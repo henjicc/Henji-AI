@@ -14,6 +14,7 @@ import { recordVideoEditPreparation } from './videoEditPreparationTiming'
  * 每个窗口按内容指纹认人，内容一改，窗口从预渲染清单里消失，它的画面随之丢弃，不会画出旧内容。
  */
 export interface VideoEditJumpPreviewWindow { key: string; startFrame: number; endFrame: number; fps: number; media: VideoEditMedia }
+export type VideoEditJumpPreviewLog = (level: 'debug' | 'info' | 'warn', message: string, event: string, context: Record<string, unknown>) => void
 
 /** 常驻画面的显存预算（字节）。 */
 export const VIDEO_EDIT_JUMP_PREVIEW_BYTES = 384 * 1024 ** 2
@@ -43,11 +44,12 @@ export class VideoEditJumpPreview {
   private leases = 0
   private readonly retired: VideoEditGpuFrame[] = []
   /** 这一轮补帧：从第一步做事起，到再无可补或预算用满为止（中途被节目打断不算结束）；workMs 是各步本身的耗时。 */
-  private fillRun?: { startedAt: number; steps: number; workMs: number }
+  private fillRun?: { startedAt: number; steps: number; workMs: number; failed?: boolean }
   /** 本实例补满过一次没有：第一次即冷启动。 */
   private filledOnce = false
 
-  constructor(private readonly frames: VideoEditFrameBackend, private readonly snapshot: (picture: VideoEditDecodedPicture) => Promise<VideoEditGpuFrame>, private readonly budgetBytes = VIDEO_EDIT_JUMP_PREVIEW_BYTES) {}
+  constructor(private readonly frames: VideoEditFrameBackend, private readonly snapshot: (picture: VideoEditDecodedPicture) => Promise<VideoEditGpuFrame>, private readonly budgetBytes = VIDEO_EDIT_JUMP_PREVIEW_BYTES,
+    private readonly log: VideoEditJumpPreviewLog = (level, message, event, context) => logger[level](message, { event, context })) {}
 
   get pictureBytes(): number { return this.bytes }
   get pictureCount(): number { return [...this.entries.values()].reduce((sum, entry) => sum + entry.pictures.length, 0) }
@@ -107,7 +109,10 @@ export class VideoEditJumpPreview {
     if (!target) { this.closeReader(); this.finishFill('complete', around, distance); return false }
     if (this.bytes >= this.budgetBytes && !this.evictFarther(distance, distance(target))) { this.closeReader(); this.finishFill('budget', around, distance); return false }
     const started = performance.now()
-    this.fillRun ??= { startedAt: started, steps: 0, workMs: 0 }
+    if (!this.fillRun) {
+      this.fillRun = { startedAt: started, steps: 0, workMs: 0 }
+      this.log('info', '开始补常驻关键帧', 'video_edit.jump_preview.fill.start', { aroundFrame: around, windows: pending.length, cold: !this.filledOnce })
+    }
     this.fillRun.steps++
     try {
       if (this.reader?.key !== target.key) {
@@ -122,7 +127,11 @@ export class VideoEditJumpPreview {
         return true
       }
       const time = target.next * KEY_SECONDS
-      if (time >= target.seconds - 0.5 / target.fps) { target.done = true; this.closeReader(); return true }
+      if (time >= target.seconds - 0.5 / target.fps) {
+        target.done = true; this.closeReader()
+        this.log('debug', '常驻关键帧补帧进度', 'video_edit.jump_preview.fill.progress', { key: target.key, pictures: this.pictureCount, filledWindows: [...this.entries.values()].filter(entry => entry.active && entry.done).length, windows: this.entries.size })
+        return true
+      }
       // 只解关键帧：每次都落在新的 GOP 上，解码器只解这一幅。
       const decoded = await this.reader.frames.frameAt(time + 1e-4, { keyFrame: true, speculative: true })
       target.next++
@@ -133,7 +142,11 @@ export class VideoEditJumpPreview {
       target.pictures.push({ time: decoded.timestamp, picture }); this.bytes += picture.allocationSize()
       recordVideoEditPreparation('jumpPreviewKey', performance.now() - started)
       return true
-    } catch {
+    } catch (error) {
+      if (this.fillRun && !this.fillRun.failed) {
+        this.fillRun.failed = true
+        this.log('warn', '常驻关键帧补帧未完成', 'video_edit.jump_preview.fill.failed', { key: target.key, aroundFrame: around, pictures: this.pictureCount, error: error instanceof Error ? error.message : String(error) })
+      }
       // 预算不够、文件已被清理或解码失败：这一轮不再补，稍后从这里重试（读不到的窗口跳过这一幅）。
       this.closeReader(); target.next++; this.blockedUntil = performance.now() + RETRY_MS
       return false
@@ -154,10 +167,10 @@ export class VideoEditJumpPreview {
     const unfilled = active.filter(entry => !entry.done || !entry.pictures.length).map(distance)
     const farthest = Math.max(0, ...active.flatMap(entry => entry.spans.map(span => Math.max(Math.abs(span.startFrame - around), Math.abs(span.endFrame - 1 - around)))))
     const coveredFrames = unfilled.length ? Math.max(0, Math.min(...unfilled) - 1) : farthest
-    logger.info('常驻关键帧已补满', { event: 'video_edit.jump_preview.filled', context: {
+    this.log('info', '常驻关键帧已补满', 'video_edit.jump_preview.filled', {
       reason, cold: !this.filledOnce, elapsedMs: Math.round(performance.now() - run.startedAt), workMs: Math.round(run.workMs), steps: run.steps,
       pictures: this.pictureCount, megabytes: Math.round(this.bytes / 1024 ** 2), windows: active.length, filledWindows: active.length - unfilled.length, aroundFrame: around, coveredFrames,
-    } })
+    })
     this.filledOnce = true
   }
 

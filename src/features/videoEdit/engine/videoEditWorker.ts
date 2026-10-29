@@ -273,7 +273,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         recordVideoEditPreparation('fontLoad', performance.now() - started)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
-        await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent)
+        await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent, log)
         renderer.onPlaybackIdle = () => { if (renderer && latestRender) { const composition = renderer.document, { frame, sequential } = latestRender; probeVideoEditTask('lookahead.update', () => decodeLookahead?.update(composition, frame, sequential, renderCacheWindows)) } }
         renderer.setRenderCache(renderCacheWindows)
         self.postMessage({ id: request.id } satisfies RenderResponse)

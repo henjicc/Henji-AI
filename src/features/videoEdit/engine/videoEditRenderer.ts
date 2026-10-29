@@ -54,7 +54,7 @@ import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/video
 import { readVideoEditExportPicture } from './videoEditExportPictures'
 import { isVideoEditRenderDivisor, videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { applyVideoEditParameterUpdate, type VideoEditParameterUpdate } from './videoEditParameterUpdate'
-import { VideoEditJumpPreview, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR } from './videoEditJumpPreview'
+import { VideoEditJumpPreview, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR, type VideoEditJumpPreviewLog } from './videoEditJumpPreview'
 import { VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
 
 interface PlaybackStream {
@@ -267,6 +267,8 @@ interface VideoSource {
   iterator?: AsyncGenerator<VideoEditDecodedPicture, void, unknown>
   current?: VideoEditDecodedPicture | VideoEditGpuFrame
   previousTime: number
+  /** 用时间线帧判断逐帧步进，避免变速或倒放把源时间差伪装成跳转。 */
+  previousFrame?: number
   codec?: string
   /** First picture of an upcoming cut, decoded before the boundary frame is requested. */
   prerolled?: Promise<void>
@@ -388,7 +390,8 @@ export class VideoEditRenderer {
     }).sort((a, b) => a.startFrame - b.startFrame)
     this.renderCacheRevision++
     if (this.previewWidth && !this.nestedOwner && !this.disposed) {
-      this.jumpPreview ??= new VideoEditJumpPreview(this.frames, picture => this.ensureCompositor().snapshot(picture, true, false, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR))
+      // Worker 没有桌面日志桥，补帧事件交给宿主已有的结构化日志通道。
+      this.jumpPreview ??= new VideoEditJumpPreview(this.frames, picture => this.ensureCompositor().snapshot(picture, true, false, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR), undefined, this.jumpPreviewLog)
       this.jumpPreview.setWindows(this.renderCache.map(window => ({ key: window.key, startFrame: window.startFrame, endFrame: window.endFrame, fps: this.document.fps, media: window.media })))
       if (this.foregroundFrames === 0) this.scheduleJumpFill()
     }
@@ -615,7 +618,7 @@ export class VideoEditRenderer {
   }
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads, codeInputSessions: this.codeInputs.size, codeInputsPrewarmed: this.prewarmedInputs.size, nestedRenderers: this.nestedPictures.size } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
-  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void) {
+  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void, private readonly jumpPreviewLog?: VideoEditJumpPreviewLog) {
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
     if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
@@ -1887,6 +1890,7 @@ export class VideoEditRenderer {
       let early = false
       /** This frame's read of a code video input gave an approximate picture (fast scrub, far jump). */
       let approximateRead = false
+      const singleFrameSeek = !sequential && (_scrubbing !== false || source.previousFrame === undefined || Math.abs(frame - source.previousFrame) !== 1)
       // A backwards source clock must use the shared GOP cache even when the
       // caller requests continuous playback; a forward iterator would re-decode
       // the whole GOP for every preceding picture.
@@ -1948,13 +1952,9 @@ export class VideoEditRenderer {
         if (!seeker) { seeker = this.frames.seeker(media, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
         const jump = source.previousTime < 0 ? Infinity : Math.abs(time - source.previousTime)
         const direction = jump > 1 ? 0 : Math.sign(time - source.previousTime)
-        // 拖动播放头时只取目标这一幅：原生会话在硬件解码器内部从关键帧解到目标、同一 GOP 内向前继续解，
-        // 中间各幅不离开原生进程。整窗方式把一秒内每一幅都交给渲染进程导入并复制进缓存，3 个交接槽位使吞吐受导入与复制限制，
-        // 4K 长 GOP 原片实测一窗 0.3～0.85 秒（单幅 20～60ms），正是拖动反向与小幅来回时的半秒停顿。
-        // 整窗缓存只留给逐帧步进（暂停时方向键前后走）。
-        // 新进入画面的图层（还没读过）也只取一幅：拖动中新镜头若走整窗，要先解完一秒才出画面（实测 0.4～0.9 秒）。
-        const single = !sequential && (source.previousTime < 0 || _scrubbing !== false)
-        const result = await seeker.sample(time, direction, single, _scrubbing === 'fast', readSignal)
+        // 跳转只需要目标画面；整窗会把无用的中间帧逐幅交接、导入并复制。只有暂停逐帧步进才值得提前存下一窗。
+        // 单帧命中缓存时也不给预取方向，避免一次点击在后台启动整窗解码。
+        const result = await seeker.sample(time, singleFrameSeek ? 0 : direction, singleFrameSeek, _scrubbing === 'fast', readSignal)
         if (result.hit) cacheHits++
         if (result.approximate) approximatePictures++
         source.current?.close(); source.current = result.sample
@@ -1973,6 +1973,7 @@ export class VideoEditRenderer {
         source.current = await source.video.frameAt(time) ?? undefined
       }
       source.previousTime = time
+      source.previousFrame = frame
       if (!source.current || early) {
         // No picture at this source time although it is inside the media: the time precedes the stream's first picture
         // (MPEG program/transport streams start after zero on the source timeline, record of 2.1). The layer is
@@ -2007,7 +2008,7 @@ export class VideoEditRenderer {
         const weight = (originalTime - current.timestamp) / current.duration
         const partnerTime = videoEditPictureSeconds(current.timestamp + current.duration)
         if (weight > 0.01 && weight < 0.99 && partnerTime < media.durationSeconds) {
-          const partner = await this.blendPartner(clip.id, media, partnerTime, sequential, readSignal)
+          const partner = await this.blendPartner(clip.id, media, partnerTime, sequential, singleFrameSeek, readSignal)
           const mixed = partner && await this.compositor!.blend(current, partner, weight).finally(() => partner.close())
           if (mixed) { this.blendedPictures.get(clip.id)?.close(); this.blendedPictures.set(clip.id, mixed); return mixed }
         }
@@ -2086,17 +2087,17 @@ export class VideoEditRenderer {
   /** 帧混合的结果画面，按片段 ID（下一帧替换时释放）。 */
   private readonly blendedPictures = new Map<string, VideoEditGpuFrame>()
   /**
-   * 帧混合的另一幅源画面（调用方负责 close）：预览先查共享帧缓存、再用定位解码（整段 GOP 解一次，后续帧命中缓存）；
+   * 帧混合的另一幅源画面（调用方负责 close）：与主画面共用定位策略，避免暂停跳转为一幅补帧启动整窗解码；
    * 导出用片段自己的第二个顺序读取器，与主画面互不打扰。
    */
-  private async blendPartner(clipId: string, media: VideoEditMedia, time: number, sequential: boolean, signal?: AbortSignal): Promise<VideoEditGpuFrame | undefined> {
+  private async blendPartner(clipId: string, media: VideoEditMedia, time: number, sequential: boolean, singleFrame: boolean, signal?: AbortSignal): Promise<VideoEditGpuFrame | undefined> {
     const cached = this.frameCache.get(media.path, time)
     if (cached instanceof VideoEditGpuFrame) return cached.clone()
     let picture: VideoEditDecodedPicture | VideoEditGpuFrame | undefined
     if (this.previewWidth || !sequential) {
       let seeker = this.seekers.get(media.path)
       if (!seeker) { seeker = this.frames.seeker(media, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
-      picture = (await seeker.sample(time, 1, false, false, signal)).sample
+      picture = (await seeker.sample(time, singleFrame ? 0 : 1, singleFrame, false, signal)).sample
     } else {
       const pending = this.source(`${clipId}${BLEND_PARTNER_KEY}`, media)
       const partner = await pending

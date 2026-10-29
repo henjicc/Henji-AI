@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameReadOptions } from './videoEditFrameSource'
 import type { VideoEditGpuFrame } from './videoEditGpuFrame'
-import { VideoEditJumpPreview, type VideoEditJumpPreviewWindow } from './videoEditJumpPreview'
+import { VideoEditJumpPreview, type VideoEditJumpPreviewWindow, type VideoEditJumpPreviewLog } from './videoEditJumpPreview'
 
 const media = (key: string): VideoEditMedia => ({ id: key, name: '预渲染', path: `cache/${key}.mp4`, kind: 'video', width: 3840, height: 2160, durationSeconds: 3, hasAudio: false })
 const window = (key: string, startFrame: number, endFrame: number): VideoEditJumpPreviewWindow => ({ key, startFrame, endFrame, fps: 60, media: media(key) })
@@ -12,6 +12,8 @@ function setup(budget = 1024, failing = new Set<string>()) {
   const closedReaders: string[] = []
   const released: string[] = []
   const pictures: Array<{ time: number; close: ReturnType<typeof vi.fn> }> = []
+  const logs: Array<{ level: string; event: string }> = []
+  const log: VideoEditJumpPreviewLog = (level, _message, event) => { logs.push({ level, event }) }
   const frames = {
     open: (item: VideoEditMedia) => ({
       key: item.path,
@@ -37,7 +39,7 @@ function setup(budget = 1024, failing = new Set<string>()) {
     pictures.push(picture)
     return { allocationSize: () => 100, close: picture.close } as unknown as VideoEditGpuFrame
   }
-  return { preview: new VideoEditJumpPreview(frames, snapshot, budget), reads, closedReaders, released, pictures }
+  return { preview: new VideoEditJumpPreview(frames, snapshot, budget, log), reads, closedReaders, released, pictures, frames, snapshot, logs, log }
 }
 
 async function fill(preview: VideoEditJumpPreview, around: number, steps = 50): Promise<void> {
@@ -153,7 +155,7 @@ describe('VideoEditJumpPreview', () => {
   })
 
   it('backs off after a failed read and never starts a step while the program is busy', async () => {
-    const { preview, reads } = setup(1024, new Set(['cache/a.mp4']))
+    const { preview, reads, logs } = setup(1024, new Set(['cache/a.mp4']))
     preview.setWindows([window('a', 0, 120)])
     expect(await preview.fillStep(0, () => false)).toBe(false)
     expect(reads).toHaveLength(0)
@@ -161,5 +163,29 @@ describe('VideoEditJumpPreview', () => {
     expect(reads).toHaveLength(1)
     expect(await preview.fillStep(0, () => true)).toBe(false)
     expect(reads).toHaveLength(1)
+    expect(logs.filter(log => log.event.endsWith('.failed'))).toEqual([{ level: 'warn', event: 'video_edit.jump_preview.fill.failed' }])
+  })
+
+  it('页面恢复从就绪窗口重新补齐，优先播放头所在窗口；失效窗口不会沿用旧画面，进度与完成日志各走其级别', async () => {
+    const { preview, frames, snapshot, reads, pictures, logs, log } = setup()
+    const ready = [window('a', 0, 120), window('b', 120, 240)]
+    preview.setWindows(ready)
+    await fill(preview, 0)
+    preview.dispose()
+    expect(pictures.every(picture => picture.close.mock.calls.length === 1)).toBe(true)
+    reads.length = 0; logs.length = 0
+    const restored = new VideoEditJumpPreview(frames, snapshot, 1024, log)
+    try {
+      restored.setWindows(ready)
+      expect(restored.pick('b', 120, 180)).toBeUndefined()
+      await fill(restored, 180)
+      expect(reads[0].path).toBe('cache/b.mp4')
+      expect(restored.pick('b', 120, 180)).toBeDefined()
+      restored.setWindows([window('a', 0, 120), window('changed', 120, 240)])
+      expect(restored.pick('b', 120, 180)).toBeUndefined()
+      expect(restored.pick('changed', 120, 180)).toBeUndefined()
+      expect(logs.filter(log => log.event.endsWith('.progress')).every(log => log.level === 'debug')).toBe(true)
+      expect(logs.filter(log => log.event.endsWith('.filled'))).toEqual([{ level: 'info', event: 'video_edit.jump_preview.filled' }])
+    } finally { restored.dispose() }
   })
 })

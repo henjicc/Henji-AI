@@ -77,6 +77,7 @@ vi.mock('./videoEditGpuCompositor', async () => {
     boundary.snapshotCalls.push(compact); await boundary.pendingSnapshot
     return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, boundary.snapshotBytes, () => { boundary.normalizedReleased++ })
   }
+  async blend(picture: InstanceType<typeof VideoEditGpuFrame>) { return picture.clone() }
   async code() { return { inspectAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle), retainAuthorInstances: async () => undefined, observeAuthor: () => [], authorGenerator: async (_key: string, _instance: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) }, warmAuthor: async (key: string) => { boundary.warmed.push(key) }, protectAuthorInstances: (keys: ReadonlySet<string>) => { boundary.protectedInstances = [...keys] },
     target: async (key: string, width: number, height: number) => { boundary.targetKeys.push(key); return target(width, height) }, releaseNestedFrames: vi.fn(),
     builtin: async (_key: string, instance: { params: Record<string, unknown> }, input: InstanceType<typeof VideoEditCodePicture>) => { boundary.builtinParams.push({ ...instance.params }); return target(input.width, input.height) },
@@ -1525,6 +1526,39 @@ it('渲染器只经注入的帧源后端取帧：定位、顺序、正向计划�
   } finally { await renderer.dispose() }
   expect(opened.length).toBeGreaterThan(0); expect(released.sort()).toEqual(opened.sort())
 })
+it.each([false, true])('暂停跳转只读单帧，变速逐帧进退保留整窗，补帧图层遵循相同选择（帧混合：%s）', async frameBlend => {
+  const calls: Array<{ time: number; single: boolean | undefined; direction: number }> = []
+  const picture = (time: number) => ({ timestamp: gridPicture(time, 30), duration: 1 / 30, format: 'NV12', close: vi.fn() }) as unknown as VideoSample
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({
+      clipFrames: () => ({ frames: async function* () {}, frameAt: async (time: number) => picture(time) }),
+      clipAudio: () => undefined, schedule: async function* () {},
+    }) }),
+    release: () => {},
+    seeker: (_media, _cache, snapshot) => ({
+      sample: async (time, direction, single) => { calls.push({ time, single, direction }); return { sample: await snapshot(picture(time), true), hit: false } },
+      dispose: async () => {},
+    }),
+  }
+  const document = fixture()
+  document.frameBlend = frameBlend
+  document.clips[0].speed = frameBlend ? { numerator: 1, denominator: 2 } : { numerator: 5, denominator: 2 }
+  const renderer = new VideoEditRenderer(document, 1920, undefined, 1024 * 1024, backend)
+  try {
+    for (const [frame, single] of [[0, true], [9, true], [10, false], [9, false], [19, true]] as const) {
+      calls.length = 0
+      await renderer.render(frame)
+      expect(calls.length).toBeGreaterThan(0)
+      expect(calls.every(call => call.single === single)).toBe(true)
+      if (single) expect(calls.every(call => call.direction === 0)).toBe(true)
+      if (frameBlend && frame % 2) expect(calls).toHaveLength(2)
+    }
+    calls.length = 0
+    await renderer.render(20, false, true)
+    expect(calls.every(call => call.single && call.direction === 0)).toBe(true)
+  } finally { await renderer.dispose() }
+})
+
 it('原生借用帧经同一复制入口进入自有显存：正向计划、剪辑点预取与定位的每一帧复制后只交回一次，从不在渲染器里关闭帧本身', async () => {
   const lent: Array<{ ptsUs: number; release: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> }> = []
   const picture = (seconds: number): VideoEditNativePicture => {
