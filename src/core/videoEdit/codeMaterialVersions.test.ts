@@ -1,3 +1,4 @@
+import { importedAuthorLibraries } from './codeMaterial/libraryImports'
 import { addressCodeMaterialFiles, documentCodeSourceResolver, type CodeMaterialFiles } from './codeMaterial/sources'
 import { testCodeSource } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
@@ -9,23 +10,47 @@ import { videoEditDocumentSchema } from './document'
 import { codeVersionContentKey } from './codeMaterial/sources'
 import { GOLDEN_SCENE_DECLARATION } from './scene/sceneTestFixtures'
 
-const compile = async (source: CodeMaterialFiles) => testAuthorProgram(testAuthorBundle(source))
+const compile = async (source: CodeMaterialFiles) => testAuthorProgram({ ...testAuthorBundle(source), libraries: importedAuthorLibraries(source) })
 const publication: CodeVersionPublication = { imports: [], async write(id, _name, files, folder) { return { folder: folder ?? id, files: (await addressCodeMaterialFiles(files)).files } } }
 const source = (defaultValue = .5) => `export default {name:"原生素材",kind:"generator",width:3840,height:2160,durationSeconds:10,params:[{key:"amount",type:"number",title:"数量",default:${defaultValue},min:0,max:1,step:.01}],draw(ctx,t,p){ctx.globalAlpha=p.amount;ctx.fillRect(t,0,100,100);}}`
 describe('作者接口与内置库版本保持一致', () => {
+  it('可达文件导入解析失败时停止发布，并点名文件而非猜测库版本', async () => {
+    const files = { entry: 'main.js', files: { 'main.js': 'import "./title.js"; ' + source(), 'title.js': 'import { layoutText } from "henji-layout/text"; const broken = "' } }
+    expect(() => importedAuthorLibraries(files)).toThrow('title.js')
+    await expect(makeCodeMaterialDefinition(files, compile, publication)).rejects.toThrow('title.js')
+  })
+  it('逐库解析明确、继承、历史缺省和新增导入；无记录旧源码原样保存复用', async () => {
+    const text = 'import "henji-layout/text";' + source()
+    const created = await makeCodeMaterialDefinition(text, compile, publication)
+    expect(created.definition.versions[0].libraries).toEqual({ 'henji-layout': '1.1.0' })
+    const old = structuredClone(created.definition); delete old.versions[0].libraries
+    const saved = await appendCodeMaterialVersion(old, text, compile, documentCodeSourceResolver(), publication)
+    expect(saved.versionId).toBe(old.defaultVersionId)
+    expect(saved.program.bundle.libraries).toEqual({ 'henji-layout': '1.0.0' })
+    const edited = await appendCodeMaterialVersion(old, text + '\n// 改动', compile, documentCodeSourceResolver(), publication)
+    expect(edited.definition.versions.at(-1)?.libraries).toEqual({ 'henji-layout': '1.0.0' })
+    const upgraded = await appendCodeMaterialVersion(old, text, compile, documentCodeSourceResolver(), { ...publication, libraries: { 'henji-layout': '1.1.0' } })
+    expect(upgraded.versionId).not.toBe(old.defaultVersionId)
+    expect(upgraded.definition.versions.at(-1)?.libraries).toEqual({ 'henji-layout': '1.1.0' })
+    const three = await makeCodeMaterialDefinition('import "three";' + source(), compile, publication)
+    const added = await appendCodeMaterialVersion(three.definition, 'import "three";' + text, compile, documentCodeSourceResolver(), publication)
+    expect(added.definition.versions.at(-1)?.libraries).toEqual({ three: '0.186.1', 'henji-layout': '1.1.0' })
+    const unchanged = await appendCodeMaterialVersion(three.definition, 'import "three";' + source(), compile, documentCodeSourceResolver(), publication)
+    expect(unchanged.versionId).toBe(three.definition.defaultVersionId)
+  })
   it('新代码按当前作者接口编译并记录，带上实际导入的内置库', async () => {
     const inputs: CodeMaterialFiles[] = []
     // 模拟打包器报告源码导入了 three。
     const importsThree: CodeSourceCompiler = async files => { inputs.push(files); const program = await compile(files); return { ...program, bundle: { ...program.bundle, libraries: { three: '0.186.1' } } } }
-    const { definition } = await makeCodeMaterialDefinition(source(), importsThree, publication)
-    expect(inputs[0]).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION }); expect(inputs[0]).not.toHaveProperty('libraries')
+    const { definition } = await makeCodeMaterialDefinition('import "three";'+source(), importsThree, publication)
+    expect(inputs[0]).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION }); expect(inputs[0].libraries).toEqual({ three: '0.186.1' })
     expect(definition.versions[0]).toMatchObject({ apiVersion: inputs[0].apiVersion, libraries: { three: '0.186.1' } })
     // 追加版本按前一版记录的库版本解析，并照旧记录。
-    const next = await appendCodeMaterialVersion(definition, source(.6), importsThree, documentCodeSourceResolver(), publication)
+    const next = await appendCodeMaterialVersion(definition, 'import "three";'+source(.6), importsThree, documentCodeSourceResolver(), publication)
     expect(inputs.at(-1)).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION, libraries: { three: '0.186.1' } })
     expect(next.definition.versions.find(version => version.id === next.versionId)).toMatchObject({ apiVersion: inputs.at(-1)?.apiVersion, libraries: { three: '0.186.1' } })
-    // 没导入内置库的新代码不记录 libraries。
-    expect((await makeCodeMaterialDefinition(source(), compile, publication)).definition.versions[0]).not.toHaveProperty('libraries')
+    // 未导入的库不参与版本身份，避免原样保存产生重复版本。
+    expect((await makeCodeMaterialDefinition(source(), compile, publication)).definition.versions[0].libraries).toBeUndefined()
   })
 
   it('已有 v4 记录照旧按 v4 编译核对，内容键不变；固定为 v4 的资产重建后仍是 v4', async () => {
@@ -82,9 +107,9 @@ describe('剪辑源码文件引用契约', () => {
     // 源码里带 /*v5*/ 的按作者接口 v5 编译，其余按 v4。
     const byApi: CodeSourceCompiler = async files => ({ ...await compile(files), apiVersion: files.files[files.entry].includes('/*v5*/') ? 5 : 4 })
     const libraries = { three: '0.186.1' }
-    const { definition } = await makeCodeMaterialDefinition(`${source()}/*v5*/`, byApi, { ...publication, libraries })
+    const { definition } = await makeCodeMaterialDefinition(`import "three";${source()}/*v5*/`, byApi, { ...publication, libraries })
     expect(definition.versions[0].libraries).toEqual(libraries)
-    const v5 = await appendCodeMaterialVersion(definition, `${source(.6)}/*v5*/`, byApi, documentCodeSourceResolver(), publication)
+    const v5 = await appendCodeMaterialVersion(definition, `import "three";${source(.6)}/*v5*/`, byApi, documentCodeSourceResolver(), publication)
     expect(v5.definition.versions.find(version => version.id === v5.versionId)?.libraries).toEqual(libraries)
     const v4 = await appendCodeMaterialVersion(definition, source(.7), byApi, documentCodeSourceResolver(), publication)
     expect(v4.definition.versions.find(version => version.id === v4.versionId)).not.toHaveProperty('libraries')
@@ -109,7 +134,8 @@ describe('剪辑源码文件引用契约', () => {
     const json = JSON.stringify({ ...document, codeMaterials: [{ ...published.definition, defaultVersionId: published.versionId }] })
     const loaded = videoEditDocumentSchema.parse(JSON.parse(json))
     const definitions = codeMaterialDefinitionsSchema.parse(loaded.codeMaterials)
-    expect(Object.keys(definitions[0].versions[0])).toEqual(['id', 'apiVersion', 'languageVersion', 'entry', 'files'])
+    expect(definitions[0].versions[0].files).toEqual(definition.versions[0].files)
+    expect(definitions[0].versions[0]).not.toHaveProperty('result')
     expect(json).not.toContain('bindings')
     expect(videoEditDocumentSchema.parse(document)).not.toHaveProperty('codeMaterials')
     expect(() => videoEditDocumentSchema.parse({ ...loaded, codeMaterials: [{ ...definitions[0], id: document.sequences[0].id }] })).toThrow('重复标识')

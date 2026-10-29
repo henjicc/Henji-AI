@@ -61,17 +61,25 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
       modules: { 'henji-layout/text': 'text.mjs', 'henji-layout/flex': 'flex.mjs' },
       types: { mount: 'henji-layout', license: 'Apache-2.0', source: 'frozen' },
     },
+    '1.1.0': {
+      license: 'Apache-2.0', minApiVersion: 6,
+      frozen: 'resources/video-edit-author/frozen/henji-layout/1.1.0',
+      modules: { 'henji-layout/text': 'text.mjs', 'henji-layout/flex': 'flex.mjs' },
+      types: { mount: 'henji-layout', license: 'Apache-2.0', source: 'frozen' },
+    },
   },
 }
 
 /** 库名 → 版本。 */
 export type AuthorLibraryVersions = Readonly<Record<string, string>>
 
-/** 新写的代码版本用这张表；表里改版本不影响已有记录。 */
-export const DEFAULT_AUTHOR_LIBRARY_VERSIONS: AuthorLibraryVersions = {
-  three: '0.186.1',
-  'opentype.js': '2.0.0',
-  'henji-layout': '1.0.0',
+/** 只用于新版本编译；读取无 libraries 的历史版本仍走第一套。 */
+export function latestAuthorLibraryVersions(apiVersion: number): AuthorLibraryVersions {
+  return Object.fromEntries(Object.entries(AUTHOR_LIBRARIES).flatMap(([name, releases]) => {
+    const versions = Object.keys(releases).filter(version => releases[version].minApiVersion <= apiVersion)
+      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+    return versions.length ? [[name, versions.at(-1)!]] : []
+  }))
 }
 
 /** 未知版本由模块解析报错；已知版本的最低接口要求在所有导入路径共用。 */

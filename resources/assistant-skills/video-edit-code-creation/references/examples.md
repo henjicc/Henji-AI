@@ -120,6 +120,8 @@ export default {
 
 花字只强调一句短语。竖向 48px 错峰进场，浅色外描边、轻辉光（textStyle 的 shadows）与深底构成层次，避免每个字同时跳动。
 
+图集下层先画全部发光/外描边，上层画各字填色及其内/居中描边，外描边不遮住正文；底板和装饰线保持整段，默认首字可见就显示。样例用 `backgroundAndDecorationOpacity` 让整段层一起淡入淡出。字素簇会失去字素间连写；回到默认姿态时直接用静态整段位图，落定后像素一致。
+
 <!-- skill-example: stagger-title -->
 ```ts
 import { layoutText, drawText } from "henji-layout/text"
@@ -138,16 +140,15 @@ export default {
       strokes: [{ color: "#e0f7ff", width: 2, position: "outside" }],
       shadows: [{ color: "#59a6e6", opacity: .9, angle: 90, distance: 0, size: 0, blur: 16 * params.glowPower }]
     }, { maxWidth: 1600, maxLines: 1, fit: { minFontSize: 56 }, anchor: { x: 960, y: 540, horizontal: .5, vertical: .5 } })
-    const glyphs = layout.graphemes.filter(g => g.x !== null && g.text.trim()).map(g => ({ g, one: layoutText(g.text, g.style) }))
     return [
       { id: "background", draw(ctx) { ctx.fillStyle = "#06080e"; ctx.fillRect(0, 0, width, height) } },
       { id: "headline", bounds: [160, 440, 1760, 640], draw(ctx, time) {
         const out = 1 - clamp01((time - 3.6) / .4)
-        glyphs.forEach(({ g, one }, i) => {
-          const start = i * .045, p = expoOut(clamp01((time - start) / .55)), at = one.graphemes[0]
-          ctx.save(); ctx.globalAlpha = clamp01((time - start) / .28) * out
-          ctx.translate(g.x - at.x, g.y - at.y + (1 - p) * 48); drawText(ctx, one); ctx.restore()
-        })
+        drawText(ctx, layout, { backgroundAndDecorationOpacity: clamp01(time / .28) * out, graphemes: (g, i) => {
+          const start = i * Math.min(.045, .6 / Math.max(1, layout.graphemes.length - 1))
+          const elapsed = time - start, p = expoOut(clamp01(elapsed / .55))
+          return { y: (1 - p) * 48, opacity: clamp01(elapsed / .28) * out }
+        } })
       } }
     ]
   }
@@ -343,12 +344,13 @@ export default {
   layers(params) {
     const digits = { fontFamily: "monospace", fontWeight: 600, align: "left" as const, fill: { color: "#f0f5f2" } }
     // 字号按终值定一次，滚动途中位数变化不改字号。
-    const size = layoutText(String(params.value), { ...digits, fontSize: 132 }, { maxWidth: 712, fit: { minFontSize: 64 } }).style.fontSize
+    const finalNumber = layoutText(String(params.value), { ...digits, fontSize: 132 }, { maxWidth: 712, fit: { minFontSize: 64 } })
+    const size = finalNumber.style.fontSize
     const label = layoutText(params.label, { fontSize: 40, align: "left", fill: { color: "#9eb0b3" } }, { maxWidth: 712, maxLines: 2, fit: { minFontSize: 28 } })
     const unit = layoutText(params.unit, { fontSize: 32, align: "left", fill: { color: "#8ac2b0" } }, { maxWidth: 712 })
     return [{ id: "data-card", bounds: [540, 280, 1380, 800], draw(ctx, time) {
       const p = expoOut(clamp01((time - .2) / 1.3))
-      const number = layoutText(String(Math.round(params.value * p)), { ...digits, fontSize: size })
+      const number = p >= 1 ? finalNumber : layoutText(String(Math.round(params.value * p)), { ...digits, fontSize: size })
       ctx.fillStyle = "#0b0e11"; ctx.strokeStyle = "rgba(166, 179, 179, .18)"; ctx.lineWidth = 1
       ctx.beginPath(); ctx.roundRect(540, 280, 840, 520, 20); ctx.fill(); ctx.stroke()
       for (const [text, centerY] of [[label, 370], [number, 536], [unit, 650]] as const) {

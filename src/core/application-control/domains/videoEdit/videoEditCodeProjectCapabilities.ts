@@ -29,11 +29,11 @@ export function videoEditCodeInstanceMigration(projectId: string, instance: Code
 }
 const materialRef = applicationRefSchema.extend({ kind: z.literal('video_edit.code_material') }).strict()
 export const upgradeVideoEditCodeMaterialsCapability = defineApplicationCapability({
-  id: 'upgrade_video_edit_code_materials', version: 1, domain: 'video_edit', title: '升级工程代码素材',
-  description: '按指定提交（默认 HEAD）重算工程入口闭包，只升级内容变化的素材，设为默认并改指使用旧版本的素材项、片段和附加效果。新版本不再声明的参数随换版本去掉，不再适用的值重置为默认，逐个实例列在 instances。所有检查通过才一次修改，可经剪辑撤销。未变化的素材跳过；若内容已有历史版本则复用该版本。', aliases: ['刷新片子代码', '升级工程入口'],
+  id: 'upgrade_video_edit_code_materials', version: 1, domain: 'video_edit', title: '升级代码素材',
+  description: 'upgradeLibraries:true 将所选素材实际导入的内置库升级到作者接口兼容的最新版（含非工程素材）。按指定提交（默认 HEAD）重算工程入口闭包，只升级内容变化的素材，设为默认并改指使用旧版本的素材项、片段和附加效果。新版本不再声明的参数随换版本去掉，不再适用的值重置为默认，逐个实例列在 instances。所有检查通过才一次修改，可经剪辑撤销。未变化的素材跳过；若内容已有历史版本则复用该版本。', aliases: ['刷新片子代码', '升级工程入口'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 120000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.code_material'], producesRefs: ['video_edit.code_version', 'video_edit.code_material', 'video_edit.clip', 'video_edit.item', 'video_edit.effect'],
-  inputSchema: z.object({ documentRef, materialRefs: z.array(materialRef).min(1).optional(), commit: z.string().regex(/^[a-f0-9]{40}$/).optional() }).strict(),
+  inputSchema: z.object({ documentRef, materialRefs: z.array(materialRef).min(1).optional(), commit: z.string().regex(/^[a-f0-9]{40}$/).optional(), upgradeLibraries: z.boolean().optional().describe('将所选素材实际导入的内置库升级到兼容最新版；源码不变也可生成新版本并改指，支持撤销') }).strict(),
   outputSchema: z.object({ commit: z.string(), upgrades: z.array(z.object({ materialRef, oldVersion: z.string(), newVersion: z.string(), changedFiles: z.array(z.string()), retargetedClips: z.number().int().nonnegative() }).strict()), instances: videoEditCodeInstanceMigrationsSchema, resultRefs: z.array(applicationRefSchema), verified: z.boolean(), message: z.string() }).strict(),
   concurrencyKey: 'video_edit', resolveConcurrencyKey: input => `video_edit:${input.documentRef.id}`,
   resolveOperationTargets: input => [input.documentRef, ...(input.materialRefs ?? [])], resolveOperationWriteTargets: input => [input.documentRef],

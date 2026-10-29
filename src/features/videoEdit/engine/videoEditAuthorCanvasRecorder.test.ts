@@ -189,3 +189,22 @@ it('标出能否单独栅格后叠加（只用 source-over）与 save/restore �
   replayAuthorCanvas(reset, real, () => { throw new Error('no asset') }, [2, 0, 0, 2, 4, 4])
   expect(calls).toEqual([['set', 'fillStyle', 'red'], ['reset'], ['setTransform', 2, 0, 0, 2, 4, 4], ['fillRect', 0, 0, 1, 1]])
 })
+
+it('旧库自建离屏画布的真实文字才触发覆盖警告，纯图形画布不触发且追踪作用域恢复', () => {
+  class Context {
+    constructor(readonly canvas: object) {}
+    fillText(): void {}
+    strokeText(): void {}
+  }
+  const fill = Context.prototype.fillText
+  vi.stubGlobal('OffscreenCanvasRenderingContext2D', Context)
+  try {
+    const bitmap = { width: 100, height: 50 }, drawing = new Context(bitmap)
+    const text = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], ctx => { drawing.fillText(); ctx.drawImage(bitmap as CanvasImageSource, 0, 0) })
+    expect(text.textDraws).toEqual([])
+    expect(text.textUncovered?.join(' ')).toContain('未使用新版排版库')
+    const shapes = recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], ctx => ctx.drawImage({ width: 10, height: 10 } as CanvasImageSource, 0, 0))
+    expect(shapes.textUncovered).toEqual([])
+    expect(Context.prototype.fillText).toBe(fill)
+  } finally { vi.unstubAllGlobals() }
+})

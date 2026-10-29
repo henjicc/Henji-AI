@@ -1,6 +1,20 @@
+import { authorModuleTextLayouts, observeTextLayouts } from '@/core/videoEdit/textDrawObservation'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { build } from 'esbuild-wasm'
+import { makeCodeMaterialDefinition, appendCodeMaterialVersion } from '@/core/videoEdit/codeMaterialVersions'
+import { addressCodeMaterialFiles, documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
+import { AUTHOR_LIBRARIES } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { collectVideoEditCodeMotion } from '@/core/videoEdit/codeMotionReview'
+import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
+import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
+import { bundleAuthorFiles } from './videoEditAuthorBundle'
+import { authorEffectMetadata } from './videoEditAuthorParameters'
+import type { AuthorModule } from './videoEditAuthorModule'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
+import { drawText, layoutText } from '../authorLibraries/text'
 const { layerDraw } = vi.hoisted(() => ({ layerDraw: vi.fn() }))
 
 vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
@@ -258,8 +272,9 @@ it('records one author draw per frame and uploads the original Canvas filter res
 /** Canvas 替身：每张画布各一个上下文，记下真实画布上的每个调用（第几张画布、方法、参数）。 */
 function canvasHarness() {
   const calls: Array<{ canvas: number; name: string; args: unknown[] }> = []
-  const methods = new Set(['reset', 'save', 'restore', 'setTransform', 'beginPath', 'rect', 'clip', 'fillRect', 'fillText', 'drawImage', 'measureText', 'createPattern'])
+  const methods = new Set(['reset', 'save', 'restore', 'setTransform', 'translate', 'scale', 'rotate', 'beginPath', 'rect', 'clip', 'clearRect', 'fillRect', 'fillText', 'drawImage', 'measureText', 'createPattern'])
   let count = 0
+  class Bitmap { constructor(readonly width: number, readonly height: number) {} close(): void {} }
   class Canvas {
     readonly id = count++
     readonly context: OffscreenCanvasRenderingContext2D
@@ -272,8 +287,10 @@ function canvasHarness() {
       }) as unknown as OffscreenCanvasRenderingContext2D
     }
     getContext(): OffscreenCanvasRenderingContext2D { return this.context }
+    transferToImageBitmap(): ImageBitmap { return new Bitmap(this.width, this.height) as unknown as ImageBitmap }
   }
   vi.stubGlobal('OffscreenCanvas', Canvas)
+  if (typeof ImageBitmap === 'undefined') vi.stubGlobal('ImageBitmap', Bitmap)
   const upload = vi.fn()
   const device = {
     createTexture: (descriptor: unknown) => ({ descriptor, destroy: vi.fn(), createView: () => ({}) }),
@@ -284,6 +301,71 @@ function canvasHarness() {
 }
 const frameInfo = (frame: number) => ({ time: frame / 60, frameDuration: 1 / 60, clip: { time: frame / 60, duration: 5 } })
 const output = { createView: () => ({}), destroy() {} }
+
+it('layers 每帧排版的独立字素动画只栅格一次，重放沿用同一图集', async () => {
+  const { device, calls, text } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '字素动画', layers() {
+    const layout = layoutText('甲乙丙', { fontSize: 20 })
+    return [{ id: 'title', draw(ctx, time) { drawText(ctx, layout, { graphemes: (_g, i) => ({ y: (1 - time) * i, opacity: .5 + time }) }) } }]
+  } })
+  try {
+    for (let frame = 0; frame < 10; frame++) await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+    expect(text(0, '甲')).toBe(1); expect(text(0, '乙')).toBe(1); expect(text(0, '丙')).toBe(1)
+    const images = calls.filter(call => call.name === 'drawImage' && call.args[0] instanceof ImageBitmap)
+    expect(images.length).toBeGreaterThan(3)
+    expect(new Set(images.map(call => call.args[0])).size).toBe(1)
+    expect(runtime.observeElements()[0].textDraws?.[0].revealComplete).toBe(true)
+  } finally { await runtime.dispose() }
+})
+
+it.each([false, true])('动态图层中的同一文字布局复用位图与上传，pose 跨档重绘且不被 cacheKey=%s 挡住', async cached => {
+  const { device, upload, calls } = canvasHarness()
+  let scale = 1
+  const draw = vi.fn(drawText)
+  const runtime = new VideoEditAuthorRuntime(device, { name: '清晰文字', mode: 'dynamic', layers: () => {
+    const layout = layoutText('静态标题', { fontSize: 20 })
+    return [{ id: 'title', bounds: [0, 0, 80, 40], pose: () => ({ scale }), draw: ctx => draw(ctx, layout), ...(cached ? { cacheKey: 'text' } : {}) }]
+  } })
+  const images = () => calls.filter(call => call.name === 'drawImage' && call.args[0] instanceof ImageBitmap).map(call => call.args[0] as ImageBitmap)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    const first = images()[0]
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(1))
+    expect(draw).toHaveBeenCalledTimes(cached ? 1 : 2)
+    expect(upload).toHaveBeenCalledOnce()
+    expect(images()).toEqual([first])
+    expect(runtime.observeElements()[0].textDraws).toHaveLength(1)
+    scale = 3
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(2))
+    const enlarged = images().at(-1)!
+    expect(enlarged.width).toBe(first.width * 2)
+    expect(upload).toHaveBeenCalledTimes(2)
+    scale = 1
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(3))
+    expect(images().at(-1)).toBe(first)
+    expect(images().at(-1)?.width).toBe(first.width)
+    expect(runtime.observeElements()[0].textDraws).toHaveLength(1)
+  } finally { await runtime.dispose() }
+})
+
+it('实际绘制的文字事实随图层 cacheKey 沿用，并按当帧位姿观察；回读不能改动缓存', async () => {
+  const { device } = canvasHarness()
+  const draw = vi.fn((ctx: OffscreenCanvasRenderingContext2D) => drawText(ctx, layoutText('标题\n遗漏行', { fontSize: 20 }, { maxLines: 1, maxWidth: 60 })))
+  const runtime = new VideoEditAuthorRuntime(device, { name: '文字', layers: () => [{ id: 'title', name: '标题', cacheKey: 'same', bounds: [0, 0, 80, 40], clip: [0, 0, 50, 50], pose: time => ({ x: time * 10, y: 0 }), draw }] })
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    const first = runtime.observeElements()[0]
+    expect(first.textDraws).toHaveLength(1)
+    expect(first.textDraws![0]).toMatchObject({ actualLines: 1, totalLines: 2, stageClip: [0, 0, 50, 50] })
+    first.textDraws![0].omittedRanges.length = 0
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(1))
+    const after = runtime.observeElements()[0]
+    expect(draw).toHaveBeenCalledOnce()
+    expect(after.matrix[4]).toBeCloseTo(10 / 60)
+    expect(after.textDraws![0].omittedRanges.length).toBeGreaterThan(0)
+    expect(after.textDraws![0].matrix).toEqual([1, 0, 0, 1, 0, 0])
+  } finally { await runtime.dispose() }
+})
 
 it('静止层与在变的层拆成几张栅格：停稳后静止部分不再重画、不再上传，GPU 按原图层顺序叠', async () => {
   const { calls, upload, device, text } = canvasHarness()
@@ -381,4 +463,98 @@ it('作者缓存的 ImageBitmap 按身份沿用：停稳的帧不重画、不上
   expect(leaky.text(0, '甲')).toBe(4)
   expect(leaky.upload).toHaveBeenCalledTimes(4)
   await unbalanced.dispose()
+})
+
+it('未绘制的整段布局向查询传递身份，不在每帧生成警告；空白图层没有文字警告', async () => {
+  const { device } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '漏绘制', layers() {
+    const whole = layoutText('标题第一行\n标题第二行', { fontSize: 20 }, { maxLines: 1 })
+    return [{ id: 'title', draw(ctx) { for (const g of whole.graphemes) if (g.x !== null) drawText(ctx, layoutText(g.text, g.style)) } }]
+  } })
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    expect(runtime.observeElements()[0].unassignedTextLayouts).not.toHaveLength(0)
+    expect(runtime.observeElements()[0].textUncovered).toEqual([])
+  } finally { await runtime.dispose() }
+  const blank = new VideoEditAuthorRuntime(device, { name: '背景', layers: () => [{ id: 'background', draw(ctx) { ctx.fillRect(0, 0, 10, 10) } }] })
+  try { await blank.render(output, 100, 50, {}, {}, frameInfo(0)); expect(blank.observeElements()[0].textUncovered).toEqual([]) } finally { await blank.dispose() }
+})
+it('save/restore 不成对导致合并时，排版事实仍归到正确图层并沿用', async () => {
+  const { device } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '合并文字', layers: () => [
+    { id: 'title', draw(ctx) { ctx.restore(); drawText(ctx, layoutText('第一行\n第二行', { fontSize: 20 }, { maxLines: 1 })) } },
+    { id: 'background', draw(ctx) { ctx.fillRect(0, 0, 10, 10) } },
+  ] })
+  try {
+    for (let i = 0; i < 3; i++) {
+      await runtime.render(output, 100, 50, {}, {}, frameInfo(i))
+      const elements = runtime.observeElements()
+      expect(elements[0].textDraws).toHaveLength(1)
+      expect(elements[0].textDraws![0]).toMatchObject({ truncated: true, retained: false })
+      expect(elements[1].textDraws ?? []).toHaveLength(0)
+    }
+  } finally { await runtime.dispose() }
+})
+
+it('新建源码版本显式固定新版库，经冻结模块实际绘制后复核出截断；旧无库记录原样保存复用', async () => {
+  const { device } = canvasHarness()
+  const source = `import { layoutText, drawText } from 'henji-layout/text';
+    export default { name: '端到端标题', kind: 'generator', mode: 'dynamic', layers() {
+      const layout = layoutText('第一行\\n第二行', { fontSize: 20 }, { maxLines: 1 });
+      return [{ id: 'title', bounds: [0,0,100,50], pose: t => ({ scale: 1 + t / 10 }), draw(ctx) { drawText(ctx, layout) } }];
+    } };`
+  let effect: AuthorModule | undefined
+  const compile = async (files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) => {
+    const bundle = await bundleAuthorFiles(files, build)
+    let code = bundle.code
+    for (const [name, version] of Object.entries(bundle.libraries ?? {})) {
+      const release = AUTHOR_LIBRARIES[name][version]
+      for (const file of Object.values(release.modules)) code = code.replaceAll(`henji-media://author-lib/${name}/${version}/${file}`, pathToFileURL(path.resolve(release.frozen!, file)).href)
+    }
+    const loaded = await import(/* @vite-ignore */ 'data:text/javascript;base64,' + Buffer.from(code).toString('base64')) as { default: AuthorModule }
+    effect = loaded.default
+    return { ...authorEffectMetadata(effect, bundle.apiVersion), apiVersion: bundle.apiVersion!, languageVersion: 4 as const, seed: 0, bundle }
+  }
+  const publication = { imports: [], async write(id: string, _name: string, files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) { return { folder: id, files: (await addressCodeMaterialFiles(files)).files } } }
+  const { definition, program } = await makeCodeMaterialDefinition(source, compile, publication)
+  const version = definition.versions[0]
+  expect(version.libraries?.['henji-layout']).toBe('1.1.0')
+  expect(program.bundle.libraries?.['henji-layout']).toBe('1.1.0')
+  const runtime = new VideoEditAuthorRuntime(device, effect!, undefined, true, version.apiVersion)
+  const document = createVideoEditDocument('新建源码复核'), sequence = createVideoEditSequence('主')
+  sequence.width = 100; sequence.height = 50; addLegacyVideoEditTracks(sequence); document.sequences = [sequence]; document.codeMaterials = [definition]
+  sequence.clips = [{ id: 'code', itemId: 'code-item', name: '标题', kind: 'code', track: 1, start: 0, duration: 30, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: .5, y: .5, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', code: { definitionId: definition.id, versionId: version.id, parameters: {} } }]
+  const composition = videoEditComposition(document, sequence.id)
+  try {
+    const result = await collectVideoEditCodeMotion(composition, { from: 0, to: 30 }, { [version.id]: program }, {}, async (local, frame) => {
+      await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+      const elements = runtime.observeElements()
+      expect(elements[0].textDraws?.[0]).toMatchObject({ sourceText: '第一行\n第二行', truncated: true })
+      return { sequenceId: local.id, revision: local.revision, frame, clips: [{ clipId: 'code', versionId: version.id, width: 100, height: 50, elements }] }
+    })
+    expect(result.records.filter(record => record.kind === 'text_truncated')).toEqual([expect.objectContaining({ elementPath: ['title'], timeline: { from: 0, to: 30 } })])
+    expect(result.records.some(record => record.kind === 'text_overflow')).toBe(false)
+  } finally { await runtime.dispose() }
+  const old = structuredClone(definition); delete old.versions[0].libraries
+  const appended = await appendCodeMaterialVersion(old, source, compile, documentCodeSourceResolver(), publication)
+  expect(appended.versionId).toBe(version.id)
+  expect(appended.program.bundle.libraries?.['henji-layout']).toBe('1.0.0')
+  expect(appended.definition.versions[0].libraries).toBeUndefined()
+})
+
+it('模块常量的布局身份跨帧传递，绘制后提供同一身份供区间汇总', async () => {
+  const { device } = canvasHarness(), pending = new Set<string>()
+  const layout = observeTextLayouts(id => pending.add(id), () => layoutText('模块常量\n遗漏行', { fontSize: 20 }, { maxLines: 1 }))
+  let enabled = false
+  const module: AuthorModule = { name: '模块常量', layers: () => [{ id: 'title', draw(ctx) { if (enabled) drawText(ctx, layout); else ctx.fillRect(0, 0, 10, 10) } }] }
+  authorModuleTextLayouts.set(module, pending)
+  const runtime = new VideoEditAuthorRuntime(device, module)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    expect(runtime.observeElements()[0].unassignedTextLayouts).not.toHaveLength(0)
+    expect(runtime.observeElements()[0].textUncovered).toEqual([])
+    enabled = true
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(1))
+    expect(runtime.observeElements()[0].textUncovered).toEqual([])
+  } finally { await runtime.dispose() }
 })

@@ -9,7 +9,7 @@ import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoE
 import { prepareProjectCodePublication, prepareCodeVersionPublication } from './videoEditCodeStorage'
 import { addressCodeMaterialFiles, loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
-import { appendCodeMaterialVersion, makeCodeMaterialDefinition, codeVersionCompilation } from '@/core/videoEdit/codeMaterialVersions'
+import { appendCodeMaterialVersion, makeCodeMaterialDefinition, codeVersionCompilation, codeVersionInheritance } from '@/core/videoEdit/codeMaterialVersions'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import { isCodeImageReference, isCodeAudioReference } from '@/core/videoEdit/codeMaterial/contract'
 import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema } from '@/core/videoEdit/document'
@@ -33,7 +33,7 @@ import { settleVideoEditCodeTypeChecks, startVideoEditCodeTypeCheck, withVideoEd
 
 const logger = createLogger('features.videoEdit.code')
 export interface VideoEditCodeInput { projectEntry?: string; source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
-export interface VideoEditCodeVersionInput { projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
+export interface VideoEditCodeVersionInput { libraries?: Readonly<Record<string, string>>; projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
 interface Candidate { definition: CodeMaterialDefinition; item: VideoEditItem; filter?: CodeMaterialInstance }
 interface CodeAssetPublication {
   asset: CodeAsset; media: VideoEditMedia[]; mediaIds: ReadonlyMap<string, string>; origin: { assetId: string; contentIdentity: string }
@@ -240,7 +240,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       const project = entry ? await prepareProjectCodePublication(projectId, entry, input.projectCommit) : undefined
       const contents = project?.contents ?? codeFilesFromInput(input)
       const prepared = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles)
-      const publicationState = { ...prepared, inheritedLibraries: prepared.inheritedLibraries ?? definition.versions.find(version => version.id === definition.defaultVersionId)?.libraries }
+      const publicationState = { ...codeVersionInheritance(definition.versions.find(version => version.id === definition.defaultVersionId)!, documentCodeSourceResolver()), ...prepared, ...(input.libraries ? { libraries: input.libraries } : {}) }
       const typeCheck = typeReports ? startVideoEditCodeTypeCheck(codeVersionCompilation(contents, publicationState), publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
       const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState), typeCheck ? [typeCheck] : [], controller.signal)

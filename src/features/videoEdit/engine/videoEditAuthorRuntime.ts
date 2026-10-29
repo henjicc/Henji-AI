@@ -9,7 +9,8 @@ import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, Autho
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
-import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, recordAuthorCanvas, replayAuthorCanvas, sameAuthorCanvasRecording, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
+import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, authorCanvasTextContext, trackAuthorCanvasText, recordAuthorCanvas, replayAuthorCanvas, sameAuthorCanvasRecording, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
+import { TEXT_DRAW_OBSERVER, TEXT_LAYER_CONTEXT, observeTextLayouts, authorModuleTextLayouts, type TextDrawObservation, type TextDrawObserverContext } from '../../../core/videoEdit/textDrawObservation'
 
 /** One recorded layer. The same object is kept across frames while its commands and image versions stay equal. */
 interface Painted { recording: AuthorCanvasRecording; assets: string }
@@ -22,7 +23,7 @@ interface SurfaceContent { key: string; parts: Painted[] }
 interface Surface { texture: GpuTexture; width: number; height: number; mips?: boolean; canvas?: OffscreenCanvas; content?: SurfaceContent }
 /** `quiet`: frames since the layer last changed; Infinity while it has not changed since it first appeared. */
 /** `cache`：作者给的内容键与 bounds/clip 组成的签名；与上一帧相同就不调用 draw，沿用上一帧的录制。 */
-interface LayerHistory { painted?: Painted; quiet: number; cache?: string }
+interface LayerHistory { textLayouts?: Map<string, number | undefined>; painted?: Painted; quiet: number; cache?: string; textRaster?: string }
 interface Part { painted?: Painted; draw(ctx: OffscreenCanvasRenderingContext2D): void }
 type Matrix = [number, number, number, number, number, number]
 const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
@@ -83,7 +84,7 @@ export class VideoEditAuthorRuntime {
   private nativeOverrideTarget?: { texture: GpuTexture; width: number; height: number }
   private closed = false
   readonly parameterMetadata: AuthorEffectMetadata
-  private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides }
+  private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides; directText?: Map<number, TextDrawObservation[]>; textUncovered?: Map<number, string[]>; textLayouts?: Map<string, number | undefined> }
   constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, apiVersion?: number) {
     this.parameterMetadata = authorEffectMetadata(effect, apiVersion)
   }
@@ -129,14 +130,27 @@ export class VideoEditAuthorRuntime {
   observeElements(): AuthorElementObservation[] {
     const frame = this.lastFrame
     if (!frame) return []
+    let attachedUnassigned = false
     return frame.layers.flatMap((layer, index) => {
       const pose = layer.pose ? layer.pose(frame.time) : {}
       const id = authorLayerId(layer, index), override = frame.overrides && Object.hasOwn(frame.overrides, id) ? frame.overrides[id] : undefined
       if (!pose || override?.hidden || (pose.opacity ?? 1) * (override?.opacity ?? 1) <= 0) return []
       const bounds = layer.bounds ?? [0, 0, frame.width, frame.height]
       const matrix = authorPoseMatrix(pose)
+      const posed = !!layer.pose || !!override
+      const recording = this.history.get(`${posed ? 'layer' : 'still'}:${index}:${id}`)?.painted?.recording
+      const combined = [...this.history.entries()].find(([key]) => { const match = /^flat:(\d+):(\d+)$/.exec(key); return match && index >= Number(match[1]) && index < Number(match[2]) })?.[1].painted?.recording
+      const observed = combined ?? recording
+      const textDraws = frame.directText?.get(index) ?? observed?.textDraws.filter(draw => draw.layerIndex === undefined || draw.layerIndex === index)
+      const textLayouts = [...frame.textLayouts ?? []].filter(([, owner]) => owner === index).map(([id]) => id)
+      const unassignedTextLayouts = attachedUnassigned ? [] : [...frame.textLayouts ?? []].filter(([, owner]) => owner === undefined).map(([id]) => id)
+      attachedUnassigned = true
       const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? (layer.factory && this.locations?.factories?.[layer.factory.file]?.[layer.factory.name]) ?? this.locations?.fallback
-      return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1) }]
+      return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1),
+        ...(textDraws ? { textDraws: structuredClone(textDraws).map(draw => ({ ...draw,
+          // 运动层的 GPU scissor 在作者画幅坐标裁切；内部 Canvas clip 已由录制保存。
+          ...(posed && layer.clip ? { stageClip: [...layer.clip] as [number, number, number, number] } : {}),
+        })) } : {}), textLayouts, unassignedTextLayouts, textUncovered: [...(observed?.textUncoveredByLayer?.[index] ?? []), ...(frame.textUncovered?.get(index) ?? [])] }]
     })
   }
   private renders: Promise<unknown> = Promise.resolve()
@@ -257,6 +271,16 @@ export class VideoEditAuthorRuntime {
         for (const key of this.eagerAssets.keys()) await freshAsset(key)
         const statistics: CodeLayerStatistics = { reused: 0, redrawn: 0, direct: 0, video: 0, uploads: 0, uploadBytes: 0 }
         const history = new Map<string, LayerHistory>()
+        const directText = new Map<number, TextDrawObservation[]>()
+        const textUncovered = new Map<number, string[]>(), textLayouts = new Map<string, number | undefined>([...authorModuleTextLayouts.get(this.effect) ?? []].map(id => [id, undefined]))
+        let textLayer: number | undefined, recordedLayouts: Map<string, number | undefined> | undefined
+        const authorCall = <T>(run: () => T): T => observeTextLayouts(id => { textLayouts.set(id, textLayer); recordedLayouts?.set(id, textLayer) }, () => trackAuthorCanvasText(run))
+        const textContext = (ctx: OffscreenCanvasRenderingContext2D, index: number): OffscreenCanvasRenderingContext2D => {
+          textLayer = index
+          if ((ctx as TextDrawObserverContext)[TEXT_DRAW_OBSERVER]) { (ctx as TextDrawObserverContext)[TEXT_LAYER_CONTEXT]?.(index); return ctx }
+          const facts: TextDrawObservation[] = []; directText.set(index, facts)
+          return authorCanvasTextContext(ctx, fact => facts.push(fact), reason => { const reasons = textUncovered.get(index) ?? []; if (!reasons.includes(reason)) reasons.push(reason); textUncovered.set(index, reasons) })
+        }
         const used = new Set<number>()
         /**
          * Records one layer slot. A recording equal to the previous frame's (same commands, same image versions) is
@@ -269,22 +293,25 @@ export class VideoEditAuthorRuntime {
         const record = (slot: string, size: { width: number; height: number }, setup: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void, cache?: string): { painted?: Painted; volatile: boolean; video: boolean } => {
           const previous = this.history.get(slot)
           let painted: Painted | undefined
+          let layouts: Map<string, number | undefined> | undefined
           const held = previous?.painted
-          if (cache !== undefined && held && previous.cache === cache && !this.directLayers.has(slot) && held.assets === assetSignature(held.recording.assets)) painted = held
+          const textRaster = JSON.stringify(setup.slice(0, 4))
+          if (cache !== undefined && held && previous.cache === cache && (!held.recording.textDraws.length || previous.textRaster === textRaster) && !this.directLayers.has(slot) && held.assets === assetSignature(held.recording.assets)) { painted = held; layouts = previous.textLayouts; for (const [id, index] of layouts ?? []) textLayouts.set(id, index) }
           else if (measure && !this.directLayers.has(slot)) {
             recording = true
             try {
-              const recorded = recordAuthorCanvas(size, measure, setup, draw)
+              recordedLayouts = layouts = new Map(); textLayer = undefined
+              const recorded = authorCall(() => recordAuthorCanvas(size, measure, setup, draw))
               const assetVersions = assetSignature(recorded.assets), held = previous?.painted
               painted = held && held.assets === assetVersions && sameAuthorCanvasRecording(held.recording, recorded) ? held : { recording: recorded, assets: assetVersions }
             } catch (error) {
               if (!(error instanceof AuthorCanvasUnrecordable) && !(error instanceof TypeError)) throw error
               // Images handed outside the canvas, pixel reads, unknown APIs: this layer draws directly from now on.
               this.directLayers.add(slot)
-            } finally { recording = false }
+            } finally { recording = false; recordedLayouts = undefined; textLayer = undefined }
           }
           const quiet = !previous ? (painted ? Infinity : 0) : painted && painted === previous.painted ? previous.quiet + 1 : 0
-          history.set(slot, { painted, quiet, ...(cache !== undefined && painted ? { cache } : {}) })
+          history.set(slot, { painted, quiet, textRaster, textLayouts: layouts, ...(cache !== undefined && painted ? { cache } : {}) })
           return { painted, volatile: quiet < QUIET_FRAMES, video: [...painted?.recording.assets ?? []].some(key => (this.assetChanges.get(key) ?? 0) >= 2) }
         }
         /** `effects`：栅格比画布像素缩小的比例，阴影与滤镜长度按它换算（只给录下的、可换算的图层）。 */
@@ -296,7 +323,7 @@ export class VideoEditAuthorRuntime {
           const rasterStarted = performance.now()
           for (const part of parts) {
             if (part.painted) replayAuthorCanvas(part.painted.recording, ctx, key => fresh.get(key)!, setup, effects)
-            else part.draw(authorCanvasContext(ctx, setup))
+            else authorCall(() => part.draw(authorCanvasContext(ctx, setup)))
           }
           recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
         }
@@ -356,14 +383,14 @@ export class VideoEditAuthorRuntime {
         }
         try {
       const listStarted = performance.now()
-      const list = this.effect.layers ? this.effect.layers(params, width, height, assets, info) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
+      const list = this.effect.layers ? authorCall(() => this.effect.layers!(params, width, height, assets, info)) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
       recordVideoEditPreparation('authorLayerList', performance.now() - listStarted)
       if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组。')
       const drawStill = (ctx: OffscreenCanvasRenderingContext2D, still: AuthorLayer, position: number): void => {
         ctx.save()
         try {
           if (still.clip) { const [x0, y0, x1, y1] = still.clip; ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip() }
-          still.draw(ctx, info.time)
+          still.draw(textContext(ctx, position), info.time)
         } catch (cause) { throw cause instanceof AuthorCanvasUnrecordable || cause instanceof AuthorAssetPending || cause instanceof TypeError ? cause : new Error(`静态层 ${position + 1}：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
         finally { ctx.restore() }
       }
@@ -429,7 +456,7 @@ export class VideoEditAuthorRuntime {
           const slot = `layer:${index}:${id}`
           const fullResolution = authorRasterScale(need, limit, this.liveLayers.has(slot))
           const fullPad = authorLayerBlur(center, fullResolution, layer.blurShape).pad
-          const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw(ctx, info.time)
+          const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw(textContext(ctx, index), info.time)
           const recorded = record(slot, { width: Math.ceil(bounds.width * fullResolution) + fullPad * 2, height: Math.ceil(bounds.height * fullResolution) + fullPad * 2 }, [fullResolution, 0, 0, fullResolution, fullPad - x * fullResolution, fullPad - y * fullResolution], draw, layerCacheSignature(layer, width, height))
           if (recorded.video) { this.liveLayers.add(slot); statistics.video++ } else this.liveLayers.delete(slot)
           // 回放分辨率降低时栅格跟着缩小，阴影与滤镜同比换算；画法换算不了的层（直接绘制、读画布、认不出的滤镜）照原分辨率栅格。
@@ -491,7 +518,7 @@ export class VideoEditAuthorRuntime {
       }
       this.layers.finish()
       this.history = history
-      this.lastFrame = { layers: list, width, height, time: info.time, parameters: params, overrides }
+      this.lastFrame = { layers: list, width, height, time: info.time, parameters: params, overrides, directText, textUncovered, textLayouts }
       // Still-group textures follow the grouping: drop the ones no group used this frame.
       this.surfaces.forEach((surface, index) => { if (surface && !surface.canvas && !used.has(index)) { this.release(surface); delete this.surfaces[index] } })
       while (this.surfaces.length > list.length * 2) {

@@ -34,7 +34,7 @@ const textOptionsSchema = z.object({
   anchor: z.object({ x: finite, y: finite, horizontal: finite, vertical: finite }).strict().optional(),
   box: z.object({ width: nonnegative.optional(), height: nonnegative.optional() }).strict().optional(),
   frame: z.object({ width: positive, height: positive }).strict().optional(),
-  direction: z.enum(['ltr', 'rtl', 'inherit']).optional(), truncate: z.boolean().optional(),
+  direction: z.enum(['ltr', 'rtl', 'inherit']).optional(), truncate: z.boolean().optional(), forceGraphemes: z.boolean().optional(),
 }).strict() satisfies z.ZodType<TextOptions>
 const nodeSchema = z.object({ id: z.string().min(1, { error: 'id 必须为非空字符串' }), style: z.unknown().optional(), children: z.array(z.unknown()).optional(), text: z.unknown().optional() }).strict()
 const nodeTextSchema = z.object({ content: z.unknown(), style: z.unknown().optional(), options: z.unknown().optional() }).strict()

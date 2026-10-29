@@ -1,4 +1,6 @@
 import { scaleAuthorCanvasEffect } from './videoEditAuthorCanvasBounds'
+import { TEXT_DRAW_OBSERVER, TEXT_RASTER_CONTEXT, TEXT_LAYER_CONTEXT, TEXT_BITMAP_RESTORE, textRectCorners, type RestorableTextBitmap, type TextDrawFact, type TextDrawObservation, type TextRasterProvider } from '../../../core/videoEdit/textDrawObservation'
+import { codePoint } from '../../../core/videoEdit/codeMaterial/geometry'
 
 /**
  * Canvas 作者图层的绘制指令录制与重放。
@@ -23,9 +25,25 @@ type Value = unknown
 type Matrix = [number, number, number, number, number, number]
 
 /** 作者自己的位图：ImageBitmap 创建后内容不再变，同一对象跨帧得到同一编号，按编号比对。 */
-class ImageRef { constructor(readonly id: number, readonly image: ImageBitmap) {} }
+class ImageRef {
+  readonly width: number
+  readonly height: number
+  constructor(readonly id: number, readonly image: ImageBitmap) { this.width = image.width; this.height = image.height }
+}
 const imageIds = new WeakMap<object, number>()
 let lastImageId = 0
+const textSurfaces = new WeakSet<object>()
+/** 旧作者库把文字画到自建离屏画布；只在同步作者回调期间记录真实 fillText/strokeText。 */
+export function trackAuthorCanvasText<T>(run: () => T): T {
+  if (typeof OffscreenCanvasRenderingContext2D === 'undefined') return run()
+  const prototype = OffscreenCanvasRenderingContext2D.prototype
+  const fill = prototype.fillText, stroke = prototype.strokeText
+  prototype.fillText = function (...args: Parameters<typeof fill>): void { textSurfaces.add(this.canvas); fill.apply(this, args) }
+  prototype.strokeText = function (...args: Parameters<typeof stroke>): void { textSurfaces.add(this.canvas); stroke.apply(this, args) }
+  try { return run() } finally { prototype.fillText = fill; prototype.strokeText = stroke }
+}
+const isUnobservedText = (name: string, args: Value[]): boolean => name === 'fillText' || name === 'strokeText'
+  || name === 'drawImage' && !!args[0] && typeof args[0] === 'object' && textSurfaces.has(args[0])
 const imageRef = (image: ImageBitmap): ImageRef => {
   let id = imageIds.get(image)
   if (id === undefined) imageIds.set(image, id = ++lastImageId)
@@ -97,6 +115,9 @@ const matrixOf = (args: Value[]): Matrix => {
 const isIdentity = (m: Matrix): boolean => m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0
 
 export interface AuthorCanvasRecording {
+  textUncovered?: string[]
+  textUncoveredByLayer?: Record<number, string[]>
+  textDraws: TextDrawObservation[]
   ops: Value[][]
   /** 指令全部可比对：与上一帧相同即可沿用纹理。 */
   comparable: boolean
@@ -113,7 +134,7 @@ export interface AuthorCanvasRecording {
 
 /** 两次录制的指令逐条相同（作者位图按身份）。只比指令；作者图片的像素版本由调用方另比。 */
 export function sameAuthorCanvasRecording(a: AuthorCanvasRecording, b: AuthorCanvasRecording): boolean {
-  return a.comparable && b.comparable && same(a.ops, b.ops)
+  return a.comparable && b.comparable && same(a.ops, b.ops) && same(a.textDraws, b.textDraws)
 }
 function same(a: Value, b: Value): boolean {
   if (a === b) return true
@@ -138,6 +159,13 @@ function same(a: Value, b: Value): boolean {
 export function recordAuthorCanvas(size: { width: number; height: number }, measure: OffscreenCanvasRenderingContext2D, transform: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void): AuthorCanvasRecording {
   measure.reset()
   const ops: Value[][] = []
+  const textDraws: TextDrawObservation[] = []
+  const textUncovered = new Set<string>()
+  const textUncoveredByLayer: Record<number, string[]> = {}
+  let layerIndex: number | undefined
+  let clips: TextDrawObservation['clips'] = [], unknownClip = false
+  let pathRect: Array<[number, number]> | undefined, pathUnknown = false
+  const clipStack: Array<{ clips: TextDrawObservation['clips']; unknownClip: boolean }> = []
   let comparable = true, isolated = true, balanced = true, ownPath = false, nextId = 0
   const adopted = new Map<object, number>()
   const assets = new Set<string>()
@@ -171,7 +199,25 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
     return live(value)
   }
   const apply = (name: string, args: Value[]): void => {
+    if (isUnobservedText(name, args)) {
+      const reason = '图层含未使用新版排版库的 Canvas 文字，文字超框未覆盖'
+      textUncovered.add(reason)
+      if (layerIndex !== undefined) textUncoveredByLayer[layerIndex] = [reason]
+    }
     const [a, b, c, d, e, f] = args as number[]
+    // 开始绘制前清屏不影响随后文字；只有后续清除或混合才使已记录正文无法证明保留。
+    if (name === 'clearRect' || name === 'reset' || PAINT.has(name) && state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over') {
+      for (const fact of textDraws) { fact.retained = false; fact.uncovered.push('文字绘制后的清除或合成遮挡') }
+    }
+    if (name === 'save') clipStack.push({ clips: [...clips], unknownClip })
+    else if (name === 'restore') { const saved = clipStack.pop(); if (saved) { clips = saved.clips; unknownClip = saved.unknownClip } }
+    else if (name === 'beginPath') { pathRect = undefined; pathUnknown = false }
+    else if (name === 'rect' && !pathRect && !pathUnknown) pathRect = textRectCorners({ x: a, y: b, width: c, height: d }).map(([x, y]) => codePoint(multiply(invert(transform), matrix), x, y))
+    else if (PATH.has(name) && name !== 'closePath') pathUnknown = true
+    else if (name === 'clip') {
+      if (!pathUnknown && pathRect && (args.length === 0 || typeof args[0] === 'string')) clips = [...clips, pathRect]
+      else unknownClip = true
+    } else if (name === 'reset') { clips = []; unknownClip = false; pathRect = undefined; pathUnknown = false; clipStack.length = 0 }
     if (name === 'translate') matrix = multiply(matrix, [1, 0, 0, 1, a, b])
     else if (name === 'scale') matrix = multiply(matrix, [a, 0, 0, b, 0, 0])
     else if (name === 'rotate') matrix = multiply(matrix, [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), 0, 0])
@@ -220,6 +266,13 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   const target = {} as Record<string, Value>
   const context = new Proxy(target, {
     get(_, property) {
+      if (property === TEXT_LAYER_CONTEXT) return (index: number): void => { layerIndex = index }
+      if (property === TEXT_RASTER_CONTEXT) return () => ({ matrix: [...matrix], colorSpace: (measure as TextRasterProvider).getContextAttributes?.().colorSpace ?? 'srgb' })
+      if (property === TEXT_DRAW_OBSERVER) return (fact: TextDrawFact): void => {
+        const uncovered = [ ...(fact.animatedGraphemes ? ['独立字素动画的墨迹裁切'] : []), ...(unknownClip ? ['任意 Canvas clip'] : []), ...(state.filter && state.filter !== 'none' ? ['Canvas filter'] : []), ...(state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over' ? ['Canvas 混合遮挡'] : []), ...(fact.bodyCoverage && fact.bodyCoverage !== 'complete' ? ['部分或全部正文未启用填充或描边，文字完整性未覆盖'] : []) ]
+        const canvasClip = textRectCorners({ x: 0, y: 0, ...size }).map(([x, y]) => codePoint(invert(transform), x, y))
+        textDraws.push(structuredClone({ ...fact, layerIndex, matrix: multiply(invert(transform), matrix), clips, canvasClip, opacity: Number(state.globalAlpha ?? 1), uncovered, ...(state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over' ? { retained: false } : {}) }))
+      }
       if (typeof property !== 'string') return undefined
       if (property === 'canvas') return standIn
       if (property in state) return state[property]
@@ -237,10 +290,11 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   }) as unknown as OffscreenCanvasRenderingContext2D
   const outer = active
   active = { idOf, adopt, ops }
-  try { draw(context) } finally { active = outer }
+  try { trackAuthorCanvasText(() => draw(context)) } finally { active = outer }
   // 多出的 save 没有 restore：画完时状态与裁剪还留在栈上，同样会漏给后面的层。
   if (stack.length) balanced = false
-  return { ops, comparable, assets, isolated, balanced }
+  if (!balanced) for (const fact of textDraws) { fact.retained = false; fact.uncovered.push('跨绘制状态或合成遮挡') }
+  return { ops, comparable, assets, isolated, balanced, textDraws, textUncovered: [...textUncovered], textUncoveredByLayer }
 }
 
 /**
@@ -251,7 +305,7 @@ export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: Offscr
   const gradients = new Map<number, CanvasGradient>(), patterns = new Map<number, CanvasPattern | null>()
   const decode = (value: Value): Value => {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
-    if (value instanceof ImageRef) return value.image
+    if (value instanceof ImageRef) return (value.image as RestorableTextBitmap<ImageBitmap>)[TEXT_BITMAP_RESTORE]?.() ?? value.image
     const record = value as Record<string, Value>
     if ('asset' in record) return asset(record.asset as string)
     if ('gradient' in record) return gradients.get(record.gradient as number)
@@ -288,6 +342,7 @@ export function authorCanvasContext(ctx: OffscreenCanvasRenderingContext2D, tran
   const identity = isIdentity(transform), inverse = invert(transform)
   return new Proxy(ctx, {
     get(real, property) {
+      if (property === TEXT_RASTER_CONTEXT) return () => { const m = real.getTransform(); return { matrix: [m.a, m.b, m.c, m.d, m.e, m.f], colorSpace: (real as TextRasterProvider).getContextAttributes?.().colorSpace ?? 'srgb' } }
       if (!identity && property === 'setTransform') return (...args: Value[]) => real.setTransform(...multiply(transform, matrixOf(args)))
       if (!identity && property === 'resetTransform') return () => real.setTransform(...transform)
       if (!identity && property === 'reset') return () => { real.reset(); real.setTransform(...transform) }
@@ -296,5 +351,24 @@ export function authorCanvasContext(ctx: OffscreenCanvasRenderingContext2D, tran
       return typeof value === 'function' ? value.bind(real) : value
     },
     set(real, property, value) { return Reflect.set(real, property, realize(real, value), real) },
+  })
+}
+
+/** 直接画布不公开裁切栈；仍保留实际绘制事实，但不能据此证明正文被裁掉。 */
+export function authorCanvasTextContext(ctx: OffscreenCanvasRenderingContext2D, collect: (fact: TextDrawObservation) => void, uncovered?: (reason: string) => void): OffscreenCanvasRenderingContext2D {
+  return new Proxy(ctx, {
+    get(real, property) {
+      if (property === TEXT_DRAW_OBSERVER) return (fact: TextDrawFact): void => {
+        const m = real.getTransform()
+        collect(structuredClone({ ...fact, matrix: [m.a, m.b, m.c, m.d, m.e, m.f], opacity: real.globalAlpha, clips: [], uncovered: ['直接绘制的 Canvas clip 与滤镜遮挡'] }))
+      }
+      const value = Reflect.get(real, property, real)
+      if (typeof property === 'string' && ['fillText', 'strokeText', 'drawImage'].includes(property)) return (...args: Value[]): void => {
+        if (isUnobservedText(property, args)) uncovered?.('图层含未使用新版排版库的 Canvas 文字，文字超框未覆盖')
+        ;(value as (...args: Value[]) => void).apply(real, args)
+      }
+      return typeof value === 'function' ? value.bind(real) : value
+    },
+    set: (real, property, value) => Reflect.set(real, property, value, real),
   })
 }

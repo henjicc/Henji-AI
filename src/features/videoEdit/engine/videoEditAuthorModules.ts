@@ -1,3 +1,4 @@
+import { importedAuthorLibraries } from '@/core/videoEdit/codeMaterial/libraryImports'
 import { parse } from 'es-module-lexer/js'
 import type { CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
@@ -130,17 +131,7 @@ export function directAuthorBundle(files: CodeMaterialFiles): CodeAuthorBundle |
 /** 只统计字面说明符；运行时才确定的动态 import 无法提前得知所用库。 */
 function usedAuthorLibraries(files: CodeMaterialFiles): Record<string, string> | undefined {
   if (!librariesAvailable(files.apiVersion)) return undefined
-  const used: Record<string, string> = {}
-  for (const [path, code] of Object.entries(files.files)) {
-    if (!/\.[cm]?jsx?$/.test(path)) continue
-    let imports: ReturnType<typeof parse>[0]
-    try { [imports] = parse(code) } catch { continue }
-    for (const request of imports) {
-      if (!request.specifier || !BARE_SPECIFIER.test(request.specifier) || resolveAuthorProjectImport(files, path, request.specifier)) continue
-      const library = resolveAuthorLibraryModule(request.specifier, files.libraries)
-      if (library && !authorLibraryCompatibilityError(library.library, library.version, files.apiVersion)) used[library.library] = library.version
-    }
-  }
+  const used = Object.fromEntries(Object.entries(importedAuthorLibraries(files)).filter(([library, version]) => !authorLibraryCompatibilityError(library, version, files.apiVersion)))
   return Object.keys(used).length ? used : undefined
 }
 

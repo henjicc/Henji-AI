@@ -1,5 +1,6 @@
 import { CODE_COMPONENT_SCHEMA_VERSION } from '../../persistence/schemaVersions'
 import { parse } from 'es-module-lexer/js'
+import { parseAuthorModuleImports } from './authorModulePaths'
 import { migratePersistenceContent, PersistenceError } from '../../persistence/migrations'
 import { formatMigrations } from '../../persistence/formatMigrations'
 import { z } from 'zod'
@@ -45,7 +46,7 @@ export function codeComponentImports(source: string, fileName = '组件.ts'): Co
   return parsed
 }
 function parseCodeComponentImports(source: string, fileName: string): CodeComponentImport[] {
-  const [imports] = parse(source)
+  const imports = parseAuthorModuleImports(source, fileName)
   return imports.flatMap(request => {
     const specifier = request.specifier
     if (!specifier) return []
@@ -129,7 +130,7 @@ export function portableCodeComponentFiles(compilation: CodeMaterialFiles): Code
   const files = Object.fromEntries(Object.entries(compilation.files).map(([path, source]) => {
     if (!/\.[cm]?[jt]sx?$/.test(path)) return [path, source]
     const edits: Array<{ start: number; end: number; value: string }> = []
-    for (const entry of parse(source)[0]) {
+    for (const entry of parseAuthorModuleImports(source, path)) {
       if (!entry.specifier) continue
       const target = compilation.resolvedImports?.[path]?.[entry.specifier]
       if (!target) continue

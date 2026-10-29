@@ -62,10 +62,10 @@
 | --- | --- | --- | --- |
 | three | 0.186.1 | v5 | `three`、`three/webgpu`、`three/tsl`；附加模块写 `three/addons/<子路径>.js`（同 `three/examples/jsm/…`，`.js` 不能省） |
 | opentype.js | 2.0.0 | v5 | `opentype.js`，只有具名导出：`import { parse } from "opentype.js"`（没有默认导出，字体字节读进来再 `parse`） |
-| henji-layout | 1.0.0 | v6 | `henji-layout/text`（`layoutText`、`drawText` 排版与绘制）、`henji-layout/flex`（`layoutBoxes` 盒子布局）；见 author-text-motion |
+| henji-layout | 1.1.0 | v6 | `henji-layout/text`（`layoutText`、`drawText` 排版、字素动画与缓存绘制）、`henji-layout/flex`（`layoutBoxes` 盒子布局）；见 author-text-motion |
 
-- **按起始接口可用**：作者接口低于起始版本的代码版本导入会报错，另存为新版本即按当前作者接口编译。
-- 版本记在代码版本里：新写的代码用上表的版本，已有版本按当时记录的版本继续跑，软件升级库版本不会悄悄改变旧画面。
+- 低于起始接口不能导入；另存新版本按当前作者接口编译。
+- 新库选兼容最新版；旧导入沿用记录，无记录用第一套。升级：`upgrade_video_edit_code_materials`、`upgradeLibraries:true`（指定素材、改指可撤销）。
 - 同一版本的库各片段共用一份实例，模块顶层不放会被别的片段看到的状态。
 - 类型检查按库的真实类型报错。three 接管宿主 WebGL 上下文见 [纵深与三维](recipes-3d.md) 的“用 three 画真实网格”。
 

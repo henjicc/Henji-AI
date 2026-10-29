@@ -41,11 +41,13 @@ export default {
 
 返回值都是作品像素：`box`（底板、选框、遮罩按它算）、`lines`（每行 `text`、`x`、`y`、`width`、`height`、`baseline`）、`graphemes`（每个字素 `text`、`x`、`y` 为基线、`advance`、`line`、`style`）、`style`（缩字号后的实际样式，`fit.fontSize` 为实际字号）、`totalLines`，以及 `truncated`、`omittedRanges`、`overflow`。原文不能被静默截掉：`truncated` 为真时加 `fit`、加高盒子或分拍；用排版库画的文字，复核能检查超框。
 
-drawText 按当前变换、`globalAlpha` 与 clip 绘制。它每次重新栅格，静止的文字层放在 `mode: "static"` 的素材里，或在动画落定后给图层 `cacheKey`（键里带上文字与样式），否则这一层每帧重画。缩放较大的推近不要先排小字再 `ctx.scale` 放大，按最终字号排版。
+drawText 按当前变换、`globalAlpha` 与 clip 绘制。同内容、样式、选项和字体代次的 `layoutText` 返回同一深度只读布局，可在 `layers()` 中调用。静态整段位图与逐字图集按布局、分辨率档位和颜色空间复用；每布局最多 4 张（包含整段层），LRU 淘汰时关闭。Canvas、pose 和字素 scale 自动选择最高 4× 分辨率，图集最低 2×，超大纹理会降档。更大放大需求可提高字号。全部字素的位移/旋转归零、缩放/透明度归一时复用静态整段位图，1× 也保持相同像素；落定后可用 `cacheKey` 跳过整层录制。
 
 ## 逐字与逐词动画
 
-逐字动画读 `layout.graphemes`，不拆字自己量。每个字素用自己的 `style` 单独排版，再平移到整段布局给出的位置：
+绘制顺序是整段底板 → 所有字素的阴影/发光与外描边 → 各字填色及其内/居中描边 → 整段装饰线，字素的变换和透明度同时作用于上下两层。底板和装饰线不随字逐个出现或移动：默认首个字素可见就显示整段；在 `drawText` 选项传 `backgroundAndDecorationOpacity`（0–1）可单独隐藏或淡入淡出整段层，例如 `{ backgroundAndDecorationOpacity: clamp01(time / .3), graphemes: ... }`。
+
+逐字动画只排整段，在一次 `drawText` 的 `graphemes` 回调里返回动画参数；字素簇各自栅格进共享图集，不会裁入相邻字的斜体像素。`x/y` 是相对排版位置的像素偏移，`scale/rotate` 围绕字素基线起点（旋转为弧度），`opacity` 为 0–1，返回 `null` 隐藏。透明度先于位移完成：
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"
@@ -59,22 +61,21 @@ export default {
   ],
   layers(params, width, height) {
     const layout = layoutText(params.text, params.style, { maxWidth: width - 200, maxLines: 2, fit: { minFontSize: 48 }, anchor: { x: width / 2, y: height / 2, horizontal: .5, vertical: .5 } })
-    const glyphs = layout.graphemes.filter(g => g.x !== null && g.text.trim()).map(g => ({ g, one: layoutText(g.text, g.style) }))
     const { x, y, width: w, height: h } = layout.box
     return [{ id: "text", bounds: [x, y, x + w, y + h + 48], draw(ctx, time) {
-      glyphs.forEach(({ g, one }, i) => {
-        const p = expoOut(clamp01((time - i * .045) / .6)), at = one.graphemes[0]
-        ctx.save(); ctx.globalAlpha = p
-        ctx.translate(g.x - at.x, g.y - at.y + (1 - p) * 48)
-        drawText(ctx, one); ctx.restore()
-      })
+      drawText(ctx, layout, { graphemes: (g, i) => {
+        const elapsed = time - i * Math.min(.045, .6 / Math.max(1, layout.graphemes.length - 1))
+        return { y: (1 - expoOut(clamp01(elapsed / .6))) * layout.style.fontSize * .45, opacity: clamp01(elapsed / .3) }
+      } })
     } }]
   }
 }
 ```
 
-- 字素的 `positionKind` 为 `"native-estimate"` 时，位置是整行塑形的推进估计：中文逐字没问题，英文字偶距、连字与组合字形逐字画会有细微差别，必要时改为逐词或整行裁切揭示。
-- 逐词：按 `graphemes[i].line` 与原文范围（`source`）把字素归成词，词首 `x` 定位，或把每个词单独 layoutText。
+- 字素模式会失去字素之间的连写和字距塑形；组合字素簇内部保持一起绘制。整段静态 drawText 保留原生整行塑形。字素的 `positionKind` 为 `"native-estimate"` 时，位置是整行塑形的推进估计：中文逐字没问题，英文字偶距、连字与组合字形逐字画会有细微差别，必要时改为逐词或整行裁切揭示。
+- 逐词：按 `graphemes[i].line` 与原文范围（`source`）把字素归成词，词首 `x` 定位，让同一词的字素回调使用同一组进度；独立词卡片可各自排版并绘制。
+
+同一帧所有排出的字素透明度都大于 0，复核才开始检查整段超框与截断；遗漏行仍来自整段布局事实。索引数量或数组也可用于明确的打字揭示，但平滑入场使用上面的回调。
 
 ## 盒子布局：layoutBoxes
 

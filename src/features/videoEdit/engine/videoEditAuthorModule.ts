@@ -1,6 +1,7 @@
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import { deterministicAuthorModule, importAuthorDeterministic } from './videoEditAuthorDeterminism'
+import { authorModuleTextLayouts } from '../../../core/videoEdit/textDrawObservation'
 
 /** Executable ES module contract. These functions never cross a worker boundary. */
 export interface AuthorFrameInfo {
@@ -91,12 +92,15 @@ const importNativeModule = new Function('url', 'return import(url)') as (url: st
  * Every entry runs with seeded randomness and frame-derived clocks (see videoEditAuthorDeterminism). */
 export async function loadAuthorModule(url: string): Promise<AuthorModule> {
   try {
-    const loaded = await importAuthorDeterministic(() => importNativeModule(url))
+    const layouts = new Set<string>()
+    const loaded = await importAuthorDeterministic(() => importNativeModule(url), id => layouts.add(id))
     const effect = loaded.default
     if (!effect || typeof effect.name !== 'string') throw new Error('默认导出需要效果名称 name。')
     if (![effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU].some(value => typeof value === 'function')) throw new Error('效果需要 draw、layers、createWebGL 或 createWebGPU 入口。')
     if (effect.layers && (effect.createWebGL || effect.createWebGPU)) throw new Error('layers 不能与独立 GPU 绘制入口同时声明。')
-    return deterministicAuthorModule(effect)
+    const wrapped = deterministicAuthorModule(effect)
+    authorModuleTextLayouts.set(wrapped, layouts)
+    return wrapped
   } catch (cause) {
     throw new Error(`加载代码效果 ${url} 失败：${cause instanceof Error ? cause.message : String(cause)}`, { cause })
   }

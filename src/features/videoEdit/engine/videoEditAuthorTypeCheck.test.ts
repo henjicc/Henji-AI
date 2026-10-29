@@ -6,6 +6,7 @@ import { normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/video
 import { codeTypeDiagnosticLine } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 import { createAuthorTypeChecker, type AuthorLibraryTypePackage } from './videoEditAuthorTypeCheck'
 import { AUTHOR_TYPE_ENVIRONMENT } from './videoEditAuthorTypeEnvironment'
+import { codeVersionCompilation } from '@/core/videoEdit/codeMaterialVersions'
 import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
 
 /** 与检查 Worker 同一份环境（Vite 打包的标准库、WebGPU 与作者接口声明），只是不经线程。 */
@@ -34,6 +35,14 @@ it('排版库挂载发行的真实声明，类型错误可检出；切回 v5 后
   expect(missing.check(files, ['main.ts']).diagnostics.some(diagnostic => /types.json/.test(diagnostic.message))).toBe(true)
 })
 
+it('新版布局返回深度 Readonly，旧冻结版本的类型保持不变', () => {
+  const typed = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: (library, version) => library === 'henji-layout' ? JSON.parse(fs.readFileSync(path.join('resources/video-edit-author/frozen', library, version, 'types.json'), 'utf8')) as AuthorLibraryTypePackage : undefined })
+  const source = 'import { layoutText } from "henji-layout/text"; export default { name: "只读", draw() { const layout = layoutText("标题"); layout.box.width = 10; layout.graphemes[0].style.fill.color = "red"; } };'
+  const files = { entry: 'main.ts', apiVersion: 6 as const, files: { 'main.ts': source } }
+  expect(typed.check({ ...files, libraries: { 'henji-layout': '1.1.0' } }, ['main.ts']).diagnostics.filter(d => d.code === 2540)).toHaveLength(2)
+  expect(typed.check({ ...files, libraries: { 'henji-layout': '1.0.0' } }, ['main.ts']).diagnostics).toEqual([])
+})
+
 describe('作者源码类型检查', () => {
   it('技能文档里的每个完整源码都没有类型错误（不能误报给助手照抄的写法）', () => {
     // 冻结发行的库读仓库里与 Worker 同一份 types.json，样例按真实声明检查；其余库读不到时照常退回无类型。
@@ -43,7 +52,7 @@ describe('作者源码类型检查', () => {
     }
     const typed = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: frozen })
     const lines = (source: string): string[] => {
-      const files: CodeMaterialFiles = { apiVersion: CODE_AUTHOR_API_VERSION, ...normalizeCodeMaterialFiles(source) }
+      const files = codeVersionCompilation(normalizeCodeMaterialFiles(source), { imports: [], write: async () => { throw new Error('类型检查不写入') } })
       return typed.check(files, Object.keys(files.files)).diagnostics.map(codeTypeDiagnosticLine)
     }
     const dir = path.resolve('resources/assistant-skills/video-edit-code-creation')

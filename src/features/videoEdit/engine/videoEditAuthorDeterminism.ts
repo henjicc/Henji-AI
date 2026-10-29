@@ -1,5 +1,6 @@
 import { authorLayerId } from './videoEditAuthorElements'
 import type { AuthorLayer, AuthorModule, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
+import { TEXT_LAYOUT_OBSERVER, type TextLayoutObserverGlobal } from '../../../core/videoEdit/textDrawObservation'
 
 /**
  * 同一参数、同一时刻必须得到同一画面：预渲染按源码与参数寻址，播放、预渲染、导出各自加载模块，作者代码用了
@@ -41,11 +42,13 @@ let imports: Promise<unknown> = Promise.resolve()
  * 模块顶层代码在 import 时执行一次，播放与预渲染各加载一份：顶层随机数也要相同。一次只加载一个模块，
  * 加载期间 Math.random 固定种子；时钟照常（同一 Worker 里的计时与缓存时效还在用）。
  */
-export function importAuthorDeterministic<T>(load: () => Promise<T>): Promise<T> {
+export function importAuthorDeterministic<T>(load: () => Promise<T>, observeLayout?: (id: string) => void): Promise<T> {
   const result = imports.then(async () => {
     const random = Math.random
+    const host = globalThis as TextLayoutObserverGlobal, previous = host[TEXT_LAYOUT_OBSERVER]
+    host[TEXT_LAYOUT_OBSERVER] = observeLayout
     Math.random = seededRandom('module', 0)
-    try { return await load() } finally { Math.random = random }
+    try { return await load() } finally { Math.random = random; host[TEXT_LAYOUT_OBSERVER] = previous }
   })
   imports = result.catch(() => undefined)
   return result

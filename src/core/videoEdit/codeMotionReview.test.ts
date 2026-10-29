@@ -3,6 +3,9 @@ import { collectVideoEditCodeMotion, type CodeMotionObserver } from './codeMotio
 import type { CodeAuthorProgram, CodeAuthorFrameObservation } from './codeAuthorProgram'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip } from './document'
 import { addLegacyVideoEditTracks } from './testFixtures'
+import type { TextDrawObservation } from './textDrawObservation'
+import { createTextDrawPlan } from '../imaging/vectorContent/textDrawPlan'
+import { textStyleSchema } from '../imaging/vectorContent/text'
 
 function fixture() {
   const document = createVideoEditDocument('代码运动'), sequence = createVideoEditSequence('主')
@@ -34,6 +37,28 @@ it('keeps source-only content unknown when stationary bounds reveal no pixel cha
   const result = await run(async (local, frame) => ({ ...await observe(local, 0), frame }))
   expect(result.records.some(record => record.kind === 'motion_hold')).toBe(false)
   expect(result.records.filter(record => record.kind === 'code_unavailable')).toHaveLength(1)
+  expect(result.records.some(record => record.kind.startsWith('text_'))).toBe(false)
+  expect(result.warnings).toEqual([])
+})
+
+it('文字墨迹与录制 clip 各用所属矩阵投影到查询序列，不把图层 bounds 当成文字', async () => {
+  const { run, clip, observe } = fixture(); clip.x = 0; clip.y = 0
+  const draw: TextDrawObservation = {
+    sourceText: '标题', box: { x: 0, y: 0, width: 50, height: 20 }, constraint: { x: 0, y: 0, width: 50, height: 20 },
+    contentSize: { width: 50, height: 20 }, visibleContentSize: { width: 50, height: 20 }, inkBounds: { x: 0, y: 0, width: 50, height: 20 }, appearanceBounds: { x: -100, y: -100, width: 300, height: 300 }, boundsKind: 'measured',
+    overflow: { full: { width: false, height: false, lines: false }, visible: { width: false, height: false, lines: false } }, truncated: false, omittedRanges: [], totalLines: 1, actualLines: 1,
+    fit: { applied: false, failed: false, fontSize: 20, scale: 1 }, matrix: [1, 0, 0, 1, 20, 0], clips: [[[0, 0], [40, 0], [40, 100], [0, 100]]], opacity: 1, uncovered: [],
+  }
+  const result = await run(async (local, frame) => {
+    const value = await observe(local, 0); value.frame = frame
+    Object.assign(value.clips[0].elements[0], { matrix: [1, 0, 0, 1, 80, 100], textDraws: [draw] })
+    return value
+  })
+  const records = result.records.filter(record => record.kind.startsWith('text_'))
+  expect(records).toHaveLength(1)
+  expect(records[0]).toMatchObject({ kind: 'text_clipped', timeline: { from: 0, to: 120 }, textOverflow: { matrix: [1, 0, 0, 1, 100, 100], clippedBy: ['clip'] } })
+  expect(records[0].textOverflow?.inkQuad).toEqual([[100, 100], [150, 100], [150, 120], [100, 120]].map(point => point.map(value => expect.closeTo(value, 8))))
+  expect(records[0].textOverflow?.effectiveClips[0]).toEqual([[80, 100], [120, 100], [120, 200], [80, 200]].map(point => point.map(value => expect.closeTo(value, 8))))
 })
 it('propagates real render failures and does not fabricate invisible layers', async () => {
   await expect(fixture().run(async (): Promise<CodeAuthorFrameObservation> => { throw new Error('作者执行失败') })).rejects.toThrow('作者执行失败')
@@ -52,4 +77,37 @@ it('maps observed author layers into output pixels for picture checks: settled t
     expect.objectContaining({ kind: 'settled_jitter', elementPath: ['headline'], basis: 'code_structure', label: '代码 · 标题' }),
     expect.objectContaining({ kind: 'safe_area', elementPath: ['logo'], timeline: { from: 0, to: 120 }, safeArea: { zone: 'action', edges: ['left'], overflowPercent: 2.5 } }),
   ])
+})
+
+it('只对实际绘制旧文字的图层提示未覆盖，短查询说明稳定帧数不足', async () => {
+  const { composition, program, observe } = fixture()
+  const observer: CodeMotionObserver = async (local, frame) => {
+    const value = await observe(local, frame)
+    value.clips[0].elements[0].textUncovered = ['图层含未使用新版排版库的 Canvas 文字，文字超框未覆盖']
+    return value
+  }
+  const result = await collectVideoEditCodeMotion(composition, { from: 0, to: 2 }, { version: program }, {}, observer)
+  expect(result.records.some(record => record.kind.startsWith('text_'))).toBe(false)
+  expect(result.warnings.join(' ')).toContain('这些图层未使用排版库')
+  expect(result.warnings.join(' ')).toContain('短于文字检查')
+})
+
+it('整个查询区间一次都没画过才按图层告警，延迟与间歇绘制不误报', async () => {
+  const { run, observe } = fixture()
+  const plan = createTextDrawPlan('标题', textStyleSchema.parse({ fontSize: 20 }), {}, () => 20)
+  const draw: TextDrawObservation = { ...plan, layoutId: 'delayed', constraint: { x: 0, y: 0 }, actualLines: 1, matrix: [1, 0, 0, 1, 0, 0], opacity: 1, clips: [], uncovered: [] }
+  const result = await run(async (local, frame) => {
+    const value = await observe(local, frame), element = value.clips[0].elements[0]
+    element.textLayouts = ['never', 'another-never', 'delayed']
+    element.textDraws = frame === 45 ? [draw] : []
+    return value
+  })
+  const warnings = result.warnings.join(' ')
+  expect(warnings.match(/没有 drawText 该布局/g)).toHaveLength(1)
+  const delayed = await run(async (local, frame) => {
+    const value = await observe(local, frame), element = value.clips[0].elements[0]
+    element.textLayouts = ['delayed']; element.textDraws = frame === 45 ? [draw] : []
+    return value
+  })
+  expect(delayed.warnings.join(' ')).not.toContain('没有 drawText 该布局')
 })

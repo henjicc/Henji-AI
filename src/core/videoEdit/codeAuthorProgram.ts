@@ -15,6 +15,10 @@ export interface AuthorElementObservation {
   factory?: { file: string; name: string }
   parameterKeys: string[]
   textParameterKeys: string[]
+  textDraws?: import('./textDrawObservation').TextDrawObservation[]
+  textUncovered?: string[]
+  textLayouts?: string[]
+  unassignedTextLayouts?: string[]
   data?: { parameter: string; index: number; key?: string | number; keyField?: string; value: unknown }
 }
 export interface CodeAuthorFrameObservation {

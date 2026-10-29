@@ -35,10 +35,17 @@ export function fixtureTextMetrics(text: string, font: string, kerning = 'normal
 }
 
 export function createTextCanvasRecorder(): {
-  Canvas: new (width: number, height: number) => { width: number; height: number; getContext: () => OffscreenCanvasRenderingContext2D }
+  Canvas: new (width: number, height: number) => { width: number; height: number; getContext: () => OffscreenCanvasRenderingContext2D; transferToImageBitmap: () => ImageBitmap }
+  Bitmap: typeof ImageBitmap
   snapshot: () => unknown
 } {
   const surfaces: RecordingCanvas[] = []
+  class RecordingBitmap {
+    readonly width: number
+    readonly height: number
+    constructor(readonly surface: RecordingCanvas) { this.width = surface.width; this.height = surface.height }
+    close(): void {}
+  }
   class RecordingCanvas {
     operations: Operation[] = []
     context: OffscreenCanvasRenderingContext2D
@@ -61,7 +68,11 @@ export function createTextCanvasRecorder(): {
         save: () => { stack.push({ ...state, matrix: [...state.matrix] }) },
         restore: () => { const previous = stack.pop(); if (!previous) throw new Error('Canvas 状态栈不平衡。'); state = previous },
         scale: (x: number, y: number) => transform(x, 0, 0, y, 0, 0),
+        rotate: (angle: number) => transform(Math.cos(angle), Math.sin(angle), -Math.sin(angle), Math.cos(angle), 0, 0),
+        setTransform: (...matrix: number[]) => { state.matrix = matrix },
         translate: (x: number, y: number) => transform(1, 0, 0, 1, x, y), transform,
+        getTransform: () => { const [a, b, c, d, e, f] = state.matrix; return { a, b, c, d, e, f } },
+        getContextAttributes: () => ({ colorSpace: 'srgb' }),
         measureText: (text: string) => fixtureTextMetrics(text, state.font, state.fontKerning, state.direction, state.textBaseline),
         // 指令替身只承接宿主 ROI 读回协议；实际像素仍由真实字体验收。
         getImageData: (_x: number, _y: number, width: number, height: number) => new ImageData(width, height),
@@ -73,12 +84,14 @@ export function createTextCanvasRecorder(): {
       }) as unknown as OffscreenCanvasRenderingContext2D
     }
     getContext(): OffscreenCanvasRenderingContext2D { return this.context }
+    transferToImageBitmap(): ImageBitmap { return new RecordingBitmap(this) as unknown as ImageBitmap }
   }
   return {
     Canvas: RecordingCanvas,
+    Bitmap: RecordingBitmap as unknown as typeof ImageBitmap,
     snapshot: () => {
       const painted = surfaces.filter(surface => surface.operations.length)
-      return painted.map(surface => ({ width: surface.width, height: surface.height, operations: surface.operations.map(operation => ({ ...operation, args: operation.args.map(arg => arg instanceof RecordingCanvas ? { surface: painted.indexOf(arg), width: arg.width, height: arg.height } : arg) })) }))
+      return painted.map(surface => ({ width: surface.width, height: surface.height, operations: surface.operations.map(operation => ({ ...operation, args: operation.args.map(arg => arg instanceof RecordingCanvas || arg instanceof RecordingBitmap ? { surface: painted.indexOf(arg instanceof RecordingBitmap ? arg.surface : arg), width: arg.width, height: arg.height } : arg) })) }))
     },
   }
 }

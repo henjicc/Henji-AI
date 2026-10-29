@@ -24,7 +24,11 @@ const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBund
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
 import { invalidateCodeTextMetrics } from '../videoEditGlyphMetrics'
-import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse } from '../engine/videoEditMotionReviewWorker'
+import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse, VideoEditMotionReviewResult } from '../engine/videoEditMotionReviewWorker'
+import type { TextDrawObservation } from '@/core/videoEdit/textDrawObservation'
+import { createTextCanvasRecorder } from '@/core/imaging/vectorContent/textDrawPlanCanvas.testSupport'
+import { layoutText, drawText } from '../authorLibraries/text'
+import { recordAuthorCanvas } from '../engine/videoEditAuthorCanvasRecorder'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { AudioContentAnalyzer } from '@/core/audioAnalysis/contentAnalysis'
 import { codeMotionAudioKey } from '@/core/videoEdit/codeAudio'
@@ -52,6 +56,8 @@ vi.mock('./videoEditBeatWorkerClient', () => ({ analyzeVideoEditBeatsOffThread: 
 class MotionWorker {
   static instances: MotionWorker[] = []
   static automatic = true
+  static textDraws?: TextDrawObservation[]
+  static textUncovered?: string[]
   onmessage: ((event: MessageEvent<VideoEditMotionReviewResponse>) => void) | null = null
   onerror: ((event: { message: string }) => void) | null = null
   onmessageerror: (() => void) | null = null
@@ -63,13 +69,16 @@ class MotionWorker {
     try {
       const { composition, range, policy, programs, pixels, audios } = this.request
       if (this.request.planInputsOnly) { this.onmessage?.(new MessageEvent<VideoEditMotionReviewResponse>('message', { data: { result: { records: [], sampledFrames: 0, sampledInstances: 0, inputPlacements: videoEditCodeInputMotionPlacements(composition, range) } } })); return }
-      const result = collectVideoEditMotionStructure(composition, range, policy)
+      const result: VideoEditMotionReviewResult = collectVideoEditMotionStructure(composition, range, policy)
       if (pixels) result.records.push(...collectVideoEditPixelMotion(pixels, composition.fps, policy))
-      if (programs) result.records.push(...(await collectVideoEditCodeMotion(composition, range, programs, policy, async (local, frame) => ({ sequenceId: local.id, revision: local.revision, frame, clips: local.clips.filter(clip => clip.code).map(clip => {
-        const audio = audios?.[codeMotionAudioKey(local.id, clip.id)]
-        const x = audio ? (audio.levels[Math.min(frame, audio.levels.length - 1)] ?? 0) * 500 : frame * 10
-        return { clipId: clip.id, versionId: clip.code!.versionId, width: 1000, height: 1000, elements: [{ id: audio ? 'sound/0' : 'moving', name: '观察图层', bounds: [0,0,100,100], matrix: [1,0,0,1,x,10], corners: [[x,10],[x+100,10],[x+100,110],[x,110]], parameterKeys: [], textParameterKeys: [] }] }
-      }) }))).records)
+      if (programs) {
+        const code = await collectVideoEditCodeMotion(composition, range, programs, policy, async (local, frame) => ({ sequenceId: local.id, revision: local.revision, frame, clips: local.clips.filter(clip => clip.code).map(clip => {
+          const audio = audios?.[codeMotionAudioKey(local.id, clip.id)]
+          const x = MotionWorker.textDraws ? 0 : audio ? (audio.levels[Math.min(frame, audio.levels.length - 1)] ?? 0) * 500 : frame * 10
+          return { clipId: clip.id, versionId: clip.code!.versionId, width: 1000, height: 1000, elements: [{ id: audio ? 'sound/0' : 'moving', name: '观察图层', bounds: [0,0,100,100], matrix: [1,0,0,1,x,10], corners: [[x,10],[x+100,10],[x+100,110],[x,110]], parameterKeys: [], textParameterKeys: [], textUncovered: MotionWorker.textUncovered, ...(MotionWorker.textDraws ? { textDraws: MotionWorker.textDraws } : {}) }] }
+        }) }))
+        result.records.push(...code.records); result.warnings = code.warnings
+      }
       this.onmessage?.({ data: { result } } as MessageEvent<VideoEditMotionReviewResponse>)
     } catch (error) { this.onmessage?.({ data: { error: error instanceof Error ? error.message : '分析失败' } } as MessageEvent<VideoEditMotionReviewResponse>) }
   }
@@ -83,6 +92,8 @@ let handles: ReturnType<typeof tracking.videoEditTrackResults>
 let trackingRevision: number
 const data = () => createVideoEditTrackHeader({ method: 'box', model: 'test', fps: 10, firstFrame: 0, frameCount: 10, sourceWidth: 64, sourceHeight: 64, promptFrames: [0], boxes: Array.from({ length: 10 }, (_, index) => index === 3 || index === 4 ? null : [0, 0, .5, .5, index === 6 ? .2 : .9]), summary: { tracked: 8, lost: 2 } })
 beforeEach(() => {
+  MotionWorker.textDraws = undefined
+  MotionWorker.textUncovered = undefined
   soundIO.documents = []; soundIO.mix.mockReset(); soundIO.dispose.mockClear()
   installHarnessNativeStorage(); handles = { [key]: { url: 'henji-media://track', version: '1' } }; trackingRevision = 1
   vi.spyOn(tracking, 'videoEditTrackResults').mockImplementation(() => handles)
@@ -117,6 +128,38 @@ async function codeFixture(source = 'export default {name:"代码复核",width:1
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
   return data
 }
+it('文字复核经正式 describe、查询和实体回读返回三类实际绘制证据，保留半开帧区间与改法', async () => {
+  const { owner, input } = await codeFixture(), app = createApplicationHarness()
+  const { Canvas } = createTextCanvasRecorder(); vi.stubGlobal('OffscreenCanvas', Canvas)
+  const measure = new Canvas(1, 1).getContext(); measure.reset = () => {}
+  MotionWorker.textDraws = recordAuthorCanvas({ width: 1000, height: 1000 }, measure, [1, 0, 0, 1, 0, 0], ctx => {
+    drawText(ctx, layoutText('中文长标题', { fontSize: 30 }, { maxWidth: 10, wrap: 'none' }))
+    drawText(ctx, layoutText('第一行\n第二行', { fontSize: 30 }, { maxLines: 1 }))
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, 5, 100); ctx.clip(); drawText(ctx, layoutText('会被裁掉', { fontSize: 30 })); ctx.restore()
+  }).textDraws
+  try {
+    const described = await app.requireResult('describe_application_entities', { entityTypes: ['video_edit.sequence'], refs: [input.sequenceRef] })
+    expect(described.entities).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'video_edit.sequence' })]))
+    const result = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 50 }))
+    const records = result.records.filter(record => record.kind.startsWith('text_'))
+    expect(new Set(records.map(record => record.kind))).toEqual(new Set(['text_overflow', 'text_clipped', 'text_truncated']))
+    for (const record of records) {
+      expect(record.timeline).toEqual({ fromFrame: 0, toFrame: 120 })
+      expect(record.motionEvidence).toMatchObject({ basis: 'text_layout', elementPath: ['moving'], textOverflow: { stability: { basis: record.kind === 'text_clipped' ? 'persistent_clip' : 'stable_layout', fromFrame: 0, toFrame: 120 } } })
+      expect(record.motionEvidence?.suggestion).toContain('序列帧')
+      const read = await app.read(record.subjectRef)
+      expect(read.ref).toEqual(record.subjectRef)
+      expect(owner.document.sequences[0].clips.some(clip => record.subjectRef.id.endsWith(`:${clip.id}`))).toBe(true)
+    }
+    expect(records.find(record => record.kind === 'text_truncated')?.motionEvidence?.textOverflow?.omittedRanges[0]).toMatchObject({ start: 4, end: 7, reason: 'maxLines' })
+    MotionWorker.textDraws = undefined
+    MotionWorker.textUncovered = ['图层含未使用新版排版库的 Canvas 文字，文字超框未覆盖']
+    editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, name: `${sequence.name}复查` })) }))
+    const legacy = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 50 }))
+    expect(legacy.records.filter(record => record.kind.startsWith('text_'))).toEqual([])
+    expect(legacy.warnings.join(' ')).toContain('这些图层未使用排版库')
+  } finally { app.dispose() }
+})
 it('片子数据检查条件参与分页身份，省略 scene 保持已有复核结果', async () => {
   const { input } = await fixture()
   const first = parse(await queryVideoEditReview({ ...input, scene: {}, limit: 1 }, context()))

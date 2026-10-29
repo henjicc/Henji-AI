@@ -6,7 +6,9 @@
 
 ## 打字机与光标
 
-可见字数由时间直接求：`Math.floor(progress * n)`，n 是整句排版结果的字素数。整句用 `layoutText` 排一次定下折行与光标位置；绘制前缀用同样的样式与 `maxWidth` 再排一次（左对齐、按字折行时前缀的折行与整句一致），光标放在最后一个已显示字素的 `x + advance`、所在行的 `y` 与 `height` 上，不要用整句宽度。光标用矩形，不用字体里的方块符号。时间决定显隐，随机寻帧不会重打字。输入中常亮，结束后每秒 2 次闪烁。
+底板默认从首个字素出现时就整段显示，不逐字切成小底板；用 `backgroundAndDecorationOpacity`（0–1）单独控制整段底板与装饰线的显隐或淡入。阴影和外描边置于下层，填色后再画内描边与居中描边。打完后默认姿态直接使用静态整段位图；动画图集独立绘制字素簇，会失去字素之间的连写。
+
+可见字数由时间直接求：`Math.floor(progress * n)`，n 是整句排版结果的字素数。整句用 `layoutText` 定下折行与光标位置，再用 `drawText(ctx, full, { graphemes: shown })` 显示前 shown 个字素，不重新排版前缀、不另排单字。同内容布局与字素图集跨帧复用，绘制事实保留整句约束和遗漏。光标放在最后一个已显示字素的 `x + advance`、所在行的 `y` 与 `height` 上；用矩形，不用字体里的方块符号。时间决定显隐，随机寻帧不会重打字。输入中常亮，结束后每秒 2 次闪烁。需要平滑错峰入场时用 recipes-text 的字素动画回调。
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"
@@ -19,17 +21,17 @@ export default {
     { key: "seconds", type: "number", title: "输入秒数", default: 1.4, min: .4, max: 3, step: .1 }
   ],
   layers(params, width, height) {
-    const x = width * .08, y = height * .4, options = { maxWidth: width * .84 }
+    const x = width * .08, y = height * .4, options = { maxWidth: width * .84, forceGraphemes: true }
     const full = layoutText(params.value, params.style, options), size = full.style.fontSize
-    const marks = full.graphemes.filter(g => g.x !== null)
+    const marks = full.graphemes
     return [{ id: "terminal", bounds: [x, y, x + width * .84, y + Math.max(full.box.height, size * 1.25)], draw(ctx, time) {
       const shown = Math.floor(clamp01((time - .2) / params.seconds) * marks.length)
       const last = marks[shown - 1], line = full.lines[last ? last.line : 0]
       ctx.save(); ctx.translate(x, y)
-      drawText(ctx, layoutText(params.value.slice(0, last ? last.source.end : 0), params.style, options))
+      drawText(ctx, full, { graphemes: shown })
       if (time < .2 + params.seconds || Math.floor(time * 4) % 2 === 0) {
         ctx.fillStyle = full.style.fill.color
-        ctx.fillRect((last ? last.x + last.advance : line?.x ?? 0) + size * .1, line?.y ?? 0, size * .15, line?.height ?? size * 1.25)
+        ctx.fillRect((last ? (last.x ?? 0) + last.advance : line?.x ?? 0) + size * .1, line?.y ?? 0, size * .15, line?.height ?? size * 1.25)
       }
       ctx.restore()
     } }]

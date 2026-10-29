@@ -6,12 +6,25 @@ import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '../../../videoEdit/time'
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const range = z.object({ fromFrame: frame, toFrame: frame }).strict().refine(value => value.toFrame >= value.fromFrame, '检查范围不能倒置。')
-const kind = z.enum(['caption', 'clip_boundary', 'effect', 'transition', 'tracking_lost', 'tracking_low_confidence', 'tracking_uncovered', 'tracking_unavailable', 'motion', 'motion_hard_stop', 'motion_hold', 'event_crowded', 'code_change', 'code_unavailable', 'pixel_cut', 'pixel_change', 'pixel_still', 'pixel_unknown', 'settled_jitter', 'safe_area', 'motion_too_fast', 'scene_box_stale', 'scene_cursor_jump', 'scene_issue'])
+const kind = z.enum(['caption', 'clip_boundary', 'effect', 'transition', 'tracking_lost', 'tracking_low_confidence', 'tracking_uncovered', 'tracking_unavailable', 'motion', 'motion_hard_stop', 'motion_hold', 'event_crowded', 'code_change', 'code_unavailable', 'pixel_cut', 'pixel_change', 'pixel_still', 'pixel_unknown', 'settled_jitter', 'safe_area', 'motion_too_fast', 'text_overflow', 'text_clipped', 'text_truncated', 'scene_box_stale', 'scene_cursor_jump', 'scene_issue'])
 const sourceRange = z.object({ fromUs: z.number().finite().nonnegative(), toUs: z.number().finite().nonnegative() }).strict()
+const size = z.object({ width: z.number().finite().nonnegative(), height: z.number().finite().nonnegative() }).strict()
+const rect = size.extend({ x: z.number().finite(), y: z.number().finite() }).strict()
+const point = z.tuple([z.number().finite(), z.number().finite()])
+const polygon = z.array(point).length(4)
+const textOverflow = z.object({ drawIndex: z.number().int().nonnegative(),
+  constraint: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().finite().nonnegative().optional(), height: z.number().finite().nonnegative().optional(), maxWidth: z.number().finite().nonnegative().optional(), maxHeight: z.number().finite().nonnegative().optional(), maxLines: z.number().int().positive().optional() }).strict(),
+  contentSize: size, visibleContentSize: size, inkBounds: rect.nullable(), appearanceBounds: rect.nullable(), boundsKind: z.enum(['measured', 'estimated']),
+  actualLines: z.number().int().nonnegative(), totalLines: z.number().int().nonnegative(),
+  omittedRanges: z.array(z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative(), paragraph: z.number().int().nonnegative(), run: z.number().int().nonnegative(), runStart: z.number().int().nonnegative(), runEnd: z.number().int().nonnegative(), reason: z.enum(['maxLines', 'maxHeight', 'trim']) }).strict()),
+  fitFailed: z.boolean(), truncated: z.boolean(), visibleOverflow: z.boolean(), matrix: z.tuple([z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite()]),
+  inkQuad: z.array(point).max(4), effectiveClips: z.array(polygon), clippedBy: z.array(z.enum(['frame', 'clip'])).max(2),
+  stability: z.object({ basis: z.enum(['stable_layout', 'persistent_clip']), fromFrame: frame, toFrame: frame, minimumFrames: z.number().int().positive() }).strict(),
+}).strict()
 export const queryVideoEditReviewCapability = defineApplicationCapability({
-  id: 'query_video_edit_review', version: 2, domain: 'video_edit', title: '选择剪辑检查点与运动、跟踪复核区间',
+  id: 'query_video_edit_review', version: 3, domain: 'video_edit', title: '选择剪辑检查点与运动、跟踪复核区间',
   description: '按 documentRef、sequenceRef 和半开整数帧 from/to 选择最多12个检查帧，并分页返回字幕边界、片段切换、已启用效果关键帧、转场及跟踪丢失/低置信度/未覆盖区间。跟踪仅读已有结果，不启动模型或重新跟踪；threshold 默认0.5，只是复核阈值，不判画面错误。记录包含原实体引用及完整嵌套放置路径，支持变速、倒放和重复实例；source 为跟踪原始微秒，timeline 为查询序列帧。渲染可能插值或借用邻近有效位置，原始跟丢不等于最终画面空白；候选也不证明像素可见。checkpoints 是整个查询的有界优先抽样，不能证明未取帧区间无问题；records 可分页继续读，超计算预算要求缩小范围，不静默截断。将返回的 documentVersion 与 checkpoints.frames 一起交给 observe_video_edit_frame（documentVersion、target.kind=frames、target.sequenceRef=本次序列）定向检查；作品编辑或关闭重开后旧计划/分页失效。跟踪记录的 subjectRef 可沿通用属性 video_edit.tracker.prompts 补充锚点纠正；scene 可选启用片子数据检查，scene_box_stale 表示数据错位，scene_cursor_jump 是鼠标瞬移候选，scene_issue 原样保留解析器 user 问题；subjectRef 指向片子数据记录，proposal 可沿通用属性修改后读回重查。不修改作品、播放头或选区。',
-  aliases: ['自动看片位置', '跟踪复核', '剪辑检查点', '画面检查', '安全框检查', '文字抖动检查'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false,
+  aliases: ['自动看片位置', '跟踪复核', '剪辑检查点', '画面检查', '安全框检查', '文字抖动检查', '文字超框检查', '文字裁切检查'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false,
   timeoutMs: 300000, supportsPreview: false, supportsUndo: false, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence'], producesRefs: ['video_edit.scene_record', 'video_edit.scene', 'video_edit.clip', 'video_edit.tracker', 'video_edit.caption', 'video_edit.effect', 'video_edit.transition', 'video_edit.media'],
   inputSchema: z.object({ documentRef: ref('video_edit.document'), sequenceRef: ref('video_edit.sequence'), from: frame, to: frame, threshold: z.number().finite().min(0).max(1).default(.5), maxFrames: z.number().int().min(1).max(12).default(8), limit: z.number().int().min(1).max(50).default(20), cursor: z.string().min(1).max(100).optional(),
     motion: z.object({ minGapSeconds: z.number().finite().min(0).max(30).default(1.5), minimumHoldSeconds: z.number().finite().min(0).max(60).default(1),
@@ -30,6 +43,7 @@ export const queryVideoEditReviewCapability = defineApplicationCapability({
         proposal: z.array(z.object({ ref: applicationRefSchema, propertyId: z.string().min(1), value: z.json() }).strict()).min(1).max(32).optional(),
         speedLimit: z.number().finite().positive().optional(), jitterPixels: z.number().finite().nonnegative().optional(),
         safeArea: z.object({ zone: z.enum(['title', 'action']), edges: z.array(z.enum(['left', 'right', 'top', 'bottom'])).min(1).max(4), overflowPercent: z.number().finite().nonnegative() }).strict().optional(),
+        textOverflow: textOverflow.optional().describe('实际 drawText 绘制事实。text_overflow 完整内容超约束，text_clipped 正文墨迹出画幅或有效矩形 clip，text_truncated 存在 maxLines/maxHeight 遗漏。排版稳定或逐帧持续裁切至少0.3秒才报半开序列帧区间；位姿变化不影响超框和截断，未完成的字素揭示不判；矩阵为文字到作者画幅，inkQuad/effectiveClips 为查询序列输出像素，阴影不计正文缺失；任意 Canvas clip 与滤镜遮挡未覆盖，详见 warnings。'),
         input: z.object({ parameter: z.string().min(1), kind: z.enum(['video', 'sequence']), mediaRef: ref('video_edit.media') }).strict().optional(),
       }).strict().optional(),
     }).strict()).max(50), total: z.number().int().nonnegative(), nextCursor: z.string().nullable(), warnings: z.array(z.string()).max(20), message: z.string(),

@@ -6,11 +6,85 @@ import { Worker } from 'node:worker_threads'
 import { execFileSync } from 'node:child_process'
 import { afterEach, expect, it, vi } from 'vitest'
 import { assertNewFrozenAuthorRelease, readFrozenAuthorRelease, sha256, validateFrozenAuthorHistory } from '../../../../scripts/lib/frozenAuthorLibraries'
+import { AUTHOR_LIBRARIES, latestAuthorLibraryVersions } from '../../../core/videoEdit/codeMaterial/authorLibraries'
 
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }))
 afterEach(() => { vi.resetAllMocks(); vi.unstubAllEnvs() })
 
 const directory = path.resolve('resources/video-edit-author/frozen/henji-layout/1.0.0')
+const workerCanvas = `
+  let rasterCount = 0;
+  globalThis.ImageBitmap = class { constructor(width, height) { this.width = width; this.height = height; } close() {} };
+  globalThis.OffscreenCanvas = class {
+    constructor(width, height) { this.width = width; this.height = height; }
+    transferToImageBitmap() { rasterCount++; return new ImageBitmap(this.width, this.height); }
+    getContext() { return { save(){}, restore(){}, scale(){}, translate(){}, clearRect(){}, fillRect(){}, fillText(){}, drawImage(){}, getTransform() { return { a:1,b:0,c:0,d:1,e:0,f:0 }; }, getContextAttributes() { return { colorSpace: 'srgb' }; }, measureText(text) { return { width: text.length * 10, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * 10, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 }; } }; }
+  };
+`
+
+it('新冻结版本在独立 Worker 的实际绘制中报告事实，旧版本保持原接口与行为', async () => {
+  const version = latestAuthorLibraryVersions(6)['henji-layout']
+  const next = path.resolve(AUTHOR_LIBRARIES['henji-layout'][version].frozen!)
+  readFrozenAuthorRelease(next, 'henji-layout', version)
+  const isolated = fs.readFileSync(path.join(next, 'text.mjs'), 'utf8').replace(/"(\.\/[^"]+)"/g, (_match, file: string) => JSON.stringify(pathToFileURL(path.resolve(next, file)).href + '?module-instance=2'))
+  const worker = new Worker(`
+    const { parentPort } = require('node:worker_threads');
+    (async () => {
+      ${workerCanvas}
+      const counts = [], facts = [];
+      const context = { ...new OffscreenCanvas(640, 360).getContext(), [Symbol.for('henji-layout.text.draw.v1')](fact) { facts.push(fact); } };
+      for (const url of ${JSON.stringify([directory, next].map(dir => pathToFileURL(path.join(dir, 'text.mjs')).href))}) {
+        const lib = await import(url);
+        const plan = lib.layoutText('第一行\\n第二行', { fontSize: 20 }, { maxLines: 1, maxWidth: 100 });
+        counts.push(facts.length);
+        lib.drawText(context, plan);
+        counts.push(facts.length);
+      }
+      const another = await import(${JSON.stringify('data:text/javascript;base64,' + Buffer.from(isolated).toString('base64'))});
+      another.drawText(context, another.layoutText('第一行\\n第二行', { fontSize: 20 }, { maxLines: 1, maxWidth: 100 }));
+      parentPort.postMessage({ counts, facts });
+    })().catch(error => { throw error; });
+  `, { eval: true })
+  try {
+    const result = await new Promise<{ counts: number[]; facts: Array<{ layoutId: string; actualLines: number; totalLines: number; omittedRanges: Array<{ start: number; reason: string }> }> }>((resolve, reject) => { worker.once('message', resolve); worker.once('error', reject) })
+    expect(result.counts).toEqual([0, 0, 0, 1])
+    expect(result.facts[0].layoutId).not.toBe(result.facts[1].layoutId)
+    expect(result.facts[0]).toMatchObject({ actualLines: 1, totalLines: 2, omittedRanges: [expect.objectContaining({ start: 4, reason: 'maxLines' })] })
+  } finally { await worker.terminate() }
+})
+
+it('冻结库有界布局缓存淘汰后关闭位图，布局和各档位位图均可被 GC 回收', async () => {
+  const next = AUTHOR_LIBRARIES['henji-layout'][latestAuthorLibraryVersions(6)['henji-layout']].frozen!
+  const worker = new Worker(`
+    const { parentPort } = require('node:worker_threads');
+    require('node:v8').setFlagsFromString('--expose_gc');
+    const gc = require('node:vm').runInNewContext('gc');
+    (async () => {
+      ${workerCanvas}
+      const lib = await import(${JSON.stringify(pathToFileURL(path.resolve(next, 'text.mjs')).href)});
+      const refs = (() => {
+        const layout = lib.layoutText('布局生命周期', { fontSize: 20 });
+        const bitmaps = [];
+        let scale = 1;
+        const ctx = { ...new OffscreenCanvas(640, 360).getContext(), getTransform() { return { a:scale,b:0,c:0,d:scale,e:0,f:0 }; }, drawImage(bitmap) { bitmaps.push(new WeakRef(bitmap)); } };
+        lib.drawText(ctx, layout); lib.drawText(ctx, layout);
+        if (rasterCount !== 1) throw new Error('重复绘制未复用位图');
+        scale = 2; lib.drawText(ctx, layout);
+        return { layout: new WeakRef(layout), bitmaps };
+      })();
+      for (let i = 0; i < 140; i++) lib.layoutText('淘汰' + i, { fontSize: 20 });
+      for (let i = 0; i < 80; i++) {
+        await new Promise(resolve => setImmediate(resolve)); gc();
+        if (!refs.layout.deref() && refs.bitmaps.every(ref => !ref.deref())) break;
+      }
+      parentPort.postMessage({ layoutCollected: !refs.layout.deref(), bitmapsCollected: refs.bitmaps.every(ref => !ref.deref()), rasterCount });
+    })().catch(error => { throw error; });
+  `, { eval: true })
+  try {
+    const result = await new Promise<unknown>((resolve, reject) => { worker.once('message', resolve); worker.once('error', reject) })
+    expect(result).toEqual({ layoutCollected: true, bitmapsCollected: true, rasterCount: 2 })
+  } finally { await worker.terminate() }
+})
 
 function withProtectedRelease(run: (root: string, release: string) => void): void {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-layout-history-'))

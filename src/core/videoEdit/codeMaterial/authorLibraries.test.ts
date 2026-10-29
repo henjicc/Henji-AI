@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { AUTHOR_LIBRARIES, DEFAULT_AUTHOR_LIBRARY_VERSIONS, authorLibraryImportTable, describeAuthorLibraries, resolveAuthorLibraryModule, type AuthorLibraryRelease } from './authorLibraries'
+import { AUTHOR_LIBRARIES, latestAuthorLibraryVersions, authorLibraryImportTable, describeAuthorLibraries, resolveAuthorLibraryModule, type AuthorLibraryRelease } from './authorLibraries'
 
 it('按版本表解析内置库入口，three 的多个入口共用同一版本目录', () => {
   expect(resolveAuthorLibraryModule('three')?.url).toBe('henji-media://author-lib/three/0.186.1/build/three.module.js')
@@ -27,11 +27,12 @@ it('未登记的库、子路径与越出登记目录的路径都不解析', () =
 describe('追加新版本与改默认版本', () => {
   // 模拟以后随包加入 three 新版本并把新代码的默认版本改过去。
   const three = AUTHOR_LIBRARIES.three as Record<string, AuthorLibraryRelease>
-  const defaults = DEFAULT_AUTHOR_LIBRARY_VERSIONS as Record<string, string>
-  beforeEach(() => { three['0.200.0'] = three['0.186.1']; defaults.three = '0.200.0' })
-  afterEach(() => { delete three['0.200.0']; defaults.three = '0.186.1' })
+  beforeEach(() => { three['0.200.0'] = three['0.186.1'] })
+  afterEach(() => { delete three['0.200.0'] })
 
   it('记录了版本的按记录解析；没有记录的旧版本一直按第一套，默认版本变化不影响它们', () => {
+    expect(latestAuthorLibraryVersions(5).three).toBe('0.200.0')
+    expect(latestAuthorLibraryVersions(4)).toEqual({})
     expect(resolveAuthorLibraryModule('three', { three: '0.200.0' })?.url).toBe('henji-media://author-lib/three/0.200.0/build/three.module.js')
     expect(resolveAuthorLibraryModule('three', { three: '0.186.1' })?.version).toBe('0.186.1')
     expect(resolveAuthorLibraryModule('three')?.version).toBe('0.186.1')

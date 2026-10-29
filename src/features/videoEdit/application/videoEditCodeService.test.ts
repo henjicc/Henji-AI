@@ -48,7 +48,7 @@ import { AUTHOR_TYPE_ENVIRONMENT } from '../engine/videoEditAuthorTypeEnvironmen
 /** 短活共用的离屏会话按设计常驻；回收它之后不应再有任何渲染器存活。 */
 async function expectRenderersReleased(): Promise<void> { await videoEditOffscreenPool.dispose(); expect(boundary.activeRenderers).toBe(0) }
 
-const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[], apiVersion: 4 as 4 | 5 }))
+const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[], apiVersion: 4 as 4 | 5 | 6 }))
 // Only thread/pixel boundaries are replaced. AST language checks, domain
 // validation, public tool registry, transactions and save/reopen are real.
 vi.mock('../engine/videoEditCodeCompiler', async () => {
@@ -682,7 +682,8 @@ it('内置库随代码资产导入、收录导出与追加版本一路带着，�
   try {
     const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
     const libraries = { three: '0.186.1' }
-    const fixture = codeAssetFixture()
+    const librarySource = source.replace('ctx.fillRect', 'void import("three");ctx.fillRect')
+    const fixture = codeAssetFixture(librarySource)
     const created = await createVideoEditCodeAssetInstance(id, importPublication({ ...fixture, sourceVersion: { ...fixture.sourceVersion, apiVersion: 5, libraries } }))
     const definitionId = owner.document.items.find(item => item.id === created.itemId)!.code!.definitionId
     const imported = owner.document.codeMaterials!.find(definition => definition.id === definitionId)!.versions[0]
@@ -695,10 +696,43 @@ it('内置库随代码资产导入、收录导出与追加版本一路带着，�
     expect(exported.libraries).toEqual(libraries)
     expect(codeVersionContentKey(exported)).toBe(codeVersionContentKey(imported))
     // 同样的源码追加时按内容键（含沿用的内置库）认出已有版本；改了源码的新版本沿用内置库。
-    await expect(createVideoEditCodeVersions(id, [{ definitionId, source }])).rejects.toThrow('相同源码版本已存在')
-    const [next] = await createVideoEditCodeVersions(id, [{ definitionId, source: source.replace('default:.5', 'default:.6') }])
+    await expect(createVideoEditCodeVersions(id, [{ definitionId, source: librarySource }])).rejects.toThrow('相同源码版本已存在')
+    const [next] = await createVideoEditCodeVersions(id, [{ definitionId, source: librarySource.replace('default:.5', 'default:.6') }])
     expect(owner.document.codeMaterials!.find(definition => definition.id === definitionId)!.versions.find(version => version.id === next)!.libraries).toEqual(libraries)
   } finally { boundary.apiVersion = 4 }
+})
+it('内置库升级通过正式描述、能力调用和读回，源码不变也改指，撤销恢复固定版本', async () => {
+  boundary.apiVersion = 6
+  const app = createApplicationHarness()
+  try {
+    let owner = await createLegacyTrackVideoEditProject()
+    const id = owner.document.id
+    const librarySource = source.replace('ctx.fillRect', 'void import("henji-layout/text");ctx.fillRect')
+    const [definitionId] = await createVideoEditCodeMaterials(id, [{ source: librarySource }])
+    // 历史版本夹具只改变库记录，实际升级仍经过正式编译、试绘边界、保存与改指事务。
+    const historical = structuredClone(owner.document); historical.codeMaterials![0].versions[0].libraries = { 'henji-layout': '1.0.0' }
+    await saveVideoEdit(id); await closeVideoEditProject(id)
+    replaceSavedVideoEdit(id, historical); owner = await reopenVideoEdit(id)
+    const first = owner.document.codeMaterials![0].defaultVersionId
+    await ensureVideoEditCodeParameterMetadata(owner, owner.document, definitionId, first)
+    const [clipId] = appendVideoEditItems(id, [owner.document.items[0].id], owner.activeSequenceId)
+    const parent = { kind: 'video_edit.document', id }, materialRef = { kind: 'video_edit.code_material', id: `${id}:${definitionId}` }
+    const described = await app.requireResult('describe_application_entities', { entityTypes: ['video_edit.code_material', 'video_edit.clip'], refs: [materialRef] })
+    expect(described.entities).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'video_edit.code_material' })]))
+    const result = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeLibraries: true })
+    expect(result.upgrades).toEqual([expect.objectContaining({ oldVersion: first, changedFiles: [], retargetedClips: 1 })])
+    expect(result.verified).toBe(true)
+    const disk = savedVideoEdit(id), definition = disk.codeMaterials![0], latest = definition.versions.find(version => version.id === definition.defaultVersionId)!
+    expect(latest.libraries).toEqual({ 'henji-layout': '1.1.0' })
+    expect(latest.files.map(({ path, hash }) => ({ path, hash }))).toEqual(definition.versions[0].files.map(({ path, hash }) => ({ path, hash })))
+    const clipRef = { kind: 'video_edit.clip', id: `${id}:${clipId}` }
+    expect((await app.read(clipRef, ['video_edit.clip.code_version_id'])).properties).toEqual({ 'video_edit.clip.code_version_id': latest.id })
+    expect((await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeLibraries: true })).upgrades).toEqual([])
+    undoVideoEdit(id)
+    expect((await app.read(clipRef, ['video_edit.clip.code_version_id'])).properties).toEqual({ 'video_edit.clip.code_version_id': first })
+    expect(owner.document.codeMaterials![0].versions).toHaveLength(1)
+    expect(owner.document.codeMaterials![0].versions[0].libraries).toEqual({ 'henji-layout': '1.0.0' })
+  } finally { app.dispose(); boundary.apiVersion = 4 }
 })
 it('图层变换覆盖收录并导入为素材初始值，新片段独立复制且保存重开不丢失', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id

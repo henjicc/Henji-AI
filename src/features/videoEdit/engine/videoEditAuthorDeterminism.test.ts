@@ -1,3 +1,4 @@
+import { TEXT_LAYOUT_OBSERVER, observeTextLayouts, type TextLayoutObserverGlobal } from '@/core/videoEdit/textDrawObservation'
 import { expect, it } from 'vitest'
 import type { AuthorFrameInfo, AuthorModule } from './videoEditAuthorModule'
 import { deterministicAuthorModule, importAuthorDeterministic } from './videoEditAuthorDeterminism'
@@ -56,4 +57,22 @@ it('模块顶层代码的随机数每次加载都相同，加载完恢复', asyn
   const [first, second] = await Promise.all([load(), load()])
   expect(second).toEqual(first)
   expect(Math.random).toBe(random)
+})
+
+it('模块顶层布局按串行 import 分配归属，并排绘制使用自己的观察作用域', async () => {
+  const host = globalThis as TextLayoutObserverGlobal, first: string[] = [], second: string[] = [], frame: string[] = []
+  const emit = (id: string) => host[TEXT_LAYOUT_OBSERVER]?.(id)
+  const one = importAuthorDeterministic(async () => {
+    emit('module-one')
+    await Promise.resolve()
+    observeTextLayouts(id => frame.push(id), () => emit('frame'))
+    emit('module-one-after-await')
+  }, id => first.push(id))
+  const two = importAuthorDeterministic(async () => { emit('module-two') }, id => second.push(id))
+  await Promise.all([one, two])
+  expect(first).toEqual(['module-one', 'module-one-after-await'])
+  expect(second).toEqual(['module-two']); expect(frame).toEqual(['frame'])
+  expect(host[TEXT_LAYOUT_OBSERVER]).toBeUndefined()
+  await expect(importAuthorDeterministic(async () => { throw new Error('模块失败') }, id => first.push(id))).rejects.toThrow('模块失败')
+  expect(host[TEXT_LAYOUT_OBSERVER]).toBeUndefined()
 })

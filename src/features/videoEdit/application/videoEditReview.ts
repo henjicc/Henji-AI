@@ -127,6 +127,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
           records.push({ ...record, motionEvidence: { basis: record.basis ?? 'clip_transform', ...(record.elementPath ? { elementPath: [...record.elementPath] } : {}), ...(record.peakSpeed === undefined ? {} : { peakSpeed: record.peakSpeed }),
             ...(record.speedLimit === undefined ? {} : { speedLimit: record.speedLimit }), ...(record.jitterPixels === undefined ? {} : { jitterPixels: record.jitterPixels }),
             ...(record.safeArea ? { safeArea: { ...record.safeArea, edges: [...record.safeArea.edges] } } : {}),
+            ...(record.textOverflow ? { textOverflow: structuredClone(record.textOverflow) } : {}),
             ...(record.input ? { input: { parameter: record.input.parameter, kind: record.input.kind, mediaRef: { kind: 'video_edit.media' as const, id: `${projectId}:${record.input.mediaId}` } } } : {}),
             suggestion: code && record.kind === 'motion_hold' ? '此元素自身结构保持；父组、输入视频或其他图层仍可能运动，请看图判断阅读停留。' : suggestion } })
         }
