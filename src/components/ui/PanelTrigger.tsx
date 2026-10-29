@@ -16,6 +16,7 @@ import {
 } from './floatingPanelPosition'
 import { UI_TRIGGER_PANEL_SIZE_CLASS, type UiTriggerPanelSize, UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_CHROME_Y_PX, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
+import { UiBooleanAppearanceContext } from './booleanAppearance'
 import { useUiFormRowLabelling } from './formRowLabel'
 import { measureElementTextWidth } from './textMeasurement'
 import { MENU_TEXT_ROUNDING_SLACK_PX, resolveMenuItemHorizontalChrome, type UiMenuSelection } from './dropdownUtils'
@@ -497,10 +498,12 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             data-panel-scroll-region
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
           >
-            {/* 浮层里的字段一律按表单排布，不继承触发器所在工具条的排布 */}
+            {/* 浮层里的字段一律按表单排布、开关用滑块，不继承触发器所在工具条或停靠面板的排布 */}
             <UiOverlayLayerProvider id={overlay.id}>
               <UiFieldLayoutContext.Provider value="form">
-                {renderPanel()}
+                <UiBooleanAppearanceContext.Provider value="pill">
+                  {renderPanel()}
+                </UiBooleanAppearanceContext.Provider>
               </UiFieldLayoutContext.Provider>
             </UiOverlayLayerProvider>
           </div>

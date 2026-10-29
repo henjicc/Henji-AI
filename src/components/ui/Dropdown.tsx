@@ -16,6 +16,7 @@ import { UiFieldTrigger, UiOptionButton } from './primitives'
 import { UI_POPOVER_TRANSITION_MS } from './motion'
 import { useDialogTransition } from './useDialogTransition'
 import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
+import { UiBooleanAppearanceContext } from './booleanAppearance'
 import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvider, useHasOpenModalUiOverlayDescendant, useUiOverlayLayer } from './overlayOwnership'
 import { measureElementTextWidth } from './textMeasurement'
 import { Check } from 'lucide-react'
@@ -381,7 +382,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const menuBody = renderPanel ? (
     <div id={panelId} className={panelSize ? "max-h-[var(--trigger-panel-max-height)] overflow-y-auto" : "max-h-60 overflow-y-auto"}>
       {/* 浮层里的字段一律按表单排布，不继承触发器所在工具条的排布 */}
-      <UiFieldLayoutContext.Provider value="form">{renderPanel()}</UiFieldLayoutContext.Provider>
+      <UiFieldLayoutContext.Provider value="form"><UiBooleanAppearanceContext.Provider value="pill">{renderPanel()}</UiBooleanAppearanceContext.Provider></UiFieldLayoutContext.Provider>
     </div>
   ) : (
     <div

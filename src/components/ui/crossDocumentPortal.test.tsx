@@ -6,6 +6,9 @@ import PanelTrigger from './PanelTrigger'
 import Dropdown from './Dropdown'
 import Tooltip from './Tooltip'
 import { UiModal } from './UiModal'
+import { UiSwitch } from './primitives'
+import { UiBooleanAppearanceContext } from './booleanAppearance'
+import { UI_SWITCH_TRACK_CLASS } from './styleTokens'
 
 /**
  * 剪辑系统浮窗：主窗口 React 把面板 portal 进另一个同源文档（另一 realm）。
@@ -82,4 +85,13 @@ it('UiModal 在浮窗中挂到浮窗文档并由浮窗内 Esc 关闭；主窗口
 
   render(<UiModal isOpen title="主窗口弹窗" onClose={vi.fn()}><div>主窗口正文</div></UiModal>)
   expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('主窗口正文')
+})
+
+it('停靠面板里弹出的浮层按表单处理：不写外观的开关画成滑块', () => {
+  render(<UiBooleanAppearanceContext.Provider value="checkbox">
+    <PanelTrigger display="样式" renderPanel={() => <UiSwitch checked={false} onCheckedChange={vi.fn()} aria-label="全局样式" />} />
+  </UiBooleanAppearanceContext.Provider>)
+  act(() => { document.querySelector<HTMLElement>('[data-panel-trigger-button]')!.click() })
+  const track = document.querySelector('[role="switch"][aria-label="全局样式"]')?.firstElementChild as HTMLElement
+  for (const name of UI_SWITCH_TRACK_CLASS.off.split(/\s+/).filter(Boolean)) expect(track.classList.contains(name)).toBe(true)
 })
