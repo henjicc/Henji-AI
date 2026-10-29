@@ -17,6 +17,8 @@ export const RELAY_PROTOCOL = 1
 export const RELAY_CONTROL_PATH = '/henji-relay'
 export const RELAY_RETIRE_PATH = '/henji-relay/retire'
 export const RELAY_CHALLENGE_HEADER = 'x-henji-relay-challenge'
+/** 痕迹直接监听对外端口时在每个回应上带这个头，另一个痕迹据此知道端口被谁占着。 */
+export const DIRECT_SERVER_HEADER = 'x-henji-mcp'
 /** 只在拉起接线员时经环境变量传入，接线员读取后立即从自身环境删除。 */
 export const RELAY_PORT_ENV = 'HENJI_MCP_RELAY_PORT'
 export const RELAY_SECRET_ENV = 'HENJI_MCP_RELAY_SECRET'
@@ -72,13 +74,14 @@ export function readHandshakeLine(socket: Socket, timeoutMs: number): Promise<st
       clearTimeout(timer)
       socket.removeListener('readable', onReadable)
       socket.removeListener('error', fail)
-      socket.removeListener('close', fail)
+      socket.removeListener('close', onClose)
     }
     const fail = (error?: unknown) => {
       cleanup()
       socket.destroy()
       reject(error instanceof Error ? error : new Error('握手失败'))
     }
+    const onClose = () => fail()
     const onReadable = () => {
       let chunk: Buffer | null
       while ((chunk = socket.read() as Buffer | null) !== null) received += chunk.toString('latin1')
@@ -91,16 +94,17 @@ export function readHandshakeLine(socket: Socket, timeoutMs: number): Promise<st
     const timer = setTimeout(() => fail(Object.assign(new Error('握手超时'), { code: 'ETIMEDOUT' })), timeoutMs)
     socket.on('readable', onReadable)
     socket.once('error', fail)
-    socket.once('close', () => fail())
+    socket.once('close', onClose)
   })
 }
 
-export type RelayProbe = { kind: 'absent' } | { kind: 'foreign' } | { kind: 'relay'; hello: RelayHello }
-
 /**
- * 看对外端口上是谁：没人监听（absent）、是知道同一凭据的接线员（relay），还是别的程序或凭据不同的接线员（foreign）。
+ * 对外端口上是谁：没人监听（absent）、知道同一凭据的接线员（relay）、凭据不同的接线员（other_relay，
+ * 另一份资料目录的痕迹或凭据已变化）、另一个直接监听的痕迹（other_instance），或别的程序（foreign）。
  * 回应慢也算 foreign，调用方稍后再看，不据此改为直接监听。
  */
+export type RelayProbe = { kind: 'absent' } | { kind: 'foreign' } | { kind: 'other_relay' } | { kind: 'other_instance' } | { kind: 'relay'; hello: RelayHello }
+
 export function probeRelay(port: number, secret: string): Promise<RelayProbe> {
   return new Promise(resolve => {
     const challenge = createRelayChallenge()
@@ -114,8 +118,9 @@ export function probeRelay(port: number, secret: string): Promise<RelayProbe> {
           if (response.statusCode === 200 && relayProofMatches(relayProof(secret, 'relay', challenge), hello.proof) && isRelayChallenge(hello.challenge)) {
             return resolve({ kind: 'relay', hello })
           }
+          if (response.statusCode === 200 && typeof hello.protocol === 'number' && typeof hello.proof === 'string') return resolve({ kind: 'other_relay' })
         } catch { /* 不是接线员的回应 */ }
-        resolve({ kind: 'foreign' })
+        resolve({ kind: response.headers[DIRECT_SERVER_HEADER] ? 'other_instance' : 'foreign' })
       })
     })
     request.on('timeout', () => request.destroy(new Error('timeout')))

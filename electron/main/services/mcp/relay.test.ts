@@ -211,6 +211,13 @@ describe('痕迹一侧的接线', () => {
     expect(response.statusCode).toBe(200)
   })
 
+  it('端口上是凭据不同的接线员时如实报告，不当成别的程序', async () => {
+    const other = await startRelay({ port: 0, secret: 'c'.repeat(64), build: BUILD })
+    closers.push(() => other.close())
+    const { link } = await backend(other.port, echo)
+    expect(link.state()).toBe('other_relay')
+  })
+
   it('临时进程不拉起接线员，端口空着时直接监听', async () => {
     const probe = createNetServer()
     const port = await new Promise<number>(resolve => probe.listen(0, '127.0.0.1', () => resolve((probe.address() as { port: number }).port)))

@@ -143,7 +143,7 @@ export interface EncryptedKeySnapshot {
   encrypted: string | null
 }
 
-/** 只供主进程事务补偿使用；密文不会跨 IPC。 */
+/** 只供主进程使用（事务补偿、区分“没有存”与“存着但解不开”）；密文不会跨 IPC。 */
 export function captureEncryptedKeySnapshot(namespace: KeyNamespace, providerId: string): EncryptedKeySnapshot {
   if (namespace === PROVIDER_KEY_NAMESPACE) migrateLegacyProviderCredential(providerId)
   const storeKey = buildKey(namespace, providerId)

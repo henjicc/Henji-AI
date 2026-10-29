@@ -7,6 +7,7 @@ import { toNodeHandler } from '@modelcontextprotocol/node'
 import { EXTERNAL_SERVER_INFO } from '../../../../src/core/application-control/localHostContracts'
 import type { McpConnections } from './connections'
 import type { McpRelayConnector, RelayLink, RelayLinkState } from './relayLink'
+import { DIRECT_SERVER_HEADER } from './relayProtocol'
 import type { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
 import { ApplicationToolDispatcher } from '../application-runtime/applicationToolDispatcher'
@@ -163,6 +164,7 @@ export class LocalMcpServer {
   private reject(response: ServerResponse, status: number): void { response.writeHead(status, { 'Cache-Control': 'no-store' }); response.end() }
   private async handle(request: IncomingMessage & { auth?: AuthInfo }, response: ServerResponse, dispatch: ReturnType<typeof toNodeHandler>): Promise<void> {
     response.setHeader('Cache-Control', 'no-store')
+    response.setHeader(DIRECT_SERVER_HEADER, '1')
     if (!this.listening || request.url !== '/mcp') return this.reject(response, 404)
     if (request.headers.host !== `127.0.0.1:${this.port}` || request.headers.origin !== undefined) return this.reject(response, 403)
     const authorization = request.headers.authorization

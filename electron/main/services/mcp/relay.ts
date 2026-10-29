@@ -292,6 +292,8 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
 
   const server = createServer((request, response) => {
     response.setHeader('Cache-Control', 'no-store')
+    // 退出过程中不让客户端复用这条连接，下一次请求新建连接，直接到达新接线员。
+    if (retiring) response.setHeader('Connection', 'close')
     // 与痕迹内的 MCP 服务同样只认本机地址、拒绝浏览器页面发起的请求；后端仍会再查一遍。
     if (request.headers.host !== `127.0.0.1:${port}` || request.headers.origin !== undefined) return reject(response, 403)
     if (request.url === '/mcp') return void forward(request, response)
@@ -310,6 +312,7 @@ export async function startRelay(options: RelayOptions): Promise<RelayHandle> {
       clearInterval(idleTimer)
       // 停止接受新连接，端口立即空出来给新接线员；已连着的客户端照常走 forward。
       server.close()
+      server.closeIdleConnections()
       for (const backend of backends.splice(0)) backend.channel.destroy()
       wakeWaiters()
       if (mode === 'replace') {

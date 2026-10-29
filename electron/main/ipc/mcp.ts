@@ -5,7 +5,7 @@ import { getApplicationRuntime, registerExternalApplicationAuthority } from '../
 import { z } from 'zod'
 import { DEFAULT_MCP_PREFERENCES, type McpStatus } from '../../../src/core/application-control/localHostContracts'
 import { readMcpPreferences, writeMcpPreferences } from '../services/mcp/preferences'
-import { getKey, setKey } from '../services/keystore'
+import { captureEncryptedKeySnapshot, getKey, setKey } from '../services/keystore'
 import { createMainLogger } from '../services/logging'
 import { McpConnections } from '../services/mcp/connections'
 import { ApplicationHostBridge } from '../services/application-runtime/applicationHostBridge'
@@ -25,17 +25,19 @@ let changing = false
 const trusted = assertTrustedApplicationSender
 function status(): McpStatus {
   const availability = server.availability
-  const issue = availability === 'connecting' || availability === 'port_in_use' ? availability : undefined
+  const issue = availability === 'serving' || availability === 'standby' || availability === 'direct' ? undefined : availability
   return { enabled: server.listening, ...(issue ? { issue } : {}), ready: host.ready, port: configuredPort, connections: connections.list() }
 }
 
 /**
  * 接线员登记凭据：用 safeStorage 保存；开发版与正式版共用同一资料目录，也就共用同一个接线员。
- * 两个实例同时首次生成时以存储里最终留下的为准，接线每一轮都重新读取，对不上的一方下一轮自然对上。
+ * 两个实例同时首次生成时以写入后回读到的值为准；接线每一轮都重新读取，只在与存储一致时拉起接线员。
+ * 存着却解不开时报错让接线稍后重试，不生成新值覆盖。
  */
 function relaySecret(): string {
   const saved = getKey('mcp-relay', 'secret')
   if (saved) return saved
+  if (captureEncryptedKeySnapshot('mcp-relay', 'secret').encrypted) throw new Error('接线员凭据暂时无法解密')
   setKey('mcp-relay', 'secret', randomBytes(32).toString('hex'))
   const stored = getKey('mcp-relay', 'secret')
   if (!stored) throw new Error('接线员凭据保存失败')
@@ -108,5 +110,20 @@ export function registerMcpIpc(options: { resident?: boolean } = {}): void {
   }, trusted)
 }
 export async function disposeMcp(): Promise<void> { await server?.stop() }
-/** 安装更新前连同接线员一起关闭：安装程序会结束安装目录里所有正在运行的进程，接线员也在其中。 */
-export async function releaseMcpForUpdate(): Promise<void> { await server?.stop({ releasePort: true }) }
+
+let releasing: Promise<void> | undefined
+/**
+ * 安装更新前连同接线员一起关闭：安装程序会结束安装目录里所有正在运行的进程，接线员也在其中。
+ * 最多等 8 秒，关不掉也继续安装。
+ */
+export async function releaseMcpForUpdate(): Promise<void> {
+  releasing = server?.stop({ releasePort: true }).catch(error => { logger.warn('安装更新前关闭外部连接失败', { event: 'mcp.update.release_failed', error }) })
+  await Promise.race([releasing, new Promise(resolve => setTimeout(resolve, 8_000))])
+}
+/** 安装更新没有真正退出应用时，按用户设置恢复外部连接。 */
+export async function restoreMcpAfterUpdate(): Promise<void> {
+  await releasing
+  if (!preferences.enabled || server.listening) return
+  logger.warn('安装更新没有退出应用，恢复外部连接', { event: 'mcp.update.restored' })
+  await server.start(configuredPort).catch(error => { logger.error('恢复外部连接失败', { event: 'mcp.restore.failed', error }) })
+}

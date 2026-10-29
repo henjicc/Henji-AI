@@ -5,9 +5,17 @@ import { Virtuoso } from 'react-virtuoso'
 import NumberInput from '@/components/ui/NumberInput'
 import { getMcpConnectionService } from '@/commands/mcp'
 import { writeClipboardText } from '@/commands/clipboard'
-import { type McpConnectionInfo, type McpStatus } from '@/core/application-control/localHostContracts'
+import { type McpConnectionInfo, type McpConnectionIssue, type McpStatus } from '@/core/application-control/localHostContracts'
 import { useI18n } from '@/hooks/useI18n'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
+
+const MCP_ISSUE_TEXT: Record<McpConnectionIssue, string> = {
+  connecting: 'mcp.issueConnecting',
+  port_in_use: 'mcp.issuePortInUse',
+  other_relay: 'mcp.issueOtherRelay',
+  relay_version: 'mcp.issueRelayVersion',
+  other_instance: 'mcp.issueOtherInstance',
+}
 
 const describeMcpError = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause)
 
@@ -24,7 +32,9 @@ export default function McpSection(): React.JSX.Element {
     const update = (): void => { void refresh().catch((cause) => setError(describeMcpError(cause))) }
     update()
     window.addEventListener('focus', update)
-    return () => window.removeEventListener('focus', update)
+    // 接通、端口被占这类状态在后台变化：设置页开着时每 3 秒只刷新状态，不改用户正在编辑的端口。
+    const poll = window.setInterval(() => { void getMcpConnectionService().status().then(setStatus, () => undefined) }, 3_000)
+    return () => { window.removeEventListener('focus', update); window.clearInterval(poll) }
   }, [])
   const act = async (action: () => Promise<unknown>): Promise<void> => {
     setBusy(true); setError('')
@@ -48,7 +58,7 @@ export default function McpSection(): React.JSX.Element {
   return <>
     {error && <UiError size="xs" align="start" title={error} message="" onRetry={() => void act(refresh)} />}
     {!status ? <UiLoading size="sm" message={t('mcp.loading')} /> : <>
-      <UiFormRow label={t('mcp.enable')} hint={status.enabled && status.issue ? t(status.issue === 'port_in_use' ? 'mcp.issuePortInUse' : 'mcp.issueConnecting') : undefined} inline>
+      <UiFormRow label={t('mcp.enable')} hint={status.enabled && status.issue ? t(MCP_ISSUE_TEXT[status.issue]) : undefined} inline>
         <UiSwitch checked={status.enabled} disabled={busy} onCheckedChange={(enabled) => void act(() => getMcpConnectionService().configure({ enabled, port }))} />
       </UiFormRow>
       <UiFormRow label={t('mcp.port')} info={t('mcp.portHint')} inline>
