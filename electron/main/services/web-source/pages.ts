@@ -35,11 +35,14 @@ export function parseWebSourceCaptureRequest(input: unknown): WebSourceCaptureRe
   return { streamId: fields.streamId as string, ticket: fields.ticket as string, time: fields.time, ...(fields.boxes ? { boxes: fields.boxes as string[] } : {}) }
 }
 
-/** 要监视的网页路径清单：每项都是本机绝对路径，不限条数（打开着的剪辑引用多少就监视多少）。 */
+/**
+ * 要监视的网页路径清单，不限条数（打开着的剪辑引用多少就监视多少）。不是本机绝对路径的条目逐条跳过：
+ * 剪辑里一条写坏的引用不能让同一窗口里其他网页文件夹都失去监视。
+ */
 export function parseWebSourcePaths(input: unknown): string[] {
   const paths = record(input, '网页监视请求').paths
   if (!Array.isArray(paths)) throw new Error('网页监视请求 paths 需要路径数组')
-  return paths.map(sourcePath)
+  return paths.flatMap(path => { try { return [sourcePath(path)] } catch { return [] } })
 }
 
 /**
@@ -77,6 +80,8 @@ export class WebSourcePages {
    * 有页面开着与否都监视，文件夹改动经 `WEB_SOURCE_CONTENT_CHANGED_CHANNEL` 按路径通知；窗口关闭或导航时一并释放。
    */
   async watchContent(target: VideoFrameTarget, paths: readonly string[]): Promise<Record<string, string | null>> {
+    // 窗口已经关掉：不再登记，否则关闭回调已经错过，监视永远不会释放
+    if (target.isDestroyed()) return {}
     const next = new Map<string, string[]>()
     for (const path of paths) {
       const root = codeWebFolderOf(path)

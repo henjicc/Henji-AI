@@ -19,6 +19,8 @@ interface WatchedRoot {
   /** 重新监视与重新散列各用一个计时器，互不取消。 */
   watchTimer?: ReturnType<typeof setTimeout>
   hashTimer?: ReturnType<typeof setTimeout>
+  /** 最近一次开始的重新散列的序号。 */
+  hashGeneration?: number
   /** 监视失败、散列失败各只记一次，恢复后清掉。 */
   watchWarned?: boolean
   hashWarned?: boolean
@@ -115,15 +117,17 @@ export class WebSourceContent {
 
   private async rehash(root: string, entry: WatchedRoot): Promise<void> {
     if (this.roots.get(root) !== entry) return
+    // 大文件夹散列较慢时可能有两次同时在算：只认最后开始的那次，先开始、后算完的旧结果不能盖掉新的
+    const generation = entry.hashGeneration = (entry.hashGeneration ?? 0) + 1
     const previous = await entry.hash.catch(() => undefined)
     let hash: string
     try {
       hash = await webSourceContentHash(root)
     } catch (error) {
-      if (this.roots.get(root) === entry) this.hashFailed(root, entry, error)
+      if (this.roots.get(root) === entry && entry.hashGeneration === generation) this.hashFailed(root, entry, error)
       return
     }
-    if (this.roots.get(root) !== entry) return
+    if (this.roots.get(root) !== entry || entry.hashGeneration !== generation) return
     entry.hash = Promise.resolve(hash)
     entry.hashWarned = false
     if (!entry.watcher && !entry.watchTimer) this.watch(root, entry, false)
