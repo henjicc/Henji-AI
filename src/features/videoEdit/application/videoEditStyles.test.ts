@@ -143,7 +143,7 @@ it('风格包往返：导出带说明书、样片、成员模板与预览，导�
     expect((await importVideoEditStylePackage('D:/out/分享风格.hjsty', fileIo)).replaced).toBe(true)
     files.set('D:/bad.hjsty', text.replace('"format":"henji-video-style"', '"format":"other"'))
     await expect(importVideoEditStylePackage('D:/bad.hjsty', fileIo)).rejects.toThrow('风格包内容无效')
-    files.set('D:/newer.hjsty', JSON.stringify({ version: 9, minReaderVersion: 9, content: {} }))
+    files.set('D:/newer.hjsty', JSON.stringify({ version: 9999, minReaderVersion: 9999, content: {} }))
     await expect(importVideoEditStylePackage('D:/newer.hjsty', fileIo)).rejects.toThrow('更新版本')
     // 导出内置风格再导入：与内置同一标识时另起标识，不覆盖内置。
     videoEditStyleLibrary.reset(io, undefined)
