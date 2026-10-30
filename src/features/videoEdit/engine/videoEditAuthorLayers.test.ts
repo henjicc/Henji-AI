@@ -10,9 +10,13 @@ const layer: AuthorLayer = { draw() {}, bounds: [-20, -10, 20, 10], pose: t => (
 describe('direct author layer GPU bridge', () => {
   it('keeps in-focus raster dimensions stable at the reference defocus thresholds', () => {
     expect(authorLayerBlur({ scale: 4, blur: .49 }, 4, 'lens')).toEqual({ radius: 0, pad: 2 })
-    expect(authorLayerBlur({ scale: 4, blur: .5 }, 4, 'lens')).toEqual({ radius: .5, pad: 3 })
+    expect(authorLayerBlur({ scale: 4, blur: .5 }, 4, 'lens')).toEqual({ radius: .5, pad: 18 })
     expect(authorLayerBlur({ scale: 2, blur: .12 }, 4, 'gaussian')).toEqual({ radius: 0, pad: 2 })
-    expect(authorLayerBlur({ scale: 2, blur: .125 }, 4, 'gaussian')).toEqual({ radius: .25, pad: 3 })
+    expect(authorLayerBlur({ scale: 2, blur: .125 }, 4, 'gaussian')).toEqual({ radius: .25, pad: 18 })
+  })
+  it('keeps the raster size through a typical defocus ramp so cached layers are reused', () => {
+    const pads = [.6, 3, 7, 13].map(blur => authorLayerBlur({ scale: 1, blur }, 1, 'lens').pad)
+    expect(new Set(pads).size).toBe(1)
   })
   it('uses Canvas radians and independent scale axes', () => {
     const m = authorPoseMatrix({ x: 5, y: 6, rotation: Math.PI / 2, scaleX: 2, scaleY: 3 })

@@ -3,12 +3,17 @@ import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampl
 import type { AuthorFrameInfo, AuthorLayer, AuthorModule, AuthorPose } from './videoEditAuthorModule'
 import { authorOverrideMatrix, type AuthorElementOverride } from './videoEditAuthorElements'
 
-/** Subpixel defocus must not change raster dimensions or mip sampling. */
+/**
+ * Subpixel defocus must not change raster dimensions or mip sampling.
+ * 边距从 16 像素起按 2 的幂向上取整：镜头缓慢推拉或虚化渐变时半径每帧都略有不同，边距跟着变就会改变栅格尺寸，
+ * 图层缓存作废、每帧整层重画；常见的虚化渐变整段落在同一档里。
+ */
 export function authorLayerBlur(pose: AuthorPose | null | undefined, rasterScale: number, shape: AuthorLayer['blurShape']): { radius: number; pad: number } {
   const scale = Math.max(Math.abs(pose?.scaleX ?? pose?.scale ?? 1), Math.abs(pose?.scaleY ?? pose?.scale ?? 1))
   const radius = (pose?.blur ?? 0) > 0 ? (pose!.blur! / scale) * rasterScale : 0
   const lens = shape === 'lens'
-  return radius < (lens ? .5 : .25) ? { radius: 0, pad: 2 } : { radius, pad: 2 + Math.ceil(radius * (lens ? 1.15 : 3)) }
+  if (radius < (lens ? .5 : .25)) return { radius: 0, pad: 2 }
+  return { radius, pad: 2 + Math.max(16, 2 ** Math.ceil(Math.log2(Math.ceil(radius * (lens ? 1.15 : 3))))) }
 }
 
 /**
