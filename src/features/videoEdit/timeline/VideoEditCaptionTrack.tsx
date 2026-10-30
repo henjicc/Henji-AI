@@ -8,11 +8,11 @@ import { UiIconButton } from '@/components/ui'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import type { VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { videoEditCaptionClipIds } from '@/core/videoEdit/captionSpeech'
-import { retimeVideoEditCaption, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
+import { retimeVideoEditCaption, rollVideoEditCaptions, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { createRafScheduler } from '@/utils/createRafScheduler'
 import { focusVideoEditPanel, type VideoEditInstance } from '../application/videoEditService'
-import { moveVideoEditCaption, updateVideoEditCaptionTrack } from '../application/videoEditTimedContent'
+import { moveVideoEditCaption, rollVideoEditCaptionEdge, updateVideoEditCaptionTrack } from '../application/videoEditTimedContent'
 import { selectVideoEditSubtitle, selectedVideoEditSubtitleId, subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision } from '../application/videoEditSubtitleSelection'
 import { VideoEditTrackHeader } from './VideoEditTrackHeader'
 import { VideoEditTimelinePlayhead } from './VideoEditTimelineTransport'
@@ -21,12 +21,12 @@ import { clearTimelineSnap, reportTimelineSnap, snapTimelineEdges, timelineSnapP
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; geometry: TimelineLayout['caption']; pixels: number; view: TimelineViewport; viewport: React.RefObject<HTMLDivElement>; onError: (error: unknown) => void }
 
-/** 字幕和普通轨道共用轨道头、行几何、片段令牌及领域历史；手势中只预览，松手提交一次。 */
+/** 字幕和普通轨道共用轨道头、行几何、片段令牌及领域历史；手势中只预览，松手提交一次。修剪时按住 Ctrl 或 Alt，挨着的邻句跟着这条边走。 */
 export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, view, viewport, onError }: Props): React.ReactElement {
   const { t } = useTranslation('ui')
   useSyncExternalStore(subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision)
   const selected = selectedVideoEditSubtitleId(instance, sequence.id)
-  const [preview, setPreview] = useState<VideoEditCaption | null>(null)
+  const [preview, setPreview] = useState<VideoEditCaption[] | null>(null)
   const cancel = useRef<(() => void) | null>(null)
   const projectId = instance.document.id
   const locked = (caption: VideoEditCaption): boolean => Boolean(sequence.captionTrackLocked || videoEditCaptionClipIds(caption).some(id => sequence.tracks.find(track => track.index === sequence.clips.find(clip => clip.id === id)?.track)?.locked))
@@ -45,7 +45,11 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     if (!host) return
     const win = ownerWindowOf(host); const contentVersion = instance.contentVersion
     const origin = event.clientX; const scroll = host.scrollLeft
-    const points = timelineSnapPoints(sequence, { playhead: instance.frame, extra: (sequence.captions ?? []).filter(value => value.id !== caption.id).flatMap(value => [value.start, value.start + value.duration]) })
+    const edge = mode === 'move' ? null : mode
+    const roll = edge !== null && (event.ctrlKey || event.metaKey || event.altKey)
+    const retime = (offset: number): VideoEditCaption[] => roll && edge ? rollVideoEditCaptions(sequence, caption.id, edge, offset) : [retimeVideoEditCaption(sequence, caption.id, mode, offset)]
+    const rolled = roll && edge ? new Set(rollVideoEditCaptions(sequence, caption.id, edge, 0).map(value => value.id)) : new Set([caption.id])
+    const points = timelineSnapPoints(sequence, { playhead: instance.frame, extra: (sequence.captions ?? []).filter(value => !rolled.has(value.id)).flatMap(value => [value.start, value.start + value.duration]) })
     const axis = timelineEdgeAxis(origin)
     let x = origin; let delta = 0; let moved = false
     const update = (): void => {
@@ -57,9 +61,10 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
       if (instance.snapping) delta += snapTimelineEdges(sequence.id, points, edges, TIMELINE_SNAP_PIXELS / pixels)
       else clearTimelineSnap()
       try {
-        const next = retimeVideoEditCaption(sequence, caption.id, mode, delta)
+        const changed = retime(delta)
+        const next = changed.find(value => value.id === caption.id)!
         if (instance.snapping) reportTimelineSnap(sequence.id, points, mode === 'move' ? [next.start, next.start + next.duration] : [mode === 'in' ? next.start : next.start + next.duration])
-        setPreview(next)
+        setPreview(changed)
       } catch (error) { finish(false); onError(error) }
     }
     const tick = (): void => {
@@ -79,7 +84,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
       cancel.current = null; animation.cancel()
       win.removeEventListener('pointermove', move); win.removeEventListener('pointerup', up); win.removeEventListener('pointercancel', abort); win.removeEventListener('blur', abort); win.removeEventListener('keydown', key, true)
       setPreview(null); clearTimelineSnap()
-      if (commit && moved && isVideoEditContentCurrent(instance, contentVersion) && instance.activeSequenceId === sequence.id) run(() => moveVideoEditCaption(projectId, sequence.id, caption.id, mode, delta))
+      if (commit && moved && isVideoEditContentCurrent(instance, contentVersion) && instance.activeSequenceId === sequence.id) run(() => roll && edge ? rollVideoEditCaptionEdge(projectId, sequence.id, caption.id, edge, delta) : moveVideoEditCaption(projectId, sequence.id, caption.id, mode, delta))
     }
     cancel.current = abort
     win.addEventListener('pointermove', move); win.addEventListener('pointerup', up); win.addEventListener('pointercancel', abort); win.addEventListener('blur', abort); win.addEventListener('keydown', key, true)
@@ -90,8 +95,8 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     <VideoEditTrackHeader caption row={row} code="C1" targeted={false} onTarget={() => focusVideoEditPanel(projectId, 'content')} onResize={() => {}} onPatch={patch => run(() => updateVideoEditCaptionTrack(projectId, sequence.id, { ...(patch.enabled === undefined ? {} : { captionTrackEnabled: patch.enabled }), ...(patch.locked === undefined ? {} : { captionTrackLocked: patch.locked }) }))} />
     {/* The pinned row covers the tracks scrolled under it, not the playhead. */}
     <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
-    {(sequence.captions ?? []).filter(caption => caption.id === preview?.id || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 32).map(original => {
-      const caption = preview?.id === original.id ? preview : original
+    {(sequence.captions ?? []).filter(caption => preview?.some(value => value.id === caption.id) || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 32).map(original => {
+      const caption = preview?.find(value => value.id === original.id) ?? original
       return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={locked(caption) || undefined} tooltip={caption.reviewReasons?.length ? `${caption.text}\n${t('captionTrack.reviewHint')}` : caption.text}
         data-ui-timeline-item data-video-edit-caption-range={caption.id} data-caption-start={caption.start} data-caption-duration={caption.duration}
         className={`absolute top-0.5 ${locked(caption) ? 'cursor-default' : 'cursor-grab'}`}

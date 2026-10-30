@@ -264,8 +264,8 @@
     "lock": "锁定字幕轨道",
     "unlock": "解锁字幕轨道",
     "select": "定位字幕 {{text}}",
-    "trimStart": "修剪字幕开始",
-    "trimEnd": "修剪字幕结束"
+    "trimStart": "修剪字幕开始（按住 Ctrl 或 Alt 连着上一句一起拖）",
+    "trimEnd": "修剪字幕结束（按住 Ctrl 或 Alt 连着下一句一起拖）"
   },
   "canvasTidy": {
     "title": "整理",

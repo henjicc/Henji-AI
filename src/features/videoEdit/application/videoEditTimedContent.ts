@@ -5,7 +5,7 @@ import { videoEditCaptionSchema, videoEditMarkerSchema, importVideoEditCaptions,
 import { getPlatform } from '@/platform/runtime'
 import { editVideoSequence, requireVideoEditInstance, videoEditExportRange, type VideoEditGesture } from './videoEditService'
 import { prepareVideoEditCaption, prepareVideoEditCaptions } from './videoEditCaptionCreation'
-import { retimeVideoEditCaption, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
+import { retimeVideoEditCaption, rollVideoEditCaptions, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 
 const logger = createLogger('features.videoEdit.timedContent')
@@ -16,6 +16,13 @@ export function moveVideoEditCaption(projectId: string, sequenceId: string, id: 
   editVideoSequence(projectId, sequenceId, sequence => {
     const next = retimeVideoEditCaption(sequence, id, mode, delta)
     return { ...sequence, captions: sequence.captions!.map(caption => caption.id === id ? next : caption) }
+  })
+}
+/** 连着邻句一起修剪（见 rollVideoEditCaptions），一次编辑、一步撤销。 */
+export function rollVideoEditCaptionEdge(projectId: string, sequenceId: string, id: string, edge: 'in' | 'out', delta: number): void {
+  editVideoSequence(projectId, sequenceId, sequence => {
+    const next = new Map(rollVideoEditCaptions(sequence, id, edge, delta).map(caption => [caption.id, caption]))
+    return { ...sequence, captions: sequence.captions!.map(caption => next.get(caption.id) ?? caption) }
   })
 }
 export function createVideoEditMarker(projectId: string, sequenceId: string, values: Omit<VideoEditMarker, 'id'>): string {

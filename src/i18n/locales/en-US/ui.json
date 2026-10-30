@@ -264,8 +264,8 @@
     "lock": "Lock caption track",
     "unlock": "Unlock caption track",
     "select": "Select caption {{text}}",
-    "trimStart": "Trim caption start",
-    "trimEnd": "Trim caption end"
+    "trimStart": "Trim caption start (hold Ctrl or Alt to move the previous caption with it)",
+    "trimEnd": "Trim caption end (hold Ctrl or Alt to move the next caption with it)"
   },
   "canvasTidy": {
     "title": "Tidy",
