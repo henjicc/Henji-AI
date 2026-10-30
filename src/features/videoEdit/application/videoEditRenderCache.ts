@@ -115,7 +115,7 @@ function ensureAutoRender(): void {
       if (!state) { state = { content, changedAt: now }; autoState.set(instance, state) }
       // An edit makes windows rendered from the old content useless: stop the automatic job and wait for quiet again.
       if (state.content !== content) { state.content = content; state.changedAt = now; state.controller?.abort(new DOMException('剪辑内容已改变。', 'AbortError')) }
-      if (!getVideoEditRenderPreference(projectId).autoRender || !loaded.has(projectId) || jobs.get(instance) || !instance.activeSequenceId) continue
+      if (!getVideoEditRenderPreference(projectId).autoRender || !loaded.has(projectId) || jobs.get(instance) || clearing.has(instance) || cancelling.has(instance) || !instance.activeSequenceId) continue
       if (instance.playing || instance.scrubbing || instance.busy || now - state.changedAt < AUTO_RENDER_IDLE_MS || now - programInteractionAt < RENDER_AFTER_INTERACTION_MS) continue
       let view: VideoEditRenderCacheView
       try { view = readVideoEditRenderCache(projectId) } catch { continue }
@@ -133,6 +133,8 @@ function ensureAutoRender(): void {
   }, 1000)
 }
 const jobs = new WeakMap<VideoEditInstance, Job>()
+const clearing = new WeakMap<VideoEditInstance, Promise<void>>()
+const cancelling = new WeakMap<VideoEditInstance, Promise<void>>()
 
 export function videoEditRenderCacheBusy(owner: VideoEditInstance): boolean { return jobs.has(owner) }
 
@@ -140,7 +142,8 @@ export type VideoEditRenderWindowState = 'ready' | 'rendering' | 'dropped' | 'pr
 export interface VideoEditRenderCacheView {
   windows: Array<{ startFrame: number; endFrame: number; state: VideoEditRenderWindowState; performance?: VideoEditRenderPerformance }>
   readyFrames: number; needsRenderFrames: number; totalFrames: number
-  rendering: { done: number; total: number } | null
+  /** auto：空闲时自动渲染的任务；用户或助手发起的渲染会直接接替它。 */
+  rendering: { done: number; total: number; auto: boolean } | null
 }
 
 function cacheOf(projectId: string): Promise<ProjectCache> {
@@ -318,17 +321,17 @@ function observe(projectId: string, composition: VideoEditComposition, window: V
 export function readVideoEditRenderCache(projectId: string, sequenceId?: string): VideoEditRenderCacheView {
   const instance = requireVideoEditInstance(projectId)
   // An empty project has nothing to render.
-  const composition = findActiveVideoEditSequence(instance)
+  if (sequenceId && !instance.document.sequences.some(sequence => sequence.id === sequenceId)) throw new Error('这条序列已不存在。')
+  const composition = sequenceId ? sequenceComposition(instance, sequenceId) : findActiveVideoEditSequence(instance)
   if (!composition) return { windows: [], readyFrames: 0, needsRenderFrames: 0, totalFrames: 0, rendering: null }
-  if (sequenceId && sequenceId !== composition.id) throw new Error('只能读取当前序列的渲染状态，请先切换到该序列。')
   const cache = loadedCache(projectId, true)
   const job = jobs.get(instance)
   const { profile } = videoEditRenderProfile(composition)
   const windows = (currentWindows(instance, composition) ?? []).map(window => ({ startFrame: window.startFrame, endFrame: window.endFrame,
     ...(readVideoEditRenderPerformance(window.key) ? { performance: readVideoEditRenderPerformance(window.key) } : {}),
-    state: readyEntry(cache, window, profile) ? 'ready' as const : job?.current === window.key ? 'rendering' as const : measuredState(window) }))
+    state: readyEntry(cache, window, profile) ? 'ready' as const : job?.sequenceId === composition.id && job.current === window.key ? 'rendering' as const : measuredState(window) }))
   const frames = (state: VideoEditRenderWindowState): number => windows.filter(window => window.state === state).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0)
-  return { windows, readyFrames: frames('ready'), needsRenderFrames: frames('dropped') + frames('predicted'), totalFrames: windows.at(-1)?.endFrame ?? 0, rendering: job && job.sequenceId === composition.id ? { done: job.done, total: job.total } : null }
+  return { windows, readyFrames: frames('ready'), needsRenderFrames: frames('dropped') + frames('predicted'), totalFrames: windows.at(-1)?.endFrame ?? 0, rendering: job && job.sequenceId === composition.id ? { done: job.done, total: job.total, auto: job.auto } : null }
 }
 
 let barRevision = 0
@@ -375,7 +378,21 @@ export function requestVideoEditRenderBarWindows(projectId: string): void {
   })
 }
 
-export function cancelVideoEditRenderCache(projectId: string): void { jobs.get(requireVideoEditInstance(projectId))?.controller.abort(new DOMException('预渲染已取消。', 'AbortError')) }
+export async function cancelVideoEditRenderCache(projectId: string): Promise<void> {
+  const instance = requireVideoEditInstance(projectId)
+  const pending = cancelling.get(instance)
+  if (pending) return pending
+  const job = jobs.get(instance)
+  const work = (async () => {
+    job?.controller.abort(new DOMException('预渲染已取消。', 'AbortError'))
+    // 等待期间自动调度也必须让出，避免旧任务退出到本次取消回读之间又开出新任务。
+    while (job && jobs.get(instance) === job) await new Promise(resolve => setTimeout(resolve, 20))
+    const auto = autoState.get(instance)
+    if (auto) auto.changedAt = performance.now()
+  })()
+  cancelling.set(instance, work)
+  try { await work } finally { cancelling.delete(instance) }
+}
 
 export interface VideoEditRenderCacheRequest {
   range?: { startFrame: number; endFrame: number }; scope: 'needed' | 'all'
@@ -394,16 +411,18 @@ export interface VideoEditRenderCacheResult { renderedWindows: number; readyFram
  */
 export async function renderVideoEditRenderCache(projectId: string, request: VideoEditRenderCacheRequest, signal?: AbortSignal, onStarted?: (plan: { pendingWindows: number; requestedFrames: number; readyFrames: number }) => void): Promise<VideoEditRenderCacheResult> {
   const instance = requireVideoEditInstance(projectId)
+  if (clearing.has(instance)) throw new Error('正在删除渲染文件，请稍后再渲染。')
+  if (cancelling.has(instance)) throw new Error('正在取消渲染，请稍后再渲染。')
   const running = jobs.get(instance)
   if (running && !running.auto) throw new Error('该剪辑正在预渲染，请等待完成或先取消。')
   // A user or assistant request replaces the idle job (its finished windows stay ready).
   if (running) { running.controller.abort(new DOMException('改为按请求预渲染。', 'AbortError')); while (jobs.get(instance)) await new Promise(resolve => setTimeout(resolve, 20)) }
   const composition = getActiveVideoEditSequence(instance)
   const cache = await cacheOf(projectId); loaded.set(projectId, cache)
-  if (jobs.has(instance)) throw new Error('该剪辑正在预渲染，请等待完成或先取消。')
+  if (jobs.has(instance) || clearing.has(instance) || cancelling.has(instance)) throw new Error('该剪辑正在预渲染、取消或删除渲染文件，请稍后重试。')
   const range = request.range ?? { startFrame: 0, endFrame: Number.MAX_SAFE_INTEGER }
   const all = await settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition))
-  if (jobs.has(instance)) throw new Error('该剪辑正在预渲染，请等待完成或先取消。')
+  if (jobs.has(instance) || clearing.has(instance) || cancelling.has(instance)) throw new Error('该剪辑正在预渲染、取消或删除渲染文件，请稍后重试。')
   let windows = all.filter(window => window.endFrame > range.startFrame && window.startFrame < range.endFrame && (request.scope === 'all' || measuredState(window) !== 'realtime'))
   const around = request.aroundFrame
   const encoding = videoEditRenderProfile(composition)
@@ -601,13 +620,37 @@ function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   })
 }
 
-/** 删除该剪辑的全部预览文件（例如磁盘不够时）。 */
-export async function clearVideoEditRenderCache(projectId: string): Promise<void> {
+/**
+ * 删除调用时当前序列的预览；范围为半开区间，整窗相交即删除。缓存可重新生成，不属于用户数据，不进回收区。
+ * 先阻止新任务并等待在途任务取消，避免迟到的 commit 在清理后写回；并发清理按调用顺序执行。
+ * 文件按内容指纹复用：删除该文件也会使其他位置引用同一指纹的预览失效，原始素材和剪辑内容不受影响。
+ */
+export async function clearVideoEditRenderCache(projectId: string, range?: { startFrame: number; endFrame: number }): Promise<void> {
   const instance = requireVideoEditInstance(projectId)
-  cancelVideoEditRenderCache(projectId)
-  // 等当前段停止写入，避免删除后迟到的 commit 重新出现绿段。
-  while (jobs.has(instance)) await new Promise(resolve => setTimeout(resolve, 20))
-  const cache = await cacheOf(projectId)
-  await getPlatform().mediaCache.renderRemove({ projectId })
-  cache.entries.clear(); publishVideoEdit()
+  const composition = getActiveVideoEditSequence(instance)
+  if (range && (!Number.isInteger(range.startFrame) || !Number.isInteger(range.endFrame) || range.startFrame < 0 || range.endFrame <= range.startFrame)) throw new Error('渲染文件范围必须是有效的半开帧区间。')
+  const previous = clearing.get(instance)
+  const clear = async (): Promise<void> => {
+    logger.info('开始删除渲染文件', { event: 'video_edit.render_cache.clear_start', context: { projectId, sequenceId: composition.id, range } })
+    try {
+      jobs.get(instance)?.controller.abort(new DOMException('正在删除渲染文件。', 'AbortError'))
+      while (jobs.has(instance)) await new Promise(resolve => setTimeout(resolve, 20))
+      const cache = await cacheOf(projectId)
+      const windows = await settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition))
+      const keys = [...new Set(windows.filter(window => !range || window.endFrame > range.startFrame && window.startFrame < range.endFrame).map(window => window.key))]
+      if (keys.length) await getPlatform().mediaCache.renderRemove({ projectId, windowKeys: keys })
+      for (const key of keys) cache.entries.delete(key)
+      loaded.set(projectId, cache)
+      const auto = autoState.get(instance)
+      if (auto) auto.changedAt = performance.now()
+      publishVideoEdit()
+      logger.info('渲染文件已删除', { event: 'video_edit.render_cache.clear_completed', context: { projectId, sequenceId: composition.id, windows: keys.length } })
+    } catch (error) {
+      logger.warn('删除渲染文件失败', { event: 'video_edit.render_cache.clear_failed', error, context: { projectId, sequenceId: composition.id } })
+      throw error
+    }
+  }
+  const work = (previous ?? Promise.resolve()).then(clear, clear)
+  clearing.set(instance, work)
+  try { await work } finally { if (clearing.get(instance) === work) clearing.delete(instance) }
 }

@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { getAppMenus, findAppMenuCommand } from '@/core/appMenu/appMenu'
 import { VideoEditAppMenus } from './VideoEditAppMenus'
 
-const mock = vi.hoisted(() => ({ panel: 'timeline', execute: vi.fn(async () => undefined), state: vi.fn(() => ({ enabled: false, reason: '请先选择片段。' })) }))
+const mock = vi.hoisted(() => ({ panel: 'timeline', execute: vi.fn(async () => undefined), state: vi.fn((_context?: unknown, _id?: string): { enabled: boolean; reason?: string; checked?: boolean; title?: string } => ({ enabled: false, reason: '请先选择片段。' })) }))
 vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: (selector: (state: { videoEditShortcuts: object }) => unknown) => selector({ videoEditShortcuts: { split: { code: 'KeyS', ctrl: true, shift: true, alt: false, meta: false } } }) }))
 vi.mock('./application/videoEditService', () => ({ activeVideoEditInstance: () => ({ document: { id: 'project' }, activePanel: mock.panel }), subscribeVideoEdit: () => () => undefined, subscribeVideoEditView: () => () => undefined, videoEditRevision: () => 1, videoEditViewRevision: () => 1 }))
 vi.mock('./application/videoEditCommands', () => ({ captureVideoEditCommandContext: (_projectId: string, scope: string) => ({ scope }), executeVideoEditCommand: mock.execute, videoEditCommandState: mock.state }))
@@ -39,4 +39,25 @@ it('焦点在没有专属命令的面板时，菜单与键盘同一规则：导�
     expect(mock.execute).toHaveBeenLastCalledWith({ scope: 'timeline' }, 'next_marker')
     view.unmount()
   } finally { mock.panel = 'timeline' }
+})
+
+
+it('预渲染在序列菜单独立分组，复用动态取消进度与勾选状态，固定作用于当前序列', async () => {
+  mock.panel = 'source'
+  mock.state.mockImplementation((_context, id) => id === 'render_in_out' ? { enabled: true, title: '取消渲染（25%）' } : id === 'toggle_auto_render' ? { enabled: true, checked: true } : { enabled: false, reason: '请先选择片段。' })
+  try {
+    const view = render(<VideoEditAppMenus />)
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(findAppMenuCommand('videoEdit.timeline.render_in_out')).toMatchObject({ label: '取消渲染（25%）', shortcut: 'Enter' })
+    expect(findAppMenuCommand('videoEdit.timeline.toggle_auto_render')).toMatchObject({ label: '空闲时自动渲染', checked: true })
+    const sequence = getAppMenus().find(menu => menu.id === 'sequence')!
+    const renderIndex = sequence.items.findIndex(item => item.kind === 'action' && item.id === 'videoEdit.timeline.render_in_out')
+    expect(sequence.items[renderIndex - 1]).toEqual({ kind: 'separator' })
+    await findAppMenuCommand('videoEdit.timeline.render_in_out')!.run()
+    expect(mock.execute).toHaveBeenLastCalledWith({ scope: 'timeline' }, 'render_in_out')
+    view.unmount()
+  } finally {
+    mock.panel = 'timeline'
+    mock.state.mockImplementation(() => ({ enabled: false, reason: '请先选择片段。' }))
+  }
 })

@@ -84,6 +84,11 @@ export const VIDEO_EDIT_COMMANDS = [
   navigation(command('mark_in', '设置入点', monitorScopes, key('KeyI'))),
   navigation(command('mark_out', '设置出点', monitorScopes, key('KeyO'))),
   command('mark_clip', '标记片段', editScopes, key('KeyX')),
+  command('render_in_out', '渲染入点到出点', editScopes, key('Enter')),
+  command('render_selection', '渲染所选片段', editScopes),
+  command('clear_render_cache', '删除渲染文件', editScopes),
+  command('clear_render_cache_in_out', '删除入点到出点的渲染文件', editScopes),
+  command('toggle_auto_render', '空闲时自动渲染', editScopes),
   navigation(command('go_in', '转到入点', editScopes, key('KeyI', false, true))),
   navigation(command('go_out', '转到出点', editScopes, key('KeyO', false, true))),
   navigation(command('clear_in', '清除入点', monitorScopes, key('KeyI', true, true))),
@@ -160,6 +165,8 @@ export const VIDEO_EDIT_COMMANDS = [
   command('project_toggle_view', '切换素材视图', ['project'], key('Backslash', false, true)),
 ] as const
 export type VideoEditCommandId = typeof VIDEO_EDIT_COMMANDS[number]['id']
+/** 序列菜单与时间线右键菜单使用相同的预渲染命令组。 */
+export const VIDEO_EDIT_RENDER_COMMANDS = ['render_in_out', 'render_selection', 'clear_render_cache', 'clear_render_cache_in_out', 'toggle_auto_render'] as const satisfies readonly VideoEditCommandId[]
 /** 有专属命令（导航与全局命令之外）的作用域；其余面板（预设、效果库、音轨混合器、跟踪、调色……）只借用导航与全局命令。 */
 const OWN_COMMAND_SCOPES: ReadonlySet<string> = new Set<string>(['global', ...VIDEO_EDIT_COMMANDS.filter(command => !command.navigation && !command.scopes.includes('global')).flatMap(command => command.scopes)])
 /** 按键在这个面板里按哪个作用域匹配。 */
@@ -180,7 +187,7 @@ export const VIDEO_EDIT_TOOL_COMMANDS = { select_tool: 'select', track_tool: 'tr
 export type VideoEditToolCommandId = keyof typeof VIDEO_EDIT_TOOL_COMMANDS
 export function isVideoEditToolCommand(id: VideoEditCommandId): id is VideoEditToolCommandId { return Object.hasOwn(VIDEO_EDIT_TOOL_COMMANDS, id) }
 export type VideoEditShortcutOverrides = Partial<Record<VideoEditCommandId, VideoEditShortcut | null>>
-const shortcutSchema = z.object({ code: z.string().regex(/^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Space|Arrow(?:Left|Right|Up|Down)|Delete|Backspace|Comma|Period|Equal|Minus|Bracket(?:Left|Right)|Backslash|Semicolon|Quote|Slash|Backquote|Home|End|Page(?:Up|Down))$/), ctrl: z.boolean(), alt: z.boolean(), shift: z.boolean(), meta: z.boolean() }).strict()
+const shortcutSchema = z.object({ code: z.string().regex(/^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Space|Enter|Arrow(?:Left|Right|Up|Down)|Delete|Backspace|Comma|Period|Equal|Minus|Bracket(?:Left|Right)|Backslash|Semicolon|Quote|Slash|Backquote|Home|End|Page(?:Up|Down))$/), ctrl: z.boolean(), alt: z.boolean(), shift: z.boolean(), meta: z.boolean() }).strict()
 export function videoEditShortcutLabel(shortcut: VideoEditShortcut | null | undefined): string {
   if (!shortcut) return '未设置'
   const labels: Record<string, string> = { Space: 'Space', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Comma: ',', Period: '.', Equal: '=', Minus: '-', Backslash: '\\', Semicolon: ';', Quote: "'", Slash: '/', Backquote: '`', BracketLeft: '[', BracketRight: ']', PageUp: 'PgUp', PageDown: 'PgDn' }

@@ -1,14 +1,32 @@
-import { renderVideoEditPreviewCapability } from '@/core/application-control/domains/videoEdit/videoEditRenderCacheCapability'
+import { cancelVideoEditPreviewCapability, clearVideoEditPreviewCapability, renderVideoEditPreviewCapability } from '@/core/application-control/domains/videoEdit/videoEditRenderCacheCapability'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { createLogger } from '@/core/logging'
-import { readVideoEditRenderCache, renderVideoEditRenderCache } from './videoEditRenderCache'
+import { cancelVideoEditRenderCache, clearVideoEditRenderCache, readVideoEditRenderCache, renderVideoEditRenderCache } from './videoEditRenderCache'
 import { requireVideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.renderCache')
 
 /** Starts the background render (a whole film can take longer than a tool call) and reads the render bar back. */
 export async function handleVideoEditRenderCacheCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
+  if (id === cancelVideoEditPreviewCapability.id) {
+    const input = cancelVideoEditPreviewCapability.inputSchema.parse(raw)
+    context.signal?.throwIfAborted()
+    await cancelVideoEditRenderCache(input.documentRef.id)
+    const verified = readVideoEditRenderCache(input.documentRef.id).rendering === null
+    return { documentRef: input.documentRef, verified, message: verified ? '预渲染已停止，已完成的预览文件已保留。' : '预渲染尚未停止，请检查渲染状态。' }
+  }
+  if (id === clearVideoEditPreviewCapability.id) {
+    const input = clearVideoEditPreviewCapability.inputSchema.parse(raw)
+    const owner = requireVideoEditInstance(input.documentRef.id)
+    if (!owner.activeSequenceId) throw new ApplicationPreflightFailure('剪辑还没有序列，请先创建序列。')
+    const sequenceId = owner.activeSequenceId
+    context.signal?.throwIfAborted()
+    await clearVideoEditRenderCache(input.documentRef.id, input.range)
+    const view = readVideoEditRenderCache(input.documentRef.id, sequenceId)
+    const verified = !view.rendering && !view.windows.some(window => window.state === 'ready' && (!input.range || window.endFrame > input.range.startFrame && window.startFrame < input.range.endFrame))
+    return { documentRef: input.documentRef, verified, message: verified ? '指定范围的渲染文件已删除。' : '渲染文件删除后回读未通过，请检查当前渲染状态。' }
+  }
   if (id !== renderVideoEditPreviewCapability.id) return undefined
   const input = renderVideoEditPreviewCapability.inputSchema.parse(raw)
   const owner = requireVideoEditInstance(input.documentRef.id)

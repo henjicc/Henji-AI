@@ -14,6 +14,7 @@ import { subscribeVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import { createVideoEditAnnotation } from './videoEditAnnotations'
+import * as renderCache from './videoEditRenderCache'
 
 // 过渡命令的画面试渲染需要 GPU Worker；命令层只验证编辑与撤销，试渲染由 videoEditCodeService.test 覆盖。
 vi.mock('./videoEditCodeTrial', async () => ({ ...await vi.importActual<typeof import('./videoEditCodeTrial')>('./videoEditCodeTrial'), trialVideoEditCodeDocument: async () => undefined }))
@@ -315,4 +316,46 @@ it('批注作用域里 Ctrl+A、Delete 作用于批注：全选当前筛选、�
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   expect(getActiveVideoEditSequence(owner).annotations).toEqual([]); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.id)).toContain(first)
   expect(videoEditCommandState(captureVideoEditCommandContext(id, 'annotations'), 'delete')).toEqual({ enabled: false, reason: '请先选中批注。' })
+})
+
+
+it('渲染命令统一换算入出点和所选片段外包范围，取消命令与自动渲染勾选同源', async () => {
+  const { id, first, second, sequence } = await fixture()
+  const read = vi.spyOn(renderCache, 'readVideoEditRenderCache').mockReturnValue({ windows: [{ startFrame: 0, endFrame: 300, state: 'realtime' }], readyFrames: 0, needsRenderFrames: 0, totalFrames: 300, rendering: null })
+  const render = vi.spyOn(renderCache, 'renderVideoEditRenderCache').mockResolvedValue({ renderedWindows: 1, readyFrames: 300, requestedFrames: 300, cancelled: false })
+  const clear = vi.spyOn(renderCache, 'clearVideoEditRenderCache').mockResolvedValue(undefined)
+  const cancel = vi.spyOn(renderCache, 'cancelVideoEditRenderCache').mockResolvedValue(undefined)
+  const context = () => captureVideoEditCommandContext(id, 'timeline')
+  await executeVideoEditCommand(context(), 'render_in_out')
+  expect(render).toHaveBeenLastCalledWith(id, { scope: 'all', range: undefined })
+  setVideoEditTimelineView(id, { inFrame: 20, outFrame: null })
+  await executeVideoEditCommand(context(), 'render_in_out')
+  expect(render).toHaveBeenLastCalledWith(id, { scope: 'all', range: { startFrame: 20, endFrame: 290 } })
+  setVideoEditTimelineView(id, { inFrame: null, outFrame: 40 })
+  await executeVideoEditCommand(context(), 'render_in_out')
+  expect(render).toHaveBeenLastCalledWith(id, { scope: 'all', range: { startFrame: 0, endFrame: 40 } })
+  await executeVideoEditCommand(context(), 'clear_render_cache_in_out')
+  expect(clear).toHaveBeenLastCalledWith(id, { startFrame: 0, endFrame: 40 })
+  setVideoEditTimelineView(id, { inFrame: null, outFrame: null, selectedClipIds: [] })
+  expect(videoEditCommandState(context(), 'clear_render_cache_in_out').enabled).toBe(false)
+  expect(videoEditCommandState(context(), 'render_selection').enabled).toBe(false)
+  setVideoEditTimelineView(id, { selectedClipIds: [first, second] })
+  await executeVideoEditCommand(context(), 'render_selection')
+  expect(render).toHaveBeenLastCalledWith(id, { scope: 'all', range: { startFrame: 0, endFrame: Math.max(...sequence.clips.map(clip => clip.start + clip.duration)) } })
+  read.mockReturnValue({ windows: [{ startFrame: 0, endFrame: 300, state: 'realtime' }], readyFrames: 0, needsRenderFrames: 0, totalFrames: 300, rendering: { done: 1, total: 4, auto: true } })
+  setVideoEditTimelineView(id, { selectedClipIds: [] })
+  expect(videoEditCommandState(context(), 'render_in_out')).toMatchObject({ enabled: true })
+  expect(videoEditCommandState(context(), 'render_in_out')).not.toHaveProperty('title')
+  await executeVideoEditCommand(context(), 'render_in_out')
+  expect(cancel).not.toHaveBeenCalled()
+  expect(render).toHaveBeenLastCalledWith(id, { scope: 'all', range: undefined })
+  read.mockReturnValue({ windows: [], readyFrames: 0, needsRenderFrames: 0, totalFrames: 300, rendering: { done: 1, total: 4, auto: false } })
+  expect(videoEditCommandState(context(), 'render_in_out')).toMatchObject({ enabled: true, title: '取消渲染（25%）' })
+  await executeVideoEditCommand(context(), 'render_in_out')
+  expect(cancel).toHaveBeenCalledWith(id)
+  renderCache.setVideoEditRenderPreference(id, { autoRender: false })
+  expect(videoEditCommandState(context(), 'toggle_auto_render').checked).toBe(false)
+  await executeVideoEditCommand(context(), 'toggle_auto_render')
+  expect(renderCache.getVideoEditRenderPreference(id).autoRender).toBe(true)
+  expect(videoEditCommandState(context(), 'toggle_auto_render').checked).toBe(true)
 })

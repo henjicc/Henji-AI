@@ -29,6 +29,7 @@ import { deleteVideoEditTransition } from './videoEditCompositing'
 import { matchVideoEditFrame, reverseMatchVideoEditFrame, videoEditMatchFrameUnavailable } from './videoEditMatchFrame'
 import { videoEditClipSpeedSupported } from '@/core/videoEdit/clipSpeed'
 import { openVideoEditSpeedDialog } from './videoEditSpeedDialog'
+import { cancelVideoEditRenderCache, clearVideoEditRenderCache, getVideoEditRenderPreference, readVideoEditRenderCache, renderVideoEditRenderCache, setVideoEditRenderPreference } from './videoEditRenderCache'
 
 /** Premiere 轨道高度键：每次 8px；展开所有轨道到 96px，最小化到最小高度。 */
 const TRACK_HEIGHT_STEP = 8
@@ -68,6 +69,14 @@ function stateOf(context: VideoEditCommandContext): ContextState {
   return state
 }
 function selection(context: VideoEditCommandContext) { const owner = stateOf(context).owner!; return getActiveVideoEditSequence(owner).clips.filter(clip => context.clipIds.includes(clip.id)) }
+function renderRange(context: VideoEditCommandContext, selected = false): { startFrame: number; endFrame: number } | undefined {
+  const owner = stateOf(context).owner!
+  if (selected) {
+    const clips = selection(context)
+    return clips.length ? { startFrame: Math.min(...clips.map(clip => clip.start)), endFrame: Math.max(...clips.map(clip => clip.start + clip.duration)) } : undefined
+  }
+  return owner.inFrame !== null || owner.outFrame !== null ? { startFrame: owner.inFrame ?? 0, endFrame: owner.outFrame ?? videoEditDuration(getActiveVideoEditSequence(owner)) } : undefined
+}
 function sourceItem(context: VideoEditCommandContext): string | undefined { return context.scope === 'source' ? stateOf(context).source?.itemId : getActiveVideoEditSequence(stateOf(context).owner!).clips.find(clip => clip.id === context.clipIds[0])?.itemId }
 /** Source and project placements also return the audio tracks a multi-track item needs (task 2.6); their clips are already on target tracks. */
 function placeClipboard(context: VideoEditCommandContext): { clipboard: VideoEditClipboard; newTracks?: VideoEditSequence['tracks'] } {
@@ -167,7 +176,7 @@ function timelineIntent(context: VideoEditCommandContext, id: VideoEditCommandId
   if (id === 'link' || id === 'unlink' || id === 'group' || id === 'ungroup') return { kind: id, clipIds: clips, linked: false }
   if (id === 'move_into_sync' || id === 'slip_into_sync') return { kind: 'sync', clipIds: clips, mode: id === 'move_into_sync' ? 'move' : 'slip' }
 }
-export function videoEditCommandState(context: VideoEditCommandContext, id: VideoEditCommandId): { enabled: boolean; reason?: string; checked?: boolean } {
+export function videoEditCommandState(context: VideoEditCommandContext, id: VideoEditCommandId): { enabled: boolean; reason?: string; checked?: boolean; title?: string } {
   try {
     const descriptor = VIDEO_EDIT_COMMANDS.find(command => command.id === id)!
     if (!descriptor.scopes.includes('global') && !descriptor.scopes.includes(context.scope)) return { enabled: false, reason: '此命令不适用于当前面板。' }
@@ -183,6 +192,20 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'deselect_all' && context.scope === 'project') return { enabled: true }
     const sequence = findActiveVideoEditSequence(owner)
     if (!sequence) return { enabled: false, reason: '没有序列，请先新建序列。' }
+    if (id === 'toggle_auto_render') return { enabled: true, checked: getVideoEditRenderPreference(owner.document.id).autoRender }
+    if (['render_in_out', 'render_selection', 'clear_render_cache', 'clear_render_cache_in_out'].includes(id)) {
+      const cache = readVideoEditRenderCache(owner.document.id)
+      // 空闲自动渲染不算“正在渲染”：按 Enter 或渲染所选片段时由用户的请求接替它。
+      const rendering = cache.rendering && !cache.rendering.auto ? cache.rendering : null
+      if (id === 'render_in_out' && rendering) return { enabled: true, title: `取消渲染（${rendering.total ? Math.round(rendering.done / rendering.total * 100) : 0}%）` }
+      const range = id === 'clear_render_cache' ? undefined : renderRange(context, id === 'render_selection')
+      if (id === 'render_selection' && !range) return { enabled: false, reason: '请先选择片段。' }
+      if (id === 'clear_render_cache_in_out' && !range) return { enabled: false, reason: '请先设置入点或出点。' }
+      if (range && range.endFrame <= range.startFrame) return { enabled: false, reason: '入出点范围内没有画面。' }
+      if (id === 'clear_render_cache' || id === 'clear_render_cache_in_out') return { enabled: true }
+      if (rendering) return { enabled: false, reason: '请先取消正在进行的渲染。' }
+      return { enabled: cache.windows.some(window => window.state !== 'ready' && (!range || window.endFrame > range.startFrame && window.startFrame < range.endFrame)), reason: '所选范围没有需要渲染的画面。' }
+    }
     if (id === 'annotation_ask') return { enabled: !owner.playing, reason: '请暂停后再让助手改这里。' }
     // 形状键 1–7 与 Esc 只在批注工具里生效，其余时候留给别的用途。
     if (id.startsWith('annotation_')) {
@@ -306,6 +329,13 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   if (id === 'open_in_source') { await updateVideoEditSource(projectId, { itemId: owner!.document.items.find(item => context.itemIds.includes(item.id) && item.mediaId)!.id }); focusVideoEditPanel(projectId, 'source'); return }
   if (id === 'deselect_all' && context.scope === 'project') { setVideoEditProjectView(projectId, { selectedItemIds: [] }); return }
   const sequenceId = context.sequenceId!; const sequence = getActiveVideoEditSequence(owner!)
+  if (id === 'render_in_out' || id === 'render_selection') {
+    const rendering = readVideoEditRenderCache(projectId).rendering
+    if (id === 'render_in_out' && rendering && !rendering.auto) { await cancelVideoEditRenderCache(projectId); return }
+    await renderVideoEditRenderCache(projectId, { range: renderRange(context, id === 'render_selection'), scope: 'all' }); return
+  }
+  if (id === 'clear_render_cache' || id === 'clear_render_cache_in_out') { await clearVideoEditRenderCache(projectId, id === 'clear_render_cache_in_out' ? renderRange(context) : undefined); return }
+  if (id === 'toggle_auto_render') { setVideoEditRenderPreference(projectId, { autoRender: !getVideoEditRenderPreference(projectId).autoRender }); return }
   if (id === 'deselect_all') selectVideoEditSubtitle(projectId, sequenceId, null)
   const transitionRequest = TRANSITION_COMMANDS[id]
   if (transitionRequest) { await applyVideoEditDefaultTransitions(projectId, sequenceId, videoEditDefaultTransitionTargets(owner!, transitionRequest, context.clipIds, context.frame)); return }

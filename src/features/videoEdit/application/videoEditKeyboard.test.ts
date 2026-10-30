@@ -82,3 +82,20 @@ it('系统浮窗（另一 realm 文档）中的输入框与面板范围同样生
   expect(videoEditKeyboardCommand(event(plain, 'KeyI'), 'timeline', {})).toBeUndefined()
   frame.remove()
 })
+
+
+it('Enter 只在时间线与节目监视器触发渲染，输入、文本编辑、菜单、已处理按键和输入法保持原行为', () => {
+  for (const scope of ['timeline', 'program', 'source', 'effects', 'project', 'code_project', 'scenes']) {
+    const panel = document.createElement('div'); panel.dataset.videoEditPanel = scope
+    const picture = document.createElement('div'); panel.append(picture)
+    expect(videoEditKeyboardCommand(event(picture, 'Enter'), 'timeline', {})).toEqual(['timeline', 'program'].includes(scope) ? { id: 'render_in_out', scope } : undefined)
+    for (const kind of ['input', 'textarea', 'select', 'contenteditable', 'textbox', 'menu']) {
+      const target = document.createElement(['input', 'textarea', 'select'].includes(kind) ? kind : 'div')
+      if (kind === 'contenteditable') target.setAttribute('contenteditable', 'plaintext-only')
+      if (kind === 'textbox' || kind === 'menu') target.setAttribute('role', kind)
+      panel.append(target)
+      expect(videoEditKeyboardCommand(event(target, 'Enter'), 'timeline', {})).toBeUndefined()
+    }
+    for (const blocked of [{ defaultPrevented: true }, { isComposing: true }, { repeat: true }]) expect(videoEditKeyboardCommand({ ...event(picture, 'Enter'), ...blocked }, 'timeline', {})).toBeUndefined()
+  }
+})

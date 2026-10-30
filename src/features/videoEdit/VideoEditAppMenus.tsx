@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { contributeAppMenus, type AppMenuCommand, type AppMenuEditRole } from '@/core/appMenu/appMenu'
-import { VIDEO_EDIT_COMMANDS, videoEditCommandShortcut, videoEditPanelCommandScope, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
+import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_RENDER_COMMANDS, videoEditCommandShortcut, videoEditPanelCommandScope, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { activeVideoEditInstance, subscribeVideoEdit, subscribeVideoEditView, videoEditRevision, videoEditViewRevision } from './application/videoEditService'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
@@ -11,6 +11,7 @@ const groups: readonly { menu: string; label?: string; scope?: VideoEditCommandS
   { menu: 'file', ids: ['new_project', 'import', 'save', 'export'] },
   { menu: 'edit', ids: ['undo', 'redo', 'cut', 'copy', 'paste', 'delete', 'select_all'] },
   { menu: 'sequence', label: '序列', ids: ['new_sequence', 'match_frame', 'reverse_match_frame', 'apply_video_transition', 'apply_audio_transition', 'toggle_motion_blur', 'toggle_frame_blend'] },
+  { menu: 'sequence', label: '序列', scope: 'timeline', ids: VIDEO_EDIT_RENDER_COMMANDS },
   { menu: 'clip', label: '剪辑', ids: ['split', 'split_tracks', 'ripple_delete', 'toggle_clip_enabled', 'link', 'unlink', 'group', 'ungroup', 'clip_speed', 'audio_gain', 'separate_audio'] },
   { menu: 'marker', label: '标记', ids: ['add_marker', 'prev_marker', 'next_marker', 'mark_in', 'mark_out', 'clear_in_out'] },
   { menu: 'annotation', label: '批注', scope: 'annotations', ids: ['select_all', 'annotations_select_in_out', 'annotations_select_clips', 'annotations_resolve', 'annotations_reject', 'annotations_mark_addressed', 'delete', 'annotations_clear_handled', 'annotations_clear_all'] },
@@ -44,10 +45,10 @@ export function VideoEditAppMenus(): null {
         const descriptor = VIDEO_EDIT_COMMANDS.find(command => command.id === id)!
         // 与键盘同一条规则：没有专属命令的面板里，导航命令照常作用于当前序列，编辑命令不适用。
         const scope = fixed ?? videoEditPanelCommandScope(panelScope, id)
-        const state = scope ? videoEditCommandState(contextOf(scope), id) : { enabled: false, reason: '此命令不适用于当前面板。', checked: undefined }
+        const state = scope ? videoEditCommandState(contextOf(scope), id) : { enabled: false, reason: '此命令不适用于当前面板。', checked: undefined, title: undefined }
         const shortcut = videoEditCommandShortcut(id, shortcuts)
         return {
-          kind: 'action', id: fixed ? `videoEdit.${fixed}.${id}` : `videoEdit.${id}`, label: (scope === 'annotations' ? annotationLabels[id] : undefined) ?? descriptor.title,
+          kind: 'action', id: fixed ? `videoEdit.${fixed}.${id}` : `videoEdit.${id}`, label: (scope === 'annotations' ? annotationLabels[id] : undefined) ?? state.title ?? descriptor.title,
           shortcut: shortcut ? videoEditShortcutLabel(shortcut) : undefined, editRole: fixed ? undefined : editRoles[id],
           disabledReason: state.enabled ? undefined : state.reason, checked: state.checked, danger: scope === 'annotations' && dangerous.has(id) ? true : undefined,
           run: async () => {

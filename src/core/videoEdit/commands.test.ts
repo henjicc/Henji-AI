@@ -61,3 +61,15 @@ it('恢复已保存改键：丢弃无效项，与新默认冲突时保留用户�
   expect(parseVideoEditShortcutOverrides(restored)).toEqual(restored)
   expect(sanitizeVideoEditShortcutOverrides('bad')).toEqual({})
 })
+
+
+it('Enter 渲染键位支持保存、恢复和改键，并与同作用域用户键位检查冲突', () => {
+  const enter = { code: 'Enter', ctrl: false, meta: false, alt: false, shift: false }
+  const saved = parseVideoEditShortcutOverrides({ render_in_out: enter })
+  expect(sanitizeVideoEditShortcutOverrides(saved)).toEqual(saved)
+  expect(videoEditShortcutLabel(videoEditCommandShortcut('render_in_out', saved))).toBe('Enter')
+  const remapped = parseVideoEditShortcutOverrides({ render_in_out: { ...enter, code: 'F9' } })
+  expect(matchVideoEditShortcut(event('Enter'), 'timeline', remapped)).toBeUndefined()
+  expect(matchVideoEditShortcut(event('F9'), 'program', remapped)).toBe('render_in_out')
+  expect(() => parseVideoEditShortcutOverrides({ select_tool: enter })).toThrow('冲突')
+})

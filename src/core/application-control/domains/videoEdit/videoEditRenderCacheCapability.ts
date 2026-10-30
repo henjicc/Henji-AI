@@ -23,3 +23,35 @@ export const renderVideoEditPreviewCapability = defineApplicationCapability({
   resolveObservedEffects: (_parsed, result) => [{ effect: 'execute', entityTypes: ['video_edit.document'], propertyIds: ['video_edit.document.render_cache'], targetRefs: [result.documentRef], count: 1, verified: result.verified, evidence: result.verified ? ['已回读渲染条：后台预渲染已启动或请求范围已全部就绪。'] : [] }],
   summarize: result => result.message,
 })
+
+export const clearVideoEditPreviewCapability = defineApplicationCapability({
+  id: 'clear_video_edit_preview', title: '删除剪辑渲染文件',
+  description: '删除当前序列可重新生成的本地预览缓存；省略 range 删除整条序列，指定半开帧范围则删除与范围相交的完整渲染窗口。先取消并等待正在进行的预渲染，不改原始素材或剪辑内容，不属于删除用户数据，不进回收区。相同内容复用同一预览文件时，其他位置的该预览也会失效。自动渲染偏好不变，空闲后可能重新生成。结果回读 video_edit.document.render_cache。',
+  version: 1, domain: 'video_edit', aliases: ['删除渲染文件', '删除入点到出点的渲染文件', '清理预渲染', 'delete render files', 'clear preview'],
+  readOnly: false, dataClasses: ['C1'], destructive: false, supportsPreview: false, supportsUndo: false, idempotent: true, timeoutMs: 600000,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document'], producesRefs: ['video_edit.document'],
+  inputSchema: z.object({ documentRef, range: range.optional().describe('序列半开帧区间；删除相交的完整窗口，省略为当前整条序列。') }).strict(),
+  outputSchema: z.object({ documentRef, verified: z.boolean(), message: z.string() }).strict(),
+  resolveConcurrencyKey: parsed => `video_edit_render_cache:${parsed.documentRef.id}`,
+  resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: parsed => [parsed.documentRef],
+  control: capabilityControl('execute', ['video_edit.document'], { propertyIds: ['video_edit.document.render_cache'], revisionScopes: ['video_edit'] }),
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_parsed, result) => [{ effect: 'execute', entityTypes: ['video_edit.document'], propertyIds: ['video_edit.document.render_cache'], targetRefs: [result.documentRef], count: 1, verified: result.verified, evidence: result.verified ? ['已回读渲染条：指定范围没有已就绪的预览文件。'] : [] }],
+  summarize: result => result.message,
+})
+
+export const cancelVideoEditPreviewCapability = defineApplicationCapability({
+  id: 'cancel_video_edit_preview', title: '取消剪辑预渲染',
+  description: '停止剪辑当前正在进行的后台预渲染，等待在途窗口停止，保留已完成的预览文件，不改原始素材或剪辑内容。没有进行中任务时直接完成。自动渲染偏好不变，空闲后可能重新开始；需要持续关闭时，通过通用实体写入 video_edit.document.render_preference 的 autoRender=false。结果回读 video_edit.document.render_cache。',
+  version: 1, domain: 'video_edit', aliases: ['取消渲染', '取消预渲染', '停止渲染预览', 'cancel preview render'],
+  readOnly: false, dataClasses: ['C1'], destructive: false, supportsPreview: false, supportsUndo: false, idempotent: true, timeoutMs: 600000,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document'], producesRefs: ['video_edit.document'],
+  inputSchema: z.object({ documentRef }).strict(),
+  outputSchema: z.object({ documentRef, verified: z.boolean(), message: z.string() }).strict(),
+  resolveConcurrencyKey: parsed => `video_edit_render_cache:${parsed.documentRef.id}`,
+  resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: parsed => [parsed.documentRef],
+  control: capabilityControl('execute', ['video_edit.document'], { propertyIds: ['video_edit.document.render_cache'], revisionScopes: ['video_edit'] }),
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_parsed, result) => [{ effect: 'execute', entityTypes: ['video_edit.document'], propertyIds: ['video_edit.document.render_cache'], targetRefs: [result.documentRef], count: 1, verified: result.verified, evidence: result.verified ? ['已回读渲染条：后台预渲染已停止。'] : [] }],
+  summarize: result => result.message,
+})

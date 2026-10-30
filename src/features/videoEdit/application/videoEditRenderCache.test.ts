@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
-import { renderVideoEditRenderCache, readVideoEditRenderCache, recordVideoEditProgramRender, readyVideoEditRenderWindows, peekVideoEditRenderCache, requestVideoEditRenderBarWindows, subscribeVideoEditRenderBar } from './videoEditRenderCache'
+import { clearVideoEditRenderCache, renderVideoEditRenderCache, readVideoEditRenderCache, recordVideoEditProgramRender, readyVideoEditRenderWindows, peekVideoEditRenderCache, requestVideoEditRenderBarWindows, subscribeVideoEditRenderBar } from './videoEditRenderCache'
 
 type TestWindow = { key: string; startFrame: number; endFrame: number; heavy: boolean }
 const state = vi.hoisted(() => ({
@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   windows: [{ key: 'window', startFrame: 0, endFrame: 3, heavy: true }] as TestWindow[],
   render: vi.fn(async (..._args: unknown[]) => {}), dispose: vi.fn(async () => {}), add: vi.fn(async (..._args: unknown[]) => {}),
   discard: vi.fn(async () => {}), commit: vi.fn(async (..._args: unknown[]) => ({})), cancel: vi.fn(async () => {}),
+  remove: vi.fn(async (..._args: unknown[]) => 0),
   sessions: 0, viewListeners: new Set<() => void>(), events: [] as string[],
   windowSet: vi.fn((..._args: unknown[]): { signature: string; windows: TestWindow[] } => ({ signature: 'test', windows: state.windows })),
 }))
@@ -27,7 +28,7 @@ vi.mock('@/core/videoEdit/renderBitrate', () => ({ videoEditRenderEncoding: () =
 vi.mock('@/core/videoEdit/renderCache', () => ({ videoEditRenderWindowSet: (...args: unknown[]) => state.windowSet(...args) }))
 vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: 0 }) }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
-  renderList: async () => [], renderRemove: async () => 0, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
+  renderList: async () => [], renderRemove: state.remove, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
 } }) }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class { canvas = {}; render = state.render; dispose = state.dispose; setSmartRegions() {} setTracks() {} constructor() { state.sessions++ } } }))
 vi.mock('../engine/videoEditExportEncoder', () => ({ videoEditExportVideoOptions: () => ({}) }))
@@ -347,4 +348,83 @@ it('回收过期文件时同一文档快照的各序列只分段一次，分段�
   state.composition = { ...(state.composition as object) }
   readVideoEditRenderCache(owner.document.id)
   expect(state.windowSet.mock.calls.at(-1)![2]).toBe(previous)
+})
+
+
+it('范围清理只删除相交整窗，边界接触保留；全部清理删除本序列所有窗口', async () => {
+  const owner = state.instances[0]
+  state.windows = [0, 3, 6].map(startFrame => ({ key: `${owner.document.id}-${startFrame}`, startFrame, endFrame: startFrame + 3, heavy: true }))
+  await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  expect(readVideoEditRenderCache(owner.document.id).readyFrames).toBe(9)
+  await clearVideoEditRenderCache(owner.document.id, { startFrame: 3, endFrame: 6 })
+  expect(state.remove).toHaveBeenLastCalledWith({ projectId: owner.document.id, windowKeys: [state.windows[1].key] })
+  expect(readVideoEditRenderCache(owner.document.id).windows.map(window => window.state)).toEqual(['ready', 'predicted', 'ready'])
+  await clearVideoEditRenderCache(owner.document.id)
+  expect(state.remove).toHaveBeenLastCalledWith({ projectId: owner.document.id, windowKeys: state.windows.map(window => window.key) })
+  expect(readVideoEditRenderCache(owner.document.id).readyFrames).toBe(0)
+})
+
+it('相同文件复用到新位置后，清理按序列当前窗口而非文件最初写入的位置判断范围', async () => {
+  const owner = state.instances[0]
+  await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  state.composition = { ...state.composition as object }
+  state.windows = [{ ...state.windows[0], startFrame: 10, endFrame: 13 }]
+  await clearVideoEditRenderCache(owner.document.id, { startFrame: 11, endFrame: 12 })
+  expect(readVideoEditRenderCache(owner.document.id).readyFrames).toBe(0)
+  expect(state.remove).toHaveBeenLastCalledWith({ projectId: owner.document.id, windowKeys: [state.windows[0].key] })
+})
+
+it('删除先取消在途编码并禁止插入新渲染，不会有迟到窗口重新变为就绪', async () => {
+  useFakeClock()
+  const owner = state.instances[0], gate = deferred()
+  state.add.mockImplementationOnce(() => gate.promise)
+  const render = renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.add).toHaveBeenCalledOnce()
+  const clear = clearVideoEditRenderCache(owner.document.id)
+  await expect(renderVideoEditRenderCache(owner.document.id, { scope: 'all' })).rejects.toThrow('正在删除')
+  await vi.advanceTimersByTimeAsync(30)
+  expect(state.remove).not.toHaveBeenCalled()
+  gate.resolve()
+  await vi.advanceTimersByTimeAsync(30)
+  await render; await clear
+  expect(readVideoEditRenderCache(owner.document.id).readyFrames).toBe(0)
+  const commits = state.commit.mock.calls.length
+  await vi.advanceTimersByTimeAsync(100)
+  expect(state.commit).toHaveBeenCalledTimes(commits)
+})
+
+it('前一次清理失败不阻断已经排队的另一范围请求，各次请求保留自己的结果', async () => {
+  const owner = state.instances[0]
+  await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  state.remove.mockRejectedValueOnce(new Error('磁盘暂不可写'))
+  const first = clearVideoEditRenderCache(owner.document.id)
+  const second = clearVideoEditRenderCache(owner.document.id, { startFrame: 0, endFrame: 1 })
+  await expect(first).rejects.toThrow('磁盘暂不可写')
+  await second
+  expect(state.remove).toHaveBeenCalledTimes(2)
+  expect(readVideoEditRenderCache(owner.document.id).readyFrames).toBe(0)
+})
+
+
+it('取消等待跨过自动调度时刻时，不在旧任务退出和取消回读之间启动新的自动任务', async () => {
+  useFakeClock(); vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const owner = state.instances[0] as (typeof state.instances)[number] & { activeSequenceId?: string }
+  owner.activeSequenceId = (state.composition as { id: string }).id
+  state.windows = [0, 3].map(startFrame => ({ key: `${owner.document.id}-${startFrame}`, startFrame, endFrame: startFrame + 3, heavy: true }))
+  const gate = deferred()
+  state.add.mockImplementation(async () => { if (state.add.mock.calls.length === 4) await gate.promise })
+  fresh.readVideoEditRenderCache(owner.document.id)
+  const render = fresh.renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.add).toHaveBeenCalledTimes(4)
+  await vi.advanceTimersByTimeAsync(3990)
+  const cancel = fresh.cancelVideoEditRenderCache(owner.document.id)
+  await vi.advanceTimersByTimeAsync(5)
+  gate.resolve()
+  await vi.advanceTimersByTimeAsync(25)
+  await render; await cancel
+  expect(state.render).toHaveBeenCalledTimes(4)
+  expect(fresh.readVideoEditRenderCache(owner.document.id)).toMatchObject({ readyFrames: 3, rendering: null })
 })
