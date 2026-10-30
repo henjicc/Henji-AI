@@ -64,7 +64,7 @@ describe('成片字幕排版与时间', () => {
     expect(lines(project)).toEqual(['只搜php点net', '那些文章都避开了'])
   })
 
-  it('单独的叹词不上字幕；间隔短于 0.5 秒接到下一条开始，更长的留空；字尾被剪掉一点的词仍在', () => {
+  it('单独的叹词不上字幕；每条提前 0.1 秒出现，间隔短于 0.5 秒接到下一条开始，更长的留空；字尾被剪掉一点的词仍在', () => {
     const blocks = blocksOf(['哎，', '你看', '答案', '出来了，', '然后', '底下'])
     blocks[2].captionBreakAfter = false
     blocks[3].captionBreakAfter = true
@@ -76,10 +76,10 @@ describe('成片字幕排版与时间', () => {
     const project = projectOf(blocks, '', cuts)
     const cues = buildProjectAudioEditSubtitleCues(project)
     expect(cues.map(cue => cue.text)).toEqual(['你看', '答案出来了', '然后底下'])
-    expect(cues[0].startFrame).toBe(blocks[1].startFrame)
+    expect(cues[0].startFrame).toBe(blocks[1].startFrame - 100)
     expect(cues[0].endFrame).toBe(cues[1].startFrame)
     expect(cues[1].words.map(word => word.text)).toEqual(['答案', '出来了，'])
-    expect(cues[2].startFrame - cues[1].endFrame).toBe(700)
+    expect(cues[2].startFrame - cues[1].endFrame).toBe(600)
     const spans = buildAudioEditTimeline(project.source.durationFrames, project.transcript, project.cuts)
     expect(buildAudioEditSubtitleCues(project.transcript, spans, 1000).map(cue => cue.text)).toEqual(cues.map(cue => cue.text))
   })

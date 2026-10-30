@@ -6,6 +6,8 @@ import { isAudioEditSubtitleFiller } from './scriptCaptions'
 
 /** 两条字幕间隔短于此（秒）就接上：前一条一直显示到后一条出现，不闪空。 */
 export const AUDIO_EDIT_SUBTITLE_JOIN_GAP_SECONDS = 0.5
+/** 字幕比第一个字的起音早这么多秒出现：正好卡在起音上，看的人读到时声音已经过去了，会觉得字幕慢半拍。 */
+export const AUDIO_EDIT_SUBTITLE_LEAD_SECONDS = 0.1
 
 const HAN_TO_ASCII = /(\p{Script=Han})[ \u3000]*([A-Za-z0-9])/gu
 const ASCII_TO_HAN = /([A-Za-z0-9])[ \u3000]*(\p{Script=Han})/gu
@@ -47,8 +49,9 @@ export interface AudioEditSubtitleWord { blockId: string; text: string; startFra
 export interface AudioEditSubtitleCue { id: string; startFrame: number; endFrame: number; text: string; words: AudioEditSubtitleWord[] }
 
 /**
- * 成片字幕：按字幕分段取保留的词（单独的叹词、语气词如“哎”“嗯”不上字幕），映射到剪后时间，排版，间隔短于 0.5 秒的接上。
- * 音频编辑导出的 SRT、放进剪辑后的链接字幕都用这一份。
+ * 成片字幕：按字幕分段取保留的词（单独的叹词、语气词如“哎”“嗯”不上字幕），映射到剪后时间，排版，每条提前 0.1 秒出现
+ * （不早于上一条开头），间隔短于 0.5 秒的接上（提前出现压到上一条时，上一条在这里结束）。
+ * 音频编辑导出的 SRT、放进剪辑后的链接字幕都用这一份；词的时间（words）不提前。
  */
 export function buildAudioEditSubtitleCues(blocks: readonly AudioEditTranscriptBlock[], spans: readonly AudioEditTimelineSpan[], sampleRate: number): AudioEditSubtitleCue[] {
   const cues = buildAudioEditSubtitleGroups(blocks, sampleRate).flatMap((group): AudioEditSubtitleCue[] => {
@@ -62,9 +65,11 @@ export function buildAudioEditSubtitleCues(blocks: readonly AudioEditTranscriptB
     return words.length && text ? [{ id: group.id, startFrame: words[0].startFrame, endFrame: words.at(-1)!.endFrame, text, words }] : []
   })
   const join = Math.round(AUDIO_EDIT_SUBTITLE_JOIN_GAP_SECONDS * sampleRate)
-  return cues.map((cue, index) => {
-    const next = cues[index + 1]
-    return next && next.startFrame > cue.endFrame && next.startFrame - cue.endFrame < join ? { ...cue, endFrame: next.startFrame } : cue
+  const lead = Math.round(AUDIO_EDIT_SUBTITLE_LEAD_SECONDS * sampleRate)
+  const led = cues.map((cue, index) => ({ ...cue, startFrame: Math.max(0, cue.startFrame - lead, index ? cues[index - 1].startFrame + 1 : 0) }))
+  return led.map((cue, index) => {
+    const next = led[index + 1]
+    return next && next.startFrame - cue.endFrame < join ? { ...cue, endFrame: Math.max(cue.startFrame + 1, next.startFrame) } : cue
   })
 }
 
