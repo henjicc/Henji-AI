@@ -79,7 +79,7 @@ function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataRead
 export async function trialVideoEditAuthorSource(source: Parameters<typeof addressCodeMaterialFiles>[0], program: CodeMaterialProgram, signal: AbortSignal): Promise<void> {
   const { codeSources: _texts, ...manifest } = await addressCodeMaterialFiles(source)
   const versionId = crypto.randomUUID()
-  const definition: CodeMaterialDefinition = { id: crypto.randomUUID(), name: program.name, defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: 4, languageVersion: 4 }] }
+  const definition: CodeMaterialDefinition = { id: crypto.randomUUID(), name: program.name, defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: program.apiVersion, languageVersion: program.languageVersion, ...(program.bundle.libraries ? { libraries: program.bundle.libraries } : {}) }] }
   const samples = candidateFrames([candidate(definition, program, {})], () => program, [], true)
   if (samples.length > 1) samples.splice(1, 0, { ...samples[0], frame: Math.floor(samples.at(-1)!.frame / 2) })
   await trialVideoEditCodeFrames(samples, signal)
