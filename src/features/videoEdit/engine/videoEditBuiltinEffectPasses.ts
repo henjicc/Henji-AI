@@ -9,7 +9,8 @@ import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitio
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 import { planColorGrade, type AdjustmentLookup } from '@/core/imaging/adjustments/plan'
 import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
-import { planGlowPro } from './glowPro'
+import { planGlow } from './glow'
+import { chromaticAberrationPass } from './chromaticAberration'
 import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 import { GAUSSIAN_EFFECT, gaussianParameterSchema, type GaussianParameters, type ResolvedGaussianPlan } from '@/core/imaging/effects/gaussian'
 import type { EffectEvaluationContext, EffectQuality, EffectSize } from '@/core/imaging/effects/descriptor'
@@ -92,7 +93,7 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
   if (instance.id === RECORDING_CURSOR_EFFECT) return planRecordingCursor(instance.cursorDraws ?? [], width, height)
   if (instance.id === RECORDING_ZOOM_EFFECT) return planRecordingZoom(instance.zoom, width, height)
   const params = resolveVideoEditBuiltinParams(instance)
-  if (instance.id === 'glow_pro') return planGlowPro(params, width, height)
+  if (instance.id === 'glow') return planGlow(params, width, height)
   const plan = new Planner(width, height)
   const H = height
   switch (instance.id) {
@@ -175,18 +176,9 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
       plan.pass('grain', 'input', 'output', [number(params, 'amount') / 100 * 0.25 * visible, cell, videoEditGrainSeed(frame.frame), params.monochrome === false ? 0 : 1]); break
     }
     case 'chromatic_aberration': {
-      const offset = number(params, 'amount') / 100 * 0.02 * H; const radial = params.mode !== 'directional'
-      const angle = number(params, 'direction') * Math.PI / 180
-      plan.pass('chromatic', 'input', 'output', radial ? [offset / width, offset / height, 1, 0] : [Math.cos(angle) * offset / width, Math.sin(angle) * offset / height, 0, 0])
-      break
-    }
-    case 'glow': {
-      const bright = plan.alloc(); const blurred = plan.alloc()
-      const threshold = number(params, 'threshold') / 100
-      plan.pass('glow_extract', 'input', bright, [threshold * 0.9, 0.1, 0, 0])
-      const sigma = (0.005 + number(params, 'radius') / 100 * 0.075) * H / 2
-      plan.gaussian(bright, blurred, sigma, sigma, true)
-      plan.pass('glow_add', blurred, 'output', [number(params, 'intensity') / 100 * 2, 0, 0, 0], ZERO, 'input')
+      const pass = chromaticAberrationPass(params, width, height, false)
+      if (pass) plan.pass(pass.entry, 'input', 'output', pass.a, pass.b, undefined, pass.c)
+      else plan.pass('copy', 'input', 'output')
       break
     }
     case 'crop': {

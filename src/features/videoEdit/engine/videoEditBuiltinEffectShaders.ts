@@ -10,10 +10,11 @@
 import { RECORDING_CURSOR_WGSL } from './videoEditRecordingCursorShader'
 import { RECORDING_ZOOM_WGSL } from './videoEditRecordingZoomShader'
 import { ADJUSTMENT_PASSES_WGSL } from '@/core/imaging/effects/wgsl/adjustmentPasses'
-import { GLOW_PRO_ENTRIES, GLOW_PRO_WGSL } from './glowPro'
+import { GLOW_ENTRIES, GLOW_WGSL } from './glow'
+import { CHROMATIC_ENTRIES, CHROMATIC_WGSL } from './chromaticAberration'
 import { GAUSSIAN_WGSL } from '@/core/imaging/effects/wgsl/gaussian'
-const LEGACY_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...LEGACY_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_PRO_ENTRIES] as const
+const INLINE_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...INLINE_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_ENTRIES, ...CHROMATIC_ENTRIES] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
@@ -120,27 +121,6 @@ fn noise(p: vec2f, seed: u32) -> f32 {
  return premul(rgb + n * u.a.x * (0.35 + 2.6 * l * (1.0 - l)), c.a);
 }
 
-/** a = (偏移 u, 偏移 v, 从中心向外)。红通道向外、蓝通道向内。 */
-@fragment fn chromatic(v: Vertex) -> @location(0) vec4f {
- let uv = uvOf(v);
- let offset = select(u.a.xy, (uv - 0.5) * 2.0 * u.a.xy, u.a.z > 0.5);
- let r = tap(uv + offset); let g = tap(uv); let b = tap(uv - offset);
- let a = max(max(r.a, g.a), b.a);
- return vec4f(min(vec3f(r.r, g.g, b.b), vec3f(a)), a);
-}
-
-/** 提取亮部：a = (阈值, 过渡宽度)。 */
-@fragment fn glow_extract(v: Vertex) -> @location(0) vec4f {
- let c = tap(uvOf(v));
- return c * smoothstep(u.a.x, u.a.x + u.a.y, dot(straight(c), LUMA));
-}
-/** 光晕叠回原画面：source 是模糊后的亮部，a.x 强度。 */
-@fragment fn glow_add(v: Vertex) -> @location(0) vec4f {
- let uv = uvOf(v); let o = tapOriginal(uv); let g = tap(uv) * u.a.x;
- let a = clamp(o.a + g.a * (1.0 - o.a), 0.0, 1.0);
- return vec4f(min(o.rgb + g.rgb, vec3f(a)), a);
-}
-
 /** a = (左, 上, 右, 下) 保留区域的边界（uv），b = (羽化 u, 羽化 v)；裁掉部分透明。 */
 @fragment fn crop(v: Vertex) -> @location(0) vec4f {
  let uv = uvOf(v); let c = tap(uv);
@@ -230,5 +210,6 @@ fn zoomTap(uv: vec2f, center: vec2f, scale: f32, spread: f32, late: bool) -> vec
  let uv = uvOf(v);
  return mix(mix(outgoing(uv), incoming(uv), u.b.x), vec4f(u.a.rgb, 1.0), u.a.w);
 }
-${GLOW_PRO_WGSL}
+${GLOW_WGSL}
+${CHROMATIC_WGSL}
 `

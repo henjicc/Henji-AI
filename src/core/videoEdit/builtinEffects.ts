@@ -10,7 +10,8 @@ import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
 import { AUDIO_EFFECT_DEFINITIONS } from '../audio/effects/audioEffectDefinitions'
 import { VIDEO_EDIT_COLOR_GRADE } from './colorGrade'
 import { parseColorGradeCurve } from './colorGradeCurves'
-import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'
+import { GLOW_EFFECT_DEFINITION } from './glow'
+import { CHROMATIC_ABERRATION_DEFINITION } from './chromaticAberration'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
 import { RECORDING_CURSOR_DEFINITION } from './recordingCursorDefinition'
 import { RECORDING_ZOOM_DEFINITION } from './recordingZoomDefinition'
@@ -94,18 +95,8 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
       strength('size', '颗粒大小', 30, '颗粒的粗细', '0 最细（画面高度的约 0.05%）；30 默认；100 很粗（约 0.4%）。'),
       { key: 'monochrome', name: '单色颗粒', type: 'boolean', default: true, tooltip: '关闭时颗粒带有彩色噪点', description: 'true 颗粒只改变明暗；false 各颜色通道独立的彩色颗粒。' },
     ] },
-  { id: 'chromatic_aberration', name: '色差', group: 'stylize', tooltip: '把红蓝通道错开，模拟镜头色散或故障感', description: 'RGB 通道分离：红、蓝通道向相反方向偏移，用于镜头感、故障风。',
-    params: [
-      strength('amount', '偏移量', 20, '通道错开的距离', '0 无；10 ≈ 镜头边缘轻微色散；40 ≈ 明显故障感；100 ≈ 偏移约为画面高度的 2%。'),
-      { key: 'mode', name: '方式', type: 'enum', default: 'radial', options: [{ value: 'radial', label: '从中心向外' }, { value: 'directional', label: '固定方向' }], tooltip: '从中心向外越到边缘越明显；固定方向整幅画面同样错开', description: 'radial 像真实镜头，越靠近边缘色散越强；directional 整幅画面沿“方向”统一错开。' },
-      angle('direction', '方向', 0, -180, 180, '方式为固定方向时，通道错开的方向', '仅 mode=directional 时生效：0 水平错开，90 垂直错开。'),
-    ] },
-  { id: 'glow', name: '发光', group: 'stylize', tooltip: '让明亮区域向外晕开发光', description: '提取画面亮部、模糊后叠加回原画面，形成柔光、霓虹辉光。',
-    params: [
-      strength('threshold', '阈值', 60, '多亮的区域开始发光', '亮度高于此值的区域才发光：40 大部分亮部发光，60 默认，90 只有最亮的高光。'),
-      strength('radius', '半径', 30, '光晕扩散范围', '0 很紧；30 默认；100 约为画面高度 8% 的大光晕。'),
-      strength('intensity', '强度', 50, '光晕的亮度', '0 无；50 默认；100 很强的辉光。'),
-    ] },
+  CHROMATIC_ABERRATION_DEFINITION,
+  GLOW_EFFECT_DEFINITION,
   { id: 'crop', name: '裁剪', group: 'frame', tooltip: '从四边裁掉画面，裁掉的部分透出下层', description: '按画面百分比从四边裁掉，裁掉部分变透明（可透出下层轨道）。做宽银幕黑边时把上下各裁 12% 左右。',
     params: [
       percent('left', '左侧', 0, '从左边裁掉的比例', '从左边裁掉的画面宽度百分比。'),
@@ -129,7 +120,7 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
   RECORDING_FRAME_DEFINITION,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
-export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, GLOW_PRO_EFFECT_DEFINITION, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...AUDIO_EFFECT_DEFINITIONS]
+export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...AUDIO_EFFECT_DEFINITIONS]
 
 const definitions = new Map(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => [definition.id, definition]))
 export function videoEditBuiltinEffect(id: string): VideoEditBuiltinEffectDefinition | undefined { return definitions.get(id) }
@@ -210,6 +201,8 @@ export function describeVideoEditParams(params: readonly VideoEditBuiltinParam[]
   return params.map(param => ({
     key: param.key, name: param.name, type: param.type, default: param.default, description: param.description,
     ...(param.animatable !== undefined ? { animatable: param.animatable } : {}),
+    ...(param.group ? { group: param.group } : {}),
+    ...(param.visibleWhen ? { visibleWhen: `${param.visibleWhen.param} ${param.visibleWhen.in ? `为 ${param.visibleWhen.in.join('、')}` : 'notEquals' in param.visibleWhen ? `不为 ${param.visibleWhen.notEquals}` : `为 ${param.visibleWhen.equals}`} 时才起作用` } : {}),
     ...(param.type === 'number' ? { min: param.min, max: param.max, unit: param.unit } : {}),
     ...(param.type === 'enum' ? { options: param.options.map(option => option.value) } : {}),
   }))

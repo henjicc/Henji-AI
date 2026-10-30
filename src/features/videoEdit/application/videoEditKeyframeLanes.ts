@@ -14,7 +14,7 @@ export function isVideoEditDiscreteField(field: Pick<ParamFieldSpec, 'type'>): b
 /** 内置效果可做动画的参数行，与效果控件里的行一一对应（点位的水平、垂直合成一行）。 */
 export function videoEditBuiltinAnimationFields(builtinId: string): VideoEditBuiltinAnimationField[] {
   return builtinParameterFields(requireVideoEditBuiltinEffect(builtinId).params).filter(field => field.animatable)
-    .map(field => ({ key: field.key, title: field.title, keys: field.bindingKeys, discrete: isVideoEditDiscreteField(field) }))
+    .map(field => ({ key: field.key, title: field.group ? `${field.group} · ${field.title}` : field.title, keys: field.bindingKeys, discrete: isVideoEditDiscreteField(field) }))
 }
 
 export interface VideoEditKeyframeLaneTarget { projectId: string; sequenceId: string; clipId: string; source: VideoEditKeyframeLaneSource }

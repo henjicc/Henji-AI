@@ -44,7 +44,7 @@ describe('旧高斯规划逐字段快照（重构前采集，禁止随重构更�
       expect(snapshotPlan(planColorGrade({ ...colorGradeDefaults(), hsl_temperature: 20, hsl_blur: hslBlur }, 101, 100))).toMatchSnapshot()
     })
   }
-  for (const id of ['sharpen', 'glow']) {
+  for (const id of ['sharpen']) {
     it(`剪辑 ${id}：数字源/目标纹理包装`, () => {
       expect(snapshotPlan(planVideoEditBuiltinEffect({ id, params: { radius: 100 } }, { width: 4097, height: 2161, frame: 0 }))).toMatchSnapshot()
     })

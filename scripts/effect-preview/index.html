@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>效果预览</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; display: flex; height: 100vh; background: #111214; color: #d4d6db; font: 13px/1.5 "Microsoft YaHei", "Segoe UI", sans-serif; }
+  #stage { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #bar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #26282d; flex-wrap: wrap; }
+  #view { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px; }
+  canvas { max-width: 100%; max-height: 100%; aspect-ratio: 16 / 9; }
+  #side { width: 320px; overflow-y: auto; border-left: 1px solid #26282d; padding: 12px; }
+  h2 { font-size: 13px; font-weight: 600; color: #e6e8ec; margin: 0 0 8px; cursor: help; }
+  details { margin: 6px 0; }
+  summary { cursor: pointer; color: #b9bdc6; padding: 3px 0; }
+  details > .row { padding-left: 14px; }
+  .row { display: grid; grid-template-columns: 84px 1fr 40px; gap: 8px; align-items: center; margin: 6px 0; }
+  .row span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .row label { color: #9ea2ab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  input[type=range] { width: 100%; }
+  select, button, input[type=color] { background: #1d1f23; color: #d4d6db; border: 1px solid #30333a; border-radius: 4px; padding: 3px 8px; font: inherit; }
+  input[type=color] { padding: 0 2px; height: 24px; width: 100%; }
+  button.on { background: #2d3a52; border-color: #4a6290; }
+  #stats { margin-left: auto; color: #8b8f98; font-variant-numeric: tabular-nums; }
+  #hint { color: #8b8f98; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bar">
+    <span>效果</span><select id="effect"></select>
+    <span>素材</span><select id="sample"></select>
+    <span>底色</span><select id="backdrop"><option value="0.06,0.065,0.075">深灰</option><option value="0,0,0">黑</option><option value="0.85,0.86,0.88">浅灰</option></select>
+    <span>显示</span><select id="mode"><option value="effect">效果</option><option value="split">左右对比原画</option><option value="original">原画</option></select>
+    <label><input type="checkbox" id="animate"> 半径来回动</label>
+    <label><input type="checkbox" id="actual"> 原尺寸</label>
+    <span id="hint">可以把图片拖进窗口</span>
+    <span id="stats"></span>
+  </div>
+  <div id="view"><canvas id="canvas" width="1920" height="1080"></canvas></div>
+</div>
+<div id="side"></div>
+<script type="module" src="./main.ts"></script>
+</body>
+</html>

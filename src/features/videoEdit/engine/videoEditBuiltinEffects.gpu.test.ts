@@ -174,4 +174,40 @@ describe('剪辑内置效果（真实设备）', () => {
     const a = await run('film_grain', { amount: 60 }, 7); const b = await run('film_grain', { amount: 60 }, 7); const c = await run('film_grain', { amount: 60 }, 8)
     expect([...a]).toEqual([...b]); expect([...a]).not.toEqual([...c])
   }, 30_000)
+  it('发光：透明底的内容向外发光，强度 0 与原画相同；色差数量 0 不改画面', async () => {
+    // 代码图层多是透明底：光要照到透明处，而且叠到黑底上要和同样内容放在不透明黑底上一样亮，否则透明底的文字外发光会偏暗。
+    const square = (backdrop: number[]): { texture: GpuTexture; data: Uint8Array } => {
+      const texture = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC }) as unknown as GpuTexture
+      const data = new Uint8Array(W * H * 4)
+      for (let at = 0; at < W * H; at++) data.set(backdrop, at * 4)
+      for (let y = 14; y < 22; y++) for (let x = 28; x < 36; x++) data.set([255, 255, 255, 255], (y * W + x) * 4)
+      device.queue.writeTexture({ texture: texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
+      return { texture, data }
+    }
+    const clear = square([0, 0, 0, 0]); const black = square([0, 0, 0, 255])
+    const render = async (source: GpuTexture, id: string, params: Record<string, unknown>): Promise<Uint8Array> => {
+      const target = output()
+      await effects.render({ id, params: params as Record<string, number> }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, 0)
+      return read(target)
+    }
+    const glow = { threshold: 0, strength: 60, radius: 40 }
+    const onClear = await render(clear.texture, 'glow', glow); const onBlack = await render(black.texture, 'glow', glow)
+    expect(pixel(onClear, 31, 17)).toEqual([255, 255, 255, 255])
+    const near = pixel(onClear, 38, 17)
+    expect(near[3]).toBeGreaterThan(40)
+    expect(Math.max(near[0], near[1], near[2])).toBeLessThanOrEqual(near[3])
+    expect(pixel(onClear, 2, 2)[3]).toBeLessThan(near[3])
+    // 预乘颜色就是叠到黑底上的结果，不能比不透明黑底上暗。透明底边缘的半覆盖像素按线性光算会略亮一点（黑底上是在编码值里混合的），所以只按比例留上方的余量。
+    for (const [x, y] of [[38, 17], [44, 17], [31, 26], [10, 5]]) {
+      const clearPixel = pixel(onClear, x, y); const blackPixel = pixel(onBlack, x, y)
+      for (let channel = 0; channel < 3; channel++) { expect(clearPixel[channel]).toBeGreaterThanOrEqual(blackPixel[channel] - 1); expect(clearPixel[channel]).toBeLessThanOrEqual(blackPixel[channel] * 1.3 + 6) }
+    }
+    // 光照不到的原画一点不变（中灰最能看出编码有没有算错）。
+    const gray = square([128, 128, 128, 255])
+    const grayResult = await render(gray.texture, 'glow', { threshold: 95, strength: 40, radius: 0 })
+    expect(pixel(grayResult, 2, 2)).toEqual([128, 128, 128, 255])
+    expect(pixel(grayResult, 60, 33)).toEqual([128, 128, 128, 255])
+    expect([...await render(clear.texture, 'glow', { strength: 0 })]).toEqual([...clear.data])
+    expect([...await render(clear.texture, 'chromatic_aberration', { amount: 0 })]).toEqual([...clear.data])
+  }, 30_000)
 })

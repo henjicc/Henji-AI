@@ -49,7 +49,7 @@ it('structural changes fall back; cancellation and latest skipped revisions pres
   expect(videoEditParameterUpdate(before, { ...next, width: 3840 })).toBeUndefined()
   expect(videoEditParameterUpdate(before, { ...next, clips: [{ ...next.clips[0], start: 2 }] })).toBeUndefined()
   expect(videoEditParameterUpdate(before, { ...next, clips: [{ ...next.clips[0], effects: [] }] })).toBeUndefined()
-  expect(videoEditParameterUpdate(before, { ...next, clips: [{ ...next.clips[0], effects: [{ ...next.clips[0].effects[0], builtin: { id: 'glow_pro', params: {} } }] }] })).toBeUndefined()
+  expect(videoEditParameterUpdate(before, { ...next, clips: [{ ...next.clips[0], effects: [{ ...next.clips[0].effects[0], builtin: { id: 'glow', params: {} } }] }] })).toBeUndefined()
 })
 it('numeric code parameters skip font preparation; text/graphic font changes retain preparation', () => {
   const before = fixture(); before.clips[0].code = { definitionId: 'code', versionId: 'v', parameters: { gain: 0, font: 'sans-serif' } }

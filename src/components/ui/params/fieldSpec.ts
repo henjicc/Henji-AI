@@ -1,10 +1,10 @@
-import type { CodeGrade, CodeParameterDeclaration, CodeParameterTypeDefinition, CodeParameterValue, CodePoint, CodeRange } from '@/core/imaging/parameterTypes'
+import type { CodeGrade, CodeParameterDeclaration, CodeParameterTypeDefinition, CodeParameterValue, CodeParameterVisibility, CodePoint, CodeRange } from '@/core/imaging/parameterTypes'
 import { IMAGING_UNIT_LABELS, type ImagingParam } from '@/core/imaging/parameterDefinition'
 import { encodeColorGradeCurve, colorGradeCurvePoints, parseColorGradeCurve } from '@/core/imaging/adjustments/curves'
 
 type DisplayDeclaration<T> = T extends CodeParameterDeclaration ? Omit<T, 'description' | 'fields'> : never
 /** Display metadata only. Assistant descriptions never enter a field. */
-export type ParamFieldSpec = (DisplayDeclaration<CodeParameterDeclaration> | { type: 'lut'; key: string; title: string; tooltip?: string; default: string; animatable: boolean; group?: string; advanced?: boolean; visibleWhen?: never }) & {
+export type ParamFieldSpec = (DisplayDeclaration<CodeParameterDeclaration> | { type: 'lut'; key: string; title: string; tooltip?: string; default: string; animatable: boolean; group?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }) & {
   source: 'code' | 'builtin'
   bindingKeys: readonly string[]
   colorFormat?: 'rgba' | 'hex'
@@ -36,7 +36,7 @@ export function builtinParameterFields(params: readonly ImagingParam[]): ParamFi
   return params.flatMap<ParamFieldSpec>(param => {
     if (used.has(param.key)) return []
     used.add(param.key)
-    const base = { key: param.key, title: param.name, tooltip: param.tooltip, animatable: param.animatable !== false, source: 'builtin' as const, bindingKeys: [param.key] }
+    const base = { key: param.key, title: param.name, tooltip: param.tooltip, animatable: param.animatable !== false, source: 'builtin' as const, bindingKeys: [param.key], ...(param.group ? { group: param.group } : {}), ...(param.visibleWhen ? { visibleWhen: param.visibleWhen } : {}) }
     if (param.type === 'number') {
       const gradePrefix = param.key.endsWith('_hue') ? param.key.slice(0, -4) : undefined
       const strength = gradePrefix && params.find(item => item.key === `${gradePrefix}_strength` && item.type === 'number')

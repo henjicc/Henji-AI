@@ -58,6 +58,7 @@
     "assistant:cli": "node scripts/run-assistant-cli.cjs",
     "build": "npm run gen:progress-seeds && npm run check:colors && npm run check:surface:strict && npm run check:icons:strict && npm run check:ui-residue && npm run check:model-i18n && npm run check:assistant-capabilities && tsc && vite build",
     "preview": "vite preview",
+    "effect-preview": "vite --config scripts/effect-preview/vite.config.ts",
     "lint": "eslint src --ext ts,tsx --cache --cache-location node_modules/.eslintcache --report-unused-disable-directives --max-warnings 0",
     "lint:electron": "eslint electron --ext ts --cache --cache-location node_modules/.eslintcache-electron --report-unused-disable-directives --max-warnings 0",
     "test": "node scripts/run-tests.mjs",

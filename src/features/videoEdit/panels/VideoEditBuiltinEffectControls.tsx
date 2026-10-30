@@ -52,7 +52,8 @@ export function VideoEditBuiltinParamRows({ params, values, gesture, animation }
   const projectId = animation && ('target' in animation ? animation.target.projectId : animation.projectId)
   const displayValues = Object.fromEntries(fields.map(field => [field.key, readBuiltinField(field, values)]))
   const extras = Object.fromEntries(fields.map(field => [field.key, field.bindingKeys.map(key => curves?.[key])]))
-  return <ParamList key={gesture.identity} fields={fields} values={displayValues} extras={extras} contextKey={animation && JSON.stringify([animation.frame, animation.start, animation.duration])}
+  // 和 AE 一样，分组默认收起，主参数直接可调。
+  return <ParamList key={gesture.identity} fields={fields} values={displayValues} extras={extras} initiallyOpenGroups={[]} contextKey={animation && JSON.stringify([animation.frame, animation.start, animation.duration])}
     renderControl={(field, value) => <BuiltinField field={field} value={value} gesture={gesture} />}
     onReset={field => gesture.commit({ params: Object.fromEntries(field.bindingKeys.map(key => [key, params.find(param => param.key === key)!.default])) })}
     resetDisabled={field => field.bindingKeys.every(key => values[key] === params.find(param => param.key === key)!.default)}

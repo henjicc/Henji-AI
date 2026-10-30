@@ -1,19 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`旧高斯规划逐字段快照（重构前采集，禁止随重构更新） > 剪辑 glow：数字源/目标纹理包装 1`] = `
-"{"width":4097,"height":2161,"scratch":[{"width":4097,"height":2161},{"width":4097,"height":2161},{"width":2049,"height":1081},{"width":1025,"height":541},{"width":513,"height":271},{"width":257,"height":136},{"width":129,"height":68},{"width":129,"height":68},{"width":129,"height":68}]}
-{"entry":"glow_extract","source":"input","target":0,"uniforms":[4097,2161,4097,2161,0.5400000214576721,0.10000000149011612,0,0,0,0,0,0,0,0,0,0]}
-{"entry":"copy","source":0,"target":2,"uniforms":[2049,1081,4097,2161,0,0,0,0,0,0,0,0,0,0,0,0]}
-{"entry":"copy","source":2,"target":3,"uniforms":[1025,541,2049,1081,0,0,0,0,0,0,0,0,0,0,0,0]}
-{"entry":"copy","source":3,"target":4,"uniforms":[513,271,1025,541,0,0,0,0,0,0,0,0,0,0,0,0]}
-{"entry":"copy","source":4,"target":5,"uniforms":[257,136,513,271,0,0,0,0,0,0,0,0,0,0,0,0]}
-{"entry":"copy","source":5,"target":6,"uniforms":[129,68,257,136,0,0,0,0,0,0,0,0,0,0,0,0]}
-{"entry":"blur","source":6,"target":7,"uniforms":[129,68,129,68,0.007751937955617905,0,2.6545872688293457,8,1,0,0,0,0,0,0,0]}
-{"entry":"blur","source":7,"target":8,"uniforms":[129,68,129,68,0,0.014705882407724857,2.6545872688293457,8,1,0,0,0,0,0,0,0]}
-{"entry":"copy","source":8,"target":1,"uniforms":[4097,2161,129,68,0,0,0,0,0,0,0,0,0,0,0,0]}
-{"entry":"glow_add","source":1,"target":"output","uniforms":[4097,2161,4097,2161,1,0,0,0,0,0,0,0,0,0,0,0],"original":"input"}"
-`;
-
 exports[`旧高斯规划逐字段快照（重构前采集，禁止随重构更新） > 剪辑 sharpen：数字源/目标纹理包装 1`] = `
 "{"width":4097,"height":2161,"scratch":[{"width":4097,"height":2161},{"width":2049,"height":1081},{"width":2049,"height":1081},{"width":2049,"height":1081}]}
 {"entry":"copy","source":"input","target":1,"uniforms":[2049,1081,4097,2161,0,0,0,0,0,0,0,0,0,0,0,0]}
