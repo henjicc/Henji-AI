@@ -13,6 +13,9 @@ const SEEK_TIMEOUT_MS = 30_000
 const RELOAD_RETRY_MS = 2_000
 /** 标记帧的画面通常几毫秒内到达；超过这么久仍没有任何新画面算取帧失败。 */
 const PAINT_TIMEOUT_MS = 3_000
+/** 页面换绘制链路后，先接完仍在传输的画面；这段等待只用于准备与降级，不进入逐帧取图。 */
+const PREPARE_QUIET_MS = 100
+const PREPARE_BUSY_MS = 500
 /**
  * 标记的损坏区会被上层的 backdrop-filter、filter 扩大成一大块，认不出“只含标记”的那一幅时：页面停住后标记帧就是最后一幅，
  * 画面停下这么久（约五个画面周期）没有新的就取最新一幅盖住标记的。
@@ -39,6 +42,107 @@ const READY_SCRIPT = `(async () => {
   return Number.isFinite(duration) && duration >= 0 ? duration : null
 })()`
 
+/** 隔离世界保存资源与还原操作，准备失败和运行中降级都恢复普通页面绘制。 */
+function snapshotPrepareScript(view: CodeWebView): string {
+  const size = codeWebPixelSize(view)
+  return `(async () => {
+    const stage = document.querySelector('[data-henji-stage]')
+    if (!stage) return { captureMode: 'compositor', fallbackReason: 'missing-stage' }
+    if (typeof HTMLCanvasElement.prototype.requestPaint !== 'function' || !navigator.gpu ||
+        typeof GPUQueue === 'undefined' || typeof Element.prototype.moveBefore !== 'function')
+      return { captureMode: 'compositor', fallbackReason: 'missing-html-in-canvas' }
+    const copy = GPUQueue.prototype.copyElementImageToTexture
+    const draw = GPUQueue.prototype.drawElementImageToTexture
+    if (typeof copy !== 'function') return { captureMode: 'compositor', fallbackReason: typeof draw === 'function' ? 'unsupported-draw-element-dictionary' : 'missing-element-image-to-texture' }
+    const container = document.createElement('canvas'), output = document.createElement('canvas')
+    const isolation = stage.style.getPropertyValue('isolation'), priority = stage.style.getPropertyPriority('isolation')
+    let device, disposed = false, pageChanged = false
+    const state = { dispose() {
+      disposed = true
+      state.cancel?.()
+      const parent = container.parentNode
+      if (parent) while (container.firstChild) parent.moveBefore(container.firstChild, container)
+      if (isolation) stage.style.setProperty('isolation', isolation, priority); else stage.style.removeProperty('isolation')
+      output.remove(); container.remove(); device?.destroy()
+      delete window.__henjiWebSourceSnapshot
+      return pageChanged
+    } }
+    window.__henjiWebSourceSnapshot = state
+    try {
+      const adapter = await navigator.gpu.requestAdapter()
+      if (disposed) throw new Error('网页快照准备已停止')
+      if (!adapter) throw new Error('WebGPU adapter 不可用')
+      device = await adapter.requestDevice()
+      device.lost.then(info => {
+        state.lostReason = '显卡设备丢失：' + (info.message || info.reason)
+        state.cancel?.(new Error(state.lostReason))
+      })
+      if (disposed) throw new Error('网页快照准备已停止')
+      container.setAttribute('layoutsubtree', ''); container.setAttribute('content', 'drawable')
+      container.style.cssText = 'all:unset!important;display:block!important;position:absolute!important;left:0!important;top:0!important;width:${view.width}px!important;height:${view.height}px!important;pointer-events:none!important'
+      if (!container.getContext('2d')) throw new Error('舞台画布的 2D 上下文不可用')
+      stage.before(container); pageChanged = true; container.moveBefore(stage, null)
+      stage.style.setProperty('isolation', 'isolate', 'important')
+      output.width = ${size.width}; output.height = ${size.height}
+      output.style.cssText = 'all:initial!important;display:block!important;position:fixed!important;left:${view.region[0]}px!important;top:${view.region[1]}px!important;width:${view.region[2]}px!important;height:${view.region[3]}px!important;pointer-events:none!important;z-index:2147483647!important'
+      document.documentElement.appendChild(output)
+      const context = output.getContext('webgpu')
+      if (!context) throw new Error('输出画布的 WebGPU 上下文不可用')
+      context.configure({ device, format: 'rgba8unorm', alphaMode: 'opaque', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST })
+      Object.assign(state, { stage, container, output, context, device, copy })
+      return { captureMode: 'html-in-canvas', fallbackReason: null, pageChanged }
+    } catch (error) {
+      state.dispose()
+      return { captureMode: 'compositor', fallbackReason: String(error), pageChanged }
+    }
+  })()`
+}
+
+function measureBoxesScript(selectors: readonly string[] | undefined): string {
+  return `const selectors = ${JSON.stringify(selectors ?? null)}
+    if (!selectors) return null
+    const boxes = {}
+    for (const selector of selectors) {
+      let element = null
+      try { element = document.querySelector(selector) } catch {}
+      const rect = element && element.getBoundingClientRect()
+      boxes[selector] = rect ? [rect.x, rect.y, rect.width, rect.height] : null
+    }
+    return boxes`
+}
+
+function snapshotPaintScript(view: CodeWebView, selectors: readonly string[] | undefined): string {
+  const [sx, sy, swidth, sheight] = view.region
+  const { width, height } = codeWebPixelSize(view)
+  return `new Promise((resolve, reject) => {
+    const state = window.__henjiWebSourceSnapshot
+    if (!state) { reject(new Error('网页快照尚未准备')); return }
+    if (state.lostReason) { reject(new Error(state.lostReason)); return }
+    const { stage, container, context, device, copy } = state
+    if (stage.parentNode !== container) { reject(new Error('网页舞台已被替换或移除')); return }
+    const clean = () => { clearTimeout(timer); container.removeEventListener('paint', paint); delete state.cancel }
+    const paint = () => {
+      clean()
+      try {
+        if (state.lostReason) throw new Error(state.lostReason)
+        if (stage.parentNode !== container) throw new Error('网页舞台已被替换或移除')
+        copy.call(device.queue, { source: stage, sx: ${sx}, sy: ${sy}, swidth: ${swidth}, sheight: ${sheight} },
+          { destination: { texture: context.getCurrentTexture() }, width: ${width}, height: ${height} })
+        resolve((() => { ${measureBoxesScript(selectors)} })())
+      } catch (error) { reject(error) }
+    }
+    const timer = setTimeout(() => { clean(); reject(new Error('网页快照 paint 超时')) }, ${PAINT_TIMEOUT_MS})
+    state.cancel = (error = new Error('网页快照已停止')) => { clean(); reject(error) }
+    container.addEventListener('paint', paint, { once: true })
+    try { container.requestPaint() } catch (error) { clean(); reject(error) }
+  })`
+}
+
+const SNAPSHOT_DISPOSE_SCRIPT = 'window.__henjiWebSourceSnapshot?.dispose()'
+
+interface CapturePath { captureMode: 'compositor' | 'html-in-canvas'; fallbackReason: string | null }
+interface SnapshotPreparation extends CapturePath { pageChanged?: boolean }
+
 /** 页面世界：摆到第 t 秒；页面实现了 boxes 时顺带读元素矩形，没实现时为 undefined（由宿主在隔离世界里量）。 */
 function seekScript(time: number, selectors: readonly string[] | undefined): string {
   return `(async () => {
@@ -56,16 +160,7 @@ function seekScript(time: number, selectors: readonly string[] | undefined): str
 function settleScript(selectors: readonly string[] | undefined): string {
   return `(async () => {
     for (let i = 0; i < 3; i++) await new Promise(resolve => requestAnimationFrame(resolve))
-    const selectors = ${JSON.stringify(selectors ?? null)}
-    if (!selectors) return null
-    const boxes = {}
-    for (const selector of selectors) {
-      let element = null
-      try { element = document.querySelector(selector) } catch {}
-      const rect = element && element.getBoundingClientRect()
-      boxes[selector] = rect ? [rect.x, rect.y, rect.width, rect.height] : null
-    }
-    return boxes
+    ${measureBoxesScript(selectors)}
   })()`
 }
 
@@ -130,7 +225,7 @@ function sessionPartition(root: string): string {
 
 /**
  * 一个网页来源的离屏页面：沙箱、隔离、不挂任何 preload，页面拿不到痕迹的接口。宿主只经 `window.henjiWeb` 控制时间，取帧串行；
- * 页面进程退出、seek 超时（结束页面进程，免得旧的 seek 继续改页面）或重新载入失败后，下一次取帧先重新载入页面。
+ * 页面进程退出、seek 或快照脚本超时（结束页面进程，免得迟到的脚本继续改页面）或重新载入失败后，下一次取帧先重新载入页面。
  */
 export class WebSourcePage {
   private window?: BrowserWindow
@@ -141,11 +236,14 @@ export class WebSourcePage {
   private wake?: () => void
   private tail: Promise<unknown> = Promise.resolve()
   private frameIndex = 0
-  /** 页面进程退出（含 seek 超时后主动结束）或重新载入失败：下一次取帧前重新载入。 */
+  /** 页面进程退出（含脚本超时后主动结束）或重新载入失败：下一次取帧前重新载入。 */
   private stale?: 'gone' | 'reload'
   /** 上一次载入失败：RELOAD_RETRY_MS 之内的取帧直接报这个错，之后再试载入（文件改好了内容指纹不变也能恢复）。 */
   private failure?: { error: Error; at: number }
   private closed = false
+  private snapshotWarned = false
+  private snapshotMark?: number
+  capturePath: CapturePath = { captureMode: 'compositor', fallbackReason: null }
   duration: number | null = null
 
   constructor(
@@ -156,6 +254,7 @@ export class WebSourcePage {
     readonly view: CodeWebView,
     public contentHash: string,
     private readonly onGone: (reason: string) => void,
+    private readonly onSnapshotFallback: (reason: string) => void,
   ) {}
 
   get pixelWidth(): number { return codeWebPixelSize(this.view).width }
@@ -174,7 +273,7 @@ export class WebSourcePage {
     // 离屏窗口的内容尺寸就是取景，设备像素比是倍率；视口与取景原点见 load()。
     const window = new BrowserWindow({
       show: false, focusable: false, skipTaskbar: true, frame: false, width: region[2], height: region[3], useContentSize: true,
-      webPreferences: { partition, contextIsolation: true, sandbox: true, nodeIntegration: false, offscreen: { useSharedTexture: true, deviceScaleFactor: scale }, backgroundThrottling: false, spellcheck: false },
+      webPreferences: { partition, contextIsolation: true, sandbox: true, nodeIntegration: false, enableBlinkFeatures: 'CanvasDrawElement', offscreen: { useSharedTexture: true, deviceScaleFactor: scale }, backgroundThrottling: false, spellcheck: false },
     })
     this.window = window
     const contents = window.webContents
@@ -182,6 +281,7 @@ export class WebSourcePage {
     contents.on('will-navigate', (event, url) => { if (new URL(url).origin !== WEB_SOURCE_ORIGIN) event.preventDefault() })
     contents.on('render-process-gone', (_event, details) => {
       this.stale = 'gone'
+      this.releasePaints()
       this.onGone(details.reason)
       this.wake?.()
     })
@@ -193,7 +293,10 @@ export class WebSourcePage {
       if (this.closed || !size.width || !size.height) { texture.release(); return }
       this.paints.push({ seq: ++this.seq, texture })
       this.lastPaintAt = Date.now()
-      while (this.paints.length > HELD_PAINTS) this.paints.shift()!.texture.release()
+      // 脚本还未返回时输出也可能已到达；第一幅完整快照必须保留到领取，后续局部画面不能把它挤走。
+      const mark = this.snapshotMark
+      const snapshot = mark === undefined ? undefined : this.paints.find(paint => paint.seq > mark && this.coversOutput(paint.texture))
+      while (this.paints.length > HELD_PAINTS) this.paints.splice(this.paints[0] === snapshot ? 1 : 0, 1)[0].texture.release()
       this.wake?.()
     })
     contents.setFrameRate(FRAME_RATE)
@@ -219,8 +322,28 @@ export class WebSourcePage {
     await withTimeout(contents.loadURL(WEB_SOURCE_ENTRY_URL), LOAD_TIMEOUT_MS, '网页加载超时')
     this.duration = await withTimeout(contents.executeJavaScript(READY_SCRIPT, false) as Promise<number | null>, READY_TIMEOUT_MS, '网页没有在 30 秒内就绪（window.henjiWeb.ready）')
     this.stale = undefined
-    this.releasePaints()
-    contents.stopPainting()
+    let pageChanged = false
+    try {
+      const prepared = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: snapshotPrepareScript(this.view) }], false) as Promise<SnapshotPreparation>, READY_TIMEOUT_MS, '网页快照准备超时')
+      this.capturePath = { captureMode: prepared.captureMode, fallbackReason: prepared.fallbackReason }
+      pageChanged = prepared.pageChanged === true
+      if (this.capturePath.captureMode === 'html-in-canvas') {
+        this.snapshotWarned = false
+        await this.drainPaints()
+        // 首次 GPU 复制可能比静默窗口更慢，必须收到初始输出，不能只以脚本返回作为准备完成。
+        const initial = await this.takeSnapshot(undefined)
+        initial.texture.release()
+      }
+    } catch (error) {
+      if (this.closed || this.window!.isDestroyed() || contents.isDestroyed() || this.stale === 'gone') throw error
+      await this.disableSnapshot(error)
+      pageChanged = false
+    }
+    if (pageChanged) await this.drainPaints()
+    else this.releasePaints()
+    if (this.stale) throw new Error('网页来源准备未完成，需要重新载入')
+    // 快照只在复制时更新输出；保持接收，避免恢复绘制额外重发上一幅画面。
+    if (this.capturePath.captureMode !== 'html-in-canvas') contents.stopPainting()
   }
 
   /** 载入并记下结果：失败时标记待重新载入，下一次取帧（隔 RELOAD_RETRY_MS 之后）再试。 */
@@ -263,7 +386,7 @@ export class WebSourcePage {
       await this.loadRecording()
     }
     const contents = this.window!.webContents
-    contents.startPainting()
+    if (!contents.isPainting()) contents.startPainting()
     try {
       let seeked: { boxes?: unknown }
       try {
@@ -276,15 +399,112 @@ export class WebSourcePage {
         }
         throw error
       }
-      const measured = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: settleScript(selectors && seeked.boxes === undefined ? selectors : undefined) }], false), SEEK_TIMEOUT_MS, '网页没有画出新画面')
+      const measure = selectors && seeked.boxes === undefined ? selectors : undefined
+      if (this.capturePath.captureMode === 'html-in-canvas') {
+        let snapshot: { measured: unknown; texture: OffscreenSharedTexture } | undefined
+        try {
+          snapshot = await this.takeSnapshot(measure)
+        } catch (error) {
+          if (this.closed || this.window!.isDestroyed() || contents.isDestroyed() || this.stale === 'gone') throw error
+          await this.disableSnapshot(error)
+        }
+        if (snapshot) {
+          await this.deliver(snapshot.texture, time, ticket)
+          return { boxes: selectors ? webSourceBoxes(seeked.boxes ?? snapshot.measured, selectors) : null, duration: this.duration, unsettled: false }
+        }
+      }
+      const measured = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: settleScript(measure) }], false), SEEK_TIMEOUT_MS, '网页没有画出新画面')
       const mark = this.seq
       await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: markScript(this.view.region) }], false), SEEK_TIMEOUT_MS, '网页没有响应取帧标记')
       const { texture, unsettled } = await this.markedPaint(mark)
       await this.deliver(texture, time, ticket)
       return { boxes: selectors ? webSourceBoxes(seeked.boxes ?? measured, selectors) : null, duration: this.duration, unsettled }
     } finally {
-      if (!this.closed && !contents.isDestroyed()) contents.stopPainting()
+      if (!this.closed && !contents.isDestroyed() && this.capturePath.captureMode !== 'html-in-canvas') contents.stopPainting()
       this.releasePaints()
+    }
+  }
+
+  private async disableSnapshot(error: unknown): Promise<void> {
+    if (this.closed || !this.window || this.window.isDestroyed() || this.stale === 'gone') throw error
+    const contents = this.window.webContents
+    if (contents.isDestroyed()) throw error
+    const reason = error instanceof Error ? error.message : String(error)
+    let pageChanged: unknown
+    try {
+      pageChanged = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: SNAPSHOT_DISPOSE_SCRIPT }], false), PAINT_TIMEOUT_MS, '网页快照清理超时')
+    } catch (cleanupError) {
+      // 清理未完成时必须重新载入，避免隐藏的舞台或迟到的快照混进普通取帧。
+      this.stale ??= 'reload'
+      throw new Error(reason, { cause: cleanupError })
+    }
+    if (pageChanged) await this.drainPaints()
+    else this.releasePaints()
+    if (this.closed || this.window.isDestroyed() || contents.isDestroyed() || this.stale) throw error
+    this.capturePath = { captureMode: 'compositor', fallbackReason: reason }
+    if (!this.snapshotWarned) { this.snapshotWarned = true; this.onSnapshotFallback(reason) }
+  }
+
+  private async takeSnapshot(selectors: readonly string[] | undefined): Promise<{ measured: unknown; texture: OffscreenSharedTexture }> {
+    const mark = this.seq
+    this.snapshotMark = mark
+    const contents = this.window!.webContents
+    try {
+      const measured: unknown = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: snapshotPaintScript(this.view, selectors) }], false), SEEK_TIMEOUT_MS, '网页没有响应快照取帧')
+      return { measured, texture: await this.snapshotPaint(mark) }
+    } catch (error) {
+      // 页面主线程卡住时清理脚本也无法执行，结束页面进程后由下一次取帧重新载入。
+      if (error instanceof Error && error.message === '网页没有响应快照取帧' && !contents.isDestroyed()) {
+        this.stale = 'gone'
+        contents.forcefullyCrashRenderer()
+      }
+      throw error
+    } finally {
+      this.snapshotMark = undefined
+    }
+  }
+
+  private coversOutput(texture: OffscreenSharedTexture): boolean {
+    const rect = updateRect(texture)
+    return !rect || rect.x <= 0 && rect.y <= 0 && rect.x + rect.width >= this.pixelWidth && rect.y + rect.height >= this.pixelHeight
+  }
+
+  /** 已收到的序号无法识别传输中的启动画面；保持接收直到静默，再一次释放，隔开两种绘制链路。 */
+  private async drainPaints(): Promise<void> {
+    const started = Date.now()
+    try {
+      for (;;) {
+        if (this.closed) throw new Error('网页来源已关闭')
+        if (this.stale === 'gone') throw new Error('网页页面进程已退出，下一次取帧时重新载入')
+        const now = Date.now()
+        const remaining = Math.min(Math.max(started, this.lastPaintAt) + PREPARE_QUIET_MS - now, started + PREPARE_BUSY_MS - now)
+        if (remaining <= 0) return
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, remaining)
+          this.wake = () => { clearTimeout(timer); resolve() }
+        })
+        this.wake = undefined
+      }
+    } finally {
+      this.releasePaints()
+    }
+  }
+
+  /** 快照更新会覆盖整个输出；局部更新可能属于准备或其他 DOM 变化，不能作为本次结果。 */
+  private async snapshotPaint(mark: number): Promise<OffscreenSharedTexture> {
+    const started = Date.now()
+    for (;;) {
+      if (this.closed) throw new Error('网页来源已关闭')
+      if (this.stale === 'gone') throw new Error('网页页面进程已退出，下一次取帧时重新载入')
+      const chosen = this.paints.find(paint => paint.seq > mark && this.coversOutput(paint.texture))
+      if (chosen) { this.paints.splice(this.paints.indexOf(chosen), 1); return chosen.texture }
+      const remaining = PAINT_TIMEOUT_MS - (Date.now() - started)
+      if (remaining <= 0) throw new Error('网页取帧超时：页面没有画出完整快照')
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, remaining)
+        this.wake = () => { clearTimeout(timer); resolve() }
+      })
+      this.wake = undefined
     }
   }
 

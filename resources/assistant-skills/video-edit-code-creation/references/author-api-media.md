@@ -76,6 +76,9 @@ window.henjiWeb = { ready /* Promise：资源字体就绪 */, duration /* 秒 */
   async seek(t) {} /* 摆成第 t 秒，可任意前后跳 */, boxes(selectors) {} /* 可选：{选择器: [x,y,w,h]|null} */ }
 ```
 
+**舞台**：把全部内容放进一个标有 `data-henji-stage` 的根元素，左上角固定在视口 (0,0)、大小等于视口（如 `position:absolute;left:0;top:0;width:1920px;height:1080px`）；背景画在舞台上，动态新增内容也挂在舞台里。宿主从舞台快照直接出图，取帧快好几倍、跳远不出黑块；普通浏览器里照常显示。不标舞台仍能用，走普通页面绘制但更慢。跨源图片与跨源 iframe 不进入快照，同源 iframe 可用。
+取帧时宿主会把舞台搬进自己的画布：舞台元素本身不要替换或移除；不要用依赖舞台父元素的选择器（如 `body > main`）或可能取到宿主画布的 `document.querySelector('canvas')`；弹层、portal 等动态内容也挂在舞台里，舞台之外不要有会变化的可见内容。
+
 **绑定值**（参数照常声明 `type: "image"`，用通用实体工具写片段代码参数）：
 
 ```text

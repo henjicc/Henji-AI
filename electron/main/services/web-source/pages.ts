@@ -63,11 +63,11 @@ export class WebSourcePages {
   private nextId = 1
   private readonly content: WebSourceContent
 
-  constructor(private readonly logger: Pick<MainLogger, 'info' | 'warn'>, broadcast: (change: WebSourceContentChange) => void) {
+  constructor(private readonly logger: Pick<MainLogger, 'debug' | 'info' | 'warn'>, broadcast: (change: WebSourceContentChange) => void) {
     this.content = new WebSourceContent((root, contentHash, paths) => {
       for (const page of this.pages.values()) if (page.folder.root === root) {
         void page.reload(contentHash).then(
-          () => this.logger.info('网页来源已按新内容重新载入', { event: 'web_source.page.reloaded', context: { streamId: page.streamId, contentHash } }),
+          () => this.logger.info('网页来源已按新内容重新载入', { event: 'web_source.page.reloaded', context: { streamId: page.streamId, contentHash, ...page.capturePath } }),
           error => this.failed(page, 'web_source.page.reload_failed', '网页来源重新载入失败', error),
         )
       }
@@ -116,7 +116,10 @@ export class WebSourcePages {
       this.content.hold(folder.root)
       retained = folder.root
       const contentHash = await this.content.current(folder.root)
-      page = new WebSourcePage(streamId, target, route, folder, view, contentHash, reason => this.logger.warn('网页来源页面进程退出，下一次取帧时重新载入', { event: 'web_source.page.gone', context: { streamId, reason } }))
+      page = new WebSourcePage(streamId, target, route, folder, view, contentHash,
+        reason => this.logger.warn('网页来源页面进程退出，下一次取帧时重新载入', { event: 'web_source.page.gone', context: { streamId, reason } }),
+        reason => this.logger.warn('网页快照取帧不可用，使用普通页面绘制', { event: 'web_source.capture.fallback', context: { streamId, captureMode: 'compositor', reason } }),
+      )
       this.pages.set(streamId, page)
       this.watchTarget(target)
       await page.open()
@@ -132,15 +135,17 @@ export class WebSourcePages {
       throw error
     }
     this.lastOpenFailure.delete(path)
-    this.logger.info('网页来源已打开', { event: 'web_source.page.open.completed', context: { ...context, elapsedMs: Date.now() - startedAt, pixelWidth: page.pixelWidth, pixelHeight: page.pixelHeight, duration: page.duration, contentHash: page.contentHash } })
+    this.logger.info('网页来源已打开', { event: 'web_source.page.open.completed', context: { ...context, elapsedMs: Date.now() - startedAt, pixelWidth: page.pixelWidth, pixelHeight: page.pixelHeight, duration: page.duration, contentHash: page.contentHash, ...page.capturePath } })
     return { streamId, route, contentHash: page.contentHash, duration: page.duration, pixelWidth: page.pixelWidth, pixelHeight: page.pixelHeight }
   }
 
   async capture(targetId: number, request: WebSourceCaptureRequest): Promise<WebSourceCaptureResult> {
     const page = this.pages.get(request.streamId)
     if (!page || page.target.id !== targetId) throw new Error('网页来源不存在或不属于当前窗口')
+    const startedAt = performance.now()
     try {
       const { boxes, duration, unsettled } = await page.capture(request.time, request.ticket, request.boxes)
+      this.logger.debug('网页取帧完成', { event: 'web_source.capture.completed', context: { streamId: page.streamId, ticket: request.ticket, time: request.time, elapsedMs: performance.now() - startedAt, ...page.capturePath } })
       if (this.lastFailure.delete(page.streamId)) this.logger.info('网页取帧已恢复', { event: 'web_source.capture.recovered', context: { streamId: page.streamId } })
       if (unsettled && !this.unsettled.has(page.streamId)) {
         this.unsettled.add(page.streamId)

@@ -11,6 +11,7 @@ export interface CodeVideoSpan { from: number; to: number; src: number; rate?: n
  * 视口 `width`×`height`（CSS 像素，默认 1920×1080），只渲染 `region`（[x, y, 宽, 高]，默认整个视口），每 CSS 像素
  * `scale` 个设备像素（默认 2）；取帧时刻 `time`/`spans` 与视频参数同义，是页面时间（交给 `henjiWeb.seek`）。
  * `boxes` 是每帧要读矩形的 CSS 选择器。语义与限制见 `codeMaterial/webSource.ts`。
+ * `data-henji-stage` 标记视口大小、原点 (0,0) 的舞台；宿主搬入画布后不依赖父元素选择器或泛选 canvas，背景与动态内容（含弹层）留在舞台内，舞台外可见内容保持静止。
  */
 export interface CodeWebReference { kind: 'web'; path: string; width?: number; height?: number; region?: [number, number, number, number]; scale?: number; time?: number; spans?: CodeVideoSpan[]; boxes?: string[]; mediaId?: never }
 export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never; spans?: never } | { kind: 'video'; mediaId: string; time?: number; spans?: CodeVideoSpan[] } | { kind: 'sequence'; mediaId: 'below'; time?: never; spans?: never } | CodeWebReference

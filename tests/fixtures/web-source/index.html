@@ -9,7 +9,8 @@
   验收脚本据此核对每一帧取的是不是这一刻。
 -->
 <style>
-  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #101418; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  [data-henji-stage] { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #101418; }
   #backdrop { position: absolute; inset: 0; background: conic-gradient(from 40deg at 30% 40%, #ff6b6b, #ffd166, #06d6a0, #118ab2, #8338ec, #ff6b6b); }
   #glass { position: absolute; left: 160px; top: 140px; width: 1100px; height: 700px; border-radius: 40px; background: rgba(255, 255, 255, 0.16); backdrop-filter: blur(28px) saturate(1.4); border: 1px solid rgba(255, 255, 255, 0.4); }
   #title { position: absolute; left: 230px; top: 210px; font-size: 96px; font-weight: 700; color: #fff; letter-spacing: 2px; white-space: nowrap; }
@@ -27,6 +28,7 @@
 </style>
 </head>
 <body>
+<div data-henji-stage>
 <div id="backdrop"></div>
 <div id="glass"></div>
 <div id="title"></div>
@@ -78,5 +80,6 @@
     },
   }
 </script>
+</div>
 </body>
 </html>

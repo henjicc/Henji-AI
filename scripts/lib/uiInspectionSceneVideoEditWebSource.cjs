@@ -72,10 +72,12 @@ function createVideoEditWebSourceScene() {
   return {
     id: 'video-edit-web-source', surface: '剪辑', name: '剪辑-网页画面', writesUserData: true,
     async setup(page, app, { capture }) {
+      const startedAt = new Date().toISOString()
       assert.ok(await app.evaluate(() => Boolean(process.env.HENJI_ISOLATED_APP_DATA)), '网页画面验收使用隔离资料目录')
       fs.rmSync(ROOT, { recursive: true, force: true }); fs.mkdirSync(ROOT, { recursive: true })
       const evidence = { completed: false, preview: [], zoom: [], export: null }
       const store = () => fs.writeFileSync(path.join(ROOT, 'evidence.json'), JSON.stringify(evidence, null, 2))
+      const webEventDetails = (since = startedAt) => page.evaluate(async since => (await window.henjiNative.logging.queryLogEvents({ date: new Date().toISOString().slice(0, 10), domainPrefix: 'main.web_source', afterTimestamp: since, limit: 10000 })).events.map(event => ({ event: event.event, level: event.level, context: event.context })), since)
       const { createVideoEditTestDocument } = loadTypeScript('src/core/videoEdit/testFixtures.ts')
       const project = createVideoEditTestDocument('网页画面验收')
       Object.assign(project.sequences[0], { width: WIDTH, height: HEIGHT, frameRate: { numerator: FPS, denominator: 1 } })
@@ -133,6 +135,11 @@ function createVideoEditWebSourceScene() {
           shot.expected = Math.round(frame / FPS * 1000)
           shot.box = await magentaBounds(shot.file)
           evidence.preview.push(shot); store()
+          if (index === 0) {
+            const opened = (await webEventDetails()).filter(event => event.event === 'web_source.page.open.completed' && event.context?.path === entry)
+            evidence.capturePaths = opened.map(event => event.context); store()
+            assert.ok(opened.length > 0 && opened.every(event => event.context.captureMode === 'html-in-canvas' && event.context.fallbackReason === null), `网页来源没有启用快照取帧：${JSON.stringify(opened)}`)
+          }
           assert.equal(shot.timeCode, shot.expected, `第 ${frame} 帧（第 ${index + 1} 次）取到的不是这一刻：${shot.timeCode}ms`)
         }
         await capture('web-source-preview')
@@ -200,10 +207,84 @@ function createVideoEditWebSourceScene() {
         fs.appendFileSync(entry, '\n<!-- changed -->\n')
         for (let attempt = 0; attempt < 40 && !(await webLogs()).includes('web_source.content.changed'); attempt++) await page.waitForTimeout(250)
         assert.ok((await webLogs()).includes('web_source.content.changed'), '改了网页文件夹没有被发现')
-        const logs = await page.evaluate(async () => (await window.henjiNative.logging.queryLogEvents({ date: new Date().toISOString().slice(0, 10), domainPrefix: 'main.web_source', limit: 200 })).events.map(event => ({ event: event.event, level: event.level, context: event.context })))
+        const reloaded = await shoot(75, 'preview-after-file-change')
+        reloaded.timeCode = await readTimeCode(reloaded.file)
+        evidence.reload = reloaded; store()
+        assert.equal(reloaded.timeCode, 2500, `网页文件重载后取到的不是这一刻：${reloaded.timeCode}ms`)
+        const logs = await webEventDetails()
         evidence.logs = logs
+        const opened = logs.filter(event => event.event === 'web_source.page.open.completed' && event.context?.path === entry)
+        evidence.capturePaths = opened.map(event => event.context)
+        store()
+        assert.ok(opened.length > 0, '没有找到本次网页来源打开日志')
+        assert.ok(opened.every(event => event.context.captureMode === 'html-in-canvas' && event.context.fallbackReason === null), `网页来源没有启用快照取帧：${JSON.stringify(opened)}`)
+        assert.ok(!logs.some(event => event.event === 'web_source.capture.fallback'), '网页快照取帧发生降级')
+
+        // 只在验收进程的隔离世界注入故障，不给正式运行时增加测试开关。
+        const failSnapshot = async (code, frame, name, reason) => {
+          const since = new Date().toISOString()
+          const injected = await app.evaluate(async ({ webContents }, script) => {
+            let count = 0
+            for (const contents of webContents.getAllWebContents()) {
+              if (contents.isOffscreen() && contents.getURL().startsWith('https://web-source.henji.invalid')) {
+                if (await contents.executeJavaScriptInIsolatedWorld(1001, [{ code: script }], false)) count++
+              }
+            }
+            return count
+          }, `(() => { const state = window.__henjiWebSourceSnapshot; if (!state) return false; ${code}; return true })()`)
+          assert.ok(injected > 0, '没有找到启用快照的验收页面')
+          const shot = await shoot(frame, name)
+          shot.timeCode = await readTimeCode(shot.file)
+          const events = await webEventDetails(since)
+          const fallbacks = events.filter(event => event.event === 'web_source.capture.fallback')
+          evidence[name] = { injected, ...shot, fallbacks }; store()
+          assert.equal(shot.timeCode, Math.round(frame / FPS * 1000), '快照降级当帧的时间条码错误')
+          assert.equal(fallbacks.length, 1, '快照降级没有恰好记录一次')
+          assert.ok(fallbacks.some(event => event.context.reason.includes(reason)), JSON.stringify(fallbacks))
+          assert.ok(events.some(event => event.event === 'web_source.capture.completed' && event.context?.time === frame / FPS && event.context.captureMode === 'compositor'), '降级当帧没有正常完成普通绘制')
+          assert.ok(!events.some(event => event.event === 'web_source.capture.failed'), '快照降级仍导致取帧失败')
+        }
+        await failSnapshot("const copy = state.copy; state.copy = function(...args) { state.copy = copy; throw new Error('验收强制快照失败') }", 83, 'snapshot-failure', '验收强制快照失败')
+        const reloadSnapshot = async () => {
+          const reloads = (await webEventDetails()).filter(event => event.event === 'web_source.page.reloaded' && event.context?.captureMode === 'html-in-canvas').length
+          fs.appendFileSync(entry, '\n<!-- reload snapshot after fallback -->\n')
+          let snapshotReady = false
+          for (let attempt = 0; attempt < 40; attempt++) {
+            snapshotReady = (await webEventDetails()).filter(event => event.event === 'web_source.page.reloaded' && event.context?.captureMode === 'html-in-canvas').length > reloads
+            if (snapshotReady) break
+            await page.waitForTimeout(250)
+          }
+          assert.ok(snapshotReady, '快照降级后重载没有重新启用快照')
+        }
+        await reloadSnapshot()
+        // 保持页面脚本持有的元素引用，舞台被替换后仍应搬回画布里全部现有内容。
+        await failSnapshot("const replacement = state.stage.cloneNode(false); replacement.style.removeProperty('isolation'); while (state.stage.firstChild) replacement.appendChild(state.stage.firstChild); state.stage.replaceWith(document.createComment('replacement'), replacement)", 87, 'snapshot-stage-replaced', '网页舞台已被替换或移除')
+        await reloadSnapshot()
+        await failSnapshot('document.body.appendChild(state.stage); state.container.remove()', 91, 'snapshot-container-detached', '网页舞台已被替换或移除')
+        await reloadSnapshot()
+        await failSnapshot('state.device.destroy()', 97, 'snapshot-device-lost', '显卡设备丢失')
+
+        // 相同页面仅去掉舞台标记，核对重载回普通绘制后的画面，并从正式取帧日志比较两条链路。
+        fs.writeFileSync(entry, fs.readFileSync(entry, 'utf8').replaceAll('data-henji-stage', 'data-compositor-stage'))
+        let fallbackReady = false
+        for (let attempt = 0; attempt < 40; attempt++) {
+          fallbackReady = (await webEventDetails()).some(event => event.event === 'web_source.page.reloaded' && event.context?.captureMode === 'compositor')
+          if (fallbackReady) break
+          await page.waitForTimeout(250)
+        }
+        assert.ok(fallbackReady, '去掉舞台标记后没有重载到普通页面绘制')
+        evidence.compositor = []
+        for (const frame of [90, 30, 150, 60, 120]) {
+          const shot = await shoot(frame, `compositor-${frame}`)
+          shot.timeCode = await readTimeCode(shot.file)
+          evidence.compositor.push(shot); store()
+          assert.equal(shot.timeCode, Math.round(frame / FPS * 1000), `普通绘制第 ${frame} 帧不是这一刻：${shot.timeCode}ms`)
+        }
         evidence.completed = true; store()
-      } finally { store(); await client?.close(); await disableMcp(page) }
+      } finally {
+        try { evidence.logs = await webEventDetails() } catch (error) { evidence.logCollectionError = String(error) }
+        store(); await client?.close(); await disableMcp(page)
+      }
     },
   }
 }

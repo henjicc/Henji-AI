@@ -53,6 +53,7 @@ export interface AuthorFrameInfo {
 /**
  * 网页参数这一帧的页面信息。画面（assets / inputs.images 同名键）是视口里 region 这一块，每 CSS 像素 scale 个像素。
  * boxes 的矩形是视口 CSS 像素，换到画面像素：(x - region[0]) * scale。
+ * data-henji-stage 标记视口大小、原点 (0,0) 的舞台；宿主搬入画布后不依赖父元素选择器或泛选 canvas，动态内容（含弹层）留在舞台内，舞台外可见内容保持静止。
  */
 export interface AuthorWebFrame {
   /** 页面时间（秒），即交给页面 henjiWeb.seek 的时刻。 */
