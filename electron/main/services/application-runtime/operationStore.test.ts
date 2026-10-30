@@ -862,4 +862,12 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
       expect(f.store.get(record.operationId, f.callerId)?.result).toEqual(failure)
     }
   })
+  it('放入结果的仅保存恢复按剪辑文件里的放入记录核对，原会话关了也能恢复', () => {
+    const f = fixture(); const documentRef = { kind: 'video_edit.document', id: 'D' }
+    const original = f.store.prepare({ operationId: randomUUID(), callerId: f.callerId, inputDigest: 'place', input: { documentRef }, state: 'prepared', capabilityId: 'place_video_edit_creative_result', atomicPlacement: true })
+    f.store.save({ ...original, state: 'partial', requestId: randomUUID(), rendererEpoch: f.rendererEpoch,
+      result: { ok: false, error: { details: { persistence: { recovery: { capabilityId: 'save_video_edit', target: documentRef, replayMutation: false } } } } } })
+    const recovery = f.coordinator.prepareSaveRecovery(f.callerId, { operationId: randomUUID(), originalOperationId: original.operationId }, randomUUID())
+    expect(recovery).toMatchObject({ state: 'prepared', recoveryOf: original.operationId, capabilityId: 'save_video_edit', recoveryOperation: { rendererEpoch: f.rendererEpoch } })
+  })
 })

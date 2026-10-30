@@ -380,11 +380,11 @@ export class ApplicationOperationCoordinator {
     if (existing && existing.state !== 'prepared' && existing.state !== 'not_executed') return existing
     const original = this.store.get(originalOperationId, callerId)
     if (!original || original.state !== 'partial') throw new Error('RECOVERY_UNAVAILABLE:原操作没有已确认的保存失败，未知修改不能重放。')
-    if (original.rendererEpoch !== rendererEpoch) throw new Error('RECOVERY_SESSION_LOST:原编辑会话已关闭，未保存的内存不能伪造恢复；请在应用中核对原文档。')
     const details = object(object(original.result?.error).details)
     const transaction = object(details.transaction)
     const recovery = object(object(transaction.persistence ?? details.persistence).recovery)
     const target = refSchema.safeParse(recovery.target)
+    // 放入结果的恢复只认剪辑文件里随内容保存的放入记录（操作身份、素材与片段），不看内存，所以原会话关了也能核对
     if (original.atomicPlacement && target.success && recovery.replayMutation === false && recovery.capabilityId === 'save_video_edit'
       && target.data.kind === 'video_edit.document' && target.data.id === object(original.input.documentRef).id && original.requestId && original.rendererEpoch) {
       return this.store.prepare({ operationId, callerId, inputDigest: operationDigest(raw), input: { documentRef: { kind: target.data.kind, id: target.data.id } },
@@ -392,6 +392,7 @@ export class ApplicationOperationCoordinator {
         recoveryOperation: { requestId: original.requestId, rendererEpoch: original.rendererEpoch,
           atomicPlacement: { operationId: applicationInvocationId(callerId, originalOperationId), documentId: target.data.id } } })
     }
+    if (original.rendererEpoch !== rendererEpoch) throw new Error('RECOVERY_SESSION_LOST:原编辑会话已关闭，未保存的内存不能伪造恢复；请在应用中核对原文档。')
     if (recovery.replayMutation !== false || !target.success || !((recovery.capabilityId === 'retry_canvas_document_save' && target.data.kind === 'canvas.document') || (recovery.capabilityId === 'retry_image_edit_document_save' && target.data.kind === 'image_edit.document'))) throw new Error('RECOVERY_UNAVAILABLE:原领域没有登记可执行的仅保存恢复入口。')
     const verification = transaction.recoveryVerification as OperationRecord['recoveryVerification']
     const ownerId = recovery.capabilityId === 'retry_image_edit_document_save' ? z.string().uuid().safeParse(recovery.ownerId) : undefined
