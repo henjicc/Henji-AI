@@ -4,16 +4,19 @@ import type { AuthorFrameInfo, AuthorLayer, AuthorModule, AuthorPose } from './v
 import { authorOverrideMatrix, type AuthorElementOverride } from './videoEditAuthorElements'
 
 /**
- * Subpixel defocus must not change raster dimensions or mip sampling.
- * 边距从 16 像素起按 2 的幂向上取整：镜头缓慢推拉或虚化渐变时半径每帧都略有不同，边距跟着变就会改变栅格尺寸，
- * 图层缓存作废、每帧整层重画；常见的虚化渐变整段落在同一档里。
+ * 虚化留出的边距（栅格像素）。边距是栅格尺寸的一部分，一变图层缓存就作废、整层重画：
+ * 镜头缓慢推拉或虚化渐变时半径每帧都略有不同，所以边距从 16 起按 2 的幂向上取整，常见的虚化渐变整段落在同一档；
+ * 声明了 `blurShape` 的层随时会虚化，清楚时也留同样的边距，虚化出现与消失时不必重画。
  */
+const DEFOCUS_PAD = 16
+
+/** Subpixel defocus must not change raster dimensions or mip sampling. */
 export function authorLayerBlur(pose: AuthorPose | null | undefined, rasterScale: number, shape: AuthorLayer['blurShape']): { radius: number; pad: number } {
   const scale = Math.max(Math.abs(pose?.scaleX ?? pose?.scale ?? 1), Math.abs(pose?.scaleY ?? pose?.scale ?? 1))
   const radius = (pose?.blur ?? 0) > 0 ? (pose!.blur! / scale) * rasterScale : 0
   const lens = shape === 'lens'
-  if (radius < (lens ? .5 : .25)) return { radius: 0, pad: 2 }
-  return { radius, pad: 2 + Math.max(16, 2 ** Math.ceil(Math.log2(Math.ceil(radius * (lens ? 1.15 : 3))))) }
+  if (radius < (lens ? .5 : .25)) return { radius: 0, pad: 2 + (shape ? DEFOCUS_PAD : 0) }
+  return { radius, pad: 2 + Math.max(DEFOCUS_PAD, 2 ** Math.ceil(Math.log2(Math.ceil(radius * (lens ? 1.15 : 3))))) }
 }
 
 /**
