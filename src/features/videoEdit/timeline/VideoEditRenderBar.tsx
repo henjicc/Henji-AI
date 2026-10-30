@@ -17,8 +17,8 @@ function sameRenderBarRead(previous: RenderBarRead, next: RenderBarRead): boolea
 }
 
 /**
- * 标尺顶部的渲染条（PR）：已渲染绿、正在渲染强调色、实测掉帧红、预计吃力黄，能实时播放的段落不画。
- * 编辑后先画上一次的结果，绘制后空闲时再分段（大工程分段要几十毫秒），按键到片段消失不等它。
+ * 标尺顶部的渲染条（PR）：已渲染绿、正在渲染强调色、实测掉帧红、指纹未就绪或预计吃力黄，能实时播放的段落不画。
+ * 编辑后按当前剪辑边界先画未就绪窗口，绘制后空闲时再分段（大工程分段要几十毫秒），按键到片段消失不等它。
  */
 export function VideoEditRenderBar({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement | null {
   useSyncExternalStore(subscribeVideoEditRenderBar, videoEditRenderBarRevision)

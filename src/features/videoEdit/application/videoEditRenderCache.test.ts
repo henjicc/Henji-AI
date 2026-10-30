@@ -1,19 +1,24 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
-import { clearVideoEditRenderCache, renderVideoEditRenderCache, readVideoEditRenderCache, recordVideoEditProgramRender, readyVideoEditRenderWindows, peekVideoEditRenderCache, requestVideoEditRenderBarWindows, subscribeVideoEditRenderBar } from './videoEditRenderCache'
+import { clearVideoEditRenderCache, renderVideoEditRenderCache, readVideoEditRenderCache, recordVideoEditProgramRender, readyVideoEditRenderWindows, peekVideoEditRenderCache, requestVideoEditRenderBarWindows, subscribeVideoEditRenderBar, videoEditRenderCacheWindows } from './videoEditRenderCache'
 
-type TestWindow = { key: string; startFrame: number; endFrame: number; heavy: boolean }
+type TestWindow = { key: string; startFrame: number; endFrame: number; heavy: boolean; fingerprintPending?: boolean }
 const state = vi.hoisted(() => ({
-  instances: [] as Array<{ document: { id: string }; playing: boolean; scrubbing: boolean; busy: boolean; playbackDirection?: number; frame?: number }>,
+  instances: [] as Array<{ document: { id: string }; contentVersion?: number; playing: boolean; scrubbing: boolean; busy: boolean; playbackDirection?: number; frame?: number }>,
   composition: {} as unknown,
   windows: [{ key: 'window', startFrame: 0, endFrame: 3, heavy: true }] as TestWindow[],
   render: vi.fn(async (..._args: unknown[]) => {}), dispose: vi.fn(async () => {}), add: vi.fn(async (..._args: unknown[]) => {}),
   discard: vi.fn(async () => {}), commit: vi.fn(async (..._args: unknown[]) => ({})), cancel: vi.fn(async () => {}),
-  remove: vi.fn(async (..._args: unknown[]) => 0),
+  remove: vi.fn(async (..._args: unknown[]) => 0), list: vi.fn(async () => []),
+  fingerprints: vi.fn((..._args: unknown[]): undefined => undefined),
+  fingerprintListeners: new Set<() => void>(),
+  trackingListeners: new Set<() => void>(), smartRegionListeners: new Set<() => void>(),
+  tracks: {} as Record<string, { url: string; version: string }>, smartRegions: {} as Record<string, unknown>, fontRevision: 0,
   sessions: 0, viewListeners: new Set<() => void>(), events: [] as string[],
   windowSet: vi.fn((..._args: unknown[]): { signature: string; windows: TestWindow[] } => ({ signature: 'test', windows: state.windows })),
 }))
+vi.mock('./videoEditRenderFingerprints', () => ({ videoEditRenderFingerprints: (...args: unknown[]) => state.fingerprints(...args), subscribeVideoEditRenderFingerprints: (listener: () => void) => { state.fingerprintListeners.add(listener); return () => state.fingerprintListeners.delete(listener) } }))
 vi.mock('mediabunny', () => ({
   CanvasSource: class { add = state.add }, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} async start() {} async finalize() {} cancel = state.cancel },
@@ -25,15 +30,15 @@ vi.mock('@/core/logging', () => ({ createLogger: () => {
 vi.mock('@/services/mediaCache/mediaCacheSettings', () => ({ getMediaCacheSettings: () => ({}), subscribeMediaCacheSettings: () => () => {} }))
 vi.mock('@/services/mediaCache/hardwareCapabilities', () => ({ resolveRenderCacheCodec: () => 'h264' }))
 vi.mock('@/core/videoEdit/renderBitrate', () => ({ videoEditRenderEncoding: () => ({ profile: 'test', codec: 'h264' }) }))
-vi.mock('@/core/videoEdit/renderCache', () => ({ videoEditRenderWindowSet: (...args: unknown[]) => state.windowSet(...args) }))
-vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: 0 }) }))
+vi.mock('@/core/videoEdit/renderCache', () => ({ videoEditRenderWindowRanges: () => state.windows.map(({ startFrame, endFrame }) => ({ startFrame, endFrame })), videoEditRenderWindowSet: (...args: unknown[]) => state.windowSet(...args) }))
+vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: state.fontRevision }) }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
-  renderList: async () => [], renderRemove: state.remove, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
+  renderList: state.list, renderRemove: state.remove, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
 } }) }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class { canvas = {}; render = state.render; dispose = state.dispose; setSmartRegions() {} setTracks() {} constructor() { state.sessions++ } } }))
 vi.mock('../engine/videoEditExportEncoder', () => ({ videoEditExportVideoOptions: () => ({}) }))
-vi.mock('./videoEditTracking', () => ({ subscribeVideoEditTracking: () => () => {}, videoEditTrackResults: () => ({}), waitVideoEditTracking: async () => {} }))
-vi.mock('./videoEditSmartRegions', () => ({ subscribeVideoEditSmartRegions: () => () => {}, videoEditSmartRegionSegments: () => ({}), waitVideoEditSmartRegions: async () => ({}) }))
+vi.mock('./videoEditTracking', () => ({ subscribeVideoEditTracking: (listener: () => void) => { state.trackingListeners.add(listener); return () => state.trackingListeners.delete(listener) }, videoEditTrackResults: () => state.tracks, waitVideoEditTracking: async () => {} }))
+vi.mock('./videoEditSmartRegions', () => ({ subscribeVideoEditSmartRegions: (listener: () => void) => { state.smartRegionListeners.add(listener); return () => state.smartRegionListeners.delete(listener) }, videoEditSmartRegionSegments: () => state.smartRegions, waitVideoEditSmartRegions: async () => ({}) }))
 vi.mock('./videoEditService', () => ({
   listVideoEditInstances: () => state.instances, requireVideoEditInstance: () => state.instances[0],
   getActiveVideoEditSequence: () => state.composition, findActiveVideoEditSequence: () => state.composition, publishVideoEdit: vi.fn(),
@@ -52,15 +57,44 @@ const useFakeClock = (): void => { vi.useFakeTimers({ toFake: ['setTimeout', 'cl
 
 beforeEach(() => {
   vi.clearAllMocks()
+  state.list.mockReset().mockResolvedValue([])
+  state.fingerprints.mockReset(); state.fingerprints.mockReturnValue(undefined)
   const document = createVideoEditTestDocument('预渲染生命周期')
   state.composition = videoEditComposition(document, document.sequences[0].id)
-  state.instances = [{ document, playing: false, scrubbing: false, busy: false, frame: 0 }]
+  state.instances = [{ document, contentVersion: 0, playing: false, scrubbing: false, busy: false, frame: 0 }]
   state.add.mockImplementation(async () => {}); state.render.mockImplementation(async () => {})
   state.windows = [{ key: document.id, startFrame: 0, endFrame: 3, heavy: true }]
   state.commit.mockImplementation(async (...args: unknown[]) => ({ ...(args[0] as { entry: object }).entry, path: 'preview.mp4', bytes: 10 }))
   state.sessions = 0; state.viewListeners.clear(); state.events = []
+  state.tracks = {}; state.smartRegions = {}; state.fontRevision = 0
 })
 afterEach(() => { vi.useRealTimers() })
+
+it('分析进度及同内容结果不使在途指纹失效，实际分析或字体变化才失效', () => {
+  const owner = state.instances[0] as Parameters<typeof videoEditRenderCacheWindows>[0]
+  const composition = state.composition as Parameters<typeof videoEditRenderCacheWindows>[1]
+  const currentEnvironment = (): (() => boolean) => {
+    videoEditRenderCacheWindows(owner, composition)
+    return state.fingerprints.mock.lastCall![5] as () => boolean
+  }
+  const original = currentEnvironment()
+  for (let progress = 0; progress < 3; progress++) {
+    state.tracks = { ...state.tracks }; state.smartRegions = { ...state.smartRegions }
+    for (const listener of [...state.trackingListeners, ...state.smartRegionListeners]) listener()
+    expect(original()).toBe(true)
+    expect(currentEnvironment()()).toBe(true)
+  }
+  state.tracks = { tracker: { url: 'tracking-result', version: '1' } }
+  for (const listener of state.trackingListeners) listener()
+  expect(original()).toBe(false)
+  const tracked = currentEnvironment()
+  state.smartRegions = { subject: { foreground: [{ url: 'region-result', startUs: 0, endUs: 1, still: true }] } }
+  for (const listener of state.smartRegionListeners) listener()
+  expect(tracked()).toBe(false)
+  const analyzed = currentEnvironment()
+  state.fontRevision++
+  expect(analyzed()).toBe(false)
+})
 
 it('每帧显式请求关键帧，非整数帧率也不因秒数舍入生成依赖中间帧的缓存', async () => {
   const owner = state.instances[0]
@@ -309,12 +343,12 @@ it('实测流畅覆盖重段预测，取消仅丢当前段并保留已完成段'
   expect(state.discard).toHaveBeenCalledOnce()
 })
 
-it('渲染条重绘不分段：内容变了先给上一次的读数并标为过期，空闲时只算最新内容，算完通知渲染条', async () => {
+it('渲染条重绘不分段：内容变了先给当前边界的未就绪读数，空闲时只算最新内容，算完通知渲染条', async () => {
   useFakeClock()
   const owner = state.instances[0] as (typeof state.instances)[number] & { activeSequenceId?: string }, projectId = owner.document.id
   // 当前序列与节目、渲染条共用同一份合成：加载缓存时的回收不另算一遍。
   owner.activeSequenceId = (state.composition as { id: string }).id
-  expect(peekVideoEditRenderCache(projectId)).toEqual({ view: null, current: false })
+  expect(peekVideoEditRenderCache(projectId)).toMatchObject({ view: { windows: [{ state: 'predicted', startFrame: 0 }], readyFrames: 0 }, current: false })
   expect(state.windowSet).not.toHaveBeenCalled()
   const notified = vi.fn(); const stop = subscribeVideoEditRenderBar(notified)
   requestVideoEditRenderBarWindows(projectId); requestVideoEditRenderBarWindows(projectId)
@@ -323,9 +357,9 @@ it('渲染条重绘不分段：内容变了先给上一次的读数并标为过�
   expect(state.windowSet).toHaveBeenCalledOnce(); expect(notified).toHaveBeenCalledOnce()
   const first = peekVideoEditRenderCache(projectId)
   expect(first.current).toBe(true); expect(first.view?.windows.map(window => window.startFrame)).toEqual([0])
-  // 新的文档快照：重绘拿到上一次的读数，不分段。
+  // 新快照只切当前边界，绝不沿用旧绿色或旧边界。
   state.composition = { ...(state.composition as object) }; state.windows = [{ key: 'moved', startFrame: 30, endFrame: 33, heavy: true }]
-  expect(peekVideoEditRenderCache(projectId)).toEqual({ view: first.view, current: false })
+  expect(peekVideoEditRenderCache(projectId)).toMatchObject({ view: { windows: [{ state: 'predicted', startFrame: 30 }], readyFrames: 0 }, current: false })
   requestVideoEditRenderBarWindows(projectId)
   // 空闲前又编辑一次：旧快照不再算，只算最新的。
   state.composition = { ...(state.composition as object) }
@@ -369,6 +403,9 @@ it('相同文件复用到新位置后，清理按序列当前窗口而非文件�
   await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
   state.composition = { ...state.composition as object }
   state.windows = [{ ...state.windows[0], startFrame: 10, endFrame: 13 }]
+  await clearVideoEditRenderCache(owner.document.id, { startFrame: 0, endFrame: 1 })
+  expect(readVideoEditRenderCache(owner.document.id).readyFrames).toBe(3)
+  expect(state.remove).not.toHaveBeenCalled()
   await clearVideoEditRenderCache(owner.document.id, { startFrame: 11, endFrame: 12 })
   expect(readVideoEditRenderCache(owner.document.id).readyFrames).toBe(0)
   expect(state.remove).toHaveBeenLastCalledWith({ projectId: owner.document.id, windowKeys: [state.windows[0].key] })
@@ -427,4 +464,245 @@ it('取消等待跨过自动调度时刻时，不在旧任务退出和取消回�
   await render; await cancel
   expect(state.render).toHaveBeenCalledTimes(4)
   expect(fresh.readVideoEditRenderCache(owner.document.id)).toMatchObject({ readyFrames: 3, rendering: null })
+})
+
+
+it('导出准备等待首次代码声明完成，不把读取中的窗口当作没有预览', async () => {
+  useFakeClock(); vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const { VideoEditCodeMetadataPending } = await import('./videoEditCodeState')
+  const owner = state.instances[0], gate = deferred()
+  let waiting = true, finished = false
+  state.fingerprints.mockImplementation(() => { if (waiting) throw new VideoEditCodeMetadataPending(gate.promise); return undefined })
+  const pending = fresh.prepareVideoEditRenderWindows(owner.document.id, state.composition as Parameters<typeof readyVideoEditRenderWindows>[1], new AbortController().signal).then(result => { finished = true; return result })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.fingerprints).toHaveBeenCalled(); expect(finished).toBe(false)
+  waiting = false; gate.resolve()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(await pending).toEqual([]); expect(finished).toBe(true)
+})
+
+it('有候选旧预览时导出准备等待指纹完成，busy 不导致提前固定空预览表', async () => {
+  useFakeClock(); vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const owner = state.instances[0]
+  const rendered = fresh.renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(30); await rendered
+  state.windows = [{ ...state.windows[0], fingerprintPending: true }]
+  for (const listener of state.fingerprintListeners) listener()
+  owner.busy = true
+  let finished = false
+  const pending = fresh.prepareVideoEditRenderWindows(owner.document.id, state.composition as Parameters<typeof readyVideoEditRenderWindows>[1], new AbortController().signal)
+    .then(result => { finished = true; return result })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(finished).toBe(false)
+  state.windows = [{ ...state.windows[0], fingerprintPending: false }]
+  for (const listener of state.fingerprintListeners) listener()
+  expect(await pending).toEqual([expect.objectContaining({ path: 'preview.mp4', startFrame: 0, endFrame: 3 })])
+  expect(owner.busy).toBe(true)
+  expect(state.sessions).toBe(1)
+})
+
+it('导出准备等待帧指纹时可取消，并释放等待订阅', async () => {
+  useFakeClock(); vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const owner = state.instances[0]
+  const rendered = fresh.renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(30); await rendered
+  state.windows = [{ ...state.windows[0], fingerprintPending: true }]
+  for (const listener of state.fingerprintListeners) listener()
+  owner.busy = true
+  const controller = new AbortController(), listeners = state.viewListeners.size
+  const pending = fresh.prepareVideoEditRenderWindows(owner.document.id, state.composition as Parameters<typeof readyVideoEditRenderWindows>[1], controller.signal)
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.viewListeners.size).toBe(listeners + 1)
+  controller.abort(); await rejected
+  expect(state.viewListeners.size).toBe(listeners)
+})
+
+it('帧指纹持续缺失时导出准备在 30 秒后退出等待，允许现场合成并释放订阅', async () => {
+  useFakeClock(); vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const owner = state.instances[0]
+  const rendered = fresh.renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(30); await rendered
+  state.windows = [{ ...state.windows[0], fingerprintPending: true }]
+  for (const listener of state.fingerprintListeners) listener()
+  owner.busy = true
+  const listeners = state.viewListeners.size
+  const pending = fresh.prepareVideoEditRenderWindows(owner.document.id, state.composition as Parameters<typeof readyVideoEditRenderWindows>[1], new AbortController().signal)
+  const rejected = expect(pending).rejects.toThrow('使用现场合成导出')
+  await vi.advanceTimersByTimeAsync(29_999)
+  expect(state.viewListeners.size).toBe(listeners + 1)
+  await vi.advanceTimersByTimeAsync(1); await rejected
+  expect(state.viewListeners.size).toBe(listeners)
+})
+
+it('请求不等待其他序列挂起的声明，已完成窗口保留且不提前回收未知文件', async () => {
+  useFakeClock(); vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const { VideoEditCodeMetadataPending } = await import('./videoEditCodeState')
+  const owner = state.instances[0]
+  const document = owner.document as ReturnType<typeof createVideoEditTestDocument>
+  document.sequences.push({ ...document.sequences[0], id: 'secondary-fingerprint' })
+  const gate = deferred()
+  let waiting = true
+  state.fingerprints.mockImplementation((_owner, composition) => {
+    if (waiting && (composition as { id: string }).id === 'secondary-fingerprint') throw new VideoEditCodeMetadataPending(gate.promise)
+    return undefined
+  })
+  const rendering = fresh.renderVideoEditRenderCache(document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(1)
+  expect(state.events).toContain('video_edit.render_cache.start')
+  await vi.advanceTimersByTimeAsync(30)
+  expect(await rendering).toMatchObject({ cancelled: false, renderedWindows: 1 })
+  expect(state.render).toHaveBeenCalledTimes(3); expect(state.remove).not.toHaveBeenCalled()
+  waiting = false; gate.resolve()
+  await vi.advanceTimersByTimeAsync(1)
+  expect(state.remove).not.toHaveBeenCalled()
+})
+
+
+it('指纹未就绪时窗口为 predicted 且立即回执排队；仅所需窗口就绪即渲染并可读缓存', async () => {
+  useFakeClock()
+  const owner = state.instances[0]
+  state.windows = [
+    { key: 'pending-first', startFrame: 0, endFrame: 3, heavy: true, fingerprintPending: true },
+    { key: 'pending-other', startFrame: 3, endFrame: 6, heavy: true, fingerprintPending: true },
+  ]
+  const started = vi.fn()
+  const rendering = renderVideoEditRenderCache(owner.document.id, { scope: 'all', range: { startFrame: 0, endFrame: 3 } }, undefined, started)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(started).toHaveBeenCalledWith({ pendingWindows: 1, readyFrames: 0, requestedFrames: 3 })
+  expect(readVideoEditRenderCache(owner.document.id)).toMatchObject({ totalFrames: 6, readyFrames: 0, windows: [{ state: 'predicted' }, { state: 'predicted' }], rendering: { total: 1 } })
+  expect(state.render).not.toHaveBeenCalled()
+  state.windows[0] = { ...state.windows[0], key: 'resolved-first', fingerprintPending: false }
+  for (const listener of state.fingerprintListeners) listener()
+  await vi.advanceTimersByTimeAsync(50)
+  expect(await rendering).toMatchObject({ renderedWindows: 1, readyFrames: 3 })
+  expect(readVideoEditRenderCache(owner.document.id).windows.map(window => window.state)).toEqual(['ready', 'predicted'])
+  expect(readyVideoEditRenderWindows(owner.document.id, state.composition as Parameters<typeof readyVideoEditRenderWindows>[1])).toMatchObject([{ key: 'resolved-first', startFrame: 0, endFrame: 3 }])
+  // 即使暂时键值碰到已存文件，未就绪标记也必须阻止复用和绿色。
+  state.windows[0] = { ...state.windows[0], fingerprintPending: true }
+  for (const listener of state.fingerprintListeners) listener()
+  expect(readyVideoEditRenderWindows(owner.document.id, state.composition as Parameters<typeof readyVideoEditRenderWindows>[1])).toEqual([])
+  expect(readVideoEditRenderCache(owner.document.id).windows.map(window => window.state)).toEqual(['predicted', 'predicted'])
+  expect(peekVideoEditRenderCache(owner.document.id).view?.readyFrames).toBe(0)
+})
+
+
+it('删除等待指纹时可取消或超时，元数据更新后可继续且只按当前窗口清理', async () => {
+  useFakeClock()
+  const owner = state.instances[0]
+  await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  owner.busy = true
+  state.composition = { ...state.composition as object }
+  state.windows = [{ ...state.windows[0], fingerprintPending: true }]
+  const controller = new AbortController()
+  const cancelled = clearVideoEditRenderCache(owner.document.id, undefined, controller.signal)
+  const rejection = expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.advanceTimersByTimeAsync(1); controller.abort(); await rejection
+  const timeout = clearVideoEditRenderCache(owner.document.id)
+  const timedOut = expect(timeout).rejects.toThrow('画面依赖尚未就绪')
+  await vi.advanceTimersByTimeAsync(30_000); await timedOut
+  expect(state.remove).not.toHaveBeenCalled()
+  const clearing = clearVideoEditRenderCache(owner.document.id)
+  await vi.advanceTimersByTimeAsync(1)
+  owner.document = { ...owner.document }
+  state.windows = [{ ...state.windows[0], fingerprintPending: false }]
+  for (const listener of state.fingerprintListeners) listener()
+  await clearing
+  expect(state.remove).toHaveBeenCalledOnce()
+  owner.busy = false
+  expect((await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })).cancelled).toBe(false)
+})
+
+it('删除等待指纹时关闭实例立即结束，不删除文件', async () => {
+  useFakeClock()
+  const owner = state.instances[0]
+  state.windows = [{ ...state.windows[0], fingerprintPending: true }]
+  const clearing = clearVideoEditRenderCache(owner.document.id)
+  const rejected = expect(clearing).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.advanceTimersByTimeAsync(1)
+  state.instances = []; publishView()
+  await rejected
+  expect(state.remove).not.toHaveBeenCalled()
+})
+
+it('元数据替换文档不取消渲染和清理，实际内容变化取消在途渲染', async () => {
+  const owner = state.instances[0]
+  state.add.mockImplementationOnce(async () => { owner.document = { ...owner.document } })
+  expect((await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })).cancelled).toBe(false)
+  state.remove.mockImplementationOnce(async () => { owner.document = { ...owner.document }; return 1 })
+  await clearVideoEditRenderCache(owner.document.id)
+  state.add.mockImplementationOnce(async () => { owner.contentVersion!++ })
+  expect((await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })).cancelled).toBe(true)
+})
+
+it('needed 在指纹就绪后重新判断并过滤实时段，不创建编码会话', async () => {
+  useFakeClock()
+  const owner = state.instances[0]
+  state.windows = [{ ...state.windows[0], fingerprintPending: true }]
+  const started = vi.fn()
+  const rendering = renderVideoEditRenderCache(owner.document.id, { scope: 'needed' }, undefined, started)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(started).toHaveBeenCalledWith({ pendingWindows: 1, requestedFrames: 3, readyFrames: 0 })
+  state.windows = [{ ...state.windows[0], heavy: false, fingerprintPending: false }]
+  for (const listener of state.fingerprintListeners) listener()
+  await vi.advanceTimersByTimeAsync(30)
+  expect(await rendering).toMatchObject({ renderedWindows: 0, requestedFrames: 0, cancelled: false })
+  expect(state.sessions).toBe(0)
+})
+
+it('仅导出读取预览不启动自动调度，也不使后台工程参加另一工程的自动渲染', async () => {
+  useFakeClock(); vi.resetModules()
+  const fresh = await import('./videoEditRenderCache')
+  const first = state.instances[0] as (typeof state.instances)[number] & { activeSequenceId?: string }
+  first.activeSequenceId = (state.composition as { id: string }).id
+  const timers = vi.getTimerCount()
+  await fresh.prepareVideoEditRenderWindows(first.document.id, state.composition as Parameters<typeof readyVideoEditRenderWindows>[1], new AbortController().signal)
+  expect(vi.getTimerCount()).toBe(timers)
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(state.sessions).toBe(0)
+})
+
+it('首次索引读取阶段取消后不再启动任务，删除同时中止等待声明的规划', async () => {
+  useFakeClock(); vi.resetModules()
+  const { renderVideoEditRenderCache, cancelVideoEditRenderCache, clearVideoEditRenderCache } = await import('./videoEditRenderCache')
+  const owner = state.instances[0], index = deferred()
+  state.list.mockImplementationOnce(async () => { await index.promise; return [] })
+  const render = renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(1)
+  await cancelVideoEditRenderCache(owner.document.id)
+  expect(await render).toMatchObject({ cancelled: true })
+  index.resolve(); await vi.advanceTimersByTimeAsync(1)
+  expect(state.render).not.toHaveBeenCalled()
+
+  const { VideoEditCodeMetadataPending } = await import('./videoEditCodeState')
+  const declarations = deferred()
+  let waiting = true
+  state.fingerprints.mockImplementation(() => { if (waiting) throw new VideoEditCodeMetadataPending(declarations.promise); return undefined })
+  const next = renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(1)
+  const clearing = clearVideoEditRenderCache(owner.document.id)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(await next).toMatchObject({ cancelled: true })
+  waiting = false; declarations.resolve()
+  await vi.advanceTimersByTimeAsync(1)
+  await clearing
+  expect(state.render).not.toHaveBeenCalled()
+})
+
+it('删除在首次索引读取阶段也响应取消，取消后不迟到删除或持续占用清理状态', async () => {
+  useFakeClock()
+  const owner = state.instances[0], index = deferred(), controller = new AbortController()
+  state.list.mockImplementationOnce(async () => { await index.promise; return [] })
+  const clearing = clearVideoEditRenderCache(owner.document.id, undefined, controller.signal)
+  const rejected = expect(clearing).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.advanceTimersByTimeAsync(1)
+  controller.abort(); await rejected
+  index.resolve(); await vi.advanceTimersByTimeAsync(1)
+  expect(state.remove).not.toHaveBeenCalled()
+  expect((await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })).cancelled).toBe(false)
 })

@@ -2017,7 +2017,7 @@ it('缓存起播前被驱逐时精确取回当前画面；零散短缓存不跳�
   }
 })
 
-it('预渲染窗口在正向播放时整帧取自预览文件，与实时合成段同一条解码计划交接；暂停与导出仍实时合成', async () => {
+it('预渲染窗口供正向播放和导出整帧读取，暂停仍现场合成', async () => {
   boundary.scheduled = []
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 10 }))
@@ -2034,7 +2034,7 @@ it('预渲染窗口在正向播放时整帧取自预览文件，与实时合成�
     expect(boundary.draws.at(-1)?.ids).toEqual(['clip', 'top'])
     const exporter = new VideoEditRenderer(document); exporter.setRenderCache([{ key: 'w1', startFrame: 60, endFrame: 120, url: 'D:/cache/w1.mp4', width: 3840, height: 2160, fps: 60 }])
     boundary.draws = []; await (await exporter.render(61, true)).completion; await exporter.dispose()
-    expect(boundary.draws.at(-1)?.ids).toEqual(['clip', 'top'])
+    expect(boundary.draws.at(-1)?.ids).toEqual(['render-cache:w1:60'])
   } finally { await renderer.dispose() }
 })
 it('剪到另一个已排程文件前半秒开始解码它的首帧，剪辑点那一帧不再现场打开定位', async () => {
@@ -2218,6 +2218,51 @@ it('取消前瞻图片后，原生解码完成之前不再启动下一份推测�
   } finally { await renderer.dispose() }
 })
 
+
+it('导出从窗口中间顺序读取预览、跨窗预开文件，缺窗和不可读窗口现场合成', async () => {
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.clips = [{ ...document.clips[0], duration: 180 }]
+  const renderer = new VideoEditRenderer(document)
+  const cache = { width: 3840, height: 2160, fps: 60 }
+  renderer.setRenderCache([
+    { ...cache, key: 'ready', url: 'ready-preview.mp4', startFrame: 0, endFrame: 30 },
+    { ...cache, key: 'next', url: 'next-preview.mp4', startFrame: 30, endFrame: 60 },
+    { ...cache, key: 'missing', url: 'missing-preview.mp4', startFrame: 90, endFrame: 120 },
+  ])
+  try {
+    for (const frame of [15, 16, 29, 30, 31]) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(result.renderCached).toBe(true)
+      expect(us(result.sourceTimestamps)).toEqual(us([(frame % 30) / 60]))
+    }
+    for (const frame of [60, 90, 91, 120]) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(result.renderCached).toBe(false)
+      expect(boundary.draws.at(-1)?.ids).toEqual([document.clips[0].id])
+    }
+  } finally { await renderer.dispose() }
+})
+
+it('预览解码中断后该窗口剩余帧只现场合成，并通过宿主日志记录回退原因', async () => {
+  const { VideoEditBrowserFrames } = await import('./videoEditBrowserFrames')
+  const backend = new VideoEditBrowserFrames(), open = backend.open.bind(backend), log = vi.fn()
+  vi.spyOn(backend, 'open').mockImplementation(media => media.path === 'corrupt-preview.mp4' ? {
+    key: 'corrupt-preview', ready: Promise.resolve({ clipAudio: () => undefined,
+      clipFrames: () => ({ async *frames(start: number) { yield { timestamp: start, duration: 1 / 60, format: 'NV12', close: vi.fn() } as unknown as import('./videoEditFrameSource').VideoEditDecodedPicture; throw new Error('预览文件损坏') }, frameAt: async () => { throw new Error('预览文件损坏') } }),
+      async *schedule() {},
+    }),
+  } : open(media))
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const renderer = new VideoEditRenderer(document, undefined, undefined, undefined, backend, undefined, undefined, undefined, log)
+  renderer.setRenderCache([{ key: 'corrupt', startFrame: 0, endFrame: 30, url: 'corrupt-preview.mp4', width: 3840, height: 2160, fps: 60 }])
+  try {
+    expect((await renderer.render(0, true)).renderCached).toBe(true)
+    expect((await renderer.render(1, true)).renderCached).toBe(false)
+    expect((await renderer.render(2, true)).renderCached).toBe(false)
+    expect(log).toHaveBeenCalledOnce()
+    expect(log.mock.calls[0]).toEqual(['warn', expect.any(String), 'video_edit.export.preview_failed', expect.objectContaining({ startFrame: 0, endFrame: 30, reason: expect.stringContaining('预览文件损坏') })])
+  } finally { await renderer.dispose() }
+})
 
 it('重复内容预览在不同位置共享文件且每次从段内零点播放，位置更新立即生效', async () => {
   boundary.scheduled = []
@@ -2721,4 +2766,22 @@ it('更早现场帧在新缓存读取期间上屏不作废新请求，窗口更�
     gate.hold = false
     expect(await renderer.render(31, false, true)).toMatchObject({ presented: true, presentedSource: 'prerendered' })
   } finally { releaseLive(); gate.hold = false; gate.release(); await renderer.dispose() }
+})
+
+it('导出预取打开坏预览失败后，现场合成期间不重复打开该文件', async () => {
+  const { VideoEditBrowserFrames } = await import('./videoEditBrowserFrames')
+  const backend = new VideoEditBrowserFrames(), open = backend.open.bind(backend)
+  const attempt = vi.fn()
+  backend.open = media => {
+    if (media.path !== 'broken-preview.mp4') return open(media)
+    attempt()
+    return { key: 'broken', ready: Promise.reject(new Error('预览文件不存在')) }
+  }
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const renderer = new VideoEditRenderer(document, undefined, undefined, undefined, backend)
+  renderer.setRenderCache([{ key: 'broken', startFrame: 30, endFrame: 60, url: 'broken-preview.mp4', width: 3840, height: 2160, fps: 60 }])
+  try {
+    for (const frame of [0, 1, 2, 29, 30, 31]) expect((await renderer.render(frame, true)).renderCached).toBe(false)
+    expect(attempt).toHaveBeenCalledOnce()
+  } finally { await renderer.dispose() }
 })

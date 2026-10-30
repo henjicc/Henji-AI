@@ -71,3 +71,11 @@ it('竖版转横版与相同画幅保持比例，拒绝奇数和无效尺寸', (
   expect(() => videoEditExportGeometry(0, 1080, settings)).toThrow('画幅')
   expect(videoEditExportSettingsSchema.safeParse({ ...settings, width: 1079 }).success).toBe(false)
 })
+
+it('新导出与省略预览选项的历史设置都从原始画面合成，显式开启保持开启', () => {
+  const sequence = { width: 1920, height: 1080, fps: 30, sampleRate: 48000, channels: 2 }
+  expect(videoEditSequenceExportSettings(sequence).usePreviews).toBe(false)
+  for (const preset of VIDEO_EDIT_EXPORT_PRESETS) expect(preset.settings.usePreviews).toBe(false)
+  expect(resolveVideoEditExportSettings({ ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, usePreviews: undefined }, sequence).usePreviews).toBe(false)
+  expect(resolveVideoEditExportSettings({ ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, usePreviews: true }, sequence).usePreviews).toBe(true)
+})

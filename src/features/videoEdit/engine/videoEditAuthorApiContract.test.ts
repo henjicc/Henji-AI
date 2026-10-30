@@ -48,6 +48,9 @@ export type Module = [
   Assert<Mutual<Host.AuthorModule['kind'], Author.AuthorModule['kind']>>,
   Assert<Mutual<Host.AuthorModule['mode'], Author.AuthorModule['mode']>>,
   Assert<Mutual<Host.AuthorModule['motionBlur'], Author.AuthorModule['motionBlur']>>,
+  Assert<Mutual<Host.AuthorModule['dataFiles'], Author.AuthorModule['dataFiles']>>,
+  Assert<Extends<Args<Host.AuthorModule['frameKey']>, Args<Author.AuthorModule['frameKey']>>>,
+  Assert<Mutual<ReturnType<Fn<Host.AuthorModule['frameKey']>>, ReturnType<Fn<Author.AuthorModule['frameKey']>>>>,
   // 宿主传给入口的实参满足作者看到的参数类型。
   Assert<Extends<Args<Host.AuthorModule['draw']>, Args<Author.AuthorModule['draw']>>>,
   Assert<Extends<Args<Host.AuthorModule['layers']>, Args<Author.AuthorModule['layers']>>>,

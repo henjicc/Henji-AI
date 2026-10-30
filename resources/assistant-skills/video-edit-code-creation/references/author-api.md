@@ -39,6 +39,8 @@ export default {
 | `params` / `types` | 参数声明数组与自定义组件类型，见 parameter-types |
 | `frames` | 滤镜需要的相邻帧偏移（宿主帧单位，非零、不重复），见 author-shaders |
 | `motionBlur` | `{ shutter?, phase?, maxSamples? }`，layers 的运动曝光默认值 |
+| `frameKey` | 可选纯函数，声明这一帧画了什么，供预渲染复用；见下方约定 |
+| `dataFiles` | 可选工程相对路径数组；仅有 frameKey 时，这些非入口文件从代码身份中排除 |
 | 绘制入口 | `draw`、`layers`、`createWebGL`、`createWebGPU` 至少一个；`layers` 不能与 GPU 入口同时声明 |
 | `dispose` | 可选；实例释放时调用 |
 
@@ -55,6 +57,52 @@ layers(params, width, height, assets, info) => Layer[]
 - `assets` 为 image 参数的画面（`CanvasImageSource`），按参数键取，如 `assets.logo`；未绑定时没有该键。
 - `info`：`time`、`frameDuration`（一帧秒数）、`clip.time` / `clip.duration`（片段内时间与片段时长）、可选 `audio` / `audioTime`（见 author-api-media）、可选 `renderScale`（见下）、可选 `web`（绑定了网页的图片参数这一帧的页面时间、取景与元素矩形，见 author-api-media）。
 - 节目监视器回放分辨率降低（1/2、1/4…）时，宿主按比例缩小栅格与上传，`ctx` 的坐标、`width` / `height` 仍是画布像素，Canvas 代码不用做任何处理；这时 `info.renderScale` 是输出像素与画布像素之比（如 0.5）。完整分辨率、取帧与导出没有这个字段，画面不受影响。
+
+## 每帧画面键与片子数据
+
+模块可选声明（完整类型见 `resources/video-edit-author/author-api.d.ts`）：
+
+```text
+frameKey?(params: AuthorParameters, width: number, height: number, info: AuthorFrameInfo): unknown
+dataFiles?: readonly string[]
+```
+
+`frameKey` 是纯函数，返回 JSON 数据：null、布尔、字符串、有限数字、数组或普通对象。不能包含 undefined、函数、symbol、bigint、循环引用、NaN/Infinity 或异步结果。只用参数、尺寸、时刻和模块自己的数据，不读 GPU、画布、素材像素或网页布局；不调用文字测量、栅格或绘制入口。宿主按代码身份、返回值、本帧排到的素材/网页内容与取帧时间、相关片子数据记录及画面参数判断能否复用。提供 frameKey 后，Canvas、文字栅格、layers 读取素材、WebGPU 与 WebGL 都走声明键，不再尝试录画布；报错或返回非 JSON 值时保守使用版本摘要，并记录原因。目前用于代码生成片段，附加代码滤镜继续按版本依赖失效。
+
+`frameKey` 描述这一帧的整个曝光区间，宿主每帧只调用一次。`info.time` 与 `info.clip` 始终是中心帧上下文；`info.frameDuration` 为一帧秒数。宿主在 frameKey 的 `info.exposure` 提供 `{ start, end, shutter, phase }`：start/end 为包含中心时刻的完整曝光范围（素材秒数），shutter/phase 为有效快门角度；未开启图层运动模糊时 start = end = time，角度均为 0。默认快门 180°、相位 -90°，范围为 time ± frameDuration / 4；自定义快门与相位按模块 motionBlur 求值。
+
+作者负责把曝光范围内会影响画面的量全部放进返回值，包括文字、位置、颜色、镜头轨迹与落点，以及曝光边界内的出现/退场。可以用 frameDuration 作保守 padding，但不能只描述中心时刻，也不能只给段落名。两次返回值相同，且 dataFiles 以外的代码与输入相同，整个曝光画面必须相同。宿主不再替作者枚举快门候选时刻。不要依赖调用次数、顺序或上次调用留下的状态。
+
+`dataFiles` 填工程内完整相对路径（例如 `film/demo/film.ts`），不写通配符或文件夹；入口文件始终计入代码身份，不存在的路径忽略。这些文件对画面的影响必须全部体现在 frameKey 返回值里，只有声明 frameKey 才会排除；其他文件、入口、钉住的组件与库版本、作者 API 版本仍计入代码身份。不要把未由画面键表达的画法或着色器放进去。漏报会留下旧画面；修正声明后，用剪辑的“删除渲染文件”恢复。
+
+写法：先算出这一刻要画的清单，frameKey 返回清单，draw 只按清单画。多文件工程把描述数据放在 dataFiles；同一求清单函数供声明和绘制使用，别各写一套。
+
+```ts
+const film = [{ at: 0, end: 2, text: "开场", x: 120 }, { at: 2, end: 5, text: "正文", x: 160 }]
+const picture = (params, width, height, info) => ({
+  background: params.background,
+  labels: film.filter(item => info.time >= item.at && info.time < item.end)
+    .map(item => ({ text: item.text, x: item.x, y: height / 2, color: params.ink }))
+})
+export default {
+  name: "按清单绘制", kind: "generator", mode: "dynamic",
+  params: [
+    { key: "background", type: "color", title: "背景", default: "#21262f" },
+    { key: "ink", type: "color", title: "文字", default: "#ffffff" }
+  ],
+  frameKey: picture,
+  draw(ctx, time, params, width, height, assets, info) {
+    const list = picture(params, width, height, info)
+    ctx.fillStyle = list.background; ctx.fillRect(0, 0, width, height)
+    ctx.font = "64px sans-serif"
+    for (const label of list.labels) {
+      ctx.fillStyle = label.color; ctx.fillText(label.text, label.x, label.y)
+    }
+  }
+}
+```
+
+此完整例子把 film 内联在入口，所以改它仍改变代码身份。工程中将 film 搬到 `film/demo/film.ts` 并导入，再在模块上写 `dataFiles: ["film/demo/film.ts"]`，即可让不影响当前清单的数据改动复用已有画面。
 
 ## 图层：layers
 

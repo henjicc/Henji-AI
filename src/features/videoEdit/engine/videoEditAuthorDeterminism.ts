@@ -91,9 +91,10 @@ function deterministicWebGPU(webgpu: AuthorWebGPU): AuthorWebGPU {
 
 /** 作者模块的每个入口都经 runAuthorDeterministic 执行；layers() 返回的图层与 GPU 入口返回的绘制对象同样包装。 */
 export function deterministicAuthorModule(effect: AuthorModule): AuthorModule {
-  const { draw, layers, createWebGL, createWebGPU, dispose } = effect
+  const { draw, layers, createWebGL, createWebGPU, frameKey, dispose } = effect
   return {
     ...effect,
+    ...(typeof frameKey === 'function' ? { frameKey: (...args: Parameters<typeof frameKey>) => runAuthorDeterministic('frameKey', args[3].time, () => frameKey.apply(effect, args)) } : {}),
     ...(typeof draw === 'function' ? { draw: (...args: Parameters<typeof draw>) => runAuthorDeterministic('draw', args[1], () => draw.apply(effect, args)) } : {}),
     ...(typeof layers === 'function' ? { layers: (...args: Parameters<typeof layers>) => {
       const list = runAuthorDeterministic('layers', args[4]?.time, () => layers.apply(effect, args))

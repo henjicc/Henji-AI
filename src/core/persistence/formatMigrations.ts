@@ -10,6 +10,8 @@ import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigr
  * 2026-10-21 兼容起点：此前的开发期版本不再读取，表从空开始；之后每次升版本必须在这里补对应步骤。
  */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
+  // 1 → 2：导出预设新增可选 usePreviews，历史预设缺省不使用预览，最低可读版本保持 1。
+  'export-presets': { 1: value => structuredClone(value) },
   // 3 → 4：历史风格源码取消长度上限；1 → 2：音效文件夹数量不设上限，内容原样保留。
   'style-kits': { 3: value => value },
   'sound-library-folders': { 1: value => value },

@@ -6,9 +6,11 @@ import { migrateEmbeddedVideoEditMotionBlurMaster } from '../../videoEdit/motion
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 45, minReaderVersion: 45,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 46, minReaderVersion: 45,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 45 → 46：嵌入剪辑导出记录的设置新增可选 usePreviews，缺省不使用预览，最低可读版本保持 45。
+    45: content => structuredClone(content),
     // 44 → 45：嵌入剪辑删除旧程序依赖的 linkedCaptionId；防止旧程序追加字幕及写回退役字段，最低可读版本提高到 45。
     44: migrateRecordingCaptionOwnership,
     // 43 → 44：嵌入剪辑的代码图片参数新增网页画面引用 {kind:'web'}，旧内容原样有效。

@@ -9,6 +9,8 @@ import { assertAuthorTrust } from './videoEditAuthorTrust'
 export interface AuthorFrameInfo {
   time: number
   frameDuration: number
+  /** frameKey 中提供：包含中心时刻的曝光范围（素材秒数）及有效快门角度。 */
+  exposure?: { start: number; end: number; shutter: number; phase: number }
   clip: { time: number; duration: number }
   /** Existing host analysis for explicitly declared audio parameters. */
   audio?: import('@/core/audioAnalysis/contentAnalysis').AudioContentAnalysis
@@ -94,6 +96,10 @@ export interface AuthorModule {
   params?: ReadonlyArray<{ key: string; type: string; default?: unknown; layer?: string; group?: string; [key: string]: unknown }>
   types?: Readonly<Record<string, unknown>>
   motionBlur?: { shutter?: number; phase?: number; maxSamples?: number }
+  /** 纯函数；相同键且代码与输入相同必须得到相同画面，不读取 GPU、画布、素材像素或网页布局。 */
+  frameKey?(params: AuthorParameters, width: number, height: number, info: AuthorFrameInfo): unknown
+  /** 这些工程相对路径的画面影响全部由 frameKey 表达；只有声明 frameKey 时才从代码身份排除；入口文件始终计入。 */
+  dataFiles?: readonly string[]
   draw?(ctx: OffscreenCanvasRenderingContext2D, time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   layers?(params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): AuthorLayer[]
   createWebGL?(gl: WebGL2RenderingContext): AuthorWebGL

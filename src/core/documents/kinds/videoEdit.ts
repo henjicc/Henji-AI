@@ -137,6 +137,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 42 → 43：导出记录的设置新增可选 usePreviews，缺省不使用预览，最低可读版本保持 42。
+    42: content => structuredClone(content),
     // 41 → 42：删除旧程序依赖的 linkedCaptionId；旧程序会追加链接字幕并写回退役字段，最低可读版本提高到 42。
     41: migrateVideoEditCaptionOwnership,
     // 40 → 41：代码图片参数新增网页画面引用 {kind:'web'}（本机网页的路径、视口、取景、倍率、取帧时刻与要读矩形的选择器）；

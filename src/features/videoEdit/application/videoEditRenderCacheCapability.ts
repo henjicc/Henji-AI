@@ -22,7 +22,7 @@ export async function handleVideoEditRenderCacheCapability(id: string, raw: unkn
     if (!owner.activeSequenceId) throw new ApplicationPreflightFailure('剪辑还没有序列，请先创建序列。')
     const sequenceId = owner.activeSequenceId
     context.signal?.throwIfAborted()
-    await clearVideoEditRenderCache(input.documentRef.id, input.range)
+    await clearVideoEditRenderCache(input.documentRef.id, input.range, context.signal)
     const view = readVideoEditRenderCache(input.documentRef.id, sequenceId)
     const verified = !view.rendering && !view.windows.some(window => window.state === 'ready' && (!input.range || window.endFrame > input.range.startFrame && window.startFrame < input.range.endFrame))
     return { documentRef: input.documentRef, verified, message: verified ? '指定范围的渲染文件已删除。' : '渲染文件删除后回读未通过，请检查当前渲染状态。' }
@@ -34,10 +34,13 @@ export async function handleVideoEditRenderCacheCapability(id: string, raw: unkn
   context.signal?.throwIfAborted()
   const plan = await new Promise<{ pendingWindows: number; requestedFrames: number; readyFrames: number }>((resolve, reject) => {
     void renderVideoEditRenderCache(input.documentRef.id, { ...(input.range ? { range: input.range } : {}), scope: input.scope }, undefined, resolve)
-      .catch(error => { reject(error); logger.warn('后台预渲染未完成', { event: 'video_edit.render_cache.background_failed', error, context: { projectId: input.documentRef.id } }) })
+      .then(result => {
+        if (result.cancelled) reject(new DOMException('预渲染在启动前已取消。', 'AbortError'))
+        else resolve({ pendingWindows: 0, requestedFrames: result.requestedFrames, readyFrames: result.readyFrames })
+      }, error => { reject(error); logger.warn('后台预渲染未完成', { event: 'video_edit.render_cache.background_failed', error, context: { projectId: input.documentRef.id } }) })
   })
   const view = readVideoEditRenderCache(input.documentRef.id)
   const verified = plan.pendingWindows === 0 ? plan.readyFrames === plan.requestedFrames : view.rendering !== null
   return { documentRef: input.documentRef, ...plan, verified,
-    message: plan.requestedFrames === 0 ? '所选范围没有需要渲染的段落，已能实时播放。' : plan.pendingWindows === 0 ? '所选范围已全部渲染，可完整分辨率流畅播放。' : `已在后台开始渲染 ${plan.pendingWindows} 段（按剪辑点分段，最多五秒），播放时自动暂停；进度见 video_edit.document.render_cache。` }
+    message: plan.requestedFrames === 0 ? '所选范围没有需要渲染的段落，已能实时播放。' : plan.pendingWindows === 0 ? '所选范围已全部渲染，可完整分辨率流畅播放。' : `已在后台排队渲染 ${plan.pendingWindows} 段（按剪辑点分段，最多五秒），指纹就绪的窗口逐段处理，播放时自动暂停栅格渲染；进度见 video_edit.document.render_cache。` }
 }

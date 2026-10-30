@@ -1,4 +1,5 @@
 import { videoEditRenderFailure, installVideoEditWorkerErrorReporting } from './videoEditGpuFailure'
+import { VideoEditCodeFingerprint } from './videoEditCodeFingerprint'
 import { enableVideoEditFrameTrace, traceVideoEditFrame } from './videoEditFrameTrace'
 import { VideoEditSharedCompilation, type SharedCompilationResponse } from './videoEditSharedCompilation'
 import { installAuthorMetadataCache } from './videoEditAuthorMetadataCache'
@@ -36,6 +37,7 @@ installVideoEditWorkerErrorReporting(self)
  */
 export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
 export type RenderRequest = { id: number } & (
+  { kind: 'fingerprint'; clipId: string; frame: number; endFrame: number; budgetMs: number; webContent: Record<string, string> } |
   { kind: 'stopPlayback'; frame: number } |
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
   { kind: 'init'; traceFrames?: boolean; /** 渲染诊断（GPU 时间戳与事件循环迟滞探针），只供基准与排障。 */ diagnostics?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
@@ -63,7 +65,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { hoverBytes?: Uint8Array; /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; refining?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted' | 'presented' | 'refined'; frame?: number; sequenceId?: string; revision?: number; presentedSource?: VideoEditPresentedSource; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { fingerprints?: Array<[number, import('@/core/videoEdit/renderFingerprint').VideoEditFrameFingerprint]>; hoverBytes?: Uint8Array; /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; refining?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted' | 'presented' | 'refined'; frame?: number; sequenceId?: string; revision?: number; presentedSource?: VideoEditPresentedSource; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -82,6 +84,7 @@ const timingEvent = (stage: string, durationMs?: number): void => {
   log('info', '剪辑 Worker 阶段计时', event, context)
 }
 let renderer: VideoEditRenderer | undefined
+let fingerprints: VideoEditCodeFingerprint | undefined
 let fonts: LoadedFontFaces | undefined
 let direct = false
 let revision = 0
@@ -161,6 +164,7 @@ function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFr
 /** Releases the renderer, then the native sessions it closed, then the frame channel (frames return before it closes). */
 async function disposeRenderer(): Promise<void> {
   releasePreopened()
+  await fingerprints?.dispose(); fingerprints = undefined
   await renderer?.dispose()
   await nativeBackend?.disposeIdle()
   await nativeBackend?.settled(); router?.dispose()
@@ -285,6 +289,11 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
       } else if (request.kind === 'authorRelease') {
         await renderer?.releaseAuthor(request.url)
         self.postMessage({ id: request.id } satisfies RenderResponse)
+      } else if (request.kind === 'fingerprint') {
+        if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
+        fingerprints ??= new VideoEditCodeFingerprint(renderer.document)
+        const values = await fingerprints.frames(request.clipId, request.frame, request.endFrame, request.webContent, request.budgetMs)
+        self.postMessage({ id: request.id, fingerprints: values } satisfies RenderResponse)
       } else if (request.kind === 'authorMetadata') {
         if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
         const authorMetadata = await renderer.readAuthorMetadata(request.url, request.locations, request.apiVersion)

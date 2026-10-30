@@ -16,6 +16,7 @@ import { importVideoEditSources } from './videoEditMedia'
 import { waitVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditTrackResults, waitVideoEditTracking } from './videoEditTracking'
 import { transientVideoEditExportOutputs, type VideoEditExportOutputs } from './videoEditExportRegistry'
+import { videoEditExportPreviews } from './videoEditExportPreviews'
 
 const logger = createLogger('features.videoEdit.export')
 /**
@@ -92,7 +93,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   let singleFrameReads = 0
   let failedFrame: number | undefined
   const started = performance.now()
-  const phases = { audioMs: 0, renderMs: 0, copyMs: 0, encodeMs: 0, frames: 0 }
+  const phases = { audioMs: 0, renderMs: 0, copyMs: 0, encodeMs: 0, frames: 0, previewFrames: 0, previewMs: 0, compositeFrames: 0, compositeMs: 0 }
   let measuredAt = started
   logger.info('开始导出剪辑', { event: 'video_edit.export.start', context: { projectId, taskId: task.id, ...range } })
   try {
@@ -109,6 +110,11 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     renderer = new VideoEditRenderSession(renderDocument, undefined, undefined, undefined, undefined, settings.useProxies ? projectId : undefined, settings.useProxies)
     renderer.setSmartRegions(smartRegions)
     renderer.setTracks(videoEditTrackResults(document))
+    try { renderer.setRenderCache(await videoEditExportPreviews(projectId, document, settings, task.controller.signal)) }
+    catch (error) {
+      task.controller.signal.throwIfAborted()
+      logger.warn('预览文件未能准备，使用现场合成', { event: 'video_edit.export.previews_unavailable', error, context: { projectId, taskId: task.id } })
+    }
     if (loudness) {
       soundSession = await spoolVideoEditAudio(renderDocument, range, task.controller.signal, renderer, fraction => { task.progress = fraction * .1; publishVideoEdit() })
       task.controller.signal.addEventListener('abort', cancelSound, { once: true })
@@ -168,8 +174,12 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       phases.audioMs += performance.now() - audioStarted
       if (video) {
         const renderStarted = performance.now()
-        singleFrameReads += (await exact(frame, renderer.render(frame, true))).singleFrameReads
-        phases.renderMs += performance.now() - renderStarted
+        const result = await exact(frame, renderer.render(frame, true))
+        singleFrameReads += result.singleFrameReads ?? 0
+        const renderMs = performance.now() - renderStarted
+        phases.renderMs += renderMs
+        if (result.renderCached) { phases.previewFrames++; phases.previewMs += renderMs }
+        else { phases.compositeFrames++; phases.compositeMs += renderMs }
         const copyStarted = performance.now()
         if (adapted && geometry) {
           const ctx = adapted.getContext('2d')!

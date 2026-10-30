@@ -7,7 +7,7 @@ import type { VideoRenderCacheStoredEntry } from '@/core/videoEdit/renderCacheSt
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { openSeededVideoEdit } from './videoEditDocumentTestKit'
 import { appendVideoEditClip, appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, switchVideoEditSequence } from './videoEditService'
-import { clearVideoEditRenderCache, getVideoEditRenderPreference, readVideoEditRenderCache, readyVideoEditRenderWindows, renderVideoEditRenderCache, videoEditRenderCacheWindows, videoEditRenderProfile } from './videoEditRenderCache'
+import { clearVideoEditRenderCache, cancelVideoEditRenderCache, videoEditRenderCacheBusy, getVideoEditRenderPreference, readVideoEditRenderCache, readyVideoEditRenderWindows, renderVideoEditRenderCache, videoEditRenderCacheWindows, videoEditRenderProfile } from './videoEditRenderCache'
 
 const pixels = vi.hoisted(() => ({ render: vi.fn(async (..._args: unknown[]) => {}) }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -148,5 +148,21 @@ it('助手取消真实后台任务并保留先前完成的预览，取消后回�
     expect(await render).toMatchObject({ cancelled: true })
     expect(readVideoEditRenderCache(id)).toMatchObject({ readyFrames: ready, rendering: null })
     expect(owner.document).toBe(before)
+  } finally { release(); app.dispose() }
+})
+
+it('公共预渲染在首次索引读取期间取消时，启动工具立即结束而非永久等待回执', async () => {
+  let release!: () => void
+  const index = new Promise<void>(resolve => { release = resolve })
+  vi.spyOn(getPlatform().mediaCache, 'renderList').mockImplementation(async () => { await index; return [] })
+  const owner = await openSeededVideoEdit(createVideoEditTestDocument('启动前取消'))
+  appendVideoEditClip(owner.document.id)
+  const app = createApplicationHarness()
+  try {
+    const pending = app.call('render_video_edit_preview', { documentRef: { kind: 'video_edit.document', id: owner.document.id } })
+    await vi.waitFor(() => expect(videoEditRenderCacheBusy(owner)).toBe(true))
+    await cancelVideoEditRenderCache(owner.document.id)
+    expect(await pending).toMatchObject({ ok: false })
+    expect(pixels.render).not.toHaveBeenCalled()
   } finally { release(); app.dispose() }
 })

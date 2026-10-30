@@ -94,14 +94,29 @@ export function authorPoseMatrix(pose: AuthorPose): CodeMatrix {
   return [c * sx, s * sx, -s * sy, c * sy, pose.x ?? 0, pose.y ?? 0]
 }
 
-/** `enabled`：序列的运动模糊总开关；关掉时带位姿的图层只取当前时刻一个姿态。 */
-export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }, override?: AuthorElementOverride, enabled = true): CodeMotionSample[] {
+function authorExposure(effect: AuthorModule): { shutter: number; phase: number; max: number } {
   const shutter = effect.motionBlur?.shutter ?? 180, phase = effect.motionBlur?.phase ?? -shutter / 2
   // 每次取样沿运动方向拉长到相邻样本间距（见 videoEditAuthorGpu），约每 4 像素一个样本、默认最多 16 个就平滑
   const max = effect.motionBlur?.maxSamples ?? 16
   if (!Number.isFinite(shutter) || shutter < 0 || !Number.isFinite(phase) || !Number.isInteger(max) || max < 1 || max > 64) throw new Error('运动模糊需要非负有限快门和 1–64 个样本。')
+  return { shutter, phase, max }
+}
+const exposureOffset = (phase: number, shutter: number, i: number, count: number): number => (phase + (i + .5) / count * shutter) / 360
+
+/** 声明键一次描述整个曝光区间；范围包含中心帧，覆盖中心绘制与快门位姿。 */
+export function authorFrameExposure(effect: AuthorModule, info: AuthorFrameInfo, enabled: boolean): NonNullable<AuthorFrameInfo['exposure']> {
+  const { shutter, phase } = authorExposure(effect)
+  const active = enabled && !!effect.layers && shutter > 0
+  return { start: info.time + Math.min(0, active ? phase / 360 : 0) * info.frameDuration,
+    end: info.time + Math.max(0, active ? (phase + shutter) / 360 : 0) * info.frameDuration,
+    shutter: active ? shutter : 0, phase: active ? phase : 0 }
+}
+
+/** `enabled`：序列的运动模糊总开关；关掉时带位姿的图层只取当前时刻一个姿态。 */
+export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }, override?: AuthorElementOverride, enabled = true): CodeMotionSample[] {
+  const { shutter, phase, max } = authorExposure(effect)
   const moving = enabled && !!layer.pose && layer.motionBlur !== false && shutter > 0
-  const offset = (i: number, count: number): number => moving ? (phase + (i + .5) / count * shutter) / 360 : 0
+  const offset = (i: number, count: number): number => moving ? exposureOffset(phase, shutter, i, count) : 0
   const poseAt = (delta: number): { matrix: CodeMatrix; opacity: number } | null => {
     const pose = layer.pose ? layer.pose(info.time + delta * info.frameDuration) : {}
     if (!pose) return null

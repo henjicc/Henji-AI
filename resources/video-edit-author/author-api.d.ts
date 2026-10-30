@@ -36,6 +36,8 @@ export interface AuthorFrameInfo {
   time: number
   /** 一帧的秒数。 */
   frameDuration: number
+  /** frameKey 中提供：包含中心时刻的完整曝光范围（素材秒数）；shutter/phase 为有效快门角度，未启用图层运动模糊时均为 0，start = end = time。 */
+  exposure?: { start: number; end: number; shutter: number; phase: number }
   /** 片段内时间与片段时长（秒）。 */
   clip: { time: number; duration: number }
   audio?: AuthorAudioAnalysis
@@ -82,6 +84,7 @@ export type AuthorParams = { readonly [key: string]: any }
 export type AuthorScene = { readonly [key: string]: any }
 /** image 参数的画面，按参数键取；未绑定、或视频参数带取帧时间表（spans）而这一帧不在任何一段里时没有该键。片子数据派生的画面按 shot.input 键取。 */
 export type AuthorAssets = { readonly [key: string]: CanvasImageSource }
+export type AuthorParameters = AuthorParams
 
 /** 变换作用在画布坐标上：先绕画布原点缩放、旋转（弧度），再平移 x/y。 */
 export interface AuthorPose {
@@ -189,6 +192,16 @@ export interface AuthorModule<P extends readonly AuthorParamDeclaration[] = read
   types?: { readonly [name: string]: unknown }
   /** layers 的运动曝光默认值。 */
   motionBlur?: { shutter?: number; phase?: number; maxSamples?: number }
+  /**
+   * 这一帧整个曝光区间画了什么：宿主每帧只调用一次，info.time/clip 是中心帧，info.exposure 给出包含中心帧的曝光范围。
+   * 作者须把曝光区间内影响画面的量（出现/退场、运动轨迹、镜头落点等）全部放入返回值，不能只描述中心时刻。
+   * 纯函数，返回可 JSON 序列化的值。返回值相同（且 dataFiles 以外的代码与输入相同）时，整个曝光画面必须相同。
+   * 不得读 GPU、画布、素材像素或网页布局；只用参数、尺寸、时刻与模块自己的数据。宿主用它决定预渲染文件能否复用。
+   * 漏报变化会留下旧画面；修正声明后用“删除渲染文件”恢复。
+   */
+  frameKey?(params: AuthorParameters, width: number, height: number, info: AuthorFrameInfo): unknown
+  /** 代码工程内的相对路径：这些文件对画面的影响全部体现在 frameKey 的返回值里，算代码身份时不计入它们；入口文件始终计入代码身份，不存在的路径忽略。没有 frameKey 时不起作用。 */
+  dataFiles?: readonly string[]
   draw?(ctx: OffscreenCanvasRenderingContext2D, time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   /** 每帧返回图层数组，按顺序从底到顶合成。 */
   layers?(params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): AuthorLayer[]

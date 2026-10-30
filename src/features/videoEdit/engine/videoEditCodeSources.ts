@@ -60,7 +60,7 @@ interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: n
  * `divisor`：这一帧代码生成器的回放分辨率缩小倍数，与缓存键一起取，画面与键始终一致。
  * `imageKeys` 是帧期画面绑定，资源别名不受持久媒体 ID 的长度限制；`author` 是交给作者代码的 params。
  */
-interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: VideoEditRenderDivisor }
+export interface VideoEditCodePlan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: VideoEditRenderDivisor }
 /** `parameters`：交给作者滤镜的 params（scene 参数已换成解析结果）。 */
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
@@ -68,7 +68,19 @@ export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; built
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 /** `sceneIssues`：这一帧的片子数据或画面参数中需要用户处理的问题，由渲染器和效果错误一起呈现。 */
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number; sceneIssues: string[] }
-export interface VideoEditCodePrepareOptions { preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
+export interface VideoEditCodePrepareOptions { authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
+/** 渲染与指纹共用时间、动画、片子数据及画面输入求值；编译与不可变参数准备留在帧循环外。 */
+function codeFrameValues(document: VideoEditComposition, clip: VideoEditClip, program: CodeMaterialProgram,
+  prepared: PreparedCodeMaterialParameters, inputs: VideoEditCodeInputs | undefined, generator: boolean,
+  frame: number, window?: VideoEditTransitionWindow) {
+  const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window, document) : codeMaterialContextForFrame(clip, frame, document.frameRate, program, document)
+  const parameters = evaluateCodeMaterialParameters(prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
+  const derived = generator ? inputs?.derived : undefined
+  const imageParameters = codeMaterialImageParameterKeys(program.parameters, derived)
+  const frameParameters = codeMediaFrameParameters(clip, derived && Object.keys(derived).length ? { ...parameters, ...derived } : parameters, frame, document.frameRate, imageParameters)
+  return { context, inputParameters: { ...parameters, ...derived }, parameters: frameParameters.parameters, imageKeys: frameParameters.images,
+    author: videoEditCodeAuthorParameters(frameParameters.parameters, inputs), transitionHandles: Boolean(window) }
+}
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
 interface InputFailureScope { sequenceId: string; clipId: string; effectId?: string; frame: number }
 function inputFailureInstance(scope: InputFailureScope): string { return JSON.stringify([scope.sequenceId, scope.clipId, scope.effectId ?? null]) }
@@ -288,17 +300,28 @@ export class VideoEditCodeSources {
       throw error
     }
   }
+  /** 指纹只需要生成器计划；固定片段的源码、动画声明与场景输入只准备一次，不创建 GPU 或逐帧走 prepare 生命周期。 */
+  async prepareGeneratorFrames(clip: VideoEditClip, signal: AbortSignal): Promise<(frame: number, window?: VideoEditTransitionWindow) => VideoEditCodePlan> {
+    if (!clip.code) throw new CodeMaterialError('COMPATIBILITY', '代码片段缺少固定源码实例。')
+    const key = identity(clip.code.definitionId, clip.code.versionId)
+    const program = await this.program(key, codeMaterialSource(this.document, clip.code), signal, new Set([key]))
+    if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
+    const prepared = prepareCodeMaterialParameters(program, clip.code)
+    const inputs = this.sceneInputs(this.document, clip, clip.start, clip.code, program, [])
+    return (frame, window) => ({ clip, key, program, static: false,
+      ...codeFrameValues(this.document, clip, program, prepared, inputs, true, frame, window) })
+  }
   async prepare(document: VideoEditComposition, clips: VideoEditClip[], frame: number, shouldPresent: () => boolean, images?: Promise<ReadonlyMap<string, VideoEditCodeImageInput> | undefined>, options: VideoEditCodePrepareOptions = {}): Promise<PreparedCodeSources> {
     this.cancel(); const epoch = this.epoch; const controller = new AbortController(); this.controller = controller
     // A decode can reject while source compilation is still pending.
     const imageOutcome = images ? Promise.allSettled([images]) : undefined
     const assertCurrent = (): void => { if (this.disposed || controller.signal.aborted || this.epoch !== epoch || this.document !== document || !shouldPresent()) throw new DOMException('旧代码画面已取消。', 'AbortError') }
-    const plans: Plan[] = []; const keys = new Set<string>(options.surfaceKeys); const sceneIssues: string[] = []
+    const plans: VideoEditCodePlan[] = []; const keys = new Set<string>(options.surfaceKeys); const sceneIssues: string[] = []
     const effects = new Map<string, PreparedVideoEditEffect[]>()
     const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
     const transitionByClip = new Map(options.transitions?.flatMap(window => [[window.left.id, window], [window.right.id, window]] as const))
     /** `generator`：代码片段本身（只有它取派生的画面输入；附加滤镜的 scene 参数只换成解析结果）。 */
-    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram, generator: boolean, effectId?: string): Promise<Pick<Plan, 'context' | 'parameters' | 'imageKeys' | 'author' | 'transitionHandles' | 'motion'>> => {
+    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram, generator: boolean, effectId?: string): Promise<Pick<VideoEditCodePlan, 'context' | 'parameters' | 'inputParameters' | 'imageKeys' | 'author' | 'transitionHandles' | 'motion'>> => {
       const scope = { sequenceId: document.id, clipId: clip.id, ...(effectId ? { effectId } : {}), frame }
       try {
         let animation = this.parameters.get(instance)
@@ -310,16 +333,12 @@ export class VideoEditCodeSources {
           animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation)
         }
         const window = transitionByClip.get(clip.id)
-        const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window, document) : codeMaterialContextForFrame(clip, frame, document.frameRate, program, document)
-        const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
-        Object.assign(context, await options.audio?.(clip, program, parameters, controller.signal)); assertCurrent()
-        const motion = undefined
         const inputs = this.sceneInputs(document, clip, frame, instance, program, sceneIssues)
-        const derived = generator ? inputs?.derived : undefined
-        const imageParameters = codeMaterialImageParameterKeys(program.parameters, derived)
-        const frameParameters = codeMediaFrameParameters(clip, derived && Object.keys(derived).length ? { ...parameters, ...derived } : parameters, frame, document.frameRate, imageParameters)
+        const values = codeFrameValues(document, clip, program, animation.prepared, inputs, generator, frame, window)
+        if (options.audio) Object.assign(values.context, await options.audio(clip, program, evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static')), controller.signal))
+        assertCurrent()
         this.inputFailures.delete(inputFailureInstance(scope))
-        return { context, parameters: frameParameters.parameters, imageKeys: frameParameters.images, author: videoEditCodeAuthorParameters(frameParameters.parameters, inputs), transitionHandles: Boolean(window), ...(motion ? { motion } : {}) }
+        return values
       } catch (error) {
         assertCurrent()
         if (error instanceof CodeMediaInputReferenceError) this.reportInputFailure(error, scope)
@@ -400,7 +419,7 @@ export class VideoEditCodeSources {
         const key = identity(clip.code.definitionId, clip.code.versionId)
         const program = await this.program(key, version, controller.signal, pinned); assertCurrent()
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
-        const { parameters, imageKeys, author, context, transitionHandles, motion } = await animated(clip, clip.code, program, true)
+        const { parameters, inputParameters, imageKeys, author, context, transitionHandles, motion } = await animated(clip, clip.code, program, true)
         const imageSources = [...codeMaterialImageIds(clip.code, program.parameters)].map(id => { const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind)); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
         const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionHandles && program.mode === 'static')
         const overrideValues = clip.elementOverrides ? Object.fromEntries(Object.entries(clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
@@ -410,10 +429,11 @@ export class VideoEditCodeSources {
         const divisor = this.runtime?.renderDivisor ?? 1
         const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues, ...(divisor === 1 ? [] : [divisor])])}` : `code:dynamic:${clip.id}`
         keys.add(target)
-        plans.push({ clip, key: target, static: isStatic, program, parameters, imageKeys, author, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
+        plans.push({ clip, key: target, static: isStatic, program, parameters, inputParameters, imageKeys, author, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
       }
       assertCurrent(); if (!options.preparationOnly) this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0, sceneIssues }
+      if (options.authorPlans) { await options.authorPlans(plans); assertCurrent(); return result }
       // Serialize GPU mutations, including a generator whose readiness resolves after cancellation.
       const work = this.gpuWork.then(async () => {
         assertCurrent()

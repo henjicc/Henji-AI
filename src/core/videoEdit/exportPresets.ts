@@ -24,6 +24,7 @@ export const videoEditExportSettingsSchema = z.object({
   importToProject: z.boolean().default(false).describe('成片完成后导入原剪辑素材箱，不自动放上时间线。'),
   addToLibrary: z.boolean().default(true).describe('成片完成后沿正式收录入口加入资产库；失败保留成片。'),
   useProxies: z.boolean().default(false).describe('显式使用已有且核验过的代理画面导出；缺代理的素材使用原片，声音始终使用原片。'),
+  usePreviews: z.boolean().optional().describe('默认 false。使用符合输出规格的已渲染预览文件加快导出；预览会再次编码，缺失或不可读的部分现场合成，声音不受影响。'),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。').superRefine((value, ctx) => {
   if (!value.videoEnabled && !value.audioEnabled) ctx.addIssue({ code: 'custom', path: ['audioEnabled'], message: '视频与音频不能同时关闭。' })
   if (value.videoEnabled && value.format !== 'mp4') ctx.addIssue({ code: 'custom', path: ['format'], message: '视频必须使用 MP4 格式。' })
@@ -35,7 +36,7 @@ export const videoEditExportPresetSchema = z.object({ id: z.string().min(1).max(
 export type VideoEditExportPreset = z.infer<typeof videoEditExportPresetSchema>
 // 内置视频预设默认把字幕烧录进画面（2026-10-28 用户：导出默认打开字幕）；仅音频的预设不输出字幕
 const preset = (id: string, name: string, width: number, height: number, videoBitrateMbps = 12, format: VideoEditExportSettings['format'] = 'mp4', fps: number | null = 30): VideoEditExportPreset => ({
-  id: `builtin:${id}`, name, settings: videoEditExportSettingsSchema.parse({ format, width, height, fps, videoBitrateMbps, audioBitrateKbps: 192, fit: 'fit', loudness: { targetLufs: -14, truePeakDbtp: -1 }, videoEnabled: format === 'mp4', audioCodec: format === 'wav' ? 'wav' : 'aac', captionMode: format === 'mp4' ? 'burn' : 'none' }),
+  id: `builtin:${id}`, name, settings: videoEditExportSettingsSchema.parse({ format, width, height, fps, videoBitrateMbps, audioBitrateKbps: 192, fit: 'fit', loudness: { targetLufs: -14, truePeakDbtp: -1 }, videoEnabled: format === 'mp4', audioCodec: format === 'wav' ? 'wav' : 'aac', captionMode: format === 'mp4' ? 'burn' : 'none', usePreviews: false }),
 })
 export const VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID = 'builtin:sequence'
 export const VIDEO_EDIT_EXPORT_PRESETS: readonly VideoEditExportPreset[] = [
@@ -51,6 +52,7 @@ export interface VideoEditExportSequenceSpec { width: number; height: number; fp
 export function resolveVideoEditExportSettings(input: VideoEditExportSettings, sequence: VideoEditExportSequenceSpec): VideoEditExportSettings {
   const value = videoEditExportSettingsSchema.parse(input)
   return videoEditExportSettingsSchema.parse({ ...value,
+    usePreviews: value.usePreviews ?? false,
     ...(value.followSequence.resolution ? { width: sequence.width, height: sequence.height } : {}),
     fps: value.followSequence.fps || value.fps === null ? sequence.fps : value.fps,
     ...(value.followSequence.sampleRate ? { sampleRate: sequence.sampleRate } : {}),

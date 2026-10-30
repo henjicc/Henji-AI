@@ -46,6 +46,7 @@ declare global {
   type AuthorRect = Api.AuthorRect
   type AuthorFrameInfo = Api.AuthorFrameInfo
   type AuthorParams = Api.AuthorParams
+  type AuthorParameters = Api.AuthorParameters
   type AuthorAssets = Api.AuthorAssets
   type AuthorGpuInputs = Api.AuthorGpuInputs
   function ${MODULE_CHECK}<const P extends readonly Api.AuthorParamDeclaration[] = readonly Api.AuthorParamDeclaration[]>(module: Api.AuthorModule<P>): Api.AuthorModule<P>

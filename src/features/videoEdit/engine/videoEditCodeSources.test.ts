@@ -802,3 +802,18 @@ it('离屏租约允许同名版本属于不同候选，清理旧画面并按源�
     expect(boundary.compiler.bundle).toHaveBeenCalledTimes(2)
   } finally { await boundary.sources.dispose() }
 })
+
+
+it('指纹计划复用正式参数和时间求值，但不调用生成器或复用静态画面', async () => {
+  const document = fixture(source('dynamic')), boundary = boundaries(document)
+  try {
+    const values: Array<{ time: number; amount: unknown }> = []
+    for (const frame of [0, 10]) await boundary.sources.prepare(document, document.clips, frame, () => true, undefined, {
+      authorPlans: async plans => { values.push({ time: plans[0].context.time, amount: plans[0].author.amount }) },
+    })
+    expect(values).toEqual([{ time: 0, amount: .5 }, { time: 10 / document.fps, amount: .5 }])
+    expect(boundary.compiler.bundle).toHaveBeenCalledTimes(1)
+    expect(boundary.generator).not.toHaveBeenCalled()
+    expect(boundary.pictures.size).toBe(0)
+  } finally { await boundary.sources.dispose() }
+})

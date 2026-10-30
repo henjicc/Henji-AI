@@ -309,6 +309,14 @@ export class VideoEditRenderTransport {
     if (this.disposed || this.proxyProjectId) throw new Error('节目会话已经被接管或释放。')
     this.proxyProjectId = projectId
   }
+  async fingerprintCodeFrames(clipId: string, startFrame: number, endFrame: number, webContent: Record<string, string>, budgetMs: number): Promise<Array<[number, import('@/core/videoEdit/renderFingerprint').VideoEditFrameFingerprint]>> {
+    await this.ready
+    this.frame = startFrame
+    await this.syncFonts(this.document)
+    const result = await this.request({ kind: 'fingerprint', clipId, frame: startFrame, endFrame, webContent, budgetMs })
+    if (!result.fingerprints?.length) throw new Error('作者帧指纹未返回')
+    return result.fingerprints
+  }
   async prepareGpu(): Promise<void> { await this.ready; await this.request({ kind: 'prepareGpu' }) }
   async releaseAuthor(url: string): Promise<void> { await this.ready; await this.request({ kind: 'authorRelease', url }) }
   async readAuthorMetadata(url: string, locations?: import('./videoEditAuthorBundle').AuthorSourceLocations, apiVersion?: number): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
@@ -457,10 +465,10 @@ export class VideoEditRenderTransport {
     return { ...result, bitmap: result.bitmap }
   }
   /** Export frames: sequential renders on this session's full-size canvas (task 2.4: exact pictures or a failure). */
-  async render(frame: number, sequential = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; singleFrameReads: number }> {
+  async render(frame: number, sequential = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; singleFrameReads: number; renderCached: boolean }> {
     const result = await this.renderBitmap(frame, sequential, false, 'final')
     try { this.canvas.getContext('2d')!.drawImage(result.bitmap, 0, 0) } finally { result.bitmap.close() }
-    return { canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0 }
+    return { canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0, renderCached: result.renderCached === true }
   }
   /** `retainIdle`：拖动播放头的声音颗粒，保留最近用过的空闲声音来源，避免每个颗粒重开会话。 */
   async mixAudio(start: number, duration: number, retainIdle = false): Promise<AudioBuffer> {

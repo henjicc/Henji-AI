@@ -42,18 +42,20 @@ export function renderBitrateMbps(input: { width: number; height: number; fps: n
 
 /**
  * 预渲染文件的编码参数（纯函数）。WebCodecs 硬件编码，播放与任意帧定位共用：
- * - VBR，目标码率按上表。
+ * - VBR，标准档取上表四倍，高档在标准档上再加两成；代理仍使用上表。
  * - 每帧强制关键帧（WebCodecs 关键帧为 IDR），精确缓存定位只需解目标一帧。
  * - H.264 High / HEVC Main，8 位 4:2:0（画布帧经编码器转 YUV）；色彩标记由编码器按 BT.709 写入。
  * 参数含义变化时递增 RENDER_ENCODING_VERSION：它进入编码档案与缓存键，旧文件随之按需要渲染处理。
  */
-export const RENDER_ENCODING_VERSION = 3
+export const RENDER_ENCODING_VERSION = 4
 export interface VideoEditRenderEncoding {
   codec: 'avc' | 'hevc'; bitrateMbps: number; bitrateMode: 'vbr'; encoderPreference: 'hardware'; keyframeInterval: number
   /** 进入缓存键的编码档案。 */
   profile: string
 }
 export function videoEditRenderEncoding(sequence: { width: number; height: number; fps: number }, codec: 'avc' | 'hevc', quality: 'standard' | 'high'): VideoEditRenderEncoding {
-  const bitrateMbps = renderBitrateMbps({ ...sequence, codec, quality })
+  // 每帧都是 IDR，点阵与细字没有跨帧预测可借用；预览标准档取代理表的四倍，高档再加两成。
+  // 4K60 AVC 为 200/240 Mbps，避免长 GOP 的码率预算抹掉随后还要再编码的细节。
+  const bitrateMbps = Math.round(renderBitrateMbps({ ...sequence, codec, quality: 'standard' }) * 4 * (quality === 'high' ? 1.2 : 1) * 10) / 10
   return { codec, bitrateMbps, bitrateMode: 'vbr', encoderPreference: 'hardware', keyframeInterval: 1 / sequence.fps, profile: `v${RENDER_ENCODING_VERSION}:${codec}:${quality}:${bitrateMbps}` }
 }

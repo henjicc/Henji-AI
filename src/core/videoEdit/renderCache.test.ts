@@ -199,3 +199,47 @@ it('片子数据引用的素材换了源文件时用到它的段失效、无关�
   const relinkedNested = structuredClone(parent); relinkedNested.media[0].sourceRevision = 'replaced'
   expect(keysWith(relinkedNested, resolved).every((key, index) => key !== nestedBefore[index])).toBe(true)
 })
+
+
+it('升级全片代码版本只改变画面指纹变化的窗口；缺帧保持未就绪，不可录制在该窗口回退版本摘要', () => {
+  const base = codeProject(), next = structuredClone(base)
+  next.sequences[0].clips.find(clip => clip.id === 'code')!.code!.versionId = 'version-2'
+  const frames = new Map(Array.from({ length: 600 }, (_, frame) => [frame, { digest: 'same-picture' }]))
+  const withFrames = (document: VideoEditDocument, values: Map<number, { digest?: string; fallback?: string }>) => keysWith(document, {
+    ...dependencies, codeFingerprints: new Map([['code', { frames: values as Map<number, import('./renderFingerprint').VideoEditFrameFingerprint> }]]),
+  })
+  const before = withFrames(base, frames)
+  expect(withFrames(next, frames)).toEqual(before)
+  const changed = new Map(frames); changed.set(100, { digest: 'different-picture' })
+  expect(withFrames(next, changed).map((key, index) => key === before[index])).toEqual([false, ...Array(17).fill(true)])
+  // 每帧声明覆盖自己的曝光范围，窗口不等待相邻窗口的中心帧。
+  changed.set(299, { digest: 'edge' })
+  expect(withFrames(next, changed).slice(0, 2).map((key, index) => key === before[index])).toEqual([false, true])
+  const failed: Map<number, { digest?: string; fallback?: string }> = new Map(frames)
+  failed.set(100, { fallback: 'unrecordable-layer' })
+  expect(withFrames(base, failed)[0]).not.toBe(withFrames(next, failed)[0])
+  expect(withFrames(base, failed)[1]).toBe(withFrames(next, failed)[1])
+  failed.delete(100)
+  expect(withFrames(base, failed)[0]).not.toBe(withFrames(next, failed)[0])
+})
+
+
+it('窗口内全部代码帧齐全立即确定键；缺帧保持边界且不就绪，明确失败允许版本回退', () => {
+  const document = codeProject(), composition = videoEditComposition(document, document.sequences[0].id)
+  const clip = composition.clips.find(clip => clip.id === 'code')!
+  composition.clips.push({ ...clip, id: 'overlay' })
+  const frames = new Map(Array.from({ length: 300 }, (_, frame) => [frame, { digest: 'same-picture' }]))
+  const overlay = new Map(frames); overlay.delete(100)
+  const deps = { ...dependencies, codeFingerprints: new Map([['code', { frames }], ['overlay', { frames: overlay }]]) }
+  const before = videoEditRenderWindows(composition, deps)
+  expect(before[0].fingerprintPending).toBe(true)
+  expect(before[1].fingerprintPending).toBe(true)
+  overlay.set(100, { digest: 'same-picture' })
+  const partial = videoEditRenderWindows(composition, deps)
+  expect(partial[0].fingerprintPending).toBeUndefined()
+  expect(partial[1].fingerprintPending).toBe(true)
+  for (let frame = 300; frame < 600; frame++) { frames.set(frame, { digest: 'later' }); overlay.set(frame, { digest: 'later' }) }
+  const complete = videoEditRenderWindows(composition, deps)
+  expect(complete[0].key).toBe(partial[0].key)
+  expect(complete[1].fingerprintPending).toBeUndefined()
+})

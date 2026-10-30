@@ -1,6 +1,9 @@
+import { videoEditRenderFingerprints, subscribeVideoEditRenderFingerprints } from './videoEditRenderFingerprints'
+import { videoEditCodeInputParameters } from '@/core/videoEdit/codeInputParameters'
+import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { CanvasSource, Mp4OutputFormat, Output, StreamTarget } from 'mediabunny'
 import { z } from 'zod'
-import { videoEditRenderWindowSet, type VideoEditRenderWindow, type VideoEditRenderWindowSet } from '@/core/videoEdit/renderCache'
+import { videoEditRenderWindowRanges, videoEditRenderWindowSet, type VideoEditRenderWindow, type VideoEditRenderWindowSet } from '@/core/videoEdit/renderCache'
 import { videoEditRenderEncoding, type VideoEditRenderEncoding } from '@/core/videoEdit/renderBitrate'
 import type { VideoRenderCacheStoredEntry } from '@/core/videoEdit/renderCacheStore'
 import { getMediaCacheSettings, subscribeMediaCacheSettings } from '@/services/mediaCache/mediaCacheSettings'
@@ -25,7 +28,7 @@ import type { RenderResponse } from '../engine/videoEditWorker'
  * 预渲染（PR“渲染入点到出点”与渲染条）：吃力的窗口在后台渲染成预览文件，节目正向播放时整帧取自文件。
  * 文件由主进程放进作品目录缓存（统一受缓存管理的容量上限与保留天数约束），按窗口内容指纹与编码档案寻址；
  * 参数、源码、素材任一依赖改变只让受影响窗口失效，预渲染格式或画质改变时按新档案重做。
- * 暂停画面、拖动、观察与导出始终实时合成，不读预览文件。
+ * 拖动与松手先读已就绪预览；需要观察作者元素或导出时由节目渲染路径决定是否现场合成。
  */
 const logger = createLogger('features.videoEdit.renderCache')
 /** 自动预渲染：编辑停下这么久、且没有播放、拖动或导出时才开始。 */
@@ -110,12 +113,12 @@ function ensureAutoRender(): void {
     const now = performance.now()
     for (const instance of listVideoEditInstances()) {
       const projectId = instance.document.id
-      const content = `${instance.activeSequenceId}\u0000${instance.document.revision}`
+      const content = `${instance.activeSequenceId}\u0000${instance.contentVersion}`
       let state = autoState.get(instance)
       if (!state) { state = { content, changedAt: now }; autoState.set(instance, state) }
       // An edit makes windows rendered from the old content useless: stop the automatic job and wait for quiet again.
       if (state.content !== content) { state.content = content; state.changedAt = now; state.controller?.abort(new DOMException('剪辑内容已改变。', 'AbortError')) }
-      if (!getVideoEditRenderPreference(projectId).autoRender || !loaded.has(projectId) || jobs.get(instance) || clearing.has(instance) || cancelling.has(instance) || !instance.activeSequenceId) continue
+      if (!getVideoEditRenderPreference(projectId).autoRender || !loaded.has(projectId) || jobs.get(instance) || planning.has(instance) || clearing.has(instance) || cancelling.has(instance) || !instance.activeSequenceId) continue
       if (instance.playing || instance.scrubbing || instance.busy || now - state.changedAt < AUTO_RENDER_IDLE_MS || now - programInteractionAt < RENDER_AFTER_INTERACTION_MS) continue
       let view: VideoEditRenderCacheView
       try { view = readVideoEditRenderCache(projectId) } catch { continue }
@@ -133,10 +136,11 @@ function ensureAutoRender(): void {
   }, 1000)
 }
 const jobs = new WeakMap<VideoEditInstance, Job>()
+const planning = new WeakMap<VideoEditInstance, AbortController>()
 const clearing = new WeakMap<VideoEditInstance, Promise<void>>()
 const cancelling = new WeakMap<VideoEditInstance, Promise<void>>()
 
-export function videoEditRenderCacheBusy(owner: VideoEditInstance): boolean { return jobs.has(owner) }
+export function videoEditRenderCacheBusy(owner: VideoEditInstance): boolean { return jobs.has(owner) || planning.has(owner) }
 
 export type VideoEditRenderWindowState = 'ready' | 'rendering' | 'dropped' | 'predicted' | 'realtime'
 export interface VideoEditRenderCacheView {
@@ -153,9 +157,7 @@ function cacheOf(projectId: string): Promise<ProjectCache> {
       await loadVideoEditRenderPerformance()
       const entries = new Map<string, Entry>()
       for (const entry of await getPlatform().mediaCache.renderList(projectId)) entries.set(entry.windowKey, entry)
-      // 按所有现存序列的内容回收，不能按最初写文件的序列删：其他位置可能仍复用该文件。
-      const instance = listVideoEditInstances().find(value => value.document.id === projectId)
-      if (instance) await pruneEntries(instance, { entries })
+      // 加载只读索引；历史文件交给统一媒体缓存回收，不让节目读缓存等待其他序列的指纹。
       return { entries }
     })()
     pending.catch(() => caches.delete(projectId))
@@ -165,6 +167,7 @@ function cacheOf(projectId: string): Promise<ProjectCache> {
 }
 /** A file counts only when it was rendered for this window with the current profile. */
 function readyEntry(cache: ProjectCache | undefined, window: VideoEditRenderWindow, profile: string): Entry | undefined {
+  if (window.fingerprintPending) return undefined
   const entry = cache?.entries.get(window.key)
   return entry && entry.profile === profile && entry.endFrame - entry.startFrame === window.endFrame - window.startFrame ? entry : undefined
 }
@@ -174,6 +177,8 @@ subscribeVideoEditTracking(() => { analysisRevision++ })
 subscribeVideoEditSmartRegions(() => { analysisRevision++ })
 // 读不出的代码声明在后台重读成功：引用片子数据的段从整份计入换回按时段计入，和分析结果一样让窗口重算并通知界面。
 subscribeVideoEditCodeDeclarations(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
+// 每个窗口的帧表一就绪便使同步读取与渲染条失效，不等待其他片段的剩余窗口。
+subscribeVideoEditRenderFingerprints(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
 // 网页文件夹的内容指纹取到或变化：用到它的窗口指纹随之改变。
 subscribeVideoEditWebContent(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
 // 打开着的剪辑引用的网页文件夹一直交给主进程监视（不论页面开没开），文件夹一改就经上面的通知让窗口失效。
@@ -198,15 +203,23 @@ export function videoEditRenderCacheWindows(owner: VideoEditInstance, compositio
   const memo = windowMemo.get(composition)
   if (memo?.revision === analysisRevision && memo.fontRevision === fontRevision) return memo.windows
   const dependencies = { fontRevision, analysis: JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()]), codeDeclarations: videoEditCodeDeclarationReader(owner), webContent: videoEditWebContentIdentity }
-  const set = videoEditRenderWindowSet(composition, dependencies, lastWindowSets.get(composition.id))
+  const webContent = Object.fromEntries(composition.clips.flatMap(clip => Object.values(videoEditCodeInputParameters(composition, clip.code, dependencies.codeDeclarations)).flatMap(value => isCodeImageReference(value) && value.kind === 'web' ? [[value.path, videoEditWebContentIdentity(value.path)]] : [])))
+  const codeFingerprints = videoEditRenderFingerprints(owner, composition, JSON.stringify([fontRevision, dependencies.analysis]), webContent, dependencies.codeDeclarations,
+    () => fontLibrarySnapshot().revision === fontRevision
+      && JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()]) === dependencies.analysis
+      && Object.entries(webContent).every(([path, identity]) => videoEditWebContentIdentity(path) === identity))
+  const set = videoEditRenderWindowSet(composition, { ...dependencies, codeFingerprints }, lastWindowSets.get(composition.id))
   lastWindowSets.delete(composition.id); lastWindowSets.set(composition.id, set)
   if (lastWindowSets.size > LAST_WINDOW_SET_LIMIT) lastWindowSets.delete(lastWindowSets.keys().next().value!)
   windowMemo.set(composition, { revision: analysisRevision, fontRevision, windows: set.windows })
   return set.windows
 }
 
+function pendingWindows(composition: VideoEditComposition): VideoEditRenderWindow[] {
+  return videoEditRenderWindowRanges(composition).map((range, index) => ({ ...range, index, key: `pending:${range.startFrame}`, heavy: true, fingerprintPending: true }))
+}
 const announcedDeclarations = new WeakSet<Promise<void>>()
-/** 同步读数用：代码声明还在读取时先当作没有窗口，读好后通知节目与渲染条重读（同一次读取只通知一次）。 */
+/** 同步读数用：代码声明还在读取时先显示未就绪窗口，读好后通知节目与渲染条重读（同一次读取只通知一次）。 */
 function currentWindows(owner: VideoEditInstance, composition: VideoEditComposition): VideoEditRenderWindow[] | undefined {
   try { return videoEditRenderCacheWindows(owner, composition) }
   catch (error) {
@@ -216,7 +229,7 @@ function currentWindows(owner: VideoEditInstance, composition: VideoEditComposit
       const announce = (): void => { barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() }
       void error.ready.then(announce, announce)
     }
-    return undefined
+    return pendingWindows(composition)
   }
 }
 
@@ -231,18 +244,7 @@ function sequenceComposition(instance: VideoEditInstance, sequenceId: string): V
   return composition
 }
 
-async function pruneEntries(instance: VideoEditInstance, cache: ProjectCache): Promise<void> {
-  // 等代码声明读好再回收：读取中算出的指纹和最终的不同，会把还能用的文件当成过期删掉。
-  const valid = await settleVideoEditCodeDeclarations(() => new Map(instance.document.sequences.flatMap(sequence => {
-    const composition = sequenceComposition(instance, sequence.id), profile = videoEditRenderProfile(composition).profile
-    return videoEditRenderCacheWindows(instance, composition).map(window => [window.key, profile] as const)
-  })))
-  const stale = [...cache.entries.values()].filter(entry => valid.get(entry.windowKey) !== entry.profile)
-  if (!stale.length) return
-  for (const entry of stale) cache.entries.delete(entry.windowKey)
-  try { await getPlatform().mediaCache.renderRemove({ projectId: instance.document.id, windowKeys: stale.map(entry => entry.windowKey) }) }
-  catch (error) { logger.warn('过期预渲染文件未回收', { event: 'video_edit.render_cache.prune_failed', error, context: { projectId: instance.document.id } }) }
-}
+// 历史窗口保留给撤销和重复内容复用；磁盘容量与保留天数由统一媒体缓存回收。
 
 const loaded = new Map<string, ProjectCache>()
 /** 已加载的项目缓存（同步读取用）；节目监视器打开时触发加载，完成后通知界面。 */
@@ -253,11 +255,33 @@ function loadedCache(projectId: string, load = false): ProjectCache | undefined 
   return cache
 }
 
+/** 导出不依赖节目监视器是否打开；加载同一索引并等依赖声明完成后读取就绪窗口。 */
+export async function prepareVideoEditRenderWindows(projectId: string, composition: VideoEditComposition, signal: AbortSignal): Promise<ReturnType<typeof readyVideoEditRenderWindows>> {
+  const cache = await abortable(cacheOf(projectId), signal)
+  const owner = requireVideoEditInstance(projectId)
+  const contentVersion = owner.contentVersion
+  await abortable(settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(owner, composition)), signal)
+  // 先核对候选旧预览的当前帧指纹，再固定导出文件表；主循环无需等待或刷新指纹。
+  const profile = videoEditRenderProfile(composition).profile
+  if ([...cache.entries.values()].some(entry => entry.profile === profile)) {
+    const controller = new AbortController(), abort = (): void => controller.abort(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    if (signal.aborted) abort()
+    const timer = setTimeout(() => controller.abort(new Error('画面指纹尚未就绪，使用现场合成导出。')), 30_000)
+    try { await waitFingerprintWindows(owner, composition, contentVersion, undefined, controller.signal) }
+    finally { clearTimeout(timer); signal.removeEventListener('abort', abort) }
+  }
+  return readyWindows(cache, owner, composition)
+}
+
 /** 节目当前序列已就绪的预渲染窗口（本地文件）；指纹不匹配的旧文件不会被播放。 */
 export function readyVideoEditRenderWindows(projectId: string, composition: VideoEditComposition): Array<{ key: string; startFrame: number; endFrame: number; path: string; width: number; height: number; fps: number }> {
   const cache = loadedCache(projectId, true)
   const owner = listVideoEditInstances().find(value => value.document.id === projectId)
-  const windows = cache && owner && currentWindows(owner, composition)
+  return cache && owner ? readyWindows(cache, owner, composition) : []
+}
+function readyWindows(cache: ProjectCache, owner: VideoEditInstance, composition: VideoEditComposition): ReturnType<typeof readyVideoEditRenderWindows> {
+  const windows = currentWindows(owner, composition)
   if (!cache || !windows) return []
   const { profile } = videoEditRenderProfile(composition)
   return windows.flatMap(window => {
@@ -267,6 +291,7 @@ export function readyVideoEditRenderWindows(projectId: string, composition: Vide
 }
 
 function measuredState(window: VideoEditRenderWindow): 'dropped' | 'predicted' | 'realtime' {
+  if (window.fingerprintPending) return 'predicted'
   return videoEditMeasuredRenderState(window.heavy, readVideoEditRenderPerformance(window.key))
 }
 const slowSamples = new Map<string, { elapsedMs: number; frame: number; stages: Record<string, number> }>()
@@ -339,10 +364,9 @@ const barListeners = new Set<() => void>()
 /** 渲染条在空闲时算完新窗口后收到通知。 */
 export function subscribeVideoEditRenderBar(listener: () => void): () => void { barListeners.add(listener); return () => { barListeners.delete(listener) } }
 export function videoEditRenderBarRevision(): number { return barRevision }
-const lastBarViews = new Map<string, { sequenceId: string; view: VideoEditRenderCacheView }>()
 const pendingBarWindows = new WeakSet<VideoEditComposition>()
 /**
- * 渲染条的读数，重绘时不逐段散列：当前内容的窗口已算过就给当前结果；还没算过时给同一序列上一次的结果并标为过期，
+ * 渲染条的读数，重绘时不逐段散列：当前内容的窗口已算过就给当前结果；还没算过时按当前剪辑边界给未就绪的黄色窗口，
  * 由渲染条在绘制后调 requestVideoEditRenderBarWindows 空闲时补算（编辑当下按键到重绘不等它）。
  */
 export function peekVideoEditRenderCache(projectId: string): { view: VideoEditRenderCacheView | null; current: boolean } {
@@ -350,11 +374,11 @@ export function peekVideoEditRenderCache(projectId: string): { view: VideoEditRe
   const composition = findActiveVideoEditSequence(instance)
   if (!composition || windowsCurrent(composition)) {
     const view = readVideoEditRenderCache(projectId)
-    if (composition) lastBarViews.set(projectId, { sequenceId: composition.id, view })
     return { view, current: true }
   }
-  const last = lastBarViews.get(projectId)
-  return { view: last?.sequenceId === composition.id ? last.view : null, current: false }
+  const windows = pendingWindows(composition)
+  return { view: { windows: windows.map(({ startFrame, endFrame }) => ({ startFrame, endFrame, state: 'predicted' })),
+    totalFrames: windows.at(-1)?.endFrame ?? 0, readyFrames: 0, needsRenderFrames: windows.at(-1)?.endFrame ?? 0, rendering: null }, current: false }
 }
 const whenIdle = (run: () => void): void => { if (typeof requestIdleCallback === 'function') requestIdleCallback(() => run(), { timeout: 300 }); else setTimeout(run, 0) }
 /** 空闲时算当前序列的窗口，算完通知渲染条；期间又有编辑时只算最新的内容。 */
@@ -384,6 +408,7 @@ export async function cancelVideoEditRenderCache(projectId: string): Promise<voi
   if (pending) return pending
   const job = jobs.get(instance)
   const work = (async () => {
+    planning.get(instance)?.abort(new DOMException('预渲染已取消。', 'AbortError'))
     job?.controller.abort(new DOMException('预渲染已取消。', 'AbortError'))
     // 等待期间自动调度也必须让出，避免旧任务退出到本次取消回读之间又开出新任务。
     while (job && jobs.get(instance) === job) await new Promise(resolve => setTimeout(resolve, 20))
@@ -408,6 +433,8 @@ export interface VideoEditRenderCacheResult { renderedWindows: number; readyFram
  * 节目起播、拖动、跳转或导出时立即取消在途这一帧并释放会话，空闲后从该窗口起点重来，不与播放争抢显卡与解码；
  * 节目操作之后的空闲要求更长（RENDER_AFTER_INTERACTION_MS，恢复过早被打断时加倍），恢复时节目很少正要起播；
  * 可取消，取消时只保留已完成的窗口。
+ * onStarted 是启动时的候选计划：requestedFrames 含指纹未就绪的窗口，pendingWindows 按候选键去重；
+ * needed 会在指纹就绪后剔除判定可实时播放的段，最终范围与就绪帧数以返回结果为准。
  */
 export async function renderVideoEditRenderCache(projectId: string, request: VideoEditRenderCacheRequest, signal?: AbortSignal, onStarted?: (plan: { pendingWindows: number; requestedFrames: number; readyFrames: number }) => void): Promise<VideoEditRenderCacheResult> {
   const instance = requireVideoEditInstance(projectId)
@@ -418,10 +445,28 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   // A user or assistant request replaces the idle job (its finished windows stay ready).
   if (running) { running.controller.abort(new DOMException('改为按请求预渲染。', 'AbortError')); while (jobs.get(instance)) await new Promise(resolve => setTimeout(resolve, 20)) }
   const composition = getActiveVideoEditSequence(instance)
-  const cache = await cacheOf(projectId); loaded.set(projectId, cache)
-  if (jobs.has(instance) || clearing.has(instance) || cancelling.has(instance)) throw new Error('该剪辑正在预渲染、取消或删除渲染文件，请稍后重试。')
+  const contentVersion = instance.contentVersion
   const range = request.range ?? { startFrame: 0, endFrame: Number.MAX_SAFE_INTEGER }
-  const all = await settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition))
+  if (planning.has(instance)) throw new Error('正在计算渲染窗口，请稍后再试。')
+  const planController = new AbortController()
+  const abortPlan = (): void => planController.abort(signal?.reason)
+  if (signal?.aborted) abortPlan()
+  signal?.addEventListener('abort', abortPlan, { once: true })
+  planning.set(instance, planController)
+  let all: VideoEditRenderWindow[]
+  let cache: ProjectCache
+  try {
+    cache = await abortable(cacheOf(projectId), planController.signal); loaded.set(projectId, cache)
+    all = await abortable(settleVideoEditCodeDeclarations(() => {
+      planController.signal.throwIfAborted()
+      return videoEditRenderCacheWindows(instance, composition)
+    }), planController.signal)
+  }
+  catch (error) {
+    if (!planController.signal.aborted) throw error
+    return { renderedWindows: 0, readyFrames: 0, requestedFrames: 0, cancelled: true }
+  } finally { planning.delete(instance); signal?.removeEventListener('abort', abortPlan) }
+  if (instance.contentVersion !== contentVersion || !listVideoEditInstances().includes(instance)) return { renderedWindows: 0, readyFrames: 0, requestedFrames: 0, cancelled: true }
   if (jobs.has(instance) || clearing.has(instance) || cancelling.has(instance)) throw new Error('该剪辑正在预渲染、取消或删除渲染文件，请稍后重试。')
   let windows = all.filter(window => window.endFrame > range.startFrame && window.startFrame < range.endFrame && (request.scope === 'all' || measuredState(window) !== 'realtime'))
   const around = request.aroundFrame
@@ -461,18 +506,31 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   const programIdle = (): boolean => activity.idleFor() >= RENDER_RESUME_IDLE_MS && activity.interactionIdleFor() >= interactionIdleMs
   logger.info('开始预渲染', { event: 'video_edit.render_cache.start', context: { projectId, sequenceId: composition.id, windows: pending.length, auto: job.auto, codec: encoding.codec, bitrateMbps: encoding.bitrateMbps } })
   try {
-    await pruneEntries(instance, cache)
+    assertOwner()
     if (pending.length) {
       smartRegions = await waitVideoEditSmartRegions(composition, composition, job.controller.signal)
       await waitVideoEditTracking(composition, composition, job.controller.signal)
       // 分析刚完成会改变指纹；编码必须使用实际交给会话的结果身份，不能把新画面写到旧键。
-      const refreshed = new Map((await settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition))).map(window => [window.startFrame, window]))
+      const refreshed = new Map((await abortable(settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition)), job.controller.signal)).map(window => [window.startFrame, window]))
+      assertOwner()
       windows = windows.map(window => refreshed.get(window.startFrame)!)
       pending = [...new Map(pending.map(window => refreshed.get(window.startFrame)!).filter(window => !readyEntry(cache, window, encoding.profile)).map(window => [window.key, window])).values()]
       job.total = pending.length
     }
-    for (const window of pending) {
+    for (let window of pending) {
       for (;;) {
+        // 只等待这个窗口的键；相邻窗口可继续算，已存在的同键文件立即复用。
+        for (;;) {
+          assertOwner()
+          window = (await abortable(settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition)), job.controller.signal)).find(value => value.startFrame === window.startFrame)!
+          windows = windows.map(value => value.startFrame === window.startFrame ? window : value)
+          if (!window.fingerprintPending) break
+          await rest(20, job.controller.signal)
+        }
+        if (request.scope !== 'all' && measuredState(window) === 'realtime') {
+          windows = windows.filter(value => value.startFrame !== window.startFrame); job.total--; break
+        }
+        if (readyEntry(cache, window, encoding.profile)) break
         await waitProgramIdle()
         if (closing) { await closing; closing = undefined }
         // 等会话关闭期间又有操作就重新等空闲；从这里到登记 attempt 都是同步的，中途起播不会漏掉。
@@ -500,7 +558,8 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
           job.controller.signal.removeEventListener('abort', follow)
         }
       }
-      job.done++; job.current = undefined; publishVideoEdit()
+      if (windows.some(value => value.startFrame === window.startFrame)) job.done++
+      job.current = undefined; publishVideoEdit()
       // A whole window went through: the next interruption starts from the base wait again.
       interactionIdleMs = RENDER_AFTER_INTERACTION_MS; resumedAt = undefined
     }
@@ -565,7 +624,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
     }
   }
   function assertOwner(): void {
-    if (!listVideoEditInstances().includes(instance)) job.controller.abort(new DOMException('原剪辑已关闭，预渲染已停止。', 'AbortError'))
+    if (!listVideoEditInstances().includes(instance) || instance.contentVersion !== contentVersion) job.controller.abort(new DOMException('原剪辑已关闭，预渲染已停止。', 'AbortError'))
     job.controller.signal.throwIfAborted()
   }
   function result(cancelled: boolean): VideoEditRenderCacheResult {
@@ -625,18 +684,26 @@ function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
  * 先阻止新任务并等待在途任务取消，避免迟到的 commit 在清理后写回；并发清理按调用顺序执行。
  * 文件按内容指纹复用：删除该文件也会使其他位置引用同一指纹的预览失效，原始素材和剪辑内容不受影响。
  */
-export async function clearVideoEditRenderCache(projectId: string, range?: { startFrame: number; endFrame: number }): Promise<void> {
+export async function clearVideoEditRenderCache(projectId: string, range?: { startFrame: number; endFrame: number }, signal?: AbortSignal): Promise<void> {
   const instance = requireVideoEditInstance(projectId)
   const composition = getActiveVideoEditSequence(instance)
   if (range && (!Number.isInteger(range.startFrame) || !Number.isInteger(range.endFrame) || range.startFrame < 0 || range.endFrame <= range.startFrame)) throw new Error('渲染文件范围必须是有效的半开帧区间。')
+  const contentVersion = instance.contentVersion
   const previous = clearing.get(instance)
   const clear = async (): Promise<void> => {
+    signal?.throwIfAborted()
+    const controller = new AbortController()
+    const abort = (): void => controller.abort(signal?.reason)
+    signal?.addEventListener('abort', abort, { once: true })
+    const timer = setTimeout(() => controller.abort(new Error('画面依赖尚未就绪，渲染文件未删除；请在拖动或导出结束后重试。')), 30_000)
     logger.info('开始删除渲染文件', { event: 'video_edit.render_cache.clear_start', context: { projectId, sequenceId: composition.id, range } })
     try {
+      planning.get(instance)?.abort(new DOMException('正在删除渲染文件。', 'AbortError'))
       jobs.get(instance)?.controller.abort(new DOMException('正在删除渲染文件。', 'AbortError'))
-      while (jobs.has(instance)) await new Promise(resolve => setTimeout(resolve, 20))
-      const cache = await cacheOf(projectId)
-      const windows = await settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition))
+      while (jobs.has(instance)) await rest(20, controller.signal)
+      const cache = await abortable(cacheOf(projectId), controller.signal)
+      if (!listVideoEditInstances().includes(instance) || instance.contentVersion !== contentVersion) throw new DOMException('剪辑已关闭或内容已改变。', 'AbortError')
+      const windows = await waitFingerprintWindows(instance, composition, contentVersion, range, controller.signal)
       const keys = [...new Set(windows.filter(window => !range || window.endFrame > range.startFrame && window.startFrame < range.endFrame).map(window => window.key))]
       if (keys.length) await getPlatform().mediaCache.renderRemove({ projectId, windowKeys: keys })
       for (const key of keys) cache.entries.delete(key)
@@ -648,9 +715,34 @@ export async function clearVideoEditRenderCache(projectId: string, range?: { sta
     } catch (error) {
       logger.warn('删除渲染文件失败', { event: 'video_edit.render_cache.clear_failed', error, context: { projectId, sequenceId: composition.id } })
       throw error
+    } finally {
+      clearTimeout(timer); signal?.removeEventListener('abort', abort)
     }
   }
   const work = (previous ?? Promise.resolve()).then(clear, clear)
   clearing.set(instance, work)
   try { await work } finally { if (clearing.get(instance) === work) clearing.delete(instance) }
+}
+
+/** 只等选中窗口；导出与清理共用依赖通知及取消路径，不能用历史文件位置猜当前窗口。 */
+function waitFingerprintWindows(owner: VideoEditInstance, composition: VideoEditComposition, contentVersion: number,
+  range: { startFrame: number; endFrame: number } | undefined, signal: AbortSignal): Promise<VideoEditRenderWindow[]> {
+  return new Promise((resolve, reject) => {
+    const finish = (windows?: VideoEditRenderWindow[], error?: unknown): void => {
+      stops.forEach(stop => stop()); signal.removeEventListener('abort', aborted)
+      if (error) reject(error); else resolve(windows!)
+    }
+    const aborted = (): void => finish(undefined, signal.reason)
+    const check = (): void => {
+      try {
+        signal?.throwIfAborted()
+        if (!listVideoEditInstances().includes(owner) || owner.contentVersion !== contentVersion) throw new DOMException('剪辑已关闭或内容已改变。', 'AbortError')
+        const windows = currentWindows(owner, composition) ?? []
+        if (!windows.some(window => window.fingerprintPending && (!range || window.endFrame > range.startFrame && window.startFrame < range.endFrame))) finish(windows)
+      } catch (error) { finish(undefined, error) }
+    }
+    const stops = [subscribeVideoEditRenderBar(check), subscribeVideoEditDomain(check), subscribeVideoEditView(check)]
+    signal.addEventListener('abort', aborted, { once: true })
+    check()
+  })
 }

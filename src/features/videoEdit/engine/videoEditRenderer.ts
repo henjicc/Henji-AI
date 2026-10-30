@@ -417,8 +417,8 @@ export class VideoEditRenderer {
     }, delay)
   }
   /** The ready window drawing this frame during forward playback of the program, if any. */
-  private cachedWindow(frame: number): { key: string; startFrame: number; endFrame: number; clip: VideoEditClip; media: VideoEditMedia } | undefined {
-    if (!this.previewWidth || this.nestedOwner) return undefined
+  private cachedWindow(frame: number, exporting = false): { key: string; startFrame: number; endFrame: number; clip: VideoEditClip; media: VideoEditMedia } | undefined {
+    if ((!this.previewWidth && !exporting) || this.nestedOwner) return undefined
     let low = 0, high = this.renderCache.length - 1
     while (low <= high) {
       const middle = (low + high) >> 1, window = this.renderCache[middle]
@@ -431,6 +431,20 @@ export class VideoEditRenderer {
   /** A clip's source media, including the files of pre-rendered windows. */
   private clipMedia(document: VideoEditComposition, clip: VideoEditClip): VideoEditMedia | undefined {
     return clip.id.startsWith('render-cache:') ? this.renderCache.find(window => window.clip.id === clip.id)?.media : videoEditClipMedia(document, clip)
+  }
+  private async rejectExportPreview(window: VideoEditRenderer['renderCache'][number], error: unknown): Promise<void> {
+    if (!this.renderCache.some(candidate => candidate.clip.id === window.clip.id)) return
+    this.renderCache = this.renderCache.filter(candidate => candidate.clip.id !== window.clip.id)
+    const message = '导出预览文件不可读，该窗口使用现场合成', event = 'video_edit.export.preview_failed'
+    const context = { sequenceId: this.document.id, revision: this.document.revision, startFrame: window.startFrame, endFrame: window.endFrame, path: window.media.path, reason: error instanceof Error ? error.message : String(error) }
+    if (this.jumpPreviewLog) this.jumpPreviewLog('warn', message, event, context)
+    else logger.warn(message, { event, error, context })
+    const pending = this.sources.get(window.clip.id)
+    this.sources.delete(window.clip.id)
+    if (pending) {
+      const source = await pending.catch(() => undefined)
+      if (source) { source.current?.close(); await source.iterator?.return().catch(() => undefined); this.release(source) }
+    }
   }
   private ensureCompositor(): VideoEditGpuCompositor {
     if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
@@ -982,10 +996,15 @@ export class VideoEditRenderer {
   }
   private preroll(clip: VideoEditClip, document: VideoEditComposition): void {
     if (this.sources.has(clip.id) || this.playback?.byClip.has(clip.id)) return
-    const media = videoEditClipMedia(document, clip)
+    const media = this.clipMedia(document, clip)
     if (!media || media.kind !== 'video') return
     const time = videoEditPictureSeconds(clipSourceSeconds(clip, clip.start, document.fps))
     const pending = this.source(clip.id, media)
+    const failed = (error: unknown): void => {
+      if (this.previewWidth) return
+      const window = this.renderCache.find(value => value.clip.id === clip.id)
+      if (window) void this.rejectExportPreview(window, error)
+    }
     void pending.then(source => {
       if (!source.video || source.iterator || source.prerolled) return
       const iterator = source.video.frames(time)
@@ -994,8 +1013,8 @@ export class VideoEditRenderer {
         const next = await iterator.next()
         if (this.disposed || this.sources.get(clip.id) !== pending || source.iterator !== iterator) { if (!next.done) next.value.close(); return }
         if (!next.done) { source.current?.close(); source.current = next.value; source.previousTime = time }
-      })().catch(() => undefined).finally(() => { source.prerolled = undefined })
-    }, () => undefined)
+      })().catch(failed).finally(() => { source.prerolled = undefined })
+    }, failed)
   }
   private async disposeCodeInputs(keep: ReadonlySet<string> = new Set(), sessions = this.codeInputs): Promise<void> {
     await Promise.allSettled([...sessions].filter(([key]) => !keep.has(key)).map(async ([key, entry]) => {
@@ -1594,7 +1613,13 @@ export class VideoEditRenderer {
     const current = (): boolean => this.shownRequest <= requestOrder
     // 先发起缓存读取，再准备现场画面；绘制锁内按请求顺序核验，现场提交后同请求缓存不能覆盖它。
     if (cacheEligible && scrubbing === false && !(this.shownFrame === frame && this.shownFrameExact)) void this.presentPrerenderedFrame(frame, present, false, requestOrder)
-    const live = this.renderFrame(frame, sequential, scrubbing, () => present() && current(), deadline, undefined, quality, capturePresentation, abandon?.signal, requestOrder)
+    const drawFrame = (): Promise<VideoEditRenderResult> => this.renderFrame(frame, sequential, scrubbing, () => present() && current(), deadline, undefined, quality, capturePresentation, abandon?.signal, requestOrder)
+    const exportWindow = sequential && !this.previewWidth ? this.cachedWindow(frame, true) : undefined
+    const live = drawFrame().catch(async error => {
+      if (!exportWindow || this.disposed || error instanceof DOMException && error.name === 'AbortError') throw error
+      await this.rejectExportPreview(exportWindow, error)
+      return drawFrame()
+    })
       .then(result => {
         if (result.presented) return result
         return abandon?.signal.aborted || shouldPresent() && !current() ? { ...result, superseded: true } : result
@@ -1827,7 +1852,10 @@ export class VideoEditRenderer {
       this.lastForwardFrame = forward ? Math.max(frame, this.lastForwardFrame!) : frame; this.armedFrame = undefined
       this.primeUpcomingStreams(frame)
     } else if (this.armedFrame !== frame || this.playback?.document !== document) { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
-    const cachedWindow = sequential && !nestedRender ? this.cachedWindow(frame) : undefined
+    const cachedWindow = sequential && !nestedRender ? this.cachedWindow(frame, !this.previewWidth) : undefined
+    const nextExportWindow = sequential && !this.previewWidth && !nestedRender ? this.renderCache.find(window => window.startFrame > frame) : undefined
+    // 下一窗口沿用剪辑首帧预取，提前打开原生会话；跨窗后继续消费同一个顺序读取器。
+    if (nextExportWindow) this.preroll(nextExportWindow.clip, document)
     const rawTransitions = cachedWindow ? [] : videoEditPictureTransitionsAt(document, frame)
     // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
     const candidates = new Map(cachedWindow ? [[cachedWindow.clip.id, cachedWindow.clip]] : activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio').map(clip => [clip.id, clip]))
@@ -2075,6 +2103,7 @@ export class VideoEditRenderer {
       } else if (sequential && !this.previewWidth) {
         // Export: the exact picture at this source time, decided by a single-frame read when the reader's is not.
         const read = await readVideoEditExportPicture(source, source.video, time, media.name)
+        if (cachedWindow && !videoEditPictureCovers(source.current, time)) throw new Error('预览文件缺少此帧。')
         early = read.blank; if (read.singleFrameRead) singleFrameReads++
       } else if (sequential || (this.previewWidth && time >= source.previousTime && time - source.previousTime <= 2)) {
         // Preview falls back here when the playback schedule has no picture for this frame (task 3.1). The same exact
@@ -2089,6 +2118,7 @@ export class VideoEditRenderer {
       source.previousTime = time
       source.previousFrame = frame
       if (!source.current || early) {
+        if (cachedWindow && !this.previewWidth) throw new Error('预览文件在此帧没有画面。')
         // No picture at this source time although it is inside the media: the time precedes the stream's first picture
         // (MPEG program/transport streams start after zero on the source timeline, record of 2.1). The layer is
         // transparent there, as in the gap before a clip, instead of failing the whole frame.
@@ -2167,6 +2197,7 @@ export class VideoEditRenderer {
     const gpuMs = performance.now() - gpuStart
     traceVideoEditFrame('compositor.record', frame, gpuStart)
     const activeIds = new Set(canPresent() ? [...active, ...upcoming].map(clip => clip.id) : [...this.sources.keys()].filter(key => !key.startsWith('audio:')).map(key => key.split(BLEND_PARTNER_KEY)[0]))
+    if (nextExportWindow) activeIds.add(nextExportWindow.clip.id)
     for (const [id, picture] of this.blendedPictures) if (!activeIds.has(id)) { picture.close(); this.blendedPictures.delete(id) }
     for (const [key, pending] of this.sources) if (!activeIds.has(key.split(BLEND_PARTNER_KEY)[0]) && !key.startsWith('audio:')) {
       this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source)

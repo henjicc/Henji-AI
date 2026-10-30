@@ -29,6 +29,7 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: (message: strin
 const workers: FakeWorker[] = []
 class FakeWorker {
   respond = true
+  renderCached = false
   readonly messages: Array<{ message: RenderRequest | { kind: string; port?: unknown }; transfer: unknown[] }> = []
   onmessage?: (event: MessageEvent) => void
   onerror?: unknown
@@ -36,7 +37,7 @@ class FakeWorker {
   constructor() { workers.push(this) }
   postMessage(message: RenderRequest, transfer: unknown[] = []) {
     this.messages.push({ message, transfer })
-    if (this.respond && 'id' in message && message.id) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, presented: true, ...(message.kind === 'render' ? { bitmap: { close: vi.fn() } } : {}) } } as MessageEvent))
+    if (this.respond && 'id' in message && message.id) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, presented: true, ...(message.kind === 'render' ? { bitmap: { close: vi.fn() }, renderCached: this.renderCached } : message.kind === 'fingerprint' ? { fingerprints: [[message.frame, { digest: 'frame-content' }]] } : {}) } } as MessageEvent))
   }
 }
 vi.stubGlobal('Worker', FakeWorker)
@@ -291,7 +292,8 @@ it('历史帧复制只随显式录制请求，过期回执释放位图', async (
 it('预览请求 interactive，正式导出入口请求 final，复用同一 Worker 链路', async () => {
   const session = new VideoEditRenderSession(composition())
   await session.present(0)
-  await session.render(1, true)
+  workers[0].renderCached = true
+  expect((await session.render(1, true)).renderCached).toBe(true)
   const renders = workers[0].messages.map(value => value.message).filter(value => value.kind === 'render')
   expect(renders).toEqual([
     expect.objectContaining({ kind: 'render', frame: 0, quality: 'interactive' }),
@@ -560,4 +562,23 @@ it.each([false, true])('缓存回执后的后台现场合成仍受看门狗保�
   expect(vi.getTimerCount()).toBe(0)
   worker.respond = true
   await session.dispose(true)
+})
+
+
+it('批量帧指纹先按当前帧同步代码字体，再发送受预算约束的区间请求', async () => {
+  const project = createVideoEditTestDocument('批量指纹字体'), sequence = project.sequences[0]
+  project.items = [{ id: 'text', name: '文字', kind: 'text' }]
+  const base = makeVideoEditItemClip(project, 'text', sequence.id, { frame: 0, duration: 20 })
+  sequence.clips = [{ ...base, id: 'code-a', kind: 'code', start: 30 }, { ...base, id: 'code-b', kind: 'code', start: 60 }]
+  const fonts = vi.fn(async (_document: VideoEditComposition) => [])
+  const session = new VideoEditRenderTransport({ fonts, proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, sequence.id))
+  try {
+    const result = await session.fingerprintCodeFrames('code-a', 30, 50, {}, 2)
+    expect(fonts.mock.lastCall![0].clips.map(clip => clip.id)).toEqual(['code-a'])
+    expect(workers[0].messages.at(-1)?.message).toMatchObject({ kind: 'fingerprint', clipId: 'code-a', frame: 30, endFrame: 50, budgetMs: 2 })
+    expect(result).toEqual([[30, { digest: 'frame-content' }]])
+    await session.fingerprintCodeFrames('code-b', 60, 80, {}, 8)
+    expect(fonts.mock.lastCall![0].clips.map(clip => clip.id)).toEqual(['code-b'])
+    expect(workers[0].messages.some(({ message }) => message.kind === 'render' || message.kind === 'prepareGpu')).toBe(false)
+  } finally { await session.dispose() }
 })

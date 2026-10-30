@@ -156,7 +156,7 @@ function same(a: Value, b: Value): boolean {
  * 在作者绘制前设好的变换（运动层的栅格缩放与留边）。作者的坐标始终是画布像素：`setTransform`/`resetTransform`
  * 相对这个变换生效，`getTransform` 也按画布像素回答。录下的指令与 `transform` 无关，重放时才用它。
  */
-export function recordAuthorCanvas(size: { width: number; height: number }, measure: OffscreenCanvasRenderingContext2D, transform: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void): AuthorCanvasRecording {
+export function recordAuthorCanvas(size: { width: number; height: number }, measure: OffscreenCanvasRenderingContext2D, transform: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void, stable = false): AuthorCanvasRecording {
   measure.reset()
   const ops: Value[][] = []
   const textDraws: TextDrawObservation[] = []
@@ -191,7 +191,10 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
     if (value instanceof PatternRecord) return { pattern: idOf(value) ?? adopt(value) }
     // 读画布本身：结果取决于前面画了什么。
     if (value instanceof CanvasStandIn) { isolated = false; return { canvas: true } }
-    if (typeof ImageBitmap !== 'undefined' && value instanceof ImageBitmap) return imageRef(value)
+    if (typeof ImageBitmap !== 'undefined' && value instanceof ImageBitmap) {
+      if (stable) throw new AuthorCanvasUnrecordable('作者位图没有跨版本内容身份')
+      return imageRef(value)
+    }
     if (Array.isArray(value) && value.every(item => typeof item === 'number')) return [...value]
     if (typeof DOMMatrix !== 'undefined' && value instanceof DOMMatrix) return { matrix: [value.a, value.b, value.c, value.d, value.e, value.f] }
     if (typeof value === 'object' && 'a' in value && 'b' in value && 'e' in value) { const m = value as unknown as DOMMatrix2DInit; return { matrix: [m.a ?? 1, m.b ?? 0, m.c ?? 0, m.d ?? 1, m.e ?? 0, m.f ?? 0] } }
@@ -267,18 +270,24 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   const context = new Proxy(target, {
     get(_, property) {
       if (property === TEXT_LAYER_CONTEXT) return (index: number): void => { layerIndex = index }
-      if (property === TEXT_RASTER_CONTEXT) return () => ({ matrix: [...matrix], colorSpace: (measure as TextRasterProvider).getContextAttributes?.().colorSpace ?? 'srgb' })
+      if (property === TEXT_RASTER_CONTEXT) {
+        if (stable) throw new AuthorCanvasUnrecordable('文字栅格依赖实际图层栅格尺寸')
+        return () => ({ matrix: [...matrix], colorSpace: (measure as TextRasterProvider).getContextAttributes?.().colorSpace ?? 'srgb' })
+      }
       if (property === TEXT_DRAW_OBSERVER) return (fact: TextDrawFact): void => {
         const uncovered = [ ...(fact.animatedGraphemes ? ['独立字素动画的墨迹裁切'] : []), ...(unknownClip ? ['任意 Canvas clip'] : []), ...(state.filter && state.filter !== 'none' ? ['Canvas filter'] : []), ...(state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over' ? ['Canvas 混合遮挡'] : []), ...(fact.bodyCoverage && fact.bodyCoverage !== 'complete' ? ['部分或全部正文未启用填充或描边，文字完整性未覆盖'] : []) ]
         const canvasClip = textRectCorners({ x: 0, y: 0, ...size }).map(([x, y]) => codePoint(invert(transform), x, y))
         textDraws.push(structuredClone({ ...fact, layerIndex, matrix: multiply(invert(transform), matrix), clips, canvasClip, opacity: Number(state.globalAlpha ?? 1), uncovered, ...(state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over' ? { retained: false } : {}) }))
       }
       if (typeof property !== 'string') return undefined
-      if (property === 'canvas') return standIn
+      if (property === 'canvas') {
+        if (stable) throw new AuthorCanvasUnrecordable('读取实际栅格画布')
+        return standIn
+      }
       if (property in state) return state[property]
       if (methods[property]) return methods[property]
       if (DRAW.has(property) || STATEFUL.has(property)) return recorder(property)
-      if (property in measure) throw new AuthorCanvasUnrecordable(`画布操作 ${property} 无法录制`)
+      if (stable || property in measure) throw new AuthorCanvasUnrecordable(`画布操作 ${property} 无法录制`)
       return undefined
     },
     set(_, property, value) {
