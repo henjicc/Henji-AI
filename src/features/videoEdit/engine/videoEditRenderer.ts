@@ -128,7 +128,8 @@ function stillDecodeKey(still: string, time: number): string { return JSON.strin
 function videoEditPictureCovers(picture: { timestamp: number; duration: number } | undefined, time: number): boolean {
   return !!picture && picture.timestamp <= time + 1e-6 && time < picture.timestamp + picture.duration - 1e-7
 }
-export interface VideoEditRenderResult { canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[];
+export type VideoEditPresentedSource = 'prerendered' | 'live' | 'jump'
+export interface VideoEditRenderResult { presentedSource?: VideoEditPresentedSource; canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[];
   /** 这一帧用到的片子数据里会让画面缺内容的问题（含嵌套序列里的）：要呈现给用户，但不是效果失败，不挡试渲染与导出。 */
   sceneIssues?: string[]; approximate?: boolean; /** Not presented because a later request's picture reached the screen first. */ superseded?: boolean; completion: Promise<void> }
 export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
@@ -253,8 +254,6 @@ const JUMP_PREVIEW_FILL_IDLE_MS = 400
 const JUMP_PREVIEW_FILL_GAP_MS = 4
 /** 快速拖动时实时画面最多等这么久（毫秒），没好就先画常驻关键帧（见 `render`）。 */
 const JUMP_PREVIEW_LIVE_BUDGET_MS = 16
-/** 暂停画面的实时合成过了这么久（毫秒）还没好，就从预渲染文件读这一帧的精确画面先替它站在屏幕上（见 `render`）。 */
-const JUMP_PREVIEW_EXACT_AFTER_MS = 40
 /**
  * Played pictures a code video input keeps in preview (bytes per source pixel: two 4-byte pictures, five 8-bit 4:2:0
  * ones): a restarted play command asks for a frame just shown, which would otherwise seek the input's decoder back to
@@ -371,20 +370,20 @@ export class VideoEditRenderer {
   private shownFrame?: number
   /** A live top-level frame still being prepared after its request returned with a jump preview (see `render`). */
   private detachedLive?: Promise<void>
+  private scrubLive?: AbortController
+  onPresentation?: (frame: number, source: VideoEditPresentedSource, exact: boolean) => void
   /** The paused exact top-level frame being prepared, which a newer paused request abandons (`supersedePausedFrame`). */
   private pausedLive?: { frame: number; abort: AbortController }
   private drawLock: Promise<void> = Promise.resolve()
-  /** Counts top-level presentations (live, resident key frame, pre-rendered exact picture); see `exclusiveDraw`. */
-  private presentations = 0
-  /**
-   * Whether the last top-level presentation was an exact frame: a live one, or a forward playback frame of a pre-rendered
-   * window (the window's whole-frame picture). A paused frame equal to it never shows the pre-rendered exact picture first.
-   */
-  private shownExact = false
-  /**
-   * Replaces the ready pre-rendered windows. Playback shows a window's file instead of composing its layers;
-   * paused frames, scrubbing, observation and export always compose live.
-   */
+  /** 请求在接收时编号；上屏只会淘汰更早的请求。 */
+  private presentationOrder = 0
+  private shownRequest = 0
+  reservePresentation(): number { return ++this.presentationOrder }
+  private shownFrameExact = false
+  private shownState?: { source: VideoEditPresentedSource; completion: Promise<void>; document: VideoEditComposition; epoch: number; cacheRevision: number; divisor: number }
+  private prerenderTail: Promise<unknown> = Promise.resolve()
+  private prerenderRequest = 0
+  /** 已就绪的窗口供节目播放和定位使用；像素回读与嵌套序列仍走现场合成。 */
   setRenderCache(windows: ReadonlyArray<VideoEditRenderCacheWindow>): void {
     this.renderCache = windows.map(window => {
       // 文件可以复用，时间线上的读取器必须有独立身份，否则重复段会沿用上一段的源时钟。
@@ -1553,45 +1552,57 @@ export class VideoEditRenderer {
    * picture at its source time or the frame fails (`videoEditExportPictures.ts`); `singleFrameReads` counts the layers
    * a single-frame read decided because the sequential reader's picture was not exact.
    */
-  async render(frame: number, sequential = false, scrubbing: VideoEditScrubMode = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void): Promise<VideoEditRenderResult> {
+  async render(frame: number, sequential = false, scrubbing: VideoEditScrubMode = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void, requireLive = false, requestOrder = this.reservePresentation()): Promise<VideoEditRenderResult> {
     // A top-level frame is the foreground: background decode steps take their turns between such frames.
     if (nestedRender || this.nestedOwner) return this.renderFrame(frame, sequential, scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation)
     // 跳转先出的画面（`videoEditJumpPreview.ts`）只给快速拖动与远距离跳转；要回读像素的帧（历史、取色）照常合成。
-    const fast = scrubbing === 'fast' && !sequential && !capturePresentation && !!this.jumpPreview
+    const cancellable = !sequential && !capturePresentation && deadline === undefined
+    const cacheEligible = cancellable && !requireLive
+    const fast = scrubbing === 'fast' && cacheEligible && !!this.jumpPreview
     clearTimeout(this.jumpFill); this.jumpFill = undefined
+    if (cacheEligible && scrubbing && this.hasPrerenderedFrame(frame)) {
+      this.abandonPausedFrame(); this.scrubLive?.abort()
+      const shown = await this.presentPrerenderedFrame(frame, shouldPresent, false, requestOrder)
+      if (shown) return shown
+    }
     // 暂停时的精确画面（跳转、点击、松手后）：更新的暂停请求可以放弃它（`supersedePausedFrame`），它就不再画上去，
-    // 各视频层的读取停在解码器已解到的位置。播放帧、拖动帧与要回读像素的帧（导出、取色、历史）从不放弃。
-    const abandon = !sequential && scrubbing === false && deadline === undefined && !capturePresentation ? new AbortController() : undefined
-    if (abandon) this.pausedLive = { frame, abort: abandon }
+    // 各视频层的读取停在解码器已解到的位置。播放帧与像素回读不放弃；后台快速拖动画面为 ready 缓存让路。
+    const abandon = cancellable && (scrubbing === false || fast) ? new AbortController() : undefined
+    if (abandon && scrubbing === false) this.pausedLive = { frame, abort: abandon }
     const present = abandon ? (): boolean => !abandon.signal.aborted && shouldPresent() : shouldPresent
     if (this.detachedLive) {
       // 上一幅实时画面还在后台准备：快速拖动不等它，先画这一帧的常驻关键帧；其他请求等它收尾（渲染器同时只合成一帧）。
-      if (fast) { const shown = await this.presentJumpPreview(frame, shouldPresent); if (shown) return shown }
+      if (fast) { const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder); if (shown) return shown }
       await this.detachedLive
+    }
+    // 等待后台合成期间也可能被新拖动取代；已取消的暂停请求不能进入现场输入准备。
+    if (abandon?.signal.aborted) {
+      if (this.pausedLive?.abort === abandon) this.pausedLive = undefined
+      return { canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 0, cacheBytes: this.frameCache.bytes, presented: false, superseded: true, renderCached: false, decodeMs: 0, gpuMs: 0, completion: Promise.resolve() }
     }
     // 远距离跳转与一步跨得很远的快速拖动：只画常驻关键帧，不开解码会话、不读素材、不跑代码，也不先收起为暂停画面备好的播放
     // （那要等在途解码收尾）。跳转后节目按精确方式补这一帧，解码从头开始，不先解一遍近似画面；拖动中这样的实时画面画出来
     // 也早已过时，只会占着 Worker 线程（代码素材每帧 10–20ms）推迟后面的画面。
     if (fast && this.shownFrame !== undefined && Math.abs(frame - this.shownFrame) >= Math.round(this.document.fps * VIDEO_EDIT_JUMP_PREVIEW_LEAP_SECONDS)) {
-      const shown = await this.presentJumpPreview(frame, shouldPresent)
+      const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder)
       if (shown) return shown
     }
+    if (abandon && fast) this.scrubLive = abandon
     this.foregroundFrames++; this.frameTurnsGranted = false; this.backgroundIdle = false; clearTimeout(this.idleTurns)
     // 快速拖动：实时画面在 `JUMP_PREVIEW_LIVE_BUDGET_MS` 内没好（新镜头要开解码会话、长 GOP 要定位）就先画常驻关键帧并
     // 交回结果，这一帧在后台继续准备（解码器随之追到指针附近），好了时屏幕上若仍是它的常驻关键帧就换成它。
-    let settled = false
-    const presentationsBefore = this.presentations
-    // 这一帧开始准备之后屏幕上换成了别的帧（后来的请求先画了常驻关键帧），它就不再画上去，免得盖住更新的画面；
-    // 它自己的常驻关键帧（同一帧）不算。
-    const current = (): boolean => this.presentations === presentationsBefore || this.shownFrame === frame
-    const live = this.renderFrame(frame, sequential, scrubbing, () => present() && current(), deadline, undefined, quality, capturePresentation, abandon?.signal)
+    const current = (): boolean => this.shownRequest <= requestOrder
+    // 先发起缓存读取，再准备现场画面；绘制锁内按请求顺序核验，现场提交后同请求缓存不能覆盖它。
+    if (cacheEligible && scrubbing === false && !(this.shownFrame === frame && this.shownFrameExact)) void this.presentPrerenderedFrame(frame, present, false, requestOrder)
+    const live = this.renderFrame(frame, sequential, scrubbing, () => present() && current(), deadline, undefined, quality, capturePresentation, abandon?.signal, requestOrder)
       .then(result => {
-        if (result.presented) { this.shownFrame = frame; this.shownExact = !result.approximate; return result }
+        if (result.presented) return result
         return abandon?.signal.aborted || shouldPresent() && !current() ? { ...result, superseded: true } : result
       })
       .finally(() => {
-        settled = true
+        this.capturePresentation = undefined
         if (this.pausedLive?.abort === abandon) this.pausedLive = undefined
+        if (this.scrubLive === abandon) this.scrubLive = undefined
         // A frame without code inputs gives its turns at its end.
         this.grantFrameTurns()
         if (--this.foregroundFrames === 0) {
@@ -1600,15 +1611,11 @@ export class VideoEditRenderer {
           this.scheduleJumpFill()
         }
       })
-    // 暂停画面（跳转后、松手后）：实时合成 `JUMP_PREVIEW_EXACT_AFTER_MS` 内没好，就从预渲染文件读这一帧的精确画面先画上，
-    // 实时合成好了再换成它（同一内容，只是少了编码损失）。
-    // 屏幕上已是这一帧的近似画面（跳转、松手）时实时合成多半要从长 GOP 的关键帧解起，不等就读。
-    if (scrubbing === false && !sequential && !capturePresentation && this.jumpPreview && !(this.shownExact && this.shownFrame === frame)) void this.showPrerenderedExact(frame, presentationsBefore, present, () => settled, this.shownFrame === frame ? 0 : JUMP_PREVIEW_EXACT_AFTER_MS)
     if (fast && this.jumpPreviewPicture(frame)) {
       let timer: ReturnType<typeof setTimeout> | undefined
       const late = await Promise.race([live, new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), JUMP_PREVIEW_LIVE_BUDGET_MS) })]).finally(() => clearTimeout(timer))
       if (late) return late
-      const shown = await this.presentJumpPreview(frame, shouldPresent)
+      const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder)
       if (shown) {
         const background: Promise<void> = live.then(() => undefined, error => { if (!this.disposed) logger.debug('快速拖动中后台准备的实时画面未完成', { event: 'video_edit.preview.detached_frame.failed', error, context: { frame } }) })
           .finally(() => { if (this.detachedLive === background) this.detachedLive = undefined })
@@ -1619,17 +1626,6 @@ export class VideoEditRenderer {
     return await live
   }
   /**
-   * A far jump requested while the renderer is still preparing an earlier paused frame (the Worker answers it outside
-   * its queue): draws the resident key frame of `frame` now and starts reading its pre-rendered exact picture, so quick
-   * successive clicks never wait for the frame before. Undefined when no resident key frame covers `frame`.
-   */
-  async presentJumpPreviewNow(frame: number, shouldPresent: () => boolean): Promise<VideoEditRenderResult | undefined> {
-    if (this.disposed || !this.jumpPreviewPicture(frame)) return undefined
-    const shown = await this.presentJumpPreview(frame, shouldPresent)
-    if (shown?.presented) void this.showPrerenderedExact(frame, this.presentations, shouldPresent, () => this.shownExact && this.shownFrame === frame, 0)
-    return shown
-  }
-  /**
    * A paused frame request for `frame` arrived (the Worker calls this on arrival, before queueing it behind the frame
    * being prepared): the paused exact frame being composed is abandoned (`abandonPausedFrame`), unless it is `frame`
    * itself or `frame` lies a short step ahead of it (within `VIDEO_EDIT_SCRUB_RETARGET_SECONDS`: its decoding is on the
@@ -1637,7 +1633,8 @@ export class VideoEditRenderer {
    * speed changes and nesting can map them apart); a misjudged step only costs one wait for the frame, or one read that
    * starts again from where its decoder stopped.
    */
-  supersedePausedFrame(frame: number): void {
+  supersedePausedFrame(frame: number, preferCache = false): void {
+    if (preferCache && this.hasPrerenderedFrame(frame)) { this.abandonPausedFrame(); this.scrubLive?.abort(); return }
     const live = this.pausedLive
     if (!live) return
     const ahead = (frame - live.frame) / this.document.fps
@@ -1651,8 +1648,7 @@ export class VideoEditRenderer {
    * browser backend's reads; they finish first, and the frame then does not present.
    */
   abandonPausedFrame(): void { this.pausedLive?.abort.abort() }
-  /** Whether a resident key frame covers `frame` (see `presentJumpPreviewNow`). */
-  hasJumpPreview(frame: number): boolean { return !!this.jumpPreviewPicture(frame) }
+  hasPrerenderedFrame(frame: number): boolean { return !!this.jumpPreview && !!this.cachedWindow(frame) }
 
   /** 缩略预览共用 GPU，画到自己的低清画布，不能改动节目表面或播放头。 */
   async captureHoverFrame(document: VideoEditComposition, frame: number, allowRender: boolean, signal: AbortSignal): Promise<Uint8Array | undefined> {
@@ -1715,63 +1711,88 @@ export class VideoEditRenderer {
     return window && picture ? { window, picture } : undefined
   }
   /** Draws the resident key frame of the pre-rendered window at `frame` (approximate); undefined when there is none. */
-  private async presentJumpPreview(frame: number, shouldPresent: () => boolean): Promise<VideoEditRenderResult | undefined> {
+  private async presentJumpPreview(frame: number, shouldPresent: () => boolean, requestOrder: number): Promise<VideoEditRenderResult | undefined> {
     const found = this.jumpPreviewPicture(frame)
     if (!found || !this.jumpPreview) return undefined
     const document = this.document; const epoch = this.presentationEpoch
-    const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
+    const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && (this.shownRequest < requestOrder || this.shownRequest === requestOrder && this.shownState?.source === 'jump') && shouldPresent()
     const started = performance.now()
     const release = this.jumpPreview.lease()
     let drawn: { presented: boolean; completion: Promise<void> }
-    try { drawn = await this.exclusiveDraw(() => this.ensureCompositor().draw(this.drawDocument(document), [found.window.clip], [found.picture], canPresent)) } catch (error) {
+    try { drawn = await this.exclusiveDraw(() => canPresent() ? this.ensureCompositor().draw(this.drawDocument(document), [found.window.clip], [found.picture], canPresent) : Promise.resolve({ presented: false, completion: Promise.resolve() }), frame, 'jump', false, requestOrder) } catch (error) {
       release()
       if (canPresent()) throw error
       drawn = { presented: false, completion: Promise.resolve() }
     }
     void drawn.completion.then(release, release)
-    if (drawn.presented) { this.shownFrame = frame; this.shownExact = false }
     recordVideoEditPreparation('jumpPreviewShown', performance.now() - started)
     if (this.foregroundFrames === 0) this.scheduleJumpFill()
-    return { canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented: drawn.presented, renderCached: false, decodeMs: 0, gpuMs: performance.now() - started, approximate: true, completion: drawn.completion }
+    return { canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented: drawn.presented, ...(!drawn.presented ? { superseded: true } : {}), renderCached: false, decodeMs: 0, gpuMs: performance.now() - started, approximate: true, presentedSource: 'jump', completion: drawn.completion }
   }
-  /**
-   * Draws the pre-rendered exact picture of `frame` (read after `delayMs`), unless the live frame or any later
-   * presentation reached the screen first.
-   */
-  private async showPrerenderedExact(frame: number, before: number, shouldPresent: () => boolean, liveSettled: () => boolean, delayMs: number): Promise<void> {
+  /** 在途缓存读完并绘制后，只处理最新排队位置；前一次缓存上屏不会作废等待中的最新目标。 */
+  presentPrerenderedFrame(frame: number, shouldPresent: () => boolean, preserveExact = false, requestOrder = this.reservePresentation()): Promise<VideoEditRenderResult | undefined> {
+    const request = ++this.prerenderRequest
+    const document = this.document, epoch = this.presentationEpoch, cacheRevision = this.renderCacheRevision
+    const read = (): Promise<VideoEditRenderResult | undefined> => {
+      const current = request === this.prerenderRequest
+      return this.readPrerenderedFrame(frame, () => current && this.document === document && this.presentationEpoch === epoch && this.renderCacheRevision === cacheRevision && shouldPresent(), preserveExact, requestOrder)
+    }
+    const result = this.prerenderTail.then(read, read)
+    this.prerenderTail = result
+    return result
+  }
+  /** 更早的现场画面不作废当前读取；同请求的现场画面和更新请求上屏后缓存才失效。 */
+  private async readPrerenderedFrame(frame: number, shouldPresent: () => boolean, preserveExact: boolean, requestOrder: number): Promise<VideoEditRenderResult | undefined> {
+    clearTimeout(this.jumpFill); this.jumpFill = undefined
     const started = performance.now()
     const document = this.document; const epoch = this.presentationEpoch
-    // Any presentation after the request began (its live frame above all) wins over this picture.
-    const wanted = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && !liveSettled() && this.presentations === before && shouldPresent()
-    if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs))
-    const window = this.cachedWindow(frame)
-    const preview = this.jumpPreview
-    if (!window || !preview || !wanted()) return
-    // Same picture time as the window's playback reads (container timestamp tolerance, `videoEditPictureSeconds`).
-    const picture = await preview.exactPicture(window.key, window.media, videoEditPictureSeconds(clipSourceSeconds(window.clip, frame, document.fps)), sample => this.ensureCompositor().snapshot(sample, true), wanted)
-    if (!picture) return
-    if (!wanted()) { picture.close(); return }
-    let drawn: { presented: boolean; completion: Promise<void> } | undefined
-    try { drawn = await this.exclusiveDraw(() => wanted() ? this.ensureCompositor().draw(this.drawDocument(document), [window.clip], [picture], wanted) : Promise.resolve({ presented: false, completion: Promise.resolve() })) } catch { drawn = undefined }
-    void (drawn?.completion ?? Promise.resolve()).then(() => picture.close(), () => picture.close())
-    if (drawn?.presented) { this.shownFrame = frame; this.shownExact = false; recordVideoEditPreparation('prerenderedExactShown', performance.now() - started) }
+    const window = this.cachedWindow(frame); const preview = this.jumpPreview; const cacheRevision = this.renderCacheRevision
+    const wanted = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && this.renderCacheRevision === cacheRevision && (this.shownRequest < requestOrder || this.shownRequest === requestOrder && this.shownState?.source !== 'live') && shouldPresent()
+    if (!window || !preview) return undefined
+    const outcome = (presented: boolean, completion = Promise.resolve()): VideoEditRenderResult => ({ canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented, ...(!presented ? { superseded: true } : {}), renderCached: true, presentedSource: 'prerendered', decodeMs: performance.now() - started, gpuMs: 0, completion })
+    const shown = this.shownState
+    if (preserveExact && this.shownFrame === frame && this.shownFrameExact && shown?.document === document && shown.epoch === epoch && shown.divisor === this.renderDivisor && shown.cacheRevision === cacheRevision) {
+      if (shown.source !== 'prerendered' || !wanted()) return undefined
+      this.shownRequest = requestOrder
+      return outcome(true, shown.completion)
+    }
+    if (!wanted()) return outcome(false)
+    this.foregroundFrames++; this.frameTurnsGranted = false; this.backgroundIdle = false; clearTimeout(this.idleTurns)
+    try {
+      const picture = await preview.exactPicture(window.key, window.media, videoEditPictureSeconds(clipSourceSeconds(window.clip, frame, document.fps)), sample => this.ensureCompositor().snapshot(sample, true), wanted)
+      if (!picture) return wanted() ? undefined : outcome(false)
+      if (!wanted()) { picture.close(); return outcome(false) }
+      let drawn: { presented: boolean; completion: Promise<void> } | undefined
+      try { drawn = await this.exclusiveDraw(() => wanted() ? this.ensureCompositor().draw(this.drawDocument(document), [window.clip], [picture], wanted) : Promise.resolve({ presented: false, completion: Promise.resolve() }), frame, 'prerendered', true, requestOrder) } catch { drawn = undefined }
+      void (drawn?.completion ?? Promise.resolve()).then(() => picture.close(), () => picture.close())
+      if (!drawn) return undefined
+      if (drawn.presented) recordVideoEditPreparation('prerenderedExactShown', performance.now() - started)
+      return outcome(drawn.presented, drawn.completion)
+    } finally {
+      this.grantFrameTurns()
+      if (--this.foregroundFrames === 0) {
+        this.idleTurns = setTimeout(() => { if (this.foregroundFrames === 0) { this.backgroundIdle = true; this.grantBackgroundTurns() } }, BACKGROUND_IDLE_MS)
+        this.scheduleJumpFill()
+      }
+    }
   }
   /**
    * Top-level draws one at a time: a jump preview never interleaves with a live frame finishing in the background.
-   * `presentations` counts the presented ones inside the lock, so a draw prepared earlier can see that it lost.
+   * 上屏请求号在锁内登记，缓存读取可据此保留更早现场合成期间的上屏资格。
    */
-  private async exclusiveDraw<T extends { presented: boolean }>(draw: () => Promise<T>): Promise<T> {
+  private async exclusiveDraw<T extends { presented: boolean; completion: Promise<void> }>(draw: () => Promise<T>, frame: number, source: VideoEditPresentedSource, exact = true, requestOrder = this.reservePresentation()): Promise<T> {
     const previous = this.drawLock
     let unlock!: () => void
     this.drawLock = new Promise<void>(resolve => { unlock = resolve })
     try {
       await previous
+      const state = { document: this.document, epoch: this.presentationEpoch, cacheRevision: this.renderCacheRevision, divisor: this.renderDivisor }
       const result = await draw()
-      if (result.presented) this.presentations++
+      if (result.presented) { this.shownRequest = requestOrder; this.shownFrame = frame; this.shownFrameExact = exact; this.shownState = { ...state, source, completion: result.completion }; this.onPresentation?.(frame, source, exact) }
       return result
     } finally { unlock() }
   }
-  private async renderFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, signal?: AbortSignal): Promise<VideoEditRenderResult> {
+  private async renderFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, signal?: AbortSignal, requestOrder?: number): Promise<VideoEditRenderResult> {
     this.capturePresentation = capturePresentation
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
@@ -2136,7 +2157,7 @@ export class VideoEditRenderer {
       await this.disposeCodeInputs(new Set([...effects].flatMap(([id, chain]) => chain.flatMap(plan => !plan.builtin && plan.program.frames.length ? [JSON.stringify([id, plan.effect.id])] : []))), this.filterInputs)
       const draw = (): Promise<{ presented: boolean; completion: Promise<void> }> => composite ? renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), effects, gpu, frame, canPresent, deadline, document, nestedPicture, onEffectError, quality,
         (clip, plan, input) => this.readFilterFrames(document, clip, plan, input, frame, quality, canPresent, nestedContext, path, sourceDocument)) : gpu.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
-      result = nestedRender ? await draw() : await this.exclusiveDraw(draw)
+      result = nestedRender ? await draw() : await this.exclusiveDraw(draw, frame, cachedWindow ? 'prerendered' : 'live', !approximatePictures && !nestedContext.approximate, requestOrder)
     } catch (error) {
       if (canPresent()) throw error
       result = { presented: false, completion: Promise.resolve() }
@@ -2173,7 +2194,7 @@ export class VideoEditRenderer {
     // The frame (the top of the tree) completes after its code input pictures; their failure fails it.
     const frameCompletion = !nestedRender && nestedContext.completions.length ? Promise.all([completion, ...nestedContext.completions]).then(() => undefined) : completion
     // A top-level frame is approximate when any picture of its tree is, code video inputs included.
-    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, decodeMs, gpuMs, effectErrors, ...(sceneIssues.length ? { sceneIssues } : {}), ...(approximatePictures || !nestedRender && nestedContext.approximate ? { approximate: true } : {}), completion: frameCompletion }
+    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, presentedSource: cachedWindow ? 'prerendered' : 'live', decodeMs, gpuMs, effectErrors, ...(sceneIssues.length ? { sceneIssues } : {}), ...(approximatePictures || !nestedRender && nestedContext.approximate ? { approximate: true } : {}), completion: frameCompletion }
   }
   /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
   private readonly audioChains = new Map<string, AudioEffectChain>()

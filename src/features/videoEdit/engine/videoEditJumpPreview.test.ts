@@ -101,9 +101,10 @@ describe('VideoEditJumpPreview', () => {
     expect(preview.pick('a', 0, 10)).toBeUndefined()
   })
 
-  it('reads exact pictures on a reader of its own, one file at a time, and gives it back when the program rests', async () => {
-    const { preview, reads, closedReaders } = setup()
-    preview.setWindows([window('a', 0, 120), window('b', 120, 240)])
+  it('精确读取跨窗口来回拖动复用解码器，超过两个窗口淘汰最久未用者，空闲时全部归还', async () => {
+    const { preview, reads, closedReaders, frames } = setup()
+    const open = vi.spyOn(frames, 'open')
+    preview.setWindows([window('a', 0, 120), window('b', 120, 240), window('d', 240, 360)])
     const snapshot = vi.fn(async (decoded: VideoEditDecodedPicture) => ({ time: decoded.timestamp, allocationSize: () => 400, close: vi.fn() }) as unknown as VideoEditGpuFrame)
     const first = await preview.exactPicture('a', media('a'), 0.5, snapshot)
     const second = await preview.exactPicture('a', media('a'), 0.6, snapshot)
@@ -111,12 +112,16 @@ describe('VideoEditJumpPreview', () => {
     expect(reads.map(read => [read.path, read.time, read.options?.keyFrame ?? false])).toEqual([['cache/a.mp4', 0.5, false], ['cache/a.mp4', 0.6, false]])
     expect(closedReaders).toEqual([])
     await preview.exactPicture('b', media('b'), 0.25, snapshot)
-    expect(closedReaders).toEqual(['cache/a.mp4'])
+    await preview.exactPicture('a', media('a'), 0.1, snapshot)
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(closedReaders).toEqual([])
+    await preview.exactPicture('d', media('d'), 0.2, snapshot)
+    expect(closedReaders).toEqual(['cache/b.mp4'])
     // Unknown windows are not read; the exact pictures never join the resident key frames.
     expect(await preview.exactPicture('c', media('c'), 0, snapshot)).toBeUndefined()
     expect(preview.pictureCount).toBe(0)
     await preview.fillStep(0, () => true)
-    expect(closedReaders).toEqual(['cache/a.mp4', 'cache/b.mp4'])
+    expect(closedReaders).toEqual(['cache/b.mp4', 'cache/a.mp4', 'cache/d.mp4'])
   })
 
   it('a newer jump abandons the exact picture still being read: the old one gets nothing, the reader stays and reads the new one', async () => {

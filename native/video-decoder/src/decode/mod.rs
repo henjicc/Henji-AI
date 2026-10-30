@@ -313,7 +313,7 @@ mod imp {
                 None
             };
             let profiles = |name: &str| platform.has_decoder_profile(name);
-            let decoder = Decoder::open(DecoderSetup { parameters, time_base: stream.time_base, has_alpha: has_alpha_tag, purpose: options.purpose, hardware, device_profiles: &profiles })?;
+            let decoder = Decoder::open(DecoderSetup { parameters, all_frames_key: input.all_frames_key(), time_base: stream.time_base, has_alpha: has_alpha_tag, purpose: options.purpose, hardware, device_profiles: &profiles })?;
             let time_base = input.time_base;
             let frame_rate = crate::probe::preferred_frame_rate(stream.avg_frame_rate, stream.r_frame_rate).unwrap_or(0.0);
             let start_ticks = (stream.start_time != ffmpeg_sys_next::AV_NOPTS_VALUE).then_some(stream.start_time);
@@ -335,7 +335,7 @@ mod imp {
                 drop(first);
                 let Primer { mut input, .. } = session_parts;
                 input.seek_start()?;
-                let decoder = Decoder::open(DecoderSetup { parameters: input.parameters(), time_base: input.stream().time_base, has_alpha: has_alpha_tag, purpose: options.purpose, hardware: None, device_profiles: &profiles })?;
+                let decoder = Decoder::open(DecoderSetup { parameters: input.parameters(), all_frames_key: input.all_frames_key(), time_base: input.stream().time_base, has_alpha: has_alpha_tag, purpose: options.purpose, hardware: None, device_profiles: &profiles })?;
                 session_parts = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None, all_key: true };
                 first = session_parts.first_frame(&control)?;
             }
@@ -953,7 +953,21 @@ mod imp {
             // 关键帧；同一 GOP 内向前续解最多再解 `KEY_ONLY_FORWARD_FRAMES` 帧，没到目标就交出已解到的最后一帧（不晚于目标）。
             // 会话停在已解到的位置，同一时间随后的精确请求按“续解”从这里接着向前解。
             let mut approximate = false;
-            let located = if key_only && !self.covers(ticks) && self.queued.is_none() {
+            let located = if self.decoder.all_frames_key && !self.covers(ticks) {
+                // 每帧独立：前后跳转都按索引直接解目标帧，不把近距离跳转当成顺序续解。
+                let target = self.input.key_before(ticks);
+                let located = if !self.force_seek && self.candidate.as_ref().map(frame_ts) == target {
+                    Ok(false)
+                } else { self.locate_key(ticks) };
+                located.and_then(|seeked| {
+                    // 容器索引可能把非关键帧标成关键帧；只有解码结果证实目标才能省去推进。
+                    if self.candidate.as_ref().is_some_and(|frame| Some(frame_ts(frame)) == target && frame_ts(frame) <= ticks && frame.is_key()) {
+                        Ok(seeked)
+                    } else {
+                        self.locate(ticks, true).map(|advanced_seek| seeked || advanced_seek)
+                    }
+                })
+            } else if key_only && !self.covers(ticks) && self.queued.is_none() {
                 if self.needs_seek(ticks) {
                     approximate = true;
                     self.locate_key(ticks)
@@ -1276,7 +1290,7 @@ mod imp {
                     let decoder = if recycle && reused.is_some() {
                         let mut decoder = reused.take().unwrap(); decoder.flush(); decoder
                     } else {
-                        Decoder::open(DecoderSetup { parameters, time_base: input.stream().time_base, has_alpha: false, purpose: Purpose::Playback, hardware: Some(platform.hardware_device().unwrap()), device_profiles: &|name| platform.has_decoder_profile(name) }).unwrap()
+                        Decoder::open(DecoderSetup { parameters, all_frames_key: input.all_frames_key(), time_base: input.stream().time_base, has_alpha: false, purpose: Purpose::Playback, hardware: Some(platform.hardware_device().unwrap()), device_profiles: &|name| platform.has_decoder_profile(name) }).unwrap()
                     };
                     let mut primer = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None, all_key: true };
                     let picture = primer.first_frame(&control).unwrap();
@@ -1384,6 +1398,73 @@ mod imp {
             let (_, approximate) = session.locate_frame(ticks, false).expect("精确取帧");
             assert!(!approximate);
             frame_ts(session.candidate.as_ref().expect("有画面"))
+        }
+
+        #[test]
+        fn intra_codec_with_sparse_index_still_returns_exact_frames() {
+            let path = std::env::temp_dir().join(format!("henji-intra-sparse-{}.mkv", std::process::id()));
+            let status = std::process::Command::new("ffmpeg")
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25:duration=4", "-c:v", "mjpeg", "-q:v", "3", "-cluster_time_limit", "1000"])
+                .arg(&path).status().expect("测试需要随包 FFmpeg");
+            assert!(status.success());
+            fn element_size(bytes: &[u8], offset: usize) -> (usize, usize) {
+                let width = bytes[offset].leading_zeros() as usize + 1;
+                let mut size = usize::from(bytes[offset] & (0xff >> width));
+                for byte in &bytes[offset + 1..offset + width] { size = (size << 8) | usize::from(*byte); }
+                (size, width)
+            }
+            let mut bytes = std::fs::read(&path).unwrap();
+            let cues = bytes.windows(4).rposition(|value| value == [0x1c, 0x53, 0xbb, 0x6b]).expect("Matroska Cues");
+            let (size, width) = element_size(&bytes, cues + 4);
+            let mut cursor = cues + 4 + width;
+            let end = cursor + size;
+            let mut points = 0;
+            while cursor < end {
+                let (size, width) = element_size(&bytes, cursor + 1);
+                if bytes[cursor] == 0xbb {
+                    // 用同长 Void 留空非整秒 CuePoint，保留合法稀疏索引及所有文件偏移。
+                    if points % 25 != 0 { bytes[cursor] = 0xec; }
+                    points += 1;
+                }
+                cursor += 1 + width + size;
+            }
+            assert_eq!(points, 100);
+            std::fs::write(&path, bytes).unwrap();
+            let mut session = open(path.to_str().unwrap());
+            assert!(session.decoder.intra_only);
+            assert!(session.input.has_index(), "存在容器定位索引");
+            assert!(!session.decoder.all_frames_key, "容器索引没有逐帧登记");
+            for frame in [1, 20, 21, 39, 2, 22] {
+                let ticks = exact(&mut session, (frame as f64 + 0.001) / 25.0);
+                assert_eq!(ticks, seconds_to_ticks(frame as f64 / 25.0, session.time_base), "稀疏索引第 {frame} 帧");
+            }
+            drop(session);
+            std::fs::remove_file(path).unwrap();
+        }
+
+        #[test]
+        fn all_intra_frame_at_decodes_one_picture_per_jump() {
+            let path = std::env::temp_dir().join(format!("henji-intra-seek-{}.mp4", std::process::id()));
+            let status = std::process::Command::new("ffmpeg")
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=2", "-c:v", "libx264", "-preset", "veryfast", "-bf", "0", "-g", "1", "-pix_fmt", "yuv420p"])
+                .arg(&path).status().expect("测试需要随包 FFmpeg");
+            assert!(status.success());
+            let mut session = open(path.to_str().unwrap());
+            assert!(session.decoder.intra_only, "全关键帧 H.264 按文件索引识别");
+            assert!(session.decoder.immediate_output, "单帧读取不能等待帧级多线程流水");
+            for frame in [1, 20, 39, 2, 21] {
+                let before = session.control.counters.decoded.load(Ordering::Relaxed);
+                let ticks = exact(&mut session, (frame as f64 + 0.001) / 30.0);
+                assert_eq!(ticks, seconds_to_ticks(frame as f64 / 30.0, session.time_base));
+                assert_eq!(session.control.counters.decoded.load(Ordering::Relaxed) - before, 1, "跳到第 {frame} 帧只解目标一帧");
+            }
+            let before = session.control.counters.decoded.load(Ordering::Relaxed);
+            exact(&mut session, 21.0 / 30.0);
+            assert_eq!(session.control.counters.decoded.load(Ordering::Relaxed), before, "同一帧不重解");
+            session.locate_frame(-1, false).unwrap();
+            assert!(session.candidate.is_none(), "源起点之前没有画面");
+            drop(session);
+            std::fs::remove_file(path).unwrap();
         }
 
         /// 定位到第二个 GOP 末尾的取帧被取消：会话停在解出的关键帧上，而帧级多线程解码器已经按“跳过非参考帧”多送了

@@ -11,7 +11,7 @@ import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { VideoEditProxyFrames } from './videoEditProxyFrames'
 import { videoEditDecodeSource, type VideoProxyResult } from '@/core/videoEdit/proxy'
 import { VideoEditDecodeLookahead } from './videoEditDecodeLookahead'
-import { VideoEditRenderer } from './videoEditRenderer'
+import { VideoEditRenderer, type VideoEditPresentedSource } from './videoEditRenderer'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 import { installVideoEditWebChannel } from './videoEditWebInputs'
@@ -59,11 +59,11 @@ export type RenderRequest = { id: number } & (
   | { kind: 'hoverFrame'; document: VideoEditComposition; frame: number; allowRender: boolean }
   | { kind: 'cancelHoverFrame' }
   /** `sentAt`：诊断时主线程发出请求的绝对时间（timeOrigin + now），用来算投递延迟。 */
-  | { kind: 'render'; sentAt?: number; observeElements?: boolean; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: import('./videoEditRenderer').VideoEditScrubMode; deadline?: number; readRgb?: { width: number; height: number }; history?: boolean }
+  | { kind: 'render'; requireLive?: boolean; sentAt?: number; observeElements?: boolean; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: import('./videoEditRenderer').VideoEditScrubMode; deadline?: number; readRgb?: { width: number; height: number }; history?: boolean }
   | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { hoverBytes?: Uint8Array; /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { hoverBytes?: Uint8Array; /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; refining?: boolean; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted' | 'presented' | 'refined'; frame?: number; sequenceId?: string; revision?: number; presentedSource?: VideoEditPresentedSource; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -112,8 +112,11 @@ let latestRender: { frame: number; sequential: boolean } | undefined
  * newest position.
  */
 const queuedFrames = new Map<number, () => void>()
-/** A paused (exact) program frame is being prepared in the queue: far jumps meanwhile are answered outside it. */
-let exactRendering = false
+/** 像素回读和完整选帧独占提交前的画布，缓存不能抢占它的快照。 */
+let pixelRendering = false
+let backgroundElements: number | undefined
+let backgroundRenderId: number | undefined
+let latestForegroundRequest: RenderRequest | undefined
 /**
  * Counts `stopPlayback` messages, applied the moment one arrives (outside the queue). A playback frame (one with a
  * presentation deadline) received before the latest stop and not on screen yet never presents: queued ones are answered
@@ -198,6 +201,11 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
   if (event.data.kind === 'code.trustResult' || event.data.kind === 'code.compiled' || event.data.kind === 'code.source' || event.data.kind === 'code.metadataResult' || event.data.kind === 'code.moduleUrls') { sharedCompilation.receive(event.data); return }
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
+  // 字体、代理切换和起播也要先让后台现场画面退场，不能等 render 排到队首才取消。
+  if (request.kind !== 'hoverFrame' && request.kind !== 'cancelHoverFrame' && request.kind !== 'renderCache') {
+    latestForegroundRequest = request
+    if (backgroundRenderId !== undefined) renderer?.abandonPausedFrame()
+  }
   if (request.kind === 'cancelHoverFrame') { hoverEpoch++; hoverRequest?.abort(); return }
   // 前台请求到达即取消后台解码，不等它排到队首。
   if (request.kind !== 'hoverFrame' && request.kind !== 'renderCache') { hoverEpoch++; hoverRequest?.abort() }
@@ -211,6 +219,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
   const epoch = playbackEpoch
   const cancelledByStop = (): boolean => request.kind === 'render' && request.deadline !== undefined && epoch !== playbackEpoch
   if (request.kind === 'render') { latestRender = request; foregroundFrames++; if (renderer) decodeLookahead?.beforeFrame(renderer.document, request.frame, request.sequential === true) }
+  const presentationOrder = request.kind === 'render' ? renderer?.reservePresentation() : undefined
   let skipped = false
   if (request.kind === 'render' && !request.sequential) {
     // 节目暂停时（拖动、跳转、逐帧）排队还没开始的旧画面请求当场答复 skipped（节目照常等这一帧），Worker 一空下来就画最新的
@@ -220,24 +229,29 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
     if (!request.history && !request.readRgb) queuedFrames.set(request.id, () => { skipped = true; releaseForeground(); self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse) })
     // 已在准备的暂停精确画面（长 GOP 可达一秒）也让给这一帧：渲染器放弃它（答复 skipped），解码停在已解到的位置，
     // 这一帧不排在一幅没人要的画面后面。播放帧（有呈现时刻）与要回读像素的帧不放弃任何帧。
-    if (request.deadline === undefined && !request.history && !request.readRgb) renderer?.supersedePausedFrame(request.frame)
+    if (request.deadline === undefined && !request.history && !request.readRgb) renderer?.supersedePausedFrame(request.frame, !request.requireLive && (!!request.scrubbing || !!renderer?.hasPrerenderedFrame(request.frame)))
   }
   if (request.kind === 'init') { enableVideoEditFrameTrace(request.traceFrames === true); enableVideoEditRenderDiagnostics(request.diagnostics === true); labelNativePort() }
 
   if (request.kind === 'preopen') { preopenMedia(request); return }
-  // 连续快速点击：前一次点击的精确画面还在准备（长 GOP 原片可达一秒）时，新的远距离跳转不排在它后面，当场画常驻关键帧并
-  // 开始读预渲染的精确画面；前一帧之后不会再画上去（渲染器按“后来的画面已上屏”放弃它）。
-  if (request.kind === 'render' && exactRendering && renderer && direct && request.scrubbing === 'fast' && !request.sequential && !request.history && !request.readRgb && renderer.hasJumpPreview(request.frame)) {
-    queuedFrames.delete(request.id)
+  // 现场合成可能等网页或解码器收尾；缓存使用独立读取器和绘制锁，不能排在它后面。
+  let outsidePreview: Promise<boolean> | undefined
+  if (request.kind === 'render' && !pixelRendering && renderer && direct && !request.sequential && request.deadline === undefined && !request.history && !request.readRgb && !request.requireLive && renderer.hasPrerenderedFrame(request.frame)) {
     const current = renderer
-    const started = performance.now()
-    void current.presentJumpPreviewNow(request.frame, () => current.document.revision === revision).then(async shown => {
-      releaseForeground()
-      if (!shown) { self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse); return }
-      await shown.completion.catch(() => undefined)
-      self.postMessage({ id: request.id, presented: shown.presented, approximate: true, renderCached: false, renderElapsedMs: performance.now() - started, renderStages: { jumpPreviewOutsideQueue: performance.now() - started }, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: shown.cacheHits, cacheBytes: shown.cacheBytes, decodeMs: 0, gpuMs: shown.gpuMs } satisfies RenderResponse)
-    }, error => { releaseForeground(); self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse) })
-    return
+    // 已开始的缓存读取占着自己的在途名额；后来的指针请求不能跳过它的回执或作废尚有上屏机会的画面。
+    queuedFrames.delete(request.id)
+    const preview = current.presentPrerenderedFrame(request.frame, () => renderer === current && current.document.revision === revision && !pixelRendering && (!!request.scrubbing || latestRender === request), !request.scrubbing, presentationOrder)
+    outsidePreview = preview.then(async shown => {
+      if (!shown || skipped) return false
+      // 缓存是否画出只决定提前回执，不能丢掉仍有人要的松手现场帧。
+      if (!shown.presented && latestRender === request) return false
+      queuedFrames.delete(request.id); releaseForeground()
+      await shown.completion
+      skipped = !shown.presented
+      self.postMessage({ id: request.id, presented: shown.presented, ...(!shown.presented ? { skipped: true } : {}), presentedSource: shown.presentedSource, refining: !request.scrubbing, renderCached: true, renderElapsedMs: performance.now() - receivedAt, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: shown.cacheHits, cacheBytes: shown.cacheBytes, decodeMs: shown.decodeMs, gpuMs: shown.gpuMs } satisfies RenderResponse)
+      return true
+    }).catch(error => { skipped = true; queuedFrames.delete(request.id); releaseForeground(); self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse); return true })
+    // 缓存成功即完成请求；暂停帧的现场合成在队列内继续，后续缓存请求仍可在队列外上屏。
   }
   if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
@@ -249,6 +263,8 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
   if (request.kind === 'init' || request.kind === 'replaceContent') revision = request.document.revision
   if (request.kind === 'update') revision = Math.max(revision, request.document.revision)
   if (request.kind === 'parameters') revision = Math.max(revision, request.update.revision)
+  let backgroundRender = false
+  let backgroundComposition: VideoEditComposition | undefined
   queue = queue.then(async () => {
     try {
       // 快速拖动时一幅实时画面可能在请求交回后继续在后台准备（渲染器先画了常驻关键帧）：改动渲染器的请求等它收尾。
@@ -290,6 +306,16 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
         await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent, log)
+        const current = renderer
+        let playbackSource: VideoEditPresentedSource | undefined
+        current.onPresentation = (frame, presentedSource, exact) => {
+          if (latestRender?.sequential) {
+            if (playbackSource === presentedSource) return
+            playbackSource = presentedSource
+          } else playbackSource = undefined
+          const authorElements = backgroundElements === frame && exact && presentedSource === 'live' ? current.observeAuthorElements(frame) : undefined
+          self.postMessage({ id: 0, phase: 'presented', frame, presentedSource, ...(authorElements ? { authorElements } : {}) } satisfies RenderResponse)
+        }
         renderer.onPlaybackIdle = () => { if (renderer && latestRender) { const composition = renderer.document, { frame, sequential } = latestRender; probeVideoEditTask('lookahead.update', () => decodeLookahead?.update(composition, frame, sequential, renderCacheWindows)) } }
         renderer.setRenderCache(renderCacheWindows)
         self.postMessage({ id: request.id } satisfies RenderResponse)
@@ -310,6 +336,17 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         // 排队期间已被更新的画面请求取代（见 `queuedFrames`），已答复过。
+        backgroundRender = !!outsidePreview && await outsidePreview
+        if (outsidePreview && latestRender !== request) {
+          if (backgroundRender && !request.scrubbing) self.postMessage({ id: request.id, phase: 'refined', presented: false } satisfies RenderResponse)
+          if (!backgroundRender && !skipped) { releaseForeground(); self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse) }
+          return
+        }
+        if (backgroundRender && latestForegroundRequest !== request) {
+          if (!request.scrubbing) self.postMessage({ id: request.id, phase: 'refined', presented: false } satisfies RenderResponse)
+          return
+        }
+        if (backgroundRender && request.scrubbing) return
         if (skipped) return
         queuedFrames.delete(request.id)
         if (cancelledByStop()) { releaseForeground(); self.postMessage({ id: request.id, presented: false, skipped: true } satisfies RenderResponse); return }
@@ -326,8 +363,10 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
           snapshot = pixels
           void snapshot.catch(() => {})
         }, { maxPixels: needsPixels ? Infinity : 1280 * 720, gpu: !direct && !request.readRgb && !request.history }) : undefined
-        exactRendering = !request.scrubbing && !request.sequential
-        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision && !cancelledByStop(), request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }).finally(() => { exactRendering = false })
+        pixelRendering = !!capture || request.requireLive === true
+        if (backgroundRender) { backgroundComposition = renderer.document; backgroundRenderId = request.id }
+        backgroundElements = backgroundRender && request.observeElements ? request.frame : undefined
+        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision && !cancelledByStop() && (!backgroundRender || latestRender === request), request.deadline, undefined, request.quality, capture, request.requireLive || backgroundRender, presentationOrder).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }).finally(() => { pixelRendering = false; backgroundElements = undefined })
         const renderStages = videoEditPreparationDelta(preparationBefore)
         // 本帧合成提交的 GPU 分段（诊断时才有）；下一帧开始前取走，不和后面的帧混在一起。
         const gpuStages = takeVideoEditGpuFrame()
@@ -336,7 +375,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         if (result.presented) probeVideoEditTask('lookahead.update', () => decodeLookahead?.update(composition, request.frame, request.sequential === true, renderCacheWindows))
         const readCodePerformance = renderer.captureCodePerformance()
         // 跳转先出的近似画面（预渲染的常驻关键帧）没有跑这一帧的代码：作者元素等随后的精确帧再读。
-        const authorElements = request.observeElements && result.presented && !result.approximate ? renderer.observeAuthorElements(request.frame) : undefined
+        const authorElements = request.observeElements && result.presented && result.presentedSource === 'live' && !result.approximate ? renderer.observeAuthorElements(request.frame) : undefined
         traceVideoEditFrame('worker.render', request.frame, renderStarted)
         const finish = async (): Promise<void> => {
           const owned = new Set<ImageBitmap>()
@@ -373,7 +412,10 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
           const bitmap = rgb || direct || !result.presented ? undefined : pixels
           traceVideoEditFrame('bitmap.prepare', request.frame, transferStarted)
           const postedAt = performance.now()
-          probeVideoEditTask('render.post', () => self.postMessage({ id: request.id, ...(result.superseded || !result.presented && cancelledByStop() ? { skipped: true } : {}), renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.sceneIssues ? [...(result.effectErrors ?? []), ...result.sceneIssues] : result.effectErrors, ...(result.sceneIssues ? { sceneIssues: result.sceneIssues } : {}), sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] }))
+          if (backgroundRender) self.postMessage({ id: request.id, phase: 'refined', frame: request.frame, sequenceId: composition.id, revision: composition.revision, presented: result.presented && latestRender === request && revision === composition.revision, effectErrors: [...(result.effectErrors ?? []), ...(result.sceneIssues ?? [])] } satisfies RenderResponse)
+          if (!backgroundRender) {
+          probeVideoEditTask('render.post', () => self.postMessage({ id: request.id, ...(result.superseded && latestRender !== request || !result.presented && cancelledByStop() ? { skipped: true } : {}), renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.sceneIssues ? [...(result.effectErrors ?? []), ...result.sceneIssues] : result.effectErrors, ...(result.sceneIssues ? { sceneIssues: result.sceneIssues } : {}), sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, presentedSource: result.presentedSource, ...(result.approximate ? { approximate: true } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] }))
+          }
           if (bitmap) owned.delete(bitmap)
           traceVideoEditFrame('worker.post', request.frame, postedAt)
           if (history) owned.delete(history)
@@ -414,7 +456,17 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         const channels = await renderer.mixAudio(request.start, request.duration, request.retainIdle === true)
         self.postMessage({ id: request.id, channels } satisfies RenderResponse, { transfer: channels.map(channel => channel.buffer as ArrayBuffer) })
       }
-    } catch (error) { releaseForeground(); self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse) }
+    } catch (error) {
+      releaseForeground()
+      if (backgroundRender) {
+        const failure = videoEditRenderFailure(error)
+        // 同帧的新请求也有独立生命周期；旧任务的取消不能变成新画面的失败，设备丢失则影响整个会话。
+        if (failure.gpuDeviceLost === undefined && (latestRender !== request || revision !== backgroundComposition?.revision)) { self.postMessage({ id: request.id, phase: 'refined', presented: false } satisfies RenderResponse); return }
+        log('warn', '暂停画面的后台现场合成未完成', 'video_edit.preview.detached_frame.failed', { frame: request.kind === 'render' ? request.frame : undefined, ...failure })
+        self.postMessage({ id: request.id, phase: 'refined', frame: request.kind === 'render' ? request.frame : undefined, sequenceId: backgroundComposition?.id, revision: backgroundComposition?.revision, ...failure } satisfies RenderResponse)
+      }
+      else self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse)
+    } finally { if (backgroundRenderId === request.id) backgroundRenderId = undefined }
   })
 }
 

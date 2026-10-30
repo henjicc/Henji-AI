@@ -66,6 +66,9 @@ export class VideoEditRenderTransport {
   private readonly moduleGraphs = new Map<number, AuthorModuleUrls>()
   private readonly worker = new Worker(new URL('./videoEditWorker.ts', import.meta.url), { type: 'module' })
   private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void; submitted?: () => void; timer?: ReturnType<typeof setTimeout> }>()
+  onPresentation?: (frame: number, source: import('./videoEditRenderer').VideoEditPresentedSource, authorElements?: RenderResponse['authorElements']) => void
+  private readonly backgroundTimers = new Map<number, ReturnType<typeof setTimeout>>()
+  onRefinement?: (result: RenderResponse, error?: Error) => void
   private nextId = 0
   private preopenVersion = 0
   private disposed = false
@@ -262,11 +265,26 @@ export class VideoEditRenderTransport {
         return
       }
       const value = event.data; const pending = this.pending.get(value.id)
+      const failure = value.error ? value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : restoreContentTrustError(new Error(value.error), value.contentTrust) : undefined
+      if (value.phase === 'refined') {
+        clearTimeout(this.backgroundTimers.get(value.id)); this.backgroundTimers.delete(value.id)
+        if (failure instanceof VideoEditGpuDeviceLostError) this.fail(failure)
+        else this.onRefinement?.(value, failure)
+        return
+      }
+      if (value.phase === 'presented') { if (value.frame !== undefined && value.presentedSource) this.onPresentation?.(value.frame, value.presentedSource, value.authorElements); return }
       if (value.phase === 'submitted') { pending?.submitted?.(); return }
       this.pending.delete(value.id)
       if (!pending) { value.bitmap?.close(); value.history?.close(); return }
       clearTimeout(pending.timer)
-      if (value.error) pending.reject(value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : restoreContentTrustError(new Error(value.error), value.contentTrust)); else pending.resolve(value)
+      if (value.refining && !failure) {
+        // 后台现场合成已用缓存完成前台请求；仍需宿主看门狗兜住无法响应取消的作者代码。
+        this.backgroundTimers.set(value.id, setTimeout(() => {
+          logger.warn('暂停画面的后台现场合成超过时限', { event: 'video_edit.preview.detached_frame.failed', context: { sequenceId: this.document.id, requestId: value.id } })
+          this.fail(new VideoEditRenderWorkerError('画面处理超过时限，请检查代码效果后重新加载预览。'))
+        }, this.requestTimeoutMs))
+      }
+      if (failure) pending.reject(failure); else pending.resolve(value)
     }
     this.worker.onerror = event => {
       event.preventDefault?.()
@@ -310,6 +328,8 @@ export class VideoEditRenderTransport {
     this.moduleGraphs.clear()
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error) }
     this.pending.clear()
+    for (const timer of this.backgroundTimers.values()) clearTimeout(timer)
+    this.backgroundTimers.clear()
     for (const controller of this.compilations.values()) controller.abort()
     this.compilations.clear(); this.stopFonts?.(); releaseDocumentFonts(this); this.content.dispose()
     this.canvas.width = this.canvas.height = 1
@@ -391,13 +411,13 @@ export class VideoEditRenderTransport {
   }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
-  async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false): Promise<RenderResponse> {
+  async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false): Promise<RenderResponse> {
     // 会话已就绪、这一帧要的字体也已在 Worker 里时不经任何等待，请求在调用方的同一个任务里发出（拖动时不排到界面更新之后）。
     if (!this.readySettled) await this.ready
     this.frame = frame
     if (this.fontSyncsPending || this.document !== this.fontDocument || this.fontKey(this.document) !== this.fontScope) await this.syncFonts(this.document)
     const document = this.document
-    const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
+    const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(requireLive ? { requireLive: true } : {}), ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
     const at = result.presented ? this.host.maskUpdateTime(document.id, document.revision) : undefined
     if (at !== undefined && result.presented) {
       const durationMs = performance.now() - at
@@ -462,6 +482,8 @@ export class VideoEditRenderTransport {
     this.content.dispose()
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('剪辑渲染已关闭。')) }
     this.pending.clear()
+    for (const timer of this.backgroundTimers.values()) clearTimeout(timer)
+    this.backgroundTimers.clear()
     if (immediate) {
       this.worker.terminate(); this.canvas.width = this.canvas.height = 1
       for (const modules of this.moduleGraphs.values()) modules.dispose()

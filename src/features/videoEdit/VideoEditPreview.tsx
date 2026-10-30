@@ -278,10 +278,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       // A different frame (including a played frame) invalidates the Worker playback plan.
       // Returning to that old paused position must not reuse the main thread's stale armed marker.
       if (instance.playing || instance.frame !== armedFrame) armedFrame = -1
-      if (releasedScrub && !instance.playing && performance.now() - firstPresentationAt >= 1100 && captureFull === 0) {
-        const document = videoMotionComposition(instance)
-        if (document === appliedDocument) void preparePlayback(document, instance.frame)
-      }
       if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
       observedAudioFrame = instance.frame
       if (instance.playing || releasedScrub || moved && !instance.scrubbing) scrubber.stop()
@@ -352,7 +348,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     /** 本次播放因跟不上时钟而跳过的帧数（播放验收读取）。 */
     let droppedFrames = 0
     /** 已交给渲染器的预渲染窗口（按内容指纹）；节目播放时整帧取自预览文件。 */
-    let appliedRenderCache = ''
+    let appliedRenderCache: ReturnType<typeof readyVideoEditRenderWindows> = []
     let renderCacheCheckedAt = -Infinity
     // 起播预热时提前混好的第一块声音：起播时钟不必再留 100ms 等混音。
     let displayPeriod: number | undefined
@@ -396,8 +392,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const interaction = (): void => { lastInteractionAt = performance.now() }
     const idleEvents = ['pointerdown', 'pointermove', 'wheel', 'keydown'] as const
     for (const event of idleEvents) window.addEventListener(event, interaction, { passive: true, capture: true })
-    // Scrub release starts preparation before the final paused-picture acknowledgement returns.
-    // The existing Worker queue keeps document/render ordering and owns all decoder resources.
+    // 播放预热和现场合成共用 Worker 队列；必须等暂停现场画面完成，缓存提前回执不代表合成完成。
     const preparePlayback = async (document: VideoEditComposition, frame: number): Promise<void> => {
       if (armedDocument === document && armedFrame === frame) return Promise.resolve()
       armedDocument = document; armedFrame = frame; armedAt = performance.now()
@@ -436,10 +431,24 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let failedFrame = -1
     let failedRetryAt = 0
     let failedRetryMs = 2000
+    let backgroundFailure: { composition: VideoEditComposition; frame: number; error: Error } | undefined
+    renderer.onRefinement = (result, error) => {
+      const composition = videoMotionComposition(instance)
+      if (stopped || session.current !== renderer || canvas.current !== surface || !composition || result.sequenceId !== composition.id || result.revision !== composition.revision || result.frame !== instance.frame || instance.playing || instance.scrubbing) return
+      if (error) { backgroundFailure = { composition, frame: instance.frame, error }; wake(0) }
+      else if (result.presented) { pausedPicture = true; setEffectFailure(result.effectErrors?.join('\n') ?? null); wake(0) }
+    }
+    renderer.onPresentation = (frame, source, authorElements) => {
+      if (stopped || session.current !== renderer || canvas.current !== surface) return
+      if (surface.dataset.presentedSource !== source) surface.dataset.presentedSource = source
+      if (source === 'live' && authorElements && listVideoEditInstances().includes(instance) && instance.activeSequenceId === authorElements.sequenceId && authorElements.frame === frame && frame === instance.frame && !instance.playing && !instance.scrubbing) {
+        installVideoEditCodeElements(instance, authorElements)
+      }
+    }
     const recordPresentation = (target: number, result: Awaited<ReturnType<VideoEditRenderSession['present']>>, requestedAt: number, scrubbing: boolean, composition: VideoEditComposition): boolean => {
       const revision = composition.revision
       if (stopped || !listVideoEditInstances().includes(instance) || instance.activeSequenceId !== composition.id || session.current !== renderer || canvas.current !== surface || requestedAt < lastPresentation) { result.history?.close(); return false }
-      if (result.authorElements && result.presented && !instance.playing && !scrubbing && target === instance.frame) installVideoEditCodeElements(instance, result.authorElements)
+      if (result.authorElements && result.presentedSource === 'live' && surface.dataset.presentedSource === 'live' && result.presented && !instance.playing && !scrubbing && target === instance.frame) installVideoEditCodeElements(instance, result.authorElements)
       if (result.history) {
         explanationSurface ??= window.document.createElement('canvas')
         explanationSurface.className = 'pointer-events-none absolute inset-0 h-full w-full object-contain'
@@ -469,7 +478,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.decodeMs = String(result.decodeMs ?? 0); surface.dataset.gpuMs = String(result.gpuMs ?? 0)
       surface.dataset.sourceTimestamps = (result.sourceTimestamps ?? []).join(','); surface.dataset.cacheHits = String(result.cacheHits ?? 0); surface.dataset.cacheBytes = String(result.cacheBytes ?? 0)
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
-      surface.dataset.scrubbing = String(scrubbing); surface.dataset.approximate = String(!!result.approximate); surface.dataset.presentedFrame = String(target)
+      surface.dataset.scrubbing = String(scrubbing); surface.dataset.approximate = String(!!result.approximate)
+      surface.dataset.presentedFrame = String(target)
       surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor)
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
@@ -563,6 +573,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (captureHistory !== historyEnabled) { historyEnabled = captureHistory; if (historyEnabled) lastRequested = -1; else retainExplanationPixels(surface, -1) }
         if (appliedFonts !== renderer.fontPresentationRevision) { appliedFonts = renderer.fontPresentationRevision; lastRequested = -1 }
         requestCommand = command; requestDocument = document
+        if (backgroundFailure) {
+          const failed = backgroundFailure; backgroundFailure = undefined
+          if (failed.composition === document && failed.frame === instance.frame) throw failed.error
+        }
         // 空闲时的 Worker 故障没有在途请求可拒绝，仍须由同一个调度循环发现并退役。
         if (renderer.terminalError || audioRenderer?.terminalError) throw renderer.terminalError ?? audioRenderer?.terminalError
         // 代理只在播放与拖动播放头时使用；停下（暂停、拖动松手）后节目换回原片实时合成的完整画质，
@@ -590,7 +604,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
           if (parameterUpdate) lastParameterUpdate = parameterTick
           // 内容或位置改变必须立即撤下旧映射，不能等下一次 250ms 缓存轮询才更新。
-          if (appliedRenderCache) { renderer.setRenderCache([]); appliedRenderCache = '' }
+          if (appliedRenderCache.length) { renderer.setRenderCache([]); appliedRenderCache = [] }
           renderCacheCheckedAt = -Infinity
           await renderer.updateDocument(document, useOriginal); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; appliedProxy = useOriginal ? 'original' : proxyState(availableProxies); lastRequested = -1
           if (!parameterUpdate && !liveProjection) lastFrame = -1
@@ -604,8 +618,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (performance.now() - renderCacheCheckedAt > 250) {
           renderCacheCheckedAt = performance.now()
           const ready = readyVideoEditRenderWindows(instance.document.id, document)
-          const signature = ready.length ? JSON.stringify(ready) : ''
-          if (signature !== appliedRenderCache) { appliedRenderCache = signature; renderer.setRenderCache(ready) }
+          if (JSON.stringify(ready) !== JSON.stringify(appliedRenderCache)) { appliedRenderCache = ready; renderer.setRenderCache(ready) }
         }
         const divisor = captureFull > 0 ? 1 : videoEditPreviewDivisor(getVideoEditPlaybackResolution(instance.document.id), current.playing)
         if (divisor !== appliedDivisor) {
@@ -716,7 +729,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         // 否则每帧都赶不上下一次刷新，画面成对出现（一帧晚、下一帧紧跟着补上，前一帧根本没显示）。
         // A history bitmap must finish before another draw can overwrite its surface.
         const pipelined = playing && direction === 1 && !liveRecording && !historyEnabled
-        if (target !== lastRequested || (lastRequestedScrubbing && !scrubbing)) {
+        if (target !== lastRequested || lastRequestedScrubbing && !scrubbing) {
           // 在途画面到了预算就先不发（背压，不是错误）：已发出的帧提交或回执时会唤醒调度，按那时的最新目标再请求。
           if (framesInFlight >= PROGRAM_FRAMES_IN_FLIGHT || pipelined && unsubmitted >= PROGRAM_UNSUBMITTED_FRAMES) return
           if (playing && direction === 1 && !liveRecording && target > Math.max(next, startFrame)) { droppedFrames += target - Math.max(next, startFrame); surface.dataset.droppedFrames = String(droppedFrames) }
@@ -728,7 +741,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           // 按慢速拖动处理——先沿用当前画面、后台解精确帧，停住后补精确帧，不让这一步堵住后面的画面。
           // 上一个请求是播放帧（流水排在前面）时不算：从播放切到暂停（含暂停时指定位置）不是小步后退。
           const steppingBack = !scrubbing && !fastJump && captureFull === 0 && lastFrame >= 0 && lastRequested >= 0 && !lastRequestedPlaying && target < lastRequested && performance.now() - lastInteractionAt < VIDEO_EDIT_EXACT_AFTER_REST_MS
-          const scrubMode: boolean | 'fast' = playing ? scrubbing : fastScrub || fastJump ? 'fast' : steppingBack || scrubbing
+          const cachedTarget = appliedRenderCache.some(window => target >= window.startFrame && target < window.endFrame)
+          const scrubMode: boolean | 'fast' = !playing && !scrubbing && cachedTarget ? false : playing ? scrubbing : fastScrub || fastJump ? 'fast' : steppingBack || scrubbing
           const requestedAt = performance.now()
           const deadline = playing && !liveRecording ? performance.timeOrigin + clockPerformanceStart + Math.abs(target - startFrame) / document.fps / (current.playbackRate ?? 1) * 1000 : undefined
           lastRequested = target; lastRequestedScrubbing = scrubbing; lastRequestedPlaying = playing
@@ -738,7 +752,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             if (pipelined) { submitted = true; unsubmitted--; submittedFrame = Math.max(submittedFrame, target) }
             // 这一帧已交给 GPU：调度交还给 wake 去准备下一帧（还能不能再发由上面的在途预算决定）。
             turn.handOff(); wake(0)
-          } : undefined, undefined, 'interactive', historyEnabled, !playing && !scrubbing).finally(() => { if (pipelined && !submitted) unsubmitted-- })
+          } : undefined, undefined, 'interactive', historyEnabled, !playing && !scrubbing, captureFull > 0).finally(() => { if (pipelined && !submitted) unsubmitted-- })
           // 正向播放不等提交回执：这一帧排进 Worker 就去准备下一帧，让它排在这一帧后面，
           // 主线程的时间线更新、电平刷新不会推迟它的准备。
           if (pipelined) { turn.handOff(); wake(0) }
@@ -776,8 +790,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             if (!recordPresentation(target, result, requestedAt, scrubbing, document)) { wake(0); return }
             if (playing) playbackShown = target
             approximateFrame = result.approximate ? target : -1; approximateWhileActive = !!result.approximate && steppingBack
-            setEffectFailure(result.effectErrors?.join('\n') ?? null)
-            lastFrame = target; lastScrubbing = scrubbing; pausedPicture = !playing && !scrubbing && !result.approximate
+            if (instance.playing || result.presentedSource !== 'prerendered') setEffectFailure(result.effectErrors?.join('\n') ?? null)
+            lastFrame = target; lastScrubbing = scrubbing; pausedPicture = !playing && !scrubbing && result.presentedSource !== 'prerendered' && !result.approximate
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
           }
           // 已交出调度的一步只收尾自己这一帧：唤醒调度按新状态推进，预热与下一帧都由那一步决定。
@@ -785,10 +799,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         }
         // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
         // 按住拖动播放头期间不预热：预热要打开连续解码并预混首段声音（复杂工程约 0.6 秒），循环等它完成期间不再请求新画面，
-        // 拖动方向反转、指针短暂停住时就出现半秒以上的停顿；松手时由上面的 releasedScrub 预热一次，起播照样即时。
+        // 拖动方向反转、指针短暂停住时就出现半秒以上的停顿；松手后的现场画面完成，再准备播放。
         // 画面请求还在途（跳转先出近似画面后，精确画面还在解）时也不预热：预热在 Worker 里排在这幅画面后面，循环等它期间
         // 下一次点击发不出去，Worker 也就放弃不了这幅没人要的精确画面，连续点击时一次要多等它解完。
-        if (!playing && approximateFrame < 0 && framesInFlight === 0 && performance.now() - firstPresentationAt >= 1100 && !current.scrubbing && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
+        if (!playing && pausedPicture && approximateFrame < 0 && framesInFlight === 0 && performance.now() - firstPresentationAt >= 1100 && !current.scrubbing && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
           await preparePlayback(document, current.frame)
           if (stopped) return
           // 刷新周期在后台量，不挡住紧接着的起播。

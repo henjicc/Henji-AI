@@ -44,8 +44,9 @@ describe('render bitrate table', () => {
 })
 
 describe('render encoding', () => {
-  it('uses VBR, hardware, one-second keyframes and a versioned profile', () => {
-    expect(videoEditRenderEncoding({ width: 3840, height: 2160, fps: 60 }, 'hevc', 'standard')).toEqual({ codec: 'hevc', bitrateMbps: 35, bitrateMode: 'vbr', encoderPreference: 'hardware', keyframeInterval: 1, profile: 'v2:hevc:standard:35' })
-    expect(videoEditRenderEncoding({ width: 3840, height: 2160, fps: 60 }, 'avc', 'high').profile).toBe('v2:avc:high:65')
+  it('缓存关键帧间隔对应一帧的时长', () => {
+    const encoding = videoEditRenderEncoding({ width: 3840, height: 2160, fps: 60 }, 'hevc', 'standard')
+    expect(encoding).toMatchObject({ codec: 'hevc', bitrateMbps: 35, bitrateMode: 'vbr', encoderPreference: 'hardware', keyframeInterval: 1 / 60 })
+    expect(videoEditRenderEncoding({ width: 1920, height: 1080, fps: 30000 / 1001 }, 'avc', 'high').keyframeInterval).toBeCloseTo(1001 / 30000)
   })
 })

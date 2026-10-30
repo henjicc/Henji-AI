@@ -41,19 +41,19 @@ export function renderBitrateMbps(input: { width: number; height: number; fps: n
 }
 
 /**
- * 预渲染文件的编码参数（纯函数）。WebCodecs 硬件编码，正向播放为主、偶尔段中起播：
- * - VBR，目标码率按上表；latencyMode quality，允许编码器使用 B 帧（WebCodecs 不直接控制数量）。
- * - 每 1 秒强制关键帧（WebCodecs 关键帧为 IDR，即闭合 GOP），每段文件由新编码器开始，第一帧必为关键帧。
+ * 预渲染文件的编码参数（纯函数）。WebCodecs 硬件编码，播放与任意帧定位共用：
+ * - VBR，目标码率按上表。
+ * - 每帧强制关键帧（WebCodecs 关键帧为 IDR），精确缓存定位只需解目标一帧。
  * - H.264 High / HEVC Main，8 位 4:2:0（画布帧经编码器转 YUV）；色彩标记由编码器按 BT.709 写入。
  * 参数含义变化时递增 RENDER_ENCODING_VERSION：它进入编码档案与缓存键，旧文件随之按需要渲染处理。
  */
-export const RENDER_ENCODING_VERSION = 2
+export const RENDER_ENCODING_VERSION = 3
 export interface VideoEditRenderEncoding {
-  codec: 'avc' | 'hevc'; bitrateMbps: number; bitrateMode: 'vbr'; encoderPreference: 'hardware'; keyframeInterval: 1
+  codec: 'avc' | 'hevc'; bitrateMbps: number; bitrateMode: 'vbr'; encoderPreference: 'hardware'; keyframeInterval: number
   /** 进入缓存键的编码档案。 */
   profile: string
 }
 export function videoEditRenderEncoding(sequence: { width: number; height: number; fps: number }, codec: 'avc' | 'hevc', quality: 'standard' | 'high'): VideoEditRenderEncoding {
   const bitrateMbps = renderBitrateMbps({ ...sequence, codec, quality })
-  return { codec, bitrateMbps, bitrateMode: 'vbr', encoderPreference: 'hardware', keyframeInterval: 1, profile: `v${RENDER_ENCODING_VERSION}:${codec}:${quality}:${bitrateMbps}` }
+  return { codec, bitrateMbps, bitrateMode: 'vbr', encoderPreference: 'hardware', keyframeInterval: 1 / sequence.fps, profile: `v${RENDER_ENCODING_VERSION}:${codec}:${quality}:${bitrateMbps}` }
 }

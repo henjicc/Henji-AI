@@ -523,7 +523,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         const frameStarted = performance.now()
         // 让出时会话随即释放，不再等在途这一帧算完。
         await abortable(renderer.render(frame, true), attemptSignal)
-        await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps)
+        await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps, { keyFrame: true })
         if (job.auto) await rest((performance.now() - frameStarted) * AUTO_RENDER_REST_RATIO, attemptSignal)
       }
       await output.finalize()

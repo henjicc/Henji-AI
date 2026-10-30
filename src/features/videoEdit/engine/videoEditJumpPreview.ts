@@ -5,7 +5,7 @@ import type { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 
 /**
- * 跳转先出的画面（节目监视器）：预渲染文件（整帧合成结果，每秒一个关键帧）的关键帧，以四分之一尺寸常驻显存。
+ * 跳转先出的画面（节目监视器）：从全帧内预渲染文件每秒抽一幅整帧合成结果，以四分之一尺寸常驻显存。
  *
  * 远距离跳转与很快的拖动先画目标之前最近的一幅（不超过一秒），不必打开解码会话、读视频、跑代码素材，也不受长 GOP
  * 原片影响；随后照常补实时合成的精确帧。4K 序列一幅约 0.78MB，预算内按离播放头的远近保留。
@@ -20,7 +20,7 @@ export type VideoEditJumpPreviewLog = (level: 'debug' | 'info' | 'warn', message
 export const VIDEO_EDIT_JUMP_PREVIEW_BYTES = 384 * 1024 ** 2
 /** 常驻画面按序列尺寸缩小的倍数。 */
 export const VIDEO_EDIT_JUMP_PREVIEW_DIVISOR = 4
-/** 预渲染文件的关键帧间隔（秒，见 renderBitrate 的 keyframeInterval）。 */
+/** 常驻画面的采样间隔（秒）；精确读取仍可直接定位预渲染文件中的任一帧。 */
 const KEY_SECONDS = 1
 /** 读不到（预算不够、文件已被清理）后隔这么久再试。 */
 const RETRY_MS = 2000
@@ -33,8 +33,8 @@ export class VideoEditJumpPreview {
   private readonly entries = new Map<string, Entry>()
   private bytes = 0
   private reader?: { key: string; demux: string; frames: VideoEditClipFrames }
-  /** Reader of `exactPicture` (one file at a time), and the read under way on it. */
-  private exactReader?: { key: string; demux: string; frames: VideoEditClipFrames }
+  /** 保留当前与上一个窗口的读取器，跨边界来回拖动时复用已打开的解码会话。 */
+  private readonly exactReaders = new Map<string, { demux: string; frames: VideoEditClipFrames }>()
   private exactTail: Promise<unknown> = Promise.resolve()
   /** The newest `exactPicture` request; a newer jump abandons it. */
   private exactRequest?: AbortController
@@ -184,7 +184,7 @@ export class VideoEditJumpPreview {
   }
 
   /**
-   * 预渲染文件 `media`（窗口 `key`）在 `seconds` 处的精确画面（整帧合成结果），用一个自己的读取器读（同一文件连续读续解）；
+   * 预渲染文件 `media`（窗口 `key`）在 `seconds` 处的精确画面（整帧合成结果），用自己的读取器读；
    * 读不到时为 undefined。暂停画面的实时合成要从长 GOP 原片的关键帧解起（4K 录屏可达一秒），这一幅先替它站在屏幕上。
    * 前一次读取完成后才开始（读取器同时只读一幅），轮到时 `wanted` 已为假（又有了新请求、实时画面已好）就不读；`snapshot`
    * 把它复制进自有显存，调用方用完关闭。新的跳转取代上一次：上一幅还没读完就放弃（解码停在已解到的位置，这一幅
@@ -196,31 +196,34 @@ export class VideoEditJumpPreview {
     this.exactRequest = request
     const read = async (): Promise<VideoEditGpuFrame | undefined> => {
       if (this.disposed || request.signal.aborted || !this.entries.get(key)?.active || !wanted()) return undefined
-      if (this.exactReader?.key !== key) {
-        this.closeExact()
+      let reader = this.exactReaders.get(key)
+      if (!reader) {
+        if (this.exactReaders.size >= 2) this.closeExact(this.exactReaders.keys().next().value!)
         const demux = this.frames.open(media)
         const source = await demux.ready.catch(error => { this.frames.release(demux.key); throw error })
         const frames = source.clipFrames({ exclusive: true })
         if (!frames) { this.frames.release(demux.key); return undefined }
         if (this.disposed) { frames.close?.(); this.frames.release(demux.key); return undefined }
-        this.exactReader = { key, demux: demux.key, frames }
+        reader = { demux: demux.key, frames }
       }
-      const decoded = await this.exactReader.frames.frameAt(seconds, { speculative: true, signal: request.signal })
+      this.exactReaders.delete(key); this.exactReaders.set(key, reader)
+      const decoded = await reader.frames.frameAt(seconds, { speculative: true, signal: request.signal })
       if (!decoded) return undefined
       try { return this.disposed || request.signal.aborted ? undefined : await snapshot(decoded) } finally { decoded.close() }
     }
     // An abandoned read keeps its reader (the next read continues its decoder); a failed one gives it back.
-    const result = this.exactTail.then(read, read).catch(() => { if (!request.signal.aborted) this.closeExact(); return undefined })
+    const result = this.exactTail.then(read, read).catch(() => { if (!request.signal.aborted) this.closeExact(key); return undefined })
       .finally(() => { if (this.exactRequest === request) this.exactRequest = undefined })
     this.exactTail = result
     return result
   }
 
-  private closeExact(): void {
-    const reader = this.exactReader
-    if (!reader) return
-    this.exactReader = undefined
-    reader.frames.close?.(); this.frames.release(reader.demux)
+  private closeExact(key?: string): void {
+    for (const [id, reader] of this.exactReaders) {
+      if (key !== undefined && id !== key) continue
+      this.exactReaders.delete(id)
+      reader.frames.close?.(); this.frames.release(reader.demux)
+    }
   }
 
   private drop(key: string): void {
@@ -229,7 +232,7 @@ export class VideoEditJumpPreview {
     this.retire(entry.pictures)
     this.entries.delete(key)
     if (this.reader?.key === key) this.closeReader()
-    if (this.exactReader?.key === key) this.closeExact()
+    this.closeExact(key)
   }
 
   private closeReader(): void {

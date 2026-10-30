@@ -44,6 +44,10 @@ impl Frame {
         unsafe { (*self.0).flags & ff::AV_FRAME_FLAG_CORRUPT != 0 }
     }
 
+    pub fn is_key(&self) -> bool {
+        unsafe { (*self.0).flags & ff::AV_FRAME_FLAG_KEY != 0 }
+    }
+
     pub fn is_hardware(&self) -> bool {
         unsafe { !(*self.0).hw_frames_ctx.is_null() }
     }
@@ -107,6 +111,7 @@ pub struct Decoder {
     pub name: String,
     pub hardware_requested: bool,
     pub intra_only: bool,
+    pub all_frames_key: bool,
     /// 帧内编码且不用帧级多线程：每送一个包就出一帧，没有输出延迟（取帧时可用下一个包的时间判定候选帧）。
     pub immediate_output: bool,
     /// 按硬解只开了一个解码线程；硬件初始化失败、实际落到软解时，调用方应按软解重新打开（多线程）。
@@ -177,6 +182,7 @@ pub fn choose_decoder(codec_id: ff::AVCodecID, hardware_available: bool, has_alp
 
 pub struct DecoderSetup<'a> {
     pub parameters: &'a ff::AVCodecParameters,
+    pub all_frames_key: bool,
     pub time_base: ff::AVRational,
     pub has_alpha: bool,
     pub purpose: Purpose,
@@ -201,7 +207,7 @@ impl Decoder {
         }
         let name = crate::ffmpeg_info::c_text(unsafe { (*codec).name }).unwrap_or_default();
         let descriptor = unsafe { ff::avcodec_descriptor_get(parameters.codec_id) };
-        let intra_only = !descriptor.is_null() && unsafe { (*descriptor).props } & ff::AV_CODEC_PROP_INTRA_ONLY != 0;
+        let intra_only = setup.all_frames_key || !descriptor.is_null() && unsafe { (*descriptor).props } & ff::AV_CODEC_PROP_INTRA_ONLY != 0;
         let mut context = unsafe { ff::avcodec_alloc_context3(codec) };
         if context.is_null() {
             return Err(ServiceError::new("INTERNAL", "无法分配解码器上下文"));
@@ -255,7 +261,7 @@ impl Decoder {
             return Err(fail(&mut context, format!("无法打开解码器 {name}：{}", error_text(opened))));
         }
         let immediate_output = intra_only && setup.purpose == Purpose::Seek;
-        Ok(Self { context, name, hardware_requested, intra_only, immediate_output, single_thread_for_hardware: hardware_requested })
+        Ok(Self { context, name, hardware_requested, intra_only, all_frames_key: setup.all_frames_key, immediate_output, single_thread_for_hardware: hardware_requested })
     }
 
     /// 送入一个包（None 表示开始排空）。返回 false 表示解码器暂不接收（先取帧）。

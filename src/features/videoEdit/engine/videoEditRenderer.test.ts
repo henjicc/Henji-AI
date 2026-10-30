@@ -177,7 +177,6 @@ it('已有常驻关键帧时只复制合成画面，不重新解码或执行代�
   try {
     renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cache.mp4', width: document.width, height: document.height, fps: document.fps }])
     await vi.advanceTimersByTimeAsync(600)
-    expect(renderer.hasJumpPreview(30)).toBe(true)
     const decoded = boundary.snapshotCalls.length
     const bytes = await renderer.captureHoverFrame(document, 30, false, new AbortController().signal)
     expect(bytes).toEqual(new Uint8Array([1]))
@@ -2396,14 +2395,15 @@ async function playedFromWindow(slowMs = 0) {
   return { renderer, readers }
 }
 const topDraws = (from: number) => boundary.draws.slice(from).filter(draw => !draw.offscreen).map(draw => draw.ids)
-it('从预渲染段播到段尾前暂停：预热到段尾的视频输入画面不被沿用（即使按小步后退请求），暂停帧是这一帧的精确画面', async () => {
+it('预渲染播放后拖动直接显示缓存精确帧，不沿用段尾预热的视频输入', async () => {
   const { renderer } = await playedFromWindow()
   try {
     contentInputs.borrows = []
     // Asked before stopPlayback and as a small step back: the worst order and mode a pause can arrive in.
     const paused = await renderer.render(60, false, true); await paused.completion
     expect(paused.approximate).toBeUndefined()
-    expect(us([shownInputs().w2])).toEqual(us([27.1 + 54 / 60]))
+    expect(paused.presentedSource).toBe('prerendered')
+    expect(contentInputs.borrows).toEqual([])
     await renderer.stopPlayback()
   } finally { await renderer.dispose() }
 })
@@ -2413,10 +2413,13 @@ it('暂停帧就是最后上屏的预渲染播放帧：只换成同一帧的实�
     await renderer.stopPlayback()
     let drawn = boundary.draws.length
     contentInputs.borrows = []
+    const cached = await renderer.presentPrerenderedFrame(62, () => true, true)
+    expect(cached).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(topDraws(drawn)).toEqual([])
     const paused = await renderer.render(62, false, false); await paused.completion
     expect(topDraws(drawn)).toEqual([['w2']])
     expect(us([shownInputs().w2])).toEqual(us([27.1 + 56 / 60]))
-    // A jump to another frame (live composition slower than 40ms) still shows that frame's pre-rendered exact picture
+    // A jump starts the pre-rendered exact read alongside live composition and shows its picture
     // first, read at the same picture time as the window's playback (container timestamp tolerance).
     drawn = boundary.draws.length
     const jumped = await renderer.render(40, false, false); await jumped.completion
@@ -2424,4 +2427,298 @@ it('暂停帧就是最后上屏的预渲染播放帧：只换成同一帧的实�
     expect(topDraws(drawn)).toEqual([['render-cache:opening:0'], ['w2']])
     expect(readers.flatMap(reader => reader.reads).some(read => read.speculative && Math.abs(read.time - videoEditPictureSeconds(40 / 60)) < 1e-9)).toBe(true)
   } finally { await renderer.dispose() }
+})
+
+it('ready 窗口内快慢拖动与反向逐帧都只读缓存，像素回读和完整选帧仍现场合成', async () => {
+  const { backend, gate } = steppingReaders()
+  const document = fixture(), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const shown: string[] = []
+  renderer.onPresentation = (_frame, source) => shown.push(source)
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
+    for (const [frame, mode] of [[30, true], [50, 'fast'], [20, 'fast'], [19, true]] as const) {
+      const result = await renderer.render(frame, false, mode); await result.completion
+      expect(result).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+      expect(result.approximate).toBeUndefined()
+      expect(boundary.pictures[0]).toBeCloseTo(frame / document.fps, 6)
+    }
+    expect(topDraws(0)).toEqual(Array.from({ length: 4 }, () => ['render-cache:cached:0']))
+    gate.hold = true
+    const old = renderer.render(25, false, true)
+    await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
+    const newest = renderer.presentPrerenderedFrame(26, () => true, true)
+    gate.release()
+    expect(await old).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
+    gate.hold = false
+    while (gate.pending.length) gate.release()
+    expect(await newest).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(topDraws(0)).toEqual(Array.from({ length: 6 }, () => ['render-cache:cached:0']))
+    const captured = vi.fn()
+    expect((await renderer.render(18, false, true, undefined, undefined, undefined, 'interactive', captured)).presentedSource).toBe('live')
+    expect(captured).toHaveBeenCalledOnce()
+    expect((await renderer.render(18, false, true)).presentedSource).toBe('prerendered')
+    expect(captured).toHaveBeenCalledOnce()
+    expect((await renderer.render(17, false, false, undefined, undefined, undefined, 'interactive', undefined, true)).presentedSource).toBe('live')
+    renderer.setRenderCache([])
+    expect((await renderer.render(16, false, true)).presentedSource).toBe('live')
+    expect(shown).toEqual(['prerendered', 'prerendered', 'prerendered', 'prerendered', 'prerendered', 'prerendered', 'live', 'prerendered', 'live', 'live'])
+  } finally { await renderer.dispose() }
+})
+it('缓存读取慢于连续拖动请求时仍持续上屏，排队的过时读取跳过，最终追上指针', async () => {
+  vi.useFakeTimers()
+  const { backend } = steppingReaders(), open = backend.open.bind(backend)
+  backend.open = media => {
+    const opened = open(media)
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => {
+        await new Promise(resolve => setTimeout(resolve, 70))
+        return reader.frameAt(time, read)
+      } }
+    } })) }
+  }
+  const document = fixture(), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const shown: number[] = [], requests: Array<ReturnType<VideoEditRenderer['render']>> = []
+  renderer.onPresentation = (frame, source) => { expect(source).toBe('prerendered'); shown.push(frame) }
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
+    for (let frame = 10; frame < 30; frame++) {
+      requests.push(renderer.render(frame, false, frame % 2 ? 'fast' : true))
+      await vi.advanceTimersByTimeAsync(33)
+      if (frame === 19) expect(shown.length).toBeGreaterThan(1)
+    }
+    expect(shown.length).toBeGreaterThan(4)
+    expect(shown.every((frame, index) => index === 0 || frame > shown[index - 1])).toBe(true)
+    await vi.advanceTimersByTimeAsync(200)
+    const results = await Promise.all(requests)
+    expect(results.at(-1)).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(shown.at(-1)).toBe(29)
+  } finally { await vi.advanceTimersByTimeAsync(200); await renderer.dispose(); vi.useRealTimers() }
+})
+
+it('拖动后同帧松手复用缓存画面，仍执行现场代码并替换画面与元素', async () => {
+  const { backend } = steppingReaders()
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const shown: Array<[number, string]> = []
+  renderer.onPresentation = (frame, source) => shown.push([frame, source])
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
+    const drag = await renderer.render(30, false, true); await drag.completion
+    expect(drag).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(boundary.generatorCalls).toBe(0)
+    const cached = await renderer.presentPrerenderedFrame(30, () => true, true)
+    expect(cached).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(shown).toEqual([[30, 'prerendered']])
+    const live = await renderer.render(30, false, false, undefined, undefined, undefined, 'interactive', undefined, true); await live.completion
+    expect(live).toMatchObject({ presented: true, presentedSource: 'live' })
+    expect(boundary.generatorCalls).toBe(1)
+    expect(shown).toEqual([[30, 'prerendered'], [30, 'live']])
+    expect(renderer.observeAuthorElements(30)).toMatchObject({ sequenceId: document.id, revision: document.revision, frame: 30, clips: [expect.objectContaining({ clipId: 'w1' })] })
+  } finally { await renderer.dispose() }
+})
+
+it('暂停缓存立即上屏，现场完成后替换；迟到缓存不覆盖现场，新拖动不等在途暂停合成', async () => {
+  const { backend, gate } = steppingReaders()
+  const open = backend.open.bind(backend)
+  let release!: () => void, liveReads = 0
+  const blocked = new Promise<void>(resolve => { release = resolve })
+  backend.open = media => {
+    const opened = open(media)
+    if (media.path.includes('cached')) return opened
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { liveReads++; await blocked; return reader.frameAt(time, read) } }
+    } })) }
+  }
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const shown: Array<[number, string]> = []
+  renderer.onPresentation = (frame, source) => shown.push([frame, source])
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
+    const paused = renderer.render(30)
+    await vi.waitFor(() => { expect(liveReads).toBe(1); expect(shown).toEqual([[30, 'prerendered']]) })
+    // 缓存拖动不能被无法立即取消的后端读取挡住，包括同一帧和近距离向前一步。
+    expect((await renderer.render(31, false, true)).presentedSource).toBe('prerendered')
+    release()
+    expect(await paused).toMatchObject({ presented: false, superseded: true })
+    const live = await renderer.render(31); await live.completion
+    expect(shown.at(-1)).toEqual([31, 'live'])
+    const beforeRepeat = shown.length
+    await renderer.render(31)
+    expect(shown.slice(beforeRepeat)).toEqual([[31, 'live']])
+    gate.hold = true
+    const lateCache = renderer.presentPrerenderedFrame(40, () => true)
+    await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
+    const next = await renderer.render(40, false, false, undefined, undefined, undefined, 'interactive', undefined, true); await next.completion
+    const presentations = shown.length
+    gate.release()
+    expect(await lateCache).toMatchObject({ presented: false, superseded: true })
+    expect(shown).toHaveLength(presentations)
+    expect(shown.at(-1)).toEqual([40, 'live'])
+  } finally { release(); gate.hold = false; gate.release(); await renderer.dispose() }
+})
+
+it('回到已上屏精确缓存松手后，较早的不可取消现场帧不能覆盖它', async () => {
+  const { backend } = steppingReaders(), open = backend.open.bind(backend)
+  let release!: () => void, liveReads = 0
+  const blocked = new Promise<void>(resolve => { release = resolve })
+  backend.open = media => {
+    const opened = open(media)
+    if (media.path.includes('cached')) return opened
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { liveReads++; await blocked; return reader.frameAt(time, read) } }
+    } })) }
+  }
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const shown: Array<[number, string]> = []
+  renderer.onPresentation = (frame, source) => shown.push([frame, source])
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 10, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
+    await renderer.render(30, false, true)
+    const older = renderer.render(5, false, true)
+    await vi.waitFor(() => expect(liveReads).toBe(1))
+    const draws = boundary.draws.length
+    expect(await renderer.presentPrerenderedFrame(30, () => true, true)).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(boundary.draws).toHaveLength(draws)
+    release()
+    expect(await older).toMatchObject({ presented: false, superseded: true })
+    expect(shown).toEqual([[30, 'prerendered']])
+  } finally { release(); await renderer.dispose() }
+})
+
+it('缓存已回执的后台现场取帧仍能被新拖动立即取消', async () => {
+  const { backend } = steppingReaders()
+  const open = backend.open.bind(backend)
+  let signal: AbortSignal | undefined
+  backend.open = media => {
+    const opened = open(media)
+    if (media.path.includes('cached')) return opened
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: (_time: number, read?: VideoEditFrameReadOptions) => {
+        signal = read?.signal
+        return new Promise<never>((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('取帧已取消', 'AbortError')), { once: true }))
+      } }
+    } })) }
+  }
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
+    expect(await renderer.presentPrerenderedFrame(30, () => true)).toMatchObject({ presented: true })
+    const live = renderer.render(30, false, false, undefined, undefined, undefined, 'interactive', undefined, true)
+    await vi.waitFor(() => expect(signal).toBeDefined())
+    renderer.supersedePausedFrame(31, true)
+    expect(signal?.aborted).toBe(true)
+    expect(await live).toMatchObject({ presented: false, superseded: true })
+    expect(await renderer.render(31, false, true)).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+  } finally { renderer.abandonPausedFrame(); await renderer.dispose() }
+})
+
+it('较早缓存画面的迟到上屏不能作废松手现场合成', async () => {
+  const { backend, gate } = steppingReaders()
+  const open = backend.open.bind(backend)
+  let release!: () => void, liveReads = 0
+  const blocked = new Promise<void>(resolve => { release = resolve })
+  backend.open = media => {
+    const opened = open(media)
+    if (media.path.includes('cached')) return opened
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { liveReads++; await blocked; return reader.frameAt(time, read) } }
+    } })) }
+  }
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const shown: Array<[number, string]> = []
+  renderer.onPresentation = (frame, source) => shown.push([frame, source])
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
+    gate.hold = true
+    const older = renderer.presentPrerenderedFrame(30, () => true)
+    await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
+    // 松手的缓存未读到；它仍有自己的现场合成，较早的缓存读取尚在途。
+    vi.spyOn(renderer, 'presentPrerenderedFrame').mockResolvedValue(undefined)
+    const paused = renderer.render(31)
+    await vi.waitFor(() => expect(liveReads).toBe(1))
+    gate.release(); await older
+    expect(shown).toEqual([[30, 'prerendered']])
+    release()
+    expect(await paused).toMatchObject({ presented: true, presentedSource: 'live' })
+    expect(shown.at(-1)).toEqual([31, 'live'])
+  } finally { release(); gate.hold = false; gate.release(); await renderer.dispose() }
+})
+
+it.each([1, 20])('ready 拖动在快速现场请求 %sms 后到达，不被旧预览覆盖或等待现场合成', async delay => {
+  vi.useFakeTimers()
+  const { backend } = steppingReaders(), open = backend.open.bind(backend)
+  let release!: () => void
+  const blocked = new Promise<void>(resolve => { release = resolve })
+  backend.open = media => {
+    const opened = open(media)
+    if (media.path.includes('cached')) return opened
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { await blocked; return reader.frameAt(time, read) } }
+    } })) }
+  }
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const shown: Array<[number, string]> = []
+  renderer.onPresentation = (frame, source) => shown.push([frame, source])
+  try {
+    renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
+    await vi.advanceTimersByTimeAsync(600)
+    vi.spyOn(renderer, 'presentPrerenderedFrame').mockResolvedValueOnce(undefined)
+    const fast = renderer.render(30, false, 'fast')
+    await vi.advanceTimersByTimeAsync(delay)
+    if (delay === 20) expect((await fast).presentedSource).toBe('jump')
+    const paused = delay === 20 ? renderer.render(31) : undefined
+    expect((await renderer.render(32, false, true)).presentedSource).toBe('prerendered')
+    await vi.advanceTimersByTimeAsync(20)
+    // 旧快速拖动的预算到期时，新缓存已经在屏幕上，不能再画旧常驻关键帧。
+    release()
+    if (paused) expect(await paused).toMatchObject({ presented: false, superseded: true })
+    await renderer.settled()
+    if (delay === 1) expect(await fast).toMatchObject({ presented: false, superseded: true })
+    expect(shown).toEqual(delay === 1 ? [[32, 'prerendered']] : [[30, 'jump'], [32, 'prerendered']])
+  } finally { release(); await renderer.dispose(); vi.useRealTimers() }
+})
+
+it('更早现场帧在新缓存读取期间上屏不作废新请求，窗口更新后最新目标仍可重读', async () => {
+  const { backend, gate } = steppingReaders(), open = backend.open.bind(backend)
+  let releaseLive!: () => void
+  const blocked = new Promise<void>(resolve => { releaseLive = resolve })
+  let liveReads = 0
+  backend.open = media => {
+    const opened = open(media)
+    if (media.path.includes('cached')) return opened
+    return { ...opened, ready: opened.ready.then(source => ({ ...source, clipFrames: options => {
+      const reader = source.clipFrames(options)!
+      return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { liveReads++; await blocked; return reader.frameAt(time, read) } }
+    } })) }
+  }
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const windows = [{ key: 'cached', startFrame: 10, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }]
+  const shown: Array<[number, string]> = []
+  renderer.onPresentation = (frame, source) => shown.push([frame, source])
+  try {
+    renderer.setRenderCache(windows)
+    const older = renderer.render(5, false, true)
+    await vi.waitFor(() => expect(liveReads).toBe(1))
+    gate.hold = true
+    const latest = renderer.presentPrerenderedFrame(30, () => true)
+    await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
+    releaseLive(); await older
+    expect(shown).toEqual([[5, 'live']])
+    gate.release()
+    expect(await latest).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(shown.at(-1)).toEqual([30, 'prerendered'])
+    const changed = renderer.presentPrerenderedFrame(31, () => true)
+    await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
+    renderer.setRenderCache(windows)
+    gate.release()
+    expect(await changed).toMatchObject({ presented: false })
+    gate.hold = false
+    expect(await renderer.render(31, false, true)).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+  } finally { releaseLive(); gate.hold = false; gate.release(); await renderer.dispose() }
 })

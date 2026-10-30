@@ -8,7 +8,7 @@ const state = vi.hoisted(() => ({
   instances: [] as Array<{ document: { id: string }; playing: boolean; scrubbing: boolean; busy: boolean; playbackDirection?: number; frame?: number }>,
   composition: {} as unknown,
   windows: [{ key: 'window', startFrame: 0, endFrame: 3, heavy: true }] as TestWindow[],
-  render: vi.fn(async (..._args: unknown[]) => {}), dispose: vi.fn(async () => {}), add: vi.fn(async () => {}),
+  render: vi.fn(async (..._args: unknown[]) => {}), dispose: vi.fn(async () => {}), add: vi.fn(async (..._args: unknown[]) => {}),
   discard: vi.fn(async () => {}), commit: vi.fn(async (..._args: unknown[]) => ({})), cancel: vi.fn(async () => {}),
   sessions: 0, viewListeners: new Set<() => void>(), events: [] as string[],
   windowSet: vi.fn((..._args: unknown[]): { signature: string; windows: TestWindow[] } => ({ signature: 'test', windows: state.windows })),
@@ -60,6 +60,14 @@ beforeEach(() => {
   state.sessions = 0; state.viewListeners.clear(); state.events = []
 })
 afterEach(() => { vi.useRealTimers() })
+
+it('每帧显式请求关键帧，非整数帧率也不因秒数舍入生成依赖中间帧的缓存', async () => {
+  const owner = state.instances[0]
+  state.composition = { ...state.composition as object, fps: 30000 / 1001 }
+  const result = await renderVideoEditRenderCache(owner.document.id, { scope: 'all', auto: true })
+  expect(result).toMatchObject({ cancelled: false, renderedWindows: 1 })
+  expect(state.add.mock.calls).toEqual([0, 1, 2].map(frame => [frame * 1001 / 30000, 1001 / 30000, { keyFrame: true }]))
+})
 
 it('离开再打开同一工程，旧窗口逐帧取消且丢弃未完成文件', async () => {
   const owner = state.instances[0]

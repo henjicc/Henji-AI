@@ -216,4 +216,12 @@ impl Input {
     pub fn has_index(&self) -> bool {
         unsafe { ff::avformat_index_get_entries_count(self.stream()) > 0 }
     }
+
+    /// H.264/HEVC 也能全帧内编码，不能只按编码器名称判断；完整索引中每一帧都必须是独立关键帧。
+    pub fn all_frames_key(&self) -> bool {
+        let stream = self.stream() as *const ff::AVStream as *mut ff::AVStream;
+        let count = unsafe { ff::avformat_index_get_entries_count(stream) };
+        count > 0 && i64::from(count) == self.stream().nb_frames && self.parameters().video_delay == 0
+            && (0..count).all(|index| unsafe { (*ff::avformat_index_get_entry(stream, index)).flags() & ff::AVINDEX_KEYFRAME != 0 })
+    }
 }

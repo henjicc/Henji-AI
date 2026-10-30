@@ -9,7 +9,7 @@ import { createVideoEditSequence, videoEditClipSchema, videoEditComposition } fr
 import { addLegacyVideoEditTracks, createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditRenderTransport } from './videoEditRenderTransport'
-import { VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 
 const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
@@ -498,4 +498,66 @@ it('要求原片且当前没有加载代理时，参数修改仍走增量更新�
   const update = workers.at(-1)!.messages.at(-1)!.message as Extract<RenderRequest, { kind: 'update' }>
   expect(update.kind).toBe('update'); expect(update.proxies).toEqual({})
   await proxied.dispose()
+})
+
+it('中途上屏通知独立于最终帧回执，保留现场回读标志且不提前结束请求', async () => {
+  const session = new VideoEditRenderTransport({ fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined }, composition())
+  try {
+    await session.prepareGpu()
+    const worker = workers[0]; worker.respond = false
+    session.onPresentation = vi.fn()
+    const result = session.present(15, false, false, undefined, undefined, undefined, 'interactive', false, false, true)
+    await vi.waitFor(() => expect(worker.messages.at(-1)?.message.kind).toBe('render'))
+    const request = worker.messages.at(-1)!.message as Extract<RenderRequest, { kind: 'render' }>
+    expect(request.requireLive).toBe(true)
+    let settled = false
+    void result.then(() => { settled = true })
+    const authorElements = { sequenceId: 'sequence', revision: 1, frame: 15, clips: [] }
+    for (const source of ['prerendered', 'live'] as const) worker.onmessage!({ data: { id: 0, phase: 'presented', frame: 15, presentedSource: source, ...(source === 'live' ? { authorElements } : {}) } } as MessageEvent)
+    await Promise.resolve()
+    expect(session.onPresentation).toHaveBeenNthCalledWith(1, 15, 'prerendered', undefined)
+    expect(session.onPresentation).toHaveBeenNthCalledWith(2, 15, 'live', authorElements)
+    expect(settled).toBe(false)
+    worker.onmessage!({ data: { id: request.id, presented: true, presentedSource: 'live' } } as MessageEvent)
+    expect((await result).presentedSource).toBe('live')
+    worker.respond = true
+  } finally { workers[0].respond = true; await session.dispose() }
+})
+
+it('后台完成保留普通失败和效果提示，GPU 丢失进入同一会话故障收口', async () => {
+  const session = new VideoEditRenderTransport({ fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined }, composition())
+  try {
+    await session.prepareGpu()
+    session.onRefinement = vi.fn()
+    const worker = workers[0]
+    const failed = { id: 0, phase: 'refined', frame: 15, error: '现场读取失败' }
+    worker.onmessage!({ data: failed } as MessageEvent)
+    expect(session.onRefinement).toHaveBeenLastCalledWith(failed, expect.objectContaining({ message: '现场读取失败' }))
+    expect(session.terminalError).toBeUndefined()
+    const completed = { id: 0, phase: 'refined', frame: 15, presented: true, effectErrors: ['素材缺失'] }
+    worker.onmessage!({ data: completed } as MessageEvent)
+    expect(session.onRefinement).toHaveBeenLastCalledWith(completed, undefined)
+    worker.onmessage!({ data: { ...failed, gpuDeviceLost: 'device reset' } } as MessageEvent)
+    expect(session.terminalError).toBeInstanceOf(VideoEditGpuDeviceLostError)
+    expect(session.terminated).toBe(true)
+  } finally { await session.dispose() }
+})
+
+it.each([false, true])('缓存回执后的后台现场合成仍受看门狗保护，完成=%s', async completed => {
+  const session = new VideoEditRenderTransport({ fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined }, composition(), undefined, undefined, undefined, undefined, undefined, false, 50)
+  await session.prepareGpu()
+  vi.useFakeTimers()
+  const worker = workers[0]; worker.respond = false
+  const pending = session.present(15)
+  await Promise.resolve()
+  const request = worker.messages.at(-1)!.message as Extract<RenderRequest, { kind: 'render' }>
+  worker.onmessage!({ data: { id: request.id, presented: true, presentedSource: 'prerendered', refining: true } } as MessageEvent)
+  expect(await pending).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+  if (completed) worker.onmessage!({ data: { id: request.id, phase: 'refined', presented: true } } as MessageEvent)
+  await vi.advanceTimersByTimeAsync(50)
+  expect(worker.terminate).toHaveBeenCalledTimes(completed ? 0 : 1)
+  expect(session.terminalError !== undefined).toBe(!completed)
+  expect(vi.getTimerCount()).toBe(0)
+  worker.respond = true
+  await session.dispose(true)
 })

@@ -5,24 +5,31 @@ import type { RenderRequest, RenderResponse } from './videoEditWorker'
 import type { VideoEditPresentationCapture } from './videoEditGpuCompositor'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
+import type { VideoEditRenderer } from './videoEditRenderer'
+import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 
-const state = vi.hoisted(() => ({ hover: vi.fn(), render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, supersede: vi.fn(), abandon: vi.fn() }))
+const state = vi.hoisted(() => ({ presentation: undefined as VideoEditRenderer['onPresentation'], elements: vi.fn(), hover: vi.fn(), render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, arm: vi.fn(), supersede: vi.fn(), abandon: vi.fn() }))
 vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   constructor(readonly document: unknown) {}
+  set onPresentation(value: VideoEditRenderer['onPresentation']) { state.presentation = value }
+  reservePresentation() { return 1 }
+  observeAuthorElements = state.elements
   render = state.render
   captureHoverFrame = state.hover
   async dispose() {}
+  async updateDocument() {}
   cancelPresentation() {}
   setRenderCache() {}
   retainLookahead() {}
+  armPlayback = state.arm
   async prepareLookahead() { return false }
   codeDiagnostics() { return {} }
   codePerformance() { return state.performance }
   captureCodePerformance() { const frames = state.performance; return () => frames }
   settled() { return Promise.resolve() }
   async stopPlayback() {}
-  hasJumpPreview() { return state.hasJump }
-  presentJumpPreviewNow = state.jump
+  hasPrerenderedFrame() { return state.hasJump }
+  presentPrerenderedFrame = state.jump
   supersedePausedFrame = state.supersede
   abandonPausedFrame = state.abandon
 } }))
@@ -49,7 +56,8 @@ async function init(direct = false): Promise<void> {
 beforeEach(async () => {
   vi.stubGlobal('self', worker)
   vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap()))
-  postMessage.mockClear(); state.hover.mockReset(); state.render.mockReset(); state.jump.mockReset(); state.supersede.mockReset(); state.abandon.mockReset(); state.hasJump = false; messages.length = 0; state.performance = []
+  postMessage.mockClear(); state.arm.mockReset(); state.hover.mockReset(); state.render.mockReset(); state.jump.mockReset(); state.supersede.mockReset(); state.abandon.mockReset(); state.hasJump = false; messages.length = 0; state.performance = []
+  state.elements.mockReset()
   state.readRgb.mockReset().mockReturnValue(new Uint8Array([1, 2, 3]))
   await import('./videoEditWorker')
   await init()
@@ -163,6 +171,36 @@ it('逐帧回执携带预览来源与实际耗时，扣除正常呈现等待并�
   } finally { clock.mockRestore() }
 })
 
+it('播放逐帧回执保持来源信息，同来源的呈现通知只发送一次', async () => {
+  await init(true)
+  state.render.mockImplementation(async (frame: number) => {
+    const presentedSource = frame < 32 ? 'live' : 'prerendered'
+    state.presentation!(frame, presentedSource, true)
+    return { presented: true, presentedSource, completion: Promise.resolve() }
+  })
+  for (const frame of [30, 31, 32, 33]) {
+    expect(await send({ ...request, frame, sequential: true })).toMatchObject({ presented: true, presentedSource: frame < 32 ? 'live' : 'prerendered' })
+  }
+  expect(messages.filter(message => message.phase === 'presented').map(message => [message.frame, message.presentedSource])).toEqual([[30, 'live'], [32, 'prerendered']])
+})
+
+it('常驻关键帧被更新请求取代时回 skipped，不触发旧帧重试', async () => {
+  await init(true)
+  let release!: () => void
+  const blocked = new Promise<void>(resolve => { release = resolve })
+  state.render.mockImplementationOnce(async () => {
+    await blocked
+    return { presented: false, superseded: true, presentedSource: 'jump', completion: Promise.resolve() }
+  }).mockResolvedValue({ presented: true, presentedSource: 'live', completion: Promise.resolve() })
+  const older = send({ ...request, frame: 30, scrubbing: 'fast' })
+  await vi.waitFor(() => expect(state.render).toHaveBeenCalledOnce())
+  const latest = send({ ...request, frame: 31, scrubbing: true })
+  release()
+  expect(await older).toMatchObject({ presented: false, skipped: true, presentedSource: 'jump' })
+  expect(await latest).toMatchObject({ presented: true })
+  expect(state.render).toHaveBeenCalledTimes(2)
+})
+
 it('暂停时预渲染窗口改变：前瞻按新窗口重新看一遍暂停的帧，而不是只取消等下一帧', async () => {
   await init(true)
   const { VideoEditDecodeLookahead } = await import('./videoEditDecodeLookahead')
@@ -199,22 +237,192 @@ it('暂停时排队中的旧画面请求在更新的请求到达时当场答复 
   expect(messages.filter(message => message.id === ids[1])).toHaveLength(1)
 })
 
-it('前一次点击的精确画面还在准备时，远距离跳转在队列外先画常驻关键帧，被取代的精确画面答复 skipped', async () => {
+it('缓存暂停请求在现场合成挂起时已完成，紧接着的同帧拖动、快慢拖动和新暂停都能直接上屏并完成', async () => {
   await init(true)
   let release!: () => void
   const blocker = new Promise<void>(resolve => { release = resolve })
   state.render.mockImplementation(async () => { await blocker; return { presented: false, superseded: true, renderCached: false, decodeMs: 0, gpuMs: 0, completion: Promise.resolve(), canvas: {} } })
   state.hasJump = true
-  state.jump.mockResolvedValue({ presented: true, approximate: true, cacheHits: 1, cacheBytes: 0, gpuMs: 1, completion: Promise.resolve() })
+  state.jump.mockResolvedValue({ presented: true, presentedSource: 'prerendered', cacheHits: 1, cacheBytes: 0, gpuMs: 1, completion: Promise.resolve() })
   const exact = ++nextId
   worker.onmessage({ data: { kind: 'render', id: exact, frame: 10, sequential: false, scrubbing: false } })
-  await vi.waitFor(() => expect(state.render).toHaveBeenCalled())
+  await vi.waitFor(() => {
+    expect(state.render).toHaveBeenCalledOnce()
+    expect(messages.find(message => message.id === exact && !message.phase)).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+  })
+  expect(await send({ kind: 'render', frame: 10, sequential: false, scrubbing: true })).toMatchObject({ presented: true, presentedSource: 'prerendered' })
   const jump = await send({ kind: 'render', frame: 500, sequential: false, scrubbing: 'fast' })
-  expect(jump).toMatchObject({ presented: true, approximate: true })
-  expect(state.jump).toHaveBeenCalledWith(500, expect.any(Function))
+  expect(jump).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+  const slow = await send({ kind: 'render', frame: 501, sequential: false, scrubbing: true })
+  expect(slow).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+  expect(slow.approximate).toBeUndefined()
+  expect(state.jump).toHaveBeenCalledWith(500, expect.any(Function), false, expect.any(Number))
   expect(state.render).toHaveBeenCalledOnce()
+  const paused = await send({ kind: 'render', frame: 502, sequential: false })
+  expect(paused).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+  expect(state.supersede).toHaveBeenLastCalledWith(502, true)
   release()
-  await vi.waitFor(() => expect(messages.find(message => message.id === exact && !message.phase)).toMatchObject({ skipped: true }))
+  await vi.waitFor(() => expect(state.render).toHaveBeenCalledTimes(2))
+  await send({ kind: 'render', frame: 503, sequential: false, scrubbing: true })
+  expect(messages.filter(message => message.id === exact && !message.phase)).toHaveLength(1)
+})
+
+it.each([true, 'fast', false] as const)('拖动缓存仍在读取时收到新指针请求（%s），旧读取保留上屏资格且请求只完成一次', async scrubbing => {
+  await init(true)
+  state.hasJump = true
+  state.render.mockImplementation(async () => {
+    state.presentation!(11, 'live', true)
+    return { presented: true, presentedSource: 'live', completion: Promise.resolve() }
+  })
+  const reads: Array<{ frame: number; wanted: () => boolean; release: () => void }> = []
+  state.jump.mockImplementation((frame: number, wanted: () => boolean) => new Promise(resolve => {
+    let done = false
+    reads.push({ frame, wanted, release: () => {
+      if (done) return
+      done = true
+      const presented = wanted()
+      if (presented) state.presentation!(frame, 'prerendered', true)
+      resolve({ presented, presentedSource: 'prerendered', completion: Promise.resolve() })
+    } })
+  }))
+  const ids = [++nextId, ++nextId]
+  try {
+    worker.onmessage({ data: { kind: 'render', id: ids[0], frame: 10, sequential: false, scrubbing: true } })
+    worker.onmessage({ data: { kind: 'render', id: ids[1], frame: 11, sequential: false, scrubbing } })
+    expect(reads[0].wanted()).toBe(true)
+    reads[0].release(); reads[1].release()
+    await vi.waitFor(() => expect(messages.filter(message => message.phase === 'presented' && message.presentedSource === 'prerendered').map(message => message.frame)).toEqual([10, 11]))
+    await vi.waitFor(() => expect(messages.filter(message => ids.includes(message.id) && !message.phase)).toHaveLength(2))
+    expect(messages.filter(message => ids.includes(message.id) && !message.phase).every(message => message.presented)).toBe(true)
+    if (scrubbing) expect(state.render).not.toHaveBeenCalled()
+    else await vi.waitFor(() => { expect(state.render).toHaveBeenCalledOnce(); expect(messages.filter(message => message.phase === 'presented').at(-1)?.presentedSource).toBe('live') })
+  } finally { for (const read of reads) read.release(); await init(true) }
+})
+
+it('旧缓存读取失败后不再回退合成已被新位置取代的画面', async () => {
+  await init(true)
+  state.hasJump = true
+  let release!: () => void
+  state.jump.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(undefined) }))
+    .mockResolvedValue({ presented: true, presentedSource: 'prerendered', completion: Promise.resolve() })
+  const old = send({ kind: 'render', frame: 10, sequential: false, scrubbing: true })
+  const latest = await send({ kind: 'render', frame: 20, sequential: false, scrubbing: true })
+  expect(latest).toMatchObject({ presented: true })
+  release()
+  expect(await old).toMatchObject({ presented: false, skipped: true })
+  expect(state.render).not.toHaveBeenCalled()
+})
+
+it.each([false, true] as const)('最新缓存请求（scrubbing=%s）失效时仍完成现场路径而非丢掉请求', async scrubbing => {
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: false, superseded: true, presentedSource: 'prerendered', completion: Promise.resolve() })
+  const authorElements = { sequenceId: composition.id, revision: composition.revision, frame: 10, clips: [] }
+  state.elements.mockReturnValue(authorElements)
+  state.render.mockImplementation(async () => {
+    state.presentation!(10, 'live', true)
+    return { presented: true, presentedSource: 'live', completion: Promise.resolve() }
+  })
+  const result = await send({ kind: 'render', frame: 10, sequential: false, scrubbing, observeElements: true })
+  expect(result).toMatchObject({ presented: true, presentedSource: 'live', authorElements })
+  expect(state.render).toHaveBeenCalledOnce()
+  expect(messages.filter(message => message.id === result.id && !message.phase)).toHaveLength(1)
+})
+
+it('后台现场上屏通知携带代码元素，缓存回执和近似现场通知不安装元素，也不重复完成请求', async () => {
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: true, presentedSource: 'prerendered', completion: Promise.resolve() })
+  const authorElements = { sequenceId: composition.id, revision: composition.revision, frame: 10, clips: [] }
+  state.elements.mockReturnValue(authorElements)
+  let release!: () => void
+  const blocker = new Promise<void>(resolve => { release = resolve })
+  state.render.mockImplementation(async () => {
+    await blocker
+    state.presentation!(10, 'live', false)
+    state.presentation!(10, 'live', true)
+    return { presented: true, presentedSource: 'live', effectErrors: ['效果失败'], sceneIssues: ['素材缺失'], completion: Promise.resolve() }
+  })
+  const cached = await send({ kind: 'render', frame: 10, sequential: false, observeElements: true })
+  expect(cached.authorElements).toBeUndefined()
+  await vi.waitFor(() => expect(state.render).toHaveBeenCalledOnce())
+  expect(state.render.mock.calls[0][8]).toBe(true)
+  release()
+  await vi.waitFor(() => expect(messages.filter(message => message.phase === 'presented')).toHaveLength(2))
+  expect(messages.filter(message => message.phase === 'presented').map(message => message.authorElements)).toEqual([undefined, authorElements])
+  await vi.waitFor(() => expect(messages.find(message => message.phase === 'refined')).toMatchObject({ presented: true, frame: 10, sequenceId: composition.id, revision: composition.revision, effectErrors: ['效果失败', '素材缺失'] }))
+  expect(messages.filter(message => message.id === cached.id && !message.phase)).toHaveLength(1)
+})
+
+it.each([true, 'fast'] as const)('缓存拖动（%s）后同帧松手先完成缓存回执，再由现场替换并携带代码元素', async scrubbing => {
+  await init(true)
+  state.hasJump = true
+  const authorElements = { sequenceId: composition.id, revision: composition.revision, frame: 10, clips: [] }
+  state.elements.mockReturnValue(authorElements)
+  state.jump.mockImplementation(async (frame: number, wanted: () => boolean, preserveExact: boolean) => {
+    // 松手复用已上屏的同帧缓存，不会再产生一次缓存呈现通知。
+    if (!preserveExact && wanted()) state.presentation!(frame, 'prerendered', true)
+    return { presented: wanted(), presentedSource: 'prerendered', completion: Promise.resolve() }
+  })
+  let release!: () => void
+  const blocker = new Promise<void>(resolve => { release = resolve })
+  state.render.mockImplementation(async (frame: number, _sequential, mode, wanted: () => boolean) => {
+    expect(mode).toBe(false)
+    await blocker
+    const presented = wanted()
+    if (presented) state.presentation!(frame, 'live', true)
+    return { presented, presentedSource: 'live', completion: Promise.resolve() }
+  })
+  try {
+    const drag = await send({ kind: 'render', frame: 10, sequential: false, scrubbing })
+    expect(drag).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(state.render).not.toHaveBeenCalled()
+    const paused = await send({ kind: 'render', frame: 10, sequential: false, scrubbing: false, observeElements: true })
+    expect(paused).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    expect(paused.authorElements).toBeUndefined()
+    await vi.waitFor(() => expect(state.render).toHaveBeenCalledOnce())
+    expect(state.render.mock.calls[0][8]).toBe(true)
+    release()
+    await vi.waitFor(() => expect(messages.filter(message => message.phase === 'presented')).toEqual([
+      expect.objectContaining({ frame: 10, presentedSource: 'prerendered' }),
+      expect.objectContaining({ frame: 10, presentedSource: 'live', authorElements }),
+    ]))
+    await vi.waitFor(() => expect(messages.find(message => message.phase === 'refined')).toMatchObject({ frame: 10, presented: true }))
+    for (const result of [drag, paused]) expect(messages.filter(message => message.id === result.id && !message.phase)).toHaveLength(1)
+  } finally { release(); await init(true) }
+})
+
+it('缓存请求已完成后，后台 GPU 丢失仍独立通知宿主，不重复回执', async () => {
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: true, presentedSource: 'prerendered', completion: Promise.resolve() })
+  let release!: () => void
+  const blocker = new Promise<void>(resolve => { release = resolve })
+  state.render.mockImplementation(async () => { await blocker; throw new VideoEditGpuDeviceLostError('device reset') })
+  const cached = await send({ kind: 'render', frame: 10, sequential: false })
+  await send({ kind: 'render', frame: 11, sequential: false, scrubbing: true })
+  release()
+  await vi.waitFor(() => expect(messages.find(message => message.phase === 'refined')).toMatchObject({ frame: 10, sequenceId: composition.id, revision: composition.revision, gpuDeviceLost: 'device reset', error: expect.any(String) }))
+  expect(messages.filter(message => message.id === cached.id && !message.phase)).toHaveLength(1)
+})
+
+it('同帧按下拖动又松手时，旧后台取消不误报为当前画面失败', async () => {
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: true, presentedSource: 'prerendered', completion: Promise.resolve() })
+  let release!: () => void
+  const blocker = new Promise<void>(resolve => { release = resolve })
+  state.render.mockImplementationOnce(async () => { await blocker; throw new DOMException('已取消', 'AbortError') })
+    .mockResolvedValue({ presented: true, presentedSource: 'live', completion: Promise.resolve() })
+  const cached = await send({ kind: 'render', frame: 10, sequential: false })
+  await vi.waitFor(() => expect(state.render).toHaveBeenCalledOnce())
+  await send({ kind: 'render', frame: 10, sequential: false, scrubbing: true })
+  await send({ kind: 'render', frame: 10, sequential: false, scrubbing: false })
+  release()
+  await vi.waitFor(() => expect(state.render).toHaveBeenCalledTimes(2))
+  await init(true)
+  expect(messages.some(message => message.phase === 'refined' && message.error)).toBe(false)
+  expect(messages.filter(message => message.id === cached.id && !message.phase)).toHaveLength(1)
 })
 
 it('暂停画面请求一到就让渲染器放弃还在准备的暂停精确画面，关闭会话时无条件放弃；导出、播放帧与要回读像素的请求不放弃', async () => {
@@ -224,7 +432,7 @@ it('暂停画面请求一到就让渲染器放弃还在准备的暂停精确画�
   await send({ kind: 'render', frame: 22, sequential: false, deadline: performance.timeOrigin + performance.now() })
   await send({ kind: 'render', frame: 23, sequential: false, readRgb: { width: 4, height: 4 } })
   await send({ kind: 'render', frame: 24, sequential: false, history: true })
-  expect(state.supersede.mock.calls).toEqual([[20]])
+  expect(state.supersede.mock.calls).toEqual([[20, true]])
   expect(state.abandon).not.toHaveBeenCalled()
   // Closing the session abandons it unconditionally, before queueing behind its decoding. The close is answered before
   // the test ends: the next test's session opens on the same worker module.
@@ -259,4 +467,83 @@ it('停止播放当场作废还没上屏的播放帧：排队的答复 skipped �
   expect(await send({ kind: 'render', frame: 10, sequential: false, scrubbing: false })).toMatchObject({ presented: true })
   expect(await send({ kind: 'render', frame: 10, sequential: true, deadline: performance.timeOrigin + performance.now() })).toMatchObject({ presented: true })
   expect(frames).toEqual([10, 10, 10])
+})
+
+it('ready 缓存不排在起播预热后面；像素回读在准备时禁止缓存抢占其画布', async () => {
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: true, presentedSource: 'prerendered', cacheHits: 1, cacheBytes: 0, gpuMs: 1, completion: Promise.resolve() })
+  let releaseArm!: () => void
+  state.arm.mockImplementation(() => new Promise<void>(resolve => { releaseArm = resolve }))
+  const arm = ++nextId
+  worker.onmessage({ data: { kind: 'arm', id: arm, frame: 15 } })
+  await vi.waitFor(() => expect(state.arm).toHaveBeenCalledOnce())
+  try {
+    expect(await send({ kind: 'render', frame: 15, sequential: false, scrubbing: true })).toMatchObject({ presentedSource: 'prerendered' })
+    expect(state.render).not.toHaveBeenCalled()
+  } finally { releaseArm() }
+  await vi.waitFor(() => expect(messages.some(message => message.id === arm)).toBe(true))
+  state.jump.mockClear()
+  let releasePixels!: () => void
+  const pixels = new Promise<void>(resolve => { releasePixels = resolve })
+  state.render.mockImplementation(async (...args: unknown[]) => {
+    const capture = args[7] as VideoEditPresentationCapture | undefined
+    capture?.(Promise.resolve(bitmap()))
+    await pixels
+    return { presented: true, presentedSource: 'live', renderCached: false, decodeMs: 0, gpuMs: 0, completion: Promise.resolve() }
+  })
+  const history = send({ kind: 'render', frame: 16, sequential: false, history: true })
+  await vi.waitFor(() => expect(state.render).toHaveBeenCalledOnce())
+  const scrub = send({ kind: 'render', frame: 17, sequential: false, scrubbing: true })
+  expect(state.jump).not.toHaveBeenCalled()
+  releasePixels(); await history; await scrub
+})
+
+it.each(['fonts', 'update', 'playback'] as const)('拖动或起播前的 %s 请求到达即放弃后台现场合成', async kind => {
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: true, presentedSource: 'prerendered', completion: Promise.resolve() })
+  let release!: () => void
+  const blocked = new Promise<void>(resolve => { release = resolve })
+  state.abandon.mockImplementation(() => release())
+  state.render.mockImplementationOnce(async () => { await blocked; return { presented: false, completion: Promise.resolve() } })
+    .mockResolvedValue({ presented: true, completion: Promise.resolve() })
+  try {
+    await send({ kind: 'render', frame: 10, sequential: false })
+    await vi.waitFor(() => expect(state.render).toHaveBeenCalledOnce())
+    state.abandon.mockClear()
+    const id = ++nextId
+    const next: RenderRequest = kind === 'fonts' ? { kind, id, fonts: [], availableIds: [], reset: false }
+      : kind === 'update' ? { kind, id, document: composition }
+        : { kind: 'render', id, frame: 11, sequential: true, deadline: performance.timeOrigin + performance.now() + 1000 }
+    worker.onmessage({ data: next })
+    expect(state.abandon).toHaveBeenCalledOnce()
+    if (kind !== 'playback') expect(await send({ kind: 'render', frame: 11, sequential: false, scrubbing: true })).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+    await vi.waitFor(() => expect(messages.some(message => message.id === id && !message.phase)).toBe(true))
+  } finally { release(); await init(true) }
+})
+
+it('最新缓存请求在回退读取期间再次失效，回 presented:false 允许主线程重发', async () => {
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: false, superseded: true, completion: Promise.resolve() })
+  state.render.mockResolvedValue({ presented: false, superseded: true, completion: Promise.resolve() })
+  const result = await send({ kind: 'render', frame: 10, sequential: false, scrubbing: true })
+  expect(result.presented).toBe(false)
+  expect(result.skipped).toBeUndefined()
+})
+
+it('字体请求在缓存读取期间到达时，不再启动会挡住它的过时后台合成', async () => {
+  await init(true)
+  state.hasJump = true
+  let release!: () => void
+  state.jump.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve({ presented: true, presentedSource: 'prerendered', completion: Promise.resolve() }) }))
+    .mockResolvedValue({ presented: true, presentedSource: 'prerendered', completion: Promise.resolve() })
+  const cached = send({ kind: 'render', frame: 10, sequential: false })
+  const id = ++nextId
+  worker.onmessage({ data: { kind: 'fonts', id, fonts: [], availableIds: [], reset: false } })
+  release(); await cached
+  await vi.waitFor(() => expect(messages.some(message => message.id === id && !message.phase)).toBe(true))
+  expect(state.render).not.toHaveBeenCalled()
+  expect(await send({ kind: 'render', frame: 11, sequential: false, scrubbing: true })).toMatchObject({ presented: true, presentedSource: 'prerendered' })
 })
