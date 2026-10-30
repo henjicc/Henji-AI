@@ -23,20 +23,24 @@ let runtime: { host: ApplicationHostBridge; operations: ApplicationOperationCoor
 /** 应用生命周期持有账本和宿主；协议适配器只提供调用者授权。 */
 export function initializeApplicationRuntime() {
   if (runtime) return runtime
+  // 账本在构造时就恢复上次没结束的调用，那时宿主还没建好：恢复里用到宿主的地方都经 bridge 取，
+  // 还没有宿主就按“渲染层不在、没有当前快照”处理
+  let bridge: ApplicationHostBridge | undefined
   // 恢复回执必须带上 revision/scopeRevisions，否则按 schema 校验的标准 MCP 客户端会拒收整条结果。
   // 原回执没有时用宿主当前快照兜住。
   const currentRevisions = () => {
-    const context = host.getContext()
+    const context = bridge?.getContext()
     return context ? { revision: context.revision, scopeRevisions: context.scopeRevisions } : undefined
   }
+  const rendererWaiting = (original: OperationRecord) => !!bridge?.ready && bridge.rendererEpoch === original.rendererEpoch
   const operations: ApplicationOperationCoordinator = new ApplicationOperationCoordinator(new ApplicationOperationStore(getDb()),
     record => recoverPersistedTranscriptionOperation(getAudioEditStoredTask, record)
-      ?? recoverPersistedVideoEditExportOperation(() => videoEditExportJobRegistry.list(), record, currentRevisions, original => host.ready && host.rendererEpoch === original.rendererEpoch)
+      ?? recoverPersistedVideoEditExportOperation(() => videoEditExportJobRegistry.list(), record, currentRevisions, rendererWaiting)
       // 渲染层还连着、仍在等这次调用时以它的回执为准；主进程用登记重建只在它不在时兜底
-      ?? recoverPersistedWebReplayOperation(id => webReplayRenderJobs.get(id), record, currentRevisions, original => host.ready && host.rendererEpoch === original.rendererEpoch)
+      ?? recoverPersistedWebReplayOperation(id => webReplayRenderJobs.get(id), record, currentRevisions, rendererWaiting)
       ?? recoverPersistedGenerationOperation(id => getGenerationHistoryStore().getStatus(id), record, currentRevisions),
-    () => host.writableEntityTypes(), item => host.publishReviews(item))
-  const host: ApplicationHostBridge = new ApplicationHostBridge(id => {
+    () => bridge?.writableEntityTypes() ?? new Set(), item => bridge?.publishReviews(item))
+  const host: ApplicationHostBridge = bridge = new ApplicationHostBridge(id => {
     if (embeddedCallers.has(id)) return
     if (!externalAuthority) throw new Error('调用者未获授权。')
     externalAuthority(id)
