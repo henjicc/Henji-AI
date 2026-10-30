@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { textStyleSchema } from '../../imaging/vectorContent/text'
+import { formatAbsolutePath, parseAbsolutePath } from '../../storage/pathSyntax'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
 import { CODE_WEB_BOX_LIMIT, CODE_WEB_SELECTOR_LENGTH, codeWebBoxesIssue, codeWebFolderOf, codeWebViewIssue } from './webSource'
 
@@ -21,13 +22,19 @@ export const codeMaterialVideoSpansSchema = z.array(z.object({ from: finite, to:
   const issue = codeVideoSpansIssue(spans)
   if (issue) context.addIssue({ code: 'custom', message: issue })
 })
+// 盘符路径一律存成 Windows 原生写法：落盘换成项目相对写法、读回时还原的都是反斜杠，内存里留着 D:/ 写法会与保存结果对不上
+const nativeWebPath = (value: string): string => {
+  if (!/^[A-Za-z]:[\\/]/.test(value)) return value
+  const parsed = parseAbsolutePath('win32', value)
+  return parsed ? formatAbsolutePath('win32', parsed) : value
+}
 const videoReference = z.object({ kind: z.literal('video'), mediaId: z.string().min(1).max(100), time: finite.nonnegative().optional(), spans: codeMaterialVideoSpansSchema.optional() }).strict().refine(value => value.time === undefined || value.spans === undefined, '视频参数的 time 与 spans 不能同时给出。')
 /**
  * 网页画面（剪辑内容第 41 版）：本地网页的路径（内存里是绝对路径，落盘按位置写法换成项目相对）、视口、取景与倍率、
  * 取帧时刻与要读矩形的选择器。取景规则见 webSource.ts。
  */
 const webReference = z.object({
-  kind: z.literal('web'), path: z.string().min(1).max(4096).refine(value => !value.includes('\0') && codeWebFolderOf(value) !== undefined, '网页路径需要网页文件夹（含 index.html）或其中的 index.html。'),
+  kind: z.literal('web'), path: z.string().min(1).max(4096).overwrite(nativeWebPath).refine(value => !value.includes('\0') && codeWebFolderOf(value) !== undefined, '网页路径需要网页文件夹（含 index.html）或其中的 index.html。'),
   width: z.number().int().optional(), height: z.number().int().optional(), region: z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()]).optional(), scale: finite.optional(),
   time: finite.nonnegative().optional(), spans: codeMaterialVideoSpansSchema.optional(),
   boxes: z.array(z.string().min(1).max(CODE_WEB_SELECTOR_LENGTH)).max(CODE_WEB_BOX_LIMIT).optional(),

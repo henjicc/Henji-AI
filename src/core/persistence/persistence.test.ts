@@ -130,6 +130,8 @@ it('剪辑内容 v41：网页画面引用是可选增量，v40 样本原样升�
   expect(agree({ kind: 'web', path: '/p/page.html' })).toBe(false)
   expect(agree({ kind: 'web', path: '/index.html' })).toBe(false)
   expect(agree({ kind: 'web', path: 'C:\\index.html' })).toBe(false)
+  // 盘符路径存成原生写法，与落盘后读回的写法一致，保存核对不会把同一个位置当成改动。
+  expect(codeMaterialImageReferenceSchema.parse({ kind: 'web', path: 'D:/视频/网页/知多少' })).toEqual({ kind: 'web', path: 'D:\\视频\\网页\\知多少' })
 })
 
 it('剪辑内容 v37：片段停用、片子数据与内置库，旧样本原样升上来；新样本经内容外形与完整 schema 读回不丢字段', () => {
