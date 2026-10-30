@@ -54,7 +54,7 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
   const beginEditing = (clipId: string, caption?: CaptionTextTarget, position?: { x: number; y: number }): void => {
     try {
       finish(); cancelDrag(); setVideoEditView(instance.document.id, { playing: false })
-      if (caption) selectVideoEditSubtitle(instance.document.id, sequence.id, caption.captionId, { preserveFrame: true })
+      if (caption) selectVideoEditSubtitle(instance.document.id, sequence.id, caption.captionId)
       else setVideoEditTimelineView(instance.document.id, { selectedClipIds: [clipId] }, clipId)
       caret.current = position
       editing.current = { ...session(clipId), caption }; setEditingId(clipId)
@@ -112,7 +112,7 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
       finish(); cancelDrag()
       if (!clip && (wasEditing || instance.tool !== 'type')) return
       if (instance.playing) setVideoEditView(instance.document.id, { playing: false })
-      if (caption) { selectVideoEditSubtitle(instance.document.id, sequence.id, caption.captionId, { preserveFrame: true }); event.currentTarget.focus(); event.preventDefault(); return }
+      if (caption) { selectVideoEditSubtitle(instance.document.id, sequence.id, caption.captionId); event.currentTarget.focus(); event.preventDefault(); return }
       if (clip && instance.tool === 'type' && corner === undefined) { beginEditing(clip.id); return }
       if (clip) setVideoEditTimelineView(instance.document.id, { selectedClipIds: [clip.id] }, clip.id)
       dragging.current = { pointerId: event.pointerId, start: point(event), clip, corner, layout, ...(clip ? { session: session(clip.id) } : {}), sequenceId: sequence.id, frame: instance.frame, document: instance.document }

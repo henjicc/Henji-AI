@@ -90,7 +90,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     const value = values?.find(value => value.id === entry.value.id)
     if (!value) throw new Error('此字幕或标记已移除，请重新选择。')
     if (instance.activeSequenceId !== current.id) switchVideoEditSequence(projectId, current.id)
-    if (entry.kind === 'caption') selectVideoEditSubtitle(projectId, current.id, value.id, { reveal: false })
+    if (entry.kind === 'caption') selectVideoEditSubtitle(projectId, current.id, value.id, { reveal: false, seek: true })
     else { selectVideoEditSubtitle(projectId, current.id, null); setVideoEditView(projectId, { frame: 'start' in value ? value.start : value.frame, playing: false }) }
   })
   const changeAnchor = (clipId: string): void => setDraft(previous => {

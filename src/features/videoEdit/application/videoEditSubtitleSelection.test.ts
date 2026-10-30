@@ -21,18 +21,19 @@ async function captionProject(): Promise<VideoEditInstance> {
   return owner
 }
 
-it('时间线上选中字幕：效果控件到前面、片段选择清空、播放头跳到它；列表里选中留在原面板，选片段即取消字幕选择（重要记录 019）', async () => {
+it('时间线上选中字幕：效果控件到前面、片段选择清空、播放头不动；列表里选中留在原面板、播放头到它开头，选片段即取消字幕选择', async () => {
   const owner = await captionProject(); const id = owner.document.id
   setVideoEditTimelineView(id, { selectedClipIds: ['clip'] }, 'clip')
   focusVideoEditPanel(id, 'content')
   const version = owner.panelFocusVersion ?? 0
+  const frame = owner.frame
   selectVideoEditSubtitle(id, owner.activeSequenceId, 'one')
   expect(owner.activePanel).toBe('effects'); expect(owner.panelFocusVersion).toBe(version + 1)
   expect(owner.selectedClipIds).toEqual([]); expect(owner.selection).toBeNull()
-  expect(owner.frame).toBe(12); expect(selectedVideoEditSubtitleId(owner)).toBe('one')
+  expect(owner.frame).toBe(frame); expect(selectedVideoEditSubtitleId(owner)).toBe('one')
   focusVideoEditPanel(id, 'content')
-  selectVideoEditSubtitle(id, owner.activeSequenceId, 'one', { reveal: false })
-  expect(owner.activePanel).toBe('content')
+  selectVideoEditSubtitle(id, owner.activeSequenceId, 'one', { reveal: false, seek: true })
+  expect(owner.activePanel).toBe('content'); expect(owner.frame).toBe(12)
   setVideoEditTimelineView(id, { selectedClipIds: ['clip'] }, 'clip')
   expect(selectedVideoEditSubtitleId(owner)).toBeUndefined()
 })

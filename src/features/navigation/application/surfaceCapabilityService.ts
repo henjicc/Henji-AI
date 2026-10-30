@@ -75,10 +75,10 @@ export async function focusApplicationEntity(
       setVideoEditView(projectId, { selection: mark.clipId ?? null, frame: mark.frame, playing: false })
       focusVideoEditPanel(projectId, 'content')
     }
-    // 助手定位字幕与人在时间线上点选同一条路：选中字幕、清空片段选择、效果控件显示它的样式。
+    // 助手定位字幕与人在字幕列表里点选同一条路：选中字幕、清空片段选择、播放头到它开头、效果控件显示它的样式。
     if (ref.kind === 'video_edit.caption') {
       if (!sequence?.captions?.some(caption => caption.id === childId)) throw new Error('NOT_FOUND')
-      selectVideoEditSubtitle(projectId, sequence.id, childId)
+      selectVideoEditSubtitle(projectId, sequence.id, childId, { seek: true })
     }
     return { ref, ...openApplicationSurface('workspace.video_edit', correlation) }
   }
