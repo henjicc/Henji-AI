@@ -24,7 +24,7 @@ import {
   type VideoFrameStreamInfo,
   type VideoFrameTarget,
 } from '../services/video-decoder'
-import { getWebSourcePages, parseWebSourceCaptureRequest, parseWebSourceOpenRequest, parseWebSourcePath } from '../services/web-source'
+import { getWebSourcePages, parseWebSourceCaptureRequest, parseWebSourceOpenRequest, parseWebSourcePaths } from '../services/web-source'
 import type { WebSourceCaptureRequest, WebSourceCaptureResult, WebSourceInfo, WebSourceOpenRequest } from '../../../src/platform/contracts/videoFrameTypes'
 import { parseStringField, parseVoid, registerIpcHandler } from './registry'
 
@@ -105,7 +105,7 @@ export function registerVideoFramesIpc(): void {
   registerIpcHandler<WebSourceOpenRequest, WebSourceInfo>('videoFrames:openWeb', parseWebSourceOpenRequest, (request, event) => getWebSourcePages().open(webContentsFrameTarget(event.sender), request))
   registerIpcHandler<WebSourceCaptureRequest, WebSourceCaptureResult>('videoFrames:captureWeb', parseWebSourceCaptureRequest, (request, event) => getWebSourcePages().capture(event.sender.id, request))
   registerIpcHandler<string, boolean>('videoFrames:closeWeb', (input) => parseStringField(input, 'streamId'), (streamId, event) => getWebSourcePages().close(event.sender.id, streamId))
-  registerIpcHandler<string, string>('videoFrames:webContent', parseWebSourcePath, (path) => getWebSourcePages().contentHash(path))
+  registerIpcHandler<string[], Record<string, string | null>>('videoFrames:watchWebContent', parseWebSourcePaths, (paths, event) => getWebSourcePages().watchContent(webContentsFrameTarget(event.sender), paths))
   // 通道断开（preload disconnect）时关闭该通道上仍打开的会话（画面、声音与网页）：消费方 Worker 被终止时可能来不及自行关闭。
   registerIpcHandler<string, number>(
     'videoFrames:closeRoute',

@@ -3,7 +3,7 @@ import { WEB_SOURCE_CONTENT_CHANGED_CHANNEL } from '../../../../src/platform/con
 import { createMainLogger } from '../logging/main-logger'
 import { WebSourcePages } from './pages'
 
-export { parseWebSourceCaptureRequest, parseWebSourceOpenRequest, parseWebSourcePath } from './pages'
+export { parseWebSourceCaptureRequest, parseWebSourceOpenRequest, parseWebSourcePaths } from './pages'
 
 let pages: WebSourcePages | null = null
 

@@ -37,6 +37,7 @@ vi.mock('./videoEditService', () => ({
   listVideoEditInstances: () => state.instances, requireVideoEditInstance: () => state.instances[0],
   getActiveVideoEditSequence: () => state.composition, findActiveVideoEditSequence: () => state.composition, publishVideoEdit: vi.fn(),
   subscribeVideoEditView: (listener: () => void) => { state.viewListeners.add(listener); return () => { state.viewListeners.delete(listener) } },
+  subscribeVideoEditDomain: () => () => undefined,
 }))
 /** 与正式 setVideoEditView 一样：改了播放状态或播放头就发布视图。 */
 function publishView(): void { for (const listener of state.viewListeners) listener() }

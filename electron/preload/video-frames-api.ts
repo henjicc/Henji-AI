@@ -222,7 +222,7 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
         ipcRenderer.removeListener('videoFrames:streamEnded', listener)
       }
     },
-    webContent: (path) => nativeInvoke('videoFrames:webContent', { path }),
+    watchWebContent: (paths) => nativeInvoke('videoFrames:watchWebContent', { paths }),
     onWebContentChanged: (handler) => {
       const listener = (_event: Electron.IpcRendererEvent, change: WebSourceContentChange): void => handler(change)
       ipcRenderer.on(WEB_SOURCE_CONTENT_CHANGED_CHANNEL, listener)

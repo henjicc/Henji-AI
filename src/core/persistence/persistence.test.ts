@@ -128,6 +128,8 @@ it('剪辑内容 v41：网页画面引用是可选增量，v40 样本原样升�
   // 网页来源是专门的网页文件夹：写文件夹本身可以，零散的 html 文件不行。
   expect(agree({ kind: 'web', path: '/p/site' })).toBe(true)
   expect(agree({ kind: 'web', path: '/p/page.html' })).toBe(false)
+  expect(agree({ kind: 'web', path: '/index.html' })).toBe(false)
+  expect(agree({ kind: 'web', path: 'C:\\index.html' })).toBe(false)
 })
 
 it('剪辑内容 v37：片段停用、片子数据与内置库，旧样本原样升上来；新样本经内容外形与完整 schema 读回不丢字段', () => {

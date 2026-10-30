@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { BrowserWindow, session as electronSession, sharedTexture, type OffscreenSharedTexture, type Session } from 'electron'
+import { BrowserWindow, session as electronSession, sharedTexture, type OffscreenSharedTexture } from 'electron'
 import { codeWebPixelSize, type CodeWebView } from '../../../../src/core/videoEdit/codeMaterial/webSource'
 import type { VideoFrameMeta, WebSourceBox } from '../../../../src/platform/contracts/videoFrameTypes'
 import type { VideoFrameTarget } from '../video-decoder'
@@ -9,6 +9,8 @@ const LOAD_TIMEOUT_MS = 30_000
 /** 页面出现 `window.henjiWeb` 并就绪（资源、字体）的时限。 */
 const READY_TIMEOUT_MS = 30_000
 const SEEK_TIMEOUT_MS = 30_000
+/** 载入失败后隔这么久，下一次取帧再试载入；这之间的取帧直接报上一次的错。 */
+const RELOAD_RETRY_MS = 2_000
 /** 标记帧的画面通常几毫秒内到达；超过这么久仍没有任何新画面算取帧失败。 */
 const PAINT_TIMEOUT_MS = 3_000
 /**
@@ -109,36 +111,26 @@ function updateRect(texture: OffscreenSharedTexture): UpdateRect {
 }
 
 /**
- * 每个网页文件夹一个内存会话分区，同一文件夹的页面共用（同一站点，共用存储无妨），不随每次打开新建永不回收的分区。
- * 站点请求只从这个文件夹提供，其他地址照常联网（本机项目里的网页属于本机创作）；拒绝摄像头、麦克风等授权请求，
- * 离屏页面没有人能回应。最后一个页面关掉时清空存储、撤下处理器。
+ * 每个网页文件夹一个内存会话分区，同一文件夹的页面共用（同一站点），不随每次打开新建分区；分区数量以用到的网页文件夹为限。
+ * 页面关掉时不清存储：清理是异步的，和紧接着重开同一分区会撞车。站点请求只从这个文件夹提供，其他地址照常联网
+ * （本机项目里的网页属于本机创作）；拒绝摄像头、麦克风等授权请求，离屏页面没有人能回应。
  */
-const sessions = new Map<string, { session: Session; partition: string; users: number }>()
-function acquireSession(root: string): { session: Session; partition: string } {
-  let entry = sessions.get(root)
-  if (!entry) {
-    const partition = `web-source-${crypto.createHash('sha256').update(root).digest('hex').slice(0, 24)}`
-    const session = electronSession.fromPartition(partition)
-    if (session.protocol.isProtocolHandled('https')) session.protocol.unhandle('https')
-    session.protocol.handle('https', request => new URL(request.url).origin === WEB_SOURCE_ORIGIN ? serveWebSourceFile(root, request) : session.fetch(request, { bypassCustomProtocolHandlers: true }))
-    session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
-    entry = { session, partition, users: 0 }
-    sessions.set(root, entry)
-  }
-  entry.users++
-  return entry
-}
-function releaseSession(root: string): void {
-  const entry = sessions.get(root)
-  if (!entry || --entry.users > 0) return
-  sessions.delete(root)
-  entry.session.protocol.unhandle('https')
-  void entry.session.clearStorageData().catch(() => undefined)
+const partitions = new Map<string, string>()
+function sessionPartition(root: string): string {
+  const existing = partitions.get(root)
+  if (existing) return existing
+  const partition = `web-source-${crypto.createHash('sha256').update(root).digest('hex').slice(0, 24)}`
+  const session = electronSession.fromPartition(partition)
+  if (session.protocol.isProtocolHandled('https')) session.protocol.unhandle('https')
+  session.protocol.handle('https', request => new URL(request.url).origin === WEB_SOURCE_ORIGIN ? serveWebSourceFile(root, request) : session.fetch(request, { bypassCustomProtocolHandlers: true }))
+  session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  partitions.set(root, partition)
+  return partition
 }
 
 /**
  * 一个网页来源的离屏页面：沙箱、隔离、不挂任何 preload，页面拿不到痕迹的接口。宿主只经 `window.henjiWeb` 控制时间，取帧串行；
- * 页面进程退出或 seek 超时（旧的 seek 可能还在改页面）后，下一次取帧先重新载入页面。
+ * 页面进程退出、seek 超时（结束页面进程，免得旧的 seek 继续改页面）或重新载入失败后，下一次取帧先重新载入页面。
  */
 export class WebSourcePage {
   private window?: BrowserWindow
@@ -149,12 +141,11 @@ export class WebSourcePage {
   private wake?: () => void
   private tail: Promise<unknown> = Promise.resolve()
   private frameIndex = 0
-  /** 载入失败（文件改坏了等）：之后的取帧照报这个错，直到重新载入成功。 */
-  private failure?: Error
-  /** 页面进程退出或 seek 超时：下一次取帧前重新载入。 */
-  private stale?: 'gone' | 'seek_timeout'
+  /** 页面进程退出（含 seek 超时后主动结束）或重新载入失败：下一次取帧前重新载入。 */
+  private stale?: 'gone' | 'reload'
+  /** 上一次载入失败：RELOAD_RETRY_MS 之内的取帧直接报这个错，之后再试载入（文件改好了内容指纹不变也能恢复）。 */
+  private failure?: { error: Error; at: number }
   private closed = false
-  private sessionHeld = false
   duration: number | null = null
 
   constructor(
@@ -170,9 +161,15 @@ export class WebSourcePage {
   get pixelWidth(): number { return codeWebPixelSize(this.view).width }
   get pixelHeight(): number { return codeWebPixelSize(this.view).height }
 
-  async open(): Promise<void> {
-    const { partition } = acquireSession(this.folder.root)
-    this.sessionHeld = true
+  /** 打开页面；之后的重新载入与取帧排在它后面。 */
+  open(): Promise<void> {
+    const run = this.openNow()
+    this.tail = run
+    return run
+  }
+
+  private async openNow(): Promise<void> {
+    const partition = sessionPartition(this.folder.root)
     const { region, scale } = this.view
     // 离屏窗口的内容尺寸就是取景，设备像素比是倍率；视口与取景原点见 load()。
     const window = new BrowserWindow({
@@ -226,18 +223,24 @@ export class WebSourcePage {
     contents.stopPainting()
   }
 
-  /** 网页文件改了：重新载入（排在进行中的取帧之后），之后的画面用新内容。 */
+  /** 载入并记下结果：失败时标记待重新载入，下一次取帧（隔 RELOAD_RETRY_MS 之后）再试。 */
+  private async loadRecording(): Promise<void> {
+    try {
+      await this.load()
+      this.failure = undefined
+    } catch (error) {
+      this.stale ??= 'reload'
+      this.failure = { error: error instanceof Error ? error : new Error(String(error)), at: Date.now() }
+      throw error
+    }
+  }
+
+  /** 网页文件改了：重新载入（排在打开与进行中的取帧之后），之后的画面用新内容。 */
   reload(contentHash: string): Promise<void> {
     const run = this.tail.catch(() => undefined).then(async () => {
       if (this.closed) return
       this.contentHash = contentHash
-      try {
-        await this.load()
-        this.failure = undefined
-      } catch (error) {
-        this.failure = error instanceof Error ? error : new Error(String(error))
-        throw error
-      }
+      await this.loadRecording()
     })
     this.tail = run
     return run
@@ -255,8 +258,10 @@ export class WebSourcePage {
 
   private async captureNow(time: number, ticket: string, selectors: readonly string[] | undefined): Promise<WebSourcePageCapture> {
     if (this.closed) throw new Error('网页来源已关闭')
-    if (this.failure) throw this.failure
-    if (this.stale) await this.load()
+    if (this.stale) {
+      if (this.failure && Date.now() - this.failure.at < RELOAD_RETRY_MS) throw this.failure.error
+      await this.loadRecording()
+    }
     const contents = this.window!.webContents
     contents.startPainting()
     try {
@@ -264,8 +269,11 @@ export class WebSourcePage {
       try {
         seeked = await withTimeout(contents.executeJavaScript(seekScript(time, selectors), false) as Promise<{ boxes?: unknown }>, SEEK_TIMEOUT_MS, `网页 seek(${time}) 超过 ${SEEK_TIMEOUT_MS / 1000} 秒没有完成`)
       } catch (error) {
-        // 超时的 seek 可能还在改页面：下一次取帧前重新载入，不让它迟到的结果混进别的时刻。
-        if (error instanceof Error && error.message.startsWith('网页 seek(')) this.stale = 'seek_timeout'
+        // 超时的 seek 可能还在改页面：结束页面进程，走进程退出后的重建，不让它迟到的结果混进别的时刻。
+        if (error instanceof Error && error.message.startsWith('网页 seek(') && !contents.isDestroyed()) {
+          this.stale = 'gone'
+          contents.forcefullyCrashRenderer()
+        }
         throw error
       }
       const measured = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: settleScript(selectors && seeked.boxes === undefined ? selectors : undefined) }], false), SEEK_TIMEOUT_MS, '网页没有画出新画面')
@@ -341,6 +349,5 @@ export class WebSourcePage {
     this.wake?.()
     this.releasePaints()
     if (this.window && !this.window.isDestroyed()) this.window.destroy()
-    if (this.sessionHeld) { this.sessionHeld = false; releaseSession(this.folder.root) }
   }
 }

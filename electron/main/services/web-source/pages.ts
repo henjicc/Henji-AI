@@ -1,4 +1,4 @@
-import { codeWebBoxesIssue, codeWebView } from '../../../../src/core/videoEdit/codeMaterial/webSource'
+import { codeWebBoxesIssue, codeWebFolderOf, codeWebView } from '../../../../src/core/videoEdit/codeMaterial/webSource'
 import type { WebSourceCaptureRequest, WebSourceCaptureResult, WebSourceContentChange, WebSourceInfo, WebSourceOpenRequest } from '../../../../src/platform/contracts/videoFrameTypes'
 import type { MainLogger } from '../logging/main-logger'
 import type { VideoFrameTarget } from '../video-decoder'
@@ -35,7 +35,12 @@ export function parseWebSourceCaptureRequest(input: unknown): WebSourceCaptureRe
   return { streamId: fields.streamId as string, ticket: fields.ticket as string, time: fields.time, ...(fields.boxes ? { boxes: fields.boxes as string[] } : {}) }
 }
 
-export function parseWebSourcePath(input: unknown): string { return sourcePath(record(input, '网页来源请求').path) }
+/** 要监视的网页路径清单：每项都是本机绝对路径，不限条数（打开着的剪辑引用多少就监视多少）。 */
+export function parseWebSourcePaths(input: unknown): string[] {
+  const paths = record(input, '网页监视请求').paths
+  if (!Array.isArray(paths)) throw new Error('网页监视请求 paths 需要路径数组')
+  return paths.map(sourcePath)
+}
 
 /**
  * 网页来源的离屏页面：每个页面归属打开它的窗口与帧通道（通道断开、窗口导航或关闭时一并关掉），取帧只能操作本窗口的页面。
@@ -50,6 +55,8 @@ export class WebSourcePages {
   private readonly lastOpenFailure = new Map<string, string>()
   /** 已记过“页面没停住”的页面。 */
   private readonly unsettled = new Set<string>()
+  /** 每个窗口要监视的网页文件夹（它打开着的剪辑引用的）：文件夹 → 引用它的路径。 */
+  private readonly interests = new Map<number, Map<string, string[]>>()
   private nextId = 1
   private readonly content: WebSourceContent
 
@@ -65,10 +72,28 @@ export class WebSourcePages {
     }, logger)
   }
 
-  /** 网页文件夹的内容指纹（预渲染窗口指纹用；内容变化按这个路径通知）。 */
-  async contentHash(path: string): Promise<string> {
-    const folder = await resolveWebSourceFolder(path)
-    return this.content.hash(folder.root, path)
+  /**
+   * 设定这个窗口要监视的网页路径（它打开着的剪辑引用的全部网页，整份替换），返回各路径当前的内容指纹（读不出来为 null）。
+   * 有页面开着与否都监视，文件夹改动经 `WEB_SOURCE_CONTENT_CHANGED_CHANNEL` 按路径通知；窗口关闭或导航时一并释放。
+   */
+  async watchContent(target: VideoFrameTarget, paths: readonly string[]): Promise<Record<string, string | null>> {
+    const next = new Map<string, string[]>()
+    for (const path of paths) {
+      const root = codeWebFolderOf(path)
+      if (root) next.set(root, [...next.get(root) ?? [], path])
+    }
+    const previous = this.interests.get(target.id) ?? new Map<string, string[]>()
+    for (const [root, rootPaths] of next) {
+      if (!previous.has(root)) this.content.hold(root)
+      this.content.request(root, rootPaths)
+    }
+    for (const root of previous.keys()) if (!next.has(root)) this.content.release(root)
+    if (next.size) { this.interests.set(target.id, next); this.watchTarget(target) } else this.interests.delete(target.id)
+    const entries = await Promise.all(paths.map(async path => {
+      const root = codeWebFolderOf(path)
+      return [path, root ? await this.content.current(root).catch(() => null) : null] as const
+    }))
+    return Object.fromEntries(entries)
   }
 
   async open(target: VideoFrameTarget, request: WebSourceOpenRequest): Promise<WebSourceInfo> {
@@ -83,8 +108,9 @@ export class WebSourcePages {
     let retained: string | undefined
     try {
       const folder = await resolveWebSourceFolder(path)
-      const contentHash = await this.content.retain(folder.root)
+      this.content.hold(folder.root)
       retained = folder.root
+      const contentHash = await this.content.current(folder.root)
       page = new WebSourcePage(streamId, target, route, folder, view, contentHash, reason => this.logger.warn('网页来源页面进程退出，下一次取帧时重新载入', { event: 'web_source.page.gone', context: { streamId, reason } }))
       this.pages.set(streamId, page)
       this.watchTarget(target)
@@ -152,6 +178,8 @@ export class WebSourcePages {
     const stop = target.onGone(reason => {
       this.watchedTargets.get(target.id)?.(); this.watchedTargets.delete(target.id)
       for (const page of [...this.pages.values()]) if (page.target.id === target.id) this.close(target.id, page.streamId, reason)
+      for (const root of this.interests.get(target.id)?.keys() ?? []) this.content.release(root)
+      this.interests.delete(target.id)
     })
     this.watchedTargets.set(target.id, stop)
   }
@@ -161,6 +189,7 @@ export class WebSourcePages {
     this.pages.clear()
     for (const stop of this.watchedTargets.values()) stop()
     this.watchedTargets.clear()
+    this.interests.clear()
     this.content.dispose()
   }
 }

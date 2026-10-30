@@ -50,14 +50,17 @@ export function codeWebPixelSize(view: CodeWebView): { width: number; height: nu
   return { width: Math.floor(view.region[2] * view.scale), height: Math.floor(view.region[3] * view.scale) }
 }
 
+/** 去掉末尾分隔符后的根：`C:`、空（`/`）、`\\server\share`。 */
+const FILESYSTEM_ROOT = /^(?:[a-z]:|[\\/]{2}[^\\/]+[\\/][^\\/]+)$/i
 /**
  * 引用写的路径对应的网页文件夹：写的是文件夹本身，或文件夹里的 index.html。零散的其他 html 文件不算网页来源
- * （它所在的文件夹往往不是专门的网页文件夹，整个拿去散列、监视、打包都不对），为 undefined。
+ * （它所在的文件夹往往不是专门的网页文件夹，整个拿去散列、监视、打包都不对），为 undefined。盘符根、文件系统根与
+ * 网络共享根同理不能当站点根。
  */
 export function codeWebFolderOf(referencePath: string): string | undefined {
   const match = /^(.*?)[\\/]+index\.html?$/i.exec(referencePath)
-  if (match) return match[1] || referencePath.slice(0, 1)
-  return /\.html?$/i.test(referencePath) ? undefined : referencePath.replace(/(?<=.)[\\/]+$/, '')
+  const folder = match ? match[1] : /\.html?$/i.test(referencePath) ? undefined : referencePath.replace(/[\\/]+$/, '')
+  return folder && !FILESYSTEM_ROOT.test(folder) ? folder : undefined
 }
 
 /** 选择器列表不合法时的说明；合法为 undefined。 */

@@ -39,6 +39,16 @@ export async function existingWebFolder(web: ContentWebReference): Promise<strin
   return (await resolveWebSourceFolder(web.reference).catch(() => null))?.root ?? null
 }
 
+/**
+ * 网页文件夹就是项目（容器）文件夹本身、或包含了它时没法单独带上：整个项目会被当成网页复制进自己或包里。
+ * 换容器、收集素材、打包都在这里明确报错。
+ */
+export function assertSeparateWebFolder(style: PathStyle, folder: string, containerRoot: string): void {
+  if (!isPathInside(style, folder, containerRoot)) return
+  const same = isPathInside(style, containerRoot, folder)
+  throw new Error(`网页文件夹${same ? '就是项目文件夹本身' : '包含了项目文件夹'}，没法单独带上：${folder}。请把网页放进单独的文件夹后再试。`)
+}
+
 const MAX_KEEP_BOTH_ATTEMPTS = 1_000
 
 /**

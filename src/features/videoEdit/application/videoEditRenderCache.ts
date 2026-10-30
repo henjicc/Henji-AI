@@ -11,14 +11,14 @@ import { getPlatform } from '@/platform/runtime'
 import { fontLibrarySnapshot } from '@/platform/fonts'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
-import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, subscribeVideoEditView, type VideoEditInstance } from './videoEditService'
+import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, subscribeVideoEditDomain, subscribeVideoEditView, type VideoEditInstance } from './videoEditService'
 import { videoEditTrackResults, waitVideoEditTracking, subscribeVideoEditTracking } from './videoEditTracking'
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions, subscribeVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditMeasuredRenderState, type VideoEditRenderPerformance } from '@/core/videoEdit/renderPerformance'
 import { loadVideoEditRenderPerformance, readVideoEditRenderPerformance, recordVideoEditRenderPerformance } from './videoEditRenderPerformance'
 import { VideoEditCodeMetadataPending } from './videoEditCodeState'
 import { settleVideoEditCodeDeclarations, subscribeVideoEditCodeDeclarations, videoEditCodeDeclarationReader } from './videoEditCodeDeclarations'
-import { subscribeVideoEditWebContent, videoEditWebContentIdentity } from './videoEditWebContent'
+import { subscribeVideoEditWebContent, videoEditWebContentIdentity, watchVideoEditWebContent } from './videoEditWebContent'
 import type { RenderResponse } from '../engine/videoEditWorker'
 
 /**
@@ -173,6 +173,8 @@ subscribeVideoEditSmartRegions(() => { analysisRevision++ })
 subscribeVideoEditCodeDeclarations(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
 // 网页文件夹的内容指纹取到或变化：用到它的窗口指纹随之改变。
 subscribeVideoEditWebContent(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
+// 打开着的剪辑引用的网页文件夹一直交给主进程监视（不论页面开没开），文件夹一改就经上面的通知让窗口失效。
+subscribeVideoEditDomain(() => watchVideoEditWebContent(listVideoEditInstances().map(instance => instance.document)))
 const windowMemo = new WeakMap<VideoEditComposition, { revision: number; fontRevision: number; windows: VideoEditRenderWindow[] }>()
 /**
  * 每条序列上一次算出的窗口与输入签名。每次编辑都会产生新的文档快照，按对象缓存必然落空；

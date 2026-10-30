@@ -28,7 +28,10 @@ export interface HenjiVideoFramesApi {
   closeStream: (streamId: string) => Promise<boolean>
   stats: () => Promise<VideoFrameBridgeStats & { preload: VideoFramesPreloadStats }>
   onStreamEnded: (handler: (payload: VideoFrameStreamEndedPayload) => void) => () => void
-  /** 网页来源文件夹的内容指纹（预渲染的窗口指纹用它）；开始监视，变化经 `onWebContentChanged` 通知。 */
-  webContent: (path: string) => Promise<string>
+  /**
+   * 设定本窗口要监视的网页路径（打开着的剪辑引用的全部网页，整份替换），返回各路径当前的内容指纹（读不出来为 null）；
+   * 之后文件夹变化经 `onWebContentChanged` 通知。
+   */
+  watchWebContent: (paths: string[]) => Promise<Record<string, string | null>>
   onWebContentChanged: (handler: (change: WebSourceContentChange) => void) => () => void
 }

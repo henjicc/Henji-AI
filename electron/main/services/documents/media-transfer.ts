@@ -12,7 +12,7 @@ import type { ResolvedContainer } from './workspace'
 import { ensureCodeCollectionTarget } from './code-paths'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { transferGitCode } from './code-git-transfer'
-import { contentWebReferences, copyWebFolder, existingWebFolder, webReferenceIn } from './web-folders'
+import { assertSeparateWebFolder, contentWebReferences, copyWebFolder, existingWebFolder, webReferenceIn } from './web-folders'
 
 /*
  * 文档换容器时带走它用到的素材（实施方案 2.11）：原容器里被引用的文件复制到新容器，原处保留；
@@ -180,7 +180,7 @@ export async function transferContainerMedia(options: MediaTransferOptions): Pro
     webKeys.add(key)
     const folder = await existingWebFolder(web)
     if (!folder) { missingPaths.push(web.reference); continue }
-    if (!rest.length) throw new Error(`网页文件夹就是原位置本身，没法单独带上：${folder}。请把网页放进单独的文件夹后再试。`)
+    assertSeparateWebFolder(style, folder, from.root)
     if (rest[0] === INTERNAL_FOLDER_NAME) await options.prepareInternalFolder?.(to.root)
     const result = await copyWebFolder(style, folder, targetFor(rest, from, to))
     mapping.set(key, webReferenceIn(web, result.path))
@@ -284,6 +284,7 @@ export async function collectContainerMedia(options: MediaCollectOptions): Promi
     webKeys.add(key)
     const folder = await existingWebFolder(web)
     if (!folder) { if (!missingPaths.includes(web.reference)) missingPaths.push(web.reference); continue }
+    assertSeparateWebFolder(style, folder, to.root)
     const result = await copyWebFolder(style, folder, path.join(to.materialsDir, path.basename(folder)))
     mapping.set(key, webReferenceIn(web, result.path))
     copied += result.copied

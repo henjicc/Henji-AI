@@ -196,6 +196,10 @@ function createVideoEditWebSourceScene() {
           assert.equal(timeCode, Math.round(frame / FPS * 1000), `导出第 ${frame} 帧不是这一刻`)
         }
         execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', output, '-vf', `select=eq(n\\,${FULL_FRAMES + 45})`, '-frames:v', '1', path.join(ROOT, `export-zoom-${FULL_FRAMES + 45}.png`)], { windowsHide: true, timeout: 120000 })
+        // 改网页文件夹：打开着的剪辑引用它，主进程一直监视着，改动后记下内容变化（预渲染窗口随之失效）。
+        fs.appendFileSync(entry, '\n<!-- changed -->\n')
+        for (let attempt = 0; attempt < 40 && !(await webLogs()).includes('web_source.content.changed'); attempt++) await page.waitForTimeout(250)
+        assert.ok((await webLogs()).includes('web_source.content.changed'), '改了网页文件夹没有被发现')
         const logs = await page.evaluate(async () => (await window.henjiNative.logging.queryLogEvents({ date: new Date().toISOString().slice(0, 10), domainPrefix: 'main.web_source', limit: 200 })).events.map(event => ({ event: event.event, level: event.level, context: event.context })))
         evidence.logs = logs
         evidence.completed = true; store()

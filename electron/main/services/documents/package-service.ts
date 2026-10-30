@@ -36,7 +36,7 @@ import { decodeDocumentContent, loadDocumentFile, type LoadedDocumentFile } from
 import { DocumentFormatError, DocumentLocationError, ProjectNotFoundError } from './errors'
 import type { DocumentIndexScanner } from './index-scanner'
 import { codeGroupDestinations, sameFileContent, rewriteContentPaths } from './media-transfer'
-import { contentWebReferences, existingWebFolder, webReferenceIn } from './web-folders'
+import { assertSeparateWebFolder, contentWebReferences, existingWebFolder, webReferenceIn, type ContentWebReference } from './web-folders'
 import { webSourceFiles } from '../web-source/site'
 import { readEntryNameKeys } from './name-check'
 import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
@@ -256,7 +256,13 @@ export class DocumentPackageService {
       .filter(reference => parseAbsolutePath(style, reference.path) !== null)
       .map(reference => reference.path), container, false)
     for (const [source, target] of await options.codeSnapshot.collect(decoded.report.references.map(reference => reference.path))) mapping.set(source, target)
-    // 网页画面引用的整个网页文件夹进包：容器里的保持相对位置，容器之外的放进包里的“素材”。
+    // 先把容器里的条目（网页文件夹与普通文件）全部登记进包，再给容器之外的文件与文件夹挑名字：
+    // 挑名字时必须已经看得到容器里同名的条目，否则两者会落到包里同一个位置。
+    const add = (relative: string, source: string): void => { names.add(relative); entries.push({ name: relative, source }) }
+    const taken = (relative: string): boolean => names.has(relative) || names.hasFolder(relative)
+    const outsideWebs: Array<{ key: string; web: ContentWebReference; folder: string; files: Awaited<ReturnType<typeof webSourceFiles>> }> = []
+    const outsideFiles: Array<{ key: string; source: string }> = []
+    // 网页画面引用的是整个网页文件夹：容器里的保持相对位置，容器之外的放进包里的“素材”。
     const webKeys = new Set<string>()
     for (const web of contentWebReferences(decoded.content)) {
       const key = pathKey(style, web.reference)
@@ -264,24 +270,16 @@ export class DocumentPackageService {
       webKeys.add(key)
       const folder = await existingWebFolder(web)
       if (!folder) { if (!missingPaths.includes(web.reference)) missingPaths.push(web.reference); continue }
+      assertSeparateWebFolder(style, folder, container.root)
       const parsedFolder = parseAbsolutePath(style, folder)
       const inside = parsedFolder ? relativeSegments(style, root, parsedFolder) : null
       const files = await webSourceFiles(folder)
-      if (inside) {
-        if (!options.includeContainerFiles) continue
-        for (const item of files) {
-          const relative = [...inside, item.relative].join('/')
-          if (!names.has(relative)) { names.add(relative); entries.push({ name: relative, source: item.file }) }
-        }
-        continue
-      }
-      const stem = keepBothEntryName(path.basename(folder), (candidate) => names.has(`${materials}/${candidate}`) || names.hasFolder(`${materials}/${candidate}`))
-      const relativeFolder = `${materials}/${stem}`
+      if (!inside) { outsideWebs.push({ key, web, folder, files }); continue }
+      if (!options.includeContainerFiles) continue
       for (const item of files) {
-        names.add(`${relativeFolder}/${item.relative}`)
-        entries.push({ name: `${relativeFolder}/${item.relative}`, source: item.file })
+        const relative = [...inside, item.relative].join('/')
+        if (!names.has(relative)) add(relative, item.file)
       }
-      mapping.set(key, webReferenceIn(web, path.join(container.root, ...relativeFolder.split('/'))))
     }
     for (const reference of decoded.report.references) {
       if (parseGitCodeLocation(reference.path)) continue
@@ -294,49 +292,52 @@ export class DocumentPackageService {
         continue
       }
       const inside = parsed ? relativeSegments(style, root, parsed) : null
-      if (inside?.length) {
-        if (!options.includeContainerFiles) continue
-        const relative = inside.join('/')
-        if (!names.has(relative)) {
-          names.add(relative)
-          entries.push({ name: relative, source: reference.path })
-          if (inside[0] === '代码' && inside[1] !== '组件库' && inside.length > 2) {
-            const ownerRelative = `代码/${inside[1]}/.definition`; const ownerPath = path.join(container.root, '代码', inside[1], '.definition')
-            if (!names.has(ownerRelative) && (await fsp.stat(ownerPath).catch(() => null))?.isFile()) { names.add(ownerRelative); entries.push({ name: ownerRelative, source: ownerPath }) }
-          }
-          if (inside.includes('组件库') && reference.path.endsWith('.ts')) {
-            const integrity = `${reference.path}.sha256`
-            if (!(await fsp.stat(integrity).catch(() => null))?.isFile()) throw new DocumentLocationError('项目组件校验文件缺失，请恢复原组件后导出。')
-            names.add(`${relative}.sha256`); entries.push({ name: `${relative}.sha256`, source: integrity })
-            if ((await fsp.stat(`${reference.path}.withdrawn`).catch(() => null))?.isFile()) { names.add(`${relative}.withdrawn`); entries.push({ name: `${relative}.withdrawn`, source: `${reference.path}.withdrawn` }) }
-          }
-        }
-        continue
+      if (!inside?.length) { if (!outsideFiles.some(item => item.key === key)) outsideFiles.push({ key, source: reference.path }); continue }
+      if (!options.includeContainerFiles) continue
+      const relative = inside.join('/')
+      if (names.has(relative)) continue
+      add(relative, reference.path)
+      if (inside[0] === '代码' && inside[1] !== '组件库' && inside.length > 2) {
+        const ownerRelative = `代码/${inside[1]}/.definition`; const ownerPath = path.join(container.root, '代码', inside[1], '.definition')
+        if (!names.has(ownerRelative) && (await fsp.stat(ownerPath).catch(() => null))?.isFile()) add(ownerRelative, ownerPath)
       }
-      // 容器之外的文件：放进包里的“素材”，重名（内容不同）时加序号
-      const segments = reference.path.split(/[\\/]/); const codeIndex = segments.lastIndexOf('代码')
-      const codeTarget = codeTargets.get(reference.path)
-      const planned = codeTarget ? relativeSegments(style, root, parseAbsolutePath(style, codeTarget)!) : null
-      const relativeDirectory = planned?.length ? planned.slice(0, -1).join('/') : codeIndex >= 0 ? segments.slice(codeIndex, -1).join('/') : materials
-      const base = path.basename(reference.path)
-      const extension = path.extname(base)
-      const plannedRelative = planned?.join('/')
-      if (plannedRelative && names.has(plannedRelative) && await sameFileContent(reference.path, codeTarget!)) { mapping.set(key, codeTarget!); continue }
-      const stem = keepBothEntryName(path.basename(base, extension), (candidate) => names.has(`${relativeDirectory}/${candidate}${extension}`))
-      const relative = `${relativeDirectory}/${stem}${extension}`
-      names.add(relative)
-      entries.push({ name: relative, source: reference.path })
-      if (codeIndex >= 0 && segments[codeIndex + 1] !== '组件库' && segments.length > codeIndex + 2) {
-        let sourceGroup = reference.path
-        for (let depth = segments.length - codeIndex - 2; depth > 0; depth--) sourceGroup = path.dirname(sourceGroup)
-        const ownerRelative = `${(planned ?? segments.slice(codeIndex)).slice(0, 2).join('/')}/.definition`; const ownerPath = path.join(sourceGroup, '.definition')
-        if (!names.has(ownerRelative) && (await fsp.stat(ownerPath).catch(() => null))?.isFile()) { names.add(ownerRelative); entries.push({ name: ownerRelative, source: ownerPath }) }
-      }
-      if (codeIndex >= 0 && segments.includes('组件库') && reference.path.endsWith('.ts')) {
+      if (inside.includes('组件库') && reference.path.endsWith('.ts')) {
         const integrity = `${reference.path}.sha256`
         if (!(await fsp.stat(integrity).catch(() => null))?.isFile()) throw new DocumentLocationError('项目组件校验文件缺失，请恢复原组件后导出。')
-        names.add(`${relative}.sha256`); entries.push({ name: `${relative}.sha256`, source: integrity })
-        if ((await fsp.stat(`${reference.path}.withdrawn`).catch(() => null))?.isFile()) { names.add(`${relative}.withdrawn`); entries.push({ name: `${relative}.withdrawn`, source: `${reference.path}.withdrawn` }) }
+        add(`${relative}.sha256`, integrity)
+        if ((await fsp.stat(`${reference.path}.withdrawn`).catch(() => null))?.isFile()) add(`${relative}.withdrawn`, `${reference.path}.withdrawn`)
+      }
+    }
+    for (const { key, web, folder, files } of outsideWebs) {
+      const stem = keepBothEntryName(path.basename(folder), (candidate) => taken(`${materials}/${candidate}`))
+      const relativeFolder = `${materials}/${stem}`
+      for (const item of files) add(`${relativeFolder}/${item.relative}`, item.file)
+      mapping.set(key, webReferenceIn(web, path.join(container.root, ...relativeFolder.split('/'))))
+    }
+    // 容器之外的文件：放进包里的“素材”，重名（内容不同）时加序号
+    for (const { key, source } of outsideFiles) {
+      const segments = source.split(/[\\/]/); const codeIndex = segments.lastIndexOf('代码')
+      const codeTarget = codeTargets.get(source)
+      const planned = codeTarget ? relativeSegments(style, root, parseAbsolutePath(style, codeTarget)!) : null
+      const relativeDirectory = planned?.length ? planned.slice(0, -1).join('/') : codeIndex >= 0 ? segments.slice(codeIndex, -1).join('/') : materials
+      const base = path.basename(source)
+      const extension = path.extname(base)
+      const plannedRelative = planned?.join('/')
+      if (plannedRelative && names.has(plannedRelative) && await sameFileContent(source, codeTarget!)) { mapping.set(key, codeTarget!); continue }
+      const stem = keepBothEntryName(path.basename(base, extension), (candidate) => taken(`${relativeDirectory}/${candidate}${extension}`))
+      const relative = `${relativeDirectory}/${stem}${extension}`
+      add(relative, source)
+      if (codeIndex >= 0 && segments[codeIndex + 1] !== '组件库' && segments.length > codeIndex + 2) {
+        let sourceGroup = source
+        for (let depth = segments.length - codeIndex - 2; depth > 0; depth--) sourceGroup = path.dirname(sourceGroup)
+        const ownerRelative = `${(planned ?? segments.slice(codeIndex)).slice(0, 2).join('/')}/.definition`; const ownerPath = path.join(sourceGroup, '.definition')
+        if (!names.has(ownerRelative) && (await fsp.stat(ownerPath).catch(() => null))?.isFile()) add(ownerRelative, ownerPath)
+      }
+      if (codeIndex >= 0 && segments.includes('组件库') && source.endsWith('.ts')) {
+        const integrity = `${source}.sha256`
+        if (!(await fsp.stat(integrity).catch(() => null))?.isFile()) throw new DocumentLocationError('项目组件校验文件缺失，请恢复原组件后导出。')
+        add(`${relative}.sha256`, integrity)
+        if ((await fsp.stat(`${source}.withdrawn`).catch(() => null))?.isFile()) add(`${relative}.withdrawn`, `${source}.withdrawn`)
       }
       mapping.set(key, path.join(container.root, ...relative.split('/')))
     }
