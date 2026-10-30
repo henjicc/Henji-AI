@@ -82,7 +82,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.caption, 'document_id', '所属音频作品（文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
     field(E.caption, 'text', '成片字幕文字', TEXT, (s) => caption(s).text, (s, v) => { s.document = setAudioEditCaptionText(s.document, s.childId, string(v)) }, [],
       '成片字幕显示的文字（排版后：中文与英文、数字之间有空格，行尾逗号句号已去掉，单独的“哎”“嗯”等叹词不显示）。'
-      + '改写时逐字比对写回这段的词块文字（保留的字留在原词块，删掉的去掉，新加的归前一个字所在的词块），词时间与声音不变；音频编辑里的文字、导出的 SRT 和放进剪辑的链接字幕是同一份，会一起更新。'
+      + '改写时逐字比对写回这段的词块文字（保留的字留在原词块，删掉的去掉，新加的归前一个字所在的词块），词时间与声音不变；音频编辑里的文字与导出的 SRT 共用；字幕段只供首次放进剪辑时参考，剪辑字幕在剪辑里定稿，不随此处更新。'
       + '校对原则：既不完全照稿也不完全照识别——实际念的与稿子不同（改词、加词、少念）按实际念的写；同音错字、专有名词、英文大小写、数字按稿子写；拿不准时保留识别。只改字，分段用 audio_edit.transcript_block.caption_break_after。'),
     field(E.caption, 'spoken_text', '这段词块文字原样拼接（识别结果加已有校正，未排版）', TEXT, (s) => caption(s).spokenText),
     field(E.caption, 'original_text', '最初识别的文字（旧作品没有保存时同 spoken_text）', TEXT, (s) => caption(s).originalText),

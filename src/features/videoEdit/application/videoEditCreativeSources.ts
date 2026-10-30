@@ -51,7 +51,7 @@ interface PublishedSource {
   /** 写进片段的来源（位置按找到的文档更新，图片文档带上渲染所用的版本）。 */
   origin?: VideoEditCreativeSource
   captions?: string
-  /** 音频编辑成品：字幕段与源录音时间线，放进剪辑后生成链接字幕、记在素材上供重新剪辑后对回。 */
+  /** 音频编辑成品：字幕段与源录音时间线，放进剪辑时一次性生成普通字幕；源录音时间线记在素材上供声音重新剪辑后对回。 */
   linked?: VideoEditLinkedAudio
   dimensions?: { width: number; height: number }
   /** Managed files created by this preparation; released only if no library record references them. */

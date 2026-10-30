@@ -95,7 +95,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('model-defaults', '默认生成与转写模型', MODEL_DEFAULTS_VERSION, 'ModelDefaultsState.version', 'src/features/settings/modelDefaultsManager.ts::loadState', modelDefaultsSchema, 'local-storage'),
   format('onboarding', '首次引导进度', ONBOARDING_VERSION, 'OnboardingStateV2.version', 'src/features/onboarding/application/onboardingManager.ts::loadState', onboardingSchema, 'local-storage'),
   // 22：声音片段新增 enabled:false（停用），旧程序忽略后会把停用的声音当成在发声，最低可读版本提高到 22。
-  { ...format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema), minReaderVersion: 22 },
+  { ...format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema), minReaderVersion: 24 },
   { ...format('setting-records', '设置记录', SETTING_RECORD_VERSION, 'SETTING_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger', { paidApproval: paidApprovalSettingsSchema }), minReaderVersion: 22 },
   { ...format('asset-records', '素材库记录', ASSET_RECORD_VERSION, 'ASSET_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger', { foreign: foreignContentSchema }), minReaderVersion: 21 },
   format('generation-presets', '生成预设', GENERATION_PRESET_VERSION, 'GENERATION_PRESET_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/presets/store.ts', presetRecordSchema, 'sqlite-ledger'),

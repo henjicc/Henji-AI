@@ -95,9 +95,7 @@ clip.motionBlur = false
 clip.curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 1, interpolation: 'ease' }] }
 clip.effects = [{ id: 'golden-grade', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4, tone_lights: 12, mixer_orange_saturation: -10, wheel_mode: 'primary', global_hue: 200, global_strength: 6 }, curves: { temperature_kelvin: [{ time: 0, value: 5600, interpolation: 'linear' }, { time: 30, value: 6200, interpolation: 'linear' }] } } }, { id: 'golden-blur', name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } }]
 sequence.clips.push(clip)
-sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', sourceText: '字幕原文、', translation: 'Golden caption' },
-  // 29：音频编辑动态链接来的字幕，文字与时间由音频编辑维护
-  { id: 'golden-linked-caption', clipId: clip.id, linkedCaptionId: 'transcript-0', start: 50, duration: 20, text: '链接字幕', speech: { text: '链接字幕', aligned: true, words: [{ clipId: clip.id, text: '链接字幕', startUs: 0, endUs: 600000, precision: 'word' }] } }]
+sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', sourceText: '字幕原文、', translation: 'Golden caption' }]
 sequence.transitions = [{ id: 'golden-transition', kind: 'cross_dissolve', rightClipId: clip.id, durationFrames: 10 }]
 // v33（剪辑）/ v36（录制会话）：过渡种类加入 gl-transitions 转场。
 sequence.transitions.push({ id: 'golden-gl-transition', kind: 'gl.Cube', leftClipId: clip.id, durationFrames: 10 })
@@ -204,6 +202,10 @@ sequence.captions = sequence.captions.map(caption => ({ ...bindVideoEditCaptionS
   { clipId: soundClip.id, text: '字幕', startUs: 166667, endUs: 700000, precision: 'word' },
   { clipId: soundClip.id, text: '原文', startUs: 700000, endUs: 1500000, precision: 'word' },
 ]), reviewReasons: ['translation'] }))
+// 42：音频编辑提供逐词参考，字幕文字与时间由剪辑持有。
+sequence.captions.push({ id: 'golden-audio-caption', clipId: soundClip.id, start: 50, duration: 20, text: '口播字幕',
+  speech: { text: '口播字幕', aligned: true, words: [{ clipId: soundClip.id, text: '口播字幕', startUs: 1666667, endUs: 2333333, precision: 'word' }] } })
+videoEditDocumentSchema.parse(document)
 const image = createImageEditDocumentV3({ width: 64, height: 48, documentId: 'golden-image', color: createDefaultImageEditColorModeV3() })
 image.namedRegions = [{ id: 'golden-region', name: '主体', selection: { operations: [{ combine: 'replace', invertBefore: false, shape: { type: 'ellipse', x: .2, y: .1, width: .5, height: .7 } }], feather: .02, inverted: false } }]
 image.namedRegions.push({id:'golden-outside',name:'画面外范围',selection:{operations:[{combine:'replace',invertBefore:false,shape:{type:'rectangle',x:-.4,y:1.1,width:1.5,height:.4}}],feather:0,inverted:false}})
@@ -262,6 +264,10 @@ replayBaseline.id = 'golden-replay'
 replayBaseline.codeMaterials = structuredClone(document.codeMaterials)
 const replaySequence = createVideoEditSequence('原始序列')
 replaySequence.id = 'golden-replay-sequence'; replaySequence.styleId = goldenStyle.id; replayBaseline.sequences.push(replaySequence)
+replayBaseline.media.push(...soundDocument.media)
+replayBaseline.items.push(...soundDocument.items)
+replaySequence.clips.push(soundClip)
+replaySequence.captions = structuredClone(sequence.captions)
 replayBaseline.styles = [goldenStyle]
 const replayOperation = { target: { kind: 'video_edit.sequence', id: 'golden-replay:golden-replay-sequence' }, properties: { 'video_edit.sequence.name': '演示序列' } }
 const values: Record<string, unknown> = {

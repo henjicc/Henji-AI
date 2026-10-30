@@ -7,7 +7,11 @@ import { getPlatform } from '@/platform/runtime'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createVideoEditTestProject, closeAllVideoEdits, reopenVideoEdit } from './videoEditDocumentTestKit'
 import { editVideoProject, undoVideoEdit, videoEditDocumentOperations, closeVideoEditProject } from './videoEditService'
-import { getVideoEditAudioLinkNotices, refreshVideoEditAudioDocumentClips, sendVideoEditClipToAudioEdit } from './videoEditAudioLinks'
+import { getVideoEditAudioLinkNotices, refreshVideoEditAudioDocumentClips, sendVideoEditClipToAudioEdit, startVideoEditAudioDocumentLinks } from './videoEditAudioLinks'
+import { videoEditCaptionsFromAudioEdit } from '@/core/videoEdit/audioEditLink'
+import { buildProjectAudioEditSubtitleCues } from '@/core/audioEdit/subtitles'
+import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
+import { applyVideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { editAudioEditProject, flushAudioEditProject, loadAudioEditProject, resetAudioEditProjectInstancesForTests, undoAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { insertAudioEditFile } from '@/features/audioEdit/application/audioEditSpliceService'
 import { editedDurationFrames, buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
@@ -70,6 +74,53 @@ it('saved edits refresh all links, trim tails without ripple, do not extend, and
   const reopened = await reopenVideoEdit(owner.document.id)
   await refreshVideoEditAudioDocumentClips(reopened.document.id, sent.documentId)
   expect(reopened.document.sequences[0].clips.find(c => c.id === clipId)?.duration).toBe(shortened.duration)
+})
+
+it('口播改字、分段、剪掉和恢复只更新声音，剪辑字幕保留且不写回；整段移除与普通删除一致', async () => {
+  const { owner, clipId } = await fixture()
+  const sent = await sendVideoEditClipToAudioEdit(owner.document.id, clipId, false)
+  const audio = await loadAudioEditProject(sent.documentId)
+  editAudioEditProject(sent.documentId, document => ({ ...document, transcript: [
+    { id: 'word-a', text: '口播', startFrame: 48000, endFrame: 96000, included: true, locked: false, granularity: 'word' },
+    { id: 'word-b', text: '原文', startFrame: 96000, endFrame: 144000, included: true, locked: false, granularity: 'word' },
+  ] }))
+  await flushAudioEditProject(sent.documentId)
+  await refreshVideoEditAudioDocumentClips(owner.document.id, sent.documentId)
+  const sequence = owner.document.sequences[0], clip = sequence.clips.find(value => value.id === clipId)!
+  const captions = videoEditCaptionsFromAudioEdit(clip, videoEditFps(sequence.frameRate), buildProjectAudioEditSubtitleCues(audio.document), audio.document.source.sampleRate)
+    .map(caption => ({ ...caption, start: caption.start + 2, duration: caption.duration - 4, text: '剪辑定稿', translation: 'Final', style: videoEditSubtitleStyleSchema.parse({ fontSize: 52 }), speech: { ...caption.speech!, words: caption.speech!.words.slice(-1) } }))
+  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(value => ({ ...value, captions })) }))
+  const stop = startVideoEditAudioDocumentLinks()
+  try {
+    const cuts = audio.document.cuts
+    editAudioEditProject(sent.documentId, document => ({ ...document, transcript: document.transcript.map(block => ({ ...block, text: `${block.text}改字`, captionBreakAfter: true })) }))
+    await flushAudioEditProject(sent.documentId)
+    await refreshVideoEditAudioDocumentClips(owner.document.id, sent.documentId)
+    expect(owner.document.sequences[0].captions).toEqual(captions)
+    editAudioEditProject(sent.documentId, document => ({ ...document, cuts: [...cuts ?? [], { id: 'shorten', startFrame: 96000, endFrame: 240000, enabled: true, reason: 'manual' }] }))
+    await flushAudioEditProject(sent.documentId)
+    await refreshVideoEditAudioDocumentClips(owner.document.id, sent.documentId)
+    const { clipId: _clipId, ...authored } = captions[0]
+    const independent = { ...authored, speech: undefined, reviewReasons: ['timing'] }
+    expect(owner.document.sequences[0].captions).toEqual([independent])
+    expect(owner.document.sequences[0].clips.find(value => value.id === clipId)?.duration).toBe(30)
+    editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(value => ({ ...value, clips: value.clips.map(item => item.id === 'following' ? { ...item, volume: 0.5 } : item) })) }))
+    expect(owner.document.sequences[0].captions).toEqual([independent])
+    editAudioEditProject(sent.documentId, document => ({ ...document, cuts }))
+    await flushAudioEditProject(sent.documentId)
+    await refreshVideoEditAudioDocumentClips(owner.document.id, sent.documentId)
+    expect(owner.document.sequences[0].captions).toEqual([independent])
+    const audioBefore = audio.document
+    editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(value => ({ ...value, captions: value.captions?.map(caption => ({ ...caption, text: '剪辑再次改字' })) })) }))
+    await flushAudioEditProject(sent.documentId)
+    expect(audio.document).toEqual(audioBefore)
+    const expected = applyVideoEditTimelineEdit(owner.document, sequence.id, { kind: 'delete', clipIds: [clipId], linked: false }).captions
+    editAudioEditProject(sent.documentId, document => ({ ...document, cuts: [{ id: 'all', startFrame: 0, endFrame: document.source.durationFrames, enabled: true, reason: 'manual' }] }))
+    await flushAudioEditProject(sent.documentId)
+    await refreshVideoEditAudioDocumentClips(owner.document.id, sent.documentId)
+    expect(owner.document.sequences[0].clips.some(value => value.id === clipId)).toBe(false)
+    expect(owner.document.sequences[0].captions).toEqual(expected)
+  } finally { stop() }
 })
 
 it('all linked clips respect speed and reverse boundaries; exhausted clips leave followers unmoved', async () => {

@@ -5,7 +5,7 @@ import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import { freezeVideoEditDocument, parseVideoEditDocument } from './documentValidation'
 
-const content = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v37.json', 'utf8')).content as object
+const content = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v42.json', 'utf8')).content as object
 const base = parseVideoEditDocument({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...content })
 const scene = base.scenes![0]
 const definition = base.codeMaterials![0]

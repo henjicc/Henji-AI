@@ -9,7 +9,7 @@ import { videoEditSceneReferenceIssues } from './sceneSchema'
 import { GOLDEN_SCENE_DECLARATION, goldenScene } from './sceneTestFixtures'
 
 type Content = { scenes: Array<{ records: Array<{ parent?: string }> }>; sequences: Array<{ clips: Array<{ id: string; code?: { parameters: Record<string, unknown> } }> }> }
-const golden = (): Content => parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v37.json', 'utf8')).content as Content
+const golden = (): Content => parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v42.json', 'utf8')).content as Content
 const parseDocument = (content: Content) => videoEditDocumentSchema.safeParse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...content })
 
 describe('片子数据', () => {

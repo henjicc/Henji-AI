@@ -1,3 +1,4 @@
+import { migrateVideoEditCaptionCollection } from '../videoEdit/captionOwnershipMigration'
 import { migrateMcpConnectionStorageV1, migrateMcpConnectionIdentity } from './mcpConnectionSchema'
 import type { PersistenceMigrations } from './migrations'
 import { WEB_RECORDING_MIGRATIONS } from '../webReplay/schema'
@@ -87,7 +88,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 代码视频参数取帧时间表（2026-10-28）：声音片段的代码参数只新增可选的 spans。
   // 片段启用开关（2026-10-28）：声音片段新增可选 enabled:false，代码参数值新增片子数据引用；旧记录原样有效。
   // 网页画面（2026-10-30）：声音片段的代码图片参数新增网页画面引用 {kind:'web'}；旧记录原样有效。
-  'subtitle-manifest': { 22: value => ({ ...value as object, version: 23 }), 21: value => ({ ...value as object, version: 22 }), 20: value => ({ ...value as object, version: 21 }), 19: value => ({ ...value as object, version: 20 }), 18: value => ({ ...value as object, version: 19 }), 17: value => ({ ...value as object, version: 18 }), 16: value => ({ ...value as object, version: 17 }), 15: value => ({ ...value as object, version: 16 }), 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
+  // 23 → 24：删除旧程序依赖的 linkedCaptionId；防止回填恢复动态链接语义，最低可读版本提高到 24。
+  'subtitle-manifest': { 23: value => ({ ...migrateVideoEditCaptionCollection(value) as object, version: 24 }), 22: value => ({ ...value as object, version: 23 }), 21: value => ({ ...value as object, version: 22 }), 20: value => ({ ...value as object, version: 21 }), 19: value => ({ ...value as object, version: 20 }), 18: value => ({ ...value as object, version: 19 }), 17: value => ({ ...value as object, version: 18 }), 16: value => ({ ...value as object, version: 17 }), 15: value => ({ ...value as object, version: 16 }), 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
 }
 /** Image layers (any depth, including smart-object documents): every `color_grade` adjustment layer's params. */
 function migrateImageColorGradeLayers(value: unknown): unknown {

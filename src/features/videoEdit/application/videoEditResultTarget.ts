@@ -7,7 +7,7 @@ import { makeVideoEditItemClip, placeVideoEditItem } from '@/core/videoEdit/proj
 import { applyVideoEditTimelineEditResult } from '@/core/videoEdit/timelineEdits'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { importVideoEditCaptions, type VideoEditCaption } from '@/core/videoEdit/timedContent'
-import { videoEditLinkedCaptions, type VideoEditLinkedTimeline } from '@/core/videoEdit/audioEditLink'
+import { videoEditCaptionsFromAudioEdit, type VideoEditLinkedTimeline } from '@/core/videoEdit/audioEditLink'
 import type { AudioEditSubtitleCue } from '@/core/audioEdit/subtitles'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
@@ -23,7 +23,7 @@ const logger = createLogger('features.videoEdit.results')
 export type { VideoEditResultPlacement } from '@/core/videoEdit/creativeResult'
 export interface VideoEditResultTarget { readonly projectId: string; readonly sequenceId: string; readonly id: string }
 /** Only formal source adapters may produce a ready asset and fixed completion identity. */
-/** 音频编辑成品的字幕段（剪后采样帧）与源录音时间线：放进剪辑时生成链接字幕，并记在素材上。 */
+/** 音频编辑成品的字幕段（剪后采样帧）与源录音时间线：放进剪辑时一次性生成普通字幕，源录音时间线记在素材上。 */
 export interface VideoEditLinkedAudio { cues: AudioEditSubtitleCue[]; timeline: VideoEditLinkedTimeline }
 export interface VideoEditCreativeResult { asset: AssetRecord; origin?: VideoEditCreativeSource; captions?: string; linked?: VideoEditLinkedAudio }
 /** library has itemId and an empty clipId; public callers receive the typed item ref. */
@@ -139,9 +139,9 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       // 与导入同走短名预算：旧资产可能以整段提示词为名，原样写入会超出素材名上限而整次放入失败。
       const sourceName = media && asset.displayName ? generatedMediaName(asset.displayName, media.name) : undefined
       if (media && origin && sourceName && media.name !== sourceName && item.name === media.name) { media.name = sourceName; item.name = sourceName }
-      // 音频编辑来的声音带链接字幕（逐词、跟着片段走、随音频编辑更新）；其他来源仍按附带的 SRT 导入
+      // 音频编辑来的字幕段一次性生成普通字幕，逐词信息作为剪辑参考；其他来源仍按附带的 SRT 导入
       const placedCaptions = (sequence: VideoEditSequence, clip: VideoEditClip): VideoEditCaption[] => result.linked
-        ? videoEditLinkedCaptions(clip, videoEditFps(sequence.frameRate), result.linked.cues, result.linked.timeline.sampleRate)
+        ? videoEditCaptionsFromAudioEdit(clip, videoEditFps(sequence.frameRate), result.linked.cues, result.linked.timeline.sampleRate)
         : importVideoEditCaptions(result.captions!, sequence.frameRate, { offset: clip.start, clip })
       const placement = state.placement
       itemId = item.id; expectedItem = JSON.stringify(item)

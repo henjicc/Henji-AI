@@ -398,7 +398,8 @@
         "37": "514e0aab6c3e0e4f520b863d4dd8c73105dd8ba8b187072454a7fc4f9615a8dd",
         "38": "36ae7d45be362b74a8c621e6dcc8072e8cb708e18ae00782a84df7218c836a07",
         "40": "399834865e605678a7b178e2cfc25577cac9396cd7ecf1cfd172a88c6b6e1045",
-        "41": "76b5b2e916102e2d14edc8d72c4fd127b3a9311ff2f484d07c86d1c60eae1dcc"
+        "41": "76b5b2e916102e2d14edc8d72c4fd127b3a9311ff2f484d07c86d1c60eae1dcc",
+        "42": "3bbb15ebaa49a2e47d28d51ac2544e522ff342ee991c91511a77871f25a616c9"
       },
       "readers": {
         "17": 17,
@@ -418,7 +419,8 @@
         "37": 37,
         "38": 38,
         "40": 38,
-        "41": 38
+        "41": 38,
+        "42": 42
       },
       "samples": {
         "v17.json": "04f30f2c819759b07c9ca5415541f277636eddce7dd1ee5808abd2e7ee34e414",
@@ -445,7 +447,8 @@
         "v38.json": "2d40f48ea86fac8eb03d28e519958a984f6091d10d8b4e5af71b194e38014b4e",
         "v39.json": "534257cf943d8f59e531cf78666714935c40bcc9c6b99ea830ff20246da2a664",
         "v40.json": "4a8dfb7a49c493f5a7fa9b1f61328e6ee08d29c4a411487d0f7abdfdb33e8ea0",
-        "v41.json": "14b6db0ec9f8d607e5bbb50148f5ae97fc751d78c4040db705342366370596eb"
+        "v41.json": "14b6db0ec9f8d607e5bbb50148f5ae97fc751d78c4040db705342366370596eb",
+        "v42.json": "8569d4c9b5ce9bd4e77d8a2ad4e4e107c57787be635656bf0b5b2e6633d9f969"
       }
     },
     "document.canvas": {
@@ -559,7 +562,8 @@
         "40": "b9dd68c8a43445f5ea1797854a67deb1b6c4b858f86654479a3a72548e8b3984",
         "41": "51d3878f3485627454f51803965bef0b970fd4038045a904530f2bbb996b5c8c",
         "43": "32111fab05d2fecfe4e7f3b7271b297503fdaed1af4e8ae31d749f040730bb46",
-        "44": "48b7f5535fe72db402acb06cc1e8babef5491ee6765a21040070081e9871e504"
+        "44": "48b7f5535fe72db402acb06cc1e8babef5491ee6765a21040070081e9871e504",
+        "45": "0b3c8f57e2b9f263c4caf8d08c56d423226b6805247262001a2aa18a5f6823a1"
       },
       "readers": {
         "19": 19,
@@ -580,7 +584,8 @@
         "40": 40,
         "41": 41,
         "43": 41,
-        "44": 41
+        "44": 41,
+        "45": 45
       },
       "samples": {
         "v19.json": "bed3ba5d2510d2fcb6c72a8f0608f39ff45af13e01ff2db2963e4008afd6a5b8",
@@ -608,7 +613,8 @@
         "v41.json": "38d96a7f0b4216be7c8829e97100159fab67e2f0f2a91edeae3d3c9a1a618193",
         "v42.json": "9d224827c3ab662654e5194546f85455966d940da965cf14b10291f35b6f6798",
         "v43.json": "d1ae5d5c8f113ecbe7d5d1ccb4e14ded80b578089ad1dcaa4bc735bf5215d657",
-        "v44.json": "285c30583d1c4f5af966a5a44c1bafe698a458444f18cf1b2630698bfb9f59fc"
+        "v44.json": "285c30583d1c4f5af966a5a44c1bafe698a458444f18cf1b2630698bfb9f59fc",
+        "v45.json": "0b3192240aa182d16747ddad74294e6280f70361ff08037e34e2ae979063c1a0"
       }
     },
     "project": {
@@ -1087,7 +1093,8 @@
         "17": "56c75285f3dea443c07c5e6b2e8d84dffafe1fc385e48456cba1062846aad4d9",
         "21": "50a0b72c80fd7d187ba8900100472f5e43b4987a1375d385bcf9d6752b73f32c",
         "22": "6a41e0d0cc2da6286dada12e46d451d69a19793f6034296d40a48fecad8dfc47",
-        "23": "28a93aa13c6abeadd719c40e9992637218b4051d1fc14a1328cf0859d435c9fb"
+        "23": "28a93aa13c6abeadd719c40e9992637218b4051d1fc14a1328cf0859d435c9fb",
+        "24": "73cf257bb219bb732b1a7ac9fba26ec3d1194f57c41c515293378e1b5400efe6"
       },
       "readers": {
         "11": 11,
@@ -1099,7 +1106,8 @@
         "17": 17,
         "21": 20,
         "22": 22,
-        "23": 22
+        "23": 22,
+        "24": 24
       },
       "samples": {
         "v11.json": "2b377205e3a00c198f44abc443b58c33b2e41901690effa050187b2d79b1c1cf",
@@ -1114,7 +1122,8 @@
         "v19.json": "d2b79fb34f2977a7305fd8355281eed010d9c50d758509201ad3a6c49d259c12",
         "v20.json": "01c7d0dcad369a7a78e44d1314877d4c890427bce6e94ebcf9e7a41f84323bef",
         "v22.json": "ca70cb77628a754acb5538d42f4d576637b1a71cc947c8f5bb9058e208626ce7",
-        "v23.json": "4a998741f8e43e04d0a6c45ab40ec4f46cc8e2b952cda449b03d613e26afbe5c"
+        "v23.json": "4a998741f8e43e04d0a6c45ab40ec4f46cc8e2b952cda449b03d613e26afbe5c",
+        "v24.json": "7cda7cdbd52a2999d9e0c73ad4dc9d2c2da98aef4a7070bc12272aba859bf697"
       }
     },
     "setting-records": {

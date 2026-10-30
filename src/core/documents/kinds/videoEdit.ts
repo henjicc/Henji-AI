@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { migrateVideoEditCaptionOwnership } from '../../videoEdit/captionOwnershipMigration'
 import { migrateEmbeddedVideoColorGradesV1 } from '../../videoEdit/colorGradeMigration'
 
 import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
@@ -132,10 +133,12 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 37：片段新增 enabled:false（停用），旧程序忽略它会照常播放与导出停用的片段；新增片子数据 scenes 与代码参数值 {kind:'scene'}，
   // 代码版本可写作者接口 v5 与内置库 libraries，旧程序读不懂这些（作者接口最高只认 v4），提高到 37，让旧程序明确提示升级。
   // 38：作者接口 v6 可使用排版库；旧程序无法执行，最低可读版本同步提高。
-  minReaderVersion: 38,
+  minReaderVersion: 42,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 41 → 42：删除旧程序依赖的 linkedCaptionId；旧程序会追加链接字幕并写回退役字段，最低可读版本提高到 42。
+    41: migrateVideoEditCaptionOwnership,
     // 40 → 41：代码图片参数新增网页画面引用 {kind:'web'}（本机网页的路径、视口、取景、倍率、取帧时刻与要读矩形的选择器）；
     // 旧内容原样有效，最低可读版本不变。
     40: content => structuredClone(content),

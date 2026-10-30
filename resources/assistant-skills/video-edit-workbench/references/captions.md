@@ -12,7 +12,7 @@
 
 查询由原读取请求持有，可并行用 `read_application_entity({ref:itemRef,propertyIds:["video_edit.item.content_queries"]})` 查阶段和终态，返回对应剪辑的查询。phaseProgress 是本阶段实测比例，null 表示未知；声音按完成声道路数、文档按已检查数量、画面按检测器回报。取消原请求或编辑/关闭剪辑会取消旧查询，迟到结果不恢复它。失败后读 error 再沿原入口重试，复用缓存、不重新识别或计费。
 
-0. 带 linked_caption_id 的字幕来自音频编辑：不重新识别、不重排；改字写 text（写回音频编辑），改断句用 audio_edit.caption。
+0. 音频编辑只提供识别结果和字幕段作参考；首次放入声音时一次性生成普通剪辑字幕，保留逐词 speech。最终字幕在剪辑里定稿，文字、时间与分段通过 video_edit.caption 修改；两边后续修改互不写回。
 1. 先用 `query_video_edit_transcript` 局部查已有口播与校对字幕，需要完整编辑时再读 `video_edit.caption` 或序列转录稿；已有可用文本不重复识别。需要识别时 `prepare_video_edit_subtitle_audio` 给 documentRef、sequenceRef，scope=sequence/in-out/selection，可给 trackRef 指定人声轨。
 2. 准备是本地混音，不计识别费；selection 保持选中声音之间的序列空隙，in-out 需要完整入出点。背景音乐太强时选清楚的人声轨。
 3. 拿返回 audioDocumentRef 调 `generate_video_edit_subtitles`，给同一 documentRef/sequenceRef/audioDocumentRef，按需 modelId、language=zh/en 及分段参数。识别可能计费，走统一付费策略。修改声音或时序后重新准备，迟到结果不能填进已变目标。

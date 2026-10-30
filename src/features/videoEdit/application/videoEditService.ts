@@ -574,13 +574,13 @@ export function updateVideoEditSequenceSettings(projectId: string, sequenceId: s
   const { name, binId, motionBlur, ...timing } = settings
   editVideoSequence(projectId, sequenceId, sequence => ({ ...changeVideoEditSequenceSettings(sequence, timing), ...(name !== undefined ? { name } : {}), ...(motionBlur !== undefined ? { motionBlur } : {}), ...(binId !== undefined ? { binId: binId || undefined } : {}) }))
 }
-export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
+export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, preserveProgramAnchors: readonly string[] = [], preserveCaptions = false): VideoEditDocument {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
   assertVideoEditWritable(instance)
   if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
   const before = instance.document
-  try { return applyVideoEditDocument(instance, update, true, false, preserveProgramAnchors) }
+  try { return applyVideoEditDocument(instance, update, true, false, preserveProgramAnchors, preserveCaptions) }
   catch (error) { publishCommandFact(instance, { operationId: crypto.randomUUID(), phase: 'failed', before, after: before }); throw error }
 }
 /** Streaming imports keep one undo boundary per request. Later edits keep their own boundaries.
@@ -687,10 +687,10 @@ export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument
   if (compensation) notifyVideoEditContent(instance)
   return restored
 }
-function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
+function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = [], preserveCaptions = false): VideoEditDocument {
   const requested = update(instance.document)
   assertCodeSourcesUnchanged(instance.document, requested)
-  const next = normalizeVideoEditCaptionSources(parseVideoEditDocument(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors), gestures.get(instance)?.before ?? instance.document))
+  const next = normalizeVideoEditCaptionSources(parseVideoEditDocument(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors, preserveCaptions), gestures.get(instance)?.before ?? instance.document))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next), changedCodeMaterialVersions(instance.document, next))
   if (!restoring && !gestures.has(instance)) validateVideoEditFontChanges(instance.document, next, readVideoEditCodeMetadata(instance, instance.document), readVideoEditCodeMetadata(instance, next))

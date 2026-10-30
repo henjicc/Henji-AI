@@ -11,7 +11,7 @@
 | 生成历史结果 | type=generation，resultRef 为 generation.result，outputIndex 从0开始 |
 | 画布结果节点（含三维结果） | type=document，documentRef 为 list_documents 返回的 documents.document，nodeRef 为 canvas.node |
 | 图片文档 | type=document，documentRef 为 documents.document；导出当前编辑结果，片段保持来源链接 |
-| 音频编辑（口播）剪后声音 | type=document，documentRef 为 documents.document；动态链接：剪后声音与链接字幕（video_edit.caption.linked_caption_id）一起进来，音频编辑改字、改分段、重新剪辑后剪辑自动跟上，片段按原来的词对回；不是原录音替代剪后声音 |
+| 音频编辑（口播）剪后声音 | type=document，documentRef 为 documents.document；声音动态链接，音频编辑重新剪辑后声音片段按原来的词对回；首次按字幕段一次性生成普通剪辑字幕并保留逐词参考，最终字幕由剪辑决定，后续不随音频编辑改字、分段或剪切而更新，也不写回音频编辑；使用剪后声音 |
 | 已有资产 | type=asset，assetRef 为 asset；原文件引用导入还可用 `import_video_edit_asset` |
 
 placement.mode=library 只进素材面板；replace 给 clipRef；insert/overwrite 给 frame、trackRef，可给 durationFrames；add 给 frame 且 trackRef/newTrack 二选一，newTrack=video/audio。时长是序列帧，overwrite 会覆盖相交区间，insert 会按同步锁定后移；选择来自实际剪辑意图。

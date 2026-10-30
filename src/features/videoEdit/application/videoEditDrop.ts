@@ -196,7 +196,7 @@ async function applyVideoEditDropInput(projectId: string, input: VideoEditDropIn
   if (input.kind === 'items') ids = input.itemIds
   else if (input.kind === 'code_asset') { const result = await importVideoEditCodeAsset(projectId, input.assetId, { binId, filterTarget, afterImport: apply }); ids = result.itemId ? [result.itemId] : [] }
   else if (input.sources.some(source => source.path && matchHenjiExtension('audio_edit', source.path))) {
-    // 音频编辑作品（.hjaud）：和“加入剪辑”一样以动态链接放进来，剪后的声音与链接字幕一起
+    // 音频编辑作品（.hjaud）：和“加入剪辑”一样以动态链接放进来，剪后的声音与一次性生成的普通字幕一起
     if (!input.sources.every(source => source.path && matchHenjiExtension('audio_edit', source.path))) throw new Error('音频编辑作品请单独拖入，不要和其他文件一起拖。')
     ids = []
     for (const source of input.sources) ids.push(await dropVideoEditAudioDocument(projectId, sequenceId, source.path!, placement, targetTrackIds, options.signal))

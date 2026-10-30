@@ -61,7 +61,7 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
    - `builtin` 内置效果（参数均衡、限幅、立体声等），builtin.id 与参数同剪辑的音频效果；`plugin` 第三方插件，pluginId 取自 `audio_edit.processor_chain.available_processors`。
    `audio_edit.document.chain_bypassed` 整体关闭（对比处理前后）。
 3. **输出**（`audio_edit.document.output`）作用在剪好的整条声音上：`volumeDb` 音量；响度用 `match_audio_edit_loudness`（短视频平台 -14、播客 -16 LUFS）测量后补偿，不要自己猜 gainDb。
-4. **多轨**：口播要和音乐、音效一起混时，多轨就是剪辑的序列：音轨的 `video_edit.track.volume_db`、`video_edit.track.pan`、`video_edit.track.effects` 与序列的 `video_edit.sequence.master`（主轨音量、主轨效果）都是剪辑实体属性；片段的 `video_edit.clip.essential_sound` 与口播的基本声音同一套设置。口播放进多轨后是动态链接，口播这里保存后多轨里自动换成新声音。
+4. **多轨**：口播要和音乐、音效一起混时，多轨就是剪辑的序列：音轨的 `video_edit.track.volume_db`、`video_edit.track.pan`、`video_edit.track.effects` 与序列的 `video_edit.sequence.master`（主轨音量、主轨效果）都是剪辑实体属性；片段的 `video_edit.clip.essential_sound` 与口播的基本声音同一套设置。口播放进多轨后是动态链接，口播这里保存后多轨里自动换成新声音。字幕段与识别结果仅供剪辑参考，首次放入时生成普通字幕；最终字幕在剪辑里定稿，两边后续字幕修改互不影响。
 5. 处理完回读属性核对，汇报加了哪些效果、顺序、量多少、为什么。
 
 ## 边界

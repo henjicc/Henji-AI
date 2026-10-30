@@ -51,7 +51,7 @@ export interface AudioEditSubtitleCue { id: string; startFrame: number; endFrame
 /**
  * 成片字幕：按字幕分段取保留的词（单独的叹词、语气词如“哎”“嗯”不上字幕），映射到剪后时间，排版，每条提前 0.1 秒出现
  * （不早于上一条开头），间隔短于 0.5 秒的接上（提前出现压到上一条时，上一条在这里结束）。
- * 音频编辑导出的 SRT、放进剪辑后的链接字幕都用这一份；词的时间（words）不提前。
+ * 音频编辑导出的 SRT、首次放进剪辑时生成的字幕都用这一份；词的时间（words）不提前。
  */
 export function buildAudioEditSubtitleCues(blocks: readonly AudioEditTranscriptBlock[], spans: readonly AudioEditTimelineSpan[], sampleRate: number): AudioEditSubtitleCue[] {
   const cues = buildAudioEditSubtitleGroups(blocks, sampleRate).flatMap((group): AudioEditSubtitleCue[] => {

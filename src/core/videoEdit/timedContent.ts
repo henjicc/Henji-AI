@@ -18,7 +18,6 @@ export const videoEditMarkerSchema = z.object({ id, clipId: id.optional(), frame
 export const videoEditCaptionSchema = z.object({ id, clipId: id.optional(), start: frame, duration: frame.min(1), text: z.string().min(1).max(2000).refine(text => Boolean(text.trim()), '字幕须包含文字。'),
   sourceText: z.string().optional().describe('排版前原句，供重新整理恢复行尾被移除的标点；人工改字后不覆盖现文。'),
   speech: videoEditCaptionSpeechSchema.optional().describe('自动字幕的来源文字及声音源区间，由字幕与剪辑服务维护。'),
-  linkedCaptionId: id.optional().describe('来自所属片段链接的音频编辑文档里的这段字幕（音频编辑字幕段 ID）：文字、断句与时间由音频编辑维护，音频编辑改动后自动更新；在剪辑里改文字会写回音频编辑。'),
   reviewReasons: videoEditCaptionReviewSchema.optional().describe('剪辑后待复核的正文、译文或估算时间；确认对应内容后可清空。'),
   translation: z.string().trim().max(2000).optional().describe('第二语言字幕，显示在原文下方；空字符串清除翻译。'),
   // Reflection's shared unset-value convention is the empty string; make it a valid schema value.
@@ -87,7 +86,7 @@ export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEd
 }
 
 /** Raw property writes receive the same clip anchoring as manual timeline commands. */
-export function reconcileVideoEditTimedContent(before: VideoEditDocument, requested: VideoEditDocument, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
+export function reconcileVideoEditTimedContent(before: VideoEditDocument, requested: VideoEditDocument, preserveProgramAnchors: readonly string[] = [], preserveCaptions = false): VideoEditDocument {
   const sequences = requested.sequences.map(sequence => {
     const previous = before.sequences.find(value => value.id === sequence.id)
     if (!previous || previous === sequence || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator) return sequence
@@ -113,7 +112,8 @@ export function reconcileVideoEditTimedContent(before: VideoEditDocument, reques
     if (jsonEqual(previous.clips, sequence.clips)) return annotations === sequence.annotations ? sequence : { ...sequence, annotations }
     // Replacing a clip's source preserves its program anchors; it is not an in-trim.
     const replacementOrigins = new Map(sequence.clips.filter(clip => preserveProgramAnchors.includes(clip.id) || previous.clips.some(prior => prior.id === clip.id && prior.itemId !== clip.itemId)).map(clip => [clip.id, { originalId: clip.id, shift: 0 }]))
-    const mapped = retimeVideoEditContent(previous, { ...sequence, annotations }, replacementOrigins)
+    // 音频刷新已用源录音时间线处理字幕；通用重定时只处理其余锚点。
+    const mapped = retimeVideoEditContent(preserveCaptions ? { ...previous, captions: undefined } : previous, { ...sequence, annotations }, replacementOrigins)
     return { ...sequence,
       clips: jsonEqual(sequence.clips, mapped.clips) ? sequence.clips : mapped.clips,
       annotations: jsonEqual(sequence.annotations, mapped.annotations) ? sequence.annotations : mapped.annotations,
