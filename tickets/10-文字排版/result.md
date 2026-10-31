@@ -272,3 +272,187 @@ node scripts/prepare-text-layout-acceptance.ts
 node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/index.html --out .tmp/text-layout-acceptance/verified-11-01-report.json
 npm run verify:changed -- --level L2 --test src/core/imaging/vectorContent/shaping/shaping.test.ts --test src/core/imaging/vectorContent/shaping/textPlan.test.ts --test src/core/imaging/vectorContent/shaping/fontChannel.test.ts --test src/features/videoEdit/authorLibraries/shapedText.test.ts --test src/features/videoEdit/engine/videoEditAuthorTextResources.test.ts --test src/platform/textFontSnapshot.test.ts scripts/prepare-text-layout-acceptance.ts scripts/text-layout-acceptance-browser.ts scripts/run-text-layout-dom.cjs src/core/imaging/vectorContent/shaping/fontSession.ts src/core/imaging/vectorContent/shaping/paragraph.ts src/core/imaging/vectorContent/shaping/runs.ts src/core/imaging/vectorContent/shaping/shaping.test.ts src/core/imaging/vectorContent/shaping/textPlan.ts
 ```
+
+## 2026-11-01 第二轮裁定落实：软连字符及实验1–3通过，实验4阻断
+
+**结论：停在实验4，ticket 10 未完成。** P021/P025 可见软连字符的宽度和绘制已修复，P018 同源问题同时消除；实验1–3达到 review.md 第二轮裁定门槛。正式渲染 Worker 的两个同时存活素材仍各自复制同一字体到 HarfBuzz，违反设计§4.5和实验4“同 Worker 同字体只准备一次”。按用户指令在此停止，不修这个新阻断、不运行实验5–8、不冻结 henji-layout 2.0.0、不修改新建默认 API7或作者技能。
+
+### 修复及实验1–3
+
+根因在共享 `ShapedParagraph`：自动换行时尾空白前的 U+00AD 没有被识别为可见插入字形，尾空白占用宽也未包含它；原替代字符固定为 ASCII `-` 并与前文一起整形，和浏览器使用当前字体 U+2010（缺字才回退 `-`）、独立插入的字偶距语义不同。现在测量、输出 glyph、原文 cluster 与尾空白占用宽使用同一可见连字符，段尾/硬换行/未换行的软连字符仍隐藏。没有修改 vendor 或固定样本。
+
+- 固定200例原始断点 **196/200**，未改 Pretext **197/200**。仅 P022/P027/U004/U007 不同，均属第二轮接受项；扣除全部7项接受序列后 **193/193** 一致。原始几何193/200；非 emoji、扣P022/P027后 **179/179**，最大 **0.02099609375px < 1/32px**。P018 已通过，无需追加豁免。
+- 临界 W−1/64、W、W+1/64 共600例：原始断点588/600、原始几何579/600；新裁定下非豁免门槛失败 **0**，执行异常 **0**。接受名单固定为 P022/P027/U003/U004/U007/U008/U018，没有把执行异常计作接受差异。
+- P018：两行原文范围[0,23]/[23,33]、宽120/45px，与DOM完全相同。P021误差 **0.013021469px**（作者23.4140625/DOM23.427083969）；P025误差 **0.010416985px**（作者14.15625/DOM14.166666985）。单独绘制原文软连字符簇，advance均 **4.8984375px**，非零像素通道分别32/40，证明可见字形实际画出。
+- 中英间距：中文AI中文关闭/开启160/168px；中文 AI 中文192/192px；中文2026中文192/200px，作者与DOM一致。
+- 实验3：SimHei、Noto Sans SC、Noto Sans JP × 7组配对/连续标点 × 1×/4×，共 **42组**；保留无特性/halt/chws glyph明细，DOM Range字位与advance最大差 **0.010417938px**；静态/逐字落定像素通道差全部 **0**。42组均输出DOM/HB/overlay共126张PNG，逐字符墨迹边界差最多 **1个物理像素**；目视抽查两档及三字体叠图（含连续标点），未见双边或双重挤压，该差异记为AA。自动几何与墨迹检查覆盖全部42组，目视不是逐张全查。
+- 同源排查覆盖共享段落的普通/富文本、软连字符前后run、尾空白/硬换行/段尾、正常/应急折行、字距及RTL排序、作者绘制消费者；P018/P021/P025已修，固定非豁免集合未发现同类失败。未把这些结果外推为所有字体、跨平台或所有GPU功能均通过。
+
+### 实验4数据与失败原因
+
+独立Electron临时profile、随机HTTP端口，运行正式 `videoEditWorker` / `authorMetadata` / `authorFrame`，专项esbuild生产优化打包，共享正式作者库与HarfBuzz模块。字体通过独立MessagePort传输，生产Worker FontFace构造计数始终 **0**，都有实际GPU出帧和有效墨迹。未连接9334，未跑Reality；不是完整 electron:prod 应用发布验收。
+
+装载子集每支5次预热、30次计量，单位ms：
+
+| 场景 | P50 | P95 | max |
+|---|---:|---:|---:|
+| 独立Worker冷准备 | 452.2 | 575.2 | 581.4 |
+| 独立Worker冷首帧（含准备） | 879.2 | 1178.0 | 1180.4 |
+| 同Worker热准备 | 3.9 | 5.2 | 5.5 |
+| 同Worker热首帧（含准备） | 10.7 | 15.0 | 16.0 |
+
+热循环额外字体读取0。切Noto Sans JP / SimHei / SimSun-ExtB / Segoe UI Emoji首帧分别38.3/61.1/22.6/25.6ms；SimSun-ExtB已由默认链预载，切换时0读取。双Worker装载、切字体及各分支关闭断言通过，每次字体快照close恰好1次。装载子集report的gate=true仅代表这部分断言，不代表完整实验4通过。
+
+**真正阻断：同Worker两个同时存活素材，文本、字体hash、face、轴完全相同。**
+
+| 证据 | 第一个素材 | 第二个素材加载后 |
+|---|---:|---:|
+| 同key HarfBuzz Font实际对象数 | 1 | 2 |
+| wasm memory字节 | 17,956,864 | 35,782,656 |
+| 第二次新增字体读取 | — | 0 |
+| 有效墨迹通道数 | 11,595 | 11,595 |
+
+字体Noto Sans SC规范化SFNT **17,773,244 bytes**，hash `763146584cf0710223441356b4395e279021b0806c196614377a7a0174ae074a`；wasm增长 **17,825,792 bytes**。计数器用WeakMap识别正式TextShaper返回的Font对象，只存编号、不持有对象，且两个素材都仍存活；因此不是仅凭heap高水位猜测重复实例化。
+
+只读定位：`src/features/videoEdit/authorLibraries/shapedText.ts:29,44,52` 的shapers以 `fonts.owner` 缓存；`videoEditAuthorTextResources.ts:26–28` 为每个素材提供各自owner；`shaping/harfbuzz.ts:29–30` 的Face/Font缓存是每个TextShaper实例私有，创建Blob会复制整个SFNT到wasm。需要按设计在同Worker、同库运行时共享字体对象并保持会话引用释放语义；本轮按停止要求不改这条路径。
+
+关闭中迟到读取得到 `Error: 字体租约已经释放`，等待正确拒绝、快照close=1；无重复requestKey读取。关闭后wasm仍维持高水位符合设计，不把“不缩小”本身报成泄漏。最终渲染器JS heap used/total **94,124,835/98,123,219 bytes**；500ms采样的渲染器最大工作集 **633,300 KiB**，完整进程采样在report。事件循环延迟P50/P95/max为0/22.5/151.3ms，混入实验端getImageData和像素遍历，**不能据此判断主进程字体处理是否阻塞**；完整主线程预算、对象释放/GC矩阵尚未验完，实验4不能宣称全面完成。
+
+独立Node worker_threads还运行了正式 `fonts/worker.ts → FontScanner.read → standaloneFont` 的读取/规范化，每种5预热30计量：
+
+| 字体/格式 | 原始→规范化bytes | P50/P95/max（ms） |
+|---|---:|---:|
+| SimHei TTF | 9,753,388→9,753,388 | 13.18/18.19/18.38 |
+| SimSun-ExtB TTF | 21,894,056→21,894,056 | 23.43/26.96/29.38 |
+| Noto Sans JP OTF | 4,472,168→4,472,168 | 5.70/11.22/16.78 |
+| Microsoft YaHei TTC | 19,704,352→19,583,608 | 64.72/69.92/72.96 |
+| Segoe UI Emoji TTF | 2,072,388→2,072,388 | 2.41/3.64/3.94 |
+| Geist WOFF2 | 29,400→65,800 | 1.85/2.28/2.39 |
+
+未清操作系统磁盘缓存，不称冷磁盘；采用本批可取得最大完整CJK字体21.89MB，没有虚构30/60MB样本。报告保留Node进程内存。这些装载数据不替代实验5逐字帧预算、实验6描边生长/three、实验7跨平台/彩色字体、实验8表格tnum：**5–8均未运行**。
+
+### 验证、审查与复现
+
+- 共享排版核心变更按testing.md L2，显式9文件 `verify:changed -- --level L2` **通过**：shaping/textPlan/shapedText 3文件30测试、改动文件ESLint、renderer与Electron增量tsc。脚本Node语法、真实esbuild/Electron、git diff --check通过；lifecycle实验退出1准确保留失败门槛。
+- `check:persistence-compat` **64格式通过**；`check:assistant-capabilities` 结构、15项覆盖、31文件237项不变量 **通过**；`check:skill-sync` **5技能25文件通过**；`node scripts/check-text-layout-vendor.cjs --check` 字节/许可/反向补丁/7模块零Canvas可达图 **通过**。
+- 本轮实际运行实验3 Canvas和正式Worker GPU出帧；未把它们宣称为完整相关GPU验收。按实验4停止要求没有扩展运行test:gpu或实验5–8。
+- 独立提交前审查 **2轮**：第1轮发现重要项“切字体分支缺少失败断言”和小问题“失败后重复close可能挂起”，均修复；第2轮增量未发现新问题。后来仅将既有SHY单测预期调整为当前字体可用的独立连字符，最终L2复验通过。
+- 本轮仅9个核心/测试/实验脚本文件；未改依赖、UI、技能、持久格式或API默认值。node_modules与Claude补齐的FFmpeg联接未动。未拉取、切分支、合并或推送；主工作区仅追加本result，未触碰D:/视频制作。
+
+证据目录 `D:/VibeCode/Henji-AI-t10/.tmp/text-layout-acceptance/`（忽略目录，不提交字体/截图/临时产物）：
+
+| 文件 | SHA-256 |
+|---|---|
+| verified-second-ruling-report.json | `336cb7001275cd740e3fdfeefebee991a2289b715dee265d43d2775ca9e58269` |
+| worker-full-11-01-report.json | `691c9520bbac9a585df99ef9fb070b7bb6ee0d4d91370bf2afe2ff5dd7592fb4` |
+| worker-lifecycle-11-01-report.json | `679e9b9dc0d8735d8a38216b758725ff9ef2a7f4d4e5ddc99ec4a198422de74d` |
+| font-io-report.json | `713980e6a7a956f3e43db5b0489230728b69015df34de0914863b430c81b4dae` |
+
+环境Electron44.9.3/Chromium152.0.7977.167/DPR1.5；固定fixture SHA-256仍 `56d23edddb7e0376639e800257c9170a321a8b88f51f0a53de1059f01596da4e`。复现依赖本工作树既有.tmp上游Pretext与字体准备，不重新抽样，不执行npm install/ci：
+
+```powershell
+node scripts/prepare-text-layout-acceptance.ts --worker
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/index.html --out .tmp/text-layout-acceptance/verified-second-ruling-report.json
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.html --out .tmp/text-layout-acceptance/worker-full-11-01-report.json
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.html --phase lifecycle --out .tmp/text-layout-acceptance/worker-lifecycle-11-01-report.json
+node scripts/text-layout-font-io-experiment.mjs
+npm run verify:changed -- --level L2 --test src/core/imaging/vectorContent/shaping/shaping.test.ts --test src/core/imaging/vectorContent/shaping/textPlan.test.ts --test src/features/videoEdit/authorLibraries/shapedText.test.ts src/core/imaging/vectorContent/shaping/paragraph.ts src/core/imaging/vectorContent/shaping/shaping.test.ts scripts/prepare-text-layout-acceptance.ts scripts/text-layout-acceptance-browser.ts scripts/run-text-layout-dom.cjs scripts/text-layout-punctuation-experiment.ts scripts/text-layout-worker-experiment.ts scripts/text-layout-worker-probe.mjs scripts/text-layout-font-io-experiment.mjs
+```
+
+本轮本地提交：**4a1bd8c47 fix(text-layout): 修复行尾软连字符并补齐排版实验**。分支 task/10-文字排版，代码工作区干净；未推送、未合并。最终复核2.0.0冻结目录不存在，新建默认API仍为7。
+
+## 2026-11-01 字体对象共享修复：实验4通过，实验5预检触发停止
+
+**结论：停在实验5，ticket 10 未完成。** 实验4重复字体对象阻断已修复；实验5的200字、1080p、纯填充逐字位姿分支，文字CPU耗时下界P95为 **5.20ms > 4ms**。按本轮“哪一步门槛不过就停在那一步”的指令，不继续其余实验5矩阵、实验6–8，也不冻结henji-layout 2.0.0、不修改新建默认API7、不改作者技能。没有把专项预检当作完整electron:prod性能验收。
+
+### 修复及同源排查
+
+- `shaping/harfbuzz.ts` 的缓存从每个TextShaper独占，改为同HarfBuzz模块/wasm运行时共享：Blob按内容hash、Face按hash+face、Font按hash+face+规范化轴键缓存。Font只在创建发布前设置scale/variations；字号、features、文本不修改共享Font。每个TextShaper只取得一次自己的引用，最后一个使用者关闭时依次显式释放Font、Face、Blob，字节内存可供wasm重用。不同冻结库运行时仍分离。
+- 检查范围：所有生产TextShaper创建点、作者素材owner/onClose、普通及富文本整形、轮廓/metrics/extents/ink、命名实例轴、两素材同时存活/先后关闭、关闭后重建。未发现其他发布后setScale/setVariations调用。没有修改旧冻结库、vendor、持久格式、UI或字体I/O生产路径。
+- 新增1项真实缺陷回归：相同内容不同ArrayBuffer、不同字号/features复用同一Font，等价轴键复用、不同轴分离；关闭一个会话后另一个还能整形，最后关闭后原生对象ptr拒绝读取，重复dispose不重复释放，重新加载能工作。断牙临时恢复HEAD的原实现，得到“setScale预期1次、实际2次”的明确失败；随后恢复本次修复，精确测试通过。
+
+### 实验4：真实Worker共享、释放、装载
+
+使用既有专项启动器的独立Electron进程/profile及随机HTTP端口，生产优化esbuild产物调用正式videoEditWorker/authorMetadata/authorFrame，专用字体MessagePort。未连接9334；生产Worker的FontFace构造数始终0，实际GPU出帧有墨迹。原生对象探针仅保留WeakRef，快照区分alive/disposed/collected；GC只在专项进程启用，不修改应用配置。
+
+- 同时存活两素材、同Noto Sans SC：Font/Face/Blob均从 **1/1/1保持1/1/1**；wasm均 **17,956,864 bytes**，第二个素材增长 **0 bytes**，重复字体读取0。规范化字体17,773,244 bytes，hash仍为`763146584cf0710223441356b4395e279021b0806c196614377a7a0174ae074a`。
+- 关闭第一个素材后Font/Face/Blob仍各存活1，剩余素材继续出帧；关闭第二个后各alive=0、disposed=1。重建同字体后wasm仍17,956,864 bytes，最终关闭后各alive=0、disposed=2；强制GC后各collected=2，没有用heap高水位不下降冒充泄漏。
+- 关闭中迟到读取正确拒绝“字体租约已经释放”，快照恰好关闭1次。冷/热装载、切字体和双Worker分支全部有实际GPU出帧，最终原生对象alive均0，各快照close=1。
+
+冷/热各5次预热、30次计量，单位ms（不清OS磁盘缓存；冷指独立Worker重建，不称冷磁盘）：
+
+| 场景 | P50 | P95 | max |
+|---|---:|---:|---:|
+| 独立Worker冷准备 | 824.2 | 1424.4 | 1693.7 |
+| 独立Worker冷首帧含准备 | 1568.0 | 2691.7 | 3131.6 |
+| 同Worker热准备 | 5.2 | 9.7 | 15.4 |
+| 同Worker热首帧含准备 | 18.3 | 30.8 | 31.9 |
+
+热循环新增字体读取0。切Noto Sans JP/SimHei/SimSun-ExtB/Segoe UI Emoji首帧分别65.6/92.9/25.0/53.4ms；SimSun-ExtB预载命中，新增读取0。渲染器JS heap used/total为69,705,984/73,614,588 bytes；500ms进程采样中渲染器最大工作集609,208 KiB。读取/规范化仍通过正式fonts/worker.ts → FontScanner.read → standaloneFont，六类真实字体大小与线程协调延迟见本节最终验证数据；没有虚构30/60MB样本。渲染器实验端getImageData混入的lag不用于证明主进程预算。
+
+### 实验5：停止点及证据边界
+
+Noto Sans SC，32px，文字`文字排版中文首帧ABC2026`重复后取200字；1920×1080，wrapWidth=1800，纯白填充，无描边阴影；逐字位姿为`y = sin(time + index) * 5`。各分支5次预热、30次计量，首帧另记。作者draw使用模块求值期间捕获的真实performance.now：宿主在作者函数内部固定时钟为素材时间，直接在draw内取时钟会得到0；这类探针调试零值不作为证据，最终报告已由修正探针重跑覆盖。
+
+| 分支 / 指标（ms） | P50 | P95 | max |
+|---|---:|---:|---:|
+| 静态作者draw | 1.90 | 2.80 | 3.30 |
+| 静态文字CPU下界 | 1.90 | 2.80 | 3.30 |
+| 静态完整请求帧 | 5.20 | 7.20 | 7.90 |
+| 逐字位姿作者draw | 1.70 | 2.90 | 3.70 |
+| 逐字位姿栅格 | 1.10 | 2.40 | 3.10 |
+| 逐字位姿上传 | 0.30 | 0.40 | 0.60 |
+| **逐字位姿文字CPU下界** | **3.20** | **5.20** | **6.20** |
+| 逐字位姿完整请求帧 | 9.30 | 11.90 | 12.40 |
+
+文字CPU下界是**每帧**draw+栅格+上传之后再求P95，不是相加三个P95；不含录制比对、合成与GPU等待。固定纯轮廓路径使用正式录制/回放，各阶段没有重复计时。静态30/30帧复用纹理且栅格/上传均0；逐字位姿0/30帧复用。首帧有效墨迹通道数静态103,626、位姿106,344。
+
+这已经触发专项停止门槛；静态CPU下界小于4ms并不证明完整文字阶段通过。没有运行旧版对照、20/1000字、4K、描边阴影、1×→8×推近和播放p90/跳帧，也没有描边生长、three挤出、完整回退/彩色格式/跨平台、表格DOM tnum数据，均不得写为完成。耗时期间本机还有其他工作树的Node/TypeScript任务，本票未结束它们；上述是本次环境的专项失败证据，不外推为独占机器或完整正式应用的最终性能。实验5的瓶颈尚未做进一步根因定位/优化。
+
+### 实验4字体I/O补齐及复现
+
+独立Node协调线程调用正式字体worker；事件循环直方图在5次预热结束后启用，下面全部为30次计量期间的数据。该指标证实耗时规范化被移入字体线程，不把独立Node协调线程冒充完整Electron主进程预算。
+
+| 字体/格式 | 原始→规范化bytes | I/O P50/P95/max（ms） | 协调线程事件循环P50/P95/max（ms） |
+|---|---:|---:|---:|
+| SimHei TTF | 9,753,388→9,753,388 | 17.19 / 23.13 / 23.92 | 1.45 / 4.39 / 7.36 |
+| SimSun-ExtB TTF | 21,894,056→21,894,056 | 35.86 / 43.26 / 49.98 | 1.38 / 2.92 / 12.44 |
+| Noto Sans JP OTF | 4,472,168→4,472,168 | 7.78 / 11.60 / 11.63 | 1.46 / 3.32 / 4.80 |
+| Microsoft YaHei TTC | 19,704,352→19,583,608 | 89.53 / 100.35 / 101.77 | 1.45 / 1.65 / 12.87 |
+| Segoe UI Emoji TTF | 2,072,388→2,072,388 | 4.22 / 6.04 / 6.38 | 1.47 / 3.22 / 4.36 |
+| Geist WOFF2 | 29,400→65,800 | 2.55 / 2.94 / 3.04 | 1.01 / 2.30 / 2.78 |
+
+证据仍在当前任务工作树`.tmp/text-layout-acceptance/`，不提交字体、截图或临时产物。Electron44.9.3、Chromium152.0.7977.167。
+
+| 文件 | SHA-256 |
+|---|---|
+| worker-lifecycle-shared-report.json | `90cd19996013f40d7a707b0733a95a6a1bf31788b53410f5c31353a0e59158d1` |
+| worker-full-shared-report.json | `198f0716caa8e58d85eba1c1c3636817c0634d7e39b4b42f30bb81727becf2cd` |
+| worker-frames-shared-report.json | `bb69cc6015d869e36baec763fe261f0a10b64303e5c68a66ac5630140e48519f` |
+| font-io-report.json | `e658256705b83d28b5cdbf6d970fafea1a27d783bbeca6bf1aa10659e329b32a` |
+
+复现（逐条执行，一次一个重任务；frames命令预期退出1，失败后不执行后续实验）：
+
+```powershell
+node scripts/prepare-text-layout-acceptance.ts --worker
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.html --phase lifecycle --out .tmp/text-layout-acceptance/worker-lifecycle-shared-report.json
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.html --out .tmp/text-layout-acceptance/worker-full-shared-report.json
+node scripts/text-layout-font-io-experiment.mjs
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.html --phase frames --out .tmp/text-layout-acceptance/worker-frames-shared-report.json
+```
+
+### 本轮验证与审查
+
+- 按testing.md L2：共享字体核心跨整形、排版和作者消费者；显式6文件`verify:changed -- --level L2`通过，精确4文件 **33测试**、改动源文件ESLint、renderer/Electron双工程增量tsc全部通过。首次renderer tsc因Node默认4GB堆上限退出134；仅在重跑命令中设`NODE_OPTIONS=--max-old-space-size=8192`后通过，没有改项目配置或隐藏失败。
+- `npm run check:persistence-compat` **64格式通过**；`npm run check:assistant-capabilities` 结构、15项覆盖、31文件 **237项不变量通过**；`npm run check:skill-sync` **5技能25共享文件通过**；`node scripts/check-text-layout-vendor.cjs --check` 字节/许可/反向补丁/7模块零Canvas可达图通过。四个本次实验脚本Node语法检查、实际esbuild及`git diff --check`通过。
+- 实际GPU验证为本次正式Worker实验4与实验5预检：前者通过、后者退出1准确报告5.20ms失败。按停止要求未扩展运行其他`test:gpu`、完整Reality/electron:prod或实验6–8，不能报“所有GPU测试通过”。
+- 独立提交前审查 **2轮**，无重要问题；第2轮发现一个小问题“事件循环直方图含预热、与报告口径不符”，已修为第6次读取前才启用并重跑六类字体I/O，最终数据及哈希以上表为准。
+- 本轮代码文件范围仅`shaping/harfbuzz.ts`、`shaping/shaping.test.ts`及`run-text-layout-dom.cjs`、`text-layout-worker-probe.mjs`、`text-layout-worker-experiment.ts`、`text-layout-font-io-experiment.mjs`。新建默认API仍7，2.0.0冻结目录不存在；技能未改，因此没有进入Claude措辞把关阶段。
+- 未切分支、拉取、推送或合并；没有安装/卸载依赖，node_modules与native/video-decoder/ffmpeg仍为原联接点。未动9334开发版、UI、真实资料、D:/视频制作；主工作区仅追加获准的本result。代码提交号见下方最终记录。
+
+```powershell
+$env:NODE_OPTIONS='--max-old-space-size=8192'
+npm run verify:changed -- --level L2 --test src/core/imaging/vectorContent/shaping/shaping.test.ts --test src/core/imaging/vectorContent/shaping/textPlan.test.ts --test src/features/videoEdit/authorLibraries/shapedText.test.ts --test src/features/videoEdit/engine/videoEditAuthorTextResources.test.ts src/core/imaging/vectorContent/shaping/harfbuzz.ts src/core/imaging/vectorContent/shaping/shaping.test.ts scripts/run-text-layout-dom.cjs scripts/text-layout-worker-probe.mjs scripts/text-layout-worker-experiment.ts scripts/text-layout-font-io-experiment.mjs
+```
+
+本轮本地提交：**b27441a35 fix(text-layout): 共享字体对象并释放会话引用**。仍在task/10-文字排版，代码工作区干净；未推送、未合并。ticket 10 停在实验5，不能冻结或启用新默认。
