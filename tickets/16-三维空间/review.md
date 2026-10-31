@@ -20,3 +20,20 @@
 
 ## 第 12.1 节裁定（11-01）
 采纳建议例外：普通卡片维持中心材料面每帧一次景深；动态 worldScene 在快门内与别层换序且开启景深的联合情况，允许对每个子样本的场景结果做局部、降采样景深（CoC 仍取中心），再按层序合成累积；P2 单列 8/16 样本成本。不冻结模拟、不关模糊。
+
+## 复审（Opus high）与裁定（11-01，第 2 轮，之后不再送审，Claude 自查后开工）
+1. 第 12.1 节裁定并入正文（5.3、9.1、11.2、11.4、12.1、4.6 调用次序、P2 单列执行次数）。
+2. transform 模式 worldScene：B 逐样本渲染，A 按层累积成一个材料面，再做一次中心景深；SpatialCompositeHost 补对应方法并写进冻结签名。
+3. `space: true` 的非 three 卡片：材料面冻结在中心时刻，不逐样本重渲，内容键只用中心时刻。
+4. 内容键由 B 生成（B 拥有作者指纹），A 只传样本时刻与相机；删掉 SpatialSampleRequest 里由 A 传入的 contentKey。
+5. 改透视量 = 推拉变焦：移动机位保持 z=0 平面取景不变，焦距随之导出；“展开空间”即透视量曲线。
+6. 无主文件：作者入口枚举相关（AuthorDeterminism、AuthorBundle、AuthorJsLocations、AuthorProbeSources、codeTrackReview、declarationReader、contract、typeDiagnostics）归 B；API 9 常量（codeMaterialVersions）归 A。
+7. 执行顺序（写进 7.2）：先合并 20、12、15、17、18、10、21、19-U12/U13（它们都在进行中）；16-A 在这些之后从最新 main 开工并负责吸收；19 的 U9/U15a 排在 16-B 之后。19-U12 的立方体/翻转/开门是二维着色器转场，与空间复合转场不同概念，写明关系。
+8. 传播清单补 creative-intent-candidate（嵌入 clip curves），并逐个核对 video-preset-package、title-templates、style-kits 是否间接嵌入模板片段。
+9. 运动类算法（stagger、motionCompiler、fitting、motionDraft、MotionGroup、超级关键帧、稳定、跟踪写入）首期不处理四个空间键，只动二维键；C 负责在这些入口写明并测试“空间键原样保留”。
+10. 4.6 补 PreparedSpatialFrame、SpatialPictureLease、materialPlan 的 TS 定义（PreparedSpatialFrame 对 A 不透明）；generatorTargetCapacity 经 CodeSources/Host 转接。
+11. 景深阈值平滑归零与材料面 CoC 尺度换算由 16-A 在 ticket 12 合并后串行改 planAuthorDefocus/BuiltinEffectPasses。
+12. 恒等判定明确包含 rotationX/Y/Z 偏移。
+13. spatialMatrices 懒加载的 three 数学类是第 9 条的允许例外：只传数值，不跨实例 instanceof。
+14. B、C 从 A 冻结接口提交的分支叠加开工（叠加分支），A 合并后各自 rebase 到 main。
+15. 链接改为指向主仓库路径。
