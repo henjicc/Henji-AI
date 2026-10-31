@@ -60,7 +60,7 @@ export function VideoEditExportEncodingFields({ encoding: e, codec, bitrateMbps,
   const levels = (videoEditExportLevels(codec) as readonly Encoding['level'][]).map(value => ({ value, label: value === 'auto' ? '自动' : value }))
   const quality = e.rateControl === 'quality'
   return <>
-    <UiGroup title="编码器" titleTone="compact">
+    <UiGroup title="编码" titleTone="compact">
       {row('encoder', '编码器', '硬件编码速度快；软件编码慢一些，同样画质下文件通常更小。', select('编码器', e.encoder, encoders, value => set('encoder', value)))}
       {row('preset', '速度', '越慢压得越精细，同样画质下文件更小。', select('编码速度', e.preset, presets, value => set('preset', value)))}
       {row('profile', '规格', '决定哪些播放设备能解码；不确定时选自动。', select('编码规格', e.profile, profiles, value => set('profile', value)))}
