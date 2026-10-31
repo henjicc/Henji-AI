@@ -456,3 +456,68 @@ npm run verify:changed -- --level L2 --test src/core/imaging/vectorContent/shapi
 ```
 
 本轮本地提交：**b27441a35 fix(text-layout): 共享字体对象并释放会话引用**。仍在task/10-文字排版，代码工作区干净；未推送、未合并。ticket 10 停在实验5，不能冻结或启用新默认。
+
+## 2026-11-01 同字重配对复测：实验 5 未达标，按门槛停止
+
+本轮起点 `b27441a35`，本地提交 **`823943658 test(text-layout): 添加同字重逐帧配对与外观失败门禁`**。仍在 `task/10-文字排版`。只改四个专项脚本，不改生产实现、UI、默认版本或冻结库；没有推送、切分支或合并。实验 4 沿用上一轮通过证据，本轮未重跑。**实验 5 整体不通过，实验 6–8 未执行，不能冻结 2.0.0。**
+
+### 有效配对及停止判定
+
+复用正式 `videoEditWorker / authorMetadata / authorFrame` 的优化专项构建，独立隐藏 Electron/profile、随机 HTTP 端口，不连接 9334。旧侧原样复制冻结 `henji-layout 1.2.0` 的 mjs；新侧使用当前作者入口。两侧同一 Noto Sans SC SFNT，17,773,244 bytes，SHA-256 `763146584cf0710223441356b4395e279021b0806c196614377a7a0174ae074a`；32px、**fontWeight=100**、1920×1080、wrapWidth=1800、纯白填充。200 字来自 `文字排版中文首帧ABC2026` 重复后截取；逐字 `y=sin(time+index)*5`。
+
+字体文件 fvar 只有 wght 轴，min/default/max=100/100/900（独立审查直接解析实际 SFNT 核实）。旧 FontFace 的 family 不再被误当 fullName 精确别名而强制400，descriptor 与作者样式均100；新 HB 读取同一字节、空轴使用默认100，字体声明也显式100。**最初 3.00/4.90ms 对 5.70/8.10ms 的配对把旧侧400与新侧100混在一起，作废，不作为通过证据。**
+
+同一 Worker，每对时间相同；相邻样本换先后顺序，5 对预热、30 对计量，首帧另记。文字阶段逐帧计算为“录制（含作者 draw、指纹比对）+表面准备（含边界分析、栅格、上传）”，再求分位数；作者 draw/栅格/上传是内部子项，不能重复相加，也不能相加各项 P95。每帧必须恰好出现一次录制与一次表面准备，缺阶段拒收。计时仅由专项 esbuild 插桩，正式源文件不改，插入点不唯一则构建失败。该文字阶段不含后续合成/GPU等待；完整请求帧另外报告，不称为完整播放器帧率。
+
+| 分支 / 指标（ms） | P50 | P95 | max |
+|---|---:|---:|---:|
+| 1.2.0 文字阶段 | 7.50 | 10.20 | 11.10 |
+| **API8 文字阶段** | **3.80** | **6.50** | **6.80** |
+| 1.2.0 完整请求帧 | 23.00 | 26.50 | 28.20 |
+| API8 完整请求帧 | 9.70 | 12.10 | 13.70 |
+| API8 作者 draw（录制内） | 2.20 | 3.60 | 3.90 |
+| API8 录制整体 | 2.30 | 3.70 | 4.10 |
+| API8 表面准备整体 | 1.40 | 2.50 | 3.10 |
+| API8 栅格（表面准备内） | 0.90 | 1.70 | 2.00 |
+| API8 上传（表面准备内） | 0.20 | 0.50 | 0.50 |
+
+相对差为 **−3.70ms**，满足“不比1.x慢1ms以上”；但 **6.50ms > 6ms**，绝对门槛失败，专项退出1。两侧30帧纹理复用均0，首帧墨迹通道数旧126,321、新106,344。耗时主要在作者提交/录制和轮廓栅格；未用分项P95相加推断总耗时，也未把某个循环认定为已证实的单一热点。最终修正夹具的运行停在 pose，不继续静态或其余矩阵，不重跑以挑选更低结果。此前静态2.90ms仅为被替换夹具的数据，不计为最终静态验收。
+
+### 外观失败及同源排查
+
+在纠正字重前的矩阵运行中另发现：API8 的20/200/1000字描边+阴影首帧全部为零墨迹。最初脚本只在分辨率循环末尾退出，导致失败后仍跑了其余1080p规模和推近；这是本轮实验脚本缺陷，已按独立审查修为首次失败立即保存证据并返回，作废其空白帧的性能数据，不将其作为有效矩阵通过证据。
+
+针对停止行为的复测 `worker-matrix-stopped-report.json` 只有6个场景：20字静态/位姿/外观各两版；旧版外观截图墨迹通道数 **41,859**，API8 **0**，在API8外观热帧计量前停止。两张截图已目视核查：旧版有白字、橙色描边，新版全黑。该复测保留当时旧400/新100的夹具，仅用于空白缺陷与停止行为，不作为性能配对；最后的同字重配对门槛失败后没有再推进矩阵。
+
+根因已由主代理和独立审查分别核实：
+
+- `shapedText.ts` 的外观分支调用 `drawTextAppearance`；`videoEditAuthorCanvasRecorder.ts:350–352` 将其记录为 `textAppearance` 延迟绘制操作。
+- `videoEditAuthorCanvasBounds.ts:241–316` 的 switch 没有处理该操作，default直接跳过，导致仅含外观文字时 `painted/bounds=null`。
+- `videoEditAuthorRuntime.ts:376–381` 将 null 解释为空内容，提前退出，未到栅格/上传；失败报告中录制182次、表面准备181次、空表面1次与这条链一致。
+- 实际检查范围为外观生成、录制与回放、共享内容边界、静止层组和运动层路径。纯轮廓 fill/stroke 路径不会忽略操作，已有实帧非空；运动层按显式bounds分配，不走此空内容退出。混合外观文字与其他已知范围绘制的静止组还存在裁剪范围漏计风险（代码推断，未新增GPU场景验证）。直接回放曾通过不能覆盖正式Worker的边界裁剪。不是“外观缓存命中所以零耗时”。
+
+按“哪一步门槛不过就停在那一步回报”保留产品根因未修复，不把本轮实验脚本修复写成产品修复。完整4K/推近密度与落定、播放跳帧/合成p90、描边生长/three挤出、回退与彩色格式、表格tnum均未验收。
+
+### 验证、审查与证据
+
+- 用户指定的显式4文件 `verify:changed -- --level L2` 通过：`shapedText.test.ts`、`videoEditAuthorCanvasRecorder.test.ts`、`videoEditAuthorCanvasBounds.test.ts` 共 **21测试**。本次只改脚本，入口未选择业务工程tsc；不能写成双工程类型检查通过。最后的字重夹具修正经Node语法、实际专项构建及真实Worker配对执行验证，未重复与其无关的CPU套件。
+- `check:persistence-compat` **64格式通过**；`check:assistant-capabilities` 结构检查、15项覆盖、31文件 **237项不变量通过**；`check:skill-sync` **5技能25共享文件通过**；`node scripts/check-text-layout-vendor.cjs --check` 字节/许可/反向补丁/7模块零Canvas可达图通过。四脚本Node语法、实际esbuild及`git diff --check`通过。
+- 相关实际GPU证据为正式Worker配对及外观失败复现：**均按失败门槛退出1**，不能报“GPU验收通过”。没有扩跑无关 `test:gpu` 或完整Reality/生产应用验收。
+- 独立审查 **3轮**：首轮3项重要问题（失败未立即停止、画布扩容漏计、推近空白漏检）和1项计时覆盖小问题均修复；第二轮增量通过并确认产品空白根因；自审发现字重不匹配后，第三轮确认同SFNT同默认轴100，无新增重要问题。外观产品问题属于本轮发现的既有问题，按停止要求未修。
+- 新建默认仍 `CODE_AUTHOR_DEFAULT_API_VERSION=7`；`henji-layout/2.0.0` 未冻结，技能未改，故未进入Claude新能力措辞把关。node_modules与FFmpeg联接点未删除/改动，未运行npm install/ci/uninstall；未动9334、真实资料、D:/视频制作，主工作区只追加获准的本result。
+
+最终证据在本工作树 `.tmp/text-layout-acceptance/`，不提交字体、截图、profile或临时产物；Electron44.9.3 / Chromium152.0.7977.167：
+
+| 文件 | SHA-256 |
+|---|---|
+| worker-paired-weight-matched-report.json（最终有效配对，失败） | `783bb0806363b10d7a144eee40d20d44c420de7e73b7831a2866cbf7a1d3e5e6` |
+| worker-matrix-stopped-report.json（外观空白与立即停止） | `5fe4d1476962a46406a4024b666067caa6b7155516787505c671bd971934e00a` |
+
+复现第一步（预期退出1；不执行后续矩阵）：
+
+```powershell
+node scripts/prepare-text-layout-acceptance.ts --worker
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.html --phase frames --out .tmp/text-layout-acceptance/worker-paired-weight-matched-report.json
+```
+
+本轮交付为可复现的配对/停止专项与失败证据，**不是ticket10完成**。本地提交 `823943658`，未push；本分支代码工作区干净。
