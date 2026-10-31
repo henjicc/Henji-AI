@@ -203,3 +203,72 @@ node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/index.ht
 后续先决定是否继续扩展Pretext适配或按裁定评估CanvasKit，再处理失败根因并重跑1–3；之后补齐4–8完整生产实验。所有门槛通过后才完成冻结资源生成、2.0.0登记、新建默认API8和新能力用法技能同步。当前未改这些默认/发行状态。
 
 末次共享检查：`check:assistant-capabilities` 退出0，结构/15项覆盖与237项不变量通过；`check:persistence-compat` 64格式通过。未修改技能。上游未修改Pretext tarball的SHA-512已与登记source.json完整一致。最终本工作树干净，HEAD `5e4c9bd21`，仍在 `task/10-文字排版`，未推送。
+
+## 2026-11-01 按新裁定修复后的前置门复验（未达标，停止发行推进）
+
+**结论：未完成 ticket 10。** 最终断点 **195/200**（同环境未改 Pretext **197/200**），未达 ≥198；非 emoji、扣除 P022/P027 后 **172/179** 的误差 ≤1/64，仍有 7 例超限。按本轮“哪一步门槛不过就停在那一步”停在实验 1–3 的前置断点/几何门；不继续实验 4–8，不冻结 2.0.0，不改新建默认 API7，不改作者技能。没有自行改用 CanvasKit，也没有扩大接受差异的名单。
+
+### 已落地修复与复验边界
+
+- P019：tab 的八空格停靠、最小推进与字距按所在 run 字体/字号/字重计算，walker 与输出几何使用同一来源；tab/CR/LF 不参与 cmap 缺字选脸，避免 Noto Sans JP 为 tab 返回非零 glyph 后劫持停靠字体。最终作者、DOM、上游宽度均 **299.28125px**，误差 **0**。
+- U017：Pretext 机会对齐完整原文字素，保留 `a🏿` 与 `👶‍🛑` 的完整边界；合并后含组合符的空白段按文字处理，防止把后续 B 当悬挂空白。固定样本断点通过，误差 **0.003257751px**，不再抛“断行只能发生在完整字素边界”。
+- U009/U010：未显式支持的书写系统走基础整形并输出 `inferred-script`，不拒绝整个段落。Unicode Script 分类使用运行时 Unicode 正则；不同脚本不合并成一次猜测，Node 22 不认识的新 alias 通过特性检测跳过。本机 Bali 字形仍缺失，保留 `missing-glyph`，两例断点通过，误差分别 **0.008468628/0.008464813px**，不能解释为已支持 Bali 字形。
+- Windows 候选表按 [Chromium 152 官方 font_fallback_win.cc](https://raw.githubusercontent.com/chromium/chromium/152.0.7977.167/third_party/blink/renderer/platform/fonts/win/font_fallback_win.cc) 补齐常见脚本，包括 Segoe UI Emoji/Symbol/Historic、Nirmala、各 CJK、Malgun/Javanese 等。Script 短名来自 [Unicode 17 PropertyValueAliases](https://www.unicode.org/Public/17.0.0/ucd/PropertyValueAliases.txt)，没有自写 Unicode 码点分类算法。候选表覆盖不等于完全复现 Chromium/DirectWrite 的字形级回退。
+- U018/U019：emoji 呈现优先系统 emoji 脸；无整簇覆盖时保留能覆盖主体的脸，并明确报告缺字。U018 不再因组合符把整簇换成 Symbol 或首字体方框，现选 **Segoe UI Emoji**；断点通过，几何仍差 **18.424484253px**，原因和限制见下表。U019 的 VS16 选脸修复后误差 **0.005210876px**。
+- 实验读取器移除“任何未知系统字体都映射到 TicketLatin/TicketCJK”的替身；用现有 `standaloneFont/parseFontFile` 提取本机真实 SFNT、识别 family aliases，缺失候选返回缺失。DOM 与未改 Pretext 共用显式候选字符串。注册 FontFace 只用于实验对照，不进入生产新排版路径。
+- 实验门禁接受 P022/P027 的预期排版差异，但执行异常仍阻断；前置门失败即返回，不继续运行后面的绘制性能诊断。未修改固定 200 例、宽度、文本或误差容限。
+
+### 固定样本最终数据与差异清单
+
+最终报告：`D:/VibeCode/Henji-AI-t10/.tmp/text-layout-acceptance/verified-11-01-report.json`，SHA-256 **`98698df775264831e72d1d51c6728f81794d1f7f9993f0f494a8c0be6b10910d`**。固定 fixture SHA-256 仍为 **`56d23edddb7e0376639e800257c9170a321a8b88f51f0a53de1059f01596da4e`**。Electron **44.9.3** / Chromium **152.0.7977.167** / DPR **1.5** / zh-CN，独立临时 profile、随机 localhost 端口。各字体实际 family、别名、字节数与 SFNT hash 全部在报告 `environment.fonts`；逐簇作者选脸在 `cases[].selection`。未分发本机字体。
+
+- 原始断点：**195/200**；失败 P018、P022、P027、U004、U007。扣除接受项后仍有 **3** 例失败，且低于同一环境未改 Pretext 的 **197/200**（其失败为 P018/P022/P027）。上轮上游 194/200 使用旧回退实验读取器，不能把环境变化后的 197 与它当作同条件性能提升。
+- 原始几何：**186/200**；非 emoji 且扣除接受项后 **172/179**，最大有限误差 **15px**。不是把 emoji 差异加大容限后算进通过。
+- W−1/64、W、W+1/64 共 **600** 条：断点 **585/600**，原始几何 **558/600**；新门槛下有 **27** 条阻断记录。固定样本及临界样本的执行异常均 **0**。
+
+| ID | 最终差异/数据 | 裁定与原因边界 |
+|---|---|---|
+| P022 | 21px 软连字符应急断行，作者/上游与 DOM 行数不同 | **接受**；照 11-01 裁定保留输入和差异，不再追此极窄情形 |
+| P027 | 1px 宽时作者/上游多出空白独占行 | **接受**；照裁定保留，不豁免异常 |
+| P018 | 作者首行原文 end=25、135px；DOM end=23、120px；未改 Pretext end=29、135px | **阻断**；替代对象符已用 Arial 补齐，但跨 run 软连字符退回策略仍不一致；上游也不一致，精确退回策略尚未解决 |
+| P011/P012/P013 | 均 **0.018230438px**，断点一致 | **阻断**；富文本跨字重及软连字符的原始 HB 推进与 DOM Range 结果仍超 1/64。量化/fragment 累计是待定位方向，尚无证据把它归为可接受 AA 误差 |
+| P021 | **4.911458969px**，断点一致 | **阻断**；软连字符位于空白前，DOM 行尾可见连字符，作者/上游该行推进未计入它；不属于已接受的 P022 宽度 |
+| P025 | **4.908854485px**，断点一致 | **阻断**；同上，窄行的可见连字符差异，未扩大接受名单 |
+| P038 | **0.020996094px**，断点一致 | **阻断**；跨字号、字重与 tracking 的富文本推进累计仍超限，尚未完成精确量化归因 |
+| U003 | **18.067707062px**，断点一致；Segoe UI Emoji 的 `❗̈` 报缺字 | 差异保留：为保留 emoji 主体而整簇留在 emoji 脸，U+0308 无覆盖；与浏览器组合符回退的推进不同 |
+| U004 | **15.845703125px**，断点不一致 | **阻断**；同一 `❗̈` 的缺字推进扩大，加入空格后改变断点，不以“emoji 差异”豁免断点门槛 |
+| U007 | 行数不同，几何误差记 null | **阻断**；`❗̈§` 组合，同一整簇单脸缺字推进改变断点 |
+| U008 | **18.065753937px**，断点一致 | 差异保留；同上，空格改变分行但此例断点一致 |
+| U009/U010 | Bali 字形缺失，但断点/几何通过；各有缺字与基础整形诊断 | 未宣称 Bali 完整支持。无可用候选时显示缺字结果，不抛错；已有字体的其他书写系统不会被并入同一次 script 猜测 |
+| U018 | 作者 emoji 簇 **91.0546875px**，DOM **109.479171753px**，差 **18.424484253px**；断点一致 | 选脸已修为 Segoe UI Emoji；该非标准修饰符/音标/ZWJ 序列仍有 U+0308 缺字，整簇单脸整形与 DOM 拆分回退/序列整形不同。未取得 DOM 的逐 glyph 实际字体追踪，不能声称已定位每个 DOM glyph 的精确字体 |
+| P039 | Malgun Gothic，误差 **0**，无缺字诊断 | 韩文回退样本通过 |
+| U020 | SimSun-ExtB + Segoe UI Emoji，误差 **0.002609253px**，无缺字诊断 | 扩展汉字回退样本通过；不外推整个字体覆盖范围 |
+
+### 实验 3–8 与停止点
+
+- 实验 3：最终门禁在断点/几何阶段停止，**未完成 DOM 标点 1×/4×墨迹叠图**。诊断阶段的 `final-11-01-drawing.png` 已打开，能看到黑色轮廓文字；同阶段静态/逐字落定与录制重放差异通道均 0。该图只证明局部绘制有效，不能作为最终实验 3 达标证据。
+- 实验 4：未运行真实 Worker 大字体/冷准备/首帧/内存/关闭专项。
+- 实验 5：最终运行未进入性能段；早期脚本附带的 Canvas 诊断数据不是完整生产上传/合成，**不作 ≤4ms 验收**。
+- 实验 6：未运行描边生长、three 挤出专项。
+- 实验 7：只取得上表 Windows 固定样本的选脸与推进证据；macOS、AAT、位图/彩色格式及同快照各入口像素矩阵未验。
+- 实验 8：未运行 DOM 逐格 tnum/窄列叠图。
+- 不运行 Reality；未运行 `test:gpu` 全套或无关合成精度专项来替代本票失败门槛。2.0.0 冻结目录不存在，新建常量 `CODE_AUTHOR_DEFAULT_API_VERSION` 仍为 **7**。
+
+### 验证、审查与提交边界
+
+- 本轮改共享排版核心，按 testing.md **L2**；显式 8 文件的 `verify:changed` 通过：6 个直接消费者测试文件 **36 项**、改动文件 ESLint、renderer/electron 两套增量 tsc。Node **22.12.0** 另跑 shaping/textPlan 的 **28 项**通过，用于复验 Unicode 16 运行时导入兼容性。Node 脚本语法检查、实际 esbuild、独立 Electron 执行及 `git diff --check` 已完成；Electron 退出 **1** 是保留失败门槛，不称通过。
+- `check:persistence-compat`：**64 种格式通过**。`node scripts/check-text-layout-vendor.cjs --check`：字节/许可/反向补丁及 7 模块无 Canvas 可达图通过。
+- `check:assistant-capabilities`：退出 **0**；结构检查、**15 项**覆盖及 **31 文件/237 项**业务不变量通过。没有把该检查替代排版实验或 GPU 验收。
+- `check:skill-sync`：**失败**，导入现有巡检依赖时找不到 `native/video-decoder/ffmpeg/ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-shared-9.0/bin/ffmpeg.exe`；本轮未改技能，也未安装 FFmpeg、修改依赖或绕过该检查。
+- 独立提交前审查 **3 轮**：第 1 轮修复“空白组合符被整段标为空白”和“不同未知脚本被合并”；第 2 轮修复“Node 22 不识别 Unicode 17 正则导致模块导入失败”和“接受项的执行异常被豁免”；第 3 轮增量审查无新重要/小问题。
+- 同源排查覆盖：普通/富文本/tab/最小推进/字距/控制符字体归属、正常/应急完整字素边界与固有宽度、跨未分类脚本的上下文、emoji 与 VS 选脸、字体链及别名/缺失、作者 layoutText/table 消费者、字体通道/快照准备、实验异常门禁。表中已修和仍失败项分别列出；没有宣称所有排版、所有字体或生产 GPU 路径已修好。
+- 始终在 `D:/VibeCode/Henji-AI-t10` 的 `task/10-文字排版`，起点 `5e4c9bd21`；未切分支、合并、推送或拉取。node_modules 仍为原联接点，未执行 install/ci/uninstall，package/锁文件未改；未触碰 9334、界面、真实资料或 `D:/视频制作`，主工作区仅更新获准的本 result 文件。
+- 最终本地提交 **`63e7bf2c5 fix(text-layout): 修正字素边界、制表位与字体回退`**，8 个代码/实验文件；代码工作区干净。result 位于获准的共享 tickets/10 目录，未混入本分支提交。**未推送、未合并**。
+
+精确复现最终数据（保留固定 cases，不重新抽样）：
+
+```powershell
+node scripts/prepare-text-layout-acceptance.ts
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/index.html --out .tmp/text-layout-acceptance/verified-11-01-report.json
+npm run verify:changed -- --level L2 --test src/core/imaging/vectorContent/shaping/shaping.test.ts --test src/core/imaging/vectorContent/shaping/textPlan.test.ts --test src/core/imaging/vectorContent/shaping/fontChannel.test.ts --test src/features/videoEdit/authorLibraries/shapedText.test.ts --test src/features/videoEdit/engine/videoEditAuthorTextResources.test.ts --test src/platform/textFontSnapshot.test.ts scripts/prepare-text-layout-acceptance.ts scripts/text-layout-acceptance-browser.ts scripts/run-text-layout-dom.cjs src/core/imaging/vectorContent/shaping/fontSession.ts src/core/imaging/vectorContent/shaping/paragraph.ts src/core/imaging/vectorContent/shaping/runs.ts src/core/imaging/vectorContent/shaping/shaping.test.ts src/core/imaging/vectorContent/shaping/textPlan.ts
+```
