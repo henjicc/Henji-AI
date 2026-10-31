@@ -122,7 +122,7 @@ it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有�
   expect(texture.destroy).not.toHaveBeenCalled()
   expect(bitmap.close).toHaveBeenCalledOnce()
 })
-it('代码视频输入不占上传图片的预算：四扇4K高精度录屏同屏可以合成，视频画面超过2GiB才拒绝', async () => {
+it('代码视频输入不占上传图片的预算：四扇4K高精度录屏同屏可以合成，浮点代码画面不重复施加固定字节拒绝', async () => {
   const { compositor, device } = copyFixture(async () => {})
   vi.stubGlobal('OffscreenCanvas', class {
     constructor(public width: number, public height: number) {}
@@ -138,7 +138,7 @@ it('代码视频输入不占上传图片的预算：四扇4K高精度录屏同�
   const other = copyFixture(async () => {})
   const many = Array.from({ length: 29 }, () => new VideoEditCodePicture(texture, 3840, 2462, other.device, 'rgba16float'))
   try {
-    await expect(other.compositor.prepareImages(new Map(many.map((picture, index) => [`win${index}`, picture])), () => true)).rejects.toThrow('2GiB')
+    expect((await other.compositor.prepareImages(new Map(many.map((picture, index) => [`win${index}`, picture])), () => true)).size).toBe(many.length)
   } finally { await other.compositor.dispose() }
 })
 it('输入画面保持原节目画布黑底，普通嵌套目标仍保留透明背景', async () => {

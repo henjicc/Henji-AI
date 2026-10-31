@@ -8,12 +8,16 @@ const bounds = { x: -20, y: -10, width: 40, height: 20 }
 const layer: AuthorLayer = { draw() {}, bounds: [-20, -10, 20, 10], pose: t => ({ x: 100 + t * 1000, y: 200 }) }
 
 describe('direct author layer GPU bridge', () => {
+  it('中心缩放为零但曝光邻帧可见时，无模糊仍给出有限边距', () => {
+    for (const blur of [undefined, 0]) expect(authorLayerBlur({ scale: 0, blur }, 2, undefined)).toEqual({ radius: 0, pad: 2 })
+  })
   it('keeps in-focus raster dimensions stable at the reference defocus thresholds', () => {
-    expect(authorLayerBlur({ scale: 4, blur: .24 }, 4, undefined)).toEqual({ radius: 0, pad: 2 })
-    expect(authorLayerBlur({ scale: 4, blur: .49 }, 4, 'lens').radius).toBe(0)
-    expect(authorLayerBlur({ scale: 4, blur: .5 }, 4, 'lens').radius).toBe(.5)
-    expect(authorLayerBlur({ scale: 2, blur: .12 }, 4, undefined).radius).toBe(0)
-    expect(authorLayerBlur({ scale: 2, blur: .125 }, 4, undefined).radius).toBe(.25)
+    for (const rasterScale of [.25, 1, 2, 4]) {
+      expect(authorLayerBlur({ scale: 2, blur: .49 }, rasterScale, undefined)).toEqual({ radius: 0, pad: 2 })
+      expect(authorLayerBlur({ scale: 2, blur: .5 }, rasterScale, undefined).radius).toBe(.25 * rasterScale)
+      expect(authorLayerBlur({ scale: 2, blur: .99 }, rasterScale, 'lens').radius).toBe(0)
+      expect(authorLayerBlur({ scale: 2, blur: 1 }, rasterScale, 'lens').radius).toBe(.5 * rasterScale)
+    }
   })
   it('keeps the raster size from in focus through a typical defocus ramp so cached layers are reused', () => {
     for (const [shape, blurs] of [['lens', [0, .6, 3, 7, 13]], ['gaussian', [0, .3, 2, 5]]] as const) {

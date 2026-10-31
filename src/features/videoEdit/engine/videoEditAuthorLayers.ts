@@ -13,9 +13,10 @@ const DEFOCUS_PAD = 16
 /** Subpixel defocus must not change raster dimensions or mip sampling. */
 export function authorLayerBlur(pose: AuthorPose | null | undefined, rasterScale: number, shape: AuthorLayer['blurShape']): { radius: number; pad: number } {
   const scale = Math.max(Math.abs(pose?.scaleX ?? pose?.scale ?? 1), Math.abs(pose?.scaleY ?? pose?.scale ?? 1))
-  const radius = (pose?.blur ?? 0) > 0 ? (pose!.blur! / scale) * rasterScale : 0
+  const referenceRadius = (pose?.blur ?? 0) > 0 ? pose!.blur! / scale : 0
   const lens = shape === 'lens'
-  if (radius < (lens ? .5 : .25)) return { radius: 0, pad: 2 + (shape ? DEFOCUS_PAD : 0) }
+  if (referenceRadius < (lens ? .5 : .25)) return { radius: 0, pad: 2 + (shape ? DEFOCUS_PAD : 0) }
+  const radius = referenceRadius * rasterScale
   return { radius, pad: 2 + Math.max(DEFOCUS_PAD, 2 ** Math.ceil(Math.log2(Math.ceil(radius * (lens ? 1.15 : 3))))) }
 }
 

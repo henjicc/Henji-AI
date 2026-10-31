@@ -1,4 +1,5 @@
 import { videoEditRenderFailure, installVideoEditWorkerErrorReporting } from './videoEditGpuFailure'
+import { setVideoEditCodeGpuErrorObserver } from './videoEditCodeGpu'
 import { VideoEditCodeFingerprint } from './videoEditCodeFingerprint'
 import { enableVideoEditFrameTrace, traceVideoEditFrame } from './videoEditFrameTrace'
 import { VideoEditSharedCompilation, type SharedCompilationResponse } from './videoEditSharedCompilation'
@@ -151,6 +152,7 @@ const log = (level: RenderLogMessage['level'], message: string, event: string, c
   if (event === 'video_edit.decode.preopen.skipped') { if (context.reason === 'budget') lookaheadStats.budgetSkipped++; else lookaheadStats.foregroundSkipped++ }
   self.postMessage({ kind: 'log', level, message, event, context } satisfies RenderLogMessage) }
 setVideoEditMaskTimingObserver(context => log('debug', '遮罩栅格化', 'video_edit.mask.raster.completed', context))
+setVideoEditCodeGpuErrorObserver(message => log('warn', '代码 GPU 执行失败', 'video_edit.code_gpu.failed', { message }))
 /** The renderer's decoding: the browser backend, plus native decoding when the frame channel is attached. */
 function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFrames {
   setProxies(decode?.proxies)

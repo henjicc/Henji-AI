@@ -1,3 +1,4 @@
+import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
@@ -54,7 +55,7 @@ function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditT
  * playback resolution (task 4.9): code filters then still read the sequence size (a `1/width` offset stays the same
  * fraction of the picture) and built-in effects learn the scale for the few amounts that cannot shrink below a pixel.
  */
-export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document, target?: VideoEditCodePicture, onEffectError?: (effect: VideoEditEffect, error: unknown) => void, quality: EffectQuality = 'interactive', readFilterFrames?: VideoEditFilterFrameReader): Promise<{ presented: boolean; completion: Promise<void> }> {
+export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document, target?: VideoEditCodePicture | ((pictures: readonly VideoEditPicture[]) => Promise<VideoEditCodePicture>), onEffectError?: (effect: VideoEditEffect, error: unknown) => void, quality: EffectQuality = 'interactive', readFilterFrames?: VideoEditFilterFrameReader): Promise<{ presented: boolean; completion: Promise<void> }> {
   const renderScale = document.height / logical.height
   let runtime: VideoEditCodeGpu | undefined
   const submissions: Array<Promise<PromiseSettledResult<void>>> = []
@@ -62,9 +63,8 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
   const current = (): void => { if (!shouldPresent()) throw new DOMException('旧合成画面已取消。', 'AbortError') }
   const gpu = async (): Promise<VideoEditCodeGpu> => { current(); runtime ??= await compositor.code(); current(); return runtime }
   const normalize = async (clip: VideoEditClip, layers: readonly Layer[]): Promise<VideoEditCodePicture> => {
-    // High-precision layers (10-bit and deeper material) are normalized into an rgba16float surface, so effects and
-    // transitions built on them keep their precision (task 2.7).
-    const format = layers.some(layer => videoEditPictureHighPrecision(layer.picture)) ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
+    // 整链需求必须在首个效果前归并，避免前置逐像素效果先写进八位目标。
+    const format = layers.some(layer => videoEditPictureHighPrecision(layer.picture)) || clip.effectsEnabled !== false && (effects.get(clip.id) ?? []).some(plan => plan.effect.enabled && plan.effect.amount > 0 && plan.builtin && videoEditEffectNeedsFloat(plan.builtin, { width: document.width, height: document.height, quality, renderScale, referenceSize: logical })) ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
     const target = await (await gpu()).target(slot(clip, 0), document.width, document.height, format); current()
     const result = await compositor.draw(document, layers.map(layer => layer.clip), layers.map(layer => layer.picture), shouldPresent, undefined, target)
     watch(result.completion)
@@ -148,7 +148,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     return layers
   }
   const layers = await resolve(nodes); current()
-  const result = await compositor.draw(document, layers.map(layer => layer.clip), layers.map(layer => layer.picture), shouldPresent, deadline, target)
+  const result = await compositor.draw(document, layers.map(layer => layer.clip), layers.map(layer => layer.picture), shouldPresent, deadline, typeof target === 'function' ? await target(layers.map(layer => layer.picture)) : target)
   watch(result.completion)
   return { presented: result.presented, completion: Promise.all(submissions).then(results => { const failed = results.find(value => value.status === 'rejected'); if (failed?.status === 'rejected') throw failed.reason }) }
 }

@@ -274,6 +274,20 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     const failure = new Error('离屏提交失败'); const rejection = expect(result.completion).rejects.toBe(failure)
     reject(failure); await rejection
   })
+  it('后置发光在首项效果前提升归一化目标，关闭效果后回到八位', async () => {
+    const owner = clip('chain')
+    const first = { effect: plan('first', [1, 0, 0, 1], owner, 0).effect, builtin: { id: 'brightness_contrast', params: { brightness: 2 } } }
+    const glow = { effect: plan('glow', [0, 0, 0, 0], owner, 0).effect, builtin: { id: 'glow', params: { strength: 30 } } }
+    owner.effects = [first.effect, glow.effect]
+    const document = composition([owner]), nodes = buildVideoEditCompositePlan(document.clips)
+    const boundary = pixels(document, videoEditCompositeSurfaceKeys(nodes))
+    const pictures = new Map([[owner.id, boundary.picture('source', [.2, .2, .2, 1])]])
+    for (const enabled of [true, false, true]) {
+      glow.effect.enabled = enabled
+      await (await renderVideoEditCompositeScene(document, nodes, pictures, new Map([[owner.id, [first, glow]]]), boundary.compositor, 0, () => true)).completion
+      expect(boundary.formats.get('composite:clip:chain:0')).toBe(enabled ? 'rgba16float' : 'rgba8unorm')
+    }
+  })
   it('高精度画面的转场端点归一化到 rgba16float 目标，八位端点目标格式不变', async () => {
     const left = clip('left', 2, { duration: 60 }); const right = clip('right', 2, { start: 60, duration: 60 })
     const document = composition([left, right])

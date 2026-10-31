@@ -199,12 +199,12 @@ describe('代码GPU会话复用与资源边界', () => {
 
 
 
-  it('高精度目标有独立的512MiB上限，不挤占八位512MiB预算', async () => {
+  it('高精度目标超过历史预算仍可分配，按真实字节回收', async () => {
     const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
     for (let index = 0; index < 8; index++) await runtime.target(`deep-${index}`, 3840, 2160, 'rgba16float')
-    await expect(runtime.target('deep-8', 3840, 2160, 'rgba16float')).rejects.toThrow('512MiB')
+    await runtime.target('deep-8', 3840, 2160, 'rgba16float')
     for (let index = 0; index < 7; index++) await runtime.target(`plain-${index}`, 3840, 2160)
-    expect(runtime.diagnostics().surfaces).toBe(15)
+    expect(runtime.diagnostics().surfaces).toBe(16)
     runtime.releaseUnused(new Set(Array.from({ length: 7 }, (_, index) => [`plain-${index}`, `deep-${index + 1}`]).flat()))
     await runtime.target('deep-8', 3840, 2160, 'rgba16float')
     expect(runtime.diagnostics()).toMatchObject({ surfaces: 15, residentBytes: 3840 * 2160 * (8 * 8 + 4 * 7) })
@@ -297,3 +297,39 @@ it('关闭等待迟到图片管线校验，迟到结果不分配目标或持有�
     expect(runtime.diagnostics()).toMatchObject({ residentBytes: 0, surfaces: 0, pipelines: 0, pipelineCompiles: 2 })
     expect(destroy).not.toHaveBeenCalled()
   })
+
+it('作者层超过软预算不驱逐独立字形缓存，绘制层纹理无需 storage usage', async () => {
+  mockTextCanvas()
+  const { device } = gpu(), runtime = new VideoEditCodeGpu(device)
+  const create = vi.spyOn(device, 'createTexture')
+  try {
+    const layer = runtime.effectAllocator.allocate(8192, 8192, 'rgba16float')
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ usage: 0x01 | 0x02 | 0x04 | 0x10 }))
+    const plain = runtime.effectAllocator.allocate(8192, 8192, 'rgba8unorm')
+    const extra = runtime.effectAllocator.allocate(8192, 8192, 'rgba8unorm')
+    await runtime.draw('clip', 16, 16, [textDraw('甲')])
+    await runtime.draw('clip', 16, 16, [textDraw('乙')])
+    await runtime.draw('clip', 16, 16, [textDraw('甲')])
+    expect(runtime.diagnostics()).toMatchObject({ glyphs: 2, externalCopies: 2 })
+    for (const texture of [layer, plain, extra]) runtime.effectAllocator.release(texture)
+  } finally { await runtime.dispose(); vi.unstubAllGlobals() }
+  expect(runtime.diagnostics().residentBytes).toBe(0)
+})
+
+
+it('字形字节累计在逐出和上传失败后归还，恢复后不会过量逐出', async () => {
+  mockTextCanvas()
+  const { device } = gpu(), runtime = new VideoEditCodeGpu(device)
+  const measure = vi.spyOn(glyphMetrics, 'measureVideoEditGlyph').mockReturnValue({ width: 4096, height: 8192, font: '32px sans-serif', offsetX: 0 })
+  try {
+    for (const name of ['a', 'b', 'c', 'd']) await runtime.draw('clip', 16, 16, [textDraw(name)])
+    vi.mocked(device.queue.copyExternalImageToTexture).mockImplementationOnce(() => { throw new Error('上传失败') })
+    await expect(runtime.draw('clip', 16, 16, [textDraw('e')])).rejects.toThrow('上传失败')
+    expect(runtime.diagnostics().glyphs).toBe(3)
+    await runtime.draw('clip', 16, 16, [textDraw('e')])
+    const copies = runtime.diagnostics().externalCopies
+    await runtime.draw('clip', 16, 16, ['b', 'c', 'd', 'e'].map(textDraw))
+    expect(runtime.diagnostics()).toMatchObject({ glyphs: 4, externalCopies: copies, residentBytes: 16 * 16 * 4 + 512 * 1024 ** 2 })
+  } finally { measure.mockRestore(); await runtime.dispose(); vi.unstubAllGlobals() }
+  expect(runtime.diagnostics().residentBytes).toBe(0)
+})

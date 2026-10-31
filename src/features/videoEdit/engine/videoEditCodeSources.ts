@@ -458,15 +458,18 @@ export class VideoEditCodeSources {
         for (const bitmap of this.spilledPictures) bitmap.close()
         this.spilledPictures.clear()
         const resident = this.targetPictures
-        const capacity = Math.min(...plans.map(plan => this.runtime?.generatorTargetCapacity?.(plan.context.width, plan.context.height) ?? Infinity))
+        const capacity = Math.min(...plans.map(plan => this.runtime?.generatorTargetCapacity?.(plan.context.width, plan.context.height, (this.targetPictures.get(plan.key) as VideoEditCodePicture | undefined)?.textureFormat) ?? Infinity))
         for (const plan of plans) {
           assertCurrent()
           let picture = plan.static ? this.staticPictures.get(plan.key) : undefined
           if (picture) result.cacheHits++
           else {
             while (resident.size >= capacity && this.runtime?.spillGeneratorTarget) {
-              const [oldKey, oldPicture] = resident.entries().next().value!
+              const candidate = [...resident].find(([, picture]) => !('highPrecision' in picture && picture.highPrecision))
+              if (!candidate) break
+              const [oldKey, oldPicture] = candidate
               const bitmap = await this.runtime.spillGeneratorTarget(oldKey)
+              if (!bitmap) break
               this.spilledPictures.add(bitmap); resident.delete(oldKey); this.staticPictures.delete(oldKey)
               for (const [id, value] of result.pictures) if (value === oldPicture) result.pictures.set(id, bitmap)
               assertCurrent()

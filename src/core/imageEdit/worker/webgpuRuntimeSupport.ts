@@ -8,6 +8,7 @@ const BUFFER_COPY_DST = 0x08
 const BUFFER_UNIFORM = 0x40
 
 export interface GpuTexture {
+  readonly format?: string
   createView(): unknown
   destroy(): void
 }

@@ -34,7 +34,7 @@ import { mixVideoEditRetimedSound, type VideoEditRetimedSoundRequest } from './v
 import { mixVideoEditStretchedSound, VideoEditTimeStretcher } from './videoEditTimeStretch'
 import { videoEditRenderedFrameInterpolation } from '@/core/videoEdit/timeRemap'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
-import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
+import { VideoEditGpuCompositor, type VideoEditPicture } from './videoEditGpuCompositor'
 import { VideoEditFrameCache, type CachedVideoEditFrame } from './videoEditFrameCache'
 import { videoEditNativeFailureKind } from './videoEditNativeFailure'
 import { planAudioEffectBlock, AudioEffectChain } from '@/core/audio/effects/audioEffectChain'
@@ -42,7 +42,7 @@ import { videoEditAudioMixer, videoEditPanGains, type VideoEditAudioMixer } from
 
 /** 一次混音里用到的解码源、效果链与拉伸器（用完后据此回收没用到的）。 */
 interface AudioMixSets { activeAudio: Set<string>; activeChains: Set<string>; activeStretchers: Set<string> }
-import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
+import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma, videoEditPictureHighPrecision } from './videoEditGpuFrame'
 import type { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
@@ -1402,7 +1402,6 @@ export class VideoEditRenderer {
   }
   private checkInputBudget(context: NestedFrameContext): void {
     const available = VIDEO_EDIT_INPUT_BUDGET_BYTES - context.bytes
-    if (available < 0) throw new Error('当前视频输入与嵌套画面超过显存预算，请减少同时读取的画面。')
     this.webOwner.webInputs?.checkBudget(context, available)
   }
   /** 每个滤镜前缀持有独立目标，递归取相邻帧时不能覆盖当前输入。 */
@@ -2211,16 +2210,20 @@ export class VideoEditRenderer {
     const decodeMs = performance.now() - decodeStart
     const gpuStart = performance.now()
     let result: { presented: boolean; completion: Promise<void> }
-    let nestedPicture = nestedRender ? await (await gpu.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, nestedRender.format ?? 'rgba16float') : undefined
-    // Code media inputs previously captured the opaque program canvas. Preserve
-    // its black letterbox rather than leaking the parent's backdrop through it.
-    if (nestedPicture && nestedRender?.opaqueBackground) nestedPicture = new VideoEditCodePicture(nestedPicture.texture, nestedPicture.width, nestedPicture.height, nestedPicture.owner, nestedPicture.textureFormat, true)
+    let nestedPicture: VideoEditCodePicture | undefined
+    const nestedTarget = nestedRender ? async (inputs: readonly VideoEditPicture[]): Promise<VideoEditCodePicture> => {
+      // 请求格式是最低精度；相邻帧须等自身效果链完成后决定实际输出。
+      const format = nestedRender.format !== 'rgba8unorm' || inputs.some(videoEditPictureHighPrecision) ? 'rgba16float' : 'rgba8unorm'
+      const picture = await (await gpu.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, format)
+      nestedPicture = nestedRender.opaqueBackground ? new VideoEditCodePicture(picture.texture, picture.width, picture.height, picture.owner, picture.textureFormat, true) : picture
+      return nestedPicture
+    } : undefined
     try {
       const drawn = this.drawDocument(document)
       const effects = preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map<string, PreparedVideoEditEffect[]>()
       await this.disposeCodeInputs(new Set([...effects].flatMap(([id, chain]) => chain.flatMap(plan => !plan.builtin && plan.program.frames.length ? [JSON.stringify([id, plan.effect.id])] : []))), this.filterInputs)
-      const draw = (): Promise<{ presented: boolean; completion: Promise<void> }> => composite ? renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), effects, gpu, frame, canPresent, deadline, document, nestedPicture, onEffectError, quality,
-        (clip, plan, input) => this.readFilterFrames(document, clip, plan, input, frame, quality, canPresent, nestedContext, path, sourceDocument, markApproximate)) : gpu.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
+      const draw = async (): Promise<{ presented: boolean; completion: Promise<void> }> => composite ? renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), effects, gpu, frame, canPresent, deadline, document, nestedTarget, onEffectError, quality,
+        (clip, plan, input) => this.readFilterFrames(document, clip, plan, input, frame, quality, canPresent, nestedContext, path, sourceDocument, markApproximate)) : gpu.draw(drawn, active, pictures, canPresent, deadline, await nestedTarget?.(pictures))
       result = nestedRender ? await draw() : await this.exclusiveDraw(draw, frame, cachedWindow ? 'prerendered' : 'live', !approximatePictures, requestOrder)
     } catch (error) {
       if (canPresent()) throw error

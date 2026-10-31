@@ -7,7 +7,7 @@ import { VideoSample } from 'mediabunny'
 import { rasterizeVideoEditText, videoEditTextResolution, type VideoEditTextRaster } from './videoEditTextSurface'
 import { defaultVideoEditTextStyle, scaleVideoEditTextStyle } from '@/core/videoEdit/text'
 import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
-import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_FRAME_BLEND_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
+import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_FRAME_BLEND_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader, videoEditFloatCodeLayerShader } from './videoEditGpuShaders'
 import { isVideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
@@ -18,7 +18,7 @@ import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceMana
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { VideoEditCodePicture } from './videoEditCodePicture'
-import { VIDEO_EDIT_CODE_PICTURE_BUDGET_BYTES, VIDEO_EDIT_CODE_PICTURE_BUDGET_LABEL, VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
+import { VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
 import { loadAuthorModule, type AuthorFrameInfo, type AuthorParameters, type AuthorWebFrame } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
@@ -56,6 +56,7 @@ export class VideoEditGpuCompositor {
   private readonly inputBitmaps = new Set<ImageBitmap>()
   private inputGeneration = 0
   private readonly authorAssets = new Map<string, Record<string, ImageBitmap>>()
+  private authorFloatPresentation?: GpuRenderPipeline
   private authorPresentation?: GpuRenderPipeline
   private authorTarget?: { texture: GpuTexture; width: number; height: number }
 
@@ -114,9 +115,15 @@ export class VideoEditGpuCompositor {
     this.device.pushErrorScope('validation')
     try {
       await runtime.render(this.authorTarget.texture, width, height, params, this.authorAssets.get(url) ?? {}, info, options?.overrides)
-      const encoder = this.device.createCommandEncoder(), pipeline = this.authorPresentation
+      const rendered = runtime.outputTexture ?? this.authorTarget.texture
+      const precise = rendered.format === VIDEO_EDIT_PRECISE_FORMAT
+      if (precise && !this.authorFloatPresentation) {
+        const module = this.device.createShaderModule({ code: VIDEO_EDIT_PRESENT_SHADER })
+        this.authorFloatPresentation = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: this.canvasFormat }] }, primitive: { topology: 'triangle-list' } })
+      }
+      const encoder = this.device.createCommandEncoder(), pipeline = precise ? this.authorFloatPresentation! : this.authorPresentation
       const pass = encoder.beginRenderPass({ colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store' }] })
-      pass.setPipeline(pipeline); pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: this.authorTarget.texture.createView() }] }))
+      pass.setPipeline(pipeline); pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: rendered.createView() }] }))
       pass.draw(3); pass.end(); this.device.queue.submit([encoder.finish()])
       await this.device.queue.onSubmittedWorkDone()
     } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
@@ -141,7 +148,7 @@ export class VideoEditGpuCompositor {
   private precise?: { texture: GpuTexture; width: number; height: number }
   /** 运动模糊的累积图与相加混合管线（第一次用到运动模糊时才建）。 */
   private motionTarget?: { texture: GpuTexture; width: number; height: number }
-  private motionAdditive?: Promise<LayerPipelines>
+  private readonly motionAdditive = new Map<boolean, Promise<LayerPipelines>>()
   private readonly precision = { snapshots: 0, frames: 0 }
   private sampler: unknown
   private readonly uniforms = new Map<string, GpuBuffer>()
@@ -210,9 +217,9 @@ export class VideoEditGpuCompositor {
   }
   /** Nested layers must belong to this device so the parent can sample them without readback or 8-bit quantization. */
   fork(canvas: OffscreenCanvas, capturePresentation?: () => VideoEditPresentationCapture | undefined): VideoEditGpuCompositor { return new VideoEditGpuCompositor(canvas, this, capturePresentation) }
-  private layerPipelines(format: string, create?: undefined, mode?: 'over' | 'add'): LayerPipelines
+  private layerPipelines(format: string, create?: undefined, mode?: 'over' | 'add', floatCode?: boolean): LayerPipelines
   private layerPipelines(format: string, create: (descriptor: unknown) => Promise<GpuRenderPipeline>): { [K in keyof LayerPipelines]: Promise<GpuRenderPipeline> }
-  private layerPipelines(format: string, create: (descriptor: unknown) => GpuRenderPipeline | Promise<GpuRenderPipeline> = descriptor => this.device.createRenderPipeline(descriptor), mode: 'over' | 'add' = 'over'): { [K in keyof LayerPipelines]: GpuRenderPipeline | Promise<GpuRenderPipeline> } {
+  private layerPipelines(format: string, create: (descriptor: unknown) => GpuRenderPipeline | Promise<GpuRenderPipeline> = descriptor => this.device.createRenderPipeline(descriptor), mode: 'over' | 'add' = 'over', floatCode = format === VIDEO_EDIT_PRECISE_FORMAT): { [K in keyof LayerPipelines]: GpuRenderPipeline | Promise<GpuRenderPipeline> } {
     // over：预乘 alpha 的“盖在上面”；add：运动模糊累积时把各次取样直接相加。
     const factor = mode === 'add' ? 'one' : 'one-minus-src-alpha'
     const blend = { color: { srcFactor: 'one', dstFactor: factor }, alpha: { srcFactor: 'one', dstFactor: factor } }
@@ -220,7 +227,7 @@ export class VideoEditGpuCompositor {
       const shader = this.device.createShaderModule({ code })
       return create({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend }] }, primitive: { topology: 'triangle-list' } })
     }
-    const video = pipeline(videoEditLayerShader(true)); const image = pipeline(videoEditLayerShader(false)); const codeImage = pipeline(videoEditLayerShader(false, true))
+    const video = pipeline(videoEditLayerShader(true)); const image = pipeline(videoEditLayerShader(false)); const codeImage = pipeline(floatCode ? videoEditFloatCodeLayerShader() : videoEditLayerShader(false, true))
     return { video, image, codeImage, cachedVideo: pipeline(VIDEO_EDIT_CACHED_YUV_SHADER) }
   }
   private async compiled<T>(build: () => T, failure: string): Promise<T> {
@@ -241,9 +248,10 @@ export class VideoEditGpuCompositor {
    * 运动模糊的累积：rgba16float 离屏图（按序列尺寸复用）与相加混合的图层管线。多次取样按 1/N 不透明度相加，
    * 半浮点精度下平均不会出现 8 位量化的色带。
    */
-  private motionResources(width: number, height: number): Promise<{ target: GpuTexture; additive: LayerPipelines }> {
-    this.motionAdditive ??= this.compiled(() => this.layerPipelines(VIDEO_EDIT_PRECISE_FORMAT, undefined, 'add'), '运动模糊合成管线初始化失败')
-    return this.motionAdditive.then(additive => {
+  private motionResources(width: number, height: number, floatCode: boolean): Promise<{ target: GpuTexture; additive: LayerPipelines }> {
+    let pending = this.motionAdditive.get(floatCode)
+    if (!pending) { pending = this.compiled(() => this.layerPipelines(VIDEO_EDIT_PRECISE_FORMAT, undefined, 'add', floatCode), '运动模糊合成管线初始化失败'); this.motionAdditive.set(floatCode, pending) }
+    return pending.then(additive => {
       if (!this.motionTarget || this.motionTarget.width !== width || this.motionTarget.height !== height) {
         this.motionTarget?.texture.destroy()
         this.motionTarget = { texture: this.device.createTexture({ size: [width, height], format: VIDEO_EDIT_PRECISE_FORMAT, usage: 0x10 | 0x04 }), width, height }
@@ -502,15 +510,13 @@ export class VideoEditGpuCompositor {
     await this.ready
     if (!shouldPresent() || this.disposed) throw new DOMException('图片画面已取消。', 'AbortError')
     this.assertDevice()
-    // Uploaded images and text layers share the upload budget. Code video inputs are decoder pictures already resident
-    // on this device (borrowed, never uploaded): they get their own budget, so a collage of several 4K recordings fits.
+    // 图片与文字需要上传；代码画面借用设备上的现有纹理，不重复计入上传预算。
     const unique = new Set(pictures.values())
-    let uploadBytes = 0, pictureBytes = 0
+    let uploadBytes = 0, uploadCount = 0
     for (const image of unique) {
-      if (image instanceof VideoEditCodePicture) pictureBytes += image.width * image.height * (image.highPrecision ? 8 : 4)
-      else uploadBytes += image.width * image.height * 4
+      if (!(image instanceof VideoEditCodePicture)) { uploadBytes += image.width * image.height * 4; uploadCount++ }
     }
-    if (unique.size + visibleText.size > 32 || uploadBytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > VIDEO_EDIT_IMAGE_BUDGET_BYTES || pictureBytes > VIDEO_EDIT_CODE_PICTURE_BUDGET_BYTES) throw new Error(`可见图片与文字超过32份或${VIDEO_EDIT_IMAGE_BUDGET_LABEL}预算（视频画面另有${VIDEO_EDIT_CODE_PICTURE_BUDGET_LABEL}），请减少同时显示的素材。`)
+    if (uploadCount + visibleText.size > 32 || uploadBytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > VIDEO_EDIT_IMAGE_BUDGET_BYTES) throw new Error(`可见图片与文字超过32份或${VIDEO_EDIT_IMAGE_BUDGET_LABEL}预算，请减少同时显示的素材。`)
     for (const image of unique) if (image instanceof VideoEditCodePicture && image.owner !== this.device) throw new Error('视频输入画面不属于当前GPU设备。')
     this.protectedImages = new Set([...unique].filter((image): image is ImageBitmap => !(image instanceof VideoEditCodePicture)).map(image => this.imageKey(image)).concat([...visibleText].map(id => `text:${id}`)))
     this.protectedUniforms = new Set(visibleClips)
@@ -573,7 +579,7 @@ export class VideoEditGpuCompositor {
       this.codeRuntime?.assertPictureLive(target)
       if (target.owner !== this.device || pictures.some(picture => picture instanceof VideoEditCodePicture && picture.texture === target.texture)) throw new Error('离屏合成输入输出不能跨设备或引用同一纹理。')
     }
-    const motion = clips.some(clip => (clip as VideoEditMotionSampledClip).motionSamples?.length) ? await this.motionResources(document.width, document.height) : undefined
+    const motion = clips.some(clip => (clip as VideoEditMotionSampledClip).motionSamples?.length) ? await this.motionResources(document.width, document.height, target?.highPrecision ?? highPrecision) : undefined
     if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
     const device = this.device
     const frames: VideoFrame[] = []

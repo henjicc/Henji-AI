@@ -40,6 +40,14 @@ export function videoEditLayerShader(external: boolean, premultiplied = false): 
 }`
 }
 
+/** 只有声明产光的代码画面允许超出覆盖率；所有输入仍保留非负下限。 */
+export function videoEditFloatCodeLayerShader(): string {
+  return videoEditLayerShader(false, true).replace(
+    'clamp(c.rgb, vec3f(0), vec3f(select(c.a, 1.0, p.alignment == 1.0))) * p.opacity',
+    'select(clamp(c.rgb, vec3f(0), vec3f(c.a)), max(c.rgb, vec3f(0)), p.alignment == 1.0) * p.opacity',
+  )
+}
+
 /** A compact 8-bit 4:2:0 owned picture (full luma plane + half chroma plane, BT.709). */
 export const VIDEO_EDIT_CACHED_YUV_SHADER = VIDEO_EDIT_LAYER_VERTEX + `
 @group(0) @binding(0) var y: texture_2d<f32>;

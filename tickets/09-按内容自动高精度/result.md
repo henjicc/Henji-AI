@@ -258,3 +258,148 @@ A/A 三层动态墙钟 p95 也有 +16.348ms，往返 +5.030ms，证明相同实�
 - 未运行 Reality、构建、性能基准、push、pull/rebase 或分支切换；未操作 9334 开发实例，未接触 `D:/视频制作`，未改 main 或主工作区其他文件。
 
 > 逐帧原始数据（benchmark-resume-paired/aa/diagnostic.json）与基线源码副本较大，移到本机忽略目录 `.tmp/t09-evidence/`，不进仓库。
+
+
+## 审查修复 1
+
+摘要：按 review.md「实现交叉审查」裁定处理 10 条。代码与非 GPU 验证完成；GPU 用例已补充，因用户正在训练模型，**全部待显卡恢复后跑**。本轮未运行 GPU、vgpu/Dawn、FFmpeg、NVENC、Electron、Reality 或性能基准。
+提交：`a5cc39635a193ef20ed7304a3c34ba959c9a21d8`（`fix(video-edit): 修复内容高精度合成审查问题`），分支 `task/09-按内容自动高精度`，19 个代码/测试文件；提交后任务 worktree 干净。仅本地提交，未推送、未合并、未切分支；此 result.md 位于用户指定的外部 ticket 目录。
+
+### 逐条处理
+
+| 条目 | 处理与证据 |
+| --- | --- |
+| 1 浮点钳制 | 浮点代码画面仅 `carriesLight` 为真时放开上限；非产光输入保留 `[0,a]`，所有输入保留零下限。保持普通后处理的标记隔离。新增 GPU 用例覆盖负值、非产光超覆盖率、产光超白和运动累积；待跑。 |
+| 2 判否帧资源与顺序 | 字形按自身纹理占用淘汰，不被作者层预算驱逐；普通作者层与效果 scratch 不申请 STORAGE_BINDING，原生 WebGPU 作者目标按既有契约保留 storage 能力。八位帧的运动累积选择原 shader 模块，浮点帧另缓存管线。clear 时序及效果闲置纹理多留一帧按裁定保留。预算、字形缓存及原生覆盖目标的非 GPU 测试通过。 |
+| 3 闲置格式与异常清理 | 帧边界清理保留键的闲置格式，涵盖普通目标和嵌套目标；分配失败也释放 alternates，尺寸切换和关闭不重复释放。生命周期精确单测通过。 |
+| 4 作者滤镜错误作用域 | 原审查将本条写在第 2 条内：删除每帧新增的跨 await push/popErrorScope；既有异常携带实际目标格式及 target.format 指引。并发完成/失败归属及下一次恢复测试通过。 |
+| 5 相邻帧精度 | 嵌套输出延迟到自身效果链完成后分配，取请求格式与实际输出格式的较高者；源画面或前序滤镜升档均不会被当前帧八位输入强制降档。相邻帧精确测试通过，包含超白值读回的 CPU 边界替身。 |
+| 6 历史相关阈值 | 模糊像素阈值用参考序列尺寸；pose.blur 用栅格倍率 1 的序列单位判定，层栈与作者效果共享本帧判定。纯函数及直接绘制/liveLayers/回放倍率测试通过。实际栅格倍率随历史变化属于原有问题，按裁定记录、不改。 |
+| 7 shaders 边界 | 不改实现；`shaderGraphSession.ts` 框架内部出口仍为 bgra8unorm，属于已知 8 位边界；外侧接 16f 不能恢复已丢精度。bitmapOf/BitmapBridge 仍为既有 8 位边界。 |
+| 8 指纹断言 | 删除 shader 文本和像素 SHA 断言；保留深位素材与嵌套的像素 toEqual、八位往返前后 toEqual。 |
+| 9 预算断言与基准 | 删除无效的 peak>0，改为独立分配器驻留字节与宿主账目相等、完整释放归零，保留热帧分配稳定性检查。依赖未入库基线的 benchmark 测试从仓库及 GPU 清单移除，脚本和可用历史 JSON 副本保留在本 worktree `.tmp/t09-evidence/`，不作门禁。 |
+| 10 历史无关回归 | 非 GPU 用例覆盖新实例在触发帧与已有实例选择相同格式，及直接绘制/liveLayers 与回放倍率的阈值。新增 GPU 用例比较静止分组、粘性直接绘制槽、liveLayers 的新旧实例格式和像素；待跑。该 GPU 夹具固定上传栅格像素，正式执行作者调度、效果和合成，不替代真实 Canvas 栅格验收；live 场景固定相同栅格倍率，避免把第 6 条已裁定不修的既有差异混进断言。 |
+
+### 非 GPU 验证
+
+- 精确 Vitest 12 文件、309 项通过（合并有效证据）：`videoEditRenderPrecision`、`videoEditCodeGpu`、`videoEditAuthorGpuLifecycle`、`videoEditAuthorRuntime`、`videoEditFilterFrames`、`videoEditCompositeScene`、`videoEditGpuCompositor`、`videoEditAuthorEffects`、`videoEditCodeSources`、`videoEditRenderer`、`videoEditAuthorRuntimeResolution`、`videoEditAuthorGpu`，均位于 `src/features/videoEdit/engine/`，扩展名 `.test.ts`。使用 `npx vitest run --mode unit <上述显式文件> --silent`，没有收集或执行任何 `.gpu.test.ts`。
+- 首次合并运行 305 项通过、4 项失败：分辨率测试的替身仍要求旧 `begin(target)`。同步为当前 `begin()` / `clear()` / 延迟目标 / draw 返回值后，单独重跑该文件 5 项全部通过；没有放宽像素断言。日志：本 worktree `.tmp/t09-review-unit-final.log`、`.tmp/t09-review-resolution.log`。
+- `node --test scripts/lib/testSuites.test.cjs`：7 项通过；仅静态验证清单归属，不初始化 GPU。日志 `.tmp/t09-review-test-suites.log`。
+- 本轮全部修改 TS 文件 ESLint 通过；最后新增的替身与类型修正增量再次通过。使用 `--report-unused-disable-directives --max-warnings 0`，日志 `.tmp/t09-review-lint.log`、`.tmp/t09-review-lint-incremental.log`。
+- 渲染层 `NODE_OPTIONS=--max-old-space-size=8192`，`npx tsc -p tsconfig.json --noEmit --tsBuildInfoFile .tmp/tsc-renderer-review.tsbuildinfo`：通过、退出码 0；始终只有一个 tsc 进程。首次发现测试参数的联合类型与类型导入问题，修正后复验通过。日志 `.tmp/t09-review-tsc-final.log`。
+- 导入相关专项 `npm run check:dependency-graph` 通过；`git diff --check` 通过。日志 `.tmp/t09-review-dependencies.log`。验证级别按 testing.md 的 L2（共享渲染链、异步资源生命周期）；没有升级到全量测试或构建。
+
+### 待显卡恢复后跑
+
+在 `D:/VibeCode/Henji-AI-t09` 执行：
+
+```powershell
+npm run test:gpu -- src/features/videoEdit/engine/videoEditContentPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditGpuPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts
+```
+
+覆盖本轮浮点钳制、历史状态像素一致性、八位运动及往返、原有深位素材/嵌套、图层效果与释放账目。**本轮尚未执行，不能据本轮宣称 GPU 像素或设备验证通过。** 本机基准依赖历史基线副本，已从门禁移除；本轮不复测性能，不变更此前性能裁定。真实窗口预览/预渲染/导出同质量端到端矩阵继续保留为未验证边界。
+
+### 审查与操作范围
+
+- 独立上下文只读审查 1 轮，最终无重要问题。最初“所有后处理应继承产光标记”的疑虑经现有契约、源码与测试核对后撤回，未据此改变普通后处理隔离语义。
+- 同源检查范围：浮点与八位合成、运动累积、作者生成/滤镜/预热/原生覆盖、普通与嵌套纹理回收、相邻帧源及前序效果、字形两种缓存入口、作者栈与效果链判定。已修复项见逐条表；检查范围内未发现其他有证据的新缺陷；GPU 和真实 Canvas 结论仍待验证。
+- 仅修改指定任务分支代码和此 ticket 的 result.md；未改界面、已登记持久格式或作者 API。node_modules 联接点仍指向 `D:/VibeCode/Henji-AI/node_modules`，未删除、重装；缓存与临时证据均在本 worktree `.tmp`。未操作 main、主工作区其他路径或 `D:/视频制作`。
+
+## 审查修复 2
+
+摘要：按 review.md 末尾「复审」裁定修复 A（重要）、B/C（小）。代码与非 GPU 验证完成；新增 GPU 回归用例已写好，全部待显卡恢复后运行。
+提交：`bd039cbba12e2054d2841d15c6af39afc8a68f46`（`fix(video-edit): 修复高精度目标复用与异步滤镜错误`），在 `a5cc39635` 后追加；分支 `task/09-按内容自动高精度`。8 个代码/测试文件，提交后任务工作区干净；未推送、未合并、未切分支。
+
+### A/B/C 处理
+
+- **A**：普通目标和嵌套目标的每档纹理记录最后使用帧，边界仅释放上一帧未用到的闲置档；连续「先八位、再升浮点」帧复用两档。键真正离开时完整释放，尺寸变化与分配失败的既有清理保持覆盖。非 GPU 测试覆盖热循环零分配、仅用一档后回收另一档、键离开后的完整释放；新增「背景层 + 发光标题」真实 GPU 热循环用例待跑。
+- **B**：设备共享一个 `uncapturederror` 监听，把原文（含格式）经已有 Worker `kind: log` 通道送入正式日志。只有一个在途作者滤镜时，错误按原有效果通道归属并携带目标格式和 `target.format` 指引；多个在途滤镜只记日志。返回前已知失败抛出，由合成场景回退原输入；返回后的事件异步报告，过期帧不再上报。沿用提交完成屏障保留归属，不增加逐滤镜 GPU 等待，不跨 await 开错误作用域。最后一个宿主关闭后移除监听。新增原生滤镜八位管线与浮点目标不匹配、按目标格式修正后恢复的 GPU 用例待跑。
+- **C**：预算测试中的零驻留断言移出 finally，宿主 dispose 放入独立 finally；前序断言失败时仍会释放宿主，正常清理后再断言零驻留。
+
+### 非 GPU 验证
+
+按 testing.md 的 L2（共享渲染链与异步资源生命周期）执行精确测试、所属工程 tsc；新增日志装配导入另跑依赖图检查，没有升级全量、构建或设备验收。
+
+```powershell
+npx vitest run --mode unit src/features/videoEdit/engine/videoEditAuthorGpuLifecycle.test.ts src/features/videoEdit/engine/videoEditCodeGpu.test.ts src/features/videoEdit/engine/videoEditCompositeScene.test.ts src/features/videoEdit/engine/videoEditCodeSources.test.ts src/features/videoEdit/engine/videoEditWorker.test.ts --silent
+npx eslint src/features/videoEdit/engine/videoEditCodeGpu.ts src/features/videoEdit/engine/videoEditAuthorGpuLifecycle.test.ts src/features/videoEdit/engine/videoEditCompositeScene.ts src/features/videoEdit/engine/videoEditCompositeScene.test.ts src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts src/features/videoEdit/engine/videoEditContentPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditWorker.ts src/features/videoEdit/engine/videoEditWorker.test.ts --report-unused-disable-directives --max-warnings 0
+$env:NODE_OPTIONS='--max-old-space-size=8192'
+npx tsc -p tsconfig.json --noEmit --tsBuildInfoFile .tmp/tsc-renderer-review2.tsbuildinfo
+npm run check:dependency-graph
+```
+
+- 精确 Vitest **5 文件、124 项通过**，日志 `.tmp/t09-review2-unit-final.log`。Worker 测试的纯类型修正后单独复验 33 项通过，日志 `.tmp/t09-review2-worker-final.log`。
+- 8 个修改的 TS 文件 ESLint 通过；Worker 测试类型修正后增量 lint 也通过。日志 `.tmp/t09-review2-lint-final.log`。
+- 渲染层 tsc 通过，退出码 0，日志 `.tmp/t09-review2-tsc-final.log`；始终只有一个 tsc 进程。过程中发现并修正 GPU 夹具 effects 应为函数、当前 Vitest 版本 vi.fn 泛型应为参数元组两处类型错误。
+- 依赖图通过，日志 `.tmp/t09-review2-dependencies-final.log`；暂存区 `git diff --cached --check` 通过，暂存清单精确匹配本次 8 文件。
+- 初次单测有一个异步测试未等待提交完成回调退出便断言归属清空；修为等待该边界，后续精确验证通过，没有放宽行为断言。
+
+### 待显卡恢复后跑
+
+在 `D:/VibeCode/Henji-AI-t09` 执行，涵盖上一轮待跑用例与本轮新增回归：
+
+```powershell
+npm run test:gpu -- src/features/videoEdit/engine/videoEditContentPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditGpuPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts
+```
+
+本轮**没有执行或收集任何 `.gpu.test.ts`**；ESLint 与 tsc 仅静态检查这些文件。真实设备异步事件时序、GPU 热帧分配与像素行为仍待验证，不能据非 GPU 替身测试宣称设备验收通过。此前真实窗口预览/预渲染/导出端到端未验证边界继续保留。本轮未运行 GPU/vgpu/Dawn、基准、Electron/开发版或 Reality。
+
+### 审查与同源范围
+
+- 独立上下文只读审查 **2 轮**。首轮发现 2 个重要问题：Worker 直接日志器无法落盘、返回前捕获的设备错误仍采用失败输出；均已修复并补测试。第二轮仅复审增量，未发现新问题。
+- 同源排查覆盖普通/嵌套纹理切换与回收、尺寸变化/分配失败/关闭、共享设备多宿主监听生命周期、单滤镜/并发/迟到错误、合成错误回退及既有 Worker 日志转发。A/B/C 已修复；上述检查范围内未发现其他有证据的同源缺陷；真实 GPU 与窗口路径仍待跑。
+- 设备事件语义查阅 [WebGPU 官方规范](https://www.w3.org/TR/webgpu/#uncaptured-errors)；本次未启动 VGPU，也未引入新日志文件、IPC 或查询通道。
+- 只改指定任务分支和本 ticket 的 result.md；未改持久格式、作者 API 或界面。`node_modules` 联接点仍指向 `D:/VibeCode/Henji-AI/node_modules`，未删除、重装。未操作 main、主工作区其他文件或 `D:/视频制作`。
+
+
+## 审查修复 3
+
+摘要：按 review.md 末尾「/code-review」第 4 轮裁定完成最后一轮修补。撤掉设备异步错误归属机制，设备事件只记正式日志；其余 4–10 项已处理。代码与非 GPU 验证完成，GPU 用例已更新、待显卡恢复后运行。
+提交：`11d92619c17456bd521721ed622101b0b0e541eb`（`fix(video-edit): 撤除设备错误归属并修复精度资源恢复`），在 `bd039cbba` 后追加；分支 `task/09-按内容自动高精度`。21 个代码/测试文件，提交后任务工作区干净；未推送、未合并、未切分支。
+
+### 裁定逐项处理
+
+| 项目 | 本轮结果 |
+|---|---|
+| 1–3 设备错误归属 | 删除在途滤镜集合、单滤镜归属、迟到回调、设备事件引发的抛错/跳过及新增 catch 包装；保留原始异常实例（含 AbortError、CodeMaterialError）。共享设备监听只发送错误原文，经既有 Worker 日志通道落正式日志；最后一个宿主关闭时移除监听。已用执行前/期间/之后、并发与多宿主生命周期替身验证。 |
+| 4 管线准备与重试 | 层栈开始前传入实际初始格式，浮点输入的 motion/mip 在绘制前异步准备；失败 Promise 从缓存移除，编译完成且验证成功才发布整组管线。拒绝与验证失败均可重试，测试验证绘制时无需同步编译。 |
+| 5 分配失败 | CodeGpu.surface 先取得候选纹理再切换所有权，失败保留当前及备用档。普通/嵌套键覆盖换格式、换尺寸、恢复与关闭。沿同源所有者再修作者栅格、原生覆盖目标、升档目标三处先释放后分配的问题；新增回到旧尺寸复用测试。 |
+| 6 判定上下文 | 精度判定的 referenceSize、renderScale 及画面尺寸必传；片段高斯使用与实际渲染相同的规划参数，作者层按参考尺寸排除历史栅格倍率影响。覆盖非方形参考画幅、降采样与横/纵高斯判定。 |
+| 7 pose.blur | authorLayerBlur 在参考单位下统一判定门槛，再换算栅格半径；低于门槛不进入效果链，清除效果链重复门槛。保留零缩放、无 blur 的有限零半径，覆盖 direct/live 历史与回放倍率。 |
+| 8 预算残余 | 删除无引用的代码画面预算常量/提示常量与错误归属残余，清理已失效的 preciseBytes 注释，并修正预算用途注释。仍在使用的缓存/前视控制保留。 |
+| 9 纹理类型 | 共享 GpuTexture 声明只读 format，删除相关生产路径及 GPU 测试中的临时交叉类型读取；未改作者 API。 |
+| 10 字形字节 | 普通/样式字形共用累计 glyphBytes，插入/淘汰/关闭维护值，单次淘汰顺序遍历；上传失败不计入。验证多次逐出、失败、恢复后缓存命中与归零。gaussian 每帧重复规划保持裁定不改。 |
+
+作者按 target.format 建管线已明确写在 `resources/assistant-skills/video-edit-code-creation/references/author-shaders.md:15`，无需修改作者契约或文档。设备事件与纹理属性查阅 [WebGPU 官方规范](https://www.w3.org/TR/webgpu/)，未启动 VGPU/Dawn。
+
+### 非 GPU 验证
+
+按 testing.md L2（共享渲染链、资源生命周期和异步重试）选择精确测试与渲染层类型检查；用户显卡暂停约束优先，未运行设备专项或应用。
+
+```powershell
+npx vitest run --mode unit src/features/videoEdit/engine/videoEditAuthorGpu.test.ts src/features/videoEdit/engine/videoEditAuthorGpuLifecycle.test.ts src/features/videoEdit/engine/videoEditAuthorLayers.test.ts src/features/videoEdit/engine/videoEditAuthorRuntime.test.ts src/features/videoEdit/engine/videoEditAuthorRuntimeResolution.test.ts src/features/videoEdit/engine/videoEditAuthorEffects.test.ts src/features/videoEdit/engine/videoEditCodeGpu.test.ts src/features/videoEdit/engine/videoEditCompositeScene.test.ts src/features/videoEdit/engine/videoEditRenderPrecision.test.ts src/features/videoEdit/engine/videoEditWorker.test.ts src/features/videoEdit/engine/videoEditGpuCompositor.test.ts --silent
+$env:NODE_OPTIONS='--max-old-space-size=8192'
+npx tsc -p tsconfig.json --noEmit --tsBuildInfoFile .tmp/tsc-renderer-review3.tsbuildinfo
+```
+
+- 最终精确单测 **11 文件、191 项通过**：`.tmp/t09-review3-unit-final.log`。这些设备边界全部为替身，没有请求显卡。
+- 本次 **21 个 TS 文件**显式文件级 ESLint 通过：`.tmp/t09-review3-lint-final.log`，使用 `--report-unused-disable-directives --max-warnings 0`，无 node_modules 缓存写入。
+- 渲染层 tsc 最终退出码 **0**：`.tmp/t09-review3-tsc-final.log`；使用 8GiB 堆，始终只有一个 tsc 进程。
+- 首轮两项旧断言要求低于 blur 门槛仍执行效果链；改为不调用并复验通过。GPU 夹具缺少 observer 导入及纹理格式类型问题已修正，最终 tsc 通过。
+- 删除的设备归属测试保护了本轮明确撤销的机制，以设备只记日志与原类型传播回归替代。新增测试针对真实失败/恢复边界，不使用源码指纹断言。
+
+### 待显卡恢复后跑
+
+以下是待跑清单，**本轮未执行或收集任何 `.gpu.test.ts`**；ESLint 与 tsc 仅静态检查。
+
+```powershell
+npm run test:gpu -- src/features/videoEdit/engine/videoEditContentPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditGpuPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts
+```
+
+覆盖前两轮待跑的超白与钳制、静止分组/直接绘制/liveLayers 历史、两档目标热帧零分配，以及本轮更新的原生滤镜格式错误只写设备日志、按 target.format 修正后恢复。真实设备异步时序、GPU 像素和热帧分配仍待验证；真实窗口预览/预渲染/导出端到端尚未验证。本轮未运行基准、Electron/开发版或 Reality。
+
+### 审查与边界
+
+- 独立干净上下文审查 **2 轮**（第二轮仅增量）：首轮 1 个重要问题（中心零缩放且无 blur 的 NaN）已修复；同源检查指出的 3 处既有纹理替换失败问题一并修复。增量复核无剩余有证据问题。
+- 实际检查范围：宿主生成/滤镜/预热、层栈开始/升档/编译重试、普通/嵌套纹理与作者三种目标、片段精度判定及合成调用方、共享设备监听与 Worker 日志、普通/样式字形计数。以上修复与检查已完成，真实 GPU/窗口边界明确待跑。
+- 未改持久格式、作者 API、界面或 main；只修改本任务分支文件和本 ticket 的 result.md。node_modules 仍为指向 `D:/VibeCode/Henji-AI/node_modules` 的原联接点，没有删除或重装；临时验证文件仅位于本 worktree `.tmp`。未操作主工作区其他路径或 `D:/视频制作`。

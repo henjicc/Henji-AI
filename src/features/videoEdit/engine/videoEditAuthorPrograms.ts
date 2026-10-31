@@ -80,6 +80,8 @@ export class VideoEditAuthorPrograms {
 
   observe(key: string): ReturnType<VideoEditAuthorRuntime['observeElements']> { return this.instances.get(key)?.runtime.observeElements() ?? [] }
 
+  get canvasBytes(): number { return [...this.instances.values()].reduce((bytes, entry) => bytes + entry.runtime.canvasBytes, 0) }
+
   protect(keys: ReadonlySet<string>): void { this.protectedKeys = new Set(keys) }
 
   retain(keys: ReadonlySet<string>): Promise<void> {

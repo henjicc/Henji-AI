@@ -1,3 +1,4 @@
+import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { resolveAuthorEffects, authorEffectBleed, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
 import { gaussianSupport, type LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
@@ -89,25 +90,37 @@ export class VideoEditAuthorRuntime {
   private webgl?: AuthorWebGL
   private webgpu?: AuthorWebGPU
   private nativeOverrideTarget?: { texture: GpuTexture; width: number; height: number }
+  private promotedTarget?: { texture: GpuTexture; width: number; height: number }
+  private renderedTarget?: GpuTexture
+  get outputTexture(): GpuTexture | undefined { return this.renderedTarget }
   private closed = false
   readonly parameterMetadata: AuthorEffectMetadata
   private lastFrame?: { carriesLight?: boolean; effects?: Map<number, ResolvedAuthorEffect[]>; layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides; directText?: Map<number, TextDrawObservation[]>; textUncovered?: Map<number, string[]>; textLayouts?: Map<string, number | undefined> }
   get carriesLight(): boolean { return this.lastFrame?.carriesLight === true }
   private readonly effectAllocator: VideoEditBuiltinScratchAllocator
-  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, private readonly apiVersion?: number, private readonly effectEnvironment: () => AuthorEffectEnvironment = () => ({}), allocator?: VideoEditBuiltinScratchAllocator) {
+  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, private readonly apiVersion?: number, private readonly effectEnvironment: () => AuthorEffectEnvironment = () => ({}), private readonly allocator?: VideoEditBuiltinScratchAllocator) {
     this.parameterMetadata = authorEffectMetadata(effect, this.apiVersion)
     this.effectAllocator = allocator ?? {
       allocate: (width, height, format, mipLevelCount = 1) => this.texture(width, height, mipLevelCount > 1, format),
       release: texture => { texture.destroy(); this.textures.delete(texture) },
     }
   }
-  private texture(width: number, height: number, mips: boolean, format = 'rgba8unorm'): GpuTexture {
-    const texture = this.device.createTexture({ size: [width, height], mipLevelCount: mips ? 1 + Math.floor(Math.log2(Math.max(width, height))) : 1, format, usage: 0x01 | 0x02 | 0x04 | 0x10 })
+  private texture(width: number, height: number, mips: boolean, format = 'rgba8unorm', storage = false): GpuTexture {
+    const mipLevelCount = mips ? 1 + Math.floor(Math.log2(Math.max(width, height))) : 1
+    const texture = this.allocator ? this.allocator.allocate(width, height, format, mipLevelCount, storage) : this.device.createTexture({ size: [width, height], mipLevelCount, format, usage: 0x01 | 0x02 | 0x04 | 0x10 | (storage ? 0x08 : 0) })
     this.textures.add(texture)
     return texture
   }
+  get canvasBytes(): number {
+    return ([...this.scratchCanvases.values(), ...this.surfaces.flatMap(surface => surface?.canvas ? [surface.canvas] : [])]).reduce((bytes, canvas) => bytes + canvas.width * canvas.height * 4, 0)
+  }
+  private releaseTexture(texture: GpuTexture): void {
+    if (this.allocator) this.allocator.release(texture)
+    else texture.destroy()
+    this.textures.delete(texture)
+  }
   private release(surface: Surface): void {
-    surface.texture.destroy(); this.textures.delete(surface.texture)
+    this.releaseTexture(surface.texture)
     if (surface.canvas) surface.canvas.width = surface.canvas.height = 1
   }
   /**
@@ -117,8 +130,8 @@ export class VideoEditAuthorRuntime {
   private surface(index: number, width: number, height: number, canvas: boolean, mips = canvas): Surface {
     const previous = this.surfaces[index]
     if (previous && previous.width === width && previous.height === height && !!previous.canvas === canvas && !!previous.mips === mips) return previous
+    const surface: Surface = { ...(canvas ? { canvas: new OffscreenCanvas(width, height) } : {}), texture: this.texture(width, height, mips), width, height, mips }
     if (previous) this.release(previous)
-    const surface: Surface = { texture: this.texture(width, height, mips), width, height, mips, ...(canvas ? { canvas: new OffscreenCanvas(width, height) } : {}) }
     this.surfaces[index] = surface
     return surface
   }
@@ -174,13 +187,15 @@ export class VideoEditAuthorRuntime {
    * `output`：`target` 的像素尺寸，缺省等于画布尺寸 `width`×`height`。回放分辨率降低时比画布小：Canvas 图层的作者坐标仍是
    * 画布像素，由宿主按比例缩小栅格与合成；WebGPU / WebGL 入口拿到的 target 与 width/height 是缩小后的像素尺寸。
    */
-  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}): Promise<CodeLayerStatistics | undefined> {
-    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur, output, environment, quality, beforeCommit))
+  render(target: GpuTexture | (() => GpuTexture), width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}, promote?: () => GpuTexture): Promise<CodeLayerStatistics | undefined> {
+    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur, output, environment, quality, beforeCommit, promote))
     this.renders = result.catch(() => undefined)
     return result
   }
-  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}): Promise<CodeLayerStatistics | undefined> {
+  private async renderFrame(initialTarget: GpuTexture | (() => GpuTexture), width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}, promote?: () => GpuTexture): Promise<CodeLayerStatistics | undefined> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
+    this.renderedTarget = undefined
+    const resolveInitialTarget = (): GpuTexture => typeof initialTarget === 'function' ? initialTarget() : initialTarget
     const frameImages: ImageBitmap[] = []
     // 画布像素到 target 像素的比例：完整分辨率与导出为 1，所有路径与原来逐条相同。
     const outWidth = output?.width ?? width, outHeight = output?.height ?? height
@@ -194,12 +209,13 @@ export class VideoEditAuthorRuntime {
       const whole: AuthorLayer = { id: AUTHOR_WHOLE_EFFECT_ID, name: this.effect.name, bounds: [0, 0, width, height], draw() {} }
       if ((this.effect.createWebGPU || this.effect.createWebGL) && overrides && Object.hasOwn(overrides, AUTHOR_WHOLE_EFFECT_ID)) {
         if (!this.nativeOverrideTarget || this.nativeOverrideTarget.width !== outWidth || this.nativeOverrideTarget.height !== outHeight) {
-          if (this.nativeOverrideTarget) { this.nativeOverrideTarget.texture.destroy(); this.textures.delete(this.nativeOverrideTarget.texture) }
-          const texture = this.device.createTexture({ size: [outWidth, outHeight], format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
+          const texture = this.texture(outWidth, outHeight, false, 'rgba8unorm', !!this.effect.createWebGPU)
+          if (this.nativeOverrideTarget) this.releaseTexture(this.nativeOverrideTarget.texture)
           this.textures.add(texture); this.nativeOverrideTarget = { texture, width: outWidth, height: outHeight }
         }
         const picture = this.nativeOverrideTarget.texture
         const statistics = await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur, output)
+        const target = resolveInitialTarget()
         await this.layers.begin(target)
         const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID], motionBlur)
         // 整幅画面按画布像素取样（纹理坐标与纹理尺寸无关），覆盖矩阵仍是画布像素，外面再叠输出比例。
@@ -210,7 +226,7 @@ export class VideoEditAuthorRuntime {
       }
       if (this.effect.createWebGPU) {
         this.webgpu ??= await this.effect.createWebGPU(this.device)
-        await this.webgpu.draw(target, info.time, params, outWidth, outHeight, assets, info, inputs)
+        await this.webgpu.draw(resolveInitialTarget(), info.time, params, outWidth, outHeight, assets, info, inputs)
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return undefined
       }
@@ -228,7 +244,7 @@ export class VideoEditAuthorRuntime {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, outWidth, outHeight)
         gl.disable(gl.SCISSOR_TEST); gl.colorMask(true, true, true, true); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
         this.webgl!.draw(info.time, params, outWidth, outHeight, assets, info)
-        this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: target, premultipliedAlpha: true }, [outWidth, outHeight])
+        this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: resolveInitialTarget(), premultipliedAlpha: true }, [outWidth, outHeight])
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return { reused: 0, redrawn: 0, direct: 0, video: 0, uploads: 1, uploadBytes: outWidth * outHeight * 4 }
       }
@@ -295,6 +311,12 @@ export class VideoEditAuthorRuntime {
           if ((ctx as TextDrawObserverContext)[TEXT_DRAW_OBSERVER]) { (ctx as TextDrawObserverContext)[TEXT_LAYER_CONTEXT]?.(index); return ctx }
           const facts: TextDrawObservation[] = []; directText.set(index, facts)
           return authorCanvasTextContext(ctx, fact => facts.push(fact), reason => { const reasons = textUncovered.get(index) ?? []; if (!reasons.includes(reason)) reasons.push(reason); textUncovered.set(index, reasons) })
+        }
+        let target: GpuTexture | undefined
+        let hasContent = false
+        const stackTarget = (): GpuTexture => {
+          if (!target) { target = resolveInitialTarget(); this.layers.clear(target) }
+          return target
         }
         const used = new Set<number>()
         /**
@@ -395,7 +417,7 @@ export class VideoEditAuthorRuntime {
           }
           statistics.video += video
           // 栅格像素 → 画布像素；输出比例由 scale 叠在外面（完整分辨率时就是 [1,0,0,1,x,y]）。
-          this.layers.draw(target, outWidth, outHeight, { texture: surface.texture, x: 0, y: 0, width: raster.width, height: raster.height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1 / rx, 0, 0, 1 / ry, raster.x / rx, raster.y / ry], opacity: 1 } }], undefined, scale)
+          hasContent = this.layers.draw(stackTarget, outWidth, outHeight, { texture: surface.texture, x: 0, y: 0, width: raster.width, height: raster.height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1 / rx, 0, 0, 1 / ry, raster.x / rx, raster.y / ry], opacity: 1 } }], undefined, scale) || hasContent
         }
         try {
       const listStarted = performance.now()
@@ -445,7 +467,7 @@ export class VideoEditAuthorRuntime {
           await stillGroup(`flat:${members[0].position}:${members.at(-1)!.position + 1}`, members[0].position * 2, members.map(member => ({ painted: member.painted, draw: ctx => drawStill(ctx, member.layer, member.position) })), crop, members.length, video)
         }
       }
-      await this.layers.begin(target)
+      await this.layers.begin(undefined, typeof initialTarget === 'function' ? inputs?.current?.format : initialTarget.format)
       this.layerEffects?.begin(this.layers.commandEncoder())
       for (let index = 0; index < list.length; index++) {
         const id = authorLayerId(list[index], index), override = overrides && Object.hasOwn(overrides, id) ? overrides[id] : undefined
@@ -504,6 +526,7 @@ export class VideoEditAuthorRuntime {
           const reduced = shrink < 1 && !!recorded.painted && contentOf([recorded.painted]).scalable
           const resolution = reduced ? fullResolution * shrink : fullResolution
           const { radius } = authorLayerBlur(center, resolution, layer.blurShape)
+          const needsFloat = authorLayerBlur(center, 1, layer.blurShape).radius > 0 || effects.some(effect => videoEditEffectNeedsFloat(effect, { width, height, referenceSize: { width, height }, renderScale: 1, layer: reference(1) }))
           const pad = padding(resolution)
           if (radius > 0) evaluated.set(index, [...effects, ...resolveAuthorEffects([{ id: layer.blurShape === 'lens' ? 'lens_blur' : 'gaussian_blur', params: { [layer.blurShape === 'lens' ? 'radius_fraction_height' : 'sigma_fraction_height']: radius / resolution / height } }]).map(effect => ({ ...effect, source: 'pose.blur' as const }))])
           const surface = this.surface(index * 2, Math.ceil(bounds.width * resolution) + pad * 2, Math.ceil(bounds.height * resolution) + pad * 2, true)
@@ -525,11 +548,29 @@ export class VideoEditAuthorRuntime {
             this.sourceVersions.set(slot, (this.sourceVersions.get(slot) ?? 0) + 1)
           }
           recordVideoEditPreparation('authorUpload', performance.now() - uploadStarted)
+          if (samples.some(sample => sample.pose && sample.pose.opacity > 0) && target?.format !== 'rgba16float' &&
+            needsFloat) {
+            await this.layers.prepareFormat('rgba16float')
+            let upgraded: GpuTexture
+            if (promote) upgraded = promote()
+            else if (typeof initialTarget !== 'function' && initialTarget.format === 'rgba16float') upgraded = initialTarget
+            else {
+              if (!this.promotedTarget || this.promotedTarget.width !== outWidth || this.promotedTarget.height !== outHeight) {
+                const texture = this.effectAllocator.allocate(outWidth, outHeight, 'rgba16float')
+                if (this.promotedTarget) this.effectAllocator.release(this.promotedTarget.texture)
+                this.promotedTarget = { texture, width: outWidth, height: outHeight }
+              }
+              upgraded = this.promotedTarget.texture
+            }
+            if (hasContent) this.layers.copy(target!, upgraded, outWidth, outHeight)
+            else this.layers.clear(upgraded)
+            target = upgraded
+          }
           let result = { picture: surface.texture, carriesLight: false }
           if (effects.length || radius > 0) {
             if (!this.layerEffects) { this.layerEffects = new VideoEditAuthorEffects(this.device, this.effectAllocator); this.layerEffects.begin(this.layers.commandEncoder()) }
             result = await this.layerEffects.encode(slot, surface.texture, canvas.width, canvas.height, effects, reference(resolution, pad), environment,
-              surface.content ? `${this.sourceVersions.get(slot)}:${surface.content.key}` : undefined, { radius, lens: layer.blurShape === 'lens' }, texture => this.layers.mipmaps(texture, canvas.width, canvas.height))
+              surface.content ? `${this.sourceVersions.get(slot)}:${surface.content.key}` : undefined, { radius, lens: layer.blurShape === 'lens' }, texture => this.layers.mipmaps(texture, canvas.width, canvas.height), needsFloat)
           }
           const poses = samples.map(sample => {
             if (!sample.pose) return sample
@@ -537,16 +578,18 @@ export class VideoEditAuthorRuntime {
             const matrix: CodeMatrix = [m[0] / resolution, m[1] / resolution, m[2] / resolution, m[3] / resolution, m[4] + m[0] * ox + m[2] * oy, m[5] + m[1] * ox + m[3] * oy]
             return { ...sample, pose: { ...sample.pose, matrix } }
           })
-          this.layers.draw(target, outWidth, outHeight, { texture: result.picture, x: 0, y: 0, width: canvas.width, height: canvas.height }, poses, layer.clip, scale)
+          hasContent = this.layers.draw(stackTarget, outWidth, outHeight, { texture: result.picture, x: 0, y: 0, width: canvas.width, height: canvas.height }, poses, layer.clip, scale) || hasContent
           carriesLight ||= (this.apiVersion ?? 7) >= 7 && result.carriesLight
         } catch (cause) {
           if (cause instanceof AuthorAssetPending || cause instanceof Error && cause.name === 'AbortError') throw cause
           throw new Error(`第 ${index + 1} 层${layer.name ? `「${layer.name}」` : ''}：${cause instanceof Error ? cause.message : String(cause)}`, { cause })
         }
       }
+      stackTarget()
       beforeCommit()
       this.layers.finish()
       this.layerEffects?.commit()
+      this.renderedTarget = target
       this.history = history
       this.lastFrame = { carriesLight, effects: evaluated, layers: list, width, height, time: info.time, parameters: params, overrides, directText, textUncovered, textLayouts }
       // Still-group textures follow the grouping: drop the ones no group used this frame.
@@ -585,7 +628,9 @@ export class VideoEditAuthorRuntime {
     if (this.ownsModule) await release(() => this.effect.dispose?.())
     await release(() => this.layerGpu?.dispose())
     await release(() => this.layerEffects?.dispose())
-    for (const texture of this.textures) await release(() => texture.destroy())
+    if (this.promotedTarget) await release(() => this.effectAllocator.release(this.promotedTarget!.texture))
+    this.promotedTarget = undefined; this.renderedTarget = undefined
+    for (const texture of this.textures) await release(() => this.releaseTexture(texture))
     this.textures.clear()
     this.canvasImages.clear(); this.assetChanges.clear(); this.liveLayers.clear(); this.history.clear(); this.combinedRuns.clear()
     for (const surface of this.surfaces) if (surface?.canvas) { const canvas = surface.canvas; await release(() => { canvas.width = canvas.height = 1 }) }

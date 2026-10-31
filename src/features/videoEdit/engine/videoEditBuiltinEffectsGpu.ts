@@ -23,9 +23,9 @@ function half(value: number): number {
 
 interface LayoutDevice { createBindGroupLayout(descriptor: unknown): unknown; createPipelineLayout(descriptor: unknown): unknown }
 /** 中间纹理由宿主分配（计入宿主的显存预算），按尺寸与格式复用。 */
-export interface VideoEditBuiltinScratchAllocator { allocate(width: number, height: number, format: string, mipLevelCount?: number): GpuTexture; release(texture: GpuTexture): void }
+export interface VideoEditBuiltinScratchAllocator { allocate(width: number, height: number, format: string, mipLevelCount?: number, storage?: boolean): GpuTexture; release(texture: GpuTexture): void }
 export interface BuiltinEncodingBatch { encoder: ReturnType<GpuDevice['createCommandEncoder']>; uniformIndex: number; taken: Set<Scratch>; created?: Set<Scratch> }
-interface Scratch { texture: GpuTexture; width: number; height: number; format: string; used: boolean }
+interface Scratch { texture: GpuTexture; width: number; height: number; format: string; used: boolean; idleFrames: number }
 
 /**
  * 内置效果的 GPU 执行器：按 `planVideoEditBuiltinEffect` 的工序逐道绘制，一个效果一次提交。
@@ -89,11 +89,11 @@ export class VideoEditBuiltinEffectsGpu {
       // 尺寸变化时先归还闲置档位，避免新旧分辨率同时占满预算。
       for (let index = this.scratch.length - 1; index >= 0; index--) {
         const idle = this.scratch[index]
-        if (!taken.has(idle) && !idle.used && (idle.width !== width || idle.height !== height || idle.format !== format)) {
+        if (!taken.has(idle) && !idle.used && (idle.width !== width || idle.height !== height)) {
           this.allocator.release(idle.texture); this.scratch.splice(index, 1)
         }
       }
-      entry = { texture: this.allocator.allocate(width, height, format), width, height, format, used: true }; this.scratch.push(entry); created?.add(entry)
+      entry = { texture: this.allocator.allocate(width, height, format), width, height, format, used: true, idleFrames: 0 }; this.scratch.push(entry); created?.add(entry)
     }
     entry.used = true; taken.add(entry)
     return entry
@@ -211,7 +211,8 @@ export class VideoEditBuiltinEffectsGpu {
     this.releaseIdleLookups()
     for (let index = this.scratch.length - 1; index >= 0; index--) {
       const entry = this.scratch[index]
-      if (entry.used) { entry.used = false; continue }
+      if (entry.used) { entry.used = false; entry.idleFrames = 0; continue }
+      if (++entry.idleFrames <= 1) continue
       this.allocator.release(entry.texture); this.scratch.splice(index, 1)
     }
   }

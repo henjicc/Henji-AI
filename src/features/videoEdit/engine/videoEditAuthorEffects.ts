@@ -1,3 +1,4 @@
+import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { authorEffectsFingerprint, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
 import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
@@ -5,7 +6,7 @@ import { planAuthorDefocus, planVideoEditBuiltinEffect, type VideoEditBuiltinPla
 import { VideoEditBuiltinEffectsGpu, type BuiltinEncodingBatch, type VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 
 export interface AuthorEffectOutput { picture: GpuTexture; carriesLight: boolean }
-interface EffectTexture { texture: GpuTexture; width: number; height: number; format: string; mipLevelCount: number }
+interface EffectTexture { texture: GpuTexture; width: number; height: number; format: string; mipLevelCount: number; touched: number }
 interface CachedOutput { key: string; output: AuthorEffectOutput; textures: EffectTexture[] }
 
 /** 每个作者实例持有资源；整帧共用一份编码批次，提交成功才发布缓存。 */
@@ -16,40 +17,42 @@ export class VideoEditAuthorEffects {
   private used = new Set<string>()
   private batch?: BuiltinEncodingBatch
   private spare: EffectTexture[] = []
+  private frame = 0
   private referenced = new Set<GpuTexture>()
   constructor(device: GpuDevice, private readonly allocator: VideoEditBuiltinScratchAllocator) {
     this.gpu = new VideoEditBuiltinEffectsGpu(device, device.createSampler({ minFilter: 'linear', magFilter: 'linear', mipmapFilter: 'linear' }), allocator)
   }
   begin(encoder: BuiltinEncodingBatch['encoder']): void {
-    this.abandon(); this.used.clear(); this.referenced.clear()
+    this.abandon(); this.frame++; this.used.clear(); this.referenced.clear()
     this.batch = { encoder, uniformIndex: 0, taken: new Set(), created: new Set() }
   }
   async encode(slot: string, input: GpuTexture, width: number, height: number, effects: readonly ResolvedAuthorEffect[], context: LayerEffectReference,
-    environment: AuthorEffectEnvironment, contentKey: string | undefined, defocus: { radius: number; lens: boolean }, mipmaps: (texture: GpuTexture) => void): Promise<AuthorEffectOutput> {
+    environment: AuthorEffectEnvironment, contentKey: string | undefined, defocus: { radius: number; lens: boolean }, mipmaps: (texture: GpuTexture) => void, needsFloat = defocus.radius > 0 || effects.some(effect => videoEditEffectNeedsFloat(effect, { width, height, referenceSize: context.referenceSize, renderScale: 1, layer: context }))): Promise<AuthorEffectOutput> {
     if (!this.batch) throw new Error('图层效果尚未开始编码。')
     this.used.add(slot)
-    const key = JSON.stringify([contentKey, width, height, context, authorEffectsFingerprint(effects, environment), defocus])
+    const format = input.format === 'rgba16float' || needsFloat ? 'rgba16float' : 'rgba8unorm'
+    const key = JSON.stringify([format, contentKey, width, height, context, authorEffectsFingerprint(effects, environment), defocus])
     const cached = this.cache.get(slot)
     if (contentKey !== undefined && cached?.key === key) return cached.output
     // 内容键失效即撤销缓存资格；同尺寸像素可以覆写，取消后必须重新编码才能发布。
     if (cached) {
       for (const entry of cached.textures) {
-        if (entry.width === width && entry.height === height) { this.spare.push(entry); this.referenced.add(entry.texture) }
+        if (entry.width === width && entry.height === height) { entry.touched = this.frame; this.spare.push(entry); this.referenced.add(entry.texture) }
         else this.allocator.release(entry.texture)
       }
       this.cache.delete(slot)
     }
     const textures: EffectTexture[] = []
     const take = (mips = false): GpuTexture => {
-      const format = 'rgba8unorm'
       const mipLevelCount = mips ? 1 + Math.floor(Math.log2(Math.max(width, height))) : 1
       const index = this.spare.findIndex(entry => entry.width === width && entry.height === height && entry.format === format && entry.mipLevelCount === mipLevelCount)
-      if (index < 0) this.releaseIdleSpare()
-      const entry = index < 0 ? { texture: this.allocator.allocate(width, height, format, mipLevelCount), width, height, format, mipLevelCount } : this.spare.splice(index, 1)[0]
+      if (index < 0) this.releaseIdleSpare({ width, height })
+      const entry = index < 0 ? { texture: this.allocator.allocate(width, height, format, mipLevelCount), width, height, format, mipLevelCount, touched: this.frame } : this.spare.splice(index, 1)[0]
+      entry.touched = this.frame
       textures.push(entry); this.referenced.add(entry.texture); return entry.texture
     }
     const encode = async (plan: VideoEditBuiltinPlan, source: GpuTexture, target: GpuTexture, second?: GpuTexture, light?: GpuTexture): Promise<void> => {
-      await this.gpu.encodePlan(plan, 'rgba8unorm', source, target, second, environment.luts, this.batch, light)
+      await this.gpu.encodePlan(plan, format, source, target, second, environment.luts, this.batch, light)
       if (textures.find(entry => entry.texture === target)!.mipLevelCount > 1) mipmaps(target)
       if (light && textures.find(entry => entry.texture === light)!.mipLevelCount > 1) mipmaps(light)
     }
@@ -110,10 +113,10 @@ export class VideoEditAuthorEffects {
     this.pending.clear(); this.batch = undefined
   }
   private releaseSpare(): void { for (const entry of this.spare) this.allocator.release(entry.texture); this.spare.length = 0 }
-  private releaseIdleSpare(): void {
+  private releaseIdleSpare(size?: { width: number; height: number }): void {
     for (let index = this.spare.length - 1; index >= 0; index--) {
       const entry = this.spare[index]
-      if (this.referenced.has(entry.texture)) continue
+      if (this.referenced.has(entry.texture) || this.frame - entry.touched <= 1 && (!size || entry.width === size.width && entry.height === size.height)) continue
       this.allocator.release(entry.texture); this.spare.splice(index, 1)
     }
   }

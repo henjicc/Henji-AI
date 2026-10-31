@@ -8,7 +8,7 @@ import type { PreparedVideoEditEffect } from './videoEditCodeSources'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { VideoEditRenderer } from './videoEditRenderer'
 
-const state = vi.hoisted(() => ({ calls: [] as Array<{ name: string; time: number; input: number; frames: Array<{ offset: number; value: number; available: boolean }> }>, references: [] as string[][], output: 0, fail: false, disposed: 0 }))
+const state = vi.hoisted(() => ({ calls: [] as Array<{ name: string; time: number; input: number; frames: Array<{ offset: number; value: number; available: boolean }> }>, references: [] as string[][], output: 0, preciseAt: undefined as number | undefined, preciseFilter: false, fail: false, disposed: 0 }))
 vi.mock('./videoEditTrackResults', async original => {
   const actual = await original<typeof import('./videoEditTrackResults')>()
   return { ...actual, applyVideoEditClipFollow: (...args: Parameters<typeof actual.applyVideoEditClipFollow>) => {
@@ -34,7 +34,7 @@ vi.mock('./videoEditGpuCompositor', () => ({ VideoEditGpuCompositor: class {
   async code() {
     return {
       target: async (key: string, width: number, height: number, format?: VideoEditCodePicture['textureFormat']) => {
-        if (!this.targets.has(key)) this.targets.set(key, picture(width, height, 0, format))
+        if (!this.targets.has(key) || this.targets.get(key)!.textureFormat !== (format ?? 'rgba8unorm')) this.targets.set(key, picture(width, height, 0, format))
         return this.targets.get(key)!
       },
       releaseNestedFrames: (keep: Set<string>) => { for (const key of this.targets.keys()) if (key.startsWith('nested:') && !keep.has(key)) this.targets.delete(key) },
@@ -43,14 +43,14 @@ vi.mock('./videoEditGpuCompositor', () => ({ VideoEditGpuCompositor: class {
         expect(input.owner).toBe(device)
         const samples = frames.map(value => ({ offset: value.offset, value: values.get(value.texture)!, available: value.available }))
         state.calls.push({ name: program.name, time: info.time, input: pixel(input), frames: samples })
-        return picture(input.width, input.height, program.name === 'first' ? pixel(input) * 2 : pixel(input) + samples.reduce((sum, value) => sum + value.value, 0), input.textureFormat)
+        return picture(input.width, input.height, program.name === 'first' ? pixel(input) * 2 : pixel(input) + samples.reduce((sum, value) => sum + value.value, 0), state.preciseFilter && info.time * 60 === state.preciseAt ? 'rgba16float' : input.textureFormat)
       },
       mix: async (_key: string, a: VideoEditCodePicture, b: VideoEditCodePicture, amount: number) => picture(a.width, a.height, pixel(a) * (1 - amount) + pixel(b) * amount),
     }
   }
   async draw(_document: unknown, clips: VideoEditClip[], pictures: VideoEditCodePicture[], current: () => boolean, _deadline: unknown, target?: VideoEditCodePicture) {
     const value = pictures.reduce((sum, input, index) => sum + pixel(input) * clips[index].opacity, 0)
-    if (target) values.set(target.texture, value); else state.output = value
+    if (target) values.set(target.texture, target.highPrecision ? value : Math.min(value, state.preciseAt === undefined ? Infinity : 1)); else state.output = value
     return { presented: current(), completion: Promise.resolve() }
   }
 } }))
@@ -67,7 +67,7 @@ vi.mock('./videoEditCodeSources', () => ({ VideoEditCodeSources: class {
       const program: CodeAuthorProgram = { apiVersion: 4, languageVersion: 4, name: effect.name, kind: 'filter', mode: 'dynamic', seed: 0, parameters: [], types: {}, frames: effect.name === 'first' ? [] : [-1, -.5, .5], hexColors: [], bundle: { code: '', map: '', locations: { layers: {} } } }
       return { effect, program, instanceKey: `${clip.id}:${effect.id}`, version: effect.id, parameters: {}, context: { time: frame / 60, localTime: frame / 60, sequenceTime: frame / 60, frame, fps: 60, width: document.width, height: document.height }, transitionHandles: false, info: { time: frame / 60, frameDuration: 1 / 60, clip: { time: frame / 60, duration: clip.duration / 60 } } }
     }))
-    return { pictures: new Map(clips.filter(clip => clip.kind === 'code').map(clip => [clip.id, picture(document.width, document.height, clip.id === 'outside' ? 1000 : frame + 1)])), effects, sceneIssues: [], sourceTimestamps: [], cacheHits: 0 }
+    return { pictures: new Map(clips.filter(clip => clip.kind === 'code').map(clip => [clip.id, picture(document.width, document.height, clip.id === 'outside' ? 1000 : frame + 1, !state.preciseFilter && frame === state.preciseAt ? 'rgba16float' : 'rgba8unorm')])), effects, sceneIssues: [], sourceTimestamps: [], cacheHits: 0 }
   }
 } }))
 
@@ -79,7 +79,7 @@ function fixture(adjustment = false): VideoEditComposition {
   return { ...sequence, width: 100, height: 100, frameRate: { numerator: 60, denominator: 1 }, fps: 60, revision: 0, clips: adjustment ? [clip('outside', 0), source, owner] : [source], media: [], items: [], tracks: [0, 1, 2].map(index => ({ id: String(index), name: String(index), kind: 'video', index, enabled: true, locked: false, muted: true, solo: false })) }
 }
 beforeEach(() => {
-  state.calls = []; state.references = []; state.output = 0; state.fail = false; state.disposed = 0
+  state.calls = []; state.references = []; state.output = 0; state.preciseAt = undefined; state.preciseFilter = false; state.fail = false; state.disposed = 0
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
 })
 afterEach(() => { vi.unstubAllGlobals() })
@@ -132,5 +132,17 @@ it('does not feed a failed predecessor render to the temporal author', async () 
     const result = await renderer.render(2)
     expect(result.effectErrors).toHaveLength(2)
     expect(state.calls.some(value => value.name === 'temporal')).toBe(false)
+  } finally { await renderer.dispose() }
+})
+
+it.each([false, true])('相邻帧自身源/前序滤镜升档保留超白，请求八位不强制降档（前序滤镜 %s）', async preciseFilter => {
+  state.preciseAt = 2.5; state.preciseFilter = preciseFilter
+  const renderer = new VideoEditRenderer(fixture())
+  try {
+    const result = await renderer.render(2)
+    expect(result.effectErrors).toEqual([])
+    const temporal = state.calls.find(call => call.name === 'temporal')!
+    expect(temporal.frames.at(-1)).toMatchObject({ offset: .5, value: preciseFilter ? 2 : 7, available: true })
+    expect(temporal.frames[0].value).toBe(1)
   } finally { await renderer.dispose() }
 })

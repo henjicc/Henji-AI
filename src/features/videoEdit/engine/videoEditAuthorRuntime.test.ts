@@ -16,12 +16,13 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import { drawText, layoutText } from '../authorLibraries/text'
 import { layoutBoxes, ready as flexReady } from '../authorLibraries/flex'
-const { layerDraw, effectEncode } = vi.hoisted(() => ({ layerDraw: vi.fn(), effectEncode: vi.fn(async (...args: unknown[]) => ({ picture: args[1], carriesLight: false })) }))
+const { layerDraw, layerCopy, layerClear, effectEncode } = vi.hoisted(() => ({ layerDraw: vi.fn(), layerCopy: vi.fn(), layerClear: vi.fn(), effectEncode: vi.fn(async (...args: unknown[]) => ({ picture: args[1], carriesLight: false })) }))
 
 vi.mock('./videoEditAuthorEffects', () => ({ VideoEditAuthorEffects: class { begin = vi.fn(); encode = effectEncode; commit = vi.fn(); abandon = vi.fn(); dispose = vi.fn() } }))
 
 vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
-  commandEncoder = vi.fn(() => ({})); begin = vi.fn(); draw = layerDraw; mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); abandon = vi.fn(); dispose = vi.fn()
+  prepareFormat = vi.fn(); copy = layerCopy; clear = layerClear;
+  commandEncoder = vi.fn(() => ({})); begin = vi.fn(); draw = (...args: unknown[]) => { if (typeof args[0] === 'function') args[0] = args[0](); layerDraw(...args); return true }; mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); abandon = vi.fn(); dispose = vi.fn()
 } }))
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
@@ -239,7 +240,7 @@ it('composites a native GPU whole-effect override on the same device without a C
   expect(draw).toHaveBeenCalledOnce()
   expect(draw.mock.calls[0][0]).toBe(intermediate)
   expect(canvas).not.toHaveBeenCalled()
-  expect(createTexture.mock.calls[0][0]).not.toHaveProperty('mipLevelCount')
+  expect(createTexture.mock.calls[0][0]).toHaveProperty('mipLevelCount', 1)
   expect(createTexture.mock.calls[0][0]).toMatchObject({ usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
   expect(layerDraw.mock.calls[0][0]).toBe(target)
   expect(runtime.observeElements()[0].matrix[4]).toBe(12)
@@ -275,7 +276,7 @@ it('records one author draw and uploads raw pixels before shared GPU defocus', a
 /** Canvas 替身：每张画布各一个上下文，记下真实画布上的每个调用（第几张画布、方法、参数）。 */
 function canvasHarness() {
   const calls: Array<{ canvas: number; name: string; args: unknown[] }> = []
-  const methods = new Set(['reset', 'save', 'restore', 'setTransform', 'translate', 'scale', 'rotate', 'beginPath', 'rect', 'clip', 'clearRect', 'fillRect', 'fillText', 'drawImage', 'measureText', 'createPattern'])
+  const methods = new Set(['reset', 'save', 'restore', 'setTransform', 'translate', 'scale', 'rotate', 'beginPath', 'rect', 'clip', 'clearRect', 'fillRect', 'fillText', 'drawImage', 'measureText', 'createPattern', 'getImageData'])
   let count = 0
   class Bitmap { constructor(readonly width: number, readonly height: number) {} close(): void {} }
   class Canvas {
@@ -687,4 +688,127 @@ it('发光标记以本帧实际 underlay 为准，空链与未产光帧不沿用
     await runtime.render(output, 100, 50, {}, {}, frameInfo(2))
     expect(runtime.carriesLight).toBe(false)
   } finally { await runtime.dispose() }
+})
+
+it('层栈在首个可见触发层提升，回调保持顺序，独立与预热实例的八位回归不依赖历史', async () => {
+  const { device } = canvasHarness()
+  const calls: string[] = []
+  let strength = 0, visible = true
+  const module: AuthorModule = { name: '精度往返', layers: () => [
+    { id: 'base', draw(ctx) { calls.push('base'); ctx.fillRect(0, 0, 10, 10) } },
+    { id: 'glow', bounds: [0, 0, 10, 10], pose: () => visible ? {} : null,
+      effects() { calls.push('effects'); return [{ id: 'glow', params: { strength } }] },
+      draw(ctx) { calls.push('glow'); ctx.fillRect(0, 0, 10, 10) } },
+  ] }
+  const runtime = new VideoEditAuthorRuntime(device, module, undefined, true, 7)
+  const precise = { format: 'rgba16float', createView: () => ({}), destroy() {} }
+  const promote = vi.fn(() => { calls.push('promote'); return precise })
+  const render = (instance: VideoEditAuthorRuntime) => instance.render(output, 100, 50, {}, {}, frameInfo(0), undefined, undefined, true, undefined, {}, 'interactive', () => {}, promote)
+  try {
+    await render(runtime); expect(runtime.outputTexture).toBe(output); expect(promote).not.toHaveBeenCalled()
+    calls.length = 0; strength = 20
+    await render(runtime)
+    expect(calls).toEqual(['base', 'effects', 'glow', 'promote'])
+    expect(runtime.outputTexture).toBe(precise)
+    expect(layerCopy).toHaveBeenCalledWith(output, precise, 100, 50)
+    strength = 0
+    await render(runtime); expect(runtime.outputTexture).toBe(output)
+    const fresh = new VideoEditAuthorRuntime(device, module, undefined, true, 7)
+    try {
+      await render(fresh); expect(fresh.outputTexture).toBe(output)
+      strength = 20
+      await render(runtime); await render(fresh)
+      expect(runtime.outputTexture).toBe(precise); expect(fresh.outputTexture).toBe(precise)
+    } finally { await fresh.dispose() }
+    strength = 20; visible = false
+    await render(runtime); expect(runtime.outputTexture).toBe(output)
+    expect(promote).toHaveBeenCalledTimes(3)
+  } finally { await runtime.dispose() }
+})
+
+
+it('空层与隐藏层之后首次触发直接取得浮点目标，下一帧空栈仍清空八位目标', async () => {
+  const { device } = canvasHarness()
+  let enabled = true
+  const runtime = new VideoEditAuthorRuntime(device, { name: '空栈', layers: () => [
+    { id: 'empty', draw() {} },
+    { id: 'hidden', bounds: [0, 0, 10, 10], pose: () => null, draw() {} },
+    ...(enabled ? [{ id: 'glow', bounds: [0, 0, 10, 10] as [number, number, number, number], effects: () => [{ id: 'glow' as const }], draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, 10, 10) } }] : []),
+  ] }, undefined, true, 7)
+  const initial = vi.fn(() => output)
+  const precise = { format: 'rgba16float', createView: () => ({}), destroy() {} }
+  const promote = vi.fn(() => precise)
+  try {
+    await runtime.render(initial, 100, 50, {}, {}, frameInfo(0), undefined, undefined, true, undefined, {}, 'final', () => {}, promote)
+    expect(initial).not.toHaveBeenCalled()
+    expect(layerCopy).not.toHaveBeenCalled()
+    expect(layerClear).toHaveBeenCalledWith(precise)
+    expect(runtime.outputTexture).toBe(precise)
+    enabled = false
+    await runtime.render(initial, 100, 50, {}, {}, frameInfo(1))
+    expect(initial).toHaveBeenCalledOnce()
+    expect(layerClear).toHaveBeenLastCalledWith(output)
+    expect(runtime.outputTexture).toBe(output)
+    enabled = true
+    await runtime.render(precise, 100, 50, {}, {}, frameInfo(2))
+    expect(runtime.outputTexture).toBe(precise)
+  } finally { await runtime.dispose() }
+})
+
+it.each(['direct', 'live'] as const)('pose.blur 的精度判定按序列单位，不随历史与回放倍率变化（%s）', async history => {
+  vi.stubGlobal('ImageBitmap', class { width = 8; height = 8; close(): void {} })
+  const { device } = canvasHarness()
+  for (const blur of [.2, .3]) {
+    const module: AuthorModule = { name: '阈值', layers: (_params, _width, _height, assets) => [{ id: 'blur', bounds: [0, 0, 10, 10], pose: () => ({ blur }), draw(ctx, time) { if (history === 'direct' && time === 0) ctx.getImageData(0, 0, 1, 1); if (history === 'live') ctx.drawImage(assets.frame, 0, 0); else ctx.fillRect(0, 0, 10, 10) } }] }
+    const warm = new VideoEditAuthorRuntime(device, module, undefined, true, 7)
+    const fresh = new VideoEditAuthorRuntime(device, module, undefined, true, 7)
+    const precise = { format: 'rgba16float', createView: () => ({}), destroy() {} }
+    const promote = () => precise
+    const render = (runtime: VideoEditAuthorRuntime, frame: number, divisor: number) => runtime.render(output, 100, 50, {}, history === 'live' ? { frame: new ImageBitmap() } : {}, frameInfo(frame), undefined, undefined, false, { width: 100 / divisor, height: Math.round(50 / divisor) }, {}, 'interactive', () => {}, promote)
+    try {
+      // 预热覆盖粘性直接绘制与连续换图；fresh 在触发帧首次进入。
+      for (let frame = 0; frame < 4; frame++) await render(warm, frame, 1)
+      for (const divisor of [1, 4]) {
+        effectEncode.mockClear()
+        const hot = await render(warm, 60, divisor), cold = await render(fresh, 60, divisor)
+        if (history === 'live') { expect(hot!.video).toBe(1); expect(cold!.video).toBe(0) }
+        expect(warm.outputTexture).toBe(blur >= .25 ? precise : output)
+        expect(fresh.outputTexture).toBe(warm.outputTexture)
+        if (blur >= .25) expect(effectEncode.mock.lastCall?.at(-1)).toBe(true)
+        else expect(effectEncode).not.toHaveBeenCalled()
+      }
+    } finally { await warm.dispose(); await fresh.dispose() }
+  }
+})
+
+
+it.each(['layer', 'native', 'promoted'] as const)('作者纹理换尺寸分配失败保留旧纹理，回到旧尺寸后可复用：%s', async kind => {
+  const { device } = canvasHarness()
+  const create = device.createTexture
+  let fail = false
+  const textures: Array<ReturnType<GpuDevice['createTexture']>> = []
+  device.createTexture = descriptor => {
+    if (fail && (kind !== 'promoted' || (descriptor as { format: string }).format === 'rgba16float')) throw new Error('分配失败')
+    const texture = create(descriptor); textures.push(texture); return texture
+  }
+  const draw = vi.fn()
+  const module: AuthorModule = kind === 'native' ? { name: '原生', createWebGPU: () => ({ draw }) } : {
+    name: '画布', layers: (_params, width) => [{ bounds: [0, 0, width, 50], pose: () => ({}),
+      ...(kind === 'promoted' ? { effects: () => [{ id: 'glow' as const }] } : {}), draw(ctx) { ctx.fillRect(0, 0, width, 50) } }],
+  }
+  const runtime = new VideoEditAuthorRuntime(device, module, undefined, true, 7)
+  const render = (width: number) => runtime.render(output, width, 50, {}, {}, frameInfo(0), kind === 'native' ? { effect: { dx: 1 } } : undefined)
+  const current = () => kind === 'promoted' ? runtime.outputTexture! : kind === 'native' ? draw.mock.lastCall![0] as ReturnType<GpuDevice['createTexture']> : layerDraw.mock.lastCall![3].texture as ReturnType<GpuDevice['createTexture']>
+  try {
+    await render(100)
+    const previous = current()
+    fail = true
+    await expect(render(200)).rejects.toThrow('分配失败')
+    expect(previous.destroy).not.toHaveBeenCalled()
+    fail = false
+    await render(100)
+    expect(current()).toBe(previous)
+    expect(previous.destroy).not.toHaveBeenCalled()
+  } finally { await runtime.dispose() }
+  for (const texture of textures) expect(texture.destroy).toHaveBeenCalledOnce()
 })

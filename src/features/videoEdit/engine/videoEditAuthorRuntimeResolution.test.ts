@@ -51,8 +51,10 @@ function context(canvas: Raster) {
 }
 const gpu = vi.hoisted(() => ({ textures: [] as Array<{ width: number; height: number; mips: number }> }))
 vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
-  async begin(target: Pixels) { target.pixels.fill(0) }
-  draw(target: Pixels, width: number, height: number, source: { texture: Pixels; x: number; y: number; width: number; height: number }, samples: CodeMotionSample[], clip?: readonly number[], scale?: readonly [number, number]) {
+  async begin(target?: Pixels) { if (target) this.clear(target) }
+  clear(target: Pixels) { target.pixels.fill(0) }
+  draw(initial: Pixels | (() => Pixels), width: number, height: number, source: { texture: Pixels; x: number; y: number; width: number; height: number }, samples: CodeMotionSample[], clip?: readonly number[], scale?: readonly [number, number]) {
+    const target = typeof initial === 'function' ? initial() : initial
     expect([width, height]).toEqual([target.width, target.height])
     const [sx, sy] = scale ?? [1, 1]
     for (const sample of samples) {
@@ -68,6 +70,7 @@ vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
         if (value) target.pixels[py * width + px] = value
       }
     }
+    return true
   }
   mipmaps() {} lens() {} finish() {} abandon() {} async dispose() {}
 } }))

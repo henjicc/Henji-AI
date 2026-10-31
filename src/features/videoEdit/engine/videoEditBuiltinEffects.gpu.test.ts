@@ -1,3 +1,4 @@
+import { videoEditHalfToFloat } from './videoEditGpuShaders'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { authorEffectBleed } from '@/core/videoEdit/authorEffects'
 import { float32ToFloat16 } from '../../imageEdit/v3/gpu/imageEditorGpuTileAtlasV3'
@@ -54,14 +55,21 @@ function input(): GpuTexture {
 }
 function output(): GpuTexture { return device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture }
 async function read(texture: GpuTexture, width = W, height = H): Promise<Uint8Array> {
-  const bytesPerRow = Math.ceil(width * 4 / 256) * 256
+  const precise = texture.format === 'rgba16float'
+  const bpp = precise ? 8 : 4
+  const bytesPerRow = Math.ceil(width * bpp / 256) * 256
   const buffer = device.createBuffer({ size: bytesPerRow * height, usage: BUFFER_MAP_READ | BUFFER_COPY_DST })
   const encoder = device.createCommandEncoder()
   encoder.copyTextureToBuffer({ texture: texture as never }, { buffer, bytesPerRow }, { width, height, depthOrArrayLayers: 1 })
   device.queue.submit([encoder.finish()])
   await buffer.mapAsync(BUFFER_MAP_READ)
   const mapped = new Uint8Array(buffer.getMappedRange()); const pixels = new Uint8Array(width * height * 4)
-  for (let y = 0; y < height; y++) pixels.set(mapped.subarray(y * bytesPerRow, y * bytesPerRow + width * 4), y * width * 4)
+  for (let y = 0; y < height; y++) {
+    if (precise) {
+      const row = new Uint16Array(mapped.buffer, y * bytesPerRow, width * 4)
+      for (let x = 0; x < row.length; x++) pixels[y * width * 4 + x] = Math.round(Math.min(1, Math.max(0, videoEditHalfToFloat(row[x]))) * 255)
+    } else pixels.set(mapped.subarray(y * bytesPerRow, y * bytesPerRow + width * 4), y * width * 4)
+  }
   buffer.unmap(); buffer.destroy()
   return pixels
 }
@@ -93,11 +101,12 @@ it.each([false, true])('30px 镜头散焦细线无横纹（前置效果：%s）'
       { referenceSize: { width: 1280, height: 720 }, contentBounds: { x: 0, y: 0, width: 100, height: 120 }, rasterScale: 1, rasterOrigin: [64, 64], quality: 'final' },
       {}, undefined, { radius: 30, lens: true }, texture => author.mipmaps(texture, width, height))
     author.finish(); chain.commit()
+    const rendered = await read(result.picture, width, height)
     const encoder = device.createCommandEncoder()
-    encoder.copyTextureToBuffer({ texture: result.picture as never }, { buffer, bytesPerRow }, [width, height, 1])
     encoder.copyTextureToBuffer({ texture: source as never, mipLevel: 2 }, { buffer, offset: bytesPerRow * height, bytesPerRow: 256 }, [57, 62, 1])
     device.queue.submit([encoder.finish()]); await buffer.mapAsync(BUFFER_MAP_READ)
     const pixels = new Uint8Array(buffer.getMappedRange())
+    for (let y = 0; y < height; y++) pixels.set(rendered.subarray(y * width * 4, (y + 1) * width * 4), y * bytesPerRow)
     const rows = Array.from({ length: height }, (_, y) => {
       let sum = 0
       for (let x = 100; x < 118; x++) {
@@ -135,7 +144,7 @@ it('镜头散焦保留高光光斑的亮度、能量和大小，逐帧重编码�
   const width = 192, height = 192, radius = 30, d = device as unknown as GpuDevice
   const host = new VideoEditCodeGpu(d), author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, host.effectAllocator)
   const source = host.effectAllocator.allocate(width, height, 'rgba8unorm', 1 + Math.floor(Math.log2(width)))
-  const target = host.effectAllocator.allocate(width, height, 'rgba8unorm')
+  const target = host.effectAllocator.allocate(width, height, 'rgba16float')
   const direct = new VideoEditBuiltinEffectsGpu(d, device.createSampler({ minFilter: 'linear', magFilter: 'linear', mipmapFilter: 'linear' }), host.effectAllocator)
   const data = new Uint8Array(width * height * 4)
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -156,7 +165,7 @@ it('镜头散焦保留高光光斑的亮度、能量和大小，逐帧重编码�
       const pixels = await read(result.picture, width, height)
       if (first) expect(pixels).toEqual(first)
       else first = pixels
-      await direct.render({ id: 'lens_blur', params: { radius_fraction_height: radius / height } }, { texture: source, width, height, format: 'rgba8unorm' }, target, frame)
+      await direct.render({ id: 'lens_blur', params: { radius_fraction_height: radius / height } }, { texture: source, width, height, format: 'rgba16float' }, target, frame)
       expect(await read(target, width, height)).toEqual(first)
     }
     let luminance = 0, energy = 0, alpha = 0, moment = 0
@@ -176,9 +185,10 @@ it('镜头散焦保留高光光斑的亮度、能量和大小，逐帧重编码�
   } finally { direct.dispose(); chain.dispose(); await author.dispose(); host.effectAllocator.release(source); host.effectAllocator.release(target); await host.dispose() }
 })
 
-function budgetAllocator(host: VideoEditCodeGpu): VideoEditBuiltinScratchAllocator & { peak: number; peakPrecise: number; peakEight: number; allocations: number } {
+function budgetAllocator(host: VideoEditCodeGpu): VideoEditBuiltinScratchAllocator & { residentBytes: number; peak: number; peakPrecise: number; peakEight: number; allocations: number } {
   const live = new Map<GpuTexture, { bytes: number; precise: boolean }>()
   const measured = {
+    get residentBytes(): number { return [...live.values()].reduce((sum, entry) => sum + entry.bytes, 0) },
     peak: 0, peakPrecise: 0, peakEight: 0, allocations: 0,
     allocate(width: number, height: number, format: string, mipLevelCount = 1): GpuTexture {
       const texture = host.effectAllocator.allocate(width, height, format, mipLevelCount)
@@ -195,7 +205,7 @@ function budgetAllocator(host: VideoEditCodeGpu): VideoEditBuiltinScratchAllocat
   return measured
 }
 
-it('1080p 与 4K 默认发光：小字与宽层、两层静止及三层参数动画 60 帧不超宿主预算', async () => {
+it('1080p 与 4K 默认发光：小字与宽层、两层静止及三层参数动画 60 帧复用稳定并记录真实峰值', async () => {
   for (const [frameWidth, frameHeight] of [[1920, 1080], [3840, 2160]]) for (const [contentWidth, contentHeight] of [[100, 40], [800, 200]]) for (const rasterScale of [1, 2]) {
     const d = device as unknown as GpuDevice, host = new VideoEditCodeGpu(d), measured = budgetAllocator(host)
     const author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, measured)
@@ -230,9 +240,11 @@ it('1080p 与 4K 默认发光：小字与宽层、两层静止及三层参数动
         previousPad = pad
       }
       expect(await device.popErrorScope()).toBeNull()
-      expect(measured.peakEight).toBeLessThan(512 * 1024 ** 2); expect(measured.peakPrecise).toBeLessThan(512 * 1024 ** 2)
+      expect(measured.residentBytes).toBe(host.diagnostics().residentBytes)
       process.stdout.write(`发光预算峰值 MiB ${JSON.stringify({ frameWidth, frameHeight, contentWidth, contentHeight, rasterScale, pad: previousPad, total: measured.peak / 1024 ** 2, rgba8: measured.peakEight / 1024 ** 2, precise: measured.peakPrecise / 1024 ** 2 })}\n`)
-    } finally { chain.dispose(); await author.dispose(); if (source) measured.release(source); measured.release(target); await host.dispose() }
+    } finally { try { chain.dispose(); await author.dispose(); if (source) measured.release(source); measured.release(target) } finally { await host.dispose() } }
+    expect(measured.residentBytes).toBe(0)
+    expect(host.diagnostics().residentBytes).toBe(0)
   }
 }, 300_000)
 
@@ -250,17 +262,14 @@ it('默认发光按能量截断：未裁切参考在规划边界之外不足半�
     await author.begin(target); chain.begin(author.commandEncoder())
     const result = await chain.encode('reference', source, width, height, effects, context, {}, undefined, { radius: 0, lens: false }, texture => author.mipmaps(texture, width, height))
     author.finish(); chain.commit()
-    const bytesPerRow = Math.ceil(width * 4 / 256) * 256, buffer = device.createBuffer({ size: bytesPerRow * height, usage: BUFFER_MAP_READ | BUFFER_COPY_DST }), encoder = device.createCommandEncoder()
-    encoder.copyTextureToBuffer({ texture: result.picture as never }, { buffer, bytesPerRow }, [width, height, 1])
-    device.queue.submit([encoder.finish()]); await buffer.mapAsync(BUFFER_MAP_READ)
-    const data = new Uint8Array(buffer.getMappedRange()); let tail = 0, visible = 0
+    const data = await read(result.picture, width, height), bytesPerRow = width * 4
+    let tail = 0, visible = 0
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
       const value = data[y * bytesPerRow + x * 4]
       if (x < pad - cutoff || x >= pad + contentWidth + cutoff || y < pad - cutoff || y >= pad + contentHeight + cutoff) tail = Math.max(tail, value)
       else visible = Math.max(visible, value)
     }
     expect(visible).toBeGreaterThan(20); expect(tail).toBe(0)
-    buffer.unmap(); buffer.destroy()
   } finally { chain.dispose(); await author.dispose(); host.effectAllocator.release(source); host.effectAllocator.release(target); await host.dispose() }
 }, 60_000)
 

@@ -117,16 +117,9 @@ export class VideoEditWebInputs {
 
   /** 本帧必需画面才是硬预算；历史、前视和闲置页在压力下让路。 */
   checkBudget(frame: object, availableBytes: number): void {
-    const state = this.beginFrame(frame)
+    this.beginFrame(frame)
     if (this.allocatedBytes > availableBytes) this.reclaim(availableBytes)
-    const pictures = new Set(state.pinned)
-    let bytes = 0
-    for (const [read, size] of state.required) {
-      if (read.picture) pictures.add(read.picture)
-      else bytes += size
-    }
-    for (const picture of pictures) bytes += picture.width * picture.height * 4
-    if (bytes > availableBytes) throw new Error('当前网页画面、视频输入与嵌套画面超过显存预算，请缩小网页取景或倍率。')
+
   }
 
   private reclaim(limit: number): void {

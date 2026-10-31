@@ -8,6 +8,9 @@ import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/perform
 import type { VideoEditRenderer } from './videoEditRenderer'
 import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 
+const gpuErrors = vi.hoisted(() => ({ observe: vi.fn<[(message: string) => void], void>() }))
+vi.mock('./videoEditCodeGpu', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditCodeGpu')>(), setVideoEditCodeGpuErrorObserver: gpuErrors.observe }))
+
 const state = vi.hoisted(() => ({ presentation: undefined as VideoEditRenderer['onPresentation'], elements: vi.fn(), hover: vi.fn(), render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, arm: vi.fn(), supersede: vi.fn(), abandon: vi.fn() }))
 vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   constructor(readonly document: unknown) {}
@@ -92,6 +95,13 @@ it('前台帧到达立即取消后台合成，迟到字节不交回卡片', asyn
 it('渲染 Worker 入口显式注册未捕获异常与未处理拒绝的监听', () => {
   expect(worker.addEventListener).toHaveBeenCalledWith('error', expect.any(Function))
   expect(worker.addEventListener).toHaveBeenCalledWith('unhandledrejection', expect.any(Function))
+})
+
+it('设备错误原文经过既有 Worker 日志通道发送', () => {
+  const observe = gpuErrors.observe.mock.lastCall![0]
+  const message = 'Attachment rgba16float does not match pipeline rgba8unorm'
+  observe(message)
+  expect(postMessage).toHaveBeenLastCalledWith({ kind: 'log', level: 'warn', message: '代码 GPU 执行失败', event: 'video_edit.code_gpu.failed', context: { message } })
 })
 
 it('联系表/单帧/试渲染在同次提交捕获全尺寸像素，不读已过期的画布', async () => {

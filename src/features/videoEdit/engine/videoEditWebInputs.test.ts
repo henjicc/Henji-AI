@@ -209,11 +209,13 @@ it('4 倍网页连续帧与视频共享预算，压力先回收前视、池、�
   expect(textures.every(texture => texture.destroy.mock.calls.length === 1)).toBe(true)
 })
 
-it('只有本帧必需画面超预算才失败，同帧已交出的纹理不能被压力回收', async () => {
+it('本帧必需画面可超过缓存预算，同帧已交出的纹理不能被压力回收', async () => {
   const frame = {}, bytes = 400 * 400 * 4
   const first = inputs.picture(reference, 1, frame, copy, [], { availableBytes: () => bytes })
   await vi.advanceTimersByTimeAsync(0); finish(0); await first
-  await expect(inputs.picture(reference, 2, frame, copy, [], { availableBytes: () => bytes })).rejects.toThrow('超过显存预算')
+  const second = inputs.picture(reference, 2, frame, copy, [], { availableBytes: () => bytes })
+  await vi.advanceTimersByTimeAsync(0); finish(1)
+  expect((await second)?.web.time).toBe(2)
   expect(textures[0].destroy).not.toHaveBeenCalled()
 })
 
