@@ -64,7 +64,7 @@ export class VideoEditGpuCompositor {
     await this.ready
     let runtime = this.authorRuntimes.get(url)
     if (!runtime) {
-      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url), locations, true, apiVersion, undefined, (await this.code()).effectAllocator)
+      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url, undefined, apiVersion), locations, true, apiVersion, undefined, (await this.code()).effectAllocator)
       this.authorRuntimes.set(url, runtime)
     }
     return runtime

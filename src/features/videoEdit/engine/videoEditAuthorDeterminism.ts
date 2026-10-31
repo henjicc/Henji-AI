@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_API_MIN_VERSION, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { authorLayerId } from './videoEditAuthorElements'
 import type { AuthorLayer, AuthorModule, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
 import { TEXT_LAYOUT_OBSERVER, type TextLayoutObserverGlobal } from '../../../core/videoEdit/textDrawObservation'
@@ -59,13 +60,15 @@ export function importAuthorDeterministic<T>(load: () => Promise<T>, observeLayo
  * 方法仍以原对象为 this 调用，作者存在 this 上的状态照常可用。
  */
 
-function deterministicLayer(layer: AuthorLayer, index: number): AuthorLayer {
-  if (!layer || typeof layer !== 'object' || typeof layer.draw !== 'function') return layer
+function deterministicLayer(layer: AuthorLayer, index: number, apiVersion: number): AuthorLayer {
+  if (!layer || typeof layer !== 'object') return layer
   const key = authorLayerId(layer, index), draw = layer.draw, pose = layer.pose, effects = layer.effects
+  const adjust = apiVersion >= CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION ? layer.adjust : undefined
   return {
     ...layer,
     ...(typeof effects === 'function' ? { effects: (time: number) => runAuthorDeterministic(`effects:${key}`, time, () => effects.call(layer, time)) } : {}),
-    draw: (ctx, time) => runAuthorDeterministic(`draw:${key}`, time, () => draw.call(layer, ctx, time)),
+    ...(typeof adjust === 'function' ? { adjust: (time: number) => runAuthorDeterministic(`adjust:${key}`, time, () => adjust.call(layer, time)) } : {}),
+    ...(typeof draw === 'function' ? { draw: (ctx: OffscreenCanvasRenderingContext2D, time: number) => runAuthorDeterministic(`draw:${key}`, time, () => draw.call(layer, ctx, time)) } : {}),
     ...(typeof pose === 'function' ? { pose: (time: number) => runAuthorDeterministic(`pose:${key}`, time, () => pose.call(layer, time)) } : {}),
   }
 }
@@ -91,7 +94,7 @@ function deterministicWebGPU(webgpu: AuthorWebGPU): AuthorWebGPU {
 }
 
 /** 作者模块的每个入口都经 runAuthorDeterministic 执行；layers() 返回的图层与 GPU 入口返回的绘制对象同样包装。 */
-export function deterministicAuthorModule(effect: AuthorModule): AuthorModule {
+export function deterministicAuthorModule(effect: AuthorModule, apiVersion = CODE_AUTHOR_API_MIN_VERSION): AuthorModule {
   const { draw, layers, createWebGL, createWebGPU, frameKey, dispose } = effect
   return {
     ...effect,
@@ -99,7 +102,7 @@ export function deterministicAuthorModule(effect: AuthorModule): AuthorModule {
     ...(typeof draw === 'function' ? { draw: (...args: Parameters<typeof draw>) => runAuthorDeterministic('draw', args[1], () => draw.apply(effect, args)) } : {}),
     ...(typeof layers === 'function' ? { layers: (...args: Parameters<typeof layers>) => {
       const list = runAuthorDeterministic('layers', args[4]?.time, () => layers.apply(effect, args))
-      return Array.isArray(list) ? list.map(deterministicLayer) : list
+      return Array.isArray(list) ? list.map((layer, index) => deterministicLayer(layer, index, apiVersion)) : list
     } } : {}),
     ...(typeof createWebGL === 'function' ? { createWebGL: (gl: WebGL2RenderingContext) => deterministicWebGL(runAuthorDeterministic('create', 0, () => createWebGL.call(effect, gl))) } : {}),
     ...(typeof createWebGPU === 'function' ? { createWebGPU: async (device: Parameters<typeof createWebGPU>[0]) => deterministicWebGPU(await runAuthorDeterministic('create', 0, () => createWebGPU.call(effect, device))) } : {}),

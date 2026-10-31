@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_API_MIN_VERSION, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import type { EffectDescriptor } from '@/core/videoEdit/authorEffects.generated'
 import type { ContentTrustReference } from '@/core/contentTrust'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -45,6 +46,8 @@ export interface AuthorPose {
   opacity?: number; blur?: number
 }
 export interface AuthorLayer {
+  adjust?: (time: number) => readonly EffectDescriptor[]
+  fill?: unknown
   effects?: (time: number) => readonly EffectDescriptor[]
   id?: string
   name?: string
@@ -64,11 +67,19 @@ export interface AuthorLayer {
    * versions: `draw` is not called and the previous recording and raster are reused; `pose` is still sampled every frame.
    */
   cacheKey?: string | number
-  draw(ctx: OffscreenCanvasRenderingContext2D, time: number): void
+  draw?(ctx: OffscreenCanvasRenderingContext2D, time: number): void
 }
 export interface AuthorWebGL {
   draw(time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   dispose?(): void | Promise<void>
+}
+export function isAuthorAdjustment(layer: AuthorLayer, apiVersion: number): boolean {
+  // 旧接口的同名字段属于作者数据，宿主不能读取或重写作者对象。
+  if (apiVersion < CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION || layer.adjust === undefined) return false
+  if (typeof layer.adjust !== 'function') throw new Error('adjust 必须是函数。')
+  if (typeof layer.id !== 'string' || !layer.id.trim()) throw new Error('调整层需要 id。')
+  if (['draw', 'fill', 'effects'].some(key => layer[key as keyof AuthorLayer] !== undefined)) throw new Error('adjust 与 draw、fill、effects 互斥。')
+  return true
 }
 export interface AuthorWebGPU {
   draw(target: GpuTexture, time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo, inputs?: AuthorGpuInputs): void | Promise<void>
@@ -116,7 +127,7 @@ const importNativeModule = new Function('url', 'return import(url)') as (url: st
 
 /** Native import resolves relative dependencies and cycles using standard ESM semantics.
  * Every entry runs with seeded randomness and frame-derived clocks (see videoEditAuthorDeterminism). */
-export async function loadAuthorModule(url: string, context?: ContentTrustReference[]): Promise<AuthorModule> {
+export async function loadAuthorModule(url: string, context?: ContentTrustReference[], apiVersion = CODE_AUTHOR_API_MIN_VERSION): Promise<AuthorModule> {
   await assertAuthorTrust({ url, context })
   try {
     const layouts = new Set<string>()
@@ -125,7 +136,7 @@ export async function loadAuthorModule(url: string, context?: ContentTrustRefere
     if (!effect || typeof effect.name !== 'string') throw new Error('默认导出需要效果名称 name。')
     if (![effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU].some(value => typeof value === 'function')) throw new Error('效果需要 draw、layers、createWebGL 或 createWebGPU 入口。')
     if (effect.layers && (effect.createWebGL || effect.createWebGPU)) throw new Error('layers 不能与独立 GPU 绘制入口同时声明。')
-    const wrapped = deterministicAuthorModule(effect)
+    const wrapped = deterministicAuthorModule(effect, apiVersion)
     authorModuleTextLayouts.set(wrapped, layouts)
     return wrapped
   } catch (cause) {

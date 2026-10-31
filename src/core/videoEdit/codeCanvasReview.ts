@@ -31,7 +31,7 @@ export function videoEditCanvasIssues(element: AuthorElementObservation, boxes =
     if (fact.kind !== 'text' || fact.retained === false || !fact.quad.length) continue
     const ink = transform(fact.quad, element)
     const candidates = boxes.filter(quad => containsInk(ink, quad)).sort((a, b) => area(a) - area(b))
-    const container = candidates[0] ?? transform(box(element.bounds), element)
+    const container = candidates[0] ?? (element.bounds ? transform(box(element.bounds), element) : [])
     if (area(container) > 0 && videoEditQuadOutside(ink, container)) issues.push({ kind: 'text_box_overflow', key: `text:${fact.text}`, localQuad: fact.quad, canvas: { text: fact.text, inkQuad: ink, boxQuad: container } })
   }
   return issues

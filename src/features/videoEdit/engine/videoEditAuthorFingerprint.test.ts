@@ -5,6 +5,8 @@ import type { AuthorModule } from './videoEditAuthorModule'
 import { videoEditRenderWindows } from '@/core/videoEdit/renderCache'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
+import * as builtinEffects from '@/core/videoEdit/builtinEffects'
 
 const measure = { reset() {}, fillStyle: 'black', globalAlpha: 1, getImageData() {} } as unknown as OffscreenCanvasRenderingContext2D
 const info = { time: 1, frameDuration: 1 / 60, clip: { time: 1, duration: 10 } }
@@ -212,4 +214,61 @@ it('未知解码尺寸不能用登记宽高求效果，单纯捕获素材仍可�
   expect(fingerprint().fallback).toContain('decoded-asset-size-required')
   effect.layers = (_p, _w, _h, assets) => [{ draw(ctx) { ctx.drawImage(assets.screen, 0, 0) } }]
   expect(fingerprintAuthorFrame(effect, size, {}, info, { screen: input }, measure, undefined, false, {}, 7).fallback).toContain('decoded-asset-size-required')
+})
+
+it('调整层在录制与 frameKey 指纹里包括实际效果、opacity、clip 和颗粒帧种子，不受无效位姿影响', () => {
+  const sample = (amount = 30, opacity = 1, clip = [0, 0, 100, 100] as [number, number, number, number], x = 0): AuthorModule => ({ name: '调整', frameKey: () => 'fixed', layers: () => [{ id: 'grade', clip, pose: () => ({ opacity, x }), adjust: () => [{ id: 'film_grain', params: { amount } }] }] })
+  const digest = (module: AuthorModule, declared: boolean, time = 1) => declared
+    ? fingerprintAuthorFrameKey(module, size, {}, { ...info, time }, {}, 'code', {}, undefined, false, {}, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+    : fingerprintAuthorFrame(module, size, {}, { ...info, time }, {}, measure, undefined, false, {}, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+  for (const declared of [true, false]) {
+    const base = digest(sample(), declared)
+    expect(base.digest).toBeTruthy()
+    expect(digest(sample(30, 1, [0, 0, 100, 100], 500), declared)).toEqual(base)
+    expect(digest(sample(31), declared)).not.toEqual(base)
+    expect(digest(sample(30, .5), declared)).not.toEqual(base)
+    expect(digest(sample(30, 1, [0, 0, 50, 50]), declared)).not.toEqual(base)
+    expect(digest(sample(), declared, 2)).not.toEqual(base)
+  }
+})
+
+it('按帧取种子由效果声明驱动，恒定 frameKey 不会冻结其他逐帧效果', () => {
+  const requireEffect = builtinEffects.requireVideoEditBuiltinEffect
+  const seeded = vi.spyOn(builtinEffects, 'requireVideoEditBuiltinEffect').mockImplementation(id => {
+    const definition = requireEffect(id)
+    return id === 'black_white' ? { ...definition, frameSeeded: true } : definition
+  })
+  const effect: AuthorModule = { name: '声明种子', frameKey: () => 'settled', layers: () => [{ id: 'grade', adjust: () => [{ id: 'black_white' }] }] }
+  try {
+    for (const declared of [true, false]) {
+      const fingerprint = (time: number) => declared
+        ? fingerprintAuthorFrameKey(effect, size, {}, { ...info, time }, {}, 'code', {}, undefined, false, {}, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+        : fingerprintAuthorFrame(effect, size, {}, { ...info, time }, {}, measure, undefined, false, {}, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+      expect(fingerprint(1).digest).toBeTruthy()
+      expect(fingerprint(1)).not.toEqual(fingerprint(1 + info.frameDuration))
+    }
+  } finally { seeded.mockRestore() }
+})
+
+it.each([4, 7, 8])('API %s 不读取继承的 adjust，保留自定义字段的指纹语义', apiVersion => {
+  const adjust = vi.fn(() => { throw new Error('旧接口不求 adjust') })
+  const inherited = { get adjust(): never { return adjust() } }
+  const module = (custom = false): AuthorModule => ({ name: '兼容', frameKey: () => 'settled', layers: () => {
+    const layer = { id: 'base', draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, 10, 10) } }
+    return [custom ? Object.setPrototypeOf(layer, inherited) : layer]
+  } })
+  const recorded = (custom: boolean) => fingerprintAuthorFrame(module(custom), size, {}, info, {}, measure, undefined, false, {}, apiVersion)
+  const keyed = (custom: boolean) => fingerprintAuthorFrameKey(module(custom), size, {}, info, {}, 'code', {}, undefined, false, {}, apiVersion)
+  expect(recorded(false).digest).toBeTruthy()
+  expect(recorded(true)).toEqual(recorded(false))
+  expect(keyed(true)).toEqual(keyed(false))
+  expect(adjust).not.toHaveBeenCalled()
+  const data = module()
+  const layer = data.layers!({}, size.width, size.height, {}, info)[0]
+  Object.defineProperty(layer, 'adjust', { value: 1, enumerable: true, writable: true })
+  data.layers = () => [layer]
+  const first = fingerprintAuthorFrame(data, size, {}, info, {}, measure, undefined, false, {}, apiVersion)
+  expect(first.digest).toBeTruthy()
+  Reflect.set(layer, 'adjust', 2)
+  expect(fingerprintAuthorFrame(data, size, {}, info, {}, measure, undefined, false, {}, apiVersion)).not.toEqual(first)
 })

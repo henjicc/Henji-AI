@@ -1,4 +1,4 @@
-import { codeOutputInputs, codeOutputScenes, codeOutputSignature, codeOutputObjectSignature } from './videoEditCodeOutputKey'
+import { codeOutputInputs, codeOutputKey, codeOutputSignature } from './videoEditCodeOutputKey'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
 import { readAuthorMetadataCache, writeAuthorMetadataCache } from './videoEditAuthorMetadataCache'
@@ -36,7 +36,7 @@ import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } fro
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
-import { codeMaterialImageParameterKeys, codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
+import { codeMaterialImageParameterKeys } from '@/core/videoEdit/codeMaterialResources'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { VideoEditBuiltinEffectInstance, VideoEditEffect } from '@/core/videoEdit/compositing'
@@ -545,12 +545,9 @@ export class VideoEditCodeSources {
     const dependencies = codeOutputInputs(document, plan, frame, inputs, options.exactInput ?? (() => false))
     if (!dependencies) return undefined
     const program = plan.program!, context = plan.context
-    const { sourceTime, overrides, info, environment } = plan.outputFrame!
+    const { overrides, info, environment } = plan.outputFrame!
     const declared = await this.runtime?.authorFrameKey?.(program, context, plan.author, info, overrides, document.motionBlur === true, plan.divisor ?? 1, environment, dependencies)
-    return codeOutputSignature([plan.outputIdentity, plan.parameters, codeOutputScenes(document, plan), dependencies,
-      declared?.digest ?? (!declared && program.mode === 'static' && !codeMaterialUsesAudio(program) ? 'static' : [context.time, context.localTime, sourceTime]),
-      codeOutputObjectSignature(context.audio), context.audioTime, info.frameDuration, info.clip.duration, context.width, context.height, plan.divisor ?? 1,
-      documentFontRevision(), overrides, document.motionBlur === true, codeOutputObjectSignature(environment), options.quality ?? 'interactive'])
+    return codeOutputKey(document, plan, dependencies, declared, options.quality)
   }
   /** 片段在这一帧的作用区域蒙版（智能区域按素材时间取分析结果，手绘遮罩按几何栅格化）；读取失败只记日志，效果按未就绪跳过。 */
   private async regionMask(document: VideoEditComposition, clip: VideoEditClip, mask: NonNullable<VideoEditEffect['mask']>, frame: number): Promise<VideoEditSmartRegionMask | undefined> {

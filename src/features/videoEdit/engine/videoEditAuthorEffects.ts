@@ -27,11 +27,11 @@ export class VideoEditAuthorEffects {
     this.batch = { encoder, uniformIndex: 0, taken: new Set(), created: new Set() }
   }
   async encode(slot: string, input: GpuTexture, width: number, height: number, effects: readonly ResolvedAuthorEffect[], context: LayerEffectReference,
-    environment: AuthorEffectEnvironment, contentKey: string | undefined, defocus: { radius: number; lens: boolean }, mipmaps: (texture: GpuTexture) => void, needsFloat = defocus.radius > 0 || effects.some(effect => videoEditEffectNeedsFloat(effect, { width, height, referenceSize: context.referenceSize, renderScale: 1, layer: context }))): Promise<AuthorEffectOutput> {
+    environment: AuthorEffectEnvironment, contentKey: string | undefined, defocus: { radius: number; lens: boolean }, mipmaps: (texture: GpuTexture) => void, needsFloat = defocus.radius > 0 || effects.some(effect => videoEditEffectNeedsFloat(effect, { width, height, referenceSize: context.referenceSize, renderScale: 1, layer: context })), adjustment?: { frame: number; opacity: number }): Promise<AuthorEffectOutput> {
     if (!this.batch) throw new Error('图层效果尚未开始编码。')
     this.used.add(slot)
     const format = input.format === 'rgba16float' || needsFloat ? 'rgba16float' : 'rgba8unorm'
-    const key = JSON.stringify([format, contentKey, width, height, context, authorEffectsFingerprint(effects, environment), defocus])
+    const key = JSON.stringify([format, contentKey, width, height, context, authorEffectsFingerprint(effects, environment), defocus, adjustment])
     const cached = this.cache.get(slot)
     if (contentKey !== undefined && cached?.key === key) return cached.output
     // 内容键失效即撤销缓存资格；同尺寸像素可以覆写，取消后必须重新编码才能发布。
@@ -61,12 +61,17 @@ export class VideoEditAuthorEffects {
       let image = input
       // 下层按产生顺序记录：光（零 alpha，相加照亮下方）与影（cover，普通预乘遮挡）。
       const underlays: Array<{ texture: GpuTexture; cover: boolean }> = []
-      const plans = effects.map(effect => planVideoEditBuiltinEffect(effect, { width, height, frame: 0, layer: context, split: true }))
+      const plans = effects.map(effect => planVideoEditBuiltinEffect(effect, adjustment
+        ? { width, height, frame: adjustment.frame, referenceSize: context.referenceSize, renderScale: context.rasterScale, quality: context.quality, split: true }
+        : { width, height, frame: 0, layer: context, split: true }))
       const hasUnderlay = plans.some(plan => plan.underlay !== undefined)
       for (const [index, effect] of effects.entries()) {
-        const plan = plans[index]
+        // 调整层的每道效果都接收完整画面；拆出的光与影不能绕过后续调色。
+        const plan = adjustment && plans[index].underlay !== undefined
+          ? planVideoEditBuiltinEffect(effect, { width, height, frame: adjustment.frame, referenceSize: context.referenceSize, renderScale: context.rasterScale, quality: context.quality })
+          : plans[index]
         // 只有交给合成器的最后一张图需要 mip（缩小绘制）；有 pose.blur 或下层时最后一张图还要再处理一道。
-        const needsMips = index === effects.length - 1 && defocus.radius <= 0 && !hasUnderlay
+        const needsMips = !adjustment && index === effects.length - 1 && defocus.radius <= 0 && !hasUnderlay
         let target = take(needsMips && effect.amount === 1), light = plan.underlay === undefined ? undefined : take()
         await encode(plan, image, target, undefined, light)
         if (effect.amount !== 1) {
@@ -97,7 +102,12 @@ export class VideoEditAuthorEffects {
           await encode(over, source, composed, picture); picture = composed
         }
       }
-      const output = { picture, carriesLight: underlays.some(underlay => !underlay.cover) }
+      if (adjustment && adjustment.opacity < 1) {
+        const blended = take()
+        await encode(mix(adjustment.opacity), picture, blended, input)
+        picture = blended
+      }
+      const output = { picture, carriesLight: underlays.some(underlay => !underlay.cover) || !!adjustment && plans.some(plan => plan.underlay !== undefined && plan.underlayKind !== 'cover') }
       // 跨层与跨帧只消费合成后的画面；主图、光与中间结果在本道链结束后即可供下一层覆写。
       this.spare.push(...textures.filter(entry => entry.texture !== picture))
       this.pending.set(slot, { key: contentKey === undefined ? '' : key, output, textures: textures.filter(entry => entry.texture === picture) })

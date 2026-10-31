@@ -8,6 +8,7 @@ import { effectParam } from './effectIncludes'
 const DESCRIPTION = '给画面叠上逐帧变化的颗粒，像胶片或高感光度拍出的质感。中间调最明显，暗部和高光收敛。'
 
 export const FILM_GRAIN_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
+  space: 'frame', frameSeeded: true, author: { factory: 'grain' },
   stage: 'point',
   id: 'film_grain', name: '颗粒', group: 'texture', description: DESCRIPTION,
   aliases: ['胶片颗粒', '噪点', '杂色', 'film grain', 'grain', 'noise'],

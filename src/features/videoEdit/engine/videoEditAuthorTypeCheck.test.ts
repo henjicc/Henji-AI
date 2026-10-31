@@ -236,3 +236,8 @@ it('效果库冻结声明支持别名、直接描述、静态范围错误与独�
   expect(typed.check({ ...files(withKnobs), libraries: { 'henji-effects': '1.2.0' } }, ['main.ts']).diagnostics).toEqual([])
   expect(typed.check(files(withKnobs), ['main.ts']).total).toBeGreaterThan(0)
 })
+
+it('作者调整层不要求 bounds 或 draw，禁止同时声明绘制与效果入口', () => {
+  expect(lines('export default { name:"调整", layers:()=>[{id:"grade", adjust:t=>[{id:"vignette",params:{amount:20}}], pose:t=>({opacity:.5})}] }')).toEqual([])
+  for (const field of ['draw(ctx,t){}', 'effects:t=>[]', 'fill:()=>({})']) expect(lines(`export default { name:"调整", layers:()=>[{id:"grade", adjust:t=>[], ${field}}] }`).length).toBeGreaterThan(0)
+})

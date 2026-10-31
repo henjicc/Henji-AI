@@ -42,7 +42,7 @@ export class VideoEditAuthorPrograms {
     const module = prepareAuthorModuleUrls(bundle).then(async urls => {
       release = urls.dispose
       const context = bundle.trustContext ?? bundle.modules?.trustContext ?? []
-      return loadAuthorModule(urls.url, context)
+      return loadAuthorModule(urls.url, context, bundle.apiVersion)
     }).catch(error => {
       this.modules.delete(bundle)
       release()
@@ -97,8 +97,7 @@ export class VideoEditAuthorPrograms {
     const frameInfo = output ? { ...info, renderScale: output.height / size.height } : info
     // 原生 GPU 作者看到实际纹理尺寸，Canvas 作者仍使用逻辑画幅。
     const dimensions = output && (effect.createWebGPU || effect.createWebGL) ? output : size
-    // 输出键已包含完整环境；frameKey 承诺覆盖整幅作者输出，不额外执行 layers。
-    return fingerprintAuthorFrameKey(effect, dimensions, authorParameterValues({ ...program, types: program.types ?? {} }, parameters), frameInfo, inputs, '', undefined, overrides, motionBlur, environment, program.apiVersion, false)
+    return fingerprintAuthorFrameKey(effect, dimensions, authorParameterValues({ ...program, types: program.types ?? {} }, parameters), frameInfo, inputs, '', undefined, overrides, motionBlur, environment, program.apiVersion)
   }
 
   get canvasBytes(): number { return [...this.instances.values()].reduce((bytes, entry) => bytes + entry.runtime.canvasBytes, 0) }

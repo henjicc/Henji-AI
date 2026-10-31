@@ -14,7 +14,7 @@ vi.mock('./videoEditCodeCompiler', async () => {
   return { VideoEditCodeCompiler: class { async bundle(files: CodeMaterialFiles) { return testAuthorBundle(files) } dispose() {} } }
 })
 vi.mock('./videoEditAuthorModules', () => ({ prepareAuthorModuleUrls: async () => ({ url: 'author-test', dispose() {} }) }))
-vi.mock('./videoEditAuthorModule', () => ({ loadAuthorModule: async () => state.effect! }))
+vi.mock('./videoEditAuthorModule', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditAuthorModule')>(), loadAuthorModule: async () => state.effect! }))
 
 function fixture(data = 'red', helper = 'paint', declared = true) {
   const document = createVideoEditTestDocument('作者画面键')
@@ -121,7 +121,8 @@ it('正式素材指纹不把登记尺寸当解码尺寸，捕获素材可比较�
   state.effect = effect
   const worker = new VideoEditCodeFingerprint(videoEditComposition(document, document.sequences[0].id))
   try {
-    expect((await worker.frame('code', 0, {})).digest).toBeTruthy()
+    const first = await worker.frame('code', 0, {})
+    expect(first.digest, JSON.stringify(first)).toBeTruthy()
     effect.layers = (_p, _w, _h, assets) => [{ effects: () => [{ id: 'glow', params: { strength: (assets.screen as ImageBitmap).width / 100 } }], draw() {} }]
     expect((await worker.frame('code', 0, {})).fallback).toContain('decoded-asset-size-required')
   } finally { await worker.dispose() }

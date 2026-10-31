@@ -212,3 +212,9 @@ export default {
   }
 }
 ```
+
+## 调整层
+
+`{ id: 'grade', adjust: t => [效果描述…], clip?, pose?: t => ({ opacity }) }`：给本模块里在它之前（下层）合成好的全部图层整体加效果，按作者画幅换算；与 draw、fill、effects 互斥。pose 只用 opacity（与原画混合），clip 限定作用范围。暗角、颗粒这类整幅效果只能放在 adjust 或片段效果链里，放进普通图层的 effects 会报错。取帧观察里它是 kind 为 adjust 的元素，没有画面选框，按 id 或源码定位。grain、vignette 工厂随下一版 henji-effects 提供，在那之前直接写效果描述对象。
+
+调整层里的效果按反预乘计算：透明底的零 alpha 光会被去掉（调色、暗角、颗粒都一样）；要处理光，在产生光的图层 effects 里调。有不透明背景时光已叠入背景，不受影响。

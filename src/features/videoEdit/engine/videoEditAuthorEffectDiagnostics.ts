@@ -9,7 +9,7 @@ const BLUR_1_0_IDS: Readonly<Record<string, string>> = { gaussian: 'gaussian_blu
 /** `effectsVersion` 是这份源码锁定的 henji-effects 版本，旧版本的工厂按它当时的参数检查。 */
 export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeChecker, effectsVersion?: string): AuthorEffectDiagnostic[] {
   const result: AuthorEffectDiagnostic[] = [], factories = new Map<ts.Symbol, string>(), namespaces = new Set<ts.Symbol>()
-  const definitions = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => definition.space === 'layer' && definition.author)
+  const definitions = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => (definition.space === 'layer' || definition.space === 'frame') && definition.author)
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== 'henji-effects') continue
     const binding = statement.importClause?.namedBindings

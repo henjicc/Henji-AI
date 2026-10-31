@@ -5,7 +5,7 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorPrograms } from './videoEditAuthorPrograms'
 
 const { load, runtimeDispose, constructed } = vi.hoisted(() => ({ load: vi.fn(), runtimeDispose: vi.fn(), constructed: vi.fn() }))
-vi.mock('./videoEditAuthorModule', () => ({ loadAuthorModule: load }))
+vi.mock('./videoEditAuthorModule', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditAuthorModule')>(), loadAuthorModule: load }))
 vi.mock('./videoEditAuthorRuntime', () => ({ VideoEditAuthorRuntime: class {
   constructor() { constructed() }
   dispose = runtimeDispose
@@ -94,13 +94,14 @@ it('输出 frameKey 使用真实作者参数与原生尺寸，非法声明回退
   } finally { await pool.dispose() }
 })
 
-it('多层作者的输出 frameKey 只执行声明，完整环境由输出键覆盖', async () => {
+it('多层作者的输出 frameKey 求效果摘要但不绘制，静止效果跨帧命中', async () => {
   const layers = vi.fn(() => [{ id: 'a', draw() {} }, { id: 'b', draw() {} }]), frameKey = vi.fn(() => 'still')
   load.mockResolvedValue({ name: '多层', layers, frameKey })
   const pool = new VideoEditAuthorPrograms({} as GpuDevice), program = await pool.inspect({ ...bundle(), apiVersion: 7 })
   try {
     const key = await pool.frameKey(program, { width: 100, height: 100 }, {}, { time: 0, frameDuration: 1 / 30, clip: { time: 0, duration: 3 } }, undefined, false, 1, {}, {})
-    expect(key?.digest).toBeDefined(); expect(frameKey).toHaveBeenCalledOnce(); expect(layers).not.toHaveBeenCalled()
+    const next = await pool.frameKey(program, { width: 100, height: 100 }, {}, { time: 1 / 30, frameDuration: 1 / 30, clip: { time: 1 / 30, duration: 3 } }, undefined, false, 1, {}, {})
+    expect(key?.digest).toBeDefined(); expect(next).toEqual(key); expect(frameKey).toHaveBeenCalledTimes(2); expect(layers).toHaveBeenCalledTimes(2)
   } finally { await pool.dispose() }
 })
 

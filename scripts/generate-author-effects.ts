@@ -7,7 +7,7 @@ import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParam } from '..
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
 const { loadTypeScript } = require('./check-persistence-compat.cjs') as { loadTypeScript(file: string): { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] } }
-const definitions = loadTypeScript('src/core/videoEdit/builtinEffects.ts').VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.space === 'layer' && value.author)
+const definitions = loadTypeScript('src/core/videoEdit/builtinEffects.ts').VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => (value.space === 'layer' || value.space === 'frame') && value.author)
 const { generateBlueNoiseRanks } = loadTypeScript('src/core/videoEdit/blueNoise.ts') as unknown as { generateBlueNoiseRanks(): Uint16Array }
 const retiredBlurIds = Object.keys((loadTypeScript('src/core/videoEdit/blur.ts') as unknown as { RETIRED_BLUR_EFFECTS: Record<string, unknown> }).RETIRED_BLUR_EFFECTS)
 const banner = '// 由 scripts/generate-author-effects.ts 生成，请修改效果登记后重新生成。\n'
@@ -18,7 +18,7 @@ function parameter(param: VideoEditBuiltinParam): string {
   return `  /** ${doc} */\n  readonly ${param.key}?: ${type}\n`
 }
 export function generateAuthorEffects(): Record<string, string> {
-  const params = definitions.map(definition => `export interface ${typeName(definition.id)} {\n${definition.params.filter(param => !param.spaces || param.spaces.includes('layer')).map(parameter).join('')}}\n`).join('\n')
+  const params = definitions.map(definition => `export interface ${typeName(definition.id)} {\n${definition.params.filter(param => !param.spaces || param.spaces.includes(definition.space === 'frame' ? 'frame' : 'layer')).map(parameter).join('')}}\n`).join('\n')
   const union = `export type BuiltinLayerEffectDescriptor =\n${definitions.map(definition => `  | { readonly id: '${definition.id}'; readonly params?: ${typeName(definition.id)} }`).join('\n')}\nexport interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }\n/** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */\nexport interface RetiredBlurDescriptor { readonly id: ${retiredBlurIds.map(id => `'${id}'`).join(' | ')}; readonly params?: object }\nexport type EffectDescriptor = BuiltinLayerEffectDescriptor | LookDescriptor | RetiredBlurDescriptor\n`
   const declarations = definitions.map(definition => `export declare function ${definition.author!.factory}(params?: ${typeName(definition.id)}): { readonly id: '${definition.id}'; readonly params: ${typeName(definition.id)} }\n`).join('')
   const factories = definitions.map(definition => `export function ${definition.author!.factory}(params: ${typeName(definition.id)} = {}): { readonly id: '${definition.id}'; readonly params: ${typeName(definition.id)} } { return { id: '${definition.id}', params } }\n`).join('')

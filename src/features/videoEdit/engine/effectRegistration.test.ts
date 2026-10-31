@@ -42,6 +42,9 @@ it('登记索引与有序目录接通规划、入口、精度、预览与三个�
   expect(builtinParameterFields(definition.params).map(value => value.key)).toEqual(['contour', 'enabled'])
   expect(() => resolveAuthorEffects([{ id: definition.id, params: { contour: true } }])).toThrow('只能用于片段')
   expect(resolveAuthorEffects([{ id: definition.id }])[0].params.enabled).toBe(true)
+  const frameEffects = resolveAuthorEffects([{ id: definition.id }], {}, 0, 'grade', 'frame')
+  expect(frameEffects[0].params).toEqual({ enabled: true, global: false })
+  expect(() => resolveAuthorEffects([{ id: definition.id, params: { local: true } }], {}, 0, 'grade', 'frame')).toThrow('只能用于图层')
   const { normalizeVideoEditBuiltinParams } = await import('@/core/videoEdit/builtinEffects')
   for (const key of ['local', 'global']) expect(() => normalizeVideoEditBuiltinParams(definition.id, { [key]: true })).toThrow('只能用于')
   expect(() => normalizeVideoEditBuiltinParams(definition.id, {}, { local: true })).toThrow('只能用于')
@@ -54,9 +57,11 @@ it('登记索引与有序目录接通规划、入口、精度、预览与三个�
   const { validateVideoEditLook, resolveVideoEditLookByName } = await import('@/core/videoEdit/authorEffects')
   const preset = { id: 'piece', name: '空间夹具', media: 'video' as const, effects: [{ id: 'member', name: '', enabled: false, amount: 0, builtin: { id: definition.id, params: {}, curves: { contour: [{ time: 0, value: false, interpolation: 'hold' as const }] } } }] }
   expect(() => validateVideoEditLook(preset)).toThrow('只能用于片段')
+  expect(() => validateVideoEditLook(preset, 'frame')).toThrow('只能用于片段')
   expect(() => resolveVideoEditLookByName(preset.name, { presets: [preset] })).toThrow('只能用于片段')
   const explicit = { ...preset, effects: [{ ...preset.effects[0], builtin: { id: definition.id, params: { contour: true } } }] }
   expect(() => resolveVideoEditLookByName(explicit.name, { presets: [explicit] })).toThrow('只能用于片段')
+  expect(() => resolveAuthorEffects([{ id: 'look', params: { name: explicit.name } }], { presets: [explicit] }, 0, 'grade', 'frame')).toThrow('只能用于片段')
 })
 
 it('定义与规划索引拒绝重复 id，错误指出两处导出来源', async () => {

@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { afterEach, expect, it } from 'vitest'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -29,5 +30,16 @@ it('原生作者 import 在顶层求值前检查选择，声明读取也不能�
     fixture.session.decide(fixture.session.check(query).challenge!, 'once')
     expect((await loadAuthorModule(url, [record])).name).toBe('外来代码')
     expect(Reflect.get(globalThis, '__contentTrustExecutions')).toBe(1)
+    const compatible = 'data:text/javascript,' + encodeURIComponent('class Layer { get adjust(){ throw new Error("custom getter"); } draw(){} } export default {name:"旧接口",layers:()=>[new Layer()] }')
+    const info = { time: 0, frameDuration: 1 / 30, clip: { time: 0, duration: 1 } }
+    for (const apiVersion of [4, 7, 8]) {
+      const author = await loadAuthorModule(compatible, undefined, apiVersion)
+      expect(author.layers!({}, 1, 1, {}, info)[0].draw).toBeTypeOf('function')
+    }
+    const adjustment = 'data:text/javascript,' + encodeURIComponent('export default {name:"调整层",layers:()=>[{id:"grade",adjust:()=>[{id:"vignette",params:{amount:Math.random()}}]}] }')
+    const current = await loadAuthorModule(adjustment, undefined, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+    const layer = current.layers!({}, 1, 1, {}, info)[0]
+    expect(layer.adjust!(1)).toEqual(layer.adjust!(1))
+
   } finally { fixture.dispose(); fs.rmSync(directory, { recursive: true, force: true }) }
 })

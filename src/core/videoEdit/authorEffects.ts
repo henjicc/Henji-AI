@@ -1,4 +1,5 @@
-import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinParamSpaceIssue, type VideoEditBuiltinParams } from './builtinEffects'
+import { CODE_AUTHOR_API_VERSION, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from './codeAuthorVersions'
+import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinParamSpaceIssue, type VideoEditBuiltinParams, type VideoEditBuiltinEffectDefinition } from './builtinEffects'
 import { resolveVideoEditStylePieceEffects, videoEditStylePieceKnobValues, type VideoEditEffectPreset } from './effectPresets'
 import { retiredBlurParams } from './blur'
 import { evaluateVideoEditEffect } from './keyframes'
@@ -32,26 +33,32 @@ function object(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) throw new Error(`${field} 必须是普通对象。`)
   return value as Record<string, unknown>
 }
-export function resolveVideoEditLookByName(name: string, environment: AuthorEffectEnvironment): VideoEditEffectPreset {
+export function resolveVideoEditLookByName(name: string, environment: AuthorEffectEnvironment, space: 'layer' | 'frame' = 'layer', apiVersion = CODE_AUTHOR_API_VERSION): VideoEditEffectPreset {
   const candidates = (environment.presets ?? []).filter(preset => preset.name === name)
   const scoped = (environment.boundStyle?.presets ?? []).filter(preset => preset.name === name)
   const matches = scoped.length ? scoped : candidates
   if (!matches.length) throw new Error(`找不到风格件「${name}」。当前绑定风格：${environment.boundStyle ? `「${environment.boundStyle.name ?? environment.boundStyle.id}」（${environment.boundStyle.id}）` : '无'}；可用名称：${[...new Set([...(environment.presets ?? []), ...(environment.boundStyle?.presets ?? [])].map(preset => preset.name))].map(name => `「${name}」`).join('、') || '无'}。请读取 video_edit.project_style.effect_presets；工程副本较旧时可重新 bind_video_edit_style，或导入全局风格件。`)
   if (matches.length !== 1) throw new Error(`风格件「${name}」在${scoped.length ? '绑定风格' : '全局库'}中重名：${matches.map(preset => preset.id).join('、')}。请先改名消除歧义。`)
-  validateVideoEditLook(matches[0])
+  validateVideoEditLook(matches[0], space, apiVersion)
   return matches[0]
 }
+function assertAuthorEffectSpace(definition: VideoEditBuiltinEffectDefinition, space: 'layer' | 'frame', apiVersion: number): void {
+  if (definition.space === 'frame' && space === 'layer') throw new Error(apiVersion < CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION
+    ? `${definition.name}按整幅画面算，请使用片段效果链；升级作者接口至 v${CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION} 后可用调整层 adjust。`
+    : `${definition.name}按整幅画面算，请放进调整层 adjust。`)
+  if (!['layer', ...(space === 'frame' ? ['frame'] : [])].includes(definition.space ?? '') || definition.media === 'audio') throw new Error(`${definition.id} 不能用于${space === 'frame' ? '调整层' : '图层'}，请使用片段效果链。`)
+}
 /** 在名称解析期校验整个风格件，不依赖当前帧、启用状态或动画求值后的参数。 */
-export function validateVideoEditLook(preset: VideoEditEffectPreset): void {
+export function validateVideoEditLook(preset: VideoEditEffectPreset, space: 'layer' | 'frame' = 'layer', apiVersion = CODE_AUTHOR_API_VERSION): void {
   if (preset.media !== 'video') throw new Error('声音预设不能用于图层。')
   for (const effect of preset.effects) {
     if (!effect.builtin || effect.mask) throw new Error(`预设「${preset.name}」包含代码效果或蒙版，请使用片段效果链。`)
     const retired = retiredBlurParams(effect.builtin.id, effect.builtin.params)
     const definition = requireVideoEditBuiltinEffect(retired ? 'blur' : effect.builtin.id)
-    if (definition.space !== 'layer' || definition.media === 'audio') throw new Error(`${definition.id} 不能用于图层，请使用片段效果链。`)
+    assertAuthorEffectSpace(definition, space, apiVersion)
     const keys = new Set([...Object.keys(retired ?? effect.builtin.params), ...Object.keys(effect.builtin.curves ?? {}), ...(preset.knobs ?? []).flatMap(knob => knob.mappings.filter(mapping => mapping.effectId === effect.id).map(mapping => mapping.parameter))])
     for (const key of keys) {
-      const issue = videoEditBuiltinParamSpaceIssue(definition.params.find(param => param.key === key), 'layer')
+      const issue = videoEditBuiltinParamSpaceIssue(definition.params.find(param => param.key === key), space)
       if (issue) throw new Error(`风格件「${preset.name}」的 ${definition.id}.${key}：${issue}`)
     }
   }
@@ -66,16 +73,17 @@ function cachedLookEffects(preset: VideoEditEffectPreset): VideoEditEffectPreset
   }
   return effects
 }
-export function resolveAuthorEffects(value: unknown, environment: AuthorEffectEnvironment = {}, presetFrame = 0, layer = '图层'): ResolvedAuthorEffect[] {
-  if (!Array.isArray(value)) throw new Error(`${layer}.effects(t) 必须同步返回效果数组。`)
+export function resolveAuthorEffects(value: unknown, environment: AuthorEffectEnvironment = {}, presetFrame = 0, layer = '图层', space: 'layer' | 'frame' = 'layer', apiVersion = CODE_AUTHOR_API_VERSION): ResolvedAuthorEffect[] {
+  const field = space === 'frame' ? 'adjust' : 'effects'
+  if (!Array.isArray(value)) throw new Error(`${layer}.${field}(t) 必须同步返回效果数组。`)
   const result: ResolvedAuthorEffect[] = []
   const add = (requested: string, raw: Record<string, unknown>, amount: number, look?: string): void => {
     // 冻结作者库的旧模糊描述与存档使用同一换算。
     const retired = retiredBlurParams(requested, raw)
     const id = retired ? 'blur' : requested, input = retired ?? raw
     const definition = requireVideoEditBuiltinEffect(id)
-    if (definition.space !== 'layer' || definition.media === 'audio') throw new Error(`${id} 不能用于图层，请使用片段效果链。`)
-    const params = normalizeVideoEditBuiltinParams(id, input, undefined, false, 'layer')
+    assertAuthorEffectSpace(definition, space, apiVersion)
+    const params = normalizeVideoEditBuiltinParams(id, input, undefined, false, space)
     for (const param of definition.params) if (param.type === 'lut' && params[param.key] && !environment.luts?.some(lut => lut.id === params[param.key])) throw new Error(`项目中找不到 LUT ${params[param.key]}，请重新导入。`)
     if (amount > 0) result.push({ id, params, amount, source: look === undefined ? 'descriptor' : 'look', ...(look === undefined ? {} : { look }) })
   }
@@ -90,7 +98,7 @@ export function resolveAuthorEffects(value: unknown, environment: AuthorEffectEn
       const unknownLook = Object.keys(params).filter(key => key !== 'name' && key !== 'knobs')
       if (unknownLook.length) throw new Error(`look 只接受 name 与 knobs；多传的键：${unknownLook.join('、')}。`)
       if (typeof params.name !== 'string' || !params.name.trim()) throw new Error('look 只接受非空 name 与 knobs。')
-      const preset = resolveVideoEditLookByName(params.name, environment)
+      const preset = resolveVideoEditLookByName(params.name, environment, space, apiVersion)
       const knobs = params.knobs === undefined ? {} : object(params.knobs, 'knobs')
       if (Object.values(knobs).some(value => typeof value !== 'number' || !Number.isFinite(value))) throw new Error('旋钮必须是有限数值。')
       const overrides = videoEditStylePieceKnobValues(preset, knobs as Record<string, number>)
@@ -99,7 +107,7 @@ export function resolveAuthorEffects(value: unknown, environment: AuthorEffectEn
         // 停用条目仍校验空间，避免启用曲线后才暴露无效预设。
         add(evaluated.builtin!.id, { ...evaluated.builtin!.params, ...overrides.get(item.id) }, evaluated.enabled === false ? 0 : evaluated.amount, preset.name)
       }
-    } catch (cause) { throw new Error(`${layer}.effects[${index}]：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
+    } catch (cause) { throw new Error(`${layer}.${field}[${index}]：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
   })
   return result
 }
@@ -112,10 +120,10 @@ export function authorEffectBleed(effects: readonly ResolvedAuthorEffect[], refe
   if (!Number.isFinite(value) || value < 0) throw new Error('图层效果外扩超出有限纹理尺寸。')
   return value
 }
-export function authorEffectsFingerprint(effects: readonly ResolvedAuthorEffect[], environment: AuthorEffectEnvironment = {}): string {
+export function authorEffectsFingerprint(effects: readonly ResolvedAuthorEffect[], environment: AuthorEffectEnvironment = {}, frame = 0): string {
   return renderFingerprintHash(JSON.stringify(effects.map(effect => {
     const params = Object.entries(effect.params).sort(([a], [b]) => a.localeCompare(b))
     const luts = requireVideoEditBuiltinEffect(effect.id).params.filter(param => param.type === 'lut').map(param => environment.luts?.find(lut => lut.id === effect.params[param.key])?.contentIdentity)
-    return [effect.id, params, effect.amount, luts]
+    return [effect.id, params, effect.amount, luts, ...(requireVideoEditBuiltinEffect(effect.id).frameSeeded ? [frame] : [])]
   })))
 }

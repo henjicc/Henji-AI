@@ -22,7 +22,7 @@ it('keeps translation in composition coordinates and fixes the opposite corner w
   const author = observation(), element = prepareAuthorElementIndex([author]).bounds[0]
   expect(codeElementMoveDelta(element, { x: 0, y: 0 }, { x: 5, y: 7 })).toEqual({ x: 5, y: 7 })
   const next = resizeCodeElement(element, {}, 2, { x: -20, y: 600 }, false)
-  const matrix = authorOverrideMatrix(author.baseMatrix!, author.bounds, next)
+  const matrix = authorOverrideMatrix(author.baseMatrix!, author.bounds!, next)
   expect(codePoint(matrix, 0, 0)).toEqual(codePoint(author.matrix, 0, 0))
   expect(codePoint(matrix, 100, 20)).toEqual([-20, 600])
 })

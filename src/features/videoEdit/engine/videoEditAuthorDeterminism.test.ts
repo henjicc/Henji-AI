@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { TEXT_LAYOUT_OBSERVER, observeTextLayouts, type TextLayoutObserverGlobal } from '@/core/videoEdit/textDrawObservation'
 import { expect, it } from 'vitest'
 import type { AuthorFrameInfo, AuthorModule } from './videoEditAuthorModule'
@@ -18,7 +19,7 @@ it('作者入口里的随机数与时钟只由入口和时刻决定：同一帧�
   const frame = (time: number) => {
     seen.length = 0
     const list = effect.layers!({}, 100, 100, {}, info(time))
-    list.forEach(layer => layer.draw(ctx, time))
+    list.forEach(layer => layer.draw!(ctx, time))
     return { values: [...seen], pose: list[1].pose!(time) }
   }
   const first = frame(1.5)
@@ -38,7 +39,7 @@ it('作者的方法仍以原对象为 this，冻结的常量图层也能包装�
   const calls: string[] = []
   const source: AuthorModule & { disposed?: boolean } = { name: '背景', layers: () => [background], dispose() { this.disposed = true } }
   const effect = deterministicAuthorModule(source)
-  effect.layers!({}, 1, 1, {}, info(0))[0].draw(ctx, 0)
+  effect.layers!({}, 1, 1, {}, info(0))[0].draw!(ctx, 0)
   void effect.dispose?.()
   expect(calls).toEqual(['ink'])
   expect(source.disposed).toBe(true)
@@ -75,4 +76,19 @@ it('模块顶层布局按串行 import 分配归属，并排绘制使用自己�
   expect(host[TEXT_LAYOUT_OBSERVER]).toBeUndefined()
   await expect(importAuthorDeterministic(async () => { throw new Error('模块失败') }, id => first.push(id))).rejects.toThrow('模块失败')
   expect(host[TEXT_LAYOUT_OBSERVER]).toBeUndefined()
+})
+
+it.each([4, 7, 8])('API %s 的确定性包装不读取继承的 adjust，draw 仍使用作者接收者', apiVersion => {
+  const calls: string[] = []
+  class Layer {
+    id = 'base'
+    color = 'ink'
+    get adjust(): never { throw new Error('旧接口不能读取 adjust') }
+    draw(): void { calls.push(this.color) }
+  }
+  const source: AuthorModule = { name: '兼容', layers: () => [new Layer()] }
+  const wrapped = deterministicAuthorModule(source, apiVersion)
+  wrapped.layers!({}, 1, 1, {}, info(0))[0].draw!(ctx, 0)
+  expect(calls).toEqual(['ink'])
+  expect(() => deterministicAuthorModule(source, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION).layers!({}, 1, 1, {}, info(0))).toThrow('旧接口不能读取 adjust')
 })

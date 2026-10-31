@@ -1,4 +1,6 @@
 import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
+import { codeElementOverrideGeometryKeys } from '@/core/videoEdit/codeElementOverrides'
 import { z } from 'zod'
 import { withVideoEditCodeMetadata, ensureVideoEditChangedCodeMetadata, ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import { getVideoEditRenderPreference, setVideoEditRenderPreference, type VideoEditRenderPreference } from './videoEditRenderCache'
@@ -279,18 +281,27 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const fontCandidate = await withVideoEditCodeMetadata(() => update(before))
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('读取代码参数期间剪辑已修改，请重读当前状态。')
     const compositeWrite = ['video_edit.effect', 'video_edit.transition'].includes(this.entityType) || keys.some(key => ['video_edit.clip.effect_ids', 'video_edit.clip.adjustment_from_track'].includes(key))
+    let candidateRendered = false
     if (compositeWrite) {
       const next = parseVideoEditDocument(reconcileVideoEditTimedContent(before, fontCandidate), before)
       assertVideoEditLockedTracks(before, next)
       const target = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) ? videoEditCompositeOwner(next, this.entityType as VideoEditCompositeEntityType, childId) : { sequence: next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!, clipIds: [childId] }
-      if (videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(owner, contentVersion, next, target.sequence.id, target.sequence.clips.find(clip => clip.id === target.clipIds[0])!.start, context?.signal, target.clipIds.map(clipId => ({ sequenceId: target.sequence.id, clipId })))
-    } else if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => ['video_edit.clip.code_version_id', 'video_edit.clip.code_parameters'].includes(mutation.propertyId))) {
+      if (videoEditIntroducesCodeEffects(before, next)) {
+        const clip = target.sequence.clips.find(clip => clip.id === target.clipIds[0])!
+        await trialVideoEditCodeDocument(owner, contentVersion, next, target.sequence.id, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)), context?.signal, target.clipIds.map(clipId => ({ sequenceId: target.sequence.id, clipId })))
+        candidateRendered = true
+      }
+    }
+    if (!candidateRendered && this.entityType === 'video_edit.clip' && step.mutations.some(mutation => ['video_edit.clip.code_version_id', 'video_edit.clip.code_parameters', 'video_edit.clip.element_overrides'].includes(mutation.propertyId))) {
       const next = parseVideoEditDocument(reconcileVideoEditTimedContent(before, fontCandidate), before)
       const sequence = next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!
       const oldCode = before.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === childId)?.code
       const nextCode = sequence.clips.find(clip => clip.id === childId)?.code
+      const clip = sequence.clips.find(clip => clip.id === childId)!
+      const apiVersion = next.codeMaterials?.find(definition => definition.id === nextCode?.definitionId)?.versions.find(version => version.id === nextCode?.versionId)?.apiVersion ?? 4
+      const geometryWrite = apiVersion >= CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION && Object.values(clip.elementOverrides ?? {}).some(override => codeElementOverrideGeometryKeys(override).length > 0)
       const imageValues = (values: typeof oldCode): unknown => Object.entries(values?.parameters ?? {}).filter(([, value]) => isCodeImageReference(value)).sort(([left], [right]) => left.localeCompare(right))
-      if (oldCode?.versionId !== nextCode?.versionId || JSON.stringify(imageValues(oldCode)) !== JSON.stringify(imageValues(nextCode))) {
+      if (geometryWrite || oldCode?.versionId !== nextCode?.versionId || JSON.stringify(imageValues(oldCode)) !== JSON.stringify(imageValues(nextCode))) {
         const owner = requireVideoEditInstance(projectId)
         const clip = sequence.clips.find(clip => clip.id === childId)!
         assertVideoEditLockedTracks(before, next)

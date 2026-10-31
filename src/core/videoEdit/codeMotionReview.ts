@@ -47,7 +47,7 @@ export async function collectVideoEditCodeMotion(root: VideoEditComposition, ran
       const observed = await observe(local, localFrame)
       if (observed.sequenceId !== local.id || observed.revision !== local.revision || observed.frame !== localFrame) throw new Error('运动观察对应的画面已改变，请重试。')
       const layer = observed.clips.find(value => value.clipId === clip.id && value.versionId === clip.code!.versionId)
-      const current = new Map((layer?.elements ?? []).map(element => [element.id, element]))
+      const current = new Map((layer?.elements ?? []).filter(element => element.kind !== 'adjust').map(element => [element.id, element]))
       sampledFrames++; sampledElements += current.size
       if (sampledElements > 200000) throw new Error('代码运动采样超过单次200000元素帧预算，请缩小 from/to；未截断证据。')
       if (layer && current.size) {

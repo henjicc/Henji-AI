@@ -1,4 +1,4 @@
-import { codeElementOverrideValuesSchema, evaluateCodeElementOverride, readCodeElementOverride, type CodeElementOverride, type CodeElementOverrideKey, type CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
+import { assertCodeElementOverrideAllowed, codeElementOverrideValuesSchema, evaluateCodeElementOverride, readCodeElementOverride, type CodeElementOverride, type CodeElementOverrideKey, type CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
 import { compareCodeMaterialTime, type CodeMaterialKeyframe } from '@/core/videoEdit/codeMaterialAnimation'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
@@ -65,6 +65,7 @@ export function updateVideoEditCodeElement(target: VideoEditCodeElementTarget, p
   const parsed = elementEditSchema.parse(patch)
   const current = readVideoEditCodeElementEdit(target)
   if (!current.element) throw new Error('此帧的元素不存在，请选择可见元素。')
+  assertCodeElementOverrideAllowed(current.element.author.kind, parsed)
   if (parsed.text !== undefined && current.textBinding) {
     if (Object.keys(parsed).length !== 1) throw new Error('文字内容和样式请分别修改。')
     setVideoEditCodeParameter(target, current.textBinding.parameter, codeAuthorTextParameterValue(current.textBinding, current.parameters, parsed.text), { gesture: options.gesture, time: options.time ?? current.time }); return
@@ -85,6 +86,7 @@ export function resetVideoEditCodeElement(target: VideoEditCodeElementTarget): v
 /** Explicitly arm/freeze transform channels. Static typography is never implicitly keyed. */
 export function setVideoEditCodeElementAutoKeyframes(target: VideoEditCodeElementTarget, enabled: boolean): void {
   const current = readVideoEditCodeElementEdit(target)
+  assertCodeElementOverrideAllowed(current.element?.author.kind, { dx: 0 })
   edit(target, clip => {
     const override = ensureOverride(clip, target.elementId)
     for (const key of ['dx', 'dy', 'scaleX', 'scaleY', 'rotation'] as const) {
@@ -98,6 +100,7 @@ export function setVideoEditCodeElementAutoKeyframes(target: VideoEditCodeElemen
 export function toggleVideoEditCodeElementKeyframe(target: VideoEditCodeElementTarget, key: CodeElementOverrideKey): void {
   if (!['dx', 'dy', 'scale', 'scaleX', 'scaleY', 'rotation', 'opacity', 'hidden'].includes(key)) throw new Error('文字与样式请使用作者声明的参数设置关键帧。')
   const current = readVideoEditCodeElementEdit(target)
+  assertCodeElementOverrideAllowed(current.element?.author.kind, { [key]: current.values[key] ?? 0 } as CodeElementOverrideValues)
   const fallback = key === 'dx' || key === 'dy' || key === 'rotation' ? 0 : key === 'hidden' ? false : 1
   const value = codeElementOverrideValuesSchema.shape[key].parse(current.values[key] ?? fallback)
   if (value === undefined) throw new Error('此元素没有这项可编辑属性。')

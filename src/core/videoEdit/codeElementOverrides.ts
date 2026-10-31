@@ -41,6 +41,17 @@ export type CodeElementOverride = z.infer<typeof codeElementOverrideSchema>
 export type CodeElementOverrides = z.infer<typeof codeElementOverridesSchema>
 export function readCodeElementOverride(values: CodeElementOverrides | undefined, id: string): CodeElementOverride | undefined { return values && Object.hasOwn(values, id) ? values[id] : undefined }
 
+/** 调整层没有可变换的几何，静态值与动画通道遵守同一约束。 */
+export function codeElementOverrideGeometryKeys(value: CodeElementOverride | undefined): CodeElementOverrideKey[] {
+  return CODE_ELEMENT_OVERRIDE_KEYS.filter(key => key !== 'opacity' && key !== 'hidden' && (value?.[key] !== undefined || value?.curves?.[key] !== undefined))
+}
+
+export function assertCodeElementOverrideAllowed(kind: 'adjust' | undefined, value: CodeElementOverride | undefined): void {
+  if (kind !== 'adjust' || !value) return
+  const geometry = codeElementOverrideGeometryKeys(value)
+  if (geometry.length) throw new Error(`调整层没有画面范围，不能修改位移、缩放或旋转（${geometry.join('、')}）；请修改效果参数或 opacity。`)
+}
+
 /** Source-anchored curves survive trimming, speed changes and reversed playback. */
 export function evaluateCodeElementOverride(value: CodeElementOverride, time: VideoEditSourceTime): CodeElementOverrideValues {
   const result: Record<string, unknown> = { ...value }; delete result.curves

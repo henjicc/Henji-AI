@@ -120,3 +120,16 @@ it('风格件线性与分段旋钮按实例映射，覆盖曲线且不污染原�
   expect(resolveAuthorEffects([look('柔和')], authorEffectEnvironmentForClip({ ...templateDocument, templates: [{ ...template, style: null }] }, templateClip))[0].amount).toBe(.4)
   expect(() => authorEffectEnvironmentForClip({ ...templateDocument, styles: [] }, templateClip)).toThrow(/模板所属风格.*child-style/)
 })
+
+it('画面效果只能进调整层或片段链，空间校验包含 look 展开及参数空间', () => {
+  expect(() => resolveAuthorEffects([{ id: 'vignette' }])).toThrow('暗角按整幅画面算，请放进调整层 adjust。')
+  expect(() => resolveAuthorEffects([{ id: 'film_grain' }])).toThrow('颗粒按整幅画面算，请放进调整层 adjust。')
+  expect(resolveAuthorEffects([{ id: 'vignette' }, { id: 'film_grain' }, { id: 'color_grade' }], {}, 0, 'grade', 'frame').map(effect => effect.id)).toEqual(['vignette', 'film_grain', 'color_grade'])
+  expect(() => resolveAuthorEffects([{ id: 'crop' }], {}, 0, 'grade', 'frame')).toThrow('片段效果链')
+  const preset: VideoEditEffectPreset = { id: 'v', name: '镜头', media: 'video', effects: [{ id: 'v', name: '暗角', enabled: true, amount: 1, builtin: { id: 'vignette', params: {} } }] }
+  expect(() => resolveAuthorEffects([look('镜头')], { presets: [preset] })).toThrow('暗角按整幅画面算，请放进调整层 adjust。')
+  expect(resolveAuthorEffects([look('镜头')], { presets: [preset] }, 0, 'grade', 'frame')[0]).toMatchObject({ id: 'vignette', source: 'look' })
+  for (const descriptor of [[{ id: 'vignette' }], [look('镜头')]]) {
+    expect(() => resolveAuthorEffects(descriptor, { presets: [preset] }, 0, 'title', 'layer', 8)).toThrow(/请使用片段效果链.*升级作者接口.*adjust/)
+  }
+})

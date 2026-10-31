@@ -1,3 +1,8 @@
+import { build } from 'esbuild-wasm'
+import { bundleAuthorFiles } from './videoEditAuthorBundle'
+import generatedFactories from '../authorLibraries/effects.generated.ts?raw'
+import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import { deterministicAuthorModule } from './videoEditAuthorDeterminism'
 import * as authorModules from './videoEditAuthorModule'
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
@@ -19,6 +24,7 @@ import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { readVideoEditPreciseRow, videoEditHalfToFloat } from './videoEditGpuShaders'
 import { float32ToFloat16 } from '../../imageEdit/v3/gpu/imageEditorGpuTileAtlasV3'
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 
 let gpu: Gpu, device: GpuDevice
 const W = 64, H = 4
@@ -26,6 +32,48 @@ const clip: VideoEditClip = { id: 'c', itemId: 'c', name: '画面', kind: 'image
 const document: VideoEditComposition = { ...createVideoEditSequence(), width: W, height: H, fps: 30, clips: [clip], media: [], items: [], revision: 0 }
 beforeAll(async () => { gpu = await init(); device = gpu.gpu as unknown as GpuDevice })
 afterAll(() => gpu?.dispose())
+
+it.each(['grain', 'animated-layer-effect', 'still'] as const)('恒定 settled 声明的 %s 输出复用与逐帧直出像素一致', async kind => {
+  const d = historyRasterDevice()
+  const effect = deterministicAuthorModule({ name: '效果复用', frameKey: () => 'settled', layers: () => [
+    { id: 'base', bounds: [0, 0, W, H] as [number, number, number, number],
+      ...(kind === 'animated-layer-effect' ? { effects: (time: number) => [{ id: 'color_grade', params: { exposure: (time - 1) * 3 } }] } : {}),
+      draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, W, H) } },
+    ...(kind === 'grain' ? [{ id: 'grain', adjust: () => [{ id: 'film_grain' as const, params: { amount: 70 } }] }] : []),
+  ] }, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+  const loader = vi.spyOn(authorModules, 'loadAuthorModule').mockResolvedValue(effect)
+  const code = { definitionId: 'definition', versionId: 'v', parameters: {} }
+  const doc: VideoEditComposition = { ...document, clips: [{ ...clip, kind: 'code', code, duration: 90 }],
+    codeMaterials: [{ id: 'definition', name: '效果复用', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, languageVersion: 4, ...testCodeManifest('export default { name: "效果复用", draw() {} }', {}) }] }] }
+  const compiler = { bundle: async (files: CodeMaterialFiles) => testAuthorBundle(files), dispose() {} }
+  const run = async (reuse: boolean) => {
+    const host = new VideoEditCodeGpu(d), sources = new VideoEditCodeSources(doc, async () => host, compiler, undefined, reuse)
+    const results: Array<{ pixels: Uint8Array; hits: number }> = []
+    try {
+      for (const frame of [30, 31, 32]) {
+        const prepared = await sources.prepare(doc, doc.clips, frame, () => true, undefined, { quality: 'final' })
+        const picture = prepared.pictures.get('c') as VideoEditCodePicture
+        const bytesPerRow = W * (picture.highPrecision ? 8 : 4)
+        const buffer = gpu.gpu.createBuffer({ size: bytesPerRow * H, usage: 0x01 | 0x08 }), encoder = gpu.gpu.createCommandEncoder()
+        encoder.copyTextureToBuffer({ texture: picture.texture as never }, { buffer, bytesPerRow }, [W, H])
+        gpu.gpu.queue.submit([encoder.finish()]); await buffer.mapAsync(0x01)
+        results.push({ pixels: new Uint8Array(buffer.getMappedRange().slice(0)), hits: prepared.cacheHits })
+        buffer.unmap(); buffer.destroy()
+      }
+      expect(host.diagnostics().generatorFrames).toBe(reuse && kind === 'still' ? 1 : 3)
+      return results
+    } finally { await sources.dispose(); await host.dispose() }
+  }
+  device.pushErrorScope('validation')
+  try {
+    const direct = await run(false), reused = await run(true)
+    expect(reused.map(frame => frame.hits)).toEqual(kind === 'still' ? [0, 1, 1] : [0, 0, 0])
+    expect(reused.map(frame => frame.pixels)).toEqual(direct.map(frame => frame.pixels))
+    if (kind === 'still') expect(reused[0].pixels).toEqual(reused[1].pixels)
+    else expect(reused[0].pixels).not.toEqual(reused[1].pixels)
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { loader.mockRestore(); vi.unstubAllGlobals() }
+})
 function compositor(): VideoEditGpuCompositor {
   const canvas = { width: W, height: H, getContext: () => ({ configure() {} }) } as unknown as OffscreenCanvas
   return new VideoEditGpuCompositor(canvas, { ready: Promise.resolve(), device, canvasFormat: 'rgba8unorm', assertDevice() {} } as unknown as VideoEditGpuCompositor)
@@ -168,7 +216,7 @@ it('浮点目标对非产光代码画面保持 [0,a]，产光只放开上限；�
 })
 
 /** 固定已栅格化的输入像素，只测正式作者缓存调度、效果与 GPU 合成，不替代浏览器 Canvas 验收。 */
-function historyRasterDevice(): GpuDevice {
+function historyRasterDevice(raster?: (width: number, height: number) => Uint8Array): GpuDevice {
   class Bitmap { width = W; height = H; close(): void {} }
   class Canvas {
     constructor(public width: number, public height: number) {}
@@ -187,7 +235,7 @@ function historyRasterDevice(): GpuDevice {
     if (key === 'copyExternalImageToTexture') return (_source: { source: Canvas }, destination: { texture: GpuTexture }, size: number[]) => {
       const [width, height] = size, pixels = new Uint8Array(width * height * 4)
       for (let i = 0; i < pixels.length; i += 4) pixels.set([51, 51, 51, 255], i)
-      gpu.gpu.queue.writeTexture({ texture: destination.texture as never }, pixels, { bytesPerRow: width * 4 }, [width, height])
+      gpu.gpu.queue.writeTexture({ texture: destination.texture as never }, raster?.(width, height) ?? pixels, { bytesPerRow: width * 4 }, [width, height])
     }
     const value: unknown = Reflect.get(target, key, target)
     return typeof value === 'function' ? value.bind(target) : value
@@ -339,4 +387,93 @@ it.each(['native', 'layers'] as const)('代码输出热命中与固定前序帧�
     if (kind === 'layers') expect(cached.map(frame => frame.format)).toEqual(['rgba8unorm', 'rgba16float', 'rgba16float', 'rgba8unorm'])
     expect(await device.popErrorScope()).toBeNull()
   } finally { loader.mockRestore(); vi.unstubAllGlobals() }
+})
+
+it('真实作者打包/加载/调整层的暗角、颗粒和整体调色与片段同参数逐像素一致，opacity 混合所有通道且 clip 外不变', async () => {
+  const width = 640, height = 360
+  const raster = (w: number, h: number): Uint8Array => {
+    const data = new Uint8Array(w * h * 4)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const alpha = x < w / 4 ? 0 : x < w / 2 ? 128 : 255
+      data.set([Math.round((.1 + .6 * x / w) * alpha), Math.round((.1 + .5 * y / h) * alpha), Math.round(.35 * alpha), alpha], (y * w + x) * 4)
+    }
+    return data
+  }
+  const d = historyRasterDevice(raster), host = new VideoEditCodeGpu(d)
+  const builtin = new VideoEditBuiltinEffectsGpu(d, d.createSampler({ minFilter: 'linear', magFilter: 'linear' }), host.effectAllocator)
+  const read = async (texture: GpuTexture, w: number, h: number): Promise<Float32Array> => {
+    const bpp = texture.format === 'rgba16float' ? 8 : 4, bytesPerRow = Math.ceil(w * bpp / 256) * 256
+    const buffer = gpu.gpu.createBuffer({ size: bytesPerRow * h, usage: 0x01 | 0x08 }), encoder = gpu.gpu.createCommandEncoder()
+    encoder.copyTextureToBuffer({ texture: texture as never }, { buffer, bytesPerRow }, [w, h])
+    gpu.gpu.queue.submit([encoder.finish()]); await buffer.mapAsync(0x01)
+    const mapped = new Uint8Array(buffer.getMappedRange()), pixels = new Float32Array(w * h * 4)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w * 4; x++) pixels[y * w * 4 + x] = bpp === 8 ? videoEditHalfToFloat(new Uint16Array(mapped.buffer, y * bytesPerRow, w * 4)[x]) : mapped[y * bytesPerRow + x] / 255
+    buffer.unmap(); buffer.destroy(); return pixels
+  }
+  device.pushErrorScope('validation')
+  try {
+    for (const [id, factory, params] of [['vignette', 'vignette', { amount: 45, midpoint: 35, feather: 65 }], ['film_grain', 'grain', { amount: 65, size: 45, monochrome: false }], ['color_grade', null, { exposure: .7 }]] as const) {
+      const descriptor = factory ? `${factory}(${JSON.stringify(params)})` : JSON.stringify({ id, params })
+      const bundle = await bundleAuthorFiles({ apiVersion: CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, entry: 'main.ts', files: {
+        'main.ts': `import { grain, vignette } from './effects.ts'; export default { name:'调整层验收', params:[{key:'opacity',type:'number',default:1,min:0,max:1,step:.01}], layers:(p,w,h)=>[{id:'base',draw(ctx){ctx.fillRect(0,0,w,h)}},{id:'adjust',adjust:()=>[${descriptor}],clip:p.opacity===1?undefined:[80,40,w-80,h-40],pose:()=>({opacity:p.opacity,x:900,blur:100})}] }`,
+        'effects.ts': generatedFactories,
+      } }, build)
+      const loaded = await import(/* @vite-ignore */ 'data:text/javascript;base64,' + Buffer.from(bundle.code).toString('base64')) as { default: AuthorModule }
+      const module = deterministicAuthorModule(loaded.default, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+      const runtime = new VideoEditAuthorRuntime(d, module, bundle.locations, true, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, undefined, host.effectAllocator)
+      try {
+        for (const divisor of [1, 2]) {
+          const w = width / divisor, h = height / divisor, source = await host.target('adjust-source', w, h)
+          const data = raster(w, h)
+          gpu.gpu.queue.writeTexture({ texture: source.texture as never }, data, { bytesPerRow: w * 4 }, [w, h])
+          const expected = await host.target('adjust-expected', w, h, id === 'film_grain' ? 'rgba8unorm' : 'rgba16float')
+          await builtin.render({ id, params: { ...params } }, { texture: source.texture, width: w, height: h, format: expected.textureFormat }, expected.texture, 17, 1 / divisor, [], 'final', { width, height })
+          const filtered = await read(expected.texture, w, h)
+          for (const opacity of [1, .35]) {
+            const eight = await host.target('adjust-eight', w, h), precise = await host.target('adjust-precise', w, h, 'rgba16float')
+            const region: [number, number, number, number] | undefined = opacity === 1 ? undefined : [80, 40, width - 80, height - 40]
+            await runtime.render(eight.texture, width, height, { opacity, region }, {}, { time: 17 / 30, frameDuration: 1 / 30, clip: { time: 17 / 30, duration: 2 } }, undefined, undefined, false, { width: w, height: h }, {}, 'final', () => {}, () => precise.texture)
+            const actual = await read(runtime.outputTexture!, w, h)
+            let maxError = 0, changed = 0
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) {
+              const i = (y * w + x) * 4 + c, before = data[i] / 255
+              const inside = !region || (x + .5 >= region[0] / divisor && x + .5 <= region[2] / divisor && y + .5 >= region[1] / divisor && y + .5 <= region[3] / divisor)
+              const desired = inside ? before * (1 - opacity) + filtered[i] * opacity : before
+              maxError = Math.max(maxError, Math.abs(actual[i] - desired))
+              if (inside && Math.abs(actual[i] - before) > 1 / 255) changed++
+            }
+            expect(maxError, JSON.stringify({ id, divisor, opacity, maxError })).toBeLessThanOrEqual(1 / 255)
+            expect(changed).toBeGreaterThan(0)
+            expect(runtime.observeElements().find(element => element.id === 'adjust')).toMatchObject({ kind: 'adjust', effects: [{ id }] })
+          }
+        }
+      } finally { await runtime.dispose() }
+    }
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { builtin.dispose(); await host.dispose(); vi.unstubAllGlobals() }
+}, 60000)
+
+it('调整层效果链中产光的完整输出进入后续调色，与片段串行链的透明边缘一致', async () => {
+  const host = new VideoEditCodeGpu(device), author = new VideoEditAuthorGpu(device), chain = new VideoEditAuthorEffects(device, host.effectAllocator)
+  const builtin = new VideoEditBuiltinEffectsGpu(device, device.createSampler({ minFilter: 'linear', magFilter: 'linear' }), host.effectAllocator)
+  device.pushErrorScope('validation')
+  try {
+    const input = await host.target('chain-input', W, H, 'rgba16float'), stack = await host.target('chain-stack', W, H, 'rgba16float')
+    const glow = await host.target('chain-glow', W, H, 'rgba16float'), expected = await host.target('chain-expected', W, H, 'rgba16float')
+    const pixels = new Uint16Array(W * H * 4)
+    for (let y = 0; y < H; y++) for (let x = W / 3 | 0; x < W * 2 / 3; x++) pixels.set([float32ToFloat16(.4), float32ToFloat16(.25), float32ToFloat16(.1), float32ToFloat16(.5)], (y * W + x) * 4)
+    gpu.gpu.queue.writeTexture({ texture: input.texture as never }, pixels, { bytesPerRow: W * 8 }, [W, H])
+    const descriptors = [{ id: 'glow', params: { strength: 70, source_opacity: 50, dither: 0 } }, { id: 'color_grade', params: { exposure: .7 } }]
+    const effects = resolveAuthorEffects(descriptors, {}, 0, 'adjust', 'frame')
+    const reference = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
+    await author.begin(stack.texture); chain.begin(author.commandEncoder())
+    const actual = await chain.encode('adjust', input.texture, W, H, effects, reference, {}, undefined, { radius: 0, lens: false }, () => {}, true, { frame: 0, opacity: 1 })
+    author.finish(); chain.commit()
+    await builtin.render(effects[0], { texture: input.texture, width: W, height: H, format: 'rgba16float' }, glow.texture, 0, 1, [], 'final')
+    await builtin.render(effects[1], { texture: glow.texture, width: W, height: H, format: 'rgba16float' }, expected.texture, 0, 1, [], 'final')
+    const received = await row(actual.picture), wanted = await row(expected.texture)
+    expect(Math.max(...received.map((value, index) => Math.abs(value - wanted[index])))).toBeLessThanOrEqual(1 / 255)
+    expect(actual.carriesLight).toBe(true)
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { chain.dispose(); builtin.dispose(); await author.dispose(); await host.dispose() }
 })

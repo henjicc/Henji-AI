@@ -106,9 +106,10 @@ export class VideoEditAuthorGpu {
     this.device.queue.submit([this.encoder.finish()])
     this.encoder = undefined
   }
-  private pass(entry: string, source: unknown, target: unknown, data: Float32Array, format = 'rgba8unorm'): void {
+  private pass(entry: string, source: unknown, target: unknown, data: Float32Array, format = 'rgba8unorm', clip?: readonly [number, number, number, number]): void {
     const encoder = this.encoder!, pipeline = this.pipeline(entry, format), buffer = this.uniform(data)
-    const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target, loadOp: 'clear', storeOp: 'store' }] })
+    const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target, loadOp: clip ? 'load' : 'clear', storeOp: 'store' }] })
+    if (clip) (pass as typeof pass & { setScissorRect(x: number, y: number, width: number, height: number): void }).setScissorRect(clip[0], clip[1], clip[2] - clip[0], clip[3] - clip[1])
     pass.setPipeline(pipeline)
     pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer } }, { binding: 1, resource: source }, { binding: 2, resource: this.sampler }] }))
     pass.draw(6); pass.end()
@@ -120,8 +121,8 @@ export class VideoEditAuthorGpu {
       this.pass('mip', view(texture, level - 1), view(texture, level), new Float32Array([width, height, 0, 0, 0, 0, 0, 0]), texture.format)
     }
   }
-  copy(source: GpuTexture, target: GpuTexture, width: number, height: number): void {
-    this.pass('mip', view(source), view(target), new Float32Array([width, height, 0, 0, 0, 0, 0, 0]), target.format)
+  copy(source: GpuTexture, target: GpuTexture, width: number, height: number, clip?: readonly [number, number, number, number]): void {
+    this.pass('mip', view(source), view(target), new Float32Array([width, height, 0, 0, 0, 0, 0, 0]), target.format, clip)
   }
   /**
    * `width`/`height` 是 `target` 的像素尺寸；位姿与 `clip` 是画布像素。`scale`：画布像素到 `target` 像素的比例（回放分辨率

@@ -1,3 +1,5 @@
+import { CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
+import { assertCodeElementOverrideAllowed } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { resolveAuthorEffects, authorEffectBleed, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
@@ -13,6 +15,7 @@ import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScal
 import { authorCanvasContent, type AuthorCanvasBox } from './videoEditAuthorCanvasBounds'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
+import { isAuthorAdjustment } from './videoEditAuthorModule'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
@@ -158,13 +161,19 @@ export class VideoEditAuthorRuntime {
     const frame = this.lastFrame
     if (!frame) return []
     let attachedUnassigned = false
-    return frame.layers.flatMap((layer, index) => {
+    return frame.layers.flatMap((layer, index): AuthorElementObservation[] => {
       const pose = layer.pose ? layer.pose(frame.time) : {}
       const id = authorLayerId(layer, index), override = frame.overrides && Object.hasOwn(frame.overrides, id) ? frame.overrides[id] : undefined
       if (!pose || override?.hidden || (pose.opacity ?? 1) * (override?.opacity ?? 1) <= 0) return []
+      if (isAuthorAdjustment(layer, this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION)) {
+        const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? this.locations?.fallback
+        return [{ kind: 'adjust', ...(layer.clip ? { clip: [...layer.clip] as [number, number, number, number] } : {}), id, name: layer.name ?? id, matrix: [...IDENTITY] as Matrix, corners: [],
+          ...(sourceSpan ? { sourceSpan } : {}), parameterKeys: (this.effect.params ?? []).filter(parameter => parameter.layer === id).map(parameter => parameter.key), textParameterKeys: [],
+          effects: frame.effects?.get(index) ?? [], effectsTime: frame.time, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1) }]
+      }
       const bounds = layer.bounds ?? [0, 0, frame.width, frame.height]
       const matrix = authorPoseMatrix(pose)
-      const posed = !!layer.pose || (this.apiVersion ?? 7) >= 7 && !!layer.effects || !!override
+      const posed = !!layer.pose || (this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION) >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION && !!layer.effects || !!override
       const recording = this.history.get(`${posed ? 'layer' : 'still'}:${index}:${id}`)?.painted?.recording
       const combined = [...this.history.entries()].find(([key]) => { const match = /^flat:(\d+):(\d+)$/.exec(key); return match && index >= Number(match[1]) && index < Number(match[2]) })?.[1].painted?.recording
       const observed = combined ?? recording
@@ -319,6 +328,24 @@ export class VideoEditAuthorRuntime {
           if (!target) { target = resolveInitialTarget(); this.layers.clear(target) }
           return target
         }
+        const promoteStack = async (): Promise<void> => {
+          if (target?.format === 'rgba16float') return
+          await this.layers.prepareFormat('rgba16float')
+          let upgraded: GpuTexture
+          if (promote) upgraded = promote()
+          else if (typeof initialTarget !== 'function' && initialTarget.format === 'rgba16float') upgraded = initialTarget
+          else {
+            if (!this.promotedTarget || this.promotedTarget.width !== outWidth || this.promotedTarget.height !== outHeight) {
+              const texture = this.effectAllocator.allocate(outWidth, outHeight, 'rgba16float')
+              if (this.promotedTarget) this.effectAllocator.release(this.promotedTarget.texture)
+              this.promotedTarget = { texture, width: outWidth, height: outHeight }
+            }
+            upgraded = this.promotedTarget.texture
+          }
+          if (hasContent) this.layers.copy(target!, upgraded, outWidth, outHeight)
+          else this.layers.clear(upgraded)
+          target = upgraded
+        }
         const used = new Set<number>()
         /**
          * Records one layer slot. A recording equal to the previous frame's (same commands, same image versions) is
@@ -425,13 +452,14 @@ export class VideoEditAuthorRuntime {
       const list = this.effect.layers ? authorCall(() => this.effect.layers!(params, width, height, assets, info)) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
       recordVideoEditPreparation('authorLayerList', performance.now() - listStarted)
       if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组。')
+      for (const layer of list) isAuthorAdjustment(layer, this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION)
       const evaluated = new Map<number, ResolvedAuthorEffect[]>()
       let carriesLight = false
       const drawStill = (ctx: OffscreenCanvasRenderingContext2D, still: AuthorLayer, position: number): void => {
         ctx.save()
         try {
           if (still.clip) { const [x0, y0, x1, y1] = still.clip; ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip() }
-          still.draw(textContext(ctx, position), info.time)
+          still.draw!(textContext(ctx, position), info.time)
         } catch (cause) { throw cause instanceof AuthorCanvasUnrecordable || cause instanceof AuthorAssetPending || cause instanceof TypeError ? cause : new Error(`静态层 ${position + 1}：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
         finally { ctx.restore() }
       }
@@ -472,15 +500,39 @@ export class VideoEditAuthorRuntime {
       this.layerEffects?.begin(this.layers.commandEncoder())
       for (let index = 0; index < list.length; index++) {
         const id = authorLayerId(list[index], index), override = overrides && Object.hasOwn(overrides, id) ? overrides[id] : undefined
-        const hasEffects = (this.apiVersion ?? 7) >= 7 && list[index].effects !== undefined
+        const hasEffects = (this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION) >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION && list[index].effects !== undefined
         const layer = (override || hasEffects) && !list[index].pose ? { ...list[index], bounds: list[index].bounds ?? [0, 0, width, height] as [number, number, number, number], pose: () => ({}) } : list[index]
         try {
+          if (isAuthorAdjustment(layer, this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION)) {
+            assertCodeElementOverrideAllowed('adjust', override)
+            const effects = resolveAuthorEffects(authorCall(() => layer.adjust!(info.time)), environment, info.clip.time / info.frameDuration, id, 'frame')
+            evaluated.set(index, effects)
+            const pose: import('./videoEditAuthorModule').AuthorPose | null = layer.pose ? authorCall(() => layer.pose!(info.time)) : {}
+            const opacity = Math.max(0, Math.min(1, (pose?.opacity ?? 1) * (override?.opacity ?? 1)))
+            if (!Number.isFinite(opacity)) throw new Error('调整层 opacity 必须是有限数值。')
+            if (!pose || override?.hidden || opacity <= 0 || !effects.length) continue
+            const rect = layer.clip ?? [0, 0, width, height]
+            if (rect.length !== 4 || !rect.every(Number.isFinite) || rect[2] < rect[0] || rect[3] < rect[1]) throw new Error('调整层 clip 范围无效。')
+            const clip: [number, number, number, number] = [Math.max(0, Math.ceil(rect[0] * sx - .5)), Math.max(0, Math.ceil(rect[1] * sy - .5)), Math.min(outWidth, Math.floor(rect[2] * sx - .5) + 1), Math.min(outHeight, Math.floor(rect[3] * sy - .5) + 1)]
+            if (clip[2] <= clip[0] || clip[3] <= clip[1]) continue
+            const needsFloat = effects.some(effect => videoEditEffectNeedsFloat(effect, { width: outWidth, height: outHeight, referenceSize: { width, height }, renderScale: sx }))
+            if (needsFloat) await promoteStack()
+            const input = stackTarget()
+            if (!this.layerEffects) { this.layerEffects = new VideoEditAuthorEffects(this.device, this.effectAllocator); this.layerEffects.begin(this.layers.commandEncoder()) }
+            const result = await this.layerEffects.encode(`adjust:${index}:${id}`, input, outWidth, outHeight, effects,
+              { referenceSize: { width, height }, contentBounds: { x: 0, y: 0, width, height }, rasterScale: sx, rasterOrigin: [0, 0], quality }, environment,
+              undefined, { radius: 0, lens: false }, () => {}, needsFloat, { frame: Math.round(info.time / info.frameDuration), opacity })
+            this.layers.copy(result.picture, input, outWidth, outHeight, clip)
+            carriesLight ||= result.carriesLight
+            hasContent = true
+            continue
+          }
           if (typeof layer.draw !== 'function') throw new Error('缺少 draw(ctx,t)。')
           // Frameflow batches adjacent untransformed layers onto one canvas.
           // This also preserves Canvas compositing between those layers.
           if (!layer.pose) {
             let end = index
-            while (end < list.length && !list[end].pose && ((this.apiVersion ?? 7) < 7 || list[end].effects === undefined) && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) end++
+            while (end < list.length && !isAuthorAdjustment(list[end], this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION) && !list[end].pose && ((this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION) < CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION || list[end].effects === undefined) && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) end++
             await stillRun(index, end)
             index = end - 1
             continue
@@ -494,7 +546,7 @@ export class VideoEditAuthorRuntime {
           const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration)).find(Boolean)
           const need = Math.max(1, ...samples.flatMap(sample => sample.pose ? [Math.hypot(sample.pose.matrix[0], sample.pose.matrix[1]), Math.hypot(sample.pose.matrix[2], sample.pose.matrix[3])] : []))
           if (hasEffects && typeof layer.effects !== 'function') throw new Error('effects 必须是函数。')
-          const effects = hasEffects ? resolveAuthorEffects(authorCall(() => layer.effects!(info.time)), environment, info.clip.time / info.frameDuration, id) : []
+          const effects = hasEffects ? resolveAuthorEffects(authorCall(() => layer.effects!(info.time)), environment, info.clip.time / info.frameDuration, id, 'layer', this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION) : []
           evaluated.set(index, effects)
           const reference = (rasterScale: number, pad = 0): LayerEffectReference => ({ referenceSize: { width, height }, contentBounds: bounds, rasterScale, rasterOrigin: [pad, pad], quality })
           const paddingByScale = new Map<number, number>()
@@ -519,7 +571,7 @@ export class VideoEditAuthorRuntime {
             if (!(fullResolution > 0) || !Number.isFinite(padding(fullResolution))) throw new Error('图层效果外扩超出设备纹理尺寸。')
           }
           const fullPad = padding(fullResolution)
-          const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw(textContext(ctx, index), info.time)
+          const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw!(textContext(ctx, index), info.time)
           const recorded = record(slot, { width: Math.ceil(bounds.width * fullResolution) + fullPad * 2, height: Math.ceil(bounds.height * fullResolution) + fullPad * 2 }, [fullResolution, 0, 0, fullResolution, fullPad - x * fullResolution, fullPad - y * fullResolution], draw, layerCacheSignature(layer, width, height))
           if (recorded.video) { this.liveLayers.add(slot); statistics.video++ } else this.liveLayers.delete(slot)
           // 回放分辨率降低时栅格跟着缩小，阴影与滤镜同比换算；画法换算不了的层（直接绘制、读画布、认不出的滤镜）照原分辨率栅格。
@@ -552,21 +604,7 @@ export class VideoEditAuthorRuntime {
           recordVideoEditPreparation('authorUpload', performance.now() - uploadStarted)
           if (samples.some(sample => sample.pose && sample.pose.opacity > 0) && target?.format !== 'rgba16float' &&
             needsFloat) {
-            await this.layers.prepareFormat('rgba16float')
-            let upgraded: GpuTexture
-            if (promote) upgraded = promote()
-            else if (typeof initialTarget !== 'function' && initialTarget.format === 'rgba16float') upgraded = initialTarget
-            else {
-              if (!this.promotedTarget || this.promotedTarget.width !== outWidth || this.promotedTarget.height !== outHeight) {
-                const texture = this.effectAllocator.allocate(outWidth, outHeight, 'rgba16float')
-                if (this.promotedTarget) this.effectAllocator.release(this.promotedTarget.texture)
-                this.promotedTarget = { texture, width: outWidth, height: outHeight }
-              }
-              upgraded = this.promotedTarget.texture
-            }
-            if (hasContent) this.layers.copy(target!, upgraded, outWidth, outHeight)
-            else this.layers.clear(upgraded)
-            target = upgraded
+            await promoteStack()
           }
           let result = { picture: surface.texture, carriesLight: false }
           if (effects.length || radius > 0) {
@@ -581,7 +619,7 @@ export class VideoEditAuthorRuntime {
             return { ...sample, pose: { ...sample.pose, matrix } }
           })
           hasContent = this.layers.draw(stackTarget, outWidth, outHeight, { texture: result.picture, x: 0, y: 0, width: canvas.width, height: canvas.height }, poses, layer.clip, scale) || hasContent
-          carriesLight ||= (this.apiVersion ?? 7) >= 7 && result.carriesLight
+          carriesLight ||= (this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION) >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION && result.carriesLight
         } catch (cause) {
           if (cause instanceof AuthorAssetPending || cause instanceof Error && cause.name === 'AbortError') throw cause
           throw new Error(`第 ${index + 1} 层${layer.name ? `「${layer.name}」` : ''}：${cause instanceof Error ? cause.message : String(cause)}`, { cause })

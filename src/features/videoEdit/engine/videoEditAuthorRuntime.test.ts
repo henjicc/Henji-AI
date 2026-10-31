@@ -1,3 +1,7 @@
+import { grain, vignette } from '../authorLibraries/effects.generated'
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
+import { authorFrameEffects } from '@/core/videoEdit/authorEffectObservation'
+import { prepareAuthorElementIndex, hitCodeElementIndex, codeElementAtSource } from '@/core/videoEdit/codeElementSelection'
 import { authorModuleTextLayouts, observeTextLayouts } from '@/core/videoEdit/textDrawObservation'
 import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import path from 'node:path'
@@ -11,7 +15,7 @@ import { createVideoEditDocument, createVideoEditSequence, videoEditComposition 
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { bundleAuthorFiles } from './videoEditAuthorBundle'
 import { authorEffectMetadata } from './videoEditAuthorParameters'
-import type { AuthorModule } from './videoEditAuthorModule'
+import type { AuthorLayer, AuthorModule } from './videoEditAuthorModule'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
@@ -848,6 +852,83 @@ it('冻结作者库 look 旋钮经正式打包加载和作者运行时进入图�
     expect(runtime.observeElements()[0].effects).toMatchObject([{ id:'blur', amount:.6, source:'look', params:{amount:.03} }])
     const previous = runtime.observeElements()
     await expect(runtime.render(output, 100, 50, {}, {}, frameInfo(1), undefined, undefined, true, undefined, {presets:[]})).rejects.toThrow(/找不到/)
+    expect(runtime.observeElements()).toEqual(previous)
+  } finally { await runtime.dispose() }
+})
+
+it('调整层切开静止组、按作者画幅执行，仅 opacity 和 clip 参与回写；观察无选框但可按源码与 id 定位', async () => {
+  const { device } = canvasHarness()
+  const sourceSpan = { file: 'main.js', start: 10, end: 30, startLine: 1, startColumn: 11, endLine: 1, endColumn: 31 }
+  const runtime = new VideoEditAuthorRuntime(device, { name: '调整', layers: () => [
+    { id: 'below', draw(ctx) { ctx.fillRect(0, 0, 100, 50) } },
+    { id: 'grade', sourceSpan, clip: [10.5, 4, 80, 40], pose: () => ({ opacity: .35, x: 900, rotation: 90, blur: 100 }), adjust: () => [grain({ amount: 42 })] },
+    { id: 'above', draw(ctx) { ctx.fillRect(0, 0, 10, 10) } },
+  ] }, undefined, true, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(6), undefined, undefined, true, { width: 50, height: 25 })
+    expect(layerDraw).toHaveBeenCalledTimes(2)
+    expect(layerCopy).toHaveBeenLastCalledWith(expect.anything(), output, 50, 25, [5, 2, 40, 20])
+    expect(layerDraw.mock.invocationCallOrder[0]).toBeLessThan(effectEncode.mock.invocationCallOrder[0])
+    expect(layerDraw.mock.invocationCallOrder[1]).toBeGreaterThan(layerCopy.mock.invocationCallOrder[0])
+    expect(effectEncode.mock.calls[0].slice(2, 6)).toMatchObject([50, 25, [{ id: 'film_grain', params: { amount: 42 } }], { referenceSize: { width: 100, height: 50 }, rasterScale: .5 }])
+    expect(effectEncode.mock.calls[0][11]).toEqual({ frame: 6, opacity: .35 })
+    const observed = runtime.observeElements(), adjust = observed.find(element => element.id === 'grade')!
+    expect(adjust).toMatchObject({ kind: 'adjust', sourceSpan, clip: [10.5, 4, 80, 40], corners: [], opacity: .35, effects: [{ id: 'film_grain', params: { amount: 42 } }] })
+    expect(adjust).not.toHaveProperty('bounds')
+    const index = prepareAuthorElementIndex(observed)
+    expect(index.byId.get('grade')?.author).toBe(adjust)
+    expect(hitCodeElementIndex(index, 20, 20).some(bound => bound.elementId === 'grade')).toBe(false)
+    expect(codeElementAtSource(index, 15, 'main.js')?.elementId).toBe('grade')
+    expect(authorFrameEffects({ sequenceId: 's', revision: 0, frame: 6, clips: [{ clipId: 'c', versionId: 'v', width: 100, height: 50, elements: observed }] }).clips[0].elements[1]).toMatchObject({ id: 'grade', kind: 'adjust', clip: [10.5, 4, 80, 40], effects: [{ id: 'film_grain', params: { amount: 42 } }] })
+  } finally { await runtime.dispose() }
+})
+
+it('调整层首次触发升 16f 时复制已有栈，后续同帧不重复升级；无触发的下一帧恢复八位', async () => {
+  const { device } = canvasHarness()
+  let amount = 35
+  const runtime = new VideoEditAuthorRuntime(device, { name: '精度', layers: () => [
+    { id: 'base', draw(ctx) { ctx.fillRect(0, 0, 100, 50) } },
+    { id: 'first', adjust: () => [vignette({ amount })] },
+    { id: 'second', adjust: () => [vignette({ amount })] },
+  ] }, undefined, true, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+  const precise = { format: 'rgba16float', createView: () => ({}), destroy() {} }, promote = vi.fn(() => precise)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0), undefined, undefined, false, undefined, {}, 'final', () => {}, promote)
+    expect(promote).toHaveBeenCalledOnce()
+    expect(layerCopy.mock.calls[0]).toEqual([output, precise, 100, 50])
+    expect(runtime.outputTexture).toBe(precise)
+    amount = 0
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(1))
+    expect(runtime.outputTexture).toBe(output)
+  } finally { await runtime.dispose() }
+})
+
+it('adjust 与画面入口互斥，旧接口忽略自定义 adjust 并保留普通绘制', async () => {
+  const { device } = canvasHarness()
+  for (const key of ['draw', 'fill', 'effects']) {
+    const runtime = new VideoEditAuthorRuntime(device, { name: '互斥', layers: () => [{ id: 'a', adjust: () => [], [key]: () => [] }] }, undefined, true, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+    try { await expect(runtime.render(output, 100, 50, {}, {}, frameInfo(0))).rejects.toThrow('adjust 与 draw、fill、effects 互斥') }
+    finally { await runtime.dispose() }
+  }
+  const adjust = vi.fn(() => { throw new Error('旧字段不执行') })
+  const draw = vi.fn(function(this: { adjust: unknown }, ctx: OffscreenCanvasRenderingContext2D) { expect(this.adjust).toBe(adjust); ctx.fillRect(0, 0, 10, 10) })
+  const layer = Object.assign(Object.create({ draw }) as AuthorLayer, { id: 'a', adjust })
+  const runtime = new VideoEditAuthorRuntime(device, { name: '旧接口', layers: () => [layer] }, undefined, true, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION - 1)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    expect(draw).toHaveBeenCalled(); expect(adjust).not.toHaveBeenCalled()
+    expect(runtime.observeElements()[0].kind).toBeUndefined()
+  }
+  finally { await runtime.dispose() }
+})
+
+it('调整层的未知覆盖也在渲染入口拒绝，失败保留成功帧观察', async () => {
+  const { device } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '覆盖拒绝', layers: () => [{ id: 'grade', adjust: () => [] }] }, undefined, true, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    const previous = runtime.observeElements()
+    await expect(runtime.render(output, 100, 50, {}, {}, frameInfo(1), { grade: { dx: 0 } })).rejects.toThrow('调整层没有画面范围')
     expect(runtime.observeElements()).toEqual(previous)
   } finally { await runtime.dispose() }
 })

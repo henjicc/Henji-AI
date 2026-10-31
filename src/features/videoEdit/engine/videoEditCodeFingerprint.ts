@@ -45,7 +45,7 @@ export class VideoEditCodeFingerprint {
     if (!module) {
       module = prepareAuthorModuleUrls(bundle).then(async urls => {
         this.releases.push(urls.dispose)
-        return loadAuthorModule(urls.url, [...bundle.trustContext ?? bundle.modules?.trustContext ?? [], ...this.document.foreign ? [this.document.foreign] : []])
+        return loadAuthorModule(urls.url, [...bundle.trustContext ?? bundle.modules?.trustContext ?? [], ...this.document.foreign ? [this.document.foreign] : []], bundle.apiVersion)
       })
       this.modules.set(bundle, module)
     }

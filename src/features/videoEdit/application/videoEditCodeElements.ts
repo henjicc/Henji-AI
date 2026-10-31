@@ -54,7 +54,11 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
     if (JSON.stringify(time) !== JSON.stringify(videoEditClipSourceTimeAt(entry.clip, frame - entry.clip.start, sequence.frameRate))) continue
     const observations = entry.index.bounds.flatMap(bound => {
       const author = bound.author
-      if (!author?.baseMatrix) return []
+      if (author.kind === 'adjust') {
+        const override = evaluateCodeElementOverride(readCodeElementOverride(raw.elementOverrides, author.id) ?? {}, time)
+        return override.hidden ? [] : [{ ...author, opacity: (author.baseOpacity ?? 1) * (override.opacity ?? 1) }]
+      }
+      if (!author?.baseMatrix || !author.bounds) return []
       const override = evaluateCodeElementOverride(readCodeElementOverride(raw.elementOverrides, author.id) ?? {}, time)
       if (override.hidden) return []
       const matrix = authorOverrideMatrix(author.baseMatrix, author.bounds, override)
@@ -97,13 +101,18 @@ export function selectVideoEditCodeElement(instance: VideoEditInstance, clipId: 
   if (instance.selection === clipId && instance.selectedCodeElement?.elementId === elementId && instance.selectedCodeElement.versionId === entry?.clip.code?.versionId) return
   setVideoEditView(instance.document.id, { selection: clipId, selectedCodeElement: elementId && entry ? { sequenceId: instance.activeSequenceId, clipId, versionId: entry.clip.code!.versionId, elementId } : null })
 }
-export function selectedVideoEditCodeElement(instance: VideoEditInstance): { entry: VideoEditCodeElementFrame; element: CodeElementBounds; label: string; parameterKeys: string[] } | undefined {
+export function readSelectedVideoEditCodeElement(instance: VideoEditInstance): { entry: VideoEditCodeElementFrame; element: CodeElementBounds; label: string; parameterKeys: string[] } | undefined {
   const selection = instance.selectedCodeElement
   if (!selection || selection.sequenceId !== instance.activeSequenceId || selection.clipId !== instance.selection) return undefined
   const entry = videoEditCodeElementFrames(instance).get(selection.clipId)
   if (!entry || entry.clip.code?.versionId !== selection.versionId) return undefined
   const element = entry.index.byId.get(selection.elementId)
-  return element && element.opacity >= .01 && element.width > 0 && element.height > 0 ? { entry, element, label: codeElementLabel(element), parameterKeys: entry.index.parameters.get(element.elementId) ?? [] } : undefined
+  return element && element.opacity >= .01 && (element.author.kind === 'adjust' || element.width > 0 && element.height > 0) ? { entry, element, label: codeElementLabel(element), parameterKeys: entry.index.parameters.get(element.elementId) ?? [] } : undefined
+}
+/** 画面选框只消费空间元素；逻辑选择与助手上下文允许没有画面范围的调整层。 */
+export function selectedVideoEditCodeElement(instance: VideoEditInstance): ReturnType<typeof readSelectedVideoEditCodeElement> {
+  const selected = readSelectedVideoEditCodeElement(instance)
+  return selected?.element.author.kind === 'adjust' ? undefined : selected
 }
 export function videoEditCodeElementRegion(entry: VideoEditCodeElementFrame, element: CodeElementBounds, sequence: Pick<VideoEditComposition, 'width' | 'height'>): { x: number; y: number; width: number; height: number } | undefined {
   const polygon = codeElementFramePolygon(element, entry.clip, entry.picture, sequence)
@@ -127,6 +136,6 @@ export function resolveVideoEditElementAnnotation(instance: VideoEditInstance, m
   return { mark: { ...mark, target: { ...mark.target, region: videoEditCodeElementRegion(entry, element, sequence) } }, missing: false, label: codeElementLabel(element) }
 }
 export function videoEditSelectedCodeElementContext(instance: VideoEditInstance): { clipRef: string; elementId: string; sourceSpan?: CodeElementBounds['sourceSpan']; parameterKeys: string[]; effects?: import('@/core/videoEdit/authorEffects').ResolvedAuthorEffect[] } | null {
-  const selected = selectedVideoEditCodeElement(instance)
+  const selected = readSelectedVideoEditCodeElement(instance)
   return selected ? { clipRef: `video_edit.clip:${instance.document.id}:${selected.entry.clip.id}`, elementId: selected.element.elementId, ...(selected.element.sourceSpan ? { sourceSpan: selected.element.sourceSpan } : {}), parameterKeys: selected.parameterKeys, effects: selected.element.author?.effects } : null
 }

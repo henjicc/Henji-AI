@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 51,
-      "fingerprint": "37681d4a6c0c934a1c4596d26f77751590d780c3811fb0476e9f9002964c5f45",
+      "version": 52,
+      "fingerprint": "78f4b46ba61f113068f8b19775c306e42c9bf9cd61a7a7f36c516e01d2f2e834",
       "supportedFrom": 17,
-      "minReaderVersion": 51
+      "minReaderVersion": 52
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 54,
-      "fingerprint": "72de9cfa8d8b5feacf3d3b2b4408a7bdb2992b470ea31cdc5283e94719950e60",
+      "version": 55,
+      "fingerprint": "aeaa7ba37a9b21f197c07eac9f89e56805e83db1aa4e7b18e595bb13ee70e02e",
       "supportedFrom": 19,
-      "minReaderVersion": 54
+      "minReaderVersion": 55
     },
     "project": {
       "version": 3,
@@ -174,16 +174,16 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 9,
-      "fingerprint": "aa9a728c14f4536b49445da0d1ebb5f040fda6680406229812ea77381337832f",
+      "version": 10,
+      "fingerprint": "4245878ce611419ce50b02447dc57d81a12d0106a149f1f3770cbd1ecabd05ae",
       "supportedFrom": 1,
-      "minReaderVersion": 9
+      "minReaderVersion": 10
     },
     "code-author-api": {
-      "version": 8,
-      "fingerprint": "d2bc7d702eb8434293703c3d4bbb28282e7aa4a87692983cf133885b0f3ef6df",
+      "version": 9,
+      "fingerprint": "1633a111fb155a0c2f325c5059323eb90fe530f322d0f3715e5d43a166ff821a",
       "supportedFrom": 4,
-      "minReaderVersion": 8
+      "minReaderVersion": 9
     },
     "code-component": {
       "version": 1,
@@ -192,10 +192,10 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 14,
-      "fingerprint": "03c790edf509f77e28aadd9fc9e02298bc1013fbf2a1ccbe5d8ffff87ac2053a",
+      "version": 15,
+      "fingerprint": "4797fb80549f6f6ad42f491819123d0d8b2837108e56838013032f8efbba1a15",
       "supportedFrom": 6,
-      "minReaderVersion": 14
+      "minReaderVersion": 15
     },
     "settings": {
       "version": 16,

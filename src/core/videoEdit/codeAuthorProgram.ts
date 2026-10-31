@@ -1,14 +1,17 @@
+import type { CodeAuthorApiVersionNumber } from './codeAuthorVersions'
 import type { ContentTrustReference } from '../contentTrust'
 import type { CodeMaterialMetadata } from './codeMaterialDocument'
 import type { CodeMatrix, CodeSourceSpan } from './codeMaterial/contract'
 
 /** Explicit author layer metadata, captured only for editing/observation. */
 export interface AuthorElementObservation {
+  kind?: 'adjust'
+  clip?: [number, number, number, number]
   effects?: import('./authorEffects').ResolvedAuthorEffect[]
   effectsTime?: number
   id: string
   name: string
-  bounds: [number, number, number, number]
+  bounds?: [number, number, number, number]
   baseMatrix?: CodeMatrix
   baseOpacity?: number
   opacity?: number
@@ -63,7 +66,7 @@ export type CodeAuthorApiVersion = CodeAuthorProgram['apiVersion']
 /** Rebuildable executable module plus declarations read in the render worker.
  * Source files, parameters and overrides remain the persisted truth. */
 export interface CodeAuthorProgram extends CodeMaterialMetadata {
-  apiVersion: 4 | 5 | 6 | 7 | 8
+  apiVersion: CodeAuthorApiVersionNumber
   languageVersion: 4
   bundle: CodeAuthorBundle
   frames: number[]

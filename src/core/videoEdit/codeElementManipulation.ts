@@ -12,6 +12,7 @@ export function codeElementMoveDelta(_element: CodeElementBounds, from: CodeEdit
 }
 export function resizeCodeElement(element: CodeElementBounds, values: CodeElementOverrideValues, corner: number, point: CodeEditPoint, uniform: boolean): CodeElementOverrideValues {
   const bounds = element.author.bounds
+  if (!bounds) return values
   const box = { x: bounds[0], y: bounds[1], width: bounds[2] - bounds[0], height: bounds[3] - bounds[1] }
   const corners = [[box.x, box.y], [box.x + box.width, box.y], [box.x + box.width, box.y + box.height], [box.x, box.y + box.height]]
   const opposite = corners[(corner + 2) % 4]; const moving = corners[corner]; const at = codePoint(codeInverseMatrix(element.matrix), point.x, point.y)
@@ -26,6 +27,7 @@ export function resizeCodeElement(element: CodeElementBounds, values: CodeElemen
 export function rotateCodeElement(element: CodeElementBounds, values: CodeElementOverrideValues, from: CodeEditPoint, to: CodeEditPoint, snap: boolean): number {
   const inverse = codeInverseMatrix(element.author.baseMatrix ?? element.matrix)
   const bounds = element.author.bounds
+  if (!bounds) return values.rotation ?? 0
   const center = codePoint(element.matrix, (bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2)
   const vector = (point: CodeEditPoint): number => Math.atan2(inverse[1] * (point.x - center[0]) + inverse[3] * (point.y - center[1]), inverse[0] * (point.x - center[0]) + inverse[2] * (point.y - center[1]))
   let delta = (vector(to) - vector(from)) * 180 / Math.PI

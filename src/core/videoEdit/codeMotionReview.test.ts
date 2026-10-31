@@ -131,3 +131,15 @@ it('整个查询区间一次都没画过才按图层告警，延迟与间歇绘�
   })
   expect(delayed.warnings.join(' ')).not.toContain('没有 drawText 该布局')
 })
+
+it('无几何调整层不进入运动速度与连续性轨迹，其他图层继续复核', async () => {
+  const { run, observe } = fixture()
+  const base = await run(observe)
+  const result = await run(async (local, frame) => {
+    const value = await observe(local, frame)
+    value.clips[0].elements.push({ id: 'grade', name: '调整', kind: 'adjust', matrix: [1, 0, 0, 1, 0, 0], corners: [], parameterKeys: [], textParameterKeys: [], effects: [{ id: 'vignette', params: { amount: 30 }, amount: 1, source: 'descriptor' }] })
+    return value
+  })
+  expect(result.records).toEqual(base.records)
+  expect(result.sampledElements).toBe(base.sampledElements)
+})

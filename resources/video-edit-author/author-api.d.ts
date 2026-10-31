@@ -101,6 +101,7 @@ export interface AuthorPose {
 }
 
 interface AuthorLayerBase {
+  adjust?: never
   effects?: (time: number) => readonly EffectDescriptor[]
   /** 稳定字符串，用于点选、元素覆盖与标注定位。 */
   id?: string
@@ -132,7 +133,18 @@ export interface AuthorPosedLayer extends AuthorLayerBase {
   /** 返回 null 表示本时刻不显示。 */
   pose(time: number): AuthorPose | null
 }
-export type AuthorLayer = AuthorStaticLayer | AuthorPosedLayer
+/** 对本模块此前合成的画面应用效果；仅采样 pose.opacity，clip 按作者画幅裁切。 */
+export interface AuthorAdjustmentLayer {
+  id: string
+  name?: string
+  adjust(time: number): readonly EffectDescriptor[]
+  clip?: AuthorRect
+  pose?(time: number): Pick<AuthorPose, 'opacity'> | null
+  draw?: never
+  fill?: never
+  effects?: never
+}
+export type AuthorLayer = AuthorStaticLayer | AuthorPosedLayer | AuthorAdjustmentLayer
 
 /** params 数组的一项；字段由宿主在加载时校验，这里只约束 key 与 type。 */
 export interface AuthorParamDeclaration {

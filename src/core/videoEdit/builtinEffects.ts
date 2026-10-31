@@ -30,6 +30,8 @@ export interface VideoEditBuiltinEffectDefinition {
   category?: 'more'
   /** layer 可用于作者图层及片段；不写只用于片段。 */
   space?: 'layer' | 'frame' | 'clip'
+  /** 效果使用宿主传入帧号取种子；身份摘要必须包含同一帧号。 */
+  frameSeeded?: boolean
   bleed?: (params: VideoEditBuiltinParams, reference: LayerEffectReference) => number
   author?: { factory: string }
   id: string

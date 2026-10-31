@@ -35,7 +35,7 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
       }
       if (ts.isObjectLiteralExpression(node)) {
         const key = (property: ts.ObjectLiteralElementLike): string | undefined => property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : undefined
-        const draw = node.properties.find(property => key(property) === 'draw')
+        const draw = node.properties.find(property => ['draw', 'adjust'].includes(key(property) ?? ''))
         const id = node.properties.find(property => key(property) === 'id')
         if (draw && id && ts.isPropertyAssignment(id) && ts.isStringLiteral(id.initializer)) {
           const value = id.initializer.text

@@ -117,3 +117,17 @@ it('效果工厂导入保留在冻结模块图，API 6 不可使用', async () =
   expect(bundle.code).toContain('henji-media://author-lib/henji-effects/1.0.0/index.mjs')
   await expect(bundleAuthorFiles({ ...files, apiVersion: 6 }, build)).rejects.toThrow(/v7|接口 7/)
 })
+
+it('真实打包分别登记同文件多个调整层及跨文件调整层的精确源码范围', async () => {
+  const files = {
+    'main.js': `import { adjustment } from './adjust.js'; export default {name:'调整',layers:()=>[{id:'a',adjust:()=>[]},{id:'b',adjust:()=>[]},adjustment]}`,
+    'adjust.js': `export const adjustment = {id:'remote',adjust:()=>[]}`,
+  }
+  const bundle = await bundleAuthorFiles({ apiVersion: 9, entry: 'main.js', files }, build)
+  for (const id of ['a', 'b', 'remote']) {
+    const span = bundle.locations.layers[id]
+    expect(span.file).toBe(id === 'remote' ? 'adjust.js' : 'main.js')
+    expect(files[span.file as keyof typeof files].slice(span.start, span.end)).toBe(`{id:'${id}',adjust:()=>[]}`)
+  }
+  expect(bundle.locations.layers.a).not.toEqual(bundle.locations.layers.b)
+})

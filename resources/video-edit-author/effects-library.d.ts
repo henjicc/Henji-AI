@@ -359,6 +359,17 @@ export interface StrokeParams {
   readonly source_opacity?: number
 }
 
+export interface VignetteParams {
+  /** 数量；四周变化多少。0 没有暗角；30（默认）柔和的电影暗角；70 浓重；100 四周完全变成所选颜色。；默认 30；硬范围 0–100；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 大小；中间不受影响的区域有多大。50%（默认）；调小暗角往里收，100% 只压最角落。；默认 50；硬范围 0–100；单位 percent；可动画 true */
+  readonly midpoint?: number
+  /** 羽化；暗角边缘过渡得多柔和。0% 边缘很硬，像一个圈；50%（默认）柔和；100% 从中心起就慢慢过渡。；默认 50；硬范围 0–100；单位 percent；可动画 true */
+  readonly feather?: number
+  /** 颜色；四周变成什么颜色。黑色（默认）是普通暗角；白色是四周提亮，适合梦境、回忆。；默认 "#000000"；可动画 true */
+  readonly color?: string
+}
+
 export interface ChromaticAberrationParams {
   /** 数量；颜色错开多远。0 没有色差；20（默认）轻微的镜头感；60 明显的彩边；100 约为画面高度的 2%，故障风。；默认 20；硬范围 0–100；单位 strength；可动画 true */
   readonly amount?: number
@@ -370,6 +381,15 @@ export interface ChromaticAberrationParams {
   readonly channels?: "red_blue" | "red_green" | "green_blue"
   /** 柔和度；彩边是清楚的三层重影还是柔和的彩虹过渡。0 三层颜色硬分开，像数码故障；50（默认）柔和；100 拉成连续的彩虹色带。；默认 50；硬范围 0–100；单位 strength；可动画 true */
   readonly smoothness?: number
+}
+
+export interface FilmGrainParams {
+  /** 强度；颗粒有多明显。0 没有颗粒；15 隐约的质感；30（默认）明显的胶片感；60 以上很粗糙。；默认 30；硬范围 0–100；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 大小；颗粒的粗细。0 最细，约一个像素；30（默认）；100 粗颗粒，约为画面高度的 0.4%。；默认 30；硬范围 0–100；单位 strength；可动画 true */
+  readonly size?: number
+  /** 单色；颗粒只改变明暗、不带颜色（默认打开），像黑白胶片；关闭后每种颜色各自起伏，像彩色胶片或高感光度的数码噪点。；默认 true；可动画 true */
+  readonly monochrome?: boolean
 }
 
 export interface MosaicParams {
@@ -406,7 +426,9 @@ export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'light_sweep'; readonly params?: LightSweepParams }
   | { readonly id: 'drop_shadow'; readonly params?: DropShadowParams }
   | { readonly id: 'stroke'; readonly params?: StrokeParams }
+  | { readonly id: 'vignette'; readonly params?: VignetteParams }
   | { readonly id: 'chromatic_aberration'; readonly params?: ChromaticAberrationParams }
+  | { readonly id: 'film_grain'; readonly params?: FilmGrainParams }
   | { readonly id: 'mosaic'; readonly params?: MosaicParams }
   | { readonly id: 'dissolve_reveal'; readonly params?: DissolveRevealParams }
 export interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }
@@ -421,7 +443,9 @@ export declare function glow(params?: GlowParams): { readonly id: 'glow'; readon
 export declare function lightSweep(params?: LightSweepParams): { readonly id: 'light_sweep'; readonly params: LightSweepParams }
 export declare function shadow(params?: DropShadowParams): { readonly id: 'drop_shadow'; readonly params: DropShadowParams }
 export declare function stroke(params?: StrokeParams): { readonly id: 'stroke'; readonly params: StrokeParams }
+export declare function vignette(params?: VignetteParams): { readonly id: 'vignette'; readonly params: VignetteParams }
 export declare function chromaticAberration(params?: ChromaticAberrationParams): { readonly id: 'chromatic_aberration'; readonly params: ChromaticAberrationParams }
+export declare function grain(params?: FilmGrainParams): { readonly id: 'film_grain'; readonly params: FilmGrainParams }
 export declare function mosaic(params?: MosaicParams): { readonly id: 'mosaic'; readonly params: MosaicParams }
 export declare function dissolve(params?: DissolveRevealParams): { readonly id: 'dissolve_reveal'; readonly params: DissolveRevealParams }
 export declare function look(name: string, knobs?: Readonly<Record<string, number>>): LookDescriptor

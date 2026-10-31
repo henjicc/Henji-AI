@@ -7,14 +7,15 @@ import type { AuthorElementObservation } from './codeAuthorProgram'
 /** These rectangles are selection metadata only, never a reconstruction of draw(). */
 export function prepareAuthorElementIndex(observations: readonly AuthorElementObservation[]): CodeElementIndex {
   const bounds = observations.map((author): CodeElementBounds => {
-    const x = Math.min(...author.corners.map(point => point[0])), y = Math.min(...author.corners.map(point => point[1]))
-    const width = Math.max(...author.corners.map(point => point[0])) - x, height = Math.max(...author.corners.map(point => point[1])) - y
+    const x = author.corners.length ? Math.min(...author.corners.map(point => point[0])) : 0, y = author.corners.length ? Math.min(...author.corners.map(point => point[1])) : 0
+    const width = author.corners.length ? Math.max(...author.corners.map(point => point[0])) - x : 0, height = author.corners.length ? Math.max(...author.corners.map(point => point[1])) - y : 0
     return { elementId: author.id, elementPath: [author.id], sourceSpan: author.sourceSpan, x, y, width, height, matrix: author.matrix, opacity: author.opacity ?? 1, author }
   })
   return { bounds, byId: new Map(bounds.map(bound => [bound.elementId, bound])), ancestors: new Map(), parameters: new Map(observations.map(author => [author.id, author.parameterKeys])) }
 }
 
 function hitAuthorBounds(author: AuthorElementObservation, x: number, y: number): boolean {
+  if (!author.bounds || author.kind === 'adjust') return false
   const [a, b, c, d, tx, ty] = author.matrix, determinant = a * d - b * c
   if (Math.abs(determinant) < 1e-12) return false
   const localX = (d * (x - tx) - c * (y - ty)) / determinant
@@ -48,7 +49,7 @@ export function cycleCodeElement(hits: readonly CodeElementBounds[], current?: s
   return hits.length ? hits[cycle ? (hits.findIndex(hit => hit.elementId === current) + 1) % hits.length : 0] : undefined
 }
 export function codeElementAtSource(index: CodeElementIndex, offset: number, file = 'main.ts'): CodeElementBounds | undefined {
-  return index.bounds.filter(bound => bound.sourceSpan && bound.sourceSpan.file === file && bound.sourceSpan.start <= offset && offset < bound.sourceSpan.end && bound.opacity >= .01 && bound.width > 0 && bound.height > 0).sort((a, b) => (a.sourceSpan!.end - a.sourceSpan!.start) - (b.sourceSpan!.end - b.sourceSpan!.start))[0]
+  return index.bounds.filter(bound => bound.sourceSpan && bound.sourceSpan.file === file && bound.sourceSpan.start <= offset && offset < bound.sourceSpan.end && bound.opacity >= .01 && (bound.author.kind === 'adjust' || bound.width > 0 && bound.height > 0)).sort((a, b) => (a.sourceSpan!.end - a.sourceSpan!.start) - (b.sourceSpan!.end - b.sourceSpan!.start))[0]
 }
 export function codeElementLabel(bound: CodeElementBounds): string {
   if (bound.author) return bound.author.name

@@ -1,3 +1,7 @@
+import { documentFontRevision } from '@/platform/fontFaces'
+import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
+import type { VideoEditFrameFingerprint } from '@/core/videoEdit/renderFingerprint'
+import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { codeMediaInputReference, codeMediaInputSample } from '@/core/videoEdit/codeMediaInput'
 import { videoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
@@ -63,4 +67,15 @@ export function codeOutputScenes(document: VideoEditComposition, plan: VideoEdit
     }
     return [name, key]
   })
+}
+
+/** 声明摘要由作者指纹入口计算，输出复用只补宿主输入与环境身份。 */
+export function codeOutputKey(document: VideoEditComposition, plan: VideoEditCodePlan, dependencies: Readonly<Record<string, AuthorFingerprintInput>>,
+  declared: VideoEditFrameFingerprint | undefined, quality: EffectQuality = 'interactive'): string {
+  const program = plan.program!, context = plan.context
+  const { sourceTime, overrides, info, environment } = plan.outputFrame!
+  return codeOutputSignature([plan.outputIdentity, plan.parameters, codeOutputScenes(document, plan), dependencies,
+    declared?.digest ?? (!declared && program.mode === 'static' && !codeMaterialUsesAudio(program) ? 'static' : [context.time, context.localTime, sourceTime]),
+    codeOutputObjectSignature(context.audio), context.audioTime, info.frameDuration, info.clip.duration, context.width, context.height, plan.divisor ?? 1,
+    documentFontRevision(), overrides, document.motionBlur === true, codeOutputObjectSignature(environment), quality])
 }

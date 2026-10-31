@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_PARAMETER_VISIBILITY_MIN_API_VERSION } from '../codeAuthorVersions'
 import { CODE_PARAMETER_TYPES, assertCodeMaterialKey, codeColor, finiteCodeNumber } from './contract'
 import type { CodeBasicParameterDeclaration, CodeBasicParameterValue, CodeParameterDeclaration, CodeParameterObject, CodeParameterTypeDefinition, CodeParameterValue, CodeParameterVisibility, CodePoint } from './contract'
 import { CODE_EASE_NAMES } from './motion'
@@ -123,7 +124,7 @@ export function parseCodeMaterialV3Parameters(raw: unknown, types: Record<string
       }
       const item = object(condition, path)
       if ('all' in item) {
-        if (apiVersion === undefined || apiVersion < 8) fail(path, '作者接口 v8 起支持 all 条件')
+        if (apiVersion === undefined || apiVersion < CODE_AUTHOR_PARAMETER_VISIBILITY_MIN_API_VERSION) fail(path, `作者接口 v${CODE_AUTHOR_PARAMETER_VISIBILITY_MIN_API_VERSION} 起支持 all 条件`)
         fields(item, ['all'], path)
         if (!Array.isArray(item.all) || !item.all.length) fail(`${path}.all`, '非空条件数组')
         parsed.visibleWhen = { all: item.all.map((value, index) => parse(value, `${path}.all[${index}]`)) }
