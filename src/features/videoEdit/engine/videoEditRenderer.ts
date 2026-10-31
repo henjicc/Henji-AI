@@ -603,7 +603,7 @@ export class VideoEditRenderer {
       const compositor = renderer.ensureCompositor()
       const { VideoEditCodeSources } = await import('./videoEditCodeSources')
       if (signal.aborted || renderer.disposed) return false
-      renderer.codeSources ??= new VideoEditCodeSources(renderer.document, () => compositor.code(), undefined, () => { this.lookaheadMetrics.codeHits++ })
+      renderer.codeSources ??= new VideoEditCodeSources(renderer.document, async () => { const code = await compositor.code(); code.setAuthorEffects({ ...renderer.document.authorEffects, luts: renderer.document.colorLuts }); return code }, undefined, () => { this.lookaheadMetrics.codeHits++ })
       this.lookaheadMetrics.codePrepared += await renderer.codeSources.prepareAhead(target.document, [target.clip], signal)
     }
     return true
@@ -625,7 +625,7 @@ export class VideoEditRenderer {
     await compositor.prepare()
     const { VideoEditCodeSources } = await import('./videoEditCodeSources')
     if (!current()) return
-    this.codeSources ??= new VideoEditCodeSources(document, () => compositor.code(), undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
+    this.codeSources ??= new VideoEditCodeSources(document, async () => { const code = await compositor.code(); code.setAuthorEffects({ ...this.document.authorEffects, luts: this.document.colorLuts }); return code }, undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
     await this.codeSources.prepare(document, clips, frame, current, undefined, { preparationOnly: true })
   }
   /** 合成、文字与作者输出共用比例；网页在全分辨率合成时仍按交付尺寸取帧。 */
@@ -1935,7 +1935,7 @@ export class VideoEditRenderer {
     if (!this.codeSources && (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length))) {
       const { VideoEditCodeSources } = await import('./videoEditCodeSources')
       if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
-      this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code(), undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
+      this.codeSources ??= new VideoEditCodeSources(document, async () => { const code = await this.compositor!.code(); code.setAuthorEffects({ ...this.document.authorEffects, luts: this.document.colorLuts }); return code }, undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
     }
     // 片子数据派生的取帧参数（视频与截图）按代码声明解析：先读好引用片子数据的代码，取帧、图片与代码准备才看到同一份合成参数。
     readSignal?.throwIfAborted()
@@ -1963,7 +1963,7 @@ export class VideoEditRenderer {
     const imagesSettled = Promise.allSettled([imagesReady])
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
-    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
+    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
       if (!codeMaterialUsesAudio(program)) return {}
       const source = codeAudioComposition(sourceDocument, sourceDocument.clips.find(value => value.id === clip.id) ?? clip, codeAudioReferenceMediaId(parameters))
       const audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)

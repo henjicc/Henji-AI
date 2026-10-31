@@ -50,7 +50,7 @@ function sample(tile: AdjustmentPixels, u: number, v: number): number[] {
 }
 function straight(pixel: number[]): Rgb { return pixel[3] <= 1e-5 ? [0, 0, 0] : pixel.slice(0, 3).map(x => x / pixel[3]) as Rgb }
 
-function evaluate(pass: AdjustmentPass, source: AdjustmentPixels, original: AdjustmentPixels, mask: AdjustmentPixels, u: number, v: number, lut: CubeLut | undefined, coordinates: AdjustmentCoordinates | undefined, uniforms: { a: Float32Array; b: Float32Array; c: Float32Array }): number[] {
+function evaluate(pass: AdjustmentPass, source: AdjustmentPixels, original: AdjustmentPixels, mask: AdjustmentPixels, u: number, v: number, lut: CubeLut | undefined, coordinates: AdjustmentCoordinates | undefined, uniforms: { a: Float32Array; b: Float32Array; c: Float32Array }, extendedRange: boolean): number[] {
   const c = sample(source, u, v); const alpha = c[3]; let rgb = straight(c)
   const { a, b, c: d } = uniforms
   switch (pass.entry) {
@@ -83,14 +83,14 @@ function evaluate(pass: AdjustmentPass, source: AdjustmentPixels, original: Adju
       const base = map(rgb, linear); const mid = weights(rgb)[1]; rgb = map(base, (x, i) => (x * a[i] - .21404114) * a[3] + .21404114)
       const y = luma(rgb); const t = tint(b[1]); rgb = map(rgb, (x, i) => encoded(mix(base[i], mix(y, x, Math.max(0, 1 + b[0])) + (t[i] * b[2] + b[3]) * .25 * mid, w))); break
     }
-    case 'color_grade_hsl_sharpen': { const base = sample(original, u, v); const w = clamp(sample(mask, u, v)[0]); const color = map(straight(base), linear); const blurred = straight(c); rgb = map(color, (x, i) => encoded(x + (x - blurred[i]) * a[0] * w)); return rgb.map(x => x * base[3]).concat(base[3]) }
+    case 'color_grade_hsl_sharpen': { const base = sample(original, u, v); const w = clamp(sample(mask, u, v)[0]); const color = map(straight(base), linear); const blurred = straight(c); rgb = map(color, (x, i) => encoded(x + (x - blurred[i]) * a[0] * w)); return rgb.map(x => (extendedRange || base[3] >= 1 && !(pass.uniforms[18] > 0) ? x : clamp(x)) * base[3]).concat(base[3]) }
     case 'color_grade_vignette': { if (coordinates && !source.fullWidth) { u = (u * source.width + coordinates.origin[0]) / coordinates.size[0]; v = (v * source.height + coordinates.origin[1]) / coordinates.size[1] } const distance = Math.hypot((u - .5) * 2 * mix(1, b[0], a[2]), (v - .5) * 2) / 1.41421356; const amount = smooth(a[1] * .8, a[1] * .8 + Math.max(.01, a[3]), distance) * Math.abs(a[0]); rgb = map(rgb, x => a[0] > 0 ? x + (1 - x) * amount : x * (1 - amount)); break }
   }
-  return rgb.map(x => x * alpha).concat(alpha)
+  return rgb.map(x => (extendedRange || pass.entry === 'color_grade_linear' || alpha >= 1 && !(pass.uniforms[18] > 0) ? x : clamp(x)) * alpha).concat(alpha)
 }
 
 /** Float32 premultiplied encoded-sRGB backend. Only the workspace adapter handles working primaries. */
-export function executeColorGradeCpuPlan(plan: AdjustmentPlan, input: AdjustmentPixels, luts: ReadonlyMap<string, CubeLut> = new Map(), coordinates?: AdjustmentCoordinates): AdjustmentPixels {
+export function executeColorGradeCpuPlan(plan: AdjustmentPlan, input: AdjustmentPixels, luts: ReadonlyMap<string, CubeLut> = new Map(), coordinates?: AdjustmentCoordinates, extendedRange = false): AdjustmentPixels {
   const originalInput: AdjustmentPixels = coordinates ? { ...input, fullWidth: coordinates.size[0], fullHeight: coordinates.size[1], origin: coordinates.origin } : input
   const outputs = new Map<number | string, AdjustmentPixels>([['input', originalInput]])
   for (const pass of plan.passes) {
@@ -103,7 +103,7 @@ export function executeColorGradeCpuPlan(plan: AdjustmentPlan, input: Adjustment
     const fullWidth = !coordinates ? width : downsampleX ? Math.ceil((source.fullWidth ?? source.width) / 2) : width > source.width ? coordinates.size[0] : source.fullWidth ?? width
     const fullHeight = !coordinates ? height : downsampleY ? Math.ceil((source.fullHeight ?? source.height) / 2) : height > source.height ? coordinates.size[1] : source.fullHeight ?? height
     const origin: readonly [number, number] = coordinates ? [Math.floor(coordinates.origin[0] * fullWidth / coordinates.size[0]), Math.floor(coordinates.origin[1] * fullHeight / coordinates.size[1])] : [0, 0]
-    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) data.set(evaluate(pass, source, original, mask, (origin[0] + x + .5) / fullWidth, (origin[1] + y + .5) / fullHeight, lut, coordinates, uniforms), (y * width + x) * 4)
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) data.set(evaluate(pass, source, original, mask, (origin[0] + x + .5) / fullWidth, (origin[1] + y + .5) / fullHeight, lut, coordinates, uniforms, extendedRange), (y * width + x) * 4)
     outputs.set(pass.target, { width, height, data, ...(coordinates ? { fullWidth, fullHeight, origin } : {}) })
   }
   return outputs.get('output')!

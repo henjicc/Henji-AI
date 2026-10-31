@@ -92,6 +92,9 @@ jobs:
       - name: 着色器组件目录检查
         run: npm run check:shader-components
 
+      - name: 检查作者效果生成产物
+        run: npm run check:author-effects
+
       - name: ESLint（渲染层）
         run: npm run lint
 

@@ -1,3 +1,4 @@
+import authorEffects from '../../../../resources/video-edit-author/author-effects.d.ts?raw'
 import webgpu from '@webgpu/types/dist/index.d.ts?raw'
 import authorApi from '../../../../resources/video-edit-author/author-api.d.ts?raw'
 import { AUTHOR_LIBRARY_TYPES_FILE, authorLibraryUrl } from '@/core/videoEdit/codeMaterial/authorLibraries'
@@ -45,5 +46,6 @@ export const AUTHOR_TYPE_ENVIRONMENT: AuthorTypeEnvironment = {
   libs: Object.fromEntries(Object.entries(libs).map(([path, text]) => [path.slice(path.lastIndexOf('/') + 1), text])),
   webgpu,
   authorApi,
+  authorEffects,
   libraryTypes: readLibraryTypes,
 }

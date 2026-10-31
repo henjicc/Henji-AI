@@ -43,6 +43,19 @@ async function run(params: VideoEditBuiltinParams, pixels: readonly number[], wi
 }
 const near = (got: readonly number[], expected: readonly number[]): void => { expected.forEach((value, i) => expect(got[i]).toBeCloseTo(value, 2)) }
 describe('ColorGrade 正式 GPU 像素', () => {
+  it('半透明边缘推亮后 RGB 不超过 alpha', async () => {
+    const result = await run({ exposure: 4, hsl_saturation: 20, vignette_amount: 30 }, [.4, .3, .2, .5])
+    for (let i = 0; i < result.length; i += 4) {
+      expect(result[i + 3]).toBe(.5)
+      expect(Math.max(...result.slice(i, i + 3))).toBeLessThanOrEqual(.5)
+    }
+  })
+  it('不透明超亮值保留到后续 HSL 与晕影工序', async () => {
+    const value = colorGradeSrgb(colorGradeLinear(.8) * 4)
+    near(await run({ exposure: 2 }, [.8, .8, .8, 1]), [value, value, value, 1])
+    const result = await run({ exposure: 2, hsl_saturation: -100, vignette_amount: -10 }, [.8, .8, .8, 1])
+    expect(Math.min(...result.filter((_, index) => index % 4 !== 3))).toBeGreaterThan(1)
+  })
   it('中性逐值恒等，1024 灰阶经中性及曝光保留高精度；透明度不变', async () => {
     const pixels = Array.from({ length: 1024 }, (_, i) => [i / 1023, i / 1023, i / 1023, 1]).flat()
     const neutral = await run({}, pixels, 1024)

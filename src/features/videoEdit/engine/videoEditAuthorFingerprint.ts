@@ -1,3 +1,4 @@
+import { resolveAuthorEffects, authorEffectsFingerprint, type AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import { renderFingerprintHash, type VideoEditFrameFingerprint } from '@/core/videoEdit/renderFingerprint'
 import { authorFrameExposure, authorLayerSamples } from './videoEditAuthorLayers'
 import { codeMaterialFilesKey, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
@@ -31,20 +32,21 @@ function frameKeyJson(value: unknown, active = new Set<object>()): string {
 /** 作者声明路径不运行任何绘制入口，也不需要文字测量画布。 */
 export function fingerprintAuthorFrameKey(effect: AuthorModule, size: { width: number; height: number }, params: AuthorParameters,
   info: AuthorFrameInfo, inputs: Readonly<Record<string, AuthorFingerprintInput>>, codeIdentity: string,
-  pictureParameters: unknown, overrides?: AuthorElementOverrides, motionBlur = true): VideoEditFrameFingerprint {
+  pictureParameters: unknown, overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = {}, apiVersion = 6): VideoEditFrameFingerprint {
   try {
     const frameInfo = Object.defineProperties({} as AuthorFrameInfo, Object.getOwnPropertyDescriptors(info))
     frameInfo.exposure = authorFrameExposure(effect, info, motionBlur)
     const key = frameKeyJson(effect.frameKey!(params, size.width, size.height, frameInfo))
+    const effects = apiVersion >= 7 && effect.layers ? fingerprintLayerEffects(effect, size, params, info, inputs, environment, overrides, motionBlur) : undefined
     return { method: 'frameKey', digest: renderFingerprintHash(JSON.stringify([codeIdentity, size.width, size.height, key,
-      Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)), pictureParameters, overrides, motionBlur])) }
+      Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)), pictureParameters, overrides, motionBlur, ...(apiVersion >= 7 ? [effects] : [])])) }
   } catch (error) { return { fallback: `frame-key-error:${error instanceof Error ? error.message : String(error)}` } }
 }
 
 /** 只运行作者函数和文字测量；不创建纹理、不解码、不重放绘制指令。 */
 export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: number; height: number }, params: AuthorParameters,
   info: AuthorFrameInfo, inputs: Readonly<Record<string, AuthorFingerprintInput>>, measure: OffscreenCanvasRenderingContext2D,
-  overrides?: AuthorElementOverrides, motionBlur = true): VideoEditFrameFingerprint {
+  overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = {}, apiVersion = 6): VideoEditFrameFingerprint {
   try {
     if (effect.createWebGL || effect.createWebGPU) return { fallback: 'native-gpu' }
     let recording = false
@@ -68,7 +70,7 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
       if (layer.pose && !layer.bounds || ![x, y, right, bottom].every(Number.isFinite) || right <= x || bottom <= y) throw new Error('图层范围无效')
       const samples = authorLayerSamples(layer, effect, info, { x, y, width: right - x, height: bottom - y }, override, motionBlur)
       // 元数据（源码行号、名称、作者缓存提示）不参与画面；未知字段保守计入，函数等无法散列则回退。
-      const { draw: _draw, pose: _pose, sourceSpan: _span, factory: _factory, name: _name, data: _data, cacheKey: _cache, ...properties } = layer
+      const { draw: _draw, pose: _pose, sourceSpan: _span, factory: _factory, name: _name, data: _data, cacheKey: _cache, effects: _effects, ...properties } = layer
       const poses = samples.map(sample => [sample, layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration) ?? null])
       const center = layer.pose?.(info.time) ?? null
       if (layer.pose && !samples.some(sample => sample.pose)) { layers.push([id, !!layer.pose, properties, poses, center]); continue }
@@ -83,7 +85,8 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
         }, true)
       } finally { recording = false }
       if (!commands.comparable || !commands.balanced) return { fallback: 'unrecordable-layer' }
-      layers.push([id, !!layer.pose, properties, poses, center, commands.ops])
+      const effects = apiVersion >= 7 && layer.effects ? authorEffectsFingerprint(resolveAuthorEffects(layer.effects(info.time), environment, info.clip.time / info.frameDuration, id), environment) : undefined
+      layers.push([id, !!layer.pose, properties, poses, center, commands.ops, ...(apiVersion >= 7 ? [effects] : [])])
     }
     const value = [{ width: size.width, height: size.height }, layers, [...used].sort().map(key => [key, inputs[key]])]
     const json = JSON.stringify(value, (_key, value: unknown) => {
@@ -94,4 +97,20 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
   } catch (error) {
     return { fallback: error instanceof AuthorCanvasUnrecordable ? `unrecordable:${error.message}` : `author-error:${error instanceof Error ? error.message : String(error)}` }
   }
+}
+
+function fingerprintLayerEffects(effect: AuthorModule, size: { width: number; height: number }, params: AuthorParameters, info: AuthorFrameInfo,
+  inputs: Readonly<Record<string, AuthorFingerprintInput>>, environment: AuthorEffectEnvironment, overrides: AuthorElementOverrides | undefined, motionBlur: boolean): unknown[] {
+  const assets: AuthorAssets = {}
+  for (const key of Object.keys(inputs)) Object.defineProperty(assets, key, { get: () => { throw new Error('asset-outside-recording') } })
+  const layers = effect.layers!(params, size.width, size.height, assets, info)
+  if (!Array.isArray(layers)) throw new Error('layers() 必须返回图层数组')
+  return layers.map((layer, index) => {
+    const [x, y, right, bottom] = layer.bounds ?? [0, 0, size.width, size.height]
+    const samples = authorLayerSamples(layer, effect, info, { x, y, width: right - x, height: bottom - y }, overrides?.[authorLayerId(layer, index)], motionBlur)
+    if (!samples.some(sample => sample.pose)) return null
+    const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration)).find(Boolean)
+    const effects = layer.effects ? resolveAuthorEffects(layer.effects(info.time), environment, info.clip.time / info.frameDuration, authorLayerId(layer, index)) : []
+    return [authorEffectsFingerprint(effects, environment), center?.blur ?? 0, center?.scaleX ?? center?.scale ?? 1, center?.scaleY ?? center?.scale ?? 1, layer.blurShape]
+  })
 }

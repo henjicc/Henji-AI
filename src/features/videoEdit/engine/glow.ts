@@ -1,3 +1,7 @@
+import { glowLevelWeights, GLOW_GAIN } from '@/core/videoEdit/glowEnergy'
+export { glowLevelWeights } from '@/core/videoEdit/glowEnergy'
+import { glowLevels, type LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
+export { glowLevels } from '@/core/videoEdit/layerEffectGeometry'
 /**
  * 发光的工序规划与 WGSL（剪辑内置效果 ABI：u.size/a/b/c、source/original/sampler，预乘 sRGB 编码）。
  *
@@ -14,24 +18,13 @@ import { GLOW_ABERRATION_PREFIX } from '@/core/videoEdit/glow'
 import { includedEffectValues } from '@/core/videoEdit/effectIncludes'
 import { chromaticAberrationPass } from './chromaticAberration'
 
-export const GLOW_ENTRIES = ['glow_prefilter', 'glow_down', 'glow_blur', 'glow_up', 'glow_composite', 'glow_source'] as const
+export const GLOW_ENTRIES = ['glow_prefilter', 'glow_down', 'glow_blur', 'glow_up', 'glow_composite', 'glow_source', 'glow_layer_image', 'glow_layer_light'] as const
 type V3 = [number, number, number]
 type V4 = readonly [number, number, number, number]
 const ZERO: V4 = [0, 0, 0, 0]
 
 /** 每层高斯在本层纹素里的标准差；加上降采样本身的模糊，缩放为 s 的一层约覆盖全分辨率 1.5 / s 像素。 */
 const LEVEL_SIGMA = 1
-const LEVEL_RADIUS = 1.5
-/**
- * 权重的基准层覆盖画面高度的 3/1080（1080 下 3 像素）。按画面高度的比例算，回放降分辨率、导出、换“分辨率”档位时，
- * 每个覆盖尺寸拿到的能量都一样，光晕亮度和形状不变。
- */
-const REFERENCE_RADIUS = 3 / 1080
-/** 半径 0 与 100 对应的光晕半径（占画面高度），中间按对数插值，滑块每段的观感变化均匀。 */
-const RADIUS_MIN = 0.004
-const RADIUS_MAX = 0.6
-/** 强度按平方映射，低强度段调得细；100 是 50 的 4 倍。整体倍数让默认参数在 1080 下的光晕总量约为 3.2。 */
-const GAIN = 3.2
 /** 光核（全分辨率、贴着发光内容的那一点光）相对光晕的权重。 */
 const CORE = 0.35
 /** 长宽比 ±100 时长轴是短轴的倍数。 */
@@ -48,47 +41,22 @@ function linearColor(value: unknown): V3 {
   }) as V3
 }
 
-/**
- * 金字塔：第一层按 `resolution`（0–1]缩放，之后每层减半，共 `count` 层。`reach` 是光晕半径折算成的层数（可以小于 1，
- * 也带小数）：第 i 层只计入 reach - i 那么多（0–1），半径连续变化时光晕连续长大，不会一档一档跳。
- * 层数不超过最小边还剩 2 个像素的深度。
- */
-export function glowLevels(radius: number, width: number, height: number, resolution: number): { first: { width: number; height: number }; count: number; reach: number } {
-  const first = { width: Math.max(1, Math.ceil(width * resolution)), height: Math.max(1, Math.ceil(height * resolution)) }
-  const pixels = height * RADIUS_MIN * (RADIUS_MAX / RADIUS_MIN) ** (Math.min(100, Math.max(0, radius)) / 100)
-  const reach = Math.log2(pixels * resolution / LEVEL_RADIUS) + 1
-  const limit = Math.max(1, Math.floor(Math.log2(Math.min(first.width, first.height) / 2)) + 1)
-  return { first, count: Math.min(limit, Math.max(1, Math.ceil(reach - 1e-9))), reach }
-}
-
-/**
- * 每层的 RGB 权重。覆盖半径每翻一倍，能量乘 `falloff`：falloff 为 1 时每个倍频程能量相同，光强按平方反比衰减；
- * 比基准更细的部分每细一倍能量减半。金字塔算不到的更细的那些倍频程，能量并进第一层；各倍频程都按半径截断。
- * 所以总亮度不随渲染尺寸和分辨率档位变。着色把每层乘上从内圈到外圈渐变的颜色（`tint` 为混合量）。
- */
-export function glowLevelWeights(count: number, reach: number, resolution: number, height: number, falloff: number, tint: number, inner: V3, outer: V3): V3[] {
-  const energy = (octave: number): number => octave >= 0 ? falloff ** octave : 2 ** octave
-  const covered = (index: number): number => Math.min(1, Math.max(0, reach - index))
-  const first = Math.log2(LEVEL_RADIUS / resolution / (REFERENCE_RADIUS * height))
-  let finer = 0
-  for (let step = 1; step <= 24; step++) finer += energy(first - step) * covered(-step)
-  return Array.from({ length: count }, (_, index) => {
-    const weight = energy(first + index) * covered(index) + (index === 0 ? finer : 0)
-    const position = count > 1 ? index / (count - 1) : 0
-    return [0, 1, 2].map(channel => weight * (1 + (inner[channel] + (outer[channel] - inner[channel]) * position - 1) * tint)) as V3
-  })
-}
-
 const taps = (sigma: number): number => Math.min(48, Math.ceil(sigma * 3))
 
 /** `params` 已补齐默认值。 */
-export function planGlow(params: VideoEditBuiltinParams, width: number, height: number): VideoEditBuiltinPlan {
+export function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
   const plan: VideoEditBuiltinPlan = { width, height, scratch: [], passes: [], linearScratch: true }
-  const alloc = (w: number, h: number): number => { plan.scratch.push({ width: w, height: h }); return plan.scratch.length - 1 }
+  const scales: number[] = []
+  const alloc = (w: number, h: number, scale = 1): number => { plan.scratch.push({ width: w, height: h }); scales.push(scale); return plan.scratch.length - 1 }
   const size = (texture: VideoEditBuiltinTexture): { width: number; height: number } => typeof texture === 'number' ? plan.scratch[texture] : plan
   const pass = (entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a: V4 = ZERO, b: V4 = ZERO, c: V4 = ZERO, original?: VideoEditBuiltinTexture): void => {
     const from = size(source); const to = size(target)
-    plan.passes.push({ entry, source, target, ...(original !== undefined ? { original } : {}), uniforms: new Float32Array([to.width, to.height, from.width, from.height, ...a, ...b, ...c]) })
+    const spatial = context ? [context.rasterOrigin[0], context.rasterOrigin[1], context.referenceSize.height * context.rasterScale, 0] : [0, 0, 0, 0]
+    const fromScale = typeof source === 'number' ? scales[source] : 1
+    const toScale = typeof target === 'number' ? scales[target] : 1
+    const ratio = fromScale / toScale
+    const grid = context ? [ratio, ...context.rasterOrigin.map(origin => Math.ceil(origin * fromScale) - Math.ceil(origin * toScale) * ratio), 1 / toScale] : [0, 0, 0, 0]
+    plan.passes.push({ entry, source, target, ...(original !== undefined ? { original } : {}), uniforms: new Float32Array([to.width, to.height, from.width, from.height, ...a, ...b, ...c, ...(context ? [...spatial, ...grid] : [])]) })
   }
   const strength = numeric(params, 'strength') / 100
   const sourceOpacity = numeric(params, 'source_opacity', 100) / 100
@@ -96,17 +64,19 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
   // a = (阈值, 过渡半宽, 原画不透明度, 着色量)：提取、合成与“发光来源”视图共用。
   const emission: V4 = [numeric(params, 'threshold') / 100, Math.max(0.001, numeric(params, 'threshold_smoothness') / 100 * 0.5), sourceOpacity, tint]
   if (params.view === 'source') { pass('glow_source', 'input', 'output', emission); return plan }
+  if (split && strength === 0) { pass('effect_opacity', 'input', 'output', [sourceOpacity, 0, 0, 0]); return plan }
   if (strength === 0 && sourceOpacity === 1) { pass('copy', 'input', 'output'); return plan }
 
   const resolution = Math.min(1, Math.max(0.25, numeric(params, 'resolution', 50) / 100))
   const inner = linearColor(params.tint_inner); const outer = linearColor(params.tint_outer)
-  const { first, count, reach } = glowLevels(numeric(params, 'radius'), width, height, resolution)
-  const weights = glowLevelWeights(count, reach, resolution, height, 0.45 + 0.55 * numeric(params, 'falloff') / 100, tint, inner, outer)
-  const gain = strength * strength * GAIN
+  const referenceHeight = context ? context.referenceSize.height * context.rasterScale : height
+  const { first, count, reach } = glowLevels(numeric(params, 'radius'), width, height, resolution, referenceHeight)
+  const weights = glowLevelWeights(count, reach, resolution, referenceHeight, 0.45 + 0.55 * numeric(params, 'falloff') / 100, tint, inner, outer)
+  const gain = strength * strength * GLOW_GAIN
   const core = inner.map(value => (1 + (value - 1) * tint) * CORE * gain) as V3
 
-  const levels: number[] = [alloc(first.width, first.height)]
-  for (let index = 1; index < count; index++) { const previous = plan.scratch[levels[index - 1]]; levels.push(alloc(Math.max(1, Math.ceil(previous.width / 2)), Math.max(1, Math.ceil(previous.height / 2)))) }
+  const levels: number[] = [alloc(first.width, first.height, resolution)]
+  for (let index = 1; index < count; index++) { const previous = plan.scratch[levels[index - 1]]; levels.push(alloc(Math.max(1, Math.ceil(previous.width / 2)), Math.max(1, Math.ceil(previous.height / 2)), resolution / 2 ** index)) }
   pass('glow_prefilter', 'input', levels[0], emission)
   for (let index = 1; index < count; index++) pass('glow_down', levels[index - 1], levels[index])
 
@@ -118,7 +88,7 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
   const middles: number[] = []
   const blurred = levels.map(level => {
     const { width: lw, height: lh } = plan.scratch[level]
-    const middle = alloc(lw, lh); const out = alloc(lw, lh); middles.push(middle)
+    const middle = alloc(lw, lh, scales[level]); const out = alloc(lw, lh, scales[level]); middles.push(middle)
     pass('glow_blur', level, middle, [along[0] / lw, along[1] / lh, LEVEL_SIGMA * aspect, taps(LEVEL_SIGMA * aspect)])
     pass('glow_blur', middle, out, [across[0] / lw, across[1] / lh, LEVEL_SIGMA, taps(LEVEL_SIGMA)])
     return out
@@ -131,16 +101,30 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
     pass('glow_up', accumulated, levels[index], [...weights[index], 0], [...lowWeight, 0], ZERO, blurred[index])
     accumulated = levels[index]; lowWeight = [1, 1, 1]
   }
-  const aberration = chromaticAberrationPass(includedEffectValues(params, GLOW_ABERRATION_PREFIX), width, height, true)
+  const aberration = chromaticAberrationPass(includedEffectValues(params, GLOW_ABERRATION_PREFIX), context ? first.width : width, context ? first.height : height, true, context ? { ...context, rasterScale: context.rasterScale * resolution, rasterOrigin: context.rasterOrigin.map(value => Math.ceil(value * resolution)) as [number, number] } : undefined)
   if (aberration) {
     pass(aberration.entry, accumulated, middles[0], aberration.a, aberration.b, aberration.c)
+    if (context) plan.passes.at(-1)!.uniforms.set(aberration.spatial, 16)
     accumulated = middles[0]
   }
   pass('glow_composite', accumulated, 'output', emission, [...core, params.blend === 'screen' ? 1 : 0], [gain, numeric(params, 'core_white') / 100, numeric(params, 'dither', 50) / 100, params.dither_mono === true ? 1 : 0])
+  if (split && strength > 0) {
+    const image = plan.passes.at(-1)!
+    image.entry = 'glow_layer_image'
+    const light = alloc(width, height)
+    plan.passes.push({ ...image, entry: 'glow_layer_light', target: light, uniforms: image.uniforms.slice() })
+    plan.underlay = light
+  }
   return plan
 }
 
 export const GLOW_WGSL = `
+// 局部纹理按内容原点定位采样网格，外扩尺寸变化不缩放网格或移动噪声。
+fn glowUv(v: Vertex) -> vec2f {
+ if (u.grid.x > 0.0) { return (v.position.xy * u.grid.x + u.grid.yz) / u.size.zw; }
+ return uvOf(v);
+}
+
 // 发光内容（预乘线性光）。a = (阈值, 过渡半宽, 原画不透明度, 着色量)。
 // 阈值按直通色最亮的通道比较，纯红、纯蓝的霓虹和白光一样容易过阈值；着色量把颜色先褪成同样亮度的白光，再在各层上色。
 fn glowEmission(c: vec4f) -> vec3f {
@@ -172,10 +156,10 @@ fn glowBoxes(uv: vec2f, t: vec2f, prefilter: bool) -> vec3f {
 }
 // 提取时输入是整幅画面，按目标纹素取样：目标与输入同样大小时（分辨率 100%）是一道柔化，缩小时是降采样。
 @fragment fn glow_prefilter(v: Vertex) -> @location(0) vec4f {
- return vec4f(glowBoxes(uvOf(v), 0.5 / u.size.xy, true), 1.0);
+ return vec4f(glowBoxes(glowUv(v), select(0.5 / u.size.xy, vec2f(0.5 * u.grid.w) / u.size.zw, u.grid.x > 0.0), true), 1.0);
 }
 @fragment fn glow_down(v: Vertex) -> @location(0) vec4f {
- return vec4f(glowBoxes(uvOf(v), 1.0 / u.size.zw, false), 1.0);
+ return vec4f(glowBoxes(glowUv(v), 1.0 / u.size.zw, false), 1.0);
 }
 // 一维高斯：a = (每步 u, 每步 v, 标准差（纹素）, 单侧取样数)。
 @fragment fn glow_blur(v: Vertex) -> @location(0) vec4f {
@@ -196,7 +180,7 @@ fn glowTent(uv: vec2f, t: vec2f) -> vec3f {
 // 本层（original）乘 a.rgb，加上粗一层（source）tent 升采样乘 b.rgb。
 @fragment fn glow_up(v: Vertex) -> @location(0) vec4f {
  let uv = uvOf(v);
- return vec4f(tapOriginal(uv).rgb * u.a.rgb + glowTent(uv, 1.0 / u.size.zw) * u.b.rgb, 1.0);
+ return vec4f(tapOriginal(uv).rgb * u.a.rgb + glowTent(glowUv(v), 1.0 / u.size.zw) * u.b.rgb, 1.0);
 }
 // 相加：发光在原画剩余的亮度空间里线性叠加，快到顶时才平滑压缩；原画本身一点不改。
 fn glowShoulder(x: vec3f) -> vec3f {
@@ -212,37 +196,43 @@ fn glowNoise(p: vec2f, mono: bool) -> vec3f {
  let b = glowHash(p, vec2f(17.873, 63.719)) + glowHash(p, vec2f(85.341, 23.553)) - 1.0;
  return vec3f(r, g, b);
 }
-// 合成：source 为累加好的光晕；b.rgb 光核权重，b.w 滤色；c = (光晕权重, 核心发白, 抖动量, 单色抖动)。
-@fragment fn glow_composite(v: Vertex) -> @location(0) vec4f {
+// 光核与光晕共用正式提取、shoulder 与抖动公式；输出方式由宿主合成语义决定。
+fn glowLight(v: Vertex) -> vec3f {
  let uv = uvOf(v); let base = tapOriginal(uv);
- // 光核取样距离按画面高度的比例（1080 下 1.5 像素），任何渲染尺寸下一样。
  let dims = vec2f(textureDimensions(original));
- let step = vec2f(1.5 / 1080.0 * dims.y / dims.x, 1.5 / 1080.0);
+ let h = select(dims.y, u.layer.z, u.layer.z > 0.0);
+ let step = vec2f(1.5 / 1080.0 * h) / dims;
  let core = glowEmission(base) * 0.5 + (glowEmission(tapOriginal(uv + vec2f(step.x, 0.0))) + glowEmission(tapOriginal(uv - vec2f(step.x, 0.0))) + glowEmission(tapOriginal(uv + vec2f(0.0, step.y))) + glowEmission(tapOriginal(uv - vec2f(0.0, step.y)))) * 0.125;
- let light = glowTent(uv, 1.0 / u.size.zw) * u.c.x + core * u.b.rgb;
- // 合成器在 sRGB 编码值上按预乘透明度叠加。所以先算出“叠到黑底上该有的样子”：原画按合成器的方式叠到黑底上，再把光加进去；
- // 输出就是这个编码颜色，透明度取它与保留原画中较大的。不透明处等于原画加光；透明处叠到黑底上和不透明黑底上一样亮。
- let shown = base.a * u.a.z;
- let before = straight(base) * shown;
+ return glowTent(glowUv(v), 1.0 / u.size.zw) * u.c.x + core * u.b.rgb;
+}
+fn glowColor(before: vec3f, light: vec3f, screen: bool, position: vec2f) -> vec3f {
  let b = toLinear(before);
  var rgb: vec3f;
- if (u.b.w > 0.5) {
-  rgb = vec3f(1.0) - (vec3f(1.0) - b) * exp(-light);
- } else {
-  // 光在原画剩余的亮度空间里线性叠加，快到顶时才平滑压缩。
+ if (screen) { rgb = vec3f(1.0) - (vec3f(1.0) - b) * exp(-light); }
+ else {
   let room = max(vec3f(1.0) - b, vec3f(0.0001));
   rgb = b + room * glowShoulder(light / room);
-  // 某个通道饱和后放不下的能量把其余通道往白推，像曝光过度的光核。
   let overflow = max(light - (rgb - b), vec3f(0.0));
   rgb = mix(rgb, vec3f(1.0), clamp(glowLuma(overflow) * u.c.y, 0.0, 1.0));
  }
  let encoded = toSrgb(rgb);
- // 抖动只加在被光改动了半个色阶以上的像素上，抖动量 50 约一个 8 位色阶：光晕的平滑渐变不出色带，光没碰到的原画一点不变。
  let changed = clamp(glowPeak(encoded - before) * 510.0, 0.0, 1.0);
- let lit = clamp(encoded + glowNoise(v.position.xy, u.c.w > 0.5) * (u.c.z * 2.0 / 255.0) * changed, vec3f(0.0), vec3f(1.0));
+ return clamp(encoded + glowNoise(position - u.layer.xy, u.c.w > 0.5) * (u.c.z * 2.0 / 255.0) * changed, vec3f(0.0), vec3f(1.0));
+}
+@fragment fn glow_composite(v: Vertex) -> @location(0) vec4f {
+ let base = tapOriginal(uvOf(v)); let shown = base.a * u.a.z;
+ let lit = glowColor(straight(base) * shown, glowLight(v), u.b.w > 0.5, v.position.xy);
  let alpha = max(shown, glowPeak(lit));
  if (alpha <= 0.00001) { return vec4f(0.0); }
  return vec4f(min(lit, vec3f(alpha)), alpha);
+}
+@fragment fn glow_layer_image(v: Vertex) -> @location(0) vec4f {
+ let base = tapOriginal(uvOf(v)); let shown = base.a * u.a.z;
+ let lit = glowColor(straight(base), glowLight(v), u.b.w > 0.5, v.position.xy);
+ return vec4f(lit * shown, shown);
+}
+@fragment fn glow_layer_light(v: Vertex) -> @location(0) vec4f {
+ return vec4f(glowColor(vec3f(0.0), glowLight(v), false, v.position.xy), 0.0);
 }
 // “发光来源”视图：只显示过了阈值、会发光的部分，其余为黑。
 @fragment fn glow_source(v: Vertex) -> @location(0) vec4f {

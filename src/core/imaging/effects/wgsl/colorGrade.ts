@@ -2,7 +2,8 @@ import { COLOR_GRADE_UNIFIED_WGSL } from './colorGradeUnified'
 
 /** LUT, HSL secondary, vignette and the unified pointwise grade (`colorGradeUnified.ts`).
  * Straight f32 color, no 8-bit LUT or intermediate upper clamp; retain premultiplied alpha. */
-export const COLOR_GRADE_WGSL = `
+export function colorGradeWgsl(extendedRange = false, layerCoordinates = false): string {
+return `
 // HSL selection is perceptual, using straight encoded RGB. Color corrections and
 // mask-weighted mixing use linear light, returning the same premultiplied sRGB ABI.
 fn colorGradeRange(x: f32, lo: f32, hi: f32, feather: f32) -> f32 {
@@ -50,7 +51,10 @@ fn colorGradeHueRange(hue: f32, lo: f32, hi: f32, feather: f32) -> f32 {
  let rgb = toLinear(straight(c)); let blurred = straight(tap(uv));
  return colorGradeOut(toSrgb(rgb + (rgb - blurred) * u.a.x * weight), c.a);
 }
-fn colorGradeOut(rgb: vec3f, alpha: f32) -> vec4f { return vec4f(rgb * alpha, alpha); }
+fn colorGradeOut(rgb: vec3f, alpha: f32) -> vec4f {
+ ${extendedRange ? '' : `if (${layerCoordinates ? 'u.layer.z > 0.0 || ' : ''}alpha < 1.0) { return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)) * alpha, alpha); }`}
+ return vec4f(rgb * alpha, alpha);
+}
 fn colorGradeWeights(rgb: vec3f) -> vec3f {
  let y = clamp(dot(rgb, LUMA), 0.0, 1.0);
  let shadow = 1.0 - smoothstep(0.0, 0.5, y); let high = smoothstep(0.5, 1.0, y);
@@ -93,3 +97,5 @@ fn colorGradeHue(rgb: vec3f) -> f32 {
 }
 ${COLOR_GRADE_UNIFIED_WGSL}
 `
+}
+export const COLOR_GRADE_WGSL = colorGradeWgsl()

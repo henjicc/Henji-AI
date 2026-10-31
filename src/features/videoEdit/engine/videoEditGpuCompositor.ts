@@ -63,7 +63,7 @@ export class VideoEditGpuCompositor {
     await this.ready
     let runtime = this.authorRuntimes.get(url)
     if (!runtime) {
-      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url), locations, true, apiVersion)
+      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url), locations, true, apiVersion, undefined, (await this.code()).effectAllocator)
       this.authorRuntimes.set(url, runtime)
     }
     return runtime
@@ -79,6 +79,13 @@ export class VideoEditGpuCompositor {
     this.authorAssets.delete(url)
     try { await runtime?.dispose() }
     finally { if (assets) for (const image of Object.values(assets)) image.close() }
+  }
+  private async disposeAuthorRuntimes(): Promise<void> {
+    const runtimes = [...this.authorRuntimes.values()]
+    this.authorRuntimes.clear()
+    const released = await Promise.allSettled(runtimes.map(runtime => runtime.dispose()))
+    const failures = released.flatMap(result => result.status === 'rejected' ? [result.reason] : [])
+    if (failures.length) throw new AggregateError(failures, '作者预览资源释放失败。')
   }
 
   /** Candidate frames use the same worker/device as the timeline, before publication. */
@@ -657,7 +664,8 @@ export class VideoEditGpuCompositor {
         }
         const warp=h ? [h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0] : new Array<number>(12).fill(0)
         const orientation = [external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0]
-        const uniformData = (layout: ReturnType<typeof geometry>, opacity: number): Float32Array => new Float32Array([layout.layerWidth * layout.fit / document.width, layout.layerHeight * layout.fit * layout.aspect / document.height, Math.cos(layout.rotation), Math.sin(layout.rotation), layout.center.x * 2, layout.center.y * 2, opacity, 0, document.height / document.width, document.width / document.height, ...orientation, ...warp])
+        const carriesLight = code && picture.carriesLight
+        const uniformData = (layout: ReturnType<typeof geometry>, opacity: number): Float32Array => new Float32Array([layout.layerWidth * layout.fit / document.width, layout.layerHeight * layout.fit * layout.aspect / document.height, Math.cos(layout.rotation), Math.sin(layout.rotation), layout.center.x * 2, layout.center.y * 2, opacity, Number(carriesLight), document.height / document.width, document.width / document.height, ...orientation, ...warp])
         const choose = (set: LayerPipelines | undefined): GpuRenderPipeline => code || (!external && !cachedVideo) ? set?.codeImage ?? this.codeImage : external ? set?.video ?? this.video : cachedVideo && picture.chroma ? set?.cachedVideo ?? this.cachedVideo : set?.image ?? this.image
         const bind = (pipeline: GpuRenderPipeline, buffer: GpuBuffer) => device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] })
         const samples = !h ? (clip as VideoEditMotionSampledClip).motionSamples : undefined
@@ -689,7 +697,7 @@ export class VideoEditGpuCompositor {
           ;(pass as typeof pass & Scissored).setScissorRect(ox, oy, ow, oh)
           const over = pipelines?.codeImage ?? this.codeImage
           const buffer = uniformFor(`${clip.id}:motion:result`)
-          device.queue.writeBuffer(buffer, 0, new Float32Array([1, 1, 1, 0, 0, 0, 1, 0, document.height / document.width, document.width / document.height, 0, 0, ...new Array<number>(12).fill(0)]))
+          device.queue.writeBuffer(buffer, 0, new Float32Array([1, 1, 1, 0, 0, 0, 1, Number(carriesLight), document.height / document.width, document.width / document.height, 0, 0, ...new Array<number>(12).fill(0)]))
           pass.setPipeline(over)
           pass.setBindGroup(0, device.createBindGroup({ layout: over.getBindGroupLayout(0), entries: [{ binding: 0, resource: motion.target.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer } }] }))
           pass.draw(6)
@@ -719,6 +727,7 @@ export class VideoEditGpuCompositor {
         ;(encoder as unknown as PresentationEncoder).copyTextureToBuffer({ texture: canvas }, { buffer: historyBuffer, bytesPerRow }, { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 })
       }
       device.queue.submit([encoder.finish()])
+      if (target) target.carriesLight = pictures.some(picture => picture instanceof VideoEditCodePicture && picture.carriesLight)
       if (capture?.gpu && canvas) {
         this.bitmapBridge ??= new VideoEditGpuBitmapBridge(device)
         capture(Promise.resolve(this.bitmapBridge.capture(canvas, this.canvas.width, this.canvas.height, this.canvasFormat)))
@@ -764,12 +773,11 @@ export class VideoEditGpuCompositor {
     await this.ready.catch(() => {})
     await Promise.allSettled([...this.offscreen.values(), this.presentReady, ...this.downscale.values()])
     await Promise.allSettled([...this.uploads, ...this.copies])
+    try { await this.disposeAuthorRuntimes() } catch (error) { failures.push(error) }
     try { await this.codeRuntime?.dispose() } catch (error) { failures.push(error) }
-    const released = await Promise.allSettled([...this.authorRuntimes.values()].map(runtime => runtime.dispose()))
-    for (const result of released) if (result.status === 'rejected') failures.push(result.reason)
     for (const assets of this.authorAssets.values()) for (const image of Object.values(assets)) image.close()
     this.authorAssets.clear()
-    this.authorRuntimes.clear(); this.authorTarget?.texture.destroy(); this.authorTarget = undefined
+    this.authorTarget?.texture.destroy(); this.authorTarget = undefined
     for (const value of this.textures.values()) value.texture.destroy()
     for (const value of this.uniforms.values()) value.destroy()
     for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }
@@ -783,6 +791,7 @@ export class VideoEditGpuCompositor {
   /** Font changes retire glyph/generated surfaces, while decoded pictures keep their owning device. */
   async invalidateFontResources(): Promise<void> {
     await Promise.allSettled([...this.uploads, ...this.copies])
+    await this.disposeAuthorRuntimes()
     await this.codeRuntime?.dispose(); this.codeRuntime = undefined
     for (const [id, value] of this.textures) if (id.startsWith('text:')) {
       value.texture.destroy(); this.textures.delete(id)

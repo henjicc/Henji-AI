@@ -96,6 +96,7 @@ export async function resetVideoEditEffect(target: VideoEditCompositeTarget, eff
 /** 新建一项内置效果（参数按登记校验）。默认存完整参数表；`sparse` 时只存给出的键（助手创建，读回与写入一致，缺的键按默认值渲染）。 */
 export function makeVideoEditBuiltinEffect(builtinId: string, params: Readonly<Record<string, unknown>> = {}, name?: string, sparse = false): VideoEditEffect {
   const definition = requireVideoEditBuiltinEffect(builtinId)
+  if (definition.space === 'layer-only') throw new Error(`${definition.name} 仅用于作者图层，请在图层 effects 中添加。`)
   return videoEditEffectSchema.parse({ id: crypto.randomUUID(), name: name ?? definition.name, enabled: true, amount: 1, builtin: { id: definition.id, params: sparse ? validateVideoEditBuiltinParams(definition.id, params) : normalizeVideoEditBuiltinParams(definition.id, params) } })
 }
 function editBuiltin(target: VideoEditCompositeTarget, change: (clip: VideoEditClip) => void, gesture?: VideoEditGesture): void {

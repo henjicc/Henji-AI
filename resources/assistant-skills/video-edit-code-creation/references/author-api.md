@@ -176,6 +176,33 @@ TS 文件（含默认入口 main.ts）在打包的同时按作者接口做类型
 
 ## Canvas 阴影的源图形范围
 
-运动层不要把源文字/图形完全画到图层栅格外，再用 `shadowOffsetX/Y` 把影子投回做辉光。这种写法不受支持：即使内容范围推算已计入偏移和模糊，Canvas 栅格裁切仍可能使整条投影消失。请在层内绘制，用 `ctx.filter = 'blur(...)'` 做光晕；或把运动层 bounds 扩大到同时容纳原图形与投影，再通过 layer.clip 限定最终显示范围。静止层按整幅画布栅格，不凭源图形在画布外就报告这一风险。
+运动层不要把源文字/图形完全画到图层栅格外，再用 `shadowOffsetX/Y` 把影子投回做辉光。这种写法不受支持：即使内容范围推算已计入偏移和模糊，Canvas 栅格裁切仍可能使整条投影消失。请在层内绘制，用 `effects: () => [glow(...)]` 做光晕；或把运动层 bounds 扩大到同时容纳原图形与投影，再通过 layer.clip 限定最终显示范围。静止层按整幅画布栅格，不凭源图形在画布外就报告这一风险。
 
 普通层内阴影继续支持，阴影越界不等于正文丢失。`query_video_edit_review` 的 `motion:{}` 会对运动层可录制的文字、矩形/圆角矩形与图像返回 `shadow_outside_source` 风险和时间；任意 Path2D、直接绘制及 GPU 内部阴影没有这份几何证据。效果是否真的出现，应使用 `visual.effects`（效果链）或显式 `visual.probes`（生成器参数）作像素比较。
+
+## API 7：图层效果链与 henji-effects
+
+新源码使用作者接口 7，`henji-effects@1.0.0` 随代码版本冻结。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（gaussian / directional / radial / lens）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
+
+`effects(t)` 每个可见层在中心作者时间求值一次，时间与 draw 相同；位姿仍按曝光采样。即使 draw 的 cacheKey 恒定，effects 仍逐帧求值。静态无 pose 的效果层也独立栅格；尽量给 bounds（内容在作者坐标中的矩形），省略时按完整作者画幅。宿主根据整链支撑外扩，不需要把光晕手工塞进 bounds。效果先于位姿变换、opacity、clip 和运动曝光；效果本身不多次曝光。
+
+空间量按完整作者画幅高度计算，不按小 bounds 或外扩后的纹理高度。高斯 `sigma_fraction_height` 默认 0.009、下限 0；lens 的 `radius_fraction_height` 是高度比例；方向 blur 用 `length`，radial 用 `strength` 与内容范围中的 `center_x/center_y` 百分比。不要把 Canvas 像素直接填进比例字段。pose.blur 保留原画面像素语义，最终使用 GPU 虚化，含 `blurShape: "lens"`。
+
+主图像按数组顺序处理；glow 产生的光保留产生时的状态，后续显式效果不改它。因此 `[blur(), glow()]` 先模糊后发光，`[glow(), blur()]` 只模糊主体；最终 pose.blur 同时处理主体与光，并使用固定质量规划。主体与光先在透明层内合成普通预乘 RGBA，再统一施加位姿、裁剪、不透明度和曝光权重。glow.blend 只控制本层主体的核心提亮；下方画面上的光总是相加。source_opacity=0 留纯光，pose.opacity=0 连光一起隐藏。
+
+API 7 本帧实际产生发光 underlay 时，光以预乘 RGBA 的零 alpha RGB 传过片段和嵌套边界；其他画面沿用 RGB≤alpha 钳制。**限制：发光“相加照亮下方”只在代码片段直接合成到下方时成立。片段上的任何效果、任何转场（包括内置擦除、交叉溶解及 gl-transitions）都会产出普通画面，零 alpha 光会被截掉，因此效果期间光晕消失，转场首尾可能跳变。需要调光色时在作者 effects 内调参数／调发光前的内容。透明文件仍是普通预乘 RGBA，背景相关相加须有背景。**
+
+`look("预设名")` 精确查询全局视频效果预设；重名、缺失（含换机器缺预设）、音频、代码效果、蒙版或片段空间效果明确报错。保留预设 enabled、amount 和以片段局部帧求值的曲线。旋钮只接受空对象；不查风格包，不扩风格 schema。离屏任务持有启动时快照，预览会话跟随全局预设更新。跨机器需另行提供同名唯一预设。
+
+```ts
+import { glow, blur } from "henji-effects"
+export default {
+  name: "局部光点", width: 1920, height: 1080, durationSeconds: 4,
+  layers(_params, width, height) {
+    return [{ id: "light", bounds: [width / 2 - 30, height / 2 - 30, width / 2 + 30, height / 2 + 30],
+      effects: t => [blur({ sigma_fraction_height: .002 }), glow({ strength: 25 + 10 * Math.sin(t), radius: 30 })],
+      draw(ctx) { ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(width / 2, height / 2, 25, 0, Math.PI * 2); ctx.fill() }
+    }]
+  }
+}
+```

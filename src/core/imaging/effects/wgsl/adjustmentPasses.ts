@@ -1,8 +1,9 @@
-import { COLOR_GRADE_WGSL } from './colorGrade'
-export function adjustmentPassesWgsl({ extendedRange = false, globalCoordinates = false, float32Sampling = false }: { extendedRange?: boolean; globalCoordinates?: boolean; float32Sampling?: boolean } = {}): string {
+import { colorGradeWgsl } from './colorGrade'
+export function adjustmentPassesWgsl({ extendedRange = false, globalCoordinates = false, float32Sampling = false, layerCoordinates = false }: { extendedRange?: boolean; globalCoordinates?: boolean; float32Sampling?: boolean; layerCoordinates?: boolean } = {}): string {
+const colorGrade = colorGradeWgsl(extendedRange, layerCoordinates)
 return `
-${float32Sampling ? COLOR_GRADE_WGSL.replace('textureSampleLevel(gradeMask, s, uv, 0.0)', 'sampleFloat32(gradeMask, uv)') : COLOR_GRADE_WGSL}
-struct Params { size: vec4f, a: vec4f, b: vec4f, c: vec4f }
+${float32Sampling ? colorGrade.replace('textureSampleLevel(gradeMask, s, uv, 0.0)', 'sampleFloat32(gradeMask, uv)') : colorGrade}
+struct Params { size: vec4f, a: vec4f, b: vec4f, c: vec4f${layerCoordinates ? ', layer: vec4f, grid: vec4f' : ''} }
 @group(0) @binding(0) var source: texture_2d<f32>;
 ${float32Sampling ? '' : '@group(0) @binding(1) var s: sampler;'}
 @group(0) @binding(2) var<uniform> u: Params;
@@ -30,7 +31,7 @@ fn tapOriginal(uv: vec2f) -> vec4f { return sampleFloat32(original, uv); }
 ` : `fn tap(uv: vec2f) -> vec4f { return textureSampleLevel(source, s, uv, 0.0); }
 fn tapOriginal(uv: vec2f) -> vec4f { return textureSampleLevel(original, s, uv, 0.0); }`}
 fn colorGradeSelectionSaturation(chroma: f32, light: f32) -> f32 { let value = chroma / max(0.000001, 1.0 - abs(2.0 * light - 1.0)); return ${extendedRange ? 'clamp(value, 0.0, 1.0)' : 'value'}; }
-fn colorGradePosition(v: Vertex) -> vec2f { return ${globalCoordinates ? 'u.b.zw + (v.position.x - 0.5) * u.c.xy + (v.position.y - 0.5) * u.c.zw' : 'uvOf(v)'}; }
+fn colorGradePosition(v: Vertex) -> vec2f { ${layerCoordinates ? 'if (u.layer.z > 0.0) { return (v.position.xy - u.layer.xy) / u.layer.zw; } ' : ''}return ${globalCoordinates ? 'u.b.zw + (v.position.x - 0.5) * u.c.xy + (v.position.y - 0.5) * u.c.zw' : 'uvOf(v)'}; }
 fn inside(uv: vec2f) -> bool { return all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0)); }
 /** repeat = 0 时画面外是透明（边缘向外渐隐）。 */
 fn tapEdge(uv: vec2f, repeat: f32) -> vec4f { if (repeat < 0.5 && !inside(uv)) { return vec4f(0.0); } return tap(uv); }

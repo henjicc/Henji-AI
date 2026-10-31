@@ -212,3 +212,19 @@ describe('Worker 里读取内置库类型包', () => {
     expect(timeouts).toEqual([5000, 5000])
   })
 })
+
+it('效果库冻结声明支持别名、直接描述、静态范围错误与独立建议，旧 API 拒绝库导入', () => {
+  const typed = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: (library, version) => JSON.parse(fs.readFileSync(path.join('resources/video-edit-author/frozen', library, version, 'types.json'), 'utf8')) as AuthorLibraryTypePackage })
+  const source = 'import { glow as light, blur } from "henji-effects"; const strength = 20; export default { name: "效果", layers() { return [{ effects: t => [light({ strength }), blur({ mode: "directional", length: 10 }), { id: "black_white" }], draw(ctx) { const paint = ctx; paint.shadowBlur = 8; paint.filter = "blur(3px)"; } }] } }'
+  const files = (text: string): CodeMaterialFiles => ({ apiVersion: 7, libraries: { 'henji-effects': '1.0.0' }, entry: 'main.ts', files: { 'main.ts': text } })
+  const valid = typed.check(files(source), ['main.ts'])
+  expect(valid.diagnostics).toEqual([]); expect(valid.total).toBe(0)
+  expect(valid.suggestions?.map(value => value.factory)).toEqual(['blur', 'glow', 'blur'])
+  expect(typed.check(files(source.replace('const strength = 20', 'const strength = 100 + 1')), ['main.ts']).diagnostics.some(value => value.code === 95001)).toBe(true)
+  expect(typed.check(files(source.replace('mode: "directional", length: 10', 'mode: "lens", radius_fraction_height: -1')), ['main.ts']).diagnostics.some(value => value.code === 95001)).toBe(true)
+  const shadowed = 'import { glow } from "henji-effects"; import * as effects from "henji-effects"; function helper(glow: (p: {strength: number}) => void, effects: {glow: (p: {strength: number}) => void}) { glow({strength: 200}); effects.glow({strength: 200}); } export default {name: "遮蔽", draw() { void helper }}'
+  expect(typed.check(files(shadowed), ['main.ts']).diagnostics).toEqual([])
+  expect(typed.check(files(source.replace('length: 10', 'length: "wide"')), ['main.ts']).total).toBeGreaterThan(0)
+  expect(typed.check(files(source.replace('id: "black_white"', 'id: "crop"')), ['main.ts']).total).toBeGreaterThan(0)
+  expect(typed.check({ ...files(source), apiVersion: 6 }, ['main.ts']).diagnostics.some(value => value.code === 2307)).toBe(true)
+})

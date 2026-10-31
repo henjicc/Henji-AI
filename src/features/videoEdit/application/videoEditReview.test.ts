@@ -579,3 +579,18 @@ it('返回的跟踪器沿正式描述、属性事务、回读补锚点，保留�
     expect(owner.document.sequences[0].clips[0].trackers![0].prompts).toEqual(tracker.prompts)
   } finally { app.dispose() }
 })
+
+it('公共结构复核提供效果建议，缺源码只标本片段不可检查并保留其他记录', async () => {
+  const { owner, input } = await codeFixture('export default { name: "建议", layers() { return [{ effects: () => [], draw(ctx) { ctx.filter = "blur(8px)"; } }] } }'), app = createApplicationHarness()
+  try {
+    const result = parse(await app.requireResult('query_video_edit_review', { ...input, limit: 50 }))
+    expect(result.records.filter(record => record.kind === 'code_effect_suggestion')).toEqual(expect.arrayContaining([expect.objectContaining({ effectSuggestion: expect.objectContaining({ factory: 'blur', confidence: 'static_assignment', file: 'main.ts' }) })]))
+    const unavailable = { ...owner.document.codeMaterials![0].versions[0], id: 'unavailable', files: [{ path: 'main.ts', location: 'D:/missing-effect-source.ts', hash: 'e'.repeat(64) }] }
+    rememberVideoEditCodeMetadata(owner, 'code-d', unavailable, compileCodeMaterial('export default { name: "缺源码", draw() {} }'))
+    editVideoProject(owner.document.id, document => { document = structuredClone(document); document.codeMaterials![0].versions.push(unavailable); document.sequences[0].clips.find(clip => clip.code)!.code!.versionId = unavailable.id; return document })
+    vi.spyOn(getPlatform().system.fs, 'readTextFile').mockRejectedValue(new Error('文件不存在'))
+    const missing = parse(await app.requireResult('query_video_edit_review', { ...input, limit: 50 }))
+    expect(missing.records.some(record => record.kind === 'code_unavailable')).toBe(true)
+    expect(missing.records.some(record => record.kind !== 'code_unavailable')).toBe(true)
+  } finally { app.dispose() }
+})

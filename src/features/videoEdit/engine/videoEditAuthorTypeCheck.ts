@@ -1,3 +1,5 @@
+import { reviewCodeEffectUsage, type CodeEffectSuggestion } from '@/core/videoEdit/codeEffectReview'
+import { authorEffectDiagnostics } from './videoEditAuthorEffectDiagnostics'
 import ts from 'typescript'
 import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'
 import { AUTHOR_LIBRARIES, authorLibraryCompatibilityError, resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
@@ -9,6 +11,7 @@ export interface AuthorTypeEnvironment {
   /** 文件名（lib.es5.d.ts）→ 内容，至少包含 AUTHOR_TYPE_LIBS 及其引用到的全部标准库。 */
   libs: Readonly<Record<string, string>>
   webgpu: string
+  authorEffects?: string
   authorApi: string
   /** 按库名与版本读取内置库的类型包；读不到时返回 undefined，导入按 any 处理，不报成找不到模块。 */
   libraryTypes?: (library: string, version: string) => AuthorLibraryTypePackage | undefined
@@ -41,6 +44,7 @@ const MODULE_CHECK = '__henjiAuthorModule'
 const GLOBALS = `import type * as Api from './henji-author-api'
 declare global {
   type AuthorModule<P extends readonly Api.AuthorParamDeclaration[] = readonly Api.AuthorParamDeclaration[]> = Api.AuthorModule<P>
+  type EffectDescriptor = Api.EffectDescriptor
   type AuthorLayer = Api.AuthorLayer
   type AuthorPose = Api.AuthorPose
   type AuthorRect = Api.AuthorRect
@@ -142,7 +146,7 @@ function flattenMessage(message: string | ts.DiagnosticMessageChain): string {
 
 /** LanguageService 常驻：标准库只解析一次，之后每次只重查变化的作者文件。 */
 export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): AuthorTypeChecker {
-  const fixed = new Map<string, string>([[ENV.webgpu, environment.webgpu], [ENV.api, environment.authorApi], [ENV.globals, GLOBALS], [ENV.modules, MODULES], ...Object.entries(environment.libs).map(([name, text]): [string, string] => [LIB_ROOT + name, text])])
+  const fixed = new Map<string, string>([[ENV.webgpu, environment.webgpu], [ENV.api, environment.authorApi], ['/env/author-effects.d.ts', environment.authorEffects ?? 'export type EffectDescriptor = never'], [ENV.globals, GLOBALS], [ENV.modules, MODULES], ...Object.entries(environment.libs).map(([name, text]): [string, string] => [LIB_ROOT + name, text])])
   // 标准库互相 /// <reference lib>；缺一个就会把所有内置类型报成找不到。升级 TypeScript 后由测试当场发现。
   const needed = [...AUTHOR_TYPE_LIBS] as string[]
   for (let index = 0; index < needed.length; index++) {
@@ -242,6 +246,7 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
       const program = service.getProgram()
       const checkedFiles: string[] = []
       const diagnostics: CodeTypeDiagnostic[] = []
+      const suggestions: CodeEffectSuggestion[] = []
       for (const path of reported) {
         const name = AUTHOR_ROOT + path
         const original = files.files[path]
@@ -261,7 +266,15 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
             diagnostics.push({ code: 2307, message: error, span: { file: path, start: request.pos, end: request.end, startLine: a.line, startColumn: a.column, endLine: b.line, endColumn: b.column } })
           }
         }
-        for (const diagnostic of [...service.getSyntacticDiagnostics(name), ...service.getSemanticDiagnostics(name)]) {
+        const insertions = shifted.get(path) ?? []
+        for (const suggestion of reviewCodeEffectUsage(program!.getSourceFile(name)!)) {
+          const parsed = program!.getSourceFile(name)!
+          const offset = parsed.getPositionOfLineAndCharacter(suggestion.line - 1, suggestion.column - 1)
+          const at = position(originalOffset(offset, insertions))
+          suggestions.push({ ...suggestion, file: path, line: at.line, column: at.column })
+        }
+        const effectDiagnostics = authorEffectDiagnostics(program!.getSourceFile(name)!, program!.getTypeChecker()).map(value => ({ ...value, category: ts.DiagnosticCategory.Error, code: 95001, messageText: value.message }))
+        for (const diagnostic of [...service.getSyntacticDiagnostics(name), ...service.getSemanticDiagnostics(name), ...effectDiagnostics]) {
           if (diagnostic.category !== ts.DiagnosticCategory.Error || IGNORED_CODES.has(diagnostic.code)) continue
           const insertions = shifted.get(path) ?? []
           const start = originalOffset(diagnostic.start ?? 0, insertions), end = Math.max(start, originalOffset((diagnostic.start ?? 0) + (diagnostic.length ?? 0), insertions))
@@ -271,7 +284,7 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
           diagnostics.push({ code: diagnostic.code, message: flattenMessage(diagnostic.messageText), span: { file: path, start, end, startLine: a.line, startColumn: a.column, endLine: b.line, endColumn: b.column } })
         }
       }
-      return { checkedFiles, diagnostics: diagnostics.slice(0, MAX_DIAGNOSTICS), total: diagnostics.length, elapsedMs: performance.now() - started }
+      return { checkedFiles, suggestions, diagnostics: diagnostics.slice(0, MAX_DIAGNOSTICS), total: diagnostics.length, elapsedMs: performance.now() - started }
     },
   }
 }

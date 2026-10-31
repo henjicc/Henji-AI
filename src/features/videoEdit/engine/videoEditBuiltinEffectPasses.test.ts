@@ -1,3 +1,4 @@
+import { authorEffectBleed, resolveAuthorEffects } from '@/core/videoEdit/authorEffects'
 import { describe, expect, it } from 'vitest'
 import { isShaderGraphEffect } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition } from '@/core/videoEdit/shaderGraph/transitions'
@@ -125,4 +126,21 @@ describe('录屏自动缩放与画框工序', () => {
     expect([...flat.passes[1].uniforms.slice(4, 7)].map(v => Math.round(v * 255))).toEqual([1, 3, 5].map(index => parseInt(RECORDING_FRAME_SOLID_DEFAULT_HEX.slice(index, index + 2), 16)))
     expect([...flat.passes[0].uniforms.slice(8, 12)]).toEqual([0.25, 0, 0.75, 1])
   })
+})
+
+it('小 bounds 用完整参考高度换算，外扩只移动原点；邻域链累加支撑', () => {
+  const base = { referenceSize: { width: 1920, height: 1080 }, contentBounds: { x: 500, y: 300, width: 80, height: 30 }, rasterScale: 1, rasterOrigin: [64, 64] as const, quality: 'final' as const }
+  const gaussian = resolveAuthorEffects([{ id: 'gaussian_blur', params: { sigma_fraction_height: .01 } }])
+  const direction = resolveAuthorEffects([{ id: 'directional_blur', params: { length: 20, direction: 0 } }])
+  expect(authorEffectBleed([...gaussian, ...direction], base)).toBeCloseTo(authorEffectBleed(gaussian, base) + authorEffectBleed(direction, base))
+  expect(authorEffectBleed(gaussian, base) * 1080).toBeGreaterThan(3 * .01 * 1080)
+  for (const scale of [.25, 1, 2]) for (const pad of [32, 128]) {
+    const width = 80 * scale + pad * 2, height = Math.ceil(30 * scale) + pad * 2, layer = { ...base, rasterScale: scale, rasterOrigin: [pad, pad] as const }
+    const directional = planVideoEditBuiltinEffect(direction[0], { width, height, frame: 0, layer })
+    // line 两次取样的总位移按参考 H 缩放，不依赖纹理 padding。
+    expect(directional.passes[0].uniforms[4] * width).toBeCloseTo(21.6 * scale / 16)
+    const zoom = planVideoEditBuiltinEffect({ id: 'zoom_blur', params: { strength: 40, center_x: 25, center_y: 75 } }, { width, height, frame: 0, layer })
+    expect(zoom.passes[0].uniforms[4] * width - pad).toBeCloseTo(20 * scale, 4)
+    expect(zoom.passes[0].uniforms[5] * height - pad).toBeCloseTo(22.5 * scale, 4)
+  }
 })

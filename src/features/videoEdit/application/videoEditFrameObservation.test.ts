@@ -422,3 +422,20 @@ it('相同内容复用可读缓存引用，只有显式要求才收录为素材'
     expect(getPlatform().system.fs.writeFile).toHaveBeenCalledTimes(2)
   } finally { app.dispose() }
 })
+
+it('公共取帧保留同帧解析效果、look 展开与兼容 blur，渲染失败不发布成功结果', async () => {
+  const { owner, documentRef } = await inspectionFixture(), app = createApplicationHarness()
+  const effects: import('@/core/videoEdit/authorEffects').ResolvedAuthorEffect[] = [{ id: 'glow', params: { strength: 35 }, amount: .6, source: 'look' as const, look: '柔光' }, { id: 'gaussian_blur', params: { radius_pixels: 8 }, amount: 1, source: 'pose.blur' as const }]
+  vi.mocked(trialVideoEditCodeFrames).mockImplementationOnce(async (frames, _signal, _keep, _collect, _measure, observe) => {
+    const { document, frame } = frames[0]
+    observe?.({ sequenceId: document.id, revision: document.revision, frame, clips: [{ clipId: 'title', versionId: 'version', width: 1920, height: 1080, elements: [{ id: 'text', name: '标题', bounds: [0, 0, 100, 100], matrix: [1, 0, 0, 1, 0, 0], corners: [], parameterKeys: [], textParameterKeys: [], effectsTime: .4, effects }] }] })
+    return { width: document.width, height: document.height, close: vi.fn() } as unknown as ImageBitmap
+  })
+  try {
+    const observed = await app.requireResult('observe_video_edit_frame', { documentRef, target: { kind: 'program', frame: 12 } })
+    expect(observed.effects).toEqual([{ frame: 12, sequenceId: owner.activeSequenceId, clips: [{ clipId: 'title', elements: [{ id: 'text', time: .4, effects }] }] }])
+    vi.mocked(trialVideoEditCodeFrames).mockRejectedValueOnce(new Error('图层效果参数无效'))
+    const failure = await app.call('observe_video_edit_frame', { documentRef, target: { kind: 'program', frame: 12 } })
+    expect(failure.ok).toBe(false)
+  } finally { app.dispose() }
+})

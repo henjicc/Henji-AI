@@ -1,3 +1,4 @@
+import type { AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import { prepareVideoEditAuthorBundle } from './videoEditSharedCompiler'
 import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
@@ -52,6 +53,8 @@ export function warmVideoEditNativeDecoder(): Promise<void> {
 
 /** A bounded request stream owned by a view/export, independent from the project lifetime. */
 export interface VideoEditRenderHost {
+  authorEffects?(): AuthorEffectEnvironment
+
   fonts(document: VideoEditComposition): Promise<import('@/platform/fonts').FontPayload[]>
   proxies(projectId: string, forExport: boolean): Promise<Record<string, VideoProxyResult>>
   maskUpdateTime(sequenceId: string, revision: number): number | undefined
@@ -159,7 +162,10 @@ export class VideoEditRenderTransport {
   private proxies: Record<string, VideoProxyResult> = {}
   private async selectProxies(original = false): Promise<void> { this.proxies = this.proxyProjectId && !original ? await this.host.proxies(this.proxyProjectId, this.exportProxies) : {} }
   private proxySources(): Record<string, VideoProxyResult> { return Object.fromEntries(Object.entries(this.proxies).map(([id, result]) => [id, { ...result, path: toFetchableMediaUrl(result.path) }])) }
-  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path), ...(media.recordingCursor ? { recordingCursor: { ...media.recordingCursor, pages: media.recordingCursor.pages.map(page => ({ ...page, path: toFetchableMediaUrl(page.path) })) } } : {}), ...(this.proxies[media.id] ? { sourceRevision: `${media.sourceRevision ?? ''}:proxy:${this.proxies[media.id].key}` } : {}) })), ...(document.colorLuts ? { colorLuts: document.colorLuts.map(asset => ({ ...asset, path: toFetchableMediaUrl(asset.path) })) } : {}) } }
+  private effectSnapshot: AuthorEffectEnvironment = {}
+  private liveEffects = false
+  private effectsChanged(): boolean { return this.liveEffects && this.host.authorEffects?.().presets !== this.effectSnapshot.presets }
+  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, authorEffects: structuredClone(document.authorEffects ?? this.effectSnapshot), media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path), ...(media.recordingCursor ? { recordingCursor: { ...media.recordingCursor, pages: media.recordingCursor.pages.map(page => ({ ...page, path: toFetchableMediaUrl(page.path) })) } } : {}), ...(this.proxies[media.id] ? { sourceRevision: `${media.sourceRevision ?? ''}:proxy:${this.proxies[media.id].key}` } : {}) })), ...(document.colorLuts ? { colorLuts: document.colorLuts.map(asset => ({ ...asset, path: toFetchableMediaUrl(asset.path) })) } : {}) } }
   /** The native decoder reads original local files; the worker only sees fetchable URLs, so it gets this map too. */
   private localPaths(document: VideoEditComposition): Record<string, string> {
     return Object.fromEntries([...Object.values(this.proxies).map(result => [toFetchableMediaUrl(result.path), result.path]), ...document.media.filter(media => media.kind !== 'image' && isLikelyLocalImagePath(media.path)).map(media => [toFetchableMediaUrl(media.path), media.path])])
@@ -187,6 +193,8 @@ export class VideoEditRenderTransport {
     }
   }
   constructor(private readonly host: VideoEditRenderHost, private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private proxyProjectId?: string, private readonly exportProxies = false, private readonly requestTimeoutMs = 60_000) {
+    this.effectSnapshot = document.authorEffects ?? host.authorEffects?.() ?? {}
+    this.liveEffects = !!surface && !document.authorEffects
     activeTransports.add(this)
     this.timing = videoEditTimingContext(proxyProjectId, document.id)
     if (this.timing) videoEditTimingEvent(this.timing, 'render.session.start')
@@ -368,7 +376,9 @@ export class VideoEditRenderTransport {
     await this.ready
     this.timing = videoEditTimingContext(this.proxyProjectId, document.id)
     // Asking for originals only needs a rebuild when proxies are loaded; otherwise a parameter edit keeps the fast path.
-    const update = (!original || Object.keys(this.proxies).length === 0) && videoEditParameterUpdate(this.document, document)
+    const effectsChanged = this.effectsChanged()
+    if (effectsChanged) this.effectSnapshot = this.host.authorEffects?.() ?? {}
+    const update = !effectsChanged && (!original || Object.keys(this.proxies).length === 0) && videoEditParameterUpdate(this.document, document)
     if (update) {
       if (videoEditParameterNeedsFonts(this.document, update)) await this.syncFonts(document)
       await this.request({ kind: 'parameters', update }); this.document = document; return
@@ -384,6 +394,7 @@ export class VideoEditRenderTransport {
   /** Exclusive offscreen lease boundary. Candidate revisions need not be monotonic. */
   async replaceContent(document: VideoEditComposition): Promise<void> {
     await this.ready
+    this.effectSnapshot = document.authorEffects ?? this.host.authorEffects?.() ?? {}
     await this.content.check(document)
     await this.syncFonts(document)
     const codeSources = await this.codeSources(document)
@@ -428,6 +439,7 @@ export class VideoEditRenderTransport {
   async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false): Promise<RenderResponse> {
     // 会话已就绪、这一帧要的字体也已在 Worker 里时不经任何等待，请求在调用方的同一个任务里发出（拖动时不排到界面更新之后）。
     if (!this.readySettled) await this.ready
+    if (this.effectsChanged()) await this.updateDocument(this.document)
     this.frame = frame
     if (this.fontSyncsPending || this.document !== this.fontDocument || this.fontKey(this.document) !== this.fontScope) await this.syncFonts(this.document)
     const document = this.document

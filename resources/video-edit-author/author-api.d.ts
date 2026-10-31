@@ -1,3 +1,5 @@
+import type { EffectDescriptor } from './author-effects'
+export type { EffectDescriptor } from './author-effects'
 /**
  * 代码素材作者接口的类型声明，只给作者源码类型检查用：源码检查 Worker 把本文件作为文本打包
  * （src/features/videoEdit/engine/videoEditAuthorTypeEnvironment.ts），不属于应用自身的 TypeScript 工程，
@@ -99,6 +101,7 @@ export interface AuthorPose {
 }
 
 interface AuthorLayerBase {
+  effects?: (time: number) => readonly EffectDescriptor[]
   /** 稳定字符串，用于点选、元素覆盖与标注定位。 */
   id?: string
   name?: string

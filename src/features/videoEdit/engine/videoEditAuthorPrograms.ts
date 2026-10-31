@@ -1,9 +1,11 @@
+import type { AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { loadAuthorModule, type AuthorModule } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import { authorEffectMetadata } from './videoEditAuthorParameters'
 import { prepareAuthorModuleUrls } from './videoEditAuthorModules'
+import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 
 const bundleBytes = (bundle: CodeAuthorBundle): number => 2 * (bundle.modules ? Object.values(bundle.modules.files).reduce((sum, text) => sum + text.length, 0) : bundle.code.length + bundle.map.length)
 
@@ -17,7 +19,7 @@ export class VideoEditAuthorPrograms {
   private closed = false
   private lifecycle: Promise<unknown> = Promise.resolve()
   private closing?: Promise<void>
-  constructor(private readonly device: GpuDevice) {}
+  constructor(private readonly device: GpuDevice, private readonly effectEnvironment: () => AuthorEffectEnvironment = () => ({}), private readonly allocator?: VideoEditBuiltinScratchAllocator) {}
 
   private enqueue<T>(action: () => Promise<T>): Promise<T> {
     const result = this.lifecycle.then(action)
@@ -70,7 +72,7 @@ export class VideoEditAuthorPrograms {
       if (previous) { this.instances.delete(key); await previous.runtime.dispose() }
       const effect = await this.module(program.bundle)
       if (this.closed) throw new Error('作者渲染会话已关闭。')
-      const runtime = new VideoEditAuthorRuntime(this.device, effect, program.bundle.locations, false, program.apiVersion)
+      const runtime = new VideoEditAuthorRuntime(this.device, effect, program.bundle.locations, false, program.apiVersion, this.effectEnvironment, this.allocator)
       this.instances.set(key, { program, runtime })
       return runtime
     })

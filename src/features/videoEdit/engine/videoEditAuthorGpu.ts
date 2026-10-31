@@ -13,16 +13,7 @@ struct P { extent:vec4f, options:vec4f }
 @fragment fn mip(@builtin(position) position:vec4f)->@location(0) vec4f {
  return textureSampleLevel(image,linearSampler,position.xy/p.extent.xy,0.0);
 }
-@fragment fn lens(@builtin(position) position:vec4f)->@location(0) vec4f {
- let spacing=p.extent.z*sqrt(3.14159265/96.0); let lod=max(0.0,log2(spacing*.7));
- var sum=vec4f(0); var total=0.0;
- for(var i=0u;i<96u;i++) {
-  let k=(f32(i)+.5)/96.0; let r=sqrt(k)*p.extent.z; let a=f32(i)*2.39996323;
-  let c=textureSampleLevel(image,linearSampler,(position.xy+r*vec2f(cos(a),sin(a)))/p.extent.xy,lod);
-  let w=1.0+2.0*pow(max(max(c.r,c.g),c.b),4.0); sum+=c*w; total+=w;
- }
- return sum/total;
-}`
+`
 /**
  * 运动曝光的每次取样沿运动方向拉长到相邻样本的间距（各向异性过滤），样本之间不留缝：
  * 约每 4 像素一个样本就够平滑，不必每像素一个。没在动或位移小于一个像素时照常按缩放取样。
@@ -61,7 +52,7 @@ export class VideoEditAuthorGpu {
     this.device.pushErrorScope('validation')
     try {
       const modules = { motion: this.device.createShaderModule({ code: motion }), filter: this.device.createShaderModule({ code: filter }) }
-      for (const entry of ['motion', 'mip', 'lens']) {
+      for (const entry of ['motion', 'mip']) {
         const module = entry === 'motion' ? modules.motion : modules.filter
         const descriptor = { layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: entry, targets: [{ format: 'rgba8unorm', ...(entry === 'motion' ? { blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } } : {}) }] }, primitive: { topology: 'triangle-list' } }
         this.pipelines.set(entry, await (this.device.createRenderPipelineAsync?.(descriptor) ?? this.device.createRenderPipeline(descriptor)))
@@ -83,6 +74,10 @@ export class VideoEditAuthorGpu {
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: view(target), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }] })
     pass.end()
   }
+  commandEncoder(): ReturnType<GpuDevice['createCommandEncoder']> {
+    if (!this.encoder) throw new Error('作者帧尚未开始。')
+    return this.encoder
+  }
   /** Drops a frame whose author code must run again before anything was submitted. */
   abandon(): void { this.encoder = undefined }
   finish(): void {
@@ -103,9 +98,6 @@ export class VideoEditAuthorGpu {
       width = Math.max(1, Math.floor(width / 2)); height = Math.max(1, Math.floor(height / 2))
       this.pass('mip', view(texture, level - 1), view(texture, level), new Float32Array([width, height, 0, 0, 0, 0, 0, 0]))
     }
-  }
-  lens(source: GpuTexture, target: GpuTexture, width: number, height: number, radius: number): void {
-    this.pass('lens', view(source), view(target, 0), new Float32Array([width, height, radius, 0, 0, 0, 0, 0]))
   }
   /**
    * `width`/`height` 是 `target` 的像素尺寸；位姿与 `clip` 是画布像素。`scale`：画布像素到 `target` 像素的比例（回放分辨率

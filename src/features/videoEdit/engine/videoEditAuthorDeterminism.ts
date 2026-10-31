@@ -61,9 +61,10 @@ export function importAuthorDeterministic<T>(load: () => Promise<T>, observeLayo
 
 function deterministicLayer(layer: AuthorLayer, index: number): AuthorLayer {
   if (!layer || typeof layer !== 'object' || typeof layer.draw !== 'function') return layer
-  const key = authorLayerId(layer, index), draw = layer.draw, pose = layer.pose
+  const key = authorLayerId(layer, index), draw = layer.draw, pose = layer.pose, effects = layer.effects
   return {
     ...layer,
+    ...(typeof effects === 'function' ? { effects: (time: number) => runAuthorDeterministic(`effects:${key}`, time, () => effects.call(layer, time)) } : {}),
     draw: (ctx, time) => runAuthorDeterministic(`draw:${key}`, time, () => draw.call(layer, ctx, time)),
     ...(typeof pose === 'function' ? { pose: (time: number) => runAuthorDeterministic(`pose:${key}`, time, () => pose.call(layer, time)) } : {}),
   }

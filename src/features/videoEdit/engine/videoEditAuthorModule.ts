@@ -1,3 +1,4 @@
+import type { EffectDescriptor } from '@/core/videoEdit/authorEffects.generated'
 import type { ContentTrustReference } from '@/core/contentTrust'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
@@ -44,6 +45,7 @@ export interface AuthorPose {
   opacity?: number; blur?: number
 }
 export interface AuthorLayer {
+  effects?: (time: number) => readonly EffectDescriptor[]
   id?: string
   name?: string
   /** Resolved by the module builder; never inferred by intercepting Canvas calls. */

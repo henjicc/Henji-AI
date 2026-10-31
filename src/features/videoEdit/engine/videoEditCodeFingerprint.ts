@@ -115,11 +115,11 @@ export class VideoEditCodeFingerprint {
         identity = authorFrameCodeIdentity(files, effect, codeVersionContentKey({ ...version, files: [] }))
         this.codeIdentities.set(program.bundle, identity)
       }
-      result = fingerprintAuthorFrameKey(effect, plan.context, params, info, inputs, identity, plan.parameters, overrides, this.document.motionBlur === true)
+      result = fingerprintAuthorFrameKey(effect, plan.context, params, info, inputs, identity, plan.parameters, overrides, this.document.motionBlur === true, { ...this.document.authorEffects, luts: this.document.colorLuts }, program.apiVersion)
     } else {
       const measure = this.measure ??= new OffscreenCanvas(1, 1).getContext('2d') ?? undefined
       if (!measure) return { fallback: 'canvas-unavailable' }
-      result = fingerprintAuthorFrame(effect, plan.context, params, info, inputs, measure, overrides, this.document.motionBlur === true)
+      result = fingerprintAuthorFrame(effect, plan.context, params, info, inputs, measure, overrides, this.document.motionBlur === true, { ...this.document.authorEffects, luts: this.document.colorLuts }, program.apiVersion)
     }
     if (!result.digest) return result
     const scenes = videoEditCodeInputs(this.document, plan.clip.code, () => program.parameters)?.scenes

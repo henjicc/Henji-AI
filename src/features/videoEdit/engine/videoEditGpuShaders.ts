@@ -36,7 +36,7 @@ export function videoEditLayerShader(external: boolean, premultiplied = false): 
 @group(0) @binding(0) var t: ${external ? 'texture_external' : 'texture_2d<f32>'};
 @fragment fn fs(v: Vertex) -> @location(0) vec4f {
  let c = ${sample}; let alpha = c.a * p.opacity;
- return vec4f(${premultiplied ? 'clamp(c.rgb, vec3f(0), vec3f(c.a)) * p.opacity' : 'clamp(c.rgb, vec3f(0), vec3f(1)) * alpha'}, alpha);
+ return vec4f(${premultiplied ? 'clamp(c.rgb, vec3f(0), vec3f(select(c.a, 1.0, p.alignment == 1.0))) * p.opacity' : 'clamp(c.rgb, vec3f(0), vec3f(1)) * alpha'}, alpha);
 }`
 }
 
@@ -172,7 +172,7 @@ struct Vertex { @builtin(position) position: vec4f }
  let steps = c.rgb * 255.0;
  let level = round(steps);
  let quantized = select(steps + (noise - 0.5), level, abs(steps - level) < vec3f(0.13));
- return vec4f(clamp(quantized / 255.0, vec3f(0), vec3f(c.a)), c.a);
+ return vec4f(clamp(quantized / 255.0, vec3f(0), vec3f(1)), c.a);
 }
 `
 

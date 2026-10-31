@@ -7,9 +7,9 @@ import { formatMigrations } from '../persistence/formatMigrations'
 import { PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
 export const CODE_ASSET_MIME = 'application/x-henji-code'
-export const CODE_ASSET_VERSION = 12
+export const CODE_ASSET_VERSION = 13
 /** v10 可携带作者接口 v6；旧程序不能正确执行排版库，必须明确要求升级。 */
-export const CODE_ASSET_MIN_READER_VERSION = 10
+export const CODE_ASSET_MIN_READER_VERSION = 13
 export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
 const image = z.object({
   id: z.string().min(1).max(100), path: z.string().min(1).max(4096).refine(value => !value.includes('\0') && /^(?:[a-z]:[\\/]|\\\\|\/)/i.test(value), '媒体依赖需要原文件绝对路径。'),

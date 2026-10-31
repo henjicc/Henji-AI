@@ -1,3 +1,4 @@
+import { layerEffectBleed, type LayerEffectReference } from './layerEffectGeometry'
 /**
  * 内置效果（实施方案第六节、任务 4.7）：每个效果登记一次，效果面板、效果控件与助手都读这里。
  * - 参数用“意图量纲”：0–100 的强度、角度（度）、曝光档、颜色、选项与开关；每项写清范围、默认值、单位、
@@ -25,6 +26,10 @@ export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, strin
 /** 内置效果作用于画面还是声音：画面效果只加到画面片段，音频效果只加到声音片段。 */
 export type VideoEditBuiltinMedia = 'video' | 'audio'
 export interface VideoEditBuiltinEffectDefinition {
+  /** layer 可用于图层及片段；layer-only 仅用于具备完整 mip 的作者图层。 */
+  space?: 'layer' | 'layer-only' | 'frame' | 'clip'
+  bleed?: (params: VideoEditBuiltinParams, reference: LayerEffectReference) => number
+  author?: { factory: string; mode?: string }
   id: string
   name: string
   group: VideoEditBuiltinGroup
@@ -47,20 +52,21 @@ const percent = (key: string, name: string, fallback: number, tooltip: string, d
 export { strength as videoEditStrengthParam, percent as videoEditPercentParam }
 
 const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
-  { id: GAUSSIAN_EFFECT.id, name: GAUSSIAN_EFFECT.name, group: 'blur', tooltip: '均匀柔化整个画面，可只模糊水平或垂直方向', description: GAUSSIAN_EFFECT.description, params: GAUSSIAN_EFFECT.parameters },
-  { id: 'directional_blur', name: '方向模糊', group: 'blur', tooltip: '沿一个方向拉出拖影，表现快速移动', description: '沿指定角度做线性拖影模糊，用于速度感、晃动感。',
+  { space: 'layer', author: { factory: 'blur', mode: 'gaussian' }, bleed: (p, r) => layerEffectBleed(GAUSSIAN_EFFECT.id, p, r), id: GAUSSIAN_EFFECT.id, name: GAUSSIAN_EFFECT.name, group: 'blur', tooltip: '均匀柔化整个画面，可只模糊水平或垂直方向', description: GAUSSIAN_EFFECT.description, params: GAUSSIAN_EFFECT.parameters },
+  { space: 'layer', author: { factory: 'blur', mode: 'directional' }, bleed: (p, r) => layerEffectBleed('directional_blur', p, r), id: 'directional_blur', name: '方向模糊', group: 'blur', tooltip: '沿一个方向拉出拖影，表现快速移动', description: '沿指定角度做线性拖影模糊，用于速度感、晃动感。',
     params: [
       angle('direction', '方向', 0, -180, 180, '拖影的方向，0° 为水平', '拖影方向角度：0 水平，90 垂直，45 斜向；正负 180 等价。'),
       strength('length', '模糊长度', 30, '拖影长度，0 没有拖影', '拖影长度：0 无；30 ≈ 画面高度的 3% 的轻微动感；100 ≈ 画面高度的 10% 的强烈拖影。'),
     ] },
-  { id: 'zoom_blur', name: '缩放模糊', group: 'blur', tooltip: '从中心向外放射的模糊，表现冲刺或聚焦', description: '以中心点为原点向外放射的径向模糊，用于冲击感、转场前的冲刺感。',
+  { space: 'layer', author: { factory: 'blur', mode: 'radial' }, bleed: (p, r) => layerEffectBleed('zoom_blur', p, r), id: 'zoom_blur', name: '缩放模糊', group: 'blur', tooltip: '从中心向外放射的模糊，表现冲刺或聚焦', description: '以中心点为原点向外放射的径向模糊，用于冲击感、转场前的冲刺感。',
     params: [
       strength('strength', '强度', 30, '放射模糊程度，0 不模糊', '0 无；20 ≈ 轻微冲刺感；50 ≈ 明显放射；100 ≈ 边缘几乎完全拉丝（约 20% 的缩放拖影）。'),
       percent('center_x', '中心水平位置', 50, '放射中心在画面中的水平位置', '放射中心的水平位置：0 左边缘，50 居中，100 右边缘。'),
       percent('center_y', '中心垂直位置', 50, '放射中心在画面中的垂直位置', '放射中心的垂直位置：0 上边缘，50 居中，100 下边缘。'),
     ] },
-  { id: 'sharpen', name: '锐化', group: 'blur', tooltip: '加强边缘对比，让画面更清晰', description: '增强细节与边缘对比（反锐化掩模）。适度使用，过高会出现白边与噪点。',
+  { space: 'layer', author: { factory: 'sharpen' }, bleed: (p, r) => layerEffectBleed('sharpen', p, r), id: 'sharpen', name: '锐化', group: 'blur', tooltip: '加强边缘对比，让画面更清晰', description: '增强细节与边缘对比（反锐化掩模）。适度使用，过高会出现白边与噪点。',
     params: [strength('amount', '锐化量', 30, '锐化程度，0 不锐化', '0 无；20 ≈ 轻微提清晰度；50 ≈ 明显锐利；100 ≈ 很强，容易出现白边。')] },
+  { id: 'lens_blur', space: 'layer-only', author: { factory: 'blur', mode: 'lens' }, bleed: (p, r) => layerEffectBleed('lens_blur', p, r), name: '镜头模糊', group: 'blur', tooltip: '圆形光圈的镜头虚化', description: '柔化图层并保留圆形光斑与明亮高光，适合镜头失焦。', params: [{ key: 'radius_fraction_height', name: '半径', type: 'number', unit: 'fraction_height', min: 0, max: Number.MAX_VALUE, step: .001, default: .009, tooltip: '半径占逻辑画幅高度的比例', description: '半径占逻辑画幅高度的比例，不随图层 bounds 改变。' }] },
   { id: 'brightness_contrast', name: '亮度与对比度', group: 'color', tooltip: '整体提亮或压暗，拉开或减弱明暗反差', description: '整体调整亮度与对比度。',
     params: [
       signed('brightness', '亮度', '正值提亮，负值压暗', '-100 很暗，0 不变，+30 ≈ 明显提亮，+100 接近过曝。'),
@@ -79,9 +85,9 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
       signed('saturation', '饱和度', '正值更鲜艳，-100 为黑白', '-100 完全黑白，-30 ≈ 低饱和电影感，0 不变，+30 ≈ 鲜艳，+100 饱和度翻倍。'),
       signed('lightness', '明度', '正值整体变亮偏白，负值变暗偏黑', '-100 全黑，0 不变，+100 全白。'),
     ] },
-  { id: 'black_white', name: '黑白', group: 'color', tooltip: '把画面变成黑白', description: '按人眼亮度把画面转成黑白（回忆、纪实感）；只想降低鲜艳度时把效果强度调到 30%–70%，或改用“色相与饱和度”。', params: [] },
+  { space: 'layer', author: { factory: 'blackWhite' }, bleed: (p, r) => layerEffectBleed('black_white', p, r), id: 'black_white', name: '黑白', group: 'color', tooltip: '把画面变成黑白', description: '按人眼亮度把画面转成黑白（回忆、纪实感）；只想降低鲜艳度时把效果强度调到 30%–70%，或改用“色相与饱和度”。', params: [] },
   { id: 'invert', name: '反相', group: 'color', tooltip: '把颜色变成互补色（底片效果）', description: '反转颜色成互补色（底片效果），用于闪回、惊悚、故障风；保留透明度。部分反相可降低效果强度。', params: [] },
-  { id: 'mosaic', name: '马赛克', group: 'stylize', tooltip: '把画面变成色块，常用于打码', description: '把画面切成方块并取每块平均颜色，用于打码、像素风。块大小随画面高度缩放。',
+  { space: 'layer', author: { factory: 'mosaic' }, bleed: (p, r) => layerEffectBleed('mosaic', p, r), id: 'mosaic', name: '马赛克', group: 'stylize', tooltip: '把画面变成色块，常用于打码', description: '把画面切成方块并取每块平均颜色，用于打码、像素风。块大小随画面高度缩放。',
     params: [strength('block_size', '块大小', 30, '色块大小，0 不打码', '0 无；10 ≈ 细小方块（画面高度的 1%）；30 ≈ 常规打码（3%）；100 ≈ 很大的色块（10%）。')] },
   { id: 'vignette', name: '暗角', group: 'stylize', tooltip: '压暗（或提亮）画面四周，把视线引向中心', description: '让画面四周变暗（或变亮），聚焦中心、增加电影感。',
     params: [

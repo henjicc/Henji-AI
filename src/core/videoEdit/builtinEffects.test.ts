@@ -17,9 +17,9 @@ describe('内置效果登记', () => {
       expect(videoEditBuiltinEffectIssue({ id: definition.id, params: videoEditBuiltinDefaults(definition) })).toBeUndefined()
     }
   })
-  it('效果面板登记表列出全部内置效果，带参数与分组', () => {
+  it('效果面板列出可用于片段的内置效果，带参数与分组', () => {
     const entries = videoEditEffectsRegistry().filter(entry => entry.builtinId)
-    expect(entries.map(entry => entry.builtinId)).toEqual(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => definition.id))
+    expect(entries.map(entry => entry.builtinId)).toEqual(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => definition.space !== 'layer-only').map(definition => definition.id))
     expect(entries.every(entry => entry.category === (entry.media === 'audio' ? 'audio_effect' : 'video_effect') && entry.id === `effect:${entry.builtinId}` && entry.group && entry.params)).toBe(true)
     expect(parseVideoEditBuiltinRefId('effect:gaussian_blur')).toBe('gaussian_blur'); expect(parseVideoEditBuiltinRefId('gaussian_blur')).toBe('gaussian_blur'); expect(parseVideoEditBuiltinRefId('effect:nope')).toBeUndefined()
   })

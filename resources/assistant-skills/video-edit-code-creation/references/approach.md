@@ -62,3 +62,5 @@ export default {
   }
 }
 ```
+
+API 7 的作者单层直接写 `effects: t => [glow(...), blur(...)]`，导入 henji-effects；全局效果预设用 look。无需为每层复制高斯、光晕或色差 shader。它们处理自己的层像素，不能读取下方轨道。缺少的折射、投影仍按本页对应能力处理。

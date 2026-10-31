@@ -3,6 +3,8 @@ import { VIDEO_EDIT_PRECISE_FORMAT, type VideoEditGpuColorFormat } from './video
 
 /** Texture belongs to the compositor's device, with premultiplied alpha. */
 export class VideoEditCodePicture {
+  /** 本帧含作者图层的零 alpha 发光；仅渲染成功后发布，嵌套合成沿输入传递。 */
+  carriesLight = false
   /** True for `rgba16float` surfaces: effects and transitions on high-precision material keep its precision. */
   readonly highPrecision: boolean
   /**

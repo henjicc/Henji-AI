@@ -1,3 +1,7 @@
+import ts from 'typescript'
+import { reviewCodeEffectUsage, type CodeEffectSuggestion } from '@/core/videoEdit/codeEffectReview'
+import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
+import { documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { queryVideoEditReviewCapability } from '@/core/application-control/domains/videoEdit/videoEditReviewCapability'
@@ -93,6 +97,31 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
       const results = videoEditTrackResults(composition)
       let sources: VideoEditMedia[] = []
       const warnings = ['检查点是结构候选和优先抽样，不证明实际像素可见或其余时段无问题。', '跟踪区间来自原始采样；渲染可能插值或借用附近有效位置，跟丢不等于画面空白。']
+      const scanned = new Map<string, CodeEffectSuggestion[]>()
+      const codeEntries: Array<() => Promise<void>> = []
+      visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(local, entry, window) {
+        const clip = entry.path.at(-1)!.clip
+        if (!clip.code) return
+        codeEntries.push(async () => {
+          try {
+            const version = codeMaterialVersion(local, clip.code!)
+            let suggestions = scanned.get(version.id)
+            if (!suggestions) {
+              await loadCodeSourceReferences(version)
+              assertCurrent()
+              const files = resolveCodeMaterialFiles(version, documentCodeSourceResolver())
+              suggestions = Object.entries(files.files).filter(([file]) => /\.[cm]?[jt]sx?$/.test(file)).flatMap(([file, text]) => reviewCodeEffectUsage(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)))
+              scanned.set(version.id, suggestions)
+            }
+            for (const effectSuggestion of suggestions) records.push({ kind: 'code_effect_suggestion', timeline: window, sequenceId: local.id, path: entry.path, subjectId: clip.id, effectSuggestion })
+          } catch (error) {
+            assertCurrent()
+            records.push({ kind: 'code_unavailable', timeline: window, sequenceId: local.id, path: entry.path, subjectId: clip.id,
+              motionEvidence: { basis: 'code_structure', suggestion: `源码静态建议未取得：${error instanceof Error ? error.message : String(error)}。其他结构检查仍有效。` } })
+          }
+        })
+      } })
+      for (const scan of codeEntries) { await scan(); assertCurrent() }
       if (input.motion) {
         const programs: Record<string, CodeMaterialProgram> = {}
         await withVideoEditCodeMetadata(() => visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(_local, entry) {
@@ -204,7 +233,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
     const records = page.map(original => {
       const record = isSceneRecord(original) ? { ...original, motionEvidence: prepared.get(original) ?? original.motionEvidence } : original
       return {
-        kind: record.kind, timeline: { fromFrame: record.timeline.from, toFrame: record.timeline.to }, sequenceRef: ref('video_edit.sequence', record.sequenceId),
+        kind: record.kind, ...('effectSuggestion' in record && record.effectSuggestion ? { effectSuggestion: record.effectSuggestion } : {}), timeline: { fromFrame: record.timeline.from, toFrame: record.timeline.to }, sequenceRef: ref('video_edit.sequence', record.sequenceId),
         subjectRef: isSceneRecord(record) ? { ...record.subjectRef } : ref(record.kind === 'event_crowded' ? 'video_edit.sequence' : record.kind.startsWith('tracking_') ? 'video_edit.tracker' : record.kind === 'caption' ? 'video_edit.caption' : record.kind === 'transition' ? 'video_edit.transition' : record.subjectType ?? 'video_edit.clip', record.subjectId),
         path: record.path.map(step => ({ sequenceRef: ref('video_edit.sequence', step.sequenceId), clipRef: ref('video_edit.clip', step.clipId) })),
         ...(record.confidence === undefined ? {} : { confidence: record.confidence }), ...(record.source ? { source: { ...record.source } } : {}),

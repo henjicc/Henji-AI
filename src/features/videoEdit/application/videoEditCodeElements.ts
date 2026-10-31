@@ -126,7 +126,7 @@ export function resolveVideoEditElementAnnotation(instance: VideoEditInstance, m
   const sequence = instance.document.sequences.find(sequence => sequence.id === sequenceId)!
   return { mark: { ...mark, target: { ...mark.target, region: videoEditCodeElementRegion(entry, element, sequence) } }, missing: false, label: codeElementLabel(element) }
 }
-export function videoEditSelectedCodeElementContext(instance: VideoEditInstance): { clipRef: string; elementId: string; sourceSpan?: CodeElementBounds['sourceSpan']; parameterKeys: string[] } | null {
+export function videoEditSelectedCodeElementContext(instance: VideoEditInstance): { clipRef: string; elementId: string; sourceSpan?: CodeElementBounds['sourceSpan']; parameterKeys: string[]; effects?: import('@/core/videoEdit/authorEffects').ResolvedAuthorEffect[] } | null {
   const selected = selectedVideoEditCodeElement(instance)
-  return selected ? { clipRef: `video_edit.clip:${instance.document.id}:${selected.entry.clip.id}`, elementId: selected.element.elementId, ...(selected.element.sourceSpan ? { sourceSpan: selected.element.sourceSpan } : {}), parameterKeys: selected.parameterKeys } : null
+  return selected ? { clipRef: `video_edit.clip:${instance.document.id}:${selected.entry.clip.id}`, elementId: selected.element.elementId, ...(selected.element.sourceSpan ? { sourceSpan: selected.element.sourceSpan } : {}), parameterKeys: selected.parameterKeys, effects: selected.element.author?.effects } : null
 }

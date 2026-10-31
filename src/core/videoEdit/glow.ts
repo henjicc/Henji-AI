@@ -1,3 +1,4 @@
+import { layerEffectBleed } from './layerEffectGeometry'
 /**
  * 发光：亮的地方向外散出物理感的光晕。
  * 实现在剪辑内置效果着色器（`features/videoEdit/engine/glow.ts`），预览与导出同一路径。
@@ -18,7 +19,7 @@ const DESCRIPTION = '让亮的地方向外散出柔和的光晕，越靠近越�
 const { amount, signed, percent, angle, choice, color, toggle } = effectParam
 
 export const GLOW_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  id: 'glow', name: '发光', group: 'stylize', tooltip: DESCRIPTION, description: DESCRIPTION,
+  space: 'layer', author: { factory: 'glow' }, bleed: (p, r) => layerEffectBleed('glow', p, r), id: 'glow', name: '发光', group: 'stylize', tooltip: DESCRIPTION, description: DESCRIPTION,
   params: [
     amount('strength', 40, { name: '强度', text: '光晕有多亮。0 不发光；20 含蓄的柔光；40（默认）明显的光晕；70 以上是强烈的霓虹辉光。' }),
     amount('radius', 60, { name: '半径', text: '光晕能散多远。0 只贴着边缘一圈；60（默认）约为画面高度的 8%；100 能铺满大半个画面。只改变散开的距离，中心亮度基本不变。' }),

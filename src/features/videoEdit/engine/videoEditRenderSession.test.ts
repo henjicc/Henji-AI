@@ -599,3 +599,24 @@ it('导出连续比例跨 Worker 传递并调整宿主画布，完整合成回�
     expect(worker.messages.at(-1)?.message).toMatchObject({ kind: 'outputScale', scale: 2 / 3, renderAtOutputResolution: false })
   } finally { await session.dispose() }
 })
+
+it('独立任务固定 look 快照，离屏复用刷新；并发工程的显式快照互不覆盖', async () => {
+  const initial = [{ id: 'a', name: '柔光', media: 'video' as const, effects: [] }]
+  let presets = initial
+  const host = { fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined, authorEffects: () => ({ presets }) }
+  const first = new VideoEditRenderTransport(host, composition())
+  const pinned = { ...composition(), authorEffects: { presets: [{ ...initial[0], name: '工程副本' }] } }
+  const second = new VideoEditRenderTransport(host, pinned)
+  try {
+    await first.present(0); await second.present(0)
+    presets = [{ ...initial[0], name: '全局已改' }]
+    await first.present(0)
+    const firstWorker = workers.at(-2)!, secondWorker = workers.at(-1)!
+    const documents = (worker: FakeWorker) => worker.messages.flatMap(({ message }) => 'document' in message ? [message.document as VideoEditComposition] : [])
+    expect(documents(firstWorker).at(-1)?.authorEffects?.presets?.[0].name).toBe('柔光')
+    await first.replaceContent(composition())
+    expect(documents(firstWorker).at(-1)?.authorEffects?.presets?.[0].name).toBe('全局已改')
+    await second.replaceContent(pinned)
+    expect(documents(secondWorker).at(-1)?.authorEffects?.presets?.[0].name).toBe('工程副本')
+  } finally { await first.dispose(); await second.dispose() }
+})

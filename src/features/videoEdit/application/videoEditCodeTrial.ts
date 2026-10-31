@@ -1,3 +1,4 @@
+import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import { videoEditOffscreenPool, type VideoEditOffscreenLease } from '../engine/videoEditOffscreenPool'
 import { type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
@@ -65,6 +66,13 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
  * `notices` 收集试渲染帧里片子数据需要用户处理的问题（只有影响这些帧的才报）。
  */
 export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[], measurements?: CodeFramePerformance[], observe?: (value: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation) => void, notices?: Set<string>): Promise<ImageBitmap | undefined> {
+  const environment = { presets: structuredClone(useVideoEditEffectLibraryStore.getState().presets) }
+  const documents = new Map<VideoEditComposition, VideoEditComposition>()
+  frames = frames.map(input => {
+    let document = documents.get(input.document)
+    if (!document) { document = { ...input.document, authorEffects: input.document.authorEffects ?? environment }; documents.set(input.document, document) }
+    return { ...input, document }
+  })
   if (!frames.length) throw new Error('源码检查需要边界画面。')
   signal.throwIfAborted()
   let lease: VideoEditOffscreenLease | undefined; let bitmap: ImageBitmap | undefined

@@ -8,7 +8,12 @@ import type { GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
  */
 export type VideoEditGpuColorFormat = 'rgba8unorm' | 'rgba16float'
 export const VIDEO_EDIT_PRECISE_FORMAT: VideoEditGpuColorFormat = 'rgba16float'
-export function videoEditGpuBytesPerPixel(format: VideoEditGpuColorFormat): number { return format === 'rgba16float' ? 8 : 4 }
+export function videoEditGpuBytesPerPixel(format: string): number {
+  if (format === 'rgba32float') return 16
+  if (format === 'rgba16float') return 8
+  if (format === 'rgba8unorm') return 4
+  throw new Error(`未知剪辑纹理格式：${format}`)
+}
 /**
  * Owned picture formats (non-compact snapshots): `rgba8unorm` for 8-bit pictures; `rgb10a2unorm` for opaque pictures
  * of at most 10 bits (exactly 10 bits per colour, 4 bytes per pixel: the frame cache holds as many 4K frames as

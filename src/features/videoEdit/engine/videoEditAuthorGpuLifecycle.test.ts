@@ -2,9 +2,11 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
+import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 
-const author = vi.hoisted(() => ({ render: vi.fn(), dispose: vi.fn(), instance: vi.fn() }))
+const author = vi.hoisted(() => ({ render: vi.fn(), dispose: vi.fn(), instance: vi.fn(), constructed: vi.fn() }))
 vi.mock('./videoEditAuthorPrograms', () => ({ VideoEditAuthorPrograms: class {
+  constructor(...args: unknown[]) { author.constructed(...args) }
   instance = author.instance
   dispose = author.dispose
 } }))
@@ -22,6 +24,43 @@ function fixture() {
   return { runtime: new VideoEditCodeGpu(device), device, program, destroyed }
 }
 const info = { time: 1, frameDuration: 1 / 60, clip: { time: 1, duration: 3 } }
+
+it('图层效果分配器进入宿主预算，完整 mip 按实际尺寸计费并在释放时归还', async () => {
+  const { runtime, program } = fixture()
+  try {
+    await runtime.authorGenerator('output', 'clip', program, { width: 16, height: 16 }, {}, {}, info)
+    const allocator = author.constructed.mock.calls[0][2] as VideoEditBuiltinScratchAllocator
+    const before = runtime.diagnostics().residentBytes
+    const texture = allocator.allocate(9, 5, 'rgba8unorm', 4)
+    expect(runtime.diagnostics().residentBytes - before).toBe((9 * 5 + 4 * 2 + 2 + 1) * 4)
+    allocator.release(texture)
+    expect(runtime.diagnostics().residentBytes).toBe(before)
+    const fullFloat = allocator.allocate(9, 5, 'rgba32float')
+    expect(runtime.diagnostics().residentBytes - before).toBe(9 * 5 * 16)
+    allocator.release(fullFloat)
+    expect(runtime.diagnostics().residentBytes).toBe(before)
+    expect(() => allocator.allocate(8192, 8192, 'rgba32float')).toThrow(/预算/)
+    expect(() => allocator.allocate(8192, 8192, 'rgba16float', 14)).toThrow(/预算/)
+    expect(runtime.diagnostics().residentBytes).toBe(before)
+  } finally { await runtime.dispose() }
+})
+
+it('仅 API 7 本帧实际产光时发布标记，重用目标后不会遗留；代码滤镜不继承标记', async () => {
+  const { runtime, program } = fixture()
+  const instance = { render: author.render, carriesLight: true }
+  author.instance.mockResolvedValue(instance)
+  try {
+    for (const apiVersion of [4, 5, 6, 7] as const) {
+      const picture = await runtime.authorGenerator('output', 'clip', { ...program, apiVersion }, { width: 16, height: 16 }, {}, {}, info)
+      expect(picture.carriesLight).toBe(apiVersion === 7)
+    }
+    instance.carriesLight = false
+    const picture = await runtime.authorGenerator('output', 'clip', { ...program, apiVersion: 7 }, { width: 16, height: 16 }, {}, {}, info)
+    expect(picture.carriesLight).toBe(false)
+    instance.carriesLight = true
+    expect((await runtime.authorFilter('filter', 'clip', { ...program, apiVersion: 7 }, {}, picture, info)).carriesLight).toBe(false)
+  } finally { await runtime.dispose() }
+})
 
 it('关闭等待作者在途绘制，重复关闭共享屏障，结束后释放目标', async () => {
   const { runtime, program, destroyed } = fixture()
@@ -72,7 +111,7 @@ it('参数与时间变化复用目标，完整参数、素材和覆盖直接传�
     const nextInfo = { ...info, time: 2 }
     const second = await runtime.authorGenerator('frame', 'clip', program, size, { title: 'B' }, assets, nextInfo, overrides)
     expect(second).toBe(first)
-    expect(author.render).toHaveBeenLastCalledWith(first.texture, 16, 16, { title: 'B' }, assets, nextInfo, overrides, { frames: [], images: {} }, true)
+    expect(author.render).toHaveBeenLastCalledWith(first.texture, 16, 16, { title: 'B' }, assets, nextInfo, overrides, { frames: [], images: {} }, true, undefined, {}, 'interactive', expect.any(Function))
     expect(runtime.diagnostics()).toMatchObject({ surfaces: 1, textureAllocations: 1, generatorFrames: 2 })
   } finally { await runtime.dispose() }
   expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })
@@ -84,15 +123,15 @@ it('1/2 回放分辨率：输出纹理减半、放置尺寸不变，作者拿到
   try {
     const half = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info, undefined, true, {}, 2)
     expect([half.width, half.height, half.displayWidth, half.displayHeight]).toEqual([1920, 1080, 3840, 2160])
-    expect(author.render).toHaveBeenLastCalledWith(half.texture, 3840, 2160, {}, {}, { ...info, renderScale: .5 }, undefined, { frames: [], images: {} }, true, { width: 1920, height: 1080 })
+    expect(author.render).toHaveBeenLastCalledWith(half.texture, 3840, 2160, {}, {}, { ...info, renderScale: .5 }, undefined, { frames: [], images: {} }, true, { width: 1920, height: 1080 }, {}, 'interactive', expect.any(Function))
     const reduced = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info, undefined, true, {}, 1.5)
     expect([reduced.width, reduced.height, reduced.displayWidth, reduced.displayHeight]).toEqual([2560, 1440, 3840, 2160])
-    expect(author.render).toHaveBeenLastCalledWith(reduced.texture, 3840, 2160, {}, {}, { ...info, renderScale: 2 / 3 }, undefined, { frames: [], images: {} }, true, { width: 2560, height: 1440 })
+    expect(author.render).toHaveBeenLastCalledWith(reduced.texture, 3840, 2160, {}, {}, { ...info, renderScale: 2 / 3 }, undefined, { frames: [], images: {} }, true, { width: 2560, height: 1440 }, {}, 'interactive', expect.any(Function))
     // 切回完整分辨率：换一张整幅纹理，调用与以前逐项相同
     const full = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info)
     expect([full.width, full.height, full.displayWidth, full.displayHeight]).toEqual([3840, 2160, 3840, 2160])
     expect(full).not.toBe(half)
-    expect(author.render).toHaveBeenLastCalledWith(full.texture, 3840, 2160, {}, {}, info, undefined, { frames: [], images: {} }, true)
+    expect(author.render).toHaveBeenLastCalledWith(full.texture, 3840, 2160, {}, {}, info, undefined, { frames: [], images: {} }, true, undefined, {}, 'interactive', expect.any(Function))
     expect(runtime.renderDivisor).toBe(1); runtime.setRenderDivisor(4); expect(runtime.renderDivisor).toBe(4)
   } finally { await runtime.dispose() }
 })
@@ -102,7 +141,7 @@ it('放大导出中的高分辨率作者按实际纹理传 renderScale，保持�
   try {
     const output = await runtime.authorGenerator('frame', 'clip', program, { width: 8192, height: 4320 }, {}, {}, info, undefined, true, {}, .5)
     expect([output.width, output.height, output.displayWidth, output.displayHeight]).toEqual([8192, 4320, 8192, 4320])
-    expect(author.render).toHaveBeenLastCalledWith(output.texture, 8192, 4320, {}, {}, { ...info, renderScale: 1 }, undefined, { frames: [], images: {} }, true, { width: 8192, height: 4320 })
+    expect(author.render).toHaveBeenLastCalledWith(output.texture, 8192, 4320, {}, {}, { ...info, renderScale: 1 }, undefined, { frames: [], images: {} }, true, { width: 8192, height: 4320 }, {}, 'interactive', expect.any(Function))
   } finally { await runtime.dispose() }
 })
 

@@ -96,7 +96,7 @@ it('回放分辨率的缩小倍数随生成器调用传下并进静态缓存键�
   const runtime = await boundary.acquire()
   try {
     await boundary.sources.prepare(document, document.clips, 0, () => true)
-    expect(boundary.generator.mock.lastCall).toHaveLength(10)
+    expect(boundary.generator.mock.lastCall![10 as number]).toBe(1)
     const fullKey = boundary.generator.mock.lastCall![0]
     Object.assign(runtime, { renderDivisor: 2 })
     await boundary.sources.prepare(document, document.clips, 0, () => true)
@@ -109,7 +109,7 @@ it('回放分辨率的缩小倍数随生成器调用传下并进静态缓存键�
     Object.assign(runtime, { renderDivisor: 1 })
     await boundary.sources.prepare(document, document.clips, 0, () => true)
     expect(boundary.generator).toHaveBeenCalledTimes(3)
-    expect(boundary.generator.mock.lastCall).toHaveLength(10)
+    expect(boundary.generator.mock.lastCall![10 as number]).toBe(1)
     expect(boundary.generator.mock.lastCall![0]).toBe(fullKey)
   } finally { await boundary.sources.dispose() }
 })
@@ -287,7 +287,7 @@ it('t102 静态声明读取音频元数据仍随来源更新，视频参数按�
     const next = { ...document, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, parameters: { picture: { kind: 'video' as const, mediaId: 'video' } } } })) }
     boundary.sources.updateParameters(next)
     await boundary.sources.prepare(next, next.clips, 15, () => true, imageInputs('code-input:["clip","picture"]'), options)
-    expect(boundary.generator).toHaveBeenLastCalledWith(expect.any(String), 'clip', expect.anything(), expect.objectContaining({ audio, audioTime: .5 }), expect.objectContaining({ picture: { kind: 'image', mediaId: 'code-input:["clip","picture"]' } }), expect.any(Object), expect.objectContaining({ audio, audioTime: .5 }), undefined, true, { picture: { texture: undefined, width: 100, height: 100 } })
+    expect(boundary.generator).toHaveBeenLastCalledWith(expect.any(String), 'clip', expect.anything(), expect.objectContaining({ audio, audioTime: .5 }), expect.objectContaining({ picture: { kind: 'image', mediaId: 'code-input:["clip","picture"]' } }), expect.any(Object), expect.objectContaining({ audio, audioTime: .5 }), undefined, true, { picture: { texture: undefined, width: 100, height: 100 } }, 1, expect.any(Object), undefined, expect.any(Function))
     // 位图只在作者读 assets 时才取，GPU 入口直接用 images 里的纹理。
     const assets = (boundary.generator.mock.lastCall as unknown as unknown[])[5] as Record<string, unknown>
     expect(Object.keys(assets)).toEqual(['picture'])

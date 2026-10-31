@@ -1,3 +1,4 @@
+import { useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
 import { verifiedVideoEditProxySources } from '../application/videoEditProxy'
 import { videoEditMaskUpdateTime } from '../application/videoEditMaskEditing'
 import { prepareVideoEditFonts } from '../application/videoEditFonts'
@@ -9,7 +10,7 @@ export { warmVideoEditNativeDecoder } from './videoEditRenderTransport'
 export class VideoEditRenderSession extends VideoEditRenderTransport {
   constructor(...args: ConstructorParameters<typeof VideoEditRenderTransport> extends [unknown, ...infer Rest] ? Rest : never) {
     initializeVideoEditCodeSourceRuntime()
-    super({ fonts: prepareVideoEditFonts, proxies: verifiedVideoEditProxySources, maskUpdateTime: videoEditMaskUpdateTime, readCodeMetadata: readCodeMetadataCache, writeCodeMetadata: writeCodeMetadataCache, loadCodeModules: prepareVideoEditNativeModules }, ...args)
+    super({ authorEffects: () => ({ presets: useVideoEditEffectLibraryStore.getState().presets }), fonts: prepareVideoEditFonts, proxies: verifiedVideoEditProxySources, maskUpdateTime: videoEditMaskUpdateTime, readCodeMetadata: readCodeMetadataCache, writeCodeMetadata: writeCodeMetadataCache, loadCodeModules: prepareVideoEditNativeModules }, ...args)
   }
 }
 import { readCodeMetadataCache, writeCodeMetadataCache } from '../application/videoEditCodeMetadataCache'

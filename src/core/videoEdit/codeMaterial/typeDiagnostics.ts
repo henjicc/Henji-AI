@@ -1,9 +1,11 @@
+import type { CodeEffectSuggestion } from '../codeEffectReview'
 import type { CodeSourceSpan } from './contract'
 
 /** 作者源码类型检查的一条错误；位置是作者原文的行列，不是检查器内部改写后的位置。 */
 export interface CodeTypeDiagnostic { code: number; message: string; span: CodeSourceSpan }
 export interface CodeTypeCheckResult {
   /** 实际检查了的作者文件：TS 文件，以及首行写了 // @ts-check 的 JS 文件。 */
+  suggestions?: CodeEffectSuggestion[]
   checkedFiles: string[]
   diagnostics: CodeTypeDiagnostic[]
   /** 全部错误数；diagnostics 只保留前若干条。 */
@@ -30,10 +32,10 @@ export function codeTypeCheckFact(report: CodeTypeCheckReport): string | undefin
 /** 证据 data：结构化的位置与错误码，供助手逐条定位。 */
 export type CodeTypeCheckData =
   | { status: 'unavailable'; reason: string }
-  | { status: 'checked'; checkedFiles: string[]; total: number; diagnostics: Array<{ file: string; line: number; column: number; endLine: number; endColumn: number; code: number; message: string }> }
+  | { status: 'checked'; suggestions?: CodeEffectSuggestion[]; checkedFiles: string[]; total: number; diagnostics: Array<{ file: string; line: number; column: number; endLine: number; endColumn: number; code: number; message: string }> }
 export function codeTypeCheckData(report: CodeTypeCheckReport): CodeTypeCheckData {
   if (report.status === 'unavailable') return { status: report.status, reason: report.reason }
-  return { status: report.status, checkedFiles: [...report.checkedFiles], total: report.total, diagnostics: report.diagnostics.slice(0, 20).map(diagnostic => ({ file: diagnostic.span.file, line: diagnostic.span.startLine, column: diagnostic.span.startColumn, endLine: diagnostic.span.endLine, endColumn: diagnostic.span.endColumn, code: diagnostic.code, message: diagnostic.message })) }
+  return { status: report.status, ...(report.suggestions?.length ? { suggestions: report.suggestions } : {}), checkedFiles: [...report.checkedFiles], total: report.total, diagnostics: report.diagnostics.slice(0, 20).map(diagnostic => ({ file: diagnostic.span.file, line: diagnostic.span.startLine, column: diagnostic.span.startColumn, endLine: diagnostic.span.endLine, endColumn: diagnostic.span.endColumn, code: diagnostic.code, message: diagnostic.message })) }
 }
 
 /** 加载或试渲染失败时附在错误信息末尾：类型错误常常就是失败原因，助手不必再猜。一次提交多份源码时标出第几份。 */

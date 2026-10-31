@@ -1,3 +1,4 @@
+import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
 import { planRecordingCursor, type RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
 import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
 import { RECORDING_ZOOM_EFFECT } from '@/core/videoEdit/recordingZoom'
@@ -33,7 +34,7 @@ export interface VideoEditBuiltinPass {
   /** (目标宽, 目标高, 输入宽, 输入高, a.xyzw, b.xyzw, c.xyzw)。 */
   uniforms: Float32Array
 }
-export interface VideoEditBuiltinPlan { width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean }
+export interface VideoEditBuiltinPlan { underlay?: number; width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean }
 type Vec4 = readonly [number, number, number, number]
 const ZERO: Vec4 = [0, 0, 0, 0]
 const LINE_TAPS = 16
@@ -87,21 +88,28 @@ export function videoEditGrainSeed(frame: number): number { return (Math.max(0, 
  */
 export function resolveVideoGaussianPlan(parameters: GaussianParameters, context: EffectEvaluationContext): ResolvedGaussianPlan { return GAUSSIAN_EFFECT.resolve(parameters, context) }
 
-export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize }): VideoEditBuiltinPlan {
+export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize; layer?: LayerEffectReference; splitGlow?: boolean }): VideoEditBuiltinPlan {
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
   if (instance.id === RECORDING_CURSOR_EFFECT) return planRecordingCursor(instance.cursorDraws ?? [], width, height)
   if (instance.id === RECORDING_ZOOM_EFFECT) return planRecordingZoom(instance.zoom, width, height)
   const params = resolveVideoEditBuiltinParams(instance)
-  if (instance.id === 'glow') return planGlow(params, width, height)
+  if (instance.id === 'glow') return planGlow(params, width, height, frame.layer, frame.splitGlow)
   const plan = new Planner(width, height)
-  const H = height
+  const H = frame.layer ? frame.layer.referenceSize.height * frame.layer.rasterScale : height
   switch (instance.id) {
-    case 'color_grade': return planColorGrade(params, width, height)
+    case 'color_grade': {
+      const grade = planColorGrade(params, width, height, frame.layer ? [frame.layer.referenceSize.width * frame.layer.rasterScale, H] : [width, height])
+      if (frame.layer) for (const pass of grade.passes) pass.uniforms = new Float32Array([...pass.uniforms, ...frame.layer.rasterOrigin, frame.layer.contentBounds.width * frame.layer.rasterScale, frame.layer.contentBounds.height * frame.layer.rasterScale])
+      return grade
+    }
+    case 'lens_blur': { plan.pass('lens', 'input', 'output', [number(params, 'radius_fraction_height') * H, 0, 0, 0]); break }
     case 'gaussian_blur': {
       const scale = frame.renderScale ?? 1
       const referenceSize = frame.referenceSize ?? { width: Math.round(width / scale), height: Math.round(height / scale) }
-      const resolvedGaussian = resolveVideoGaussianPlan(gaussianParameterSchema.parse(params), { referenceSize, outputSize: { width, height }, quality: frame.quality ?? 'interactive' })
+      // 局部纹理只改变栅格范围；尺度仍来自完整作者画幅。
+      const parameters = frame.layer ? { ...params, sigma_fraction_height: number(params, 'sigma_fraction_height') * H / height } : params
+      const resolvedGaussian = resolveVideoGaussianPlan(gaussianParameterSchema.parse(parameters), { referenceSize: frame.layer ? { width, height } : referenceSize, outputSize: { width, height }, quality: frame.layer?.quality ?? frame.quality ?? 'interactive' })
       if (resolvedGaussian.passes.every(pass => pass.operation.kind === 'copy')) { plan.pass('copy', 'input', 'output') }
       else {
         let source: VideoEditBuiltinTexture = plan.alloc()
@@ -127,7 +135,8 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
     case 'zoom_blur': {
       const range = number(params, 'strength') / 100 * 0.2
       if (range * H < 1) { plan.pass('copy', 'input', 'output'); break }
-      const center: Vec4 = [number(params, 'center_x') / 100, number(params, 'center_y') / 100, 0, 0]
+      const local = frame.layer
+      const center: Vec4 = local ? [(local.rasterOrigin[0] + number(params, 'center_x') / 100 * local.contentBounds.width * local.rasterScale) / width, (local.rasterOrigin[1] + number(params, 'center_y') / 100 * local.contentBounds.height * local.rasterScale) / height, 0, 0] : [number(params, 'center_x') / 100, number(params, 'center_y') / 100, 0, 0]
       const middle = plan.alloc()
       plan.pass('zoom', 'input', middle, [center[0], center[1], range / LINE_TAPS, LINE_TAPS])
       plan.pass('zoom', middle, 'output', [center[0], center[1], range / LINE_TAPS ** 2, LINE_TAPS])
@@ -164,6 +173,10 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
       const block = number(params, 'block_size') / 100 * 0.1 * H
       if (block < 1) { plan.pass('copy', 'input', 'output'); break }
       plan.pass('mosaic', 'input', 'output', [block / width, block / height, 0, 0])
+      if (frame.layer) {
+        const local = frame.layer
+        plan.passes.at(-1)!.uniforms = new Float32Array([...plan.passes.at(-1)!.uniforms, (local.rasterOrigin[0] + local.contentBounds.width * local.rasterScale / 2) / width, (local.rasterOrigin[1] + local.contentBounds.height * local.rasterScale / 2) / height, 1, 0])
+      }
       break
     }
     case 'vignette': plan.pass('vignette', 'input', 'output', [number(params, 'amount') / 100, 0.15 + number(params, 'midpoint') / 100 * 0.8, 0.05 + number(params, 'feather') / 100 * 0.9, width / height]); break
@@ -176,8 +189,11 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
       plan.pass('grain', 'input', 'output', [number(params, 'amount') / 100 * 0.25 * visible, cell, videoEditGrainSeed(frame.frame), params.monochrome === false ? 0 : 1]); break
     }
     case 'chromatic_aberration': {
-      const pass = chromaticAberrationPass(params, width, height, false)
-      if (pass) plan.pass(pass.entry, 'input', 'output', pass.a, pass.b, undefined, pass.c)
+      const pass = chromaticAberrationPass(params, width, height, false, frame.layer)
+      if (pass) {
+        plan.pass(pass.entry, 'input', 'output', pass.a, pass.b, undefined, pass.c)
+        if (frame.layer) plan.passes.at(-1)!.uniforms = new Float32Array([...plan.passes.at(-1)!.uniforms, ...pass.spatial])
+      }
       else plan.pass('copy', 'input', 'output')
       break
     }
@@ -277,4 +293,19 @@ export function planVideoEditBuiltinTransition(input: VideoEditBuiltinTransition
     default: throw new Error(`过渡“${String(input.kind)}”没有渲染实现。`)
   }
   return { width, height, scratch: plan.scratch, passes: plan.passes }
+}
+
+/** pose.blur 使用编码预乘颜色，公开高斯仍在线性光处理。 */
+export function planAuthorDefocus(width: number, height: number, radius: number, lens: boolean, preserveZeroAlpha = false): VideoEditBuiltinPlan {
+  if (lens) {
+    const plan = new Planner(width, height); plan.pass('lens', 'input', 'output', [radius, 0, 0, 0])
+    return { width, height, passes: plan.passes, scratch: plan.scratch }
+  }
+  const plan = planVideoEditBuiltinEffect({ id: 'gaussian_blur', params: { sigma_fraction_height: radius / height, edge_mode: 'transparent' } }, { width, height, frame: 0, quality: 'final' })
+  // 光纹理的 RGB 独立于覆盖率；只有此输入允许在零 alpha 下参与共用高斯核。
+  for (const pass of plan.passes) {
+    if (pass.entry === 'gaussian_linear' || pass.entry === 'gaussian_encoded') pass.entry = 'gaussian_copy'
+    if (pass.entry === 'gaussian_blur' || pass.entry === 'gaussian_resample') pass.uniforms[11] = preserveZeroAlpha ? 1 : 0
+  }
+  return plan
 }

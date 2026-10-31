@@ -13,7 +13,7 @@ struct Params {
  let size = vec2i(params.domain.xy); let origin = vec2i(params.domain.zw);
  let repeatEdges = params.transfer.w > 0.5;
  if (params.operation.x < 0.5) {
-  return gaussianConvolve(source, sourcePosition, params.operation.yz, params.transfer.x, i32(params.operation.w), size, repeatEdges, origin);
+  return gaussianConvolve(source, sourcePosition, params.operation.yz, params.transfer.x, i32(params.operation.w), size, repeatEdges, origin, false);
  }
- return gaussianSample(source, sourcePosition, size, repeatEdges, origin);
+ return gaussianSample(source, sourcePosition, size, repeatEdges, origin, false);
 }

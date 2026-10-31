@@ -60,7 +60,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
     case 'video_edit.code_version': return (document.codeMaterials ?? []).flatMap(definition => definition.versions.map(version => ({ ...version, name: definition.name })))
     case 'video_edit.tracker': case 'video_edit.graphic_object': case 'video_edit.effect': case 'video_edit.transition': return videoEditCompositeItems(document, type)
     // 内置效果与过渡同一个只读目录：效果 effect:<ID>，过渡 transition:<种类>（4.7）
-    case 'video_edit.builtin_effect': return [...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({ id: videoEditBuiltinRefId(definition.id), name: definition.name })), ...VIDEO_EDIT_TRANSITION_PRESETS.map(preset => ({ id: `${VIDEO_EDIT_TRANSITION_REF_PREFIX}${preset.kind}`, name: preset.name }))]
+    case 'video_edit.builtin_effect': return [...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => definition.space !== 'layer-only').map(definition => ({ id: videoEditBuiltinRefId(definition.id), name: definition.name })), ...VIDEO_EDIT_TRANSITION_PRESETS.map(preset => ({ id: `${VIDEO_EDIT_TRANSITION_REF_PREFIX}${preset.kind}`, name: preset.name }))]
   }
 }
 /** 只核对引用指向的实体仍在，不读属性：删除前核对父序列、`propertyIds: []` 读基线都走这里，避免整份克隆序列和重算转写。 */
@@ -79,7 +79,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     const transitionKind = parseVideoEditTransitionRefId(childId)
     if (transitionKind) return JSON.parse(JSON.stringify(describeVideoEditTransitionKind(transitionKind))) as VideoEditFieldData
     const id = parseVideoEditBuiltinRefId(childId)
-    if (!id) throw new Error(`NOT_FOUND：没有内置效果 ${childId}，可用：${VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => videoEditBuiltinRefId(definition.id)).join('、')}。`)
+    if (!id || requireVideoEditBuiltinEffect(id).space === 'layer-only') throw new Error(`NOT_FOUND：没有片段内置效果 ${childId}，可用：${VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => definition.space !== 'layer-only').map(definition => videoEditBuiltinRefId(definition.id)).join('、')}。`)
     const { name, group, description, params } = describeVideoEditBuiltinEffect(requireVideoEditBuiltinEffect(id))
     return JSON.parse(JSON.stringify({ name, group, description, params })) as VideoEditFieldData
   }

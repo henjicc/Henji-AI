@@ -1,3 +1,4 @@
+import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import { renderFingerprintHash, type VideoEditCodeFingerprints, type VideoEditFrameFingerprint } from '@/core/videoEdit/renderFingerprint'
 import { videoEditPictureTransitionWindows, videoEditPictureFilter, type VideoEditComposition } from '@/core/videoEdit/document'
 import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
@@ -50,6 +51,7 @@ const publish = (): void => {
   publication = setTimeout(() => { publication = undefined; if (publicationPending) { publicationPending = false; publish() } }, 50)
   for (const listener of listeners) listener()
 }
+useVideoEditEffectLibraryStore.subscribe((state, previous) => { if (state.presets !== previous.presets) publish() })
 const rest = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 /** 同步消费者始终拿到当前帧表；缺帧由窗口标为未就绪，完成窗口的通知按短间隔合并。 */
@@ -66,7 +68,9 @@ export function videoEditRenderFingerprints(owner: VideoEditInstance, compositio
   if (!clips.length) return undefined
   let byEnvironment = snapshots.get(composition)
   if (!byEnvironment) { byEnvironment = new Map(); snapshots.set(composition, byEnvironment) }
-  const snapshotEnvironment = JSON.stringify([environment, webContent])
+  const authorEffects = composition.authorEffects ?? { presets: useVideoEditEffectLibraryStore.getState().presets }
+  const effectsEnvironment = composition.codeMaterials?.some(definition => definition.versions.some(version => version.apiVersion >= 7)) ? JSON.stringify([authorEffects.presets, composition.colorLuts]) : ''
+  const snapshotEnvironment = JSON.stringify([environment, webContent, effectsEnvironment])
   const existing = byEnvironment.get(snapshotEnvironment)
   for (const key of byEnvironment.keys()) if (key !== snapshotEnvironment) byEnvironment.delete(key)
   let currentEnvironments = environments.get(owner)
@@ -94,7 +98,7 @@ export function videoEditRenderFingerprints(owner: VideoEditInstance, compositio
       const web = Object.values(parameters).flatMap(value => isCodeImageReference(value) && value.kind === 'web' ? [[value.path, webContent[value.path]]] : [])
       const follow = clip.follow && composition.clips.find(value => value.id === clip.follow!.clipId)
       const key = renderFingerprintHash(JSON.stringify([composition.width, composition.height, composition.frameRate, composition.motionBlur,
-        composition.foreign, environment, web, composition.media.filter(media => mediaIds.has(media.id)), scenes,
+        composition.foreign, environment, effectsEnvironment, web, composition.media.filter(media => mediaIds.has(media.id)), scenes,
         videoEditRenderPictureClip(clip), version, handles.map(handle => [handle.start, handle.end, handle.transition]), follow && videoEditRenderPictureClip(follow)]))
       memo = { environment: snapshotEnvironment, inputs, key }; keys.set(clip.id, memo)
     }

@@ -92,10 +92,11 @@ export const useVideoEditEffectLibraryStore = createVideoEditEffectLibraryStore(
 export function resolveVideoEditLibraryEffects(ref: string): { media: 'video' | 'audio'; effects: Omit<VideoEditEffect, 'id'>[]; needsSource: boolean } | undefined {
   if (ref.startsWith('preset:')) {
     const preset = useVideoEditEffectLibraryStore.getState().presets.find(value => `preset:${value.id}` === ref)
-    return preset && { media: preset.media, effects: structuredClone(preset.effects), needsSource: preset.effects.some(effect => isSmartRegionMask(effect.mask)) }
+    const effects = preset?.effects.filter(effect => requireVideoEditBuiltinEffect(effect.builtin!.id).space !== 'layer-only')
+    return preset && effects?.length ? { media: preset.media, effects: structuredClone(effects), needsSource: effects.some(effect => isSmartRegionMask(effect.mask)) } : undefined
   }
   const template = resolveVideoEditEffectTemplate(ref)
-  if (!template) return undefined
+  if (!template || requireVideoEditBuiltinEffect(template.builtinId).space === 'layer-only') return undefined
   return { media: videoEditBuiltinEffectMedia(template.builtinId), effects: [{ name: template.name ?? requireVideoEditBuiltinEffect(template.builtinId).name, enabled: true, amount: 1, builtin: { id: template.builtinId, params: normalizeVideoEditBuiltinParams(template.builtinId, template.params) }, ...(template.mask ? { mask: template.mask } : {}) }], needsSource: Boolean(template.mask) }
 }
 export type VideoEditLibraryEntry = Omit<VideoEditEffectsRegistryEntry, 'category'> & { category: VideoEditEffectsRegistryEntry['category'] | 'presets'; aliases?: readonly string[] }
@@ -113,5 +114,5 @@ export function filterVideoEditLibraryEntries(entries: readonly VideoEditLibrary
   })
 }
 export function videoEditPresetCreationProperties(preset: VideoEditEffectPreset): Array<Record<string, unknown>> {
-  return preset.effects.map(effect => ({ 'video_edit.effect.definition_id': videoEditBuiltinRefId(effect.builtin!.id), 'video_edit.effect.parameters': structuredClone(effect.builtin!.params), 'video_edit.effect.name': effect.name, 'video_edit.effect.enabled': effect.enabled, 'video_edit.effect.amount': effect.amount, ...(effect.mask ? { 'video_edit.effect.mask': structuredClone(effect.mask) } : {}) }))
+  return preset.effects.filter(effect => requireVideoEditBuiltinEffect(effect.builtin!.id).space !== 'layer-only').map(effect => ({ 'video_edit.effect.definition_id': videoEditBuiltinRefId(effect.builtin!.id), 'video_edit.effect.parameters': structuredClone(effect.builtin!.params), 'video_edit.effect.name': effect.name, 'video_edit.effect.enabled': effect.enabled, 'video_edit.effect.amount': effect.amount, ...(effect.mask ? { 'video_edit.effect.mask': structuredClone(effect.mask) } : {}) }))
 }

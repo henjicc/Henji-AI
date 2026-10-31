@@ -52,3 +52,5 @@ fps = `video_edit.sequence.frame_rate` 的 numerator ÷ denominator。新插入�
 2. 拿到新版本返回的引用后，另一次事务把 `video_edit.clip.code_version_id`（或 `video_edit.effect.version_id`）设为该引用 id 冒号后的版本部分，并一起写入符合新声明的参数和关键帧。新版本不会自动替换实例；先列举/检查同定义调用方，只替换本次授权的实例。
 
 元素 id/sourceSpan 仅定位源码，没有可写元素覆盖层。若目标关联已有公开参数，优先改参数；否则新增源码版本，不编造 element.* 属性。
+
+API 7 的 frameKey 路径还会调用 layers/effects 取得真实图层效果参数；只声明不变 frameKey 不能隐藏效果变化。API 4–6 不新增这次调用。effects(t) 在中心作者时间求一次；曝光只采样位姿，兼容 blur 取中心状态并按尺度换算。look 曲线用片段局部帧；源码 effects 用秒。静态可证的非法参数归类型诊断，动态非法值在实际帧报层／效果／字段位置。

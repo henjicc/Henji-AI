@@ -8,7 +8,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { videoEditEffectsRegistry } from '@/core/videoEdit/effectsRegistry'
 import { makeVideoEditBuiltinEffect, applyVideoEditBuiltinEffect } from './videoEditCompositing'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
-import { createVideoEditEffectLibraryStore, filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditUserPresetEntries, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY } from './videoEditEffectPresets'
+import { resolveVideoEditLibraryEffects, videoEditPresetCreationProperties, createVideoEditEffectLibraryStore, filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditUserPresetEntries, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY } from './videoEditEffectPresets'
 import { videoEditEffectDropClips } from '../panels/videoEditEffectDrag'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -148,4 +148,25 @@ it('助手正式目录可读预设，并经现有效果集合写入整组；与�
     undoVideoEdit(id)
     undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].effects ?? []).toEqual([])
   } finally { app.dispose() }
+})
+
+it('导入预设与直接模板不能绕过片段范围；展开保留双用效果且不修改原预设', async () => {
+  const { owner, id, sequenceId, pictures } = await project()
+  const lens = { ...makeVideoEditBuiltinEffect('gaussian_blur'), builtin: { id: 'lens_blur', params: { radius_fraction_height: .009 } } }
+  const [preset] = useVideoEditEffectLibraryStore.getState().importPresets([{ id: 'external', name: '混合预设', media: 'video', effects: [lens, makeVideoEditBuiltinEffect('gaussian_blur')] }])
+  const ref = `preset:${preset.id}`
+  expect(resolveVideoEditLibraryEffects(ref)?.effects.map(effect => effect.builtin?.id)).toEqual(['gaussian_blur'])
+  expect(videoEditPresetCreationProperties(preset).map(value => value['video_edit.effect.definition_id'])).toEqual(['effect:gaussian_blur'])
+  applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], ref)
+  expect(getActiveVideoEditSequence(owner).clips[0].effects?.map(effect => effect.builtin?.id)).toEqual(['gaussian_blur'])
+  expect(preset.effects.map(effect => effect.builtin?.id)).toEqual(['lens_blur', 'gaussian_blur'])
+  const before = owner.document
+  for (const template of ['lens_blur', 'effect:lens_blur']) {
+    expect(resolveVideoEditLibraryEffects(template)).toBeUndefined()
+    expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], template)).toThrow()
+  }
+  const [onlyLens] = useVideoEditEffectLibraryStore.getState().importPresets([{ ...preset, effects: [lens] }])
+  expect(resolveVideoEditLibraryEffects(`preset:${onlyLens.id}`)).toBeUndefined()
+  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], `preset:${onlyLens.id}`)).toThrow()
+  expect(owner.document).toBe(before)
 })

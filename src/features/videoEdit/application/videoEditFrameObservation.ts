@@ -1,3 +1,4 @@
+import { authorFrameEffects, type AuthorFrameEffects } from '@/core/videoEdit/authorEffectObservation'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { prepareVideoEditAnnotationObservation, paintVideoEditAnnotationObservation, type VideoEditAnnotationObservationOptions } from './videoEditAnnotationImage'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
@@ -33,6 +34,7 @@ export interface VideoEditFrameObservationOptions extends VideoEditAnnotationObs
   reference?: { itemId: string; offsetUs: number }
 }
 export interface VideoEditFrameObservation {
+  effects?: AuthorFrameEffects[]
   performance?: CodeFramePerformance[]
   asset?: AssetRecord
   image: { filePath: string; displayUrl: string; displayName: string }
@@ -88,6 +90,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   if (annotations.cropRegion) videoEditObservationRegionSchema.parse(annotations.cropRegion)
   if (annotations.cropRegion && annotations.cropAnnotationId) throw new Error('cropRegion 与 cropAnnotationId 只能选择一种裁切方式。')
   const measurements: CodeFramePerformance[] = []
+  const effects: AuthorFrameEffects[] = []
   const started = performance.now()
   let composition: VideoEditComposition; let frame = 0
   if (target.kind !== 'source') {
@@ -135,6 +138,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
     const selection = target.kind === 'program' ? { frames: [target.frame] } : target.kind === 'source' ? { frames: [0] } : target
     const sheet = await renderVideoEditContactSheet(composition, selection, maxWidth ?? VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH, signal, measurements, {
       cropRegion: annotations.cropRegion,
+      observe: value => { effects.push(authorFrameEffects(value)) },
       ...(reference ? { reference: (frame: number) => {
         const timeUs = referenceMedia?.kind === 'image' ? 0 : Math.round(frame * 1e6 / composition.fps) + reference.offsetUs
         const source = videoEditSourceComposition(document, reference.itemId, timeUs); referenceTimesUs.push(timeUs)
@@ -146,7 +150,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
     const published = await publishObservationImage(sheet.bytes, sheet.width, sheet.height, `${document.name} · ${composition.name} · ${reference ? '参考比较' : '联系表'}`, signal, assertCurrent, annotations.saveToAssets)
     await verifyReference(); await verifyReviewSources()
     logger.info('剪辑联系表观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, imageRef: published.resultRef, reused: published.reused, width: sheet.width, height: sheet.height, durationMs: Math.round(performance.now() - started) } })
-    return { ...(measurements.length ? { performance: measurements } : {}), ...published, width: sheet.width, height: sheet.height, byteLength: sheet.bytes.byteLength, sourceWidth: composition.width, sourceHeight: composition.height,
+    return { effects, ...(measurements.length ? { performance: measurements } : {}), ...published, width: sheet.width, height: sheet.height, byteLength: sheet.bytes.byteLength, sourceWidth: composition.width, sourceHeight: composition.height,
       documentRevision: document.revision, documentVersion, sequenceId: composition.id, contactSheet: { frames: sheet.frames, columns: sheet.columns, rows: sheet.rows },
       ...(reference ? { comparison: { referenceItemId: reference.itemId, referenceTimesUs } } : {}) }
   }
@@ -156,7 +160,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   prepareVideoEditAnnotationObservation(composition.annotations, frame, dynamicCrop
     ? { ...annotations, cropAnnotationId: undefined, annotationIds: [...(annotations.annotationIds ?? []), annotations.cropAnnotationId!] }
     : annotations)
-  const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true, undefined, measurements, target.kind === 'program' ? value => { assertCurrent(); installVideoEditCodeElements(owner, value) } : undefined)
+  const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true, undefined, measurements, value => { assertCurrent(); effects.push(authorFrameEffects(value)); if (target.kind === 'program') installVideoEditCodeElements(owner, value) })
   if (!bitmap) throw new Error('指定画面没有渲染结果，请重试。')
   let bytes: Uint8Array; let width: number; let height: number; const sourceWidth = bitmap.width; const sourceHeight = bitmap.height
   try {
@@ -192,7 +196,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const published = await publishObservationImage(bytes, width, height, `${document.name} · ${composition.name} · ${label} 观察`, signal, assertCurrent, annotations.saveToAssets)
   await verifyReviewSources()
   logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, imageRef: published.resultRef, reused: published.reused, width, height, durationMs: Math.round(performance.now() - started) } })
-  return { ...(measurements.length ? { performance: measurements } : {}), ...published, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
+  return { effects, ...(measurements.length ? { performance: measurements } : {}), ...published, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
 }
 
 const imageWrites = new Map<string, Promise<boolean>>()

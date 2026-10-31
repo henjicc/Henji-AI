@@ -23,7 +23,8 @@ function half(value: number): number {
 
 interface LayoutDevice { createBindGroupLayout(descriptor: unknown): unknown; createPipelineLayout(descriptor: unknown): unknown }
 /** 中间纹理由宿主分配（计入宿主的显存预算），按尺寸与格式复用。 */
-export interface VideoEditBuiltinScratchAllocator { allocate(width: number, height: number, format: string): GpuTexture; release(texture: GpuTexture): void }
+export interface VideoEditBuiltinScratchAllocator { allocate(width: number, height: number, format: string, mipLevelCount?: number): GpuTexture; release(texture: GpuTexture): void }
+export interface BuiltinEncodingBatch { encoder: ReturnType<GpuDevice['createCommandEncoder']>; uniformIndex: number; taken: Set<Scratch>; created?: Set<Scratch> }
 interface Scratch { texture: GpuTexture; width: number; height: number; format: string; used: boolean }
 
 /**
@@ -50,7 +51,7 @@ export class VideoEditBuiltinEffectsGpu {
     const group = device.createBindGroupLayout({ entries: [
       { binding: 0, visibility: 2, texture: { sampleType: gaussian ? 'unfilterable-float' : 'float' } },
       { binding: 1, visibility: 2, sampler: { type: 'filtering' } },
-      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 64 } },
+      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 96 } },
       { binding: 3, visibility: 2, texture: { sampleType: 'float' } },
       { binding: 4, visibility: 2, texture: { sampleType: 'float', viewDimension: '3d' } },
       { binding: 5, visibility: 2, texture: { sampleType: 'float' } },
@@ -82,11 +83,20 @@ export class VideoEditBuiltinEffectsGpu {
     }
     return pending
   }
-  private take(width: number, height: number, format: string, taken: Set<Scratch>): GpuTexture {
+  private take(width: number, height: number, format: string, taken: Set<Scratch>, created?: Set<Scratch>): Scratch {
     let entry = this.scratch.find(value => !taken.has(value) && value.width === width && value.height === height && value.format === format)
-    if (!entry) { entry = { texture: this.allocator.allocate(width, height, format), width, height, format, used: true }; this.scratch.push(entry) }
+    if (!entry) {
+      // 尺寸变化时先归还闲置档位，避免新旧分辨率同时占满预算。
+      for (let index = this.scratch.length - 1; index >= 0; index--) {
+        const idle = this.scratch[index]
+        if (!taken.has(idle) && !idle.used && (idle.width !== width || idle.height !== height || idle.format !== format)) {
+          this.allocator.release(idle.texture); this.scratch.splice(index, 1)
+        }
+      }
+      entry = { texture: this.allocator.allocate(width, height, format), width, height, format, used: true }; this.scratch.push(entry); created?.add(entry)
+    }
     entry.used = true; taken.add(entry)
-    return entry.texture
+    return entry
   }
   /** 预编译效果用到的全部管线（试渲染与首次使用前）。 */
   async prepare(instance: VideoEditBuiltinEffectInstance, width: number, height: number, format: string): Promise<void> {
@@ -95,14 +105,14 @@ export class VideoEditBuiltinEffectsGpu {
   }
   /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
   async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize): Promise<void> {
-    await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts)
+    await this.encodePlan(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts)
   }
   /**
    * 带参数的视频过渡（4.7）：`outgoing` 前一段、`incoming` 后一段（单侧过渡两者可以是同一纹理，空着的一侧由参数标记），
    * 三者尺寸相同；`format` 是输出格式（任一侧是高精度时为高精度）。
    */
   async renderTransition(transition: VideoEditBuiltinTransitionInput, outgoing: GpuTexture, incoming: GpuTexture, output: GpuTexture, size: { width: number; height: number; format: string }): Promise<void> {
-    await this.execute(planVideoEditBuiltinTransition(transition, size), size.format, outgoing, output, incoming)
+    await this.encodePlan(planVideoEditBuiltinTransition(transition, size), size.format, outgoing, output, incoming)
   }
   private upload(data: Float32Array, width: number, depth = 1, three = false): GpuTexture {
     const height = three ? width : Math.ceil(data.length / 4 / width)
@@ -111,9 +121,9 @@ export class VideoEditBuiltinEffectsGpu {
     ;(this.device.queue as typeof this.device.queue & UploadQueue).writeTexture({ texture }, Uint16Array.from(padded, half), { bytesPerRow: width * 8, rowsPerImage: height }, [width, height, depth])
     return texture
   }
-  private async execute(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly ColorLutAsset[] = []): Promise<void> {
+  async encodePlan(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly ColorLutAsset[] = [], batch?: BuiltinEncodingBatch, underlay?: GpuTexture): Promise<void> {
     const scratchFormat = plan.linearScratch ? plan.resolvedGaussian?.intermediateFormat ?? 'rgba16float' : format
-    const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, pass.target === 'output' ? format : scratchFormat)))
+    const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, pass.target === 'output' || pass.target === plan.underlay && underlay ? format : scratchFormat)))
     if (this.disposed) throw new Error('原调色渲染已关闭。')
     // Resolve all resources before recording, so missing LUT never silently becomes identity.
     const lookups: Array<{ texture: GpuTexture; cube?: CubeLut } | undefined> = []
@@ -143,19 +153,44 @@ export class VideoEditBuiltinEffectsGpu {
       lookups.push(resource)
     }
     this.fallbackLut ??= this.upload(new Float32Array([0, 0, 0, 1]), 1, 1, true)
-    const taken = new Set<Scratch>()
-    const scratch = plan.scratch.map(value => this.take(value.width, value.height, scratchFormat, taken))
-    const texture = (ref: VideoEditBuiltinTexture): GpuTexture => ref === 'input' ? input : ref === 'second' ? second ?? input : ref === 'output' ? output : scratch[ref]
-    const encoder = this.device.createCommandEncoder()
+    const taken = batch?.taken ?? new Set<Scratch>()
+    // 高斯只用 textureLoad 与显式有效尺寸取样；各缩放工序共用两幅全尺寸 backing，
+    // 通过 viewport 限定写入区域，保持 final 的 32f 数值而不同时驻留整组金字塔。
+    const gaussianBacking = plan.resolvedGaussian && plan.scratch.length ? {
+      width: Math.max(...plan.scratch.map(value => value.width)), height: Math.max(...plan.scratch.map(value => value.height)),
+    } : undefined
+    const scratch: GpuTexture[] = []
+    const borrowed = new Map<number, Scratch>()
+    const lastUse = new Map<number, number>()
     plan.passes.forEach((pass, index) => {
+      for (const ref of [pass.source, pass.original, pass.mask, pass.target]) if (typeof ref === 'number') lastUse.set(ref, index)
+    })
+    const texture = (ref: VideoEditBuiltinTexture): GpuTexture => ref === 'input' ? input : ref === 'second' ? second ?? input : ref === 'output' ? output : scratch[ref]
+    const encoder = batch?.encoder ?? this.device.createCommandEncoder()
+    plan.passes.forEach((pass, index) => {
+      for (const ref of [pass.source, pass.original, pass.mask, pass.target]) {
+        if (typeof ref !== 'number' || scratch[ref]) continue
+        if (ref === plan.underlay && underlay) scratch[ref] = underlay
+        else {
+          const size = gaussianBacking ?? plan.scratch[ref], entry = this.take(size.width, size.height, scratchFormat, taken, batch?.created)
+          scratch[ref] = entry.texture; borrowed.set(ref, entry)
+        }
+      }
       const lookup = lookups[index]; const cube = lookup?.cube
       if (cube) {
         pass.uniforms[5] = cube.kind === '1d' ? 1 : 0; pass.uniforms[6] = cube.size
         pass.uniforms.set(cube.domainMin, 8); pass.uniforms.set(cube.domainMax.map((value, i) => value - cube.domainMin[i]), 12)
       }
-      const buffer = this.uniforms[index] ??= this.device.createBuffer({ size: 64, usage: 0x08 | 0x40 })
-      this.device.queue.writeBuffer(buffer, 0, pass.uniforms)
-      const target = encoder.beginRenderPass({ colorAttachments: [{ view: texture(pass.target).createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
+      const slot = batch ? batch.uniformIndex++ : index
+      const buffer = this.uniforms[slot] ??= this.device.createBuffer({ size: 96, usage: 0x08 | 0x40 })
+      const uniform = new Float32Array(24); uniform.set(pass.uniforms)
+      this.device.queue.writeBuffer(buffer, 0, uniform)
+      const target = encoder.beginRenderPass({ colorAttachments: [{ view: (texture(pass.target) as GpuTexture & { createView(descriptor: unknown): unknown }).createView({ baseMipLevel: 0, mipLevelCount: 1 }), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
+      if (gaussianBacking && typeof pass.target === 'number') {
+        const size = plan.scratch[pass.target]
+        const viewport = target as typeof target & { setViewport(x: number, y: number, width: number, height: number, minDepth: number, maxDepth: number): void; setScissorRect(x: number, y: number, width: number, height: number): void }
+        viewport.setViewport(0, 0, size.width, size.height, 0, 1); viewport.setScissorRect(0, 0, size.width, size.height)
+      }
       const pipeline = pipelines[index]
       target.setPipeline(pipeline)
       target.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
@@ -165,30 +200,47 @@ export class VideoEditBuiltinEffectsGpu {
         { binding: 5, resource: texture(pass.mask ?? 'input').createView() },
       ] }))
       target.draw(3); target.end()
+      // 同一 encoder 中的 pass 有序执行；最后一次读取以后即可复用像素存储，uniform 仍逐道独占。
+      for (const [ref, entry] of borrowed) if (lastUse.get(ref) === index) { taken.delete(entry); borrowed.delete(ref) }
     })
-    this.device.queue.submit([encoder.finish()])
+    if (!batch) this.device.queue.submit([encoder.finish()])
     this.passes += plan.passes.length
   }
   /** 释放自上次调用以来没有用到的中间纹理。 */
   releaseIdle(): void {
-    // Sweep at the frame boundary, not between effects: every curve/LUT in a long
-    // chain stays warm. Animated or removed lookups survive at most one idle frame.
-    for (const [key, value] of this.lookups) {
-      if (value.used) value.used = false
-      else { value.texture.destroy(); this.lookups.delete(key) }
-    }
+    this.releaseIdleLookups()
     for (let index = this.scratch.length - 1; index >= 0; index--) {
       const entry = this.scratch[index]
       if (entry.used) { entry.used = false; continue }
       this.allocator.release(entry.texture); this.scratch.splice(index, 1)
     }
   }
+  private releaseIdleLookups(): void {
+    // Sweep at the frame boundary, not between effects: every curve/LUT in a long
+    // chain stays warm. Animated or removed lookups survive at most one idle frame.
+    for (const [key, value] of this.lookups) {
+      if (value.used) value.used = false
+      else { value.texture.destroy(); this.lookups.delete(key) }
+    }
+  }
+  /** 弃帧只归还本次新分配的附件，保留已经预热的池。 */
+  abandon(batch: BuiltinEncodingBatch): void {
+    for (let index = this.scratch.length - 1; index >= 0; index--) {
+      const entry = this.scratch[index]
+      if (batch.created?.has(entry)) { this.allocator.release(entry.texture); this.scratch.splice(index, 1) }
+    }
+    batch.taken.clear()
+    this.releaseIdleLookups()
+  }
+  releaseScratch(): void {
+    for (const entry of this.scratch) this.allocator.release(entry.texture)
+    this.scratch.length = 0
+  }
   dispose(): void {
     this.disposed = true
     for (const value of this.lookups.values()) value.texture.destroy()
     this.lookups.clear(); this.fallbackLut?.destroy(); this.fallbackLut = undefined
-    for (const entry of this.scratch) this.allocator.release(entry.texture)
-    this.scratch.length = 0
+    this.releaseScratch()
     for (const buffer of this.uniforms) buffer.destroy()
     this.uniforms.length = 0; this.pipelines.clear(); this.layout = undefined; this.module = undefined
     this.gaussianLayout = undefined

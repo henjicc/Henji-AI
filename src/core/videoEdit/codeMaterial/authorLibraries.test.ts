@@ -47,3 +47,10 @@ describe('追加新版本与改默认版本', () => {
     expect(authorLibraryImportTable({ three: '0.200.0' }, 5).modules.three).toBe('henji-media://author-lib/three/0.200.0/build/three.module.js')
   })
 })
+
+it('效果库只在兼容接口自动锁定，显式不存在的发行不换版本', () => {
+  expect(latestAuthorLibraryVersions(7)['henji-effects']).toBe('1.0.0')
+  expect(latestAuthorLibraryVersions(6)['henji-effects']).toBeUndefined()
+  expect(resolveAuthorLibraryModule('henji-effects', { 'henji-effects': '9.0.0' })).toBeUndefined()
+  expect(authorLibraryImportTable({ 'henji-effects': '1.0.0' }, 7).modules['henji-effects']).toContain('/henji-effects/1.0.0/index.mjs')
+})

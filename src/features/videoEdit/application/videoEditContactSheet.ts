@@ -1,3 +1,4 @@
+import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { videoEditDuration, type VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
@@ -7,6 +8,7 @@ import { videoEditObservationFrames, videoEditObservationPixelCrop, type VideoEd
 
 export interface VideoEditContactSheetRange { startFrame: number; endFrame: number; frameCount: number }
 export interface VideoEditContactSheetOptions {
+  observe?: (value: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation) => void
   cropRegion?: VideoEditObservationRegion
   reference?: (frame: number) => { document: VideoEditComposition; frame: number; label: string }
 }
@@ -25,6 +27,7 @@ export function videoEditContactSheetLayout(composition: VideoEditComposition, r
 
 /** 逐帧使用正式试渲染队列，及时释放位图；不移动播放头、不产生中间资产。 */
 export async function renderVideoEditContactSheet(composition: VideoEditComposition, range: VideoEditObservationFrames, maxWidth: number, signal: AbortSignal, measurements?: CodeFramePerformance[], options: VideoEditContactSheetOptions = {}): Promise<VideoEditContactSheetLayout & { bytes: Uint8Array }> {
+  composition = { ...composition, authorEffects: composition.authorEffects ?? { presets: structuredClone(useVideoEditEffectLibraryStore.getState().presets) } }
   const layout = videoEditContactSheetLayout(composition, range, maxWidth, options)
   const canvas = new OffscreenCanvas(layout.width, layout.height); const context = canvas.getContext('2d')
   if (!context) throw new Error('无法生成联系表图片。')
@@ -33,7 +36,7 @@ export async function renderVideoEditContactSheet(composition: VideoEditComposit
   const cells = layout.frames.flatMap(frame => [{ document: composition, frame, label: videoEditFrameTimecode(frame, composition.fps) }, ...(options.reference ? [options.reference(frame)] : [])])
   for (const [index, cell] of cells.entries()) {
     signal.throwIfAborted()
-    const bitmap = await trialVideoEditCodeFrames([{ document: cell.document, frame: cell.frame }], signal, true, undefined, measurements)
+    const bitmap = await trialVideoEditCodeFrames([{ document: cell.document, frame: cell.frame }], signal, true, undefined, measurements, cell.document === composition ? options.observe : undefined)
     if (!bitmap) throw new Error(`target 联系表帧 ${cell.frame} 没有渲染结果。`)
     try {
       const x = index % layout.columns * layout.cellWidth; const y = Math.floor(index / layout.columns) * layout.cellHeight

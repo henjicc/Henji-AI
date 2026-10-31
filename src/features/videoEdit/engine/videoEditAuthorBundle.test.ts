@@ -74,7 +74,7 @@ it('项目里的同名文件优先于内置库；未登记的裸名列出可用�
   const own = await bundleAuthorFiles({ entry: 'main.js', files: { 'main.js': 'import { v } from "three"; export default { draw() { return v } };', 'three.js': 'export const v = "vendored";' } }, build)
   expect(own.code).toContain('"vendored"')
   expect(own.libraries).toBeUndefined()
-  await expect(bundleAuthorFiles({ entry: 'main.js', files: { 'main.js': 'import _ from "lodash"; export default _;' } }, build)).rejects.toThrow(/找不到模块 lodash（由 main\.js 导入）。可用的内置库：three@0\.186\.1.*opentype\.js@2\.0\.0/)
+  await expect(bundleAuthorFiles({ entry: 'main.js', files: { 'main.js': 'import _ from "lodash"; export default _;' } }, build)).rejects.toThrow(/找不到模块 lodash（由 main\.js 导入）。可用的内置库：.*three@0\.186\.1.*opentype\.js@2\.0\.0/)
   await expect(bundleAuthorFiles({ entry: 'main.js', files: { 'main.js': 'import * as T from "three"; export default T;' }, libraries: { three: '0.999.0' } }, build)).rejects.toThrow('找不到模块 three')
 })
 
@@ -85,7 +85,7 @@ it('TS 路径的运行时 import(名字) 与 JS 直出用同一张内置库表�
   expect(call, bundle.code).not.toBeNull()
   const resolve = new Function(`return ${call![1]}`)() as (specifier: string) => string
   expect(resolve('three/webgpu')).toBe('henji-media://author-lib/three/0.186.1/build/three.webgpu.js')
-  expect(decodeURIComponent(resolve('lodash'))).toContain('找不到模块 lodash（由 main.ts 导入）。可用的内置库：three@0.186.1')
+  expect(decodeURIComponent(resolve('lodash'))).toContain('找不到模块 lodash（由 main.ts 导入）。可用的内置库：')
 })
 
 it('TS 路径同样报出同名项目文件遮住内置库', async () => {
@@ -109,4 +109,11 @@ it('TS 打包与原生模块路径使用相同的排版库 v6 门槛', async () 
     expect(result.code).toContain('henji-media://author-lib/henji-layout/1.0.0/')
     expect(result.libraries).toEqual({ 'henji-layout': '1.0.0' })
   }
+})
+
+it('效果工厂导入保留在冻结模块图，API 6 不可使用', async () => {
+  const files = { apiVersion: 7 as const, libraries: { 'henji-effects': '1.0.0' }, entry: 'main.ts', files: { 'main.ts': 'import { glow as light } from "henji-effects"; export default { name: "发光", layers() { return [{ effects: () => [light({strength:20})], draw() {} }] } };' } }
+  const bundle = await bundleAuthorFiles(files, build)
+  expect(bundle.code).toContain('henji-media://author-lib/henji-effects/1.0.0/index.mjs')
+  await expect(bundleAuthorFiles({ ...files, apiVersion: 6 }, build)).rejects.toThrow(/v7|接口 7/)
 })

@@ -1,5 +1,5 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -10,6 +10,40 @@ import { VideoEditCodePicture } from './videoEditCodePicture'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
+import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
+
+const candidates = vi.hoisted(() => ({ disposals: [] as Array<Mock<[], Promise<void>>> }))
+vi.mock('./videoEditAuthorModule', async importOriginal => ({
+  ...await importOriginal<typeof import('./videoEditAuthorModule')>(),
+  loadAuthorModule: vi.fn(async () => ({ name: '候选预览' })),
+}))
+vi.mock('./videoEditAuthorRuntime', () => ({ VideoEditAuthorRuntime: class {
+  readonly parameterMetadata = { name: '候选预览' }
+  readonly dispose
+  constructor(_device: unknown, _effect: unknown, _locations: unknown, _ownsModule: unknown, _apiVersion: unknown, _environment: unknown, allocator: VideoEditBuiltinScratchAllocator) {
+    const texture = allocator.allocate(32, 16, 'rgba16float', 2)
+    this.dispose = vi.fn(async () => { allocator.release(texture) })
+    candidates.disposals.push(this.dispose)
+  }
+} }))
+
+it('候选预览效果纳入宿主预算，字体重置与关闭先释放作者再释放宿主', async () => {
+  const { compositor } = copyFixture(async () => {})
+  try {
+    for (let cycle = 0; cycle < 2; cycle++) {
+      await compositor.readAuthorMetadata('candidate', undefined, 7)
+      const host = await compositor.code()
+      const hostDispose = vi.spyOn(host, 'dispose')
+      const candidateDispose = candidates.disposals.at(-1)!
+      expect(host.diagnostics().residentBytes).toBe((32 * 16 + 16 * 8) * 8)
+      if (cycle === 0) await compositor.invalidateFontResources()
+      else await compositor.dispose()
+      expect(host.diagnostics().residentBytes).toBe(0)
+      expect(candidateDispose).toHaveBeenCalledOnce()
+      expect(candidateDispose.mock.invocationCallOrder[0]).toBeLessThan(hostDispose.mock.invocationCallOrder[0])
+    }
+  } finally { await compositor.dispose() }
+})
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0, loss: undefined as ((reason: string) => void) | undefined }))
 it('网页首帧占位保持透明，图片输入继续提供作者可读取的网页元数据', async () => {

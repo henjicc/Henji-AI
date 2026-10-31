@@ -23,6 +23,7 @@
     "gen:licenses": "node scripts/generate-third-party-licenses.cjs",
     "gen:shader-components": "node scripts/generate-shader-components.cjs",
     "check:shader-components": "node scripts/generate-shader-components.cjs --check",
+    "check:author-effects": "node scripts/generate-author-effects.ts --check",
     "package:source": "node scripts/build-source-package.cjs",
     "build:sdk": "node scripts/build-sdk-if-needed.cjs",
     "build:sdk:force": "node scripts/build-sdk-if-needed.cjs --force",

@@ -103,3 +103,5 @@ resultRef 交给 `read_application_media(mode="image")`，直接查看返回的�
 `visual.effects` 默认 true，给已启用且 amount 非零的画面效果，在查询放置区间首/中/末帧做单变量“开→关→开”全尺寸像素比较，包括代码滤镜/WebGPU。`effect_unchanged` 是该帧无差异，可能效果未绘制、被遮挡、裁切或本帧自然为零；`effect_visible` 是有像素差异，仍要读图判是否符合预期；`effect_unstable` 是重复开启也不同，先处理确定性或输入就绪问题再查。每条都有时间和改法。
 
 作者生成器参数没有统一的关闭值；通过 `visual.probes` 指定 `{clipRef,frame,parameter,offValue}` 比较一个数值/布尔参数。工具按真实源时钟读取当前曲线，在临时副本里设关闭值并去掉该参数曲线；不改作品和播放头。用参数声明判断 offValue，不能假设任意数值参数都能设零。重复引用同一嵌套实体时开关影响该实体全部实例。分页复用已完成证据，文件/字体/作品变化后重新查询。网页取帧是否就绪不在本检查保证内。
+
+图层效果复核：公共取帧及元素读回中的 effects 是已成功绘制帧的真实解析参数，含 look 展开项、amount 和兼容 pose.blur；失败帧不能作为成功证据。源码检查的 suggestions 仅为 AST 静态证据，带文件行列和工厂建议；shadowBlur 不等于投影可被 blur 直接替换。检查全幅效果层是否可补 bounds。深色／浅色／彩色背景都看主体外光晕，独立下方片段只能被提亮；比较强度零、source_opacity 零、层 opacity 零、遮挡和 clip。连续参数跨外扩档位、半分辨率、旋转及推近时检查光形和噪声相位，不能只看停帧。pose.blur 的 GPU 高斯与 Canvas 旧高斯做相同像素半径 A/B，lens 另看散焦，数值测试不代替观感。

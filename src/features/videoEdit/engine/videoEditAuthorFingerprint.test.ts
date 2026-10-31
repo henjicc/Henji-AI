@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { authorFrameCodeIdentity, fingerprintAuthorFrame, fingerprintAuthorFrameKey } from './videoEditAuthorFingerprint'
 import { deterministicAuthorModule } from './videoEditAuthorDeterminism'
 import type { AuthorModule } from './videoEditAuthorModule'
@@ -140,3 +140,28 @@ if (process.env.HENJI_FINGERPRINT_BENCHMARK === '1') it('2 万帧、三个贯穿
   }
   process.stdout.write(JSON.stringify({ frames: 20_000, clips: 3, layersPerClip: 8, shapesPerLayer: 20, elapsedMs: performance.now() - started }) + '\n')
 }, 120_000)
+
+it('API 7 的 frameKey 与 recording 纳入实际效果，恒定 draw 键不能遮住动态参数；API 6 不求 layers', () => {
+  let calls = 0
+  const module = (strength?: number): AuthorModule => ({ name: '效果', frameKey: () => 'static', layers: () => { calls++; return [{ id: 'title', cacheKey: 'constant', effects: time => [{ id: 'glow', params: strength === undefined ? {} : { strength: strength + time } }], draw(ctx) { ctx.fillRect(0, 0, 10, 10) } }] } })
+  const keyed = (effect: AuthorModule, version: number, time = 1) => fingerprintAuthorFrameKey(effect, size, {}, { ...info, time }, {}, 'code', {}, undefined, false, {}, version)
+  const old = keyed(module(), 6); expect(old.digest).toBeTruthy(); expect(calls).toBe(0)
+  expect(keyed(module(20), 6)).toEqual(old); expect(calls).toBe(0)
+  const first = keyed(module(20), 7)
+  expect(first.digest).toBeTruthy(); expect(calls).toBe(1)
+  expect(keyed(module(20), 7)).toEqual(first)
+  expect(keyed(module(20), 7, 2)).not.toEqual(first)
+  const recorded = (strength: number) => fingerprintAuthorFrame(module(strength), size, {}, info, {}, measure, undefined, false, {}, 7)
+  expect(recorded(20).digest).toBeTruthy()
+  expect(recorded(21)).not.toEqual(recorded(20))
+})
+
+it.each([4, 5, 6])('API %s 的 recording 忽略 effects，指纹与没有该属性时相同', apiVersion => {
+  const calls = vi.fn(() => { throw new Error('不应求值') })
+  const fingerprint = (effects?: unknown) => fingerprintAuthorFrame({ name: '兼容', layers: () => [{ effects: effects as never, draw(ctx) { ctx.fillRect(0, 0, 10, 10) } }] }, size, {}, info, {}, measure, undefined, false, {}, apiVersion)
+  const plain = fingerprint()
+  expect(plain.digest).toBeTruthy()
+  expect(fingerprint(calls)).toEqual(plain)
+  expect(fingerprint(123)).toEqual(plain)
+  expect(calls).not.toHaveBeenCalled()
+})

@@ -22,7 +22,7 @@ export async function applyImageColorGradeV3(source: Float32PremultipliedRgbaTil
     }
   }
   const encoded = convertFloat32TileColorContractV3(source, { ...source, workingSpace: 'srgb', transferFunction: 'srgb', colorDomain: 'perceptual-working' })
-  const pixels = executeColorGradeCpuPlan(plan, encoded, luts, coordinates)
+  const pixels = executeColorGradeCpuPlan(plan, encoded, luts, coordinates, true)
   const processed = convertFloat32TileColorContractV3(createFloat32PremultipliedRgbaTile(pixels.width, pixels.height, 'perceptual-working', pixels.data, 'srgb', 'srgb', source.referenceWhiteNits), { ...source, colorDomain: 'linear-light' })
   return mixProcessedWithMask(convertFloat32TileColorDomainV3(source, 'linear-light'), processed, mask)
 }

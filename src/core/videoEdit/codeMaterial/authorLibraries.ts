@@ -33,6 +33,9 @@ export const AUTHOR_LIBRARY_TYPES_FILE = 'types.json'
 
 /** 每个库的第一个版本是“第一套”：没有记录 libraries 的代码版本一直按它运行，所以只能追加新版本，不能改动已有版本。 */
 export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, AuthorLibraryRelease>>>> = {
+  'henji-effects': {
+    '1.0.0': { license: 'Apache-2.0', minApiVersion: 7, frozen: 'resources/video-edit-author/frozen/henji-effects/1.0.0', modules: { 'henji-effects': 'index.mjs' }, types: { mount: 'henji-effects', license: 'Apache-2.0', source: 'frozen' } },
+  },
   three: {
     '0.186.1': {
       license: 'MIT',

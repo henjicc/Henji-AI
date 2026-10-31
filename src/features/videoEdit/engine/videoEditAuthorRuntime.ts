@@ -1,3 +1,8 @@
+import type { EffectQuality } from '@/core/imaging/effects/descriptor'
+import { resolveAuthorEffects, authorEffectBleed, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
+import { gaussianSupport, type LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
+import { VideoEditAuthorEffects } from './videoEditAuthorEffects'
+import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeLayerStatistics } from '@/core/videoEdit/codeMaterial/performance'
@@ -76,6 +81,8 @@ export class VideoEditAuthorRuntime {
   /** Still runs with a layer that cannot be recorded or leaks canvas state: painted as one group, as Frameflow does. */
   private readonly combinedRuns = new Set<string>()
   private measureContext?: OffscreenCanvasRenderingContext2D
+  private layerEffects?: VideoEditAuthorEffects
+  private readonly sourceVersions = new Map<string, number>()
   private layerGpu?: VideoEditAuthorGpu
   private get layers(): VideoEditAuthorGpu { return this.layerGpu ??= new VideoEditAuthorGpu(this.device) }
   private gl?: WebGL2RenderingContext
@@ -84,12 +91,18 @@ export class VideoEditAuthorRuntime {
   private nativeOverrideTarget?: { texture: GpuTexture; width: number; height: number }
   private closed = false
   readonly parameterMetadata: AuthorEffectMetadata
-  private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides; directText?: Map<number, TextDrawObservation[]>; textUncovered?: Map<number, string[]>; textLayouts?: Map<string, number | undefined> }
-  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, apiVersion?: number) {
-    this.parameterMetadata = authorEffectMetadata(effect, apiVersion)
+  private lastFrame?: { carriesLight?: boolean; effects?: Map<number, ResolvedAuthorEffect[]>; layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides; directText?: Map<number, TextDrawObservation[]>; textUncovered?: Map<number, string[]>; textLayouts?: Map<string, number | undefined> }
+  get carriesLight(): boolean { return this.lastFrame?.carriesLight === true }
+  private readonly effectAllocator: VideoEditBuiltinScratchAllocator
+  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, private readonly apiVersion?: number, private readonly effectEnvironment: () => AuthorEffectEnvironment = () => ({}), allocator?: VideoEditBuiltinScratchAllocator) {
+    this.parameterMetadata = authorEffectMetadata(effect, this.apiVersion)
+    this.effectAllocator = allocator ?? {
+      allocate: (width, height, format, mipLevelCount = 1) => this.texture(width, height, mipLevelCount > 1, format),
+      release: texture => { texture.destroy(); this.textures.delete(texture) },
+    }
   }
-  private texture(width: number, height: number, mips: boolean): GpuTexture {
-    const texture = this.device.createTexture({ size: [width, height], mipLevelCount: mips ? 1 + Math.floor(Math.log2(Math.max(width, height))) : 1, format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x10 })
+  private texture(width: number, height: number, mips: boolean, format = 'rgba8unorm'): GpuTexture {
+    const texture = this.device.createTexture({ size: [width, height], mipLevelCount: mips ? 1 + Math.floor(Math.log2(Math.max(width, height))) : 1, format, usage: 0x01 | 0x02 | 0x04 | 0x10 })
     this.textures.add(texture)
     return texture
   }
@@ -137,7 +150,7 @@ export class VideoEditAuthorRuntime {
       if (!pose || override?.hidden || (pose.opacity ?? 1) * (override?.opacity ?? 1) <= 0) return []
       const bounds = layer.bounds ?? [0, 0, frame.width, frame.height]
       const matrix = authorPoseMatrix(pose)
-      const posed = !!layer.pose || !!override
+      const posed = !!layer.pose || (this.apiVersion ?? 7) >= 7 && !!layer.effects || !!override
       const recording = this.history.get(`${posed ? 'layer' : 'still'}:${index}:${id}`)?.painted?.recording
       const combined = [...this.history.entries()].find(([key]) => { const match = /^flat:(\d+):(\d+)$/.exec(key); return match && index >= Number(match[1]) && index < Number(match[2]) })?.[1].painted?.recording
       const observed = combined ?? recording
@@ -147,7 +160,7 @@ export class VideoEditAuthorRuntime {
       const unassignedTextLayouts = attachedUnassigned ? [] : [...frame.textLayouts ?? []].filter(([, owner]) => owner === undefined).map(([id]) => id)
       attachedUnassigned = true
       const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? (layer.factory && this.locations?.factories?.[layer.factory.file]?.[layer.factory.name]) ?? this.locations?.fallback
-      return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1),
+      return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), effects: frame.effects?.get(index) ?? [], effectsTime: frame.time, baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1),
         ...(textDraws ? { textDraws: structuredClone(textDraws).map(draw => ({ ...draw,
           // 运动层的 GPU scissor 在作者画幅坐标裁切；内部 Canvas clip 已由录制保存。
           ...(posed && layer.clip ? { stageClip: [...layer.clip] as [number, number, number, number] } : {}),
@@ -161,12 +174,12 @@ export class VideoEditAuthorRuntime {
    * `output`：`target` 的像素尺寸，缺省等于画布尺寸 `width`×`height`。回放分辨率降低时比画布小：Canvas 图层的作者坐标仍是
    * 画布像素，由宿主按比例缩小栅格与合成；WebGPU / WebGL 入口拿到的 target 与 width/height 是缩小后的像素尺寸。
    */
-  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }): Promise<CodeLayerStatistics | undefined> {
-    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur, output))
+  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}): Promise<CodeLayerStatistics | undefined> {
+    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur, output, environment, quality, beforeCommit))
     this.renders = result.catch(() => undefined)
     return result
   }
-  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }): Promise<CodeLayerStatistics | undefined> {
+  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}): Promise<CodeLayerStatistics | undefined> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
     const frameImages: ImageBitmap[] = []
     // 画布像素到 target 像素的比例：完整分辨率与导出为 1，所有路径与原来逐条相同。
@@ -174,6 +187,7 @@ export class VideoEditAuthorRuntime {
     if (![outWidth, outHeight].every(value => Number.isInteger(value) && value >= 1)) throw new Error('输出尺寸无效。')
     const sx = outWidth / width, sy = outHeight / height
     const scale = sx !== 1 || sy !== 1 ? [sx, sy] as const : undefined
+    const changedSurfaces = new Set<Surface>()
     try {
       params = authorParameterValues(this.parameterMetadata, params)
       if (!Number.isFinite(info.time) || !(info.frameDuration > 0) || !Number.isFinite(info.clip?.time) || !(info.clip.duration > 0)) throw new Error('效果需要有效的帧时间和片段时间。')
@@ -368,6 +382,7 @@ export class VideoEditAuthorRuntime {
           const content = recorded && { key: `${slot}\u0000${width}x${height}\u0000${raster.x},${raster.y}\u0000${rx},${ry}`, parts: recorded }
           if (content && sameContent(surface.content, content)) { statistics.reused += layers; recordVideoEditPreparation('authorRasterReused', 0) }
           else {
+            changedSurfaces.add(surface)
             surface.content = undefined
             const canvas = this.scratch(raster.width, raster.height, 2 * Math.max(width * height, outWidth * outHeight))
             await paint(canvas, [rx, 0, 0, ry, 0 - raster.x, 0 - raster.y], parts, rx !== 1 || ry !== 1 ? { sx: rx, sy: ry } : undefined)
@@ -387,6 +402,8 @@ export class VideoEditAuthorRuntime {
       const list = this.effect.layers ? authorCall(() => this.effect.layers!(params, width, height, assets, info)) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
       recordVideoEditPreparation('authorLayerList', performance.now() - listStarted)
       if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组。')
+      const evaluated = new Map<number, ResolvedAuthorEffect[]>()
+      let carriesLight = false
       const drawStill = (ctx: OffscreenCanvasRenderingContext2D, still: AuthorLayer, position: number): void => {
         ctx.save()
         try {
@@ -429,16 +446,18 @@ export class VideoEditAuthorRuntime {
         }
       }
       await this.layers.begin(target)
+      this.layerEffects?.begin(this.layers.commandEncoder())
       for (let index = 0; index < list.length; index++) {
         const id = authorLayerId(list[index], index), override = overrides && Object.hasOwn(overrides, id) ? overrides[id] : undefined
-        const layer = override && !list[index].pose ? { ...list[index], bounds: list[index].bounds ?? [0, 0, width, height] as [number, number, number, number], pose: () => ({}) } : list[index]
+        const hasEffects = (this.apiVersion ?? 7) >= 7 && list[index].effects !== undefined
+        const layer = (override || hasEffects) && !list[index].pose ? { ...list[index], bounds: list[index].bounds ?? [0, 0, width, height] as [number, number, number, number], pose: () => ({}) } : list[index]
         try {
           if (typeof layer.draw !== 'function') throw new Error('缺少 draw(ctx,t)。')
           // Frameflow batches adjacent untransformed layers onto one canvas.
           // This also preserves Canvas compositing between those layers.
           if (!layer.pose) {
             let end = index
-            while (end < list.length && !list[end].pose && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) end++
+            while (end < list.length && !list[end].pose && ((this.apiVersion ?? 7) < 7 || list[end].effects === undefined) && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) end++
             await stillRun(index, end)
             index = end - 1
             continue
@@ -449,14 +468,34 @@ export class VideoEditAuthorRuntime {
           const bounds = { x, y, width: right - x, height: bottom - y }
           const samples = authorLayerSamples(layer, this.effect, info, bounds, override, motionBlur)
           if (!samples.some(sample => sample.pose)) continue
-          const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator * info.frameDuration)).find(Boolean)
+          const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration)).find(Boolean)
           const need = Math.max(1, ...samples.flatMap(sample => sample.pose ? [Math.hypot(sample.pose.matrix[0], sample.pose.matrix[1]), Math.hypot(sample.pose.matrix[2], sample.pose.matrix[3])] : []))
-          const unitPad = authorLayerBlur(center, 1, layer.blurShape).pad
+          if (hasEffects && typeof layer.effects !== 'function') throw new Error('effects 必须是函数。')
+          const effects = hasEffects ? resolveAuthorEffects(authorCall(() => layer.effects!(info.time)), environment, info.clip.time / info.frameDuration, id) : []
+          evaluated.set(index, effects)
+          const reference = (rasterScale: number, pad = 0): LayerEffectReference => ({ referenceSize: { width, height }, contentBounds: bounds, rasterScale, rasterOrigin: [pad, pad], quality })
+          const paddingByScale = new Map<number, number>()
+          const padding = (rasterScale: number): number => {
+            const cached = paddingByScale.get(rasterScale)
+            if (cached !== undefined) return cached
+            const blur = authorLayerBlur(center, rasterScale, layer.blurShape)
+            if (!effects.length && blur.radius === 0) return hasEffects ? Math.max(16, blur.pad) : blur.pad
+            const bleed = authorEffectBleed(effects, reference(rasterScale)) * height * rasterScale
+            const defocusPad = blur.radius > 0 ? layer.blurShape === 'lens' ? blur.radius * 1.5 : gaussianSupport(blur.radius, Math.ceil(bounds.width * rasterScale), Math.ceil(bounds.height * rasterScale), 'final') : 0
+            const required = bleed + Math.max(blur.pad, defocusPad) + 2
+            const pad = effects.length || hasEffects ? required <= 16 ? 16 : Math.ceil(required / 64) * 64 : Math.max(blur.pad, 2 ** Math.ceil(Math.log2(Math.max(1, defocusPad + 2))))
+            paddingByScale.set(rasterScale, pad)
+            return pad
+          }
           const textureLimit = (this.device as GpuDevice & { limits?: Record<string, number> }).limits?.maxTextureDimension2D ?? 8192
-          const limit = Math.min((textureLimit - 2 * unitPad) / Math.max(bounds.width, bounds.height), Math.sqrt(16e6 / Math.max(1, bounds.width * bounds.height)))
+          const limit = Math.min(textureLimit / Math.max(bounds.width, bounds.height), Math.sqrt(16e6 / Math.max(1, bounds.width * bounds.height)))
           const slot = `layer:${index}:${id}`
-          const fullResolution = authorRasterScale(need, limit, this.liveLayers.has(slot))
-          const fullPad = authorLayerBlur(center, fullResolution, layer.blurShape).pad
+          let fullResolution = authorRasterScale(need, limit, this.liveLayers.has(slot))
+          while (Math.ceil(Math.max(bounds.width, bounds.height) * fullResolution) + 2 * padding(fullResolution) > textureLimit) {
+            fullResolution /= 2
+            if (!(fullResolution > 0) || !Number.isFinite(padding(fullResolution))) throw new Error('图层效果外扩超出设备纹理尺寸。')
+          }
+          const fullPad = padding(fullResolution)
           const draw = (ctx: OffscreenCanvasRenderingContext2D): void => layer.draw(textContext(ctx, index), info.time)
           const recorded = record(slot, { width: Math.ceil(bounds.width * fullResolution) + fullPad * 2, height: Math.ceil(bounds.height * fullResolution) + fullPad * 2 }, [fullResolution, 0, 0, fullResolution, fullPad - x * fullResolution, fullPad - y * fullResolution], draw, layerCacheSignature(layer, width, height))
           if (recorded.video) { this.liveLayers.add(slot); statistics.video++ } else this.liveLayers.delete(slot)
@@ -464,46 +503,33 @@ export class VideoEditAuthorRuntime {
           const shrink = scale ? Math.max(sx, sy) : 1
           const reduced = shrink < 1 && !!recorded.painted && contentOf([recorded.painted]).scalable
           const resolution = reduced ? fullResolution * shrink : fullResolution
-          const { radius, pad } = authorLayerBlur(center, resolution, layer.blurShape)
+          const { radius } = authorLayerBlur(center, resolution, layer.blurShape)
+          const pad = padding(resolution)
+          if (radius > 0) evaluated.set(index, [...effects, ...resolveAuthorEffects([{ id: layer.blurShape === 'lens' ? 'lens_blur' : 'gaussian_blur', params: { [layer.blurShape === 'lens' ? 'radius_fraction_height' : 'sigma_fraction_height']: radius / resolution / height } }]).map(effect => ({ ...effect, source: 'pose.blur' as const }))])
           const surface = this.surface(index * 2, Math.ceil(bounds.width * resolution) + pad * 2, Math.ceil(bounds.height * resolution) + pad * 2, true)
           const canvas = surface.canvas!, region = { x: 0, y: 0, width: canvas.width, height: canvas.height }
           const setup: Matrix = [resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution]
           const content = recorded.painted && { key: `${slot}\u0000${canvas.width}x${canvas.height}\u0000${setup.join(',')}`, parts: [recorded.painted] }
           const changed = !content || !sameContent(surface.content, content)
           if (changed) {
+            changedSurfaces.add(surface)
             surface.content = undefined
             await paint(canvas, setup, [{ painted: recorded.painted, draw }], reduced ? { sx: shrink, sy: shrink } : undefined)
             surface.content = content && recorded.painted!.recording.comparable ? content : undefined
             if (recorded.painted) statistics.redrawn++; else statistics.direct++
           } else { statistics.reused++; recordVideoEditPreparation('authorRasterReused', 0) }
           const uploadStarted = performance.now()
-          let picture = surface.texture
-          if (radius > 0 && layer.blurShape !== 'lens') {
-            // Use the original Canvas/Skia blur operator, without pixel readback
-            // or a second author draw. Do not substitute a different blur kernel.
-            const blurred = this.surface(index * 2 + 1, canvas.width, canvas.height, true)
-            const blurContent = surface.content && { key: `${surface.content.key}\u0000blur:${radius}`, parts: surface.content.parts }
-            if (changed || !blurContent || !sameContent(blurred.content, blurContent)) {
-              const blurContext = blurred.canvas!.getContext('2d')
-              if (!blurContext) throw new Error('Canvas2D 不可用。')
-              blurContext.reset(); blurContext.filter = `blur(${radius}px)`
-              blurContext.drawImage(canvas, 0, 0); blurContext.filter = 'none'
-              upload(blurred.canvas!, blurred.texture, region)
-              this.layers.mipmaps(blurred.texture, canvas.width, canvas.height)
-              blurred.content = blurContent
-            }
-            picture = blurred.texture
-          } else if (changed) {
+          if (changed) {
             upload(canvas, surface.texture, region)
             this.layers.mipmaps(surface.texture, canvas.width, canvas.height)
+            this.sourceVersions.set(slot, (this.sourceVersions.get(slot) ?? 0) + 1)
           }
           recordVideoEditPreparation('authorUpload', performance.now() - uploadStarted)
-          if (radius > 0 && layer.blurShape === 'lens') {
-            const blurred = this.surface(index * 2 + 1, canvas.width, canvas.height, true)
-            this.layers.lens(surface.texture, blurred.texture, canvas.width, canvas.height, radius)
-            this.layers.mipmaps(blurred.texture, canvas.width, canvas.height)
-            blurred.content = undefined
-            picture = blurred.texture
+          let result = { picture: surface.texture, carriesLight: false }
+          if (effects.length || radius > 0) {
+            if (!this.layerEffects) { this.layerEffects = new VideoEditAuthorEffects(this.device, this.effectAllocator); this.layerEffects.begin(this.layers.commandEncoder()) }
+            result = await this.layerEffects.encode(slot, surface.texture, canvas.width, canvas.height, effects, reference(resolution, pad), environment,
+              surface.content ? `${this.sourceVersions.get(slot)}:${surface.content.key}` : undefined, { radius, lens: layer.blurShape === 'lens' }, texture => this.layers.mipmaps(texture, canvas.width, canvas.height))
           }
           const poses = samples.map(sample => {
             if (!sample.pose) return sample
@@ -511,15 +537,18 @@ export class VideoEditAuthorRuntime {
             const matrix: CodeMatrix = [m[0] / resolution, m[1] / resolution, m[2] / resolution, m[3] / resolution, m[4] + m[0] * ox + m[2] * oy, m[5] + m[1] * ox + m[3] * oy]
             return { ...sample, pose: { ...sample.pose, matrix } }
           })
-          this.layers.draw(target, outWidth, outHeight, { texture: picture, x: 0, y: 0, width: canvas.width, height: canvas.height }, poses, layer.clip, scale)
+          this.layers.draw(target, outWidth, outHeight, { texture: result.picture, x: 0, y: 0, width: canvas.width, height: canvas.height }, poses, layer.clip, scale)
+          carriesLight ||= (this.apiVersion ?? 7) >= 7 && result.carriesLight
         } catch (cause) {
-          if (cause instanceof AuthorAssetPending) throw cause
+          if (cause instanceof AuthorAssetPending || cause instanceof Error && cause.name === 'AbortError') throw cause
           throw new Error(`第 ${index + 1} 层${layer.name ? `「${layer.name}」` : ''}：${cause instanceof Error ? cause.message : String(cause)}`, { cause })
         }
       }
+      beforeCommit()
       this.layers.finish()
+      this.layerEffects?.commit()
       this.history = history
-      this.lastFrame = { layers: list, width, height, time: info.time, parameters: params, overrides, directText, textUncovered, textLayouts }
+      this.lastFrame = { carriesLight, effects: evaluated, layers: list, width, height, time: info.time, parameters: params, overrides, directText, textUncovered, textLayouts }
       // Still-group textures follow the grouping: drop the ones no group used this frame.
       this.surfaces.forEach((surface, index) => { if (surface && !surface.canvas && !used.has(index)) { this.release(surface); delete this.surfaces[index] } })
       while (this.surfaces.length > list.length * 2) {
@@ -530,10 +559,14 @@ export class VideoEditAuthorRuntime {
         } catch (error) {
           // An image read outside a recorded canvas draw needs its bitmap before the author code runs: draw the frame again.
           if (!(error instanceof AuthorAssetPending) || attempt > Object.keys(assets).length) throw error
-          this.layers.abandon()
+          this.layers.abandon(); this.layerEffects?.abandon()
         }
       }
     } catch (cause) {
+      this.layers.abandon(); this.layerEffects?.abandon()
+      // 上传已执行，但 mip 工序可能随弃帧丢弃；仅这些纹理需要重新上传。
+      for (const surface of changedSurfaces) surface.content = undefined
+      if (cause instanceof Error && cause.name === 'AbortError') throw cause
       throw new Error(`代码效果「${this.effect.name}」在 ${info.time} 秒执行失败：${cause instanceof Error ? cause.message : String(cause)}`, { cause })
     } finally {
       frameImages.forEach(image => image.close())
@@ -551,6 +584,7 @@ export class VideoEditAuthorRuntime {
     await release(() => this.webgpu?.dispose?.())
     if (this.ownsModule) await release(() => this.effect.dispose?.())
     await release(() => this.layerGpu?.dispose())
+    await release(() => this.layerEffects?.dispose())
     for (const texture of this.textures) await release(() => texture.destroy())
     this.textures.clear()
     this.canvasImages.clear(); this.assetChanges.clear(); this.liveLayers.clear(); this.history.clear(); this.combinedRuns.clear()

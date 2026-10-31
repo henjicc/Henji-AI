@@ -22,7 +22,7 @@ it('批量同一文档的相邻观察帧无需重复序列化，临时副本仍�
   const input = frames()[0], changed = { ...input.document }
   await trialVideoEditCodeFrames([input, { ...input, frame: 1 }, { document: changed, frame: 2 }, { document: changed, frame: 3 }], new AbortController().signal)
   expect(boundary.replace).toHaveBeenCalledTimes(1)
-  expect(boundary.replace).toHaveBeenCalledWith(changed)
+  expect(boundary.replace).toHaveBeenCalledWith({ ...changed, authorEffects: { presets: [] } })
   expect(boundary.present).toHaveBeenCalledTimes(4)
 })
 it('试算的普通 Worker 异常重建后恢复当前帧，连续三次异常结束并释放租约', async () => {

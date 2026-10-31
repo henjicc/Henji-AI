@@ -9,19 +9,33 @@
  */
 import { RECORDING_CURSOR_WGSL } from './videoEditRecordingCursorShader'
 import { RECORDING_ZOOM_WGSL } from './videoEditRecordingZoomShader'
-import { ADJUSTMENT_PASSES_WGSL } from '@/core/imaging/effects/wgsl/adjustmentPasses'
+import { adjustmentPassesWgsl } from '@/core/imaging/effects/wgsl/adjustmentPasses'
 import { GLOW_ENTRIES, GLOW_WGSL } from './glow'
 import { CHROMATIC_ENTRIES, CHROMATIC_WGSL } from './chromaticAberration'
 import { GAUSSIAN_WGSL } from '@/core/imaging/effects/wgsl/gaussian'
-const INLINE_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...INLINE_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_ENTRIES, ...CHROMATIC_ENTRIES] as const
+const INLINE_EFFECT_ENTRIES = ['lens', 'effect_mix', 'effect_over', 'effect_opacity', 'copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...INLINE_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_copy', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_ENTRIES, ...CHROMATIC_ENTRIES] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
-${ADJUSTMENT_PASSES_WGSL}
+${adjustmentPassesWgsl({ layerCoordinates: true })}
 ${RECORDING_CURSOR_WGSL}
 ${RECORDING_ZOOM_WGSL}
 ${GAUSSIAN_WGSL}
+@fragment fn effect_over(v: Vertex) -> @location(0) vec4f { let image = tap(uvOf(v)); return image + tapOriginal(uvOf(v)) * (1.0 - image.a); }
+@fragment fn effect_opacity(v: Vertex) -> @location(0) vec4f { return tap(uvOf(v)) * u.a.x; }
+@fragment fn effect_mix(v: Vertex) -> @location(0) vec4f { return mix(tapOriginal(uvOf(v)), tap(uvOf(v)), u.a.x); }
+@fragment fn lens(v: Vertex) -> @location(0) vec4f {
+ let spacing=u.a.x*sqrt(3.14159265/96.0); let lod=max(0.0,log2(spacing*.7));
+ var sum=vec4f(0); var total=0.0;
+ for(var i=0u;i<96u;i++) {
+  let k=(f32(i)+.5)/96.0; let r=sqrt(k)*u.a.x; let a=f32(i)*2.39996323;
+  let c=textureSampleLevel(source,s,(v.position.xy+r*vec2f(cos(a),sin(a)))/u.size.xy,lod);
+  let w=1.0+2.0*pow(max(max(c.r,c.g),c.b),4.0); sum+=c*w; total+=w;
+ }
+ return sum/total;
+}
+@fragment fn gaussian_copy(v: Vertex) -> @location(0) vec4f { return textureLoad(source, vec2i(v.position.xy), 0); }
 @fragment fn gaussian_linear(v: Vertex) -> @location(0) vec4f {
  let c = textureLoad(source, vec2i(v.position.xy), 0);
  if (c.a <= 0.0) { return vec4f(0.0); }
@@ -37,10 +51,10 @@ ${GAUSSIAN_WGSL}
  return vec4f(rgb * c.a, c.a);
 }
 @fragment fn gaussian_blur(v: Vertex) -> @location(0) vec4f {
- return gaussianConvolve(source, v.position.xy - 0.5, u.a.xy, u.a.z, i32(u.a.w), vec2i(u.b.yz), u.b.x > 0.5, vec2i(0));
+ return gaussianConvolve(source, v.position.xy - 0.5, u.a.xy, u.a.z, i32(u.a.w), vec2i(u.b.yz), u.b.x > 0.5, vec2i(0), u.b.w > 0.5);
 }
 @fragment fn gaussian_resample(v: Vertex) -> @location(0) vec4f {
- return gaussianSample(source, v.position.xy * u.a.xy - 0.5, vec2i(u.b.yz), u.b.x > 0.5, vec2i(0));
+ return gaussianSample(source, v.position.xy * u.a.xy - 0.5, vec2i(u.b.yz), u.b.x > 0.5, vec2i(0), u.b.w > 0.5);
 }
 /** 等权直线取样（方向模糊）：a = (每步 u, 每步 v, 取样数)，以当前像素为中心。 */
 @fragment fn line(v: Vertex) -> @location(0) vec4f {
@@ -85,7 +99,8 @@ ${GAUSSIAN_WGSL}
 /** a = (块宽 u, 块高 v)；块以画面中心对齐，每块取 4×4 个双线性取样的平均。 */
 @fragment fn mosaic(v: Vertex) -> @location(0) vec4f {
  let uv = uvOf(v); let block = u.a.xy;
- let origin = (floor((uv - 0.5) / block) * block) + 0.5;
+ let center = select(vec2f(0.5), u.layer.xy, u.layer.z > 0.0);
+ let origin = (floor((uv - center) / block) * block) + center;
  var sum = vec4f(0.0);
  for (var y = 0; y < 4; y++) { for (var x = 0; x < 4; x++) { sum += tap(clamp(origin + block * (vec2f(f32(x), f32(y)) + 0.5) / 4.0, vec2f(0.0), vec2f(1.0))); } }
  return sum / 16.0;

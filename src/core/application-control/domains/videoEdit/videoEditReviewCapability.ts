@@ -1,3 +1,4 @@
+import { codeEffectSuggestionSchema } from '../../../videoEdit/codeEffectReview'
 import { z } from 'zod'
 import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
@@ -6,7 +7,7 @@ import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '../../../videoEdit/time'
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const range = z.object({ fromFrame: frame, toFrame: frame }).strict().refine(value => value.toFrame >= value.fromFrame, '检查范围不能倒置。')
-const kind = z.enum(['caption', 'clip_boundary', 'effect', 'transition', 'tracking_lost', 'tracking_low_confidence', 'tracking_uncovered', 'tracking_unavailable', 'motion', 'motion_hard_stop', 'motion_hold', 'event_crowded', 'code_change', 'code_unavailable', 'pixel_cut', 'pixel_change', 'pixel_still', 'pixel_unknown', 'settled_jitter', 'safe_area', 'motion_too_fast', 'text_overflow', 'text_clipped', 'text_truncated', 'scene_box_stale', 'scene_cursor_jump', 'scene_issue', 'text_box_overflow', 'shadow_outside_source', 'visibility_dip', 'narration_alignment', 'effect_unchanged', 'effect_visible', 'effect_unstable'])
+const kind = z.enum(['code_effect_suggestion', 'caption', 'clip_boundary', 'effect', 'transition', 'tracking_lost', 'tracking_low_confidence', 'tracking_uncovered', 'tracking_unavailable', 'motion', 'motion_hard_stop', 'motion_hold', 'event_crowded', 'code_change', 'code_unavailable', 'pixel_cut', 'pixel_change', 'pixel_still', 'pixel_unknown', 'settled_jitter', 'safe_area', 'motion_too_fast', 'text_overflow', 'text_clipped', 'text_truncated', 'scene_box_stale', 'scene_cursor_jump', 'scene_issue', 'text_box_overflow', 'shadow_outside_source', 'visibility_dip', 'narration_alignment', 'effect_unchanged', 'effect_visible', 'effect_unstable'])
 const sourceRange = z.object({ fromUs: z.number().finite().nonnegative(), toUs: z.number().finite().nonnegative() }).strict()
 const size = z.object({ width: z.number().finite().nonnegative(), height: z.number().finite().nonnegative() }).strict()
 const rect = size.extend({ x: z.number().finite(), y: z.number().finite() }).strict()
@@ -39,7 +40,7 @@ export const queryVideoEditReviewCapability = defineApplicationCapability({
   }).strict().refine(value => value.to > value.from, 'to 必须大于 from。'),
   outputSchema: z.object({ documentRef: ref('video_edit.document'), sequenceRef: ref('video_edit.sequence'), documentVersion: z.string().min(1), range,
     checkpoints: z.object({ frames: z.array(frame).max(12), selection: z.literal('prioritized_sample') }).strict(),
-    records: z.array(z.object({ kind, timeline: range, sequenceRef: ref('video_edit.sequence'), subjectRef: applicationRefSchema,
+    records: z.array(z.object({ kind, effectSuggestion: codeEffectSuggestionSchema.optional(), timeline: range, sequenceRef: ref('video_edit.sequence'), subjectRef: applicationRefSchema,
       path: z.array(z.object({ sequenceRef: ref('video_edit.sequence'), clipRef: ref('video_edit.clip') }).strict()).max(8),
       confidence: z.number().finite().min(0).max(1).optional(), source: sourceRange.optional(),
       motionEvidence: z.object({ basis: z.enum(['clip_transform', 'structural_events', 'code_structure', 'video_pixels', 'code_input_pixels', 'text_layout', 'scene_data', 'program_pixels']), elementPath: z.array(z.string().min(1)).optional(), peakSpeed: z.number().finite().nonnegative().optional(), gapSeconds: z.number().finite().nonnegative().optional(), suggestion: z.string().min(1).max(1000),

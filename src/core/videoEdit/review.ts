@@ -5,7 +5,7 @@ import { videoEditNestedCaptionSourceId } from './nestedCaptions'
 import { activeVideoEditEffects } from './compositing'
 import type { VideoEditSafeAreaEvidence } from './motionStructure'
 
-export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast' | 'text_overflow' | 'text_clipped' | 'text_truncated' | 'text_box_overflow' | 'shadow_outside_source' | 'visibility_dip' | 'narration_alignment' | 'effect_unchanged' | 'effect_visible' | 'effect_unstable'
+export type VideoEditReviewKind = 'code_effect_suggestion' | 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast' | 'text_overflow' | 'text_clipped' | 'text_truncated' | 'text_box_overflow' | 'shadow_outside_source' | 'visibility_dip' | 'narration_alignment' | 'effect_unchanged' | 'effect_visible' | 'effect_unstable'
 export interface VideoEditReviewRecord {
   kind: VideoEditReviewKind
   timeline: VideoEditSourceMapRange
@@ -13,6 +13,7 @@ export interface VideoEditReviewRecord {
   path: readonly VideoEditSourceMapStep[]
   subjectId: string
   subjectType?: 'video_edit.clip' | 'video_edit.effect' | 'video_edit.caption'
+  effectSuggestion?: import('./codeEffectReview').CodeEffectSuggestion
   confidence?: number
   source?: { fromUs: number; toUs: number }
   motionEvidence?: { basis: 'clip_transform' | 'structural_events' | 'code_structure' | 'video_pixels' | 'code_input_pixels' | 'text_layout' | 'program_pixels'; elementPath?: string[]; peakSpeed?: number; gapSeconds?: number; suggestion: string;

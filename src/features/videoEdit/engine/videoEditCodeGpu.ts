@@ -1,3 +1,4 @@
+import type { AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
 import { recordVideoEditPreparation, videoEditGpuTimer } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
@@ -99,16 +100,18 @@ export class VideoEditCodeGpu {
     void pending.then(() => this.authorWork.delete(pending), () => this.authorWork.delete(pending))
     return pending
   }
-  private authors(): VideoEditAuthorPrograms { return this.authorPrograms ??= new VideoEditAuthorPrograms(this.device) }
+  private effectEnvironment: AuthorEffectEnvironment = {}
+  setAuthorEffects(environment: AuthorEffectEnvironment): void { this.effectEnvironment = environment }
+  private authors(): VideoEditAuthorPrograms { return this.authorPrograms ??= new VideoEditAuthorPrograms(this.device, () => this.effectEnvironment, this.effectAllocator) }
   async inspectAuthor(bundle: CodeAuthorBundle): Promise<CodeAuthorProgram> { return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().inspect(bundle) }) }
   /**
    * `divisor`：输出比例的倒数。输出纹理按比例分配，画面的放置尺寸仍是
    * `size`；Canvas 作者坐标不变，WebGPU / WebGL 入口拿到缩小后的 target 与 width/height，`info.renderScale` 给出比例。
    */
-  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}, divisor: number = 1): Promise<VideoEditCodePicture> {
-    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur, images, divisor))
+  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}, divisor: number = 1, environment: AuthorEffectEnvironment = this.effectEnvironment, quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}): Promise<VideoEditCodePicture> {
+    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur, images, divisor, environment, quality, beforeCommit))
   }
-  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images'], divisor: number): Promise<VideoEditCodePicture> {
+  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images'], divisor: number, environment: AuthorEffectEnvironment, quality: EffectQuality, beforeCommit: () => void): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive()
     const runtime = await this.authors().instance(instanceKey, program)
     this.assertLive()
@@ -120,9 +123,10 @@ export class VideoEditCodeGpu {
     const timer = videoEditGpuTimer(this.device), timed = timer?.begin('author')
     // 完整分辨率按原样调用（不多传参数、不改 info），画面与之前逐像素相同。
     const layers = output
-      ? await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, { ...info, renderScale: output.height / size.height }, overrides, { frames: [], images }, motionBlur, output)
-      : await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, { frames: [], images }, motionBlur)
+      ? await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, { ...info, renderScale: output.height / size.height }, overrides, { frames: [], images }, motionBlur, output, environment, quality, beforeCommit)
+      : await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, overrides, { frames: [], images }, motionBlur, undefined, environment, quality, beforeCommit)
     timer?.end(timed)
+    target.picture.carriesLight = program.apiVersion >= 7 && runtime.carriesLight
     const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
     return target.picture
@@ -242,13 +246,15 @@ export class VideoEditCodeGpu {
     try { await pending }
     catch (error) { if (this.imageReady === pending) this.imageReady = undefined; throw error }
   }
-  private texture(width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm'): GpuTexture {
-    const bytes = width * height * videoEditGpuBytesPerPixel(format)
-    const precise = format === VIDEO_EDIT_PRECISE_FORMAT
+  private texture(width: number, height: number, format = 'rgba8unorm', mipLevelCount = 1): GpuTexture {
+    let pixels = 0
+    for (let level = 0; level < mipLevelCount; level++) pixels += Math.max(1, Math.floor(width / 2 ** level)) * Math.max(1, Math.floor(height / 2 ** level))
+    const bytes = pixels * videoEditGpuBytesPerPixel(format)
+    const precise = format !== 'rgba8unorm'
     if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new CodeMaterialError('BUDGET', '代码素材纹理超出尺寸或512MiB会话预算。')
     if (precise ? bytes + this.preciseBytes > MAX_PRECISE_RESIDENT_BYTES : bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', precise ? '高精度代码素材纹理超出512MiB会话预算。' : '代码素材纹理超出尺寸或512MiB会话预算。')
     const textureStarted = performance.now()
-    const texture = this.device.createTexture({ size: [width, height], format, usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
+    const texture = this.device.createTexture({ size: [width, height], mipLevelCount, format, usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
     recordVideoEditPreparation('textureAllocation', performance.now() - textureStarted)
     this.bytes += bytes; if (precise) this.preciseBytes += bytes
     this.textureBytes.set(texture, bytes); if (precise) this.preciseTextures.add(texture)
@@ -548,11 +554,12 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     const runtime = this.glTransitions()
     await Promise.all(kinds.map(kind => runtime.prepare(kind, 'rgba8unorm')))
   }
-  private builtins(): VideoEditBuiltinEffectsGpu {
-    return this.builtinRuntime ??= new VideoEditBuiltinEffectsGpu(this.device, this.sampler, {
-      allocate: (width, height, format) => this.texture(width, height, format as VideoEditGpuColorFormat),
+  readonly effectAllocator: import('./videoEditBuiltinEffectsGpu').VideoEditBuiltinScratchAllocator = {
+      allocate: (width, height, format, mipLevelCount) => this.texture(width, height, format, mipLevelCount),
       release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes; if (this.preciseTextures.has(texture)) this.preciseBytes -= bytes },
-    })
+  }
+  private builtins(): VideoEditBuiltinEffectsGpu {
+    return this.builtinRuntime ??= new VideoEditBuiltinEffectsGpu(this.device, this.sampler, this.effectAllocator)
   }
   /**
    * 带参数的视频过渡（4.7：擦除、推动、滑动、缩放、模糊、闪光、圆形划像）：与内置效果同一套着色器与显存预算。

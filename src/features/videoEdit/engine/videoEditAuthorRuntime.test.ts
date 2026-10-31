@@ -16,10 +16,12 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import { drawText, layoutText } from '../authorLibraries/text'
 import { layoutBoxes, ready as flexReady } from '../authorLibraries/flex'
-const { layerDraw } = vi.hoisted(() => ({ layerDraw: vi.fn() }))
+const { layerDraw, effectEncode } = vi.hoisted(() => ({ layerDraw: vi.fn(), effectEncode: vi.fn(async (...args: unknown[]) => ({ picture: args[1], carriesLight: false })) }))
+
+vi.mock('./videoEditAuthorEffects', () => ({ VideoEditAuthorEffects: class { begin = vi.fn(); encode = effectEncode; commit = vi.fn(); abandon = vi.fn(); dispose = vi.fn() } }))
 
 vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
-  begin = vi.fn(); draw = layerDraw; mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); abandon = vi.fn(); dispose = vi.fn()
+  commandEncoder = vi.fn(() => ({})); begin = vi.fn(); draw = layerDraw; mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); abandon = vi.fn(); dispose = vi.fn()
 } }))
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
@@ -245,7 +247,7 @@ it('composites a native GPU whole-effect override on the same device without a C
   expect(intermediate.destroy).toHaveBeenCalledOnce()
 })
 
-it('records one author draw per frame and uploads the original Canvas filter result', async () => {
+it('records one author draw and uploads raw pixels before shared GPU defocus', async () => {
   const contexts: Array<{ reset: ReturnType<typeof vi.fn>; setTransform: ReturnType<typeof vi.fn>; drawImage: ReturnType<typeof vi.fn>; filter: string }> = []
   class Canvas {
     context = { reset: vi.fn(), setTransform: vi.fn(), drawImage: vi.fn(), filter: 'none' }
@@ -262,11 +264,11 @@ it('records one author draw per frame and uploads the original Canvas filter res
     await runtime.render(target, 3840, 2160, {}, {}, { time: 1, frameDuration: 1 / 60, clip: { time: 1, duration: 5 } })
     expect(draw).toHaveBeenCalledOnce()
     expect(draw).toHaveBeenCalledWith(expect.anything(), 1)
-    // contexts[0] only measures text; [1] is the layer raster and [2] its Canvas blur.
-    expect(contexts[2].drawImage).toHaveBeenCalledOnce()
+    expect(contexts).toHaveLength(2)
     expect(upload).toHaveBeenCalledOnce()
-    expect(upload.mock.calls[0][0].source.context).toBe(contexts[2])
-    expect(contexts[2].filter).toBe('none')
+    expect(upload.mock.calls[0][0].source.context).toBe(contexts[1])
+    expect(contexts[1].filter).toBe('none')
+    expect(effectEncode.mock.calls.at(-1)?.[8]).toEqual({ radius: 8, lens: false })
   } finally { await runtime.dispose() }
 })
 
@@ -585,5 +587,104 @@ it('模块常量的布局身份跨帧传递，绘制后提供同一身份供区�
     enabled = true
     await runtime.render(output, 100, 50, {}, {}, frameInfo(1))
     expect(runtime.observeElements()[0].textUncovered).toEqual([])
+  } finally { await runtime.dispose() }
+})
+
+it('恒定 cacheKey 的效果每帧只求中心时刻一次；取消与非法值保留已发布观察及未修改的栅格', async () => {
+  const { device, upload } = canvasHarness()
+  const effects = vi.fn((t: number) => [{ id: 'glow' as const, params: { strength: 20 + t } }])
+  const runtime = new VideoEditAuthorRuntime(device, { name: '效果时钟', layers: () => [{ id: 'title', cacheKey: 'constant', bounds: [0, 0, 20, 10], effects, draw(ctx) { ctx.fillRect(0, 0, 20, 10) } }] }, undefined, true, 7)
+  try {
+    for (const frame of [0, 60]) {
+      await runtime.render(output, 100, 50, {}, {}, frameInfo(frame))
+      expect(runtime.observeElements()[0]).toMatchObject({ effectsTime: frame / 60, effects: [{ id: 'glow', params: { strength: 20 + frame / 60 } }] })
+    }
+    expect(effects.mock.calls).toEqual([[0], [1]])
+    expect(effectEncode).toHaveBeenCalledTimes(2)
+    const lastObservation = runtime.observeElements()
+    const cancel = () => { throw new DOMException('已取消', 'AbortError') }
+    await expect(runtime.render(output, 100, 50, {}, {}, frameInfo(120), undefined, undefined, true, undefined, {}, 'final', cancel)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(runtime.observeElements()).toEqual(lastObservation)
+    const previousUploads = upload.mock.calls.length
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(120))
+    expect(upload.mock.calls.length).toBe(previousUploads)
+    const successful = runtime.observeElements()
+    effects.mockReturnValueOnce([{ id: 'glow', params: { strength: NaN } }])
+    await expect(runtime.render(output, 100, 50, {}, {}, frameInfo(180))).rejects.toThrow(/title.effects.*strength/)
+    expect(runtime.observeElements()).toEqual(successful)
+  } finally { await runtime.dispose() }
+})
+
+it.each([4, 5, 6, 7])('API %s 弃帧只重画本次改写的层，静态层和观察保持有效', async apiVersion => {
+  const { device, upload } = canvasHarness()
+  let changed = false
+  const runtime = new VideoEditAuthorRuntime(device, { name: '弃帧', layers: () => [
+    { id: 'static', draw(ctx) { ctx.fillRect(0, 0, 10, 10) } },
+    { id: 'dynamic', bounds: [0, 0, 10, 10], pose: () => ({}), draw(ctx) { ctx.fillStyle = changed ? 'red' : 'blue'; ctx.fillRect(0, 0, 10, 10) } },
+  ] }, undefined, true, apiVersion)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    const observation = runtime.observeElements()
+    changed = true
+    const cancel = () => { throw new DOMException('过期', 'AbortError') }
+    await expect(runtime.render(output, 100, 50, {}, {}, frameInfo(1), undefined, undefined, true, undefined, {}, 'interactive', cancel)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(runtime.observeElements()).toEqual(observation)
+    const uploaded = upload.mock.calls.length
+    expect(await runtime.render(output, 100, 50, {}, {}, frameInfo(2))).toMatchObject({ reused: 1, redrawn: 1 })
+    expect(upload.mock.calls.length - uploaded).toBe(1)
+  } finally { await runtime.dispose() }
+})
+
+it.each([4, 5, 6])('API %s 忽略未知 effects，不拆静态批组，也不执行或校验效果', async apiVersion => {
+  const { device } = canvasHarness()
+  const effects = vi.fn(() => { throw new Error('不应执行') })
+  const runtime = new VideoEditAuthorRuntime(device, { name: '兼容', layers: () => [
+    { id: 'a', effects, draw(ctx) { ctx.fillRect(0, 0, 10, 10) } },
+    { id: 'b', effects: 123 as never, draw(ctx) { ctx.fillRect(0, 0, 10, 10) } },
+    { id: 'c', effects, bounds: [0, 0, 10, 10], pose: () => ({}), draw(ctx) { ctx.fillRect(0, 0, 10, 10) } },
+  ] }, undefined, true, apiVersion)
+  try {
+    expect(await runtime.render(output, 100, 50, {}, {}, frameInfo(0))).toMatchObject({ uploads: 2 })
+    expect(effects).not.toHaveBeenCalled()
+    expect(effectEncode).not.toHaveBeenCalled()
+    expect(runtime.observeElements().map(layer => layer.effects)).toEqual([[], [], []])
+    expect(runtime.carriesLight).toBe(false)
+  } finally { await runtime.dispose() }
+})
+
+it('空效果链保留最小外扩档，pose.blur 读回使用逻辑画幅比例与登记参数', async () => {
+  const { device, upload } = canvasHarness()
+  let empty = false
+  const runtime = new VideoEditAuthorRuntime(device, { name: '最小档', layers: () => [{ id: 'a', bounds: [0, 0, 10, 10], cacheKey: 'same', effects: () => empty ? [] : [{ id: 'black_white' }], draw(ctx) { ctx.fillRect(0, 0, 10, 10) } }] }, undefined, true, 7)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    empty = true
+    expect(await runtime.render(output, 100, 50, {}, {}, frameInfo(1))).toMatchObject({ reused: 1, uploads: 0 })
+    expect(upload).toHaveBeenCalledTimes(1)
+  } finally { await runtime.dispose() }
+  for (const shape of [undefined, 'lens'] as const) {
+    const blurred = new VideoEditAuthorRuntime(device, { name: '虚化读回', layers: () => [{ id: 'a', bounds: [0, 0, 10, 10], blurShape: shape, pose: () => ({ blur: 4, scale: 2 }), draw(ctx) { ctx.fillRect(0, 0, 10, 10) } }] }, undefined, true, 7)
+    try {
+      for (const divisor of [1, 2, 4]) {
+        await blurred.render(output, 100, 50, {}, {}, frameInfo(0), undefined, undefined, false, { width: 100 / divisor, height: 100 / divisor })
+        expect(blurred.observeElements()[0].effects).toMatchObject([{ source: 'pose.blur', params: { [shape === 'lens' ? 'radius_fraction_height' : 'sigma_fraction_height']: 2 / 50 } }])
+      }
+    } finally { await blurred.dispose() }
+  }
+})
+
+it('发光标记以本帧实际 underlay 为准，空链与未产光帧不沿用标记', async () => {
+  const { device } = canvasHarness()
+  let empty = false
+  const runtime = new VideoEditAuthorRuntime(device, { name: '产光', layers: () => [{ id: 'a', bounds: [0, 0, 10, 10], effects: () => empty ? [] : [{ id: 'glow' }], draw(ctx) { ctx.fillRect(0, 0, 10, 10) } }] }, undefined, true, 7)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    expect(runtime.carriesLight).toBe(false)
+    effectEncode.mockImplementationOnce(async (...args: unknown[]) => ({ picture: args[1], carriesLight: true }))
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(1))
+    expect(runtime.carriesLight).toBe(true)
+    empty = true
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(2))
+    expect(runtime.carriesLight).toBe(false)
   } finally { await runtime.dispose() }
 })

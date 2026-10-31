@@ -7,7 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { applyVideoEditBuiltinEffect, resetVideoEditEffect, updateVideoEditBuiltinEffect } from './videoEditCompositing'
+import { applyVideoEditBuiltinEffect, makeVideoEditBuiltinEffect, resetVideoEditEffect, updateVideoEditBuiltinEffect } from './videoEditCompositing'
+import { videoEditEntityItems } from './videoEditReflection'
 import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 
 // 试渲染只替换像素边界；领域校验、事务、注册与读回都是正式实现。
@@ -33,6 +34,20 @@ async function project() {
   const sequence = getActiveVideoEditSequence(owner)
   return { owner, id, sequenceId: sequence.id, clipIds: sequence.clips.map(clip => clip.id) }
 }
+
+it('仅图层效果不出现在助手片段目录，直接读取和公共片段写入均拒绝，通用模糊仍可用', async () => {
+  const { id, owner, clipIds } = await project(), app = createApplicationHarness()
+  try {
+    expect(videoEditEntityItems(owner.document, 'video_edit.builtin_effect').some(item => item.id === 'effect:lens_blur')).toBe(false)
+    expect(videoEditEntityItems(owner.document, 'video_edit.builtin_effect').some(item => item.id === 'effect:gaussian_blur')).toBe(true)
+    await expect(app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:lens_blur` }, ['video_edit.builtin_effect.name'])).rejects.toThrow(/NOT_FOUND/)
+    expect(() => makeVideoEditBuiltinEffect('lens_blur')).toThrow(/仅用于作者图层/)
+    const ref = { kind: 'video_edit.clip', id: `${id}:${clipIds[0]}` }, baseline = await app.read(ref)
+    const result = await app.call('change_application_entities', { summary: '添加模糊', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: ref, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:lens_blur' } }] }] }, baseline.revisions as Record<string, number>)
+    expect(result).toMatchObject({ ok: false }); expect(getActiveVideoEditSequence(owner).clips[0].effects ?? []).toEqual([])
+    expect(makeVideoEditBuiltinEffect('gaussian_blur').builtin?.id).toBe('gaussian_blur')
+  } finally { app.dispose() }
+})
 
 it('录制光标通过正式通用实体创建、修改、回读和撤销；烤入状态可发现，拒绝无日志片段', async () => {
   const { owner, id, sequenceId, clipIds } = await project()

@@ -1,9 +1,21 @@
+import { VideoEditCodeGpu } from './videoEditCodeGpu'
+import { authorEffectBleed } from '@/core/videoEdit/authorEffects'
+import { float32ToFloat16 } from '../../imageEdit/v3/gpu/imageEditorGpuTileAtlasV3'
+import { VideoEditAuthorEffects } from './videoEditAuthorEffects'
+import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
+import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
+import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
+import { VideoEditCodePicture } from './videoEditCodePicture'
+import { resolveAuthorEffects } from '@/core/videoEdit/authorEffects'
+import { createVideoEditSequence, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { isShaderGraphEffect } from '@/core/videoEdit/shaderGraph/effects'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
-import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import { VideoEditBuiltinEffectsGpu, type BuiltinEncodingBatch, type VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
+import { planAuthorDefocus } from './videoEditBuiltinEffectPasses'
+import { authorLayerBlur } from './videoEditAuthorLayers'
 import type { RecordingCursorDraw } from './videoEditRecordingCursorPlan'
 import { RECORDING_FRAME_SOLID_DEFAULT_HEX } from '@/core/theme/colorTokens'
 
@@ -15,6 +27,12 @@ type Device = Gpu['gpu']
 let gpu: Gpu
 let device: Device
 let effects: VideoEditBuiltinEffectsGpu
+function allocator(): VideoEditBuiltinScratchAllocator {
+  return {
+    allocate: (width, height, format, mipLevelCount = 1) => device.createTexture({ size: [width, height], format: format as 'rgba8unorm', mipLevelCount, usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_DST }) as unknown as GpuTexture,
+    release: texture => texture.destroy(),
+  }
+}
 beforeAll(async () => {
   gpu = await init(); device = gpu.gpu
   const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
@@ -53,6 +71,180 @@ async function run(id: string, params: Record<string, unknown> = {}, frame = 0):
   return read(target)
 }
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.subarray((y * W + x) * 4, (y * W + x) * 4 + 4)]
+
+function budgetAllocator(host: VideoEditCodeGpu): VideoEditBuiltinScratchAllocator & { peak: number; peakPrecise: number; peakEight: number; allocations: number } {
+  const live = new Map<GpuTexture, { bytes: number; precise: boolean }>()
+  const measured = {
+    peak: 0, peakPrecise: 0, peakEight: 0, allocations: 0,
+    allocate(width: number, height: number, format: string, mipLevelCount = 1): GpuTexture {
+      const texture = host.effectAllocator.allocate(width, height, format, mipLevelCount)
+      let pixels = 0
+      for (let i = 0; i < mipLevelCount; i++) pixels += Math.max(1, Math.floor(width / 2 ** i)) * Math.max(1, Math.floor(height / 2 ** i))
+      live.set(texture, { bytes: pixels * (format === 'rgba32float' ? 16 : format === 'rgba16float' ? 8 : 4), precise: format !== 'rgba8unorm' })
+      const all = [...live.values()], precise = all.filter(value => value.precise).reduce((sum, value) => sum + value.bytes, 0), eight = all.filter(value => !value.precise).reduce((sum, value) => sum + value.bytes, 0)
+      measured.peakPrecise = Math.max(measured.peakPrecise, precise); measured.peakEight = Math.max(measured.peakEight, eight)
+      measured.peak = Math.max(measured.peak, precise + eight); measured.allocations++
+      return texture
+    },
+    release(texture: GpuTexture): void { expect(live.delete(texture)).toBe(true); host.effectAllocator.release(texture) },
+  }
+  return measured
+}
+
+it('1080p 与 4K 默认发光：小字与宽层、两层静止及三层参数动画 60 帧不超宿主预算', async () => {
+  for (const [frameWidth, frameHeight] of [[1920, 1080], [3840, 2160]]) for (const [contentWidth, contentHeight] of [[100, 40], [800, 200]]) for (const rasterScale of [1, 2]) {
+    const d = device as unknown as GpuDevice, host = new VideoEditCodeGpu(d), measured = budgetAllocator(host)
+    const author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, measured)
+    const target = measured.allocate(frameWidth, frameHeight, 'rgba8unorm')
+    let source: GpuTexture | undefined, previousPad = -1, warmAllocations = 0, previousAllocations = 0
+    try {
+      device.pushErrorScope('validation')
+      for (let frame = 0; frame < 62; frame++) {
+        const effects = resolveAuthorEffects([{ id: 'glow', params: frame < 2 ? {} : { strength: 40 + Math.sin(frame / 10), radius: 60 + Math.sin(frame / 10) } }])
+        const reference = { referenceSize: { width: frameWidth, height: frameHeight }, contentBounds: { x: 0, y: 0, width: contentWidth, height: contentHeight }, rasterScale, rasterOrigin: [0, 0] as [number, number], quality: 'final' as const }
+        const pad = Math.max(16, Math.ceil((authorEffectBleed(effects, reference) * frameHeight * rasterScale + 4) / 64) * 64)
+        const width = contentWidth * rasterScale + pad * 2, height = contentHeight * rasterScale + pad * 2
+        reference.rasterOrigin = [pad, pad]
+        if (pad !== previousPad) {
+          if (source) measured.release(source)
+          source = measured.allocate(width, height, 'rgba8unorm', 1 + Math.floor(Math.log2(Math.max(width, height))))
+          const pixels = new Uint8Array(width * height * 4)
+          for (let y = pad; y < pad + contentHeight * rasterScale; y++) pixels.fill(255, (y * width + pad) * 4, (y * width + pad + contentWidth * rasterScale) * 4)
+          device.queue.writeTexture({ texture: source as never }, pixels, { bytesPerRow: width * 4 }, [width, height])
+        }
+        await author.begin(target); chain.begin(author.commandEncoder())
+        if (pad !== previousPad) author.mipmaps(source!, width, height)
+        for (let layer = 0; layer < (frame < 2 ? 2 : 3); layer++) {
+          const result = await chain.encode(`title:${layer}`, source!, width, height, effects, reference, {}, `white:${pad}`, { radius: 0, lens: false }, texture => author.mipmaps(texture, width, height))
+          author.draw(target, frameWidth, frameHeight, { texture: result.picture, x: -pad, y: -pad, width, height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, frameWidth / 2, frameHeight / 2], opacity: 1 } }])
+        }
+        author.finish(); chain.commit(); await device.queue.onSubmittedWorkDone()
+        if (frame === 0) warmAllocations = measured.allocations
+        if (frame === 1) expect(measured.allocations).toBe(warmAllocations)
+        if (frame > 2 && pad === previousPad) expect(measured.allocations).toBe(previousAllocations)
+        previousAllocations = measured.allocations
+        previousPad = pad
+      }
+      expect(await device.popErrorScope()).toBeNull()
+      expect(measured.peakEight).toBeLessThan(512 * 1024 ** 2); expect(measured.peakPrecise).toBeLessThan(512 * 1024 ** 2)
+      process.stdout.write(`发光预算峰值 MiB ${JSON.stringify({ frameWidth, frameHeight, contentWidth, contentHeight, rasterScale, pad: previousPad, total: measured.peak / 1024 ** 2, rgba8: measured.peakEight / 1024 ** 2, precise: measured.peakPrecise / 1024 ** 2 })}\n`)
+    } finally { chain.dispose(); await author.dispose(); if (source) measured.release(source); measured.release(target); await host.dispose() }
+  }
+}, 300_000)
+
+it('默认发光按能量截断：未裁切参考在规划边界之外不足半级，不切掉可见光', async () => {
+  const d = device as unknown as GpuDevice, host = new VideoEditCodeGpu(d), author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, host.effectAllocator)
+  const contentWidth = 800, contentHeight = 200, pad = 1280, width = contentWidth + pad * 2, height = contentHeight + pad * 2
+  const source = host.effectAllocator.allocate(width, height, 'rgba8unorm'), target = host.effectAllocator.allocate(1, 1, 'rgba8unorm')
+  const context = { referenceSize: { width: 1920, height: 1080 }, contentBounds: { x: 0, y: 0, width: contentWidth, height: contentHeight }, rasterScale: 1, rasterOrigin: [pad, pad] as const, quality: 'final' as const }
+  const effects = resolveAuthorEffects([{ id: 'glow', params: { source_opacity: 0 } }])
+  const cutoff = Math.ceil(authorEffectBleed(effects, context) * 1080)
+  const pixels = new Uint8Array(width * height * 4)
+  for (let y = pad; y < pad + contentHeight; y++) pixels.fill(255, (y * width + pad) * 4, (y * width + pad + contentWidth) * 4)
+  device.queue.writeTexture({ texture: source as never }, pixels, { bytesPerRow: width * 4 }, [width, height])
+  try {
+    await author.begin(target); chain.begin(author.commandEncoder())
+    const result = await chain.encode('reference', source, width, height, effects, context, {}, undefined, { radius: 0, lens: false }, texture => author.mipmaps(texture, width, height))
+    author.finish(); chain.commit()
+    const bytesPerRow = Math.ceil(width * 4 / 256) * 256, buffer = device.createBuffer({ size: bytesPerRow * height, usage: BUFFER_MAP_READ | BUFFER_COPY_DST }), encoder = device.createCommandEncoder()
+    encoder.copyTextureToBuffer({ texture: result.picture as never }, { buffer, bytesPerRow }, [width, height, 1])
+    device.queue.submit([encoder.finish()]); await buffer.mapAsync(BUFFER_MAP_READ)
+    const data = new Uint8Array(buffer.getMappedRange()); let tail = 0, visible = 0
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const value = data[y * bytesPerRow + x * 4]
+      if (x < pad - cutoff || x >= pad + contentWidth + cutoff || y < pad - cutoff || y >= pad + contentHeight + cutoff) tail = Math.max(tail, value)
+      else visible = Math.max(visible, value)
+    }
+    expect(visible).toBeGreaterThan(20); expect(tail).toBe(0)
+    buffer.unmap(); buffer.destroy()
+  } finally { chain.dispose(); await author.dispose(); host.effectAllocator.release(source); host.effectAllocator.release(target); await host.dispose() }
+}, 60_000)
+
+it('已预热的 pose.blur scratch 在连续弃帧时保留复用，恢复提交有正确像素', async () => {
+  const d = device as unknown as GpuDevice, host = new VideoEditCodeGpu(d), measured = budgetAllocator(host), chain = new VideoEditAuthorEffects(d, measured), author = new VideoEditAuthorGpu(d)
+  const source = input(), target = output(), context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
+  try {
+    let warm = 0
+    for (let frame = 0; frame < 20; frame++) {
+      await author.begin(target); chain.begin(author.commandEncoder())
+      const result = await chain.encode('blur', source, W, H, [], context, {}, undefined, { radius: 1 + frame / 100, lens: false }, texture => author.mipmaps(texture, W, H))
+      if (frame === 0) warm = measured.allocations
+      else expect(measured.allocations).toBe(warm)
+      if (frame > 0 && frame < 19) { author.abandon(); chain.abandon() }
+      else {
+        author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+        author.finish(); chain.commit()
+      }
+    }
+    expect(pixel(await read(target), W / 2, H / 2)[3]).toBe(255)
+  } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy(); await host.dispose() }
+})
+
+it('弃帧未用到的预热 scratch 档位在拖动返回时仍能复用', async () => {
+  const d = device as unknown as GpuDevice, host = new VideoEditCodeGpu(d), measured = budgetAllocator(host)
+  const local = new VideoEditBuiltinEffectsGpu(d, device.createSampler({ magFilter: 'linear', minFilter: 'linear' }), measured)
+  const source = input(), target = output()
+  const encode = async (radius: number, commit: boolean): Promise<void> => {
+    const batch: BuiltinEncodingBatch = { encoder: d.createCommandEncoder(), uniformIndex: 0, taken: new Set(), created: new Set() }
+    await local.encodePlan(planAuthorDefocus(W, H, radius, false), 'rgba8unorm', source, target, undefined, [], batch)
+    if (commit) { d.queue.submit([batch.encoder.finish()]); local.releaseIdle() }
+    else local.abandon(batch)
+  }
+  try {
+    await encode(2, true)
+    const warm = measured.allocations
+    for (let index = 0; index < 4; index++) await encode(0, false)
+    await encode(2, true)
+    expect(measured.allocations).toBe(warm)
+    expect(pixel(await read(target), W / 2, H / 2)[3]).toBe(255)
+  } finally { local.dispose(); source.destroy(); target.destroy(); await host.dispose() }
+})
+
+it('4K 10-bit 输入加 final 高斯保留 32f 工序，复用峰值低于 512MiB', async () => {
+  const width = 3840, height = 2160, d = device as unknown as GpuDevice, host = new VideoEditCodeGpu(d), measured = budgetAllocator(host)
+  const local = new VideoEditBuiltinEffectsGpu(d, device.createSampler({ magFilter: 'linear', minFilter: 'linear' }), measured)
+  const source = measured.allocate(width, height, 'rgba16float'), target = measured.allocate(width, height, 'rgba16float')
+  // 10 位解码后的正式工作格式，额外保留一幅高精度素材表面覆盖导出期间的在途画面。
+  const inFlight = measured.allocate(width, height, 'rgba16float')
+  const value = float32ToFloat16(512 / 1023), row = new Uint16Array(width * height * 4)
+  for (let i = 0; i < row.length; i += 4) row.set([value, value, value, float32ToFloat16(1)], i)
+  device.queue.writeTexture({ texture: source as never }, row, { bytesPerRow: width * 8 }, [width, height])
+  try {
+    device.pushErrorScope('validation')
+    for (const sigma of [.003, .009, .03]) {
+      await local.render({ id: 'gaussian_blur', params: { sigma_fraction_height: sigma } }, { texture: source, width, height, format: 'rgba16float' }, target, 0, 1, [], 'final')
+      await device.queue.onSubmittedWorkDone(); local.releaseIdle()
+    }
+    const buffer = device.createBuffer({ size: 256, usage: BUFFER_MAP_READ | BUFFER_COPY_DST }), encoder = device.createCommandEncoder()
+    encoder.copyTextureToBuffer({ texture: target as never, origin: [width / 2, height / 2] }, { buffer, bytesPerRow: 256 }, [1, 1, 1])
+    device.queue.submit([encoder.finish()]); await buffer.mapAsync(BUFFER_MAP_READ)
+    expect([...new Uint16Array(buffer.getMappedRange()).slice(0, 4)]).toEqual([value, value, value, float32ToFloat16(1)])
+    buffer.unmap(); buffer.destroy()
+    expect(await device.popErrorScope()).toBeNull(); expect(measured.peakPrecise).toBeLessThan(512 * 1024 ** 2)
+    process.stdout.write(`4K 10-bit final 高斯预算峰值 MiB ${measured.peakPrecise / 1024 ** 2}\n`)
+  } finally { local.dispose(); measured.release(source); measured.release(target); measured.release(inFlight); await host.dispose() }
+}, 120_000)
+
+it('半透明边缘推亮后，片段与图层调色均保持 RGB≤alpha，其他层产光不改变调色结果', async () => {
+  const source = input(), target = output(), author = new VideoEditAuthorGpu(device as unknown as GpuDevice), chain = new VideoEditAuthorEffects(device as unknown as GpuDevice, allocator())
+  const pixels = new Uint8Array(W * H * 4)
+  for (let i = 0; i < pixels.length; i += 4) pixels.set([96, 64, 32, 128], i)
+  device.queue.writeTexture({ texture: source as never }, pixels, { bytesPerRow: W * 4 }, [W, H])
+  const grade = resolveAuthorEffects([{ id: 'color_grade', params: { exposure: 4, saturation: 100 } }])
+  const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
+  try {
+    await effects.render(grade[0], { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, 0)
+    const expected = await read(target)
+    expect(expected.every((v, i) => i % 4 === 3 || v <= expected[i - i % 4 + 3])).toBe(true)
+    for (const strength of [0, .1, 40, 0]) {
+      await author.begin(target); chain.begin(author.commandEncoder())
+      await chain.encode('light', source, W, H, resolveAuthorEffects([{ id: 'glow', params: { strength } }]), context, {}, undefined, { radius: 0, lens: false }, t => author.mipmaps(t, W, H))
+      const result = await chain.encode('grade', source, W, H, grade, context, {}, undefined, { radius: 0, lens: false }, t => author.mipmaps(t, W, H))
+      author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+      author.finish(); chain.commit(); expect(await read(target)).toEqual(expected)
+    }
+  } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
+})
 
 describe('剪辑内置效果（真实设备）', () => {
   it('录制光标矢量轮廓、移动、按键颜色、隐藏和半透明原片的像素一致', async () => {
@@ -142,7 +334,7 @@ describe('剪辑内置效果（真实设备）', () => {
         else warm = count
       }
       // Gaussian's three linear targets, shared across all instances; a single-stage grade writes straight to its output.
-      expect(scratchAllocations).toBe(3)
+      expect(scratchAllocations).toBe(oneEffect.scratchAllocations)
       expect(pixel(await read(current), W / 2, H / 2)[3]).toBe(255)
     } finally { local.dispose(); source.destroy(); first.destroy(); second.destroy() }
   }, 60_000)
@@ -210,4 +402,267 @@ describe('剪辑内置效果（真实设备）', () => {
     expect([...await render(clear.texture, 'glow', { strength: 0 })]).toEqual([...clear.data])
     expect([...await render(clear.texture, 'chromatic_aberration', { amount: 0 })]).toEqual([...clear.data])
   }, 30_000)
+})
+
+/** 经过正式作者合成与片段合成器，检查零 alpha 光在 picture 边界仍然相加。 */
+describe('作者图层效果（真实设备）', () => {
+  it('连续取消且调色曲线逐帧变化时，查找表纹理复用，恢复提交仍能正确绘制', async () => {
+    let allocations = 0
+    const counted = new Proxy(device, { get: (target, key) => {
+      if (key === 'createTexture') return (descriptor: Parameters<Device['createTexture']>[0]) => { allocations++; return target.createTexture(descriptor) }
+      const value = Reflect.get(target, key) as unknown
+      return value instanceof Function ? value.bind(target) : value
+    } })
+    const d = counted as unknown as GpuDevice, author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, allocator()), source = input(), target = output()
+    const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'interactive' as const }
+    try {
+      let warm = 0
+      for (let frame = 0; frame < 24; frame++) {
+        await author.begin(target); chain.begin(author.commandEncoder())
+        await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'color_grade', params: { curve_master_2: 51 + frame } }]), context, {}, 'pixels', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+        author.abandon(); chain.abandon()
+        if (!frame) warm = allocations
+        else expect(allocations).toBe(warm)
+      }
+      await author.begin(target); chain.begin(author.commandEncoder())
+      const result = await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'color_grade', params: { curve_master_2: 80 } }]), context, {}, 'pixels', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+      author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+      author.finish(); chain.commit()
+      expect(pixel(await read(target), W / 2, H / 2)[0]).toBeGreaterThan(pixel(await read(source), W / 2, H / 2)[0])
+    } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
+  })
+  it('旧 API 和未产光的 API 7 输出仍钳制 RGB≤alpha；带光画面经两层嵌套与运动模糊保留且逐帧复位', async () => {
+    const d = device as unknown as GpuDevice
+    const source = input(), target = output(), nested = output(), parent = output()
+    const canvas = { width: W, height: H, getContext: () => ({ configure() {} }) } as unknown as OffscreenCanvas
+    const compositor = new VideoEditGpuCompositor(canvas, { ready: Promise.resolve(), device: d, canvasFormat: 'rgba8unorm', assertDevice() {} } as unknown as VideoEditGpuCompositor)
+    const clip: VideoEditClip = { id: 'a', itemId: 'a', name: 'a', kind: 'image', track: 1, start: 0, duration: 30, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
+    const document: VideoEditComposition = { ...createVideoEditSequence(), width: W, height: H, fps: 30, clips: [clip], media: [], items: [], revision: 0 }
+    const picture = new VideoEditCodePicture(source, W, H, d), child = new VideoEditCodePicture(nested, W, H, d), outer = new VideoEditCodePicture(parent, W, H, d), destination = new VideoEditCodePicture(target, W, H, d)
+    const raw = new Uint8Array(W * H * 4)
+    for (let at = 0; at < raw.length; at += 4) raw.set([180, 120, 60, at < raw.length / 2 ? 64 : 0], at)
+    const draw = async (input: VideoEditCodePicture, output: VideoEditCodePicture, placed = clip) => {
+      await (await compositor.draw(document, [placed], [input], () => true, undefined, output)).completion
+    }
+    try {
+      for (const apiVersion of [4, 5, 6, 7]) {
+        const runtime = new VideoEditAuthorRuntime(d, { name: '加色输出', createWebGPU: () => ({ draw: texture => device.queue.writeTexture({ texture: texture as never }, raw, { bytesPerRow: W * 4 }, [W, H]) }) }, undefined, true, apiVersion)
+        try {
+          await runtime.render(source, W, H, {}, {}, { time: 0, frameDuration: 1 / 30, clip: { time: 0, duration: 1 } })
+          picture.carriesLight = runtime.carriesLight
+          expect(picture.carriesLight).toBe(false)
+          await draw(picture, destination)
+          const pixels = await read(target)
+          expect(pixel(pixels, 32, 8)).toEqual([64, 64, 60, 64])
+          expect(pixel(pixels, 32, 28)).toEqual([0, 0, 0, 0])
+        } finally { await runtime.dispose() }
+      }
+      picture.carriesLight = true
+      await draw(picture, child); await draw(child, outer); await draw(outer, destination)
+      expect(child.carriesLight).toBe(true); expect(outer.carriesLight).toBe(true)
+      expect(await read(target)).toEqual(raw)
+      const moving = { ...clip, motionSamples: [{ x: 0, y: 0, scale: 1, rotation: 0 }, { x: 0, y: 0, scale: 1, rotation: 0 }] }
+      await draw(outer, destination, moving)
+      expect(await read(target)).toEqual(raw)
+      picture.carriesLight = false
+      await draw(picture, child); await draw(child, outer)
+      expect(child.carriesLight).toBe(false); expect(outer.carriesLight).toBe(false)
+      await draw(outer, destination)
+      expect(pixel(await read(target), 32, 28)).toEqual([0, 0, 0, 0])
+    } finally { await compositor.dispose(); for (const texture of [source, target, nested, parent]) texture.destroy() }
+  })
+  it('内部背景与独立下方图片片段一致，光晕只提亮；源透明和层透明语义分开', async () => {
+    const d = device as unknown as GpuDevice
+    const author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, allocator())
+    const source = input(), background = input(), title = output(), internal = output(), external = output()
+    const pixels = new Uint8Array(W * H * 4)
+    for (let y = 14; y < 22; y++) for (let x = 28; x < 36; x++) pixels.set(x < 30 ? [255, 0, 0, 255] : x > 33 ? [0, 0, 255, 255] : [128, 128, 128, 128], (y * W + x) * 4)
+    device.queue.writeTexture({ texture: source as never }, pixels, { bytesPerRow: W * 4 }, [W, H])
+    const canvas = { width: W, height: H, getContext: () => ({ configure() {} }) } as unknown as OffscreenCanvas
+    const shared = { ready: Promise.resolve(), device: d, canvasFormat: 'rgba8unorm', assertDevice() {} } as unknown as VideoEditGpuCompositor
+    const compositor = new VideoEditGpuCompositor(canvas, shared)
+    const clip = (id: string, track: number): VideoEditClip => ({ id, itemId: id, name: id, kind: 'image', track, start: 0, duration: 30, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' })
+    const clips = [clip('background', 1), clip('title', 2)]
+    const document: VideoEditComposition = { ...createVideoEditSequence(), width: W, height: H, fps: 30, clips, media: [], items: [], revision: 0 }
+    const reference = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'interactive' as const }
+    let transformed = false
+    const draw = (target: GpuTexture, texture: GpuTexture, opacity = 1): void => {
+      const moving = transformed && texture !== background
+      author.draw(target, W, H, { texture, x: 0, y: 0, width: W, height: H }, moving
+        ? [{ offset: { numerator: -1, denominator: 4 }, weight: .25, pose: { matrix: [.8, .15, -.25, 1.1, 10, -5], opacity } }, { offset: { numerator: 1, denominator: 4 }, weight: .75, pose: { matrix: [.8, .15, -.25, 1.1, 12, -5], opacity } }]
+        : [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity } }], moving ? [15, 5, 52, 29] : undefined)
+    }
+    const render = async (bg: number[], strength = 45, sourceOpacity = 100, layerOpacity = 1): Promise<{ inside: Uint8Array; outside: Uint8Array }> => {
+      const data = new Uint8Array(W * H * 4); for (let at = 0; at < data.length; at += 4) data.set([...bg, 255], at)
+      device.queue.writeTexture({ texture: background as never }, data, { bytesPerRow: W * 4 }, [W, H])
+      await author.begin(title); chain.begin(author.commandEncoder())
+      const result = await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'glow', params: { strength, radius: 35, dither: 0, source_opacity: sourceOpacity, threshold: 10 } }]), reference, {}, 'fixed', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+      draw(title, result.picture, layerOpacity)
+      author.finish(); chain.commit()
+      await author.begin(internal); draw(internal, background)
+      draw(internal, result.picture, layerOpacity)
+      author.finish()
+      const pictures = [background, title].map(texture => new VideoEditCodePicture(texture, W, H, d))
+      pictures[1].carriesLight = result.carriesLight
+      const composed = await compositor.draw(document, clips, pictures, () => true, undefined, new VideoEditCodePicture(external, W, H, d))
+      await composed.completion
+      return { inside: await read(internal), outside: await read(external) }
+    }
+    try {
+      for (const bg of [[0, 0, 0], [30, 30, 30], [180, 180, 180], [20, 90, 130]]) {
+        const lit = await render(bg)
+        expect(Math.max(...lit.outside.map((value, index) => Math.abs(value - lit.inside[index])))).toBeLessThanOrEqual(1)
+        const halo = pixel(lit.outside, 26, 18)
+        expect(halo.slice(0, 3).every((channel, index) => channel >= bg[index])).toBe(true)
+        expect(halo.slice(0, 3).some((channel, index) => channel > bg[index])).toBe(true)
+        expect(pixel(lit.outside, 0, 0)).toEqual([...bg, 255])
+        expect((await render(bg)).outside).toEqual(lit.outside)
+        expect(pixel((await render(bg, 0)).outside, 26, 18)).toEqual([...bg, 255])
+        expect(pixel((await render(bg, 45, 0)).outside, 26, 18)).toEqual(halo)
+        const hidden = (await render(bg, 45, 100, 0)).outside
+        expect(pixel(hidden, 32, 18)).toEqual([...bg, 255])
+        expect(pixel(hidden, 26, 18)).toEqual([...bg, 255])
+      }
+      const bg = [20, 50, 80]
+      const full = pixel((await render(bg)).outside, 26, 18), half = pixel((await render(bg, 45, 100, .5)).outside, 26, 18)
+      for (let channel = 0; channel < 3; channel++) expect(Math.abs(half[channel] - (bg[channel] + (full[channel] - bg[channel]) * .5))).toBeLessThanOrEqual(1)
+      transformed = true
+      const moved = await render(bg)
+      expect(Math.max(...moved.outside.map((value, index) => Math.abs(value - moved.inside[index])))).toBeLessThanOrEqual(1)
+      expect(pixel(moved.outside, 10, 18)).toEqual([...bg, 255])
+      expect(pixel(moved.outside, 54, 18)).toEqual([...bg, 255])
+      // 上层不透明区域覆盖已有光，覆盖区域外仍保留当前片段。
+      await author.begin(internal); draw(internal, title)
+      author.draw(internal, W, H, { texture: background, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }], [25, 12, 40, 25])
+      author.finish()
+      expect(pixel(await read(internal), 32, 18)).toEqual([...bg, 255])
+    } finally { chain.dispose(); await author.dispose(); await compositor.dispose(); for (const texture of [source, background, title, internal, external]) texture.destroy() }
+  })
+  it('同一批次不同参数与顺序生效；缓存只在提交后发布，弃帧和删层不复用附件', async () => {
+    const d = device as unknown as GpuDevice, chain = new VideoEditAuthorEffects(d, allocator()), author = new VideoEditAuthorGpu(d)
+    const source = input(), target = output()
+    const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'interactive' as const }
+    const encode = (slot: string, amount: number) => chain.encode(slot, source, W, H, resolveAuthorEffects([{ id: 'black_white' }, { id: 'sharpen', params: { amount } }]), context, {}, 'constant', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+    try {
+      await author.begin(target); chain.begin(author.commandEncoder())
+      const first = await encode('a', 0), second = await encode('b', 100)
+      expect(first.picture).not.toBe(second.picture)
+      author.draw(target, W, H, { texture: second.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+      author.finish(); chain.commit()
+      const processed = await read(target); expect(pixel(processed, 0, 0)[0]).toBe(pixel(processed, 0, 0)[1])
+      await author.begin(target); chain.begin(author.commandEncoder()); expect((await encode('a', 0)).picture).toBe(first.picture)
+      const changed = await encode('b', 25); expect(changed.picture).toBe(second.picture)
+      author.abandon(); chain.abandon()
+      await author.begin(target); chain.begin(author.commandEncoder()); expect((await encode('b', 100)).picture).toBe(second.picture)
+      author.finish(); chain.commit()
+      await author.begin(target); chain.begin(author.commandEncoder()); await encode('a', 0)
+      author.finish(); chain.commit()
+    } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
+  })
+})
+
+it('图层发光采样网格跨外扩档稳定，局部公开高斯与镜头虚化两档质量可执行', async () => {
+  const d = device as unknown as GpuDevice, author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, allocator()), target = output()
+  const render = async (pad: number, descriptors: unknown[], quality: 'interactive' | 'final' = 'interactive', defocus = 0): Promise<Uint8Array> => {
+    const width = 9 + pad * 2, height = 7 + pad * 2
+    const source = device.createTexture({ size: [width, height], mipLevelCount: 1 + Math.floor(Math.log2(Math.max(width, height))), format: 'rgba8unorm', usage: 4 | 16 | 2 })
+    const data = new Uint8Array(width * height * 4)
+    for (let y = 0; y < 7; y++) for (let x = 0; x < 9; x++) data.set([200, 110, 20, 210], ((y + pad) * width + x + pad) * 4)
+    device.queue.writeTexture({ texture: source }, data, { bytesPerRow: width * 4 }, [width, height])
+    try {
+      await author.begin(target); chain.begin(author.commandEncoder()); author.mipmaps(source as unknown as GpuTexture, width, height)
+      const result = await chain.encode('padded', source as unknown as GpuTexture, width, height, resolveAuthorEffects(descriptors), { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: 9, height: 7 }, rasterScale: 1, rasterOrigin: [pad, pad], quality }, {}, undefined, { radius: defocus, lens: false }, texture => author.mipmaps(texture, width, height))
+      author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width, height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 28 - pad, 14 - pad], opacity: 1 } }])
+      author.finish(); chain.commit(); return await read(target)
+    } finally { source.destroy() }
+  }
+  try {
+    const descriptor = [{ id: 'glow', params: { strength: 20, radius: 25, resolution: 37, dither: 50 } }]
+    const a = await render(32, descriptor), b = await render(64, descriptor)
+    expect(Math.max(...a.map((value, index) => Math.abs(value - b[index])))).toBeLessThanOrEqual(1)
+    const plain = await render(32, [])
+    expect(await render(32, [], 'interactive', 3)).toEqual(await render(32, [], 'final', 3))
+    for (const quality of ['interactive', 'final'] as const) {
+      expect(await render(32, [{ id: 'gaussian_blur', params: { sigma_fraction_height: .03 } }], quality)).not.toEqual(plain)
+      expect(await render(32, [], quality, 3)).not.toEqual(plain)
+    }
+    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.space === 'layer' || value.space === 'layer-only')) expect((await render(32, [{ id: definition.id }])).length).toBe(W * H * 4)
+  } finally { chain.dispose(); await author.dispose(); target.destroy() }
+})
+
+it('光核使用正式 shoulder/screen 公式，保留小幅线性光与强光压缩', async () => {
+  const source = input(), base = input(), target = output()
+  const fill = (texture: GpuTexture, value: number[]) => {
+    const bytes = new Uint8Array(W * H * 4)
+    for (let at = 0; at < bytes.length; at += 4) bytes.set(value, at)
+    device.queue.writeTexture({ texture: texture as never }, bytes, { bytesPerRow: W * 4 }, [W, H])
+  }
+  const linear = (value: number) => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4
+  const encoded = (value: number) => value <= .0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - .055
+  const shoulder = (value: number) => value <= .75 ? value : .75 + .25 * (1 - Math.exp(-(value - .75) / .25))
+  try {
+    fill(source, [51, 51, 51, 255]); fill(base, [26, 51, 77, 128])
+    for (const gain of [.1, 6]) for (const screen of [false, true]) {
+      const encoder = device.createCommandEncoder()
+      await effects.encodePlan({ width: W, height: H, scratch: [], passes: [{ entry: 'glow_layer_image', source: 'input', original: 'second', target: 'output', uniforms: new Float32Array([W, H, W, H, 0, .001, 1, 0, 0, 0, 0, Number(screen), gain, 0, 0, 0]) }] }, 'rgba8unorm', source, target, base, undefined, { encoder: encoder as never, uniformIndex: 0, taken: new Set() })
+      device.queue.submit([encoder.finish()])
+      const result = pixel(await read(target), 32, 18)
+      for (const [channel, before] of [26, 51, 77].entries()) {
+        const b = linear(before / 128), light = .2 * gain, room = 1 - b
+        const lit = screen ? 1 - room * Math.exp(-light) : b + room * shoulder(light / room)
+        expect(Math.abs(result[channel] - encoded(lit) * 128)).toBeLessThanOrEqual(1)
+      }
+      expect(result[3]).toBe(128)
+    }
+  } finally { source.destroy(); base.destroy(); target.destroy() }
+})
+
+it('主链顺序与 underlay 保留语义，最终虚化同时作用全部输出', async () => {
+  const d = device as unknown as GpuDevice, author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, allocator()), source = input(), target = output()
+  const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
+  const light = { id: 'glow', params: { strength: 30, dither: 0 } }, blur = { id: 'gaussian_blur', params: { sigma_fraction_height: .03 } }
+  const render = async (descriptors: Array<{ id: string; params: Record<string, number> }>, defocus = 0) => {
+    const capture = async (onlyLight: boolean): Promise<Uint8Array> => {
+    await author.begin(target); chain.begin(author.commandEncoder())
+    const result = await chain.encode('chain', source, W, H, resolveAuthorEffects(descriptors.map(effect => onlyLight && effect.id === 'glow' ? { ...effect, params: { ...effect.params, source_opacity: 0 } } : effect)), context, {}, undefined, { radius: defocus, lens: false }, texture => author.mipmaps(texture, W, H))
+    author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+    author.finish(); chain.commit(); return read(target)
+    }
+    return { image: await capture(false), light: await capture(true) }
+  }
+  try {
+    const original = await render([light]), suffix = await render([light, blur]), prefix = await render([blur, light]), defocused = await render([light], 2)
+    expect(suffix.light).toEqual(original.light); expect(suffix.image).not.toEqual(original.image)
+    expect(prefix.light).not.toEqual(original.light)
+    expect(defocused.light).not.toEqual(original.light); expect(defocused.image).not.toEqual(original.image)
+  } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
+})
+
+it('发光层高斯 pose.blur 保持光能量，亚像素阈值两侧连续', async () => {
+  const d = device as unknown as GpuDevice, author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, allocator())
+  const source = input(), target = output(), pixels = new Uint8Array(W * H * 4)
+  for (let y = 15; y < 21; y++) for (let x = 28; x < 36; x++) pixels.set([255, 255, 255, 255], (y * W + x) * 4)
+  device.queue.writeTexture({ texture: source as never }, pixels, { bytesPerRow: W * 4 }, [W, H])
+  const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 28, y: 15, width: 8, height: 6 }, rasterScale: 1, rasterOrigin: [28, 15] as const, quality: 'final' as const }
+  const descriptors = resolveAuthorEffects([{ id: 'glow', params: { strength: 30, radius: 20, dither: 0, source_opacity: 0 } }])
+  const render = async (blur: number): Promise<Uint8Array> => {
+    await author.begin(target); chain.begin(author.commandEncoder())
+    const { radius } = authorLayerBlur({ blur }, 1, undefined)
+    const result = await chain.encode('light', source, W, H, descriptors, context, {}, undefined, { radius, lens: false }, texture => author.mipmaps(texture, W, H))
+    author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+    author.finish(); chain.commit(); return read(target)
+  }
+  const energy = (values: Uint8Array): number => values.reduce((sum, value, index) => sum + (index % 4 === 3 ? 0 : value), 0)
+  try {
+    const original = await render(0), below = await render(.249), above = await render(.251), blurred = await render(2)
+    const baseline = energy(original)
+    expect(baseline).toBeGreaterThan(0)
+    for (const result of [below, above, blurred]) {
+      expect(Math.abs(energy(result) / baseline - 1)).toBeLessThan(.05)
+      expect(result.filter((_, index) => index % 4 === 3).every(alpha => alpha === 0)).toBe(true)
+    }
+    const jump = above.reduce((sum, value, index) => sum + (index % 4 === 3 ? 0 : Math.abs(value - below[index])), 0)
+    expect(jump / baseline).toBeLessThan(.01)
+    expect(blurred).not.toEqual(original)
+  } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
 })

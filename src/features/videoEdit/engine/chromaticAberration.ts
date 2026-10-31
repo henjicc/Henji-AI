@@ -1,3 +1,4 @@
+import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
 /**
  * 色差的工序与 WGSL（剪辑内置效果 ABI）。一道工序：沿错开方向取若干点，每个颜色通道按自己的偏移位置加权。
  * 既作为独立效果作用在画面上，也被发光包含、只作用在光晕上（光是线性光、可以超过 1，不按透明度截断）。
@@ -18,10 +19,10 @@ const CENTERS: Readonly<Record<string, readonly [number, number, number]>> = { r
  * 色差这道工序的参数；数量为 0 时返回 undefined（不加工序）。`width`/`height` 是整幅画面的尺寸，
  * 偏移按 uv 给出，所以在半分辨率的光晕上调用时错开的距离与画面上一致。`light` 为真时输入是线性光。
  */
-export function chromaticAberrationPass(params: VideoEditBuiltinParams, width: number, height: number, light: boolean): { entry: typeof CHROMATIC_ENTRIES[number]; a: V4; b: V4; c: V4 } | undefined {
+export function chromaticAberrationPass(params: VideoEditBuiltinParams, width: number, height: number, light: boolean, context?: LayerEffectReference): { entry: typeof CHROMATIC_ENTRIES[number]; a: V4; b: V4; c: V4; spatial: V4 } | undefined {
   const amount = typeof params.amount === 'number' ? params.amount / 100 : 0
   if (amount <= 0) return undefined
-  const offset = amount * MAX_OFFSET * height
+  const offset = amount * MAX_OFFSET * (context ? context.referenceSize.height * context.rasterScale : height)
   const radial = params.mode !== 'directional'
   const angle = (typeof params.angle === 'number' ? params.angle : 0) * Math.PI / 180
   const smoothness = typeof params.smoothness === 'number' ? params.smoothness / 100 : 0.5
@@ -29,9 +30,10 @@ export function chromaticAberrationPass(params: VideoEditBuiltinParams, width: n
   const step: [number, number] = radial ? [offset / width, offset / height] : [Math.cos(angle) * offset / width, Math.sin(angle) * offset / height]
   return {
     entry: 'chromatic',
+    spatial: context ? [(context.rasterOrigin[0] + context.contentBounds.width * context.rasterScale / 2) / width, (context.rasterOrigin[1] + context.contentBounds.height * context.rasterScale / 2) / height, 1, 0] : [0.5, 0.5, 0, 0],
     a: [step[0], step[1], radial ? 1 : 0, smoothness > 0 ? 9 : 3],
     b: [centers[0], centers[1], centers[2], light ? 1 : 0],
-    c: [0.08 + smoothness * 0.9, 0, 0, 0],
+    c: [0.08 + smoothness * 0.9, context ? width / (context.contentBounds.width * context.rasterScale) : 1, context ? height / (context.contentBounds.height * context.rasterScale) : 1, 0],
   }
 }
 
@@ -40,7 +42,9 @@ export const CHROMATIC_WGSL = `
 // 柔和度 0 时只取 -1、0、1 三点，三种颜色硬分开；越柔和，每个通道在越宽的一段上加权平均，彩边连成彩虹色带。
 @fragment fn chromatic(v: Vertex) -> @location(0) vec4f {
  let uv = uvOf(v); let n = i32(u.a.w);
- let offset = select(u.a.xy, (uv - 0.5) * 2.0 * u.a.xy, u.a.z > 0.5);
+ var radial = (uv - select(vec2f(0.5), u.layer.xy, u.layer.z > 0.0)) * 2.0 * u.c.yz;
+ if (u.layer.z > 0.0) { radial = clamp(radial, vec2f(-1.0), vec2f(1.0)); }
+ let offset = select(u.a.xy, radial * u.a.xy, u.a.z > 0.5);
  var sum = vec3f(0.0); var weight = vec3f(0.0); var cover = vec3f(0.0);
  for (var i = 0; i < n; i++) {
   let s = -1.0 + 2.0 * f32(i) / f32(n - 1);

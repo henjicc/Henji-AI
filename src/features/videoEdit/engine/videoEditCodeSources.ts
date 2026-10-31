@@ -68,7 +68,7 @@ export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; built
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 /** `sceneIssues`：这一帧的片子数据或画面参数中需要用户处理的问题，由渲染器和效果错误一起呈现。 */
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number; sceneIssues: string[] }
-export interface VideoEditCodePrepareOptions { authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
+export interface VideoEditCodePrepareOptions { quality?: import('@/core/imaging/effects/descriptor').EffectQuality; authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
 /** 渲染与指纹共用时间、动画、片子数据及画面输入求值；编译与不可变参数准备留在帧循环外。 */
 function codeFrameValues(document: VideoEditComposition, clip: VideoEditClip, program: CodeMaterialProgram,
   prepared: PreparedCodeMaterialParameters, inputs: VideoEditCodeInputs | undefined, generator: boolean,
@@ -427,7 +427,7 @@ export class VideoEditCodeSources {
         const isStatic = program.mode === 'static' && !codeMaterialUsesAudio(program) && !videoEditCodeSceneKeys(clip.code).length && ![...codeMaterialImageParameterKeys(program.parameters)].some(key => { const value = clip.code!.parameters[key]; return isCodeImageReference(value) && value.kind !== 'image' })
         // 回放分辨率（任务 4.9）：缩小倍数进静态缓存键，切回完整分辨率时不会沿用缩小的画面。
         const divisor = this.runtime?.renderDivisor ?? 1
-        const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues, ...(divisor === 1 ? [] : [divisor])])}` : `code:dynamic:${clip.id}`
+        const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues, ...(program.apiVersion >= 7 ? [document.authorEffects, document.colorLuts, options.quality ?? 'interactive'] : []), ...(divisor === 1 ? [] : [divisor])])}` : `code:dynamic:${clip.id}`
         keys.add(target)
         plans.push({ clip, key: target, static: isStatic, program, parameters, inputParameters, imageKeys, author, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
       }
@@ -490,9 +490,7 @@ export class VideoEditCodeSources {
               const sourceTime = videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static')
               const overrides = plan.clip.elementOverrides ? Object.fromEntries(Object.entries(plan.clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
               const info = { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps, clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps }, ...(Object.keys(web).length ? { web } : {}) }
-              picture = plan.divisor
-                ? await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor)
-                : await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images)
+              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, { ...document.authorEffects, luts: document.colorLuts }, options.quality, assertCurrent)
             }
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)

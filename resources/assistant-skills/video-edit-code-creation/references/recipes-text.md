@@ -59,3 +59,5 @@ export default {
 `tracking` 是千分之一 em，`leading` 是行距像素（0 为 1.25 倍字号）。标题行距 1.05–1.2 倍字号、正文 1.4–1.6 倍；大标题 tracking −10～−30，大写标签 +50～+150，中文正文 0～+20。
 
 换字／字体后先看排版结果：`totalLines`、`truncated` 与 `fit.fontSize` 是否合理，再取帧检查孤字、下伸字母、边缘裁切、遮罩内逐字过冲。遮罩先全帧看关系再按标注放大，不能只凭排版数值验收。
+
+需要整段文字光晕时，保留 layoutText/drawText，把文字层隔离并声明 bounds，使用 `effects: t => [glow({ strength: 30, radius: 25 })]`（从 henji-effects 导入）。不用重复偏移绘字或 shadowBlur 模拟已有光晕；文字样式自己的描边、装饰和投影仍按原契约。
