@@ -78,7 +78,7 @@ async function build() {
     '] as const',
     '',
   ].join('\n')
-  const usable = components.filter(value => !value.excluded && !value.usesPointer)
+  const usable = components.filter(value => !value.excluded && !value.usesPointer && value.role !== 'transition')
   const ROLE = { generator: '生成', filter: '滤镜', transition: '转场', group: '分组' }
   // 助手参考每份不超过 8KB（技能读取上限）：按用途分文件，超出时同一组再续一份。
   const GROUPS = [
@@ -87,7 +87,7 @@ async function build() {
   ]
   const brief = text => { const first = text.split(/(?<=[.。])\s/)[0]; return first.length > 72 ? `${first.slice(0, 70)}…` : first }
   const propList = value => value.props.filter(prop => prop.ui !== 'none').map(prop => `${prop.key}${prop.key === value.speedProp ? '⏱' : ''}`).join(' ')
-  const header = title => [`# 着色器组件：${title}`, '', `由脚本从 shaders ${pkg.version} 生成。作为剪辑内置效果与转场使用（片段效果 effect:shaders.组件名，转场 transition:shaders.组件名），作者代码不直接调用；中文名是效果面板名。角色：生成=画出整幅内容；滤镜=处理片段画面；转场=剪辑过渡。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect。`, '']
+  const header = title => [`# 着色器组件：${title}`, '', `由脚本从 shaders ${pkg.version} 生成。作为剪辑内置效果使用（片段效果 effect:shaders.组件名）；过渡从 video_edit.builtin_effect 读取整理后的目录与方式，作者代码不直接调用；中文名是效果面板名。角色：生成=画出整幅内容；滤镜=处理片段画面；转场=剪辑过渡。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect。`, '']
   const references = {}
   for (const [slug, title, categories] of GROUPS) {
     const lines = usable.filter(value => categories.includes(value.category)).map(value => `- **${value.name}** ${ZH.components[value.name]?.[0] ?? ''}｜${ROLE[value.role]}｜${brief(value.description)}｜${propList(value)}`)

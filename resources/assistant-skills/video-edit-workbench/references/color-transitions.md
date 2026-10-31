@@ -27,10 +27,12 @@ HSL辅助的色相／饱和度／亮度为联合选区。肤色15–50°、天�
 
 ## 转场选择与时长
 
-硬切适合连续动作、语义交接和直接对比；叠化可表达时间或情绪连接；擦除、推动、缩放、模糊及 `shaders.*` 框架转场可服务品牌、空间关系或夸张综艺。选择来自故事、参考和素材方向，不固定“首选硬切”或禁止花哨。
+硬切适合连续动作、语义交接和直接对比；叠化可表达时间或情绪连接；擦除、推动、缩放、模糊等已登记转场可服务品牌、空间关系或夸张综艺。选择来自故事、参考和素材方向，不固定“首选硬切”或禁止花哨。
 
 1. 从 `video_edit.builtin_effect` 查实际 transition: 条目与参数语义。`shaders.*` 是命名空间，不是可直接调用的完整种类；从目录取确切后缀。需要自写代码画面或着色器转去 video-edit-code-creation。
-2. 在序列下通用创建 `video_edit.transition`，必填 `video_edit.transition.duration_frames`，给 `video_edit.transition.kind` 与真实 `video_edit.transition.left_clip_id` / `video_edit.transition.right_clip_id`。两端是相邻编辑点；单侧只写一端，表示片段入／出过渡。不可拿任意两个远隔镜头硬建转场。
+2. 在序列下通用创建 `video_edit.transition`，必填 `video_edit.transition.duration_frames`，给目录返回的 `video_edit.transition.kind` 与真实 `video_edit.transition.left_clip_id` / `video_edit.transition.right_clip_id`。两端是相邻编辑点；单侧只写一端，表示片段入／出过渡。不可拿任意两个远隔镜头硬建转场。
 3. 30fps时8–15帧（约0.27–0.5秒）可试柔和叠化；快动作3–8帧，梦境／回忆0.8–2秒也可成立。技术上 durationFrames 至少2帧；其他帧率按目标秒数换算。艺术时长不是硬限制。
 4. alignment=center/start/end/custom；custom 才使用 `video_edit.transition.frames_before_cut`。查源余量、链接声音与既有效果，拒绝时按返回原因收短或换对齐，不吞错。
 5. 用 `observe_video_edit_frame` 在切点前、中、后及需要的连续帧检查，配合 `read_application_media(mode="image")` 看跳变、重复、冻结、黑帧与字幕；框架转场成功不等于观感适合。声音另核实恒定功率等过渡与实际听感。
+
+过渡的方式与参数从同一目录读取，写入 `video_edit.transition.parameters`；不使用被合并的来源 ID。旧工程里的已移除过渡保留原数据、按同时长交叉溶解播放。

@@ -1,10 +1,11 @@
+import { isRemovedVideoEditTransition } from './transitionCatalog'
 import { testCodeManifest, testCodeMetadata } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
 import { changeVideoEditSequenceSettings, setVideoEditClipEnabled, videoEditDocumentSchema, videoEditPictureTransitionWindows, videoEditPictureTransitionsAt, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
-import { applyVideoEditTransitionPairs, dragVideoEditTransition, retimeVideoEditTransitions, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount, videoEditTransitionPictureClips, videoEditTransitionRender, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS } from './transitions'
+import { applyVideoEditTransitionPairs, dragVideoEditTransition, retimeVideoEditTransitions, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount, videoEditTransitionPictureClips, videoEditTransitionRender, videoEditTransitionSchema } from './transitions'
 import { WHITE_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_BUILTIN_TRANSITION_KINDS, VIDEO_EDIT_TRANSITION_PARAMS, validateVideoEditTransitionParams } from './transitionParams'
 import { reconcileVideoEditTimedContent } from './timedContent'
@@ -14,6 +15,7 @@ import { codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
 import { prepareCodeMaterialParameters, evaluateCodeMaterialParameters } from './codeMaterialAnimation'
 import { offsetVideoEditSource } from './time'
 import type { VideoEditKeyframes } from './keyframes'
+import { videoEditTransitionPreset } from './transitions'
 import { SHADER_GRAPH_TRANSITION_PRESETS } from './shaderGraph/transitions'
 
 it('内置与 shaders 转场按内部帧求参数，校验范围/时刻/离散插值，保存后曲线不丢', () => {
@@ -28,7 +30,7 @@ it('内置与 shaders 转场按内部帧求参数，校验范围/时刻/离散�
   expect(invalid({ direction: [{ time: 0, value: 'from_top', interpolation: 'bezier' }] })).toBe(false)
   expect(invalid({ progress: feather })).toBe(false); expect(invalid({ feather: [] })).toBe(false)
   let animatedShaders = 0
-  for (const preset of SHADER_GRAPH_TRANSITION_PRESETS) {
+  for (const preset of SHADER_GRAPH_TRANSITION_PRESETS.filter(preset => !isRemovedVideoEditTransition(preset.kind))) {
     const parameter = VIDEO_EDIT_TRANSITION_PARAMS[preset.kind].find(param => param.type === 'number' && param.animatable !== false)
     if (!parameter) continue
     animatedShaders++
@@ -296,7 +298,7 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
   })
   it('第一批带参数的视频过渡（4.7）：登记完整、参数可选并校验、编辑保留参数、渲染走内置着色器且单侧另一侧为空', () => {
     for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {
-      expect(VIDEO_EDIT_TRANSITION_PRESETS.find(preset => preset.kind === kind)?.medium).toBe('video')
+      expect(videoEditTransitionPreset(kind).medium).toBe('video')
       for (const param of VIDEO_EDIT_TRANSITION_PARAMS[kind]) {
         // shaders.* 与 gl.* 转场参数的名字已说明含义，悬停说明可空；助手语义必有。
         if (!kind.startsWith('shaders.') && !kind.startsWith('gl.')) expect(param.tooltip?.length, `${kind}.${param.key}`).toBeGreaterThan(4)
@@ -309,7 +311,7 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     sequence.transitions = [{ id: 'wipe', kind: 'wipe', leftClipId: 'left', rightClipId: 'right', durationFrames: 30, parameters: { direction: 'from_top' } }]
     expect(() => videoEditDocumentSchema.parse(document)).not.toThrow()
     expect(() => videoEditTransitionSchema.parse({ ...sequence.transitions![0], parameters: { feather: 300 } })).toThrow('超出范围')
-    expect(() => videoEditTransitionSchema.parse({ ...sequence.transitions![0], parameters: { angle: 3 } })).toThrow('可用参数')
+    expect(() => videoEditTransitionSchema.parse({ ...sequence.transitions![0], parameters: { missing_parameter: 3 } })).toThrow('可用参数')
     expect(() => videoEditTransitionSchema.parse({ id: 'x', kind: 'cross_dissolve', leftClipId: 'left', rightClipId: 'right', durationFrames: 4, parameters: { feather: 1 } })).toThrow('没有可调参数')
     expect(validateVideoEditTransitionParams('wipe', '擦除', { border: 20 })).toEqual({ border: 20 })
     // 拖动改时长、再次放同种过渡都保留参数；换种类回到默认

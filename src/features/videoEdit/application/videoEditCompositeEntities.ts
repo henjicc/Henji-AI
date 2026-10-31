@@ -1,9 +1,10 @@
+import { isRemovedVideoEditTransition } from '@/core/videoEdit/transitionCatalog'
 import type { JsonValue } from '@/core/application-control'
 import { videoEditClipMedia, videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
 import { orderVideoEditEffects, videoEditEffectAccepts, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
-import { videoEditTransitionClipIds, videoEditTransitionEditPoints, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, videoEditTransitionWindow, resizeVideoEditTransition, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
+import { assertVideoEditTransitionCreatable, videoEditTransitionClipIds, videoEditTransitionEditPoints, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, videoEditTransitionWindow, resizeVideoEditTransition, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { validateVideoEditTransitionParams } from '@/core/videoEdit/transitionParams'
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
@@ -127,12 +128,12 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
     }
   } else {
     const kind = (data.kind ?? owner.transition.kind) as VideoEditTransitionKind
-    if (!VIDEO_EDIT_TRANSITION_PRESETS.some(preset => preset.kind === kind)) throw new Error(`没有过渡种类 ${String(kind)}，可用：${VIDEO_EDIT_TRANSITION_PRESETS.map(preset => preset.kind).join('、')}。`)
+    if (kind !== owner.transition.kind) assertVideoEditTransitionCreatable(kind)
     if (videoEditTransitionMedium(kind) !== videoEditTransitionMedium(owner.transition.kind)) throw new Error(`过渡种类只能换成同一媒介的；当前是${videoEditTransitionMedium(owner.transition.kind) === 'audio' ? '音频' : '视频'}过渡，可用种类：${VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === videoEditTransitionMedium(owner.transition.kind)).map(preset => preset.kind).join('、')}。`)
     // 参数整体写入（写什么存什么）；只换种类、参数没动时旧参数不再适用，按新种类的默认值
     const raw = (data.parameters ?? {}) as Record<string, unknown>
     const untouched = JSON.stringify(raw) === JSON.stringify(owner.transition.parameters ?? {})
-    const parameters = kind !== owner.transition.kind && untouched ? {} : validateVideoEditTransitionParams(kind, videoEditTransitionPreset(kind).name, raw)
+    const parameters = isRemovedVideoEditTransition(kind) && kind === owner.transition.kind && untouched ? raw : kind !== owner.transition.kind && untouched ? {} : validateVideoEditTransitionParams(kind, videoEditTransitionPreset(kind).name, raw)
     const curveUntouched = JSON.stringify(data.frameCurves ?? {}) === JSON.stringify(owner.transition.frameCurves ?? {})
     const frameCurves = kind !== owner.transition.kind && curveUntouched ? undefined : curveUntouched ? resizeVideoEditTransition(owner.transition, Number(data.durationFrames)).frameCurves : videoEditCurvesSchema.parse(data.frameCurves)
     const next = videoEditTransitionSchema.parse({ ...owner.transition, frameCurves, kind, durationFrames: data.durationFrames, alignment: data.alignment ?? undefined, framesBeforeCut: data.framesBeforeCut ?? undefined, parameters: Object.keys(parameters).length ? parameters : undefined })
@@ -150,6 +151,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     // 两端可只写一端（单侧过渡，与时间线上拖到片段一端的行为一致）；空字符串视为没写。
     const endpoints = { ...values }
     for (const key of ['leftClipId', 'rightClipId']) if (endpoints[key] === '' || endpoints[key] === null) delete endpoints[key]
+    assertVideoEditTransitionCreatable(String(endpoints.kind ?? 'cross_dissolve'))
     const transition = videoEditTransitionSchema.parse({ id: crypto.randomUUID(), kind: 'cross_dissolve', ...endpoints })
     if (transition.parameters && !Object.keys(transition.parameters).length) delete transition.parameters
     assertTransitionEndpoints(sequence, transition)

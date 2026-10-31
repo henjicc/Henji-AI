@@ -1,3 +1,4 @@
+import { isRemovedVideoEditTransition } from '@/core/videoEdit/transitionCatalog'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
 import { recordingDocumentSchema, type RecordingDocument } from '@/core/screenRecording/document'
@@ -61,6 +62,8 @@ export async function readRecordingDocument(id: string): Promise<RecordingDocume
 export async function showRecordingDocument(id: string): Promise<void> {
   if (capture && view.documentId !== id) throw new Error('请先结束当前录制')
   const content = await readRecordingDocument(id)
+  const removed = content.scriptCapture.baselines.flatMap(baseline => baseline.content.sequences.flatMap(sequence => (sequence.transitions ?? []).filter(transition => isRemovedVideoEditTransition(transition.kind))))
+  if (removed.length) logger.warn('此过渡已移除，按交叉溶解播放', { event: 'recording.document.removed_transitions_tolerated', context: { documentId: id, kinds: [...new Set(removed.map(transition => transition.kind))] } })
   await markSessionDocumentOpened(id)
   publish({ documentId: id, content, error: null })
 }

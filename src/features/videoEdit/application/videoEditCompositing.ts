@@ -9,7 +9,7 @@ import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { recordingZoomRegionsSchema, sortRecordingZoomRegions, RECORDING_ZOOM_EFFECT, type RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
 import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, resizeVideoEditTransition, type VideoEditTransition } from '@/core/videoEdit/transitions'
+import { assertVideoEditTransitionCreatable, videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, resizeVideoEditTransition, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
@@ -244,6 +244,7 @@ export async function updateVideoEditAdjustmentRange(target: VideoEditCompositeT
   }, signal)
 }
 export async function createVideoEditTransition(projectId: string, sequenceId: string, input: { leftClipId?: string; rightClipId?: string; durationFrames: number } & Partial<Pick<VideoEditTransition, 'kind' | 'alignment' | 'framesBeforeCut'>>, signal?: AbortSignal): Promise<string> {
+  if (input.kind) assertVideoEditTransitionCreatable(input.kind)
   const transition = videoEditTransitionSchema.parse({ id: crypto.randomUUID(), kind: 'cross_dissolve', ...input })
   await editComposite(projectId, sequenceId, videoEditTransitionClipIds(transition), sequence => { (sequence.transitions ??= []).push(transition) }, signal)
   return transition.id
@@ -253,6 +254,7 @@ export async function updateVideoEditTransition(projectId: string, sequenceId: s
   const transition = requireVideoEditInstance(projectId).document.sequences.find(sequence => sequence.id === sequenceId)?.transitions?.find(transition => transition.id === transitionId)
   if (!transition) throw new Error('原转场已移除。')
   const patch = typeof changes === 'number' ? { durationFrames: changes } : changes
+  if (patch.kind && patch.kind !== transition.kind) assertVideoEditTransitionCreatable(patch.kind)
   await editComposite(projectId, sequenceId, videoEditTransitionClipIds(transition), sequence => {
     const list = sequence.transitions!; const index = list.findIndex(value => value.id === transitionId)
     const next = videoEditTransitionSchema.parse({ ...resizeVideoEditTransition(list[index], patch.durationFrames ?? list[index].durationFrames), ...patch, ...(patch.kind && patch.kind !== list[index].kind ? { parameters: undefined, frameCurves: undefined } : {}) })

@@ -14,6 +14,7 @@ import { VIDEO_EDIT_TRANSITION_PRESETS, videoEditTransitionAlignmentFields, vide
 import { deleteVideoEditTransition, updateVideoEditTransition } from '../application/videoEditCompositing'
 import { selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, updateVideoEditTransitionParams, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
 import { evaluateVideoEditTransitionParams, videoEditTransitionParamDefinitions } from '@/core/videoEdit/transitionParams'
+import { isRemovedVideoEditTransition } from '@/core/videoEdit/transitionCatalog'
 import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
 import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 import { subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
@@ -53,8 +54,10 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
       <span className="min-w-0 flex-1 truncate text-xs text-text1">{preset.name}</span>
       {window && <span className="shrink-0 truncate text-2xs text-text3" data-user-content>{window.side ? `${window.left.name} ${window.side === 'in' ? '开头' : '结尾'}` : `${window.left.name} → ${window.right.name}`}</span>}
     </div>
+    {isRemovedVideoEditTransition(transition.kind) && <div className={`text-xs text-text3 ${UI_PROPERTY_INSET_CLASS}`}>此过渡已移除，按交叉溶解播放</div>}
     <UiFormRow density="compact" label="种类" info="换成同一媒介的其他过渡；参数回到新种类的默认值。">
       <Dropdown<VideoEditTransitionKind> ariaLabel="过渡种类" value={transition.kind} disabled={action.busy}
+        display={!VIDEO_EDIT_TRANSITION_PRESETS.some(option => option.kind === transition.kind) ? isRemovedVideoEditTransition(transition.kind) ? '已移除的过渡（按交叉溶解播放）' : `${preset.name}（历史过渡）` : undefined}
         options={VIDEO_EDIT_TRANSITION_PRESETS.filter(option => option.medium === preset.medium).map(option => ({ value: option.kind, label: option.name }))}
         onSelect={kind => { if (kind !== transition.kind) update({ kind }) }} />
     </UiFormRow>

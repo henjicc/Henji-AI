@@ -15,6 +15,7 @@ import { audioCaptureSettingsEnvelopeSchema, DEFAULT_AUDIO_CAPTURE_SETTINGS } fr
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { PERSISTENCE_FORMATS } from '../src/core/persistence/formats'
+import { CURATED_TRANSITIONS } from '../src/core/videoEdit/transitionCatalog'
 import { upgradePersistenceContent } from '../src/core/persistence/migrations'
 import { parseWebReplayDirector } from '../src/core/webReplay/director'
 import { MODEL_DEFAULTS_VERSION, SUBTITLE_MANIFEST_VERSION, modelDefaultsSchema } from '../src/core/persistence/preferenceSchemas'
@@ -28,7 +29,7 @@ import { ImageEditCommandHistoryV3 } from '../src/core/imageEdit/v3/commandHisto
 import { splitImageEditHistoryPagesV3 } from '../src/core/imageEdit/v3/historyPaging/checkpoint'
 import { buildDocumentEnvelope } from '../src/core/documents/envelope'
 import { buildProjectManifest } from '../src/core/documents/projectManifest'
-import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema } from '../src/core/videoEdit/document'
+import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema, type VideoEditDocument } from '../src/core/videoEdit/document'
 import { makeVideoEditItemClip } from '../src/core/videoEdit/projectItems'
 import { setVideoEditClipTimeRemap } from '../src/core/videoEdit/clipSpeed'
 import { videoEditFps } from '../src/core/videoEdit/time'
@@ -400,10 +401,44 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
     }
     const sourceFile = audioSources[format.id]
     const source = sourceFile ? JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/audio-effect-merge', `${sourceFile}.json`), 'utf8')) as { content?: unknown; kindVersion?: number; version: number } : undefined
-    const content = source ? upgradePersistenceContent(format, source.content ?? source, source.kindVersion ?? source.version) : format.schema.parse(values[format.id])
+    if (format.id === 'video-effect-library' && source) {
+      const library = source.content as { favorites: string[] }
+      library.favorites.push('transition:shaders.IrisWipe', 'transition:iris_round', 'effect:shaders.Blur', 'effect:gaussian_blur', 'transition:gl.Bounce', 'preset:mine')
+    }
+    let content = source ? upgradePersistenceContent(format, source.content ?? source, source.kindVersion ?? source.version) : format.schema.parse(values[format.id])
+    if (format.id === 'document.video_edit' || format.id === 'document.screen_recording') {
+      const historical = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/video-edit-transitions/before-u12.json'), 'utf8')) as { content: unknown; kindVersion: number }
+      const videoFormat = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+      const transitions = (upgradePersistenceContent(videoFormat, historical.content, historical.kindVersion) as { sequences: VideoEditDocument['sequences'] }).sequences.filter(sequence => sequence.id.startsWith('transition-'))
+      const appendTransitions = (value: unknown): unknown => {
+        const video = value as Omit<VideoEditDocument, 'format' | 'version' | 'id' | 'name' | 'revision'>
+        const added = CURATED_TRANSITIONS.find(entry => entry.kind === 'dissolve')!.variants.slice(4).map(([mode]) => {
+          const sequence = createVideoEditSequence(`溶解 ${mode}`)
+          sequence.id = `dissolve-${mode}`
+          sequence.tracks.forEach((track, index) => { track.id = `${sequence.id}-track-${index}` })
+          const clip = makeVideoEditItemClip({ ...document, ...video, sequences: [...video.sequences, sequence] }, 'golden-screen-item', sequence.id, { frame: 0, duration: 30 })
+          clip.id = `${sequence.id}-clip`
+          sequence.clips.push(clip)
+          sequence.transitions = [{ id: `${sequence.id}-transition`, kind: 'dissolve', rightClipId: clip.id, durationFrames: 10, parameters: { mode, reveal_edge_width: 30, reveal_glow_strength: 40 } }]
+          return sequence
+        })
+        return { ...video, sequences: [...video.sequences, ...transitions, ...added] }
+      }
+      content = format.id === 'document.video_edit' ? appendTransitions(content) : (() => {
+        const recording = content as { scriptCapture: { baselines: Array<{ content: unknown }> } }
+        return { ...recording, scriptCapture: { ...recording.scriptCapture, baselines: recording.scriptCapture.baselines.map(baseline => ({ ...baseline, content: appendTransitions(baseline.content) })) } }
+      })()
+      content = format.schema.parse(content)
+    }
+    if (format.id === 'preset-preferences') content = upgradePersistenceContent(format, [
+      ...values[format.id] as object[],
+      { category: 'transition', id: 'shaders.IrisWipe', rating: 2, isDefault: true },
+      { category: 'transition', id: 'iris_round', rating: 5, isDefault: false },
+      { category: 'effect', id: 'gaussian_blur', rating: 4, isDefault: false },
+    ], 1)
     const raw = format.id.startsWith('document.') ? buildDocumentEnvelope({ kind: format.id.slice('document.'.length), kindVersion: format.version, kindMinReaderVersion: format.minReaderVersion ?? format.version, id: `golden-${format.id.split('.')[1]}`, name: format.name, createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content })
       : format.id === 'settings' || format.id === 'theme' ? { version: format.version, state: content }
-      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, content } : ['video-style-library', 'video-template-library', 'video-style-package'].includes(format.id) ? { version: format.version, minReaderVersion: format.minReaderVersion ?? format.version, content } : content
+      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, minReaderVersion: format.minReaderVersion ?? format.version, content } : ['video-style-library', 'video-template-library', 'video-style-package'].includes(format.id) ? { version: format.version, minReaderVersion: format.minReaderVersion ?? format.version, content } : content
     const directory = path.join(root, 'tests/fixtures/persistence', format.id)
     fs.mkdirSync(directory, { recursive: true })
     fs.writeFileSync(path.join(directory, `v${format.version}.json`), `${JSON.stringify(raw, null, 2)}\n`, { flag: 'wx' })

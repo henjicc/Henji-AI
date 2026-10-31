@@ -1,6 +1,6 @@
 # 着色器组件：图形与材质
 
-由脚本从 shaders 4.0.2 生成。作为剪辑内置效果与转场使用（片段效果 effect:shaders.组件名，转场 transition:shaders.组件名），作者代码不直接调用；中文名是效果面板名。角色：生成=画出整幅内容；滤镜=处理片段画面；转场=剪辑过渡。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect。
+由脚本从 shaders 4.0.2 生成。作为剪辑内置效果使用（片段效果 effect:shaders.组件名）；过渡从 video_edit.builtin_effect 读取整理后的目录与方式，作者代码不直接调用；中文名是效果面板名。角色：生成=画出整幅内容；滤镜=处理片段画面；转场=剪辑过渡。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect。
 
 - **Arc** 扇形｜生成｜Pie sector (arc wedge) with adjustable radius and aperture angle｜origin color center radius aperture rotation softness strokeThickness strokeColor strokePosition colorSpace
 - **BrushedMetal** 拉丝金属｜生成｜Photorealistic brushed metal — a satin anodised surface combed with fi…｜origin center scale rotation lightColor darkColor brushAngle anisotropy grain grainScale roughness environment envRotation lightAngle speed⏱ bevelWidth bevelShape edgeSoftness shape

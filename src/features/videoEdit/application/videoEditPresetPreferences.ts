@@ -1,5 +1,5 @@
 import { useSettingsStore } from '@/stores/settingsStore'
-import { VIDEO_EDIT_DEFAULT_TRANSITIONS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
+import { videoEditDefaultTransitionKind, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_PRESET_MAX_RATING, VIDEO_EDIT_PRESET_DEFAULTABLE, videoEditPresetPreferencesSchema, type VideoEditPresetCategory, type VideoEditPresetPreference } from '@/core/videoEdit/presetPackage'
 import { VideoEditLocalLibrary } from './videoEditLocalLibrary'
 import { publishVideoEdit } from './videoEditService'
@@ -15,7 +15,7 @@ export class VideoEditPresetPreferences extends VideoEditLocalLibrary<VideoEditP
   }
   rating(category: VideoEditPresetCategory, id: string): number { return this.custom().find(value => value.category === category && value.id === id)?.rating ?? 0 }
   defaultId(category: VideoEditPresetCategory): string | undefined {
-    if (category === 'transition') return useSettingsStore.getState().videoEditDefaultTransitions.video ?? VIDEO_EDIT_DEFAULT_TRANSITIONS.video
+    if (category === 'transition') return videoEditDefaultTransitionKind(useSettingsStore.getState().videoEditDefaultTransitions, 'video')
     return this.custom().find(value => value.category === category && value.isDefault)?.id
   }
   setRating(category: VideoEditPresetCategory, id: string, rating: number): void {

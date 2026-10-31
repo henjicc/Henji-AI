@@ -13,7 +13,7 @@ import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import './videoEditStyles'
 import { createTestStyleLibraryIo } from './videoEditStyleTestKit'
 import { videoEditTextPresetLibrary } from './videoEditTextPresets'
-import { videoEditPresetPreferences } from './videoEditPresetPreferences'
+import { VideoEditPresetPreferences, PRESET_PREFERENCES_STORAGE_KEY, videoEditPresetPreferences } from './videoEditPresetPreferences'
 import { deleteVideoEditPreset, exportVideoEditPresetPackage, importVideoEditPresetPackage, listVideoEditPresets, preferredVideoEditPreset, setVideoEditPresetDefault, setVideoEditPresetRating, videoEditPresetHostSummary, videoEditPresetSource } from './videoEditPresetCatalog'
 import { appendVideoEditSequence, requireVideoEditInstance } from './videoEditService'
 import { createVideoEditCaption } from './videoEditTimedContent'
@@ -71,6 +71,28 @@ it('默认排第一，其余按喜爱程度排序；未设默认的类别推荐�
   // Transition default is the existing default-transition setting, not a second copy.
   setVideoEditPresetDefault('transition', 'wipe'); expect(useSettingsStore.getState().videoEditDefaultTransitions.video).toBe('wipe')
   expect(listVideoEditPresets('transition')[0]).toMatchObject({ id: 'wipe', isDefault: true })
+})
+it('历史评分加载先备份，合并来源评分后只在明确保存时写回当前版本', () => {
+  const disk = new Map<string, string>()
+  const original = JSON.stringify({ version: 1, content: [{ category: 'transition', id: 'shaders.IrisWipe' }, { category: 'transition', id: 'shape_wipe', rating: 5, isDefault: false }] })
+  disk.set(PRESET_PREFERENCES_STORAGE_KEY, original)
+  const storage = { getItem: (key: string) => disk.get(key) ?? null, setItem: (key: string, value: string) => { disk.set(key, value) } }
+  const preferences = new VideoEditPresetPreferences(storage, () => {})
+  expect(preferences.loadError()).toBe('')
+  expect(preferences.custom()).toEqual([{ category: 'transition', id: 'shape_wipe', rating: 5, isDefault: false }])
+  expect(disk.get(PRESET_PREFERENCES_STORAGE_KEY)).toBe(original)
+  expect(disk.get(`${PRESET_PREFERENCES_STORAGE_KEY}:backup:v1`)).toBe(original)
+  preferences.setRating('transition', 'shape_wipe', 4)
+  expect(new VideoEditPresetPreferences(storage, () => {}).rating('transition', 'shape_wipe')).toBe(4)
+})
+it('所有合并条目设为默认后存目录 ID，预设目录与效果面板使用相同默认换算', () => {
+  for (const entry of listVideoEditPresets('transition')) {
+    setVideoEditPresetDefault('transition', entry.id)
+    expect(useSettingsStore.getState().videoEditDefaultTransitions.video).toBe(entry.id)
+    expect(listVideoEditPresets('transition').filter(value => value.isDefault).map(value => value.id)).toEqual([entry.id])
+  }
+  useSettingsStore.getState().setVideoEditDefaultTransition('video', 'gl.WaterDrop')
+  expect(videoEditPresetPreferences.defaultId('transition')).toBe('ripple')
 })
 it('默认风格自动套到新建序列（工程里复制一份副本并复用），默认文字样式用于新字幕', async () => {
   await videoEditStyleLibrary.ready()

@@ -1,5 +1,5 @@
+import { VIDEO_EDIT_EFFECT_LIBRARY_VERSION } from '@/core/persistence/schemaVersions'
 import fs from 'node:fs'
-import { VIDEO_EDIT_EFFECT_LIBRARY_VERSION } from '@/core/videoEdit/effectPresets'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { createTestStyleLibraryIo } from './videoEditStyleTestKit'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
@@ -73,6 +73,20 @@ it('贝塞尔过冲预设应用到较短片段，修剪后参数仍可持久保�
   expect(points.at(-1)?.value).toBeCloseTo(0.07125, 6)
   expect(points[0].easeValues).toEqual([0, 0.03])
 })
+it('加载收藏统一合并过渡与效果引用，去重并保留原存储，保存后读回目录引用', () => {
+  const disk = storage()
+  const original = JSON.stringify({ version: 4, minReaderVersion: 4, content: { favorites: ['transition:shaders.IrisWipe', 'transition:iris_round', 'effect:shaders.Blur', 'effect:gaussian_blur', 'effect:exposure', 'effect:shaders.Exposure', 'effect:shaders.Pixelate', 'transition:gl.Bounce', 'preset:mine'], presets: [] } })
+  disk.setItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, original)
+  const store = createVideoEditEffectLibraryStore(disk)
+  expect(store.getState().loadError).toBe('')
+  expect(store.getState().favorites).toEqual(['transition:shape_wipe', 'effect:blur', 'effect:color_grade', 'effect:mosaic', 'transition:gl.Bounce', 'preset:mine'])
+  expect(disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)).toBe(original)
+  expect(disk.getItem(`${VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY}:backup:v4`)).toBe(original)
+  store.getState().toggleFavorite('transition:shape_wipe')
+  expect(JSON.parse(disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)!)).toMatchObject({ version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, minReaderVersion: VIDEO_EDIT_EFFECT_LIBRARY_VERSION })
+  expect(createVideoEditEffectLibraryStore(disk).getState().favorites).toEqual(['effect:blur', 'effect:color_grade', 'effect:mosaic', 'transition:gl.Bounce', 'preset:mine'])
+})
+
 it('收藏、参数组合、重命名与删除经本机设置持久保存；写失败不发布新状态', () => {
   const disk = storage(); const first = createVideoEditEffectLibraryStore(disk)
   first.getState().toggleFavorite('effect:blur'); first.getState().toggleFavorite('transition:cross_dissolve')

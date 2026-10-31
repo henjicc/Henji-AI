@@ -7,7 +7,7 @@
  * - 生成器多一个 `blend_mode`：生成的画面怎样叠在原画面上；效果“数量”仍是与原画面的混合比例。
  */
 import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinGroup, VideoEditBuiltinParam, VideoEditBuiltinParams } from '../builtinEffects'
-import { SHADER_BLEND_MODES, SHADER_COMPONENTS, SHADER_GRAPH_INPUT, type ShaderComponent, type ShaderComponentProp, type ShaderGraphSpec } from './spec'
+import { SHADER_BLEND_MODES, SHADER_COMPONENTS, SHADER_GRAPH_INPUT, shaderGraphStructureKey, type ShaderComponent, type ShaderComponentProp, type ShaderGraphSpec } from './spec'
 import { SHADER_COMPONENT_ZH, SHADER_LABEL_ZH, SHADER_OPTION_ZH } from './zh'
 import { BLACK_HEX } from '../../theme/colorTokens'
 
@@ -116,11 +116,11 @@ export function shaderGraphEffectSpec(id: string): ShaderGraphSpec {
  * 剪辑里静态可知的着色器图（片段效果、着色器转场），用于后台预热：新结构首次编译约半秒，
  * 放在打开剪辑/加效果时做，播放到那一段时就不再卡一下。代码素材的 shader 图层要逐帧求值才知道，不在此列。
  */
-export function videoEditShaderGraphWarmSpecs(sequences: ReadonlyArray<{ clips: ReadonlyArray<{ effects?: ReadonlyArray<{ builtin?: { id: string } }> }>; transitions?: ReadonlyArray<{ kind: string }> }>, transitionSpec: (kind: string) => ShaderGraphSpec | undefined): ShaderGraphSpec[] {
+export function videoEditShaderGraphWarmSpecs(sequences: ReadonlyArray<{ clips: ReadonlyArray<{ effects?: ReadonlyArray<{ builtin?: { id: string } }> }>; transitions?: ReadonlyArray<{ kind: string; parameters?: Readonly<VideoEditBuiltinParams> }> }>, transitionSpec: (kind: string, parameters?: Readonly<VideoEditBuiltinParams>) => ShaderGraphSpec | undefined): ShaderGraphSpec[] {
   const specs = new Map<string, ShaderGraphSpec>()
   for (const sequence of sequences) {
     for (const clip of sequence.clips) for (const effect of clip.effects ?? []) if (effect.builtin && isShaderGraphEffect(effect.builtin.id)) specs.set(effect.builtin.id, shaderGraphEffectSpec(effect.builtin.id))
-    for (const transition of sequence.transitions ?? []) { const spec = transitionSpec(transition.kind); if (spec) specs.set(transition.kind, spec) }
+    for (const transition of sequence.transitions ?? []) { const spec = transitionSpec(transition.kind, transition.parameters); if (spec) specs.set(shaderGraphStructureKey(spec), spec) }
   }
   return [...specs.values()]
 }

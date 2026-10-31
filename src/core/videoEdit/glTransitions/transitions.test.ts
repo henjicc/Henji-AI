@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { GL_TRANSITION_CATALOG } from './catalog.generated'
 import { GL_TRANSITION_KINDS, GL_TRANSITION_PARAMS, GL_TRANSITION_PRESETS, glParamKey, glTransitionUniforms, isGlTransition, type GlTransitionKind } from './transitions'
 import data from './zh.json'
+import { CURATED_TRANSITIONS, isRemovedVideoEditTransition } from '../transitionCatalog'
 import { VIDEO_EDIT_TRANSITION_PRESETS, videoEditTransitionSchema } from '../transitions'
 import { normalizeVideoEditTransitionParams, resolveVideoEditTransitionParams, VIDEO_EDIT_BUILTIN_TRANSITION_KINDS } from '../transitionParams'
 import { videoEditEffectsRegistry } from '../effectsRegistry'
@@ -11,7 +12,7 @@ const ints = (buffer: ArrayBuffer, offset: number, count: number): number[] => [
 const offset = (kind: GlTransitionKind, name: string): number => GL_TRANSITION_CATALOG.find(entry => `gl.${entry.name}` === kind)!.uniforms.find(uniform => uniform.name === name)!.offset
 
 describe('gl-transitions 转场登记', () => {
-  it('收录的转场全部进入过渡种类、效果面板与助手目录，名称不与已有过渡重名', () => {
+  it('来源实现保留，整理后的目录不重复暴露来源，名称不重名', () => {
     expect(GL_TRANSITION_KINDS.length).toBeGreaterThan(0)
     for (const kind of GL_TRANSITION_KINDS) {
       expect(isGlTransition(kind)).toBe(true)
@@ -20,7 +21,10 @@ describe('gl-transitions 转场登记', () => {
     const names = VIDEO_EDIT_TRANSITION_PRESETS.map(preset => preset.name)
     expect(new Set(names).size).toBe(names.length)
     const registry = videoEditEffectsRegistry().filter(entry => entry.transitionKind?.startsWith('gl.'))
-    expect(registry).toHaveLength(GL_TRANSITION_KINDS.length)
+    for (const kind of GL_TRANSITION_KINDS) {
+      const listed = registry.some(entry => entry.transitionKind === kind)
+      expect(listed || isRemovedVideoEditTransition(kind) || CURATED_TRANSITIONS.some(entry => entry.variants.some(variant => variant[2] === kind)), kind).toBe(true)
+    }
     expect(registry.every(entry => entry.group && entry.category === 'video_transition')).toBe(true)
     // 面板按分组连续排列：同一分组只出现一段。
     const groups = GL_TRANSITION_PRESETS.map(preset => preset.group)

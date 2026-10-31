@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "minReaderVersion": 2,
+  "content": [
+    {
+      "category": "style",
+      "id": "golden-kit",
+      "rating": 5,
+      "isDefault": true
+    },
+    {
+      "category": "transition",
+      "id": "cross_dissolve",
+      "rating": 3,
+      "isDefault": false
+    },
+    {
+      "category": "transition",
+      "id": "shape_wipe",
+      "rating": 5,
+      "isDefault": true
+    },
+    {
+      "category": "effect",
+      "id": "gaussian_blur",
+      "rating": 4,
+      "isDefault": false
+    }
+  ]
+}

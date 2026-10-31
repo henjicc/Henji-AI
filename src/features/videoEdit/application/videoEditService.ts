@@ -1,3 +1,4 @@
+import { isRemovedVideoEditTransition } from '@/core/videoEdit/transitionCatalog'
 import { jsonEqual } from '@/core/jsonEqual'
 import { storedVideoEditBuiltinEffectNotes } from '@/core/videoEdit/builtinEffects'
 import { parseVideoEditDocument as parseDocument, freezeVideoEditDocument } from '@/core/videoEdit/documentValidation'
@@ -1026,6 +1027,8 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   beginVideoEditFirstFrame(session.id, instance.activeSequenceId, 'open')
   publishVideoEdit(true)
   logger.info('剪辑已打开', { event: 'video_edit.document.open.completed', context: { docId: session.id, missing: session.getState().missingPaths.length } })
+  const removedTransitions = instance.document.sequences.flatMap(sequence => (sequence.transitions ?? []).filter(transition => isRemovedVideoEditTransition(transition.kind)))
+  if (removedTransitions.length) logger.warn('此过渡已移除，按交叉溶解播放', { event: 'video_edit.document.removed_transitions_tolerated', context: { docId: session.id, kinds: [...new Set(removedTransitions.map(transition => transition.kind))] } })
   // 效果改版后旧工程照样打开：已移除的效果保留不渲染、越界的旧数值按当前范围使用，在这里记一次。
   const stored = instance.document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => (clip.effects ?? []).flatMap(effect => effect.builtin ? [{ id: effect.builtin.id, ...storedVideoEditBuiltinEffectNotes(effect.builtin) }] : [])))
   const removed = [...new Set(stored.filter(note => note.removed).map(note => note.id))], clamped = stored.flatMap(note => note.clamped.map(key => `${note.id}.${key}`))

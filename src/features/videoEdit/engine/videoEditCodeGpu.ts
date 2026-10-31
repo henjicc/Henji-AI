@@ -17,6 +17,7 @@ import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
 import { isShaderGraphEffect, shaderGraphEffectProps, shaderGraphEffectSpec, type VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
+import { isDissolveTransitionSource } from '@/core/videoEdit/transitionSources'
 import { isGlTransition, type GlTransitionKind } from '@/core/videoEdit/glTransitions/transitions'
 import { VideoEditGlTransitionsGpu } from './glTransitions/videoEditGlTransitionsGpu'
 import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
@@ -623,7 +624,8 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
   async transition(key: string, transition: VideoEditBuiltinTransitionInput, outgoing: VideoEditCodePicture, incoming: VideoEditCodePicture): Promise<VideoEditCodePicture> {
     if (outgoing.owner !== this.device || incoming.owner !== this.device || outgoing.width !== incoming.width || outgoing.height !== incoming.height) throw new CodeMaterialError('CONTEXT', '过渡需要同设备同尺寸的两段画面。')
     await this.ready; this.assertLive(); this.assertInput(outgoing.texture); this.assertInput(incoming.texture)
-    const format = outgoing.highPrecision || incoming.highPrecision ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
+    // 显影的渐显与亮边光晕保留到末道量化；两端恒等画面沿用输入精度。
+    const format = outgoing.highPrecision || incoming.highPrecision || isDissolveTransitionSource(transition.kind) && transition.progress > 0 && transition.progress < 1 ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
     const target = this.surface(key, outgoing.width, outgoing.height, format)
     if (target.picture.texture === outgoing.texture || target.picture.texture === incoming.texture) throw new CodeMaterialError('CONTEXT', '过渡输入输出不能引用同一纹理。')
     if (isShaderGraphTransition(transition.kind)) {

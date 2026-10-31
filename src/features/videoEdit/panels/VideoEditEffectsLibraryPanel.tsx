@@ -27,7 +27,7 @@ import { VideoEditEffectPresetDialog } from './VideoEditEffectPresetDialog'
 export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean; onEffectsAdded?: (effectIds: readonly string[]) => void }): React.ReactElement {
   const { showNotification } = useNotification()
   const [query, setQuery] = useState('')
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set(['more']))
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
   const favorites = useVideoEditEffectLibraryStore(state => state.favorites)
   const presets = useVideoEditEffectLibraryStore(state => state.presets)
@@ -41,7 +41,8 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
   const folders = [
     { id: 'favorites', name: '收藏', entries: filterVideoEditLibraryEntries(entries.filter(entry => favorites.includes(entry.id)), query, '收藏') },
     { id: 'presets', name: '预设', entries: matching.filter(entry => entry.category === 'presets') },
-    ...VIDEO_EDIT_EFFECT_CATEGORIES.map(category => ({ ...category, entries: matching.filter(entry => entry.category === category.id) })),
+    ...VIDEO_EDIT_EFFECT_CATEGORIES.map(category => ({ ...category, entries: matching.filter(entry => entry.category === category.id && entry.group !== '更多') })),
+    { id: 'more', name: '更多', entries: matching.filter(entry => entry.group === '更多') },
   ]
     .filter(folder => !keyword || folder.entries.length)
   const isDefault = (entry: VideoEditLibraryEntry): boolean => Boolean(entry.transitionKind && videoEditDefaultTransitionKind(defaults, videoEditTransitionMedium(entry.transitionKind)) === entry.transitionKind)

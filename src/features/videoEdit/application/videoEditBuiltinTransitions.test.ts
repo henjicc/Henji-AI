@@ -49,21 +49,43 @@ it('效果面板双击过渡：放到所选片段两端的编辑点（相接处�
   await expect(applyVideoEditTransitionToSelection(id, 'push')).rejects.toThrow('先在时间线上选中片段')
 })
 
+it('公共创建和换种类拒绝已移除与合并来源，已有移除项仍可改时长、换为目录项', async () => {
+  const { owner, id, sequenceId, clipIds } = await project()
+  const app = createApplicationHarness()
+  const parent = { kind: 'video_edit.sequence', id: `${id}:${sequenceId}` }
+  try {
+    for (const [kind, reason] of [['gl.Bounce', '已移除'], ['shaders.IrisWipe', '已合并到 shape_wipe']]) {
+      const result = await app.call('change_application_entities', { summary: '创建转场', changes: [{ kind: 'create_items', entityType: 'video_edit.transition', parent, items: [{ properties: { 'video_edit.transition.kind': kind, 'video_edit.transition.right_clip_id': clipIds[0], 'video_edit.transition.duration_frames': 10 } }] }] })
+      expect(result.ok).toBe(false)
+      expect(JSON.stringify(result)).toContain(reason)
+      expect(JSON.stringify(result)).toContain('可用条目')
+      expect(getActiveVideoEditSequence(owner).transitions ?? []).toHaveLength(0)
+    }
+    editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? { ...sequence, transitions: [{ id: 'removed-transition', kind: 'gl.Bounce', rightClipId: clipIds[0], durationFrames: 10 }] } : sequence) }))
+    const ref = { kind: 'video_edit.transition', id: `${id}:removed-transition` }
+    expect(await app.change(ref, { 'video_edit.transition.duration_frames': 12 })).toMatchObject({ ok: true })
+    const rejected = await app.change(ref, { 'video_edit.transition.kind': 'shaders.IrisWipe' })
+    expect(rejected.ok).toBe(false); expect(JSON.stringify(rejected)).toContain('已合并到 shape_wipe')
+    expect(await app.change(ref, { 'video_edit.transition.kind': 'shape_wipe' })).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).transitions![0]).toMatchObject({ kind: 'shape_wipe', durationFrames: 12 })
+  } finally { await app.dispose() }
+})
+
 it('效果控件拖动过渡参数只记一步撤销、数值夹进范围；未知参数报错', async () => {
   const { owner, id, sequenceId, clipIds } = await project()
   setVideoEditTimelineView(id, { selectedClipIds: clipIds })
-  await applyVideoEditTransitionToSelection(id, 'iris_round')
+  await applyVideoEditTransitionToSelection(id, 'shape_wipe')
   const transition = getActiveVideoEditSequence(owner).transitions!.find(value => value.leftClipId && value.rightClipId)!
   const params = () => getActiveVideoEditSequence(owner).transitions!.find(value => value.id === transition.id)!.parameters
   const history = owner.past.length
   const drag = beginVideoEditGesture(id)
   for (const feather of [20, 60, 140]) updateVideoEditTransitionParams(id, sequenceId, transition.id, { feather }, drag)
-  expect(params()).toMatchObject({ feather: 100, mode: 'open', center_x: 50 }); expect(owner.past).toHaveLength(history)
+  expect(params()).toMatchObject({ feather: 100, mode: 'circle', operation: 'open', center_x: 50 }); expect(owner.past).toHaveLength(history)
   finishVideoEditGesture(drag); expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(id); expect(params()).toBeUndefined()
-  updateVideoEditTransitionParams(id, sequenceId, transition.id, { mode: 'close' })
-  expect(params()).toMatchObject({ mode: 'close', feather: 5 })
-  expect(() => updateVideoEditTransitionParams(id, sequenceId, transition.id, { direction: 'from_left' })).toThrow('可用参数')
+  updateVideoEditTransitionParams(id, sequenceId, transition.id, { operation: 'close' })
+  expect(params()).toMatchObject({ mode: 'circle', operation: 'close', feather: 5 })
+  expect(() => updateVideoEditTransitionParams(id, sequenceId, transition.id, { missing_parameter: 'from_left' })).toThrow('可用参数')
 })
 
 it('助手经通用实体读写：目录里读过渡用途与参数，创建带参数的过渡、整体改参数、换种类回到默认、越界被拒', async () => {
@@ -91,7 +113,7 @@ it('助手经通用实体读写：目录里读过渡用途与参数，创建带�
     expect(getActiveVideoEditSequence(owner).transitions![0].parameters).toBeUndefined()
     expect((await app.read(ref, ['video_edit.transition.parameters'])).properties).toMatchObject({ 'video_edit.transition.parameters': {} })
     const audio = await app.change(ref, { 'video_edit.transition.kind': 'constant_gain' }); expect(audio.ok).toBe(false)
-  } finally { app.dispose() }
+  } finally { await app.dispose() }
 })
 
 it('拖效果经过时间线：高亮松手会加上效果的片段（落在所选片段上为全部所选），声音片段与锁定轨道跳过，结束拖动清掉', async () => {

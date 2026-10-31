@@ -6,10 +6,12 @@ import { createVideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import type { VideoEditInstance } from '../application/videoEditService'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, undoVideoEdit } from '../application/videoEditService'
+import { editVideoProject, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, undoVideoEdit } from '../application/videoEditService'
 import { createVideoEditTestProject } from '../application/videoEditDocumentTestKit'
 import { useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
 import * as compositing from '../application/videoEditCompositing'
+import { selectVideoEditTransition } from '../application/videoEditTransitions'
+import { VideoEditTransitionPanel } from './VideoEditTransitionPanel'
 import { VideoEditEffectsLibraryPanel } from './VideoEditEffectsLibraryPanel'
 import { VideoEditEffectPresetDialog } from './VideoEditEffectPresetDialog'
 
@@ -185,4 +187,16 @@ it.each(['save', 'rename'])('重名时保存与改名弹窗保留输入并显示
   expect(screen.getByRole('alert').textContent).toContain(a.name)
   expect(close).not.toHaveBeenCalled()
   expect(useVideoEditEffectLibraryStore.getState().presets.map(value => value.name)).toEqual([a.name, b.name])
+})
+
+it('移除项保留时种类下拉显示回退播放标签，仍可打开并选当前目录', () => {
+  const sequenceId = getActiveVideoEditSequence(instance).id
+  const clipId = getActiveVideoEditSequence(instance).clips[0].id
+  editVideoProject(instance.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? { ...sequence, transitions: [{ id: 'removed', kind: 'gl.Bounce', rightClipId: clipId, durationFrames: 10 }] } : sequence) }))
+  selectVideoEditTransition(instance.document.id, 'removed')
+  render(<VideoEditTransitionPanel instance={instance} sequence={getActiveVideoEditSequence(instance)} onError={vi.fn()} />)
+  const dropdown = screen.getByRole('button', { name: '过渡种类' })
+  expect(dropdown.textContent).toContain('已移除的过渡（按交叉溶解播放）')
+  fireEvent.click(dropdown)
+  expect(screen.getByText('形状擦除')).toBeTruthy()
 })

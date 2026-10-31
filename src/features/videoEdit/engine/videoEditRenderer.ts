@@ -1,3 +1,4 @@
+import { resolveVideoEditTransitionSource } from '@/core/videoEdit/transitionCatalog'
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
 import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
 import { codeMediaInputKey, codeMediaInputComposition, codeMediaInputNextFrame, codeMediaInputSample, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
@@ -851,9 +852,9 @@ export class VideoEditRenderer {
   private warmShaderGraphs(): void {
     const compositor = this.compositor
     if (!compositor) return
-    const specs = videoEditShaderGraphWarmSpecs([this.document], kind => isShaderGraphTransition(kind) ? shaderGraphTransitionSpec(kind) : undefined)
+    const specs = videoEditShaderGraphWarmSpecs([this.document], (kind, parameters) => { const source = resolveVideoEditTransitionSource(kind, parameters ?? {}); return source && isShaderGraphTransition(source.kind) ? shaderGraphTransitionSpec(source.kind) : undefined })
     if (specs.length) void compositor.code().then(code => code.shaderGraphs().warm(specs)).catch(() => undefined)
-    const glKinds = [...new Set((this.document.transitions ?? []).map(transition => transition.kind).filter(isGlTransition))]
+    const glKinds = [...new Set((this.document.transitions ?? []).map(transition => resolveVideoEditTransitionSource(transition.kind, transition.parameters ?? {})?.kind).filter((kind): kind is import('@/core/videoEdit/glTransitions/transitions').GlTransitionKind => Boolean(kind && isGlTransition(kind))))]
     if (glKinds.length) void compositor.code().then(code => code.warmGlTransitions(glKinds)).catch(() => undefined)
   }
   /** Newly imported/replaced fonts must rebuild cached glyphs and nested text surfaces. */

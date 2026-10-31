@@ -17,8 +17,8 @@ import { appendGlow, createGlowPlanner } from './glow'
 import { linearHex } from './lightSweep'
 import { BLUE_NOISE_64_RANKS } from './blueNoise64.generated'
 
-export const DISSOLVE_REVEAL_ENTRIES = ['dissolve_image', 'dissolve_light'] as const
-const MODES: Readonly<Record<string, number>> = { noise: 0, dots: 1, halftone: 2 }
+export const DISSOLVE_REVEAL_ENTRIES = ['dissolve_image', 'dissolve_light', 'dissolve_transition'] as const
+const MODES: Readonly<Record<string, number>> = { noise: 0, dots: 1, halftone: 2, blocks: 3 }
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
 let blueNoise: AdjustmentLookup | undefined
@@ -46,11 +46,11 @@ function encodedHex(value: unknown): [number, number, number] {
 }
 
 /** `params` 已补齐默认值；`split` 为图层拆输出。 */
-export function planDissolveReveal(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
+export function planDissolveReveal(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false, transition?: { emptyOutgoing?: boolean; emptyIncoming?: boolean }): VideoEditBuiltinPlan {
   const glow = createGlowPlanner(width, height, context)
   const progress = n(params, 'progress') / 100
-  if (progress >= 1) { glow.pass('copy', 'input', 'output'); return glow.plan }
-  if (progress <= 0) { glow.pass('effect_opacity', 'input', 'output'); return glow.plan }
+  if (!transition && progress >= 1) { glow.pass('copy', 'input', 'output'); return glow.plan }
+  if (!transition && progress <= 0) { glow.pass('effect_opacity', 'input', 'output'); return glow.plan }
   const h = context ? context.referenceSize.height * context.rasterScale : height
   const mode = MODES[String(params.mode)] ?? 0
   const edge = n(params, 'edge_width') / 100 * 0.3
@@ -61,12 +61,12 @@ export function planDissolveReveal(params: VideoEditBuiltinParams, width: number
     const [tw, th] = typeof target === 'number' ? [glow.plan.scratch[target].width, glow.plan.scratch[target].height] : [width, height]
     const color = entry === 'dissolve_image' ? encodedHex(params.edge_color) : linearHex(params.edge_color)
     return {
-      entry, source: 'input', target, ...(lookup ? { lookup } : {}),
-      uniforms: new Float32Array([tw, th, width, height, mode, dissolveCellSize(n(params, 'size')) * h, progress, n(params, 'softness') / 100 * 0.5, ...color, edge, shiftX, shiftY, hashSeed, 0, origin[0], origin[1], 0, 0, 0, 0, 0, 0]),
+      entry: transition && entry === 'dissolve_image' ? 'dissolve_transition' : entry, source: 'input', target, ...(lookup ? { lookup } : {}), ...(transition ? { mask: 'second' } : {}),
+      uniforms: new Float32Array([tw, th, width, height, mode, dissolveCellSize(n(params, 'size')) * h, progress, n(params, 'softness') / 100 * 0.5, ...color, edge, shiftX, shiftY, hashSeed, 0, origin[0], origin[1], 0, 0, transition ? 1 : 0, transition?.emptyOutgoing ? 1 : 0, transition?.emptyIncoming ? 1 : 0, 0]),
     }
   }
   const glowParams = lightGlowParams(params)
-  if (edge <= 0 || Number(glowParams.strength) <= 0) { glow.plan.passes.push(pass('dissolve_image', 'output')); return glow.plan }
+  if (edge <= 0 || Number(glowParams.strength) <= 0 || progress <= 0 || progress >= 1) { glow.plan.passes.push(pass('dissolve_image', 'output')); return glow.plan }
   const image = glow.alloc(width, height), light = glow.alloc(width, height)
   glow.plan.passes.push(pass('dissolve_image', image), pass('dissolve_light', light))
   appendGlow(glow, glowParams, width, height, context, split, 'light', light, image)
@@ -88,6 +88,7 @@ fn dissolveNoise(q: vec2f) -> f32 {
 fn dissolveField(v: Vertex, c: vec4f) -> f32 {
  let q = (v.position.xy - u.layer.xy) / u.a.y;
  if (u.a.x < 0.5) { return dissolveNoise(q); }
+ if (u.a.x > 2.5) { return hash(vec2u(vec2i(floor(q)) + vec2i(32768)), u32(u.c.z)); }
  let d = length(fract(q) - 0.5) * 2.0 / sqrt(2.0);
  if (u.a.x < 1.5) { return 0.65 * hash(vec2u(vec2i(floor(q)) + vec2i(32768)), u32(u.c.z)) + 0.35 * d; }
  return 0.6 * d + 0.4 * (1.0 - dot(straight(c), LUMA));
@@ -102,11 +103,27 @@ fn dissolveMask(v: Vertex, c: vec4f) -> vec2f {
  if (w >= 0.0001) { e = (1.0 - m) * (1.0 - ramp(t + s, t + s + w, f)) * smoothstep(0.0, 0.05, w); }
  return vec2f(m, e);
 }
+// grid = (双输入过渡, 前段为空, 后段为空, 0)；gradeMask 绑定后一段，original 留给蓝噪声表。
+fn dissolveOutgoing(v: Vertex) -> vec4f { return select(tap(uvOf(v)), vec4f(0.0), u.grid.y > 0.5); }
+fn dissolveIncoming(v: Vertex) -> vec4f { return select(textureSampleLevel(gradeMask, s, uvOf(v), 0.0), vec4f(0.0), u.grid.z > 0.5); }
+fn dissolveTransitionReference(v: Vertex) -> vec4f { return select(dissolveIncoming(v), dissolveOutgoing(v), u.grid.z > 0.5); }
+@fragment fn dissolve_transition(v: Vertex) -> @location(0) vec4f {
+ let a = dissolveOutgoing(v); let b = dissolveIncoming(v);
+ if (u.a.z <= 0.0) { return a; }
+ if (u.a.z >= 1.0) { return b; }
+ let mask = dissolveMask(v, dissolveTransitionReference(v)); let base = mix(a, b, mask.x);
+ return vec4f(mix(base.rgb, u.b.rgb * base.a, mask.y), base.a);
+}
 @fragment fn dissolve_image(v: Vertex) -> @location(0) vec4f {
  let c = tap(uvOf(v)); let mask = dissolveMask(v, c);
  return vec4f(straight(c) * c.a * mask.x + u.b.rgb * c.a * mask.y, c.a * (mask.x + mask.y));
 }
 @fragment fn dissolve_light(v: Vertex) -> @location(0) vec4f {
+ if (u.grid.x > 0.5) {
+  let mask = dissolveMask(v, dissolveTransitionReference(v));
+  let alpha = mix(dissolveOutgoing(v).a, dissolveIncoming(v).a, mask.x);
+  return vec4f(u.b.rgb * alpha * mask.y, 1.0);
+ }
  let c = tap(uvOf(v)); let mask = dissolveMask(v, c);
  return vec4f(u.b.rgb * c.a * mask.y, 1.0);
 }

@@ -8,13 +8,13 @@ export interface VersionedPersistenceJson { version: number; minReaderVersion?: 
 /** 每个本机库只有一份当前内容：记住最近一次前向读取，保存时带回未知字段与原版本戳。 */
 const forwardReads = new Map<string, { version: number; minReaderVersion: number; fields: readonly ForwardField[] }>()
 export const LOCAL_LIBRARY_FORMATS: Readonly<Record<string, { id: string; name: string; version: number; minReaderVersion?: number }>> = {
-  'video-edit-effects-library': { id: 'video-effect-library', name: '本机风格件与效果收藏', version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, minReaderVersion: 4 },
+  'video-edit-effects-library': { id: 'video-effect-library', name: '本机风格件与效果收藏', version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, minReaderVersion: 5 },
   'video-edit-style-kits': { id: 'style-kits', name: '本机风格包', version: 4, minReaderVersion: 3 },
   'video-edit-title-templates': { id: 'title-templates', name: '本机标题模板', version: 9, minReaderVersion: 6 },
   'video-edit-text-presets': { id: 'text-presets', name: '本机文字和字幕预设', version: 1 },
   'video-edit-export-presets': { id: 'export-presets', name: '本机导出预设', version: 4, minReaderVersion: 1 },
   'video-edit-export-memory': { id: 'export-memory', name: '上次导出设置', version: 2, minReaderVersion: 1 },
-  'video-edit-preset-preferences': { id: 'preset-preferences', name: '预设评分与默认', version: 1 },
+  'video-edit-preset-preferences': { id: 'preset-preferences', name: '预设评分与默认', version: 2, minReaderVersion: 2 },
   'voice_library_records': { id: 'voice-library', name: '克隆音色库', version: 1 },
   'henji-canvas-node-parameter-defaults-v1': { id: 'node-defaults', name: '画布默认参数', version: 1 },
   'henji-recording-setup': { id: 'recording-setup', name: '录制设置', version: 5, minReaderVersion: 3 },

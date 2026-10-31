@@ -15,7 +15,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditShortcutOverridesSchema, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
 import { videoEditMonitorButtonLayoutsSchema } from '@/core/videoEdit/monitorButtons'
 import { videoEditTrackHeaderButtonLayoutsSchema } from '@/core/videoEdit/trackHeaderButtons'
-import { videoEditDefaultTransitionPreferencesSchema } from '@/core/videoEdit/transitions'
+import { VIDEO_EDIT_TRANSITION_PRESETS, videoEditDefaultTransitionPreferencesSchema } from '@/core/videoEdit/transitions'
 import { z } from 'zod'
 import { DEFAULT_RECORDING_SHORTCUTS, recordingShortcutsSchema } from '@/core/screenRecording/contracts'
 
@@ -97,7 +97,7 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
     store.setVideoEditTrackHeaderButtons('audio', layouts.audio ?? null)
   }),
   storeSetting({
-    id: 'video_edit.default_transitions', title: '剪辑默认过渡', description: '应用默认过渡（Ctrl+D 视频、Ctrl+Shift+D 音频、Shift+D 所选片段）时用的过渡种类：video 可选 cross_dissolve（交叉溶解）、dip_to_black（黑场过渡）、dip_to_white（白场过渡）、wipe（擦除）、push（推动）、slide（滑动）、cross_zoom（缩放过渡）、blur_dissolve（模糊过渡）、flash（闪光）、iris_round（圆形划像），audio 可选 constant_power（恒定功率）、constant_gain（恒定增益）、exponential_fade（指数淡化）；省略某一侧即恢复 PR 默认（交叉溶解、恒定功率）。',
+    id: 'video_edit.default_transitions', title: '剪辑默认过渡', description: `应用默认过渡（Ctrl+D 视频、Ctrl+Shift+D 音频、Shift+D 所选片段）时使用的目录条目：${(['video', 'audio'] as const).map(medium => `${medium} 可选 ${VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === medium).map(preset => `${preset.kind}（${preset.name}）`).join('、')}`).join('；')}；省略某一侧即恢复内置默认（交叉溶解、恒定功率）。`,
     aliases: ['默认过渡', '默认转场', '设为默认过渡', 'default transition'], schema: videoEditDefaultTransitionPreferencesSchema, defaultValue: {},
     target: settingsTarget('workspace-video-edit'), requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => videoEditDefaultTransitionPreferencesSchema.parse(useSettingsStore.getState().videoEditDefaultTransitions),

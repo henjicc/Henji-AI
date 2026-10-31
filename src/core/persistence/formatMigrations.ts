@@ -1,4 +1,5 @@
 import { migrateAudioMergedEffects, migrateAudioEffectLibraryV3, migrateAudioPresetPackageV11, migrateAudioEqualizerModes } from '../audio/effects/mergedEffectsMigration'
+import { migrateVideoEditLibraryCatalog, migrateVideoEditPresetCatalogPreferences } from '../videoEdit/libraryCatalogMigration'
 import { migrateVideoEditStylePiece } from '../videoEdit/effectPresets'
 import { migrateVideoEditCaptionCollection } from '../videoEdit/captionOwnershipMigration'
 import { migrateMcpConnectionStorageV1, migrateMcpConnectionIdentity } from './mcpConnectionSchema'
@@ -17,7 +18,10 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 2 → 3：新增可选 renderAtOutputResolution，历史预设缺省为开，最低可读版本保持 1。
   // 3 → 4：高级编码为可选字段，旧预设继续直接导出，最低可读版本保持 1。
   // 1 → 2：调色格式升级；2 → 3：旧预设补空的风格件字段，收藏与效果原样保留。
-  'video-effect-library': { 3: value => migrateAudioEqualizerModes(migrateAudioEffectLibraryV3(value)), 1: migrateEmbeddedVideoColorGradesV1, 2: value => { const library = structuredClone(value) as { presets: unknown[] }; return { ...library, presets: library.presets.map(migrateVideoEditStylePiece) } } },
+  // 4 → 5：收藏里的旧过渡、效果引用迁到条目 ID，合并后去重，最低可读版本提高到 5。
+  'video-effect-library': { 4: migrateVideoEditLibraryCatalog, 3: value => migrateAudioEqualizerModes(migrateAudioEffectLibraryV3(value)), 1: migrateEmbeddedVideoColorGradesV1, 2: value => { const library = structuredClone(value) as { presets: unknown[] }; return { ...library, presets: library.presets.map(migrateVideoEditStylePiece) } } },
+  // 1 → 2：评分引用使用合并后的目录 ID，重复项保留最高评分与默认标记，最低可读版本提高到 2。
+  'preset-preferences': { 1: migrateVideoEditPresetCatalogPreferences },
   'export-presets': { 1: value => structuredClone(value), 2: value => structuredClone(value), 3: value => structuredClone(value) },
   // 1 → 2：新增可选请求文件名与响度意图；兼容初版记忆中的重复目标码率，最低可读版本保持 1。
   'export-memory': { 1: migrateVideoEditExportEntries },

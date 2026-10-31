@@ -7,6 +7,8 @@ import { planRecordingZoom, type RecordingEffectsRenderInput } from './videoEdit
 import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
+import { DISSOLVE_REVEAL_EFFECT_DEFINITION } from '@/core/videoEdit/dissolveReveal'
+import { DISSOLVE_TRANSITION_PATTERNS, isDissolveTransitionSource } from '@/core/videoEdit/transitionSources'
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 import { planColorGrade, type AdjustmentLookup } from '@/core/imaging/adjustments/plan'
 import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
@@ -198,6 +200,10 @@ export function planVideoEditBuiltinTransition(input: VideoEditBuiltinTransition
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('过渡需要有效的画面尺寸。')
   if (!Number.isFinite(input.progress) || input.progress < 0 || input.progress > 1) throw new Error('过渡进度必须在 0 到 1 之间。')
+  if (isDissolveTransitionSource(input.kind)) {
+    const params = { ...Object.fromEntries(DISSOLVE_REVEAL_EFFECT_DEFINITION.params.map(param => [param.key, param.default])), ...input.params, mode: DISSOLVE_TRANSITION_PATTERNS[input.kind], progress: input.progress * 100 }
+    return planDissolveReveal(params, width, height, undefined, false, input)
+  }
   const plan = new Planner(width, height); const params = input.params; const H = height; const t = input.progress
   const empty = (mode = 0): Vec4 => [t, input.emptyOutgoing ? 1 : 0, input.emptyIncoming ? 1 : 0, mode]
   const direction = (): readonly [number, number] => DIRECTIONS[String(params.direction)] ?? DIRECTIONS.from_left

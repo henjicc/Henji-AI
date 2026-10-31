@@ -60,6 +60,22 @@ describe('设置的正式反射结果', () => {
       }],
     }, context(`settings-${id}`))
   }
+  it('默认过渡通过公共设置入口接受目录 ID，读回同一目录 ID，历史来源也规范化', async () => {
+    const before = useSettingsStore.getState().videoEditDefaultTransitions
+    try {
+      for (const video of ['radial_wipe', 'shape_wipe', 'rotate_zoom']) {
+        const result = await applicationReflectionHandlers.changeEntities({ summary: '设置默认过渡', changes: [{ kind: 'set_properties', target: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { 'video_edit.default_transitions': { video, audio: 'constant_gain' } } }] }, context(`transition-${video}`))
+        expect(result).toMatchObject({ status: 'completed' })
+        const setting = INTERFACE_APPLICATION_SETTING_DEFINITIONS.find(value => value.id === 'video_edit.default_transitions')!
+        expect(setting.read()).toEqual({ video, audio: 'constant_gain' })
+      }
+      useSettingsStore.getState().setVideoEditDefaultTransition('video', 'gl.WaterDrop')
+      expect(INTERFACE_APPLICATION_SETTING_DEFINITIONS.find(value => value.id === 'video_edit.default_transitions')!.read()).toEqual({ video: 'ripple', audio: 'constant_gain' })
+    } finally {
+      useSettingsStore.getState().setVideoEditDefaultTransition('video', before.video ?? null)
+      useSettingsStore.getState().setVideoEditDefaultTransition('audio', before.audio ?? null)
+    }
+  })
   it('同步保存抛错后恢复设置内存，持久值不变', async () => {
     useSettingsStore.getState().setThemeContrast(originalContrast)
     const stored = localStorage.getItem('settings-storage')

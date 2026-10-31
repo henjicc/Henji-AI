@@ -75,4 +75,4 @@ export default {
 
 ## 内置着色器组件
 
-效果面板里的 shaders 组件（纹理、模糊、扭曲、风格化、转场）是剪辑内置效果与转场，用 `video_edit.builtin_effect`（`effect:shaders.组件名` / `transition:shaders.组件名`）添加，作者代码不直接调用。需要同类但可定制的效果时，在 createWebGPU 里自写 WGSL。组件目录见 shader-components-* 参考。
+效果面板里的 shaders 组件（纹理、模糊、扭曲、风格化、转场）是剪辑内置效果与转场，用 `video_edit.builtin_effect`（`effect:shaders.组件名`；过渡先读取 `video_edit.builtin_effect` 的 `transition:<目录条目>` 与 `mode` 选项）添加，作者代码不直接调用。需要同类但可定制的效果时，在 createWebGPU 里自写 WGSL。组件目录见 shader-components-* 参考。

@@ -10,6 +10,12 @@ import { BLACK_HEX } from '@/core/theme/colorTokens'
 import { resolveVideoEditTransitionParams, VIDEO_EDIT_BUILTIN_TRANSITION_KINDS, type VideoEditBuiltinTransitionKind } from '@/core/videoEdit/transitionParams'
 import { videoEditTransitionRender, type VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import { VideoEditCodeGpu } from './videoEditCodeGpu'
+import { VideoEditGlTransitionsGpu } from './glTransitions/videoEditGlTransitionsGpu'
+import { VIDEO_EDIT_SOURCE_TRANSITION_KINDS, VIDEO_EDIT_SOURCE_TRANSITION_PARAMS } from '@/core/videoEdit/transitionSources'
+import { isRemovedVideoEditTransition, resolveVideoEditTransitionSource } from '@/core/videoEdit/transitionCatalog'
+import { migrateVideoEditTransitionCollection } from '@/core/videoEdit/transitionMigration'
+import { videoEditTransitionSchema } from '@/core/videoEdit/transitions'
 
 // 任务 4.7 视频过渡真实设备专项：过渡着色器在 Dawn 上编译，逐像素核对两端、中点与单侧过渡。npm run test:gpu 无条件执行。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -49,17 +55,93 @@ async function read(texture: GpuTexture): Promise<Uint8Array> {
   buffer.unmap(); buffer.destroy()
   return pixels
 }
-async function run(kind: VideoEditBuiltinTransitionKind, progress: number, params: Record<string, unknown> = {}, single?: 'in' | 'out'): Promise<Uint8Array> {
+async function run(kind: VideoEditBuiltinTransitionKind | 'dissolve', progress: number, params: Record<string, unknown> = {}, single?: 'in' | 'out'): Promise<Uint8Array> {
   const outgoing = solid(RED); const incoming = single ? outgoing : solid(BLUE)
   const output = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture
-  const input: VideoEditBuiltinTransitionInput = { kind, params: resolveVideoEditTransitionParams(kind, params), progress, ...(single === 'in' ? { emptyOutgoing: true } : single === 'out' ? { emptyIncoming: true } : {}) }
+  const source = resolveVideoEditTransitionSource(kind, resolveVideoEditTransitionParams(kind, params))!
+  const input: VideoEditBuiltinTransitionInput = { ...source, progress, ...(single === 'in' ? { emptyOutgoing: true } : single === 'out' ? { emptyIncoming: true } : {}) }
   await effects.renderTransition(input, outgoing, incoming, output, { width: W, height: H, format: 'rgba8unorm' })
-  return read(output)
+  try { return await read(output) } finally { outgoing.destroy(); if (incoming !== outgoing) incoming.destroy(); output.destroy() }
 }
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.subarray((y * W + x) * 4, (y * W + x) * 4 + 4)]
 const near = (actual: number[], expected: number[], tolerance = 3): void => { actual.forEach((value, index) => expect(Math.abs(value - expected[index]), `${actual} ≈ ${expected}`).toBeLessThanOrEqual(tolerance)) }
 
 describe('剪辑视频过渡（真实设备）', () => {
+  it('正式过渡宿主把显影中间帧升为浮点，两端回到输入精度', async () => {
+    const host = new VideoEditCodeGpu(device as unknown as GpuDevice)
+    device.pushErrorScope('validation')
+    try {
+      const outgoing = await host.target('outgoing', W, H), incoming = await host.target('incoming', W, H)
+      for (const [picture, color] of [[outgoing, RED], [incoming, BLUE]] as const) {
+        const data = new Uint8Array(W * H * 4)
+        for (let at = 0; at < data.length; at += 4) data.set(color, at)
+        device.queue.writeTexture({ texture: picture.texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
+      }
+      for (const mode of ['noise_reveal', 'blocks_reveal', 'dots', 'halftone']) for (const progress of [0, .5, 1]) {
+        const source = resolveVideoEditTransitionSource('dissolve', resolveVideoEditTransitionParams('dissolve', { mode, reveal_edge_width: 30, reveal_glow_strength: 60 }))!
+        const picture = await host.transition('dissolve', { ...source, progress }, outgoing, incoming)
+        expect(picture.textureFormat, `${mode} ${progress}`).toBe(progress === .5 ? 'rgba16float' : 'rgba8unorm')
+      }
+      expect(await device.popErrorScope()).toBeNull()
+    } finally { await host.dispose() }
+  })
+  it('显影四种新增方式双侧连续切换、单侧透明，统一亮边和光晕参与真实 GPU 合成', async () => {
+    const frames: Uint8Array[] = []
+    for (const mode of ['noise_reveal', 'blocks_reveal', 'dots', 'halftone']) {
+      const params = { mode, reveal_size: 90, reveal_softness: 0, reveal_seed: 12 }
+      near(pixel(await run('dissolve', 0, params), 32, 18), RED)
+      near(pixel(await run('dissolve', 1, params), 32, 18), BLUE)
+      const before = await run('dissolve', .25, params), middle = await run('dissolve', .5, params), after = await run('dissolve', .75, params)
+      const blue = (pixels: Uint8Array): number => pixels.reduce((sum, value, index) => sum + (index % 4 === 2 ? value : 0), 0)
+      expect(blue(after), mode).toBeGreaterThan(blue(before))
+      expect(middle.some((value, index) => index % 4 === 0 && value > 0), mode).toBe(true)
+      expect(blue(middle), mode).toBeGreaterThan(0)
+      const edgeParams = { ...params, reveal_edge_width: 60 }
+      const edge = await run('dissolve', .5, edgeParams)
+      expect(edge.some((value, index) => index % 4 === 1 && value > 0), `${mode} 亮边`).toBe(true)
+      const glow = await run('dissolve', .5, { ...edgeParams, reveal_glow_strength: 70, reveal_glow_radius: 40 })
+      expect(glow.some((value, index) => value > edge[index] + 3), `${mode} 光晕`).toBe(true)
+      for (const side of ['in', 'out'] as const) {
+        expect(pixel(await run('dissolve', side === 'in' ? 0 : 1, edgeParams, side), 32, 18)[3], `${mode} ${side} 空端`).toBe(0)
+        near(pixel(await run('dissolve', side === 'in' ? 1 : 0, edgeParams, side), 32, 18), RED)
+        const faded = await run('dissolve', .5, params, side)
+        const alpha = faded.filter((_, index) => index % 4 === 3)
+        expect(alpha.some(value => value > 0) && alpha.some(value => value < 255), `${mode} ${side} 中点`).toBe(true)
+      }
+      if (mode !== 'halftone') expect(await run('dissolve', .5, { ...params, reveal_seed: 13 }), `${mode} 种子`).not.toEqual(middle)
+      frames.push(middle)
+    }
+    for (let index = 0; index < frames.length; index++) for (let other = 0; other < index; other++) expect(frames[index]).not.toEqual(frames[other])
+  }, 60_000)
+  it('合并后的每种方式与迁移前来源在真实 GPU 上逐像素相同，包含双侧与单侧', async () => {
+    const outgoing = solid(RED); const incoming = solid(BLUE); const transparent = solid([0, 0, 0, 0])
+    const gl = new VideoEditGlTransitionsGpu(device as unknown as GpuDevice, device.createSampler({ magFilter: 'linear', minFilter: 'linear' }))
+    try {
+      for (const kind of VIDEO_EDIT_SOURCE_TRANSITION_KINDS) {
+        if (isRemovedVideoEditTransition(kind)) continue
+        const parameters = Object.fromEntries(VIDEO_EDIT_SOURCE_TRANSITION_PARAMS[kind].map(param => [param.key, param.default]))
+        const old = { id: kind, kind, durationFrames: 100, parameters }
+        const migrated = migrateVideoEditTransitionCollection({ transitions: [old] }) as { transitions: unknown[] }
+        const transition = videoEditTransitionSchema.parse(migrated.transitions[0])
+        const shader = isShaderGraphTransition(kind) ? await ShaderGraphSession.create(device as unknown as GpuDevice, shaderGraphTransitionSpec(kind)) : undefined
+        const output = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture
+        const draw = async (input: VideoEditBuiltinTransitionInput): Promise<Uint8Array> => {
+          if (shader && isShaderGraphTransition(input.kind)) await shader.render({ timeSeconds: .5, width: W, height: H, input: input.emptyOutgoing ? transparent : outgoing, second: input.emptyIncoming ? transparent : incoming, output, outputFormat: 'rgba8unorm', props: new Map([['fx', shaderGraphTransitionProps(input.kind, input.params, input.progress)]]) })
+          else if (isGlTransition(input.kind)) await gl.render({ ...input, kind: input.kind }, outgoing, incoming, output, { width: W, height: H, format: 'rgba8unorm' }, () => transparent)
+          else await effects.renderTransition(input, outgoing, incoming, output, { width: W, height: H, format: 'rgba8unorm' })
+          return read(output)
+        }
+        try {
+          for (const side of [undefined, 'in', 'out'] as const) for (const frame of [0, 25, 50, 75, 99]) {
+            const rendered = videoEditTransitionRender({ transition, start: 0, end: 100, side }, frame)
+            if (rendered.kind !== 'builtin') throw new Error(kind)
+            const expected = await draw({ kind, params: parameters, progress: frame / 100, ...(side === 'in' ? { emptyOutgoing: true } : side === 'out' ? { emptyIncoming: true } : {}) })
+            expect(await draw(rendered.input), `${kind} ${side ?? '双侧'} ${frame}`).toEqual(expected)
+          }
+        } finally { output.destroy(); shader?.dispose() }
+      }
+    } finally { gl.dispose(); outgoing.destroy(); incoming.destroy(); transparent.destroy() }
+  }, 240_000)
   it('转场内部帧贝塞尔参数进入真实 GPU；同进度不同参数产生不同画面（内置与 shaders）', async () => {
     const outgoing = solid(RED); const incoming = solid(BLUE)
     for (const kind of ['flash', 'shaders.LinearWipe'] as const) {
