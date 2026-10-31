@@ -1,7 +1,7 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 import path from 'node:path'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from '@/core/videoEdit/shaderGraph/effects'
-import { SHADER_GRAPH_TRANSITION_PRESETS } from '@/core/videoEdit/shaderGraph/transitions'
+import { CURATED_TRANSITIONS } from '@/core/videoEdit/transitionCatalog'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
@@ -114,9 +114,9 @@ it('shaders 组件效果与转场通过正式通用实体可读；助手创建�
       const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:${definition.id}` }, ['video_edit.builtin_effect.name', 'video_edit.builtin_effect.params'])
       expect(catalog.properties).toMatchObject({ 'video_edit.builtin_effect.name': definition.name, 'video_edit.builtin_effect.params': expect.any(Array) })
     }
-    for (const definition of SHADER_GRAPH_TRANSITION_PRESETS) {
-      const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:transition:${definition.kind}` }, ['video_edit.builtin_effect.name'])
-      expect(catalog.properties).toMatchObject({ 'video_edit.builtin_effect.name': definition.name })
+    for (const entry of CURATED_TRANSITIONS) {
+      const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:transition:${entry.kind}` }, ['video_edit.builtin_effect.name'])
+      expect(catalog.properties).toMatchObject({ 'video_edit.builtin_effect.name': entry.name })
     }
     const clipRef = { kind: 'video_edit.clip', id: `${id}:${clipIds[0]}` }
     const baseline = await app.read(clipRef)
