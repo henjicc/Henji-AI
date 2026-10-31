@@ -53,15 +53,15 @@ function input(): GpuTexture {
   return texture as unknown as GpuTexture
 }
 function output(): GpuTexture { return device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture }
-async function read(texture: GpuTexture): Promise<Uint8Array> {
-  const bytesPerRow = Math.ceil(W * 4 / 256) * 256
-  const buffer = device.createBuffer({ size: bytesPerRow * H, usage: BUFFER_MAP_READ | BUFFER_COPY_DST })
+async function read(texture: GpuTexture, width = W, height = H): Promise<Uint8Array> {
+  const bytesPerRow = Math.ceil(width * 4 / 256) * 256
+  const buffer = device.createBuffer({ size: bytesPerRow * height, usage: BUFFER_MAP_READ | BUFFER_COPY_DST })
   const encoder = device.createCommandEncoder()
-  encoder.copyTextureToBuffer({ texture: texture as never }, { buffer, bytesPerRow }, { width: W, height: H, depthOrArrayLayers: 1 })
+  encoder.copyTextureToBuffer({ texture: texture as never }, { buffer, bytesPerRow }, { width, height, depthOrArrayLayers: 1 })
   device.queue.submit([encoder.finish()])
   await buffer.mapAsync(BUFFER_MAP_READ)
-  const mapped = new Uint8Array(buffer.getMappedRange()); const pixels = new Uint8Array(W * H * 4)
-  for (let y = 0; y < H; y++) pixels.set(mapped.subarray(y * bytesPerRow, y * bytesPerRow + W * 4), y * W * 4)
+  const mapped = new Uint8Array(buffer.getMappedRange()); const pixels = new Uint8Array(width * height * 4)
+  for (let y = 0; y < height; y++) pixels.set(mapped.subarray(y * bytesPerRow, y * bytesPerRow + width * 4), y * width * 4)
   buffer.unmap(); buffer.destroy()
   return pixels
 }
@@ -71,6 +71,110 @@ async function run(id: string, params: Record<string, unknown> = {}, frame = 0):
   return read(target)
 }
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.subarray((y * W + x) * 4, (y * W + x) * 4 + 4)]
+
+it.each([false, true])('30px 镜头散焦细线无横纹（前置效果：%s）', async precedingEffects => {
+  const width = 228, height = 248, d = device as unknown as GpuDevice
+  const host = new VideoEditCodeGpu(d), author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, host.effectAllocator)
+  const source = host.effectAllocator.allocate(width, height, 'rgba8unorm', 1 + Math.floor(Math.log2(Math.max(width, height))))
+  const target = host.effectAllocator.allocate(1280, 720, 'rgba8unorm')
+  const bytesPerRow = Math.ceil(width * 4 / 256) * 256
+  const buffer = device.createBuffer({ size: bytesPerRow * height + 256 * 62, usage: BUFFER_MAP_READ | BUFFER_COPY_DST })
+  const data = new Uint8Array(width * height * 4)
+  for (const [y0, thickness, color] of [[64, 5, [255, 255, 255]], [88, 3, [255, 48, 64]], [112, 3, [48, 64, 255]]] as const) {
+    for (let y = y0; y < y0 + thickness; y++) for (let x = 64; x < 154; x++) data.set([...color, 255], (y * width + x) * 4)
+  }
+  device.queue.writeTexture({ texture: source as never }, data, { bytesPerRow: width * 4 }, [width, height])
+  try {
+    await author.begin(target); chain.begin(author.commandEncoder())
+    device.pushErrorScope('validation')
+    author.mipmaps(source, width, height)
+    const result = await chain.encode('lines', source, width, height,
+      resolveAuthorEffects(precedingEffects ? [{ id: 'color_grade' }] : []),
+      { referenceSize: { width: 1280, height: 720 }, contentBounds: { x: 0, y: 0, width: 100, height: 120 }, rasterScale: 1, rasterOrigin: [64, 64], quality: 'final' },
+      {}, undefined, { radius: 30, lens: true }, texture => author.mipmaps(texture, width, height))
+    author.finish(); chain.commit()
+    const encoder = device.createCommandEncoder()
+    encoder.copyTextureToBuffer({ texture: result.picture as never }, { buffer, bytesPerRow }, [width, height, 1])
+    encoder.copyTextureToBuffer({ texture: source as never, mipLevel: 2 }, { buffer, offset: bytesPerRow * height, bytesPerRow: 256 }, [57, 62, 1])
+    device.queue.submit([encoder.finish()]); await buffer.mapAsync(BUFFER_MAP_READ)
+    const pixels = new Uint8Array(buffer.getMappedRange())
+    const rows = Array.from({ length: height }, (_, y) => {
+      let sum = 0
+      for (let x = 100; x < 118; x++) {
+        const at = y * bytesPerRow + x * 4
+        sum += .2126 * pixels[at] + .7152 * pixels[at + 1] + .0722 * pixels[at + 2]
+      }
+      return sum / 18
+    })
+    let highFrequency = 0
+    for (let y = 35; y < 145; y++) highFrequency += (rows[y - 1] - 2 * rows[y] + rows[y + 1]) ** 2
+    highFrequency = Math.sqrt(highFrequency / 110)
+    let luminance = 0, energy = 0, alpha = 0
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const at = y * bytesPerRow + x * 4
+      luminance += .2126 * pixels[at] + .7152 * pixels[at + 1] + .0722 * pixels[at + 2]
+      energy += pixels[at] + pixels[at + 1] + pixels[at + 2]; alpha += pixels[at + 3]
+    }
+    if (process.env.HENJI_TEST_DIAGNOSTICS === '1') process.stdout.write(`lens 前置效果=${precedingEffects} ${JSON.stringify({ highFrequency, meanLuminance: luminance / (width * height), energy, alpha })}\n`)
+    const mipOffset = bytesPerRow * height
+    const mipSamples = [16, 17, 22, 28].map(y => pixels[mipOffset + y * 256 + 27 * 4])
+    buffer.unmap()
+    expect(await device.popErrorScope()).toBeNull()
+    // 同批生成的第二层须含预期细线覆盖率，避免把未生成的黑色 mip 误判成平滑结果。
+    expect(mipSamples).toEqual([255, 64, 191, 36])
+    expect(Math.max(...rows)).toBeGreaterThan(10)
+    expect(highFrequency).toBeLessThan(1.5)
+    // 固定圆盘在此夹具的 GPU 基线；约束亮度和预乘 RGB/透明度总能量，不能用减弱散焦消除横纹。
+    expect(Math.abs(luminance / (width * height) / 4.009582374787763 - 1)).toBeLessThan(.03)
+    expect(Math.abs(energy / 753335 - 1)).toBeLessThan(.03)
+    expect(Math.abs(alpha / 334385 - 1)).toBeLessThan(.03)
+  } finally { buffer.destroy(); chain.dispose(); await author.dispose(); host.effectAllocator.release(source); host.effectAllocator.release(target); await host.dispose() }
+})
+
+it('镜头散焦保留高光光斑的亮度、能量和大小，逐帧重编码稳定且与内置 lens 工序一致', async () => {
+  const width = 192, height = 192, radius = 30, d = device as unknown as GpuDevice
+  const host = new VideoEditCodeGpu(d), author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, host.effectAllocator)
+  const source = host.effectAllocator.allocate(width, height, 'rgba8unorm', 1 + Math.floor(Math.log2(width)))
+  const target = host.effectAllocator.allocate(width, height, 'rgba8unorm')
+  const direct = new VideoEditBuiltinEffectsGpu(d, device.createSampler({ minFilter: 'linear', magFilter: 'linear', mipmapFilter: 'linear' }), host.effectAllocator)
+  const data = new Uint8Array(width * height * 4)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const dx = x + .5 - width / 2, dy = y + .5 - height / 2
+    if (dx * dx + dy * dy <= 36) data.set([255, 240, 192, 255], (y * width + x) * 4)
+  }
+  device.queue.writeTexture({ texture: source as never }, data, { bytesPerRow: width * 4 }, [width, height])
+  try {
+    let first: Uint8Array | undefined
+    for (const frame of [0, 1, 47]) {
+      await author.begin(target); chain.begin(author.commandEncoder())
+      author.mipmaps(source, width, height)
+      // 不提供内容键，确保每帧都执行着色器，不能靠复用缓存通过稳定性断言。
+      const result = await chain.encode('spot', source, width, height, [],
+        { referenceSize: { width, height }, contentBounds: { x: 0, y: 0, width, height }, rasterScale: 1, rasterOrigin: [0, 0], quality: 'final' },
+        {}, undefined, { radius, lens: true }, texture => author.mipmaps(texture, width, height))
+      author.finish(); chain.commit()
+      const pixels = await read(result.picture, width, height)
+      if (first) expect(pixels).toEqual(first)
+      else first = pixels
+      await direct.render({ id: 'lens_blur', params: { radius_fraction_height: radius / height } }, { texture: source, width, height, format: 'rgba8unorm' }, target, frame)
+      expect(await read(target, width, height)).toEqual(first)
+    }
+    let luminance = 0, energy = 0, alpha = 0, moment = 0
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const at = (y * width + x) * 4, pixels = first!
+      const light = .2126 * pixels[at] + .7152 * pixels[at + 1] + .0722 * pixels[at + 2]
+      luminance += light; energy += pixels[at] + pixels[at + 1] + pixels[at + 2]; alpha += pixels[at + 3]
+      moment += light * ((x + .5 - width / 2) ** 2 + (y + .5 - height / 2) ** 2)
+    }
+    const rmsRadius = Math.sqrt(moment / luminance)
+    if (process.env.HENJI_TEST_DIAGNOSTICS === '1') process.stdout.write(`lens 高光 ${JSON.stringify({ meanLuminance: luminance / (width * height), energy, alpha, rmsRadius })}\n`)
+    // 同参数固定圆盘的 GPU 基线；二阶矩同时约束光斑大小，防止缩小半径换取平滑。
+    expect(Math.abs(luminance / (width * height) / 1.1957859809027416 - 1)).toBeLessThan(.03)
+    expect(Math.abs(energy / 126327 - 1)).toBeLessThan(.03)
+    expect(Math.abs(alpha / 46925 - 1)).toBeLessThan(.03)
+    expect(Math.abs(rmsRadius / 21.624576292927294 - 1)).toBeLessThan(.03)
+  } finally { direct.dispose(); chain.dispose(); await author.dispose(); host.effectAllocator.release(source); host.effectAllocator.release(target); await host.dispose() }
+})
 
 function budgetAllocator(host: VideoEditCodeGpu): VideoEditBuiltinScratchAllocator & { peak: number; peakPrecise: number; peakEight: number; allocations: number } {
   const live = new Map<GpuTexture, { bytes: number; precise: boolean }>()

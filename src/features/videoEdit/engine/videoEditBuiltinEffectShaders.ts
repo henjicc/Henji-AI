@@ -27,9 +27,11 @@ ${GAUSSIAN_WGSL}
 @fragment fn effect_mix(v: Vertex) -> @location(0) vec4f { return mix(tapOriginal(uvOf(v)), tap(uvOf(v)), u.a.x); }
 @fragment fn lens(v: Vertex) -> @location(0) vec4f {
  let spacing=u.a.x*sqrt(3.14159265/96.0); let lod=max(0.0,log2(spacing*.7));
+ // Jimenez 交错梯度噪声按像素旋转圆盘，打散相邻像素的取样条纹；不含帧种子以保持时间稳定。
+ let rotation=6.28318531*fract(52.9829189*fract(dot(floor(v.position.xy),vec2f(.06711056,.00583715))));
  var sum=vec4f(0); var total=0.0;
  for(var i=0u;i<96u;i++) {
-  let k=(f32(i)+.5)/96.0; let r=sqrt(k)*u.a.x; let a=f32(i)*2.39996323;
+  let k=(f32(i)+.5)/96.0; let r=sqrt(k)*u.a.x; let a=f32(i)*2.39996323+rotation;
   let c=textureSampleLevel(source,s,(v.position.xy+r*vec2f(cos(a),sin(a)))/u.size.xy,lod);
   let w=1.0+2.0*pow(max(max(c.r,c.g),c.b),4.0); sum+=c*w; total+=w;
  }

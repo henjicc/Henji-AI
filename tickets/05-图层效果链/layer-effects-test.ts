@@ -16,7 +16,7 @@ export default {
   ],
   layers(params, width, height) {
     const background = ["transparent", "black", "#242424", "#bcbcbc", "#245d85"][params.background]
-    const label = layoutText("光晕 LIGHT", { fontSize: 70, fontWeight: 700, fill: { color: "white" } }, { anchor: { x: width / 2, y: height * .28, horizontal: .5, vertical: .5 } })
+    const label = layoutText("光晕 LIGHT", { fontSize: 70, fontWeight: 700, fill: { color: "#FFFFFF" } }, { anchor: { x: width / 2, y: height * .28, horizontal: .5, vertical: .5 } })
     const shape = (ctx: OffscreenCanvasRenderingContext2D, x: number, y: number) => {
       ctx.fillStyle = "white"; ctx.fillRect(x, y, 90, 5)
       ctx.fillStyle = "#ff3040"; ctx.fillRect(x, y + 24, 90, 3)
