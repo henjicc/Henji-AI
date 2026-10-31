@@ -6,7 +6,16 @@ import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, type AuthorElementOverrides } fr
 import { AuthorCanvasAsset, AuthorCanvasUnrecordable, recordAuthorCanvas } from './videoEditAuthorCanvasRecorder'
 import type { AuthorAssets, AuthorFrameInfo, AuthorLayer, AuthorModule, AuthorParameters } from './videoEditAuthorModule'
 
-export interface AuthorFingerprintInput { width: number; height: number; identity: string }
+export interface AuthorFingerprintInput { width: number; height: number; identity: string; dimensionsKnown?: boolean }
+
+function fingerprintAsset(key: string, input: AuthorFingerprintInput): AuthorCanvasAsset {
+  const asset = new AuthorCanvasAsset(key, input.width, input.height)
+  // 解码尺寸只能由实际画面提供；代理、旋转及缩小解码的尺寸不能从素材登记值推断。
+  if (input.dimensionsKnown === false) for (const property of ['width', 'height']) Object.defineProperty(asset, property, {
+    get: () => { throw new AuthorCanvasUnrecordable('decoded-asset-size-required') },
+  })
+  return asset
+}
 
 /** 使用版本的完整原始文件表，不能用打包结果：打包结果已把片子数据内联进了绘制代码。 */
 export function authorFrameCodeIdentity(files: CodeMaterialFiles, effect: AuthorModule, pinned: string): string {
@@ -52,7 +61,7 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
     let recording = false
     const used = new Set<string>(), assets: Record<string, CanvasImageSource> = {}
     for (const [key, input] of Object.entries(inputs)) {
-      const asset = new AuthorCanvasAsset(key, input.width, input.height)
+      const asset = fingerprintAsset(key, input)
       Object.defineProperty(assets, key, { enumerable: true, get: () => {
         // layers/pose 拿到真实位图时可以读像素或按对象类型分支，不能用替身证明相同。
         if (!recording) throw new AuthorCanvasUnrecordable('asset-outside-recording')
@@ -101,8 +110,24 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
 
 function fingerprintLayerEffects(effect: AuthorModule, size: { width: number; height: number }, params: AuthorParameters, info: AuthorFrameInfo,
   inputs: Readonly<Record<string, AuthorFingerprintInput>>, environment: AuthorEffectEnvironment, overrides: AuthorElementOverrides | undefined, motionBlur: boolean): unknown[] {
-  const assets: AuthorAssets = {}
-  for (const key of Object.keys(inputs)) Object.defineProperty(assets, key, { get: () => { throw new Error('asset-outside-recording') } })
+  const assets: Record<string, CanvasImageSource> = {}
+  const unavailable = (): never => { throw new AuthorCanvasUnrecordable('asset-outside-recording') }
+  // 声明键已承担绘制内容的身份；效果与位姿仍须求值，可读取确定的素材尺寸，但不能把元数据当作像素。
+  for (const [key, input] of Object.entries(inputs)) {
+    const asset = new Proxy(fingerprintAsset(key, input), {
+      get: (_target, property) => {
+        if (property === 'width' || property === 'height') {
+          if (input.dimensionsKnown === false) throw new AuthorCanvasUnrecordable('decoded-asset-size-required')
+          return input[property]
+        }
+        return unavailable()
+      },
+      getPrototypeOf: unavailable, setPrototypeOf: unavailable, set: unavailable,
+      has: unavailable, ownKeys: unavailable, getOwnPropertyDescriptor: unavailable,
+      defineProperty: unavailable, deleteProperty: unavailable, isExtensible: unavailable, preventExtensions: unavailable,
+    })
+    Object.defineProperty(assets, key, { enumerable: true, get: () => asset })
+  }
   const layers = effect.layers!(params, size.width, size.height, assets, info)
   if (!Array.isArray(layers)) throw new Error('layers() 必须返回图层数组')
   return layers.map((layer, index) => {

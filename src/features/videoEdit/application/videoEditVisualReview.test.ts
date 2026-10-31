@@ -205,10 +205,10 @@ it('共用基线在各自关闭效果后重复开启，不稳定时整组不能�
   expect(result.records.some(record => record.kind === 'effect_visible')).toBe(false)
 })
 
-it('效果计算超过预算时在第一次取帧前拒绝，并给出可缩小的参数', async () => {
+it.each([60, 780])('范围 %s 的效果计算超过预算时，在首次响应前拒绝并给出可缩小的参数', async to => {
   const { owner, input, render } = await fixture(), app = createApplicationHarness()
-  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, effects: Array.from({ length: 40 }, () => makeVideoEditBuiltinEffect('color_grade', { exposure: .2 })) })) })) }))
-  const result = await app.call('query_video_edit_review', input)
+  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, duration: to, effects: Array.from({ length: 40 }, () => makeVideoEditBuiltinEffect('color_grade', { exposure: .2 })) })) })) }))
+  const result = await app.call('query_video_edit_review', { ...input, to })
   expect(result.ok).toBe(false)
   expect(JSON.stringify(result)).toContain('缩小 from/to')
   expect(render).not.toHaveBeenCalled(); expect(PixelWorker.instances).toHaveLength(0)
@@ -256,4 +256,26 @@ it('显式色带无候选时说明如何指定', async () => {
   expect(warnings.join()).toContain('没有可检查的候选帧')
   expect(warnings.join()).toContain('visual.probes')
   expect(render).not.toHaveBeenCalled()
+  expect(PixelWorker.instances).toHaveLength(0)
+})
+
+it('长范围像素预算预检在后台提交前失败，不创建渲染或来源查询', async () => {
+  const { owner, input, render } = await fixture(), app = createApplicationHarness()
+  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, width: 7680, height: 4320, clips: sequence.clips.map(clip => ({ ...clip, duration: 780 })) })) }))
+  const result = await app.call('query_video_edit_review', { ...input, to: 780 })
+  expect(result.ok).toBe(false)
+  expect(JSON.stringify(result)).toContain('百万像素')
+  expect(render).not.toHaveBeenCalled()
+  expect(pixelMotion.pinVideoEditMotionSources).not.toHaveBeenCalled()
+  expect(PixelWorker.instances).toHaveLength(0)
+})
+
+it('色带预检为运动与跟踪后续候选预留 maxFrames，不只计算当前的结构边界', async () => {
+  const { owner, input, render } = await fixture(), app = createApplicationHarness()
+  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, width: 7680, height: 4320, captions: [], clips: sequence.clips.map(clip => ({ ...clip, duration: 780, effects: [] })) })) }))
+  const result = await app.call('query_video_edit_review', { ...input, to: 780, maxFrames: 8, motion: {}, visual: { narration: false, effects: false, banding: true } })
+  expect(result.ok).toBe(false)
+  expect(JSON.stringify(result)).toContain('maxFrames')
+  expect(render).not.toHaveBeenCalled()
+  expect(PixelWorker.instances).toHaveLength(0)
 })

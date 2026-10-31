@@ -30,8 +30,9 @@ function altered(composition: VideoEditComposition, clipId: string, change: (cli
   return { ...composition, clips: replace(composition.clips), sequences: composition.sequences?.map(sequence => ({ ...sequence, clips: replace(sequence.clips) })) }
 }
 
-export async function collectVideoEditVisualReview(owner: VideoEditInstance, composition: VideoEditComposition, range: VideoEditSourceMapRange, options: Options, signal: AbortSignal, assertCurrent: () => void, existingCount: number, warnings: string[], reviewFrames: readonly number[] = []): Promise<{ records: VideoEditReviewRecord[]; sources: VideoEditMedia[] }> {
-  const records: VideoEditReviewRecord[] = [], placements: Placement[] = [], skippedProbes: string[] = []
+/** 只规划与检查预算，不取素材、不创建渲染会话；前台预检和实际执行共用。 */
+export async function planVideoEditVisualReview(owner: VideoEditInstance, composition: VideoEditComposition, range: VideoEditSourceMapRange, options: Options, existingCount: number, warnings: string[], reviewFrames: readonly number[] = [], reservedBandingFrames = 0) {
+  const placements: Placement[] = [], skippedProbes: string[] = []
   const captions: Array<{ text: string; record: VideoEditReviewRecord }> = []
   visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(local, entry) { placements.push({ local, entry }) } })
   if (options.narration) visitVideoEditPictureInstances(composition, { from: 0, to: range.to }, {
@@ -79,7 +80,8 @@ export async function collectVideoEditVisualReview(owner: VideoEditInstance, com
   const comparisonFrames = new Set(comparisons.map(value => value.frame))
   const pixelFrames = new Set([...comparisonFrames, ...(options.banding ? reviewFrames : [])])
   if (options.banding && !pixelFrames.size) warnings.push('色带检查没有可检查的候选帧；请将 from/to 指向含画面片段的区间，或用 visual.probes 指定已放置代码片段的 frame 和参数后重查。')
-  const additionalBandingFrames = pixelFrames.size - comparisonFrames.size
+  // 运动与跟踪分析会增加候选；提交前按 maxFrames 预留，不能只预算当前已知的结构边界。
+  const additionalBandingFrames = Math.max(pixelFrames.size - comparisonFrames.size, options.banding ? reservedBandingFrames : 0)
   // 字幕仅需有代码放置的局部观察；按序列和帧去重，再按文档批量取，避免反复切换根/子序列。
   const observations = new Map<VideoEditComposition, { local: VideoEditComposition; frames: Set<number>; values: Map<number, CodeAuthorFrameObservation> }>()
   for (const { record } of captions) for (const { local, entry } of placements) {
@@ -90,9 +92,16 @@ export async function collectVideoEditVisualReview(owner: VideoEditInstance, com
   }
   const plannedFrames = comparisons.length + comparisonFrames.size * 2 + additionalBandingFrames + [...observations.values()].reduce((sum, job) => sum + job.frames.size, 0)
   const plannedPixels = (comparisons.length + comparisonFrames.size * 2 + additionalBandingFrames) * composition.width * composition.height + [...observations.values()].reduce((sum, job) => sum + job.frames.size * job.local.width * job.local.height, 0)
-  if (plannedFrames > 120 || plannedPixels > 250_000_000) throw new Error(`画面复核预计需渲染 ${plannedFrames} 帧（${Math.ceil(plannedPixels / 1e6)} 百万像素），超过单次计算预算；请缩小 from/to，或分别启用 visual.narration / effects / banding。尚未开始渲染，未截断证据。`)
+  if (plannedFrames > 120 || plannedPixels > 250_000_000) throw new Error(`画面复核预计需渲染 ${plannedFrames} 帧（${Math.ceil(plannedPixels / 1e6)} 百万像素），超过单次计算预算；请缩小 from/to 或 maxFrames，或分别启用 visual.narration / effects / banding。尚未开始渲染，未截断证据。`)
   // 色带记录数要扫完才知道，由 append 逐条按实际数量计入预算；按理论上界预检会让多帧检查误报超预算。
   assertVideoEditReviewBudget(existingCount + captions.length + comparisons.length)
+  return { placements, skippedProbes, captions, comparisons, comparisonFrames, pixelFrames, observations }
+}
+
+export async function collectVideoEditVisualReview(owner: VideoEditInstance, composition: VideoEditComposition, range: VideoEditSourceMapRange, options: Options, signal: AbortSignal, assertCurrent: () => void, existingCount: number, warnings: string[], reviewFrames: readonly number[] = []): Promise<{ records: VideoEditReviewRecord[]; sources: VideoEditMedia[] }> {
+  const records: VideoEditReviewRecord[] = []
+  const { placements, skippedProbes, captions, comparisons, comparisonFrames, pixelFrames, observations } = await planVideoEditVisualReview(owner, composition, range, options, existingCount, warnings, reviewFrames)
+  assertCurrent()
   const dependencies = await withVideoEditCodeMetadata(() => {
     const media = new Map<string, VideoEditMedia>()
     for (const { local, entry } of placements) {

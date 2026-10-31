@@ -165,3 +165,51 @@ it.each([4, 5, 6])('API %s 的 recording 忽略 effects，指纹与没有该属�
   expect(fingerprint(123)).toEqual(plain)
   expect(calls).not.toHaveBeenCalled()
 })
+
+it('声明键的图层可以捕获素材和读取尺寸，效果变化仍失效，不支持的素材读取保守回退', () => {
+  const effect: AuthorModule = { name: '素材图层', frameKey: () => 'same', layers: (_p, _w, _h, assets) => {
+    const image = assets.screen as ImageBitmap
+    return [{ bounds: [0, 0, image.width, image.height], pose: () => ({ scale: image.width / 1920 }),
+      effects: () => [{ id: 'glow', params: { strength: image.height / 100 } }], draw(ctx) { ctx.drawImage(image, 0, 0) } }]
+  } }
+  const key = (width = 1920, identity = 'media:1') => fingerprintAuthorFrameKey(effect, size, {}, info,
+    { screen: { width, height: 1080, identity } }, 'code', {}, undefined, false, {}, 7)
+  const base = key()
+  expect(base.method).toBe('frameKey'); expect(base.digest).toBeTruthy()
+  expect(key()).toEqual(base)
+  expect(key(960)).not.toEqual(base)
+  expect(key(1920, 'media:2')).not.toEqual(base)
+  for (const read of [(image: CanvasImageSource) => Reflect.get(image, 'getContext'), (image: CanvasImageSource) => 'close' in image,
+    (image: CanvasImageSource) => Object.keys(image), (image: CanvasImageSource) => Object.getOwnPropertyDescriptor(image, 'width')]) {
+    effect.layers = (_p, _w, _h, assets) => { read(assets.screen); return [] }
+    expect(key().fallback).toContain('asset-outside-recording')
+  }
+})
+
+it('同 frameKey 和素材身份下，随时间变化的图层效果使指纹失效', () => {
+  const effect: AuthorModule = { name: '动态效果', frameKey: () => 'same', layers: (_p, _w, _h, assets) => {
+    const image = assets.screen
+    return [{ effects: time => [{ id: 'glow', params: { strength: time * 10 } }], draw(ctx) { ctx.drawImage(image, 0, 0) } }]
+  } }
+  const fingerprint = (time: number) => fingerprintAuthorFrameKey(effect, size, {}, { ...info, time },
+    { screen: { width: 1920, height: 1080, identity: 'same-media' } }, 'same-code', {}, undefined, false, {}, 7)
+  const first = fingerprint(0)
+  expect(first.digest).toBeTruthy()
+  expect(fingerprint(0)).toEqual(first)
+  expect(fingerprint(1).digest).toBeTruthy()
+  expect(fingerprint(1).digest).not.toBe(first.digest)
+})
+
+it('未知解码尺寸不能用登记宽高求效果，单纯捕获素材仍可使用声明键', () => {
+  const input = { width: 1920, height: 1080, identity: 'same-media', dimensionsKnown: false }
+  const effect: AuthorModule = { name: '代理尺寸', frameKey: () => 'same', layers: (_p, _w, _h, assets) => {
+    const image = assets.screen
+    return [{ draw(ctx) { ctx.drawImage(image, 0, 0) } }]
+  } }
+  const fingerprint = () => fingerprintAuthorFrameKey(effect, size, {}, info, { screen: input }, 'code', {}, undefined, false, {}, 7)
+  expect(fingerprint().digest).toBeTruthy()
+  effect.layers = (_p, _w, _h, assets) => [{ effects: () => [{ id: 'glow', params: { strength: (assets.screen as ImageBitmap).width / 100 } }], draw() {} }]
+  expect(fingerprint().fallback).toContain('decoded-asset-size-required')
+  effect.layers = (_p, _w, _h, assets) => [{ draw(ctx) { ctx.drawImage(assets.screen, 0, 0) } }]
+  expect(fingerprintAuthorFrame(effect, size, {}, info, { screen: input }, measure, undefined, false, {}, 7).fallback).toContain('decoded-asset-size-required')
+})

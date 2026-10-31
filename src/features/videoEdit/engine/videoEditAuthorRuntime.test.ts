@@ -17,13 +17,13 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import { drawText, layoutText } from '../authorLibraries/text'
 import { layoutBoxes, ready as flexReady } from '../authorLibraries/flex'
-const { layerDraw, layerCopy, layerClear, effectEncode } = vi.hoisted(() => ({ layerDraw: vi.fn(), layerCopy: vi.fn(), layerClear: vi.fn(), effectEncode: vi.fn(async (...args: unknown[]) => ({ picture: args[1], carriesLight: false })) }))
+const { layerDraw, layerCopy, layerClear, layerMips, layerAbandon, effectEncode } = vi.hoisted(() => ({ layerDraw: vi.fn(), layerCopy: vi.fn(), layerClear: vi.fn(), layerMips: vi.fn(), layerAbandon: vi.fn(), effectEncode: vi.fn(async (...args: unknown[]) => ({ picture: args[1], carriesLight: false })) }))
 
 vi.mock('./videoEditAuthorEffects', () => ({ VideoEditAuthorEffects: class { begin = vi.fn(); encode = effectEncode; commit = vi.fn(); abandon = vi.fn(); dispose = vi.fn() } }))
 
 vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
   prepareFormat = vi.fn(); copy = layerCopy; clear = layerClear;
-  commandEncoder = vi.fn(() => ({})); begin = vi.fn(); draw = (...args: unknown[]) => { if (typeof args[0] === 'function') args[0] = args[0](); layerDraw(...args); return true }; mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); abandon = vi.fn(); dispose = vi.fn()
+  commandEncoder = vi.fn(() => ({})); begin = vi.fn(); draw = (...args: unknown[]) => { if (typeof args[0] === 'function') args[0] = args[0](); layerDraw(...args); return true }; mipmaps = layerMips; lens = vi.fn(); finish = vi.fn(); abandon = layerAbandon; dispose = vi.fn()
 } }))
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
@@ -306,6 +306,24 @@ function canvasHarness() {
 }
 const frameInfo = (frame: number) => ({ time: frame / 60, frameDuration: 1 / 60, clip: { time: frame / 60, duration: 5 } })
 const output = { createView: () => ({}), destroy() {} }
+
+it('后层读取素材触发资源重试时，前层已上传表面必须重新生成被弃掉的 mip', async () => {
+  const { device, upload } = canvasHarness()
+  class Bitmap { width = 20; height = 10; close = vi.fn() }
+  vi.stubGlobal('ImageBitmap', Bitmap)
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => new Bitmap()))
+  const runtime = new VideoEditAuthorRuntime(device, { name: '重试', layers: (_p, _w, _h, assets) => [
+    { id: 'first', bounds: [0, 0, 50, 25], pose: () => ({ scale: 1 }), draw(ctx) { ctx.fillRect(0, 0, 50, 25) } },
+    { id: 'second', bounds: [0, 0, 20, 10], pose: () => ({ x: (assets.image as ImageBitmap).width }), draw(ctx) { ctx.fillRect(0, 0, 20, 10) } },
+  ] })
+  try {
+    await runtime.render(output, 100, 50, {}, { image: new Bitmap() as unknown as ImageBitmap }, frameInfo(0))
+    expect(layerAbandon).toHaveBeenCalledOnce()
+    const firstTexture = upload.mock.calls[0][1].texture
+    expect(upload.mock.calls.filter(call => call[1].texture === firstTexture)).toHaveLength(2)
+    expect(layerMips.mock.calls.filter(call => call[0] === firstTexture)).toHaveLength(2)
+  } finally { await runtime.dispose() }
+})
 
 it.each([false, true])('只对独立栅格的运动层报告源图形外投影，静止层不误报（pose=%s）', async posed => {
   const { device } = canvasHarness()

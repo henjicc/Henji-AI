@@ -106,6 +106,27 @@ it('片段准备一次后批量求帧；每帧只调用一次作者键，预算�
   } finally { await worker.dispose(); prepare.mockRestore() }
 })
 
+it('正式素材指纹不把登记尺寸当解码尺寸，捕获素材可比较，按尺寸求效果则回退', async () => {
+  const { document, effect } = fixture()
+  document.codeMaterials![0].versions[0].apiVersion = 7
+  effect.createWebGPU = undefined
+  effect.params = [{ key: 'screen', type: 'image', title: '图片', default: null }]
+  document.media = [{ id: 'image', name: '代理画面', kind: 'image', path: '/image.png', width: 1920, height: 1080, durationSeconds: 1 }]
+  document.sequences[0].clips[0].code!.parameters.screen = { kind: 'image', mediaId: 'image' }
+  effect.frameKey = () => 'same'
+  effect.layers = (_p, _w, _h, assets) => {
+    const image = assets.screen
+    return [{ draw(ctx) { ctx.drawImage(image, 0, 0) } }]
+  }
+  state.effect = effect
+  const worker = new VideoEditCodeFingerprint(videoEditComposition(document, document.sequences[0].id))
+  try {
+    expect((await worker.frame('code', 0, {})).digest).toBeTruthy()
+    effect.layers = (_p, _w, _h, assets) => [{ effects: () => [{ id: 'glow', params: { strength: (assets.screen as ImageBitmap).width / 100 } }], draw() {} }]
+    expect((await worker.frame('code', 0, {})).fallback).toContain('decoded-asset-size-required')
+  } finally { await worker.dispose() }
+})
+
 if (process.env.HENJI_FRAME_KEY_BENCHMARK === '1') it('四个片段各 2.1 万帧：正式片段准备与帧指纹路径（编译/ESM 边界替身，无 IPC/GPU）', async () => {
   const { document, effect } = fixture()
   const sequence = document.sequences[0]

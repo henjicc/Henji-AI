@@ -431,7 +431,8 @@ it.each(['cancel', 'edit'] as const)('a pending pixel scan %s cancels the shared
 it.each([12000, 60001])('pixel budgets preflight the whole query before decoding: %s placed frames', async frames => {
   const { owner, input, platform } = await pixelFixture()
   editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].durationSeconds = 10000; document.sequences[0].clips[0].duration = frames; return document })
-  await expect(queryVideoEditReview({ ...input, to: frames, motion: { videoPixels: true } }, context())).rejects.toThrow(frames > 60000 ? '60000' : '300秒')
+  const request = { ...input, to: frames, motion: { videoPixels: true } }
+  await expect(queryVideoEditReview(request, context())).rejects.toThrow(frames > 60000 ? '60000' : '300秒')
   expect(platform.sceneDetection.detect).not.toHaveBeenCalled()
 })
 
@@ -508,6 +509,104 @@ it.each(['changed', 'cancelled'] as const)('a pending native-motion query %s rej
   if (kind === 'changed') editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].name = '新的剪辑'; return document })
   else controller.abort(new Error('取消分析'))
   MotionWorker.instances[0].respond(); await rejected
+})
+
+it('长范围公共复核立即返回游标，轮询不重复计算，完成后保留完整范围和分页', async () => {
+  const { owner, input } = await codeFixture('export default {name:"代码复核",width:1000,height:1000,durationSeconds:30,draw(){}}')
+  editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].frameRate = { numerator: 60, denominator: 1 }; document.sequences[0].clips.find(clip => clip.code)!.duration = 780; return document })
+  MotionWorker.automatic = false
+  const app = createApplicationHarness(), request = { ...input, to: 780, motion: {}, limit: 1 }
+  try {
+    const started = parse(await app.requireResult('query_video_edit_review', request))
+    expect(started.status).toBe('running'); expect(started.nextCursor).toBeTruthy()
+    await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
+    const poll = { ...request, cursor: started.nextCursor, wait: false }
+    expect(parse(await app.requireResult('query_video_edit_review', poll)).status).toBe('running')
+    expect(MotionWorker.instances).toHaveLength(1)
+    for (let index = 1; index <= 4; index++) {
+      const other = parse(await app.requireResult('query_video_edit_review', request))
+      expect(other.nextCursor).toBe(started.nextCursor)
+    }
+    expect(MotionWorker.instances).toHaveLength(1)
+    expect(parse(await app.requireResult('query_video_edit_review', poll))).toMatchObject({ progress: { phase: '逐帧复核运动', observedFrames: 0 }, pollAfterMs: 1000 })
+    const waiting = app.requireResult('query_video_edit_review', { ...poll, wait: true })
+    await MotionWorker.instances[0].respond()
+    const completed = parse(await waiting)
+    expect(completed.status).toBe('completed')
+    expect(completed.range).toEqual({ fromFrame: 0, toFrame: 780 })
+    expect(completed.total).toBeGreaterThan(1)
+    expect(completed.records).toHaveLength(1)
+    const page = parse(await app.requireResult('query_video_edit_review', { ...request, cursor: completed.nextCursor }))
+    expect(page.total).toBe(completed.total)
+    expect(MotionWorker.instances).toHaveLength(1)
+  } finally { app.dispose() }
+})
+
+it.each(['cancel', 'edit', 'close', 'failure', 'fonts', 'tracking'] as const)('后台复核在 %s 后终止或返回真实失败，不交付旧结果', async action => {
+  const { owner, input } = await codeFixture('export default {name:"代码复核",width:1000,height:1000,durationSeconds:30,draw(){}}')
+  editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].frameRate = { numerator: 60, denominator: 1 }; document.sequences[0].clips.find(clip => clip.code)!.duration = 780; return document })
+  MotionWorker.automatic = false
+  const request = { ...input, to: 780, motion: {} }
+  const started = parse(await queryVideoEditReview(request, context()))
+  await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
+  const worker = MotionWorker.instances[0], poll = { ...request, cursor: started.nextCursor, wait: false }
+  if (action === 'cancel') {
+    expect(parse(await queryVideoEditReview({ ...poll, cancel: true }, context())).status).toBe('cancelled')
+  } else if (action === 'edit') {
+    editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].name = '修改'; return document })
+    await expect(queryVideoEditReview(poll, context())).rejects.toThrow('失效')
+  } else if (action === 'close') {
+    await closeAllVideoEdits()
+    await expect(queryVideoEditReview(poll, context())).rejects.toThrow()
+  } else if (action === 'failure') {
+    worker.onerror?.({ message: '真实计算失败' })
+    await vi.waitFor(async () => { await expect(queryVideoEditReview(poll, context())).rejects.toThrow('真实计算失败') })
+  } else {
+    if (action === 'fonts') invalidateCodeTextMetrics()
+    else { handles = { [key]: { url: 'henji-media://track', version: 'changed' } }; trackingRevision++ }
+    // 不向 Worker 回包，也不发布剪辑事件，后台必须自行中止。
+    await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalledOnce())
+    await expect(queryVideoEditReview(poll, context())).rejects.toThrow('失效')
+    expect(parse(await queryVideoEditReview({ ...poll, cancel: true }, context())).status).toBe('cancelled')
+  }
+  await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalledOnce())
+})
+
+it('取消等待保留后台计算，运行中的任务同样参与四项保留预算，被替换的 Worker 立即释放', async () => {
+  const { owner, input } = await codeFixture('export default {name:"代码复核",width:1000,height:1000,durationSeconds:30,draw(){}}')
+  editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].clips.find(clip => clip.code)!.duration = 780; return document })
+  MotionWorker.automatic = false
+  const request = { ...input, to: 780, motion: {} }
+  const started = parse(await queryVideoEditReview(request, context()))
+  await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
+  const controller = new AbortController()
+  const waiting = queryVideoEditReview({ ...request, cursor: started.nextCursor }, { signal: controller.signal })
+  const rejected = expect(waiting).rejects.toThrow('等待已取消')
+  controller.abort(); await rejected
+  expect(MotionWorker.instances[0].terminate).not.toHaveBeenCalled()
+  for (let index = 1; index <= 4; index++) {
+    await queryVideoEditReview({ ...request, threshold: index / 10 }, context())
+    await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(index + 1))
+  }
+  expect(MotionWorker.instances[0].terminate).toHaveBeenCalledOnce()
+  expect(MotionWorker.instances.filter(worker => !worker.terminate.mock.calls.length)).toHaveLength(4)
+  await expect(queryVideoEditReview({ ...request, cursor: started.nextCursor }, context())).rejects.toThrow('失效')
+  // 被逐出的任务结束时不能重新插回保留表，挤走其他仍在运行的任务。
+  const retained = parse(await queryVideoEditReview({ ...request, threshold: .1 }, context()))
+  expect(retained.status).toBe('running')
+  expect(MotionWorker.instances).toHaveLength(5)
+})
+
+it('编辑缩短序列后仍能用原游标和原范围取消后台复核', async () => {
+  const { owner, input } = await codeFixture('export default {name:"代码复核",width:1000,height:1000,durationSeconds:30,draw(){}}')
+  editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].clips.find(clip => clip.code)!.duration = 780; return document })
+  MotionWorker.automatic = false
+  const request = { ...input, to: 780, motion: {} }
+  const started = parse(await queryVideoEditReview(request, context()))
+  await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
+  editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].clips.find(clip => clip.code)!.duration = 120; return document })
+  expect(parse(await queryVideoEditReview({ ...request, cursor: started.nextCursor, cancel: true }, context())).status).toBe('cancelled')
+  expect(MotionWorker.instances[0].terminate).toHaveBeenCalledOnce()
 })
 it('公共查询选出有界检查帧并区分同素材两次跟踪实例，不运行模型、不改变历史或视图', async () => {
   const { owner, input } = await fixture(); const app = createApplicationHarness()

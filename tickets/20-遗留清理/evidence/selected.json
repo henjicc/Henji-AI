@@ -1,0 +1,54 @@
+[
+  {
+    "projectId": "43e2b5cb-0124-4b12-b45e-92211d3de4f8",
+    "sequenceId": "60585956-031e-4269-a463-465969ed0048",
+    "windowKey": "rgda7ic1eq8t4q4st3eb",
+    "profile": "v4:avc:standard:200",
+    "startFrame": 194,
+    "endFrame": 326,
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "bytes": 21766202,
+    "path": "E:\\文档\\痕迹AI\\.痕迹AI缓存\\render\\c6a1b108432fa87b2884a62f0c6dcf0709190fcf21128c1760e14ef35c30a164.mp4"
+  },
+  {
+    "projectId": "43e2b5cb-0124-4b12-b45e-92211d3de4f8",
+    "sequenceId": "60585956-031e-4269-a463-465969ed0048",
+    "windowKey": "mbxpp7rrx925237a01lqs",
+    "profile": "v4:avc:standard:200",
+    "startFrame": 3605,
+    "endFrame": 3742,
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "bytes": 74374696,
+    "path": "E:\\文档\\痕迹AI\\.痕迹AI缓存\\render\\02c13fda9ad4e95c97ace56838e19811d508a1b31f667b328a76a70e674e7dd6.mp4"
+  },
+  {
+    "projectId": "43e2b5cb-0124-4b12-b45e-92211d3de4f8",
+    "sequenceId": "60585956-031e-4269-a463-465969ed0048",
+    "windowKey": "qcgabwl2lh9y01997sg",
+    "profile": "v4:avc:standard:200",
+    "startFrame": 10406,
+    "endFrame": 10635,
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "bytes": 80143199,
+    "path": "E:\\文档\\痕迹AI\\.痕迹AI缓存\\render\\4d99e0edc38f8cafb74de8b90b7202e88a6e1d957975210c1ea067867dbb4cb9.mp4"
+  },
+  {
+    "projectId": "43e2b5cb-0124-4b12-b45e-92211d3de4f8",
+    "sequenceId": "60585956-031e-4269-a463-465969ed0048",
+    "windowKey": "1gn3gu1xocm1itq6ttjch9",
+    "profile": "v4:avc:standard:200",
+    "startFrame": 20453,
+    "endFrame": 20612,
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "bytes": 48136013,
+    "path": "E:\\文档\\痕迹AI\\.痕迹AI缓存\\render\\e67ab3b4008b6e0666bba07a7dd17e72bfba3810242a60c8b2f1ffb0c0a66483.mp4"
+  }
+]

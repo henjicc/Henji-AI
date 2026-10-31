@@ -605,6 +605,9 @@ export class VideoEditAuthorRuntime {
           // An image read outside a recorded canvas draw needs its bitmap before the author code runs: draw the frame again.
           if (!(error instanceof AuthorAssetPending) || attempt > Object.keys(assets).length) throw error
           this.layers.abandon(); this.layerEffects?.abandon()
+          // 上传直接进入队列，mip 随本批编码器丢弃；重试必须重建这些表面的完整内容。
+          for (const surface of changedSurfaces) surface.content = undefined
+          changedSurfaces.clear()
         }
       }
     } catch (cause) {

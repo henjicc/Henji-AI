@@ -98,7 +98,7 @@ export class VideoEditCodeFingerprint {
         if (!media) return { fallback: 'missing-media' }
         let identity = this.mediaDigests.get(media.id)
         if (!identity) { identity = renderFingerprintHash(JSON.stringify(media)); this.mediaDigests.set(media.id, identity) }
-        inputs[key] = { width: media.width, height: media.height, identity: JSON.stringify([identity, sample]) }
+        inputs[key] = { width: media.width, height: media.height, dimensionsKnown: false, identity: JSON.stringify([identity, sample]) }
       }
     }
     const info: AuthorFrameInfo = { time: plan.context.time, frameDuration: 1 / this.document.fps, clip: { time: plan.context.localTime, duration: plan.clip.duration / this.document.fps } }

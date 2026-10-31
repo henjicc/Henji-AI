@@ -34,10 +34,40 @@ export async function pinVideoEditMotionSources(sources: readonly VideoEditMedia
   return pinned
 }
 
+/** 合并来源区间并预检；原生视频无需解码或代码输入 Worker 就能完成此步。 */
+export function planVideoEditPixelMotion(composition: VideoEditComposition, range: VideoEditSourceMapRange, inputs: readonly VideoEditPixelMotionPlacement[] = []) {
+  const placements: VideoEditPixelMotionPlacement[] = [...new VideoEditSourceMapIndex().query(composition, range, ['video']).map(entry => ({ entry })), ...inputs]
+  const groups = new Map<string, Plan[]>(), sources = new Map<string, VideoEditMedia>()
+  const mediaById = new Map(composition.media.map(media => [media.id, media]))
+  let frames = 0
+  for (const placement of placements) {
+    const { entry } = placement
+    const media = entry.mediaId ? mediaById.get(entry.mediaId) : undefined
+    if (!media || media.kind !== 'video') continue
+    frames += entry.timeline.to - entry.timeline.from
+    if (frames > VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET) throw new Error('视频运动超过60000帧实例预算，请缩小 from/to；未截断实例。')
+    const key = JSON.stringify([media.assetContent?.contentIdentity ?? media.path, media.assetContent?.sizeBytes, media.assetContent?.fileModifiedAt]), group = groups.get(key) ?? []
+    const from = Math.floor(entry.source.fromUs / 1e6 * 15 + 1e-8) / 15, to = Math.min(media.durationSeconds, Math.ceil(entry.source.toUs / 1e6 * 15 - 1e-8) / 15)
+    if (to <= from) throw new Error('原视频运动范围无效，请核对素材时长与源入点。')
+    group.push({ media, placements: [placement], from, to }); groups.set(key, group); sources.set(media.id, media)
+  }
+  const plans: Plan[] = []
+  for (const group of groups.values()) {
+    let previous: Plan | undefined
+    for (const plan of group.sort((a, b) => a.from - b.from)) {
+      if (previous && plan.from <= previous.to + 1e-7) { previous.to = Math.max(previous.to, plan.to); previous.placements.push(...plan.placements) }
+      else { previous = plan; plans.push(plan) }
+    }
+  }
+  if (plans.reduce((seconds, plan) => seconds + plan.to - plan.from, 0) > 300 + 1e-7) throw new Error('本次视频运动分析超过300秒不同源区间预算，请缩小 from/to；未截断证据。')
+  return { plans, sources }
+}
+
 /** Same scene-analysis channel, source cache and query progress as the content
  * index. Merge overlapping source scans while retaining each placed instance. */
 export async function readVideoEditPixelMotion(owner: VideoEditInstance, composition: VideoEditComposition, range: VideoEditSourceMapRange, signal: AbortSignal, assertCurrent: () => void): Promise<{ pixels: VideoEditPixelMotionInput[]; sources: VideoEditMedia[] }> {
   assertCurrent()
+  planVideoEditPixelMotion(composition, range)
   let inputItemId: string | undefined
   // 片子数据派生的取帧参数不存在片段上，按代码声明解析后才知道，所以引用片子数据的代码片段也算有画面输入。
   const sceneCodes: CodeMaterialInstance[] = []
@@ -63,30 +93,7 @@ export async function readVideoEditPixelMotion(owner: VideoEditInstance, composi
     } catch (error) { task.finish('failed', error); throw error }
   }
   assertCurrent()
-  const placements: VideoEditPixelMotionPlacement[] = [...new VideoEditSourceMapIndex().query(composition, range, ['video']).map(entry => ({ entry })), ...inputs]
-  const groups = new Map<string, Plan[]>(), sources = new Map<string, VideoEditMedia>()
-  const mediaById = new Map(composition.media.map(media => [media.id, media]))
-  let frames = 0
-  for (const placement of placements) {
-    const { entry } = placement
-    const media = entry.mediaId ? mediaById.get(entry.mediaId) : undefined
-    if (!media || media.kind !== 'video') continue
-    frames += entry.timeline.to - entry.timeline.from
-    if (frames > VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET) throw new Error('视频运动超过60000帧实例预算，请缩小 from/to；未截断实例。')
-    const key = JSON.stringify([media.assetContent?.contentIdentity ?? media.path, media.assetContent?.sizeBytes, media.assetContent?.fileModifiedAt]), group = groups.get(key) ?? []
-    const from = Math.floor(entry.source.fromUs / 1e6 * 15 + 1e-8) / 15, to = Math.min(media.durationSeconds, Math.ceil(entry.source.toUs / 1e6 * 15 - 1e-8) / 15)
-    if (to <= from) throw new Error('原视频运动范围无效，请核对素材时长与源入点。')
-    group.push({ media, placements: [placement], from, to }); groups.set(key, group); sources.set(media.id, media)
-  }
-  const plans: Plan[] = []
-  for (const group of groups.values()) {
-    let previous: Plan | undefined
-    for (const plan of group.sort((a, b) => a.from - b.from)) {
-      if (previous && plan.from <= previous.to + 1e-7) { previous.to = Math.max(previous.to, plan.to); previous.placements.push(...plan.placements) }
-      else { previous = plan; plans.push(plan) }
-    }
-  }
-  if (plans.reduce((seconds, plan) => seconds + plan.to - plan.from, 0) > 300 + 1e-7) throw new Error('本次视频运动分析超过300秒不同源区间预算，请缩小 from/to；未截断证据。')
+  const { plans, sources } = planVideoEditPixelMotion(composition, range, inputs)
   const pixels: VideoEditPixelMotionInput[] = [], platform = getPlatform()
   const verifiedSources = await pinVideoEditMotionSources([...sources.values()], signal, assertCurrent)
   for (const plan of plans) {

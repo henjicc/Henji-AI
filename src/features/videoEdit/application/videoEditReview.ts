@@ -5,6 +5,7 @@ import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { waitForApplicationTask } from '@/core/application-control/taskWait'
 import { queryVideoEditReviewCapability } from '@/core/application-control/domains/videoEdit/videoEditReviewCapability'
 import { videoEditComposition, videoEditDuration, type VideoEditMedia } from '@/core/videoEdit/document'
 import { assertVideoEditReviewBudget, collectVideoEditReviewStructure, selectVideoEditReviewFrames, videoEditReviewRange, videoEditTrackingReviewRanges, videoEditCrowdedReviewEvents, VIDEO_EDIT_REVIEW_TRACK_SAMPLE_BUDGET, type VideoEditReviewRecord } from '@/core/videoEdit/review'
@@ -17,13 +18,13 @@ import { readVideoEditTrackReviewHeader } from '../engine/videoEditTrackResults'
 import { videoEditTrackResults } from './videoEditTracking'
 import { videoEditTrackerEntityId } from './videoEditCompositeEntities'
 import { videoEditObservationVersion } from './videoEditObservationVersion'
-import { requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
+import { requireVideoEditInstance, subscribeVideoEdit, type VideoEditInstance } from './videoEditService'
 import { splitVideoEditRef } from './videoEditReflection'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { analyzeVideoEditMotionStructure } from './videoEditMotionReviewWorkerClient'
 import { withVideoEditCodeMetadata, readVideoEditCodeProgram } from './videoEditCodeState'
 import { codeTextFontGeneration } from '../videoEditGlyphMetrics'
-import { readVideoEditPixelMotion, verifyVideoEditMotionSources } from './videoEditPixelMotion'
+import { planVideoEditPixelMotion, readVideoEditPixelMotion, verifyVideoEditMotionSources } from './videoEditPixelMotion'
 import { readVideoEditCodeMotionAudio } from './videoEditCodeMotionAudio'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import type { CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
@@ -31,7 +32,7 @@ import { videoEditMotionSpeedFacts, VIDEO_EDIT_MOTION_PACE_LIMITS } from '@/core
 import { collectVideoEditTextSafety, type VideoEditTextMeasure } from '@/core/videoEdit/textSafetyReview'
 import { videoEditCodeSceneKeys } from '@/core/videoEdit/codeInputParameters'
 import { collectVideoEditSceneReview, readVideoEditSceneReviewPage, type VideoEditSceneReviewRecord } from './videoEditSceneReview'
-import { collectVideoEditVisualReview } from './videoEditVisualReview'
+import { collectVideoEditVisualReview, planVideoEditVisualReview } from './videoEditVisualReview'
 import { settleVideoEditCodeDeclarations, videoEditCodeDeclarationReader } from './videoEditCodeDeclarations'
 
 /** Same measuring path as the Program text overlay: the renderer document's loaded fonts. */
@@ -53,6 +54,13 @@ function frameCandidates(records: readonly ReviewRecord[]): VideoEditReviewRecor
 
 interface Snapshot { key: string; version: string; baseVersion: string; records: ReviewRecord[]; frames: number[]; warnings: string[]; sources: VideoEditMedia[] }
 const snapshots = new WeakMap<VideoEditInstance, Map<string, Snapshot>>()
+interface PendingReview {
+  key: string; version: string; controller: AbortController
+  state: 'running' | 'completed' | 'cancelled' | 'failed'
+  progress: { phase: string; observedFrames: number }
+  result?: Record<string, unknown>; error?: unknown
+}
+const pendingReviews = new WeakMap<VideoEditInstance, Map<string, PendingReview>>()
 const logger = createLogger('features.videoEdit.review')
 /** Recheck the file snapshots used by pixel review before observing its plan. */
 export async function verifyVideoEditReviewObservationSources(owner: VideoEditInstance, version: string, sequenceId: string, signal: AbortSignal, assertCurrent: () => void): Promise<VideoEditMedia[]> {
@@ -65,6 +73,89 @@ export async function verifyVideoEditReviewObservationSources(owner: VideoEditIn
 }
 
 export async function queryVideoEditReview(raw: unknown, context: Pick<CapabilityExecutionContext, 'signal' | 'callerGrant' | 'requestId'>): Promise<Record<string, unknown>> {
+  const input = queryVideoEditReviewCapability.inputSchema.parse(raw)
+  context.signal.throwIfAborted()
+  if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
+  const { projectId, childId } = splitVideoEditRef(input.sequenceRef)
+  if (projectId !== input.documentRef.id || !childId) throw new Error('sequenceRef 必须属于 documentRef，请使用完整序列引用。')
+  const owner = requireVideoEditInstance(projectId)
+  const version = videoEditObservationVersion(owner, owner.document.revision)
+  const { cursor, cancel, wait, ...conditions } = input
+  const key = JSON.stringify([conditions, version, codeTextFontGeneration()])
+  const retained = pendingReviews.get(owner) ?? new Map<string, PendingReview>()
+  pendingReviews.set(owner, retained)
+  const pendingId = cursor?.endsWith(':pending') ? cursor.slice(0, -8) : undefined
+  if (cancel && !pendingId) throw new Error('cancel 需要正在运行的复核 nextCursor。')
+  // 只把耗时观察放到后台；完整范围的几何轨迹保留在同一次正式复核里，避免分段边界漏报。
+  if (pendingId || !cursor && input.to - input.from > 120 && (input.motion || input.visual)) {
+    const id = pendingId ?? [...retained].find(([, value]) => value.key === key && value.state === 'running')?.[0] ?? crypto.randomUUID()
+    let task = retained.get(id)
+    // 取消按任务身份寻址，查询条件与观察版本变化不能挡住资源释放。
+    if (cancel && task && task.state !== 'completed') { task.state = 'cancelled'; task.controller.abort(new DOMException('复核已取消。', 'AbortError')) }
+    if (pendingId && (!task || !cancel && task.key !== key)) throw new Error('检查分页已失效，请保持原条件重新查询。')
+    if (!task) {
+      const composition = videoEditComposition(owner.document, childId)
+      const range = videoEditReviewRange(composition, input.from, input.to)
+      if (input.motion?.videoPixels) planVideoEditPixelMotion(composition, range)
+      if (input.visual) {
+        const structure = collectVideoEditReviewStructure(composition, range)
+        await planVideoEditVisualReview(owner, composition, range, input.visual, structure.records.length, [], [], input.maxFrames)
+        context.signal.throwIfAborted()
+        if (videoEditObservationVersion(owner, owner.document.revision) !== version) throw new Error('预检期间剪辑已改变，请重新查询。')
+        // 预检可能等待代码声明；期间另一个调用可能已提交同条件任务。
+        if ([...retained.values()].some(value => value.key === key && value.state === 'running')) return queryVideoEditReview(raw, context)
+      }
+      while (retained.size >= 4) {
+        const [oldestId, oldest] = [...retained].find(([, value]) => value.state !== 'running') ?? retained.entries().next().value!
+        oldest.controller.abort(new Error('复核已被后续查询替换，请重新查询。'))
+        retained.delete(oldestId)
+      }
+      const controller = new AbortController(), contentVersion = owner.contentVersion, fontGeneration = codeTextFontGeneration()
+      task = { key, version, controller, state: 'running', progress: { phase: '准备复核', observedFrames: 0 } }; retained.set(id, task)
+      const current = task
+      const checkCurrent = (): void => {
+        if (!isVideoEditContentCurrent(owner, contentVersion) || videoEditObservationVersion(owner, owner.document.revision) !== version || codeTextFontGeneration() !== fontGeneration) {
+          controller.abort(new Error('检查分页已失效：剪辑、跟踪结果或字体已改变，请重新查询。'))
+        }
+      }
+      const unsubscribe = subscribeVideoEdit(checkCurrent)
+      // 字体与跟踪结果并非都发布剪辑事件；运行中也主动检查，不能等 Worker 回包才释放。
+      const monitor = setInterval(checkCurrent, 100)
+      void new Promise<void>(resolve => setTimeout(resolve, 0)).then(() => {
+        checkCurrent(); controller.signal.throwIfAborted()
+        return executeVideoEditReview(conditions, { ...context, signal: controller.signal }, current.progress)
+      }).then(result => {
+        if (current.state === 'running') { current.progress.phase = '复核完成'; current.result = { ...result, status: 'completed', progress: { ...current.progress }, pollAfterMs: 0 }; current.state = 'completed' }
+      }, error => {
+        if (current.state === 'running') { current.error = error; current.state = 'failed' }
+      }).finally(() => {
+        unsubscribe(); clearInterval(monitor)
+        // 按完成顺序保留结果，避免先发的慢查询刚完成就被逐出。
+        if (retained.get(id) === current) { retained.delete(id); retained.set(id, current) }
+      })
+    }
+    if (pendingId && wait && !cancel && task.state === 'running') await waitForApplicationTask(async () => task!, value => value.state === 'running' ? undefined : 'terminal', context.signal, 25_000)
+    context.signal.throwIfAborted()
+    if (task.state === 'failed') throw task.error
+    if (task.state === 'completed') {
+      const assertCurrent = (): void => {
+        context.signal.throwIfAborted()
+        if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
+        if (JSON.stringify([conditions, videoEditObservationVersion(owner, owner.document.revision), codeTextFontGeneration()]) !== key) throw new Error('检查期间剪辑或字体已改变，请重新查询。')
+      }
+      await verifyVideoEditReviewObservationSources(owner, String(task.result!.documentVersion), childId, context.signal, assertCurrent)
+      assertCurrent()
+      return task.result!
+    }
+    return { documentRef: input.documentRef, sequenceRef: input.sequenceRef, documentVersion: task.version,
+      range: { fromFrame: input.from, toFrame: input.to }, status: task.state, checkpoints: { frames: [], selection: 'prioritized_sample' }, records: [], total: 0,
+      progress: { ...task.progress }, pollAfterMs: task.state === 'running' ? 1000 : 0,
+      nextCursor: task.state === 'running' ? `${id}:pending` : null, warnings: [], message: task.state === 'running' ? '复核正在后台计算完整范围，请稍后用 nextCursor 重查；尚无最终结论。' : '复核已取消。' }
+  }
+  return executeVideoEditReview(input, context)
+}
+
+async function executeVideoEditReview(raw: unknown, context: Pick<CapabilityExecutionContext, 'signal' | 'callerGrant' | 'requestId'>, progress?: PendingReview['progress']): Promise<Record<string, unknown>> {
   const input = queryVideoEditReviewCapability.inputSchema.parse(raw)
   const { projectId, childId } = splitVideoEditRef(input.sequenceRef)
   if (projectId !== input.documentRef.id || !childId) throw new Error('sequenceRef 必须属于 documentRef，请使用完整序列引用。')
@@ -91,6 +182,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
       id = parsed[1]; offset = Number(parsed[2]); snapshot = previous
       if (!Number.isSafeInteger(offset) || offset >= snapshot.records.length) throw new Error('检查分页位置无效，请重新查询。')
     } else {
+      if (progress) progress.phase = '检查结构与源码'
       id = crypto.randomUUID()
       const structure = collectVideoEditReviewStructure(composition, range)
       const records: ReviewRecord[] = structure.records
@@ -156,15 +248,18 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
           const code = entry.path.at(-1)!.clip.code
           if (code && !programs[code.versionId]) programs[code.versionId] = readVideoEditCodeProgram(owner, owner.document, code)
         } }))
+        if (progress) progress.phase = '分析画面与声音来源'
         const video = input.motion.videoPixels ? await readVideoEditPixelMotion(owner, composition, range, context.signal, assertCurrent) : undefined
         const sound = await readVideoEditCodeMotionAudio(owner, composition, range, programs, context.signal, assertCurrent)
         sources = [...(video?.sources ?? []), ...sound.sources]
+        if (progress) progress.phase = '逐帧复核运动'
         const motion = await analyzeVideoEditMotionStructure({ composition, range, programs, audios: sound.audios, ...(video ? { pixels: video.pixels } : {}), policy: { minGapSeconds: input.motion.minGapSeconds, minimumStillSeconds: input.motion.minimumHoldSeconds } }, context.signal, async (document, frame) => {
           assertCurrent()
           let observation: CodeAuthorFrameObservation | undefined
           await trialVideoEditCodeFrames([{ document, frame }], context.signal, false, undefined, undefined, value => { observation = value })
           assertCurrent()
           if (!observation) throw new Error('渲染会话没有返回作者图层观察。')
+          if (progress) progress.observedFrames++
           return observation
         })
         assertCurrent()
@@ -200,6 +295,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
             motionEvidence: { basis: 'structural_events', gapSeconds: event.gapSeconds, suggestion: '核对这段是否有多个信息同时争抢注意力；按风格和阅读时间决定是否错开、合并或保留，不能只按间隔删减。' } })
         }
       }
+      if (progress) progress.phase = '复核跟踪结果'
       const headers = new Map<string, ReturnType<typeof readVideoEditTrackReviewHeader>>()
       const budget = { remaining: VIDEO_EDIT_REVIEW_TRACK_SAMPLE_BUDGET }
       for (const { composition: local, entry } of tracking) {
@@ -232,6 +328,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
         }
       }
       if (input.scene) {
+        if (progress) progress.phase = '复核片子数据'
         const sceneRecords = await settleVideoEditCodeDeclarations(() => {
           // 在异步读录制页以前读齐声明，避免中途重试后重复 I/O。
           const read = videoEditCodeDeclarationReader(owner)
@@ -246,6 +343,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
         warnings.push('片子数据检查只说明数据与窗口内容的对应关系；作者代码可能主动淡掉错位的框，不能据此断言观众看见了框。鼠标日志缺失或隐藏时不判跳动；proposal 是可选改法，修改前读声明，写后读回并重新复核。')
       }
       if (input.visual) {
+        if (progress) progress.phase = '复核口播与画面效果'
         const reviewedFrames = input.visual.banding ? selectVideoEditReviewFrames(frameCandidates(records), range, input.maxFrames, videoEditDuration(composition)) : []
         const visual = await collectVideoEditVisualReview(owner, composition, range, input.visual, context.signal, assertCurrent, records.length, warnings, reviewedFrames)
         records.push(...visual.records); sources.push(...visual.sources)
