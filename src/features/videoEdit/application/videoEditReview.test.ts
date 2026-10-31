@@ -12,6 +12,8 @@ import { editVideoProject } from './videoEditService'
 import { queryVideoEditReview } from './videoEditReview'
 import { videoEditObservationVersion } from './videoEditObservationVersion'
 import * as tracking from './videoEditTracking'
+import * as trackReview from '@/core/videoEdit/codeTrackReview'
+import * as effectReview from '@/core/videoEdit/codeEffectReview'
 import * as trackReader from '../engine/videoEditTrackResults'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
@@ -128,6 +130,27 @@ async function codeFixture(source = 'export default {name:"代码复核",width:1
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
   return data
 }
+it('独立常驻层建议经公共输出定位片段与源码，放置有镜头动画时不建议拆层', async () => {
+  const source = 'export default {name:"分层",width:1000,height:1000,layers(){return [{id:"base",name:"背景",draw(ctx){ctx.fillStyle="black";ctx.fillRect(0,0,1000,1000)}},{id:"note",name:"角注",draw(ctx){ctx.fillStyle="gray";ctx.font="20px sans-serif";ctx.fillText("演示画面",20,980)}}]}}'
+  const { owner, input } = await codeFixture(source), app = createApplicationHarness()
+  const mismatch = parse(await app.requireResult('query_video_edit_review', { ...input, limit: 50 }))
+  expect(mismatch.records.some(record => record.kind === 'separate_track_suggestion')).toBe(false)
+  expect(mismatch.warnings.join()).toContain('尺寸或比例不一致 1 处')
+  editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].width = 1000; document.sequences[0].height = 1000; return document })
+  const result = parse(await app.requireResult('query_video_edit_review', { ...input, limit: 50 }))
+  const records = result.records.filter(record => record.kind === 'separate_track_suggestion')
+  expect(records).toHaveLength(2)
+  expect(records[1].motionEvidence?.trackSuggestion).toMatchObject({ layerId: 'note', name: '角注', line: 1 })
+  expect(records.every(record => record.subjectRef.kind === 'video_edit.clip' && record.motionEvidence?.suggestion.includes('建议，非错误'))).toBe(true)
+  await app.read(records[0].subjectRef)
+  editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].clips.find(clip => clip.code)!.anchorX = 0; return document })
+  const anchored = parse(await app.requireResult('query_video_edit_review', { ...input, limit: 50 }))
+  expect(anchored.records.some(record => record.kind === 'separate_track_suggestion')).toBe(false)
+  expect(anchored.warnings.join()).toContain('锚点')
+  editVideoProject(owner.document.id, original => { const document = structuredClone(original); document.sequences[0].clips.find(clip => clip.code)!.anchorX = .5; document.sequences[0].clips.find(clip => clip.code)!.curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 60, value: .2, interpolation: 'linear' }] }; return document })
+  const moved = parse(await app.requireResult('query_video_edit_review', { ...input, limit: 50 }))
+  expect(moved.records.some(record => record.kind === 'separate_track_suggestion')).toBe(false)
+})
 it('文字复核经正式 describe、查询和实体回读返回三类实际绘制证据，保留半开帧区间与改法', async () => {
   const { owner, input } = await codeFixture(), app = createApplicationHarness()
   const { Canvas } = createTextCanvasRecorder(); vi.stubGlobal('OffscreenCanvas', Canvas)
@@ -593,4 +616,19 @@ it('公共结构复核提供效果建议，缺源码只标本片段不可检查�
     expect(missing.records.some(record => record.kind === 'code_unavailable')).toBe(true)
     expect(missing.records.some(record => record.kind !== 'code_unavailable')).toBe(true)
   } finally { app.dispose() }
+})
+
+it('拆轨和效果分析分别失败时另一项仍返回，跳过原因按放置汇总', async () => {
+  const source = 'export default {width:1920,height:1080,layers(){return [{id:"base",draw(ctx){ctx.fillStyle="black";ctx.fillRect(0,0,1920,1080)}},{id:"note",draw(ctx){ctx.fillStyle="gray";ctx.font="24px sans-serif";ctx.fillText("演示",40,1040)}}]}}'
+  const { input } = await codeFixture(source), app = createApplicationHarness()
+  const track = vi.spyOn(trackReview, 'reviewCodeTrackSeparation').mockImplementationOnce(() => { throw new Error('拆轨失败样本') })
+  vi.spyOn(effectReview, 'reviewCodeEffectUsage').mockReturnValueOnce([{file:'main.js',line:1,column:1,evidence:'shadowBlur=12',factory:'dropShadow',confidence:'static_assignment',message:'阴影'}])
+  const first = parse(await app.requireResult('query_video_edit_review', { ...input, limit:50 }))
+  expect(first.records.some(record => record.kind === 'code_effect_suggestion')).toBe(true)
+  expect(first.warnings.join()).toContain('拆轨失败样本 1 处')
+  track.mockRestore()
+  vi.mocked(effectReview.reviewCodeEffectUsage).mockImplementationOnce(() => { throw new Error('效果失败样本') })
+  const second = parse(await app.requireResult('query_video_edit_review', { ...input, limit:50 }))
+  expect(second.records.filter(record => record.kind === 'separate_track_suggestion')).toHaveLength(2)
+  expect(second.warnings.join()).toContain('效果失败样本')
 })

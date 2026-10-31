@@ -3,10 +3,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { queryVideoEditReviewCapability } from '@/core/application-control/domains/videoEdit/videoEditReviewCapability'
+import { detectVideoEditBanding } from '@/core/videoEdit/bandingReview'
+import { selectVideoEditReviewFrames, type VideoEditReviewRecord } from '@/core/videoEdit/review'
+import { collectVideoEditVisualReview } from './videoEditVisualReview'
 import { compareVideoEditEffectPixels } from '@/core/videoEdit/effectPixelReview'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createVideoEditSequence, videoEditComposition, videoEditNestedComposition } from '@/core/videoEdit/document'
-import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse } from '../engine/videoEditMotionReviewWorker'
+import type { VideoEditMotionReviewInput, VideoEditMotionReviewResponse } from '../engine/videoEditMotionReviewWorker'
 import { closeAllVideoEdits, createVideoEditTestProject } from './videoEditDocumentTestKit'
 import { editVideoProject } from './videoEditService'
 import * as trial from './videoEditCodeTrial'
@@ -23,9 +26,15 @@ class PixelWorker {
   onmessage: ((event: MessageEvent<VideoEditMotionReviewResponse>) => void) | null = null
   onerror = null; onmessageerror = null
   terminate = vi.fn()
-  postMessage(request: VideoEditMotionReviewRequest): void {
+  postMessage(request: VideoEditMotionReviewInput): void {
     expect(request).not.toHaveProperty('composition')
-    const [on, off, repeat] = request.comparison! as unknown as [Image, Image, Image?]
+    if ('banding' in request) {
+      const image = request.banding as Image
+      queueMicrotask(() => this.onmessage?.(new MessageEvent<VideoEditMotionReviewResponse>('message', { data: { result: { records: [], sampledFrames: 0, sampledInstances: 0, banding: detectVideoEditBanding(image.pixels, image.width, image.height) } } })))
+      return
+    }
+    if (!('comparison' in request) || !request.comparison) throw new Error('测试需要像素请求。')
+    const [on, off, repeat] = request.comparison as unknown as [Image, Image, Image?]
     queueMicrotask(() => this.onmessage?.(new MessageEvent<VideoEditMotionReviewResponse>('message', { data: { result: { records: [], sampledFrames: 0, sampledInstances: 0, comparison: compareVideoEditEffectPixels(on.pixels, off.pixels, (repeat ?? on).pixels, on.width, on.height) } } })))
   }
 }
@@ -203,4 +212,48 @@ it('效果计算超过预算时在第一次取帧前拒绝，并给出可缩小�
   expect(result.ok).toBe(false)
   expect(JSON.stringify(result)).toContain('缩小 from/to')
   expect(render).not.toHaveBeenCalled(); expect(PixelWorker.instances).toHaveLength(0)
+})
+
+it('色带经公共入口返回时间、比例位置和片段；分页不重渲染且不改作品，效果基线复用', async () => {
+  const { owner, input, render } = await fixture(), app = createApplicationHarness(), parse = queryVideoEditReviewCapability.outputSchema.parse
+  const before = JSON.stringify(owner.document), images: Image[] = []
+  render.mockImplementation(async () => {
+    const width = 960, height = 540, pixels = new Uint8ClampedArray(width * height * 4)
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const t = Math.min(1, Math.hypot((x - 480) / 624, (y - 270) / 459))
+      pixels.set([Math.round(21 - t * 8), Math.round(22 - t * 8), Math.round(26 - t * 10), 255], (y * width + x) * 4)
+    }
+    const image = { width, height, pixels, close: vi.fn() } as unknown as Image
+    images.push(image); return image
+  })
+  const options = { ...input, limit: 1, maxFrames: 2, visual: { banding: true, effects: true, narration: false } }
+  let page = parse(await app.requireResult('query_video_edit_review', options))
+  const records = [...page.records]
+  const calls = render.mock.calls.length
+  while (page.nextCursor) { page = parse(await app.requireResult('query_video_edit_review', { ...options, cursor: page.nextCursor })); records.push(...page.records) }
+  const banding = records.filter(record => record.kind === 'banding')
+  expect(banding.length).toBeGreaterThan(0)
+  expect(banding.every(record => record.subjectRef.kind === 'video_edit.sequence' && record.timeline.toFrame === record.timeline.fromFrame + 1 && record.motionEvidence?.banding?.clipRefs.some(ref => ref.id === `${owner.document.id}:picture`))).toBe(true)
+  expect(banding[0].motionEvidence?.banding?.region).toMatchObject({ x: expect.any(Number), width: expect.any(Number) })
+  expect(banding[0].motionEvidence?.suggestion).toContain('半级亮度')
+  expect(banding[0].motionEvidence?.suggestion).toContain('素材自带')
+  const candidates: VideoEditReviewRecord[] = records.map(record => ({ kind: record.kind as VideoEditReviewRecord['kind'], timeline: {from:record.timeline.fromFrame,to:record.timeline.toFrame},subjectId:record.subjectRef.id,sequenceId:input.sequenceRef.id,path:[] }))
+  expect(page.checkpoints.frames).toEqual(selectVideoEditReviewFrames(candidates, {from:0,to:60}, 2, 60))
+  expect(render).toHaveBeenCalledTimes(calls)
+  const frames = new Set(render.mock.calls.map(call => call[0][0].frame))
+  expect(calls).toBe(9 + [...frames].filter(frame => ![0, 29, 59].includes(frame)).length)
+  expect(images.every(image => vi.mocked(image.close).mock.calls.length === 1)).toBe(true)
+  expect(JSON.stringify(owner.document)).toBe(before)
+})
+
+it('显式色带无候选时说明如何指定', async () => {
+  const { owner, render } = await fixture()
+  const composition = videoEditComposition(owner.document, owner.document.sequences[0].id)
+  const warnings: string[] = []
+  const options = queryVideoEditReviewCapability.inputSchema.parse({documentRef:{kind:'video_edit.document',id:owner.document.id},sequenceRef:{kind:'video_edit.sequence',id:'sequence'},from:0,to:60,visual:{banding:true,narration:false,effects:false}}).visual!
+  const args = [owner, composition, {from:0,to:60}, options, new AbortController().signal, () => {}] as const
+  await collectVideoEditVisualReview(...args, 0, warnings)
+  expect(warnings.join()).toContain('没有可检查的候选帧')
+  expect(warnings.join()).toContain('visual.probes')
+  expect(render).not.toHaveBeenCalled()
 })

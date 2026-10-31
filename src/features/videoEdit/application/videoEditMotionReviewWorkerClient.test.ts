@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { analyzeVideoEditMotionStructure } from './videoEditMotionReviewWorkerClient'
 import { collectVideoEditMotionStructure } from '@/core/videoEdit/motionStructure'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
-import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse, VideoEditMotionReviewMessage } from '../engine/videoEditMotionReviewWorker'
+import type { VideoEditMotionReviewInput, VideoEditMotionReviewRequest, VideoEditMotionReviewResponse, VideoEditMotionReviewMessage } from '../engine/videoEditMotionReviewWorker'
 import type { CodeAuthorProgram, CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
 import * as glyphs from '../videoEditGlyphMetrics'
 import { Worker as NodeWorker } from 'node:worker_threads'
@@ -64,11 +64,18 @@ it.each(['error', 'message', 'post', 'domain'] as const)('%s failure releases th
 })
 it('the real worker entry uses the same domain kernel and returns domain failures through the envelope', async () => {
   const posted: VideoEditMotionReviewResponse[] = []
-  const scope = { postMessage: (value: VideoEditMotionReviewResponse) => posted.push(value), onmessage: undefined as unknown as (event: MessageEvent<VideoEditMotionReviewRequest>) => void }
+  const scope = { postMessage: (value: VideoEditMotionReviewResponse) => posted.push(value), onmessage: undefined as unknown as (event: MessageEvent<VideoEditMotionReviewInput>) => void }
   vi.stubGlobal('self', scope)
   await import('../engine/videoEditMotionReviewWorker')
   scope.onmessage(new MessageEvent('message', { data: request }))
   expect(posted[0]).toHaveProperty('result.sampledInstances', 0)
+  const width = 96, height = 64, pixels = new Uint8ClampedArray(width * height * 4)
+  for (let i = 0; i < width * height; i++) { const value = 14 + Math.floor(i % width / 16); pixels.set([value, value, value, 255], i * 4) }
+  const close = vi.fn()
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { drawImage() {}, getImageData: () => ({ data: pixels }) } } })
+  scope.onmessage(new MessageEvent('message', { data: { banding: { width, height, close } } }))
+  expect(posted[1]).toMatchObject({ result: { banding: [expect.objectContaining({ levels: 6, axis: 'horizontal' })] } })
+  expect(close).toHaveBeenCalledOnce()
 })
 const observation = (composition = request.composition, frame = 0): CodeAuthorFrameObservation => ({ sequenceId: composition.id, revision: composition.revision, frame, clips: [] })
 it('round-trips actual render observations and keeps the analysis worker alive until completion', async () => {

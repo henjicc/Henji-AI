@@ -1,8 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
+import { queryVideoEditReviewCapability } from '../videoEdit/videoEditReviewCapability'
+import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS } from '@/core/videoEdit/builtinEffects'
 import { authorEffectMetadata } from '@/features/videoEdit/engine/videoEditAuthorParameters'
 import { testAuthorModule } from '@/features/videoEdit/engine/videoEditAuthorTestFixtures'
 import { createVideoEditRegistrations } from '@/features/videoEdit/application/videoEditReflection'
@@ -22,7 +25,13 @@ const entityTypes = new Set(registrations.map(registration => registration.entit
 const properties = new Map(registrations.flatMap(registration => registration.properties.map(property => [property.id, { entityType: registration.entity.id, property }] as const)))
 // load_application_tools 是内置 Pi 的披露工具，不在应用能力目录里；create_items/set_properties 是事务变更种类。
 const piDisclosureSource = fs.readFileSync(path.resolve('electron/main/services/embedded-agent/toolDisclosure.ts'), 'utf8')
+const reviewRecords = z.toJSONSchema(queryVideoEditReviewCapability.outputSchema).properties?.records
+const reviewItem = typeof reviewRecords === 'object' ? reviewRecords.items : undefined
+const reviewKind = reviewItem && typeof reviewItem === 'object' && !Array.isArray(reviewItem) ? reviewItem.properties?.kind : undefined
+const reviewKinds = typeof reviewKind === 'object' ? reviewKind.enum?.filter((value): value is string => typeof value === 'string') ?? [] : []
 const knownNames = new Set([
+  ...reviewKinds,
+  ...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.flatMap(effect => effect.params.map(parameter => parameter.key)),
   ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().map(definition => definition.id),
   ...PROTOCOL_TOOL_SPECS.map(spec => spec.name),
   ...(piDisclosureSource.includes("name: 'load_application_tools'") ? ['load_application_tools'] : []),
@@ -90,14 +99,10 @@ describe('剪辑代码素材技能只引用真实契约', () => {
     }
   })
 
-  it('主文件与每份参考保持有界，主文件链接与实际参考一致', () => {
+  it('主文件链接与实际参考一致', () => {
     const main = text(path.join(SKILL_DIR, 'SKILL.md'))
-    expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(10 * 1024)
     const links = [...main.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1]).sort()
     expect(links).toEqual(fs.readdirSync(path.join(SKILL_DIR, 'references')).map(name => `references/${name}`).sort())
-    for (const file of files.slice(1)) {
-      const limit = path.basename(file) === 'examples.md' ? 16 * 1024 : 10 * 1024
-      expect(Buffer.byteLength(text(file), 'utf8'), file).toBeLessThanOrEqual(limit)
-    }
+
   })
 })

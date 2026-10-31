@@ -1,3 +1,4 @@
+import { detectVideoEditBanding, type VideoEditBandingEvidence } from '../../../core/videoEdit/bandingReview'
 import { compareVideoEditEffectPixels, type VideoEditEffectPixelEvidence } from '../../../core/videoEdit/effectPixelReview'
 import { collectVideoEditMotionStructure, type VideoEditMotionStructureResult } from '../../../core/videoEdit/motionStructure'
 import type { VideoEditComposition } from '../../../core/videoEdit/document'
@@ -13,8 +14,8 @@ import type { CodeParameterDeclaration } from '../../../core/videoEdit/codeMater
 
 /** `codeDeclarations`：引用片子数据的代码版本（按版本 ID）的参数声明，planInputsOnly 据此加上片子数据派生的取帧参数。 */
 export interface VideoEditMotionReviewRequest { comparison?: [ImageBitmap, ImageBitmap, ImageBitmap]; composition: VideoEditComposition; range: VideoEditSourceMapRange; policy: MotionReviewPolicy; programs?: Record<string, CodeMaterialProgram>; pixels?: VideoEditPixelMotionInput[]; audios?: Record<string, AudioContentAnalysis>; planInputsOnly?: boolean; codeDeclarations?: Record<string, readonly CodeParameterDeclaration[]> }
-export type VideoEditMotionReviewInput = VideoEditMotionReviewRequest | { comparison: [ImageBitmap, ImageBitmap] }
-export type VideoEditMotionReviewResult = VideoEditMotionStructureResult & { comparison?: VideoEditEffectPixelEvidence; sampledCodeFrames?: number; sampledElements?: number; warnings?: string[]; inputPlacements?: VideoEditPixelMotionPlacement[] }
+export type VideoEditMotionReviewInput = VideoEditMotionReviewRequest | { comparison: [ImageBitmap, ImageBitmap] } | { banding: ImageBitmap }
+export type VideoEditMotionReviewResult = VideoEditMotionStructureResult & { banding?: VideoEditBandingEvidence[]; comparison?: VideoEditEffectPixelEvidence; sampledCodeFrames?: number; sampledElements?: number; warnings?: string[]; inputPlacements?: VideoEditPixelMotionPlacement[] }
 export type VideoEditMotionReviewResponse = { result: VideoEditMotionReviewResult } | { error: string } | { observeFrame: { id: number; composition: VideoEditComposition; frame: number } }
 export type VideoEditMotionReviewMessage = VideoEditMotionReviewInput | { observation: { id: number; value: CodeAuthorFrameObservation } }
 const scope = self as unknown as DedicatedWorkerGlobalScope
@@ -23,6 +24,16 @@ const measurements = new Map<number, (value: CodeAuthorFrameObservation) => void
 scope.onmessage = async (event: MessageEvent<VideoEditMotionReviewMessage>): Promise<void> => {
   if ('observation' in event.data) { const { id, value } = event.data.observation; measurements.get(id)?.(value); measurements.delete(id); return }
   try {
+    if ('banding' in event.data) {
+      const image = event.data.banding
+      try {
+        const canvas = new OffscreenCanvas(image.width, image.height), ctx = canvas.getContext('2d', { willReadFrequently: true })
+        if (!ctx) throw new Error('无法读取色带检查像素。')
+        ctx.drawImage(image, 0, 0)
+        scope.postMessage({ result: { records: [], sampledFrames: 0, sampledInstances: 0, banding: detectVideoEditBanding(ctx.getImageData(0, 0, image.width, image.height).data, image.width, image.height) } } satisfies VideoEditMotionReviewResponse)
+      } finally { image.close() }
+      return
+    }
     if ('comparison' in event.data && event.data.comparison) {
       const images = event.data.comparison
       try {

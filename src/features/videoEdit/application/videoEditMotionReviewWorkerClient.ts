@@ -45,7 +45,7 @@ export function createVideoEditMotionAnalyzer(signal: AbortSignal, observe?: Cod
       current.onmessageerror = () => finish(new Error('运动结构分析结果传递失败。'))
       signal.addEventListener('abort', abort, { once: true })
       if (signal.aborted) { abort(); return }
-      try { current.postMessage(request, 'comparison' in request ? request.comparison ?? [] : []) } catch (error) { finish(error) }
+      try { current.postMessage(request, 'banding' in request ? [request.banding] : 'comparison' in request ? request.comparison ?? [] : []) } catch (error) { finish(error) }
     })
   }
   return { analyze, dispose }

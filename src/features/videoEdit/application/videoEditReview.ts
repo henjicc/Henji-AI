@@ -1,4 +1,5 @@
 import ts from 'typescript'
+import { reviewCodeTrackSeparation, type CodeTrackSuggestion } from '@/core/videoEdit/codeTrackReview'
 import { reviewCodeEffectUsage, type CodeEffectSuggestion } from '@/core/videoEdit/codeEffectReview'
 import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
@@ -97,7 +98,9 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
       const results = videoEditTrackResults(composition)
       let sources: VideoEditMedia[] = []
       const warnings = ['检查点是结构候选和优先抽样，不证明实际像素可见或其余时段无问题。', '跟踪区间来自原始采样；渲染可能插值或借用附近有效位置，跟丢不等于画面空白。']
-      const scanned = new Map<string, CodeEffectSuggestion[]>()
+      const skippedTracks = new Map<string, number>()
+      const skipTracks = (reason: string): void => { skippedTracks.set(reason, (skippedTracks.get(reason) ?? 0) + 1) }
+      const scanned = new Map<string, { effects: CodeEffectSuggestion[]; entry: ts.SourceFile; errors: string[] }>()
       const codeEntries: Array<() => Promise<void>> = []
       visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(local, entry, window) {
         const clip = entry.path.at(-1)!.clip
@@ -110,18 +113,43 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
               await loadCodeSourceReferences(version)
               assertCurrent()
               const files = resolveCodeMaterialFiles(version, documentCodeSourceResolver())
-              suggestions = Object.entries(files.files).filter(([file]) => /\.[cm]?[jt]sx?$/.test(file)).flatMap(([file, text]) => reviewCodeEffectUsage(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)))
+              const parsed = new Map(Object.entries(files.files).filter(([file]) => file === files.entry || /\.[cm]?[jt]sx?$/.test(file)).map(([file, text]) => [file, ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)]))
+              suggestions = { effects: [], entry: parsed.get(files.entry)!, errors: [] }
+              for (const source of parsed.values()) {
+                try { suggestions.effects.push(...reviewCodeEffectUsage(source)) }
+                catch (error) { assertCurrent(); suggestions.errors.push(`效果建议 ${source.fileName}：${error instanceof Error ? error.message : String(error)}`) }
+              }
               scanned.set(version.id, suggestions)
             }
-            for (const effectSuggestion of suggestions) records.push({ kind: 'code_effect_suggestion', timeline: window, sequenceId: local.id, path: entry.path, subjectId: clip.id, effectSuggestion })
+            for (const effectSuggestion of suggestions.effects) records.push({ kind: 'code_effect_suggestion', timeline: window, sequenceId: local.id, path: entry.path, subjectId: clip.id, effectSuggestion })
+            for (const error of suggestions.errors) warnings.push(error)
+            let tracks: CodeTrackSuggestion[] = []
+            try { tracks = reviewCodeTrackSeparation(suggestions.entry, local, skipTracks) }
+            catch (error) { assertCurrent(); skipTracks(`拆轨分析失败：${error instanceof Error ? error.message : String(error)}`) }
+            const independentPlacement = entry.path.every(({ clip }) => (clip.anchorX ?? .5) === .5 && (clip.anchorY ?? .5) === .5 && clip.x === 0 && clip.y === 0 && clip.scale === 1 && (clip.scaleAspect ?? 1) === 1 && clip.rotation === 0
+              && clip.opacity === 1 && !clip.follow && !clip.stabilization && !clip.fadeInFrames && !clip.fadeOutFrames && !clip.elementOverrides
+              && !Object.values(clip.curves ?? {}).some(points => points?.length) && !clip.effects?.length)
+              && entry.path.every(step => !(composition.sequences?.find(sequence => sequence.id === step.sequenceId) ?? composition).transitions?.some(transition => transition.leftClipId === step.clipId || transition.rightClipId === step.clipId))
+            const matchingSequenceSizes = entry.path.every(step => {
+              const sequence = composition.sequences?.find(sequence => sequence.id === step.sequenceId)
+              return !sequence || Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator) === local.width && sequence.height === local.height
+            })
+            if (tracks.length && (!independentPlacement || !matchingSequenceSizes)) skipTracks(!matchingSequenceSizes ? '嵌套序列尺寸或比例不一致' : '放置含锚点、变换、曲线、跟随或效果依赖')
+            if (independentPlacement && matchingSequenceSizes) for (const trackSuggestion of tracks) {
+              assertVideoEditReviewBudget(records.length + 1)
+              records.push({ kind: 'separate_track_suggestion', timeline: window, sequenceId: local.id, path: entry.path, subjectId: clip.id,
+                motionEvidence: { basis: 'code_structure', elementPath: [trackSuggestion.layerId], trackSuggestion, suggestion: `“${trackSuggestion.name}”${trackSuggestion.reason}，适合单独成轨（建议，非错误）。源码 ${trackSuggestion.file}:${trackSuggestion.line}；核对用户是否要独立开关、调强度、挪时间或复用，拆分不应复制镜头或排版逻辑。拆出的片段和轨道用看得懂的名字；跟随镜头、节点或窗口的花字和高亮留在内容模块。` } })
+            }
           } catch (error) {
             assertCurrent()
+            skipTracks('源码不可读')
             records.push({ kind: 'code_unavailable', timeline: window, sequenceId: local.id, path: entry.path, subjectId: clip.id,
               motionEvidence: { basis: 'code_structure', suggestion: `源码静态建议未取得：${error instanceof Error ? error.message : String(error)}。其他结构检查仍有效。` } })
           }
         })
       } })
       for (const scan of codeEntries) { await scan(); assertCurrent() }
+      if (skippedTracks.size) warnings.push(`拆轨建议跳过的代码放置（按原因计数）：${[...skippedTracks].map(([reason, count]) => `${reason} ${count} 处`).join('；')}。未给建议不代表应该合并。`)
       if (input.motion) {
         const programs: Record<string, CodeMaterialProgram> = {}
         await withVideoEditCodeMetadata(() => visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(_local, entry) {
@@ -218,7 +246,8 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
         warnings.push('片子数据检查只说明数据与窗口内容的对应关系；作者代码可能主动淡掉错位的框，不能据此断言观众看见了框。鼠标日志缺失或隐藏时不判跳动；proposal 是可选改法，修改前读声明，写后读回并重新复核。')
       }
       if (input.visual) {
-        const visual = await collectVideoEditVisualReview(owner, composition, range, input.visual, context.signal, assertCurrent, records.length, warnings)
+        const reviewedFrames = input.visual.banding ? selectVideoEditReviewFrames(frameCandidates(records), range, input.maxFrames, videoEditDuration(composition)) : []
+        const visual = await collectVideoEditVisualReview(owner, composition, range, input.visual, context.signal, assertCurrent, records.length, warnings, reviewedFrames)
         records.push(...visual.records); sources.push(...visual.sources)
       }
       records.sort((a, b) => a.timeline.from - b.timeline.from || a.kind.localeCompare(b.kind) || a.subjectId.localeCompare(b.subjectId))

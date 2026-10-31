@@ -30,7 +30,7 @@ function altered(composition: VideoEditComposition, clipId: string, change: (cli
   return { ...composition, clips: replace(composition.clips), sequences: composition.sequences?.map(sequence => ({ ...sequence, clips: replace(sequence.clips) })) }
 }
 
-export async function collectVideoEditVisualReview(owner: VideoEditInstance, composition: VideoEditComposition, range: VideoEditSourceMapRange, options: Options, signal: AbortSignal, assertCurrent: () => void, existingCount: number, warnings: string[]): Promise<{ records: VideoEditReviewRecord[]; sources: VideoEditMedia[] }> {
+export async function collectVideoEditVisualReview(owner: VideoEditInstance, composition: VideoEditComposition, range: VideoEditSourceMapRange, options: Options, signal: AbortSignal, assertCurrent: () => void, existingCount: number, warnings: string[], reviewFrames: readonly number[] = []): Promise<{ records: VideoEditReviewRecord[]; sources: VideoEditMedia[] }> {
   const records: VideoEditReviewRecord[] = [], placements: Placement[] = [], skippedProbes: string[] = []
   const captions: Array<{ text: string; record: VideoEditReviewRecord }> = []
   visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(local, entry) { placements.push({ local, entry }) } })
@@ -77,6 +77,9 @@ export async function collectVideoEditVisualReview(owner: VideoEditInstance, com
     }
   }
   const comparisonFrames = new Set(comparisons.map(value => value.frame))
+  const pixelFrames = new Set([...comparisonFrames, ...(options.banding ? reviewFrames : [])])
+  if (options.banding && !pixelFrames.size) warnings.push('色带检查没有可检查的候选帧；请将 from/to 指向含画面片段的区间，或用 visual.probes 指定已放置代码片段的 frame 和参数后重查。')
+  const additionalBandingFrames = pixelFrames.size - comparisonFrames.size
   // 字幕仅需有代码放置的局部观察；按序列和帧去重，再按文档批量取，避免反复切换根/子序列。
   const observations = new Map<VideoEditComposition, { local: VideoEditComposition; frames: Set<number>; values: Map<number, CodeAuthorFrameObservation> }>()
   for (const { record } of captions) for (const { local, entry } of placements) {
@@ -85,9 +88,10 @@ export async function collectVideoEditVisualReview(owner: VideoEditInstance, com
     const job = observations.get(local) ?? { local, frames: new Set(), values: new Map() }
     job.frames.add(videoEditSourceMapLocalFrame(entry, frame)); observations.set(local, job)
   }
-  const plannedFrames = comparisons.length + comparisonFrames.size * 2 + [...observations.values()].reduce((sum, job) => sum + job.frames.size, 0)
-  const plannedPixels = (comparisons.length + comparisonFrames.size * 2) * composition.width * composition.height + [...observations.values()].reduce((sum, job) => sum + job.frames.size * job.local.width * job.local.height, 0)
-  if (plannedFrames > 120 || plannedPixels > 250_000_000) throw new Error(`画面复核预计需渲染 ${plannedFrames} 帧（${Math.ceil(plannedPixels / 1e6)} 百万像素），超过单次计算预算；请缩小 from/to，或分别启用 visual.narration / effects。尚未开始渲染，未截断证据。`)
+  const plannedFrames = comparisons.length + comparisonFrames.size * 2 + additionalBandingFrames + [...observations.values()].reduce((sum, job) => sum + job.frames.size, 0)
+  const plannedPixels = (comparisons.length + comparisonFrames.size * 2 + additionalBandingFrames) * composition.width * composition.height + [...observations.values()].reduce((sum, job) => sum + job.frames.size * job.local.width * job.local.height, 0)
+  if (plannedFrames > 120 || plannedPixels > 250_000_000) throw new Error(`画面复核预计需渲染 ${plannedFrames} 帧（${Math.ceil(plannedPixels / 1e6)} 百万像素），超过单次计算预算；请缩小 from/to，或分别启用 visual.narration / effects / banding。尚未开始渲染，未截断证据。`)
+  // 色带记录数要扫完才知道，由 append 逐条按实际数量计入预算；按理论上界预检会让多帧检查误报超预算。
   assertVideoEditReviewBudget(existingCount + captions.length + comparisons.length)
   const dependencies = await withVideoEditCodeMetadata(() => {
     const media = new Map<string, VideoEditMedia>()
@@ -152,9 +156,22 @@ export async function collectVideoEditVisualReview(owner: VideoEditInstance, com
   }
   const analyzer = createVideoEditMotionAnalyzer(signal)
   try {
-    for (const frame of comparisonFrames) {
+    for (const frame of pixelFrames) {
       const baseline = await render(composition, frame)
       try {
+        if (options.banding) {
+          const image = await createImageBitmap(baseline)
+          try {
+            const result = await analyzer.analyze({ banding: image })
+            assertCurrent()
+            if (!result.banding) throw new Error('色带检查没有返回证据，请重查。')
+            const clipRefs = [...new Set(placements.filter(({ entry }) => frame >= entry.timeline.from && frame < entry.timeline.to).map(({ entry }) => entry.path.at(-1)!.clip.id))].map(id => ({ kind: 'video_edit.clip' as const, id: `${owner.document.id}:${id}` }))
+            const hasSourceMedia = placements.some(({ entry }) => frame >= entry.timeline.from && frame < entry.timeline.to && ['video', 'image'].includes(entry.path.at(-1)!.clip.kind))
+            for (const evidence of result.banding) append({ kind: 'banding', subjectType: 'video_edit.sequence', subjectId: composition.id, sequenceId: composition.id, path: [], timeline: { from: frame, to: frame + 1 },
+              motionEvidence: { basis: 'program_pixels', banding: { ...evidence, clipRefs }, suggestion: `序列帧 ${frame}（${(frame / composition.fps).toFixed(2)}秒）在比例区域 (${evidence.region.x.toFixed(3)}, ${evidence.region.y.toFixed(3)}, ${evidence.region.width.toFixed(3)}, ${evidence.region.height.toFixed(3)}) 检出宽平台与连续一级台阶，疑似色带；同帧片段见 clipRefs，不能据此定位源层。${hasSourceMedia ? '同帧有视频/图片，色带可能是素材自带；先对照原素材，必要时去色带或加颗粒。' : ''}若来自代码，删掉氛围用大面积极浅渐变；确需时在 GPU 中画并加交错梯度噪声，幅度按叠到底色后最终画面的半级亮度算，不按透明度；Canvas2D 渐变只用于小范围。取帧将暗部对比度拉高约6倍读图复查。` } })
+          } finally { image.close() }
+        }
+        if (!comparisonFrames.has(frame)) continue
         const measured: Array<{ job: Comparison; pixels: VideoEditEffectPixelEvidence }> = []
         const compare = async (image: ImageBitmap): Promise<VideoEditEffectPixelEvidence> => {
           const images: ImageBitmap[] = []
@@ -178,6 +195,7 @@ export async function collectVideoEditVisualReview(owner: VideoEditInstance, com
       } finally { baseline.close() }
     }
   } finally { analyzer.dispose() }
+  if (options.banding) warnings.push('色带仅检查所采最终合成帧的原尺寸宽平台和连续一级台阶；有噪点或抖动的细小断层可能漏检。位置是画面比例坐标，同帧片段不是源层归因；候选须拉高暗部对比度约6倍读图，未检测到不保证其他帧或最终编码无色带。')
   if (skippedProbes.length) warnings.push(`这些探针当前值已等于 offValue，未作效果判断：${skippedProbes.join('、')}。`)
   warnings.push('口播清单按字幕段句首，不自动识别语义；片段/图层及正文清单不包含遮挡分析，网页画面就绪由正式取帧链路负责。效果只比较所采帧的全尺寸最终合成像素，可能被上层遮挡或本帧自然为零；相同不能推断整段无效，差异不能证明效果正确。任意作者参数无统一关闭语义，需显式 probes；重复使用同一嵌套片段时开关影响该实体的全部实例。')
   await verifyVideoEditMotionSources(sources, signal, assertCurrent)

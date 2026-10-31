@@ -5,20 +5,22 @@ import { videoEditNestedCaptionSourceId } from './nestedCaptions'
 import { activeVideoEditEffects } from './compositing'
 import type { VideoEditSafeAreaEvidence } from './motionStructure'
 
-export type VideoEditReviewKind = 'code_effect_suggestion' | 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast' | 'text_overflow' | 'text_clipped' | 'text_truncated' | 'text_box_overflow' | 'shadow_outside_source' | 'visibility_dip' | 'narration_alignment' | 'effect_unchanged' | 'effect_visible' | 'effect_unstable'
+export type VideoEditReviewKind = 'code_effect_suggestion' | 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast' | 'text_overflow' | 'text_clipped' | 'text_truncated' | 'text_box_overflow' | 'shadow_outside_source' | 'visibility_dip' | 'narration_alignment' | 'effect_unchanged' | 'effect_visible' | 'effect_unstable' | 'banding' | 'separate_track_suggestion'
 export interface VideoEditReviewRecord {
   kind: VideoEditReviewKind
   timeline: VideoEditSourceMapRange
   sequenceId: string
   path: readonly VideoEditSourceMapStep[]
   subjectId: string
-  subjectType?: 'video_edit.clip' | 'video_edit.effect' | 'video_edit.caption'
+  subjectType?: 'video_edit.clip' | 'video_edit.effect' | 'video_edit.caption' | 'video_edit.sequence'
   effectSuggestion?: import('./codeEffectReview').CodeEffectSuggestion
   confidence?: number
   source?: { fromUs: number; toUs: number }
   motionEvidence?: { basis: 'clip_transform' | 'structural_events' | 'code_structure' | 'video_pixels' | 'code_input_pixels' | 'text_layout' | 'program_pixels'; elementPath?: string[]; peakSpeed?: number; gapSeconds?: number; suggestion: string;
     speedLimit?: number; jitterPixels?: number; safeArea?: VideoEditSafeAreaEvidence
     visual?: { captionText?: string; content?: string[]; width: number; height: number; changedPixels?: number; unstablePixels?: number; maxChannelDifference?: number; meanChannelDifference?: number; changedPixelRatio?: number; parameter?: string; offValue?: number | boolean }
+    banding?: import('./bandingReview').VideoEditBandingEvidence & { clipRefs: Array<{ kind: 'video_edit.clip'; id: string }> }
+    trackSuggestion?: import('./codeTrackReview').CodeTrackSuggestion
     canvas?: import('./codeCanvasReview').VideoEditCanvasEvidence
     textOverflow?: import('./textOverflowReview').VideoEditTextOverflowEvidence
     input?: { parameter: string; kind: 'video' | 'sequence'; mediaRef: { kind: 'video_edit.media'; id: string } } }
