@@ -37,3 +37,6 @@
 13. spatialMatrices 懒加载的 three 数学类是第 9 条的允许例外：只传数值，不跨实例 instanceof。
 14. B、C 从 A 冻结接口提交的分支叠加开工（叠加分支），A 合并后各自 rebase 到 main。
 15. 链接改为指向主仓库路径。
+
+## B 线开工方式（11-01，Claude 定）
+B 线不等 15/17/18 合并：先做与它们无关的部分——受管 createThree 入口、单一 WebGPURenderer 后端契约与 GLSL 材质类型报错、three 内部时钟控制（停 RAF、宿主设 nodeFrame 时间）、模块身份（与作者同一挂载 URL）、G/W 原型与 ExternalTexture 对比、作者入口枚举相关文件。作者 API 号用一处常量（暂记 9，与 17/18 合并后对齐）。与 17（模拟在曝光子时刻取样）、18（文本 DTO 共存）、15（空间片段的内容键）的接缝先留明确的挂接点与测试桩，等它们合并进 main 后由 B 线吸收 main 再接上。
