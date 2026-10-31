@@ -1,45 +1,47 @@
-摘要：新增投影、描边、扫光、溶解显影四个登记条目，轮廓发光做成“发光”的方式“轮廓”；全部照发光样板写定义与工序，图层上光走零 alpha、影走普通预乘下层。
-摘要：投影用现有均匀模糊规划模糊 alpha；轮廓发光与扫光、溶解的光晕共用发光金字塔（三种发光来源）；描边 3 像素以内邻域取样，以上 Jump Flood，两条路径用同一覆盖公式。
-摘要：依赖 ticket 11 的 softMin/softMax、一份说明、aliases、blurSigma 与预览页；第 11 节列出需要 Claude 定的点，定后照本文实现。
+摘要：新增投影、描边、扫光、溶解显影四个登记条目，轮廓发光做成“发光”的方式“轮廓”；全部照发光样板写定义与工序，图层上光走零 alpha、影走普通预乘下层（cover）。
+摘要：投影用现有 planGaussian 模糊 alpha；轮廓发光、扫光与溶解的光晕用发光金字塔的三种来源；本票不在运行时共用金字塔。描边按触及半径在邻域取样与 Jump Flood 间交叉过渡，两路同一覆盖公式并保证 E≤a≤D。
+摘要：已按 Codex 审查（review.md，必须改 15、建议 5）全部修订，接缝按 ticket 11 提交 813a2a663 核对；末尾为 Claude 裁定。
 
 # 12 新效果设计
 
 ## 0. 依据与边界
 
-- 依据：`docs/task/代码效果与渲染改进/效果库.md`（参数与说明规范、效果包含效果、效果样板：发光、代码设计第 2、3、7 节）；`tickets/05-图层效果链/design.md` 第 11 节裁定（C1 零 alpha 光、C2 主图像串行与副输出保留产生时状态）。
-- 样板：`src/core/videoEdit/glow.ts`、`chromaticAberration.ts`、`effectIncludes.ts`；`src/features/videoEdit/engine/glow.ts`、`chromaticAberration.ts`、`videoEditAuthorEffects.ts`、`videoEditBuiltinEffectPasses.ts`、`videoEditBuiltinEffectsGpu.ts`。ticket 11 的进行中改动在 `D:/VibeCode/Henji-AI-t11`（`core/videoEdit/blur.ts`、`vignette.ts`、`effectIncludes.ts` 的 `soft()`、`parameterDefinition.ts` 的 softMin/softMax 等）。
-- 记号：H = 图层效果的参考高度，`context ? referenceSize.height * rasterScale : height`（与发光、色差同一写法）；“内容坐标”= 纹理像素减 `rasterOrigin`，内容尺寸 = `contentBounds * rasterScale`；片段上没有 context 时内容 = 整张纹理。所有图案、光带、偏移都锚在内容坐标上，外扩档位变化不移动画面。
+- 依据：`docs/task/代码效果与渲染改进/效果库.md`（参数与说明规范、效果包含效果、效果样板：发光、代码设计第 2、3、7 节）；`tickets/05-图层效果链/design.md` 第 11 节裁定（C1 零 alpha 光、C2 主图像串行与副输出保留产生时状态）；ticket 09 的恒等旁路不触发浮点。
+- 样板：`src/core/videoEdit/glow.ts`、`chromaticAberration.ts`、`effectIncludes.ts`；`src/features/videoEdit/engine/glow.ts`、`chromaticAberration.ts`、`videoEditAuthorEffects.ts`、`videoEditBuiltinEffectPasses.ts`、`videoEditBuiltinEffectsGpu.ts`；ticket 11 的 `core/videoEdit/blur.ts`、`vignette.ts`、`engine/blur.ts`、`videoEditRenderPrecision.ts`（提交 813a2a663）。
+- 记号：H = 图层效果的参考高度，`context ? referenceSize.height * rasterScale : height`（与发光、色差同一写法）；“内容坐标”= 纹理像素减 `rasterOrigin`，内容尺寸 = `contentBounds * rasterScale`；片段上没有 context 时内容 = 整张纹理。图案、光带、偏移都锚在内容坐标上，外扩档位变化不移动画面。
 - 全部效果 `space: 'layer'`（图层与片段都能用），组 `stylize`。片段效果链没有外扩：片段上投影、外侧描边、光晕只在片段画面范围内出现。
-- 不做：调整层、第二批效果、跨效果运行时共用金字塔（见 11.2）、风格件与技能三档（ticket 13）、性能基线测量（效果库决定 5，等显卡空闲）。
+- 采样约定：现有共用 sampler 是 clamp。凡需要“范围外为透明”或“环绕”的取样（投影偏移、蓝噪声）都在着色器里显式处理（越界判断、`textureLoad` + 手动环绕与双线性），不依赖 sampler。
+- 恒等状态：每个效果在“没有效果”的参数下规划只含 `copy`（或 `effect_opacity` 且系数 1 时也改为 `copy`）；浮点判定以规划为准（7.3），与 ticket 09 一致。
+- 不做：调整层、第二批效果、运行时跨效果共用金字塔、风格件与技能三档（ticket 13）、性能基线测量（效果库决定 5，等显卡空闲）。
 
 ## 1. 登记总表
 
 | 效果 | id / 作者工厂 | 定义文件 | 实现文件 | 输出（图层模式） |
 |---|---|---|---|---|
-| 投影 | `drop_shadow` / `shadow` | `src/core/videoEdit/dropShadow.ts` | `engine/dropShadow.ts` | 主图 + 普通预乘下层（cover） |
+| 投影 | `drop_shadow` / `shadow` | `src/core/videoEdit/dropShadow.ts` | `engine/dropShadow.ts` | 主图 + cover 下层 |
 | 发光·轮廓 | `glow` 的 `mode: 'shape'` | `src/core/videoEdit/glow.ts` | `engine/glow.ts` | 主图（只按原画不透明度）+ 零 alpha 光 |
 | 描边 | `stroke` / `stroke` | `src/core/videoEdit/stroke.ts` | `engine/stroke.ts` | 单张主图 |
 | 扫光 | `light_sweep` / `lightSweep` | `src/core/videoEdit/lightSweep.ts` | `engine/lightSweep.ts` | 主图 +（发光组开启时）零 alpha 光 |
-| 溶解显影 | `dissolve` / `dissolve` | `src/core/videoEdit/dissolve.ts` | `engine/dissolve.ts` | 主图 +（亮边发光时）零 alpha 光 |
+| 溶解显影 | `dissolve_reveal` / `dissolve` | `src/core/videoEdit/dissolveReveal.ts` | `engine/dissolveReveal.ts` | 主图 +（亮边发光时）零 alpha 光 |
 
-- 定义照发光：`effectParam` 写参数，只写 `description`（一份说明），主参数在前、其余按组，方式相关参数写 `visibleWhen`，外扩函数 `bleed` 写在各自定义文件里（照 ticket 11 的 `blurBleed`）。
-- 别名（`aliases`，效果面板搜索用）：投影 `阴影、影子、外阴影、drop shadow、shadow`；描边 `勾边、轮廓线、外描边、outline、stroke`；扫光 `流光、光泽、反光、light sweep、shine`；溶解显影 `溶解、显影、消散、颗粒溶解、dissolve、reveal`；发光补 `外发光、轮廓发光、outer glow`。
-- 着色器组件 `DropShadow` 并入投影：加进 `shaderGraph/effects.ts` 的 `SAME_AS_BUILTIN`（不写迁移，效果库决定 6）。`NoiseDissolve`、`BlockDissolve` 是转场组件，不在效果面板，本票不动。
-- 数量为 0 即关闭：投影不透明度 0、描边粗细 0、扫光亮度与发光强度都为 0、溶解进度 100（且无亮边）时，规划直接返回 `copy`（或只按原画不透明度的 `effect_opacity`）。
+- 溶解显影的 id 用 `dissolve_reveal`：`planVideoEditBuiltinEffect` 的同一个分发里还有转场 `cross_dissolve`、`blur_dissolve`，避免看错。
+- 定义照发光：`effectParam` 写参数，只写 `description`（一份说明），主参数在前、其余按组，方式相关参数写 `visibleWhen`，`bleed` 写在各自定义文件里（照 ticket 11 的 `blurBleed`）。
+- 别名（`aliases`）：投影 `阴影、影子、外阴影、drop shadow、shadow`；描边 `勾边、轮廓线、外描边、outline、stroke`；扫光 `流光、光泽、反光、light sweep、shine`；溶解显影 `溶解、显影、消散、颗粒溶解、dissolve、reveal`；发光补 `外发光、轮廓发光、outer glow`。
+- 着色器组件 `DropShadow` 并入投影：加进 `shaderGraph/effects.ts` 的 `SAME_AS_BUILTIN`（不写迁移，效果库决定 6）。`NoiseDissolve`、`BlockDissolve` 是转场组件，本票不动。
 
 ## 2. 投影 `drop_shadow`
 
 **效果说明**：在内容后面投下一道柔和的影子，让图层和背景之间拉开前后距离。适合标题、卡片、抠好的人物和画中画；影子按内容的形状算。整幅不透明的画面看不到投影，因为影子被画面自己挡住。
 
-| 键 | 名称 | 组 | 单位 | 软范围 | 硬范围 | 默认 | 显隐 |
-|---|---|---|---|---|---|---|---|
-| `opacity` | 不透明度 | — | % | 0–100 | 0–100 | 40 | — |
-| `distance` | 距离 | — | 强度 | 0–100 | 0–400 | 20 | — |
-| `softness` | 柔和度 | — | 强度 | 0–100 | 0–200 | 40 | — |
-| `direction` | 方向 | — | ° | −180–180 | −180–180 | 90 | — |
-| `color` | 颜色 | 外观 | 颜色 | — | — | 黑（`BLACK_HEX`） | — |
-| `spread` | 扩展 | 外观 | % | 0–100 | 0–100 | 0 | — |
-| `source_opacity` | 原画不透明度 | 外观 | % | 0–100 | 0–100 | 100 | — |
+| 键 | 名称 | 组 | 单位 | 软范围 | 硬范围 | 默认 |
+|---|---|---|---|---|---|---|
+| `opacity` | 不透明度 | — | % | 0–100 | 0–100 | 40 |
+| `distance` | 距离 | — | 强度 | 0–100 | 0–400 | 20 |
+| `softness` | 柔和度 | — | 强度 | 0–100 | 0–200 | 40 |
+| `direction` | 方向 | — | ° | −180–180 | −180–180 | 90 |
+| `color` | 颜色 | 外观 | 颜色 | — | — | 黑（`BLACK_HEX`） |
+| `spread` | 扩展 | 外观 | % | 0–100 | 0–100 | 0 |
+| `source_opacity` | 原画不透明度 | 外观 | % | 0–100 | 0–100 | 100 |
 
 说明（一份，人和助手同读）：
 - 不透明度：影子有多深。0 没有投影；40%（默认）淡淡的影子，像纸片稍稍离开桌面；80% 以上是浓重的影子。
@@ -50,57 +52,60 @@
 - 扩展：影子的实心部分有多大。0%（默认）完全按柔和度渐变；50% 影子更实、更大一圈；100% 变成放大了一圈的硬边影子。
 - 原画不透明度：内容本身保留多少。100%（默认）；0% 只留下影子，相当于 AE 的“仅阴影”，可以单独放一层再叠。
 
-换算：偏移 `d = distance × 0.0005 × H`（100 → 5%）；标准差 `σ = blurSigma(softness) × H`（ticket 11 `core/videoEdit/blur.ts`，40 → 0.9%、80 → 3%、200 → 48%）。外扩 `bleed = (d + gaussianSupport(σ) + 2px) / H`。
+换算：偏移 `d = distance × 0.0005 × H`；标准差 `σ = blurSigma(softness) × H`（ticket 11 `core/videoEdit/blur.ts`，0 → 0、40 → 0.9%、80 → 3%、200 → 48%）。外扩 `bleed = (d + gaussianSupport(σ) + 2px) / H`。
 
 工序（`planDropShadow(params, width, height, context?, split)`）：
-1. 模糊：`σ ≥ 0.5px` 时对输入调用现有 `Planner.gaussian`（`planGaussian`，降采样到 σ ≤ 3 再横竖两道，透明边缘），目标纹理按 `2^k` 缩小（`k = clamp(floor(log2(σ/2)), 0, 3)`），`linearScratch` 用 rgba16float。只用结果的 alpha，颜色内容不影响影子。`σ < 0.5px` 直接取输入。
-2. 合成 `shadow_composite`（片段）/ `shadow_layer`（图层）：在 `uv − 偏移` 处双线性取模糊后的 alpha `a`，`a' = min(1, a / (1 − 0.99 × spread))`，影子 = `vec4(颜色 × a', a') × 不透明度`（预乘、sRGB 编码值，与合成器一致）。在 `a' > 0` 的像素上对 rgb 与 a 一起加 ±1/510 的半级亮度抖动（同 ticket 11 暗角的写法：加在预乘值上，叠到任何底色后正好半级）。
-   - 片段：`out = 原画 × 原画不透明度 over 影子`，单输出。
-   - 图层：主图 = `effect_opacity(原画不透明度)`（为 1 时 `copy`）；影子写入 `plan.underlay`，`plan.underlayKind = 'cover'`。影子是普通预乘 RGBA，不设 `carriesLight`，过片段边界、转场、嵌套都按普通画面走。
+1. 恒等：不透明度为 0 时，原画不透明度为 1 返回 `copy`，否则 `effect_opacity`（片段与图层相同，图层不出下层）。
+2. 模糊：调用现有 `Planner.gaussian(input, S, σ, σ, repeatEdges=false)`，S 为与输入同尺寸的 rgba16float scratch（`linearScratch`）。不另设 σ 旁路或目标降采样档：`σ = 0`（柔和度 0）时 planGaussian 本身只有 `copy`；`0 < σ < 0.3px` 时它按 `minimumSigma` 也是 `copy`，该处相邻权重约 0.4%，跳变小于 1/255，有用例守住（10.3）。只用结果的 alpha。
+3. 合成 `shadow_composite`（片段）/ `shadow_layer`（图层）：
+   - 取样：`uv' = uv − 偏移`；`uv'` 落在 [0,1] 外时 `a = 0`（显式判断，不靠 clamp sampler 延伸边缘），否则双线性取 S 的 alpha。
+   - `a' = min(1, a / (1 − 0.99 × spread))`；半级抖动只加在 alpha 上：`a_d = clamp(a' + (hash − 0.5)/255 × [a' > 0], 0, 1)`；影子 = `vec4(颜色(编码) × a_d, a_d) × 不透明度`。颜色由 alpha 推出，预乘始终成立；黑色影子 RGB 恒为 0，抖动只改变遮挡量，叠到任何底色上都只可能变暗、幅度不超过半级。
+   - 片段：`out = 原画 × s + 影子 × (1 − 原画.a × s)`（s = 原画不透明度）。
+   - 图层：主图 = s 为 1 时 `copy`，否则 `effect_opacity(s)`；影子写入 `plan.underlay`，`plan.underlayKind = 'cover'`。cover 是普通预乘 RGBA，不设 `carriesLight`，过片段边界、转场、嵌套都按普通画面走。片段与图层在 `s = 0` 时结果一致（只剩影子）。
 
 观感目标：
-- 默认：透明底白字放在中灰底上，字下方约 1% 处有一层很淡、很散的影子，字像浮起一点，没有厚重的立体感；深底上几乎看不出（符合“很淡很散的投影”）。
+- 默认：透明底白字放在中灰底上，字下方约 1% 处一层很淡、很散的影子，字像浮起一点，没有厚重的立体感；深底上几乎看不出（符合“很淡很散的投影”）。
 - 不透明画面（整幅片段或铺满的图层）：看不到影子；给有 bounds 的画中画图层加投影时，影子落在画面框外。
-- 连续性：柔和度跨 `k` 档位、距离从 0 拖到 400、方向转一圈，影子都连续变化；`planGaussian` 的档位连续性已有测试保证，新增用例只测偏移与 `spread`。
+- 连续：柔和度 0→200、距离 0→400、方向一圈，画面连续变化。
 
 ## 3. 发光·轮廓（发光的方式“轮廓”）
 
-发光原有的“亮部”方式不变；新增方式“轮廓”：按内容的 alpha 发光，颜色只来自着色组。这就是 Photoshop 外发光的做法，和“阈值 0”的区别是深色的字也能发光、光的颜色不受内容颜色和亮度影响。
+发光原有“亮部”方式不变；新增“轮廓”：按内容的 alpha 发光，颜色只来自着色组（Photoshop 外发光的做法）。与“阈值 0”的区别：深色的字也能发光，光的颜色不受内容颜色和亮度影响。
 
 登记改动（`core/videoEdit/glow.ts`）：
-- 在“半径”后加主参数 `mode` 方式：`bright` 亮部（默认）/ `shape` 轮廓。说明：什么发光。亮部（默认）按画面亮度，亮的地方发光、光的颜色跟着原画；轮廓按文字和图形的形状发光，深色的字也能发出光，光的颜色由“着色”组的内圈、外圈颜色决定。
+- “半径”后加主参数 `mode` 方式：`bright` 亮部（默认）/ `shape` 轮廓。说明：什么发光。亮部（默认）按画面亮度，亮的地方发光、光的颜色跟着原画；轮廓按文字和图形的形状发光，深色的字也能发出光，光的颜色由“着色”组的内圈、外圈颜色决定。
 - `threshold`、`threshold_smoothness`、`tint`（着色量）加 `visibleWhen: { param: 'mode', in: ['bright'] }`。
-- 内圈颜色说明改为：靠近内容的光晕颜色。亮部方式下着色量为 0 时不起作用；轮廓方式下光就是这个颜色。外圈颜色同理补“轮廓方式下……”。
-- 效果说明末尾补一句：方式选轮廓，按形状给文字、图形加外发光，深色的字也能发出彩色的光。
-- 其余参数（强度、半径、拖尾、核心发白、混合模式、长宽比、色差、质量、输出）两种方式共用，含义不变。
+- 内圈颜色说明：靠近内容的光晕颜色。亮部方式下着色量为 0 时不起作用；轮廓方式下光就是这个颜色。外圈颜色同理补“轮廓方式下……”。
+- 效果说明末尾补：方式选轮廓，按形状给文字、图形加外发光，深色的字也能发出彩色的光。
+- 其余参数两种方式共用、含义不变。
 
 实现（`engine/glow.ts`）：
-- 发光金字塔拆成两段供本票复用（第 7 节）：`glowPyramid(...)` 负责提取 → 13 点降采样 → 每层可分离高斯 → tent 升采样累加 →（色差），返回累加纹理；`glowFinish(...)` 负责合成。`planGlow` 改为调用这两段，亮部方式的工序与 uniform 不变。
-- 发光来源三种，统一用 `a.x`（亮部的阈值 ≥ 0）区分：`a.x = −1` 轮廓、`a.x = −2` 光源纹理（第 5、6 节）。`glowEmission(c)` 首行分支：轮廓返回 `vec3f(c.a)`（预乘白光，颜色由层权重的内外圈色给出，着色量在规划里固定为 1）；光源纹理直接返回 `c.rgb`（已是预乘线性光）。光核（`glowLight` 的 core）同一分支取样，光源纹理方式光核权重为 0。
-- 轮廓方式的合成：光在内容后面，不给内容加核心提亮。
-  - 片段：新入口 `glow_shape_composite`：`lit = glowColor(0, 光)`、`la = glowPeak(lit)`，`out = 原画 × 原画不透明度 + vec4(lit, la) × (1 − 原画 alpha)`。
-  - 图层：主图 = `effect_opacity(原画不透明度)`；光照旧走 `glow_layer_light` 写零 alpha 光，`plan.underlay` 不写 `underlayKind`（缺省为光），`carriesLight` 照旧成立。
-- “视图：发光来源”在轮廓方式下显示形状（白色剪影）。
-- 外扩：`glowEnergySupport` 按白色条带算最坏光强，轮廓发光的来源不超过白色，原函数直接适用。
+- 拆成 `glowPyramid(...)`（提取 → 13 点降采样 → 每层可分离高斯 → tent 升采样累加 →（色差），返回累加纹理）与 `glowFinish(...)`（合成）；`planGlow` 改为调用这两段。**拆分前后亮部方式的工序表与像素不变**：拆分前先记下基线（10.3 第 1 条），拆分后逐项对比。
+- 发光来源三种，用 `a.x` 区分（亮部的阈值 ≥ 0）：`a.x = −1` 轮廓、`a.x = −2` 光源纹理（第 5、6 节）。`glowEmission(c)` 首行分支：轮廓返回 `vec3f(c.a)`（预乘白光，颜色由层权重的内外圈色给出，规划里着色量固定为 1）；光源纹理直接返回 `c.rgb`（已是预乘线性光）。光核（`glowLight` 的 core）同一分支取样；光源纹理方式光核权重为 0。
+- 轮廓方式的合成：光在内容后面，不给内容加核心提亮。令 `s` = 原画不透明度、`shown = 原画.a × s`。
+  - 片段：新入口 `glow_shape_composite`：`lit = glowColor(0, 光)`、`la = glowPeak(lit)`，`out = 原画 × s + vec4(lit, la) × (1 − shown)`。遮挡用缩放后的 `shown`，所以 `s = 0` 时光完整露出，与图层一致。
+  - 图层：主图 = `effect_opacity(s)`（s 为 1 时 `copy`）；光照旧走 `glow_layer_light` 写零 alpha 光（`underlayKind` 缺省为光，`carriesLight` 成立）。层内 `effect_over` 叠上主图后，遮挡同样是 `1 − shown`。
+- “视图：发光来源”在轮廓方式下显示白色剪影。
+- 外扩：`glowEnergySupport` 按白色条带求最坏光强，轮廓来源不超过白色，原函数直接适用。
 
 观感目标：
-- 透明底深灰字、白底：着色组设一种颜色时，字四周出现贴着笔画的亮边加向外渐淡的光雾，字本身颜色不变；黑底上同样亮（透明底与黑底一致是发光现有的保证）。
+- 透明底深灰字、白底：着色组设一种颜色时，字四周贴着笔画的亮边加向外渐淡的光雾，字本身颜色不变；黑底上同样亮。
 - 透明底白字：轮廓与“亮部 + 阈值 0 + 着色量 100”观感相同。
-- 不透明画面：只在图层外扩处看到光（画面框外一圈）；整幅片段上看不到。
-- 连续：强度、半径、着色颜色连续变化；方式切换是选项，允许一次性变化。
+- 不透明画面：只在图层外扩处看到光；整幅片段上看不到。
+- 连续：强度、半径、颜色连续变化；方式是选项，允许一次性变化。
 
 ## 4. 描边 `stroke`
 
 **效果说明**：沿内容的轮廓描一圈边，文字、图形、抠好的人物都能用。适合字幕描边、花字和贴纸白边。整幅不透明的画面会沿四边描成一个框。
 
-| 键 | 名称 | 组 | 单位 | 软范围 | 硬范围 | 默认 | 显隐 |
-|---|---|---|---|---|---|---|---|
-| `width` | 粗细 | — | 强度 | 0–100 | 0–120 | 50 | — |
-| `color` | 颜色 | — | 颜色 | — | — | 黑 | — |
-| `position` | 位置 | 边缘 | 选项 | 外侧 `outside`（默认）/ 内侧 `inside` / 居中 `center` | | | — |
-| `softness` | 柔和度 | 边缘 | % | 0–100 | 0–100 | 0 | — |
-| `opacity` | 不透明度 | 边缘 | % | 0–100 | 0–100 | 100 | — |
-| `source_opacity` | 原画不透明度 | 边缘 | % | 0–100 | 0–100 | 100 | — |
+| 键 | 名称 | 组 | 单位 | 软范围 | 硬范围 | 默认 |
+|---|---|---|---|---|---|---|
+| `width` | 粗细 | — | 强度 | 0–100 | 0–120 | 50 |
+| `color` | 颜色 | — | 颜色 | — | — | 黑 |
+| `position` | 位置 | 边缘 | 选项：外侧 `outside`（默认）/ 内侧 `inside` / 居中 `center` | | | |
+| `softness` | 柔和度 | 边缘 | % | 0–100 | 0–100 | 0 |
+| `opacity` | 不透明度 | 边缘 | % | 0–100 | 0–100 | 100 |
+| `source_opacity` | 原画不透明度 | 边缘 | % | 0–100 | 0–100 | 100 |
 
 说明：
 - 粗细：边有多粗。0 没有描边；20 发丝细线；50（默认）约为画面高度的 0.4%，常规字幕描边；100 约 4%，粗壮的贴纸边。可以输入到 120。
@@ -110,42 +115,49 @@
 - 不透明度：边有多实。100%（默认）实色；50% 半透明，透出后面的画面。
 - 原画不透明度：内容本身保留多少。100%（默认）；0% 只留下描边，做空心字。
 
-换算：粗细 `w = 0.0006 × (e^{4.2·t/100} − 1) × H`（20 → 0.08%、50 → 0.43%、100 → 3.9%、120 → 9.2%，按对数感受均匀）；羽化宽 `f = max(1px, softness × w)`；内部轮廓定义为 alpha = 0.5 的等值线。外扩：外侧 `w + f/2 + 2px`，居中 `w/2 + f/2 + 2px`，内侧 0。
+换算：粗细 `w = 0.0006 × (e^{4.2·t/100} − 1) × H`（20 → 0.08%、50 → 0.43%、100 → 3.9%、120 → 9.2%）；羽化宽 `f = max(1px, softness × w)`；轮廓 = alpha 0.5 的等值线；触及半径 `R = ρ + f/2 + 1px`，ρ 为外侧 w、居中 w/2、内侧 w。外扩：外侧 `w + f/2 + 2px`，居中 `w/2 + f/2 + 2px`，内侧 0。宽度为 0 时 `copy`（`s < 1` 时 `effect_opacity`）。
 
-覆盖公式（两条路径共用）：
-- 有符号距离 `sd`：到轮廓的距离（纹理像素），内容里面为负。膨胀覆盖 `D(r) = clamp((r − sd)/f + 0.5, 0, 1)`，腐蚀覆盖 `E(r) = clamp((−r − sd)/f + 0.5, 0, 1)`。
-- 按位置取 `(D, E)`：外侧 `(D(w), a)`，内侧 `(a, E(w))`，居中 `(D(w/2), E(w/2))`；`a` 为原画 alpha，`c` 为原画直通色，`k` = 不透明度，`s` = 原画不透明度。
-- 输出（预乘，区域互不重叠所以直接相加，抗锯齿边不会出现接缝）：
-  `rgb = c·s·E + 描边色·k·(D − E) + c·s·(1 − k)·(a − E)`，`alpha = s·E + k·(D − E) + s·(1 − k)·(a − E)`。外侧时 E = a，就是“边在内容后面”；内侧时 D = a，就是“边盖在内容边缘”。
-- 片段上纹理以外按透明处理，所以整幅不透明片段的四边是轮廓：内侧、居中描成画框，外侧被画面边缘裁掉。
+### 4.1 覆盖公式（两条路径共用）
 
-两条路径：
-- **细（邻域取样）**：`w ≤ 3` 纹理像素且柔和度为 0 时用 `stroke_near` 一道：在半径 r、2r/3、r/3 三圈各取 16 个方向（加中心，共 49 次双线性取样），取最大得 D、取最小得 E（居中用 r = w/2）。直边上双线性 alpha 是 1 像素宽的线性坡，圆盘最大值正好等于 `clamp(r − sd + 0.5)`，与粗路径同一公式；16 边形误差约 0.02r。
-- **粗（Jump Flood）**，参考 Rong & Tan 2006、Ben Golus《The Quest for Very Wide Outlines》：
-  1. `stroke_seed`：跨 0.5 等值线的像素（与 4 邻之一分居两侧，纹理外按 a = 0）写种子 `p + δ`，`δ = g·(0.5 − a)/|g|²`（g 为中心差分梯度，|δ| ≤ 1）得到亚像素位置；其余写哨兵。格式 rg32float（half 精度在大纹理上不够亚像素抗锯齿）。
-  2. `stroke_jfa`：步长 `2^m, …, 2, 1, 1`（最后多一道 1 即 JFA+1），`m = ceil(log2(R))`，`R = w + f/2 + 2`。每道取 9 个候选，保留最近的种子。成本只随粗细的对数增长：默认 50（1080p 约 4.6px）共 5 道。
-  3. `stroke_shade`：`sd = |p − seed| × (a ≥ 0.5 ? −1 : 1)`，找不到种子时按 ±R；套上面的覆盖公式输出。
-- 已知差异：alpha 处处低于 0.5 的发丝（不到半像素的线）粗路径找不到轮廓、细路径会描出很淡的边；粗细跨 3 像素时这类内容的描边会消失。其余内容两条路径人眼一致，由 GPU 用例约束（10.2）。
+- 有符号距离 `sd`：到轮廓的距离（纹理像素），内容里面为负。膨胀覆盖 `D(ρ) = clamp((ρ − sd)/f + 0.5, 0, 1)`，腐蚀覆盖 `E(ρ) = clamp((−ρ − sd)/f + 0.5, 0, 1)`。
+- **夹到原画 alpha**：`D' = max(D, a)`、`E' = min(E, a)`，保证 `E' ≤ a ≤ D'`。半透明平台（如 a = 0.6 的整片内部，原始 E = 1）因此不会出现负带宽。
+- 按位置取 `(D, E)`：外侧 `(D'(w), a)`，内侧 `(a, E'(w))`，居中 `(D'(w/2), E'(w/2))`；`c` 为原画直通色，`k` = 不透明度，`s` = 原画不透明度。
+- 输出（预乘；三块区域互不重叠，直接相加，抗锯齿边不出现接缝）：
+  `rgb = c·s·E + 描边色·k·(D − E) + c·s·(1 − k)·(a − E)`，`alpha = s·E + k·(D − E) + s·(1 − k)·(a − E)`。各项系数非负，`alpha ≤ D ≤ 1`，`rgb ≤ alpha`，预乘成立；`s = 0` 时只剩描边。
+- 片段上纹理以外按透明处理：整幅不透明片段的四边是轮廓，内侧、居中描成画框；外侧被画面边缘裁掉。
+
+### 4.2 粗路径：Jump Flood（Rong & Tan 2006；Ben Golus《The Quest for Very Wide Outlines》）
+
+1. `stroke_seed`：每个像素检查 4 邻（纹理外按 a = 0）。与邻居 q 分居 0.5 两侧时，交点 `x = p + (q − p) × (0.5 − a_p)/(a_q − a_p)`（分母必不为 0，因为两者分居两侧）；保留离 p 最近的交点作为种子；没有交点写哨兵。这是 marching squares 的边交点：硬直边（1 与 0）交点正好在两像素中点，距像素中心 0.5px；轮廓两侧的像素记下的是同一个交点，不会错位成两排；孤立实心像素、单像素细线四边都有交点，没有零梯度的退化情况；画幅边缘的交点落在纹理边上，画框厚度准确。
+2. `stroke_jfa`：步长 `2^m, …, 2, 1, 1`（JFA+1），`m = ceil(log2(R))`；每道取 9 个候选，保留离 p 最近的种子。JFA 是近似算法，追加一步只降低误差、不保证精确（误差约束见 10.3）。
+3. `stroke_shade`：`sd = |p − seed| × (a_p ≥ 0.5 ? −1 : 1)`，没有种子时 `sd = ±R`；套 4.1。
+- 种子格式 rg32float（half 精度在大纹理坐标上不够亚像素）：核心可渲染、不可过滤，种子只用 `textureLoad` 读。
+
+### 4.3 细路径：邻域取样，与粗路径交叉过渡
+
+- `stroke_near` 一道：以 0.75px 为间距取同心圈（到 R 为止，R ≤ 4 时至多 6 圈），每圈 16 个方向双线性取 alpha，加中心；按半径累积最大、最小值，得到 `D_hard(ρ)`、`E_hard(ρ)` 随半径的阶梯（圈间线性插值）。直边上双线性 alpha 是 1px 宽的线性坡，圆盘最大值即 `clamp(ρ − sd + 0.5)`，与粗路径同一公式；柔边 `f > 1` 时对半径区间 `[ρ − (f−1)/2, ρ + (f−1)/2]` 取 5 点平均，得到宽度 f 的坡。D ≥ a、E ≤ a 天然成立。
+- 路径只按 R 选，柔和度不单独触发切换：`R ≤ 3px` 只走细路径；`3 < R < 4px` 两路都算，结果按 `smoothstep(3, 4, R)` 混合；`R ≥ 4px` 只走粗路径。粗细、柔和度连续变化时 R 连续，画面连续。
+- 两路差异：alpha 处处低于 0.5 的发丝（不到半像素的线）粗路径找不到轮廓、细路径会描出淡边；任何粗细与柔和度下，这类内容的描边都只在 R 3→4px 的过渡区里逐渐淡出，不会突然消失。16 方向的多边形误差约 0.02ρ（4px 时约 0.08px）。
 
 观感目标：
-- 默认：透明底白字外侧一圈约 0.4% 画面高的黑边，拐角是圆的，边缘与字之间没有缝和黑灰边；停住或慢速移动时边不抖（距离场在内容坐标里算）。
-- 粗细从 0 拖到 120、柔和度从 0 拖到 100、跨 3 像素路径切换，画面连续，没有一档一档的跳。
-- 不透明画面：图层上外侧描在画面框外，片段上内侧和居中是画框。抠像后的人物沿身形描边。
+- 默认：透明底白字外侧一圈约 0.4% 画面高的黑边，拐角是圆的，边与字之间没有缝和灰边；停住或慢速移动时边不抖。
+- 粗细 0→120、柔和度 0→100、穿过 3–4px 过渡区，画面连续。
+- 不透明画面：图层上外侧描在画面框外，片段上内侧和居中是画框；抠像后的人物沿身形描边。
 
 ## 5. 扫光 `light_sweep`
 
 **效果说明**：让一道光从文字或 Logo 上扫过，只照亮内容本身。适合标题出场、Logo 定版的点睛；给进度打关键帧从 0% 到 100% 就是扫一遍。纯白的字本身已经最亮，扫过时主要靠“发光”组的光晕看出来。
 
-| 键 | 名称 | 组 | 单位 | 软范围 | 硬范围 | 默认 | 显隐 |
-|---|---|---|---|---|---|---|---|
-| `progress` | 进度 | — | % | 0–100 | 0–100 | 50 | — |
-| `width` | 宽度 | — | 强度 | 0–100 | 0–100 | 50 | — |
-| `angle` | 角度 | — | ° | −180–180 | −180–180 | 30 | — |
-| `color` | 颜色 | 光 | 颜色 | — | — | 白 | — |
-| `intensity` | 亮度 | 光 | 强度 | 0–100 | 0–400 | 60 | — |
-| `feather` | 边缘柔和 | 光 | % | 0–100 | 0–100 | 60 | — |
-| `glow_strength` | 强度 | 发光（包含发光） | 强度 | 0–100 | 随发光登记 | 25 | — |
-| `glow_radius` | 半径 | 发光（包含发光） | 强度 | 0–100 | 随发光登记 | 30 | — |
+| 键 | 名称 | 组 | 单位 | 软范围 | 硬范围 | 默认 |
+|---|---|---|---|---|---|---|
+| `progress` | 进度 | — | % | 0–100 | 0–100 | 50 |
+| `width` | 宽度 | — | 强度 | 0–100 | 0–100 | 50 |
+| `angle` | 角度 | — | ° | −180–180 | −180–180 | 30 |
+| `color` | 颜色 | 光 | 颜色 | — | — | 白 |
+| `intensity` | 亮度 | 光 | 强度 | 0–100 | 0–400 | 60 |
+| `feather` | 边缘柔和 | 光 | % | 0–100 | 0–100 | 60 |
+| `glow_strength` | 强度 | 发光（包含发光） | 强度 | 0–100 | 随发光登记 | 25 |
+| `glow_radius` | 半径 | 发光（包含发光） | 强度 | 0–100 | 随发光登记 | 30 |
 
 说明：
 - 进度：光扫到哪里。0% 光还在内容外面没进来，100% 已经完全扫出去；50%（默认）在正中。打两个关键帧从 0% 到 100% 就是完整扫一遍，首尾都不会多出光。
@@ -154,32 +166,33 @@
 - 颜色：光的颜色。白色（默认）；金色、淡蓝做出金属或冷光的质感。
 - 亮度：光有多亮。0 没有光；60（默认）明显的高光；100 接近曝光过度，彩色的字中心发白。可以输入到 400。
 - 边缘柔和：光带两边利落还是渐隐。0% 边缘清楚的光条；60%（默认）中间亮、两边柔和地暗下去；100% 整条都是渐变。
-- 发光·强度（包含发光，改了默认值所以改写说明）：从扫过的光里散出的光晕有多亮。0 不加光晕；25（默认）柔和的光晕，白字上也看得出光扫过；60 以上明显的辉光。
+- 发光·强度（改了默认值所以改写说明）：从扫过的光里散出的光晕有多亮。0 不加光晕；25（默认）柔和的光晕，白字上也看得出光扫过；60 以上明显的辉光。
 - 发光·半径：光晕能散多远。0 只贴着内容；30（默认）约为画面高度的 2%；100 能铺满大半个画面。
 
-光带：方向 `n = (cos θ, sin θ)`（屏幕 y 向下，0° 向右、90° 向下）；`s = dot(q − 内容中心, n)`，内容框四角投影得 `[smin, smax]`；半宽 `hw = 0.004 × 100^{width/100} × H / 2`；中心 `x0 = mix(smin − hw, smax + hw, progress)`；`profile = 1 − smoothstep(1 − max(feather, 1/hw), 1, |s − x0|/hw)`。光 `L = 颜色(线性) × intensity/100 × profile`。
+光带：`n = (cos θ, sin θ)`（屏幕 y 向下）；`s = dot(q − 内容中心, n)`，内容框四角投影得 `[smin, smax]`；半宽 `hw = 0.004 × 100^{width/100} × H / 2`；中心 `x0 = mix(smin − hw, smax + hw, progress)`；`profile = 1 − ramp(1 − max(feather, 1/hw), 1, |s − x0|/hw)`（`ramp` 见 7.3，零宽时为阶跃）。光 `L = 颜色(线性) × intensity/100 × profile`。
 
 工序（`planLightSweep`）：
-- `sweep_image`：`rgb = glowColor(直通色, L)` 再乘 alpha（只照亮内容；复用发光的相加、肩部压缩、溢出推白与只加在被改动像素上的抖动，`c = (_, 核心发白 0.5, 抖动 0.5, 彩色)` 固定）。透明处 alpha 为 0，结果仍为 0。
-- 发光组强度 > 0 时再加 `sweep_light`：写 `L × alpha`（预乘线性光，rgba16float），交给 `glowPyramid`（来源 = 光源纹理，`a.x = −2`），固定其余发光参数：拖尾 70、核心发白 50、相加、长宽比 0、色差 0、着色 0、分辨率 50%、抖动 50。合成：片段 `glow_composite`（base = `sweep_image` 结果）；图层 `glow_layer_image` + `glow_layer_light`（零 alpha 光，`carriesLight`）。
-- 外扩：发光组关闭时为 0；开启时 `glowEnergySupport`，按光的峰值 `P = intensity/100 × max(颜色)` 把强度换成 `strength × √P` 再算（光强与强度平方成正比）。
-- 不做“只照亮内容”开关：关掉它只会在图层透明处多出一条矩形光带，正是“不要用矩形假装光斑”的反例（11.3）。
+- 恒等：亮度为 0 → `copy`（光为 0，发光组也没有来源）；进度 0 或 100 时光带完全在内容外，规划同样只有 `copy`。
+- `sweep_image`：`rgb = glowColor(直通色, L)` 再乘 alpha（只照亮内容；复用发光的相加、肩部压缩、溢出推白与只加在改动像素上的抖动，`c = (_, 核心发白 0.5, 抖动 0.5, 彩色)` 固定）。透明处 alpha 为 0，结果仍为 0。
+- 发光组强度 > 0 时加 `sweep_light`：写 `L × alpha`（预乘线性光，rgba16float），交给 `glowPyramid`（光源纹理，`a.x = −2`），其余发光参数固定：拖尾 70、核心发白 50、相加、长宽比 0、色差 0、着色 0、分辨率 50%、抖动 50。合成：片段 `glow_composite`（base = `sweep_image` 结果）；图层 `glow_layer_image` + `glow_layer_light`（零 alpha 光）。
+- 外扩：发光组关闭为 0；开启时 `glowEnergySupport`，按光峰值 `P = intensity/100 × max(颜色)` 把强度换成 `strength × √P` 再算（光强与强度平方成正比）。
+- 不做“只照亮内容”开关（Claude 裁定 3）。
 
 观感目标：
-- 默认（进度 50）：透明底彩色字上一道向右倾斜的柔光正好压在字中间，光带只出现在笔画里，透明处没有光条；字周围一圈淡淡的光晕跟着光带走。白字上笔画本身不变亮，光晕扫过。
-- 不透明画面：一道光带掠过整幅画面，亮部被推向白色，不出硬切的边。
-- 关键帧 0→100：光从无到有、从有到无都平滑，首尾帧与没加效果完全一样；中途不闪、不跳。
+- 默认（进度 50）：透明底彩色字上一道向右倾斜的柔光压在字中间，光只在笔画里，透明处没有光条；字周围淡淡的光晕跟着光带走。白字上笔画本身不变亮，光晕扫过。
+- 不透明画面：一道光带掠过整幅画面，亮部推向白色，没有硬边。
+- 关键帧 0→100：首尾帧与没加效果完全一样，中途不闪、不跳。
 
-## 6. 溶解显影 `dissolve`
+## 6. 溶解显影 `dissolve_reveal`
 
 **效果说明**：让内容按颗粒、点阵或半调网点一点点显现出来，也能反过来消散掉。给进度打关键帧：0% 到 100% 是显现，100% 到 0% 是消散。适合标题、图片和素材的出场与退场；正在显现的边缘可以带一圈亮边和光晕。
 
 | 键 | 名称 | 组 | 单位 | 软范围 | 硬范围 | 默认 | 显隐 |
 |---|---|---|---|---|---|---|---|
 | `progress` | 进度 | — | % | 0–100 | 0–100 | 50 | — |
-| `mode` | 方式 | — | 选项 | 噪声 `noise`（默认）/ 点阵 `dots` / 半调 `halftone` | | | — |
+| `mode` | 方式 | — | 选项：噪声 `noise`（默认）/ 点阵 `dots` / 半调 `halftone` | | | | — |
 | `size` | 大小 | 图案 | 强度 | 0–100 | 0–100 | 30 | — |
-| `seed` | 随机种子 | 图案 | 无（`value`，步长 1，不做动画） | 0–9999 | 0–9999 | 0 | 方式为噪声、点阵 |
+| `seed` | 随机种子 | 图案 | `value`，步长 1，不做动画 | 0–9999 | 0–9999 | 0 | 噪声、点阵 |
 | `softness` | 柔和度 | 边缘 | % | 0–100 | 0–100 | 30 | — |
 | `edge_width` | 宽度 | 边缘 | 强度 | 0–100 | 0–100 | 0 | — |
 | `edge_color` | 颜色 | 边缘 | 颜色 | — | — | 白 | — |
@@ -194,27 +207,32 @@
 - 柔和度：每一点是一下子出现还是慢慢浮现。0% 一下子出现，最利落；30%（默认）稍有渐显；100% 整体接近淡入，图案若隐若现。
 - 宽度（边缘）：正在显现的边缘带一圈亮边有多宽。0（默认）没有亮边，也没有光晕；20 细细的一圈；60 以上是宽的亮带，像燃烧的纸边。
 - 颜色（边缘）：亮边和它散出的光晕的颜色。宽度为 0 时不起作用。
-- 发光·强度、发光·半径：照搬发光的参数与说明；半径默认改为 30，说明改写为“30（默认）约为画面高度的 2%”。强度沿用发光默认 40，原说明不改。
+- 发光·强度：照搬发光的参数与说明（默认 40 不变）。发光·半径默认改为 30，说明改写为“30（默认）约为画面高度的 2%”。
 
 图案场 `f ∈ [0,1]`（内容坐标 q，格子边长 `g = 0.002 × 40^{size/100} × H`）：
-- 噪声：64×64 蓝噪声纹理按 `q/g + 种子偏移` 双线性、环绕取样。纹理由新增脚本 `scripts/generate-blue-noise.ts` 用 void-and-cluster（Ulichney 1993，与 Christoph Peters 的 CC0 纹理同法）生成，产物 `engine/blueNoise64.generated.ts`（4096 字节），不下载外部文件；以 `pass.lookup` 的 `table` 形式上传（rgba16float 32KB，键固定，常驻缓存）。双线性让大颗粒是圆润的斑块，不出方块。
+- 噪声：64×64 蓝噪声，在 `q/g + 种子偏移` 处用 `textureLoad` 取 4 个纹素、手动环绕（`((i % 64) + 64) % 64`）后双线性插值，平铺接缝处与内部同样连续；种子偏移 = `hash(seed)` 取的整数平移。双线性让大颗粒成为圆润的斑块，不出方块。
 - 点阵：`cell = floor(q/g)`，`h = hash(cell, 种子)`，`d = |fract(q/g) − 0.5| × 2/√2`；`f = 0.65·h + 0.35·d`：每格的圆点在随机时刻开始长大，最后长满整格。
-- 半调：同一网格（0°，不倾斜）不加随机，`f = 0.6·d + 0.4·(1 − 亮度)`，亮度取原画编码值的人眼亮度；透明底同色字上就是网点一起长大。
-- 抗锯齿：`S = max(柔和度 × 0.5, fwidth(f))`。
+- 半调：同一网格（0°）不加随机，`f = 0.6·d + 0.4·(1 − 亮度)`，亮度取原画编码值的人眼亮度。
+- 抗锯齿宽 `S = max(柔和度 × 0.5, fwidth(f))`；`S` 仍可能为 0（柔和度 0 且对齐的格子里 `fwidth = 0`），所有过渡用 `ramp`（7.3），零宽时是确定的阶跃。
+
+蓝噪声纹理（建议采纳项）：
+- 新增 `scripts/generate-blue-noise.ts`：void-and-cluster（Ulichney 1993，与 Christoph Peters 的 CC0 纹理同法），64×64、环绕、能量核 σ = 1.5；初始二值图取 10% 像素，随机数用固定 PRNG mulberry32、种子 `0x48454e4a`；能量相同时取线性下标最小者；输出每像素排名 `(rank + 0.5)/4096`。
+- 产物 `src/features/videoEdit/engine/blueNoise64.generated.ts`（4096 个 float32，base64）。生成器带 `--check`，按字节比较重新生成结果与已提交产物，接进 ticket 11 已有的 `check:author-effects` 同类生成检查（或在 `package.json` 新增 `check:blue-noise`，二选一，以现有脚本组织为准）。不下载外部文件。
+- 上传走 `pass.lookup` 的 `table`（键 `blue-noise-64`，rgba16float 64×64 = 32 KB）。现有 table 池复用闲置表时不比较尺寸（`videoEditBuiltinEffectsGpu.ts` 约 140 行），与 256×N 的调色表交替会复用错尺寸并越界写入：改为闲置表必须同宽同高才复用，否则新建（7.3）。
 
 显现与亮边：
-- 阈值 `t = progress × (1 + 2S + w) − S − w`，`w = edge_width/100 × 0.3`；`m = 1 − smoothstep(t − S, t + S, f)`。进度 0 时 m 处处为 0，100 时处处为 1。
-- 亮边 `e = (1 − m) × (1 − smoothstep(t + S, t + S + w, f)) × smoothstep(0, 0.05, w)`（w → 0 时连续归零；w < 1e−4 视为 0）。
-- `dissolve_image`：`out = vec4(c·a·m + 边色·a·e, a·(m + e))`（边色为编码值，`e ≤ 1 − m`，透明处没有边）。
-- 亮边宽度 > 0 且发光强度 > 0 时加 `dissolve_light`：写 `边色(线性) × a × e`，经 `glowPyramid`（光源纹理方式，固定参数同扫光）→ 片段 `glow_composite` / 图层零 alpha 光。外扩同扫光（峰值 ≤ 1）。
-- 进度 ≥ 100 返回 `copy`，结果与原画逐像素相同；进度 0 时主图全透明、无光。
+- `w = edge_width/100 × 0.3`；阈值 `t = progress × (1 + 2S + w) − S − w`；`m = 1 − ramp(t − S, t + S, f)`。进度 0 时 m 处处为 0，100 时处处为 1。
+- 亮边 `e = (1 − m) × (1 − ramp(t + S, t + S + w, f)) × smoothstep(0, 0.05, w)`（w → 0 时连续归零）。
+- `dissolve_image`：`out = vec4(c·a·m + 边色·a·e, a·(m + e))`（边色为编码值，`e ≤ 1 − m`，透明处没有边，预乘成立）。
+- 亮边宽度 > 0 且发光强度 > 0 时加 `dissolve_light`：写 `边色(线性) × a × e`，经 `glowPyramid`（光源纹理，固定参数同扫光）→ 片段 `glow_composite` / 图层零 alpha 光。外扩同扫光（峰值 ≤ 1）。
+- 恒等：进度 ≥ 100 返回 `copy`（不论发光组），结果与原画逐像素相同；进度 0 时主图全透明、无光。
 
 观感目标：
-- 默认（噪声、进度 50、无亮边）：透明底文字上一半颗粒已经出现，颗粒细（约 0.6%），每粒略带渐显；关键帧动起来像底片显影，不是方块马赛克。
-- 点阵：方格里的小圆点此起彼伏地长满，最后连成完整画面；半调：整齐的网点一起长大，照片的亮部先成形。网点、圆点都是正的方格排列。
-- 亮边 + 发光：边缘一圈细亮边，向外散出柔光，光照到透明背景上（零 alpha 光，提亮下方画面）。
+- 默认（噪声、进度 50、无亮边）：透明底文字上一半颗粒已出现，颗粒细（约 0.6%），每粒略带渐显；动起来像底片显影，不是方块马赛克。
+- 点阵：方格里的小圆点此起彼伏地长满，最后连成完整画面；半调：整齐的网点一起长大，照片亮部先成形；排列都是正的。
+- 亮边 + 发光：边缘一圈细亮边向外散出柔光，光照到透明背景上提亮下方画面。
 - 不透明画面：片段上逐步透出下方轨道；图层上同理。
-- 连续：进度、柔和度、大小、宽度连续变化时画面连续；随机种子是整数，换值即换排法。图案锚在内容坐标，图层移动时图案跟着走，不在画面上滑动闪烁。
+- 连续：进度、柔和度、大小、宽度连续变化时画面连续；图案锚在内容坐标，图层移动时图案跟着走，不滑动闪烁。
 
 ## 7. 共用工序与执行器改动
 
@@ -226,64 +244,72 @@
 | 轮廓 | −1 | `vec3f(c.a)`，着色量固定 1 | 发光·轮廓 |
 | 光源纹理 | −2 | 输入即预乘线性光 | 扫光、溶解的发光组 |
 
-- `glowPyramid(plan, source, emission, params, context)` 与 `glowFinish(plan, accumulated, base, params, context, split, behind)`；`behind = true` 是轮廓方式（光在内容后面、主图只按原画不透明度），其余为 false。光源纹理方式 `base` 指向扫光、溶解的主图 scratch，经 `pass` 的 `original` 绑定。
-- 包含发光：参数的硬范围、单位随发光登记（发光以后放宽硬范围，扫光、溶解跟着变）。`effectIncludes.ts` 的 `includedEffectParams` 加两个可选能力：只取指定键（`keys`），以及按原键覆盖默认值时同时给新说明（`overrides: { radius: { default: 30, text: '…' } }`）。扫光、溶解只取 `strength`、`radius`，键前缀 `glow`、组名“发光”；其余发光参数由规划固定。
+- `glowPyramid(plan, source, emission, params, context)` 与 `glowFinish(plan, accumulated, base, params, context, split, behind)`；`behind` 为轮廓方式。光源纹理方式的 `base` 指向扫光、溶解的主图 scratch，经 `original` 绑定。
+- 包含发光：参数的硬范围、单位随发光登记。`includedEffectParams` 加两个可选能力：只取指定键（`keys`）；按原键覆盖默认值时同时给新说明（`overrides: { radius: { default: 30, text: '…' } }`，只改默认不改说明时报错，防止“（默认）”与实际不符）。扫光、溶解只取 `strength`、`radius`，前缀 `glow`、组名“发光”。顺带修发光包含的色差“数量”：默认 0，说明改写为“0（默认）没有色差；20 轻微的镜头感……”（Claude 裁定 5）。
 
-### 7.2 投影与轮廓发光的关系
+### 7.2 投影与轮廓发光
 
-两者都只看 alpha，但需要的模糊不同：投影要一个准确、紧凑的高斯（软到硬连续可调），轮廓发光要多倍频程叠加的长尾光。所以投影复用均匀模糊的 `planGaussian`（档位连续性已验证），轮廓发光复用发光金字塔（来源“轮廓”）。两者共用的是“只取 alpha 形状”的约定与外扩写法；同一图层上 `[shadow(), glow({mode:'shape'})]` 各自降采样一次，1080p 整幅多花约 0.2 ms。运行时跨效果共用纹理属于执行器的效果图编译，本票不做（11.2）。
+两者都只看 alpha，但模糊不同：投影要一个准确、紧凑的高斯，轮廓发光要多倍频程的长尾光。投影复用 `planGaussian`，轮廓发光复用发光金字塔。同一图层上两者并用时各自降采样一次；运行时共用纹理不做（Claude 裁定 2），额外成本列入待测（第 9 节）。
 
-### 7.3 执行器
+### 7.3 执行器与着色器
 
-- `VideoEditBuiltinPlan` 加 `underlayKind?: 'cover'`（缺省为光）与 `scratchFormat?: 'rg32float'`（描边种子；缺省按现有 `linearScratch` 规则）。
-- `VideoEditBuiltinEffectsGpu`：`scratchFormat` 优先于 `linearScratch`；`stroke_jfa`、`stroke_shade` 用现有不可过滤布局（`source` 绑定 textureLoad，与 `gaussian_*` 同一判定，判定改为入口集合）。
-- `VideoEditAuthorEffects.encode`：先为整条链生成全部规划，再编码。`hasUnderlay = 任一规划有 underlay`（替换只认发光的 `producesLight`，用于末道是否生成 mip）；`carriesLight = 任一规划有光 underlay`（cover 不算）；`underlays` 记录种类，`pose.blur` 对 cover 用主图规划、对光用光规划；`effect.amount ≠ 1` 时两种下层都用 `effect_opacity` 缩放。下层按链中产生顺序以 `effect_over` 叠好，最后叠主图（现有逻辑）。
+- `VideoEditBuiltinPlan` 加 `underlayKind?: 'cover'`（缺省为光）与 `scratchFormat?: 'rg32float'`（描边种子；缺省沿用 `linearScratch` 规则）。
+- 纹理字节计账：`videoEditGpuFrame.ts::videoEditGpuBytesPerPixel` 补 `rg32float → 8`（现在会抛“未知剪辑纹理格式”）；预览页的简化分配器同样按格式计数，不能让预览通过而正式分配器失败（10.3 有用例）。
+- `VideoEditBuiltinEffectsGpu`：`scratchFormat` 优先于 `linearScratch`；`stroke_jfa`、`stroke_shade` 的 `source` 绑定用不可过滤布局（与 `gaussian_*` 同一机制，判定由前缀改为入口集合）；`stroke_shade` 的原画走 `original`（可过滤）。table 池闲置复用加同尺寸条件。
+- `VideoEditAuthorEffects.encode`（ticket 11 版本：`needsMips = 末道 && 无 pose.blur && !producesLight`，光下层 `take()` 不带 mip）：先为整条链生成全部规划再编码。`producesLight` 换成 `hasUnderlay = 任一规划有 underlay`（cover 也使最终图变成合成图，末道主图不再需要 mip）；`carriesLight = 任一规划有光 underlay`；`underlays` 记录种类，`pose.blur` 对 cover 用主图规划、对光用光规划；`effect.amount ≠ 1` 时两种下层都用 `effect_opacity` 缩放。下层按产生顺序 `effect_over` 叠好，最后叠主图（现有逻辑）。
 - `planVideoEditBuiltinEffect` 加四个分发；`splitGlow` 改名 `split`（图层拆输出，已不只发光用）。
-- `videoEditEffectNeedsFloat`：投影（不透明度 > 0 且 σ ≥ 0.5px）、扫光（亮度 > 0 或发光组开启）、溶解（亮边发光开启）要求浮点，与发光同理；描边不要求。
-- 新入口：`shadow_composite`、`shadow_layer`、`glow_shape_composite`、`stroke_near`、`stroke_seed`、`stroke_jfa`、`stroke_shade`、`sweep_image`、`sweep_light`、`dissolve_image`、`dissolve_light`，各自 `*_ENTRIES` 并入 `VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES`，WGSL 与规划放在同一实现文件（照发光）。
-- 半级抖动：ticket 11 暗角的 `(hash(position) − 0.5)/255` 加在预乘值上的写法抽成着色器前导里的 `halfLevelDither(position)`，暗角、投影共用；发光与扫光沿用 `glowColor` 内的抖动。
+- 浮点判定 `videoEditEffectNeedsFloat`：照 ticket 11 `blur` 分支的写法，以规划为准——投影、扫光、溶解：规划含 `copy`/`effect_opacity` 以外的工序时要求浮点；描边不要求。于是溶解进度 100、扫光亮度 0（即使发光组开启）、投影不透明度 0 都不触发浮点。
+- `ramp(e0, e1, x)`：`e1 > e0` 时 `smoothstep(e0, e1, x)`，否则 `select(0, 1, x >= e0)`；投影以外所有新入口的过渡都用它（WGSL 的 `smoothstep` 在 e0 ≥ e1 时结果未定义）。
+- 半级抖动：从 ticket 11 暗角的写法抽出 `halfLevelDither(position) = (hash(vec2u(position), 0u) − 0.5)/255`；暗角加在 RGB、投影加在 alpha（2 节）。发光与扫光沿用 `glowColor` 内的抖动。
+- 新入口：`shadow_composite`、`shadow_layer`、`glow_shape_composite`、`stroke_near`、`stroke_seed`、`stroke_jfa`、`stroke_shade`、`sweep_image`、`sweep_light`、`dissolve_image`、`dissolve_light`，各自 `*_ENTRIES` 并入 `VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES`，WGSL 与规划放在同一实现文件。
 
 ### 7.4 透明图层上的光与影（沿用 05 裁定）
 
-- 影（投影）：普通预乘 RGBA 下层，在层内先 `effect_over` 叠到主图下面；不设 `carriesLight`，任何片段边界、片段效果、转场都正常保留。
+- 影（投影）：cover 下层，层内 `effect_over` 叠到主图下；不设 `carriesLight`，任何片段边界、片段效果、转场都正常保留。
 - 光（轮廓发光、扫光与溶解的发光组）：零 alpha 光，片段合成器的预乘 over 天然等于相加；`carriesLight` 让代码图片保留 RGB > alpha。05 写进技能的限制原样适用：片段上的效果与转场会截掉零 alpha 光。
-- 链的顺序（写进 `author-api.md`）：光与影保留产生时的状态，后面的效果不改它们。所以先改内容的效果在前、光与影在后：`[dissolve(), stroke(), lightSweep(), glow(), shadow()]`。`[shadow(), dissolve()]` 会让内容消散而影子留着；`[stroke(), shadow()]` 才是“描了边的字投影”。
+- 链的顺序（写进 `author-api.md`）：光与影保留产生时的状态，后面的效果不改它们。先改内容的效果在前、光与影在后：`[dissolve(), stroke(), lightSweep(), glow(), shadow()]`。`[shadow(), dissolve()]` 会让内容消散而影子留着；`[stroke(), shadow()]` 才是“描了边的字投影”。
 
-## 8. 中间纹理与显存（1080p 整幅图层的峰值；常见标题图层约 1200×300，约为下表的 1/6）
+## 8. 中间纹理与显存
 
-| 效果（默认参数） | 中间纹理 | 峰值显存 |
+记 N = 图层纹理像素数（含外扩），F = 本层输出格式字节（需要浮点时 rgba16float 8，否则 rgba8 4）。执行器在图层模式下，一个有下层的效果另占：主图 1 张、下层 1 张，链末合成图 1 张（均为 F）；无下层只占主图。下表“规划内”为该效果规划同时存活的 scratch 峰值（按 `encodePlan` 的末次使用归还计）。
+
+| 效果（默认参数） | 规划内同时存活 | 规划内峰值 | 图层模式执行器 |
+|---|---|---|---|
+| 投影（σ≈10px） | S 全尺寸 16f + planGaussian 降采样链（1/4、1/16 面积及各自模糊临时） | ≈ 8N × 1.4 | 3 × F × N |
+| 投影（σ < 3px，不降采样） | S + 横向模糊临时，均为全尺寸 16f | 16N | 3 × F × N |
+| 发光·轮廓 | 同发光：50% 分辨率金字塔 16f（每层本层、横向、纵向） + 光全尺寸 | ≈ 2N × 3 × 1.33 + 8N | 3 × F × N |
+| 描边·细 | 无 | 0 | F × N |
+| 描边·粗 | rg32float 种子两张轮换 | 16N | F × N |
+| 扫光 / 溶解（不开发光） | 无 | 0 | F × N |
+| 扫光 / 溶解（开发光） | 主图 scratch 16f + 光源 16f + 发光金字塔 | ≈ 16N + 8N | 3 × F × N |
+
+代入：1080p 整幅图层 N ≈ 2.07M（外扩会让它更大），8N ≈ 16.6 MB。投影默认约 23 MB 规划内 + 50 MB 执行器（F = 8）；粗描边 33 MB + 17 MB。常见标题 1200×300、默认外扩约 40px 时 N ≈ 1280×380 ≈ 0.49M，约为整幅的 1/4，各项按比例缩小（同参考高度下外扩不随标题变小）。另有常驻 32 KB 蓝噪声。纹理按现有分配器与空闲回收，不加固定上限。实现后在 GPU 用例里按分配器计数核对本表。
+
+## 9. 耗时（待测目标，不是成本结论）
+
+等显卡空闲后测量（效果库决定 5）。有 `timestamp-query` 时记显卡时间；没有时预览页现有计时含等待显卡，发光实测约 4 ms 已是下限，分项目标无法验证，只记录总耗时与工序数。
+
+| 效果（1080p 整幅图层） | 工序数 | 待测目标 |
 |---|---|---|
-| 投影 | rgba16float：σ≈10px 降两级 960×540 + 480×270，各含模糊临时一张 | 约 10 MB（σ < 4px 时整幅两张，约 33 MB） |
-| 发光·轮廓 | 同发光：50% 分辨率金字塔 rgba16float + 整幅光下层 | 约 25 MB |
-| 描边·细 | 无 | 0 |
-| 描边·粗 | rg32float 种子两张轮换 | 约 33 MB |
-| 扫光（含发光组） | 光源 rgba16float 整幅 + 主图 scratch + 发光金字塔 | 约 50 MB；关闭发光组为 0 |
-| 溶解（亮边发光） | 同扫光 | 约 50 MB；无亮边为 0（另有常驻 32 KB 蓝噪声） |
-
-纹理按现有分配器与空闲回收，不加固定上限。
-
-## 9. 耗时目标（1080p 整幅图层，等显卡空闲后与发光同法测量）
-
-| 效果 | 工序数 | 目标 |
-|---|---|---|
-| 投影 | 模糊 4–6 道（多在 1/4 面积）+ 合成 1 道 | ≤ 0.6 ms |
-| 发光·轮廓 | 同发光 | 与发光默认相同 |
-| 描边·细 | 1 道（49 次取样） | ≤ 0.3 ms |
+| 投影 | 模糊 4–6 道 + 合成 1 道 | ≤ 0.6 ms |
+| 发光·轮廓 | 同发光 | 与发光默认相当 |
+| 描边·细 | 1 道（≤ 97 次取样） | ≤ 0.4 ms |
 | 描边·粗（默认 50） | 种子 + 5 道 JFA + 着色 | ≤ 0.8 ms；粗细 120 ≤ 1.5 ms |
 | 扫光 / 溶解（不开发光） | 1 道 | ≤ 0.2 ms |
-| 扫光 / 溶解（开发光） | 1–2 道 + 发光金字塔 | 与发光默认相同 |
-
-预览页现有计时含等待显卡，发光实测约 4 ms 是下限（效果库进度）；有 `timestamp-query` 时按显卡时间记录，否则记录“不高于发光默认的实测值”。只动进度的扫光、溶解，按 05 的整链缓存每帧整链重做，单道逐点工序不需要更细的沿用。
+| 扫光 / 溶解（开发光） | 2 道 + 发光金字塔 | 与发光默认相当 |
+| 投影 + 轮廓发光同层 | 各自降采样 | 记录比单独两者之和多出的部分 |
 
 ## 10. 预览与验收
 
-### 10.1 预览页（`scripts/effect-preview/main.ts`，ticket 11 合并后的版本）
+### 10.1 预览页（`scripts/effect-preview/main.ts`，ticket 11 版本）
 
-- `PREVIEW_EFFECTS` 加 `drop_shadow`、`stroke`、`light_sweep`、`dissolve`；轮廓发光在发光的“方式”里切换。参数面板由定义自动生成。
-- 素材：现有“透明底文字”“夜景灯光”“拖入的图片”，加一个“透明底深色字”（深灰粗体字加一个实心小图形，用来看轮廓发光、投影在浅底上的样子）；拖入的图片支持带透明的 PNG（抠好的人物）。
-- 两个开关：“按图层合成”（以图层模式规划，下层用 `effect_over` 叠好再显示，验证零 alpha 光与 cover 下层在任意底色上的观感）；“播放进度”（有 `progress` 参数的效果按 2 秒一遍循环 0→100，看平滑与闪烁）。
+- `PREVIEW_EFFECTS`（现 9 项）加 `drop_shadow`、`stroke`、`light_sweep`、`dissolve_reveal`；轮廓发光在发光的“方式”里切换。参数面板由定义自动生成，滑块已按 `softMin/softMax`。
+- 素材：现有“透明底文字”“夜景灯光”“拖入的图片”，加“透明底深色字”（深灰粗体字加一个实心小图形）；拖入的图片支持带透明的 PNG（抠好的人物）。
+- 现有“动画”开关按 `radius → amount → block_size` 取要动的参数，改为先取 `progress`，扫光、溶解即可循环播放进度。
+- 新增“按图层合成”开关：以图层模式规划，下层用 `effect_over` 叠好再显示，验证零 alpha 光与 cover 下层在任意底色上的观感。
+- 预览页分配器按格式计字节（含 rg32float），与正式分配器一致。
 
-### 10.2 验收
+### 10.2 目视验收（Claude）
 
 | 素材 | 看什么 |
 |---|---|
@@ -292,41 +318,51 @@
 | 夜景灯光（不透明） | 投影、轮廓发光看不到且画面不变；片段上内侧 / 居中描边成框；扫光掠过不出硬边；溶解透出底色 |
 | 拖入的图片 / 抠像 PNG | 半调亮部先长满；沿人物描边；投影落在人物身后 |
 
-- 连续性逐项拖动：投影柔和度 0→200、描边粗细 0→120（跨 3 像素路径切换）、扫光与溶解播放进度；任何一处出现跳档按 bug 修，不调参数掩盖。暗部把对比度拉高 6 倍查色带（投影、扫光、发光组）。
-- 真实设备着色器用例（`videoEditBuiltinEffects.gpu.test.ts`，接正式图层编码与片段合成入口）：
-  1. 投影叠到下方独立片段：影子处只变暗不变亮，偏移位置与 `distance × 0.0005 × H` 一致；`source_opacity = 0` 只剩影子。
-  2. 轮廓发光：透明底黑字产生非零光，下方片段在光晕处只被提亮。
-  3. 描边：已知距离处的覆盖值符合公式；粗细 2.9 与 3.1 纹理像素两条路径结果之差 ≤ 2/255（发丝内容除外）；外扩之外像素不变。
-  4. 溶解：进度 100 与原画逐像素相同，进度 0 全透明且无光；扫光发光组为 0 时透明像素不变。
-- 单测只测有风险的纯函数：描边 JFA 步数与路径选择、各效果 `bleed` 覆盖实际取样支撑（以加大外扩渲染对比，声明外扩之外无差异）。不把参数表、默认值抄进断言。
-- 最后在开发版真实应用里看效果控件（分组、显隐、软硬范围、悬停说明）、关键帧行名称与整片播放。
+逐项拖动看连续：投影柔和度 0→200、描边粗细 0→120 与柔和度 0→100（穿过 3–4px 过渡区）、扫光与溶解播放进度；出现跳档按缺陷修，不调参数掩盖。暗部对比度拉高 6 倍查色带（投影、扫光、发光组）。最后在开发版真实应用里看效果控件（分组、显隐、软硬范围、悬停说明）、关键帧行名称与整片播放。
 
-## 11. 与 ticket 11 的接缝及待 Claude 定的点
+### 10.3 自动验证
 
-### 11.1 依赖 ticket 11 的改动（11 合并进 main 后开工，先 `git pull --rebase`）
+真实设备着色器用例（`videoEditBuiltinEffects.gpu.test.ts`，接正式图层编码与片段合成入口）：
+1. **发光拆分基线**：拆 `glowPyramid/glowFinish` 前，在现有代码上记下亮部方式的工序表（入口、尺寸、uniform）快照，以及片段与图层拆分两种输出在透明底文字、夜景、含色差、含着色、视图“发光来源”五组输入上的像素；拆分后工序表逐项相同、像素逐位相同。
+2. 投影：叠到下方独立片段，影子处只变暗、不变亮（黑底上 RGB 恒为 0）；偏移与 `distance × 0.0005 × H` 一致；内容越过纹理边时影子不被边缘延伸；`s = 0` 时片段与图层结果相同；柔和度在 σ = 0.3px 两侧的结果差 ≤ 1/255。
+3. 轮廓发光：透明底黑字产生非零光，下方片段在光晕处只被提亮；`s = 0` 时片段与图层结果相同。
+4. 描边：已知距离处覆盖值符合 4.1；`E' ≤ a ≤ D'` 在半透明平台上成立、输出无负值、预乘成立；同一粗细强制两路径比较（1.5、3、4px，常规文字与圆形，非发丝内容），覆盖差最大 ≤ 24/255、均值 ≤ 3/255（由 16 方向 0.02ρ 误差与双线性坡推得）；粗细以 0.05px 步长穿过 3–4px，相邻步的变化不超过精确距离参照相邻步变化 + 4/255；外扩之外像素不变。
+5. JFA 精确参照：CPU 暴力求到全部边交点的最近距离，覆盖大坐标（4096 宽纹理远角）、奇数尺寸（1023×517）、带孔字形（“回”“O”）、相距 2px 的两个轮廓；R 内 ≥ 99.9% 像素误差 ≤ 0.05px，最大误差 ≤ 1px。不宣称误差为零。
+6. 溶解：进度 100 与原画逐位相同，进度 0 全透明且无光；柔和度 0 且对齐网格（2×2 点阵格）输出确定、两次渲染相同；蓝噪声平铺接缝两侧连续。扫光：发光组为 0 时透明像素不变；进度 0、100 与原画逐位相同。
+7. 混合链（执行器）：`[shadow, glow]`、`[glow, shadow]`、`[shadow, glow({mode:'shape'})]`，各配 `amount = 0.5`、`pose.blur` 高斯与镜头两种；同一槽位连续三帧“光 → 只有影 → 无下层”切换：`carriesLight` 依次为真、假、假，末道 mip、缓存键与最终合成正确，没有残留上一帧的下层。
+8. 资源：rg32float 经正式分配器分配与计账；蓝噪声 64×64 与调色表交替使用十轮，table 池不复用错尺寸。
 
-| 依赖 | ticket 11 的做法 | 本票对接 |
+单测：JFA 步数、路径与混合权重选择；各效果 `bleed` 覆盖实际取样支撑（加大外扩渲染对比，声明外扩之外无差异）；浮点判定在恒等状态为假；`includedEffectParams` 改默认未改说明时报错；蓝噪声生成器 `--check`。不把参数表、默认值抄进断言。
+
+检查：两套 tsc、lint、`check:assistant-capabilities`、`check:author-effects`、`check:persistence-compat`、`npm run verify:changed -- --level L2 <本次文件...>`；提交前独立审查。
+
+## 11. 与 ticket 11 的接缝（按提交 813a2a663 核对）及需要 Claude 定的点
+
+### 11.1 依赖 ticket 11 的实际实现（11 合并进 main 后开工，先 `git pull --rebase`）
+
+| 依赖 | ticket 11 的实际做法 | 本票对接 |
 |---|---|---|
-| 软 / 硬范围 | `effectParam.amount(key, 默认, 文字, hardMax)` / `signed(…, hardLimit)` 经 `soft()` 写 `softMin/softMax`；`describeVideoEditParams` 输出 softMin/softMax | 第 2–6 节硬范围大于软范围的参数都用第四个参数；`percent`、`angle` 软硬一致 |
-| 一份说明 | `tooltip` 改可选，定义只写 `description` | 新定义不写 tooltip |
-| `aliases` | 定义新增字段 | 按第 1 节填写 |
-| 模糊尺子 | `core/videoEdit/blur.ts` 的 `blurSigma`；外扩函数写在各自定义文件 | 投影柔和度直接用 `blurSigma`；各效果 `bleed` 写在自己的定义文件；`layerEffectGeometry` 只保留 `gaussianSupport` 与发光分支 |
-| 着色器组件去重 | `SAME_AS_BUILTIN` 扩充 | 再加 `DropShadow` |
-| 半级抖动 | 暗角内联写法 | 抽成 `halfLevelDither` 共用 |
-| 预览页 | `PREVIEW_EFFECTS`、素材表已改 | 在其上追加 |
-| henji-effects | 新增冻结版本 1.1.0 与生成器改动 | 本票再冻结 1.2.0（新增 `shadow`、`stroke`、`lightSweep`、`dissolve` 工厂，`glow` 多 `mode`），重新生成 `authorEffects.generated.ts`、`author-effects.d.ts`、`effects.generated.ts`；`author-api.md` 补四个工厂与第 7.4 节的顺序规则 |
-| `videoEditRenderPrecision.ts`、`videoEditBuiltinEffectPasses.ts` | 11 改了模糊等分支 | 在 11 的版本上加本票分支与 `split` 改名 |
+| 软 / 硬范围 | `effectParam.amount(key, 默认, 文字, hardMax?)`、`signed(…, hardLimit?)` 经 `soft()` 写 `min/max` 与 `softMin/softMax`；`percent`、`angle` 无软范围；`describeVideoEditParams` 输出 softMin/softMax | 硬范围大于软范围的参数（投影距离 400、柔和度 200，描边粗细 120，扫光亮度 400）用第四个参数 |
+| 一份说明 | `ParamBase.tooltip?` 与定义 `tooltip?` 可选，`said()` 只写 `description` | 新定义不写 tooltip |
+| `aliases` | 定义可选字段，面板搜索用 | 按第 1 节填写 |
+| 模糊尺子 | `core/videoEdit/blur.ts::blurSigma`、`BLUR_AMOUNT_MAX = 200`；外扩函数在各定义文件（`blurBleed`）；`layerEffectGeometry` 删了模糊分支，留 `gaussianSupport` 与发光分支 | 投影柔和度用 `blurSigma`、硬范围同为 200；外扩写在各自定义文件，用 `gaussianSupport` |
+| 包含效果 | `includedEffectParams(definition, prefix, group, defaults)` 未变 | 本票加 `keys` 与 `overrides`（7.1） |
+| 着色器组件去重 | `SAME_AS_BUILTIN` 已含模糊、调色、颗粒、暗角、像素化等 | 再加 `DropShadow` |
+| 半级抖动 | 暗角内联 `(hash(vec2u(position), 0u) − 0.5)/255` 加在 RGB 并夹到 alpha | 抽成 `halfLevelDither`；投影加在 alpha |
+| 浮点判定 | `videoEditEffectNeedsFloat` 白名单 `glow/blur/vignette/color_grade`，`blur` 以规划是否全为 `copy` 判定 | 新增三项同样以规划判定（7.3） |
+| 执行器 | `needsMips = 末道 && 无 pose.blur && !producesLight`；光下层 `take()` 无 mip；仍叫 `splitGlow` | 换成 `hasUnderlay`、记录下层种类、`split` 改名（7.3） |
+| 分发 | `planVideoEditBuiltinEffect` 里 `glow`、`blur` 提前返回，其余在 switch；转场同在此分发 | 新效果提前返回；溶解 id 用 `dissolve_reveal` |
+| 预览页 | `PREVIEW_EFFECTS` 9 项、滑块走软范围、“动画”开关按 radius/amount/block_size | 追加 4 项、动画先取 `progress`、加“按图层合成” |
+| henji-effects | 冻结 1.1.0（`blur` 一个工厂），生成器 `scripts/generate-author-effects.ts`，`check:author-effects` | 冻结 1.2.0：新增 `shadow`、`stroke`、`lightSweep`、`dissolve`，`glow` 多 `mode`；重新生成 `authorEffects.generated.ts`、`author-effects.d.ts`、`effects-library.d.ts`、`effects.generated.ts`；`author-api.md` 补四个工厂与 7.4 的顺序规则 |
+| 持久格式 | 剪辑内容 46→47、录制 49→50（旧模糊迁移） | 只新增效果 ID，`clip.effects` 结构不变；若 `check:persistence-compat` 报指纹变化，按 persistence.md 在 47/50 之上升版本 |
+| 未改动、本票要改 | `videoEditBuiltinEffectsGpu.ts`（table 池、不可过滤布局判定）、`videoEditGpuFrame.ts`（字节计账）11 未动 | 按 7.3 修改 |
 
-另：ticket 13 的代码复核里 `shadowBlur` 提示（`codeEffectReview.ts` 现写“投影不等同于高斯模糊，不自动替换”）在本票合并后应改为指向 `shadow()`，由 13 处理。持久格式：只新增效果 ID，`clip.effects` 结构不变；若 `check:persistence-compat` 报 schema 指纹变化，按 persistence.md 升版本。
+另：ticket 13 的代码复核里 `shadowBlur` 提示（`codeEffectReview.ts` 现写“投影不等同于高斯模糊，不自动替换”）在本票合并后应改为指向 `shadow()`，由 13 处理。
 
-### 11.2 需要 Claude 定的点（本文按“建议”写成，Claude 改判后按改判实现）
+### 11.2 仍需 Claude 定的点
 
-1. **轮廓发光不单独立条目**，做成发光的方式“轮廓”（建议）。理由：效果库决定 4“同目的合并成一个名字 + 方式”，算法只多一个提取分支，其余参数全部共用。另一选择是独立 `outer_glow`，参数更少但重复一份发光。
-2. **投影不与轮廓发光在运行时共用金字塔**（建议）。投影用 `planGaussian`、轮廓发光用发光金字塔，第 7.2 节说明了原因与 0.2 ms 代价；运行时共用留给执行器效果图编译。
-3. **扫光去掉“只照亮内容”开关、改为包含发光（默认强度 25）**（建议）。开关关掉只会多出矩形光带；包含发光让白字上也看得出扫光，也与溶解的发光边共用同一套。
-4. **投影、描边都加“原画不透明度”**（建议）：投影 0% 即“仅阴影”，描边 0% 即空心字；与发光同一个键 `source_opacity`。投影把它放进“外观”组，避免“输出”组只有一个参数。
-5. **包含效果支持只取部分参数和改默认时改说明**（建议），并顺带修一个原有问题：发光包含的色差“数量”默认改成 0，说明仍写“20（默认）”。
-6. **默认值口味**：投影方向默认 90°（正下方，扁平界面式的前后距离），不用 AE 的右下 135°；描边默认黑色外侧；溶解默认无亮边、噪声方式；半调网格不倾斜。
+1. 描边细路径的价值：为了与粗路径连续，细路径要支持柔边并在 3–4px 交叉过渡，取样数到 97 次；而粗路径在 R ≤ 4 时只有种子 + 4 道 JFA + 着色。细路径不一定更快，建议实现后实测，若不更快就删掉细路径、只留 JFA（画面不变，发丝内容一律不描边）。
+2. 蓝噪声生成检查挂在 `check:author-effects` 同类检查里，还是新增 `check:blue-noise`。
 
 ## Claude 裁定（10-31）
 1. 轮廓发光做成发光的新方式“轮廓”，不单独立条目。
@@ -336,3 +372,8 @@
 5. 包含效果允许只取部分参数并改默认值与说明；顺带修发光里色差“数量”默认值与说明不一致。
 6. 默认值：投影正下方 90°；描边黑色、外侧；溶解默认无亮边；半调网格不倾斜（用户不喜欢歪斜样式）。
 实现等 ticket 11 合并后由同一子代理接着做；设计的技术部分交 Codex 只读审查。
+
+## Claude 裁定（11-01，修订后）
+1. 描边细路径实现后实测；不比 JFA 快就只留 JFA，删掉细路径（少一套实现）。
+2. 蓝噪声再生成检查挂进现有 `check:author-effects` 一类检查，不新增命令。
+设计定稿，实现在 ticket 11 合并后开始。
