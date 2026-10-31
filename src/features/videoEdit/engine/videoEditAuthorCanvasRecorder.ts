@@ -1,6 +1,9 @@
 import { scaleAuthorCanvasEffect } from './videoEditAuthorCanvasBounds'
 import { TEXT_DRAW_OBSERVER, TEXT_RASTER_CONTEXT, TEXT_LAYER_CONTEXT, TEXT_BITMAP_RESTORE, textRectCorners, type RestorableTextBitmap, type TextDrawFact, type TextDrawObservation, type TextRasterProvider } from '../../../core/videoEdit/textDrawObservation'
 import { codePoint } from '../../../core/videoEdit/codeMaterial/geometry'
+import type { AuthorCanvasReviewObservation } from '../../../core/videoEdit/codeAuthorProgram'
+import { videoEditQuadOutside } from '../../../core/videoEdit/textOverflowReview'
+import { parseColor } from '../../../core/theme/themeColor'
 
 /**
  * Canvas 作者图层的绘制指令录制与重放。
@@ -115,6 +118,7 @@ const matrixOf = (args: Value[]): Matrix => {
 const isIdentity = (m: Matrix): boolean => m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0
 
 export interface AuthorCanvasRecording {
+  canvasReview?: AuthorCanvasReviewObservation[]
   textUncovered?: string[]
   textUncoveredByLayer?: Record<number, string[]>
   textDraws: TextDrawObservation[]
@@ -160,11 +164,12 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   measure.reset()
   const ops: Value[][] = []
   const textDraws: TextDrawObservation[] = []
+  const canvasReview: AuthorCanvasReviewObservation[] = []
   const textUncovered = new Set<string>()
   const textUncoveredByLayer: Record<number, string[]> = {}
   let layerIndex: number | undefined
   let clips: TextDrawObservation['clips'] = [], unknownClip = false
-  let pathRect: Array<[number, number]> | undefined, pathUnknown = false
+  let pathRect: Array<[number, number]> | undefined, pathUnknown = false, pathRounded = false
   const clipStack: Array<{ clips: TextDrawObservation['clips']; unknownClip: boolean }> = []
   let comparable = true, isolated = true, balanced = true, ownPath = false, nextId = 0
   const adopted = new Map<object, number>()
@@ -202,23 +207,77 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
     return live(value)
   }
   const apply = (name: string, args: Value[]): void => {
+    const firstFact = canvasReview.length
     if (isUnobservedText(name, args)) {
       const reason = '图层含未使用新版排版库的 Canvas 文字，文字超框未覆盖'
       textUncovered.add(reason)
       if (layerIndex !== undefined) textUncoveredByLayer[layerIndex] = [reason]
     }
     const [a, b, c, d, e, f] = args as number[]
+    const observeBox = (kind: AuthorCanvasReviewObservation['kind'], quad: Array<[number, number]>, text?: string): void => {
+      if (!quad.flat().every(Number.isFinite)) return
+      canvasReview.push({ kind, layerIndex, quad: quad.map(([x, y]) => codePoint(multiply(invert(transform), matrix), x, y)), opacity: Number(state.globalAlpha ?? 1), ...(text === undefined ? {} : { text }) })
+    }
+    let primitive: Array<[number, number]> | undefined
+    if (name === 'fillRect' || name === 'strokeRect') {
+      primitive = textRectCorners({ x: a, y: b, width: c, height: d })
+      observeBox('box', primitive)
+    } else if ((name === 'fill' || name === 'stroke') && pathRect && !pathUnknown && (args.length === 0 || typeof args[0] === 'string')) {
+      const inverse = invert(multiply(invert(transform), matrix))
+      primitive = pathRect.map(([x, y]) => codePoint(inverse, x, y))
+      observeBox('box', primitive)
+    } else if (name === 'fillText' || name === 'strokeText') {
+      for (const key of TEXT_STATE) (measure as unknown as Record<string, Value>)[key] = state[key]
+      const metrics = measure.measureText(String(args[0]))
+      const left = metrics.actualBoundingBoxLeft, right = metrics.actualBoundingBoxRight, ascent = metrics.actualBoundingBoxAscent, descent = metrics.actualBoundingBoxDescent
+      const strokeMargin = name === 'strokeText' ? Number(state.lineWidth ?? 1) / 2 : 0
+      const squeeze = args[3] === undefined ? 1 : Math.min(1, Number(args[3]) / metrics.width)
+      primitive = textRectCorners({ x: b - left * squeeze - strokeMargin, y: c - ascent - strokeMargin, width: (left + right) * squeeze + strokeMargin * 2, height: ascent + descent + strokeMargin * 2 })
+      if (squeeze > 0) observeBox('text', primitive, String(args[0]))
+    } else if (name === 'drawImage') {
+      const image = args[0] as { width?: number; height?: number } | null
+      const destination = args.length === 9 ? args.slice(5) : args.length === 5 ? args.slice(1) : [b, c, image?.width, image?.height]
+      const [x, y, width, height] = destination as number[]
+      primitive = textRectCorners({ x, y, width, height })
+    }
+    if (primitive && (Number(state.shadowOffsetX) || Number(state.shadowOffsetY))) {
+      // 只对可能投回画布的绘制规范化颜色，状态与路径指令无需解析阴影。
+      measure.shadowColor = String(state.shadowColor ?? 'transparent')
+      const shadowColor = measure.shadowColor.replace(/\s/g, '').toLowerCase()
+      const transparentShadow = shadowColor === 'transparent' || /^rgba\([^,]+,[^,]+,[^,]+,0(?:\.0+)?\)$/.test(shadowColor) || /^#(?:[\da-f]{3}0|[\da-f]{6}00)$/.test(shadowColor) || /\/0(?:\.0+)?%?\)$/.test(shadowColor)
+      const raster = primitive.map(([x, y]) => codePoint(matrix, x, y))
+      const xs = raster.map(p => p[0]), ys = raster.map(p => p[1])
+      // 源四边形和画布均为栅格坐标；Canvas 阴影长度不随 CTM/fullResolution 缩放，和重放保持一致。
+      const dx = Number(state.shadowOffsetX ?? 0), dy = Number(state.shadowOffsetY ?? 0), blur = Math.max(0, Number(state.shadowBlur ?? 0)) * 2
+      const outside = Math.max(...xs) < 0 || Math.min(...xs) > size.width || Math.max(...ys) < 0 || Math.min(...ys) > size.height
+      const returns = Math.max(...xs) + dx + blur >= 0 && Math.min(...xs) + dx - blur <= size.width && Math.max(...ys) + dy + blur >= 0 && Math.min(...ys) + dy - blur <= size.height
+      if (!transparentShadow && outside && returns) observeBox('shadow_outside_source', primitive)
+    }
     // 开始绘制前清屏不影响随后文字；只有后续清除或混合才使已记录正文无法证明保留。
     if (name === 'clearRect' || name === 'reset' || PAINT.has(name) && state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over') {
+      for (const fact of canvasReview) if (fact.kind === 'text') fact.retained = false
+      let cleared = name === 'clearRect' ? textRectCorners({ x: a, y: b, width: c, height: d }).map(([x, y]) => codePoint(multiply(invert(transform), matrix), x, y)) : undefined
+      if (name === 'fillRect' && state.globalCompositeOperation === 'destination-out' && Number(state.globalAlpha) === 1 && (!state.filter || state.filter === 'none') && typeof state.fillStyle === 'string') {
+        measure.fillStyle = state.fillStyle
+        if (parseColor(measure.fillStyle)?.a === 1) cleared = primitive!.map(([x, y]) => codePoint(multiply(invert(transform), matrix), x, y))
+      }
+      for (const [index, fact] of canvasReview.entries()) {
+        if (fact.kind !== 'box') continue
+        const coveredByClip = !unknownClip && clips.every(clip => !videoEditQuadOutside(fact.quad, clip))
+        // 仅排除已证实被清除的框；混合的最终像素未知时，仍保留几何候选。
+        const erased = name === 'reset' || coveredByClip && (cleared && !videoEditQuadOutside(fact.quad, cleared) || PAINT.has(name) && state.globalCompositeOperation === 'copy' && index < firstFact)
+        const removalShape = index >= firstFact && ['destination-in', 'destination-out'].includes(String(state.globalCompositeOperation))
+        if (erased || removalShape) fact.retained = false
+      }
       for (const fact of textDraws) { fact.retained = false; fact.uncovered.push('文字绘制后的清除或合成遮挡') }
     }
     if (name === 'save') clipStack.push({ clips: [...clips], unknownClip })
     else if (name === 'restore') { const saved = clipStack.pop(); if (saved) { clips = saved.clips; unknownClip = saved.unknownClip } }
-    else if (name === 'beginPath') { pathRect = undefined; pathUnknown = false }
-    else if (name === 'rect' && !pathRect && !pathUnknown) pathRect = textRectCorners({ x: a, y: b, width: c, height: d }).map(([x, y]) => codePoint(multiply(invert(transform), matrix), x, y))
+    else if (name === 'beginPath') { pathRect = undefined; pathUnknown = false; pathRounded = false }
+    else if ((name === 'rect' || name === 'roundRect') && !pathRect && !pathUnknown) { pathRounded = name === 'roundRect'; pathRect = textRectCorners({ x: a, y: b, width: c, height: d }).map(([x, y]) => codePoint(multiply(invert(transform), matrix), x, y)) }
     else if (PATH.has(name) && name !== 'closePath') pathUnknown = true
     else if (name === 'clip') {
-      if (!pathUnknown && pathRect && (args.length === 0 || typeof args[0] === 'string')) clips = [...clips, pathRect]
+      if (!pathUnknown && !pathRounded && pathRect && (args.length === 0 || typeof args[0] === 'string')) clips = [...clips, pathRect]
       else unknownClip = true
     } else if (name === 'reset') { clips = []; unknownClip = false; pathRect = undefined; pathUnknown = false; clipStack.length = 0 }
     if (name === 'translate') matrix = multiply(matrix, [1, 0, 0, 1, a, b])
@@ -275,6 +334,7 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
         return () => ({ matrix: [...matrix], colorSpace: (measure as TextRasterProvider).getContextAttributes?.().colorSpace ?? 'srgb' })
       }
       if (property === TEXT_DRAW_OBSERVER) return (fact: TextDrawFact): void => {
+        if (fact.inkBounds && fact.boundsKind === 'measured' && fact.revealComplete !== false && !fact.animatedGraphemes && fact.bodyCoverage !== 'none') canvasReview.push({ kind: 'text', layerIndex, text: fact.sourceText, quad: textRectCorners(fact.inkBounds).map(([x, y]) => codePoint(multiply(invert(transform), matrix), x, y)), opacity: Number(state.globalAlpha ?? 1) })
         const uncovered = [ ...(fact.animatedGraphemes ? ['独立字素动画的墨迹裁切'] : []), ...(unknownClip ? ['任意 Canvas clip'] : []), ...(state.filter && state.filter !== 'none' ? ['Canvas filter'] : []), ...(state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over' ? ['Canvas 混合遮挡'] : []), ...(fact.bodyCoverage && fact.bodyCoverage !== 'complete' ? ['部分或全部正文未启用填充或描边，文字完整性未覆盖'] : []) ]
         const canvasClip = textRectCorners({ x: 0, y: 0, ...size }).map(([x, y]) => codePoint(invert(transform), x, y))
         textDraws.push(structuredClone({ ...fact, layerIndex, matrix: multiply(invert(transform), matrix), clips, canvasClip, opacity: Number(state.globalAlpha ?? 1), uncovered, ...(state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over' ? { retained: false } : {}) }))
@@ -303,7 +363,7 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   // 多出的 save 没有 restore：画完时状态与裁剪还留在栈上，同样会漏给后面的层。
   if (stack.length) balanced = false
   if (!balanced) for (const fact of textDraws) { fact.retained = false; fact.uncovered.push('跨绘制状态或合成遮挡') }
-  return { ops, comparable, assets, isolated, balanced, textDraws, textUncovered: [...textUncovered], textUncoveredByLayer }
+  return { ops, comparable, assets, isolated, balanced, textDraws, canvasReview, textUncovered: [...textUncovered], textUncoveredByLayer }
 }
 
 /**

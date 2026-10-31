@@ -17,6 +17,7 @@ export interface AuthorElementObservation {
   parameterKeys: string[]
   textParameterKeys: string[]
   textDraws?: import('./textDrawObservation').TextDrawObservation[]
+  canvasReview?: AuthorCanvasReviewObservation[]
   textUncovered?: string[]
   textLayouts?: string[]
   unassignedTextLayouts?: string[]
@@ -27,6 +28,15 @@ export interface CodeAuthorFrameObservation {
   revision: number
   frame: number
   clips: Array<{ clipId: string; versionId: string; width: number; height: number; elements: AuthorElementObservation[] }>
+}
+/** 录制到的几何事实；不是对最终像素或卡片语义的推断。坐标在作者图层内。 */
+export interface AuthorCanvasReviewObservation {
+  retained?: boolean
+  layerIndex?: number
+  kind: 'text' | 'box' | 'shadow_outside_source'
+  text?: string
+  quad: [number, number][]
+  opacity: number
 }
 
 export interface CodeAuthorSourceLocations {

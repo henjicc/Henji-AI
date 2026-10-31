@@ -10,6 +10,7 @@ import { videoEditJitterFacts, videoEditPictureRole, videoEditRootMapper, videoE
 import { videoEditTextOverflowFacts, type VideoEditTextDrawSample } from './textOverflowReview'
 import { textRectCorners } from './textDrawObservation'
 import { codePoint, codeMultiply } from './codeMaterial/geometry'
+import { videoEditCanvasBoxes, videoEditCanvasIssues, videoEditCanvasIssueFacts, videoEditVisibilityDips, type VideoEditCanvasIssue } from './codeCanvasReview'
 
 export interface CodeMotionReviewResult { records: VideoEditMotionStructureFact[]; sampledFrames: number; sampledElements: number; warnings: string[] }
 export type CodeMotionObserver = (composition: VideoEditComposition, frame: number) => Promise<CodeAuthorFrameObservation>
@@ -37,6 +38,8 @@ export async function collectVideoEditCodeMotion(root: VideoEditComposition, ran
     // Output-pixel geometry in the queried sequence for the picture checks (jitter, safe areas).
     const pictures = new Map<string, { element: AuthorElementObservation; samples: VideoEditPictureSample[] }>()
     const textSamples = new Map<string, Map<number, VideoEditTextDrawSample[]>>()
+    const canvasSamples = new Map<string, Array<{ frame: number; issues: VideoEditCanvasIssue[] }>>()
+    const visibility = new Map<string, Map<number, number>>()
     const layouts = new Map<string, string>(), drawnLayouts = new Set<string>()
     let previous = new Map<string, AuthorElementObservation>()
     for (let frame = entry.timeline.from; frame < entry.timeline.to; frame++) {
@@ -51,11 +54,21 @@ export async function collectVideoEditCodeMotion(root: VideoEditComposition, ran
         const placement = evaluateVideoEditClip(clip, localFrame), toRoot = videoEditRootMapper(root, entry.path.slice(0, -1), frame)
         const parentOpacity = entry.path.slice(0, -1).reduce((opacity, step, index) => opacity * evaluateVideoEditClip(step.clip, videoEditSourceMapLocalFrame({ path: entry.path.slice(0, index + 1) }, frame)).opacity, 1)
         const picture = { width: layer.width, height: layer.height }
+        const boxes = videoEditCanvasBoxes(current.values())
         for (const element of current.values()) {
           if (element.corners.length !== 4) continue
           const quad = element.corners.map(([x, y]) => { const point = toRoot(videoEditClipToFrame(placement, picture, local, x / picture.width, y / picture.height)); return { x: point.x * root.width, y: point.y * root.height } })
           const picked = pictures.get(element.id) ?? { element, samples: [] }
-          picked.samples.push({ frame, quad, opacity: (element.opacity ?? 1) * placement.opacity }); pictures.set(element.id, picked)
+          const opacity = (element.opacity ?? 1) * placement.opacity * parentOpacity
+          picked.samples.push({ frame, quad, opacity }); pictures.set(element.id, picked)
+          const issues = canvasSamples.get(element.id) ?? []
+          issues.push({ frame, issues: opacity >= .01 ? videoEditCanvasIssues(element, boxes) : [] }); canvasSamples.set(element.id, issues)
+          const xs = quad.map(p => p.x), ys = quad.map(p => p.y)
+          const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys)
+          const visibleArea = Math.max(0, Math.min(root.width, right) - Math.max(0, left)) * Math.max(0, Math.min(root.height, bottom) - Math.max(0, top))
+          const area = (right - left) * (bottom - top)
+          const visible = visibility.get(element.id) ?? new Map<number, number>()
+          visible.set(frame, area > 0 ? opacity * visibleArea / area : 0); visibility.set(element.id, visible)
           const coverageKey = JSON.stringify([entry.path.map(step => step.clipId), element.id]), coverage = textCoverage.get(coverageKey)
           if (element.textDraws?.length || element.textUncovered?.some(reason => reason.includes('Canvas 文字'))) textCoverage.set(coverageKey, { name: element.name || element.id, drawn: !!element.textDraws?.length || !!coverage?.drawn })
           for (const id of element.textLayouts ?? []) layouts.set(id, element.name || element.id)
@@ -108,11 +121,15 @@ export async function collectVideoEditCodeMotion(root: VideoEditComposition, ran
         records.push(...videoEditJitterFacts(picked.samples, root.fps, base, role), ...videoEditSafeAreaFacts(videoEditSampleSegments(picked.samples, root.width, root.fps), root, root.fps, base, role))
       }
       records.push({ ...base, kind: 'code_unavailable', timeline: entry.timeline, detail: '已测量作者图层位姿；draw 内部像素变化不能由 bounds 判断，请按需观察画面。' })
+      records.push(...videoEditCanvasIssueFacts(canvasSamples.get(id) ?? [], root.fps, base))
+      const visible = visibility.get(id)
+      if (visible) records.push(...videoEditVisibilityDips(Array.from({ length: entry.timeline.to - entry.timeline.from }, (_, offset) => ({ frame: entry.timeline.from + offset, visibility: visible.get(entry.timeline.from + offset) ?? 0 })), root.fps, base))
       for (const samples of textSamples.get(id)?.values() ?? []) records.push(...videoEditTextOverflowFacts(samples, root.fps, base))
       if (records.length > 20000) throw new Error('代码运动候选超过单次20000项预算，请缩小 from/to；未截断结果。')
     }
   }
   const warnings: string[] = []
+  if (sampledFrames) warnings.push('文字撑框按已录制的原生 Canvas 文字或 drawText 墨迹对绘制矩形/自身声明 bounds 检查，框关联是几何候选；直接绘制、GPU 内部文字、无几何关联的卡片及像素遮挡未覆盖。visibility_dip 只检查范围外接框与透明度中途下降后恢复，不识别高亮语义；嵌套裁切、任意 clip 与后续遮挡需取帧核对。shadow_outside_source 表示源图形在栅格外投回的写法不受支持，不是已量得像素缺失。')
   if (textCoverage.size) warnings.push('文字超框与截断只在排版内容连续稳定至少0.3秒时报，位姿运动不影响判定；字素揭示未完成时不判。裁切逐帧检查后合并，区间内已完全揭开的入场遮罩不报。任意 Canvas clip、滤镜遮挡、后续覆盖和跨图层合成的可见性未覆盖；墨迹伸出、阴影或外观越界不作内容超框。')
   if (textCoverage.size && range.to - range.from < Math.max(3, Math.ceil(.3 * root.fps))) warnings.push('查询区间短于文字检查所需的最小连续帧数（至少3帧且0.3秒），本次无法形成稳定区间；请扩大 from/to。')
   const missingText = new Set([...textCoverage.values()].filter(value => !value.drawn).map(value => value.name))

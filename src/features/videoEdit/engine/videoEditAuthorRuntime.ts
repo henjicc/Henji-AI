@@ -142,6 +142,7 @@ export class VideoEditAuthorRuntime {
       const combined = [...this.history.entries()].find(([key]) => { const match = /^flat:(\d+):(\d+)$/.exec(key); return match && index >= Number(match[1]) && index < Number(match[2]) })?.[1].painted?.recording
       const observed = combined ?? recording
       const textDraws = frame.directText?.get(index) ?? observed?.textDraws.filter(draw => draw.layerIndex === undefined || draw.layerIndex === index)
+      const canvasReview = observed?.canvasReview?.filter(fact => (fact.layerIndex === undefined || fact.layerIndex === index) && (posed || fact.kind !== 'shadow_outside_source'))
       const textLayouts = [...frame.textLayouts ?? []].filter(([, owner]) => owner === index).map(([id]) => id)
       const unassignedTextLayouts = attachedUnassigned ? [] : [...frame.textLayouts ?? []].filter(([, owner]) => owner === undefined).map(([id]) => id)
       attachedUnassigned = true
@@ -150,7 +151,7 @@ export class VideoEditAuthorRuntime {
         ...(textDraws ? { textDraws: structuredClone(textDraws).map(draw => ({ ...draw,
           // 运动层的 GPU scissor 在作者画幅坐标裁切；内部 Canvas clip 已由录制保存。
           ...(posed && layer.clip ? { stageClip: [...layer.clip] as [number, number, number, number] } : {}),
-        })) } : {}), textLayouts, unassignedTextLayouts, textUncovered: [...(observed?.textUncoveredByLayer?.[index] ?? []), ...(frame.textUncovered?.get(index) ?? [])] }]
+        })) } : {}), ...(canvasReview ? { canvasReview: structuredClone(canvasReview) } : {}), textLayouts, unassignedTextLayouts, textUncovered: [...(observed?.textUncoveredByLayer?.[index] ?? []), ...(frame.textUncovered?.get(index) ?? [])] }]
     })
   }
   private renders: Promise<unknown> = Promise.resolve()

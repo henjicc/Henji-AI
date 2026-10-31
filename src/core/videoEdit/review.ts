@@ -5,7 +5,7 @@ import { videoEditNestedCaptionSourceId } from './nestedCaptions'
 import { activeVideoEditEffects } from './compositing'
 import type { VideoEditSafeAreaEvidence } from './motionStructure'
 
-export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast' | 'text_overflow' | 'text_clipped' | 'text_truncated'
+export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast' | 'text_overflow' | 'text_clipped' | 'text_truncated' | 'text_box_overflow' | 'shadow_outside_source' | 'visibility_dip' | 'narration_alignment' | 'effect_unchanged' | 'effect_visible' | 'effect_unstable'
 export interface VideoEditReviewRecord {
   kind: VideoEditReviewKind
   timeline: VideoEditSourceMapRange
@@ -15,8 +15,10 @@ export interface VideoEditReviewRecord {
   subjectType?: 'video_edit.clip' | 'video_edit.effect' | 'video_edit.caption'
   confidence?: number
   source?: { fromUs: number; toUs: number }
-  motionEvidence?: { basis: 'clip_transform' | 'structural_events' | 'code_structure' | 'video_pixels' | 'code_input_pixels' | 'text_layout'; elementPath?: string[]; peakSpeed?: number; gapSeconds?: number; suggestion: string;
+  motionEvidence?: { basis: 'clip_transform' | 'structural_events' | 'code_structure' | 'video_pixels' | 'code_input_pixels' | 'text_layout' | 'program_pixels'; elementPath?: string[]; peakSpeed?: number; gapSeconds?: number; suggestion: string;
     speedLimit?: number; jitterPixels?: number; safeArea?: VideoEditSafeAreaEvidence
+    visual?: { captionText?: string; content?: string[]; width: number; height: number; changedPixels?: number; unstablePixels?: number; maxChannelDifference?: number; meanChannelDifference?: number; changedPixelRatio?: number; parameter?: string; offValue?: number | boolean }
+    canvas?: import('./codeCanvasReview').VideoEditCanvasEvidence
     textOverflow?: import('./textOverflowReview').VideoEditTextOverflowEvidence
     input?: { parameter: string; kind: 'video' | 'sequence'; mediaRef: { kind: 'video_edit.media'; id: string } } }
 }
@@ -150,7 +152,7 @@ export function videoEditTrackingReviewRanges(header: VideoEditTrackHeader, rang
 
 /** Prioritize tracking evidence, distributing a small frame budget across the requested time range. */
 export function selectVideoEditReviewFrames(records: readonly VideoEditReviewRecord[], range: VideoEditSourceMapRange, maxFrames: number, duration: number): number[] {
-  const priority = (kind: VideoEditReviewKind): number => kind.startsWith('tracking_') ? 3 : ['transition', 'motion_hard_stop', 'event_crowded', 'settled_jitter', 'safe_area', 'motion_too_fast', 'text_overflow', 'text_clipped', 'text_truncated'].includes(kind) ? 2 : 1
+  const priority = (kind: VideoEditReviewKind): number => kind.startsWith('tracking_') ? 3 : ['transition', 'motion_hard_stop', 'event_crowded', 'settled_jitter', 'safe_area', 'motion_too_fast', 'text_overflow', 'text_clipped', 'text_truncated', 'text_box_overflow', 'shadow_outside_source', 'visibility_dip', 'effect_unchanged', 'effect_unstable'].includes(kind) ? 2 : 1
   const candidates = new Map<number, number>()
   for (const record of records) for (const frame of [record.timeline.from - 1, record.timeline.from, record.timeline.to - 1, record.timeline.to]) {
     if (frame >= range.from && frame < Math.min(range.to, duration)) candidates.set(frame, Math.max(candidates.get(frame) ?? 0, priority(record.kind)))

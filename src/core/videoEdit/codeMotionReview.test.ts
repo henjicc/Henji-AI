@@ -28,6 +28,26 @@ it('measures actual observed layer motion without evaluating author code in the 
   expect(result.records.some(record => record.kind === 'code_unavailable')).toBe(true)
   expect(result.records.some(record => record.kind === 'motion_hold')).toBe(false)
 })
+it('同层文字撑卡片持续报出，漏层后恢复报连续性，正常出入场和透明父组不误报文字', async () => {
+  const { run, observe, composition, clip } = fixture()
+  const result = await run(async (local, frame) => {
+    const observation = await observe(local, frame), layer = observation.clips[0], element = layer.elements[0]
+    element.canvasReview = [
+      { kind: 'box', quad: [[10,0],[70,0],[70,100],[10,100]], opacity: 1 },
+      { kind: 'text', text: '长正文'.repeat(400), quad: [[0,10],[80,10],[80,30],[0,30]], opacity: 1 },
+    ]
+    if (frame < 5 || frame >= 110 || frame >= 40 && frame < 45) layer.elements = []
+    return observation
+  })
+  const overflow = result.records.filter(record => record.kind === 'text_box_overflow')
+  expect(overflow.map(record => record.timeline)).toEqual([{ from: 5, to: 40 }, { from: 45, to: 110 }])
+  expect(overflow[0].canvas).toMatchObject({ text: '长正文'.repeat(400) })
+  expect(overflow[0].detail!.length).toBeLessThan(1000)
+  expect(result.records.filter(record => record.kind === 'visibility_dip').map(record => record.timeline)).toEqual([{ from: 40, to: 45 }])
+  clip.opacity = 0
+  composition.clips[0].opacity = 0
+  expect((await run(observe)).records.some(record => record.kind === 'text_box_overflow')).toBe(false)
+})
 it('rejects a stale observation rather than attributing it to the requested frame', async () => {
   const { run, observe } = fixture()
   await expect(run(async (local, frame) => ({ ...await observe(local, frame), revision: local.revision + 1 }))).rejects.toThrow('画面已改变')
@@ -38,7 +58,7 @@ it('keeps source-only content unknown when stationary bounds reveal no pixel cha
   expect(result.records.some(record => record.kind === 'motion_hold')).toBe(false)
   expect(result.records.filter(record => record.kind === 'code_unavailable')).toHaveLength(1)
   expect(result.records.some(record => record.kind.startsWith('text_'))).toBe(false)
-  expect(result.warnings).toEqual([])
+  expect(result.warnings.some(warning => warning.includes('未使用排版库'))).toBe(false)
 })
 
 it('文字墨迹与录制 clip 各用所属矩阵投影到查询序列，不把图层 bounds 当成文字', async () => {

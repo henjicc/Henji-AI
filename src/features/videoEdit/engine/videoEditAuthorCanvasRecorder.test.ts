@@ -1,10 +1,85 @@
 import { expect, it, vi } from 'vitest'
 import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, recordAuthorCanvas, replayAuthorCanvas, sameAuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
+import { videoEditCanvasIssues } from '@/core/videoEdit/codeCanvasReview'
 
 function measuring(): OffscreenCanvasRenderingContext2D {
-  return { reset: vi.fn(), font: '10px sans-serif', fillStyle: 'black', globalAlpha: 1, getImageData: vi.fn(), measureText: vi.fn(function (this: { font: string }, text: string) { return { width: text.length * Number.parseFloat(this.font) } }) } as unknown as OffscreenCanvasRenderingContext2D
+  return { reset: vi.fn(), font: '10px sans-serif', fillStyle: 'rgb(0, 0, 0)', globalAlpha: 1, getImageData: vi.fn(), measureText: vi.fn(function (this: { font: string }, text: string) { return { width: text.length * Number.parseFloat(this.font) } }) } as unknown as OffscreenCanvasRenderingContext2D
 }
 const size = { width: 100, height: 50 }
+it('无图形或无阴影偏移的指令不规范化颜色，真实阴影仍记录风险', () => {
+  const measure = measuring()
+  let color = 'transparent'
+  const normalize = vi.fn((value: string) => { color = value })
+  Object.defineProperty(measure, 'shadowColor', { get: () => color, set: normalize })
+  const result = recordAuthorCanvas(size, measure, [1, 0, 0, 1, 0, 0], ctx => {
+    ctx.shadowColor = 'black'; ctx.fillRect(10, 10, 20, 10)
+    ctx.shadowOffsetX = 200; ctx.save(); ctx.beginPath(); ctx.rect(-190, 10, 20, 10); ctx.fill(); ctx.restore()
+    ctx.shadowOffsetX = 0; ctx.fillRect(10, 10, 20, 10)
+  })
+  expect(normalize).toHaveBeenCalledOnce()
+  expect(normalize).toHaveBeenCalledWith('black')
+  expect(result.canvasReview?.filter(fact => fact.kind === 'shadow_outside_source')).toHaveLength(1)
+})
+
+it('lighter 与局部清除只使文字无法证明保留，矩形和图层外投影事实仍可复核', () => {
+  const measure = measuring()
+  measure.measureText = () => ({ width: 80, actualBoundingBoxLeft: 0, actualBoundingBoxRight: 80, actualBoundingBoxAscent: 10, actualBoundingBoxDescent: 2 }) as TextMetrics
+  const result = recordAuthorCanvas(size, measure, [1, 0, 0, 1, 0, 0], ctx => {
+    ctx.fillRect(0, 0, 90, 40); ctx.fillText('正文', 10, 20)
+    ctx.globalCompositeOperation = 'lighter'; ctx.shadowColor = 'black'; ctx.shadowOffsetX = 200
+    ctx.fillRect(-190, 10, 20, 10)
+    ctx.clearRect(90, 40, 1, 1)
+  })
+  expect(result.canvasReview?.find(fact => fact.kind === 'text')).toMatchObject({ text: '正文', retained: false })
+  expect(result.canvasReview?.filter(fact => fact.kind === 'box')).toHaveLength(2)
+  expect(result.canvasReview?.filter(fact => fact.kind === 'shadow_outside_source')).toHaveLength(1)
+})
+it('阴影使用栅格长度且不随作者 CTM 缩放，透明颜色不误报', () => {
+  const record = (offset: number, color: string) => recordAuthorCanvas(size, measuring(), [2, 0, 0, 2, 0, 0], ctx => {
+    ctx.shadowColor = color; ctx.shadowOffsetX = offset; ctx.fillRect(-90, 5, 10, 10)
+  }).canvasReview?.filter(fact => fact.kind === 'shadow_outside_source')
+  expect(record(90, 'black')).toHaveLength(0)
+  expect(record(180, 'black')).toHaveLength(1)
+  // eslint-disable-next-line no-restricted-syntax -- 验证 Canvas 透明颜色解析输入，不是界面配色。
+  for (const color of ['transparent', 'rgba(0,0,0,0)', 'rgba(0, 0, 0, 0)', '#0000', '#ffffff00']) expect(record(180, color)).toHaveLength(0)
+})
+it('完整擦掉的矩形保留绘制事实但不再充当容器，局部清除和辉光不丢失其他框', () => {
+  const record = (clear: (ctx: OffscreenCanvasRenderingContext2D) => void) => recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], ctx => { ctx.fillRect(10, 10, 60, 30); clear(ctx) }).canvasReview
+  expect(record(ctx => ctx.clearRect(0, 0, 100, 50))?.[0]).toMatchObject({ kind: 'box', retained: false })
+  expect(record(ctx => ctx.reset())?.[0]).toMatchObject({ kind: 'box', retained: false })
+  expect(record(ctx => ctx.clearRect(90, 40, 1, 1))?.[0].retained).toBeUndefined()
+  expect(record(ctx => { ctx.globalCompositeOperation = 'lighter'; ctx.fillRect(90, 40, 1, 1) })?.[0].retained).toBeUndefined()
+  expect(record(ctx => { ctx.globalCompositeOperation = 'destination-out'; ctx.fillRect(90, 40, 1, 1) })?.[0].retained).toBeUndefined()
+  expect(record(ctx => { ctx.globalCompositeOperation = 'destination-out'; ctx.fillRect(0, 0, 100, 50) })?.[0].retained).toBe(false)
+  expect(record(ctx => { ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = .5; ctx.fillRect(0, 0, 100, 50) })?.[0].retained).toBeUndefined()
+})
+it('copy 新绘制的窄卡片仍是有效容器，不把不相交的擦除形状当容器', () => {
+  const measure = measuring()
+  measure.measureText = () => ({ width: 80, actualBoundingBoxLeft: 0, actualBoundingBoxRight: 80, actualBoundingBoxAscent: 10, actualBoundingBoxDescent: 2 }) as TextMetrics
+  const { canvasReview } = recordAuthorCanvas(size, measure, [1, 0, 0, 1, 0, 0], ctx => {
+    ctx.fillRect(0, 0, 5, 5)
+    ctx.globalCompositeOperation = 'copy'; ctx.fillRect(10, 10, 60, 30)
+    ctx.globalCompositeOperation = 'destination-out'; ctx.fillRect(90, 40, 1, 1)
+    ctx.globalCompositeOperation = 'source-over'; ctx.fillText('正文', 20, 30)
+  })
+  expect(canvasReview?.filter(fact => fact.kind === 'box').map(fact => fact.retained)).toEqual([false, undefined, false])
+  expect(videoEditCanvasIssues({ id: 'card', name: '', bounds: [0, 0, 100, 50], matrix: [1, 0, 0, 1, 0, 0], corners: [], parameterKeys: [], textParameterKeys: [], canvasReview })).toEqual([expect.objectContaining({ kind: 'text_box_overflow' })])
+})
+it('记录实际文字墨迹和圆角卡片；栅格外源图形的偏移投影返回风险，普通阴影不报', () => {
+  const measure = measuring()
+  measure.measureText = () => ({ width: 80, actualBoundingBoxLeft: 0, actualBoundingBoxRight: 80, actualBoundingBoxAscent: 10, actualBoundingBoxDescent: 2 }) as TextMetrics
+  const result = recordAuthorCanvas(size, measure, [1, 0, 0, 1, 0, 0], ctx => {
+    ctx.beginPath(); ctx.roundRect(10, 10, 60, 30, 5); ctx.fill()
+    ctx.fillText('宽数字单位', 20, 30)
+    ctx.save(); ctx.shadowColor = 'black'; ctx.shadowOffsetX = 200; ctx.shadowBlur = 4; ctx.fillRect(-190, 20, 20, 10); ctx.restore()
+    ctx.shadowOffsetX = 4; ctx.shadowColor = 'black'; ctx.fillRect(20, 20, 10, 10)
+  })
+  expect(result.canvasReview).toEqual(expect.arrayContaining([
+    expect.objectContaining({ kind: 'box', quad: [[10, 10], [70, 10], [70, 40], [10, 40]] }),
+    expect.objectContaining({ kind: 'text', text: '宽数字单位', quad: [[20, 20], [100, 20], [100, 32], [20, 32]] }),
+  ]))
+  expect(result.canvasReview?.filter(fact => fact.kind === 'shadow_outside_source')).toHaveLength(1)
+})
 const scene = (ctx: OffscreenCanvasRenderingContext2D, label: string, image?: CanvasImageSource): void => {
   ctx.save(); ctx.translate(10, 5); ctx.font = '20px sans-serif'
   const width = ctx.measureText(label).width

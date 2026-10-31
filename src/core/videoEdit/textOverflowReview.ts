@@ -35,7 +35,7 @@ export interface VideoEditTextDrawSample {
 type Base = Pick<VideoEditMotionStructureFact, 'sequenceId' | 'path' | 'subjectId' | 'elementPath' | 'label'>
 
 /** 只对凸裁切证明包含关系；未知路径不能用外接矩形冒充有效 clip。 */
-function outside(points: Point[], polygon: Point[]): boolean {
+export function videoEditQuadOutside(points: Point[], polygon: Point[]): boolean {
   if (!points.length) return false
   const area = polygon.reduce((sum, [x, y], i) => { const next = polygon[(i + 1) % polygon.length]; return sum + x * next[1] - y * next[0] }, 0)
   if (Math.abs(area) < 1e-8) return true
@@ -59,8 +59,8 @@ const ready = (sample: VideoEditTextDrawSample): boolean => sample.opacity >= .0
 function clipped(sample: VideoEditTextDrawSample): VideoEditTextOverflowEvidence['clippedBy'] {
   const { draw } = sample
   if (!ready(sample) || draw.retained === false || draw.uncovered.length || draw.boundsKind !== 'measured') return []
-  return [...(sample.frameClips.some(clip => outside(sample.inkQuad, clip)) ? ['frame' as const] : []),
-    ...(sample.effectiveClips.some(clip => outside(sample.inkQuad, clip)) ? ['clip' as const] : [])]
+  return [...(sample.frameClips.some(clip => videoEditQuadOutside(sample.inkQuad, clip)) ? ['frame' as const] : []),
+    ...(sample.effectiveClips.some(clip => videoEditQuadOutside(sample.inkQuad, clip)) ? ['clip' as const] : [])]
 }
 
 /** 排版稳定与位姿运动无关；裁切按每帧正文和有效裁切判定后合并，不以坐标恒等作为前提。 */

@@ -68,6 +68,7 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
   if (!frames.length) throw new Error('源码检查需要边界画面。')
   signal.throwIfAborted()
   let lease: VideoEditOffscreenLease | undefined; let bitmap: ImageBitmap | undefined
+  let loadedDocument: VideoEditComposition | undefined
   const poolAbort = new AbortController()
   let succeeded = false
   let expired = false; let timer: ReturnType<typeof setTimeout> | undefined; let abort: (() => void) | undefined
@@ -105,7 +106,8 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
           return value
         })
         lease = await Promise.race([acquiring, deadline]); sessionReused = lease.reused; measuredSession = lease.session
-      } else await Promise.race([lease.run(input.document, session => { measureSession(session); return session.replaceContent(input.document) }), deadline])
+      } else if (loadedDocument !== input.document) await Promise.race([lease.run(input.document, session => { measureSession(session); return session.replaceContent(input.document) }), deadline])
+      loadedDocument = input.document
       const present = async (frame: number): ReturnType<VideoEditRenderSession['present']> => {
         signal.throwIfAborted()
         clearTimeout(timer)

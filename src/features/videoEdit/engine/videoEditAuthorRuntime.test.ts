@@ -303,6 +303,15 @@ function canvasHarness() {
 const frameInfo = (frame: number) => ({ time: frame / 60, frameDuration: 1 / 60, clip: { time: frame / 60, duration: 5 } })
 const output = { createView: () => ({}), destroy() {} }
 
+it.each([false, true])('只对独立栅格的运动层报告源图形外投影，静止层不误报（pose=%s）', async posed => {
+  const { device } = canvasHarness()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '投影', layers: () => [{ id: 'shadow', bounds: [0, 0, 100, 50], ...(posed ? { pose: () => ({ x: 0 }) } : {}), draw(ctx) { ctx.shadowColor = 'black'; ctx.shadowOffsetX = 180; ctx.fillRect(-90, 10, 10, 10) } }] })
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0))
+    expect(runtime.observeElements()[0].canvasReview?.some(fact => fact.kind === 'shadow_outside_source')).toBe(posed)
+  } finally { await runtime.dispose() }
+})
+
 it('layers 每帧排版的独立字素动画只栅格一次，重放沿用同一图集', async () => {
   const { device, calls, text } = canvasHarness()
   const runtime = new VideoEditAuthorRuntime(device, { name: '字素动画', layers() {

@@ -67,6 +67,17 @@ describe('自动检查点与原始跟踪证据', () => {
     const result = collectVideoEditReviewStructure(videoEditComposition(document, 'root'), { from: 0, to: 25 }).records
     expect(result.find(record => record.kind === 'effect' && record.subjectId === 'leaf')?.timeline.from).toBe(6)
   })
+  it('倒放嵌套的片段边界与不透明度事件在跨越边界时报告，不能提前到边界采样帧', () => {
+    const { document, sequence } = fixture(); const child = createVideoEditSequence('倒放子序列'); child.id = 'child'
+    child.clips = [clip('leaf', { start: 10, duration: 40, curves: { opacity: [{ time: 12, value: 0, interpolation: 'hold' }] } })]
+    document.sequences.push(child); document.items.push({ id: 'nested', kind: 'sequence', name: '子', sequenceId: child.id })
+    const parent = clip('parent', { kind: 'sequence', itemId: 'nested', duration: 60, sourceInUs: 2000000, reverse: true }); sequence.clips = [parent]
+    const records = collectVideoEditReviewStructure(videoEditComposition(document, 'root'), { from: 0, to: 60 }).records.filter(record => record.subjectId === 'leaf')
+    expect(records.filter(record => record.kind === 'clip_boundary').map(record => record.timeline)).toEqual([{ from: 50, to: 50 }, { from: 10, to: 10 }])
+    expect(records.find(record => record.kind === 'effect')?.timeline).toEqual({ from: 38, to: 38 })
+    expect(videoEditNestedFrame({ fps: 30 }, parent, { fps: 30 }, 37)).toBe(22)
+    expect(videoEditNestedFrame({ fps: 30 }, parent, { fps: 30 }, 38)).toBe(21)
+  })
   it('连续跟丢、低置信度和未覆盖各自压缩，保留最小置信度，不因渲染借帧掩盖跟丢', () => {
     const result = videoEditTrackingReviewRanges(header([box(.9), null, null, box(.4), box(.2), box(.8)], 2), { fromUs: 0, toUs: 1000000 }, .5, budget())
     expect(result).toEqual([

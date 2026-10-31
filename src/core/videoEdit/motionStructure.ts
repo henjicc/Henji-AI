@@ -5,7 +5,7 @@ import { videoEditSourceMapLocalFrame, visitVideoEditPictureInstances, type Vide
 import type { VideoEditComposition } from './document'
 
 export const VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET = 60000
-export type VideoEditMotionStructureKind = 'motion' | 'motion_hard_stop' | 'motion_hold' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast' | 'text_overflow' | 'text_clipped' | 'text_truncated'
+export type VideoEditMotionStructureKind = 'motion' | 'motion_hard_stop' | 'motion_hold' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown' | 'settled_jitter' | 'safe_area' | 'motion_too_fast' | 'text_overflow' | 'text_clipped' | 'text_truncated' | 'text_box_overflow' | 'shadow_outside_source' | 'visibility_dip'
 export type VideoEditSafeAreaEdge = 'left' | 'right' | 'top' | 'bottom'
 /** Safe-area overflow measured as a percentage of the output frame side it crosses. */
 export interface VideoEditSafeAreaEvidence { zone: 'title' | 'action'; edges: VideoEditSafeAreaEdge[]; overflowPercent: number }
@@ -21,6 +21,7 @@ export interface VideoEditMotionStructureFact {
   speedLimit?: number
   jitterPixels?: number
   safeArea?: VideoEditSafeAreaEvidence
+  canvas?: import('./codeCanvasReview').VideoEditCanvasEvidence
   textOverflow?: import('./textOverflowReview').VideoEditTextOverflowEvidence
   /** User-facing clip, element or caption name; only words suggestions, never an identity. */
   label?: string

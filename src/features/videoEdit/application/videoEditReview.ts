@@ -26,6 +26,7 @@ import { videoEditMotionSpeedFacts, VIDEO_EDIT_MOTION_PACE_LIMITS } from '@/core
 import { collectVideoEditTextSafety, type VideoEditTextMeasure } from '@/core/videoEdit/textSafetyReview'
 import { videoEditCodeSceneKeys } from '@/core/videoEdit/codeInputParameters'
 import { collectVideoEditSceneReview, readVideoEditSceneReviewPage, type VideoEditSceneReviewRecord } from './videoEditSceneReview'
+import { collectVideoEditVisualReview } from './videoEditVisualReview'
 import { settleVideoEditCodeDeclarations, videoEditCodeDeclarationReader } from './videoEditCodeDeclarations'
 
 /** Same measuring path as the Program text overlay: the renderer document's loaded fonts. */
@@ -69,14 +70,14 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
     context.signal.throwIfAborted()
     if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
     if (!isVideoEditContentCurrent(owner, contentVersion) || videoEditObservationVersion(owner, owner.document.revision) !== version) throw new Error('检查期间剪辑或跟踪结果已改变，请重新查询。')
-    if (input.motion && codeTextFontGeneration() !== fontGeneration) throw new Error('检查期间字体已改变，请重新查询。')
+    if ((input.motion || input.visual) && codeTextFontGeneration() !== fontGeneration) throw new Error('检查期间字体已改变，请重新查询。')
   }
   logger.info('剪辑检查点查询开始', { event: 'video_edit.review.start', requestId: context.requestId, context: { documentId: projectId, sequenceId: childId, from: input.from, to: input.to } })
   try {
     assertCurrent()
     const composition = videoEditComposition(owner.document, childId)
     const range = videoEditReviewRange(composition, input.from, input.to)
-    const key = JSON.stringify([childId, version, input.from, input.to, input.threshold, input.maxFrames, input.motion, input.motion ? fontGeneration : null, input.scene])
+    const key = JSON.stringify([childId, version, input.from, input.to, input.threshold, input.maxFrames, input.motion, (input.motion || input.visual) ? fontGeneration : null, input.scene, input.visual])
     const saved = snapshots.get(owner) ?? new Map<string, Snapshot>(); snapshots.set(owner, saved)
     let id: string; let offset = 0; let snapshot: Snapshot
     if (input.cursor) {
@@ -127,6 +128,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
           records.push({ ...record, motionEvidence: { basis: record.basis ?? 'clip_transform', ...(record.elementPath ? { elementPath: [...record.elementPath] } : {}), ...(record.peakSpeed === undefined ? {} : { peakSpeed: record.peakSpeed }),
             ...(record.speedLimit === undefined ? {} : { speedLimit: record.speedLimit }), ...(record.jitterPixels === undefined ? {} : { jitterPixels: record.jitterPixels }),
             ...(record.safeArea ? { safeArea: { ...record.safeArea, edges: [...record.safeArea.edges] } } : {}),
+            ...(record.canvas ? { canvas: structuredClone(record.canvas) } : {}),
             ...(record.textOverflow ? { textOverflow: structuredClone(record.textOverflow) } : {}),
             ...(record.input ? { input: { parameter: record.input.parameter, kind: record.input.kind, mediaRef: { kind: 'video_edit.media' as const, id: `${projectId}:${record.input.mediaId}` } } } : {}),
             suggestion: code && record.kind === 'motion_hold' ? '此元素自身结构保持；父组、输入视频或其他图层仍可能运动，请看图判断阅读停留。' : suggestion } })
@@ -186,8 +188,12 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
         records.push(...await collectVideoEditSceneReview(projectId, composition, range, input.scene, sceneRecords, context.signal, assertCurrent, records.length, warnings))
         warnings.push('片子数据检查只说明数据与窗口内容的对应关系；作者代码可能主动淡掉错位的框，不能据此断言观众看见了框。鼠标日志缺失或隐藏时不判跳动；proposal 是可选改法，修改前读声明，写后读回并重新复核。')
       }
+      if (input.visual) {
+        const visual = await collectVideoEditVisualReview(owner, composition, range, input.visual, context.signal, assertCurrent, records.length, warnings)
+        records.push(...visual.records); sources.push(...visual.sources)
+      }
       records.sort((a, b) => a.timeline.from - b.timeline.from || a.kind.localeCompare(b.kind) || a.subjectId.localeCompare(b.subjectId))
-      snapshot = { key, baseVersion: version, version: sources.length ? `${version}|review:${id}` : version, records, warnings, sources, frames: selectVideoEditReviewFrames(frameCandidates(records), range, input.maxFrames, videoEditDuration(composition)) }
+      snapshot = { key, baseVersion: version, version: sources.length || input.visual ? `${version}|review:${id}` : version, records, warnings, sources, frames: selectVideoEditReviewFrames(frameCandidates(records), range, input.maxFrames, videoEditDuration(composition)) }
       assertCurrent()
       while (saved.size >= 4) saved.delete(saved.keys().next().value!)
       saved.set(id, snapshot)

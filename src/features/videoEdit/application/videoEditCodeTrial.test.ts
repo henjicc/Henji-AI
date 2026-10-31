@@ -6,18 +6,25 @@ import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { VideoEditRenderWorkerError } from '../engine/videoEditGpuFailure'
 
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ system: { memoryInfo: async () => ({ availableBytes: 2 ** 32, totalBytes: 2 ** 33 }) } }) }))
-const boundary = vi.hoisted(() => ({ present: vi.fn(), dispose: vi.fn(), construct: vi.fn() }))
+const boundary = vi.hoisted(() => ({ present: vi.fn(), dispose: vi.fn(), construct: vi.fn(), replace: vi.fn() }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   constructor() { boundary.construct() }
   present = boundary.present
   dispose = boundary.dispose
   async updateDocument() {}
-  async replaceContent() {}
+  replaceContent = boundary.replace
 } }))
 function frames() { const document = createVideoEditTestDocument('试渲染'); return [{ document: videoEditComposition(document, document.sequences[0].id), frame: 0 }] }
 function result() { return { presented: true, bitmap: { width: 1, height: 1, close: vi.fn() } as unknown as ImageBitmap } }
 beforeEach(() => { vi.clearAllMocks(); boundary.present.mockResolvedValue(result()); boundary.dispose.mockResolvedValue(undefined) })
 afterEach(async () => { await videoEditOffscreenPool.dispose(); vi.useRealTimers(); vi.restoreAllMocks() })
+it('批量同一文档的相邻观察帧无需重复序列化，临时副本仍触发替换', async () => {
+  const input = frames()[0], changed = { ...input.document }
+  await trialVideoEditCodeFrames([input, { ...input, frame: 1 }, { document: changed, frame: 2 }, { document: changed, frame: 3 }], new AbortController().signal)
+  expect(boundary.replace).toHaveBeenCalledTimes(1)
+  expect(boundary.replace).toHaveBeenCalledWith(changed)
+  expect(boundary.present).toHaveBeenCalledTimes(4)
+})
 it('试算的普通 Worker 异常重建后恢复当前帧，连续三次异常结束并释放租约', async () => {
   vi.useFakeTimers()
   boundary.present.mockRejectedValueOnce(new VideoEditRenderWorkerError('退出'))
