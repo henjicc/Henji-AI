@@ -1,6 +1,6 @@
 # 06 导出按输出分辨率渲染（以后再做第 11 项做法 1、3）
 摘要：导出不再按序列完整分辨率合成再缩小，而是直接按输出分辨率渲染（任意比例，复用预览的缩小渲染）；进度发布与让出线程改为按时间。
-网页倍率跟随输出（做法 2）已在 ticket 03（b3a12af5a）完成，本 ticket 只接上统一的输出比例。
+网页倍率跟随输出（做法 2）已在 ticket 03（643a59a31）完成，本 ticket 只接上统一的输出比例。
 分级：中；执行 Codex sol high；交叉审查 Opus high；画面对比验收 Claude。
 
 ## 依据
@@ -24,4 +24,4 @@
 - `npm run verify:changed -- --level L2 <本次文件...>` 通过；改持久格式的按 persistence.md 补迁移与黄金样本。
 
 ## 依赖与顺序
-基于 main b3a12af5a，在 worktree `task/06-导出按输出分辨率` 进行，可与 ticket 05 并行（05 主要改作者运行时与效果，06 改渲染尺寸与导出；videoEditRenderer.ts 如有交叉，合并时 Claude 处理）。
+基于 main 643a59a31，在 worktree `task/06-导出按输出分辨率` 进行，可与 ticket 05 并行（05 主要改作者运行时与效果，06 改渲染尺寸与导出；videoEditRenderer.ts 如有交叉，合并时 Claude 处理）。
