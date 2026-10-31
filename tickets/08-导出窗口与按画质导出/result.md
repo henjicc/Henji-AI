@@ -91,3 +91,9 @@ A 段功能已实现：画质压制、完整编码快照、本机导出记忆、
 - https://ffmpeg.org/ffmpeg.html
 - https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/ffmpeg-with-nvidia-gpu/
 - https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/nvenc-video-encoder-api-prog-guide/index.html
+
+## B 段（界面，Opus 子代理，63a7c01a9）
+- 新增 VideoEditExportPresetMenu（预设下拉 + 底部竖排操作）、VideoEditExportEncodingFields（高级分组、灰掉原因、逐项恢复）、videoEditExportUi（参数连带、画质档文案、两段进度）；改 Dialog/Fields/Progress/QueueList 与队列测试。L1（含 check:surface 严格、colors、icons、ui-residue、ui-design）与 52 项队列测试通过。
+- 与设计的偏离（Claude 认可）：高级分组 7 并 5（码率控制与画质码率合并、10 位并入色彩）；Profile/Level 标为“规格/级别”；选目录时由队列取不重名文件名；“入点到出点”记为范围来源；按画质压制不显示预计大小、摘要写档名；仅音频切回视频自动套视觉无损；无 encoding 的旧预设显示“自定义”、原参数进高级。
+- A 段接口缺口：记忆存的是落盘文件名（界面靠正则去 “ (N)”），应在 remember 处传请求文件名；任务开始前无“是否有压制段”字段（靠 settings.encoding 判断）；两套 Reality 脚本的确认导出步骤断言预设为“与序列一致”，有上次记忆时会挂。
+- 交叉审查：A 段 Opus xhigh、B 段 Codex 只读审查进行中；视觉由 Claude 合并后在开发版目视验收。
