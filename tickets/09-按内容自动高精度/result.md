@@ -256,3 +256,5 @@ A/A 三层动态墙钟 p95 也有 +16.348ms，往返 +5.030ms，证明相同实�
 - 基准临时源码位于已忽略的 `.tmp/precision-baseline`；测试缓存、类型缓存与提交正文也在本 worktree 的 `.tmp`。ticket 目录的全部历史与本轮证据文件保留。
 - `node_modules` 保持指向 `D:/VibeCode/Henji-AI/node_modules` 的原联接点，未删除、未重装；测试缓存由现有配置写入 worktree `.tmp`。
 - 未运行 Reality、构建、性能基准、push、pull/rebase 或分支切换；未操作 9334 开发实例，未接触 `D:/视频制作`，未改 main 或主工作区其他文件。
+
+> 逐帧原始数据（benchmark-resume-paired/aa/diagnostic.json）与基线源码副本较大，移到本机忽略目录 `.tmp/t09-evidence/`，不进仓库。
