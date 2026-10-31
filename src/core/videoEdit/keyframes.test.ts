@@ -1,7 +1,7 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
 import { videoEditComposition, videoEditDocumentSchema, splitVideoEditClip, changeVideoEditSequenceSettings, type VideoEditClip } from './document'
-import { evaluateVideoEditClip, evaluateVideoEditKeyframes, sliceVideoEditCurves, validateVideoEditBuiltinCurves, videoEditKeyframesSchema, type VideoEditKeyframes } from './keyframes'
+import { assertVideoEditBuiltinCurves, evaluateVideoEditBuiltinParameters, evaluateVideoEditClip, evaluateVideoEditKeyframes, sliceVideoEditCurves, validateVideoEditBuiltinCurves, videoEditKeyframesSchema, type VideoEditKeyframes } from './keyframes'
 import { videoEditClipCenterPosition, videoEditClipToFrame, videoEditFrameToClip } from './clipGeometry'
 import { applyVideoEditRateStretch } from './clipSpeedEdits'
 import { defaultVideoEditTextStyle } from './text'
@@ -138,4 +138,15 @@ it('锚点参与同一几何；跟随上的关键帧为偏移与缩放乘数', (
   clip.x = .2; clip.scale = 2; clip.curves = { x: [{ time: 0, value: .1, interpolation: 'linear' }], scale: [{ time: 0, value: .5, interpolation: 'linear' }] }
   expect(evaluateVideoEditClip(clip, 0).x).toBeCloseTo(.3)
   expect(evaluateVideoEditClip(clip, 0).scale).toBe(1)
+})
+
+it('后来改成不做动画的参数：旧存档的关键帧照样读入、按第一个关键帧定住；整表原样写回可以，新写或改动不行', () => {
+  // 影棚背景的环境光速度决定它自己累加的时钟，做关键帧时结果取决于渲染历史，改成不做动画。
+  const stored = { ambient_speed: [{ time: 0, value: 1, interpolation: 'linear' as const }, { time: 30, value: 4, interpolation: 'linear' as const }] }
+  const builtin = { id: 'shaders.StudioBackground', params: { ambient_speed: 2 }, curves: stored }
+  expect(() => assertVideoEditBuiltinCurves(builtin)).not.toThrow()
+  for (const time of [0, 15, 30]) expect(evaluateVideoEditBuiltinParameters(builtin, time).ambient_speed).toBe(1)
+  expect(() => validateVideoEditBuiltinCurves(builtin, stored)).not.toThrow()
+  expect(() => validateVideoEditBuiltinCurves({ ...builtin, curves: { ambient_speed: [stored.ambient_speed[0]] } }, stored)).toThrow(/不支持关键帧/)
+  expect(() => validateVideoEditBuiltinCurves(builtin)).toThrow(/不支持关键帧/)
 })

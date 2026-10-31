@@ -99,22 +99,25 @@ async function checkCustomWgsl(device: GpuDevice, shader: ShaderGraphCustomShade
 }
 
 export interface ShaderGraphRenderRequest {
-  /** 本帧秒时间（片段内时间或作者给的 time），任意顺序调用结果相同。 */
+  /**
+   * 本帧秒时间（片段内时间）。框架按与上一帧的秒差推进：全局时间与动画时间任意顺序调用结果相同；
+   * 少数组件在自己的合成里按秒差另行累加（片门晃动、环境光漂移、自转），乘数在片段间不同或做关键帧时与渲染历史有关。
+   */
   timeSeconds: number
   width: number
   height: number
   /** 宿主画面：预乘 alpha、sRGB 编码；图里引用 `@input` / `@second` 时必需。 */
   input?: GpuTexture
   second?: GpuTexture
-  /** 每个图层的属性值（按图层 id），只写有变化的项。 */
+  /** 每个图层的完整属性表（按图层 id）：没写的属性回到组件默认值。 */
   props?: ReadonlyMap<string, Readonly<Record<string, unknown>>>
   output: GpuTexture
   outputFormat: string
 }
 
 /**
- * 一个图结构（图层树、组件类型、作者着色器源码）一个会话；属性变化只改数值，不重建。
- * 结构变了由调用方按 `shaderGraphStructureKey` 换会话。
+ * 一种合成一个会话：图结构（图层树、组件类型、作者着色器源码）之外，编译期属性、带重建条件属性的阈值一侧与混合模式
+ * 都在建会话时定下，之后只改普通属性的数值，不重建。这些变了由调用方换会话（`ShaderGraphCache` 按它们分会话）。
  */
 export class ShaderGraphSession {
   readonly key: string
@@ -129,6 +132,7 @@ export class ShaderGraphSession {
   private gpuError?: string
   private computes = false
   private disposed = false
+  private builds = 0
   private readonly pipelines = new Map<string, GpuRenderPipeline>()
   private module?: unknown
   private sampler?: unknown
@@ -140,6 +144,9 @@ export class ShaderGraphSession {
     await session.initialize()
     return session
   }
+
+  /** 宿主画面图层建过几次：框架每建一份合成，其中每个 @input / @second 各一次；缓存按结构分会话，建好后不再增加。 */
+  get hostBuilds(): number { return this.builds }
 
   /** 由设备代理调用：本会话发起的 GPU 工作报了错（多为作者 WGSL）。 */
   noteGpuError(message: string): void { this.gpuError ??= message }
@@ -169,6 +176,7 @@ export class ShaderGraphSession {
   /** 宿主画面图层：一张线性光、直通 alpha 的媒体纹理，尺寸跟随渲染尺寸。 */
   private hostDefinition(type: string): Definition {
     const fragment = (params: { createMediaTexture(options: unknown): HostTexture; registerMediaTexture(get: () => unknown): { sample(uv: unknown): unknown }; onCleanup(fn: () => void): void; ctx: { uv: unknown }; uvContext?: unknown }): unknown => {
+      this.builds++
       const make = (width: number, height: number) => params.createMediaTexture({ width: Math.max(1, width), height: Math.max(1, height), format: 'rgba16float', label: type })
       let current = make(this.size.width, this.size.height)
       this.hostTextures.set(type, { get texture() { return current.texture }, get width() { return current.width }, get height() { return current.height }, unwrap: () => current.unwrap(), destroy: () => current.destroy() })

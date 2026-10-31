@@ -97,7 +97,8 @@ export function evaluateVideoEditBuiltinParameters(builtin: { id: string; params
   // 已移除的效果不渲染，参数原样保留。
   if (isRemovedVideoEditBuiltinEffect(builtin.id)) return params
   for (const param of requireVideoEditBuiltinEffect(builtin.id).params) {
-    const value = evaluateVideoEditKeyframes(builtin.curves?.[param.key], time, builtin.params[param.key] ?? param.default)
+    const points = builtin.curves?.[param.key]
+    const value = param.storedKeyframes === 'first' && points?.length ? points[0].value as VideoEditBuiltinParams[string] : evaluateVideoEditKeyframes(points, time, builtin.params[param.key] ?? param.default)
     params[param.key] = param.type === 'number' && typeof value === 'number' ? Math.max(param.min, Math.min(param.max, value)) : value
   }
   return params
@@ -120,19 +121,23 @@ export function evaluateVideoEditClip(clip: VideoEditClip, timelineFrame: number
 export function assertVideoEditKeyframeTimes(curves: VideoEditCurves | undefined, duration: number, title: string): void {
   for (const [key, points] of Object.entries(curves ?? {})) for (const point of points) if (point.time >= duration) throw new Error(`${title} ${key}.keyframes 的 time 越界：允许片段内 0–${duration - 1} 帧。`)
 }
-/** 写入内置效果关键帧时的严格校验：参数必须存在、可动画，值在硬范围内，选项类参数只能定格插值。 */
-export function validateVideoEditBuiltinCurves(builtin: { id: string; curves?: VideoEditCurves }): void {
+/**
+ * 写入内置效果关键帧时的严格校验：参数必须存在、可动画，值在硬范围内，选项类参数只能定格插值。
+ * `stored` 是写入前存着的关键帧：`storedKeyframes: 'first'` 的参数，存档留下的关键帧原样带回可以（改别的参数时整表写回），新写或改动不行。
+ */
+export function validateVideoEditBuiltinCurves(builtin: { id: string; curves?: VideoEditCurves }, stored?: VideoEditCurves): void {
   const definition = requireVideoEditBuiltinEffect(builtin.id)
   for (const [key, points] of Object.entries(builtin.curves ?? {})) {
     const param = definition.params.find(param => param.key === key)
     if (!param) throw new Error(`参数 ${key}.keyframes 不存在；可用：${definition.params.map(param => param.key).join('、')}。`)
+    if (param.storedKeyframes === 'first' && points.length && JSON.stringify(points) !== JSON.stringify(stored?.[key] ?? [])) throw new Error(`${param.name}（${key}）不支持关键帧，请直接修改参数。`)
     for (const point of points) for (const value of videoEditKeyframeValues(point)) videoEditBuiltinParamValue(param, value)
   }
   assertVideoEditBuiltinCurves(builtin)
 }
 /**
  * 存档里内置效果关键帧的校验，与 `videoEditBuiltinEffectIssue` 同一个口径：已移除的效果、已不存在的参数原样读入，
- * 超出当前范围的值求值时钳制；类型不对或插值不合规才报错。
+ * 超出当前范围的值求值时钳制，`storedKeyframes: 'first'` 的参数上的关键帧照样读入（求值取第一个关键帧）；类型不对或插值不合规才报错。
  */
 export function assertVideoEditBuiltinCurves(builtin: { id: string; curves?: VideoEditCurves }): void {
   if (isRemovedVideoEditBuiltinEffect(builtin.id)) return
@@ -140,7 +145,7 @@ export function assertVideoEditBuiltinCurves(builtin: { id: string; curves?: Vid
   for (const [key, points] of Object.entries(builtin.curves ?? {})) {
     const param = definition.params.find(param => param.key === key)
     if (!param) continue
-    if (param.animatable === false && points.length) throw new Error(`${param.name}（${key}）不支持关键帧，请直接修改参数。`)
+    if (param.animatable === false && param.storedKeyframes !== 'first' && points.length) throw new Error(`${param.name}（${key}）不支持关键帧，请直接修改参数。`)
     for (const point of points) {
       for (const value of videoEditKeyframeValues(point)) videoEditBuiltinParamValue(param, value, true)
       if ((param.type === 'boolean' || param.type === 'enum' || param.type === 'curve' || param.type === 'lut') && point.interpolation !== 'hold') throw new Error(`${param.name}.keyframes 只能用 hold 定格插值。`)

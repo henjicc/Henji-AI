@@ -22,8 +22,9 @@ import { VideoEditBuiltinEffectsGpu, type BuiltinEncodingBatch, type VideoEditBu
 import { planAuthorDefocus, planVideoEditBuiltinEffect } from './videoEditBuiltinEffectPasses'
 import { authorLayerBlur } from './videoEditAuthorLayers'
 import type { RecordingCursorDraw } from './videoEditRecordingCursorPlan'
-import { RECORDING_FRAME_SOLID_DEFAULT_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { RECORDING_FRAME_SOLID_DEFAULT_HEX, VIDEO_EDIT_GRADIENT_MAP_TEST_COLORS, WHITE_HEX } from '@/core/theme/colorTokens'
 import { VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES, VIDEO_EDIT_BUILTIN_EFFECT_SHADER } from './videoEditBuiltinEffectShaders'
+import { gradientMap, invert, posterize } from '@/features/videoEdit/authorLibraries/effects'
 
 // 任务 4.7b 真实设备专项：内置效果的正式 WGSL 与工序在 Dawn 上编译并逐像素核对关键结果。npm run test:gpu 无条件执行。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -1101,3 +1102,69 @@ it('镜头范围在过渡带里层与层之间没有接缝：逐行的散开宽�
     })
   } finally { blocks.destroy(); target.destroy() }
 }, 60_000)
+
+describe('颜色效果（真实设备）', () => {
+  /** 透明底上的白色方块，四周一圈半透明边（预乘）。 */
+  function whiteSquare(): GpuTexture {
+    const texture = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC })
+    const data = new Uint8Array(W * H * 4)
+    for (let y = 8; y < 28; y++) for (let x = 20; x < 44; x++) {
+      const alpha = Math.round(255 * Math.min(1, (Math.min(x - 20, 43 - x, y - 8, 27 - y) + 1) / 4))
+      data.set([alpha, alpha, alpha, alpha], (y * W + x) * 4)
+    }
+    device.queue.writeTexture({ texture }, data, { bytesPerRow: W * 4 }, [W, H])
+    return texture as unknown as GpuTexture
+  }
+  it('渐变映射：黑→白两种插值都与“黑白”一致；三色时透明底白字的半透明边缘仍是亮部颜色，不发暗', async () => {
+    const bw = await run('black_white')
+    for (const interpolation of ['perceptual', 'srgb']) {
+      const mapped = await run('gradient_map', { interpolation })
+      expect(Math.max(...Array.from(mapped, (value, index) => Math.abs(value - bw[index]))), interpolation).toBeLessThanOrEqual(1)
+    }
+    const { dark, mid, light } = VIDEO_EDIT_GRADIENT_MAP_TEST_COLORS
+    const lightRgb = [1, 3, 5].map(index => parseInt(light.slice(index, index + 2), 16))
+    const source = whiteSquare()
+    for (const interpolation of ['perceptual', 'srgb']) {
+      const target = output()
+      await effects.render({ id: 'gradient_map', params: { mode: 'three', dark_color: dark, mid_color: mid, light_color: light, interpolation } as never }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, 0)
+      const pixels = await read(target)
+      expect(pixel(pixels, 2, 2), interpolation).toEqual([0, 0, 0, 0])
+      for (const [x, y] of [[20, 18], [21, 18], [32, 8], [32, 18]]) {
+        const [r, g, b, a] = pixel(pixels, x, y)
+        expect(a).toBeGreaterThan(0)
+        // 预乘值换回直通色：边缘只是更透明，颜色仍是亮部颜色（8 位预乘在低透明度处有取整误差）。
+        for (const [channel, value] of [r, g, b].entries()) expect(Math.abs(value / a * 255 - lightRgb[channel]), `${interpolation} ${x},${y}`).toBeLessThanOrEqual(255 / a + 1)
+      }
+    }
+    source.destroy()
+  }, 30_000)
+  it('色调分离：按通道灰阶只剩等距的 n 级，平滑后台阶间连续过渡；按亮度保留色相', async () => {
+    const row = (pixels: Uint8Array): number[] => Array.from({ length: W }, (_, x) => pixel(pixels, x, 18)[1])
+    expect([...new Set(row(await run('posterize', { levels: 6 })))].sort((a, b) => a - b)).toEqual([0, 51, 102, 153, 204, 255])
+    const smooth = row(await run('posterize', { levels: 6, smooth: 100 }))
+    expect(smooth.every((value, x) => x === 0 || value >= smooth[x - 1])).toBe(true)
+    expect(new Set(smooth).size).toBeGreaterThan(6)
+    const luminance = await run('posterize', { by: 'luminance', levels: 4 })
+    const red = pixel(luminance, 0, 0)
+    expect(red[0]).toBeGreaterThan(red[1] + 100); expect(red[0]).toBeGreaterThan(red[2] + 100)
+    const gray = pixel(luminance, 40, 18)
+    expect(Math.max(...gray.slice(0, 3)) - Math.min(...gray.slice(0, 3))).toBeLessThanOrEqual(1)
+  }, 30_000)
+  it('作者工厂直接产出图层效果：透明处保持透明，内容按链的顺序换色', async () => {
+    const d = device as unknown as GpuDevice, chain = new VideoEditAuthorEffects(d, allocator()), author = new VideoEditAuthorGpu(d)
+    const source = whiteSquare(), target = output()
+    const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'interactive' as const }
+    try {
+      await author.begin(target); chain.begin(author.commandEncoder())
+      const { dark, light } = VIDEO_EDIT_GRADIENT_MAP_TEST_COLORS
+      const result = await chain.encode('color', source, W, H, resolveAuthorEffects([gradientMap({ dark_color: dark, light_color: light }), posterize({ levels: 2 }), invert()]), context, {}, 'constant', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+      author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+      author.finish(); chain.commit()
+      const pixels = await read(target)
+      expect(pixel(pixels, 2, 2)).toEqual([0, 0, 0, 0])
+      // 白字 → 暖白 → 两级后全亮 → 反相成黑，透明度不变。
+      expect(pixel(pixels, 32, 18)).toEqual([0, 0, 0, 255])
+      expect(pixel(pixels, 20, 18)[3]).toBe(64)
+    } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
+  }, 30_000)
+})

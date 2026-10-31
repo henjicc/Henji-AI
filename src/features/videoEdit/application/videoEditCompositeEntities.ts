@@ -116,7 +116,7 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       // 删除跟踪器后引用可落空；只在实际写入作用区域时校验，改名称等属性仍可进行。
       if (JSON.stringify(mask) !== JSON.stringify(owner.effect.mask)) assertMaskClip(document, owner.clip, mask as VideoEditEffectMask | undefined)
       const curves = videoEditCurvesSchema.parse(data.frameCurves ?? {})
-      validateVideoEditBuiltinCurves({ id: builtin.id, curves })
+      validateVideoEditBuiltinCurves({ id: builtin.id, curves }, owner.effect.builtin?.curves)
       const zoom = withVideoEditZoomRegions<{ id: string; regions?: RecordingZoomRegion[] }>({ id: builtin.id }, data.regions)
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params, ...(Object.keys(curves).length ? { curves } : {}), ...(zoom.regions ? { regions: zoom.regions } : {}) }, ...(mask ? { mask } : {}) })
       delete owner.effect.mask; Object.assign(owner.effect, next)

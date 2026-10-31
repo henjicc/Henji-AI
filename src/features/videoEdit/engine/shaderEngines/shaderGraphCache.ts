@@ -1,15 +1,62 @@
 import { recordVideoEditPreparation } from '../videoEditPreparationTiming'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { shaderGraphIssues, shaderGraphLayerProps, shaderGraphStructureKey, type ShaderGraphSpec } from '@/core/videoEdit/shaderGraph/spec'
+import { shaderClockRateProps, shaderComponent, shaderGraphIssues, shaderGraphLayerId, shaderGraphLayerProps, shaderGraphStructureKey, type ShaderGraphLayer, type ShaderGraphSpec } from '@/core/videoEdit/shaderGraph/spec'
 import { createLogger } from '@/core/logging'
+import { SHADER_COMPONENT_LOADERS } from './componentLoaders.generated'
 import { ShaderGraphError, ShaderGraphSession, type ShaderGraphRenderRequest } from './shaderGraphSession'
 
 const logger = createLogger('features.videoEdit.shaderGraph')
-/** 结构相同的图共用一个会话；这么久没用到才释放（建一次要编译管线，约半秒）。 */
+/** 合成结构相同的图共用一个会话；这么久没用到才释放（建一次要编译管线，约半秒）。 */
 const IDLE_MS = 30_000
 
+type LayerProps = ReadonlyMap<string, Readonly<Record<string, unknown>>>
+type StructuralProp = { default?: unknown; compileTime?: boolean; compileTimeWhen?: (previous: unknown, next: unknown) => boolean }
+const componentProps = new Map<string, Promise<Readonly<Record<string, StructuralProp>> | undefined>>()
+function structuralProps(type: string): Promise<Readonly<Record<string, StructuralProp>> | undefined> {
+  let found = componentProps.get(type)
+  if (!found) {
+    const load = SHADER_COMPONENT_LOADERS[type]
+    found = load ? load().then(module => (module.componentDefinition as { props: Record<string, StructuralProp> }).props) : Promise.resolve(undefined)
+    componentProps.set(type, found)
+  }
+  return found
+}
+
 /**
- * 一台设备上的着色器图会话缓存：效果、转场、代码素材的 shader 图层都经过这里。
+ * 会话按合成结构区分：图层结构之外，编译期属性的取值、带重建条件的属性落在默认值哪一侧（剪辑可用组件的条件都是阈值两侧）、
+ * 混合模式，任一不同框架就要换一份合成。一种合成一个会话，几段片段交替用同一组件的不同设置时不必每帧重建、重新上传。
+ * 时钟快慢（速度类属性）也分会话：时间按“秒差 × 速度”在会话里累加，速度不同的片段共用会话时结果会取决于渲染历史。
+ */
+async function compositionKey(spec: ShaderGraphSpec, props: LayerProps): Promise<string> {
+  const parts: unknown[] = []
+  const visit = async (layers: readonly ShaderGraphLayer[], prefix: string): Promise<void> => {
+    for (const [index, layer] of layers.entries()) {
+      const id = shaderGraphLayerId(layer, index, prefix), values = props.get(id) ?? {}
+      const component = shaderComponent(layer.type), clockRates = component ? shaderClockRateProps(component) : []
+      for (const [key, config] of Object.entries(await structuralProps(layer.type) ?? {})) {
+        const value = key in values ? values[key] : config.default
+        if (config.compileTime || clockRates.includes(key)) parts.push([id, key, value])
+        else if (config.compileTimeWhen) parts.push([id, key, config.compileTimeWhen(config.default, value)])
+      }
+      parts.push([id, 'blendMode', typeof values.blendMode === 'string' ? values.blendMode : 'normal'])
+      await visit(layer.children ?? [], `${id}.`)
+    }
+  }
+  await visit(spec.layers, 'layer')
+  return `${shaderGraphStructureKey(spec)}|${JSON.stringify(parts)}`
+}
+
+/** 新会话直接按本帧属性建合成，第一帧就是要的结构。 */
+function withLayerProps(spec: ShaderGraphSpec, props: LayerProps): ShaderGraphSpec {
+  const map = (layers: readonly ShaderGraphLayer[], prefix: string): ShaderGraphLayer[] => layers.map((layer, index) => {
+    const id = shaderGraphLayerId(layer, index, prefix)
+    return { ...layer, props: { ...(props.get(id) ?? {}) }, ...(layer.children ? { children: map(layer.children, `${id}.`) } : {}) }
+  })
+  return { ...spec, layers: map(spec.layers, 'layer') }
+}
+
+/**
+ * 一台设备上的着色器图会话缓存：片段效果、着色器转场与预热都经过这里。
  * 同一会话的渲染串行进行（属性与时间是会话状态），不同会话互不等待。
  */
 export class ShaderGraphCache {
@@ -17,13 +64,15 @@ export class ShaderGraphCache {
   constructor(private readonly device: GpuDevice) {}
 
   async render(spec: ShaderGraphSpec, request: ShaderGraphRenderRequest, allow: { input?: boolean; second?: boolean } = { input: true, second: true }): Promise<void> {
-    const key = shaderGraphStructureKey(spec)
+    // 没指定时按图里写的属性下发；指定时是每个图层的完整属性表。
+    const props: LayerProps = request.props ?? shaderGraphLayerProps(spec)
+    const key = await compositionKey(spec, props)
     let entry = this.entries.get(key)
     if (!entry) {
       const issues = shaderGraphIssues(spec, allow)
       if (issues.length) throw new ShaderGraphError(issues.join('\n'))
       const started = performance.now()
-      const session = ShaderGraphSession.create(this.device, spec)
+      const session = ShaderGraphSession.create(this.device, withLayerProps(spec, props))
       session.then(() => recordVideoEditPreparation('contentPipelines', performance.now() - started), () => undefined)
       session.then(() => logger.info('着色器图已准备', { event: 'video_edit.shader_graph.prepared', context: { layers: spec.layers.length, custom: spec.shaders?.length ?? 0, ms: Math.round(performance.now() - started) } }), () => undefined)
       entry = { session, used: performance.now(), queue: Promise.resolve() }
@@ -35,9 +84,7 @@ export class ShaderGraphCache {
     }
     entry.used = performance.now()
     const current = entry
-    // 同结构的图共用会话：没指定时按图里写的属性下发（第一次建会话时已带上，后续帧只改变化的项）。
-    const frame = request.props ? request : { ...request, props: shaderGraphLayerProps(spec) }
-    const run = current.queue.then(async () => (await current.session).render(frame))
+    const run = current.queue.then(async () => (await current.session).render({ ...request, props }))
     current.queue = run.catch(() => undefined)
     return run
   }
@@ -49,11 +96,10 @@ export class ShaderGraphCache {
    * 逐个排队执行，不并发抢 GPU；失败只记日志，正式渲染时会再报给用户。
    */
   warm(specs: readonly ShaderGraphSpec[]): Promise<void> {
-    const pending = specs.filter(spec => !this.entries.has(shaderGraphStructureKey(spec)))
-    if (!pending.length) return this.warming
+    if (!specs.length) return this.warming
     this.warming = this.warming.then(async () => {
-      for (const spec of pending) {
-        if (this.entries.has(shaderGraphStructureKey(spec))) continue
+      for (const spec of specs) {
+        if (this.entries.has(await compositionKey(spec, shaderGraphLayerProps(spec)))) continue
         this.dummy ??= { texture: this.device.createTexture({ size: [32, 18], format: 'rgba8unorm', usage: 0x04 | 0x10 }), output: this.device.createTexture({ size: [32, 18], format: 'rgba8unorm', usage: 0x04 | 0x10 }) }
         const started = performance.now()
         await this.render(spec, { timeSeconds: 0, width: 32, height: 18, input: this.dummy.texture, second: this.dummy.texture, output: this.dummy.output, outputFormat: 'rgba8unorm' }).then(

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { init } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '../../../../core/imageEdit/worker/webgpuRuntimeSupport'
 import { SHADER_COMPONENTS, type ShaderGraphSpec } from '../../../../core/videoEdit/shaderGraph/spec'
@@ -8,7 +8,7 @@ import { initShaderGraphTestGpu } from './shaderGraphGpu.testing'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS, shaderGraphEffectProps, shaderGraphEffectSpec, videoEditShaderGraphWarmSpecs } from '../../../../core/videoEdit/shaderGraph/effects'
 import { SHADER_GRAPH_TRANSITION_KINDS, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '../../../../core/videoEdit/shaderGraph/transitions'
 import { resolveVideoEditTransitionParams } from '../../../../core/videoEdit/transitionParams'
-import { videoEditBuiltinDefaults } from '../../../../core/videoEdit/builtinEffects'
+import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '../../../../core/videoEdit/builtinEffects'
 import { THEME_SEED_ACCENT_HEX } from '../../../../core/theme/colorTokens'
 
 type Raw = { createTexture(d: unknown): GpuTexture & { width: number; height: number }; createBuffer(d: unknown): { mapAsync(m: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void; destroy(): void }; createCommandEncoder(): { copyTextureToBuffer(a: unknown, b: unknown, c: unknown): void; finish(): unknown }; queue: { submit(c: unknown[]): void; writeTexture(a: unknown, b: ArrayBufferView, c: unknown, d: unknown): void } }
@@ -152,6 +152,64 @@ describe('shader graph effects', () => {
     expect(performance.now() - started).toBeLessThan(250)
     cache.dispose(); input.destroy(); output.destroy()
   })
+  it('同一组件不同编译期设置、不同混合模式的片段交替渲染：各用一个会话、建好后不再重建，每帧与新会话逐位一致', async () => {
+    const cache = new ShaderGraphCache(device)
+    const input = texture()
+    // 胶片：换胶片是编译期属性，光晕跨过 0 换结构；极光：两种混合模式。
+    const clips = [
+      { id: 'film_look', params: { stock: 'vivid100' } },
+      { id: 'film_look', params: { stock: 'mono400', halation: 0 } },
+      { id: 'shaders.Aurora', params: { blend_mode: 'normal' } },
+      { id: 'shaders.Aurora', params: { blend_mode: 'screen' } },
+    ]
+    const fxProps = (clip: typeof clips[number]): Record<string, unknown> => shaderGraphEffectProps(clip.id, resolveVideoEditBuiltinParams({ id: clip.id, params: clip.params }))
+    const render = async (target: { render(request: Parameters<ShaderGraphSession['render']>[0]): Promise<void> }, clip: typeof clips[number]): Promise<Uint8Array> => {
+      const output = texture()
+      await target.render({ timeSeconds: 0.5, width: W, height: H, input, output, outputFormat: 'rgba8unorm', props: new Map([['fx', fxProps(clip)]]) })
+      const pixels = await read(output); output.destroy(); return pixels
+    }
+    const create = ShaderGraphSession.create.bind(ShaderGraphSession)
+    const created: ShaderGraphSession[] = []
+    const spy = vi.spyOn(ShaderGraphSession, 'create').mockImplementation(async (d, spec) => { const session = await create(d, spec); created.push(session); return session })
+    try {
+      for (let frame = 0; frame < 3; frame++) for (const clip of clips) {
+        // 每帧换一张输入：会话若用到别的设置留下的合成或上一帧的画面，都能比出来。
+        fill(input, (x, y) => [(x * 3 + frame * 50) % 256, (y * 5 + frame * 90) % 256, 128, 255])
+        const spec = shaderGraphEffectSpec(clip.id)
+        const fresh = await create(device, { ...spec, layers: spec.layers.map(layer => layer.id === 'fx' ? { ...layer, props: fxProps(clip) } : layer) })
+        const expected = await render(fresh, clip)
+        fresh.dispose()
+        expect(await render({ render: request => cache.render(spec, request) }, clip), `${clip.id} ${JSON.stringify(clip.params)} @${frame}`).toEqual(expected)
+      }
+      expect(created).toHaveLength(clips.length)
+      expect(created.map(session => session.hostBuilds)).toEqual(clips.map(() => 1))
+    } finally { spy.mockRestore(); cache.dispose(); input.destroy() }
+  }, 180_000)
+  it('时钟快慢不同的同种组件片段交替播放：跳到某一帧与顺序播放到这一帧逐位一致', async () => {
+    const input = texture()
+    fill(input, (x, y) => [x * 2 % 256, y * 4 % 256, 128, 255])
+    // 影棚背景按环境光速度另行累加漂移；极光代表按 speedProp 推进动画时间的组件。各段的片段内时间也错开。
+    const clips = [
+      { id: 'shaders.StudioBackground', params: { ambient_speed: 2 }, offset: 0 },
+      { id: 'shaders.StudioBackground', params: { ambient_speed: 5 }, offset: 0.25 },
+      { id: 'shaders.Aurora', params: { speed: 1 }, offset: 0.5 },
+      { id: 'shaders.Aurora', params: { speed: 3 }, offset: 0.75 },
+    ]
+    const render = async (cache: ShaderGraphCache, clip: typeof clips[number], timeSeconds: number): Promise<Uint8Array> => {
+      const output = texture()
+      await cache.render(shaderGraphEffectSpec(clip.id), { timeSeconds, width: W, height: H, input, output, outputFormat: 'rgba8unorm', props: new Map([['fx', shaderGraphEffectProps(clip.id, resolveVideoEditBuiltinParams({ id: clip.id, params: clip.params }))]]) })
+      const pixels = await read(output); output.destroy(); return pixels
+    }
+    const sequential = new ShaderGraphCache(device), played: Uint8Array[] = []
+    for (let frame = 0; frame <= 30; frame++) for (const [index, clip] of clips.entries()) played[index] = await render(sequential, clip, clip.offset + frame / 30)
+    sequential.dispose()
+    for (const [index, clip] of clips.entries()) {
+      const jump = new ShaderGraphCache(device)
+      expect(await render(jump, clip, clip.offset + 1), `${clip.id} ${JSON.stringify(clip.params)}`).toEqual(played[index])
+      jump.dispose()
+    }
+    input.destroy()
+  }, 180_000)
   it('maps percent positions and blend modes onto component props', () => {
     expect(shaderGraphEffectProps('shaders.Vignette', { center_x: 25, center_y: 75 })).toMatchObject({ center: { x: 0.25, y: 0.75 } })
     expect(shaderGraphEffectProps('shaders.Aurora', { blend_mode: 'screen', color_a: THEME_SEED_ACCENT_HEX.violet })).toMatchObject({ blendMode: 'screen', colorA: THEME_SEED_ACCENT_HEX.violet })

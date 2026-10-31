@@ -175,9 +175,10 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
     if (changes.enabled !== undefined) effect.enabled = changes.enabled
     if (changes.amount !== undefined) effect.amount = Math.min(1, Math.max(0, changes.amount))
     if (changes.curves !== undefined) {
+      const stored = effect.builtin.curves
       effect.builtin = { ...effect.builtin, curves: videoEditCurvesSchema.parse(changes.curves) }
       // 写入的关键帧按硬范围严格校验；已移除的效果没有登记，只按存档口径保留。
-      if (!isRemovedVideoEditBuiltinEffect(effect.builtin.id)) validateVideoEditBuiltinCurves(effect.builtin)
+      if (!isRemovedVideoEditBuiltinEffect(effect.builtin.id)) validateVideoEditBuiltinCurves(effect.builtin, stored)
     }
     // 已移除的效果没有登记：关键帧行删光时留下的静态值原样写回，不校验也不打关键帧。
     if (changes.params && isRemovedVideoEditBuiltinEffect(effect.builtin.id)) effect.builtin = { ...effect.builtin, params: { ...effect.builtin.params, ...changes.params as VideoEditBuiltinParams } }
@@ -186,9 +187,11 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
       const params = normalizeVideoEditBuiltinParams(builtin.id, changes.params, builtin.params, true)
       const curves = { ...builtin.curves }
       for (const key of Object.keys(changes.params)) if (curves[key]?.length) {
+        const definition = requireVideoEditBuiltinEffect(builtin.id).params.find(param => param.key === key)!
+        // 存档留下关键帧、现在不做动画的参数：这次编辑去掉旧关键帧，直接用新值。
+        if (definition.storedKeyframes === 'first') { delete curves[key]; continue }
         const time = requireVideoEditInstance(target.projectId).frame - clip.start
         if (time < 0 || time >= clip.duration) throw new Error(`请将播放头放在片段内（${clip.start}–${clip.start + clip.duration - 1} 帧）再编辑关键帧。`)
-        const definition = requireVideoEditBuiltinEffect(builtin.id).params.find(param => param.key === key)!
         curves[key] = putVideoEditKeyframe(curves[key], { ...curves[key].find(point => point.time === time), easeRange: undefined, easeValues: undefined, time, value: params[key], interpolation: curves[key].find(point => point.time === time)?.interpolation ?? (definition.type === 'boolean' || definition.type === 'enum' || definition.type === 'curve' || definition.type === 'lut' ? 'hold' : 'linear') })
         if (builtin.params[key] === undefined) delete params[key]; else params[key] = builtin.params[key]
       }

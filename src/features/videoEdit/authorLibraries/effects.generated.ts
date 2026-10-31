@@ -1,9 +1,12 @@
 // 由 scripts/generate-author-effects.ts 生成，请修改效果登记后重新生成。
-import type { BlurParams, SharpenParams, ColorGradeParams, BlackWhiteParams, GlowParams, LightSweepParams, DropShadowParams, StrokeParams, VignetteParams, ChromaticAberrationParams, FilmGrainParams, MosaicParams, DissolveRevealParams } from '@/core/videoEdit/authorEffects.generated'
+import type { BlurParams, SharpenParams, ColorGradeParams, BlackWhiteParams, InvertParams, GradientMapParams, PosterizeParams, GlowParams, LightSweepParams, DropShadowParams, StrokeParams, VignetteParams, ChromaticAberrationParams, FilmGrainParams, MosaicParams, DissolveRevealParams } from '@/core/videoEdit/authorEffects.generated'
 export function blur(params: BlurParams = {}): { readonly id: 'blur'; readonly params: BlurParams } { return { id: 'blur', params } }
 export function sharpen(params: SharpenParams = {}): { readonly id: 'sharpen'; readonly params: SharpenParams } { return { id: 'sharpen', params } }
 export function colorGrade(params: ColorGradeParams = {}): { readonly id: 'color_grade'; readonly params: ColorGradeParams } { return { id: 'color_grade', params } }
 export function blackWhite(params: BlackWhiteParams = {}): { readonly id: 'black_white'; readonly params: BlackWhiteParams } { return { id: 'black_white', params } }
+export function invert(params: InvertParams = {}): { readonly id: 'invert'; readonly params: InvertParams } { return { id: 'invert', params } }
+export function gradientMap(params: GradientMapParams = {}): { readonly id: 'gradient_map'; readonly params: GradientMapParams } { return { id: 'gradient_map', params } }
+export function posterize(params: PosterizeParams = {}): { readonly id: 'posterize'; readonly params: PosterizeParams } { return { id: 'posterize', params } }
 export function glow(params: GlowParams = {}): { readonly id: 'glow'; readonly params: GlowParams } { return { id: 'glow', params } }
 export function lightSweep(params: LightSweepParams = {}): { readonly id: 'light_sweep'; readonly params: LightSweepParams } { return { id: 'light_sweep', params } }
 export function shadow(params: DropShadowParams = {}): { readonly id: 'drop_shadow'; readonly params: DropShadowParams } { return { id: 'drop_shadow', params } }

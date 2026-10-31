@@ -601,7 +601,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     }
     return this.transparentPixel
   }
-  /** 着色器图（`shaders` 框架）会话缓存：效果、转场与代码素材 shader 图层共用。 */
+  /** 着色器图（`shaders` 框架）会话缓存：片段效果与着色器转场共用。 */
   shaderGraphs(): ShaderGraphCache { return this.graphCache ??= new ShaderGraphCache(this.device) }
   private glTransitions(): VideoEditGlTransitionsGpu { return this.glTransitionRuntime ??= new VideoEditGlTransitionsGpu(this.device, this.sampler) }
   /** 起播前在后台先编译用到的 gl-transitions 管线（8 位输出），第一次播到转场不再等编译。 */

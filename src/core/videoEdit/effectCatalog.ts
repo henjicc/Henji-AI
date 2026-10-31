@@ -3,7 +3,7 @@ import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinGroup } from './
 /** 顺序与分组的唯一目录；新效果按设计目录插入对应组，两个导出索引仍只负责登记。 */
 export const VIDEO_EDIT_EFFECT_CATALOG: readonly { readonly group: VideoEditBuiltinGroup; readonly ids: readonly string[] }[] = [
   { group: 'blur', ids: ['blur', 'sharpen'] },
-  { group: 'color', ids: ['color_grade', 'black_white', 'invert'] },
+  { group: 'color', ids: ['color_grade', 'black_white', 'invert', 'gradient_map', 'posterize', 'film_look'] },
   { group: 'light', ids: ['glow', 'light_sweep'] },
   { group: 'outline', ids: ['drop_shadow', 'stroke'] },
   { group: 'lens', ids: ['vignette', 'chromatic_aberration'] },

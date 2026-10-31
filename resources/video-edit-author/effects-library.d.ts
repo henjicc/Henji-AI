@@ -271,6 +271,37 @@ export interface ColorGradeParams {
 export interface BlackWhiteParams {
 }
 
+export interface InvertParams {
+}
+
+export interface GradientMapParams {
+  /** 方式；用几种颜色。双色（默认）从暗部颜色过渡到亮部颜色；三色在中间多一个中间调颜色。；默认 "two"；可动画 true */
+  readonly mode?: "two" | "three"
+  /** 暗部颜色；最暗处换成的颜色。黑色（默认）配白色的亮部，就是按人眼明暗变成黑白；换成深蓝、深棕，暗部就带上这种色调。；默认 "#000000"；可动画 true */
+  readonly dark_color?: string
+  /** 亮部颜色；最亮处换成的颜色。白色（默认）；换成暖白、浅黄，高光和亮部就偏暖。；默认 "#ffffff"；可动画 true */
+  readonly light_color?: string
+  /** 中间调颜色；中等明暗处换成的颜色。灰色（默认）与黑白两端一起就是黑白；换成彩色，中间调就是这个颜色。；默认 "#808080"；分组 渐变；显隐 {"param":"mode","in":["three"]}；可动画 true */
+  readonly mid_color?: string
+  /** 中间调位置；中间调颜色落在多亮的地方。50%（默认）正中；30% 偏暗处，更多画面接近亮部颜色；70% 偏亮处，更多画面接近暗部颜色。；默认 50；硬范围 0–100；单位 percent；分组 渐变；显隐 {"param":"mode","in":["three"]}；可动画 true */
+  readonly mid_point?: number
+  /** 插值；颜色之间怎么过渡。感知（默认）过渡均匀，两种彩色之间不发灰发脏；标准与网页 CSS 渐变一致。；默认 "perceptual"；分组 渐变；可动画 true */
+  readonly interpolation?: "perceptual" | "srgb"
+  /** 黑场；比它还暗的地方都用暗部颜色。0%（默认）只有纯黑才是暗部颜色；调到 20%，暗部更实、反差更大。；默认 0；硬范围 0–100；单位 percent；分组 色阶；可动画 true */
+  readonly black_point?: number
+  /** 白场；比它还亮的地方都用亮部颜色。100%（默认）只有纯白才是亮部颜色；调到 80%，亮部更通透。；默认 100；硬范围 0–100；单位 percent；分组 色阶；可动画 true */
+  readonly white_point?: number
+}
+
+export interface PosterizeParams {
+  /** 色阶；每个颜色留几级。2 只剩最亮最暗；6（默认）明显的色块；16 接近原画。可以输入到 64。；默认 6；常用 2–16；硬范围 2–64；单位 value；可动画 true */
+  readonly levels?: number
+  /** 分离方式；分哪些。按通道（默认）颜色和明暗都分级，色块颜色更少更纯；按亮度只分明暗，保留原来的色相。；默认 "channels"；可动画 true */
+  readonly by?: "channels" | "luminance"
+  /** 平滑；台阶之间硬切还是柔和过渡。0%（默认）硬边；50% 色块边缘柔一些；100% 台阶之间连成柔和的起伏。；默认 0；硬范围 0–100；单位 percent；可动画 true */
+  readonly smooth?: number
+}
+
 export interface GlowParams {
   /** 强度；光晕有多亮。0 不发光；20 含蓄的柔光；40（默认）明显的光晕；70 以上是强烈的霓虹辉光。；默认 40；硬范围 0–100；单位 strength；可动画 true */
   readonly strength?: number
@@ -434,6 +465,9 @@ export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'sharpen'; readonly params?: SharpenParams }
   | { readonly id: 'color_grade'; readonly params?: ColorGradeParams }
   | { readonly id: 'black_white'; readonly params?: BlackWhiteParams }
+  | { readonly id: 'invert'; readonly params?: InvertParams }
+  | { readonly id: 'gradient_map'; readonly params?: GradientMapParams }
+  | { readonly id: 'posterize'; readonly params?: PosterizeParams }
   | { readonly id: 'glow'; readonly params?: GlowParams }
   | { readonly id: 'light_sweep'; readonly params?: LightSweepParams }
   | { readonly id: 'drop_shadow'; readonly params?: DropShadowParams }
@@ -451,6 +485,9 @@ export declare function blur(params?: BlurParams): { readonly id: 'blur'; readon
 export declare function sharpen(params?: SharpenParams): { readonly id: 'sharpen'; readonly params: SharpenParams }
 export declare function colorGrade(params?: ColorGradeParams): { readonly id: 'color_grade'; readonly params: ColorGradeParams }
 export declare function blackWhite(params?: BlackWhiteParams): { readonly id: 'black_white'; readonly params: BlackWhiteParams }
+export declare function invert(params?: InvertParams): { readonly id: 'invert'; readonly params: InvertParams }
+export declare function gradientMap(params?: GradientMapParams): { readonly id: 'gradient_map'; readonly params: GradientMapParams }
+export declare function posterize(params?: PosterizeParams): { readonly id: 'posterize'; readonly params: PosterizeParams }
 export declare function glow(params?: GlowParams): { readonly id: 'glow'; readonly params: GlowParams }
 export declare function lightSweep(params?: LightSweepParams): { readonly id: 'light_sweep'; readonly params: LightSweepParams }
 export declare function shadow(params?: DropShadowParams): { readonly id: 'drop_shadow'; readonly params: DropShadowParams }

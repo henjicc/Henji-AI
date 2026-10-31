@@ -3,13 +3,14 @@
  *
  * - 效果 ID 为 `shaders.<组件名>`；渲染时组成着色器图 `[@input, 组件]`（见 `shaderGraphEffectSpec`）。
  * - 数值、颜色、选项、开关直接对应；位置拆成 `<键>_x` / `<键>_y` 两个百分比（0 左/上，100 右/下）。
- * - 渐变色标、形状、文字等结构化属性不进效果参数（取组件默认值）；需要时在代码素材的 shader 图层里写全。
+ * - 渐变色标、形状、文字等结构化属性不进效果参数，取组件默认值。
  * - 生成器多一个 `blend_mode`：生成的画面怎样叠在原画面上；效果“数量”仍是与原画面的混合比例。
  */
 import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinGroup, VideoEditBuiltinParam, VideoEditBuiltinParams } from '../builtinEffects'
-import { SHADER_BLEND_MODES, SHADER_COMPONENTS, SHADER_GRAPH_INPUT, shaderGraphStructureKey, type ShaderComponent, type ShaderComponentProp, type ShaderGraphSpec } from './spec'
+import { SHADER_BLEND_MODES, SHADER_COMPONENTS, SHADER_GRAPH_INPUT, shaderClockRateProps, shaderGraphStructureKey, type ShaderComponent, type ShaderComponentProp, type ShaderGraphSpec } from './spec'
 import { SHADER_COMPONENT_ZH, SHADER_LABEL_ZH, SHADER_OPTION_ZH } from './zh'
 import { BLACK_HEX } from '../../theme/colorTokens'
+import { FILM_LOOK_SHADER_GRAPH } from '../filmLook'
 
 export const SHADER_EFFECT_PREFIX = 'shaders.'
 const GROUPS: Readonly<Record<string, VideoEditBuiltinGroup>> = {
@@ -36,13 +37,14 @@ export const shaderPositionKeys = (key: string): readonly [string, string] => [`
 /** 组件属性 → 剪辑参数（效果与过渡共用）；`skip` 里的属性由宿主驱动（如转场进度），不做参数。 */
 export function shaderComponentParams(component: ShaderComponent, skip: readonly string[] = []): VideoEditBuiltinParam[] {
   const result: VideoEditBuiltinParam[] = []
+  const clockRates = shaderClockRateProps(component)
   for (const prop of component.props) {
     if (skip.includes(prop.key)) continue
     // 助手语义里写明代码素材里的属性名：效果参数用下划线键，代码图层用组件原名（两种写法代码里都认）。
     const base = { key: shaderParamKey(prop.key), name: label(prop), tooltip: '', description: `${prop.description || prop.label}（代码图层属性 ${prop.key}）` }
     if (prop.ui === 'range' && typeof prop.default === 'number' && Number.isFinite(prop.default)) {
       const min = prop.min ?? Math.min(0, prop.default); const max = prop.max ?? Math.max(1, prop.default * 4)
-      result.push({ ...base, type: 'number', unit: 'value', min, max, step: prop.step ?? (max - min > 20 ? 1 : 0.01), default: prop.default, animatable: prop.key !== component.speedProp && !prop.compileTime })
+      result.push({ ...base, type: 'number', unit: 'value', min, max, step: prop.step ?? (max - min > 20 ? 1 : 0.01), default: prop.default, animatable: !clockRates.includes(prop.key) && !prop.compileTime, ...(clockRates.includes(prop.key) && prop.key !== component.speedProp ? { storedKeyframes: 'first' as const } : {}) })
     } else if (prop.ui === 'color') result.push({ ...base, type: 'color', default: color(prop.default), alpha: true, animatable: true })
     else if (prop.ui === 'select' && prop.options?.length) result.push({ ...base, type: 'enum', default: String(prop.default ?? prop.options[0].value), options: prop.options.map(option => ({ value: String(option.value), label: SHADER_OPTION_ZH[option.label] ?? option.label })) })
     else if (prop.ui === 'checkbox') result.push({ ...base, type: 'boolean', default: prop.default === true })
@@ -58,7 +60,7 @@ export function shaderComponentParams(component: ShaderComponent, skip: readonly
 }
 
 /**
- * 与剪辑内置效果同目的的组件只在代码素材的着色器图层里使用，不单独列为效果：
+ * 与剪辑内置效果同目的的组件不单独列为效果，剪辑里用对应的内置效果：
  * 黑白、反相、翻转；模糊（高斯、方向、缩放、镜头虚化）、锐度、调色（亮度对比度、曝光、饱和度、色相、自然饱和度、着色）、
  * 颗粒、暗角、像素化（并入马赛克）、投影。
  */
@@ -77,7 +79,13 @@ export const SHADER_GRAPH_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDef
     }
   })
 const BY_ID = new Map(SHADER_GRAPH_EFFECT_DEFINITIONS.map(definition => [definition.id, definition]))
-export function isShaderGraphEffect(id: string): boolean { return BY_ID.has(id) }
+/**
+ * 封装效果：一个组件登记成有自己名字和一份说明的内置效果（定义随效果登记），渲染时把它的参数换算回组件属性。
+ * 着色器不重写，所以只上片段，出口仍是着色器图的 8 位。
+ */
+export interface ShaderGraphWrappedEffect { readonly id: string; readonly component: string; readonly props: (values: Readonly<VideoEditBuiltinParams>) => Record<string, unknown> }
+const WRAPPED: ReadonlyMap<string, ShaderGraphWrappedEffect> = new Map([FILM_LOOK_SHADER_GRAPH].map(wrapped => [wrapped.id, wrapped]))
+export function isShaderGraphEffect(id: string): boolean { return BY_ID.has(id) || WRAPPED.has(id) }
 
 /** 剪辑参数 → 组件属性：位置合回 {x, y}（百分比转 0–1），选项值还原成组件原类型（效果与过渡共用）。 */
 export function shaderComponentProps(component: ShaderComponent, values: Readonly<VideoEditBuiltinParams>): Record<string, unknown> {
@@ -99,6 +107,8 @@ export function shaderComponentProps(component: ShaderComponent, values: Readonl
 }
 /** 效果参数 → 组件属性。 */
 export function shaderGraphEffectProps(id: string, values: Readonly<VideoEditBuiltinParams>): Record<string, unknown> {
+  const wrapped = WRAPPED.get(id)
+  if (wrapped) return wrapped.props(values)
   const component = SHADER_COMPONENTS.find(value => `${SHADER_EFFECT_PREFIX}${value.name}` === id)
   if (!component) throw new Error(`没有着色器效果 ${id}。`)
   return shaderComponentProps(component, values)
@@ -109,12 +119,12 @@ export interface VideoEditShaderClock { shaderTimeSeconds?: number }
 
 /** 一项着色器效果对应的着色器图：先画片段画面，再叠生成器或套滤镜。组件图层 id 固定为 `fx`。 */
 export function shaderGraphEffectSpec(id: string): ShaderGraphSpec {
-  return { layers: [{ type: SHADER_GRAPH_INPUT }, { type: id.slice(SHADER_EFFECT_PREFIX.length), id: 'fx' }] }
+  return { layers: [{ type: SHADER_GRAPH_INPUT }, { type: WRAPPED.get(id)?.component ?? id.slice(SHADER_EFFECT_PREFIX.length), id: 'fx' }] }
 }
 
 /**
  * 剪辑里静态可知的着色器图（片段效果、着色器转场），用于后台预热：新结构首次编译约半秒，
- * 放在打开剪辑/加效果时做，播放到那一段时就不再卡一下。代码素材的 shader 图层要逐帧求值才知道，不在此列。
+ * 放在打开剪辑/加效果时做，播放到那一段时就不再卡一下。
  */
 export function videoEditShaderGraphWarmSpecs(sequences: ReadonlyArray<{ clips: ReadonlyArray<{ effects?: ReadonlyArray<{ builtin?: { id: string } }> }>; transitions?: ReadonlyArray<{ kind: string; parameters?: Readonly<VideoEditBuiltinParams> }> }>, transitionSpec: (kind: string, parameters?: Readonly<VideoEditBuiltinParams>) => ShaderGraphSpec | undefined): ShaderGraphSpec[] {
   const specs = new Map<string, ShaderGraphSpec>()

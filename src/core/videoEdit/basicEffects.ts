@@ -5,7 +5,7 @@ import { videoEditStrengthParam as strength, videoEditPercentParam as percent } 
 
 export const BASIC_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
   { stage: 'point', space: 'layer', author: { factory: 'blackWhite' }, bleed: (p, r) => layerEffectBleed('black_white', p, r), id: 'black_white', name: '黑白', group: 'color', aliases: ['去色', '灰度', 'grayscale', 'black and white'], description: '按人眼对明暗的感受把画面变成黑白，适合回忆、纪实感。只想降低鲜艳度时把效果强度调到 30%–70%，或用调色里的饱和度。', params: [] },
-  { stage: 'point', id: 'invert', name: '反相', group: 'color', tooltip: '把颜色变成互补色（底片效果）', description: '反转颜色成互补色（底片效果），用于闪回、惊悚、故障风；保留透明度。部分反相可降低效果强度。', params: [] },
+  { stage: 'point', space: 'layer', author: { factory: 'invert' }, id: 'invert', name: '反相', group: 'color', aliases: ['底片', '负片', 'invert', 'negative'], description: '把颜色变成互补色，像底片。透明处保持透明；只想反一部分时降低效果强度。', params: [] },
   { stage: 'point', id: 'crop', name: '裁剪', group: 'frame', tooltip: '从四边裁掉画面，裁掉的部分透出下层', description: '按画面百分比从四边裁掉，裁掉部分变透明（可透出下层轨道）。做宽银幕黑边时把上下各裁 12% 左右。',
     params: [
       percent('left', '左侧', 0, '从左边裁掉的比例', '从左边裁掉的画面宽度百分比。'),

@@ -23,6 +23,10 @@ export const RECORDING_FRAME_BACKGROUND_HEX = {
 /** “录屏画框”纯色背景的默认颜色（画面内容色）。 */
 export const RECORDING_FRAME_SOLID_DEFAULT_HEX = '#1b1d22';
 export const BLACK_HEX = '#000000';
+/** 剪辑内置效果“渐变映射”中间调颜色的默认值（画面内容色，中灰）。 */
+export const MID_GRAY_HEX = '#808080';
+/** 渐变映射三色像素回归的固定输入：深蓝、灰、暖白。 */
+export const VIDEO_EDIT_GRADIENT_MAP_TEST_COLORS = { dark: '#14213d', mid: MID_GRAY_HEX, light: '#fff3dc' } as const;
 /**
  * 音频编辑频谱图的色表（声音能量的可视化，属于内容色，不随界面主题变化）：从静音到最响依次取色，
  * 与 Audition 的频谱显示同一观感（深紫 → 品红 → 橙 → 亮黄）。

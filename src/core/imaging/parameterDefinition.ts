@@ -14,7 +14,8 @@ export type ImagingUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibe
  */
 export type ImagingParamSpace = 'clip' | 'layer' | 'frame'
 /** 不写 spaces 的参数可用于效果支持的全部空间。 */
-interface ParamBase { spaces?: readonly ImagingParamSpace[]; key: string; name: string; tooltip?: string; description: string; animatable?: boolean; group?: string; visibleWhen?: CodeParameterVisibility }
+/** `storedKeyframes: 'first'`：不做动画、但以前做过动画的参数，存档里留下的关键帧照样读入，求值取第一个关键帧，不再写入。 */
+interface ParamBase { spaces?: readonly ImagingParamSpace[]; key: string; name: string; tooltip?: string; description: string; animatable?: boolean; storedKeyframes?: 'first'; group?: string; visibleWhen?: CodeParameterVisibility }
 export type ImagingParam =
   | ParamBase & { type: 'number'; unit: ImagingUnit; min: number; max: number; softMin?: number; softMax?: number; step: number; default: number }
   /** `alpha` 时可写 #rrggbbaa（着色器组件的半透明颜色）。 */

@@ -1,5 +1,5 @@
 /**
- * 着色器图：剪辑里所有 `shaders` 框架画面的唯一描述（效果、转场、代码素材的 shader 图层共用）。
+ * 着色器图：剪辑里所有 `shaders` 框架画面的唯一描述（片段效果与着色器转场共用）。
  *
  * - `layers`：图层树，写法与框架的预设 JSON 相同（`type`、`id`、`props`、`children`），先画的在下；
  *   滤镜类组件作用于它之前画好的兄弟图层，或只作用于嵌在它里面的子图层。
@@ -48,6 +48,15 @@ const ALL = catalog.components as readonly ShaderComponent[]
 export const SHADER_COMPONENTS: readonly ShaderComponent[] = ALL.filter(value => !value.excluded && !value.usesPointer)
 const BY_NAME = new Map(SHADER_COMPONENTS.map(value => [value.name, value]))
 export function shaderComponent(name: string): ShaderComponent | undefined { return BY_NAME.get(name) }
+/** 按秒差另行累加时钟的组件属性（框架的动画时间只认 speedProp）：影棚背景的环境光漂移。 */
+const EXTRA_CLOCK_RATE_PROPS: Readonly<Record<string, readonly string[]>> = { StudioBackground: ['ambientSpeed'] }
+/**
+ * 决定组件时钟快慢的属性：框架按“秒差 × 这些值”累加时间。同一会话里它们取值不同或做关键帧，累加结果就取决于渲染历史，
+ * 所以这些参数不做动画，会话缓存按它们分会话；取值固定时顺序播放、跳帧、往回跳的结果相同。
+ */
+export function shaderClockRateProps(component: ShaderComponent): readonly string[] {
+  return [...(component.speedProp ? [component.speedProp] : []), ...(EXTRA_CLOCK_RATE_PROPS[component.name] ?? [])]
+}
 
 /** 框架给每个图层的通用属性（混合、透明度、遮罩、变换、包围盒）。 */
 export const SHADER_GRAPH_UNIVERSAL_PROPS = ['blendMode', 'opacity', 'visible', 'maskSource', 'maskType', 'transform', 'boundingBox'] as const
