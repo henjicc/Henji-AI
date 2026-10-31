@@ -48,7 +48,12 @@ export function detectVideoEditBanding(pixels: Uint8ClampedArray, width: number,
         const adjacent = valid && previous && previous.color >= 0 && previous.end - previous.start >= minimumRun && Math.abs(delta) === 1
           && [65536, 256, 1].every(divisor => Math.abs(Math.floor(run.color / divisor) % 256 - Math.floor(previous.color / divisor) % 256) <= 2)
         if (adjacent && (!direction || direction === delta)) { direction = delta; continue }
-        if (i - first >= 2 && direction) spans.push({ start: runs[first].start, end: previous.end, levels: i - first })
+        if (i - first >= 2 && direction) {
+          // 台阶两端的平台可能是延伸到画面边缘的大片底色，只保留与台阶等宽的一段，区域才指向断层本身。
+          const inner = runs.slice(first + 1, i - 1).map(value => value.end - value.start)
+          const reach = inner.length ? Math.max(...inner) : Math.min(runs[first].end - runs[first].start, previous.end - previous.start)
+          spans.push({ start: Math.max(runs[first].start, runs[first].end - reach), end: Math.min(previous.end, previous.start + reach), levels: i - first })
+        }
         first = adjacent ? i - 1 : i; direction = adjacent ? delta : 0
       }
       const next: Patch[] = []

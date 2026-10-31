@@ -40,6 +40,11 @@ it('水平与竖直浅台阶都能定位，不接受一个薄条里的偶然平�
   expect(detectVideoEditBanding(image((x, y) => [14 + y / height * 6, 14 + y / height * 6, 14 + y / height * 6]), width, height)).toEqual(expect.arrayContaining([expect.objectContaining({ axis: 'vertical' })]))
   expect(detectVideoEditBanding(image((x, y) => { const value = y > 100 && y < 103 ? 14 + x / width * 6 : 14; return [value, value, value] }), width, height)).toEqual([])
 })
+it('台阶后接到画面边缘的大片底色不算进区域', () => {
+  const found = detectVideoEditBanding(image((_x, y) => { const value = y < 200 ? 18 - Math.floor(y / 50) : 14; return [value, value, value] }), width, height)
+  expect(found.length).toBeGreaterThan(0)
+  for (const { region } of found) expect(region.y + region.height).toBeLessThanOrEqual(260 / height)
+})
 it('4K 原尺寸的八级台阶仍可定位，原像素抖动不会被缩图吞掉', () => {
   const width = 3840, height = 2160, pixels = new Uint8ClampedArray(width * height * 4)
   for (const dither of [false, true]) {
