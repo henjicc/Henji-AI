@@ -14,8 +14,9 @@ import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import type { VideoEditBuiltinPlan } from './effectPlan'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
-import { isShaderGraphEffect, shaderGraphEffectProps, shaderGraphEffectSpec, type VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
+import { isShaderGraphEffect, shaderGraphEffectKeepsSourceAlpha, shaderGraphEffectProps, shaderGraphEffectSpec, type VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import { isDissolveTransitionSource } from '@/core/videoEdit/transitionSources'
 import { isGlTransition, type GlTransitionKind } from '@/core/videoEdit/glTransitions/transitions'
@@ -110,6 +111,18 @@ const imageShader = `${shapeShader}
 export interface VideoEditCodeImageInput { texture: GpuTexture; width: number; height: number; owner: GpuDevice; premultiplied: boolean; source?: CanvasImageSource; web?: import('./videoEditAuthorModule').AuthorWebFrame }
 
 interface Surface { picture: VideoEditCodePicture; lastUsedFrame: number; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer; maskData?: Uint8Array; maskRgba?: Uint8Array }
+/**
+ * 着色器结果按原画透明度裁回：先拷进中间纹理，再与原画（second）的 alpha 相乘写回同一张输出。
+ * 第二道的遮罩槽也绑原画，避免把正在写的输出同时当作取样纹理。
+ */
+function sourceAlphaPlan(width: number, height: number): VideoEditBuiltinPlan {
+  const uniforms = (): Float32Array => new Float32Array([width, height, width, height, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+  return { width, height, scratch: [{ width, height }], passes: [
+    { entry: 'copy', source: 'input', target: 0, uniforms: uniforms() },
+    { entry: 'effect_source_alpha', source: 0, original: 'second', mask: 'second', target: 'output', uniforms: uniforms() },
+  ] }
+}
+
 export class VideoEditCodeGpu {
   private bitmapBridge?: VideoEditGpuBitmapBridge
   private authorPrograms?: VideoEditAuthorPrograms
@@ -585,7 +598,9 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     if (isShaderGraphEffect(instance.id)) {
       // `shaders` 组件效果：着色器图 [@input, 组件]，时间是片段内秒数（由合成场景给出）。
       const time = (instance as VideoEditShaderClock).shaderTimeSeconds ?? 0
-      await this.shaderGraphs().render(shaderGraphEffectSpec(instance.id), { timeSeconds: time, width: input.width, height: input.height, input: input.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphEffectProps(instance.id, resolveVideoEditBuiltinParams(instance))]]) })
+      const params = resolveVideoEditBuiltinParams(instance)
+      await this.shaderGraphs().render(shaderGraphEffectSpec(instance.id, params), { timeSeconds: time, width: input.width, height: input.height, input: input.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphEffectProps(instance.id, params)]]) })
+      if (shaderGraphEffectKeepsSourceAlpha(instance.id, params)) await runtime.encodePlan(sourceAlphaPlan(input.width, input.height), format, target.picture.texture, target.picture.texture, input.texture)
     } else await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format }, target.picture.texture, frame, renderScale, luts, quality, referenceSize)
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture

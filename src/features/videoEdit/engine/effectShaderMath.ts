@@ -33,6 +33,13 @@ fn noise(p: vec2f, seed: u32) -> f32 {
  let a = hash(cell, seed); let b = hash(cell + vec2u(1u, 0u), seed); let c = hash(cell + vec2u(0u, 1u), seed); let d = hash(cell + vec2u(1u, 1u), seed);
  return mix(mix(a, b, w.x), mix(c, d, w.x), w.y) * 2.0 - 1.0;
 }
+/** 与 noise 同一张格子的值噪声，另给解析梯度（平滑插值 3t² − 2t³ 的导数）：返回 (值 −1..1, ∂/∂x, ∂/∂y)。 */
+fn noiseGradient(p: vec2f, seed: u32) -> vec3f {
+ let i = floor(p); let f = p - i; let w = f * f * (3.0 - 2.0 * f); let dw = 6.0 * f * (1.0 - f); let cell = vec2u(vec2i(i) + vec2i(1 << 20));
+ let a = hash(cell, seed); let b = hash(cell + vec2u(1u, 0u), seed); let c = hash(cell + vec2u(0u, 1u), seed); let d = hash(cell + vec2u(1u, 1u), seed);
+ let k = a - b - c + d;
+ return vec3f(2.0 * (a + (b - a) * w.x + (c - a) * w.y + k * w.x * w.y) - 1.0, 2.0 * dw * vec2f(b - a + k * w.y, c - a + k * w.x));
+}
 
 /** 编码 sRGB 颜色间插值；perceptual 时在 OkLab 中插值，保留超色域结果交给末道输出。 */
 fn interpolateColor(a: vec3f, b: vec3f, t: f32, perceptual: bool) -> vec3f {

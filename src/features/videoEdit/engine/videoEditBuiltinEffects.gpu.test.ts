@@ -472,8 +472,8 @@ describe('剪辑内置效果（真实设备）', () => {
     // shaders.* 组件效果的真实设备覆盖在 shaderEngines/shaderGraph.gpu.test.ts。
     for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio' && !isShaderGraphEffect(value.id))) {
       const pixels = await run(definition.id, videoEditBuiltinDefaults(definition))
-      // 裁剪、抠像与溶解显影（默认进度一半）本来就会让部分画面透明。
-      if (!['crop', 'chroma_key', 'dissolve_reveal'].includes(definition.id)) expect(pixel(pixels, W / 2, H / 2)[3], definition.id).toBe(255)
+      // 裁剪、抠像、溶解显影（默认进度一半）与半调网点（原色网点之间透明）本来就会让部分画面透明。
+      if (!['crop', 'chroma_key', 'dissolve_reveal', 'halftone'].includes(definition.id)) expect(pixel(pixels, W / 2, H / 2)[3], definition.id).toBe(255)
     }
   }, 60_000)
   it('关键结果：反相、水平翻转、零强度模糊不变、模糊在线性光混合、裁剪透明、抠掉纯绿', async () => {
@@ -892,12 +892,12 @@ it('发光层高斯 pose.blur 保持光能量，亚像素阈值两侧连续', as
   } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
 })
 
-it('真实 GPU 核对有符号 OkLab、两种插值、退化 ramp、噪声与四次取样 B 样条', async () => {
+it('真实 GPU 核对有符号 OkLab、两种插值、退化 ramp、噪声（含解析梯度）与四次取样 B 样条', async () => {
   const texture = device.createTexture({ size: [8, 8], format: 'rgba8unorm', usage: 0x04 | 0x02 })
   const pixels = Uint8Array.from({ length: 8 * 8 * 4 }, (_, index) => (index * 37 + 19) % 256)
   device.queue.writeTexture({ texture }, pixels, { bytesPerRow: 32 }, [8, 8])
-  const result = device.createBuffer({ size: 7 * 16, usage: 0x80 | 0x04 })
-  const readback = device.createBuffer({ size: 7 * 16, usage: 0x01 | 0x08 })
+  const result = device.createBuffer({ size: 9 * 16, usage: 0x80 | 0x04 })
+  const readback = device.createBuffer({ size: 9 * 16, usage: 0x01 | 0x08 })
   try {
     const shader = device.createShaderModule({ code: `${COLOR_MATH_WGSL}
 ${EFFECT_SHADER_MATH_WGSL}
@@ -912,12 +912,14 @@ ${EFFECT_SHADER_MATH_WGSL}
  result[4] = vec4f(ramp(1.0, 1.0, 0.9), ramp(1.0, 1.0, 1.0), ramp(1.0, 0.0, 1.1), ramp(0.0, 1.0, 0.5));
  result[5] = sampleBSpline(image, filtering, vec2f(0.43, 0.61));
  result[6] = vec4f(noise(vec2f(0.123, -3.456), 7u), noise(vec2f(0.123, -3.456), 7u), simplexNoise(vec2f(0.123, -3.456)), simplexNoise(vec2f(0.1231, -3.456)));
+ result[7] = vec4f(noiseGradient(vec2f(0.37, -3.456), 7u), noise(vec2f(0.37, -3.456), 7u));
+ result[8] = vec4f(noise(vec2f(0.371, -3.456), 7u), noise(vec2f(0.37, -3.455), 7u), 0.0, 0.0);
 }` })
     const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module: shader, entryPoint: 'main' } })
     const bindings = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: result } }, { binding: 1, resource: texture.createView() }, { binding: 2, resource: device.createSampler({ minFilter: 'linear', magFilter: 'linear' }) }] })
     const encoder = device.createCommandEncoder(); const pass = encoder.beginComputePass()
     pass.setPipeline(pipeline); pass.setBindGroup(0, bindings); pass.dispatchWorkgroups(1); pass.end()
-    encoder.copyBufferToBuffer(result, 0, readback, 0, 7 * 16); device.queue.submit([encoder.finish()])
+    encoder.copyBufferToBuffer(result, 0, readback, 0, 9 * 16); device.queue.submit([encoder.finish()])
     await readback.mapAsync(0x01)
     const values = new Float32Array(readback.getMappedRange()).slice(); readback.unmap()
     const expectedLab = linearSrgbToOklab([-0.1, 0.4, 2])
@@ -928,6 +930,9 @@ ${EFFECT_SHADER_MATH_WGSL}
     expectedMix.forEach((value, index) => expect(values[8 + index]).toBeCloseTo(value, 5))
     expect([...values.slice(12, 16)]).toEqual([0.5, 0, 0.5, 1])
     expect([...values.slice(16, 20)]).toEqual([0, 1, 1, 0.5])
+    // 带梯度的值噪声：值与 noise 相同，梯度与千分之一格的差分一致。
+    expect(values[28]).toBeCloseTo(values[31], 6)
+    expect(values[29]).toBeCloseTo((values[32] - values[31]) / 0.001, 1); expect(values[30]).toBeCloseTo((values[33] - values[31]) / 0.001, 1)
     // CPU 直接计算 4×4 卷积，验证 GPU 四次双线性与完整 B 样条等价。
     const at = [0.43 * 8 - 0.5, 0.61 * 8 - 0.5]
     const weights = at.map(value => {

@@ -24,7 +24,7 @@ const n = (params: VideoEditBuiltinParams, key: string): number => Number(params
 
 let blueNoise: AdjustmentLookup | undefined
 /** 蓝噪声阈值表，按 `table` 查找表上传（键固定，常驻缓存）。 */
-function blueNoiseLookup(): AdjustmentLookup {
+export function blueNoiseLookup(): AdjustmentLookup {
   if (!blueNoise) {
     const data = new Float32Array(64 * 64 * 4)
     BLUE_NOISE_64_RANKS.forEach((rank, index) => { data[index * 4] = (rank + 0.5) / 4096 })
@@ -34,7 +34,7 @@ function blueNoiseLookup(): AdjustmentLookup {
 }
 
 /** 种子 → 整数平移（蓝噪声）与哈希偏移（点阵）。 */
-function seedOffset(seed: number): [number, number, number] {
+export function seedOffset(seed: number): [number, number, number] {
   // JS 的位运算结果是有符号 32 位，每一步都转回无符号，否则负数到着色器里转 u32 会变成 0，种子失效。
   let h = Math.imul(Math.floor(seed), 2654435761) >>> 0
   h = (h ^ (h >>> 16)) >>> 0; h = Math.imul(h, 2246822519) >>> 0; h = (h ^ (h >>> 13)) >>> 0

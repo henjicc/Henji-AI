@@ -13,6 +13,8 @@ import { planStroke, strokeJumpSteps } from './stroke'
 import type { VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
 import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
+import { ditherPattern, halftone } from '../authorLibraries/effects.generated'
+import { ditherPixelSize } from '@/core/videoEdit/ditherPattern'
 
 // 投影、描边、扫光、溶解显影与发光“轮廓”的真实设备用例：正式 WGSL 与工序在 Dawn 上执行，按像素核对。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -467,6 +469,7 @@ describe('外扩覆盖实际取样支撑', () => {
     ['stroke', { width: 80, softness: 50 }],
     ['light_sweep', { glow_strength: 60, glow_radius: 40, intensity: 200 }],
     ['dissolve_reveal', { edge_width: 40, glow_strength: 60, glow_radius: 40 }],
+    ['paper', { amount: 100, edge: 100, scale: 100 }],
   ]
   it.each(cases)('%s', async (id, params) => {
     const contentWidth = 60, contentHeight = 30
@@ -485,3 +488,65 @@ describe('外扩覆盖实际取样支撑', () => {
   }, 60_000)
 })
 
+describe('质感', () => {
+  // 作者库生成的工厂直接给出描述；参考画面 1920×1080，小纹理里也是正常大小的网点与点阵。
+  const texture1080 = (): LayerEffectReference => local(W, H, 0)
+  const alphas = (pixels: Uint8Array): number[] => Array.from({ length: pixels.length / 4 }, (_, i) => pixels[i * 4 + 3])
+  it('半调网点：原色网点之间透明；双色的纸按原画逐像素透明度铺满内容；彩色印刷白处不上墨、黑处盖满', async () => {
+    const original = (await layer(nightData(), [halftone({ size: 60 })], undefined, { reference: texture1080() })).pixels
+    expect(alphas(original).some(alpha => alpha === 0)).toBe(true)
+    const title = titleData()
+    const duo = (await layer(title, [halftone({ size: 60, color_mode: 'duo' })], undefined, { reference: texture1080() })).pixels
+    expect(Math.max(...alphas(duo).map((alpha, i) => Math.abs(alpha - title[i * 4 + 3])))).toBeLessThanOrEqual(1)
+    const half = canvas(W, H, x => x < W / 2 ? [255, 255, 255, 255] : [0, 0, 0, 255])
+    const cmyk = (await layer(half, [halftone({ size: 60, mode: 'cmyk', misregister: 20 })], undefined, { reference: texture1080() })).pixels
+    expect(at(cmyk, 4, 32)).toEqual([255, 255, 255, 255]); expect(at(cmyk, W - 4, 32)).toEqual([0, 0, 0, 255])
+    expect(Math.min(...alphas(cmyk))).toBe(255)
+    // 线条：网线水平，同一行横向一致；远看墨的面积就是暗度（半灰约一半）。
+    const gray = canvas(W, H, () => [128, 128, 128, 255])
+    const lines = (await layer(gray, [halftone({ size: 60, color_mode: 'duo', shape: 'line' })], undefined, { reference: texture1080() })).pixels
+    const rows = Array.from({ length: H }, (_, y) => new Set(Array.from({ length: W }, (_, x) => at(lines, x, y)[0])).size)
+    expect(Math.max(...rows)).toBe(1)
+    const linear = (value: number): number => { const c = value / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
+    const paperShare = Array.from({ length: H }, (_, y) => linear(at(lines, 0, y)[0])).reduce((sum, value) => sum + value, 0) / H
+    expect(Math.abs(paperShare - 128 / 255)).toBeLessThan(0.08)
+  }, 60_000)
+  it('抖动点阵：两色时每个像素只是暗色或亮色、同一个点里同色；蓝噪声与方格都确定', async () => {
+    for (const pattern of ['bayer', 'blue_noise'] as const) {
+      const params = { pixel_size: 60, pattern }
+      const pixels = (await layer(nightData(), [ditherPattern(params)], undefined, { reference: texture1080() })).pixels
+      expect(hash(pixels)).toBe(hash((await layer(nightData(), [ditherPattern(params)], undefined, { reference: texture1080() })).pixels))
+      // 同一个点里与点的左上角同色（点的边长按参考画面高度换算再取整）。
+      const size = Math.round(ditherPixelSize(60) * 1080), wrong: string[] = []
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const [r, g, b, a] = at(pixels, x, y)
+        if (!/^(0,0,0|255,255,255),255$/.test([r, g, b, a].join()) || r !== at(pixels, x - x % size, y - y % size)[0]) wrong.push(`${x},${y}`)
+      }
+      expect(wrong.slice(0, 5)).toEqual([])
+    }
+    // 原色、色阶 2：每个通道只剩 0 或 255，透明处仍透明。
+    const title = titleData()
+    const original = (await layer(title, [ditherPattern({ pixel_size: 0, color_mode: 'original' })], undefined, { reference: texture1080() })).pixels
+    const levels = new Set(Array.from({ length: W * H }, (_, i) => original[i * 4 + 3] === 255 ? [0, 1, 2].map(c => original[i * 4 + c]) : []).flat())
+    expect([...levels].every(value => value === 0 || value === 255)).toBe(true)
+    expect(at(original, 2, 2)[3]).toBe(0)
+  }, 60_000)
+  it('纸张强度 0 与原画逐位相同、默认只改明暗不改透明度；划痕同一帧相同、停留 100 换帧不变、数量 0 不改画面', async () => {
+    const night = nightData()
+    expect(hash(await clip(night, 'paper', { amount: 0 }))).toBe(hash(night))
+    const paper = await clip(titleData(), 'paper', { edge: 0 })
+    expect(alphas(paper)).toEqual(alphas(titleData()))
+    const scratches = async (params: Record<string, unknown>, frame: number): Promise<string> => {
+      const input = texture(night), output = target()
+      try {
+        await effects.render({ id: 'scratches', params: params as Record<string, number> }, { texture: input, width: W, height: H, format: 'rgba8unorm' }, output, frame, 1, [], 'final')
+        return hash(await read(output))
+      } finally { input.destroy(); output.destroy() }
+    }
+    const busy = { amount: 100, opacity: 100, width: 100 }
+    expect(await scratches(busy, 7)).toBe(await scratches(busy, 7))
+    expect(await scratches(busy, 7)).not.toBe(hash(night))
+    expect(await scratches({ ...busy, hold: 100 }, 7)).toBe(await scratches({ ...busy, hold: 100 }, 300))
+    expect(await scratches({ ...busy, amount: 0 }, 7)).toBe(hash(night))
+  }, 60_000)
+})

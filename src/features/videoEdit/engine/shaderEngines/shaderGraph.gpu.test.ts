@@ -10,6 +10,7 @@ import { SHADER_GRAPH_TRANSITION_KINDS, shaderGraphTransitionProps, shaderGraphT
 import { resolveVideoEditTransitionParams } from '../../../../core/videoEdit/transitionParams'
 import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '../../../../core/videoEdit/builtinEffects'
 import { THEME_SEED_ACCENT_HEX } from '../../../../core/theme/colorTokens'
+import { VideoEditCodeGpu } from '../videoEditCodeGpu'
 
 type Raw = { createTexture(d: unknown): GpuTexture & { width: number; height: number }; createBuffer(d: unknown): { mapAsync(m: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void; destroy(): void }; createCommandEncoder(): { copyTextureToBuffer(a: unknown, b: unknown, c: unknown): void; finish(): unknown }; queue: { submit(c: unknown[]): void; writeTexture(a: unknown, b: ArrayBufferView, c: unknown, d: unknown): void } }
 let gpu: Awaited<ReturnType<typeof init>>
@@ -210,6 +211,70 @@ describe('shader graph effects', () => {
     }
     input.destroy()
   }, 180_000)
+  it('老式画面两种方式都出画面且随时间变化；强度 0 与原画相同', async () => {
+    const cache = new ShaderGraphCache(device)
+    const input = texture()
+    fill(input, (x, y) => [x * 2 % 256, y * 4 % 256, 128, 255])
+    const original = await read(input)
+    const render = async (params: Record<string, unknown>, timeSeconds: number): Promise<Uint8Array> => {
+      const values = resolveVideoEditBuiltinParams({ id: 'retro_screen', params: params as Record<string, number> }), output = texture()
+      await cache.render(shaderGraphEffectSpec('retro_screen', values), { timeSeconds, width: W, height: H, input, output, outputFormat: 'rgba8unorm', props: new Map([['fx', shaderGraphEffectProps('retro_screen', values)]]) })
+      const pixels = await read(output); output.destroy(); return pixels
+    }
+    const differs = (a: Uint8Array, b: Uint8Array): number => a.reduce((sum, value, index) => Math.max(sum, Math.abs(value - b[index])), 0)
+    for (const mode of ['vhs', 'crt']) {
+      expect(differs(await render({ mode }, 1.5), original), mode).toBeGreaterThan(2)
+      expect(differs(await render({ mode, amount: 0 }, 1.5), original), mode).toBeLessThanOrEqual(1)
+    }
+    expect(differs(await render({ mode: 'vhs', wobble: 100, amount: 100 }, 1.2), await render({ mode: 'vhs', wobble: 100, amount: 100 }, 2.7))).toBeGreaterThan(2)
+    cache.dispose(); input.destroy()
+  }, 120_000)
+  it('显像管强度在 100 与 60 之间交替、预热后第一帧：同一缓存与新会话逐位一致，不重建合成；之后的显像管屏幕不留透明度', async () => {
+    const cache = new ShaderGraphCache(device)
+    const input = texture()
+    const crt = (amount: number) => resolveVideoEditBuiltinParams({ id: 'retro_screen', params: { mode: 'crt', amount } })
+    const screen = SHADER_GRAPH_EFFECT_DEFINITIONS.find(definition => definition.id === 'shaders.CRTScreen')!
+    const clips = [
+      { id: 'retro_screen', values: crt(60) }, { id: 'retro_screen', values: crt(100) }, { id: 'retro_screen', values: crt(60) }, { id: 'retro_screen', values: crt(100) },
+      { id: 'shaders.CRTScreen', values: videoEditBuiltinDefaults(screen) },
+    ]
+    const render = async (target: { render(request: Parameters<ShaderGraphSession['render']>[0]): Promise<void> }, props: Record<string, unknown>): Promise<Uint8Array> => {
+      const output = texture()
+      await target.render({ timeSeconds: 0.5, width: W, height: H, input, output, outputFormat: 'rgba8unorm', props: new Map([['fx', props]]) })
+      const pixels = await read(output); output.destroy(); return pixels
+    }
+    const create = ShaderGraphSession.create.bind(ShaderGraphSession)
+    const created: ShaderGraphSession[] = []
+    // 预热用无属性的图（透明度按 1）；默认强度 60 的第一帧要换到自己的会话，而不是在预热会话里重建合成。
+    await cache.warm([shaderGraphEffectSpec('retro_screen', crt(60))])
+    const spy = vi.spyOn(ShaderGraphSession, 'create').mockImplementation(async (d, spec) => { const session = await create(d, spec); created.push(session); return session })
+    try {
+      for (const [index, clip] of clips.entries()) {
+        fill(input, (x, y) => [(x * 3 + index * 50) % 256, (y * 5 + index * 90) % 256, 128, 255])
+        const spec = shaderGraphEffectSpec(clip.id, clip.values), props = shaderGraphEffectProps(clip.id, clip.values)
+        const fresh = await create(device, { ...spec, layers: spec.layers.map(layer => layer.id === 'fx' ? { ...layer, props } : layer) })
+        const expected = await render(fresh, props)
+        fresh.dispose()
+        expect(await render({ render: request => cache.render(spec, request) }, props), `${clip.id} ${String(clip.values.amount ?? '')} #${index}`).toEqual(expected)
+      }
+      expect(created.map(session => session.hostBuilds)).toEqual(created.map(() => 1))
+    } finally { spy.mockRestore(); cache.dispose(); input.destroy() }
+  }, 180_000)
+  it('显像管按原画透明度裁回：透明底片段不多出黑底，录像带本来就保留透明度', async () => {
+    const host = new VideoEditCodeGpu(device)
+    try {
+      const source = await host.target('source', W, H)
+      const data = new Uint8Array(W * H * 4)
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x < W / 2) data.set([90, 120, 160, 255], (y * W + x) * 4)
+      raw.queue.writeTexture({ texture: source.texture }, data, { bytesPerRow: W * 4 }, [W, H])
+      for (const mode of ['crt', 'vhs']) {
+        const result = await host.builtin(`retro-${mode}`, { id: 'retro_screen', params: { mode, amount: 100 } }, source, 0)
+        const pixels = await read(result.texture)
+        expect(at(pixels, W - 8, H / 2), mode).toEqual([0, 0, 0, 0])
+        expect(at(pixels, 8, H / 2)[3], mode).toBe(255)
+      }
+    } finally { await host.dispose() }
+  }, 120_000)
   it('maps percent positions and blend modes onto component props', () => {
     expect(shaderGraphEffectProps('shaders.Vignette', { center_x: 25, center_y: 75 })).toMatchObject({ center: { x: 0.25, y: 0.75 } })
     expect(shaderGraphEffectProps('shaders.Aurora', { blend_mode: 'screen', color_a: THEME_SEED_ACCENT_HEX.violet })).toMatchObject({ blendMode: 'screen', colorA: THEME_SEED_ACCENT_HEX.violet })

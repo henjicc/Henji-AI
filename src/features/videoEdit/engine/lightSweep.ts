@@ -26,6 +26,12 @@ export function linearHex(value: unknown): [number, number, number] {
   }) as [number, number, number]
 }
 
+/** #rrggbb 或带透明度的 #rrggbbaa → 线性光与 alpha（没写透明度为 1）。 */
+export function linearHexAlpha(value: unknown): [number, number, number, number] {
+  const alpha = typeof value === 'string' && /^#[0-9a-f]{8}$/i.test(value) ? parseInt(value.slice(7, 9), 16) / 255 : 1
+  return [...linearHex(value), alpha]
+}
+
 /** 内容框（纹理像素）：图层上是未外扩的 bounds，片段上是整张纹理。 */
 export function contentBox(width: number, height: number, context?: LayerEffectReference): { x: number; y: number; width: number; height: number } {
   if (!context) return { x: 0, y: 0, width, height }

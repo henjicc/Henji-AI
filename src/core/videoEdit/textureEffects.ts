@@ -1,0 +1,8 @@
+/** 质感组：半调网点、抖动点阵、纸张、划痕、老式画面；目录里按这个顺序排在颗粒后面。 */
+import { HALFTONE_EFFECT_DEFINITION } from './halftone'
+import { DITHER_PATTERN_EFFECT_DEFINITION } from './ditherPattern'
+import { PAPER_EFFECT_DEFINITION } from './paper'
+import { SCRATCHES_EFFECT_DEFINITION } from './scratches'
+import { RETRO_SCREEN_EFFECT_DEFINITION } from './retroScreen'
+
+export const TEXTURE_EFFECT_DEFINITIONS = [HALFTONE_EFFECT_DEFINITION, DITHER_PATTERN_EFFECT_DEFINITION, PAPER_EFFECT_DEFINITION, SCRATCHES_EFFECT_DEFINITION, RETRO_SCREEN_EFFECT_DEFINITION] as const

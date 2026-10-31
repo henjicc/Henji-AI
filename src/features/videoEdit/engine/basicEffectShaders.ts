@@ -2,7 +2,7 @@ import { RECORDING_CURSOR_WGSL } from './videoEditRecordingCursorShader'
 import { RECORDING_ZOOM_WGSL } from './videoEditRecordingZoomShader'
 import { adjustmentPassesWgsl } from '@/core/imaging/effects/wgsl/adjustmentPasses'
 import { GAUSSIAN_WGSL } from '@/core/imaging/effects/wgsl/gaussian'
-const INLINE_EFFECT_ENTRIES = ['effect_mix', 'effect_over', 'effect_opacity', 'copy', 'blur', 'unsharp', 'black_white', 'invert', 'mosaic', 'vignette', 'grain', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
+const INLINE_EFFECT_ENTRIES = ['effect_mix', 'effect_over', 'effect_opacity', 'effect_source_alpha', 'copy', 'blur', 'unsharp', 'black_white', 'invert', 'mosaic', 'vignette', 'grain', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
 export const BASIC_EFFECT_ENTRIES = [...INLINE_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_copy', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen'] as const
 
 export const BASIC_EFFECT_WGSL = `
@@ -12,6 +12,8 @@ ${RECORDING_ZOOM_WGSL}
 ${GAUSSIAN_WGSL}
 @fragment fn effect_over(v: Vertex) -> @location(0) vec4f { let image = tap(uvOf(v)); return image + tapOriginal(uvOf(v)) * (1.0 - image.a); }
 @fragment fn effect_opacity(v: Vertex) -> @location(0) vec4f { return tap(uvOf(v)) * u.a.x; }
+/** 不透明的处理结果按原画（original）的透明度裁回：预乘值整体乘原画 alpha。 */
+@fragment fn effect_source_alpha(v: Vertex) -> @location(0) vec4f { return tap(uvOf(v)) * tapOriginal(uvOf(v)).a; }
 @fragment fn effect_mix(v: Vertex) -> @location(0) vec4f { return mix(tapOriginal(uvOf(v)), tap(uvOf(v)), u.a.x); }
 @fragment fn gaussian_copy(v: Vertex) -> @location(0) vec4f { return textureLoad(source, vec2i(v.position.xy), 0); }
 @fragment fn gaussian_linear(v: Vertex) -> @location(0) vec4f {

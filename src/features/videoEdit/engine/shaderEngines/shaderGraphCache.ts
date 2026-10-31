@@ -24,7 +24,7 @@ function structuralProps(type: string): Promise<Readonly<Record<string, Structur
 
 /**
  * 会话按合成结构区分：图层结构之外，编译期属性的取值、带重建条件的属性落在默认值哪一侧（剪辑可用组件的条件都是阈值两侧）、
- * 混合模式，任一不同框架就要换一份合成。一种合成一个会话，几段片段交替用同一组件的不同设置时不必每帧重建、重新上传。
+ * 混合模式、透明度是否不足 1（框架把它算进合成哈希）与是否可见，任一不同框架就要换一份合成。一种合成一个会话，几段片段交替用同一组件的不同设置时不必每帧重建、重新上传。
  * 时钟快慢（速度类属性）也分会话：时间按“秒差 × 速度”在会话里累加，速度不同的片段共用会话时结果会取决于渲染历史。
  */
 async function compositionKey(spec: ShaderGraphSpec, props: LayerProps): Promise<string> {
@@ -38,7 +38,7 @@ async function compositionKey(spec: ShaderGraphSpec, props: LayerProps): Promise
         if (config.compileTime || clockRates.includes(key)) parts.push([id, key, value])
         else if (config.compileTimeWhen) parts.push([id, key, config.compileTimeWhen(config.default, value)])
       }
-      parts.push([id, 'blendMode', typeof values.blendMode === 'string' ? values.blendMode : 'normal'])
+      parts.push([id, 'blendMode', typeof values.blendMode === 'string' ? values.blendMode : 'normal'], [id, 'translucent', (typeof values.opacity === 'number' ? values.opacity : 1) < 1], [id, 'visible', values.visible !== false])
       await visit(layer.children ?? [], `${id}.`)
     }
   }

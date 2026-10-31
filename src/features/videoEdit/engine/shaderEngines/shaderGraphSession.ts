@@ -237,12 +237,13 @@ export class ShaderGraphSession {
     this.renderer = renderer
   }
 
+  /** 透明度与可见没写时显式给 1 与 true：框架跳过值为 undefined 的项，否则共用会话会沿用上一张图的值。 */
   private metadata(layer: ShaderGraphLayer, order: number, id: string): Record<string, unknown> {
     const props = layer.props ?? {}
     return {
       blendMode: typeof props.blendMode === 'string' ? props.blendMode : 'normal',
-      opacity: typeof props.opacity === 'number' ? props.opacity : undefined,
-      visible: typeof props.visible === 'boolean' ? props.visible : undefined,
+      opacity: typeof props.opacity === 'number' ? props.opacity : 1,
+      visible: typeof props.visible === 'boolean' ? props.visible : true,
       renderOrder: order, id,
       mask: typeof props.maskSource === 'string' ? { source: props.maskSource, type: typeof props.maskType === 'string' ? props.maskType : 'alpha' } : undefined,
       transform: props.transform && typeof props.transform === 'object' ? { offsetX: 0, offsetY: 0, rotation: 0, scale: 1, anchorX: 0.5, anchorY: 0.5, edges: 'transparent', ...props.transform } : undefined,

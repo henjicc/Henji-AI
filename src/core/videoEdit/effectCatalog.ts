@@ -7,7 +7,7 @@ export const VIDEO_EDIT_EFFECT_CATALOG: readonly { readonly group: VideoEditBuil
   { group: 'light', ids: ['glow', 'light_sweep'] },
   { group: 'outline', ids: ['drop_shadow', 'stroke'] },
   { group: 'lens', ids: ['vignette', 'chromatic_aberration'] },
-  { group: 'texture', ids: ['film_grain'] },
+  { group: 'texture', ids: ['film_grain', 'halftone', 'dither_pattern', 'paper', 'scratches', 'retro_screen'] },
   { group: 'stylize', ids: ['mosaic', 'glitch', 'dissolve_reveal'] },
   { group: 'distort', ids: [] },
   { group: 'frame', ids: ['crop', 'flip'] },

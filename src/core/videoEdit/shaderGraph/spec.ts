@@ -48,6 +48,25 @@ const ALL = catalog.components as readonly ShaderComponent[]
 export const SHADER_COMPONENTS: readonly ShaderComponent[] = ALL.filter(value => !value.excluded && !value.usesPointer)
 const BY_NAME = new Map(SHADER_COMPONENTS.map(value => [value.name, value]))
 export function shaderComponent(name: string): ShaderComponent | undefined { return BY_NAME.get(name) }
+/** 封装效果按名字取组件；组件库里没有时报错，效果无法登记。 */
+export function requireShaderComponent(name: string, owner: string): ShaderComponent {
+  const component = BY_NAME.get(name)
+  if (!component) throw new Error(`着色器组件库里没有 ${name}，${owner}无法登记。`)
+  return component
+}
+/** 组件属性的范围；属性没有范围时报错：封装效果的 0–100 参数按它换算，不能静默改用别的范围。 */
+export function shaderPropRange(component: ShaderComponent, key: string): readonly [number, number] {
+  const prop = component.props.find(item => item.key === key)
+  if (prop?.min === undefined || prop.max === undefined) throw new Error(`着色器组件 ${component.name} 没有带范围的属性 ${key}。`)
+  return [prop.min, prop.max]
+}
+/** 0–1 换算到组件属性的范围：linear 线性；log 按对数（跨度 8 倍以上的量每段观感均匀），log_reverse 时 0 对应上限。 */
+export function shaderPropValue(component: ShaderComponent, key: string, t: number, curve: 'linear' | 'log' | 'log_reverse' = 'linear'): number {
+  const [min, max] = shaderPropRange(component, key)
+  if (curve === 'log') return min * (max / min) ** t
+  if (curve === 'log_reverse') return max * (min / max) ** t
+  return min + t * (max - min)
+}
 /** 按秒差另行累加时钟的组件属性（框架的动画时间只认 speedProp）：影棚背景的环境光漂移。 */
 const EXTRA_CLOCK_RATE_PROPS: Readonly<Record<string, readonly string[]>> = { StudioBackground: ['ambientSpeed'] }
 /**

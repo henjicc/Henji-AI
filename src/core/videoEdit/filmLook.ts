@@ -6,11 +6,11 @@
  */
 import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParams } from './builtinEffects'
 import type { ShaderGraphWrappedEffect } from './shaderGraph/effects'
-import { shaderComponent, type ShaderComponent } from './shaderGraph/spec'
+import { requireShaderComponent, shaderPropValue } from './shaderGraph/spec'
 import { effectParam } from './effectIncludes'
 
 const COMPONENT = 'FilmStock'
-const component: ShaderComponent = shaderComponent(COMPONENT) ?? (() => { throw new Error(`着色器组件库里没有 ${COMPONENT}，胶片模拟无法登记。`) })()
+const component = requireShaderComponent(COMPONENT, '胶片模拟')
 
 /** 组件的选项值不变，名称按胶片的观感译成中文。 */
 const STOCKS: ReadonlyArray<{ value: string; label: string }> = [
@@ -40,11 +40,7 @@ export const FILM_LOOK_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
   ],
 }
 
-const scale = (key: string, value: number): number => {
-  const prop = component.props.find(item => item.key === key)
-  const min = prop?.min ?? 0, max = prop?.max ?? 1
-  return min + value / 100 * (max - min)
-}
+const scale = (key: string, value: number): number => shaderPropValue(component, key, value / 100)
 
 export const FILM_LOOK_SHADER_GRAPH: ShaderGraphWrappedEffect = {
   id: FILM_LOOK_EFFECT_DEFINITION.id, component: COMPONENT,

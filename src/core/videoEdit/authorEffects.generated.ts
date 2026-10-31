@@ -435,6 +435,70 @@ export interface FilmGrainParams {
   readonly monochrome?: boolean
 }
 
+export interface HalftoneParams {
+  /** 网点大小；每个网点格子多大。0 细到接近原画；40（默认）约为画面高度的 0.9%；100 约 8%，一颗颗大圆点。；默认 40；硬范围 0–100；单位 strength；可动画 true */
+  readonly size?: number
+  /** 方式；单色（默认）一层网点；彩色印刷用青、品红、黄、黑四色网点按印刷网角叠印在白纸上，近看有玫瑰斑。；默认 "mono"；可动画 true */
+  readonly mode?: "mono" | "cmyk"
+  /** 形状；圆点（默认）；线条是一排排粗细随明暗变化的横线，彩色印刷时四色线条各斜一个网角。；默认 "dot"；分组 网点；可动画 true */
+  readonly shape?: "dot" | "line"
+  /** 对比度；网点大小随明暗变化得多明显。50（默认）照原画明暗；调高暗处更实、亮处更空；调低网点大小更接近，画面发灰。；默认 50；硬范围 0–100；单位 strength；分组 网点；可动画 true */
+  readonly contrast?: number
+  /** 颜色；原色（默认）网点用原画颜色，亮处网点大，网点之间透明，适合暗底；双色是墨印在纸上，暗处墨点大。；默认 "original"；分组 颜色；显隐 {"param":"mode","equals":"mono"}；可动画 true */
+  readonly color_mode?: "original" | "duo"
+  /** 墨色；双色时网点的颜色。黑色（默认）像报纸；换成深蓝、深红就是单色套印。；默认 "#000000"；分组 颜色；显隐 {"all":[{"param":"mode","equals":"mono"},{"param":"color_mode","equals":"duo"}]}；可动画 true */
+  readonly ink?: string
+  /** 纸色；双色时网点下面的纸是什么颜色。白色（默认）；设成透明只留下墨点，可以叠在别的画面上。；默认 "#ffffff"；分组 颜色；显隐 {"all":[{"param":"mode","equals":"mono"},{"param":"color_mode","equals":"duo"}]}；可动画 true */
+  readonly paper?: string
+  /** 套色偏移；四色版错开多远，像没对准的印刷。0（默认）对齐；10 约为画面高度的 0.5%，边上露出彩边；100 约 5%。；默认 0；硬范围 0–100；单位 strength；分组 颜色；显隐 {"param":"mode","equals":"cmyk"}；可动画 true */
+  readonly misregister?: number
+}
+
+export interface DitherPatternParams {
+  /** 像素大小；每个点多大。0 约为画面高度的 0.1%，最细的点；20（默认）约 0.2%；100 约 3%，大颗马赛克点。；默认 20；硬范围 0–100；单位 strength；可动画 true */
+  readonly pixel_size?: number
+  /** 图案；点怎么排。方格（默认）整齐的网纹，像老游戏机；蓝噪声细碎均匀、没有纹路。；默认 "bayer"；可动画 true */
+  readonly pattern?: "bayer" | "blue_noise"
+  /** 色阶；每种颜色留几级。2（默认）只有暗色和亮色；4 多出两级中间色；8 以上接近原画的明暗。；默认 2；常用 2–8；硬范围 2–16；单位 value；分组 颜色；可动画 true */
+  readonly levels?: number
+  /** 颜色；双色（默认）只用暗色与亮色；原色按原画的颜色分级，色阶 2 时只剩红绿蓝、青品黄和黑白八种颜色。；默认 "duo"；分组 颜色；可动画 true */
+  readonly color_mode?: "duo" | "original"
+  /** 暗色；双色时暗处点的颜色。黑色（默认）；换成深绿、深蓝像老掌机的屏幕。；默认 "#000000"；分组 颜色；显隐 {"param":"color_mode","equals":"duo"}；可动画 true */
+  readonly dark?: string
+  /** 亮色；双色时亮处点的颜色。白色（默认）；换成浅绿、米黄像老掌机的屏幕。；默认 "#ffffff"；分组 颜色；显隐 {"param":"color_mode","equals":"duo"}；可动画 true */
+  readonly light?: string
+  /** 阈值；整体偏暗还是偏亮。50%（默认）照原画；调高更多点变暗；调低更多点变亮。；默认 50；硬范围 0–100；单位 percent；分组 颜色；可动画 true */
+  readonly threshold?: number
+}
+
+export interface PaperParams {
+  /** 强度；纸纹多明显。0 没有；40（默认）近看才看得出；80 像粗糙的水彩纸。深色处纸纹本来就淡。；默认 40；硬范围 0–100；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 纹理大小；纤维与颗粒有多粗。50（默认）约为画面高度的 1.3%；20 细密的打印纸；90 粗糙的手工纸。；默认 50；硬范围 0–100；单位 strength；可动画 true */
+  readonly scale?: number
+  /** 粗糙度；偏细纤维还是偏颗粒。0% 顺滑的纤维；50%（默认）两者都有；100% 粗颗粒。；默认 50；硬范围 0–100；单位 percent；分组 纸纹；可动画 true */
+  readonly roughness?: number
+  /** 边缘毛糙；内容边缘被纸纹带得多不齐。10（默认）几乎看不出；60 像印在粗纸上的字边。只动轮廓，内容内部不变。；默认 10；硬范围 0–100；单位 strength；分组 纸纹；可动画 true */
+  readonly edge?: number
+  /** 随机种子；换一个数，纤维和颗粒就换一种排法，粗细和明显程度不变。同一画面上几张卡片各填不同的数，纸纹不会一模一样。；默认 0；硬范围 0–9999；单位 value；分组 纸纹；可动画 false */
+  readonly seed?: number
+}
+
+export interface ScratchesParams {
+  /** 数量；同时有多少条。0 没有；30（默认）偶尔几条；80 满屏划痕。；默认 30；硬范围 0–100；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 不透明度；划痕多显眼。50%（默认）清楚但不抢画面；100% 亮划痕接近纯白、暗划痕接近纯黑。；默认 50；硬范围 0–100；单位 percent；可动画 true */
+  readonly opacity?: number
+  /** 粗细；划痕多粗。20（默认）约为画面高度的 0.07%，发丝细；60 约 0.2%；100 约 0.6%，像粗的划伤。；默认 20；硬范围 0–100；单位 strength；分组 划痕；可动画 true */
+  readonly width?: number
+  /** 停留；一条划痕停多久。0% 每帧换位置；30%（默认）约停 4 帧；80% 约 50 帧；100% 一直不动。；默认 30；硬范围 0–100；单位 percent；分组 划痕；可动画 true */
+  readonly hold?: number
+  /** 颜色；亮（默认）是胶片上白色的划伤；暗是黑色的脏线。；默认 "light"；分组 划痕；可动画 true */
+  readonly tone?: "light" | "dark"
+  /** 随机种子；换一个数，划痕出现的位置和先后就换一种排法，数量和节奏不变。；默认 0；硬范围 0–9999；单位 value；分组 划痕；可动画 false */
+  readonly seed?: number
+}
+
 export interface MosaicParams {
   /** 块大小；方块有多大。0 不打码；10 细小方块，约为画面高度的 1%；30（默认）常规打码；100 很大的色块，约 10%，可以输入到 200。；默认 30；常用 0–100；硬范围 0–200；单位 strength；可动画 true */
   readonly block_size?: number
@@ -494,6 +558,10 @@ export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'vignette'; readonly params?: VignetteParams }
   | { readonly id: 'chromatic_aberration'; readonly params?: ChromaticAberrationParams }
   | { readonly id: 'film_grain'; readonly params?: FilmGrainParams }
+  | { readonly id: 'halftone'; readonly params?: HalftoneParams }
+  | { readonly id: 'dither_pattern'; readonly params?: DitherPatternParams }
+  | { readonly id: 'paper'; readonly params?: PaperParams }
+  | { readonly id: 'scratches'; readonly params?: ScratchesParams }
   | { readonly id: 'mosaic'; readonly params?: MosaicParams }
   | { readonly id: 'glitch'; readonly params?: GlitchParams }
   | { readonly id: 'dissolve_reveal'; readonly params?: DissolveRevealParams }

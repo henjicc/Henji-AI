@@ -11,6 +11,7 @@ import { SHADER_BLEND_MODES, SHADER_COMPONENTS, SHADER_GRAPH_INPUT, shaderClockR
 import { SHADER_COMPONENT_ZH, SHADER_LABEL_ZH, SHADER_OPTION_ZH } from './zh'
 import { BLACK_HEX } from '../../theme/colorTokens'
 import { FILM_LOOK_SHADER_GRAPH } from '../filmLook'
+import { RETRO_SCREEN_SHADER_GRAPH } from '../retroScreen'
 
 export const SHADER_EFFECT_PREFIX = 'shaders.'
 const GROUPS: Readonly<Record<string, VideoEditBuiltinGroup>> = {
@@ -81,11 +82,19 @@ export const SHADER_GRAPH_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDef
 const BY_ID = new Map(SHADER_GRAPH_EFFECT_DEFINITIONS.map(definition => [definition.id, definition]))
 /**
  * 封装效果：一个组件登记成有自己名字和一份说明的内置效果（定义随效果登记），渲染时把它的参数换算回组件属性。
- * 着色器不重写，所以只上片段，出口仍是着色器图的 8 位。
+ * 着色器不重写，所以只上片段，出口仍是着色器图的 8 位。一个名字合了几个组件时，`component` 按参数里的方式选。
  */
-export interface ShaderGraphWrappedEffect { readonly id: string; readonly component: string; readonly props: (values: Readonly<VideoEditBuiltinParams>) => Record<string, unknown> }
-const WRAPPED: ReadonlyMap<string, ShaderGraphWrappedEffect> = new Map([FILM_LOOK_SHADER_GRAPH].map(wrapped => [wrapped.id, wrapped]))
+export interface ShaderGraphWrappedEffect {
+  readonly id: string
+  readonly component: string | ((values: Readonly<VideoEditBuiltinParams>) => string)
+  readonly props: (values: Readonly<VideoEditBuiltinParams>) => Record<string, unknown>
+  /** 组件把透明处填成不透明（如显像管最后一步 opaque）时为真：宿主按原画透明度裁回，透明底片段不多出黑底。 */
+  readonly keepsSourceAlpha?: (values: Readonly<VideoEditBuiltinParams>) => boolean
+}
+const WRAPPED: ReadonlyMap<string, ShaderGraphWrappedEffect> = new Map([FILM_LOOK_SHADER_GRAPH, RETRO_SCREEN_SHADER_GRAPH].map(wrapped => [wrapped.id, wrapped]))
+function wrappedComponent(wrapped: ShaderGraphWrappedEffect, values: Readonly<VideoEditBuiltinParams>): string { return typeof wrapped.component === 'string' ? wrapped.component : wrapped.component(values) }
 export function isShaderGraphEffect(id: string): boolean { return BY_ID.has(id) || WRAPPED.has(id) }
+export function shaderGraphEffectKeepsSourceAlpha(id: string, values: Readonly<VideoEditBuiltinParams>): boolean { return WRAPPED.get(id)?.keepsSourceAlpha?.(values) ?? false }
 
 /** 剪辑参数 → 组件属性：位置合回 {x, y}（百分比转 0–1），选项值还原成组件原类型（效果与过渡共用）。 */
 export function shaderComponentProps(component: ShaderComponent, values: Readonly<VideoEditBuiltinParams>): Record<string, unknown> {
@@ -117,19 +126,20 @@ export function shaderGraphEffectProps(id: string, values: Readonly<VideoEditBui
 /** 渲染时钟（片段内秒数），只在渲染时传递，不写入效果参数。 */
 export interface VideoEditShaderClock { shaderTimeSeconds?: number }
 
-/** 一项着色器效果对应的着色器图：先画片段画面，再叠生成器或套滤镜。组件图层 id 固定为 `fx`。 */
-export function shaderGraphEffectSpec(id: string): ShaderGraphSpec {
-  return { layers: [{ type: SHADER_GRAPH_INPUT }, { type: WRAPPED.get(id)?.component ?? id.slice(SHADER_EFFECT_PREFIX.length), id: 'fx' }] }
+/** 一项着色器效果对应的着色器图：先画片段画面，再叠生成器或套滤镜。组件图层 id 固定为 `fx`；封装效果按参数里的方式选组件。 */
+export function shaderGraphEffectSpec(id: string, params: Readonly<VideoEditBuiltinParams> = {}): ShaderGraphSpec {
+  const wrapped = WRAPPED.get(id)
+  return { layers: [{ type: SHADER_GRAPH_INPUT }, { type: wrapped ? wrappedComponent(wrapped, params) : id.slice(SHADER_EFFECT_PREFIX.length), id: 'fx' }] }
 }
 
 /**
  * 剪辑里静态可知的着色器图（片段效果、着色器转场），用于后台预热：新结构首次编译约半秒，
  * 放在打开剪辑/加效果时做，播放到那一段时就不再卡一下。
  */
-export function videoEditShaderGraphWarmSpecs(sequences: ReadonlyArray<{ clips: ReadonlyArray<{ effects?: ReadonlyArray<{ builtin?: { id: string } }> }>; transitions?: ReadonlyArray<{ kind: string; parameters?: Readonly<VideoEditBuiltinParams> }> }>, transitionSpec: (kind: string, parameters?: Readonly<VideoEditBuiltinParams>) => ShaderGraphSpec | undefined): ShaderGraphSpec[] {
+export function videoEditShaderGraphWarmSpecs(sequences: ReadonlyArray<{ clips: ReadonlyArray<{ effects?: ReadonlyArray<{ builtin?: { id: string; params?: Readonly<VideoEditBuiltinParams> } }> }>; transitions?: ReadonlyArray<{ kind: string; parameters?: Readonly<VideoEditBuiltinParams> }> }>, transitionSpec: (kind: string, parameters?: Readonly<VideoEditBuiltinParams>) => ShaderGraphSpec | undefined): ShaderGraphSpec[] {
   const specs = new Map<string, ShaderGraphSpec>()
   for (const sequence of sequences) {
-    for (const clip of sequence.clips) for (const effect of clip.effects ?? []) if (effect.builtin && isShaderGraphEffect(effect.builtin.id)) specs.set(effect.builtin.id, shaderGraphEffectSpec(effect.builtin.id))
+    for (const clip of sequence.clips) for (const effect of clip.effects ?? []) if (effect.builtin && isShaderGraphEffect(effect.builtin.id)) { const spec = shaderGraphEffectSpec(effect.builtin.id, effect.builtin.params); specs.set(shaderGraphStructureKey(spec), spec) }
     for (const transition of sequence.transitions ?? []) { const spec = transitionSpec(transition.kind, transition.parameters); if (spec) specs.set(shaderGraphStructureKey(spec), spec) }
   }
   return [...specs.values()]
