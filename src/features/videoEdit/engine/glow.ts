@@ -18,7 +18,7 @@ import { GLOW_ABERRATION_PREFIX } from '@/core/videoEdit/glow'
 import { includedEffectValues } from '@/core/videoEdit/effectIncludes'
 import { chromaticAberrationPass } from './chromaticAberration'
 
-export const GLOW_ENTRIES = ['glow_prefilter', 'glow_down', 'glow_blur', 'glow_up', 'glow_composite', 'glow_source', 'glow_layer_image', 'glow_layer_light'] as const
+export const GLOW_ENTRIES = ['glow_prefilter', 'glow_down', 'glow_blur', 'glow_up', 'glow_composite', 'glow_shape_composite', 'glow_shape_light', 'glow_source', 'glow_layer_image', 'glow_layer_light'] as const
 type V3 = [number, number, number]
 type V4 = readonly [number, number, number, number]
 const ZERO: V4 = [0, 0, 0, 0]
@@ -43,29 +43,67 @@ function linearColor(value: unknown): V3 {
 
 const taps = (sigma: number): number => Math.min(48, Math.ceil(sigma * 3))
 
-/** `params` 已补齐默认值。 */
-export function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
+/** 发光来源：亮部（过阈值的亮处）、轮廓（内容的 alpha）、光源纹理（扫光、溶解显影先画好的预乘线性光）。 */
+export type GlowEmission = 'bright' | 'shape' | 'light'
+export interface GlowPlanner {
+  plan: VideoEditBuiltinPlan
+  alloc(width: number, height: number, scale?: number): number
+  scale(texture: VideoEditBuiltinTexture): number
+  pass(entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a?: V4, b?: V4, c?: V4, original?: VideoEditBuiltinTexture): void
+}
+
+/** 发光的工序记录器：每道工序带上局部坐标与按层缩放的取样网格；扫光、溶解显影在同一份规划里先画光再接发光。 */
+export function createGlowPlanner(width: number, height: number, context?: LayerEffectReference): GlowPlanner {
   const plan: VideoEditBuiltinPlan = { width, height, scratch: [], passes: [], linearScratch: true }
   const scales: number[] = []
   const alloc = (w: number, h: number, scale = 1): number => { plan.scratch.push({ width: w, height: h }); scales.push(scale); return plan.scratch.length - 1 }
   const size = (texture: VideoEditBuiltinTexture): { width: number; height: number } => typeof texture === 'number' ? plan.scratch[texture] : plan
+  const scale = (texture: VideoEditBuiltinTexture): number => typeof texture === 'number' ? scales[texture] : 1
   const pass = (entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a: V4 = ZERO, b: V4 = ZERO, c: V4 = ZERO, original?: VideoEditBuiltinTexture): void => {
     const from = size(source); const to = size(target)
     const spatial = context ? [context.rasterOrigin[0], context.rasterOrigin[1], context.referenceSize.height * context.rasterScale, 0] : [0, 0, 0, 0]
-    const fromScale = typeof source === 'number' ? scales[source] : 1
-    const toScale = typeof target === 'number' ? scales[target] : 1
+    const fromScale = scale(source)
+    const toScale = scale(target)
     const ratio = fromScale / toScale
     const grid = context ? [ratio, ...context.rasterOrigin.map(origin => Math.ceil(origin * fromScale) - Math.ceil(origin * toScale) * ratio), 1 / toScale] : [0, 0, 0, 0]
     plan.passes.push({ entry, source, target, ...(original !== undefined ? { original } : {}), uniforms: new Float32Array([to.width, to.height, from.width, from.height, ...a, ...b, ...c, ...(context ? [...spatial, ...grid] : [])]) })
   }
+  return { plan, alloc, scale, pass }
+}
+
+/** a = (阈值, 过渡半宽, 原画不透明度, 着色量)：提取、合成与“发光来源”视图共用；轮廓与光源纹理用负的阈值标记来源。 */
+function emissionUniform(params: VideoEditBuiltinParams, emission: GlowEmission): V4 {
+  const sourceOpacity = numeric(params, 'source_opacity', 100) / 100
+  if (emission === 'shape') return [-1, 0.001, sourceOpacity, 1]
+  if (emission === 'light') return [-2, 0.001, 1, 0]
+  return [numeric(params, 'threshold') / 100, Math.max(0.001, numeric(params, 'threshold_smoothness') / 100 * 0.5), sourceOpacity, numeric(params, 'tint') / 100]
+}
+
+/** `params` 已补齐默认值。 */
+export function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
+  const glow = createGlowPlanner(width, height, context)
+  const emission: GlowEmission = params.mode === 'shape' ? 'shape' : 'bright'
   const strength = numeric(params, 'strength') / 100
   const sourceOpacity = numeric(params, 'source_opacity', 100) / 100
-  const tint = numeric(params, 'tint') / 100
-  // a = (阈值, 过渡半宽, 原画不透明度, 着色量)：提取、合成与“发光来源”视图共用。
-  const emission: V4 = [numeric(params, 'threshold') / 100, Math.max(0.001, numeric(params, 'threshold_smoothness') / 100 * 0.5), sourceOpacity, tint]
-  if (params.view === 'source') { pass('glow_source', 'input', 'output', emission); return plan }
-  if (split && strength === 0) { pass('effect_opacity', 'input', 'output', [sourceOpacity, 0, 0, 0]); return plan }
-  if (strength === 0 && sourceOpacity === 1) { pass('copy', 'input', 'output'); return plan }
+  if (params.view === 'source') { glow.pass('glow_source', 'input', 'output', emissionUniform(params, emission)); return glow.plan }
+  if (split && strength === 0) { glow.pass('effect_opacity', 'input', 'output', [sourceOpacity, 0, 0, 0]); return glow.plan }
+  if (strength === 0 && sourceOpacity === 1) { glow.pass('copy', 'input', 'output'); return glow.plan }
+  appendGlow(glow, params, width, height, context, split, emission, 'input', 'input')
+  return glow.plan
+}
+
+/**
+ * 在 `glow` 里接上金字塔与合成，写到 'output'（图层拆输出时另写 `plan.underlay`）。
+ * `source` 是发光来源的纹理；`base` 是光要叠上去的画面（亮部、轮廓都是效果输入，光源纹理时是扫光、溶解画好的主图）。
+ * 轮廓方式的光在内容后面：主图只按原画不透明度，光不给内容加核心提亮。
+ */
+export function appendGlow(glow: GlowPlanner, params: VideoEditBuiltinParams, width: number, height: number, context: LayerEffectReference | undefined, split: boolean, emission: GlowEmission, source: VideoEditBuiltinTexture, base: VideoEditBuiltinTexture): void {
+  const { plan, alloc, pass } = glow
+  const strength = numeric(params, 'strength') / 100
+  const sourceOpacity = numeric(params, 'source_opacity', 100) / 100
+  const uniform = emissionUniform(params, emission)
+  const tint = uniform[3]
+  const original = base === 'input' ? undefined : base
 
   const resolution = Math.min(1, Math.max(0.25, numeric(params, 'resolution', 50) / 100))
   const inner = linearColor(params.tint_inner); const outer = linearColor(params.tint_outer)
@@ -73,11 +111,11 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
   const { first, count, reach } = glowLevels(numeric(params, 'radius'), width, height, resolution, referenceHeight)
   const weights = glowLevelWeights(count, reach, resolution, referenceHeight, 0.45 + 0.55 * numeric(params, 'falloff') / 100, tint, inner, outer)
   const gain = strength * strength * GLOW_GAIN
-  const core = inner.map(value => (1 + (value - 1) * tint) * CORE * gain) as V3
+  const core = emission === 'light' ? [0, 0, 0] as V3 : inner.map(value => (1 + (value - 1) * tint) * CORE * gain) as V3
 
   const levels: number[] = [alloc(first.width, first.height, resolution)]
   for (let index = 1; index < count; index++) { const previous = plan.scratch[levels[index - 1]]; levels.push(alloc(Math.max(1, Math.ceil(previous.width / 2)), Math.max(1, Math.ceil(previous.height / 2)), resolution / 2 ** index)) }
-  pass('glow_prefilter', 'input', levels[0], emission)
+  pass('glow_prefilter', source, levels[0], uniform)
   for (let index = 1; index < count; index++) pass('glow_down', levels[index - 1], levels[index])
 
   // 长宽比为正时沿“角度”拉长，为负时沿与它垂直的方向拉长。
@@ -88,7 +126,7 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
   const middles: number[] = []
   const blurred = levels.map(level => {
     const { width: lw, height: lh } = plan.scratch[level]
-    const middle = alloc(lw, lh, scales[level]); const out = alloc(lw, lh, scales[level]); middles.push(middle)
+    const middle = alloc(lw, lh, glow.scale(level)); const out = alloc(lw, lh, glow.scale(level)); middles.push(middle)
     pass('glow_blur', level, middle, [along[0] / lw, along[1] / lh, LEVEL_SIGMA * aspect, taps(LEVEL_SIGMA * aspect)])
     pass('glow_blur', middle, out, [across[0] / lw, across[1] / lh, LEVEL_SIGMA, taps(LEVEL_SIGMA)])
     return out
@@ -107,7 +145,18 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
     if (context) plan.passes.at(-1)!.uniforms.set(aberration.spatial, 16)
     accumulated = middles[0]
   }
-  pass('glow_composite', accumulated, 'output', emission, [...core, params.blend === 'screen' ? 1 : 0], [gain, numeric(params, 'core_white') / 100, numeric(params, 'dither', 50) / 100, params.dither_mono === true ? 1 : 0])
+  const b: V4 = [...core, params.blend === 'screen' ? 1 : 0]
+  const c: V4 = [gain, numeric(params, 'core_white') / 100, numeric(params, 'dither', 50) / 100, params.dither_mono === true ? 1 : 0]
+  if (emission === 'shape') {
+    if (!split) { pass('glow_shape_composite', accumulated, 'output', uniform, b, c); return }
+    const light = alloc(width, height)
+    pass('glow_shape_light', accumulated, light, uniform, b, c)
+    plan.underlay = light
+    if (sourceOpacity === 1) pass('copy', 'input', 'output')
+    else pass('effect_opacity', 'input', 'output', [sourceOpacity, 0, 0, 0])
+    return
+  }
+  pass('glow_composite', accumulated, 'output', uniform, b, c, original)
   if (split && strength > 0) {
     const image = plan.passes.at(-1)!
     image.entry = 'glow_layer_image'
@@ -115,7 +164,6 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
     plan.passes.push({ ...image, entry: 'glow_layer_light', target: light, uniforms: image.uniforms.slice() })
     plan.underlay = light
   }
-  return plan
 }
 
 export const GLOW_WGSL = `
@@ -127,8 +175,11 @@ fn glowUv(v: Vertex) -> vec2f {
 
 // 发光内容（预乘线性光）。a = (阈值, 过渡半宽, 原画不透明度, 着色量)。
 // 阈值按直通色最亮的通道比较，纯红、纯蓝的霓虹和白光一样容易过阈值；着色量把颜色先褪成同样亮度的白光，再在各层上色。
+// 阈值为负标记另外两种来源：-1 轮廓（只看 alpha 的白光，颜色由层权重给出），-2 光源纹理（输入已是预乘线性光）。
 fn glowEmission(c: vec4f) -> vec3f {
+ if (u.a.x < -1.5) { return c.rgb; }
  if (c.a <= 0.00001) { return vec3f(0.0); }
+ if (u.a.x < -0.5) { return vec3f(c.a); }
  let s = straight(c);
  let mask = smoothstep(u.a.x - u.a.y, u.a.x + u.a.y, max(s.r, max(s.g, s.b)));
  let e = toLinear(s) * mask;
@@ -225,6 +276,16 @@ fn glowColor(before: vec3f, light: vec3f, screen: bool, position: vec2f) -> vec3
  let alpha = max(shown, glowPeak(lit));
  if (alpha <= 0.00001) { return vec4f(0.0); }
  return vec4f(min(lit, vec3f(alpha)), alpha);
+}
+// 轮廓方式：光在内容后面，按显示出来的 alpha 挡住（原画不透明度为 0 时光完整露出，与图层拆输出一致）。
+@fragment fn glow_shape_composite(v: Vertex) -> @location(0) vec4f {
+ let base = tapOriginal(uvOf(v)) * u.a.z;
+ let lit = glowColor(vec3f(0.0), glowLight(v), u.b.w > 0.5, v.position.xy);
+ return base + vec4f(lit, glowPeak(lit)) * (1.0 - base.a);
+}
+// 轮廓方式的图层下层：光整个在内容后面，与片段入口一样按混合模式叠到黑底上（相加或滤色），再作为零 alpha 光交出去。
+@fragment fn glow_shape_light(v: Vertex) -> @location(0) vec4f {
+ return vec4f(glowColor(vec3f(0.0), glowLight(v), u.b.w > 0.5, v.position.xy), 0.0);
 }
 @fragment fn glow_layer_image(v: Vertex) -> @location(0) vec4f {
  let base = tapOriginal(uvOf(v)); let shown = base.a * u.a.z;

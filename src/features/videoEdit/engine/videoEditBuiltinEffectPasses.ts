@@ -13,6 +13,10 @@ import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
 import { planBlur, planLensBlur, planUniformBlur } from './blur'
 import { SHARPEN_MIN_SIGMA_PX, sharpenSigma } from '@/core/videoEdit/sharpen'
 import { planGlow } from './glow'
+import { planDropShadow } from './dropShadow'
+import { planStroke } from './stroke'
+import { planLightSweep } from './lightSweep'
+import { planDissolveReveal } from './dissolveReveal'
 import { chromaticAberrationPass } from './chromaticAberration'
 import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 import { GAUSSIAN_EFFECT, type GaussianParameters, type ResolvedGaussianPlan } from '@/core/imaging/effects/gaussian'
@@ -36,7 +40,12 @@ export interface VideoEditBuiltinPass {
   /** (目标宽, 目标高, 输入宽, 输入高, a.xyzw, b.xyzw, c.xyzw)。 */
   uniforms: Float32Array
 }
-export interface VideoEditBuiltinPlan { underlay?: number; width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean }
+/**
+ * `underlay`：图层拆输出时叠在主图下面的那张 scratch。缺省是零 alpha 的光（相加照亮下方画面，`carriesLight`）；
+ * `underlayKind: 'cover'` 是普通预乘画面（投影），按普通透明度遮挡。
+ * `scratchFormat`：中间纹理不是画面而是数据时的格式（描边的种子坐标），优先于 `linearScratch`。
+ */
+export interface VideoEditBuiltinPlan { underlay?: number; underlayKind?: 'cover'; width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean; scratchFormat?: 'rg32float' }
 type Vec4 = readonly [number, number, number, number]
 const ZERO: Vec4 = [0, 0, 0, 0]
 
@@ -83,13 +92,17 @@ export function videoEditGrainSeed(frame: number): number { return (Math.max(0, 
  */
 export function resolveVideoGaussianPlan(parameters: GaussianParameters, context: EffectEvaluationContext): ResolvedGaussianPlan { return GAUSSIAN_EFFECT.resolve(parameters, context) }
 
-export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize; layer?: LayerEffectReference; splitGlow?: boolean }): VideoEditBuiltinPlan {
+export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize; layer?: LayerEffectReference; split?: boolean }): VideoEditBuiltinPlan {
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
   if (instance.id === RECORDING_CURSOR_EFFECT) return planRecordingCursor(instance.cursorDraws ?? [], width, height)
   if (instance.id === RECORDING_ZOOM_EFFECT) return planRecordingZoom(instance.zoom, width, height)
   const params = resolveVideoEditBuiltinParams(instance)
-  if (instance.id === 'glow') return planGlow(params, width, height, frame.layer, frame.splitGlow)
+  if (instance.id === 'glow') return planGlow(params, width, height, frame.layer, frame.split)
+  if (instance.id === 'drop_shadow') return planDropShadow(params, width, height, frame.layer, frame.split)
+  if (instance.id === 'stroke') return planStroke(params, width, height, frame.layer)
+  if (instance.id === 'light_sweep') return planLightSweep(params, width, height, frame.layer, frame.split)
+  if (instance.id === 'dissolve_reveal') return planDissolveReveal(params, width, height, frame.layer, frame.split)
   if (instance.id === 'blur') return planBlur(params, width, height, frame)
   const plan = new Planner(width, height)
   const H = frame.layer ? frame.layer.referenceSize.height * frame.layer.rasterScale : height

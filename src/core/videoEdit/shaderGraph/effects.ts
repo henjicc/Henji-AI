@@ -60,9 +60,9 @@ export function shaderComponentParams(component: ShaderComponent, skip: readonly
 /**
  * 与剪辑内置效果同目的的组件只在代码素材的着色器图层里使用，不单独列为效果：
  * 黑白、反相、翻转；模糊（高斯、方向、缩放、镜头虚化）、锐度、调色（亮度对比度、曝光、饱和度、色相、自然饱和度、着色）、
- * 颗粒、暗角、像素化（并入马赛克）。
+ * 颗粒、暗角、像素化（并入马赛克）、投影。
  */
-const SAME_AS_BUILTIN = new Set(['Grayscale', 'Invert', 'Flip', 'Blur', 'LinearBlur', 'ZoomBlur', 'BokehBlur', 'Sharpness', 'BrightnessContrast', 'Exposure', 'Saturation', 'HueShift', 'Vibrance', 'Tint', 'FilmGrain', 'Vignette', 'Pixelate'])
+const SAME_AS_BUILTIN = new Set(['Grayscale', 'Invert', 'Flip', 'Blur', 'LinearBlur', 'ZoomBlur', 'BokehBlur', 'Sharpness', 'BrightnessContrast', 'Exposure', 'Saturation', 'HueShift', 'Vibrance', 'Tint', 'FilmGrain', 'Vignette', 'Pixelate', 'DropShadow'])
 /** 可作为片段效果的组件：生成器与滤镜（转场另行登记，分组容器不单独成效果）。 */
 export const SHADER_GRAPH_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = SHADER_COMPONENTS
   .filter(component => (component.role === 'generator' || component.role === 'filter') && GROUPS[component.category] && !SAME_AS_BUILTIN.has(component.name))

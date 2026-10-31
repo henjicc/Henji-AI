@@ -14,8 +14,14 @@ import { GLOW_ENTRIES, GLOW_WGSL } from './glow'
 import { CHROMATIC_ENTRIES, CHROMATIC_WGSL } from './chromaticAberration'
 import { GAUSSIAN_WGSL } from '@/core/imaging/effects/wgsl/gaussian'
 import { BLUR_ENTRIES, BLUR_WGSL } from './blur'
+import { DROP_SHADOW_ENTRIES, DROP_SHADOW_WGSL } from './dropShadow'
+import { STROKE_ENTRIES, STROKE_FIELD_ENTRIES, STROKE_WGSL } from './stroke'
+import { LIGHT_SWEEP_ENTRIES, LIGHT_SWEEP_WGSL } from './lightSweep'
+import { DISSOLVE_REVEAL_ENTRIES, DISSOLVE_REVEAL_WGSL } from './dissolveReveal'
 const INLINE_EFFECT_ENTRIES = ['effect_mix', 'effect_over', 'effect_opacity', 'copy', 'blur', 'unsharp', 'black_white', 'invert', 'mosaic', 'vignette', 'grain', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...INLINE_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_copy', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_ENTRIES, ...CHROMATIC_ENTRIES, ...BLUR_ENTRIES] as const
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...INLINE_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_copy', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_ENTRIES, ...CHROMATIC_ENTRIES, ...BLUR_ENTRIES, ...DROP_SHADOW_ENTRIES, ...STROKE_ENTRIES, ...LIGHT_SWEEP_ENTRIES, ...DISSOLVE_REVEAL_ENTRIES] as const
+/** 只用 textureLoad 读 `source` 的入口：数据纹理（rg32float 种子）不可过滤，绑定按不可过滤取样类型。 */
+export const VIDEO_EDIT_UNFILTERED_SOURCE_ENTRIES: ReadonlySet<VideoEditBuiltinEffectEntry> = new Set(['gaussian_copy', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', ...STROKE_FIELD_ENTRIES])
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
@@ -23,6 +29,8 @@ ${adjustmentPassesWgsl({ layerCoordinates: true })}
 ${RECORDING_CURSOR_WGSL}
 ${RECORDING_ZOOM_WGSL}
 ${GAUSSIAN_WGSL}
+// WGSL 的 smoothstep 在 e0 ≥ e1 时结果未定义；过渡宽度为 0 时给出确定的阶跃。
+fn ramp(e0: f32, e1: f32, x: f32) -> f32 { if (e1 > e0) { return smoothstep(e0, e1, x); } return select(0.0, 1.0, x >= e0); }
 @fragment fn effect_over(v: Vertex) -> @location(0) vec4f { let image = tap(uvOf(v)); return image + tapOriginal(uvOf(v)) * (1.0 - image.a); }
 @fragment fn effect_opacity(v: Vertex) -> @location(0) vec4f { return tap(uvOf(v)) * u.a.x; }
 @fragment fn effect_mix(v: Vertex) -> @location(0) vec4f { return mix(tapOriginal(uvOf(v)), tap(uvOf(v)), u.a.x); }
@@ -187,4 +195,8 @@ fn zoomTap(uv: vec2f, center: vec2f, scale: f32, spread: f32, late: bool) -> vec
 ${GLOW_WGSL}
 ${CHROMATIC_WGSL}
 ${BLUR_WGSL}
+${DROP_SHADOW_WGSL}
+${STROKE_WGSL}
+${LIGHT_SWEEP_WGSL}
+${DISSOLVE_REVEAL_WGSL}
 `

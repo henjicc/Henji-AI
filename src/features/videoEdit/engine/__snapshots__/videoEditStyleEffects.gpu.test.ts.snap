@@ -1,0 +1,41 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`发光拆分基线 > 夜景·发光来源 1`] = `
+{
+  "carriesLight": false,
+  "clip": "139c77f8",
+  "layer": "139c77f8",
+}
+`;
+
+exports[`发光拆分基线 > 夜景·默认 1`] = `
+{
+  "carriesLight": true,
+  "clip": "6b7ffc43",
+  "layer": "64b1c049",
+}
+`;
+
+exports[`发光拆分基线 > 透明底文字·着色 1`] = `
+{
+  "carriesLight": true,
+  "clip": "ed863edb",
+  "layer": "fac599db",
+}
+`;
+
+exports[`发光拆分基线 > 透明底文字·色差 1`] = `
+{
+  "carriesLight": true,
+  "clip": "8901fb78",
+  "layer": "ff3f9dd7",
+}
+`;
+
+exports[`发光拆分基线 > 透明底文字·阈值 0 1`] = `
+{
+  "carriesLight": true,
+  "clip": "67e02a12",
+  "layer": "91fc8824",
+}
+`;

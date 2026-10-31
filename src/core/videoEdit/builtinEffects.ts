@@ -22,6 +22,10 @@ import { SHARPEN_EFFECT_DEFINITION } from './sharpen'
 import { MOSAIC_EFFECT_DEFINITION } from './mosaic'
 import { VIGNETTE_EFFECT_DEFINITION } from './vignette'
 import { FILM_GRAIN_EFFECT_DEFINITION } from './filmGrain'
+import { DROP_SHADOW_EFFECT_DEFINITION } from './dropShadow'
+import { STROKE_EFFECT_DEFINITION } from './stroke'
+import { LIGHT_SWEEP_EFFECT_DEFINITION } from './lightSweep'
+import { DISSOLVE_REVEAL_EFFECT_DEFINITION } from './dissolveReveal'
 
 export type { ImagingParamValue as VideoEditBuiltinParamValue, ImagingParams as VideoEditBuiltinParams, ImagingUnit as VideoEditBuiltinUnit, ImagingParam as VideoEditBuiltinParam } from '../imaging/parameterDefinition'
 import { IMAGING_UNIT_LABELS, type ImagingParamValue as VideoEditBuiltinParamValue, type ImagingParam as VideoEditBuiltinParam, type ImagingParams as VideoEditBuiltinParams, type ImagingUnit as VideoEditBuiltinUnit } from '../imaging/parameterDefinition'
@@ -66,6 +70,10 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
   FILM_GRAIN_EFFECT_DEFINITION,
   CHROMATIC_ABERRATION_DEFINITION,
   GLOW_EFFECT_DEFINITION,
+  DROP_SHADOW_EFFECT_DEFINITION,
+  STROKE_EFFECT_DEFINITION,
+  LIGHT_SWEEP_EFFECT_DEFINITION,
+  DISSOLVE_REVEAL_EFFECT_DEFINITION,
   { id: 'crop', name: '裁剪', group: 'frame', tooltip: '从四边裁掉画面，裁掉的部分透出下层', description: '按画面百分比从四边裁掉，裁掉部分变透明（可透出下层轨道）。做宽银幕黑边时把上下各裁 12% 左右。',
     params: [
       percent('left', '左侧', 0, '从左边裁掉的比例', '从左边裁掉的画面宽度百分比。'),

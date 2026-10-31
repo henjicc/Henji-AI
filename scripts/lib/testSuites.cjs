@@ -16,6 +16,7 @@ const GPU_TEST_FILES = [
   'src/features/videoEdit/engine/videoEditContentPrecision.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditCornerPin.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts',
+  'src/features/videoEdit/engine/videoEditStyleEffects.gpu.test.ts',
   'src/features/videoEdit/engine/gaussianHosts.gpu.test.ts',
   'src/features/videoEdit/engine/shaderEngines/shaderGraph.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditColorGrade.gpu.test.ts',

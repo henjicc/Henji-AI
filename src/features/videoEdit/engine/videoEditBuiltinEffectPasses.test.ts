@@ -18,7 +18,7 @@ function blurSigmas(result: VideoEditBuiltinPlan): number[] {
 }
 
 describe('内置效果工序与参数打包', () => {
-  it('每个效果按默认参数都能规划：最后一道写输出，入口都在着色器里，参数是 16 个 float、开头是目标与输入尺寸', () => {
+  it('每个效果按默认参数都能规划：最后一道写输出，入口都在着色器里，参数是 16 个 float（带局部坐标的 24 个）、开头是目标与输入尺寸', () => {
     // shaders.* 组件效果走着色器图（shaderEngines），不经这里的工序规划。
     for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio' && !isShaderGraphEffect(value.id))) {
       const result = plan(definition.id, videoEditBuiltinDefaults(definition))
@@ -26,7 +26,7 @@ describe('内置效果工序与参数打包', () => {
       for (const pass of result.passes) {
         expect(VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES).toContain(pass.entry)
         expect(VIDEO_EDIT_BUILTIN_EFFECT_SHADER).toContain(`@fragment fn ${pass.entry}(`)
-        expect(pass.uniforms).toHaveLength(16)
+        expect([16, 24]).toContain(pass.uniforms.length)
         expect(pass.uniforms.every(Number.isFinite)).toBe(true)
         const target = typeof pass.target === 'number' ? result.scratch[pass.target] : result
         expect([pass.uniforms[0], pass.uniforms[1]]).toEqual([target.width, target.height])

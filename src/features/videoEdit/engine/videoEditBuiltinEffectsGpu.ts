@@ -4,7 +4,7 @@ import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import { planVideoEditBuiltinEffect, planVideoEditBuiltinTransition, type VideoEditBuiltinPlan, type VideoEditBuiltinTexture } from './videoEditBuiltinEffectPasses'
-import { VIDEO_EDIT_BUILTIN_EFFECT_SHADER, type VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
+import { VIDEO_EDIT_BUILTIN_EFFECT_SHADER, VIDEO_EDIT_UNFILTERED_SOURCE_ENTRIES, type VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 import type { CubeLut } from '@/core/videoEdit/cubeLut'
 import type { ColorLutAsset } from '@/core/videoEdit/colorLutAsset'
 import { fetchVideoEditColorLut } from './videoEditColorLutSource'
@@ -39,7 +39,7 @@ export class VideoEditBuiltinEffectsGpu {
   private gaussianLayout?: unknown
   private module?: unknown
   private fallbackLut?: GpuTexture
-  private readonly lookups = new Map<string, { texture: GpuTexture; cube?: CubeLut; used: boolean }>()
+  private readonly lookups = new Map<string, { texture: GpuTexture; cube?: CubeLut; used: boolean; width?: number; height?: number }>()
   private disposed = false
   passes = 0
   constructor(private readonly device: GpuDevice, private readonly sampler: unknown, private readonly allocator: VideoEditBuiltinScratchAllocator, private readonly lutLoader: VideoEditLutLoader = loadLut) {}
@@ -70,7 +70,7 @@ export class VideoEditBuiltinEffectsGpu {
         let compiled: Promise<GpuRenderPipeline>
         try {
           this.module ??= this.device.createShaderModule({ code: VIDEO_EDIT_BUILTIN_EFFECT_SHADER })
-          const descriptor = { layout: this.pipelineLayout(entry.startsWith('gaussian_')), vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format }] }, primitive: { topology: 'triangle-list' } }
+          const descriptor = { layout: this.pipelineLayout(VIDEO_EDIT_UNFILTERED_SOURCE_ENTRIES.has(entry)), vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format }] }, primitive: { topology: 'triangle-list' } }
           compiled = this.device.createRenderPipelineAsync ? this.device.createRenderPipelineAsync(descriptor) : Promise.resolve(this.device.createRenderPipeline(descriptor))
         } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
         // Pop before yielding: parallel preparation must not steal another pipeline's error scope.
@@ -122,7 +122,7 @@ export class VideoEditBuiltinEffectsGpu {
     return texture
   }
   async encodePlan(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly ColorLutAsset[] = [], batch?: BuiltinEncodingBatch, underlay?: GpuTexture): Promise<void> {
-    const scratchFormat = plan.linearScratch ? plan.resolvedGaussian?.intermediateFormat ?? 'rgba16float' : format
+    const scratchFormat = plan.scratchFormat ?? (plan.linearScratch ? plan.resolvedGaussian?.intermediateFormat ?? 'rgba16float' : format)
     const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, pass.target === 'output' || pass.target === plan.underlay && underlay ? format : scratchFormat)))
     if (this.disposed) throw new Error('原调色渲染已关闭。')
     // Resolve all resources before recording, so missing LUT never silently becomes identity.
@@ -137,11 +137,13 @@ export class VideoEditBuiltinEffectsGpu {
       if (!resource) {
         if (lookup.kind === 'table') {
           // Parameter tables change on every drag frame: rewrite an idle table texture of the same size instead of allocating.
-          const idle = [...this.lookups].find(([key, value]) => key.startsWith('table:') && !value.used && !value.cube)
+          // 只复用同尺寸的闲置表：调色参数表与蓝噪声表尺寸不同，换用错尺寸的纹理会越界写入。
+          const rows = Math.ceil(lookup.data.length / 4 / lookup.width)
+          const idle = [...this.lookups].find(([key, value]) => key.startsWith('table:') && !value.used && !value.cube && value.width === lookup.width && value.height === rows)
           if (idle) {
             this.lookups.delete(idle[0]); resource = idle[1]
             ;(this.device.queue as typeof this.device.queue & UploadQueue).writeTexture({ texture: resource.texture }, Uint16Array.from(lookup.data, half), { bytesPerRow: lookup.width * 8, rowsPerImage: lookup.height }, [lookup.width, lookup.height, 1])
-          } else resource = { texture: this.upload(lookup.data, lookup.width), used: true }
+          } else resource = { texture: this.upload(lookup.data, lookup.width), used: true, width: lookup.width, height: rows }
         } else {
           const cube = await this.lutLoader(asset!)
           if (this.disposed) throw new Error('原调色渲染已关闭。')

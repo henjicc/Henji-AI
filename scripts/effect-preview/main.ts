@@ -4,11 +4,12 @@
  */
 import { videoEditBuiltinDefaults, videoEditBuiltinEffect, type VideoEditBuiltinEffectDefinition, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import { VideoEditBuiltinEffectsGpu } from '@/features/videoEdit/engine/videoEditBuiltinEffectsGpu'
+import { planVideoEditBuiltinEffect, type VideoEditBuiltinPlan } from '@/features/videoEdit/engine/videoEditBuiltinEffectPasses'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 
 const W = 1920; const H = 1080
 /** 预览页能选的效果。 */
-const PREVIEW_EFFECTS = ['glow', 'chromatic_aberration', 'blur', 'sharpen', 'color_grade', 'black_white', 'film_grain', 'vignette', 'mosaic']
+const PREVIEW_EFFECTS = ['glow', 'drop_shadow', 'stroke', 'light_sweep', 'dissolve_reveal', 'chromatic_aberration', 'blur', 'sharpen', 'color_grade', 'black_white', 'film_grain', 'vignette', 'mosaic']
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
 
 const adapter = await navigator.gpu?.requestAdapter()
@@ -22,6 +23,8 @@ const effects = new VideoEditBuiltinEffectsGpu(device as unknown as GpuDevice, s
 const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
 const input = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage })
 const output = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage })
+// 按图层合成：主图与下层（光或影）各一张，再在层内叠好。
+const layerImage = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage }); const layerUnder = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage })
 
 const canvas = $<HTMLCanvasElement>('canvas')
 const context = canvas.getContext('webgpu')!
@@ -75,9 +78,16 @@ function nightScene(ctx: OffscreenCanvasRenderingContext2D): void {
   ctx.lineWidth = 4; ctx.strokeStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(0, 1000); ctx.lineTo(W, 1000); ctx.stroke()
   ctx.fillStyle = '#6c707c'; ctx.font = '600 44px "Microsoft YaHei", sans-serif'; ctx.fillText('不够亮的文字不发光', 220, 470)
 }
+function darkLabel(ctx: OffscreenCanvasRenderingContext2D): void {
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#2a2d33'; ctx.font = '700 200px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('深色标题', W / 2, H / 2 - 60)
+  ctx.fillStyle = '#3a6df0'; ctx.beginPath(); ctx.roundRect(W / 2 - 260, H / 2 + 120, 520, 110, 55); ctx.fill()
+  ctx.fillStyle = '#ffffff'; ctx.font = '700 60px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('标签', W / 2, H / 2 + 175)
+}
 let photo: ImageBitmap | undefined
 const samples: Record<string, { name: string; params: Partial<VideoEditBuiltinParams>; draw(ctx: OffscreenCanvasRenderingContext2D): void }> = {
   title: { name: '透明底文字', params: { threshold: 0 }, draw: neonTitle },
+  dark: { name: '透明底深色字', params: { threshold: 0 }, draw: darkLabel },
   night: { name: '夜景灯光', params: { threshold: 60 }, draw: nightScene },
   photo: { name: '拖入的图片', params: { threshold: 60 }, draw: ctx => { if (photo) { const s = Math.max(W / photo.width, H / photo.height); ctx.drawImage(photo, (W - photo.width * s) / 2, (H - photo.height * s) / 2, photo.width * s, photo.height * s) } } },
 }
@@ -158,7 +168,17 @@ async function render(): Promise<void> {
   const started = performance.now()
   if (mode !== 'original') {
     const instance = { id: effectSelect.value, params: { ...params } }
-    await effects.render(instance as never, { texture: input as unknown as GpuTexture, width: W, height: H, format: 'rgba8unorm' }, output as unknown as GpuTexture, frame++)
+    if ($<HTMLInputElement>('layer').checked) {
+      // 与代码图层同一条路径：拆成主图与下层，下层在主图下面叠好（零 alpha 的光按相加叠到底色上）。
+      const layer = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
+      const plan = planVideoEditBuiltinEffect({ ...instance, params: { ...videoEditBuiltinDefaults(definition()), ...params } } as never, { width: W, height: H, frame: frame++, layer, split: true })
+      const image = plan.underlay === undefined ? output : layerImage
+      await effects.encodePlan(plan, 'rgba8unorm', input as unknown as GpuTexture, image as unknown as GpuTexture, undefined, [], undefined, layerUnder as unknown as GpuTexture)
+      if (plan.underlay !== undefined) {
+        const over: VideoEditBuiltinPlan = { width: W, height: H, scratch: [], passes: [{ entry: 'effect_over', source: 'input', original: 'second', target: 'output', uniforms: new Float32Array([W, H, W, H, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) }] }
+        await effects.encodePlan(over, 'rgba8unorm', layerImage as unknown as GpuTexture, output as unknown as GpuTexture, layerUnder as unknown as GpuTexture)
+      }
+    } else await effects.render(instance as never, { texture: input as unknown as GpuTexture, width: W, height: H, format: 'rgba8unorm' }, output as unknown as GpuTexture, frame++)
     await device.queue.onSubmittedWorkDone()
   }
   const elapsed = performance.now() - started
@@ -178,8 +198,8 @@ async function render(): Promise<void> {
 
 function animate(time: number): void {
   if ($<HTMLInputElement>('animate').checked) {
-    // 发光与锐化动半径，其余效果动主参数（数量、模糊度），看参数连续变化时画面是否连续。
-    const key = 'radius' in params ? 'radius' : 'amount' in params ? 'amount' : 'block_size'
+    // 扫光、溶解显影动进度，发光与锐化动半径，其余效果动主参数（数量、模糊度、粗细、柔和度），看参数连续变化时画面是否连续。
+    const key = ['progress', 'radius', 'amount', 'width', 'softness', 'block_size'].find(name => name in params) ?? 'block_size'
     params[key] = Math.round((0.5 - 0.5 * Math.cos(time / 1800)) * 1000) / 10
     refresh.forEach(update => update()); void render()
   }
@@ -188,7 +208,7 @@ function animate(time: number): void {
 
 sampleSelect.addEventListener('change', () => { resetParams(); loadSample(); void render() })
 effectSelect.addEventListener('change', () => { buildPanel(); void render() })
-for (const id of ['backdrop', 'mode']) $(id).addEventListener('change', () => void render())
+for (const id of ['backdrop', 'mode', 'layer']) $(id).addEventListener('change', () => void render())
 document.addEventListener('dragover', event => event.preventDefault())
 document.addEventListener('drop', async event => {
   event.preventDefault()

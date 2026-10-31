@@ -25,11 +25,18 @@ export const effectParam = {
   toggle: (key: string, value: boolean, words: EffectParamText): VideoEditBuiltinParam => ({ key, type: 'boolean', default: value, ...said(words) }),
 }
 
-/** 把 `definition` 的参数放进分组 `group`，键改为 `<prefix>_<原键>`；`defaults` 按原键覆盖默认值。 */
-export function includedEffectParams(definition: VideoEditBuiltinEffectDefinition, prefix: string, group: string, defaults: Readonly<Record<string, VideoEditBuiltinParams[string]>> = {}): VideoEditBuiltinParam[] {
-  return definition.params.map(param => ({
+/** 被包含参数的改动：改默认值时必须同时给新说明，说明里写着“（默认）”的取值才不会与实际不符。 */
+export interface IncludedParamOverride { default: VideoEditBuiltinParams[string]; text: string }
+/**
+ * 把 `definition` 的参数放进分组 `group`，键改为 `<prefix>_<原键>`。
+ * `keys` 只取其中几项（其余由当前效果在规划里固定）；`overrides` 按原键改默认值与说明。
+ */
+export function includedEffectParams(definition: VideoEditBuiltinEffectDefinition, prefix: string, group: string, options: { keys?: readonly string[]; overrides?: Readonly<Record<string, IncludedParamOverride>> } = {}): VideoEditBuiltinParam[] {
+  const overrides = options.overrides ?? {}
+  for (const key of Object.keys(overrides)) if (!definition.params.some(param => param.key === key)) throw new Error(`${definition.id} 没有参数 ${key}，不能改它的默认值。`)
+  return definition.params.filter(param => !options.keys || options.keys.includes(param.key)).map(param => ({
     ...param, key: `${prefix}_${param.key}`, group,
-    ...(param.key in defaults ? { default: defaults[param.key] } : {}),
+    ...(param.key in overrides ? { default: overrides[param.key].default, description: overrides[param.key].text } : {}),
     ...(param.visibleWhen ? { visibleWhen: { ...param.visibleWhen, param: `${prefix}_${param.visibleWhen.param}` } } : {}),
   }) as VideoEditBuiltinParam)
 }

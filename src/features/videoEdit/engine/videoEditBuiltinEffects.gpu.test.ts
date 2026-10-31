@@ -456,7 +456,8 @@ describe('剪辑内置效果（真实设备）', () => {
     // shaders.* 组件效果的真实设备覆盖在 shaderEngines/shaderGraph.gpu.test.ts。
     for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio' && !isShaderGraphEffect(value.id))) {
       const pixels = await run(definition.id, videoEditBuiltinDefaults(definition))
-      if (!['crop', 'chroma_key'].includes(definition.id)) expect(pixel(pixels, W / 2, H / 2)[3], definition.id).toBe(255)
+      // 裁剪、抠像与溶解显影（默认进度一半）本来就会让部分画面透明。
+      if (!['crop', 'chroma_key', 'dissolve_reveal'].includes(definition.id)) expect(pixel(pixels, W / 2, H / 2)[3], definition.id).toBe(255)
     }
   }, 60_000)
   it('关键结果：反相、水平翻转、零强度模糊不变、模糊在线性光混合、裁剪透明、抠掉纯绿', async () => {

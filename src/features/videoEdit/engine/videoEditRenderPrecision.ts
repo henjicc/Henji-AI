@@ -8,7 +8,7 @@ import { COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HUE_CURVES } from '@/core/imagi
 type PrecisionContext = Omit<Parameters<typeof planVideoEditBuiltinEffect>[1], 'frame' | 'referenceSize' | 'renderScale'> & Required<Pick<Parameters<typeof planVideoEditBuiltinEffect>[1], 'referenceSize' | 'renderScale'>>
 export function videoEditEffectNeedsFloat(effect: VideoEditBuiltinEffectInstance & { amount?: number }, context: PrecisionContext): boolean {
   if (effect.amount !== undefined && effect.amount <= 0) return false
-  if (!['glow', 'blur', 'vignette', 'color_grade'].includes(effect.id)) return false
+  if (!['glow', 'blur', 'vignette', 'color_grade', 'drop_shadow', 'light_sweep', 'dissolve_reveal'].includes(effect.id)) return false
   const reference = context.referenceSize
   const height = reference.height
   const p = resolveVideoEditBuiltinParams(effect)
@@ -18,6 +18,10 @@ export function videoEditEffectNeedsFloat(effect: VideoEditBuiltinEffectInstance
     case 'blur': return planVideoEditBuiltinEffect(effect, context.layer
       ? { width: reference.width, height, frame: 0, referenceSize: reference, renderScale: 1, quality: context.layer.quality }
       : { ...context, frame: 0 }).passes.some(pass => pass.entry !== 'copy')
+    // 投影的柔边、扫光、溶解的渐显与亮边光晕都是平滑渐变，靠 16 位浮点合成与末道抖动防色带；恒等状态（规划只剩复制或调原画不透明度）不触发。
+    case 'drop_shadow': case 'light_sweep': case 'dissolve_reveal': return planVideoEditBuiltinEffect(effect, context.layer
+      ? { width: reference.width, height, frame: 0, referenceSize: reference, renderScale: 1, quality: context.layer.quality, layer: context.layer }
+      : { ...context, frame: 0 }).passes.some(pass => pass.entry !== 'copy' && pass.entry !== 'effect_opacity')
     case 'vignette': return n('amount') !== 0
     case 'color_grade': {
       if (n('vignette_amount') || p.input_lut && n('input_lut_strength') || p.look_lut && n('look_lut_strength')) return true

@@ -10,7 +10,8 @@ export type VideoEditGpuColorFormat = 'rgba8unorm' | 'rgba16float'
 export const VIDEO_EDIT_PRECISE_FORMAT: VideoEditGpuColorFormat = 'rgba16float'
 export function videoEditGpuBytesPerPixel(format: string): number {
   if (format === 'rgba32float') return 16
-  if (format === 'rgba16float') return 8
+  // 描边的种子坐标（两个 32 位浮点）。
+  if (format === 'rgba16float' || format === 'rg32float') return 8
   if (format === 'rgba8unorm') return 4
   throw new Error(`未知剪辑纹理格式：${format}`)
 }

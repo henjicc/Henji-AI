@@ -59,12 +59,14 @@ export class VideoEditAuthorEffects {
     const mix = (amount: number): VideoEditBuiltinPlan => ({ width, height, scratch: [], passes: [{ entry: 'effect_mix', source: 'input', original: 'second', target: 'output', uniforms: new Float32Array([width, height, width, height, amount, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) }] })
     try {
       let image = input
-      const underlays: GpuTexture[] = []
-      const producesLight = effects.some(effect => effect.id === 'glow' && effect.params.view !== 'source' && Number(effect.params.strength) > 0)
+      // 下层按产生顺序记录：光（零 alpha，相加照亮下方）与影（cover，普通预乘遮挡）。
+      const underlays: Array<{ texture: GpuTexture; cover: boolean }> = []
+      const plans = effects.map(effect => planVideoEditBuiltinEffect(effect, { width, height, frame: 0, layer: context, split: true }))
+      const hasUnderlay = plans.some(plan => plan.underlay !== undefined)
       for (const [index, effect] of effects.entries()) {
-        const plan = planVideoEditBuiltinEffect(effect, { width, height, frame: 0, layer: context, splitGlow: true })
-        // 只有交给合成器的最后一张图需要 mip（缩小绘制）；有 pose.blur 或光时最后一张图还要再处理一道。
-        const needsMips = index === effects.length - 1 && defocus.radius <= 0 && !producesLight
+        const plan = plans[index]
+        // 只有交给合成器的最后一张图需要 mip（缩小绘制）；有 pose.blur 或下层时最后一张图还要再处理一道。
+        const needsMips = index === effects.length - 1 && defocus.radius <= 0 && !hasUnderlay
         let target = take(needsMips && effect.amount === 1), light = plan.underlay === undefined ? undefined : take()
         await encode(plan, image, target, undefined, light)
         if (effect.amount !== 1) {
@@ -75,27 +77,27 @@ export class VideoEditAuthorEffects {
             await encode(opacity, light, scaled); light = scaled
           }
         }
-        if (light) underlays.push(light)
+        if (light) underlays.push({ texture: light, cover: plan.underlayKind === 'cover' })
         image = target
       }
       if (defocus.radius > 0) {
         const plan = planAuthorDefocus(width, height, defocus.radius, defocus.lens)
         const blurred = take(!underlays.length); await encode(plan, image, blurred); image = blurred
-        const lightPlan = underlays.length ? planAuthorDefocus(width, height, defocus.radius, defocus.lens, true) : plan
-        for (let index = 0; index < underlays.length; index++) {
-          const blurredLight = take(); await encode(lightPlan, underlays[index], blurredLight); underlays[index] = blurredLight
+        const lightPlan = planAuthorDefocus(width, height, defocus.radius, defocus.lens, true)
+        for (const underlay of underlays) {
+          const blurredUnderlay = take(); await encode(underlay.cover ? plan : lightPlan, underlay.texture, blurredUnderlay); underlay.texture = blurredUnderlay
         }
       }
       // 在透明层内完成 over，再统一应用曝光权重与不透明度，避免背景提前饱和。
       let picture = image
       if (underlays.length) {
-        picture = underlays[0]
-        for (const source of [...underlays.slice(1), image]) {
+        picture = underlays[0].texture
+        for (const source of [...underlays.slice(1).map(underlay => underlay.texture), image]) {
           const composed = take(source === image), over = mix(1); over.passes[0].entry = 'effect_over'
           await encode(over, source, composed, picture); picture = composed
         }
       }
-      const output = { picture, carriesLight: underlays.length > 0 }
+      const output = { picture, carriesLight: underlays.some(underlay => !underlay.cover) }
       // 跨层与跨帧只消费合成后的画面；主图、光与中间结果在本道链结束后即可供下一层覆写。
       this.spare.push(...textures.filter(entry => entry.texture !== picture))
       this.pending.set(slot, { key: contentKey === undefined ? '' : key, output, textures: textures.filter(entry => entry.texture === picture) })

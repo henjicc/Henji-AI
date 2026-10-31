@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
 const { loadTypeScript } = require('./check-persistence-compat.cjs') as { loadTypeScript(file: string): { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] } }
 const definitions = loadTypeScript('src/core/videoEdit/builtinEffects.ts').VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.space === 'layer' && value.author)
+const { generateBlueNoiseRanks } = loadTypeScript('src/core/videoEdit/blueNoise.ts') as unknown as { generateBlueNoiseRanks(): Uint16Array }
 const retiredBlurIds = Object.keys((loadTypeScript('src/core/videoEdit/blur.ts') as unknown as { RETIRED_BLUR_EFFECTS: Record<string, unknown> }).RETIRED_BLUR_EFFECTS)
 const banner = '// 由 scripts/generate-author-effects.ts 生成，请修改效果登记后重新生成。\n'
 const typeName = (id: string): string => id.split('_').map(part => part[0].toUpperCase() + part.slice(1)).join('') + 'Params'
@@ -22,10 +23,14 @@ export function generateAuthorEffects(): Record<string, string> {
   const declarations = definitions.map(definition => `export declare function ${definition.author!.factory}(params?: ${typeName(definition.id)}): { readonly id: '${definition.id}'; readonly params: ${typeName(definition.id)} }\n`).join('')
   const factories = definitions.map(definition => `export function ${definition.author!.factory}(params: ${typeName(definition.id)} = {}): { readonly id: '${definition.id}'; readonly params: ${typeName(definition.id)} } { return { id: '${definition.id}', params } }\n`).join('')
   const types = banner + params + union
+  const blueNoise = generateBlueNoiseRanks()
   return {
     'src/core/videoEdit/authorEffects.generated.ts': types,
     'resources/video-edit-author/author-effects.d.ts': types,
     'resources/video-edit-author/effects-library.d.ts': types + declarations + 'export declare function look(name: string, knobs?: Readonly<Record<string, number>>): LookDescriptor\n',
+    // 溶解显影“噪声”方式的蓝噪声阈值表（与作者效果同一道生成检查，产物逐位可复现）。
+    'src/features/videoEdit/engine/blueNoise64.generated.ts': '// 由 scripts/generate-author-effects.ts 生成（src/core/videoEdit/blueNoise.ts），请勿手改。\n/** 64×64 蓝噪声的排名，按行存放；阈值为 (排名 + 0.5) / 4096。 */\nexport const BLUE_NOISE_64_RANKS: readonly number[] = [\n'
+      + Array.from({ length: 64 }, (_, row) => `  ${[...blueNoise.subarray(row * 64, row * 64 + 64)].join(', ')},\n`).join('') + ']\n',
     'src/features/videoEdit/authorLibraries/effects.generated.ts': banner + `import type { ${definitions.map(definition => typeName(definition.id)).join(', ')} } from '@/core/videoEdit/authorEffects.generated'\n` + factories,
   }
 }
