@@ -1,3 +1,6 @@
+import { videoEditEffectPresetSchema, type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
+import { videoEditEffectMedia, type VideoEditEffect } from '@/core/videoEdit/compositing'
+import { videoEditStylePieceEffectCopies, type LibraryData } from './videoEditEffectPresets'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { createVideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
@@ -81,4 +84,11 @@ export async function createVideoEditTestProject(): Promise<VideoEditInstance> {
   document.sequences.push(createVideoEditSequence())
   replaceSavedVideoEdit(created.document.id, document)
   return reopenVideoEdit(created.document.id)
+}
+
+/** 只构造已有内置风格件夹具；保存用户内容仍由正式异步服务负责。 */
+export function seedVideoEditEffectPreset(library: LibraryData & { restoreLibrary(value: LibraryData): void }, name: string, effects: readonly VideoEditEffect[], includeShapes = false): VideoEditEffectPreset {
+  const preset = videoEditEffectPresetSchema.parse({ id: crypto.randomUUID(), name, media: videoEditEffectMedia(effects[0]), effects: videoEditStylePieceEffectCopies(effects, includeShapes), description: '', usage: '', knobs: [] })
+  library.restoreLibrary({ favorites: library.favorites, presets: [...library.presets, preset] })
+  return preset
 }

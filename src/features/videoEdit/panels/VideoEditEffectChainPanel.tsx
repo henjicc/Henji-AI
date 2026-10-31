@@ -44,7 +44,7 @@ function AdjustmentRange({ target, sequence, clip, action }: { target: { project
 
 /**
  * 附加效果（重要记录 019，对齐 AE）：不再有“附加效果”大标题，每个效果直接是一节——箭头折叠、fx 开关、名称，悬停出重置与删除；
- * 点标题行选中（Delete 删除），拖标题行换序。添加、从其他片段复制、保存预设与全部效果的总开关在面板右下角的底栏。
+ * 点标题行选中（Delete 删除），拖标题行换序。添加、从其他片段复制、保存风格件与全部效果的总开关在面板右下角的底栏。
  */
 export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel({ instance, sequence, clip, footer, onError }: Props): React.ReactElement {
   const document = instance.document
@@ -66,7 +66,6 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const [creatingFilter, setCreatingFilter] = useState(false)
   const [createdFilter, setCreatedFilter] = useState(false)
   const [savingPreset, setSavingPreset] = useState<VideoEditEffect[] | null>(null)
-  const savableEffects = effects.filter(isVideoEditBuiltinEffect)
   const selected = effects.find(effect => effect.id === selectedId)
   const [definitions, setDefinitions] = useState<{ items: Array<{ id: string; name: string; versionId: string }>; error?: unknown; loading?: boolean }>({ items: [] })
   useEffect(() => {
@@ -124,7 +123,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
     ...(sources.length > 0 ? [{ kind: 'menu', id: 'copy', label: '复制其他片段的效果', icon: Copy, tooltip: `复制另一个片段的整条效果链（连同关键帧），替换这里已有的${effectsLabel}`, disabled: action.busy, disabledReason: busyReason, menu: () => <>
       {sources.map(source => <UiOptionButton key={source.value} role="menuitem" variant="menu" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => copyVideoEditEffects(target, { sequenceId: source.sequenceId, clipId: source.clipId }, signal), () => setSelectedId(''), false) }}>{source.label}</UiOptionButton>)}
     </> }] satisfies UiPanelFooterTool[] : []),
-    { kind: 'action', id: 'preset', label: '保存为预设', icon: Save, disabled: action.busy || !savableEffects.length, disabledReason: action.busy ? busyReason : `还没有可保存的${effectsLabel}`, onSelect: () => setSavingPreset(structuredClone(savableEffects)) },
+    { kind: 'action', id: 'preset', label: '保存为风格件', icon: Save, disabled: action.busy || !effects.length, disabledReason: action.busy ? busyReason : `还没有可保存的${effectsLabel}`, onSelect: () => setSavingPreset(structuredClone(effects)) },
     // 名称随状态写成“停用 / 启用”动作；全部启用是默认状态，用 pressed 只表达开关、不着色（同 EffectToggle）
     ...(effects.length > 0 ? [{ kind: 'action', id: 'master', pressed: master, label: `${master ? '停用' : '启用'}所有${effectsLabel}`, icon: master ? ICON_EFFECT_ENABLED : ICON_EFFECT_DISABLED, tooltip: master ? `停用所有${effectsLabel}（保留参数与关键帧）` : `启用所有${effectsLabel}`, onSelect: () => setMaster(!master) }] satisfies UiPanelFooterTool[] : []),
   ]
@@ -163,6 +162,6 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
     {action.busy && <div className={`flex items-center gap-2 py-1 ${UI_PROPERTY_INSET_CLASS}`}><UiLoading size="xs" message="正在检查混合画面" /><UiButton size="sm" onClick={action.cancel}>取消检查</UiButton></div>}
     {footer && createPortal(<UiToolbar variant="footer" aria-label={`${effectsLabel}工具`} tools={tools}>{effects.length ? `${effects.length} 个${effectsLabel}` : `没有${effectsLabel}`}</UiToolbar>, footer)}
     {creatingFilter && <VideoEditCodeCreateDialog projectId={projectId} mode="filter" onClose={() => setCreatingFilter(false)} onCreated={() => { if (requireVideoEditInstance(projectId) === instance) setCreatedFilter(true) }} />}
-    {savingPreset && <VideoEditEffectPresetDialog effects={savingPreset} initialName={savingPreset.length === 1 ? savingPreset[0].name : `${clip.name}效果`} onClose={() => setSavingPreset(null)} />}
+    {savingPreset && <VideoEditEffectPresetDialog projectId={projectId} effects={savingPreset} initialName={savingPreset.length === 1 ? savingPreset[0].name : `${clip.name}效果`} onClose={() => setSavingPreset(null)} />}
   </div>
 })

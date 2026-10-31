@@ -1,3 +1,6 @@
+import { desktopEffectLibrarySources } from './videoEditEffectLibrarySources'
+import { videoEditStyleLibrary } from './videoEditStyleLibrary'
+import { createTestStyleLibraryIo } from './videoEditStyleTestKit'
 import { ContentTrustSession, installContentTrustSession } from '../../../../electron/main/services/content-trust/runtime'
 import fsp from 'node:fs/promises'
 import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
@@ -47,6 +50,10 @@ import * as sharedCompiler from '../engine/videoEditSharedCompiler'
 import { createAuthorTypeChecker } from '../engine/videoEditAuthorTypeCheck'
 import { AUTHOR_TYPE_ENVIRONMENT } from '../engine/videoEditAuthorTypeEnvironment'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
+import { useVideoEditEffectLibraryStore, videoEditPresetCreationProperties, listVideoEditStylePieces } from './videoEditEffectPresets'
+import { applyVideoEditStylePiece } from './videoEditCompositing'
+import { videoEditEffectPresetSchema } from '@/core/videoEdit/effectPresets'
+import { exportVideoEditPresetPackage, importVideoEditPresetPackage } from './videoEditPresetCatalog'
 
 /** 短活共用的离屏会话按设计常驻；回收它之后不应再有任何渲染器存活。 */
 async function expectRenderersReleased(): Promise<void> { await videoEditOffscreenPool.dispose(); expect(boundary.activeRenderers).toBe(0) }
@@ -140,6 +147,142 @@ it('关闭的剪辑可后台创建代码素材和组件，读取组件不抢占�
   } finally { app.dispose() }
 })
 const filterSource = "export default {name:\"原创滤镜\",kind:\"filter\",mode:\"static\",width:3840,height:2160,durationSeconds:10,params:[{key:\"gain\",type:\"number\",title:\"强度\",default:.5,min:0,max:1,step:.01}],createWebGPU(){return {draw(){}}}}"
+
+it('代码风格件经通用创建嵌入快照，跨工程按内容复用、一步撤销并保存读回', async () => {
+  const original = useVideoEditEffectLibraryStore.getState().presets
+  const io = createTestStyleLibraryIo({ builtin: false }); videoEditStyleLibrary.reset(io)
+  const app = createApplicationHarness()
+  try {
+    useVideoEditEffectLibraryStore.setState({ presets: [] })
+    const sourceOwner = await createLegacyTrackVideoEditProject(), sourceId = sourceOwner.document.id
+    const mediaPath = resolvePath(pathSeparator, 'style-photo.png'), mediaContent = { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) }
+    vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue(mediaContent)
+    vi.spyOn(mediaService, 'inspectVideoEditMedia').mockResolvedValue({ id: 'target-photo', name: '风格照片', kind: 'image', path: mediaPath, width: 100, height: 100, durationSeconds: 0 })
+    appendVideoEditMedia(sourceId, { id: 'source-photo', name: '风格照片', kind: 'image', path: mediaPath, width: 100, height: 100, durationSeconds: 0 })
+    const schema = { id: 'style.scene', version: 1, kinds: { card: { fields: { photo: { type: 'media', accept: ['image'] } } } } }
+    boundary.apiVersion = 6
+    const dependencySource = filterSource.replace('params:[', `params:[{key:'logo',type:'image',title:'照片',default:null},{key:'film',type:'scene',title:'数据',schema:${JSON.stringify(schema)}},`)
+    editVideoProject(sourceId, document => ({ ...document, scenes: [{ id: 'source-scene', name: '风格数据', schema: { id: 'style.scene', version: 1 }, records: [{ id: 'card', kind: 'card', values: { photo: 'source-photo' } }] }] }))
+    const itemId = createVideoEditGraphicItem(sourceId, { kind: 'rect' })
+    const [clipId] = appendVideoEditItems(sourceId, [itemId], sourceOwner.activeSequenceId)
+    const [definitionId] = await createVideoEditCodeMaterials(sourceId, [{ source: dependencySource }])
+    const effectId = await createVideoEditEffect({ projectId: sourceId, sequenceId: sourceOwner.activeSequenceId, clipId }, { definitionId, parameters: { gain: .7, logo: { kind: 'image', mediaId: 'source-photo' }, film: { kind: 'scene', sceneId: 'source-scene' } } })
+    const input = { name: '代码滤镜风格件', media: 'video', effects: [{ ref: { kind: 'video_edit.effect', id: `${sourceId}:${effectId}` } }], knobs: [{ key: 'strength', name: '强度', min: 0, max: 100, default: 70, mappings: [{ effectId, parameter: 'gain', points: [{ input: 0, output: 0 }, { input: 100, output: 1 }] }] }] }
+    const created = await app.call('change_application_entities', { summary: '保存用户确认的风格件', changes: [{ kind: 'create_items', entityType: 'video_edit.effect_preset', parent: { kind: 'video_edit.style_library', id: 'singleton' }, items: [{ properties: { 'video_edit.effect_preset.definition': input } }] }] })
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    const preset = useVideoEditEffectLibraryStore.getState().presets[0]
+    expect(preset.codeSnapshots![effectId].version).toMatchObject({ apiVersion: 6, languageVersion: 4 })
+    expect(preset.codeSnapshots![effectId].version.foreign).toBeUndefined()
+    expect(preset.codeSnapshots![effectId].version.files.every(file => file.location === `asset:${file.hash}`)).toBe(true)
+    const styleCreated = await app.call('change_application_entities', { summary: '以效果引用创建风格成员', changes: [{ kind: 'create_items', entityType: 'video_edit.style', parent: { kind: 'video_edit.style_library', id: 'singleton' }, items: [{ properties: { name: '代码风格', effect_presets: [input] } }] }] })
+    expect(styleCreated, JSON.stringify(styleCreated)).toMatchObject({ ok: true })
+    const style = videoEditStyleLibrary.listStyles()[0].style
+    expect(style.effectPresets?.[0].codeSnapshots).toBeDefined()
+    const rawCreate = await app.call('change_application_entities', { summary: '不能用原始快照新建成员', changes: [{ kind: 'create_items', entityType: 'video_edit.effect_preset', parent: { kind: 'video_edit.style_library', id: 'singleton' }, items: [{ properties: { definition: { ...preset, name: '绕过引用的快照' } } }] }] })
+    expect(rawCreate.ok).toBe(false)
+    const text = exportVideoEditPresetPackage([{ category: 'effect', id: preset.id }])
+    await closeVideoEditProject(sourceId)
+    const target = await createLegacyTrackVideoEditProject(), id = target.document.id, seq = target.activeSequenceId
+    const item = createVideoEditGraphicItem(id, { kind: 'rect' }), [left, right] = appendVideoEditItems(id, [item, item], seq)
+    const before = target.past.length
+    const clipRef = { kind: 'video_edit.clip', id: `${id}:${left}` }
+    expect(target.document.codeMaterials ?? []).toHaveLength(0)
+    const applied = await app.call('change_application_entities', { summary: '向空工程应用代码风格件', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: videoEditPresetCreationProperties(preset).map(properties => ({ properties })) }] })
+    expect(applied, JSON.stringify(applied)).toMatchObject({ ok: true }); expect(target.document.codeMaterials).toHaveLength(1)
+    expect(target.document.media).toHaveLength(1); expect(target.document.scenes).toHaveLength(1)
+    expect(target.past).toHaveLength(before + 1)
+    await applyVideoEditStylePiece(id, seq, [left, right], `preset:${preset.id}`, { strength: 80 })
+    expect(target.document.codeMaterials).toHaveLength(1)
+    expect(target.document.sequences[0].clips[0].effects).toHaveLength(2)
+    expect(target.document.sequences[0].clips[0].effects![1].code!.parameters.logo).toEqual({ kind: 'image', mediaId: 'target-photo' })
+    expect(target.document.scenes?.[0].records[0].values.photo).toBe('target-photo')
+    const local = await app.read({ kind: 'video_edit.effect_preset', id: preset.id })
+    const replacement = await app.change(local.ref as { kind: string; id: string }, { 'video_edit.effect_preset.definition': { id: preset.id, name: preset.name, media: 'video', effects: [{ id: 'builtin', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: {} } }] } })
+    expect(replacement, JSON.stringify(replacement)).toMatchObject({ ok: true })
+    expect(useVideoEditEffectLibraryStore.getState().presets.find(value => value.id === preset.id)!.codeSnapshots).toBeUndefined()
+    expect(listVideoEditStylePieces(id, seq).map(entry => entry.ref)).toContain(`preset:${preset.id}`)
+    await saveVideoEdit(id)
+    const reopened = await reopenVideoEdit(id)
+    expect(reopened.document.sequences[0].clips[0].effects![0].code!.parameters.gain).toBe(.7)
+    const imported = await importVideoEditPresetPackage(text)
+    const external = useVideoEditEffectLibraryStore.getState().presets.find(preset => preset.id === imported[0].id)!
+    expect(external.codeSnapshots![effectId].version.foreign?.sourceType).toBe('style_package')
+    const rewritten = structuredClone(external)
+    delete rewritten.codeSnapshots![effectId].version.foreign
+    rewritten.name = '改名后仍为外来'
+    const replaced = await app.change({ kind: 'video_edit.effect_preset', id: external.id }, { 'video_edit.effect_preset.definition': rewritten })
+    expect(replaced, JSON.stringify(replaced)).toMatchObject({ ok: true })
+    expect(useVideoEditEffectLibraryStore.getState().presets.find(value => value.id === external.id)!.codeSnapshots![effectId].version.foreign).toEqual(external.codeSnapshots![effectId].version.foreign)
+    const localStyleRename = await app.change({ kind: 'video_edit.style', id: style.id }, { 'video_edit.style.effect_presets': [{ ...style.effectPresets![0], name: '本机改名' }] })
+    expect(localStyleRename, JSON.stringify(localStyleRename)).toMatchObject({ ok: true })
+    expect(videoEditStyleLibrary.requireStyle(style.id).style.effectPresets![0].codeSnapshots![effectId].version.foreign).toBeUndefined()
+    await videoEditStyleLibrary.saveStyle({ ...style, effectPresets: [external] })
+    const styleRewritten = await app.change({ kind: 'video_edit.style', id: style.id }, { 'video_edit.style.effect_presets': [rewritten] })
+    expect(styleRewritten, JSON.stringify(styleRewritten)).toMatchObject({ ok: true })
+    expect(videoEditStyleLibrary.requireStyle(style.id).style.effectPresets![0].codeSnapshots![effectId].version.foreign).toEqual(external.codeSnapshots![effectId].version.foreign)
+    const session = new ContentTrustSession(() => false, () => undefined)
+    const restore = installContentTrustSession(session); stopTrustPrompt()
+    try {
+      const beforeDenied = reopened.document, compileCalls = boundary.compileCalls
+      const pending = applyVideoEditStylePiece(id, seq, [left], `preset:${external.id}`)
+      const denied = expect(pending).rejects.toThrow()
+      await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+      useAlertDialogStore.getState().dismissCurrent()
+      await denied
+      expect(boundary.compileCalls).toBe(compileCalls); expect(reopened.document).toBe(beforeDenied)
+      expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+    } finally { restore() }
+    undoVideoEdit(reopened.document.id)
+  } finally { app.dispose(); useVideoEditEffectLibraryStore.setState({ presets: original }); videoEditStyleLibrary.reset(); io.dispose() }
+})
+
+it('代码风格件试渲染失败或源码摘要不符时不发布部分定义和效果', async () => {
+  const { styleCodeFixture } = await import('@/core/videoEdit/styleCodeTestFixtures')
+  const original = useVideoEditEffectLibraryStore.getState().presets
+  const owner = await createLegacyTrackVideoEditProject(), id = owner.document.id, seq = owner.activeSequenceId
+  const item = createVideoEditGraphicItem(id, { kind: 'rect' }), [clip] = appendVideoEditItems(id, [item], seq)
+  try {
+    const preset = styleCodeFixture(); useVideoEditEffectLibraryStore.setState({ presets: [preset] })
+    const before = owner.document, history = owner.past.length
+    boundary.failTrial = true
+    await expect(applyVideoEditStylePiece(id, seq, [clip], `preset:${preset.id}`)).rejects.toThrow('GPU trial rejected')
+    expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
+    boundary.failTrial = false
+    const changed = structuredClone(preset); changed.codeSnapshots!.code.codeSources[0].source += '\n// changed'
+    useVideoEditEffectLibraryStore.setState({ presets: [videoEditEffectPresetSchema.parse(changed)] })
+    await expect(applyVideoEditStylePiece(id, seq, [clip], `preset:${preset.id}`)).rejects.toThrow('校验失败')
+    expect(owner.document).toBe(before)
+    useVideoEditEffectLibraryStore.setState({ presets: [preset] })
+    const [definitionId] = await createVideoEditCodeMaterials(id, [{ source: filterSource }])
+    editVideoProject(id, document => ({ ...document, codeMaterials: document.codeMaterials!.map(definition => definition.id === definitionId ? { ...definition, versions: [...definition.versions, { ...definition.versions[0], id: 'unreadable-history', files: [{ path: 'main.ts', location: 'memory:missing-history', hash: 'b'.repeat(64) }] }] } : definition) }))
+    await expect(applyVideoEditStylePiece(id, seq, [clip], `preset:${preset.id}`)).resolves.toHaveLength(1)
+    expect(owner.document.codeMaterials).toHaveLength(2)
+  } finally { useVideoEditEffectLibraryStore.setState({ presets: original }) }
+})
+
+it('公共入口的提交后回执校验失败，补偿文档与新发布源码', async () => {
+  const { styleCodeFixture } = await import('@/core/videoEdit/styleCodeTestFixtures')
+  const originalPresets = useVideoEditEffectLibraryStore.getState().presets
+  const owner = await createLegacyTrackVideoEditProject(), id = owner.document.id
+  const item = createVideoEditGraphicItem(id, { kind: 'rect' }), [clip] = appendVideoEditItems(id, [item], owner.activeSequenceId)
+  const preset = styleCodeFixture(); useVideoEditEffectLibraryStore.setState({ presets: [preset] })
+  const app = createApplicationHarness(), before = owner.document
+  const apply = VideoEditCollectionExecutor.prototype.apply
+  vi.spyOn(VideoEditCollectionExecutor.prototype, 'apply').mockImplementation(async function (this: VideoEditCollectionExecutor, step, context) {
+    const result = await apply.call(this, step, context)
+    if (this.entityType === 'video_edit.effect') result.cascadeEffects![0].origin = { kind: 'cascade', declarationId: 'test:undeclared' }
+    return result
+  })
+  const written = vi.spyOn(getPlatform().documents, 'writeCodeVersion'), discarded = vi.spyOn(getPlatform().documents, 'discardCodeFiles')
+  try {
+    const result = await app.call('change_application_entities', { summary: '验证提交后补偿', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: { kind: 'video_edit.clip', id: `${id}:${clip}` }, items: videoEditPresetCreationProperties(preset).map(properties => ({ properties })) }] })
+    expect(result.ok).toBe(false)
+    expect(owner.document).toEqual({ ...before, revision: owner.document.revision })
+    const publication = await written.mock.results[0].value
+    expect(discarded).toHaveBeenCalledWith(expect.objectContaining({ files: publication.files }))
+    await expect(getPlatform().documents.readCodeFile(publication.files[0])).rejects.toThrow('缺失')
+  } finally { app.dispose(); useVideoEditEffectLibraryStore.setState({ presets: originalPresets }) }
+})
 const codeAssetFixture = (codeSource = source): CodeAsset => ({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '可编辑资产', ...testCodeAssetSource(codeSource), parameters: { amount: .7 }, curves: { amount: [{ id: 'asset-key', sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 }, value: .9, interpolation: 'ease' }] }, images: [] })
 const importPublication = (asset = codeAssetFixture()) => ({ asset, media: [], mediaIds: new Map<string, string>(), origin: { assetId: 'fixed-asset', contentIdentity: 'a'.repeat(64) }, beforePublish: async () => undefined })
 function collectionBoundary() {
@@ -339,7 +482,10 @@ let stopTrustPrompt: () => void
 beforeEach(() => {
   stopTrustPrompt = useAlertDialogStore.subscribe(state => { if (state.queue[0]?.cancelLabel === '不运行') queueMicrotask(() => useAlertDialogStore.getState().confirmCurrent()) })
   installHarnessNativeStorage(); files.clear()
-  Object.assign(boundary, { compileGate: undefined, trialGate: undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [], presentedFrames: [] })
+  const librarySources = new Map<string, string>()
+  vi.spyOn(desktopEffectLibrarySources, 'write').mockImplementation(async ({ hash, source }) => { librarySources.set(hash, source) })
+  vi.spyOn(desktopEffectLibrarySources, 'read').mockImplementation(async hash => { const source = librarySources.get(hash); if (source === undefined) throw new Error('源码缺失'); return source })
+  Object.assign(boundary, { apiVersion: 4, compileGate: undefined, trialGate: undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [], presentedFrames: [] })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-project.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)

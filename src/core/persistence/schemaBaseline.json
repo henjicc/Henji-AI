@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 52,
-      "fingerprint": "78f4b46ba61f113068f8b19775c306e42c9bf9cd61a7a7f36c516e01d2f2e834",
+      "version": 53,
+      "fingerprint": "6523b040ed5a528e48a28c9821d078c81cca0b4cd5441aedc6c09c1ee78ecb2f",
       "supportedFrom": 17,
-      "minReaderVersion": 52
+      "minReaderVersion": 53
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 55,
-      "fingerprint": "aeaa7ba37a9b21f197c07eac9f89e56805e83db1aa4e7b18e595bb13ee70e02e",
+      "version": 56,
+      "fingerprint": "914cfabf14bdfed612f984f8465a3fb17029bde46c82f653eaeee972ed8d81a6",
       "supportedFrom": 19,
-      "minReaderVersion": 55
+      "minReaderVersion": 56
     },
     "project": {
       "version": 3,
@@ -240,10 +240,10 @@
       "minReaderVersion": 2
     },
     "video-preset-package": {
-      "version": 12,
-      "fingerprint": "c973f0b62cfeaa51da139d8fe4c04e9b19826cd1b77fd98014901f1d652e3230",
+      "version": 13,
+      "fingerprint": "9ca56909c78edb3d1fb1ac75d91be59407f10d6b55a1bd05d96bf9bc27a09bfb",
       "supportedFrom": 5,
-      "minReaderVersion": 12
+      "minReaderVersion": 13
     },
     "voice-library": {
       "version": 1,
@@ -324,10 +324,10 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 8,
-      "fingerprint": "8e71006a1217e5a14615f5a14ea1bf19afd76c863c849c44d90ce990a089a309",
+      "version": 9,
+      "fingerprint": "5067614479b56afaed33b7fcf90e35eed483fb64f75020c39799895847a37d40",
       "supportedFrom": 1,
-      "minReaderVersion": 8
+      "minReaderVersion": 9
     },
     "video-template-library": {
       "version": 6,
@@ -336,10 +336,10 @@
       "minReaderVersion": 3
     },
     "video-style-package": {
-      "version": 11,
-      "fingerprint": "f947576cdcb1ea78a1eaa0350b358fdd0f46ef556dd8b25ed5f1e6a838b32321",
+      "version": 12,
+      "fingerprint": "4ce01e38f5f728377ebd247b674d2e607c3f9ec6a01c0c3b61fee77017e18ef1",
       "supportedFrom": 1,
-      "minReaderVersion": 11
+      "minReaderVersion": 12
     },
     "workspace-layouts": {
       "version": 1,
@@ -396,10 +396,10 @@
       "minReaderVersion": 1
     },
     "video-effect-library": {
-      "version": 5,
-      "fingerprint": "8d342f5059d4f2fce57e983593a5f976229107dad188f6a399e03538562fe2d6",
+      "version": 6,
+      "fingerprint": "3aa2140e1e7c6607cfb1faaf297e4097b99a555d2e254804b2e0f59f23f7c039",
       "supportedFrom": 1,
-      "minReaderVersion": 5
+      "minReaderVersion": 6
     }
   },
   "devBreaks": [],

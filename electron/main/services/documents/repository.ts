@@ -193,7 +193,7 @@ export class DocumentRepository {
       await this.options.adapters.get(file.kind.id)!.writeHeader(file.path, { foreign })
       return
     }
-    if (file.kind.id !== 'video_edit' || !file.envelope) return
+    if (!['video_edit', 'screen_recording'].includes(file.kind.id) || !file.envelope) return
     const envelope = markForeignVideoDocument(file, foreign, await this.workspace.containerForPath(file.path), this.workspace)
     await writeBufferAtomically(file.path, this.bytes(envelope))
   }

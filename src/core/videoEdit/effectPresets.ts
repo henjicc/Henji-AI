@@ -2,6 +2,10 @@ import { z } from 'zod'
 import { renderFingerprintHash } from './renderFingerprint'
 import { videoEditEffectSchema, videoEditEffectMedia } from './compositing'
 import { requireVideoEditBuiltinEffect } from './builtinEffects'
+import { videoEditStyleCodeSnapshotSchema, styleCodeParameters } from './styleCodeSnapshot'
+import { prepareCodeMaterialParameters } from './codeMaterialAnimation'
+import type { ContentTrustReference } from '../contentTrust'
+import { isCodeImageReference, isCodeAudioReference, isCodeSceneReference } from './codeMaterial/contract'
 
 const point = z.object({ input: z.number().finite(), output: z.number().finite() }).strict()
 export const videoEditStyleKnobMappingSchema = z.object({
@@ -25,8 +29,19 @@ export const videoEditEffectPresetSchema = z.object({
   effects: z.array(videoEditEffectSchema).min(1),
   description: z.string().optional(), usage: z.string().optional(),
   knobs: z.array(videoEditStyleKnobSchema).optional(),
+  codeSnapshots: z.record(z.string(), videoEditStyleCodeSnapshotSchema).optional(),
 }).strict().superRefine((preset, context) => {
-  if (preset.effects.some(effect => !effect.builtin || videoEditEffectMedia(effect) !== preset.media || effect.mask?.regionId === 'tracker' || effect.mask?.regionId === 'shapes' && effect.mask.shapes.some(shape => shape.follow))) context.addIssue({ code: 'custom', message: '预设只保存同媒介的内置效果，不能保存原片段的跟踪绑定；代码滤镜请保存为代码素材。' })
+  if (preset.effects.some(effect => videoEditEffectMedia(effect) !== preset.media || effect.mask?.regionId === 'tracker' || effect.mask?.regionId === 'shapes' && effect.mask.shapes.some(shape => shape.follow))) context.addIssue({ code: 'custom', message: '预设只保存同媒介的效果，不能保存原片段的跟踪绑定。' })
+  for (const key of Object.keys(preset.codeSnapshots ?? {})) if (!preset.effects.some(effect => effect.id === key && effect.code)) context.addIssue({ code: 'custom', message: '代码快照必须对应风格件里的代码滤镜成员。' })
+  for (const effect of preset.effects) if (effect.code) {
+    const snapshot = preset.codeSnapshots?.[effect.id]
+    if (!snapshot || snapshot.version.id !== effect.code.versionId) context.addIssue({ code: 'custom', message: '代码滤镜成员必须带完整的固定版本快照。' })
+    else try { prepareCodeMaterialParameters({ name: effect.name, kind: 'filter', mode: 'dynamic', seed: 0, parameters: styleCodeParameters(snapshot) }, effect.code) } catch (error) { context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : String(error) }) }
+    if (snapshot) for (const value of Object.values(effect.code.parameters)) {
+      if ((isCodeAudioReference(value) || isCodeImageReference(value) && (value.kind === 'image' || value.kind === 'video')) && !snapshot.media?.some(media => media.id === value.mediaId && (value.kind === 'audio' ? media.kind === 'audio' || media.kind === 'video' : media.kind === value.kind))) context.addIssue({ code: 'custom', message: '代码滤镜快照缺少匹配的媒体依赖。' })
+      if (isCodeSceneReference(value) && !snapshot.scenes?.some(scene => scene.id === value.sceneId)) context.addIssue({ code: 'custom', message: '代码滤镜快照缺少引用的片子数据。' })
+    }
+  }
   const ids = new Set(preset.effects.map(effect => effect.id))
   if (preset.knobs?.length && ids.size !== preset.effects.length) context.addIssue({ code: 'custom', message: '带旋钮的风格件内，效果标识不能重复。' })
   const keys = new Set<string>(), targets = new Set<string>()
@@ -36,8 +51,8 @@ export const videoEditEffectPresetSchema = z.object({
     for (const mapping of knob.mappings) {
       if (!ids.has(mapping.effectId)) context.addIssue({ code: 'custom', message: `旋钮引用了不存在的效果 ${mapping.effectId}。` })
       const effect = preset.effects.find(effect => effect.id === mapping.effectId)
-      const parameter = effect?.builtin && requireVideoEditBuiltinEffect(effect.builtin.id).params.find(param => param.key === mapping.parameter)
-      if (!parameter || parameter.type !== 'number') context.addIssue({ code: 'custom', message: `映射目标 ${mapping.effectId}.${mapping.parameter} 必须是已登记的数值参数。` })
+      const parameter = effect?.builtin ? requireVideoEditBuiltinEffect(effect.builtin.id).params.find(param => param.key === mapping.parameter) : effect?.code && preset.codeSnapshots?.[effect.id] ? styleCodeParameters(preset.codeSnapshots[effect.id]).find(param => param.key === mapping.parameter) : undefined
+      if (!parameter || parameter.type !== 'number' && parameter.type !== 'angle') context.addIssue({ code: 'custom', message: `映射目标 ${mapping.effectId}.${mapping.parameter} 必须是已登记的数值参数。` })
       else if (mapping.points.some(point => point.output < parameter.min || point.output > parameter.max)) context.addIssue({ code: 'custom', message: `${mapping.parameter} 映射值必须在 ${parameter.min}–${parameter.max} 之间。` })
       const target = JSON.stringify([mapping.effectId, mapping.parameter])
       if (targets.has(target)) context.addIssue({ code: 'custom', message: '一个效果参数只能由一个旋钮映射一次。' })
@@ -105,6 +120,18 @@ export function resolveVideoEditStylePieceEffects(preset: VideoEditEffectPreset,
         if (!Object.keys(copy.builtin.curves).length) delete copy.builtin.curves
       }
     }
+    if (copy.code && params) {
+      copy.code.parameters = { ...copy.code.parameters, ...params }
+      if (copy.code.curves) {
+        copy.code.curves = Object.fromEntries(Object.entries(copy.code.curves).filter(([key]) => !Object.hasOwn(params, key)))
+        if (!Object.keys(copy.code.curves).length) delete copy.code.curves
+      }
+    }
     return videoEditEffectSchema.parse(copy)
   })
+}
+
+/** 导入边界覆盖包内来源，包里的字段不能赋予本机信任。 */
+export function markVideoEditStylePieceForeign(preset: VideoEditEffectPreset, foreign: ContentTrustReference): VideoEditEffectPreset {
+  return videoEditEffectPresetSchema.parse({ ...preset, ...(preset.codeSnapshots ? { codeSnapshots: Object.fromEntries(Object.entries(preset.codeSnapshots).map(([id, snapshot]) => [id, { ...snapshot, version: { ...snapshot.version, foreign } }])) } : {}) })
 }

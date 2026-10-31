@@ -1,4 +1,5 @@
-import { VIDEO_EDIT_EFFECT_LIBRARY_VERSION, videoEditEffectLibrarySchema } from '../videoEdit/effectPresets'
+import { storedVideoEditEffectLibrarySchema } from '../videoEdit/effectLibrary'
+import { VIDEO_EDIT_EFFECT_LIBRARY_VERSION } from '../videoEdit/effectPresets'
 import { formatMigrations } from './formatMigrations'
 import { foreignContentSchema } from '../contentTrust'
 import { gitCodeLocationSchema } from '../storage/gitCodeLocation'
@@ -80,18 +81,18 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   // 2026-10-22 起停用：只读，风格库首次加载时把其中的个人风格与标题模板转存进新的风格库目录，原键不改写。
   { ...format('style-kits', '本机风格包', LOCAL_LIBRARY_FORMATS['video-edit-style-kits'].version, 'video-edit-style-kits.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::importStoredStyleKits', z.array(styleKitMigrationSchema), 'local-storage'), minReaderVersion: 3 },
   { ...format('title-templates', '本机标题模板', LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].version, 'video-edit-title-templates.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::importStoredStyleKits', z.array(titleTemplateMigrationSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].minReaderVersion },
-  // 旋钮默认值已写进效果参数；忽略可选风格件或旋钮的旧读者仍能按已有参数理解画面。
-  { ...format('video-style-library', '风格库中的风格', VIDEO_EDIT_STYLE_LIBRARY_VERSION, '风格库/styles/<id>/style.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readStyleFile', videoEditStyleSchema), minReaderVersion: 8 },
+  // 代码成员带完整快照，旧程序会拒绝风格件；最低可读版本只在改变语义时显式提高。
+  { ...format('video-style-library', '风格库中的风格', VIDEO_EDIT_STYLE_LIBRARY_VERSION, '风格库/styles/<id>/style.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readStyleFile', videoEditStyleSchema), minReaderVersion: 9 },
   // 模板库 3、风格包 6：原生模板片段新增 enabled:false，旧程序忽略它会把停用的模板片段当成启用，最低可读版本提高到新版本。
   { ...format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema), minReaderVersion: 3 },
-  { ...format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.hjsty.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema), minReaderVersion: 11 },
+  { ...format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.hjsty.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema), minReaderVersion: 12 },
   // 效果库 v3 接入版本化 content 容器；v2 仅接受 {state, version:1|2}，不能读取该外壳。
-  { ...format('video-effect-library', '本机风格件与效果收藏', VIDEO_EDIT_EFFECT_LIBRARY_VERSION, 'video-edit-effects-library.version', 'src/features/videoEdit/application/videoEditEffectPresets.ts::createVideoEditEffectLibraryStore', videoEditEffectLibrarySchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-effects-library'].minReaderVersion },
+  { ...format('video-effect-library', '本机风格件与效果收藏', VIDEO_EDIT_EFFECT_LIBRARY_VERSION, 'video-edit-effects-library.version', 'src/features/videoEdit/application/videoEditEffectPresets.ts::createVideoEditEffectLibraryStore', storedVideoEditEffectLibrarySchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-effects-library'].minReaderVersion },
   format('text-presets', '本机文字和字幕预设', LOCAL_LIBRARY_FORMATS['video-edit-text-presets'].version, 'video-edit-text-presets.version', 'src/features/videoEdit/application/videoEditLocalLibrary.ts', z.array(videoEditTextPresetSchema), 'local-storage'),
   { ...format('export-presets', '本机导出预设', LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].version, 'video-edit-export-presets.version', 'src/features/videoEdit/application/videoEditExportPresets.ts', z.array(videoEditExportPresetSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].minReaderVersion },
   { ...format('export-memory', '上次导出设置', LOCAL_LIBRARY_FORMATS['video-edit-export-memory'].version, 'video-edit-export-memory.version', 'src/features/videoEdit/application/videoEditExportMemory.ts', videoEditExportMemorySchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-export-memory'].minReaderVersion },
   { ...format('preset-preferences', '预设评分与默认', LOCAL_LIBRARY_FORMATS['video-edit-preset-preferences'].version, 'video-edit-preset-preferences.version', 'src/features/videoEdit/application/videoEditPresetPreferences.ts', videoEditPresetPreferencesSchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-preset-preferences'].minReaderVersion },
-  { ...format('video-preset-package', '可分享剪辑预设', VIDEO_EDIT_PRESET_PACKAGE_VERSION, 'henji-video-presets.version', 'src/features/videoEdit/application/videoEditPresetCatalog.ts::importVideoEditPresetPackage', videoEditPresetPackageSchema), minReaderVersion: 12 },
+  { ...format('video-preset-package', '可分享剪辑预设', VIDEO_EDIT_PRESET_PACKAGE_VERSION, 'henji-video-presets.version', 'src/features/videoEdit/application/videoEditPresetCatalog.ts::importVideoEditPresetPackage', videoEditPresetPackageSchema), minReaderVersion: 13 },
   format('voice-library', '克隆音色库', LOCAL_LIBRARY_FORMATS['voice_library_records'].version, 'settings.voice_library_records.version', 'src/services/voiceLibrary/VoiceLibraryService.ts::parseVoiceRecords', z.array(voiceLibraryRecordSchema)),
   { ...format('sound-library-folders', '音效文件夹', SOUND_LIBRARY_FOLDERS_VERSION, 'settings.sound_library.folders.version', 'electron/main/services/sound-library/runtime.ts::readFolders', soundLibraryFoldersSchema), minReaderVersion: 1 },
   format('preset-export', '可分享生成预设', 1, 'PresetService export.version（1.0 → 1）', 'src/services/presets/PresetService.ts::importPreset', presetExportSchema),

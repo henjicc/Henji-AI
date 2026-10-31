@@ -1,3 +1,5 @@
+import { splitVideoEditRef } from './videoEditRefs'
+export { splitVideoEditRef } from './videoEditRefs'
 import { createCodeProjectRegistrations } from './videoEditCodeProjectReflection'
 import { getVideoEditAudioLinkNotices } from './videoEditAudioLinks'
 import { getVideoEditRenderPreference, readVideoEditRenderCache } from './videoEditRenderCache'
@@ -27,7 +29,7 @@ import { VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY, VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYP
 import { readVideoEditSource } from './videoEditSource'
 import { getVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
-import { createVideoEditEffectPresetRegistration } from './videoEditEffectPresetReflection'
+import { createVideoEditEffectLibraryRegistration, createVideoEditEffectPresetRegistration } from './videoEditEffectPresetReflection'
 import { createVideoEditPresetRegistration } from './videoEditPresetReflection'
 import { createVideoEditSubtitlePresetRegistration } from './videoEditSubtitlePresetReflection'
 import { createVideoEditExportPresetRegistration } from './videoEditExportPresetReflection'
@@ -38,11 +40,6 @@ import { VIDEO_EDIT_SCENE, VIDEO_EDIT_SCENE_DECLARATION_BLOCK, VIDEO_EDIT_SCENE_
 import { findVideoEditScene, loadVideoEditSceneDeclarations } from './videoEditScenes'
 import { videoEditSceneMedia } from '@/core/videoEdit/scene/sceneMedia'
 
-export function splitVideoEditRef(ref: ApplicationRef): { projectId: string; childId: string } {
-  if (ref.kind === 'video_edit.document') return { projectId: ref.id, childId: '' }
-  const index = ref.id.indexOf(':'); if (index < 0) throw new Error('请使用目录返回的完整剪辑实体引用。')
-  return { projectId: ref.id.slice(0, index), childId: ref.id.slice(index + 1) }
-}
 export function videoEditEntityItems(document: VideoEditDocument, type: VideoEditEntityType): Array<{ id: string; name?: string; text?: string }> {
   switch (type) {
     case 'video_edit.document': return [document]
@@ -326,5 +323,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), ...createCodeProjectRegistrations(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createFontRegistration(), ...createVideoEditStyleRegistrations(), ...createVideoEditSceneRegistrations()]
+  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), ...createCodeProjectRegistrations(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditEffectLibraryRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createFontRegistration(), ...createVideoEditStyleRegistrations(), ...createVideoEditSceneRegistrations()]
 }

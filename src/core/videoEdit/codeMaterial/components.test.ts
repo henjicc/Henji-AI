@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { expandPinnedCodeComponents, portableCodeComponentFiles, pinCodeComponentImports, packageComponentSource, rewriteCodeComponentImports, componentSourceMetadata, type CodeComponent } from './components'
-import { addressCodeMaterialFiles, codeComponentPinsSchema, componentFileReferences, codeVersionContentKey, documentCodeSourceResolver, installCodeSourceReader, loadCodeSourceReferences, withActualCodeSourceHashes, type CodeComponentPin } from './sources'
+import { addressCodeMaterialFiles, snapshotCodeSourceClosure, codeComponentPinsSchema, componentFileReferences, codeVersionContentKey, documentCodeSourceResolver, installCodeSourceReader, loadCodeSourceReferences, withActualCodeSourceHashes, type CodeComponentPin } from './sources'
 import { renameCodeMaterialFile } from './fileEdits'
 
 const entry = 'export default {languageVersion:3,apiVersion:1,name:"组件",kind:"generator",mode:"static",width:16,height:16,durationSeconds:1,seed:1,parameters:{},render(ctx){return [latest(),old()]}}'
@@ -40,6 +40,10 @@ describe('位置解析与固定组件依赖', () => {
     expect(saved.codeMaterials[0].versions[0].files[0].hash).not.toBe(version.files[0].hash)
     expect(saved.codeMaterials[0].versions[1].files[0].hash).toBe(moved.files[0].hash)
     expect(document.codeMaterials[0].versions[0]).toBe(version)
+    const snapshot = await snapshotCodeSourceClosure(version, documentCodeSourceResolver())
+    expect(snapshot.files[0]).toEqual({ path: 'main.ts', hash: saved.codeMaterials[0].versions[0].files[0].hash, location: `asset:${saved.codeMaterials[0].versions[0].files[0].hash}` })
+    expect(snapshot.codeSources).toEqual([{ hash: snapshot.files[0].hash, source: '外部修改' }])
+    await expect(snapshotCodeSourceClosure({ files: [{ ...version.files[0], location: 'git:fixed' }] }, { read: () => '外部修改' })).rejects.toThrow('校验失败')
     read.mockRejectedValue(new Error('main.ts 缺失，请恢复备份')); await expect(loadCodeSourceReferences(version)).rejects.toThrow('main.ts 缺失')
   })
   it('紧跟完整核对的内部步骤可在时限内复用核对结果；默认仍每次读盘', async () => {

@@ -1,3 +1,5 @@
+import { codeMediaDependencySchema as image } from './codeMediaDependency'
+export { codeAssetContentSchema } from './codeMediaDependency'
 import { codeSourcesSchema, rememberCodeSource, componentFileReferences, type CodeSourceResolver } from './codeMaterial/sources'
 import { z } from 'zod'
 import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from './codeMaterialPersistence'
@@ -10,11 +12,6 @@ export const CODE_ASSET_MIME = 'application/x-henji-code'
 export const CODE_ASSET_VERSION = 15
 /** v10 可携带作者接口 v6；旧程序不能正确执行排版库，必须明确要求升级。 */
 export const CODE_ASSET_MIN_READER_VERSION = 15
-export const codeAssetContentSchema = z.object({ sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
-const image = z.object({
-  id: z.string().min(1).max(100), path: z.string().min(1).max(4096).refine(value => !value.includes('\0') && /^(?:[a-z]:[\\/]|\\\\|\/)/i.test(value), '媒体依赖需要原文件绝对路径。'),
-  kind: z.enum(['image', 'video', 'audio']), content: codeAssetContentSchema, assetId: z.string().min(1).max(100).optional(),
-}).strict()
 export const codeAssetSchema = z.object({
   format: z.literal('henji-code-asset'), version: z.literal(CODE_ASSET_VERSION), minReaderVersion: z.number().int().positive().optional(), name: z.string().trim().min(1).max(200),
   sourceVersion: z.object({ apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, entry: codeMaterialVersionSchema.shape.entry, files: codeMaterialVersionSchema.shape.files, imports: codeMaterialVersionSchema.shape.imports, libraries: codeMaterialVersionSchema.shape.libraries }).strict(),

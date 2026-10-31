@@ -1,3 +1,4 @@
+import { hasVideoEditLibraryHistory } from './videoEditLibraryHistory'
 import { askAssistantAtVideoEditFrame, chooseVideoEditAnnotationShape, executeVideoEditAnnotationCommand, isVideoEditAnnotationBatchCommand, videoEditAnnotationBrush, videoEditAnnotationCommandState, VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS, VIDEO_EDIT_ANNOTATION_SHAPES } from './videoEditAnnotations'
 import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
@@ -9,7 +10,7 @@ import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { applyVideoEditTimelineEdit, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { videoEditSyncCorrections } from '@/core/videoEdit/linkSync'
-import { appendVideoEditSequence, createVideoEditProject, editVideoSequence, focusVideoEditPanel, findActiveVideoEditSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, videoEditProgramCommandIdentity, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
+import { appendVideoEditSequence, createVideoEditProject, editVideoSequence, focusVideoEditPanel, findActiveVideoEditSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, videoEditProgramCommandIdentity, switchVideoEditSequence, undoVideoEditWorkspace, type VideoEditInstance } from './videoEditService'
 import { chooseVideoEditMedia } from './videoEditMedia'
 import { openVideoEditAudioGainDialog, openVideoEditExportDialog } from './videoEditAudioDialogs'
 import { videoEditClipHasSound } from './videoEditLoudness'
@@ -183,7 +184,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     const { owner, source } = stateOf(context)
     if (id === 'new_project') return { enabled: true }
     if (!owner) return { enabled: false, reason: '请先打开剪辑。' }
-    if (id === 'undo' || id === 'redo') return { enabled: Boolean(id === 'undo' ? owner.past.length : owner.future.length), reason: '没有可恢复的编辑。' }
+    if (id === 'undo' || id === 'redo') return { enabled: Boolean((id === 'undo' ? owner.past.length : owner.future.length) || hasVideoEditLibraryHistory(id === 'redo')), reason: '没有可恢复的编辑。' }
     if (context.scope === 'annotations' && isVideoEditAnnotationBatchCommand(id)) return videoEditAnnotationCommandState(owner, id)
     if (id in FOCUS_PANELS || id === 'maximize_panel' || id === 'save' || id === 'import') return { enabled: true }
     if (id === 'new_sequence') return { enabled: true }
@@ -319,7 +320,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   const shape = VIDEO_EDIT_ANNOTATION_SHAPES.find(item => VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS[item] === id)
   if (shape) { chooseVideoEditAnnotationShape(projectId, shape); return }
   // 项目级命令在零时间线时仍可用，先于所有时间线计算执行。
-  if (id === 'undo' || id === 'redo') { undoVideoEdit(projectId, id === 'redo'); return }
+  if (id === 'undo' || id === 'redo') { undoVideoEditWorkspace(projectId, id === 'redo'); return }
   if (id === 'save') { await saveVideoEdit(projectId); return }
   if (id === 'import') { await chooseVideoEditMedia(projectId, owner!.selectedBinId || undefined); return }
   if (id === 'new_sequence') { switchVideoEditSequence(projectId, appendVideoEditSequence(projectId)); return }

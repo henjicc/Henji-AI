@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { VideoEditPresetSource } from '../application/videoEditPresetCatalog'
+import { videoEditPresetTrustQueries, type VideoEditPresetSource } from '../application/videoEditPresetCatalog'
 import { PRESET_PREVIEW_FPS, presetPreviewTimeline, renderPresetPreviewFrame, videoEditPresetPreviewKey, type PresetPreviewTimeline } from '../application/videoEditPresetPreview'
 import { useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
 import { subscribeContentTrustContext, runForeignContent } from '@/services/contentTrust'
@@ -36,7 +36,7 @@ export function VideoEditPresetPlayer({ source, size, playing, label, trustActio
   const [trustPending, setTrustPending] = useState(false)
   const trustFailure = readContentTrustFailure(error)
   const [retry, setRetry] = useState(0)
-  useEffect(() => subscribeContentTrustContext(() => 'trustContext' in source ? [{ contents: source.trustContext ?? [] }] : [], () => setRetry(value => value + 1), reason => setError(reason instanceof Error ? reason : new Error('预览准备失败。'))), [source])
+  useEffect(() => subscribeContentTrustContext(() => videoEditPresetTrustQueries(source), () => setRetry(value => value + 1), reason => setError(reason instanceof Error ? reason : new Error('预览准备失败。'))), [source])
   // 风格件改动会改变 look() 结果，效果库修订进依赖，键只取风格 id 与风格件摘要
   const libraryRevision = useVideoEditEffectLibraryStore(state => state.revision)
   const key = useMemo(() => videoEditPresetPreviewKey(source, size), [source, size, libraryRevision]) // eslint-disable-line react-hooks/exhaustive-deps -- 修订通过 store 读取

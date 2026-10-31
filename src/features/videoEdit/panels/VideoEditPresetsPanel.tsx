@@ -8,7 +8,8 @@ import { VIDEO_EDIT_PRESET_PANEL_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, 
 import { deleteVideoEditPreset, exportVideoEditPresetPackage, importVideoEditPresetPackage, listVideoEditPresets, setVideoEditPresetDefault, setVideoEditPresetRating, videoEditPresetExportable, videoEditPresetSource, type VideoEditPresetEntry } from '../application/videoEditPresetCatalog'
 import { applyVideoEditPreset } from '../application/videoEditPresetApply'
 import { getActiveVideoEditSequence, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from '../application/videoEditService'
-import { startVideoEditEffectDrag } from './videoEditEffectDrag'
+import { startVideoEditStylePieceDrag } from './videoEditEffectDrag'
+import { findVideoEditGlobalStylePiece } from '../application/videoEditEffectPresets'
 import { startVideoEditTransitionDrag } from './videoEditTransitionDrag'
 import { VideoEditPresetPlayer } from './VideoEditPresetPlayer'
 import type { VideoEditTransitionKind } from '@/core/videoEdit/transitions'
@@ -37,7 +38,7 @@ function PresetDetail({ entry, instance, onClose, onError }: { entry: VideoEditP
     await writeTextFile(path, exportVideoEditPresetPackage([entry])); showNotification(`已导出“${entry.name}”。`)
   })
   return <UiModal isOpen title={entry.name} size="editor" onClose={onClose} footer={<>
-    {!entry.builtin && <UiButton variant="danger" disabled={busy} className="mr-auto" onClick={() => { void run(() => { deleteVideoEditPreset(entry.category, entry.id); onClose() }) }}>删除</UiButton>}
+    {!entry.builtin && <UiButton variant="danger" disabled={busy} className="mr-auto" onClick={() => { void run(async () => { await deleteVideoEditPreset(entry.category, entry.id); onClose() }) }}>删除</UiButton>}
     {videoEditPresetExportable(entry.category, entry.id) && <UiButton variant="secondary" disabled={busy} onClick={() => { void exportOne() }}>导出</UiButton>}
     <UiButton variant="primary" loading={busy} disabledReason={!sequenceId ? '先打开一个序列' : undefined} disabled={!sequenceId} onClick={() => { void run(async () => { showNotification(await applyVideoEditPreset(instance.document.id, sequenceId!, entry.category, entry.id)); onClose() }) }}>应用</UiButton>
   </>}>
@@ -67,7 +68,8 @@ const DEFAULT_HINT: Partial<Record<VideoEditPresetCategory, string>> = {
 function PresetTile({ entry, instance, onOpen, onApply }: { entry: VideoEditPresetEntry; instance: VideoEditInstance; onOpen: () => void; onApply: () => void }): React.ReactElement {
   const [hovered, setHovered] = useState(false)
   const drag = (event: React.DragEvent): void => {
-    if (entry.category === 'effect') startVideoEditEffectDrag(event.dataTransfer, instance.document.id, `preset:${entry.id}`)
+    const piece = entry.category === 'effect' && instance.activeSequenceId ? findVideoEditGlobalStylePiece(instance.document.id, instance.activeSequenceId, entry.id) : undefined
+    if (piece) startVideoEditStylePieceDrag(event.dataTransfer, instance.document.id, piece)
     else if (entry.category === 'transition') startVideoEditTransitionDrag(event.dataTransfer, instance.document.id, entry.id as VideoEditTransitionKind)
     else event.preventDefault()
   }
@@ -121,7 +123,7 @@ function Content({ instance, onError, visible = true }: { instance: VideoEditIns
         ? <div className="grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-3" role="list" aria-label={`${VIDEO_EDIT_PRESET_CATEGORY_LABELS[category]}预设`}>
           {visible && entries.map(entry => <div role="listitem" key={entry.id} className="min-w-0"><PresetTile entry={entry} instance={instance} onOpen={() => setOpen(`${entry.category}:${entry.id}`)} onApply={() => apply(entry)} /></div>)}
         </div>
-        : <UiEmpty size="sm" title={query ? '没有匹配的预设' : category === 'effect' ? '还没有效果预设' : '还没有预设'} description={category === 'effect' && !query ? '在效果控件里把一组效果“保存为预设”，就会出现在这里。' : undefined} />}
+        : <UiEmpty size="sm" title={query ? '没有匹配的预设' : category === 'effect' ? '还没有效果预设' : '还没有预设'} description={category === 'effect' && !query ? '在效果控件里把一组效果“保存为风格件”，就会出现在这里。' : undefined} />}
     </div>
     {detail && <PresetDetail entry={detail} instance={instance} onClose={() => setOpen(null)} onError={onError} />}
   </div>

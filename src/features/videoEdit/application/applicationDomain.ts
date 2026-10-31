@@ -1,4 +1,4 @@
-import { VideoEditStylePieceCollectionExecutor, VideoEditStylePieceMutationExecutor } from './videoEditEffectPresetReflection'
+import { VideoEditEffectLibraryMutationExecutor, VideoEditStylePieceCollectionExecutor, VideoEditStylePieceMutationExecutor } from './videoEditEffectPresetReflection'
 import { loadVideoEditHoverPreview } from './videoEditHoverPreview'
 import { upgradeVideoEditCodeMaterials } from './videoEditCodeProjectUpgrade'
 import { getPlatform } from '@/platform/runtime'
@@ -71,7 +71,7 @@ import { splitVideoEditRef } from './videoEditReflection'
  * 不属于某份剪辑的 video_edit.* 实体：源素材预览、风格库与模板库、各类预设、内置效果目录、风格使用者偏好。
  * 写它们不经剪辑文件保存；只有其余实体（引用形如“剪辑ID:子ID”）才按所属剪辑登记持久化参与者。
  */
-const VIDEO_EDIT_LIBRARY_KINDS: ReadonlySet<string> = new Set(['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.template', 'video_edit.style', 'video_edit.style_preference', 'video_edit.preset', 'video_edit.effect_preset', 'video_edit.subtitle_preset', 'video_edit.builtin_effect'])
+const VIDEO_EDIT_LIBRARY_KINDS: ReadonlySet<string> = new Set(['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.template', 'video_edit.style', 'video_edit.style_preference', 'video_edit.preset', 'video_edit.effect_library', 'video_edit.effect_preset', 'video_edit.subtitle_preset', 'video_edit.builtin_effect'])
 const isVideoEditDocumentKind = (kind: string): boolean => kind.startsWith('video_edit.') && !VIDEO_EDIT_LIBRARY_KINDS.has(kind)
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { trimVideoEditClip } from './videoEditTrimCapability'
@@ -137,6 +137,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   registerExecutors(engine) {
     engine.registerCollectionExecutor(new VideoEditStylePieceCollectionExecutor())
     engine.registerMutationExecutor(new VideoEditStylePieceMutationExecutor())
+    engine.registerMutationExecutor(new VideoEditEffectLibraryMutationExecutor())
     engine.registerMutationExecutor(new CodeProjectFileMutationExecutor())
     engine.registerCollectionExecutor(new CodeProjectFileCollectionExecutor())
     engine.registerCollectionExecutor(new CodeComponentCollectionExecutor())

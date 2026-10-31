@@ -1,6 +1,7 @@
 import type { VideoEditPresetCategory } from '@/core/videoEdit/presetPackage'
 import { applyVideoEditSubtitlePreset } from './videoEditSubtitlePresets'
-import { applyVideoEditBuiltinEffect } from './videoEditCompositing'
+import { applyVideoEditStylePiece } from './videoEditCompositing'
+import { findVideoEditGlobalStylePiece } from './videoEditEffectPresets'
 import { applyVideoEditTransitionToSelection } from './videoEditTransitions'
 import { requireVideoEditInstance } from './videoEditService'
 import { videoEditPresetSource } from './videoEditPresetCatalog'
@@ -18,10 +19,13 @@ export async function applyVideoEditPreset(projectId: string, sequenceId: string
       if (!sequence?.captions?.length) throw new Error('这个序列还没有字幕；先生成或添加字幕，再套用文字样式。')
       applyVideoEditSubtitlePreset(projectId, sequenceId, id); return `已为全部字幕套用“${source.preset.name}”。`
     }
-    case 'effect':
+    case 'effect': {
       if (!owner.selectedClipIds.length) throw new Error('先在时间线上选中片段，再套用效果预设。')
-      if (!applyVideoEditBuiltinEffect(projectId, sequenceId, owner.selectedClipIds, `preset:${id}`).length) throw new Error('所选片段不能使用这个效果预设（画面与声音效果分开）。')
+      const piece = findVideoEditGlobalStylePiece(projectId, sequenceId, id)
+      if (!piece) throw new Error('风格件已移除，请重新选择。')
+      await applyVideoEditStylePiece(projectId, sequenceId, owner.selectedClipIds, piece.ref)
       return `已为所选片段添加“${source.preset.name}”。`
+    }
     case 'transition': await applyVideoEditTransitionToSelection(projectId, source.kind); return '已在所选片段处添加转场。'
   }
 }

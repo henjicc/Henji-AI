@@ -19,7 +19,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 3 → 4：高级编码为可选字段，旧预设继续直接导出，最低可读版本保持 1。
   // 1 → 2：调色格式升级；2 → 3：旧预设补空的风格件字段，收藏与效果原样保留。
   // 4 → 5：收藏里的旧过渡、效果引用迁到条目 ID，合并后去重，最低可读版本提高到 5。
-  'video-effect-library': { 4: migrateVideoEditLibraryCatalog, 3: value => migrateAudioEqualizerModes(migrateAudioEffectLibraryV3(value)), 1: migrateEmbeddedVideoColorGradesV1, 2: value => { const library = structuredClone(value) as { presets: unknown[] }; return { ...library, presets: library.presets.map(migrateVideoEditStylePiece) } } },
+  // 5 → 6：代码快照内联源码读取后转入内容存储，明确保存才写摘要引用；历史效果与收藏保持。
+  'video-effect-library': { 5: value => structuredClone(value), 4: migrateVideoEditLibraryCatalog, 3: value => migrateAudioEqualizerModes(migrateAudioEffectLibraryV3(value)), 1: migrateEmbeddedVideoColorGradesV1, 2: value => { const library = structuredClone(value) as { presets: unknown[] }; return { ...library, presets: library.presets.map(migrateVideoEditStylePiece) } } },
   // 1 → 2：评分引用使用合并后的目录 ID，重复项保留最高评分与默认标记，最低可读版本提高到 2。
   'preset-preferences': { 1: migrateVideoEditPresetCatalogPreferences },
   'export-presets': { 1: value => structuredClone(value), 2: value => structuredClone(value), 3: value => structuredClone(value) },
@@ -70,7 +71,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 4 → 5：新增可选 foreign，已有 imported 只表示文字来源，不赋予代码来源。
   // 5 → 6：风格中的源码与组件依赖取消容量和深度上限。
   // 6 → 7：新增随风格保存的可选风格件；归属由风格容器决定，旧内容保持不带风格件。
-  'video-style-library': { 7: value => migrateAudioEqualizerModes(migrateAudioMergedEffects(value)), 6: value => structuredClone(value), 5: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => value, 4: value => structuredClone(value) },
+  // 8 → 9：风格件可带固定代码快照，历史风格原样保留。
+  'video-style-library': { 8: value => structuredClone(value), 7: value => migrateAudioEqualizerModes(migrateAudioMergedEffects(value)), 6: value => structuredClone(value), 5: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => value, 4: value => structuredClone(value) },
   // 1 → 2：模板里的代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 2 → 3：原生模板片段新增可选 enabled:false；代码参数值新增片子数据引用 {kind:'scene'}（模板不携带片子数据，实际不会出现）。
   // 旧内容原样有效；旧程序会把停用的模板片段当成启用，最低可读版本提高到 3。
@@ -89,7 +91,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 7 → 8：分享包中的源码与组件依赖取消容量和深度上限。
   // 8 → 9：成员模板里的代码图片参数新增网页画面引用 {kind:'web'}，旧内容原样有效。
   // 9 → 10：风格可携带可选风格件，随分享包保留；已有风格和模板原样有效。
-  'video-style-package': { 10: value => migrateAudioEqualizerModes(migrateAudioMergedEffects(value)), 9: value => structuredClone(value), 8: value => structuredClone(value), 7: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => value, 4: value => value, 5: value => value, 6: value => structuredClone(value) },
+  // 11 → 12：风格件可携带固定代码快照，历史分享包原样保留。
+  'video-style-package': { 11: value => structuredClone(value), 10: value => migrateAudioEqualizerModes(migrateAudioMergedEffects(value)), 9: value => structuredClone(value), 8: value => structuredClone(value), 7: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => value, 4: value => value, 5: value => value, 6: value => structuredClone(value) },
   'recording-setup': { 1: value => value, 2: value => { const { microphoneId: _legacyDevice, ...rest } = value as Record<string, unknown>; return rest }, 3: value => value, 4: value => value },
   'screen-capture': { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },
@@ -104,7 +107,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 8 → 9：嵌入的源码不设长度上限。
   // 9 → 10：代码图片参数新增网页画面引用 {kind:'web'}，旧内容原样有效。
   // 10 → 11：效果预设补空的说明、用途和旋钮；已有参数、曲线与蒙版原样保留。
-  'video-preset-package': { 11: value => migrateAudioEqualizerModes(migrateAudioPresetPackageV11(value)), 10: value => { const pack = structuredClone(value) as { items: { category: string; preset: unknown }[] }; return { ...pack, version: 11, items: pack.items.map(item => item.category === 'effect' ? { ...item, preset: migrateVideoEditStylePiece(item.preset) } : item) } }, 9: value => ({ ...value as object, version: 10 }), 8: value => ({ ...value as object, version: 9 }), 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }), 6: value => ({ ...value as object, version: 7 }), 7: value => ({ ...value as object, version: 8 }) },
+  // 12 → 13：风格件可携带固定代码快照，保留既有参数、曲线与来源。
+  'video-preset-package': { 12: value => ({ ...structuredClone(value) as object, version: 13, minReaderVersion: 13 }), 11: value => migrateAudioEqualizerModes(migrateAudioPresetPackageV11(value)), 10: value => { const pack = structuredClone(value) as { items: { category: string; preset: unknown }[] }; return { ...pack, version: 11, items: pack.items.map(item => item.category === 'effect' ? { ...item, preset: migrateVideoEditStylePiece(item.preset) } : item) } }, 9: value => ({ ...value as object, version: 10 }), 8: value => ({ ...value as object, version: 9 }), 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }), 6: value => ({ ...value as object, version: 7 }), 7: value => ({ ...value as object, version: 8 }) },
   'image-working-copy': { 14: value => migrateImageWorkingCopyColorGrades(value, 15) },
   'image-package': { 12: value => ({ ...value as object, packageVersion: 13, document: migrateImageWorkingCopyColorGrades((value as { document?: unknown }).document, 15) }) },
   'canvas-layer-package': { 12: value => ({ ...value as object, version: 13 }) },

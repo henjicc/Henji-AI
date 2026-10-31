@@ -154,6 +154,20 @@ export async function verifyCodeSourceReferences(version: { files: readonly Code
   }
 }
 
+/** 自包含快照只引用内容；旧路径取实际文本的摘要，固定 Git 内容仍必须通过原摘要校验。 */
+export async function snapshotCodeSourceClosure(version: { files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }, resolver: CodeSourceResolver): Promise<{ files: CodeFileReference[]; imports?: CodeComponentPin[]; codeSources: CodeSource[] }> {
+  const sources = new Map<string, string>(), hashes = new Map<string, string>()
+  const key = (file: Pick<CodeFileReference, 'hash' | 'location'>): string => JSON.stringify([file.location, file.hash])
+  for (const file of [...version.files, ...componentFileReferences(version.imports)]) {
+    const source = resolver.read(file.hash, file.location, file.path), hash = await sha256HexString(source)
+    if (file.location.startsWith('git:') && hash !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 的源码内容校验失败，请恢复原版本后重试。`)
+    sources.set(hash, source); hashes.set(key(file), hash)
+  }
+  const reference = (file: Pick<CodeFileReference, 'hash' | 'location'>): { hash: string; location: string } => { const hash = hashes.get(key(file))!; return { hash, location: `asset:${hash}` } }
+  const pin = (value: CodeComponentPin): CodeComponentPin => ({ ...value, ...reference(value), imports: value.imports.map(pin) })
+  return { files: version.files.map(file => ({ ...file, ...reference(file) })), ...(version.imports ? { imports: version.imports.map(pin) } : {}), codeSources: [...sources].map(([hash, source]) => ({ hash, source })) }
+}
+
 /** 仅保存快照更新已有 hash；读取不改文档、不标脏，也不写原文件。 */
 export function withActualCodeSourceHashes<T extends { codeMaterials?: { versions: { files: CodeFileReference[]; imports?: CodeComponentPin[] }[] }[] }>(document: T): T {
   const pin = (value: CodeComponentPin): CodeComponentPin => ({ ...value, hash: locationHashes.get(value.location) ?? value.hash, imports: value.imports.map(pin) })

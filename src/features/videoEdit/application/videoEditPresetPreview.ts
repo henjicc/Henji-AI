@@ -1,4 +1,5 @@
-import { resolveVideoEditStylePieceEffects, videoEditStylePiecesFingerprint } from '@/core/videoEdit/effectPresets'
+import { videoEditStylePiecesFingerprint } from '@/core/videoEdit/effectPresets'
+import { materializeVideoEditStylePiece } from './videoEditStyleCode'
 import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import type { ContentTrustReference } from '@/core/contentTrust'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
@@ -138,7 +139,7 @@ async function build(source: VideoEditPresetSource, size: { width: number; heigh
       if (source.preset.media !== 'video') throw new Error('声音效果没有画面预览。')
       const builder = start(size)
       const id = await backdropClip(builder, 8)
-      builder.sequence.clips.find(value => value.id === id)!.effects = resolveVideoEditStylePieceEffects(source.preset).map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() }))
+      builder.sequence.clips.find(value => value.id === id)!.effects = await materializeVideoEditStylePiece(builder.document, source.preset, { signal })
       return builder
     }
     case 'transition': {

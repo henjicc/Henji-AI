@@ -4,6 +4,10 @@ import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSche
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditIntroducesCodeEffects, videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
 import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
+import { listVideoEditStylePieces } from './videoEditEffectPresets'
+import { materializeVideoEditStylePiece } from './videoEditStyleCode'
+import { discardVideoEditCodeFiles } from './videoEditCodeStorage'
+import type { CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { assertVideoEditMaskTrackers } from './videoEditTrackingEdits'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { recordingZoomRegionsSchema, sortRecordingZoomRegions, RECORDING_ZOOM_EFFECT, type RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
@@ -30,14 +34,14 @@ function requireEffectClip(sequence: VideoEditSequence, clipId: string): VideoEd
   return clip
 }
 /** Trial only a newly introduced code execution input; structural edits publish once. */
-export async function editComposite(projectId: string, sequenceId: string, endpointIds: string[], change: (sequence: VideoEditSequence) => void, signal?: AbortSignal): Promise<void> {
+export async function editComposite(projectId: string, sequenceId: string, endpointIds: string[], change: (sequence: VideoEditSequence, document: VideoEditDocument) => void | Promise<void>, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const draft = structuredClone(baseline); const sequence = draft.sequences.find(sequence => sequence.id === sequenceId)
   if (!sequence) throw new Error('原序列已移除。')
   // 音频过渡两端是声音片段：不需要画面试渲染，只做结构校验。
   const clipIds = endpointIds.filter(id => sequence.clips.find(clip => clip.id === id)?.kind !== 'audio')
-  clipIds.forEach(id => requireClip(sequence, id)); change(sequence)
+  clipIds.forEach(id => requireClip(sequence, id)); await change(sequence, draft)
   const next = videoEditDocumentSchema.parse(draft)
   assertVideoEditLockedTracks(baseline, next)
   await ensureVideoEditChangedCodeMetadata(owner, baseline, next, signal)
@@ -143,8 +147,7 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     const media = resolved.media
     // 作用区域要逐帧分析素材画面：只加到视频、图片片段上。
     const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track) && (!resolved.needsSource || clip.kind === 'video' || clip.kind === 'image')).map(clip => clip.id))
-    if (!targets.size && resolved.needsSource) throw new Error('请选择视频或图片片段：智能效果要分析素材画面，文字、图形、调整图层与声音片段不能使用；锁定轨道上的片段不能修改。')
-    if (!targets.size) throw new Error(media === 'audio' ? '请选择声音片段：音频效果只能加到声音片段，锁定轨道上的片段不能修改。' : '请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。')
+    if (!targets.size) throw new Error(noEffectTargetMessage(media, resolved.needsSource))
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
       const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditBuiltinCurves(template.builtin, 0, clip.duration) } } : {}) }))
@@ -154,6 +157,34 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips } : value) }
   })
   return [...created]
+}
+
+function noEffectTargetMessage(media: 'video' | 'audio', needsSource: boolean): string {
+  if (needsSource) return '请选择视频或图片片段：智能效果要分析素材画面，文字、图形、调整图层与声音片段不能使用；锁定轨道上的片段不能修改。'
+  return media === 'audio' ? '请选择声音片段：音频效果只能加到声音片段，锁定轨道上的片段不能修改。' : '请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。'
+}
+/** 风格件的片段入口：整组试渲染通过后一步提交，含源码定义与所有目标片段。片段的取舍与内置效果相同。 */
+export async function applyVideoEditStylePiece(projectId: string, sequenceId: string, clipIds: readonly string[], ref: string, knobs: Readonly<Record<string, number>> = {}, signal?: AbortSignal): Promise<string[]> {
+  const entry = listVideoEditStylePieces(projectId, sequenceId).find(entry => entry.ref === ref)
+  if (!entry) throw new Error('风格件已移除，请重新选择。')
+  const owner = requireVideoEditInstance(projectId), sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)!
+  // 作用区域要逐帧分析素材画面：只加到视频、图片片段上。
+  const needsSource = entry.preset.effects.some(effect => isSmartRegionMask(effect.mask))
+  const targets = sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(entry.preset.media, clip) && !sequence.tracks.some(track => track.index === clip.track && track.locked) && (!needsSource || clip.kind === 'video' || clip.kind === 'image'))
+  if (!targets.length) throw new Error(noEffectTargetMessage(entry.preset.media, needsSource))
+  const created: string[] = []
+  const createdFiles: CodeFileReference[] = []
+  try {
+    await editComposite(projectId, sequenceId, targets.map(clip => clip.id), async (sequence, document) => {
+      const effects = await materializeVideoEditStylePiece(document, entry.preset, { projectId, owner, signal, knobs, createdFiles })
+      for (const target of targets) {
+        const clip = sequence.clips.find(clip => clip.id === target.id)!
+        const copies = effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID(), ...(effect.builtin?.curves ? { builtin: { ...effect.builtin, curves: sliceVideoEditBuiltinCurves(effect.builtin, 0, clip.duration) } } : {}) }))
+        created.push(...copies.map(effect => effect.id)); clip.effects = [...(clip.effects ?? []), ...copies]
+      }
+    }, signal)
+    return created
+  } catch (error) { await discardVideoEditCodeFiles(createdFiles); throw error }
 }
 /** `mask`：作用区域（4.7d），null 回到整个画面。 */
 /** `regions`：自动缩放的缩放区间（整体替换，按开始时间排序后保存；null 或空数组清空）。 */

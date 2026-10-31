@@ -7,6 +7,7 @@ import type { VideoEditStyle } from '@/core/videoEdit/styles/styleSchemas'
 import { readTextFile, writeTextFile, exists } from '@/platform/desktopApi'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { getPlatform } from '@/platform/runtime'
+import { markVideoEditStylePieceForeign } from '@/core/videoEdit/effectPresets'
 
 const logger = createLogger('features.videoEdit.stylePackages')
 const PACKAGE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-style-package')!
@@ -53,7 +54,7 @@ export async function importVideoEditStylePackage(path: string, io: VideoEditSty
     writing = true
     const foreign = { id, sourceName: value.style.name, sourceType: 'style_package' as const }
     await videoEditStyleLibrary.preserveStyle(id)
-    const style = (await videoEditStyleLibrary.saveStyle({ ...value.style, id, imported: true, foreign }, media)).style
+    const style = (await videoEditStyleLibrary.saveStyle({ ...value.style, id, imported: true, foreign, ...(value.style.effectPresets ? { effectPresets: value.style.effectPresets.map(preset => markVideoEditStylePieceForeign(preset, foreign)) } : {}) }, media)).style
     const templates: VideoEditTemplate[] = []
     for (const template of value.templates) {
       await videoEditStyleLibrary.preserveTemplate(template.id)

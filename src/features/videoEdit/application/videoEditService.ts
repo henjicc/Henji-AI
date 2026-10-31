@@ -44,6 +44,7 @@ import { videoEditInPlaceRecordsSchema, type VideoEditInPlaceRecord } from '@/co
 import { VIDEO_EDIT_FOCUSABLE_PANELS, type VideoEditFocusablePanel } from '@/core/videoEdit/panels'
 
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
+import { nextVideoEditHistoryOrder, registerVideoEditDocumentRedo, undoVideoEditLibraryBefore } from './videoEditLibraryHistory'
 import { readDocumentSessionState, writeDocumentSessionState } from '@/commands/documents'
 import { registerReloadResumeView } from '@/core/documents/reloadResumeViews'
 
@@ -111,7 +112,11 @@ const domainListeners = new Set<() => void>()
 export interface VideoEditCommandFact { operationId: string; relatedOperationId?: string; phase: 'committed' | 'cancelled' | 'failed' | 'undo' | 'redo'; before: VideoEditDocument; after: VideoEditDocument }
 const commandListeners = new Set<(owner: VideoEditInstance, fact: VideoEditCommandFact) => void>()
 const historyOperations = new WeakMap<VideoEditDocument, string>()
+const historyOrder = new WeakMap<VideoEditDocument, number>()
+const redoOrder = new WeakMap<VideoEditDocument, number>()
 const undoneFrom = new WeakMap<VideoEditDocument, VideoEditDocument>()
+// 效果库的新提交与剪辑文档排在同一条撤销链上，同样让文档的重做失效。
+registerVideoEditDocumentRedo(() => { for (const owner of listVideoEditInstances()) owner.future = [] })
 export function subscribeVideoEditCommandFacts(listener: (owner: VideoEditInstance, fact: VideoEditCommandFact) => void): () => void { commandListeners.add(listener); return () => { commandListeners.delete(listener) } }
 function publishCommandFact(owner: VideoEditInstance, fact: VideoEditCommandFact): void {
   for (const listener of commandListeners) {
@@ -337,7 +342,7 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
   const maskOnly = Boolean(state.maskChanges) && owner.contentVersion === (state.maskContentVersion ?? state.beforeContentVersion)
   const committed = commit && (maskOnly ? [...state.maskChanges!.values()].some(change => change.changed) : !sameDocumentContent(owner.document, state.before))
   if (committed) {
-    historyOperations.set(state.before, state.handle.token)
+    historyOperations.set(state.before, state.handle.token); historyOrder.set(state.before, nextVideoEditHistoryOrder('document'))
     owner.past = [...owner.past.slice(-49), state.before]; owner.future = []
   } else if (owner.contentVersion !== state.beforeContentVersion && (!commit || !maskOnly)) {
     // 手势期间确有预览写入才恢复起点；什么都没写的取消不产生新版本（否则画面版本领先于已保存版本却无内容可存）。
@@ -667,7 +672,12 @@ export function editVideoEditImportGroup(group: VideoEditImportEditGroup, update
   if (boundary < 0) throw new Error('此次导入已被撤销，剩余文件不会写入。')
   assertApplicationWritesAllowed(); assertVideoEditWritable(owner)
   if (gestures.has(owner)) throw new Error('请先完成当前参数调整。')
-  const rebased = owner.past.map((snapshot, index) => index > boundary ? parseVideoEditDocument(update(snapshot), snapshot) : snapshot)
+  const rebased = owner.past.map((snapshot, index) => {
+    if (index <= boundary) return snapshot
+    const value = parseVideoEditDocument(update(snapshot), snapshot), order = historyOrder.get(snapshot)
+    if (order !== undefined) historyOrder.set(value, order)
+    return value
+  })
   const next = applyVideoEditDocument(owner, update, false)
   for (const other of importEditGroups.get(owner) ?? []) if (other.boundary) {
     const index = owner.past.indexOf(other.boundary)
@@ -702,7 +712,7 @@ function applyVideoEditDocument(instance: VideoEditInstance, update: (document: 
 function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean, spatialOnly = false): VideoEditDocument {
   const history = { past: instance.past, future: instance.future }
   const operationId = recordHistory ? crypto.randomUUID() : undefined
-  if (operationId) historyOperations.set(instance.document, operationId)
+  if (operationId) { historyOperations.set(instance.document, operationId); historyOrder.set(instance.document, nextVideoEditHistoryOrder('document')) }
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
@@ -727,19 +737,36 @@ function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDo
   if (recordHistory) notifyVideoEditContent(instance)
   return instance.document
 }
+function nextHistoryOrder(instance: VideoEditInstance, redo: boolean): number | undefined {
+  const candidate = redo ? instance.future[0] : instance.past.at(-1)
+  return candidate ? (redo ? redoOrder.get(candidate) : historyOrder.get(candidate)) ?? 0 : undefined
+}
+/**
+ * 界面撤销：剪辑文档与本机效果库按真实提交顺序共用一条撤销，助手对库的修改也在其中。
+ * 助手的 undo_video_edit 只撤剪辑文档，库修改由通用撤销按操作撤回，回执才与实际影响一致。
+ */
+export function undoVideoEditWorkspace(id: string, redo = false): void {
+  assertApplicationWritesAllowed()
+  const instance = requireVideoEditInstance(id)
+  assertVideoEditWritable(instance)
+  if (!gestures.has(instance) && undoVideoEditLibraryBefore(nextHistoryOrder(instance, redo), redo)) return
+  undoVideoEdit(id, redo)
+}
 export function undoVideoEdit(id: string, redo = false): void {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
   assertVideoEditWritable(instance)
   if (gestures.has(instance)) { cancelVideoEditGesture(instance); return }
+  const order = nextHistoryOrder(instance, redo)
   const target = redo ? instance.future.shift() : instance.past.pop()
   if (!target) return
   if (redo) {
     const pushed = instance.document
+    historyOrder.set(pushed, order ?? 0)
     instance.past.push(pushed)
     const origin = undoneFrom.get(pushed)
     if (origin) for (const group of importEditGroups.get(instance) ?? []) if (group.boundary === origin) group.boundary = pushed
-  } else instance.future.unshift(instance.document)
+  } else { redoOrder.set(instance.document, order ?? 0); instance.future.unshift(instance.document) }
   const before = instance.document
   const relatedOperationId = historyOperations.get(target) ?? historyOperations.get(before) ?? crypto.randomUUID()
   historyOperations.set(target, relatedOperationId); historyOperations.set(before, relatedOperationId)

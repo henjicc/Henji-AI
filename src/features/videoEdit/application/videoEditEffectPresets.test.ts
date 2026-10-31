@@ -1,3 +1,4 @@
+import { seedVideoEditEffectPreset } from './videoEditDocumentTestKit'
 import { VIDEO_EDIT_EFFECT_LIBRARY_VERSION } from '@/core/persistence/schemaVersions'
 import fs from 'node:fs'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
@@ -7,15 +8,15 @@ import { createVideoEditTestProject as createVideoEditProject } from './videoEdi
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
-import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage, registerHarnessRecycledFile } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getHostScopeRevisions } from '@/features/application-control/hostContext/hostContext'
 import { videoEditEffectsRegistry } from '@/core/videoEdit/effectsRegistry'
 import { WHITE_HEX } from '@/core/theme/colorTokens'
 import { blurAmountForSigma } from '@/core/videoEdit/blur'
-import { makeVideoEditBuiltinEffect, applyVideoEditBuiltinEffect } from './videoEditCompositing'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit, videoEditDomainRevision } from './videoEditService'
-import { resolveVideoEditLibraryEffects, videoEditPresetCreationProperties, createVideoEditEffectLibraryStore, filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditUserPresetEntries, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY } from './videoEditEffectPresets'
+import { makeVideoEditBuiltinEffect, applyVideoEditStylePiece } from './videoEditCompositing'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit, undoVideoEditWorkspace, videoEditDomainRevision } from './videoEditService'
+import { videoEditPresetCreationProperties, createVideoEditEffectLibraryStore, filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditStylePieceLibraryEntries, listVideoEditStylePieces, findVideoEditGlobalStylePiece, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY } from './videoEditEffectPresets'
 import { videoEditEffectDropClips } from '../panels/videoEditEffectDrag'
 import { videoEditPresetCreationItemsSchema, VideoEditStylePieceCollectionExecutor } from './videoEditEffectPresetReflection'
 
@@ -27,9 +28,20 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 } }))
 beforeEach(() => {
   installHarnessNativeStorage()
+  useVideoEditEffectLibraryStore.getState().forgetLibraryChange()
   useVideoEditEffectLibraryStore.setState({ favorites: [], presets: [] })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue(path.resolve(path.sep, 'preset-test.hjvid'))
-  vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
+  const files = new Map<string, string>(), platform = getPlatform()
+  vi.spyOn(platform.system.paths, 'appLocalDataDir').mockResolvedValue(path.resolve(path.sep, 'effect-library-test'))
+  vi.spyOn(platform.system.paths, 'join').mockImplementation(async (...parts) => path.join(...parts))
+  vi.spyOn(platform.system.fs, 'mkdir').mockResolvedValue(undefined)
+  vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (file, text) => { files.set(file, text) })
+  vi.spyOn(platform.system.fs, 'remove').mockImplementation(async file => { files.delete(file) })
+  vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async file => { const text = files.get(file); if (text === undefined) throw new Error('文件不存在'); return text })
+  vi.spyOn(platform.settings, 'trashFile').mockImplementation(async (file, name) => {
+    const text = files.get(file); if (text === undefined) throw new Error('文件不存在')
+    registerHarnessRecycledFile(file, name ?? file, async () => { files.set(file, text) }); files.delete(file)
+  })
 })
 afterEach(async () => {
   for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id)
@@ -66,8 +78,8 @@ it('贝塞尔过冲预设应用到较短片段，修剪后参数仍可持久保�
   const clip = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[0])!
   const effect = makeVideoEditBuiltinEffect('blur')
   effect.builtin!.curves = { amount: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: (clip.duration - 1) * 2, value: 0.03, interpolation: 'linear' }] }
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('模糊动画', [effect])
-  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [clip.id], `preset:${preset.id}`)).not.toThrow()
+  const preset = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '模糊动画', [effect])
+  await applyVideoEditStylePiece(id, sequenceId, [clip.id], findVideoEditGlobalStylePiece(id, sequenceId, preset.id)!.ref)
   const points = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects![0].builtin!.curves!.amount
   expect(points.at(-1)?.time).toBe(clip.duration - 1)
   expect(points.at(-1)?.value).toBeCloseTo(0.07125, 6)
@@ -87,15 +99,15 @@ it('加载收藏统一合并过渡与效果引用，去重并保留原存储，�
   expect(createVideoEditEffectLibraryStore(disk).getState().favorites).toEqual(['effect:blur', 'effect:color_grade', 'effect:mosaic', 'transition:gl.Bounce', 'preset:mine'])
 })
 
-it('收藏、参数组合、重命名与删除经本机设置持久保存；写失败不发布新状态', () => {
+it('收藏、参数组合、重命名与删除经本机设置持久保存；写失败不发布新状态', async () => {
   const disk = storage(); const first = createVideoEditEffectLibraryStore(disk)
   first.getState().toggleFavorite('effect:blur'); first.getState().toggleFavorite('transition:cross_dissolve')
-  const preset = first.getState().savePreset('清晰对白', [makeVideoEditBuiltinEffect('audio_filter', { mode: 'high_pass', high_pass_frequency: 100 }), makeVideoEditBuiltinEffect('compressor')])
+  const preset = seedVideoEditEffectPreset(first.getState(), '清晰对白', [makeVideoEditBuiltinEffect('audio_filter', { mode: 'high_pass', high_pass_frequency: 100 }), makeVideoEditBuiltinEffect('compressor')])
   first.getState().renamePreset(preset.id, '对白处理')
   const restored = createVideoEditEffectLibraryStore(disk)
   expect(restored.getState().favorites).toEqual(['effect:blur', 'transition:cross_dissolve'])
   expect(restored.getState().presets[0]).toMatchObject({ name: '对白处理', media: 'audio', effects: preset.effects })
-  restored.getState().toggleFavorite('effect:blur'); restored.getState().deletePreset(preset.id)
+  restored.getState().toggleFavorite('effect:blur'); await restored.getState().deletePreset(preset.id)
   expect(createVideoEditEffectLibraryStore(disk).getState()).toMatchObject({ favorites: ['transition:cross_dissolve'], presets: [] })
   const previous = restored.getState(); const written = disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)
   vi.spyOn(disk, 'setItem').mockImplementation(() => { throw new Error('storage full') })
@@ -111,34 +123,35 @@ it('收藏、参数组合、重命名与删除经本机设置持久保存；写�
 it('保存参数强度开关与作用区域；手绘形状可选保存，跟踪绑定不会流入其他片段', () => {
   const library = createVideoEditEffectLibraryStore(storage()).getState()
   const effect = { ...makeVideoEditBuiltinEffect('mosaic'), enabled: false, amount: .45, mask: { regionId: 'face' as const, invert: true, feather: 25, expand: 10 } }
-  expect(library.savePreset('人脸处理', [effect]).effects[0]).toMatchObject(effect)
+  expect(seedVideoEditEffectPreset(library, '人脸处理', [effect]).effects[0]).toMatchObject(effect)
   const shapes = { ...effect, mask: { regionId: 'shapes' as const, shapes: [{ id: 'shape', kind: 'rect' as const, points: [[.2,.1,0,0,0,0],[.5,.1,0,0,0,0],[.5,.5,0,0,0,0],[.2,.5,0,0,0,0]] as import('@/core/videoEdit/effectMasks').VideoEditMaskPoint[], follow: { trackerId: 'original', reference: [0, 0, 1, 1] as [number, number, number, number] } }] } }
-  expect(library.savePreset('不含形状', [shapes]).effects[0].mask).toBeUndefined()
-  const saved = library.savePreset('含形状', [shapes], true)
+  expect(seedVideoEditEffectPreset(library, '不含形状', [shapes]).effects[0].mask).toBeUndefined()
+  const saved = seedVideoEditEffectPreset(library, '含形状', [shapes], true)
   expect(saved.effects[0].mask).toEqual({ regionId: 'shapes', shapes: [{ id: 'shape', kind: 'rect', points: [[.2,.1,0,0,0,0],[.5,.1,0,0,0,0],[.5,.5,0,0,0,0],[.2,.5,0,0,0,0]] }] })
   expect(shapes.mask.shapes[0].follow).toBeDefined()
-  expect(() => library.savePreset('混合媒介', [effect, makeVideoEditBuiltinEffect('audio_filter')])).toThrow('同媒介')
+  expect(() => seedVideoEditEffectPreset(library, '混合媒介', [effect, makeVideoEditBuiltinEffect('audio_filter')])).toThrow('同媒介')
 })
 
 it('预设组合拖放/双击共用应用入口，长链跨片段一步撤销；媒介不匹配拒绝', async () => {
   const { owner, id, sequenceId, pictures, sound } = await project()
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('画面组合', [makeVideoEditBuiltinEffect('blur', { amount: 0.0195 }), { ...makeVideoEditBuiltinEffect('mosaic'), amount: .3, enabled: false }])
-  const templateRef = `preset:${preset.id}`
+  const preset = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '画面组合', [makeVideoEditBuiltinEffect('blur', { amount: 0.0195 }), { ...makeVideoEditBuiltinEffect('mosaic'), amount: .3, enabled: false }])
+  const piece = findVideoEditGlobalStylePiece(id, sequenceId, preset.id)!
   const before = owner.past.length
-  const created = applyVideoEditBuiltinEffect(id, sequenceId, [...pictures, sound], templateRef)
+  const created = await applyVideoEditStylePiece(id, sequenceId, [...pictures, sound], piece.ref)
   expect(created).toHaveLength(4); expect(new Set(created).size).toBe(4); expect(owner.past).toHaveLength(before + 1)
   for (const clip of getActiveVideoEditSequence(owner).clips.filter(clip => clip.kind !== 'audio')) expect(clip.effects?.map(({ id: _id, ...effect }) => effect)).toEqual(preset.effects.map(({ id: _id, ...effect }) => effect))
-  expect(videoEditEffectDropClips(getActiveVideoEditSequence(owner), pictures[0], [...pictures, sound], templateRef)).toEqual(pictures)
-  expect(videoEditEffectDropClips(getActiveVideoEditSequence(owner), sound, [], templateRef)).toEqual([])
+  expect(videoEditEffectDropClips(getActiveVideoEditSequence(owner), pictures[0], [...pictures, sound], piece)).toEqual(pictures)
+  expect(videoEditEffectDropClips(getActiveVideoEditSequence(owner), sound, [], piece)).toEqual([])
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.every(clip => !clip.effects?.length)).toBe(true)
-  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [sound], templateRef)).toThrow('画面片段')
-  const audio = useVideoEditEffectLibraryStore.getState().savePreset('对白', [makeVideoEditBuiltinEffect('audio_filter')])
-  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, pictures, `preset:${audio.id}`)).toThrow('声音片段')
-  applyVideoEditBuiltinEffect(id, sequenceId, [sound, ...pictures], `preset:${audio.id}`)
+  await expect(applyVideoEditStylePiece(id, sequenceId, [sound], piece.ref)).rejects.toThrow('画面片段')
+  const audio = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '对白', [makeVideoEditBuiltinEffect('audio_filter')])
+  const audioRef = findVideoEditGlobalStylePiece(id, sequenceId, audio.id)!.ref
+  await expect(applyVideoEditStylePiece(id, sequenceId, pictures, audioRef)).rejects.toThrow('声音片段')
+  await applyVideoEditStylePiece(id, sequenceId, [sound, ...pictures], audioRef)
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === sound)?.effects?.[0].builtin?.id).toBe('audio_filter')
   editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === pictures[1] ? { ...clip, effects: Array.from({ length: 40 }, () => makeVideoEditBuiltinEffect('mosaic')) } : clip) })) }))
   const baseline = owner.document; const history = owner.past.length
-  expect(applyVideoEditBuiltinEffect(id, sequenceId, pictures, templateRef)).toHaveLength(4)
+  expect(await applyVideoEditStylePiece(id, sequenceId, pictures, piece.ref)).toHaveLength(4)
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[1])?.effects).toHaveLength(42)
   expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(id); expect(owner.document).toEqual({ ...baseline, revision: owner.document.revision })
@@ -146,8 +159,8 @@ it('预设组合拖放/双击共用应用入口，长链跨片段一步撤销；
 
 it('助手正式目录可读预设，并经现有效果集合写入整组；与手动入口结果相同且一步撤销', async () => {
   const { owner, id, pictures } = await project()
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('颜色组合', Array.from({ length: 24 }, (_, index) => makeVideoEditBuiltinEffect(index % 2 ? 'vignette' : 'color_grade')))
-  expect(filterVideoEditLibraryEntries(videoEditUserPresetEntries([preset]), '颜色组合 视频预设')).toHaveLength(1)
+  const preset = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '颜色组合', Array.from({ length: 24 }, (_, index) => makeVideoEditBuiltinEffect(index % 2 ? 'vignette' : 'color_grade')))
+  expect(filterVideoEditLibraryEntries(videoEditStylePieceLibraryEntries(listVideoEditStylePieces(id, owner.activeSequenceId)), '颜色组合 视频风格件')).toHaveLength(1)
   const app = createApplicationHarness()
   try {
     const listed = await app.requireResult('list_application_entities', { entityType: 'video_edit.effect_preset', limit: 20, propertyIds: ['video_edit.effect_preset.name'], where: { 'video_edit.effect_preset.name': preset.name } })
@@ -182,11 +195,10 @@ it('本机预设库里有已移除的效果时照样读入、原样保留，旧�
   // 已移除的效果原样保留；旧暗角的负数量读入时换成正数量配白色。
   expect(store.getState().presets[0].effects).toEqual([removed, { ...dark, builtin: { id: 'vignette', params: { amount: 30, color: WHITE_HEX } } }])
   useVideoEditEffectLibraryStore.setState({ presets: store.getState().presets })
-  expect(resolveVideoEditLibraryEffects('preset:old')?.effects.map(effect => effect.builtin?.id)).toEqual(['vignette'])
   const items = videoEditPresetCreationItemsSchema.parse(videoEditPresetCreationProperties(store.getState().presets[0]).map(properties => ({ properties })))
   expect(items.map(item => item.properties['video_edit.effect.definition_id'])).toEqual(['effect:vignette'])
   const { owner, id, sequenceId, pictures } = await project()
-  applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], 'preset:old')
+  await applyVideoEditStylePiece(id, sequenceId, [pictures[0]], findVideoEditGlobalStylePiece(id, sequenceId, 'old')!.ref)
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[0])!.effects?.map(effect => effect.builtin?.id)).toEqual(['vignette'])
 })
 
@@ -208,11 +220,10 @@ it('历史库先备份再迁移且读取不改写原件；失败不覆盖原件�
     expect(failed.getItem(key)).toBe(raw)
   }
   const disk = storage(), key = VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY
-  const futureVersion = VIDEO_EDIT_EFFECT_LIBRARY_VERSION + 1
-  disk.setItem(key, JSON.stringify({ version: futureVersion, minReaderVersion: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, content: { favorites: [], presets: [], futureTaste: { contrast: 3 } } }))
+  disk.setItem(key, JSON.stringify({ version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION + 1, minReaderVersion: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, content: { favorites: [], presets: [], futureTaste: { contrast: 3 } } }))
   const forward = createVideoEditEffectLibraryStore(disk)
-  forward.getState().savePreset('未来库内新增', [makeVideoEditBuiltinEffect('mosaic')])
-  expect(JSON.parse(disk.getItem(key)!)).toMatchObject({ version: futureVersion, minReaderVersion: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, content: { futureTaste: { contrast: 3 } } })
+  seedVideoEditEffectPreset(forward.getState(), '未来库内新增', [makeVideoEditBuiltinEffect('mosaic')])
+  expect(JSON.parse(disk.getItem(key)!)).toMatchObject({ version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION + 1, minReaderVersion: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, content: { futureTaste: { contrast: 3 } } })
 })
 
 it('公共入口创建与修改全局风格件并按说明检索，风格成员沿正式属性写入和读回', async () => {
@@ -268,16 +279,151 @@ it('公共入口创建与修改全局风格件并按说明检索，风格成员�
   } finally { app.dispose(); videoEditStyleLibrary.reset(); io.dispose() }
 })
 
+it('通用修改收藏及取消收藏风格件和内置效果，界面共用正式库并可撤销', async () => {
+  const store = useVideoEditEffectLibraryStore
+  const preset = seedVideoEditEffectPreset(store.getState(), '收藏风格件', [makeVideoEditBuiltinEffect('blur')])
+  const app = createApplicationHarness(), ref = { kind: 'video_edit.effect_library', id: 'singleton' }
+  const property = 'video_edit.effect_library.favorite_ids'
+  try {
+    const { owner, id, pictures } = await project()
+    const document = owner.document
+    const described = await app.requireResult('describe_application_entities', { entityTypes: [ref.kind], refs: [ref] })
+    expect(JSON.stringify(described)).toContain(property)
+    const ids = [`preset:${preset.id}`, 'effect:blur', 'transition:cross_dissolve']
+    const changed = await app.change(ref, { [property]: ids })
+    expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
+    expect(store.getState().favorites).toEqual(ids)
+    expect((await app.read(ref, [property])).properties).toMatchObject({ [property]: ids })
+    if (!changed.ok) throw new Error('收藏失败')
+    await app.requireResult('undo_application_changes', { undoRef: changed.data.undoRef })
+    expect(store.getState().favorites).toEqual([])
+    store.getState().toggleFavorite(`preset:${preset.id}`)
+    expect((await app.read(ref, [property])).properties).toMatchObject({ [property]: [`preset:${preset.id}`] })
+    const cleared = await app.change(ref, { [property]: [] })
+    expect(cleared).toMatchObject({ ok: true })
+    expect(store.getState().favorites).toEqual([])
+    if (!cleared.ok) throw new Error('取消收藏失败')
+    await app.requireResult('undo_application_changes', { undoRef: cleared.data.undoRef })
+    expect(store.getState().favorites).toEqual([`preset:${preset.id}`])
+    undoVideoEditWorkspace(id)
+    expect(store.getState().favorites).toEqual([])
+    expect(owner.document).toBe(document)
+    undoVideoEditWorkspace(id, true)
+    expect(store.getState().favorites).toEqual([`preset:${preset.id}`])
+    store.getState().toggleFavorite(`preset:${preset.id}`)
+    undoVideoEditWorkspace(id)
+    expect(store.getState().favorites).toEqual([`preset:${preset.id}`])
+    // 文档修改晚于收藏：界面撤销先撤文档再撤收藏，重做按原顺序；助手的 undo_video_edit 只撤文档。
+    const mosaic = () => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[0])?.effects?.length ?? 0
+    store.getState().toggleFavorite('effect:blur')
+    editVideoProject(id, value => ({ ...value, sequences: value.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === pictures[0] ? { ...clip, effects: [makeVideoEditBuiltinEffect('mosaic')] } : clip) })) }))
+    undoVideoEditWorkspace(id)
+    expect([mosaic(), store.getState().favorites]).toEqual([0, [`preset:${preset.id}`, 'effect:blur']])
+    undoVideoEditWorkspace(id)
+    expect(store.getState().favorites).toEqual([`preset:${preset.id}`])
+    undoVideoEditWorkspace(id, true)
+    expect([mosaic(), store.getState().favorites]).toEqual([0, [`preset:${preset.id}`, 'effect:blur']])
+    undoVideoEditWorkspace(id, true)
+    expect(mosaic()).toBe(1)
+    store.getState().toggleFavorite('effect:blur')
+    undoVideoEdit(id)
+    expect([mosaic(), store.getState().favorites]).toEqual([0, [`preset:${preset.id}`]])
+    // 撤销收藏后有新的文档提交，收藏不能再被重做。
+    undoVideoEditWorkspace(id)
+    expect(store.getState().favorites).toEqual([`preset:${preset.id}`, 'effect:blur'])
+    editVideoProject(id, value => ({ ...value, sequences: value.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === pictures[0] ? { ...clip, effects: [makeVideoEditBuiltinEffect('mosaic')] } : clip) })) }))
+    undoVideoEditWorkspace(id, true)
+    expect([mosaic(), store.getState().favorites]).toEqual([1, [`preset:${preset.id}`, 'effect:blur']])
+    store.getState().toggleFavorite('effect:blur')
+    expect(JSON.stringify(await app.change(ref, { [property]: ['effect:blur', 'effect:blur'] }))).toContain('收藏条目不能重复')
+    expect(store.getState().favorites).toEqual([`preset:${preset.id}`])
+    const before = store.getState()
+    expect(await app.change(ref, { [property]: ['preset:missing'] })).toMatchObject({ ok: false })
+    expect(store.getState()).toBe(before)
+  } finally { app.dispose() }
+})
+
+it('通用删除风格件进入回收区，通用恢复合并后续内容且撤销与界面共用恢复路径', async () => {
+  const store = useVideoEditEffectLibraryStore
+  const preset = seedVideoEditEffectPreset(store.getState(), '回收风格件', [makeVideoEditBuiltinEffect('blur')])
+  store.getState().toggleFavorite(`preset:${preset.id}`)
+  const app = createApplicationHarness(), parent = { kind: 'video_edit.style_library', id: 'singleton' }
+  const target = { kind: 'video_edit.effect_preset', id: preset.id }
+  const remove = () => app.requireResult('change_application_entities', { summary: '删除风格件', changes: [{ kind: 'remove_items', entityType: target.kind, parent, targets: [target] }] })
+  const restore = async (id: string) => app.requireResult('change_application_entities', { summary: '恢复风格件', changes: [{ kind: 'remove_items', entityType: 'settings.deleted_item', parent: { kind: 'settings.registry', id: 'singleton' }, targets: [{ kind: 'settings.deleted_item', id }] }] })
+  try {
+    const { id } = await project()
+    await app.requireResult('describe_application_entities', { entityTypes: [target.kind], refs: [target] })
+    const deleted = await remove()
+    expect(store.getState().presets).toEqual([])
+    expect(store.getState().favorites).toEqual([])
+    let items = await getPlatform().settings.listDeleted()
+    expect(items).toHaveLength(1)
+    expect(items[0].name).toBe(preset.name)
+    await app.requireResult('undo_application_changes', { undoRef: deleted.undoRef })
+    expect(store.getState().presets).toEqual([preset])
+    expect(store.getState().favorites).toEqual([`preset:${preset.id}`])
+    // 恢复同一副本是幂等的，不复制已撤销删除的成员。
+    await restore(items[0].id)
+    expect(store.getState().presets).toEqual([preset])
+    await store.getState().deletePreset(preset.id)
+    undoVideoEditWorkspace(id)
+    expect(store.getState().presets).toEqual([preset])
+    undoVideoEditWorkspace(id, true)
+    expect(store.getState().presets).toEqual([])
+    const later = seedVideoEditEffectPreset(store.getState(), '后来保存', [makeVideoEditBuiltinEffect('mosaic')])
+    items = await getPlatform().settings.listDeleted()
+    await restore(items[0].id)
+    expect(store.getState().presets).toEqual([later, preset])
+    expect(store.getState().favorites).toEqual([`preset:${preset.id}`])
+    // 回收区恢复不进撤销：撤销不会移除已不在回收区的风格件。
+    undoVideoEditWorkspace(id)
+    expect(store.getState().presets).toEqual([later, preset])
+    expect((await app.read(target, ['video_edit.effect_preset.name'])).properties).toMatchObject({ 'video_edit.effect_preset.name': preset.name })
+    expect(await getPlatform().settings.listDeleted()).toEqual([])
+  } finally { app.dispose() }
+})
+
+it('恢复读取失败保留回收入口，重名长名称可恢复，可信撤销保留历史失效收藏', async () => {
+  const store = useVideoEditEffectLibraryStore, name = '风'.repeat(200)
+  const preset = seedVideoEditEffectPreset(store.getState(), name, [makeVideoEditBuiltinEffect('blur')])
+  const app = createApplicationHarness()
+  const restore = async (id: string) => app.call('change_application_entities', { summary: '恢复风格件', changes: [{ kind: 'remove_items', entityType: 'settings.deleted_item', parent: { kind: 'settings.registry', id: 'singleton' }, targets: [{ kind: 'settings.deleted_item', id }] }] })
+  try {
+    await store.getState().deletePreset(preset.id)
+    const later = seedVideoEditEffectPreset(store.getState(), name, [makeVideoEditBuiltinEffect('mosaic')])
+    let item = (await getPlatform().settings.listDeleted())[0]
+    vi.mocked(getPlatform().system.fs.readTextFile).mockRejectedValueOnce(new Error('读取暂时失败'))
+    expect(await restore(item.id)).toMatchObject({ ok: false })
+    expect(store.getState().presets).toEqual([later])
+    item = (await getPlatform().settings.listDeleted())[0]
+    expect(item).toBeDefined()
+    expect(await restore(item.id)).toMatchObject({ ok: true })
+    expect(store.getState().presets).toHaveLength(2)
+    expect(store.getState().presets[1]).toMatchObject({ id: preset.id, name: `${name.slice(0, 196)} (2)` })
+    // 移入回收区失败时不发布删除。
+    vi.mocked(getPlatform().settings.trashFile).mockRejectedValueOnce(new Error('回收区不可用'))
+    await expect(store.getState().deletePreset(later.id)).rejects.toThrow('回收区不可用')
+    expect(store.getState().presets).toHaveLength(2)
+    store.setState({ favorites: ['preset:missing'] })
+    const changed = await app.change({ kind: 'video_edit.effect_library', id: 'singleton' }, { 'video_edit.effect_library.favorite_ids': [] })
+    expect(changed).toMatchObject({ ok: true })
+    if (!changed.ok) throw new Error('清空收藏失败')
+    await app.requireResult('undo_application_changes', { undoRef: changed.data.undoRef })
+    expect(store.getState().favorites).toEqual(['preset:missing'])
+  } finally { app.dispose() }
+})
+
 it('所有效果库写入口拒绝重名且不发布，成功操作和收藏只推进效果库自己的修订', () => {
   const store = useVideoEditEffectLibraryStore
   const domain = videoEditDomainRevision(), baseline = getHostScopeRevisions()
-  const a = store.getState().savePreset('柔化', [makeVideoEditBuiltinEffect('blur')])
-  const b = store.getState().savePreset('对白', [makeVideoEditBuiltinEffect('audio_filter')])
+  const a = seedVideoEditEffectPreset(store.getState(), '柔化', [makeVideoEditBuiltinEffect('blur')])
+  const b = seedVideoEditEffectPreset(store.getState(), '对白', [makeVideoEditBuiltinEffect('audio_filter')])
   const snapshot = store.getState(), written = localStorage.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)
   for (const write of [
-    () => store.getState().savePreset(' 柔化 ', a.effects),
+    () => seedVideoEditEffectPreset(store.getState(), ' 柔化 ', a.effects),
     () => store.getState().renamePreset(b.id, a.name),
-    () => store.getState().importPresets([a]),
+    () => store.getState().restoreLibrary({ favorites: [], presets: [a, { ...a, id: 'duplicate' }] }),
     () => store.getState().restoreLibrary({ favorites: [], presets: [a, { ...b, name: a.name }] }),
   ]) {
     expect(write).toThrow(/柔化/)
@@ -289,16 +435,16 @@ it('所有效果库写入口拒绝重名且不发布，成功操作和收藏只�
   expect(getHostScopeRevisions()['video_edit.effects']).toBeGreaterThan(baseline['video_edit.effects'])
 })
 
-it('旧库的多组重名可逐项修复，收藏不受影响，也不能引入新的重名', () => {
+it('旧库的多组重名可逐项修复，收藏不受影响，也不能引入新的重名', async () => {
   const disk = storage()
   const presets = ['甲', '甲', '乙', '乙'].map((name, index) => ({ id: `inherited-${index}`, name, media: 'video', effects: [makeVideoEditBuiltinEffect('blur')] }))
   disk.setItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, JSON.stringify({ version: 2, content: { favorites: [], presets } }))
   const store = createVideoEditEffectLibraryStore(disk)
   store.getState().toggleFavorite('preset:inherited-0')
   store.getState().renamePreset('inherited-0', '甲一')
-  store.getState().deletePreset('inherited-2')
+  await store.getState().deletePreset('inherited-2')
   expect(store.getState().presets.map(preset => preset.name)).toEqual(['甲一', '甲', '乙'])
-  expect(() => store.getState().savePreset('甲', presets[0].effects)).toThrow(/甲/)
+  expect(() => seedVideoEditEffectPreset(store.getState(), '甲', presets[0].effects)).toThrow(/甲/)
   expect(createVideoEditEffectLibraryStore(disk).getState().favorites).toEqual(['preset:inherited-0'])
 })
 
@@ -327,10 +473,10 @@ it('旋钮默认映射在片段应用、公共创建项和 look 中一致，映�
   const { owner, id, sequenceId, pictures } = await project()
   const effect = makeVideoEditBuiltinEffect('blur', { amount: .01 })
   effect.builtin!.curves = { amount: [{ time: 0, value: .02, interpolation: 'linear' }] }
-  const [preset] = useVideoEditEffectLibraryStore.getState().importPresets([{ id: 'mapped', name: '柔化', media: 'video', effects: [effect], knobs: [{ key: 'soft', name: '柔和度', min: 0, max: 100, default: 75, mappings: [{ effectId: effect.id, parameter: 'amount', points: [{ input: 0, output: 0 }, { input: 100, output: .04 }] }] }] }])
+  const [preset] = await useVideoEditEffectLibraryStore.getState().importPresets([{ id: 'mapped', name: '柔化', media: 'video', effects: [effect], knobs: [{ key: 'soft', name: '柔和度', min: 0, max: 100, default: 75, mappings: [{ effectId: effect.id, parameter: 'amount', points: [{ input: 0, output: 0 }, { input: 100, output: .04 }] }] }] }])
   const authored = resolveAuthorEffects([look(preset.name)], { presets: [preset] })[0]
   const creation = videoEditPresetCreationProperties(preset)[0]
-  applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], `preset:${preset.id}`)
+  await applyVideoEditStylePiece(id, sequenceId, [pictures[0]], findVideoEditGlobalStylePiece(id, sequenceId, preset.id)!.ref)
   const applied = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[0])!.effects![0]
   expect(creation['video_edit.effect.parameters']).toEqual(applied.builtin!.params)
   expect(applied.builtin!.params.amount).toBe(authored.params.amount)

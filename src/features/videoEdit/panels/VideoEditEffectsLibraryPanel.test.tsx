@@ -1,14 +1,18 @@
+import { seedVideoEditEffectPreset } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { videoEditEffectSchema } from '@/core/videoEdit/compositing'
 import { createVideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { expectButtonDisabled } from '@/tests/buttonAssertions'
 import type { VideoEditInstance } from '../application/videoEditService'
-import { editVideoProject, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, undoVideoEdit } from '../application/videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, undoVideoEdit } from '../application/videoEditService'
 import { createVideoEditTestProject } from '../application/videoEditDocumentTestKit'
-import { useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
+import { listVideoEditStylePieces, useVideoEditEffectLibraryStore } from '../application/videoEditEffectPresets'
+import { videoEditStyleLibrary } from '../application/videoEditStyleLibrary'
+import { createTestStyleLibraryIo } from '../application/videoEditStyleTestKit'
 import * as compositing from '../application/videoEditCompositing'
 import { selectVideoEditTransition } from '../application/videoEditTransitions'
 import { VideoEditTransitionPanel } from './VideoEditTransitionPanel'
@@ -31,6 +35,7 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/effects-library.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(compositing, 'applyVideoEditBuiltinEffect')
+  vi.spyOn(compositing, 'applyVideoEditStylePiece')
   instance = await createVideoEditTestProject()
   appendVideoEditClip(instance.document.id)
   setVideoEditTimelineView(instance.document.id, { selectedClipIds: [getActiveVideoEditSequence(instance).clips[0].id] })
@@ -75,32 +80,34 @@ it('混合媒介多选只添加到全部匹配片段，一步撤销；保留多�
   expect(getActiveVideoEditSequence(instance).clips.every(value => !value.effects?.length)).toBe(true)
 })
 
-it.each(['none', 'incompatible'] as const)('选区不可用（%s）给短通知，不走报错弹窗、不打开控件', reason => {
+it.each(['none', 'incompatible'] as const)('选区不可用（%s）与拖放共用不可用提示，不打开控件', reason => {
   if (reason === 'none') setVideoEditTimelineView(instance.document.id, { selectedClipIds: [] })
   const history = instance.past.length
   const added = vi.fn(); const onError = vi.fn()
   const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={onError} onEffectsAdded={added} />)
   fireEvent.doubleClick(container.querySelector(`[data-video-edit-effects-entry="effect:${reason === 'none' ? 'blur' : 'reverb'}"]`)!)
-  expect(notification).toHaveBeenCalledOnce()
-  expect(notification).toHaveBeenCalledWith({ key: reason === 'none' ? 'selectTimelineClip' : 'effectUnavailable' }, 'error')
-  expect(onError).not.toHaveBeenCalled()
+  expect(notification).not.toHaveBeenCalled()
+  expect(onError).toHaveBeenCalledWith(expect.any(Error))
   expect(added).not.toHaveBeenCalled()
   expect(compositing.applyVideoEditBuiltinEffect).not.toHaveBeenCalled()
   expect(instance.past).toHaveLength(history)
 })
 
-it('聚焦列表项按 Enter 应用预设，重复按键不重复添加', () => {
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('柔化', [effect()])
-  const added = vi.fn()
-  const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={vi.fn()} onEffectsAdded={added} />)
+it('聚焦列表项按 Enter 应用风格件，重复按键与进行中的再次应用不重复添加', async () => {
+  const preset = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '柔化', [effect()])
+  const added = vi.fn(); const onError = vi.fn()
+  const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={onError} onEffectsAdded={added} />)
   const item = container.querySelector<HTMLElement>(`[data-video-edit-effects-entry="preset:${preset.id}"]`)!
   item.focus()
   expect(document.activeElement).toBe(item)
   fireEvent.keyDown(item, { key: 'Enter' })
   fireEvent.keyDown(item, { key: 'Enter', repeat: true })
+  fireEvent.doubleClick(item)
+  await waitFor(() => expect(added).toHaveBeenCalledOnce())
   expect(getActiveVideoEditSequence(instance).clips[0].effects).toHaveLength(1)
-  expect(added).toHaveBeenCalledOnce()
-  expect(compositing.applyVideoEditBuiltinEffect).toHaveBeenCalledOnce()
+  expect(compositing.applyVideoEditStylePiece).toHaveBeenCalledOnce()
+  expect(compositing.applyVideoEditBuiltinEffect).not.toHaveBeenCalled()
+  expect(onError).not.toHaveBeenCalled()
 })
 
 it('搜索命中自动展开文件夹，清空恢复折叠；收藏置顶且星标不会应用效果', () => {
@@ -121,70 +128,103 @@ it('搜索命中自动展开文件夹，清空恢复折叠；收藏置顶且星�
   expect(compositing.applyVideoEditBuiltinEffect).not.toHaveBeenCalled()
 })
 
-it('预设双击走统一入口，右键重命名与删除更新本机库', async () => {
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('柔化', [effect()])
+it('风格件双击走异步风格件入口，右键重命名与删除更新本机库', async () => {
+  const preset = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '柔化', [effect()])
   const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={vi.fn()} />)
   const item = (): Element => container.querySelector(`[data-video-edit-effects-entry="preset:${preset.id}"]`)!
   fireEvent.doubleClick(item())
-  expect(compositing.applyVideoEditBuiltinEffect).toHaveBeenCalledWith(instance.document.id, instance.activeSequenceId, instance.selectedClipIds, `preset:${preset.id}`)
+  expect(compositing.applyVideoEditStylePiece).toHaveBeenCalledWith(instance.document.id, instance.activeSequenceId, instance.selectedClipIds, `preset:${preset.id}`)
+  await waitFor(() => expect(getActiveVideoEditSequence(instance).clips[0].effects).toHaveLength(1))
   fireEvent.contextMenu(item())
   fireEvent.click(screen.getByText('重命名…'))
-  fireEvent.change(await screen.findByRole('textbox', { name: '预设名称' }), { target: { value: '柔和画面' } })
+  fireEvent.change(await screen.findByRole('textbox', { name: '风格件名称' }), { target: { value: '柔和画面' } })
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  expect(useVideoEditEffectLibraryStore.getState().presets[0].name).toBe('柔和画面')
-  fireEvent.contextMenu(item()); fireEvent.click(screen.getByText('删除预设'))
+  await waitFor(() => expect(useVideoEditEffectLibraryStore.getState().presets[0].name).toBe('柔和画面'))
+  // 删除先把副本移入回收区；回收区本身由宿主测试覆盖，这里只替换系统边界。
+  vi.spyOn(getPlatform().system.paths, 'appLocalDataDir').mockResolvedValue('D:/effect-library-test')
+  vi.spyOn(getPlatform().system.paths, 'join').mockImplementation(async (...parts) => parts.join('/'))
+  vi.spyOn(getPlatform().system.fs, 'mkdir').mockResolvedValue(undefined)
+  const trash = vi.spyOn(getPlatform().settings, 'trashFile').mockResolvedValue(undefined)
+  fireEvent.contextMenu(item()); fireEvent.click(screen.getByText('删除风格件'))
   await waitFor(() => expect(useVideoEditEffectLibraryStore.getState().presets).toEqual([]))
+  expect(trash).toHaveBeenCalledWith(expect.any(String), '柔和画面')
 })
 
-it('保存入口允许选择是否保留手绘遮罩；保存副本参数不随原效果改变', () => {
+it('风格件文件夹同时列出全局与绑定风格的同名风格件，按归属分组；风格成员只能应用，失败交给报错通道', async () => {
+  const io = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(io, undefined)
+  try {
+    await videoEditStyleLibrary.ready()
+    const id = instance.document.id; const sequenceId = instance.activeSequenceId
+    const global = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '柔化', [effect()])
+    const style = { ...videoEditStyleLibrary.requireStyle('restrained').style, effectPresets: [{ ...global, id: 'member' }] }
+    editVideoProject(id, document => ({ ...document, styles: [style], sequences: document.sequences.map(sequence => sequence.id === sequenceId ? { ...sequence, styleId: style.id } : sequence) }))
+    const onError = vi.fn()
+    const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={onError} />)
+    const folder = within(container.querySelector<HTMLElement>('[data-video-edit-effects-folder="presets"]')!)
+    expect(folder.getByText('全局')).toBeTruthy(); expect(folder.getByText(style.name)).toBeTruthy()
+    expect(folder.getAllByText('柔化')).toHaveLength(2)
+    expect(folder.getAllByRole('button', { name: '收藏柔化' })).toHaveLength(1)
+    const member = listVideoEditStylePieces(id, sequenceId).find(entry => entry.styleId === style.id)!
+    const item = container.querySelector(`[data-video-edit-effects-entry="${member.ref}"]`)!
+    fireEvent.doubleClick(item)
+    expect(compositing.applyVideoEditStylePiece).toHaveBeenCalledWith(id, sequenceId, instance.selectedClipIds, member.ref)
+    await waitFor(() => expect(getActiveVideoEditSequence(instance).clips[0].effects).toHaveLength(1))
+    vi.mocked(compositing.applyVideoEditStylePiece).mockRejectedValueOnce(new Error('试渲染失败'))
+    await waitFor(() => expect(item.getAttribute('aria-busy')).toBeNull())
+    fireEvent.doubleClick(item)
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: '试渲染失败' })))
+  } finally { videoEditStyleLibrary.reset(); io.dispose() }
+})
+
+it('保存入口允许选择是否保留手绘遮罩；保存副本参数不随原效果改变', async () => {
   const source = { ...effect(), mask: { regionId: 'shapes' as const, shapes: [createVideoEditMaskShape('rect', 'shape')] } }
   const close = vi.fn()
-  render(<VideoEditEffectPresetDialog effects={[source]} initialName="局部柔化" onClose={close} />)
+  render(<VideoEditEffectPresetDialog projectId={instance.document.id} effects={[source]} initialName="局部柔化" onClose={close} />)
   fireEvent.click(screen.getByRole('switch', { name: '保存手绘遮罩' }))
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
   source.builtin!.params.amount = 10
+  await waitFor(() => expect(close).toHaveBeenCalledOnce())
   expect(screen.queryByRole('alert')?.textContent).toBeUndefined()
-  expect(close).toHaveBeenCalledOnce()
   expect(useVideoEditEffectLibraryStore.getState().presets[0].effects[0]).toMatchObject({ builtin: { params: { amount: 61.19 } }, mask: source.mask })
 })
 
 it('取消勾选全部效果或清空名称时禁用保存，Enter 也不会写入；取消不保存', () => {
   const close = vi.fn()
-  render(<VideoEditEffectPresetDialog effects={[effect()]} initialName="柔化" onClose={close} />)
+  render(<VideoEditEffectPresetDialog projectId={instance.document.id} effects={[effect()]} initialName="柔化" onClose={close} />)
   const checkbox = screen.getByRole('checkbox', { name: '保存效果：高斯模糊' })
-  const name = screen.getByRole('textbox', { name: '预设名称' })
+  const name = screen.getByRole('textbox', { name: '风格件名称' })
   fireEvent.click(checkbox)
-  expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(true)
+  expectButtonDisabled(screen.getByRole('button', { name: '保存' }))
   fireEvent.keyDown(name, { key: 'Enter' })
   expect(close).not.toHaveBeenCalled()
   expect(useVideoEditEffectLibraryStore.getState().presets).toEqual([])
   fireEvent.click(checkbox)
   fireEvent.change(name, { target: { value: '  ' } })
   fireEvent.keyDown(name, { key: 'Enter' })
-  expect(screen.getByRole('button', { name: '保存' }).hasAttribute('disabled')).toBe(true)
+  expectButtonDisabled(screen.getByRole('button', { name: '保存' }))
   expect(useVideoEditEffectLibraryStore.getState().presets).toEqual([])
   fireEvent.click(screen.getByRole('button', { name: '取消' }))
   expect(close).toHaveBeenCalledOnce()
   expect(useVideoEditEffectLibraryStore.getState().presets).toEqual([])
 })
 
-it('只选择无手绘遮罩的效果时不再显示遮罩选项，并且只保存它', () => {
+it('只选择无手绘遮罩的效果时不再显示遮罩选项，并且只保存它', async () => {
   const masked = { ...effect(), id: 'masked', name: '局部柔化', mask: { regionId: 'shapes' as const, shapes: [createVideoEditMaskShape('rect', 'shape')] } }
-  render(<VideoEditEffectPresetDialog effects={[masked, effect()]} initialName="柔化" onClose={vi.fn()} />)
+  render(<VideoEditEffectPresetDialog projectId={instance.document.id} effects={[masked, effect()]} initialName="柔化" onClose={vi.fn()} />)
   expect(screen.getByRole('switch', { name: '保存手绘遮罩' })).toBeTruthy()
   fireEvent.click(screen.getByRole('checkbox', { name: '保存效果：局部柔化' }))
   expect(screen.queryByRole('switch', { name: '保存手绘遮罩' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  expect(useVideoEditEffectLibraryStore.getState().presets[0].effects.map(effect => effect.id)).toEqual(['effect'])
+  await waitFor(() => expect(useVideoEditEffectLibraryStore.getState().presets[0].effects.map(effect => effect.id)).toEqual(['effect']))
 })
 
-it.each(['save', 'rename'])('重名时保存与改名弹窗保留输入并显示冲突名：%s', mode => {
-  const a = useVideoEditEffectLibraryStore.getState().savePreset('已存在的柔化', [effect()])
-  const b = useVideoEditEffectLibraryStore.getState().savePreset('另一项', [effect()])
+it.each(['save', 'rename'])('重名时保存与改名弹窗保留输入并显示冲突名：%s', async mode => {
+  const a = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '已存在的柔化', [effect()])
+  const b = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '另一项', [effect()])
   const close = vi.fn()
-  render(<VideoEditEffectPresetDialog effects={[effect()]} presetId={mode === 'rename' ? b.id : undefined} initialName={a.name} onClose={close} />)
+  render(mode === 'rename' ? <VideoEditEffectPresetDialog presetId={b.id} initialName={a.name} onClose={close} /> : <VideoEditEffectPresetDialog projectId={instance.document.id} effects={[effect()]} initialName={a.name} onClose={close} />)
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  expect(screen.getByRole('alert').textContent).toContain(a.name)
+  expect((await screen.findByRole('alert')).textContent).toContain(a.name)
   expect(close).not.toHaveBeenCalled()
   expect(useVideoEditEffectLibraryStore.getState().presets.map(value => value.name)).toEqual([a.name, b.name])
 })

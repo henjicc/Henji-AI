@@ -1,3 +1,4 @@
+import type { ContentTrustQuery } from '@/core/contentTrust'
 import type { ContentTrustReference } from '@/core/contentTrust'
 import { migrateVideoEditLibraryEffects } from '@/core/videoEdit/mergedEffectsMigration'
 import { createLogger } from '@/core/logging'
@@ -8,6 +9,7 @@ import type { VideoEditTemplateBody } from '@/core/videoEdit/styles/templateSche
 import { migrateStyleKit, migrateTitleTemplate } from '@/core/videoEdit/styles/styleTemplateMigration'
 import { VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import type { VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
+import { markVideoEditStylePieceForeign } from '@/core/videoEdit/effectPresets'
 import { VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_PACKAGE_VERSION, VIDEO_EDIT_PRESET_PANEL_CATEGORIES, videoEditPresetPackageSchema, type VideoEditPresetCategory, type VideoEditPresetPackageItem } from '@/core/videoEdit/presetPackage'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { listVideoEditSubtitlePresets, type VideoEditSubtitlePreset } from './videoEditSubtitlePresetList'
@@ -78,12 +80,13 @@ export function videoEditPresetSource(category: VideoEditPresetCategory, id: str
 export function setVideoEditPresetRating(category: VideoEditPresetCategory, id: string, rating: number): void { requireVideoEditPreset(category, id); videoEditPresetPreferences.setRating(category, id, rating) }
 export function setVideoEditPresetDefault(category: VideoEditPresetCategory, id: string | null): void { if (id) requireVideoEditPreset(category, id); videoEditPresetPreferences.setDefault(category, id) }
 /** Only personal presets can be deleted; projects keep their own snapshots of anything already applied. */
-export function deleteVideoEditPreset(category: VideoEditPresetCategory, id: string): void {
+export function deleteVideoEditPreset(category: VideoEditPresetCategory, id: string): void | Promise<void> {
   const entry = requireVideoEditPreset(category, id)
   if (entry.builtin) throw new Error('内置预设不能删除。')
   logger.info('preset.delete.start', '删除个人预设', { context: { category } })
   if (category === 'text') videoEditTextPresetLibrary.remove(id)
-  else if (category === 'effect') useVideoEditEffectLibraryStore.getState().deletePreset(id)
+  // 风格件评分按 id 保留：效果库面板与通用删除走同一个 deletePreset，撤销或回收恢复（未改身份时）可接回。
+  else if (category === 'effect') return useVideoEditEffectLibraryStore.getState().deletePreset(id).then(() => { logger.info('preset.delete.completed', '个人预设已删除', { context: { category } }) })
   videoEditPresetPreferences.forget(category, id)
   logger.info('preset.delete.completed', '个人预设已删除', { context: { category } })
 }
@@ -98,7 +101,7 @@ function packageItem(category: VideoEditPresetCategory, id: string): VideoEditPr
 export function videoEditPresetExportable(category: VideoEditPresetCategory, _id: string): boolean { return category === 'text' || category === 'effect' }
 /** Serialized exchange file (pretty JSON) for one or more presets. */
 export function exportVideoEditPresetPackage(refs: ReadonlyArray<{ category: VideoEditPresetCategory; id: string }>): string {
-  const value = videoEditPresetPackageSchema.parse({ format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: refs.map(ref => packageItem(ref.category, ref.id)) })
+  const value = videoEditPresetPackageSchema.parse({ format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, minReaderVersion: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: refs.map(ref => packageItem(ref.category, ref.id)) })
   return `${JSON.stringify(value, null, 2)}\n`
 }
 const unique = (name: string, taken: readonly string[]): string => { if (!taken.includes(name)) return name; let index = 2; while (taken.includes(`${name} ${index}`)) index++; return `${name} ${index}` }
@@ -132,7 +135,7 @@ export async function importVideoEditPresetPackage(text: string): Promise<Array<
       added.push({ category: 'title', id: template.id, name: template.name })
     }
     else if (item.category === 'text') { const preset = videoEditTextPresetLibrary.save(unique(item.preset.name, taken), item.preset.style); added.push({ category: 'text', id: preset.id, name: preset.name }) }
-    else { const [preset] = useVideoEditEffectLibraryStore.getState().importPresets([{ ...item.preset, name: unique(item.preset.name, taken) }]); added.push({ category: 'effect', id: preset.id, name: preset.name }) }
+    else { const [preset] = await useVideoEditEffectLibraryStore.getState().importPresets([markVideoEditStylePieceForeign({ ...item.preset, name: unique(item.preset.name, taken) }, { id: crypto.randomUUID(), sourceName: item.preset.name, sourceType: 'style_package' })]); added.push({ category: 'effect', id: preset.id, name: preset.name }) }
   }
   logger.info('preset.import.completed', '剪辑预设已导入', { context: { count: added.length } })
   return added
@@ -145,4 +148,10 @@ export function videoEditPresetHostSummary(): string {
     return [`${VIDEO_EDIT_PRESET_CATEGORY_LABELS[category]}：${[preferred && `默认“${preferred.name}”`, liked && `最喜欢“${liked.name}”（${liked.rating} 星）`].filter(Boolean).join('，')}`]
   })
   return parts.length ? `${parts.join('；')}。用户没有指定时优先用默认，没有默认就推荐最喜欢的并说明；评分与默认在 video_edit.preset 读写。` : '用户还没有设默认或给预设评分；可列出 video_edit.preset 了解可用预设。'
+}
+
+/** 预览订阅与编译使用相同来源，用户重新允许运行后可恢复被拒绝的效果预览。 */
+export function videoEditPresetTrustQueries(source: VideoEditPresetSource): ContentTrustQuery[] {
+  if (source.category === 'effect') return [{ contents: Object.values(source.preset.codeSnapshots ?? {}).flatMap(snapshot => snapshot.version.foreign ? [snapshot.version.foreign] : []) }]
+  return 'trustContext' in source ? [{ contents: source.trustContext ?? [] }] : []
 }

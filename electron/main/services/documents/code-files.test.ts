@@ -1,5 +1,11 @@
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { CodeGitRepository } from './code-git'
+import { styleCodeFixture } from '../../../../src/core/videoEdit/styleCodeTestFixtures'
+import { createRecordingDocument } from '../../../../src/core/screenRecording/document'
+import { createVideoEditTestDocument } from '../../../../src/core/videoEdit/testFixtures'
+import { screenRecordingDocumentKind } from '../../../../src/core/documents/kinds/screenRecording'
+import { videoEditDocumentKind } from '../../../../src/core/documents/kinds/videoEdit'
+import { snapshotCodeSourceClosure } from '../../../../src/core/videoEdit/codeMaterial/sources'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,6 +22,25 @@ async function setup() {
   return { service, project, document, target, write }
 }
 const worktreePath = (location: string) => { const reference = parseGitCodeLocation(location)!; return path.join(reference.repository, reference.filepath) }
+it('自包含风格快照跨工程保存后，原仓库移走仍可导出文档包与工程包', async () => {
+  const { service, target, project } = await setup()
+  const preset = styleCodeFixture(), snapshot = preset.codeSnapshots!.code
+  const publication = await service.writeCodeVersion({ target, definitionId: 'filter', name: '滤镜', contents: { entry: 'main.ts', files: { 'main.ts': snapshot.codeSources[0].source } } })
+  const closure = await snapshotCodeSourceClosure({ ...snapshot.version, files: publication.files }, { read: () => snapshot.codeSources[0].source })
+  const { codeSources, ...references } = closure
+  preset.codeSnapshots!.code = { ...snapshot, version: { ...snapshot.version, ...references }, codeSources }
+  const style = JSON.parse(await fsp.readFile(path.resolve('tests/fixtures/persistence/video-style-library/v7.json'), 'utf8')).content
+  style.effectPresets = [preset]
+  const destination = await service.createProject({ name: '复用工程' })
+  const document = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: destination.id }, name: '快照' })
+  await service.saveDocument({ target: { id: document.meta.id }, expectedRevision: 0, content: { media: [], bins: [], items: [], sequences: [], styles: [style] } })
+  await fsp.rename(project.path, path.join(env.outside, '已移走的原工程'))
+  expect((await service.readDocument({ id: document.meta.id })).missingPaths).toEqual([])
+  const single = await service.exportDocumentPackage({ target: { id: document.meta.id }, destination: path.join(env.outside, '快照文档包') })
+  expect((await service.importPackage({ source: single.path })).type).toBe('document')
+  const whole = await service.exportProjectPackage({ projectId: destination.id, destination: path.join(env.outside, '快照工程包') })
+  expect((await service.importPackage({ source: whole.path })).type).toBe('project')
+})
 it('工程闭包跨项目收集、单文档包和整项目包带齐源码并重写 project 提交', async () => {
   const { service, target, project } = await setup()
   const sources = { 'entries/a.ts': 'export { value } from "../style/tokens"; import "../style/desk.wgsl"', 'style/tokens.ts': 'export const value=1', 'style/desk.wgsl': 'fn desk() {}', 'README.md': '不属于闭包的作者说明' }
@@ -210,7 +235,9 @@ it('正式写入入口并发分配版本序号，没有覆盖或丢失提交', a
 it('本机和历史文档没有标记；外部导入只给导入批次的记录打标，复制沿用标记', async () => {
   const { service, document, target, write } = await setup()
   const written = await write()
-  const content = { media: [], bins: [], items: [], sequences: [], codeMaterials: [{ id: 'definition', defaultVersionId: 'version', name: '代码', versions: [{ id: 'version', apiVersion: 4, languageVersion: 4, entry: 'main.ts', files: written.files }] }] }
+  const style = JSON.parse(await fsp.readFile(path.resolve('tests/fixtures/persistence/video-style-library/v7.json'), 'utf8')).content
+  style.effectPresets = [styleCodeFixture()]
+  const content = { media: [], bins: [], items: [], sequences: [], styles: [style], codeMaterials: [{ id: 'definition', defaultVersionId: 'version', name: '代码', versions: [{ id: 'version', apiVersion: 4, languageVersion: 4, entry: 'main.ts', files: written.files }] }] }
   await service.saveDocument({ target, expectedRevision: 0, content })
   const local = await service.readDocument(target)
   expect(local.content).not.toHaveProperty('foreign')
@@ -222,6 +249,7 @@ it('本机和历史文档没有标记；外部导入只给导入批次的记录�
   const imported = await service.registerExternalDocument(importedPath)
   const foreign = { id: imported.id, sourceName: imported.name, sourceType: 'document_package' }
   expect((await service.readDocument({ id: imported.id })).content).toMatchObject({ foreign, codeMaterials: [{ versions: [{ foreign }] }] })
+  expect((await service.readDocument({ id: imported.id })).content).toMatchObject({ styles: [{ effectPresets: [{ codeSnapshots: { code: { version: { foreign } } } }] }] })
   const copied = await service.duplicateDocument({ target: { id: imported.id }, name: '派生副本', onConflict: 'keepBoth' })
   expect((await service.readDocument({ id: copied.meta.id })).content).toMatchObject({ foreign, codeMaterials: [{ versions: [{ foreign }] }] })
   expect((await service.readDocument(target)).content).not.toHaveProperty('foreign')
@@ -245,6 +273,42 @@ it('从单个外部文档打开工程时，工程其他目录的代码也带来�
   expect(rows).toHaveLength(2)
   for (const row of rows) expect((await service.readDocument({ id: row.id })).content).toMatchObject({ codeMaterials: [{ versions: [{ foreign: { sourceType: 'project', id: opened.container.projectId } }] }] })
   expect((await service.readDocument(target)).content).not.toHaveProperty('foreign')
+})
+
+it.each(['video_edit', 'screen_recording'] as const)('外部导入 %s 的较新可读文档保留未知快照字段，嵌入代码全部标记外来', async kind => {
+  const { service, project } = await setup()
+  const document = await service.createDocument({ kind, container: { kind: 'project', projectId: project.id }, name: '较新内容' })
+  const video = createVideoEditTestDocument('基线')
+  const style = JSON.parse(await fsp.readFile(path.resolve('tests/fixtures/persistence/video-style-library/v7.json'), 'utf8')).content
+  const preset = styleCodeFixture()
+  const snapshot = preset.codeSnapshots!.code
+  const publication = await service.writeCodeVersion({ target: { id: document.meta.id }, definitionId: 'filter', name: '滤镜', contents: { entry: 'main.ts', files: { 'main.ts': snapshot.codeSources[0].source } } })
+  snapshot.version.files = publication.files
+  video.codeMaterials = [{ id: 'filter', name: '代码', defaultVersionId: snapshot.version.id, versions: [snapshot.version] }]
+  style.effectPresets = [preset]; video.styles = [style]
+  const content = kind === 'video_edit' ? video : { ...createRecordingDocument(), scriptCapture: { baselines: [{ documentId: video.id, content: video }], calls: [] } }
+  await service.saveDocument({ target: { id: document.meta.id }, expectedRevision: 0, content })
+  const envelope = JSON.parse(await fsp.readFile(document.meta.path, 'utf8'))
+  const current = kind === 'video_edit' ? videoEditDocumentKind.version : screenRecordingDocumentKind.version
+  envelope.kindVersion = current + 1; envelope.kindMinReaderVersion = current
+  const nested = kind === 'video_edit' ? envelope.content : envelope.content.scriptCapture.baselines[0].content
+  nested.styles[0].effectPresets[0].futureMember = { retained: true }
+  nested.styles[0].effectPresets[0].codeSnapshots.code.futureSnapshot = 'retained'
+  const external = path.join(env.outside, path.basename(document.meta.path))
+  await fsp.writeFile(external, JSON.stringify(envelope))
+  const imported = await service.registerExternalDocument(external)
+  const saved = JSON.parse(await fsp.readFile(imported.path, 'utf8'))
+  const marked = kind === 'video_edit' ? saved.content : saved.content.scriptCapture.baselines[0].content
+  expect(saved.kindVersion).toBe(current + 1)
+  expect(marked.codeMaterials[0].versions[0].foreign).toMatchObject({ sourceType: 'document_package' })
+  expect(marked.styles[0].effectPresets[0]).toMatchObject({ futureMember: { retained: true }, codeSnapshots: { code: { futureSnapshot: 'retained', version: { foreign: { sourceType: 'document_package' } } } } })
+  const exported = await service.exportProjectPackage({ projectId: project.id, destination: path.join(env.outside, `project-${kind}`) })
+  const importedProject = await service.importPackage({ source: exported.path })
+  if (importedProject.type !== 'project') throw new Error('应导入工程')
+  const [row] = await service.listDocuments({ kind, container: { kind: 'project', projectId: importedProject.project.id } })
+  const projectRead = await service.readDocument({ id: row.id })
+  const embedded = kind === 'video_edit' ? projectRead.content : (projectRead.content as ReturnType<typeof createRecordingDocument>).scriptCapture.baselines[0].content
+  expect(embedded).toMatchObject({ codeMaterials: [{ versions: [{ foreign: { sourceType: 'project' } }] }], styles: [{ effectPresets: [{ codeSnapshots: { code: { version: { foreign: { sourceType: 'project' } } } } }] }] })
 })
 
 it('组件目录存在失效联接点时记录警告并继续返回正常组件', async () => {

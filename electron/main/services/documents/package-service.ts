@@ -547,7 +547,7 @@ export class DocumentPackageService {
       const codec = createLocationCodec(this.workspace.locationContext(stagedContainer))
       for (const { path: filePath, file, nextId } of documents) {
         if (file.envelope) {
-          const importedEnvelope = file.kind.id === 'video_edit' ? markForeignVideoDocument(file, projectManifest.foreign!, stagedContainer, this.workspace) : file.envelope
+          const importedEnvelope = ['video_edit', 'screen_recording'].includes(file.kind.id) ? markForeignVideoDocument(file, projectManifest.foreign!, stagedContainer, this.workspace) : file.envelope
           const imported = importedEnvelope.content
           const linked = remapDocumentLinks(imported, idMap, location => {
             const absolute = codec.decode(location).value

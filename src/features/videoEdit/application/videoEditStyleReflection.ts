@@ -1,3 +1,4 @@
+import { resolveVideoEditStyleMembers, videoEditStylePieceDefinitionInputSchema } from './videoEditStylePieceDefinition'
 import { videoEditEffectPresetSchema } from '@/core/videoEdit/effectPresets'
 import { videoEditPresetCreationProperties } from './videoEditEffectPresets'
 import { videoEditPresetCreationItemsSchema } from './videoEditEffectPresetReflection'
@@ -17,6 +18,7 @@ import { videoEditStyleLibrary, type VideoEditLibraryStyle } from './videoEditSt
 import { newerLibraryStyleVersion } from './videoEditStyles'
 import { newerLibraryTemplateVersion, unregisterVideoEditTemplates, videoEditTemplateInstances, withVideoEditTemplateStyle } from './videoEditTemplates'
 import { videoEditTemplateStyle } from './videoEditPresetCatalog'
+import { jsonEqual } from '@/core/jsonEqual'
 
 /*
  * 风格与模板的通用实体：读、改、增、删和成员关系都走通用动词；渲染样片、导入导出、绑定、应用、固化、升级、分离是专用能力。
@@ -48,7 +50,7 @@ const READ_ONLY: Record<string, string> = {
 const jsonRef = (entityType: string, key: string): Value => ({ kind: 'json', schemaRef: videoEditSchemaRef('property', `${entityType}.${key}.value`) })
 const field = <T>(entityType: string, key: string, title: string, description: string, value: Value, read: (value: T) => JsonValue, write?: (draft: T, value: JsonValue | undefined) => void, nullable = false): ApplicationFieldDefinition<T, T> => ({
   propertyId: `${entityType}.${key}`, storeActions: [], read, ...(write ? { writer: { write: (draft: T, mutation: { value?: JsonValue }) => write(draft, mutation.value) } } : {}),
-  descriptor: descriptor(entityType, key, title, description, value, Boolean(write), nullable),
+  descriptor: { ...descriptor(entityType, key, title, description, value, Boolean(write), nullable), ...(entityType === STYLE_ENTITY && key === 'effect_presets' ? { verificationStrategy: 'execution' as const } : {}) },
 })
 
 // —— 风格库风格 ——
@@ -56,7 +58,7 @@ interface StyleDraft { entry: VideoEditLibraryStyle; style: VideoEditStyle; isDe
 const styleShape = videoEditStyleSchema.shape
 const sections = STYLE_GUIDE_SECTIONS.map(spec => spec.title).join('、')
 const styleFields: ApplicationFieldDefinition<StyleDraft, StyleDraft>[] = [
-  field(STYLE_ENTITY, 'effect_presets', '风格件', '本风格的风格件；同名覆盖全局，归属由所在风格决定，无须填写 owner。新建或修改前展示内容，请用户确认一次。', jsonRef(STYLE_ENTITY, 'effect_presets'), draft => (draft.style.effectPresets ?? []) as unknown as JsonValue, (draft, value) => { draft.style = videoEditStyleSchema.parse({ ...draft.style, effectPresets: value }) }),
+  field(STYLE_ENTITY, 'effect_presets', '风格件', '本风格的风格件；同名覆盖全局，归属由所在风格决定，无须填写 owner。新建或修改前展示内容，请用户确认一次。effects 支持 {ref: video_edit.effect 引用}，新增代码成员须使用引用；原始快照仅可原样读回修改名称和旋钮。', jsonRef(STYLE_ENTITY, 'effect_presets'), draft => (draft.style.effectPresets ?? []) as unknown as JsonValue, (draft, value) => { draft.style = videoEditStyleSchema.parse({ ...draft.style, effectPresets: value }) }),
   field(STYLE_ENTITY, 'name', '风格名称', '风格名称（最多 80 字）。', { kind: 'string', maxLength: 80 }, draft => draft.style.name, (draft, value) => { draft.style.name = styleShape.name.parse(value) }),
   field(STYLE_ENTITY, 'name_english', '英文名', '可选英文名；null 清除。', { kind: 'string', maxLength: 80 }, draft => draft.style.nameEnglish ?? null, (draft, value) => { if (value === null) delete draft.style.nameEnglish; else draft.style.nameEnglish = styleShape.nameEnglish.unwrap().parse(value) }, true),
   field(STYLE_ENTITY, 'description', '一句话说明', '这个风格是什么感觉、适合什么片子（最多 300 字），列表与挑选风格时显示。', { kind: 'string', maxLength: 300 }, draft => draft.style.description, (draft, value) => { draft.style.description = styleShape.description.parse(value) }),
@@ -87,7 +89,7 @@ const templateFields: ApplicationFieldDefinition<VideoEditTemplate, VideoEditTem
 // —— 工程风格副本 ——
 interface ProjectStyleDraft { projectId: string; style: VideoEditStyle; document: VideoEditDocument }
 const projectStyleFields: ApplicationFieldDefinition<ProjectStyleDraft, ProjectStyleDraft>[] = [
-  field(PROJECT_STYLE_ENTITY, 'effect_presets', '风格件', '工程风格副本里的风格件，供绑定序列的 look 使用；每项 creation_items 可用于向片段创建效果，库更新须经 bind_video_edit_style 同步。', jsonRef(PROJECT_STYLE_ENTITY, 'effect_presets'), draft => (draft.style.effectPresets ?? []).map(preset => ({ ...preset, creation_items: videoEditPresetCreationProperties(preset).map(properties => ({ properties })) })) as unknown as JsonValue),
+  field(PROJECT_STYLE_ENTITY, 'effect_presets', '风格件', '工程风格副本里的风格件，供绑定序列的 look 使用；每项 creation_items 可用于向片段创建效果，库更新须经 bind_video_edit_style 同步。', jsonRef(PROJECT_STYLE_ENTITY, 'effect_presets'), draft => (draft.style.effectPresets ?? []).map(preset => ({ ...preset, creation_items: videoEditPresetCreationProperties(preset, draft.style.id).map(properties => ({ properties })) })) as unknown as JsonValue),
   field(PROJECT_STYLE_ENTITY, 'name', '风格名称', '工程副本的名称。', { kind: 'string', maxLength: 80 }, draft => draft.style.name),
   field(PROJECT_STYLE_ENTITY, 'version', '版本号', '本工程用的版本；写进项目制作进度（documents.project.progress），例如“风格预设：克制高级 v3”。', { kind: 'integer' }, draft => draft.style.version),
   field(PROJECT_STYLE_ENTITY, 'library_version', '风格库里的更新版本', '风格库里同一风格的版本更高时为那个版本，否则为 null：告诉用户并问要不要升级（bind_video_edit_style）。', { kind: 'integer' }, draft => newerLibraryStyleVersion(draft.style), undefined, true),
@@ -122,7 +124,7 @@ const libraryFields: ApplicationFieldDefinition<typeof videoEditStyleLibrary, ty
   field(STYLE_LIBRARY_ENTITY, 'template_count', '库模板数', '风格库里的库模板数。', { kind: 'integer' }, library => library.listTemplates().length),
 ]
 const JSON_SCHEMAS: Array<[string, z.ZodType]> = [
-  [`${STYLE_ENTITY}.effect_presets`, z.array(videoEditEffectPresetSchema)], [`${PROJECT_STYLE_ENTITY}.effect_presets`, z.array(videoEditEffectPresetSchema.safeExtend({ creation_items: videoEditPresetCreationItemsSchema }))],
+  [`${STYLE_ENTITY}.effect_presets`, z.array(videoEditStylePieceDefinitionInputSchema)], [`${PROJECT_STYLE_ENTITY}.effect_presets`, z.array(videoEditEffectPresetSchema.safeExtend({ creation_items: videoEditPresetCreationItemsSchema }))],
   [`${STYLE_ENTITY}.sample`, videoEditStyleSampleSchema], [`${STYLE_ENTITY}.missing_sections`, z.array(z.string())],
   [`${STYLE_ENTITY}.media`, z.object({ preview: z.string().nullable(), thumbnail: z.string().nullable(), anchors: z.array(z.string()) })],
   [`${STYLE_ENTITY}.template_refs`, z.array(z.object({ kind: z.string(), id: z.string(), label: z.string() }))],
@@ -255,6 +257,14 @@ class LibraryExecutor {
 function newStyle(name: string): VideoEditStyle {
   return videoEditStyleSchema.parse({ id: crypto.randomUUID(), name, description: '', version: 0, contentHash: '', updatedAt: new Date().toISOString(), guide: styleGuideTemplate(name), sample: { ...NEW_STYLE_SAMPLE, anchors: [...NEW_STYLE_SAMPLE.anchors], code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } } } })
 }
+async function resolveStyleMutations(mutations: Extract<ApplicationPlannedStep, { kind: 'mutation' }>['mutations'], signal?: AbortSignal, previous: VideoEditStyle['effectPresets'] = []) {
+  return Promise.all(mutations.map(async mutation => mutation.propertyId === `${STYLE_ENTITY}.effect_presets` ? { ...mutation, value: await resolveVideoEditStyleMembers(mutation.value, previous, signal) as unknown as JsonValue } : mutation))
+}
+async function saveStyleWithMemberReadback(style: VideoEditStyle): Promise<VideoEditLibraryStyle> {
+  const saved = await videoEditStyleLibrary.saveStyle(style)
+  if (!jsonEqual(videoEditStyleLibrary.requireStyle(style.id).style.effectPresets, style.effectPresets)) throw new Error('风格成员保存读回不一致。')
+  return saved
+}
 export class VideoEditStyleCollectionExecutor extends LibraryExecutor implements ApplicationCollectionExecutor {
   constructor(readonly entityType: typeof STYLE_ENTITY | typeof TEMPLATE_ENTITY) { super() }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
@@ -267,8 +277,8 @@ export class VideoEditStyleCollectionExecutor extends LibraryExecutor implements
       if (unknown.length) throw new Error(`创建时不能写这些属性：${unknown.join('、')}；可写：${fields.filter(value => value.writer).map(value => value.propertyId).join('、')}。`)
       if (this.entityType === STYLE_ENTITY) {
         const draft: StyleDraft = { entry: undefined as unknown as VideoEditLibraryStyle, style: newStyle(styleShape.name.parse(item.properties[`${STYLE_ENTITY}.name`])), isDefault: false }
-        await applyWriterTable(fieldWriterTable(styleFields), draft, Object.entries(item.properties).map(([propertyId, value]) => ({ propertyId, operation: 'set' as const, value: value as JsonValue })))
-        const saved = await videoEditStyleLibrary.saveStyle(draft.style)
+        await applyWriterTable(fieldWriterTable(styleFields), draft, await resolveStyleMutations(Object.entries(item.properties).map(([propertyId, value]) => ({ propertyId, operation: 'set' as const, value: value as JsonValue })), context.signal))
+        const saved = await saveStyleWithMemberReadback(draft.style)
         if (draft.isDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); await videoEditStyleLibrary.setDefaultStyle(saved.style.id, 'assistant') }
         state.styles.push({ id: saved.style.id, after: saved.style }); state.refs.push({ kind: STYLE_ENTITY, id: saved.style.id })
       } else {
@@ -306,9 +316,9 @@ export class VideoEditStyleMutationExecutor extends LibraryExecutor implements A
       const draft = await styleDraft(step.target); const before = structuredClone(draft.style); const wasDefault = draft.isDefault
       const contentKeys = step.mutations.filter(mutation => mutation.propertyId !== `${STYLE_ENTITY}.is_default`)
       if (draft.entry.builtin && contentKeys.length) throw new Error('内置风格只读；要改先以它的内容创建个人风格。')
-      await applyWriterTable(fieldWriterTable(styleFields), draft, step.mutations)
+      await applyWriterTable(fieldWriterTable(styleFields), draft, await resolveStyleMutations(step.mutations, context.signal, before.effectPresets))
       context.signal?.throwIfAborted()
-      if (contentKeys.length) state.styles.push({ id: before.id, before, after: (await videoEditStyleLibrary.saveStyle(draft.style)).style })
+      if (contentKeys.length) state.styles.push({ id: before.id, before, after: (await saveStyleWithMemberReadback(draft.style)).style })
       if (draft.isDefault !== wasDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); await videoEditStyleLibrary.setDefaultStyle(draft.isDefault ? before.id : null, 'assistant') }
     } else {
       const before = await templateValue(step.target); const draft = structuredClone(before)

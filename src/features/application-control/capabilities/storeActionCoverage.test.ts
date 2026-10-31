@@ -64,6 +64,8 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useUiStore } from '@/stores/uiStore'
+import { EFFECT_LIBRARY_STORE_LEDGER } from '@/features/videoEdit/application/videoEditEffectLibraryStoreLedger'
+import { useVideoEditEffectLibraryStore } from '@/features/videoEdit/application/videoEditEffectPresets'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from './applicationControlRegistry'
@@ -84,6 +86,7 @@ interface LedgerCase {
 }
 
 const LEDGERS: LedgerCase[] = [
+  { ledger: EFFECT_LIBRARY_STORE_LEDGER, state: () => useVideoEditEffectLibraryStore.getState() },
   { ledger: AUDIO_EDIT_STORE_LEDGER, state: () => useAudioEditStore.getState() },
   { ledger: AUDIO_EDIT_PLAYBACK_STORE_LEDGER, state: () => useAudioEditPlaybackStore.getState() },
   { ledger: CAMERA_STAGE_STORE_LEDGER, state: () => useCameraStageStore.getState() },

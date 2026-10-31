@@ -1,3 +1,5 @@
+import { storedVideoEditEffectLibrary } from '../src/core/videoEdit/effectLibrary'
+import { styleCodeDeclarations } from '../src/core/videoEdit/styleCodeSnapshot'
 import { videoEditEffectPresetSchema } from '../src/core/videoEdit/effectPresets'
 import { PACKAGE_VERSION } from '../src/core/persistence/storedSchemas'
 import { gitCodeLocation } from '../src/core/storage/gitCodeLocation'
@@ -164,7 +166,14 @@ sequence.clips.push(remapClip)
 // v22：工程风格副本（说明书 + 样片代码）绑定序列；代码模板联动代码定义，原生模板联动带 templateId 的图形片段。
 // v30（剪辑）/ v3（风格库、风格包）/ v33（录制会话）：样片画布放宽到 3840×2160、60 帧，黄金风格按 4K60 写。
 // v32（剪辑）/ v4（风格库、风格包）/ v35（录制会话）：样片放宽到 30 秒、锚点 10 张，黄金风格按 24 秒、9 张锚点写。
-const goldenPiece = videoEditEffectPresetSchema.parse({ id: 'golden-piece', name: '柔和背景', description: '柔化背景但保留轮廓。', usage: '标题底图', media: 'video', effects: [{ id: 'piece-blur', name: '模糊', enabled: true, amount: .6, builtin: { id: 'blur', params: { mode: 'uniform', amount: 50 } } }], knobs: [{ key: 'softness', name: '柔和度', min: 0, max: 100, default: 50, mappings: [{ effectId: 'piece-blur', parameter: 'amount', points: [{ input: 0, output: 0 }, { input: 50, output: 50 }, { input: 100, output: 100 }] }] }] })
+const goldenBuiltinPiece = videoEditEffectPresetSchema.parse({ id: 'golden-piece', name: '柔和背景', description: '柔化背景但保留轮廓。', usage: '标题底图', media: 'video', effects: [{ id: 'piece-blur', name: '模糊', enabled: true, amount: .6, builtin: { id: 'blur', params: { mode: 'uniform', amount: 50 } } }], knobs: [{ key: 'softness', name: '柔和度', min: 0, max: 100, default: 50, mappings: [{ effectId: 'piece-blur', parameter: 'amount', points: [{ input: 0, output: 0 }, { input: 50, output: 50 }, { input: 100, output: 100 }] }] }] })
+const styleFilterSource = 'export default {name:"风格滤镜",kind:"filter",mode:"static",params:[{key:"gain",type:"number",title:"强度",default:.5,min:0,max:1,step:.01}],createWebGPU(){return {draw(){}}}}'
+const styleFilterHash = createHash('sha256').update(styleFilterSource).digest('hex')
+const styleFilterMetadata = testCodeMetadata({ name: '风格滤镜', kind: 'filter', parameters: { gain: { type: 'number', title: '强度', default: .5, min: 0, max: 1, step: .01 } }, apiVersion: CODE_AUTHOR_API_VERSION })
+const goldenPiece = videoEditEffectPresetSchema.parse({ ...goldenBuiltinPiece,
+  effects: [...goldenBuiltinPiece.effects, { id: 'piece-code', name: '风格滤镜', enabled: true, amount: .8, code: { definitionId: 'style-filter', versionId: 'style-filter-version', parameters: { gain: .5 } } }],
+  codeSnapshots: { 'piece-code': { version: { id: 'style-filter-version', apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4, entry: 'main.ts', files: [{ path: 'main.ts', location: `asset:${styleFilterHash}`, hash: styleFilterHash }], libraries: { 'henji-effects': '1.3.0' } }, codeSources: [{ hash: styleFilterHash, source: styleFilterSource }], ...styleCodeDeclarations(styleFilterMetadata) } },
+})
 const goldenStyle = { effectPresets: [goldenPiece], userPreferences: [{ id: 'golden-style-memory', content: '标题少用装饰线。', source: 'user' as const, updatedAt: timestamp, revision: 1 }], id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 3840, height: 2160, durationSeconds: 24, fps: 60, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8, 12.4, 15, 18.2, 23.2] } }
 document.styles = [{ ...goldenStyle, sample: { ...goldenStyle.sample, code: { entry: 'index.js', files: { 'index.js': source } } } }]
 sequence.styleId = goldenStyle.id
@@ -318,7 +327,7 @@ const values: Record<string, unknown> = {
   'image-working-copy': working,
   settings: { providerKeyStatus: { kie: false }, uploadProvider: 'kie', uploadFallbackEnabled: false, canvasLodLevel: 'balanced', videoEditBinsFirst: true, experimentalWebAppRecording: true, videoEditClipThumbnails: 'head_tail' },
   theme: { theme: 'dark' },
-  'video-effect-library': { favorites: ['preset:golden-piece'], presets: [goldenPiece] },
+  'video-effect-library': storedVideoEditEffectLibrary({ favorites: ['preset:golden-piece'], presets: [goldenPiece] }),
   'style-kits': legacyKits,
   'title-templates': legacyTitles,
   'video-style-library': goldenStyle,
