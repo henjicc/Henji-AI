@@ -1,6 +1,6 @@
-摘要：保留 Pretext 1.0.0 + harfbuzzjs 1.6.4；先验证共同度量与标点字形，再发布新的 henji-layout 冻结版，旧冻结版不变。
-摘要：layoutText / drawText / GraphemePose 保留现有调用形状；新增字体准备与简单表格入口，字体宿主契约建议升作者 API，宿主内置文字暂不切换排版算法。
-摘要：本次仅技术设计，未安装依赖、未执行实验、未启动 Electron/GPU；Claude 与指定审查员批准后实施，真实窗口实验另等显卡解禁。
+摘要：采用 Pretext 1.0.0 的断行规则与标点决策，HarfBuzz 整段整形提供唯一度量；发行 henji-layout 2.0.0 / 作者 API 8，旧冻结库与旧记录保持原行为。
+摘要：字体改为模块静态声明、宿主出帧前准备；新路径只向 HarfBuzz 交付字节，会话回退链固定。layoutText / drawText / GraphemePose 保留调用形状，新增简单表格模块。
+摘要：正文按第 13 节重写；第 12、13 节原样保留为裁定记录，冲突以第 13 节为准。本轮只改本文件，不安装依赖、不改代码、不运行实验或 Electron/GPU、不提交、合并或 push。
 
 # Ticket 10 技术设计
 
@@ -50,14 +50,28 @@ interface GraphemePose {
 
 ### 2.3 新冻结版本的发布方式
 
-1. 在 `src/core/videoEdit/codeMaterial/authorLibraries.ts` 登记新版本。建议版本为 `henji-layout@2.0.0`：虽然保留旧函数签名，默认断行与逐字字形语义发生可见变化；准确版本号在批准实施时确认，已存在目录不可复用。
-2. 改完源码并验证后才运行 `node scripts/freeze-layout-library.ts <新版本号>`。该脚本目前只生成 text/flex；本票需增加 table、字体准备导出、HarfBuzz ESM/wasm 资源、对应类型与完整许可证。
+1. 在 `src/core/videoEdit/codeMaterial/authorLibraries.ts` 登记新版本。版本确定为 `henji-layout@2.0.0`：虽然保留旧函数签名，默认断行与逐字字形语义发生可见变化；最低作者 API 为 8，已存在目录不可复用。
+2. 改完源码并验证后才运行 `node scripts/freeze-layout-library.ts <新版本号>`。该脚本目前只生成 text/flex；本票需增加 table、静态字体声明类型、HarfBuzz ESM/wasm 资源、对应类型与完整许可证。
 3. 冻结目录 `resources/video-edit-author/frozen/henji-layout/<版本>/` 保存 JS、类型、wasm、LICENSE/NOTICE 和 `release.json`。manifest 的 inputs 记录源码/补丁/锁文件，outputs 按原始字节计算 SHA-256；当前脚本的文本输出表需支持二进制，不能用 UTF-8 写 wasm。
 4. 日常 `npm run build:author-libs` 仅校验和复制冻结内容到构建目录 `resources/author-libs/`（当前工作树尚未生成该目录）；`henji-media://author-lib/henji-layout/<版本>/…` 提供资源。现有 `electron/main/protocol.ts` 已支持 wasm MIME 和跨协议资源读取，不新增下载通道。
-5. `CodeMaterialVersion.libraries` 钉住精确版本。已有导入继续原版本，缺失 libraries 的历史按首版解析；只有新导入或显式 `upgrade_video_edit_code_materials` 的 `upgradeLibraries:true` 采用兼容新版本。升级创建新素材版本、改指可撤销，不重写历史源码与钉住关系。
+5. `CodeMaterialVersion.libraries` 钉住精确版本。已有导入继续原版本，缺失 libraries 的历史按首版解析；新建素材默认 API 8；已有素材只有显式升级作者 API 才可用 2.0.0，单独 `upgradeLibraries:true` 仍保持原 API（见 2.4）。升级创建新素材版本、改指可撤销，不重写历史源码与钉住关系。
 6. 1.x 的源码产物、类型、license、release 摘要永久保留，日常构建不以新源码重新生成旧目录。新旧版本同时存在时，不共享可变字体匹配状态、排版缓存或 `TextLayout` 内部对象。
 
 冻结只能固定作者库算法；系统字体被替换/删除、操作系统字体栅格与 Electron 升级仍可能影响旧版 Canvas 画面。“旧作品原样”验收限定同字体字节和同运行环境，不能把冻结 JS 宣称为跨机器像素封存。项目字体随包封存目前没有完整能力，本票不暗中加一个新资产格式。
+
+### 2.4 版本钉住与显式升级
+
+现有 `videoEditPresetPreview.ts::codeClip` 调用 `codeVersionCompilation(files, {})`，因此会按当前 API 和兼容最新库重编译。`styleSchemas.ts` 的样片与库模板代码体只有源码，没有该次渲染的版本选择。这条链必须与素材版本一样传递版本事实，不能只修素材导入。
+
+- 在 `VideoEditStyleSample`、`VideoEditTemplateCodeBody` 上增加可选 `apiVersion` 与 `libraries`（库名到精确版本的只读映射），与各自 `code` 并列；预设预览源和编译请求显式携带同样两项。新建、由素材登记模板、提升模板、复制到工程、导入导出、样片渲染均写入或原样传递**实际**版本。已有代码资产导入使用其记录，不能当成“新建”抹掉版本。
+- 对上述样片/模板/预览来源，两个字段均缺失时固定解释为 API 7 + **2026-10-31 的 API 7 库快照**：`henji-layout:1.2.0`、`henji-effects:1.0.0`、`three:0.186.1`、`opentype.js:2.0.0`；仅将实际导入的库写进编译结果。缺 API 时补 7；缺 libraries 时用该固定快照。明确给出的版本优先，若与 API 不兼容则报错，不默默降级。不能调用未来的 `latestAuthorLibraryVersions(7)`，否则之后追加 1.x 仍会漂移。
+- 此历史缺省**只适用于原本未记录版本的样片/模板/预览来源**。已有 `CodeMaterialVersion` 缺 libraries 仍按原来的首版规则读取，不统一补成 1.2.0。编译身份、元数据缓存、指纹、预览和导出都使用同一个解析结果。版本字段与源码表分开传递，`normalizeCodeMaterialFiles` 后仍将原记录的 API/库交给 `codeVersionCompilation`，不能继续传空 publication 丢掉钉住。
+- 原生文字/效果/转场预设没有独立作者源码时，预览用的宿主生成模块也显式钉住其 API/库（现有 BACKDROP 固定 API 7 及上述快照）；不得受全局最新 API 影响。预设包条目可带 `previewAuthor?: { apiVersion?: number; libraries?: Readonly<Record<string,string>> }`，解析后传入统一预览源；无此字段按固定历史值，带字段的导入项在现有个人预设记录中保留。新生成预览记录实际值，非作者内容的布局算法不因此切换。
+- 风格/模板内容摘要须区分“补齐历史等价钉住”与“实际升级语义”：迁移不改变样片内容版本、不重算或丢弃已有 preview/thumbnail/anchors。旧缺省与显式历史快照归一为同一个语义身份；历史等价记录继续兼容原摘要，真正换 API/库才把版本身份加入摘要并要求重新渲染。不得仅因加字段把所有旧样片标成过期。
+
+扩展既有 `upgrade_video_edit_code_materials`，增加可选 `upgradeAuthorApi: true`（面向用户描述“升到最新作者 API”）：省略/false 保持旧 API；true 把所选素材新版本的 API 升到当前版本，并为实际导入的库选取该 API 兼容的最新版本，因此同时包含升级库语义。`upgradeLibraries:true` 单独出现时只升级旧 API 兼容库，API ≤7 永远不会被它隐式切到 2.0.0。
+
+正式升级服务须同时处理工程与非工程素材；版本相等判断包含源码、组件钉住、API 和实际 libraries，源码相同但 API/库变化也生成新版本。全部编译和参数迁移检查通过后，一次更改默认版本及使用中的引用，支持一步撤销；失败不留半升级状态。历史源码、版本与引用可恢复，不把“打开旧工程”变成升级操作。更新能力唯一声明、正式执行器与结果读回，Pi/MCP 自动投影；作者技能及 `codeMotionReview.ts` 的升级建议明确区分两种升级，不再只建议 upgradeLibraries 就能获得新排版。
 
 ## 3. 选型核查与适配边界
 
@@ -72,113 +86,167 @@ interface GraphemePose {
 | harfbuzzjs 1.6.4 升到 HarfBuzz 15.0；整形、字位和轮廓均有接口，默认入口使用顶层 await | [发布记录](https://github.com/harfbuzz/harfbuzzjs/releases/tag/v1.6.4)、[README](https://github.com/harfbuzz/harfbuzzjs/blob/v1.6.4/README.md)、[入口](https://github.com/harfbuzz/harfbuzzjs/blob/v1.6.4/src/index.ts) | 使用 1.x 的 Blob/Face/Font/Buffer API，不照搬旧版 createBlob/createFace 示例 |
 | HarfBuzz 不做断行、两端对齐、字体回退或完整 bidi | [HarfBuzz 职责边界](https://harfbuzz.github.io/what-harfbuzz-doesnt-do.html) | 字体与方向分 run 是宿主/适配层责任；不把 `guessSegmentProperties` 当 bidi 算法 |
 
-锁定上游：Pretext npm gitHead `4a98f37b1e5396a73197f17c13f3128c15d8c17c`；harfbuzzjs `3f162fa2c6ba68b40839fe2c11502a26632e20df`。本次只读取 npm 元数据及固定 tag 源码，未下载/执行包。实施安装需锁精确版本及 integrity，不跟随 latest。
+锁定上游：Pretext npm gitHead `4a98f37b1e5396a73197f17c13f3128c15d8c17c`；harfbuzzjs `3f162fa2c6ba68b40839fe2c11502a26632e20df`。以上为选型记录中的固定版本身份；本轮只读核对源码与官方资料，未安装或执行这些包。实施安装需锁精确版本及 integrity，不跟随 latest。
 
-### 3.2 需要批准的窄适配
+### 3.2 固定补丁的职责
 
-采用固定源码的可审计 Pretext 适配补丁，并随新冻结库保存来源与补丁。修改范围限于三条内部接缝：
+第 13 节取代“三处 measurer 接缝足够”的假设：保留 Pretext 的 Unicode/UAX#14 数据、字素边界、富文本整段原文映射、避头尾及标点上下文规则；生产不走其 Canvas prepare，不以独立词/片段测量后相加来模拟整段。Pretext 只输出合法/紧急断行机会和标点压缩决策；选行与重整形由消费同一 HarfBuzz 段落结果的断行适配层负责。不是把 HB 包成 `measureText(segment)` 后沿用全部 Canvas 修正。
 
-1. 测量入口可注入相同字体/feature 的整形度量；默认 Canvas 实现保留为对照。生产的推进量来自 HarfBuzz，Canvas 仅承担需要浏览器字体墨迹/标点分类的探测。
-2. 暴露原文映射及行边界的标点 trim/feature 决策，供最终 HarfBuzz reshape 使用；不只暴露已经减掉宽度的数字。
-3. 在原断行 walker 的宽度累加处接收字素边界 spacing 与行首/尾回收规则，供中英间距使用。不得用插空格或插空白 box 改变原文与断点。
+补丁按固定 tag + 独立 diff + 构建摘要保存。生产入口与上游 Canvas 对照入口分开，前者不得可达 Canvas/DOM 测量代码；保留原版只用于实验。规则按请求传 locale，固定 Blink 规则配置随 2.0.0 冻结，不按 Worker userAgent 重新选算法，不改全局 Canvas/FontFace 或跨请求 `setLocale`。本阶段默认 `zh-CN`，日文样本也据此对照；不声称具备完整 locale 选择器。
 
-保留上游 UAX/ICU 数据、避头尾规则及断行 walker，不另写分词器和贪心换行。适配代码归冻结库的实现边界，不 monkey-patch 全局 Canvas/FontFace，不让不同库版本互相影响；优先向上游提可复用接口，实施不依赖上游合并时点。
+### 3.3 Pretext Canvas/DOM 探测逐项处置
 
-当前的无补丁组合省掉维护成本，但无法公开表达 HB feature 度量和标点最终字位；上述做法使测量与绘制共用字形结果，代价是维护并验证一份固定版本补丁。若实验 1–3 表明还需重写成段断行、完整 bidi 或大范围模仿 Blink，停止扩张补丁，按原计划比较 CanvasKit 段落方案。现阶段没有证据支持推翻 Pretext + HarfBuzz，也没有实测证明补丁规模足够小。
+下表依据固定版本 [measurement.ts](https://github.com/chenglou/pretext/blob/v1.0.0/src/measurement.ts) 与 [han-kerning.ts](https://github.com/chenglou/pretext/blob/v1.0.0/src/han-kerning.ts) 的实际入口。表中“关闭”包含其调用方与修正缓存，不是返回假宽度绕过探测。
 
-## 4. Worker、字体与 wasm
-
-### 4.1 接入位置与准备屏障
-
-- 作者 draw/layers 实际在 `videoEditWorker.ts` 所在剪辑渲染 Worker 执行；“作者 Worker”和“宿主渲染 Worker”在这条执行链上是同一 Worker，不为每个标题另开线程。打包/类型检查 Worker 不创建文字渲染上下文。
-- 可复用文本核心放在 `src/core/imaging/vectorContent/` 的独立排版模块，纯算法和宿主端口分离；作者封装放 `src/features/videoEdit/authorLibraries/`。新核心被新冻结库打包；旧 `createTextDrawPlan` 保留给当前宿主消费方，不改成隐式按最新库运行。
-- 在现有 `videoEditRenderTransport.ts → videoEditWorker.ts` 消息链提供会话字体端口，主进程仍只通过既有 fonts IPC 交付数据。Worker 不调用 PAL、不读文件系统。字体解析/解压沿 `electron/main/services/fonts/worker.ts` 的 CPU worker，不挪到主进程事件循环。
-- 每个会话先建立字体端口，再允许作者模块求值；首帧前等待声明字体、回退字体和 wasm ready。声明参数用现有 `font / textStyle` 元数据收集；不能只按 family 的常规体选择，新增匹配需带 weight、style、variation。
-- 为模块常量字体和运行中参数选出的额外字体，新增库入口 `prepareTextFonts(requests): Promise<void>`，request 最小包含 family 与可选 weight/style/variation。作者在模块顶层 await 或异步准备阶段调用；不改变 `layoutText` 同步签名，不在每帧隐式 await，不靠重复执行整个作者模块补字体。该入口是作者库导出，不是新 MCP 工具。
-- 未准备的字体走已准备的明确回退脸并报告实际字体；要保证指定字体必须先准备。固定参数字体由宿主代劳；完全不透明的任意 JS 字符串无法在执行前静态扫描完。顶层准备不能反向等待尚未读出的作者参数元数据；字体端口可独立按请求解析，避免元数据加载死锁。
-- 同时排版多个语言/素材时，locale 和字体状态属于请求/会话；不逐段调用全局 `setLocale` 造成串扰。首阶段新库默认语言明确固定为 `zh-CN`，日文文本也按该语言配置验收，不宣称提供完整 locale 选择器；新增语言配置另行评估。
-
-### 4.2 两个引擎使用同一份字体事实
-
-现有链：`platform/fonts.ts::prepareFontPayloads/readFontPayload` → `FontPayload { face, bytes }` → `LoadedFontFaces.load` → Worker `FontFaceSet`。`prepareFontPayloads` 对 generic 返回空数组；按名称选择字体时倾向常规体。`LoadedFontFaces` 为全名、family 等建立别名，不能仅凭这些别名证明 HB 选中了相同脸。
-
-新会话字体记录包含：规范化 SFNT 内容哈希、原 face 身份、weight/style、variation、唯一内部 CSS family、覆盖信息、实际 fallback 顺序与代次。它是内存资源描述，不写入 TextStyle 或项目 JSON。
-
-| 来源 | 传递与选择决定 |
+| 探测/入口 | 生产替换或关闭 |
 |---|---|
-| 本机 TTF/OTF | 复用 fonts.list/readFace；同一 SFNT 字节同时交 `new FontFace(唯一内部名, bytes, descriptors)` 与 `new hb.Blob → Face → Font` |
-| TTC/dfont | 沿现有 `metadata.ts::standaloneFont` 拆成单脸，保留所有表；交给 HB 的 face index 为 0，不能再拿原集合 index 索引拆出文件 |
-| WOFF/WOFF2 | 现有 standaloneFont 对这两种压缩格式原样返回，不能直接视为 HB 可读 SFNT；建议 CPU 字体 worker 使用 `fontverter@2.0.0` 的 sfnt 转换（内部为成熟的 wawoff2 / woff2sfnt-sfnt2woff），两端都消费转换后同一字节，不手写解码或通过 fontkit subset 丢表。[fontverter 文档](https://github.com/papandreou/fontverter)、[Google woff2 的 wasm 封装](https://github.com/fontello/wawoff2) |
-| 用户导入字体 | 当前进入全局字体库，按相同路径交付；不另建票内字体目录 |
-| “项目字体” | 当前 `catalog.ts::filterFonts('project')` 是已使用名称筛选，不是随项目携带的文件集合。本票支持项目所用且已安装/导入的字体；项目目录里未登记的字体先走现有导入。项目字体自动发现、随包与跨设备绑定不纳入本票，也不假装已经实现 |
-| generic 与缺失脸 | 新版按已登记的明确平台候选表解析 sans/serif/mono，选定实际脸和字节；Win/macOS 分别验证。若缺指定字体沿现有警告与回退，不凭 `sans-serif` 字符串让 HB 自己猜 |
+| 普通段宽、尾空格、空格/tab 基准：`getSegmentMetrics / getFollowingSpaceMetrics / getTextWidth / getSpaceWidth` | 读整段 shape 的 cluster advance、前缀和与空白规则；tab stop 以同脸 HB 空格度量计算。段落的词段不独立 shape。独立空格基准可按字体实例缓存，不替代上下文中的空格字位 |
+| 字偶距及空格跨边界：`getFontSpaceKerning / getCharacterSpaceKerning / getSpaceKerning` | 关闭 Canvas 探针与差值补偿。HB 整段 GSUB/GPOS 已含 kern；行边界按 unsafe 标志重整形，不另加 ASCII pair 表 |
+| 假名字偶距：`getFontKanaKerning / getKanaKerning / measureKanaKerning / getWholeRunContext` | 关闭“Canvas 分词漏 kern”补偿；完整 script/font/style run 一次 HB 整形，假名与标点上下文保留 |
+| 连字检测：`isLigature / countLigaturesOnFirstLetter` | 以 HB cluster→原文字素映射与 glyph flags 判断共享簇；不用两字符宽度差猜连字。可选连字开关见 5.4 |
+| 字形/字距计数：`getExtraSpacings`、`GLYPH_COUNT_SPACING` | 关闭超大 letterSpacing 反推；从 HB glyph/cluster 和 Pretext 字素映射得到可加字距的边界，组合 mark 不误加一次；glyph 数不等于字素数 |
+| 紧急断词：`getSegmentFit / measureFitAdvances` 与前缀宽探针 | 直接查询整段 cluster 边界与前缀和；选中的不安全边界才局部重整形。不保留上游 80px 等探测成本阈值、不逐前缀 shape |
+| 连字符：`getHyphenText / measureIn` | 主脸 cmap/nominal glyph 检查 U+2010，否则 U+002D；以 HB 取得字位。软连字符未断行时不显示，断在此处才把可见连字符纳入边缘重整形与选行；不靠 Canvas 墨迹猜实际脸 |
+| emoji 校正与计数：`getEmojiCorrection / readEmojiWidth / readWidthIn / getEmojiGlyphs / countEmojiGlyphs` | 全部关闭浏览器 DOM/Canvas 宽度校正；使用实际回退脸的 HB 簇 advance。emoji 彩色回退只替换绘制，不反向修改度量或断点 |
+| 标点墨迹、halt 能力与 trim：`getTypeFromBounds / getFontData / getTrim / getHanKerningTrims` | HB glyph extents + offset + advance 给出开/闭/居中分类；无 extents 时从同 glyph 轮廓求范围。字体 feature 表及实际 HB 特性对照验证 halt/chws；Pretext 输出作用范围/行边决策，HB 负责相应替换，移除 Canvas 宽差 trim 和重复扣宽 |
+| 字体可用性/generic/locale：`hasFamily / getWebKitGenericFamilies / contextTakesFont / getCanvasFont` | 字体会话从平台目录选择实际脸与字节；不通过 Canvas font 字符串是否接受、墨迹或 WebKit generic 表猜脸。locale 是显式请求事实 |
+| 上下文、引擎 profile 与 Canvas letterSpacing 能力：`createContext / createMeasureState / getContext / buildEngineProfile` | 生产不创建测量画布、不读 DOM/userAgent 决定行为；冻结规则配置，字距算术和 LayoutUnit 转换在共同几何层执行 |
 
-回退顺序：指定精确脸 → 同 family 合适字重/样式 → 已准备的系统 CJK/Latin/emoji 候选 → 系统默认文字脸。针对一个完整字素（包括 VS、组合符、ZWJ）查询 cmap/variation glyph，并整簇试 shape；缺失字形再换下一脸。避免把 emoji ZWJ 序列和基字/附加符拆到两个字体。相邻同脸同样式同 script 的簇合并后整形，不能每个字素独立 shape 破坏上下文。
+实施验收须搜索全部 `measureText / actualBoundingBox / getContext / document / OffscreenCanvas` 的可达路径，覆盖 text、rich-inline、flex、table；在没有这些全局对象的 CPU 环境验证纯整形排版可用。生产普通文字“零 Canvas 测量”是结构约束，emoji 绘制例外不能偷带测量。相关接口若需包装补丁，随冻结版保存，不改上游 opaque prepared 对象冒充 API。
 
-Pretext、HB 与 DOM 对照均用内部唯一名字和同一实际脸，不允许两端分别走不可见系统 fallback。所有候选仍缺字时记录 missing-glyph，使用明确替代字形并暴露警告；不能把 tofu 当实验通过。OS 的默认替补不等于跨平台一致，本票不自动分发商业字体。
+### 3.4 选型与冻结纪律
 
-可变字体对两端设置相同命名实例轴值；自动 opsz 的不一致在实验 2 定位后统一显式轴值。真实 bold/italic 脸优先；现有 fauxItalic/fauxBold 由既有外观变换执行且计入墨迹范围，不让 HB advance 加一次、绘制再加一次。
+继续使用已裁定的 Pretext 1.0.0 + harfbuzzjs 1.6.4；代价是维护规则/整形接缝、unsafe 局部重排与确定性字体会话。不是未经验证的“小补丁即可完成”。先做实验 1–3 的共同度量与标点验证；若仍须引入完整 bidi 引擎或大范围复制 Blink，停止扩张并将证据交 Claude，再比较 CanvasKit。
 
-为保护旧版：新增精确脸使用内部别名；不在旧别名下覆盖字体，不撤掉旧版仍持有的 FontFace。旧库继续消费原加载路径，新库按新资源端口取同字节事实；WOFF/SFNT 规范化仅用于该新请求，原 readFace 的旧返回行为不被统一改写。
+Electron/Pretext/HB/字体变化后复跑受影响实验；如果 Electron 升级造成既有 2.0.0 与新 DOM 的差异，只发布新冻结版本修正，既有 2.0.0 字节、规则配置和作品钉住保持不变。冻结算法不能封存 OS 字体和 Canvas 抗锯齿；跨机器像素保证仍以相同字体字节与运行环境为前提。
 
-### 4.3 wasm 装载、缓存和释放
+## 4. Worker、静态字体声明与会话资源
 
-- Pretext 为 JS；harfbuzzjs 的运行 ESM 与实际 npm wasm 文件一起收入冻结目录，使用模块相对 URL，离线加载。约 174 KB 的 brotli 数值不作为安装体积或内存预算；实际未压缩文件、wasm heap 和首实例成本由实验记录。
-- 为 `text.mjs / flex.mjs / table.mjs` 采用共同 ready 外壳，顶层 await 完成 HarfBuzz 初始化后暴露同步排版。现有 flex 的 Yoga ready 外壳可复用发行模式；不能把上游顶层 await 塞进目前 ES2020 bundle 后假定能工作。
-- 同一 Worker、同一冻结 URL 只初始化一次，多个素材共享实例；不同冻结版的 HB、Pretext 和缓存隔离。不同预览/导出 Worker 不共享可变 wasm memory；跨 Worker 传字体副本或专用可转移 buffer，不能 detach PAL 缓存中的原 buffer。
-- 并发字体请求按内容哈希合并；SFNT 字节、Face、不同轴值 Font、轮廓分层缓存，按实际内存软预算回收，活跃布局引用的资源 pin 住。不得以大字体/字体数量作为硬拒绝条件。
-- harfbuzzjs 1.6.4 的包装对象使用 `FinalizationRegistry` 跟踪原生销毁，没有可假定的公共 `destroy()`。复用 Buffer、及时断开淘汰对象引用；内存峰值必须实测，不能声称 LRU 淘汰立刻归还 wasm heap。Worker 关闭释放整个实例；若实验 4 证明 GC 行为不够稳定，再单独评审带注销的显式 dispose 补丁，禁止手动 free 后由 finalizer 二次释放。[helpers.ts](https://github.com/harfbuzz/harfbuzzjs/blob/v1.6.4/src/helpers.ts)
-- 加载失败走已有错误链，日志记录阶段、字体哈希/脸、库版本、耗时，不静默换引擎。取消/关闭后迟到资源不得装入新会话；字体变化统一使 prepare、shape、layout、轮廓/栅格、作者帧和宿主预渲染缓存失效。
+### 4.1 现有链与新屏障的位置
 
-### 4.4 许可证义务
+当前 `videoEditRenderTransport.ts::fontsDocument` 根据当前帧、嵌套序列源时间和转场两侧收集字体；`applyFonts` 比较字体库 revision，发送 additions、availableIds、reset。`videoEditWorker.ts` 的 `fonts` 分支在渲染 queue 内执行，`LoadedFontFaces.retainIds` 淘汰本轮不在集合的字体。因此现状是**逐帧同步 + 淘汰**，不是文档级或会话级字体就绪屏障。
 
-- Henji 自有冻结库继续按项目 Apache-2.0 发行；保留已有 Yoga/Zod 声明。
-- Pretext 顶层 MIT 之外，LICENSE 包含 Chromium/WebKit BSD 条款、ICU/Unicode/ICU4X 等第三方全文。复制整个固定版本 LICENSE 与实际随包来源声明，不只登记一个 MIT。[Pretext 完整 LICENSE](https://github.com/chenglou/pretext/blob/v1.0.0/LICENSE)
-- harfbuzzjs 保留 MIT 全文；wasm 内 HarfBuzz 15.0 保留其 COPYING 及实际构建所含声明。[harfbuzzjs LICENSE](https://github.com/harfbuzz/harfbuzzjs/blob/v1.6.4/LICENSE)、[HarfBuzz COPYING](https://github.com/harfbuzz/harfbuzz/blob/15.0.0/COPYING)
-- fontverter 为 BSD-3-Clause；实施锁定其传递依赖后逐项收入 wasm、Google woff2/Brotli 等实际分发许可。字体是独立许可对象，实验用 OFL 等允许再分发的字体保留许可证；系统商业字体只在本机读，不入 fixture 或安装包。
-- 声明同时进入冻结 NOTICE 和现有 `scripts/third-party-licenses/author-libs/`/许可证生成链，不另造许可系统。本次未执行打包许可审计。
+API 8 新库使用独立的会话字节字体资源集；1.x 与宿主文字继续原 FontFaceSet 链。作者 draw/layers 与宿主渲染处在同一个 `videoEditWorker.ts`，不另开每素材渲染线程。纯排版核心位于 `src/core/imaging/vectorContent/` 的独立模块，冻结到新库；宿主端口和作者封装仍各归本层。字体解析/解压使用已有 `electron/main/services/fonts/worker.ts` CPU worker，主进程负责 I/O，Worker 不直接访问 PAL/文件。
 
-## 5. 从断行到字位和绘制
+### 4.2 字体声明的形状与覆盖边界
 
-### 5.1 排版流水线
+删除作者异步字体准备入口，不导出 `prepareTextFonts`。新增 API 8 模块级静态元数据，示意如下（这是待实现契约，不是当前已有 API）：
 
-1. 沿当前 parse/validate 入口规范化富文本、样式和约束，保存原文 UTF-16 映射。沿用大小写、smallCaps、上/下标等已有转换；显示文本与原文范围分别保存。换行正规化不能丢失原文坐标。
-2. 分段落、字素和样式 run；合并相邻等样式的整形上下文，按 script/direction/font 再分 run。方向继承先解析，连字/组合符使用整段上下文；字素边界以固定的 Pretext grapheme 数据和适配规则为准，不混用不同 Unicode 版本的索引。
-3. Pretext 产生合法断点、禁则、空白/soft-hyphen 处理及标点挤压决策；注入 HB run 度量与 spacing 后选择行。富文本走其 rich-inline 的跨样式段规则，不能先逐 span 排行再拼接。[rich-inline.ts](https://github.com/chenglou/pretext/blob/v1.0.0/src/rich-inline.ts)
-4. 在最终行边界按相同上下文重新 shape，设置准确 font/script/language/direction/feature range。使用 `Buffer.addText` 的 UTF-16 cluster 偏移，结合字素映射组成 glyph run；advance/offset 从 font units 按字号/upem 换成作品像素，HB 的 y 向上变为画布 y 向下。
-5. 把最终 advance、字间附加距离、行首/尾 trim 和可见 soft hyphen 纳入同一几何结果；再应用 justify、align、anchor、baseline。fit 每次用同一管线重排；fit/截断/省略范围/墨迹与外观范围保留当前语义。
-6. 内部保存 glyph ID、font 实例键、cluster 源范围、glyph origins、轮廓/彩色绘制引用；外部依旧得到 `TextLayout`。`drawText` 使用这份内部计划，不重新用 `fillText(单个字符)` 整形普通轮廓字。
+```ts
+export const textFonts = {
+  faces: [
+    { family: 'Noto Sans CJK SC', weight: 700, style: 'normal', variations: {} }
+  ],
+  text: ['固定标题 2026'],
+  bindings: [{ text: 'title', style: 'titleStyle' }],
+  scripts: ['Latn', 'Hani']
+} as const
+```
 
-### 5.2 宽度的唯一权威
+- `faces` 项：`family: string`，`weight?: number`（默认 400），`style?: 'normal'|'italic'|'oblique'`（默认 normal），`variations?: Readonly<Record<string,number>>`（OpenType 四字符轴 tag → 有限轴值）。完整字体名仍指向实际脸；字体匹配采用规范化后的请求，不能始终选 regular。features 属于排版请求/缓存键，不用它重新选择字体文件。
+- `text?: readonly string[]` 提供模块常量文字，宿主由完整字素推导实际 script/emoji/VS 需求；`bindings?: readonly { text: string; style: string }[]` 指向本模块文本/富文本参数和 font/textStyle 参数，取已合并默认值的本次有效参数。`scripts?: readonly string[]` 使用 Unicode script 短名，并允许 `Emoji` 需求标记，声明代码计算文字可能用到的系统。Common/Inherited 由上下文及整簇覆盖检查解决，不各加载一套字体。
+- 元数据是只读数据，不是回调、Promise、URL 或文件路径。编译阶段用现有 TS/JS 解析基础设施提取可静态读取的字面量/同模块常量引用，汇集依赖闭包各模块的声明；不能为了读取它先执行作者模块。参数绑定在作用域内解析，默认值纳入编译元数据；参数值未知时只预热明确声明的 faces/scripts，不把任意 JS 求值当字体扫描器。这是资源声明的可读性要求，不是限制作者 JS 表达能力的 AST 白名单。
+- `font / textStyle` 参数沿现有元数据补入请求；固定字体和运行时可能选择的额外字体在 `faces` 列齐，动态字符串的书写系统在 `scripts` 列齐。不要求重复填每个字号或每个文字实例；按实际请求与 script 懒加载，不枚举所有已安装字体。
+- 默认 generic 也解析为实际脸。缺指定脸走固定回退并报告；声明之外的字体/script 在同步 layout/draw 中不能发起 I/O，也不能临时选“此刻已加载”的脸。返回可定位到模块和声明缺项的准备错误，补声明或更新参数后经正式准备重试，不把半就绪帧呈现出来。
 
-最终绘制几何以 HarfBuzz 字位加排版附加距离为准；Pretext 决定合法断点及行策略，但必须使用同一份度量。记录三份独立数值：未修改 Pretext 的 Canvas 行宽、注入 HB 后的行宽、最终绘制计划行宽，不能仅比较两个都来自同一数组的总和。
+### 4.3 生命周期与绕开渲染 queue 的通道
 
-`Wline = Σ HB.xAdvance + Σ tracking/kerning/中英间距 + Σ justify − 尚未由 HB feature 实现的 trim`，并排除按 CSS 规则悬挂的尾空白。由 halt/chws 已实现的压缩绝不再减一次。
+顺序为：**编译并读静态声明 → 建立会话字体快照 → 加载冻结库 wasm → 准备本次声明/参数所需字体 → 确认 ready → 确定性作者模块求值 → 同步 layers/draw → 提交首帧**。模块顶层只要使用已声明的固定字体仍可同步 layoutText；不在 import 中 await 字体、不重复执行模块来发现字体。若声明提取尚未完成，不能先进入模块求值“试一下”。
 
-若最终 reshape 使候选行超宽，回到 Pretext 已有候选断点重新 fit，再 reshape；禁止额外写一套断行、整体横向压缩、平均摊差、改画布宽度或挪末字遮掩差异。计算必须覆盖实际候选，不能以任意迭代上限吞掉未收敛。
+具体接线：在既有 RenderTransport/Worker 连接初始化时移交一个专用 `MessagePort`，承载内部 `prepare / payload / ready / failed / cancel / dispose` 消息，含 sessionId、requestId、字体库 revision 和准备代次。Worker 收件函数在 `queue = queue.then(...)` **之前**分流该端口；资源接收、HB 对象构造、就绪回执均不排入渲染 queue。宿主处理请求沿现有 `platform/fonts → fonts IPC → 字体 service/CPU worker`，无需新文件下载或日志通道。
 
-实验 2 建议几何阈值为每行绝对误差 ≤ 1/64 作品像素，且临界宽度断点零差；该阈值属于本设计的审批项，不冒充原计划已有阈值。超差先检查实际脸、轴、feature、字距、行边缘与空白。发布前没有解释并修复的几何差异即失败；不能用“以 HB 为准”免除与 DOM 的验收。
+- RenderTransport 在将相关 frame/update/init 放入渲染执行阶段前等待字体 ready；即使一个在途 frame 等待资源，payload 回执也能独立到达。资源处理只更新会话资源表，不调用作者函数、不重入绘制。
+- HarfBuzz ESM/wasm 的异步初始化在 `importAuthorDeterministic` 之外先完成；作者 import 只消费已初始化模块。`videoEditAuthorDeterminism.ts` 的导入串行链与 Math.random/Date/performance 临时替换不能覆盖字体 I/O 或资源等待，也不能以同队列里的字体响应解锁它自身。
+- 参数改字体/文字 script 时，先准备增量，再原子切换参数与布局代次。播放中后续素材首次出现可准备新需求，但已解析链不重排、不淘汰先前字体。seek、导出起帧、样片渲染、元数据探测、取帧复核和指纹 Worker 均用相同准备服务，不能仅修节目窗口。
+- 元数据读取只提取声明时不初始化 GPU；若需要执行模块求值，则也先完成该模块静态字体准备。指纹计算先纳入解析后的资源身份，不能用“无字体版”输出命中“有字体版”的预渲染缓存。
+- 取消一个请求只取消其等待/订阅，不撤销其他使用者共享的资源加载。关闭会话使代次失效、关闭端口并释放引用；迟到响应按 session/revision/request 验证后丢弃并释放，不激活旧会话。失败经现有日志/失败回执点名字体与阶段，不静默换引擎。
 
-### 5.3 各排版责任
+### 4.4 字体字节与会话常驻回退链
 
-| 项目 | 唯一责任与规则 |
+回退链身份只由 **规范化请求字体（family/weight/style/axes）、冻结的平台候选表、字体库修订号** 决定，候选表内容摘要属于冻结实现。不得受当前帧、加载完成顺序、LRU、其他素材用过什么字体影响。文本/script 只决定该固定链中哪些候选需要加载；候选次序先固定，选脸必须依序完整覆盖测试，不能跳过未 ready 的前候选抢用后面的已加载字体。
+
+平台候选表为 Win x64/macOS arm64 分别提供 Latin/CJK/假名/emoji 与 generic 具体候选顺序。原则为指定脸 → 同 family 匹配脸 → 该 script 的平台候选 → 明确最后回退；用字体目录覆盖事实和整字素试 shape 选择，缺失脸也记入快照。连字符、组合 mark、VS、ZWJ 均按完整簇选脸；相邻同脸同 shaping 样式同 script 的字素合并后整形，不逐字 shape。
+
+会话已准备链、SFNT 字节、被其引用的 Face/Font **会话内常驻并 pin**，不随 frame availableIds 或像素缓存 LRU 回收。脚本懒加载指首用前等待，不指用完一帧就卸载。读取字节后再次核对目录 revision 与文件内容身份，变化则重建请求快照，不把新字节混入旧快照。字体库修订号改变时建立新快照，先准备再切换；旧快照保留至在途帧/导出任务结束，预渲染、指纹、layout/raster 全部按 revision + 完整候选链摘要 + 实际字体内容身份失效。导出任务固定一个快照；期间字体库变化不能让前后帧混用。新旧 Worker 在同 revision/候选表/字节下应解析为同一链，不要求跨 OS 用相同字体。
+
+| 来源 | 新路径处理 |
 |---|---|
-| UAX#14、避头尾 | Pretext 固定版本规则。超窄行的紧急断字也沿其规则，保留差异证据，不再维护手写标点名单 |
-| `wrap` | 新版省略 wrap 时用 normal 断行（英文单词优先、CJK 禁则）。`word` 对应 normal + 单词过长时紧急断字；显式 `grapheme` 保留强制字素切断语义，对照 DOM `line-break:anywhere`，不宣称该模式仍有禁则；`none` 仅显式换行。默认改变只发生于新冻结版 |
-| 标点挤压 | Pretext 决定位置/上下文/行边缘，HB 执行精确 feature range 与字形 offset。通常由相应标点的 `halt` 完成；对有 `chws` 的字体按实际 shaping 结果去重，不能整段同时强开 halt/chws。无相应 feature 的字体不虚构半角字形，也不挤压轮廓。实验 3 核对开口标点的墨迹原点，不只核对总宽 |
-| 中英间距 | 本库薄层，按 CSS Text 4 的 ideograph-alpha/ideograph-numeric 字类边界提供附加间距，不插字符；建议默认 1/8 相邻表意字体 em。已有空白、行首/尾不重复加，CJK 标点不一概当汉字；该距离参与选断点并在换行边缘回收。[CSS text-autospace](https://www.w3.org/TR/css-text-4/#text-autospace-property) |
-| 两端对齐 | 本库薄层，复用现有 align 枚举：默认末行不拉伸，justify-center/right 控制末行，justify-all 包含末行。优先分配合法词间空白，再分配允许的 CJK 字素间隙；不拆连写簇、不在禁则标点之间硬塞距离。只扩展空隙，不缩放 glyph；无法扩展的单簇行保持自然宽 |
-| `tracking / kerning` | 保留现有千分之一 em 单位；数字 kerning 的额外间距与自动 kern 开关按现有含义映射。不能把 Canvas letterSpacing 与手加 tracking 同时生效 |
-| glyph 整形与轮廓 | HarfBuzz 负责 GSUB/GPOS、ligature、mark、advance/offset；通过 glyphToPath/glyphToJson 取轮廓，不能按 Unicode 再到 opentype.js 查另一枚 glyph |
+| TTF/OTF | 复用 `fonts.list/readFace`，规范化字节只交 HB Blob/Face/Font；新生产路径不注册 FontFace、不生成 CSS 别名 |
+| TTC/dfont | 沿 `metadata.ts::standaloneFont` 提取独立脸并保留表；HB face index 用 0，原集合索引仅作来源信息 |
+| WOFF/WOFF2 | 当前 standaloneFont 原样返回压缩内容；实施采用成熟 SFNT 转换方案（候选 `fontverter@2.0.0`，内部使用 wawoff2 等），在字体 CPU worker 转换并哈希，先验证表完整性；不手写解压、不以 fontkit subset 丢表 |
+| 用户导入/项目所用字体 | 走全局字体库。现有 `catalog.ts::filterFonts('project')` 是已用名称筛选，不是项目携带字节；本票不新增项目字体打包/自动发现 |
+| 对照 DOM | 仅实验页面将同一 SFNT 注册独立 FontFace 并等待 ready，映射实际脸/weight/style/axes；生产 HB 不受对照 FontFaceSet 影响 |
+| 彩色 emoji 例外 | 如精简 HB 构建无法绘制彩色簇，使用系统 emoji Canvas 绘制，位置/advance 仍由 HB 决定；不注册自定义 FontFace，列为已知平台差异，见 5.4/实验7 |
 
-### 5.4 字素动画、连字与受限路径
+参考：[fontverter](https://github.com/papandreou/fontverter)、[wawoff2](https://github.com/fontello/wawoff2)。所有候选都缺字时输出明确 missing-glyph 事实及稳定替代簇，不能把 tofu 当通过。真实粗斜脸优先；fauxBold/fauxItalic 沿外观层执行一次。可变轴按请求显式固定，包括 opsz 的规则；字体对象发布后不可变，同 Face 的不同轴 Font 分开缓存。
 
-- 一个字素可能对应多个 glyph，多个字素可能共用一个 glyph cluster。内部建立多对多关系；公开 graphemes 保留原文逻辑顺序，不按 glyph 个数改索引。
-- 一个字素的所有 glyph 一起应用 `GraphemePose`。跨字素连字默认视为不可分组：组内位姿相同才画一次；位置可读但继续标记 `native-estimate`，不能标记成可任意拆画的 `individual`。
-- 跨字素簇的不同位姿或部分选择不通过裁切轮廓制造“半个连字”。需要逐字强拆时使用已有 `forceGraphemes:true`，在排版前关闭可选连字并按字素重新整形；必要连写仍不可拆时，返回清楚的“不支持独立位姿”错误，作者可改为逐词/整簇揭示。新旧模式的差别记录进技能，不能承诺阿拉伯连写可无损逐字飞散。
-- 首阶段不新增完整 UAX#9 实现。已支持的复杂双向段落保留既有原生整段路径及 `x=null/unavailable` 语义；不伪造逐字坐标。这是明确兼容路径，记录原因；混合 bidi 不算新引擎准确字位通过样本，另保留回归项。若需扩展，评审成熟 bidi 库，禁止自己写重排算法。
-- 彩色 emoji 不把空轮廓当成功：优先使用 harfbuzzjs paint/PNG 能力并复用现有 Canvas 外观层；不支持的彩色格式允许完整字素的原生 Canvas 栅格路径，必须用同一实际字体并验证 advance 与墨迹，不把彩色 emoji 当可描边生长或可挤出的矢量字。[字体绘制 API](https://github.com/harfbuzz/harfbuzzjs/blob/v1.6.4/src/font.ts)
-- 新版静态与逐字状态共享同一次 shape；落定时不切换到另一种字体整形。底板、阴影、外描边、填充、内描边和装饰线继续沿既有层次，文字观察事实来自实际绘制后的几何，不丢弃截断/超框证据。
+### 4.5 wasm 发行、共享与显式释放
+
+本票**不把 harfbuzzjs 登记成独立的公开作者库**：唯一消费者是本票排版，新增公开可变对象 API 会增加类型、生命周期和跨版本组合成本。将其运行时做为 henji-layout 2.0.0 的共同内部 ESM/wasm 依赖，text/flex/table 共享同一个实例；按内容哈希共享字体，已能避免每个入口复制 CJK 字体。未来有独立作者调用需求再单独评估，不让作者自行释放宿主字体对象。
+
+- 冻结目录包含实际 wasm 二进制、ESM、类型、许可证与来源/补丁摘要；模块相对 URL 离线装载，构建按原始字节哈希。不同冻结版不共享可变 wasm memory；不同 Worker 有独立实例，传输专用 buffer 副本，不 detach PAL 的缓存原件。
+- 字节键为规范化 SFNT SHA-256；Face 键加 face index/构建身份；Font 键加规范化轴、尺度和合成配置。对象不可变，变轴新建；只读字节可共享，跨版本可变状态不可共享。
+- [harfbuzzjs 1.6.4 helpers.ts](https://github.com/harfbuzz/harfbuzzjs/blob/v1.6.4/src/helpers.ts) 目前用 FinalizationRegistry 且无公共 destroy。本票须随冻结依赖加可审计的显式 dispose 包装补丁：统一所有权、注册可注销 token、幂等释放、先 unregister 后调用对应 HB destroy；dispose 后禁止再访问，不能手动 free 后仍被 finalizer 二次释放。
+- 会话持有的回退字体不参加 LRU；**最后会话/布局引用释放之后**才可淘汰 Font→Face→Blob 并显式释放 wasm 原生对象，临时 Buffer/轮廓/栅格按引用和软预算回收。释放使 wasm heap 中空间可重用，不保证 WebAssembly.Memory 或 OS RSS 立刻缩小；最终 Worker 结束释放整个实例。大文件/数量不设硬拒绝上限。
+- 实验 4 区分字节、HB 对象、heap 高水位与进程 RSS，验证重复 prepare 不重复创建、取消和迟到结果无泄漏。旧库 FontFaceSet 的加载/淘汰保持原路径，新库不在旧别名下覆盖、删除或额外注册字体。
+
+## 5. 整段整形、断行与字素动画
+
+### 5.1 唯一流水线
+
+“整段一次”指**先保留完整段落上下文，再按字体/script/direction/实际 shaping 样式划分必要 run，每个 run 初始只 shape 一次**；HB 单次 shape 只能接收一套 Font，不是强迫多字体段落塞进一个 Font。Pretext 的词、断行机会、富文本 span 边界都不自动成为 shaping 边界。颜色等仅绘制属性变化不拆 shaping run。
+
+1. **解析与映射**：沿 `parseTextInput / textStyleSchema` 解析原文与富文本，保留 UTF-16 原文→段落→样式→字素映射。应用 allCaps/smallCaps 等文字变换时另存显示文本映射（一个原字素可展开多个码点）；源码范围、揭示索引仍指原文。硬换行切段，软连字符和折叠空白保留可追踪的归属。
+2. **准备资源**：取得 4.3 的 ready 快照，按完整字素选脸；给每个 run 明确 language/script/direction/font/字号/axes/features，规范化 feature 范围。不得把 `guessSegmentProperties` 当完整 bidi；本票没有完整混合双向段落引擎。
+3. **规则与标点计划**：Pretext 扫描完整段落并输出硬断点、正常/紧急机会与避头尾约束。标点静态类别沿其规则，字体相关类别来自同字体 HB extents；生成段内特性范围及各候选行首/尾的决策。字体分类探针可按字体实例缓存，它们不承担正文宽度测量。
+4. **整段初始 shape**：每个必要 run 用完整段落文本及 itemOffset/itemLength 提供上下文，保留原文 cluster 偏移。设置字体尺度、features、轴值和 buffer flags，得到 glyph IDs、advance/offset、cluster 与 unsafe flags；建立 glyph↔字素多对多映射和精确 advance 前缀和。不得逐词、逐 Pretext segment 或逐字素测完再拼。
+5. **候选选行**：适配层只在 Pretext 给出的机会中选行；候选宽从上述结果切片，加 tracking/数字 kerning/tsume/中英间距、tab 与尾空白规则，再应用该候选的行边标点/连字符决策。宽度按 5.3 量化；不以 Canvas 宽或 Pretext 旧 prepared.width 驱动选行。
+6. **边缘修复**：普通安全断点直接切片，复用段落 glyph。只有不安全的断点，或行边特性/可见连字符实际改变输入的边缘，走 5.2 的局部重整形；更新候选宽再检查 fit。不能每一行无条件重新 shape。
+7. **放置与公开结果**：确定行之后再应用 justify、align、anchor、baseline、fit/截断/省略号与边界计算。省略号也是同字体链的 HB shaping，选截断点时计入其宽度；fit 改字号/有效 opsz 后重新走同一流水线。内部 glyph 绘制计划与公开 TextLayout 从同一结果派生，drawText 不再以单字符 fillText 重新整形普通文字。
+
+### 5.2 unsafe_to_break、局部重整形与收敛
+
+[HarfBuzz 15 glyph flags](https://github.com/harfbuzz/harfbuzz/blob/15.0.0/src/hb-buffer.h) 明确：unsafe_to_break 表示在该 cluster 起点切开后两侧可能改变；它**不是禁止在这里换行**。无标志的 cluster 边界可直接复用，cluster 内部没有独立 flags，不能当“安全”。Skia 的 [SkShaper HarfBuzz 实现](https://skia.googlesource.com/skia/+/f4aab0584dc844b1fa38e299ff1a9c1922c06a99/modules/skshaper/src/SkShaper_harfbuzz.cpp) 保存该事实；本设计采用第 13 节所指的段落 shaping 后切行/按需 reshape 路线，不把具体库内部行为当成未经验证的等价证明。
+
+- 候选若落在共享 cluster 内（例如长词紧急断到可选连字内部），视为需要重整形；不拆 glyph 或按平均宽度造半个 glyph。仍只接受合法字素边界，不能切 UTF-16 代理对、组合簇或 emoji ZWJ。
+- 请求 `PRODUCE_UNSAFE_TO_CONCAT`，同时读取 unsafe_to_break；向断点左右寻找可安全拼接边界，重整形行尾与下一行行首的受影响区段，设置真实文本/行上下文和对应边缘特性。新结果的拼接点也要安全；否则继续向外扩大到必要 run/段落边界，不以“只重排前后两个字”当通用规则。
+- harfbuzzjs 1.6.4 的 `getGlyphInfos / getGlyphInfosAndPositions` 已返回 flags，`BufferFlag.PRODUCE_UNSAFE_TO_CONCAT` 也已暴露，应直接接入并验证；初期宁可重整形受影响 run 的左右两部分，也不能在适配时丢掉 flags 后当零。该保守范围只由不安全切点触发；无需把整个段落所有行重做。纯安全行边无变化时保持初始 glyph 数组及字体身份。
+- 字符替换（软连字符/省略号）、行首/尾 halt/chws 特性范围变化同样使**对应边缘计划失效**；原结果上的 safe 标志仅对原输入/原 features 有效。只重整形确有变化的边缘，不能以“没有 unsafe 标志”为由沿用失效字形，也不能因一个标点变化重做每行。
+- 每个候选以 `(段落shape键, 行起止, 边缘输入/feature计划)` 缓存修复结果。用修复后的真实 occupied width 决定是否放得下；超宽退到上一个合法机会，修复后变窄可验证后续候选，以选出规则允许的最远合适边界。依规则有序遍历有限机会，每候选至多计算一次；不靠任意循环上限、epsilon 放宽、缩放 glyph 或移动末字掩盖差异。
+- 下一行消费修复后的行首，不能仍读原段的错误字偶距。没有任何可放下的机会时，按 wrap 的紧急断行/单簇 overflow 语义产出事实，不无限重试。原文映射、omittedRanges 和复核几何随最终计划更新。
+
+### 5.3 唯一度量与 LayoutUnit
+
+`Woccupied = Σ HB.xAdvance + Σ 字距/tsume/中英附加间距 + Σ justify − 规则允许悬挂的尾空白`。HB kern 与 halt/chws 已反映在 glyph advance/offset 中，不能再叠加 Pretext 的 Canvas 补偿/trim。墨迹边界来自 glyph extents 与 placement，不是 advance 的另一种叫法。
+
+字体单位值保持精确到换算阶段；作品像素为内部几何基准，不把 DPR/输出密度混入排版。比较可用宽与占用宽时采用 Blink **LayoutUnit（1/64 CSS px）** 的同阶段转换/舍入，单位相同再作整数比较，不沿用 Pretext 的 0.005px fit epsilon，也不能对每个 glyph 单独四舍五入后求和。依据固定 [Chromium 152 layout_unit.h](https://github.com/chromium/chromium/blob/152.0.7977.167/third_party/blink/renderer/platform/geometry/layout_unit.h) 区分构造截断、Floor、Ceil、Round；实施须核对调用处使用哪一种，不能统一用 `Math.round(width*64)` 宣称模拟 Blink。
+
+实验 2 同时报告原始 HB advance、布局 occupied width、量化后的对照宽、DOM Range 宽与墨迹宽。**几何误差 ≤1/64 作品像素；临界断点按量化宽判定一致**。W−1/64、W、W+1/64 与半格边界均入附加样本；量化后相同的宽度必须作相同判断。原始浮点值跨过未量化阈值但量化后相等不判错；超过一个 LayoutUnit 的差异仍须修复。Canvas Pretext 仅是独立对照，不能将两个来自相同 HB 数组的求和互相比较当成功证据。
+
+### 5.4 字素揭示、位姿与连字
+
+- `drawText(..., { graphemes })` 的 number、索引集合、回调三种形态都触发逐字素模式，该排版段关闭可选 `liga/clig`；`forceGraphemes:true` 可在 layoutText 阶段提前选同一模式。保留 kern/mark/curs/必需 rlig 等，不以关闭全部 OpenType 换取“每字一个 glyph”。Latin/CJK 可拆字素各有独立簇，一个字素仍可有多个 glyph。
+- 复杂书写系统的必需连字保持整簇，使用原文逻辑顺序的**首字素**作为 owner；其位姿、透明度和是否被选中决定整簇。number=N 以 owner 索引是否小于 N 判定；索引集合只选中簇内非 owner 不显示该簇；回调可给所有字素求值，但非 owner 的结果不用于绘制该簇。整簇只画一次，不报“组内姿态不相同”、不裁半个连字，不承诺复杂连写可逐字飞散。
+- 必需连字簇的非 owner 位置不能标记为可独立绘制的 individual；公开字素仍按逻辑原文排列，内部记录 owner/range。观察事实报告整簇的实际可见性、位姿和边界，避免把同一 glyph 计多次。
+- **调用时序补充提案（待第 11 节确认）**：graphemes 目前只在 drawText 才传入，layoutText 已返回不可变几何。建议 layoutText 同步缓存普通与禁可选连字两个计划，默认公开普通计划；graphemes 绘制固定选动画计划，回调收到动画计划的字素几何，观察器也记录动画计划；`forceGraphemes:true` 返回的公开几何就是动画计划。首次动画绘制不得改写已返回的 TextLayout，动画完成仍保留 graphemes（全选）避免切回连字版。若作者需在绘制前读取精确动画行框，应在 layoutText 用 forceGraphemes。两计划确实可能不同的断行/行框语义须由 Claude 确认，不能伪称旧调用形状天然解决该问题；确认前不实施该接缝。
+- 首阶段没有完整 UAX#9；复杂混合 bidi 保持已明确的原生兼容路径与 unavailable/x=null 语义，独立列回归，不纳入新 HB 字位准确覆盖。不用自写重排算法，也不从兼容路径反向提供新引擎宽度。
+- AAT（如 morx/kerx）与位图 emoji 不能假定 HB_TINY 支持；实验 7 检验真实构建与字体表。纯轮廓文字用 HB glyphToPath/glyphToJson；彩色能力可用才走对应 paint/PNG。精简构建画不了的 emoji 簇，允许 Canvas **系统 emoji** 在 HB 指定的簇原点/基线上整簇绘制：HB 决定位置和宽度，Canvas 不做测量校正。记录实际回退和平台差异，不保证它与指定自定义 emoji 字节像素一致，不用于矢量描边生长/挤出。
+
+### 5.5 样式语义与排版责任
+
+| 项目 | 规则 |
+|---|---|
+| wrap | 新版省略时 normal；word 为单词优先 + 超长词紧急断行；grapheme 沿合法字素边界强断，对照 `line-break:anywhere`；none 只硬换行。不把字素强断宣称仍满足避头尾 |
+| 标点挤压 | Pretext 决定位置和特性范围；HB 同字体 extents 判字形类别，再按实际字体支持执行 halt/chws。不能整段两者同时强开、重复扣宽或压缩轮廓；无字体支持则保留自然字形并报告对照差异 |
+| 中英间距 | 按 CSS Text 4 的表意字母/数字边界，默认相邻表意字体 1/8 em；不插字符；已有空白、行首/尾不重复加；作为断行前附加距离参与候选宽，换行时回收边界距离 |
+| tracking / kerning | 保留千分之一 em；数字 kerning 是既有附加字距语义，auto 由 HB kern 处理。明确定义开关后只应用一次，不能再开 Canvas letterSpacing。必需簇内部不分配字距 |
+| tsume | 沿当前 `text.ts/metrics.ts` 含义：0–100% 压缩字形推进量，不横向压缩轮廓；在 HB 完成字位后按簇的可分配推进扣减，glyph offset 与轮廓保持，下一簇起点相应前移。与 halt/chws 的形状替换分开记账，按压缩后的 HB advance 应用一次；组合 mark 不另扣一次 |
+| allCaps / smallCaps | 保留既有合成语义，allCaps 优先。源字素转大写并保留映射；smallCaps 仅原小写部分使用 0.75 倍字号，已大写不缩。按各自实际字号重新整形并参与行宽/墨迹计算，不把大号 glyph 缩图当同一度量。不自动启用 smcp/c2sc 取代已有语义 |
+| superscript / subscript | 保留 0.65 倍字号整形，上标基线移 −0.35×原字号、下标 +0.2×原字号，二者同时启用以上标优先；可与 smallCaps 的 0.75 叠乘。另叠加现有 baselineShift（正数上移）。不同时启用 sups/subs 再缩小一次；每个实际字号/opsz 独立 shape |
+| justify | 沿既有 align 枚举：末行默认不拉伸，justify-center/right 控制末行，justify-all 包含末行。只在合法空白/CJK 间隙扩展，不拆必需簇、不缩放 glyph；单簇行保持自然宽 |
+| fit / 截断 / 外观 | 保留宽高/行数/anchor/box/omittedRanges 契约；fit 改字号须重新 shape，省略号参与度量。底板、阴影、外描边、填充、内描边、装饰线维持既有层次，实际绘制事实可供复核 |
+
+CSS 字类依据：[CSS Text 4 text-autospace](https://www.w3.org/TR/css-text-4/#text-autospace-property)。常用横排和简单富文本在本票验收范围；竖排、完整 bidi 与复杂段落继续另行设计。
 
 ## 6. 简单表格
 
@@ -220,23 +288,46 @@ layoutTable(input: TableInput, options?: TableOptions): TableLayout
 
 数字列的 features 是库内单元格排版请求，不改共享 `TextStyle` schema。不为它新增全应用 OpenType 面板。
 
-## 7. 绘制成本与缓存
+## 7. 稳定绘制身份、密度缓存与失效
 
-- 默认普通轮廓字按输出像素密度由 OffscreenCanvas 2D 绘制。shape 和轮廓构造不随时间重跑；逐字位姿每帧只遍历已排出的 glyph、变换并绘制 Path2D。新的逐字默认路径不沿用旧版固定最高 4× 图集放大。
-- 每帧成本分开测：位姿求值/路径提交、2D 栅格、外观合成、纹理上传、宿主合成。含阴影/多描边时同一字有多层像素成本；4K 整屏上传和运动模糊多采样不能只计一次 HB 排版时间。
-- 静态内容继续用既有图层 `pose/cacheKey`、录制和位图复用；Path2D 在现有 recorder 中可能导致 live 绘制，必须测实际沿用，不能把缓存 Path2D 误报为缓存了输出像素。只在同内容/变换/采样密度/颜色空间命中时沿用栅格；推近时重新按目标密度栅格，不把低清缓存贴大。
-- 排版键：冻结版本及适配摘要 + 原文/富文本结构 + 实际样式 + 宽度/fit/截断/方向 + 实际字体内容哈希/轴/回退链/代次 + spacing/features。颜色不影响断行但影响绘制；geometry cache 与 appearance cache 可拆，不能遗漏任一影响字段。
-- 分层缓存：字体字节/Face；shape run；Pretext prepare（不含宽度）；最终 layout（含宽度）；glyph outline（font+axes+glyph）；必要的 raster（含实际分辨率、外观和颜色空间）。动画时间与 GraphemePose 不进排版键。所有缓存只保留可重建数据，不落进项目格式。
-- 对连续变化的宽度/字号采取内存软预算和 LRU，淘汰不改变仍由作者持有的只读布局；恢复所需字体资源须有 pin 或可重新准备的明确生命周期。缓存关闭和字体切换不得留下已释放 Path2D/Bitmap 的引用。
-- 超大中文字体成本包括读取/解压、跨边界复制、FontFace 解析、HB blob 复制、cmap/shape 懒初始化。先按需求加载具体脸和 fallback，不把系统全部字体传进 Worker。缓存共享同脸字节、不同轴值共享 Face；避免为每个作者素材复制完整 CJK 字体。
-- 不预设绝对速度。建议性能目标待审批：典型 200 可见字、1080p、60fps 的文字绘制与栅格 P95 ≤ 4ms；同时以整段播放跳帧比例、实时合成 p90 和导出一致性验收。1000 字、4K、多个阴影作为压力样本报告退化，不作为输入硬上限。
-- 日志复用 `createLogger/createMainLogger`、现有 Worker 日志回传和 `recordVideoEditPreparation('fontLoad', …)`；准备/失败按事件记录，逐帧细分只在性能采样期开启 debug/trace，不另建日志文件或查询 IPC。
+### 7.1 路径与录制器复用
+
+现有 `videoEditAuthorCanvasRecorder.ts` 把任意作者 Path2D 当可变 live 对象，会令指令不可比对；仅缓存 Path2D 实例仍会每帧重栅格和上传。本票扩展现有录制器的内部资源协议：库构造并持有不可变字形路径，将其与稳定内容键登记在宿主控制的 WeakMap；记录 fill/stroke/clip 时编码该键和绘制状态，重放时解析同一路径。作者拿不到可变路径引用；任意作者 Path2D 仍按 live 处理，不凭作者声称“不可变”复用。
+
+路径身份包含冻结库/路径格式、规范化字体哈希、face、轴、glyph ID、轮廓命令摘要与填充规则；同一内容重建得到同一语义键，不能只用运行时递增 id。录制器仍比较位姿、颜色、透明度、裁剪、混合、外观及采样密度。静态指令命中时复用既有图层纹理，整层移动优先沿现有 pose；逐字位姿变了须重合成，但复用字形资源。指纹 Worker 只序列化轮廓内容身份和数值，不需要创建 Path2D 或 GPU。
+
+### 7.2 外观栅格与成本边界
+
+纯填充可按稳定路径录制；带描边/阴影的字以**字素/必需连字簇**为单位，按密度档缓存紧边界栅格或图集单元。边界包含真实 ink、描边外扩、阴影模糊和位移；沿既有 appearance 算法在首次/失效时绘制紧尺寸画布，产出不可变位图。按层次分别保存阴影/外描边、填充/内描边等必要层并批量合成，不能逐字画完全部外观而改变跨字遮挡顺序。
+
+每帧仅变换、透明度合成所需单元，不为每个字新建两张整作品画布；整段底板/装饰线沿独立稳定层缓存。空白簇不分配像素，必需连字只占一个簇单元。推近由总变换与输出密度选择合适档，越档才重栅格，密度不固定封顶 4×；超设备单纹理尺寸时分片，不以字体大小硬拒绝。图集单元 padding 防止过滤串色，回收按实际像素/字节软预算。
+
+4ms 门槛仅用于**典型 200 可见字、1080p、纯填充、逐字位姿**文字阶段 P95（位姿求值、路径提交/回放、2D 栅格及该阶段必要上传）；同时报告整帧 P50/P95/max、播放跳帧与合成 p90。静态复用单列，不能拿静态命中冒充动画通过；描边、阴影、多重外观、1000 字/4K 压力独立列数据，不受纯填充 4ms 一刀切。冷准备不藏进热帧统计，运动模糊多采样列实际次数。
+
+### 7.3 完整缓存键与生命周期
+
+| 层 | 必须进入身份的事实 |
+|---|---|
+| 字体/回退会话 | 规范化请求、平台候选表版本/内容、字体库 revision、完整有序候选链（含缺失候选）、规范化 SFNT 哈希/face；与当前帧无关 |
+| 规则分析 | Pretext/补丁/Unicode 数据身份、原文与富文本映射、language、wrap/空白/禁则规则；不依赖字体宽度，不用只含 CSS font 的 prepare 缓存 |
+| 段落 shape | HB 构建/冻结版、原文与显示文本映射、完整 run 上下文、实际 font/face/hash、字号/scale、script/language/direction、cluster level/buffer flags、**规范化 OpenType features（tag/value/原文范围）与 variable axes（tag/value）**、合成字形/大小写/上下标模式、可选连字模式、回退快照。范围相同但周边字不同不可误命中 |
+| 行边重整形 | 段落 shape 键、行起止原文 offset、左右安全拼接点、边缘上下文/flags、标点特性计划、可见连字符/省略号替换、特性范围；不能只按 substring 缓存 |
+| 最终 layout | shape 与边缘计划键、宽高/fit/截断/行数、spacing/tsume/justify/align、anchor/box/frame、量化规则、回退 revision/链；可共享不含放置的中间数据，但公开几何键不能漏放置参数 |
+| glyph 轮廓/稳定路径 | font 哈希/face/轴、glyph ID、轮廓版本/命令身份、填充规则；尺度若已烘焙也入键。features 已映射到 glyph 及 placement，不把同 codepoint 误当同 glyph |
+| 逐簇外观栅格 | glyph 及相对字位、实际字号/合成变换、填充/描边/阴影/装饰参数、密度档/栅格原点策略、颜色空间；必要时加亚像素相位。逐帧位姿/时间不进几何键，位姿导致密度/相位变化须选择对应栅格 |
+| 预渲染/指纹/图层 | 源码/参数/API/精确库版本、当前实际绘制计划、全部字体依赖的 revision/链/字节身份、画幅/密度/颜色空间、真实位姿与绘制状态；字体更新不得命中旧帧 |
+
+两种连字计划分键；table 的 tnum/pnum 也参与 features，不允许列宽测量与绘制共用漏特性的旧结果。按 tag 排序只用于没有优先级冲突的规范化值；重叠 feature range 要先解成最终有效区间，不能排序后改变覆盖顺序。
+
+可重建缓存不落项目；字体按 4.4 会话常驻，其余布局/轮廓/栅格按软预算和 LRU。录制命令、在途帧、作者仍持有的布局 pin 住必要资源；淘汰纹理/位图后通过稳定资源键恢复，不留已 close 的 Bitmap 引用。字体代次切换、密度变化、会话关闭都必须有对应失效/释放路径。
+
+日志复用 `createLogger/createMainLogger`、已有 Worker 回传和 `recordVideoEditPreparation('fontLoad', …)`。记录 prepare 开始/完成/失败、资源身份与耗时；逐帧细分仅性能采样期开启，不新增日志文件、查看器或 IPC。
 
 ## 8. 实验 1–8
 
 本节是批准后的执行规格，本次结果全部为“未执行”。显卡暂停期间即使 OffscreenCanvas、软件渲染或无头 Electron 也不启动；Node 可执行项仅指后续获得实施授权后的 CPU 阶段。
 
-裸 Node 不具备 Canvas/FontFace/DOM。CPU 规则测试使用明确的固定度量；HB 原型可直接消费 SFNT，但涉及 Pretext 的 Canvas 墨迹分类/emoji 探测时须注入此前真实窗口采集的 fixture，或标为等待窗口证据。不得以 Node 模拟 Canvas 的成功代替实验1–3、7的验收。
+裸 Node 不具备 Canvas/FontFace/DOM；新生产规则与 HB 整形必须无需这些对象即可执行。原版 Pretext、DOM 与 Canvas 系统 emoji 对照留待真实窗口；不再用伪 Canvas fixture 支撑生产标点分类。CPU 结果不能替代实验 1–3、7 的真实对照验收。
 
 ### 8.1 固定 200 条断行样本来源
 
@@ -245,18 +336,20 @@ layoutTable(input: TableInput, options?: TableOptions): TableLayout
 | ID | 数量 | 具体来源与组成 |
 |---|---:|---|
 | R001–R020 | 20 | 本仓库 `author-text-motion.md / recipes-text.md / recipes-text-data.md` 及 `authorLibraries/textPixels.test.ts` 的现有标题/数据卡文字；取 10 条，每条普通宽和临界宽各一例，不读取外部视频工程 |
-| P001–P060 | 60 | Pretext v1.0.0 的 `harness/` 已有用例与 accepted 记录对应输入，固定抽取 20 CJK 标点/禁则、20 空白/tab/soft-hyphen、10 Latin kern/ligature、10 假名/富文本跨 run；保留原 case ID，样本不够某类时从该类官方案例生成等价变体并标注 |
-| U001–U040 | 40 | Unicode 固定版本 `LineBreakTest.txt` 与 `GraphemeBreakTest.txt` 选取 20 断行边界、20 emoji/VS/ZWJ/扩展汉字/组合符序列，包在自有短句中；Unicode 预期只验证规则层，最终 DOM 断点仍现场采集，不把 UAX 默认规则当 CSS oracle |
-| H001–H080 | 80 | 自有短句生成器：8 类各 10 例——中英无空格、带已有空格、括号引号、连续句末标点、数字与单位/负数、URL/长词、显式换行与窄宽、粗细/字号切换的富文本。种子固定，宽度以接近断点的值为主 |
-| 合计 | 200 | 至少保留少量 ≤24px 极窄案例；不因上游已知差异排除。复杂 mixed bidi 另列兼容回归，不塞入“新引擎字位已支持”结论 |
+| P001–P040 | 40 | Pretext v1.0.0 的 `harness/` 已有用例与 accepted 记录对应输入，固定抽取 10 CJK 标点/禁则、10 空白/tab/soft-hyphen、10 Latin kern/ligature、10 假名/富文本跨 run；保留原 case ID，样本不够某类时从该类官方案例生成等价变体并标注 |
+| U001–U020 | 20 | Unicode 固定版本 `LineBreakTest.txt` 与 `GraphemeBreakTest.txt` 选取 10 断行边界、10 emoji/VS/ZWJ/扩展汉字/组合符序列，包在自有短句中；Unicode 预期只验证规则层，最终 DOM 断点仍现场采集，不把 UAX 默认规则当 CSS oracle |
+| H001–H120 | 120 | 自有短句生成器：8 类各 15 例——中英无空格、带已有空格、括号引号、连续句末标点、数字与单位/负数、URL/长词、显式换行与窄宽、粗细/字号切换的富文本。种子固定，宽度以接近断点的值为主 |
+| 合计 | 200 | H 组独立自有样本 120/200 = 60%（不把上游/Unicode 改写计入）；加 R 组共 70%。至少保留少量 ≤24px 极窄案例；不因上游已知差异排除。复杂 mixed bidi 另列兼容回归，不塞入“新引擎字位已支持”结论 |
 
 Unicode 版本与 Pretext 固定数据对齐，实施从 [Unicode 数据目录](https://www.unicode.org/Public/) 读取对应版本，保存具体版本 URL；不使用随时间漂移的 latest。实验字体优先采用固定文件的思源黑体/宋体 CJK、Noto/允许再分发的 Latin 与 emoji 字体，另加本机商业字体只做本机结果；所有报告记录真实文件名、哈希、脸与轴，不只写 family 名。新增字体 fixture/依赖须在实施阶段获得授权后准备。
 
 ### 8.2 统一 DOM 对照法
 
-在正式 `test:reality` 真实 Electron 窗口的隔离资料目录注册本票专项场景；沿正式 author import、字体加载、Worker 与取帧链，不另造启动器。HTML 与 Worker 加载同一 SFNT，并等待 FontFace loaded/document.fonts.ready；记录 Electron/Chromium、OS、DPR、locale、字体哈希和冻结版本。
+在正式 `test:reality` 真实 Electron 窗口的隔离资料目录注册本票专项场景；沿正式 author import、字体加载、Worker 与取帧链，不另造启动器。对照 HTML 注册同一 SFNT 并等待 FontFace loaded/document.fonts.ready；生产 Worker 仅加载该 SFNT 到 HB 并等待会话 ready；记录 Electron/Chromium、OS、DPR、locale、字体哈希和冻结版本。
 
-DOM 固定 border-box/content-box、font-size/weight/style、line-height、white-space、word-break、overflow-wrap、font-kerning、font-feature/variation、text-spacing-trim、text-autospace、letter-spacing。normal 基线为 pre-wrap、word-break normal、line-break auto、overflow-wrap break-word；显式 grapheme 与 none 分别设对应 CSS。需探测当前 Electron 是否支持 CSS 属性，不以忽略了属性的 DOM 当对照。
+DOM 固定 border-box/content-box、font-size/weight/style、line-height、white-space、word-break、overflow-wrap、font-kerning、font-feature/variation、text-spacing-trim、text-autospace、letter-spacing。normal 基线为 pre-wrap、word-break normal、line-break auto、overflow-wrap break-word；显式 grapheme 与 none 分别设对应 CSS。实验 1 在 DOM 显式 `text-autospace:no-autospace`，新库测试配置也关闭自动中英间距；两边不插空格，不以产品默认 1/8 em 与关闭间距的 DOM 比断点。中英间距在实验 2 的独立几何组验证，产品默认不变。
+
+静态核对已确认 Chromium **152.0.7977.167 支持 text-autospace**：固定版本 [css_properties.json5](https://github.com/chromium/chromium/blob/152.0.7977.167/third_party/blink/renderer/core/css/css_properties.json5) 登记 `normal / no-autospace`，默认 no-autospace，该属性无 runtime_flag；不能据此声称全部 CSS Text 4 扩展值都支持。解禁后记录 `CSS.supports`、computed style 及有/无间距的 Range 宽差，以确认 Electron 实际构建没有覆盖行为。几何组用 normal 对照整体间距，并独立核对本库 1/8 em 的边界增量；属性被忽略时标为对照不可用，不伪报通过。
 
 用 Text node + Range 采集原文范围所属行、边界和文本盒，不把每个字包成 span 破坏连写。Range 不能可靠证明 ligature 内单字的 ink origin；这部分用整行叠图/字形轮廓和 cluster 范围核对。分别输出断点差异、advance 差异、墨迹差异与抗锯齿差异；截图必须打开目视，不能只确认文件存在。
 
@@ -264,70 +357,93 @@ DOM 固定 border-box/content-box、font-size/weight/style、line-height、white
 
 | 实验 | Node/CPU 可做 | 必须真实 Electron/显卡解禁后做 | 判据与输出 |
 |---|---|---|---|
-| 1：200 条断行 | 样本生成、原文映射、固定规则数据与 Pretext walker 不变量；HB measurer 的 CPU 逻辑。伪 Canvas 宽度只验证算法，不算浏览器证据 | 同一 200 case 比较 DOM、未修改 Pretext、适配后正式作者输出；逐条比较可见行起止 UTF-16 偏移、硬换行与省略范围 | 断点 200/200 且逐行一致；任一失败保留，列明原因/修复/复测。升级 Electron、Pretext、HB 或字体后重跑相应基线 |
-| 2：行宽 vs HB advance | TTF/OTF 下 shape、cluster、轴、feature、spacing/trim 算术与 source mapping | 对实验 1 同批取 Canvas Pretext、HB、DOM Range 的宽度；追加每个临界点 W−1/64、W、W+1/64，不用它们凑 200 数量 | 建议误差 ≤1/64 作品像素、临界断点一致；分别记录裸 advance 与最终 occupied width，不能混入尾空白悬挂后误报 |
-| 3：开口标点与 halt/chws | 取 `「『（《【“` 及配对闭口、连续标点的 glyph ID、advance、offset；各做无特性/halt/chws/适配策略；覆盖有/无特性的字体 | 同字体、字号与行首/中/尾，1×和4×输出叠图 DOM；比较标点墨迹原点与相邻字的间距；静态/逐字落定互比 | 无位置性差异；AA 差异单列且目视无可辨双边，不以总宽相同替代字形正确。任何双重挤压阻断发布 |
-| 4：大中文字体打开 | 用实际 10/30/60MB 附近字体或本机可取得的最大完整 CJK 字体，记录真实字节数；TTF/OTF/TTC/WOFF2 读取、解压、HB 实例与首 shape，Node worker_threads 内存/耗时 | 正式消息传输、Worker FontFace.load、两个引擎 ready、第一帧延迟；并发两素材/两 Worker、切字体、关闭后迟到结果、长时淘汰/GC | 冷启动和缓存命中分开，P50/P95/max、JS/wasm/进程内存；证实重工作不堵主线程、同 Worker 同字体只准备一次。无虚构冷磁盘缓存结论 |
-| 5：逐字重画与推近 | layout/shape/outline 缓存命中与失效；无 Canvas 的位姿计算基准 | 20/200/1000 字，1080p/4K，静态、逐字位姿、描边阴影、推近1×→8×；旧版与新版同一场景；记录完整帧与上传 | 报作者提交/栅格/上传/合成 P50/P95/max，播放跳帧与 p90；建议典型200字 P95≤4ms；推近按新密度重画、落定无跳字；压力规模超预算如实报告 |
+| 1：200 条断行 | 样本生成、原文映射、固定规则数据与 Pretext walker 不变量；HB 整段/安全切片/unsafe 双侧修复与标点计划逻辑，生产零 Canvas 调用 | 同一 200 case 比较 DOM、未修改 Pretext、适配后正式作者输出；逐条比较可见行起止 UTF-16 偏移、硬换行与省略范围 | 断点 200/200 且逐行一致；任一失败保留，列明原因/修复/复测。升级 Electron、Pretext、HB 或字体后重跑相应基线 |
+| 2：行宽 vs HB advance | TTF/OTF 下 shape、cluster、轴、feature、spacing/trim 算术与 source mapping | 对实验 1 同批取 Canvas Pretext、HB、DOM Range 的宽度；追加每个临界点 W−1/64、W、W+1/64，不用它们凑 200 数量 | 误差 ≤1/64 作品像素，候选与容器宽按相同 LayoutUnit 转换后比较，临界断点一致；裸 advance/occupied/量化/墨迹分栏。另设中英间距几何组（normal vs no-autospace、已有空格、换行边缘），不计入实验1断点分母 |
+| 3：开口标点与 halt/chws | 取 `「『（《【“` 及配对闭口、连续标点的 glyph ID、advance、offset；各做无特性/halt/chws/适配策略；覆盖有/无特性的字体 | 同字体、字号与行首/中/尾，1×和4×输出叠图 DOM；比较标点墨迹原点与相邻字的间距；同一禁可选连字计划的静态/逐字落定互比 | 无位置性差异；AA 差异单列且目视无可辨双边，不以总宽相同替代字形正确。任何双重挤压阻断发布 |
+| 4：大中文字体打开 | 用实际 10/30/60MB 附近字体或本机可取得的最大完整 CJK 字体，记录真实字节数；TTF/OTF/TTC/WOFF2 读取、解压、HB 实例与首 shape，Node worker_threads 内存/耗时；加入系统中文、系统 emoji 实际字节装载成本 | 独立字体端口消息传输、HB 会话 ready、第一帧延迟（生产不注册 FontFace）；验证渲染 queue 等待时资源回执仍能到达；并发两素材/两 Worker、切字体、关闭后迟到结果、会话常驻、关闭后的显式 dispose/wasm 重用与 GC | 冷启动和缓存命中分开，P50/P95/max、JS/wasm/进程内存；证实重工作不堵主线程、同 Worker 同字体只准备一次。无虚构冷磁盘缓存结论 |
+| 5：逐字重画与推近 | layout/shape/outline/稳定路径身份命中与失效；无 Canvas 的位姿计算基准；连字全选/部分选择/不同位姿与 owner 规则 | 20/200/1000 字，1080p/4K，静态、逐字位姿、描边阴影、推近1×→8×；旧版与新版同一场景；记录完整帧与上传、录制器纹理复用、密度档切换与逐簇外观栅格分配，确认热帧零整画布临时分配 | 报作者提交/栅格/上传/合成 P50/P95/max，播放跳帧与 p90；典型200字纯填充 P95≤4ms；描边/阴影单列，不套此门槛；推近按新密度重画、落定无跳字；压力规模超预算如实报告 |
 | 6：描边生长、立体字耗时 | 同一 HB 轮廓转 Path2D 指令/three.Shape 的 CPU 几何准备；用已内置 three SVGLoader/ExtrudeGeometry，不另写曲线离散/三角化；计洞/轮廓数与几何缓存 | 小标题与200字压力样本的描边揭示和一次挤出绘制，首帧/热帧成本、内存及截图；复用当前 three 路线 | 轮廓、洞与方向正确，缓存避免每帧挤出；不把结果解释为本票已交付三维字系统，不测试 hb-gpu |
-| 7：回退 | 字素整簇选脸、缺字判定、UTF-16/代理对/ZWJ/VS 映射；同名字节变化与轴变化失效 | 指定脸故意缺 emoji/扩展汉字/假名，比较正式 Worker 与 DOM 的实际回退；Windows 与可取得的 macOS 分别验；彩色格式单列 | 同一 case 同一脸/序列与断点，簇不拆、无未报告缺字；只测 Win 就标明 macOS 未验，不能声称跨平台一致 |
+| 7：回退 | 字素整簇选脸、缺字判定、UTF-16/代理对/ZWJ/VS 映射；同名字节变化与轴变化失效；核对 HB_TINY 的 AAT 支持、实际字体 morx/kerx 及位图 emoji 表，不把有 glyph ID 当支持绘制 | 指定脸故意缺 emoji/扩展汉字/假名，比较正式 Worker 与 DOM 的实际回退；Windows 与可取得的 macOS 分别验；加入 AAT 字体、CBDT/CBLC、sbix 与可得彩色格式，验证系统 emoji Canvas 回退在 HB 位置绘制；随机 seek/预览/导出/指纹同快照同链 | 同一 case 同一脸/序列与断点，簇不拆、无未报告缺字；系统 emoji 回退的形状/基线/墨迹/AA 差异单列，不能当完整一致；只测 Win 就标明 macOS 未验，不能声称跨平台一致 |
 | 8：tnum 与列宽 | 0–9、正负数、小数、百分比、空格/千分位的 HB advance；列 min/max/固定列/overflow 算法、无tnum字体诊断 | 表格在 DOM 使用 `font-variant-numeric:tabular-nums` 与相同字体，逐格对齐/换行、换数字长度、窄列叠图 | 支持 tnum 的数字 advance 同宽（HB font units 精确），符号不要求与数字同宽；列不重叠，换数值不发生意外横跳；简化表格与完整 CSS 分配差异显式列出 |
 
 性能统一 5 次预热、30 次计量；冷启动用同一次专项中的独立 Worker 重建并明确“进程冷/字体冷/磁盘未清缓存”。正式产物性能验收走 `electron:prod` 对应生产构建及统一 Reality 启动路径；不能以 Vite 开发页或 Node 的时间宣称最终帧率。运行大字号字体、2D 栅格、截图、GPU/three 及 Electron 的所有部分现在均暂停。
 
-## 9. 持久格式、作者 API 与兼容性裁定
+## 9. 持久格式、迁移与助手覆盖
 
-依据 `docs/rules/persistence.md`：“作者接口 apiVersion、字段默认值/含义和数值范围变化”都属于持久语义；“库版本”与“宿主作者 API 版本”分别裁定。
+### 9.1 受影响格式清单
 
-| 变化 | 裁定 |
-|---|---|
-| 只增加自足的冻结库版本，宿主能力/序列化/旧版默认值均不变 | 不自动等于作者 API 升级；`libraries` 已能记录精确版本。旧冻结库不变是必要条件 |
-| 本设计新增字节字体端口、准备屏障及库对宿主的就绪约定 | 属于宿主作者契约变化；建议 API 7→8，新 henji-layout `minApiVersion=8`。不因 draw/layoutText 参数没变而省略版本 |
-| layoutTable、prepareTextFonts 新导出，默认断行/字素行为变化 | 用新冻结版本承载；旧类型包不改，旧作品不自动换库 |
-| 内存排版/字体哈希/wasm/轮廓/栅格缓存 | 不落盘，不升项目格式；现有可重建缓存按引擎/资源身份失效 |
-| 把新算法直接替换宿主 textStyle 或让旧作者库受新字体别名覆盖 | 改变旧画面语义，本设计不采用；若扩范围必须另做版本分流与迁移设计 |
+版本与 schema 权威为 `src/core/persistence/formats.ts`；下表基于本工作树 2026-10-31 基线列出下一版本，实施前若基线前进则顺延，禁止复用已发布版本。`apiVersion` 和库钉住决定作者行为，不是可丢弃缓存。字段可选是为了读取旧数据，不等于能让旧程序忽略 API 8 后照常渲染。
 
-当前登记事实：code-author-api 7、code-version 8、code-asset 13、剪辑内容 45、录制内容 48。升级 API 会改变被多种嵌套 schema 引用的最大合法版本，不能只修改一个常量。实施时从 `src/core/persistence/formats.ts` 顺向核对 code-version、code-asset、document.video_edit、document.screen_recording，以及实际嵌套这些记录的风格包/预设/交换包；凡权威 schema 或解释语义变化都登记逐版本迁移，按实际最新基线递增，不把此处数字写死进测试。
+| 登记格式/存储 | 基线 → 计划 | 变化与迁移动作 |
+|---|---|---|
+| `code-author-api` | 7 → 8 | 新静态字体/宿主准备/稳定路径资源契约；版本分流保留 4–7 行为，不把旧素材 apiVersion 值批量改成 8 |
+| `code-version` | 8 → 9 | schema 接受 API 8；既有 apiVersion/libraries/源码哈希/组件与工程引用原样保留，迁移仅升级容器解释能力 |
+| `code-asset` | 13 → 14 | sourceVersion 等嵌套代码版本允许 API 8；旧资产导入保留记录，不套新建 API8 默认值；导出读回包含实际库版本 |
+| `document.video_edit` | 45 → 46 | 嵌套代码版本/工程风格样片接受新契约；旧代码保持原值，只有无钉住的样片等按 2.4 固定历史语义解析 |
+| `document.screen_recording` | 48 → 49 | 内嵌剪辑内容同样逐层迁移；不能只升级外层后遗漏录制内的代码/风格副本 |
+| `video-style-library` | 6 → 7 | `sample.apiVersion? / libraries?`；读取缺值按固定 API7 快照，不改 guide、源码、风格内容 version、媒体与历史 contentHash |
+| `video-template-library` | 6 → 7 | 代码体 `body.apiVersion? / libraries?`；原生模板内容不变；应用到工程时版本传入新素材，不能被发布默认值冲掉 |
+| `video-style-package` | 9 → 10 | 遍历 style.sample 与所有 templates[].body 的代码体迁移，保留精确钉住；预览视频/缩略图/锚点原始字节不重做、不丢失 |
+| `video-preset-package` | 10 → 11 | 条目增加可选 `previewAuthor` 钉住；缺省固定历史快照。历史 style/title 条目的冻结输入 schema 不改，由已有转换函数在生成新样片/模板时补历史钉住；其他预设内容原样保留 |
+| `text-presets` | 1 → 2 | 个人文字预设保留包中带来的可选 previewAuthor；预览生成器取此记录，原生文字 style 及算法不变 |
+| `video-edit-effects-library` 本地数据 | 现有存储 2 → 3；登记正式格式 | 个人效果预设同样保留 previewAuthor。当前 `videoEditEffectPresets.ts` 自管版本且未在 formats.ts 单列；本次触及其存储字段，须把现有受支持读取（1、2）接入正式逐版本迁移和样本，保留 favorites/effects，不顺带重构其他本地库 |
 
-对于能包含 API8 记录的容器，旧程序不能正确解释新作者行为，最低可读版本提高到能读 API8 的格式版本；不能按“加了一个可选字段”豁免。只是外部包里装了新版本文档且包自身结构/语义未变的外壳，不机械升版本。实现前列出实际指纹与语义影响清单，完成嵌套读入口测试再更新 baseline/releasedCompatibility。
+后两项是预设包钉住在“导入→本机保存→预览→再导出”间不丢失的必要传播，不新增预设业务功能；内置转场等无个人记录的来源在内置描述符写固定版本。字段投影复用一个作者版本 schema，包条目到个人记录直接搬运，不能两边各维护一套默认值。
 
-迁移保持旧记录中的 `apiVersion` 和 `libraries` 原值，保留旧源码与文件哈希；新程序接受旧作品并执行对应旧行为，不把 v4–7 的代码内容迁为 v8。打开时只内存升级，首次明确保存前按已有通道备份；旧程序遇到新最低可读版本返回“请升级”，不能打开后覆盖。
+上述会实际容纳 API8 或依赖新钉住解释的格式，最低可读版本提高到对应新版本；旧程序会误解释 API8，不能以“字段可选”豁免。若实施把**仅补充 API7 等价元数据、旧程序忽略仍保持完全相同语义**独立发布为中间格式，该中间步才可保持原 minReaderVersion；不得让最终写出的 API8 数据继续沿用旧下限。code-author-api 自身的兼容范围与容器可读下限分开管理。
 
-黄金样本由正式构造/导出入口追加，包括旧1.x作品、新2.x/API8作品、同文档混用、代码资产/嵌套录制/项目包读回、升级库后撤销。已发布样本与旧冻结摘要不可重生成。
+不机械升级：剪辑 JSON 外壳（当前 document version 10）由 kindVersion 管具体内容；项目说明与通用项目/单文档包外壳如果结构/解释不变，保持版本，仅在嵌套入口调用对应内容迁移。字体字节、wasm、shape/outline/raster 和预渲染缓存均非新增项目格式。`codeMaterialFilesSchema` 继续描述源码表，版本字段放所在样片/代码体/素材版本，避免无差别修改所有源码消费者。只读的旧 style-kits/title-templates 输入 schema 也不借此扩写。
 
-助手覆盖判断：新排版仍通过已有代码工程写入、素材版本、升级、预览/取帧/复核操作调用；字体走已有 font 数据与导入入口。无需排版专用 MCP 工具或任意脚本能力。实施更新作者类型与技能并核对公共操作结果；新文字计划仍走 `textDrawObservation.ts` 的布局/绘制事实供助手复核，不能只更新技能文案而丢掉可读回结果。
+### 9.2 逐版本迁移、摘要与黄金样本
+
+- 文档类在 kind descriptor.migrations、其他已登记格式在 `formatMigrations.ts` 中按 N→N+1 增加纯函数，保留旧链；只复制新增字段，不做文件 I/O、源码重新编译或预览重渲染。缺值解析和迁移共用 2.4 的固定快照，显式字段原样保留，未知/不兼容库走明确错误，禁止吞掉后选 latest。
+- 风格/模板可以在内存补齐等价历史钉住，但使用语义归一兼容已有 contentHash，新增版本身份不造成旧样片失效。新建或真正升级时哈希纳入实际 API/库；相同源码、不同引擎必须不同身份。存储字段升级不等于用户内容版本加一。
+- 文件读取升级前沿现有通道备份 `.henji/backups/`；localStorage 先留备份键。读/扫描/hydration 只产出内存结果，明确保存才落新格式。失败保留原件，不能以空库覆盖；未知高版本按 minReaderVersion 拒绝并提示升级。
+- 分别追加旧样片/库模板/风格包/预设包无字段、显式 API7+1.x、API8+2.0.0、缺一个字段、同工程混用、新旧嵌套录制、代码资产、项目/单文档包真实入口样本。校验 import→保存→重开→export 钉住相同，包预览媒体摘要不变、历史源码哈希不变；旧 CodeMaterialVersion 缺库仍落首版。
+- 升级操作单列黄金场景：仅升级库仍为 API7；显式升级 API 产生 API8+2.0.0；源码相同也创建/复用正确新版本；撤销恢复全部实例、默认版本与参数。不可仅断言登记表版本号。
+- 样本用正式构造/导出入口追加到已有 persistence fixtures；已发布样本和冻结目录不改。精确迁移/读写验证通过后，才更新 baseline/releasedCompatibility 并执行兼容门禁。
+
+### 9.3 能力与可读回结果
+
+按 henji-application-capability 分级，本票属于**既有算法能力的能力增量**：扩展升级操作的 `upgradeAuthorApi`，不用新增排版 MCP 工具。实现保持 `videoEditCodeProjectUpgrade.ts` 为唯一升级服务，领域声明与 UI/Pi/MCP 同源，结果明确列出变更素材/实例、实际 API/库及可撤销事实；幂等比较必须包括 API/库。
+
+字体查询/导入继续原实体与操作；静态声明属于作者契约，准备通道属于内部宿主通信，不新增任意脚本或下载工具。更新作者技能、类型、示例及 codeMotionReview 建议，使助手知道新建默认、两种升级差别、字体声明、自动连字策略和表格入口，不教助手手写测量/换行/列宽。
+
+`textDrawObservation.ts` 的文字布局/绘制事实必须来自实际计划（包含动画连字计划、必需簇 owner、截断、溢出与回退），新 drawText 绘制轮廓也要上报，不能因为不再 fillText 就丢失复核覆盖。外来模块执行仍经过既有信任入口；纯读源码/静态声明不是执行，但首次真正模块求值不能绕过原有确认。
 
 ## 10. 验证与分步实施
 
-本次为 L0 文档任务：只核查路径、接口、引用和设计完整性，不执行 lint/tsc/Vitest/构建。当前工作区和 node_modules 联接点不变；不提交、合并或 push。
+### 10.1 本轮文档交付边界
 
-批准后的顺序：
+本轮为 **L0**：仅核对本文件的裁定一致性、实际代码入口、固定上游源码、路径与链接；不运行 lint/tsc/Vitest/构建或任何实验。不安装依赖、不触碰 node_modules 联接点；不启动 Electron、Reality、OffscreenCanvas/GPU/显存程序，不操作 `D:/视频制作`；不提交、不合并、不 push。第 12 节曾允许 CPU 实施，不构成本轮越过“只写文档”授权的依据。
 
-1. **设计批准**：Claude 与指定审查员裁定第 11 节；批准前不写实现、测试、fixture 或 result.md。
-2. **CPU 原型**：固定依赖/许可，先验证 HB 字体格式、cluster/轮廓、Pretext 三处适配接缝和共用度量；只跑实验 1–4、6–8 的 CPU 子项。此时不冻结正式发行目录、不接默认新作品。
-3. **真实窗口可行性门**：显卡解禁后先跑实验 1–3、7、8；必须满足断点、几何及字形判据。失败先定位；需要大规模重写或改变选型时提交证据重新裁定，不边修边铺完整产品。
-4. **资源生命周期与正式集成**：实现字体端口、准备、取消、版本隔离、缓存失效、API/容器迁移；验证预览、导出、样片、元数据及读回。旧宿主字体行为回归独立于新文字效果验收。
-5. **文字与表格闭环**：完成 spacing/justify/fit/截断/appearance、逐字 cluster 策略、table；更新作者技能可执行示例，复用现有操作，不新增界面。方案得到实际试用确认后再保留必要自动测试。
-6. **性能与兼容性**：完成实验 4–6 真机部分、缓存冷热/字体切换/旧作品混用/关闭重开；只测一次改前基线与一次改后完整场景，失败增量复测。结果写计划要求的 result.md 是后续阶段任务。
-7. **冻结与验证**：在原型和迁移通过后冻结新版本；比对旧目录全字节摘要，离线装载新库与 wasm，核对生成类型和许可证。尚未批准发行或存在必要实验未验时，不把新版本设为已验收默认。
+### 10.2 后续实施顺序（需另行进入实施阶段）
 
-匹配测试范围与升级条件：
+1. **复审设计**：Claude 与指定审查员检查本次正文，补定第 11 节接口接缝。实验 1–8 仍全为未执行；不得先写原型/fixture 冒充已获实现授权。
+2. **CPU 可行性**：获实施授权后锁定依赖/许可与来源补丁，验证 SFNT/flags/cluster/轮廓、Pretext 规则接口、整段 shaping/unsafe 双侧修复、标点 extents、LayoutUnit、table；验证新生产排版不依赖 Canvas/DOM。字体显式 dispose 补丁也在这一阶段验证。显卡暂停时仍不做任何画布或窗口实验。
+3. **真实窗口可行性门**：解禁后沿正式 Reality 跑实验 1–3、7、8：200 断点（关闭 autospace）、量化几何、标点字形、连字模式、AAT/emoji 与表格。失败保留样本；若需改变裁定或大幅扩张引擎先交证据，不直接发布。
+4. **宿主与版本集成**：静态声明提取、字体独立端口/首次求值与出帧屏障、会话回退常驻、预览/导出/元数据/指纹同源、revision 原子失效；并落实 API8、全部钉住入口、9.1 格式迁移与显式升级。测试涵盖不同帧顺序、两 Worker、取消/迟到、关闭重开及旧1.x混用。
+5. **绘制与性能**：接稳定路径身份和录制器复用、密度档逐簇外观缓存；完成实验 4–6 的正式系统字体/真实画面/热帧数据。纯填充 4ms 门槛与外观数据分栏；确认热帧没有每字整画布分配、推近无低清放大、连字落定无跳换。
+6. **冻结与交付**：上述可行性、迁移与集成通过后冻结 2.0.0，增加 table/共同 wasm 模块/类型/许可/二进制摘要，逐字节核对旧 1.x 不变。更新技能和真实结果读回，分别报告未验证的平台与彩色格式。实验报告属于后续被授权阶段，本轮不创建其他文档。
 
-- 局部确定性算法/格式转换先用精确 CPU 测试。保留重点是原文映射、断点/feature 度量一致、cluster 不重复绘制、取消/迟到资源、字体代次失效、table 溢出及 tnum 失败；不复制登记表/版本号清单到断言。
-- 复用直接消费者现有测试：`authorLibraries/layout.test.ts / precision.test.ts / release.test.ts / textPixels.test.ts`，`core/imaging/vectorContent/textDrawPlan.test.ts`，`platform/fonts.test.ts / fontFaces.test.ts`，字体 service/scanner 测试，代码版本与模块解析测试，以及真正受影响的持久读写测试。像素测试若依赖真实 Canvas/设备，归显式专项，不能混进 CPU 阶段偷跑。
-- 共享核心/字体生命周期/Worker 契约阶段为 L2：精确消费者、所属 TypeScript 工程、依赖图、持久兼容及实际涉及的专项；core 被主进程引用时两套 tsc。`verify:changed` 必须显式本票文件并先 dry-run；package/锁文件不冒充该工具自动支持。
-- 作者 API 核心公共契约和关键文字依赖正式替换符合 testing.md 的 L3 条件；在完整实施边界执行其全量质量门禁一次，不在每轮原型叠加全仓检查。仅需要新 Electron 运行产物时用 `electron:bundle`；性能正式验收按生产产物要求，不因为旧产物而自动跑 electron:build。
-- 持久变化完成迁移/黄金样本后才执行 `persistence:baseline / persistence:release-snapshot / check:persistence-compat`；作者发行改动核对冻结与类型消费；导入边界变动做 `check:dependency-graph`，真实技能/能力注册有变化才执行对应检查。
-- 有代码后的提交前审查按 AGENTS.md 派干净上下文，仅交目标、diff 与相关规则。当前设计不代替 Claude/指定审查员批准，不擅自启动实现审查代理。
+### 10.3 验证等级与风险对应
 
-## 11. 需要 Claude 与审查员裁定的点
+- CPU 精确验证覆盖原文映射、features/轴缓存失效、安全切片与 unsafe 重整形、临界量化、必需簇 owner、表格 tnum/overflow、固定历史解析及字体取消/迟到。不得用上游规则清单/版本数字的复制断言代替行为测试。
+- 直接消费者复用 `authorLibraries/layout.test.ts / precision.test.ts / release.test.ts / textPixels.test.ts`、core textDrawPlan、fonts/fontFaces、作者模块/编译、CodeProjectUpgrade/CodeService、PresetPreview、指纹与 CanvasRecorder 及 persistence 读写测试；真实像素依赖的部分留显式解禁专项，不混入 CPU 阶段。复核按 API7/8 和1.x/2.0分别断言实际绘制事实。
+- 共享字体生命周期、内部消息与持久迁移满足 testing.md 的 **L2**：精确直接消费者、所属 TS 工程、依赖图和格式专项；core 同时被两工程编译则双 tsc。`verify:changed` 显式传本票代码文件并先 dry-run，不扫描他人脏工作区。
+- 作者 API 核心公共契约/关键排版依赖正式引入满足 **L3** 升级条件；完整实施边界执行一次对应全量质量门禁，原型阶段不反复跑全仓。构建只为更新产物时用 electron:bundle；正式性能结论用生产产物和真实设备，不用 Node 时间代表帧率。
+- 新格式完成精确迁移与黄金样本验证后才运行 persistence:baseline / persistence:release-snapshot / check:persistence-compat。升级能力字段变化执行能力投影与正式结果验证；无新界面不新增 Surface/MCP 工具。
+- 实施后的 L2/L3 或 IPC/持久高风险代码才按 AGENTS.md 做干净上下文提交前审查。本轮 L0 不派实现审查代理、不启动实现，只将正文交回 Claude 复审。
 
-1. **Pretext 窄适配**：批准固定源码补丁的测量注入、标点决策输出、边界 spacing 三处接缝；实验1–3失败且需更深改造时重新评估 CanvasKit。无补丁直接拼接无法满足同一度量。
-2. **版本与范围**：建议新库2.0.0、作者API8；本票不改宿主内置文字布局、不做竖排和项目字体打包。API8会牵涉嵌套持久格式，不能作为“库内部替换”隐去。
-3. **作者契约补充**：保留 layoutText/drawText/GraphemePose 形状，增加 prepareTextFonts 与 table 模块；默认正常断行/1⁄8em中英间距，跨字素连字只接受同组位姿，强拆用 forceGraphemes。若要求绝对不增加任何公开导出，应先收窄模块常量字体和表格能力，不能靠同步隐式文件读取实现。
-4. **通过阈值**：断点200/200沿原计划；建议几何误差≤1/64作品像素、典型200字1080p文字阶段P95≤4ms，须批准后作为新增门槛。跨平台字体、彩色emoji与像素AA差异分别报告，不将它们包装成“已完全一致”。
+## 11. 仍需 Claude 补定的点
 
-批准状态：待 Claude 与指定审查员；实验1–8均未执行；显卡暂停约束继续有效。
+**仅一处接口语义尚需裁定：graphemes 延迟到 drawText 才出现，如何与不可变 TextLayout 几何一致。** 第 13 节已确定“逐字素模式自动关闭 liga/clig、必需连字跟随首字素”，此处不重开方向，只补齐调用时序。
+
+建议采用 5.4 的“双计划 + forceGraphemes 提前选动画几何”：不改三个公开函数的调用形状，graphemes 自动选禁可选连字计划；回调/观察器读实际计划，需要绘制前读取同一几何的作者设置已有 forceGraphemes。代价是可能多算一个 shaping/layout 计划，且未设置 forceGraphemes 的公开 layout 行框可能与随后动画绘制不同。另一选择是让 API8 新版始终关闭可选连字，以单一几何换取静态连字损失；本设计不擅自采用。Claude 确认前该接缝保留明确未决状态，其他已裁定项不重复请求批准。
+
+其余为实施验证项而非待定产品方向：平台候选实际覆盖、字体格式支持、AAT/彩色 emoji 限制、真实性能与 DOM 对照都要实验，不能以设计写完宣称通过。字体声明的提取/参数绑定及无队列资源准备按第 4 节作为具体复审方案；harfbuzzjs 暂不公开独立作者库的成本决定见 4.5。
+
+以下第 12、13 节为原样保留的裁定记录，不是两套同时有效的实现方案。第 13 节优先；本轮禁止实施与显卡暂停约束继续有效。
 
 ## 12. Claude 裁定（10-31）
 1. **Pretext 窄适配**：批准三处接缝（测量注入、标点决策输出、边界 spacing）的固定源码补丁：锁定 Pretext 1.0.0，补丁以独立补丁文件 + 来源版本记录，Electron 升级与 Pretext 升级时都要复跑实验 1–3。实验 1–3 失败且需要更深改造时停下回报，再评估 CanvasKit。
@@ -351,3 +467,6 @@ DOM 固定 border-box/content-box、font-size/weight/style、line-height、white
 12. 补 tsume、小型大写、上下标的映射与各自字号下的整形方式。
 13. 采纳：字体对象按内容哈希缓存、不可变；字体淘汰时显式释放 wasm 内存。harfbuzzjs 是否登记为独立作者库按成本决定，写明理由。
 14. 实验 1 的断行对照关闭中英间距（两边都关）比较断点；中英间距单独按几何验证。确认 Chromium 152 的 text-autospace 支持情况并写进设计；自有样本比例提高到至少 60%。
+
+## 14. 第 11 节裁定（10-31）
+采用单一几何：API 8 的新版默认关闭可选连字（liga/clig），排版几何只由文字与样式决定，drawText 收到 graphemes 不再改变几何，不做双计划；去掉 forceGraphemes。TextStyle 增加可选 `ligatures: true` 给需要连字的静态标题用，此时逐字素位姿/揭示按“整簇跟随首字素”处理。DOM 对照实验相应设置 `font-variant-ligatures: no-common-ligatures`（开连字的样本另列）。理由：中文为主的片子里拉丁可选连字收益很小，单一几何让排版结果、回调与绘制始终一致，接口更简单。
