@@ -56,6 +56,8 @@ const parameters = {
   nodes: { type: 'table', title: '节点数据', rowKey: 'id', fields: { id: { type: 'text', title: '键', default: '', maxLength: 64 }, label: { type: 'text', title: '文案', default: '', maxLength: 200 } }, default: [{ id: 'node-0', label: '首项' }] },
   titleStyle: { type: 'textStyle', title: '文字样式', layer: 'golden-motion', default: { fontFamily: 'sans-serif', fontSize: 64 } },
   label: { type: 'text', title: '标题', default: '黄金样本', maxLength: 200 },
+  show: { type: 'boolean', title: '显示', default: true },
+  detail: { type: 'number', title: '细节', default: 1, min: 0, max: 10, step: 1, visibleWhen: { all: [{ param: 'show', equals: true }, { param: 'show', notEquals: false }] } },
   size: { type: 'number', title: '字号', default: 24, min: 1, max: 72, step: 1, unit: 'px' },
   // 剪辑内容 v36：视频参数可按取帧时间表取帧（见下方片段的 screen）。
   screen: { type: 'image', title: '录屏', default: null },
@@ -164,7 +166,7 @@ sequence.clips.push(remapClip)
 // v32（剪辑）/ v4（风格库、风格包）/ v35（录制会话）：样片放宽到 30 秒、锚点 10 张，黄金风格按 24 秒、9 张锚点写。
 const goldenPiece = videoEditEffectPresetSchema.parse({ id: 'golden-piece', name: '柔和背景', description: '柔化背景但保留轮廓。', usage: '标题底图', media: 'video', effects: [{ id: 'piece-blur', name: '模糊', enabled: true, amount: .6, builtin: { id: 'blur', params: { mode: 'uniform', amount: 50 } } }], knobs: [{ key: 'softness', name: '柔和度', min: 0, max: 100, default: 50, mappings: [{ effectId: 'piece-blur', parameter: 'amount', points: [{ input: 0, output: 0 }, { input: 50, output: 50 }, { input: 100, output: 100 }] }] }] })
 const goldenStyle = { effectPresets: [goldenPiece], userPreferences: [{ id: 'golden-style-memory', content: '标题少用装饰线。', source: 'user' as const, updatedAt: timestamp, revision: 1 }], id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 3840, height: 2160, durationSeconds: 24, fps: 60, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8, 12.4, 15, 18.2, 23.2] } }
-document.styles = [goldenStyle]
+document.styles = [{ ...goldenStyle, sample: { ...goldenStyle.sample, code: { entry: 'index.js', files: { 'index.js': source } } } }]
 sequence.styleId = goldenStyle.id
 const nativeGraphic = titleGraphic('lower_third', { text: '姓名', subtitle: '职务' }, 1920, 1080, 119 / 30)
 const nativeClipContent = { name: '人名条', kind: 'graphic' as const, graphic: nativeGraphic, track: 0, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
@@ -268,11 +270,11 @@ replayBaseline.id = 'golden-replay'
 replayBaseline.codeMaterials = structuredClone(document.codeMaterials)
 const replaySequence = createVideoEditSequence('原始序列')
 replaySequence.id = 'golden-replay-sequence'; replaySequence.styleId = goldenStyle.id; replayBaseline.sequences.push(replaySequence)
-replayBaseline.media.push(...soundDocument.media)
-replayBaseline.items.push(...soundDocument.items)
+replayBaseline.media.push(...structuredClone(document.media))
+replayBaseline.items.push(...structuredClone(document.items))
 replaySequence.clips.push(soundClip)
 replaySequence.captions = structuredClone(sequence.captions)
-replayBaseline.styles = [goldenStyle]
+replayBaseline.styles = structuredClone(document.styles)
 const replayOperation = { target: { kind: 'video_edit.sequence', id: 'golden-replay:golden-replay-sequence' }, properties: { 'video_edit.sequence.name': '演示序列' } }
 const values: Record<string, unknown> = {
   'document.screen_recording': { ...createRecordingDocument(), sessionId: '00000000-0000-4000-8000-000000000005', originUs: 1000000, startUs: 3000000, endUs: 13000000, pauses: [{ startUs: 6000000, endUs: 7000000 }], status: 'stopped',
@@ -405,8 +407,17 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
       const library = source.content as { favorites: string[] }
       library.favorites.push('transition:shaders.IrisWipe', 'transition:iris_round', 'effect:shaders.Blur', 'effect:gaussian_blur', 'transition:gl.Bounce', 'preset:mine')
     }
+    // 音频案例覆盖全部持久位置；当前构造器提供作者声明，不能被旧案例里的作者接口覆盖。
     let content = source ? upgradePersistenceContent(format, source.content ?? source, source.kindVersion ?? source.version) : format.schema.parse(values[format.id])
     if (format.id === 'document.video_edit' || format.id === 'document.screen_recording') {
+      const authorFixture = (value: unknown): unknown => {
+        const video = value as VideoEditDocument
+        return { ...video, codeMaterials: structuredClone(document.codeMaterials), styles: video.styles?.map(style => ({ ...style, sample: { ...style.sample, code: structuredClone(document.styles![0].sample.code) } })) }
+      }
+      content = format.id === 'document.video_edit' ? authorFixture(content) : (() => {
+        const recording = content as { scriptCapture: { baselines: Array<{ content: unknown }> } }
+        return { ...recording, scriptCapture: { ...recording.scriptCapture, baselines: recording.scriptCapture.baselines.map(baseline => ({ ...baseline, content: authorFixture(baseline.content) })) } }
+      })()
       const historical = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/video-edit-transitions/before-u12.json'), 'utf8')) as { content: unknown; kindVersion: number }
       const videoFormat = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
       const transitions = (upgradePersistenceContent(videoFormat, historical.content, historical.kindVersion) as { sequences: VideoEditDocument['sequences'] }).sequences.filter(sequence => sequence.id.startsWith('transition-'))

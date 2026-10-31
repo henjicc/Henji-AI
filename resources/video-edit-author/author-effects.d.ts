@@ -27,148 +27,6 @@ export interface SharpenParams {
   readonly threshold?: number
 }
 
-export interface BlackWhiteParams {
-}
-
-export interface MosaicParams {
-  /** 块大小；方块有多大。0 不打码；10 细小方块，约为画面高度的 1%；30（默认）常规打码；100 很大的色块，约 10%，可以输入到 200。；默认 30；常用 0–100；硬范围 0–200；单位 strength；可动画 true */
-  readonly block_size?: number
-}
-
-export interface ChromaticAberrationParams {
-  /** 数量；颜色错开多远。0 没有色差；20（默认）轻微的镜头感；60 明显的彩边；100 约为画面高度的 2%，故障风。；默认 20；硬范围 0–100；单位 strength；可动画 true */
-  readonly amount?: number
-  /** 方式；从中心向外（默认）像真实镜头，越靠近画面边缘错得越开；固定方向让整个画面朝同一个方向错开，更像故障效果。；默认 "radial"；可动画 true */
-  readonly mode?: "radial" | "directional"
-  /** 角度；固定方向时颜色错开的方向。0（默认）左右错开，90 上下错开。；默认 0；硬范围 -180–180；单位 degrees；显隐 {"param":"mode","in":["directional"]}；可动画 true */
-  readonly angle?: number
-  /** 通道；哪两种颜色分开：前一种往外偏，后一种往里偏，第三种不动。红与蓝（默认）外红内蓝，最像真实镜头。；默认 "red_blue"；可动画 true */
-  readonly channels?: "red_blue" | "red_green" | "green_blue"
-  /** 柔和度；彩边是清楚的三层重影还是柔和的彩虹过渡。0 三层颜色硬分开，像数码故障；50（默认）柔和；100 拉成连续的彩虹色带。；默认 50；硬范围 0–100；单位 strength；可动画 true */
-  readonly smoothness?: number
-}
-
-export interface GlowParams {
-  /** 强度；光晕有多亮。0 不发光；20 含蓄的柔光；40（默认）明显的光晕；70 以上是强烈的霓虹辉光。；默认 40；硬范围 0–100；单位 strength；可动画 true */
-  readonly strength?: number
-  /** 半径；光晕能散多远。0 只贴着边缘一圈；60（默认）约为画面高度的 8%；100 能铺满大半个画面。只改变散开的距离，中心亮度基本不变。；默认 60；硬范围 0–100；单位 strength；可动画 true */
-  readonly radius?: number
-  /** 方式；什么发光。亮部（默认）按画面亮度，亮的地方发光、光的颜色跟着原画；轮廓按文字和图形的形状发光，深色的字也能发出光，光的颜色由“着色”组的内圈、外圈颜色决定。；默认 "bright"；可动画 true */
-  readonly mode?: "bright" | "shape"
-  /** 阈值；画面里多亮的地方才发光。0 所有内容都发光（给文字加外发光时用）；60（默认）只有明显的亮部；85 以上只剩灯光、反光这类最亮处。；默认 60；硬范围 0–100；单位 strength；分组 输入；显隐 {"param":"mode","in":["bright"]}；可动画 true */
-  readonly threshold?: number
-  /** 阈值平滑度；阈值附近是一刀切还是慢慢过渡。0 刚过阈值才发光，边界生硬；30（默认）自然；100 接近阈值的部分也微微发光。；默认 30；硬范围 0–100；单位 strength；分组 输入；显隐 {"param":"mode","in":["bright"]}；可动画 true */
-  readonly threshold_smoothness?: number
-  /** 拖尾；远处的光留得多少。0 光集中在近处，很快消失；70（默认）自然的光雾；100 远处留下大片淡光，最像真实镜头。；默认 70；硬范围 0–100；单位 strength；分组 光晕；可动画 true */
-  readonly falloff?: number
-  /** 核心发白；很亮的彩色光，中心有多容易变白，像曝光过度。0 保持原来的颜色；50（默认）自然；100 强光中心明显发白。；默认 50；硬范围 0–100；单位 strength；分组 光晕；可动画 true */
-  readonly core_white?: number
-  /** 混合模式；光晕怎样叠到画面上。相加（默认）像真实的光，亮处更亮、强光会变白；滤色更柔和，不容易过曝。；默认 "add"；分组 光晕；可动画 true */
-  readonly blend?: "add" | "screen"
-  /** 长宽比；把光晕拉成横向或竖向的光带，像宽银幕镜头。0（默认）圆形；往正调横向拉长，50 约 3 倍、100 拉成 8 倍长的光条；往负调竖向拉长。；默认 0；硬范围 -100–100；单位 strength；分组 长宽比；可动画 true */
-  readonly aspect?: number
-  /** 角度；把拉长的方向再转一个角度，用来斜着拉。0（默认）不转。长宽比为 0 时不起作用。；默认 0；硬范围 -180–180；单位 degrees；分组 长宽比；可动画 true */
-  readonly angle?: number
-  /** 数量；颜色错开多远，只作用在光晕上。0（默认）没有色差；20 轻微的镜头感；60 明显的彩边；100 约为画面高度的 2%。；默认 0；硬范围 0–100；单位 strength；分组 色差；可动画 true */
-  readonly aberration_amount?: number
-  /** 方式；从中心向外（默认）像真实镜头，越靠近画面边缘错得越开；固定方向让整个画面朝同一个方向错开，更像故障效果。；默认 "radial"；分组 色差；可动画 true */
-  readonly aberration_mode?: "radial" | "directional"
-  /** 角度；固定方向时颜色错开的方向。0（默认）左右错开，90 上下错开。；默认 0；硬范围 -180–180；单位 degrees；分组 色差；显隐 {"param":"aberration_mode","in":["directional"]}；可动画 true */
-  readonly aberration_angle?: number
-  /** 通道；哪两种颜色分开：前一种往外偏，后一种往里偏，第三种不动。红与蓝（默认）外红内蓝，最像真实镜头。；默认 "red_blue"；分组 色差；可动画 true */
-  readonly aberration_channels?: "red_blue" | "red_green" | "green_blue"
-  /** 柔和度；彩边是清楚的三层重影还是柔和的彩虹过渡。0 三层颜色硬分开，像数码故障；50（默认）柔和；100 拉成连续的彩虹色带。；默认 50；硬范围 0–100；单位 strength；分组 色差；可动画 true */
-  readonly aberration_smoothness?: number
-  /** 着色量；把光晕换成下面的颜色的程度。0（默认）保持发光内容本来的颜色；100 完全换成从内圈到外圈的颜色。白字配彩色光晕时设 100。；默认 0；硬范围 0–100；单位 strength；分组 着色；显隐 {"param":"mode","in":["bright"]}；可动画 true */
-  readonly tint?: number
-  /** 内圈颜色；靠近发光内容的光晕颜色。亮部方式下着色量为 0 时不起作用；轮廓方式下光就是这个颜色。；默认 "#ffffff"；分组 着色；可动画 true */
-  readonly tint_inner?: string
-  /** 外圈颜色；远处光晕的颜色，从内圈颜色渐变过来；和内圈颜色相同就是单色光晕。亮部方式下着色量为 0 时不起作用；轮廓方式下光就是这个颜色。；默认 "#ffffff"；分组 着色；可动画 true */
-  readonly tint_outer?: string
-  /** 分辨率；光晕按画面多大的分辨率计算。50%（默认）又快又好；100% 贴近内容的光更细腻，细小亮点在运动中更稳，计算量约为默认的三倍；25% 最快，近处的光略糊。亮度和光晕大小不随它变。；默认 50；硬范围 25–100；单位 percent；分组 质量；可动画 false */
-  readonly resolution?: number
-  /** 抖动；给光晕加极细的噪点，盖住平滑渐变里一圈圈的色带。0 关闭；50（默认）刚好看不出噪点；100 色带最少，但暗处能看到细微的颗粒。；默认 50；硬范围 0–100；单位 strength；分组 质量；可动画 true */
-  readonly dither?: number
-  /** 单色抖动；抖动的噪点只改变明暗、不带颜色。默认关闭，彩色噪点更不容易被看出来。；默认 false；分组 质量；可动画 true */
-  readonly dither_mono?: boolean
-  /** 原画不透明度；原来的画面还保留多少。100%（默认）光晕加在原画上；0% 只留下光晕，适合单独放一层再叠加。；默认 100；硬范围 0–100；单位 percent；分组 输出；可动画 true */
-  readonly source_opacity?: number
-  /** 视图；最终效果（默认）显示加了光晕的画面；发光来源只显示会发光的部分（轮廓方式下是白色剪影），用来检查阈值调得对不对。；默认 "final"；分组 输出；可动画 true */
-  readonly view?: "final" | "source"
-}
-
-export interface DropShadowParams {
-  /** 不透明度；影子有多深。0 没有投影；40%（默认）淡淡的影子，像纸片稍稍离开桌面；80% 以上是浓重的影子。；默认 40；硬范围 0–100；单位 percent；可动画 true */
-  readonly opacity?: number
-  /** 距离；影子离内容多远。0 影子正好在内容正下方，只露出四周一圈；20（默认）约为画面高度的 1%；100 约 5%，像悬得很高。可以输入到 400。；默认 20；常用 0–100；硬范围 0–400；单位 strength；可动画 true */
-  readonly distance?: number
-  /** 柔和度；影子的边缘有多虚。0 边缘清楚的硬影；40（默认）柔和，虚化约为画面高度的 1%；80 以上散成一大片淡影。和“模糊”的模糊度是同一把尺子，可以输入到 200。；默认 40；常用 0–100；硬范围 0–200；单位 strength；可动画 true */
-  readonly softness?: number
-  /** 方向；影子往哪边落。90°（默认）落在正下方，像光从正上方照下来；45° 右下；0° 正右；−90° 正上方。；默认 90；硬范围 -180–180；单位 degrees；可动画 true */
-  readonly direction?: number
-  /** 颜色；影子的颜色。黑色（默认）最自然；在有颜色的背景上用背景色的深色，比纯黑更像真实的影子。；默认 "#000000"；分组 外观；可动画 true */
-  readonly color?: string
-  /** 扩展；影子的实心部分有多大。0%（默认）完全按柔和度渐变；50% 影子更实、更大一圈；100% 变成放大了一圈的硬边影子。；默认 0；硬范围 0–100；单位 percent；分组 外观；可动画 true */
-  readonly spread?: number
-  /** 原画不透明度；内容本身保留多少。100%（默认）；0% 只留下影子，相当于 AE 的“仅阴影”，可以单独放一层再叠。；默认 100；硬范围 0–100；单位 percent；分组 外观；可动画 true */
-  readonly source_opacity?: number
-}
-
-export interface StrokeParams {
-  /** 粗细；边有多粗。0 没有描边；20 发丝细线；50（默认）约为画面高度的 0.4%，常规字幕描边；100 约 4%，粗壮的贴纸边。可以输入到 120。；默认 50；常用 0–100；硬范围 0–120；单位 strength；可动画 true */
-  readonly width?: number
-  /** 颜色；边的颜色。黑色（默认）让浅色字在亮画面上也看得清；白色做贴纸边。；默认 "#000000"；可动画 true */
-  readonly color?: string
-  /** 位置；边描在轮廓的哪一侧。外侧（默认）不遮住内容，字形不变；内侧描在内容里面，外形不变大；居中跨在轮廓线上。；默认 "outside"；分组 边缘；可动画 true */
-  readonly position?: "outside" | "inside" | "center"
-  /** 柔和度；边的外缘清楚还是发虚。0%（默认）清楚利落；30% 微微发虚；100% 整条边都在渐变，像一层柔光。；默认 0；硬范围 0–100；单位 percent；分组 边缘；可动画 true */
-  readonly softness?: number
-  /** 不透明度；边有多实。100%（默认）实色；50% 半透明，透出后面的画面。；默认 100；硬范围 0–100；单位 percent；分组 边缘；可动画 true */
-  readonly opacity?: number
-  /** 原画不透明度；内容本身保留多少。100%（默认）；0% 只留下描边，做空心字。；默认 100；硬范围 0–100；单位 percent；分组 边缘；可动画 true */
-  readonly source_opacity?: number
-}
-
-export interface LightSweepParams {
-  /** 进度；光扫到哪里。0% 光还在内容外面没进来，100% 已经完全扫出去；50%（默认）在正中。打两个关键帧从 0% 到 100% 就是完整扫一遍，首尾都不会多出光。；默认 50；硬范围 0–100；单位 percent；可动画 true */
-  readonly progress?: number
-  /** 宽度；光带有多宽。0 一条细亮线；40 约为画面高度的 2.5%；70（默认）约 10%，一道清楚的光带；100 约 40%，一大片柔光掠过。；默认 70；硬范围 0–100；单位 strength；可动画 true */
-  readonly width?: number
-  /** 角度；光往哪个方向扫，光带和它垂直。0° 从左往右、光带竖直；30°（默认）往右下扫、光带向右倾斜；90° 从上往下扫。；默认 30；硬范围 -180–180；单位 degrees；可动画 true */
-  readonly angle?: number
-  /** 颜色；光的颜色。白色（默认）；金色、淡蓝做出金属或冷光的质感。；默认 "#ffffff"；分组 光；可动画 true */
-  readonly color?: string
-  /** 亮度；光有多亮。0 没有光；50 含蓄的高光；100（默认）明显的高光，彩色的字中心发白；200 以上接近曝光过度。可以输入到 400。；默认 100；常用 0–100；硬范围 0–400；单位 strength；分组 光；可动画 true */
-  readonly intensity?: number
-  /** 边缘柔和；光带两边利落还是渐隐。0% 边缘清楚的光条；60%（默认）中间亮、两边柔和地暗下去；100% 整条都是渐变。；默认 60；硬范围 0–100；单位 percent；分组 光；可动画 true */
-  readonly feather?: number
-  /** 强度；从扫过的光里散出的光晕有多亮。0 不加光晕；40（默认）光带经过处贴着笔画的一圈亮边，纯白的字靠它看出光扫过；70 以上明显的辉光。；默认 40；硬范围 0–100；单位 strength；分组 发光；可动画 true */
-  readonly glow_strength?: number
-  /** 半径；光晕能散多远。0 只贴着内容；12（默认）约为画面高度的 0.7%，紧贴笔画；40 约 3%，柔和的光雾；100 能铺满大半个画面。；默认 12；硬范围 0–100；单位 strength；分组 发光；可动画 true */
-  readonly glow_radius?: number
-}
-
-export interface DissolveRevealParams {
-  /** 进度；显现了多少。0% 完全看不见；50%（默认）出来一半；100% 完整显示，和没加效果一样。做消散就从 100% 调到 0%。；默认 50；硬范围 0–100；单位 percent；可动画 true */
-  readonly progress?: number
-  /** 方式；按什么图案显现。噪声（默认）细碎的颗粒随机冒出来，像照片显影；点阵是按方格排开的圆点各自先后长满；半调是整齐的网点一起长大，亮的地方先长满。；默认 "noise"；可动画 true */
-  readonly mode?: "noise" | "dots" | "halftone"
-  /** 大小；颗粒或网点有多大。0 约为画面高度的 0.2%，细得像胶片颗粒；10（默认）约 0.3%，细碎的颗粒；30 约 0.6%，噪声方式下连成斑纹；100 约 8%，大块的图案。；默认 10；硬范围 0–100；单位 strength；分组 图案；可动画 true */
-  readonly size?: number
-  /** 随机种子；换一个数，颗粒出现的先后就换一种排法，大小和节奏不变。同一画面上几处都用溶解时各填不同的数。；默认 0；硬范围 0–9999；单位 value；分组 图案；显隐 {"param":"mode","in":["noise","dots"]}；可动画 false */
-  readonly seed?: number
-  /** 柔和度；每一点是一下子出现还是慢慢浮现。0% 一下子出现，最利落；30%（默认）稍有渐显；100% 整体接近淡入，图案若隐若现。；默认 30；硬范围 0–100；单位 percent；分组 边缘；可动画 true */
-  readonly softness?: number
-  /** 宽度；正在显现的边缘带一圈亮边有多宽。0（默认）没有亮边，也没有光晕；20 细细的一圈；60 以上是宽的亮带，像燃烧的纸边。；默认 0；硬范围 0–100；单位 strength；分组 边缘；可动画 true */
-  readonly edge_width?: number
-  /** 颜色；亮边和它散出的光晕的颜色。宽度为 0 时不起作用。；默认 "#ffffff"；分组 边缘；可动画 true */
-  readonly edge_color?: string
-  /** 强度；光晕有多亮。0 不发光；20 含蓄的柔光；40（默认）明显的光晕；70 以上是强烈的霓虹辉光。；默认 40；硬范围 0–100；单位 strength；分组 发光；可动画 true */
-  readonly glow_strength?: number
-  /** 半径；光晕能散多远。0 只贴着亮边；30（默认）约为画面高度的 2%；100 能铺满大半个画面。；默认 30；硬范围 0–100；单位 strength；分组 发光；可动画 true */
-  readonly glow_radius?: number
-}
-
 export interface ColorGradeParams {
   /** 色温；白平衡校正（开尔文）：写入画面光源的色温即可让白色物体还原中性。6500 不变；数值越低画面越冷（校正钨丝灯 3200 K 的暖光写 3200），越高越暖（阴天/阴影 7500–9000）。常用 2800–10000。先调白平衡与曝光，再调反差和色彩。；默认 6500；硬范围 2000–20000；单位 kelvin；可动画 true */
   readonly temperature_kelvin?: number
@@ -397,18 +255,160 @@ export interface ColorGradeParams {
   /** 晕影羽化；越大，边缘过渡越柔和。；默认 50；硬范围 0–100；单位 strength；可动画 true */
   readonly vignette_feather?: number
 }
+
+export interface BlackWhiteParams {
+}
+
+export interface GlowParams {
+  /** 强度；光晕有多亮。0 不发光；20 含蓄的柔光；40（默认）明显的光晕；70 以上是强烈的霓虹辉光。；默认 40；硬范围 0–100；单位 strength；可动画 true */
+  readonly strength?: number
+  /** 半径；光晕能散多远。0 只贴着边缘一圈；60（默认）约为画面高度的 8%；100 能铺满大半个画面。只改变散开的距离，中心亮度基本不变。；默认 60；硬范围 0–100；单位 strength；可动画 true */
+  readonly radius?: number
+  /** 方式；什么发光。亮部（默认）按画面亮度，亮的地方发光、光的颜色跟着原画；轮廓按文字和图形的形状发光，深色的字也能发出光，光的颜色由“着色”组的内圈、外圈颜色决定。；默认 "bright"；可动画 true */
+  readonly mode?: "bright" | "shape"
+  /** 阈值；画面里多亮的地方才发光。0 所有内容都发光（给文字加外发光时用）；60（默认）只有明显的亮部；85 以上只剩灯光、反光这类最亮处。；默认 60；硬范围 0–100；单位 strength；分组 输入；显隐 {"param":"mode","in":["bright"]}；可动画 true */
+  readonly threshold?: number
+  /** 阈值平滑度；阈值附近是一刀切还是慢慢过渡。0 刚过阈值才发光，边界生硬；30（默认）自然；100 接近阈值的部分也微微发光。；默认 30；硬范围 0–100；单位 strength；分组 输入；显隐 {"param":"mode","in":["bright"]}；可动画 true */
+  readonly threshold_smoothness?: number
+  /** 拖尾；远处的光留得多少。0 光集中在近处，很快消失；70（默认）自然的光雾；100 远处留下大片淡光，最像真实镜头。；默认 70；硬范围 0–100；单位 strength；分组 光晕；可动画 true */
+  readonly falloff?: number
+  /** 核心发白；很亮的彩色光，中心有多容易变白，像曝光过度。0 保持原来的颜色；50（默认）自然；100 强光中心明显发白。；默认 50；硬范围 0–100；单位 strength；分组 光晕；可动画 true */
+  readonly core_white?: number
+  /** 混合模式；光晕怎样叠到画面上。相加（默认）像真实的光，亮处更亮、强光会变白；滤色更柔和，不容易过曝。；默认 "add"；分组 光晕；可动画 true */
+  readonly blend?: "add" | "screen"
+  /** 长宽比；把光晕拉成横向或竖向的光带，像宽银幕镜头。0（默认）圆形；往正调横向拉长，50 约 3 倍、100 拉成 8 倍长的光条；往负调竖向拉长。；默认 0；硬范围 -100–100；单位 strength；分组 长宽比；可动画 true */
+  readonly aspect?: number
+  /** 角度；把拉长的方向再转一个角度，用来斜着拉。0（默认）不转。长宽比为 0 时不起作用。；默认 0；硬范围 -180–180；单位 degrees；分组 长宽比；可动画 true */
+  readonly angle?: number
+  /** 数量；颜色错开多远，只作用在光晕上。0（默认）没有色差；20 轻微的镜头感；60 明显的彩边；100 约为画面高度的 2%。；默认 0；硬范围 0–100；单位 strength；分组 色差；可动画 true */
+  readonly aberration_amount?: number
+  /** 方式；从中心向外（默认）像真实镜头，越靠近画面边缘错得越开；固定方向让整个画面朝同一个方向错开，更像故障效果。；默认 "radial"；分组 色差；可动画 true */
+  readonly aberration_mode?: "radial" | "directional"
+  /** 角度；固定方向时颜色错开的方向。0（默认）左右错开，90 上下错开。；默认 0；硬范围 -180–180；单位 degrees；分组 色差；显隐 {"param":"aberration_mode","in":["directional"]}；可动画 true */
+  readonly aberration_angle?: number
+  /** 通道；哪两种颜色分开：前一种往外偏，后一种往里偏，第三种不动。红与蓝（默认）外红内蓝，最像真实镜头。；默认 "red_blue"；分组 色差；可动画 true */
+  readonly aberration_channels?: "red_blue" | "red_green" | "green_blue"
+  /** 柔和度；彩边是清楚的三层重影还是柔和的彩虹过渡。0 三层颜色硬分开，像数码故障；50（默认）柔和；100 拉成连续的彩虹色带。；默认 50；硬范围 0–100；单位 strength；分组 色差；可动画 true */
+  readonly aberration_smoothness?: number
+  /** 着色量；把光晕换成下面的颜色的程度。0（默认）保持发光内容本来的颜色；100 完全换成从内圈到外圈的颜色。白字配彩色光晕时设 100。；默认 0；硬范围 0–100；单位 strength；分组 着色；显隐 {"param":"mode","in":["bright"]}；可动画 true */
+  readonly tint?: number
+  /** 内圈颜色；靠近发光内容的光晕颜色。亮部方式下着色量为 0 时不起作用；轮廓方式下光就是这个颜色。；默认 "#ffffff"；分组 着色；可动画 true */
+  readonly tint_inner?: string
+  /** 外圈颜色；远处光晕的颜色，从内圈颜色渐变过来；和内圈颜色相同就是单色光晕。亮部方式下着色量为 0 时不起作用；轮廓方式下光就是这个颜色。；默认 "#ffffff"；分组 着色；可动画 true */
+  readonly tint_outer?: string
+  /** 分辨率；光晕按画面多大的分辨率计算。50%（默认）又快又好；100% 贴近内容的光更细腻，细小亮点在运动中更稳，计算量约为默认的三倍；25% 最快，近处的光略糊。亮度和光晕大小不随它变。；默认 50；硬范围 25–100；单位 percent；分组 质量；可动画 false */
+  readonly resolution?: number
+  /** 抖动；给光晕加极细的噪点，盖住平滑渐变里一圈圈的色带。0 关闭；50（默认）刚好看不出噪点；100 色带最少，但暗处能看到细微的颗粒。；默认 50；硬范围 0–100；单位 strength；分组 质量；可动画 true */
+  readonly dither?: number
+  /** 单色抖动；抖动的噪点只改变明暗、不带颜色。默认关闭，彩色噪点更不容易被看出来。；默认 false；分组 质量；可动画 true */
+  readonly dither_mono?: boolean
+  /** 原画不透明度；原来的画面还保留多少。100%（默认）光晕加在原画上；0% 只留下光晕，适合单独放一层再叠加。；默认 100；硬范围 0–100；单位 percent；分组 输出；可动画 true */
+  readonly source_opacity?: number
+  /** 视图；最终效果（默认）显示加了光晕的画面；发光来源只显示会发光的部分（轮廓方式下是白色剪影），用来检查阈值调得对不对。；默认 "final"；分组 输出；可动画 true */
+  readonly view?: "final" | "source"
+}
+
+export interface LightSweepParams {
+  /** 进度；光扫到哪里。0% 光还在内容外面没进来，100% 已经完全扫出去；50%（默认）在正中。打两个关键帧从 0% 到 100% 就是完整扫一遍，首尾都不会多出光。；默认 50；硬范围 0–100；单位 percent；可动画 true */
+  readonly progress?: number
+  /** 宽度；光带有多宽。0 一条细亮线；40 约为画面高度的 2.5%；70（默认）约 10%，一道清楚的光带；100 约 40%，一大片柔光掠过。；默认 70；硬范围 0–100；单位 strength；可动画 true */
+  readonly width?: number
+  /** 角度；光往哪个方向扫，光带和它垂直。0° 从左往右、光带竖直；30°（默认）往右下扫、光带向右倾斜；90° 从上往下扫。；默认 30；硬范围 -180–180；单位 degrees；可动画 true */
+  readonly angle?: number
+  /** 颜色；光的颜色。白色（默认）；金色、淡蓝做出金属或冷光的质感。；默认 "#ffffff"；分组 光；可动画 true */
+  readonly color?: string
+  /** 亮度；光有多亮。0 没有光；50 含蓄的高光；100（默认）明显的高光，彩色的字中心发白；200 以上接近曝光过度。可以输入到 400。；默认 100；常用 0–100；硬范围 0–400；单位 strength；分组 光；可动画 true */
+  readonly intensity?: number
+  /** 边缘柔和；光带两边利落还是渐隐。0% 边缘清楚的光条；60%（默认）中间亮、两边柔和地暗下去；100% 整条都是渐变。；默认 60；硬范围 0–100；单位 percent；分组 光；可动画 true */
+  readonly feather?: number
+  /** 强度；从扫过的光里散出的光晕有多亮。0 不加光晕；40（默认）光带经过处贴着笔画的一圈亮边，纯白的字靠它看出光扫过；70 以上明显的辉光。；默认 40；硬范围 0–100；单位 strength；分组 发光；可动画 true */
+  readonly glow_strength?: number
+  /** 半径；光晕能散多远。0 只贴着内容；12（默认）约为画面高度的 0.7%，紧贴笔画；40 约 3%，柔和的光雾；100 能铺满大半个画面。；默认 12；硬范围 0–100；单位 strength；分组 发光；可动画 true */
+  readonly glow_radius?: number
+}
+
+export interface DropShadowParams {
+  /** 不透明度；影子有多深。0 没有投影；40%（默认）淡淡的影子，像纸片稍稍离开桌面；80% 以上是浓重的影子。；默认 40；硬范围 0–100；单位 percent；可动画 true */
+  readonly opacity?: number
+  /** 距离；影子离内容多远。0 影子正好在内容正下方，只露出四周一圈；20（默认）约为画面高度的 1%；100 约 5%，像悬得很高。可以输入到 400。；默认 20；常用 0–100；硬范围 0–400；单位 strength；可动画 true */
+  readonly distance?: number
+  /** 柔和度；影子的边缘有多虚。0 边缘清楚的硬影；40（默认）柔和，虚化约为画面高度的 1%；80 以上散成一大片淡影。和“模糊”的模糊度是同一把尺子，可以输入到 200。；默认 40；常用 0–100；硬范围 0–200；单位 strength；可动画 true */
+  readonly softness?: number
+  /** 方向；影子往哪边落。90°（默认）落在正下方，像光从正上方照下来；45° 右下；0° 正右；−90° 正上方。；默认 90；硬范围 -180–180；单位 degrees；可动画 true */
+  readonly direction?: number
+  /** 颜色；影子的颜色。黑色（默认）最自然；在有颜色的背景上用背景色的深色，比纯黑更像真实的影子。；默认 "#000000"；分组 外观；可动画 true */
+  readonly color?: string
+  /** 扩展；影子的实心部分有多大。0%（默认）完全按柔和度渐变；50% 影子更实、更大一圈；100% 变成放大了一圈的硬边影子。；默认 0；硬范围 0–100；单位 percent；分组 外观；可动画 true */
+  readonly spread?: number
+  /** 原画不透明度；内容本身保留多少。100%（默认）；0% 只留下影子，相当于 AE 的“仅阴影”，可以单独放一层再叠。；默认 100；硬范围 0–100；单位 percent；分组 外观；可动画 true */
+  readonly source_opacity?: number
+}
+
+export interface StrokeParams {
+  /** 粗细；边有多粗。0 没有描边；20 发丝细线；50（默认）约为画面高度的 0.4%，常规字幕描边；100 约 4%，粗壮的贴纸边。可以输入到 120。；默认 50；常用 0–100；硬范围 0–120；单位 strength；可动画 true */
+  readonly width?: number
+  /** 颜色；边的颜色。黑色（默认）让浅色字在亮画面上也看得清；白色做贴纸边。；默认 "#000000"；可动画 true */
+  readonly color?: string
+  /** 位置；边描在轮廓的哪一侧。外侧（默认）不遮住内容，字形不变；内侧描在内容里面，外形不变大；居中跨在轮廓线上。；默认 "outside"；分组 边缘；可动画 true */
+  readonly position?: "outside" | "inside" | "center"
+  /** 柔和度；边的外缘清楚还是发虚。0%（默认）清楚利落；30% 微微发虚；100% 整条边都在渐变，像一层柔光。；默认 0；硬范围 0–100；单位 percent；分组 边缘；可动画 true */
+  readonly softness?: number
+  /** 不透明度；边有多实。100%（默认）实色；50% 半透明，透出后面的画面。；默认 100；硬范围 0–100；单位 percent；分组 边缘；可动画 true */
+  readonly opacity?: number
+  /** 原画不透明度；内容本身保留多少。100%（默认）；0% 只留下描边，做空心字。；默认 100；硬范围 0–100；单位 percent；分组 边缘；可动画 true */
+  readonly source_opacity?: number
+}
+
+export interface ChromaticAberrationParams {
+  /** 数量；颜色错开多远。0 没有色差；20（默认）轻微的镜头感；60 明显的彩边；100 约为画面高度的 2%，故障风。；默认 20；硬范围 0–100；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 方式；从中心向外（默认）像真实镜头，越靠近画面边缘错得越开；固定方向让整个画面朝同一个方向错开，更像故障效果。；默认 "radial"；可动画 true */
+  readonly mode?: "radial" | "directional"
+  /** 角度；固定方向时颜色错开的方向。0（默认）左右错开，90 上下错开。；默认 0；硬范围 -180–180；单位 degrees；显隐 {"param":"mode","in":["directional"]}；可动画 true */
+  readonly angle?: number
+  /** 通道；哪两种颜色分开：前一种往外偏，后一种往里偏，第三种不动。红与蓝（默认）外红内蓝，最像真实镜头。；默认 "red_blue"；可动画 true */
+  readonly channels?: "red_blue" | "red_green" | "green_blue"
+  /** 柔和度；彩边是清楚的三层重影还是柔和的彩虹过渡。0 三层颜色硬分开，像数码故障；50（默认）柔和；100 拉成连续的彩虹色带。；默认 50；硬范围 0–100；单位 strength；可动画 true */
+  readonly smoothness?: number
+}
+
+export interface MosaicParams {
+  /** 块大小；方块有多大。0 不打码；10 细小方块，约为画面高度的 1%；30（默认）常规打码；100 很大的色块，约 10%，可以输入到 200。；默认 30；常用 0–100；硬范围 0–200；单位 strength；可动画 true */
+  readonly block_size?: number
+}
+
+export interface DissolveRevealParams {
+  /** 进度；显现了多少。0% 完全看不见；50%（默认）出来一半；100% 完整显示，和没加效果一样。做消散就从 100% 调到 0%。；默认 50；硬范围 0–100；单位 percent；可动画 true */
+  readonly progress?: number
+  /** 方式；按什么图案显现。噪声（默认）细碎的颗粒随机冒出来，像照片显影；点阵是按方格排开的圆点各自先后长满；半调是整齐的网点一起长大，亮的地方先长满。；默认 "noise"；可动画 true */
+  readonly mode?: "noise" | "dots" | "halftone"
+  /** 大小；颗粒或网点有多大。0 约为画面高度的 0.2%，细得像胶片颗粒；10（默认）约 0.3%，细碎的颗粒；30 约 0.6%，噪声方式下连成斑纹；100 约 8%，大块的图案。；默认 10；硬范围 0–100；单位 strength；分组 图案；可动画 true */
+  readonly size?: number
+  /** 随机种子；换一个数，颗粒出现的先后就换一种排法，大小和节奏不变。同一画面上几处都用溶解时各填不同的数。；默认 0；硬范围 0–9999；单位 value；分组 图案；显隐 {"param":"mode","in":["noise","dots"]}；可动画 false */
+  readonly seed?: number
+  /** 柔和度；每一点是一下子出现还是慢慢浮现。0% 一下子出现，最利落；30%（默认）稍有渐显；100% 整体接近淡入，图案若隐若现。；默认 30；硬范围 0–100；单位 percent；分组 边缘；可动画 true */
+  readonly softness?: number
+  /** 宽度；正在显现的边缘带一圈亮边有多宽。0（默认）没有亮边，也没有光晕；20 细细的一圈；60 以上是宽的亮带，像燃烧的纸边。；默认 0；硬范围 0–100；单位 strength；分组 边缘；可动画 true */
+  readonly edge_width?: number
+  /** 颜色；亮边和它散出的光晕的颜色。宽度为 0 时不起作用。；默认 "#ffffff"；分组 边缘；可动画 true */
+  readonly edge_color?: string
+  /** 强度；光晕有多亮。0 不发光；20 含蓄的柔光；40（默认）明显的光晕；70 以上是强烈的霓虹辉光。；默认 40；硬范围 0–100；单位 strength；分组 发光；可动画 true */
+  readonly glow_strength?: number
+  /** 半径；光晕能散多远。0 只贴着亮边；30（默认）约为画面高度的 2%；100 能铺满大半个画面。；默认 30；硬范围 0–100；单位 strength；分组 发光；可动画 true */
+  readonly glow_radius?: number
+}
 export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'blur'; readonly params?: BlurParams }
   | { readonly id: 'sharpen'; readonly params?: SharpenParams }
+  | { readonly id: 'color_grade'; readonly params?: ColorGradeParams }
   | { readonly id: 'black_white'; readonly params?: BlackWhiteParams }
-  | { readonly id: 'mosaic'; readonly params?: MosaicParams }
-  | { readonly id: 'chromatic_aberration'; readonly params?: ChromaticAberrationParams }
   | { readonly id: 'glow'; readonly params?: GlowParams }
+  | { readonly id: 'light_sweep'; readonly params?: LightSweepParams }
   | { readonly id: 'drop_shadow'; readonly params?: DropShadowParams }
   | { readonly id: 'stroke'; readonly params?: StrokeParams }
-  | { readonly id: 'light_sweep'; readonly params?: LightSweepParams }
+  | { readonly id: 'chromatic_aberration'; readonly params?: ChromaticAberrationParams }
+  | { readonly id: 'mosaic'; readonly params?: MosaicParams }
   | { readonly id: 'dissolve_reveal'; readonly params?: DissolveRevealParams }
-  | { readonly id: 'color_grade'; readonly params?: ColorGradeParams }
 export interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }
 /** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */
 export interface RetiredBlurDescriptor { readonly id: 'gaussian_blur' | 'directional_blur' | 'zoom_blur' | 'lens_blur'; readonly params?: object }

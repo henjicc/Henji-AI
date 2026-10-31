@@ -1,5 +1,5 @@
 import type { CodeGrade, CodeParameterDeclaration, CodeParameterTypeDefinition, CodeParameterValue, CodeParameterVisibility, CodePoint, CodeRange } from '@/core/imaging/parameterTypes'
-import { IMAGING_UNIT_LABELS, type ImagingParam } from '@/core/imaging/parameterDefinition'
+import { IMAGING_UNIT_LABELS, imagingParamsForSpace, type ImagingParamSpace, type ImagingParam } from '@/core/imaging/parameterDefinition'
 import { encodeColorGradeCurve, colorGradeCurvePoints, parseColorGradeCurve } from '@/core/imaging/adjustments/curves'
 
 type DisplayDeclaration<T> = T extends CodeParameterDeclaration ? Omit<T, 'description' | 'fields'> : never
@@ -34,7 +34,8 @@ export function codeParameterFields(parameters: readonly CodeParameterDeclaratio
   })
 }
 
-export function builtinParameterFields(params: readonly ImagingParam[]): ParamFieldSpec[] {
+export function builtinParameterFields(params: readonly ImagingParam[], space: ImagingParamSpace = 'clip'): ParamFieldSpec[] {
+  params = imagingParamsForSpace(params, space)
   const used = new Set<string>()
   return params.flatMap<ParamFieldSpec>(param => {
     if (used.has(param.key)) return []

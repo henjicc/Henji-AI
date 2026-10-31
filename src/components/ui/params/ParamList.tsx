@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
 import { UiButton, UiIconButton } from '../primitives'
 import { UiFormRow, UiGroup, UiTooltipText } from '../layout'
 import type { CodeParameterValue } from '@/core/imaging/parameterTypes'
+import { parameterVisible } from '@/core/imaging/parameterVisibility'
 import type { ParamFieldSpec } from './fieldSpec'
 import { useUiFieldLayout, useUiPropertyMenu } from '../fieldLayout'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -31,15 +32,6 @@ const WIDE_TYPES = new Set<ParamFieldSpec['type']>(['textStyle', 'table', 'curve
 /** 参数名称悬停约 1 秒才弹出说明：一列参数挨在一起，扫视或拖动经过时不一路弹出。 */
 const PARAM_INFO_DELAY_MS = 1000
 
-function paramVisible(field: ParamFieldSpec, values: Readonly<Record<string, CodeParameterValue>>): boolean {
-  const condition = field.visibleWhen
-  if (!condition) return true
-  const value = values[condition.param]
-  if ('equals' in condition) return value === condition.equals
-  if ('notEquals' in condition) return value !== condition.notEquals
-  return condition.in?.some(candidate => candidate === value) ?? true
-}
-
 /** Local projection of authoritative values; listeners are indexed by field key. */
 function createFieldStore() {
   const snapshots = new Map<string, string>()
@@ -50,7 +42,7 @@ function createFieldStore() {
     update(props: ParamListProps, notify: boolean) {
       current = props
       for (const field of props.fields) {
-        const snapshot = JSON.stringify([props.values[field.key], props.extras?.[field.key], paramVisible(field, props.values), props.contextKey, props.highlightedKeys?.includes(field.key)])
+        const snapshot = JSON.stringify([props.values[field.key], props.extras?.[field.key], parameterVisible(field.visibleWhen, props.values), props.contextKey, props.highlightedKeys?.includes(field.key)])
         if (snapshots.get(field.key) === snapshot) continue
         snapshots.set(field.key, snapshot)
         if (notify) listeners.get(field.key)?.forEach(listener => listener())

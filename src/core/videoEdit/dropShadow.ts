@@ -32,7 +32,8 @@ const DESCRIPTION = '在内容后面投下一道柔和的影子，让图层和�
 const { amount, percent, angle, color } = effectParam
 
 export const DROP_SHADOW_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  space: 'layer', author: { factory: 'shadow' }, bleed: dropShadowBleed, id: 'drop_shadow', name: '投影', group: 'stylize', description: DESCRIPTION,
+  precision: (_params, plan) => plan.passes.some(pass => pass.entry !== 'copy' && pass.entry !== 'effect_opacity'),
+  space: 'layer', author: { factory: 'shadow' }, bleed: dropShadowBleed, id: 'drop_shadow', name: '投影', group: 'outline', description: DESCRIPTION,
   aliases: ['阴影', '影子', '外阴影', 'drop shadow', 'shadow'],
   params: [
     percent('opacity', 40, 0, { name: '不透明度', text: '影子有多深。0 没有投影；40%（默认）淡淡的影子，像纸片稍稍离开桌面；80% 以上是浓重的影子。' }),

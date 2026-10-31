@@ -1,3 +1,4 @@
+import { definePlanner } from './effectPlanner'
 /**
  * 投影的工序规划与 WGSL（剪辑内置效果 ABI）。
  *
@@ -86,3 +87,8 @@ fn shadowCover(v: Vertex) -> vec4f {
 }
 @fragment fn shadow_layer(v: Vertex) -> @location(0) vec4f { return shadowCover(v); }
 `
+
+export const DROP_SHADOW_PLANNER = definePlanner({
+  id: 'drop_shadow', entries: DROP_SHADOW_ENTRIES, wgsl: DROP_SHADOW_WGSL,
+  plan: (params, frame) => planDropShadow(params, frame.width, frame.height, frame.layer, frame.split),
+})

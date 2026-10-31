@@ -45,18 +45,21 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 5 → 6：新增可选外来来源，历史版本保持没有标记的本机身份。
   // 6 → 7：作者源码与固定组件依赖取消容量和深度上限。
   // 7 → 8：允许作者接口 7；不重写旧版本源码、接口或库。
-  'code-version': { 7: value => structuredClone(value), 6: value => structuredClone(value), 1: value => structuredClone(value), 2: value => structuredClone(value), 3: value => structuredClone(value), 4: value => structuredClone(value), 5: value => structuredClone(value) },
+  // 8 → 9：容器接受作者接口 v8，历史代码版本不自动提升接口。
+  'code-version': { 8: value => structuredClone(value), 7: value => structuredClone(value), 6: value => structuredClone(value), 1: value => structuredClone(value), 2: value => structuredClone(value), 3: value => structuredClone(value), 4: value => structuredClone(value), 5: value => structuredClone(value) },
   // 作者宿主接口 4 → 5：v5 起可声明片子数据参数与使用内置库；宿主按 apiVersion 保持 v4 代码原行为，不迁移源码。
   // 5 → 6：新增版本化排版库；迁移不把旧素材提升到新作者接口。
   // 6 → 7：增加图层效果描述；旧作者接口原样保留。
-  'code-author-api': { 6: value => structuredClone(value), 4: value => structuredClone(value), 5: value => structuredClone(value) },
+  // 7 → 8：作者参数可声明 visibleWhen.all；旧接口和源码保持原样。
+  'code-author-api': { 7: value => structuredClone(value), 6: value => structuredClone(value), 4: value => structuredClone(value), 5: value => structuredClone(value) },
   // 7 → 8：代码视频参数新增可选取帧时间表 spans，旧资产原样有效，最低可读版本仍为 7。
   // 8 → 9：源码版本新增可选内置库 libraries 并接受作者接口 v5；资产不携带片子数据，不能引用它。旧资产原样有效，最低可读版本仍为 7。
   // 9 → 10：资产可携带作者接口 v6；只升容器版本，保留 sourceVersion。
   // 10 → 11：源码长度不设产品上限，保留所有源码与最低可读版本。
   // 11 → 12：代码图片参数新增网页画面引用 {kind:'web'}，旧资产原样有效，最低可读版本不变。
   // 12 → 13：容器可携带 API 7；源码版本的接口与库不自动升级。
-  'code-asset': { 12: value => ({ ...structuredClone(value) as object, version: 13, minReaderVersion: 13 }), 11: value => ({ ...value as object, version: 12 }), 10: value => ({ ...value as object, version: 11 }), 6: value => ({ ...structuredClone(value) as object, version: 7, minReaderVersion: 7 }), 7: value => ({ ...structuredClone(value) as object, version: 8, minReaderVersion: 7 }), 8: value => ({ ...structuredClone(value) as object, version: 9, minReaderVersion: 7 }), 9: value => ({ ...structuredClone(value) as object, version: 10, minReaderVersion: 10 }) },
+  // 13 → 14：容器接受作者接口 v8，旧源码、参数与库版本原样保留。
+  'code-asset': { 13: value => ({ ...structuredClone(value) as object, version: 14, minReaderVersion: 14 }), 12: value => ({ ...structuredClone(value) as object, version: 13, minReaderVersion: 13 }), 11: value => ({ ...value as object, version: 12 }), 10: value => ({ ...value as object, version: 11 }), 6: value => ({ ...structuredClone(value) as object, version: 7, minReaderVersion: 7 }), 7: value => ({ ...structuredClone(value) as object, version: 8, minReaderVersion: 7 }), 8: value => ({ ...structuredClone(value) as object, version: 9, minReaderVersion: 7 }), 9: value => ({ ...structuredClone(value) as object, version: 10, minReaderVersion: 10 }) },
   // 2 → 3：新增可选外来来源，历史工程保持本机身份。
   project: { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }), 2: value => ({ ...value as object, version: 3 }) },
   // 2 → 3：样片画布放宽到 3840×2160、60 帧，旧内容原样有效。

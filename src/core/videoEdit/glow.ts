@@ -20,7 +20,8 @@ const { amount, signed, percent, angle, choice, color, toggle } = effectParam
 const BRIGHT_ONLY = { visibleWhen: { param: 'mode', in: ['bright'] } }
 
 export const GLOW_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  space: 'layer', author: { factory: 'glow' }, bleed: (p, r) => layerEffectBleed('glow', p, r), id: 'glow', name: '发光', group: 'stylize', aliases: ['外发光', '轮廓发光', '辉光', '光晕', 'outer glow', 'bloom'], description: DESCRIPTION,
+  precision: params => params.view !== 'source' && Number(params.strength) > 0,
+  space: 'layer', author: { factory: 'glow' }, bleed: (p, r) => layerEffectBleed('glow', p, r), id: 'glow', name: '发光', group: 'light', aliases: ['外发光', '轮廓发光', '辉光', '光晕', 'outer glow', 'bloom'], description: DESCRIPTION,
   params: [
     amount('strength', 40, { name: '强度', text: '光晕有多亮。0 不发光；20 含蓄的柔光；40（默认）明显的光晕；70 以上是强烈的霓虹辉光。' }),
     amount('radius', 60, { name: '半径', text: '光晕能散多远。0 只贴着边缘一圈；60（默认）约为画面高度的 8%；100 能铺满大半个画面。只改变散开的距离，中心亮度基本不变。' }),

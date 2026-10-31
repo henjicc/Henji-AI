@@ -1,6 +1,6 @@
 import { colorGradeWgsl } from './colorGrade'
-export function adjustmentPassesWgsl({ extendedRange = false, globalCoordinates = false, float32Sampling = false, layerCoordinates = false }: { extendedRange?: boolean; globalCoordinates?: boolean; float32Sampling?: boolean; layerCoordinates?: boolean } = {}): string {
-const colorGrade = colorGradeWgsl(extendedRange, layerCoordinates)
+export function adjustmentPassesWgsl({ extendedRange = false, globalCoordinates = false, float32Sampling = false, layerCoordinates = false, sharedColorMath = false }: { extendedRange?: boolean; globalCoordinates?: boolean; float32Sampling?: boolean; layerCoordinates?: boolean; sharedColorMath?: boolean } = {}): string {
+const colorGrade = colorGradeWgsl(extendedRange, layerCoordinates, sharedColorMath)
 return `
 ${float32Sampling ? colorGrade.replace('textureSampleLevel(gradeMask, s, uv, 0.0)', 'sampleFloat32(gradeMask, uv)') : colorGrade}
 struct Params { size: vec4f, a: vec4f, b: vec4f, c: vec4f${layerCoordinates ? ', layer: vec4f, grid: vec4f' : ''} }

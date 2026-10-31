@@ -18,7 +18,7 @@ function parameter(param: VideoEditBuiltinParam): string {
   return `  /** ${doc} */\n  readonly ${param.key}?: ${type}\n`
 }
 export function generateAuthorEffects(): Record<string, string> {
-  const params = definitions.map(definition => `export interface ${typeName(definition.id)} {\n${definition.params.map(parameter).join('')}}\n`).join('\n')
+  const params = definitions.map(definition => `export interface ${typeName(definition.id)} {\n${definition.params.filter(param => !param.spaces || param.spaces.includes('layer')).map(parameter).join('')}}\n`).join('\n')
   const union = `export type BuiltinLayerEffectDescriptor =\n${definitions.map(definition => `  | { readonly id: '${definition.id}'; readonly params?: ${typeName(definition.id)} }`).join('\n')}\nexport interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }\n/** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */\nexport interface RetiredBlurDescriptor { readonly id: ${retiredBlurIds.map(id => `'${id}'`).join(' | ')}; readonly params?: object }\nexport type EffectDescriptor = BuiltinLayerEffectDescriptor | LookDescriptor | RetiredBlurDescriptor\n`
   const declarations = definitions.map(definition => `export declare function ${definition.author!.factory}(params?: ${typeName(definition.id)}): { readonly id: '${definition.id}'; readonly params: ${typeName(definition.id)} }\n`).join('')
   const factories = definitions.map(definition => `export function ${definition.author!.factory}(params: ${typeName(definition.id)} = {}): { readonly id: '${definition.id}'; readonly params: ${typeName(definition.id)} } { return { id: '${definition.id}', params } }\n`).join('')
@@ -39,4 +39,4 @@ for (const [file, text] of Object.entries(generateAuthorEffects())) {
   if (process.argv.includes('--check')) { if (!fs.existsSync(target) || fs.readFileSync(target, 'utf8').replace(/\r\n/g, '\n') !== text) throw new Error(`效果生成产物过期：${file}`) }
   else { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, text) }
 }
-console.log(`作者效果生成${process.argv.includes('--check') ? '检查通过' : '完成'}。`)
+process.stdout.write(`作者效果生成${process.argv.includes('--check') ? '检查通过' : '完成'}。\n`)

@@ -1,0 +1,27 @@
+{
+  "id": "code-version",
+  "foreign": {
+    "id": "golden-import",
+    "sourceType": "project",
+    "sourceName": "分享工程"
+  },
+  "apiVersion": 8,
+  "languageVersion": 4,
+  "project": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "entry": "entries/title.ts"
+  },
+  "entry": "entries/title.ts",
+  "files": [
+    {
+      "path": "entries/title.ts",
+      "location": "git:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:henji%3A%2F%E4%BB%A3%E7%A0%81:entries%2Ftitle.ts",
+      "hash": "0baa2b46d19f858915a02522ba3467f1d7ea7e5c3b631be34b9483bb7c792846"
+    }
+  ],
+  "imports": [],
+  "libraries": {
+    "three": "0.186.1",
+    "henji-layout": "1.0.0"
+  }
+}

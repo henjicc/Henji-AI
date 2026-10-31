@@ -10,7 +10,7 @@ import { effectParam } from './effectIncludes'
 const DESCRIPTION = '把红、绿、蓝三种颜色错开，边缘出现彩色的边，像镜头的色散。适合做镜头质感、科技感和故障风。'
 
 export const CHROMATIC_ABERRATION_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  space: 'layer', author: { factory: 'chromaticAberration' }, bleed: (p, r) => layerEffectBleed('chromatic_aberration', p, r), id: 'chromatic_aberration', name: '色差', group: 'stylize', description: DESCRIPTION,
+  space: 'layer', author: { factory: 'chromaticAberration' }, bleed: (p, r) => layerEffectBleed('chromatic_aberration', p, r), id: 'chromatic_aberration', name: '色差', group: 'lens', description: DESCRIPTION,
   params: [
     effectParam.amount('amount', 20, { name: '数量', text: '颜色错开多远。0 没有色差；20（默认）轻微的镜头感；60 明显的彩边；100 约为画面高度的 2%，故障风。' }),
     effectParam.choice('mode', 'radial', [{ value: 'radial', label: '从中心向外' }, { value: 'directional', label: '固定方向' }], { name: '方式', text: '从中心向外（默认）像真实镜头，越靠近画面边缘错得越开；固定方向让整个画面朝同一个方向错开，更像故障效果。' }),

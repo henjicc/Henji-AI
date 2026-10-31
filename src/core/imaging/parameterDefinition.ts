@@ -12,7 +12,9 @@ export type ImagingUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibe
  * 数值的 `min`/`max` 是硬范围：关键帧、表达式与助手写入超出即报错；`softMin`/`softMax` 是滑块与拖动读数走的常用范围，
  * 不写等于硬范围。点数字可以直接输入软范围以外、硬范围以内的值。
  */
-interface ParamBase { key: string; name: string; tooltip?: string; description: string; animatable?: boolean; group?: string; visibleWhen?: CodeParameterVisibility }
+export type ImagingParamSpace = 'clip' | 'layer' | 'frame'
+/** 不写 spaces 的参数可用于效果支持的全部空间。 */
+interface ParamBase { spaces?: readonly ImagingParamSpace[]; key: string; name: string; tooltip?: string; description: string; animatable?: boolean; group?: string; visibleWhen?: CodeParameterVisibility }
 export type ImagingParam =
   | ParamBase & { type: 'number'; unit: ImagingUnit; min: number; max: number; softMin?: number; softMax?: number; step: number; default: number }
   /** `alpha` 时可写 #rrggbbaa（着色器组件的半透明颜色）。 */
@@ -22,3 +24,7 @@ export type ImagingParam =
   | ParamBase & { type: 'curve' | 'lut'; default: string }
 
 export const IMAGING_UNIT_LABELS: Record<ImagingUnit, string> = { strength: "", percent: "%", degrees: "°", stops: "档", decibels: "dB", hertz: "Hz", semitones: "半音", milliseconds: "ms", multiplier: "倍", value: "", fraction_height: '画面高度', kelvin: 'K' }
+
+export function imagingParamsForSpace(params: readonly ImagingParam[], space: ImagingParamSpace): readonly ImagingParam[] {
+  return params.filter(param => !param.spaces || param.spaces.includes(space))
+}

@@ -2,7 +2,7 @@ import type { VideoEditBuiltinEffectDefinition } from './builtinEffects'
 import { RECORDING_ZOOM_EFFECT } from './recordingZoom'
 
 export const RECORDING_ZOOM_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  id: RECORDING_ZOOM_EFFECT, name: '自动缩放', group: 'frame',
+  id: RECORDING_ZOOM_EFFECT, name: '自动缩放', group: 'recording',
   tooltip: '在缩放区间内放大屏幕画面，可跟随鼠标或对准固定位置',
   description: '录屏片段的缩放区间（效果的 regions 属性）：区间开始时开始放大、结束时缩小完成，中间保持放大（放大与缩小都在区间内），画面在片段自身范围内放大，输出尺寸不变。'
     + '每个区间 {id,startUs,endUs,depth,focus,origin}：startUs/endUs 是片段素材的源时间微秒（修剪、拆分、移动、变速、倒放后自动跟着内容走）；'

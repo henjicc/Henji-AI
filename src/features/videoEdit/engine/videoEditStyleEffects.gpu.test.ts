@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { BLACK_HEX, WHITE_HEX, VIDEO_EDIT_GLOW_TEST_COLORS } from '@/core/theme/colorTokens'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { resolveAuthorEffects } from '@/core/videoEdit/authorEffects'
@@ -112,8 +112,7 @@ describe('发光拆分基线', () => {
     ['透明底文字·阈值 0', titleData, { threshold: 0, strength: 55, radius: 40 }],
     ['夜景·默认', nightData, {}],
     ['透明底文字·色差', titleData, { threshold: 0, aberration_amount: 60, aberration_mode: 'directional', aberration_angle: 30 }],
-    // eslint-disable-next-line no-restricted-syntax -- 着色测试数据，不是界面配色；改了会让拆分前记下的像素基线失效。
-    ['透明底文字·着色', titleData, { threshold: 0, tint: 100, tint_inner: '#ff8040', tint_outer: '#4080ff', aspect: 40, blend: 'screen' }],
+    ['透明底文字·着色', titleData, { threshold: 0, tint: 100, tint_inner: VIDEO_EDIT_GLOW_TEST_COLORS.inner, tint_outer: VIDEO_EDIT_GLOW_TEST_COLORS.outer, aspect: 40, blend: 'screen' }],
     ['夜景·发光来源', nightData, { view: 'source' }],
   ]
   it.each(cases)('%s', async (_, data, params) => {
@@ -154,8 +153,7 @@ describe('投影', () => {
 
 describe('发光·轮廓', () => {
   const dark = (): Uint8Array => canvas(W, H, (x, y) => x >= 30 && x < 60 && y >= 24 && y < 40 ? [20, 20, 24, 255] : undefined)
-  // eslint-disable-next-line no-restricted-syntax -- 着色测试数据（橙色光便于按通道断言），不是界面配色。
-  const params = { mode: 'shape', strength: 60, radius: 40, tint_inner: '#ff8040', tint_outer: '#ff8040' }
+  const params = { mode: 'shape', strength: 60, radius: 40, tint_inner: VIDEO_EDIT_GLOW_TEST_COLORS.inner, tint_outer: VIDEO_EDIT_GLOW_TEST_COLORS.inner }
   it('透明底深色字也发出着色组颜色的光；图层上光只提亮下方画面', async () => {
     const lit = await clip(dark(), 'glow', params)
     const halo = at(lit, 63, 32)

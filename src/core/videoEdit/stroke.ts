@@ -30,7 +30,7 @@ const DESCRIPTION = '沿内容的轮廓描一圈边，文字、图形、抠好�
 const { amount, percent, choice, color } = effectParam
 
 export const STROKE_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  space: 'layer', author: { factory: 'stroke' }, bleed: strokeBleed, id: 'stroke', name: '描边', group: 'stylize', description: DESCRIPTION,
+  space: 'layer', author: { factory: 'stroke' }, bleed: strokeBleed, id: 'stroke', name: '描边', group: 'outline', description: DESCRIPTION,
   aliases: ['勾边', '轮廓线', '外描边', 'outline', 'stroke'],
   params: [
     amount('width', 50, { name: '粗细', text: '边有多粗。0 没有描边；20 发丝细线；50（默认）约为画面高度的 0.4%，常规字幕描边；100 约 4%，粗壮的贴纸边。可以输入到 120。' }, 120),

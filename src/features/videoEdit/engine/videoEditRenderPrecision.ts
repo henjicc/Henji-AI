@@ -1,37 +1,23 @@
 import { planVideoEditBuiltinEffect } from './videoEditBuiltinEffectPasses'
-import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import { resolveVideoEditBuiltinParams, videoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
-import { colorGradeCurvePoints } from '@/core/imaging/adjustments/curves'
-import { COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HUE_CURVES } from '@/core/imaging/adjustments/colorGrade'
+import type { VideoEditBuiltinPlan } from './effectPlan'
 
 /** 只看当前已求值内容；源画布与运动曝光不声明额外精度。 */
 type PrecisionContext = Omit<Parameters<typeof planVideoEditBuiltinEffect>[1], 'frame' | 'referenceSize' | 'renderScale'> & Required<Pick<Parameters<typeof planVideoEditBuiltinEffect>[1], 'referenceSize' | 'renderScale'>>
 export function videoEditEffectNeedsFloat(effect: VideoEditBuiltinEffectInstance & { amount?: number }, context: PrecisionContext): boolean {
   if (effect.amount !== undefined && effect.amount <= 0) return false
-  if (!['glow', 'blur', 'vignette', 'color_grade', 'drop_shadow', 'light_sweep', 'dissolve_reveal'].includes(effect.id)) return false
+  const precision = videoEditBuiltinEffect(effect.id)?.precision
+  if (!precision) return false
   const reference = context.referenceSize
-  const height = reference.height
-  const p = resolveVideoEditBuiltinParams(effect)
-  const n = (key: string): number => Number(p[key]) || 0
-  switch (effect.id) {
-    case 'glow': return p.view !== 'source' && n('strength') > 0
-    case 'blur': return planVideoEditBuiltinEffect(effect, context.layer
-      ? { width: reference.width, height, frame: 0, referenceSize: reference, renderScale: 1, quality: context.layer.quality }
-      : { ...context, frame: 0 }).passes.some(pass => pass.entry !== 'copy')
-    // 投影的柔边、扫光、溶解的渐显与亮边光晕都是平滑渐变，靠 16 位浮点合成与末道抖动防色带；恒等状态（规划只剩复制或调原画不透明度）不触发。
-    case 'drop_shadow': case 'light_sweep': case 'dissolve_reveal': return planVideoEditBuiltinEffect(effect, context.layer
-      ? { width: reference.width, height, frame: 0, referenceSize: reference, renderScale: 1, quality: context.layer.quality, layer: context.layer }
-      : { ...context, frame: 0 }).passes.some(pass => pass.entry !== 'copy' && pass.entry !== 'effect_opacity')
-    case 'vignette': return n('amount') !== 0
-    case 'color_grade': {
-      if (n('vignette_amount') || p.input_lut && n('input_lut_strength') || p.look_lut && n('look_lut_strength')) return true
-      if (['tone_highlights', 'tone_lights', 'tone_darks', 'tone_shadows'].some(key => n(key) !== 0)) return true
-      return [...COLOR_GRADE_CURVE_CHANNELS, ...COLOR_GRADE_HUE_CURVES].some(channel => {
-        const hue = (COLOR_GRADE_HUE_CURVES as readonly string[]).includes(channel)
-        if (hue && !p[`curve_${channel}_points`]) return false
-        return colorGradeCurvePoints(p, channel).some(point => point.y !== (hue ? 50 : point.x))
-      })
-    }
-    default: return false
-  }
+  let plan: VideoEditBuiltinPlan | undefined
+  return precision(resolveVideoEditBuiltinParams(effect), {
+    // 纯参数判定不创建规划或调色查找表；需要工序时才按完整参考尺寸规划一次。
+    get passes() {
+      plan ??= planVideoEditBuiltinEffect(effect, context.layer
+        ? { width: reference.width, height: reference.height, frame: 0, referenceSize: reference, renderScale: 1, quality: context.layer.quality, layer: { ...context.layer, rasterScale: 1 } }
+        : { ...context, frame: 0 })
+      return plan.passes
+    },
+  })
 }

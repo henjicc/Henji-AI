@@ -9,9 +9,11 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 53, minReaderVersion: 53,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 54, minReaderVersion: 54,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 53 → 54：嵌入剪辑允许作者接口 v8 的 all 显隐条件，保留旧源码和接口。
+    53: content => structuredClone(content),
     // 52 → 53：录制基线按剪辑 49 → 50 精确迁移过渡；旧程序不认识新 ID，最低可读版本提高到 53。
     52: migrateRecordingTransitions,
     // 51 → 52：音频效果合并、均衡方式拆分并保留声音身份别名；旧程序无法理解新效果，最低可读版本同步提高。

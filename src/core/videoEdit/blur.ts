@@ -103,6 +103,7 @@ const { amount, choice, angle, percent, toggle } = effectParam
 const only = (mode: BlurMode) => ({ visibleWhen: { param: 'mode', in: [mode] } })
 
 export const BLUR_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
+  precision: (_params, plan) => plan.passes.some(pass => pass.entry !== 'copy'),
   space: 'layer', author: { factory: 'blur' }, bleed: blurBleed, id: 'blur', name: '模糊', group: 'blur', description: DESCRIPTION,
   aliases: ['高斯模糊', '方向模糊', '运动模糊', '缩放模糊', '径向模糊', '镜头模糊', '镜头虚化', '虚化', '柔化', 'gaussian blur', 'directional blur', 'motion blur', 'zoom blur', 'radial blur', 'lens blur', 'bokeh'],
   params: [

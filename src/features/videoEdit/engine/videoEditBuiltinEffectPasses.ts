@@ -1,185 +1,25 @@
-import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
-import { planRecordingCursor, type RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
-import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
-import { RECORDING_ZOOM_EFFECT } from '@/core/videoEdit/recordingZoom'
-import { RECORDING_FRAME_EFFECT, recordingFrameBackground } from '@/core/videoEdit/recordingFrame'
-import { planRecordingZoom, type RecordingEffectsRenderInput } from './videoEditRecordingZoomPlan'
+import { Planner, ZERO, type Vec4, type VideoEditBuiltinPlan } from './effectPlan'
+export type { VideoEditBuiltinTexture, VideoEditBuiltinPass, VideoEditBuiltinPlan } from './effectPlan'
+export { videoEditGrainSeed } from './basicEffectPlanners'
+import { VIDEO_EDIT_EFFECT_PLANNER_BY_ID } from './effectPlanners'
+import type { EffectPlannerInput, EffectPlannerFrame } from './effectPlanner'
 import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
-import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
+import { planLensBlur, planUniformBlur } from './blur'
+import { planDissolveReveal } from './dissolveReveal'
 import { DISSOLVE_REVEAL_EFFECT_DEFINITION } from '@/core/videoEdit/dissolveReveal'
 import { DISSOLVE_TRANSITION_PATTERNS, isDissolveTransitionSource } from '@/core/videoEdit/transitionSources'
-import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
-import { planColorGrade, type AdjustmentLookup } from '@/core/imaging/adjustments/plan'
-import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
-import { planBlur, planLensBlur, planUniformBlur } from './blur'
-import { SHARPEN_MIN_SIGMA_PX, sharpenSigma } from '@/core/videoEdit/sharpen'
-import { planGlow } from './glow'
-import { planDropShadow } from './dropShadow'
-import { planStroke } from './stroke'
-import { planLightSweep } from './lightSweep'
-import { planDissolveReveal } from './dissolveReveal'
-import { chromaticAberrationPass } from './chromaticAberration'
-import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 import { GAUSSIAN_EFFECT, type GaussianParameters, type ResolvedGaussianPlan } from '@/core/imaging/effects/gaussian'
-import type { EffectEvaluationContext, EffectQuality, EffectSize } from '@/core/imaging/effects/descriptor'
-
-/**
- * 把一个内置效果实例翻译成 GPU 工序（纯函数，可单测）：每道工序是一个着色器入口、输入、输出和 16 个 float 的参数。
- * 空间量一律按“输入画面高度”换算成像素，再按需降采样：同一个效果在任何渲染尺寸下看起来一样，大半径模糊的代价也有上限。
- */
-/** `second` 只在过渡里出现：后一段画面（`input` 是前一段）。 */
-export type VideoEditBuiltinTexture = 'input' | 'second' | 'output' | number
-export interface VideoEditBuiltinPass {
-  /** HSL 选区蒙版；仅局部锐化同时需要原画面、线性模糊画面和蒙版。 */
-  mask?: VideoEditBuiltinTexture
-  lookup?: AdjustmentLookup
-  entry: VideoEditBuiltinEffectEntry
-  source: VideoEditBuiltinTexture
-  /** 第二个输入（`original` 绑定）；没有时绑定效果的原始输入。 */
-  original?: VideoEditBuiltinTexture
-  target: VideoEditBuiltinTexture
-  /** (目标宽, 目标高, 输入宽, 输入高, a.xyzw, b.xyzw, c.xyzw)。 */
-  uniforms: Float32Array
-}
-/**
- * `underlay`：图层拆输出时叠在主图下面的那张 scratch。缺省是零 alpha 的光（相加照亮下方画面，`carriesLight`）；
- * `underlayKind: 'cover'` 是普通预乘画面（投影），按普通透明度遮挡。
- * `scratchFormat`：中间纹理不是画面而是数据时的格式（描边的种子坐标），优先于 `linearScratch`。
- */
-export interface VideoEditBuiltinPlan { underlay?: number; underlayKind?: 'cover'; width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean; scratchFormat?: 'rg32float' }
-type Vec4 = readonly [number, number, number, number]
-const ZERO: Vec4 = [0, 0, 0, 0]
-
-class Planner {
-  readonly scratch: Array<{ width: number; height: number }> = []
-  readonly passes: VideoEditBuiltinPass[] = []
-  constructor(readonly width: number, readonly height: number) {}
-  size(texture: VideoEditBuiltinTexture): [number, number] {
-    if (typeof texture === 'number') { const value = this.scratch[texture]; return [value.width, value.height] }
-    return [this.width, this.height]
-  }
-  alloc(width = this.width, height = this.height): number { this.scratch.push({ width, height }); return this.scratch.length - 1 }
-  pass(entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a: Vec4 = ZERO, b: Vec4 = ZERO, original?: VideoEditBuiltinTexture, c: Vec4 = ZERO): void {
-    const [targetWidth, targetHeight] = this.size(target); const [sourceWidth, sourceHeight] = this.size(source)
-    const uniforms = new Float32Array(16)
-    uniforms.set([targetWidth, targetHeight, sourceWidth, sourceHeight, ...a, ...b, ...c])
-    this.passes.push({ entry, source, target, uniforms, ...(original !== undefined ? { original } : {}) })
-  }
-  /**
-   * 可分离高斯（sigma 为全尺寸像素，按轴给）：先按轴把画面对半降采样到 sigma ≤ 3，再横竖两道一维高斯，最后双线性放大回目标。
-   * 降采样与放大本身带来的模糊（方差）从剩余 sigma 里扣掉，整体仍是要求的 sigma。只模糊一个方向时另一方向不降采样。
-   */
-  gaussian(source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, sigmaX: number, sigmaY: number, repeatEdges: boolean): void {
-    const [width, height] = this.size(source); const [targetWidth, targetHeight] = this.size(target)
-    const { passes } = planGaussian({ width, height, sigmaX, sigmaY, repeatEdges, targetSize: { width: targetWidth, height: targetHeight } })
-    let current = source
-    passes.forEach((step, index) => {
-      const next = index === passes.length - 1 ? target : this.alloc(step.width, step.height)
-      if (step.kind === 'blur') this.pass('blur', current, next, [step.axis === 'x' ? 1 / step.sourceWidth : 0, step.axis === 'y' ? 1 / step.sourceHeight : 0, step.sigma, step.radius], [step.repeatEdges ? 1 : 0, 0, 0, 0])
-      else this.pass('copy', current, next)
-      current = next
-    })
-  }
-}
+import type { EffectEvaluationContext } from '@/core/imaging/effects/descriptor'
 
 const number = (params: VideoEditBuiltinParams, key: string): number => params[key] as number
 function hexColor(value: string): [number, number, number] { return [1, 3, 5].map(index => parseInt(value.slice(index, index + 2), 16) / 255) as [number, number, number] }
-/** 胶片颗粒的种子：只与帧号有关（同一帧预览与导出一致，逐帧变化）。 */
-export function videoEditGrainSeed(frame: number): number { return (Math.max(0, Math.floor(frame)) * 7 + 1) % 65_521 }
-
-/**
- * `renderScale` is the drawn height over the sequence height (below 1 only at a reduced playback resolution, task 4.9).
- * Spatial amounts already follow the drawn height; it is needed only where a pixel is the smallest unit.
- */
 export function resolveVideoGaussianPlan(parameters: GaussianParameters, context: EffectEvaluationContext): ResolvedGaussianPlan { return GAUSSIAN_EFFECT.resolve(parameters, context) }
-
-export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize; layer?: LayerEffectReference; split?: boolean }): VideoEditBuiltinPlan {
-  const { width, height } = frame
-  if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
-  if (instance.id === RECORDING_CURSOR_EFFECT) return planRecordingCursor(instance.cursorDraws ?? [], width, height)
-  if (instance.id === RECORDING_ZOOM_EFFECT) return planRecordingZoom(instance.zoom, width, height)
-  const params = resolveVideoEditBuiltinParams(instance)
-  if (instance.id === 'glow') return planGlow(params, width, height, frame.layer, frame.split)
-  if (instance.id === 'drop_shadow') return planDropShadow(params, width, height, frame.layer, frame.split)
-  if (instance.id === 'stroke') return planStroke(params, width, height, frame.layer)
-  if (instance.id === 'light_sweep') return planLightSweep(params, width, height, frame.layer, frame.split)
-  if (instance.id === 'dissolve_reveal') return planDissolveReveal(params, width, height, frame.layer, frame.split)
-  if (instance.id === 'blur') return planBlur(params, width, height, frame)
-  const plan = new Planner(width, height)
-  const H = frame.layer ? frame.layer.referenceSize.height * frame.layer.rasterScale : height
-  switch (instance.id) {
-    case 'color_grade': {
-      const grade = planColorGrade(params, width, height, frame.layer ? [frame.layer.referenceSize.width * frame.layer.rasterScale, H] : [width, height])
-      if (frame.layer) for (const pass of grade.passes) pass.uniforms = new Float32Array([...pass.uniforms, ...frame.layer.rasterOrigin, frame.layer.contentBounds.width * frame.layer.rasterScale, frame.layer.contentBounds.height * frame.layer.rasterScale])
-      return grade
-    }
-    case 'sharpen': {
-      const blurred = plan.alloc()
-      const sigma = Math.max(SHARPEN_MIN_SIGMA_PX, sharpenSigma(number(params, 'radius')) * H)
-      plan.gaussian('input', blurred, sigma, sigma, true)
-      plan.pass('unsharp', blurred, 'output', [number(params, 'amount') / 100 * 3, number(params, 'threshold') / 100 * 0.25, 0, 0], ZERO, 'input')
-      break
-    }
-    case 'black_white': plan.pass('black_white', 'input', 'output'); break
-    case 'invert': plan.pass('invert', 'input', 'output'); break
-    case 'mosaic': {
-      const block = number(params, 'block_size') / 100 * 0.1 * H
-      if (block < 1) { plan.pass('copy', 'input', 'output'); break }
-      plan.pass('mosaic', 'input', 'output', [block / width, block / height, 0, 0])
-      if (frame.layer) {
-        const local = frame.layer
-        plan.passes.at(-1)!.uniforms = new Float32Array([...plan.passes.at(-1)!.uniforms, (local.rasterOrigin[0] + local.contentBounds.width * local.rasterScale / 2) / width, (local.rasterOrigin[1] + local.contentBounds.height * local.rasterScale / 2) / height, 1, 0])
-      }
-      break
-    }
-    case 'vignette': plan.pass('vignette', 'input', 'output', [number(params, 'amount') / 100, 0.15 + number(params, 'midpoint') / 100 * 0.8, 0.05 + number(params, 'feather') / 100 * 0.9, width / height], [...hexColor(String(params.color)), 0]); break
-    case 'film_grain': {
-      // Grain cannot be finer than a pixel. At a reduced resolution each drawn pixel stands for several sequence pixels
-      // whose grain would average out, so the amplitude falls with the number of independent grain units it covers
-      // (a unit is one grain cell, at least one sequence pixel). At full resolution the factor is 1.
-      const cell = (0.0005 + number(params, 'size') / 100 * 0.0035) * H; const scale = Math.min(1, Math.max(1e-3, frame.renderScale ?? 1))
-      const visible = Math.min(1, scale * Math.max(1, cell / scale))
-      plan.pass('grain', 'input', 'output', [number(params, 'amount') / 100 * 0.25 * visible, cell, videoEditGrainSeed(frame.frame), params.monochrome === false ? 0 : 1]); break
-    }
-    case 'chromatic_aberration': {
-      const pass = chromaticAberrationPass(params, width, height, false, frame.layer)
-      if (pass) {
-        plan.pass(pass.entry, 'input', 'output', pass.a, pass.b, undefined, pass.c)
-        if (frame.layer) plan.passes.at(-1)!.uniforms = new Float32Array([...plan.passes.at(-1)!.uniforms, ...pass.spatial])
-      }
-      else plan.pass('copy', 'input', 'output')
-      break
-    }
-    case 'crop': {
-      const feather = Math.max(1, number(params, 'feather') / 100 * 0.05 * H)
-      plan.pass('crop', 'input', 'output', [number(params, 'left') / 100, number(params, 'top') / 100, 1 - number(params, 'right') / 100, 1 - number(params, 'bottom') / 100], [feather / width, feather / height, 0, 0])
-      break
-    }
-    case RECORDING_FRAME_EFFECT: {
-      // 内容（片段在画面中的外接矩形，缺省整幅）按边距等比放进画面中央；投影是内容透明度的高斯模糊，背景不透明。
-      const [x0, y0, x1, y1] = instance.frameContent ?? [0, 0, 1, 1]
-      const pad = number(params, 'padding') / 100 * H; const contentWidth = (x1 - x0) * width; const contentHeight = (y1 - y0) * H
-      const fit = contentWidth >= 1 && contentHeight >= 1 ? Math.max(0, Math.min((width - 2 * pad) / contentWidth, (H - 2 * pad) / contentHeight)) : 0
-      const placedWidth = contentWidth * fit / width; const placedHeight = contentHeight * fit / H
-      const content = plan.alloc()
-      plan.pass('recording_frame_content', 'input', content, [0.5 - placedWidth / 2, 0.5 - placedHeight / 2, 0.5 + placedWidth / 2, 0.5 + placedHeight / 2], [x0, y0, x1, y1], undefined, [number(params, 'radius') / 100 * H, fit > 0 ? 1 / fit : 1, 0, 0])
-      const strength = number(params, 'shadow') / 100
-      let shadow: VideoEditBuiltinTexture = content
-      if (strength > 0 && fit > 0) { shadow = plan.alloc(); const sigma = (0.008 + 0.032 * strength) * H; plan.gaussian(content, shadow, sigma, sigma, false) }
-      const [from, to] = recordingFrameBackground(params)
-      plan.pass('recording_frame_compose', shadow, 'output', [...from, 0.65 * strength], [...to, 0.018 * strength], content, [Math.SQRT1_2, Math.SQRT1_2, 0, 0])
-      break
-    }
-    case 'flip': plan.pass('flip', 'input', 'output', [params.axis !== 'vertical' ? 1 : 0, params.axis !== 'horizontal' ? 1 : 0, 0, 0]); break
-    case 'chroma_key': {
-      const [r, g, b] = hexColor(String(params.key_color)); const y = 0.2126 * r + 0.7152 * g + 0.0722 * b
-      plan.pass('chroma_key', 'input', 'output', [(b - y) / 1.8556, (r - y) / 1.5748, 0.02 + number(params, 'tolerance') / 100 * 0.3, 0.002 + number(params, 'softness') / 100 * 0.2], [number(params, 'spill') / 100, 0, 0, 0])
-      break
-    }
-    default: throw new Error(`内置效果“${instance.id}”没有渲染实现。`)
-  }
-  return { width, height, scratch: plan.scratch, passes: plan.passes }
+export function planVideoEditBuiltinEffect(instance: EffectPlannerInput, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
+  if (![frame.width, frame.height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
+  const planner = VIDEO_EDIT_EFFECT_PLANNER_BY_ID.get(instance.id)
+  if (!planner) throw new Error(`内置效果“${instance.id}”没有渲染实现。`)
+  return planner.plan(resolveVideoEditBuiltinParams(instance), frame, instance)
 }
 
 const DIAGONAL = Math.SQRT1_2

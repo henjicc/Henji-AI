@@ -28,7 +28,8 @@ export type CodeParameterObject = Record<string, CodeBasicParameterValue>
 export type CodeParameterTableRow = Record<string, CodeBasicParameterValue | TextStyle>
 export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeParameterTableRow[] | TextStyle | CodeImageReference | CodeAudioReference | CodeSceneReference | null
 export type CodeParameterValues = Record<string, CodeParameterValue>
-export interface CodeParameterVisibility { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
+export interface CodeParameterComparison { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
+export type CodeParameterVisibility = CodeParameterComparison | { all: CodeParameterComparison[] }
 interface ParameterBase { key: string; title: string; description: string; animatable: boolean; tooltip?: string; group?: string; layer?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }
 export type CodeBasicParameterDeclaration = ParameterBase & (
   | { type: 'number'; default: number; min: number; max: number; step: number; unit: string; control?: 'slider' | 'knob' | 'input' }

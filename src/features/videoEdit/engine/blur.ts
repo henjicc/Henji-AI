@@ -1,3 +1,4 @@
+import { definePlanner } from './effectPlanner'
 /**
  * 模糊的工序规划与 WGSL（剪辑内置效果 ABI：u.size/a/b/c、source/original/sampler，预乘 sRGB 编码）。
  *
@@ -156,3 +157,8 @@ export const BLUR_WGSL = `
  return sum / total;
 }
 `
+
+export const BLUR_PLANNER = definePlanner({
+  id: 'blur', entries: BLUR_ENTRIES, wgsl: BLUR_WGSL,
+  plan: (params, frame) => planBlur(params, frame.width, frame.height, frame),
+})

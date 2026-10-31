@@ -11,10 +11,12 @@ import { VIDEO_EDIT_SMART_PRESETS, videoEditSmartPresetRef } from './smartRegion
  */
 export const VIDEO_EDIT_EFFECT_CATEGORIES = [
   { id: 'video_effect', name: '视频效果' },
+  { id: 'generator', name: '生成' },
   { id: 'video_transition', name: '视频过渡' },
   { id: 'audio_effect', name: '音频效果' },
   { id: 'audio_transition', name: '音频过渡' },
   { id: 'smart', name: '智能' },
+  { id: 'more', name: '更多' },
 ] as const
 export type VideoEditEffectCategory = typeof VIDEO_EDIT_EFFECT_CATEGORIES[number]['id']
 export interface VideoEditEffectsRegistryEntry {
@@ -48,8 +50,8 @@ export interface VideoEditEffectsRegistryEntry {
  * 内置效果：来自 `VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS`（参数、范围、语义说明与 GPU 实现都在那里登记），
  * 拖到片段上或选中片段后双击即加到片段效果链。
  */
-export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({
-  space: definition.space, id: videoEditBuiltinRefId(definition.id), name: definition.name, category: definition.media === 'audio' ? 'audio_effect' : 'video_effect', kind: 'effect', media: definition.media ?? 'video',
+export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map((definition): VideoEditEffectsRegistryEntry => ({
+  space: definition.space, id: videoEditBuiltinRefId(definition.id), name: definition.name, category: definition.media === 'audio' ? 'audio_effect' : definition.category === 'more' ? 'more' : definition.stage === 'generator' ? 'generator' : 'video_effect', kind: 'effect', media: definition.media ?? 'video',
   description: definition.description, tooltip: definition.tooltip ?? definition.description, builtinId: definition.id, templateRef: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], aliases: [definition.id, definition.id.replaceAll('_', ' '), ...(definition.aliases ?? [])], ...(definition.cover ? { cover: definition.cover } : {}),
 }))
 /** 智能文件夹（4.7d）：内置效果 + 作用区域的一键预设，加到视频、图片片段上后在效果控件里微调。 */

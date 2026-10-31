@@ -21,6 +21,7 @@ const DESCRIPTION = '让内容按颗粒、点阵或半调网点一点点显现�
 const { amount, percent, choice, color } = effectParam
 
 export const DISSOLVE_REVEAL_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
+  precision: (_params, plan) => plan.passes.some(pass => pass.entry !== 'copy' && pass.entry !== 'effect_opacity'),
   space: 'layer', author: { factory: 'dissolve' }, bleed: dissolveRevealBleed, id: 'dissolve_reveal', name: '溶解显影', group: 'stylize', description: DESCRIPTION,
   aliases: ['溶解', '显影', '消散', '颗粒溶解', 'dissolve', 'reveal'],
   params: [

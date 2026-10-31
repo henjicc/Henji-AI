@@ -1,3 +1,4 @@
+import { mapParameterVisibility } from '../imaging/parameterVisibility'
 /**
  * 内置效果的参数写法，以及一个效果包含另一个效果。
  *
@@ -37,7 +38,7 @@ export function includedEffectParams(definition: VideoEditBuiltinEffectDefinitio
   return definition.params.filter(param => !options.keys || options.keys.includes(param.key)).map(param => ({
     ...param, key: `${prefix}_${param.key}`, group,
     ...(param.key in overrides ? { default: overrides[param.key].default, description: overrides[param.key].text } : {}),
-    ...(param.visibleWhen ? { visibleWhen: { ...param.visibleWhen, param: `${prefix}_${param.visibleWhen.param}` } } : {}),
+    ...(param.visibleWhen ? { visibleWhen: mapParameterVisibility(param.visibleWhen, key => `${prefix}_${key}`) } : {}),
   }) as VideoEditBuiltinParam)
 }
 

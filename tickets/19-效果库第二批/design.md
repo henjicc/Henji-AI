@@ -462,6 +462,8 @@ layers: (p, w, h) => [
 
 效果控件的元素视图三块布局、“已改”标记、重置、元素上 fx 开关、拖放追加、missing 提示。面板安静：标记用中性小点，不用强调色。
 
+待办（U9 合并审查第 8 条）：CodeSourceEditor、VideoEditCodeElementsPanel、CodeParameterPanel 按 id 选中调整层时，源码编辑器定位源码，参数面板显示已选元素，元素属性显示不透明度与显示开关；逻辑选择使用 readSelectedVideoEditCodeElement，画面选框继续排除无几何范围的调整层。
+
 ### 11.5 持久格式
 
 元素覆盖值 `effects`、`addedEffects` 与片段 `edits` 都是新增可选字段：剪辑内容、录制会话（按 schema 指纹实际变化的容器）升版本、写逐版本迁移与黄金样本，最低可读版本不提高（旧程序忽略它们，其余内容含义不变）。效果 `key` 进作者 API 新版本（第 12 节）。
@@ -540,7 +542,7 @@ N = 图层纹理像素数（含外扩），1080p 整幅约 2.07M；8N ≈ 16.6 M
 |---|---|---|---|---|
 | U0 登记骨架 | 定义新增 `stage`、`precision`、参数级 `spaces`、`visibleWhen.all`；`planVideoEditBuiltinEffect` 的分发改成按 id 的规划表；工序入口集合、浮点判定、预览页条目都从定义与规划表生成；新增两个只追加的索引文件；共用 WGSL 数学（OkLab、hash、值噪声 / 单形噪声、`ramp`、B 样条取样）；效果面板类别加“生成”“更多”与第 13 节小组 | `core/videoEdit/builtinEffects.ts`、`effectsRegistry.ts`、`core/imaging/parameterDefinition.ts`、新增 `core/videoEdit/effectIndex.ts`、`engine/effectPlannerIndex.ts`、`engine/effectShaderMath.ts`、`engine/videoEditBuiltinEffectPasses.ts`、`videoEditBuiltinEffectShaders.ts`、`videoEditRenderPrecision.ts`、`scripts/effect-preview/main.ts` | 11、12 合并后第一个做，串行 | Codex |
 | U1 模糊补全 | 第 2.1 节 | `core/videoEdit/blur.ts`、`engine/blur.ts` | U0 | Opus 子代理 |
-| U2 颜色 | 第 2.2 节 | 新增 `core/videoEdit/gradientMap.ts`、`posterize.ts`、`filmLook.ts`，`engine/colorMaps.ts`；`builtinEffects.ts` 里反相一行 | U0 | Opus 子代理 |
+| U2 颜色 | 第 2.2 节 | 新增 `core/videoEdit/gradientMap.ts`、`posterize.ts`、`filmLook.ts`，`engine/colorMaps.ts`；反相在 `basicEffects.ts` / `basicEffectPlanners.ts` 原地替换 | U0 | Opus 子代理 |
 | U3 质感 | 第 2.3 节 | 新增 `core` 与 `engine` 下 `halftone.ts`、`ditherPattern.ts`、`paper.ts`、`scratches.ts`、`retroScreen.ts` | U0；蓝噪声来自 12 | Opus 子代理 |
 | U4 故障 | 第 2.4 节 | 新增 `core`、`engine` 下 `glitch.ts` | U0 | Opus 子代理 |
 | U5 光 | 第 2.5 节 | 新增 `lensFlare.ts`、`lightLeak.ts`（core、engine） | U0；12 的 `glowPyramid` | Opus 子代理 |

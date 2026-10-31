@@ -44,7 +44,7 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
     ...VIDEO_EDIT_EFFECT_CATEGORIES.map(category => ({ ...category, entries: matching.filter(entry => entry.category === category.id && entry.group !== '更多') })),
     { id: 'more', name: '更多', entries: matching.filter(entry => entry.group === '更多') },
   ]
-    .filter(folder => !keyword || folder.entries.length)
+    .filter(folder => folder.entries.length)
   const isDefault = (entry: VideoEditLibraryEntry): boolean => Boolean(entry.transitionKind && videoEditDefaultTransitionKind(defaults, videoEditTransitionMedium(entry.transitionKind)) === entry.transitionKind)
   const toggle = (id: string): void => setCollapsed(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const favorite = (id: string): void => { try { useVideoEditEffectLibraryStore.getState().toggleFavorite(id) } catch (error) { onError(error) } }

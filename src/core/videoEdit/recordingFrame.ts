@@ -11,7 +11,7 @@ export const RECORDING_FRAME_BACKGROUNDS = ['graphite', 'mist', 'ocean', 'sunset
 export type RecordingFrameBackground = typeof RECORDING_FRAME_BACKGROUNDS[number]
 
 export const RECORDING_FRAME_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  id: RECORDING_FRAME_EFFECT, name: '录屏画框', group: 'frame',
+  id: RECORDING_FRAME_EFFECT, name: '录屏画框', group: 'recording',
   tooltip: '缩小画面并加圆角、投影和背景，让录屏更精致',
   description: '把片段画面按边距缩小居中，加圆角与柔和投影，四周铺渐变或纯色背景（不透明），常用于录屏成片。边距、圆角按画面高度比例，与分辨率无关；画面里其他效果（光标、自动缩放）放在它之前，会在画框内生效。',
   params: [

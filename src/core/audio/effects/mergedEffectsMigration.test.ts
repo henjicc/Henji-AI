@@ -32,7 +32,9 @@ describe('音频效果合并迁移', () => {
       const assertVideoSample = (actual: Record<string, unknown>, expected: Record<string, unknown>): void => {
         const { sequences: expectedSequences, ...expectedRest } = expected
         const { sequences: actualSequences, ...actualRest } = actual
-        expect(actualRest).toEqual(expectedRest)
+        // 最新黄金样本的作者接口和源码独立演进；音频所在的其他字段与风格件必须逐项保持。
+        const withoutAuthorSources = (value: Record<string, unknown>): Record<string, unknown> => ({ ...value, codeMaterials: undefined, styles: (value.styles as Array<{ sample: Record<string, unknown> }> | undefined)?.map(style => ({ ...style, sample: { ...style.sample, code: undefined } })) })
+        expect(withoutAuthorSources(actualRest)).toEqual(withoutAuthorSources(expectedRest))
         expect(actualSequences).toEqual(expect.arrayContaining(expectedSequences as unknown[]))
       }
       // 当前黄金样本还携带其他领域的案例；音频来源里的每条序列必须完整保留。

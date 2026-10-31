@@ -2,7 +2,7 @@ import type { VideoEditBuiltinEffectDefinition } from './builtinEffects'
 import { RECORDING_CURSOR_EFFECT } from './recordingCursor'
 
 export const RECORDING_CURSOR_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  id: RECORDING_CURSOR_EFFECT, name: '录制光标', group: 'frame',
+  id: RECORDING_CURSOR_EFFECT, name: '录制光标', group: 'recording',
   tooltip: '平滑重绘录屏光标，并突出鼠标点击',
   description: '由屏幕素材绑定的采集事件日志驱动的独立光标层，自动跟随片段的源时间、剪切、移动、速度、倒放与缩放。原片含光标时只提供点击提示；没有事件日志的素材不可用。建议放在效果链最前，随后效果会同时处理光标和原片。',
   params: [

@@ -1,3 +1,6 @@
+import { VIDEO_EDIT_EFFECT_PREVIEW_COLORS as sampleColors, WHITE_HEX } from '@/core/theme/colorTokens'
+import { VIDEO_EDIT_EFFECT_PREVIEW_DEFINITIONS } from '@/features/videoEdit/engine/effectPlanners'
+import { parameterVisible } from '@/core/imaging/parameterVisibility'
 /**
  * 内置效果预览：素材画进 1920×1080 纹理，交给剪辑的正式内置效果执行器，结果叠到所选底色上显示。
  * 参数面板直接由效果登记生成，界面上调的就是软件里的同一组参数。
@@ -9,7 +12,7 @@ import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntim
 
 const W = 1920; const H = 1080
 /** 预览页能选的效果。 */
-const PREVIEW_EFFECTS = ['glow', 'drop_shadow', 'stroke', 'light_sweep', 'dissolve_reveal', 'chromatic_aberration', 'blur', 'sharpen', 'color_grade', 'black_white', 'film_grain', 'vignette', 'mosaic']
+const PREVIEW_EFFECTS = VIDEO_EDIT_EFFECT_PREVIEW_DEFINITIONS.map(definition => definition.id)
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
 
 const adapter = await navigator.gpu?.requestAdapter()
@@ -53,36 +56,36 @@ const uniforms = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM |
 function backdropSrgb(): number[] { return $<HTMLSelectElement>('backdrop').value.split(',').map(Number) }
 function neonTitle(ctx: OffscreenCanvasRenderingContext2D): void {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#ffffff'; ctx.font = '700 220px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('痕迹 AI', W / 2, H / 2 - 90)
-  ctx.fillStyle = '#4fd1ff'; ctx.font = '700 72px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('LIGHT  ·  发光测试', W / 2, H / 2 + 110)
-  ctx.lineWidth = 6; ctx.strokeStyle = '#ff3b6b'; ctx.beginPath(); ctx.moveTo(560, 820); ctx.lineTo(1360, 820); ctx.stroke()
-  ctx.lineWidth = 3; ctx.strokeStyle = '#ffd25a'; ctx.beginPath(); ctx.arc(330, 300, 90, 0, Math.PI * 2); ctx.stroke()
-  ctx.lineWidth = 2; ctx.strokeStyle = '#8affc1'; ctx.strokeRect(1480, 220, 220, 140)
+  ctx.fillStyle = WHITE_HEX; ctx.font = '700 220px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('痕迹 AI', W / 2, H / 2 - 90)
+  ctx.fillStyle = sampleColors.titleAccent; ctx.font = '700 72px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('LIGHT  ·  发光测试', W / 2, H / 2 + 110)
+  ctx.lineWidth = 6; ctx.strokeStyle = sampleColors.signalRed; ctx.beginPath(); ctx.moveTo(560, 820); ctx.lineTo(1360, 820); ctx.stroke()
+  ctx.lineWidth = 3; ctx.strokeStyle = sampleColors.signalYellow; ctx.beginPath(); ctx.arc(330, 300, 90, 0, Math.PI * 2); ctx.stroke()
+  ctx.lineWidth = 2; ctx.strokeStyle = sampleColors.signalMint; ctx.strokeRect(1480, 220, 220, 140)
 }
 function nightScene(ctx: OffscreenCanvasRenderingContext2D): void {
-  const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#05070d'); sky.addColorStop(1, '#1a1c26'); ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H)
-  ctx.fillStyle = '#fff6dc'; ctx.beginPath(); ctx.arc(1550, 220, 70, 0, Math.PI * 2); ctx.fill()
+  const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, sampleColors.skyTop); sky.addColorStop(1, sampleColors.skyBottom); ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = sampleColors.moon; ctx.beginPath(); ctx.arc(1550, 220, 70, 0, Math.PI * 2); ctx.fill()
   let seed = 7; const random = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647
   for (let row = 0; row < 7; row++) {
     const y = 560 + row * 62
     ctx.fillStyle = `rgb(${18 + row * 4},${20 + row * 4},${28 + row * 4})`; ctx.fillRect(0, y - 40, W, 80)
     for (let i = 0; i < 70; i++) {
       const x = random() * W; const hue = random()
-      ctx.fillStyle = hue < 0.5 ? '#ffd9a0' : hue < 0.7 ? '#ffffff' : hue < 0.85 ? '#7fd4ff' : '#ff6a6a'
+      ctx.fillStyle = hue < 0.5 ? sampleColors.windowWarm : hue < 0.7 ? WHITE_HEX : hue < 0.85 ? sampleColors.windowCool : sampleColors.windowPink
       ctx.fillRect(Math.round(x), Math.round(y - 30 + random() * 50), 3 + Math.round(random() * 3), 3 + Math.round(random() * 3))
     }
   }
   ctx.lineCap = 'round'
-  ctx.lineWidth = 10; ctx.strokeStyle = '#ff2d55'; ctx.beginPath(); ctx.moveTo(220, 330); ctx.lineTo(620, 330); ctx.stroke()
-  ctx.strokeStyle = '#2d8cff'; ctx.beginPath(); ctx.arc(900, 320, 110, Math.PI * 0.1, Math.PI * 1.6); ctx.stroke()
-  ctx.lineWidth = 4; ctx.strokeStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(0, 1000); ctx.lineTo(W, 1000); ctx.stroke()
-  ctx.fillStyle = '#6c707c'; ctx.font = '600 44px "Microsoft YaHei", sans-serif'; ctx.fillText('不够亮的文字不发光', 220, 470)
+  ctx.lineWidth = 10; ctx.strokeStyle = sampleColors.neonRed; ctx.beginPath(); ctx.moveTo(220, 330); ctx.lineTo(620, 330); ctx.stroke()
+  ctx.strokeStyle = sampleColors.neonBlue; ctx.beginPath(); ctx.arc(900, 320, 110, Math.PI * 0.1, Math.PI * 1.6); ctx.stroke()
+  ctx.lineWidth = 4; ctx.strokeStyle = WHITE_HEX; ctx.beginPath(); ctx.moveTo(0, 1000); ctx.lineTo(W, 1000); ctx.stroke()
+  ctx.fillStyle = sampleColors.mutedText; ctx.font = '600 44px "Microsoft YaHei", sans-serif'; ctx.fillText('不够亮的文字不发光', 220, 470)
 }
 function darkLabel(ctx: OffscreenCanvasRenderingContext2D): void {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#2a2d33'; ctx.font = '700 200px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('深色标题', W / 2, H / 2 - 60)
-  ctx.fillStyle = '#3a6df0'; ctx.beginPath(); ctx.roundRect(W / 2 - 260, H / 2 + 120, 520, 110, 55); ctx.fill()
-  ctx.fillStyle = '#ffffff'; ctx.font = '700 60px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('标签', W / 2, H / 2 + 175)
+  ctx.fillStyle = sampleColors.darkTitle; ctx.font = '700 200px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('深色标题', W / 2, H / 2 - 60)
+  ctx.fillStyle = sampleColors.badge; ctx.beginPath(); ctx.roundRect(W / 2 - 260, H / 2 + 120, 520, 110, 55); ctx.fill()
+  ctx.fillStyle = WHITE_HEX; ctx.font = '700 60px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('标签', W / 2, H / 2 + 175)
 }
 let photo: ImageBitmap | undefined
 const samples: Record<string, { name: string; params: Partial<VideoEditBuiltinParams>; draw(ctx: OffscreenCanvasRenderingContext2D): void }> = {
@@ -151,7 +154,7 @@ function buildPanel(): void {
     }
     row.append(control, value); section.append(row)
     const shownWhen = param.visibleWhen
-    if (shownWhen) refresh.push(() => { row.style.display = (shownWhen.in ?? [shownWhen.equals]).includes(params[shownWhen.param]) ? '' : 'none' })
+    if (shownWhen) refresh.push(() => { row.style.display = parameterVisible(shownWhen, params) ? '' : 'none' })
   }
   const reset = Object.assign(document.createElement('button'), { textContent: '恢复默认' })
   reset.addEventListener('click', () => { resetParams(); void render() })

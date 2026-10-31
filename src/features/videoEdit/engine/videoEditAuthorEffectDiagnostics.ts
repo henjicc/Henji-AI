@@ -1,5 +1,5 @@
 import ts from 'typescript'
-import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinParamValue } from '@/core/videoEdit/builtinEffects'
+import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinParamValue, videoEditBuiltinParamSpaceIssue } from '@/core/videoEdit/builtinEffects'
 import { retiredBlurParams } from '@/core/videoEdit/blur'
 
 export interface AuthorEffectDiagnostic { start: number; length: number; message: string }
@@ -67,10 +67,13 @@ export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeC
     const definition = definitions.find(value => value.id === id)
     if (!definition || !params || typeof params !== 'object') return
     for (const [key, value] of Object.entries(params)) {
-      if (value === undefined) continue
       const param = definition.params.find(param => param.key === key)
       if (!param) continue // 字段和枚举由公共声明检查。
-      try { videoEditBuiltinParamValue(param, value) }
+      try {
+        const issue = videoEditBuiltinParamSpaceIssue(param, 'layer')
+        if (issue) throw new Error(issue)
+        if (value !== undefined) videoEditBuiltinParamValue(param, value)
+      }
       catch (error) { result.push({ start: node.getStart(source), length: node.getWidth(source), message: `${definition.name}.${key}：${error instanceof Error ? error.message : String(error)}` }) }
     }
   }

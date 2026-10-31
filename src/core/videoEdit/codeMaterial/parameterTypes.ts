@@ -109,15 +109,25 @@ export function parseCodeMaterialV3Parameters(raw: unknown, types: Record<string
     const parsed = declaration(key, value, types, false, apiVersion)
     const condition = object(value, key).visibleWhen
     if (condition !== undefined) {
-      const item = object(condition, `${key}.visibleWhen`); fields(item, ['param', 'equals', 'notEquals', 'in'], `${key}.visibleWhen`)
-      const name = text(item.param, `${key}.visibleWhen.param`, 64)
-      const target = result.find(parameter => parameter.key === name)
-      if (!target || !['choice', 'boolean', 'number'].includes(target.type)) fail(`${key}.visibleWhen`, '仅引用声明顺序在前的 choice/boolean/number 参数')
-      const tests = ['equals', 'notEquals', 'in'].filter(test => Object.prototype.hasOwnProperty.call(item, test))
-      if (tests.length !== 1) fail(`${key}.visibleWhen`, 'equals、notEquals、in 中恰好一个条件')
-      if (tests[0] === 'in' && (!Array.isArray(item.in) || !item.in.length)) fail(`${key}.visibleWhen.in`, '非空比较值数组')
-      for (const comparison of tests[0] === 'in' ? item.in as unknown[] : [item[tests[0]]]) validateCodeMaterialV3ParameterValue(target, comparison)
-      parsed.visibleWhen = { ...item } as unknown as CodeParameterVisibility
+      const path = `${key}.visibleWhen`
+      const parse = (raw: unknown, path: string): Exclude<CodeParameterVisibility, { all: unknown }> => {
+        const item = object(raw, path); fields(item, ['param', 'equals', 'notEquals', 'in'], path)
+        const name = text(item.param, `${path}.param`, 64)
+        const target = result.find(parameter => parameter.key === name)
+        if (!target || !['choice', 'boolean', 'number'].includes(target.type)) fail(path, '仅引用声明顺序在前的 choice/boolean/number 参数')
+        const tests = ['equals', 'notEquals', 'in'].filter(test => Object.prototype.hasOwnProperty.call(item, test))
+        if (tests.length !== 1) fail(path, 'equals、notEquals、in 中恰好一个条件')
+        if (tests[0] === 'in' && (!Array.isArray(item.in) || !item.in.length)) fail(`${path}.in`, '非空比较值数组')
+        for (const comparison of tests[0] === 'in' ? item.in as unknown[] : [item[tests[0]]]) validateCodeMaterialV3ParameterValue(target, comparison)
+        return { ...item } as unknown as Exclude<CodeParameterVisibility, { all: unknown }>
+      }
+      const item = object(condition, path)
+      if ('all' in item) {
+        if (apiVersion === undefined || apiVersion < 8) fail(path, '作者接口 v8 起支持 all 条件')
+        fields(item, ['all'], path)
+        if (!Array.isArray(item.all) || !item.all.length) fail(`${path}.all`, '非空条件数组')
+        parsed.visibleWhen = { all: item.all.map((value, index) => parse(value, `${path}.all[${index}]`)) }
+      } else parsed.visibleWhen = parse(item, path)
     }
     result.push(parsed)
   }

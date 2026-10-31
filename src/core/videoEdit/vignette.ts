@@ -9,7 +9,9 @@ import { BLACK_HEX } from '../theme/colorTokens'
 const DESCRIPTION = '让画面四周变暗或换成别的颜色，把视线引向中心，增加电影感。颜色选白色就是四周提亮的白边。'
 
 export const VIGNETTE_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  id: 'vignette', name: '暗角', group: 'stylize', description: DESCRIPTION,
+  stage: 'point',
+  precision: params => Number(params.amount) !== 0,
+  id: 'vignette', name: '暗角', group: 'lens', description: DESCRIPTION,
   aliases: ['晕影', '暗边', 'vignette'],
   params: [
     effectParam.amount('amount', 30, { name: '数量', text: '四周变化多少。0 没有暗角；30（默认）柔和的电影暗角；70 浓重；100 四周完全变成所选颜色。' }),

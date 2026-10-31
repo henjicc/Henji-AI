@@ -2,13 +2,16 @@ import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parseDocumentText } from '../documents/envelope'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
+import { PERSISTENCE_FORMATS } from '../persistence/formats'
+import { upgradePersistenceContent } from '../persistence/migrations'
 import { videoEditDocumentSchema } from './document'
 import { activeVideoEditEffects } from './compositing'
 import { evaluateVideoEditClip, sliceVideoEditBuiltinCurves } from './keyframes'
 import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, resolveVideoEditBuiltinParams, storedVideoEditBuiltinEffectNotes } from './builtinEffects'
 import { audioEditEffectChainSchema, audioEditChainItemEffects } from '../audioEdit/effects'
 
-const content = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v47.json', 'utf8')).content as { sequences: Array<{ clips: Array<{ id: string; effects?: unknown[] }> }> }
+const fixture = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v47.json', 'utf8'))
+const content = upgradePersistenceContent(PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!, fixture.content, fixture.kindVersion) as { sequences: Array<{ clips: Array<{ id: string; effects?: unknown[] }> }> }
 const removed = { id: 'removed', name: '亮度与对比度', enabled: true, amount: 1, builtin: { id: 'brightness_contrast', params: { brightness: -35 }, curves: { brightness: [{ time: 0, value: -35, interpolation: 'linear' as const }, { time: 10, value: 20, interpolation: 'linear' as const }] } } }
 const shader = { id: 'shader', name: '高斯模糊（着色器）', enabled: false, amount: 1, builtin: { id: 'shaders.Blur', params: { intensity: 50 } } }
 const vignette = { id: 'vignette', name: '暗角', enabled: true, amount: 1, builtin: { id: 'vignette', params: { amount: -40, midpoint: 50 } } }

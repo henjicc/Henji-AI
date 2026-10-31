@@ -124,7 +124,7 @@ for (const definition of CURATED_TRANSITIONS) {
       const compatible = params.find(param => param.key === target)
       keys.set(original.key, target)
       if (compatible) {
-        if (compatible.visibleWhen?.in) compatible.visibleWhen.in.push(mode)
+        if (compatible.visibleWhen && 'in' in compatible.visibleWhen) compatible.visibleWhen.in?.push(mode)
       } else params.push({ ...original, key: target, ...(merged ? { visibleWhen: { param: 'mode', in: [mode] } } : {}) })
     }
     BY_SOURCE.set(source, { entry: definition, variant, keys })

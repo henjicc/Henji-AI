@@ -1,8 +1,8 @@
-import { COLOR_GRADE_UNIFIED_WGSL } from './colorGradeUnified'
+import { COLOR_GRADE_UNIFIED_WGSL, COLOR_GRADE_UNIFIED_BODY_WGSL } from './colorGradeUnified'
 
 /** LUT, HSL secondary, vignette and the unified pointwise grade (`colorGradeUnified.ts`).
  * Straight f32 color, no 8-bit LUT or intermediate upper clamp; retain premultiplied alpha. */
-export function colorGradeWgsl(extendedRange = false, layerCoordinates = false): string {
+export function colorGradeWgsl(extendedRange = false, layerCoordinates = false, sharedColorMath = false): string {
 return `
 // HSL selection is perceptual, using straight encoded RGB. Color corrections and
 // mask-weighted mixing use linear light, returning the same premultiplied sRGB ABI.
@@ -95,7 +95,7 @@ fn colorGradeHue(rgb: vec3f) -> f32 {
  let amount = smoothstep(u.a.y * 0.8, u.a.y * 0.8 + max(0.01, u.a.w), distance) * abs(u.a.x);
  let rgb = straight(c); return colorGradeOut(select(rgb * (1.0 - amount), rgb + (1.0-rgb) * amount, u.a.x > 0.0), c.a);
 }
-${COLOR_GRADE_UNIFIED_WGSL}
+${sharedColorMath ? COLOR_GRADE_UNIFIED_BODY_WGSL : COLOR_GRADE_UNIFIED_WGSL}
 `
 }
 export const COLOR_GRADE_WGSL = colorGradeWgsl()

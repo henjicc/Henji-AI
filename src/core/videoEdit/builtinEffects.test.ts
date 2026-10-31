@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeVideoEditBuiltinParams, parseVideoEditBuiltinRefId, resolveVideoEditBuiltinParams, VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults, videoEditBuiltinEffectIssue } from './builtinEffects'
 import { videoEditEffectSchema } from './compositing'
-import { videoEditEffectsRegistry } from './effectsRegistry'
+import { VIDEO_EDIT_EFFECT_CATEGORIES, videoEditEffectsRegistry } from './effectsRegistry'
 import { BLACK_HEX } from '../theme/colorTokens'
 
 describe('内置效果登记', () => {
@@ -24,8 +24,8 @@ describe('内置效果登记', () => {
   })
   it('效果面板列出可用于片段的内置效果，带参数与分组', () => {
     const entries = videoEditEffectsRegistry().filter(entry => entry.builtinId)
-    expect(entries.map(entry => entry.builtinId)).toEqual(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => definition.id))
-    expect(entries.every(entry => entry.category === (entry.media === 'audio' ? 'audio_effect' : 'video_effect') && entry.id === `effect:${entry.builtinId}` && entry.group && entry.params)).toBe(true)
+    expect(new Set(entries.map(entry => entry.builtinId))).toEqual(new Set(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => definition.id)))
+    expect(entries.every(entry => VIDEO_EDIT_EFFECT_CATEGORIES.some(category => category.id === entry.category) && entry.id === `effect:${entry.builtinId}` && entry.group && entry.params)).toBe(true)
     expect(parseVideoEditBuiltinRefId('effect:blur')).toBe('blur'); expect(parseVideoEditBuiltinRefId('blur')).toBe('blur'); expect(parseVideoEditBuiltinRefId('effect:nope')).toBeUndefined()
   })
   it('严格校验越界、错类型与未知参数并列出可用范围；界面写入时夹进范围', () => {
@@ -36,7 +36,7 @@ describe('内置效果登记', () => {
     expect(() => normalizeVideoEditBuiltinParams('blur', { amount: -1.0 })).toThrow('超出范围 0–')
     expect(() => normalizeVideoEditBuiltinParams('blur', { radius: 3 })).toThrow('可用参数：amount、mode、axis')
     expect(() => normalizeVideoEditBuiltinParams('blur', { axis: 'diagonal' })).toThrow('both、horizontal、vertical')
-    expect(() => normalizeVideoEditBuiltinParams('nope')).toThrow('可用：blur')
+    expect(() => normalizeVideoEditBuiltinParams('nope')).toThrow(/可用：.*blur/)
     expect(normalizeVideoEditBuiltinParams('blur', { amount: 900 }, undefined, true).amount).toBe(450)
     // 颜色由测试拼出（颜色字面量只允许登记在主题文件）
     expect(normalizeVideoEditBuiltinParams('chroma_key', { key_color: ` #${'00B140'} ` }).key_color).toBe(`#${'00b140'}`)

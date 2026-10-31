@@ -1,4 +1,4 @@
-import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, type VideoEditBuiltinParams } from './builtinEffects'
+import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinParamSpaceIssue, type VideoEditBuiltinParams } from './builtinEffects'
 import { resolveVideoEditStylePieceEffects, videoEditStylePieceKnobValues, type VideoEditEffectPreset } from './effectPresets'
 import { retiredBlurParams } from './blur'
 import { evaluateVideoEditEffect } from './keyframes'
@@ -38,7 +38,23 @@ export function resolveVideoEditLookByName(name: string, environment: AuthorEffe
   const matches = scoped.length ? scoped : candidates
   if (!matches.length) throw new Error(`找不到风格件「${name}」。当前绑定风格：${environment.boundStyle ? `「${environment.boundStyle.name ?? environment.boundStyle.id}」（${environment.boundStyle.id}）` : '无'}；可用名称：${[...new Set([...(environment.presets ?? []), ...(environment.boundStyle?.presets ?? [])].map(preset => preset.name))].map(name => `「${name}」`).join('、') || '无'}。请读取 video_edit.project_style.effect_presets；工程副本较旧时可重新 bind_video_edit_style，或导入全局风格件。`)
   if (matches.length !== 1) throw new Error(`风格件「${name}」在${scoped.length ? '绑定风格' : '全局库'}中重名：${matches.map(preset => preset.id).join('、')}。请先改名消除歧义。`)
+  validateVideoEditLook(matches[0])
   return matches[0]
+}
+/** 在名称解析期校验整个风格件，不依赖当前帧、启用状态或动画求值后的参数。 */
+export function validateVideoEditLook(preset: VideoEditEffectPreset): void {
+  if (preset.media !== 'video') throw new Error('声音预设不能用于图层。')
+  for (const effect of preset.effects) {
+    if (!effect.builtin || effect.mask) throw new Error(`预设「${preset.name}」包含代码效果或蒙版，请使用片段效果链。`)
+    const retired = retiredBlurParams(effect.builtin.id, effect.builtin.params)
+    const definition = requireVideoEditBuiltinEffect(retired ? 'blur' : effect.builtin.id)
+    if (definition.space !== 'layer' || definition.media === 'audio') throw new Error(`${definition.id} 不能用于图层，请使用片段效果链。`)
+    const keys = new Set([...Object.keys(retired ?? effect.builtin.params), ...Object.keys(effect.builtin.curves ?? {}), ...(preset.knobs ?? []).flatMap(knob => knob.mappings.filter(mapping => mapping.effectId === effect.id).map(mapping => mapping.parameter))])
+    for (const key of keys) {
+      const issue = videoEditBuiltinParamSpaceIssue(definition.params.find(param => param.key === key), 'layer')
+      if (issue) throw new Error(`风格件「${preset.name}」的 ${definition.id}.${key}：${issue}`)
+    }
+  }
 }
 // 风格件修订替换快照对象；结构只展开一次，动画旋钮不进入缓存键。
 const lookEffects = new WeakMap<VideoEditEffectPreset, VideoEditEffectPreset['effects']>()
@@ -59,7 +75,7 @@ export function resolveAuthorEffects(value: unknown, environment: AuthorEffectEn
     const id = retired ? 'blur' : requested, input = retired ?? raw
     const definition = requireVideoEditBuiltinEffect(id)
     if (definition.space !== 'layer' || definition.media === 'audio') throw new Error(`${id} 不能用于图层，请使用片段效果链。`)
-    const params = normalizeVideoEditBuiltinParams(id, input)
+    const params = normalizeVideoEditBuiltinParams(id, input, undefined, false, 'layer')
     for (const param of definition.params) if (param.type === 'lut' && params[param.key] && !environment.luts?.some(lut => lut.id === params[param.key])) throw new Error(`项目中找不到 LUT ${params[param.key]}，请重新导入。`)
     if (amount > 0) result.push({ id, params, amount, source: look === undefined ? 'descriptor' : 'look', ...(look === undefined ? {} : { look }) })
   }
@@ -77,10 +93,8 @@ export function resolveAuthorEffects(value: unknown, environment: AuthorEffectEn
       const preset = resolveVideoEditLookByName(params.name, environment)
       const knobs = params.knobs === undefined ? {} : object(params.knobs, 'knobs')
       if (Object.values(knobs).some(value => typeof value !== 'number' || !Number.isFinite(value))) throw new Error('旋钮必须是有限数值。')
-      if (preset.media !== 'video') throw new Error('声音预设不能用于图层。')
       const overrides = videoEditStylePieceKnobValues(preset, knobs as Record<string, number>)
       for (const item of cachedLookEffects(preset)) {
-        if (!item.builtin || item.mask) throw new Error(`预设「${preset.name}」包含代码效果或蒙版，请使用片段效果链。`)
         const evaluated = evaluateVideoEditEffect(item, presetFrame)
         // 停用条目仍校验空间，避免启用曲线后才暴露无效预设。
         add(evaluated.builtin!.id, { ...evaluated.builtin!.params, ...overrides.get(item.id) }, evaluated.enabled === false ? 0 : evaluated.amount, preset.name)

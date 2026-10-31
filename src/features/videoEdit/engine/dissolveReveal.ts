@@ -1,3 +1,4 @@
+import { definePlanner } from './effectPlanner'
 /**
  * 溶解显影的工序规划与 WGSL（剪辑内置效果 ABI）。
  *
@@ -128,3 +129,8 @@ fn dissolveTransitionReference(v: Vertex) -> vec4f { return select(dissolveIncom
  return vec4f(u.b.rgb * c.a * mask.y, 1.0);
 }
 `
+
+export const DISSOLVE_REVEAL_PLANNER = definePlanner({
+  id: 'dissolve_reveal', entries: DISSOLVE_REVEAL_ENTRIES, wgsl: DISSOLVE_REVEAL_WGSL,
+  plan: (params, frame) => planDissolveReveal(params, frame.width, frame.height, frame.layer, frame.split),
+})

@@ -1,3 +1,4 @@
+import { definePlanner } from './effectPlanner'
 /**
  * 描边的工序规划与 WGSL（剪辑内置效果 ABI）。Jump Flood 距离场（Rong & Tan 2006；Ben Golus《The Quest for Very Wide Outlines》）：
  *
@@ -177,3 +178,9 @@ fn strokeColor(base: vec4f, sd: f32) -> vec4f {
  return strokeColor(base, strokeNearDistance(source, uvOf(v), base.a, u.a.z));
 }
 `
+
+export const STROKE_PLANNER = definePlanner({
+  id: 'stroke', entries: STROKE_ENTRIES, wgsl: STROKE_WGSL,
+  plan: (params, frame) => planStroke(params, frame.width, frame.height, frame.layer),
+  unfilteredSourceEntries: STROKE_FIELD_ENTRIES,
+})

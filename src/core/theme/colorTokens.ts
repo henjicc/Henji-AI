@@ -391,3 +391,25 @@ export const VIDEO_EDIT_STYLE_PALETTES = [
 ]
 
 export const VIDEO_EDIT_STYLE_STATUS_COLORS = { positive: stylePaletteColor(46, 137, 108), negative: stylePaletteColor(197, 68, 73) }
+
+/** 内置效果预览素材的固定内容色，不随界面主题变化。 */
+export const VIDEO_EDIT_EFFECT_PREVIEW_COLORS = {
+  titleAccent: '#4fd1ff',
+  signalRed: '#ff3b6b',
+  signalYellow: '#ffd25a',
+  signalMint: '#8affc1',
+  skyTop: '#05070d',
+  skyBottom: '#1a1c26',
+  moon: '#fff6dc',
+  windowWarm: '#ffd9a0',
+  windowCool: '#7fd4ff',
+  windowPink: '#ff6a6a',
+  neonRed: '#ff2d55',
+  neonBlue: '#2d8cff',
+  mutedText: '#6c707c',
+  darkTitle: '#2a2d33',
+  badge: '#3a6df0',
+} as const;
+
+/** 发光像素回归的固定着色输入，保持已登记画面基线。 */
+export const VIDEO_EDIT_GLOW_TEST_COLORS = { inner: '#ff8040', outer: '#4080ff' } as const;

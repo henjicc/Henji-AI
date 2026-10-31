@@ -1,3 +1,4 @@
+import { definePlanner } from './effectPlanner'
 import { glowLevelWeights, GLOW_GAIN } from '@/core/videoEdit/glowEnergy'
 export { glowLevelWeights } from '@/core/videoEdit/glowEnergy'
 import { glowLevels, type LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
@@ -301,3 +302,8 @@ fn glowColor(before: vec3f, light: vec3f, screen: bool, position: vec2f) -> vec3
  return premul(toSrgb(glowEmission(c) / c.a), c.a);
 }
 `
+
+export const GLOW_PLANNER = definePlanner({
+  id: 'glow', entries: GLOW_ENTRIES, wgsl: GLOW_WGSL,
+  plan: (params, frame) => planGlow(params, frame.width, frame.height, frame.layer, frame.split),
+})

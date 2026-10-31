@@ -1,3 +1,4 @@
+import { definePlanner } from './effectPlanner'
 /**
  * 扫光的工序规划与 WGSL（剪辑内置效果 ABI）。
  *
@@ -76,3 +77,8 @@ fn sweepLight(v: Vertex) -> vec3f {
 }
 @fragment fn sweep_light(v: Vertex) -> @location(0) vec4f { return vec4f(sweepLight(v) * tap(uvOf(v)).a, 1.0); }
 `
+
+export const LIGHT_SWEEP_PLANNER = definePlanner({
+  id: 'light_sweep', entries: LIGHT_SWEEP_ENTRIES, wgsl: LIGHT_SWEEP_WGSL,
+  plan: (params, frame) => planLightSweep(params, frame.width, frame.height, frame.layer, frame.split),
+})

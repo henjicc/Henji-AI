@@ -24,7 +24,8 @@ const DESCRIPTION = '让一道光从文字或 Logo 上扫过，只照亮内容�
 const { amount, percent, angle, color } = effectParam
 
 export const LIGHT_SWEEP_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
-  space: 'layer', author: { factory: 'lightSweep' }, bleed: lightSweepBleed, id: 'light_sweep', name: '扫光', group: 'stylize', description: DESCRIPTION,
+  precision: (_params, plan) => plan.passes.some(pass => pass.entry !== 'copy' && pass.entry !== 'effect_opacity'),
+  space: 'layer', author: { factory: 'lightSweep' }, bleed: lightSweepBleed, id: 'light_sweep', name: '扫光', group: 'light', description: DESCRIPTION,
   aliases: ['流光', '光泽', '反光', 'light sweep', 'shine'],
   params: [
     percent('progress', 50, 0, { name: '进度', text: '光扫到哪里。0% 光还在内容外面没进来，100% 已经完全扫出去；50%（默认）在正中。打两个关键帧从 0% 到 100% 就是完整扫一遍，首尾都不会多出光。' }),

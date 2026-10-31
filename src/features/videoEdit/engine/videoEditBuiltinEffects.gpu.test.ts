@@ -1,3 +1,6 @@
+import { COLOR_MATH_WGSL, EFFECT_SHADER_MATH_WGSL } from './effectShaderMath'
+import { linearSrgbToOklab, oklabToLinearSrgb, srgbToLinear, linearToSrgb } from '@/core/imaging/adjustments/colorScience'
+
 import { videoEditHalfToFloat } from './videoEditGpuShaders'
 import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
@@ -20,6 +23,7 @@ import { planAuthorDefocus } from './videoEditBuiltinEffectPasses'
 import { authorLayerBlur } from './videoEditAuthorLayers'
 import type { RecordingCursorDraw } from './videoEditRecordingCursorPlan'
 import { RECORDING_FRAME_SOLID_DEFAULT_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES, VIDEO_EDIT_BUILTIN_EFFECT_SHADER } from './videoEditBuiltinEffectShaders'
 
 // 任务 4.7b 真实设备专项：内置效果的正式 WGSL 与工序在 Dawn 上编译并逐像素核对关键结果。npm run test:gpu 无条件执行。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -44,6 +48,17 @@ beforeAll(async () => {
   })
 })
 afterAll(() => { effects?.dispose(); gpu?.dispose() })
+
+it('全部登记入口使用显式共享前导块在真实设备编译', async () => {
+  device.pushErrorScope('validation')
+  try {
+    const module = device.createShaderModule({ code: VIDEO_EDIT_BUILTIN_EFFECT_SHADER })
+    expect((await module.getCompilationInfo()).messages.filter((value: { type: string }) => value.type === 'error')).toEqual([])
+    for (const entry of VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES) {
+      await device.createRenderPipelineAsync({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: entry, targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
+    }
+  } finally { expect(await device.popErrorScope()).toBeNull() }
+}, 60_000)
 
 /** 不透明的水平灰阶，左上角一个纯红像素（看翻转与位置）。 */
 function input(): GpuTexture {
@@ -846,4 +861,57 @@ it('发光层高斯 pose.blur 保持光能量，亚像素阈值两侧连续', as
     expect(jump / baseline).toBeLessThan(.01)
     expect(blurred).not.toEqual(original)
   } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
+})
+
+it('真实 GPU 核对有符号 OkLab、两种插值、退化 ramp、噪声与四次取样 B 样条', async () => {
+  const texture = device.createTexture({ size: [8, 8], format: 'rgba8unorm', usage: 0x04 | 0x02 })
+  const pixels = Uint8Array.from({ length: 8 * 8 * 4 }, (_, index) => (index * 37 + 19) % 256)
+  device.queue.writeTexture({ texture }, pixels, { bytesPerRow: 32 }, [8, 8])
+  const result = device.createBuffer({ size: 7 * 16, usage: 0x80 | 0x04 })
+  const readback = device.createBuffer({ size: 7 * 16, usage: 0x01 | 0x08 })
+  try {
+    const shader = device.createShaderModule({ code: `${COLOR_MATH_WGSL}
+${EFFECT_SHADER_MATH_WGSL}
+@group(0) @binding(0) var<storage, read_write> result: array<vec4f>;
+@group(0) @binding(1) var image: texture_2d<f32>;
+@group(0) @binding(2) var filtering: sampler;
+@compute @workgroup_size(1) fn main() {
+ result[0] = vec4f(cgOklab(vec3f(-0.1, 0.4, 2.0)), 1.0);
+ result[1] = vec4f(cgFromOklab(result[0].rgb), 1.0);
+ result[2] = vec4f(interpolateColor(vec3f(1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), 0.5, true), 1.0);
+ result[3] = vec4f(interpolateColor(vec3f(1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), 0.5, false), 1.0);
+ result[4] = vec4f(ramp(1.0, 1.0, 0.9), ramp(1.0, 1.0, 1.0), ramp(1.0, 0.0, 1.1), ramp(0.0, 1.0, 0.5));
+ result[5] = sampleBSpline(image, filtering, vec2f(0.43, 0.61));
+ result[6] = vec4f(noise(vec2f(0.123, -3.456), 7u), noise(vec2f(0.123, -3.456), 7u), simplexNoise(vec2f(0.123, -3.456)), simplexNoise(vec2f(0.1231, -3.456)));
+}` })
+    const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module: shader, entryPoint: 'main' } })
+    const bindings = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: result } }, { binding: 1, resource: texture.createView() }, { binding: 2, resource: device.createSampler({ minFilter: 'linear', magFilter: 'linear' }) }] })
+    const encoder = device.createCommandEncoder(); const pass = encoder.beginComputePass()
+    pass.setPipeline(pipeline); pass.setBindGroup(0, bindings); pass.dispatchWorkgroups(1); pass.end()
+    encoder.copyBufferToBuffer(result, 0, readback, 0, 7 * 16); device.queue.submit([encoder.finish()])
+    await readback.mapAsync(0x01)
+    const values = new Float32Array(readback.getMappedRange()).slice(); readback.unmap()
+    const expectedLab = linearSrgbToOklab([-0.1, 0.4, 2])
+    expectedLab.forEach((value, index) => expect(values[index]).toBeCloseTo(value, 5))
+    ;[-0.1, 0.4, 2].forEach((value, index) => expect(values[4 + index]).toBeCloseTo(value, 5))
+    const red = linearSrgbToOklab([1, 0, 0].map(srgbToLinear)); const blue = linearSrgbToOklab([0, 0, 1].map(srgbToLinear))
+    const expectedMix = oklabToLinearSrgb(red.map((value, index) => (value + blue[index]) / 2)).map(linearToSrgb)
+    expectedMix.forEach((value, index) => expect(values[8 + index]).toBeCloseTo(value, 5))
+    expect([...values.slice(12, 16)]).toEqual([0.5, 0, 0.5, 1])
+    expect([...values.slice(16, 20)]).toEqual([0, 1, 1, 0.5])
+    // CPU 直接计算 4×4 卷积，验证 GPU 四次双线性与完整 B 样条等价。
+    const at = [0.43 * 8 - 0.5, 0.61 * 8 - 0.5]
+    const weights = at.map(value => {
+      const t = value - Math.floor(value)
+      return [(1 - t) ** 3 / 6, (3 * t ** 3 - 6 * t ** 2 + 4) / 6, (-3 * t ** 3 + 3 * t ** 2 + 3 * t + 1) / 6, t ** 3 / 6]
+    })
+    for (let channel = 0; channel < 4; channel++) {
+      let expected = 0
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) expected += pixels[((Math.floor(at[1]) + y - 1) * 8 + Math.floor(at[0]) + x - 1) * 4 + channel] / 255 * weights[0][x] * weights[1][y]
+      expect(values[20 + channel]).toBeCloseTo(expected, 3)
+    }
+    expect(values[24]).toBe(values[25])
+    expect(Math.abs(values[26])).toBeLessThanOrEqual(1)
+    expect(Math.abs(values[26] - values[27])).toBeLessThan(0.001)
+  } finally { texture.destroy(); result.destroy(); readback.destroy() }
 })
