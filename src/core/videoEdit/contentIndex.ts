@@ -4,7 +4,7 @@ import type { AudioEditProjectDocument } from '../audioEdit/types'
 import type { RecordingDocument } from '../screenRecording/document'
 import type { VideoEditDocument, VideoEditMedia } from './document'
 import { videoEditComposition } from './document'
-import { videoEditTextMediaIdentity } from './textTranscript'
+import { videoEditTextMediaIdentityMatches } from './textTranscript'
 import { videoEditClipSourceSecondsAtTime } from './clipSpeed'
 import { videoEditFps } from './time'
 import type { ScreenChangeAnalysis } from '../media/screenChangeEvidence'
@@ -51,7 +51,7 @@ export function videoEditSavedContentFacts(document: VideoEditDocument, itemIds:
     const originRef = { kind: 'video_edit.sequence', id: `${document.id}:${sequence.id}` }
     const composition = videoEditComposition(document, sequence.id)
     for (const source of sequence.textTranscription?.sources ?? []) {
-      if (!ids.has(source.itemId) || source.mediaIdentity !== videoEditTextMediaIdentity(composition, source.itemId)) continue
+      if (!ids.has(source.itemId) || !videoEditTextMediaIdentityMatches(composition, source.itemId, source.mediaIdentity)) continue
       const signature = JSON.stringify([source.audioMappingIdentity, source.blocks])
       if (seenSources.has(signature)) continue
       seenSources.add(signature)

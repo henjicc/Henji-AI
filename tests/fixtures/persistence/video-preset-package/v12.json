@@ -1,0 +1,608 @@
+{
+  "format": "henji-video-presets",
+  "version": 12,
+  "items": [
+    {
+      "category": "effect",
+      "preset": {
+        "id": "audio-merge",
+        "name": "音频合并",
+        "media": "audio",
+        "effects": [
+          {
+            "id": "audio-merge-gain_balance",
+            "name": "自定义 gain_balance",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "gain_balance",
+              "params": {
+                "gain": 6.24,
+                "balance": 26,
+                "mono": true
+              },
+              "curves": {
+                "gain": [
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 6.24,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-polarity_invert",
+            "name": "自定义 polarity_invert",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "gain_balance",
+              "params": {
+                "invert": "right"
+              },
+              "curves": {},
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{},\"id\":\"gain_balance\",\"params\":{\"invert\":\"right\"}}",
+                  "previous": "{\"curves\":{},\"id\":\"polarity_invert\",\"params\":{\"channels\":\"right\"}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-compressor",
+            "name": "自定义 compressor",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "compressor",
+              "params": {
+                "amount": 53,
+                "speed": "slow",
+                "makeup": false,
+                "mode": "single"
+              },
+              "curves": {
+                "amount": [
+                  {
+                    "value": 40,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 53,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"amount\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":40},{\"interpolation\":\"hold\",\"time\":10,\"value\":53}]},\"id\":\"compressor\",\"params\":{\"amount\":53,\"makeup\":false,\"mode\":\"single\",\"speed\":\"slow\"}}",
+                  "previous": "{\"curves\":{\"amount\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":40},{\"interpolation\":\"hold\",\"time\":10,\"value\":53}]},\"id\":\"compressor\",\"params\":{\"amount\":53,\"makeup\":false,\"speed\":\"slow\"}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-multiband_compressor",
+            "name": "自定义 multiband_compressor",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "compressor",
+              "params": {
+                "multi_low_crossover": 322.2,
+                "multi_high_crossover": 4170,
+                "multi_low_amount": 40,
+                "multi_mid_amount": 43,
+                "multi_high_amount": 43,
+                "multi_output": 3.12,
+                "mode": "multi"
+              },
+              "curves": {
+                "multi_low_crossover": [
+                  {
+                    "value": 200,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 322.2,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"multi_low_crossover\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":200},{\"interpolation\":\"hold\",\"time\":10,\"value\":322.2}]},\"id\":\"compressor\",\"params\":{\"mode\":\"multi\",\"multi_high_amount\":43,\"multi_high_crossover\":4170,\"multi_low_amount\":40,\"multi_low_crossover\":322.2,\"multi_mid_amount\":43,\"multi_output\":3.12}}",
+                  "previous": "{\"curves\":{\"low_crossover\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":200},{\"interpolation\":\"hold\",\"time\":10,\"value\":322.2}]},\"id\":\"multiband_compressor\",\"params\":{\"high_amount\":43,\"high_crossover\":4170,\"low_amount\":40,\"low_crossover\":322.2,\"mid_amount\":43,\"output\":3.12}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-delay",
+            "name": "自定义 delay",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "delay_echo",
+              "params": {
+                "delay_left_delay": 130,
+                "delay_right_delay": 130,
+                "delay_mix": 100,
+                "mode": "delay"
+              },
+              "curves": {
+                "delay_left_delay": [
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 130,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"delay_left_delay\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0},{\"interpolation\":\"hold\",\"time\":10,\"value\":130}]},\"id\":\"delay_echo\",\"params\":{\"delay_left_delay\":130,\"delay_mix\":100,\"delay_right_delay\":130,\"mode\":\"delay\"}}",
+                  "previous": "{\"curves\":{\"left_delay\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0},{\"interpolation\":\"hold\",\"time\":10,\"value\":130}]},\"id\":\"delay\",\"params\":{\"left_delay\":130,\"mix\":100,\"right_delay\":130}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-echo",
+            "name": "自定义 echo",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "delay_echo",
+              "params": {
+                "echo_delay": 509.87,
+                "echo_feedback": 47.35,
+                "echo_mix": 43,
+                "echo_tone": 10470,
+                "echo_ping_pong": true,
+                "mode": "echo"
+              },
+              "curves": {
+                "echo_delay": [
+                  {
+                    "value": 250,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 509.87,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"echo_delay\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":250},{\"interpolation\":\"hold\",\"time\":10,\"value\":509.87}]},\"id\":\"delay_echo\",\"params\":{\"echo_delay\":509.87,\"echo_feedback\":47.35,\"echo_mix\":43,\"echo_ping_pong\":true,\"echo_tone\":10470,\"mode\":\"echo\"}}",
+                  "previous": "{\"curves\":{\"delay\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":250},{\"interpolation\":\"hold\",\"time\":10,\"value\":509.87}]},\"id\":\"echo\",\"params\":{\"delay\":509.87,\"feedback\":47.35,\"mix\":43,\"ping_pong\":true,\"tone\":10470}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-parametric_eq",
+            "name": "自定义 parametric_eq",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "equalizer",
+              "params": {
+                "simple_preset": "bright",
+                "simple_low": 3.12,
+                "simple_mid": 3.12,
+                "simple_high": 3.12,
+                "mode": "simple"
+              },
+              "curves": {
+                "simple_low": [
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 3.12,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"simple_low\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0},{\"interpolation\":\"hold\",\"time\":10,\"value\":3.12}]},\"id\":\"equalizer\",\"params\":{\"mode\":\"parametric\",\"simple_high\":3.12,\"simple_low\":3.12,\"simple_mid\":3.12,\"simple_preset\":\"bright\"}}",
+                  "previous": "{\"curves\":{\"low\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0},{\"interpolation\":\"hold\",\"time\":10,\"value\":3.12}]},\"id\":\"parametric_eq\",\"params\":{\"high\":3.12,\"low\":3.12,\"mid\":3.12,\"preset\":\"bright\"}}"
+                },
+                {
+                  "phase": "equalizer-modes",
+                  "current": "{\"curves\":{\"simple_low\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0},{\"interpolation\":\"hold\",\"time\":10,\"value\":3.12}]},\"id\":\"equalizer\",\"params\":{\"mode\":\"simple\",\"simple_high\":3.12,\"simple_low\":3.12,\"simple_mid\":3.12,\"simple_preset\":\"bright\"}}",
+                  "previous": "{\"curves\":{\"simple_low\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0},{\"interpolation\":\"hold\",\"time\":10,\"value\":3.12}]},\"id\":\"equalizer\",\"params\":{\"mode\":\"parametric\",\"simple_high\":3.12,\"simple_low\":3.12,\"simple_mid\":3.12,\"simple_preset\":\"bright\"}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-eq_bands",
+            "name": "自定义 eq_bands",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "equalizer",
+              "params": {
+                "hp_on": true,
+                "hp_frequency": 207.4,
+                "low_gain": 3.9000000000000004,
+                "low_frequency": 247.4,
+                "band1_gain": 3.9000000000000004,
+                "band1_frequency": 2324.8,
+                "band1_q": 43,
+                "band2_gain": 3.9000000000000004,
+                "band2_frequency": 3074.8,
+                "band2_q": 43,
+                "band3_gain": 3.9000000000000004,
+                "band3_frequency": 6074.8,
+                "band3_q": 43,
+                "high_gain": 3.9000000000000004,
+                "high_frequency": 10470,
+                "lp_on": true,
+                "lp_frequency": 18470,
+                "mode": "parametric"
+              },
+              "curves": {
+                "hp_frequency": [
+                  {
+                    "value": 80,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 207.4,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"hp_frequency\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":80},{\"interpolation\":\"hold\",\"time\":10,\"value\":207.4}]},\"id\":\"equalizer\",\"params\":{\"band1_frequency\":2324.8,\"band1_gain\":3.9000000000000004,\"band1_q\":43,\"band2_frequency\":3074.8,\"band2_gain\":3.9000000000000004,\"band2_q\":43,\"band3_frequency\":6074.8,\"band3_gain\":3.9000000000000004,\"band3_q\":43,\"high_frequency\":10470,\"high_gain\":3.9000000000000004,\"hp_frequency\":207.4,\"hp_on\":true,\"low_frequency\":247.4,\"low_gain\":3.9000000000000004,\"lp_frequency\":18470,\"lp_on\":true,\"mode\":\"parametric\"}}",
+                  "previous": "{\"curves\":{\"hp_frequency\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":80},{\"interpolation\":\"hold\",\"time\":10,\"value\":207.4}]},\"id\":\"eq_bands\",\"params\":{\"band1_frequency\":2324.8,\"band1_gain\":3.9000000000000004,\"band1_q\":43,\"band2_frequency\":3074.8,\"band2_gain\":3.9000000000000004,\"band2_q\":43,\"band3_frequency\":6074.8,\"band3_gain\":3.9000000000000004,\"band3_q\":43,\"high_frequency\":10470,\"high_gain\":3.9000000000000004,\"hp_frequency\":207.4,\"hp_on\":true,\"low_frequency\":247.4,\"low_gain\":3.9000000000000004,\"lp_frequency\":18470,\"lp_on\":true}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-graphic_eq",
+            "name": "自定义 graphic_eq",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "equalizer",
+              "params": {
+                "graphic_band_31": 3.12,
+                "graphic_band_63": 3.12,
+                "graphic_band_125": 3.12,
+                "graphic_band_250": 3.12,
+                "graphic_band_500": 3.12,
+                "graphic_band_1k": 3.12,
+                "graphic_band_2k": 3.12,
+                "graphic_band_4k": 3.12,
+                "graphic_band_8k": 3.12,
+                "graphic_band_16k": 3.12,
+                "graphic_output": 3.12,
+                "mode": "graphic"
+              },
+              "curves": {
+                "graphic_band_31": [
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 3.12,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"graphic_band_31\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0},{\"interpolation\":\"hold\",\"time\":10,\"value\":3.12}]},\"id\":\"equalizer\",\"params\":{\"graphic_band_125\":3.12,\"graphic_band_16k\":3.12,\"graphic_band_1k\":3.12,\"graphic_band_250\":3.12,\"graphic_band_2k\":3.12,\"graphic_band_31\":3.12,\"graphic_band_4k\":3.12,\"graphic_band_500\":3.12,\"graphic_band_63\":3.12,\"graphic_band_8k\":3.12,\"graphic_output\":3.12,\"mode\":\"graphic\"}}",
+                  "previous": "{\"curves\":{\"band_31\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0},{\"interpolation\":\"hold\",\"time\":10,\"value\":3.12}]},\"id\":\"graphic_eq\",\"params\":{\"band_125\":3.12,\"band_16k\":3.12,\"band_1k\":3.12,\"band_250\":3.12,\"band_2k\":3.12,\"band_31\":3.12,\"band_4k\":3.12,\"band_500\":3.12,\"band_63\":3.12,\"band_8k\":3.12,\"output\":3.12}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-notch",
+            "name": "自定义 notch",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "audio_filter",
+              "params": {
+                "notch_frequency": 3597.4,
+                "notch_width": 63,
+                "notch_depth": -22.2,
+                "mode": "notch"
+              },
+              "curves": {
+                "notch_frequency": [
+                  {
+                    "value": 1000,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 3597.4,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"notch_frequency\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":1000},{\"interpolation\":\"hold\",\"time\":10,\"value\":3597.4}]},\"id\":\"audio_filter\",\"params\":{\"mode\":\"notch\",\"notch_depth\":-22.2,\"notch_frequency\":3597.4,\"notch_width\":63}}",
+                  "previous": "{\"curves\":{\"frequency\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":1000},{\"interpolation\":\"hold\",\"time\":10,\"value\":3597.4}]},\"id\":\"notch\",\"params\":{\"depth\":-22.2,\"frequency\":3597.4,\"width\":63}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-high_pass",
+            "name": "自定义 high_pass",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "audio_filter",
+              "params": {
+                "high_pass_frequency": 207.4,
+                "high_pass_slope": "steep",
+                "mode": "high_pass"
+              },
+              "curves": {
+                "high_pass_frequency": [
+                  {
+                    "value": 80,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 207.4,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"high_pass_frequency\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":80},{\"interpolation\":\"hold\",\"time\":10,\"value\":207.4}]},\"id\":\"audio_filter\",\"params\":{\"high_pass_frequency\":207.4,\"high_pass_slope\":\"steep\",\"mode\":\"high_pass\"}}",
+                  "previous": "{\"curves\":{\"frequency\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":80},{\"interpolation\":\"hold\",\"time\":10,\"value\":207.4}]},\"id\":\"high_pass\",\"params\":{\"frequency\":207.4,\"slope\":\"steep\"}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-low_pass",
+            "name": "自定义 low_pass",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "audio_filter",
+              "params": {
+                "low_pass_frequency": 10535,
+                "low_pass_slope": "steep",
+                "mode": "low_pass"
+              },
+              "curves": {
+                "low_pass_frequency": [
+                  {
+                    "value": 8000,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 10535,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"low_pass_frequency\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":8000},{\"interpolation\":\"hold\",\"time\":10,\"value\":10535}]},\"id\":\"audio_filter\",\"params\":{\"low_pass_frequency\":10535,\"low_pass_slope\":\"steep\",\"mode\":\"low_pass\"}}",
+                  "previous": "{\"curves\":{\"frequency\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":8000},{\"interpolation\":\"hold\",\"time\":10,\"value\":10535}]},\"id\":\"low_pass\",\"params\":{\"frequency\":10535,\"slope\":\"steep\"}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-chorus",
+            "name": "自定义 chorus",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "modulation",
+              "params": {
+                "chorus_rate": 1.4435000000000002,
+                "chorus_depth": 40,
+                "chorus_voices": 2.39,
+                "chorus_mix": 53,
+                "mode": "chorus"
+              },
+              "curves": {
+                "chorus_rate": [
+                  {
+                    "value": 0.8,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 1.4435000000000002,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"chorus_rate\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0.8},{\"interpolation\":\"hold\",\"time\":10,\"value\":1.4435000000000002}]},\"id\":\"modulation\",\"params\":{\"chorus_depth\":40,\"chorus_mix\":53,\"chorus_rate\":1.4435000000000002,\"chorus_voices\":2.39,\"mode\":\"chorus\"}}",
+                  "previous": "{\"curves\":{\"rate\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0.8},{\"interpolation\":\"hold\",\"time\":10,\"value\":1.4435000000000002}]},\"id\":\"chorus\",\"params\":{\"depth\":40,\"mix\":53,\"rate\":1.4435000000000002,\"voices\":2.39}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-flanger",
+            "name": "自定义 flanger",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "modulation",
+              "params": {
+                "flanger_rate": 0.9435,
+                "flanger_depth": 73,
+                "flanger_feedback": 52.35,
+                "flanger_mix": 63,
+                "mode": "flanger"
+              },
+              "curves": {
+                "flanger_rate": [
+                  {
+                    "value": 0.3,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 0.9435,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"flanger_rate\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0.3},{\"interpolation\":\"hold\",\"time\":10,\"value\":0.9435}]},\"id\":\"modulation\",\"params\":{\"flanger_depth\":73,\"flanger_feedback\":52.35,\"flanger_mix\":63,\"flanger_rate\":0.9435,\"mode\":\"flanger\"}}",
+                  "previous": "{\"curves\":{\"rate\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0.3},{\"interpolation\":\"hold\",\"time\":10,\"value\":0.9435}]},\"id\":\"flanger\",\"params\":{\"depth\":73,\"feedback\":52.35,\"mix\":63,\"rate\":0.9435}}"
+                }
+              ]
+            }
+          },
+          {
+            "id": "audio-merge-phaser",
+            "name": "自定义 phaser",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "modulation",
+              "params": {
+                "phaser_rate": 1.1435,
+                "phaser_depth": 73,
+                "phaser_stages": "12",
+                "phaser_feedback": 42.35,
+                "phaser_mix": 63,
+                "mode": "phaser"
+              },
+              "curves": {
+                "phaser_rate": [
+                  {
+                    "value": 0.5,
+                    "interpolation": "linear",
+                    "time": 0
+                  },
+                  {
+                    "value": 1.1435,
+                    "interpolation": "hold",
+                    "time": 10
+                  }
+                ]
+              },
+              "identityAliases": [
+                {
+                  "phase": "audio-merge",
+                  "current": "{\"curves\":{\"phaser_rate\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0.5},{\"interpolation\":\"hold\",\"time\":10,\"value\":1.1435}]},\"id\":\"modulation\",\"params\":{\"mode\":\"phaser\",\"phaser_depth\":73,\"phaser_feedback\":42.35,\"phaser_mix\":63,\"phaser_rate\":1.1435,\"phaser_stages\":\"12\"}}",
+                  "previous": "{\"curves\":{\"rate\":[{\"interpolation\":\"linear\",\"time\":0,\"value\":0.5},{\"interpolation\":\"hold\",\"time\":10,\"value\":1.1435}]},\"id\":\"phaser\",\"params\":{\"depth\":73,\"feedback\":42.35,\"mix\":63,\"rate\":1.1435,\"stages\":\"12\"}}"
+                }
+              ]
+            }
+          }
+        ],
+        "description": "",
+        "usage": "",
+        "knobs": [
+          {
+            "key": "strength",
+            "name": "强度",
+            "min": 0,
+            "max": 100,
+            "default": 40,
+            "mappings": [
+              {
+                "effectId": "audio-merge-chorus",
+                "parameter": "chorus_depth",
+                "points": [
+                  {
+                    "input": 0,
+                    "output": 0
+                  },
+                  {
+                    "input": 100,
+                    "output": 100
+                  }
+                ]
+              },
+              {
+                "effectId": "audio-merge-multiband_compressor",
+                "parameter": "multi_low_amount",
+                "points": [
+                  {
+                    "input": 0,
+                    "output": 0
+                  },
+                  {
+                    "input": 100,
+                    "output": 100
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

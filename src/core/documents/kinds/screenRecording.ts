@@ -1,3 +1,4 @@
+import { migrateAudioMergedEffects, migrateAudioEqualizerModes } from '../../audio/effects/mergedEffectsMigration'
 import { migrateRecordingCaptionOwnership } from '../../videoEdit/captionOwnershipMigration'
 import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
@@ -7,9 +8,11 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 51, minReaderVersion: 50,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 52, minReaderVersion: 52,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 51 → 52：音频效果合并、均衡方式拆分并保留声音身份别名；旧程序无法理解新效果，最低可读版本同步提高。
+    51: content => migrateAudioEqualizerModes(migrateAudioMergedEffects(content)),
     // 50 → 51：嵌入剪辑的工程风格新增可选风格件，最低可读版本保持 50。
     50: content => structuredClone(content),
     // 49 → 50：嵌入剪辑里的旧模糊并成“模糊”、旧暗角负数量换成白色（与剪辑 46 → 47 同一换算）；旧程序不认识新效果，最低可读版本提高到 50。

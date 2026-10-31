@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { AudioEffectInstance } from './effects/audioEffectChain'
+import { audioIdentityAliasesSchema } from './effects/audioIdentity'
 
 /**
  * 基本声音（参照 Audition 的“基本声音”面板）：按声音类型给出几组“一个开关 + 一个量”的常用处理，
@@ -19,6 +20,7 @@ export const ESSENTIAL_SOUND_EQ_PRESETS = ['podcast', 'broadcast', 'warm', 'brig
 export const ESSENTIAL_SOUND_REVERB_PRESETS = ['room', 'studio', 'hall', 'outdoor'] as const
 
 export const essentialSoundSettingsSchema = z.object({
+  effectIdentityAliases: z.record(z.string(), audioIdentityAliasesSchema).optional(),
   type: z.enum(ESSENTIAL_SOUND_TYPES),
   repair: z.object({
     noise: toggle, rumble: toggle, hum: toggle.extend({ mains: z.union([z.literal(50), z.literal(60)]) }).strict(), deEss: toggle,
@@ -56,7 +58,7 @@ type Params = Record<string, number | string | boolean>
 const effect = (key: string, id: string, params: Params, strength = 1): AudioEffectInstance => ({ id: `essential:${key}`, builtin: { id, params }, amount: strength })
 const scale = (value: number): number => value / 100
 
-/** 均衡预设（参数均衡器的增益在 amount=100 时的值，按量线性缩放）。 */
+/** 均衡预设（均衡器参数方式的增益在 amount=100 时的值，按量线性缩放）。 */
 const EQ_PRESETS: Record<EssentialSoundEqPreset, Params> = {
   podcast: { hp_on: true, hp_frequency: 80, low_gain: -1, low_frequency: 120, band1_gain: -3, band1_frequency: 300, band2_gain: 2, band2_frequency: 2500, band3_gain: 3, band3_frequency: 5000, high_gain: 2, high_frequency: 10000 },
   broadcast: { hp_on: true, hp_frequency: 70, low_gain: 3, low_frequency: 120, band1_gain: -4, band1_frequency: 350, band2_gain: 3, band2_frequency: 3000, band3_gain: 2, band3_frequency: 6000, high_gain: 3, high_frequency: 12000 },
@@ -89,19 +91,22 @@ export function essentialSoundEffects(settings: EssentialSoundSettings | undefin
   if (!settings) return []
   const effects: AudioEffectInstance[] = []
   const repair = settings.repair, clarity = settings.clarity
-  if (on(repair?.rumble)) effects.push(effect('rumble', 'high_pass', { frequency: Math.round(40 + 1.2 * repair.rumble.amount), slope: repair.rumble.amount > 50 ? 'steep' : 'gentle' }))
+  if (on(repair?.rumble)) effects.push(effect('rumble', 'audio_filter', { mode: 'high_pass', high_pass_frequency: Math.round(40 + 1.2 * repair.rumble.amount), high_pass_slope: repair.rumble.amount > 50 ? 'steep' : 'gentle' }))
   if (on(repair?.hum)) effects.push(effect('hum', 'dehum', { mains: String(repair.hum.mains), harmonics: 5, amount: repair.hum.amount }))
   if (on(repair?.noise)) effects.push(effect('noise', 'noise_reduction', { strength: repair.noise.amount }))
   if (on(repair?.deEss)) effects.push(effect('de_ess', 'de_esser', { amount: repair.deEss.amount, frequency: 6000 }))
   if (on(clarity?.dynamics)) effects.push(effect('dynamics', 'compressor', { amount: Math.round(clarity.dynamics.amount * 0.8), speed: 'normal', makeup: true }))
-  if (on(clarity?.eq)) effects.push(effect('eq', 'eq_bands', eqParams(clarity.eq.preset, scale(clarity.eq.amount))))
+  if (on(clarity?.eq)) effects.push(effect('eq', 'equalizer', { mode: 'parametric', ...eqParams(clarity.eq.preset, scale(clarity.eq.amount)) }))
   if (clarity?.enhance?.enabled) effects.push(effect('enhance', 'vocal_enhancer', { voice: clarity.enhance.voice, amount: 60 }))
   const reverb = settings.creative?.reverb
   if (on(reverb)) effects.push(effect('reverb', 'reverb', { ...REVERB_PRESETS[reverb.preset], mix: Math.round(reverb.amount * 0.5) }))
   const gain = (settings.loudness?.enabled ? settings.loudness.gainDb : 0) + (settings.volume?.gainDb ?? 0)
   if (Math.abs(gain) >= 0.05) effects.push(effect('gain', 'gain_balance', { gain: Math.max(-24, Math.min(24, Math.round(gain * 10) / 10)), balance: 0, mono: false }))
   if (settings.loudness?.enabled) effects.push(effect('limiter', 'limiter', { ceiling: -1, boost: 0 }))
-  return effects
+  return effects.map(value => {
+    const aliases = settings.effectIdentityAliases?.[value.id]
+    return aliases ? { ...value, builtin: { ...value.builtin, identityAliases: aliases } } : value
+  })
 }
 
 /** 需要离线预处理的项（本地模型）：减少混响、人声分离；量为混入处理结果的比例 0–1。 */

@@ -27,7 +27,7 @@ export interface AudioEditEffectCatalogEntry {
 export const AUDIO_EDIT_EFFECT_FOLDER_NAMES: Record<AudioEditEffectFolder, string> = { smart: '智能修复', builtin: '内置效果', plugin: '第三方插件' }
 
 /** Audition 效果菜单的分类顺序。 */
-const GROUP_ORDER: readonly string[] = ['audio_level', 'audio_dynamics', 'audio_eq', 'audio_repair', 'audio_space', 'audio_delay', 'audio_modulation', 'audio_stereo', 'audio_special', 'audio_pitch']
+const GROUP_ORDER: readonly string[] = ['audio_level', 'audio_dynamics', 'audio_delay', 'audio_eq', 'audio_modulation', 'audio_repair', 'audio_space', 'audio_special', 'audio_stereo', 'audio_pitch']
 
 const SMART: AudioEditEffectCatalogEntry[] = [
   { key: 'mouth_declick', name: '去除口水音', tooltip: '找出说话时口水带出的“咔啦”声，按前后声音插值修掉，不改变时长。加进来就按它之前的声音自动检测。', folder: 'smart', group: 'repair', groupName: '修复', single: 'mouth_declick', create: () => createAudioEditChainItem('mouth_declick') },

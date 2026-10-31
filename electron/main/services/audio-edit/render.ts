@@ -19,6 +19,7 @@ import { applyAudioEditRealtimeEffects, applyAudioEffectInstancesToFile } from '
 import { runAudioEditProcess } from './process'
 import { AudioEditSpliceRenderer } from '../../../../src/core/audioEdit/spliceCrossfade'
 import { createF32WavWriter, openF32Wav, type F32WavReader } from './pcm-wav'
+import { AUDIO_IDENTITY_PHASES, audioEffectsIdentity } from '../../../../src/core/audio/effects/audioIdentity'
 
 const logger = createMainLogger('main.audio_edit.render')
 
@@ -68,15 +69,15 @@ export async function prepareAudioEditRenderSource(project: AudioEditProjectDocu
   const identity = project.source.identity ?? await identifyAudioEditSource(project.source.sourcePath, signal)
   const directory = audioEditCacheDirectory(project.id)
   const { sampleRate, channels, durationFrames } = project.source
-  let key = audioRenderKey(['audio-render-v1', identity.digest, sampleRate, channels, project.source.audioStreamIndex])
+  let keys = AUDIO_IDENTITY_PHASES.map(() => audioRenderKey(['audio-render-v1', identity.digest, sampleRate, channels, project.source.audioStreamIndex]))
   let input = await prepareAudioEditAudio(project, signal)
   const stage = async (recipe: unknown, prefix: string, produce: (source: string, output: string) => Promise<void>): Promise<void> => {
-    key = audioRenderKey([key, recipe])
+    keys = keys.map(key => audioRenderKey([key, recipe]))
     const source = input
-    input = await cachedAudioFile(directory, `${prefix}-${key}`, 'wav', async output => {
+    input = await cachedAudioFile(directory, `${prefix}-${keys[0]}`, 'wav', async output => {
       await produce(source, output)
       await validateAudioEditAudio(output, sampleRate, channels, durationFrames, signal)
-    }, signal)
+    }, signal, keys.slice(1).map(key => `${prefix}-${key}`))
   }
   for (const repair of (project.repairs ?? []).filter(r => r.enabled && r.strength > 0)) {
     const { id: _id, enabled: _enabled, ...recipe } = repair
@@ -96,7 +97,7 @@ export async function prepareAudioEditRenderSource(project: AudioEditProjectDocu
   const flush = async (): Promise<void> => {
     if (!pending.length) return
     const effects = pending; pending = []
-    key = audioRenderKey([key, 'realtime', effects.map(({ builtin, amount }) => ({ builtin, amount }))])
+    keys = keys.map((key, index) => audioRenderKey([key, 'realtime', audioEffectsIdentity(effects, AUDIO_IDENTITY_PHASES[index])]))
     input = await applyAudioEffectInstancesToFile(project.id, await audioEditF32Source(project, input, signal), effects, signal)
   }
   for (const item of items) {

@@ -5,6 +5,7 @@ import type { AudioEffectInstance } from '../../../../src/core/audio/effects/aud
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
 import { audioEditCacheDirectory } from './media'
 import { audioRenderKey, cachedAudioFile } from './render-cache'
+import { AUDIO_IDENTITY_PHASES, audioEffectsIdentity } from '../../../../src/core/audio/effects/audioIdentity'
 
 /**
  * 导出、动态链接用的声音过一遍边播边算的那段效果（效果链末尾的实时效果 + 输出）：与试听同一份实现，在主进程工作线程里离线处理，
@@ -17,8 +18,8 @@ export async function applyAudioEditRealtimeEffects(project: AudioEditProjectDoc
 /** 把一串实时效果离线跑过一个 32 位浮点 WAV（效果链里排在整段处理效果之前的实时效果也用它）。 */
 export async function applyAudioEffectInstancesToFile(projectId: string, input: string, effects: readonly AudioEffectInstance[], signal?: AbortSignal, onProgress?: (value: number) => void): Promise<string> {
   if (!effects.length) return input
-  const key = audioRenderKey(['effects-v1', path.basename(input), effects.map(({ builtin, amount }) => ({ builtin, amount }))])
-  return cachedAudioFile(audioEditCacheDirectory(projectId), `fx-${key}`, 'wav', output => runEffectsWorker(input, output, effects, signal, onProgress), signal)
+  const keys = AUDIO_IDENTITY_PHASES.map(phase => `fx-${audioRenderKey(['effects-v1', path.basename(input), audioEffectsIdentity(effects, phase)])}`)
+  return cachedAudioFile(audioEditCacheDirectory(projectId), keys[0], 'wav', output => runEffectsWorker(input, output, effects, signal, onProgress), signal, keys.slice(1))
 }
 
 function runEffectsWorker(input: string, output: string, effects: readonly AudioEffectInstance[], signal?: AbortSignal, onProgress?: (value: number) => void): Promise<void> {

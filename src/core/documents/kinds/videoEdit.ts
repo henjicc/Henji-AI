@@ -1,3 +1,4 @@
+import { migrateAudioMergedEffects, migrateAudioEqualizerModes } from '../../audio/effects/mergedEffectsMigration'
 import { z } from 'zod'
 import { migrateVideoEditCaptionOwnership } from '../../videoEdit/captionOwnershipMigration'
 import { migrateEmbeddedVideoColorGradesV1 } from '../../videoEdit/colorGradeMigration'
@@ -135,10 +136,12 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 代码版本可写作者接口 v5 与内置库 libraries，旧程序读不懂这些（作者接口最高只认 v4），提高到 37，让旧程序明确提示升级。
   // 38：作者接口 v6 可使用排版库；旧程序无法执行，最低可读版本同步提高。
   // 47：内置效果换成合并后的“模糊”（blur），旧程序不认识这个效果，会把整份剪辑当成内容无效，提高到 47 让它明确提示升级。
-  minReaderVersion: 47,
+  minReaderVersion: 49,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 48 → 49：音频效果合并、均衡方式拆分并保留声音身份别名；旧程序无法理解新效果，最低可读版本同步提高。
+    48: content => migrateAudioEqualizerModes(migrateAudioMergedEffects(content)),
     // 47 → 48：工程风格新增可选风格件，默认旋钮已归一化到效果参数，最低可读版本保持 47。
     47: content => structuredClone(content),
     // 46 → 47：高斯、方向、缩放、镜头模糊并成“模糊”（方式 + 模糊度，曲线逐帧换算），旧暗角的负数量换成正数量配白色；每一帧画面不变。

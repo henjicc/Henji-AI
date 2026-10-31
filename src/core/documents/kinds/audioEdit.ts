@@ -1,3 +1,4 @@
+import { migrateAudioMergedEffects, migrateAudioEqualizerModes } from '../../audio/effects/mergedEffectsMigration'
 import { z } from 'zod'
 import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '../../audioEdit/regions'
 import { audioEditOutputSchema, migrateAudioEditEffectsToChain } from '../../audioEdit/effects'
@@ -75,10 +76,12 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   // 版本 5（2026-10-26 效果控件重构）= 效果组、基本声音、口水音修复、VST3 插件链合成一条有序效果链（effectChain），
   // 音量与自动匹配响度移到 output；去掉了旧程序必填的 vstEnabled，所以旧程序不能再读（minReaderVersion 5，用户已确认）。
   // 版本 6 = 去除口水音新增可选的 skipped（用户关掉、不处理的位置），只加可选字段，最低可读版本不变。
-  version: 6,
-  minReaderVersion: 5,
+  version: 7,
+  minReaderVersion: 7,
   contentSchema: audioEditContentSchema,
-  migrations: { 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content), 4: (content) => migrateAudioEditEffectsToChain(content as Record<string, unknown>) as AudioEditDocumentContent, 5: (content) => structuredClone(content) },
+  migrations: {
+    // 6 → 7：音频效果合并、均衡方式拆分并保留声音身份别名；旧程序无法理解新效果，最低可读版本同步提高。
+    6: content => migrateAudioEqualizerModes(migrateAudioMergedEffects(content)), 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content), 4: (content) => migrateAudioEditEffectsToChain(content as Record<string, unknown>) as AudioEditDocumentContent, 5: (content) => structuredClone(content) },
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [] }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({

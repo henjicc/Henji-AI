@@ -18,7 +18,7 @@ import { resolveSubtitleStyle } from '@/core/videoEdit/subtitleStyleProfiles'
 import { advanceVideoEditClipSource, videoEditClipFrameBoundaryAtSource } from '@/core/videoEdit/clipSpeed'
 import { readClipSpeechTimings, readClipEnergyPauses, readSourceEnergyPauses } from './videoEditPauseMap'
 import { videoEditComposition, videoEditDuration, audibleVideoEditClips, type VideoEditComposition } from '@/core/videoEdit/document'
-import { videoEditAudioContent } from '@/core/videoEdit/audioContent'
+import { videoEditAudioContent, videoEditAudioContentIdentities } from '@/core/videoEdit/audioContent'
 import { videoEditCaptionSchema, type VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/core/videoEdit/subtitleStyle'
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, videoEditTextMediaIdentity, type VideoEditTextTranscription } from '@/core/videoEdit/textTranscript'
@@ -39,8 +39,15 @@ type Manifest = z.infer<typeof manifestSchema>
 const active = new WeakSet<VideoEditInstance>()
 
 export async function videoEditSubtitleSequenceSignature(snapshot: VideoEditComposition): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(videoEditAudioContent(snapshot)))
+  return subtitleSoundSignature(videoEditAudioContent(snapshot))
+}
+async function subtitleSoundSignature(sound: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sound))
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+export async function videoEditSubtitleSequenceSignatureMatches(snapshot: VideoEditComposition, signature: string): Promise<boolean> {
+  for (const sound of videoEditAudioContentIdentities(snapshot)) if (await subtitleSoundSignature(sound) === signature) return true
+  return false
 }
 const sequenceSignature = videoEditSubtitleSequenceSignature
 function current(projectId: string, sequenceId: string): VideoEditComposition { return videoEditComposition(requireVideoEditInstance(projectId).document, sequenceId) }
@@ -131,7 +138,7 @@ export function appendAutoSubtitles(projectId: string, sequenceId: string, capti
   const owner = requireVideoEditInstance(projectId)
   const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence) throw new Error('原序列已移除，请重新选择。')
-  const transcription = textTranscription ? mergeVideoEditTextTranscription(sequence.textTranscription, textTranscription) : sequence.textTranscription
+  const transcription = textTranscription ? mergeVideoEditTextTranscription(sequence.textTranscription, textTranscription, videoEditComposition(owner.document, sequenceId)) : sequence.textTranscription
   const parsed = prepareVideoEditCaptions(sequence, bindVideoEditTranscriptCaptions({ ...videoEditComposition(owner.document, sequenceId), textTranscription: transcription }, captions), projectId)
   if (!parsed.length) throw new Error('没有可用字幕，请检查识别结果。')
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...(transcription ? { textTranscription: transcription } : {}), captions: [...(sequence.captions ?? []), ...parsed] }))
@@ -164,7 +171,7 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
       signal?.throwIfAborted()
       const composition = current(projectId, sequenceId)
       const changed = (): Error => new Error('原序列声音已有修改；识别结果保留在口播文档，不会覆盖当前剪辑。')
-      if (requireVideoEditInstance(projectId) !== owner || await sequenceSignature(composition) !== manifest.signature) throw changed()
+      if (requireVideoEditInstance(projectId) !== owner || !await videoEditSubtitleSequenceSignatureMatches(composition, manifest.signature)) throw changed()
       await verifyVideoEditSpeechMediaContent(composition, manifest.soundClips ?? audibleVideoEditClips(composition), signal)
       signal?.throwIfAborted()
       if (requireVideoEditInstance(projectId) !== owner || videoEditAudioContent(current(projectId, sequenceId)) !== videoEditAudioContent(composition)) throw changed()

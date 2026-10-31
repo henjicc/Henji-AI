@@ -8,7 +8,11 @@ async function gainAt(builtinId: string, params: Record<string, unknown>, freque
   const tone = sine(frequency, .3, RATE * 2)
   return steadyGain((await run([effect(builtinId, params)], stereo(tone))).output[0], tone, RATE)
 }
-const designOf = (builtinId: string, params: Record<string, unknown>) => resolveVideoEditBuiltinParams({ id: builtinId, params: effect(builtinId, params).builtin.params })
+const designOf = (builtinId: string, params: Record<string, unknown>) => {
+  const values = resolveVideoEditBuiltinParams(effect(builtinId, params).builtin)
+  const prefix = builtinId === 'graphic_eq' ? 'graphic_' : builtinId === 'notch' ? 'notch_' : ''
+  return prefix ? Object.fromEntries(Object.entries(values).filter(([key]) => key.startsWith(prefix)).map(([key, value]) => [key.slice(prefix.length), value])) : values
+}
 
 describe('滤波与均衡类效果', () => {
   it('图形均衡器：全部为 0 时逐样本原样（不经滤波）；单段提升只在该频段附近，实测频响与理论一致；输出增益整体缩放', async () => {
@@ -22,7 +26,7 @@ describe('滤波与均衡类效果', () => {
     expect(Math.abs(await gainAt('graphic_eq', params, 4000))).toBeLessThan(.5)
     expect(await gainAt('graphic_eq', { output: -6 }, 1000)).toBeCloseTo(-6, 2)
   })
-  it('参数均衡器：全部中性时逐样本原样；高通、低通开关生效；峰值段按频率与窄度提升，窄度换算 Q（30 ≈ 1）', async () => {
+  it('均衡器参数方式：全部中性时逐样本原样；高通、低通开关生效；峰值段按频率与窄度提升，窄度换算 Q（30 ≈ 1）', async () => {
     const input = stereo(noise(RATE, .3), sine(440, .3, RATE))
     const neutral = (await run([effect('eq_bands')], input)).output
     expectSamples(neutral[0], input[0]); expectSamples(neutral[1], input[1])

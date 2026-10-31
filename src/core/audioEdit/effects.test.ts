@@ -1,3 +1,4 @@
+import { migrateAudioMergedEffects } from '../audio/effects/mergedEffectsMigration'
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { audioEditDocumentKind } from '../documents/kinds/audioEdit'
@@ -11,12 +12,12 @@ import { audioEditSourceRecipe } from './regions'
 
 const declick: AudioEditChainItem = { id: 'd', kind: 'mouth_declick', enabled: true, sensitivity: 50, analyzed: true, clicks: [{ startFrame: 10, endFrame: 20 }] }
 const comp: AudioEditChainItem = { id: 'c', kind: 'builtin', name: '压缩器', enabled: true, amount: 1, builtin: { id: 'compressor', params: { amount: 40, speed: 'normal', makeup: true } } }
-const eq: AudioEditChainItem = { id: 'e', kind: 'builtin', name: '参数均衡', enabled: true, amount: 1, builtin: { id: 'eq_bands', params: {} } }
+const eq: AudioEditChainItem = { id: 'e', kind: 'builtin', name: '参数均衡', enabled: true, amount: 1, builtin: { id: 'equalizer', params: {} } }
 
 describe('音频编辑效果链', () => {
   it('v4 黄金样本迁到效果链：口水音 → 基本声音 → 效果组，音量与响度进输出；迁移后的内容通过当前严格 schema', () => {
     const v4 = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.audio_edit/v4.json', 'utf8')).content
-    const next = audioEditDocumentKind.migrations[4]!(structuredClone(v4)) as Record<string, unknown>
+    const next = migrateAudioMergedEffects(audioEditDocumentKind.migrations[4]!(structuredClone(v4))) as Record<string, unknown>
     for (const key of ['effects', 'effectsBypassed', 'essentialSound', 'mouthClicks', 'processorChain', 'vstEnabled']) expect(next).not.toHaveProperty(key)
     const chain = audioEditEffectChainSchema.parse(next.effectChain)
     expect(chain.map(item => item.kind)).toEqual(['mouth_declick', 'essential', 'builtin'])
@@ -53,7 +54,7 @@ describe('音频编辑效果链', () => {
 
   it('录音上的配方只随整段处理的那一段变：改末尾实时效果的参数、换 id 都不重算', () => {
     const base = audioEditSourceRecipe({ effectChain: [declick, eq] })
-    expect(audioEditSourceRecipe({ effectChain: [declick, { ...eq, builtin: { id: 'eq_bands', params: { low: 3 } } }] })).toEqual(base)
+    expect(audioEditSourceRecipe({ effectChain: [declick, { ...eq, builtin: { id: 'equalizer', params: { low_gain: 3 } } }] })).toEqual(base)
     expect(audioEditSourceRecipe({ effectChain: [{ ...declick, id: 'other' }, eq] })).toEqual(base)
     expect(audioEditSourceRecipe({ effectChain: [{ ...declick, clicks: [{ startFrame: 10, endFrame: 30 }] }, eq] })).not.toEqual(base)
   })

@@ -1,3 +1,4 @@
+import { migrateAudioEffectInstance, migrateAudioEqualizerModes } from './mergedEffectsMigration'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { sampleDifference } from '../../../../scripts/lib/sampleDifference'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
@@ -13,7 +14,9 @@ function expectSamples(actual: ArrayLike<number>, expected: ArrayLike<number> | 
 beforeAll(() => { (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope ??= class {} })
 
 function effect(builtinId: string, params: Record<string, unknown> = {}, amount = 1, id = builtinId): VideoEditBuiltinEffect {
-  return { id, name: builtinId, enabled: true, amount, builtin: { id: builtinId, params: normalizeVideoEditBuiltinParams(builtinId, params) } }
+  const initial = { builtin: migrateAudioEffectInstance({ id: builtinId, params }) }
+  const { builtin: migrated } = builtinId === 'equalizer' ? initial : migrateAudioEqualizerModes(initial)
+  return { id, name: builtinId, enabled: true, amount, builtin: { ...migrated, params: normalizeVideoEditBuiltinParams(migrated.id, migrated.params) } }
 }
 const sine = (frequency: number, amplitude: number, length: number, phase = 0): Float32Array => Float32Array.from({ length }, (_, index) => amplitude * Math.sin(2 * Math.PI * frequency * index / RATE + phase))
 const stereo = (left: Float32Array, right = left): Float32Array[] => [Float32Array.from(left), Float32Array.from(right)]
@@ -33,7 +36,7 @@ const db = (ratio: number): number => 20 * Math.log10(ratio)
 const steadyGain = (output: Float32Array, input: Float32Array): number => db(rms(output, RATE / 4) / rms(input, RATE / 4))
 
 describe('音频内置效果的逐样本处理（4.7c）', () => {
-  it('参数均衡：默认中性时逐样本不变；低频 +6 dB 只抬低频；“去低频嗡声”压掉 50/60 Hz 而 1 kHz 不变；“人声更清楚”切掉 40 Hz', async () => {
+  it('均衡器简易方式：默认中性时逐样本不变；低频 +6 dB 只抬低频；“去低频嗡声”压掉 50/60 Hz 而 1 kHz 不变；“人声更清楚”切掉 40 Hz', async () => {
     const input = sine(1000, .3, RATE)
     expect((await run([effect('parametric_eq')], stereo(input))).output[0]).toEqual(input)
     const low = sine(40, .3, RATE); const high = sine(5000, .3, RATE)

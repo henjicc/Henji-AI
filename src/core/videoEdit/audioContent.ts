@@ -1,5 +1,6 @@
 import { audibleVideoEditClips, videoEditClipMedia, videoEditDuration, videoEditNestedComposition, type VideoEditComposition } from './document'
 import { activeVideoEditAudioEffects } from './compositing'
+import { AUDIO_IDENTITY_PHASES, audioBuiltinIdentity, type AudioIdentityBuiltin, type AudioIdentityPhase } from '../audio/effects/audioIdentity'
 import { videoEditAudioMixer } from './audioMixer'
 import type { VideoEditKeyframe } from './keyframes'
 import { VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from './sequenceGraph'
@@ -17,7 +18,8 @@ function canonical(value: unknown): unknown {
 }
 
 /** Project only the inputs consumed by mixAudio, recursively following audible nested clips. */
-export function videoEditAudioContent(snapshot: VideoEditComposition): string {
+export function videoEditAudioContent(snapshot: VideoEditComposition, phase: AudioIdentityPhase = 'current'): string {
+  const busIdentity = (builtin: AudioIdentityBuiltin): { id: string; params: Readonly<Record<string, unknown>> } => { const { id, params } = audioBuiltinIdentity(builtin, phase); return { id, params } }
   const cached = new Map<string, number>(); const sequences: unknown[] = []
   const content = (sequence: VideoEditComposition, path: readonly string[]): number => {
     if (path.includes(sequence.id) || path.length >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH) throw new Error('嵌套声音存在循环或超过可混音层数。')
@@ -32,7 +34,7 @@ export function videoEditAudioContent(snapshot: VideoEditComposition): string {
     // 音轨混音（轨道音量、声像、效果与主轨）进入身份；没有时不加字段，已有缓存身份不变。
     const mixer = videoEditAudioMixer(sequence)
     const result = { fps: sequence.fps, sampleRate: sequence.sampleRate, channels: sequence.channels,
-      ...(mixer ? { mixer: { tracks: [...mixer.tracks.values()].filter(bus => bus.gain !== 1 || bus.pan !== 0 || bus.effects.length).map(({ index, gain, pan, effects }) => ({ index, gain, pan, effects: effects.map(({ builtin, amount }) => ({ builtin, amount })) })), master: { gain: mixer.master.gain, effects: mixer.master.effects.map(({ builtin, amount }) => ({ builtin, amount })) } } } : {}),
+      ...(mixer ? { mixer: { tracks: [...mixer.tracks.values()].filter(bus => bus.gain !== 1 || bus.pan !== 0 || bus.effects.length).map(({ index, gain, pan, effects }) => ({ index, gain, pan, effects: effects.map(({ builtin, amount }) => ({ builtin: busIdentity(builtin), amount })) })), master: { gain: mixer.master.gain, effects: mixer.master.effects.map(({ builtin, amount }) => ({ builtin: busIdentity(builtin), amount })) } } } : {}),
       clips: audibleVideoEditClips(sequence).map(clip => {
         const nested = videoEditNestedComposition(sequence, clip)
         const media = nested ? undefined : videoEditClipMedia(sequence, clip)
@@ -43,8 +45,11 @@ export function videoEditAudioContent(snapshot: VideoEditComposition): string {
           timeRemap: clip.timeRemap ?? null, pitchSemitones: clip.pitchSemitones ?? 0,
           gainDb: clip.gainDb ?? 0, volume: clip.disabledIntrinsicSections?.includes('audio') ? 1 : clip.volume, volumeCurve: points(clip.disabledIntrinsicSections?.includes('audio') ? undefined : clip.curves?.volume), fadeInFrames: clip.fadeInFrames ?? 0, fadeOutFrames: clip.fadeOutFrames ?? 0,
           audioMapping: clip.audioMapping,
-          effects: activeVideoEditAudioEffects(clip).map(effect => ({ id: effect.builtin.id, amount: effect.amount, params: effect.builtin.params,
-            curves: Object.fromEntries(Object.entries(effect.builtin.curves ?? {}).map(([key, values]) => [key, points(values)])) })),
+          effects: activeVideoEditAudioEffects(clip).map(effect => {
+            const builtin = audioBuiltinIdentity(effect.builtin, phase)
+            return { id: builtin.id, amount: effect.amount, params: builtin.params,
+              curves: Object.fromEntries(Object.entries(builtin.curves ?? {}).map(([key, values]) => [key, points(values)])) }
+          }),
           transitions: windows.filter(window => window.left.id === clip.id && window.side !== 'in' || window.right.id === clip.id && window.side !== 'out').map(window => ({
             kind: window.transition.kind, start: window.start, end: window.end, side: window.side, outgoing: window.left.id === clip.id,
           })),
@@ -59,4 +64,8 @@ export function videoEditAudioContent(snapshot: VideoEditComposition): string {
   content(snapshot, [])
   // 拉伸引擎换版本时，保持音调与变调的声音随之改变。
   return JSON.stringify(canonical([VIDEO_EDIT_AUDIO_STRETCH_ENGINE, sequences]))
+}
+
+export function videoEditAudioContentIdentities(snapshot: VideoEditComposition): string[] {
+  return [...new Set(AUDIO_IDENTITY_PHASES.map(phase => videoEditAudioContent(snapshot, phase)))]
 }

@@ -1,3 +1,4 @@
+import { migrateAudioEffectInstance, migrateAudioEqualizerModes } from '../mergedEffectsMigration'
 /** 音频效果测试的公共工具：构造效果、信号，跑效果链，量电平与频响。只给测试用。 */
 import { expect } from 'vitest'
 import { sampleDifference } from '../../../../../scripts/lib/sampleDifference'
@@ -11,7 +12,9 @@ export function expectSamples(actual: ArrayLike<number>, expected: ArrayLike<num
   expect(sampleDifference(actual, expected, precision)).toEqual({ differences: 0, first: -1, maximumError: 0, lengthDifference: 0 })
 }
 export function effect(builtinId: string, params: Record<string, unknown> = {}, amount = 1, id = builtinId): VideoEditBuiltinEffect {
-  return { id, name: builtinId, enabled: true, amount, builtin: { id: builtinId, params: normalizeVideoEditBuiltinParams(builtinId, params) } }
+  const initial = { builtin: migrateAudioEffectInstance({ id: builtinId, params }) }
+  const { builtin: migrated } = builtinId === 'equalizer' ? initial : migrateAudioEqualizerModes(initial)
+  return { id, name: builtinId, enabled: true, amount, builtin: { ...migrated, params: normalizeVideoEditBuiltinParams(migrated.id, migrated.params) } }
 }
 export const sine = (frequency: number, amplitude: number, length: number, phase = 0): Float32Array => Float32Array.from({ length }, (_, index) => amplitude * Math.sin(2 * Math.PI * frequency * index / RATE + phase))
 export const stereo = (left: Float32Array, right = left): Float32Array[] => [Float32Array.from(left), Float32Array.from(right)]

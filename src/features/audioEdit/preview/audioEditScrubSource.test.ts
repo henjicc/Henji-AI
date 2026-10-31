@@ -43,7 +43,7 @@ it('剪后试听按成片时间读声音：删掉的部分不占位置，播放�
 it('有实时效果时每块重置效果链、预读一小段并扣掉延迟，听到的与播放经过同一套效果', async () => {
   chain.latency = 4
   const spans = [span(0, 480000, 0)]
-  const effects = [{ id: 'eq', builtin: { id: 'eq_bands', params: {} }, amount: 1 }] as unknown as AudioEffectInstance[]
+  const effects = [{ id: 'eq', builtin: { id: 'equalizer', params: {} }, amount: 1 }] as unknown as AudioEffectInstance[]
   const source = audioEditScrubSource(project, 'edited', spans, new PreviewChunkCache(project, 'edited', spans), effects)
   expect(source.concurrency).toBe(1)
   const [left] = await source.read(96000, 100)

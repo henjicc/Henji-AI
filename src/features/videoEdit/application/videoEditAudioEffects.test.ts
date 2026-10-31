@@ -46,8 +46,8 @@ async function project() {
 
 it('音频效果登记在“音频效果”文件夹；双击只加到所选的声音片段（画面片段跳过）、一步撤销；落点高亮按媒介', async () => {
   const entries = videoEditEffectsRegistry().filter(entry => entry.category === 'audio_effect')
-  expect(entries.map(entry => entry.builtinId)).toEqual(expect.arrayContaining(['parametric_eq', 'compressor', 'limiter', 'noise_reduction', 'reverb', 'pitch_shift', 'gain_balance', 'high_pass', 'low_pass', 'de_esser']))
-  expect(entries.every(entry => entry.media === 'audio' && entry.tooltip && entry.params?.every(param => param.tooltip && param.description))).toBe(true)
+  expect(entries.map(entry => entry.builtinId)).toEqual(expect.arrayContaining(['equalizer', 'compressor', 'limiter', 'noise_reduction', 'reverb', 'pitch_shift', 'gain_balance', 'audio_filter', 'modulation', 'de_esser']))
+  expect(entries.every(entry => entry.media === 'audio' && entry.tooltip && entry.params?.every(param => param.description))).toBe(true)
   const { owner, id, sequenceId, sounds, picture } = await project()
   const history = owner.past.length
   const created = applyVideoEditBuiltinEffect(id, sequenceId, [...sounds, picture], 'noise_reduction')
@@ -79,16 +79,16 @@ it('文档校验按媒介：音频效果不能挂画面片段、画面效果不�
 
 it('效果控件：拖动音频效果参数只记一步撤销并夹进范围；换序、删除走同一效果链', async () => {
   const { owner, id, sequenceId, sounds } = await project()
-  const [eq, limiter] = [applyVideoEditBuiltinEffect(id, sequenceId, [sounds[0]], 'parametric_eq')[0], applyVideoEditBuiltinEffect(id, sequenceId, [sounds[0]], 'limiter')[0]]
+  const [eq, limiter] = [applyVideoEditBuiltinEffect(id, sequenceId, [sounds[0]], 'equalizer')[0], applyVideoEditBuiltinEffect(id, sequenceId, [sounds[0]], 'limiter')[0]]
   const target = { projectId: id, sequenceId, clipId: sounds[0] }
   const effect = () => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === sounds[0])!.effects!.find(value => value.id === eq)!
   const history = owner.past.length
   const drag = beginVideoEditGesture(id)
-  for (const low of [3, 9, 40]) updateVideoEditBuiltinEffect(target, eq, { params: { low } }, drag)
-  expect(effect().builtin!.params.low).toBe(12); expect(owner.past).toHaveLength(history)
+  for (const low of [3, 9, 40]) updateVideoEditBuiltinEffect(target, eq, { params: { simple_low: low } }, drag)
+  expect(effect().builtin!.params.simple_low).toBe(12); expect(owner.past).toHaveLength(history)
   finishVideoEditGesture(drag); expect(owner.past).toHaveLength(history + 1)
-  updateVideoEditBuiltinEffect(target, eq, { params: { preset: 'remove_hum' } })
-  expect(effect().builtin!.params).toMatchObject({ preset: 'remove_hum', low: 12 })
+  updateVideoEditBuiltinEffect(target, eq, { params: { simple_preset: 'remove_hum' } })
+  expect(effect().builtin!.params).toMatchObject({ simple_preset: 'remove_hum', simple_low: 12 })
   await reorderVideoEditEffects(target, [limiter, eq])
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === sounds[0])!.effects!.map(value => value.id)).toEqual([limiter, eq])
   await deleteVideoEditEffects(target, [limiter])
@@ -104,14 +104,14 @@ it('助手经通用实体读写音频效果：目录写明适用片段与参数�
     expect(catalog.properties['video_edit.builtin_effect.params']).toEqual([expect.objectContaining({ key: 'strength', min: 0, max: 100, default: 80 })])
     const clipRef = { kind: 'video_edit.clip', id: `${id}:${sounds[0]}` }
     const baseline = await app.read(clipRef)
-    const created = await app.call('change_application_entities', { summary: '人声均衡', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:parametric_eq', 'video_edit.effect.parameters': { preset: 'voice_clarity' } } }] }] }, baseline.revisions as Record<string, number>)
+    const created = await app.call('change_application_entities', { summary: '人声均衡', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:equalizer', 'video_edit.effect.parameters': { simple_preset: 'voice_clarity' } } }] }] }, baseline.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
     const effect = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === sounds[0])!.effects![0]
-    expect(effect.builtin).toEqual({ id: 'parametric_eq', params: { preset: 'voice_clarity' } })
+    expect(effect.builtin).toEqual({ id: 'equalizer', params: { simple_preset: 'voice_clarity' } })
     const ref = { kind: 'video_edit.effect', id: `${id}:${effect.id}` }
-    const changed = await app.change(ref, { 'video_edit.effect.parameters': { preset: 'voice_clarity', high: 3 } }); expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
-    expect((await app.read(ref, ['video_edit.effect.parameters'])).properties).toEqual({ 'video_edit.effect.parameters': { preset: 'voice_clarity', high: 3 } })
-    const outOfRange = await app.change(ref, { 'video_edit.effect.parameters': { high: 30 } }); expect(outOfRange.ok).toBe(false); expect(JSON.stringify(outOfRange)).toContain('-12–12dB')
+    const changed = await app.change(ref, { 'video_edit.effect.parameters': { simple_preset: 'voice_clarity', simple_high: 3 } }); expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
+    expect((await app.read(ref, ['video_edit.effect.parameters'])).properties).toEqual({ 'video_edit.effect.parameters': { simple_preset: 'voice_clarity', simple_high: 3 } })
+    const outOfRange = await app.change(ref, { 'video_edit.effect.parameters': { simple_high: 30 } }); expect(outOfRange.ok).toBe(false); expect(JSON.stringify(outOfRange)).toContain('-12–12dB')
     const wrongMedia = await app.call('change_application_entities', { summary: '模糊', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:blur' } }] }] }, (await app.read(clipRef)).revisions as Record<string, number>)
     expect(wrongMedia.ok).toBe(false); expect(JSON.stringify(wrongMedia)).toContain('只能加音频效果')
     const pictureRef = { kind: 'video_edit.clip', id: `${id}:${picture}` }

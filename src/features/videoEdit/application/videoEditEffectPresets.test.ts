@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { VIDEO_EDIT_EFFECT_LIBRARY_VERSION } from '@/core/videoEdit/effectPresets'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { createTestStyleLibraryIo } from './videoEditStyleTestKit'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
@@ -75,7 +76,7 @@ it('贝塞尔过冲预设应用到较短片段，修剪后参数仍可持久保�
 it('收藏、参数组合、重命名与删除经本机设置持久保存；写失败不发布新状态', () => {
   const disk = storage(); const first = createVideoEditEffectLibraryStore(disk)
   first.getState().toggleFavorite('effect:blur'); first.getState().toggleFavorite('transition:cross_dissolve')
-  const preset = first.getState().savePreset('清晰对白', [makeVideoEditBuiltinEffect('high_pass', { frequency: 100 }), makeVideoEditBuiltinEffect('compressor')])
+  const preset = first.getState().savePreset('清晰对白', [makeVideoEditBuiltinEffect('audio_filter', { mode: 'high_pass', high_pass_frequency: 100 }), makeVideoEditBuiltinEffect('compressor')])
   first.getState().renamePreset(preset.id, '对白处理')
   const restored = createVideoEditEffectLibraryStore(disk)
   expect(restored.getState().favorites).toEqual(['effect:blur', 'transition:cross_dissolve'])
@@ -102,7 +103,7 @@ it('保存参数强度开关与作用区域；手绘形状可选保存，跟踪�
   const saved = library.savePreset('含形状', [shapes], true)
   expect(saved.effects[0].mask).toEqual({ regionId: 'shapes', shapes: [{ id: 'shape', kind: 'rect', points: [[.2,.1,0,0,0,0],[.5,.1,0,0,0,0],[.5,.5,0,0,0,0],[.2,.5,0,0,0,0]] }] })
   expect(shapes.mask.shapes[0].follow).toBeDefined()
-  expect(() => library.savePreset('混合媒介', [effect, makeVideoEditBuiltinEffect('high_pass')])).toThrow('同媒介')
+  expect(() => library.savePreset('混合媒介', [effect, makeVideoEditBuiltinEffect('audio_filter')])).toThrow('同媒介')
 })
 
 it('预设组合拖放/双击共用应用入口，长链跨片段一步撤销；媒介不匹配拒绝', async () => {
@@ -117,10 +118,10 @@ it('预设组合拖放/双击共用应用入口，长链跨片段一步撤销；
   expect(videoEditEffectDropClips(getActiveVideoEditSequence(owner), sound, [], templateRef)).toEqual([])
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.every(clip => !clip.effects?.length)).toBe(true)
   expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [sound], templateRef)).toThrow('画面片段')
-  const audio = useVideoEditEffectLibraryStore.getState().savePreset('对白', [makeVideoEditBuiltinEffect('high_pass')])
+  const audio = useVideoEditEffectLibraryStore.getState().savePreset('对白', [makeVideoEditBuiltinEffect('audio_filter')])
   expect(() => applyVideoEditBuiltinEffect(id, sequenceId, pictures, `preset:${audio.id}`)).toThrow('声音片段')
   applyVideoEditBuiltinEffect(id, sequenceId, [sound, ...pictures], `preset:${audio.id}`)
-  expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === sound)?.effects?.[0].builtin?.id).toBe('high_pass')
+  expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === sound)?.effects?.[0].builtin?.id).toBe('audio_filter')
   editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === pictures[1] ? { ...clip, effects: Array.from({ length: 40 }, () => makeVideoEditBuiltinEffect('mosaic')) } : clip) })) }))
   const baseline = owner.document; const history = owner.past.length
   expect(applyVideoEditBuiltinEffect(id, sequenceId, pictures, templateRef)).toHaveLength(4)
@@ -193,10 +194,11 @@ it('历史库先备份再迁移且读取不改写原件；失败不覆盖原件�
     expect(failed.getItem(key)).toBe(raw)
   }
   const disk = storage(), key = VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY
-  disk.setItem(key, JSON.stringify({ version: 4, minReaderVersion: 3, content: { favorites: [], presets: [], futureTaste: { contrast: 3 } } }))
+  const futureVersion = VIDEO_EDIT_EFFECT_LIBRARY_VERSION + 1
+  disk.setItem(key, JSON.stringify({ version: futureVersion, minReaderVersion: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, content: { favorites: [], presets: [], futureTaste: { contrast: 3 } } }))
   const forward = createVideoEditEffectLibraryStore(disk)
   forward.getState().savePreset('未来库内新增', [makeVideoEditBuiltinEffect('mosaic')])
-  expect(JSON.parse(disk.getItem(key)!)).toMatchObject({ version: 4, minReaderVersion: 3, content: { futureTaste: { contrast: 3 } } })
+  expect(JSON.parse(disk.getItem(key)!)).toMatchObject({ version: futureVersion, minReaderVersion: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, content: { futureTaste: { contrast: 3 } } })
 })
 
 it('公共入口创建与修改全局风格件并按说明检索，风格成员沿正式属性写入和读回', async () => {
@@ -256,7 +258,7 @@ it('所有效果库写入口拒绝重名且不发布，成功操作和收藏只�
   const store = useVideoEditEffectLibraryStore
   const domain = videoEditDomainRevision(), baseline = getHostScopeRevisions()
   const a = store.getState().savePreset('柔化', [makeVideoEditBuiltinEffect('blur')])
-  const b = store.getState().savePreset('对白', [makeVideoEditBuiltinEffect('high_pass')])
+  const b = store.getState().savePreset('对白', [makeVideoEditBuiltinEffect('audio_filter')])
   const snapshot = store.getState(), written = localStorage.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)
   for (const write of [
     () => store.getState().savePreset(' 柔化 ', a.effects),
@@ -331,4 +333,25 @@ it('正式撤销栈遗忘事务时释放风格件快照', async () => {
   const result = await executor.apply({ kind: 'collection', entityType: 'video_edit.effect_preset', expectedRevisions: {}, parent: { kind: 'video_edit.style_library', id: 'singleton' }, operation: { kind: 'create', items: [{ properties: { 'video_edit.effect_preset.definition': { name: '可回收', media: 'video', effects: [makeVideoEditBuiltinEffect('blur')] } } }] } }, { signal: new AbortController().signal } as Parameters<typeof executor.apply>[1])
   executor.forget(result.undoToken!)
   await expect(executor.undo(result.undoToken!)).rejects.toThrow(/撤销记录不存在/)
+})
+
+it('旧音频库备份后只在内存迁移，收藏合并去重，保存与重开保持音频预设', () => {
+  const disk = storage()
+  const source = JSON.parse(fs.readFileSync('tests/fixtures/audio-effect-merge/effect_library.json', 'utf8'))
+  source.content.favorites = ['effect:chorus', 'effect:flanger', 'effect:polarity_invert', 'effect:gain_balance']
+  const raw = JSON.stringify(source)
+  disk.setItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, raw)
+  const store = createVideoEditEffectLibraryStore(disk)
+  expect(store.getState().loadError).toBe('')
+  expect(store.getState().favorites).toEqual(['effect:modulation', 'effect:gain_balance'])
+  expect(disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)).toBe(raw)
+  expect(disk.getItem(`${VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY}:backup:v3`)).toBe(raw)
+  const preset = store.getState().presets[0]
+  expect(preset.media).toBe('audio')
+  expect(preset.effects.every(effect => videoEditEffectsRegistry().some(entry => entry.id === `effect:${effect.builtin?.id}`))).toBe(true)
+  store.getState().renamePreset(preset.id, '迁移后的对白')
+  const persisted = JSON.parse(disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)!)
+  expect(persisted.version).toBeGreaterThan(source.version)
+  expect(persisted.minReaderVersion).toBeGreaterThan(source.version)
+  expect(createVideoEditEffectLibraryStore(disk).getState().presets[0]).toEqual(store.getState().presets[0])
 })

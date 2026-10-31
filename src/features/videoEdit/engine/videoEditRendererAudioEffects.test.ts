@@ -16,7 +16,7 @@ beforeAll(() => { (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalSc
 const RATE = 48000
 // 显式基准仅测正式混音算法与PCM读取，不把该数字冒充真实设备端到端延迟。
 if (process.env.HENJI_SCRUB_BENCHMARK === '1') it('擦洗80ms单段混音耗时', async () => {
-  for (const [name, effects] of [['原声', []], ['均衡与限幅', [builtin('parametric_eq'), builtin('limiter')]], ['重效果链', [builtin('noise_reduction'), builtin('pitch_shift', { semitones: -2 }), builtin('reverb')]]] as const) {
+  for (const [name, effects] of [['原声', []], ['均衡与限幅', [builtin('equalizer'), builtin('limiter')]], ['重效果链', [builtin('noise_reduction'), builtin('pitch_shift', { semitones: -2 }), builtin('reverb')]]] as const) {
     const renderer = new VideoEditRenderer(sound({ effects: [...effects] }), { surface: { width: 1, height: 1 } as OffscreenCanvas, frames: backend() })
     try {
       const timings: number[] = []
@@ -116,7 +116,7 @@ it('音频效果在混音里生效：片段音量在效果之前、淡化在效�
 })
 
 it('连续播放时与分块方式无关：0.5 秒块（预览）与按帧长的块（导出）逐样本一致，效果链延迟已对齐', async () => {
-  const effects = [builtin('noise_reduction', { strength: 50 }), builtin('parametric_eq', { preset: 'voice_clarity' }), builtin('pitch_shift', { semitones: -2 }), builtin('reverb'), builtin('limiter', { boost: 3 })]
+  const effects = [builtin('noise_reduction', { strength: 50 }), builtin('equalizer', { simple_preset: 'voice_clarity' }), builtin('pitch_shift', { semitones: -2 }), builtin('reverb'), builtin('limiter', { boost: 3 })]
   const composition = sound({ effects: effects.map((effect, index) => ({ ...effect, id: `fx-${index}` })) })
   const preview = await mix(composition, [.5, .5, .5, .5, .5, .5])
   const exported = await mix(composition, Array.from({ length: 90 }, () => 1 / 30))
@@ -129,7 +129,7 @@ it('连续播放时与分块方式无关：0.5 秒块（预览）与按帧长的
 
 it('调制效果的振荡相位按片段内位置对齐：片段不在块边界上开始时预览块与导出块逐样本一致，从中间定位与连续播放相同', async () => {
   // 片段从第 16 帧开始：预览的 0.5 秒块与导出的帧长块在片段开头之前的起点不同。
-  const composition = sound({ start: 16, effects: [builtin('chorus', { voices: 4, depth: 80 }), builtin('flanger', { feedback: 0 })].map((effect, index) => ({ ...effect, id: `fx-${index}` })) })
+  const composition = sound({ start: 16, effects: [builtin('modulation', { mode: 'chorus', chorus_voices: 4, chorus_depth: 80 }), builtin('modulation', { mode: 'flanger', flanger_feedback: 0 })].map((effect, index) => ({ ...effect, id: `fx-${index}` })) })
   const preview = await mix(composition, [.5, .5, .5, .5, .5, .5])
   const exported = await mix(composition, Array.from({ length: 90 }, () => 1 / 30))
   // 逐样本比较只报不同的个数（整段数组的差异输出很慢）。
@@ -141,7 +141,7 @@ it('调制效果的振荡相位按片段内位置对齐：片段不在块边界�
 })
 
 it('从中间定位开始播放：预读后与从头连续播放的结果几乎相同（滤波器与包络已稳定）', async () => {
-  const composition = sound({ effects: [builtin('parametric_eq', { low: 6, high: -3 }), builtin('compressor')] })
+  const composition = sound({ effects: [builtin('equalizer', { simple_low: 6, simple_high: -3 }), builtin('compressor')] })
   const continuous = await mix(composition, [.5, .5, .5, .5])
   const sought = await mix(composition, [.5], 1.5)
   let worst = 0

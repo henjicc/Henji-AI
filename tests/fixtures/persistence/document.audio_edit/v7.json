@@ -1,0 +1,460 @@
+{
+  "format": "henji-document",
+  "envelopeVersion": 1,
+  "minReaderVersion": 1,
+  "kind": "audio_edit",
+  "kindVersion": 7,
+  "kindMinReaderVersion": 7,
+  "id": "golden-audio_edit",
+  "name": "音频",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "source": {
+      "mediaType": "audio",
+      "sourcePath": "/persistence-project/素材/voice.wav",
+      "audioPath": "/persistence-project/素材/voice.wav",
+      "durationFrames": 48000,
+      "sampleRate": 48000,
+      "channels": 1
+    },
+    "referenceScript": "参考稿",
+    "transcript": [
+      {
+        "id": "word",
+        "text": "你好",
+        "startFrame": 0,
+        "endFrame": 24000,
+        "included": true,
+        "locked": false,
+        "granularity": "word"
+      }
+    ],
+    "suggestions": [],
+    "cuts": [
+      {
+        "id": "cut",
+        "startFrame": 24000,
+        "endFrame": 48000,
+        "reason": "manual",
+        "enabled": true
+      }
+    ],
+    "gainRegions": [
+      {
+        "id": "gain",
+        "startFrame": 0,
+        "endFrame": 24000,
+        "enabled": true,
+        "gainDb": -6,
+        "fadeInFrames": 100,
+        "fadeOutFrames": 100
+      }
+    ],
+    "repairs": [
+      {
+        "id": "repair",
+        "startFrame": 1000,
+        "endFrame": 2000,
+        "enabled": true,
+        "kind": "spectral_heal",
+        "lowHz": 100,
+        "highHz": 1000,
+        "strength": 0.5,
+        "strokes": [
+          {
+            "radius": 0.1,
+            "radiusY": 0.2,
+            "points": [
+              {
+                "x": 0.5,
+                "y": 0.5
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "effectChain": [
+      {
+        "id": "audio-merge-gain_balance",
+        "kind": "builtin",
+        "name": "自定义 gain_balance",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "gain_balance",
+          "params": {
+            "gain": 6.24,
+            "balance": 26,
+            "mono": true
+          }
+        }
+      },
+      {
+        "id": "audio-merge-polarity_invert",
+        "kind": "builtin",
+        "name": "自定义 polarity_invert",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "gain_balance",
+          "params": {
+            "invert": "right"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"gain_balance\",\"params\":{\"invert\":\"right\"}}",
+              "previous": "{\"id\":\"polarity_invert\",\"params\":{\"channels\":\"right\"}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-compressor",
+        "kind": "builtin",
+        "name": "自定义 compressor",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "compressor",
+          "params": {
+            "amount": 53,
+            "speed": "slow",
+            "makeup": false,
+            "mode": "single"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"compressor\",\"params\":{\"amount\":53,\"makeup\":false,\"mode\":\"single\",\"speed\":\"slow\"}}",
+              "previous": "{\"id\":\"compressor\",\"params\":{\"amount\":53,\"makeup\":false,\"speed\":\"slow\"}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-multiband_compressor",
+        "kind": "builtin",
+        "name": "自定义 multiband_compressor",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "compressor",
+          "params": {
+            "multi_low_crossover": 322.2,
+            "multi_high_crossover": 4170,
+            "multi_low_amount": 43,
+            "multi_mid_amount": 43,
+            "multi_high_amount": 43,
+            "multi_output": 3.12,
+            "mode": "multi"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"compressor\",\"params\":{\"mode\":\"multi\",\"multi_high_amount\":43,\"multi_high_crossover\":4170,\"multi_low_amount\":43,\"multi_low_crossover\":322.2,\"multi_mid_amount\":43,\"multi_output\":3.12}}",
+              "previous": "{\"id\":\"multiband_compressor\",\"params\":{\"high_amount\":43,\"high_crossover\":4170,\"low_amount\":43,\"low_crossover\":322.2,\"mid_amount\":43,\"output\":3.12}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-delay",
+        "kind": "builtin",
+        "name": "自定义 delay",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "delay_echo",
+          "params": {
+            "delay_left_delay": 130,
+            "delay_right_delay": 130,
+            "delay_mix": 100,
+            "mode": "delay"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"delay_echo\",\"params\":{\"delay_left_delay\":130,\"delay_mix\":100,\"delay_right_delay\":130,\"mode\":\"delay\"}}",
+              "previous": "{\"id\":\"delay\",\"params\":{\"left_delay\":130,\"mix\":100,\"right_delay\":130}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-echo",
+        "kind": "builtin",
+        "name": "自定义 echo",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "delay_echo",
+          "params": {
+            "echo_delay": 509.87,
+            "echo_feedback": 47.35,
+            "echo_mix": 43,
+            "echo_tone": 10470,
+            "echo_ping_pong": true,
+            "mode": "echo"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"delay_echo\",\"params\":{\"echo_delay\":509.87,\"echo_feedback\":47.35,\"echo_mix\":43,\"echo_ping_pong\":true,\"echo_tone\":10470,\"mode\":\"echo\"}}",
+              "previous": "{\"id\":\"echo\",\"params\":{\"delay\":509.87,\"feedback\":47.35,\"mix\":43,\"ping_pong\":true,\"tone\":10470}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-parametric_eq",
+        "kind": "builtin",
+        "name": "自定义 parametric_eq",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "equalizer",
+          "params": {
+            "simple_preset": "bright",
+            "simple_low": 3.12,
+            "simple_mid": 3.12,
+            "simple_high": 3.12,
+            "mode": "simple"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"equalizer\",\"params\":{\"mode\":\"parametric\",\"simple_high\":3.12,\"simple_low\":3.12,\"simple_mid\":3.12,\"simple_preset\":\"bright\"}}",
+              "previous": "{\"id\":\"parametric_eq\",\"params\":{\"high\":3.12,\"low\":3.12,\"mid\":3.12,\"preset\":\"bright\"}}"
+            },
+            {
+              "phase": "equalizer-modes",
+              "current": "{\"id\":\"equalizer\",\"params\":{\"mode\":\"simple\",\"simple_high\":3.12,\"simple_low\":3.12,\"simple_mid\":3.12,\"simple_preset\":\"bright\"}}",
+              "previous": "{\"id\":\"equalizer\",\"params\":{\"mode\":\"parametric\",\"simple_high\":3.12,\"simple_low\":3.12,\"simple_mid\":3.12,\"simple_preset\":\"bright\"}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-eq_bands",
+        "kind": "builtin",
+        "name": "自定义 eq_bands",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "equalizer",
+          "params": {
+            "hp_on": true,
+            "hp_frequency": 207.4,
+            "low_gain": 3.9000000000000004,
+            "low_frequency": 247.4,
+            "band1_gain": 3.9000000000000004,
+            "band1_frequency": 2324.8,
+            "band1_q": 43,
+            "band2_gain": 3.9000000000000004,
+            "band2_frequency": 3074.8,
+            "band2_q": 43,
+            "band3_gain": 3.9000000000000004,
+            "band3_frequency": 6074.8,
+            "band3_q": 43,
+            "high_gain": 3.9000000000000004,
+            "high_frequency": 10470,
+            "lp_on": true,
+            "lp_frequency": 18470,
+            "mode": "parametric"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"equalizer\",\"params\":{\"band1_frequency\":2324.8,\"band1_gain\":3.9000000000000004,\"band1_q\":43,\"band2_frequency\":3074.8,\"band2_gain\":3.9000000000000004,\"band2_q\":43,\"band3_frequency\":6074.8,\"band3_gain\":3.9000000000000004,\"band3_q\":43,\"high_frequency\":10470,\"high_gain\":3.9000000000000004,\"hp_frequency\":207.4,\"hp_on\":true,\"low_frequency\":247.4,\"low_gain\":3.9000000000000004,\"lp_frequency\":18470,\"lp_on\":true,\"mode\":\"parametric\"}}",
+              "previous": "{\"id\":\"eq_bands\",\"params\":{\"band1_frequency\":2324.8,\"band1_gain\":3.9000000000000004,\"band1_q\":43,\"band2_frequency\":3074.8,\"band2_gain\":3.9000000000000004,\"band2_q\":43,\"band3_frequency\":6074.8,\"band3_gain\":3.9000000000000004,\"band3_q\":43,\"high_frequency\":10470,\"high_gain\":3.9000000000000004,\"hp_frequency\":207.4,\"hp_on\":true,\"low_frequency\":247.4,\"low_gain\":3.9000000000000004,\"lp_frequency\":18470,\"lp_on\":true}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-graphic_eq",
+        "kind": "builtin",
+        "name": "自定义 graphic_eq",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "equalizer",
+          "params": {
+            "graphic_band_31": 3.12,
+            "graphic_band_63": 3.12,
+            "graphic_band_125": 3.12,
+            "graphic_band_250": 3.12,
+            "graphic_band_500": 3.12,
+            "graphic_band_1k": 3.12,
+            "graphic_band_2k": 3.12,
+            "graphic_band_4k": 3.12,
+            "graphic_band_8k": 3.12,
+            "graphic_band_16k": 3.12,
+            "graphic_output": 3.12,
+            "mode": "graphic"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"equalizer\",\"params\":{\"graphic_band_125\":3.12,\"graphic_band_16k\":3.12,\"graphic_band_1k\":3.12,\"graphic_band_250\":3.12,\"graphic_band_2k\":3.12,\"graphic_band_31\":3.12,\"graphic_band_4k\":3.12,\"graphic_band_500\":3.12,\"graphic_band_63\":3.12,\"graphic_band_8k\":3.12,\"graphic_output\":3.12,\"mode\":\"graphic\"}}",
+              "previous": "{\"id\":\"graphic_eq\",\"params\":{\"band_125\":3.12,\"band_16k\":3.12,\"band_1k\":3.12,\"band_250\":3.12,\"band_2k\":3.12,\"band_31\":3.12,\"band_4k\":3.12,\"band_500\":3.12,\"band_63\":3.12,\"band_8k\":3.12,\"output\":3.12}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-notch",
+        "kind": "builtin",
+        "name": "自定义 notch",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "audio_filter",
+          "params": {
+            "notch_frequency": 3597.4,
+            "notch_width": 63,
+            "notch_depth": -22.2,
+            "mode": "notch"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"audio_filter\",\"params\":{\"mode\":\"notch\",\"notch_depth\":-22.2,\"notch_frequency\":3597.4,\"notch_width\":63}}",
+              "previous": "{\"id\":\"notch\",\"params\":{\"depth\":-22.2,\"frequency\":3597.4,\"width\":63}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-high_pass",
+        "kind": "builtin",
+        "name": "自定义 high_pass",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "audio_filter",
+          "params": {
+            "high_pass_frequency": 207.4,
+            "high_pass_slope": "steep",
+            "mode": "high_pass"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"audio_filter\",\"params\":{\"high_pass_frequency\":207.4,\"high_pass_slope\":\"steep\",\"mode\":\"high_pass\"}}",
+              "previous": "{\"id\":\"high_pass\",\"params\":{\"frequency\":207.4,\"slope\":\"steep\"}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-low_pass",
+        "kind": "builtin",
+        "name": "自定义 low_pass",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "audio_filter",
+          "params": {
+            "low_pass_frequency": 10535,
+            "low_pass_slope": "steep",
+            "mode": "low_pass"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"audio_filter\",\"params\":{\"low_pass_frequency\":10535,\"low_pass_slope\":\"steep\",\"mode\":\"low_pass\"}}",
+              "previous": "{\"id\":\"low_pass\",\"params\":{\"frequency\":10535,\"slope\":\"steep\"}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-chorus",
+        "kind": "builtin",
+        "name": "自定义 chorus",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "modulation",
+          "params": {
+            "chorus_rate": 1.4435000000000002,
+            "chorus_depth": 53,
+            "chorus_voices": 2.39,
+            "chorus_mix": 53,
+            "mode": "chorus"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"modulation\",\"params\":{\"chorus_depth\":53,\"chorus_mix\":53,\"chorus_rate\":1.4435000000000002,\"chorus_voices\":2.39,\"mode\":\"chorus\"}}",
+              "previous": "{\"id\":\"chorus\",\"params\":{\"depth\":53,\"mix\":53,\"rate\":1.4435000000000002,\"voices\":2.39}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-flanger",
+        "kind": "builtin",
+        "name": "自定义 flanger",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "modulation",
+          "params": {
+            "flanger_rate": 0.9435,
+            "flanger_depth": 73,
+            "flanger_feedback": 52.35,
+            "flanger_mix": 63,
+            "mode": "flanger"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"modulation\",\"params\":{\"flanger_depth\":73,\"flanger_feedback\":52.35,\"flanger_mix\":63,\"flanger_rate\":0.9435,\"mode\":\"flanger\"}}",
+              "previous": "{\"id\":\"flanger\",\"params\":{\"depth\":73,\"feedback\":52.35,\"mix\":63,\"rate\":0.9435}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "audio-merge-phaser",
+        "kind": "builtin",
+        "name": "自定义 phaser",
+        "enabled": false,
+        "amount": 0.73,
+        "builtin": {
+          "id": "modulation",
+          "params": {
+            "phaser_rate": 1.1435,
+            "phaser_depth": 73,
+            "phaser_stages": "12",
+            "phaser_feedback": 42.35,
+            "phaser_mix": 63,
+            "mode": "phaser"
+          },
+          "identityAliases": [
+            {
+              "phase": "audio-merge",
+              "current": "{\"id\":\"modulation\",\"params\":{\"mode\":\"phaser\",\"phaser_depth\":73,\"phaser_feedback\":42.35,\"phaser_mix\":63,\"phaser_rate\":1.1435,\"phaser_stages\":\"12\"}}",
+              "previous": "{\"id\":\"phaser\",\"params\":{\"depth\":73,\"feedback\":42.35,\"mix\":63,\"rate\":1.1435,\"stages\":\"12\"}}"
+            }
+          ]
+        }
+      }
+    ],
+    "chainBypassed": false,
+    "output": {
+      "volumeDb": -1.5,
+      "loudness": {
+        "enabled": true,
+        "targetLufs": -16,
+        "gainDb": 3.5
+      }
+    }
+  }
+}

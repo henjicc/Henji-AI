@@ -1,3 +1,4 @@
+import { migrateAudioMergedEffects, migrateAudioEqualizerModes } from '../audio/effects/mergedEffectsMigration'
 import { videoEditSubtitleStyleSchema } from '../videoEdit/subtitleStyle'
 import { migrateVideoEditCaptionCollection, migrateVideoEditCaptionOwnership, migrateRecordingCaptionOwnership } from '../videoEdit/captionOwnershipMigration'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from './schemaVersions'
@@ -73,11 +74,13 @@ import { mcpConnectionStorageSchema } from './mcpConnectionSchema'
 import { persistedCanvasNodeDataSchema, persistedStageSettingsSchema } from './businessSchemas'
 import { createDefaultLlmConfig } from '../llm/defaults'
 import { migrateEmbeddedVideoEditMotionBlurMaster, migrateVideoEditMotionBlurMaster } from '../videoEdit/motionBlurMigration'
-import { migrateVideoEditMergedEffects } from '../videoEdit/mergedEffectsMigration'
+import { migrateVideoEditLibraryEffects } from '../videoEdit/mergedEffectsMigration'
 import { parseGitCodeLocation } from '../storage/gitCodeLocation'
 
+function migrateVideoEditMergedEffects<T>(value: T): T { return migrateAudioEqualizerModes(migrateVideoEditLibraryEffects(value)) }
+
 function ownedCaptions(id: string, value: unknown): unknown {
-  return id === 'document.video_edit' ? migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(value)) : id === 'document.screen_recording' ? migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(value)) : id === 'subtitle-manifest' ? migrateVideoEditCaptionCollection(value) : value
+  return id === 'document.video_edit' ? migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(value)) : id === 'document.screen_recording' ? migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(value)) : id === 'subtitle-manifest' ? migrateVideoEditCaptionCollection(value) : id === 'document.audio_edit' ? migrateAudioEqualizerModes(migrateAudioMergedEffects(value)) : value
 }
 
 it('旧剪辑、录制快照和字幕回填记录仅移除字幕链接标记，原件及其余字段完整保留', () => {

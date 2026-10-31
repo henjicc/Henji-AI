@@ -1,3 +1,4 @@
+import { migrateAudioMergedEffects } from '../audio/effects/mergedEffectsMigration'
 import { RETIRED_BLUR_EFFECTS } from './blur'
 import { WHITE_HEX } from '../theme/colorTokens'
 import type { VideoEditBezier, VideoEditInterpolation } from './keyframeInterpolation'
@@ -104,4 +105,9 @@ export function migrateVideoEditMergedEffects<T>(content: T): T {
     return Object.fromEntries(entries)
   }
   return walk(content) as T
+}
+
+/** 本机库与交换包的读取兼容入口；各类合并使用各自冻结的转换。 */
+export function migrateVideoEditLibraryEffects<T>(content: T): T {
+  return migrateAudioMergedEffects(migrateVideoEditMergedEffects(content))
 }

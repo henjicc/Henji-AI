@@ -5,17 +5,18 @@ import { findTranscriptSearchRanges } from '../media/transcriptSearch'
 import { isAudioEditDecimalPoint } from '../audioEdit/captions'
 import { videoEditClipSourceRange, videoEditClipFrameBoundaryAtSource, videoEditClipSourceSecondsAtTime } from './clipSpeed'
 import { audibleVideoEditClips, videoEditComposition, videoEditNestedComposition, type VideoEditClip, type VideoEditComposition, type VideoEditDocument } from './document'
-import { videoEditAudioContent } from './audioContent'
+import { videoEditAudioContent, videoEditAudioContentIdentities } from './audioContent'
 
 import { videoEditTextTranscriptionSchema } from './textTranscriptionSchema'
 export { videoEditTextTranscriptionSchema } from './textTranscriptionSchema'
 export type VideoEditTextTranscription = z.infer<typeof videoEditTextTranscriptionSchema>
 /** Keep recognition for other source ranges when only a selected clip is transcribed again. */
-export function mergeVideoEditTextTranscription(previous: VideoEditTextTranscription | undefined, incoming: VideoEditTextTranscription): VideoEditTextTranscription {
+export function mergeVideoEditTextTranscription(previous: VideoEditTextTranscription | undefined, incoming: VideoEditTextTranscription, composition: VideoEditComposition): VideoEditTextTranscription {
   if (!previous) return incoming
   const sources = previous.sources.map(source => structuredClone(source))
   for (const source of incoming.sources) {
-    const index = sources.findIndex(value => value.itemId === source.itemId && value.mediaIdentity === source.mediaIdentity && value.audioMappingIdentity === source.audioMappingIdentity)
+    const index = sources.findIndex(value => value.itemId === source.itemId && value.audioMappingIdentity === source.audioMappingIdentity
+      && (value.mediaIdentity === source.mediaIdentity || videoEditTextMediaIdentityMatches(composition, source.itemId, value.mediaIdentity) && videoEditTextMediaIdentityMatches(composition, source.itemId, source.mediaIdentity)))
     if (index < 0) { sources.push(source); continue }
     const old = sources[index]
     const covered = source.coverage ?? source.blocks
@@ -33,6 +34,13 @@ export function videoEditTextMediaIdentity(composition: VideoEditComposition, it
   const media = composition.media.find(value => value.id === item?.mediaId)
   if (item?.kind === 'sequence') return JSON.stringify([item.sequenceId, videoEditAudioContent(videoEditNestedComposition(composition, { itemId, kind: 'sequence' })!)])
   return JSON.stringify([item?.mediaId, media?.path, media?.sourceRevision, media?.assetContent, item?.sequenceId])
+}
+
+export function videoEditTextMediaIdentityMatches(composition: VideoEditComposition, itemId: string, identity: string): boolean {
+  const item = composition.items.find(value => value.id === itemId)
+  if (item?.kind !== 'sequence') return identity === videoEditTextMediaIdentity(composition, itemId)
+  const nested = videoEditNestedComposition(composition, { itemId, kind: 'sequence' })!
+  return videoEditAudioContentIdentities(nested).some(sound => JSON.stringify([item.sequenceId, sound]) === identity)
 }
 
 /**
@@ -72,7 +80,7 @@ export function rebindVideoEditProjectTextIdentities(document: VideoEditDocument
   return changed ? { ...document, sequences } : null
 }
 function sourceForClip(composition: VideoEditComposition, clip: VideoEditClip): VideoEditTextTranscription['sources'][number] | undefined {
-  return composition.textTranscription?.sources.find(value => value.itemId === clip.itemId && value.mediaIdentity === videoEditTextMediaIdentity(composition, clip.itemId) && (value.audioMappingIdentity === undefined || value.audioMappingIdentity === JSON.stringify(clip.audioMapping ?? null)))
+  return composition.textTranscription?.sources.find(value => value.itemId === clip.itemId && videoEditTextMediaIdentityMatches(composition, clip.itemId, value.mediaIdentity) && (value.audioMappingIdentity === undefined || value.audioMappingIdentity === JSON.stringify(clip.audioMapping ?? null)))
 }
 export function mapVideoEditTextRange(clip: VideoEditClip, range: { startFrame: number; endFrame: number }, fps: number): VideoEditTextRange | undefined {
   const source = videoEditClipSourceRange(clip, fps)

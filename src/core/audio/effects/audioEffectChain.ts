@@ -1,4 +1,5 @@
 import { videoEditFft } from '../../videoEdit/fft'
+import type { AudioIdentityAliases } from './audioIdentity'
 import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '../../videoEdit/builtinEffects'
 // 静态引入：剪辑渲染工作线程按 IIFE 打包，不能拆出动态分块。模块求值只定义函数，模型与 WebAssembly 到第一次用降噪时才解码。
 import { Rnnoise } from '@shiguredo/rnnoise-wasm'
@@ -7,14 +8,14 @@ import { dehumDesign, eqBandsDesign, FilterCascade, graphicEqDesign, notchDesign
 import { MultibandCompressor, NoiseGate, SpeechLeveler } from './processors/dynamics'
 import { Echo, StereoDelay } from './processors/delay'
 import { Chorus, Flanger, Phaser } from './processors/modulation'
-import { PolarityInvert, StereoWidth } from './processors/stereo'
+import { StereoWidth } from './processors/stereo'
 import { Distortion, vocalEnhancerDesign } from './processors/special'
 
 /** 兼容旧引用：双二阶系数与压缩曲线在处理器公共模块。 */
 export { audioBiquadCoefficients, audioCompressorCurve } from './processors/shared'
 
 /** 效果链里的一个效果：内置效果 id 与参数、效果强度（干湿比 0–1）。剪辑片段的效果与音频编辑的效果组都是这个形状。 */
-export interface AudioEffectInstance { readonly id: string; readonly builtin: { readonly id: string; readonly params: Readonly<Record<string, unknown>> }; readonly amount: number }
+export interface AudioEffectInstance { readonly id: string; readonly builtin: { readonly id: string; readonly params: Readonly<Record<string, unknown>>; readonly identityAliases?: AudioIdentityAliases }; readonly amount: number }
 
 /**
  * 音频内置效果的处理（任务 4.7c）：剪辑混音逐片段、音频编辑的效果组都按效果链顺序处理声音，预览与导出是同一份代码。
@@ -29,7 +30,7 @@ export interface AudioEffectInstance { readonly id: string; readonly builtin: { 
  * 音调变换移植 smbPitchShift（相位声码器，WOL 许可）；多段压缩的分频用 Linkwitz-Riley 4 阶（两级巴特沃斯串联，低段补全通相位）。
  */
 
-/** 参数均衡的预设曲线（与三段增益叠加）。 */
+/** 均衡器简易方式的预设曲线（与三段增益叠加）。 */
 const EQ_PRESETS: Record<string, BiquadSpec[]> = {
   none: [],
   voice_clarity: [{ kind: 'highpass', frequency: 80, q: Math.SQRT1_2 }, { kind: 'peaking', frequency: 250, q: 1, gain: -3 }, { kind: 'peaking', frequency: 3000, q: 1, gain: 4 }, { kind: 'highshelf', frequency: 10000, q: 1, gain: 2 }],
@@ -41,11 +42,11 @@ const passFilters = (kind: 'highpass' | 'lowpass') => (params: VideoEditBuiltinP
   ? BUTTERWORTH_4.map(q => ({ kind, frequency: params.frequency as number, q }))
   : [{ kind, frequency: params.frequency as number, q: Math.SQRT1_2 }]
 
-// —— 增益与声道平衡 ——
+// —— 增益与声道 ——
 class GainBalance implements AudioProcessor {
   readonly latency = 0
-  private gain = 1; private balance = 0; private mono = false
-  update(params: VideoEditBuiltinParams): void { this.gain = dbToGain(params.gain as number); this.balance = (params.balance as number) / 100; this.mono = params.mono as boolean }
+  private gain = 1; private balance = 0; private mono = false; private invert = 'none'
+  update(params: VideoEditBuiltinParams): void { this.gain = dbToGain(params.gain as number); this.balance = (params.balance as number) / 100; this.mono = params.mono as boolean; this.invert = params.invert as string }
   process(channels: Float32Array[], length: number): void {
     const stereo = channels.length === 2
     const left = this.gain * (stereo && this.balance > 0 ? 1 - this.balance : 1); const right = this.gain * (stereo && this.balance < 0 ? 1 + this.balance : 1)
@@ -53,8 +54,8 @@ class GainBalance implements AudioProcessor {
       if (stereo) {
         let l = channels[0][index]; let r = channels[1][index]
         if (this.mono) { l = r = (l + r) / 2 }
-        channels[0][index] = l * left; channels[1][index] = r * right
-      } else for (const data of channels) data[index] *= this.gain
+        channels[0][index] = l * left * (this.invert === 'both' || this.invert === 'left' ? -1 : 1); channels[1][index] = r * right * (this.invert === 'both' || this.invert === 'right' ? -1 : 1)
+      } else for (const data of channels) data[index] *= this.gain * (this.invert === 'none' ? 1 : -1)
     }
   }
 }
@@ -334,33 +335,59 @@ class NoiseReduction implements AudioProcessor {
   dispose(): void { for (const lane of this.lanes) lane.state.destroy() }
 }
 
+/** 按方式复用原处理器；换方式时清空该算法的状态，参数更新仍原地生效。 */
+class ModeProcessor implements AudioProcessor {
+  readonly latency = 0
+  private mode = ''
+  private processor?: AudioProcessor
+  private readonly values: VideoEditBuiltinParams = {}
+  private keys: Array<[string, string]> = []
+  constructor(private readonly factories: Record<string, () => AudioProcessor>, private readonly prefix = true) {}
+  update(params: VideoEditBuiltinParams): void {
+    const mode = params.mode as string
+    if (this.mode !== mode) { this.processor?.dispose?.(); this.processor = this.factories[mode](); this.mode = mode; this.keys = []; for (const key in this.values) delete this.values[key] }
+    if (this.prefix || mode === 'multi' || mode === 'simple' || mode === 'graphic') {
+      const prefix = mode + '_'
+      if (!this.keys.length) this.keys = Object.keys(params).filter(key => key.startsWith(prefix)).map(key => [key, key.slice(prefix.length)])
+      for (const [source, target] of this.keys) this.values[target] = params[source]
+      this.processor!.update(this.values)
+    } else this.processor!.update(params)
+  }
+  process(channels: Float32Array[], length: number): void { this.processor!.process(channels, length) }
+  locate(sample: number): void { this.processor?.locate?.(sample) }
+  dispose(): void { this.processor?.dispose?.() }
+}
+const simpleEqDesign = (params: VideoEditBuiltinParams): BiquadSpec[] => [...(EQ_PRESETS[params.preset as string] ?? []), { kind: 'lowshelf', frequency: 100, q: 1, gain: params.low as number }, { kind: 'peaking', frequency: 1000, q: 0.8, gain: params.mid as number }, { kind: 'highshelf', frequency: 8000, q: 1, gain: params.high as number }]
+
 function createProcessor(id: string, rate: number, channels: number, denoiser?: RnnoiseModule): AudioProcessor {
   switch (id) {
-    case 'parametric_eq': return new FilterCascade(rate, channels, params => [...(EQ_PRESETS[params.preset as string] ?? []), { kind: 'lowshelf', frequency: 100, q: 1, gain: params.low as number }, { kind: 'peaking', frequency: 1000, q: 0.8, gain: params.mid as number }, { kind: 'highshelf', frequency: 8000, q: 1, gain: params.high as number }])
-    case 'high_pass': return new FilterCascade(rate, channels, passFilters('highpass'))
-    case 'low_pass': return new FilterCascade(rate, channels, passFilters('lowpass'))
+    case 'equalizer': return new ModeProcessor({
+      simple: () => new FilterCascade(rate, channels, simpleEqDesign),
+      parametric: () => new FilterCascade(rate, channels, eqBandsDesign),
+      combined: () => {
+        const simple: VideoEditBuiltinParams = {}
+        return new FilterCascade(rate, channels, params => {
+          simple.preset = params.simple_preset; simple.low = params.simple_low; simple.mid = params.simple_mid; simple.high = params.simple_high
+          return [...simpleEqDesign(simple), ...eqBandsDesign(params)]
+        })
+      },
+      graphic: () => new FilterCascade(rate, channels, graphicEqDesign, params => params.output as number),
+    }, false)
+    case 'audio_filter': return new ModeProcessor({ high_pass: () => new FilterCascade(rate, channels, passFilters('highpass')), low_pass: () => new FilterCascade(rate, channels, passFilters('lowpass')), notch: () => new FilterCascade(rate, channels, notchDesign) })
     case 'gain_balance': return new GainBalance()
-    case 'compressor': return new Compressor(rate)
+    case 'compressor': return new ModeProcessor({ single: () => new Compressor(rate), multi: () => new MultibandCompressor(rate, channels) }, false)
     case 'limiter': return new Limiter(rate, channels)
     case 'de_esser': return new DeEsser(rate, channels)
     case 'reverb': return new Reverb(rate, channels)
     case 'pitch_shift': return new PitchShift(rate, channels)
     case 'noise_reduction': if (!denoiser) throw new Error('降噪模型尚未加载。'); return new NoiseReduction(denoiser, channels)
-    case 'graphic_eq': return new FilterCascade(rate, channels, graphicEqDesign, params => params.output as number)
-    case 'eq_bands': return new FilterCascade(rate, channels, eqBandsDesign)
-    case 'notch': return new FilterCascade(rate, channels, notchDesign)
     case 'dehum': return new FilterCascade(rate, channels, dehumDesign)
     case 'vocal_enhancer': return new FilterCascade(rate, channels, vocalEnhancerDesign)
     case 'noise_gate': return new NoiseGate(rate, channels)
     case 'speech_leveler': return new SpeechLeveler(rate)
-    case 'multiband_compressor': return new MultibandCompressor(rate, channels)
-    case 'echo': return new Echo(rate, channels)
-    case 'delay': return new StereoDelay(rate, channels)
-    case 'chorus': return new Chorus(rate, channels)
-    case 'flanger': return new Flanger(rate, channels)
-    case 'phaser': return new Phaser(rate, channels)
+    case 'delay_echo': return new ModeProcessor({ echo: () => new Echo(rate, channels), delay: () => new StereoDelay(rate, channels) })
+    case 'modulation': return new ModeProcessor({ chorus: () => new Chorus(rate, channels), flanger: () => new Flanger(rate, channels), phaser: () => new Phaser(rate, channels) })
     case 'stereo_width': return new StereoWidth(rate)
-    case 'polarity_invert': return new PolarityInvert()
     case 'distortion': return new Distortion(rate, channels)
     default: throw new Error(`没有音频效果“${id}”。`)
   }
@@ -382,14 +409,18 @@ class DelayLine {
     this.cursor = cursor
   }
 }
-interface Stage { effectId: string; builtinId: string; processor: AudioProcessor; amount: number; dry: DelayLine }
+interface Stage { effectId: string; builtinId: string; processor: AudioProcessor; amount: number; preroll: number; dry: DelayLine }
 /**
  * 预读多久让状态稳定下来：混响、回声尾音长；延迟要先填满延迟线；窄陷波（去嗡声、陷波）与慢包络（语音电平、噪声门）要先收敛；
  * 其余效果的包络与滤波器很快稳定。调制效果的振荡相位按片段位置对齐（`locate`），预读只需填满延迟线、让反馈共振稳定。
  */
 const PREROLL_SECONDS: Record<string, number> = {
   reverb: 2, noise_reduction: 0.5, compressor: 0.5, de_esser: 0.2, limiter: 0.2,
-  echo: 4, delay: 1.05, flanger: 1, phaser: 0.5, chorus: 0.2, speech_leveler: 2, noise_gate: 1, multiband_compressor: 0.5, dehum: 1, notch: 1, eq_bands: 0.3, graphic_eq: 0.1, vocal_enhancer: 0.1,
+  speech_leveler: 2, noise_gate: 1, dehum: 1, equalizer: 0.3, vocal_enhancer: 0.1,
+}
+
+const MODE_PREROLL_SECONDS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  delay_echo: { delay: 1.05, echo: 4 }, modulation: { chorus: 0.2, flanger: 1, phaser: 0.5 }, audio_filter: { high_pass: 0.05, low_pass: 0.05, notch: 1 },
 }
 
 /**
@@ -403,24 +434,28 @@ export class AudioEffectChain {
   nextSample?: number
   constructor(readonly rate: number, readonly channels: number) {}
   get latency(): number { return this.stages.reduce((sum, stage) => sum + stage.processor.latency, 0) }
-  get preroll(): number { return Math.round(this.rate * Math.max(0.05, ...this.stages.map(stage => PREROLL_SECONDS[stage.builtinId] ?? 0.05))) }
+  get preroll(): number { return Math.round(this.rate * Math.max(0.05, ...this.stages.map(stage => stage.preroll))) }
   /**
    * 对齐到当前效果链：效果的增删、换序或启停（结构变化）时重建并清空状态；只改参数与强度时原地更新，播放中拖动参数不中断。
    * 返回是否重建。（变速保持音调不在这里：由拉伸器在读源时完成，见 videoEditTimeStretch.ts。）
    */
   async sync(effects: readonly AudioEffectInstance[]): Promise<boolean> {
-    const signature = effects.map(effect => `${effect.id}:${effect.builtin.id}`).join('|')
+    const signature = effects.map(effect => `${effect.id}:${effect.builtin.id}:${effect.builtin.params.mode ?? ''}`).join('|')
     let rebuilt = false
     if (signature !== this.signature) {
       const denoiser = effects.some(effect => effect.builtin.id === 'noise_reduction') ? await loadRnnoise() : undefined
       this.dispose()
       this.stages = effects.map(effect => {
         const processor = createProcessor(effect.builtin.id, this.rate, this.channels, denoiser)
-        return { effectId: effect.id, builtinId: effect.builtin.id, processor, amount: 1, dry: new DelayLine(processor.latency, this.channels) }
+        return { effectId: effect.id, builtinId: effect.builtin.id, processor, amount: 1, preroll: 0.05, dry: new DelayLine(processor.latency, this.channels) }
       })
       this.signature = signature; this.nextSample = undefined; rebuilt = true
     }
-    effects.forEach((effect, index) => { const stage = this.stages[index]; stage.processor.update(resolveVideoEditBuiltinParams(effect.builtin)); stage.amount = effect.amount })
+    effects.forEach((effect, index) => {
+      const stage = this.stages[index]; const params = resolveVideoEditBuiltinParams(effect.builtin)
+      stage.processor.update(params); stage.amount = effect.amount
+      stage.preroll = MODE_PREROLL_SECONDS[stage.builtinId]?.[params.mode as string] ?? PREROLL_SECONDS[stage.builtinId] ?? 0.05
+    })
     return rebuilt
   }
   /** 清空状态（重建全部处理器，参数保留）。 */
@@ -436,7 +471,7 @@ export class AudioEffectChain {
   /** 原地处理；输出比输入晚 `latency` 个样本。 */
   process(channels: Float32Array[], length: number, automation?: (sample: number) => readonly AudioEffectInstance[]): void {
     if (automation) {
-      // Reuse single-sample buffers; state and delay lines persist between samples and blocks.
+      // 单样本缓冲复用，处理器与延迟线的状态跨样本、跨块延续。
       const one = channels.map(() => new Float32Array(1))
       const dry = channels.map(() => new Float32Array(1))
       for (let sample = 0; sample < length; sample++) {

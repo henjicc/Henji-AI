@@ -21,17 +21,3 @@ export class StereoWidth implements AudioProcessor {
     }
   }
 }
-
-// —— 反相：把选定声道的波形上下翻转（极性取反），逐样本精确；单声道素材反相唯一的声道 ——
-export class PolarityInvert implements AudioProcessor {
-  readonly latency = 0
-  private channels = 'both'
-  update(params: VideoEditBuiltinParams): void { this.channels = params.channels as string }
-  process(channels: Float32Array[], length: number): void {
-    for (let channel = 0; channel < channels.length; channel++) {
-      if (channels.length === 2 && (this.channels === 'left' && channel === 1 || this.channels === 'right' && channel === 0)) continue
-      const data = channels[channel]
-      for (let index = 0; index < length; index++) data[index] = -data[index]
-    }
-  }
-}

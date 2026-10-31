@@ -4,7 +4,7 @@ import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import type { SpeechTimings } from '@/core/media/speechTimings'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
-import { videoEditTextMediaIdentity, videoEditTranscriptWords } from '@/core/videoEdit/textTranscript'
+import { videoEditTextMediaIdentityMatches, videoEditTranscriptWords } from '@/core/videoEdit/textTranscript'
 import { subtitleFrameBoundary } from '@/core/videoEdit/subtitleStyleProfiles'
 import { getPlatform } from '@/platform/runtime'
 import { readGenerationResultTimings } from '@/features/generation'
@@ -22,7 +22,7 @@ export async function readClipSpeechTimings(projectId: string, sequenceId: strin
   const clip = composition.clips.find(value => value.id === clipId)
   const media = composition.media.find(value => value.id === composition.items.find(item => item.id === clip?.itemId)?.mediaId)
   if (!clip || !media) throw new Error('请选择引用声音素材的片段。')
-  const source = composition.textTranscription?.sources.find(value => value.itemId === clip.itemId && value.mediaIdentity === videoEditTextMediaIdentity(composition, clip.itemId) && (value.audioMappingIdentity === undefined || value.audioMappingIdentity === JSON.stringify(clip.audioMapping ?? null)))
+  const source = composition.textTranscription?.sources.find(value => value.itemId === clip.itemId && videoEditTextMediaIdentityMatches(composition, clip.itemId, value.mediaIdentity) && (value.audioMappingIdentity === undefined || value.audioMappingIdentity === JSON.stringify(clip.audioMapping ?? null)))
   let fallback: SpeechTimings | undefined = source?.blocks.length ? { granularity: source.blocks.every(block => block.granularity === 'word') ? 'word' : 'sentence', items: source.blocks.map(block => ({ text: block.text, startMs: block.startFrame / 1000, endMs: block.endFrame / 1000 })) } : undefined
   if (fallback?.granularity === 'word') return fallback
   if (media.creativeSource?.type === 'generation') {

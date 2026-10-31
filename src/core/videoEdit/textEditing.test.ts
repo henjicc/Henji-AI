@@ -96,7 +96,7 @@ it('selected-range recognition preserves other source words and invalidates sile
   previous.sources[0].silences = [{ startFrame: 1000000, endFrame: 2000000 }, { startFrame: 5000000, endFrame: 6000000 }]
   audio.source.durationFrames = 1000; audio.transcript = [{ ...audio.transcript[1], text: '新价格', startFrame: 0, endFrame: 500 }]
   const incoming = buildVideoEditTextTranscription(composition, [sequence.clips[1]], audio, 30)
-  const merged = mergeVideoEditTextTranscription(previous, incoming)
+  const merged = mergeVideoEditTextTranscription(previous, incoming, composition)
   expect(merged.sources[0].blocks.map(word => word.text)).toEqual(['嗯，', '新价格', '那个'])
   expect(merged.sources[0].silences).toEqual([{ startFrame: 5000000, endFrame: 6000000 }])
   expect(previous.sources[0].blocks.map(word => word.text)).toEqual(['嗯，', '价格', '九元。', '那个'])

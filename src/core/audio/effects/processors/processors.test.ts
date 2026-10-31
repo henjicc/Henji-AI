@@ -36,11 +36,11 @@ function program(length: number): Float32Array[] {
 }
 
 describe('新增音频效果的公共约束', () => {
-  it('登记：16 个效果都有处理器、分组与参数说明；效果 ID 不与任何内置效果重名；同组的效果在登记表里相邻', async () => {
+  it('登记：目录效果都有处理器、分组与参数说明；效果 ID 不与任何内置效果重名；同组的效果在登记表里相邻', async () => {
     const ids = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => definition.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const id of NEW_EFFECTS) {
-      const definition = requireVideoEditBuiltinEffect(id)
+      const definition = requireVideoEditBuiltinEffect(effect(id).builtin.id)
       expect(definition.media).toBe('audio'); expect(VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group]).toBeTruthy()
     }
     for (const definition of AUDIO_EFFECT_DEFINITIONS) {
@@ -70,7 +70,7 @@ describe('新增音频效果的公共约束', () => {
     loud[0][RATE / 2] = 1; loud[1][RATE / 3] = -1
     const extreme = (param: VideoEditBuiltinParam, side: 'min' | 'max'): unknown => param.type === 'number' ? param[side] : param.type === 'boolean' ? side === 'max' : param.default
     for (const id of NEW_EFFECTS) {
-      const { params } = requireVideoEditBuiltinEffect(id)
+      const { params } = requireVideoEditBuiltinEffect(effect(id).builtin.id)
       const sets: Record<string, unknown>[] = [
         Object.fromEntries(params.map(param => [param.key, extreme(param, 'min')])),
         Object.fromEntries(params.map(param => [param.key, extreme(param, 'max')])),
@@ -78,7 +78,7 @@ describe('新增音频效果的公共约束', () => {
       ]
       for (const values of sets) {
         for (const input of [loud, [loud[0]]]) {
-          const output = (await run([effect(id, values)], input.map(channel => Float32Array.from(channel)))).output
+          const output = (await run([effect(effect(id).builtin.id, values)], input.map(channel => Float32Array.from(channel)))).output
           expect(isFiniteSignal(output), `${id} ${JSON.stringify(values)}`).toBe(true)
           expect(Math.max(...output.map(channel => peak(channel))), `${id} ${JSON.stringify(values)}`).toBeLessThan(1000)
         }
@@ -97,7 +97,7 @@ describe('新增音频效果的公共约束', () => {
       for (const channel of [0, 1]) { expectSamples(first[channel], whole[channel].subarray(0, RATE / 2)); expectSamples(second[channel], whole[channel].subarray(RATE / 2)) }
       chain.dispose()
       // 每个数值参数朝另一端挪 5% 的范围：不重建，衔接处的样本跳变不超过平稳段的几倍。
-      const { params } = requireVideoEditBuiltinEffect(id)
+      const { params } = requireVideoEditBuiltinEffect(effect(id).builtin.id)
       const nudged = Object.fromEntries(params.flatMap(param => {
         if (param.type !== 'number') return []
         const current = (effects[0].builtin.params[param.key] as number); const span = param.max - param.min
@@ -105,7 +105,7 @@ describe('新增音频效果的公共约束', () => {
       }))
       const moving = new AudioEffectChain(RATE, 2); await moving.sync(effects)
       const before = input.map(channel => channel.slice(0, RATE / 2)); moving.process(before, RATE / 2)
-      expect(await moving.sync([effect(id, { ...ACTIVE[id], ...nudged })])).toBe(false)
+      expect(await moving.sync([effect(effects[0].builtin.id, { ...effects[0].builtin.params, ...nudged }, 1, effects[0].id)])).toBe(false)
       const after = input.map(channel => channel.slice(RATE / 2)); moving.process(after, RATE / 2)
       moving.dispose()
       for (const channel of [0, 1]) {

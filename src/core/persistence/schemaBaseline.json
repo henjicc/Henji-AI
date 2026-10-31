@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 48,
-      "fingerprint": "f90b465c11d901cecd2c6b1ddc0bc3e82ce4f3db63bb4b9e1197519ddc0f7062",
+      "version": 49,
+      "fingerprint": "49a74b078090997a6a21721b83ab3cd3222ffa1ca696f7053593d26ef8e70893",
       "supportedFrom": 17,
-      "minReaderVersion": 47
+      "minReaderVersion": 49
     },
     "document.canvas": {
       "version": 1,
@@ -138,10 +138,10 @@
       "minReaderVersion": 1
     },
     "document.audio_edit": {
-      "version": 6,
-      "fingerprint": "d505724c8d9f988492ee06a06fa52c0df2437e4031f2e8a597675aeb153072f8",
+      "version": 7,
+      "fingerprint": "55466fa0258efe0479c8518712307bde44f05d34d2f56926ecae7c45ce95bdea",
       "supportedFrom": 1,
-      "minReaderVersion": 5
+      "minReaderVersion": 7
     },
     "document.camera_stage": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 51,
-      "fingerprint": "794d418836208c0bc64d2cb59c984613daa92d161fcf23844bdfb15677574c3e",
+      "version": 52,
+      "fingerprint": "65802363da73e3efe7b14ed51df878d797d19b0cc6ac8d86f99cdd64f8ea18a4",
       "supportedFrom": 19,
-      "minReaderVersion": 50
+      "minReaderVersion": 52
     },
     "project": {
       "version": 3,
@@ -240,10 +240,10 @@
       "minReaderVersion": 1
     },
     "video-preset-package": {
-      "version": 11,
-      "fingerprint": "d0e31105f971a35ab8a13ffad0f8dd0e6e9e5fb844c51f57265cce3efdc4cf2c",
+      "version": 12,
+      "fingerprint": "c973f0b62cfeaa51da139d8fe4c04e9b19826cd1b77fd98014901f1d652e3230",
       "supportedFrom": 5,
-      "minReaderVersion": 6
+      "minReaderVersion": 12
     },
     "voice-library": {
       "version": 1,
@@ -288,10 +288,10 @@
       "minReaderVersion": 2
     },
     "subtitle-manifest": {
-      "version": 24,
-      "fingerprint": "73cf257bb219bb732b1a7ac9fba26ec3d1194f57c41c515293378e1b5400efe6",
+      "version": 25,
+      "fingerprint": "efbdcb6e210b500734e88357023a1f400f53df1c279fda2257cf3c12deffa234",
       "supportedFrom": 11,
-      "minReaderVersion": 24
+      "minReaderVersion": 25
     },
     "setting-records": {
       "version": 22,
@@ -324,10 +324,10 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 7,
-      "fingerprint": "fb9268dbb06f7a0450b52464f86a3dd59cec79d66d437cecdafbbb6ceed4e12c",
+      "version": 8,
+      "fingerprint": "8e71006a1217e5a14615f5a14ea1bf19afd76c863c849c44d90ce990a089a309",
       "supportedFrom": 1,
-      "minReaderVersion": 1
+      "minReaderVersion": 8
     },
     "video-template-library": {
       "version": 6,
@@ -336,10 +336,10 @@
       "minReaderVersion": 3
     },
     "video-style-package": {
-      "version": 10,
-      "fingerprint": "cc77ab8f5c9b30cb4c6153b318ef8a8b504587ff02838d982dbc3a699c7104c1",
+      "version": 11,
+      "fingerprint": "f947576cdcb1ea78a1eaa0350b358fdd0f46ef556dd8b25ed5f1e6a838b32321",
       "supportedFrom": 1,
-      "minReaderVersion": 6
+      "minReaderVersion": 11
     },
     "workspace-layouts": {
       "version": 1,
@@ -396,10 +396,10 @@
       "minReaderVersion": 1
     },
     "video-effect-library": {
-      "version": 3,
-      "fingerprint": "d4e73151c3dd4b7197f76efe55ef3ec4d3771e1a5e463483d410c5890ccbd24f",
+      "version": 4,
+      "fingerprint": "dc6685a0cc02fa3debdebb36fb2c385ef3f7c402efc6f3ae837802697b7243a5",
       "supportedFrom": 1,
-      "minReaderVersion": 3
+      "minReaderVersion": 4
     }
   },
   "devBreaks": [],

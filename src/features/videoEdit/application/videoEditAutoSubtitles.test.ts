@@ -27,6 +27,9 @@ import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
 import { SpeechSubtitleTestWorker } from '@/tests/speechSubtitleWorkerTestKit'
 import { buildAutoSubtitles } from '@/core/videoEdit/autoSubtitles'
 import { videoEditTextMediaIdentity } from '@/core/videoEdit/textTranscript'
+import { videoEditAudioContent } from '@/core/videoEdit/audioContent'
+import { migrateAudioEqualizerModes, migrateAudioMergedEffects } from '@/core/audio/effects/mergedEffectsMigration'
+import { createHash } from 'node:crypto'
 
 const boundary = vi.hoisted(() => ({ mixes: [] as Array<{ start: number; duration: number }>, disposed: vi.fn() }))
 // Pixel/encoder boundaries only; ASR, document instances, edits, history and persistence remain real.
@@ -544,6 +547,29 @@ it('识别等待保持原实例，声音修改后拒绝迟到回填且保留付�
   expect(sequence().captions).toBeUndefined(); expect((await loadAudioEditProject(id)).document.transcript).toHaveLength(1)
   expect(videoEditBusyReason(owner.document.id)).toBeNull()
 })
+it.each(['audio-merge', 'equalizer-modes'] as const)('迁移前 %s 的未回填字幕恢复接受历史签名，保存重开不重复识别，真改声音仍拒绝', async phase => {
+  editVideoProject(owner.document.id, document => {
+    const value = structuredClone(document)
+    value.sequences[0].clips[0].effects = [{ id: 'eq', name: '均衡', enabled: true, amount: .7, builtin: { id: 'parametric_eq', params: { preset: 'warm', low: 3 } } }]
+    return migrateAudioEqualizerModes(migrateAudioMergedEffects(value))
+  })
+  const id = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')
+  editAudioEditProject(id, project => ({ ...project, transcript: [{ id: 'saved-word', text: '已经识别。', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' }] }))
+  const manifestPath = [...texts.keys()].find(path => path.endsWith('.subtitle.json'))!
+  const manifest = JSON.parse(texts.get(manifestPath)!) as { signature: string; version: number }
+  manifest.signature = createHash('sha256').update(videoEditAudioContent(videoEditComposition(owner.document, sequence().id), phase)).digest('hex')
+  manifest.version = 24
+  texts.set(manifestPath, JSON.stringify(manifest))
+  owner = await reopenVideoEdit(owner.document.id)
+  expect(await generateVideoEditSubtitles(owner.document.id, sequence().id, id)).toHaveLength(1)
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  owner = await reopenVideoEdit(owner.document.id)
+  expect(await generateVideoEditSubtitles(owner.document.id, sequence().id, id)).toHaveLength(1)
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  editVideoProject(owner.document.id, document => { const value = structuredClone(document); value.sequences[0].clips[0].volume = .5; return value })
+  await expect(generateVideoEditSubtitles(owner.document.id, sequence().id, id)).rejects.toThrow('已有修改')
+})
+
 it('字幕保存后恢复记录写入失败，重开仍只核实原字幕、不重复识别或追加历史', async () => {
   const id = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')
   let fail = true

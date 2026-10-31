@@ -1,0 +1,508 @@
+{
+  "version": 3,
+  "minReaderVersion": 3,
+  "content": {
+    "favorites": [
+      "effect:gain_balance",
+      "effect:polarity_invert",
+      "effect:compressor",
+      "effect:multiband_compressor",
+      "effect:delay",
+      "effect:echo",
+      "effect:parametric_eq",
+      "effect:eq_bands",
+      "effect:graphic_eq",
+      "effect:notch",
+      "effect:high_pass",
+      "effect:low_pass",
+      "effect:chorus",
+      "effect:flanger",
+      "effect:phaser"
+    ],
+    "presets": [
+      {
+        "description": "",
+        "usage": "",
+        "knobs": [
+          {
+            "key": "strength",
+            "name": "强度",
+            "min": 0,
+            "max": 100,
+            "default": 40,
+            "mappings": [
+              {
+                "effectId": "audio-merge-chorus",
+                "parameter": "depth",
+                "points": [
+                  {
+                    "input": 0,
+                    "output": 0
+                  },
+                  {
+                    "input": 100,
+                    "output": 100
+                  }
+                ]
+              },
+              {
+                "effectId": "audio-merge-multiband_compressor",
+                "parameter": "low_amount",
+                "points": [
+                  {
+                    "input": 0,
+                    "output": 0
+                  },
+                  {
+                    "input": 100,
+                    "output": 100
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "id": "audio-merge",
+        "name": "音频合并",
+        "media": "audio",
+        "effects": [
+          {
+            "id": "audio-merge-gain_balance",
+            "name": "自定义 gain_balance",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "gain_balance",
+              "params": {
+                "gain": 6.24,
+                "balance": 26,
+                "mono": true
+              },
+              "curves": {
+                "gain": [
+                  {
+                    "time": 0,
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 6.24,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-polarity_invert",
+            "name": "自定义 polarity_invert",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "polarity_invert",
+              "params": {
+                "channels": "right"
+              },
+              "curves": {}
+            }
+          },
+          {
+            "id": "audio-merge-compressor",
+            "name": "自定义 compressor",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "compressor",
+              "params": {
+                "amount": 53,
+                "speed": "slow",
+                "makeup": false
+              },
+              "curves": {
+                "amount": [
+                  {
+                    "time": 0,
+                    "value": 40,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 53,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-multiband_compressor",
+            "name": "自定义 multiband_compressor",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "multiband_compressor",
+              "params": {
+                "low_crossover": 322.2,
+                "high_crossover": 4170,
+                "low_amount": 40,
+                "mid_amount": 43,
+                "high_amount": 43,
+                "output": 3.12
+              },
+              "curves": {
+                "low_crossover": [
+                  {
+                    "time": 0,
+                    "value": 200,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 322.2,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-delay",
+            "name": "自定义 delay",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "delay",
+              "params": {
+                "left_delay": 130,
+                "right_delay": 130,
+                "mix": 100
+              },
+              "curves": {
+                "left_delay": [
+                  {
+                    "time": 0,
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 130,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-echo",
+            "name": "自定义 echo",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "echo",
+              "params": {
+                "delay": 509.87,
+                "feedback": 47.35,
+                "mix": 43,
+                "tone": 10470,
+                "ping_pong": true
+              },
+              "curves": {
+                "delay": [
+                  {
+                    "time": 0,
+                    "value": 250,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 509.87,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-parametric_eq",
+            "name": "自定义 parametric_eq",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "parametric_eq",
+              "params": {
+                "preset": "bright",
+                "low": 3.12,
+                "mid": 3.12,
+                "high": 3.12
+              },
+              "curves": {
+                "low": [
+                  {
+                    "time": 0,
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 3.12,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-eq_bands",
+            "name": "自定义 eq_bands",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "eq_bands",
+              "params": {
+                "hp_on": true,
+                "hp_frequency": 207.4,
+                "low_gain": 3.9000000000000004,
+                "low_frequency": 247.4,
+                "band1_gain": 3.9000000000000004,
+                "band1_frequency": 2324.8,
+                "band1_q": 43,
+                "band2_gain": 3.9000000000000004,
+                "band2_frequency": 3074.8,
+                "band2_q": 43,
+                "band3_gain": 3.9000000000000004,
+                "band3_frequency": 6074.8,
+                "band3_q": 43,
+                "high_gain": 3.9000000000000004,
+                "high_frequency": 10470,
+                "lp_on": true,
+                "lp_frequency": 18470
+              },
+              "curves": {
+                "hp_frequency": [
+                  {
+                    "time": 0,
+                    "value": 80,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 207.4,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-graphic_eq",
+            "name": "自定义 graphic_eq",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "graphic_eq",
+              "params": {
+                "band_31": 3.12,
+                "band_63": 3.12,
+                "band_125": 3.12,
+                "band_250": 3.12,
+                "band_500": 3.12,
+                "band_1k": 3.12,
+                "band_2k": 3.12,
+                "band_4k": 3.12,
+                "band_8k": 3.12,
+                "band_16k": 3.12,
+                "output": 3.12
+              },
+              "curves": {
+                "band_31": [
+                  {
+                    "time": 0,
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 3.12,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-notch",
+            "name": "自定义 notch",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "notch",
+              "params": {
+                "frequency": 3597.4,
+                "width": 63,
+                "depth": -22.2
+              },
+              "curves": {
+                "frequency": [
+                  {
+                    "time": 0,
+                    "value": 1000,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 3597.4,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-high_pass",
+            "name": "自定义 high_pass",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "high_pass",
+              "params": {
+                "frequency": 207.4,
+                "slope": "steep"
+              },
+              "curves": {
+                "frequency": [
+                  {
+                    "time": 0,
+                    "value": 80,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 207.4,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-low_pass",
+            "name": "自定义 low_pass",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "low_pass",
+              "params": {
+                "frequency": 10535,
+                "slope": "steep"
+              },
+              "curves": {
+                "frequency": [
+                  {
+                    "time": 0,
+                    "value": 8000,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 10535,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-chorus",
+            "name": "自定义 chorus",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "chorus",
+              "params": {
+                "rate": 1.4435000000000002,
+                "depth": 40,
+                "voices": 2.39,
+                "mix": 53
+              },
+              "curves": {
+                "rate": [
+                  {
+                    "time": 0,
+                    "value": 0.8,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 1.4435000000000002,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-flanger",
+            "name": "自定义 flanger",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "flanger",
+              "params": {
+                "rate": 0.9435,
+                "depth": 73,
+                "feedback": 52.35,
+                "mix": 63
+              },
+              "curves": {
+                "rate": [
+                  {
+                    "time": 0,
+                    "value": 0.3,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 0.9435,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "audio-merge-phaser",
+            "name": "自定义 phaser",
+            "enabled": false,
+            "amount": 0.73,
+            "builtin": {
+              "id": "phaser",
+              "params": {
+                "rate": 1.1435,
+                "depth": 73,
+                "stages": "12",
+                "feedback": 42.35,
+                "mix": 63
+              },
+              "curves": {
+                "rate": [
+                  {
+                    "time": 0,
+                    "value": 0.5,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "time": 10,
+                    "value": 1.1435,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

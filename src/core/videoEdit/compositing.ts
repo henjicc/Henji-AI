@@ -8,11 +8,13 @@ import { isRemovedVideoEditBuiltinEffect, videoEditBuiltinEffectIssue, videoEdit
 import { videoEditEffectMaskSchema } from './effectMasks'
 import { videoEditCurvesSchema, assertVideoEditBuiltinCurves } from './keyframes'
 import { essentialSoundEffects } from '../audio/essentialSound'
+import { audioIdentityAliasesSchema } from '../audio/effects/audioIdentity'
 
 /** 内置效果实例（4.7a）：内置效果 ID 与参数（键与范围由 `builtinEffects.ts` 登记）。 */
 export const videoEditBuiltinEffectInstanceSchema = z.object({
   id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(4096)])),
   curves: videoEditCurvesSchema.optional(),
+  identityAliases: audioIdentityAliasesSchema.optional(),
   /** 自动缩放（`recording_zoom`）的缩放区间，源时间微秒；只属于这一个效果，其他效果不得携带。 */
   regions: recordingZoomRegionsSchema.optional(),
 }).strict()
@@ -72,7 +74,7 @@ export function activeVideoEditEffects(clip: Pick<VideoEditClip, 'effects' | 'ki
 export function activeVideoEditAudioEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'effectsEnabled' | 'essentialSound'>): VideoEditBuiltinEffect[] {
   if (clip.effectsEnabled === false) return []
   if (clip.kind !== 'audio') return []
-  const essential = essentialSoundEffects(clip.essentialSound).map((effect): VideoEditBuiltinEffect => ({ id: effect.id, name: '基本声音', enabled: true, amount: effect.amount, builtin: { id: effect.builtin.id, params: effect.builtin.params as VideoEditBuiltinEffect['builtin']['params'] } }))
+  const essential = essentialSoundEffects(clip.essentialSound).map((effect): VideoEditBuiltinEffect => ({ id: effect.id, name: '基本声音', enabled: true, amount: effect.amount, builtin: { ...effect.builtin, params: effect.builtin.params as VideoEditBuiltinEffect['builtin']['params'] } }))
   return [...essential, ...(clip.effects ?? []).filter((effect): effect is VideoEditBuiltinEffect => effect.enabled && effect.amount > 0 && isVideoEditBuiltinEffect(effect) && videoEditEffectMedia(effect) === 'audio')]
 }
 export type VideoEditCompositeNode = { fromTrack: number; toTrack: number } & (

@@ -1,0 +1,536 @@
+[
+  {
+    "id": "gain_balance",
+    "variant": "defaults",
+    "defaults": {
+      "gain": 0,
+      "balance": 0,
+      "mono": false
+    },
+    "params": {},
+    "hash": "2c37704cab62f4ebb06d439de3b9d66f20ff1c62412f289d7f43c567cd8405de",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "gain_balance",
+    "variant": "adjusted",
+    "defaults": {
+      "gain": 0,
+      "balance": 0,
+      "mono": false
+    },
+    "params": {
+      "gain": 6.24,
+      "balance": 26,
+      "mono": true
+    },
+    "hash": "25a54f6e0111631a753b46f9784327d3b213f5244eee2dbc4e45ba419b87d462",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "polarity_invert",
+    "variant": "defaults",
+    "defaults": {
+      "channels": "both"
+    },
+    "params": {},
+    "hash": "8fb0a565c65fe6ca38b885b1b1bfd69508c1825ff83b5ee95fe0d7208629abf9",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "polarity_invert",
+    "variant": "adjusted",
+    "defaults": {
+      "channels": "both"
+    },
+    "params": {
+      "channels": "right"
+    },
+    "hash": "28bbde097b0317490826783210e0dccbecf0082c3772950a4154bc49d381c91e",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "compressor",
+    "variant": "defaults",
+    "defaults": {
+      "amount": 40,
+      "speed": "normal",
+      "makeup": true
+    },
+    "params": {},
+    "hash": "9efdb04b628f9e2456ee12d72a69cde9b0bf466892d00ba239b73399bf695626",
+    "latency": 0,
+    "preroll": 24000
+  },
+  {
+    "id": "compressor",
+    "variant": "adjusted",
+    "defaults": {
+      "amount": 40,
+      "speed": "normal",
+      "makeup": true
+    },
+    "params": {
+      "amount": 53,
+      "speed": "slow",
+      "makeup": false
+    },
+    "hash": "029d7c2a72cabbf1ba3612e813524faef5c7f6b0c332b232d7dba8a8830add85",
+    "latency": 0,
+    "preroll": 24000
+  },
+  {
+    "id": "multiband_compressor",
+    "variant": "defaults",
+    "defaults": {
+      "low_crossover": 200,
+      "high_crossover": 3000,
+      "low_amount": 30,
+      "mid_amount": 30,
+      "high_amount": 30,
+      "output": 0
+    },
+    "params": {},
+    "hash": "2d81a362c331c5d6b679f7ecfea8a655f49c8e4db8df7fcdb64e2c10412e8547",
+    "latency": 0,
+    "preroll": 24000
+  },
+  {
+    "id": "multiband_compressor",
+    "variant": "adjusted",
+    "defaults": {
+      "low_crossover": 200,
+      "high_crossover": 3000,
+      "low_amount": 30,
+      "mid_amount": 30,
+      "high_amount": 30,
+      "output": 0
+    },
+    "params": {
+      "low_crossover": 322.2,
+      "high_crossover": 4170,
+      "low_amount": 43,
+      "mid_amount": 43,
+      "high_amount": 43,
+      "output": 3.12
+    },
+    "hash": "2402bf4785f75a8c9188f2d2b75bb05901a8818655a28456046002c925f4c904",
+    "latency": 0,
+    "preroll": 24000
+  },
+  {
+    "id": "delay",
+    "variant": "defaults",
+    "defaults": {
+      "left_delay": 0,
+      "right_delay": 0,
+      "mix": 100
+    },
+    "params": {},
+    "hash": "2c37704cab62f4ebb06d439de3b9d66f20ff1c62412f289d7f43c567cd8405de",
+    "latency": 0,
+    "preroll": 50400
+  },
+  {
+    "id": "delay",
+    "variant": "adjusted",
+    "defaults": {
+      "left_delay": 0,
+      "right_delay": 0,
+      "mix": 100
+    },
+    "params": {
+      "left_delay": 130,
+      "right_delay": 130,
+      "mix": 100
+    },
+    "hash": "05486d7747d97926487ac0a9025d23237627188224ecc172ce74941216c24d34",
+    "latency": 0,
+    "preroll": 50400
+  },
+  {
+    "id": "echo",
+    "variant": "defaults",
+    "defaults": {
+      "delay": 250,
+      "feedback": 35,
+      "mix": 30,
+      "tone": 8000,
+      "ping_pong": false
+    },
+    "params": {},
+    "hash": "0112ea084c1604621365c8e44eed9467cda0a8f37a63974dd7a65a0f8f77d875",
+    "latency": 0,
+    "preroll": 192000
+  },
+  {
+    "id": "echo",
+    "variant": "adjusted",
+    "defaults": {
+      "delay": 250,
+      "feedback": 35,
+      "mix": 30,
+      "tone": 8000,
+      "ping_pong": false
+    },
+    "params": {
+      "delay": 509.87,
+      "feedback": 47.35,
+      "mix": 43,
+      "tone": 10470,
+      "ping_pong": true
+    },
+    "hash": "6f2f2a0f723390f0f4f691d62465ed47ec0eadf07541614028e3cb2872ed4cc6",
+    "latency": 0,
+    "preroll": 192000
+  },
+  {
+    "id": "parametric_eq",
+    "variant": "defaults",
+    "defaults": {
+      "preset": "none",
+      "low": 0,
+      "mid": 0,
+      "high": 0
+    },
+    "params": {},
+    "hash": "2c37704cab62f4ebb06d439de3b9d66f20ff1c62412f289d7f43c567cd8405de",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "parametric_eq",
+    "variant": "adjusted",
+    "defaults": {
+      "preset": "none",
+      "low": 0,
+      "mid": 0,
+      "high": 0
+    },
+    "params": {
+      "preset": "bright",
+      "low": 3.12,
+      "mid": 3.12,
+      "high": 3.12
+    },
+    "hash": "6edae3d6d566a68be9016788917114a9235ce3e9d4b5e3d4ddb905789c3f6a3e",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "eq_bands",
+    "variant": "defaults",
+    "defaults": {
+      "hp_on": false,
+      "hp_frequency": 80,
+      "low_gain": 0,
+      "low_frequency": 120,
+      "band1_gain": 0,
+      "band1_frequency": 250,
+      "band1_q": 30,
+      "band2_gain": 0,
+      "band2_frequency": 1000,
+      "band2_q": 30,
+      "band3_gain": 0,
+      "band3_frequency": 4000,
+      "band3_q": 30,
+      "high_gain": 0,
+      "high_frequency": 8000,
+      "lp_on": false,
+      "lp_frequency": 16000
+    },
+    "params": {},
+    "hash": "2c37704cab62f4ebb06d439de3b9d66f20ff1c62412f289d7f43c567cd8405de",
+    "latency": 0,
+    "preroll": 14400
+  },
+  {
+    "id": "eq_bands",
+    "variant": "adjusted",
+    "defaults": {
+      "hp_on": false,
+      "hp_frequency": 80,
+      "low_gain": 0,
+      "low_frequency": 120,
+      "band1_gain": 0,
+      "band1_frequency": 250,
+      "band1_q": 30,
+      "band2_gain": 0,
+      "band2_frequency": 1000,
+      "band2_q": 30,
+      "band3_gain": 0,
+      "band3_frequency": 4000,
+      "band3_q": 30,
+      "high_gain": 0,
+      "high_frequency": 8000,
+      "lp_on": false,
+      "lp_frequency": 16000
+    },
+    "params": {
+      "hp_on": true,
+      "hp_frequency": 207.4,
+      "low_gain": 3.9000000000000004,
+      "low_frequency": 247.4,
+      "band1_gain": 3.9000000000000004,
+      "band1_frequency": 2324.8,
+      "band1_q": 43,
+      "band2_gain": 3.9000000000000004,
+      "band2_frequency": 3074.8,
+      "band2_q": 43,
+      "band3_gain": 3.9000000000000004,
+      "band3_frequency": 6074.8,
+      "band3_q": 43,
+      "high_gain": 3.9000000000000004,
+      "high_frequency": 10470,
+      "lp_on": true,
+      "lp_frequency": 18470
+    },
+    "hash": "262e805a7047309ad8a3fb09f79ce15017a9a58054f6bee77838c85e2f293319",
+    "latency": 0,
+    "preroll": 14400
+  },
+  {
+    "id": "graphic_eq",
+    "variant": "defaults",
+    "defaults": {
+      "band_31": 0,
+      "band_63": 0,
+      "band_125": 0,
+      "band_250": 0,
+      "band_500": 0,
+      "band_1k": 0,
+      "band_2k": 0,
+      "band_4k": 0,
+      "band_8k": 0,
+      "band_16k": 0,
+      "output": 0
+    },
+    "params": {},
+    "hash": "2c37704cab62f4ebb06d439de3b9d66f20ff1c62412f289d7f43c567cd8405de",
+    "latency": 0,
+    "preroll": 4800
+  },
+  {
+    "id": "graphic_eq",
+    "variant": "adjusted",
+    "defaults": {
+      "band_31": 0,
+      "band_63": 0,
+      "band_125": 0,
+      "band_250": 0,
+      "band_500": 0,
+      "band_1k": 0,
+      "band_2k": 0,
+      "band_4k": 0,
+      "band_8k": 0,
+      "band_16k": 0,
+      "output": 0
+    },
+    "params": {
+      "band_31": 3.12,
+      "band_63": 3.12,
+      "band_125": 3.12,
+      "band_250": 3.12,
+      "band_500": 3.12,
+      "band_1k": 3.12,
+      "band_2k": 3.12,
+      "band_4k": 3.12,
+      "band_8k": 3.12,
+      "band_16k": 3.12,
+      "output": 3.12
+    },
+    "hash": "eef1385c8c98f2a1f4fb7bdc51dd3f5a33efbf6e4fd3ae85ef4c24181ad8da98",
+    "latency": 0,
+    "preroll": 4800
+  },
+  {
+    "id": "notch",
+    "variant": "defaults",
+    "defaults": {
+      "frequency": 1000,
+      "width": 50,
+      "depth": -30
+    },
+    "params": {},
+    "hash": "3a4f85d5b7bc17d13ff43084031a74a9f7e80d31583741a6570d4e9c24a5f553",
+    "latency": 0,
+    "preroll": 48000
+  },
+  {
+    "id": "notch",
+    "variant": "adjusted",
+    "defaults": {
+      "frequency": 1000,
+      "width": 50,
+      "depth": -30
+    },
+    "params": {
+      "frequency": 3597.4,
+      "width": 63,
+      "depth": -22.2
+    },
+    "hash": "c8854ca639af623ad03c290455643ef1d2f6fae255816557c1775fa631378f72",
+    "latency": 0,
+    "preroll": 48000
+  },
+  {
+    "id": "high_pass",
+    "variant": "defaults",
+    "defaults": {
+      "frequency": 80,
+      "slope": "gentle"
+    },
+    "params": {},
+    "hash": "b13d439a22762c49c85e8beb03ff4251a451aa768b09b9d07dbe15939ec50129",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "high_pass",
+    "variant": "adjusted",
+    "defaults": {
+      "frequency": 80,
+      "slope": "gentle"
+    },
+    "params": {
+      "frequency": 207.4,
+      "slope": "steep"
+    },
+    "hash": "d4babd5e1901bfe5281505ab1f2af2700b21f99cabd7abef798ff69aea69053e",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "low_pass",
+    "variant": "defaults",
+    "defaults": {
+      "frequency": 8000,
+      "slope": "gentle"
+    },
+    "params": {},
+    "hash": "8e2d511c55a190e0f854e444d59f4127ce3e5d019b7450caff234bc0b1b8b97c",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "low_pass",
+    "variant": "adjusted",
+    "defaults": {
+      "frequency": 8000,
+      "slope": "gentle"
+    },
+    "params": {
+      "frequency": 10535,
+      "slope": "steep"
+    },
+    "hash": "002d2dc83625497fbc928821b09495345677def8a415e7cbe14a08513b6e18d9",
+    "latency": 0,
+    "preroll": 2400
+  },
+  {
+    "id": "chorus",
+    "variant": "defaults",
+    "defaults": {
+      "rate": 0.8,
+      "depth": 40,
+      "voices": 2,
+      "mix": 40
+    },
+    "params": {},
+    "hash": "0dec514be4a6ec23a43070bb7dd31bb51f5458ed3a3f59f207cecffc9ef28141",
+    "latency": 0,
+    "preroll": 9600
+  },
+  {
+    "id": "chorus",
+    "variant": "adjusted",
+    "defaults": {
+      "rate": 0.8,
+      "depth": 40,
+      "voices": 2,
+      "mix": 40
+    },
+    "params": {
+      "rate": 1.4435000000000002,
+      "depth": 53,
+      "voices": 2.39,
+      "mix": 53
+    },
+    "hash": "6be26ca36e2b7081504cc5b3c5b7b72810e58f7de0959ef04c0469efd42c3fb6",
+    "latency": 0,
+    "preroll": 9600
+  },
+  {
+    "id": "flanger",
+    "variant": "defaults",
+    "defaults": {
+      "rate": 0.3,
+      "depth": 60,
+      "feedback": 40,
+      "mix": 50
+    },
+    "params": {},
+    "hash": "f43f2daa8f018aaf9acf6d64b977c473442ffe25a2a1f212b781db3823c1dd9f",
+    "latency": 0,
+    "preroll": 48000
+  },
+  {
+    "id": "flanger",
+    "variant": "adjusted",
+    "defaults": {
+      "rate": 0.3,
+      "depth": 60,
+      "feedback": 40,
+      "mix": 50
+    },
+    "params": {
+      "rate": 0.9435,
+      "depth": 73,
+      "feedback": 52.35,
+      "mix": 63
+    },
+    "hash": "fdf05b7303476b17601335ca57fa44bad1ce6886dcb23e10852578a8825a89de",
+    "latency": 0,
+    "preroll": 48000
+  },
+  {
+    "id": "phaser",
+    "variant": "defaults",
+    "defaults": {
+      "rate": 0.5,
+      "depth": 60,
+      "stages": "8",
+      "feedback": 30,
+      "mix": 50
+    },
+    "params": {},
+    "hash": "f41f6197fad40a0bb721aeed71fb8f3cc2bcfa138eef73c02cde9831acf56c13",
+    "latency": 0,
+    "preroll": 24000
+  },
+  {
+    "id": "phaser",
+    "variant": "adjusted",
+    "defaults": {
+      "rate": 0.5,
+      "depth": 60,
+      "stages": "8",
+      "feedback": 30,
+      "mix": 50
+    },
+    "params": {
+      "rate": 1.1435,
+      "depth": 73,
+      "stages": "12",
+      "feedback": 42.35,
+      "mix": 63
+    },
+    "hash": "41d6514132d424af04dde900193135a94d16d58db96813506521190739111160",
+    "latency": 0,
+    "preroll": 24000
+  }
+]

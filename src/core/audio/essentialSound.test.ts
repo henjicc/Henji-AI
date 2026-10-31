@@ -23,7 +23,7 @@ describe('基本声音换算成效果链', () => {
   })
   it('按修复 → 透明度 → 创意 → 响度与音量的顺序；响度开着时末尾限幅', () => {
     const ids = essentialSoundEffects(everything('podcast', 'room', 60)).map(effect => effect.builtin.id)
-    expect(ids).toEqual(['high_pass', 'dehum', 'noise_reduction', 'de_esser', 'compressor', 'eq_bands', 'vocal_enhancer', 'reverb', 'gain_balance', 'limiter'])
+    expect(ids).toEqual(['audio_filter', 'dehum', 'noise_reduction', 'de_esser', 'compressor', 'equalizer', 'vocal_enhancer', 'reverb', 'gain_balance', 'limiter'])
   })
   it('关着或量为 0 的项不进链；只选了类型时声音不变', () => {
     expect(essentialSoundEffects({ type: 'dialogue' })).toEqual([])

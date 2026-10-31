@@ -9,10 +9,13 @@ export function audioRenderKey(value: unknown): string {
 }
 const running = new Map<string, Promise<string>>()
 /** Publish only validated, complete files. Failed/cancelled work cannot poison subsequent reads. */
-export async function cachedAudioFile(directory: string, key: string, extension: string, build: (temporary: string) => Promise<void>, signal?: AbortSignal): Promise<string> {
+export async function cachedAudioFile(directory: string, key: string, extension: string, build: (temporary: string) => Promise<void>, signal?: AbortSignal, aliases: readonly string[] = []): Promise<string> {
   signal?.throwIfAborted()
   const output = path.join(directory, `${key}.${extension}`)
-  if ((await fs.stat(output).catch(() => null))?.size) return output
+  for (const candidate of new Set([key, ...aliases])) {
+    const file = path.join(directory, `${candidate}.${extension}`)
+    if ((await fs.stat(file).catch(() => null))?.size) return file
+  }
   const existing = running.get(output)
   if (existing) { await existing; signal?.throwIfAborted(); return output }
   const operation = (async () => {

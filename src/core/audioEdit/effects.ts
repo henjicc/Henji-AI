@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { audioBuiltinIdentity, audioIdentityAliasesSchema } from '../audio/effects/audioIdentity'
 import type { AudioEffectInstance } from '../audio/effects/audioEffectChain'
 import { essentialSoundEffects, essentialSoundOfflineStages, essentialSoundSettingsSchema, type EssentialSoundSettings } from '../audio/essentialSound'
 import { isRemovedVideoEditBuiltinEffect, videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia } from '../videoEdit/builtinEffects'
@@ -28,7 +29,7 @@ const name = z.string().trim().min(1).max(200)
 
 const builtinItemSchema = z.object({
   id, kind: z.literal('builtin'), name, enabled: z.boolean(), amount: z.number().finite().min(0).max(1),
-  builtin: z.object({ id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(4096)])) }).strict(),
+  builtin: z.object({ id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(4096)])), identityAliases: audioIdentityAliasesSchema.optional() }).strict(),
 }).strict()
 const essentialItemSchema = z.object({ id, kind: z.literal('essential'), enabled: z.boolean(), settings: essentialSoundSettingsSchema }).strict()
 /**
@@ -107,8 +108,8 @@ export function splitAudioEditChain(project: ChainOwner): { rendered: AudioEditC
 /** 一项在处理时等价的内容（去掉 id 与开关）：缓存键用它，换 id、改名不重算。 */
 export function audioEditChainItemRecipe(item: AudioEditChainItem): unknown {
   switch (item.kind) {
-    case 'builtin': return ['builtin', item.amount, item.builtin]
-    case 'essential': return ['essential', item.settings]
+    case 'builtin': return ['builtin', item.amount, audioBuiltinIdentity(item.builtin)]
+    case 'essential': { const { effectIdentityAliases: _aliases, ...settings } = item.settings; return ['essential', settings] }
     case 'mouth_declick': return ['mouth_declick-v1', item.clicks]
     case 'breath': return ['breath-v1', item.mode, item.mode === 'mute' ? -120 : item.reductionDb, item.breaths]
     case 'separation': return ['separation-v1', item.mode, item.amount]

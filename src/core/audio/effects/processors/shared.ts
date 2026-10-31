@@ -94,7 +94,7 @@ export function biquadBlock(c: Coefficients, state: Float64Array, offset: number
 /** 两个系数是否相同（参数没变时不重算三角函数）。 */
 export const sameBiquadSpec = (a: BiquadSpec | undefined, b: BiquadSpec): boolean => !!a && a.kind === b.kind && a.frequency === b.frequency && a.q === b.q && (a.gain ?? 0) === (b.gain ?? 0)
 
-// —— 压缩曲线（压缩器与多段压缩器共用） ——
+// —— 压缩曲线（压缩器单段与多段共用） ——
 /** 压缩量 0–100 → 阈值、比率与自动补偿：0 不压缩；40 ≈ 阈值 -16 dB、比率 3.8:1；100 ≈ 阈值 -40 dB、比率 8:1。 */
 export function audioCompressorCurve(amount: number): { threshold: number; ratio: number; makeup: number } {
   const threshold = -0.4 * amount; const ratio = 1 + 0.07 * amount

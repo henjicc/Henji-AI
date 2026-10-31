@@ -48,7 +48,7 @@ describe('动态类效果', () => {
     for (let index = RATE; index + 480 <= input.length; index += 480) jump = Math.max(jump, Math.abs(gainOf(index) - gainOf(index - 480)))
     expect(jump).toBeLessThan(.5)
   })
-  it('多段压缩器：压缩量全 0、输出 0 dB 时幅频平直（含分频点）；只压高频段时高频变轻、低频不变；输出增益整体缩放', async () => {
+  it('压缩器多段方式：压缩量全 0、输出 0 dB 时幅频平直（含分频点）；只压高频段时高频变轻、低频不变；输出增益整体缩放', async () => {
     for (const frequency of [50, 200, 700, 3000, 10000]) {
       const tone = sine(frequency, .5, RATE)
       expect(Math.abs(steadyGain((await run([effect('multiband_compressor', { low_amount: 0, mid_amount: 0, high_amount: 0 })], stereo(tone))).output[0], tone))).toBeLessThan(.02)

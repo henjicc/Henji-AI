@@ -15,6 +15,7 @@ import { audioCaptureSettingsEnvelopeSchema, DEFAULT_AUDIO_CAPTURE_SETTINGS } fr
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { PERSISTENCE_FORMATS } from '../src/core/persistence/formats'
+import { upgradePersistenceContent } from '../src/core/persistence/migrations'
 import { parseWebReplayDirector } from '../src/core/webReplay/director'
 import { MODEL_DEFAULTS_VERSION, SUBTITLE_MANIFEST_VERSION, modelDefaultsSchema } from '../src/core/persistence/preferenceSchemas'
 import { createMotionFixture } from '../src/core/creativeIntent/fixtures/motionFixtures'
@@ -183,7 +184,7 @@ const legacyPresetItems = (JSON.parse(fs.readFileSync('tests/fixtures/persistenc
 videoEditDocumentSchema.parse(document)
 // 第 28 版：音轨混音（音量、声像、轨道效果）与主轨。
 const mixedTrack = sequence.tracks.find(track => track.kind === 'audio')!
-Object.assign(mixedTrack, { volumeDb: -3, pan: -20, effects: [{ id: 'golden-track-eq', name: '高通（去低频）', enabled: true, amount: 1, builtin: { id: 'high_pass', params: { frequency: 80, slope: 'gentle' } } }] })
+Object.assign(mixedTrack, { volumeDb: -3, pan: -20, effects: [{ id: 'golden-track-eq', name: '滤波', enabled: true, amount: 1, builtin: { id: 'audio_filter', params: { mode: 'high_pass', high_pass_frequency: 80, high_pass_slope: 'gentle' } } }] })
 sequence.master = { volumeDb: -1, effects: [{ id: 'golden-master-limiter', name: '限幅器', enabled: true, amount: 1, builtin: { id: 'limiter', params: { ceiling: -1, boost: 0 } } }] }
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const soundDocument = createVideoEditDocument('节拍声音样本'), soundSequence = createVideoEditSequence()
@@ -393,7 +394,13 @@ export function getImageLayoutFixtureResources(): readonly unknown[] {
 export function generatePersistenceFixtures(root = process.cwd(), only?: string): number {
   for (const format of PERSISTENCE_FORMATS) {
     if (only && format.id !== only) continue
-    const content = format.schema.parse(values[format.id])
+    const audioSources: Record<string, string> = {
+      'document.video_edit': 'video_edit', 'document.audio_edit': 'audio_edit', 'document.screen_recording': 'screen_recording',
+      'video-effect-library': 'effect_library', 'video-preset-package': 'preset_package', 'video-style-library': 'style_library', 'video-style-package': 'style_package',
+    }
+    const sourceFile = audioSources[format.id]
+    const source = sourceFile ? JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/audio-effect-merge', `${sourceFile}.json`), 'utf8')) as { content?: unknown; kindVersion?: number; version: number } : undefined
+    const content = source ? upgradePersistenceContent(format, source.content ?? source, source.kindVersion ?? source.version) : format.schema.parse(values[format.id])
     const raw = format.id.startsWith('document.') ? buildDocumentEnvelope({ kind: format.id.slice('document.'.length), kindVersion: format.version, kindMinReaderVersion: format.minReaderVersion ?? format.version, id: `golden-${format.id.split('.')[1]}`, name: format.name, createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content })
       : format.id === 'settings' || format.id === 'theme' ? { version: format.version, state: content }
       : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, content } : ['video-style-library', 'video-template-library', 'video-style-package'].includes(format.id) ? { version: format.version, minReaderVersion: format.minReaderVersion ?? format.version, content } : content
