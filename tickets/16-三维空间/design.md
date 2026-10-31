@@ -1,59 +1,59 @@
-摘要：正文执行 review.md 的 13 条必须改与 11 条建议；第 14 节保留为历史记录，冲突以 review.md 裁定及本次改写后的正文为准。
+摘要：已将 review.md 首轮 24 项、第 12.1 节裁定及第 2 轮 15 项全部并入实施正文；本文为最终设计，Claude 自查后按依赖顺序开工，不再送设计复审。
 摘要：只扩展剪辑片段空间属性、序列摄像机和受管 three 作者场景；A 负责格式与曝光调度，B 负责作者运行时，C 负责算法能力与读回。
-摘要：10/15/17/18 的前置接口合入后，16 三线吸收 main 并按冻结接口实施；本次只改设计文档，未修改源码、安装依赖、提交或推送。
+摘要：20、12、15、17、18、10、21、19-U12/U13 先合并；A 吸收最新 main 并提交冻结接口，B/C 从该提交叠加开工，A 合并后各自 rebase 到 main；19-U9/U15a 在 B 之后。
 
 # 16 三维空间技术设计
 
 ## 1. 范围、依据与基线
 
-- 范围以 [plan.md](plan.md)、[review.md](review.md) 的最终裁定和 [以后再做第 4 项](../../../Henji-AI-t16/docs/task/代码效果与渲染改进/以后再做.md) 的收窄决定为准。[三维空间调研](../../../Henji-AI-t16/docs/task/代码效果与渲染改进/三维空间调研.md) 仅作技术依据；SpaceScene 编辑器、镜头参考迁移、摄像机轨道、模型/HDR 导入优化不在本票。
+- 范围以 [plan.md](plan.md)、[review.md](review.md) 的最终裁定和 [以后再做第 4 项](../../docs/task/代码效果与渲染改进/以后再做.md) 的收窄决定为准。[三维空间调研](../../docs/task/代码效果与渲染改进/三维空间调研.md) 仅作技术依据；SpaceScene 编辑器、镜头参考迁移、摄像机轨道、模型/HDR 导入优化不在本票。
 - 图片、视频、文字、图形、代码和嵌套序列片段可成为空间卡片；几何体由标准 TS/JS 与原生 three API 创作。只面向 AI 操作，不新增人工三维界面、第二套时间线、业务状态或撤销栈。
-- 裁定顺序：review.md 的 24 项全部采纳，优先于第 14 节的历史冲突处；第 1–13 节是实施正文，第 14 节与 review.md 原文保留。API 9、首期中心深度近似、原型标定和由 Claude 目视样片均已批准，不重复请求方向批准。设计复审一轮后再开工。
+- 裁定顺序：review.md 第 2 轮 15 项、第 12.1 节裁定、首轮 24 项依次优先，均已落实在第 1–13 节。第 14 节只记已定方向，review.md 保存完整审查记录。API 9、中心深度近似及其动态换序例外、原型标定与 Claude 目视样片均已定；Claude 自查后直接开工，不再送设计复审。
 - 本次唯一写入为本文件；不改源码、不安装/卸载依赖、不切分支、不提交或 push，不操作 9334 开发实例与 D:/视频制作。node_modules 为联接点，仅只读核对。未启动 GPU 原型或应用，本轮不能当作渲染验收。
 - 代码核对基线：D:/VibeCode/Henji-AI-t16，task/16-三维空间，HEAD 90103a8f3bceb6b3d8c88b87f7302a461c390797，工作区干净、无上游。该值是设计调查基线，非未来集成 main 的冻结值；实现按第 3、7 节重新吸收前置票。
-- 规则依据：[架构](../../../Henji-AI-t16/docs/rules/architecture.md)、[持久格式](../../../Henji-AI-t16/docs/rules/persistence.md)、[助手目标](../../../Henji-AI-t16/docs/rules/assistant-goal.md)、[助手现状](../../../Henji-AI-t16/docs/rules/assistant-status.md)、[应用能力](../../../Henji-AI-t16/docs/rules/assistant-capability.md)、[能力技能](../../../Henji-AI-t16/.codex/skills/henji-application-capability/SKILL.md)、[日志](../../../Henji-AI-t16/docs/rules/logging.md)、[媒体边界](../../../Henji-AI-t16/docs/rules/media-url.md)、[验证](../../../Henji-AI-t16/docs/rules/testing.md)。本轮为 L0 文档核查；以下实现文件和签名均为拟新增/拟扩展，不冒充已存在 API。
+- 规则依据：[架构](../../docs/rules/architecture.md)、[持久格式](../../docs/rules/persistence.md)、[助手目标](../../docs/rules/assistant-goal.md)、[助手现状](../../docs/rules/assistant-status.md)、[应用能力](../../docs/rules/assistant-capability.md)、[能力技能](../../.codex/skills/henji-application-capability/SKILL.md)、[日志](../../docs/rules/logging.md)、[媒体边界](../../docs/rules/media-url.md)、[验证](../../docs/rules/testing.md)。本轮为 L0 文档核查；以下实现文件和签名是冻结的新增/扩展契约，不表示源码已实现。
 
 ## 2. 现有代码事实与复用决定
 
 | 位置 | 事实与决定 |
 | --- | --- |
-| [document.ts](../../../Henji-AI-t16/src/core/videoEdit/document.ts)，videoEditClipStateSchema、videoEditSequenceSchema；[keyframes.ts](../../../Henji-AI-t16/src/core/videoEdit/keyframes.ts) | 片段已有位置、缩放、Z 轴旋转、锚点和曲线；新增深度与 X/Y 旋转，不复制二维属性。序列摄像机采用一个可动画对象，不新增 camera 片段类型。 |
-| [clipGeometry.ts](../../../Henji-AI-t16/src/core/videoEdit/clipGeometry.ts)，videoEditClipToFrame | x/y 是相对画面中心的宽/高比例，正 y 向下；不是左上角绝对比例。fit、anchor、scaleAspect、源方向必须保留。 |
-| [videoEditGpuShaders.ts](../../../Henji-AI-t16/src/features/videoEdit/engine/videoEditGpuShaders.ts)，VIDEO_EDIT_LAYER_VERTEX | 现有 warp 把单应矩阵变成齐次 x/y/w，但 z 固定为 0，且 warp2.z 被用作启用判定。不能把任意摄像机投影直接塞入并声称近/远裁剪正确。三维使用独立顶点布局和完整 clip xyzw，二维 shader 保持原行为。 |
-| [videoEditGpuCompositor.ts](../../../Henji-AI-t16/src/features/videoEdit/engine/videoEditGpuCompositor.ts)，draw；[videoEditCompositeScene.ts](../../../Henji-AI-t16/src/features/videoEdit/engine/videoEditCompositeScene.ts)，normalize、resolveClip | 画面与片段按数组下标配对；附加效果会先画到全画幅，再把片段几何改成 identity。三维排序必须排序完整绘制项，附加效果路径必须保留空间元数据，不能只排序 clips 或让 identity 丢掉投影。 |
-| [compositing.ts](../../../Henji-AI-t16/src/core/videoEdit/compositing.ts)，buildVideoEditCompositePlan | 调整层已有轨道范围树，转场已有原子合成节点。保留此树的语义，不能对全序列简单按 z 排序。 |
-| [motionBlur.ts](../../../Henji-AI-t16/src/core/videoEdit/motionBlur.ts)；[videoEditRenderer.ts](../../../Henji-AI-t16/src/features/videoEdit/engine/videoEditRenderer.ts)，render 帧准备 | 片段路径为 180° 快门，最多 16 样本，播放最多 8；位移估计间距 1.5px，不是调研文档里的统一“每 4px”。当前逐层平均不能保证曝光期间换序的遮挡。三维沿用采样器与质量档；仅快门内换序组逐子时刻合成后平均，稳定层序复用变换曝光。 |
-| [videoEditBuiltinEffectPasses.ts](../../../Henji-AI-t16/src/features/videoEdit/engine/videoEditBuiltinEffectPasses.ts)，planAuthorDefocus；[videoEditAuthorEffects.ts](../../../Henji-AI-t16/src/features/videoEdit/engine/videoEditAuthorEffects.ts) | 镜头虚化已收口到共享效果计划及执行器；复用它的 padding、预乘 alpha、高精度和光贡献处理。不新增另一套 blur shader，不再按旧调研调用不存在的 AuthorGpu.lens。 |
-| [videoEditAuthorModule.ts](../../../Henji-AI-t16/src/features/videoEdit/engine/videoEditAuthorModule.ts)，AuthorFrameInfo、AuthorModule；[videoEditAuthorRuntime.ts](../../../Henji-AI-t16/src/features/videoEdit/engine/videoEditAuthorRuntime.ts)，renderFrame | 作者已有 createWebGL/createWebGPU；WebGL 画布每帧 copyExternalImageToTexture，WebGPU 借同一 device 画目标。layers 与 GPU 入口互斥。现有 info.time 是作者源时间，不能改成序列时间。 |
-| [authorLibraries.ts](../../../Henji-AI-t16/src/core/videoEdit/codeMaterial/authorLibraries.ts)、[package.json](../../../Henji-AI-t16/package.json) | 已冻结 three 0.186.1、three/webgpu、three/tsl；应用镜头参考仍使用 three 0.169。本票复用作者版，禁止宿主适配器误导入应用的另一版 three。 |
-| [videoEditFields.ts](../../../Henji-AI-t16/src/features/videoEdit/application/videoEditFields.ts)、[videoEditExecutors.ts](../../../Henji-AI-t16/src/features/videoEdit/application/videoEditExecutors.ts)、[videoEditService.ts](../../../Henji-AI-t16/src/features/videoEdit/application/videoEditService.ts) | 通用字段、实体事务、文档实例、editVideoProject 和保存回读已存在。只增加声明和领域算法；Pi/MCP 自动投影，不手写工具白名单。 |
-| [recipes-3d.md](../../../Henji-AI-t16/resources/assistant-skills/video-edit-code-creation/references/recipes-3d.md) | 当前还教作者手写伪透视和摄像机。实施后新增能力的配方调用宿主操作；旧 API 说明保留版本边界，不能继续把宿主已实现的投影/虚化作为作者作业。 |
+| [document.ts](../../src/core/videoEdit/document.ts)，videoEditClipStateSchema、videoEditSequenceSchema；[keyframes.ts](../../src/core/videoEdit/keyframes.ts) | 片段已有位置、缩放、Z 轴旋转、锚点和曲线；新增深度与 X/Y 旋转，不复制二维属性。序列摄像机采用一个可动画对象，不新增 camera 片段类型。 |
+| [clipGeometry.ts](../../src/core/videoEdit/clipGeometry.ts)，videoEditClipToFrame | x/y 是相对画面中心的宽/高比例，正 y 向下；不是左上角绝对比例。fit、anchor、scaleAspect、源方向必须保留。 |
+| [videoEditGpuShaders.ts](../../src/features/videoEdit/engine/videoEditGpuShaders.ts)，VIDEO_EDIT_LAYER_VERTEX | 现有 warp 把单应矩阵变成齐次 x/y/w，但 z 固定为 0，且 warp2.z 被用作启用判定。不能把任意摄像机投影直接塞入并声称近/远裁剪正确。三维使用独立顶点布局和完整 clip xyzw，二维 shader 保持原行为。 |
+| [videoEditGpuCompositor.ts](../../src/features/videoEdit/engine/videoEditGpuCompositor.ts)，draw；[videoEditCompositeScene.ts](../../src/features/videoEdit/engine/videoEditCompositeScene.ts)，normalize、resolveClip | 画面与片段按数组下标配对；附加效果会先画到全画幅，再把片段几何改成 identity。三维排序必须排序完整绘制项，附加效果路径必须保留空间元数据，不能只排序 clips 或让 identity 丢掉投影。 |
+| [compositing.ts](../../src/core/videoEdit/compositing.ts)，buildVideoEditCompositePlan | 调整层已有轨道范围树，转场已有原子合成节点。保留此树的语义，不能对全序列简单按 z 排序。 |
+| [motionBlur.ts](../../src/core/videoEdit/motionBlur.ts)；[videoEditRenderer.ts](../../src/features/videoEdit/engine/videoEditRenderer.ts)，render 帧准备 | 片段路径为 180° 快门，最多 16 样本，播放最多 8；位移估计间距 1.5px，不是调研文档里的统一“每 4px”。当前逐层平均不能保证曝光期间换序的遮挡。三维沿用采样器与质量档；仅快门内换序组逐子时刻合成后平均，稳定层序复用变换曝光。 |
+| [videoEditBuiltinEffectPasses.ts](../../src/features/videoEdit/engine/videoEditBuiltinEffectPasses.ts)，planAuthorDefocus；[videoEditAuthorEffects.ts](../../src/features/videoEdit/engine/videoEditAuthorEffects.ts) | 镜头虚化已收口到共享效果计划及执行器；复用它的 padding、预乘 alpha、高精度和光贡献处理。不新增另一套 blur shader，不再按旧调研调用不存在的 AuthorGpu.lens。 |
+| [videoEditAuthorModule.ts](../../src/features/videoEdit/engine/videoEditAuthorModule.ts)，AuthorFrameInfo、AuthorModule；[videoEditAuthorRuntime.ts](../../src/features/videoEdit/engine/videoEditAuthorRuntime.ts)，renderFrame | 作者已有 createWebGL/createWebGPU；WebGL 画布每帧 copyExternalImageToTexture，WebGPU 借同一 device 画目标。layers 与 GPU 入口互斥。现有 info.time 是作者源时间，不能改成序列时间。 |
+| [authorLibraries.ts](../../src/core/videoEdit/codeMaterial/authorLibraries.ts)、[package.json](../../package.json) | 已冻结 three 0.186.1、three/webgpu、three/tsl；应用镜头参考仍使用 three 0.169。本票复用作者版，禁止宿主适配器误导入应用的另一版 three。 |
+| [videoEditFields.ts](../../src/features/videoEdit/application/videoEditFields.ts)、[videoEditExecutors.ts](../../src/features/videoEdit/application/videoEditExecutors.ts)、[videoEditService.ts](../../src/features/videoEdit/application/videoEditService.ts) | 通用字段、实体事务、文档实例、editVideoProject 和保存回读已存在。只增加声明和领域算法；Pi/MCP 自动投影，不手写工具白名单。 |
+| [recipes-3d.md](../../resources/assistant-skills/video-edit-code-creation/references/recipes-3d.md) | 当前还教作者手写伪透视和摄像机。实施后新增能力的配方调用宿主操作；旧 API 说明保留版本边界，不能继续把宿主已实现的投影/虚化作为作者作业。 |
 
 ## 3. 三条实现线、最终文件所有权与集成顺序
 
 ### 3.1 唯一写入方
 
-下表路径分别以 src/core/videoEdit、src/features/videoEdit/engine（engine）、src/features/videoEdit/application（application）为根；标为新增的文件当前不要求存在。同名文件只能由一条线写，其他线交接口需求或补丁说明。
+下表 core/ 路径以 src/core/ 为根，engine/ 以 src/features/videoEdit/engine/ 为根，application/ 以 src/features/videoEdit/application/ 为根；其他路径以主仓库根 D:/VibeCode/Henji-AI/ 为根；标为新增的文件当前不要求存在。同名文件只能由一条线写，其他线交接口需求或补丁说明。
 
 | 线 | 最终独占文件范围 | 交付 |
 | --- | --- | --- |
-| A：格式、求值、合成、曝光调度 | 新增 core/videoEdit/{spatialSchema,spatialTypes,spatialEvaluation,spatialMatrices,spatialPropagation,keyframeSchema}.ts；修改 core/videoEdit/{document,keyframes,keyframeLanes,clipGeometry,compositing,motionBlur,renderCache,renderFingerprint,timelineEdits,sequenceCopy,nestedSequences,reframe}.ts 与 styles/{templateSchemas,nativeTemplates}.ts；新增 engine/{videoEditSpatialContracts,videoEditSpatialExposure,videoEditSpatialComposite,videoEditSpatialShaders}.ts；修改 engine/{videoEditGpuCompositor,videoEditGpuShaders,videoEditCompositeScene,videoEditRenderer,videoEditRenderPrecision,videoEditGpuBudget,videoEditMotionWorkerProtocol,videoEditMotionWorker}.ts；application/{videoEditClipSpeed,videoEditTemplates,videoEditReframe,videoEditMotionWorkerClient}.ts 的空间传播/Worker 接入；第 10 节全部格式文件；scripts/check-dependency-graph.cjs 及其定向测试 | 冻结领域 DTO、曝光调度与 B 回调签名；全传播、旧片指纹/像素、景深与组曝光、版本迁移；A 是最终 Renderer 调度 owner |
-| B：作者场景、后端、时钟、内容键 | 新增 engine/{videoEditAuthorThree,videoEditAuthorThreeWebGpu,videoEditAuthorThreeClock}.ts；修改 engine/{videoEditAuthorModule,videoEditAuthorRuntime,videoEditAuthorPrograms,videoEditAuthorParameters,videoEditAuthorTypeEnvironment,videoEditCodeGpu,videoEditCodeSources,videoEditAuthorFingerprint,videoEditCodeFingerprint}.ts；resources/video-edit-author/author-api.d.ts | 实现 A 冻结的 CodeSources 帧准备/逐样本渲染/释放接口；受管场景、显式依赖、同模块身份、时钟确定性、GPU 资源与 ticket 15 键失效；消费 17 模拟和 18 网页 DTO |
-| C：公共属性、算法、结构读回、配方 | 新增 core/videoEdit/spatialLayout.ts、core/application-control/domains/videoEdit/videoEditSpatialCapabilities.ts、application/videoEditSpatial.ts；修改 application/{videoEditFields,videoEditReflection,videoEditExecutors,videoEditDocumentAlgorithm,applicationDomain,videoEditFrameObservation}.ts、core/application-control/domains/videoEdit/videoEditApplicationCapabilities.ts；resources/assistant-skills/video-edit-code-creation/{SKILL.md,references/recipes-3d.md,references/camera.md,references/author-api.md} | 通用字段同源；布局/展开/压平/验证算法；正式写入、读回、撤销、保存闭环；消费 A 求值/传播接口，不另算相机 |
+| A：格式、求值、合成、曝光调度 | 新增 core/videoEdit/{spatialSchema,spatialTypes,spatialEvaluation,spatialMatrices,spatialPropagation,keyframeSchema}.ts；修改 core/videoEdit/{document,keyframes,keyframeLanes,clipGeometry,compositing,motionBlur,renderCache,renderFingerprint,timelineEdits,sequenceCopy,nestedSequences,reframe}.ts 与 core/videoEdit/styles/{templateSchemas,nativeTemplates,styleTemplateMigration}.ts、core/videoEdit/{presetPackage,codeMaterialVersions}.ts；core/creativeIntent/{persistence,referenceTransforms}.ts、core/persistence/{resourceContracts,versionedJson}.ts；新增 engine/{videoEditSpatialContracts,videoEditSpatialExposure,videoEditSpatialComposite,videoEditSpatialShaders}.ts；修改 engine/{videoEditGpuCompositor,videoEditGpuShaders,videoEditCompositeScene,videoEditRenderer,videoEditRenderPrecision,videoEditGpuBudget,videoEditMotionWorkerProtocol,videoEditMotionWorker,videoEditBuiltinEffectPasses}.ts；application/{videoEditClipSpeed,videoEditTemplates,videoEditReframe,videoEditMotionWorkerClient}.ts 的空间传播/Worker 接入；第 10 节全部格式文件；scripts/check-dependency-graph.cjs 及其定向测试 | 冻结领域 DTO、曝光调度与 B 回调签名；全传播、旧片指纹/像素、景深与组曝光、版本迁移；A 是最终 Renderer 调度 owner；ticket 12 合并后串行扩 planAuthorDefocus/共享效果计划的 CoC 尺度换算和小半径归零 |
+| B：作者场景、后端、时钟、内容键 | 新增 engine/{videoEditAuthorThree,videoEditAuthorThreeWebGpu,videoEditAuthorThreeClock}.ts；修改 engine/{videoEditAuthorModule,videoEditAuthorRuntime,videoEditAuthorPrograms,videoEditAuthorParameters,videoEditAuthorTypeEnvironment,videoEditCodeGpu,videoEditCodeSources,videoEditAuthorFingerprint,videoEditCodeFingerprint,videoEditAuthorDeterminism,videoEditAuthorBundle,videoEditAuthorJsLocations,videoEditAuthorProbeSources}.ts；core/videoEdit/codeTrackReview.ts、core/videoEdit/codeMaterial/{declarationReader,contract,typeDiagnostics}.ts；resources/video-edit-author/author-api.d.ts | 实现 A 冻结的 CodeSources 帧准备/逐样本渲染/释放接口；受管场景、显式依赖、同模块身份、时钟确定性、GPU 资源与 ticket 15 键失效；消费 17 模拟和 18 网页 DTO |
+| C：公共属性、算法、结构读回、配方 | 新增 core/videoEdit/spatialLayout.ts、core/application-control/domains/videoEdit/videoEditSpatialCapabilities.ts、application/videoEditSpatial.ts；修改 application/{videoEditFields,videoEditReflection,videoEditExecutors,videoEditDocumentAlgorithm,applicationDomain,videoEditFrameObservation}.ts、core/application-control/domains/videoEdit/videoEditApplicationCapabilities.ts；core/creativeIntent/{stagger,motionCompiler,fitting}.ts、core/videoEdit/{motionDraft,stabilization,tracking}.ts、application/{videoEditMotionGroup,videoEditSuperKeyframes,videoEditStabilization,videoEditTrackingEdits,videoEditTrackingEditing}.ts；resources/assistant-skills/video-edit-code-creation/{SKILL.md,references/recipes-3d.md,references/camera.md,references/author-api.md} | 通用字段同源；布局/展开/压平/验证算法；正式写入、读回、撤销、保存闭环；消费 A 求值/传播接口，不另算相机；上述运动入口仅处理二维键并保留空间键 |
 
-相邻精确测试归实现 owner。A 拥有共享契约的定义权和空间传播服务；C 的通用执行器调用 A 服务，不能在字段写入路径另做删除级联或曲线转换。C 的纯计算由 A 接入既有运动 Worker/消息协议；B/C 不分别扩 Worker 协议。新增 core 文件之间用相对导入，schema 与 DTO 不导入 feature 或 GPU 类型。
+表内列出的新增文件明确标为新增，其余是现有文件的本票增量；不授予目录内其他文件的默认修改权。相邻精确测试归实现 owner。A 拥有共享契约的定义权和空间传播服务；C 的通用执行器调用 A 服务，不能在字段写入路径另做删除级联或曲线转换。C 的纯计算由 A 接入既有运动 Worker/消息协议；B/C 不分别扩 Worker 协议。新增 core 文件之间用相对导入，schema 与 DTO 不导入 feature 或 GPU 类型。
+
+补充所有权：作者入口枚举的 AuthorDeterminism、AuthorBundle、AuthorJsLocations、AuthorProbeSources、codeTrackReview、declarationReader、contract、typeDiagnostics 全归 B；API 9 常量所在 codeMaterialVersions.ts 归 A，B 不改版本常量。C 的二维运动入口与 A 的通用四键传播分工见 10.3；A 不改 C 的拟合/运动策略。planAuthorDefocus 当前位于 videoEditBuiltinEffectPasses.ts，其在 ticket 12 后的落点及相邻精确测试由 A 串行接手，效果 owner 不与 A 并发写。
 
 全局文件也有唯一责任人：A 汇总 schemaVersions、formats、formatMigrations、schemaBaseline、releasedCompatibility、格式夹具和公共契约版本；B 提供作者 API/类型增量，C 提供能力声明增量，均交 A 串行登记。Claude 负责主工作区依赖安装、package.json/锁文件与全局生成命令的串行执行，A 校验其产物并集成；三线不得自行安装，也不得分别生成全局文件互相覆盖。polygon-clipping 已获批准，由 Claude 安装后各线吸收，不重提选型。
 
 ### 3.2 实施次序
 
-1. 先合 ticket 10 的 API 8/作者库基础，以及空间所依赖的 11/12 效果公共接口；13/14 的相应模板/网页接口由各票 owner 串行提供。15 的“上次内容键”先落地。
-2. **17、18 先合并；随后 16 的 A/B/C 全部吸收同一 main 基线。** 17 的 createSimulation/prepare/at、18 的 webText/info.web.text、15 的目标复用同时成为 B 接入前提。18 与 14 的缓存元数据增量按 18 已批准顺序处理，不让 16 改网页服务。
-3. A 先提交可消费的 schema/类型、坐标与传播夹具、曝光签名；B/C 确认同一接口后并行实施。A/B/C 不在不同快门、单位、相机字段下各做一套原型。B 可用固定 SpatialFrame 验证桥，C 可用纯数值夹具实现算法。
-4. A 先集成格式和调度骨架，B 实现场景/CodeSources 回调，C 接公共属性和算法；A 串行接入最终 Renderer 与预算，C 对正式服务闭环验收。共享文件归上表 owner，不以“联调”交叉写入。
-5. 三线完成后共用一份正式运行产物做 P1–P5、精确测试与独立审查；Claude 按用户画面口味目视样片后推进，不等用户看片。构建、GPU 实验和共享资源验证一次一个。
+唯一执行表见 7.2。前置集合全部合入后，16-A 从最新 main 开工并负责吸收其接口与冲突。A 先提交 4.5/4.6 的可编译契约、schema 和数值夹具；B、C 分别从 **A 该接口提交的分支创建叠加分支**，以同一提交为父基线并行实现各自所有权内代码。A 合并 main 后，B/C 各自 rebase 到 main，移除已合入的 A 祖先，不重复 cherry-pick、不把另一条线未完成内容混入。
 
-API 9 在 17/18 首次登记后由 16 扩充，三票未发布前共用同一版本常量；不会为本票再占 API 10。最终格式数字由 A 根据吸收后的登记表递增，最低可读门槛按第 10 节执行。
+A 先集成格式和调度骨架；B 提供作者回调，C 提供领域算法与公共属性。A 串行接 Renderer、预算和运动 Worker，C 验正式事务闭环。三线完成后共用一份正式产物做 P1–P5 与匹配验证；Claude 自查设计后开工，实现提交前的独立代码审查仍遵循 AGENTS.md，不能混为再次设计送审。
+
+API 9 在 17/18 首次登记后由 16 扩充，未发布前共用同一版本常量，16 不占 API 10。最终持久格式数字由 A 按最新 main 登记表递增，最低 reader 按第 10 节执行；这属于执行事项，不是待决设计。
 
 ## 4. 领域数据、坐标与冻结接口
 
@@ -66,35 +66,35 @@ API 9 在 17/18 首次登记后由 16 扩充，三票未发布前共用同一版
 
 ### 4.2 相机唯一表示与恒等判定
 
-序列可选 spatialCamera 保存**相对默认机位的偏移 + 透视量**，不保存绝对 position、focalLength、矩阵和派生焦距副本。拟冻结结构如下，所有数值曲线复用既有关键帧值/插值契约，时间为序列帧：
+序列可选 spatialCamera 保存**相对默认机位的偏移 + 透视量**，不保存绝对 position、focalLength、矩阵和派生焦距副本。冻结结构如下，所有数值曲线复用既有关键帧值/插值契约，时间为序列帧：
 
 | 持久属性 | 语义与默认 |
 | --- | --- |
 | offsetX / offsetY / offsetZ | 世界轴的机位平移偏移，显示高度单位，缺省 0 |
 | rotationX / rotationY / rotationZ | 基准视向上的局部旋转偏移，度，缺省 0 |
-| perspective | 透视量，缺省 0；光学求值 f=80×2^perspective mm，36mm 横向传感器；这是精确定义的映射，不额外保存 f |
+| perspective | 透视量，缺省 0；改变它执行推拉变焦：f=80×2^perspective mm，F=f×a/36，未绑定时机位移到 (0,0,F)，同步改 FOV，使 z=0 平面取景恒定；不额外保存 f 或机位副本 |
 | framing? | 取景对象（稳定 clip 引用或明确世界点/包围框）与 heightFraction；持久保存意图本身，目标引用只能 hold 切换，heightFraction 可动画；perspective 使用上方同一字段/曲线，不在 framing 另存一份 |
 | aim? / focus? | 独立瞄准、对焦绑定；clip 或世界点，焦点也可用显式视深距离；离散绑定仅 hold。省略 aim 使用基准视向，省略 focus 使用默认参考平面 |
 | defocus / fStop? | defocus 为 0 时无景深贡献，缺省 0；fStop 在启用后参与光学求值，缺省 fStop=5.6，由 schema 统一定义，不以是否存在 fStop 判断空间开启 |
-| curves? | 上述数值属性与 framing.heightFraction、aim/focus 点/距离的序列时间曲线；离散引用用同一 hold 关键帧协议，禁止插值 clipId；不混进片段的 clip.curves |
+| curves? / bindings? | curves 保存数值与点/包围框分量曲线；bindings 保存 framing/aim/focus 的完整目标 hold 曲线，解除用显式 null；不插值 clipId，不混进 clip.curves |
 
-相机数值曲线键使用 offsetX/offsetY/offsetZ、rotationX/rotationY/rotationZ、perspective、framingHeightFraction、aimX/aimY/aimZ、focusX/focusY/focusZ、focusDistance、defocus、fStop 这类无点号键，由同一 schema 映射到对象字段；绑定类型和 clipId 分别用 hold 通道表达，世界点/包围框分量用数值通道，不能把 ApplicationRef 对象塞进数值曲线或插值字符串。字段映射与传播遍历同一声明表。
+相机数值曲线键和绑定结构按 4.5 的 SpatialCamera 冻结。数值键无点号，由同一 schema 映射到对象字段；bindings 用完整目标的 hold 通道，世界点/包围框分量用数值通道，不能把 ApplicationRef 塞进数值曲线或插值 clipId。字段映射与传播遍历同一声明表。
 
-相机求值在每个时刻先算当前画幅的默认机位 C0，再求 framing/aim 的派生机位与基准朝向，最后应用 offset 和旋转偏移。没有 framing/aim 时，C=C0+offset；framing 时，以目标可见几何中心及占高比例、同一 perspective 反解机位，得到相对 C0 的派生增量 Δframing，再取 C=C0+Δframing+offset。目标动画或改画幅会重新求解，不能把一次反解的绝对位置当持久真相。framing 与显式 aim 同时出现时 aim 决定视向，framing 沿该视向解占高；解不存在时返回具体几何事实。
+相机求值在每个时刻先算当前画幅的默认机位 C0，再求 framing/aim 的派生机位与基准朝向，最后应用 offset 和旋转偏移。令 Δperspective=(0,0,F−F0)，无 framing/aim 时 C=C0+Δperspective+offset，故改变 perspective 同时推拉机位与焦距，z=0 平面大小不变，其他深度产生视差。只有 aim 时，以此机位求朝向后施加旋转偏移。framing 时，以目标可见几何中心及占高比例、同一 perspective 反解机位，得到相对 C0 的总派生增量 Δframing（已包含该透视量所需距离），再取 C=C0+Δframing+offset，不重复加 Δperspective。目标动画或改画幅会重新求解，不能把一次反解的绝对位置当持久真相。framing 与显式 aim 同时出现时 aim 决定视向，framing 沿该视向解占高；解不存在时返回具体几何事实。
 
 - 原始光学读回返回派生焦距/距离/FOV；精确写入通过同一转换服务写回 perspective/偏移/取景意图，不能形成第二套绝对相机状态。对焦与瞄准独立，推近不会自动换焦点。
-- **缺省相机，或无 framing/aim/非默认焦点绑定且所有有效偏移、透视量、defocus 均严格等于 0，是相机规范恒等。** fStop 等休眠参数不产生贡献；非零绑定/意图不凭数值近似判为恒等。零来自数据规范化或曲线端点，不使用 epsilon，不比较近似单位矩阵。全帧 flatIdentity 还要求曝光所有样本的有效卡片四个空间值为 0、没有可见 worldScene 贡献，见第 5 节。
+- **缺省相机，或无 framing/aim/非默认焦点绑定且offsetX/offsetY/offsetZ、rotationX/rotationY/rotationZ、perspective、defocus 的全部有效值均严格等于 0，是相机规范恒等。** fStop 等休眠参数不产生贡献；非零绑定/意图不凭数值近似判为恒等。零来自数据规范化或曲线端点，不使用 epsilon，不比较近似单位矩阵。全帧 flatIdentity 还要求曝光所有样本的有效卡片四个空间值为 0、没有可见 worldScene 贡献，见第 5 节。
 - 一条序列只有一台相机，镜头切换用 hold。二维覆盖项不因存在相机变成空间卡片。目标不在有效时间内仍可求其曲线几何，targetActive=false；损坏引用明确失败，不使用上一帧焦点。
 - 删除/分割目标、序列复制、部分复制、嵌套、尺寸/PAR/重构图变更由 A 的 spatialPropagation 处理，C 只调用；完整传播规则见第 10 节。引用解绑定须保存等价世界目标/取景轨迹和普通曲线，同一事务内完成、可撤销，不静默改目标。
 
 ### 4.3 坐标、中心、旋转与时间
 
 - 逻辑显示宽 Wd=sequence.width×pixelAspectRatio，高 H=sequence.height，a=Wd/H；世界 X 向右、Y 向上、Z 朝默认摄像机，右手系。旧二维位置映射为 (x×a, −y, depth)，局部长度除以 H；像素长宽比只应用一次，preview divisor/导出缩放只改变栅格密度。
-- 默认 f0=80mm、sensorWidth=36mm，F0=f0×a/36，C0=(0,0,F0)，视向 −Z，垂直 FOV=2 atan(0.5/F0)。当 perspective 非零时 F=f×a/36，由同一相机求值器给出 FOV 和姿态；three 使用显示 aspect，不用编码栅格 aspect 或 filmGauge 的长边语义代替横向传感器。
+- 默认 f0=80mm、sensorWidth=36mm，F0=f0×a/36，C0=(0,0,F0)，视向 −Z，垂直 FOV=2 atan(0.5/F0)。当 perspective 非零时 F=f×a/36，无绑定默认机位同步移到 (0,0,F)，FOV=2 atan(0.5/F)，保持 z=0 平面恒定取景；three 使用显示 aspect，不用编码栅格 aspect 或 filmGauge 的长边语义代替横向传感器。
 - 局部操作顺序与 AE 的 X→Y→Z 轴旋转一致：先锚点平移/缩放及参考平面的角点贴合，再绕空间轴心依次旋转 X、Y、Z，最后平移至片段位置。列向量组合写成 Rz·Ry·Rx；旧 Z 旋转的屏幕顺时针约定在边界转换为世界角度，X/Y 的正向由同一右手系转换固定，不能直接依赖 three 默认 Euler order。非交换旋转数值夹具固定此约定。
 - 双面显示，背面可见且文字/图案镜像，不自动翻正 UV。lookAt 上向量默认 +Y；与视向平行时，按与视向绝对点积最小的世界轴确定回退，固定同值优先次序，不读取上一帧朝向。机位与目标重合返回不可求视向事实。
 - 排序与景深中心采用**近/远及视口裁剪后的可见卡片多边形质心**，在卡片平面/视空间求面积质心后变换到视空间；为空则不绘制。未裁剪时即几何中心。另保留完整边界/视深范围作诊断与布局。锚点只作轴心。three 场景按宿主求得的场景包围几何中心作单层近似，不让作者锚点支配排序。
-- 空间矩阵复用锁定 three 0.186.1 的数学类；core schema 不导入它。spatialEvaluation/spatialMatrices 在 Worker 或算法执行入口懒加载；WebGPU z∈[0,w] 与 WebGL z∈[−w,w] 由同一光学参数分别生成，不混用投影。
+- 空间矩阵复用锁定 three 0.186.1 的数学类；core schema 不导入它。spatialEvaluation/spatialMatrices 在 Worker 或算法执行入口懒加载；这是“宿主不打包第二份场景 three”规则的唯一数学例外，只向外传数值数组/DTO，不传 Vector/Matrix 对象，不跨模块实例做 instanceof；WebGPU z∈[0,w] 与 WebGL z∈[−w,w] 由同一光学参数分别生成，不混用投影。
 - 相机与卡片按精确 sequenceFrame/subframe 求值。info.time 是作者源时间，info.clip.time 是片段内时间；info.space 显式携带 sequenceTime、sampleTime、sourceTime，均注明秒。源时间按正式变速/倒放/重映射入口转换；不把序列时间直接传给 simulation.at。
 - 嵌套子序列用自己的时间与相机，先合成，再成为父序列一张卡；不自动折叠内部三维。仅整序列复制保留相机，模板首期不携带相机。
 
@@ -104,42 +104,345 @@ API 9 在 17/18 首次登记后由 16 扩充，三票未发布前共用同一版
 
 A 将 `henji-author-three-0.186.1`（含子路径，以及以后同前缀版本别名）加入 scripts/check-dependency-graph.cjs 的重包识别；现有裸 `three` 名单不能覆盖 npm alias。门禁覆盖直接静态导入、静态 re-export/barrel、动态入口被静态值边重新拉回首屏的情况。类型导入不算运行时依赖；不通过更新基线放行新的首屏重包。门禁定向夹具须证明别名可被拦截，正常懒加载可通过。
 
-### 4.5 A/B/C 领域契约
+### 4.5 A/B/C 领域契约（冻结）
 
-| 拟冻结接口/DTO | 内容与归属 |
-| --- | --- |
-| evaluateSpatialFrame(composition, sequenceFrame, output, quality) → SpatialFrame | A：纯求值；逻辑画幅/目标像素、相机参数及矩阵、相机/卡片中心、flatIdentity、目标诊断；不持有 GPU 或全局时钟 |
-| SpatialCardGeometry | A：clipId、uvToWorld/clipFromUv、logicalBounds/effectPadding、几何质心 centerViewDepth、viewDepthRange、裁剪多边形、原 ordinal、compoundGroup；anchor 独立，不当深度 |
-| SpatialDrawItem | A：sourceKey、clipId、picture lease、geometry、opacity、precision、carriesLight、group、kind=card/worldScene/transition；排序不可拆开 picture 与 geometry；worldScene 已投影，不能二次投影 |
-| planSpatialLayout(snapshot, intent) → SpatialPatch | C：普通字段/曲线变更、前后投影指标、近裁剪/遮挡事实；调用 A 的相机求值和传播计划，原事务提交 |
-| inspectSpatialFrame(snapshot, frame) → SpatialInspection | C：调用 A 同一求值结果，输出第 8 节结构信息；不执行作者源码制造纯结构证据 |
+以下纯数值类型由 A 放在 core/videoEdit/spatialTypes.ts；schema 在 spatialSchema.ts。现有 VideoEditComposition/VideoEditClip、VideoEditKeyframe/VideoEditKeyframes、EffectQuality 均只做 type-only 导入，使用仓库已有定义。空间字段缺省不写入旧作品；下列可选字段只在求值时取 4.1/4.2 的默认值。
+
+```ts
+type SpatialKey = 'depth' | 'rotationX' | 'rotationY' | 'anchorDepth';
+type SpatialVec2 = readonly [number, number];
+type SpatialVec3 = readonly [number, number, number];
+type SpatialMat4 = readonly [
+  number, number, number, number, number, number, number, number,
+  number, number, number, number, number, number, number, number
+];
+interface SpatialRect { x: number; y: number; width: number; height: number }
+interface SpatialBounds { min: SpatialVec3; max: SpatialVec3 }
+type SpatialTarget =
+  | { kind: 'clip'; clipId: string }
+  | { kind: 'point'; point: SpatialVec3 }
+  | { kind: 'bounds'; bounds: SpatialBounds };
+type SpatialFocus = SpatialTarget | { kind: 'distance'; distance: number };
+type SpatialHold<T> = readonly { time: number; value: T; interpolation: 'hold' }[];
+type SpatialCameraNumericKey =
+  | 'offsetX' | 'offsetY' | 'offsetZ'
+  | 'rotationX' | 'rotationY' | 'rotationZ' | 'perspective'
+  | 'framingHeightFraction' | 'defocus' | 'fStop' | 'focusDistance'
+  | `${'framing' | 'aim' | 'focus'}${'X' | 'Y' | 'Z'}`
+  | `${'framing' | 'aim' | 'focus'}${'Min' | 'Max'}${'X' | 'Y' | 'Z'}`;
+interface SpatialCamera {
+  offsetX?: number; offsetY?: number; offsetZ?: number;
+  rotationX?: number; rotationY?: number; rotationZ?: number;
+  perspective?: number; defocus?: number; fStop?: number;
+  framing?: { target: SpatialTarget; heightFraction: number };
+  aim?: SpatialTarget;
+  focus?: SpatialFocus;
+  curves?: Partial<Record<SpatialCameraNumericKey, VideoEditKeyframes>>;
+  bindings?: {
+    framing?: SpatialHold<SpatialTarget | null>;
+    aim?: SpatialHold<SpatialTarget | null>;
+    focus?: SpatialHold<SpatialFocus | null>;
+  };
+}
+interface SpatialOutput {
+  width: number; height: number; // 实际栅格像素
+  displayWidth: number; displayHeight: number; // 含 PAR 的逻辑画幅
+}
+interface SpatialCameraFrame {
+  position: SpatialVec3; target: SpatialVec3; up: SpatialVec3;
+  focalLengthMm: number; sensorWidthMm: number;
+  focusDistance: number; fStop: number; defocus: number;
+  near: number; far: number; fovYRadians: number;
+  view: SpatialMat4; projectionWebGpu: SpatialMat4; projectionWebGl: SpatialMat4;
+  canonicalIdentity: boolean;
+  resolvedAim: SpatialVec3; resolvedFocus: SpatialVec3;
+  targetActive: boolean;
+}
+interface SpatialCardGeometry {
+  clipId: string; ordinal: number; compoundGroup?: string;
+  uvToWorld: SpatialMat4; clipFromUv: SpatialMat4;
+  logicalBounds: SpatialRect;
+  effectPadding: readonly [number, number, number, number]; // 左上右下，逻辑像素
+  anchorWorld: SpatialVec3; centerWorld: SpatialVec3;
+  originalQuad: readonly [SpatialVec3, SpatialVec3, SpatialVec3, SpatialVec3];
+  visiblePolygon: readonly SpatialVec3[];
+  screenPolygon: readonly SpatialVec2[]; // 归一化显示坐标
+  screenBounds: SpatialRect;
+  centerViewDepth: number; viewDepthRange: readonly [number, number];
+  cocRadiusPx: number; cocRangePx: readonly [number, number];
+  behindCamera: boolean; clipped: boolean; ambiguousDepth: boolean;
+}
+interface SpatialFact {
+  code: 'missing-target' | 'invalid-optics' | 'singular-aim'
+    | 'clipped' | 'ambiguous-depth' | 'projection-residual' | 'unknown-scene';
+  clipIds: readonly string[];
+  sequenceFrame: number;
+  message: string;
+  values: Readonly<Record<string, number | string | boolean>>;
+}
+interface SpatialFrame {
+  sequenceFrame: number; sequenceTime: number; output: SpatialOutput;
+  camera: SpatialCameraFrame; cards: readonly SpatialCardGeometry[];
+  flatIdentity: boolean; facts: readonly SpatialFact[];
+}
+interface SpatialSnapshot {
+  composition: Readonly<VideoEditComposition>;
+  sequenceId: string;
+  revision: VideoEditComposition['revision'];
+}
+interface SpatialClipEdit {
+  clipId: string;
+  values: Partial<Pick<VideoEditClip,
+    'x' | 'y' | 'scale' | 'scaleAspect' | 'rotation' | 'anchorX' | 'anchorY'
+    | 'depth' | 'rotationX' | 'rotationY' | 'anchorDepth' | 'spatial'>>;
+  curves?: VideoEditClip['curves'];
+}
+interface SpatialPatch {
+  sequenceId: string; expectedRevision: VideoEditComposition['revision'];
+  clips: readonly SpatialClipEdit[];
+  camera?: { value: SpatialCamera | null };
+  achievedParallaxRatio: number;
+  maxProjectionErrorPx: number;
+  facts: readonly SpatialFact[];
+}
+type SpatialLayoutIntent =
+  | { kind: 'arrange'; clipIds: readonly string[]; referenceFrame: number;
+      parallaxRatio: number; focusClipId: string; range?: readonly [number, number] }
+  | { kind: 'expand'; clipIds: readonly string[]; range: readonly [number, number];
+      parallaxRatio: number; focusClipId: string; perspective: number }
+  | { kind: 'flatten'; clipIds: readonly string[]; range: readonly [number, number];
+      focusClipId: string };
+interface SpatialInspection {
+  frame: SpatialFrame;
+  cards: readonly {
+    clipId: string; drawOrder: number; visibleFraction: number | null;
+    occludedBy: readonly string[];
+    visibility: 'proven-visible' | 'proven-occluded' | 'estimated' | 'unknown';
+    approximation: 'layer-center';
+    sceneBoundsSource: 'render-observation' | 'none';
+  }[];
+}
+declare function evaluateSpatialFrame(
+  composition: Readonly<VideoEditComposition>, sequenceFrame: number,
+  output: SpatialOutput, quality: EffectQuality
+): SpatialFrame;
+declare function planSpatialLayout(
+  snapshot: SpatialSnapshot, intent: SpatialLayoutIntent,
+  output: SpatialOutput, signal: AbortSignal
+): Promise<SpatialPatch>;
+declare function inspectSpatialFrame(
+  snapshot: SpatialSnapshot, frame: SpatialFrame
+): SpatialInspection;
+declare function applySpatialPatch(
+  snapshot: SpatialSnapshot, patch: SpatialPatch
+): VideoEditComposition;
+interface SpatialPropagationRequest {
+  before: SpatialSnapshot;
+  proposed: VideoEditComposition;
+  operation: 'fields' | 'trim' | 'split' | 'retime' | 'move' | 'ripple'
+    | 'frame-rate' | 'resize' | 'reframe' | 'copy' | 'paste' | 'nest'
+    | 'unnest' | 'delete' | 'template';
+  clipMap: readonly {
+    fromSequenceId: string; fromClipId: string;
+    sourceRange: readonly [number, number];
+    toSequenceId: string; toClipId: string | null;
+  }[];
+  sequenceTimeMap: readonly {
+    sequenceId: string;
+    sourceRange: readonly [number, number];
+    targetRange: readonly [number, number] | null;
+  }[];
+  output: SpatialOutput; quality: EffectQuality; signal: AbortSignal;
+}
+declare function planSpatialPropagation(
+  request: SpatialPropagationRequest
+): Promise<{ composition: VideoEditComposition; facts: readonly SpatialFact[] }>;
+```
+
+A 定义全部公共 DTO、evaluateSpatialFrame、applySpatialPatch 与 planSpatialPropagation；C 实现 planSpatialLayout/inspectSpatialFrame，使用 A 的相机求值，Worker 接入由 A 完成。矩阵为列主序，逻辑坐标/单位按 4.3。SpatialPatch 是内部封闭计算结果，不是新开放 patch 工具；curves 若存在是合并后的完整片段曲线，必须保留未修改键，camera:null 表示移除相机对象，camera 省略表示不改。纯 apply 返回新 composition；C 的公共字段或算法先构造 proposed，再调 A 的 planSpatialPropagation，最后由同一文档算法守卫核对 revision、一次事务保存与撤销。传播服务不做 I/O；clipMap 表示身份变化及其原序列半开有效区间，toClipId:null 表示目标移除，未列出的身份不变；sequenceTimeMap 是半开区间的线性有理帧映射（targetRange:null 表示删除区间），空数组表示序列时钟不变，hold/区间边界按 10.2 保留。映射由正式时间线操作产生，C 不猜测映射；仅修改相机属性用 operation='fields' 与空映射。proposed 包含 before 的其他序列快照，传播据此处理跨序列引用，返回完整变更与事实后才提交。
+
+bindings 的 time 为整数序列帧；value:null 是解除该绑定的明确事件，仅用于此联合类型，不代表任意可选字段接受 null。绑定采用完整 tagged target 的 hold 通道；数值曲线只保存数值，framing/aim/focus 的 X/Y/Z 对应 point，Min/Max 分量对应 bounds，focusDistance 仅用于 distance。有效 binding 覆盖静态目标，再叠加与当前种类匹配的数值通道；休眠通道保留但无贡献。frame 中的裁剪空集用空 polygon 表示，不制造 NaN；不可求相机/损坏引用由带 SpatialFact 的领域错误返回，不发布半张成功帧。
+
+expand 的 perspective 是第 8.3 节公开的目标透视量；framingHeightFraction 从参考画面读取并持久化。公共入口用完整 ApplicationRef，C 通过已有解析器得到上述内部 clipId/sequenceId，返回时映射回完整引用，不能自己拼另一套身份。
 
 ### 4.6 曝光调度冻结签名（A 负责）
 
-以下是 A/B 开工前冻结的宿主内部签名，不作为作者 API，也不由 B 自选第二条调度链。A 在 engine/videoEditSpatialContracts.ts 定义，A 的 videoEditSpatialExposure.ts 执行；B 只在 CodeSources/运行时实现回调。此处使用的 *Request/*Lease 均是本票拟新增类型，引用既有 picture/lease/取消协议。
+A 在 engine/videoEditSpatialContracts.ts 定义下列类型，videoEditSpatialExposure.ts 实施唯一调度；B 在 CodeSources/Runtime 实现 SpatialCodeSources。GPU 类型只在 engine。以下跨文件类型与函数均从所属契约模块 export，declare function 表示冻结签名，实施时提供函数体。下文 Spatial* 数值 DTO 来自 4.5；VideoEditGpuColorFormat 从 engine/videoEditGpuFrame.ts type-only 导入现有 GPU 格式类型，EffectQuality 使用现有质量枚举。type-only 类型导入不加载 three。
 
 ```ts
+type SpatialContentKind = 'card' | 'worldScene';
+interface SpatialSourceDescriptor {
+  clipId: string; kind: SpatialContentKind; spaceDependency: boolean;
+}
+interface SpatialSample {
+  index: number; sequenceFrame: number; weight: number;
+  frame: SpatialFrame;
+  clips: readonly {
+    clipId: string; sequenceFrame: number; sourceTime: number;
+    centerSourceTime: number; motionBlur: boolean;
+  }[];
+}
+interface SpatialTargetSpec {
+  key: string; width: number; height: number;
+  format: VideoEditGpuColorFormat; usage: GPUTextureUsageFlags;
+}
+interface SpatialMaterialPlan {
+  clipId: string; kind: SpatialContentKind;
+  contentTime: 'center' | 'sample';
+  centerFrame: number; centerSourceTime: number;
+  referenceSize: { width: number; height: number };
+  logicalBounds: SpatialRect;
+  uvToReference: SpatialMat4;
+  rasterScale: SpatialVec2; // 每逻辑像素的材料面纹素数
+  supportBoundsPx: SpatialRect; // 材料面纹理内、含发光的支持域
+  defocus: {
+    centerCocRadiusPx: number; materialRadiusPx: SpatialVec2;
+    workBoundsPx: SpatialRect; downsample: number; bypass: boolean;
+    stage: 'center-material' | 'after-layer-accumulation' | 'per-scene-sample';
+  };
+  target: SpatialTargetSpec;
+  highPrecision: boolean; carriesLight: boolean;
+}
+interface SpatialFrameRequest {
+  composition: Readonly<VideoEditComposition>; sequenceFrame: number;
+  output: SpatialOutput; quality: EffectQuality;
+  sessionKind: 'preview' | 'prerender' | 'export' | 'observe';
+  sources: readonly SpatialSourceDescriptor[];
+  requestId: string; signal: AbortSignal; assertCurrent(): void;
+}
+interface SpatialGroupPlan {
+  id: string; mode: 'single' | 'transform' | 'group';
+  clipIds: readonly string[]; itemIds: readonly string[];
+  orderBySample: readonly (readonly string[])[];
+}
+interface SpatialExposurePlan {
+  centerFrame: SpatialFrame; samples: readonly SpatialSample[];
+  shotRange: readonly [number, number];
+  groups: readonly SpatialGroupPlan[];
+  materials: readonly SpatialMaterialPlan[];
+  workingSetBytes: number;
+}
+declare const preparedSpatialBrand: unique symbol;
+interface PreparedSpatialFrame {
+  readonly [preparedSpatialBrand]: true;
+}
+interface SpatialPrepareRequest {
+  frame: SpatialFrameRequest; plan: SpatialExposurePlan;
+}
+interface SpatialSceneSample {
+  clipId: string; sampleIndex: number; sequenceFrame: number;
+  worldBounds: SpatialBounds | null; // null 是空场景
+}
+interface SpatialSampleRequest {
+  prepared: PreparedSpatialFrame;
+  clipId: string; sampleIndex: number; sequenceFrame: number;
+  sourceTime: number; centerSourceTime: number;
+  spatialFrame: SpatialFrame;
+  target: SpatialTargetSpec;
+  materialPlan: SpatialMaterialPlan;
+}
+interface SpatialPictureLease {
+  readonly texture: GPUTexture;
+  readonly owner: 'code-sources' | 'composite-host';
+  readonly width: number; readonly height: number;
+  readonly format: VideoEditGpuColorFormat;
+  readonly highPrecision: boolean; readonly carriesLight: boolean;
+  readonly completion: Promise<void>;
+  readonly worldBounds?: SpatialBounds | null;
+  release(afterUse: Promise<void>): Promise<void>;
+}
 interface SpatialCodeSources {
+  describeSpatialSources(
+    composition: Readonly<VideoEditComposition>, signal: AbortSignal
+  ): Promise<readonly SpatialSourceDescriptor[]>;
   prepareSpatialFrame(request: SpatialPrepareRequest): Promise<PreparedSpatialFrame>;
+  inspectSpatialSceneSamples(
+    prepared: PreparedSpatialFrame
+  ): Promise<readonly SpatialSceneSample[]>;
   renderSpatialSample(request: SpatialSampleRequest): Promise<SpatialPictureLease>;
+  generatorTargetCapacity(width: number, height: number, format: VideoEditGpuColorFormat): number;
   releaseSpatialFrame(prepared: PreparedSpatialFrame): Promise<void>;
 }
-function planSpatialExposure(request: SpatialFrameRequest): SpatialExposurePlan;
-function renderSpatialExposure(
-  request: SpatialFrameRequest,
-  plan: SpatialExposurePlan,
-  sources: SpatialCodeSources,
-  host: SpatialCompositeHost,
+interface SpatialDrawItem {
+  itemId: string; sourceKey: string; clipId: string;
+  kind: SpatialContentKind | 'transition';
+  picture: SpatialPictureLease; geometry: SpatialCardGeometry;
+  opacity: number; groupId: string; ordinal: number;
+  projection: 'material' | 'screen';
+}
+declare const spatialAccumulatorBrand: unique symbol;
+interface SpatialAccumulator {
+  readonly [spatialAccumulatorBrand]: true;
+}
+interface SpatialSubmission { readonly completion: Promise<void> }
+interface SpatialCompositeHost {
+  generatorTargetCapacity(width: number, height: number, format: VideoEditGpuColorFormat): number;
+  reserveWorkingSet(plan: SpatialExposurePlan, signal: AbortSignal): Promise<void>;
+  prepareCardMaterial(
+    request: SpatialFrameRequest, materialPlan: SpatialMaterialPlan
+  ): Promise<SpatialPictureLease>;
+  consumePicture(
+    picture: SpatialPictureLease, target: SpatialTargetSpec
+  ): Promise<SpatialPictureLease>;
+  applyCenterDefocus(
+    picture: SpatialPictureLease, materialPlan: SpatialMaterialPlan,
+    sampleSupportBoundsPx: SpatialRect
+  ): Promise<SpatialPictureLease>;
+  beginAccumulation(target: SpatialTargetSpec): Promise<SpatialAccumulator>;
+  accumulateLayerSample(
+    accumulator: SpatialAccumulator, item: SpatialDrawItem, weight: number
+  ): Promise<SpatialSubmission>;
+  finishLayer(accumulator: SpatialAccumulator): Promise<SpatialPictureLease>;
+  compositeGroup(
+    group: SpatialGroupPlan, sample: SpatialSample,
+    orderedItems: readonly SpatialDrawItem[]
+  ): Promise<SpatialPictureLease>;
+  accumulate(
+    accumulator: SpatialAccumulator, groupPicture: SpatialPictureLease, weight: number
+  ): Promise<SpatialSubmission>;
+  finish(accumulator: SpatialAccumulator): Promise<SpatialPictureLease>;
+  compositeFrame(
+    request: SpatialFrameRequest,
+    groups: readonly { groupId: string; picture: SpatialPictureLease }[]
+  ): Promise<SpatialPictureLease>;
+  releaseAccumulation(accumulator: SpatialAccumulator): Promise<void>;
+  releaseWorkingSet(): Promise<void>;
+}
+type SpatialExposurePicture = SpatialPictureLease;
+declare function planSpatialExposure(
+  request: SpatialFrameRequest, sceneSamples?: readonly SpatialSceneSample[]
+): SpatialExposurePlan;
+declare function renderSpatialExposure(
+  request: SpatialFrameRequest, plan: SpatialExposurePlan,
+  sources: SpatialCodeSources, host: SpatialCompositeHost
 ): Promise<SpatialExposurePicture>;
 ```
 
-- SpatialFrameRequest 含不可变 composition、sequenceFrame、output、quality、sessionKind、requestId、signal 与 assertCurrent。SpatialExposurePlan 含 centerFrame、按时间排序且权重和为 1 的 samples、各 clip 的精确 sourceTime/中心源时间、连续镜头边界、空间组及各子时刻排序、mode=single/transform/group、材料面计划、实际目标描述和预算字节。
-- SpatialPrepareRequest 含 request 与完整 plan；B 先解析不可变声明和完整键，按 15 对真实目标检查复用；只有全部样本能在不覆写目标的条件下命中时才跳过昂贵输入/模拟准备。存在未命中时一次准备资产/中心媒体输入与 17 模拟的全部源时间包络（含 pose 探测和插值邻步），初始化/预热场景，返回 PreparedSpatialFrame。renderSpatialSample 使用前仍复核目标实际最后键，不能使用 prepare 时留下但已被早先样本覆写的命中结论。该对象只持有本请求的实例句柄和输入 lease，不宣称 N 个输出已驻留；取消身份贯穿全过程。
-- SpatialSampleRequest 含 prepared、clipId、sampleIndex、sequenceFrame、sourceTime、centerSourceTime、spatialFrame、target（key/width/height/format/usage）、materialPlan、contentKey。B 在自己的既有串行 GPU 队列里运行作者 update/生成并返回 lease；含 texture、owner、尺寸、precision/carriesLight、completion、可释放句柄，以及 worldScene 的 bounds。A 不绕过 CodeSources 直接调用 three。
-- SpatialCompositeHost 提供已有预算/目标租借、consumePicture、compositeGroup、accumulate、finish 和 release 的薄适配；它不读取作者声明、不拥有模拟。group 模式下 A 的唯一调用次序为：prepare 一次 → 每个子时刻按该时刻层序逐项 renderSpatialSample/消费 → compositeGroup → accumulate(weight) → 释放本样本临时 lease → 下一样本 → finish → finally releaseSpatialFrame。任何失败/取消均不发布部分累积图。
-- single 只做中心样本。transform 对无换序组使用现有片段变换曝光合成语义，静态材料面复用；group **仅在快门内有效层序发生改变时**逐样本完成整组 over 后累积。排序检测覆盖所有最终样本和层深交叉区间，不能只比快门首尾；透明平面相交仍按首期单层排序近似，读回标明。
-- 目标容量先按实际尺寸/格式向 generatorTargetCapacity 与 videoEditGpuBudget 询问；保留一份组工作目标、一份曝光累积目标，加当前作者输出及效果必需临时目标，不乘以样本数预分配。消费/提交后再复用 lease；不能覆写仍在采样的纹理。容量紧张按样本/项串行、复用既有 spill 路径并清除内容键；高精度或发光数据不得降到 8 位 spill。必要工作集无法容纳时返回预算事实，不静默减质量或限制卡片数量。
-- ticket 15 的“上次内容键”挂在实际作者工作目标上。空间依赖输出使用**子时刻完整键**，中心帧键不能代替子样本；每次 clear/覆写/resize/spill/dispose 前失效，成功提交且身份匹配后才记录实际键。最后一个子样本仍只叫最后子样本；曝光终图另属 A 的输出目标，不能把它标成作者目标中心内容。预渲染、导出、观察及含网页/序列输入仍按 15 裁定禁用复用。
+**类型与所有权规则**
+
+- PreparedSpatialFrame 对 A 完全不透明，仅能原样传回 B；B 用私有 WeakMap 保存实例、输入 lease、取消身份和模拟准备结果，A 不拆字段、不持有作者实例。品牌 symbol 从契约模块导出，B 构造带该标记的空句柄并在私有 WeakMap 登记；A 只传句柄，构造和解析只在 B 内发生。releaseSpatialFrame 幂等，释放输入及实例借用，不销毁宿主 device。
+- SpatialPictureLease 是只读借用。completion 指该输出已完成的既有 GPU 完成信号；调用方最后一次使用后用 release(afterUse) 交回，owner 等待生产与消费均结束才复用或销毁。Host 方法借用输入、不隐式释放；accumulateLayerSample/accumulate 返回提交回执，其 completion 传给输入 lease.release(afterUse)，不能把“已编码/已提交”的 Promise 当 GPU 消费完成；consumePicture 复制/接管为 Host 管理的独立输出借用，A 随后显式释放原借用。bypass 可以返回同纹理的新计数借用，不能给一个句柄重复释放。失败在 finally 中释放已取得的全部 lease/累积器/准备对象，不发布部分累积图。
+- materialPlan 由 A 产生，B 只消费尺寸、参照映射、precision/carriesLight 与 contentTime，不自行执行景深。A 通过 centerCocRadiusPx、中心投影 Jacobian 与 rasterScale 换算材料面半径，worldScene 已投影则按输出/工作纹理倍率换算。中心参数不随样本重算；per-scene-sample 仅更新样本支持域与局部 workBounds，按 12.1 运行同一计划。
+- **内容键只由 B 生成**。SpatialSampleRequest 没有 contentKey；A 只传精确时刻、相机/几何、输出规格与材料计划。源码/库/dataFiles/参数/frameKey/模拟 epoch 等作者指纹由 B 的唯一实现收口。target.key 是工作目标定位键，不能当内容身份。
+- generatorTargetCapacity 的真实实现保留在 VideoEditCodeGpu；B 在 CodeSources 显式转接同名签名，Host 的同名方法注入委托 CodeSources，A 调 Host，不越层访问 CodeGpu，也不复制容量公式。A 再结合 videoEditGpuBudget 和 three 内部 RT 字节计算必要工作集。prepareCardMaterial 仅用于非代码卡片；代码卡片（含 space:true）统一由 B 的 renderSpatialSample 供图。
+
+**规划与调用次序**
+
+0. B 先 describeSpatialSources 读已获信任的不可变声明，A 根据结果生成 request.sources 和初始 plan。createThree 隐含空间依赖，非 three 仅显式 space:true；普通代码不受相机内容依赖污染。
+1. A 调 prepareSpatialFrame 一次；B 准备中心媒体/网页输入、全部正式及探测源时间的模拟包络、实例与预热。只可在 ticket 15 允许且真实目标内容仍匹配时跳过昂贵输入准备。动态场景的排序探测仍须具有同一时间姿态，不能用旧输出键跳过必要的几何更新。
+2. B 的 inspectSpatialSceneSamples 在受管串行队列按中心和计划样本取 simulation.at(sourceTime)、更新场景并返回数值 worldBounds，不产出 N 张纹理。中心用 sampleIndex=-1；其他索引与 plan.samples 一一对应。A 用这些数值调用 planSpatialExposure(request, sceneSamples) 完成质心、裁剪与换序判断并定稿 group/mode/materialPlan。初始 plan 的 mode 不能提前旁路场景探测；最终 plan 不增删采样时刻，探测覆盖中途交叉而非仅首尾。若采样器需追加时刻，释放准备对象后按完整新包络重做准备，禁止未 prepare 就 at(t)。真正 render 前 B 再按该时刻设置对象，不能使用探测最后时刻残留状态。对 clip.motionBlur=false，A 在该 clip 的请求中传中心 sequenceFrame/sourceTime/spatialFrame（含中心相机），其他 clip 仍传自己的有效样本时刻，不直接拿共享 sample.frame 覆盖冻结语义。
+3. A 经 Host 查询容量、reserveWorkingSet。必要驻留为当前作者目标、中心材料面/可 spill 输入、组工作目标、曝光累积目标及效果临时目标，不按 N 分配 N 份输出。预算紧张按项/样本串行及既有 spill 处理；spill 使 B 的实际目标内容键失效；高精度/发光数据不得降成 8 位。最低必要工作集不能容纳则返回事实，不限卡片数、不静默减样本。
+4. **普通卡片统一中心准备**：非代码走 prepareCardMaterial；代码走 renderSpatialSample，sampleIndex=-1，sequenceFrame/sourceTime/spatialFrame 全为中心，materialPlan.contentTime='center'。space:true 的非 three 亦如此。内部 pose 模糊在中心作者材料面流程内保留。consumePicture → applyCenterDefocus 一次，所得材料面在曝光子时刻只重投影，不再调 B。
+5. **single**：中心生成/场景渲染 → 一次中心景深 → 按中心层序 compositeGroup；无曝光累积。序列/片段模糊关闭的有效时刻按 5.4 冻结。
+6. **transform：稳定层序**：普通卡片以中心已虚化材料面及各样本 geometry 调 accumulateLayerSample。worldScene 则 beginAccumulation → 对每个样本 B.renderSpatialSample → consumePicture → accumulateLayerSample(weight) → 释放该样本借用 → finishLayer → **applyCenterDefocus 一次**。worldScene 的 projection='screen'，累积不再投影；普通卡片为 'material'，累积执行投影。完成的层输出均标为 screen、opacity=1（源 opacity 已在样本中应用），按稳定层序 compositeGroup，禁止二次应用片段 opacity/变换。A 独占逐层累积，B 必须逐样本渲染，不能只交中心图。
+7. **group：快门内换序**：beginAccumulation → 每个子时刻依该时刻层序获取项：普通卡片重用第 4 步材料面，worldScene 经 B.renderSpatialSample → consumePicture → **若动态且启用景深则 applyCenterDefocus（中心 CoC、该样本局部支持域）** → compositeGroup → accumulate(weight) → 释放本样本临时借用 → 下一样本 → finish。静态且相机/根变换也不变的 worldScene 可复用中心已滤图；只要有效场景输出随样本变化即按动态处理。不先把世界场景逐层平均，否则会丢换序遮挡。
+8. 各组完成后 Host.compositeFrame 将组图替换回原合成树对应节点，与二维屏障、调整层、嵌套输出按原语义完成整帧；不能把所有组再做一次全局深度排序。最终输出经 request.assertCurrent() 后发布；finally releaseSpatialFrame、releaseAccumulation、releaseWorkingSet，输出 lease 的资源归消费方持有直至 release；finish/finishLayer 转出的纹理借用独立计数，releaseAccumulation/releaseWorkingSet 只退还调度者持有份额，不销毁仍被最终输出借用的资源。A 根 GPU 调度队列串行 await 各操作的提交，不在每个 pass 等全队列空闲；B 内部队列不得反向等待持锁的 A。
+
+orderBySample 用 itemId 排完整绘制项，双空间端转场只有一个 compound itemId，不能用两端 clipId 拆排序；clipIds 仅用于收集来源，itemIds/orderBySample 用于绘制。SpatialDrawItem 的 precision/carriesLight 唯一来自 picture，不另存可能漂移的副本。
+
+**ticket 15 的键与目标**
+
+B 在每次 renderSpatialSample 前重新核对目标的最后完整键，不能把 prepare 阶段的命中判断沿用到已被上一子样本覆写的目标。worldScene 使用精确子时刻键（片段关闭模糊时为实际中心取样键）；space:true 非 three 卡片只使用中心相机/中心源时间键；普通卡片不追加空间作者依赖。每次 clear/覆写/resize/spill/dispose 先失效，成功提交且身份匹配才记录 B 生成的实际键。最后子样本不得冒充中心，A 曝光终图不写回作者目标键。预渲染、导出、观察及含网页/序列输入仍按 15 排除复用。
 
 ## 5. 合成顺序、裁剪、景深与曝光
 
@@ -167,15 +470,15 @@ function renderSpatialExposure(
 
 - 首期为单层中心深度近似：按可见几何中心视深算 CoC，非锚点。斜卡/厚网格读回 viewDepthRange、cocRange、approximation='layer-center'；不承诺逐像素物理景深。
 - 统一薄透镜公式：f、s（层距离）、sf（焦点距离）、sensorWidth 先换毫米，N=fStop，CoC 直径 c=abs(f²(s−sf)/(N·s·(sf−f)))，半径 r=0.5·c/sensorWidth×实际输出显示宽，再乘 defocus 的连续强度。1 世界单位=1000mm；s≤near 或 sf≤f 报无效光学状态，不用夹分母伪造结果。
-- **每个输出帧只在中心时刻求焦点/CoC，并在材料面完成一次景深处理；曝光子时刻不重算焦点、不重复景深滤波。** 复用 planAuthorDefocus 镜头模式、padding、高精度、预乘 alpha/carriesLight。以中心投影将屏幕 CoC 换算为材料面采样尺度；贴图、滤波参照与第 5.1 节一致，不能先烘成全屏再误当局部平面。
+- **所有路径每帧仅在中心求焦点/CoC。普通卡片在中心材料面做一次景深；稳定层序 worldScene 先逐样本累积成层材料面再做一次中心景深；动态 worldScene 在快门内换序且开启景深时，对每个场景子样本做局部、降采样景深，再按当时层序合成累积，CoC 始终复用中心值。** 复用 planAuthorDefocus 镜头模式、padding、高精度、预乘 alpha/carriesLight。以中心投影将屏幕 CoC 换算为材料面采样尺度；贴图、滤波参照与第 5.1 节一致，不能先烘成全屏再误当局部平面。
 - 按可见支持域包围框加 CoC padding 建工作目标；大弥散圆使用已有 blur 降采样/重建计划，不为每层每样本开全画幅大 RT。降采样是效果内部计划，逻辑模糊半径不变；记录实际工作像素与峰值字节。零 alpha 发光支持域不能被普通 alpha 包围框裁掉。
-- 可感知阈值以下旁路，r→0 连续。阈值以最终输出像素定义，通过小半径夹具确定；阈值连接段沿共享效果计划让贡献连续归零，不在阈值处突然切一幅不同锐度的图，不把该阈值用作相机恒等 epsilon。参数与阈值不新增用户设置。
-- worldScene 的场景层景深仍是中心深度近似，不接 three TSL dof，也不同时开宿主与 three 两套景深。稳定层序时先把本场景的内部变换子样本累积成一个材料面，再按中心 CoC 执行一次景深，作为该层曝光输出参与稳定层序合成；不对每个网格材质各开一个屏幕景深来假冒单层景深。**动态 worldScene、快门内换序与“一帧一次材料面景深”的联合执行存在需复审确认的技术接缝，见第 12 节；不得以逐子帧全屏 blur 暗中违反本节成本契约。** 静态/普通卡片路径不依赖这个接缝。
+- 可感知阈值以下旁路，r→0 连续。阈值以最终输出像素定义，通过小半径夹具确定；阈值连接段沿共享效果计划让贡献连续归零，不在阈值处突然切一幅不同锐度的图，不把该阈值用作相机恒等 epsilon。参数与阈值不新增用户设置。ticket 12 合并后由 16-A 串行修改 planAuthorDefocus/videoEditBuiltinEffectPasses 的平滑归零与材料面 CoC 尺度换算，B/C 只消费计划，不另写阈值或 blur 实现。
+- worldScene 的场景层景深仍是中心深度近似，不接 three TSL dof，也不同时开宿主与 three 两套景深。稳定层序时先把本场景的内部变换子样本累积成一个材料面，再按中心 CoC 执行一次景深，作为该层曝光输出参与稳定层序合成；不对每个网格材质各开一个屏幕景深来假冒单层景深。动态 worldScene 的换序联合情况按第 12.1 节已定例外执行：每个子样本局部/降采样景深，不冻结模拟、不关闭模糊，不先混层再统一虚化。非换序场景仍为逐样本渲染、逐层累积后一次景深。
 
 ### 5.4 曝光与两类运动模糊
 
 - 复用现有 180° 快门、播放最多 8/最终最多 16 样本；用投影角点/包围盒运动估计，含相机和中间往返，不仅看首尾。静止组单样本，hold/切点分段截断并重归一权重，不混合两个镜头。
-- 材料面纹理、普通媒体时间、效果与景深冻结在中心时刻，曝光主要采片段/相机变换；普通视频不因 N 个样本解码 N 次，网页不重演 N 次。three 内部对象变换与模拟姿态按源子时刻求值，场景光栅化由 B 逐样本提供，其他不随运动的准备复用。
+- 普通卡片的材料面纹理、媒体时间、效果与景深冻结在中心时刻，曝光主要采片段/相机变换；普通视频不因 N 个样本解码 N 次，网页不重演 N 次；声明 space:true 的非 three 卡片也只在中心注入相机/时间并生成一次，曝光不逐样本重渲它，作者内容键只用中心时刻。three 内部对象变换与模拟姿态按源子时刻求值，场景光栅化由 B 逐样本提供，其他不随运动的准备复用。
 - **保留卡片内部作者 pose 模糊**（逐字、图形层等），只替换片段外层二维变换模糊。中心材料面先得到原有内部 pose 曝光，空间曝光再处理卡片/相机变换；不能关闭所有作者位姿模糊，也不能把同一个片段变换采两次。createThree 的内部姿态由其场景子样本负责，不再对同一个网格动作叠加另一份内部采样。
 - 稳定层序组复用现有逐层变换曝光语义；只有快门内层序变化才进入 group 模式，执行“子时刻场景 → 子时刻整组混合 → 权重累计”。这保留已批准的首期性能/遮挡边界；不宣称稳定层序半透明交叠等同无限精度光学积分。
 - clip.motionBlur=false 在所有样本冻结该片段的自身变换、相机采样与场景姿态于中心；序列 motionBlur=false 单样本。混合开关下仍按各样本的有效几何求层序，不能让关闭模糊的层偷用邻层时间。
@@ -189,7 +492,7 @@ function renderSpatialExposure(
 
 - host 暴露同一冻结作者库创建的 camera、逻辑尺寸和受管环境。update 前同步 camera，draw 前复核/重设相机；作者读取不会改变作品真相。场景根应用片段变换一次，输出 worldScene，由 A 直接混合。
 - **显式空间依赖**：createThree 隐含 space=true；其他新 API 绘制入口只有模块声明 `space: true` 才获得 info.space。未声明时不注入该字段、不把相机加入作者内容键，旧 API 行为不变。类型环境区分声明了空间依赖的 AuthorFrameInfo，不能以 API 版本新就默认所有模块使用相机，也不能通过运行时是否访问属性猜依赖。
-- info.space 含相机参数、中心/当前样本时刻与只读 project(point)；显式依赖必须进入实际输出键、逐帧指纹及窗口保守依赖。frameKey 常量不能覆盖相机、场景根或子时刻依赖。createThree 输出类型由工厂决定，不从 info.space 的读取行为推测。
+- info.space 含相机参数、中心/当前样本时刻与只读 project(point)；显式依赖必须进入实际输出键、逐帧指纹及窗口保守依赖。frameKey 常量不能覆盖相机、场景根或子时刻依赖。createThree 输出类型由工厂决定，不从 info.space 的读取行为推测。非 three 的 space:true 卡片只在中心生成，info.space 的 sampleTime 与 sample camera 都取中心，内容键亦只用中心；只有 worldScene 执行曝光子样本 update/render。
 - 10 使用 API 8；16/17/18 共用尚未发布的 API 9，一处版本常量，声明读取、类型、编译器、运行时和持久最大版本同步。旧作品不自动升级 API，不改库 pin。
 
 ### 6.2 单一渲染器与模块身份
@@ -198,7 +501,7 @@ function renderSpatialExposure(
 
 作者使用节点材质/TSL 或 WebGPURenderer 支持的标准材质；GLSL ShaderMaterial/RawShaderMaterial 在 createThree 的类型检查与发布校验阶段明确报错。普通既有 createWebGL 的 GLSL 作品仍按旧 API 运行，本限制不扩散到它。作者 Scene 本身类型较宽，不能只靠 scene: THREE.Scene 的签名假设已排除不支持材质；B 负责提供该入口的类型诊断，初始化/更新后的场景材质校验兜底动态 JS 内容并点名材质。
 
-宿主创建 renderer/camera 时与作者 import map **使用完全相同的挂载 URL**，从现有 authorLibraries/库 pin 解析器取得 three、three/webgpu、three/tsl 及共享 core 的 URL；不另写地址表，不把 henji-author-three 或应用镜头参考的 three 0.169 打进渲染适配器。Core 数学模块只按第 4.4 节懒加载；宿主场景的 instanceof/材质转换始终属于作者同一 ESM 实例。验收比较模块构造器身份和实际加载模块，不能只比较版本字符串。
+宿主创建 renderer/camera 时与作者 import map **使用完全相同的挂载 URL**，从现有 authorLibraries/库 pin 解析器取得 three、three/webgpu、three/tsl 及共享 core 的 URL；不另写地址表，不把 henji-author-three 或应用镜头参考的 three 0.169 打进渲染适配器。Core 数学模块是明确允许的例外，只按第 4.4 节懒加载数学类，只跨边界传数值，不跨实例 instanceof；宿主场景的 instanceof/材质转换始终属于作者同一 ESM 实例。验收比较模块构造器身份和实际加载模块，不能只比较版本字符串。
 
 ### 6.3 r186 内部时钟控制
 
@@ -232,24 +535,38 @@ ExternalTexture 的公开构造器和本地 r186 接入/外部纹理不销毁分
 ### 7.1 内容依赖与旧指纹
 
 1. 无空间数据、无显式空间声明的文档，片段、序列、窗口及渲染内容指纹的序列化字节**逐字节保持不变**；不能无条件追加 undefined/null、空对象、默认相机、空间版本标签或新 tuple 槽位。A/B 对改前 main 的同输入指纹作精确对照，不用更新快照消除差异。构建自动派生的引擎版本变化按现有机制处理，不混称内容指纹变化。
-2. 普通二维代码即使升级到 API 9，也不自动读取 info.space。卡片外部位置/相机只影响投影；作者源内容仅在原依赖、实际栅格密度等变化时重画。只有 createThree 或 `space: true` 的模块注入空间上下文，键中才追加当前相机/投影、场景根、焦点/光圈、精确序列及源子时刻、尺寸/质量等真实依赖。
+2. 普通二维代码即使升级到 API 9，也不自动读取 info.space。卡片外部位置/相机只影响投影；作者源内容仅在原依赖、实际栅格密度等变化时重画。只有 createThree 或 `space: true` 的模块注入空间上下文。B 生成作者内容键：worldScene 追加实际子时刻相机/投影、场景根、焦点/光圈、精确序列及源时间、尺寸/质量；space:true 非 three 卡片追加这些依赖的**中心时刻**值，中心生成后冻结材料面，不逐样本重渲。
 3. 空间片段最终合成键包括空间变换和材料面效果；显式空间作者的**作者输出键**还包含空间依赖。两种键不能混淆：普通代码在不同子时刻仅重投影时可以复用相同材料面，不能为复用而漏掉 worldScene 的子时刻键。
 4. 15 只保留实际工作目标的最后完整键，不增加 LRU、RAM、跨 Worker 额度、额外设备代次键。键含完整源码/库身份（含 dataFiles）、参数、frameKey 或时间、尺寸、精度；16 空间摘要与 17 simulationEpoch 按声明追加。覆写/clear/spill/resize/dispose 先清键；成功提交后记录本次实际内容。
 5. 预览以外及网页/序列输入的排除沿 15；观察正式渲染一次并返回对应结构事实，不复用旧观察快照。曝光终图和作者最后子样本是不同目标/身份。
 
-### 7.2 集成矩阵
+### 7.2 最终执行顺序与集成矩阵
+
+| 阶段 | 必须完成的前置 / 执行动作 | 执行方与产出 |
+| --- | --- | --- |
+| 0 | **先合并 20、12、15、17、18、10、21、19-U12/U13**（均在进行中）；集合内部按各票已有依赖串行合入，不要求其余 19 子项先做完 | Claude/各票 owner；完整前置 main，安装与共享生成命令串行 |
+| 1 | 阶段 0 全部合入后，16-A 从最新 main 开工并负责吸收，先交 4.5/4.6 可编译接口提交和坐标/曲线夹具 | A；冻结提交及分支明确交给 B/C |
+| 2 | B、C 各从 A 冻结接口提交所在分支建立叠加分支；A 继续合成/传播，B 作者运行时，C 算法/读回及二维运动保留 | A/B/C 按 3.1 并行，禁止 B/C 从旧 main 猜接口 |
+| 3 | A 合入 main；B/C 各自 rebase 到 main，保留本线增量，串行解决共享依赖与生成产物 | A 负责主线吸收，B/C 各自负责本线 rebase 和受影响验证 |
+| 4 | B 完成合入后才启动/合入 **19-U9/U15a** 的受管 three 配方与相关增量；C 按自身依赖完成 | B/19 owner；不并发改 B 的作者入口或让 19 抢先写另一套场景桥 |
+| 5 | A/B/C 与所需接缝集成完成，共用正式产物验 P1–P5、同源公共调用与代码审查 | Claude 串行构建、样片目视和最终验收；不再设计送审 |
+
+下表规定接口消费和文件交接，不改变上表前置集合。
 
 | 票 | 先后顺序、冻结输入/输出和唯一责任 |
 | --- | --- |
+| [20 遗留清理](../20-遗留清理/plan.md) | 在 16-A 之前合入；A 吸收删改后的入口和实际目录，禁止恢复已退役实现 |
+| [21 组件库静止复用](../21-组件库静止复用/plan.md) | 在 16-A 之前合入；B 扩作者指纹/入口时保留组件静止判定和复用语义，空间依赖不被静止声明覆盖 |
+| [19 效果库第二批](../19-效果库第二批/plan.md) | **U12/U13 在 16-A 前合入，U9/U15a 在 16-B 后**。U12 的立方体/翻转/开门是二维着色器转场，在原二维转场内生成像素；16 的空间复合转场是把两张空间卡作为一个排序绘制项，是不同概念。前者可作为后者内部的转场效果，不能代替空间几何/深度排序，不另注册同名三维转场 |
 | [10 文字排版](../10-文字排版/design.md) | 先合 API 8/冻结库与字体入口。16 B 在其后扩 author-api/Module/Runtime，A 传最大投影栅格倍率；字体生命周期与库构建仍归 10，不再造排版器 |
-| [11 效果合并](../11-效果合并/plan.md)、[12 新效果](../12-新效果/plan.md) | 先获得合并后的共享 blur/色调/发光计划；16 A 消费材料面单位、padding、precision/carriesLight，不能写死旧 lens_blur ID 或重写效果核。内核变更由效果 owner 串行提供 |
+| [11 效果合并](../11-效果合并/plan.md)、[12 新效果](../12-新效果/plan.md) | 先获得合并后的共享 blur/色调/发光计划；16 A 消费材料面单位、padding、precision/carriesLight，不能写死旧 lens_blur ID 或重写效果核。12 合并后，由 16-A 串行改 planAuthorDefocus/videoEditBuiltinEffectPasses 的 CoC 尺度与阈值平滑归零；保留 12 的效果契约，不由 B/C 或效果 owner 并发修改 |
 | [13 风格件](../13-风格件与技能三档/plan.md) | 16 A 接空间片段属性模板 pick/strip；模板不携带序列相机、不新建嵌套。C 合配方；全局格式由 A/Claude 串行登记，SKILL.md 不并发覆盖 |
 | [14 网页时间缓存](../14-网页页面时间缓存/design.md) | A 仅提供实际需求栅格密度；页面时钟、GOP/解码、coverage、取消仍归 14。18 的实时几何先行，其缓存元数据按 14 DTO 定稿后接；16 不改服务/端口，不为曝光重复网页 seek |
 | [15 代码输出缓存裁定](../15-代码片段输出缓存/review.md) | 先合“上次内容键”，再由 B 改 CodeSources/CodeGpu。A 调 B 的逐样本接口；实际目标内容写入和失效由 B 完成，A 消费 lease 并负责曝光终图。容量、spill、保护键遵从第 4.6 节，不能把中心准备键当 N 个子样本的身份 |
-| [17 模拟运行时](../17-模拟运行时/design.md) | **先合 17，再由 16 三线吸收 main**。createSimulation 是数据状态工厂，可与 createThree 同用。A 给完整精确源时间包络，B 调 17 的 prepare(range,input,signal) 一次；渲染前已可用，update/pose 经 info.simulation.at(t) 只读采样，不 step/restore，不用序列秒。共享 simulationEpoch/取消/实例队列，不自建模拟或快照；倒放只逆序取样，物理仍正向准备。曝光新增的探测/正式子时刻必须都落在准备范围 |
-| [18 网页文本几何](../18-网页文本几何/design.md) | **先合 18，再由 16 三线吸收 main**。消费 webText 静态声明与 info.web[param].text，不改其 DTO/采样器。纹理、text、viewportToImage、region、有效尺寸来自同一页面时间/票据；CSS 坐标先映射作者材料面，再由 A 做片段空间投影，DPR 不重复相乘。默认曝光冻结中心网页画面和几何，不能用子时刻相机配错时刻文字；有网页输入仍不启用 15 输出复用 |
+| [17 模拟运行时](../17-模拟运行时/design.md) | **先合 17，再由 16-A 吸收 main；B/C 从 A 冻结提交叠加**。createSimulation 是数据状态工厂，可与 createThree 同用。A 给完整精确源时间包络，B 调 17 的 prepare(range,input,signal) 一次；渲染前已可用，update/pose 经 info.simulation.at(t) 只读采样，不 step/restore，不用序列秒。共享 simulationEpoch/取消/实例队列，不自建模拟或快照；倒放只逆序取样，物理仍正向准备。曝光新增的探测/正式子时刻必须都落在准备范围 |
+| [18 网页文本几何](../18-网页文本几何/design.md) | **先合 18，再由 16-A 吸收 main；B/C 从 A 冻结提交叠加**。消费 webText 静态声明与 info.web[param].text，不改其 DTO/采样器。纹理、text、viewportToImage、region、有效尺寸来自同一页面时间/票据；CSS 坐标先映射作者材料面，再由 A 做片段空间投影，DPR 不重复相乘。默认曝光冻结中心网页画面和几何，不能用子时刻相机配错时刻文字；有网页输入仍不启用 15 输出复用 |
 
-共享热点 AuthorModule、Runtime、Programs、TypeEnvironment、CodeSources、CodeGpu、作者指纹和 author-api.d.ts 在 17/18 完成后由 B 唯一接手 16 的增量；Renderer/Compositor/预算归 A；通用属性与配方归 C。三线实现前共同记录同一 main 基线及 API 9 支持状态，不能通过覆盖文件丢掉 simulation/webText。
+共享热点 AuthorModule、Runtime、Programs、TypeEnvironment、CodeSources、CodeGpu、作者指纹和 author-api.d.ts 在 17/18 完成后由 B 唯一接手 16 的增量；Renderer/Compositor/预算归 A；通用属性与配方归 C。A 记录前置集合合入后的 main 基线与冻结接口提交，B/C 以该提交叠加并记录 API 9 支持状态，不能通过覆盖文件丢掉 simulation/webText。
 
 ## 8. AI 属性、两项写算法与结构化读回
 
@@ -271,8 +588,8 @@ ExternalTexture 的公开构造器和本地 r186 接入/外部纹理不销毁分
 
 ### 8.3 transition_video_edit_space：展开 / 压平
 
-- 输入：documentRef、sequenceRef、clipRefs、非空序列帧 range、mode=expand|flatten、focusRef，以及展开的 parallaxRatio。强度统一用上节视差比，不并存另一个没有定义的 strength。只影响返回中列明的片段/相机字段。
-- 展开从当前参考构图起步，空间四值为 0、相机偏移/透视量/defocus 为 0；调用上节算法解目标层深。使用现有 ease/Bezier 连续展开，持久 camera.framing 绑定焦点主体和占高曲线、perspective 曲线，逐时刻求机位以保持主体取景，其他层产生真实视差。
+- 输入：documentRef、sequenceRef、clipRefs、非空序列帧 range、mode=expand|flatten、focusRef，以及展开的 parallaxRatio、perspective（目标透视量，0 为默认取景）。强度统一用上节视差比，不并存另一个没有定义的 strength。只影响返回中列明的片段/相机字段。
+- 展开从当前参考构图起步，空间四值为 0、相机偏移/透视量/defocus 为 0；调用上节算法解目标层深。“展开空间”的镜头透视变化就是相机 perspective 曲线，移动机位并同步导出焦距；不能只改 FOV 造成全平面缩放。使用现有 ease/Bezier 连续展开，持久 camera.framing 绑定焦点主体和占高曲线、perspective 曲线，逐时刻求机位以保持主体取景，其他层产生真实视差。
 - 压平回到 depth/rotationX/rotationY/anchorDepth 严格 0，镜头偏移/透视量/defocus 严格 0。若此前有 framing/aim/focus 绑定，在尾点以等价默认点/距离完成规范化并解除非默认绑定，保证真正命中恒等；不能只清 offset 却留下 framing。空间绑定的离散切换用 hold，切换前后派生画面连续；保留尾帧主体中心与大小，其他卡片连续归位。
 - 曲线是普通持久关键帧，不是另一套相机动画 DSL；拟合在输出帧与曝光子时刻验证，规范零值端点不能被简化掉。任意相交场景压平不保证全程所有轮廓/遮挡不变，结果明确标出首期近似。
 - 算法不遍历改写任意 JS 场景对象；three 几何/灯光由作者源码根据同一时间更新。样片从第一帧预建物体，通过透明权重/姿态连续显现，不替换整块画面。
@@ -298,7 +615,7 @@ C 更新配方为“风格件→内置效果→宿主空间能力→标准 three
 
 - 0–1.5 秒：原二维排版，空间值/相机偏移与透视量/defocus 全 0，无有效绑定；网格已预建/预热、透明贡献为 0。保留改动前 main 的同输入原始帧作真值。
 - 1.5–4.5 秒：真实时间线卡片连续展开，持久 framing 保持主体占高，透视量和镜头偏移形成推拉/横移，产生视差和遮挡；网格连续显现、侧转和光照过渡，无剪切、黑帧、突然替换。
-- 4.5–6.5 秒：运镜并拉焦至前景，CoC 交换。厚场景标明中心深度近似；涉及第 12 节联合场景须先裁定，不用样片避开后声称全部组合已验。
+- 4.5–6.5 秒：运镜并拉焦至前景，CoC 交换。厚场景标明中心深度近似；必须包含动态 worldScene 与其他层在快门内换序、同时开启景深的联合片段，按 12.1 逐样本局部景深，8/16 样本均验，不冻结模拟或关闭模糊。
 - 6.5–8 秒：连续压平，尾点四个空间值与全部有效相机偏移/透视量/defocus 严格归零、绑定规范化，回到原二维路径。恒等帧零差；进入/离开恒等前后各 1 帧由 Claude 目视无跳变。
 
 G 草样也必须使用 WebGPURenderer(forceWebGL:true)，与 W 同一材质/时钟契约；草样不证明正式卡片、共享相机、保存或能力已完成。正式样片必须经公共算法写入、createThree、结构读回和正式取帧验一次。
@@ -311,10 +628,20 @@ G 草样也必须使用 WebGPURenderer(forceWebGL:true)，与 W 同一材质/时
 | --- | --- |
 | P0 数学与时钟 | 前版设计记录过 1000 组点/16:9/80mm 的 CPU 代数误差约 1.11e−16（平面）和 1.80e−16（补偿）；本次未复跑，不能替代新偏移/取景模型验证。实施补偏移零值、PAR/画幅变化、framing、AE 旋转、lookAt 回退、质心/锚点区分、three nodeFrame 受控夹具 |
 | P1 改前 main 真值 | 固定 main commit 和同输入原始帧；无空间、恒等两种结果与真值差异像素数/最大通道差皆 0；无空间内容指纹序列化字节不变；另验恒等前后各 1 帧及非零趋零连续性 |
-| P2 G/W 渲染桥 | G/W 各测 1080p/4K，**1、8、16 样本**，预热后 120 输出帧；分稳定层序与快门换序、单/多 three 场景、景深开/关。报 CPU 提交、可用时的 GPU timestamp、请求到完成 p50/p95/max、拷贝次数、中心材料面景深执行次数、目标容量/峰值字节、冷编译/稳态；读回不计入 GPU 核计时。W 先过 ExternalTexture 公开组合的写入/颜色/释放探针，Z 不测 |
+| P2 G/W 渲染桥 | G/W 各测 1080p/4K，**1、8、16 样本**，预热后 120 输出帧；分稳定层序与快门换序、单/多 three 场景、景深开/关。报 CPU 提交、可用时的 GPU timestamp、请求到完成 p50/p95/max、拷贝次数、普通卡片/稳定 worldScene/动态换序 worldScene 各自的景深执行次数、目标容量/峰值字节、冷编译/稳态；读回不计入 GPU 核计时。W 先过 ExternalTexture 公开组合的写入/颜色/释放探针，Z 不测 |
 | P3 确定性/生命周期 | 固定前序请求，0→37→12→37、重复 t、实际等待后重复、compileAsync 前后、resize/精度切换、设备重建、取消迟到；同一路径同请求逐字节一致。TSL time/compute、模拟 at 子时刻、17 epoch、18 图像与文本同票据都覆盖；不能只测场景手写 update |
 | P4 空间/传播 | 20 卡常规/30 卡压力，背面镜像、近裁剪、斜视、非中心轴心、同深度、子帧换序、透明文字内部 pose 模糊、双空间端转场、调整层、嵌套、改尺寸/PAR/重构图、目标分割/删除/复制、模板目标相机；写入→读回→取帧→撤销→保存重开一致 |
 | P5 整帧性能 | 1080p60 连续预览无可归因本票的持续跳帧，整帧 p95≤16.7ms；4K 桥接阶段目标 p95≤8ms、20 卡空间阶段≤10ms，整帧目标仍≤16.7ms。8/16 样本与峰值内存单列；不关闭景深/模糊、漏算 three 内部 RT 或只报分项冒称同质量实时 |
+
+P2 的计数按每个输出帧、每个可见源单列；下表为开启景深且未阈值旁路的执行次数，单位是一次效果计划执行，内部 GPU pass 数另报：
+
+| 路径 | N=8：场景渲染 / 景深 | N=16：场景渲染 / 景深 | 次序 |
+| --- | --- | --- | --- |
+| 普通卡片（含 space:true 非 three） | 0 / 1 | 0 / 1 | 中心作者材料面生成一次（内部 pose 按原逻辑）→ 景深 → 各子时刻投影 |
+| transform worldScene | 8 / 1 | 16 / 1 | B 逐样本渲染 → A 层累积 → 一次景深 → 稳定层序混合 |
+| group 动态 worldScene + 换序 | 8 / 8 | 16 / 16 | B 子样本渲染 → A 局部降采样景深 → 子时刻组混合 → 累积 |
+
+single 的 worldScene 为 1/1；关闭景深或旁路为 0 次景深。无变化的场景复用、源场景数量、实际有效样本数必须另列，不能把复用样本当成本例外 8/16 样本的测量结果。
 
 每条证据记录 commit、Electron/Chromium、three pin、GPU/驱动、尺寸/质量、样本数、冷/热、缓存与其他 GPU 活动。G 满足门槛可先交付；W 只在正确性/资源门槛全过且稳定有收益时采用。没有 GPU timestamp 时不把全队列等待叫作某个 pass 的 GPU 耗时。
 
@@ -331,10 +658,14 @@ G 草样也必须使用 WebGPURenderer(forceWebGL:true)，与 W 同一材质/时
 | video-edit 内容/文档 | 片段四键与曲线、spatial.enabled、序列相机、语义绑定；content version 与 minReaderVersion 同步登记，外壳按实际 schema 变化传播 |
 | screen-recording | 内嵌剪辑 schema/空间语义支持下限跟随，不只升独立 .hjvid |
 | code-author-api / code-version / code-asset | API 9 的 createThree、space 声明及 17/18 增量均可读可执行，版本记录/可编辑代码资产/样片传播其最大 API 与最低 reader |
+| creative-intent-candidate | core/creativeIntent/persistence.ts 的 storedMotionCandidateSchema.motions[].curves 直接嵌入 videoEditClipCurvesSchema；A 升版本/最低 reader、逐版本迁移与候选黄金样本，C 的二维编译/应用不得消除已有空间键 |
+| title-templates | styleTemplateMigration.ts → titleTemplateMigrationSchema.content → videoEditNativeTemplateContentSchema.clips，间接嵌入模板片段；即使仅作旧库读取也受 schema 变更影响，由 A 登记版本/最低 reader 与迁移，保留旧库原件和旧夹具 |
+| video-preset-package | presetPackage.ts → items[category=title].preset → titleTemplateMigrationSchema.content.clips，间接嵌入；A 同步格式版本/最低 reader、包读取迁移与往返，不能以新导出不含 title 为由漏掉旧包入口 |
+| style-kits | 已核对 styleKitMigrationSchema：仅 guide/examples 源码，不嵌入模板片段或 clip.curves，本票四键不触发其版本升级；保留旧库导入到新风格的既有路径。它与 title-templates 不能合并判定 |
 | native template / style / style package / code samples | 模板只带空间片段字段与 clip.curves，不带相机；其 pick/strip、嵌套片段与作者 API 固定字段更新，直接嵌入 schema 的父格式一起登记 |
 | 单文档包/整项目包 | 包内作品保持正确内容版本/最低 reader；外壳只有自身结构或解释改变时升级，不为凑齐清单无条件改号 |
 
-A 的落点：[schemaVersions.ts](../../../Henji-AI-t16/src/core/persistence/schemaVersions.ts)、[documents/kinds/videoEdit.ts](../../../Henji-AI-t16/src/core/documents/kinds/videoEdit.ts)、[codeMaterialPersistence.ts](../../../Henji-AI-t16/src/core/videoEdit/codeMaterialPersistence.ts)、[codeAsset.ts](../../../Henji-AI-t16/src/core/videoEdit/codeAsset.ts)、[documents/kinds/screenRecording.ts](../../../Henji-AI-t16/src/core/documents/kinds/screenRecording.ts)、[formats.ts](../../../Henji-AI-t16/src/core/persistence/formats.ts)、[formatMigrations.ts](../../../Henji-AI-t16/src/core/persistence/formatMigrations.ts)，以及上表实际引用到的模板/风格 schema。schemaBaseline.json、releasedCompatibility.json、tests/fixtures/persistence 由 A 统筹串行生成，不能改已发布样本摘要。
+A 的落点：[schemaVersions.ts](../../src/core/persistence/schemaVersions.ts)、[documents/kinds/videoEdit.ts](../../src/core/documents/kinds/videoEdit.ts)、[codeMaterialPersistence.ts](../../src/core/videoEdit/codeMaterialPersistence.ts)、[codeAsset.ts](../../src/core/videoEdit/codeAsset.ts)、[documents/kinds/screenRecording.ts](../../src/core/documents/kinds/screenRecording.ts)、[formats.ts](../../src/core/persistence/formats.ts)、[formatMigrations.ts](../../src/core/persistence/formatMigrations.ts)，以及 core/creativeIntent/{persistence,referenceTransforms}.ts、core/persistence/{resourceContracts,versionedJson}.ts、core/videoEdit/{presetPackage,codeMaterialVersions}.ts、styles/{templateSchemas,nativeTemplates,styleTemplateMigration}.ts 的上述嵌入链。referenceTransforms 的采样页目标快照也引用 clip.curves，A 沿 creative-intent-page 登记与样本核对同源变更，不能只改候选外壳。schemaBaseline.json、releasedCompatibility.json、tests/fixtures/persistence 由 A 统筹串行生成，不能改已发布样本摘要。
 
 各 N→N+1 迁移是纯函数，保留旧作品字段、曲线、源码和库 pin；不插入默认相机或 spatial.enabled，不批量写零值以污染旧指纹。旧版可读性继续保证；提高最低 reader 是阻止旧程序误解新文件，不是抛弃旧文件。读取只内存升级，沿既有备份边界保护原件，明确保存才写回。
 
@@ -355,6 +686,7 @@ A 的落点：[schemaVersions.ts](../../../Henji-AI-t16/src/core/persistence/sch
 | 剪切/复制/粘贴部分片段 | 复制四键/曲线/开关；目标一同复制则按稳定身份重映射。跨序列粘贴沿目标序列相机，不覆盖目标相机；确需携带原序列空间构图的操作走正式嵌套入口。任何需迁出的相机引用若目标未随行，由 A 先烘成等价世界点/边界/焦点距离曲线，不能悬空；普通复制片段本身不偷带相机 |
 | 嵌套/解除嵌套 | nestedSequences 保留子序列相机/独立时钟，父序列仅见输出卡片。创建子序列搬移绑定目标时，同步处理父相机引用（转等价世界目标轨迹），子相机所需外部目标也在搬移前烘焙；仅 whole-sequence 复制可直接复制完整相机。解除嵌套调用现有服务及空间转换，不能用 JSON 展开后忽略两套投影；无法无损表示时保留嵌套并说明具体原因 |
 | 删除绑定目标 | 删除前按旧快照在其全有效绑定区间求 framing/aim/focus，转为世界点/边界或距离的普通曲线、保留输出误差门槛和关键边界；然后同一事务删除并按原回收/历史语义保留。撤销恢复对象与原绑定。暂时隐藏/停用不是删除，仍求几何并返回 targetActive=false |
+| 创意候选/引用快照 | creative-intent-candidate 的 motions[].curves 与 referenceTransforms 中目标快照的 curves 都要能读取/保存四个空间键；A 负责 schema/格式链，C 负责候选应用仅合并二维键、保留目标空间曲线。候选内存在空间曲线不授权二维运动算法重写它；撤销/恢复保留原片段完整曲线 |
 | 原生模板与风格件 | videoEditNativeTemplateClipSchema、styles/templateSchemas/nativeTemplates、videoEditTemplates 显式保留四数值/clip.curves/spatial.enabled。**首期仅带片段空间属性，沿用目标序列相机**；不带相机快照，不为模板自动新建嵌套，不承诺带回来源机位下的相同取景 |
 | 保存/重开、撤销/重做、包导入导出、录制内嵌 | 全部经正式格式/事务服务保留同一数据及引用，纯迁移不补空间默认字段；包复制重映射稳定身份。指纹无空间字节不变；有空间时包含真实相机、片段与嵌套依赖 |
 
@@ -362,21 +694,39 @@ A 的落点：[schemaVersions.ts](../../../Henji-AI-t16/src/core/persistence/sch
 
 黄金样本通过正式构造器/序列化器生成，覆盖旧平面、空间四键切分/缩放、相机偏移/framing/目标曲线、API 9、模板与录制/包往返；旧样本全部保留。精确迁移/读取/写回测试通过后串行执行 persistence:baseline 与 persistence:release-snapshot。不改 .hjstg、cameraStage、R3F 或镜头参考，也不新增 SpaceScene 格式。
 
+### 10.3 C 负责的二维运动边界（首期冻结）
+
+四个空间键参与 A 的通用时间操作（修剪、分割、改速、缩放等），**不扩入现有运动算法的处理键集合**。C 负责以下入口的声明、实现保护和语义测试；算法仍只改其原有二维键，不因 VIDEO_EDIT_ANIMATABLE_KEYS 增加而遍历全部键。此处不是禁止空间能力写空间键：第 8 节的专门空间算法仍按 SpatialPatch 写入。
+
+| 入口与唯一 owner=C | 首期行为 / 必须保护的结果 |
+| --- | --- |
+| core/creativeIntent/stagger.ts | 错峰仅移动二维动作；目标 depth/rotationX/rotationY/anchorDepth 的数值及每条曲线原样保留，不把来源空间动画复制到目标 |
+| core/creativeIntent/{motionCompiler,fitting}.ts | 编译、拟合误差与简化只覆盖现有二维 MotionCurveKey；不为未知空间键插入默认值、不裁剪或简化空间关键帧 |
+| core/videoEdit/motionDraft.ts | merge/apply 候选仅合并受支持二维键；先保留目标完整 clip.curves，不以候选替换整个 curves，不以候选中的空间键覆盖目标 |
+| application/videoEditMotionGroup.ts | 批量运动/错峰沿上面同一服务；提交与撤销保持每个成员的空间开关、四数值与四曲线 |
+| application/videoEditSuperKeyframes.ts | 录制、拟合、应用、清除自动动作仅覆盖原二维动作范围；空间数据随原片段快照保留，不编译为空或重置为 0 |
+| core/videoEdit/stabilization.ts、application/videoEditStabilization.ts | 稳定结果与关闭/移除稳定只处理二维校正及其来源，不改空间键 |
+| core/videoEdit/tracking.ts、application/{videoEditTrackingEdits,videoEditTrackingEditing}.ts | 跟踪写入、替换和清除仅处理二维跟随/曲线；保留目标的全部空间数据 |
+
+每个入口用真实混合片段验证：既有二维动画加四条非零空间曲线（含 Bezier/easeRange/手工来源）和空间数值，执行算法及清除/撤销后，二维结果符合原算法，空间字段深比较不变。不是断言键名单；保护的是泛化遍历、整体替换与清除操作可能误伤空间数据的行为。C 修改自己的算法入口，若需要 A 的通用键元数据/Worker 签名增量，由 A 在其独占文件落地。
+
 ## 11. 实施验证、资源与失败语义
 
 ### 11.1 本轮文档验证
 
-本轮 L0，已检查正文与 24 条裁定对应、相对链接/函数引用、接口与所有权一致、冲突段落清除；第 14 节及 review.md 的 SHA-256 与改写前一致。不跑 lint、tsc、Vitest、构建、安装或 GPU 实验。前版 CPU 记录是历史资料，本次未复跑。设计已采纳裁定不等于实现通过，也不等于已完成 review.md 要求的下一轮 Claude/指定审查员复审。
+本轮为 L0 文档核查：按首轮 24 项、第 12.1 节裁定及第 2 轮 15 项核对正文、TS 契约语法及类型引用、所有权、执行次序、主仓库链接和嵌入 schema 链；review.md 保持原文。只改本文件，不运行 lint、工程 tsc、Vitest、构建、安装或 GPU 实验，不提交、不 push。历史 CPU/GPU 记录不是本轮实测；设计定稿后由 Claude 自查直接开工，不再送设计复审，正式运行验收仍按 11.2 执行。
 
 ### 11.2 实施时的最小匹配验证
 
 - A 的格式/共享合成、B 的 GPU/作者契约、C 的原子事务至少 L2；按本线实际文件运行精确测试、所属 tsc 与依赖图/持久化/能力专项。core 改动按规则跑双工程 tsc，verify:changed 显式给本次文件、先 dry-run；不得扫描其他任务脏工作区。
 - 三线最终集成改变核心公共作者契约/关键依赖，满足 testing.md 的 L3 条件，由 Claude 在完整边界统一执行一次；不让每条线各自全仓构建。只需更新运行产物时用 electron:bundle；性能结论用隔离生产产物，一次一个，不接 9334。
 - 数值测试保护真实语义：零相机与不同画幅/PAR、X/Y/Z 非交换旋转、可见质心与非中心轴心、lookAt 奇异、裁剪、层序切换、转场原子排序、焦点/取景求值、CoC→0 与二维收敛。
+- 调度测试用可观察的调用序列证明 transform worldScene 是 B 逐样本渲染、A 按层累积后一次景深；group 动态换序场景是每样本局部景深→组合成→累积，8/16 样本各对应 8/16 次。space:true 非 three 只中心渲染/中心键，A 从未构造作者 contentKey；容量方法经 CodeSources/Host 转接。失败/取消验证 lease 无泄漏、部分累积不发布。
+- C 对 10.3 每个运动入口做“二维发生预期变化、空间键及曲线原样保留”的行为验证，含应用、替换、清除与撤销；A 验 candidate/title-templates/preset 包的嵌入链，style-kits 保持无关格式不改。
 - 状态/格式测试覆盖四键切分/缩放与旧零默认、相机引用级联/嵌套、向后读取与最低 reader 拒绝旧程序误读、模板目标相机、无空间指纹字节不变、17 模拟子时刻/18 同票据几何、15 键与目标实际内容一致。
 - 生命周期验证覆盖 resize/精度升档、release/spill/dispose、共享 device 丢失、取消迟到、预热与合成串行、nodeFrame 墙钟停止、最后子样本键不得冒充中心帧；同一路径固定前序帧验确定性。
 - 能力从 describe/change/read 的正式状态源验证成功/失败/撤销/保存重开；真实模型经 assistant:cli 在隔离工程完成“展开、对焦、压平、撤销”，外部 MCP 走同源正式调用。按已有付费策略，不放宽额度；schema 通过不能替代实际能力使用。
-- 新测试只保留迁移/传播、数值不变量、所有权与取消、缓存错误、公共闭环这类风险，不把字段清单/版本号抄成断言。P1–P5 实测和目视按第 9 节；待第 12 节联合场景裁定后补其定向验收。
+- 新测试只保留迁移/传播、数值不变量、所有权与取消、缓存错误、公共闭环这类风险，不把字段清单/版本号抄成断言。P1–P5 实测和目视按第 9 节；必须定向验证第 12.1 节联合场景的逐样本局部景深次序、8/16 次数与模拟姿态，不以冻结中心画面替代。
 
 ### 11.3 资源、日志与失败
 
@@ -393,7 +743,7 @@ A 的落点：[schemaVersions.ts](../../../Henji-AI-t16/src/core/persistence/sch
 | 1 动画键并入、2 最低 reader | 4.1、10.1–10.2 |
 | 3 几何中心、4 零偏移相机/传播 | 4.2–4.3、5.2–5.3、10.2 |
 | 5 近恒等收敛、6 改前 main 真值 | 5.1、9 P1 |
-| 7 中心一次景深/按需组曝光 | 4.6、5.3–5.4；动态 worldScene 联合接缝明确留在 12，不擅自更改裁定 |
+| 7 中心一次景深/按需组曝光 | 4.6、5.3–5.4、12.1；动态换序 worldScene 的逐样本局部景深已并入，普通卡片仍每帧一次 |
 | 8 three 时钟、9 单一后端与模块身份 | 6.2–6.3 |
 | 10 A 曝光接口、11 17/18 顺序 | 3.2、4.6、7.2 |
 | 12 显式空间依赖、13 core/依赖门禁 | 4.4、6.1、7.1 |
@@ -404,26 +754,46 @@ A 的落点：[schemaVersions.ts](../../../Henji-AI-t16/src/core/persistence/sch
 | 21 模板边界、22 旧指纹字节不变 | 10.2、7.1 |
 | 23 小 CoC 旁路与连续、24 内部 pose 模糊 | 5.3、5.4 |
 
-## 12. 剩余裁定与实施门槛
+第 2 轮逐项落点（以下均为执行契约）：
 
-### 12.1 仍需 Claude 定的联合语义（仅此一项）
+| 第 2 轮编号 | 正文落实 |
+| --- | --- |
+| 1 第 12.1 节已定例外 | 4.6 次序，5.3，9.1/9.2 的 P2 次数，11.2，12.1 |
+| 2 transform worldScene | 4.6 的 accumulateLayerSample/finishLayer/applyCenterDefocus 签名与逐层次序，5.3 |
+| 3 space:true 非 three 中心冻结 | 4.6、5.4、6.1、7.1 |
+| 4 B 独占内容键 | 4.6 SpatialSampleRequest 无 contentKey；7.1 |
+| 5 透视量推拉变焦 | 4.2/4.3 的机位与焦距联动，8.3 的 perspective 曲线 |
+| 6 作者入口枚举与 API 9 owner | 3.1：八处入口相关文件归 B，codeMaterialVersions 归 A |
+| 7 前置票与 19 后置子项 | 3.2、7.2 执行表；19-U12 二维效果与空间复合转场关系 |
+| 8 嵌入格式传播 | 10.1/10.2：candidate、title-templates、video-preset-package、style-kits 逐项判定 |
+| 9 运动算法保留空间键 | 3.1、10.3、11.2，由 C 负责各入口 |
+| 10 具体帧/lease/materialPlan/容量 | 4.6 完整 TS，PreparedSpatialFrame 对 A 不透明，容量经 CodeSources/Host |
+| 11 景深阈值及尺度归属 | 3.1、5.3、7.2，ticket 12 后 A 串行修改共享效果计划 |
+| 12 相机旋转恒等 | 4.2 显式列 rotationX/Y/Z；5.1 与 11.2 数值验证 |
+| 13 three 数学例外 | 4.3/4.4、6.2：懒加载，只传数值，不跨实例 instanceof |
+| 14 叠加分支 | 3.2、7.2：B/C 基于 A 接口提交开工，A 合入后各自 rebase |
+| 15 主仓库链接 | 全文仓内链接以本票目录的 ../../ 指向 D:/VibeCode/Henji-AI，票间链接仍在同一 tickets 内 |
 
-**动态 worldScene 在快门内改变内部姿态，同时与别层换序且开启景深时，“每子时刻重渲场景/整组混合”和“景深仅中心材料面每帧一次”尚缺可同时满足的执行定义。** 普通卡片的中心纹理可以先滤波再变换；worldScene 的每个子样本却是不同遮挡/轮廓的完整场景图。冻结一张中心已虚化图会漏掉内部运动；先把整组曝光合完再统一虚化，会把不同层 CoC 和遮挡混为一体。纹理级 ExternalTexture 成功也不自动解决此语义问题。
+## 12. 已定联合语义与实施门槛
 
-建议 Claude 在复审时明确：**普通卡片维持一次中心材料面景深；worldScene 的 CoC 仍只取中心，但动态且换序的联合情况允许对子样本场景结果执行局部/降采样景深**，每样本再按层序合成累积，并单列 P2 的 8/16 样本成本。代价是该特定情况放宽“一帧一次景深 pass”；这是对第 7 条裁定的建议例外，未获确认前不进入实施契约。
+### 12.1 动态 worldScene、换序、景深的最终执行规则
 
-若坚持第 7 条对所有场景严格无例外，则须明确接受 worldScene 中心画面冻结的曝光近似及内部运动损失，或给出另一条经短原型证明的执行方案；不能悄悄冻结模拟/关模糊，也不能按“每样本全屏 blur”实现后冒称已遵守裁定。该接缝不阻塞纯 schema、传播及普通卡片的独立准备，但空间合成最终验收须等待裁定。
+review.md 已批准本例外，直接实施。普通卡片（包括 space:true 的非 three 作者）冻结中心材料面，每帧景深一次。稳定层序的 worldScene 由 B 逐样本渲染，A 用 accumulateLayerSample 累积成一个场景层材料面，再 applyCenterDefocus 一次。动态 worldScene 在快门内与别层换序且开启景深时，B 每子时刻执行 simulation.at(sourceTime)/update/render，A 对返回场景图按中心 CoC 做局部降采样景深，再与该时刻其他层 compositeGroup，最后 accumulate；不能先累积场景层或整组再统一虚化。
+
+CoC 只求中心值，子样本只更新支持域/裁剪与工作区域；场景已投影，CoC 直接以输出像素换到其局部工作纹理，不二次透视。每个未旁路场景在 N=8/16 时对应 8/16 次场景渲染和 8/16 次景深执行；每个普通卡片仍只有 1 次景深。不开景深或阈值旁路则执行次数为 0。单次计划内部多 pass/降采样另计，不把一次计划说成一次 GPU pass。具体调用和 lease 生命周期冻结在 4.6，P2 分项记录在 9.2。
+
+该例外只放宽动态换序场景的景深次数，不冻结模拟、不关闭模糊、不对每个样本盲开全画幅 blur；空间层序仍是首期中心深度近似。
 
 ### 12.2 已定方向与实测门槛
 
-API 9、中心深度近似、80mm/36mm/1m 标定、polygon-clipping、A/B/C owner、模板只带空间片段与 Claude 看样片均已定，不重复请批。最终格式数字是前置票合并后由 A 按规则分配的集成事项。
+API 9、中心深度近似、80mm/36mm/1m 标定、polygon-clipping、最终 owner、叠加分支、模板只带空间片段与 Claude 看样片均已定。没有剩余设计裁定项。最终格式数字由 A 在前置票合入后按登记表分配。
 
-G/W 默认路径选择、ExternalTexture 公开目标组合、抗锯齿/CoC 阈值与 P2/P5 性能是实测门槛；按第 6、9 节执行后由 Claude 根据证据验收，不预先声称 W 可用、零拷贝或达标。第 14 节末尾的“审完三线开工”结合 review.md 执行：本次改写之后先复审，再按第 3 节前置集成顺序开工。
+G/W 默认路径、ExternalTexture 公开目标组合、抗锯齿/CoC 阈值和 P2/P5 性能属于实施中的实测验收：按第 6、9 节由 Claude 根据证据验收，不预先声称 W 可用、零拷贝或性能达标。Claude 自查本文后按 7.2 开工，无下一轮设计送审。
 
 ## 13. 官方资料与采用边界
 
 - [three WebGPURenderer](https://threejs.org/docs/pages/WebGPURenderer.html)：同一渲染器可选择 WebGPU 或 forceWebGL 后端；本票据此统一 G/W 契约，而非两种 renderer 的近似互换。
-- [three ExternalTexture](https://threejs.org/docs/pages/ExternalTexture.html)、[本地 r186 实现](../../../Henji-AI-t16/node_modules/henji-author-three-0.186.1/src/textures/ExternalTexture.js)：公开包装同上下文 GPUTexture/WebGLTexture；公开组合可否完整用作宿主输出目标仍需 P2。不可把接口存在当生产可用证明。
+- [three ExternalTexture](https://threejs.org/docs/pages/ExternalTexture.html)、[本地 r186 实现](../../node_modules/henji-author-three-0.186.1/src/textures/ExternalTexture.js)：公开包装同上下文 GPUTexture/WebGLTexture；公开组合可否完整用作宿主输出目标仍需 P2。不可把接口存在当生产可用证明。
 - [r186 Renderer](https://github.com/mrdoob/three.js/blob/r186/src/renderers/common/Renderer.js)、[Animation](https://github.com/mrdoob/three.js/blob/r186/src/renderers/common/Animation.js)、[NodeFrame](https://github.com/mrdoob/three.js/blob/r186/src/nodes/core/NodeFrame.js)：本地锁定 0.186.1 同名源码已只读核对，init 启动 RAF、空用户回调不会停时钟、NodeFrame.update 读 performance.now；受管封装与回归集中在 B 的时钟适配器。
 - [three PerspectiveCamera](https://threejs.org/docs/pages/PerspectiveCamera.html)、[r186 WebGPUBackend](https://github.com/mrdoob/three.js/blob/r186/src/renderers/webgpu/WebGPUBackend.js)：相机光学语义、外部 device 与资源生命周期参考；不使用 XR 私有目标接口。具体归属/错误回调必须以锁定源码和探针验证。
 - [r186 DepthOfFieldNode](https://github.com/mrdoob/three.js/blob/r186/examples/jsm/tsl/display/DepthOfFieldNode.js)：不把其艺术化参数直接当本票毫米薄透镜与透明层契约；首期复用宿主现有镜头 blur 内核。
@@ -438,4 +808,4 @@ G/W 默认路径选择、ExternalTexture 公开目标组合、抗锯齿/CoC 阈�
 2. 批准 createThree 受管入口；作者 API 与 ticket 17/18 共用 API 9（谁先合并谁登记，API 9 未发布前其余直接扩充）。A/B/C 文件所有权与热点文件集成顺序按第 3、7 节；polygon-clipping 由 Claude 在主工作区安装（MIT，纯 JS），各线合并 main 后使用。
 3. 批准 80mm、36mm 横向画幅、1 世界单位 = 1m 的原型标定与第 9 节验收目标；正式后端按样片数据选，零拷贝未过门槛不进默认路径。
 4. 用户不看样片：原型样片由 Claude 按用户画面口味目视验收后直接往下做。
-设计先交 Opus xhigh 审一轮（架构级），审完三条线同时开工。
+首轮与第 2 轮设计裁定均已落入正文；Claude 自查后按 7.2 的前置集合与叠加分支顺序开工，不再送设计复审。
