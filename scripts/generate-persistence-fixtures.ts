@@ -110,7 +110,7 @@ sequence.annotations = [
   goldenMark('golden-annotation-marker', { kind: 'marker', x: .8, y: .8, number: 2 }, '第二步在这里停顿', { color: 'green' }),
 ] as typeof sequence.annotations
 document.exportHistory = [{ id: 'golden-export', taskId: 'golden-render', sequenceId: sequence.id, name: '黄金导出', presetName: '自定义导出', rangeSource: 'explicit',
-  path: '/persistence-project/导出/黄金.mp4', completedAt: Date.parse(timestamp), settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings,
+  path: '/persistence-project/导出/黄金.mp4', completedAt: Date.parse(timestamp), settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, renderAtOutputResolution: false },
   range: { startFrame: 0, endFrame: 30 }, assetRef: { kind: 'asset', id: 'golden-export-asset' } }]
 // 29：动态链接的音频编辑成品记着它由源录音的哪些采样帧区间拼成
 document.media.push({ id: 'golden-voice', name: '口播 · 剪后声音', path: '/persistence-project/生成结果/finished-golden.wav', kind: 'audio', width: 0, height: 0, durationSeconds: 3, hasAudio: true, linkedTimeline: { sampleRate: 48000, spans: [0, 48000, 96000, 192000] } })
@@ -318,7 +318,7 @@ const values: Record<string, unknown> = {
   'video-template-library': { id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'code', code: { entry: 'main.ts', files: { 'main.ts': source } }, durationSeconds: 4 } },
   'video-style-package': { format: 'henji-video-style', style: { ...goldenStyle, imported: true }, templates: [{ id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'native', content: { width: 1920, height: 1080, fps: 30, clips: [nativeClipContent] } } }], media: { thumbnail: '/9j/4AAQ', anchors: ['/9j/4AAQ'] } },
   'text-presets': [{ id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) }],
-  'export-presets': [{ ...VIDEO_EDIT_EXPORT_PRESETS[0], id: 'golden-export', name: '黄金导出' }],
+  'export-presets': [{ ...VIDEO_EDIT_EXPORT_PRESETS[0], id: 'golden-export', name: '黄金导出', settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, renderAtOutputResolution: false } }],
   'preset-preferences': [{ category: 'style', id: 'golden-kit', rating: 5, isDefault: true }, { category: 'transition', id: 'cross_dissolve', rating: 3, isDefault: false }],
   'video-preset-package': { format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: legacyPresetItems },
   'voice-library': [{ voiceId: 'golden-voice', voiceName: '黄金音色', providerId: 'kie', createdAt: timestamp, updatedAt: timestamp, status: 'ready', activated: true }],

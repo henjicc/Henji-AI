@@ -55,7 +55,7 @@ import { activeVideoEditAudioEffects, activeVideoEditEffects, buildVideoEditComp
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
 import { readVideoEditExportPicture } from './videoEditExportPictures'
-import { isVideoEditRenderDivisor, videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
+import { isVideoEditRenderDivisor, videoEditRenderSize, videoEditOutputRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { applyVideoEditParameterUpdate, type VideoEditParameterUpdate } from './videoEditParameterUpdate'
 import { VideoEditJumpPreview, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR, type VideoEditJumpPreviewLog } from './videoEditJumpPreview'
 import { VIDEO_EDIT_INPUT_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
@@ -459,11 +459,8 @@ export class VideoEditRenderer {
   private get lookaheadOwner(): VideoEditRenderer { return this.nestedOwner?.lookaheadOwner ?? this }
   /** 网页页面归整棵渲染器树的根（嵌套序列与代码输入里的网页参数共用页面）。 */
   private webInputs?: VideoEditWebInputs
-  private webOutputScale = 1
-  setWebOutputScale(scale: number): void {
-    if (!Number.isFinite(scale) || scale <= 0) throw new Error('网页输出比例需要正有限数。')
-    this.webOutputScale = Math.min(1, scale)
-  }
+  private outputScale = 1
+  private renderAtOutputResolution = true
   private get webOwner(): VideoEditRenderer { return this.nestedOwner?.webOwner ?? this }
   private lookaheadRenderers(): VideoEditRenderer[] {
     const renderers = new Set<VideoEditRenderer>([this])
@@ -488,7 +485,7 @@ export class VideoEditRenderer {
     let entry = owner.nestedPictures.get(key)
     if (!entry) {
       const renderer = new VideoEditRenderer(child, this.previewWidth, undefined, 64 * 1024 ** 2, this.frames, owner)
-      renderer.setRenderDivisor(this.renderDivisor); renderer.instanceKey = key
+      renderer.setOutputScale(this.outputScale, this.renderAtOutputResolution); renderer.instanceKey = key
       entry = { renderer, tail: Promise.resolve() }; owner.nestedPictures.set(key, entry)
     }
     return entry
@@ -631,8 +628,8 @@ export class VideoEditRenderer {
     this.codeSources ??= new VideoEditCodeSources(document, () => compositor.code(), undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
     await this.codeSources.prepare(document, clips, frame, current, undefined, { preparationOnly: true })
   }
-  /** Preview only (task 4.9): the canvas, composition targets and owned pictures are 1/divisor of the sequence size. */
-  private renderDivisor: VideoEditRenderDivisor = 1
+  /** 合成、文字与作者输出共用比例；网页在全分辨率合成时仍按交付尺寸取帧。 */
+  private get renderDivisor(): number { return this.renderAtOutputResolution ? videoEditOutputRenderDivisor(this.document.width, this.document.height, this.outputScale) : 1 }
   /** High-precision composition counters and, with `row`, that row of the last high-precision frame before 8-bit quantization (task 2.7 acceptance). */
   async precisionDiagnostics(row?: number): Promise<{ counters?: ReturnType<VideoEditGpuCompositor['precisionDiagnostics']>; row?: Uint16Array }> {
     return { counters: this.compositor?.precisionDiagnostics(), row: row === undefined ? undefined : await this.compositor?.readPreciseRow(row) }
@@ -659,20 +656,29 @@ export class VideoEditRenderer {
   private resizeCanvas(): void {
     const { width, height } = videoEditRenderSize(this.document.width, this.document.height, this.renderDivisor)
     if (this.canvas.width !== width || this.canvas.height !== height) { this.canvas.width = width; this.canvas.height = height }
+    this.compositor?.setPictureDivisor(this.renderDivisor)
   }
-  /**
-   * Playback resolution of the preview (task 4.9). Pictures cached at the previous size are dropped, so a paused frame
-   * that returns to full resolution is decoded again instead of showing a reduced picture. Export never calls this.
-   */
+  /** 预览偏好仍只接受四档，连续比例由导出入口传入。 */
   setRenderDivisor(divisor: number): void {
     if (!isVideoEditRenderDivisor(divisor)) throw new Error('回放分辨率无效。')
-    if (!this.previewWidth && divisor !== 1) throw new Error('导出始终按完整分辨率渲染。')
-    if (divisor === this.renderDivisor) return
-    this.renderDivisor = divisor
-    this.compositor?.setPictureDivisor(divisor)
-    this.frameCache.clear()
-    this.resizeCanvas()
-    for (const entry of this.nestedPictures.values()) entry.renderer.setRenderDivisor(divisor)
+    this.updateOutputScale(1 / divisor, true, false)
+  }
+  setOutputScale(scale: number, renderAtOutputResolution = true): void {
+    this.updateOutputScale(scale, renderAtOutputResolution, true)
+  }
+  private updateOutputScale(scale: number, renderAtOutputResolution: boolean, cancelPresentation: boolean): void {
+    if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(1 / scale)) throw new Error('输出比例需要正有限数。')
+    if (renderAtOutputResolution === this.renderAtOutputResolution && scale === this.outputScale) return
+    const divisor = this.renderDivisor, webScale = Math.min(1, this.outputScale)
+    this.outputScale = scale
+    this.renderAtOutputResolution = renderAtOutputResolution
+    if (divisor !== this.renderDivisor || webScale !== Math.min(1, scale)) {
+      // 预览分辨率只作用于后续帧，播放与暂停切换不能取消正在提交的画面。
+      if (cancelPresentation) { this.presentationEpoch++; this.codeSources?.cancel(); this.compositor?.cancelPresentation() }
+      this.frameCache.clear()
+      this.resizeCanvas()
+    }
+    for (const entry of [...this.nestedPictures.values(), ...this.codeInputs.values(), ...this.filterInputs.values()]) entry.renderer.updateOutputScale(scale, renderAtOutputResolution, cancelPresentation)
   }
   /** Drops one user of the shared opened file; a clip's own sound reader and exclusive picture reader close with its source. */
   private release(source: Pick<VideoSource, 'demux'> & Partial<Pick<VideoSource, 'audio' | 'video' | 'ahead' | 'retired'>>): void {
@@ -1039,6 +1045,7 @@ export class VideoEditRenderer {
   private codeInputRenderer(input: Pick<CodeMediaInput, 'kind' | 'document' | 'still'>): VideoEditRenderer {
     if (input.kind !== 'video') {
       const below = new VideoEditRenderer(input.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
+      below.setOutputScale(this.outputScale, this.renderAtOutputResolution)
       below.exclusiveWhenShared = true
       return below
     }
@@ -1046,6 +1053,7 @@ export class VideoEditRenderer {
     const still = input.still && media ? videoEditStillKey(media) : undefined
     const history = !!this.previewWidth && !still
     const renderer = new VideoEditRenderer(input.document, undefined, undefined, history ? Math.max(1, input.document.width * input.document.height * CODE_INPUT_HISTORY_BYTES_PER_PIXEL) : 1, this.frames, this, this.sequencePath)
+    renderer.setOutputScale(this.outputScale, this.renderAtOutputResolution)
     renderer.codeInput = { history, ...(still ? { still } : {}) }
     return renderer
   }
@@ -1404,7 +1412,7 @@ export class VideoEditRenderer {
     if (!entry) {
       const source = codeFilterInputComposition(document, clip.id, plan.effect.id)
       const renderer = new VideoEditRenderer(source, this.previewWidth, undefined, 1, this.frames, this, this.sequencePath)
-      renderer.setRenderDivisor(this.renderDivisor)
+      renderer.setOutputScale(this.outputScale, this.renderAtOutputResolution)
       entry = { renderer, tail: Promise.resolve(), document, sourceKey: '', ownerKey: `filter-input:${document.id}:${sessionKey}` }
       this.filterInputs.set(sessionKey, entry)
     }
@@ -1489,7 +1497,7 @@ export class VideoEditRenderer {
     const pending: Array<[string, Promise<VideoEditCodePicture | undefined>]> = []
     for (const { clip, parameter, reference, source } of requests) {
       if (!current()) throw new DOMException('视频取帧已取消。', 'AbortError')
-      const sampleKey = JSON.stringify([quality, sequential, source.sampleKey, ...(source.kind === 'sequence' ? [this.webOwner.webOutputScale / this.webOwner.renderDivisor] : [])]), key = JSON.stringify([source.sessionKey, sampleKey])
+      const sampleKey = JSON.stringify([quality, sequential, source.sampleKey, this.renderDivisor, Math.min(1, this.webOwner.outputScale)]), key = JSON.stringify([source.sessionKey, sampleKey])
       let picture = shared.get(key)
       if (!picture) {
         context.bytes += source.document.width * source.document.height * 8
@@ -1547,7 +1555,7 @@ export class VideoEditRenderer {
         if (!current()) throw new DOMException('网页取帧已取消。', 'AbortError')
         // 外来剪辑或外来代码里的网页和外来代码一样，先过信任确认，确认之前不开页面。
         const trust = [...codeMaterialTrustContext(document, clip.code!), ...(document.foreign ? [document.foreign] : [])].filter((value, index, all) => all.findIndex(other => other.id === value.id) === index)
-        const outputScale = this.webOwner.webOutputScale / this.webOwner.renderDivisor
+        const outputScale = Math.min(1, this.webOwner.outputScale)
         const view = codeWebView(reference)
         const ahead = sequential && context.webDeadline === undefined
           ? [1, 2].flatMap(offset => {
@@ -1987,7 +1995,7 @@ export class VideoEditRenderer {
         // that instance's decoders and plan).
         if (!nestedContext.keys.has(rendererKey)) nestedContext.keys.set(rendererKey, new Set())
         if (!picture) {
-          const size = videoEditRenderSize(child.width, child.height, this.renderDivisor)
+          const size = videoEditRenderSize(child.width, child.height, this.renderAtOutputResolution ? videoEditOutputRenderDivisor(child.width, child.height, this.outputScale) : 1)
           nestedContext.bytes += size.width * size.height * 8
           this.checkInputBudget(nestedContext)
           const entry = this.nestedPicture(child, rendererKey)

@@ -126,8 +126,8 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 43,
-      "fingerprint": "ce4e467de55a5411cb0c62b508b1229baddfd7c75f2bcd800232b4f3507a53ac",
+      "version": 44,
+      "fingerprint": "46278ac936f9e47d58481833e0bb246cc774125384df37cf70c663f3efdf0596",
       "supportedFrom": 17,
       "minReaderVersion": 42
     },
@@ -156,8 +156,8 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 46,
-      "fingerprint": "9d64f1296b0225315905f98e41d9db511fc517ae507e15f5465b3e23a6f38787",
+      "version": 47,
+      "fingerprint": "da59dfee3b60d86477699cb15d688a6077202179eaf80f9fc9d487a6ebb49229",
       "supportedFrom": 19,
       "minReaderVersion": 45
     },
@@ -228,8 +228,8 @@
       "minReaderVersion": 1
     },
     "export-presets": {
-      "version": 2,
-      "fingerprint": "86b27b369d8205f844fbc06de0f8d38abe597d69ada7c70e861a892a3c53e2e0",
+      "version": 3,
+      "fingerprint": "e9b3319eee0343826a4b8f8660fd38ce535cd40149ff33a1f56e31ab47001c5d",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },

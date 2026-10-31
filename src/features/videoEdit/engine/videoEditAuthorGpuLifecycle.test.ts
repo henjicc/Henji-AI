@@ -85,12 +85,24 @@ it('1/2 回放分辨率：输出纹理减半、放置尺寸不变，作者拿到
     const half = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info, undefined, true, {}, 2)
     expect([half.width, half.height, half.displayWidth, half.displayHeight]).toEqual([1920, 1080, 3840, 2160])
     expect(author.render).toHaveBeenLastCalledWith(half.texture, 3840, 2160, {}, {}, { ...info, renderScale: .5 }, undefined, { frames: [], images: {} }, true, { width: 1920, height: 1080 })
+    const reduced = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info, undefined, true, {}, 1.5)
+    expect([reduced.width, reduced.height, reduced.displayWidth, reduced.displayHeight]).toEqual([2560, 1440, 3840, 2160])
+    expect(author.render).toHaveBeenLastCalledWith(reduced.texture, 3840, 2160, {}, {}, { ...info, renderScale: 2 / 3 }, undefined, { frames: [], images: {} }, true, { width: 2560, height: 1440 })
     // 切回完整分辨率：换一张整幅纹理，调用与以前逐项相同
     const full = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info)
     expect([full.width, full.height, full.displayWidth, full.displayHeight]).toEqual([3840, 2160, 3840, 2160])
     expect(full).not.toBe(half)
     expect(author.render).toHaveBeenLastCalledWith(full.texture, 3840, 2160, {}, {}, info, undefined, { frames: [], images: {} }, true)
     expect(runtime.renderDivisor).toBe(1); runtime.setRenderDivisor(4); expect(runtime.renderDivisor).toBe(4)
+  } finally { await runtime.dispose() }
+})
+
+it('放大导出中的高分辨率作者按实际纹理传 renderScale，保持逻辑放置尺寸', async () => {
+  const { runtime, program } = fixture()
+  try {
+    const output = await runtime.authorGenerator('frame', 'clip', program, { width: 8192, height: 4320 }, {}, {}, info, undefined, true, {}, .5)
+    expect([output.width, output.height, output.displayWidth, output.displayHeight]).toEqual([8192, 4320, 8192, 4320])
+    expect(author.render).toHaveBeenLastCalledWith(output.texture, 8192, 4320, {}, {}, { ...info, renderScale: 1 }, undefined, { frames: [], images: {} }, true, { width: 8192, height: 4320 })
   } finally { await runtime.dispose() }
 })
 

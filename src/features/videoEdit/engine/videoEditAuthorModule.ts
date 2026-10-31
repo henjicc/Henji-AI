@@ -16,7 +16,7 @@ export interface AuthorFrameInfo {
   audio?: import('@/core/audioAnalysis/contentAnalysis').AudioContentAnalysis
   audioTime?: number
   /**
-   * 本帧输出像素与画布像素之比，只在节目回放分辨率降低时出现（如 1/2 时为 0.5）；完整分辨率、取帧与导出没有该字段（即 1）。
+   * 本帧输出像素与画布像素之比（≤1）：预览降分辨率与导出按输出分辨率渲染时提供（如 1/2 时为 0.5），省略即 1。
    * Canvas 图层由宿主缩放，坐标不变；WebGPU / WebGL 拿到的 target 与 width/height 已是缩小后的像素，按像素写的常数乘它。
    */
   renderScale?: number

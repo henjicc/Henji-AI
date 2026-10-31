@@ -28,7 +28,7 @@ import { VideoEditAuthorPrograms } from './videoEditAuthorPrograms'
 import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs } from './videoEditAuthorModule'
 import type { AuthorElementOverrides } from './videoEditAuthorElements'
-import { videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
+import { videoEditRenderSize, videoEditOutputRenderDivisor } from '@/core/videoEdit/playbackResolution'
 
 // 4K media + grading + author filters need more than eight RGBA8 surfaces.
 // Allocate on demand, with a bounded 512MiB tier independent of precise targets.
@@ -102,17 +102,17 @@ export class VideoEditCodeGpu {
   private authors(): VideoEditAuthorPrograms { return this.authorPrograms ??= new VideoEditAuthorPrograms(this.device) }
   async inspectAuthor(bundle: CodeAuthorBundle): Promise<CodeAuthorProgram> { return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().inspect(bundle) }) }
   /**
-   * `divisor`：节目回放分辨率的缩小倍数（任务 4.9，导出与完整分辨率为 1）。大于 1 时输出纹理按比例缩小，画面的放置尺寸仍是
+   * `divisor`：输出比例的倒数。输出纹理按比例分配，画面的放置尺寸仍是
    * `size`；Canvas 作者坐标不变，WebGPU / WebGL 入口拿到缩小后的 target 与 width/height，`info.renderScale` 给出比例。
    */
-  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}, divisor: VideoEditRenderDivisor = 1): Promise<VideoEditCodePicture> {
+  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}, divisor: number = 1): Promise<VideoEditCodePicture> {
     return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur, images, divisor))
   }
-  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images'], divisor: VideoEditRenderDivisor): Promise<VideoEditCodePicture> {
+  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images'], divisor: number): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive()
     const runtime = await this.authors().instance(instanceKey, program)
     this.assertLive()
-    const output = divisor === 1 ? undefined : videoEditRenderSize(size.width, size.height, divisor)
+    const output = divisor === 1 ? undefined : videoEditRenderSize(size.width, size.height, videoEditOutputRenderDivisor(size.width, size.height, 1 / divisor))
     const target = output ? this.surface(key, output.width, output.height, 'rgba8unorm', false, size) : this.surface(key, size.width, size.height)
     const started = performance.now()
     for (const image of Object.values(images)) this.assertInput(image.texture)
@@ -576,10 +576,10 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     return target.picture
   }
   resetFramePerformance(): void { this.performanceFrames.clear(); this.performanceSpans.clear() }
-  private divisor: VideoEditRenderDivisor = 1
-  /** 合成器所在节目的回放分辨率缩小倍数（任务 4.9），由合成器同步；导出会话始终为 1。 */
-  get renderDivisor(): VideoEditRenderDivisor { return this.divisor }
-  setRenderDivisor(divisor: VideoEditRenderDivisor): void { this.divisor = divisor }
+  private divisor: number = 1
+  /** 合成器同步的渲染缩小倍数：预览使用整数档，导出使用连续比例。 */
+  get renderDivisor(): number { return this.divisor }
+  setRenderDivisor(divisor: number): void { this.divisor = divisor }
   captureFramePerformance(): () => CodeFramePerformance[] {
     // Keep this request's records alive while the next pipelined frame resets the
     // current maps. Queue completion still updates these captured span objects.

@@ -93,6 +93,7 @@ it('同帧同源两时刻隔离，倍率切换保留实例，前视回执乱序�
   const scaled = inputs.picture(reference, 1.2, {}, copy, [], { outputScale: 2 })
   await vi.advanceTimersByTimeAsync(0); finish(4)
   expect((await scaled)?.width).toBe(400)
+  expect(requests[4].params.scale).toBe(4)
   expect(stream).toBe(2)
   for (const handler of contentHandlers) handler({ path: reference.path, contentHash: 'changed' })
   const updated = inputs.picture(reference, 1.2, {}, copy, [], { outputScale: 2 })

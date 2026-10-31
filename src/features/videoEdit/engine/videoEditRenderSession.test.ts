@@ -30,6 +30,7 @@ const workers: FakeWorker[] = []
 class FakeWorker {
   respond = true
   renderCached = false
+  bitmapSize = { width: 1920, height: 1080 }
   readonly messages: Array<{ message: RenderRequest | { kind: string; port?: unknown }; transfer: unknown[] }> = []
   onmessage?: (event: MessageEvent) => void
   onerror?: unknown
@@ -37,7 +38,7 @@ class FakeWorker {
   constructor() { workers.push(this) }
   postMessage(message: RenderRequest, transfer: unknown[] = []) {
     this.messages.push({ message, transfer })
-    if (this.respond && 'id' in message && message.id) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, presented: true, ...(message.kind === 'render' ? { bitmap: { close: vi.fn() }, renderCached: this.renderCached } : message.kind === 'fingerprint' ? { fingerprints: [[message.frame, { digest: 'frame-content' }]] } : {}) } } as MessageEvent))
+    if (this.respond && 'id' in message && message.id) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, presented: true, ...(message.kind === 'render' ? { bitmap: { ...this.bitmapSize, close: vi.fn() }, renderCached: this.renderCached } : message.kind === 'fingerprint' ? { fingerprints: [[message.frame, { digest: 'frame-content' }]] } : {}) } } as MessageEvent))
   }
 }
 vi.stubGlobal('Worker', FakeWorker)
@@ -580,5 +581,21 @@ it('批量帧指纹先按当前帧同步代码字体，再发送受预算约束�
     await session.fingerprintCodeFrames('code-b', 60, 80, {}, 8)
     expect(fonts.mock.lastCall![0].clips.map(clip => clip.id)).toEqual(['code-b'])
     expect(workers[0].messages.some(({ message }) => message.kind === 'render' || message.kind === 'prepareGpu')).toBe(false)
+  } finally { await session.dispose() }
+})
+
+it('导出连续比例跨 Worker 传递并调整宿主画布，完整合成回退保持原尺寸', async () => {
+  const session = new VideoEditRenderSession(composition())
+  try {
+    await session.setOutputScale(2 / 3)
+    expect([session.canvas.width, session.canvas.height]).toEqual([1280, 720])
+    const worker = workers.at(-1)!
+    expect(worker.messages.at(-1)?.message).toMatchObject({ kind: 'outputScale', scale: 2 / 3, renderAtOutputResolution: true })
+    worker.bitmapSize = { width: 1280, height: 720 }
+    await session.render(0)
+    expect([session.canvas.width, session.canvas.height]).toEqual([1280, 720])
+    await session.setOutputScale(2 / 3, false)
+    expect([session.canvas.width, session.canvas.height]).toEqual([1920, 1080])
+    expect(worker.messages.at(-1)?.message).toMatchObject({ kind: 'outputScale', scale: 2 / 3, renderAtOutputResolution: false })
   } finally { await session.dispose() }
 })

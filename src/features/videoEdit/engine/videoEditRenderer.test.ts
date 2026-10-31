@@ -237,7 +237,7 @@ it('真实转场窗口准备两端原视频余量，不改片段时钟，禁用�
     await renderer.updateDocument({ ...document, tracks: document.tracks.map(track => track.index === 1 ? { ...track, enabled: false } : track) })
     boundary.draws = []; const hidden = await renderer.render(55)
     expect(hidden.sourceTimestamps).toEqual([]); expect(boundary.snapshotCalls).toHaveLength(decodes)
-    expect(boundary.draws).toEqual([{ ids: [], timestamps: [], offscreen: false }]); expect(boundary.mixes).toHaveLength(3)
+    expect(boundary.draws).toMatchObject([{ ids: [], timestamps: [], offscreen: false }]); expect(boundary.mixes).toHaveLength(3)
   } finally { await renderer.dispose() }
 })
 it('媒体不足时转场重复首尾帧（PR），黑场过渡把纯色交给混合（4.3）', async () => {
@@ -492,7 +492,7 @@ it.each(['nested', 'input'] as const)('网页 %s 经结构编辑与剪点复用�
     expect(call.mock.calls.filter(([method]) => method === 'openWeb')).toHaveLength(opened)
   } finally { await renderer.dispose(); installVideoEditWebChannel(() => undefined) }
 })
-it('根与下层代码输入在半分辨率、四分辨率共用同页同刻倍率', async () => {
+it('根与下层代码输入在整数、连续比例与恢复完整时共用同页同刻倍率', async () => {
   const document = codeInputFixture(), base = document.clips[1]
   const web = { kind: 'web' as const, path: '/site', width: 100, height: 100, scale: 4 }
   document.clips = [
@@ -509,8 +509,8 @@ it('根与下层代码输入在半分辨率、四分辨率共用同页同刻倍�
   installVideoEditWebChannel(() => ({ call, subscribe: (_id: string, handler: (frame: NativeVideoFrame) => void) => { deliver = handler; return () => {} }, subscribeWebContent: () => () => {} }) as unknown as VideoEditNativeFrameReceiver)
   const renderer = new VideoEditRenderer(document, 1920)
   try {
-    for (const divisor of [2, 4]) {
-      renderer.setRenderDivisor(divisor)
+    for (const divisor of [2, 4, 1.5, 1]) {
+      renderer.setOutputScale(1 / divisor)
       const before = call.mock.calls.length
       const draws = boundary.draws.length
       expect(await renderer.render(17)).toMatchObject({ presented: true })
@@ -518,6 +518,13 @@ it('根与下层代码输入在半分辨率、四分辨率共用同页同刻倍�
       for (const frame of [18, 19, 17]) expect(await renderer.render(frame)).toMatchObject({ presented: true })
       const scales = call.mock.calls.slice(before).filter(([method]) => method === 'captureWeb').map(([, params]) => params.scale)
       expect(scales).toEqual([4 / divisor, 4 / divisor, 4 / divisor, 4 / divisor])
+    }
+    for (const scale of [2 / 3, 2]) {
+      renderer.setOutputScale(scale, false)
+      const beforeFallback = call.mock.calls.length
+      await renderer.render(17)
+      expect([renderer.canvas.width, renderer.canvas.height]).toEqual([document.width, document.height])
+      expect(call.mock.calls.slice(beforeFallback).filter(([method]) => method === 'captureWeb').map(([, params]) => params.scale)).toEqual([4 * Math.min(1, scale)])
     }
     expect(call.mock.calls.filter(([method]) => method === 'openWeb')).toHaveLength(1)
   } finally { await renderer.dispose(); installVideoEditWebChannel(() => undefined) }
@@ -1357,6 +1364,21 @@ function nestedFixture(): ReturnType<typeof videoEditComposition> {
   return { ...child, ...parent, items: [...child.items, { id: 'nested-item', name: '子序列', kind: 'sequence', sequenceId: child.id }], sequences: [...child.sequences!, parent] }
 }
 
+it('放大导出中的高分辨率嵌套保持可合成的原生采样，切换比例后恢复缩小目标', async () => {
+  const document = nestedFixture(); const child = document.sequences!.find(sequence => sequence.id !== document.id)!
+  child.width = 7680; child.height = 4320
+  const renderer = new VideoEditRenderer(document)
+  try {
+    renderer.setOutputScale(2)
+    await renderer.render(0)
+    expect(boundary.draws.find(draw => draw.offscreen)?.size).toEqual([7680, 4320])
+    boundary.draws = []
+    renderer.setOutputScale(2 / 3)
+    await renderer.render(0)
+    expect(boundary.draws.find(draw => draw.offscreen)?.size).toEqual([5120, 2880])
+  } finally { await renderer.dispose() }
+})
+
 it('nested sequence parameter updates reuse the child renderer and its uploaded source frame', async () => {
   const document = nestedFixture(); const child = document.sequences!.find(sequence => sequence.id !== document.id)!
   child.clips[0].effects = [{ id: 'grade', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: .2 } } }]
@@ -1534,7 +1556,7 @@ it('嵌套预览与导出使用相同帧；回放分辨率递归应用，字幕�
     expect(boundary.mixes).toHaveLength(2)
     expect(boundary.draws.some(draw => draw.size?.[0] === document.width / 2 && draw.offscreen)).toBe(true)
     expect(boundary.draws.some(draw => draw.ids.some(id => id.includes('nested-caption')))).toBe(true)
-    expect(() => exporter.setRenderDivisor(2)).toThrow('完整分辨率')
+    exporter.setOutputScale(2 / 3); expect([exporter.canvas.width, exporter.canvas.height]).toEqual([Math.round(document.width * 2 / 3), Math.round(document.height * 2 / 3)])
   } finally { await preview.dispose(); await exporter.dispose() }
 })
 it('递归声音按子采样率与声道重采样，父音量/变速/倒放与导出一致，修改子素材使缓存失效', async () => {
@@ -1712,8 +1734,8 @@ it('完全透明的代码片段不激活源码，隐藏后释放目标且恢复�
     expect(boundary.compilerCalls).toBe(1); expect(boundary.generatorCalls).toBe(2)
   } finally { await renderer.dispose() }
 })
-it('晚到代码检查在更新、取消或关闭后不能呈现旧画面', async () => {
-  for (const action of ['update', 'cancel', 'dispose'] as const) {
+it('晚到代码检查在更新、取消、切换导出比例或关闭后不能呈现旧画面', async () => {
+  for (const action of ['update', 'cancel', 'scale', 'dispose'] as const) {
     const document = mixedFixture(); const renderer = new VideoEditRenderer(document)
     let resolve!: (program: CodeMaterialProgram) => void
     boundary.pendingCode = new Promise(done => { resolve = done })
@@ -1721,6 +1743,7 @@ it('晚到代码检查在更新、取消或关闭后不能呈现旧画面', asyn
     await vi.waitFor(() => expect(boundary.compilerCalls).toBeGreaterThan(0))
     if (action === 'update') await renderer.updateDocument({ ...document, revision: 1 })
     else if (action === 'cancel') renderer.cancelPresentation()
+    else if (action === 'scale') renderer.setOutputScale(2 / 3)
     else await renderer.dispose()
     resolve(compileCodeMaterial(codeSource))
     expect((await old).presented).toBe(false)
@@ -2147,7 +2170,7 @@ it('声道映射（2.6）：每个片段按映射读取指定声音流，单声�
   } finally { await renderer.dispose() }
   expect(sessions.every(entry => entry.closed)).toBe(true)
 })
-it('回放分辨率（4.9）：预览按 1/N 画布与合成尺寸渲染、换尺寸丢弃旧缓存帧；导出拒绝降低分辨率', async () => {
+it('回放分辨率（4.9）：预览按 1/N 画布与合成尺寸渲染、换尺寸丢弃旧缓存帧；导出接受连续输出比例', async () => {
   const document = fixture()
   const renderer = new VideoEditRenderer(document, document.width)
   try {
@@ -2168,7 +2191,38 @@ it('回放分辨率（4.9）：预览按 1/N 画布与合成尺寸渲染、换�
     expect(() => renderer.setRenderDivisor(3)).toThrow('回放分辨率无效')
   } finally { await renderer.dispose() }
   const exporter = new VideoEditRenderer(document)
-  try { expect(() => exporter.setRenderDivisor(2)).toThrow('完整分辨率') } finally { await exporter.dispose() }
+  try { exporter.setOutputScale(2 / 3); expect([exporter.canvas.width, exporter.canvas.height]).toEqual([Math.round(document.width * 2 / 3), Math.round(document.height * 2 / 3)]) } finally { await exporter.dispose() }
+})
+it.each([1, 2])('播放暂停应用预览倍率 %s 不取消在途帧', async divisor => {
+  const renderer = new VideoEditRenderer(mixedFixture(), 1920)
+  let resolve!: (program: CodeMaterialProgram) => void
+  boundary.pendingCode = new Promise(done => { resolve = done })
+  try {
+    const pending = renderer.render(0)
+    await vi.waitFor(() => expect(boundary.compilerCalls).toBeGreaterThan(0))
+    renderer.setRenderDivisor(divisor)
+    resolve(compileCodeMaterial(codeSource))
+    expect((await pending).presented).toBe(true)
+  } finally { resolve(compileCodeMaterial(codeSource)); await renderer.dispose() }
+})
+it('代码输入历史仅在实际比例变化时清除，等效设置与播放暂停保持历史', async () => {
+  const renderer = new VideoEditRenderer(codeInputFixture(), 1920)
+  try {
+    await renderer.render(17)
+    const state = renderer as unknown as { codeInputs: Map<string, { renderer: VideoEditRenderer }>; frameCache: VideoEditFrameCache }
+    const caches = [state.frameCache, ...[...state.codeInputs.values()].map(entry => (entry.renderer as unknown as { frameCache: VideoEditFrameCache }).frameCache)]
+    expect(caches.length).toBeGreaterThan(1)
+    const clears = caches.map(cache => vi.spyOn(cache, 'clear'))
+    renderer.setOutputScale(1, false)
+    renderer.setRenderDivisor(1)
+    expect(clears.every(clear => clear.mock.calls.length === 0)).toBe(true)
+    renderer.setRenderDivisor(2)
+    expect(clears.every(clear => clear.mock.calls.length === 1)).toBe(true)
+    renderer.setRenderDivisor(2)
+    expect(clears.every(clear => clear.mock.calls.length === 1)).toBe(true)
+    renderer.setRenderDivisor(1)
+    expect(clears.every(clear => clear.mock.calls.length === 2)).toBe(true)
+  } finally { await renderer.dispose() }
 })
 it('变速与倒放按片段速度取帧（4.13 帧采样）：正放跳帧，倒放逐帧后退', async () => {
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }

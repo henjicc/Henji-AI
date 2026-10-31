@@ -37,7 +37,7 @@ vi.mock('mediabunny', () => ({
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   canvas = {}; constructor(private composition: VideoEditComposition, ...options: unknown[]) { encoding.pictures.push(composition); encoding.rendererOptions.push(options) }
-  setWebOutputScale = encoding.webScale
+  setOutputScale = encoding.webScale
   updateDocument(document: VideoEditComposition) { this.composition = document }
   async renderBitmap() { return { bitmap: { width: 640, height: 360, close() {} } } }
   setSmartRegions(segments: VideoEditSmartRegionSegments) { encoding.smartRegions.push(segments) } setTracks() {} setRenderCache() {} async dispose() {}
@@ -219,8 +219,8 @@ it('正式编码固定序列快照；输出帧率只影响画面；历史队列�
   expect(encoding.rendered.map(([, frame]) => frame)).toEqual([1, 1, 2, 2]); expect(encoding.rendered.every(([name]) => name !== '后续修改')).toBe(true)
   expect(encoding.videoTimes).toEqual([0, 1 / 60, 2 / 60, 3 / 60]); expect(encoding.audio.reduce((sum, value) => sum + value, 0)).toBe(.2 * getActiveVideoEditSequence(owner).sampleRate)
   expect(encoding.formats).toEqual(['mp4', 'wav']); expect(jobs[1].task?.output?.kind).toBe('audio'); expect(videoEditQueuedExportTask(projectId, jobs[0].id)).toBe(jobs[0].task)
-  expect(encoding.draw).toHaveBeenCalledWith({}, 0, 0, 1920, 1080, 0, 656.25, 1080, 607.5)
-  expect(encoding.webScale).toHaveBeenCalledWith(1080 / 1920)
+  expect(encoding.draw).toHaveBeenCalledWith({}, 0, 0, 1080, 608, 0, 656.25, 1080, 607.5)
+  expect(encoding.webScale).toHaveBeenCalledWith(1080 / 1920, true)
 })
 it('1080p 序列导出 4K 不提高网页声明倍率', async () => {
   const owner = await project(), projectId = owner.document.id
@@ -228,7 +228,7 @@ it('1080p 序列导出 4K 不提高网页声明倍率', async () => {
   const [job] = await enqueueVideoEditExports([{ projectId, settings, path: file('4k.mp4'), range: { startFrame: 0, endFrame: 1 } }])
   await videoEditExportQueue.wait(job.id)
   expect(job.state).toBe('completed')
-  expect(encoding.webScale).toHaveBeenCalledWith(1)
+  expect(encoding.webScale).toHaveBeenCalledWith(1, true)
 })
 it('正式队列单项失败可重试；已发布文件的回执失败不重新编码或删除', async () => {
   const owner = await project(); const projectId = owner.document.id
@@ -309,16 +309,18 @@ it('助手从通用目录读取预设，跨序列/剪辑一次批量提交、查
     vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('vertical.mp4')).mockResolvedValueOnce(file('horizontal.mp4'))
     const result = await app.requireResult('export_video_edit', { documentRef: { kind: 'video_edit.document', id: first.document.id }, exports: [
       { presetRef: { kind: 'video_edit.export_preset', id: 'builtin:douyin' }, range: { startFrame: 1, endFrame: 3 } },
-      { documentRef: { kind: 'video_edit.document', id: second.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${second.document.id}:${second.activeSequenceId}` }, settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, usePreviews: true }, fit: 'fill' },
+      { documentRef: { kind: 'video_edit.document', id: second.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${second.document.id}:${second.activeSequenceId}` }, settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, usePreviews: true, renderAtOutputResolution: false }, fit: 'fill' },
     ] })
     expect(result.queue).toHaveLength(2)
     const jobs = videoEditExportQueue.list(); expect(jobs[1].settings.fit).toBe('fill'); expect(jobs[0].range).toEqual({ startFrame: 1, endFrame: 3 })
     expect(jobs.map(job => job.settings.usePreviews)).toEqual([false, true])
+    expect(jobs.map(job => job.settings.renderAtOutputResolution)).toEqual([true, false])
     // 助手/外部智能体导出不弹保存对话框（无人可点会一直等待），默认放进项目“导出”文件夹。
     expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
     for (const job of jobs) expect(job.path).toMatch(/导出[\\/][^\\/]+\.mp4$/)
     const read = await app.requireResult('query_video_edit_export', { detail: 'full', documentRef: { kind: 'video_edit.document', id: second.document.id } }); expect(read.queue).toHaveLength(1)
     expect((read.queue as Array<{ settings: VideoEditExportSettings }>)[0].settings.usePreviews).toBe(true)
+    expect((read.queue as Array<{ settings: VideoEditExportSettings }>)[0].settings.renderAtOutputResolution).toBe(false)
     expect((await app.call('cancel_video_edit_export', { documentRef: { kind: 'video_edit.document', id: first.document.id }, taskId: jobs[1].id })).ok).toBe(false)
     await app.requireResult('cancel_video_edit_export', { documentRef: { kind: 'video_edit.document', id: second.document.id }, taskId: jobs[1].id }); expect(jobs[1].state).toBe('cancelled')
     const bad = await app.call('export_video_edit', { documentRef: { kind: 'video_edit.document', id: first.document.id }, exports: [{ presetRef: { kind: 'video_edit.export_preset', id: 'builtin:douyin' }, sequenceRef: { kind: 'video_edit.sequence', id: `${second.document.id}:${second.activeSequenceId}` } }] }); expect(bad.ok).toBe(false); expect(videoEditExportQueue.list()).toHaveLength(2)

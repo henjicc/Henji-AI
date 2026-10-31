@@ -8,7 +8,7 @@ import { rasterizeVideoEditText, videoEditTextResolution, type VideoEditTextRast
 import { defaultVideoEditTextStyle, scaleVideoEditTextStyle } from '@/core/videoEdit/text'
 import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
 import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_FRAME_BLEND_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
-import type { VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
+import { isVideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { VideoEditWebPicture } from './videoEditWebInputs'
@@ -123,7 +123,7 @@ export class VideoEditGpuCompositor {
   private readonly copyDeep = new Map<VideoEditOwnedFormat, GpuRenderPipeline>()
   private cachedVideo!: GpuRenderPipeline
   /** Reduced playback resolution (task 4.9): decoded pictures enter owned memory at 1/divisor size; export keeps 1. */
-  private pictureDivisor: VideoEditRenderDivisor = 1
+  private pictureDivisor: number = 1
   /** Copies per divisor and source transfer, compiled on first use: [y, uv, rgba by owned format]. */
   private readonly downscale = new Map<string, Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }>>()
   private canvasFormat = 'bgra8unorm'
@@ -251,7 +251,7 @@ export class VideoEditGpuCompositor {
     return ready
   }
   /** Pictures snapshotted from now on are stored at 1/divisor of their decoded size; the layer shader samples them by UV. */
-  setPictureDivisor(divisor: VideoEditRenderDivisor): void { this.pictureDivisor = divisor; this.codeRuntime?.setRenderDivisor(divisor) }
+  setPictureDivisor(divisor: number): void { this.pictureDivisor = divisor; this.codeRuntime?.setRenderDivisor(divisor) }
   private downscalePipelines(divisor: 1 | 2 | 4 | 8, srgb = false): Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }> {
     const key = `${divisor}:${srgb}`
     let ready = this.downscale.get(key)
@@ -285,7 +285,7 @@ export class VideoEditGpuCompositor {
    * (closing a shared texture frame in a worker crashes the renderer process, record 002).
    * Owned format: compact 4:2:0 planes when `compact`; otherwise `videoEditGpuFrameFormat()` (`rgb10a2unorm` or
    * `rgba16float` for more than 8 bits, `rgba8unorm` for the rest). */
-  async snapshot(sample: VideoSample | VideoEditNativePicture, compact: boolean, deferCompletion = false, pictureDivisor?: VideoEditRenderDivisor): Promise<VideoEditGpuFrame> {
+  async snapshot(sample: VideoSample | VideoEditNativePicture, compact: boolean, deferCompletion = false, pictureDivisor?: number): Promise<VideoEditGpuFrame> {
     await this.ready
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     this.assertDevice()
@@ -298,7 +298,9 @@ export class VideoEditGpuCompositor {
     // A reduced playback resolution copies a box-averaged picture of 1/divisor size (task 4.9); the frame keeps its
     // display size, so placement, fit and effects are unchanged and only the stored pixels shrink. `pictureDivisor`
     // overrides it for one copy (the program's resident jump pictures, `videoEditJumpPreview.ts`).
-    const divisor = pictureDivisor ?? this.pictureDivisor
+    // 整数预览沿用 box 采样；连续比例保留源采样，由合成器已有的纹理缩放完成重采样。
+    const requestedDivisor = pictureDivisor ?? this.pictureDivisor
+    const divisor = isVideoEditRenderDivisor(requestedDivisor) ? requestedDivisor : 1
     let reduced = divisor === 1 ? undefined : await this.downscalePipelines(divisor)
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     // Copy on the compositor's device; no Skia canvas or cross-context fences.
@@ -445,7 +447,7 @@ export class VideoEditGpuCompositor {
       this.assertDevice()
       if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
       this.codeRuntime ??= new VideoEditCodeGpu(this.device)
-      // 代码生成器与解码画面一样按回放分辨率缩小（任务 4.9）；导出从不设置，始终为 1。
+      // 代码生成器与解码画面共用预览或导出的实际渲染比例。
       this.codeRuntime.setRenderDivisor(this.pictureDivisor)
     }
     return this.codeRuntime

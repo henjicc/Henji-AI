@@ -56,7 +56,7 @@ layers(params, width, height, assets, info) => Layer[]
 - `params` 为当前帧参数值（已应用关键帧曲线），见 parameter-types 的取值表。
 - `assets` 为 image 参数的画面（`CanvasImageSource`），按参数键取，如 `assets.logo`；未绑定时没有该键。
 - `info`：`time`、`frameDuration`（一帧秒数）、`clip.time` / `clip.duration`（片段内时间与片段时长）、可选 `audio` / `audioTime`（见 author-api-media）、可选 `renderScale`（见下）、可选 `web`（绑定了网页的图片参数这一帧的页面时间、取景与元素矩形，见 author-api-media）。
-- 节目监视器回放分辨率降低（1/2、1/4…）时，宿主按比例缩小栅格与上传，`ctx` 的坐标、`width` / `height` 仍是画布像素，Canvas 代码不用做任何处理；这时 `info.renderScale` 是输出像素与画布像素之比（如 0.5）。完整分辨率、取帧与导出没有这个字段，画面不受影响。
+- 预览降分辨率（1/2、1/4…）与导出按输出分辨率渲染时，宿主按比例缩小栅格与上传，`info.renderScale` 给出输出像素与画布像素之比（≤1，如 0.5；省略即 1）。`ctx` 的坐标、`width` / `height` 仍是画布像素，Canvas 代码不用处理；WebGPU / WebGL 中按像素写的长度乘 `info.renderScale ?? 1`。输出大于序列或填充裁切需要放大时，按序列尺寸渲染后再放大。
 
 ## 每帧画面键与片子数据
 

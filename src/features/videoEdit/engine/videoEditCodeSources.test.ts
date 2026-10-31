@@ -76,6 +76,20 @@ function changedVersion(document: VideoEditComposition, id: string): VideoEditCo
   return { ...document, revision: document.revision + 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, versionId: id } })) }
 }
 const imageInputs = (id: string): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> => Promise.resolve(new Map([[id, { source: {}, width: 100, height: 100 } as VideoEditCodeImageInput]]))
+it('作者滤镜在连续比例和恢复完整时收到实际输出比例', async () => {
+  const document = fixture(source('static', '滤镜', 'filter'))
+  const base = document.clips[0]
+  document.clips = [{ ...base, kind: 'video', code: undefined, effects: [{ id: 'filter', name: '滤镜', enabled: true, amount: 1, code: base.code }] }]
+  const boundary = boundaries(document), runtime = await boundary.acquire()
+  try {
+    for (const divisor of [1.5, 2, 1]) {
+      Object.assign(runtime, { renderDivisor: divisor })
+      const prepared = await boundary.sources.prepare(document, document.clips, 0, () => true)
+      const effect = prepared.effects.get(base.id)?.[0] as PreparedVideoEditCodeEffect
+      expect(effect.info.renderScale).toBe(divisor === 1 ? undefined : 1 / divisor)
+    }
+  } finally { await boundary.sources.dispose() }
+})
 it('回放分辨率的缩小倍数随生成器调用传下并进静态缓存键：切回完整分辨率重新渲染整幅画面', async () => {
   const document = fixture()
   const boundary = boundaries(document)

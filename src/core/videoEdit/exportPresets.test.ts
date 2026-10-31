@@ -1,5 +1,37 @@
 import { expect, it } from 'vitest'
-import { VIDEO_EDIT_EXPORT_PRESETS, patchVideoEditExportSettings, resolveVideoEditExportSettings, videoEditExportEstimatedBytes, videoEditSequenceExportSettings, videoEditExportEncoding, videoEditExportGeometry, videoEditExportSettingsSchema } from './exportPresets'
+import { VIDEO_EDIT_EXPORT_PRESETS, patchVideoEditExportSettings, resolveVideoEditExportSettings, videoEditExportEstimatedBytes, videoEditSequenceExportSettings, videoEditExportEncoding, videoEditExportGeometry, videoEditExportRenderPlan, videoEditExportSettingsSchema } from './exportPresets'
+
+it.each(['fit', 'fill', 'letterbox'] as const)('连续比例导出 %s 保持原裁切与定位，包括舍入后的异画幅', fit => {
+  for (const [sourceWidth, sourceHeight, width, height] of [[3840, 2160, 2560, 1440], [3840, 2160, 1920, 1080], [1920, 1080, 1080, 1920], [4096, 2160, 1000, 702]]) {
+    for (const renderAtOutputResolution of [true, false]) {
+      const settings = { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, width, height, fit, renderAtOutputResolution }
+      const original = videoEditExportGeometry(sourceWidth, sourceHeight, settings)
+      const plan = videoEditExportRenderPlan(sourceWidth, sourceHeight, settings)
+      expect(plan.geometry.destination).toEqual(original.destination)
+      for (const key of ['x', 'width'] as const) expect(plan.geometry.source[key] / plan.width).toBeCloseTo(original.source[key] / sourceWidth, 12)
+      for (const key of ['y', 'height'] as const) expect(plan.geometry.source[key] / plan.height).toBeCloseTo(original.source[key] / sourceHeight, 12)
+      if (renderAtOutputResolution && width === 2560) expect(plan).toMatchObject({ width: 2560, height: 1440, scale: 2 / 3, direct: true })
+      if (!renderAtOutputResolution) expect([plan.width, plan.height]).toEqual([sourceWidth, sourceHeight])
+    }
+  }
+})
+
+it('输出分辨率渲染缺省开启，显式关闭经设置解析和补丁保留', () => {
+  const sequence = { width: 3840, height: 2160, fps: 60, sampleRate: 48000, channels: 2 }
+  const settings = videoEditSequenceExportSettings(sequence)
+  expect(settings.renderAtOutputResolution).toBe(true)
+  expect(resolveVideoEditExportSettings({ ...settings, renderAtOutputResolution: undefined }, sequence).renderAtOutputResolution).toBe(true)
+  expect(resolveVideoEditExportSettings(patchVideoEditExportSettings(settings, { renderAtOutputResolution: false }), sequence).renderAtOutputResolution).toBe(false)
+})
+
+it('放大输出与横竖填充按序列尺寸渲染再放大，保持原导出几何', () => {
+  for (const [sourceWidth, sourceHeight, width, height] of [[1920, 1080, 3840, 2160], [1920, 1080, 1080, 1920], [7680, 4320, 4320, 7680]]) {
+    const settings = { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, width, height, fit: 'fill' as const }
+    const plan = videoEditExportRenderPlan(sourceWidth, sourceHeight, settings)
+    expect(plan).toMatchObject({ width: sourceWidth, height: sourceHeight, scale: 1, renderAtOutputResolution: true, direct: false })
+    expect(plan.geometry).toEqual(videoEditExportGeometry(sourceWidth, sourceHeight, settings))
+  }
+})
 
 it('导出沿共享序列边界接受8192单边，保持8K总像素上限与120帧支持', () => {
   const settings = VIDEO_EDIT_EXPORT_PRESETS[0].settings

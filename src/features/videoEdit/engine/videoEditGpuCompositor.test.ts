@@ -408,7 +408,7 @@ it('原生共享纹理帧按原样导入、绝不在 Worker 里关闭：复制�
   expect(frame.close).not.toHaveBeenCalled()
   copy.close(); await compositor.dispose()
 })
-it.each([1, 2] as const)('sRGB 视频在 %s 分辨率的 RGBA 与紧凑 YUV 复制阶段转换；BT.709 保持原路径', async divisor => {
+it.each([1, 2, 1.5, .5] as const)('sRGB 视频在 %s 分辨率的 RGBA 与紧凑 YUV 复制阶段转换；BT.709 保持原路径', async divisor => {
   const { compositor, device } = copyFixture(async () => {})
   compositor.setPictureDivisor(divisor)
   const frame = { codedWidth: 3840, codedHeight: 2160, format: 'NV12', colorSpace: { transfer: 'bt709' } }

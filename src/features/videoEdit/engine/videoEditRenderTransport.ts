@@ -25,6 +25,7 @@ import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { ensureContentTrust, executeContentTrust, subscribeContentTrust } from '@/services/contentTrust'
 import { authorTrustContext } from './videoEditAuthorTrust'
 import { readContentTrustFailure, restoreContentTrustError } from '@/core/contentTrust'
+import { videoEditOutputRenderDivisor, videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
 
 const logger = createLogger('features.videoEdit.render')
 /** 一个渲染会话同时排着的请求上限（Worker 串行执行，排得越多停止与跳转越慢）。 */
@@ -402,7 +403,11 @@ export class VideoEditRenderTransport {
   }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
-  async setWebOutputScale(scale: number): Promise<void> { await this.ready; await this.request({ kind: 'webOutputScale', scale }) }
+  async setOutputScale(scale: number, renderAtOutputResolution = true): Promise<void> {
+    await this.ready; await this.request({ kind: 'outputScale', scale, renderAtOutputResolution })
+    const size = videoEditRenderSize(this.document.width, this.document.height, renderAtOutputResolution ? videoEditOutputRenderDivisor(this.document.width, this.document.height, scale) : 1)
+    this.canvas.width = size.width; this.canvas.height = size.height
+  }
   /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */
   async armPlayback(frame: number): Promise<void> { await this.ready; await this.request({ kind: 'arm', frame }) }
   /**
@@ -465,10 +470,13 @@ export class VideoEditRenderTransport {
     if (!result.bitmap) throw new Error('剪辑渲染没有返回画面。')
     return { ...result, bitmap: result.bitmap }
   }
-  /** Export frames: sequential renders on this session's full-size canvas (task 2.4: exact pictures or a failure). */
+  /** 导出逐帧取精确画面，画布尺寸跟随 Worker 实际输出。 */
   async render(frame: number, sequential = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; singleFrameReads: number; renderCached: boolean }> {
     const result = await this.renderBitmap(frame, sequential, false, 'final')
-    try { this.canvas.getContext('2d')!.drawImage(result.bitmap, 0, 0) } finally { result.bitmap.close() }
+    try {
+      if (this.canvas.width !== result.bitmap.width || this.canvas.height !== result.bitmap.height) { this.canvas.width = result.bitmap.width; this.canvas.height = result.bitmap.height }
+      this.canvas.getContext('2d')!.drawImage(result.bitmap, 0, 0)
+    } finally { result.bitmap.close() }
     return { canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0, renderCached: result.renderCached === true }
   }
   /** `retainIdle`：拖动播放头的声音颗粒，保留最近用过的空闲声音来源，避免每个颗粒重开会话。 */

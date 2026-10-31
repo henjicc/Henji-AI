@@ -1,6 +1,5 @@
 import { AdtsOutputFormat, AudioBufferSource, CanvasSource, Mp4OutputFormat, WavOutputFormat, Output, StreamTarget } from 'mediabunny'
-import { BLACK_HEX } from '@/core/theme/colorTokens'
-import { videoEditExportEncoding, videoEditExportGeometry, resolveVideoEditExportSettings, videoEditSequenceExportSettings, videoEditExportPaths, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import { videoEditExportEncoding, resolveVideoEditExportSettings, videoEditSequenceExportSettings, videoEditExportPaths, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { exportVideoEditCaptions } from '@/core/videoEdit/timedContent'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
@@ -17,6 +16,7 @@ import { waitVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditTrackResults, waitVideoEditTracking } from './videoEditTracking'
 import { transientVideoEditExportOutputs, type VideoEditExportOutputs } from './videoEditExportRegistry'
 import { videoEditExportPreviews } from './videoEditExportPreviews'
+import { prepareVideoEditExportFrame, videoEditExportProgress } from './videoEditExportFrame'
 
 const logger = createLogger('features.videoEdit.export')
 /**
@@ -107,9 +107,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     // Mix in the delivery layout before measuring loudness. Downmixing after normalization
     // changes LUFS; the shared mixer already resamples and maps mono/stereo correctly.
     const renderDocument = { ...pictures, sampleRate: settings.sampleRate, channels: settings.channels }
-    const geometry = videoEditExportGeometry(document.width, document.height, settings)
     renderer = new VideoEditRenderSession(renderDocument, undefined, undefined, undefined, undefined, settings.useProxies ? projectId : undefined, settings.useProxies)
-    await renderer.setWebOutputScale(Math.min(1, Math.max(geometry.destination.width / geometry.source.width, geometry.destination.height / geometry.source.height)))
+    const picture = settings.videoEnabled ? await prepareVideoEditExportFrame(renderer, document, settings) : undefined
     renderer.setSmartRegions(smartRegions)
     renderer.setTracks(videoEditTrackResults(document))
     try { renderer.setRenderCache(await videoEditExportPreviews(projectId, document, settings, task.controller.signal)) }
@@ -132,9 +131,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     }
     output = new Output({ format: format === 'wav' ? new WavOutputFormat() : format === 'aac' ? new AdtsOutputFormat() : new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
     await outputs.create(path); created = true
-    const adapted = settings.videoEnabled ? new OffscreenCanvas(settings.width, settings.height) : undefined
     task.controller.signal.throwIfAborted()
-    const video = videoCodec ? new CanvasSource(adapted ?? renderer.canvas, videoEditExportVideoOptions(settings)) : undefined
+    const video = videoCodec ? new CanvasSource(picture!.canvas, videoEditExportVideoOptions(settings)) : undefined
     const audio = settings.audioEnabled ? new AudioBufferSource(videoEditExportAudioOptions(settings)) : undefined
     if (video) output.addVideoTrack(video, { frameRate: encoding.fps })
     if (audio) output.addAudioTrack(audio)
@@ -167,6 +165,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       }
     }
     const steps = video ? videoFrames : Math.ceil(frames / Math.max(1, Math.round(document.fps)))
+    const publishProgress = videoEditExportProgress(publishVideoEdit)
     for (let index = 0; index < steps; index++) {
       const frame = video ? Math.min(endFrame - 1, startFrame + Math.floor(index * document.fps / encoding.fps + 1e-7)) : audioFrame
       task.controller.signal.throwIfAborted()
@@ -182,12 +181,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
         if (result.renderCached) { phases.previewFrames++; phases.previewMs += renderMs }
         else { phases.compositeFrames++; phases.compositeMs += renderMs }
         const copyStarted = performance.now()
-        if (adapted && geometry) {
-          const ctx = adapted.getContext('2d')!
-          ctx.fillStyle = BLACK_HEX; ctx.fillRect(0, 0, adapted.width, adapted.height)
-          const s = geometry.source; const d = geometry.destination
-          ctx.drawImage(renderer.canvas, s.x, s.y, s.width, s.height, d.x, d.y, d.width, d.height)
-        }
+        picture!.copy()
         phases.copyMs += performance.now() - copyStarted
         const encodeStarted = performance.now()
         await video.add(index / encoding.fps, Math.min(1 / encoding.fps, frames / document.fps - index / encoding.fps))
@@ -198,7 +192,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
         logger.info('剪辑导出阶段耗时', { event: 'video_edit.export.performance', context: { projectId, taskId: task.id, ...phases, elapsedMs: measuredAt - started } })
       }
       task.progress = (loudness ? .1 : 0) + (index + 1) / steps * (loudness ? .9 : 1)
-      if (index % 5 === 0) { publishVideoEdit(); await new Promise(resolve => setTimeout(resolve, 0)) }
+      await publishProgress()
     }
     await addSoundUntil(endFrame)
     task.controller.signal.throwIfAborted()

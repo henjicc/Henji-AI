@@ -7,6 +7,28 @@ import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { PERSISTENCE_FORMATS } from './formats'
 
+it('输出渲染开关跨剪辑、录制快照与导出预设迁移保留；旧记录缺省语义由设置解析补齐', async () => {
+  const { resolveVideoEditExportSettings } = await import('../videoEdit/exportPresets')
+  const sequence = { width: 1920, height: 1080, fps: 30, sampleRate: 48000, channels: 2 }
+  for (const [id, previous] of [['document.video_edit', 43], ['document.screen_recording', 46], ['export-presets', 2]] as const) {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
+    const read = (version: number) => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')).content
+    const settingsIn = (content: unknown): Record<string, unknown> => {
+      const value = content as { exportHistory: Array<{ settings: Record<string, unknown> }>; scriptCapture: { baselines: Array<{ content: { exportHistory: Array<{ settings: Record<string, unknown> }> } }> } }
+      return id === 'export-presets' ? (content as Array<{ settings: Record<string, unknown> }>)[0].settings : id === 'document.video_edit' ? value.exportHistory[0].settings : value.scriptCapture.baselines[0].content.exportHistory[0].settings
+    }
+    const original = read(previous), frozen = structuredClone(original)
+    const upgraded = upgradePersistenceContent(format, original, previous)
+    expect(original).toEqual(frozen)
+    const settings = settingsIn(upgraded)
+    expect(settings).not.toHaveProperty('renderAtOutputResolution')
+    expect(resolveVideoEditExportSettings(settings as Parameters<typeof resolveVideoEditExportSettings>[0], sequence).renderAtOutputResolution).toBe(true)
+    const current = upgradePersistenceContent(format, read(format.version), format.version)
+    expect(settingsIn(current).renderAtOutputResolution).toBe(false)
+    expect(resolveVideoEditExportSettings(settingsIn(current) as Parameters<typeof resolveVideoEditExportSettings>[0], sequence).renderAtOutputResolution).toBe(false)
+  }
+})
+
 it('历史 imported 风格及模板升级只保留原数据，不赋予外来代码标记', () => {
   for (const [id, version] of [['video-style-library', 4], ['video-template-library', 3]] as const) {
     const format = PERSISTENCE_FORMATS.find(value => value.id === id)!

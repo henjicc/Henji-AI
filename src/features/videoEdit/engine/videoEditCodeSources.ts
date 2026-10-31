@@ -47,7 +47,7 @@ import { videoEditEffectMask } from './videoEditEffectMasks'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditTextResolution } from './videoEditTextSurface'
-import { videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
+import { videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
 
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
@@ -60,7 +60,7 @@ interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: n
  * `divisor`：这一帧代码生成器的回放分辨率缩小倍数，与缓存键一起取，画面与键始终一致。
  * `imageKeys` 是帧期画面绑定，资源别名不受持久媒体 ID 的长度限制；`author` 是交给作者代码的 params。
  */
-export interface VideoEditCodePlan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: VideoEditRenderDivisor }
+export interface VideoEditCodePlan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: number }
 /** `parameters`：交给作者滤镜的 params（scene 参数已换成解析结果）。 */
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */

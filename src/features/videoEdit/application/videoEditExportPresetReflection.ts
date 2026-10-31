@@ -15,7 +15,7 @@ const field = (key: 'name' | 'settings', title: string, description: string, val
 })
 const fields = [
   field('name', '预设名称', '自定义预设名称；内置预设不可修改。', { kind: 'string', maxLength: 200 }),
-  field('settings', '导出设置', '完整设置含格式、codec、bitrateMode、keyframeInterval秒、encoderPreference、音视频开关、audioCodec、采样率Hz/声道、loudness(null不标准化)、captionMode(none/burn/srt/vtt)、followSequence四项、importToProject、addToLibrary、useProxies和usePreviews（默认关闭，开启后使用预览文件；关闭时从原始画面合成）。跟随标志在提交时读取目标序列；读取schema查看真实字段约束。', { kind: 'json', schemaRef: videoEditSchemaRef('property', `${type}.settings.value`) }),
+  field('settings', '导出设置', '完整设置含格式、codec、bitrateMode、keyframeInterval秒、encoderPreference、音视频开关、audioCodec、采样率Hz/声道、loudness(null不标准化)、captionMode(none/burn/srt/vtt)、followSequence四项、importToProject、addToLibrary、renderAtOutputResolution（默认开启，关闭按序列完整分辨率合成再缩放）、useProxies和usePreviews（默认关闭，开启后使用预览文件；关闭时从原始画面合成）。跟随标志在提交时读取目标序列；读取schema查看真实字段约束。', { kind: 'json', schemaRef: videoEditSchemaRef('property', `${type}.settings.value`) }),
 ]
 export function createVideoEditExportPresetRegistration(): ApplicationEntityRegistration {
   const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })

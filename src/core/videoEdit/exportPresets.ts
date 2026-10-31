@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { videoEditLoudnessSettingsSchema } from './loudness'
-import { videoEditSequenceSizeFields, isVideoEditSequenceSize } from './sequenceSize'
+import { VIDEO_EDIT_SEQUENCE_LIMITS, videoEditSequenceSizeFields, isVideoEditSequenceSize } from './sequenceSize'
+import { videoEditRenderSize } from './playbackResolution'
 
 export const videoEditExportSettingsSchema = z.object({
   format: z.enum(['mp4', 'aac', 'wav']),
@@ -25,6 +26,7 @@ export const videoEditExportSettingsSchema = z.object({
   addToLibrary: z.boolean().default(true).describe('成片完成后沿正式收录入口加入资产库；失败保留成片。'),
   useProxies: z.boolean().default(false).describe('显式使用已有且核验过的代理画面导出；缺代理的素材使用原片，声音始终使用原片。'),
   usePreviews: z.boolean().optional().describe('默认 false。使用符合输出规格的已渲染预览文件加快导出；预览会再次编码，缺失或不可读的部分现场合成，声音不受影响。'),
+  renderAtOutputResolution: z.boolean().optional().describe('默认 true。按输出分辨率渲染；false 按序列完整分辨率合成再缩放，用于保留点阵与细线的超采样效果。'),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。').superRefine((value, ctx) => {
   if (!value.videoEnabled && !value.audioEnabled) ctx.addIssue({ code: 'custom', path: ['audioEnabled'], message: '视频与音频不能同时关闭。' })
   if (value.videoEnabled && value.format !== 'mp4') ctx.addIssue({ code: 'custom', path: ['format'], message: '视频必须使用 MP4 格式。' })
@@ -53,6 +55,7 @@ export function resolveVideoEditExportSettings(input: VideoEditExportSettings, s
   const value = videoEditExportSettingsSchema.parse(input)
   return videoEditExportSettingsSchema.parse({ ...value,
     usePreviews: value.usePreviews ?? false,
+    renderAtOutputResolution: value.renderAtOutputResolution ?? true,
     ...(value.followSequence.resolution ? { width: sequence.width, height: sequence.height } : {}),
     fps: value.followSequence.fps || value.fps === null ? sequence.fps : value.fps,
     ...(value.followSequence.sampleRate ? { sampleRate: sequence.sampleRate } : {}),
@@ -92,4 +95,18 @@ export function videoEditExportGeometry(sourceWidth: number, sourceHeight: numbe
 export function videoEditExportEncoding(settings: VideoEditExportSettings, sequenceFps: number): { fps: number; videoBitrate: number; audioBitrate: number; audioCodec: 'aac' | 'pcm-s24' } {
   const parsed = videoEditExportSettingsSchema.parse(settings)
   return { fps: parsed.followSequence.fps ? sequenceFps : parsed.fps ?? sequenceFps, videoBitrate: Math.round(parsed.videoBitrateMbps * 1_000_000), audioBitrate: parsed.audioBitrateKbps * 1000, audioCodec: parsed.audioCodec === 'wav' ? 'pcm-s24' : 'aac' }
+}
+
+/** 保留序列坐标中的原导出几何，只把源矩形换算到实际舍入后的渲染画布。 */
+export function videoEditExportRenderPlan(sourceWidth: number, sourceHeight: number, settings: VideoEditExportSettings): { scale: number; width: number; height: number; geometry: VideoEditExportGeometry; direct: boolean; renderAtOutputResolution: boolean } {
+  const geometry = videoEditExportGeometry(sourceWidth, sourceHeight, settings)
+  const scale = Math.min(1, geometry.destination.width / geometry.source.width)
+  const scaled = videoEditRenderSize(sourceWidth, sourceHeight, 1 / scale)
+  // 裁切前的整幅画面可能比交付画幅大；超出既有合成规格时用完整序列，避免合法导出在中间目标分配时失败。
+  const renderAtOutputResolution = settings.renderAtOutputResolution !== false && Math.max(scaled.width, scaled.height) <= VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension && scaled.width * scaled.height <= VIDEO_EDIT_SEQUENCE_LIMITS.maxPixels
+  const size = renderAtOutputResolution ? scaled : { width: sourceWidth, height: sourceHeight }
+  const sx = size.width / sourceWidth, sy = size.height / sourceHeight
+  const source = { x: geometry.source.x * sx, y: geometry.source.y * sy, width: geometry.source.width * sx, height: geometry.source.height * sy }
+  const direct = size.width === settings.width && size.height === settings.height && geometry.source.x === 0 && geometry.source.y === 0 && geometry.destination.width === settings.width && geometry.destination.height === settings.height
+  return { ...size, scale, geometry: { source, destination: geometry.destination }, direct, renderAtOutputResolution }
 }

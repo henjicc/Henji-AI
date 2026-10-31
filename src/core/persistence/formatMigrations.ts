@@ -11,7 +11,8 @@ import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigr
  */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
   // 1 → 2：导出预设新增可选 usePreviews，历史预设缺省不使用预览，最低可读版本保持 1。
-  'export-presets': { 1: value => structuredClone(value) },
+  // 2 → 3：新增可选 renderAtOutputResolution，历史预设缺省为开，最低可读版本保持 1。
+  'export-presets': { 1: value => structuredClone(value), 2: value => structuredClone(value) },
   // 3 → 4：历史风格源码取消长度上限；1 → 2：音效文件夹数量不设上限，内容原样保留。
   'style-kits': { 3: value => value },
   'sound-library-folders': { 1: value => value },

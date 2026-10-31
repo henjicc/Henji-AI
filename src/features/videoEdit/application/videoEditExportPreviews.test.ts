@@ -49,3 +49,11 @@ it('等待前只比较一次合成，等待后以文档身份和内容版本拒�
   state.ready.mockImplementationOnce(async () => { state.owner.contentVersion++; return [ready] })
   expect(await videoEditExportPreviews('project', snapshot, settings, new AbortController().signal)).toEqual([])
 })
+
+it.each([true, false])('直接渲染与完整合成均按输出尺寸筛选预览，按输出渲染=%s', async renderAtOutputResolution => {
+  const snapshot = videoEditComposition(state.owner.document, state.owner.document.sequences[0].id)
+  const settings = { ...videoEditSequenceExportSettings(snapshot), width: 1280, height: 720, usePreviews: true, renderAtOutputResolution }
+  const ready = { key: 'output-sized', width: 1280, height: 720, fps: snapshot.fps }
+  state.ready.mockResolvedValue([ready, { ...ready, key: 'too-small', width: 1278 }])
+  expect(await videoEditExportPreviews('project', snapshot, settings, new AbortController().signal)).toEqual([ready])
+})
