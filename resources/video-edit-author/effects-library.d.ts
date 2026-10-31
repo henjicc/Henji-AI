@@ -1,44 +1,37 @@
 // 由 scripts/generate-author-effects.ts 生成，请修改效果登记后重新生成。
-export interface GaussianBlurParams {
-  /** 模糊尺度；高斯标准差占完整文档或序列画面高度的比例。0 无模糊；0.003 轻微柔化；0.009 背景虚化；0.03 强烈虚化。与视口、瓦片及预览缩放无关。；默认 0.009；硬范围 0–1.7976931348623157e+308；单位 fraction_height；可动画 true */
-  readonly sigma_fraction_height?: number
-  /** 模糊方向；both 同时模糊两轴；horizontal 只水平；vertical 只垂直。；默认 "both"；可动画 true */
+export interface BlurParams {
+  /** 模糊度；画面糊得多厉害。0 不模糊；10 轻微柔化；40（默认）背景虚化，约为画面高度的 1%；70 只剩大块颜色。四种方式下同一个数值糊的程度相近，可以输入更大的值。；默认 40；常用 0–100；硬范围 0–450；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 方式；均匀（默认）整体柔化；方向沿一个角度拉出拖影；放射从中心向四周拉丝；镜头像失焦，亮点散成圆形光斑。；默认 "uniform"；可动画 true */
+  readonly mode?: "uniform" | "directional" | "radial" | "lens"
+  /** 模糊方向；只往哪个方向糊。水平和垂直（默认）各方向一样；只选水平或垂直时，另一个方向保持清楚。；默认 "both"；显隐 {"param":"mode","in":["uniform"]}；可动画 true */
   readonly axis?: "both" | "horizontal" | "vertical"
-  /** 边缘处理；clamp 使用最近的画面边缘像素；transparent 把画面外视为透明。瓦片接缝始终读取真实相邻像素。；默认 "clamp"；可动画 true */
-  readonly edge_mode?: "clamp" | "transparent"
-}
-
-export interface DirectionalBlurParams {
-  /** 方向；拖影方向角度：0 水平，90 垂直，45 斜向；正负 180 等价。；默认 0；硬范围 -180–180；单位 degrees；可动画 true */
-  readonly direction?: number
-  /** 模糊长度；拖影长度：0 无；30 ≈ 画面高度的 3% 的轻微动感；100 ≈ 画面高度的 10% 的强烈拖影。；默认 30；硬范围 0–100；单位 strength；可动画 true */
-  readonly length?: number
-}
-
-export interface ZoomBlurParams {
-  /** 强度；0 无；20 ≈ 轻微冲刺感；50 ≈ 明显放射；100 ≈ 边缘几乎完全拉丝（约 20% 的缩放拖影）。；默认 30；硬范围 0–100；单位 strength；可动画 true */
-  readonly strength?: number
-  /** 中心水平位置；放射中心的水平位置：0 左边缘，50 居中，100 右边缘。；默认 50；硬范围 0–100；单位 percent；可动画 true */
+  /** 角度；拖影的方向。0（默认）左右拉，90 上下拉，45 斜着拉。；默认 0；硬范围 -180–180；单位 degrees；显隐 {"param":"mode","in":["directional"]}；可动画 true */
+  readonly angle?: number
+  /** 中心（水平）；放射的中心。默认在画面正中；挪到主体上，主体保持清楚、四周向外拉丝。；默认 50；硬范围 0–100；单位 percent；显隐 {"param":"mode","in":["radial"]}；可动画 true */
   readonly center_x?: number
-  /** 中心垂直位置；放射中心的垂直位置：0 上边缘，50 居中，100 下边缘。；默认 50；硬范围 0–100；单位 percent；可动画 true */
+  /** 中心（垂直）；放射中心的上下位置，0 在顶边，100 在底边。；默认 50；硬范围 0–100；单位 percent；显隐 {"param":"mode","in":["radial"]}；可动画 true */
   readonly center_y?: number
+  /** 亮点加亮；亮点散开后有多亮。0 亮点和其他地方一样被抹平；50（默认）亮点散成明显的圆形光斑；100 光斑更亮更醒目。；默认 50；硬范围 0–100；单位 strength；显隐 {"param":"mode","in":["lens"]}；可动画 true */
+  readonly highlights?: number
+  /** 重复边缘像素；画面边缘外面当作什么来糊。打开（默认）沿用边缘的颜色，整幅画面的四边不会发黑变透明；关闭时外面当作透明，给文字、图形加模糊时边缘自然淡出。；默认 true；可动画 true */
+  readonly repeat_edges?: boolean
 }
 
 export interface SharpenParams {
-  /** 锐化量；0 无；20 ≈ 轻微提清晰度；50 ≈ 明显锐利；100 ≈ 很强，容易出现白边。；默认 30；硬范围 0–100；单位 strength；可动画 true */
+  /** 锐化量；边缘加强多少。0 不锐化；30（默认）自然的清晰度；60 明显锐利；100 以上容易出白边和噪点，可以输入到 200。；默认 30；常用 0–100；硬范围 0–200；单位 strength；可动画 true */
   readonly amount?: number
-}
-
-export interface LensBlurParams {
-  /** 半径；半径占逻辑画幅高度的比例，不随图层 bounds 改变。；默认 0.009；硬范围 0–1.7976931348623157e+308；单位 fraction_height；可动画 true */
-  readonly radius_fraction_height?: number
+  /** 半径；加强多粗的细节。30（默认）只加强细小纹理；0 连发丝和噪点一起加强；70 以上加强大块明暗，画面更有立体感。；默认 30；硬范围 0–100；单位 strength；分组 细节；可动画 true */
+  readonly radius?: number
+  /** 阈值；明暗差多小的地方不锐化。0（默认）全部锐化；10–20 天空、皮肤这类平坦处不出噪点，只加强真正的边缘。；默认 0；硬范围 0–100；单位 strength；分组 细节；可动画 true */
+  readonly threshold?: number
 }
 
 export interface BlackWhiteParams {
 }
 
 export interface MosaicParams {
-  /** 块大小；0 无；10 ≈ 细小方块（画面高度的 1%）；30 ≈ 常规打码（3%）；100 ≈ 很大的色块（10%）。；默认 30；硬范围 0–100；单位 strength；可动画 true */
+  /** 块大小；方块有多大。0 不打码；10 细小方块，约为画面高度的 1%；30（默认）常规打码；100 很大的色块，约 10%，可以输入到 200。；默认 30；常用 0–100；硬范围 0–200；单位 strength；可动画 true */
   readonly block_size?: number
 }
 
@@ -331,24 +324,22 @@ export interface ColorGradeParams {
   readonly vignette_feather?: number
 }
 export type BuiltinLayerEffectDescriptor =
-  | { readonly id: 'gaussian_blur'; readonly params?: GaussianBlurParams }
-  | { readonly id: 'directional_blur'; readonly params?: DirectionalBlurParams }
-  | { readonly id: 'zoom_blur'; readonly params?: ZoomBlurParams }
+  | { readonly id: 'blur'; readonly params?: BlurParams }
   | { readonly id: 'sharpen'; readonly params?: SharpenParams }
-  | { readonly id: 'lens_blur'; readonly params?: LensBlurParams }
   | { readonly id: 'black_white'; readonly params?: BlackWhiteParams }
   | { readonly id: 'mosaic'; readonly params?: MosaicParams }
   | { readonly id: 'chromatic_aberration'; readonly params?: ChromaticAberrationParams }
   | { readonly id: 'glow'; readonly params?: GlowParams }
   | { readonly id: 'color_grade'; readonly params?: ColorGradeParams }
 export interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string } }
-export type EffectDescriptor = BuiltinLayerEffectDescriptor | LookDescriptor
-export type BlurParams = (GaussianBlurParams & { readonly mode?: 'gaussian' }) | (DirectionalBlurParams & { readonly mode: 'directional' }) | (ZoomBlurParams & { readonly mode: 'radial' }) | (LensBlurParams & { readonly mode: 'lens' })
+/** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */
+export interface RetiredBlurDescriptor { readonly id: 'gaussian_blur' | 'directional_blur' | 'zoom_blur' | 'lens_blur'; readonly params?: object }
+export type EffectDescriptor = BuiltinLayerEffectDescriptor | LookDescriptor | RetiredBlurDescriptor
+export declare function blur(params?: BlurParams): { readonly id: 'blur'; readonly params: BlurParams }
 export declare function sharpen(params?: SharpenParams): { readonly id: 'sharpen'; readonly params: SharpenParams }
 export declare function blackWhite(params?: BlackWhiteParams): { readonly id: 'black_white'; readonly params: BlackWhiteParams }
 export declare function mosaic(params?: MosaicParams): { readonly id: 'mosaic'; readonly params: MosaicParams }
 export declare function chromaticAberration(params?: ChromaticAberrationParams): { readonly id: 'chromatic_aberration'; readonly params: ChromaticAberrationParams }
 export declare function glow(params?: GlowParams): { readonly id: 'glow'; readonly params: GlowParams }
 export declare function colorGrade(params?: ColorGradeParams): { readonly id: 'color_grade'; readonly params: ColorGradeParams }
-export declare function blur(params?: BlurParams): BuiltinLayerEffectDescriptor
 export declare function look(name: string, knobs?: Readonly<Record<string, never>>): LookDescriptor

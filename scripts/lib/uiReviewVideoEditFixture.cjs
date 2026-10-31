@@ -39,7 +39,7 @@ function applyStress(project, id) {
   if (picture) {
     picture.effects = [
       ...(picture.effects ?? []),
-      { id: `${id}-stress-blur`, name: `背景虚化${LONG}`, enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.01, axis: 'horizontal', edge_mode: 'clamp' } } },
+      { id: `${id}-stress-blur`, name: `背景虚化${LONG}`, enabled: true, amount: 1, builtin: { id: 'blur', params: { mode: 'uniform', amount: 43, axis: 'horizontal', repeat_edges: true } } },
       { id: `${id}-stress-grade`, name: `夜景调色${LONG}`, enabled: true, amount: 0.8, builtin: { id: 'color_grade', params: { exposure: -0.5, temperature_kelvin: 4200, tint: -6 } } },
     ]
   }
@@ -76,7 +76,7 @@ function buildProject({ id, name, source, captions, effects, motion }) {
         clips: [
           { ...base, id: `${id}-picture`, name: '核对画面', kind: 'video', track: 1, start: 0, duration: 150, itemId: `${id}-item`, sourceComponent: 'video', linkId: `${id}-take`,
             ...(effects ? { effects: [
-              { id: `${id}-blur`, name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } },
+              { id: `${id}-blur`, name: '模糊', enabled: true, amount: 0.5, builtin: { id: 'blur', params: { mode: 'uniform', amount: 17.43, axis: 'both', repeat_edges: true } } },
               { id: `${id}-grade`, name: '全能调色', enabled: false, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4 } } },
             ] } : {}),
             ...(motion ? { scale: 0.6, curves: { rotation: [{ time: 0, value: -360, interpolation: 'linear' }, { time: 149, value: 360, interpolation: 'linear' }], x: [{ time: 0, value: -0.15, interpolation: 'ease' }, { time: 75, value: 0.15, interpolation: 'ease' }, { time: 149, value: 0, interpolation: 'linear' }], opacity: [{ time: 120, value: 1, interpolation: 'hold' }, { time: 140, value: 0.4, interpolation: 'hold' }] } } : {}) },

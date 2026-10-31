@@ -146,6 +146,26 @@ describe('NumberInput', () => {
     expect(document.activeElement).not.toBe(input)
   })
 
+  it('拖动只在常用范围里走，键入可到硬范围；从常用范围外开始拖不会跳回', () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<NumberInput ariaLabel="模糊度" value={95} onChange={onChange} min={0} max={200} scrubMin={0} scrubMax={100} />)
+    const input = screen.getByRole('spinbutton', { name: '模糊度' })
+    fireEvent.pointerDown(input, { pointerId: 1, button: 0, clientX: 0 })
+    fireEvent.pointerMove(input, { pointerId: 1, clientX: 40 })
+    expect(onChange).toHaveBeenLastCalledWith(100)
+    fireEvent.pointerUp(input, { pointerId: 1, clientX: 40 })
+    rerender(<NumberInput ariaLabel="模糊度" value={150} onChange={onChange} min={0} max={200} scrubMin={0} scrubMax={100} />)
+    fireEvent.pointerDown(input, { pointerId: 2, button: 0, clientX: 0 })
+    const calls = onChange.mock.calls.length
+    fireEvent.pointerMove(input, { pointerId: 2, clientX: 10 })
+    expect(onChange).toHaveBeenCalledTimes(calls)
+    fireEvent.pointerMove(input, { pointerId: 2, clientX: -20 })
+    expect(onChange).toHaveBeenLastCalledWith(140)
+    fireEvent.pointerUp(input, { pointerId: 2, clientX: -20 })
+    fireEvent.focus(input); fireEvent.change(input, { target: { value: '180' } }); fireEvent.blur(input)
+    expect(onChange).toHaveBeenLastCalledWith(180)
+  })
+
   it('拖动时 Shift 精细、Alt 粗调，中途切换修饰键不跳变', () => {
     expect(resolveScrubFactor({ shiftKey: true, altKey: false })).toBe(0.1)
     expect(resolveScrubFactor({ shiftKey: false, altKey: true })).toBe(10)

@@ -1,0 +1,16 @@
+{
+  "library": "henji-effects",
+  "version": "1.1.0",
+  "inputs": {
+    "src/features/videoEdit/authorLibraries/effects.generated.ts": "8bcfee791378bdb2144c914491112d927908c6f9a6a63ea1ad08039083f16d95",
+    "src/features/videoEdit/authorLibraries/effects.ts": "670caf5bf5c8fafa7586599b3932b8d32b44385767b430ab616056705434f66b",
+    "resources/video-edit-author/effects-library.d.ts": "f162e582b2136d233092a338f1f41048f7a3b3ca123dd73bbdec732fbfae0517",
+    "scripts/generate-author-effects.ts": "7e17dd3e300800b18f329878b5ca8c7e0fb1d2c9328bc03213209e54d6c3e6d8",
+    "scripts/freeze-effects-library.ts": "d32a9a54126a6601c1ae3f6fe579da9b881c9ef3b2db1eb886cb071f0c157a72"
+  },
+  "outputs": {
+    "index.mjs": "62f061ce3de7824b56307581770fd517170a4ceff3cf590b090cecf40e808ebf",
+    "types.json": "7000b6547fff06fae88b69a59b287346c5ea2f59ea27659d10cfc4269bbad5a9",
+    "LICENSE": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6"
+  }
+}

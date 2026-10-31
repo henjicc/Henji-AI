@@ -38,15 +38,15 @@ afterEach(async () => {
   for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id)
   vi.restoreAllMocks(); uninstallHarnessNativeStorage(); localStorage.clear()
 })
-const effect = () => videoEditEffectSchema.parse({ id: 'effect', name: '高斯模糊', enabled: true, amount: .5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.018 } } })
+const effect = () => videoEditEffectSchema.parse({ id: 'effect', name: '高斯模糊', enabled: true, amount: .5, builtin: { id: 'blur', params: { amount: 61.19 } } })
 
 it('双击内置效果添加到当前片段，并把新增效果交给停靠宿主定位', () => {
   const added = vi.fn(); const onError = vi.fn()
   const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={onError} onEffectsAdded={added} />)
-  fireEvent.doubleClick(container.querySelector('[data-video-edit-effects-entry="effect:gaussian_blur"]')!)
+  fireEvent.doubleClick(container.querySelector('[data-video-edit-effects-entry="effect:blur"]')!)
   const effects = getActiveVideoEditSequence(instance).clips[0].effects!
   expect(effects).toHaveLength(1)
-  expect(effects[0].builtin?.id).toBe('gaussian_blur')
+  expect(effects[0].builtin?.id).toBe('blur')
   expect(added).toHaveBeenCalledWith([effects[0].id])
   expect(onError).not.toHaveBeenCalled()
 })
@@ -63,8 +63,8 @@ it('混合媒介多选只添加到全部匹配片段，一步撤销；保留多�
   setVideoEditTimelineView(id, { selectedClipIds: selection }, sound.id)
   const history = instance.past.length
   const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={vi.fn()} />)
-  fireEvent.doubleClick(container.querySelector('[data-video-edit-effects-entry="effect:gaussian_blur"]')!)
-  expect(getActiveVideoEditSequence(instance).clips.filter(value => value.kind !== 'audio').every(value => value.effects?.[0].builtin?.id === 'gaussian_blur')).toBe(true)
+  fireEvent.doubleClick(container.querySelector('[data-video-edit-effects-entry="effect:blur"]')!)
+  expect(getActiveVideoEditSequence(instance).clips.filter(value => value.kind !== 'audio').every(value => value.effects?.[0].builtin?.id === 'blur')).toBe(true)
   expect(getActiveVideoEditSequence(instance).clips.find(value => value.id === sound.id)!.effects).toBeUndefined()
   expect(instance.selectedClipIds).toEqual(selection)
   expect(instance.selection).toBe(clips[0].id)
@@ -78,7 +78,7 @@ it.each(['none', 'incompatible'] as const)('选区不可用（%s）给短通知�
   const history = instance.past.length
   const added = vi.fn(); const onError = vi.fn()
   const { container } = render(<VideoEditEffectsLibraryPanel instance={instance} onError={onError} onEffectsAdded={added} />)
-  fireEvent.doubleClick(container.querySelector(`[data-video-edit-effects-entry="effect:${reason === 'none' ? 'gaussian_blur' : 'reverb'}"]`)!)
+  fireEvent.doubleClick(container.querySelector(`[data-video-edit-effects-entry="effect:${reason === 'none' ? 'blur' : 'reverb'}"]`)!)
   expect(notification).toHaveBeenCalledOnce()
   expect(notification).toHaveBeenCalledWith({ key: reason === 'none' ? 'selectTimelineClip' : 'effectUnavailable' }, 'error')
   expect(onError).not.toHaveBeenCalled()
@@ -108,14 +108,14 @@ it('搜索命中自动展开文件夹，清空恢复折叠；收藏置顶且星�
   expect(folder().getAttribute('aria-expanded')).toBe('false')
   fireEvent.change(screen.getByRole('textbox', { name: '搜索效果' }), { target: { value: 'GAUSSIAN BLUR' } })
   expect(folder().getAttribute('aria-expanded')).toBe('true')
-  expect(container.querySelector('[data-video-edit-effects-entry="effect:gaussian_blur"]')).not.toBeNull()
+  expect(container.querySelector('[data-video-edit-effects-entry="effect:blur"]')).not.toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '清除搜索' }))
   expect(folder().getAttribute('aria-expanded')).toBe('false')
   fireEvent.click(screen.getByRole('button', { name: '视频效果' }))
-  fireEvent.click(screen.getByRole('button', { name: '收藏高斯模糊' }))
-  expect(useVideoEditEffectLibraryStore.getState().favorites).toEqual(['effect:gaussian_blur'])
+  fireEvent.click(screen.getByRole('button', { name: '收藏模糊' }))
+  expect(useVideoEditEffectLibraryStore.getState().favorites).toEqual(['effect:blur'])
   expect(container.querySelector('[role="tree"]')?.firstElementChild?.getAttribute('data-video-edit-effects-folder')).toBe('favorites')
-  expect(container.querySelector('[data-video-edit-effects-folder="favorites"] [data-video-edit-effects-entry="effect:gaussian_blur"]')).not.toBeNull()
+  expect(container.querySelector('[data-video-edit-effects-folder="favorites"] [data-video-edit-effects-entry="effect:blur"]')).not.toBeNull()
   expect(compositing.applyVideoEditBuiltinEffect).not.toHaveBeenCalled()
 })
 
@@ -140,10 +140,10 @@ it('保存入口允许选择是否保留手绘遮罩；保存副本参数不随�
   render(<VideoEditEffectPresetDialog effects={[source]} initialName="局部柔化" onClose={close} />)
   fireEvent.click(screen.getByRole('switch', { name: '保存手绘遮罩' }))
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  source.builtin!.params.sigma_fraction_height = 10
+  source.builtin!.params.amount = 10
   expect(screen.queryByRole('alert')?.textContent).toBeUndefined()
   expect(close).toHaveBeenCalledOnce()
-  expect(useVideoEditEffectLibraryStore.getState().presets[0].effects[0]).toMatchObject({ builtin: { params: { sigma_fraction_height: 0.018 } }, mask: source.mask })
+  expect(useVideoEditEffectLibraryStore.getState().presets[0].effects[0]).toMatchObject({ builtin: { params: { amount: 61.19 } }, mask: source.mask })
 })
 
 it('取消勾选全部效果或清空名称时禁用保存，Enter 也不会写入；取消不保存', () => {

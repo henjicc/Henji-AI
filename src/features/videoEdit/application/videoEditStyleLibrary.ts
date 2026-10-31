@@ -1,4 +1,5 @@
 import { writeMemory } from '@/services/assistantMemory/memoryService'
+import { migrateVideoEditMergedEffects } from '@/core/videoEdit/mergedEffectsMigration'
 import { subscribeRestored } from '@/services/recycle'
 import { registerStyleMemoryStorage } from '@/services/assistantMemory/styleMemoryStorage'
 import { applyMemoryWrite } from '@/core/assistant/memoryOperations'
@@ -63,7 +64,7 @@ function container(format: typeof STYLE_FORMAT, content: unknown): string { retu
 function decode<T>(format: typeof STYLE_FORMAT, text: string, path: string): T {
   let raw: unknown
   try { raw = JSON.parse(text) } catch { throw new Error(`风格库文件损坏，无法解析：${path}`) }
-  return format.schema.parse(parseVersionedPersistenceJson(raw, format)) as T
+  return format.schema.parse(migrateVideoEditMergedEffects(parseVersionedPersistenceJson(raw, format))) as T
 }
 const padded = (index: number): string => String(index + 1).padStart(2, '0')
 
@@ -225,7 +226,7 @@ export class VideoEditStyleLibrary {
     if (!this.migrationStorage) return
     const marker = await this.io.join(root, 'legacy-import.json')
     if (await this.io.exists(marker)) return
-    const read = <T>(key: string, schema: z.ZodType<T[]>): T[] => { const text = this.migrationStorage!.getItem(key); if (!text) return []; try { return schema.parse(readLocalPersistenceJson(text, key, localLibraryContract(key, schema), this.migrationStorage!)) } catch (error) { logger.error('legacy.read_failed', '旧本机库读取失败，原数据已保留', { error, context: { key } }); throw error } }
+    const read = <T>(key: string, schema: z.ZodType<T[]>): T[] => { const text = this.migrationStorage!.getItem(key); if (!text) return []; try { return schema.parse(migrateVideoEditMergedEffects(readLocalPersistenceJson(text, key, localLibraryContract(key, schema), this.migrationStorage!))) } catch (error) { logger.error('legacy.read_failed', '旧本机库读取失败，原数据已保留', { error, context: { key } }); throw error } }
     const kits = read(MIGRATION_STORAGE_KEYS.styles, z.array(styleKitMigrationSchema)); const titles = read(MIGRATION_STORAGE_KEYS.templates, z.array(titleTemplateMigrationSchema))
     const now = new Date().toISOString(); const imported = { styles: [] as string[], templates: [] as string[] }
     await this.io.mkdir(root)

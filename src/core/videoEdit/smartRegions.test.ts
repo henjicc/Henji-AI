@@ -78,7 +78,7 @@ describe('智能区域：缓存格式与蒙版', () => {
     expect(() => validateVideoEditSmartPresets()).not.toThrow()
     expect(VIDEO_EDIT_SMART_PRESETS.map(preset => preset.mask.regionId)).toEqual(expect.arrayContaining(['face', 'background', 'text']))
     expect(resolveVideoEditEffectTemplate('smart:face_mosaic')).toMatchObject({ builtinId: 'mosaic', mask: { regionId: 'face' } })
-    expect(resolveVideoEditEffectTemplate('effect:gaussian_blur')).toEqual({ builtinId: 'gaussian_blur' })
+    expect(resolveVideoEditEffectTemplate('effect:blur')).toEqual({ builtinId: 'blur' })
     expect(resolveVideoEditEffectTemplate('smart:nope')).toBeUndefined()
   })
 })

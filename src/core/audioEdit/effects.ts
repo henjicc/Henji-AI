@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { AudioEffectInstance } from '../audio/effects/audioEffectChain'
 import { essentialSoundEffects, essentialSoundOfflineStages, essentialSoundSettingsSchema, type EssentialSoundSettings } from '../audio/essentialSound'
-import { videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia } from '../videoEdit/builtinEffects'
+import { isRemovedVideoEditBuiltinEffect, videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia } from '../videoEdit/builtinEffects'
 
 /*
  * 音频编辑的效果链（效果控件，2026-10-26 用户确认的重构）：一串有顺序的效果，从上到下依次处理录音本身（源时间，
@@ -48,7 +48,7 @@ export const audioEditEffectChainSchema = z.array(audioEditChainItemSchema).max(
   if (new Set(items.map(item => item.id)).size !== items.length) ctx.addIssue({ code: 'custom', message: '效果引用重复' })
   for (const item of items) {
     if (item.kind !== 'builtin') continue
-    if (videoEditBuiltinEffectMedia(item.builtin.id) !== 'audio') ctx.addIssue({ code: 'custom', message: `效果控件只能放音频效果（${item.builtin.id} 不是音频效果）。` })
+    if (!isRemovedVideoEditBuiltinEffect(item.builtin.id) && videoEditBuiltinEffectMedia(item.builtin.id) !== 'audio') ctx.addIssue({ code: 'custom', message: `效果控件只能放音频效果（${item.builtin.id} 不是音频效果）。` })
     const issue = videoEditBuiltinEffectIssue(item.builtin)
     if (issue) ctx.addIssue({ code: 'custom', message: issue })
   }
@@ -118,7 +118,8 @@ export function audioEditChainItemRecipe(item: AudioEditChainItem): unknown {
 
 /** 一项换算成的实时效果（内置效果、基本声音）；实例 id 带上这一项的 id，链里放几份基本声音也不会互相串状态。 */
 export function audioEditChainItemEffects(item: AudioEditChainItem): AudioEffectInstance[] {
-  if (item.kind === 'builtin') return [{ id: item.id, builtin: item.builtin, amount: item.amount }]
+  // 已移除的内置效果原样保留在链上，但不处理声音。
+  if (item.kind === 'builtin') return isRemovedVideoEditBuiltinEffect(item.builtin.id) ? [] : [{ id: item.id, builtin: item.builtin, amount: item.amount }]
   if (item.kind === 'essential') return essentialSoundEffects(item.settings).map(effect => ({ ...effect, id: `${item.id}:${effect.id}` }))
   return []
 }

@@ -43,7 +43,7 @@ export const VIDEO_EDIT_TRANSITION_PARAMS: Readonly<Record<VideoEditBuiltinTrans
     strength('blur', '动感模糊', 50, '缩放时沿放射方向的模糊程度', '缩放时的放射拖影：0 没有拖影；50（默认）明显的冲刺感；100 强烈拉丝。'),
     centerX, centerY,
   ],
-  blur_dissolve: [strength('blur', '模糊度', 50, '过渡中点画面最模糊的程度', '中点最大模糊（与“高斯模糊”同一量纲）：20 ≈ 轻微失焦；50（默认）≈ 明显虚化；100 ≈ 半径约为画面高度 6% 的强烈虚化。')],
+  blur_dissolve: [strength('blur', '模糊度', 50, '过渡中点画面最模糊的程度', '中点最大模糊：20 ≈ 轻微失焦；50（默认）≈ 明显虚化；100 ≈ 半径约为画面高度 6% 的强烈虚化。')],
   flash: [
     { key: 'color', name: '闪光颜色', type: 'color', default: WHITE_HEX, tooltip: '闪光的颜色', description: '闪光颜色，写 #rrggbb；默认白色（相机闪光、回忆）；红色可表现冲击、受伤。' },
     strength('intensity', '闪光强度', 100, '中点画面被闪光盖住的程度', '中点闪光的覆盖程度：100（默认）中点整屏变成闪光色；50 ≈ 半透明的一闪；20 ≈ 轻微一亮。'),

@@ -20,7 +20,7 @@ import { videoEditClipMedia, type VideoEditDocument } from '@/core/videoEdit/doc
 import { videoEditClipSpeedData } from './videoEditClipSpeed'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditTranscriptWords, resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
-import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
+import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEditTransitionClipIds, VIDEO_EDIT_TRANSITION_PRESETS, VIDEO_EDIT_TRANSITION_REF_PREFIX } from '@/core/videoEdit/transitions'
 import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
 import { VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY, VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditDataKey, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
@@ -60,7 +60,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
     case 'video_edit.code_version': return (document.codeMaterials ?? []).flatMap(definition => definition.versions.map(version => ({ ...version, name: definition.name })))
     case 'video_edit.tracker': case 'video_edit.graphic_object': case 'video_edit.effect': case 'video_edit.transition': return videoEditCompositeItems(document, type)
     // 内置效果与过渡同一个只读目录：效果 effect:<ID>，过渡 transition:<种类>（4.7）
-    case 'video_edit.builtin_effect': return [...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => definition.space !== 'layer-only').map(definition => ({ id: videoEditBuiltinRefId(definition.id), name: definition.name })), ...VIDEO_EDIT_TRANSITION_PRESETS.map(preset => ({ id: `${VIDEO_EDIT_TRANSITION_REF_PREFIX}${preset.kind}`, name: preset.name }))]
+    case 'video_edit.builtin_effect': return [...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({ id: videoEditBuiltinRefId(definition.id), name: definition.name })), ...VIDEO_EDIT_TRANSITION_PRESETS.map(preset => ({ id: `${VIDEO_EDIT_TRANSITION_REF_PREFIX}${preset.kind}`, name: preset.name }))]
   }
 }
 /** 只核对引用指向的实体仍在，不读属性：删除前核对父序列、`propertyIds: []` 读基线都走这里，避免整份克隆序列和重算转写。 */
@@ -79,7 +79,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     const transitionKind = parseVideoEditTransitionRefId(childId)
     if (transitionKind) return JSON.parse(JSON.stringify(describeVideoEditTransitionKind(transitionKind))) as VideoEditFieldData
     const id = parseVideoEditBuiltinRefId(childId)
-    if (!id || requireVideoEditBuiltinEffect(id).space === 'layer-only') throw new Error(`NOT_FOUND：没有片段内置效果 ${childId}，可用：${VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => definition.space !== 'layer-only').map(definition => videoEditBuiltinRefId(definition.id)).join('、')}。`)
+    if (!id) throw new Error(`NOT_FOUND：没有片段内置效果 ${childId}，可用：${VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => videoEditBuiltinRefId(definition.id)).join('、')}。`)
     const { name, group, description, params } = describeVideoEditBuiltinEffect(requireVideoEditBuiltinEffect(id))
     return JSON.parse(JSON.stringify({ name, group, description, params })) as VideoEditFieldData
   }
@@ -184,7 +184,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
       const parameterKey = propertyId.split('.').at(-2)!
       const curveKey = propertyId.endsWith('.keyframes') ? this.entityType === 'video_edit.clip' ? videoEditDataKey(parameterKey) : parameterKey : undefined
       const builtin = childOwner?.kind === 'effect' ? childOwner.effect.builtin : undefined
-      const curveReason = curveKey && this.entityType === 'video_edit.effect' && (!builtin || !requireVideoEditBuiltinEffect(builtin.id).params.some(param => param.key === curveKey)) ? '此内置效果没有该参数；代码滤镜请用 curves 源时间曲线。' : curveKey && this.entityType === 'video_edit.clip' && (data.kind === 'adjustment' && curveKey !== 'opacity' || data.kind === 'audio' && curveKey !== 'volume') ? '此片段类型不支持该动画参数。' : undefined
+      const curveReason = curveKey && this.entityType === 'video_edit.effect' && (!builtin || !videoEditBuiltinEffect(builtin.id)?.params.some(param => param.key === curveKey)) ? '此内置效果没有该参数；代码滤镜请用 curves 源时间曲线。' : curveKey && this.entityType === 'video_edit.clip' && (data.kind === 'adjustment' && curveKey !== 'opacity' || data.kind === 'audio' && curveKey !== 'volume') ? '此片段类型不支持该动画参数。' : undefined
       const captionOwner = this.entityType === 'video_edit.caption' ? document.sequences.find(sequence => sequence.captions?.some(caption => caption.id === childId)) : undefined
       const caption = captionOwner?.captions?.find(value => value.id === childId)
       const locked = captionOwner ? Boolean(captionOwner.captionTrackLocked || caption && videoEditCaptionClipIds(caption).some(id => captionOwner.tracks.find(track => track.index === captionOwner.clips.find(clip => clip.id === id)?.track)?.locked)) : childOwner ? childOwner.clipIds.some(id => childOwner.sequence.tracks.find(track => track.index === childOwner.sequence.clips.find(clip => clip.id === id)?.track)?.locked) : false

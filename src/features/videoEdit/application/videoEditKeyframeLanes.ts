@@ -1,4 +1,4 @@
-import { requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
+import { isRemovedVideoEditBuiltinEffect, requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditAnimatableKey, VideoEditKeyframe } from '@/core/videoEdit/keyframes'
 import type { VideoEditBuiltinAnimationField, VideoEditKeyframeChanges, VideoEditKeyframeLaneSource } from '@/core/videoEdit/keyframeLanes'
 import { builtinParameterFields, type ParamFieldSpec } from '@/components/ui/params/fieldSpec'
@@ -13,6 +13,8 @@ export function isVideoEditDiscreteField(field: Pick<ParamFieldSpec, 'type'>): b
 
 /** 内置效果可做动画的参数行，与效果控件里的行一一对应（点位的水平、垂直合成一行）。 */
 export function videoEditBuiltinAnimationFields(builtinId: string): VideoEditBuiltinAnimationField[] {
+  // 已移除的效果不渲染，也不显示关键帧行。
+  if (isRemovedVideoEditBuiltinEffect(builtinId)) return []
   return builtinParameterFields(requireVideoEditBuiltinEffect(builtinId).params).filter(field => field.animatable)
     .map(field => ({ key: field.key, title: field.group ? `${field.group} · ${field.title}` : field.title, keys: field.bindingKeys, discrete: isVideoEditDiscreteField(field) }))
 }

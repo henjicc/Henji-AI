@@ -5,7 +5,7 @@ import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
 import { UiButton, UiIconButton, UiOptionButton, UiSegmented } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
-import { requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
+import { videoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 import { evaluateVideoEditKeyframes, putVideoEditKeyframe, videoEditClipValue, type VideoEditAnimatableKey, type VideoEditKeyframe } from '@/core/videoEdit/keyframes'
 import { VIDEO_EDIT_DEFAULT_BEZIER, type VideoEditBezier } from '@/core/videoEdit/keyframeInterpolation'
 import { deleteVideoEditLaneKeyframe, editVideoEditLaneChannel, moveVideoEditLaneKeyframe, shapeVideoEditLaneKeyframe, videoEditKeyframeShape, videoEditLaneEntryTimes, videoEditLaneKeyframesAt, videoEditLaneTimes, type VideoEditKeyframeChanges, type VideoEditKeyframeLane, type VideoEditKeyframeLaneEntry, type VideoEditKeyframeShape } from '@/core/videoEdit/keyframeLanes'
@@ -42,7 +42,7 @@ function channelValue(entry: VideoEditKeyframeLaneEntry, key: string, time: numb
   const effectId = entry.source.effectId
   const builtin = entry.clip.effects?.find(effect => effect.id === effectId)?.builtin
   if (!builtin) throw new Error('原内置效果已移除。')
-  const fallback = builtin.params[key] ?? requireVideoEditBuiltinEffect(builtin.id).params.find(param => param.key === key)?.default ?? 0
+  const fallback = builtin.params[key] ?? videoEditBuiltinEffect(builtin.id)?.params.find(param => param.key === key)?.default ?? 0
   return evaluateVideoEditKeyframes(entry.channels.find(channel => channel.key === key)?.points, time, fallback as VideoEditKeyframe['value'])
 }
 /** 速度曲线里拖数值时的取值范围（属性或参数登记的边界）。 */
@@ -50,7 +50,7 @@ function channelBounds(entry: VideoEditKeyframeLaneEntry, key: string): { min: n
   if (entry.source.kind === 'intrinsic') return videoEditClipPropertyBounds(key as VideoEditClipPropertyKey)
   const effectId = entry.source.effectId
   const builtin = entry.clip.effects?.find(effect => effect.id === effectId)?.builtin
-  const param = builtin && requireVideoEditBuiltinEffect(builtin.id).params.find(value => value.key === key)
+  const param = builtin && videoEditBuiltinEffect(builtin.id)?.params.find(value => value.key === key)
   return param?.type === 'number' ? { min: param.min, max: param.max } : { min: -Infinity, max: Infinity }
 }
 function formatValue(entry: VideoEditKeyframeLaneEntry, key: string, value: number, sequence: VideoEditSequence): string {

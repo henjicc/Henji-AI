@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 46,
+      "version": 47,
       "fingerprint": "b8c4b1c2c4bccca20b801e51aaa2ec393b3be8e40f288c52517bbebf424fc346",
       "supportedFrom": 17,
-      "minReaderVersion": 45
+      "minReaderVersion": 47
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 49,
+      "version": 50,
       "fingerprint": "90bb29ef6125a42cc9282f239e4cac894eba35b25f834adbf693e1b416b1443b",
       "supportedFrom": 19,
-      "minReaderVersion": 48
+      "minReaderVersion": 50
     },
     "project": {
       "version": 3,

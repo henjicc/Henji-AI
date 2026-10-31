@@ -93,7 +93,7 @@ clip.scaleAspect = 1.2
 // 31：序列运动模糊改为总开关，片段可单独关掉自身变换动画的模糊。
 clip.motionBlur = false
 clip.curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 1, interpolation: 'ease' }] }
-clip.effects = [{ id: 'golden-grade', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4, tone_lights: 12, mixer_orange_saturation: -10, wheel_mode: 'primary', global_hue: 200, global_strength: 6 }, curves: { temperature_kelvin: [{ time: 0, value: 5600, interpolation: 'linear' }, { time: 30, value: 6200, interpolation: 'linear' }] } } }, { id: 'golden-blur', name: '高斯模糊', enabled: true, amount: 0.5, builtin: { id: 'gaussian_blur', params: { sigma_fraction_height: 0.003, axis: 'both', edge_mode: 'clamp' } } }]
+clip.effects = [{ id: 'golden-grade', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4, tone_lights: 12, mixer_orange_saturation: -10, wheel_mode: 'primary', global_hue: 200, global_strength: 6 }, curves: { temperature_kelvin: [{ time: 0, value: 5600, interpolation: 'linear' }, { time: 30, value: 6200, interpolation: 'linear' }] } } }, { id: 'golden-blur', name: '模糊', enabled: true, amount: 0.5, builtin: { id: 'blur', params: { mode: 'uniform', amount: 17.43, axis: 'both', repeat_edges: true } } }]
 sequence.clips.push(clip)
 sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', sourceText: '字幕原文、', translation: 'Golden caption' }]
 sequence.transitions = [{ id: 'golden-transition', kind: 'cross_dissolve', rightClipId: clip.id, durationFrames: 10 }]

@@ -1,4 +1,5 @@
 import type { ContentTrustReference } from '@/core/contentTrust'
+import { migrateVideoEditMergedEffects } from '@/core/videoEdit/mergedEffectsMigration'
 import { createLogger } from '@/core/logging'
 import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
 import { upgradePersistenceContent } from '@/core/persistence/migrations'
@@ -105,7 +106,7 @@ export async function importVideoEditPresetPackage(text: string): Promise<Array<
   // Older packages go through the registered migrations first (v1 drops the old parameter-style items).
   const version = parsed && typeof parsed === 'object' && 'version' in parsed && typeof parsed.version === 'number' ? parsed.version : VIDEO_EDIT_PRESET_PACKAGE_VERSION
   if (version < VIDEO_EDIT_PRESET_PACKAGE_VERSION && (parsed as { format?: unknown }).format === 'henji-video-presets') { try { parsed = upgradePersistenceContent(PRESET_PACKAGE_FORMAT, parsed, version) } catch { throw new Error('这个文件不是痕迹AI剪辑预设，或来自更新的版本。') } }
-  const result = videoEditPresetPackageSchema.safeParse(parsed)
+  const result = videoEditPresetPackageSchema.safeParse(migrateVideoEditMergedEffects(parsed))
   if (!result.success) throw new Error('这个文件不是痕迹AI剪辑预设，或来自更新的版本。')
   logger.info('preset.import.start', '导入剪辑预设', { context: { count: result.data.items.length } })
   const added: Array<{ category: VideoEditPresetCategory; id: string; name: string }> = []

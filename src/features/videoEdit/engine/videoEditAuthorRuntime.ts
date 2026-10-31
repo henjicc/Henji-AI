@@ -2,6 +2,7 @@ import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { resolveAuthorEffects, authorEffectBleed, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
 import { gaussianSupport, type LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
+import { BLUR_AMOUNT_MAX, blurAmountForSigma } from '@/core/videoEdit/blur'
 import { VideoEditAuthorEffects } from './videoEditAuthorEffects'
 import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -528,7 +529,8 @@ export class VideoEditAuthorRuntime {
           const { radius } = authorLayerBlur(center, resolution, layer.blurShape)
           const needsFloat = authorLayerBlur(center, 1, layer.blurShape).radius > 0 || effects.some(effect => videoEditEffectNeedsFloat(effect, { width, height, referenceSize: { width, height }, renderScale: 1, layer: reference(1) }))
           const pad = padding(resolution)
-          if (radius > 0) evaluated.set(index, [...effects, ...resolveAuthorEffects([{ id: layer.blurShape === 'lens' ? 'lens_blur' : 'gaussian_blur', params: { [layer.blurShape === 'lens' ? 'radius_fraction_height' : 'sigma_fraction_height']: radius / resolution / height } }]).map(effect => ({ ...effect, source: 'pose.blur' as const }))])
+          // 报给助手的是“模糊”效果的等效参数：均匀方式的标准差就是 pose.blur 的像素值，镜头方式的圆盘半径是它的两倍标准差。
+          if (radius > 0) evaluated.set(index, [...effects, ...resolveAuthorEffects([{ id: 'blur', params: { mode: layer.blurShape === 'lens' ? 'lens' : 'uniform', repeat_edges: false, amount: Math.min(BLUR_AMOUNT_MAX, blurAmountForSigma(radius / resolution / height / (layer.blurShape === 'lens' ? 2 : 1))) } }]).map(effect => ({ ...effect, source: 'pose.blur' as const }))])
           const surface = this.surface(index * 2, Math.ceil(bounds.width * resolution) + pad * 2, Math.ceil(bounds.height * resolution) + pad * 2, true)
           const canvas = surface.canvas!, region = { x: 0, y: 0, width: canvas.width, height: canvas.height }
           const setup: Matrix = [resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution]

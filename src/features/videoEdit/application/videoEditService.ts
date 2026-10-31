@@ -1,4 +1,5 @@
 import { jsonEqual } from '@/core/jsonEqual'
+import { storedVideoEditBuiltinEffectNotes } from '@/core/videoEdit/builtinEffects'
 import { parseVideoEditDocument as parseDocument, freezeVideoEditDocument } from '@/core/videoEdit/documentValidation'
 import { z } from 'zod'
 import type { ApplicationExecutionContext } from '@/core/application-control'
@@ -1025,6 +1026,10 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   beginVideoEditFirstFrame(session.id, instance.activeSequenceId, 'open')
   publishVideoEdit(true)
   logger.info('剪辑已打开', { event: 'video_edit.document.open.completed', context: { docId: session.id, missing: session.getState().missingPaths.length } })
+  // 效果改版后旧工程照样打开：已移除的效果保留不渲染、越界的旧数值按当前范围使用，在这里记一次。
+  const stored = instance.document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => (clip.effects ?? []).flatMap(effect => effect.builtin ? [{ id: effect.builtin.id, ...storedVideoEditBuiltinEffectNotes(effect.builtin) }] : [])))
+  const removed = [...new Set(stored.filter(note => note.removed).map(note => note.id))], clamped = stored.flatMap(note => note.clamped.map(key => `${note.id}.${key}`))
+  if (removed.length || clamped.length) logger.warn('剪辑里有已移除的效果或超出范围的旧参数，已原样保留', { event: 'video_edit.document.stored_effects_tolerated', context: { docId: session.id, removed, clamped: [...new Set(clamped)] } })
   // 打开即恢复（含后台打开），无需挂载时间线；只续查原任务，不重新生成。
   if (instance.document.inPlaceGenerations?.length) {
     const inPlace = await import('./videoEditInPlaceGeneration')

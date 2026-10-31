@@ -276,7 +276,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
   })
   it('后置发光在首项效果前提升归一化目标，关闭效果后回到八位', async () => {
     const owner = clip('chain')
-    const first = { effect: plan('first', [1, 0, 0, 1], owner, 0).effect, builtin: { id: 'brightness_contrast', params: { brightness: 2 } } }
+    const first = { effect: plan('first', [1, 0, 0, 1], owner, 0).effect, builtin: { id: 'invert', params: {} } }
     const glow = { effect: plan('glow', [0, 0, 0, 0], owner, 0).effect, builtin: { id: 'glow', params: { strength: 30 } } }
     owner.effects = [first.effect, glow.effect]
     const document = composition([owner]), nodes = buildVideoEditCompositePlan(document.clips)

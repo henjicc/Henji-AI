@@ -80,7 +80,7 @@ it('作者效果→层栈→片段→amount/mask→转场保持浮点，强度�
       expect(rendered.picture.format).toBe(target.textureFormat)
       author.copy(rendered.picture, target.texture, W, H); author.finish(); chain.commit()
       if (!strength) continue
-      const filtered = await host.builtin('filter', { id: 'brightness_contrast', params: { brightness: 2 } }, target, 0)
+      const filtered = await host.builtin('filter', { id: 'invert', params: {} }, target, 0)
       const mixed = await host.mix('mixed', target, filtered, .25)
       const mask = await host.uploadMask('mask', W, H, new Uint8Array(W * H).fill(128))
       const masked = await host.maskedMix('masked', target, mixed, mask, .5)

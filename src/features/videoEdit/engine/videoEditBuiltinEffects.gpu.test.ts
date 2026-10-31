@@ -1,4 +1,5 @@
 import { videoEditHalfToFloat } from './videoEditGpuShaders'
+import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { authorEffectBleed } from '@/core/videoEdit/authorEffects'
 import { float32ToFloat16 } from '../../imageEdit/v3/gpu/imageEditorGpuTileAtlasV3'
@@ -18,7 +19,7 @@ import { VideoEditBuiltinEffectsGpu, type BuiltinEncodingBatch, type VideoEditBu
 import { planAuthorDefocus } from './videoEditBuiltinEffectPasses'
 import { authorLayerBlur } from './videoEditAuthorLayers'
 import type { RecordingCursorDraw } from './videoEditRecordingCursorPlan'
-import { RECORDING_FRAME_SOLID_DEFAULT_HEX } from '@/core/theme/colorTokens'
+import { RECORDING_FRAME_SOLID_DEFAULT_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 
 // 任务 4.7b 真实设备专项：内置效果的正式 WGSL 与工序在 Dawn 上编译并逐像素核对关键结果。npm run test:gpu 无条件执行。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -140,7 +141,7 @@ it.each([false, true])('30px 镜头散焦细线无横纹（前置效果：%s）'
   } finally { buffer.destroy(); chain.dispose(); await author.dispose(); host.effectAllocator.release(source); host.effectAllocator.release(target); await host.dispose() }
 })
 
-it('镜头散焦保留高光光斑的亮度、能量和大小，逐帧重编码稳定且与内置 lens 工序一致', async () => {
+it('镜头散焦保留高光光斑的亮度、能量和大小，逐帧重编码稳定且与模糊效果的镜头方式一致', async () => {
   const width = 192, height = 192, radius = 30, d = device as unknown as GpuDevice
   const host = new VideoEditCodeGpu(d), author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, host.effectAllocator)
   const source = host.effectAllocator.allocate(width, height, 'rgba8unorm', 1 + Math.floor(Math.log2(width)))
@@ -165,7 +166,7 @@ it('镜头散焦保留高光光斑的亮度、能量和大小，逐帧重编码�
       const pixels = await read(result.picture, width, height)
       if (first) expect(pixels).toEqual(first)
       else first = pixels
-      await direct.render({ id: 'lens_blur', params: { radius_fraction_height: radius / height } }, { texture: source, width, height, format: 'rgba16float' }, target, frame)
+      await direct.render({ id: 'blur', params: { mode: 'lens', amount: blurAmountForSigma(radius / height / 2), repeat_edges: false } }, { texture: source, width, height, format: 'rgba16float' }, target, frame)
       expect(await read(target, width, height)).toEqual(first)
     }
     let luminance = 0, energy = 0, alpha = 0, moment = 0
@@ -324,8 +325,8 @@ it('4K 10-bit 输入加 final 高斯保留 32f 工序，复用峰值低于 512Mi
   device.queue.writeTexture({ texture: source as never }, row, { bytesPerRow: width * 8 }, [width, height])
   try {
     device.pushErrorScope('validation')
-    for (const sigma of [.003, .009, .03]) {
-      await local.render({ id: 'gaussian_blur', params: { sigma_fraction_height: sigma } }, { texture: source, width, height, format: 'rgba16float' }, target, 0, 1, [], 'final')
+    for (const amount of [17.43, 40.01, 79.67]) {
+      await local.render({ id: 'blur', params: { amount } }, { texture: source, width, height, format: 'rgba16float' }, target, 0, 1, [], 'final')
       await device.queue.onSubmittedWorkDone(); local.releaseIdle()
     }
     const buffer = device.createBuffer({ size: 256, usage: BUFFER_MAP_READ | BUFFER_COPY_DST }), encoder = device.createCommandEncoder()
@@ -429,7 +430,7 @@ describe('剪辑内置效果（真实设备）', () => {
       release: texture => texture.destroy(),
     })
     const source = input(); const first = output(); const second = output()
-    const blur = { id: 'gaussian_blur', params: { sigma_fraction_height: 0.03 } }
+    const blur = { id: 'blur', params: { amount: 79.67 } }
     const draw = async (instance: Parameters<typeof local.render>[0], from: GpuTexture, to: GpuTexture): Promise<void> => local.render(instance, { texture: from, width: W, height: H, format: 'rgba8unorm' }, to, 0)
     try {
       await draw(blur, source, first)
@@ -459,11 +460,11 @@ describe('剪辑内置效果（真实设备）', () => {
     }
   }, 60_000)
   it('关键结果：反相、水平翻转、零强度模糊不变、模糊在线性光混合、裁剪透明、抠掉纯绿', async () => {
-    const original = await run('gaussian_blur', { sigma_fraction_height: 0 })
+    const original = await run('blur', { amount: 0.0 })
     expect(pixel(original, 0, 0)).toEqual([255, 0, 0, 255]); expect(pixel(original, 10, 5)).toEqual([Math.round(10 / 63 * 255), Math.round(10 / 63 * 255), Math.round(10 / 63 * 255), 255])
     expect(pixel(await run('invert'), 0, 0)).toEqual([0, 255, 255, 255])
     expect(pixel(await run('flip', { axis: 'horizontal' }), W - 1, 0)).toEqual([255, 0, 0, 255])
-    const blurred = await run('gaussian_blur', { sigma_fraction_height: 0.03 })
+    const blurred = await run('blur', { amount: 79.67 })
     const row = (pixels: Uint8Array): number => Array.from({ length: W }, (_, x) => pixels[(18 * W + x) * 4 + 1]).reduce((sum, value) => sum + value, 0) / W
     expect(Math.abs(row(blurred) - row(original))).toBeLessThan(5)
     // 左上角的红点被晕开到相邻像素
@@ -478,6 +479,72 @@ describe('剪辑内置效果（真实设备）', () => {
   it('胶片颗粒同一帧逐像素相同，换一帧不同', async () => {
     const a = await run('film_grain', { amount: 60 }, 7); const b = await run('film_grain', { amount: 60 }, 7); const c = await run('film_grain', { amount: 60 }, 8)
     expect([...a]).toEqual([...b]); expect([...a]).not.toEqual([...c])
+  }, 30_000)
+  it('颗粒彩色时各通道各自起伏，单色时三通道一致', async () => {
+    const mono = await run('film_grain', { amount: 80 }, 3); const color = await run('film_grain', { amount: 80, monochrome: false }, 3)
+    const spread = (pixels: Uint8Array) => Array.from({ length: W * H }, (_, i) => Math.max(Math.abs(pixels[i * 4] - pixels[i * 4 + 1]), Math.abs(pixels[i * 4 + 1] - pixels[i * 4 + 2]))).slice(W)
+    expect(Math.max(...spread(mono))).toBeLessThanOrEqual(1)
+    expect(Math.max(...spread(color))).toBeGreaterThan(4)
+  }, 30_000)
+  it('暗角：黑色与旧公式一致、白色提亮四周；中心不动，抖动只在被暗角改动的像素上且不超过半级', async () => {
+    const original = await run('blur', { amount: 0 })
+    const black = await run('vignette', { amount: 60 }); const white = await run('vignette', { amount: 60, color: WHITE_HEX })
+    const at = (x: number, y: number) => (y * W + x) * 4
+    // 中心离暗角起点很远：逐像素不变。
+    expect([...black.slice(at(32, 18), at(32, 18) + 4)]).toEqual([...original.slice(at(32, 18), at(32, 18) + 4)])
+    // 角落：旧公式 rgb × (1 − 数量 × t)，t 在角落为 1；抖动最多半级，加上取整误差不超过 1。
+    const corner = original[at(W - 1, H - 1)]
+    expect(Math.abs(black[at(W - 1, H - 1)] - Math.round(corner * 0.4))).toBeLessThanOrEqual(1)
+    expect(Math.abs(white[at(0, H - 1) + 1] - Math.round(original[at(0, H - 1) + 1] + (255 - original[at(0, H - 1) + 1]) * 0.6))).toBeLessThanOrEqual(1)
+  }, 30_000)
+  it('暗角抖动按叠到底色后的半级算：暗底平滑渐变上打散色带，半透明画面的抖动不随透明度变小', async () => {
+    const width = 512, height = 64
+    const flat = (alpha: number): GpuTexture => {
+      const texture = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC })
+      const data = new Uint8Array(width * height * 4)
+      for (let i = 0; i < width * height; i++) data.set([Math.round(24 * alpha), Math.round(24 * alpha), Math.round(24 * alpha), Math.round(255 * alpha)], i * 4)
+      device.queue.writeTexture({ texture }, data, { bytesPerRow: width * 4 }, [width, height])
+      return texture as unknown as GpuTexture
+    }
+    const levels = async (alpha: number): Promise<number> => {
+      const source = flat(alpha), target = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture
+      await effects.render({ id: 'vignette', params: { amount: 100, midpoint: 50, feather: 100 } }, { texture: source, width, height, format: 'rgba8unorm' }, target, 0)
+      const pixels = await read(target, width, height)
+      // 中间一行从中心到右边缘：没有抖动时同值像素连成长段（色带），抖动后相邻像素交错。
+      const row = Array.from({ length: width / 2 }, (_, x) => pixels[((height / 2) * width + width / 2 + x) * 4])
+      return row.slice(1).filter((value, x) => value !== row[x]).length
+    }
+    const opaque = await levels(1), half = await levels(0.5)
+    // 24 级到 0 级的渐变只有 24 个台阶；抖动后变化点远多于台阶数，半透明画面同样多。
+    expect(opaque).toBeGreaterThan(60); expect(half).toBeGreaterThan(40)
+  }, 30_000)
+  it('模糊四种方式守恒亮度：整幅不透明画面的平均亮度不变；不重复边缘时四边向透明淡出', async () => {
+    const original = await run('blur', { amount: 0 })
+    const mean = (pixels: Uint8Array, channel = 1) => Array.from({ length: W * H }, (_, i) => pixels[i * 4 + channel]).reduce((sum, value) => sum + value, 0) / (W * H)
+    for (const params of [{ mode: 'uniform', amount: 120 }, { mode: 'directional', amount: 120, angle: 30 }, { mode: 'radial', amount: 120 }, { mode: 'lens', amount: 120, highlights: 0 }]) {
+      const blurred = await run('blur', params)
+      expect(Math.abs(mean(blurred) - mean(original)), params.mode).toBeLessThan(4)
+      expect([...blurred], params.mode).not.toEqual([...original])
+      // 放射只朝中心取样，边缘像素取不到画面外。
+      if (params.mode === 'radial') continue
+      const edge = await run('blur', { ...params, repeat_edges: false })
+      expect(edge[(18 * W) * 4 + 3], params.mode).toBeLessThan(255)
+      expect(edge[(18 * W + 32) * 4 + 3], params.mode).toBeGreaterThan(edge[(18 * W) * 4 + 3])
+    }
+  }, 60_000)
+  it('锐化阈值：明暗差小于阈值的细碎起伏不加强，真正的边缘照样加强', async () => {
+    const source = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC })
+    const data = new Uint8Array(W * H * 4)
+    // 左半是 ±3 级的棋盘细纹，右半是亮块，中间一条明显的边。
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const value = x < W / 2 ? 60 + ((x + y) % 2 ? 3 : -3) : 200; data.set([value, value, value, 255], (y * W + x) * 4) }
+    device.queue.writeTexture({ texture: source }, data, { bytesPerRow: W * 4 }, [W, H])
+    const sharpen = async (threshold: number): Promise<Uint8Array> => { const target = output(); await effects.render({ id: 'sharpen', params: { amount: 100, threshold } }, { texture: source as unknown as GpuTexture, width: W, height: H, format: 'rgba8unorm' }, target, 0); return read(target) }
+    const change = (pixels: Uint8Array, x: number, y = 18) => Math.abs(pixels[(y * W + x) * 4] - data[(y * W + x) * 4])
+    const all = await sharpen(0), kept = await sharpen(40)
+    expect(change(all, 10)).toBeGreaterThan(1)
+    expect(change(kept, 10)).toBeLessThanOrEqual(1)
+    expect(change(kept, W / 2 - 1)).toBeGreaterThan(5); expect(change(kept, W / 2)).toBeGreaterThan(5)
+    source.destroy()
   }, 30_000)
   it('发光：透明底的内容向外发光，强度 0 与原画相同；色差数量 0 不改画面', async () => {
     // 代码图层多是透明底：光要照到透明处，而且叠到黑底上要和同样内容放在不透明黑底上一样亮，否则透明底的文字外发光会偏暗。
@@ -696,10 +763,10 @@ it('图层发光采样网格跨外扩档稳定，局部公开高斯与镜头虚�
     const plain = await render(32, [])
     expect(await render(32, [], 'interactive', 3)).toEqual(await render(32, [], 'final', 3))
     for (const quality of ['interactive', 'final'] as const) {
-      expect(await render(32, [{ id: 'gaussian_blur', params: { sigma_fraction_height: .03 } }], quality)).not.toEqual(plain)
+      expect(await render(32, [{ id: 'blur', params: { amount: 79.67 } }], quality)).not.toEqual(plain)
       expect(await render(32, [], quality, 3)).not.toEqual(plain)
     }
-    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.space === 'layer' || value.space === 'layer-only')) expect((await render(32, [{ id: definition.id }])).length).toBe(W * H * 4)
+    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.space === 'layer')) expect((await render(32, [{ id: definition.id }])).length).toBe(W * H * 4)
   } finally { chain.dispose(); await author.dispose(); target.destroy() }
 })
 
@@ -733,7 +800,7 @@ it('光核使用正式 shoulder/screen 公式，保留小幅线性光与强光�
 it('主链顺序与 underlay 保留语义，最终虚化同时作用全部输出', async () => {
   const d = device as unknown as GpuDevice, author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, allocator()), source = input(), target = output()
   const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
-  const light = { id: 'glow', params: { strength: 30, dither: 0 } }, blur = { id: 'gaussian_blur', params: { sigma_fraction_height: .03 } }
+  const light = { id: 'glow', params: { strength: 30, dither: 0 } }, blur = { id: 'blur', params: { amount: 79.67 } }
   const render = async (descriptors: Array<{ id: string; params: Record<string, number> }>, defocus = 0) => {
     const capture = async (onlyLight: boolean): Promise<Uint8Array> => {
     await author.begin(target); chain.begin(author.commandEncoder())

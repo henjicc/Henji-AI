@@ -143,7 +143,7 @@ describe('shader graph effects', () => {
   }, 300_000)
   it('warms effect and transition graphs found in the edit so the first real frame does not compile', async () => {
     const cache = new ShaderGraphCache(device)
-    const specs = videoEditShaderGraphWarmSpecs([{ clips: [{ effects: [{ builtin: { id: 'shaders.Vignette' } }, { builtin: { id: 'gaussian_blur' } }, { builtin: { id: 'shaders.Vignette' } }] }], transitions: [{ kind: 'shaders.LinearWipe' }, { kind: 'wipe' }] }], kind => kind.startsWith('shaders.') ? shaderGraphTransitionSpec(kind as never) : undefined)
+    const specs = videoEditShaderGraphWarmSpecs([{ clips: [{ effects: [{ builtin: { id: 'shaders.Posterize' } }, { builtin: { id: 'blur' } }, { builtin: { id: 'shaders.Posterize' } }] }], transitions: [{ kind: 'shaders.LinearWipe' }, { kind: 'wipe' }] }], kind => kind.startsWith('shaders.') ? shaderGraphTransitionSpec(kind as never) : undefined)
     expect(specs).toHaveLength(2)
     await cache.warm(specs)
     const input = texture(); const output = texture(); fill(input, () => [10, 20, 30, 255])

@@ -1,4 +1,5 @@
 import { authorModuleTextLayouts, observeTextLayouts } from '@/core/videoEdit/textDrawObservation'
+import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild-wasm'
@@ -668,7 +669,7 @@ it('空效果链保留最小外扩档，pose.blur 读回使用逻辑画幅比例
     try {
       for (const divisor of [1, 2, 4]) {
         await blurred.render(output, 100, 50, {}, {}, frameInfo(0), undefined, undefined, false, { width: 100 / divisor, height: 100 / divisor })
-        expect(blurred.observeElements()[0].effects).toMatchObject([{ source: 'pose.blur', params: { [shape === 'lens' ? 'radius_fraction_height' : 'sigma_fraction_height']: 2 / 50 } }])
+        expect(blurred.observeElements()[0].effects).toMatchObject([{ id: 'blur', source: 'pose.blur', params: { mode: shape === 'lens' ? 'lens' : 'uniform', amount: expect.closeTo(blurAmountForSigma(2 / 50 / (shape === 'lens' ? 2 : 1)), 6) } }])
       }
     } finally { await blurred.dispose() }
   }

@@ -3,20 +3,27 @@ import { authorEffectsFingerprint, resolveAuthorEffects } from './authorEffects'
 import { glow, blur, look } from '@/features/videoEdit/authorLibraries/effects'
 import type { VideoEditEffectPreset } from './effectPresets'
 import { videoEditEffectsRegistry } from './effectsRegistry'
-import { layerEffectBleed } from './layerEffectGeometry'
+import { blurAmountForSigma, blurBleed, blurZoomRange } from './blur'
 
 describe('作者图层效果解析', () => {
-  it('镜头虚化只在作者图层可发现，片段效果目录不暴露不可用的入口', () => {
-    expect(resolveAuthorEffects([blur({ mode: 'lens' })])[0].id).toBe('lens_blur')
-    expect(videoEditEffectsRegistry().some(effect => effect.builtinId === 'lens_blur')).toBe(false)
-    expect(videoEditEffectsRegistry().some(effect => effect.builtinId === 'gaussian_blur')).toBe(true)
+  it('模糊四种方式是同一个效果，图层与片段目录都能找到', () => {
+    for (const mode of ['uniform', 'directional', 'radial', 'lens'] as const) expect(resolveAuthorEffects([blur({ mode })])[0]).toMatchObject({ id: 'blur', params: { mode } })
+    expect(videoEditEffectsRegistry().some(effect => effect.builtinId === 'blur')).toBe(true)
   })
-  it('缩放模糊的外扩覆盖两次径向取样的反向映射，包含角落中心和最大强度', () => {
+  it('旧版作者库产出的旧模糊 ID 按存档迁移的同一换算转成模糊', () => {
+    expect(resolveAuthorEffects([{ id: 'gaussian_blur', params: { sigma_fraction_height: 0.009, edge_mode: 'transparent' } }])[0]).toMatchObject({ id: 'blur', params: { mode: 'uniform', amount: expect.closeTo(blurAmountForSigma(0.009), 2), repeat_edges: false } })
+    expect(resolveAuthorEffects([{ id: 'lens_blur', params: { radius_fraction_height: 0.02 } }])[0]).toMatchObject({ id: 'blur', params: { mode: 'lens', amount: expect.closeTo(blurAmountForSigma(0.01), 2) } })
+    expect(resolveAuthorEffects([{ id: 'directional_blur', params: { direction: 30 } }])[0].params).toMatchObject({ mode: 'directional', angle: 30 })
+  })
+  it('放射模糊的外扩覆盖多道径向取样的反向映射，包含角落中心和最大模糊度', () => {
     const ref = { referenceSize: { width: 1000, height: 500 }, contentBounds: { x: 0, y: 0, width: 800, height: 100 }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
-    for (const strength of [0, 20, 50, 100]) for (const center of [0, 50, 100]) {
-      const bleed = layerEffectBleed('zoom_blur', { strength, center_x: center, center_y: center }, ref) * 500
-      const range = strength / 100 * .2
-      const reach = 800 * Math.max(center / 100, 1 - center / 100) * (1 / ((1 - range) * (1 - range / 16)) - 1)
+    for (const amount of [0, 20, 50, 100, 200]) for (const center of [0, 50, 100]) {
+      const bleed = blurBleed({ mode: 'radial', amount, center_x: center, center_y: center }, ref) * 500
+      const range = blurZoomRange(amount)
+      if (range * 500 < 1) { expect(bleed).toBe(0); continue }
+      // 每道最多缩到 1 − 15/16 × 本道范围；道数越多累计越小，取 4 道作上界。
+      const shrink = [1, 2, 3, 4].reduce((product, index) => product * (1 - range * 15 / 16 ** index), 1)
+      const reach = 800 * Math.max(center / 100, 1 - center / 100) * (1 / shrink - 1)
       expect(bleed).toBeGreaterThanOrEqual(reach)
     }
   })

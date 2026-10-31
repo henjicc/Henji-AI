@@ -9,11 +9,15 @@
 import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParam, VideoEditBuiltinParams } from './builtinEffects'
 
 export interface EffectParamText { name: string; text: string; group?: string }
-const said = ({ name, text, group }: EffectParamText): Pick<VideoEditBuiltinParam, 'name' | 'tooltip' | 'description' | 'group'> => ({ name, tooltip: text, description: text, ...(group ? { group } : {}) })
+const said = ({ name, text, group }: EffectParamText): Pick<VideoEditBuiltinParam, 'name' | 'description' | 'group'> => ({ name, description: text, ...(group ? { group } : {}) })
+/** 硬范围比滑块宽时，滑块仍走 0–100（或 −100–100），点数字可输入到硬范围。 */
+const soft = (hard: number | undefined, softMin: number, softMax: number): { min: number; max: number; softMin?: number; softMax?: number } =>
+  hard === undefined ? { min: softMin, max: softMax } : { min: softMin < 0 ? -hard : 0, max: hard, softMin, softMax }
 
 export const effectParam = {
-  amount: (key: string, value: number, words: EffectParamText): VideoEditBuiltinParam => ({ key, type: 'number', unit: 'strength', min: 0, max: 100, step: 1, default: value, animatable: true, ...said(words) }),
-  signed: (key: string, value: number, words: EffectParamText): VideoEditBuiltinParam => ({ key, type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: value, animatable: true, ...said(words) }),
+  /** `hardMax`：可以输入的上限（超出滑块的 100 仍有意义时写）。 */
+  amount: (key: string, value: number, words: EffectParamText, hardMax?: number): VideoEditBuiltinParam => ({ key, type: 'number', unit: 'strength', ...soft(hardMax, 0, 100), step: 1, default: value, animatable: true, ...said(words) }),
+  signed: (key: string, value: number, words: EffectParamText, hardLimit?: number): VideoEditBuiltinParam => ({ key, type: 'number', unit: 'strength', ...soft(hardLimit, -100, 100), step: 1, default: value, animatable: true, ...said(words) }),
   percent: (key: string, value: number, min: number, words: EffectParamText): VideoEditBuiltinParam => ({ key, type: 'number', unit: 'percent', min, max: 100, step: 1, default: value, animatable: true, ...said(words) }),
   angle: (key: string, value: number, words: EffectParamText): VideoEditBuiltinParam => ({ key, type: 'number', unit: 'degrees', min: -180, max: 180, step: 1, default: value, animatable: true, ...said(words) }),
   choice: (key: string, value: string, options: Array<{ value: string; label: string }>, words: EffectParamText): VideoEditBuiltinParam => ({ key, type: 'enum', default: value, options, ...said(words) }),

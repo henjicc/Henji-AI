@@ -2,7 +2,7 @@
  * 内置效果的 WGSL（任务 4.7b）：一个模块、多个片元入口，全部共用同一组绑定。
  * - binding 0 `source`：本道工序的输入；binding 3 `original`：效果的原始输入（锐化、发光叠回原图时用）。
  * - binding 2 是 16 个 float：`size` = (目标宽, 目标高, 输入宽, 输入高)，`a`/`b`/`c` 由 `videoEditBuiltinEffectPasses.ts` 按入口打包。
- * 画面是预乘透明度的 sRGB 编码值；改颜色的入口先还原直通色，曝光与白平衡在线性光里计算。
+ * 画面是预乘透明度的 sRGB 编码值；改颜色的入口先还原直通色，均匀模糊与发光在线性光里计算。
  * 所有入口不读时间、不用随机数（胶片颗粒的种子来自帧号），同一帧预览与导出结果相同。
  * 视频过渡（`tr_*`）：`source` 是前一段、`original` 是后一段，`c` = (进度 0..1, 前一段为空, 后一段为空, 备用)；
  * 单侧过渡空着的一侧按透明处理（与交叉溶解的单侧语义一致）。
@@ -13,8 +13,9 @@ import { adjustmentPassesWgsl } from '@/core/imaging/effects/wgsl/adjustmentPass
 import { GLOW_ENTRIES, GLOW_WGSL } from './glow'
 import { CHROMATIC_ENTRIES, CHROMATIC_WGSL } from './chromaticAberration'
 import { GAUSSIAN_WGSL } from '@/core/imaging/effects/wgsl/gaussian'
-const INLINE_EFFECT_ENTRIES = ['lens', 'effect_mix', 'effect_over', 'effect_opacity', 'copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...INLINE_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_copy', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_ENTRIES, ...CHROMATIC_ENTRIES] as const
+import { BLUR_ENTRIES, BLUR_WGSL } from './blur'
+const INLINE_EFFECT_ENTRIES = ['effect_mix', 'effect_over', 'effect_opacity', 'copy', 'blur', 'unsharp', 'black_white', 'invert', 'mosaic', 'vignette', 'grain', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...INLINE_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_copy', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_ENTRIES, ...CHROMATIC_ENTRIES, ...BLUR_ENTRIES] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
@@ -25,18 +26,6 @@ ${GAUSSIAN_WGSL}
 @fragment fn effect_over(v: Vertex) -> @location(0) vec4f { let image = tap(uvOf(v)); return image + tapOriginal(uvOf(v)) * (1.0 - image.a); }
 @fragment fn effect_opacity(v: Vertex) -> @location(0) vec4f { return tap(uvOf(v)) * u.a.x; }
 @fragment fn effect_mix(v: Vertex) -> @location(0) vec4f { return mix(tapOriginal(uvOf(v)), tap(uvOf(v)), u.a.x); }
-@fragment fn lens(v: Vertex) -> @location(0) vec4f {
- let spacing=u.a.x*sqrt(3.14159265/96.0); let lod=max(0.0,log2(spacing*.7));
- // Jimenez 交错梯度噪声按像素旋转圆盘，打散相邻像素的取样条纹；不含帧种子以保持时间稳定。
- let rotation=6.28318531*fract(52.9829189*fract(dot(floor(v.position.xy),vec2f(.06711056,.00583715))));
- var sum=vec4f(0); var total=0.0;
- for(var i=0u;i<96u;i++) {
-  let k=(f32(i)+.5)/96.0; let r=sqrt(k)*u.a.x; let a=f32(i)*2.39996323+rotation;
-  let c=textureSampleLevel(source,s,(v.position.xy+r*vec2f(cos(a),sin(a)))/u.size.xy,lod);
-  let w=1.0+2.0*pow(max(max(c.r,c.g),c.b),4.0); sum+=c*w; total+=w;
- }
- return sum/total;
-}
 @fragment fn gaussian_copy(v: Vertex) -> @location(0) vec4f { return textureLoad(source, vec2i(v.position.xy), 0); }
 @fragment fn gaussian_linear(v: Vertex) -> @location(0) vec4f {
  let c = textureLoad(source, vec2i(v.position.xy), 0);
@@ -58,43 +47,7 @@ ${GAUSSIAN_WGSL}
 @fragment fn gaussian_resample(v: Vertex) -> @location(0) vec4f {
  return gaussianSample(source, v.position.xy * u.a.xy - 0.5, vec2i(u.b.yz), u.b.x > 0.5, vec2i(0), u.b.w > 0.5);
 }
-/** 等权直线取样（方向模糊）：a = (每步 u, 每步 v, 取样数)，以当前像素为中心。 */
-@fragment fn line(v: Vertex) -> @location(0) vec4f {
- let uv = uvOf(v); let n = i32(u.a.z); let middle = (u.a.z - 1.0) * 0.5;
- var sum = vec4f(0.0);
- for (var i = 0; i < n; i++) { sum += tap(uv + u.a.xy * (f32(i) - middle)); }
- return sum / u.a.z;
-}
-
-/** 朝中心缩放取样（缩放模糊）：a = (中心 u, 中心 v, 每步缩放, 取样数)。 */
-@fragment fn zoom(v: Vertex) -> @location(0) vec4f {
- let uv = uvOf(v); let n = i32(u.a.w);
- var sum = vec4f(0.0);
- for (var i = 0; i < n; i++) { sum += tap(u.a.xy + (uv - u.a.xy) * (1.0 - u.a.z * f32(i))); }
- return sum / u.a.w;
-}
-
-/** a = (亮度偏移, 对比度倍数)。 */
-@fragment fn brightness_contrast(v: Vertex) -> @location(0) vec4f {
- let c = tap(uvOf(v));
- return premul((straight(c) - 0.5) * u.a.y + 0.5 + u.a.x, c.a);
-}
-
-/** 线性光里逐通道增益（曝光、白平衡）：a.rgb。 */
-@fragment fn gain_linear(v: Vertex) -> @location(0) vec4f {
- let c = tap(uvOf(v));
- return premul(toSrgb(toLinear(straight(c)) * u.a.rgb), c.a);
-}
-
-/** a = (cos 色相角, sin 色相角, 饱和度倍数, 明度 -1..1)；黑白就是饱和度 0。 */
-@fragment fn hue_saturation(v: Vertex) -> @location(0) vec4f {
- let c = tap(uvOf(v)); var rgb = straight(c);
- let k = vec3f(0.57735027);
- rgb = rgb * u.a.x + cross(k, rgb) * u.a.y + k * dot(k, rgb) * (1.0 - u.a.x);
- rgb = mix(vec3f(dot(rgb, LUMA)), rgb, u.a.z);
- rgb = select(rgb * (1.0 + u.a.w), rgb + (1.0 - rgb) * u.a.w, u.a.w > 0.0);
- return premul(rgb, c.a);
-}
+@fragment fn black_white(v: Vertex) -> @location(0) vec4f { let c = tap(uvOf(v)); return vec4f(vec3f(dot(c.rgb, LUMA)), c.a); }
 
 @fragment fn invert(v: Vertex) -> @location(0) vec4f { let c = tap(uvOf(v)); return premul(1.0 - straight(c), c.a); }
 
@@ -108,14 +61,18 @@ ${GAUSSIAN_WGSL}
  return sum / 16.0;
 }
 
-/** a = (数量 -1..1, 开始位置, 羽化宽度, 宽高比)；距离按画面形状归一化，角落为 1。 */
+/**
+ * 暗角：a = (数量 0..1, 开始位置, 羽化宽度, 宽高比)，b.rgb 四周的颜色；距离按画面形状归一化，角落为 1。
+ * 平滑渐变在暗底上会出色带：被暗角改动的像素加 ±半级（1/510）抖动，加在预乘值上，叠到底色后正好是半级，不随透明度缩小。
+ */
 @fragment fn vignette(v: Vertex) -> @location(0) vec4f {
- let uv = uvOf(v); let c = tap(uv); var rgb = straight(c);
+ let uv = uvOf(v); let c = tap(uv);
  let q = (uv - 0.5) * vec2f(u.a.w, 1.0);
  let r = length(q) / length(vec2f(u.a.w, 1.0) * 0.5);
- let t = smoothstep(u.a.y - u.a.z * 0.5, u.a.y + u.a.z * 0.5, r);
- rgb = select(rgb * (1.0 - u.a.x * t), rgb + (1.0 - rgb) * (-u.a.x) * t, u.a.x < 0.0);
- return premul(rgb, c.a);
+ let t = u.a.x * smoothstep(u.a.y - u.a.z * 0.5, u.a.y + u.a.z * 0.5, r);
+ let shaded = premul(mix(straight(c), u.b.rgb, t), c.a);
+ let dither = select(0.0, (hash(vec2u(v.position.xy), 0u) - 0.5) / 255.0, t > 0.0 && c.a > 0.0);
+ return vec4f(clamp(shaded.rgb + dither, vec3f(0.0), vec3f(c.a)), c.a);
 }
 
 fn hash(p: vec2u, seed: u32) -> f32 {
@@ -229,4 +186,5 @@ fn zoomTap(uv: vec2f, center: vec2f, scale: f32, spread: f32, late: bool) -> vec
 }
 ${GLOW_WGSL}
 ${CHROMATIC_WGSL}
+${BLUR_WGSL}
 `

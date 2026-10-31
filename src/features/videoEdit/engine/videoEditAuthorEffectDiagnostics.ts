@@ -1,11 +1,15 @@
 import ts from 'typescript'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinParamValue } from '@/core/videoEdit/builtinEffects'
+import { retiredBlurParams } from '@/core/videoEdit/blur'
 
 export interface AuthorEffectDiagnostic { start: number; length: number; message: string }
 /** 常量只读 AST 与 const 绑定，动态表达式留给逐帧校验。 */
-export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeChecker): AuthorEffectDiagnostic[] {
+/** henji-effects 1.0.0 的 blur() 按 mode 产出并进“模糊”前的 ID，参数也是旧的。 */
+const BLUR_1_0_IDS: Readonly<Record<string, string>> = { gaussian: 'gaussian_blur', directional: 'directional_blur', radial: 'zoom_blur', lens: 'lens_blur' }
+/** `effectsVersion` 是这份源码锁定的 henji-effects 版本，旧版本的工厂按它当时的参数检查。 */
+export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeChecker, effectsVersion?: string): AuthorEffectDiagnostic[] {
   const result: AuthorEffectDiagnostic[] = [], factories = new Map<ts.Symbol, string>(), namespaces = new Set<ts.Symbol>()
-  const definitions = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => (definition.space === 'layer' || definition.space === 'layer-only') && definition.author)
+  const definitions = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => definition.space === 'layer' && definition.author)
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== 'henji-effects') continue
     const binding = statement.importClause?.namedBindings
@@ -56,7 +60,10 @@ export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeC
     }
     return undefined
   }
-  const validate = (node: ts.Node, id: unknown, params: unknown): void => {
+  const validate = (node: ts.Node, requested: unknown, raw: unknown): void => {
+    // 旧模糊 ID 与运行时一样先换成“模糊”的参数再检查。
+    const retired = typeof requested === 'string' && raw && typeof raw === 'object' ? retiredBlurParams(requested, raw as Record<string, unknown>) : undefined
+    const id = retired ? 'blur' : requested, params = retired ?? raw
     const definition = definitions.find(value => value.id === id)
     if (!definition || !params || typeof params !== 'object') return
     for (const [key, value] of Object.entries(params)) {
@@ -74,9 +81,10 @@ export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeC
       const factory = symbol && (ts.isIdentifier(expression) ? factories.get(symbol) : ts.isPropertyAccessExpression(expression) && namespaces.has(symbol) ? expression.name.text : undefined)
       if (factory && node.arguments[0]) {
         const params = constant(node.arguments[0])
-        const mode = params && typeof params === 'object' && 'mode' in params ? params.mode : 'gaussian'
-        const definition = definitions.find(value => value.author?.factory === factory && (factory !== 'blur' || value.author.mode === mode))
-        validate(node.arguments[0], definition?.id, params)
+        if (factory === 'blur' && effectsVersion === '1.0.0' && params && typeof params === 'object') {
+          const { mode = 'gaussian', ...rest } = params as Record<string, unknown>
+          validate(node.arguments[0], BLUR_1_0_IDS[String(mode)], rest)
+        } else validate(node.arguments[0], definitions.find(value => value.author?.factory === factory)?.id, params)
       }
     }
     if (ts.isObjectLiteralExpression(node)) {

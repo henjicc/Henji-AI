@@ -309,7 +309,7 @@ it.each(['closed', 'stacked', 'visible', 'popout_stacked', 'popout_visible'] as 
   })
   const groups = dock.groups.map(group => group.id)
   if (opened.length) opened[0].child.focus.mockClear()
-  fireEvent.doubleClick(view.container.querySelector('[data-video-edit-effects-entry="effect:gaussian_blur"]')!)
+  fireEvent.doubleClick(view.container.querySelector('[data-video-edit-effects-entry="effect:blur"]')!)
   if (opened.length) {
     expect(dock.getPanel('effects')).toBeUndefined()
     expect(listVideoEditPopouts()[0].active).toBe('effects')
@@ -344,7 +344,7 @@ it('新效果延迟出现时逐帧重查，找到或耗尽重试后停止，替�
   const view = render(<VideoEditDock instance={instance} onError={vi.fn()} onApiChange={value => { api = value }} />)
   const dock = api as unknown as DockviewApi
   act(() => { dock.layout(1440, 860); dock.getPanel('effects_library')!.api.setActive() })
-  const add = (): void => { fireEvent.doubleClick(view.container.querySelector('[data-video-edit-effects-entry="effect:gaussian_blur"]')!) }
+  const add = (): void => { fireEvent.doubleClick(view.container.querySelector('[data-video-edit-effects-entry="effect:blur"]')!) }
   const runFrame = (): void => {
     const pending = [...frames.values()]; frames.clear()
     pending.forEach(callback => callback(id * 16))

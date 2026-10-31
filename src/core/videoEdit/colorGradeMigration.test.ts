@@ -30,7 +30,7 @@ describe('video color grade v1 → v2 migration', () => {
     expect(videoEditBuiltinEffectIssue(next)).toBeUndefined()
   })
   it('walks documents and preset packages, leaving other effects untouched', () => {
-    const blur = { id: 'b', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: { temperature: 1 } } }
+    const blur = { id: 'b', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: { temperature: 1 } } }
     const grade = { id: 'g', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { temperature: 25 } } }
     const content = { sequences: [{ clips: [{ effects: [grade, blur] }] }] }
     const migrated = videoEditDocumentKind.migrations[17](content) as typeof content

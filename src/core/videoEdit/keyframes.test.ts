@@ -1,7 +1,7 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
 import { videoEditComposition, videoEditDocumentSchema, splitVideoEditClip, changeVideoEditSequenceSettings, type VideoEditClip } from './document'
-import { evaluateVideoEditClip, evaluateVideoEditKeyframes, sliceVideoEditCurves, videoEditKeyframesSchema, type VideoEditKeyframes } from './keyframes'
+import { evaluateVideoEditClip, evaluateVideoEditKeyframes, sliceVideoEditCurves, validateVideoEditBuiltinCurves, videoEditKeyframesSchema, type VideoEditKeyframes } from './keyframes'
 import { videoEditClipCenterPosition, videoEditClipToFrame, videoEditFrameToClip } from './clipGeometry'
 import { applyVideoEditRateStretch } from './clipSpeedEdits'
 import { defaultVideoEditTextStyle } from './text'
@@ -36,7 +36,7 @@ function fixture(): ReturnType<typeof createVideoEditDocument> {
 it('过冲在消费范围内夹取，拆分后仍可保存且与原曲线逐帧一致', () => {
   const document = fixture(); const original = document.sequences[0].clips[0]
   original.curves = { opacity: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: 100, value: 1, interpolation: 'linear' }] }
-  original.effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {}, curves: { sigma_fraction_height: [{ ...original.curves.opacity![0], value: 0 }, { time: 100, value: 100, interpolation: 'linear' }] } } }]
+  original.effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: {}, curves: { amount: [{ ...original.curves.opacity![0], value: 0 }, { time: 100, value: 100, interpolation: 'linear' }] } } }]
   expect(evaluateVideoEditClip(original, 50).opacity).toBe(1)
   const sequence = splitVideoEditClip(document.sequences[0], 'clip', 50)
   expect(videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })).toBeTruthy()
@@ -44,7 +44,7 @@ it('过冲在消费范围内夹取，拆分后仍可保存且与原曲线逐帧�
     const clipped = evaluateVideoEditClip(sequence.clips[frame < 50 ? 0 : 1], frame)
     const before = evaluateVideoEditClip(original, frame)
     expect(clipped.opacity).toBeCloseTo(before.opacity, 7)
-    expect(clipped.effects![0].builtin!.params.sigma_fraction_height).toBeCloseTo(Number(before.effects![0].builtin!.params.sigma_fraction_height), 5)
+    expect(clipped.effects![0].builtin!.params.amount).toBeCloseTo(Number(before.effects![0].builtin!.params.amount), 5)
   }
   sequence.clips[1].curves!.opacity![0].easeValues = [0, 99]
   expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })).toThrow()
@@ -61,13 +61,13 @@ it('停用固有分区按默认渲染，保存参数和关键帧，再打开恢�
   expect(restored.x).toBe(.4); expect(restored.opacity).toBe(.15625); expect(restored.text).toBe('标题')
   expect(restored.textStyle?.fontSize).toBe(100)
 })
-it('文档拒绝片段固有亮度及其关键帧，内置亮度效果仍可保存', () => {
+it('文档拒绝片段固有亮度及其关键帧，调色效果的曝光仍可保存', () => {
   const document = fixture(); const clip = document.sequences[0].clips[0]
   const withClip = (value: unknown) => ({ ...document, sequences: [{ ...document.sequences[0], clips: [value] }] })
   expect(videoEditDocumentSchema.safeParse(withClip({ ...clip, brightness: 1 })).success).toBe(false)
   expect(videoEditDocumentSchema.safeParse(withClip({ ...clip, curves: { brightness: curve('linear') } })).success).toBe(false)
-  clip.effects = [{ id: 'brightness-effect', name: '亮度与对比度', enabled: true, amount: 1, builtin: { id: 'brightness_contrast', params: { brightness: 25 } } }]
-  expect(videoEditDocumentSchema.parse(document).sequences[0].clips[0].effects![0].builtin!.params.brightness).toBe(25)
+  clip.effects = [{ id: 'exposure-effect', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25 } } }]
+  expect(videoEditDocumentSchema.parse(document).sequences[0].clips[0].effects![0].builtin!.params.exposure).toBe(0.25)
 })
 it('集中插值支持边界、线性、定格、固定三次贝塞尔；拒绝乱序/重复', () => {
   for (const interpolation of ['linear', 'hold', 'ease'] as const) {
@@ -107,8 +107,10 @@ it('旧文件兼容；片内时间、值、内置效果参数与插值受文档�
   const result = evaluateVideoEditClip(clip, 50)
   expect(result.effects![0].builtin!.params.exposure).toBe(1)
   expect(clip.effects[0].builtin!.params).toEqual({})
+  // 存档里越界的关键帧照样读入、求值时钳制；新写入仍严格报错。
   clip.effects[0].builtin!.curves!.exposure[1].value = 500
-  expect(() => videoEditDocumentSchema.parse(doc)).toThrow('曝光')
+  expect(evaluateVideoEditClip(videoEditDocumentSchema.parse(doc).sequences[0].clips[0], 100).effects![0].builtin!.params.exposure).toBe(4)
+  expect(() => validateVideoEditBuiltinCurves(clip.effects![0].builtin!)).toThrow('曝光')
 })
 it('帧率与比率拉伸按新帧网格重定位关键帧，冲突去重不越界', () => {
   const doc = fixture(); const sequence = doc.sequences[0]

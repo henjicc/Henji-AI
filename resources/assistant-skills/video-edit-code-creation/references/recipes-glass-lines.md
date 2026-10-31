@@ -48,7 +48,7 @@ export default {
   params: [
     { key: "label", type: "text", title: "透镜说明", default: "看见信息的层次", maxLength: 64, layer: "label" },
     { key: "accent", type: "color", title: "引导色", default: "#99e0f2" },
-    { key: "frost", type: "number", title: "磨砂像素", default: 12, min: 0, max: 40, step: 1 },
+    { key: "frost", type: "number", title: "磨砂程度", default: 45, min: 0, max: 100, step: 1 },
     { key: "seconds", type: "number", title: "线条生长秒数", default: .8, min: .3, max: 1.5, step: .1 }
   ],
   layers(params, width, height) {
@@ -57,7 +57,7 @@ export default {
     return [
       { id: "backdrop", draw(ctx, time) { backdrop(ctx, width, height, time) } },
       { id: "lens", bounds: [0, 0, width, height], clip: [cx - r, cy - r, cx + r, cy + r],
-        effects: () => [blur({ sigma_fraction_height: params.frost / height })],
+        effects: () => [blur({ amount: params.frost })],
         draw(ctx, time) { backdrop(ctx, width, height, time) } },
       { id: "edge", draw(ctx) {
         ctx.fillStyle = "rgba(255, 255, 255, .06)"; ctx.fillRect(cx - r, cy - r, r * 2, r * 2)

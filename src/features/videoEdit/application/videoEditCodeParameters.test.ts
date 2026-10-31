@@ -83,7 +83,7 @@ it('code animation candidate is isolated, stale-safe, one undo and persists thro
 it('mask path candidate commits through the native effect and public read/write, saves/reopens and undoes', async () => {
   const { owner, target } = await setup(); const shape = { ...createVideoEditMaskShape('rect', 'shape'), feather: 0 }
   editVideoProject(target.projectId, document => { document = structuredClone(document);
-    document.sequences[0].clips[0].effects = [{ id: 'mask-effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect('gaussian_blur')) }, mask: { regionId: 'shapes', shapes: [shape] } }]
+    document.sequences[0].clips[0].effects = [{ id: 'mask-effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect('blur')) }, mask: { regionId: 'shapes', shapes: [shape] } }]
     return document
   })
   const maskTarget = { ...target, effectId: 'mask-effect', shapeId: shape.id }

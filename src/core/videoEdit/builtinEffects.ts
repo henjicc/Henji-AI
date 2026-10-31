@@ -1,8 +1,8 @@
 import { layerEffectBleed, type LayerEffectReference } from './layerEffectGeometry'
 /**
  * 内置效果（实施方案第六节、任务 4.7）：每个效果登记一次，效果面板、效果控件与助手都读这里。
- * - 参数用“意图量纲”：0–100 的强度、角度（度）、曝光档、颜色、选项与开关；每项写清范围、默认值、单位、
- *   给用户的悬停说明（`tooltip`）和给助手的语义说明（`description`，如“强度 30 ≈ 背景轻微虚化”）。
+ * - 参数用“意图量纲”：0–100 的强度、角度（度）、曝光档、颜色、选项与开关；每项写清范围、默认值、单位和一份说明
+ *   （`description`，人和助手读同一句，如“40（默认）背景虚化”）。范围分硬范围 min/max 与滑块用的 softMin/softMax。
  * - 空间量（模糊半径、马赛克块大小、颗粒大小、偏移）一律相对画面高度，渲染尺寸变化（预览缩放、回放分辨率）效果看起来一样。
  * - 实现只有一份：剪辑合成器里的 GPU 着色器（`features/videoEdit/engine/videoEditBuiltinEffect*`），预览与导出同一路径，结果确定。
  * 存入片段效果链 `clip.effects` 时只记 `{ id, params }`；缺的参数按默认值，旧文件没有这个字段不受影响。
@@ -17,7 +17,11 @@ import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
 import { RECORDING_CURSOR_DEFINITION } from './recordingCursorDefinition'
 import { RECORDING_ZOOM_DEFINITION } from './recordingZoomDefinition'
 import { RECORDING_FRAME_DEFINITION } from './recordingFrame'
-import { GAUSSIAN_EFFECT } from '../imaging/effects/gaussian'
+import { BLUR_EFFECT_DEFINITION } from './blur'
+import { SHARPEN_EFFECT_DEFINITION } from './sharpen'
+import { MOSAIC_EFFECT_DEFINITION } from './mosaic'
+import { VIGNETTE_EFFECT_DEFINITION } from './vignette'
+import { FILM_GRAIN_EFFECT_DEFINITION } from './filmGrain'
 
 export type { ImagingParamValue as VideoEditBuiltinParamValue, ImagingParams as VideoEditBuiltinParams, ImagingUnit as VideoEditBuiltinUnit, ImagingParam as VideoEditBuiltinParam } from '../imaging/parameterDefinition'
 import { IMAGING_UNIT_LABELS, type ImagingParamValue as VideoEditBuiltinParamValue, type ImagingParam as VideoEditBuiltinParam, type ImagingParams as VideoEditBuiltinParams, type ImagingUnit as VideoEditBuiltinUnit } from '../imaging/parameterDefinition'
@@ -26,17 +30,20 @@ export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, strin
 /** 内置效果作用于画面还是声音：画面效果只加到画面片段，音频效果只加到声音片段。 */
 export type VideoEditBuiltinMedia = 'video' | 'audio'
 export interface VideoEditBuiltinEffectDefinition {
-  /** layer 可用于图层及片段；layer-only 仅用于具备完整 mip 的作者图层。 */
-  space?: 'layer' | 'layer-only' | 'frame' | 'clip'
+  /** layer 可用于作者图层及片段；不写只用于片段。 */
+  space?: 'layer' | 'frame' | 'clip'
   bleed?: (params: VideoEditBuiltinParams, reference: LayerEffectReference) => number
-  author?: { factory: string; mode?: string }
+  author?: { factory: string }
   id: string
   name: string
+  /** 效果面板搜索用的别名：并入它的旧效果名、常见英文名。 */
+  aliases?: readonly string[]
   group: VideoEditBuiltinGroup
   /** 缺省为画面效果；音频效果写 `audio`（登记在 `audioEffectDefinitions.ts`）。 */
   media?: VideoEditBuiltinMedia
-  tooltip: string
-  /** 给助手的语义说明：作用、适用场景、常用取值。 */
+  /** 只在尚未改写成一份说明的效果上另给效果面板一句短话；不写时面板与助手都读 `description`。 */
+  tooltip?: string
+  /** 一份说明，人和助手都读：做什么、什么时候用，必要时一句注意事项。 */
   description: string
   params: readonly VideoEditBuiltinParam[]
   /** Thumbnail recipe, rendered by the trusted library on the existing host device. */
@@ -45,62 +52,18 @@ export interface VideoEditBuiltinEffectDefinition {
 export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = IMAGING_UNIT_LABELS
 
 const strength = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: 0, max: 100, step: 1, default: fallback, tooltip, description })
-const signed = (key: string, name: string, tooltip: string, description: string, fallback = 0): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: fallback, tooltip, description })
-const angle = (key: string, name: string, fallback: number, min: number, max: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'degrees', min, max, step: 1, default: fallback, tooltip, description })
 const percent = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'percent', min: 0, max: 100, step: 1, default: fallback, tooltip, description })
 /** 参数构造（过渡参数登记复用，量纲与内置效果一致）。 */
 export { strength as videoEditStrengthParam, percent as videoEditPercentParam }
 
 const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
-  { space: 'layer', author: { factory: 'blur', mode: 'gaussian' }, bleed: (p, r) => layerEffectBleed(GAUSSIAN_EFFECT.id, p, r), id: GAUSSIAN_EFFECT.id, name: GAUSSIAN_EFFECT.name, group: 'blur', tooltip: '均匀柔化整个画面，可只模糊水平或垂直方向', description: GAUSSIAN_EFFECT.description, params: GAUSSIAN_EFFECT.parameters },
-  { space: 'layer', author: { factory: 'blur', mode: 'directional' }, bleed: (p, r) => layerEffectBleed('directional_blur', p, r), id: 'directional_blur', name: '方向模糊', group: 'blur', tooltip: '沿一个方向拉出拖影，表现快速移动', description: '沿指定角度做线性拖影模糊，用于速度感、晃动感。',
-    params: [
-      angle('direction', '方向', 0, -180, 180, '拖影的方向，0° 为水平', '拖影方向角度：0 水平，90 垂直，45 斜向；正负 180 等价。'),
-      strength('length', '模糊长度', 30, '拖影长度，0 没有拖影', '拖影长度：0 无；30 ≈ 画面高度的 3% 的轻微动感；100 ≈ 画面高度的 10% 的强烈拖影。'),
-    ] },
-  { space: 'layer', author: { factory: 'blur', mode: 'radial' }, bleed: (p, r) => layerEffectBleed('zoom_blur', p, r), id: 'zoom_blur', name: '缩放模糊', group: 'blur', tooltip: '从中心向外放射的模糊，表现冲刺或聚焦', description: '以中心点为原点向外放射的径向模糊，用于冲击感、转场前的冲刺感。',
-    params: [
-      strength('strength', '强度', 30, '放射模糊程度，0 不模糊', '0 无；20 ≈ 轻微冲刺感；50 ≈ 明显放射；100 ≈ 边缘几乎完全拉丝（约 20% 的缩放拖影）。'),
-      percent('center_x', '中心水平位置', 50, '放射中心在画面中的水平位置', '放射中心的水平位置：0 左边缘，50 居中，100 右边缘。'),
-      percent('center_y', '中心垂直位置', 50, '放射中心在画面中的垂直位置', '放射中心的垂直位置：0 上边缘，50 居中，100 下边缘。'),
-    ] },
-  { space: 'layer', author: { factory: 'sharpen' }, bleed: (p, r) => layerEffectBleed('sharpen', p, r), id: 'sharpen', name: '锐化', group: 'blur', tooltip: '加强边缘对比，让画面更清晰', description: '增强细节与边缘对比（反锐化掩模）。适度使用，过高会出现白边与噪点。',
-    params: [strength('amount', '锐化量', 30, '锐化程度，0 不锐化', '0 无；20 ≈ 轻微提清晰度；50 ≈ 明显锐利；100 ≈ 很强，容易出现白边。')] },
-  { id: 'lens_blur', space: 'layer-only', author: { factory: 'blur', mode: 'lens' }, bleed: (p, r) => layerEffectBleed('lens_blur', p, r), name: '镜头模糊', group: 'blur', tooltip: '圆形光圈的镜头虚化', description: '柔化图层并保留圆形光斑与明亮高光，适合镜头失焦。', params: [{ key: 'radius_fraction_height', name: '半径', type: 'number', unit: 'fraction_height', min: 0, max: Number.MAX_VALUE, step: .001, default: .009, tooltip: '半径占逻辑画幅高度的比例', description: '半径占逻辑画幅高度的比例，不随图层 bounds 改变。' }] },
-  { id: 'brightness_contrast', name: '亮度与对比度', group: 'color', tooltip: '整体提亮或压暗，拉开或减弱明暗反差', description: '整体调整亮度与对比度。',
-    params: [
-      signed('brightness', '亮度', '正值提亮，负值压暗', '-100 很暗，0 不变，+30 ≈ 明显提亮，+100 接近过曝。'),
-      signed('contrast', '对比度', '正值增强反差，负值让画面变灰', '-100 完全灰平，0 不变，+30 ≈ 明显增强反差，+100 对比度约 3 倍。'),
-    ] },
-  { id: 'exposure', name: '曝光', group: 'color', tooltip: '按相机曝光档调整亮度，高光过渡更自然', description: '在线性光下按档位调整曝光，比“亮度”更自然地处理高光。',
-    params: [{ key: 'exposure', name: '曝光', type: 'number', unit: 'stops', min: -4, max: 4, step: 0.1, default: 0, tooltip: '每增加 1 档亮度翻倍', description: '曝光档：+1 亮度翻倍，-1 减半；常用 -1 到 +1；0 不变。' }] },
-  { id: 'white_balance', name: '色温与色调', group: 'color', tooltip: '白平衡：让画面偏暖或偏冷，偏绿或偏洋红', description: '白平衡调整，用于校正偏色或营造冷暖氛围。',
-    params: [
-      signed('temperature', '色温', '正值偏暖（黄），负值偏冷（蓝）', '-100 很冷（蓝），0 不变，+20 ≈ 温暖午后，+100 很暖（橙黄）。'),
-      signed('tint', '色调', '正值偏洋红，负值偏绿', '-100 明显偏绿，0 不变，+100 明显偏洋红；常用于修正荧光灯偏绿。'),
-    ] },
-  { id: 'hue_saturation', name: '色相与饱和度', group: 'color', tooltip: '旋转色相、调整鲜艳程度与明度', description: '整体旋转色相并调整饱和度与明度。',
-    params: [
-      angle('hue', '色相', 0, -180, 180, '整体旋转颜色，180° 为互补色', '色相旋转角度：0 不变，±180 变为互补色；小角度（±10）可微调肤色。'),
-      signed('saturation', '饱和度', '正值更鲜艳，-100 为黑白', '-100 完全黑白，-30 ≈ 低饱和电影感，0 不变，+30 ≈ 鲜艳，+100 饱和度翻倍。'),
-      signed('lightness', '明度', '正值整体变亮偏白，负值变暗偏黑', '-100 全黑，0 不变，+100 全白。'),
-    ] },
-  { space: 'layer', author: { factory: 'blackWhite' }, bleed: (p, r) => layerEffectBleed('black_white', p, r), id: 'black_white', name: '黑白', group: 'color', tooltip: '把画面变成黑白', description: '按人眼亮度把画面转成黑白（回忆、纪实感）；只想降低鲜艳度时把效果强度调到 30%–70%，或改用“色相与饱和度”。', params: [] },
+  BLUR_EFFECT_DEFINITION,
+  SHARPEN_EFFECT_DEFINITION,
+  { space: 'layer', author: { factory: 'blackWhite' }, bleed: (p, r) => layerEffectBleed('black_white', p, r), id: 'black_white', name: '黑白', group: 'color', aliases: ['去色', '灰度', 'grayscale', 'black and white'], description: '按人眼对明暗的感受把画面变成黑白，适合回忆、纪实感。只想降低鲜艳度时把效果强度调到 30%–70%，或用调色里的饱和度。', params: [] },
   { id: 'invert', name: '反相', group: 'color', tooltip: '把颜色变成互补色（底片效果）', description: '反转颜色成互补色（底片效果），用于闪回、惊悚、故障风；保留透明度。部分反相可降低效果强度。', params: [] },
-  { space: 'layer', author: { factory: 'mosaic' }, bleed: (p, r) => layerEffectBleed('mosaic', p, r), id: 'mosaic', name: '马赛克', group: 'stylize', tooltip: '把画面变成色块，常用于打码', description: '把画面切成方块并取每块平均颜色，用于打码、像素风。块大小随画面高度缩放。',
-    params: [strength('block_size', '块大小', 30, '色块大小，0 不打码', '0 无；10 ≈ 细小方块（画面高度的 1%）；30 ≈ 常规打码（3%）；100 ≈ 很大的色块（10%）。')] },
-  { id: 'vignette', name: '暗角', group: 'stylize', tooltip: '压暗（或提亮）画面四周，把视线引向中心', description: '让画面四周变暗（或变亮），聚焦中心、增加电影感。',
-    params: [
-      signed('amount', '数量', '正值压暗四周，负值提亮四周', '0 无；+30（默认）≈ 柔和电影暗角，+70 ≈ 浓重暗角，负值把四周提亮成白边。', 30),
-      percent('midpoint', '大小', 50, '暗角从多远开始，数值越大中心亮区越大', '暗角开始的位置：0 从中心就开始变暗，50 默认，100 只在最角落。'),
-      percent('feather', '羽化', 50, '暗角边缘过渡的柔和程度', '0 边缘很硬，50 默认柔和，100 非常柔和的大范围过渡。'),
-    ] },
-  { id: 'film_grain', name: '胶片颗粒', group: 'stylize', tooltip: '叠加随时间变化的胶片颗粒', description: '叠加逐帧变化的颗粒噪声，模拟胶片质感。颗粒大小随画面高度缩放，同一帧的颗粒每次渲染都相同。',
-    params: [
-      strength('amount', '强度', 30, '颗粒的明显程度', '0 无；15 ≈ 隐约的质感；30 ≈ 明显胶片感；100 ≈ 非常粗糙。'),
-      strength('size', '颗粒大小', 30, '颗粒的粗细', '0 最细（画面高度的约 0.05%）；30 默认；100 很粗（约 0.4%）。'),
-      { key: 'monochrome', name: '单色颗粒', type: 'boolean', default: true, tooltip: '关闭时颗粒带有彩色噪点', description: 'true 颗粒只改变明暗；false 各颜色通道独立的彩色颗粒。' },
-    ] },
+  MOSAIC_EFFECT_DEFINITION,
+  VIGNETTE_EFFECT_DEFINITION,
+  FILM_GRAIN_EFFECT_DEFINITION,
   CHROMATIC_ABERRATION_DEFINITION,
   GLOW_EFFECT_DEFINITION,
   { id: 'crop', name: '裁剪', group: 'frame', tooltip: '从四边裁掉画面，裁掉的部分透出下层', description: '按画面百分比从四边裁掉，裁掉部分变透明（可透出下层轨道）。做宽银幕黑边时把上下各裁 12% 左右。',
@@ -140,7 +103,7 @@ export const VIDEO_EDIT_BUILTIN_REF_PREFIX = 'effect:'
 /** 内置效果作用于画面还是声音；不认识的效果按画面效果。 */
 export function videoEditBuiltinEffectMedia(id: string): VideoEditBuiltinMedia { return definitions.get(id)?.media ?? 'video' }
 export function videoEditBuiltinRefId(id: string): string { return `${VIDEO_EDIT_BUILTIN_REF_PREFIX}${id}` }
-/** `effect:gaussian_blur` 或 `gaussian_blur` → 内置效果 ID；不是内置效果时返回 undefined。 */
+/** `effect:blur` 或 `blur` → 内置效果 ID；不是内置效果时返回 undefined。 */
 export function parseVideoEditBuiltinRefId(value: string): string | undefined {
   const id = value.startsWith(VIDEO_EDIT_BUILTIN_REF_PREFIX) ? value.slice(VIDEO_EDIT_BUILTIN_REF_PREFIX.length) : value
   return definitions.has(id) ? id : undefined
@@ -209,7 +172,7 @@ export function describeVideoEditParams(params: readonly VideoEditBuiltinParam[]
     ...(param.animatable !== undefined ? { animatable: param.animatable } : {}),
     ...(param.group ? { group: param.group } : {}),
     ...(param.visibleWhen ? { visibleWhen: `${param.visibleWhen.param} ${param.visibleWhen.in ? `为 ${param.visibleWhen.in.join('、')}` : 'notEquals' in param.visibleWhen ? `不为 ${param.visibleWhen.notEquals}` : `为 ${param.visibleWhen.equals}`} 时才起作用` } : {}),
-    ...(param.type === 'number' ? { min: param.min, max: param.max, unit: param.unit } : {}),
+    ...(param.type === 'number' ? { min: param.min, max: param.max, unit: param.unit, ...(param.softMin !== undefined ? { softMin: param.softMin } : {}), ...(param.softMax !== undefined ? { softMax: param.softMax } : {}) } : {}),
     ...(param.type === 'enum' ? { options: param.options.map(option => option.value) } : {}),
   }))
 }
@@ -220,14 +183,35 @@ export function validateVideoEditBuiltinParams(id: string, params: Readonly<Reco
   const full = normalizeVideoEditBuiltinParams(id, params)
   return Object.fromEntries(Object.keys(params).map(key => [key, full[key]]))
 }
-/** 文档校验：未知效果、未知参数或越界值返回原因；缺的参数允许（按默认值，便于以后给效果加参数）。 */
+/**
+ * 已移除的内置效果：登记里已没有这个 ID（并进了别的效果或删除了）。工程、预设库、风格包与模板里原样保留，
+ * 渲染与混音跳过，效果控件里显示“已移除”并可删除；新建与写入参数仍会拒绝它。
+ */
+export function isRemovedVideoEditBuiltinEffect(id: string): boolean { return !definitions.has(id) }
+/**
+ * 存档里的一项内置效果读不读得进来。效果改版后旧存档要能打开：已移除的效果、超出当前范围的数值（使用时按范围钳制）、
+ * 已不存在的参数都照样读入、原样保留；只有类型不对（数字写成文字、选项不存在、颜色格式错）才算内容损坏。
+ * 新建与写入参数走 `normalizeVideoEditBuiltinParams` / `validateVideoEditBuiltinParams`，仍按硬范围严格报错。
+ */
 export function videoEditBuiltinEffectIssue(instance: { id: string; params: Readonly<Record<string, unknown>> }): string | undefined {
-  try { normalizeVideoEditBuiltinParams(instance.id, instance.params); return undefined } catch (error) { return error instanceof Error ? error.message : '内置效果参数无效。' }
+  const definition = definitions.get(instance.id)
+  if (!definition) return undefined
+  const known = Object.fromEntries(Object.entries(instance.params).filter(([key]) => definition.params.some(param => param.key === key)))
+  try { normalizeVideoEditBuiltinParams(instance.id, known, undefined, true); return undefined } catch (error) { return error instanceof Error ? error.message : '内置效果参数无效。' }
 }
-/** 读取时补齐默认值（不校验，渲染用）；未知效果抛错。 */
+/** 存档里与当前登记对不上、读取时容忍了的地方（打开工程时记一次日志）：已移除的效果，或按范围钳制的参数键。 */
+export function storedVideoEditBuiltinEffectNotes(instance: { id: string; params: Readonly<Record<string, unknown>> }): { removed: boolean; clamped: string[] } {
+  const definition = definitions.get(instance.id)
+  if (!definition) return { removed: true, clamped: [] }
+  return { removed: false, clamped: definition.params.filter(param => param.type === 'number' && typeof instance.params[param.key] === 'number' && (instance.params[param.key] as number < param.min || instance.params[param.key] as number > param.max)).map(param => param.key) }
+}
+/** 读取时补齐默认值，超出范围的旧数值按当前范围钳制（不报错，渲染用）；已移除的效果抛错，调用方先用 `isRemovedVideoEditBuiltinEffect` 跳过。 */
 export function resolveVideoEditBuiltinParams(instance: { id: string; params: Readonly<Record<string, unknown>> }): VideoEditBuiltinParams {
   const definition = requireVideoEditBuiltinEffect(instance.id)
-  return Object.fromEntries(definition.params.map(param => [param.key, (instance.params[param.key] ?? param.default) as VideoEditBuiltinParamValue]))
+  return Object.fromEntries(definition.params.map(param => {
+    const value = (instance.params[param.key] ?? param.default) as VideoEditBuiltinParamValue
+    return [param.key, param.type === 'number' && typeof value === 'number' ? Math.min(param.max, Math.max(param.min, value)) : value]
+  }))
 }
 export function isVideoEditBuiltinParamDefault(param: VideoEditBuiltinParam, value: unknown): boolean { return value === undefined || value === param.default }
 /** 给助手的结构化目录：每个效果的作用与参数语义（范围、默认值、单位、取值含义）。 */

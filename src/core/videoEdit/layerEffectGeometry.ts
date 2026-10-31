@@ -32,17 +32,7 @@ export function layerEffectBleed(id: string, params: ImagingParams, ref: LayerEf
   const w = Math.ceil(ref.contentBounds.width * ref.rasterScale), bh = Math.ceil(ref.contentBounds.height * ref.rasterScale)
   const n = (key: string): number => Number(params[key] ?? 0)
   switch (id) {
-    case 'gaussian_blur': return gaussianSupport(n('sigma_fraction_height') * h, w, bh, ref.quality) / h
-    case 'directional_blur': return n('length') / 100 * .1 * (1 + 1 / 16)
-    // 反向采样的最远边界为 distance * k / (1 - k)，而非 distance * k。
-    case 'zoom_blur': {
-      const k = n('strength') / 100 * .25
-      const distance = Math.max(w * Math.max(n('center_x') / 100, 1 - n('center_x') / 100), bh * Math.max(n('center_y') / 100, 1 - n('center_y') / 100))
-      return (distance * k / (1 - k) + (k > 0 ? 2 : 0)) / h
-    }
-    case 'lens_blur': return n('radius_fraction_height') * 1.5
     case 'chromatic_aberration': return n('amount') / 100 * .025 * 2
-    case 'sharpen': return gaussianSupport(.0015 * h, w, bh, ref.quality) / h
     case 'mosaic': return Math.max(1, n('block_size') / 100 * .1 * h) / h
     case 'color_grade': return colorGradeSpatialSupport(params, h) / h
     case 'glow': {

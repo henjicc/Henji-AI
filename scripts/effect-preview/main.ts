@@ -1,5 +1,5 @@
 /**
- * 发光效果预览：素材画进 1920×1080 纹理，交给剪辑的正式内置效果执行器，结果叠到所选底色上显示。
+ * 内置效果预览：素材画进 1920×1080 纹理，交给剪辑的正式内置效果执行器，结果叠到所选底色上显示。
  * 参数面板直接由效果登记生成，界面上调的就是软件里的同一组参数。
  */
 import { videoEditBuiltinDefaults, videoEditBuiltinEffect, type VideoEditBuiltinEffectDefinition, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
@@ -8,7 +8,7 @@ import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntim
 
 const W = 1920; const H = 1080
 /** 预览页能选的效果。 */
-const PREVIEW_EFFECTS = ['glow', 'chromatic_aberration']
+const PREVIEW_EFFECTS = ['glow', 'chromatic_aberration', 'blur', 'sharpen', 'color_grade', 'black_white', 'film_grain', 'vignette', 'mosaic']
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
 
 const adapter = await navigator.gpu?.requestAdapter()
@@ -109,7 +109,8 @@ function buildPanel(): void {
   const heading = document.createElement('h2'); heading.textContent = effect.name; heading.title = effect.description; side.append(heading)
   // 参数按登记顺序摆放；同组的连续参数收进一个可折叠分组，没有分组的直接放在外面。
   let section: HTMLElement = side; let current: string | undefined
-  for (const param of effect.params) {
+  // 曲线与 LUT 要专门的编辑器，预览页不放；它们的默认值就是不改画面。
+  for (const param of effect.params.filter(value => value.type !== 'curve' && value.type !== 'lut')) {
     if (param.group !== current) {
       current = param.group
       if (current) {
@@ -122,7 +123,7 @@ function buildPanel(): void {
     const value = document.createElement('span')
     let control: HTMLInputElement | HTMLSelectElement
     if (param.type === 'number') {
-      control = Object.assign(document.createElement('input'), { type: 'range', min: String(param.min), max: String(param.max), step: String(param.step) })
+      control = Object.assign(document.createElement('input'), { type: 'range', min: String(param.softMin ?? param.min), max: String(param.softMax ?? param.max), step: String(param.step) })
       control.addEventListener('input', () => { params[param.key] = Number(control.value); value.textContent = control.value; void render() })
       refresh.push(() => { control.value = String(params[param.key]); value.textContent = String(params[param.key]) })
     } else if (param.type === 'enum') {
@@ -177,7 +178,9 @@ async function render(): Promise<void> {
 
 function animate(time: number): void {
   if ($<HTMLInputElement>('animate').checked) {
-    params.radius = Math.round((0.5 - 0.5 * Math.cos(time / 1800)) * 1000) / 10
+    // 发光与锐化动半径，其余效果动主参数（数量、模糊度），看参数连续变化时画面是否连续。
+    const key = 'radius' in params ? 'radius' : 'amount' in params ? 'amount' : 'block_size'
+    params[key] = Math.round((0.5 - 0.5 * Math.cos(time / 1800)) * 1000) / 10
     refresh.forEach(update => update()); void render()
   }
   requestAnimationFrame(animate)

@@ -26,7 +26,7 @@ it.skipIf(process.env.HENJI_MASK_BENCH !== '1')('4K mask rasterization and real 
   appendVideoEditClip(owner.document.id, 'bench-media')
   const sequence = getActiveVideoEditSequence(owner); const clip = sequence.clips.find(value => value.kind === 'video')!
   const target = { projectId: owner.document.id, sequenceId: sequence.id, clipId: clip.id }
-  const [effectId] = applyVideoEditBuiltinEffect(owner.document.id, sequence.id, [clip.id], 'gaussian_blur')
+  const [effectId] = applyVideoEditBuiltinEffect(owner.document.id, sequence.id, [clip.id], 'blur')
   const shape = createVideoEditMaskShape('ellipse', 'bench-shape')
   const sample = (fn: (index: number) => void, count: number): { median: number; max: number } => {
     fn(-1)

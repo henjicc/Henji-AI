@@ -63,13 +63,14 @@ export class VideoEditAuthorEffects {
       const producesLight = effects.some(effect => effect.id === 'glow' && effect.params.view !== 'source' && Number(effect.params.strength) > 0)
       for (const [index, effect] of effects.entries()) {
         const plan = planVideoEditBuiltinEffect(effect, { width, height, frame: 0, layer: context, splitGlow: true })
-        const needsMips = effects[index + 1]?.id === 'lens_blur' || index === effects.length - 1 && (defocus.radius > 0 ? defocus.lens : !producesLight)
-        let target = take(needsMips && effect.amount === 1), light = plan.underlay === undefined ? undefined : take(defocus.radius > 0 && defocus.lens && effect.amount === 1)
+        // 只有交给合成器的最后一张图需要 mip（缩小绘制）；有 pose.blur 或光时最后一张图还要再处理一道。
+        const needsMips = index === effects.length - 1 && defocus.radius <= 0 && !producesLight
+        let target = take(needsMips && effect.amount === 1), light = plan.underlay === undefined ? undefined : take()
         await encode(plan, image, target, undefined, light)
         if (effect.amount !== 1) {
           const blended = take(needsMips); await encode(mix(effect.amount), target, blended, image); target = blended
           if (light) {
-            const scaled = take(defocus.radius > 0 && defocus.lens)
+            const scaled = take()
             const opacity = mix(effect.amount); opacity.passes[0].entry = 'effect_opacity'
             await encode(opacity, light, scaled); light = scaled
           }

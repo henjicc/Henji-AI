@@ -56,7 +56,7 @@ it('音频效果登记在“音频效果”文件夹；双击只加到所选的�
   expect(clips.filter(clip => clip.kind === 'audio').every(clip => clip.effects?.[0].builtin?.id === 'noise_reduction')).toBe(true)
   expect(clips.find(clip => clip.id === picture)!.effects).toBeUndefined()
   expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [picture], 'reverb')).toThrow('声音片段')
-  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, sounds, 'gaussian_blur')).toThrow('画面片段')
+  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, sounds, 'blur')).toThrow('画面片段')
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.every(clip => !clip.effects)).toBe(true)
   const sequence = getActiveVideoEditSequence(owner)
   expect(videoEditEffectDropClips(sequence, sounds[0], [...sounds, picture], 'reverb')).toEqual(sounds)
@@ -112,7 +112,7 @@ it('助手经通用实体读写音频效果：目录写明适用片段与参数�
     const changed = await app.change(ref, { 'video_edit.effect.parameters': { preset: 'voice_clarity', high: 3 } }); expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
     expect((await app.read(ref, ['video_edit.effect.parameters'])).properties).toEqual({ 'video_edit.effect.parameters': { preset: 'voice_clarity', high: 3 } })
     const outOfRange = await app.change(ref, { 'video_edit.effect.parameters': { high: 30 } }); expect(outOfRange.ok).toBe(false); expect(JSON.stringify(outOfRange)).toContain('-12–12dB')
-    const wrongMedia = await app.call('change_application_entities', { summary: '模糊', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:gaussian_blur' } }] }] }, (await app.read(clipRef)).revisions as Record<string, number>)
+    const wrongMedia = await app.call('change_application_entities', { summary: '模糊', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:blur' } }] }] }, (await app.read(clipRef)).revisions as Record<string, number>)
     expect(wrongMedia.ok).toBe(false); expect(JSON.stringify(wrongMedia)).toContain('只能加音频效果')
     const pictureRef = { kind: 'video_edit.clip', id: `${id}:${picture}` }
     const audioOnPicture = await app.call('change_application_entities', { summary: '混响', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: pictureRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:reverb' } }] }] }, (await app.read(pictureRef)).revisions as Record<string, number>)

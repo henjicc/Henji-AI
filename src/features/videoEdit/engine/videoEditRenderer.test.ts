@@ -1524,7 +1524,7 @@ it('重新起播时再次请求刚显示过的帧，沿用原排程，不在起�
 })
 it('嵌套画面作为普通一层参与父效果与运动/不透明度关键帧', async () => {
   const document = nestedFixture()
-  document.clips[0].effects = [{ id: 'nested-blur', name: '模糊', enabled: true, amount: .5, builtin: { id: 'gaussian_blur', params: {} } }]
+  document.clips[0].effects = [{ id: 'nested-blur', name: '模糊', enabled: true, amount: .5, builtin: { id: 'blur', params: {} } }]
   document.clips[0].curves = { x: [{ time: 0, value: .2, interpolation: 'linear' }], opacity: [{ time: 0, value: .5, interpolation: 'linear' }] }
   const renderer = new VideoEditRenderer(document)
   try {

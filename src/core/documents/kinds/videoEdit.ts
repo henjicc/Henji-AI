@@ -8,6 +8,7 @@ import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistenc
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
 import { migrateVideoEditStyles } from '../../videoEdit/styles/styleTemplateMigration'
 import { migrateVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
+import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigration'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
 import { creativeIntentsSchema } from '../../creativeIntent/persistence'
 import { VIDEO_EDIT_CONTENT_VERSION } from '../../persistence/schemaVersions'
@@ -133,10 +134,13 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 37：片段新增 enabled:false（停用），旧程序忽略它会照常播放与导出停用的片段；新增片子数据 scenes 与代码参数值 {kind:'scene'}，
   // 代码版本可写作者接口 v5 与内置库 libraries，旧程序读不懂这些（作者接口最高只认 v4），提高到 37，让旧程序明确提示升级。
   // 38：作者接口 v6 可使用排版库；旧程序无法执行，最低可读版本同步提高。
-  minReaderVersion: 45,
+  // 47：内置效果换成合并后的“模糊”（blur），旧程序不认识这个效果，会把整份剪辑当成内容无效，提高到 47 让它明确提示升级。
+  minReaderVersion: 47,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 46 → 47：高斯、方向、缩放、镜头模糊并成“模糊”（方式 + 模糊度，曲线逐帧换算），旧暗角的负数量换成正数量配白色；每一帧画面不变。
+    46: migrateVideoEditMergedEffects,
     // 45 → 46：导出历史新增可选高级编码，旧记录保持直接导出语义，最低可读版本保持 45。
     45: content => structuredClone(content),
     // 44 → 45：允许作者接口 7 的图层效果，旧源码与库锁定保持原样。

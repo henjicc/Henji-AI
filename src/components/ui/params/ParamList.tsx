@@ -28,6 +28,8 @@ export interface ParamAnimationSlots { leading: ReactNode; labelTrailing?: React
 const isAnimationSlots = (value: unknown): value is ParamAnimationSlots => typeof value === 'object' && value !== null && !isValidElement(value) && 'leading' in value
 /** 属性面板里需要整行宽度的控件：名称单独一行，控件在下面占满名称列与数值列。 */
 const WIDE_TYPES = new Set<ParamFieldSpec['type']>(['textStyle', 'table', 'curve', 'grade', 'gradient', 'point', 'text', 'custom', 'image', 'audio', 'range'])
+/** 参数名称悬停约 1 秒才弹出说明：一列参数挨在一起，扫视或拖动经过时不一路弹出。 */
+const PARAM_INFO_DELAY_MS = 1000
 
 function paramVisible(field: ParamFieldSpec, values: Readonly<Record<string, CodeParameterValue>>): boolean {
   const condition = field.visibleWhen
@@ -79,7 +81,7 @@ const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpe
     const reset = props.onReset && (() => store.props.onReset?.(field))
     const resetDisabled = props.resetDisabled?.(field, value)
     return <div className={highlighted ? 'bg-selected-accent' : undefined} data-video-edit-code-parameter={field.source === 'code' ? field.key : undefined} data-video-edit-builtin-param={field.source === 'builtin' ? field.key : undefined} data-code-element-parameter={highlighted || undefined}>
-      <UiFormRow label={field.title} info={field.tooltip} wide={WIDE_TYPES.has(field.type)} leading={slots?.leading} labelTrailing={slots?.labelTrailing}
+      <UiFormRow label={field.title} info={field.tooltip} infoDelay={PARAM_INFO_DELAY_MS} wide={WIDE_TYPES.has(field.type)} leading={slots?.leading} labelTrailing={slots?.labelTrailing}
         trailing={reset && !menu ? <UiIconButton size="2xs" aria-label={resetLabel} tooltip={resetLabel} disabled={resetDisabled} onClick={reset}><RotateCcw /></UiIconButton> : undefined}
         onContextMenu={reset && menu ? event => menu(event, [{ id: 'reset', label: resetLabel, icon: <RotateCcw size={UI_ICON_SIZE.sm} />, disabled: resetDisabled, onClick: reset }]) : undefined}>
         {props.renderControl(field, value)}
@@ -89,7 +91,7 @@ const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpe
   }
   const wheel = field.type === 'textStyle' || field.type === 'table' || (field.type === 'grade' && field.layout === 'wheel') || (field.type === 'curve' && field.source === 'builtin')
   return <div className={highlighted ? 'flex flex-col gap-1 bg-selected-accent' : 'flex flex-col gap-1'} data-video-edit-code-parameter={field.source === 'code' ? field.key : undefined} data-video-edit-builtin-param={field.source === 'builtin' ? field.key : undefined} data-code-element-parameter={highlighted || undefined}>
-    {wheel ? <div className="flex min-h-8 items-start gap-1.5"><span className="min-w-0 flex-1 pt-1 text-xs text-text2"><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>{props.onReset && <UiIconButton size="2xs" aria-label={`重置${field.title}`} tooltip={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}</div> : <UiFormRow label={field.title} info={field.tooltip} density="compact">
+    {wheel ? <div className="flex min-h-8 items-start gap-1.5"><span className="min-w-0 flex-1 pt-1 text-xs text-text2"><UiTooltipText tooltip={field.tooltip} delay={PARAM_INFO_DELAY_MS}>{field.title}</UiTooltipText></span>{props.onReset && <UiIconButton size="2xs" aria-label={`重置${field.title}`} tooltip={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}</div> : <UiFormRow label={field.title} info={field.tooltip} infoDelay={PARAM_INFO_DELAY_MS} density="compact">
       <div className="flex min-w-0 items-center gap-1.5">
         <div className="min-w-0 flex-1">{props.renderControl(field, value)}</div>
         {props.onReset && <UiIconButton size="2xs" className="shrink-0" aria-label={`重置${field.title}`} tooltip={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}

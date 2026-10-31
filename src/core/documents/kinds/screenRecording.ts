@@ -3,12 +3,15 @@ import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/styleTemplateMigration'
 import { migrateEmbeddedVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
+import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigration'
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 49, minReaderVersion: 48,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 50, minReaderVersion: 50,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 49 → 50：嵌入剪辑里的旧模糊并成“模糊”、旧暗角负数量换成白色（与剪辑 46 → 47 同一换算）；旧程序不认识新效果，最低可读版本提高到 50。
+    49: migrateVideoEditMergedEffects,
     // 48 → 49：剪辑基线新增可选高级导出编码，旧快照保持原样，最低可读版本保持 48。
     48: content => structuredClone(content),
     // 47 → 48：允许作者接口 7 的图层效果，旧源码与库锁定保持原样。

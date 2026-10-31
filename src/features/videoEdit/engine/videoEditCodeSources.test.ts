@@ -297,7 +297,7 @@ it('t102 静态声明读取音频元数据仍随来源更新，视频参数按�
 
 it('static code picture cache does not freeze its native animated effect mask', async () => {
   const document = fixture(); const shape = { ...createVideoEditMaskShape('rect', 'mask'), feather: 0 }
-  document.clips[0].effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'shapes', shapes: [{ ...shape, pathAnimation: { pointIds: ['a', 'b', 'c', 'd'], keys: [
+  document.clips[0].effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: {} }, mask: { regionId: 'shapes', shapes: [{ ...shape, pathAnimation: { pointIds: ['a', 'b', 'c', 'd'], keys: [
     { sourceTimeUs: 0, points: shape.points, interpolation: 'linear' },
     { sourceTimeUs: 1e6, points: shape.points.map(p => [p[0] + .2, ...p.slice(1)] as typeof p), interpolation: 'linear' },
   ] } }] } }]

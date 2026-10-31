@@ -2,7 +2,7 @@ import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
 import { z } from 'zod'
 import { codeMaterialKeyframeSchema } from './codeMaterialAnimation'
 import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe } from './keyframeInterpolation'
-import { requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, type VideoEditBuiltinParams } from './builtinEffects'
+import { isRemovedVideoEditBuiltinEffect, requireVideoEditBuiltinEffect, videoEditBuiltinParamValue, type VideoEditBuiltinParams } from './builtinEffects'
 import type { VideoEditClip } from './document'
 import type { VideoEditEffect } from './compositing'
 
@@ -94,6 +94,8 @@ export function evaluateVideoEditEffect(effect: VideoEditEffect, time: number): 
 }
 /** Optional reusable output avoids allocating parameter objects in sample-level audio automation. */
 export function evaluateVideoEditBuiltinParameters(builtin: { id: string; params: VideoEditBuiltinParams; curves?: VideoEditCurves }, time: number, params: VideoEditBuiltinParams = { ...builtin.params }): VideoEditBuiltinParams {
+  // 已移除的效果不渲染，参数原样保留。
+  if (isRemovedVideoEditBuiltinEffect(builtin.id)) return params
   for (const param of requireVideoEditBuiltinEffect(builtin.id).params) {
     const value = evaluateVideoEditKeyframes(builtin.curves?.[param.key], time, builtin.params[param.key] ?? param.default)
     params[param.key] = param.type === 'number' && typeof value === 'number' ? Math.max(param.min, Math.min(param.max, value)) : value
@@ -118,14 +120,29 @@ export function evaluateVideoEditClip(clip: VideoEditClip, timelineFrame: number
 export function assertVideoEditKeyframeTimes(curves: VideoEditCurves | undefined, duration: number, title: string): void {
   for (const [key, points] of Object.entries(curves ?? {})) for (const point of points) if (point.time >= duration) throw new Error(`${title} ${key}.keyframes 的 time 越界：允许片段内 0–${duration - 1} 帧。`)
 }
-export function assertVideoEditBuiltinCurves(builtin: { id: string; curves?: VideoEditCurves }): void {
+/** 写入内置效果关键帧时的严格校验：参数必须存在、可动画，值在硬范围内，选项类参数只能定格插值。 */
+export function validateVideoEditBuiltinCurves(builtin: { id: string; curves?: VideoEditCurves }): void {
   const definition = requireVideoEditBuiltinEffect(builtin.id)
   for (const [key, points] of Object.entries(builtin.curves ?? {})) {
     const param = definition.params.find(param => param.key === key)
     if (!param) throw new Error(`参数 ${key}.keyframes 不存在；可用：${definition.params.map(param => param.key).join('、')}。`)
+    for (const point of points) for (const value of videoEditKeyframeValues(point)) videoEditBuiltinParamValue(param, value)
+  }
+  assertVideoEditBuiltinCurves(builtin)
+}
+/**
+ * 存档里内置效果关键帧的校验，与 `videoEditBuiltinEffectIssue` 同一个口径：已移除的效果、已不存在的参数原样读入，
+ * 超出当前范围的值求值时钳制；类型不对或插值不合规才报错。
+ */
+export function assertVideoEditBuiltinCurves(builtin: { id: string; curves?: VideoEditCurves }): void {
+  if (isRemovedVideoEditBuiltinEffect(builtin.id)) return
+  const definition = requireVideoEditBuiltinEffect(builtin.id)
+  for (const [key, points] of Object.entries(builtin.curves ?? {})) {
+    const param = definition.params.find(param => param.key === key)
+    if (!param) continue
     if (param.animatable === false && points.length) throw new Error(`${param.name}（${key}）不支持关键帧，请直接修改参数。`)
     for (const point of points) {
-      for (const value of videoEditKeyframeValues(point)) validateVideoEditBuiltinParams(builtin.id, { [key]: value })
+      for (const value of videoEditKeyframeValues(point)) videoEditBuiltinParamValue(param, value, true)
       if ((param.type === 'boolean' || param.type === 'enum' || param.type === 'curve' || param.type === 'lut') && point.interpolation !== 'hold') throw new Error(`${param.name}.keyframes 只能用 hold 定格插值。`)
     }
   }
@@ -161,9 +178,10 @@ export function sliceVideoEditCurves(curves: VideoEditCurves | undefined, offset
   }))
 }
 export function sliceVideoEditBuiltinCurves(builtin: { id: string; curves?: VideoEditCurves }, offset: number, duration: number): VideoEditCurves | undefined {
-  const params = requireVideoEditBuiltinEffect(builtin.id).params
+  const params = isRemovedVideoEditBuiltinEffect(builtin.id) ? [] : requireVideoEditBuiltinEffect(builtin.id).params
   return sliceVideoEditCurves(builtin.curves, offset, duration, (key, value) => {
-    const param = params.find(param => param.key === key)!
+    const param = params.find(param => param.key === key)
+    if (!param) return value
     return param.type === 'number' && typeof value === 'number' ? Math.max(param.min, Math.min(param.max, value)) : value
   })
 }

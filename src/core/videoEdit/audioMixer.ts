@@ -1,5 +1,6 @@
 import type { AudioEffectInstance } from '../audio/effects/audioEffectChain'
 import type { VideoEditSequence } from './document'
+import { isRemovedVideoEditBuiltinEffect } from './builtinEffects'
 
 type VideoEditTrack = VideoEditSequence['tracks'][number]
 
@@ -17,7 +18,7 @@ export function videoEditBusGain(volumeDb: number | undefined): number {
   return volumeDb <= -60 ? 0 : 10 ** (volumeDb / 20)
 }
 function activeEffects(effects: VideoEditTrack['effects']): AudioEffectInstance[] {
-  return (effects ?? []).filter(effect => effect.enabled && effect.amount > 0 && effect.builtin).map(effect => ({ id: effect.id, builtin: { id: effect.builtin!.id, params: effect.builtin!.params }, amount: effect.amount }))
+  return (effects ?? []).filter(effect => effect.enabled && effect.amount > 0 && effect.builtin && !isRemovedVideoEditBuiltinEffect(effect.builtin.id)).map(effect => ({ id: effect.id, builtin: { id: effect.builtin!.id, params: effect.builtin!.params }, amount: effect.amount }))
 }
 export function videoEditTrackHasMix(track: Pick<VideoEditTrack, 'volumeDb' | 'pan' | 'effects'>): boolean {
   return (track.volumeDb ?? 0) !== 0 || (track.pan ?? 0) !== 0 || activeEffects(track.effects).length > 0

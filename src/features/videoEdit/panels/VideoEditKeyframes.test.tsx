@@ -153,8 +153,8 @@ it('从效果控件打开预设面板，默认全选，按链顺序只保存勾�
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
   expectButtonDisabled(ui.getByRole('button', { name: '保存为预设' }))
   act(() => {
-    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
-    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'brightness_contrast')
+    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'blur')
+    applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'vignette')
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'color_grade')
   })
   fireEvent.click(ui.getByRole('button', { name: '保存为预设' }))
@@ -162,13 +162,13 @@ it('从效果控件打开预设面板，默认全选，按链顺序只保存勾�
   const checkboxes = modal.getAllByRole('checkbox')
   expect(checkboxes).toHaveLength(3)
   for (const checkbox of checkboxes) expect(checkbox.getAttribute('aria-checked')).toBe('true')
-  fireEvent.click(modal.getByRole('checkbox', { name: '保存效果：亮度与对比度' }))
+  fireEvent.click(modal.getByRole('checkbox', { name: '保存效果：暗角' }))
   fireEvent.change(modal.getByRole('textbox', { name: '预设名称' }), { target: { value: '柔化调色' } })
   fireEvent.click(modal.getByRole('button', { name: '保存' }))
   const presets = useVideoEditEffectLibraryStore.getState().presets
   expect(presets).toHaveLength(1)
   expect(presets[0].name).toBe('柔化调色')
-  expect(presets[0].effects.map(effect => effect.builtin?.id)).toEqual(['gaussian_blur', 'color_grade'])
+  expect(presets[0].effects.map(effect => effect.builtin?.id)).toEqual(['blur', 'color_grade'])
   expect(within(document.body).queryByRole('dialog')).toBeNull()
 })
 
@@ -290,7 +290,7 @@ it('选中在文字与画面片段间来回切换，效果控件顶部始终只�
 it('效果头部只选中，箭头单独折叠；无源码不显示添加行；Delete只删效果并选择相邻项', async () => {
   const { owner, id, sequenceId, clipId, clip } = await project()
   applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'sharpen')
-  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'blur')
   const trial = vi.spyOn(codeTrial, 'trialVideoEditCodeDocument').mockRejectedValue(new Error('不应试渲染'))
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
   expect(ui.queryByRole('button', { name: '添加到片段' })).toBeNull()
@@ -320,7 +320,7 @@ it('效果头部只选中，箭头单独折叠；无源码不显示添加行；D
 
 it('拖动效果头部显示插入位置、一次撤销；Esc取消不提交', async () => {
   const { owner, id, sequenceId, clipId, clip } = await project()
-  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'blur')
   applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'sharpen')
   const order = clip().effects!.map(effect => effect.id)
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
@@ -347,7 +347,7 @@ it('拖动效果头部显示插入位置、一次撤销；Esc取消不提交', a
 
 it('分区开关保留效果状态和固有参数关键帧；助手通用读写同字段', async () => {
   const { owner, id, sequenceId, clipId, clip } = await project()
-  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
+  applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'blur')
   editVideoProject(id, draft => { draft = structuredClone(draft); const item = draft.sequences[0].clips[0]; item.effects![0].enabled = false; item.x = .3; item.curves = { x: [{ time: 0, value: .4, interpolation: 'linear' }] }; return draft })
   const original = structuredClone(clip())
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)

@@ -167,7 +167,7 @@ it('导出前等待区域分析：完成后继续；失败时给出用户语言�
   try {
     const clipRef = { kind: 'video_edit.clip', id: `${id}:${video.id}` }
     const baseline = await app.read(clipRef)
-    await app.call('change_application_entities', { summary: '背景虚化', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:gaussian_blur', 'video_edit.effect.mask': { regionId: 'background' } } }] }] }, baseline.revisions as Record<string, number>)
+    await app.call('change_application_entities', { summary: '背景虚化', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:blur', 'video_edit.effect.mask': { regionId: 'background' } } }] }] }, baseline.revisions as Record<string, number>)
     await flush()
     const sequence = getActiveVideoEditSequence(owner)
     const waiting = waitVideoEditSmartRegions(sequence, sequence)

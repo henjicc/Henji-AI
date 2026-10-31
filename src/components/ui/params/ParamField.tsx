@@ -50,7 +50,7 @@ function TextStyleField({ value, gesture, font, onError }: ParamFieldProps): Rea
     onError={reason => { setError(reason instanceof Error ? reason.message : String(reason)); onError?.(reason) }} />{error && <UiError message={error} />}</>
 }
 
-function Numeric({ value, min, max, step = 1, label, gesture, unit }: { value: number; min?: number; max?: number; step?: number; label: string; gesture: ParamGesture; unit?: string }) {
+function Numeric({ value, min, max, softMin, softMax, step = 1, label, gesture, unit }: { value: number; min?: number; max?: number; softMin?: number; softMax?: number; step?: number; label: string; gesture: ParamGesture; unit?: string }) {
   const touched = useRef(false)
   // 属性面板：紧凑读数框右对齐，单位固定占一格，同面板各行的数字右缘对齐（重要记录 019）。
   const compact = useUiFieldLayout() === 'property'
@@ -58,7 +58,7 @@ function Numeric({ value, min, max, step = 1, label, gesture, unit }: { value: n
     onClickCapture={event => { if (elementOfEventTarget(event.target)?.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
     onKeyDownCapture={event => { if (['ArrowUp', 'ArrowDown'].includes(event.key)) touched.current = true }}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) gesture.finish() }}>
-    <NumberInput key={gesture.epoch} className={compact ? 'shrink-0' : 'min-w-0 flex-1'} size="sm" value={value} min={min} max={max} step={step} ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} widthClassName={compact ? undefined : 'w-full'} align={compact ? 'right' : undefined} commitOnChange
+    <NumberInput key={gesture.epoch} className={compact ? 'shrink-0' : 'min-w-0 flex-1'} size="sm" value={value} min={min} max={max} scrubMin={softMin} scrubMax={softMax} step={step} ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} widthClassName={compact ? undefined : 'w-full'} align={compact ? 'right' : undefined} commitOnChange
       onScrubStart={() => { touched.current = true; gesture.begin() }} onScrubEnd={cancelled => { if (cancelled) { touched.current = false; gesture.cancel() } else gesture.finish() }}
       onChange={next => { if (touched.current) { if (gesture.active()) gesture.write(next); else gesture.atomic(next) } }} />
     {compact ? unit && <UiPropertyUnit>{unit}</UiPropertyUnit> : unit && <span className="shrink-0 whitespace-nowrap text-2xs text-text3">{unit}</span>}
@@ -137,13 +137,13 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
   let control: ReactNode
   switch (field.type) {
     case 'number': {
-      const slider = field.control !== 'input' && field.control !== 'knob' && <UiRangeInput aria-label={`${label}滑杆`} min={field.min} max={field.max} step={field.step} value={value as number} onFocus={gesture.begin} onBlur={gesture.finish}
+      const slider = field.control !== 'input' && field.control !== 'knob' && <UiRangeInput aria-label={`${label}滑杆`} min={field.softMin ?? field.min} max={field.softMax ?? field.max} step={field.step} value={value as number} onFocus={gesture.begin} onBlur={gesture.finish}
       onPointerDown={event => { gesture.begin(); event.currentTarget.setPointerCapture?.(event.pointerId) }} onPointerUp={gesture.finish} onPointerCancel={cancel} onLostPointerCapture={() => { if (gesture.active()) cancel() }}
       onKeyDown={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.begin() }} onKeyUp={event => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) gesture.finish() }} onChange={event => gesture.write(Number(event.target.value))} />
       const knob = field.control === 'knob' && <UiAngleDial {...shared} min={field.min} max={field.max} step={field.step} wrap={false} value={value as number} defaultValue={field.default} onChange={gesture.write} />
       // 属性面板：作者声明的滑杆或旋钮与读数同在数值列一行（滑杆在左、读数靠右），不再另起一行。
-      control = property ? <div className="flex min-w-0 items-center justify-end gap-2">{slider && <div className="min-w-0 flex-1">{slider}</div>}{knob}<Numeric label={label} value={value as number} min={field.min} max={field.max} step={field.step} unit={field.unit} gesture={gesture} /></div>
-        : <div className="flex flex-col gap-1"><Numeric label={label} value={value as number} min={field.min} max={field.max} step={field.step} unit={field.unit} gesture={gesture} />{slider}{knob}</div>; break
+      control = property ? <div className="flex min-w-0 items-center justify-end gap-2">{slider && <div className="min-w-0 flex-1">{slider}</div>}{knob}<Numeric label={label} value={value as number} min={field.min} max={field.max} softMin={field.softMin} softMax={field.softMax} step={field.step} unit={field.unit} gesture={gesture} /></div>
+        : <div className="flex flex-col gap-1"><Numeric label={label} value={value as number} min={field.min} max={field.max} softMin={field.softMin} softMax={field.softMax} step={field.step} unit={field.unit} gesture={gesture} />{slider}{knob}</div>; break
     }
     case 'angle': control = <UiAngleDial {...shared} min={field.min} max={field.max} step={field.step} wrap={false} value={value as number} defaultValue={field.default} onChange={gesture.write} />; break
     case 'point': control = <Point field={field} label={label} value={value} gesture={gesture} />; break

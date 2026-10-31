@@ -28,7 +28,7 @@ function builtinFieldGesture(field: ParamFieldSpec, gesture: VideoEditBuiltinPar
 export function VideoEditBuiltinEffectControls({ target, effect, onError }: { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; onError: (reason: unknown) => void }): React.ReactElement {
   const gesture = useVideoEditBuiltinParamGesture(target.projectId, JSON.stringify([target.sequenceId, target.clipId, effect.id]), (changes, handle) => updateVideoEditBuiltinEffect(target, effect.id, changes, handle), onError)
   let definition
-  try { definition = requireVideoEditBuiltinEffect(effect.builtin.id) } catch { return <span className="text-2xs text-text3">暂不支持此效果，已保留原设置。</span> }
+  try { definition = requireVideoEditBuiltinEffect(effect.builtin.id) } catch { return <span className="text-2xs text-text3">此效果已在新版本中移除，不再生效；设置已保留，可以删除。</span> }
   const owner = requireVideoEditInstance(target.projectId)
   const clip = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips.find(clip => clip.id === target.clipId)!
   const cursorSource = effect.builtin.id === RECORDING_CURSOR_EFFECT ? videoEditClipMedia(owner.document, clip)?.recordingCursor : undefined

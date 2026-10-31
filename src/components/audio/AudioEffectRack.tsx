@@ -26,7 +26,7 @@ const GROUP_ORDER: readonly string[] = ['audio_level', 'audio_dynamics', 'audio_
 
 function groupedDefinitions(query: string): Array<[VideoEditBuiltinGroup, VideoEditBuiltinEffectDefinition[]]> {
   const needle = query.trim().toLowerCase()
-  const matches = AUDIO_EFFECT_DEFINITIONS.filter(definition => !needle || definition.name.toLowerCase().includes(needle) || definition.tooltip.toLowerCase().includes(needle))
+  const matches = AUDIO_EFFECT_DEFINITIONS.filter(definition => !needle || definition.name.toLowerCase().includes(needle) || (definition.tooltip ?? definition.description).toLowerCase().includes(needle))
   const order = [...GROUP_ORDER, ...new Set(matches.map(definition => definition.group as string).filter(group => !GROUP_ORDER.includes(group)))] as VideoEditBuiltinGroup[]
   return order.map(group => [group, matches.filter(definition => definition.group === group)] as [VideoEditBuiltinGroup, VideoEditBuiltinEffectDefinition[]]).filter(([, items]) => items.length)
 }
@@ -45,7 +45,7 @@ export function AudioEffectPicker({ onPick, disabled, disabledReason }: { onPick
         {shown.length ? shown.map(([group, items], index) => <div key={group} role="group" aria-label={VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]} className={index ? `mt-1 pt-1 ${UI_DIVIDER_CLASS}` : ''}>
           <div className="px-2 pb-0.5 pt-1.5 text-xs font-semibold text-text1">{VIDEO_EDIT_BUILTIN_GROUP_NAMES[group]}</div>
           <div className="pl-2">
-            {items.map(definition => option(definition.id, definition.name, definition.tooltip, () => onPick(definition)))}
+            {items.map(definition => option(definition.id, definition.name, definition.tooltip ?? definition.description, () => onPick(definition)))}
           </div>
         </div>) : <p className={`m-0 px-2 py-3 ${UI_TEXT_META_CLASS}`}>没有找到“{query}”相关的效果</p>}
       </div>
@@ -60,7 +60,7 @@ export function AudioEffectParams({ effect, onChange, gesture }: { effect: Audio
   const active = useRef<{ finish: () => void; cancel: () => void } | null>(null)
   const latest = useRef(effect); latest.current = effect
   const menu = useContextMenu()
-  if (!definition) return <p className={`m-0 ${UI_TEXT_META_CLASS}`}>暂不支持此效果，已保留原设置。</p>
+  if (!definition) return <p className={`m-0 ${UI_TEXT_META_CLASS}`}>此效果已在新版本中移除，不再生效；设置已保留，可以删除。</p>
   const values = resolveVideoEditBuiltinParams(effect.builtin)
   // 音频参数配滑杆（拖动时实时试听），读数仍可直接输入与左右拖动。
   const fields = builtinParameterFields(definition.params).map(field => field.type === 'number' ? { ...field, control: 'slider' as const } : field)
@@ -119,7 +119,7 @@ export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypasse
           return <div key={effect.id} role="listitem" className="flex flex-col" data-audio-effect-slot={effect.builtin.id}>
             <div className="group flex h-8 min-w-0 items-center gap-1">
               <UiIconButton size="xs" on={effect.enabled} aria-pressed={effect.enabled} tooltip={effect.enabled ? '关闭这个效果' : '打开这个效果'} aria-label={`${effect.name}开关`} disabled={disabled} onClick={() => replace(effect.id, { ...effect, enabled: !effect.enabled })}><Power /></UiIconButton>
-              {toggleRow(effect.id, open, effect.name, index + 1, effect.enabled, definition?.tooltip)}
+              {toggleRow(effect.id, open, effect.name, index + 1, effect.enabled, definition && (definition.tooltip ?? definition.description))}
               <PanelTrigger panelSize="menu" panelPadding="menu" alignment="bottomRight" closeOnPanelClick
                 renderPanel={() => <div className="flex flex-col">
                   <UiOptionButton variant="menu" size="sm" disabled={index === 0} onClick={() => move(index, -1)}>上移</UiOptionButton>

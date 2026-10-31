@@ -60,7 +60,12 @@ function evaluate(pass: AdjustmentPass, source: AdjustmentPixels, original: Adju
       for (let i = -a[3]; i <= a[3]; i++) { const w = Math.exp(i * i * -.5 / Math.max(a[2] * a[2], .0001)); const pixel = sample(source, u + a[0] * source.width / (source.fullWidth ?? source.width) * i, v + a[1] * source.height / (source.fullHeight ?? source.height) * i); pixel.forEach((x, channel) => { result[channel] += x * w }); total += w }
       return result.map(x => x / total)
     }
-    case 'unsharp': { const base = sample(original, u, v); return [0, 1, 2].map(i => base[i] + (base[i] - c[i]) * a[0]).concat(base[3]) }
+    case 'unsharp': {
+      const base = sample(original, u, v); const diff = [0, 1, 2].map(i => base[i] - c[i])
+      const t = Math.min(1, Math.max(0, (Math.abs(diff[0] * .2126 + diff[1] * .7152 + diff[2] * .0722) - a[1] * .5) / Math.max(a[1] * .5, 1e-9)))
+      const keep = a[1] > 0 ? t * t * (3 - 2 * t) : 1
+      return [0, 1, 2].map(i => base[i] + diff[i] * a[0] * keep).concat(base[3])
+    }
     case 'color_grade_linear': rgb = map(rgb, linear); break
     case 'color_grade_unified': {
       if (pass.lookup?.kind !== 'table') throw new Error('调色参数表缺失')

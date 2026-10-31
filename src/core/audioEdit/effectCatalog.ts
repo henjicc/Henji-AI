@@ -41,7 +41,7 @@ export function audioEditEffectCatalog(plugins: readonly AudioEditProcessorDescr
   const builtins = [...AUDIO_EFFECT_DEFINITIONS]
     .sort((a, b) => GROUP_ORDER.indexOf(a.group as string) - GROUP_ORDER.indexOf(b.group as string))
     .map((definition): AudioEditEffectCatalogEntry => ({
-      key: `builtin:${definition.id}`, name: definition.name, tooltip: definition.tooltip, folder: 'builtin',
+      key: `builtin:${definition.id}`, name: definition.name, tooltip: definition.tooltip ?? definition.description, folder: 'builtin',
       group: definition.group as string, groupName: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group as VideoEditBuiltinGroup] ?? '其他',
       create: () => ({ ...createAudioRackEffect(definition), kind: 'builtin' }),
     }))

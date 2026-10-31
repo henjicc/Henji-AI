@@ -182,11 +182,11 @@ TS 文件（含默认入口 main.ts）在打包的同时按作者接口做类型
 
 ## API 7：图层效果链与 henji-effects
 
-新源码使用作者接口 7，`henji-effects@1.0.0` 随代码版本冻结。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（gaussian / directional / radial / lens）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
+新源码使用作者接口 7，`henji-effects` 随代码版本冻结（新源码锁定 1.1.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / lens 镜头）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
 
 `effects(t)` 每个可见层在中心作者时间求值一次，时间与 draw 相同；位姿仍按曝光采样。即使 draw 的 cacheKey 恒定，effects 仍逐帧求值。静态无 pose 的效果层也独立栅格；尽量给 bounds（内容在作者坐标中的矩形），省略时按完整作者画幅。宿主根据整链支撑外扩，不需要把光晕手工塞进 bounds。效果先于位姿变换、opacity、clip 和运动曝光；效果本身不多次曝光。
 
-空间量按完整作者画幅高度计算，不按小 bounds 或外扩后的纹理高度。高斯 `sigma_fraction_height` 默认 0.009、下限 0；lens 的 `radius_fraction_height` 是高度比例；方向 blur 用 `length`，radial 用 `strength` 与内容范围中的 `center_x/center_y` 百分比。不要把 Canvas 像素直接填进比例字段。pose.blur 保留原画面像素语义，最终使用 GPU 虚化，含 `blurShape: "lens"`。
+空间量按完整作者画幅高度计算，不按小 bounds 或外扩后的纹理高度。blur 的 `amount`（模糊度）四种方式共用：40 约为画面高度 1% 的背景虚化，常用 0–100、可以写得更大；方向用 `angle`，放射用内容范围中的 `center_x/center_y` 百分比，镜头用 `highlights` 控制光斑亮度。不要把 Canvas 像素直接填进模糊度。pose.blur 保留原画面像素语义，最终使用 GPU 虚化，含 `blurShape: "lens"`。
 
 主图像按数组顺序处理；glow 产生的光保留产生时的状态，后续显式效果不改它。因此 `[blur(), glow()]` 先模糊后发光，`[glow(), blur()]` 只模糊主体；最终 pose.blur 同时处理主体与光，并使用固定质量规划。主体与光先在透明层内合成普通预乘 RGBA，再统一施加位姿、裁剪、不透明度和曝光权重。glow.blend 只控制本层主体的核心提亮；下方画面上的光总是相加。source_opacity=0 留纯光，pose.opacity=0 连光一起隐藏。
 
@@ -200,7 +200,7 @@ export default {
   name: "局部光点", width: 1920, height: 1080, durationSeconds: 4,
   layers(_params, width, height) {
     return [{ id: "light", bounds: [width / 2 - 30, height / 2 - 30, width / 2 + 30, height / 2 + 30],
-      effects: t => [blur({ sigma_fraction_height: .002 }), glow({ strength: 25 + 10 * Math.sin(t), radius: 30 })],
+      effects: t => [blur({ amount: 12 }), glow({ strength: 25 + 10 * Math.sin(t), radius: 30 })],
       draw(ctx) { ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(width / 2, height / 2, 25, 0, Math.PI * 2); ctx.fill() }
     }]
   }

@@ -25,6 +25,12 @@ type NumberInputProps = {
   onChange: (next: number) => void
   min?: number
   max?: number
+  /**
+   * 拖动读数只在这一段里走（参数的常用范围）；键入与步进仍按 min/max。
+   * 拖动开始时值已在这一段外面，就以开始值为界，不会一拖就跳回来。
+   */
+  scrubMin?: number
+  scrubMax?: number
   step?: number
   /** 外框宽度（布局类）。读数比它长时外框按内容撑开，读数不会被裁切。 */
   widthClassName?: string
@@ -113,6 +119,8 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     onChange,
     min,
     max,
+    scrubMin,
+    scrubMax,
     step = 1,
     widthClassName: widthClassNameProp,
     className,
@@ -284,7 +292,10 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     session.travel += (event.clientX - session.lastX) * resolveScrubFactor(event)
     session.lastX = event.clientX
     const steps = Math.round(session.travel / SCRUB_PIXELS_PER_STEP)
-    const next = clamp(session.startValue + steps * step)
+    let raw = session.startValue + steps * step
+    if (typeof scrubMin === 'number') raw = Math.max(Math.min(scrubMin, session.startValue), raw)
+    if (typeof scrubMax === 'number') raw = Math.min(Math.max(scrubMax, session.startValue), raw)
+    const next = clamp(raw)
     if (next === session.lastCommitted) return
     session.lastCommitted = next
     onChange(next)

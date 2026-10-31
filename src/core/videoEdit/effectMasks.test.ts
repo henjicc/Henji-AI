@@ -88,7 +88,7 @@ describe('作用区域：存储格式', () => {
   })
 
   it('效果上的手绘遮罩随效果一起校验，只允许内置画面效果', () => {
-    const effect = { id: 'e', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'shapes', shapes: [rect('s',0,0,.5,.5)] } }
+    const effect = { id: 'e', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: {} }, mask: { regionId: 'shapes', shapes: [rect('s',0,0,.5,.5)] } }
     expect(videoEditEffectSchema.parse(effect).mask).toEqual(effect.mask)
     expect(() => videoEditEffectSchema.parse({ ...effect, builtin: { id: 'compressor', params: {} } })).toThrow(/作用区域/)
   })

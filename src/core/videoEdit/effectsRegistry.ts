@@ -19,10 +19,10 @@ export const VIDEO_EDIT_EFFECT_CATEGORIES = [
 export type VideoEditEffectCategory = typeof VIDEO_EDIT_EFFECT_CATEGORIES[number]['id']
 export interface VideoEditEffectsRegistryEntry {
   /** 稳定 ID：过渡为 `transition:<种类>`，内置效果为 `effect:<效果 ID>`。 */
-  space?: 'layer' | 'layer-only' | 'frame' | 'clip'
+  space?: 'layer' | 'frame' | 'clip'
   id: string
   name: string
-  /** 搜索别名（英文名称与登记 ID）。 */
+  /** 搜索别名（登记 ID、英文名称与并入它的旧效果名）。 */
   aliases?: readonly string[]
   category: VideoEditEffectCategory
   kind: 'effect' | 'transition'
@@ -48,9 +48,9 @@ export interface VideoEditEffectsRegistryEntry {
  * 内置效果：来自 `VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS`（参数、范围、语义说明与 GPU 实现都在那里登记），
  * 拖到片段上或选中片段后双击即加到片段效果链。
  */
-export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(definition => definition.space !== 'layer-only').map(definition => ({
+export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({
   space: definition.space, id: videoEditBuiltinRefId(definition.id), name: definition.name, category: definition.media === 'audio' ? 'audio_effect' : 'video_effect', kind: 'effect', media: definition.media ?? 'video',
-  description: definition.description, tooltip: definition.tooltip, builtinId: definition.id, templateRef: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], aliases: [definition.id, definition.id.replaceAll('_', ' ')], ...(definition.cover ? { cover: definition.cover } : {}),
+  description: definition.description, tooltip: definition.tooltip ?? definition.description, builtinId: definition.id, templateRef: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], aliases: [definition.id, definition.id.replaceAll('_', ' '), ...(definition.aliases ?? [])], ...(definition.cover ? { cover: definition.cover } : {}),
 }))
 /** 智能文件夹（4.7d）：内置效果 + 作用区域的一键预设，加到视频、图片片段上后在效果控件里微调。 */
 export const VIDEO_EDIT_SMART_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_SMART_PRESETS.map(preset => ({

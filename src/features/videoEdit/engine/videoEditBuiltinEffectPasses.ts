@@ -10,10 +10,12 @@ import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitio
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 import { planColorGrade, type AdjustmentLookup } from '@/core/imaging/adjustments/plan'
 import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
+import { planBlur, planLensBlur, planUniformBlur } from './blur'
+import { SHARPEN_MIN_SIGMA_PX, sharpenSigma } from '@/core/videoEdit/sharpen'
 import { planGlow } from './glow'
 import { chromaticAberrationPass } from './chromaticAberration'
 import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
-import { GAUSSIAN_EFFECT, gaussianParameterSchema, type GaussianParameters, type ResolvedGaussianPlan } from '@/core/imaging/effects/gaussian'
+import { GAUSSIAN_EFFECT, type GaussianParameters, type ResolvedGaussianPlan } from '@/core/imaging/effects/gaussian'
 import type { EffectEvaluationContext, EffectQuality, EffectSize } from '@/core/imaging/effects/descriptor'
 
 /**
@@ -37,7 +39,6 @@ export interface VideoEditBuiltinPass {
 export interface VideoEditBuiltinPlan { underlay?: number; width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean }
 type Vec4 = readonly [number, number, number, number]
 const ZERO: Vec4 = [0, 0, 0, 0]
-const LINE_TAPS = 16
 
 class Planner {
   readonly scratch: Array<{ width: number; height: number }> = []
@@ -69,12 +70,6 @@ class Planner {
       current = next
     })
   }
-  /** 两道等权取样组成的平滑直线模糊：第二道填满第一道取样之间的空隙（等效 16×16 次取样）。 */
-  line(source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, dx: number, dy: number): void {
-    const middle = this.alloc()
-    this.pass('line', source, middle, [dx / LINE_TAPS / this.width, dy / LINE_TAPS / this.height, LINE_TAPS, 0])
-    this.pass('line', middle, target, [dx / LINE_TAPS ** 2 / this.width, dy / LINE_TAPS ** 2 / this.height, LINE_TAPS, 0])
-  }
 }
 
 const number = (params: VideoEditBuiltinParams, key: string): number => params[key] as number
@@ -95,6 +90,7 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
   if (instance.id === RECORDING_ZOOM_EFFECT) return planRecordingZoom(instance.zoom, width, height)
   const params = resolveVideoEditBuiltinParams(instance)
   if (instance.id === 'glow') return planGlow(params, width, height, frame.layer, frame.splitGlow)
+  if (instance.id === 'blur') return planBlur(params, width, height, frame)
   const plan = new Planner(width, height)
   const H = frame.layer ? frame.layer.referenceSize.height * frame.layer.rasterScale : height
   switch (instance.id) {
@@ -103,71 +99,14 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
       if (frame.layer) for (const pass of grade.passes) pass.uniforms = new Float32Array([...pass.uniforms, ...frame.layer.rasterOrigin, frame.layer.contentBounds.width * frame.layer.rasterScale, frame.layer.contentBounds.height * frame.layer.rasterScale])
       return grade
     }
-    case 'lens_blur': { plan.pass('lens', 'input', 'output', [number(params, 'radius_fraction_height') * H, 0, 0, 0]); break }
-    case 'gaussian_blur': {
-      const scale = frame.renderScale ?? 1
-      const referenceSize = frame.referenceSize ?? { width: Math.round(width / scale), height: Math.round(height / scale) }
-      // 局部纹理只改变栅格范围；尺度仍来自完整作者画幅。
-      const parameters = frame.layer ? { ...params, sigma_fraction_height: number(params, 'sigma_fraction_height') * H / height } : params
-      const resolvedGaussian = resolveVideoGaussianPlan(gaussianParameterSchema.parse(parameters), { referenceSize: frame.layer ? { width, height } : referenceSize, outputSize: { width, height }, quality: frame.layer?.quality ?? frame.quality ?? 'interactive' })
-      if (resolvedGaussian.passes.every(pass => pass.operation.kind === 'copy')) { plan.pass('copy', 'input', 'output') }
-      else {
-        let source: VideoEditBuiltinTexture = plan.alloc()
-        plan.pass('gaussian_linear', 'input', source)
-        for (const step of resolvedGaussian.passes) {
-          const operation = step.operation; const target = plan.alloc(operation.width, operation.height)
-          plan.pass(operation.kind === 'blur' ? 'gaussian_blur' : 'gaussian_resample', source, target,
-            operation.kind === 'blur' ? [operation.axis === 'x' ? 1 : 0, operation.axis === 'y' ? 1 : 0, operation.sigma, operation.radius] : [step.sampleScale[0], step.sampleScale[1], 0, 0],
-            [params.edge_mode === 'clamp' ? 1 : 0, operation.sourceWidth, operation.sourceHeight, 0])
-          source = target
-        }
-        plan.pass('gaussian_encoded', source, 'output')
-      }
-      return { width, height, scratch: plan.scratch, passes: plan.passes, resolvedGaussian, linearScratch: true }
-    }
-    case 'directional_blur': {
-      const length = number(params, 'length') / 100 * 0.1 * H
-      if (length < 1) { plan.pass('copy', 'input', 'output'); break }
-      const angle = number(params, 'direction') * Math.PI / 180
-      plan.line('input', 'output', Math.cos(angle) * length, Math.sin(angle) * length)
-      break
-    }
-    case 'zoom_blur': {
-      const range = number(params, 'strength') / 100 * 0.2
-      if (range * H < 1) { plan.pass('copy', 'input', 'output'); break }
-      const local = frame.layer
-      const center: Vec4 = local ? [(local.rasterOrigin[0] + number(params, 'center_x') / 100 * local.contentBounds.width * local.rasterScale) / width, (local.rasterOrigin[1] + number(params, 'center_y') / 100 * local.contentBounds.height * local.rasterScale) / height, 0, 0] : [number(params, 'center_x') / 100, number(params, 'center_y') / 100, 0, 0]
-      const middle = plan.alloc()
-      plan.pass('zoom', 'input', middle, [center[0], center[1], range / LINE_TAPS, LINE_TAPS])
-      plan.pass('zoom', middle, 'output', [center[0], center[1], range / LINE_TAPS ** 2, LINE_TAPS])
-      break
-    }
     case 'sharpen': {
       const blurred = plan.alloc()
-      const sigma = Math.max(0.6, 0.0015 * H)
+      const sigma = Math.max(SHARPEN_MIN_SIGMA_PX, sharpenSigma(number(params, 'radius')) * H)
       plan.gaussian('input', blurred, sigma, sigma, true)
-      plan.pass('unsharp', blurred, 'output', [number(params, 'amount') / 100 * 3, 0, 0, 0], ZERO, 'input')
+      plan.pass('unsharp', blurred, 'output', [number(params, 'amount') / 100 * 3, number(params, 'threshold') / 100 * 0.25, 0, 0], ZERO, 'input')
       break
     }
-    case 'brightness_contrast': {
-      const contrast = number(params, 'contrast') / 100
-      plan.pass('brightness_contrast', 'input', 'output', [number(params, 'brightness') / 100 * 0.5, contrast >= 0 ? 1 + contrast * 2 : 1 + contrast, 0, 0])
-      break
-    }
-    case 'exposure': { const gain = 2 ** number(params, 'exposure'); plan.pass('gain_linear', 'input', 'output', [gain, gain, gain, 0]); break }
-    case 'white_balance': {
-      const temperature = number(params, 'temperature') / 100; const tint = number(params, 'tint') / 100
-      const gains = [1 + 0.3 * temperature, 1 - 0.25 * tint, 1 - 0.3 * temperature]
-      const luma = gains[0] * 0.2126 + gains[1] * 0.7152 + gains[2] * 0.0722
-      plan.pass('gain_linear', 'input', 'output', [gains[0] / luma, gains[1] / luma, gains[2] / luma, 0])
-      break
-    }
-    case 'hue_saturation': {
-      const hue = number(params, 'hue') * Math.PI / 180
-      plan.pass('hue_saturation', 'input', 'output', [Math.cos(hue), Math.sin(hue), 1 + number(params, 'saturation') / 100, number(params, 'lightness') / 100])
-      break
-    }
-    case 'black_white': plan.pass('hue_saturation', 'input', 'output', [1, 0, 0, 0]); break
+    case 'black_white': plan.pass('black_white', 'input', 'output'); break
     case 'invert': plan.pass('invert', 'input', 'output'); break
     case 'mosaic': {
       const block = number(params, 'block_size') / 100 * 0.1 * H
@@ -179,7 +118,7 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
       }
       break
     }
-    case 'vignette': plan.pass('vignette', 'input', 'output', [number(params, 'amount') / 100, 0.15 + number(params, 'midpoint') / 100 * 0.8, 0.05 + number(params, 'feather') / 100 * 0.9, width / height]); break
+    case 'vignette': plan.pass('vignette', 'input', 'output', [number(params, 'amount') / 100, 0.15 + number(params, 'midpoint') / 100 * 0.8, 0.05 + number(params, 'feather') / 100 * 0.9, width / height], [...hexColor(String(params.color)), 0]); break
     case 'film_grain': {
       // Grain cannot be finer than a pixel. At a reduced resolution each drawn pixel stands for several sequence pixels
       // whose grain would average out, so the amplitude falls with the number of independent grain units it covers
@@ -295,13 +234,11 @@ export function planVideoEditBuiltinTransition(input: VideoEditBuiltinTransition
   return { width, height, scratch: plan.scratch, passes: plan.passes }
 }
 
-/** pose.blur 使用编码预乘颜色，公开高斯仍在线性光处理。 */
+/** pose.blur 使用编码预乘颜色，模糊效果的均匀方式仍在线性光处理。`radius` 是高斯标准差或镜头圆盘半径（像素）。 */
 export function planAuthorDefocus(width: number, height: number, radius: number, lens: boolean, preserveZeroAlpha = false): VideoEditBuiltinPlan {
-  if (lens) {
-    const plan = new Planner(width, height); plan.pass('lens', 'input', 'output', [radius, 0, 0, 0])
-    return { width, height, passes: plan.passes, scratch: plan.scratch }
-  }
-  const plan = planVideoEditBuiltinEffect({ id: 'gaussian_blur', params: { sigma_fraction_height: radius / height, edge_mode: 'transparent' } }, { width, height, frame: 0, quality: 'final' })
+  // 亮点加权取模糊效果的默认值，pose.blur 的镜头散焦与“模糊”效果的镜头方式观感一致。
+  if (lens) return planLensBlur(radius, 50, false, width, height)
+  const plan = planUniformBlur(radius / height, 'both', false, width, height, { frame: 0, quality: 'final' })
   // 光纹理的 RGB 独立于覆盖率；只有此输入允许在零 alpha 下参与共用高斯核。
   for (const pass of plan.passes) {
     if (pass.entry === 'gaussian_linear' || pass.entry === 'gaussian_encoded') pass.entry = 'gaussian_copy'

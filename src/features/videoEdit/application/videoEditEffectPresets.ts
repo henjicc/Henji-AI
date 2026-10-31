@@ -1,11 +1,12 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
+import { migrateVideoEditMergedEffects } from '@/core/videoEdit/mergedEffectsMigration'
 import { createJSONStorage } from 'zustand/middleware'
 import { z } from 'zod'
 import { createLogger } from '@/core/logging'
 import { videoEditEffectSchema, videoEditEffectMedia, type VideoEditEffect } from '@/core/videoEdit/compositing'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPresets'
-import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
+import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { VIDEO_EDIT_EFFECT_CATEGORIES, videoEditEffectsRegistry, type VideoEditEffectsRegistryEntry } from '@/core/videoEdit/effectsRegistry'
 
 import { migrateEmbeddedVideoColorGradesV1 } from '@/core/videoEdit/colorGradeMigration'
@@ -39,7 +40,8 @@ export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage)
     if (saved && !('then' in saved)) {
       if (saved.version !== 1 && saved.version !== VIDEO_EDIT_EFFECT_LIBRARY_VERSION) throw new Error('效果库格式无法读取。')
       // v1 → v2：全能调色参数格式 v2（与剪辑文档 17 → 18 同一迁移）；首次保存时写入 v2。
-      initial = dataSchema.parse(saved.version === 1 ? migrateEmbeddedVideoColorGradesV1(saved.state) : saved.state)
+      // 效果库合并后的旧效果（旧模糊、负数暗角）读入时换算，格式版本不变；首次保存时写入换算后的内容。
+      initial = dataSchema.parse(migrateVideoEditMergedEffects(saved.version === 1 ? migrateEmbeddedVideoColorGradesV1(saved.state) : saved.state))
       if (new Set(initial.presets.map(preset => preset.id)).size !== initial.presets.length) throw new Error('预设标识重复。')
       initial.favorites = [...new Set(initial.favorites)]
     }
@@ -92,11 +94,12 @@ export const useVideoEditEffectLibraryStore = createVideoEditEffectLibraryStore(
 export function resolveVideoEditLibraryEffects(ref: string): { media: 'video' | 'audio'; effects: Omit<VideoEditEffect, 'id'>[]; needsSource: boolean } | undefined {
   if (ref.startsWith('preset:')) {
     const preset = useVideoEditEffectLibraryStore.getState().presets.find(value => `preset:${value.id}` === ref)
-    const effects = preset?.effects.filter(effect => requireVideoEditBuiltinEffect(effect.builtin!.id).space !== 'layer-only')
+    // 预设里已移除的效果原样留在库里；它们没有渲染实现，应用时跳过。
+    const effects = preset?.effects.filter(effect => !effect.builtin || !isRemovedVideoEditBuiltinEffect(effect.builtin.id))
     return preset && effects?.length ? { media: preset.media, effects: structuredClone(effects), needsSource: effects.some(effect => isSmartRegionMask(effect.mask)) } : undefined
   }
   const template = resolveVideoEditEffectTemplate(ref)
-  if (!template || requireVideoEditBuiltinEffect(template.builtinId).space === 'layer-only') return undefined
+  if (!template) return undefined
   return { media: videoEditBuiltinEffectMedia(template.builtinId), effects: [{ name: template.name ?? requireVideoEditBuiltinEffect(template.builtinId).name, enabled: true, amount: 1, builtin: { id: template.builtinId, params: normalizeVideoEditBuiltinParams(template.builtinId, template.params) }, ...(template.mask ? { mask: template.mask } : {}) }], needsSource: Boolean(template.mask) }
 }
 export type VideoEditLibraryEntry = Omit<VideoEditEffectsRegistryEntry, 'category'> & { category: VideoEditEffectsRegistryEntry['category'] | 'presets'; aliases?: readonly string[] }
@@ -114,5 +117,5 @@ export function filterVideoEditLibraryEntries(entries: readonly VideoEditLibrary
   })
 }
 export function videoEditPresetCreationProperties(preset: VideoEditEffectPreset): Array<Record<string, unknown>> {
-  return preset.effects.filter(effect => requireVideoEditBuiltinEffect(effect.builtin!.id).space !== 'layer-only').map(effect => ({ 'video_edit.effect.definition_id': videoEditBuiltinRefId(effect.builtin!.id), 'video_edit.effect.parameters': structuredClone(effect.builtin!.params), 'video_edit.effect.name': effect.name, 'video_edit.effect.enabled': effect.enabled, 'video_edit.effect.amount': effect.amount, ...(effect.mask ? { 'video_edit.effect.mask': structuredClone(effect.mask) } : {}) }))
+  return preset.effects.filter(effect => !isRemovedVideoEditBuiltinEffect(effect.builtin!.id)).map(effect => ({ 'video_edit.effect.definition_id': videoEditBuiltinRefId(effect.builtin!.id), 'video_edit.effect.parameters': structuredClone(effect.builtin!.params), 'video_edit.effect.name': effect.name, 'video_edit.effect.enabled': effect.enabled, 'video_edit.effect.amount': effect.amount, ...(effect.mask ? { 'video_edit.effect.mask': structuredClone(effect.mask) } : {}) }))
 }

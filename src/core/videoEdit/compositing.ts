@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { codeMaterialInstanceSchema } from './codeMaterialPersistence'
 import type { VideoEditSequence, VideoEditClip } from './document'
 import type { VideoEditTransitionWindow } from './transitions'
-import { videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia, type VideoEditBuiltinMedia } from './builtinEffects'
+import { isRemovedVideoEditBuiltinEffect, videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia, type VideoEditBuiltinMedia } from './builtinEffects'
 import { videoEditEffectMaskSchema } from './effectMasks'
 import { videoEditCurvesSchema, assertVideoEditBuiltinCurves } from './keyframes'
 import { essentialSoundEffects } from '../audio/essentialSound'
@@ -59,11 +59,11 @@ export function orderVideoEditEffects(effects: VideoEditEffect[], ids: string[])
 export function videoEditEffectMedia(effect: Pick<VideoEditEffect, 'builtin'>): VideoEditBuiltinMedia { return effect.builtin ? videoEditBuiltinEffectMedia(effect.builtin.id) : 'video' }
 /** 片段能不能挂这种效果：音频效果只挂声音片段，画面效果只挂画面片段（与过渡的媒介规则一致）。 */
 export function videoEditEffectAccepts(media: VideoEditBuiltinMedia, clip: Pick<VideoEditClip, 'kind'>): boolean { return media === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' }
-/** Disabled effects remain editable/persisted, but consume no render resources. 只返回画面效果（音频效果由混音处理）。 */
+/** Disabled effects remain editable/persisted, but consume no render resources. 只返回画面效果（音频效果由混音处理）；已移除的内置效果保留在片段上但不渲染。 */
 export function activeVideoEditEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'opacity' | 'effectsEnabled' | 'disabledIntrinsicSections'>): VideoEditEffect[] {
   if (clip.effectsEnabled === false) return []
   if (clip.kind === 'adjustment' && clip.opacity <= 0 && !clip.disabledIntrinsicSections?.includes('opacity')) return []
-  return (clip.effects ?? []).filter(effect => effect.enabled && effect.amount > 0 && videoEditEffectMedia(effect) === 'video')
+  return (clip.effects ?? []).filter(effect => effect.enabled && effect.amount > 0 && videoEditEffectMedia(effect) === 'video' && !(effect.builtin && isRemovedVideoEditBuiltinEffect(effect.builtin.id)))
 }
 /**
  * 声音片段上生效的音频效果（按效果链顺序处理声音）：基本声音换算出的效果在前（与音频编辑同一份换算），片段效果在后。

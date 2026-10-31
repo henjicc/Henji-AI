@@ -93,7 +93,7 @@ describe('正式读入口打开黄金归档与源码', () => {
     const read = await environment.services.service.readDocument({ id: document.id })
     // 归档可读还必须能进入剪辑的完整 schema，不能只通过主进程的外层校验。
     const parsed = videoEditDocumentSchema.parse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: read.meta.id, name: read.meta.name, revision: read.meta.revision, ...(read.content as object) })
-    expect(parsed.sequences[0].clips.find(clip => clip.kind === 'code')).toMatchObject({ effects: [{ builtin: { id: 'color_grade' } }, { builtin: { id: 'gaussian_blur' } }], contentAnchor: { ranges: [{ clipId: 'golden-sound-clip', itemId: 'golden-sound-item' }] } })
+    expect(parsed.sequences[0].clips.find(clip => clip.kind === 'code')).toMatchObject({ effects: [{ builtin: { id: 'color_grade' } }, { builtin: { id: 'blur', params: { mode: 'uniform', amount: 17.43 } } }], contentAnchor: { ranges: [{ clipId: 'golden-sound-clip', itemId: 'golden-sound-item' }] } })
     expect(parsed.sequences[0].captions?.find(caption => caption.id === 'golden-caption')).toMatchObject({ translation: 'Golden caption', speech: { words: [
       { clipId: 'golden-sound-clip', text: '字幕', startUs: 166667, endUs: 700000 },
       { clipId: 'golden-sound-clip', text: '原文', startUs: 700000, endUs: 1500000 },

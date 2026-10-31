@@ -36,7 +36,7 @@ export interface SmartRegionInfo {
 export const SMART_REGIONS: Readonly<Record<VideoEditSmartRegionId, SmartRegionInfo>> = {
   face: {
     id: 'face', label: '人脸', tooltip: '自动找出画面中的每张人脸并逐帧跟随',
-    description: '画面中所有人脸（YuNet 检测 + 逐帧跟踪，短暂遮挡时按轨迹继续覆盖）。配合马赛克或高斯模糊即人脸打码。',
+    description: '画面中所有人脸（YuNet 检测 + 逐帧跟踪，短暂遮挡时按轨迹继续覆盖）。配合马赛克或模糊即人脸打码。',
     defaults: { feather: 20, expand: 30 },
   },
   person: {
@@ -45,8 +45,8 @@ export const SMART_REGIONS: Readonly<Record<VideoEditSmartRegionId, SmartRegionI
     defaults: { feather: 10, expand: 0 },
   },
   background: {
-    id: 'background', label: '背景', tooltip: '人物以外的部分；配合高斯模糊即背景虚化',
-    description: '人物以外的全部画面（人物抠像取反）。背景虚化 = 高斯模糊 + 背景；只把背景调暗 = 亮度与对比度 + 背景。',
+    id: 'background', label: '背景', tooltip: '人物以外的部分；配合模糊即背景虚化',
+    description: '人物以外的全部画面（人物抠像取反）。背景虚化 = 模糊 + 背景；只把背景调暗 = 全能调色（降曝光）+ 背景。',
     defaults: { feather: 10, expand: 0 },
   },
   text: {

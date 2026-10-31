@@ -14,6 +14,9 @@ export type ParamFieldSpec = (DisplayDeclaration<CodeParameterDeclaration> | { t
   step?: number
   rangeTrack?: 'hue' | 'saturation' | 'luminance'
   rangeWrap?: boolean
+  /** 数值的常用范围：滑块两端与拖动读数只走这一段，点数字可以输入到 min/max。 */
+  softMin?: number
+  softMax?: number
 }
 
 export function codeParameterFields(parameters: readonly CodeParameterDeclaration[], types: Record<string, CodeParameterTypeDefinition> = {}): ParamFieldSpec[] {
@@ -36,7 +39,7 @@ export function builtinParameterFields(params: readonly ImagingParam[]): ParamFi
   return params.flatMap<ParamFieldSpec>(param => {
     if (used.has(param.key)) return []
     used.add(param.key)
-    const base = { key: param.key, title: param.name, tooltip: param.tooltip, animatable: param.animatable !== false, source: 'builtin' as const, bindingKeys: [param.key], ...(param.group ? { group: param.group } : {}), ...(param.visibleWhen ? { visibleWhen: param.visibleWhen } : {}) }
+    const base = { key: param.key, title: param.name, tooltip: param.tooltip ?? param.description, animatable: param.animatable !== false, source: 'builtin' as const, bindingKeys: [param.key], ...(param.group ? { group: param.group } : {}), ...(param.visibleWhen ? { visibleWhen: param.visibleWhen } : {}) }
     if (param.type === 'number') {
       const gradePrefix = param.key.endsWith('_hue') ? param.key.slice(0, -4) : undefined
       const strength = gradePrefix && params.find(item => item.key === `${gradePrefix}_strength` && item.type === 'number')
@@ -56,11 +59,11 @@ export function builtinParameterFields(params: readonly ImagingParam[]): ParamFi
       const y = positionKey && params.find(item => item.key === `${positionKey}_y` && item.type === 'number' && item.unit === 'percent')
       if (x && y && x.type === 'number' && y.type === 'number') {
         used.add(x.key); used.add(y.key)
-        return [{ ...base, key: positionKey!, title: x.name.replace(/（水平）$/, ''), tooltip: x.tooltip, bindingKeys: [x.key, y.key], type: 'point' as const, space: 'frame' as const,
+        return [{ ...base, key: positionKey!, title: x.name.replace(/（水平）$/, ''), tooltip: x.tooltip ?? x.description, bindingKeys: [x.key, y.key], type: 'point' as const, space: 'frame' as const,
           default: { x: x.default / 100, y: y.default / 100 }, min: { x: x.min / 100, y: y.min / 100 }, max: { x: x.max / 100, y: y.max / 100 }, step: Math.min(x.step, y.step) / 100, animatable: x.animatable !== false && y.animatable !== false }]
       }
       if (param.unit === 'degrees') return [{ ...base, type: 'angle' as const, default: param.default, min: param.min, max: param.max, step: param.step }]
-      return [{ ...base, type: 'number' as const, default: param.default, min: param.min, max: param.max, step: param.step, unit: IMAGING_UNIT_LABELS[param.unit], control: 'input' as const }]
+      return [{ ...base, type: 'number' as const, default: param.default, min: param.min, max: param.max, ...(param.softMin !== undefined ? { softMin: param.softMin } : {}), ...(param.softMax !== undefined ? { softMax: param.softMax } : {}), step: param.step, unit: IMAGING_UNIT_LABELS[param.unit], control: 'input' as const }]
     }
     if (param.type === 'enum') return [{ ...base, type: 'choice' as const, default: param.default, options: param.options.map(option => option.value), optionLabels: Object.fromEntries(param.options.map(option => [option.value, option.label])) }]
     if (param.type === 'color') return [{ ...base, type: 'color' as const, default: hexColor(param.default), colorFormat: 'hex' as const, alpha: param.alpha ?? false }]

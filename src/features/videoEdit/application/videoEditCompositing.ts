@@ -1,13 +1,13 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, updateVideoEditParameterGesture, updateVideoEditMaskGesture, type VideoEditGesture } from './videoEditService'
-import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSchema, sliceVideoEditBuiltinCurves, type VideoEditCurves } from '@/core/videoEdit/keyframes'
+import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSchema, sliceVideoEditBuiltinCurves, validateVideoEditBuiltinCurves, type VideoEditCurves } from '@/core/videoEdit/keyframes'
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditIntroducesCodeEffects, videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
 import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
 import { assertVideoEditMaskTrackers } from './videoEditTrackingEdits'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { recordingZoomRegionsSchema, sortRecordingZoomRegions, RECORDING_ZOOM_EFFECT, type RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
-import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
+import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, resizeVideoEditTransition, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
@@ -89,14 +89,14 @@ export async function resetVideoEditEffect(target: VideoEditCompositeTarget, eff
   const owner = requireVideoEditInstance(target.projectId); const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)
   const effect = sequence && requireEffectClip(sequence, target.clipId).effects?.find(effect => effect.id === effectId)
   if (!effect) throw new Error('原效果已移除。')
-  if (effect.builtin) { updateVideoEditBuiltinEffect(target, effectId, { enabled: true, amount: 1, curves: {}, params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect(effect.builtin.id)) }); return }
+  // 已移除的效果没有默认参数，只恢复开关、强度并清掉关键帧，原参数保留。
+  if (effect.builtin) { updateVideoEditBuiltinEffect(target, effectId, { enabled: true, amount: 1, curves: {}, ...(isRemovedVideoEditBuiltinEffect(effect.builtin.id) ? {} : { params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect(effect.builtin.id)) }) }); return }
   const metadata = await withVideoEditCodeMetadata(() => readVideoEditCodeMetadata(owner, owner.document)(effect.code!))
   await updateVideoEditEffect(target, effectId, { enabled: true, amount: 1, parameters: validateCodeMaterialParameters(metadata), curves: {} }, signal)
 }
 /** 新建一项内置效果（参数按登记校验）。默认存完整参数表；`sparse` 时只存给出的键（助手创建，读回与写入一致，缺的键按默认值渲染）。 */
 export function makeVideoEditBuiltinEffect(builtinId: string, params: Readonly<Record<string, unknown>> = {}, name?: string, sparse = false): VideoEditEffect {
   const definition = requireVideoEditBuiltinEffect(builtinId)
-  if (definition.space === 'layer-only') throw new Error(`${definition.name} 仅用于作者图层，请在图层 effects 中添加。`)
   return videoEditEffectSchema.parse({ id: crypto.randomUUID(), name: name ?? definition.name, enabled: true, amount: 1, builtin: { id: definition.id, params: sparse ? validateVideoEditBuiltinParams(definition.id, params) : normalizeVideoEditBuiltinParams(definition.id, params) } })
 }
 function editBuiltin(target: VideoEditCompositeTarget, change: (clip: VideoEditClip) => void, gesture?: VideoEditGesture): void {
@@ -174,8 +174,14 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
     if (changes.name !== undefined) effect.name = changes.name
     if (changes.enabled !== undefined) effect.enabled = changes.enabled
     if (changes.amount !== undefined) effect.amount = Math.min(1, Math.max(0, changes.amount))
-    if (changes.curves !== undefined) effect.builtin = { ...effect.builtin, curves: videoEditCurvesSchema.parse(changes.curves) }
-    if (changes.params) {
+    if (changes.curves !== undefined) {
+      effect.builtin = { ...effect.builtin, curves: videoEditCurvesSchema.parse(changes.curves) }
+      // 写入的关键帧按硬范围严格校验；已移除的效果没有登记，只按存档口径保留。
+      if (!isRemovedVideoEditBuiltinEffect(effect.builtin.id)) validateVideoEditBuiltinCurves(effect.builtin)
+    }
+    // 已移除的效果没有登记：关键帧行删光时留下的静态值原样写回，不校验也不打关键帧。
+    if (changes.params && isRemovedVideoEditBuiltinEffect(effect.builtin.id)) effect.builtin = { ...effect.builtin, params: { ...effect.builtin.params, ...changes.params as VideoEditBuiltinParams } }
+    else if (changes.params) {
       const builtin = effect.builtin
       const params = normalizeVideoEditBuiltinParams(builtin.id, changes.params, builtin.params, true)
       const curves = { ...builtin.curves }

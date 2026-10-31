@@ -114,6 +114,8 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   error?: ReactNode;
   /** 背景知识型说明：标签文字本身在悬停或聚焦时显示（不加 ⓘ 图标） */
   info?: ReactNode;
+  /** 说明悬停多久弹出（毫秒）；效果参数这类一排排挨着的名称用较长的延迟，扫视时不会一路弹出。 */
+  infoDelay?: number;
   /** 横向排列（标签左、控件右）；未指定时继承面板列宽，普通表单保持纵向 */
   inline?: boolean;
   /**
@@ -269,6 +271,8 @@ interface UiTooltipTextProps {
   className?: string;
   /** 提示框位置，默认上方；一列紧挨着的表单行（画布节点参数行）用 `left`，避免盖住上一行。 */
   placement?: TooltipPlacement;
+  /** 悬停多久弹出（毫秒），默认 200。 */
+  delay?: number;
 }
 
 /**
@@ -276,11 +280,11 @@ interface UiTooltipTextProps {
  * 有说明时文字可聚焦、悬停或聚焦显示 tooltip，用一道点状下划线提示“这里有说明”；
  * 不在名称旁加 ⓘ / 问号图标，也不把整个控件包进 Tooltip。没有说明时就是普通文字。
  */
-export function UiTooltipText({ tooltip, children, className = '', placement }: UiTooltipTextProps): JSX.Element {
+export function UiTooltipText({ tooltip, children, className = '', placement, delay = 200 }: UiTooltipTextProps): JSX.Element {
   const tooltipId = useId();
   if (!tooltip) return className ? <span className={className}>{children}</span> : <>{children}</>;
   return (
-    <Tooltip content={tooltip} contentId={tooltipId} delay={200} placement={placement}>
+    <Tooltip content={tooltip} contentId={tooltipId} delay={delay} placement={placement}>
       <span
         tabIndex={0}
         aria-describedby={tooltipId}
@@ -425,6 +429,7 @@ export function UiFormRow({
   hint,
   error,
   info,
+  infoDelay,
   inline = false,
   density = 'default',
   labelColumn,
@@ -444,7 +449,7 @@ export function UiFormRow({
   const hintId = hint ? `${baseId}-hint` : undefined;
   const errorId = error ? `${baseId}-error` : undefined;
   const errorNode = error ? <UiFieldMessage id={errorId} className="mt-1">{error}</UiFieldMessage> : null;
-  const labelNode = <UiTooltipText tooltip={info}>{label}</UiTooltipText>;
+  const labelNode = <UiTooltipText tooltip={info} delay={infoDelay}>{label}</UiTooltipText>;
   const labelClass = density === 'compact' ? 'text-xs text-text2' : UI_TEXT_PANEL_TITLE_CLASS;
   // 行内控件没有自己的名称时，用 aria-labelledby 指向这行标签（B-50）
   const labelling = { labelId, hintId, errorId, fillControl: fixedColumn || fieldLayout === 'property' };

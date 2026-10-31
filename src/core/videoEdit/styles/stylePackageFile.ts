@@ -1,5 +1,6 @@
 import { PersistenceError, persistenceMinReaderVersion, upgradePersistenceContent, type PersistenceContract } from '../../persistence/migrations'
 import type { VideoEditStyle } from './styleSchemas'
+import { migrateVideoEditMergedEffects } from '../mergedEffectsMigration'
 import { VIDEO_EDIT_STYLE_PACKAGE_MAX_BYTES, videoEditStylePackageSchema, type VideoEditStylePackage, type VideoEditTemplate } from './templateSchemas'
 
 export interface VideoEditStylePackageMedia { preview?: Uint8Array; thumbnail?: Uint8Array; anchors: Uint8Array[] }
@@ -38,7 +39,7 @@ export function decodeVideoEditStylePackage(contract: PersistenceContract, text:
   let upgraded: unknown
   try { upgraded = upgradePersistenceContent(contract, content, version, undefined, minReaderVersion) }
   catch (error) { if (error instanceof PersistenceError && error.code === 'newer-version') throw new Error('这个风格包由更新版本的痕迹AI创建，请升级后再导入。'); throw new Error(`风格包内容无效，无法识别：${error instanceof Error ? error.message.slice(0, 200) : String(error)}`, { cause: error }) }
-  const parsed = videoEditStylePackageSchema.safeParse(upgraded)
+  const parsed = videoEditStylePackageSchema.safeParse(migrateVideoEditMergedEffects(upgraded))
   if (!parsed.success) throw new Error(`风格包内容无效：${parsed.error.issues.slice(0, 3).map(issue => `${issue.path.join('.')} ${issue.message}`).join('；')}`)
   const media = { ...(parsed.data.media.preview ? { preview: fromBase64(parsed.data.media.preview) } : {}), ...(parsed.data.media.thumbnail ? { thumbnail: fromBase64(parsed.data.media.thumbnail) } : {}), anchors: parsed.data.media.anchors.map(fromBase64) }
   checkMedia(media)

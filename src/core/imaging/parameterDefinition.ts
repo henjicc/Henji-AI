@@ -8,10 +8,13 @@ export type ImagingUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibe
  * `group`：参数所在的分组（如“着色”），效果控件按组折叠显示，助手读到的参数说明也带上组名；
  * 不写的是主参数，排在最上面。分组只管摆放，人和助手能调的参数完全相同。
  * `visibleWhen`：只在另一个参数取某些值时才有用，其余时候效果控件里隐藏；与作者参数用同一种条件写法。
+ * `description`：人和助手读同一份说明，效果控件在名称上悬停时显示它。`tooltip` 只在尚未改写成一份说明的参数上另给界面一句短话。
+ * 数值的 `min`/`max` 是硬范围：关键帧、表达式与助手写入超出即报错；`softMin`/`softMax` 是滑块与拖动读数走的常用范围，
+ * 不写等于硬范围。点数字可以直接输入软范围以外、硬范围以内的值。
  */
-interface ParamBase { key: string; name: string; tooltip: string; description: string; animatable?: boolean; group?: string; visibleWhen?: CodeParameterVisibility }
+interface ParamBase { key: string; name: string; tooltip?: string; description: string; animatable?: boolean; group?: string; visibleWhen?: CodeParameterVisibility }
 export type ImagingParam =
-  | ParamBase & { type: 'number'; unit: ImagingUnit; min: number; max: number; step: number; default: number }
+  | ParamBase & { type: 'number'; unit: ImagingUnit; min: number; max: number; softMin?: number; softMax?: number; step: number; default: number }
   /** `alpha` 时可写 #rrggbbaa（着色器组件的半透明颜色）。 */
   | ParamBase & { type: 'color'; default: string; alpha?: boolean }
   | ParamBase & { type: 'enum'; options: ReadonlyArray<{ value: string; label: string }>; default: string }

@@ -31,7 +31,7 @@ function createVideoEditMaskScene() {
 
       // 效果库与效果控件在同一组堆叠：双击后效果控件必须自动显示
       await page.locator('.dv-tab', { hasText: '效果' }).filter({ hasNotText: '控件' }).first().click()
-      const entry = page.locator('[data-video-edit-effects-entry]', { hasText: '高斯模糊' }).first()
+      const entry = page.locator('[data-video-edit-effects-entry="effect:blur"]').first()
       await entry.waitFor({ state: 'visible' }); await entry.dblclick()
       let document = await saved(page, file, value => clipOf(value).effects?.length === 1)
       const effect = clipOf(document).effects[0]

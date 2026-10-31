@@ -46,7 +46,7 @@ describe('旧高斯规划逐字段快照（重构前采集，禁止随重构更�
   }
   for (const id of ['sharpen']) {
     it(`剪辑 ${id}：数字源/目标纹理包装`, () => {
-      expect(snapshotPlan(planVideoEditBuiltinEffect({ id, params: { radius: 100 } }, { width: 4097, height: 2161, frame: 0 }))).toMatchSnapshot()
+      expect(snapshotPlan(planVideoEditBuiltinEffect({ id, params: {} }, { width: 4097, height: 2161, frame: 0 }))).toMatchSnapshot()
     })
   }
   for (const [emptyOutgoing, emptyIncoming] of [[false, false], [true, false], [false, true], [true, true]]) {

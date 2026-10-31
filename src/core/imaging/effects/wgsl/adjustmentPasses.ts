@@ -54,10 +54,11 @@ fn toSrgb(c: vec3f) -> vec3f { let x = ${extendedRange ? 'abs(c)' : 'max(c, vec3
  return sum / weight;
 }
 
-/** 反锐化掩模：source 是模糊后的画面，original 是原画面；a.x 锐化量。 */
+/** 反锐化掩模：source 是模糊后的画面，original 是原画面；a.x 锐化量，a.y 阈值（明暗差低于它的平坦处不加强，0 全部加强）。 */
 @fragment fn unsharp(v: Vertex) -> @location(0) vec4f {
- let uv = uvOf(v); let o = tapOriginal(uv); let b = tap(uv);
- let rgb = o.rgb + (o.rgb - b.rgb) * u.a.x;
+ let uv = uvOf(v); let o = tapOriginal(uv); let d = o.rgb - tap(uv).rgb;
+ let keep = select(1.0, smoothstep(u.a.y * 0.5, u.a.y, abs(dot(d, LUMA))), u.a.y > 0.0);
+ let rgb = o.rgb + d * u.a.x * keep;
  return vec4f(${extendedRange ? 'rgb' : 'clamp(rgb, vec3f(0.0), vec3f(o.a))'}, o.a);
 }
 

@@ -21,11 +21,11 @@ export interface VideoEditSmartPreset {
 
 export const VIDEO_EDIT_SMART_PRESETS: readonly VideoEditSmartPreset[] = [
   { id: 'face_mosaic', name: '人脸打码', tooltip: '自动找出每张人脸，逐帧跟随打上马赛克', description: '马赛克（块大小 40）+ 人脸区域。', builtinId: 'mosaic', params: { block_size: 40 }, mask: { regionId: 'face' } },
-  { id: 'face_blur', name: '人脸模糊', tooltip: '自动找出每张人脸，逐帧跟随模糊', description: '高斯模糊（标准差为画面高度的 1.8%）+ 人脸区域。', builtinId: 'gaussian_blur', params: { sigma_fraction_height: 0.018 }, mask: { regionId: 'face' } },
-  { id: 'background_blur', name: '背景虚化', tooltip: '人物保持清晰，背景模糊', description: '高斯模糊（标准差为画面高度的 1.05%）+ 背景区域（人物抠像取反）。', builtinId: 'gaussian_blur', params: { sigma_fraction_height: 0.0105 }, mask: { regionId: 'background' } },
-  { id: 'background_darken', name: '背景压暗', tooltip: '压暗人物以外的部分，突出人物', description: '亮度与对比度（亮度 -35）+ 背景区域。', builtinId: 'brightness_contrast', params: { brightness: -35 }, mask: { regionId: 'background' } },
+  { id: 'face_blur', name: '人脸模糊', tooltip: '自动找出每张人脸，逐帧跟随模糊', description: '模糊（均匀，模糊度 61，约为画面高度的 1.8%）+ 人脸区域。', builtinId: 'blur', params: { amount: 61 }, mask: { regionId: 'face' } },
+  { id: 'background_blur', name: '背景虚化', tooltip: '人物保持清晰，背景模糊', description: '模糊（均匀，模糊度 44，约为画面高度的 1%）+ 背景区域（人物抠像取反）。', builtinId: 'blur', params: { amount: 44 }, mask: { regionId: 'background' } },
+  { id: 'background_darken', name: '背景压暗', tooltip: '压暗人物以外的部分，突出人物', description: '全能调色（曝光 -1 档）+ 背景区域。', builtinId: 'color_grade', params: { exposure: -1 }, mask: { regionId: 'background' } },
   { id: 'text_mosaic', name: '文字打码', tooltip: '找出画面里的文字（字幕、标牌、水印）打上马赛克', description: '马赛克（块大小 25）+ 文字区域。擦除文字的第一版：遮挡而不是修补背景。', builtinId: 'mosaic', params: { block_size: 25 }, mask: { regionId: 'text' } },
-  { id: 'text_blur', name: '文字模糊', tooltip: '找出画面里的文字，模糊掉', description: '高斯模糊（标准差为画面高度的 1.5%）+ 文字区域。', builtinId: 'gaussian_blur', params: { sigma_fraction_height: 0.015 }, mask: { regionId: 'text' } },
+  { id: 'text_blur', name: '文字模糊', tooltip: '找出画面里的文字，模糊掉', description: '模糊（均匀，模糊度 55，约为画面高度的 1.5%）+ 文字区域。', builtinId: 'blur', params: { amount: 55 }, mask: { regionId: 'text' } },
 ]
 
 export const VIDEO_EDIT_SMART_PRESET_PREFIX = 'smart:'

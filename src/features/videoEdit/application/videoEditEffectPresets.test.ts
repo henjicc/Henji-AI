@@ -6,9 +6,10 @@ import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { videoEditEffectsRegistry } from '@/core/videoEdit/effectsRegistry'
+import { WHITE_HEX } from '@/core/theme/colorTokens'
 import { makeVideoEditBuiltinEffect, applyVideoEditBuiltinEffect } from './videoEditCompositing'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
-import { resolveVideoEditLibraryEffects, videoEditPresetCreationProperties, createVideoEditEffectLibraryStore, filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditUserPresetEntries, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY } from './videoEditEffectPresets'
+import { createVideoEditEffectLibraryStore, filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditUserPresetEntries, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY } from './videoEditEffectPresets'
 import { videoEditEffectDropClips } from '../panels/videoEditEffectDrag'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -42,12 +43,12 @@ async function project() {
 
 it('搜索名称、别名、分类、分组、说明，忽略大小写与全角；清空返回完整目录', () => {
   const entries = videoEditEffectsRegistry()
-  expect(filterVideoEditLibraryEntries(entries, '高斯').map(entry => entry.builtinId)).toContain('gaussian_blur')
-  expect(filterVideoEditLibraryEntries(entries, 'GAUSSIAN BLUR').map(entry => entry.builtinId)).toContain('gaussian_blur')
+  expect(filterVideoEditLibraryEntries(entries, '高斯').map(entry => entry.builtinId)).toContain('blur')
+  expect(filterVideoEditLibraryEntries(entries, 'GAUSSIAN BLUR').map(entry => entry.builtinId)).toContain('blur')
   expect(filterVideoEditLibraryEntries([{ ...entries[0], aliases: ['叠化'] }], '叠化')).toHaveLength(1)
   expect(filterVideoEditLibraryEntries(entries, '音频效果').every(entry => entry.media === 'audio')).toBe(true)
-  expect(filterVideoEditLibraryEntries(entries, 'gaussian_blur').map(entry => entry.builtinId)).toEqual(['gaussian_blur'])
-  const effect = entries.find(entry => entry.builtinId === 'gaussian_blur')!
+  expect(filterVideoEditLibraryEntries(entries, '缩放模糊').map(entry => entry.builtinId)).toEqual(['blur'])
+  const effect = entries.find(entry => entry.builtinId === 'blur')!
   expect(filterVideoEditLibraryEntries([effect], effect.description.slice(0, 6))).toEqual([effect])
   expect(filterVideoEditLibraryEntries(entries, '不存在的效果')).toEqual([])
   expect(filterVideoEditLibraryEntries(entries, '  ')).toEqual(entries)
@@ -56,24 +57,24 @@ it('搜索名称、别名、分类、分组、说明，忽略大小写与全角�
 it('贝塞尔过冲预设应用到较短片段，修剪后参数仍可持久保存', async () => {
   const { owner, id, sequenceId, pictures } = await project()
   const clip = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[0])!
-  const effect = makeVideoEditBuiltinEffect('gaussian_blur')
-  effect.builtin!.curves = { sigma_fraction_height: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: (clip.duration - 1) * 2, value: 0.03, interpolation: 'linear' }] }
+  const effect = makeVideoEditBuiltinEffect('blur')
+  effect.builtin!.curves = { amount: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, 3] }, { time: (clip.duration - 1) * 2, value: 80, interpolation: 'linear' }] }
   const preset = useVideoEditEffectLibraryStore.getState().savePreset('模糊动画', [effect])
   expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [clip.id], `preset:${preset.id}`)).not.toThrow()
-  const points = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects![0].builtin!.curves!.sigma_fraction_height
+  const points = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects![0].builtin!.curves!.amount
   expect(points.at(-1)?.time).toBe(clip.duration - 1)
-  expect(points.at(-1)?.value).toBeCloseTo(0.07125, 6)
-  expect(points[0].easeValues).toEqual([0, 0.03])
+  expect(points.at(-1)?.value).toBeCloseTo(190, 4)
+  expect(points[0].easeValues).toEqual([0, 80])
 })
 it('收藏、参数组合、重命名与删除经本机设置持久保存；写失败不发布新状态', () => {
   const disk = storage(); const first = createVideoEditEffectLibraryStore(disk)
-  first.getState().toggleFavorite('effect:gaussian_blur'); first.getState().toggleFavorite('transition:cross_dissolve')
+  first.getState().toggleFavorite('effect:blur'); first.getState().toggleFavorite('transition:cross_dissolve')
   const preset = first.getState().savePreset('清晰对白', [makeVideoEditBuiltinEffect('high_pass', { frequency: 100 }), makeVideoEditBuiltinEffect('compressor')])
   first.getState().renamePreset(preset.id, '对白处理')
   const restored = createVideoEditEffectLibraryStore(disk)
-  expect(restored.getState().favorites).toEqual(['effect:gaussian_blur', 'transition:cross_dissolve'])
+  expect(restored.getState().favorites).toEqual(['effect:blur', 'transition:cross_dissolve'])
   expect(restored.getState().presets[0]).toMatchObject({ name: '对白处理', media: 'audio', effects: preset.effects })
-  restored.getState().toggleFavorite('effect:gaussian_blur'); restored.getState().deletePreset(preset.id)
+  restored.getState().toggleFavorite('effect:blur'); restored.getState().deletePreset(preset.id)
   expect(createVideoEditEffectLibraryStore(disk).getState()).toMatchObject({ favorites: ['transition:cross_dissolve'], presets: [] })
   const previous = restored.getState(); const written = disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)
   vi.spyOn(disk, 'setItem').mockImplementation(() => { throw new Error('storage full') })
@@ -100,7 +101,7 @@ it('保存参数强度开关与作用区域；手绘形状可选保存，跟踪�
 
 it('预设组合拖放/双击共用应用入口，长链跨片段一步撤销；媒介不匹配拒绝', async () => {
   const { owner, id, sequenceId, pictures, sound } = await project()
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('画面组合', [makeVideoEditBuiltinEffect('gaussian_blur', { sigma_fraction_height: 0.0195 }), { ...makeVideoEditBuiltinEffect('mosaic'), amount: .3, enabled: false }])
+  const preset = useVideoEditEffectLibraryStore.getState().savePreset('画面组合', [makeVideoEditBuiltinEffect('blur', { amount: 63.95 }), { ...makeVideoEditBuiltinEffect('mosaic'), amount: .3, enabled: false }])
   const templateRef = `preset:${preset.id}`
   const before = owner.past.length
   const created = applyVideoEditBuiltinEffect(id, sequenceId, [...pictures, sound], templateRef)
@@ -124,7 +125,7 @@ it('预设组合拖放/双击共用应用入口，长链跨片段一步撤销；
 
 it('助手正式目录可读预设，并经现有效果集合写入整组；与手动入口结果相同且一步撤销', async () => {
   const { owner, id, pictures } = await project()
-  const preset = useVideoEditEffectLibraryStore.getState().savePreset('颜色组合', Array.from({ length: 24 }, (_, index) => makeVideoEditBuiltinEffect(index % 2 ? 'vignette' : 'brightness_contrast')))
+  const preset = useVideoEditEffectLibraryStore.getState().savePreset('颜色组合', Array.from({ length: 24 }, (_, index) => makeVideoEditBuiltinEffect(index % 2 ? 'vignette' : 'color_grade')))
   expect(filterVideoEditLibraryEntries(videoEditUserPresetEntries([preset]), '颜色组合 视频预设')).toHaveLength(1)
   const app = createApplicationHarness()
   try {
@@ -150,23 +151,18 @@ it('助手正式目录可读预设，并经现有效果集合写入整组；与�
   } finally { app.dispose() }
 })
 
-it('导入预设与直接模板不能绕过片段范围；展开保留双用效果且不修改原预设', async () => {
+
+it('本机预设库里有已移除的效果时照样读入、原样保留，旧暗角换算；应用预设时跳过已移除的效果', async () => {
+  const disk = storage()
+  const removed = { id: 'r', name: '亮度与对比度', enabled: true, amount: 1, builtin: { id: 'brightness_contrast', params: { brightness: -35 } } }
+  const dark = { id: 'v', name: '暗角', enabled: true, amount: 1, builtin: { id: 'vignette', params: { amount: -30 } } }
+  disk.setItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, JSON.stringify({ version: 2, state: { favorites: ['effect:brightness_contrast'], presets: [{ id: 'old', name: '旧组合', media: 'video', effects: [removed, dark] }] } }))
+  const store = createVideoEditEffectLibraryStore(disk)
+  expect(store.getState().loadError).toBe('')
+  // 已移除的效果原样保留；旧暗角的负数量读入时换成正数量配白色。
+  expect(store.getState().presets[0].effects).toEqual([removed, { ...dark, builtin: { id: 'vignette', params: { amount: 30, color: WHITE_HEX } } }])
+  useVideoEditEffectLibraryStore.setState({ presets: store.getState().presets })
   const { owner, id, sequenceId, pictures } = await project()
-  const lens = { ...makeVideoEditBuiltinEffect('gaussian_blur'), builtin: { id: 'lens_blur', params: { radius_fraction_height: .009 } } }
-  const [preset] = useVideoEditEffectLibraryStore.getState().importPresets([{ id: 'external', name: '混合预设', media: 'video', effects: [lens, makeVideoEditBuiltinEffect('gaussian_blur')] }])
-  const ref = `preset:${preset.id}`
-  expect(resolveVideoEditLibraryEffects(ref)?.effects.map(effect => effect.builtin?.id)).toEqual(['gaussian_blur'])
-  expect(videoEditPresetCreationProperties(preset).map(value => value['video_edit.effect.definition_id'])).toEqual(['effect:gaussian_blur'])
-  applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], ref)
-  expect(getActiveVideoEditSequence(owner).clips[0].effects?.map(effect => effect.builtin?.id)).toEqual(['gaussian_blur'])
-  expect(preset.effects.map(effect => effect.builtin?.id)).toEqual(['lens_blur', 'gaussian_blur'])
-  const before = owner.document
-  for (const template of ['lens_blur', 'effect:lens_blur']) {
-    expect(resolveVideoEditLibraryEffects(template)).toBeUndefined()
-    expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], template)).toThrow()
-  }
-  const [onlyLens] = useVideoEditEffectLibraryStore.getState().importPresets([{ ...preset, effects: [lens] }])
-  expect(resolveVideoEditLibraryEffects(`preset:${onlyLens.id}`)).toBeUndefined()
-  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], `preset:${onlyLens.id}`)).toThrow()
-  expect(owner.document).toBe(before)
+  applyVideoEditBuiltinEffect(id, sequenceId, [pictures[0]], 'preset:old')
+  expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === pictures[0])!.effects?.map(effect => effect.builtin?.id)).toEqual(['vignette'])
 })

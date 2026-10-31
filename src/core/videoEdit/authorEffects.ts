@@ -1,4 +1,5 @@
 import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, type VideoEditBuiltinParams } from './builtinEffects'
+import { retiredBlurParams } from './blur'
 import type { VideoEditEffectPreset } from './effectPresets'
 import { evaluateVideoEditEffect } from './keyframes'
 import type { ColorLutAsset } from './colorLutAsset'
@@ -26,9 +27,12 @@ export function resolveVideoEditLookByName(name: string, environment: AuthorEffe
 export function resolveAuthorEffects(value: unknown, environment: AuthorEffectEnvironment = {}, presetFrame = 0, layer = '图层'): ResolvedAuthorEffect[] {
   if (!Array.isArray(value)) throw new Error(`${layer}.effects(t) 必须同步返回效果数组。`)
   const result: ResolvedAuthorEffect[] = []
-  const add = (id: string, input: Record<string, unknown>, amount: number, look?: string): void => {
+  const add = (requested: string, raw: Record<string, unknown>, amount: number, look?: string): void => {
+    // 冻结的 henji-effects 1.0.0 的 blur() 与旧预设产出并进“模糊”前的 ID，按存档迁移的同一换算转过来。
+    const retired = retiredBlurParams(requested, raw)
+    const id = retired ? 'blur' : requested, input = retired ?? raw
     const definition = requireVideoEditBuiltinEffect(id)
-    if (definition.space !== 'layer' && definition.space !== 'layer-only' || definition.media === 'audio') throw new Error(`${id} 不能用于图层，请使用片段效果链。`)
+    if (definition.space !== 'layer' || definition.media === 'audio') throw new Error(`${id} 不能用于图层，请使用片段效果链。`)
     const params = normalizeVideoEditBuiltinParams(id, input)
     for (const param of definition.params) if (param.type === 'lut' && params[param.key] && !environment.luts?.some(lut => lut.id === params[param.key])) throw new Error(`项目中找不到 LUT ${params[param.key]}，请重新导入。`)
     if (amount > 0) result.push({ id, params, amount, source: look === undefined ? 'descriptor' : 'look', ...(look === undefined ? {} : { look }) })

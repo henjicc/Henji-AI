@@ -47,7 +47,7 @@ async function fixture() {
     document.media = [{ id: 'media', kind: 'image', name: '画面', path: '/review.png', width: 100, height: 100, durationSeconds: 1 }]
     document.items = [{ id: 'item', kind: 'image', name: '卡片', mediaId: 'media' }]
     const sequence = document.sequences[0], clip = makeVideoEditItemClip(document, 'item', sequenceId, { frame: 0, duration: 60 })
-    sequence.clips = [{ ...clip, id: 'picture', effects: [makeVideoEditBuiltinEffect('brightness_contrast', { brightness: .2 })] }]
+    sequence.clips = [{ ...clip, id: 'picture', effects: [makeVideoEditBuiltinEffect('color_grade', { exposure: .2 })] }]
     sequence.captions = [{ id: 'first', start: 0, duration: 20, text: '第一句话' }, { id: 'second', start: 30, duration: 20, text: '第二句话' }]
     return document
   })
@@ -180,7 +180,7 @@ it.each([false, true])('变速跳过整段字幕时不在字幕范围外伪造�
 
 it('同帧多效果共用两次开启基线，复用一个比较 Worker，纯字幕清单不渲染', async () => {
   const { owner, input, render } = await fixture(), app = createApplicationHarness()
-  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, effects: [...clip.effects!, makeVideoEditBuiltinEffect('brightness_contrast', { brightness: .4 })] })) })) }))
+  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, effects: [...clip.effects!, makeVideoEditBuiltinEffect('color_grade', { exposure: .4 })] })) })) }))
   const result = queryVideoEditReviewCapability.outputSchema.parse(await app.requireResult('query_video_edit_review', { ...input, limit: 50 }))
   expect(result.records.filter(record => record.kind === 'effect_visible')).toHaveLength(6)
   expect(render).toHaveBeenCalledTimes(3 * (2 + 2))
@@ -207,7 +207,7 @@ it('共用基线在各自关闭效果后重复开启，不稳定时整组不能�
 
 it('效果计算超过预算时在第一次取帧前拒绝，并给出可缩小的参数', async () => {
   const { owner, input, render } = await fixture(), app = createApplicationHarness()
-  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, effects: Array.from({ length: 40 }, () => makeVideoEditBuiltinEffect('brightness_contrast', { brightness: .2 })) })) })) }))
+  editVideoProject(owner.document.id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, effects: Array.from({ length: 40 }, () => makeVideoEditBuiltinEffect('color_grade', { exposure: .2 })) })) })) }))
   const result = await app.call('query_video_edit_review', input)
   expect(result.ok).toBe(false)
   expect(JSON.stringify(result)).toContain('缩小 from/to')

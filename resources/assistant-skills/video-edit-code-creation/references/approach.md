@@ -11,7 +11,7 @@
 | 网页画面（图片参数绑定本地网页） | 只在显卡画法做不好或做不像时用：复刻真实网页应用界面、依赖大量 CSS 的富排版、本来就是网页的内容；标题、花字、简单表格、数据卡仍用代码生成器 | 页面按 `henjiWeb.seek(t)` 可任意寻帧，浏览器排版与真网页一致；每个来源多开一个隔离页面、每帧排版绘制再交给合成，成本明显更高；推近用取景加倍率保持清楚，见 author-api-media 的“网页画面” |
 | 代码滤镜 | 处理下方画面：局部折射、方向模糊、色散、相邻帧拖影；`createWebGPU` 读 `inputs.current` 与 `inputs.frames` | 只拿当前输入与声明的相邻帧，不读其他轨道或无限历史；源码可改 |
 | shaders 组件 | 成熟纹理、材质、扭曲、模糊；先查组件目录，作为片段效果 `effect:shaders.组件名` 或转场 `transition:shaders.组件名` | 已筛选为可寻帧确定；参数易调；作者代码不能直接调用组件 |
-| 内置效果 | 全能调色 effect:color_grade、发光 effect:glow（含光晕色差、着色）、色差 effect:chromatic_aberration、高斯／方向／缩放模糊、锐化、颗粒、暗角 | 用 video_edit.builtin_effect 查参数；video_edit.effect 可改、可设 frame_curves；单位通常是意图强度 |
+| 内置效果 | 全能调色 effect:color_grade、发光 effect:glow（含光晕色差、着色）、色差 effect:chromatic_aberration、模糊 effect:blur（均匀／方向／放射／镜头）、锐化、颗粒、暗角、马赛克 | 用 video_edit.builtin_effect 查参数；video_edit.effect 可改、可设 frame_curves；单位通常是意图强度 |
 | AI 生图／生视频再合成 | 真实场景、复杂角色、摄影／难程序化的有机纹理；原地生成后图形／字幕叠加 | 可能付费且不保证精确重复或文字正确；结果成为媒体，内部不可逐元素改；先给用户可评估的方案与预算，遵守已有生成授权 |
 | 时间线片段／转场 | 现成媒体编排、剪接、字幕、速度交接 | 时间线驱动过渡进度；不用代码重写已有剪辑操作，转场名必须来自目录 |
 

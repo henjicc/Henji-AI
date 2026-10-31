@@ -97,7 +97,7 @@ it('转场余量、字幕及小于半秒片段参与分段，隐藏轨道和关�
 
 it('复制效果实例共用预览，隐藏的跟踪来源变化仍使依赖段失效', () => {
   const document = project(), sequence = document.sequences[0], clip = sequence.clips[0]
-  const effect = { id: 'effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: { radius: 5 } } }
+  const effect = { id: 'effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: { radius: 5 } } }
   sequence.clips = [{ ...clip, duration: 120, effects: [effect] }, { ...clip, id: 'copy', start: 120, duration: 120, effects: [{ ...effect, id: 'copied-effect' }] }]
   expect(keys(document)[0]).toBe(keys(document)[1])
   sequence.clips[0].follow = { clipId: 'hidden-source', trackerId: 'tracker', offsetX: 0, offsetY: 0 }

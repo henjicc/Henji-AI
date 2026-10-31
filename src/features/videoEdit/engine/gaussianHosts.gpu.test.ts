@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import { effect, frame, target, type Target } from 'vgpu'
 import { writeFileSync } from 'node:fs'
 import { init, type Gpu } from 'vgpu/node'
@@ -104,7 +105,7 @@ describe('两宿主高斯真实设备符合性', () => {
         const imagePixels = await imageOutput.readFloats()
         const reference = executeGaussianCpu(plan, { x: 0, y: 0, width, height, data: await source.readFloats() }).data
         compare(imagePixels, reference)
-        await video.render({ id: 'gaussian_blur', params: parameters }, { texture: encodedSource.color.gpu as unknown as GpuTexture, width, height, format: 'rgba16float' }, videoOutput.color.gpu as unknown as GpuTexture, 0, 1, [], quality, { width, height })
+        await video.render({ id: 'blur', params: { amount: blurAmountForSigma(parameters.sigma_fraction_height), axis: parameters.axis, repeat_edges: parameters.edge_mode === 'clamp' } }, { texture: encodedSource.color.gpu as unknown as GpuTexture, width, height, format: 'rgba16float' }, videoOutput.color.gpu as unknown as GpuTexture, 0, 1, [], quality, { width, height })
         const encodedImage = new Float32Array(imagePixels)
         for (let i = 0; i < encodedImage.length; i += 4) for (let c = 0; c < 3; c++) encodedImage[i + c] = imagePixels[i + 3] > 0 ? encode(imagePixels[i + c] / imagePixels[i + 3]) * imagePixels[i + 3] : 0
         compare(await videoOutput.readFloats(), encodedImage)

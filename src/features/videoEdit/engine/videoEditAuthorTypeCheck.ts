@@ -2,7 +2,7 @@ import { reviewCodeEffectUsage, type CodeEffectSuggestion } from '@/core/videoEd
 import { authorEffectDiagnostics } from './videoEditAuthorEffectDiagnostics'
 import ts from 'typescript'
 import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'
-import { AUTHOR_LIBRARIES, authorLibraryCompatibilityError, resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { AUTHOR_LIBRARIES, authorLibraryCompatibilityError, authorLibraryVersion, resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import type { CodeTypeCheckResult, CodeTypeDiagnostic } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 
@@ -273,7 +273,7 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
           const at = position(originalOffset(offset, insertions))
           suggestions.push({ ...suggestion, file: path, line: at.line, column: at.column })
         }
-        const effectDiagnostics = authorEffectDiagnostics(program!.getSourceFile(name)!, program!.getTypeChecker()).map(value => ({ ...value, category: ts.DiagnosticCategory.Error, code: 95001, messageText: value.message }))
+        const effectDiagnostics = authorEffectDiagnostics(program!.getSourceFile(name)!, program!.getTypeChecker(), authorLibraryVersion('henji-effects', files.libraries)).map(value => ({ ...value, category: ts.DiagnosticCategory.Error, code: 95001, messageText: value.message }))
         for (const diagnostic of [...service.getSyntacticDiagnostics(name), ...service.getSemanticDiagnostics(name), ...effectDiagnostics]) {
           if (diagnostic.category !== ts.DiagnosticCategory.Error || IGNORED_CODES.has(diagnostic.code)) continue
           const insertions = shifted.get(path) ?? []

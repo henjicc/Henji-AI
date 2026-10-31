@@ -14,7 +14,7 @@ import { videoEditSmartRegionStatusText } from './videoEditSmartRegions'
 import { assertVideoEditMaskTrackers, putVideoEditTracker } from './videoEditTrackingEdits'
 import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
 import { isSmartRegionMask, type VideoEditEffectMask } from '@/core/videoEdit/effectMasks'
-import { videoEditCurvesSchema, sliceVideoEditClipKeyframes } from '@/core/videoEdit/keyframes'
+import { videoEditCurvesSchema, sliceVideoEditClipKeyframes, validateVideoEditBuiltinCurves } from '@/core/videoEdit/keyframes'
 import type { RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
 
 export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition', 'video_edit.tracker'] as const
@@ -115,6 +115,7 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       // 删除跟踪器后引用可落空；只在实际写入作用区域时校验，改名称等属性仍可进行。
       if (JSON.stringify(mask) !== JSON.stringify(owner.effect.mask)) assertMaskClip(document, owner.clip, mask as VideoEditEffectMask | undefined)
       const curves = videoEditCurvesSchema.parse(data.frameCurves ?? {})
+      validateVideoEditBuiltinCurves({ id: builtin.id, curves })
       const zoom = withVideoEditZoomRegions<{ id: string; regions?: RecordingZoomRegion[] }>({ id: builtin.id }, data.regions)
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params, ...(Object.keys(curves).length ? { curves } : {}), ...(zoom.regions ? { regions: zoom.regions } : {}) }, ...(mask ? { mask } : {}) })
       delete owner.effect.mask; Object.assign(owner.effect, next)
@@ -170,7 +171,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     if (values.curves !== undefined) object.curves = codeMaterialInstanceSchema.shape.curves.parse(values.curves)
     clip.graphic.objects.push(object); return videoEditGraphicObjectId(clip.id, object.id)
   }
-  if (values.definitionId === undefined || typeof values.definitionId !== 'string') throw new Error('请提供 definition_id：内置效果写 effect:<ID>（如画面 effect:gaussian_blur、声音 effect:noise_reduction，完整目录见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID。')
+  if (values.definitionId === undefined || typeof values.definitionId !== 'string') throw new Error('请提供 definition_id：内置效果写 effect:<ID>（如画面 effect:blur、声音 effect:noise_reduction，完整目录见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID。')
   const builtinId = parseVideoEditBuiltinRefId(values.definitionId)
   const media = builtinId ? videoEditBuiltinEffectMedia(builtinId) : 'video'
   if (!videoEditEffectAccepts(media, clip)) throw new Error(media === 'audio' ? `音频效果只能加到声音片段，片段“${clip.name}”不是声音片段。` : `片段“${clip.name}”是声音片段，只能加音频效果（video_edit.builtin_effect 里说明以“音频效果”开头的 effect:<ID>，如 effect:noise_reduction）。`)
@@ -180,7 +181,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     const effect = makeVideoEditBuiltinEffect(builtinId, (values.parameters ?? {}) as Record<string, unknown>, values.name !== undefined ? String(values.name) : undefined, true)
     if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
     if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)
-    if (values.frameCurves !== undefined) effect.builtin!.curves = videoEditCurvesSchema.parse(values.frameCurves)
+    if (values.frameCurves !== undefined) { effect.builtin!.curves = videoEditCurvesSchema.parse(values.frameCurves); validateVideoEditBuiltinCurves(effect.builtin!) }
     if (values.regions !== undefined) effect.builtin = withVideoEditZoomRegions(effect.builtin!, values.regions)
     Object.assign(effect, videoEditEffectSchema.parse(effect))
     if (values.mask) {

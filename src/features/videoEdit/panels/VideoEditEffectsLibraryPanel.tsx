@@ -90,7 +90,7 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
               {entry.group && entry.group !== folder.entries[index - 1]?.group && <span className="px-2 pb-0.5 pt-1.5 text-2xs text-text3" aria-hidden="true">{entry.group}</span>}
               <div className="flex min-w-0 items-center gap-1">
               <div className="min-w-0 flex-1">
-              <Tooltip content={`${entry.tooltip}。${entry.kind === 'transition' ? '拖到时间线上两个片段相接处或片段一端，或选中片段后双击应用。' : '拖到片段上，或选中片段后双击应用。'}`} placement="left">
+              <Tooltip content={`${entry.tooltip.replace(/。$/, '')}。${entry.kind === 'transition' ? '拖到时间线上两个片段相接处或片段一端，或选中片段后双击应用。' : '拖到片段上，或选中片段后双击应用。'}`} placement="left">
               <UiOptionButton variant="menu" size="sm" className="w-full min-w-0 justify-start gap-2" role="treeitem" aria-selected={false} draggable={entry.kind === 'transition' || Boolean(entry.templateRef)} data-video-edit-effects-entry={entry.id}
                 onDragStart={event => { if (entry.transitionKind) startVideoEditTransitionDrag(event.dataTransfer, instance.document.id, entry.transitionKind); else if (entry.templateRef) startVideoEditEffectDrag(event.dataTransfer, instance.document.id, entry.templateRef) }}
                 onDragEnd={() => { endVideoEditTransitionDrag(); endVideoEditEffectDrag() }}

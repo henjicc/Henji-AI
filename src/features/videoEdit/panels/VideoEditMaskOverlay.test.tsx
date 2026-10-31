@@ -36,7 +36,7 @@ async function fixture(kind: 'rect' | 'ellipse' = 'rect') {
   appendVideoEditMedia(projectId, { id:'m',name:'素材',path:'/media/a.mp4',kind:'video',durationSeconds:20,width:1920,height:1080 })
   appendVideoEditClip(projectId,'m')
   const sequence = getActiveVideoEditSequence(owner); const clip = sequence.clips.find(value=>value.kind==='video')!
-  const [effectId] = applyVideoEditBuiltinEffect(projectId,sequence.id,[clip.id],'gaussian_blur')
+  const [effectId] = applyVideoEditBuiltinEffect(projectId,sequence.id,[clip.id],'blur')
   const target = {projectId,sequenceId:sequence.id,clipId:clip.id,effectId}
   const shape = createVideoEditMaskShape(kind,'shape')
   updateVideoEditBuiltinEffect(target,effectId,{mask:{regionId:'shapes',shapes:[shape]}})
@@ -208,7 +208,7 @@ it('钢笔：逐点画、按住拖出控制柄、点回起点闭合成遮罩（�
   appendVideoEditMedia(id, { id: 'm1', name: '素材', path: 'D:/media/a.mp4', kind: 'video', durationSeconds: 20, width: 1920, height: 1080 })
   appendVideoEditClip(id, 'm1')
   const sequence = getActiveVideoEditSequence(owner); const clip = sequence.clips.find(entry => entry.kind === 'video')!
-  const [effectId] = applyVideoEditBuiltinEffect(id, sequence.id, [clip.id], 'gaussian_blur')
+  const [effectId] = applyVideoEditBuiltinEffect(id, sequence.id, [clip.id], 'blur')
   const target = { projectId: id, sequenceId: sequence.id, clipId: clip.id, effectId }
   setVideoEditMaskEditing({ ...target, pen: true })
   const view = render(<VideoEditMaskOverlay instance={owner} onError={error => { throw error }} />)
