@@ -75,8 +75,8 @@ async function disableMcp(page) {
 }
 
 /** 成功调用；失败直接把完整结果抛出来，不让 `isError:true` 被当成通过。 */
-async function callTool(client, name, args) {
-  const result = await client.callTool({ name, arguments: args })
+async function callTool(client, name, args, options) {
+  const result = await client.callTool({ name, arguments: args }, options)
   assert.equal(result.isError, false, `${name} 调用失败：${JSON.stringify(result)}`)
   return result.structuredContent
 }

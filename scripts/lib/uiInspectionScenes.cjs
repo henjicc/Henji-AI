@@ -46,6 +46,7 @@ const { createVideoEditOpenPictureScene } = require('./uiInspectionSceneVideoEdi
 const { createVideoEditProjectSourceScene } = require('./uiInspectionSceneVideoEditProjectSource.cjs')
 const { createVideoEditCodeScene } = require('./uiInspectionSceneVideoEditCode.cjs')
 const { createVideoEditCodePerformanceScene } = require('./uiInspectionSceneVideoEditCodePerformance.cjs')
+const { createVideoEditStyleReuseScene } = require('./uiInspectionSceneVideoEditStyleReuse.cjs')
 const { createVideoEditCompositeScene } = require('./uiInspectionSceneVideoEditComposite.cjs')
 const { createVideoEditCompositeEditScene } = require('./uiInspectionSceneVideoEditCompositeEdit.cjs')
 const { createVideoEditMaskScene } = require('./uiInspectionSceneVideoEditMask.cjs')
@@ -185,6 +186,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditProjectSourceScene(),
     createVideoEditCodeScene(),
     createVideoEditCodePerformanceScene(),
+    ...(process.env.HENJI_STYLE_REUSE_ROOT ? [createVideoEditStyleReuseScene()] : []),
     createVideoEditCompositeScene(),
     createVideoEditCompositeEditScene(),
     createVideoEditCompositeEditScene({ pressureOnly: true }),
