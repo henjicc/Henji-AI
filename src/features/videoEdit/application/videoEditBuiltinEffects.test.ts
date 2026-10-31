@@ -2,6 +2,7 @@ import { createVideoEditTestProject as createVideoEditProject } from './videoEdi
 import path from 'node:path'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from '@/core/videoEdit/shaderGraph/effects'
 import { CURATED_TRANSITIONS } from '@/core/videoEdit/transitionCatalog'
+import { videoEditBuiltinDefaults, videoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
@@ -138,7 +139,7 @@ it('效果面板拖放或双击：同一效果加到所选全部画面片段，�
   const history = owner.past.length
   const created = applyVideoEditBuiltinEffect(id, sequenceId, clipIds, 'blur')
   expect(created).toHaveLength(2); expect(owner.past).toHaveLength(history + 1)
-  for (const clip of getActiveVideoEditSequence(owner).clips) expect(clip.effects).toEqual([expect.objectContaining({ name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: { amount: 40, mode: 'uniform', axis: 'both', angle: 0, center_x: 50, center_y: 50, highlights: 50, repeat_edges: true } } })])
+  for (const clip of getActiveVideoEditSequence(owner).clips) expect(clip.effects).toEqual([expect.objectContaining({ name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: videoEditBuiltinDefaults(videoEditBuiltinEffect('blur')!) } })])
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.every(clip => !clip.effects?.length)).toBe(true)
   const track = getActiveVideoEditSequence(owner).clips[0].track
   editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, tracks: sequence.tracks.map(value => value.index === track ? { ...value, locked: true } : value) })) }))

@@ -9,7 +9,7 @@ import { planVideoEditBuiltinEffect, planVideoEditBuiltinTransition, videoEditGr
 import { resolveVideoEditTransitionParams, VIDEO_EDIT_BUILTIN_TRANSITION_KINDS } from '@/core/videoEdit/transitionParams'
 import { VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES, VIDEO_EDIT_BUILTIN_EFFECT_SHADER } from './videoEditBuiltinEffectShaders'
 import { recordingZoomDraw } from './videoEditRecordingZoomPlan'
-import { blurLineLength, blurSigma } from '@/core/videoEdit/blur'
+import { blurLineLength, blurRangeLevelSigma, blurSigma, blurSpinAngle } from '@/core/videoEdit/blur'
 
 const plan = (id: string, params: Record<string, unknown>, width = 1920, height = 1080, frame = 0): VideoEditBuiltinPlan => planVideoEditBuiltinEffect({ id, params: params as Record<string, number> }, { width, height, frame })
 /** 一道工序的全尺寸像素 sigma：降采样倍数 × 低分辨率 sigma。 */
@@ -167,6 +167,26 @@ it('模糊四种方式：同一个模糊度换算成相近的方差，放射按�
     expect(steps.at(-1)! * Math.hypot(1920, 1080)).toBeLessThan(1)
   }
   expect(plan('blur', { mode: 'radial', amount: 0 }).passes.map(pass => pass.entry)).toEqual(['copy'])
+})
+
+it('模糊旋转首道取满转角、迭代到最远角弧步不到一个像素；范围金字塔最粗一层盖住最糊处，模糊度 0 只复制', () => {
+  const spin = plan('blur', { mode: 'spin', amount: 40 })
+  const steps = spin.passes.map(pass => pass.uniforms[6])
+  expect(spin.passes.every(pass => pass.entry === 'blur_spin')).toBe(true)
+  expect(steps[0] * 16).toBeCloseTo(blurSpinAngle(40), 6)
+  expect(steps.every((step, index) => index === 0 || Math.abs(step * 16 / steps[index - 1] - 1) < 1e-5)).toBe(true)
+  expect(steps.at(-1)! * Math.hypot(960, 540)).toBeLessThan(1)
+  const sigma = blurSigma(100) * 1080
+  const ranged = plan('blur', { range: 'tilt', amount: 100 })
+  const levels = ranged.passes.filter(pass => pass.entry === 'blur_range_down').length
+  expect(blurRangeLevelSigma(levels)).toBeGreaterThanOrEqual(sigma); expect(blurRangeLevelSigma(levels - 1)).toBeLessThan(sigma)
+  expect(ranged.passes.at(-1)!.entry).toBe('blur_range_finish')
+  for (const pass of [...ranged.passes, ...plan('blur', { mode: 'lens', range: 'tilt', amount: 100 }).passes]) expect([16, 24], pass.entry).toContain(pass.uniforms.length)
+  // 图层上位置锚在内容框里，距离按完整画幅高度换算，与纹理外扩无关。
+  const layer = { referenceSize: { width: 1920, height: 1080 }, contentBounds: { x: 500, y: 300, width: 80, height: 30 }, rasterScale: 2, rasterOrigin: [64, 32] as const, quality: 'final' as const }
+  const anchored = planVideoEditBuiltinEffect({ id: 'blur', params: { range: 'progressive', range_x: 25, range_y: 100 } }, { width: 288, height: 124, frame: 0, layer }).passes.at(-1)!.uniforms
+  expect([anchored[8] * 2160, anchored[9] * 2160]).toEqual([expect.closeTo(64 + 40, 3), expect.closeTo(32 + 60, 3)])
+  for (const params of [{ range: 'tilt', amount: 0 }, { mode: 'lens', range: 'progressive', amount: 0 }, { mode: 'spin', amount: 0 }]) expect(plan('blur', params).passes.map(pass => pass.entry)).toEqual(['copy'])
 })
 
 it('锐化按半径换算模糊、带阈值；暗角带颜色', () => {

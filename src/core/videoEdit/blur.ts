@@ -1,16 +1,18 @@
 /**
- * 模糊：一个效果四种方式（均匀、方向、放射、镜头），同一个“模糊度”在四种方式下糊的程度相近。
+ * 模糊：一个效果五种方式（均匀、方向、放射、旋转、镜头），同一个“模糊度”在各方式下糊的程度相近。
  * 实现在剪辑内置效果着色器（`features/videoEdit/engine/blur.ts`），预览与导出同一路径。
  *
  * 模糊度先换成“相当于多大的高斯标准差”（画面高度的比例），各方式再按自己的形状换算：
  * 方向是等权直线，长度 √12·σ 时方差与高斯相同；放射在离中心半个画面高处拉出同样长的线；
- * 镜头是均匀圆盘，半径 2σ 时方差与高斯相同。
+ * 镜头是均匀圆盘，半径 2σ 时方差与高斯相同。旋转没有统一的长度（离中心越远弧越长），按转过的角度算。
+ * 均匀与镜头可以只糊一部分（“范围”）：渐进与移轴按位置逐处改变模糊量，最糊处的模糊度与整幅相同。
  */
 import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParams } from './builtinEffects'
 import { effectParam } from './effectIncludes'
 import { gaussianSupport, type LayerEffectReference } from './layerEffectGeometry'
 
-export type BlurMode = 'uniform' | 'directional' | 'radial' | 'lens'
+export type BlurMode = 'uniform' | 'directional' | 'radial' | 'spin' | 'lens'
+type BlurRange = 'full' | 'progressive' | 'tilt'
 /** 放射模糊的缩放取样不能越过中心，再往上画面已经全糊。 */
 const RADIAL_LIMIT = 0.8
 const SQRT12 = Math.sqrt(12)
@@ -33,6 +35,15 @@ export function blurLineLength(amount: number): number { return SQRT12 * blurSig
 export function blurZoomRange(amount: number): number { return Math.min(RADIAL_LIMIT, 2 * SQRT12 * blurSigma(amount)) }
 /** 镜头模糊的圆盘半径（画面高度的比例）。 */
 export function blurLensRadius(amount: number): number { return 2 * blurSigma(amount) }
+/**
+ * 范围金字塔第 `level` 层（边长减半 `level` 次）放大回全分辨率后的等效高斯标准差（像素）。
+ * 13 点降采样每次在上一层纹素里加方差 7/4，B 样条放大每次在粗一层纹素里加 1/3；逐层累加得 (37/36)(4^level − 1)。
+ */
+export function blurRangeLevelSigma(level: number): number { return Math.sqrt(37 / 36 * (4 ** level - 1)) }
+/** 范围（均匀）最糊处标准差为 `sigma`（像素）时实际用到的最粗一层的标准差：层数加到第一次盖住 `sigma` 为止。 */
+export function blurRangeCoarsestSigma(sigma: number): number { let level = 1; while (blurRangeLevelSigma(level) < sigma) level++; return blurRangeLevelSigma(level) }
+/** 旋转模糊转过的总角度（弧度）：每 1 模糊度 0.45°，40 约 18°，100 约 45°。 */
+export function blurSpinAngle(amount: number): number { return Math.max(0, amount) * 0.45 * Math.PI / 180 }
 
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
@@ -93,27 +104,64 @@ export function blurBleed(params: VideoEditBuiltinParams, ref: LayerEffectRefere
       const distance = Math.max(w * Math.max(n(params, 'center_x') / 100, 1 - n(params, 'center_x') / 100), bh * Math.max(n(params, 'center_y') / 100, 1 - n(params, 'center_y') / 100))
       return (distance * k / (1 - k) + 2) / h
     }
+    case 'spin': return blurSpinBleed(blurSpinAngle(amount) / 2, w, bh, n(params, 'center_x') / 100, n(params, 'center_y') / 100) / h
     case 'lens': return Math.min(cap, blurLensRadius(amount) * 1.5) + 2 / h
-    default: return Math.min(cap * h, gaussianSupport(blurSigma(amount) * h, w, bh, ref.quality)) / h
+    default: {
+      const sigma = blurSigma(amount) * h
+      // 范围最糊处是相邻两层的混合，粗的那层标准差可到目标的约两倍，尾巴比同样标准差的高斯重；外扩按实际用到的最粗一层算。
+      const ranged = (params.range === 'progressive' || params.range === 'tilt') && sigma > 0
+      return Math.min(cap * h, gaussianSupport(ranged ? blurRangeCoarsestSigma(sigma) : sigma, w, bh, ref.quality)) / h
+    }
   }
 }
 
-const DESCRIPTION = '让画面变糊。均匀用来柔化、做背景虚化或遮住细节；方向沿一个方向拉出拖影，表现速度；放射从中心向四周拉丝，表现冲刺和聚焦；镜头像相机失焦，亮点散成圆形光斑。'
+/**
+ * 旋转的外扩（像素）：内容四角绕中心各转 ±half 扫出的圆弧超出内容框多远。各道转过的角度合计不超过 ±half。
+ * 圆弧的最左、最右、最上、最下处在端点或正好经过水平、竖直方向的地方。
+ */
+function blurSpinBleed(half: number, width: number, height: number, cx: number, cy: number): number {
+  const center = [cx * width, cy * height]
+  if (half * Math.hypot(width, height) < 0.5) return 0
+  let over = 0
+  for (const [x, y] of [[0, 0], [width, 0], [0, height], [width, height]]) {
+    const r = Math.hypot(x - center[0], y - center[1]), start = Math.atan2(y - center[1], x - center[0])
+    const turns = [start - half, start + half]
+    for (let quarter = -4; quarter <= 4; quarter++) if (Math.abs(quarter * Math.PI / 2 - start) < half) turns.push(quarter * Math.PI / 2)
+    for (const angle of turns) {
+      const px = center[0] + r * Math.cos(angle), py = center[1] + r * Math.sin(angle)
+      over = Math.max(over, -px, px - width, -py, py - height)
+    }
+  }
+  return over + 2
+}
+
+const DESCRIPTION = '让画面变糊。均匀用来柔化、做背景虚化或遮住细节；方向沿一个方向拉出拖影，表现速度；放射从中心向四周拉丝，表现冲刺和聚焦；旋转绕中心转着糊开，像转盘、车轮；镜头像相机失焦，亮点散成圆形光斑。均匀和镜头可以用“范围”只糊一部分：渐进越往一边越糊，移轴只留一条清楚的带，像微缩模型。'
 const { amount, choice, angle, percent, toggle } = effectParam
-const only = (mode: BlurMode) => ({ visibleWhen: { param: 'mode', in: [mode] } })
+const only = (...modes: BlurMode[]) => ({ visibleWhen: { param: 'mode', in: modes } })
+const RANGE_MODES = { param: 'mode', in: ['uniform', 'lens'] }
+const ranged = (range: { equals: BlurRange } | { notEquals: BlurRange }) => ({ visibleWhen: { all: [RANGE_MODES, { param: 'range', ...range }] } })
+/** 位置可以放到内容外面（渐进从画面外开始变糊），滑块只走 0–100%。 */
+const position = (key: string, name: string, text: string) => ({ ...percent(key, 50, 0, { group: '范围', name, text }), min: -100, max: 200, softMin: 0, softMax: 100, ...ranged({ notEquals: 'full' }) })
 
 export const BLUR_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
   precision: (_params, plan) => plan.passes.some(pass => pass.entry !== 'copy'),
   space: 'layer', author: { factory: 'blur' }, bleed: blurBleed, id: 'blur', name: '模糊', group: 'blur', description: DESCRIPTION,
-  aliases: ['高斯模糊', '方向模糊', '运动模糊', '缩放模糊', '径向模糊', '镜头模糊', '镜头虚化', '虚化', '柔化', 'gaussian blur', 'directional blur', 'motion blur', 'zoom blur', 'radial blur', 'lens blur', 'bokeh'],
+  aliases: ['高斯模糊', '方向模糊', '运动模糊', '缩放模糊', '径向模糊', '旋转模糊', '镜头模糊', '镜头虚化', '虚化', '柔化', '移轴', '微缩模型', '渐进模糊', 'gaussian blur', 'directional blur', 'motion blur', 'zoom blur', 'radial blur', 'spin blur', 'lens blur', 'bokeh', 'tilt shift', 'progressive blur'],
   params: [
-    amount('amount', 40, { name: '模糊度', text: '画面糊得多厉害。0 不模糊；10 轻微柔化；40（默认）背景虚化，约为画面高度的 1%；70 只剩大块颜色。四种方式下同一个数值糊的程度相近，可以输入更大的值。' }, BLUR_AMOUNT_MAX),
-    choice('mode', 'uniform', [{ value: 'uniform', label: '均匀' }, { value: 'directional', label: '方向' }, { value: 'radial', label: '放射' }, { value: 'lens', label: '镜头' }], { name: '方式', text: '均匀（默认）整体柔化；方向沿一个角度拉出拖影；放射从中心向四周拉丝；镜头像失焦，亮点散成圆形光斑。' }),
-    { ...choice('axis', 'both', [{ value: 'both', label: '水平和垂直' }, { value: 'horizontal', label: '水平' }, { value: 'vertical', label: '垂直' }], { name: '模糊方向', text: '只往哪个方向糊。水平和垂直（默认）各方向一样；只选水平或垂直时，另一个方向保持清楚。' }), ...only('uniform') },
+    amount('amount', 40, { name: '模糊度', text: '画面糊得多厉害。0 不模糊；10 轻微柔化；40（默认）背景虚化，约为画面高度的 1%；70 只剩大块颜色。各方式下糊的程度相近；旋转按转过的角度算，40 约 18°，100 约 45°。可以输入更大的值。' }, BLUR_AMOUNT_MAX),
+    choice('mode', 'uniform', [{ value: 'uniform', label: '均匀' }, { value: 'directional', label: '方向' }, { value: 'radial', label: '放射' }, { value: 'spin', label: '旋转' }, { value: 'lens', label: '镜头' }], { name: '方式', text: '均匀（默认）整体柔化；方向沿一个角度拉出拖影；放射从中心向四周拉丝；旋转让画面绕中心转着糊开，像转盘、车轮；镜头像失焦，亮点散成圆形光斑。' }),
+    // 范围不是整幅时按位置逐处改变模糊量，两个方向一起糊，单方向不起作用。
+    { ...choice('axis', 'both', [{ value: 'both', label: '水平和垂直' }, { value: 'horizontal', label: '水平' }, { value: 'vertical', label: '垂直' }], { name: '模糊方向', text: '只往哪个方向糊。水平和垂直（默认）各方向一样；只选水平或垂直时，另一个方向保持清楚。' }), visibleWhen: { all: [{ param: 'mode', in: ['uniform'] }, { param: 'range', equals: 'full' }] } },
     { ...angle('angle', 0, { name: '角度', text: '拖影的方向。0（默认）左右拉，90 上下拉，45 斜着拉。' }), ...only('directional') },
-    { ...percent('center_x', 50, 0, { name: '中心（水平）', text: '放射的中心。默认在画面正中；挪到主体上，主体保持清楚、四周向外拉丝。' }), ...only('radial') },
-    { ...percent('center_y', 50, 0, { name: '中心（垂直）', text: '放射中心的上下位置，0 在顶边，100 在底边。' }), ...only('radial') },
+    { ...percent('center_x', 50, 0, { name: '中心（水平）', text: '放射、旋转的中心。默认在画面正中；挪到主体上，主体保持清楚，四周向外拉丝或绕着它转。' }), ...only('radial', 'spin') },
+    { ...percent('center_y', 50, 0, { name: '中心（垂直）', text: '中心的上下位置，0 在顶边，100 在底边。' }), ...only('radial', 'spin') },
     { ...amount('highlights', 50, { name: '亮点加亮', text: '亮点散开后有多亮。0 亮点和其他地方一样被抹平；50（默认）亮点散成明显的圆形光斑；100 光斑更亮更醒目。' }), ...only('lens') },
     toggle('repeat_edges', true, { name: '重复边缘像素', text: '画面边缘外面当作什么来糊。打开（默认）沿用边缘的颜色，整幅画面的四边不会发黑变透明；关闭时外面当作透明，给文字、图形加模糊时边缘自然淡出。' }),
+    { ...choice('range', 'full', [{ value: 'full', label: '整幅' }, { value: 'progressive', label: '渐进' }, { value: 'tilt', label: '移轴' }], { group: '范围', name: '范围', text: '哪里糊、哪里清楚。整幅（默认）处处一样；渐进从“位置”开始沿“角度”越来越糊；移轴只留一条清楚的带，两边渐糊，像微缩模型。' }), visibleWhen: RANGE_MODES },
+    position('range_x', '位置（水平）', '渐进从哪里开始变糊，移轴清楚带的中心。50%、50%（默认）在正中；可以输入画面外的值。'),
+    position('range_y', '位置（垂直）', '位置的上下，0% 在顶边，100% 在底边。'),
+    { ...angle('range_angle', 90, { group: '范围', name: '角度', text: '越来越糊的方向。90°（默认）渐进往下加重、移轴是一条水平带；0° 往右加重、带是竖的。' }), ...ranged({ notEquals: 'full' }) },
+    { ...percent('range_width', 30, 0, { group: '范围', name: '清晰范围', text: '移轴时清楚的带有多宽。30%（默认）约画面高度的三成；10% 只剩一窄条，微缩感最强。' }), ...ranged({ equals: 'tilt' }) },
+    { ...percent('range_falloff', 40, 0, { group: '范围', name: '过渡', text: '从清楚到最糊经过多远。40%（默认）柔和；10% 很快糊到底；100% 拉满整个画面慢慢变。' }), ...ranged({ notEquals: 'full' }) },
   ],
 }

@@ -2,7 +2,7 @@ import { COLOR_MATH_WGSL, EFFECT_SHADER_MATH_WGSL } from './effectShaderMath'
 import { linearSrgbToOklab, oklabToLinearSrgb, srgbToLinear, linearToSrgb } from '@/core/imaging/adjustments/colorScience'
 
 import { videoEditHalfToFloat } from './videoEditGpuShaders'
-import { blurAmountForSigma } from '@/core/videoEdit/blur'
+import { blurAmountForSigma, blurBleed, blurLensRadius, blurRangeLevelSigma } from '@/core/videoEdit/blur'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { authorEffectBleed } from '@/core/videoEdit/authorEffects'
 import { float32ToFloat16 } from '../../imageEdit/v3/gpu/imageEditorGpuTileAtlasV3'
@@ -19,7 +19,7 @@ import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { VideoEditBuiltinEffectsGpu, type BuiltinEncodingBatch, type VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
-import { planAuthorDefocus } from './videoEditBuiltinEffectPasses'
+import { planAuthorDefocus, planVideoEditBuiltinEffect } from './videoEditBuiltinEffectPasses'
 import { authorLayerBlur } from './videoEditAuthorLayers'
 import type { RecordingCursorDraw } from './videoEditRecordingCursorPlan'
 import { RECORDING_FRAME_SOLID_DEFAULT_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
@@ -915,3 +915,189 @@ ${EFFECT_SHADER_MATH_WGSL}
     expect(Math.abs(values[26] - values[27])).toBeLessThan(0.001)
   } finally { texture.destroy(); result.destroy(); readback.destroy() }
 })
+
+/** 按坐标生成的测试图（预乘 0–255）。 */
+function patternTexture(width: number, height: number, color: (x: number, y: number) => readonly number[]): GpuTexture {
+  const texture = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC })
+  const data = new Uint8Array(width * height * 4)
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) data.set(color(x, y), (y * width + x) * 4)
+  device.queue.writeTexture({ texture }, data, { bytesPerRow: width * 4 }, [width, height])
+  return texture as unknown as GpuTexture
+}
+async function renderBlur(params: Record<string, unknown>, source: GpuTexture, width: number, height: number, format: 'rgba8unorm' | 'rgba16float' = 'rgba8unorm'): Promise<GpuTexture> {
+  const target = device.createTexture({ size: [width, height], format, usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture
+  await effects.render({ id: 'blur', params: params as Record<string, number> }, { texture: source, width, height, format }, target, 0, 1, [], 'final')
+  return target
+}
+
+it('模糊旋转中心清楚、外圈糊开；移轴清楚带逐像素不变，离带越远越糊且逐行连续', async () => {
+  const size = 64
+  const checker = patternTexture(size, size, (x, y) => ((x >> 3) + (y >> 3)) % 2 ? [255, 255, 255, 255] : [0, 0, 0, 255])
+  const stripes = patternTexture(size, size, x => (x >> 2) % 2 ? [255, 255, 255, 255] : [0, 0, 0, 255])
+  const textures = [checker, stripes]
+  const take = async (params: Record<string, unknown>, source: GpuTexture): Promise<Uint8Array> => { const target = await renderBlur(params, source, size, size); textures.push(target); return read(target, size, size) }
+  try {
+    const original = await read(checker, size, size)
+    const change = (spin: Uint8Array, x0: number, y0: number): number => { let sum = 0; for (let y = y0; y < y0 + 4; y++) for (let x = x0; x < x0 + 4; x++) sum += Math.abs(spin[(y * size + x) * 4 + 1] - original[(y * size + x) * 4 + 1]); return sum / 16 }
+    // 默认模糊度 40（约 18°）与更强的 100。
+    // 左边中间的切向是竖直的，旋转正好跨过棋盘格；45° 角上的切向沿着同色格子走，看不出糊。
+    for (const params of [{ mode: 'spin' }, { mode: 'spin', amount: 100 }]) {
+      const spin = await take(params, checker)
+      expect(change(spin, 30, 30), JSON.stringify(params)).toBeLessThan(0.25 * change(spin, 0, 30))
+      expect(change(spin, 0, 30), JSON.stringify(params)).toBeGreaterThan(30)
+    }
+    // 竖条纹只沿水平方向变化：每行的反差只取决于这一行糊得多厉害。
+    const flat = await read(stripes, size, size)
+    const tilt = await take({ range: 'tilt', amount: 100 }, stripes)
+    for (let y = 24; y < 40; y++) expect([...tilt.subarray(y * size * 4, (y + 1) * size * 4)], `第 ${y} 行`).toEqual([...flat.subarray(y * size * 4, (y + 1) * size * 4)])
+    const contrast = Array.from({ length: size }, (_, y) => {
+      const row = Array.from({ length: size }, (_, x) => tilt[(y * size + x) * 4 + 1]); const mean = row.reduce((sum, value) => sum + value, 0) / size
+      return Math.sqrt(row.reduce((sum, value) => sum + (value - mean) ** 2, 0) / size)
+    })
+    if (process.env.HENJI_TEST_DIAGNOSTICS === '1') process.stdout.write(`移轴逐行反差 ${contrast.map(value => value.toFixed(1)).join(' ')}\n`)
+    const drop = contrast[41] - contrast[63]
+    expect(drop).toBeGreaterThan(60)
+    for (let y = 42; y < size; y++) {
+      expect(contrast[y], `第 ${y} 行`).toBeLessThanOrEqual(contrast[y - 1] + 0.5)
+      expect(contrast[y - 1] - contrast[y], `第 ${y} 行`).toBeLessThan(0.2 * drop)
+    }
+    // 清楚带上下对称。
+    for (let y = 0; y < 22; y++) expect(Math.abs(contrast[y] - contrast[size - 1 - y]), `第 ${y} 行`).toBeLessThan(2)
+  } finally { textures.forEach(texture => texture.destroy()) }
+}, 60_000)
+
+it('范围最糊处与整幅一致：均匀渐进的点扩散与高斯同宽且能量守恒，镜头范围与整幅圆盘逐像素相同', async () => {
+  const size = 128, center = size / 2
+  const textures: GpuTexture[] = []
+  const dot = device.createTexture({ size: [size, size], format: 'rgba16float', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC })
+  const half = new Uint16Array(size * size * 4)
+  for (let i = 0; i < size * size; i++) half[i * 4 + 3] = float32ToFloat16(1)
+  half.set([1, 1, 1, 1].map(float32ToFloat16), (center * size + center) * 4)
+  device.queue.writeTexture({ texture: dot }, half, { bytesPerRow: size * 8 }, [size, size])
+  textures.push(dot as unknown as GpuTexture)
+  /** 线性光亮度的总能量与单轴均方根半径（扣掉一个像素自身的 1/12）。 */
+  const spread = async (target: GpuTexture): Promise<{ energy: number; radius: number }> => {
+    const bytesPerRow = size * 8, buffer = device.createBuffer({ size: bytesPerRow * size, usage: BUFFER_MAP_READ | BUFFER_COPY_DST })
+    const encoder = device.createCommandEncoder(); encoder.copyTextureToBuffer({ texture: target as never }, { buffer, bytesPerRow }, [size, size]); device.queue.submit([encoder.finish()])
+    await buffer.mapAsync(BUFFER_MAP_READ); const values = new Uint16Array(buffer.getMappedRange().slice(0)); buffer.unmap(); buffer.destroy()
+    let energy = 0, moment = 0
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const encoded = videoEditHalfToFloat(values[(y * size + x) * 4 + 1]), alpha = videoEditHalfToFloat(values[(y * size + x) * 4 + 3])
+      const linear = alpha > 0 ? srgbToLinear(encoded / alpha) * alpha : 0
+      energy += linear; moment += linear * ((x - center) ** 2 + (y - center) ** 2)
+    }
+    return { energy, radius: Math.sqrt(moment / energy / 2 - 1 / 12) }
+  }
+  try {
+    // 最糊处的标准差正好落在第 3 层：结果只来自这一层，核对逐层累加的方差。
+    const sigma = blurRangeLevelSigma(3), amount = blurAmountForSigma(sigma / size)
+    const gaussian = await renderBlur({ amount }, dot as unknown as GpuTexture, size, size, 'rgba16float'); textures.push(gaussian)
+    const ranged = await renderBlur({ amount, range: 'progressive', range_y: -100, range_falloff: 0 }, dot as unknown as GpuTexture, size, size, 'rgba16float'); textures.push(ranged)
+    const reference = await spread(gaussian), measured = await spread(ranged)
+    if (process.env.HENJI_TEST_DIAGNOSTICS === '1') process.stdout.write(`范围点扩散 ${JSON.stringify({ sigma, reference, measured })}\n`)
+    expect(Math.abs(reference.radius / sigma - 1)).toBeLessThan(0.05)
+    expect(Math.abs(measured.radius / sigma - 1)).toBeLessThan(0.05)
+    expect(Math.abs(measured.energy / reference.energy - 1)).toBeLessThan(0.02)
+    const checker = patternTexture(size, size, (x, y) => ((x >> 3) + (y >> 3)) % 2 ? [255, 240, 200, 255] : [10, 20, 40, 255]); textures.push(checker)
+    // 不重复边缘时画外是透明：范围放大粗层也按透明取，四边与整幅一样淡出。
+    const edgeFull = await renderBlur({ amount, repeat_edges: false }, checker, size, size); textures.push(edgeFull)
+    const edgeRanged = await renderBlur({ amount, repeat_edges: false, range: 'progressive', range_y: -100, range_falloff: 0 }, checker, size, size); textures.push(edgeRanged)
+    const fullPixels = await read(edgeFull, size, size), rangedPixels = await read(edgeRanged, size, size)
+    for (const [x, y] of [[0, center], [center, 0], [0, 0]]) expect(Math.abs(rangedPixels[(y * size + x) * 4 + 3] - fullPixels[(y * size + x) * 4 + 3]), `${x},${y}`).toBeLessThan(10)
+    expect(rangedPixels[center * 4 + 3]).toBeLessThan(200)
+    for (const lensAmount of [20, 60]) {
+      const full = await renderBlur({ mode: 'lens', amount: lensAmount }, checker, size, size); textures.push(full)
+      const lens = await renderBlur({ mode: 'lens', amount: lensAmount, range: 'progressive', range_y: -100, range_falloff: 0 }, checker, size, size); textures.push(lens)
+      expect([...await read(lens, size, size)], String(lensAmount)).toEqual([...await read(full, size, size)])
+    }
+  } finally { textures.forEach(texture => texture.destroy()) }
+}, 60_000)
+
+it('旋转的外扩盖住内容四角转过的圆弧，外扩之外没有画面', async () => {
+  const definition = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.find(value => value.id === 'blur')!
+  const cw = 60, ch = 20
+  const reference = (pad: number) => ({ referenceSize: { width: 160, height: 90 }, contentBounds: { x: 50, y: 35, width: cw, height: ch }, rasterScale: 1, rasterOrigin: [pad, pad] as const, quality: 'final' as const })
+  const cases: Array<Record<string, number>> = [{ amount: 100 }, { amount: 200, center_x: 0, center_y: 100 }]
+  for (const extra of cases) {
+    const params = { ...videoEditBuiltinDefaults(definition), mode: 'spin', repeat_edges: false, ...extra }
+    const declared = Math.ceil(blurBleed(params, reference(0)) * 90), pad = declared + 24
+    const width = cw + pad * 2, height = ch + pad * 2
+    const source = patternTexture(width, height, (x, y) => x >= pad && x < pad + cw && y >= pad && y < pad + ch ? [255, 255, 255, 255] : [0, 0, 0, 0])
+    const target = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture
+    try {
+      await effects.encodePlan(planVideoEditBuiltinEffect({ id: 'blur', params }, { width, height, frame: 0, layer: reference(pad) }), 'rgba8unorm', source, target)
+      const pixels = await read(target, width, height)
+      let outside = 0, band = 0
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        const alpha = pixels[(y * width + x) * 4 + 3]
+        const inBleed = x >= pad - declared && x < pad + cw + declared && y >= pad - declared && y < pad + ch + declared
+        const inContent = x >= pad && x < pad + cw && y >= pad && y < pad + ch
+        if (!inBleed) outside = Math.max(outside, alpha)
+        else if (!inContent) band = Math.max(band, alpha)
+      }
+      expect(outside, JSON.stringify(extra)).toBe(0)
+      expect(band, JSON.stringify(extra)).toBeGreaterThan(20)
+    } finally { source.destroy(); target.destroy() }
+  }
+}, 60_000)
+
+it('范围（均匀）的外扩按金字塔最粗层算：最糊处约 20 像素、粗层占大头时，外扩之外几乎没有画面', async () => {
+  const definition = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.find(value => value.id === 'blur')!
+  const cw = 200, ch = 60
+  const reference = (pad: number) => ({ referenceSize: { width: 1920, height: 1080 }, contentBounds: { x: 800, y: 500, width: cw, height: ch }, rasterScale: 1, rasterOrigin: [pad, pad] as const, quality: 'interactive' as const })
+  // 清晰带宽 0、过渡 0：处处最糊。σ = 20 落在第 4（16.2）、5 层（32.4）之间，混合里粗层约占三成，尾巴最重。
+  const params = { ...videoEditBuiltinDefaults(definition), range: 'tilt', range_width: 0, range_falloff: 0, repeat_edges: false, amount: blurAmountForSigma(20 / 1080) }
+  const declared = Math.ceil(blurBleed(params, reference(0)) * 1080), pad = declared + 32
+  const width = cw + pad * 2, height = ch + pad * 2
+  const source = patternTexture(width, height, (x, y) => x >= pad && x < pad + cw && y >= pad && y < pad + ch ? [255, 255, 255, 255] : [0, 0, 0, 0])
+  const target = device.createTexture({ size: [width, height], format: 'rgba16float', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture
+  try {
+    await effects.encodePlan(planVideoEditBuiltinEffect({ id: 'blur', params }, { width, height, frame: 0, layer: reference(pad) }), 'rgba16float', source, target)
+    // 读 16 位浮点原值：按同样标准差的高斯算外扩时，切掉处还剩约 0.5/255，八位读回看不出。
+    const bytesPerRow = Math.ceil(width * 8 / 256) * 256, buffer = device.createBuffer({ size: bytesPerRow * height, usage: BUFFER_MAP_READ | BUFFER_COPY_DST })
+    const encoder = device.createCommandEncoder(); encoder.copyTextureToBuffer({ texture: target as never }, { buffer, bytesPerRow }, [width, height]); device.queue.submit([encoder.finish()])
+    await buffer.mapAsync(BUFFER_MAP_READ); const halves = new Uint16Array(buffer.getMappedRange().slice(0)); buffer.unmap(); buffer.destroy()
+    let outside = 0, band = 0
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const alpha = videoEditHalfToFloat(halves[y * bytesPerRow / 2 + x * 4 + 3]) * 255
+      const inBleed = x >= pad - declared && x < pad + cw + declared && y >= pad - declared && y < pad + ch + declared
+      if (!inBleed) outside = Math.max(outside, alpha)
+      else if (x < pad || y < pad) band = Math.max(band, alpha)
+    }
+    expect(outside).toBeLessThan(0.1)
+    expect(band).toBeGreaterThan(60)
+  } finally { source.destroy(); target.destroy() }
+}, 60_000)
+
+it('镜头范围在过渡带里层与层之间没有接缝：逐行的散开宽度跟着本处半径连续变大', async () => {
+  const width = 512, height = 256
+  const blocks = patternTexture(width, height, x => (x >> 7) % 2 ? [255, 255, 255, 255] : [0, 0, 0, 255])
+  // 最糊处圆盘半径约 41 像素，分 3 层（0–2）；过渡带从带边延到画面外，本处半径从 0 涨到约 30 像素，跨过两次换层。
+  const target = await renderBlur({ mode: 'lens', amount: 120, highlights: 0, range: 'tilt', range_width: 20, range_falloff: 60 }, blocks, width, height)
+  const radius = blurLensRadius(120) * height
+  try {
+    const pixels = await read(target, width, height)
+    /** 每行三条边的线扩散标准差：带符号的一阶差分作权重求二阶矩（噪声正负抵消）；均匀圆盘半径 r 时为 r/2。 */
+    const spread = (y: number): number => {
+      let total = 0
+      for (const [edge, sign] of [[128, 1], [256, -1], [384, 1]]) {
+        let weight = 0, first = 0, second = 0
+        for (let x = edge - 60; x < edge + 60; x++) {
+          const d = sign * (pixels[(y * width + x + 1) * 4 + 1] - pixels[(y * width + x) * 4 + 1]), at = x + 1 - edge
+          weight += d; first += d * at; second += d * at * at
+        }
+        total += Math.sqrt(Math.max(0, second / weight - (first / weight) ** 2))
+      }
+      return total / 3
+    }
+    const expected = (y: number): number => { const t = Math.min(1, Math.max(0, (Math.abs(y + 0.5 - height / 2) / height - 0.1) / 0.6)); return radius * t * t * (3 - 2 * t) / 2 }
+    const rows = Array.from({ length: height / 2 - 26 }, (_, index) => height / 2 + 26 + index)
+    const measured = rows.map(spread)
+    if (process.env.HENJI_TEST_DIAGNOSTICS === '1') process.stdout.write(`镜头移轴逐行散开 ${rows.map((y, index) => `${y}:${measured[index].toFixed(2)}/${expected(y).toFixed(2)}`).join(' ')}
+`)
+    rows.forEach((y, index) => {
+      expect(Math.abs(measured[index] - expected(y)), `第 ${y} 行`).toBeLessThan(0.6 + 0.08 * expected(y))
+      if (index) expect(Math.abs(measured[index] - measured[index - 1] - (expected(y) - expected(y - 1))), `第 ${y} 行`).toBeLessThan(0.5)
+    })
+  } finally { blocks.destroy(); target.destroy() }
+}, 60_000)

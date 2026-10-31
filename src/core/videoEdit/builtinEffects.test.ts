@@ -29,7 +29,8 @@ describe('内置效果登记', () => {
     expect(parseVideoEditBuiltinRefId('effect:blur')).toBe('blur'); expect(parseVideoEditBuiltinRefId('blur')).toBe('blur'); expect(parseVideoEditBuiltinRefId('effect:nope')).toBeUndefined()
   })
   it('严格校验越界、错类型与未知参数并列出可用范围；界面写入时夹进范围', () => {
-    expect(normalizeVideoEditBuiltinParams('blur', { amount: 51.8 })).toEqual({ amount: 51.8, mode: 'uniform', axis: 'both', angle: 0, center_x: 50, center_y: 50, highlights: 50, repeat_edges: true })
+    const blur = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.find(definition => definition.id === 'blur')!
+    expect(normalizeVideoEditBuiltinParams('blur', { amount: 51.8 })).toEqual({ ...videoEditBuiltinDefaults(blur), amount: 51.8 })
     // 软范围之外、硬范围之内照样接受；超出硬范围报错并给出硬范围。
     expect(normalizeVideoEditBuiltinParams('blur', { amount: 150 }).amount).toBe(150)
     expect(() => normalizeVideoEditBuiltinParams('blur', { amount: 451 })).toThrow('超出范围 0–450')

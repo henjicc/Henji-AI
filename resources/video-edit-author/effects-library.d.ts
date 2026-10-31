@@ -1,21 +1,33 @@
 // 由 scripts/generate-author-effects.ts 生成，请修改效果登记后重新生成。
 export interface BlurParams {
-  /** 模糊度；画面糊得多厉害。0 不模糊；10 轻微柔化；40（默认）背景虚化，约为画面高度的 1%；70 只剩大块颜色。四种方式下同一个数值糊的程度相近，可以输入更大的值。；默认 40；常用 0–100；硬范围 0–450；单位 strength；可动画 true */
+  /** 模糊度；画面糊得多厉害。0 不模糊；10 轻微柔化；40（默认）背景虚化，约为画面高度的 1%；70 只剩大块颜色。各方式下糊的程度相近；旋转按转过的角度算，40 约 18°，100 约 45°。可以输入更大的值。；默认 40；常用 0–100；硬范围 0–450；单位 strength；可动画 true */
   readonly amount?: number
-  /** 方式；均匀（默认）整体柔化；方向沿一个角度拉出拖影；放射从中心向四周拉丝；镜头像失焦，亮点散成圆形光斑。；默认 "uniform"；可动画 true */
-  readonly mode?: "uniform" | "directional" | "radial" | "lens"
-  /** 模糊方向；只往哪个方向糊。水平和垂直（默认）各方向一样；只选水平或垂直时，另一个方向保持清楚。；默认 "both"；显隐 {"param":"mode","in":["uniform"]}；可动画 true */
+  /** 方式；均匀（默认）整体柔化；方向沿一个角度拉出拖影；放射从中心向四周拉丝；旋转让画面绕中心转着糊开，像转盘、车轮；镜头像失焦，亮点散成圆形光斑。；默认 "uniform"；可动画 true */
+  readonly mode?: "uniform" | "directional" | "radial" | "spin" | "lens"
+  /** 模糊方向；只往哪个方向糊。水平和垂直（默认）各方向一样；只选水平或垂直时，另一个方向保持清楚。；默认 "both"；显隐 {"all":[{"param":"mode","in":["uniform"]},{"param":"range","equals":"full"}]}；可动画 true */
   readonly axis?: "both" | "horizontal" | "vertical"
   /** 角度；拖影的方向。0（默认）左右拉，90 上下拉，45 斜着拉。；默认 0；硬范围 -180–180；单位 degrees；显隐 {"param":"mode","in":["directional"]}；可动画 true */
   readonly angle?: number
-  /** 中心（水平）；放射的中心。默认在画面正中；挪到主体上，主体保持清楚、四周向外拉丝。；默认 50；硬范围 0–100；单位 percent；显隐 {"param":"mode","in":["radial"]}；可动画 true */
+  /** 中心（水平）；放射、旋转的中心。默认在画面正中；挪到主体上，主体保持清楚，四周向外拉丝或绕着它转。；默认 50；硬范围 0–100；单位 percent；显隐 {"param":"mode","in":["radial","spin"]}；可动画 true */
   readonly center_x?: number
-  /** 中心（垂直）；放射中心的上下位置，0 在顶边，100 在底边。；默认 50；硬范围 0–100；单位 percent；显隐 {"param":"mode","in":["radial"]}；可动画 true */
+  /** 中心（垂直）；中心的上下位置，0 在顶边，100 在底边。；默认 50；硬范围 0–100；单位 percent；显隐 {"param":"mode","in":["radial","spin"]}；可动画 true */
   readonly center_y?: number
   /** 亮点加亮；亮点散开后有多亮。0 亮点和其他地方一样被抹平；50（默认）亮点散成明显的圆形光斑；100 光斑更亮更醒目。；默认 50；硬范围 0–100；单位 strength；显隐 {"param":"mode","in":["lens"]}；可动画 true */
   readonly highlights?: number
   /** 重复边缘像素；画面边缘外面当作什么来糊。打开（默认）沿用边缘的颜色，整幅画面的四边不会发黑变透明；关闭时外面当作透明，给文字、图形加模糊时边缘自然淡出。；默认 true；可动画 true */
   readonly repeat_edges?: boolean
+  /** 范围；哪里糊、哪里清楚。整幅（默认）处处一样；渐进从“位置”开始沿“角度”越来越糊；移轴只留一条清楚的带，两边渐糊，像微缩模型。；默认 "full"；分组 范围；显隐 {"param":"mode","in":["uniform","lens"]}；可动画 true */
+  readonly range?: "full" | "progressive" | "tilt"
+  /** 位置（水平）；渐进从哪里开始变糊，移轴清楚带的中心。50%、50%（默认）在正中；可以输入画面外的值。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；分组 范围；显隐 {"all":[{"param":"mode","in":["uniform","lens"]},{"param":"range","notEquals":"full"}]}；可动画 true */
+  readonly range_x?: number
+  /** 位置（垂直）；位置的上下，0% 在顶边，100% 在底边。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；分组 范围；显隐 {"all":[{"param":"mode","in":["uniform","lens"]},{"param":"range","notEquals":"full"}]}；可动画 true */
+  readonly range_y?: number
+  /** 角度；越来越糊的方向。90°（默认）渐进往下加重、移轴是一条水平带；0° 往右加重、带是竖的。；默认 90；硬范围 -180–180；单位 degrees；分组 范围；显隐 {"all":[{"param":"mode","in":["uniform","lens"]},{"param":"range","notEquals":"full"}]}；可动画 true */
+  readonly range_angle?: number
+  /** 清晰范围；移轴时清楚的带有多宽。30%（默认）约画面高度的三成；10% 只剩一窄条，微缩感最强。；默认 30；硬范围 0–100；单位 percent；分组 范围；显隐 {"all":[{"param":"mode","in":["uniform","lens"]},{"param":"range","equals":"tilt"}]}；可动画 true */
+  readonly range_width?: number
+  /** 过渡；从清楚到最糊经过多远。40%（默认）柔和；10% 很快糊到底；100% 拉满整个画面慢慢变。；默认 40；硬范围 0–100；单位 percent；分组 范围；显隐 {"all":[{"param":"mode","in":["uniform","lens"]},{"param":"range","notEquals":"full"}]}；可动画 true */
+  readonly range_falloff?: number
 }
 
 export interface SharpenParams {
