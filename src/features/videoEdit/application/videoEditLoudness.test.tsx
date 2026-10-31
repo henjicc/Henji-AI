@@ -20,7 +20,7 @@ import { cancelVideoEditExport, exportVideoEdit as exportWithSettings, videoEdit
 
 import { videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import { videoEditExportQueue } from './videoEditExportQueue'
-const exportVideoEdit: typeof exportWithSettings = (id, target, background, signal, loudness) => { const owner = requireVideoEditInstance(id); const snapshot = getActiveVideoEditSequence(owner); return exportWithSettings(id, target, background, signal, loudness, { snapshot, range: videoEditExportRange(owner), settings: { ...videoEditSequenceExportSettings(snapshot), addToLibrary: false } }) }
+const exportVideoEdit: typeof exportWithSettings = (id, target, background, signal, loudness) => { const owner = requireVideoEditInstance(id); const snapshot = getActiveVideoEditSequence(owner); return exportWithSettings(id, target, background, signal, loudness, { snapshot, range: videoEditExportRange(owner), settings: { ...videoEditSequenceExportSettings(snapshot), encoding: undefined, addToLibrary: false } }) }
 
 const boundary = vi.hoisted(() => ({ mixes: vi.fn(), encoded: [] as number[], normalized: false }))
 vi.mock('mediabunny', () => ({
@@ -30,7 +30,7 @@ vi.mock('mediabunny', () => ({
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   canvas = {}; constructor(private composition: VideoEditComposition) { assertVideoEditSequenceGraph({ items: composition.items, sequences: composition.sequences ?? [] }) }
-  setSmartRegions() {} setTracks() {} async dispose() {}
+  setOutputScale() {} setSmartRegions() {} setTracks() {} setRenderCache() {} async dispose() {}
   async render() { return { singleFrameReads: 0 } }
   async mixAudio(_start: number, duration: number) {
     boundary.mixes()
@@ -53,6 +53,10 @@ beforeEach(() => {
   vi.spyOn(platform.system.fs, 'remove').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue(path.resolve(path.sep, 'fixture'))
   vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 5, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64) })
+  vi.spyOn(platform.videoEditExport, 'capabilities').mockResolvedValue({ cuda: false, encoders: { h264_nvenc: { supported: false, tenBit: false }, hevc_nvenc: { supported: false, tenBit: false }, libx264: { supported: true, tenBit: true }, libx265: { supported: true, tenBit: true } } })
+  vi.spyOn(platform.videoEditExport, 'prepareCompression').mockResolvedValue({ id: 'compression', intermediatePath: path.resolve(path.sep, 'fixture', 'intermediate.mp4') })
+  vi.spyOn(platform.videoEditExport, 'compress').mockResolvedValue(undefined)
+  vi.spyOn(platform.videoEditExport, 'cancelCompression').mockResolvedValue(undefined)
   const api = platform.audioEdit.loudness
   vi.spyOn(api, 'start').mockImplementation(async (_rate, _channels, id) => { pcm.set(id, 0) })
   vi.spyOn(api, 'append').mockImplementation(async (id, planes) => { pcm.set(id, planes[0][0]) })

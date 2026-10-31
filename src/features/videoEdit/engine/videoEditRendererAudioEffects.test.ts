@@ -17,7 +17,7 @@ const RATE = 48000
 // 显式基准仅测正式混音算法与PCM读取，不把该数字冒充真实设备端到端延迟。
 if (process.env.HENJI_SCRUB_BENCHMARK === '1') it('擦洗80ms单段混音耗时', async () => {
   for (const [name, effects] of [['原声', []], ['均衡与限幅', [builtin('parametric_eq'), builtin('limiter')]], ['重效果链', [builtin('noise_reduction'), builtin('pitch_shift', { semitones: -2 }), builtin('reverb')]]] as const) {
-    const renderer = new VideoEditRenderer(sound({ effects: [...effects] }), undefined, { width: 1, height: 1 } as OffscreenCanvas, 8 * 1024 ** 3, backend())
+    const renderer = new VideoEditRenderer(sound({ effects: [...effects] }), { surface: { width: 1, height: 1 } as OffscreenCanvas, frames: backend() })
     try {
       const timings: number[] = []
       for (let i = 0; i < 35; i++) {
@@ -92,7 +92,7 @@ function sound(clip: Partial<VideoEditClip> = {}): VideoEditComposition {
   return videoEditComposition(document, document.sequences[0].id)
 }
 async function mix(composition: VideoEditComposition, blocks: number[], start = 0): Promise<Float32Array[]> {
-  const renderer = new VideoEditRenderer(composition, undefined, { width: 1, height: 1 } as unknown as OffscreenCanvas, 8 * 1024 ** 3, backend())
+  const renderer = new VideoEditRenderer(composition, { surface: { width: 1, height: 1 } as unknown as OffscreenCanvas, frames: backend() })
   try {
     const parts: Float32Array[][] = []; let at = start
     for (const duration of blocks) { parts.push(await renderer.mixAudio(at, duration)); at += duration }

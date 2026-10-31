@@ -63,7 +63,7 @@ export class VideoEditSourceFrames {
       annotations: [],
     }
     surface.width = media.width; surface.height = media.height
-    this.session = new VideoEditRenderSession(this.document, media.width, undefined, surface.transferControlToOffscreen(), SOURCE_CACHE_BYTES, proxyProjectId)
+    this.session = new VideoEditRenderSession(this.document, { previewWidth: media.width, surface: surface.transferControlToOffscreen(), cacheBudgetBytes: SOURCE_CACHE_BYTES, proxyProjectId })
   }
 
   invalidate(): void {

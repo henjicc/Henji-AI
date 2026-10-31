@@ -1,3 +1,7 @@
+import * as authorModules from './videoEditAuthorModule'
+import { VideoEditCodeSources } from './videoEditCodeSources'
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
+import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -284,4 +288,55 @@ it('原生滤镜格式不匹配只写设备日志，按 target.format 修正后�
     expect((await row(output.texture))[0]).toBeCloseTo(1.5, 3)
     expect(report).toHaveBeenCalledTimes(calls)
   } finally { instance.mockRestore(); await author.dispose(); await host.dispose(); stopObserving() }
+})
+
+
+it.each(['native', 'layers'] as const)('代码输出热命中与固定前序帧直接渲染原始像素一致（%s）', async kind => {
+  const d = kind === 'layers' ? historyRasterDevice() : device
+  const effect: AuthorModule = {
+    name: '输出复用', mode: 'dynamic', width: W, height: H,
+    frameKey: (_params, _width, _height, info) => Math.floor(info.time),
+    ...(kind === 'layers' ? {
+      layers: () => [{ id: 'base', opacity: .5, draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, W / 2, H) } }, { id: 'light', effects: (time: number) => [{ id: 'glow' as const, params: { strength: time >= 1 && time < 2 ? 30 : 0, dither: 0 } }], draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, W, H) } }],
+    } : {
+      createWebGPU: () => ({ draw(target: GpuTexture) {
+        const encoder = device.createCommandEncoder()
+        encoder.beginRenderPass({ colorAttachments: [{ view: target.createView(), loadOp: 'clear', storeOp: 'store', clearValue: [.2, .1, .05, .5] }] }).end()
+        device.queue.submit([encoder.finish()])
+      } }),
+    }),
+  }
+  const loader = vi.spyOn(authorModules, 'loadAuthorModule').mockResolvedValue(effect)
+  const code = { definitionId: 'definition', versionId: 'v', parameters: {} }
+  const doc: VideoEditComposition = { ...document, clips: [{ ...clip, kind: 'code', code, duration: 90 }], codeMaterials: [{ id: 'definition', name: '输出复用', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 7, languageVersion: 4, ...testCodeManifest('export default { name: "输出复用", draw() {} }', {}) }] }] }
+  const compiler = { bundle: async (files: CodeMaterialFiles) => testAuthorBundle(files), dispose() {} }
+  const read = async (picture: VideoEditCodePicture): Promise<Uint8Array> => {
+    const bytesPerRow = W * (picture.highPrecision ? 8 : 4)
+    const buffer = gpu.gpu.createBuffer({ size: bytesPerRow * H, usage: 0x01 | 0x08 }), encoder = gpu.gpu.createCommandEncoder()
+    encoder.copyTextureToBuffer({ texture: picture.texture as never }, { buffer, bytesPerRow }, [W, H])
+    gpu.gpu.queue.submit([encoder.finish()]); await buffer.mapAsync(0x01)
+    const result = new Uint8Array(buffer.getMappedRange().slice(0)); buffer.unmap(); buffer.destroy(); return result
+  }
+  const run = async (reuse: boolean) => {
+    const host = new VideoEditCodeGpu(d), sources = new VideoEditCodeSources(doc, async () => host, compiler, undefined, reuse)
+    const results: Array<{ pixels: Uint8Array; format: string; carriesLight: boolean; hits: number }> = []
+    try {
+      // 两条路径都先跑 0、30；比较 31 时，作者层栈历史和精度提升历史相同。
+      for (const frame of [0, 30, 31, 60]) {
+        const result = await sources.prepare(doc, doc.clips, frame, () => true, undefined, { quality: 'final' })
+        const picture = result.pictures.get('c') as VideoEditCodePicture
+        results.push({ pixels: await read(picture), format: picture.textureFormat, carriesLight: picture.carriesLight, hits: result.cacheHits })
+      }
+      expect(host.diagnostics().generatorFrames).toBe(reuse ? 3 : 4)
+      return results
+    } finally { await sources.dispose(); await host.dispose(); expect(host.diagnostics().residentBytes).toBe(0) }
+  }
+  device.pushErrorScope('validation')
+  try {
+    const direct = await run(false), cached = await run(true)
+    expect(cached.map(frame => frame.hits)).toEqual([0, 0, 1, 0])
+    expect(cached.map(({ hits: _hits, ...frame }) => frame)).toEqual(direct.map(({ hits: _hits, ...frame }) => frame))
+    if (kind === 'layers') expect(cached.map(frame => frame.format)).toEqual(['rgba8unorm', 'rgba16float', 'rgba16float', 'rgba8unorm'])
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { loader.mockRestore(); vi.unstubAllGlobals() }
 })

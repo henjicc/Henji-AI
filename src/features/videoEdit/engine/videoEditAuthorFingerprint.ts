@@ -41,12 +41,12 @@ function frameKeyJson(value: unknown, active = new Set<object>()): string {
 /** 作者声明路径不运行任何绘制入口，也不需要文字测量画布。 */
 export function fingerprintAuthorFrameKey(effect: AuthorModule, size: { width: number; height: number }, params: AuthorParameters,
   info: AuthorFrameInfo, inputs: Readonly<Record<string, AuthorFingerprintInput>>, codeIdentity: string,
-  pictureParameters: unknown, overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = {}, apiVersion = 6): VideoEditFrameFingerprint {
+  pictureParameters: unknown, overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = {}, apiVersion = 6, includeLayerEffects = true): VideoEditFrameFingerprint {
   try {
     const frameInfo = Object.defineProperties({} as AuthorFrameInfo, Object.getOwnPropertyDescriptors(info))
     frameInfo.exposure = authorFrameExposure(effect, info, motionBlur)
     const key = frameKeyJson(effect.frameKey!(params, size.width, size.height, frameInfo))
-    const effects = apiVersion >= 7 && effect.layers ? fingerprintLayerEffects(effect, size, params, info, inputs, environment, overrides, motionBlur) : undefined
+    const effects = includeLayerEffects && apiVersion >= 7 && effect.layers ? fingerprintLayerEffects(effect, size, params, info, inputs, environment, overrides, motionBlur) : undefined
     return { method: 'frameKey', digest: renderFingerprintHash(JSON.stringify([codeIdentity, size.width, size.height, key,
       Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)), pictureParameters, overrides, motionBlur, ...(apiVersion >= 7 ? [effects] : [])])) }
   } catch (error) { return { fallback: `frame-key-error:${error instanceof Error ? error.message : String(error)}` } }

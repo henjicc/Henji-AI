@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
+import type { VideoEditRenderTransportOptions } from './videoEditRenderTransport'
 import type { RenderResponse } from './videoEditWorker'
 import { VideoEditSourceFrames, videoEditSourceBackend } from './videoEditSourceFrames'
 
@@ -12,7 +13,7 @@ const boundary = vi.hoisted(() => ({
 }))
 vi.mock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
-  constructor(document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, budget?: number) { boundary.created.push({ document, previewWidth, surface, budget }) }
+  constructor(document: VideoEditComposition, { previewWidth, surface, cacheBudgetBytes: budget }: VideoEditRenderTransportOptions = {}) { boundary.created.push({ document, previewWidth, surface, budget }) }
   updateDocument(document: VideoEditComposition): Promise<void> { boundary.documents.push(document); return boundary.update(document) }
   invalidateDocument(revision: number): void { boundary.invalidations.push(revision) }
   present(frame: number, sequential: boolean, scrubbing: boolean, deadline?: number): Promise<RenderResponse> { return boundary.present(frame, sequential, scrubbing, deadline) }

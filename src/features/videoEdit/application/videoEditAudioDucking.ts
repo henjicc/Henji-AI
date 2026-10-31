@@ -42,7 +42,7 @@ export async function generateVideoEditAudioDucking(target: VideoEditGainTarget,
       const isolated = { ...composition, clips: [clip], transitions: [] }
       const from = Math.max(start, clip.start); const to = Math.min(end, clip.start + clip.duration)
       const api = getPlatform().audioEdit.loudness
-      const renderer = new VideoEditRenderSession(isolated, 1)
+      const renderer = new VideoEditRenderSession(isolated, { previewWidth: 1 })
       let session: string | undefined
       const abort = (): void => { if (session) void api.close(session).catch(() => undefined) }
       signal?.addEventListener('abort', abort, { once: true })

@@ -42,7 +42,7 @@ async function checkMemoryAndPrepare(): Promise<void> {
     const sequence = { ...createVideoEditSequence('节目准备'), width: 32, height: 32 }
     const document: VideoEditComposition = { ...sequence, fps: 30, revision: 0, media: [], items: [] }
     const surface = createVideoEditProgramSurface(32, 32)
-    const entry: Program = { surface, document, renderer: new VideoEditRenderSession(document, 32, undefined, surface.transferControlToOffscreen()), ready: false }
+    const entry: Program = { surface, document, renderer: new VideoEditRenderSession(document, { previewWidth: 32, surface: surface.transferControlToOffscreen() }), ready: false }
     spare = entry
     const started = performance.now()
     logger.info('空闲节目会话开始准备', { event: 'video_edit.program.pool.start' })

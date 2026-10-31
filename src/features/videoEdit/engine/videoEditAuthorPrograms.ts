@@ -1,9 +1,16 @@
+import { documentFontRevision } from '@/platform/fontFaces'
 import type { AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { loadAuthorModule, type AuthorModule } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
-import { authorEffectMetadata } from './videoEditAuthorParameters'
+import { authorEffectMetadata, authorParameterValues } from './videoEditAuthorParameters'
+import type { VideoEditFrameFingerprint } from '@/core/videoEdit/renderFingerprint'
+import type { AuthorFingerprintInput } from './videoEditAuthorFingerprint'
+import { fingerprintAuthorFrameKey } from './videoEditAuthorFingerprint'
+import type { AuthorFrameInfo } from './videoEditAuthorModule'
+import type { AuthorElementOverrides } from './videoEditAuthorElements'
+import { videoEditRenderSize, videoEditOutputRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { prepareAuthorModuleUrls } from './videoEditAuthorModules'
 import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 
@@ -13,7 +20,7 @@ const bundleBytes = (bundle: CodeAuthorBundle): number => 2 * (bundle.modules ? 
  * Owned by the timeline compositor, never a separate worker or device. */
 export class VideoEditAuthorPrograms {
   private readonly modules = new Map<CodeAuthorBundle, { dispose(): void; module: Promise<AuthorModule> }>()
-  private readonly instances = new Map<string, { program: CodeAuthorProgram; runtime: VideoEditAuthorRuntime }>()
+  private readonly instances = new Map<string, { program: CodeAuthorProgram; fontRevision: number; runtime: VideoEditAuthorRuntime }>()
   /** Instances warmed ahead of the playhead: kept until their clip is drawn, even while no current frame uses them. */
   private protectedKeys: ReadonlySet<string> = new Set()
   private closed = false
@@ -68,17 +75,31 @@ export class VideoEditAuthorPrograms {
     return this.enqueue(async () => {
       if (this.closed) throw new Error('作者渲染会话已关闭。')
       const previous = this.instances.get(key)
-      if (previous?.program === program) return previous.runtime
+      const fontRevision = documentFontRevision()
+      // 字体变化会改变相同绘制指令的栅格，实例内部的层纹理也必须重新生成。
+      if (previous?.program === program && previous.fontRevision === fontRevision) return previous.runtime
       if (previous) { this.instances.delete(key); await previous.runtime.dispose() }
       const effect = await this.module(program.bundle)
       if (this.closed) throw new Error('作者渲染会话已关闭。')
       const runtime = new VideoEditAuthorRuntime(this.device, effect, program.bundle.locations, false, program.apiVersion, this.effectEnvironment, this.allocator)
-      this.instances.set(key, { program, runtime })
+      this.instances.set(key, { program, fontRevision, runtime })
       return runtime
     })
   }
 
   observe(key: string): ReturnType<VideoEditAuthorRuntime['observeElements']> { return this.instances.get(key)?.runtime.observeElements() ?? [] }
+
+  async frameKey(program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, info: AuthorFrameInfo,
+    overrides: AuthorElementOverrides | undefined, motionBlur: boolean, divisor: number, environment: AuthorEffectEnvironment, inputs: Readonly<Record<string, AuthorFingerprintInput>>): Promise<VideoEditFrameFingerprint | undefined> {
+    const effect = await this.module(program.bundle)
+    if (!effect.frameKey) return undefined
+    const output = divisor === 1 ? undefined : videoEditRenderSize(size.width, size.height, videoEditOutputRenderDivisor(size.width, size.height, 1 / divisor))
+    const frameInfo = output ? { ...info, renderScale: output.height / size.height } : info
+    // 原生 GPU 作者看到实际纹理尺寸，Canvas 作者仍使用逻辑画幅。
+    const dimensions = output && (effect.createWebGPU || effect.createWebGL) ? output : size
+    // 输出键已包含完整环境；frameKey 承诺覆盖整幅作者输出，不额外执行 layers。
+    return fingerprintAuthorFrameKey(effect, dimensions, authorParameterValues({ ...program, types: program.types ?? {} }, parameters), frameInfo, inputs, '', undefined, overrides, motionBlur, environment, program.apiVersion, false)
+  }
 
   get canvasBytes(): number { return [...this.instances.values()].reduce((bytes, entry) => bytes + entry.runtime.canvasBytes, 0) }
 

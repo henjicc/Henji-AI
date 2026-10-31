@@ -291,6 +291,18 @@ interface VideoSource {
   prewarmed?: boolean
 }
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
+export interface VideoEditRendererOptions {
+  previewWidth?: number
+  surface?: OffscreenCanvas
+  cacheBudgetBytes?: number
+  frames?: VideoEditFrameBackend
+  nestedOwner?: VideoEditRenderer
+  sequencePath?: string[]
+  timing?: (stage: string, durationMs?: number) => void
+  jumpPreviewLog?: VideoEditJumpPreviewLog
+  /** 性能对照用；正常会话默认复用所有精确输入输出。 */
+  reuseCodeOutputs?: boolean
+}
 export class VideoEditRenderer {
   private readonly nestedPictures = new Map<string, { renderer: VideoEditRenderer; tail: Promise<unknown> }>()
   /**
@@ -356,7 +368,7 @@ export class VideoEditRenderer {
   private sharedCompositor?: VideoEditGpuCompositor
   private capturePresentation?: (pixels: Promise<ImageBitmap>) => void
   private codeSources?: VideoEditCodeSources
-  private readonly contentAudio = new VideoEditContentAudio(document => new VideoEditRenderer(document, 1, undefined, 1, this.frames))
+  private readonly contentAudio = new VideoEditContentAudio(document => new VideoEditRenderer(document, { previewWidth: 1, cacheBudgetBytes: 1, frames: this.frames }))
   private presentationEpoch = 0
   /** Pre-rendered preview windows (forward playback of the top-level program only), as full-frame clips of their files. */
   private renderCache: Array<{ key: string; startFrame: number; endFrame: number; clip: VideoEditClip; media: VideoEditMedia }> = []
@@ -484,7 +496,7 @@ export class VideoEditRenderer {
     const owner = this.nestedOwner ?? this
     let entry = owner.nestedPictures.get(key)
     if (!entry) {
-      const renderer = new VideoEditRenderer(child, this.previewWidth, undefined, 64 * 1024 ** 2, this.frames, owner)
+      const renderer = new VideoEditRenderer(child, { previewWidth: this.previewWidth, cacheBudgetBytes: 64 * 1024 ** 2, frames: this.frames, nestedOwner: owner })
       renderer.setOutputScale(this.outputScale, this.renderAtOutputResolution); renderer.instanceKey = key
       entry = { renderer, tail: Promise.resolve() }; owner.nestedPictures.set(key, entry)
     }
@@ -603,7 +615,7 @@ export class VideoEditRenderer {
       const compositor = renderer.ensureCompositor()
       const { VideoEditCodeSources } = await import('./videoEditCodeSources')
       if (signal.aborted || renderer.disposed) return false
-      renderer.codeSources ??= new VideoEditCodeSources(renderer.document, async () => { const code = await compositor.code(); code.setAuthorEffects({ ...renderer.document.authorEffects, luts: renderer.document.colorLuts }); return code }, undefined, () => { this.lookaheadMetrics.codeHits++ })
+      renderer.codeSources ??= new VideoEditCodeSources(renderer.document, async () => { const code = await compositor.code(); code.setAuthorEffects({ ...renderer.document.authorEffects, luts: renderer.document.colorLuts }); return code }, undefined, () => { this.lookaheadMetrics.codeHits++ }, renderer.reuseCodeOutputs)
       this.lookaheadMetrics.codePrepared += await renderer.codeSources.prepareAhead(target.document, [target.clip], signal)
     }
     return true
@@ -625,7 +637,7 @@ export class VideoEditRenderer {
     await compositor.prepare()
     const { VideoEditCodeSources } = await import('./videoEditCodeSources')
     if (!current()) return
-    this.codeSources ??= new VideoEditCodeSources(document, async () => { const code = await compositor.code(); code.setAuthorEffects({ ...this.document.authorEffects, luts: this.document.colorLuts }); return code }, undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
+    this.codeSources ??= new VideoEditCodeSources(document, async () => { const code = await compositor.code(); code.setAuthorEffects({ ...this.document.authorEffects, luts: this.document.colorLuts }); return code }, undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ }, this.reuseCodeOutputs)
     await this.codeSources.prepare(document, clips, frame, current, undefined, { preparationOnly: true })
   }
   /** 合成、文字与作者输出共用比例；网页在全分辨率合成时仍按交付尺寸取帧。 */
@@ -641,7 +653,22 @@ export class VideoEditRenderer {
   }
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads, codeInputSessions: this.codeInputs.size, codeInputsPrewarmed: this.prewarmedInputs.size, nestedRenderers: this.nestedPictures.size } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
-  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void, private readonly jumpPreviewLog?: VideoEditJumpPreviewLog) {
+  private readonly previewWidth?: number
+  private readonly frames: VideoEditFrameBackend
+  private readonly nestedOwner?: VideoEditRenderer
+  private sequencePath: string[]
+  private readonly timing?: (stage: string, durationMs?: number) => void
+  private readonly jumpPreviewLog?: VideoEditJumpPreviewLog
+  private readonly reuseCodeOutputs: boolean
+  constructor(public document: VideoEditComposition, options: VideoEditRendererOptions = {}) {
+    const { surface, cacheBudgetBytes = 8 * 1024 ** 3 } = options
+    this.previewWidth = options.previewWidth
+    this.frames = options.frames ?? new VideoEditBrowserFrames()
+    this.nestedOwner = options.nestedOwner
+    this.sequencePath = options.sequencePath ?? [document.id]
+    this.timing = options.timing
+    this.jumpPreviewLog = options.jumpPreviewLog
+    this.reuseCodeOutputs = options.reuseCodeOutputs ?? true
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
     if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
@@ -1044,7 +1071,7 @@ export class VideoEditRenderer {
    */
   private codeInputRenderer(input: Pick<CodeMediaInput, 'kind' | 'document' | 'still'>): VideoEditRenderer {
     if (input.kind !== 'video') {
-      const below = new VideoEditRenderer(input.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
+      const below = new VideoEditRenderer(input.document, { cacheBudgetBytes: 1, frames: this.frames, nestedOwner: this, sequencePath: this.sequencePath })
       below.setOutputScale(this.outputScale, this.renderAtOutputResolution)
       below.exclusiveWhenShared = true
       return below
@@ -1052,7 +1079,7 @@ export class VideoEditRenderer {
     const media = input.document.clips[0] && this.clipMedia(input.document, input.document.clips[0])
     const still = input.still && media ? videoEditStillKey(media) : undefined
     const history = !!this.previewWidth && !still
-    const renderer = new VideoEditRenderer(input.document, undefined, undefined, history ? Math.max(1, input.document.width * input.document.height * CODE_INPUT_HISTORY_BYTES_PER_PIXEL) : 1, this.frames, this, this.sequencePath)
+    const renderer = new VideoEditRenderer(input.document, { cacheBudgetBytes: history ? Math.max(1, input.document.width * input.document.height * CODE_INPUT_HISTORY_BYTES_PER_PIXEL) : 1, frames: this.frames, nestedOwner: this, sequencePath: this.sequencePath })
     renderer.setOutputScale(this.outputScale, this.renderAtOutputResolution)
     renderer.codeInput = { history, ...(still ? { still } : {}) }
     return renderer
@@ -1410,7 +1437,7 @@ export class VideoEditRenderer {
     let entry = this.filterInputs.get(sessionKey)
     if (!entry) {
       const source = codeFilterInputComposition(document, clip.id, plan.effect.id)
-      const renderer = new VideoEditRenderer(source, this.previewWidth, undefined, 1, this.frames, this, this.sequencePath)
+      const renderer = new VideoEditRenderer(source, { previewWidth: this.previewWidth, cacheBudgetBytes: 1, frames: this.frames, nestedOwner: this, sequencePath: this.sequencePath })
       renderer.setOutputScale(this.outputScale, this.renderAtOutputResolution)
       entry = { renderer, tail: Promise.resolve(), document, sourceKey: '', ownerKey: `filter-input:${document.id}:${sessionKey}` }
       this.filterInputs.set(sessionKey, entry)
@@ -1593,7 +1620,7 @@ export class VideoEditRenderer {
    * picture at its source time or the frame fails (`videoEditExportPictures.ts`); `singleFrameReads` counts the layers
    * a single-frame read decided because the sequential reader's picture was not exact.
    */
-  async render(frame: number, sequential = false, scrubbing: VideoEditScrubMode = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void, requireLive = false, requestOrder = this.reservePresentation()): Promise<VideoEditRenderResult> {
+  async render(frame: number, sequential = false, scrubbing: VideoEditScrubMode = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void, requireLive = false, requestOrder = this.reservePresentation(), observeElements = false): Promise<VideoEditRenderResult> {
     // A top-level frame is the foreground: background decode steps take their turns between such frames.
     if (nestedRender || this.nestedOwner) return this.renderFrame(frame, sequential, scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation)
     // 跳转先出的画面（`videoEditJumpPreview.ts`）只给快速拖动与远距离跳转；要回读像素的帧（历史、取色）照常合成。
@@ -1635,7 +1662,7 @@ export class VideoEditRenderer {
     const current = (): boolean => this.shownRequest <= requestOrder
     // 先发起缓存读取，再准备现场画面；绘制锁内按请求顺序核验，现场提交后同请求缓存不能覆盖它。
     if (cacheEligible && scrubbing === false && !(this.shownFrame === frame && this.shownFrameExact)) void this.presentPrerenderedFrame(frame, present, false, requestOrder)
-    const drawFrame = (): Promise<VideoEditRenderResult> => this.renderFrame(frame, sequential, scrubbing, () => present() && current(), deadline, undefined, quality, capturePresentation, abandon?.signal, requestOrder)
+    const drawFrame = (): Promise<VideoEditRenderResult> => this.renderFrame(frame, sequential, scrubbing, () => present() && current(), deadline, undefined, quality, capturePresentation, abandon?.signal, requestOrder, observeElements)
     const exportWindow = sequential && !this.previewWidth ? this.cachedWindow(frame, true) : undefined
     const live = drawFrame().catch(async error => {
       if (!exportWindow || this.disposed || error instanceof DOMException && error.name === 'AbortError') throw error
@@ -1707,7 +1734,7 @@ export class VideoEditRenderer {
       await this.hoverRenderer.dispose(); this.hoverRenderer = undefined
     }
     if (!current()) return undefined
-    const preview = this.hoverRenderer ??= new VideoEditRenderer(document, 320, undefined, 16 * 1024 ** 2, this.frames)
+    const preview = this.hoverRenderer ??= new VideoEditRenderer(document, { previewWidth: 320, cacheBudgetBytes: 16 * 1024 ** 2, frames: this.frames })
     // GPU 可以共用，嵌套序列、解码位置和播放准备必须由后台自己的资源树持有。
     preview.sharedCompositor = this.ensureCompositor()
     // 复用暂停/回放的低清渲染尺寸，文字、效果与嵌套序列随同一比例缩放。
@@ -1839,18 +1866,18 @@ export class VideoEditRenderer {
       return result
     } finally { unlock() }
   }
-  private async renderFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, signal?: AbortSignal, requestOrder?: number): Promise<VideoEditRenderResult> {
+  private async renderFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, signal?: AbortSignal, requestOrder?: number, observeElements = false): Promise<VideoEditRenderResult> {
     this.capturePresentation = capturePresentation
     if (this.disposed) throw new Error('预览已关闭。')
     const nestedContext: NestedFrameContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0, completions: [], instances: new Set(), approximate: new WeakSet(), ...(signal ? { signal } : {}) }
     try {
-      return await this.renderPreparedFrame(frame, sequential, _scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation, nestedContext, requestOrder)
+      return await this.renderPreparedFrame(frame, sequential, _scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation, nestedContext, requestOrder, observeElements)
     } finally {
       // 输入必须保护到根帧提交；取消与失败也结束本帧，子树共享的状态由根统一释放。
       if (!nestedRender) this.webOwner.webInputs?.trim(nestedContext)
     }
   }
-  private async renderPreparedFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, nestedContext: NestedFrameContext, requestOrder?: number): Promise<VideoEditRenderResult> {
+  private async renderPreparedFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, nestedContext: NestedFrameContext, requestOrder?: number, observeElements = false): Promise<VideoEditRenderResult> {
     const document = this.document; const epoch = this.presentationEpoch
     // 滤镜前缀只限定可见合成层，音频、跟踪与显式媒体引用仍读取完整源文档。
     const sourceDocument = nestedRender?.sourceDocument ?? document
@@ -1934,7 +1961,7 @@ export class VideoEditRenderer {
     if (!this.codeSources && (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length))) {
       const { VideoEditCodeSources } = await import('./videoEditCodeSources')
       if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
-      this.codeSources ??= new VideoEditCodeSources(document, async () => { const code = await this.compositor!.code(); code.setAuthorEffects({ ...this.document.authorEffects, luts: this.document.colorLuts }); return code }, undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ })
+      this.codeSources ??= new VideoEditCodeSources(document, async () => { const code = await this.compositor!.code(); code.setAuthorEffects({ ...this.document.authorEffects, luts: this.document.colorLuts }); return code }, undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ }, this.reuseCodeOutputs)
     }
     // 片子数据派生的取帧参数（视频与截图）按代码声明解析：先读好引用片子数据的代码，取帧、图片与代码准备才看到同一份合成参数。
     readSignal?.throwIfAborted()
@@ -1954,15 +1981,20 @@ export class VideoEditRenderer {
       if (image?.predecoded) { image.predecoded = false; this.lookaheadOwner.lookaheadMetrics.imageHits++ }
     }
     for (const id of this.images.keys()) if (!imageIds.has(id) && !this.warmImages.has(id)) this.releaseImage(id)
+    const approximateCodeInputs = new WeakSet<object>()
     const imagesReady = (async () => {
       const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media, false, readSignal)] as const)))
-      for (const [key, picture] of await this.prepareCodeInputs(sourceDocument, active, frame, sequential, quality, canPresent, nestedContext, path, markApproximate, _scrubbing)) inputs.set(key, picture)
-      return await this.compositor!.prepareImages(inputs, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
+      const codeInputs = await this.prepareCodeInputs(sourceDocument, active, frame, sequential, quality, canPresent, nestedContext, path, markApproximate, _scrubbing)
+      for (const [key, picture] of codeInputs) inputs.set(key, picture)
+      const prepared = await this.compositor!.prepareImages(inputs, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
+      // 上传边界会创建作者输入包装对象；精确性必须随原画面传递，不能拿包装对象查原画面的 WeakSet。
+      for (const [key, picture] of codeInputs) if (nestedContext.approximate.has(picture) && prepared.get(key)) approximateCodeInputs.add(prepared.get(key)!)
+      return prepared
     })()
     const imagesSettled = Promise.allSettled([imagesReady])
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
-    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
+    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { observeElements, exactInput: input => !approximateCodeInputs.has(input), quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
       if (!codeMaterialUsesAudio(program)) return {}
       const source = codeAudioComposition(sourceDocument, sourceDocument.clips.find(value => value.id === clip.id) ?? clip, codeAudioReferenceMediaId(parameters))
       const audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)
@@ -2445,7 +2477,7 @@ export class VideoEditRenderer {
         if (this.sequencePath.includes(nested.id) || this.sequencePath.length >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH) throw new Error('嵌套声音存在循环或超过可混音层数。')
         activeAudio.add(clip.id)
         let renderer = this.nestedSounds.get(clip.id)
-        if (!renderer) { renderer = new VideoEditRenderer(nested, this.previewWidth, undefined, 1, this.frames, undefined, [...this.sequencePath, nested.id]); this.nestedSounds.set(clip.id, renderer) }
+        if (!renderer) { renderer = new VideoEditRenderer(nested, { previewWidth: this.previewWidth, cacheBudgetBytes: 1, frames: this.frames, sequencePath: [...this.sequencePath, nested.id] }); this.nestedSounds.set(clip.id, renderer) }
         const audio = videoEditNestedAudio(nested.sampleRate, sourceDuration, (start, duration) => renderer!.mixAudio(start, duration, retainIdle))
         await this.mixRetimedSound(clip, { clip, fps, rate, channels: this.document.channels, from, to, base, targets, gainAt, reads: [{ audio }] }, audioMode === 'stretch' ? 'stretch' : 'resample', activeStretchers)
         return

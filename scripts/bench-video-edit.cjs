@@ -26,6 +26,7 @@ const HELP = `用法：npm run bench:video-edit -- [选项]
 需要 out/ 是最新构建（先 npm run electron:bundle）；全程使用隔离资料目录，不读写用户真实资料。
 
 选项：
+  --scenario code-output  代码输出复用专项（交替顺序；可叠加 --diagnostics）
   --project <路径>     真实工程文件夹（或工程里的任一文件）：按 .henji/project.json 找到工程根，只把这个工程复制到临时目录再测
   --document <ID>      工程里有多份剪辑时指定剪辑文档 ID（默认工程的主剪辑）
   --from <帧>          起播帧（默认 0）
@@ -40,7 +41,7 @@ const HELP = `用法：npm run bench:video-edit -- [选项]
 输出：结果 JSON 写到 --out 目录并打印到标准输出；baseline.stable 为 true 才算基线。`
 
 function parseArgs(argv) {
-  const options = { project: null, document: null, from: 0, to: null, rounds: 2, warmup: 1, tolerance: 0.05, diagnostics: false, out: path.join(ROOT, '.bench', 'video-edit'), help: false }
+  const options = { scenario: undefined, project: null, document: null, from: 0, to: null, rounds: 2, warmup: 1, tolerance: 0.05, diagnostics: false, out: path.join(ROOT, '.bench', 'video-edit'), help: false }
   const value = (index, name) => {
     const next = argv[index + 1]
     if (next === undefined || next.startsWith('--')) throw new Error(`${name} 需要一个值`)
@@ -55,6 +56,7 @@ function parseArgs(argv) {
     const arg = argv[index]
     if (arg === '--help' || arg === '-h') options.help = true
     else if (arg === '--diagnostics') options.diagnostics = true
+    else if (arg === '--scenario') { options.scenario = value(index++, arg); if (options.scenario !== 'code-output') throw new Error('未知基准场景') }
     else if (arg === '--project') options.project = path.resolve(value(index++, arg))
     else if (arg === '--document') options.document = value(index++, arg)
     else if (arg === '--from') options.from = integer(value(index++, arg), arg, 0)
@@ -276,7 +278,10 @@ if (require.main === module) {
   let options
   try { options = parseArgs(process.argv.slice(2)) } catch (error) { console.error(`[bench:video-edit] ${error.message}\n\n${HELP}`); process.exit(1) }
   if (options.help) { console.log(HELP); process.exit(0) }
-  main(options).then(({ result, outFile }) => {
+  const run = options.scenario === 'code-output' ? require('./lib/benchVideoEditCodeOutput.cjs').runCodeOutputBench(options) : main(options)
+  run.then(outcome => {
+    if (!outcome) return
+    const { result, outFile } = outcome
     console.log(JSON.stringify(result, null, 2))
     console.error(`[bench:video-edit] 结果：${outFile}；${result.baseline.stable ? '两遍误差在容差内，可作基线' : '两遍误差超出容差，不能作基线'}`)
   }, error => { console.error(`[bench:video-edit] 失败：${error.stack ?? error}`); process.exit(1) })

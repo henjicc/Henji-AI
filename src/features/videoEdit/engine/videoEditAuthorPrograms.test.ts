@@ -1,3 +1,5 @@
+import { LoadedFontFaces } from '@/platform/fontFaces'
+import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorPrograms } from './videoEditAuthorPrograms'
@@ -73,4 +75,45 @@ it('前瞻模块加载挂起时，当前帧的实例读取不排在加载后面'
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
   expect(await pool.instance('clip', program)).toBe(current)
   finish({ name: 'future', draw() {} }); await future; await pool.dispose()
+})
+
+
+it('输出 frameKey 使用真实作者参数与原生尺寸，非法声明回退而不绘制', async () => {
+  const draw = vi.fn(), frameKey = vi.fn((_p, width, height, info) => [width, height, info.renderScale ?? 1])
+  load.mockResolvedValue({ name: '原生', createWebGPU: () => ({ draw }), frameKey })
+  const pool = new VideoEditAuthorPrograms({} as GpuDevice), program = await pool.inspect(bundle())
+  const info = { time: 1, frameDuration: 1 / 30, clip: { time: 1, duration: 4 } }
+  try {
+    const full = await pool.frameKey(program, { width: 1920, height: 1080 }, {}, info, undefined, false, 1, {}, {})
+    const half = await pool.frameKey(program, { width: 1920, height: 1080 }, {}, info, undefined, false, 2, {}, {})
+    expect(frameKey.mock.lastCall?.slice(1, 3)).toEqual([960, 540])
+    expect(half?.digest).not.toBe(full?.digest)
+    frameKey.mockImplementationOnce(() => Number.NaN as never)
+    expect((await pool.frameKey(program, { width: 1920, height: 1080 }, {}, info, undefined, false, 1, {}, {}))?.fallback).toContain('frame-key-error')
+    expect(draw).not.toHaveBeenCalled()
+  } finally { await pool.dispose() }
+})
+
+it('多层作者的输出 frameKey 只执行声明，完整环境由输出键覆盖', async () => {
+  const layers = vi.fn(() => [{ id: 'a', draw() {} }, { id: 'b', draw() {} }]), frameKey = vi.fn(() => 'still')
+  load.mockResolvedValue({ name: '多层', layers, frameKey })
+  const pool = new VideoEditAuthorPrograms({} as GpuDevice), program = await pool.inspect({ ...bundle(), apiVersion: 7 })
+  try {
+    const key = await pool.frameKey(program, { width: 100, height: 100 }, {}, { time: 0, frameDuration: 1 / 30, clip: { time: 0, duration: 3 } }, undefined, false, 1, {}, {})
+    expect(key?.digest).toBeDefined(); expect(frameKey).toHaveBeenCalledOnce(); expect(layers).not.toHaveBeenCalled()
+  } finally { await pool.dispose() }
+})
+
+it('Worker 字体变化后同一程序重建实例，不能沿用旧字体的内部层纹理', async () => {
+  load.mockResolvedValue({ name: '字体', draw() {} })
+  vi.stubGlobal('FontFace', class { async load() { return this } })
+  const fonts = new LoadedFontFaces({ add() {}, delete() {} } as unknown as FontFaceSet)
+  const pool = new VideoEditAuthorPrograms({} as GpuDevice), program = await pool.inspect(bundle())
+  try {
+    const first = await pool.instance('clip', program)
+    expect(await pool.instance('clip', program)).toBe(first)
+    await fonts.load({ face: { ...GENERIC_FONT_FACES[0], id: 'worker-font' }, bytes: new Uint8Array([1]) })
+    expect(await pool.instance('clip', program)).not.toBe(first)
+    expect(runtimeDispose).toHaveBeenCalledOnce()
+  } finally { await pool.dispose(); fonts.dispose(); vi.unstubAllGlobals() }
 })

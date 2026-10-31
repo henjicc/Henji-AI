@@ -32,7 +32,7 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
     let timer: ReturnType<typeof setTimeout> | undefined
     let applied: VideoEditComposition = pictures
     let renderer: VideoEditRenderSession
-    try { renderer = new VideoEditRenderSession(pictures, 640, undefined, undefined, undefined, settings.useProxies ? projectId : undefined, settings.useProxies) } catch (reason) { setError('无法生成导出预览，请重试。'); setLoading(false); logger.warn('创建导出预览失败', { event: 'video_edit.export.preview_failed', error: reason, context: { projectId, frame: requested.current.frame } }); return }
+    try { renderer = new VideoEditRenderSession(pictures, { previewWidth: 640, proxyProjectId: settings.useProxies ? projectId : undefined, exportProxies: settings.useProxies }) } catch (reason) { setError('无法生成导出预览，请重试。'); setLoading(false); logger.warn('创建导出预览失败', { event: 'video_edit.export.preview_failed', error: reason, context: { projectId, frame: requested.current.frame } }); return }
     let disposing: Promise<void> | undefined
     const dispose = (): Promise<void> => disposing ??= renderer.dispose().catch(reason => logger.warn('释放导出预览失败', { event: 'video_edit.export.preview_cleanup_failed', error: reason }))
     const render = async (): Promise<void> => {

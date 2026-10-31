@@ -31,7 +31,7 @@ export class VideoEditTrackingFrames {
       if (!session) {
         if (this.sessions.size >= TRACKING_FRAME_MAX_PENDING) throw new Error('嵌套跟踪取帧任务过多。')
         const composition = this.resolve(event.source)
-        const renderer = new VideoEditRenderSession(composition, 1280, undefined, undefined, 64 * 1024 ** 2)
+        const renderer = new VideoEditRenderSession(composition, { previewWidth: 1280, cacheBudgetBytes: 64 * 1024 ** 2 })
         session = { renderer, source: event.source, controller: new AbortController(), busy: true }; ownsFrameRequest = true
         this.sessions.set(event.jobId, session); await this.prepare(renderer, composition)
         logger.debug('嵌套跟踪取帧开始', { event: 'video_edit.tracking.frames.start', context: { width: composition.width, height: composition.height } })

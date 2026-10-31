@@ -125,6 +125,9 @@ export class VideoEditCodeGpu {
   setAuthorEffects(environment: AuthorEffectEnvironment): void { this.effectEnvironment = environment }
   private authors(): VideoEditAuthorPrograms { return this.authorPrograms ??= new VideoEditAuthorPrograms(this.device, () => this.effectEnvironment, this.effectAllocator) }
   async inspectAuthor(bundle: CodeAuthorBundle): Promise<CodeAuthorProgram> { return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().inspect(bundle) }) }
+  async authorFrameKey(...args: Parameters<VideoEditAuthorPrograms['frameKey']>): ReturnType<VideoEditAuthorPrograms['frameKey']> {
+    return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().frameKey(...args) })
+  }
   /**
    * `divisor`：输出比例的倒数。输出纹理按比例分配，画面的放置尺寸仍是
    * `size`；Canvas 作者坐标不变，WebGPU / WebGL 入口拿到缩小后的 target 与 width/height，`info.renderScale` 给出比例。

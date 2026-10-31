@@ -724,7 +724,8 @@ export class VideoEditGpuCompositor {
         quantize.draw(3); quantize.end()
         this.precision.frames++
       }
-      if (timer) { timer.end(timed, encoder); timer.finishFrame(encoder) }
+      timer?.end(timed, encoder)
+      const readGpuTimings = timer?.finishFrame(encoder)
       const capture = target ? undefined : this.capturePresentation?.()
       const bytesPerRow = Math.ceil(this.canvas.width * 4 / 256) * 256
       if (capture && !capture.gpu) {
@@ -733,6 +734,7 @@ export class VideoEditGpuCompositor {
         ;(encoder as unknown as PresentationEncoder).copyTextureToBuffer({ texture: canvas }, { buffer: historyBuffer, bytesPerRow }, { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 })
       }
       device.queue.submit([encoder.finish()])
+      readGpuTimings?.()
       if (target) target.carriesLight = pictures.some(picture => picture instanceof VideoEditCodePicture && picture.carriesLight)
       if (capture?.gpu && canvas) {
         this.bitmapBridge ??= new VideoEditGpuBitmapBridge(device)

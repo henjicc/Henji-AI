@@ -160,7 +160,7 @@ it('作者声明由现有渲染会话读取，不创建额外 Worker 或请求�
 })
 
 it('卡死渲染终止共享会话、释放全部等待和原生通道，显式重建可继续出画', async () => {
-  const session = new VideoEditRenderSession(composition(), undefined, undefined, undefined, undefined, undefined, false, 50)
+  const session = new VideoEditRenderSession(composition(), { requestTimeoutMs: 50 })
   await session.prepareGpu()
   vi.useFakeTimers()
   const old = workers[0]; old.respond = false
@@ -306,7 +306,7 @@ it('预览请求 interactive，正式导出入口请求 final，复用同一 Wor
 it('60 effect moves send only effect deltas, without media/source/font payloads; structural edits resync', async () => {
   const document = composition()
   document.clips = [videoEditClipSchema.parse({ id: 'clip', itemId: 'item', kind: 'video', name: '片段', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', effects: [{ id: 'grade', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {} } }] })]
-  const session = new VideoEditRenderSession(document, 1280)
+  const session = new VideoEditRenderSession(document, { previewWidth: 1280 })
   await session.present(0)
   for (let i = 1; i <= 60; i++) await session.updateDocument({ ...document, revision: i, clips: [{ ...document.clips[0], x: i / 100, scale: 1 + i / 100, rotation: i, effects: [{ ...document.clips[0].effects![0], builtin: { id: 'color_grade', params: { exposure: i / 60 } } }] }] })
   const parameters = workers[0].messages.map(value => value.message).filter(value => value.kind === 'parameters')
@@ -320,7 +320,7 @@ it('60 effect moves send only effect deltas, without media/source/font payloads;
 })
 
 it('遮罩更新按序列与版本关联首次出画，日志给出帧延迟，后续重画不重复计延迟', async () => {
-  const document = composition(); const session = new VideoEditRenderSession(document,1280)
+  const document = composition(); const session = new VideoEditRenderSession(document, { previewWidth: 1280 })
   await session.present(0)
   const updated = {...document,revision:1}
   recordVideoEditMaskUpdate(updated.id,updated.revision,performance.now()-12)
@@ -338,7 +338,7 @@ it('遮罩更新按序列与版本关联首次出画，日志给出帧延迟，�
 })
 
 it('离屏跟踪RGB尺寸进入既有渲染Worker请求，不开启第二条渲染路径', async () => {
-  const session = new VideoEditRenderSession(composition(), 1280)
+  const session = new VideoEditRenderSession(composition(), { previewWidth: 1280 })
   await session.present(60, false, false, undefined, undefined, { width: 512, height: 512 })
   expect(workers[0].messages.at(-1)?.message).toMatchObject({ kind: 'render', frame: 60, sequential: false, readRgb: { width: 512, height: 512 } })
   await session.dispose()
@@ -348,7 +348,7 @@ it('预览与导出 Worker 接收完整嵌套图，子序列保持原始尺寸/P
   const root = composition(); const child = { ...root, id: 'child', name: '子序列', pixelAspectRatio: { numerator: 2, denominator: 1 } }
   const document = { ...root, sequences: [root, child], items: [{ id: 'nested-item', name: '嵌套', kind: 'sequence' as const, sequenceId: 'child' }] }
   for (const previewWidth of [960, undefined]) {
-    const session = new VideoEditRenderSession(document, previewWidth); await session.present(0)
+    const session = new VideoEditRenderSession(document, { previewWidth }); await session.present(0)
     const init = workers.at(-1)!.messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
     expect(init.document.sequences).toEqual(document.sequences)
     expect(init.document.items).toEqual(document.items)
@@ -416,7 +416,7 @@ it('代理进入明确预览或代理导出会话，默认导出与抓原片保�
   const document = composition()
   const proxy = { path: 'D:/cache/proxy.mp4', key: 'a'.repeat(64), contentIdentity: 'b'.repeat(64), preset: '720p' as const, width: 1280, height: 720, bytes: 1024 }
   proxyState.sources = { pro: proxy }
-  const preview = new VideoEditRenderSession(document, 1920, undefined, undefined, undefined, 'project')
+  const preview = new VideoEditRenderSession(document, { previewWidth: 1920, proxyProjectId: 'project' })
   await preview.present(0)
   const init = workers[0].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
   expect(init.decode?.proxies?.pro.path).toBe('url:D:/cache/proxy.mp4')
@@ -430,14 +430,14 @@ it('代理进入明确预览或代理导出会话，默认导出与抓原片保�
   const exported = new VideoEditRenderSession(document); await exported.present(0)
   const exportInit = workers[1].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
   expect(exportInit.decode?.proxies).toEqual({}); expect(exportInit.document.media[0].sourceRevision).toBeUndefined()
-  const proxyExport = new VideoEditRenderSession(document, undefined, undefined, undefined, undefined, 'p', true); await proxyExport.present(0)
+  const proxyExport = new VideoEditRenderSession(document, { proxyProjectId: 'p', exportProxies: true }); await proxyExport.present(0)
   const proxyInit = workers[2].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
   expect(proxyInit.decode?.proxies).toEqual({ pro: { ...proxy, path: 'url:' + proxy.path } }); expect(proxyInit.document.media[0].path).toBe('url:D:/prores.mov')
   await Promise.all([preview.dispose(), exported.dispose(), proxyExport.dispose()])
 })
 
 it('空闲会话准备 GPU 后只允许接管一次，项目接管后使用该项目的文档配置', async () => {
-  const session = new VideoEditRenderSession(composition(), 32)
+  const session = new VideoEditRenderSession(composition(), { previewWidth: 32 })
   await session.prepareGpu()
   expect(workers[0].messages.some(value => value.message.kind === 'prepareGpu')).toBe(true)
   session.adoptProject('project')
@@ -453,7 +453,7 @@ it('切换预打开在普通文档更新前发送，交给 Worker 按首帧前�
   document.items = [{ id: 'video', name: '视频', kind: 'video', mediaId: 'pro' }]
   document.tracks = [{ id: 'v', name: '视频', index: 1, kind: 'video', enabled: true, locked: false, muted: false, solo: false }]
   document.clips = [videoEditClipSchema.parse({ id: 'clip', itemId: 'video', name: '视频', kind: 'video', track: 1, start: 0, duration: 120, sourceInUs: 3500000, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' })]
-  const session = new VideoEditRenderSession(composition(), 1920)
+  const session = new VideoEditRenderSession(composition(), { previewWidth: 1920 })
   await session.prepareGpu()
   session.preopenSequence(document, 0)
   session.preopenSequence({ ...document, id: 'latest' }, 0)
@@ -489,13 +489,13 @@ it('要求原片且当前没有加载代理时，参数修改仍走增量更新�
   project.sequences[0].clips = [makeVideoEditItemClip(project, 'item', project.sequences[0].id, { frame: 0 })]
   const before = videoEditComposition(project, project.sequences[0].id)
   const moved = { ...before, revision: 1, clips: [{ ...before.clips[0], opacity: .5 }] }
-  const plain = new VideoEditRenderSession(before, undefined, undefined, undefined, undefined, 'project')
+  const plain = new VideoEditRenderSession(before, { proxyProjectId: 'project' })
   await plain.prepareGpu()
   await plain.updateDocument(moved, true)
   expect(workers.at(-1)!.messages.at(-1)!.message.kind).toBe('parameters')
   await plain.dispose()
   proxyState.sources = { pro: { key: 'k', path: 'D:/proxy.mp4', width: 960, height: 540 } as unknown as import('@/core/videoEdit/proxy').VideoProxyResult }
-  const proxied = new VideoEditRenderSession(before, undefined, undefined, undefined, undefined, 'project')
+  const proxied = new VideoEditRenderSession(before, { proxyProjectId: 'project' })
   await proxied.prepareGpu()
   await proxied.updateDocument(moved, true)
   const update = workers.at(-1)!.messages.at(-1)!.message as Extract<RenderRequest, { kind: 'update' }>
@@ -547,7 +547,7 @@ it('后台完成保留普通失败和效果提示，GPU 丢失进入同一会话
 })
 
 it.each([false, true])('缓存回执后的后台现场合成仍受看门狗保护，完成=%s', async completed => {
-  const session = new VideoEditRenderTransport({ fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined }, composition(), undefined, undefined, undefined, undefined, undefined, false, 50)
+  const session = new VideoEditRenderTransport({ fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined }, composition(), { requestTimeoutMs: 50 })
   await session.prepareGpu()
   vi.useFakeTimers()
   const worker = workers[0]; worker.respond = false

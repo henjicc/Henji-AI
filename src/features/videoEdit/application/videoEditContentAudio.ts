@@ -26,7 +26,7 @@ export async function analyzeVideoEditMediaAudio(projectId: string, sequenceId: 
   const release = holdVideoEditActivity(projectId, '分析音频')
   const task = { controller, progress: 0 }; tasks.set(owner, task)
   const cache = new VideoEditContentAudio(document => {
-    const renderer = new VideoEditRenderSession(document, 1)
+    const renderer = new VideoEditRenderSession(document, { previewWidth: 1 })
     return { async mixAudio(start, duration) { const audio = await renderer.mixAudio(start, duration); return Array.from({ length: audio.numberOfChannels }, (_, channel) => audio.getChannelData(channel).slice()) }, dispose: () => renderer.dispose() }
   })
   try {

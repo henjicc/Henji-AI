@@ -7,7 +7,7 @@ function timestampDevice(features: string[]) {
   const passes: unknown[] = []
   const encoder = { beginComputePass: vi.fn((descriptor: unknown) => { passes.push(descriptor); return { end: () => {} } }), resolveQuerySet: vi.fn(), copyBufferToBuffer: vi.fn(), finish: () => ({}) }
   const read = { mapAsync: vi.fn(async () => {}), getMappedRange: () => new BigUint64Array([1_000_000n, 4_000_000n, 5_000_000n, 7_500_000n]).buffer, unmap: () => {}, destroy: () => {} }
-  return { passes, encoder, device: { features: new Set(features), createQuerySet: vi.fn(() => ({})), createBuffer: vi.fn(() => read), createCommandEncoder: () => encoder, queue: { submit: vi.fn() } } }
+  return { passes, encoder, read, device: { features: new Set(features), createQuerySet: vi.fn(() => ({})), createBuffer: vi.fn(() => read), createCommandEncoder: () => encoder, queue: { submit: vi.fn() } } }
 }
 
 describe('剪辑渲染诊断', () => {
@@ -31,14 +31,17 @@ describe('剪辑渲染诊断', () => {
 
   it('作者入口与合成提交的打点在帧尾解析成 gpu.* 分段', async () => {
     enableVideoEditRenderDiagnostics(true)
-    const { device, encoder, passes } = timestampDevice(['timestamp-query'])
+    const { device, encoder, passes, read } = timestampDevice(['timestamp-query'])
     const timer = videoEditGpuTimer(device)!
     const author = timer.begin('author'); timer.end(author)
     const composite = timer.begin('composite', encoder); timer.end(composite, encoder)
-    timer.finishFrame(encoder)
+    const readAfterSubmit = timer.finishFrame(encoder)
+    expect(read.mapAsync).not.toHaveBeenCalled()
     expect(passes).toHaveLength(4)
     expect(device.queue.submit).toHaveBeenCalledTimes(2)
     expect(encoder.resolveQuerySet).toHaveBeenCalledWith(expect.anything(), 0, 4, expect.anything(), 0)
+    device.queue.submit([encoder.finish()]); readAfterSubmit?.()
+    expect(read.mapAsync).toHaveBeenCalledOnce()
     expect(await takeVideoEditGpuFrame()).toEqual({ 'gpu.author': 3, 'gpu.composite': 2.5, 'gpu.frame': 6.5 })
     expect(takeVideoEditGpuFrame()).toBeUndefined()
   })
@@ -53,7 +56,8 @@ describe('剪辑渲染诊断', () => {
     beginVideoEditGpuFrame()
     timer.end(unfinished)
     const composite = timer.begin('composite', encoder); timer.end(composite, encoder)
-    timer.finishFrame(encoder)
+    const readAfterSubmit = timer.finishFrame(encoder)
+    device.queue.submit([encoder.finish()]); readAfterSubmit?.()
     expect(encoder.resolveQuerySet).toHaveBeenCalledWith(expect.anything(), 0, 2, expect.anything(), 0)
     expect(Object.keys(await takeVideoEditGpuFrame() ?? {})).toEqual(['gpu.composite', 'gpu.frame'])
   })

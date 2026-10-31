@@ -41,7 +41,7 @@ export async function readVideoEditCodeMotionAudio(owner: VideoEditInstance, com
   let cache = caches.get(owner)
   if (!cache) {
     cache = new VideoEditContentAudio(document => {
-      const renderer = new VideoEditRenderSession(document, 1)
+      const renderer = new VideoEditRenderSession(document, { previewWidth: 1 })
       return { async mixAudio(start, duration) { const audio = await renderer.mixAudio(start, duration); return Array.from({ length: audio.numberOfChannels }, (_, channel) => audio.getChannelData(channel).slice()) }, dispose: () => renderer.dispose() }
     })
     caches.set(owner, cache)

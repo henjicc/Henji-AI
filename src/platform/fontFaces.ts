@@ -1,5 +1,6 @@
 import type { FontPayload } from './fonts'
 import { cssFontFamily, type FontFaceInfo } from '../core/fonts/catalog'
+let documentRevision = 0
 /** Shared by document.fonts and WorkerGlobalScope.fonts. No PAL calls inside the worker. */
 export class LoadedFontFaces {
   private readonly loaded = new Map<string, { faces: FontFace[]; bytes: number }>()
@@ -8,6 +9,7 @@ export class LoadedFontFaces {
   private allowedIds?: Set<string>
   private pinnedIds = new Set<string>()
   constructor(private readonly fonts: FontFaceSet, private readonly cacheBudget = Infinity, private readonly onChange: () => void = () => undefined) {}
+  private changed(): void { documentRevision++; this.onChange() }
   async load(payload: FontPayload): Promise<void> {
     const existing = this.loaded.get(payload.face.id)
     if (existing) { this.loaded.delete(payload.face.id); this.loaded.set(payload.face.id, existing); return }
@@ -31,7 +33,7 @@ export class LoadedFontFaces {
     }
     if (generation !== this.generation || this.allowedIds && !this.allowedIds.has(face.id)) return
     for (const value of result) this.fonts.add(value)
-    this.loaded.set(face.id, { faces: result, bytes: source.byteLength * result.length }); this.onChange()
+    this.loaded.set(face.id, { faces: result, bytes: source.byteLength * result.length }); this.changed()
     this.trim()
   }
   retain(faces: readonly FontFaceInfo[]): void {
@@ -40,7 +42,7 @@ export class LoadedFontFaces {
   retainIds(values: readonly string[]): void {
     const ids = new Set(values)
     this.allowedIds = ids
-    for (const [id, entry] of this.loaded) if (!ids.has(id)) { for (const value of entry.faces) this.fonts.delete(value); this.loaded.delete(id); this.onChange() }
+    for (const [id, entry] of this.loaded) if (!ids.has(id)) { for (const value of entry.faces) this.fonts.delete(value); this.loaded.delete(id); this.changed() }
   }
   setPinnedIds(ids: readonly string[]): void { this.pinnedIds = new Set(ids); this.trim() }
   private trim(): void {
@@ -49,13 +51,12 @@ export class LoadedFontFaces {
       if (bytes <= this.cacheBudget) break
       if (this.pinnedIds.has(id)) continue
       for (const value of entry.faces) this.fonts.delete(value)
-      this.loaded.delete(id); this.onChange(); bytes -= entry.bytes
+      this.loaded.delete(id); this.changed(); bytes -= entry.bytes
     }
   }
   dispose(): void { this.generation++; this.retain([]); this.pending.clear() }
 }
 let documentFonts: LoadedFontFaces | undefined
-let documentRevision = 0
 /** Typography textures must be invalidated when actual loaded font resources change. */
 export function documentFontRevision(): number { return documentRevision }
 const documentPins = new Map<object, readonly string[]>()
@@ -65,7 +66,7 @@ export function pinDocumentFonts(owner: object, ids: readonly string[]): void { 
 export function releaseDocumentFonts(owner: object): void { documentPins.delete(owner); updatePins() }
 export async function loadDocumentFont(payload: FontPayload): Promise<void> {
   if (typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts) return
-  documentFonts ??= new LoadedFontFaces(document.fonts, 64 * 1024 * 1024, () => { documentRevision++ })
+  documentFonts ??= new LoadedFontFaces(document.fonts, 64 * 1024 * 1024)
   updatePins()
   await documentFonts.load(payload)
 }

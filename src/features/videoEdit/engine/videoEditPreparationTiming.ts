@@ -194,7 +194,7 @@ export class VideoEditGpuTimer {
     if (slot !== undefined) span.end = slot
   }
   /** 帧尾：在合成器最后一次提交的编码器里解析本帧的点；GPU 完成后由 `takeVideoEditGpuFrame` 读回。 */
-  finishFrame(encoder: unknown): void {
+  finishFrame(encoder: unknown): (() => void) | undefined {
     const spans = this.spans.filter(span => span.end !== undefined && span.epoch === gpuEpoch)
     const count = this.used
     this.spans = []; this.used = 0
@@ -205,15 +205,18 @@ export class VideoEditGpuTimer {
     const target = encoder as TimestampEncoder
     target.resolveQuerySet(this.querySet, 0, count, resolve, 0)
     target.copyBufferToBuffer(resolve, 0, read, 0, bytes)
-    gpuFrame = (async () => {
-      try {
-        await read.mapAsync(BUFFER_MAP_READ)
-        const values = new BigUint64Array(read.getMappedRange().slice(0))
-        read.unmap()
-        return videoEditGpuSpanStages(values, spans)
-      } finally { resolve.destroy(); read.destroy() }
-    })()
-    void gpuFrame.catch(() => {})
+    // mapAsync 会立即占用缓冲区，调用方提交这条编码器后才能启动读回。
+    return () => {
+      gpuFrame = (async () => {
+        try {
+          await read.mapAsync(BUFFER_MAP_READ)
+          const values = new BigUint64Array(read.getMappedRange().slice(0))
+          read.unmap()
+          return videoEditGpuSpanStages(values, spans)
+        } finally { resolve.destroy(); read.destroy() }
+      })()
+      void gpuFrame.catch(() => {})
+    }
   }
 }
 

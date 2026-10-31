@@ -1,3 +1,6 @@
+import { LoadedFontFaces } from '@/platform/fontFaces'
+import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
+import { videoEditStyleSchema } from '@/core/videoEdit/styles/styleSchemas'
 import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
 import { testCodeSource, testSetCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
@@ -59,7 +62,7 @@ function fixture(code = source(), count = 1): VideoEditComposition {
   document.sequences[0].clips = [clip]
   return videoEditComposition(document, document.sequences[0].id)
 }
-function boundaries(document: VideoEditComposition) {
+function boundaries(document: VideoEditComposition, reuse = true) {
   const pictures = new Map<string, VideoEditCodePicture>()
   const generator = vi.fn(async (key: string, _instance: string, program: CodeMaterialProgram) => {
     let picture = pictures.get(key)
@@ -70,7 +73,7 @@ function boundaries(document: VideoEditComposition) {
   const runtime = { authorGenerator: generator, inspectAuthor: vi.fn(async (bundle: CodeAuthorBundle) => testAuthorProgram(bundle)), retainAuthorInstances: vi.fn(), observeAuthor: vi.fn(), releaseUnused }
   const acquire = vi.fn(async () => runtime)
   const compiler = { bundle: vi.fn(async (code: string | import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles, _signal?: AbortSignal) => testAuthorBundle(code)), dispose: vi.fn() }
-  return { sources: new VideoEditCodeSources(document, acquire, compiler), compiler, acquire, generator, releaseUnused, pictures }
+  return { sources: new VideoEditCodeSources(document, acquire, compiler, undefined, reuse), compiler, acquire, generator, releaseUnused, pictures }
 }
 function changedVersion(document: VideoEditComposition, id: string): VideoEditComposition {
   return { ...document, revision: document.revision + 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, versionId: id } })) }
@@ -102,7 +105,7 @@ it('回放分辨率的缩小倍数随生成器调用传下并进静态缓存键�
     await boundary.sources.prepare(document, document.clips, 0, () => true)
     expect(boundary.generator).toHaveBeenCalledTimes(2)
     expect(boundary.generator.mock.lastCall![10 as number]).toBe(2)
-    expect(boundary.generator.mock.lastCall![0]).not.toBe(fullKey)
+    expect(boundary.generator.mock.lastCall![0]).toBe(fullKey)
     // 同一倍数下静态画面照常沿用
     await boundary.sources.prepare(document, document.clips, 1, () => true)
     expect(boundary.generator).toHaveBeenCalledTimes(2)
@@ -257,7 +260,7 @@ it('自定义结构含 kind 和 mediaId 字段也不决定媒体语义，不读�
   } finally { await boundary.sources.dispose() }
 })
 
-it('分层作者收到正式源时钟、参数和片段局部信息，动态曝光不误用静态缓存', async () => {
+it('分层作者收到正式源时钟、参数和片段局部信息，同帧复用完整输出', async () => {
   const code = 'export default {name:"参数运动",width:64,height:64,durationSeconds:3,params:[{key:"amount",type:"number",title:"位置",default:0,min:0,max:100,step:1,animatable:true}],motionBlur:{},layers(p){return [{id:"box",bounds:[0,0,8,8],pose:t=>({x:p.amount+t}),draw(ctx){ctx.fillRect(0,0,8,8);}}];}}'
   const document = fixture(code)
   document.clips[0].code!.curves = { amount: [{ id: 'a', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'b', sourceInUs: 1_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 100, interpolation: 'linear' }] }
@@ -265,7 +268,7 @@ it('分层作者收到正式源时钟、参数和片段局部信息，动态曝�
   try {
     await boundary.sources.prepare(document, document.clips, 15, () => true)
     await boundary.sources.prepare(document, document.clips, 15, () => true)
-    expect(boundary.generator).toHaveBeenCalledTimes(2)
+    expect(boundary.generator).toHaveBeenCalledOnce()
     const options = boundary.generator.mock.calls[0] as unknown as Parameters<VideoEditCodeGpu['authorGenerator']>
     expect(options[3]).toMatchObject({ time: .5, frame: 15, localTime: .5 })
     expect(options[4]).toEqual({ amount: 50 })
@@ -324,7 +327,7 @@ describe('可见代码源与固定内容复用', () => {
       await boundary.sources.prepare(document, document.clips, 0, () => true)
       await boundary.sources.prepare(document, document.clips, 15, () => true)
       expect(boundary.generator).toHaveBeenCalledTimes(2)
-      expect(boundary.generator.mock.calls[0][0]).not.toBe(boundary.generator.mock.calls[1][0])
+      expect(boundary.generator.mock.calls[0][0]).toBe(boundary.generator.mock.calls[1][0])
       expect((boundary.generator.mock.calls[1] as unknown[])[7]).toEqual({ box: { dx: 50 } })
       await boundary.sources.prepare(document, document.clips, 15, () => true); expect(boundary.generator).toHaveBeenCalledTimes(2)
       const next = { ...document, clips: [{ ...document.clips[0], elementOverrides: { box: { dx: 100 } } }] }
@@ -461,9 +464,9 @@ describe('可见代码源与固定内容复用', () => {
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     await vi.waitFor(() => expect(finish).toBeTypeOf('function')); await boundary.sources.dispose(); finish(testAuthorBundle(testCodeSource(document, document.codeMaterials![0].versions[0]))); await rejected
     expect(boundary.acquire).not.toHaveBeenCalled(); expect(boundary.generator).not.toHaveBeenCalled()
-    expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0 })
+    expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, outputPictures: 0 })
   })
-  it('静态按版本和规范参数共享目标，帧/变换/普通revision变化不重编译或求值', async () => {
+  it('静态内容相同的片段共用目标，帧/变换/普通revision变化不重编译或求值', async () => {
     let document = fixture(); const boundary = boundaries(document)
     try {
       const first = await boundary.sources.prepare(document, document.clips, 0, () => true)
@@ -475,7 +478,7 @@ describe('可见代码源与固定内容复用', () => {
       boundary.sources.updateDocument(document)
       const second = await boundary.sources.prepare(document, document.clips, 60, () => true)
       expect(second.pictures.get('clip')).toBe(picture); expect(second.pictures.get('copy')).toBe(picture)
-      expect(second.cacheHits).toBe(2); expect(boundary.compiler.bundle).toHaveBeenCalledOnce(); expect(boundary.generator).toHaveBeenCalledOnce()
+      expect(second.cacheHits).toBe(2); expect(boundary.compiler.bundle).toHaveBeenCalledOnce(); expect(boundary.generator).toHaveBeenCalledTimes(1)
       expect(boundary.releaseUnused.mock.calls.at(-1)![0].size).toBe(1)
       document = { ...document, clips: [{ ...document.clips[0], code: { ...document.clips[0].code!, parameters: { amount: .8 } } }] }
       boundary.sources.updateDocument(document); await boundary.sources.prepare(document, document.clips, 10, () => true)
@@ -503,7 +506,7 @@ describe('可见代码源与固定内容复用', () => {
       await boundary.sources.prepare(document, [], 0, () => true); expect(boundary.acquire).not.toHaveBeenCalled(); expect(boundary.compiler.bundle).not.toHaveBeenCalled()
       await boundary.sources.prepare(document, document.clips, 0, () => true)
       await boundary.sources.prepare(document, [], 90, () => true)
-      expect(boundary.pictures.size).toBe(0); expect(boundary.sources.diagnostics().staticPictures).toBe(0)
+      expect(boundary.pictures.size).toBe(0); expect(boundary.sources.diagnostics().outputPictures).toBe(0)
       const filter = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'filter', apiVersion: 4 as const, languageVersion: 4 as const, ...testCodeManifest(source('dynamic', '滤镜', 'filter'), document) }] }] }
       boundary.sources.updateDocument(filter)
       await expect(boundary.sources.prepare(filter, changedVersion(filter, 'filter').clips, 0, () => true)).rejects.toThrow('单输入滤镜')
@@ -585,7 +588,7 @@ describe('失效、身份与资源上限', () => {
       const changed = { ...document, codeMaterials: document.codeMaterials!.map(definition => ({ ...definition, versions: definition.versions.map(version => ({ ...version, ...testCodeManifest(source('static', '冒用'), document) })) })) }
       expect(() => boundary.sources.updateDocument(changed)).toThrow('不可变代码版本')
     } finally { await boundary.sources.dispose() }
-    expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0, seenVersions: 0 })
+    expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, outputPictures: 0, seenVersions: 0 })
   })
   it('图片准备失败或取消同步回收静态索引，恢复原参数不命中已销毁目标', async () => {
     for (const failure of ['reject', 'cancel'] as const) {
@@ -598,10 +601,10 @@ describe('失效、身份与资源上限', () => {
         const images = new Promise<undefined>((_resolve, fail) => { reject = fail })
         const pending = boundary.sources.prepare(next, next.clips, 0, () => true, images)
         const refused = expect(pending).rejects.toThrow()
-        await vi.waitFor(() => expect(boundary.sources.diagnostics().staticPictures).toBe(1))
+        await vi.waitFor(() => expect(boundary.sources.diagnostics().outputPictures).toBe(1))
         if (failure === 'cancel') boundary.sources.cancel()
         reject(new Error('图片读取失败')); await refused
-        expect(boundary.sources.diagnostics().staticPictures).toBe(0); expect(boundary.pictures.size).toBe(0)
+        expect(boundary.sources.diagnostics().outputPictures).toBe(0); expect(boundary.pictures.size).toBe(0)
         boundary.sources.updateDocument(document)
         const restored = await boundary.sources.prepare(document, document.clips, 0, () => true)
         expect(restored.cacheHits).toBe(0); expect(restored.pictures.get('clip')).not.toBe(first.pictures.get('clip'))
@@ -617,12 +620,12 @@ describe('失效、身份与资源上限', () => {
     document.clips[0].code!.parameters = { logo: { kind: 'image', mediaId: 'image' } }
     const boundary = boundaries(document)
     try {
-      const first = await boundary.sources.prepare(document, document.clips, 0, () => true, imageInputs('image'))
+      const first = await boundary.sources.prepare(document, document.clips, 0, () => true, imageInputs('image'), { exactInput: () => true })
       const transformed = { ...document, revision: 1, clips: document.clips.map(clip => ({ ...clip, scale: 2 })) }
-      boundary.sources.updateDocument(transformed); expect((await boundary.sources.prepare(transformed, transformed.clips, 1, () => true, imageInputs('image'))).cacheHits).toBe(1)
+      boundary.sources.updateDocument(transformed); expect((await boundary.sources.prepare(transformed, transformed.clips, 1, () => true, imageInputs('image'), { exactInput: () => true })).cacheHits).toBe(1)
       const refreshed = { ...transformed, revision: 2, media: transformed.media.map(media => ({ ...media, sourceRevision: 'explicit-relink' })) }
-      boundary.sources.updateDocument(refreshed); const fresh = await boundary.sources.prepare(refreshed, refreshed.clips, 1, () => true, imageInputs('image'))
-      expect(fresh.cacheHits).toBe(0); expect(fresh.pictures.get('clip')).not.toBe(first.pictures.get('clip')); expect(boundary.compiler.bundle).toHaveBeenCalledOnce()
+      boundary.sources.updateDocument(refreshed); const fresh = await boundary.sources.prepare(refreshed, refreshed.clips, 1, () => true, imageInputs('image'), { exactInput: () => true })
+      expect(fresh.cacheHits).toBe(0); expect(fresh.pictures.get('clip')).toBe(first.pictures.get('clip')); expect(boundary.compiler.bundle).toHaveBeenCalledOnce()
     } finally { await boundary.sources.dispose() }
   })
   it('晚到GPU生成串行回收，旧批次失败不破坏新批次完整保护集合', async () => {
@@ -647,7 +650,7 @@ describe('失效、身份与资源上限', () => {
       expect(boundary.generator).toHaveBeenCalledTimes(2); expect(boundary.pictures.size).toBe(1)
       expect(boundary.releaseUnused.mock.calls.at(-1)![0].has(boundary.generator.mock.calls[1][0])).toBe(true)
       expect(ready.pictures.get('clip')).toBe(boundary.pictures.get(boundary.generator.mock.calls[1][0]))
-      expect(boundary.sources.diagnostics().staticPictures).toBe(1)
+      expect(boundary.sources.diagnostics().outputPictures).toBe(1)
     } finally { await boundary.sources.dispose() }
   })
   it('晚到编译不能生成旧剪辑，取消/更新/关闭清理观察与compiler', async () => {
@@ -666,7 +669,7 @@ describe('失效、身份与资源上限', () => {
     const last = boundary.sources.prepare(changed, changed.clips, 0, () => true); const lastFailed = expect(last).rejects.toMatchObject({ name: 'AbortError' })
     await vi.waitFor(() => expect(late).toBeTypeOf('function')); await boundary.sources.dispose(); late(testAuthorBundle(source('static', '晚到'))); await lastFailed
     expect(boundary.compiler.dispose).toHaveBeenCalledOnce(); expect(boundary.pictures.size).toBe(0)
-    expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0, seenVersions: 0 })
+    expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, outputPictures: 0, seenVersions: 0 })
   })
   it('逐出编译缓存仍拒绝同ID源码改写，缓存数量与字节均有界', async () => {
     let document = fixture(source(), 36); const boundary = boundaries(document)
@@ -829,5 +832,176 @@ it('指纹计划复用正式参数和时间求值，但不调用生成器或复�
     expect(boundary.compiler.bundle).toHaveBeenCalledTimes(1)
     expect(boundary.generator).not.toHaveBeenCalled()
     expect(boundary.pictures.size).toBe(0)
+  } finally { await boundary.sources.dispose() }
+})
+
+
+it('节目输出复用跨帧与局部编辑，参数、dataFiles、质量、观察和会话替换仍执行作者', async () => {
+  let document = fixture(source('dynamic').replace('draw(ctx', 'dataFiles:["data.json"],frameKey(){return 1},draw(ctx'))
+  document.codeMaterials![0].versions[0].files.push({ ...testCodeManifest('{"value":1}', document).files[0], path: 'data.json' })
+  document.clips.push({ ...document.clips[0], id: 'other' })
+  const boundary = boundaries(document), runtime = await boundary.acquire()
+  Object.assign(runtime, { authorFrameKey: vi.fn(async () => ({ digest: 'same-frame', method: 'frameKey' })) })
+  const prepare = (frame = 0, options: Parameters<VideoEditCodeSources['prepare']>[5] = {}) => boundary.sources.prepare(document, document.clips, frame, () => true, undefined, options)
+  try {
+    await prepare()
+    expect((await prepare(1)).cacheHits).toBe(2)
+    document = { ...document, revision: 1, clips: document.clips.map(clip => clip.id === 'other' ? { ...clip, code: { ...clip.code!, parameters: { amount: .8 } } } : { ...clip, x: .1, scale: .5, effects: [{ id: 'invert', name: '反相', enabled: true, amount: 1, builtin: { id: 'invert', params: {} } }] }) }
+    boundary.sources.updateParameters(document)
+    expect((await prepare(2)).cacheHits).toBe(1)
+    expect(boundary.generator).toHaveBeenCalledTimes(3)
+    expect((await prepare(3, { observeElements: true })).cacheHits).toBe(0)
+    expect(boundary.generator).toHaveBeenCalledTimes(5)
+    expect((await prepare(4, { quality: 'final' })).cacheHits).toBe(0)
+    expect((await prepare(5, { quality: 'final' })).cacheHits).toBe(2)
+    // frameKey 相同也不能把 dataFiles 新版本映射到之前的像素。
+    const version = { ...document.codeMaterials![0].versions[0], id: 'data-change', files: [document.codeMaterials![0].versions[0].files[0], { ...testCodeManifest('{"value":2}', document).files[0], path: 'data.json' }] }
+    document = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, version] }], clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, versionId: version.id } })) }
+    boundary.sources.updateDocument(document)
+    expect((await prepare(5, { quality: 'final' })).cacheHits).toBe(0)
+    await boundary.sources.replaceContent(document); boundary.sources.updateDocument(document)
+    expect((await prepare(5, { quality: 'final' })).cacheHits).toBe(0)
+  } finally { await boundary.sources.dispose() }
+})
+
+it('失败或取消的覆写不能恢复旧内容键；spill 的目标不得在下帧命中', async () => {
+  const document = fixture(source('dynamic')), boundary = boundaries(document)
+  const runtime = await boundary.acquire()
+  const prepare = (frame: number) => boundary.sources.prepare(document, document.clips, frame, () => true)
+  try {
+    await prepare(0)
+    boundary.generator.mockRejectedValueOnce(new DOMException('已取消的半帧', 'AbortError'))
+    await expect(prepare(1)).rejects.toMatchObject({ name: 'AbortError' })
+    expect((await prepare(0)).cacheHits).toBe(0)
+    const close = vi.fn()
+    Object.assign(runtime, { generatorTargetCapacity: () => 1, spillGeneratorTarget: vi.fn(async (key: string) => { boundary.pictures.delete(key); return { close } as unknown as ImageBitmap }) })
+    document.clips.push({ ...document.clips[0], id: 'second' })
+    await prepare(0)
+    const previous = boundary.generator.mock.calls.length
+    expect((await prepare(0)).cacheHits).toBe(0)
+    expect(boundary.generator.mock.calls.length - previous).toBe(2)
+    expect(close).toHaveBeenCalled()
+  } finally { await boundary.sources.dispose() }
+})
+
+
+it.each(['static', 'dynamic'] as const)('默认会话复用精确输入的 %s 输出', async mode => {
+  const document = fixture(source(mode)), boundary = boundaries(document)
+  try {
+    await boundary.sources.prepare(document, document.clips, 0, () => true)
+    expect((await boundary.sources.prepare(document, document.clips, 0, () => true)).cacheHits).toBe(1)
+    expect(boundary.generator).toHaveBeenCalledTimes(1)
+  } finally { await boundary.sources.dispose() }
+})
+
+it.each(['static', 'dynamic'] as const)('效果库、LUT、模板风格与音频快照改变使 %s 输出失效，声明与生成共用环境', async mode => {
+  let document = fixture(source(mode))
+  const preset = { id: 'look', name: '柔和', media: 'video' as const, effects: [{ id: 'invert', name: '反相', enabled: true, amount: .2, builtin: { id: 'invert', params: {} } }] }
+  document.authorEffects = { presets: [preset] }
+  document.colorLuts = [{ id: 'lut', name: '调色', path: '/color.cube', contentIdentity: 'a'.repeat(64) }]
+  document.styles = [videoEditStyleSchema.parse({ id: 'test-style', name: '风格', description: '', version: 1, contentHash: '', updatedAt: '2026-01-01T00:00:00Z', guide: '', sample: { code: { entry: 'index.js', files: { 'index.js': source() } } }, effectPresets: [preset] })]
+  document.templates = [{ id: 'template', name: '模板', description: '', version: 1, contentHash: '', updatedAt: '2026-01-01T00:00:00Z', origin: null, style: { id: 'test-style', version: 1 }, body: { kind: 'code', definitionId: 'definition' } }]
+  let audio = { fps: 30, duration: 3, bpm: 120, beats: [0, .5], onsets: [0, .5], beatsPerBar: 4, barOrigin: 0, levels: [.1], bands: { bass: [], mid: [], treble: [] } }
+  const boundary = boundaries(document), runtime = await boundary.acquire(), frameKey = vi.fn(async () => ({ digest: 'still', method: 'frameKey' }))
+  Object.assign(runtime, { authorFrameKey: frameKey })
+  const prepare = () => boundary.sources.prepare(document, document.clips, 0, () => true, undefined, { audio: async () => ({ audio, audioTime: 0 }) })
+  try {
+    await prepare(); expect((await prepare()).cacheHits).toBe(1)
+    const changes: Array<() => void> = [
+      () => { document = { ...document, authorEffects: { presets: [{ ...preset, effects: [{ ...preset.effects[0], amount: .6 }] }] } } },
+      () => { document = { ...document, colorLuts: [{ ...document.colorLuts![0], contentIdentity: 'b'.repeat(64) }] } },
+      () => { document = { ...document, styles: [{ ...document.styles![0], effectPresets: [{ ...preset, effects: [{ ...preset.effects[0], amount: .9 }] }] }] } },
+      () => { audio = { ...audio, levels: [.8] } },
+    ]
+    for (const change of changes) {
+      change(); boundary.sources.updateDocument(document)
+      expect((await prepare()).cacheHits).toBe(0)
+      const args = boundary.generator.mock.lastCall as unknown as Parameters<VideoEditCodeGpu['authorGenerator']>
+      expect(frameKey.mock.lastCall![3 as number]).toBe(args[6])
+      expect(frameKey.mock.lastCall![7 as number]).toBe(args[11])
+      expect((await prepare()).cacheHits).toBe(1)
+    }
+  } finally { await boundary.sources.dispose() }
+})
+
+it('片子数据修订即使 frameKey 不变也必须重画', async () => {
+  const code = `export default {name:"片子",mode:"dynamic",params:[{key:"film",type:"scene",title:"片子",schema:${JSON.stringify(GOLDEN_SCENE_DECLARATION)}}],draw(){}}`
+  let document = fixture(code)
+  document.codeMaterials![0].versions[0].apiVersion = 5
+  document.scenes = [{ ...goldenScene('screen'), records: goldenScene('screen').records.filter(record => record.kind === 'segment') }]
+  document.clips[0].code!.parameters = { film: { kind: 'scene', sceneId: 'golden-scene' } }
+  const boundary = boundaries(document), runtime = await boundary.acquire()
+  Object.assign(runtime, { authorFrameKey: async () => ({ digest: 'still', method: 'frameKey' }) })
+  const prepare = () => boundary.sources.prepare(document, document.clips, 0, () => true)
+  try {
+    await prepare(); expect((await prepare()).cacheHits).toBe(1)
+    document = { ...document, revision: 1, scenes: document.scenes.map(scene => ({ ...scene, records: scene.records.map(record => ({ ...record, values: { ...record.values, name: '新标题' } })) })) }
+    boundary.sources.updateDocument(document)
+    expect((await prepare()).cacheHits).toBe(0)
+    expect((await prepare()).cacheHits).toBe(1)
+  } finally { await boundary.sources.dispose() }
+})
+
+it('没有精确声明的媒体不登记输出；精确补帧后才可命中', async () => {
+  const document = fixture('export default {name:"图片",mode:"static",params:[{key:"logo",type:"image",title:"图片",default:null}],draw(){}}')
+  document.media = [{ id: 'image', path: '/image.png', name: '图片', kind: 'image', width: 100, height: 100, durationSeconds: 0 }]
+  document.clips[0].code!.parameters = { logo: { kind: 'image', mediaId: 'image' } }
+  const boundary = boundaries(document)
+  try {
+    for (const options of [{}, {}, { exactInput: () => false }, { exactInput: () => true }]) {
+      expect((await boundary.sources.prepare(document, document.clips, 0, () => true, imageInputs('image'), options)).cacheHits).toBe(0)
+    }
+    expect((await boundary.sources.prepare(document, document.clips, 0, () => true, imageInputs('image'), { exactInput: () => true })).cacheHits).toBe(1)
+  } finally { await boundary.sources.dispose() }
+})
+
+it('Worker 字体集合的新增与删除均使静态输出失效', async () => {
+  vi.stubGlobal('FontFace', class { async load() { return this } })
+  const fonts = new LoadedFontFaces({ add() {}, delete() {} } as unknown as FontFaceSet)
+  const document = fixture(), boundary = boundaries(document)
+  const prepare = () => boundary.sources.prepare(document, document.clips, 0, () => true)
+  try {
+    await prepare(); expect((await prepare()).cacheHits).toBe(1)
+    await fonts.load({ face: { ...GENERIC_FONT_FACES[0], id: 'worker-font' }, bytes: new Uint8Array([1]) })
+    expect((await prepare()).cacheHits).toBe(0); expect((await prepare()).cacheHits).toBe(1)
+    fonts.retainIds([])
+    expect((await prepare()).cacheHits).toBe(0)
+  } finally { fonts.dispose(); vi.unstubAllGlobals(); await boundary.sources.dispose() }
+})
+
+it('等待画面时前瞻逐出 program，已组装的计划仍保留完整源码身份', async () => {
+  const document = fixture(source(), 36), boundary = boundaries(document)
+  let release!: () => void
+  const images = new Promise<undefined>(resolve => { release = () => resolve(undefined) })
+  const pending = boundary.sources.prepare(document, document.clips, 0, () => true, images)
+  try {
+    await vi.waitFor(() => expect((boundary.acquire.mock.results[0]?.value as Promise<unknown>) !== undefined).toBe(true))
+    await boundary.sources.prepareAhead(document, Array.from({ length: 35 }, (_, index) => ({ ...document.clips[0], id: `ahead${index}`, code: { ...document.clips[0].code!, versionId: `v${index + 1}` } })), new AbortController().signal)
+    expect(boundary.sources.declarations(document.clips[0].code!)).toBeUndefined()
+    release(); expect((await pending).pictures.size).toBe(1)
+  } finally { release(); await pending; await boundary.sources.dispose() }
+})
+
+it('静态共享目标分裂时保留未改内容，独占目标参数变化时原位覆写，合并后回收多余目标', async () => {
+  let document = fixture()
+  document.clips.push({ ...document.clips[0], id: 'copy' })
+  const boundary = boundaries(document)
+  const prepare = () => boundary.sources.prepare(document, document.clips, 0, () => true)
+  const change = (amount: number): void => {
+    document = { ...document, clips: document.clips.map(clip => clip.id === 'clip' ? { ...clip, code: { ...clip.code!, parameters: { amount } } } : clip) }
+    boundary.sources.updateParameters(document)
+  }
+  try {
+    const first = await prepare(), shared = first.pictures.get('copy')
+    expect(first.pictures.get('clip')).toBe(shared)
+    change(.6)
+    const split = await prepare(), changed = split.pictures.get('clip')
+    expect(split.cacheHits).toBe(1); expect(changed).not.toBe(shared); expect(split.pictures.get('copy')).toBe(shared)
+    change(.7)
+    const next = await prepare()
+    expect(next.pictures.get('clip')).toBe(changed); expect(next.pictures.get('copy')).toBe(shared)
+    change(.5)
+    const merged = await prepare()
+    expect(merged.cacheHits).toBe(2); expect(merged.pictures.get('clip')).toBe(shared); expect(boundary.pictures.size).toBe(1)
   } finally { await boundary.sources.dispose() }
 })

@@ -1,8 +1,8 @@
+import { codeOutputInputs, codeOutputScenes, codeOutputSignature, codeOutputObjectSignature } from './videoEditCodeOutputKey'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
 import { readAuthorMetadataCache, writeAuthorMetadataCache } from './videoEditAuthorMetadataCache'
 import { codeMediaFrameParameters, codeMediaInputClipSeconds, codeMediaInputReference, CodeMediaInputReferenceError } from '@/core/videoEdit/codeMediaInput'
-import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialContext } from '@/core/videoEdit/codeMaterial/contract'
 import { VideoEditRecordingCursorSource } from './videoEditRecordingCursorSource'
 import { RECORDING_CURSOR_EFFECT, sampleRecordingCursor } from '@/core/videoEdit/recordingCursor'
@@ -23,7 +23,7 @@ import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeParameterDeclaration, CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 import { videoEditCodeAuthorParameters, videoEditCodeInputs, videoEditCodeSceneKeys, videoEditCodeSceneUserMessages, type VideoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
 import type { CodeAuthorApiVersion, CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
-import type { AuthorAssets, AuthorFrameInfo, AuthorGpuImage, AuthorWebFrame } from './videoEditAuthorModule'
+import type { AuthorAssets, AuthorFrameInfo, AuthorGpuImage } from './videoEditAuthorModule'
 import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
@@ -36,7 +36,7 @@ import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } fro
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
-import { codeMaterialImageIds, codeMaterialImageParameterKeys, codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
+import { codeMaterialImageParameterKeys, codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { VideoEditBuiltinEffectInstance, VideoEditEffect } from '@/core/videoEdit/compositing'
@@ -53,15 +53,16 @@ import { videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorFrameKey' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'bundle' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
-interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
+interface CodeOutputFrame { sourceTime: ReturnType<typeof videoEditClipSourceTimeAt>; info: AuthorFrameInfo; overrides: Parameters<VideoEditCodeGpu['authorGenerator']>[7]; environment: ReturnType<typeof authorEffectEnvironmentForClip> }
+interface CachedProgram { source: string; outputIdentity: string; program: CodeMaterialProgram; bytes: number }
 /**
  * `divisor`：这一帧代码生成器的回放分辨率缩小倍数，与缓存键一起取，画面与键始终一致。
  * `imageKeys` 是帧期画面绑定，资源别名不受持久媒体 ID 的长度限制；`author` 是交给作者代码的 params。
  */
-export interface VideoEditCodePlan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: number }
+export interface VideoEditCodePlan { clip: VideoEditClip; key: string; static: boolean; sourceTime?: ReturnType<typeof videoEditClipSourceTimeAt>; outputIdentity?: string; outputFrame?: CodeOutputFrame; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: number }
 /** `parameters`：交给作者滤镜的 params（scene 参数已换成解析结果）。 */
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
@@ -69,17 +70,18 @@ export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; built
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 /** `sceneIssues`：这一帧的片子数据或画面参数中需要用户处理的问题，由渲染器和效果错误一起呈现。 */
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number; sceneIssues: string[] }
-export interface VideoEditCodePrepareOptions { quality?: import('@/core/imaging/effects/descriptor').EffectQuality; authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
+export interface VideoEditCodePrepareOptions { observeElements?: boolean; exactInput?: (input: VideoEditCodeImageInput) => boolean; quality?: import('@/core/imaging/effects/descriptor').EffectQuality; authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
 /** 渲染与指纹共用时间、动画、片子数据及画面输入求值；编译与不可变参数准备留在帧循环外。 */
 function codeFrameValues(document: VideoEditComposition, clip: VideoEditClip, program: CodeMaterialProgram,
   prepared: PreparedCodeMaterialParameters, inputs: VideoEditCodeInputs | undefined, generator: boolean,
   frame: number, window?: VideoEditTransitionWindow) {
   const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window, document) : codeMaterialContextForFrame(clip, frame, document.frameRate, program, document)
-  const parameters = evaluateCodeMaterialParameters(prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
+  const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static')
+  const parameters = evaluateCodeMaterialParameters(prepared, sourceTime)
   const derived = generator ? inputs?.derived : undefined
   const imageParameters = codeMaterialImageParameterKeys(program.parameters, derived)
   const frameParameters = codeMediaFrameParameters(clip, derived && Object.keys(derived).length ? { ...parameters, ...derived } : parameters, frame, document.frameRate, imageParameters)
-  return { context, inputParameters: { ...parameters, ...derived }, parameters: frameParameters.parameters, imageKeys: frameParameters.images,
+  return { context, sourceTime, inputParameters: { ...parameters, ...derived }, parameters: frameParameters.parameters, imageKeys: frameParameters.images,
     author: videoEditCodeAuthorParameters(frameParameters.parameters, inputs), transitionHandles: Boolean(window) }
 }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
@@ -123,7 +125,9 @@ export class VideoEditCodeSources {
   private knownBytes = 0
   private readonly programs = new Map<string, CachedProgram>()
   private programBytes = 0
-  private readonly staticPictures = new Map<string, VideoEditCodePicture | ImageBitmap>()
+  private readonly lastOutputs = new Map<string, { key: string; picture: VideoEditCodePicture }>()
+  private outputTargetSequence = 0
+  private readonly outputReuse = { hits: 0, misses: 0, bypasses: 0 }
   private readonly targetPictures = new Map<string, VideoEditCodePicture | ImageBitmap>()
   private readonly spilledPictures = new Set<ImageBitmap>()
   private readonly parameters = new WeakMap<CodeMaterialInstance, { program: CodeMaterialProgram; prepared: PreparedCodeMaterialParameters }>()
@@ -155,9 +159,9 @@ export class VideoEditCodeSources {
   private releaseUnused(keys: ReadonlySet<string>): void {
     this.runtime?.releaseUnused(keys)
     for (const key of this.targetPictures.keys()) if (!keys.has(key)) this.targetPictures.delete(key)
-    for (const [key, picture] of this.staticPictures) if (!keys.has(key)) { if (typeof ImageBitmap !== 'undefined' && picture instanceof ImageBitmap) picture.close(); this.staticPictures.delete(key) }
+    for (const key of this.lastOutputs.keys()) if (!keys.has(key)) this.lastOutputs.delete(key)
   }
-  constructor(private document: VideoEditComposition, private readonly acquireRuntime: () => Promise<CodeRuntime>, private readonly compiler: Compiler = new VideoEditCodeCompiler(), private readonly onAheadHit?: () => void) { this.checkVersions(document) }
+  constructor(private document: VideoEditComposition, private readonly acquireRuntime: () => Promise<CodeRuntime>, private readonly compiler: Compiler = new VideoEditCodeCompiler(), private readonly onAheadHit?: () => void, private readonly reuseOutputs = true) { this.checkVersions(document) }
   private checkVersions(document: VideoEditComposition): void {
     const additions = new Map<string, KnownVersion>(); let bytes = this.knownBytes
     for (const definition of document.codeMaterials ?? []) for (const version of definition.versions) {
@@ -179,7 +183,7 @@ export class VideoEditCodeSources {
     this.inputFailures.clear()
     this.protectedKeys.clear(); this.releaseUnused(this.protectedKeys)
     for (const bitmap of this.spilledPictures) bitmap.close()
-    this.spilledPictures.clear(); this.targetPictures.clear(); this.staticPictures.clear()
+    this.spilledPictures.clear(); this.targetPictures.clear(); this.lastOutputs.clear()
     // Versions belong to a document; a candidate from another owner may use the same ids.
     const previous = new Map(this.known)
     this.known.clear(); this.knownBytes = 0; this.checkVersions(document)
@@ -252,7 +256,7 @@ export class VideoEditCodeSources {
       signal.throwIfAborted()
       const key = identity(instance.definitionId, instance.versionId)
       if (this.programs.has(key)) continue
-      const program = await this.program(key, codeMaterialSource(document, instance), signal, pinned)
+      const { program } = await this.program(key, codeMaterialSource(document, instance), signal, pinned)
       signal.throwIfAborted()
       await this.runtime!.inspectAuthor(program.bundle)
       signal.throwIfAborted()
@@ -260,14 +264,14 @@ export class VideoEditCodeSources {
     }
     return prepared
   }
-  private async program(key: string, version: CodeMaterialVersion, signal: AbortSignal, pinned: ReadonlySet<string>): Promise<CodeMaterialProgram> {
+  private async program(key: string, version: CodeMaterialVersion, signal: AbortSignal, pinned: ReadonlySet<string>): Promise<CachedProgram> {
     signal.throwIfAborted()
     const cached = this.programs.get(key)
     if (cached) {
       // checkVersions validates immutable manifests at document updates. Do not
       // reread, parse module imports or serialize bundled libraries every frame.
       if (this.preparedAhead.delete(key)) this.onAheadHit?.()
-      this.programs.delete(key); this.programs.set(key, cached); return cached.program
+      this.programs.delete(key); this.programs.set(key, cached); return cached
     }
     await loadCodeSourceReferences(version); signal.throwIfAborted()
     const resolver = documentCodeSourceResolver()
@@ -286,16 +290,17 @@ export class VideoEditCodeSources {
       if (program.apiVersion !== version.apiVersion || program.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '代码源码协议与固定版本声明不一致。')
       // 同一版本可能同时在准备（帧准备、前瞻、片子数据声明）：先完成的那份入缓存，后到的沿用它，不重复计入字节预算。
       const raced = this.programs.get(key)
-      if (raced) return raced.program
+      if (raced) return raced
       const bytes = new TextEncoder().encode(source).byteLength + new TextEncoder().encode(JSON.stringify(program)).byteLength
       while (this.programs.size >= CACHED_PROGRAMS || this.programBytes + bytes > CACHED_PROGRAM_BYTES) {
         const oldest = [...this.programs].find(([key]) => !pinned.has(key))
         if (!oldest) break
         this.programs.delete(oldest[0]); this.programBytes -= oldest[1].bytes
       }
-      this.programs.set(key, { source, program: freezeProgram(program), bytes }); this.programBytes += bytes
+      const entry = { source, outputIdentity: codeOutputSignature(source), program: freezeProgram(program), bytes }
+      this.programs.set(key, entry); this.programBytes += bytes
       logger.debug('可见代码源码检查完成', { event: 'video_edit.code.compile.completed', context: { sequenceId: this.document.id, version: key } })
-      return program
+      return entry
     } catch (error) {
       if (!signal.aborted) logger.warn('可见代码源码检查失败', { event: 'video_edit.code.compile.failed', error, context: { sequenceId: this.document.id, version: key } })
       throw error
@@ -305,11 +310,11 @@ export class VideoEditCodeSources {
   async prepareGeneratorFrames(clip: VideoEditClip, signal: AbortSignal): Promise<(frame: number, window?: VideoEditTransitionWindow) => VideoEditCodePlan> {
     if (!clip.code) throw new CodeMaterialError('COMPATIBILITY', '代码片段缺少固定源码实例。')
     const key = identity(clip.code.definitionId, clip.code.versionId)
-    const program = await this.program(key, codeMaterialSource(this.document, clip.code), signal, new Set([key]))
+    const { program, outputIdentity } = await this.program(key, codeMaterialSource(this.document, clip.code), signal, new Set([key]))
     if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
     const prepared = prepareCodeMaterialParameters(program, clip.code)
     const inputs = this.sceneInputs(this.document, clip, clip.start, clip.code, program, [])
-    return (frame, window) => ({ clip, key, program, static: false,
+    return (frame, window) => ({ clip, key, program, outputIdentity, static: false,
       ...codeFrameValues(this.document, clip, program, prepared, inputs, true, frame, window) })
   }
   async prepare(document: VideoEditComposition, clips: VideoEditClip[], frame: number, shouldPresent: () => boolean, images?: Promise<ReadonlyMap<string, VideoEditCodeImageInput> | undefined>, options: VideoEditCodePrepareOptions = {}): Promise<PreparedCodeSources> {
@@ -322,7 +327,7 @@ export class VideoEditCodeSources {
     const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
     const transitionByClip = new Map(options.transitions?.flatMap(window => [[window.left.id, window], [window.right.id, window]] as const))
     /** `generator`：代码片段本身（只有它取派生的画面输入；附加滤镜的 scene 参数只换成解析结果）。 */
-    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram, generator: boolean, effectId?: string): Promise<Pick<VideoEditCodePlan, 'context' | 'parameters' | 'inputParameters' | 'imageKeys' | 'author' | 'transitionHandles' | 'motion'>> => {
+    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram, generator: boolean, effectId?: string): Promise<Pick<VideoEditCodePlan, 'context' | 'sourceTime' | 'parameters' | 'inputParameters' | 'imageKeys' | 'author' | 'transitionHandles' | 'motion'>> => {
       const scope = { sequenceId: document.id, clipId: clip.id, ...(effectId ? { effectId } : {}), frame }
       try {
         let animation = this.parameters.get(instance)
@@ -336,7 +341,7 @@ export class VideoEditCodeSources {
         const window = transitionByClip.get(clip.id)
         const inputs = this.sceneInputs(document, clip, frame, instance, program, sceneIssues)
         const values = codeFrameValues(document, clip, program, animation.prepared, inputs, generator, frame, window)
-        if (options.audio) Object.assign(values.context, await options.audio(clip, program, evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static')), controller.signal))
+        if (options.audio) Object.assign(values.context, await options.audio(clip, program, evaluateCodeMaterialParameters(animation.prepared, values.sourceTime), controller.signal))
         assertCurrent()
         this.inputFailures.delete(inputFailureInstance(scope))
         return values
@@ -385,7 +390,7 @@ export class VideoEditCodeSources {
           if (!effect.code) continue
           try {
             const key = identity(effect.code.definitionId, effect.code.versionId)
-            const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
+            const { program } = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
             if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
             const { author, context, transitionHandles } = await animated(clip, effect.code, program, false, effect.id)
             // 回放分辨率降低时滤镜的输入、输出按序列缩小后的尺寸给出（任务 4.9），比例随 info 告诉作者。
@@ -418,19 +423,13 @@ export class VideoEditCodeSources {
         if (!clip.code) throw new CodeMaterialError('COMPATIBILITY', '代码片段缺少固定源码实例。')
         const version = codeMaterialSource(document, clip.code)
         const key = identity(clip.code.definitionId, clip.code.versionId)
-        const program = await this.program(key, version, controller.signal, pinned); assertCurrent()
+        const { program, outputIdentity } = await this.program(key, version, controller.signal, pinned); assertCurrent()
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
-        const { parameters, inputParameters, imageKeys, author, context, transitionHandles, motion } = await animated(clip, clip.code, program, true)
-        const imageSources = [...codeMaterialImageIds(clip.code, program.parameters)].map(id => { const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind)); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
-        const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionHandles && program.mode === 'static')
-        const overrideValues = clip.elementOverrides ? Object.fromEntries(Object.entries(clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
-        // 引用片子数据的不做静态缓存：缓存键要整份序列化参数，而解析结果是带父子引用的对象图。
-        const isStatic = program.mode === 'static' && !codeMaterialUsesAudio(program) && !videoEditCodeSceneKeys(clip.code).length && ![...codeMaterialImageParameterKeys(program.parameters)].some(key => { const value = clip.code!.parameters[key]; return isCodeImageReference(value) && value.kind !== 'image' })
-        // 回放分辨率（任务 4.9）：缩小倍数进静态缓存键，切回完整分辨率时不会沿用缩小的画面。
+        const { parameters, inputParameters, imageKeys, author, context, sourceTime, transitionHandles, motion } = await animated(clip, clip.code, program, true)
         const divisor = this.runtime?.renderDivisor ?? 1
-        const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues, ...(program.apiVersion >= 7 ? [document.authorEffects, document.colorLuts, options.quality ?? 'interactive'] : []), ...(divisor === 1 ? [] : [divisor])])}` : `code:dynamic:${clip.id}`
+        const target = `code:output:${clip.id}`
         keys.add(target)
-        plans.push({ clip, key: target, static: isStatic, program, parameters, inputParameters, imageKeys, author, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
+        plans.push({ clip, key: target, static: program.mode === 'static', program, outputIdentity, sourceTime, parameters, inputParameters, imageKeys, author, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
       }
       assertCurrent(); if (!options.preparationOnly) this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0, sceneIssues }
@@ -455,6 +454,33 @@ export class VideoEditCodeSources {
         if (outcome?.status === 'rejected') throw outcome.reason
         const inputs = outcome?.status === 'fulfilled' ? outcome.value : undefined; assertCurrent()
         await this.runtime?.retainAuthorInstances(new Set([...plans.filter(plan => plan.program).map(plan => plan.clip.id), ...[...effects.values()].flatMap(chain => chain.flatMap(effect => effect.builtin ? [] : [effect.instanceKey]))]))
+        const contentKeys = new Map<VideoEditCodePlan, string | undefined>()
+        for (const plan of plans) {
+          if (plan.program) {
+            const sourceTime = plan.sourceTime!
+            const overrides = plan.clip.elementOverrides ? Object.fromEntries(Object.entries(plan.clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
+            const web = Object.fromEntries([...plan.imageKeys].flatMap(([name, key]) => inputs?.get(key)?.web ? [[name, inputs.get(key)!.web!]] : []))
+            plan.outputFrame = { sourceTime, overrides, environment: authorEffectEnvironmentForClip(document, plan.clip),
+              info: { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps,
+                clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps }, ...(Object.keys(web).length ? { web } : {}) } }
+          }
+          const contentKey = plan.program ? this.reuseOutputs ? await this.outputKey(document, plan, frame, inputs, options) : undefined : plan.static ? plan.key : undefined
+          assertCurrent()
+          contentKeys.set(plan, contentKey)
+        }
+        // 内容身份用于共享，物理目标保持稳定；先保住本帧仍会命中的目标，再把闲置目标交给变化的内容。
+        const shared = new Map<string, string>()
+        const requested = new Set(plans.filter(plan => plan.program && plan.static && !options.observeElements).flatMap(plan => contentKeys.get(plan) ? [contentKeys.get(plan)!] : []))
+        for (const [target, output] of this.lastOutputs) if (target.startsWith('code:shared:') && requested.has(output.key) && !shared.has(output.key)) shared.set(output.key, target)
+        const used = new Set(shared.values())
+        const available = [...this.targetPictures.keys()].filter(key => key.startsWith('code:shared:') && !used.has(key))
+        for (const contentKey of requested) if (!shared.has(contentKey)) shared.set(contentKey, available.shift() ?? `code:shared:${++this.outputTargetSequence}`)
+        keys.clear()
+        for (const key of options.surfaceKeys ?? []) keys.add(key)
+        for (const plan of plans) {
+          if (plan.program && plan.static && !options.observeElements) plan.key = shared.get(contentKeys.get(plan) ?? '') ?? plan.key
+          keys.add(plan.key)
+        }
         this.releaseUnused(keys)
         for (const bitmap of this.spilledPictures) bitmap.close()
         this.spilledPictures.clear()
@@ -462,16 +488,21 @@ export class VideoEditCodeSources {
         const capacity = Math.min(...plans.map(plan => this.runtime?.generatorTargetCapacity?.(plan.context.width, plan.context.height, (this.targetPictures.get(plan.key) as VideoEditCodePicture | undefined)?.textureFormat) ?? Infinity))
         for (const plan of plans) {
           assertCurrent()
-          let picture = plan.static ? this.staticPictures.get(plan.key) : undefined
-          if (picture) result.cacheHits++
+          const contentKey = contentKeys.get(plan)
+          const previous = this.lastOutputs.get(plan.key)
+          let picture = contentKey && !options.observeElements && previous?.key === contentKey ? previous.picture : undefined
+          if (picture) { result.cacheHits++; if (plan.program) this.outputReuse.hits++ }
           else {
-            while (resident.size >= capacity && this.runtime?.spillGeneratorTarget) {
+            // 作者可能先写目标再失败；开始覆写前就撤销旧键，取消也不能把半帧登记成命中。
+            this.lastOutputs.delete(plan.key)
+            if (plan.program) this.outputReuse[contentKey ? 'misses' : 'bypasses']++
+            while (!resident.has(plan.key) && resident.size >= capacity && this.runtime?.spillGeneratorTarget) {
               const candidate = [...resident].find(([, picture]) => !('highPrecision' in picture && picture.highPrecision))
               if (!candidate) break
               const [oldKey, oldPicture] = candidate
               const bitmap = await this.runtime.spillGeneratorTarget(oldKey)
               if (!bitmap) break
-              this.spilledPictures.add(bitmap); resident.delete(oldKey); this.staticPictures.delete(oldKey)
+              this.spilledPictures.add(bitmap); resident.delete(oldKey); this.lastOutputs.delete(oldKey)
               for (const [id, value] of result.pictures) if (value === oldPicture) result.pictures.set(id, bitmap)
               assertCurrent()
             }
@@ -480,24 +511,21 @@ export class VideoEditCodeSources {
               picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws, undefined, Math.min(document.width / plan.context.width, document.height / plan.context.height) * plan.clip.scale)
             } else {
               // GPU 入口直接采样纹理；位图只在作者代码真读 assets 时才生成。
-              const assets: Record<string, CanvasImageSource> = {}, images: Record<string, AuthorGpuImage> = {}, web: Record<string, AuthorWebFrame> = {}
+              const assets: Record<string, CanvasImageSource> = {}, images: Record<string, AuthorGpuImage> = {}
               for (const [name, key] of plan.imageKeys) {
                 const input = inputs?.get(key)
                 if (!input) throw new Error(`作者图片参数 ${name} 没有可绘制的源画面。`)
                 images[name] = { texture: input.texture, width: input.width, height: input.height }
-                if (input.web) web[name] = input.web
                 Object.defineProperty(assets, name, { enumerable: true, get: () => {
                   if (!input.source) throw new Error(`作者图片参数 ${name} 没有可绘制的源画面。`)
                   return input.source
                 } })
               }
-              const sourceTime = videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static')
-              const overrides = plan.clip.elementOverrides ? Object.fromEntries(Object.entries(plan.clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
-              const info = { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps, clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps }, ...(Object.keys(web).length ? { web } : {}) }
-              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, authorEffectEnvironmentForClip(document, plan.clip), options.quality, assertCurrent)
+              const { info, overrides, environment } = plan.outputFrame!
+              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, environment, options.quality, assertCurrent)
             }
             assertCurrent()
-            if (plan.static) this.staticPictures.set(plan.key, picture)
+            if (contentKey) this.lastOutputs.set(plan.key, { key: contentKey, picture })
           }
           resident.delete(plan.key); resident.set(plan.key, picture)
           result.pictures.set(plan.clip.id, picture)
@@ -511,6 +539,18 @@ export class VideoEditCodeSources {
       if (imageOutcome && (this.controller === controller || !this.controller)) { this.protectedKeys = new Set(); this.releaseUnused(this.protectedKeys) }
       throw error
     } finally { if (this.controller === controller) this.controller = undefined }
+  }
+  private async outputKey(document: VideoEditComposition, plan: VideoEditCodePlan, frame: number,
+    inputs: ReadonlyMap<string, VideoEditCodeImageInput> | undefined, options: VideoEditCodePrepareOptions): Promise<string | undefined> {
+    const dependencies = codeOutputInputs(document, plan, frame, inputs, options.exactInput ?? (() => false))
+    if (!dependencies) return undefined
+    const program = plan.program!, context = plan.context
+    const { sourceTime, overrides, info, environment } = plan.outputFrame!
+    const declared = await this.runtime?.authorFrameKey?.(program, context, plan.author, info, overrides, document.motionBlur === true, plan.divisor ?? 1, environment, dependencies)
+    return codeOutputSignature([plan.outputIdentity, plan.parameters, codeOutputScenes(document, plan), dependencies,
+      declared?.digest ?? (!declared && program.mode === 'static' && !codeMaterialUsesAudio(program) ? 'static' : [context.time, context.localTime, sourceTime]),
+      codeOutputObjectSignature(context.audio), context.audioTime, info.frameDuration, info.clip.duration, context.width, context.height, plan.divisor ?? 1,
+      documentFontRevision(), overrides, document.motionBlur === true, codeOutputObjectSignature(environment), options.quality ?? 'interactive'])
   }
   /** 片段在这一帧的作用区域蒙版（智能区域按素材时间取分析结果，手绘遮罩按几何栅格化）；读取失败只记日志，效果按未就绪跳过。 */
   private async regionMask(document: VideoEditComposition, clip: VideoEditClip, mask: NonNullable<VideoEditEffect['mask']>, frame: number): Promise<VideoEditSmartRegionMask | undefined> {
@@ -532,13 +572,13 @@ export class VideoEditCodeSources {
     })
     return { sequenceId: this.document.id, revision: this.document.revision, frame, clips }
   }
-  diagnostics() { return { programs: this.programs.size, programBytes: this.programBytes, staticPictures: this.staticPictures.size, seenVersions: this.known.size, seenManifestBytes: this.knownBytes, compiler: this.compiler.diagnostics?.() } }
+  diagnostics() { return { programs: this.programs.size, programBytes: this.programBytes, outputPictures: this.lastOutputs.size, outputReuse: { ...this.outputReuse }, seenVersions: this.known.size, seenManifestBytes: this.knownBytes, compiler: this.compiler.diagnostics?.() } }
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true; this.cursorSources.clear(); this.zoomPointers.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear(); this.inputFailures.clear()
     await Promise.allSettled([this.gpuWork])
     this.spilledPictures.forEach(bitmap => bitmap.close()); this.spilledPictures.clear(); this.targetPictures.clear()
     try { this.runtime?.releaseUnused(new Set()) }
-    finally { for (const picture of this.staticPictures.values()) if (typeof ImageBitmap !== 'undefined' && picture instanceof ImageBitmap) picture.close(); this.programs.clear(); this.programBytes = 0; this.staticPictures.clear(); this.known.clear(); this.knownBytes = 0 }
+    finally { this.programs.clear(); this.programBytes = 0; this.lastOutputs.clear(); this.known.clear(); this.knownBytes = 0 }
   }
 }

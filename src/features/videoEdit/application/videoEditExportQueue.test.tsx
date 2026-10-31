@@ -450,7 +450,7 @@ it('仅音频WAV不编码视频，关闭响度不创建PCM标准化会话；显�
   const owner = await project(); const settings = patchVideoEditExportSettings(videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), { format: 'wav', loudness: null, useProxies: true, addToLibrary: false, captionMode: 'none' })
   const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('sound.wav'), settings }]); await videoEditExportQueue.wait(job.id)
   expect(job.state).toBe('completed'); expect(encoding.videoOptions).toEqual([]); expect(encoding.rendered).toEqual([]); expect(encoding.audioOptions).toEqual([{ codec: 'pcm-s24', transform: { sampleRate: 48000, numberOfChannels: 2 } }]); expect(getPlatform().audioEdit.loudness.start).not.toHaveBeenCalled()
-  expect(encoding.rendererOptions[0].slice(-2)).toEqual([owner.document.id, true])
+  expect(encoding.rendererOptions[0]).toEqual([{ proxyProjectId: owner.document.id, exportProxies: true }])
 })
 it('默认按设备切到H264软件；手动选择HEVC后禁用不支持的CBR', async () => {
   const owner = await project(); vi.mocked(canEncodeVideo).mockImplementation(async config => config.codec.startsWith('hev1') ? config?.bitrateMode !== 'constant' : config?.hardwareAcceleration === 'prefer-software')

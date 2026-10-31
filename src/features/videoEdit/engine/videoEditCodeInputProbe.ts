@@ -21,7 +21,7 @@ export async function runVideoEditCodeInputProbe(host: HTMLElement, path: string
   const base: VideoEditClip = { id: 'base', itemId: 'video-item', name: '原片', kind: 'video', start: 0, duration: 120, track: 1, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
   sequence.clips = [base, { ...base, id: 'code', itemId: 'code-item', kind: 'code', track: 2, code }]
   const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360; canvas.style.cssText = 'width:100%;max-height:65vh;object-fit:contain'; host.replaceChildren(canvas)
-  const renderer = new VideoEditRenderer(videoEditComposition(model, sequence.id), undefined, canvas.transferControlToOffscreen())
+  const renderer = new VideoEditRenderer(videoEditComposition(model, sequence.id), { surface: canvas.transferControlToOffscreen() })
   const phases: Record<string, unknown> = {}
   const evidence: Record<string, unknown> = { completed: false, phases }
   const render = async (frame: number, sequential = false): Promise<void> => { const result = await renderer.render(frame, sequential, false, () => true, undefined, undefined, sequential ? 'final' : 'interactive'); await result.completion; if (!result.presented) throw new Error('输入测量帧没有提交') }

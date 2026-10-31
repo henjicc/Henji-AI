@@ -46,7 +46,7 @@ export async function analyzeVideoEditBeats(target: VideoEditBeatTarget, signal?
   let renderer: VideoEditRenderSession | undefined
   logger.info('节拍分析开始', { event: 'video_edit.beats.start', context: { projectId: target.projectId, sequenceId: target.sequenceId, clipId: target.clipId } })
   try {
-    assertCurrent(); renderer = new VideoEditRenderSession(source, 1)
+    assertCurrent(); renderer = new VideoEditRenderSession(source, { previewWidth: 1 })
     const blocks = async function* (): AsyncGenerator<Float32Array[]> {
       for (let frame = start; frame < end;) {
         assertCurrent()

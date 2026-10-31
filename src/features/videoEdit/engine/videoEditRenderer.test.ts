@@ -114,7 +114,7 @@ beforeEach(() => {
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
 })
 it('font refresh preserves paused decoded pictures on the same compositor device', async () => {
-  const renderer = new VideoEditRenderer(fixture(), 1920)
+  const renderer = new VideoEditRenderer(fixture(), { previewWidth: 1920 })
   try {
     await renderer.render(0)
     const snapshots = boundary.snapshotCalls.length
@@ -134,7 +134,7 @@ it('后台合成复用低清渲染和独立表面：仅缓存模式不渲染，�
   })
   const document = fixture()
   document.clips = [{ ...document.clips[0], kind: 'text', text: '合成文字' }]
-  const renderer = new VideoEditRenderer(document, document.width)
+  const renderer = new VideoEditRenderer(document, { previewWidth: document.width })
   const controller = new AbortController()
   try {
     expect(await renderer.captureHoverFrame(document, 0, false, controller.signal)).toBeUndefined()
@@ -162,7 +162,7 @@ it('后台先渲染的嵌套序列不占用节目的资源树，节目随后仍�
   document.items.push({ id: 'nested', kind: 'sequence', name: '嵌套', sequenceId: child.id })
   document.sequences = [...document.sequences!, child]
   document.clips = [{ ...document.clips[0], kind: 'sequence', itemId: 'nested' }]
-  const renderer = new VideoEditRenderer(document, document.width)
+  const renderer = new VideoEditRenderer(document, { previewWidth: document.width })
   try {
     await renderer.captureHoverFrame(document, 0, true, new AbortController().signal)
     boundary.draws = []
@@ -178,7 +178,7 @@ it('已有常驻关键帧时只复制合成画面，不重新解码或执行代�
     getContext() { return { drawImage: vi.fn() } }
     async convertToBlob() { return new Blob([new Uint8Array([1])], { type: 'image/webp' }) }
   })
-  const document = fixture(), renderer = new VideoEditRenderer(document, document.width)
+  const document = fixture(), renderer = new VideoEditRenderer(document, { previewWidth: document.width })
   try {
     renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cache.mp4', width: document.width, height: document.height, fps: document.fps }])
     await vi.advanceTimersByTimeAsync(600)
@@ -200,7 +200,7 @@ it('后台等待图片时取消立即让出，不等无法中断的图片解码�
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, blob: async () => new Blob() })))
   const decode = vi.fn(() => new Promise(resolve => { finish = resolve }))
   vi.stubGlobal('createImageBitmap', decode)
-  const renderer = new VideoEditRenderer(document, document.width), controller = new AbortController()
+  const renderer = new VideoEditRenderer(document, { previewWidth: document.width }), controller = new AbortController()
   try {
     const pending = renderer.captureHoverFrame(document, 0, true, controller.signal)
     await vi.waitFor(() => expect(decode).toHaveBeenCalledOnce())
@@ -320,14 +320,14 @@ it('顺序播放和导出使用定位同一GPU格式，每个实际解码帧只�
 })
 it('正向预览的已呈现帧留在同一有界缓存，倒退不重新解码且关闭释放全部引用', async () => {
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 200)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, cacheBudgetBytes: 200 })
   const first = await renderer.render(0, true); const next = await renderer.render(1, true)
   expect(first.cacheBytes).toBe(100); expect(next.cacheBytes).toBe(200); expect(boundary.normalizedReleased).toBe(0)
   // Also protect continuous-playback callers that accidentally retain true.
   const reverse = await renderer.render(0, true)
   expect(reverse.cacheHits).toBe(1); expect(boundary.pictures).toEqual([0]); expect(boundary.snapshotCalls).toHaveLength(2)
   await renderer.dispose(); expect(boundary.normalizedReleased).toBe(2)
-  expect(() => new VideoEditRenderer(document, 3840, undefined, 9 * 1024 ** 3)).toThrow('预算')
+  expect(() => new VideoEditRenderer(document, { previewWidth: 3840, cacheBudgetBytes: 9 * 1024 ** 3 })).toThrow('预算')
 })
 it('关闭或替换媒体期间晚到GPU复制不能挂回已释放源或遗留纹理', async () => {
   for (const action of ['dispose', 'replace'] as const) {
@@ -395,7 +395,7 @@ it('网页未到时节目继续合成且标近似，暂停精确帧被新拖动�
     },
     subscribe: () => () => undefined, subscribeWebContent: () => () => undefined,
   }) as unknown as VideoEditNativeFrameReceiver)
-  const renderer = new VideoEditRenderer(document, 1920)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   renderer.setRenderDivisor(4)
   try {
     const playing = await renderer.render(15, true)
@@ -427,7 +427,7 @@ it('根帧绘制提交前不结束网页状态，失败退出也释放状态', a
     },
     subscribe: (_id: string, handler: typeof deliver) => { deliver = handler; return () => {} }, subscribeWebContent: () => () => {},
   }) as unknown as VideoEditNativeFrameReceiver)
-  const renderer = new VideoEditRenderer(document, 1920)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   const original = boundary.drawHook
   try {
     boundary.drawHook = () => { expect(trim).not.toHaveBeenCalled() }
@@ -465,7 +465,7 @@ it.each(['nested', 'input'] as const)('网页 %s 经结构编辑与剪点复用�
     return result
   })
   installVideoEditWebChannel(() => ({ call, subscribe: (_id: string, handler: (frame: NativeVideoFrame) => void) => { deliver = handler; return () => {} }, subscribeWebContent: (handler: typeof contentChanged) => { contentChanged = handler; return () => {} } }) as unknown as VideoEditNativeFrameReceiver)
-  const renderer = new VideoEditRenderer(document, 1920)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   try {
     await renderer.render(15)
     const opened = call.mock.calls.filter(([method]) => method === 'openWeb').length
@@ -507,7 +507,7 @@ it('根与下层代码输入在整数、连续比例与恢复完整时共用同�
     return { boxes: null, duration: 100, contentHash: 'hash', pixelWidth: 100 * params.scale, pixelHeight: 100 * params.scale }
   })
   installVideoEditWebChannel(() => ({ call, subscribe: (_id: string, handler: (frame: NativeVideoFrame) => void) => { deliver = handler; return () => {} }, subscribeWebContent: () => () => {} }) as unknown as VideoEditNativeFrameReceiver)
-  const renderer = new VideoEditRenderer(document, 1920)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   try {
     for (const divisor of [2, 4, 1.5, 1]) {
       renderer.setOutputScale(1 / divisor)
@@ -546,7 +546,7 @@ it.each([false, true])('7680×4320 网页加一路视频输入连续多帧不因
     },
     subscribe: (_id: string, handler: (frame: NativeVideoFrame) => void) => { deliver = handler; return () => {} }, subscribeWebContent: () => () => {},
   }) as unknown as VideoEditNativeFrameReceiver)
-  const renderer = new VideoEditRenderer(document, preview ? 1920 : undefined)
+  const renderer = new VideoEditRenderer(document, { previewWidth: preview ? 1920 : undefined })
   try {
     for (const frame of [15, 18, 19, 22, 23, 26, 27, 30]) {
       const result = await renderer.render(frame, true)
@@ -600,7 +600,7 @@ it('并发兄弟子树的网页回退不污染精确子树及其冻结输入缓�
     results.push({ id: this.document.id, approximate: result.approximate })
     return result
   })
-  const renderer = new VideoEditRenderer(document, 1920)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   try {
     expect(await renderer.render(15, false, 'fast')).toMatchObject({ approximate: true, presented: true })
     expect(results.find(result => result.id === exact.id)?.approximate).toBeUndefined()
@@ -728,7 +728,7 @@ function shownInputs(): Record<string, number | undefined> {
 const pictureTimes = (from: number, to: number, offset = 0): number[] => Array.from({ length: to - from }, (_, index) => videoEditPictureSeconds(offset + (from + index) / 60))
 it('两扇录屏窗口同时引用同一段录屏：每个引用独占自己的读取位置，重叠段两边都只向前续读；切入那一帧沿用提前解好的入点', async () => {
   const { backend, readers } = inputReaders()
-  const renderer = new VideoEditRenderer(recordingWindowsFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(), { previewWidth: 3840, frames: backend })
   try {
     for (let frame = 50; frame < 130; frame++) {
       contentInputs.borrows = []
@@ -760,7 +760,7 @@ function timetableFixture(): ReturnType<typeof fixture> {
 }
 it('带取帧时间表的视频参数：段内按表取帧，停住不再读取，段间不参与（不读、不留会话、作者代码拿不到画面也不报错）；进入下一段前提前解到那一段的入点', async () => {
   const { backend, readers } = inputReaders()
-  const renderer = new VideoEditRenderer(timetableFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(timetableFixture(), { previewWidth: 3840, frames: backend })
   const play = async (frame: number): Promise<number | undefined> => {
     contentInputs.borrows = []
     const result = await renderer.render(frame, true); await result.completion
@@ -798,7 +798,7 @@ it.each([[10, 2], [.55, 1]])('段间短空档后下一段从源 %s 秒起：跳�
   const code = { ...document.clips[0].code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', spans: [{ from: 0, to: .5, src: 0 }, { from: 1, to: 1.5, src }] } } }
   document.clips = [{ ...document.clips[0], code, duration: 600 }]
   const { backend, readers } = inputReaders()
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     for (let frame = 0; frame < 60; frame++) await (await renderer.render(frame, true)).completion
     const inputs = () => readers.filter(reader => reader.exclusive)
@@ -825,7 +825,7 @@ it('暂停时前瞻提前打开即将进入下一段的带时间表视频参数�
   // Far from the next span: nothing to open yet.
   expect(videoEditLookaheadTargets(document, 70, false).content.filter(target => target.kind === 'input')).toEqual([])
   const { backend, readers } = inputReaders()
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     await (await renderer.render(200)).completion
     expect(renderer.codeDiagnostics()).toMatchObject({ codeInputSessions: 0 })
@@ -838,7 +838,7 @@ it('暂停时前瞻提前打开即将进入下一段的带时间表视频参数�
 })
 it('重新起播重复请求刚显示过的帧：代码视频输入取回保留的已播画面，不让解码器回到关键帧；导出不保留', async () => {
   const { backend, readers } = inputReaders()
-  const renderer = new VideoEditRenderer(recordingWindowsFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(), { previewWidth: 3840, frames: backend })
   try {
     for (let frame = 20; frame <= 30; frame++) await (await renderer.render(frame, true)).completion
     const w1 = readers.find(reader => reader.exclusive && reader.times[0] < 4)!, reads = w1.times.length
@@ -854,7 +854,7 @@ it('重新起播重复请求刚显示过的帧：代码视频输入取回保留�
 it('窗口切入前才打开并解到入点；停止播放、跳走或离开片段时预热与输入的解码会话立即关闭', async () => {
   const { backend, readers } = inputReaders()
   // The second window starts at frame 300, five seconds in: three seconds ahead is frame 120.
-  const renderer = new VideoEditRenderer(recordingWindowsFixture(300), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(300), { previewWidth: 3840, frames: backend })
   const prewarmed = () => readers.filter(reader => reader.exclusive && reader.times[0] >= 5)
   try {
     await (await renderer.render(119, true)).completion
@@ -931,7 +931,7 @@ async function settlesSoon(promise: Promise<unknown>): Promise<boolean> {
 }
 it('预热分小步走向入点：先只解关键帧，每步不超过 6 幅；后台一步挂起时显示中的输入照常逐帧读取', async () => {
   const { backend, readers, gate } = steppingReaders()
-  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(walkFixture(), { previewWidth: 3840, frames: backend })
   try {
     gate.hold = true
     for (let frame = 118; frame < 126; frame++) {
@@ -955,7 +955,7 @@ it('预热分小步走向入点：先只解关键帧，每步不超过 6 幅；�
 })
 it('连续播放时每个显示帧最多让后台走 1 步，且在本帧输入读完之后；步长随解码余量增大，几十帧内仍走到入点', async () => {
   const { backend, readers } = steppingReaders()
-  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(walkFixture(), { previewWidth: 3840, frames: backend })
   const w1 = () => readers.find(reader => (reader.reads[0]?.time ?? Infinity) < 4)!
   const w2 = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 28)
   try {
@@ -984,7 +984,7 @@ it('播放中后台解定格帧：所有后台解码每个显示帧合计最多�
   const document = walkFixture(40.4)
   const w2 = document.clips.find(clip => clip.id === 'w2')!
   document.clips.push({ ...w2, id: 'w3', track: 4, code: { ...w2.code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', time: 50.4 } } } })
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   const w1 = () => readers.find(reader => (reader.reads[0]?.time ?? Infinity) < 4)!
   const still = (from: number) => readers.find(reader => (reader.reads[0]?.time ?? 0) >= from && (reader.reads[0]?.time ?? 0) < from + 10)
   const background = () => (still(40)?.reads.length ?? 0) + (still(50)?.reads.length ?? 0)
@@ -1007,7 +1007,7 @@ it('播放中后台解定格帧：所有后台解码每个显示帧合计最多�
 })
 it('片段在预热途中开始：只等正在进行的那一步，随后停止预热，从走到的位置接着解剩下的部分', async () => {
   const { backend, readers, gate } = steppingReaders()
-  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(walkFixture(), { previewWidth: 3840, frames: backend })
   const w2 = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 28)!
   try {
     gate.hold = true
@@ -1033,7 +1033,7 @@ it('定格帧（固定时刻的视频参数）只解一次：解完交回解码�
   const document = { ...recordingWindowsFixture(120) }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
   document.clips = document.clips.map(clip => ({ ...clip, duration: 60, code: { ...clip.code!, parameters: { screen: { kind: 'video' as const, mediaId: 'A', time: 40.4 } } } }))
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     // Frame 80 shows neither clip: the input session closes, and the later frames open new ones.
     for (const frame of [10, 11, 80, 130, 131, 80, 10]) {
@@ -1050,7 +1050,7 @@ it('暂停时前瞻提前解好时间线附近的定格帧（播放中不列入�
   const { backend, readers } = steppingReaders()
   const document = walkFixture(40.4)
   document.clips = document.clips.map(clip => clip.id === 'w2' ? { ...clip, start: 600 } : { ...clip, duration: 60 })
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     expect(videoEditLookaheadTargets(document, 0, true).content.filter(target => target.kind === 'still')).toEqual([])
     const stills = videoEditLookaheadTargets(document, 0, false).content.filter(target => target.kind === 'still')
@@ -1078,7 +1078,7 @@ it('暂停时前瞻由近到远解好 60 秒内的定格帧；存储放不下时
   const document = stillsFixture()
   // Two such pictures fill the still store (VIDEO_EDIT_IMAGE_BUDGET_BYTES, 1GiB).
   boundary.snapshotBytes = 400 * 1024 ** 2
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   const decoded = (): number[] => readers.filter(reader => reader.reads.length).map(reader => Math.round(reader.reads.at(-1)!.time * 10) / 10)
   const reads = (): number => readers.reduce((sum, reader) => sum + reader.reads.length, 0)
   const prepare = async (frame: number): Promise<number[]> => {
@@ -1103,7 +1103,7 @@ it('暂停时前瞻由近到远解好 60 秒内的定格帧；存储放不下时
 })
 it('定格帧在后台解码途中片段开始：显示帧等它解完（剩下的步不再等轮次），不另起一次解码', async () => {
   const { backend, readers, gate } = steppingReaders()
-  const renderer = new VideoEditRenderer(walkFixture(40.4), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(walkFixture(40.4), { previewWidth: 3840, frames: backend })
   try {
     gate.hold = true
     await (await renderer.render(120, true)).completion
@@ -1122,7 +1122,7 @@ it('暂停时提前打开并解到 2 秒内要开始的移动视频输入：起�
   const { backend, readers } = inputReaders()
   // w1 shows the recording from frame 0; w2 (5 seconds in) starts at frame 6.
   const document = recordingWindowsFixture(6)
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   const w2 = () => readers.filter(reader => reader.exclusive && (reader.times[0] ?? 0) >= 5)
   try {
     await (await renderer.render(0)).completion
@@ -1165,7 +1165,7 @@ it('真机流程：暂停定位到第 1 帧再到第 0 帧，等待后起播；�
   const document = recordingWindowsFixture(6)
   document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
   document.clips = document.clips.filter(clip => clip.id === 'w2').map(clip => ({ ...clip, sourceInUs: 27_100_000 }))
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   const { VideoEditDecodeLookahead } = await import('./videoEditDecodeLookahead')
   // Wired as the program worker wires it: the lookahead around every presented frame, the renderer as its host.
   const lookahead = new VideoEditDecodeLookahead(undefined, media => media, { idle: () => true, prepare: (target, signal) => renderer.prepareLookahead(target, signal), retain: targets => renderer.retainLookahead(targets) })
@@ -1193,7 +1193,7 @@ it('真机流程：暂停在第 0 帧时 0–86 帧有预渲染文件，等待�
   const document = recordingWindowsFixture(6)
   document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
   document.clips = document.clips.filter(clip => clip.id === 'w2').map(clip => ({ ...clip, sourceInUs: 27_100_000 }))
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   const { VideoEditDecodeLookahead } = await import('./videoEditDecodeLookahead')
   const lookahead = new VideoEditDecodeLookahead(undefined, media => media, { idle: () => true, prepare: (target, signal) => renderer.prepareLookahead(target, signal), retain: targets => renderer.retainLookahead(targets) })
   // The program worker: one window list for the renderer and the lookahead, replaced by a `renderCache` message.
@@ -1230,7 +1230,7 @@ it('从预渲染文件接回实时合成：片段在窗口里已经开始、窗�
   const document = recordingWindowsFixture(6)
   document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
   document.clips = document.clips.filter(clip => clip.id === 'w2').map(clip => ({ ...clip, sourceInUs: 27_100_000 }))
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   renderer.setRenderCache([{ key: 'opening', startFrame: 0, endFrame: 86, url: 'henji-media://local/opening.mp4', width: 3840, height: 2160, fps: 60 }])
   const input = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 24)
   try {
@@ -1256,7 +1256,7 @@ it('暂停预热因解码预算被拒：交回会话，前瞻重试时重新打�
       return { ...reader, frameAt: (time, read) => refuse && read?.speculative ? Promise.reject(new VideoEditNativeFailure('解码会话已满', 'budget', 'BUDGET_EXCEEDED')) : reader.frameAt(time, read) }
     } })) }
   }
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     await (await renderer.render(0)).completion
     const content = videoEditLookaheadTargets(document, 0, false).content, input = content.find(target => target.kind === 'input')!
@@ -1281,7 +1281,7 @@ it('暂停预热的一步被放弃（前台读取接手了解码器）不算失�
       return { ...reader, frameAt: (time, read) => read?.speculative ? Promise.reject(new DOMException('取帧已取消。', 'AbortError')) : reader.frameAt(time, read) }
     } })) }
   }
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     await (await renderer.render(0)).completion
     const content = videoEditLookaheadTargets(document, 0, false).content, input = content.find(target => target.kind === 'input')!
@@ -1293,7 +1293,7 @@ it('暂停预热的一步被放弃（前台读取接手了解码器）不算失�
 })
 it('导出逐帧：重叠段两个引用每帧各读一次准确画面，不提前打开，读取位置各自只向前', async () => {
   const { backend, readers } = inputReaders()
-  const renderer = new VideoEditRenderer(recordingWindowsFixture(), undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(), { frames: backend })
   try {
     for (let frame = 0; frame < 180; frame++) {
       contentInputs.borrows = []
@@ -1312,7 +1312,7 @@ it('导出逐帧：重叠段两个引用每帧各读一次准确画面，不提�
 
 it('视频输入画面提交后不等 GPU 完成就交给作者，完成并入整帧；每帧重画同一个目标而不逐帧新建；提交失败使该帧失败且不再复用', async () => {
   const { backend } = inputReaders()
-  const renderer = new VideoEditRenderer(recordingWindowsFixture(300), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(recordingWindowsFixture(300), { previewWidth: 3840, frames: backend })
   try {
     let finish!: () => void
     boundary.offscreenCompletion = new Promise<void>(resolve => { finish = resolve })
@@ -1338,7 +1338,7 @@ it('视频输入画面提交后不等 GPU 完成就交给作者，完成并入�
 it('parameter updates keep the running decoder schedule and reuse uploaded paused pictures', async () => {
   const document = fixture()
   document.clips[0].effects = [{ id: 'effect', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: .2 } } }]
-  const renderer = new VideoEditRenderer(document, 1920)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   const next = { ...document, revision: document.revision + 1, clips: [{ ...document.clips[0], effects: [{ ...document.clips[0].effects[0], builtin: { id: 'color_grade', params: { exposure: .5 } } }] }] }
   try {
     await renderer.render(0, true)
@@ -1382,7 +1382,7 @@ it('放大导出中的高分辨率嵌套保持可合成的原生采样，切换�
 it('nested sequence parameter updates reuse the child renderer and its uploaded source frame', async () => {
   const document = nestedFixture(); const child = document.sequences!.find(sequence => sequence.id !== document.id)!
   child.clips[0].effects = [{ id: 'grade', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: .2 } } }]
-  const renderer = new VideoEditRenderer(document, 1920)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   try {
     await renderer.render(0)
     const snapshots = boundary.snapshotCalls.length; const disposed = boundary.disposed.length
@@ -1401,7 +1401,7 @@ it('多机位预览与导出按机位段选择画面，返回原机位且固定�
   child.multicam = { cameras: [{ id: 'camera-a', name: '机位1', clipId: base.id }, { id: 'camera-b', name: '机位2', clipId: 'camera-b' }], audioCameraId: 'camera-a' }
   const parent = document.clips[0]
   document.clips = [{ ...parent, duration: 15, multicamCameraId: 'camera-a' }, { ...parent, id: 'cut-b', start: 15, duration: 15, sourceInUs: 500000, multicamCameraId: 'camera-b' }, { ...parent, id: 'return-a', start: 30, duration: 30, sourceInUs: 1000000, multicamCameraId: 'camera-a' }]
-  const preview = new VideoEditRenderer(document, 960); const exporter = new VideoEditRenderer(document)
+  const preview = new VideoEditRenderer(document, { previewWidth: 960 }); const exporter = new VideoEditRenderer(document)
   try {
     for (const [frame, expected] of [[1, base.id], [15, 'camera-b'], [30, base.id]] as const) {
       boundary.draws = []; const a = await preview.render(frame, true); const b = await exporter.render(frame, true)
@@ -1433,7 +1433,7 @@ it('变速嵌套片段正向播放：子序列只建一条按父片段速度取�
   const child = document.sequences!.find(sequence => sequence.id !== document.id)!
   child.clips[0].duration = 600; child.frameRate = { numerator: 60, denominator: 1 }; document.media = document.media.map(media => ({ ...media, durationSeconds: 20 }))
   document.clips = [{ ...document.clips[0], duration: 120, speed: { numerator: 5, denominator: 2 } }, { ...document.clips[0], id: 'slow', start: 120, duration: 60, speed: { numerator: 1, denominator: 2 } }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     for (const frame of [0, 1, 2, 3, 6, 7]) {
       const result = await renderer.render(frame, true); await result.completion
@@ -1458,7 +1458,7 @@ it('同一嵌套序列的两个实例同时显示在不同子帧：各用自己�
   child.clips[0].duration = 600; child.frameRate = { numerator: 60, denominator: 1 }; document.media = document.media.map(media => ({ ...media, durationSeconds: 20 }))
   // n1 shows child frames f, n2 (another track, starting 60 frames later) child frames f − 60; afterwards n3 reuses the sequence alone.
   document.clips = [{ ...document.clips[0], id: 'n1', start: 0, duration: 120 }, { ...document.clips[0], id: 'n2', track: 2, start: 60, duration: 120 }, { ...document.clips[0], id: 'n3', start: 180, duration: 60 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     for (let frame = 60; frame < 80; frame++) {
       const result = await renderer.render(frame, true); await result.completion
@@ -1484,7 +1484,7 @@ it('下层画面输入覆盖同一文件两段剪辑的交叉溶解：后进入�
   document.items.push({ id: 'code', name: '下层', kind: 'code', code })
   document.clips = [{ ...base, id: 'c1', start: 0, duration: 120 }, { ...base, id: 'c2', start: 120, duration: 120, sourceInUs: 10_000_000 }, { ...base, id: 'code', itemId: 'code', kind: 'code', code, track: 3, start: 100, duration: 40 }]
   document.transitions = [{ id: 'x', kind: 'cross_dissolve', leftClipId: 'c1', rightClipId: 'c2', durationFrames: 20 }]
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try { for (let frame = 104; frame < 136; frame++) await (await renderer.render(frame, true)).completion } finally { await renderer.dispose() }
   // The lower-tracks input reads c1 on the file's shared reader and c2 (entering at the window, 110) on its own.
   const single = readers.filter(reader => reader.times.length)
@@ -1497,7 +1497,7 @@ it('正向播放时钟落后时在同一计划内跳帧追上，不重新定位�
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 10 }))
   document.clips = [{ ...document.clips[0], duration: 600 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     for (const frame of [0, 1, 4, 9, 10]) {
       const result = await renderer.render(frame, true); await result.completion
@@ -1513,7 +1513,7 @@ it('重新起播时再次请求刚显示过的帧，沿用原排程，不在起�
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 10 }))
   document.clips = [{ ...document.clips[0], duration: 600 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     for (const frame of [100, 101, 102, 101, 103, 104]) {
       const result = await renderer.render(frame, true); await result.completion
@@ -1548,7 +1548,7 @@ it('嵌套预览与导出使用相同帧；回放分辨率递归应用，字幕�
   child.clips = [{ ...base, duration: 30 }, { ...base, id: 'right-nested', itemId: 'item-B', start: 30, duration: 30 }]
   child.transitions = [{ id: 'nested-transition', kind: 'cross_dissolve', leftClipId: base.id, rightClipId: 'right-nested', durationFrames: 10 }]
   child.captions = [{ id: 'nested-caption', start: 0, duration: 60, text: '字幕' }]
-  const preview = new VideoEditRenderer(document, 960); const exporter = new VideoEditRenderer(document)
+  const preview = new VideoEditRenderer(document, { previewWidth: 960 }); const exporter = new VideoEditRenderer(document)
   try {
     preview.setRenderDivisor(2)
     const a = await preview.render(30, true); const b = await exporter.render(30, true)
@@ -1562,7 +1562,7 @@ it('嵌套预览与导出使用相同帧；回放分辨率递归应用，字幕�
 it('递归声音按子采样率与声道重采样，父音量/变速/倒放与导出一致，修改子素材使缓存失效', async () => {
   const document = nestedFixture(); const child = document.sequences![0]
   child.sampleRate = 44100; child.channels = 1
-  const preview = new VideoEditRenderer(document, 960); const exporter = new VideoEditRenderer(document)
+  const preview = new VideoEditRenderer(document, { previewWidth: 960 }); const exporter = new VideoEditRenderer(document)
   try {
     const a = await preview.mixAudio(.5, .01); const b = await exporter.mixAudio(.5, .01)
     expect(a).toEqual(b); expect(a[0][0]).toBeCloseTo(.1875); expect(a[1][0]).toBeCloseTo(.1875)
@@ -1708,7 +1708,7 @@ it('可见原视频和代码画面走同一合成，静态变换修改复用纹�
 })
 it('顶层代码提前准备模块但不绘制废弃帧，进入时复用同一版本', async () => {
   const document = mixedFixture(); document.clips[1] = { ...document.clips[1], start: 90, duration: 60 }
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     await (await renderer.render(0, true)).completion
     const targets = videoEditLookaheadTargets(document, 40, true).content
@@ -1757,7 +1757,7 @@ it('正向播放从第一帧起按文件建立一条解码计划：同文件剪�
   document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))
   const base = document.clips[0]
   document.clips = [{ ...base, duration: 60, sourceInUs: 1_000_000 }, { ...base, id: 'repeat', start: 60, duration: 60, sourceInUs: 0 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     // The first frame of a play run is already the first scheduled picture (task 3.6 F1).
     const first = await renderer.render(50, true); await first.completion
@@ -1786,7 +1786,7 @@ it('暂停短时预拉当前位置，实际起播复用；重画保留计划，�
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))
   document.clips = [{ ...document.clips[0], duration: 120, sourceInUs: 0 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   const internals = renderer as unknown as { playback?: unknown }
   try {
     await (await renderer.render(30, false)).completion
@@ -1810,7 +1810,7 @@ it('暂停短时预拉当前位置，实际起播复用；重画保留计划，�
 
 it('暂停预热短租期结束归还排程，长时间做 OCR 不占住原生帧池；真正播放接管租期', async () => {
   vi.useFakeTimers()
-  const renderer = new VideoEditRenderer(fixture(), 3840)
+  const renderer = new VideoEditRenderer(fixture(), { previewWidth: 3840 })
   const internals = renderer as unknown as { playback?: unknown }
   try {
     await renderer.armPlayback(0)
@@ -1853,7 +1853,7 @@ it('渲染器只经注入的帧源后端取帧：定位、顺序、正向计划�
     seeker(media, _cache, snapshot) { calls.push('seeker'); return { sample: async time => ({ sample: await snapshot(picture(gridPicture(time)), true), hit: false }), dispose: async () => {} } },
   }
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     await renderer.render(0); expect(boundary.pictures).toEqual([0])
     await renderer.render(1, true); expect(boundary.pictures).toEqual([1 / 60])
@@ -1883,7 +1883,7 @@ it.each([false, true])('暂停跳转只读单帧，变速逐帧进退保留整�
   const document = fixture()
   document.frameBlend = frameBlend
   document.clips[0].speed = frameBlend ? { numerator: 1, denominator: 2 } : { numerator: 5, denominator: 2 }
-  const renderer = new VideoEditRenderer(document, 1920, undefined, 1024 * 1024, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920, cacheBudgetBytes: 1024 * 1024, frames: backend })
   try {
     for (const [frame, single] of [[0, true], [9, true], [10, false], [9, false], [19, true]] as const) {
       calls.length = 0
@@ -1911,7 +1911,7 @@ it('原生借用帧经同一复制入口进入自有显存：正向计划、剪�
     seeker: (_media, _cache, snapshot) => ({ sample: async time => { const decoded = picture(gridPicture(time)); try { return { sample: await snapshot(decoded, true), hit: false } } finally { decoded.close() } }, dispose: async () => {} }),
   }
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     await renderer.render(0); await renderer.render(1, true); await renderer.render(2, true); await renderer.render(3, true)
     expect(boundary.pictures).toEqual([3 / 60])
@@ -1927,15 +1927,15 @@ it('源时间早于流的首个画面（MPEG 节目流从 0.533 秒开始）时�
     seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
   }
   const document = fixture()
-  const renderer = new VideoEditRenderer(document, undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { frames: backend })
   try {
     const result = await renderer.render(10)
     expect(result).toMatchObject({ presented: true, blankPictures: 1, sourceTimestamps: [] })
-    const preview = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+    const preview = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
     try { expect(await preview.render(10)).toMatchObject({ presented: true, blankPictures: 1 }) } finally { await preview.dispose() }
     // A sequential reader started before the first picture yields that picture early; it waits for its own time.
     const firstAtHalf: VideoEditFrameBackend = { ...backend, open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ async *frames() { for (let index = 0; index < 30; index++) yield { timestamp: .5 + index / 30, duration: 1 / 30, format: 'NV12', close: vi.fn() } as unknown as VideoSample }, frameAt: async () => null }), clipAudio: () => undefined, async *schedule() {} }) }) }
-    const sequential = new VideoEditRenderer({ ...document, fps: 30, frameRate: { numerator: 30, denominator: 1 } }, undefined, undefined, 8 * 1024 ** 3, firstAtHalf)
+    const sequential = new VideoEditRenderer({ ...document, fps: 30, frameRate: { numerator: 30, denominator: 1 } }, { frames: firstAtHalf })
     try {
       expect(await sequential.render(14, true)).toMatchObject({ blankPictures: 1, sourceTimestamps: [] })
       expect(await sequential.render(15, true)).toMatchObject({ blankPictures: 0, sourceTimestamps: [.5] })
@@ -1960,7 +1960,7 @@ it('导出逐帧（无预览宽度的顺序渲染，2.4）：读取器跳过或�
     release: () => {},
     seeker: () => { throw new Error('导出不定位。') },
   }
-  const renderer = new VideoEditRenderer(fixture(), undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(fixture(), { frames: backend })
   try {
     const drawn: number[] = []; let reads = 0
     for (let frame = 0; frame < 10; frame++) {
@@ -1996,7 +1996,7 @@ it('预览播放回落到顺序读取器（时间计划没有该帧，3.1）：�
     seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
   }
   const document = { ...fixture(), fps: 30, frameRate: { numerator: 30, denominator: 1 } }
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     const drawn: number[] = []
     for (let frame = 0; frame < 8; frame++) {
@@ -2034,7 +2034,7 @@ it.each([44100, 48000])('原生声音经混音逐样本对齐：微秒入点、�
   const base = fixture(); const fps = 30000 / 1001
   const clip = { ...base.clips[0], start: 7, duration: 60, sourceInUs: 400_000, sourceRemainder: { numerator: 1, denominator: 3 } }
   const document = { ...base, fps, frameRate: { numerator: 30000, denominator: 1001 }, clips: [clip] }
-  const renderer = new VideoEditRenderer(document, undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { frames: backend })
   try {
     const blocks: Float32Array[][] = []
     for (let start = 0; start < 2.5; start += .5) blocks.push(await renderer.mixAudio(start, .5))
@@ -2066,7 +2066,7 @@ it('原生多声道按混音统一规则映射：立体声取前左前右，单�
   const sixChannels = () => pcmSession(48000, 6, channel => Math.fround(.1 * (channel + 1)))
   for (const [channels, expected] of [[2, [.1, .2]], [1, [.35]]] as const) {
     const { backend } = nativeSoundBackend(sixChannels)
-    const renderer = new VideoEditRenderer({ ...fixture(), channels }, undefined, undefined, 8 * 1024 ** 3, backend)
+    const renderer = new VideoEditRenderer({ ...fixture(), channels }, { frames: backend })
     try {
       const mix = await renderer.mixAudio(.25, .01)
       expect(mix).toHaveLength(channels)
@@ -2077,7 +2077,7 @@ it('原生多声道按混音统一规则映射：立体声取前左前右，单�
 it('片段声音读取器随源释放而关闭，原生会话只关一次，打开与释放成对', async () => {
   let closed = 0
   const { backend, opened, released } = nativeSoundBackend(() => pcmSession(48000, 2, () => .5, () => { closed++ }))
-  const renderer = new VideoEditRenderer(fixture(), undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(fixture(), { frames: backend })
   try {
     expect((await renderer.mixAudio(0, .01))[0][0]).toBe(.5)
     expect(closed).toBe(0)
@@ -2091,7 +2091,7 @@ it('片段声音读取器随源释放而关闭，原生会话只关一次，打�
 it('拖动播放头的声音颗粒（retainIdle）离开片段后保留其声音会话，回来时不重开；普通混音仍立即释放', async () => {
   let closed = 0
   const { backend, opened, released } = nativeSoundBackend(() => pcmSession(48000, 2, () => .5, () => { closed++ }))
-  const renderer = new VideoEditRenderer(fixture(), undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(fixture(), { frames: backend })
   try {
     expect((await renderer.mixAudio(0, .01, true))[0][0]).toBe(.5)
     expect((await renderer.mixAudio(5, .01, true))[0].every(value => value === 0)).toBe(true)
@@ -2112,7 +2112,7 @@ it('混音把序列采样率交给声音读取器；序列采样率改变后按�
     seeker() { throw new Error('声音测试不定位画面。') },
   }
   const document = fixture()
-  const renderer = new VideoEditRenderer(document, undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { frames: backend })
   try {
     await renderer.mixAudio(0, .01)
     await renderer.updateDocument({ ...document, sampleRate: 44100 })
@@ -2126,7 +2126,7 @@ it('同采样率块按最近样本混入：半样本相位在相邻混音块中�
   const { backend } = nativeSoundBackend(() => pcmSession(48000, 1, signal))
   const base = fixture()
   const clip = { ...base.clips[0], start: 0, duration: 60, sourceInUs: 10, sourceRemainder: { numerator: 5, denominator: 12 } }
-  const renderer = new VideoEditRenderer({ ...base, channels: 1, clips: [clip] }, undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer({ ...base, channels: 1, clips: [clip] }, { frames: backend })
   try {
     const output = [...(await renderer.mixAudio(0, .25))[0], ...(await renderer.mixAudio(.25, .25))[0]]
     // 10 + 5/12 µs at 48kHz is exactly 0.5 samples.
@@ -2150,7 +2150,7 @@ it('声道映射（2.6）：每个片段按映射读取指定声音流，单声�
   const tracks = [...base.tracks, { id: 'a2', name: '音频 2', index: 8, kind: 'audio' as const, locked: false, enabled: true, muted: false, solo: false }, { id: 'a3', name: '音频 3', index: 9, kind: 'audio' as const, locked: false, enabled: true, muted: false, solo: false }]
   const clips = [sound('third', 0, { format: 'mono', sources: [{ stream: 2, channel: 0 }] }), sound('pair', 8, { format: 'stereo', sources: [{ stream: 0, channel: 0 }, { stream: 1, channel: 0 }] }), sound('missing', 9, { format: 'mono', sources: [{ stream: 9, channel: 0 }] })]
   const document = { ...base, tracks, clips }
-  const renderer = new VideoEditRenderer(document, undefined, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { frames: backend })
   const level = (plane: Float32Array): number => { expect(plane.every(value => Math.abs(value - plane[0]) < 1e-7)).toBe(true); return plane[0] }
   try {
     expect((await renderer.mixAudio(.25, .01)).map(level).map(value => Math.round(value * 1e6) / 1e6)).toEqual([.4, .5])
@@ -2172,7 +2172,7 @@ it('声道映射（2.6）：每个片段按映射读取指定声音流，单声�
 })
 it('回放分辨率（4.9）：预览按 1/N 画布与合成尺寸渲染、换尺寸丢弃旧缓存帧；导出接受连续输出比例', async () => {
   const document = fixture()
-  const renderer = new VideoEditRenderer(document, document.width)
+  const renderer = new VideoEditRenderer(document, { previewWidth: document.width })
   try {
     await (await renderer.render(0)).completion
     renderer.setRenderDivisor(4)
@@ -2194,7 +2194,7 @@ it('回放分辨率（4.9）：预览按 1/N 画布与合成尺寸渲染、换�
   try { exporter.setOutputScale(2 / 3); expect([exporter.canvas.width, exporter.canvas.height]).toEqual([Math.round(document.width * 2 / 3), Math.round(document.height * 2 / 3)]) } finally { await exporter.dispose() }
 })
 it.each([1, 2])('播放暂停应用预览倍率 %s 不取消在途帧', async divisor => {
-  const renderer = new VideoEditRenderer(mixedFixture(), 1920)
+  const renderer = new VideoEditRenderer(mixedFixture(), { previewWidth: 1920 })
   let resolve!: (program: CodeMaterialProgram) => void
   boundary.pendingCode = new Promise(done => { resolve = done })
   try {
@@ -2206,7 +2206,7 @@ it.each([1, 2])('播放暂停应用预览倍率 %s 不取消在途帧', async di
   } finally { resolve(compileCodeMaterial(codeSource)); await renderer.dispose() }
 })
 it('代码输入历史仅在实际比例变化时清除，等效设置与播放暂停保持历史', async () => {
-  const renderer = new VideoEditRenderer(codeInputFixture(), 1920)
+  const renderer = new VideoEditRenderer(codeInputFixture(), { previewWidth: 1920 })
   try {
     await renderer.render(17)
     const state = renderer as unknown as { codeInputs: Map<string, { renderer: VideoEditRenderer }>; frameCache: VideoEditFrameCache }
@@ -2242,7 +2242,7 @@ it('片内运动、不透明度、ColorGrade 关键帧在预览与导出同一�
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   const points = (from: number, to: number) => [{ time: 0, value: from, interpolation: 'ease' as const }, { time: 30, value: to, interpolation: 'linear' as const }]
   document.clips[0] = { ...document.clips[0], curves: { x: points(0, .4), y: points(0, -.2), scale: points(1, 2), rotation: points(0, 90), anchorX: points(.5, .25), opacity: points(1, .2) }, effects: [{ id: 'animated-color', name: 'ColorGrade', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {}, curves: { exposure: points(0, 2) } } }] }
-  const preview = new VideoEditRenderer(document, 1920); const exported = new VideoEditRenderer(document)
+  const preview = new VideoEditRenderer(document, { previewWidth: 1920 }); const exported = new VideoEditRenderer(document)
   const read = () => ({ x: boundary.evaluatedClips[0].x, y: boundary.evaluatedClips[0].y, scale: boundary.evaluatedClips[0].scale, rotation: boundary.evaluatedClips[0].rotation, anchorX: boundary.evaluatedClips[0].anchorX, opacity: boundary.evaluatedClips[0].opacity, exposure: boundary.builtinParams.at(-1)?.exposure })
   try {
     await preview.render(15, true); const shown = read()
@@ -2265,7 +2265,7 @@ it('拖动缓存可立即起播，原计划从缓存末尾准备；准确交接�
   let ready!: () => void
   boundary.pendingSchedule = new Promise(resolve => { ready = resolve })
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   const { cache, released } = cachePlaybackPrefix(renderer, document.media[0].path)
   try {
     await renderer.armPlayback(15)
@@ -2287,7 +2287,7 @@ it('缓存起播前被驱逐时精确取回当前画面；零散短缓存不跳�
   for (const count of [14, 30]) {
     boundary.scheduled = []
     const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
-    const renderer = new VideoEditRenderer(document, 3840)
+    const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
     const { cache, released } = cachePlaybackPrefix(renderer, document.media[0].path, count)
     try {
       await renderer.armPlayback(15)
@@ -2307,7 +2307,7 @@ it('预渲染窗口供正向播放和导出整帧读取，暂停仍现场合成'
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 10 }))
   document.clips = [{ ...document.clips[0], duration: 120 }, { ...document.clips[0], id: 'top', track: 2, duration: 120 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   renderer.setRenderCache([{ key: 'w1', startFrame: 60, endFrame: 120, url: 'D:/cache/w1.mp4', width: 3840, height: 2160, fps: 60 }])
   try {
     for (let frame = 58; frame <= 61; frame++) { boundary.draws = []; await (await renderer.render(frame, true)).completion; expect(boundary.draws.at(-1)?.ids).toEqual(frame < 60 ? ['clip', 'top'] : ['render-cache:w1:60']) }
@@ -2326,7 +2326,7 @@ it('剪到另一个已排程文件前半秒开始解码它的首帧，剪辑点�
   boundary.scheduled = []
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.clips = [{ ...document.clips[0], duration: 60 }, { ...document.clips[0], id: 'next', itemId: 'item-B', start: 60, duration: 60 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     for (let frame = 0; frame < 29; frame++) await (await renderer.render(frame, true)).completion
     expect(boundary.scheduled.map(value => value.path)).toEqual(['D:/A.mp4'])
@@ -2343,7 +2343,7 @@ it('未来剪辑不提前借用原生帧池，到该素材首个实际播放帧�
   boundary.scheduled = []
   const document = fixture()
   document.clips = [{ ...document.clips[0], duration: 30 }, { ...document.clips[0], id: 'future', itemId: 'item-B', start: 300, duration: 30 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     await renderer.render(0, true)
     expect(boundary.scheduled.map(v => v.path)).toEqual([document.media[0].path])
@@ -2367,7 +2367,7 @@ it.each([false, true])('预热租期到期释放借帧与排程；已起播=%s �
   }
   const document = fixture()
   document.clips = [{ ...document.clips[0], duration: 120 }, { ...document.clips[0], id: 'future', start: 300, duration: 30 }]
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     await renderer.armPlayback(30)
     await vi.advanceTimersByTimeAsync(0)
@@ -2398,7 +2398,7 @@ it('预热解码尚未返回时超时取消，未交付帧也不会遗留排程'
       },
     }) }), release: () => { released++ }, seeker: () => { throw new Error('预热测试不走定位解码。') },
   }
-  const renderer = new VideoEditRenderer(fixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(fixture(), { previewWidth: 3840, frames: backend })
   try {
     await renderer.armPlayback(0); await vi.advanceTimersByTimeAsync(2500)
     expect(aborted).toBe(true); expect(released).toBeGreaterThan(0)
@@ -2420,7 +2420,7 @@ it('原生预算管理时未来段不走旧半秒预取；停止立即回收当�
   }
   const document = fixture(), base = document.clips[0]
   document.clips = [{ ...base, duration: 30 }, { ...base, id: 'next', itemId: 'item-B', start: 30 }]
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   try {
     await renderer.render(20, true)
     expect(scheduled).toEqual([document.media[0].path])
@@ -2433,7 +2433,7 @@ it('同一原片在时间线空档后复用时分开排程，不在空档中扣�
   boundary.scheduled = []
   const document = fixture(), clip = document.clips[0]
   document.clips = [{ ...clip, duration: 1 }, { ...clip, id: 'later', start: 90, duration: 2 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   try {
     await renderer.render(0, true)
     expect(boundary.scheduled).toHaveLength(1)
@@ -2467,7 +2467,7 @@ it('嵌套切点预备图片和代码后，经过当前帧再进入仍命中同�
   const fetchImage = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() })
   const decode = vi.fn(async () => ({ width: 32, height: 32, close: vi.fn() }))
   vi.stubGlobal('fetch', fetchImage); vi.stubGlobal('createImageBitmap', decode)
-  const renderer = new VideoEditRenderer(document, 1920)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   try {
     const targets = videoEditLookaheadTargets(document, 0, true).content
     expect(targets.map(target => target.kind)).toEqual(['image', 'code'])
@@ -2538,7 +2538,7 @@ it('预览解码中断后该窗口剩余帧只现场合成，并通过宿主日�
     }),
   } : open(media))
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
-  const renderer = new VideoEditRenderer(document, undefined, undefined, undefined, backend, undefined, undefined, undefined, log)
+  const renderer = new VideoEditRenderer(document, { frames: backend, jumpPreviewLog: log })
   renderer.setRenderCache([{ key: 'corrupt', startFrame: 0, endFrame: 30, url: 'corrupt-preview.mp4', width: 3840, height: 2160, fps: 60 }])
   try {
     expect((await renderer.render(0, true)).renderCached).toBe(true)
@@ -2553,7 +2553,7 @@ it('重复内容预览在不同位置共享文件且每次从段内零点播放�
   boundary.scheduled = []
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.clips = [{ ...document.clips[0], duration: 180 }]
-  const renderer = new VideoEditRenderer(document, 3840)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   const cache = { key: 'shared', url: 'shared-preview.mp4', width: 3840, height: 2160, fps: 60 }
   renderer.setRenderCache([{ ...cache, startFrame: 0, endFrame: 30 }, { ...cache, startFrame: 30, endFrame: 60 }])
   try {
@@ -2572,7 +2572,7 @@ it('重复内容预览在不同位置共享文件且每次从段内零点播放�
 })
 it('快速拖动与远距离跳转：代码视频输入先给近似画面（整帧标为近似），停住后按精确补帧；拖动中沿用当前画面，后台追向指针', async () => {
   const { backend, readers } = steppingReaders()
-  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(walkFixture(), { previewWidth: 3840, frames: backend })
   const reads = () => readers[0]!.reads
   const settle = async (): Promise<void> => { for (let tick = 0; tick < 20; tick++) await new Promise(resolve => setTimeout(resolve, 0)) }
   try {
@@ -2583,8 +2583,12 @@ it('快速拖动与远距离跳转：代码视频输入先给近似画面（整�
     expect(far.approximate).toBe(true)
     expect(reads().at(-1)).toMatchObject({ keyFrame: true, decoded: 1 })
     // 停住后的精确补帧从关键帧续解到目标
+    const beforeRefine = boundary.generatorCalls
     const rested = await renderer.render(30, false); await rested.completion
     expect(rested.approximate).toBeUndefined()
+    expect(boundary.generatorCalls).toBe(beforeRefine + 1)
+    expect((await renderer.render(30, false)).cacheHits).toBe(1)
+    expect(boundary.generatorCalls).toBe(beforeRefine + 1)
     expect(reads().at(-1)).toMatchObject({ keyFrame: false, decoded: 30 })
     expect(us([shownInputs().w1])).toEqual(us([0.5]))
     // 拖动到第 60 帧：这一帧沿用第 30 帧的画面、不等解码；后台按近似方式读向目标
@@ -2627,7 +2631,7 @@ it('拖动中后台追向指针的精确读取：指针退回或向前跳出半�
     release: () => {},
     seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
   }
-  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(walkFixture(), { previewWidth: 3840, frames: backend })
   const scrub = async (frame: number): Promise<void> => { await (await renderer.render(frame, false, true)).completion }
   const at = (frame: number): number => videoEditPictureSeconds(frame / 60)
   try {
@@ -2662,7 +2666,7 @@ it('连续点击 A→B→C：更新的暂停请求放弃还在解码的精确画
     release: () => {},
     seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
   }
-  const renderer = new VideoEditRenderer(walkFixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(walkFixture(), { previewWidth: 3840, frames: backend })
   const reading = async (count: number): Promise<void> => { await vi.waitFor(() => expect(reads).toHaveLength(count)) }
   try {
     const drawn = boundary.draws.length
@@ -2713,7 +2717,7 @@ async function playedFromWindow(slowMs = 0) {
   const document = recordingWindowsFixture(6)
   document.media = document.media.map(media => ({ ...media, durationSeconds: 60 }))
   document.clips = document.clips.filter(clip => clip.id === 'w2').map(clip => ({ ...clip, sourceInUs: 27_100_000 }))
-  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   renderer.setRenderCache([{ key: 'opening', startFrame: 0, endFrame: 86, url: 'henji-media://local/opening.mp4', width: 3840, height: 2160, fps: 60 }])
   const input = () => readers.find(reader => (reader.reads[0]?.time ?? 0) >= 24)
   await (await renderer.render(0, false)).completion
@@ -2761,7 +2765,7 @@ it('暂停帧就是最后上屏的预渲染播放帧：只换成同一帧的实�
 
 it('ready 窗口内快慢拖动与反向逐帧都只读缓存，像素回读和完整选帧仍现场合成', async () => {
   const { backend, gate } = steppingReaders()
-  const document = fixture(), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = fixture(), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   const shown: string[] = []
   renderer.onPresentation = (_frame, source) => shown.push(source)
   try {
@@ -2808,7 +2812,7 @@ it('缓存读取慢于连续拖动请求时仍持续上屏，排队的过时读�
       } }
     } })) }
   }
-  const document = fixture(), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = fixture(), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   const shown: number[] = [], requests: Array<ReturnType<VideoEditRenderer['render']>> = []
   renderer.onPresentation = (frame, source) => { expect(source).toBe('prerendered'); shown.push(frame) }
   try {
@@ -2829,7 +2833,7 @@ it('缓存读取慢于连续拖动请求时仍持续上屏，排队的过时读�
 
 it('拖动后同帧松手复用缓存画面，仍执行现场代码并替换画面与元素', async () => {
   const { backend } = steppingReaders()
-  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   const shown: Array<[number, string]> = []
   renderer.onPresentation = (frame, source) => shown.push([frame, source])
   try {
@@ -2861,7 +2865,7 @@ it('暂停缓存立即上屏，现场完成后替换；迟到缓存不覆盖现�
       return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { liveReads++; await blocked; return reader.frameAt(time, read) } }
     } })) }
   }
-  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   const shown: Array<[number, string]> = []
   renderer.onPresentation = (frame, source) => shown.push([frame, source])
   try {
@@ -2901,7 +2905,7 @@ it('回到已上屏精确缓存松手后，较早的不可取消现场帧不能�
       return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { liveReads++; await blocked; return reader.frameAt(time, read) } }
     } })) }
   }
-  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   const shown: Array<[number, string]> = []
   renderer.onPresentation = (frame, source) => shown.push([frame, source])
   try {
@@ -2933,7 +2937,7 @@ it('缓存已回执的后台现场取帧仍能被新拖动立即取消', async (
       } }
     } })) }
   }
-  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   try {
     renderer.setRenderCache([{ key: 'cached', startFrame: 0, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }])
     expect(await renderer.presentPrerenderedFrame(30, () => true)).toMatchObject({ presented: true })
@@ -2959,7 +2963,7 @@ it('较早缓存画面的迟到上屏不能作废松手现场合成', async () =
       return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { liveReads++; await blocked; return reader.frameAt(time, read) } }
     } })) }
   }
-  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   const shown: Array<[number, string]> = []
   renderer.onPresentation = (frame, source) => shown.push([frame, source])
   try {
@@ -2992,7 +2996,7 @@ it.each([1, 20])('ready 拖动在快速现场请求 %sms 后到达，不被旧�
       return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { await blocked; return reader.frameAt(time, read) } }
     } })) }
   }
-  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   const shown: Array<[number, string]> = []
   renderer.onPresentation = (frame, source) => shown.push([frame, source])
   try {
@@ -3027,7 +3031,7 @@ it('更早现场帧在新缓存读取期间上屏不作废新请求，窗口更�
       return { ...reader, frameAt: async (time: number, read?: VideoEditFrameReadOptions) => { liveReads++; await blocked; return reader.frameAt(time, read) } }
     } })) }
   }
-  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, document.width, undefined, undefined, backend)
+  const document = recordingWindowsFixture(1000), renderer = new VideoEditRenderer(document, { previewWidth: document.width, frames: backend })
   const windows = [{ key: 'cached', startFrame: 10, endFrame: 60, url: 'cached.mp4', width: document.width, height: document.height, fps: document.fps }]
   const shown: Array<[number, string]> = []
   renderer.onPresentation = (frame, source) => shown.push([frame, source])
@@ -3063,7 +3067,7 @@ it('导出预取打开坏预览失败后，现场合成期间不重复打开该�
     return { key: 'broken', ready: Promise.reject(new Error('预览文件不存在')) }
   }
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
-  const renderer = new VideoEditRenderer(document, undefined, undefined, undefined, backend)
+  const renderer = new VideoEditRenderer(document, { frames: backend })
   renderer.setRenderCache([{ key: 'broken', startFrame: 30, endFrame: 60, url: 'broken-preview.mp4', width: 3840, height: 2160, fps: 60 }])
   try {
     for (const frame of [0, 1, 2, 29, 30, 31]) expect((await renderer.render(frame, true)).renderCached).toBe(false)

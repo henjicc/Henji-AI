@@ -240,7 +240,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     // Explanation presents acknowledged Worker pixels on a stable canvas because a transferred GPU
     // surface can lose its compositor image between frames. Never reconstruct a historical picture.
     let explanationSurface: HTMLCanvasElement | undefined
-    const renderer = adopted?.renderer ?? new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen(), undefined, instance.document.id); session.current = renderer
+    const renderer = adopted?.renderer ?? new VideoEditRenderSession(initialDocument, { previewWidth: initialDocument.width, preparing: active => { if (!stopped) setPreparing(active) }, surface: surface.transferControlToOffscreen(), proxyProjectId: instance.document.id }); session.current = renderer
     let observedSequence = initialDocument.id
     const unsubscribe = subscribeVideoEditDomain(() => {
       if (stopped) return

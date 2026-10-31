@@ -63,6 +63,15 @@ export interface VideoEditRenderHost {
   loadCodeModules?(files: CodeMaterialFiles): Promise<AuthorModuleUrls>
 }
 
+export interface VideoEditRenderTransportOptions {
+  previewWidth?: number
+  preparing?: (active: boolean) => void
+  surface?: OffscreenCanvas
+  cacheBudgetBytes?: number
+  proxyProjectId?: string
+  exportProxies?: boolean
+  requestTimeoutMs?: number
+}
 export class VideoEditRenderTransport {
   private readonly contentTrustIds = new Set<string>()
   denyForeignContent(): void { if (this.contentTrustIds.size) void this.dispose(true) }
@@ -192,7 +201,14 @@ export class VideoEditRenderTransport {
       return { nativeAvailable: false, ...(forced ? { forced } : {}) }
     }
   }
-  constructor(private readonly host: VideoEditRenderHost, private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private proxyProjectId?: string, private readonly exportProxies = false, private readonly requestTimeoutMs = 60_000) {
+  private proxyProjectId?: string
+  private readonly exportProxies: boolean
+  private readonly requestTimeoutMs: number
+  constructor(private readonly host: VideoEditRenderHost, private document: VideoEditComposition, options: VideoEditRenderTransportOptions = {}) {
+    const { previewWidth, surface, cacheBudgetBytes, proxyProjectId } = options
+    this.proxyProjectId = proxyProjectId
+    this.exportProxies = options.exportProxies ?? false
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 60_000
     this.effectSnapshot = document.authorEffects ?? host.authorEffects?.() ?? {}
     this.liveEffects = !!surface && !document.authorEffects
     activeTransports.add(this)

@@ -21,7 +21,7 @@ export async function spoolVideoEditAudio(composition: VideoEditComposition, ran
   signal?.throwIfAborted(); signal?.addEventListener('abort', cancel, { once: true })
   try {
     await api.start(composition.sampleRate, composition.channels, id); signal?.throwIfAborted()
-    renderer ??= new VideoEditRenderSession(composition, 1)
+    renderer ??= new VideoEditRenderSession(composition, { previewWidth: 1 })
     for (let frame = range.startFrame; frame < range.endFrame;) {
       signal?.throwIfAborted()
       const end = Math.min(range.endFrame, frame + Math.max(1, Math.round(composition.fps)))

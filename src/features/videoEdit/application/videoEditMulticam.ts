@@ -25,7 +25,7 @@ export interface VideoEditMulticamAutoOptions { minimumSeconds?: number; sensiti
 async function readSyncSound(composition: VideoEditComposition, start: number, duration: number, signal?: AbortSignal): Promise<Float32Array> {
   const samples = Math.floor(duration * VIDEO_EDIT_MULTICAM_SYNC_RATE)
   videoEditAudioSyncSize(samples, samples)
-  const renderer = new VideoEditRenderSession(composition, 1)
+  const renderer = new VideoEditRenderSession(composition, { previewWidth: 1 })
   const abort = (): void => { void renderer.dispose().catch(() => undefined) }
   signal?.addEventListener('abort', abort, { once: true })
   const output = new Float32Array(samples)
@@ -91,7 +91,7 @@ export async function autoSwitchVideoEditMulticam(target: VideoEditMulticamTarge
     for (const camera of source.multicam.cameras) {
       current()
       const isolated = { ...parent, clips: [{ ...clip, volume: 1, multicamCameraId: camera.id }], transitions: [], tracks: parent.tracks.map(track => ({ ...track, enabled: true, muted: false, solo: false })), sequences: parent.sequences?.map(sequence => sequence.id === source.id ? { ...sequence, tracks: sequence.tracks.map(track => ({ ...track, enabled: true, muted: false, solo: false })), multicam: { ...source.multicam!, audioCameraId: camera.id } } : sequence) }
-      const api = getPlatform().audioEdit.loudness; const id = crypto.randomUUID(); const renderer = new VideoEditRenderSession(isolated, 1)
+      const api = getPlatform().audioEdit.loudness; const id = crypto.randomUUID(); const renderer = new VideoEditRenderSession(isolated, { previewWidth: 1 })
       const levels: VideoEditMulticamActivity['levels'] = []
       const abort = (): void => { void api.close(id).catch(() => undefined); void renderer.dispose().catch(() => undefined) }
       signal?.addEventListener('abort', abort, { once: true })

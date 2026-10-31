@@ -317,7 +317,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         recordVideoEditPreparation('fontLoad', performance.now() - started)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
-        await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent, log)
+        await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, { previewWidth: request.previewWidth, surface: request.surface, cacheBudgetBytes: request.cacheBudgetBytes, frames: frameBackend(request.decode), sequencePath: [request.document.id], timing: timingEvent, jumpPreviewLog: log })
         const current = renderer
         let playbackSource: VideoEditPresentedSource | undefined
         current.onPresentation = (frame, presentedSource, exact) => {
@@ -378,7 +378,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         pixelRendering = !!capture || request.requireLive === true
         if (backgroundRender) { backgroundComposition = renderer.document; backgroundRenderId = request.id }
         backgroundElements = backgroundRender && request.observeElements ? request.frame : undefined
-        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision && !cancelledByStop() && (!backgroundRender || latestRender === request), request.deadline, undefined, request.quality, capture, request.requireLive || backgroundRender, presentationOrder).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }).finally(() => { pixelRendering = false; backgroundElements = undefined })
+        const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision && !cancelledByStop() && (!backgroundRender || latestRender === request), request.deadline, undefined, request.quality, capture, request.requireLive || backgroundRender, presentationOrder, request.observeElements).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }).finally(() => { pixelRendering = false; backgroundElements = undefined })
         const renderStages = videoEditPreparationDelta(preparationBefore)
         // 本帧合成提交的 GPU 分段（诊断时才有）；下一帧开始前取走，不和后面的帧混在一起。
         const gpuStages = takeVideoEditGpuFrame()

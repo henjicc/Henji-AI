@@ -46,7 +46,7 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
           if (stopped) return
           const composition = videoEditNestedComposition(parent, { ...target.clip, multicamCameraId: camera.id })!
           let session = sessions.get(camera.id)
-          if (!session) { session = new VideoEditRenderSession(composition, 320, undefined, undefined, 32 * 1024 ** 2); sessions.set(camera.id, session) }
+          if (!session) { session = new VideoEditRenderSession(composition, { previewWidth: 320, cacheBudgetBytes: 32 * 1024 ** 2 }); sessions.set(camera.id, session) }
           else if (lastRevision !== revision) await session.updateDocument(composition)
           const result = await session.renderBitmap(videoEditNestedFrame(parent, target.clip, composition, frame))
           try {

@@ -34,7 +34,7 @@ function sound(clip: Partial<VideoEditClip> = {}): VideoEditComposition {
   return videoEditComposition(document, document.sequences[0].id)
 }
 async function mix(composition: VideoEditComposition, blocks: number[], start = 0): Promise<Float32Array[]> {
-  const renderer = new VideoEditRenderer(composition, undefined, { width: 1, height: 1 } as unknown as OffscreenCanvas, 8 * 1024 ** 3, backend())
+  const renderer = new VideoEditRenderer(composition, { surface: { width: 1, height: 1 } as unknown as OffscreenCanvas, frames: backend() })
   try {
     const parts: Float32Array[][] = []; let at = start
     for (const duration of blocks) { parts.push(await renderer.mixAudio(at, duration)); at += duration }
