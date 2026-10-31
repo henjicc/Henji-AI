@@ -91,7 +91,7 @@ async function layer(source: Uint8Array, chainEffects: unknown[], defocus = { ra
   try {
     await author.begin(frame); chain.begin(author.commandEncoder())
     const resolved = resolveAuthorEffects(chainEffects).map(effect => ({ ...effect, amount: options.amount ?? effect.amount }))
-    const result = await chain.encode('layer', input, width, height, resolved, options.reference ?? reference(), {}, undefined, defocus, value => author.mipmaps(value, width, height))
+    const result = await chain.encode('layer', input, width, height, resolved, options.reference ?? reference(), {}, undefined, defocus, value => author.mipmaps(value, width, height), 0)
     author.finish(); chain.commit()
     return { pixels: await read(result.picture, width, height), carriesLight: result.carriesLight }
   } finally { chain.dispose(); await author.dispose(); input.destroy(); frame.destroy() }
@@ -432,7 +432,7 @@ describe('混合链与资源', () => {
       const results: Array<{ carriesLight: boolean; pixels: Uint8Array }> = []
       for (const effectsOfFrame of [[glowShape], [shadow], []]) {
         await author.begin(frame); chain.begin(author.commandEncoder())
-        const result = await chain.encode('slot', input, W, H, resolveAuthorEffects(effectsOfFrame), reference(), {}, 'content', { radius: 0, lens: false }, value => author.mipmaps(value, W, H))
+        const result = await chain.encode('slot', input, W, H, resolveAuthorEffects(effectsOfFrame), reference(), {}, 'content', { radius: 0, lens: false }, value => author.mipmaps(value, W, H), 0)
         author.finish(); chain.commit()
         results.push({ carriesLight: result.carriesLight, pixels: await read(result.picture) })
       }

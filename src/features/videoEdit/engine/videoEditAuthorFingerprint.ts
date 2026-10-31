@@ -7,15 +7,15 @@ import { codeMaterialFilesKey, type CodeMaterialFiles } from '@/core/videoEdit/c
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, type AuthorElementOverrides } from './videoEditAuthorElements'
 import { AuthorCanvasAsset, AuthorCanvasUnrecordable, recordAuthorCanvas } from './videoEditAuthorCanvasRecorder'
 import type { AuthorAssets, AuthorFrameInfo, AuthorLayer, AuthorModule, AuthorParameters } from './videoEditAuthorModule'
-import { isAuthorAdjustment } from './videoEditAuthorModule'
+import { authorFrameNumber, isAuthorAdjustment } from './videoEditAuthorModule'
 
-function adjustmentFingerprint(layer: AuthorLayer, index: number, info: AuthorFrameInfo, environment: AuthorEffectEnvironment, overrides?: AuthorElementOverrides): unknown[] {
+function adjustmentFingerprint(layer: AuthorLayer, index: number, info: AuthorFrameInfo, frame: number, environment: AuthorEffectEnvironment, overrides?: AuthorElementOverrides): unknown[] {
   const id = authorLayerId(layer, index), override = overrides?.[id]
   assertCodeElementOverrideAllowed('adjust', override)
   const effects = resolveAuthorEffects(layer.adjust!(info.time), environment, info.clip.time / info.frameDuration, id, 'frame')
   const pose = layer.pose ? layer.pose(info.time) : {}
   return ['adjust', id, layer.clip, pose ? pose.opacity ?? 1 : 0, override?.opacity, override?.hidden,
-    authorEffectsFingerprint(effects, environment, Math.round(info.time / info.frameDuration))]
+    authorEffectsFingerprint(effects, environment, frame)]
 }
 
 export interface AuthorFingerprintInput { width: number; height: number; identity: string; dimensionsKnown?: boolean }
@@ -86,7 +86,7 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
     if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组')
     const layers: unknown[] = []
     for (const [index, layer] of list.entries()) {
-      if (isAuthorAdjustment(layer, apiVersion)) { layers.push(adjustmentFingerprint(layer, index, info, environment, overrides)); continue }
+      if (isAuthorAdjustment(layer, apiVersion)) { layers.push(adjustmentFingerprint(layer, index, info, authorFrameNumber(effect, info), environment, overrides)); continue }
       const id = authorLayerId(layer, index), override = overrides?.[id]
       const [x, y, right, bottom] = layer.bounds ?? [0, 0, size.width, size.height]
       if (layer.pose && !layer.bounds || ![x, y, right, bottom].every(Number.isFinite) || right <= x || bottom <= y) throw new Error('图层范围无效')
@@ -107,7 +107,7 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
         }, true)
       } finally { recording = false }
       if (!commands.comparable || !commands.balanced) return { fallback: 'unrecordable-layer' }
-      const effects = apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION && layer.effects ? authorEffectsFingerprint(resolveAuthorEffects(layer.effects(info.time), environment, info.clip.time / info.frameDuration, id, 'layer', apiVersion), environment) : undefined
+      const effects = apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION && layer.effects ? authorEffectsFingerprint(resolveAuthorEffects(layer.effects(info.time), environment, info.clip.time / info.frameDuration, id, 'layer', apiVersion), environment, authorFrameNumber(effect, info)) : undefined
       layers.push([id, !!layer.pose, properties, poses, center, commands.ops, ...(apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION ? [effects] : [])])
     }
     const value = [{ width: size.width, height: size.height }, layers, [...used].sort().map(key => [key, inputs[key]])]
@@ -144,12 +144,12 @@ function fingerprintLayerEffects(effect: AuthorModule, size: { width: number; he
   const layers = effect.layers!(params, size.width, size.height, assets, info)
   if (!Array.isArray(layers)) throw new Error('layers() 必须返回图层数组')
   return layers.map((layer, index) => {
-    if (isAuthorAdjustment(layer, apiVersion)) return adjustmentFingerprint(layer, index, info, environment, overrides)
+    if (isAuthorAdjustment(layer, apiVersion)) return adjustmentFingerprint(layer, index, info, authorFrameNumber(effect, info), environment, overrides)
     const [x, y, right, bottom] = layer.bounds ?? [0, 0, size.width, size.height]
     const samples = authorLayerSamples(layer, effect, info, { x, y, width: right - x, height: bottom - y }, overrides?.[authorLayerId(layer, index)], motionBlur)
     if (!samples.some(sample => sample.pose)) return null
     const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration)).find(Boolean)
     const effects = layer.effects ? resolveAuthorEffects(layer.effects(info.time), environment, info.clip.time / info.frameDuration, authorLayerId(layer, index), 'layer', apiVersion) : []
-    return [authorEffectsFingerprint(effects, environment), center?.blur ?? 0, center?.scaleX ?? center?.scale ?? 1, center?.scaleY ?? center?.scale ?? 1, layer.blurShape]
+    return [authorEffectsFingerprint(effects, environment, authorFrameNumber(effect, info)), center?.blur ?? 0, center?.scaleX ?? center?.scale ?? 1, center?.scaleY ?? center?.scale ?? 1, layer.blurShape]
   })
 }

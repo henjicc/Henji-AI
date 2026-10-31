@@ -108,3 +108,20 @@ it('逐个独立导入索引中的定义模块，不依赖 builtinEffects 先初
     expect(Object.keys(await modules[module]()).length, module).toBeGreaterThan(0)
   }
 })
+
+it('规划随帧号变化的效果必须声明 frameSeed，种子相同的帧规划相同', async () => {
+  const [{ planVideoEditBuiltinEffect }, { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults }, { VIDEO_EDIT_EFFECT_PLANNER_BY_ID }] = await Promise.all([
+    import('./videoEditBuiltinEffectPasses'), import('@/core/videoEdit/builtinEffects'), import('./effectPlanners'),
+  ])
+  const layer = { referenceSize: { width: 64, height: 36 }, contentBounds: { x: 0, y: 0, width: 48, height: 24 }, rasterScale: 1, rasterOrigin: [8, 6] as const, quality: 'final' as const }
+  const frames = [0, 1, 2, 5, 6, 7, 30, 31, 997]
+  for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => VIDEO_EDIT_EFFECT_PLANNER_BY_ID.has(value.id))) {
+    const params = videoEditBuiltinDefaults(definition)
+    for (const context of definition.space === 'layer' ? [undefined, layer] : [undefined]) {
+      const plans = frames.map(frame => planVideoEditBuiltinEffect({ id: definition.id, params }, { width: 64, height: 36, frame, ...(context ? { layer: context } : {}) }))
+      const seeds = frames.map(frame => definition.frameSeed?.(params, frame) ?? 0)
+      // 没有声明的效果所有帧同种子；声明了的，同种子的帧必须得到同一份规划，否则复用键会拿到别的帧的画面。
+      frames.forEach((_frame, index) => expect(plans[index], `${definition.id} 第 ${frames[index]} 帧`).toEqual(plans[seeds.indexOf(seeds[index])]))
+    }
+  }
+})

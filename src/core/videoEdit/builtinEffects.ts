@@ -30,8 +30,11 @@ export interface VideoEditBuiltinEffectDefinition {
   category?: 'more'
   /** layer 可用于作者图层及片段；不写只用于片段。 */
   space?: 'layer' | 'frame' | 'clip'
-  /** 效果使用宿主传入帧号取种子；身份摘要必须包含同一帧号。 */
-  frameSeeded?: boolean
+  /**
+   * 规划随宿主帧号变化的效果必须声明：返回这一帧真正用到的种子值。返回值相同的帧必须得到相同的规划；
+   * 输出复用键与指纹并入返回值而不是帧号，同一段错法、强度为 0 等画面不变的帧照样复用。
+   */
+  frameSeed?: (params: VideoEditBuiltinParams, frame: number) => number
   bleed?: (params: VideoEditBuiltinParams, reference: LayerEffectReference) => number
   author?: { factory: string }
   id: string

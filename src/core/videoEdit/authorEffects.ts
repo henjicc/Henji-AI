@@ -120,10 +120,12 @@ export function authorEffectBleed(effects: readonly ResolvedAuthorEffect[], refe
   if (!Number.isFinite(value) || value < 0) throw new Error('图层效果外扩超出有限纹理尺寸。')
   return value
 }
-export function authorEffectsFingerprint(effects: readonly ResolvedAuthorEffect[], environment: AuthorEffectEnvironment = {}, frame = 0): string {
+/** `frame` 是宿主帧号；声明了 frameSeed 的效果把换算出的种子并入身份，各调用方必须传入渲染时用的同一个帧号。 */
+export function authorEffectsFingerprint(effects: readonly ResolvedAuthorEffect[], environment: AuthorEffectEnvironment, frame: number): string {
   return renderFingerprintHash(JSON.stringify(effects.map(effect => {
     const params = Object.entries(effect.params).sort(([a], [b]) => a.localeCompare(b))
     const luts = requireVideoEditBuiltinEffect(effect.id).params.filter(param => param.type === 'lut').map(param => environment.luts?.find(lut => lut.id === effect.params[param.key])?.contentIdentity)
-    return [effect.id, params, effect.amount, luts, ...(requireVideoEditBuiltinEffect(effect.id).frameSeeded ? [frame] : [])]
+    const { frameSeed } = requireVideoEditBuiltinEffect(effect.id)
+    return [effect.id, params, effect.amount, luts, ...(frameSeed ? [frameSeed(effect.params, frame)] : [])]
   })))
 }

@@ -8,7 +8,7 @@ export const VIDEO_EDIT_EFFECT_CATALOG: readonly { readonly group: VideoEditBuil
   { group: 'outline', ids: ['drop_shadow', 'stroke'] },
   { group: 'lens', ids: ['vignette', 'chromatic_aberration'] },
   { group: 'texture', ids: ['film_grain'] },
-  { group: 'stylize', ids: ['mosaic', 'dissolve_reveal'] },
+  { group: 'stylize', ids: ['mosaic', 'glitch', 'dissolve_reveal'] },
   { group: 'distort', ids: [] },
   { group: 'frame', ids: ['crop', 'flip'] },
   { group: 'keying', ids: ['chroma_key'] },

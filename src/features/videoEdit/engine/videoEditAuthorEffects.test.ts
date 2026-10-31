@@ -17,7 +17,7 @@ it('动态效果按尺寸复用工作纹理，覆写前撤销缓存资格，缩�
   const input = { createView: () => ({}), destroy: vi.fn() }
   const context = { referenceSize: { width: 100, height: 50 }, contentBounds: { x: 0, y: 0, width: 20, height: 10 }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'interactive' as const }
   const begin = () => chain.begin({} as ReturnType<GpuDevice['createCommandEncoder']>)
-  const encode = (amount: number, width = 64) => chain.encode('title', input, width, 32, [{ ...resolveAuthorEffects([{ id: 'black_white' }])[0], amount }], context, {}, 'same-pixels', { radius: 0, lens: false }, () => {})
+  const encode = (amount: number, width = 64) => chain.encode('title', input, width, 32, [{ ...resolveAuthorEffects([{ id: 'black_white' }])[0], amount }], context, {}, 'same-pixels', { radius: 0, lens: false }, () => {}, 0)
   try {
     begin(); const first = await encode(.2); chain.commit()
     begin(); const next = await encode(.3); chain.commit()

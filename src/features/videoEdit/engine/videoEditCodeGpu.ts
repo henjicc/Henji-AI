@@ -574,7 +574,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }
-  /** 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame` 只用作胶片颗粒的确定种子。 */
+  /** 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame` 是片段自己的帧号，只用作随帧效果的确定种子。 */
   async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1, luts: readonly import('@/core/videoEdit/colorLutAsset').ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: { width: number; height: number }): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '内置效果输入必须属于当前GPU设备。')

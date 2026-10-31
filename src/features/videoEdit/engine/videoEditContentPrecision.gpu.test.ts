@@ -33,25 +33,28 @@ const document: VideoEditComposition = { ...createVideoEditSequence(), width: W,
 beforeAll(async () => { gpu = await init(); device = gpu.gpu as unknown as GpuDevice })
 afterAll(() => gpu?.dispose())
 
-it.each(['grain', 'animated-layer-effect', 'still'] as const)('恒定 settled 声明的 %s 输出复用与逐帧直出像素一致', async kind => {
-  const d = historyRasterDevice()
-  const effect = deterministicAuthorModule({ name: '效果复用', frameKey: () => 'settled', layers: () => [
+it.each(['grain', 'animated-layer-effect', 'still', 'glitch-layer', 'glitch-still', 'glitch-static'] as const)('恒定 settled 声明或 static 模块的 %s 输出复用与逐帧直出像素一致', async kind => {
+  // 故障要横向有明暗变化的画面才看得出错位。static 模块不写 frameKey，随帧效果按第 0 帧，与先渲染哪一帧无关。
+  const glitch = kind.startsWith('glitch'), staticModule = kind === 'glitch-static', still = kind === 'still' || kind === 'glitch-still' || staticModule
+  const d = historyRasterDevice(glitch ? (width, height) => Uint8Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 255 : (Math.floor(i / 4) % width) * 37 % 256) : undefined)
+  const effect = deterministicAuthorModule({ name: '效果复用', ...(staticModule ? { mode: 'static' as const } : { frameKey: () => 'settled' }), layers: () => [
     { id: 'base', bounds: [0, 0, W, H] as [number, number, number, number],
       ...(kind === 'animated-layer-effect' ? { effects: (time: number) => [{ id: 'color_grade', params: { exposure: (time - 1) * 3 } }] } : {}),
+      ...(glitch ? { effects: () => [{ id: 'glitch' as const, params: { amount: 100, block_size: 100, rhythm: kind === 'glitch-still' ? 0 : 100 } }] } : {}),
       draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, W, H) } },
-    ...(kind === 'grain' ? [{ id: 'grain', adjust: () => [{ id: 'film_grain' as const, params: { amount: 70 } }] }] : []),
+    ...(kind === 'grain' || staticModule ? [{ id: 'grain', adjust: () => [{ id: 'film_grain' as const, params: { amount: 70 } }] }] : []),
   ] }, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
   const loader = vi.spyOn(authorModules, 'loadAuthorModule').mockResolvedValue(effect)
   const code = { definitionId: 'definition', versionId: 'v', parameters: {} }
   const doc: VideoEditComposition = { ...document, clips: [{ ...clip, kind: 'code', code, duration: 90 }],
-    codeMaterials: [{ id: 'definition', name: '效果复用', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, languageVersion: 4, ...testCodeManifest('export default { name: "效果复用", draw() {} }', {}) }] }] }
+    codeMaterials: [{ id: 'definition', name: '效果复用', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, languageVersion: 4, ...testCodeManifest(`export default { name: "效果复用", ${staticModule ? 'mode: "static", ' : ''}draw() {} }`, {}) }] }] }
   const compiler = { bundle: async (files: CodeMaterialFiles) => testAuthorBundle(files), dispose() {} }
-  const run = async (reuse: boolean) => {
+  const run = async (reuse: boolean, quality: 'interactive' | 'final' = 'final') => {
     const host = new VideoEditCodeGpu(d), sources = new VideoEditCodeSources(doc, async () => host, compiler, undefined, reuse)
     const results: Array<{ pixels: Uint8Array; hits: number }> = []
     try {
       for (const frame of [30, 31, 32]) {
-        const prepared = await sources.prepare(doc, doc.clips, frame, () => true, undefined, { quality: 'final' })
+        const prepared = await sources.prepare(doc, doc.clips, frame, () => true, undefined, { quality })
         const picture = prepared.pictures.get('c') as VideoEditCodePicture
         const bytesPerRow = W * (picture.highPrecision ? 8 : 4)
         const buffer = gpu.gpu.createBuffer({ size: bytesPerRow * H, usage: 0x01 | 0x08 }), encoder = gpu.gpu.createCommandEncoder()
@@ -60,17 +63,19 @@ it.each(['grain', 'animated-layer-effect', 'still'] as const)('恒定 settled �
         results.push({ pixels: new Uint8Array(buffer.getMappedRange().slice(0)), hits: prepared.cacheHits })
         buffer.unmap(); buffer.destroy()
       }
-      expect(host.diagnostics().generatorFrames).toBe(reuse && kind === 'still' ? 1 : 3)
+      expect(host.diagnostics().generatorFrames).toBe(reuse && still ? 1 : 3)
       return results
     } finally { await sources.dispose(); await host.dispose() }
   }
   device.pushErrorScope('validation')
   try {
     const direct = await run(false), reused = await run(true)
-    expect(reused.map(frame => frame.hits)).toEqual(kind === 'still' ? [0, 1, 1] : [0, 0, 0])
+    expect(reused.map(frame => frame.hits)).toEqual(still ? [0, 1, 1] : [0, 0, 0])
     expect(reused.map(frame => frame.pixels)).toEqual(direct.map(frame => frame.pixels))
-    if (kind === 'still') expect(reused[0].pixels).toEqual(reused[1].pixels)
+    if (still) expect(reused[0].pixels).toEqual(reused[1].pixels)
     else expect(reused[0].pixels).not.toEqual(reused[1].pixels)
+    // 预览走复用与交互质量，导出逐帧直出与最终质量：同一帧逐像素相同。
+    if (glitch) expect((await run(true, 'interactive')).map(frame => frame.pixels)).toEqual(direct.map(frame => frame.pixels))
     expect(await device.popErrorScope()).toBeNull()
   } finally { loader.mockRestore(); vi.unstubAllGlobals() }
 })
@@ -128,7 +133,7 @@ it('作者效果→层栈→片段→amount/mask→转场保持浮点，强度�
     for (const strength of [0, 30, 0, 30, 0]) {
       const target = await host.target('stack', W, H, strength ? 'rgba16float' : 'rgba8unorm')
       await author.begin(target.texture); chain.begin(author.commandEncoder())
-      const rendered = await chain.encode('layer', source.texture, W, H, resolveAuthorEffects([{ id: 'glow', params: { strength, dither: 0 } }]), reference, {}, 'fixed', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+      const rendered = await chain.encode('layer', source.texture, W, H, resolveAuthorEffects([{ id: 'glow', params: { strength, dither: 0 } }]), reference, {}, 'fixed', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H), 0)
       expect(rendered.picture.format).toBe(target.textureFormat)
       author.copy(rendered.picture, target.texture, W, H); author.finish(); chain.commit()
       if (!strength) continue
@@ -467,7 +472,7 @@ it('调整层效果链中产光的完整输出进入后续调色，与片段串�
     const effects = resolveAuthorEffects(descriptors, {}, 0, 'adjust', 'frame')
     const reference = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
     await author.begin(stack.texture); chain.begin(author.commandEncoder())
-    const actual = await chain.encode('adjust', input.texture, W, H, effects, reference, {}, undefined, { radius: 0, lens: false }, () => {}, true, { frame: 0, opacity: 1 })
+    const actual = await chain.encode('adjust', input.texture, W, H, effects, reference, {}, undefined, { radius: 0, lens: false }, () => {}, 0, true, { opacity: 1 })
     author.finish(); chain.commit()
     await builtin.render(effects[0], { texture: input.texture, width: W, height: H, format: 'rgba16float' }, glow.texture, 0, 1, [], 'final')
     await builtin.render(effects[1], { texture: glow.texture, width: W, height: H, format: 'rgba16float' }, expected.texture, 0, 1, [], 'final')

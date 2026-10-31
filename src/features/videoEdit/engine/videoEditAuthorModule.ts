@@ -73,6 +73,13 @@ export interface AuthorWebGL {
   draw(time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   dispose?(): void | Promise<void>
 }
+/**
+ * 图层效果按帧取种子用的帧号：渲染、输出复用键与预渲染指纹都取这同一个值，预览与导出才一致。
+ * static 模块承诺画面不随时间变，输出键也不含时间，随帧效果一律取第 0 帧，结果不取决于先渲染哪一帧。
+ */
+export function authorFrameNumber(module: Pick<AuthorModule, 'mode'>, info: Pick<AuthorFrameInfo, 'time' | 'frameDuration'>): number {
+  return module.mode === 'static' ? 0 : Math.round(info.time / info.frameDuration)
+}
 export function isAuthorAdjustment(layer: AuthorLayer, apiVersion: number): boolean {
   // 旧接口的同名字段属于作者数据，宿主不能读取或重写作者对象。
   if (apiVersion < CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION || layer.adjust === undefined) return false

@@ -116,7 +116,7 @@ it.each([false, true])('30px 镜头散焦细线无横纹（前置效果：%s）'
     const result = await chain.encode('lines', source, width, height,
       resolveAuthorEffects(precedingEffects ? [{ id: 'color_grade' }] : []),
       { referenceSize: { width: 1280, height: 720 }, contentBounds: { x: 0, y: 0, width: 100, height: 120 }, rasterScale: 1, rasterOrigin: [64, 64], quality: 'final' },
-      {}, undefined, { radius: 30, lens: true }, texture => author.mipmaps(texture, width, height))
+      {}, undefined, { radius: 30, lens: true }, texture => author.mipmaps(texture, width, height), 0)
     author.finish(); chain.commit()
     const rendered = await read(result.picture, width, height)
     const encoder = device.createCommandEncoder()
@@ -177,7 +177,7 @@ it('镜头散焦保留高光光斑的亮度、能量和大小，逐帧重编码�
       // 不提供内容键，确保每帧都执行着色器，不能靠复用缓存通过稳定性断言。
       const result = await chain.encode('spot', source, width, height, [],
         { referenceSize: { width, height }, contentBounds: { x: 0, y: 0, width, height }, rasterScale: 1, rasterOrigin: [0, 0], quality: 'final' },
-        {}, undefined, { radius, lens: true }, texture => author.mipmaps(texture, width, height))
+        {}, undefined, { radius, lens: true }, texture => author.mipmaps(texture, width, height), 0)
       author.finish(); chain.commit()
       const pixels = await read(result.picture, width, height)
       if (first) expect(pixels).toEqual(first)
@@ -246,7 +246,7 @@ it('1080p 与 4K 默认发光：小字与宽层、两层静止及三层参数动
         await author.begin(target); chain.begin(author.commandEncoder())
         if (pad !== previousPad) author.mipmaps(source!, width, height)
         for (let layer = 0; layer < (frame < 2 ? 2 : 3); layer++) {
-          const result = await chain.encode(`title:${layer}`, source!, width, height, effects, reference, {}, `white:${pad}`, { radius: 0, lens: false }, texture => author.mipmaps(texture, width, height))
+          const result = await chain.encode(`title:${layer}`, source!, width, height, effects, reference, {}, `white:${pad}`, { radius: 0, lens: false }, texture => author.mipmaps(texture, width, height), 0)
           author.draw(target, frameWidth, frameHeight, { texture: result.picture, x: -pad, y: -pad, width, height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, frameWidth / 2, frameHeight / 2], opacity: 1 } }])
         }
         author.finish(); chain.commit(); await device.queue.onSubmittedWorkDone()
@@ -277,7 +277,7 @@ it('默认发光按能量截断：未裁切参考在规划边界之外不足半�
   device.queue.writeTexture({ texture: source as never }, pixels, { bytesPerRow: width * 4 }, [width, height])
   try {
     await author.begin(target); chain.begin(author.commandEncoder())
-    const result = await chain.encode('reference', source, width, height, effects, context, {}, undefined, { radius: 0, lens: false }, texture => author.mipmaps(texture, width, height))
+    const result = await chain.encode('reference', source, width, height, effects, context, {}, undefined, { radius: 0, lens: false }, texture => author.mipmaps(texture, width, height), 0)
     author.finish(); chain.commit()
     const data = await read(result.picture, width, height), bytesPerRow = width * 4
     let tail = 0, visible = 0
@@ -297,7 +297,7 @@ it('已预热的 pose.blur scratch 在连续弃帧时保留复用，恢复提交
     let warm = 0
     for (let frame = 0; frame < 20; frame++) {
       await author.begin(target); chain.begin(author.commandEncoder())
-      const result = await chain.encode('blur', source, W, H, [], context, {}, undefined, { radius: 1 + frame / 100, lens: false }, texture => author.mipmaps(texture, W, H))
+      const result = await chain.encode('blur', source, W, H, [], context, {}, undefined, { radius: 1 + frame / 100, lens: false }, texture => author.mipmaps(texture, W, H), 0)
       if (frame === 0) warm = measured.allocations
       else expect(measured.allocations).toBe(warm)
       if (frame > 0 && frame < 19) { author.abandon(); chain.abandon() }
@@ -368,8 +368,8 @@ it('半透明边缘推亮后，片段与图层调色均保持 RGB≤alpha，其�
     expect(expected.every((v, i) => i % 4 === 3 || v <= expected[i - i % 4 + 3])).toBe(true)
     for (const strength of [0, .1, 40, 0]) {
       await author.begin(target); chain.begin(author.commandEncoder())
-      await chain.encode('light', source, W, H, resolveAuthorEffects([{ id: 'glow', params: { strength } }]), context, {}, undefined, { radius: 0, lens: false }, t => author.mipmaps(t, W, H))
-      const result = await chain.encode('grade', source, W, H, grade, context, {}, undefined, { radius: 0, lens: false }, t => author.mipmaps(t, W, H))
+      await chain.encode('light', source, W, H, resolveAuthorEffects([{ id: 'glow', params: { strength } }]), context, {}, undefined, { radius: 0, lens: false }, t => author.mipmaps(t, W, H), 0)
+      const result = await chain.encode('grade', source, W, H, grade, context, {}, undefined, { radius: 0, lens: false }, t => author.mipmaps(t, W, H), 0)
       author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
       author.finish(); chain.commit(); expect(await read(target)).toEqual(expected)
     }
@@ -599,6 +599,34 @@ describe('剪辑内置效果（真实设备）', () => {
     expect([...await render(clear.texture, 'glow', { strength: 0 })]).toEqual([...clear.data])
     expect([...await render(clear.texture, 'chromatic_aberration', { amount: 0 })]).toEqual([...clear.data])
   }, 30_000)
+  it('故障：三种方式同一帧逐像素一致，变化频率 0 定住；透明底的错位碎片与红蓝分色不发黑', async () => {
+    // 作者库生成的工厂直接给出效果描述，和代码图层写法一致。
+    const { glitch } = await import('@/features/videoEdit/authorLibraries/effects')
+    const texture = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC }) as unknown as GpuTexture
+    const data = new Uint8Array(W * H * 4)
+    for (let y = 8; y < 28; y++) for (let x = 16; x < 48; x++) data.set([255, 255, 255, 255], (y * W + x) * 4)
+    device.queue.writeTexture({ texture: texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
+    const render = async (params: Parameters<typeof glitch>[0], frame: number): Promise<Uint8Array> => {
+      const target = output()
+      await effects.render(glitch({ block_size: 100, rgb_split: 100, ...params }) as never, { texture, width: W, height: H, format: 'rgba8unorm' }, target, frame)
+      return read(target)
+    }
+    expect([...await render({ amount: 0 }, 5)]).toEqual([...data])
+    for (const mode of ['digital', 'bars', 'compression'] as const) {
+      const frames: Uint8Array[] = []
+      for (let frame = 0; frame < 6; frame++) frames.push(await render({ mode, amount: 60, rhythm: 100 }, frame))
+      expect([...await render({ mode, amount: 60, rhythm: 100 }, 3)], mode).toEqual([...frames[3]])
+      expect(frames.some(pixels => pixels.some((value, index) => value !== data[index])), mode).toBe(true)
+      expect(frames.some((pixels, frame) => frame > 0 && pixels.some((value, index) => value !== frames[0][index])), mode).toBe(true)
+      // 白色内容错开后只剩白、红、青：有透明度的像素里最亮的通道应等于透明度，否则就是叠到底色上会发黑的边。
+      for (const pixels of frames) for (let at = 0; at < W * H * 4; at += 4) {
+        const alpha = pixels[at + 3], peak = Math.max(pixels[at], pixels[at + 1], pixels[at + 2])
+        if (alpha > 0) { expect(peak, mode).toBeLessThanOrEqual(alpha); expect(peak, mode).toBeGreaterThanOrEqual(alpha - 2) }
+      }
+      expect([...await render({ mode, rhythm: 0 }, 0)], mode).toEqual([...await render({ mode, rhythm: 0 }, 37)])
+    }
+    texture.destroy()
+  }, 30_000)
 })
 
 /** 经过正式作者合成与片段合成器，检查零 alpha 光在 picture 边界仍然相加。 */
@@ -616,13 +644,13 @@ describe('作者图层效果（真实设备）', () => {
       let warm = 0
       for (let frame = 0; frame < 24; frame++) {
         await author.begin(target); chain.begin(author.commandEncoder())
-        await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'color_grade', params: { curve_master_2: 51 + frame } }]), context, {}, 'pixels', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+        await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'color_grade', params: { curve_master_2: 51 + frame } }]), context, {}, 'pixels', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H), 0)
         author.abandon(); chain.abandon()
         if (!frame) warm = allocations
         else expect(allocations).toBe(warm)
       }
       await author.begin(target); chain.begin(author.commandEncoder())
-      const result = await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'color_grade', params: { curve_master_2: 80 } }]), context, {}, 'pixels', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+      const result = await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'color_grade', params: { curve_master_2: 80 } }]), context, {}, 'pixels', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H), 0)
       author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
       author.finish(); chain.commit()
       expect(pixel(await read(target), W / 2, H / 2)[0]).toBeGreaterThan(pixel(await read(source), W / 2, H / 2)[0])
@@ -693,7 +721,7 @@ describe('作者图层效果（真实设备）', () => {
       const data = new Uint8Array(W * H * 4); for (let at = 0; at < data.length; at += 4) data.set([...bg, 255], at)
       device.queue.writeTexture({ texture: background as never }, data, { bytesPerRow: W * 4 }, [W, H])
       await author.begin(title); chain.begin(author.commandEncoder())
-      const result = await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'glow', params: { strength, radius: 35, dither: 0, source_opacity: sourceOpacity, threshold: 10 } }]), reference, {}, 'fixed', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+      const result = await chain.encode('title', source, W, H, resolveAuthorEffects([{ id: 'glow', params: { strength, radius: 35, dither: 0, source_opacity: sourceOpacity, threshold: 10 } }]), reference, {}, 'fixed', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H), 0)
       draw(title, result.picture, layerOpacity)
       author.finish(); chain.commit()
       await author.begin(internal); draw(internal, background)
@@ -739,7 +767,7 @@ describe('作者图层效果（真实设备）', () => {
     const d = device as unknown as GpuDevice, chain = new VideoEditAuthorEffects(d, allocator()), author = new VideoEditAuthorGpu(d)
     const source = input(), target = output()
     const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'interactive' as const }
-    const encode = (slot: string, amount: number) => chain.encode(slot, source, W, H, resolveAuthorEffects([{ id: 'black_white' }, { id: 'sharpen', params: { amount } }]), context, {}, 'constant', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+    const encode = (slot: string, amount: number) => chain.encode(slot, source, W, H, resolveAuthorEffects([{ id: 'black_white' }, { id: 'sharpen', params: { amount } }]), context, {}, 'constant', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H), 0)
     try {
       await author.begin(target); chain.begin(author.commandEncoder())
       const first = await encode('a', 0), second = await encode('b', 100)
@@ -768,7 +796,7 @@ it('图层发光采样网格跨外扩档稳定，局部公开高斯与镜头虚�
     device.queue.writeTexture({ texture: source }, data, { bytesPerRow: width * 4 }, [width, height])
     try {
       await author.begin(target); chain.begin(author.commandEncoder()); author.mipmaps(source as unknown as GpuTexture, width, height)
-      const result = await chain.encode('padded', source as unknown as GpuTexture, width, height, resolveAuthorEffects(descriptors), { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: 9, height: 7 }, rasterScale: 1, rasterOrigin: [pad, pad], quality }, {}, undefined, { radius: defocus, lens: false }, texture => author.mipmaps(texture, width, height))
+      const result = await chain.encode('padded', source as unknown as GpuTexture, width, height, resolveAuthorEffects(descriptors), { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: 9, height: 7 }, rasterScale: 1, rasterOrigin: [pad, pad], quality }, {}, undefined, { radius: defocus, lens: false }, texture => author.mipmaps(texture, width, height), 0)
       author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width, height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 28 - pad, 14 - pad], opacity: 1 } }])
       author.finish(); chain.commit(); return await read(target)
     } finally { source.destroy() }
@@ -821,7 +849,7 @@ it('主链顺序与 underlay 保留语义，最终虚化同时作用全部输出
   const render = async (descriptors: Array<{ id: string; params: Record<string, number> }>, defocus = 0) => {
     const capture = async (onlyLight: boolean): Promise<Uint8Array> => {
     await author.begin(target); chain.begin(author.commandEncoder())
-    const result = await chain.encode('chain', source, W, H, resolveAuthorEffects(descriptors.map(effect => onlyLight && effect.id === 'glow' ? { ...effect, params: { ...effect.params, source_opacity: 0 } } : effect)), context, {}, undefined, { radius: defocus, lens: false }, texture => author.mipmaps(texture, W, H))
+    const result = await chain.encode('chain', source, W, H, resolveAuthorEffects(descriptors.map(effect => onlyLight && effect.id === 'glow' ? { ...effect, params: { ...effect.params, source_opacity: 0 } } : effect)), context, {}, undefined, { radius: defocus, lens: false }, texture => author.mipmaps(texture, W, H), 0)
     author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
     author.finish(); chain.commit(); return read(target)
     }
@@ -845,7 +873,7 @@ it('发光层高斯 pose.blur 保持光能量，亚像素阈值两侧连续', as
   const render = async (blur: number): Promise<Uint8Array> => {
     await author.begin(target); chain.begin(author.commandEncoder())
     const { radius } = authorLayerBlur({ blur }, 1, undefined)
-    const result = await chain.encode('light', source, W, H, descriptors, context, {}, undefined, { radius, lens: false }, texture => author.mipmaps(texture, W, H))
+    const result = await chain.encode('light', source, W, H, descriptors, context, {}, undefined, { radius, lens: false }, texture => author.mipmaps(texture, W, H), 0)
     author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
     author.finish(); chain.commit(); return read(target)
   }
@@ -1157,7 +1185,7 @@ describe('颜色效果（真实设备）', () => {
     try {
       await author.begin(target); chain.begin(author.commandEncoder())
       const { dark, light } = VIDEO_EDIT_GRADIENT_MAP_TEST_COLORS
-      const result = await chain.encode('color', source, W, H, resolveAuthorEffects([gradientMap({ dark_color: dark, light_color: light }), posterize({ levels: 2 }), invert()]), context, {}, 'constant', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H))
+      const result = await chain.encode('color', source, W, H, resolveAuthorEffects([gradientMap({ dark_color: dark, light_color: light }), posterize({ levels: 2 }), invert()]), context, {}, 'constant', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H), 0)
       author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
       author.finish(); chain.commit()
       const pixels = await read(target)

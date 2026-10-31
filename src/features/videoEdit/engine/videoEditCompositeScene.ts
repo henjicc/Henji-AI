@@ -81,9 +81,10 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       const previous = result; const previousKey = key
       try {
         // Render-only clip clock (seconds since the clip starts): moving a clip keeps its look. Never persisted.
+        // 随帧效果的种子同样按片段自己的帧号取：复制、挪动片段观感不变，与只记相对位置的预渲染窗口一致。
         const builtin = plan.builtin && { ...plan.builtin, shaderTimeSeconds: (frame - clip.start) / document.fps }
         const filtered = plan.builtin
-          ? await runtime.builtin(free[0], builtin!, result, frame, renderScale, document.colorLuts, quality, logical)
+          ? await runtime.builtin(free[0], builtin!, result, frame - clip.start, renderScale, document.colorLuts, quality, logical)
           : await runtime.authorFilter(free[0], plan.instanceKey, plan.program, plan.parameters, result, plan.info, plan.program.frames.length ? await readFilterFrames?.(clip, plan, result) : [])
         current()
         if (plan.builtin && plan.mask) {

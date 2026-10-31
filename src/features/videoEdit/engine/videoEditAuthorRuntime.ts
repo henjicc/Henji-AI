@@ -15,7 +15,7 @@ import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScal
 import { authorCanvasContent, type AuthorCanvasBox } from './videoEditAuthorCanvasBounds'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
-import { isAuthorAdjustment } from './videoEditAuthorModule'
+import { authorFrameNumber, isAuthorAdjustment } from './videoEditAuthorModule'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
@@ -521,7 +521,7 @@ export class VideoEditAuthorRuntime {
             if (!this.layerEffects) { this.layerEffects = new VideoEditAuthorEffects(this.device, this.effectAllocator); this.layerEffects.begin(this.layers.commandEncoder()) }
             const result = await this.layerEffects.encode(`adjust:${index}:${id}`, input, outWidth, outHeight, effects,
               { referenceSize: { width, height }, contentBounds: { x: 0, y: 0, width, height }, rasterScale: sx, rasterOrigin: [0, 0], quality }, environment,
-              undefined, { radius: 0, lens: false }, () => {}, needsFloat, { frame: Math.round(info.time / info.frameDuration), opacity })
+              undefined, { radius: 0, lens: false }, () => {}, authorFrameNumber(this.effect, info), needsFloat, { opacity })
             this.layers.copy(result.picture, input, outWidth, outHeight, clip)
             carriesLight ||= result.carriesLight
             hasContent = true
@@ -610,7 +610,7 @@ export class VideoEditAuthorRuntime {
           if (effects.length || radius > 0) {
             if (!this.layerEffects) { this.layerEffects = new VideoEditAuthorEffects(this.device, this.effectAllocator); this.layerEffects.begin(this.layers.commandEncoder()) }
             result = await this.layerEffects.encode(slot, surface.texture, canvas.width, canvas.height, effects, reference(resolution, pad), environment,
-              surface.content ? `${this.sourceVersions.get(slot)}:${surface.content.key}` : undefined, { radius, lens: layer.blurShape === 'lens' }, texture => this.layers.mipmaps(texture, canvas.width, canvas.height), needsFloat)
+              surface.content ? `${this.sourceVersions.get(slot)}:${surface.content.key}` : undefined, { radius, lens: layer.blurShape === 'lens' }, texture => this.layers.mipmaps(texture, canvas.width, canvas.height), authorFrameNumber(this.effect, info), needsFloat)
           }
           const poses = samples.map(sample => {
             if (!sample.pose) return sample

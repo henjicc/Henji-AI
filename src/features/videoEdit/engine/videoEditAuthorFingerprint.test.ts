@@ -236,7 +236,7 @@ it('按帧取种子由效果声明驱动，恒定 frameKey 不会冻结其他逐
   const requireEffect = builtinEffects.requireVideoEditBuiltinEffect
   const seeded = vi.spyOn(builtinEffects, 'requireVideoEditBuiltinEffect').mockImplementation(id => {
     const definition = requireEffect(id)
-    return id === 'black_white' ? { ...definition, frameSeeded: true } : definition
+    return id === 'black_white' ? { ...definition, frameSeed: (_params: unknown, frame: number) => frame } : definition
   })
   const effect: AuthorModule = { name: '声明种子', frameKey: () => 'settled', layers: () => [{ id: 'grade', adjust: () => [{ id: 'black_white' }] }] }
   try {
@@ -248,6 +248,19 @@ it('按帧取种子由效果声明驱动，恒定 frameKey 不会冻结其他逐
       expect(fingerprint(1)).not.toEqual(fingerprint(1 + info.frameDuration))
     }
   } finally { seeded.mockRestore() }
+  // 普通图层上的故障同样按帧取种子：录制与 frameKey 两条指纹路径并入的是错法段号，不是帧号。
+  const glitching = (params: Record<string, number>): AuthorModule => ({ name: '故障标题', frameKey: () => 'settled', layers: () => [{ id: 'title', draw(ctx) { ctx.fillRect(0, 0, 10, 10) }, effects: () => [{ id: 'glitch', params }] }] })
+  for (const declared of [true, false]) {
+    const fingerprint = (params: Record<string, number>, frame: number) => declared
+      ? fingerprintAuthorFrameKey(glitching(params), size, {}, { ...info, time: frame * info.frameDuration }, {}, 'code', {}, undefined, false, {}, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+      : fingerprintAuthorFrame(glitching(params), size, {}, { ...info, time: frame * info.frameDuration }, {}, measure, undefined, false, {}, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+    expect(fingerprint({ rhythm: 100 }, 60).digest).toBeTruthy()
+    expect(fingerprint({ rhythm: 100 }, 60)).not.toEqual(fingerprint({ rhythm: 100 }, 61))
+    // 默认约 6 帧一段：同一段内复用，换段才变；强度 0 时与帧号无关。
+    expect(fingerprint({}, 60)).toEqual(fingerprint({}, 61))
+    expect(fingerprint({}, 60)).not.toEqual(fingerprint({}, 66))
+    expect(fingerprint({ amount: 0 }, 60)).toEqual(fingerprint({ amount: 0 }, 997))
+  }
 })
 
 it.each([4, 7, 8])('API %s 不读取继承的 adjust，保留自定义字段的指纹语义', apiVersion => {

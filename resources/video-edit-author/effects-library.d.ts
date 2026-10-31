@@ -440,6 +440,25 @@ export interface MosaicParams {
   readonly block_size?: number
 }
 
+export interface GlitchParams {
+  /** 强度；出错有多凶。0 没有故障；40（默认）几块明显错位；100 大半个画面碎掉。数字故障超过 60 时偶尔还有一块反色。；默认 40；硬范围 0–100；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 方式；怎么出错。数字故障（默认）一块块横向错开、红蓝分离；条带错位把画面切成平行条带各自偏移；压缩失真像码率不够时的方块与串色。；默认 "digital"；可动画 true */
+  readonly mode?: "digital" | "bars" | "compression"
+  /** 变化频率；多久换一种错法。0% 定住不变；60%（默认）约每 6 帧一变；100% 每帧都换。；默认 60；硬范围 0–100；单位 percent；可动画 true */
+  readonly rhythm?: number
+  /** 色彩分离；红、蓝两色错开多远。0 不分色；40（默认）约为画面高度的 2%；100 约 5%。只出现在错开的块和条带上。；默认 40；硬范围 0–100；单位 strength；显隐 {"param":"mode","notEquals":"compression"}；可动画 true */
+  readonly rgb_split?: number
+  /** 块大小；错位块或压缩方块有多大。10 约为画面高度的 0.3%，细碎；40（默认）约 0.9%；100 约 8%，大块碎片。数字故障的块是宽为高 4 倍的长条，还会混进 2 倍、4 倍大的块。；默认 40；硬范围 0–100；单位 strength；分组 块；显隐 {"param":"mode","notEquals":"bars"}；可动画 true */
+  readonly block_size?: number
+  /** 条带数；画面切成几条。4 几条宽带；12（默认）；40 细碎的条纹。可以输入到 200。；默认 12；常用 2–40；硬范围 2–200；单位 value；分组 块；显隐 {"param":"mode","equals":"bars"}；可动画 true */
+  readonly bars?: number
+  /** 角度；条带的走向。0°（默认）水平条带，左右错开；90° 竖直条带，上下错开。；默认 0；硬范围 -180–180；单位 degrees；分组 块；显隐 {"param":"mode","equals":"bars"}；可动画 true */
+  readonly angle?: number
+  /** 随机种子；换一个数，出错的位置和样子就换一种，强度和节奏不变。同一画面几处都用故障时各填不同的数。；默认 0；硬范围 0–9999；单位 value；分组 块；可动画 false */
+  readonly seed?: number
+}
+
 export interface DissolveRevealParams {
   /** 进度；显现了多少。0% 完全看不见；50%（默认）出来一半；100% 完整显示，和没加效果一样。做消散就从 100% 调到 0%。；默认 50；硬范围 0–100；单位 percent；可动画 true */
   readonly progress?: number
@@ -476,6 +495,7 @@ export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'chromatic_aberration'; readonly params?: ChromaticAberrationParams }
   | { readonly id: 'film_grain'; readonly params?: FilmGrainParams }
   | { readonly id: 'mosaic'; readonly params?: MosaicParams }
+  | { readonly id: 'glitch'; readonly params?: GlitchParams }
   | { readonly id: 'dissolve_reveal'; readonly params?: DissolveRevealParams }
 export interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }
 /** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */
@@ -496,5 +516,6 @@ export declare function vignette(params?: VignetteParams): { readonly id: 'vigne
 export declare function chromaticAberration(params?: ChromaticAberrationParams): { readonly id: 'chromatic_aberration'; readonly params: ChromaticAberrationParams }
 export declare function grain(params?: FilmGrainParams): { readonly id: 'film_grain'; readonly params: FilmGrainParams }
 export declare function mosaic(params?: MosaicParams): { readonly id: 'mosaic'; readonly params: MosaicParams }
+export declare function glitch(params?: GlitchParams): { readonly id: 'glitch'; readonly params: GlitchParams }
 export declare function dissolve(params?: DissolveRevealParams): { readonly id: 'dissolve_reveal'; readonly params: DissolveRevealParams }
 export declare function look(name: string, knobs?: Readonly<Record<string, number>>): LookDescriptor

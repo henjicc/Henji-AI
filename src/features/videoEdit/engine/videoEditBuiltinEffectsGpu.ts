@@ -103,7 +103,7 @@ export class VideoEditBuiltinEffectsGpu {
     const plan = planVideoEditBuiltinEffect(instance, { width, height, frame: 0 })
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
-  /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
+  /** `input` 与 `output` 尺寸相同；`frame` 是片段自己的帧号，只用作随帧效果（颗粒、故障）的确定种子。 */
   async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize): Promise<void> {
     await this.encodePlan(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts)
   }
