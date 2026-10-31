@@ -12,13 +12,14 @@ import type { VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { VideoEditWebPicture } from './videoEditWebInputs'
+import { codeWebPixelSize } from '@/core/videoEdit/codeMaterial/webSource'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { VIDEO_EDIT_CODE_PICTURE_BUDGET_BYTES, VIDEO_EDIT_CODE_PICTURE_BUDGET_LABEL, VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
-import { loadAuthorModule, type AuthorFrameInfo, type AuthorParameters } from './videoEditAuthorModule'
+import { loadAuthorModule, type AuthorFrameInfo, type AuthorParameters, type AuthorWebFrame } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import type { AuthorElementObservation, AuthorElementOverrides } from './videoEditAuthorElements'
@@ -383,6 +384,15 @@ export class VideoEditGpuCompositor {
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
     this.blankTexture ??= this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x04 })
     return new VideoEditGpuFrame({ timestamp, duration, displayWidth: Math.max(1, width), displayHeight: Math.max(1, height), rotation: 0, flip: false }, this.blankTexture, undefined, 4, () => {})
+  }
+  /** 来源第一幅尚未到达时，代码输入也使用同一张透明像素，仍满足图片参数的可绘制契约。 */
+  async blankWebPicture(web: AuthorWebFrame): Promise<VideoEditWebPicture> {
+    await this.ready
+    this.assertDevice()
+    if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
+    this.blankTexture ??= this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x04 })
+    const size = codeWebPixelSize(web)
+    return new VideoEditWebPicture(this.blankTexture!, 1, 1, this.device, web, false, size)
   }
   /**
    * 帧混合（时间重映射补帧）：`a`、`b` 是同一素材相邻两帧，返回 a·(1−weight) + b·weight 的新帧（同尺寸、同格式，

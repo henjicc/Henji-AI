@@ -245,12 +245,20 @@ export interface WebSourceCaptureRequest {
   ticket: string
   /** 要读取矩形的选择器。 */
   boxes?: string[]
+  /** 实际输出倍率；省略时沿用页面当前倍率。 */
+  scale?: number
+  /** 播放、拖动只保留最后一个尚未执行的目标。 */
+  latest?: boolean
 }
 
 /** 元素在视口里的矩形 [x, y, w, h]（CSS 像素）；找不到为 null。 */
 export type WebSourceBox = [number, number, number, number] | null
 
 export interface WebSourceCaptureResult {
+  /** 被更新目标或取消票据取代，不会送出画面。 */
+  dropped?: boolean
+  pixelWidth: number
+  pixelHeight: number
   /** 帧随 `request: { kind: 'frame_at', id: ticket }` 经帧通道到达。没有请求选择器时为 null。 */
   boxes: Record<string, WebSourceBox> | null
   /** 页面当前声明的总时长（网页文件改动重新载入后可能变化）。 */
@@ -284,6 +292,7 @@ export type VideoFramePortCall =
   | { method: 'closeAudio'; params: { audioId: string } }
   | { method: 'openWeb'; params: Omit<WebSourceOpenRequest, 'route'> }
   | { method: 'captureWeb'; params: WebSourceCaptureRequest }
+  | { method: 'cancelWeb'; params: { streamId: string; ticket: string } }
   | { method: 'closeWeb'; params: { streamId: string } }
 
 export interface VideoFramePortCallResults {
@@ -301,6 +310,7 @@ export interface VideoFramePortCallResults {
   closeAudio: boolean
   openWeb: WebSourceInfo
   captureWeb: WebSourceCaptureResult
+  cancelWeb: boolean
   closeWeb: boolean
 }
 

@@ -57,6 +57,7 @@ const PORT_CALL_CHANNELS: Record<VideoFramePortCall['method'], string> = {
   closeAudio: 'videoFrames:closeAudio',
   openWeb: 'videoFrames:openWeb',
   captureWeb: 'videoFrames:captureWeb',
+  cancelWeb: 'videoFrames:cancelWeb',
   closeWeb: 'videoFrames:closeWeb',
 }
 
@@ -93,6 +94,12 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
   const counters = { received: 0, delivered: 0, dropped: 0, returned: 0 }
   let nextRoute = 1
   let nextToken = 1
+
+  ipcRenderer.on(WEB_SOURCE_CONTENT_CHANGED_CHANNEL, (_event, change: WebSourceContentChange) => {
+    for (const route of routes.values()) {
+      try { route.port.postMessage({ type: 'webContent', change }, []) } catch { /* 已关闭的端口不再接收变更。 */ }
+    }
+  })
 
   sharedTexture.setSharedTextureReceiver(async (data, ...args: unknown[]) => {
     const imported = data.importedSharedTexture

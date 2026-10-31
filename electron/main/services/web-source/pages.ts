@@ -23,7 +23,7 @@ export function parseWebSourceOpenRequest(input: unknown): WebSourceOpenRequest 
   const fields = record(input, '网页来源请求')
   if (typeof fields.route !== 'string' || !ROUTE_PATTERN.test(fields.route)) throw new Error('网页来源参数 route 无效')
   if (['width', 'height', 'region', 'scale'].some(key => fields[key] === undefined)) throw new Error('网页来源需要 width、height、region 与 scale')
-  const view = codeWebView({ width: fields.width as number, height: fields.height as number, region: fields.region as number[], scale: fields.scale as number })
+  const view = codeWebView({ width: fields.width as number, height: fields.height as number, region: fields.region as number[], scale: fields.scale as number }, 'output')
   return { route: fields.route, path: sourcePath(fields.path), ...view }
 }
 
@@ -32,7 +32,9 @@ export function parseWebSourceCaptureRequest(input: unknown): WebSourceCaptureRe
   for (const key of ['streamId', 'ticket'] as const) if (typeof fields[key] !== 'string' || !ID_PATTERN.test(fields[key] as string)) throw new Error(`网页取帧参数 ${key} 无效`)
   if (typeof fields.time !== 'number' || !Number.isFinite(fields.time) || fields.time < 0) throw new Error('网页取帧参数 time 需要非负秒数')
   if (fields.boxes !== undefined) { const issue = codeWebBoxesIssue(fields.boxes); if (issue) throw new Error(issue) }
-  return { streamId: fields.streamId as string, ticket: fields.ticket as string, time: fields.time, ...(fields.boxes ? { boxes: fields.boxes as string[] } : {}) }
+  if (fields.scale !== undefined && (typeof fields.scale !== 'number' || !Number.isFinite(fields.scale) || fields.scale <= 0 || fields.scale > 8192)) throw new Error('网页取帧倍率需要大于 0 且不超过 8192')
+  if (fields.latest !== undefined && typeof fields.latest !== 'boolean') throw new Error('网页取帧 latest 需要布尔值')
+  return { streamId: fields.streamId as string, ticket: fields.ticket as string, time: fields.time, ...(fields.boxes ? { boxes: fields.boxes as string[] } : {}), ...(fields.scale !== undefined ? { scale: fields.scale as number } : {}), ...(fields.latest !== undefined ? { latest: fields.latest as boolean } : {}) }
 }
 
 /**
@@ -47,7 +49,7 @@ export function parseWebSourcePaths(input: unknown): string[] {
 
 /**
  * 网页来源的离屏页面：每个页面归属打开它的窗口与帧通道（通道断开、窗口导航或关闭时一并关掉），取帧只能操作本窗口的页面。
- * 同一通道里同一来源与取景只开一个页面由渲染层保证（它按来源与取景复用会话）。
+ * 渲染层按来源、取景与取样轨道复用页面；不同轨道可以停在不同的页面时刻。
  */
 export class WebSourcePages {
   private readonly pages = new Map<string, WebSourcePage>()
@@ -144,18 +146,27 @@ export class WebSourcePages {
     if (!page || page.target.id !== targetId) throw new Error('网页来源不存在或不属于当前窗口')
     const startedAt = performance.now()
     try {
-      const { boxes, duration, unsettled } = await page.capture(request.time, request.ticket, request.boxes)
-      this.logger.debug('网页取帧完成', { event: 'web_source.capture.completed', context: { streamId: page.streamId, ticket: request.ticket, time: request.time, elapsedMs: performance.now() - startedAt, ...page.capturePath } })
+      const { boxes, duration, unsettled, dropped, pixelWidth, pixelHeight } = await page.capture(request.time, request.ticket, request.boxes, request)
+      if (dropped) {
+        this.logger.debug('过时网页取帧已丢弃', { event: 'web_source.capture.dropped', context: { streamId: page.streamId, ticket: request.ticket, time: request.time } })
+        return { boxes, duration, contentHash: page.contentHash, dropped, pixelWidth, pixelHeight }
+      }
+      this.logger.debug('网页取帧完成', { event: 'web_source.capture.completed', context: { streamId: page.streamId, ticket: request.ticket, time: request.time, scale: request.scale, pixelWidth, pixelHeight, elapsedMs: performance.now() - startedAt, ...page.capturePath } })
       if (this.lastFailure.delete(page.streamId)) this.logger.info('网页取帧已恢复', { event: 'web_source.capture.recovered', context: { streamId: page.streamId } })
       if (unsettled && !this.unsettled.has(page.streamId)) {
         this.unsettled.add(page.streamId)
         this.logger.warn('网页在 seek 之后一直在变，取帧按最新画面（页面没按约定停住，同一时刻的画面可能不一致）', { event: 'web_source.capture.not_static', context: { streamId: page.streamId, time: request.time } })
       }
-      return { boxes, duration, contentHash: page.contentHash }
+      return { boxes, duration, contentHash: page.contentHash, pixelWidth, pixelHeight }
     } catch (error) {
       this.failed(page, 'web_source.capture.failed', '网页取帧失败', error, { time: request.time })
       throw error
     }
+  }
+
+  cancel(targetId: number, streamId: string, ticket: string): boolean {
+    const page = this.pages.get(streamId)
+    return page?.target.id === targetId ? page.cancel(ticket) : false
   }
 
   private failed(page: WebSourcePage, event: string, message: string, error: unknown, context: Record<string, unknown> = {}): void {

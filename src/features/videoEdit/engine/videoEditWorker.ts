@@ -46,6 +46,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'parameters'; update: VideoEditParameterUpdate }
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
   | { kind: 'scale'; divisor: number }
+  | { kind: 'webOutputScale'; scale: number }
   | { kind: 'arm'; frame: number }
   | { kind: 'prepareGpu' }
   | { kind: 'authorMetadata'; url: string; locations?: import('./videoEditAuthorBundle').AuthorSourceLocations; apiVersion?: number }
@@ -456,6 +457,9 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
       } else if (request.kind === 'scale') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         renderer.setRenderDivisor(request.divisor); self.postMessage({ id: request.id } satisfies RenderResponse)
+      } else if (request.kind === 'webOutputScale') {
+        if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        renderer.setWebOutputScale(request.scale); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'precision') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         const precision = await renderer.precisionDiagnostics(request.row)

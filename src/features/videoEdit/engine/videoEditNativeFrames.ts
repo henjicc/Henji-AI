@@ -1,5 +1,6 @@
 import type { VideoFrameMeta, VideoFramePortCall, VideoFramePortEndedMessage, VideoFrameStreamEndedPayload, VideoFramePortCallResults, VideoFramePortFrameMessage, VideoFramePortReleaseMessage, VideoFramePortRequestMessage, VideoFramePortResponseMessage, VideoFramePortScheduleMessage, VideoFrameScheduleEvent } from '@/platform/contracts/videoFrames'
 import { VideoEditNativeCallError } from './videoEditNativeFailure'
+import type { WebSourceContentChange } from '@/platform/contracts/videoFrames'
 
 /** 只需要设备队列的“已提交工作完成”通知。 */
 export interface NativeFrameReleaseDevice {
@@ -33,7 +34,7 @@ export interface NativeFrameReceiverStats {
 
 type FrameHandler = (frame: NativeVideoFrame) => void
 type ScheduleHandler = (event: VideoFrameScheduleEvent) => void
-type PortMessage = VideoFramePortFrameMessage | VideoFramePortScheduleMessage | VideoFramePortResponseMessage | VideoFramePortEndedMessage
+type PortMessage = VideoFramePortFrameMessage | VideoFramePortScheduleMessage | VideoFramePortResponseMessage | VideoFramePortEndedMessage | { type: 'webContent'; change: WebSourceContentChange }
 type EndedHandler = (payload: VideoFrameStreamEndedPayload) => void
 /** 一次端口请求的参数（按方法区分）。 */
 export type NativeFrameCallParams<M extends VideoFramePortCall['method']> = Extract<VideoFramePortCall, { method: M }>['params']
@@ -42,6 +43,7 @@ export class VideoEditNativeFrameReceiver {
   private readonly handlers = new Map<string, FrameHandler>()
   private readonly scheduleHandlers = new Map<string, ScheduleHandler>()
   private readonly endedHandlers = new Map<string, EndedHandler>()
+  private readonly webContentHandlers = new Set<(change: WebSourceContentChange) => void>()
   private readonly outstanding = new Set<NativeVideoFrame>()
   private readonly counters = { received: 0, released: 0, unclaimed: 0 }
   /** 已决定交回、尚未发出的帧（等 GPU 工作完成或下一个任务）。 */
@@ -57,6 +59,7 @@ export class VideoEditNativeFrameReceiver {
       if (message?.type === 'schedule') this.scheduleHandlers.get(message.event.streamId)?.(message.event)
       else if (message?.type === 'response') this.answer(message)
       else if (message?.type === 'ended') this.endedHandlers.get(message.payload.streamId)?.(message.payload)
+      else if (message?.type === 'webContent') { for (const handler of this.webContentHandlers) handler(message.change) }
       else this.receive(message)
     }
     port.start?.()
@@ -93,6 +96,11 @@ export class VideoEditNativeFrameReceiver {
     }
   }
 
+  subscribeWebContent(handler: (change: WebSourceContentChange) => void): () => void {
+    this.webContentHandlers.add(handler)
+    return () => { this.webContentHandlers.delete(handler) }
+  }
+
   /** 订阅解码会话的计划事件（缺帧、计划结束）。帧与这些事件经不同通道到达，消费方按 index 对齐。 */
   subscribeSchedule(streamId: string, handler: ScheduleHandler): () => void {
     this.scheduleHandlers.set(streamId, handler)
@@ -123,6 +131,7 @@ export class VideoEditNativeFrameReceiver {
     this.handlers.clear()
     this.scheduleHandlers.clear()
     this.endedHandlers.clear()
+    this.webContentHandlers.clear()
     for (const call of this.calls.values()) call.reject(new VideoEditNativeCallError('原生帧通道已关闭。', 'CHANNEL_CLOSED'))
     this.calls.clear()
     for (const frame of [...this.outstanding]) frame.release()

@@ -104,6 +104,7 @@ export function registerVideoFramesIpc(): void {
   // 网页来源：离屏页面按页面时间出画面，画面与解码帧走同一条通道；页面归属打开它的窗口与通道。
   registerIpcHandler<WebSourceOpenRequest, WebSourceInfo>('videoFrames:openWeb', parseWebSourceOpenRequest, (request, event) => getWebSourcePages().open(webContentsFrameTarget(event.sender), request))
   registerIpcHandler<WebSourceCaptureRequest, WebSourceCaptureResult>('videoFrames:captureWeb', parseWebSourceCaptureRequest, (request, event) => getWebSourcePages().capture(event.sender.id, request))
+  registerIpcHandler<{ streamId: string; ticket: string }, boolean>('videoFrames:cancelWeb', parseVideoFrameAtCancelRequest, (request, event) => getWebSourcePages().cancel(event.sender.id, request.streamId, request.ticket))
   registerIpcHandler<string, boolean>('videoFrames:closeWeb', (input) => parseStringField(input, 'streamId'), (streamId, event) => getWebSourcePages().close(event.sender.id, streamId))
   registerIpcHandler<string[], Record<string, string | null>>('videoFrames:watchWebContent', parseWebSourcePaths, (paths, event) => getWebSourcePages().watchContent(webContentsFrameTarget(event.sender), paths))
   // 通道断开（preload disconnect）时关闭该通道上仍打开的会话（画面、声音与网页）：消费方 Worker 被终止时可能来不及自行关闭。

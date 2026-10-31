@@ -195,4 +195,22 @@ describe('videoFrames preload', () => {
     await expect(receive({ importedSharedTexture: { getVideoFrame: () => { throw new Error('lost') }, release } }, meta('x'))).rejects.toThrow('lost')
     expect(release).toHaveBeenCalledOnce()
   })
+
+  it('网页取消票据走既有帧端口，内容变更只通知仍连接的端口', async () => {
+    const { ipcRenderer } = await import('electron')
+    const { api, invoke } = await create(vi.fn(async () => true))
+    const route = api.connect(), worker = announcements[0].port
+    const replies: unknown[] = []
+    worker.onmessage = event => replies.push(event.data)
+    worker.postMessage({ type: 'request', id: 1, call: { method: 'cancelWeb', params: { streamId: 'web-1', ticket: 'web-2' } } })
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('videoFrames:cancelWeb', { streamId: 'web-1', ticket: 'web-2' }))
+    const changed = vi.mocked(ipcRenderer.on).mock.calls.filter(([channel]) => channel === 'videoFrames:webContentChanged').at(-1)![1]
+    const change = { path: '/site', contentHash: 'changed' }
+    changed({} as Electron.IpcRendererEvent, change)
+    expect(replies).toContainEqual({ type: 'webContent', change })
+    api.disconnect(route)
+    const count = replies.length
+    changed({} as Electron.IpcRendererEvent, change)
+    expect(replies).toHaveLength(count)
+  })
 })

@@ -27,7 +27,7 @@ import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions } from '
 import type { SmartRegionProgressEvent, SmartRegionRequest } from '@/platform/contracts/smartRegions'
 import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegionMasks'
 
-const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][], smartRegions: [] as VideoEditSmartRegionSegments[] }))
+const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), webScale: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][], smartRegions: [] as VideoEditSmartRegionSegments[] }))
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], Input: class { dispose() {} async getPrimaryVideoTrack() { return { codec: 'avc', displayWidth: 1920, displayHeight: 1080, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 4, bestGuessFrameRate: 30, frameRateIsConstant: true }) } } async getPrimaryAudioTrack() { return { codec: 'aac', numberOfChannels: 2, sampleRate: 48000, canDecode: async () => true } } async getAudioTracks() { return [await this.getPrimaryAudioTrack()] } async computeDuration() { return .2 } }, UrlSource: class {},
   Mp4OutputFormat: class { constructor() { encoding.formats.push('mp4') } }, AdtsOutputFormat: class { constructor() { encoding.formats.push('aac') } }, WavOutputFormat: class { constructor() { encoding.formats.push('wav') } }, StreamTarget: class {},
@@ -37,6 +37,7 @@ vi.mock('mediabunny', () => ({
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   canvas = {}; constructor(private composition: VideoEditComposition, ...options: unknown[]) { encoding.pictures.push(composition); encoding.rendererOptions.push(options) }
+  setWebOutputScale = encoding.webScale
   updateDocument(document: VideoEditComposition) { this.composition = document }
   async renderBitmap() { return { bitmap: { width: 640, height: 360, close() {} } } }
   setSmartRegions(segments: VideoEditSmartRegionSegments) { encoding.smartRegions.push(segments) } setTracks() {} setRenderCache() {} async dispose() {}
@@ -53,6 +54,7 @@ beforeEach(() => {
   vi.mocked(canEncodeVideo).mockReset().mockResolvedValue(true)
   vi.mocked(canEncodeAudio).mockReset().mockResolvedValue(true)
   installHarnessNativeStorage(); encoding.rendered = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.audioOptions = []; encoding.pictures = []; encoding.rendererOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
+  encoding.webScale.mockClear()
   videoEditExportQueue.clearFinished(); videoEditExportPresetLibrary.replace([])
   const platform = getPlatform()
   vi.spyOn(platform.videoEditExport, 'register').mockImplementation(async request => request.jobs.map(job => ({ id: job.id, retained: job.restorable })))
@@ -218,6 +220,15 @@ it('正式编码固定序列快照；输出帧率只影响画面；历史队列�
   expect(encoding.videoTimes).toEqual([0, 1 / 60, 2 / 60, 3 / 60]); expect(encoding.audio.reduce((sum, value) => sum + value, 0)).toBe(.2 * getActiveVideoEditSequence(owner).sampleRate)
   expect(encoding.formats).toEqual(['mp4', 'wav']); expect(jobs[1].task?.output?.kind).toBe('audio'); expect(videoEditQueuedExportTask(projectId, jobs[0].id)).toBe(jobs[0].task)
   expect(encoding.draw).toHaveBeenCalledWith({}, 0, 0, 1920, 1080, 0, 656.25, 1080, 607.5)
+  expect(encoding.webScale).toHaveBeenCalledWith(1080 / 1920)
+})
+it('1080p 序列导出 4K 不提高网页声明倍率', async () => {
+  const owner = await project(), projectId = owner.document.id
+  const settings = { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), width: 3840, height: 2160, loudness: null, addToLibrary: false, captionMode: 'none' as const }
+  const [job] = await enqueueVideoEditExports([{ projectId, settings, path: file('4k.mp4'), range: { startFrame: 0, endFrame: 1 } }])
+  await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('completed')
+  expect(encoding.webScale).toHaveBeenCalledWith(1)
 })
 it('正式队列单项失败可重试；已发布文件的回执失败不重新编码或删除', async () => {
   const owner = await project(); const projectId = owner.document.id

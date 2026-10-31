@@ -21,7 +21,7 @@ interface CodeWebViewInput { width?: number; height?: number; region?: readonly 
 const integer = (value: unknown, min: number, max: number): boolean => typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
 
 /** 取景不合法时的说明（用户语言）；合法为 undefined。 */
-export function codeWebViewIssue(input: CodeWebViewInput): string | undefined {
+export function codeWebViewIssue(input: CodeWebViewInput, purpose: 'author' | 'output' = 'author'): string | undefined {
   const width = input.width ?? CODE_WEB_DEFAULT_VIEWPORT.width, height = input.height ?? CODE_WEB_DEFAULT_VIEWPORT.height
   if (!integer(width, 1, 16384) || !integer(height, 1, 16384)) return '网页视口 width/height 需要 1–16384 的整数 CSS 像素。'
   const region = input.region ?? [0, 0, width, height]
@@ -29,16 +29,18 @@ export function codeWebViewIssue(input: CodeWebViewInput): string | undefined {
   const [x, y, w, h] = region
   if (w < 1 || h < 1 || x + w > width || y + h > height) return '网页取景 region 必须落在视口内，宽高至少 1。'
   const scale = input.scale ?? CODE_WEB_DEFAULT_SCALE
-  if (typeof scale !== 'number' || !Number.isFinite(scale) || scale < 0.25 || scale > CODE_WEB_MAX_SCALE) return `网页渲染倍率 scale 需要 0.25–${CODE_WEB_MAX_SCALE}。`
-  const pixels = codeWebPixelSize({ width, height, region: [x, y, w, h], scale })
-  if (pixels.width > CODE_WEB_MAX_TEXTURE || pixels.height > CODE_WEB_MAX_TEXTURE) return `网页画面每边最多 ${CODE_WEB_MAX_TEXTURE} 像素：取景 ${w}×${h} 乘倍率 ${scale} 超出了，请缩小 region（只取露出的部分）或降低 scale。`
-  if (pixels.width < 1 || pixels.height < 1) return `网页取景 ${w}×${h} 乘倍率 ${scale} 不足 1 个像素，请放大 region 或提高 scale。`
+  if (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0) return '网页渲染倍率 scale 需要正有限数。'
+  if (purpose === 'author' && (scale < 0.25 || scale > CODE_WEB_MAX_SCALE)) return `网页渲染倍率 scale 需要 0.25–${CODE_WEB_MAX_SCALE}。`
+  const pixels = { width: Math.floor(w * scale), height: Math.floor(h * scale) }
+  if (!Number.isSafeInteger(pixels.width) || !Number.isSafeInteger(pixels.height)) return '网页输出像素尺寸无效。'
+  if (purpose === 'author' && (pixels.width > CODE_WEB_MAX_TEXTURE || pixels.height > CODE_WEB_MAX_TEXTURE)) return `网页画面每边最多 ${CODE_WEB_MAX_TEXTURE} 像素：取景 ${w}×${h} 乘倍率 ${scale} 超出了，请缩小 region（只取露出的部分）或降低 scale。`
+  if (purpose === 'author' && (pixels.width < 1 || pixels.height < 1)) return `网页取景 ${w}×${h} 乘倍率 ${scale} 不足 1 个像素，请放大 region 或提高 scale。`
   return undefined
 }
 
 /** 补齐默认值后的取景；不合法时抛出。 */
-export function codeWebView(input: CodeWebViewInput): CodeWebView {
-  const issue = codeWebViewIssue(input)
+export function codeWebView(input: CodeWebViewInput, purpose: 'author' | 'output' = 'author'): CodeWebView {
+  const issue = codeWebViewIssue(input, purpose)
   if (issue) throw new Error(issue)
   const width = input.width ?? CODE_WEB_DEFAULT_VIEWPORT.width, height = input.height ?? CODE_WEB_DEFAULT_VIEWPORT.height
   const [x, y, w, h] = input.region ?? [0, 0, width, height]
@@ -47,7 +49,7 @@ export function codeWebView(input: CodeWebViewInput): CodeWebView {
 
 /** 画面像素尺寸。离屏页面的画面总比取景乘倍率大一两个像素，取左上角这一块。 */
 export function codeWebPixelSize(view: CodeWebView): { width: number; height: number } {
-  return { width: Math.floor(view.region[2] * view.scale), height: Math.floor(view.region[3] * view.scale) }
+  return { width: Math.max(1, Math.min(CODE_WEB_MAX_TEXTURE, Math.floor(view.region[2] * view.scale))), height: Math.max(1, Math.min(CODE_WEB_MAX_TEXTURE, Math.floor(view.region[3] * view.scale))) }
 }
 
 /** 去掉末尾分隔符后的根：`C:`、空（`/`）、`\\server\share`。 */

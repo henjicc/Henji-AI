@@ -12,6 +12,18 @@ import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0, loss: undefined as ((reason: string) => void) | undefined }))
+it('网页首帧占位保持透明，图片输入继续提供作者可读取的网页元数据', async () => {
+  const { compositor } = copyFixture(async () => {})
+  const web = { time: 3, width: 1920, height: 1080, region: [0, 0, 1920, 1080] as [number, number, number, number], scale: 1, duration: null, boxes: {} }
+  try {
+    const picture = await compositor.blankWebPicture(web)
+    expect(picture.opaqueBackground).toBe(false)
+    expect([picture.width, picture.height]).toEqual([1, 1])
+    expect([picture.displayWidth, picture.displayHeight]).toEqual([1920, 1080])
+    const inputs = await compositor.prepareImages(new Map([['site', picture]]), () => true)
+    expect(inputs.get('site')!.web).toEqual(web)
+  } finally { await compositor.dispose() }
+})
 it('导出捕获在画布纹理过期前复制到 GPU 位图，不映射 CPU 缓冲区', async () => {
   const capture = Object.assign(vi.fn(), { gpu: true, maxPixels: Infinity })
   const bitmap = { close: vi.fn() }

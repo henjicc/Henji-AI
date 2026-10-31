@@ -9,3 +9,6 @@ export const VIDEO_EDIT_CODE_PICTURE_BUDGET_BYTES = 2 * 1024 ** 3
 /** 写进提示语的预算大小。 */
 export const VIDEO_EDIT_IMAGE_BUDGET_LABEL = '1GiB'
 export const VIDEO_EDIT_CODE_PICTURE_BUDGET_LABEL = '2GiB'
+
+/** 当前合成帧借用的网页、视频输入与嵌套画面共用预算；历史和前视只占用可回收的余量。 */
+export const VIDEO_EDIT_INPUT_BUDGET_BYTES = 512 * 1024 ** 2

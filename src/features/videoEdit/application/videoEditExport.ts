@@ -107,7 +107,9 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     // Mix in the delivery layout before measuring loudness. Downmixing after normalization
     // changes LUFS; the shared mixer already resamples and maps mono/stereo correctly.
     const renderDocument = { ...pictures, sampleRate: settings.sampleRate, channels: settings.channels }
+    const geometry = videoEditExportGeometry(document.width, document.height, settings)
     renderer = new VideoEditRenderSession(renderDocument, undefined, undefined, undefined, undefined, settings.useProxies ? projectId : undefined, settings.useProxies)
+    await renderer.setWebOutputScale(Math.min(1, Math.max(geometry.destination.width / geometry.source.width, geometry.destination.height / geometry.source.height)))
     renderer.setSmartRegions(smartRegions)
     renderer.setTracks(videoEditTrackResults(document))
     try { renderer.setRenderCache(await videoEditExportPreviews(projectId, document, settings, task.controller.signal)) }
@@ -131,7 +133,6 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     output = new Output({ format: format === 'wav' ? new WavOutputFormat() : format === 'aac' ? new AdtsOutputFormat() : new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
     await outputs.create(path); created = true
     const adapted = settings.videoEnabled ? new OffscreenCanvas(settings.width, settings.height) : undefined
-    const geometry = videoEditExportGeometry(document.width, document.height, settings)
     task.controller.signal.throwIfAborted()
     const video = videoCodec ? new CanvasSource(adapted ?? renderer.canvas, videoEditExportVideoOptions(settings)) : undefined
     const audio = settings.audioEnabled ? new AudioBufferSource(videoEditExportAudioOptions(settings)) : undefined

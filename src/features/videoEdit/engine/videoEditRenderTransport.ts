@@ -402,6 +402,7 @@ export class VideoEditRenderTransport {
   }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
+  async setWebOutputScale(scale: number): Promise<void> { await this.ready; await this.request({ kind: 'webOutputScale', scale }) }
   /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */
   async armPlayback(frame: number): Promise<void> { await this.ready; await this.request({ kind: 'arm', frame }) }
   /**
