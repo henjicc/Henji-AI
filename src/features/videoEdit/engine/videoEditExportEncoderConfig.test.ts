@@ -24,7 +24,7 @@ it.each([
 })
 
 it.each([12, 45, 50])('4K60/%iMbps：适配、严格校验、真实Mediabunny configure配置逐字段相等', async videoBitrateMbps => {
-  const settings = { ...videoEditSequenceExportSettings({ width: 3840, height: 2160, fps: 60, sampleRate: 44100, channels: 1 }), videoBitrateMbps }
+  const settings = { ...videoEditSequenceExportSettings({ width: 3840, height: 2160, fps: 60, sampleRate: 44100, channels: 1 }), encoding: undefined, videoBitrateMbps }
   const nativeProbe = vi.fn(async (config: VideoEncoderConfig) => ({ config, supported: config.codec === 'avc1.640034' && config.hardwareAcceleration === 'prefer-software' }))
   const configure = vi.fn((_config: VideoEncoderConfig) => { throw new Error('native boundary reached') })
   vi.stubGlobal('VideoEncoder', class { static isConfigSupported = nativeProbe; configure = configure; state = 'unconfigured'; close() {} })

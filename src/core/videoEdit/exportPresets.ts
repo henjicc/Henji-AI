@@ -2,13 +2,16 @@ import { z } from 'zod'
 import { videoEditLoudnessSettingsSchema } from './loudness'
 import { VIDEO_EDIT_SEQUENCE_LIMITS, videoEditSequenceSizeFields, isVideoEditSequenceSize } from './sequenceSize'
 import { videoEditRenderSize } from './playbackResolution'
+import { videoEditExportEncodingSchema, videoEditExportQualityEncoding, videoEditExportLevels } from './exportEncoding'
+export { applyVideoEditExportQuality, videoEditExportQualityOf, videoEditExportPresetModified, videoEditExportChangedFields } from './exportEncoding'
 
 export const videoEditExportSettingsSchema = z.object({
+  encoding: videoEditExportEncodingSchema.optional().describe('高级视频编码设置；省略时保持既有直接导出行为。'),
   format: z.enum(['mp4', 'aac', 'wav']),
   width: videoEditSequenceSizeFields.width.refine(value => value % 2 === 0, '宽度必须是偶数。'),
   height: videoEditSequenceSizeFields.height.refine(value => value % 2 === 0, '高度必须是偶数。'),
   fps: z.number().min(1).max(120).nullable().describe('null 表示保持序列帧率。'),
-  videoBitrateMbps: z.number().min(.1).max(200), audioBitrateKbps: z.number().int().min(32).max(512),
+  videoBitrateMbps: z.number().positive(), audioBitrateKbps: z.number().int().min(32).max(512),
   fit: z.enum(['fit', 'fill', 'letterbox']).describe('fit 适合：保持完整画面并居中；fill 填充：按中心裁切铺满；letterbox 留黑边：保持完整画面并明确补黑边。适合与留黑边在不透明成片中相同。'),
   loudness: videoEditLoudnessSettingsSchema.nullable(),
   codec: z.enum(['avc', 'hevc']).default('avc').describe('avc 为 H.264，hevc 为 H.265；严格使用所选编码，不自动替换。'),
@@ -28,6 +31,8 @@ export const videoEditExportSettingsSchema = z.object({
   usePreviews: z.boolean().optional().describe('默认 false。使用符合输出规格的已渲染预览文件加快导出；预览会再次编码，缺失或不可读的部分现场合成，声音不受影响。'),
   renderAtOutputResolution: z.boolean().optional().describe('默认 true。按输出分辨率渲染；false 按序列完整分辨率合成再缩放，用于保留点阵与细线的超采样效果。'),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。').superRefine((value, ctx) => {
+  if (value.encoding && value.encoding.rateControl !== 'quality' && value.encoding.maxBitrateMbps > 0 && value.encoding.maxBitrateMbps < value.videoBitrateMbps) ctx.addIssue({ code: 'custom', path: ['encoding', 'maxBitrateMbps'], message: '最大码率不能小于目标码率。' })
+  if (value.encoding && value.videoEnabled && (value.codec === 'hevc') !== ['hevc_nvenc', 'libx265'].includes(value.encoding.encoder)) ctx.addIssue({ code: 'custom', path: ['encoding', 'encoder'], message: '编码器必须与所选 H.264/H.265 格式一致。' })
   if (!value.videoEnabled && !value.audioEnabled) ctx.addIssue({ code: 'custom', path: ['audioEnabled'], message: '视频与音频不能同时关闭。' })
   if (value.videoEnabled && value.format !== 'mp4') ctx.addIssue({ code: 'custom', path: ['format'], message: '视频必须使用 MP4 格式。' })
   if (!value.videoEnabled && value.format !== value.audioCodec) ctx.addIssue({ code: 'custom', path: ['format'], message: '仅音频的格式须与音频编码一致。' })
@@ -38,7 +43,7 @@ export const videoEditExportPresetSchema = z.object({ id: z.string().min(1).max(
 export type VideoEditExportPreset = z.infer<typeof videoEditExportPresetSchema>
 // 内置视频预设默认把字幕烧录进画面（2026-10-28 用户：导出默认打开字幕）；仅音频的预设不输出字幕
 const preset = (id: string, name: string, width: number, height: number, videoBitrateMbps = 12, format: VideoEditExportSettings['format'] = 'mp4', fps: number | null = 30): VideoEditExportPreset => ({
-  id: `builtin:${id}`, name, settings: videoEditExportSettingsSchema.parse({ format, width, height, fps, videoBitrateMbps, audioBitrateKbps: 192, fit: 'fit', loudness: { targetLufs: -14, truePeakDbtp: -1 }, videoEnabled: format === 'mp4', audioCodec: format === 'wav' ? 'wav' : 'aac', captionMode: format === 'mp4' ? 'burn' : 'none', usePreviews: false }),
+  id: `builtin:${id}`, name, settings: videoEditExportSettingsSchema.parse({ format, width, height, fps, videoBitrateMbps, audioBitrateKbps: 192, fit: 'fit', loudness: { targetLufs: -14, truePeakDbtp: -1 }, videoEnabled: format === 'mp4', audioCodec: format === 'wav' ? 'wav' : 'aac', captionMode: format === 'mp4' ? 'burn' : 'none', usePreviews: false, ...(format === 'mp4' ? { encoding: videoEditExportQualityEncoding('avc', 'visually_lossless') } : {}) }),
 })
 export const VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID = 'builtin:sequence'
 export const VIDEO_EDIT_EXPORT_PRESETS: readonly VideoEditExportPreset[] = [
@@ -48,7 +53,7 @@ export const VIDEO_EDIT_EXPORT_PRESETS: readonly VideoEditExportPreset[] = [
   preset('youtube', 'YouTube · 横版 1080p', 1920, 1080), preset('youtube-4k', 'YouTube · 横版 4K', 3840, 2160, 45),
   preset('instagram', 'Instagram · 方形', 1080, 1080), preset('aac', '仅音频 · AAC', 1920, 1080, 12, 'aac', null),
   { ...preset('wav', '仅音频 · WAV 无损', 1920, 1080, 12, 'wav', null), settings: { ...preset('wav', '', 1920, 1080, 12, 'wav', null).settings, loudness: null } },
-  { ...preset('master', '高质量母版 · 原画幅', 1920, 1080, 80, 'mp4', null), settings: { ...preset('master', '', 1920, 1080, 80, 'mp4', null).settings, codec: 'hevc', loudness: null, followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } } },
+  { ...preset('master', '高质量母版 · 原画幅', 1920, 1080, 80, 'mp4', null), settings: { ...preset('master', '', 1920, 1080, 80, 'mp4', null).settings, codec: 'hevc', encoding: undefined, loudness: null, followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } } },
 ]
 export interface VideoEditExportSequenceSpec { width: number; height: number; fps: number; sampleRate: number; channels: number }
 export function resolveVideoEditExportSettings(input: VideoEditExportSettings, sequence: VideoEditExportSequenceSpec): VideoEditExportSettings {
@@ -64,11 +69,16 @@ export function resolveVideoEditExportSettings(input: VideoEditExportSettings, s
 }
 export function videoEditSequenceExportSettings(sequence: VideoEditExportSequenceSpec): VideoEditExportSettings {
   const bitrate = sequence.width * sequence.height >= 7680 * 4320 ? 100 : sequence.width * sequence.height >= 3840 * 2160 ? 50 : sequence.width * sequence.height >= 1920 * 1080 ? 12 : 6
-  return resolveVideoEditExportSettings({ ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, videoBitrateMbps: bitrate }, sequence)
+  const settings = VIDEO_EDIT_EXPORT_PRESETS[0].settings
+  return resolveVideoEditExportSettings({ ...settings, videoBitrateMbps: bitrate }, sequence)
 }
 /** The same transition is used by controls and settings callers, keeping container/stream constraints together. */
 export function patchVideoEditExportSettings(settings: VideoEditExportSettings, patch: Partial<VideoEditExportSettings>): VideoEditExportSettings {
   const value = { ...settings, ...patch }
+  if (patch.codec && patch.codec !== settings.codec && value.encoding && !patch.encoding) {
+    const hardware = value.encoding.encoder.endsWith('_nvenc')
+    value.encoding = { ...value.encoding, encoder: patch.codec === 'hevc' ? hardware ? 'hevc_nvenc' : 'libx265' : hardware ? 'h264_nvenc' : 'libx264', profile: 'auto', level: videoEditExportLevels(patch.codec).includes(value.encoding.level) ? value.encoding.level : 'auto' }
+  }
   if (patch.format === 'aac' || patch.format === 'wav') { value.videoEnabled = false; value.audioEnabled = true; value.audioCodec = patch.format }
   if (patch.format === 'mp4') value.videoEnabled = true
   if (patch.videoEnabled === false || !value.videoEnabled && patch.audioCodec) { value.format = value.audioCodec; value.audioEnabled = true }

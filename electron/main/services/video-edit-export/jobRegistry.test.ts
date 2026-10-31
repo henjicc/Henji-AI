@@ -1,9 +1,8 @@
-import { EventEmitter } from 'node:events'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { VideoEditExportJobRegistry, watchVideoEditExportSender, type VideoEditExportPage } from './jobRegistry'
+import { VideoEditExportJobRegistry, type VideoEditExportPage } from './jobRegistry'
 
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
@@ -50,23 +49,6 @@ it('同一次登记的回执丢失后重试登记，保留所有已接受操作�
   exports.register(oldPage, { snapshots: ['snapshot'], jobs: [{ ...entry, invocationId: 'first' }] })
   exports.register(oldPage, { snapshots: ['snapshot'], jobs: [{ ...entry, invocationId: 'retry' }] })
   expect(exports.list()[0].invocationIds).toEqual(['first', 'retry'])
-})
-
-it('被拦下的导航不触发中断；只有渲染进程退出或销毁才算离开', async () => {
-  const exports = registry(); const sender = new EventEmitter()
-  watchVideoEditExportSender(sender, oldPage.senderId, exports)
-  const output = path.join(root, 'live.mp4')
-  exports.register(oldPage, { snapshots: ['{}'], jobs: [job('a', [output])] })
-  exports.update(oldPage, { id: 'a', state: 'running', progress: .2 })
-  await exports.createOutput(oldPage, 'a', output)
-  for (const event of ['will-navigate', 'did-start-navigation', 'did-fail-load']) sender.emit(event, {}, 'file:///dropped.png', false, true)
-  await Promise.resolve()
-  expect(await exists(output)).toBe(true)
-  exports.update(oldPage, { id: 'a', state: 'running', progress: .6 })
-  expect(exports.list()[0]).toMatchObject({ state: 'running', progress: .6 })
-  sender.emit('render-process-gone', {}, { reason: 'crashed' })
-  await vi.waitFor(async () => expect(await exists(output)).toBe(false))
-  expect(exports.list()[0].state).toBe('interrupted')
 })
 
 it('同一路径换成了别的文件、或成片已发布，都不删除', async () => {

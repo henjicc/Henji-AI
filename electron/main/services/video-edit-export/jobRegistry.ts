@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import type { EventEmitter } from 'node:events'
 import path from 'node:path'
 import type { VideoEditExportJobRecord, VideoEditExportJobRegistration, VideoEditExportJobUpdate, VideoEditExportRegistrationRequest, VideoEditExportRegistrationResult } from '../../../../src/platform/contracts/videoEditExport'
 import { createMainLogger } from '../logging'
@@ -14,6 +13,7 @@ export interface VideoEditExportRegistryFiles {
   createExclusive(path: string): Promise<void>
   identify(path: string): Promise<VideoEditExportFileIdentity | null>
   remove(path: string): Promise<void>
+  replace?(source: string, target: string): Promise<void>
 }
 
 interface Entry {
@@ -102,6 +102,22 @@ export class VideoEditExportJobRegistry {
     if (entry) { entry.outputPublished = true; entry.created.clear() }
   }
 
+  /** 只替换本项独占创建的占位文件，并将新文件身份交回同一清理账本。 */
+  ownsOutput(page: VideoEditExportPage, id: string, target: string): boolean {
+    return Boolean(this.owned(page, id)?.created.has(target))
+  }
+
+  async replaceOutput(page: VideoEditExportPage, id: string, target: string, staging: string): Promise<void> {
+    const entry = this.owned(page, id), expected = entry?.created.get(target)
+    if (!entry || !expected || !this.files.replace) throw new Error('输出文件登记已失效，请重新导出。')
+    const current = await this.files.identify(target)
+    if (!current || !sameFile(current, expected)) throw new Error('导出位置的文件已被替换，请选择新的文件名。')
+    await this.files.replace(staging, target)
+    const identity = await this.files.identify(target)
+    if (!identity) throw new Error('压制文件发布后无法读取。')
+    entry.created.set(target, identity)
+  }
+
   async discardLeftovers(page: VideoEditExportPage, id: string): Promise<void> {
     const entry = this.owned(page, id)
     if (entry && !entry.outputPublished) await this.cleanup(entry, 'retry')
@@ -182,10 +198,4 @@ export class VideoEditExportJobRegistry {
       }
     }
   }
-}
-
-/** 只认进程退出与销毁：导航可能被守卫拦下，那时页面仍在写，不能判中断。 */
-export function watchVideoEditExportSender(sender: EventEmitter, senderId: number, registry: VideoEditExportJobRegistry): void {
-  sender.on('render-process-gone', () => { void registry.leave(senderId, 'render_process_gone') })
-  sender.once('destroyed', () => { void registry.leave(senderId, 'destroyed') })
 }

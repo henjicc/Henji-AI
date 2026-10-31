@@ -23,7 +23,10 @@ async function confirmVideoEditExport(page, onOpen) {
     })
     await onOpen(dialog)
   }
-  assert.match(await dialog.getByRole('button', { name: '导出预设', exact: true }).textContent(), /与序列一致/)
+  // 窗口会恢复本机记住的上次导出设置；先回到“与序列一致”，场景才不依赖之前跑过什么。
+  await dialog.getByRole('button', { name: '导出预设', exact: true }).click()
+  await page.getByRole('option', { name: '与序列一致', exact: true }).click()
+  assert.equal(await dialog.getByRole('button', { name: '导出预设', exact: true }).textContent(), '与序列一致')
   const loudness = dialog.getByRole('switch', { name: '启用响度', exact: true })
   if (await loudness.getAttribute('aria-checked') === 'true') await loudness.click()
   const captions = dialog.getByRole('switch', { name: '启用字幕', exact: true })

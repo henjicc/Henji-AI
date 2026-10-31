@@ -11,6 +11,13 @@ const contract: PersistenceContract = { id: 'forward-sample', name: '前向样�
 const newer = { name: '片子', future: { lane: 2 }, clips: [{ id: 'a', start: 0, fade: 0.5 }, { id: 'b', start: 30 }], meta: { author: '痕迹', reviewer: '新字段' } }
 
 describe('新版本字段被旧版本读取', () => {
+  it('有独立 id 的条目优先按 id 对齐，同项目同序列的多项记录不会混淆', () => {
+    const records = z.array(z.object({ id: z.string(), projectId: z.string(), sequenceId: z.string() }).strict())
+    const first = { id: 'a', projectId: 'p', sequenceId: 's', future: 'first' }
+    const second = { ...first, id: 'b', future: 'second' }
+    const read = readForwardCompatible(records, [first, second])
+    expect(restoreForwardFields([...read.value].reverse(), read.fields)).toEqual([second, first])
+  })
   it('较新版本但最低可读版本不高于本程序：正常打开，记录并在保存时放回未知字段', () => {
     const value = upgradePersistenceContent(contract, newer, 4, undefined, 3) as z.infer<typeof schema>
     expect(value).toEqual({ name: '片子', clips: [{ id: 'a', start: 0 }, { id: 'b', start: 30 }], meta: { author: '痕迹' } })

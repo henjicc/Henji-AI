@@ -137,6 +137,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 45 → 46：导出历史新增可选高级编码，旧记录保持直接导出语义，最低可读版本保持 45。
+    45: content => structuredClone(content),
     // 44 → 45：允许作者接口 7 的图层效果，旧源码与库锁定保持原样。
     44: content => structuredClone(content),
     // 43 → 44：导出设置新增可选 renderAtOutputResolution，缺省为开，最低可读版本保持 42。

@@ -14,7 +14,7 @@ import { ApplicationWriteExecution } from '@/core/application-control/execution/
 
 const RESTORED_NOTICE = '按界面重新加载前提交时的内容导出。'
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
-  return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: videoEditExportJobProgress(job), range: job.range, settings: job.settings,
+  return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: videoEditExportJobProgress(job), ...(job.task ? { phase: job.task.phase, compositionProgress: job.task.compositionProgress, compressionProgress: job.task.compressionProgress } : {}), range: job.range, settings: job.settings,
     rangeSource: job.rangeSource, outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : job.restored ? { notice: RESTORED_NOTICE } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
 }
 
@@ -61,8 +61,8 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
         const composition = videoEditComposition(target.document, sequenceId?.slice(projectId.length + 1) ?? target.activeSequenceId)
         const base = value.settings ?? (preset && preset.id !== 'builtin:sequence' ? preset.settings : videoEditSequenceExportSettings(composition))
         const settings = value.settings ? base : await adaptVideoEditExportPreset(resolveVideoEditExportSettings(base, composition))
-        return { projectId, loudnessRequested: Boolean(value.settings?.loudness || value.presetRef && value.presetRef.id !== 'builtin:sequence' && preset?.settings.loudness), sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings, outputDirectory: () => videoEditCapabilityOutputDirectory(projectId, input.destination) }
-      })) : [{ projectId: documentRef.id, loudnessRequested: Boolean(input.loudness || input.settings?.loudness), range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })), outputDirectory: () => videoEditCapabilityOutputDirectory(documentRef.id, input.destination) }]
+        return { projectId, quality: value.quality, loudnessRequested: Boolean(value.settings?.loudness || value.presetRef && value.presetRef.id !== 'builtin:sequence' && preset?.settings.loudness), sequenceId: sequenceId?.slice(projectId.length + 1), presetId: preset?.id, range: value.range, settings: value.fit ? { ...settings, fit: value.fit } : settings, outputDirectory: () => videoEditCapabilityOutputDirectory(projectId, input.destination) }
+      })) : [{ projectId: documentRef.id, quality: input.quality, loudnessRequested: Boolean(input.loudness || input.settings?.loudness), range: input.range, settings: input.settings ?? await adaptVideoEditExportPreset(patchVideoEditExportSettings(videoEditSequenceExportSettings(videoEditComposition(owner.document, owner.activeSequenceId)), { ...(input.loudness ? { loudness: input.loudness } : {}), ...(input.format ? { format: input.format as 'mp4' | 'aac' | 'wav' } : {}) })), outputDirectory: () => videoEditCapabilityOutputDirectory(documentRef.id, input.destination) }]
       const jobs = await execution.run(() => enqueueVideoEditExports(requests.map(request => ({ ...request, invocationId: context.requestId })), context.signal))
       submitted = jobs
       verified = jobs.length > 0; message = verified ? `已加入 ${jobs.length} 项导出，请查询队列确认完成。` : '已取消文件选择，未加入任何导出。'
@@ -123,8 +123,8 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     const remaining = after === undefined ? filtered : filtered.filter(item => String(item.id) > after!)
     const page = remaining.slice(0, query.limit)
     const projected = page.map(item => {
-      const { id, state, progress, outputReady, taskId, error, notice, assetRef, completedAt, archived } = item
-      const summary = { id, documentRef, state, progress, outputReady,
+      const { id, state, progress, phase, compositionProgress, compressionProgress, outputReady, taskId, error, notice, assetRef, completedAt, archived } = item
+      const summary = { id, documentRef, state, progress, phase, compositionProgress, compressionProgress, outputReady,
         resultRef: { documentRef, taskId: String(id) },
         ...(taskId ? { taskId } : {}), ...(error ? { error } : {}), ...(notice ? { notice } : {}),
         ...(assetRef ? { assetRef } : {}), ...(completedAt ? { completedAt } : {}), ...(archived ? { archived } : {}),

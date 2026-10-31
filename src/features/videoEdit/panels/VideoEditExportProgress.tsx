@@ -3,11 +3,14 @@ import { UiButton, UiError, UiModal } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { videoEditExportJobProgress, videoEditExportQueue } from '../application/videoEditExportQueue'
 import { subscribeVideoEdit, videoEditRevision } from '../application/videoEditService'
+import { videoEditExportStages } from './videoEditExportUi'
 
 function duration(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000))
   return `${Math.floor(seconds / 60)}分${seconds % 60}秒`
 }
+
+type ExportJob = ReturnType<typeof videoEditExportQueue.list>[number]
 
 /** UI、助手和批量队列的任务共用同一个进度宿主，不依赖导出设置面板是否打开。 */
 export function VideoEditExportProgress(): React.ReactElement | null {
@@ -20,12 +23,13 @@ export function VideoEditExportProgress(): React.ReactElement | null {
   return <ExportProgress key={attempt} job={job} onClose={() => setDismissed(attempt)} />
 }
 
-function ExportProgress({ job, onClose }: { job: ReturnType<typeof videoEditExportQueue.list>[number]; onClose: () => void }): React.ReactElement {
+function ExportProgress({ job, onClose }: { job: ExportJob; onClose: () => void }): React.ReactElement {
   const [now, setNow] = useState(Date.now)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const active = job.state === 'running' || job.state === 'queued'
   const cancelling = active && job.controller.signal.aborted
   const progress = Math.max(0, Math.min(1, videoEditExportJobProgress(job)))
+  const stages = videoEditExportStages(job)
   useEffect(() => {
     if (!active) return
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -41,9 +45,15 @@ function ExportProgress({ job, onClose }: { job: ReturnType<typeof videoEditExpo
     : <UiButton variant="primary" onClick={onClose}>完成</UiButton>}>
     <div className="flex flex-col gap-4">
       <p className="break-words text-13 text-text1">{job.name}</p>
-      <div role="progressbar" aria-label="导出进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
+      {stages ? stages.map(stage => <div key={stage.label} className="flex items-center gap-3">
+        <span className="w-8 shrink-0 text-xs text-text2">{stage.label}</span>
+        <div role="progressbar" aria-label={`${stage.label}进度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(stage.progress * 100)} className="min-w-0 flex-1">
+          <ProgressBar progress={stage.progress * 100} duration={0} />
+        </div>
+        <span className="w-10 shrink-0 text-right text-xs tabular-nums text-text2">{Math.round(stage.progress * 100)}%</span>
+      </div>) : <div role="progressbar" aria-label="导出进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
         <ProgressBar progress={job.state === 'completed' ? 100 : progress * 100} duration={0} />
-      </div>
+      </div>}
       <p role="status" className="text-13 tabular-nums text-text2">已用 {duration(elapsed)}{active ? remaining === undefined ? ' · 正在估算剩余时间' : ` · 预计剩余 ${duration(remaining)}` : ''}</p>
       {active && progress === 1 && !cancelling && <p className="text-13 text-text2">画面处理完成，正在保存成片…</p>}
       <p className="break-all text-xs text-text2">保存位置：{job.path || '正在准备输出文件'}</p>

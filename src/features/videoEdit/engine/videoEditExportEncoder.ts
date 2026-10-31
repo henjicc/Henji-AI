@@ -1,6 +1,9 @@
-import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import { videoEditSequenceExportSettings, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { createLogger } from '@/core/logging'
 import { videoEditExportAudioEncoderConfig, videoEditExportVideoEncoderConfig, type VideoEditExportAudioEncoderSpec, type VideoEditExportEncoderSpec } from './videoEditExportEncoderConfig'
+import { applyVideoEditExportQuality, videoEditExportQualityOf, videoEditExportIntermediateSettings, videoEditExportEncoderSupportsSize } from '@/core/videoEdit/exportEncoding'
+import { getPlatform } from '@/platform/runtime'
+import { notifyUser } from '@/contexts/NotificationContext'
 export { videoEditExportAudioOptions, videoEditExportVideoOptions } from './videoEditExportEncoderConfig'
 export type { VideoEditExportAudioEncoderSpec, VideoEditExportEncoderSpec } from './videoEditExportEncoderConfig'
 
@@ -8,6 +11,7 @@ const logger = createLogger('features.videoEdit.exportEncoder')
 export const VIDEO_EDIT_EXPORT_AUDIO_BITRATES = [320, 256, 192, 160, 128, 96, 64] as const
 type AudioSettings = Pick<VideoEditExportSettings, 'audioEnabled' | 'audioCodec' | 'sampleRate' | 'channels' | 'audioBitrateKbps'>
 const nativeSupportCache = new WeakMap<object, Map<string, Promise<boolean>>>()
+let compressionFallbackNotified = false
 type ProbePhase = 'probe' | 'adapt' | 'strict'
 interface ProbeTrace { phase: ProbePhase; candidateKey?: string }
 /** The only native support predicate: cache the complete config, sharing concurrent probes.
@@ -83,22 +87,38 @@ export async function canEncodeVideoEditExport(spec: VideoEditExportEncoderSpec 
  * invalidate the panel's configuration snapshot; it is not a VideoEncoderConfig field.
  */
 export function videoEditExportProbeKey(settings: VideoEditExportSettings): string {
+  const encoding = settings.encoding
+  settings = videoEditExportIntermediateSettings(settings)
   return JSON.stringify({ format: settings.format, videoEnabled: settings.videoEnabled, frameRate: settings.fps,
     video: videoEditExportVideoEncoderConfig({ ...settings, frameRate: settings.fps ?? 0, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000) }), keyframeInterval: settings.keyframeInterval,
-    audioEnabled: settings.audioEnabled, audioCodec: settings.audioCodec,
+    encoding, audioEnabled: settings.audioEnabled, audioCodec: settings.audioCodec,
     audio: videoEditExportAudioEncoderConfig({ codec: settings.audioCodec === 'wav' ? 'pcm-s24' : 'aac', sampleRate: settings.sampleRate, numberOfChannels: settings.channels, bitrate: settings.audioBitrateKbps * 1000 }) })
 }
 export interface VideoEditExportSupport { supported: boolean; videoSupported: boolean; audioSupported: boolean; reason: string }
+/** 中间编码与交付编码独立，按完整规格优先 H.264，设备不支持时再用 HEVC。 */
+export async function resolveVideoEditExportIntermediateSettings(settings: VideoEditExportSettings): Promise<VideoEditExportSettings> {
+  const intermediate = videoEditExportIntermediateSettings(settings)
+  if (!settings.videoEnabled || !settings.encoding) return intermediate
+  for (const codec of ['avc', 'hevc'] as const) {
+    if (await canEncodeVideoEditExport({ ...intermediate, codec, frameRate: intermediate.fps ?? 30, bitrate: Math.round(intermediate.videoBitrateMbps * 1_000_000) })) return { ...intermediate, codec }
+  }
+  return intermediate
+}
 /** One complete probe for the panel, queue, direct pipeline and assistant. No implicit replacement. */
 export async function probeVideoEditExport(settings: VideoEditExportSettings, phase: ProbePhase = 'probe'): Promise<VideoEditExportSupport> {
   try {
     if (settings.fps === null) throw new Error('请先解析序列帧率。')
     const trace = { phase, candidateKey: videoEditExportProbeKey(settings) }
-    const videoSupported = !settings.videoEnabled || await canEncodeVideoEditExport({ width: settings.width, height: settings.height, frameRate: settings.fps,
-      bitrate: Math.round(settings.videoBitrateMbps * 1_000_000), codec: settings.codec, bitrateMode: settings.bitrateMode, encoderPreference: settings.encoderPreference, keyframeInterval: settings.keyframeInterval }, trace)
+    const intermediate = await resolveVideoEditExportIntermediateSettings(settings)
+    const capabilities = settings.videoEnabled && settings.encoding ? await getPlatform().videoEditExport.capabilities() : undefined
+    const encoder = settings.encoding && capabilities?.encoders[settings.encoding.encoder]
+    const sizeSupported = !settings.encoding || videoEditExportEncoderSupportsSize(settings.encoding.encoder, settings.width, settings.height)
+    const finalSupported = !settings.encoding || !settings.videoEnabled || Boolean(sizeSupported && encoder?.supported && (!settings.encoding.tenBit || encoder.tenBit))
+    const videoSupported = !settings.videoEnabled || finalSupported && await canEncodeVideoEditExport({ width: settings.width, height: settings.height, frameRate: settings.fps,
+      bitrate: Math.round(intermediate.videoBitrateMbps * 1_000_000), codec: intermediate.codec, bitrateMode: intermediate.bitrateMode, encoderPreference: intermediate.encoderPreference, keyframeInterval: intermediate.keyframeInterval }, trace)
     const audioSupported = !settings.audioEnabled || await canEncodeVideoEditExportAudio({ codec: settings.audioCodec === 'wav' ? 'pcm-s24' : 'aac',
       sampleRate: settings.sampleRate, numberOfChannels: settings.channels, ...(settings.audioCodec === 'aac' ? { bitrate: settings.audioBitrateKbps * 1000 } : {}) }, trace)
-    const reason = !videoSupported ? `当前设备不支持所选编码设置（${settings.codec === 'avc' ? 'H.264' : 'HEVC'} · ${settings.width} × ${settings.height} · ${Number(settings.fps.toFixed(3))} 帧）。请尝试其他编码、性能或码率模式，或降低规格。`
+    const reason = !finalSupported ? !sizeSupported ? '所选硬件编码器不支持此分辨率，请使用软件编码器。' : encoder && encoder.reason || '此设备不支持所选编码器或输出位深。' : !videoSupported ? `当前设备不支持所选编码设置（${settings.codec === 'avc' ? 'H.264' : 'HEVC'} · ${settings.width} × ${settings.height} · ${Number(settings.fps.toFixed(3))} 帧）。请尝试其他编码、性能或码率模式，或降低规格。`
       : !audioSupported ? settings.audioCodec === 'aac' ? videoEditExportAudioUnsupportedMessage(settings, await probeVideoEditExportAudioBitrates(settings)) : '此设备不支持所选 WAV 声音设置，请调整采样率或声道。' : ''
     const result = { supported: videoSupported && audioSupported, videoSupported, audioSupported, reason }
     logger.debug('导出候选编码探测完成', { event: 'video_edit.export.probe', context: { ...trace, ...result } })
@@ -117,6 +137,21 @@ export async function assertVideoEditExportSupported(settings: VideoEditExportSe
 }
 /** Device adaptation is reserved for presets; explicit settings always use the strict probe above. */
 export async function adaptVideoEditExportPreset(settings: VideoEditExportSettings): Promise<VideoEditExportSettings> {
+  if (settings.encoding && settings.videoEnabled) {
+    let capabilities
+    try { capabilities = await getPlatform().videoEditExport.capabilities(); compressionFallbackNotified = false }
+    catch (error) {
+      logger.warn('压制能力检查失败，预设使用直接导出', { event: 'video_edit.export.compression_fallback', error })
+      if (!compressionFallbackNotified) {
+        compressionFallbackNotified = true
+        notifyUser('视频压制暂不可用，本次将按默认码率直接导出。', 'warning')
+      }
+      const defaults = videoEditSequenceExportSettings({ ...settings, fps: settings.fps ?? 30 })
+      settings = { ...settings, encoding: undefined, videoBitrateMbps: defaults.videoBitrateMbps }
+    }
+    const tier = videoEditExportQualityOf(settings)
+    if (capabilities && tier !== 'custom') settings = applyVideoEditExportQuality(settings, tier, capabilities)
+  }
   if ((await probeVideoEditExport(settings, 'adapt')).supported) return settings
   let candidate = settings
   if (candidate.audioEnabled && candidate.audioCodec === 'aac') {
@@ -127,6 +162,13 @@ export async function adaptVideoEditExportPreset(settings: VideoEditExportSettin
     }
   }
   if (!candidate.videoEnabled) { await assertVideoEditExportSupported(candidate); return candidate }
+  if (candidate.encoding) {
+    for (const encoderPreference of [candidate.encoderPreference, candidate.encoderPreference === 'hardware' ? 'software' : 'hardware'] as const) {
+      const next = { ...candidate, encoderPreference }
+      if ((await probeVideoEditExport(next, 'adapt')).supported) return next
+    }
+    await assertVideoEditExportSupported(candidate); return candidate
+  }
   // Keep the preset's requested mode first, then its alternative; keep output geometry intact.
   const modes = [candidate.bitrateMode, candidate.bitrateMode === 'vbr' ? 'cbr' : 'vbr'] as const
   const recommended = candidate.width * candidate.height >= 7680 * 4320 ? 80 : candidate.width * candidate.height >= 3840 * 2160 ? 45 : candidate.width * candidate.height >= 1920 * 1080 ? 12 : 6

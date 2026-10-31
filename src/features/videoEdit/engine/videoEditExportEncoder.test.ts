@@ -1,19 +1,53 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { adaptVideoEditExportPreset, assertVideoEditExportSupported, assertVideoEditExportAudioSupported, canEncodeVideoEditExport, canEncodeVideoEditExportAudio, probeVideoEditExport, probeVideoEditExportAudioBitrates, selectVideoEditExportEncoder, videoEditExportAudioUserError, videoEditExportProbeKey, videoEditExportVideoOptions } from './videoEditExportEncoder'
+import { resolveVideoEditExportIntermediateSettings, adaptVideoEditExportPreset, assertVideoEditExportSupported, assertVideoEditExportAudioSupported, canEncodeVideoEditExport, canEncodeVideoEditExportAudio, probeVideoEditExport, probeVideoEditExportAudioBitrates, selectVideoEditExportEncoder, videoEditExportAudioUserError, videoEditExportProbeKey, videoEditExportVideoOptions } from './videoEditExportEncoder'
 import { resolveVideoEditExportSettings, videoEditSequenceExportSettings, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import { videoEditExportQualityEncoding } from '@/core/videoEdit/exportEncoding'
 const diagnostics = vi.hoisted(() => ({ debug: vi.fn(), warn: vi.fn() }))
+const compression = vi.hoisted(() => ({ capabilities: vi.fn(), notify: vi.fn() }))
 vi.mock('@/core/logging', () => ({ createLogger: () => diagnostics }))
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoEditExport: { capabilities: compression.capabilities } }) }))
+vi.mock('@/contexts/NotificationContext', () => ({ notifyUser: compression.notify }))
 const video = vi.fn(async (_config: VideoEncoderConfig): Promise<boolean> => true)
 const audio = vi.fn(async (_config: AudioEncoderConfig): Promise<boolean> => true)
 const spec = { width: 7680, height: 4320, frameRate: 120, bitrate: 80_000_000 }
-const fourK = (): VideoEditExportSettings => videoEditSequenceExportSettings({ width: 3840, height: 2160, fps: 60, sampleRate: 48000, channels: 2 })
+const fourK = (): VideoEditExportSettings => ({ ...videoEditSequenceExportSettings({ width: 3840, height: 2160, fps: 60, sampleRate: 48000, channels: 2 }), encoding: undefined })
 beforeEach(() => {
+  compression.capabilities.mockReset().mockResolvedValue({ cuda: true, encoders: Object.fromEntries(['h264_nvenc', 'hevc_nvenc', 'libx264', 'libx265'].map(encoder => [encoder, { supported: true, tenBit: true }])) }); compression.notify.mockClear()
   diagnostics.debug.mockClear(); diagnostics.warn.mockClear()
   video.mockReset().mockResolvedValue(true); audio.mockReset().mockResolvedValue(true)
   vi.stubGlobal('VideoEncoder', { isConfigSupported: async (config: VideoEncoderConfig) => ({ config, supported: await video(config) }) })
   vi.stubGlobal('AudioEncoder', { isConfigSupported: async (config: AudioEncoderConfig) => ({ config, supported: await audio(config) }) })
 })
+it('压制探测异常时预设回退默认码率直出，同次故障只提示一次，显式设置仍严格失败', async () => {
+  compression.capabilities.mockRejectedValue(new Error('FFmpeg missing'))
+  const settings = { ...fourK(), videoBitrateMbps: 180, encoding: videoEditExportQualityEncoding('avc', 'high') }
+  const first = await adaptVideoEditExportPreset(settings)
+  expect(first).toMatchObject({ encoding: undefined, videoBitrateMbps: 50 })
+  await expect(assertVideoEditExportSupported(first)).resolves.toBeUndefined()
+  expect((await adaptVideoEditExportPreset({ ...settings, encoding: { ...settings.encoding, quality: 17 } })).encoding).toBeUndefined()
+  expect(compression.notify).toHaveBeenCalledOnce()
+  expect(diagnostics.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'video_edit.export.compression_fallback', error: expect.any(Error) }))
+  await expect(assertVideoEditExportSupported(settings)).rejects.toThrow('无法检查')
+})
+it('大画幅预设提交前回退同格式软件编码，显式超大 NVENC 配置提交前拒绝', async () => {
+  const settings = { ...fourK(), width: 7680, height: 4320, encoding: videoEditExportQualityEncoding('avc', 'high') }
+  expect((await adaptVideoEditExportPreset(settings)).encoding?.encoder).toBe('libx264')
+  const invalid = { ...settings, encoding: videoEditExportQualityEncoding('avc', 'high', 'h264_nvenc') }
+  await expect(assertVideoEditExportSupported(invalid)).rejects.toThrow('分辨率')
+})
 afterEach(() => { vi.unstubAllGlobals() })
+it('交付 HEVC 使用独立的 H.264 中间编码，完整规格不支持 H.264 时才选 HEVC', async () => {
+  const settings = { ...fourK(), codec: 'hevc' as const, encoding: videoEditExportQualityEncoding('hevc', 'high') }
+  expect((await resolveVideoEditExportIntermediateSettings(settings)).codec).toBe('avc')
+  expect(video).toHaveBeenCalledOnce()
+  video.mockClear()
+  video.mockImplementation(async config => config.codec.startsWith('hev1'))
+  const large = { ...settings, width: 7680, height: 4320 }
+  expect(await resolveVideoEditExportIntermediateSettings(large)).toMatchObject({ codec: 'hevc', encoding: undefined, videoBitrateMbps: 200 })
+  expect(video.mock.calls.map(([config]) => config.codec.split('.')[0])).toEqual(['avc1', 'hev1'])
+  const direct = { ...large, encoding: undefined }
+  expect(await resolveVideoEditExportIntermediateSettings(direct)).toBe(direct)
+})
 it('8K/120与竖屏优先HEVC，探测实际原生尺寸、帧率、码率', async () => {
   expect(await selectVideoEditExportEncoder(spec)).toBe('hevc')
   expect(video).toHaveBeenCalledWith(expect.objectContaining({ codec: expect.stringMatching(/^hev1\./), width: 7680, height: 4320, displayWidth: 7680, displayHeight: 4320, bitrate: 20_000_000, latencyMode: 'quality', hardwareAcceleration: 'prefer-hardware' }))

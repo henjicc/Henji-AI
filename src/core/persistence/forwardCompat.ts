@@ -5,15 +5,17 @@ import type { z } from 'zod'
  * 只新增可选字段时最低可读版本不变，旧程序按自己认识的字段打开，并在保存时原样带回它不认识的字段；
  * 改变已有字段含义时才提高最低可读版本，旧程序明确提示升级，不打开、不覆盖。
  */
-export type ForwardFieldPath = ReadonlyArray<string | number | { id: string }>
+export type ForwardFieldPath = ReadonlyArray<string | number | { id: string } | { projectId: string; sequenceId: string }>
 export interface ForwardField { path: ForwardFieldPath; key: string; value: unknown }
 export interface ForwardReadResult<T> { value: T; fields: ForwardField[] }
 
 type Record_ = Record<string, unknown>
 const isRecord = (value: unknown): value is Record_ => typeof value === 'object' && value !== null && !Array.isArray(value)
-const step = (container: unknown[], index: number): string | number | { id: string } => {
+const step = (container: unknown[], index: number): string | number | { id: string } | { projectId: string; sequenceId: string } => {
   const item = container[index]
-  return isRecord(item) && typeof item.id === 'string' && item.id ? { id: item.id } : index
+  if (isRecord(item) && typeof item.id === 'string' && item.id) return { id: item.id }
+  if (isRecord(item) && typeof item.projectId === 'string' && typeof item.sequenceId === 'string') return { projectId: item.projectId, sequenceId: item.sequenceId }
+  return index
 }
 
 /** 文件版本是否可由本程序直接读取（等于当前或更新但最低可读版本不高于当前）。 */
@@ -25,7 +27,7 @@ function at(root: unknown, path: ForwardFieldPath): unknown {
   let value = root
   for (const segment of path) {
     if (Array.isArray(value)) {
-      value = typeof segment === 'object' ? value.find(item => isRecord(item) && item.id === segment.id) : value[segment as number]
+      value = typeof segment === 'object' ? value.find(item => isRecord(item) && ('id' in segment ? item.id === segment.id : item.projectId === segment.projectId && item.sequenceId === segment.sequenceId)) : value[segment as number]
     } else if (isRecord(value) && typeof segment === 'string') value = Object.hasOwn(value, segment) ? value[segment] : undefined
     else return undefined
   }
@@ -33,7 +35,7 @@ function at(root: unknown, path: ForwardFieldPath): unknown {
 }
 
 function described(root: unknown, path: ReadonlyArray<PropertyKey>): ForwardFieldPath {
-  const result: Array<string | number | { id: string }> = []
+  const result: Array<string | number | { id: string } | { projectId: string; sequenceId: string }> = []
   let value = root
   for (const segment of path) {
     if (Array.isArray(value) && typeof segment === 'number') { result.push(step(value, segment)); value = value[segment] }
@@ -43,8 +45,8 @@ function described(root: unknown, path: ReadonlyArray<PropertyKey>): ForwardFiel
   return result
 }
 
-/** raw 中存在、解析结果中被去掉的键（宽松对象静默剥离的未知字段）。按数组下标对齐，记录稳定 id 路径。 */
-function collectStripped(raw: unknown, parsed: unknown, path: Array<string | number | { id: string }>, out: ForwardField[]): void {
+/** raw 与解析结果按下标比较，未知字段记录稳定条目标识以便重排后恢复。 */
+function collectStripped(raw: unknown, parsed: unknown, path: Array<string | number | { id: string } | { projectId: string; sequenceId: string }>, out: ForwardField[]): void {
   if (Array.isArray(raw) && Array.isArray(parsed) && raw.length === parsed.length) {
     raw.forEach((item, index) => collectStripped(item, parsed[index], [...path, step(raw, index)], out))
     return

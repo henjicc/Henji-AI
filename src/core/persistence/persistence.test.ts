@@ -7,6 +7,21 @@ import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { PERSISTENCE_FORMATS } from './formats'
 
+it('高级导出编码跨预设、剪辑历史、录制嵌入快照读回，旧样本不被补入新编码', () => {
+  for (const [id, previous] of [['document.video_edit', 45], ['document.screen_recording', 48], ['export-presets', 3]] as const) {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
+    const read = (version: number): unknown => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')).content
+    const settingsIn = (content: unknown): Record<string, unknown> => {
+      const value = content as { exportHistory: Array<{ settings: Record<string, unknown> }>; scriptCapture: { baselines: Array<{ content: { exportHistory: Array<{ settings: Record<string, unknown> }> } }> } }
+      return id === 'export-presets' ? (content as Array<{ settings: Record<string, unknown> }>)[0].settings : id === 'document.video_edit' ? value.exportHistory[0].settings : value.scriptCapture.baselines[0].content.exportHistory[0].settings
+    }
+    const original = read(previous), before = structuredClone(original)
+    expect(settingsIn(upgradePersistenceContent(format, original, previous))).not.toHaveProperty('encoding')
+    expect(original).toEqual(before)
+    expect(settingsIn(upgradePersistenceContent(format, read(format.version), format.version)).encoding).toMatchObject({ encoder: 'libx264', rateControl: 'quality' })
+  }
+})
+
 it('输出渲染开关跨剪辑、录制快照与导出预设迁移保留；旧记录缺省语义由设置解析补齐', async () => {
   const { resolveVideoEditExportSettings } = await import('../videoEdit/exportPresets')
   const sequence = { width: 1920, height: 1080, fps: 30, sampleRate: 48000, channels: 2 }

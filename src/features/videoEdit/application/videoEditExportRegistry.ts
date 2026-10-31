@@ -106,8 +106,8 @@ export function videoEditExportOutputs(id: string, onPublished?: () => void): Vi
  * 不进导出队列的单次导出（如发送到画布）：只登记输出文件，重载后清理未完成文件、不恢复。
  * 已知限制：清理靠新页面加载时取回登记或渲染进程退出触发；重载后新页面一直加载失败时，要等窗口销毁才清理。
  */
-export function transientVideoEditExportOutputs(job: { id: string; projectId: string; name: string; outputPaths: string[] }): VideoEditExportOutputs {
-  void registerVideoEditExportJobs([{ ...job, presetName: '', restorable: false }]).catch(syncFailed(job.id, 'video_edit.export_registry.register_failed'))
+export async function transientVideoEditExportOutputs(job: { id: string; projectId: string; name: string; outputPaths: string[] }): Promise<VideoEditExportOutputs> {
+  await registerVideoEditExportJobs([{ ...job, presetName: '', restorable: false }])
   syncVideoEditExportJob({ id: job.id, state: 'running', progress: 0 })
   return { ...videoEditExportOutputs(job.id), finish: leftover => { if (leftover) syncVideoEditExportJob({ id: job.id, state: 'failed', progress: 0 }); else removeVideoEditExportJobs([job.id]) } }
 }

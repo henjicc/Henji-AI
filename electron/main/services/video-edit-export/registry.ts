@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import { renameWithRetry } from '../fs/atomic-file'
 import { removePath, writeFileBytes } from '../system'
 import { VideoEditExportJobRegistry } from './jobRegistry'
 
@@ -11,5 +12,6 @@ export const videoEditExportJobRegistry = new VideoEditExportJobRegistry({
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error }
   },
   remove: target => removePath(target),
+  replace: (source, target) => renameWithRetry(source, target),
 })
 

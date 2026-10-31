@@ -21,6 +21,7 @@ import { videoEditStyleSchema } from '../videoEdit/styles/styleSchemas'
 import { VIDEO_EDIT_STYLE_LIBRARY_VERSION, VIDEO_EDIT_STYLE_PACKAGE_VERSION, VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, videoEditStylePackageSchema, videoEditTemplateSchema } from '../videoEdit/styles/templateSchemas'
 import { VIDEO_EDIT_PRESET_PACKAGE_VERSION, videoEditPresetPackageSchema, videoEditPresetPreferencesSchema } from '../videoEdit/presetPackage'
 import { videoEditExportPresetSchema } from '../videoEdit/exportPresets'
+import { videoEditExportMemorySchema } from '../videoEdit/exportMemory'
 import { audioEditProjectSchema } from '../audioEdit/schema'
 import { assetRecordSchema, packageManifestSchema, PACKAGE_VERSION, presetRecordSchema, settingRecordSchema, videoEditTextPresetSchema, voiceLibraryRecordSchema, videoEditSubtitleManifestSchema } from './storedSchemas'
 import type { PersistenceContract } from './migrations'
@@ -46,7 +47,7 @@ export interface PersistenceFormat extends PersistenceContract {
 
 function format(id: string, name: string, version: number, versionSource: string, readEntry: string, schema: z.ZodType, storage: PersistenceFormat['storage'] = 'file', schemas: Readonly<Record<string, z.ZodType>> = {}): PersistenceFormat {
   const container = ['settings', 'theme'].includes(id) ? z.object({ version: z.literal(version), state: schema })
-    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config', 'sound-library-folders', 'video-style-library', 'video-template-library', 'video-style-package'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
+    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'export-memory', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config', 'sound-library-folders', 'video-style-library', 'video-template-library', 'video-style-package'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
   return { id, name, version, versionSource, readEntry, schema, schemas: { content: schema, ...(container ? { container } : {}), ...schemas }, migrations: formatMigrations(id), storage, migrationEntry: storage === 'sqlite-ledger' ? 'electron/main/services/db-migrations.ts::SCHEMA_MIGRATIONS / runSchemaMigrations' : 'src/core/persistence/formatMigrations.ts / migrations.ts::upgradePersistenceContent' }
 }
 
@@ -83,7 +84,8 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema), minReaderVersion: 3 },
   { ...format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.hjsty.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema), minReaderVersion: 6 },
   format('text-presets', '本机文字和字幕预设', LOCAL_LIBRARY_FORMATS['video-edit-text-presets'].version, 'video-edit-text-presets.version', 'src/features/videoEdit/application/videoEditLocalLibrary.ts', z.array(videoEditTextPresetSchema), 'local-storage'),
-  { ...format('export-presets', '本机导出预设', LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].version, 'video-edit-export-presets.version', 'src/features/videoEdit/application/videoEditExportPresets.ts', z.array(videoEditExportPresetSchema), 'local-storage'), minReaderVersion: 1 },
+  { ...format('export-presets', '本机导出预设', LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].version, 'video-edit-export-presets.version', 'src/features/videoEdit/application/videoEditExportPresets.ts', z.array(videoEditExportPresetSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].minReaderVersion },
+  { ...format('export-memory', '上次导出设置', LOCAL_LIBRARY_FORMATS['video-edit-export-memory'].version, 'video-edit-export-memory.version', 'src/features/videoEdit/application/videoEditExportMemory.ts', videoEditExportMemorySchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-export-memory'].minReaderVersion },
   format('preset-preferences', '预设评分与默认', LOCAL_LIBRARY_FORMATS['video-edit-preset-preferences'].version, 'video-edit-preset-preferences.version', 'src/features/videoEdit/application/videoEditPresetPreferences.ts', videoEditPresetPreferencesSchema, 'local-storage'),
   { ...format('video-preset-package', '可分享剪辑预设', VIDEO_EDIT_PRESET_PACKAGE_VERSION, 'henji-video-presets.version', 'src/features/videoEdit/application/videoEditPresetCatalog.ts::importVideoEditPresetPackage', videoEditPresetPackageSchema), minReaderVersion: 6 },
   format('voice-library', '克隆音色库', LOCAL_LIBRARY_FORMATS['voice_library_records'].version, 'settings.voice_library_records.version', 'src/services/voiceLibrary/VoiceLibraryService.ts::parseVoiceRecords', z.array(voiceLibraryRecordSchema)),

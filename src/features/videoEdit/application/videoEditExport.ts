@@ -1,5 +1,5 @@
 import { AdtsOutputFormat, AudioBufferSource, CanvasSource, Mp4OutputFormat, WavOutputFormat, Output, StreamTarget } from 'mediabunny'
-import { videoEditExportEncoding, resolveVideoEditExportSettings, videoEditSequenceExportSettings, videoEditExportPaths, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import { videoEditExportEncoding, resolveVideoEditExportSettings, videoEditSequenceExportSettings, videoEditExportPaths, videoEditExportEstimatedBytes, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { exportVideoEditCaptions } from '@/core/videoEdit/timedContent'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
@@ -8,7 +8,7 @@ import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessSettings, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { spoolVideoEditAudio } from './videoEditLoudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditExportAudioUserError, videoEditExportVideoOptions, videoEditExportAudioOptions } from '../engine/videoEditExportEncoder'
+import { resolveVideoEditExportIntermediateSettings, adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditExportAudioUserError, videoEditExportVideoOptions, videoEditExportAudioOptions } from '../engine/videoEditExportEncoder'
 import { recordVideoEditExport, getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { importVideoEditSources } from './videoEditMedia'
@@ -17,6 +17,8 @@ import { videoEditTrackResults, waitVideoEditTracking } from './videoEditTrackin
 import { transientVideoEditExportOutputs, type VideoEditExportOutputs } from './videoEditExportRegistry'
 import { videoEditExportPreviews } from './videoEditExportPreviews'
 import { prepareVideoEditExportFrame, videoEditExportProgress } from './videoEditExportFrame'
+import { videoEditExportMemory } from './videoEditExportMemory'
+import { compressVideoEditExport } from './videoEditExportCompression'
 
 const logger = createLogger('features.videoEdit.export')
 /**
@@ -26,12 +28,15 @@ const logger = createLogger('features.videoEdit.export')
 function videoEditExportFrameError(frame: number, fps: number, error: unknown): Error {
   return new Error(`导出在 ${videoEditFrameTimecode(frame, fps)} 处停止。${error instanceof Error ? error.message : String(error)}`, { cause: error })
 }
-export interface VideoEditExportTask { id: string; projectId: string; sequenceId: string; revision: number; startFrame: number; endFrame: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; controller: AbortController; output?: VideoEditOutputReceipt; assetRef?: { kind: 'asset'; id: string }; loudness?: VideoEditLoudnessSettings; loudnessMeasurement?: VideoEditLoudnessMeasurement; notice?: string }
+export interface VideoEditExportTask { phase?: 'composition' | 'compression'; compositionProgress?: number; compressionProgress?: number; id: string; projectId: string; sequenceId: string; revision: number; startFrame: number; endFrame: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; controller: AbortController; output?: VideoEditOutputReceipt; assetRef?: { kind: 'asset'; id: string }; loudness?: VideoEditLoudnessSettings; loudnessMeasurement?: VideoEditLoudnessMeasurement; notice?: string }
 const tasks = new WeakMap<VideoEditInstance, VideoEditExportTask>()
 export function videoEditExportTask(projectId: string): VideoEditExportTask | undefined { return tasks.get(requireVideoEditInstance(projectId)) }
 export function cancelVideoEditExport(projectId: string): void { videoEditExportTask(projectId)?.controller.abort() }
 export interface VideoEditExportOptions {
+  /** 只有导出窗口主动请求时写入上次导出记忆。 */
+  rememberExport?: boolean
   queueId?: string
+  presetId?: string
   presetName?: string
   rangeSource?: 'explicit' | 'in-out' | 'content'
   snapshot: VideoEditComposition
@@ -40,6 +45,8 @@ export interface VideoEditExportOptions {
   signal?: AbortSignal
   onTask?: (task: VideoEditExportTask) => void
   loudnessRequested?: boolean
+  /** 用户请求的文件名，记进上次导出；自动取名补上的编号不在其中。 */
+  requestedFileName?: string
   /** 输出文件由导出登记独占创建；省略时按单次导出临时登记，界面重载后只清理未完成文件。 */
   outputs?: VideoEditExportOutputs
 }
@@ -69,15 +76,17 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   if (!listVideoEditInstances().includes(instance)) throw new Error('原剪辑已关闭，导出不会写入重新打开的剪辑。')
   if (instance.busy) throw new Error('该剪辑已有导出任务。')
   const document = snapshot
-  const task: VideoEditExportTask = { id: crypto.randomUUID(), projectId, sequenceId: document.id, revision: document.revision, ...range, state: 'running', progress: 0, controller: new AbortController() }
+  const task: VideoEditExportTask = { id: crypto.randomUUID(), projectId, sequenceId: document.id, revision: document.revision, ...range, state: 'running', phase: 'composition', compositionProgress: 0, progress: 0, controller: new AbortController() }
   task.loudness = loudness
   tasks.set(instance, task); instance.busy = true; publishVideoEdit()
   const abort = (): void => task.controller.abort()
   options?.signal?.addEventListener('abort', abort, { once: true })
   if (options?.signal?.aborted) abort()
   options?.onTask?.(task)
-  const outputs = options?.outputs ?? transientVideoEditExportOutputs({ id: task.id, projectId, name: snapshot.name, outputPaths: videoEditExportPaths(path, settings) })
+  let outputs = options?.outputs
   const render = async (): Promise<string | null> => {
+  let compression: { id: string; intermediatePath: string } | undefined
+  let writePath = path
   let renderer: VideoEditRenderSession | undefined
   let soundSession: string | undefined
   const loudnessApi = platform.audioEdit.loudness
@@ -97,9 +106,16 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   let measuredAt = started
   logger.info('开始导出剪辑', { event: 'video_edit.export.start', context: { projectId, taskId: task.id, ...range } })
   try {
-    const encoding = videoEditExportEncoding(settings, document.fps)
-    const videoCodec = settings.videoEnabled ? settings.codec : undefined
+    const intermediateSettings = await resolveVideoEditExportIntermediateSettings(settings)
+    outputs ??= await transientVideoEditExportOutputs({ id: task.id, projectId, name: snapshot.name, outputPaths: videoEditExportPaths(path, settings) })
+    const encoding = videoEditExportEncoding(intermediateSettings, document.fps)
+    const videoCodec = settings.videoEnabled ? intermediateSettings.codec : undefined
     task.controller.signal.throwIfAborted()
+    if (settings.videoEnabled && settings.encoding) {
+      await outputs.create(path); created = true
+      compression = await platform.videoEditExport.prepareCompression(options?.queueId ?? task.id, path, videoEditExportEstimatedBytes(intermediateSettings, (range.endFrame - range.startFrame) / document.fps))
+      writePath = compression.intermediatePath
+    }
     // 智能区域（4.7d）：导出用到的区域先全部分析完成，导出画面与预览同一份蒙版。
     const smartRegions = await waitVideoEditSmartRegions(document, document, task.controller.signal)
     await waitVideoEditTracking(document, document, task.controller.signal)
@@ -117,7 +133,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       logger.warn('预览文件未能准备，使用现场合成', { event: 'video_edit.export.previews_unavailable', error, context: { projectId, taskId: task.id } })
     }
     if (loudness) {
-      soundSession = await spoolVideoEditAudio(renderDocument, range, task.controller.signal, renderer, fraction => { task.progress = fraction * .1; publishVideoEdit() })
+      soundSession = await spoolVideoEditAudio(renderDocument, range, task.controller.signal, renderer, fraction => { task.compositionProgress = fraction * .1; task.progress = task.compositionProgress * (compression ? .8 : 1); publishVideoEdit() })
       task.controller.signal.addEventListener('abort', cancelSound, { once: true })
       task.controller.signal.throwIfAborted()
       const measured = await loudnessApi.measure(soundSession)
@@ -129,10 +145,10 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       } else task.loudnessMeasurement = await loudnessApi.normalize(soundSession, loudness)
       task.controller.signal.throwIfAborted()
     }
-    output = new Output({ format: format === 'wav' ? new WavOutputFormat() : format === 'aac' ? new AdtsOutputFormat() : new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
-    await outputs.create(path); created = true
+    if (!created) { await outputs.create(path); created = true }
+    output = new Output({ format: format === 'wav' ? new WavOutputFormat() : format === 'aac' ? new AdtsOutputFormat() : new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(writePath, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
     task.controller.signal.throwIfAborted()
-    const video = videoCodec ? new CanvasSource(picture!.canvas, videoEditExportVideoOptions(settings)) : undefined
+    const video = videoCodec ? new CanvasSource(picture!.canvas, videoEditExportVideoOptions(intermediateSettings)) : undefined
     const audio = settings.audioEnabled ? new AudioBufferSource(videoEditExportAudioOptions(settings)) : undefined
     if (video) output.addVideoTrack(video, { frameRate: encoding.fps })
     if (audio) output.addAudioTrack(audio)
@@ -191,7 +207,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
         measuredAt = performance.now()
         logger.info('剪辑导出阶段耗时', { event: 'video_edit.export.performance', context: { projectId, taskId: task.id, ...phases, elapsedMs: measuredAt - started } })
       }
-      task.progress = (loudness ? .1 : 0) + (index + 1) / steps * (loudness ? .9 : 1)
+      task.compositionProgress = (loudness ? .1 : 0) + (index + 1) / steps * (loudness ? .9 : 1)
+      task.progress = task.compositionProgress * (compression ? .8 : 1)
       await publishProgress()
     }
     await addSoundUntil(endFrame)
@@ -199,6 +216,12 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     publishVideoEdit()
     await output.finalize()
     task.controller.signal.throwIfAborted()
+    if (compression && settings.encoding) {
+      task.phase = 'compression'; task.compositionProgress = 1; task.compressionProgress = 0; publishVideoEdit()
+      await compressVideoEditExport(compression.id, settings.encoding, encoding.fps, frames / document.fps, task.controller.signal, value => {
+        task.compressionProgress = value; task.progress = .8 + value * .2; publishVideoEdit()
+      }, settings.videoBitrateMbps)
+    }
     if (captionPath && (settings.captionMode === 'srt' || settings.captionMode === 'vtt')) {
       const text = exportVideoEditCaptions(document, settings.captionMode, { ...range, clock: 'range' })
       task.controller.signal.throwIfAborted()
@@ -210,6 +233,13 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     published = true; task.state = 'completed'
     task.output = await publishVideoEditOutput({ owner: instance, sequenceId: document.id, revision: document.revision, path, name: `${snapshot.name} · ${format === 'mp4' ? '成片' : '声音'}`, kind: format === 'mp4' ? 'video' : 'audio' })
     const completedAt = Date.now()
+    const separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+    try {
+      if (options?.rememberExport) videoEditExportMemory.remember({ projectId, sequenceId: document.id, presetId: options?.presetId ?? (options?.settings ? 'custom' : 'builtin:sequence'), settings, loudnessRequested: options.loudnessRequested ?? loudnessSettings !== undefined, directory: path.slice(0, separator), fileName: path.slice(separator + 1), ...(options?.requestedFileName ? { requestedFileName: options.requestedFileName } : {}), range, rangeSource, completedAt })
+    } catch (error) {
+      task.notice = [task.notice, '成片已保存，但没能记住本次导出设置。'].filter(Boolean).join(' ')
+      logger.warn('成片完成后写入导出记忆失败', { event: 'video_edit.export.memory_failed', error, context: { projectId, taskId: task.id } })
+    }
     const persistReceipt = async (): Promise<void> => {
       recordVideoEditExport(projectId, { id: options?.queueId ?? task.id, taskId: task.id, sequenceId: document.id,
         name: snapshot.name, presetName: options?.presetName ?? '自定义导出', rangeSource, path, completedAt, settings, range, ...(task.assetRef ? { assetRef: task.assetRef } : {}) })
@@ -242,9 +272,10 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     if (!task.controller.signal.aborted) throw userError
     return null
   } finally {
+    if (compression) await platform.videoEditExport.cancelCompression(compression.id).catch(error => logger.warn('导出临时文件清理未完成', { event: 'video_edit.export.cleanup_failed', error, context: { projectId, taskId: task.id } }))
     task.controller.signal.removeEventListener('abort', cancelSound)
     options?.signal?.removeEventListener('abort', abort)
-    outputs.finish?.(leftover)
+    outputs?.finish?.(leftover)
     try { if (soundSession) await loudnessApi.close(soundSession) } finally { try { await renderer?.dispose() } finally { instance.busy = false; publishVideoEdit() } }
   }
   }

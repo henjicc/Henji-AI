@@ -9,6 +9,11 @@ function text(value: unknown, field: string): string {
 export function createVideoEditExportApi(invoke: <T>(channel: string, payload?: unknown) => Promise<T>): VideoEditExportPlatform {
   const pageId = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
   return {
+    capabilities: () => invoke(VIDEO_EDIT_EXPORT_CHANNELS.capabilities),
+    prepareCompression: (jobId, path, estimatedBytes = 0) => invoke(VIDEO_EDIT_EXPORT_CHANNELS.prepareCompression, { pageId, jobId: text(jobId, 'jobId'), path: text(path, 'path'), estimatedBytes }),
+    compress: request => invoke(VIDEO_EDIT_EXPORT_CHANNELS.compress, { pageId, ...request }),
+    compressionProgress: id => invoke(VIDEO_EDIT_EXPORT_CHANNELS.compressionProgress, { pageId, id: text(id, 'id') }),
+    cancelCompression: id => invoke(VIDEO_EDIT_EXPORT_CHANNELS.cancelCompression, { pageId, id: text(id, 'id') }),
     register: request => {
       if (!request || !Array.isArray(request.jobs) || !Array.isArray(request.snapshots) || request.snapshots.some(value => typeof value !== 'string')) throw new Error('导出登记格式无效。')
       return invoke(VIDEO_EDIT_EXPORT_CHANNELS.register, { pageId, snapshots: request.snapshots, jobs: request.jobs })

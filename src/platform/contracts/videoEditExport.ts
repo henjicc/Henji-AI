@@ -5,7 +5,14 @@
  * 实现在 `electron/main/services/video-edit-export/jobRegistry.ts`，渲染层入口是 `videoEditExportRegistry.ts`。
  */
 
+import type { VideoEditExportCapabilities, VideoEditExportEncoding } from '../../core/videoEdit/exportEncoding'
+
 export const VIDEO_EDIT_EXPORT_CHANNELS = {
+  capabilities: 'video-edit-export:capabilities',
+  prepareCompression: 'video-edit-export:prepare-compression',
+  compress: 'video-edit-export:compress',
+  compressionProgress: 'video-edit-export:compression-progress',
+  cancelCompression: 'video-edit-export:cancel-compression',
   register: 'video-edit-export:register',
   update: 'video-edit-export:update',
   createOutput: 'video-edit-export:create-output',
@@ -72,6 +79,11 @@ export interface VideoEditExportJobRecord {
 }
 
 export interface VideoEditExportPlatform {
+  capabilities(): Promise<VideoEditExportCapabilities>
+  prepareCompression(jobId: string, path: string, estimatedBytes?: number): Promise<{ id: string; intermediatePath: string }>
+  compress(request: { id: string; encoding: VideoEditExportEncoding; videoBitrateMbps?: number; fps: number; durationSeconds: number }): Promise<void>
+  compressionProgress(id: string): Promise<number>
+  cancelCompression(id: string): Promise<void>
   register(request: VideoEditExportRegistrationRequest): Promise<VideoEditExportRegistrationResult[]>
   update(update: VideoEditExportJobUpdate): Promise<void>
   /** 由主进程独占创建空的输出文件并记下文件身份；已有同名文件时失败，不覆盖。 */

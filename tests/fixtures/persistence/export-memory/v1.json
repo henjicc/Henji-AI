@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "content": [
+    {
+      "projectId": "golden-video_edit",
+      "sequenceId": "main",
+      "presetId": "builtin:sequence",
+      "settings": {
+        "encoding": {
+          "encoder": "libx264",
+          "rateControl": "quality",
+          "quality": 20,
+          "bitrateMbps": 12,
+          "maxBitrateMbps": 0,
+          "bufferMbps": 0,
+          "preset": "medium",
+          "profile": "auto",
+          "level": "auto",
+          "keyframeSeconds": 2,
+          "bFrames": 3,
+          "lookaheadFrames": 40,
+          "spatialAq": true,
+          "temporalAq": false,
+          "colorRange": "limited",
+          "colorMatrix": "bt709",
+          "tenBit": false
+        },
+        "format": "mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": null,
+        "videoBitrateMbps": 12,
+        "audioBitrateKbps": 192,
+        "fit": "fit",
+        "loudness": {
+          "targetLufs": -14,
+          "truePeakDbtp": -1
+        },
+        "codec": "avc",
+        "bitrateMode": "vbr",
+        "keyframeInterval": "auto",
+        "encoderPreference": "hardware",
+        "videoEnabled": true,
+        "audioEnabled": true,
+        "audioCodec": "aac",
+        "sampleRate": 48000,
+        "channels": 2,
+        "captionMode": "burn",
+        "followSequence": {
+          "resolution": true,
+          "fps": true,
+          "sampleRate": true,
+          "channels": true
+        },
+        "importToProject": false,
+        "addToLibrary": true,
+        "useProxies": false,
+        "usePreviews": false
+      },
+      "directory": "/exports",
+      "fileName": "成片.mp4",
+      "range": {
+        "startFrame": 0,
+        "endFrame": 300
+      },
+      "rangeSource": "content",
+      "completedAt": 1791504000000
+    }
+  ]
+}
