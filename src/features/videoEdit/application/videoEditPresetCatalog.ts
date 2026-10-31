@@ -3,7 +3,7 @@ import { migrateVideoEditMergedEffects } from '@/core/videoEdit/mergedEffectsMig
 import { createLogger } from '@/core/logging'
 import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
 import { upgradePersistenceContent } from '@/core/persistence/migrations'
-import type { VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
+import type { VideoEditStyle, VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
 import type { VideoEditTemplateBody } from '@/core/videoEdit/styles/templateSchemas'
 import { migrateStyleKit, migrateTitleTemplate } from '@/core/videoEdit/styles/styleTemplateMigration'
 import { VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
@@ -19,11 +19,17 @@ const logger = createLogger('features.videoEdit.presetCatalog')
 const PRESET_PACKAGE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-preset-package')!
 /** What a preview renders: a style sample, a template, or a panel preset (one resolver for the panel, the assistant entity and export). */
 export type VideoEditPresetSource =
-  | { category: 'style'; trustContext?: ContentTrustReference[]; sample: VideoEditStyleSample }
-  | { category: 'template'; trustContext?: ContentTrustReference[]; body: VideoEditTemplateBody }
+  | { category: 'style'; style?: VideoEditStyle; trustContext?: ContentTrustReference[]; sample: VideoEditStyleSample }
+  | { category: 'template'; style?: VideoEditStyle; trustContext?: ContentTrustReference[]; body: VideoEditTemplateBody }
   | { category: 'text'; preset: VideoEditSubtitlePreset }
   | { category: 'effect'; preset: VideoEditEffectPreset }
   | { category: 'transition'; kind: VideoEditTransitionKind }
+/** 工程模板优先携带工程风格副本；库模板使用其所属的库风格。 */
+export function videoEditTemplateStyle(template: { style: { id: string } | null }, styles?: readonly VideoEditStyle[]): VideoEditStyle | undefined {
+  const style = template.style ? styles?.find(style => style.id === template.style!.id) ?? videoEditStyleLibrary.findStyle(template.style.id)?.style : undefined
+  if (template.style && !style) throw new Error(`模板所属风格（${template.style.id}）已不可用，请恢复该风格或重新指定模板所属风格。`)
+  return style
+}
 export interface VideoEditPresetEntry {
   category: VideoEditPresetCategory; id: string; name: string; meta: string
   builtin: boolean; rating: number; isDefault: boolean

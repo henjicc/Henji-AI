@@ -57,9 +57,10 @@ function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProg
 }
 /** Trial uses the same full-resolution source/compiler/GPU path as preview and
  * export. Its bounded temporary session is always released before publication. */
-function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader, media: VideoEditMedia[] = [], endpoints = false, host = createVideoEditSequence()): Array<{ document: VideoEditComposition; frame: number }> {
-  const sequence = { ...createVideoEditSequence('源码候选检查'), width: host.width, height: host.height, frameRate: host.frameRate }
-  const document: VideoEditDocument = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: crypto.randomUUID(), name: sequence.name, revision: 0, media, bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
+function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader, media: VideoEditMedia[] = [], endpoints = false, host = createVideoEditSequence(), context?: Pick<VideoEditDocument, 'styles' | 'templates'>): Array<{ document: VideoEditComposition; frame: number }> {
+  const sequence = { ...createVideoEditSequence('源码候选检查'), width: host.width, height: host.height, frameRate: host.frameRate, ...(host.styleId ? { styleId: host.styleId } : {}) }
+  const definitions = new Set(candidates.map(candidate => candidate.definition.id))
+  const document: VideoEditDocument = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: crypto.randomUUID(), name: sequence.name, revision: 0, media, bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence], styles: context?.styles, templates: context?.templates?.filter(template => template.body.kind === 'code' && definitions.has(template.body.definitionId)) }
   const frames = candidates.flatMap(candidate => {
     const program = read(candidate.filter ?? candidate.item.code!)
     Object.assign(sequence, codeMaterialSize(program, sequence))
@@ -167,7 +168,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     await ensureVideoEditChangedCodeMetadata(owner, baseline, candidateDocument, controller.signal)
     validateCodeMaterialDocument(candidateDocument, read, changedCodeMaterialVersions(baseline, candidateDocument))
     const placements = publication || afterCreate ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
-    const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication), owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))
+    const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication), owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId), candidateDocument)
     await withVideoEditCodeTypeContext(() => trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal, false, undefined, measurements), typeChecks, controller.signal)
     if (publication) await publication.beforePublish()
     controller.signal.throwIfAborted()
@@ -221,7 +222,7 @@ export async function createVideoEditCodeAssetInstance(projectId: string, public
 }
 
 /** 新版本默认用于后续放置；已有素材项与片段仍保持各自固定的版本。 */
-export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[], afterCreate?: (document: VideoEditDocument, versionIds: string[]) => VideoEditDocument): Promise<string[]> {
+export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[], afterCreate?: (document: VideoEditDocument, versionIds: string[]) => VideoEditDocument, trialContext?: Pick<VideoEditDocument, 'styles' | 'templates'>): Promise<string[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的源码版本。')
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
@@ -262,7 +263,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     validateCodeMaterialDocument(document, read, changedCodeMaterialVersions(baseline, document))
     // Separate candidates may append to the same definition; each isolated
     // source trial avoids duplicate definitions while retaining one queue.
-    await withVideoEditCodeTypeContext(() => trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))), controller.signal, false, undefined, measurements), typeChecks, controller.signal)
+    await withVideoEditCodeTypeContext(() => trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, document.sequences.find(sequence => sequence.id === owner.activeSequenceId), trialContext ?? document)), controller.signal, false, undefined, measurements), typeChecks, controller.signal)
     controller.signal.throwIfAborted()
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, current => withVideoEditCurrentMetadata(document, current))

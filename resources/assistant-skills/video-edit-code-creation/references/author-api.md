@@ -182,7 +182,7 @@ TS 文件（含默认入口 main.ts）在打包的同时按作者接口做类型
 
 ## API 7：图层效果链与 henji-effects
 
-新源码使用作者接口 7，`henji-effects` 随代码版本冻结（新源码锁定 1.1.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / lens 镜头）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
+新源码使用作者接口 7，`henji-effects` 随代码版本冻结（新源码锁定 1.2.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / lens 镜头）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
 
 `effects(t)` 每个可见层在中心作者时间求值一次，时间与 draw 相同；位姿仍按曝光采样。即使 draw 的 cacheKey 恒定，effects 仍逐帧求值。静态无 pose 的效果层也独立栅格；尽量给 bounds（内容在作者坐标中的矩形），省略时按完整作者画幅。宿主根据整链支撑外扩，不需要把光晕手工塞进 bounds。效果先于位姿变换、opacity、clip 和运动曝光；效果本身不多次曝光。
 
@@ -192,7 +192,9 @@ TS 文件（含默认入口 main.ts）在打包的同时按作者接口做类型
 
 API 7 本帧实际产生发光 underlay 时，光以预乘 RGBA 的零 alpha RGB 传过片段和嵌套边界；其他画面沿用 RGB≤alpha 钳制。**限制：发光“相加照亮下方”只在代码片段直接合成到下方时成立。片段上的任何效果、任何转场（包括内置擦除、交叉溶解及 gl-transitions）都会产出普通画面，零 alpha 光会被截掉，因此效果期间光晕消失，转场首尾可能跳变。需要调光色时在作者 effects 内调参数／调发光前的内容。透明文件仍是普通预乘 RGBA，背景相关相加须有背景。**
 
-`look("预设名")` 精确查询全局视频效果预设；重名、缺失（含换机器缺预设）、音频、代码效果、蒙版或片段空间效果明确报错。保留预设 enabled、amount 和以片段局部帧求值的曲线。旋钮只接受空对象；不查风格包，不扩风格 schema。离屏任务持有启动时快照，预览会话跟随全局预设更新。跨机器需另行提供同名唯一预设。
+`look("风格件名", { 旋钮键: 数值 })` 用 `henji-effects@1.2.0`。先查当前序列绑定的工程风格副本 `video_edit.project_style.effect_presets`，同名覆盖全局 `video_edit.effect_preset`。读取说明、用途、knobs 的范围和默认值再写；省略旋钮取默认值，未知键、非数值、越界直接报错。映射先求原曲线，再覆盖目标效果实例的参数；两点为线性、多点为分段线性。enabled、amount 和未映射参数的曲线照常生效。
+
+风格件可包含多个内置效果；声音、代码效果、蒙版或只能用于片段的效果不能放进作者图层。缺失和同级重名报错。工程风格件随风格包分享；全局件跨机器另行导入。离屏任务固定启动快照，预览跟随全局库更新。新建或修改前展示具体定义，请用户确认一次；全局写 `video_edit.effect_preset.definition`，归属风格写 `video_edit.style.effect_presets`，导入风格后按原有绑定／升级路径更新工程副本。
 
 ```ts
 import { glow, blur } from "henji-effects"

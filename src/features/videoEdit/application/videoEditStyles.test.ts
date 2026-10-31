@@ -1,3 +1,6 @@
+import { resolveAuthorEffects, authorEffectEnvironmentForStyle } from '@/core/videoEdit/authorEffects'
+import { videoEditEffectPresetSchema } from '@/core/videoEdit/effectPresets'
+import { look } from '../authorLibraries/effects'
 import { readMemory, refreshMemory, writeMemory, revertMemory } from '@/services/assistantMemory/memoryService'
 import { getPlatform } from '@/platform/runtime'
 // @vitest-environment jsdom
@@ -25,6 +28,7 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
+const trialDocuments = vi.hoisted(() => [] as VideoEditComposition[])
 
 vi.mock('../engine/videoEditCodeCompiler', async () => {
  const { testAuthorBundle } = await import('../engine/videoEditAuthorTestFixtures')
@@ -41,6 +45,7 @@ vi.mock('../engine/videoEditRenderSession', async () => {
     async updateDocument(document: VideoEditComposition) { this.document = document }
     async replaceContent(document: VideoEditComposition) { this.document = document }
     async present() {
+      trialDocuments.push(this.document)
       for (const clip of this.document.clips) if (clip.code) {
         const version = this.document.codeMaterials!.find(value => value.id === clip.code!.definitionId)!.versions.find(value => value.id === clip.code!.versionId)!
         testAuthorProgram(testAuthorBundle(testCodeSource(this.document, version)))
@@ -56,6 +61,7 @@ const CARD = `export default { name: "档案人名条", kind: "generator", mode:
 `
 let io: ReturnType<typeof createTestStyleLibraryIo>
 beforeEach(async () => {
+  trialDocuments.length = 0
   installHarnessNativeStorage(); await refreshMemory(); io = createTestStyleLibraryIo(); videoEditStyleLibrary.reset(io, undefined); videoEditPresetPreferences.replace([])
   vi.stubGlobal('OffscreenCanvas', class { width: number; height: number; constructor(width: number, height: number) { this.width = width; this.height = height } getContext() { return { font: '', drawImage() {}, measureText(text: string) { return { width: text.length * 20, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * 20 } } } } async convertToBlob() { return new Blob(['frame']) } })
 })
@@ -227,6 +233,7 @@ it('代码模板：固化代码片段并设为全局；别的工程第一次应�
   const placed = makeVideoEditItemClip(requireVideoEditInstance(projectId).document, itemId, sequenceId, { frame: 0 }, readVideoEditCodeMetadata(requireVideoEditInstance(projectId), requireVideoEditInstance(projectId).document))
   editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: [...sequence.clips, placed] })) }))
   const created = await createVideoEditTemplate(projectId, sequenceId, [placed.id], { name: '档案人名条', description: '人物首次出场介绍姓名', styleId: 'restrained', global: true })
+  expect(requireVideoEditInstance(projectId).document.styles?.some(style => style.id === 'restrained')).toBe(true)
   expect(created.template).toMatchObject({ body: { kind: 'code' }, style: { id: 'restrained', version: videoEditStyleLibrary.requireStyle('restrained').style.version }, origin: { id: created.library!.id, version: 1 } })
   expect(created.library!.body.kind).toBe('code'); expect(JSON.stringify(created.library!.body)).toContain('档案人名条')
   // 另一个工程：第一次应用复制登记，第二次复用同一份，实例联动同一个代码定义。
@@ -235,6 +242,7 @@ it('代码模板：固化代码片段并设为全局；别的工程第一次应�
   const b = await applyVideoEditTemplate(otherId, other.activeSequenceId, 'library', created.library!.id, { placement: { frame: 150 } })
   expect([a.copied, b.copied]).toEqual([true, false]); expect(b.template.id).toBe(a.template.id)
   const otherDoc = (): ReturnType<typeof requireVideoEditInstance>['document'] => requireVideoEditInstance(otherId).document
+  expect(otherDoc().styles?.some(style => style.id === 'restrained')).toBe(true)
   expect(otherDoc().templates).toHaveLength(1); expect(otherDoc().templates![0].origin).toEqual({ id: created.library!.id, version: 1 })
   const clips = otherDoc().sequences[0].clips.filter(clip => clip.code)
   expect(clips).toHaveLength(2); expect(new Set(clips.map(clip => clip.code!.definitionId)).size).toBe(1)
@@ -244,9 +252,28 @@ it('代码模板：固化代码片段并设为全局；别的工程第一次应�
   const app = createApplicationHarness()
   try {
     const ref = { kind: 'video_edit.project_template', id: `${otherId}:${a.template.id}` }
+    const alternate = (await videoEditStyleLibrary.saveStyle({ ...videoEditStyleLibrary.requireStyle('restrained').style, id: 'template-alternate' })).style
+    const changedStyle = await app.change(ref, { 'video_edit.project_template.style_id': alternate.id })
+    expect(changedStyle.ok).toBe(true)
+    expect(otherDoc().styles?.some(style => style.id === alternate.id)).toBe(true)
+    if (!changedStyle.ok) throw new Error('修改模板所属风格失败')
+    await app.requireResult('undo_application_changes', { undoRef: changedStyle.data.undoRef })
+    expect(otherDoc().styles?.some(style => style.id === alternate.id)).toBe(false)
+    await videoEditStyleLibrary.saveTemplate({ ...videoEditStyleLibrary.requireTemplate(created.library!.id).template, style: { id: alternate.id, version: alternate.version } })
     expect(((await app.read(ref, ['video_edit.project_template.library_version'])) as { properties: Record<string, unknown> }).properties['video_edit.project_template.library_version']).toBe(2)
+    const trialsBeforeUpdate = trialDocuments.length
+    const beforeTemplate = structuredClone(otherDoc().templates![0])
+    const beforeVersions = otherDoc().sequences[0].clips.map(clip => clip.code?.versionId)
     const result = await app.requireResult('update_video_edit_template', { templateRef: ref, content: { kind: 'library' } }) as { instanceCount: number; version: number }
+    expect(trialDocuments.slice(trialsBeforeUpdate).some(document => document.templates?.some(template => template.id === a.template.id && template.style?.id === alternate.id) && document.styles?.some(style => style.id === alternate.id))).toBe(true)
     expect(result).toMatchObject({ instanceCount: 2, version: 2 })
+    expect(otherDoc().templates![0].style?.id).toBe(alternate.id)
+    undoVideoEdit(otherId)
+    expect(otherDoc().templates![0]).toEqual(beforeTemplate)
+    expect(otherDoc().sequences[0].clips.map(clip => clip.code?.versionId)).toEqual(beforeVersions)
+    expect(otherDoc().styles?.some(style => style.id === alternate.id)).toBe(false)
+    undoVideoEdit(otherId, true)
+    expect(otherDoc().templates![0].style?.id).toBe(alternate.id)
     const versions = otherDoc().sequences[0].clips.filter(clip => clip.code).map(clip => clip.code!.versionId)
     const definition = otherDoc().codeMaterials!.find(value => value.id === clips[0].code!.definitionId)!
     expect(new Set(versions)).toEqual(new Set([definition.defaultVersionId])); expect(definition.versions).toHaveLength(2)
@@ -342,4 +369,34 @@ it('注入的风格记忆存储走正式写入、历史和撤回，历史失败�
     expect(videoEditStyleLibrary.requireStyle(target.ownerId).style).toMatchObject({ userPreferences: previous.userPreferences, version: previous.version })
     expect(await readMemory(target)).toEqual([])
   } finally { record.mockRestore() }
+})
+
+it('风格件随正式风格包往返，容器换标识不改变摘要；同名覆盖全局', async () => {
+  await videoEditStyleLibrary.ready()
+  const base = videoEditStyleLibrary.requireStyle('restrained').style
+  const piece = { id: 'soft', name: '柔化', description: '柔化标题底图', usage: '背景', media: 'video' as const, effects: [{ id: 'blur', name: '模糊', enabled: true, amount: .6, builtin: { id: 'blur', params: {} } }], knobs: [{ key: 'soft', name: '柔和度', min: 0, max: 100, default: 50, mappings: [{ effectId: 'blur', parameter: 'amount', points: [{ input: 0, output: 0 }, { input: 100, output: .04 }] }] }] }
+  const style = { ...base, id: 'shared-piece', effectPresets: [piece] }
+  style.contentHash = await videoEditStyleContentHash(style)
+  expect(style.contentHash).not.toBe(await videoEditStyleContentHash({ ...style, effectPresets: [] }))
+  await videoEditStyleLibrary.saveStyle(style)
+  const personal = await videoEditStyleLibrary.saveStyle({ ...style, id: 'personal-copy' })
+  expect(personal.stale).toBe(false)
+  expect(personal.style.contentHash).toBe(style.contentHash)
+  let text = ''; const file = path.resolve(path.sep, 'style-piece.hjsty')
+  const packageIo = { read: async () => text, write: async (_file: string, value: string) => { text = value }, exists: async () => false }
+  await exportVideoEditStylePackage(style.id, file, packageIo)
+  const other = createTestStyleLibraryIo({ builtin: false }); videoEditStyleLibrary.reset(other, undefined)
+  try {
+    const imported = await importVideoEditStylePackage(file, packageIo)
+    expect(imported.style.effectPresets).toEqual([videoEditEffectPresetSchema.parse(piece)])
+    expect(videoEditStyleLibrary.requireStyle(style.id).stale).toBe(false)
+    const global = { ...piece, id: 'global', effects: piece.effects.map(effect => ({ ...effect, amount: .1 })) }
+    const environment = authorEffectEnvironmentForStyle({ presets: [global] }, [imported.style], imported.style.id)
+    expect(resolveAuthorEffects([look(piece.name, { soft: 75 })], environment)[0]).toMatchObject({ amount: .6, params: { amount: .03 } })
+  } finally { other.dispose(); videoEditStyleLibrary.reset(io, undefined) }
+  await videoEditStyleLibrary.ready()
+  const pack = JSON.parse(text); pack.content.style.id = 'restrained'; text = JSON.stringify(pack)
+  const collision = await importVideoEditStylePackage(file, packageIo)
+  expect(collision.style.id).not.toBe('restrained')
+  expect(videoEditStyleLibrary.requireStyle(collision.style.id).stale).toBe(false)
 })

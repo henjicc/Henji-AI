@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "content": {
+    "favorites": [
+      "preset:golden-piece"
+    ],
+    "presets": [
+      {
+        "id": "golden-piece",
+        "name": "柔和背景",
+        "media": "video",
+        "effects": [
+          {
+            "id": "piece-blur",
+            "name": "模糊",
+            "enabled": true,
+            "amount": 0.6,
+            "builtin": {
+              "id": "blur",
+              "params": {
+                "mode": "uniform",
+                "amount": 50
+              }
+            }
+          }
+        ],
+        "description": "柔化背景但保留轮廓。",
+        "usage": "标题底图",
+        "knobs": [
+          {
+            "key": "softness",
+            "name": "柔和度",
+            "min": 0,
+            "max": 100,
+            "default": 50,
+            "mappings": [
+              {
+                "effectId": "piece-blur",
+                "parameter": "amount",
+                "points": [
+                  {
+                    "input": 0,
+                    "output": 0
+                  },
+                  {
+                    "input": 50,
+                    "output": 50
+                  },
+                  {
+                    "input": 100,
+                    "output": 100
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

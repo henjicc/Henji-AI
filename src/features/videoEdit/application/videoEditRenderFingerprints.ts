@@ -1,4 +1,5 @@
 import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
+import { videoEditStylePiecesFingerprint } from '@/core/videoEdit/effectPresets'
 import { renderFingerprintHash, type VideoEditCodeFingerprints, type VideoEditFrameFingerprint } from '@/core/videoEdit/renderFingerprint'
 import { videoEditPictureTransitionWindows, videoEditPictureFilter, type VideoEditComposition } from '@/core/videoEdit/document'
 import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
@@ -69,7 +70,7 @@ export function videoEditRenderFingerprints(owner: VideoEditInstance, compositio
   let byEnvironment = snapshots.get(composition)
   if (!byEnvironment) { byEnvironment = new Map(); snapshots.set(composition, byEnvironment) }
   const authorEffects = composition.authorEffects ?? { presets: useVideoEditEffectLibraryStore.getState().presets }
-  const effectsEnvironment = composition.codeMaterials?.some(definition => definition.versions.some(version => version.apiVersion >= 7)) ? JSON.stringify([authorEffects.presets, composition.colorLuts]) : ''
+  const effectsEnvironment = composition.codeMaterials?.some(definition => definition.versions.some(version => version.apiVersion >= 7)) ? JSON.stringify([videoEditStylePiecesFingerprint(authorEffects.presets), composition.colorLuts, composition.styleId, composition.styles?.map(style => [style.id, videoEditStylePiecesFingerprint(style.effectPresets)]), composition.templates?.map(template => [template.body.kind === 'code' ? template.body.definitionId : template.id, template.style?.id]), composition.sequences?.map(sequence => [sequence.id, sequence.styleId])]) : ''
   const snapshotEnvironment = JSON.stringify([environment, webContent, effectsEnvironment])
   const existing = byEnvironment.get(snapshotEnvironment)
   for (const key of byEnvironment.keys()) if (key !== snapshotEnvironment) byEnvironment.delete(key)

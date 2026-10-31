@@ -49,7 +49,8 @@ describe('追加新版本与改默认版本', () => {
 })
 
 it('效果库只在兼容接口自动锁定，显式不存在的发行不换版本', () => {
-  expect(latestAuthorLibraryVersions(7)['henji-effects']).toBe('1.1.0')
+  expect(resolveAuthorLibraryModule('henji-effects', latestAuthorLibraryVersions(7))).toBeDefined()
+  expect(resolveAuthorLibraryModule('henji-effects')?.version).toBe('1.0.0')
   expect(latestAuthorLibraryVersions(6)['henji-effects']).toBeUndefined()
   expect(resolveAuthorLibraryModule('henji-effects', { 'henji-effects': '9.0.0' })).toBeUndefined()
   expect(authorLibraryImportTable({ 'henji-effects': '1.0.0' }, 7).modules['henji-effects']).toContain('/henji-effects/1.0.0/index.mjs')

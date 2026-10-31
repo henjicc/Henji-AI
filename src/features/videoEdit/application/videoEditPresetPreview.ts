@@ -1,3 +1,5 @@
+import { resolveVideoEditStylePieceEffects, videoEditStylePiecesFingerprint } from '@/core/videoEdit/effectPresets'
+import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import type { ContentTrustReference } from '@/core/contentTrust'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { VIDEO_EDIT_AUTHOR_CONTENT_COLORS } from '@/core/theme/colorTokens'
@@ -6,7 +8,7 @@ import { codeVersionCompilation } from '@/core/videoEdit/codeMaterialVersions'
 import { createVideoEditSequence, videoEditComposition, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { instantiateNativeTemplate } from '@/core/videoEdit/styles/nativeTemplates'
-import type { VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
+import type { VideoEditStyle, VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 import { getBundledResourcePath } from '@/platform/desktopApi'
 import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
@@ -109,9 +111,14 @@ async function styleSample(sample: VideoEditStyleSample, size: { width: number; 
 }
 async function build(source: VideoEditPresetSource, size: { width: number; height: number }, signal: AbortSignal): Promise<Builder> {
   switch (source.category) {
-    case 'style': return styleSample(source.sample, size, signal, PRESET_PREVIEW_FPS, source.trustContext)
+    case 'style': {
+      const builder = await styleSample(source.sample, size, signal, PRESET_PREVIEW_FPS, source.trustContext)
+      if (source.style) { builder.document.styles = [source.style]; builder.sequence.styleId = source.style.id }
+      return builder
+    }
     case 'template': {
       const builder = start(size)
+      if (source.style) { builder.document.styles = [source.style]; builder.sequence.styleId = source.style.id }
       await backdropClip(builder, 4)
       if (source.body.kind === 'code') { await codeClip(builder, { ...source.body.code, trustContext: source.trustContext }, {}, { frame: 0, track: 2, seconds: source.body.durationSeconds ?? 4 }, signal); return builder }
       for (const snapshot of instantiateNativeTemplate(source.body.content, builder.sequence)) {
@@ -131,7 +138,7 @@ async function build(source: VideoEditPresetSource, size: { width: number; heigh
       if (source.preset.media !== 'video') throw new Error('声音效果没有画面预览。')
       const builder = start(size)
       const id = await backdropClip(builder, 8)
-      builder.sequence.clips.find(value => value.id === id)!.effects = source.preset.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() }))
+      builder.sequence.clips.find(value => value.id === id)!.effects = resolveVideoEditStylePieceEffects(source.preset).map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() }))
       return builder
     }
     case 'transition': {
@@ -156,9 +163,16 @@ function posterFrame(source: VideoEditPresetSource, frames: number): number {
   }
 }
 const timelines = new Map<string, Promise<PresetPreviewTimeline>>()
+/** 界面与构建缓存共用；所属风格只以身份及风格件内容参与失效。 */
+export function videoEditPresetPreviewKey(source: VideoEditPresetSource, size: { width: number; height: number }): string {
+  const content = source.category === 'style' || source.category === 'template'
+    ? { ...source, style: source.style ? [source.style.id, videoEditStylePiecesFingerprint(source.style.effectPresets)] : undefined }
+    : source
+  return JSON.stringify([content, size, useVideoEditEffectLibraryStore.getState().revision])
+}
 /** Built once per preset content and size; compiling the components is the only step that is not real time. */
 export function presetPreviewTimeline(source: VideoEditPresetSource, size: { width: number; height: number }): Promise<PresetPreviewTimeline> {
-  const key = JSON.stringify([source, size])
+  const key = videoEditPresetPreviewKey(source, size)
   let value = timelines.get(key)
   if (!value) {
     value = build(source, size, new AbortController().signal).then(builder => {
@@ -209,8 +223,9 @@ class PresetRenderer {
 
 const renderer = new PresetRenderer()
 /** 渲染风格样片用：按样片自己的帧率逐帧取画面（预览视频、缩略图与锚点帧）。 */
-export async function styleSampleTimeline(sample: VideoEditStyleSample, signal: AbortSignal, trustContext: ContentTrustReference[] = []): Promise<PresetPreviewTimeline & { fps: number }> {
+export async function styleSampleTimeline(sample: VideoEditStyleSample, signal: AbortSignal, trustContext: ContentTrustReference[] = [], style?: VideoEditStyle): Promise<PresetPreviewTimeline & { fps: number }> {
   const builder = await styleSample(sample, { width: sample.width, height: sample.height }, signal, sample.fps, trustContext)
+  if (style) { builder.document.styles = [style]; builder.sequence.styleId = style.id }
   const frames = Math.max(1, ...builder.sequence.clips.map(clip => clip.start + clip.duration))
   return { composition: videoEditComposition(builder.document, builder.sequence.id), frames, poster: Math.min(frames - 1, Math.round(sample.thumbnail * sample.fps)), fps: sample.fps }
 }

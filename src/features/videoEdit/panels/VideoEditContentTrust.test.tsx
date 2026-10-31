@@ -8,7 +8,7 @@ import { VideoEditPresetPlayer } from './VideoEditPresetPlayer'
 import { VideoEditTemplatesPanel } from './VideoEditTemplatesPanel'
 const state = vi.hoisted(() => ({ allowed: false, listeners: new Set<() => void>(), preview: vi.fn(), run: vi.fn() }))
 const foreign: ContentTrustReference = { id: 'external', sourceType: 'template', sourceName: '分享模板' }
-vi.mock('../application/videoEditPresetPreview', () => ({ PRESET_PREVIEW_FPS: 30, presetPreviewTimeline: (...args: unknown[]) => state.preview(...args), renderPresetPreviewFrame: vi.fn() }))
+vi.mock('../application/videoEditPresetPreview', () => ({ PRESET_PREVIEW_FPS: 30, presetPreviewTimeline: (...args: unknown[]) => state.preview(...args), renderPresetPreviewFrame: vi.fn(), videoEditPresetPreviewKey: (source: unknown, size: unknown) => JSON.stringify([source, size]) }))
 vi.mock('@/services/contentTrust', () => ({
   subscribeContentTrustContext: (queries: () => ContentTrustQuery[], listener: () => void) => { const relevant = () => { if (queries().some(query => query.contents.some(record => record.id === 'external'))) listener() }; state.listeners.add(relevant); return () => state.listeners.delete(relevant) },
   runForeignContent: (records: ContentTrustReference[]) => state.run(records),

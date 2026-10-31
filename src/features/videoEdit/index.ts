@@ -18,3 +18,4 @@ export { removeSuperKeyframeTake, superKeyframeAttachment, openVideoSuperKeyfram
 export { listVideoEditInstances, subscribeVideoEditDomain, videoEditDomainRevision } from './application/videoEditService'
 export { selectVideoEditSubtitle } from './application/videoEditSubtitleSelection'
 export { subscribeVideoEditSceneSelection, videoEditSelectedSceneRecordRef } from './application/videoEditSceneSelection'
+export { videoEditEffectLibraryRevisions } from './application/videoEditEffectPresets'

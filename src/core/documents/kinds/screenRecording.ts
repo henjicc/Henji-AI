@@ -7,9 +7,11 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 50, minReaderVersion: 50,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 51, minReaderVersion: 50,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 50 → 51：嵌入剪辑的工程风格新增可选风格件，最低可读版本保持 50。
+    50: content => structuredClone(content),
     // 49 → 50：嵌入剪辑里的旧模糊并成“模糊”、旧暗角负数量换成白色（与剪辑 46 → 47 同一换算）；旧程序不认识新效果，最低可读版本提高到 50。
     49: migrateVideoEditMergedEffects,
     // 48 → 49：剪辑基线新增可选高级导出编码，旧快照保持原样，最低可读版本保持 48。

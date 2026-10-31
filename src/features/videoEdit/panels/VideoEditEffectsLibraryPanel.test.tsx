@@ -175,3 +175,14 @@ it('只选择无手绘遮罩的效果时不再显示遮罩选项，并且只保�
   fireEvent.click(screen.getByRole('button', { name: '保存' }))
   expect(useVideoEditEffectLibraryStore.getState().presets[0].effects.map(effect => effect.id)).toEqual(['effect'])
 })
+
+it.each(['save', 'rename'])('重名时保存与改名弹窗保留输入并显示冲突名：%s', mode => {
+  const a = useVideoEditEffectLibraryStore.getState().savePreset('已存在的柔化', [effect()])
+  const b = useVideoEditEffectLibraryStore.getState().savePreset('另一项', [effect()])
+  const close = vi.fn()
+  render(<VideoEditEffectPresetDialog effects={[effect()]} presetId={mode === 'rename' ? b.id : undefined} initialName={a.name} onClose={close} />)
+  fireEvent.click(screen.getByRole('button', { name: '保存' }))
+  expect(screen.getByRole('alert').textContent).toContain(a.name)
+  expect(close).not.toHaveBeenCalled()
+  expect(useVideoEditEffectLibraryStore.getState().presets.map(value => value.name)).toEqual([a.name, b.name])
+})

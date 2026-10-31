@@ -1,0 +1,27 @@
+{
+  "state": {
+    "favorites": [],
+    "presets": [
+      {
+        "id": "02c58ada-19dc-43ba-9f10-b85496346220",
+        "name": "历史柔化",
+        "media": "video",
+        "effects": [
+          {
+            "id": "historic-blur",
+            "name": "高斯模糊",
+            "enabled": true,
+            "amount": 0.4,
+            "builtin": {
+              "id": "gaussian_blur",
+              "params": {
+                "sigma_fraction_height": 0.01
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "version": 1
+}

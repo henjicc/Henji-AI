@@ -1,7 +1,7 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
+import { localLibraryContract, readLocalPersistenceJson, serializeVersionedPersistenceJson } from '@/core/persistence/versionedJson'
+import { publishVideoEdit } from './videoEditService'
 import { migrateVideoEditMergedEffects } from '@/core/videoEdit/mergedEffectsMigration'
-import { createJSONStorage } from 'zustand/middleware'
-import { z } from 'zod'
 import { createLogger } from '@/core/logging'
 import { videoEditEffectSchema, videoEditEffectMedia, type VideoEditEffect } from '@/core/videoEdit/compositing'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
@@ -9,12 +9,13 @@ import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPres
 import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { VIDEO_EDIT_EFFECT_CATEGORIES, videoEditEffectsRegistry, type VideoEditEffectsRegistryEntry } from '@/core/videoEdit/effectsRegistry'
 
-import { migrateEmbeddedVideoColorGradesV1 } from '@/core/videoEdit/colorGradeMigration'
+import { assertVideoEditStylePieceNames, resolveVideoEditStylePieceEffects, videoEditEffectLibrarySchema as dataSchema } from '@/core/videoEdit/effectPresets'
 import { videoEditEffectPresetNameSchema as nameSchema, videoEditEffectPresetSchema, type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
 const logger = createLogger('features.videoEdit.presets')
 export { videoEditEffectPresetSchema, type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
-interface LibraryData { favorites: string[]; presets: VideoEditEffectPreset[] }
+export interface LibraryData { favorites: string[]; presets: VideoEditEffectPreset[] }
 interface LibraryState extends LibraryData {
+  restoreLibrary(value: LibraryData, expected?: LibraryData): void
   revision: number
   loadError: string
   savePreset(name: string, effects: readonly VideoEditEffect[], includeShapes?: boolean): VideoEditEffectPreset
@@ -25,36 +26,37 @@ interface LibraryState extends LibraryData {
   toggleFavorite(id: string): void
 }
 export const VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY = 'video-edit-effects-library'
-const VIDEO_EDIT_EFFECT_LIBRARY_VERSION = 2
-const dataSchema = z.object({ favorites: z.array(z.string().max(150)), presets: z.array(videoEditEffectPresetSchema) }).strict()
+const contract = localLibraryContract(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, dataSchema)
 interface SyncSettingsStorage { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
 
 /** Shared by UI and assistant discovery. The persistence write precedes publication;
  * a full disk/storage failure leaves the previous library intact. */
 export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage): UseBoundStore<StoreApi<LibraryState>> {
-  const json = createJSONStorage<LibraryData>(() => storage ?? localStorage)
+  const disk = storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage)
   let initial: LibraryData = { favorites: [], presets: [] }
   let loadError = ''
   try {
-    const saved = json?.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)
-    if (saved && !('then' in saved)) {
-      if (saved.version !== 1 && saved.version !== VIDEO_EDIT_EFFECT_LIBRARY_VERSION) throw new Error('效果库格式无法读取。')
-      // v1 → v2：全能调色参数格式 v2（与剪辑文档 17 → 18 同一迁移）；首次保存时写入 v2。
-      // 效果库合并后的旧效果（旧模糊、负数暗角）读入时换算，格式版本不变；首次保存时写入换算后的内容。
-      initial = dataSchema.parse(migrateVideoEditMergedEffects(saved.version === 1 ? migrateEmbeddedVideoColorGradesV1(saved.state) : saved.state))
+    const saved = disk?.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)
+    if (saved && disk) {
+      const raw = JSON.parse(saved) as { state?: unknown }
+      initial = dataSchema.parse(migrateVideoEditMergedEffects(readLocalPersistenceJson(saved, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, contract, disk, 'state' in raw ? 'state' : 'content')))
       if (new Set(initial.presets.map(preset => preset.id)).size !== initial.presets.length) throw new Error('预设标识重复。')
       initial.favorites = [...new Set(initial.favorites)]
     }
   } catch (error) { loadError = '效果收藏与预设读取失败，已保留原数据；请重启应用后重试。'; initial = { favorites: [], presets: [] }; logger.error('effect_library.load.failed', '效果收藏与预设读取失败', { error }) }
   return create<LibraryState>((set, get) => {
-    const publish = (operation: string, next: LibraryData): void => {
+    const publish = (operation: string, next: LibraryData, expected?: LibraryData): void => {
       logger.info(`effect_library.${operation}.start`, '更新本机效果库')
       try {
-        if (!json) throw new Error('本机预设存储不可用。')
+        if (!disk) throw new Error('本机预设存储不可用。')
         if (loadError) throw new Error(loadError)
-        const result = json.setItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, { state: dataSchema.parse(next), version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION })
-        if (result && typeof result === 'object' && 'then' in result) throw new Error('效果库需要同步的本机设置存储。')
+        // 撤销只能恢复仍与已完成事务吻合的历史快照，包括旧库已有的重名。
+        if (expected) {
+          if (JSON.stringify({ favorites: get().favorites, presets: get().presets }) !== JSON.stringify(expected)) throw new Error('风格件库已有后续修改，请重新读取。')
+        } else assertVideoEditStylePieceNames(next.presets, get().presets)
+        disk.setItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, serializeVersionedPersistenceJson(contract, next))
         set({ ...next, revision: get().revision + 1 })
+        publishVideoEdit()
         logger.info(`effect_library.${operation}.completed`, '本机效果库已保存')
       } catch (error) { logger.error(`effect_library.${operation}.failed`, '本机效果库保存失败', { error }); throw error }
     }
@@ -65,6 +67,7 @@ export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage)
     }
     return {
       ...initial, revision: 0, loadError,
+      restoreLibrary(value, expected) { publish('restore', dataSchema.parse(structuredClone(value)), expected) },
       savePreset(name, effects, includeShapes = false) {
         if (!effects.length || effects.some(effect => !effect.builtin)) throw new Error('请选择内置效果；代码滤镜请保存为代码素材。')
         const copies = effects.map(effect => {
@@ -74,7 +77,7 @@ export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage)
           else if (copy.mask?.regionId === 'shapes') copy.mask.shapes.forEach(shape => { delete shape.follow })
           return copy
         })
-        const preset = videoEditEffectPresetSchema.parse({ id: crypto.randomUUID(), name, media: videoEditEffectMedia(copies[0]), effects: copies })
+        const preset = videoEditEffectPresetSchema.parse({ id: crypto.randomUUID(), name, media: videoEditEffectMedia(copies[0]), effects: copies, description: '', usage: '', knobs: [] })
         publish('save', { favorites: get().favorites, presets: [...get().presets, preset] })
         return structuredClone(preset)
       },
@@ -89,13 +92,14 @@ export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage)
   })
 }
 export const useVideoEditEffectLibraryStore = createVideoEditEffectLibraryStore()
+export const VIDEO_EDIT_EFFECT_LIBRARY_SCOPE = 'video_edit.effects'
+export function videoEditEffectLibraryRevisions(): Record<string, number> { return { [VIDEO_EDIT_EFFECT_LIBRARY_SCOPE]: useVideoEditEffectLibraryStore.getState().revision } }
 
 /** Creation templates share the same effect application path for builtins, smart presets and saved combinations. */
 export function resolveVideoEditLibraryEffects(ref: string): { media: 'video' | 'audio'; effects: Omit<VideoEditEffect, 'id'>[]; needsSource: boolean } | undefined {
   if (ref.startsWith('preset:')) {
     const preset = useVideoEditEffectLibraryStore.getState().presets.find(value => `preset:${value.id}` === ref)
-    // 预设里已移除的效果原样留在库里；它们没有渲染实现，应用时跳过。
-    const effects = preset?.effects.filter(effect => !effect.builtin || !isRemovedVideoEditBuiltinEffect(effect.builtin.id))
+    const effects = preset && resolveVideoEditStylePieceEffects(preset).filter(effect => !isRemovedVideoEditBuiltinEffect(effect.builtin!.id))
     return preset && effects?.length ? { media: preset.media, effects: structuredClone(effects), needsSource: effects.some(effect => isSmartRegionMask(effect.mask)) } : undefined
   }
   const template = resolveVideoEditEffectTemplate(ref)
@@ -104,7 +108,7 @@ export function resolveVideoEditLibraryEffects(ref: string): { media: 'video' | 
 }
 export type VideoEditLibraryEntry = Omit<VideoEditEffectsRegistryEntry, 'category'> & { category: VideoEditEffectsRegistryEntry['category'] | 'presets'; aliases?: readonly string[] }
 export function videoEditUserPresetEntries(presets: readonly VideoEditEffectPreset[]): VideoEditLibraryEntry[] {
-  return presets.map(preset => ({ id: `preset:${preset.id}`, templateRef: `preset:${preset.id}`, name: preset.name, category: 'presets', kind: 'effect', media: preset.media, tooltip: preset.media === 'audio' ? '将已保存的效果组合加到声音片段' : '将已保存的效果组合加到画面片段', description: preset.effects.map(effect => `${effect.name} ${effect.builtin?.id}`).join(' '), aliases: preset.effects.map(effect => effect.builtin?.id.replaceAll('_', ' ') ?? '') }))
+  return presets.map(preset => ({ id: `preset:${preset.id}`, templateRef: `preset:${preset.id}`, name: preset.name, category: 'presets', kind: 'effect', media: preset.media, tooltip: preset.media === 'audio' ? '将已保存的效果组合加到声音片段' : '将已保存的效果组合加到画面片段', description: [preset.description, preset.usage, preset.effects.map(effect => `${effect.name} ${effect.builtin?.id}`).join(' ')].join(' '), aliases: preset.effects.map(effect => effect.builtin?.id.replaceAll('_', ' ') ?? '') }))
 }
 /** Whitespace-separated keywords must all match; accents/case and English IDs are normalized. */
 export function filterVideoEditLibraryEntries(entries: readonly VideoEditLibraryEntry[], query: string, folderName = ''): VideoEditLibraryEntry[] {
@@ -117,5 +121,5 @@ export function filterVideoEditLibraryEntries(entries: readonly VideoEditLibrary
   })
 }
 export function videoEditPresetCreationProperties(preset: VideoEditEffectPreset): Array<Record<string, unknown>> {
-  return preset.effects.filter(effect => !isRemovedVideoEditBuiltinEffect(effect.builtin!.id)).map(effect => ({ 'video_edit.effect.definition_id': videoEditBuiltinRefId(effect.builtin!.id), 'video_edit.effect.parameters': structuredClone(effect.builtin!.params), 'video_edit.effect.name': effect.name, 'video_edit.effect.enabled': effect.enabled, 'video_edit.effect.amount': effect.amount, ...(effect.mask ? { 'video_edit.effect.mask': structuredClone(effect.mask) } : {}) }))
+  return resolveVideoEditStylePieceEffects(preset).filter(effect => !isRemovedVideoEditBuiltinEffect(effect.builtin!.id)).map(effect => ({ 'video_edit.effect.definition_id': videoEditBuiltinRefId(effect.builtin!.id), 'video_edit.effect.parameters': structuredClone(effect.builtin!.params), 'video_edit.effect.name': effect.name, 'video_edit.effect.enabled': effect.enabled, 'video_edit.effect.amount': effect.amount, ...(effect.builtin!.curves ? { 'video_edit.effect.frame_curves': structuredClone(effect.builtin!.curves) } : {}), ...(effect.mask ? { 'video_edit.effect.mask': structuredClone(effect.mask) } : {}) }))
 }

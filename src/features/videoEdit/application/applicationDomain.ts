@@ -1,3 +1,4 @@
+import { VideoEditStylePieceCollectionExecutor, VideoEditStylePieceMutationExecutor } from './videoEditEffectPresetReflection'
 import { loadVideoEditHoverPreview } from './videoEditHoverPreview'
 import { upgradeVideoEditCodeMaterials } from './videoEditCodeProjectUpgrade'
 import { getPlatform } from '@/platform/runtime'
@@ -134,6 +135,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   recoverOperation: recoverVideoEditPlacement,
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
+    engine.registerCollectionExecutor(new VideoEditStylePieceCollectionExecutor())
+    engine.registerMutationExecutor(new VideoEditStylePieceMutationExecutor())
     engine.registerMutationExecutor(new CodeProjectFileMutationExecutor())
     engine.registerCollectionExecutor(new CodeProjectFileCollectionExecutor())
     engine.registerCollectionExecutor(new CodeComponentCollectionExecutor())

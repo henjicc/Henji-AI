@@ -14,6 +14,7 @@ import { VideoEditCodeSources, type VideoEditCodePlan } from './videoEditCodeSou
 import { loadAuthorModule, type AuthorModule, type AuthorFrameInfo } from './videoEditAuthorModule'
 import { authorEffectMetadata, authorParameterValues } from './videoEditAuthorParameters'
 import { prepareAuthorModuleUrls } from './videoEditAuthorModules'
+import { authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
 import { authorFrameCodeIdentity, fingerprintAuthorFrame, fingerprintAuthorFrameKey, type AuthorFingerprintInput } from './videoEditAuthorFingerprint'
 
 /** 属于预渲染会话的 Worker；使用正式编译、信任、参数与时间求值入口，完全不获取 GPU。 */
@@ -115,11 +116,11 @@ export class VideoEditCodeFingerprint {
         identity = authorFrameCodeIdentity(files, effect, codeVersionContentKey({ ...version, files: [] }))
         this.codeIdentities.set(program.bundle, identity)
       }
-      result = fingerprintAuthorFrameKey(effect, plan.context, params, info, inputs, identity, plan.parameters, overrides, this.document.motionBlur === true, { ...this.document.authorEffects, luts: this.document.colorLuts }, program.apiVersion)
+      result = fingerprintAuthorFrameKey(effect, plan.context, params, info, inputs, identity, plan.parameters, overrides, this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion)
     } else {
       const measure = this.measure ??= new OffscreenCanvas(1, 1).getContext('2d') ?? undefined
       if (!measure) return { fallback: 'canvas-unavailable' }
-      result = fingerprintAuthorFrame(effect, plan.context, params, info, inputs, measure, overrides, this.document.motionBlur === true, { ...this.document.authorEffects, luts: this.document.colorLuts }, program.apiVersion)
+      result = fingerprintAuthorFrame(effect, plan.context, params, info, inputs, measure, overrides, this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion)
     }
     if (!result.digest) return result
     const scenes = videoEditCodeInputs(this.document, plan.clip.code, () => program.parameters)?.scenes

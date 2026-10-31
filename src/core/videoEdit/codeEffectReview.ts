@@ -12,6 +12,43 @@ export type CodeEffectSuggestion = z.infer<typeof codeEffectSuggestionSchema>
 export function reviewCodeEffectUsage(source: ts.SourceFile): CodeEffectSuggestion[] {
   const suggestions: CodeEffectSuggestion[] = []
   const factories = new Set(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.flatMap(value => value.author ? [value.author.factory] : []))
+  const number = (node: ts.Expression): number | undefined => {
+    if (ts.isParenthesizedExpression(node)) return number(node.expression)
+    if (ts.isNumericLiteral(node)) return Number(node.text)
+    if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.MinusToken || node.operator === ts.SyntaxKind.PlusToken)) { const value = number(node.operand); return value === undefined ? undefined : node.operator === ts.SyntaxKind.MinusToken ? -value : value }
+    return undefined
+  }
+  const text = (node: ts.Expression): { value: string; dynamic: boolean } => {
+    if (ts.isParenthesizedExpression(node)) return text(node.expression)
+    if (ts.isStringLiteralLike(node)) return { value: node.text, dynamic: false }
+    if (ts.isTemplateExpression(node)) return { value: node.head.text + node.templateSpans.map(span => '${…}' + span.literal.text).join(''), dynamic: true }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) { const a = text(node.left), b = text(node.right); return { value: a.value + b.value, dynamic: a.dynamic || b.dynamic } }
+    return { value: '${…}', dynamic: true }
+  }
+  const member = (node: ts.Expression, contexts: Set<string>): string => {
+    const receiver = ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) ? node.expression : undefined
+    return receiver && ts.isIdentifier(receiver) && contexts.has(receiver.text) ? ts.isPropertyAccessExpression(node) ? node.name.text : ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : '' : ''
+  }
+  const shadowOffsets = new Map<ts.Node, Set<string>>()
+  const offsetShadow = (node: ts.Node, contexts: Set<string>): boolean => {
+    let scope = node.parent
+    while (scope.parent && !ts.isFunctionLike(scope)) scope = scope.parent
+    let receivers = shadowOffsets.get(scope)
+    if (!receivers) {
+      receivers = new Set<string>()
+      const scan = (part: ts.Node): void => {
+        if (part !== scope && ts.isFunctionLike(part)) return
+        if (ts.isBinaryExpression(part) && part.operatorToken.kind === ts.SyntaxKind.EqualsToken && number(part.right) !== 0) {
+          const left = part.left
+          const receiver = ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left) ? left.expression : undefined
+          if (receiver && ts.isIdentifier(receiver) && ['shadowOffsetX', 'shadowOffsetY'].includes(member(left, new Set([receiver.text])))) receivers!.add(receiver.text)
+        }
+        ts.forEachChild(part, scan)
+      }
+      scan(scope); shadowOffsets.set(scope, receivers)
+    }
+    return [...contexts].some(context => receivers.has(context))
+  }
   const add = (node: ts.Node, factory: string, message: string, confidence: CodeEffectSuggestion['confidence'] = 'static_assignment'): void => {
     if (!factories.has(factory)) return
     const at = source.getLineAndCharacterOfPosition(node.getStart(source))
@@ -40,12 +77,17 @@ export function reviewCodeEffectUsage(source: ts.SourceFile): CodeEffectSuggesti
     }
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && ts.isIdentifier(node.initializer) && contexts.has(node.initializer.text)) contexts.add(node.name.text)
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-      const left = node.left
-      const receiver = ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left) ? left.expression : undefined
-      const property = ts.isPropertyAccessExpression(left) ? left.name.text : ts.isElementAccessExpression(left) && ts.isStringLiteralLike(left.argumentExpression) ? left.argumentExpression.text : ''
-      if (receiver && ts.isIdentifier(receiver) && contexts.has(receiver.text)) {
-        if (property === 'shadowBlur' && ts.isNumericLiteral(node.right) && Number(node.right.text) > 0) add(node, 'glow', '存在非零 Canvas shadowBlur；核对虚化或发光是否可复用 henji-effects。投影不等同于高斯模糊，不自动替换。')
-        if (property === 'filter' && (ts.isStringLiteralLike(node.right) || ts.isNoSubstitutionTemplateLiteral(node.right)) && /blur\s*\(/.test(node.right.text)) add(node, 'blur', '静态 Canvas filter 使用 blur；可核对图层 blur 工厂，参数按完整画幅高度换算。')
+      const property = member(node.left, contexts)
+      if (property) {
+        if (property === 'shadowBlur') {
+          const blur = number(node.right), offset = offsetShadow(node, contexts)
+          const factory = factories.has('dropShadow') ? 'dropShadow' : offset ? undefined : factories.has('glow') ? 'glow' : undefined
+          if (factory && (blur === undefined || blur > 0)) add(node, factory, `Canvas shadowBlur ${offset ? '含偏移投影' : '是虚化阴影候选'}；先查风格件，再看画面核对 ${factory}，不能据此证明算法等价。`, blur === undefined ? 'structural_candidate' : 'static_assignment')
+        }
+        if (property === 'filter') {
+          const filter = text(node.right)
+          if (/blur\s*\(/.test(filter.value)) add(node, 'blur', 'Canvas filter 使用 blur；先查风格件，再核对图层 blur 工厂，参数按完整画幅高度换算。', filter.dynamic ? 'structural_candidate' : 'static_assignment')
+        }
       }
     }
     if (ts.isObjectLiteralExpression(node)) {

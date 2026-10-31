@@ -37,6 +37,7 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
     '1.0.0': { license: 'Apache-2.0', minApiVersion: 7, frozen: 'resources/video-edit-author/frozen/henji-effects/1.0.0', modules: { 'henji-effects': 'index.mjs' }, types: { mount: 'henji-effects', license: 'Apache-2.0', source: 'frozen' } },
     // 1.1.0：模糊合成一个效果（blur 的 mode 选均匀、方向、放射、镜头），锐化补半径与阈值，参数带常用范围。
     '1.1.0': { license: 'Apache-2.0', minApiVersion: 7, frozen: 'resources/video-edit-author/frozen/henji-effects/1.1.0', modules: { 'henji-effects': 'index.mjs' }, types: { mount: 'henji-effects', license: 'Apache-2.0', source: 'frozen' } },
+    '1.2.0': { license: 'Apache-2.0', minApiVersion: 7, frozen: 'resources/video-edit-author/frozen/henji-effects/1.2.0', modules: { 'henji-effects': 'index.mjs' }, types: { mount: 'henji-effects', license: 'Apache-2.0', source: 'frozen' } },
   },
   three: {
     '0.186.1': {

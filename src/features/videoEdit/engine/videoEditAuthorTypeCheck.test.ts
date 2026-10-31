@@ -232,4 +232,7 @@ it('效果库冻结声明支持别名、直接描述、静态范围错误与独�
   const legacy = source.replace('mode: "directional", amount: 10', 'mode: "directional", length: 10')
   expect(typed.check(old(legacy), ['main.ts']).diagnostics).toEqual([])
   expect(typed.check(old(legacy.replace('length: 10', 'length: -5')), ['main.ts']).diagnostics.some(value => value.code === 95001)).toBe(true)
+  const withKnobs = 'import { look, blur } from "henji-effects"; export default { name: "风格件", layers() { return [{ effects: () => [look("柔化", { soft: 75 }), blur({ mode: "lens", amount: 30 })], draw(ctx) { ctx.fillRect(0, 0, 20, 10) } }] } }'
+  expect(typed.check({ ...files(withKnobs), libraries: { 'henji-effects': '1.2.0' } }, ['main.ts']).diagnostics).toEqual([])
+  expect(typed.check(files(withKnobs), ['main.ts']).total).toBeGreaterThan(0)
 })

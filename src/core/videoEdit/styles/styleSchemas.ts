@@ -4,6 +4,7 @@ import { styleMemoryEntriesSchema } from '../../assistant/memoryEntries'
 import { codeMaterialFilesSchema, type CodeMaterialFiles } from '../codeMaterial/sources'
 import { sha256HexString } from '../../../utils/save/hash'
 import { STYLE_GUIDE_MAX_LENGTH } from './styleGuide'
+import { videoEditEffectPresetSchema } from '../effectPresets'
 
 /**
  * 风格包与模板（照搬 Frameflow 的风格预设与模板机制，2026-10-22 用户确认）。
@@ -49,8 +50,12 @@ export const videoEditStyleSchema = z.object({
   foreign: foreignContentSchema.optional(),
   guide: z.string().max(STYLE_GUIDE_MAX_LENGTH).describe('风格说明书（Markdown），栏目见技能 style-kit。'),
   userPreferences: styleMemoryEntriesSchema.optional(),
+  effectPresets: z.array(videoEditEffectPresetSchema).optional(),
   sample: videoEditStyleSampleSchema,
-}).strict()
+}).strict().superRefine((style, context) => {
+  const presets = style.effectPresets ?? []
+  if (new Set(presets.map(preset => preset.name)).size !== presets.length || new Set(presets.map(preset => preset.id)).size !== presets.length) context.addIssue({ code: 'custom', path: ['effectPresets'], message: '同一风格里的风格件名称与标识不能重复。' })
+})
 export type VideoEditStyle = z.infer<typeof videoEditStyleSchema>
 /** 模板属于哪个风格（以及登记时的风格版本）；null 表示单独存在。 */
 export const videoEditTemplateStyleSchema = z.object({ id: videoEditStyleIdSchema, version: z.number().int().min(0) }).strict()
@@ -68,9 +73,9 @@ export const videoEditTemplateCodeBodySchema = z.object({
 
 const json = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item)
 /** 风格内容摘要：说明书、样片源码与样片设置（与 Frameflow styleRevision 同口径）。 */
-export function videoEditStyleContentHash(style: Pick<VideoEditStyle, 'guide' | 'sample' | 'userPreferences'>): Promise<string> {
+export function videoEditStyleContentHash(style: Pick<VideoEditStyle, 'guide' | 'sample' | 'userPreferences' | 'effectPresets'>): Promise<string> {
   const { code, ...settings } = style.sample
-  return sha256HexString(json({ guide: style.guide.replace(/\r\n?/g, '\n'), files: sortedFiles(code), settings, ...(style.userPreferences?.length ? { userPreferences: style.userPreferences } : {}) }))
+  return sha256HexString(json({ guide: style.guide.replace(/\r\n?/g, '\n'), files: sortedFiles(code), settings, ...(style.userPreferences?.length ? { userPreferences: style.userPreferences } : {}), ...(style.effectPresets?.length ? { effectPresets: style.effectPresets.map(preset => videoEditEffectPresetSchema.parse(preset)) } : {}) }))
 }
 /** 模板内容摘要：只看内容，名称与说明不参与。 */
 export function videoEditTemplateContentHash(body: unknown): Promise<string> { return sha256HexString(json(body)) }

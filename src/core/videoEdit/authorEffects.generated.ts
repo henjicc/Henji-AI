@@ -331,7 +331,7 @@ export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'chromatic_aberration'; readonly params?: ChromaticAberrationParams }
   | { readonly id: 'glow'; readonly params?: GlowParams }
   | { readonly id: 'color_grade'; readonly params?: ColorGradeParams }
-export interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string } }
+export interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }
 /** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */
 export interface RetiredBlurDescriptor { readonly id: 'gaussian_blur' | 'directional_blur' | 'zoom_blur' | 'lens_blur'; readonly params?: object }
 export type EffectDescriptor = BuiltinLayerEffectDescriptor | LookDescriptor | RetiredBlurDescriptor

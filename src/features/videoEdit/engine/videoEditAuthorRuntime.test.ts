@@ -813,3 +813,23 @@ it.each(['layer', 'native', 'promoted'] as const)('作者纹理换尺寸分配�
   } finally { await runtime.dispose() }
   for (const texture of textures) expect(texture.destroy).toHaveBeenCalledOnce()
 })
+
+it('冻结作者库 look 旋钮经正式打包加载和作者运行时进入图层效果，缺失时保留上一帧观察', async () => {
+  const { device } = canvasHarness()
+  const bundle = await bundleAuthorFiles({ apiVersion: 7, libraries: { 'henji-effects': '1.2.0' }, entry: 'main.js', files: { 'main.js': `import { look } from 'henji-effects'; export default { name:'风格件标题', layers() { return [{ id:'title', bounds:[0,0,20,10], effects:()=>[look('轻柔',{soft:75})], draw(ctx){ctx.fillRect(0,0,20,10)} }] } }` } }, build)
+  let code = bundle.code
+  for (const [name, version] of Object.entries(bundle.libraries ?? {})) {
+    const release = AUTHOR_LIBRARIES[name][version]
+    for (const file of Object.values(release.modules)) code = code.replaceAll(`henji-media://author-lib/${name}/${version}/${file}`, pathToFileURL(path.resolve(release.frozen!, file)).href)
+  }
+  const loaded = await import(/* @vite-ignore */ 'data:text/javascript;base64,' + Buffer.from(code).toString('base64')) as { default: AuthorModule }
+  const preset = { id: 'soft', name: '轻柔', media: 'video' as const, effects: [{ id:'blur', name:'模糊', enabled:true, amount:.6, builtin:{id:'blur',params:{}} }], knobs:[{key:'soft',name:'柔和度',min:0,max:100,default:50,mappings:[{effectId:'blur',parameter:'amount',points:[{input:0,output:0},{input:100,output:.04}]}]}] }
+  const runtime = new VideoEditAuthorRuntime(device, loaded.default, bundle.locations, true, bundle.apiVersion)
+  try {
+    await runtime.render(output, 100, 50, {}, {}, frameInfo(0), undefined, undefined, true, undefined, {presets:[preset]})
+    expect(runtime.observeElements()[0].effects).toMatchObject([{ id:'blur', amount:.6, source:'look', params:{amount:.03} }])
+    const previous = runtime.observeElements()
+    await expect(runtime.render(output, 100, 50, {}, {}, frameInfo(1), undefined, undefined, true, undefined, {presets:[]})).rejects.toThrow(/找不到/)
+    expect(runtime.observeElements()).toEqual(previous)
+  } finally { await runtime.dispose() }
+})

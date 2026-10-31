@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_EFFECT_LIBRARY_VERSION, videoEditEffectLibrarySchema } from '../videoEdit/effectPresets'
 import { formatMigrations } from './formatMigrations'
 import { foreignContentSchema } from '../contentTrust'
 import { gitCodeLocationSchema } from '../storage/gitCodeLocation'
@@ -47,7 +48,7 @@ export interface PersistenceFormat extends PersistenceContract {
 
 function format(id: string, name: string, version: number, versionSource: string, readEntry: string, schema: z.ZodType, storage: PersistenceFormat['storage'] = 'file', schemas: Readonly<Record<string, z.ZodType>> = {}): PersistenceFormat {
   const container = ['settings', 'theme'].includes(id) ? z.object({ version: z.literal(version), state: schema })
-    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'export-memory', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config', 'sound-library-folders', 'video-style-library', 'video-template-library', 'video-style-package'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
+    : ['video-effect-library', 'style-kits', 'title-templates', 'text-presets', 'export-presets', 'export-memory', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config', 'sound-library-folders', 'video-style-library', 'video-template-library', 'video-style-package'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
   return { id, name, version, versionSource, readEntry, schema, schemas: { content: schema, ...(container ? { container } : {}), ...schemas }, migrations: formatMigrations(id), storage, migrationEntry: storage === 'sqlite-ledger' ? 'electron/main/services/db-migrations.ts::SCHEMA_MIGRATIONS / runSchemaMigrations' : 'src/core/persistence/formatMigrations.ts / migrations.ts::upgradePersistenceContent' }
 }
 
@@ -79,10 +80,13 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   // 2026-10-22 起停用：只读，风格库首次加载时把其中的个人风格与标题模板转存进新的风格库目录，原键不改写。
   { ...format('style-kits', '本机风格包', LOCAL_LIBRARY_FORMATS['video-edit-style-kits'].version, 'video-edit-style-kits.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::importStoredStyleKits', z.array(styleKitMigrationSchema), 'local-storage'), minReaderVersion: 3 },
   { ...format('title-templates', '本机标题模板', LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].version, 'video-edit-title-templates.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::importStoredStyleKits', z.array(titleTemplateMigrationSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].minReaderVersion },
+  // 旋钮默认值已写进效果参数；忽略可选风格件或旋钮的旧读者仍能按已有参数理解画面。
   { ...format('video-style-library', '风格库中的风格', VIDEO_EDIT_STYLE_LIBRARY_VERSION, '风格库/styles/<id>/style.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readStyleFile', videoEditStyleSchema), minReaderVersion: 1 },
   // 模板库 3、风格包 6：原生模板片段新增 enabled:false，旧程序忽略它会把停用的模板片段当成启用，最低可读版本提高到新版本。
   { ...format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema), minReaderVersion: 3 },
   { ...format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.hjsty.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema), minReaderVersion: 6 },
+  // 效果库 v3 接入版本化 content 容器；v2 仅接受 {state, version:1|2}，不能读取该外壳。
+  { ...format('video-effect-library', '本机风格件与效果收藏', VIDEO_EDIT_EFFECT_LIBRARY_VERSION, 'video-edit-effects-library.version', 'src/features/videoEdit/application/videoEditEffectPresets.ts::createVideoEditEffectLibraryStore', videoEditEffectLibrarySchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-effects-library'].minReaderVersion },
   format('text-presets', '本机文字和字幕预设', LOCAL_LIBRARY_FORMATS['video-edit-text-presets'].version, 'video-edit-text-presets.version', 'src/features/videoEdit/application/videoEditLocalLibrary.ts', z.array(videoEditTextPresetSchema), 'local-storage'),
   { ...format('export-presets', '本机导出预设', LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].version, 'video-edit-export-presets.version', 'src/features/videoEdit/application/videoEditExportPresets.ts', z.array(videoEditExportPresetSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].minReaderVersion },
   { ...format('export-memory', '上次导出设置', LOCAL_LIBRARY_FORMATS['video-edit-export-memory'].version, 'video-edit-export-memory.version', 'src/features/videoEdit/application/videoEditExportMemory.ts', videoEditExportMemorySchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-export-memory'].minReaderVersion },

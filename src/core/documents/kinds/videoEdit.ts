@@ -139,6 +139,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 47 → 48：工程风格新增可选风格件，默认旋钮已归一化到效果参数，最低可读版本保持 47。
+    47: content => structuredClone(content),
     // 46 → 47：高斯、方向、缩放、镜头模糊并成“模糊”（方式 + 模糊度，曲线逐帧换算），旧暗角的负数量换成正数量配白色；每一帧画面不变。
     46: migrateVideoEditMergedEffects,
     // 45 → 46：导出历史新增可选高级编码，旧记录保持直接导出语义，最低可读版本保持 45。

@@ -1,4 +1,5 @@
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
 import { readAuthorMetadataCache, writeAuthorMetadataCache } from './videoEditAuthorMetadataCache'
 import { codeMediaFrameParameters, codeMediaInputClipSeconds, codeMediaInputReference, CodeMediaInputReferenceError } from '@/core/videoEdit/codeMediaInput'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
@@ -493,7 +494,7 @@ export class VideoEditCodeSources {
               const sourceTime = videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static')
               const overrides = plan.clip.elementOverrides ? Object.fromEntries(Object.entries(plan.clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
               const info = { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps, clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps }, ...(Object.keys(web).length ? { web } : {}) }
-              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, { ...document.authorEffects, luts: document.colorLuts }, options.quality, assertCurrent)
+              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, authorEffectEnvironmentForClip(document, plan.clip), options.quality, assertCurrent)
             }
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)

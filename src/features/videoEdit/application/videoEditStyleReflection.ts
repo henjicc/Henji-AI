@@ -1,3 +1,6 @@
+import { videoEditEffectPresetSchema } from '@/core/videoEdit/effectPresets'
+import { videoEditPresetCreationProperties } from './videoEditEffectPresets'
+import { videoEditPresetCreationItemsSchema } from './videoEditEffectPresetReflection'
 import { captureRecycledRemoval } from '@/features/application-control'
 import { restoreDeleted } from '@/services/recycle'
 import { z } from 'zod'
@@ -12,7 +15,8 @@ import { videoEditSchemaRef } from './videoEditFields'
 import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, restoreVideoEditSnapshot, videoEditDomainRevision } from './videoEditService'
 import { videoEditStyleLibrary, type VideoEditLibraryStyle } from './videoEditStyleLibrary'
 import { newerLibraryStyleVersion } from './videoEditStyles'
-import { newerLibraryTemplateVersion, unregisterVideoEditTemplates, videoEditTemplateInstances } from './videoEditTemplates'
+import { newerLibraryTemplateVersion, unregisterVideoEditTemplates, videoEditTemplateInstances, withVideoEditTemplateStyle } from './videoEditTemplates'
+import { videoEditTemplateStyle } from './videoEditPresetCatalog'
 
 /*
  * 风格与模板的通用实体：读、改、增、删和成员关系都走通用动词；渲染样片、导入导出、绑定、应用、固化、升级、分离是专用能力。
@@ -52,6 +56,7 @@ interface StyleDraft { entry: VideoEditLibraryStyle; style: VideoEditStyle; isDe
 const styleShape = videoEditStyleSchema.shape
 const sections = STYLE_GUIDE_SECTIONS.map(spec => spec.title).join('、')
 const styleFields: ApplicationFieldDefinition<StyleDraft, StyleDraft>[] = [
+  field(STYLE_ENTITY, 'effect_presets', '风格件', '本风格的风格件；同名覆盖全局，归属由所在风格决定，无须填写 owner。新建或修改前展示内容，请用户确认一次。', jsonRef(STYLE_ENTITY, 'effect_presets'), draft => (draft.style.effectPresets ?? []) as unknown as JsonValue, (draft, value) => { draft.style = videoEditStyleSchema.parse({ ...draft.style, effectPresets: value }) }),
   field(STYLE_ENTITY, 'name', '风格名称', '风格名称（最多 80 字）。', { kind: 'string', maxLength: 80 }, draft => draft.style.name, (draft, value) => { draft.style.name = styleShape.name.parse(value) }),
   field(STYLE_ENTITY, 'name_english', '英文名', '可选英文名；null 清除。', { kind: 'string', maxLength: 80 }, draft => draft.style.nameEnglish ?? null, (draft, value) => { if (value === null) delete draft.style.nameEnglish; else draft.style.nameEnglish = styleShape.nameEnglish.unwrap().parse(value) }, true),
   field(STYLE_ENTITY, 'description', '一句话说明', '这个风格是什么感觉、适合什么片子（最多 300 字），列表与挑选风格时显示。', { kind: 'string', maxLength: 300 }, draft => draft.style.description, (draft, value) => { draft.style.description = styleShape.description.parse(value) }),
@@ -82,6 +87,7 @@ const templateFields: ApplicationFieldDefinition<VideoEditTemplate, VideoEditTem
 // —— 工程风格副本 ——
 interface ProjectStyleDraft { projectId: string; style: VideoEditStyle; document: VideoEditDocument }
 const projectStyleFields: ApplicationFieldDefinition<ProjectStyleDraft, ProjectStyleDraft>[] = [
+  field(PROJECT_STYLE_ENTITY, 'effect_presets', '风格件', '工程风格副本里的风格件，供绑定序列的 look 使用；每项 creation_items 可用于向片段创建效果，库更新须经 bind_video_edit_style 同步。', jsonRef(PROJECT_STYLE_ENTITY, 'effect_presets'), draft => (draft.style.effectPresets ?? []).map(preset => ({ ...preset, creation_items: videoEditPresetCreationProperties(preset).map(properties => ({ properties })) })) as unknown as JsonValue),
   field(PROJECT_STYLE_ENTITY, 'name', '风格名称', '工程副本的名称。', { kind: 'string', maxLength: 80 }, draft => draft.style.name),
   field(PROJECT_STYLE_ENTITY, 'version', '版本号', '本工程用的版本；写进项目制作进度（documents.project.progress），例如“风格预设：克制高级 v3”。', { kind: 'integer' }, draft => draft.style.version),
   field(PROJECT_STYLE_ENTITY, 'library_version', '风格库里的更新版本', '风格库里同一风格的版本更高时为那个版本，否则为 null：告诉用户并问要不要升级（bind_video_edit_style）。', { kind: 'integer' }, draft => newerLibraryStyleVersion(draft.style), undefined, true),
@@ -116,6 +122,7 @@ const libraryFields: ApplicationFieldDefinition<typeof videoEditStyleLibrary, ty
   field(STYLE_LIBRARY_ENTITY, 'template_count', '库模板数', '风格库里的库模板数。', { kind: 'integer' }, library => library.listTemplates().length),
 ]
 const JSON_SCHEMAS: Array<[string, z.ZodType]> = [
+  [`${STYLE_ENTITY}.effect_presets`, z.array(videoEditEffectPresetSchema)], [`${PROJECT_STYLE_ENTITY}.effect_presets`, z.array(videoEditEffectPresetSchema.safeExtend({ creation_items: videoEditPresetCreationItemsSchema }))],
   [`${STYLE_ENTITY}.sample`, videoEditStyleSampleSchema], [`${STYLE_ENTITY}.missing_sections`, z.array(z.string())],
   [`${STYLE_ENTITY}.media`, z.object({ preview: z.string().nullable(), thumbnail: z.string().nullable(), anchors: z.array(z.string()) })],
   [`${STYLE_ENTITY}.template_refs`, z.array(z.object({ kind: z.string(), id: z.string(), label: z.string() }))],
@@ -339,7 +346,8 @@ export class VideoEditProjectTemplateMutationExecutor extends ProjectTemplateExe
     // style_id 可以写风格库风格的 id：风格库按需读取，没读过时先读完再找。
     if (step.mutations.some(mutation => mutation.propertyId === `${PROJECT_TEMPLATE_ENTITY}.style_id` && mutation.value !== null)) await videoEditStyleLibrary.ready()
     await applyWriterTable(fieldWriterTable(projectTemplateFields), draft, step.mutations)
-    return this.commit(draft.projectId, [step.target], document => ({ ...document, templates: document.templates!.map(value => value.id === draft.template.id ? draft.template : value) }))
+    const style = step.mutations.some(mutation => mutation.propertyId === `${PROJECT_TEMPLATE_ENTITY}.style_id`) ? videoEditTemplateStyle(draft.template, draft.document.styles) : undefined
+    return this.commit(draft.projectId, [step.target], document => ({ ...withVideoEditTemplateStyle(document, style), templates: document.templates!.map(value => value.id === draft.template.id ? draft.template : value) }))
   }
 }
 export class VideoEditProjectTemplateCollectionExecutor extends ProjectTemplateExecutorBase implements ApplicationCollectionExecutor {

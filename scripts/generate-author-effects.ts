@@ -18,14 +18,14 @@ function parameter(param: VideoEditBuiltinParam): string {
 }
 export function generateAuthorEffects(): Record<string, string> {
   const params = definitions.map(definition => `export interface ${typeName(definition.id)} {\n${definition.params.map(parameter).join('')}}\n`).join('\n')
-  const union = `export type BuiltinLayerEffectDescriptor =\n${definitions.map(definition => `  | { readonly id: '${definition.id}'; readonly params?: ${typeName(definition.id)} }`).join('\n')}\nexport interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string } }\n/** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */\nexport interface RetiredBlurDescriptor { readonly id: ${retiredBlurIds.map(id => `'${id}'`).join(' | ')}; readonly params?: object }\nexport type EffectDescriptor = BuiltinLayerEffectDescriptor | LookDescriptor | RetiredBlurDescriptor\n`
+  const union = `export type BuiltinLayerEffectDescriptor =\n${definitions.map(definition => `  | { readonly id: '${definition.id}'; readonly params?: ${typeName(definition.id)} }`).join('\n')}\nexport interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }\n/** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */\nexport interface RetiredBlurDescriptor { readonly id: ${retiredBlurIds.map(id => `'${id}'`).join(' | ')}; readonly params?: object }\nexport type EffectDescriptor = BuiltinLayerEffectDescriptor | LookDescriptor | RetiredBlurDescriptor\n`
   const declarations = definitions.map(definition => `export declare function ${definition.author!.factory}(params?: ${typeName(definition.id)}): { readonly id: '${definition.id}'; readonly params: ${typeName(definition.id)} }\n`).join('')
   const factories = definitions.map(definition => `export function ${definition.author!.factory}(params: ${typeName(definition.id)} = {}): { readonly id: '${definition.id}'; readonly params: ${typeName(definition.id)} } { return { id: '${definition.id}', params } }\n`).join('')
   const types = banner + params + union
   return {
     'src/core/videoEdit/authorEffects.generated.ts': types,
     'resources/video-edit-author/author-effects.d.ts': types,
-    'resources/video-edit-author/effects-library.d.ts': types + declarations + 'export declare function look(name: string, knobs?: Readonly<Record<string, never>>): LookDescriptor\n',
+    'resources/video-edit-author/effects-library.d.ts': types + declarations + 'export declare function look(name: string, knobs?: Readonly<Record<string, number>>): LookDescriptor\n',
     'src/features/videoEdit/authorLibraries/effects.generated.ts': banner + `import type { ${definitions.map(definition => typeName(definition.id)).join(', ')} } from '@/core/videoEdit/authorEffects.generated'\n` + factories,
   }
 }

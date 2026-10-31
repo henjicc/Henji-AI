@@ -22,6 +22,7 @@ import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, set
 import { ensureVideoEditRetargetMetadata, withVideoEditCodeMetadata, withVideoEditUnreadableCodeVersions, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditCodeVersions, createVideoEditPlacedCodeItems } from './videoEditCodeService'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
+import { videoEditTemplateStyle } from './videoEditPresetCatalog'
 import type { VideoEditDropPlacement } from './videoEditDrop'
 
 const logger = createLogger('features.videoEdit.templates')
@@ -80,14 +81,6 @@ function defaultVersion(document: VideoEditDocument, definitionId: string): Code
   if (!definition || !version) throw new Error('模板的代码定义不存在。')
   return version
 }
-/** 模板所属风格的引用：工程风格副本优先，其次风格库。 */
-function styleRef(document: Pick<VideoEditDocument, 'styles'>, styleId: string | null | undefined): { id: string; version: number } | null {
-  if (!styleId) return null
-  const style: VideoEditStyle | undefined = document.styles?.find(value => value.id === styleId) ?? videoEditStyleLibrary.findStyle(styleId)?.style
-  if (!style) throw new Error(`NOT_FOUND：没有这个风格（${styleId}），请重新列出 video_edit.style 或 video_edit.project_style。`)
-  return { id: style.id, version: style.version }
-}
-
 interface PreparedClip { clip: VideoEditClip; item?: VideoEditItem; layer: number }
 /** 放置一组片段：落点默认播放头、最上层可用视频轨；多层组合按层数占用连续视频轨，轨道不够就新建。整组一步撤销。 */
 function placeClips(owner: VideoEditInstance, document: VideoEditDocument, sequenceId: string, prepared: PreparedClip[], placement?: VideoEditDropPlacement): { document: VideoEditDocument; clipIds: string[] } {
@@ -151,11 +144,12 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
     if (!template) {
       await videoEditStyleLibrary.ready()
       const library = videoEditStyleLibrary.requireTemplate(templateId).template; copied = true
-      const meta = { id: newId(), name: library.name, description: library.description, version: 1, updatedAt: new Date().toISOString(), style: library.style, origin: { id: library.id, version: library.version } }
+      const style = videoEditTemplateStyle(library, owner.document.styles)
+      const meta = { id: newId(), name: library.name, description: library.description, version: 1, updatedAt: new Date().toISOString(), style: style ? { id: style.id, version: style.version } : null, origin: { id: library.id, version: library.version } }
       if (library.body.kind === 'native') {
         const registered = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: await videoEditTemplateContentHash(library.body), body: library.body })
         editVideoProject(projectId, document => {
-          const next = { ...document, templates: [...(document.templates ?? []), registered] }
+          const next = { ...withVideoEditTemplateStyle(document, style), templates: [...(document.templates ?? []), registered] }
           const sequence = next.sequences.find(value => value.id === sequenceId); if (!sequence) throw new Error('原模板落点序列不存在。')
           const placed = placeClips(owner, next, sequenceId, nativeClips(next, sequence, registered, options), options.placement); clipIds = placed.clipIds; return placed.document
         })
@@ -167,7 +161,7 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
         await createVideoEditPlacedCodeItems(projectId, [{ files: body.code.files, entry: body.code.entry, name: library.name, trustContext: library.foreign ? [library.foreign] : [] }], (document, itemIds) => {
           const item = document.items.find(value => value.id === itemIds[0])!
           registered = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: '', body: { kind: 'code', definitionId: item.code!.definitionId } })
-          const next = { ...document, templates: [...(document.templates ?? []), registered] }
+          const next = { ...withVideoEditTemplateStyle(document, style), templates: [...(document.templates ?? []), registered] }
           const sequence = next.sequences.find(value => value.id === sequenceId); if (!sequence) throw new Error('原模板落点序列不存在。')
           const placed = placeClips(owner, next, sequenceId, [codeClip(owner, next, sequence, item.code!.definitionId, { durationSeconds: options.durationSeconds ?? body.durationSeconds, parameters: options.parameters })], placement)
           clipIds = placed.clipIds; return placed.document
@@ -178,16 +172,24 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
       }
     } else {
       const chosen = template
+      if (chosen.style && !owner.document.styles?.some(style => style.id === chosen.style!.id)) await videoEditStyleLibrary.ready()
+      const style = videoEditTemplateStyle(chosen, owner.document.styles)
       await withVideoEditCodeMetadata(() => editVideoProject(projectId, document => {
-        const sequence = document.sequences.find(value => value.id === sequenceId); if (!sequence) throw new Error('原模板落点序列不存在。')
-        const prepared = chosen.body.kind === 'native' ? nativeClips(document, sequence, chosen, options) : [codeClip(owner, document, sequence, chosen.body.definitionId, options)]
-        const placed = placeClips(owner, document, sequenceId, prepared, options.placement); clipIds = placed.clipIds; return placed.document
+        const next = withVideoEditTemplateStyle(document, style)
+        const sequence = next.sequences.find(value => value.id === sequenceId); if (!sequence) throw new Error('原模板落点序列不存在。')
+        const prepared = chosen.body.kind === 'native' ? nativeClips(next, sequence, chosen, options) : [codeClip(owner, next, sequence, chosen.body.definitionId, options)]
+        const placed = placeClips(owner, next, sequenceId, prepared, options.placement); clipIds = placed.clipIds; return placed.document
       }))
     }
     if (owner.activeSequenceId === sequenceId) setVideoEditView(projectId, { selection: clipIds[0] ?? null })
     logger.info('template.apply.completed', '模板已加到时间线', { context: { projectId, sequenceId, copied, count: clipIds.length } })
     return { template, clipIds, copied }
   }) } catch (error) { logger.error('template.apply.failed', '模板应用失败', { error, context: { projectId, sequenceId } }); throw error }
+}
+
+export function withVideoEditTemplateStyle(document: VideoEditDocument, style: VideoEditStyle | undefined): VideoEditDocument {
+  if (!style || document.styles?.some(value => value.id === style.id)) return document
+  return { ...document, styles: [...(document.styles ?? []), structuredClone(style)] }
 }
 
 export interface VideoEditTemplateCreateOptions { name: string; description?: string; styleId?: string | null; global?: boolean }
@@ -208,17 +210,18 @@ export function createVideoEditTemplate(projectId: string, sequenceId: string, c
     const styleId = options.styleId === undefined ? sequence.styleId : options.styleId
     // 风格库按需读取：引用库里的风格或要存进风格库时先读完，任何写入之前就能判断风格在不在。
     if (options.global || styleId && !document.styles?.some(value => value.id === styleId)) await videoEditStyleLibrary.ready()
-    const style = styleRef(document, styleId)
+    const sourceStyle = videoEditTemplateStyle({ style: styleId ? { id: styleId } : null }, document.styles)
+    const style = sourceStyle ? { id: sourceStyle.id, version: sourceStyle.version } : null
     const meta = { id: newId(), name: options.name, description: options.description ?? '', version: 1, updatedAt: new Date().toISOString(), style, origin: null }
     let template: VideoEditProjectTemplate
     if (code.length) {
       const definitionId = code[0].code!.definitionId
       template = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: await codeVersionHash(defaultVersion(document, definitionId)), body: { kind: 'code', definitionId } })
-      editVideoProject(projectId, current => ({ ...current, templates: [...(current.templates ?? []), template] }))
+      editVideoProject(projectId, current => ({ ...withVideoEditTemplateStyle(current, sourceStyle), templates: [...(current.templates ?? []), template] }))
     } else {
       const content = captureNativeTemplateContent(sequence, clips)
       template = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: await videoEditTemplateContentHash({ kind: 'native', content }), body: { kind: 'native', content } })
-      editVideoProject(projectId, current => ({ ...current, templates: [...(current.templates ?? []), template], sequences: current.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(clip => clipIds.includes(clip.id) ? { ...clip, templateId: template.id } : clip) } : value) }))
+      editVideoProject(projectId, current => ({ ...withVideoEditTemplateStyle(current, sourceStyle), templates: [...(current.templates ?? []), template], sequences: current.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(clip => clipIds.includes(clip.id) ? { ...clip, templateId: template.id } : clip) } : value) }))
     }
     logger.info('template.create.completed', '已登记工程模板', { context: { projectId, kind: template.body.kind } })
     if (!options.global) return { template }
@@ -299,15 +302,19 @@ export function updateVideoEditTemplate(projectId: string, templateId: string, s
     const owner = requireVideoEditInstance(projectId); let template = requireProjectTemplate(owner.document, templateId)
     logger.info('template.update.start', '更新模板并刷新实例', { context: { projectId, source: content.kind } })
     let origin = template.origin
+    let style: VideoEditStyle | undefined
     if (content.kind === 'library') {
       await videoEditStyleLibrary.ready()
       if (!template.origin) throw new Error('这个模板不是从风格库复制来的，没有可升级的来源。')
       const library = videoEditStyleLibrary.requireTemplate(template.origin.id).template
       if (library.body.kind !== template.body.kind) throw new Error('库模板与工程副本的类型不同，不能直接升级；请重新应用库模板。')
+      style = videoEditTemplateStyle(library, owner.document.styles)
+      template = { ...template, style: style ? { id: style.id, version: style.version } : null }
       origin = { id: library.id, version: library.version }
       if (library.body.kind === 'code') {
+        const trialContext = { styles: withVideoEditTemplateStyle(owner.document, style).styles, templates: owner.document.templates!.map(value => value.id === template.id ? { ...value, style: template.style } : value) }
         external()
-        const [versionId] = await createVideoEditCodeVersions(projectId, [{ definitionId: (template.body as { definitionId: string }).definitionId, files: library.body.code.files, entry: library.body.code.entry, trustContext: library.foreign ? [library.foreign] : [] }], signal).catch(async (error: unknown) => {
+        const [versionId] = await createVideoEditCodeVersions(projectId, [{ definitionId: (template.body as { definitionId: string }).definitionId, files: library.body.code.files, entry: library.body.code.entry, trustContext: library.foreign ? [library.foreign] : [] }], signal, undefined, undefined, undefined, trialContext).catch(async (error: unknown) => {
           if (readContentTrustFailure(error)) throw error
           // 源码与工程里已有的某个版本完全相同：直接改用那个版本。
           const match = await findSameVersion(requireVideoEditInstance(projectId).document, (template.body as { definitionId: string }).definitionId, library.body.kind === 'code' ? library.body.code : undefined)
@@ -337,7 +344,7 @@ export function updateVideoEditTemplate(projectId: string, templateId: string, s
     let instances = 0; let codeInstances: VideoEditCodeInstanceMigration[] = []
     // 等待期间新出现的版本引用在写入时才知道，读取中就等它读完再重试。
     await withVideoEditUnreadableCodeVersions(owner, unreadable, () => withVideoEditCodeMetadata(() => editVideoProject(projectId, current => {
-      let value: VideoEditDocument = { ...current, templates: current.templates!.map(item => item.id === templateId ? next : item) }
+      let value: VideoEditDocument = { ...withVideoEditTemplateStyle(current, style), templates: current.templates!.map(item => item.id === templateId ? next : item) }
       if (next.body.kind === 'code' && content.kind === 'version') ({ document: value, codeInstances } = rebindCode(owner, value, next.body.definitionId, content.versionId, unreadable))
       if (next.body.kind === 'native') value = syncNativeItems(refreshNativeInstances(value, next), next.id)
       instances = videoEditTemplateInstances(value, next).length

@@ -519,6 +519,7 @@ describe('所有登记格式的黄金样本', () => {
         const raw: unknown = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'))
         let content = raw
         if (format.id.startsWith('document.')) content = parseDocumentEnvelope(raw).content
+        else if (format.id === 'video-effect-library') content = (raw as { state?: unknown; content?: unknown }).state ?? (raw as { content: unknown }).content
         else if (format.id === 'settings' || format.id === 'theme') content = (raw as { state: unknown }).state
         else if ((format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders', 'video-style-library', 'video-template-library', 'video-style-package'].includes(format.id)) content = (raw as { content: unknown }).content
         const upgraded = upgradePersistenceContent(format, content, version)

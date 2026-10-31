@@ -3,7 +3,7 @@ import { getAudioEditRevision } from '@/features/audioEdit/application/audioEdit
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
-import { subscribeVideoEditSceneSelection, videoEditSelectedSceneRecordRef } from '@/features/videoEdit'
+import { subscribeVideoEditSceneSelection, videoEditSelectedSceneRecordRef, videoEditEffectLibraryRevisions } from '@/features/videoEdit'
 import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementSummary'
 import { videoEditPresetHostSummary, videoEditStyleHostSummary } from '@/features/videoEdit/application/videoEditStyles'
 import {
@@ -90,6 +90,7 @@ function syncPulledRevisions(): void {
   scopeRevisions.image_edit = getImageEditDocumentCatalogRevisionV3()
   scopeRevisions.audio_edit = getAudioEditRevision()
   scopeRevisions.video_edit = videoEditDomainRevision()
+  Object.assign(scopeRevisions, videoEditEffectLibraryRevisions())
   scopeRevisions.documents = getDocumentOperations().revision()
 }
 

@@ -126,8 +126,8 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 47,
-      "fingerprint": "b8c4b1c2c4bccca20b801e51aaa2ec393b3be8e40f288c52517bbebf424fc346",
+      "version": 48,
+      "fingerprint": "f90b465c11d901cecd2c6b1ddc0bc3e82ce4f3db63bb4b9e1197519ddc0f7062",
       "supportedFrom": 17,
       "minReaderVersion": 47
     },
@@ -156,8 +156,8 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 50,
-      "fingerprint": "90bb29ef6125a42cc9282f239e4cac894eba35b25f834adbf693e1b416b1443b",
+      "version": 51,
+      "fingerprint": "794d418836208c0bc64d2cb59c984613daa92d161fcf23844bdfb15677574c3e",
       "supportedFrom": 19,
       "minReaderVersion": 50
     },
@@ -240,8 +240,8 @@
       "minReaderVersion": 1
     },
     "video-preset-package": {
-      "version": 10,
-      "fingerprint": "00a323a10e9768f905af091555abca03f7ef13ae8a632438b1676c5a89edd8fd",
+      "version": 11,
+      "fingerprint": "d0e31105f971a35ab8a13ffad0f8dd0e6e9e5fb844c51f57265cce3efdc4cf2c",
       "supportedFrom": 5,
       "minReaderVersion": 6
     },
@@ -324,8 +324,8 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 6,
-      "fingerprint": "a1ec5243acf4aff7ce5c11306056dbbc76e3b59b4847356d20c7ffd7f0a98ac2",
+      "version": 7,
+      "fingerprint": "fb9268dbb06f7a0450b52464f86a3dd59cec79d66d437cecdafbbb6ceed4e12c",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },
@@ -336,8 +336,8 @@
       "minReaderVersion": 3
     },
     "video-style-package": {
-      "version": 9,
-      "fingerprint": "72fd53ff1a8f48bb699f9b4bbe6baca5ecd684ba64b932b21e09576ca55cb54b",
+      "version": 10,
+      "fingerprint": "cc77ab8f5c9b30cb4c6153b318ef8a8b504587ff02838d982dbc3a699c7104c1",
       "supportedFrom": 1,
       "minReaderVersion": 6
     },
@@ -394,6 +394,12 @@
       "fingerprint": "749c73d98e8d14dcb0ce66c40e42dc6728c99f05615c75c132cffe513a46f089",
       "supportedFrom": 1,
       "minReaderVersion": 1
+    },
+    "video-effect-library": {
+      "version": 3,
+      "fingerprint": "d4e73151c3dd4b7197f76efe55ef3ec4d3771e1a5e463483d410c5890ccbd24f",
+      "supportedFrom": 1,
+      "minReaderVersion": 3
     }
   },
   "devBreaks": [],

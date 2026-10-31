@@ -5,6 +5,7 @@ import type { VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_PRESET_PANEL_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_DEFAULTABLE, VIDEO_EDIT_PRESET_MAX_RATING, type VideoEditPresetCategory, type VideoEditPresetPreference } from '@/core/videoEdit/presetPackage'
 import { videoEditSchemaRef } from './videoEditFields'
 import { videoEditDomainRevision } from './videoEditService'
+import { VIDEO_EDIT_EFFECT_LIBRARY_SCOPE, videoEditEffectLibraryRevisions } from './videoEditEffectPresets'
 import { listAllVideoEditPresets, requireVideoEditPreset, setVideoEditPresetDefault, setVideoEditPresetRating, type VideoEditPresetEntry } from './videoEditPresetCatalog'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
 
@@ -21,7 +22,7 @@ function parse(ref: ApplicationRef): { category: VideoEditPresetCategory; id: st
 }
 const readOnly = (name: string, title: string, value: ApplicationFieldDefinition<Draft, Draft>['descriptor']['value'], read: (draft: Draft) => JsonValue): ApplicationFieldDefinition<Draft, Draft> => ({
   propertyId: `${PRESET_ENTITY}.${name}`, storeActions: [], read,
-  descriptor: { id: `${PRESET_ENTITY}.${name}`, entityType: PRESET_ENTITY, version: 1, title, description: title, value, nullable: name === 'source_ref', dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: [] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', `${PRESET_ENTITY}.${name}`), readOnlyReason: '由预设库维护；内容请经 source_ref 指向的原实体修改。' },
+  descriptor: { id: `${PRESET_ENTITY}.${name}`, entityType: PRESET_ENTITY, version: 1, title, description: title, value, nullable: name === 'source_ref', dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: [] }, revisionScopes: ['video_edit', VIDEO_EDIT_EFFECT_LIBRARY_SCOPE], schemaRef: videoEditSchemaRef('property', `${PRESET_ENTITY}.${name}`), readOnlyReason: '由预设库维护；内容请经 source_ref 指向的原实体修改。' },
 })
 const fields: ApplicationFieldDefinition<Draft, Draft>[] = [
   readOnly('name', '预设名称', { kind: 'string', maxLength: 200 }, draft => draft.entry.name),
@@ -32,17 +33,17 @@ const fields: ApplicationFieldDefinition<Draft, Draft>[] = [
   readOnly('source_ref', '原实体引用（类型:标识）；转场没有', { kind: 'string', maxLength: 300 }, draft => SOURCE_ENTITY[draft.entry.category] ? `${SOURCE_ENTITY[draft.entry.category]}:${draft.entry.id}` : null),
   { propertyId: `${PRESET_ENTITY}.rating`, storeActions: [], read: draft => draft.rating,
     writer: { write(draft, mutation) { const value = mutation.value; if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > VIDEO_EDIT_PRESET_MAX_RATING) throw new Error(`rating 须为 0–${VIDEO_EDIT_PRESET_MAX_RATING} 的整数，0 表示清除评分。`); draft.rating = value } },
-    descriptor: { id: `${PRESET_ENTITY}.rating`, entityType: PRESET_ENTITY, version: 1, title: '喜爱程度', description: '0–5 的整数，0 清除评分；只在用户明确表达喜好时修改。', value: { kind: 'integer', hardRange: { min: 0, max: VIDEO_EDIT_PRESET_MAX_RATING } }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: ['video_edit:write'] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', `${PRESET_ENTITY}.rating`) } },
+    descriptor: { id: `${PRESET_ENTITY}.rating`, entityType: PRESET_ENTITY, version: 1, title: '喜爱程度', description: '0–5 的整数，0 清除评分；只在用户明确表达喜好时修改。', value: { kind: 'integer', hardRange: { min: 0, max: VIDEO_EDIT_PRESET_MAX_RATING } }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: ['video_edit:write'] }, revisionScopes: ['video_edit', VIDEO_EDIT_EFFECT_LIBRARY_SCOPE], schemaRef: videoEditSchemaRef('property', `${PRESET_ENTITY}.rating`) } },
   { propertyId: `${PRESET_ENTITY}.is_default`, storeActions: [], read: draft => draft.isDefault,
     writer: { write(draft, mutation) { if (typeof mutation.value !== 'boolean') throw new Error('is_default 须为布尔值。'); draft.isDefault = mutation.value } },
-    descriptor: { id: `${PRESET_ENTITY}.is_default`, entityType: PRESET_ENTITY, version: 1, title: '设为默认', description: 'true 设为该类默认（同类原默认自动取消），false 取消；效果预设没有默认。', value: { kind: 'boolean' }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: ['video_edit:write'] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', `${PRESET_ENTITY}.is_default`) } },
+    descriptor: { id: `${PRESET_ENTITY}.is_default`, entityType: PRESET_ENTITY, version: 1, title: '设为默认', description: 'true 设为该类默认（同类原默认自动取消），false 取消；效果预设没有默认。', value: { kind: 'boolean' }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: ['video_edit:write'] }, revisionScopes: ['video_edit', VIDEO_EDIT_EFFECT_LIBRARY_SCOPE], schemaRef: videoEditSchemaRef('property', `${PRESET_ENTITY}.is_default`) } },
 ]
 const draftOf = (ref: ApplicationRef): Draft => { const { category, id } = parse(ref); const entry = requireVideoEditPreset(category, id); return { entry, rating: entry.rating, isDefault: entry.isDefault } }
-const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
+const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision(), ...videoEditEffectLibraryRevisions() })
 export function createVideoEditPresetRegistration(): ApplicationEntityRegistration {
   const properties = fieldDescriptors(fields)
   return {
-    entity: { id: PRESET_ENTITY, domain: 'video_edit', version: 1, title: '剪辑预设', description, refKind: PRESET_ENTITY, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', PRESET_ENTITY) },
+    entity: { id: PRESET_ENTITY, domain: 'video_edit', version: 1, title: '剪辑预设', description, refKind: PRESET_ENTITY, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['video_edit', VIDEO_EDIT_EFFECT_LIBRARY_SCOPE], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', PRESET_ENTITY) },
     properties,
     provider: {
       entityType: PRESET_ENTITY,
