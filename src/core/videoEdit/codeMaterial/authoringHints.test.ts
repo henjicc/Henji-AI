@@ -17,3 +17,12 @@ it('requires text content and style to share a layer binding', () => {
 it('does not claim unused parameters can be detected in arbitrary JS', () => {
   expect(codeMaterialAuthoringHints(program({ size: { type: 'number', title: '大小', default: 40, min: 0, max: 100, step: 1 } }))).toEqual([])
 })
+
+it('有 id 的元素除文字外没有绑定参数时提示，调整层不提示', () => {
+  const span = { file: 'main.js', start: 0, end: 1, startLine: 3, startColumn: 1, endLine: 3, endColumn: 2 }
+  const base = program({ title: { type: 'text', title: '文案', default: '标题', maxLength: 200, layer: 'card' }, style: { type: 'textStyle', title: '样式', default: {}, layer: 'card' } })
+  const withLayers = (parameters: CodeAuthorProgram['parameters'], adjustLayerIds?: string[]) => ({ ...base, parameters, bundle: { ...base.bundle, locations: { layers: { card: span, grade: span }, ...(adjustLayerIds ? { adjustLayerIds } : {}) } } })
+  const textOnly = base.parameters.filter(parameter => parameter.type === 'text')
+  expect(codeMaterialAuthoringHints(withLayers(textOnly, ['grade'])).filter(hint => hint.code === 'UNBOUND_VISUAL')).toEqual([expect.objectContaining({ line: 3, message: expect.stringContaining('元素 card') })])
+  expect(codeMaterialAuthoringHints(withLayers(base.parameters, ['grade'])).some(hint => hint.code === 'UNBOUND_VISUAL')).toBe(false)
+})
