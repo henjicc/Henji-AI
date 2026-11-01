@@ -189,7 +189,7 @@ TS 文件（含默认入口 main.ts）在打包的同时按作者接口做类型
 
 ## API 7：图层效果链与 henji-effects
 
-新源码使用当前作者接口，`henji-effects` 随代码版本冻结（新源码锁定 1.4.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / lens 镜头）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic`、`shadow`、`stroke`、`lightSweep`、`dissolve` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
+新源码使用当前作者接口，`henji-effects` 随代码版本冻结（新源码锁定 1.4.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / spin 旋转 / lens 镜头；`range` 选 full 整幅 / progressive 渐进 / tilt 移轴，配 `range_x`、`range_y`、`range_angle`、`range_width`、`range_falloff`）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic`、`shadow`、`stroke`、`lightSweep`、`dissolve` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
 
 `effects(t)` 每个可见层在中心作者时间求值一次，时间与 draw 相同；位姿仍按曝光采样。即使 draw 的 cacheKey 恒定，effects 仍逐帧求值。静态无 pose 的效果层也独立栅格；尽量给 bounds（内容在作者坐标中的矩形），省略时按完整作者画幅。宿主根据整链支撑外扩，不需要把光晕手工塞进 bounds。效果先于位姿变换、opacity、clip 和运动曝光；效果本身不多次曝光。
 

@@ -153,8 +153,8 @@ export const BLUR_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
     // 范围不是整幅时按位置逐处改变模糊量，两个方向一起糊，单方向不起作用。
     { ...choice('axis', 'both', [{ value: 'both', label: '水平和垂直' }, { value: 'horizontal', label: '水平' }, { value: 'vertical', label: '垂直' }], { name: '模糊方向', text: '只往哪个方向糊。水平和垂直（默认）各方向一样；只选水平或垂直时，另一个方向保持清楚。' }), visibleWhen: { all: [{ param: 'mode', in: ['uniform'] }, { param: 'range', equals: 'full' }] } },
     { ...angle('angle', 0, { name: '角度', text: '拖影的方向。0（默认）左右拉，90 上下拉，45 斜着拉。' }), ...only('directional') },
-    { ...percent('center_x', 50, 0, { name: '中心（水平）', text: '放射、旋转的中心。默认在画面正中；挪到主体上，主体保持清楚，四周向外拉丝或绕着它转。' }), ...only('radial', 'spin') },
-    { ...percent('center_y', 50, 0, { name: '中心（垂直）', text: '中心的上下位置，0 在顶边，100 在底边。' }), ...only('radial', 'spin') },
+    { ...percent('center_x', 50, 0, { group: '中心', name: '水平', text: '放射、旋转的中心。默认在画面正中；挪到主体上，主体保持清楚，四周向外拉丝或绕着它转。' }), ...only('radial', 'spin') },
+    { ...percent('center_y', 50, 0, { group: '中心', name: '垂直', text: '中心的上下位置，0 在顶边，100 在底边。' }), ...only('radial', 'spin') },
     { ...amount('highlights', 50, { name: '亮点加亮', text: '亮点散开后有多亮。0 亮点和其他地方一样被抹平；50（默认）亮点散成明显的圆形光斑；100 光斑更亮更醒目。' }), ...only('lens') },
     toggle('repeat_edges', true, { name: '重复边缘像素', text: '画面边缘外面当作什么来糊。打开（默认）沿用边缘的颜色，整幅画面的四边不会发黑变透明；关闭时外面当作透明，给文字、图形加模糊时边缘自然淡出。' }),
     { ...choice('range', 'full', [{ value: 'full', label: '整幅' }, { value: 'progressive', label: '渐进' }, { value: 'tilt', label: '移轴' }], { group: '范围', name: '范围', text: '哪里糊、哪里清楚。整幅（默认）处处一样；渐进从“位置”开始沿“角度”越来越糊；移轴只留一条清楚的带，两边渐糊，像微缩模型。' }), visibleWhen: RANGE_MODES },

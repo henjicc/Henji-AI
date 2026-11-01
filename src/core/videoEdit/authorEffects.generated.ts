@@ -8,9 +8,9 @@ export interface BlurParams {
   readonly axis?: "both" | "horizontal" | "vertical"
   /** 角度；拖影的方向。0（默认）左右拉，90 上下拉，45 斜着拉。；默认 0；硬范围 -180–180；单位 degrees；显隐 {"param":"mode","in":["directional"]}；可动画 true */
   readonly angle?: number
-  /** 中心（水平）；放射、旋转的中心。默认在画面正中；挪到主体上，主体保持清楚，四周向外拉丝或绕着它转。；默认 50；硬范围 0–100；单位 percent；显隐 {"param":"mode","in":["radial","spin"]}；可动画 true */
+  /** 水平；放射、旋转的中心。默认在画面正中；挪到主体上，主体保持清楚，四周向外拉丝或绕着它转。；默认 50；硬范围 0–100；单位 percent；分组 中心；显隐 {"param":"mode","in":["radial","spin"]}；可动画 true */
   readonly center_x?: number
-  /** 中心（垂直）；中心的上下位置，0 在顶边，100 在底边。；默认 50；硬范围 0–100；单位 percent；显隐 {"param":"mode","in":["radial","spin"]}；可动画 true */
+  /** 垂直；中心的上下位置，0 在顶边，100 在底边。；默认 50；硬范围 0–100；单位 percent；分组 中心；显隐 {"param":"mode","in":["radial","spin"]}；可动画 true */
   readonly center_y?: number
   /** 亮点加亮；亮点散开后有多亮。0 亮点和其他地方一样被抹平；50（默认）亮点散成明显的圆形光斑；100 光斑更亮更醒目。；默认 50；硬范围 0–100；单位 strength；显隐 {"param":"mode","in":["lens"]}；可动画 true */
   readonly highlights?: number
