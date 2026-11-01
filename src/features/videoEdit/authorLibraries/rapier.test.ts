@@ -2,7 +2,9 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import { expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { AUTHOR_LIBRARIES } from '../../../core/videoEdit/codeMaterial/authorLibraries'
+import { CODE_AUTHOR_SIMULATION_MIN_API_VERSION } from '../../../core/videoEdit/codeAuthorVersions'
 
 it('冻结 Rapier 的 init 失败向所有调用方传播，下一次可重试且成功后继续去重', async () => {
   const [release] = Object.values(AUTHOR_LIBRARIES['@dimforge/rapier3d-deterministic-compat'])
@@ -47,4 +49,9 @@ it('冻结 Rapier 的 init 失败向所有调用方传播，下一次可重试�
     })
     expect((result as { snapshotBytes: number }).snapshotBytes).toBeGreaterThan(0)
   } finally { await worker.terminate() }
+})
+
+it('Rapier 的起始作者接口与模拟起始版本一致；登记文件不带导入，构建脚本才能用原生 Node 直接加载', () => {
+  expect(Object.values(AUTHOR_LIBRARIES['@dimforge/rapier3d-deterministic-compat']).every(release => release.minApiVersion === CODE_AUTHOR_SIMULATION_MIN_API_VERSION)).toBe(true)
+  expect(readFileSync(path.resolve(__dirname, '../../../core/videoEdit/codeMaterial/authorLibraries.ts'), 'utf8')).not.toMatch(/^\s*import\s/m)
 })

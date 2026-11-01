@@ -1,4 +1,3 @@
-import { CODE_AUTHOR_SIMULATION_MIN_API_VERSION } from '../codeAuthorVersions'
 /**
  * 代码效果可直接导入的内置库：库名、版本、模块入口、类型与许可的唯一登记。
  *
@@ -36,7 +35,8 @@ export const AUTHOR_LIBRARY_TYPES_FILE = 'types.json'
 /** 每个库的第一个版本是“第一套”：没有记录 libraries 的代码版本一直按它运行，所以只能追加新版本，不能改动已有版本。 */
 export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, AuthorLibraryRelease>>>> = {
   '@dimforge/rapier3d-deterministic-compat': {
-    '0.21.0-henji.1': { license: 'Apache-2.0', minApiVersion: CODE_AUTHOR_SIMULATION_MIN_API_VERSION, frozen: 'resources/video-edit-author/frozen/@dimforge/rapier3d-deterministic-compat/0.21.0-henji.1', modules: { '@dimforge/rapier3d-deterministic-compat': 'rapier.mjs' }, types: { mount: '@dimforge/rapier3d-deterministic-compat', license: 'Apache-2.0', source: 'frozen' } },
+    // 构建脚本用原生 Node 直接加载本登记，这里不能有导入：13 即作者接口里模拟起始的版本（CODE_AUTHOR_SIMULATION_MIN_API_VERSION）。
+    '0.21.0-henji.1': { license: 'Apache-2.0', minApiVersion: 13, frozen: 'resources/video-edit-author/frozen/@dimforge/rapier3d-deterministic-compat/0.21.0-henji.1', modules: { '@dimforge/rapier3d-deterministic-compat': 'rapier.mjs' }, types: { mount: '@dimforge/rapier3d-deterministic-compat', license: 'Apache-2.0', source: 'frozen' } },
   },
   'henji-effects': {
     '1.0.0': { license: 'Apache-2.0', minApiVersion: 7, frozen: 'resources/video-edit-author/frozen/henji-effects/1.0.0', modules: { 'henji-effects': 'index.mjs' }, types: { mount: 'henji-effects', license: 'Apache-2.0', source: 'frozen' } },
