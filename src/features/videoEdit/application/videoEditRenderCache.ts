@@ -563,6 +563,10 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         try {
           activity.check()
           await renderWindow(window, session, controller.signal)
+          // 渲染期间输入可能变了（如字体库读完、分析结果到达），窗口换了指纹：刚写好的文件按旧指纹登记，
+          // 新指纹仍未就绪，回到循环开头按新指纹再渲一遍，不在渲染条上留下补不上的空段。
+          const latest = (await abortable(settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition)), job.controller.signal)).find(value => value.startFrame === window.startFrame)
+          if (latest && latest.key !== window.key) continue
           break
         } catch (error) {
           // 只有让出播放才重来同一窗口；取消、关闭原剪辑和真实失败照常结束任务。

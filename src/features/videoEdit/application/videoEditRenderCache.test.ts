@@ -328,6 +328,17 @@ it('相同内容的两个位置只编码一次，整体平移使用当前起点�
 })
 
 
+it('渲染途中窗口换了指纹（字体库读完）：旧指纹的文件照常登记，按新指纹再渲一遍，渲染条不留空段', async () => {
+  const owner = state.instances[0]
+  state.windows = [{ key: 'before-fonts', startFrame: 0, endFrame: 3, heavy: true }]
+  state.render.mockImplementationOnce(async () => { state.fontRevision = 1; state.windows = [{ key: 'after-fonts', startFrame: 0, endFrame: 3, heavy: true }] })
+  await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  expect(state.commit.mock.calls.map(call => (call[0] as { entry: { windowKey: string } }).entry.windowKey)).toEqual(['before-fonts', 'after-fonts'])
+  expect(state.render).toHaveBeenCalledTimes(6)
+  const ready = readyVideoEditRenderWindows(owner.document.id, state.composition as Parameters<typeof readyVideoEditRenderWindows>[1])
+  expect(ready.map(window => window.key)).toEqual(['after-fonts'])
+})
+
 it('实测流畅覆盖重段预测，取消仅丢当前段并保留已完成段', async () => {
   const owner = state.instances[0], composition = state.composition as Parameters<typeof recordVideoEditProgramRender>[1]
   owner.playing = true; owner.playbackDirection = 1
