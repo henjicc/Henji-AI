@@ -5,6 +5,7 @@ import type { VideoFrameTarget } from '../video-decoder'
 import { WebSourceContent } from './content'
 import { WebSourcePage } from './page'
 import { resolveWebSourceFolder } from './site'
+import { webTextSelectors } from '../../../../src/core/videoEdit/webTextGeometry'
 
 const ROUTE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/
@@ -34,7 +35,8 @@ export function parseWebSourceCaptureRequest(input: unknown): WebSourceCaptureRe
   if (fields.boxes !== undefined) { const issue = codeWebBoxesIssue(fields.boxes); if (issue) throw new Error(issue) }
   if (fields.scale !== undefined && (typeof fields.scale !== 'number' || !Number.isFinite(fields.scale) || fields.scale <= 0 || fields.scale > 8192)) throw new Error('网页取帧倍率需要大于 0 且不超过 8192')
   if (fields.latest !== undefined && typeof fields.latest !== 'boolean') throw new Error('网页取帧 latest 需要布尔值')
-  return { streamId: fields.streamId as string, ticket: fields.ticket as string, time: fields.time, ...(fields.boxes ? { boxes: fields.boxes as string[] } : {}), ...(fields.scale !== undefined ? { scale: fields.scale as number } : {}), ...(fields.latest !== undefined ? { latest: fields.latest as boolean } : {}) }
+  const text = fields.text === undefined ? undefined : webTextSelectors(fields.text)
+  return { streamId: fields.streamId as string, ticket: fields.ticket as string, time: fields.time, ...(fields.boxes ? { boxes: fields.boxes as string[] } : {}), ...(text?.length ? { text } : {}), ...(fields.scale !== undefined ? { scale: fields.scale as number } : {}), ...(fields.latest !== undefined ? { latest: fields.latest as boolean } : {}) }
 }
 
 /**
@@ -145,8 +147,9 @@ export class WebSourcePages {
     const page = this.pages.get(request.streamId)
     if (!page || page.target.id !== targetId) throw new Error('网页来源不存在或不属于当前窗口')
     const startedAt = performance.now()
+    if (request.text?.length) this.logger.debug('采样网页文本几何', { event: 'web_source.text_geometry.start', context: { streamId: page.streamId, ticket: request.ticket, time: request.time, selectors: request.text.length } })
     try {
-      const { boxes, duration, unsettled, dropped, pixelWidth, pixelHeight } = await page.capture(request.time, request.ticket, request.boxes, request)
+      const { boxes, text, duration, unsettled, dropped, pixelWidth, pixelHeight } = await page.capture(request.time, request.ticket, request.boxes, request)
       if (dropped) {
         this.logger.debug('过时网页取帧已丢弃', { event: 'web_source.capture.dropped', context: { streamId: page.streamId, ticket: request.ticket, time: request.time } })
         return { boxes, duration, contentHash: page.contentHash, dropped, pixelWidth, pixelHeight }
@@ -157,8 +160,10 @@ export class WebSourcePages {
         this.unsettled.add(page.streamId)
         this.logger.warn('网页在 seek 之后一直在变，取帧按最新画面（页面没按约定停住，同一时刻的画面可能不一致）', { event: 'web_source.capture.not_static', context: { streamId: page.streamId, time: request.time } })
       }
-      return { boxes, duration, contentHash: page.contentHash, pixelWidth, pixelHeight }
+      if (text) this.logger.debug('网页文本几何采样完成', { event: 'web_source.text_geometry.completed', context: { streamId: page.streamId, ticket: request.ticket, time: text.time, sampleMs: text.sampleMs, serializationMs: text.serializationMs, bytes: text.bytes, statuses: Object.values(text.results).map(value => value.status), reasons: Object.values(text.results).flatMap(value => value.status === 'unavailable' ? [{ reason: value.reason, details: value.details ?? [] }] : []), graphemes: Object.values(text.results).reduce((sum, value) => sum + (value.status === 'ready' ? value.geometry.graphemes.length : 0), 0) } })
+      return { boxes, ...(text ? { text } : {}), duration, contentHash: text?.contentHash ?? page.contentHash, pixelWidth, pixelHeight }
     } catch (error) {
+      if (request.text?.length) this.logger.debug('网页文本几何采样失败', { event: 'web_source.text_geometry.failed', context: { streamId: page.streamId, ticket: request.ticket, time: request.time } })
       this.failed(page, 'web_source.capture.failed', '网页取帧失败', error, { time: request.time })
       throw error
     }

@@ -1,6 +1,7 @@
 import { sharedTexture, type WebFrameMain } from 'electron'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { WebSourcePage } from './page'
+import { WEB_TEXT_SAMPLER_VERSION } from '../../../../src/core/videoEdit/webTextGeometry'
 
 const boundary = vi.hoisted(() => {
   const contents = {
@@ -47,6 +48,52 @@ beforeEach(async () => {
   page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
 })
 afterEach(() => { page.close(); vi.useRealTimers() })
+
+function snapshotText(result: unknown): void {
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+    if (code.includes('const paint =')) {
+      const paint = boundary.contents.on.mock.calls.find(([event]) => event === 'paint')![1]
+      paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
+      return result
+    }
+    return null
+  })
+}
+
+it('主进程交付同幅文本身份和同步原因，空声明保持原快照脚本', async () => {
+  snapshotText({ boxes: {}, text: { samplerVersion: WEB_TEXT_SAMPLER_VERSION, sampleMs: 1, serializationMs: 0, bytes: 0, results: { '#title': { status: 'unavailable', reason: 'unsynchronized', details: ['font-error'] } } } })
+  const captured = await page.capture(2, 'text', undefined, { text: ['#title'] })
+  expect(captured.text).toMatchObject({ ticket: 'text', time: 2, contentHash: 'hash', results: { '#title': { details: ['font-error'] } } })
+  expect(page.capturePath.captureMode).toBe('html-in-canvas')
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockClear()
+  await page.capture(3, 'plain', undefined, { text: [] })
+  expect(boundary.contents.executeJavaScriptInIsolatedWorld).toHaveBeenCalledOnce()
+  expect(boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls[0][1][0].code).not.toContain('textSelectors')
+})
+
+it.each(['timeout', 'prepare', 'sample'] as const)('文本 %s 失败只拒绝当次，保留快照路径供无声明帧与重试使用', async failure => {
+  if (failure === 'sample') snapshotText({ boxes: {}, textError: { code: 'sampling-failed', message: 'bad selector' } })
+  else if (failure === 'timeout') boundary.contents.executeJavaScriptInIsolatedWorld.mockReturnValueOnce(new Promise(() => undefined))
+  else boundary.contents.executeJavaScriptInIsolatedWorld.mockRejectedValueOnce(new Error('任意脚本错误，没有分类前缀'))
+  const rejected = expect(page.capture(1, 'failed-text', undefined, { text: ['#title'] })).rejects.toMatchObject({
+    name: 'WebTextCaptureError', code: failure === 'timeout' ? 'font-timeout' : failure === 'prepare' ? 'prepare-failed' : 'sampling-failed',
+  })
+  await vi.advanceTimersByTimeAsync(failure === 'timeout' ? 30_000 : 0)
+  await rejected
+  expect(page.capturePath.captureMode).toBe('html-in-canvas')
+  expect(boundary.fallback).not.toHaveBeenCalled()
+  expect(boundary.contents.forcefullyCrashRenderer).not.toHaveBeenCalled()
+  snapshotText({ boxes: {}, text: { samplerVersion: WEB_TEXT_SAMPLER_VERSION, sampleMs: 0, serializationMs: 0, bytes: 0, results: { '#title': { status: 'not-found' } } } })
+  await page.capture(2, 'plain', undefined)
+  expect((await page.capture(3, 'recovered-text', undefined, { text: ['#title'] })).text?.results).toEqual({ '#title': { status: 'not-found' } })
+})
+
+it('compositor 继续交付画面但明确没有精确文本，不把独立测量冒充同刻结果', async () => {
+  page.capturePath = { captureMode: 'compositor', fallbackReason: 'missing-stage' }
+  const captured = await page.capture(2, 'compositor-text', undefined, { text: ['#title'] })
+  expect(captured.text?.results).toEqual({ '#title': { status: 'unavailable', reason: 'capture-path' } })
+  expect(boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.every(([, scripts]) => !scripts[0].code.includes('textSelectors'))).toBe(true)
+})
 
 it('丢弃排队的旧目标与取消票据，seek 返回后不再为取消任务画快照', async () => {
   let finish!: () => void

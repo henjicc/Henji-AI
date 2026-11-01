@@ -9,6 +9,7 @@ import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import { deterministicAuthorModule, importAuthorDeterministic } from './videoEditAuthorDeterminism'
 import { authorModuleTextLayouts } from '../../../core/videoEdit/textDrawObservation'
 import { assertAuthorTrust } from './videoEditAuthorTrust'
+import type { WebTextDeclaration, WebTextImageMapping, WebTextResults } from '@/core/videoEdit/webTextGeometry'
 
 /** Executable ES module contract. These functions never cross a worker boundary. */
 export interface AuthorFrameInfo {
@@ -34,6 +35,9 @@ export interface AuthorFrameInfo {
  * （视口 CSS 像素，找不到为 null）。`duration` 是页面声明的总时长。
  */
 export interface AuthorWebFrame {
+  /** Range 排版盒；不是字形墨迹或真实基线，pivot 是盒中心。 */
+  text?: WebTextResults
+  imageMapping?: WebTextImageMapping
   time: number
   width: number
   height: number
@@ -110,6 +114,8 @@ export interface AuthorGpuInputs {
   images: Readonly<Record<string, AuthorGpuImage>>
 }
 export interface AuthorModule {
+  /** 图片参数名 → 需要同刻文本几何的 CSS 选择器；普通图片绑定不触发采样。 */
+  webText?: WebTextDeclaration
   name: string
   kind?: 'generator' | 'filter'
   /** Optional placement hints. Rendering dimensions/time still belong to the host. */

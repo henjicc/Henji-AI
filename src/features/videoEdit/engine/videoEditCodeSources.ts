@@ -21,7 +21,7 @@ import { documentFontRevision } from '@/platform/fontFaces'
 import { createLogger } from '@/core/logging'
 import { sha256HexString } from '@/utils/save/hash'
 import { codeMaterialVersion as codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
-import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
+import { CodeMaterialError, isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeParameterDeclaration, CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 import { videoEditCodeAuthorParameters, videoEditCodeInputs, videoEditCodeSceneKeys, videoEditCodeSceneUserMessages, type VideoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
 import type { CodeAuthorApiVersion, CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
@@ -51,6 +51,7 @@ import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditTextResolution } from './videoEditTextSurface'
 import { videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
+import { WEB_TEXT_AUTHOR_API_VERSION, type WebTextDeclaration } from '@/core/videoEdit/webTextGeometry'
 
 const logger = createLogger('features.videoEdit.codeSources')
 /** 人物蒙版取分析结果原样（不羽化、不扩展），收缩与柔化由效果自己按画面高度在 GPU 上做。 */
@@ -214,13 +215,15 @@ export class VideoEditCodeSources {
   declarations(instance: CodeMaterialInstance): readonly CodeParameterDeclaration[] | undefined {
     return this.programs.get(identity(instance.definitionId, instance.versionId))?.program.parameters
   }
+  webText(instance: CodeMaterialInstance): WebTextDeclaration | undefined {
+    return this.programs.get(identity(instance.definitionId, instance.versionId))?.program.webText
+  }
   /**
-   * 片子数据派生的取帧参数要按代码声明解析，所以引用片子数据的代码片段要先读好源码，渲染器才知道这一帧取哪些画面。
-   * 渲染器在发起取帧前调用；之后同一帧里取帧、图片与代码准备都同步读 declarations，看到的是同一份合成参数。
+   * 片子数据派生参数与网页文本需求来自作者声明，必须在取帧前读好；同一帧的图片与代码准备共用这份编译结果。
    * 都已读好时返回 undefined，不多等一轮。
    */
-  prepareScenes(document: VideoEditComposition, clips: readonly VideoEditClip[]): Promise<void> | undefined {
-    const pending = clips.flatMap(clip => clip.kind === 'code' && clip.code && videoEditCodeSceneKeys(clip.code).length && !this.programs.has(identity(clip.code.definitionId, clip.code.versionId)) ? [clip.code] : [])
+  prepareInputDeclarations(document: VideoEditComposition, clips: readonly VideoEditClip[]): Promise<void> | undefined {
+    const pending = clips.flatMap(clip => clip.kind === 'code' && clip.code && (videoEditCodeSceneKeys(clip.code).length || codeMaterialSource(document, clip.code).apiVersion >= WEB_TEXT_AUTHOR_API_VERSION && Object.values(clip.code.parameters).some(value => isCodeImageReference(value) && value.kind === 'web')) && !this.programs.has(identity(clip.code.definitionId, clip.code.versionId)) ? [clip.code] : [])
     if (!pending.length) return undefined
     const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
     const controller = new AbortController(); this.sceneControllers.add(controller)
@@ -279,7 +282,7 @@ export class VideoEditCodeSources {
     }
     await loadCodeSourceReferences(version); signal.throwIfAborted()
     const resolver = documentCodeSourceResolver()
-    // 按版本记录编译：作者接口版本与内置库版本都跟着记录走，默认库版本以后变了也不影响这一版。记录的 apiVersion 已由 schema 限定在 4–5。
+    // 按版本记录编译：作者接口版本与内置库版本都跟着记录走，默认库版本以后变了也不影响这一版。记录的 apiVersion 由持久 schema 校验。
     const files = { ...expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver), apiVersion: version.apiVersion as CodeAuthorApiVersion, ...(version.libraries ? { libraries: version.libraries } : {}), trustContext: version.foreign ? [version.foreign] : [] }
     const source = codeMaterialFilesKey(files)
     logger.debug('可见代码源码检查开始', { event: 'video_edit.code.compile.start', context: { sequenceId: this.document.id, version: key } })

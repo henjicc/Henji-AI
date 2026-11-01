@@ -33,6 +33,15 @@ vi.mock('./videoEditEffectMasks', async importOriginal => {
   const actual = await importOriginal<typeof import('./videoEditEffectMasks')>()
   return { ...actual, videoEditEffectMask: async (...args: Parameters<typeof actual.videoEditEffectMask>) => { if (maskFailure.fail) throw new Error('区域缓存读取失败'); return actual.videoEditEffectMask(...args) } }
 })
+it('旧接口网页不为不存在的文本声明提前等待编译', async () => {
+  const document = fixture()
+  document.clips[0].code!.parameters = { page: { kind: 'web', path: '/site', width: 100, height: 100 } }
+  const boundary = boundaries(document)
+  try {
+    expect(boundary.sources.prepareInputDeclarations(document, document.clips)).toBeUndefined()
+    expect(boundary.compiler.bundle).not.toHaveBeenCalled()
+  } finally { await boundary.sources.dispose() }
+})
 it('真实前瞻预热携带来源，在询问与拒绝状态都不求值，允许后才执行作者模块', async () => {
   const document = fixture('globalThis.__aheadTrustExecutions=(globalThis.__aheadTrustExecutions||0)+1;' + source())
   const foreign = { id: 'ahead-external', sourceType: 'template' as const, sourceName: '外来预热模板' }
@@ -141,7 +150,7 @@ it('片子数据参数（作者接口 v5）：params 拿到解析结果、派生
   try {
     const instance = document.clips[0].code!
     expect(boundary.sources.declarations(instance)).toBeUndefined()
-    await boundary.sources.prepareScenes(document, document.clips)
+    await boundary.sources.prepareInputDeclarations(document, document.clips)
     const film = videoEditCodeInputs(document, instance, value => boundary.sources.declarations(value))!.scenes.film
     const input = film.timetables[0].shots[0].input, picture = codeMediaInputKey(document.clips[0].id, input)
     expect(picture.length).toBeGreaterThan(100)

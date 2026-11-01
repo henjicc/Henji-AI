@@ -1,3 +1,4 @@
+import { freezeWebText, unavailableWebText } from '@/core/videoEdit/webTextGeometry'
 import { resolveVideoEditTransitionSource } from '@/core/videoEdit/transitionCatalog'
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
 import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
@@ -483,7 +484,7 @@ export class VideoEditRenderer {
   get waitingForPresentation(): boolean { return this.compositor?.waitingForPresentation === true }
   /**
    * 整棵渲染树里已读好的代码声明（不触发编译）：解码前瞻据此加上片子数据派生的取帧参数。还没有哪个会话读过这一版时为
-   * undefined，前瞻就只看片段上存的参数；正式渲染每一帧都会先读好（VideoEditCodeSources.prepareScenes）。
+   * undefined，前瞻就只看片段上存的参数；正式渲染每一帧都会先读好（VideoEditCodeSources.prepareInputDeclarations）。
    */
   codeDeclarations(instance: CodeMaterialInstance): readonly CodeParameterDeclaration[] | undefined {
     for (const renderer of this.lookaheadOwner.lookaheadRenderers()) {
@@ -1591,11 +1592,13 @@ export class VideoEditRenderer {
             const sample = codeMediaInputSample(clip, reference, at, document.frameRate)
             return sample ? [sample.seconds] : []
           }) : []
+        const text = clip.code ? this.codeSources?.webText(clip.code)?.[parameter] : undefined
         const picture = webs.picture(reference, seconds, context, copy, trust, {
+          text,
           outputScale, deadline: context.webDeadline,
           availableBytes: () => VIDEO_EDIT_INPUT_BUDGET_BYTES - context.bytes,
           signal: context.signal, ahead, approximate: markApproximate,
-        }).then(picture => picture ?? compositor.blankWebPicture({ time: seconds, width: view.width, height: view.height, region: [...view.region], scale: view.scale * outputScale, duration: null, boxes: Object.fromEntries((reference.boxes ?? []).map(selector => [selector, null])) }))
+        }).then(picture => picture ?? compositor.blankWebPicture({ time: seconds, width: view.width, height: view.height, region: [...view.region], scale: view.scale * outputScale, duration: null, boxes: Object.fromEntries((reference.boxes ?? []).map(selector => [selector, null])), ...(text?.length ? { text: freezeWebText(unavailableWebText(text, 'pending-picture')) } : {}) }))
         void picture.catch(() => undefined)
         pending.push([codeMediaInputKey(clip.id, parameter), picture])
       }
@@ -1964,10 +1967,10 @@ export class VideoEditRenderer {
       if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
       this.codeSources ??= new VideoEditCodeSources(document, async () => { const code = await this.compositor!.code(); code.setAuthorEffects({ ...this.document.authorEffects, luts: this.document.colorLuts }); return code }, undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ }, this.reuseCodeOutputs)
     }
-    // 片子数据派生的取帧参数（视频与截图）按代码声明解析：先读好引用片子数据的代码，取帧、图片与代码准备才看到同一份合成参数。
+    // 片子数据派生参数与网页文本需求共用编译声明，在发起画面读取前准备。
     readSignal?.throwIfAborted()
-    const scenesReady = this.codeSources?.prepareScenes(document, active)
-    if (scenesReady) await scenesReady
+    const declarationsReady = this.codeSources?.prepareInputDeclarations(document, active)
+    if (declarationsReady) await declarationsReady
     const declarations = (instance: CodeMaterialInstance): readonly CodeParameterDeclaration[] | undefined => this.codeSources?.declarations(instance)
     const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code && { ...clip.code, parameters: videoEditCodeInputParameters(document, clip.code, declarations) }), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
     const imageMedia = [...imageIds].map(id => {

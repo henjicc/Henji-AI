@@ -1,3 +1,4 @@
+import { WEB_TEXT_SAMPLER_VERSION } from '@/core/videoEdit/webTextGeometry'
 import { videoEditLookaheadTargets } from './videoEditDecodeLookahead'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
@@ -381,11 +382,15 @@ function codeInputFixture(): ReturnType<typeof fixture> {
   return document
 }
 
-it('网页未到时节目继续合成且标近似，暂停精确帧被新拖动立即取消', async () => {
+it.each([false, true])('网页未到时节目继续合成且标近似，暂停精确帧被新拖动立即取消；文本=%s', async textEnabled => {
   const document = codeInputFixture()
   const base = document.clips[1]
   const code = { ...base.code!, parameters: { a: { kind: 'web' as const, path: '/site', width: 100, height: 100, scale: 4, boxes: ['.title'] } } }
   document.clips = [{ ...base, code }]
+  if (textEnabled) {
+    const source = 'export default {name:"文本预览",params:[{key:"a",type:"image"}],webText:{a:["#title"]},draw(){}}'
+    document.codeMaterials![0].versions[0] = { ...document.codeMaterials![0].versions[0], apiVersion: 12, ...testCodeManifest(source, document) }
+  }
   const captures: Array<{ time: number; scale: number }> = []
   installVideoEditWebChannel(() => ({
     call: async (method: string, params: { time: number; scale: number }) => {
@@ -401,7 +406,7 @@ it('网页未到时节目继续合成且标近似，暂停精确帧被新拖动�
     const playing = await renderer.render(15, true)
     expect(playing).toMatchObject({ presented: true, approximate: true })
     expect(captures[0].scale).toBe(1)
-    expect(contentInputs.web).toEqual([{ a: { time: captures[0].time, width: 100, height: 100, region: [0, 0, 100, 100], scale: 1, duration: null, boxes: { '.title': null } } }])
+    expect(contentInputs.web).toEqual([{ a: { time: captures[0].time, width: 100, height: 100, region: [0, 0, 100, 100], scale: 1, duration: null, boxes: { '.title': null }, ...(textEnabled ? { text: { '#title': { status: 'unavailable', reason: 'pending-picture' } } } : {}) } }])
     for (const frame of [20, 40, 10]) {
       expect(await renderer.render(frame, false, 'fast')).toMatchObject({ presented: true, approximate: true })
     }
@@ -3073,4 +3078,62 @@ it('导出预取打开坏预览失败后，现场合成期间不重复打开该�
     for (const frame of [0, 1, 2, 29, 30, 31]) expect((await renderer.render(frame, true)).renderCached).toBe(false)
     expect(attempt).toHaveBeenCalledOnce()
   } finally { await renderer.dispose() }
+})
+
+
+it('旧作者无文本声明时首帧开页取帧与慢编译并行', async () => {
+  const document = codeInputFixture(), base = document.clips[1]
+  document.clips = [{ ...base, code: { ...base.code!, parameters: { a: { kind: 'web', path: '/site', width: 100, height: 100 } } } }]
+  let finish!: (program: CodeMaterialProgram) => void
+  boundary.pendingCode = new Promise(resolve => { finish = resolve })
+  let deliver: ((frame: NativeVideoFrame) => void) | undefined
+  const call = vi.fn(async (method: string, params: { ticket: string }) => {
+    if (method === 'openWeb') return { streamId: 'web', pixelWidth: 100, pixelHeight: 100, duration: 100, contentHash: 'hash', route: 'route' }
+    if (method !== 'captureWeb') return true
+    deliver?.({ meta: { request: { id: params.ticket } }, release: vi.fn() } as unknown as NativeVideoFrame)
+    return { duration: 100, boxes: null, contentHash: 'hash', pixelWidth: 100, pixelHeight: 100 }
+  })
+  installVideoEditWebChannel(() => ({ call, subscribe: (_id: string, handler: typeof deliver) => { deliver = handler; return () => {} }, subscribeWebContent: () => () => {} }) as unknown as VideoEditNativeFrameReceiver)
+  const renderer = new VideoEditRenderer(document)
+  const program = compileCodeMaterial('export default {name:"网页",params:[{key:"a",type:"image"}],draw(){}}')
+  try {
+    const pending = renderer.render(0)
+    await vi.waitFor(() => {
+      expect(boundary.compilerCalls).toBeGreaterThan(0)
+      expect(call.mock.calls.some(([method]) => method === 'captureWeb')).toBe(true)
+    })
+    finish(program)
+    expect((await pending).presented).toBe(true)
+  } finally { finish(program); await renderer.dispose(); installVideoEditWebChannel(() => undefined) }
+})
+
+it('首次网页取帧先编译静态文本声明，网页切成普通输入时不采样文本', async () => {
+  const document = codeInputFixture(), base = document.clips[1]
+  const source = 'export default {name:"网页文字",params:[{key:"a",type:"image"}],webText:{a:["#title"]},draw(){}}'
+  document.codeMaterials = [{ id: 'definition', name: '网页文字', defaultVersionId: 'text', versions: [{ id: 'text', apiVersion: 12, languageVersion: 4, ...testCodeManifest(source, document) }] }]
+  document.clips = [{ ...base, code: { definitionId: 'definition', versionId: 'text', parameters: { a: { kind: 'web', path: '/site', width: 100, height: 100 } } } }]
+  let deliver: ((frame: NativeVideoFrame) => void) | undefined
+  const requests: Array<{ text?: string[] }> = []
+  installVideoEditWebChannel(() => ({
+    call: async (method: string, params: { ticket: string; time: number; text?: string[] }) => {
+      if (method === 'openWeb') return { streamId: 'web', pixelWidth: 100, pixelHeight: 100, duration: 100, contentHash: 'hash', route: 'route' }
+      if (method !== 'captureWeb') return true
+      requests.push(params)
+      expect(boundary.compilerCalls).toBe(1)
+      deliver?.({ meta: { request: { id: params.ticket }, timestampUs: Math.round(params.time * 1e6) }, release: vi.fn() } as unknown as NativeVideoFrame)
+      return { duration: 100, boxes: null, contentHash: 'hash', pixelWidth: 100, pixelHeight: 100, text: { ticket: params.ticket, time: params.time, contentHash: 'hash', samplerVersion: WEB_TEXT_SAMPLER_VERSION, results: { '#title': { status: 'not-found' } } } }
+    },
+    subscribe: (_id: string, handler: (frame: NativeVideoFrame) => void) => { deliver = handler; return () => {} }, subscribeWebContent: () => () => {},
+  }) as unknown as VideoEditNativeFrameReceiver)
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(0)
+    expect(requests).toMatchObject([{ text: ['#title'] }])
+    expect(contentInputs.web[0]?.a.text).toEqual({ '#title': { status: 'not-found' } })
+    expect(boundary.compilerCalls).toBe(1)
+    const updated = { ...document, revision: document.revision + 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, parameters: { a: null } } })) }
+    await renderer.updateDocument(updated)
+    await renderer.render(1)
+    expect(requests).toHaveLength(1)
+  } finally { await renderer.dispose(); installVideoEditWebChannel(() => undefined) }
 })

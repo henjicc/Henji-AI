@@ -58,7 +58,7 @@ vi.mock('./videoEditCodeSources', () => ({ VideoEditCodeSources: class {
   cancel() {}
   dispose() {}
   updateDocument() {}
-  async prepareScenes() {}
+  async prepareInputDeclarations() {}
   declarations() { return [] }
   async prepare(document: VideoEditComposition, clips: VideoEditClip[], frame: number, _current: unknown, images: Promise<unknown>) {
     await images

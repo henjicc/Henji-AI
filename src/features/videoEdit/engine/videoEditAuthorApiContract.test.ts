@@ -19,12 +19,13 @@ type Fn<T> = Extract<T, (...args: never[]) => unknown>
 type Args<T> = Parameters<Fn<T>>
 /** 宿主运行时按下标读取 bounds/clip，作者侧接受任意长度数组。 */
 type Relaxed<T> = Omit<T, 'bounds' | 'clip'> & { bounds?: readonly number[]; clip?: readonly number[] }
-type AuthorLayerKeys = keyof Author.AuthorStaticLayer | keyof Author.AuthorPosedLayer
+type AuthorLayerKeys = keyof Author.AuthorStaticLayer | keyof Author.AuthorPosedLayer | keyof Author.AuthorAdjustmentLayer
 type ModuleFields = 'name' | 'kind' | 'mode' | 'width' | 'height' | 'durationSeconds' | 'frames' | 'params' | 'types' | 'motionBlur'
 
 export type FrameInfo = [
   Assert<SameKeys<Host.AuthorFrameInfo, Author.AuthorFrameInfo>>,
   Assert<Mutual<Host.AuthorFrameInfo, Author.AuthorFrameInfo>>,
+  Assert<Mutual<Host.AuthorWebFrame, Author.AuthorWebFrame>>,
   Assert<SameKeys<NonNullable<Host.AuthorFrameInfo['audio']>, Author.AuthorAudioAnalysis>>,
   Assert<SameKeys<Host.AuthorPose, Author.AuthorPose>>,
   Assert<Mutual<Host.AuthorPose, Author.AuthorPose>>,
@@ -49,6 +50,7 @@ export type Module = [
   Assert<Mutual<Host.AuthorModule['mode'], Author.AuthorModule['mode']>>,
   Assert<Mutual<Host.AuthorModule['motionBlur'], Author.AuthorModule['motionBlur']>>,
   Assert<Mutual<Host.AuthorModule['dataFiles'], Author.AuthorModule['dataFiles']>>,
+  Assert<Mutual<Host.AuthorModule['webText'], Author.AuthorModule['webText']>>,
   Assert<Extends<Args<Host.AuthorModule['frameKey']>, Args<Author.AuthorModule['frameKey']>>>,
   Assert<Mutual<ReturnType<Fn<Host.AuthorModule['frameKey']>>, ReturnType<Fn<Author.AuthorModule['frameKey']>>>>,
   // 宿主传给入口的实参满足作者看到的参数类型。

@@ -7,6 +7,7 @@ import type { AuthorWebFrame } from './videoEditAuthorModule'
 import { assertAuthorTrust } from './videoEditAuthorTrust'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
+import { freezeWebText, webTextUnavailableMessage, unavailableWebText, WEB_TEXT_SAMPLER_VERSION, webTextImageMapping, webTextSelectors } from '@/core/videoEdit/webTextGeometry'
 
 export class VideoEditWebPicture extends VideoEditCodePicture {
   constructor(texture: GpuTexture, width: number, height: number, owner: GpuDevice, readonly web: AuthorWebFrame, opaqueBackground = true, display?: { width: number; height: number }) { super(texture, width, height, owner, 'rgba8unorm', opaqueBackground, display) }
@@ -20,6 +21,7 @@ const WEB_SESSION_RECENT_MS = 2_000
 const aborted = (): DOMException => new DOMException('网页取帧已取消。', 'AbortError')
 
 export interface WebPictureOptions {
+  text?: readonly string[]
   outputScale?: number
   /** 播放与拖动预览共用一帧截止时间。 */
   deadline?: number
@@ -166,6 +168,7 @@ export class VideoEditWebInputs {
     const state = this.beginFrame(frame)
     if (options.availableBytes) state.availableBytes = options.availableBytes
     const view = codeWebView(reference)
+    const textSelectors = options.text?.length ? webTextSelectors(options.text) : undefined
     view.scale *= Math.min(1, options.outputScale ?? 1)
     const base = JSON.stringify([videoEditWebSourceKey(reference), trust.map(value => value.id).sort()])
     const slots = state.slots
@@ -190,7 +193,7 @@ export class VideoEditWebInputs {
     }
     session.lastUsed = performance.now()
     const times = [time, ...(options.deadline === undefined ? options.ahead ?? [] : [])]
-    const readKey = (at: number): string => JSON.stringify([at, view.scale, reference.boxes ?? []])
+    const readKey = (at: number): string => JSON.stringify([at, view.scale, textSelectors ? options.deadline !== undefined : false, reference.boxes ?? [], ...(textSelectors ? [textSelectors] : [])])
     const keep = new Set(times.map(readKey))
     const kept = state.kept.get(session) ?? new Set<string>()
     state.kept.set(session, kept)
@@ -203,7 +206,7 @@ export class VideoEditWebInputs {
       read.abort.abort(); session.reads.delete(key)
       if (read.picture && read.picture !== session.last) session.retired.add(read.picture)
     }
-    const read = this.read(session, readKey(time), reference, view, time, copy, options.deadline !== undefined, state)
+    const read = this.read(session, readKey(time), reference, view, time, copy, options.deadline !== undefined, state, textSelectors)
     const size = codeWebPixelSize(view)
     state.required.set(read, size.width * size.height * 4)
     const cancel = (): void => {
@@ -216,31 +219,31 @@ export class VideoEditWebInputs {
     try {
       this.checkBudget(frame, state.availableBytes())
       if (options.deadline === undefined) {
-        for (const at of times.slice(1)) this.read(session, readKey(at), reference, view, at, copy, false, state)
+        for (const at of times.slice(1)) this.read(session, readKey(at), reference, view, at, copy, false, state, textSelectors)
         const picture = await abortable(read.promise, options.signal)
         this.remember(session, picture)
         state.pinned.add(picture)
-        return this.withSelectors(picture, reference.boxes)
+        return this.withSelectors(picture, reference.boxes, textSelectors)
       }
       let timer: ReturnType<typeof setTimeout> | undefined
       const picture = await abortable(Promise.race([
         read.promise,
         new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), Math.max(0, options.deadline! - performance.now())) }),
       ]).finally(() => clearTimeout(timer)), options.signal)
-      if (picture) { state.pinned.add(picture); return this.withSelectors(picture, reference.boxes) }
+      if (picture) { state.pinned.add(picture); return this.withSelectors(picture, reference.boxes, textSelectors) }
       state.required.delete(read)
       options.approximate?.()
       if (session.last) state.pinned.add(session.last)
       this.checkBudget(frame, state.availableBytes())
-      return session.last && this.withSelectors(session.last, reference.boxes)
+      return session.last && this.withSelectors(session.last, reference.boxes, textSelectors)
     } catch (error) { state.required.delete(read); cancel(); throw error }
     finally { options.signal?.removeEventListener('abort', cancel) }
   }
 
-  private withSelectors(picture: VideoEditWebPicture, selectors: readonly string[] = []): VideoEditWebPicture {
-    if (selectors.every(selector => Object.hasOwn(picture.web.boxes, selector))) return picture
+  private withSelectors(picture: VideoEditWebPicture, selectors: readonly string[] = [], textSelectors?: readonly string[]): VideoEditWebPicture {
+    if (selectors.every(selector => Object.hasOwn(picture.web.boxes, selector)) && (!textSelectors || textSelectors.every(selector => Object.hasOwn(picture.web.text ?? {}, selector)))) return picture
     return new VideoEditWebPicture(picture.texture, picture.width, picture.height, picture.owner,
-      { ...picture.web, boxes: { ...Object.fromEntries(selectors.map(selector => [selector, null])), ...picture.web.boxes } }, picture.opaqueBackground, { width: picture.displayWidth, height: picture.displayHeight })
+      { ...picture.web, boxes: { ...Object.fromEntries(selectors.map(selector => [selector, null])), ...picture.web.boxes }, ...(textSelectors ? { text: freezeWebText({ ...unavailableWebText(textSelectors, 'previous-picture-coverage'), ...picture.web.text }) } : {}) }, picture.opaqueBackground, { width: picture.displayWidth, height: picture.displayHeight })
   }
 
   private remember(session: WebSession, picture: VideoEditWebPicture): void {
@@ -248,10 +251,10 @@ export class VideoEditWebInputs {
     session.last = picture
   }
 
-  private read(session: WebSession, key: string, reference: CodeWebReference, view: CodeWebView, time: number, copy: VideoEditWebFrameCopy, preview: boolean, state: WebFrameState): WebRead {
+  private read(session: WebSession, key: string, reference: CodeWebReference, view: CodeWebView, time: number, copy: VideoEditWebFrameCopy, preview: boolean, state: WebFrameState, textSelectors?: string[]): WebRead {
     const existing = session.reads.get(key)
     if (existing) {
-      // 松手可接着等待同一目标的在途预览；接管后也必须享有内容更新时的精确重排语义。
+      // 无文本的旧捕获可继续接管；文本读键分开，预览的覆盖状态不能作为精确结果。
       if (!preview) existing.preview = false
       return existing
     }
@@ -272,7 +275,7 @@ export class VideoEditWebInputs {
         }
         controller.signal.addEventListener('abort', cancel, { once: true })
         try {
-          const result = await abortable(session.channel.call('captureWeb', { streamId: info.streamId, time, ticket, scale: view.scale, latest: read.preview, ...(reference.boxes ? { boxes: reference.boxes } : {}) }), controller.signal)
+          const result = await abortable(session.channel.call('captureWeb', { streamId: info.streamId, time, ticket, scale: view.scale, latest: read.preview, ...(reference.boxes ? { boxes: reference.boxes } : {}), ...(textSelectors ? { text: textSelectors } : {}) }), controller.signal)
           if (result.dropped || generation !== session.generation) {
             if (!read.preview && !session.closed && !controller.signal.aborted) continue
             throw aborted()
@@ -280,6 +283,15 @@ export class VideoEditWebInputs {
           await abortable(arrived, controller.signal)
           if (session.closed || controller.signal.aborted) throw aborted()
           const native = borrowed!
+          if (textSelectors) {
+            const text = result.text
+            if (!text || text.ticket !== ticket || text.time !== time || text.contentHash !== result.contentHash || text.samplerVersion !== WEB_TEXT_SAMPLER_VERSION || native.meta.timestampUs !== Math.round(time * 1e6) || textSelectors.some(selector => !Object.hasOwn(text.results, selector))) throw new Error('网页文字位置与当前画面不匹配，请重新取帧后重试。')
+            const unavailable = textSelectors.find(selector => text.results[selector].status === 'unavailable')
+            if (unavailable && !read.preview) {
+              const status = text.results[unavailable]
+              throw new Error(webTextUnavailableMessage(status.status === 'unavailable' ? status.reason : ''))
+            }
+          }
           const dimensions = { width: result.pixelWidth, height: result.pixelHeight }
           const protectedPictures = this.protectedPictures()
           const reuse = [...session.pool].find(picture => !protectedPictures.has(picture) && picture.width === dimensions.width && picture.height === dimensions.height)
@@ -306,7 +318,7 @@ export class VideoEditWebInputs {
             if (!read.preview && !session.closed && !controller.signal.aborted) continue
             throw aborted()
           }
-          const picture = new VideoEditWebPicture(copied.texture, result.pixelWidth, result.pixelHeight, copied.owner, { time, width: view.width, height: view.height, region: [...view.region], scale: view.scale, duration: result.duration, boxes: result.boxes ?? {} })
+          const picture = new VideoEditWebPicture(copied.texture, result.pixelWidth, result.pixelHeight, copied.owner, { time, width: view.width, height: view.height, region: [...view.region], scale: view.scale, duration: result.duration, boxes: result.boxes ?? {}, ...(textSelectors ? { text: freezeWebText(result.text!.results), imageMapping: freezeWebText(webTextImageMapping(view.region, result.pixelWidth, result.pixelHeight)) } : {}) })
           read.picture = picture
           // 前视不能把未来帧当作当前播放的回退画面。
           if (preview) this.remember(session, picture)

@@ -245,6 +245,8 @@ export interface WebSourceCaptureRequest {
   ticket: string
   /** 要读取矩形的选择器。 */
   boxes?: string[]
+  /** 需要同刻 DOM 文本几何的 CSS 选择器；没有声明时不采样。 */
+  text?: string[]
   /** 实际输出倍率；省略时沿用页面当前倍率。 */
   scale?: number
   /** 播放、拖动只保留最后一个尚未执行的目标。 */
@@ -255,6 +257,7 @@ export interface WebSourceCaptureRequest {
 export type WebSourceBox = [number, number, number, number] | null
 
 export interface WebSourceCaptureResult {
+  text?: import('../../core/videoEdit/webTextGeometry').WebTextCapture
   /** 被更新目标或取消票据取代，不会送出画面。 */
   dropped?: boolean
   pixelWidth: number

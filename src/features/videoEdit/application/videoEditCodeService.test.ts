@@ -58,7 +58,7 @@ import { exportVideoEditPresetPackage, importVideoEditPresetPackage } from './vi
 /** 短活共用的离屏会话按设计常驻；回收它之后不应再有任何渲染器存活。 */
 async function expectRenderersReleased(): Promise<void> { await videoEditOffscreenPool.dispose(); expect(boundary.activeRenderers).toBe(0) }
 
-const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[], honorApiVersion: false, apiVersion: 4 as 4 | 5 | 6 | 7 | 8 }))
+const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[], honorApiVersion: false, apiVersion: 4 as import('@/core/videoEdit/codeAuthorVersions').CodeAuthorApiVersionNumber }))
 // Only thread/pixel boundaries are replaced. AST language checks, domain
 // validation, public tool registry, transactions and save/reopen are real.
 vi.mock('../engine/videoEditCodeCompiler', async () => {
@@ -1501,4 +1501,84 @@ it('本机创作的代码资产导入仍是本机内容，不发起确认', asyn
   const result = await createVideoEditCodeAssetInstance(owner.document.id, { ...importPublication(), foreign: null })
   expect(owner.document.codeMaterials!.find(value => value.id === result.definitionId)!.versions[0].foreign).toBeUndefined()
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+})
+
+
+it('正式实体创建与编译后，四种作者入口经同一 CodeSources 读取同一网页文本 DTO', async () => {
+  const { VideoEditCodeSources } = await import('../engine/videoEditCodeSources')
+  const { VideoEditAuthorRuntime } = await import('../engine/videoEditAuthorRuntime')
+  const { testAuthorProgram, testAuthorModule } = await import('../engine/videoEditAuthorTestFixtures')
+  const { bundleAuthorFiles } = await import('../engine/videoEditAuthorBundle')
+  const { createRequire } = await import('node:module')
+  const { build } = createRequire(import.meta.url)('esbuild') as typeof import('esbuild')
+  type Device = import('@/core/imageEdit/worker/webgpuRuntimeSupport').GpuDevice
+  type Picture = import('../engine/videoEditCodeGpu').VideoEditCodePicture
+  type FrameInfo = import('../engine/videoEditAuthorModule').AuthorFrameInfo
+  const owner = await createLegacyTrackVideoEditProject(), app = createApplicationHarness()
+  boundary.apiVersion = CODE_AUTHOR_API_VERSION
+  const { freezeWebText } = await import('@/core/videoEdit/webTextGeometry')
+  const text: import('@/core/videoEdit/webTextGeometry').WebTextResults = freezeWebText({ '#title': { status: 'ready', geometry: {
+    coordinateSpace: 'viewport-css', coverage: 'dom-text-only', text: 'A', breaks: [], limitations: [],
+    fonts: [{ fontFamily: 'Arial', fontSize: '16px', fontWeight: '400', fontStyle: 'normal', fontStretch: '100%', lineHeight: 'normal', letterSpacing: 'normal', wordSpacing: 'normal', direction: 'ltr', writingMode: 'horizontal-tb', fontFeatureSettings: 'normal', fontVariationSettings: 'normal', whiteSpace: 'normal', textTransform: 'none', lang: 'zh-CN' }],
+    graphemes: [{ source: { start: 0, end: 1 }, segments: [{ node: 0, start: 0, end: 1, font: 0 }], rects: [{ rect: [10, 20, 12, 16], line: 0 }], bounds: [10, 20, 12, 16], pivot: [16, 28], baseline: null, layoutStatus: 'box', transparent: false, outsideRegion: false, regionRects: [{ rect: [10, 20, 12, 16], line: 0 }], rendered: true, overlaps: false }],
+    words: [{ source: { start: 0, end: 1 }, isWordLike: true, graphemes: [0], rects: [{ rect: [10, 20, 12, 16], line: 0 }] }],
+    lineFragments: [{ rect: [10, 20, 12, 16], node: 0, font: 0 }], segmentation: [{ source: { start: 0, end: 1 }, locale: 'zh-CN', contract: 'intl-segmenter' }],
+  } } })
+  const web = { time: 0, width: 100, height: 100, region: [0, 0, 100, 100] as [number, number, number, number], scale: 1, duration: 1, boxes: {}, text }
+  const observed: unknown[] = []
+  const context = { reset() {}, save() {}, restore() {}, setTransform() {} }
+  class Canvas {
+    constructor(public width: number, public height: number) {}
+    getContext(kind: string): unknown { return kind === 'webgl2' ? { canvas: this, bindFramebuffer() {}, viewport() {}, disable() {}, colorMask() {}, clearColor() {}, clear() {}, getExtension: () => null } : context }
+  }
+  vi.stubGlobal('OffscreenCanvas', Canvas)
+  vi.stubGlobal('ImageBitmap', class {})
+  const target = { createView: () => ({}), destroy() {} }
+  const device = { createTexture: () => target, queue: { copyExternalImageToTexture() {} } } as unknown as Device
+  const check = 'if(info.web.page.text["#title"].status!=="ready"||info.web.page.text["#title"].geometry.graphemes[0].bounds[2]!==12)throw new Error("文本 DTO 未到达作者入口");'
+  const bodies = [
+    `draw(ctx,t,p,w,h,a,info){${check}}`,
+    `layers(p,w,h,a,info){${check}return []}`,
+    `createWebGL(){return {draw(t,p,w,h,a,info){${check}}}}`,
+    `createWebGPU(){return {draw(target,t,p,w,h,a,info){${check}}}}`,
+  ]
+  try {
+    for (const body of bodies) {
+      const source = `export default {name:"网页文本",width:100,height:100,params:[{key:"page",type:"image"}],webText:{page:["#title"]},${body}}`
+      const parent = { kind: 'video_edit.document', id: owner.document.id }
+      await app.requireResult('change_application_entities', { summary: '创建网页文本代码', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': source } }] }] }, (await app.read(parent)).revisions as Record<string, number>)
+      const item = owner.document.items.at(-1)!
+      appendVideoEditItems(owner.document.id, [item.id], owner.activeSequenceId, { frame: 0 })
+      const clip = getActiveVideoEditSequence(owner).clips.at(-1)!
+      editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(value => value.id === clip.id ? { ...value, code: { ...value.code!, parameters: { page: { kind: 'web', path: '/site', width: 100, height: 100 } } } } : value) }))
+      const document = videoEditComposition(owner.document, owner.activeSequenceId), current = document.clips.find(value => value.id === clip.id)!
+      const compiler = { bundle: (files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) => bundleAuthorFiles(files, options => build(options as import('esbuild').BuildOptions)), dispose() {} }
+      const runtime = {
+        inspectAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle),
+        retainAuthorInstances() {}, observeAuthor: () => [], releaseUnused() {},
+        authorGenerator: async (_key: string, _instance: string, program: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorProgram, _context: unknown, _params: unknown, _assets: unknown, info: FrameInfo) => {
+          const module = testAuthorModule(program.bundle.code)
+          const capture = (args: unknown[]): void => { const frame = args.at(-1) as FrameInfo; observed.push(frame.web?.page.text); expect(frame.web?.page.text).toBe(text) }
+          if (module.draw) { const draw = module.draw; module.draw = (...args) => { capture(args); return draw(...args) } }
+          if (module.layers) { const layers = module.layers; module.layers = (...args) => { capture(args); return layers(...args) } }
+          if (module.createWebGL) { const create = module.createWebGL; module.createWebGL = gl => { const renderer = create(gl), draw = renderer.draw; renderer.draw = (...args) => { capture(args); return draw(...args) }; return renderer } }
+          if (module.createWebGPU) { const create = module.createWebGPU; module.createWebGPU = async gpu => { const renderer = await create(gpu), draw = renderer.draw; renderer.draw = (...args) => { capture(args.slice(0, -1)); return draw(...args) }; return renderer } }
+          const author = new VideoEditAuthorRuntime(device, module, undefined, true, program.apiVersion)
+          // 只替换像素设备边界，作者入口分派与 info 传递走正式运行时。
+          Object.assign(author, { layerGpu: { prepareFormat: async () => {}, begin: async () => {}, clear() {}, commandEncoder: () => ({}), draw() {}, finish() {}, abandon() {}, dispose() {} } })
+          try { await author.render(target, 100, 100, {}, {}, info) } finally { await author.dispose() }
+          return { width: 100, height: 100 } as Picture
+        },
+      }
+      const sources = new VideoEditCodeSources(document, async () => runtime as unknown as import('../engine/videoEditCodeGpu').VideoEditCodeGpu, compiler)
+      try {
+        await sources.prepareInputDeclarations(document, [current])
+        expect(sources.webText(current.code!)).toEqual({ page: ['#title'] })
+        const key = (await import('@/core/videoEdit/codeMediaInput')).codeMediaInputKey(current.id, 'page')
+        await sources.prepare(document, [current], 0, () => true, Promise.resolve(new Map([[key, { width: 100, height: 100, texture: target, owner: device, premultiplied: true, web }]])))
+      } finally { await sources.dispose() }
+    }
+    expect(observed.length).toBeGreaterThanOrEqual(4)
+    expect(new Set(observed)).toEqual(new Set([text]))
+  } finally { app.dispose(); vi.unstubAllGlobals() }
 })

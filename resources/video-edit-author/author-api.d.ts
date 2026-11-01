@@ -54,12 +54,79 @@ export interface AuthorFrameInfo {
   web?: { readonly [key: string]: AuthorWebFrame }
 }
 
+export type WebTextDeclaration = Readonly<Record<string, readonly string[]>>
+export type WebTextRect = readonly [number, number, number, number]
+export interface WebTextSource { readonly start: number; readonly end: number }
+export interface WebTextFont {
+  readonly fontFamily: string; readonly fontSize: string; readonly fontWeight: string; readonly fontStyle: string
+  readonly fontStretch: string; readonly lineHeight: string; readonly letterSpacing: string; readonly wordSpacing: string
+  readonly direction: string; readonly writingMode: string; readonly fontFeatureSettings: string
+  readonly fontVariationSettings: string; readonly whiteSpace: string; readonly textTransform: string; readonly lang: string
+}
+export interface WebTextFragment { readonly rect: WebTextRect; readonly line: number | null }
+export type WebTextBreakKind = 'line-break' | 'block' | 'language' | 'replaced-element'
+export interface WebTextBreak { readonly offset: number; readonly kind: WebTextBreakKind }
+export type WebTextLayoutStatus = 'box' | 'zero-width' | 'collapsed-whitespace' | 'display-none' | 'visibility-hidden' | 'content-hidden'
+export interface WebTextGrapheme {
+  readonly source: WebTextSource
+  /** 目标内 Text 节点序号与节点内 UTF-16 区间；跨内联节点的字素保留全部来源。 */
+  readonly segments: readonly { readonly node: number; readonly start: number; readonly end: number; readonly font: number }[]
+  readonly rects: readonly WebTextFragment[]
+  readonly bounds: WebTextRect | null
+  readonly pivot: readonly [number, number] | null
+  readonly baseline: null
+  /** Range 布局状态独立于透明度与取景；零宽片段保留位置。 */
+  readonly layoutStatus: WebTextLayoutStatus
+  readonly transparent: boolean
+  readonly outsideRegion: boolean
+  readonly regionRects: readonly WebTextFragment[]
+  readonly rendered: boolean
+  readonly overlaps: boolean
+}
+export interface WebTextWord { readonly source: WebTextSource; readonly isWordLike: boolean; readonly graphemes: readonly number[]; readonly rects: readonly WebTextFragment[] }
+export interface WebTextLineFragment { readonly rect: WebTextRect; readonly node: number; readonly font: number }
+export interface WebTextGeometry {
+  readonly coordinateSpace: 'viewport-css'
+  readonly coverage: 'dom-text-only'
+  readonly text: string
+  readonly breaks: readonly WebTextBreak[]
+  readonly fonts: readonly WebTextFont[]
+  readonly graphemes: readonly WebTextGrapheme[]
+  readonly words: readonly WebTextWord[]
+  readonly lineFragments: readonly WebTextLineFragment[]
+  readonly segmentation: readonly { readonly source: WebTextSource; readonly locale: string; readonly contract: 'intl-segmenter' }[]
+  readonly limitations: readonly string[]
+}
+export type WebTextResult = { readonly status: 'ready'; readonly geometry: WebTextGeometry }
+  | { readonly status: 'not-found' }
+  | { readonly status: 'unsupported' | 'unavailable'; readonly reason: string; readonly details?: readonly string[] }
+export type WebTextResults = Readonly<Record<string, WebTextResult>>
+export interface WebTextCapture {
+  readonly samplerVersion: number
+  readonly ticket: string
+  readonly time: number
+  readonly contentHash: string
+  readonly results: WebTextResults
+  readonly sampleMs: number
+  readonly serializationMs: number
+  readonly bytes: number
+}
+export interface WebTextImageMapping {
+  readonly contentWidth: number
+  readonly contentHeight: number
+  /** CSS viewport → 有效图像像素，按 Canvas 仿射矩阵 [a,b,c,d,e,f]。 */
+  readonly viewportToImage: readonly [number, number, number, number, number, number]
+}
+
 /**
  * 网页参数这一帧的页面信息。画面（assets / inputs.images 同名键）是视口里 region 这一块，每 CSS 像素 scale 个像素。
  * boxes 的矩形是视口 CSS 像素，换到画面像素：(x - region[0]) * scale。
  * data-henji-stage 标记视口大小、原点 (0,0) 的舞台；宿主搬入画布后不依赖父元素选择器或泛选 canvas，动态内容（含弹层）留在舞台内，舞台外可见内容保持静止。
  */
 export interface AuthorWebFrame {
+  /** 仅显式 webText 声明启用。Range 排版盒；baseline 为 null，pivot 是盒中心，不是字形墨迹。x/y 姿态位移使用作者逻辑画布像素，rotate 为弧度。 */
+  text?: WebTextResults
+  imageMapping?: WebTextImageMapping
   /** 页面时间（秒），即交给页面 henjiWeb.seek 的时刻。 */
   time: number
   /** 页面视口（CSS 像素）。 */
@@ -193,6 +260,8 @@ export interface AuthorWebGPU<P extends readonly AuthorParamDeclaration[] = read
 
 /** 默认导出的效果对象。 */
 export interface AuthorModule<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {
+  /** 图片参数名到 CSS 选择器列表；只自动覆盖舞台内普通 HTML Text，不包含伪元素、SVG、Canvas、表单、Shadow DOM 或 iframe。 */
+  webText?: WebTextDeclaration
   name: string
   kind?: 'generator' | 'filter'
   mode?: 'static' | 'dynamic'

@@ -106,3 +106,14 @@ draw(ctx, time, params, width, height, assets, info) {
 ```
 
 页面打不开、没有 `window.henjiWeb`、seek 超过 30 秒或取不到画面时这一帧报错，不会换成旧画面。
+
+
+**网页文本几何（作者接口 12 起）**：在模块上声明 `webText: { app: ["#title"] }`（键是 `type:"image"` 的参数名）。绑定网页时，四种作者入口共用 `info.web.app.text["#title"]`；换成普通图片或未绑定时不采样。逐字效果只选需要的元素，500 字素实时采样 P95 预算 25ms；整页 5000 字素成本显著更高，不能按每帧实时使用。
+
+结果先看 `status`：`ready` 才读 `geometry`；其余为 `not-found`、`unsupported` 或带原因的 `unavailable`。`geometry.text` 是 DOM 原文，`graphemes` / `words` 的 `source` 是半开 UTF-16 区间，字素含 `rects`、`bounds`、盒中心 `pivot`；字体是 CSS 声明，`lineFragments` 是文字 run 的行片段。坐标均为视口 CSS 像素；换到实际纹理用 `web.imageMapping.viewportToImage`，不要再乘 DPR。几何随同一票据画面交付；预览回退时只读返回的同幅几何，不把请求时刻当作返回画面时刻。
+
+Range 返回排版盒，`baseline:null`，不提供字形墨迹、真实基线、独立字形或干净背景。Canvas、SVG text、表单、伪元素、iframe 和 Shadow DOM 内文字不在自动采样范围；需要逐字移动时先由网页提供满足分片条件的文字层，不能把整页背景当作可独立提字的图层。
+
+文本几何要求网页提供 `[data-henji-stage]` 舞台：舞台 CSS 尺寸等于视口、原点为 `(0,0)`，根上没有 transform、padding 或 border。`henjiWeb.seek(t)` 完成后须把动画定位并暂停，直到下次 seek 不自主改布局；paint 监听器不得改 DOM。字体须加载成功，所选文字子树与祖先不能仍在播放动画或滚动。缺舞台或快照不可用时返回 `unavailable/capture-path`；布局、字体、滚动或动画不稳定返回 `unavailable/unsynchronized`，`details` 记录具体原因。
+
+`breaks` 每项为 `{offset, kind}`，offset 是原文 UTF-16 位置，kind 分别为 `line-break`（BR）、`block`、`language`、`replaced-element`。`layoutStatus` 区分普通盒、零宽、折叠空白、display:none、visibility:hidden 与 content-visibility:hidden；零宽保留位置盒，隐藏文本保留来源。`transparent` 表示贡献布局片段的来源全部透明，`outsideRegion` 表示布局片段全部在取景外；`regionRects` 是与取景的矩形交集。`rendered` 只表示有非透明且落入取景的正宽布局片段，不证明最终墨迹可见（遮挡、mask 等仍不由 Range 判断）。

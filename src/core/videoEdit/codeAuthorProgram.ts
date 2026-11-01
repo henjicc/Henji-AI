@@ -2,6 +2,7 @@ import type { CodeAuthorApiVersionNumber } from './codeAuthorVersions'
 import type { ContentTrustReference } from '../contentTrust'
 import type { CodeMaterialMetadata } from './codeMaterialDocument'
 import type { CodeMatrix, CodeSourceSpan } from './codeMaterial/contract'
+import type { WebTextDeclaration } from './webTextGeometry'
 
 /** Explicit author layer metadata, captured only for editing/observation. */
 export interface AuthorElementObservation {
@@ -76,6 +77,7 @@ export type CodeAuthorApiVersion = CodeAuthorProgram['apiVersion']
  * Source files, parameters and overrides remain the persisted truth. */
 export interface CodeAuthorProgram extends CodeMaterialMetadata {
   apiVersion: CodeAuthorApiVersionNumber
+  webText?: WebTextDeclaration
   languageVersion: 4
   bundle: CodeAuthorBundle
   frames: number[]

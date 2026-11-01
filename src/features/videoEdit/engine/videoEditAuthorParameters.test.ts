@@ -4,6 +4,15 @@ import { authorEffectMetadata, authorParameterMetadata, authorParameterValues } 
 import { validateCodeMaterialParameterValue } from '@/core/videoEdit/codeMaterial/parameters'
 import { parseCodeMaterialTypes } from '@/core/videoEdit/codeMaterial/parameterTypes'
 import { codeMaterialAnimatedParameterValueSchema } from '@/core/videoEdit/codeMaterial/parameterValueSchema'
+import { WEB_TEXT_AUTHOR_API_VERSION } from '@/core/videoEdit/webTextGeometry'
+
+it('文本需求按作者接口启用并只绑定声明的图片参数，切换为普通图片不改变声明', () => {
+  const effect = { name: '文本', params: [{ key: 'page', type: 'image' }], webText: { page: ['#b', '#a', '#a'] }, draw() {} }
+  expect(authorEffectMetadata(effect, WEB_TEXT_AUTHOR_API_VERSION).webText).toEqual({ page: ['#a', '#b'] })
+  expect(authorEffectMetadata(effect, 4).webText).toBeUndefined()
+  expect(() => authorEffectMetadata({ ...effect, webText: { missing: ['#a'] } }, WEB_TEXT_AUTHOR_API_VERSION)).toThrow('webText.missing')
+  expect(() => authorEffectMetadata({ ...effect, webText: { page: [''] } }, WEB_TEXT_AUTHOR_API_VERSION)).toThrow('webText.page')
+})
 
 describe('作者 JS 参数适配', () => {
   it('不为原作者模块虚构尺寸和源时长；有效放置提示原样读回', () => {

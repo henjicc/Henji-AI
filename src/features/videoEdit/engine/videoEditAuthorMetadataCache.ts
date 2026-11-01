@@ -5,11 +5,14 @@ interface Cache {
   read(key: string): Promise<AuthorCachedMetadata | undefined>
   write(key: string, metadata: AuthorCachedMetadata): Promise<void>
 }
+// 元数据提取规则变化时失效；源码与编译产物身份不受影响。
+const EXTRACTION_VERSION = 2
+const metadataKey = (source: string): string => JSON.stringify([EXTRACTION_VERSION, source])
 let cache: Cache | undefined
 /** Worker 通过现有渲染传输借用宿主缓存，不持有数据库或另建持久化通道。 */
 export function installAuthorMetadataCache(value: Cache): void { cache = value }
-export function readAuthorMetadataCache(key: string): Promise<AuthorCachedMetadata | undefined> { return cache?.read(key) ?? Promise.resolve(undefined) }
+export function readAuthorMetadataCache(key: string): Promise<AuthorCachedMetadata | undefined> { return cache?.read(metadataKey(key)) ?? Promise.resolve(undefined) }
 export function writeAuthorMetadataCache(key: string, program: CodeAuthorProgram): void {
   const { bundle: _bundle, ...metadata } = program
-  void cache?.write(key, metadata).catch(() => undefined)
+  void cache?.write(metadataKey(key), metadata).catch(() => undefined)
 }

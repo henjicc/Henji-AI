@@ -1,6 +1,7 @@
 import { CodeMaterialError, type CodeParameterDeclaration, type CodeParameterTypeDefinition } from '@/core/videoEdit/codeMaterial/contract'
 import { parseCodeMaterialTypes, parseCodeMaterialV3Parameters } from '@/core/videoEdit/codeMaterial/parameterTypes'
 import type { AuthorModule, AuthorParameters } from './videoEditAuthorModule'
+import { WEB_TEXT_AUTHOR_API_VERSION, webTextSelectors, type WebTextDeclaration } from '@/core/videoEdit/webTextGeometry'
 
 export interface AuthorParameterMetadata {
   parameters: CodeParameterDeclaration[]
@@ -9,6 +10,7 @@ export interface AuthorParameterMetadata {
 }
 
 export interface AuthorEffectMetadata extends AuthorParameterMetadata {
+  webText?: WebTextDeclaration
   name: string
   kind: 'generator' | 'filter'
   mode: 'static' | 'dynamic'
@@ -33,7 +35,16 @@ export function authorEffectMetadata(effect: AuthorModule, apiVersion?: number):
   }
   const frames = [...(effect.frames ?? [])]
   if (frames.some(offset => !Number.isFinite(offset) || offset === 0) || new Set(frames).size !== frames.length) throw new Error('相邻帧偏移必须为不重复的非零有限数值。')
-  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...hints, ...authorParameterMetadata(effect, apiVersion) }
+  const metadata = authorParameterMetadata(effect, apiVersion)
+  let webText: WebTextDeclaration | undefined
+  if ((apiVersion ?? 4) >= WEB_TEXT_AUTHOR_API_VERSION && effect.webText !== undefined) {
+    if (!effect.webText || typeof effect.webText !== 'object' || Array.isArray(effect.webText)) throw new Error('webText 需要图片参数名到 CSS 选择器数组的对象。')
+    webText = Object.fromEntries(Object.entries(effect.webText).map(([key, selectors]) => {
+      if (!metadata.parameters.some(parameter => parameter.key === key && parameter.type === 'image')) throw new Error(`webText.${key} 必须对应已声明的图片参数。`)
+      return [key, webTextSelectors(selectors, `webText.${key}`)]
+    }))
+  }
+  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...hints, ...metadata, ...(webText ? { webText } : {}) }
 }
 
 /** Only control metadata is normalized. The author module has already executed

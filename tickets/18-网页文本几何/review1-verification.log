@@ -1,0 +1,50 @@
+
+> henji-ai@2.0.0-beta.1 verify:changed
+> node scripts/run-changed-verification.cjs --level L2 --test src/features/videoEdit/engine/videoEditAuthorApiContract.test.ts electron/main/services/web-source/page.ts electron/main/services/web-source/page.test.ts electron/main/services/web-source/pages.ts electron/main/services/web-source/textGeometry.ts resources/video-edit-author/author-api.d.ts resources/assistant-skills/video-edit-code-creation/references/author-api-media.md src/core/videoEdit/webTextGeometry.ts src/features/videoEdit/application/videoEditCodeService.test.ts src/features/videoEdit/engine/videoEditAuthorMetadataCache.ts src/features/videoEdit/engine/videoEditAuthorMetadataCache.test.ts src/features/videoEdit/engine/videoEditCodeSources.ts src/features/videoEdit/engine/videoEditCodeSources.test.ts src/features/videoEdit/engine/videoEditRenderer.test.ts src/features/videoEdit/engine/videoEditWebInputs.ts src/features/videoEdit/engine/videoEditWebInputs.test.ts src/features/videoEdit/engine/videoEditWebTextSampler.test.ts
+
+验证级别 L2；显式文件 16 个。
+
+[局部验证 1/6] 精确 Vitest（合并去重）
+
+ RUN  v1.6.1 D:/VibeCode/Henji-AI-t18
+
+ ✓ src/core/videoEdit/webTextGeometry.test.ts  (1 test) 5ms
+ ✓ electron/main/services/web-source/page.test.ts  (17 tests) 35ms
+ ✓ src/features/videoEdit/engine/videoEditWebInputs.test.ts  (22 tests) 60ms
+ ✓ src/features/videoEdit/engine/videoEditWebTextSampler.test.ts  (6 tests) 278ms
+ ✓ src/features/videoEdit/engine/videoEditAuthorMetadataCache.test.ts  (1 test) 97ms
+ ✓ src/features/videoEdit/engine/videoEditAuthorApiContract.test.ts  (1 test) 2418ms
+ ✓ electron/main/services/web-source/pages.test.ts  (2 tests) 5ms
+ ✓ src/features/videoEdit/engine/videoEditCodeSources.test.ts  (40 tests) 1336ms
+ ✓ src/features/videoEdit/engine/videoEditRenderer.test.ts  (135 tests) 6171ms
+(node:35712) V8: file:///D:/VibeCode/Henji-AI/node_modules/es-module-lexer/dist/lexer.asm.js:2 Linking failure in asm.js: Unexpected stdlib member
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/features/videoEdit/application/videoEditCodeService.test.ts  (60 tests) 7840ms
+
+ Test Files  10 passed (10)
+      Tests  285 passed (285)
+   Start at  02:18:57
+   Duration  57.51s (transform 48.38s, setup 1ms, collect 90.87s, tests 18.25s, environment 4.52s, prepare 3.79s)
+
+
+[局部验证 2/6] 改动文件 ESLint
+
+[局部验证 3/6] 渲染层增量类型检查
+
+[局部验证 4/6] Electron 增量类型检查
+
+[局部验证 5/6] 导入/装配依赖图
+
+> henji-ai@2.0.0-beta.1 check:dependency-graph
+> node scripts/check-dependency-graph.cjs
+
+依赖图门禁通过：0 个静态值 SCC，0 条冻结跨层边，351 条跨 feature 非 index 导入；首屏 1553 模块 / 0 重模块，11 动态值回边；78.48 秒。
+
+[局部验证 6/6] 主进程传递导入
+
+> henji-ai@2.0.0-beta.1 check:main-imports
+> node scripts/check-main-imports.cjs
+
+✔ 主进程 import 边界检查通过（扫描 978 个 main/preload 文件）
+
+局部验证通过：精确 Vitest（合并去重）、改动文件 ESLint、渲染层增量类型检查、Electron 增量类型检查、导入/装配依赖图、主进程传递导入

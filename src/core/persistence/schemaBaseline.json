@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 55,
-      "fingerprint": "d63120723af2463706be06867f6967efce2585408c209744dcfdd0f05a095c69",
+      "version": 56,
+      "fingerprint": "9d6e78eee2966a790a3151ff461481566d06e2141cd9ba42a5089e4b009f7d64",
       "supportedFrom": 17,
-      "minReaderVersion": 55
+      "minReaderVersion": 56
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 58,
-      "fingerprint": "99082638ad2e4b411e2e6e5a17f5d22a768c9debcc6f3c3222611164c7f3a12e",
+      "version": 59,
+      "fingerprint": "5d6d1fd087565e8b6d712cb3f777e3bc05885c131b04154ae7d9875cd21ea349",
       "supportedFrom": 19,
-      "minReaderVersion": 58
+      "minReaderVersion": 59
     },
     "project": {
       "version": 3,
@@ -174,16 +174,16 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 12,
-      "fingerprint": "57a6ea3ca6f9ff2c34521cc2a47755b856f08b219e8645c0e8691d71b0fd8b6e",
+      "version": 13,
+      "fingerprint": "233f453d5bbe189fd06c1504a2e152cd1958b5bec4e121731c93e7e9ce46b964",
       "supportedFrom": 1,
-      "minReaderVersion": 12
+      "minReaderVersion": 13
     },
     "code-author-api": {
-      "version": 11,
-      "fingerprint": "99139f4e8b0c71c4a41f968a5aaef27db24ada48cb307731aaf30e8a76f9d526",
+      "version": 12,
+      "fingerprint": "996c00c304f1bb8c5b1cf59ca7cabaa0d9a6d49b84e97d729e64ecf01becbbbf",
       "supportedFrom": 4,
-      "minReaderVersion": 11
+      "minReaderVersion": 12
     },
     "code-component": {
       "version": 1,
@@ -192,10 +192,10 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 17,
-      "fingerprint": "413117a8dd7a44ea10c2798ac240532aa3e29de3d2afdec749e57338695e1667",
+      "version": 18,
+      "fingerprint": "4539b535c73d0ae9362639305b1560f0587e31fe3a935861095b144902673a33",
       "supportedFrom": 6,
-      "minReaderVersion": 17
+      "minReaderVersion": 18
     },
     "settings": {
       "version": 16,
@@ -240,10 +240,10 @@
       "minReaderVersion": 2
     },
     "video-preset-package": {
-      "version": 15,
-      "fingerprint": "fc94ea329c97a721b23fe8f42adf377d59b47796ef922bf3df7c25d872b8bcf8",
+      "version": 16,
+      "fingerprint": "1f00174d03227d335c89ea32eb4d20f16fee89616586ba93e39ef3fd959a78c6",
       "supportedFrom": 5,
-      "minReaderVersion": 15
+      "minReaderVersion": 16
     },
     "voice-library": {
       "version": 1,
@@ -324,22 +324,22 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 11,
-      "fingerprint": "a0e850bebbe87d4e955ac67ea7b350173af6b6d750ffe2081f9b24a8b0037f4a",
+      "version": 12,
+      "fingerprint": "1efb8c05f62c75753b6ea8ee88df19bbdc1c3b84c64948327b5fcaed7010d020",
       "supportedFrom": 1,
-      "minReaderVersion": 11
+      "minReaderVersion": 12
     },
     "video-template-library": {
-      "version": 8,
-      "fingerprint": "fdf07eb3f09a076b569b4d4fe60b005c86d9e84d1c3ec836f0fd47f32cee4773",
+      "version": 9,
+      "fingerprint": "e8e8c329c8c14f8b6b1a1186a55a23a03fe9bc92373a3be8544ea378e725c414",
       "supportedFrom": 1,
-      "minReaderVersion": 8
+      "minReaderVersion": 9
     },
     "video-style-package": {
-      "version": 14,
-      "fingerprint": "e52c30a68f2fc4f9c471430be6095940516d587220bf2ceb09f82201e520551c",
+      "version": 15,
+      "fingerprint": "bb5909d3968750920c637c2efcce090412a9b1daa9f7cee87a9670e6bbde4ffc",
       "supportedFrom": 1,
-      "minReaderVersion": 14
+      "minReaderVersion": 15
     },
     "workspace-layouts": {
       "version": 1,
@@ -396,8 +396,8 @@
       "minReaderVersion": 1
     },
     "video-effect-library": {
-      "version": 8,
-      "fingerprint": "ac4dbb72a25f26670653e504dc3ad8e0a1ef9422ef894a5d09a1ef06164e3f57",
+      "version": 9,
+      "fingerprint": "6722596d5622b2a8b7e908e634e31dd026f175d76de1fbaea5801bc49dc415fa",
       "supportedFrom": 1,
       "minReaderVersion": 8
     }

@@ -4,6 +4,7 @@ import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntim
 import type { WebSourceCaptureRequest, WebSourceCaptureResult } from '@/platform/contracts/videoFrames'
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 import { installVideoEditWebChannel, VideoEditWebInputs, type WebPictureOptions } from './videoEditWebInputs'
+import { WEB_TEXT_SAMPLER_VERSION } from '@/core/videoEdit/webTextGeometry'
 
 const reference: CodeWebReference = { kind: 'web', path: '/site', width: 100, height: 100, region: [0, 0, 100, 100], scale: 4 }
 const handlers = new Map<string, (frame: NativeVideoFrame) => void>()
@@ -40,6 +41,76 @@ beforeEach(() => {
   inputs = new VideoEditWebInputs()
 })
 afterEach(() => { inputs.dispose(); installVideoEditWebChannel(() => undefined); vi.restoreAllMocks(); vi.useRealTimers() })
+
+it('文本与画面按票据和时间配对，响应与纹理可倒序到达；同刻不同覆盖不复用缺测值', async () => {
+  const frame = {}
+  const first = inputs.picture(reference, 1, frame, copy, [], { text: ['#a'] })
+  const second = inputs.picture(reference, 1, frame, copy, [], { text: ['#b'] })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(requests).toHaveLength(2)
+  const complete = (index: number, responseFirst: boolean): void => {
+    const { params, resolve } = requests[index]
+    const sendFrame = (): void => handlers.get(params.streamId)?.({ meta: { request: { id: params.ticket }, timestampUs: 1e6 }, release: vi.fn() } as unknown as NativeVideoFrame)
+    const sendResponse = (): void => resolve({ boxes: null, duration: 1, contentHash: 'hash', pixelWidth: 399, pixelHeight: 397, text: { ticket: params.ticket, time: 1, contentHash: 'hash', samplerVersion: WEB_TEXT_SAMPLER_VERSION, sampleMs: 0, serializationMs: 0, bytes: 0, results: { [params.text![0]]: { status: 'not-found' } } } })
+    if (responseFirst) { sendResponse(); sendFrame() } else { sendFrame(); sendResponse() }
+  }
+  complete(1, true); complete(0, false)
+  const [a, b] = await Promise.all([first, second])
+  expect(a?.web.text).toEqual({ '#a': { status: 'not-found' } })
+  expect(b?.web.text).toEqual({ '#b': { status: 'not-found' } })
+  expect(a?.web.imageMapping?.viewportToImage).toEqual([3.99, 0, 0, 3.97, -0, -0])
+  expect(Object.isFrozen(a?.web.text?.['#a'])).toBe(true)
+  inputs.trim(frame)
+})
+
+function finishText(index: number, unavailable = false, patch: Partial<NonNullable<WebSourceCaptureResult['text']>> = {}, timestamp?: number): ReturnType<typeof vi.fn> {
+  const { params, resolve } = requests[index], release = vi.fn()
+  handlers.get(params.streamId)?.({ meta: { request: { id: params.ticket }, timestampUs: timestamp ?? params.time * 1e6 }, release } as unknown as NativeVideoFrame)
+  resolve({ boxes: null, duration: 1, contentHash: 'hash', pixelWidth: 400, pixelHeight: 400, text: { ticket: params.ticket, time: params.time, contentHash: 'hash', samplerVersion: WEB_TEXT_SAMPLER_VERSION, sampleMs: 0, serializationMs: 0, bytes: 0, results: { '#a': unavailable ? { status: 'unavailable', reason: 'unsynchronized' } : { status: 'not-found' } }, ...patch } })
+  return release
+}
+
+it.each([
+  { patch: { time: 7 }, timestamp: undefined },
+  { patch: { contentHash: 'stale-content' }, timestamp: undefined },
+  { patch: {}, timestamp: 7e6 },
+  { patch: { results: {} }, timestamp: undefined },
+])('实际文本时刻、内容、纹理时刻与覆盖错配拒绝整对：%j', async ({ patch, timestamp }) => {
+  const pending = renderPicture(2, { text: ['#a'] })
+  const rejected = expect(pending).rejects.toThrow('不匹配')
+  await vi.advanceTimersByTimeAsync(0)
+  const release = finishText(0, false, patch, timestamp)
+  await rejected
+  expect(release).toHaveBeenCalledOnce()
+  expect(copy).not.toHaveBeenCalled()
+})
+
+it('精确不可用归还整对，只向用户解释恢复方式', async () => {
+  const pending = renderPicture(2, { text: ['#a'] })
+  const rejected = expect(pending).rejects.toThrow('网页文字与画面尚未同步')
+  await vi.advanceTimersByTimeAsync(0)
+  const release = finishText(0, true)
+  await rejected
+  expect(release).toHaveBeenCalledOnce()
+  expect(copy).not.toHaveBeenCalled()
+})
+
+it.each([false, true])('同刻精确取帧不复用预览不可用结果，也不改变预览语义，在途=%s', async inFlight => {
+  const frame = {}
+  const preview = inputs.picture(reference, 2, frame, copy, [], { text: ['#a'], deadline: performance.now() + 100 })
+  await vi.advanceTimersByTimeAsync(0)
+  if (!inFlight) { finishText(0, true); await preview }
+  const exact = inputs.picture(reference, 2, frame, copy, [], { text: ['#a'] })
+  const rejected = expect(exact).rejects.toThrow('网页文字与画面尚未同步')
+  await vi.advanceTimersByTimeAsync(0)
+  expect(requests.map(({params})=>params.latest)).toEqual([true, false])
+  const release = finishText(1, true)
+  if (inFlight) finishText(0, true)
+  expect((await preview)?.web.text?.['#a']).toEqual({ status: 'unavailable', reason: 'unsynchronized' })
+  await rejected
+  expect(release).toHaveBeenCalledOnce()
+  expect(copy).toHaveBeenCalledOnce()
+})
 
 it('慢网页到预算即交回，后台只追最新目标且保留上一幅，精确观察仍等待', async () => {
   const approximate = vi.fn()
