@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile, readVideoEditFile, showVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { prepareStylePackage } = require('./uiInspectionStylePackage.cjs')
 
@@ -40,14 +40,7 @@ function createVideoEditStylesScene() {
         return result
       }
       const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, ...(propertyIds ? { propertyIds } : {}) })
-      const dock = async title => {
-        const tab = page.locator('.dv-tab').filter({ has: page.getByText(title, { exact: true }) }).first()
-        if (await tab.isVisible()) return tab.click()
-        // 标签放不下时收进组标题右侧的下拉。
-        const overflow = page.locator('.dv-tabs-overflow-dropdown-default, .dv-tabs-overflow-dropdown-root').first()
-        if (await overflow.isVisible().catch(() => false)) { await overflow.click(); const item = page.locator('.dv-tabs-overflow-container .dv-tab').filter({ hasText: title }).first(); if (await item.isVisible().catch(() => false)) return item.click() }
-        await button(page, '面板').click(); await button(page, title).click()
-      }
+      const dock = title => showVideoEditDockPanel(page, title)
       const savedProject = async matches => { for (let i = 0; i < 300; i++) { const value = readVideoEditFile(file); if (matches(value)) return value; await page.waitForTimeout(100) } return assert.fail(`剪辑没有保存成期望状态：${JSON.stringify(readVideoEditFile(file).templates ?? null)}`) }
       try {
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
@@ -201,13 +194,7 @@ function createVideoEditStyleMemoryScene() {
       await dialogs(app, [file], file)
       await openVideoEditFile(page, file)
       await presented(page, 0)
-      const tab = page.locator('.dv-tab').filter({ has: page.getByText('风格', { exact: true }) }).first()
-      if (await tab.isVisible()) await tab.click()
-      else {
-        const overflow = page.locator('.dv-tabs-overflow-dropdown-default, .dv-tabs-overflow-dropdown-root').first()
-        await overflow.click()
-        await page.locator('.dv-tabs-overflow-container .dv-tab').filter({ hasText: '风格' }).first().click()
-      }
+      await showVideoEditDockPanel(page, '风格')
       await capture('style-memory-before-detail')
       await page.locator('[data-video-edit-style="restrained"]').click()
       const detail = page.locator('[data-video-edit-style-detail="restrained"]')

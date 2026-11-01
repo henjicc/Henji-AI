@@ -7,7 +7,7 @@ const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.c
 const { openVideoEditFile, readVideoEditFile, leaveVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
 const { presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 function gpuLoad() {
   try { return execFileSync('nvidia-smi', ['--query-gpu=utilization.gpu,utilization.memory,memory.used,temperature.gpu,pstate', '--format=csv,noheader'], { windowsHide: true, encoding: 'utf8', timeout: 3000 }).trim() }
@@ -37,7 +37,7 @@ function createVideoEditCodePerformanceScene() {
       assert.ok(Number.isInteger(rounds) && rounds >= 2 && rounds <= 30)
       const after = label.startsWith('after')
       assert.match(label, /^[a-z0-9-]+$/)
-      const root = path.resolve(process.env.HENJI_CODE_PERF_ROOT ?? 'node_modules/.cache/t112', label); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve(process.env.HENJI_CODE_PERF_ROOT ?? '.ui-tour/cache/t112', label); fs.mkdirSync(root, { recursive: true })
       const evidence = { completed: false, resolution: [1920, 1080], fps: 30, expectedFrames: 180,
         measurements: { rounds: ['first-playback', 'warmed-playback'], drawMs: 'code draw preparation through GPU queue completion, excluding CPU evaluation', presentationMs: 'compositor submission through queue completion; not physical display scanout', requestMs: 'main-to-worker request through completed response', dropped: '180 expected timeline frames minus distinct completed presentations, including the initially presented frame 0' },
         pixelTolerance: { maxDelta: 1, changedRatio: .0001 }, pixels: [], runs: [], observations: [] }
@@ -54,11 +54,7 @@ function createVideoEditCodePerformanceScene() {
         const opened = await openVideoEditFile(page, file)
         const documentRef = { kind: 'video_edit.document', id: opened.documentId }
         const sequenceRef = { kind: 'video_edit.sequence', id: `${opened.documentId}:${project.sequences[0].id}` }
-        const port = await new Promise((resolve, reject) => {
-          const server = require('node:net').createServer(); server.once('error', reject)
-          server.listen(0, '127.0.0.1', () => { const port = server.address().port; server.close(error => error ? reject(error) : resolve(port)) })
-        })
-        await page.evaluate(port => window.henjiNative.mcp.configure({ enabled: true, port }), port)
+        await assignIsolatedMcpPort(page)
         const identity = await authorizeMcpConnection(page, { name: '代码播放性能验收' })
         client = await connectMcpClient(identity.config, 'Henji code performance')
         const change = async (ref, entry) => {

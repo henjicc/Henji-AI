@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const sharp = require('sharp')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 
@@ -12,13 +12,13 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 function createVideoEditPrimitivesScene() {
   return { id: 'video-edit-primitives', surface: '剪辑', name: '剪辑-动作原语两周与普通曲线编辑', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/t151-primitives'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/t151-primitives'); fs.mkdirSync(root, { recursive: true })
       const evidence = { shots: [], frames: [], paidCalls: 0 }; let client; let seeded
       const unblock = await blockPaidGeneration(app)
       const controls = page.locator('[data-creative-intent-controls]')
       const trigger = () => page.getByRole('button', { name: /^(超级关键帧|正在示范)$/ })
-      const panel = async () => { if (!await controls.isVisible()) await trigger().click(); await controls.waitFor({ state: 'visible' }) }
-      const close = async () => { if (await controls.isVisible()) { await trigger().click(); await controls.waitFor({ state: 'hidden' }) } }
+      const panel = async () => { await takeOverVideoEdit(page); if (!await controls.isVisible()) await trigger().click(); await controls.waitFor({ state: 'visible' }) }
+      const close = async () => { await takeOverVideoEdit(page); if (await controls.isVisible()) { await trigger().click(); await controls.waitFor({ state: 'hidden' }) } }
       const shot = async name => { await page.waitForTimeout(240); evidence.shots.push(name); await capture('step-' + String(evidence.shots.length).padStart(3, '0')) }
       const presented = async frame => page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), frame)
       const saved = async test => { for (let i = 0; i < 200; i++) { const doc = readVideoEditFile(seeded.file); if (test(doc)) return doc; await page.waitForTimeout(50) } assert.fail('文档没有保存预期动作') }

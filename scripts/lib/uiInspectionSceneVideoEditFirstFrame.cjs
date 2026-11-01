@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, leaveVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, leaveVideoEditProject, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
@@ -18,7 +18,7 @@ function summarize(runs) {
 function createVideoEditFirstFrameScene() {
   return { id: 'video-edit-first-frame', surface: '剪辑', name: '剪辑-打开与新序列首帧分段计时', writesUserData: true,
     setup: async (page, app) => {
-      const root = path.resolve('node_modules/.cache/video-edit-first-frame'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-first-frame'); fs.mkdirSync(root, { recursive: true })
       const source = path.join(root, '1080p60.mp4')
       if (!fs.existsSync(source)) execFileSync(require('./mediaBinaries.cjs').ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=60', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '8', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '240', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', source], { windowsHide: true })
       // Separate files force separate native decoders; remux keeps codec/GOP/frames identical for fair comparisons.
@@ -70,6 +70,7 @@ function createVideoEditFirstFrameScene() {
           const sequenceRef = { kind: 'video_edit.sequence', id: `${seeded.documentId}:${sequence.id}` }
           await callTool(client, 'change_application_entities', operationEnvelope([await read(sequenceRef)], { summary: '加入首帧画面', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: Array.from({ length: many ? 20 : 1 }, (_, clipIndex) => ({ properties: { 'video_edit.clip.item_id': `item-source${many ? 1 + ((i + clipIndex) % 6) : i + 1}`, 'video_edit.clip.name': `画面 ${clipIndex + 1}`, 'video_edit.clip.kind': 'video', 'video_edit.clip.track': sequence.tracks.find(track => track.kind === 'video').index, 'video_edit.clip.start': clipIndex * 120, 'video_edit.clip.duration': 120, 'video_edit.clip.source_in_us': 3500000 } })) }] }))
           await page.waitForTimeout(1500)
+          await takeOverVideoEdit(page)
           const after = new Date().toISOString()
           await page.locator(`[data-video-edit-project-entry="${sequence.id}"]`).dblclick()
           await collect(after, many ? 'switch-many' : 'switch')

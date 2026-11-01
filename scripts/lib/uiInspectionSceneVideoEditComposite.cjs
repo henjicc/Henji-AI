@@ -5,7 +5,7 @@ const path = require('node:path')
 function createVideoEditCompositeScene() {
   return { id: 'video-edit-composite-contract', surface: '剪辑', name: '剪辑-基础图层离屏与转场4K GPU验收', writesUserData: false,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-composite-contract'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-composite-contract'); fs.mkdirSync(root, { recursive: true })
       const display = await app.evaluate(({ BrowserWindow, screen }) => {
         const window = BrowserWindow.getAllWindows().find(window => !window.isDestroyed())
         const bounds = window.getBounds(); const chosen = screen.getDisplayMatching(bounds)

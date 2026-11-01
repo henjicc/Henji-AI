@@ -174,7 +174,7 @@ async function measureScrub(page, pattern, pct) {
   const midValue = await slider.getAttribute('aria-valuenow')
   await page.mouse.up()
   const presentedFrames = await page.evaluate(() => { window.__scrubMo.disconnect(); return window.__scrubFrames })
-  const profilePath = path.resolve('node_modules/.cache/video-edit-open-picture', `scrub-${pattern.name}.cpuprofile`)
+  const profilePath = path.resolve('.ui-tour/cache/video-edit-open-picture', `scrub-${pattern.name}.cpuprofile`)
   const top = cpu ? await profileStop(cpu, profilePath) : undefined
   const debug = { total, box: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) }, startX: Math.round(position(0)), midValue, endValue: await slider.getAttribute('aria-valuenow') }
   const snapshot = await workerSnapshot(page)
@@ -215,7 +215,7 @@ function summarizeSamples(samples) {
 function createVideoEditOpenPictureScene() {
   return { id: 'video-edit-open-picture', surface: '剪辑', name: '剪辑-打开项目后节目画面实际上屏', writesUserData: true,
     setup: async (page, _app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-open-picture'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-open-picture'); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath } = require('./mediaBinaries.cjs')
       // 接近相机原片：4K60 H.264 长 GOP、B 帧、带声音；画面始终明亮，任何黑屏都能被亮度区分。
       const source = path.join(root, '4k60-camera.mp4')

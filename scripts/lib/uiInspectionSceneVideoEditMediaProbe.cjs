@@ -18,8 +18,8 @@ const { PICTURE_TOLERANCE_SECONDS } = require('./videoEditFormatMatrix.cjs')
  * - 2.1 改动前由应用保存的旧工程打开无迁移（文件逐字节不变）、能出画面。
  */
 const button = (page, name) => page.getByRole('button', { name, exact: true })
-const ROOT = path.resolve('node_modules/.cache/video-edit-media-probe')
-const SAMPLES = path.resolve('node_modules/.cache/native-decode')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-media-probe')
+const SAMPLES = path.resolve('.ui-tour/cache/native-decode')
 const FFPROBE = path.join(require('./mediaBinaries.cjs').binDir, 'ffprobe.exe')
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const TRIPO_4444 = 'D:/视频制作/2026-09-19_Tripo/素材/010_荷花_高细节_独立透明缓转_v2.mov'

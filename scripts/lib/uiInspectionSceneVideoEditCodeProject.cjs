@@ -1,4 +1,4 @@
-const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
+const { confirmVideoEditExport, finishVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
@@ -8,14 +8,14 @@ const { createHash } = require('node:crypto')
 const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
-const { adoptNewVideoEditProject, chooseVideoEditImportFiles, codeVersionSource, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, codeVersionSource, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: values.openPaths })
+    dialog.showOpenDialog = async (...args) => ({ canceled: false, filePaths: args.at(-1)?.properties?.includes('openDirectory') ? [values.outputDirectory] : values.openPaths })
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: values.savePath })
-  }, { openPaths, savePath })
+  }, { openPaths, savePath, outputDirectory: path.dirname(savePath) })
 }
 async function saved(page, file, condition) {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -62,10 +62,10 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
   const dynamicSource = control?.dynamicSource ?? baseDynamicSource; const staticSource = control?.staticSource ?? baseStaticSource
   return { id: controls ? 'video-edit-code-controls' : 'video-edit-code-project', surface: '剪辑', name: controls ? '剪辑-参数曲线源码与透明图片4K60回环' : '剪辑-原创代码素材混合保存与4K60导出', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve(`node_modules/.cache/video-edit-code-${controls ? 'controls' : 'project'}`); fs.mkdirSync(root, { recursive: true })
-      const video = path.resolve('node_modules/.cache/video-edit-probe/3840-60.mp4')
-      const picture = control ? await control.makePicture(root) : path.resolve('node_modules/.cache/video-edit-project-source/picture.png')
-      const audio = path.resolve('node_modules/.cache/video-edit-project-source/audio.wav')
+      const root = path.resolve(`.ui-tour/cache/video-edit-code-${controls ? 'controls' : 'project'}`); fs.mkdirSync(root, { recursive: true })
+      const video = path.resolve('.ui-tour/cache/video-edit-probe/3840-60.mp4')
+      const picture = control ? await control.makePicture(root) : path.resolve('.ui-tour/cache/video-edit-project-source/picture.png')
+      const audio = path.resolve('.ui-tour/cache/video-edit-project-source/audio.wav')
       for (const source of [video, picture, audio]) assert.ok(fs.existsSync(source), `复用真实前置媒体：${source}`)
       const originals = [video, picture, audio].map(file => ({ file, size: fs.statSync(file).size, mtime: fs.statSync(file).mtimeMs }))
       const file = path.join(root, 'code-project.henji-video')
@@ -98,6 +98,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         const materialRef = { kind: 'video_edit.code_material', id: `${document.id}:${dynamicItem.code.definitionId}` }
         const read = await callTool(client, 'read_application_entity', { ref: materialRef, propertyIds: ['video_edit.code_material.source'] })
         assert.equal(read.data.properties['video_edit.code_material.source'], dynamicSource)
+        await takeOverVideoEdit(page)
         await button(page, '新建素材项').click(); await button(page, '新建代码素材').click()
         await page.getByLabel('作者源码', { exact: true }).fill(staticSource)
         await capture('code-source-authoring')
@@ -106,6 +107,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         document = await saved(page, file, value => value.items.filter(item => item.kind === 'code').length === 2)
         const staticItem = document.items.find(item => item.kind === 'code' && item.id !== dynamicItem.id)
         evidence.phases.push('原创MCP源码与手动静态源码已入库')
+        await change([{ kind: 'create_items', entityType: 'video_edit.track', parent: sequenceRef, items: Array.from({ length: 3 }, () => ({ properties: { 'video_edit.track.kind': 'video' } })) }])
         await change(document.items.filter(item => item.id !== staticItem.id).map(item => ({ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: {
             'video_edit.clip.item_id': item.id, 'video_edit.clip.name': item.name, 'video_edit.clip.kind': item.kind,
             'video_edit.clip.start': 0, 'video_edit.clip.duration': 180, 'video_edit.clip.track': item.kind === 'audio' ? 0 : item.kind === 'video' ? 1 : item.kind === 'image' ? 2 : 4,
@@ -117,6 +119,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         // Drag onto the populated 4K60 sequence to verify insertion into this target.
         // Free video track 3 (code clips occupy 4; the monitor scene reuses this project and keeps 6/7 free).
         const freeTrack = page.locator('[data-track-kind="video"][data-track-index="3"]')
+        await takeOverVideoEdit(page)
         await page.locator(`[data-video-edit-project-entry="${staticItem.id}"]`).dragTo(freeTrack, { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 6, y: 16 } })
         document = await saved(page, file, value => value.sequences[0].clips.length === 5)
         const staticClip = document.sequences[0].clips.find(clip => clip.itemId === staticItem.id)
@@ -147,13 +150,14 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         document = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === dynamicClip.id).code.parameters.speed === 200)
         assert.deepEqual(document.codeMaterials.map(definition => definition.versions), beforeSource, '参数更新不改源码版本')
         assert.equal(document.items.find(item => item.id === dynamicItem.id).code.parameters.speed, 80, '实例参数不改项目默认值')
+        await takeOverVideoEdit(page)
         await button(page, '撤销').click(); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === dynamicClip.id).code.parameters.speed === 80)
         await page.waitForFunction(previous => document.querySelector('canvas[aria-label="剪辑画面"]').toDataURL('image/png') === previous, snapshots[120], { timeout: 10000 })
         const beforeRejected = readVideoEditFile(file)
         await button(page, '新建素材项').click(); await button(page, '新建代码素材').click()
-        await page.getByLabel('作者源码', { exact: true }).fill(dynamicSource.replace('const x=', 'while(true){} const x='))
+        await page.getByLabel('作者源码', { exact: true }).fill(`${dynamicSource}\nexport const broken = ;`)
         await button(page, '检查并创建').click()
-        const rejection = page.getByText(/render 中仅允许 const 和最后一个 return/)
+        const rejection = page.getByRole('dialog', { name: '新建代码素材', exact: true }).getByRole('alert')
         await rejection.waitFor({ state: 'visible' }); evidence.refusedSource = await rejection.innerText()
         assert.deepEqual(readVideoEditFile(file), beforeRejected, '非法候选不得改变有效工程')
         await capture('code-invalid-source-preserved'); await button(page, '取消').click()
@@ -209,8 +213,8 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
           await seek(page, frame)
           fs.writeFileSync(path.join(root, `preview-${frame}.png`), Buffer.from(await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => canvas.toDataURL('image/png').split(',')[1]), 'base64'))
         }
-        await dialogs(app, [file], output); const exportAt = performance.now(); await confirmVideoEditExport(page)
-        await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
+        await dialogs(app, [file], output); const exportAt = performance.now(); await confirmVideoEditExport(page, undefined, output)
+        await finishVideoEditExport(page)
         const { ffprobePath, ffmpegPath } = require('./mediaBinaries.cjs')
         const metadata = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { encoding: 'utf8', windowsHide: true }))
         const videoStream = metadata.streams.find(stream => stream.codec_type === 'video')

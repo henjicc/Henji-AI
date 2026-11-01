@@ -15,8 +15,8 @@ const normalized = value => value.replaceAll('/', '\\').toLowerCase()
 function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
   return { id: 'video-edit-outputs', surface: '剪辑', name: '剪辑-真实4K选帧成片同源资产收录与画布复用', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-outputs'); fs.mkdirSync(root, { recursive: true })
-      const fixture = readVideoEditFile(path.resolve('node_modules/.cache/video-edit-composite-edit/mixed.hjvid'))
+      const root = path.resolve('.ui-tour/cache/video-edit-outputs'); fs.mkdirSync(root, { recursive: true })
+      const fixture = readVideoEditFile(path.resolve('.ui-tour/cache/video-edit-composite-edit/mixed.hjvid'))
       fixture.id = 'video-edit-output-collection'; fixture.name = '真实混剪输出收录'; fixture.revision = 0
       const file = path.join(root, 'outputs.hjvid'); fs.writeFileSync(file, JSON.stringify(fixture))
       const selectedPath = path.join(root, `program-90-${Date.now()}.png`); const exportPath = path.join(root, `mixed-${Date.now()}.mp4`)

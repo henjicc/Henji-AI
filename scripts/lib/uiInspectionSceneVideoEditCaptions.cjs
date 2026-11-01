@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, showVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 
 function createVideoEditCaptionsScene() {
@@ -13,15 +13,13 @@ function createVideoEditCaptionsScene() {
         const caption = page.locator('[data-video-edit-caption-track]')
         const video = page.locator('[data-track-kind="video"]').first()
         const [captionRect, videoRect, rulerRect] = await Promise.all([caption.boundingBox(), video.boundingBox(), page.locator('[data-video-edit-ruler]').boundingBox()])
-        assert.ok(Math.abs(captionRect.y + captionRect.height - videoRect.y) < 1, 'C1 必须紧贴最上视频轨')
-        assert.ok(captionRect.y > rulerRect.y + rulerRect.height + 24, '新建视频轨的空白必须在 C1 上方')
+        assert.ok(Math.abs(captionRect.y - rulerRect.y - rulerRect.height) < 1, 'C1 必须固定在标尺下方')
+        assert.ok(captionRect.y + captionRect.height <= videoRect.y + 1, '画面轨不得盖住置顶字幕轨')
         const captionButtons = caption.locator('[data-video-edit-track-header] button')
-        const videoButtons = video.locator('[data-video-edit-track-header] button')
         assert.equal(await captionButtons.count(), 2, 'C1 仅显示锁和眼睛')
-        for (const [captionIndex, videoIndex] of [[0, 1], [1, 3]]) {
-          const [a, b] = await Promise.all([captionButtons.nth(captionIndex).boundingBox(), videoButtons.nth(videoIndex).boundingBox()])
+        for (const [captionIndex, videoButton] of [[0, video.getByRole('button', { name: /锁定$/ }).first()], [1, video.getByRole('button', { name: /输出$/ })]]) {
+          const [a, b] = await Promise.all([captionButtons.nth(captionIndex).boundingBox(), videoButton.boundingBox()])
           assert.ok(Math.abs(a.x - b.x) < 1 && Math.abs(a.width - b.width) < 1, 'C1 同名按钮必须与视频轨竖直对齐')
-          assert.equal(await captionButtons.nth(captionIndex).getAttribute('class'), await videoButtons.nth(videoIndex).getAttribute('class'), '同状态按钮必须共用外观')
         }
       }
       const captureSettled = async suffix => { await page.waitForTimeout(350); await assertAlignment(); await capture(suffix) }
@@ -55,7 +53,8 @@ function createVideoEditCaptionsScene() {
         const second = row.locator('[data-video-edit-caption-range="caption-two"]')
         await second.click()
         assert.equal(await second.getAttribute('aria-pressed'), 'true')
-        await page.locator('[data-video-edit-timed-entry="caption-two"]').waitFor({ state: 'visible' })
+        await showVideoEditDockPanel(page, '字幕与标记')
+        await page.locator('[data-video-edit-timed-entry="caption-two"]').click()
         await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '75')
         await captureSettled('captions-selected')
         await row.getByRole('button', { name: '锁定字幕轨道', exact: true }).click()

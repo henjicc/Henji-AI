@@ -7,7 +7,7 @@ const { execFileSync } = require('node:child_process')
 const mediaBinaries = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 导出接入与预览一致性（2.4）在真实 Electron 中的闭环：
@@ -22,9 +22,9 @@ const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile,
  * - 入出点范围导出与取消（专业格式工程）。
  * - 精确帧或失败（帧通道端口代理，不改正式代码）：导出会话的连续计划丢掉几帧时由单帧读取补上，成片逐帧条码仍正确；
  *   再让单帧读取失败时导出停在该帧、以用户语言提示并删除半成品。
- * `HENJI_VIDEO_DECODER=browser` 时只跑 H.264（浏览器后端对照耗时）。证据：node_modules/.cache/video-edit-export-native/evidence.json。
+ * `HENJI_VIDEO_DECODER=browser` 时只跑 H.264（浏览器后端对照耗时）。证据：.ui-tour/cache/video-edit-export-native/evidence.json。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-export-native')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-export-native')
 const WIDTH = 3840; const HEIGHT = 2160; const FPS = 60; const SOURCE_SECONDS = 2.5; const RATE = 48000
 const CODE_BITS = 16; const CODE_HEIGHT = 240
 const MAX_LAG = Math.round(RATE * 0.01)
@@ -316,18 +316,23 @@ function createVideoEditExportNativeScene() {
         const exportUi = async (document, output, { cancelAt } = {}) => {
           const startedAt = new Date().toISOString(); const cpuBefore = nativeCpuSeconds(); const metricsBefore = await app.evaluate(({ app }) => app.getAppMetrics())
           const started = performance.now()
-          await confirmVideoEditExport(page)
-          await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 15000 })
+          await takeOverVideoEdit(page)
+          await confirmVideoEditExport(page, undefined, output)
           if (cancelAt !== undefined) {
-            await page.waitForFunction(percent => { const node = [...document.querySelectorAll('button')].find(button => /^取消导出/.test(button.textContent ?? '')); return node && Number(/(\d+)%/.exec(node.textContent)?.[1] ?? 0) >= percent }, cancelAt, { timeout: 120000 })
+            await page.waitForFunction(percent => Number(document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') ?? 0) >= percent, cancelAt, { timeout: 120000 })
             await page.getByRole('button', { name: /^取消导出/ }).click()
+            await button(page, '确认取消导出').click()
           }
-          await button(page, '导出视频').waitFor({ state: 'visible', timeout: 600000 })
+          const terminal = page.getByRole('dialog', { name: /^导出(完成|失败|已取消|已中断)$/ })
+          await terminal.waitFor({ state: 'visible', timeout: 600000 })
           const ms = performance.now() - started; const cpuAfter = nativeCpuSeconds(); const metricsAfter = await app.evaluate(({ app }) => app.getAppMetrics())
-          const task = (await callTool(client, 'query_video_edit_export', { documentRef: projectRef(document.id) })).data.task
+          const task = (await callTool(client, 'query_video_edit_export', { documentRef: projectRef(document.id), detail: 'full' })).data.queue.find(job => job.path && path.resolve(job.path) === path.resolve(output))
+          const visibleAlerts = await alerts()
+          await terminal.getByRole('button', { name: '完成', exact: true }).click()
+          await terminal.waitFor({ state: 'hidden' })
           const logs = await page.evaluate(async afterTimestamp => (await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10), afterTimestamp, domainPrefix: 'features.videoEdit.export', limit: 50 })).events.filter(event => /^video_edit\.export\.(completed|failed|cancelled)$/.test(event.event)).map(event => ({ event: event.event, context: event.context, error: event.error })), startedAt)
           const cpu = (metrics, type) => metrics.filter(metric => metric.type === type).reduce((sum, metric) => sum + (metric.cpu?.cumulativeCPUUsage ?? 0), 0)
-          return { ms, task, log: logs[0] ?? null, nativeCpuSeconds: cpuBefore === null || cpuAfter === null ? null : cpuAfter - cpuBefore, nativeCores: cpuBefore === null || cpuAfter === null ? null : (cpuAfter - cpuBefore) / (ms / 1000), rendererCpuSeconds: cpu(metricsAfter, 'Tab') - cpu(metricsBefore, 'Tab'), gpuCpuSeconds: cpu(metricsAfter, 'GPU') - cpu(metricsBefore, 'GPU'), alerts: await alerts() }
+          return { ms, task, log: logs[0] ?? null, nativeCpuSeconds: cpuBefore === null || cpuAfter === null ? null : cpuAfter - cpuBefore, nativeCores: cpuBefore === null || cpuAfter === null ? null : (cpuAfter - cpuBefore) / (ms / 1000), rendererCpuSeconds: cpu(metricsAfter, 'Tab') - cpu(metricsBefore, 'Tab'), gpuCpuSeconds: cpu(metricsAfter, 'GPU') - cpu(metricsBefore, 'GPU'), alerts: visibleAlerts }
         }
         /** Frame count, every frame's source frame (code band), and the sound against the reference, for `[from, to)`. */
         const verify = (document, output, track, from, to, label) => {

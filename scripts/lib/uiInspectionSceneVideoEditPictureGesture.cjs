@@ -108,8 +108,8 @@ async function observePicture(page, sequenceId, clip) {
 function createVideoEditPictureGestureScene() {
   return { id: 'video-edit-picture-gesture', surface: '剪辑', name: '剪辑-32轨500片段原4K画面移动与一次撤销', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-picture-gesture'); fs.mkdirSync(root, { recursive: true })
-      const fixture = path.resolve('node_modules/.cache/video-edit-monitor/pressure.hjvid')
+      const root = path.resolve('.ui-tour/cache/video-edit-picture-gesture'); fs.mkdirSync(root, { recursive: true })
+      const fixture = path.resolve('.ui-tour/cache/video-edit-monitor/pressure.hjvid')
       assert.ok(fs.existsSync(fixture), '先通过正式monitor生成原4K压力工程')
       const project = readProject(fixture)
       project.id = 'picture-gesture-pressure'; project.name = '原4K画面移动'; project.revision = 0

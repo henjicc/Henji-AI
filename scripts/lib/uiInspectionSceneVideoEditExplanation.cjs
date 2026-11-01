@@ -14,7 +14,7 @@ function createVideoEditExplanationScene() {
   return { id: 'video-edit-explanation', surface: '剪辑', name: '剪辑-录制讲解与指代审阅', writesUserData: true,
     launchArgs: ['--autoplay-policy=no-user-gesture-required'],
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/t150-explanation'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/t150-explanation'); fs.mkdirSync(root, { recursive: true })
       const evidence = { frames: [], audio: '原生麦克风与统一录音设置', interruption: '仅终止本隔离 Electron 的原生采集子进程', transcription: '受控毫秒DTO，非真实ASR', visualReview: '待逐张目视', paidCalls: 0 }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const unblock = await blockPaidGeneration(app)
@@ -144,6 +144,7 @@ function createVideoEditExplanationScene() {
           if (children.length !== 1 || !children[0].kill()) throw new Error('未找到唯一的隔离原生录音进程')
         })
         await button(page, '继续录制讲解').waitFor(); await panel(); await shot('08-原生录音中断')
+        await close()
         await button(page, '继续录制讲解').click(); await page.getByLabel('暂停录制讲解', { exact: true }).waitFor(); await review().waitFor({ state: 'hidden' }); await shot('09-恢复麦克风')
         await page.waitForTimeout(1700); await page.getByLabel('结束录制讲解', { exact: true }).click()
         await page.getByLabel('讲解词稿审阅', { exact: true }).waitFor(); await shot('10-结束')

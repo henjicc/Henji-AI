@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
-const { openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, videoEditDockTab, showVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 const button = (page, name) => page.getByRole('button', { name, exact: true })
@@ -24,7 +24,11 @@ async function pointerDrag(page, source, target, position) {
 }
 
 async function layoutAction(page, action) {
-  await button(page, '面板').click(); await button(page, action).click(); await page.waitForTimeout(250)
+  if (action === '重置布局') {
+    await page.getByRole('button', { name: '面板菜单', exact: true }).first().click()
+    await page.getByRole('menuitem', { name: action, exact: true }).click()
+  } else await showVideoEditDockPanel(page, action)
+  await page.waitForTimeout(250)
 }
 async function presented(page, frame) {
   await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), frame, { timeout: 20000 })
@@ -130,7 +134,7 @@ function createVideoEditLayoutScene() {
   return {
     id: 'video-edit-layout', surface: '剪辑', name: '剪辑-停靠布局与真实渲染会话生命周期', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-layout'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-layout'); fs.mkdirSync(root, { recursive: true })
       const file = path.join(root, 'layout.hjvid')
       const project = videoEditFixtureProject({ id: 'reality-video-layout', name: '剪辑布局验收', revision: 0, width: 3840, height: 2160, fps: 60, media: [], annotations: [],
         clips: [{ id: 'layout-title', name: '布局验收文字', kind: 'text', track: 1, start: 0, duration: 360, sourceInUs: 0, x: 0, y: 0, scale: 0.8, rotation: 0, opacity: 1, volume: 0, text: 'Henji · 4K60 布局验收' }] })

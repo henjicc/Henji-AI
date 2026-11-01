@@ -2,10 +2,14 @@ const assert = require('node:assert/strict')
 
 // Existing picture/audio comparisons explicitly retain burned captions and unnormalized sound.
 // Check the new default before applying those scene-specific choices.
-async function confirmVideoEditExport(page, onOpen) {
+async function confirmVideoEditExport(page, onOpen, outputPath) {
   await page.getByRole('button', { name: '导出视频', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '导出', exact: true })
   await dialog.waitFor({ state: 'visible' })
+  if (outputPath) {
+    await dialog.getByRole('textbox', { name: '导出文件名', exact: true }).fill(require('node:path').basename(outputPath))
+    await dialog.getByRole('button', { name: '选择导出目录', exact: true }).click()
+  }
   // 可选：面板打开后留一张截图，供目视核对布局。
   if (onOpen) {
     // The dialog wrapper itself is opaque; its panel and scrim carry the fade transition.
@@ -38,7 +42,8 @@ async function confirmVideoEditExport(page, onOpen) {
   await page.waitForFunction(() => {
     const dialog = [...document.querySelectorAll('[role="dialog"]')].find(node => node.textContent.includes('文件名'))
     const submit = dialog && [...dialog.querySelectorAll('button')].find(node => node.textContent === '导出')
-    return submit && (!submit.disabled || dialog.textContent.includes('当前设备不支持所选编码设置'))
+    const error = dialog?.querySelector('[role="alert"]')
+    return submit && (!submit.disabled || error?.textContent.includes('当前设备不支持所选编码设置'))
   })
   if (await dialog.getByRole('button', { name: '导出', exact: true }).isDisabled()) {
     await dialog.getByRole('button', { name: '导出格式', exact: true }).click()
@@ -48,8 +53,13 @@ async function confirmVideoEditExport(page, onOpen) {
     await codec.click()
   }
   await dialog.getByRole('button', { name: '导出', exact: true }).click()
-  // Close settings while encoding continues, so existing progress/cancel scenarios can reach the toolbar.
-  const close = dialog.getByRole('button', { name: '导出 - 关闭', exact: true })
-  if (await close.isVisible()) await close.click()
+  await page.getByRole('dialog', { name: /^(正在导出|准备导出|导出完成|导出失败)$/ }).waitFor({ state: 'visible' })
 }
-module.exports = { confirmVideoEditExport }
+async function finishVideoEditExport(page) {
+  const progress = page.getByRole('dialog', { name: /^导出(完成|失败|已取消|已中断)$/ })
+  await progress.waitFor({ state: 'visible', timeout: 120000 })
+  assert.equal(await page.getByRole('dialog', { name: '导出完成', exact: true }).count(), 1, `导出未成功：${await progress.innerText()}`)
+  await progress.getByRole('button', { name: '完成', exact: true }).click()
+  await progress.waitFor({ state: 'hidden' })
+}
+module.exports = { confirmVideoEditExport, finishVideoEditExport }

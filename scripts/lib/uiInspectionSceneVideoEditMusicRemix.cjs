@@ -13,7 +13,7 @@ const { openVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
  * 默认素材由 FFmpeg 合成（稳定 120 BPM 鼓组分段 + 速度起伏的自由节奏）；设置 HENJI_REMIX_MUSIC="名字=路径;…" 时改用真实歌曲，
  * HENJI_REMIX_OUTPUT 指定试听文件另存目录。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-music-remix')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-music-remix')
 const FPS = 30
 const RATIOS = [0.6, 1.6]
 

@@ -18,11 +18,11 @@ const { videoFramesHarness } = require('./uiInspectionSceneVideoFrames.cjs')
  * - load：每种格式单路 4K60（ProRes 4444 用 2560²）按 60Hz 节拍消费 HENJI_VIDEO_DECODE_LOAD_SECONDS 秒（默认 60）；
  * - soak：两路（H.264 硬解 nv12 + ProRes 软解 rgbaf16）连续播放 HENJI_VIDEO_DECODE_SOAK_SECONDS 秒（默认 600），
  *   每 30 秒记录句柄、显存，结束后会话关闭、资源回到基线。
- * 缩短时长的结果不能作为验收数字。证据写入 node_modules/.cache/video-decode/evidence.json。
+ * 缩短时长的结果不能作为验收数字。证据写入 .ui-tour/cache/video-decode/evidence.json。
  */
 
-const ROOT = path.resolve('node_modules/.cache/video-decode')
-const SAMPLES = path.resolve('node_modules/.cache/native-decode')
+const ROOT = path.resolve('.ui-tour/cache/video-decode')
+const SAMPLES = path.resolve('.ui-tour/cache/native-decode')
 const FFMPEG_BIN = require('./mediaBinaries.cjs').binDir
 const FFMPEG = path.join(FFMPEG_BIN, 'ffmpeg.exe')
 const FFPROBE = path.join(FFMPEG_BIN, 'ffprobe.exe')

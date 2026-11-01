@@ -69,8 +69,8 @@ function createVideoEditProjectSourceScene() {
   return {
     id: 'video-edit-project-source', surface: '剪辑', name: '剪辑-素材面板与真实源监视器', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-project-source'); fs.mkdirSync(root, { recursive: true })
-      const existing = path.resolve('node_modules/.cache/video-edit-probe/3840-60.mp4')
+      const root = path.resolve('.ui-tour/cache/video-edit-project-source'); fs.mkdirSync(root, { recursive: true })
+      const existing = path.resolve('.ui-tour/cache/video-edit-probe/3840-60.mp4')
       const video = fs.existsSync(existing) ? existing : path.join(root, '4k60.mp4')
       const picture = path.join(root, 'picture.png'); const audio = path.join(root, 'audio.wav')
       const { ffmpegPath } = require('./mediaBinaries.cjs')
@@ -193,19 +193,19 @@ function createVideoEditProjectSourceScene() {
         evidence.previewIsolation = { programmeFrame, projectUnchanged: true, audioDecoders: 1, hiddenSourceReleased: true }
 
         await enterBin(page, binId)
-        await entry(page, videoId).click({ button: 'right' }); await menuItem(page, '按此素材新建序列').click(); await page.getByLabel('序列名称', { exact: true }).fill('4K60 匹配序列'); await button(page, '确定').click()
+        await entry(page, videoId).click({ button: 'right' }); await menuItem(page, '按此素材新建序列').click(); await page.getByLabel('序列名称', { exact: true }).fill('4K60 匹配序列'); await page.getByRole('dialog', { name: '按素材新建序列' }).getByRole('button', { name: '新建', exact: true }).click()
         document = await saved(page, file, value => value.sequences.some(sequence => sequence.name === '4K60 匹配序列'))
         const sequence = document.sequences.find(sequence => sequence.name === '4K60 匹配序列')
         // A video with sound becomes its picture plus a linked sound clip (task 2.6).
         const videoHasAudio = document.media.find(media => media.id === document.items.find(item => item.id === videoId).mediaId).hasAudio === true
         assert.equal(sequence.width, 3840); assert.equal(sequence.height, 2160); assert.deepEqual(sequence.frameRate, { numerator: 60, denominator: 1 }); assert.equal(sequence.clips.length, videoHasAudio ? 2 : 1)
-        await button(page, '序列设置').click(); await page.getByLabel('音频采样率', { exact: true }).selectOption('44100'); await page.getByLabel('声道', { exact: true }).selectOption('1'); await button(page, '确定').click()
+        await button(page, '序列设置').click(); await page.getByRole('dialog', { name: '序列设置' }).getByRole('button', { name: '更多设置', exact: true }).click(); await page.getByLabel('音频采样率', { exact: true }).selectOption('44100'); await page.getByLabel('声道', { exact: true }).selectOption('1'); await page.getByRole('dialog', { name: '序列设置' }).getByRole('button', { name: '保存', exact: true }).click()
         await saved(page, file, value => value.sequences.find(item => item.id === sequence.id)?.sampleRate === 44100)
         await capture('video-project-matched-sequence')
         await page.getByRole('tab', { name: '序列 1', exact: true }).click()
         // Timeline content: ruler row (28px) above track rows; lanes start after the 208px track header.
-        const timeline = page.locator('[data-video-edit-timeline-content]')
-        await entry(page, videoId).dragTo(timeline, { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 6, y: 28 + 32 + 16 } })
+        const timeline = page.locator('[data-video-edit-track][data-track-kind="video"]').first()
+        await entry(page, videoId).dragTo(timeline, { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 6, y: 16 } })
         document = await saved(page, file, value => value.sequences.length === 3)
         const dropped = document.sequences.at(-1)
         assert.equal(dropped.width, 3840); assert.deepEqual(dropped.frameRate, { numerator: 60, denominator: 1 }); assert.equal(dropped.clips[0].start, 0)
@@ -214,6 +214,7 @@ function createVideoEditProjectSourceScene() {
         await dialogs(app, [file], file); await openVideoEditFile(page, file)
         await enterBin(page, binId)
         await entry(page, sequence.id).dblclick(); await button(page, '序列设置').click()
+        await page.getByRole('dialog', { name: '序列设置' }).getByRole('button', { name: '更多设置', exact: true }).click()
         assert.equal(await page.getByLabel('音频采样率', { exact: true }).inputValue(), '44100'); assert.equal(await page.getByLabel('声道', { exact: true }).inputValue(), '1')
         await button(page, '取消').click(); evidence.savedReopen = { matchedSequenceId: sequence.id, sampleRate: 44100, channels: 1, tagsPersisted: true }
         await toRoot(page); await entry(page, binId).click({ button: 'right' }); await menuItem(page, '重命名与移动素材箱').click()

@@ -19,8 +19,8 @@ const checked = result => { assert.equal(result.executionState, 'completed', JSO
 function createVideoEditCodeAssetsScene() {
   return { id: 'video-edit-code-assets', surface: '剪辑', name: '剪辑-可编辑代码资产跨工程原图曲线与4K60输出', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-code-assets'); fs.mkdirSync(root, { recursive: true })
-      const fixture = read(path.resolve('node_modules/.cache/video-edit-composite-edit/mixed.henji-video'))
+      const root = path.resolve('.ui-tour/cache/video-edit-code-assets'); fs.mkdirSync(root, { recursive: true })
+      const fixture = read(path.resolve('.ui-tour/cache/video-edit-composite-edit/mixed.henji-video'))
       fixture.id = 'code-asset-source-project'; fixture.name = '代码资产原工程'; fixture.revision = 0; fixture.codeMaterials = []
       fixture.items = fixture.items.filter(item => ['video', 'audio', 'image'].includes(item.kind))
       for (const sequence of fixture.sequences) { sequence.clips = sequence.clips.filter(clip => ['video', 'audio'].includes(clip.kind)).map(clip => { const next = { ...clip }; delete next.effects; return next }); sequence.transitions = [] }

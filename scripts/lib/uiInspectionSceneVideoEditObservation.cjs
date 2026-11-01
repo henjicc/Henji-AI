@@ -24,7 +24,7 @@ function createVideoEditObservationScene() {
   return { id: 'video-edit-observation-review', surface: '剪辑', name: '剪辑-定向连续帧局部放大与参考比较', writesUserData: true,
     setup: async (page, app, { capture }) => {
       assert.ok(await app.evaluate(() => Boolean(process.env.HENJI_ISOLATED_APP_DATA)), '输入性能测量只允许隔离资料目录')
-      const root = path.resolve('node_modules/.cache/video-edit-observation-review'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-observation-review'); fs.mkdirSync(root, { recursive: true })
       const referencePath = path.join(root, 'reference.png')
       const videoReferencePath = path.join(root, 'reference.mp4')
       const soundPath = path.join(root, 'sound.wav')
@@ -158,8 +158,7 @@ function createVideoEditObservationScene() {
         const soundBefore = readVideoEditFile(seeded.file)
         const soundClip = soundBefore.sequences[0].clips.find(value => value.itemId === soundItem.id)
         const soundPlan = (await callTool(client, 'query_video_edit_review', { documentRef, sequenceRef, from: 0, to: 120, motion: { minimumHoldSeconds: .25 }, limit: 50 })).data
-        assert.ok(soundPlan.records.some(record => record.kind === 'motion' && record.motionEvidence?.basis === 'code_structure' && record.subjectRef.id.endsWith(`:${soundClip.id}`) && record.timeline.fromFrame >= 58 && record.timeline.fromFrame <= 61), JSON.stringify(soundPlan))
-        assert.ok(!soundPlan.records.some(record => record.kind === 'code_unavailable'), JSON.stringify(soundPlan))
+        assert.ok(soundPlan.records.some(record => record.kind === 'code_unavailable' && record.subjectRef.id.endsWith(`:${soundClip.id}`)), 'draw 内部的声音驱动画面必须明确提示需取帧观察')
         evidence.soundPlan = soundPlan; store()
         const soundObserved = await observe('sound-review', { kind: 'frames', frames: [59, 61] }, { documentVersion: soundPlan.documentVersion })
         near(await pixel(soundObserved.bytes, 40, 50), [0, 255, 0]); near(await pixel(soundObserved.bytes, 435, 50), [0, 255, 0])

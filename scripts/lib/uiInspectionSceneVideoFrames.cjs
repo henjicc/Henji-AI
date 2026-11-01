@@ -10,10 +10,10 @@ const { execFileSync } = require('node:child_process')
  *
  * 阶段：各格式像素校验 → 单流/多流 4K60 负载 → 长时间运行资源曲线 → 关闭与页面重载后的资源归零。
  * 时长可用 HENJI_VIDEO_FRAMES_LOAD_SECONDS（默认 30）、HENJI_VIDEO_FRAMES_SOAK_SECONDS（默认 300）缩短，
- * 缩短后的结果不能作为验收数字。证据写入 node_modules/.cache/video-frames/evidence.json。
+ * 缩短后的结果不能作为验收数字。证据写入 .ui-tour/cache/video-frames/evidence.json。
  */
 
-const ROOT = path.resolve('node_modules/.cache/video-frames')
+const ROOT = path.resolve('.ui-tour/cache/video-frames')
 const LOAD_SECONDS = Number(process.env.HENJI_VIDEO_FRAMES_LOAD_SECONDS ?? 30)
 const SOAK_SECONDS = Number(process.env.HENJI_VIDEO_FRAMES_SOAK_SECONDS ?? 300)
 const SAMPLE_EVERY_SECONDS = 30
@@ -76,7 +76,7 @@ function totalGpuMemoryMiB() {
 
 function workerAssetUrl() {
   const assets = path.resolve('out/renderer/assets')
-  const name = fs.readdirSync(assets).find((file) => /^videoEditWorker-[\w-]+\.js$/.test(file))
+  const name = fs.readdirSync(assets).find((file) => /^videoEditWorker-[\w-]+(?:\.worker)?\.js$/.test(file))
   assert.ok(name, '构建产物里找不到剪辑渲染 Worker')
   return `./assets/${name}`
 }

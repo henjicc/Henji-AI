@@ -15,10 +15,10 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
  * - 渲染与 GPU 进程私有占用：第 1 轮循环后到第 4 轮循环后的增长 ≤ 15%（重要记录 017；工作集照常记录，不作门槛）；
  * - 原生服务私有提交、句柄与显存（工作集照常记录）：第一段播放 2 分钟后的首个样本到最后一个播放样本的增长 ≤ 15%，会话数不增加；
  * - 播放不中断（每个采样区间都有新画面），关闭工程后帧流、原生会话、未归还帧、显存预约与渲染 Worker 全部归零。
- * 素材可用 `HENJI_SOAK_SOURCE` 替换（须为 4K60、7 秒）。证据：`node_modules/.cache/video-edit-native-soak/evidence.json`。
+ * 素材可用 `HENJI_SOAK_SOURCE` 替换（须为 4K60、7 秒）。证据：`.ui-tour/cache/video-edit-native-soak/evidence.json`。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-native-soak')
-const SOURCE = path.resolve(process.env.HENJI_SOAK_SOURCE || 'node_modules/.cache/native-decode/prores422hq.mov')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-native-soak')
+const SOURCE = path.resolve(process.env.HENJI_SOAK_SOURCE || '.ui-tour/cache/native-decode/prores422hq.mov')
 const MINUTES = Number(process.env.HENJI_SOAK_MINUTES) || 60
 const PROJECT_ID = 'video-edit-native-soak'
 const FPS = 60

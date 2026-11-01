@@ -4,11 +4,11 @@ const path = require('node:path')
 const sharp = require('sharp')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard, leaveVideoEditProject, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, leaveVideoEditProject, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) * q)] ?? null
-function fixture(source = path.resolve('node_modules/.cache/video-edit-motion-draft/source.png')) {
+function fixture(source = path.resolve('.ui-tour/cache/video-edit-motion-draft/source.png')) {
   const { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema } = loadTypeScript('src/core/videoEdit/document.ts')
   const { makeVideoEditItemClip } = loadTypeScript('src/core/videoEdit/projectItems.ts')
   const document = createVideoEditDocument('超级关键帧剪辑验收'); document.id = 'reality-video-motion'
@@ -23,7 +23,7 @@ function createVideoEditMotionDraftScene() {
   return { id: 'video-edit-motion-draft', surface: '剪辑', name: '剪辑-超级关键帧采集候选应用与重开', writesUserData: true,
     launchArgs: ['--autoplay-policy=no-user-gesture-required'],
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-motion-draft'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-motion-draft'); fs.mkdirSync(root, { recursive: true })
       const evidence = { frames: [], candidateMs: [], latencyMs: [],  visualReview: '待代理逐张目视检查' }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       let client; let seeded
@@ -136,6 +136,7 @@ function createVideoEditMotionDraftScene() {
         await saved(doc => doc.creativeIntents.drafts[0].applications.at(-1)?.saved)
         const applied = JSON.stringify(readVideoEditFile(seeded.file).sequences[0].clips[0].curves); assert(applied)
         await shot('09-应用普通曲线')
+        await takeOverVideoEdit(page)
         await button(page, '撤销').click(); await saved(doc => !doc.sequences[0].clips[0].curves?.x); await shot('10-一步撤销')
         await button(page, '重做').click(); await saved(doc => JSON.stringify(doc.sequences[0].clips[0].curves) === applied); await shot('11-一步重做')
         await leaveVideoEditProject(page, '保存'); await openVideoEditProjectCard(page, seeded.projectId); await playback(0)

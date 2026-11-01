@@ -4,7 +4,7 @@ const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, showVideoEditProjects, leaveVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, showVideoEditProjects, leaveVideoEditProject, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const { presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 
@@ -16,7 +16,7 @@ function createVideoEditContentEditScene() {
     setup: async (page, app, { capture }) => {
       assert.ok(await app.evaluate(() => Boolean(process.env.HENJI_ISOLATED_APP_DATA)), '内容剪辑验收只允许隔离资料目录')
       const unblock = await blockPaidGeneration(app)
-      const root = path.resolve('node_modules/.cache/video-edit-content-edit'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-content-edit'); fs.mkdirSync(root, { recursive: true })
       const evidence = { completed: false, fixture: 'Controlled word transcript with real generated AVC/AAC files; no ASR or model judgement. Audio is gated sine, not human speech.', calls: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       let client
@@ -104,6 +104,7 @@ function createVideoEditContentEditScene() {
           }
           assert.deepEqual(readVideoEditFile(seeded.file).sequences[0], expected)
         }
+        await takeOverVideoEdit(page)
         await page.getByRole('button', { name: '撤销', exact: true }).click(); await waitSaved(before)
         await page.getByRole('button', { name: '重做', exact: true }).click(); await waitSaved(after)
         evidence.undoRedo = { wholeSequenceRestoredWithOneUndo: true, redoRestored: true }; store()

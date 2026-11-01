@@ -26,7 +26,7 @@ function createVideoEditPlayStartScene() {
     id: 'video-edit-play-start', surface: '剪辑', name: '剪辑-节目起播延迟与起播帧率', writesUserData: true,
     reviewCapture: 'play-start', // 审查主图在关闭工程之前捕获；默认终态只是辅助证据。
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-play-start'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-play-start'); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath } = require('./mediaBinaries.cjs')
       const source = path.join(root, '1080p60-gop240-aac.mp4')
       if (!fs.existsSync(source)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=60', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '20', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '240', '-keyint_min', '240', '-sc_threshold', '0', '-bf', '2', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', source], { windowsHide: true })

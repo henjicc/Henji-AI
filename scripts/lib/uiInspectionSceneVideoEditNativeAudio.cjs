@@ -15,7 +15,7 @@ const mediaBinaries = require('./mediaBinaries.cjs')
  *   原生 soxr 转 48kHz）、96kHz PCM WAV（纯声音，96→48kHz）；浏览器能解的文件另用强制浏览器后端混一次作对照；
  * - Worker 关闭后原生声音会话全部回收。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-native-audio')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-native-audio')
 const RATE = 48000
 const FPS = 30
 const CLIP = { startFrame: 15, durationFrames: 60, sourceInUs: 700_000, remainder: { numerator: 1, denominator: 3 } }
@@ -91,7 +91,7 @@ function compare(mix, sample) {
 
 async function installHarness(page) {
   const assets = path.resolve('out/renderer/assets')
-  const name = fs.readdirSync(assets).find((file) => /^videoEditWorker-[\w-]+\.js$/.test(file))
+  const name = fs.readdirSync(assets).find((file) => /^videoEditWorker-[\w-]+(?:\.worker)?\.js$/.test(file))
   assert.ok(name, '构建产物里找不到剪辑渲染 Worker')
   await page.evaluate(async (workerUrl) => {
     window.__henjiNativeAudio?.worker.terminate()

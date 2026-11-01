@@ -21,9 +21,9 @@ const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile,
  * 另一阶段 `tripo`：用户素材目录（只读原路径引用）全部视频导入，源监视器逐个播放，素材文件大小与修改时间不变。
  *
  * 诊断变量：HENJI_FORMAT_MATRIX_ONLY=id,id（只跑部分样本，不作为全矩阵结论）、HENJI_FORMAT_MATRIX_PHASES=formats,tripo、
- * HENJI_VIDEO_DECODER=browser|native。证据：node_modules/.cache/video-edit-format-matrix/evidence-<后端>.json。
+ * HENJI_VIDEO_DECODER=browser|native。证据：.ui-tour/cache/video-edit-format-matrix/evidence-<后端>.json。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-format-matrix')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-format-matrix')
 const TRIPO = 'D:/视频制作/2026-09-19_Tripo/素材'
 const RATE = 48000; const MAX_LAG = Math.round(RATE * 0.01)
 const ONLY = process.env.HENJI_FORMAT_MATRIX_ONLY ? process.env.HENJI_FORMAT_MATRIX_ONLY.split(',').map(value => value.trim()).filter(Boolean) : null
@@ -350,7 +350,7 @@ function createVideoEditFormatMatrixScene() {
             record.checks.reverse = true; store()
 
             // Ruler drag (scrub): from frame 2 to near the end and back, over 1.5s each, then settle.
-            const zoom = Number(await page.getByLabel('时间线缩放', { exact: true }).inputValue())
+            const zoom = Number(await page.getByRole('slider', { name: '时间线缩放', exact: true }).inputValue())
             const pixels = 60 * zoom / fps
             const box = await ruler.boundingBox()
             const to = Math.max(4, Math.min(frames - 3, Math.floor((box.width - 12) / pixels)))

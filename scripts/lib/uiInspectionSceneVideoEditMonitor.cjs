@@ -9,7 +9,7 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { observeNativeWaveforms, nativeWaveformSnapshot, waitNativeWaveformsReleased, restoreNativeWaveformObservers } = require('./uiInspectionSceneVideoEditMonitorResources.cjs')
-const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, seedVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
+const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, seedVideoEditProject, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const panel = (page, id) => page.locator(`[data-video-edit-panel="${id}"]`).first()
@@ -26,9 +26,9 @@ async function trackBanks(page) {
 }
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: values.openPaths })
+    dialog.showOpenDialog = async (...args) => ({ canceled: false, filePaths: args.at(-1)?.properties?.includes('openDirectory') ? [values.saveDirectory] : values.openPaths })
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: values.savePath })
-  }, { openPaths, savePath })
+  }, { openPaths, savePath, saveDirectory: path.dirname(savePath) })
 }
 async function saved(page, file, matches) {
   let current
@@ -44,6 +44,7 @@ async function saved(page, file, matches) {
  * 原来的“源素材定位秒”数字框已并进这个读数。
  */
 async function seekSourceSeconds(page, seconds) {
+  await takeOverVideoEdit(page)
   await page.getByRole('spinbutton', { name: '源时间码', exact: true }).click()
   const field = page.getByLabel('源时间码（输入时间）', { exact: true })
   await field.fill(`${seconds}s`); await field.press('Enter')
@@ -52,7 +53,8 @@ async function seekSourceSeconds(page, seconds) {
 async function presented(page, frame) {
   await page.waitForFunction(frame => {
     const canvas = document.querySelector('canvas[aria-label="剪辑画面"]')
-    return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing !== 'true'
+    // 远跳先上近似画面（常驻关键帧、上一幅网页画面），停稳后再换精确画面；验收按精确那一幅。
+    return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing !== 'true' && canvas.dataset.approximate !== 'true'
   }, frame, { timeout: 90000 })
 }
 async function sourceReady(page, kind) {
@@ -132,7 +134,7 @@ function generatedControls(root, ffmpegPath, ffprobePath) {
 function createVideoEditMonitorScene() {
   return { id: 'video-edit-monitor', surface: '剪辑', name: '剪辑-源范围音画、波形电平与字幕4K60回环', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-monitor'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-monitor'); fs.mkdirSync(root, { recursive: true })
       const file = path.join(root, 'monitor.hjvid'); const pressureFile = path.join(root, 'pressure.hjvid')
       const evidence = { completed: false, phases: [], captures: [], exports: [], originalPaths: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
@@ -143,8 +145,8 @@ function createVideoEditMonitorScene() {
         evidence.currentPhase = '生成并探测独立音视频控制样本'; store()
         const controls = generatedControls(root, ffmpegPath, ffprobePath); evidence.controls = controls
         // Prior scenes are media sources only; their cached document schemas are not monitor fixtures.
-        const previousMedia = readProject(path.resolve('node_modules/.cache/video-edit-code-controls/code-project.hjvid')).media
-        const original = readProject(path.resolve('node_modules/.cache/video-edit-scrub-original/scrub.hjvid')).media.find(media => media.kind === 'video')
+        const previousMedia = readProject(path.resolve('.ui-tour/cache/video-edit-code-controls/code-project.hjvid')).media
+        const original = readProject(path.resolve('.ui-tour/cache/video-edit-scrub-original/scrub.hjvid')).media.find(media => media.kind === 'video')
         const pressureProbe = mediaProbe(ffprobePath, original.path)
         assert.ok(!pressureProbe.streams.some(stream => stream.codec_type === 'audio'), '原 intro4K60 已确认无音轨，不能伪造 hasAudio')
         const pressureVideo = pressureProbe.streams.find(stream => stream.codec_type === 'video')

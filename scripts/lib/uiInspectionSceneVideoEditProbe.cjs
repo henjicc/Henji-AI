@@ -1,4 +1,4 @@
-const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
+const { confirmVideoEditExport, finishVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
@@ -6,13 +6,21 @@ const path = require('node:path')
 const os = require('node:os')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { adoptNewVideoEditProject, chooseVideoEditImportFiles, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, showVideoEditDockPanel, takeOverVideoEdit: takeOver } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true })
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
 // Track rows span the 208px track header and the lanes; one frame is 2px at 30fps and zoom 1.
 const trackRow = (page, index) => page.locator(`[data-video-edit-track][data-track-index="${index}"]`)
 const TRACK_HEADER = VIDEO_EDIT_TRACK_HEADER_WIDTH
+async function addText(page) {
+  await button(page, '文字工具').click()
+  await page.getByLabel('节目文字工具', { exact: true }).click({ position: { x: 24, y: 24 } })
+  const editor = page.getByRole('textbox', { name: '就地编辑文字', exact: true })
+  await editor.fill('文字')
+  await editor.press('Escape')
+  await button(page, '选择工具').click()
+}
 async function savedProject(page, file, matches, label) {
   const deadline = performance.now() + 5000
   let document
@@ -25,9 +33,9 @@ async function savedProject(page, file, matches, label) {
 }
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: values.openPaths })
+    dialog.showOpenDialog = async options => ({ canceled: false, filePaths: options?.properties?.includes('openDirectory') ? [values.outputDirectory] : values.openPaths })
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: values.savePath })
-  }, { openPaths, savePath })
+  }, { openPaths, savePath, outputDirectory: path.dirname(savePath || openPaths[0] || process.cwd()) })
 }
 async function presented(page, frame) {
   try { await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, frame, { timeout: 20000 }) }
@@ -54,7 +62,19 @@ async function seek(page, frame, fps) {
  * 960×640 下时间线只有几条轨高，Playwright 的 scrollIntoViewIfNeeded 只保证进入滚动容器，
  * 片段会停在吸顶标尺底下，拖动起点就落在标尺上（判据不变：拖动必须从片段本身开始）。
  */
-async function revealClipBelowRuler(page, clipId) {
+async function revealClipBelowRuler(page, clipId, track) {
+  const row = trackRow(page, track)
+  const region = page.locator('[data-video-edit-track-region="video"]')
+  const area = await region.boundingBox()
+  assert.ok(area, '画面轨区域不可见')
+  await page.mouse.move(area.x + 120, area.y + area.height / 2)
+  await page.keyboard.down('Control')
+  try {
+    const box = await row.boundingBox()
+    assert.ok(box, `时间线里找不到轨道 ${track}`)
+    await page.mouse.wheel(0, box.y + box.height / 2 - (area.y + area.height / 2))
+  } finally { await page.keyboard.up('Control') }
+  await page.locator(`[data-video-edit-clip="${clipId}"]`).waitFor({ state: 'attached' })
   await page.evaluate((id) => {
     const viewport = document.querySelector('[data-video-edit-timeline-viewport]')
     const clip = viewport?.querySelector(`[data-video-edit-clip="${id}"]`)
@@ -82,6 +102,9 @@ function createVideoEditProbeScene() {
     expectedLogEvents: ['video_edit.save.failed'],
     // 故障阶段最后停在已重新定位的工程上；关掉它，后序场景（与 --only 单跑时一样）从“打开工程”开始。
     cleanup: async (page) => {
+      await page.keyboard.press('Escape')
+      await page.mouse.up()
+      await takeOver(page)
       const close = button(page, '关闭项目')
       if (!(await close.isVisible().catch(() => false))) {
         const tab = button(page, '剪辑').first()
@@ -94,11 +117,10 @@ function createVideoEditProbeScene() {
         await cancel.click()
         await button(page, '导出视频').waitFor({ state: 'visible', timeout: 20000 })
       }
-      await close.click()
-      await button(page, '新建项目').waitFor({ state: 'visible', timeout: 15000 })
+      await leaveVideoEditProject(page)
     },
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-probe'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-probe'); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
       const ffmpeg = args => execFileSync(ffmpegPath, ['-v', 'error', '-y', ...args], { windowsHide: true, stdio: 'pipe' })
       const probe = file => JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
@@ -132,8 +154,7 @@ function createVideoEditProbeScene() {
       for (const item of [items.video, items.video, items.image, items.audio]) {
         await entry(page, item.id).click(); await entry(page, item.id).click({ button: 'right' }); await menuItem(page, '添加到当前序列').click()
       }
-      // 3.5：“文字”在时间线工具栏；素材面板随后也会列出同名文字项，所以限定在时间线面板内。
-      await button(page.locator('[data-video-edit-panel="timeline"]').first(), '文字').click()
+      await addText(page)
       try { await page.waitForFunction(() => ![...document.querySelectorAll('[role=alert]')].some(alert => alert.getClientRects().length && alert.textContent?.trim())) }
       catch (error) { await capture('video-edit-import-error'); throw new Error(`导入后界面报错：${await page.getByRole('alert').allTextContents()}`, { cause: error }) }
       await page.waitForTimeout(300)
@@ -146,12 +167,13 @@ function createVideoEditProbeScene() {
       const drops = [
         { item: items.video, path: specs[0].source, kind: 'video', x: 120, track: 2 },
         { item: items.audio, path: sound, kind: 'audio', x: 180, track: 0 },
-        { item: items.image, path: picture, kind: 'image', x: 240, track: 3, asset: true },
+        { item: items.image, path: picture, kind: 'image', x: 240, track: 1, asset: true },
       ]
       for (const drop of drops) {
         const source = drop.asset ? page.locator('[data-asset-card]').filter({ hasText: '素材库图片' }) : entry(page, drop.item.id)
         if (drop.asset) { await button(page, '资产库').click(); await source.waitFor({ state: 'visible' }) }
-        await source.dragTo(trackRow(page, drop.track), { targetPosition: { x: TRACK_HEADER + drop.x, y: 16 }, timeout: 10000 })
+        // 片段会覆盖轨道底板，真实拖放落在片段上也由时间线处理。
+        await source.dragTo(trackRow(page, drop.track), { targetPosition: { x: TRACK_HEADER + drop.x, y: 16 }, force: true, timeout: 10000 })
         if (drop.asset) await list.click({ position: { x: 12, y: listRect.height - 30 } })
         const count = drop.kind === 'video' ? 2 : 1
         const after = await savedProject(page, projectPath, document => document.sequences[0].clips.length === original.sequences[0].clips.length + count, `拖入 ${drop.kind} 保存`)
@@ -169,6 +191,11 @@ function createVideoEditProbeScene() {
       try {
         const projectRef = { kind: 'video_edit.document', id: original.id }
         const clips = original.sequences[0].clips.map(item => ({ kind: 'video_edit.clip', id: `${original.id}:${item.id}` }))
+        const sequenceRef = { kind: 'video_edit.sequence', id: `${original.id}:${original.sequences[0].id}` }
+        await callTool(client, 'change_application_entities', operationEnvelope([await callTool(client, 'read_application_entity', { ref: sequenceRef })], {
+          summary: '准备图片与文字的独立画面轨', changes: [{ kind: 'create_items', entityType: 'video_edit.track', parent: sequenceRef,
+            items: [{ properties: { 'video_edit.track.kind': 'video' } }, { properties: { 'video_edit.track.kind': 'video' } }] }],
+        }))
         // Stack the appended clips at frame 0 in one public transaction: pictures on their own tracks, the first
         // video's sound at half volume, the second video's sound silent, the tone at a quarter.
         const changes = [{ duration: 60, track: 1 }, { duration: 60, track: 0, volume: 0.5 }, { duration: 60, track: 2, scale: 0.35, x: 0.25, y: -0.25 }, { duration: 60, track: 0, volume: 0 }, { duration: 60, track: 3, scale: 0.18, x: -0.3, y: -0.3 }, { duration: 60, track: 0, volume: 0.25 }, { duration: 60, track: 4, text: 'Henji · 本地剪辑', y: 0.3 }]
@@ -178,23 +205,29 @@ function createVideoEditProbeScene() {
         const changed = await callTool(client, 'change_application_entities', operationEnvelope(baselines, { summary: '双视频、图片、声音与文字合成', changes }))
         assert.equal(changed.executionState, 'completed', JSON.stringify(changed)); assert.equal(changed.verificationState, 'verified', JSON.stringify(changed))
         await presented(page, 0); await capture('video-edit-composition')
+        await takeOver(page)
         await button(page, '撤销').click(); await page.waitForTimeout(150)
         assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[2].scale === 1, '撤销 MCP 合成保存')).sequences[0].clips[2].scale, 1)
         await button(page, '重做').click(); await page.waitForTimeout(150)
         assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[2].scale === 0.35, '重做 MCP 合成保存')).sequences[0].clips[2].scale, 0.35)
-        await seek(page, 30, 30); await page.getByTitle('1920-30.mp4', { exact: true }).first().click(); await button(page, '更多节目操作').click(); await button(page, '点标注').click()
-        await page.getByLabel('标注文字', { exact: true }).fill('检查叠加边缘')
-        await page.getByLabel('剪辑画面', { exact: true }).click({ position: { x: 100, y: 100 } })
+        await seek(page, 30, 30)
+        await button(page, '批注工具').click()
+        await page.getByRole('radiogroup', { name: '批注形状', exact: true }).getByRole('radio', { name: '评论钉', exact: true }).click()
+        const annotationLayer = page.getByLabel('画面标注层', { exact: true })
+        await annotationLayer.click({ position: { x: 100, y: 100 } })
+        const annotationInput = page.getByLabel('这里要改什么？', { exact: true })
+        await annotationInput.fill('检查叠加边缘'); await annotationInput.press('Enter')
         await page.waitForTimeout(150)
         const marks = await callTool(client, 'list_application_entities', { entityType: 'video_edit.annotation', propertyIds: ['video_edit.annotation.text', 'video_edit.annotation.frame', 'video_edit.annotation.space'] })
         assert.equal(marks.data.items[0].properties['video_edit.annotation.text'], '检查叠加边缘'); assert.equal(marks.data.items[0].properties['video_edit.annotation.frame'], 30)
-        await button(page, '删除').click(); await page.waitForTimeout(150)
+        await annotationLayer.press('Delete'); await page.waitForTimeout(150)
         assert.equal((await savedProject(page, projectPath, document => document.sequences[0].annotations.length === 0, '删除标注保存')).sequences[0].annotations.length, 0)
         await button(page, '撤销').click()
+        await button(page, '选择工具').click()
         // Move and trim the text clip: the stacked sounds share the one audio track, so moving the linked
         // picture-and-sound pair would move its sound onto the others (the timeline refuses moves into occupied ranges).
         const textClip = original.sequences[0].clips[6]; assert.equal(textClip.kind, 'text')
-        await revealClipBelowRuler(page, textClip.id)
+        await revealClipBelowRuler(page, textClip.id, 4)
         const clipButton = page.locator(`[data-video-edit-clip="${textClip.id}"]`).getByRole('button', { name: `选择片段 ${textClip.name}`, exact: true })
         const clipBox = await clipButton.boundingBox()
         await page.mouse.move(clipBox.x + clipBox.width / 2, clipBox.y + clipBox.height / 2); await page.mouse.down()
@@ -215,19 +248,24 @@ function createVideoEditProbeScene() {
         // Linked Selection splits the picture and its linked sound together.
         assert.equal(saved.sequences[0].clips.length, 9); assert.equal(saved.sequences[0].clips[1].sourceInUs, 1000000)
         evidence.toolRoundTrip = { change: changed.executionState, verification: changed.verificationState, annotation: marks.data.items, split: split.executionState }
-        await button(page, '选择').click()
+        await takeOver(page)
+        await button(page, '选择工具').click()
         for (const spec of specs) {
           await button(page, '关闭项目').click()
           const document = structuredClone(saved)
           document.id = `reality-${spec.width}-${spec.fps}`; document.sequences[0].width = spec.width; document.sequences[0].height = spec.height; document.sequences[0].frameRate = { numerator: spec.fps, denominator: 1 }; document.name = `剪辑验收 ${spec.width} ${spec.fps}`
-          Object.assign(document.media.find(item => item.kind === 'video'), { path: spec.source, width: spec.width, height: spec.height })
+          const videoMedia = document.media.find(item => item.kind === 'video')
+          Object.assign(videoMedia, { path: spec.source, width: spec.width, height: spec.height, frameRate: { numerator: spec.fps, denominator: 1 } })
+          // 新规格使用另一份生成文件，不能沿用上一份文件的内容身份。
+          delete videoMedia.assetContent
           document.sequences[0].clips.forEach(clip => { clip.start *= spec.fps / 30; clip.duration *= spec.fps / 30 }); document.sequences[0].annotations.forEach(mark => { mark.frame *= spec.fps / 30 })
           const file = path.join(root, `${spec.width}-${spec.fps}.hjvid`); fs.writeFileSync(file, JSON.stringify(document))
           await dialogs(app, [file], ''); await openVideoEditFile(page, file); await presented(page, 0)
           const seeks = []; const previewFrames = {}
           const canvas = page.getByLabel('剪辑画面', { exact: true })
           const pixel = () => canvas.evaluate(canvas => canvas.toDataURL('image/png'))
-          await page.getByTitle('1920-30.mp4', { exact: true }).first().click()
+          await page.locator(`[data-video-edit-clip="${document.sequences[0].clips.find(clip => clip.kind === 'video').id}"]`).getByRole('button', { name: /^选择片段 / }).click()
+          await showVideoEditDockPanel(page, '效果控件')
           const originalPixel = await pixel(); const effectStart = performance.now()
           await page.getByLabel('不透明度', { exact: true }).fill('70'); await page.getByLabel('不透明度', { exact: true }).press('Enter')
           await page.waitForFunction(previous => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas.toDataURL('image/png') !== previous }, originalPixel)
@@ -259,8 +297,8 @@ function createVideoEditProbeScene() {
           await button(page, '播放／暂停').click(); await page.waitForFunction(last => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(last), 2 * spec.fps - 1, { timeout: 20000 })
           const frames = await page.evaluate(() => { window.__videoObserver.disconnect(); return window.__videoEvidence })
           const output = path.join(root, `${spec.width}-${spec.fps}-export-${Date.now()}.mp4`); await dialogs(app, [file], output)
-          const exportStart = performance.now(); await confirmVideoEditExport(page)
-          await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
+          const exportStart = performance.now(); await confirmVideoEditExport(page, undefined, output)
+          await finishVideoEditExport(page)
           const exportMs = performance.now() - exportStart; const metadata = probe(output)
           assert.ok(metadata.streams.some(track => track.codec_type === 'audio')); assert.ok(Math.abs(Number(metadata.format.duration) - 2) < 0.1)
           assert.equal(Number(metadata.streams.find(track => track.codec_type === 'video').nb_frames), 2 * spec.fps)
@@ -301,8 +339,8 @@ function createVideoEditProbeScene() {
           await page.locator('[data-video-edit-export-range]').waitFor({ state: 'visible' })
           const rangeLabel = await page.locator('[data-video-edit-export-range]').textContent()
           const rangeOutput = path.join(root, `range-${Date.now()}.mp4`); await dialogs(app, [], rangeOutput)
-          const startedAt = performance.now(); await confirmVideoEditExport(page)
-          await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
+          const startedAt = performance.now(); await confirmVideoEditExport(page, undefined, rangeOutput)
+          await finishVideoEditExport(page)
           const rangeMs = performance.now() - startedAt; const metadata = probe(rangeOutput); const video = metadata.streams.find(track => track.codec_type === 'video')
           assert.equal(Number(video.nb_frames), 61, '入点30到出点90（含）共61帧'); assert.ok(Math.abs(Number(metadata.format.duration) - 61 / fps) < 0.05, `范围导出时长：${metadata.format.duration}`)
           const preview = path.join(root, 'range-preview-30.png'); fs.writeFileSync(preview, Buffer.from(rangeStart, 'base64'))
@@ -328,11 +366,22 @@ function createVideoEditProbeScene() {
         const cancellationBaseline = await callTool(client, 'read_application_entity', { ref: lastRef, propertyIds: ['video_edit.document.name'] })
         const submitted = await callTool(client, 'export_video_edit', operationEnvelope([cancellationBaseline], { documentRef: lastRef }))
         assert.equal(submitted.executionState, 'completed', JSON.stringify(submitted))
-        await callTool(client, 'cancel_video_edit_export', operationEnvelope([cancellationBaseline], { documentRef: lastRef }))
+        const cancellationJobId = (submitted.result?.data ?? submitted.data).queue[0].id
+        await callTool(client, 'cancel_video_edit_export', operationEnvelope([cancellationBaseline], { documentRef: lastRef, taskId: cancellationJobId }))
         await button(page, '导出视频').waitFor({ state: 'visible', timeout: 20000 })
-        const cancelled = await callTool(client, 'query_video_edit_export', { documentRef: lastRef })
-        assert.equal(cancelled.data.task.state, 'cancelled'); assert.equal(fs.existsSync(cancellationPath), false)
-        evidence.cancellation = { state: cancelled.data.task.state, partialFileRemoved: true }
+        let cancelledJob
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const cancelled = await callTool(client, 'query_video_edit_export', { documentRef: lastRef, taskId: cancellationJobId, detail: 'full' })
+          cancelledJob = cancelled.data.queue.find(job => job.id === cancellationJobId)
+          if (cancelledJob?.state !== 'running' && cancelledJob?.state !== 'queued') break
+          await page.waitForTimeout(100)
+        }
+        assert.equal(cancelledJob?.state, 'cancelled'); assert.equal(cancelledJob.outputReady, false)
+        evidence.cancellation = { state: cancelledJob.state, outputReady: cancelledJob.outputReady }
+        const cancelledProgress = page.getByRole('dialog', { name: '导出已取消', exact: true })
+        await cancelledProgress.getByRole('button', { name: '完成', exact: true }).click()
+        await cancelledProgress.waitFor({ state: 'hidden' })
+        await takeOver(page)
         // Exercise sequence-specific output settings and disk reopening in the real host.
         await button(page, '关闭项目').click()
         const multi = structuredClone(saved); multi.id = 'reality-multi-sequence'; multi.name = '多序列保存导出验收'
@@ -346,21 +395,21 @@ function createVideoEditProbeScene() {
         // Its own folder: the save-failure ACL must not touch media files (asset identity includes ctime).
         const multiPath = path.join(root, 'projects', 'multi-sequence.hjvid'); fs.mkdirSync(path.dirname(multiPath), { recursive: true }); fs.writeFileSync(multiPath, JSON.stringify(multi))
         const fractionalOutput = path.join(root, `portrait-2997-mono-${Date.now()}.mp4`)
-        await dialogs(app, [multiPath], fractionalOutput); await openVideoEditFile(page, multiPath); await presented(page, 0)
+        await dialogs(app, [multiPath], fractionalOutput); const multiOpened = await openVideoEditFile(page, multiPath); await presented(page, 0)
         const portraitRef = { kind: 'video_edit.sequence', id: `${multi.id}:${portrait.id}` }
         const portraitRead = await callTool(client, 'read_application_entity', { ref: portraitRef, propertyIds: ['video_edit.sequence.name', 'video_edit.sequence.frame_rate', 'video_edit.sequence.sample_rate', 'video_edit.sequence.channels'] })
         const named = await callTool(client, 'change_application_entities', operationEnvelope([portraitRead], { summary: '修改后台竖屏序列名称', changes: [{ kind: 'set_properties', entityType: portraitRef.kind, target: portraitRef, properties: { 'video_edit.sequence.name': '已保存的竖屏序列' } }] }))
         assert.equal(named.verificationState, 'verified', JSON.stringify(named))
         const multiSaved = readVideoEditFile(multiPath)
         assert.equal(multiSaved.sequences[1].name, '已保存的竖屏序列'); assert.deepEqual(multiSaved.media, multi.media)
-        await leaveVideoEditProject(page, null); await openVideoEditFile(page, multiPath); await presented(page, 0)
+        await takeOver(page); await leaveVideoEditProject(page, null); await openVideoEditFile(page, multiPath); await presented(page, 0)
         const restored = await callTool(client, 'read_application_entity', { ref: portraitRef, propertyIds: ['video_edit.sequence.name', 'video_edit.sequence.frame_rate', 'video_edit.sequence.sample_rate', 'video_edit.sequence.channels'] })
         assert.deepEqual(restored.data.properties, { 'video_edit.sequence.name': '已保存的竖屏序列', 'video_edit.sequence.frame_rate': { numerator: 30000, denominator: 1001 }, 'video_edit.sequence.sample_rate': 44100, 'video_edit.sequence.channels': 1 })
         const focused = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: portraitRef }))
         assert.equal(focused.executionState, 'completed', JSON.stringify(focused)); await presented(page, 0)
         await page.waitForFunction(() => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.width === 1080 && canvas.height === 1920 })
         await capture('video-edit-portrait-sequence')
-        await confirmVideoEditExport(page); await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible' }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
+        await takeOver(page); await confirmVideoEditExport(page, undefined, fractionalOutput); await finishVideoEditExport(page)
         const fractionalMetadata = probe(fractionalOutput)
         const fractionalVideo = fractionalMetadata.streams.find(track => track.codec_type === 'video'); const monoAudio = fractionalMetadata.streams.find(track => track.codec_type === 'audio')
         assert.equal(fractionalVideo.width, 1080); assert.equal(fractionalVideo.height, 1920); assert.equal(fractionalVideo.avg_frame_rate, '30000/1001'); assert.equal(Number(fractionalVideo.nb_frames), 60)
@@ -371,31 +420,28 @@ function createVideoEditProbeScene() {
         const alerts = async () => (await page.getByRole('alert').allTextContents()).map(text => text.trim()).filter(Boolean)
         const projectText = () => JSON.stringify(readVideoEditFile(multiPath))
         evidence.faults = {}
-        // 1) Edits during an export are allowed and never reach the frozen export snapshot; opening another project does not disturb it.
+        // 导出进度弹窗阻止人工编辑，完成后工程与固定的导出快照保持一致。
         {
-          const output = path.join(root, `during-export-${Date.now()}.mp4`); await dialogs(app, [path.join(root, `${specs[0].width}-${specs[0].fps}.hjvid`)], output)
-          const before = JSON.parse(projectText()).sequences[1].clips.length
-          await confirmVideoEditExport(page); await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 })
-          // 3.5: 文字 lives in the timeline toolbar; the project panel also lists a text item named 文字.
-          await button(page.locator('[data-video-edit-panel="timeline"]').first(), '文字').click()
-          await savedProject(page, multiPath, document => document.sequences[1].clips.length === before + 1, '导出期间编辑保存')
-          // Leaving the project is refused while its export runs; the export keeps going.
-          await button(page, '关闭项目').click(); await page.waitForTimeout(300)
-          const closeRefused = { stillOpen: await button(page, '关闭项目').count(), alerts: await alerts() }
-          const multiRef = { kind: 'video_edit.document', id: multi.id }
-          for (let state = 'running'; state === 'running';) { await page.waitForTimeout(250); state = (await callTool(client, 'query_video_edit_export', { documentRef: multiRef })).data.task.state }
+          const output = path.join(root, `during-export-${Date.now()}.mp4`); await dialogs(app, [], output)
+          const before = projectText()
+          await confirmVideoEditExport(page, undefined, output)
+          await page.getByRole('dialog', { name: /^(正在导出|准备导出|导出完成)$/ }).waitFor({ state: 'visible' })
+          await finishVideoEditExport(page)
           const metadata = probe(output); const video = metadata.streams.find(track => track.codec_type === 'video')
-          evidence.faults.editDuringExport = { frames: Number(video.nb_frames), duration: Number(metadata.format.duration), clipsBefore: before, closeRefused, task: (await callTool(client, 'query_video_edit_export', { documentRef: multiRef })).data.task, alerts: await alerts() }
-          assert.equal(evidence.faults.editDuringExport.frames, 60, '导出期间的编辑不能进入已固定的导出快照')
-          assert.equal(closeRefused.stillOpen, 1); assert.ok(closeRefused.alerts.some(text => text.includes('请等待导出完成或取消导出')), JSON.stringify(closeRefused))
-          assert.equal(evidence.faults.editDuringExport.task.state, 'completed')
-          await capture('video-edit-fault-edit-during-export')
+          // 导出记录按设计写进工程文件，但不属于剪辑内容（与 sameDocumentContent 一致忽略 revision 与 exportHistory）。
+          const content = text => { const value = JSON.parse(text); delete value.revision; delete value.exportHistory; delete value.updatedAt; return JSON.stringify(value) }
+          assert.equal(content(projectText()), content(before), '导出不应修改剪辑内容')
+          assert.equal(Number(video.nb_frames), 60, '竖屏序列应导出60帧')
+          evidence.faults.exportIsolation = { frames: Number(video.nb_frames), duration: Number(metadata.format.duration), projectUnchanged: true }
+          await capture('video-edit-fault-export-isolation')
+          await addText(page)
+          await savedProject(page, multiPath, document => document.sequences[1].clips.length === JSON.parse(before).sequences[1].clips.length + 1, '导出完成后编辑保存')
           fs.writeFileSync(path.join(root, 'evidence-final.json'), JSON.stringify(evidence, null, 2))
         }
         // 2) Save failure: deny creating files in the project's folder, so the atomic staged write cannot start.
         {
           const before = JSON.parse(projectText()).sequences[1].clips.length
-          const account = os.userInfo().username; const acl = args => execFileSync('icacls', [path.dirname(multiPath), ...args], { windowsHide: true, stdio: 'pipe' })
+          const account = os.userInfo().username; const acl = args => execFileSync('icacls', [path.dirname(multiOpened.file), ...args], { windowsHide: true, stdio: 'pipe' })
           acl(['/deny', `${account}:(W)`])
           try {
             await button(page, '撤销').click()

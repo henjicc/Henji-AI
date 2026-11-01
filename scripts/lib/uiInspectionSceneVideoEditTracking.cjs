@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, leaveVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, leaveVideoEditProject, takeOverVideoEdit, showVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 /*
@@ -43,7 +43,7 @@ function redBlob(png) {
 function createVideoEditTrackingScene() {
   return { id: 'video-edit-tracking-stabilize', surface: '剪辑', name: '跟踪与防抖-两点旋转跟随录屏光标跟随与防抖对比', writesUserData: true,
     setup: async (page) => {
-      const root = path.resolve('node_modules/.cache/video-edit-tracking'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-tracking'); fs.mkdirSync(root, { recursive: true })
       const files = media(root)
       const log = await require('../check-persistence-compat.cjs').loadTypeScript('src/tests/recordingCursorFixture.ts').recordingCursorFixture()
       log.source.pages = log.source.pages.map((ref, index) => {
@@ -139,9 +139,9 @@ function createVideoEditTrackingScene() {
         evidence.cursor = { early, late, cursorDelta }
         // 4. 跟踪面板：重新打开防抖，面板读回实际裁切；截取面板供目视（防抖分组、录屏新建选项）。
         await set(clipRef('shaky-clip'), { 'video_edit.clip.stabilization': { smoothness: 'natural', maxCrop: 0.1, rotation: true, scale: true } })
-        await page.getByRole('button', { name: '面板', exact: true }).click()
-        await page.locator('button', { hasText: /^跟踪$/ }).first().click()
+        await takeOverVideoEdit(page)
         await page.locator('[data-video-edit-clip="shaky-clip"]').first().click()
+        await showVideoEditDockPanel(page, '跟踪')
         const panel = page.locator('[data-video-edit-panel="tracking"]')
         await panel.getByText(/实际裁切/).waitFor({ timeout: 120000 })
         await panel.screenshot({ path: path.join(root, 'tracking-panel-stabilize.png') })

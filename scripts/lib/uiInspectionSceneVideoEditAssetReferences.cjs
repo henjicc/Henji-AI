@@ -19,12 +19,12 @@ async function sourceReady(page) {
 function createVideoEditAssetReferencesScene() {
   return { id: 'video-edit-asset-references', surface: '剪辑', name: '剪辑-可信资产拖入固定原路径保存重开与重新定位', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-asset-references'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-asset-references'); fs.mkdirSync(root, { recursive: true })
       const file = path.join(root, 'fixed-reference.hjvid'); const first = path.join(root, 'first-original.png'); const second = path.join(root, 'second-original.png')
       for (const [target, color] of [[first, { r: 21, g: 80, b: 220 }], [second, { r: 35, g: 195, b: 87 }]]) {
         if (!fs.existsSync(target)) await sharp({ create: { width: 3840, height: 2160, channels: 3, background: color } }).png().toFile(target)
       }
-      const fixture = readVideoEditFile(path.resolve('node_modules/.cache/video-edit-monitor/monitor.hjvid'))
+      const fixture = readVideoEditFile(path.resolve('.ui-tour/cache/video-edit-monitor/monitor.hjvid'))
       fixture.id = 'asset-fixed-reference'; fixture.name = '固定原路径资产引用'; fixture.revision = 0
       fixture.media = []; fixture.bins = []; fixture.items = []; fixture.codeMaterials = []; fixture.sequences = [fixture.sequences[0]]
       const sequence = fixture.sequences[0]

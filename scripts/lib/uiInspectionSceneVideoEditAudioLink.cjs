@@ -8,7 +8,7 @@ const { openVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
  * 剪辑与音频编辑的动态链接：剪辑里右键音频片段“在音频编辑中编辑”，以嵌入模式打开音频编辑；
  * 在波形上删掉一段后返回剪辑，片段改用编辑后的声音且结尾截短（不移动后面的片段），无需导出。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-audio-link')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-audio-link')
 const FPS = 30
 const SECONDS = 8
 
@@ -57,7 +57,7 @@ function createVideoEditAudioLinkScene() {
       await page.mouse.down()
       await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.2, { steps: 8 })
       await page.mouse.up()
-      await page.getByRole('button', { name: '删除', exact: true }).click()
+      await page.getByRole('button', { name: '删除选区', exact: true }).click()
       await page.waitForFunction(() => document.querySelector('[data-audio-spectral-editor] [data-audio-overlay="deleted"]'), null, { timeout: 10000 })
       await capture('audio-link-02-deleted')
 

@@ -14,9 +14,9 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
  * 素材/网页/验收页，经正式 MCP 写入代码素材与片段参数；节目监视器前后跳着取帧，按页面右上角的时间条码核对每一帧
  * 是这一刻、同一时刻两次取帧逐像素相同、作者代码按 info.web 的元素矩形画出的框跟着按钮走；第二个片段用取景
  * region 推近 3 倍、6 倍栅格；最后导出 4K，逐帧核对条码并留下画面供目视检查清晰度。
- * 证据：node_modules/.cache/video-edit-web-source/evidence.json 与同目录 PNG。
+ * 证据：.ui-tour/cache/video-edit-web-source/evidence.json 与同目录 PNG。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-web-source')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-web-source')
 const WIDTH = 3840, HEIGHT = 2160, FPS = 30, SECONDS = 6
 const FULL_FRAMES = SECONDS * FPS, ZOOM_FRAMES = 2 * FPS
 const SOURCE = `export default {
@@ -121,7 +121,8 @@ function createVideoEditWebSourceScene() {
         const shoot = async (frame, name) => {
           const started = Date.now()
           await playback(frame)
-          await page.waitForFunction(value => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(value), frame, { timeout: 120000 })
+          // 网页取帧不阻塞：精确画面没到时先用上一幅顶上并标为近似，停稳后再换精确画面；按精确那一次取图。
+          await page.waitForFunction(value => { const surface = document.querySelector('canvas[aria-label="剪辑画面"]'); return surface?.dataset.presentedFrame === String(value) && surface.dataset.approximate !== 'true' }, frame, { timeout: 120000 })
           const png = await canvas.evaluate(element => element.toDataURL('image/png'))
           const file = path.join(ROOT, `${name}.png`)
           fs.writeFileSync(file, Buffer.from(png.split(',')[1], 'base64'))

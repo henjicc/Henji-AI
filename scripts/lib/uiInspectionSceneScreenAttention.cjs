@@ -9,7 +9,7 @@ const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClien
 function createScreenAttentionScene() {
   return { id: 'screen-attention', surface: '剪辑', name: '录屏注意力-正式生成与推近平移回全景', writesUserData: true,
     setup: async page => {
-      const root = path.resolve('node_modules/.cache/screen-attention'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/screen-attention'); fs.mkdirSync(root, { recursive: true })
       const source = path.join(root, 'screen.mp4')
       execFileSync(require('./mediaBinaries.cjs').ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=gray:size=1920x1080:rate=60', '-vf', 'drawbox=x=200:y=300:w=400:h=200:color=red:t=fill,drawbox=x=1320:y=580:w=400:h=200:color=blue:t=fill', '-t', '10', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', source], { windowsHide: true })
       const log = await require('../check-persistence-compat.cjs').loadTypeScript('src/tests/screenAttentionFixture.ts').screenAttentionFixture()

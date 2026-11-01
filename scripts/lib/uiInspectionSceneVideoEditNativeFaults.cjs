@@ -17,9 +17,9 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
  * - 缺失：主进程诊断变量指向不存在的服务可执行文件后结束服务进程（重启时找不到服务）。H.264 工程全程走后备解码且
  *   画面正确；ProRes 就地提示“格式当前无法播放”；恢复可执行文件后重新加载预览即回到原生。
  * 另含超预算：同时显示 11 个视频素材（每个渲染器最多 10 个原生会话）时就地提示且不崩溃。
- * 证据：`node_modules/.cache/video-edit-native-faults/evidence.json`。
+ * 证据：`.ui-tour/cache/video-edit-native-faults/evidence.json`。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-native-faults')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-native-faults')
 const FPS = 30
 /** Each source file: 8s at 30fps. The fault project repeats it three times per track (24s of timeline). */
 const FRAMES = 240

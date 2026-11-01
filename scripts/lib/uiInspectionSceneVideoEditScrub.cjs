@@ -14,7 +14,7 @@ function createVideoEditScrubScene() {
     id: 'video-edit-4k60-scrub', surface: '剪辑', name: '剪辑-4K60连续拖动实际画面更新', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const suppliedSource = process.env.HENJI_VIDEO_EDIT_SCRUB_SOURCE
-      const root = path.resolve(`node_modules/.cache/video-edit-scrub${suppliedSource ? '-original' : ''}`); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve(`.ui-tour/cache/video-edit-scrub${suppliedSource ? '-original' : ''}`); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
       const source = suppliedSource ? path.resolve(suppliedSource) : path.join(root, '4k60-gop120-b2.mp4')
       if (suppliedSource) assert.ok(fs.existsSync(source), '指定的原素材必须存在，不生成替代文件')
@@ -61,9 +61,9 @@ function createVideoEditScrubScene() {
           await button(page, '关闭项目').click()
           await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, longFile)
           await openVideoEditFile(page, longFile); await waitPresented(0, 'segment-start-failed')
-          await page.getByLabel('时间线缩放', { exact: true }).focus(); await page.getByLabel('时间线缩放', { exact: true }).press('Home')
+          await page.getByRole('slider', { name: '时间线缩放', exact: true }).focus(); await page.getByRole('slider', { name: '时间线缩放', exact: true }).press('Home')
           // The timeline draws 60 x zoom / fps pixels per frame; read the zoom the control actually reached.
-          pixels = 60 * Number(await page.getByLabel('时间线缩放', { exact: true }).inputValue()) / 60
+          pixels = 60 * Number(await page.getByRole('slider', { name: '时间线缩放', exact: true }).inputValue()) / 60
         }
         const box = await ruler.boundingBox()
         const safeStart = Math.max(6, from * pixels + pixels / 4)

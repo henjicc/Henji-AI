@@ -9,12 +9,12 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
 /**
  * 剪辑片段链接（2.5，参照 Premiere Pro）在真实 Electron 时间线中的鼠标与键盘交互：
  * - 链接选择开启时点击任一部分选中整组（画面 + 两条同源声音）；
- * - 按住 Alt 点击只选一条并单独拖动，同源失步时片段上显示偏移帧数，右键“移入同步”恢复；
+ * - Alt 点击只选一条，松开 Alt 后单独拖动，同源失步时显示偏移帧数，右键“移入同步”恢复；
  * - 工具栏“链接选择”关闭后点击只选一条，开关状态经 MCP 时间线视图同源读回；
  * - 剃刀在同一帧拆开整组且右半各自成链，Alt 剃刀只拆一条并保留链接；
  * - 右键“解除链接”后各片段完全独立。全程不改原素材文件。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-links')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-links')
 const FPS = 30
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const clipNode = (page, id) => page.locator(`[data-video-edit-clip="${id}"]`)
@@ -98,6 +98,8 @@ function createVideoEditLinksScene() {
         try {
           await label(page, sound, '声音一').click()
           assert.deepEqual((await view()).selectedClipIds, [sound])
+          // Alt 拖动表示复制；先完成单选，再以普通拖动移动选中的声音。
+          await page.keyboard.up('Alt')
           const start = await pointOn(page, sound)
           evidence.dragGeometry = { start, viewport: await page.locator('[data-video-edit-timeline-viewport]').evaluate(host => { const rect = host.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, scrollTop: host.scrollTop, scrollLeft: host.scrollLeft } }), rows: await page.locator('[data-video-edit-track]').evaluateAll(rows => rows.map(row => { const rect = row.getBoundingClientRect(); return { index: row.getAttribute('data-track-index'), kind: row.getAttribute('data-track-kind'), top: rect.top, bottom: rect.bottom } })) }
           await page.mouse.move(start.x, start.y); await page.mouse.down()

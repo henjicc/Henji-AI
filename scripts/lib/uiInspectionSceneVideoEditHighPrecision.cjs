@@ -14,7 +14,7 @@ const mediaBinaries = require('./mediaBinaries.cjs')
  * - 一个转场（HEVC 10 位 → ProRes 422 HQ 交叉溶解）检验效果/转场表面保持 rgba16float。
  * - 同时记录 8 位画布输出（抖动量化后）的级数。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-high-precision')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-high-precision')
 const WIDTH = 1920; const HEIGHT = 1080; const FPS = 30; const ROW = 540
 const RAMP10 = "geq=lum='64+X*876/(W-1)':cb=512:cr=512"
 const SOURCE10 = (format, extra = '') => ['-f', 'lavfi', '-i', `color=c=black:s=${WIDTH}x${HEIGHT}:r=${FPS}:d=1,format=${format},${RAMP10}${extra}`]
@@ -54,7 +54,7 @@ const psnr = (actual, expected) => {
 
 async function installHarness(page) {
   const assets = path.resolve('out/renderer/assets')
-  const name = fs.readdirSync(assets).find(file => /^videoEditWorker-[\w-]+\.js$/.test(file))
+  const name = fs.readdirSync(assets).find(file => /^videoEditWorker-[\w-]+(?:\.worker)?\.js$/.test(file))
   assert.ok(name, '构建产物里找不到剪辑渲染 Worker')
   await page.evaluate(async workerUrl => {
     window.__henjiPrecision?.worker.terminate()

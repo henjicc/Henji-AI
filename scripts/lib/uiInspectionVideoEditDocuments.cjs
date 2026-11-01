@@ -185,7 +185,7 @@ async function adoptNewVideoEditProject(page, fixtureFile) {
   await page.getByRole('dialog').waitFor({ state: 'visible' })
   await page.getByRole('dialog').getByRole('button', { name: '帧率', exact: true }).click()
   await page.getByRole('option', { name: '30 帧', exact: true }).click()
-  await button(page, '确定').click()
+  await page.locator('[data-dialog="true"]').filter({ hasText: '新建序列' }).getByRole('button', { name: '新建', exact: true }).click()
   await page.getByRole('dialog').waitFor({ state: 'hidden' })
   const latest = await latestVideoEditDocument(page)
   await page.evaluate(async ({ projectId }) => {
@@ -212,6 +212,24 @@ async function savedVideoEdit(page, file, matches, message = '剪辑没有保存
 
 /** 停靠面板标签（按标题定位，标签不再带关闭按钮，见 VideoEditDockTab 的 data-dock-tab-title）。 */
 const videoEditDockTab = (scope, title) => scope.locator(`[data-dock-tab-title="${title}"]`)
+async function takeOverVideoEdit(page) {
+  const control = page.getByRole('status').getByRole('button', { name: '接管', exact: true })
+  if (await control.isVisible()) await control.click()
+}
+async function showVideoEditDockPanel(page, title) {
+  const tab = videoEditDockTab(page, title).first()
+  if (await tab.isVisible()) { await tab.click(); return }
+  const entry = async () => {
+    await page.getByRole('menubar', { name: '菜单栏' }).getByRole('menuitem', { name: '窗口', exact: true }).click()
+    return page.getByRole('menu', { name: '窗口' }).getByRole('menuitemcheckbox', { name: title, exact: true })
+  }
+  let item = await entry()
+  // 已打开但收进溢出列表的面板，重新打开才会成为当前标签。
+  if (await item.getAttribute('aria-checked') === 'true') { await item.click(); item = await entry() }
+  await item.click()
+  await tab.waitFor({ state: 'visible' })
+  await tab.click()
+}
 /** 与 PR 一致：关闭面板走面板菜单。先点标签让它成为组内当前标签（菜单只挂在当前标签上），再选“关闭面板”。 */
 async function closeVideoEditDockPanel(page, title) {
   const tab = videoEditDockTab(page, title).first()
@@ -225,6 +243,8 @@ module.exports = {
   codeVersionSource,
   closeVideoEditDockPanel,
   videoEditDockTab,
+  showVideoEditDockPanel,
+  takeOverVideoEdit,
   adoptNewVideoEditProject,
   chooseVideoEditImportFiles,
   latestVideoEditDocument,

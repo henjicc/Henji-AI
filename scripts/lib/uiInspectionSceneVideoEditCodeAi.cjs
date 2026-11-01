@@ -53,7 +53,7 @@ function createVideoEditCodeAiScene() {
       const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
       const { openVideoEditFile, leaveVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
       const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-      const root = path.resolve('node_modules/.cache/video-edit-code-ai')
+      const root = path.resolve('.ui-tour/cache/video-edit-code-ai')
       fs.mkdirSync(root, { recursive: true })
       const file = path.join(root, 'code-ai.henji-video')
       const evidence = { completed: false, steps: [], paidPermission: false, modelSendInvoked: false, source: CODE_AI_SOURCE }

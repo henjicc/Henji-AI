@@ -53,7 +53,7 @@ function summarize(frames) {
 function createVideoEditTimeRemapScene() {
   return { id: 'video-edit-time-remap', surface: '剪辑', name: '剪辑-4K60速度坡道帧混合持续播放与跳帧数据', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-time-remap'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-time-remap'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
       assert.ok(fs.existsSync(SOURCE), `缺少 4K60 素材：${SOURCE}`)
       const file = path.join(root, 'time-remap.hjvid'); fs.writeFileSync(file, JSON.stringify(fixture()))
       const evidence = { completed: false, startedAt: new Date().toISOString(), source: SOURCE, tolerance: TOLERANCE, runs: {} }

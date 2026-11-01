@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, showVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 const { captureRegionPixels } = require('./uiInspectionCompositedMove.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 
@@ -28,8 +28,9 @@ function createVideoEditCaptionTextScene() {
         await page.evaluate(() => document.fonts.ready)
         await source.click()
         assert.equal(await page.locator('[data-video-edit-caption-range="u3-caption"]').getAttribute('aria-pressed'), 'true')
-        await page.locator('[data-video-edit-timed-entry="u3-caption"]').waitFor({ state: 'visible' })
-        // Revealing the content dock can resize the WebGPU surface; wait for the resized composition.
+        await showVideoEditDockPanel(page, '效果控件')
+        await page.locator('[data-video-edit-panel="effects"]').getByText('在画面里，直接修改字幕', { exact: true }).waitFor({ state: 'visible' })
+        // 停靠面板切换可能改变节目画面尺寸，像素取证前等待重新合成。
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
         await page.waitForTimeout(1000)
         assert.equal(await source.locator('[data-video-edit-text-selection]').evaluate(element => getComputedStyle(element).outlineStyle), 'solid')

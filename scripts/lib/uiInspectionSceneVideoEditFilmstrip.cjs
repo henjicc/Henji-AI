@@ -21,7 +21,7 @@ function createVideoEditFilmstripScene() {
   return {
     id: 'video-edit-filmstrip', surface: '剪辑', name: '剪辑-片段缩略图条生成、缓存与滚动缩放', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-filmstrip'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-filmstrip'); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
       const source = path.join(root, '4k60-gop120-20s.mp4')
       if (!fs.existsSync(source)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=3840x2160:rate=60', '-t', '20', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '120', '-keyint_min', '120', '-sc_threshold', '0', '-bf', '2', '-pix_fmt', 'yuv420p', source], { windowsHide: true })
@@ -138,8 +138,9 @@ function createVideoEditFilmstripScene() {
         const reopenedAt = Date.now(); await open()
         await setZoom(1.5)
         evidence.warmFillMs = (Date.now() - reopenedAt) + await waitFilled('warm')
-        const userData = await app.evaluate(({ app }) => app.getPath('userData'))
-        const cacheDirectory = path.join(userData, 'HenjiCache', 'Filmstrip')
+        const directories = await page.evaluate(() => window.henjiNative.paths.appDirectories())
+        const cacheDirectory = ['.痕迹AI缓存', '.Henji AI Cache'].map(name => path.join(directories.userRoot, name, 'preview', 'filmstrip')).find(directory => fs.existsSync(directory))
+        assert.ok(cacheDirectory, '作品目录中应有正式缩略帧缓存')
         const cached = fs.readdirSync(cacheDirectory).filter(name => name.endsWith('.webp'))
         evidence.cache = { files: cached.length, bytes: cached.reduce((sum, name) => sum + fs.statSync(path.join(cacheDirectory, name)).size, 0), leftoverTemporary: fs.readdirSync(cacheDirectory).filter(name => name.endsWith('.tmp')).length }
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))

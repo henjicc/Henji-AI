@@ -42,7 +42,7 @@ async function measureUpdates(target, seconds) {
 function createVideoEditPopoutScene() {
   return { id: 'video-edit-popout', surface: '剪辑', name: '剪辑-独立浮窗跨窗口编辑撤销保存与节目显示面迁移', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-popout'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-popout'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
       const file = path.join(root, 'popout.hjvid'); fs.writeFileSync(file, JSON.stringify(fixture()))
       const evidence = { completed: false, phases: [], captures: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
@@ -233,7 +233,7 @@ function createVideoEditPopoutScene() {
 function createVideoEditDockGesturesScene() {
   return { id: 'video-edit-dock-gestures', surface: '剪辑', name: '剪辑-PR式停靠拖放与独立窗口标题栏', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-dock-gestures'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-dock-gestures'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
       const file = path.join(root, 'gestures.hjvid'); fs.writeFileSync(file, JSON.stringify({ ...fixture(), id: 'video-edit-dock-gestures', name: '停靠拖放验收' }))
       const evidence = { completed: false, phases: [], captures: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))

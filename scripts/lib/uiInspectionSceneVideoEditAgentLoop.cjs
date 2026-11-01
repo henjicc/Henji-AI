@@ -36,7 +36,7 @@ const near = (rgb, expected, tolerance = 4) => rgb.every((value, index) => Math.
 function createVideoEditAgentLoopScene() {
   return { id: 'video-edit-agent-loop', surface: '剪辑', name: '剪辑-MCP与Pi原创代码素材创作调参观察撤销保存回环', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-agent-loop'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/video-edit-agent-loop'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
       // 3.1：经正式文档接口建项目与主剪辑，文档 ID 由仓库生成
       let file; let seeded; let PROJECT_ID = FIXTURE_ID
       const evidence = { completed: false, phases: [], captures: [], timings: {}, pi: {} }

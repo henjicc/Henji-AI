@@ -1,4 +1,4 @@
-const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
+const { confirmVideoEditExport, finishVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
@@ -9,7 +9,7 @@ const mediaBinaries = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { installNativeMixHarness } = require('./uiInspectionSceneVideoEditNativeAudio.cjs')
-const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 多音轨展开与声道类型（2.6，参照 Premiere Pro“使用文件 / 修改音频声道”）在真实 Electron 中的端到端验收：
@@ -23,7 +23,7 @@ const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile,
  * - 2.6 之前的旧工程（无声音流清单、画面声音合一片段）打开不迁移、只播放第一条流。
  * 每条声道是不同频率的正弦，任何串流、串声道都会让互相关失败。
  */
-const ROOT = path.resolve('node_modules/.cache/video-edit-multitrack')
+const ROOT = path.resolve('.ui-tour/cache/video-edit-multitrack')
 const RATE = 48000
 const MAX_LAG = Math.round(RATE * 0.01)
 const BLOCK_SECONDS = 0.5
@@ -245,6 +245,7 @@ function createVideoEditMultitrackScene() {
         const append = async (key, frame, count) => {
           const before = readProject(file).sequences[0].clips.length
           await playhead(frame)
+          await takeOverVideoEdit(page)
           await entry(page, items[key].id).click(); await entry(page, items[key].id).click({ button: 'right' }); await menuItem(page, '添加到当前序列').click()
           const value = await saved(page, file, document => document.sequences[0].clips.length === before + count, `${samples[key].file} 放入后应新增 ${count} 个片段`)
           // 5.5 VE-06：执行过的菜单必须立即退出交互（收起动画可能因窗口在后台被节流而停住，但不得再被点中）
@@ -392,9 +393,9 @@ function createVideoEditMultitrackScene() {
         phase('导出音轨与期望互相关')
         const output = path.join(ROOT, `export-${Date.now()}.mp4`)
         await dialogs(app, [file], output)
-        await confirmVideoEditExport(page)
-        await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 15000 })
-        await button(page, '导出视频').waitFor({ state: 'visible', timeout: 300000 })
+        await takeOverVideoEdit(page)
+        await confirmVideoEditExport(page, undefined, output)
+        await finishVideoEditExport(page)
         const exported = JSON.parse(execFileSync(mediaBinaries.ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { windowsHide: true, encoding: 'utf8' }))
         const exportedAudio = exported.streams.find(stream => stream.codec_type === 'audio'); assert.ok(exportedAudio, '导出文件应有音轨'); assert.equal(exportedAudio.channels, 2)
         const raw = execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-i', output, '-vn', '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 512 * 1024 * 1024 })

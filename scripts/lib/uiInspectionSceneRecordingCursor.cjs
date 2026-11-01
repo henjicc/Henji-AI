@@ -9,7 +9,7 @@ const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClien
 function createRecordingCursorScene() {
   return { id: 'recording-cursor', surface: '剪辑', name: '录制光标-切分移动变速与点击像素', writesUserData: true,
     setup: async (page) => {
-      const root = path.resolve('node_modules/.cache/recording-cursor'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/recording-cursor'); fs.mkdirSync(root, { recursive: true })
       const source = path.join(root, 'screen.mp4')
       execFileSync(require('./mediaBinaries.cjs').ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=gray:size=1920x1080:rate=60', '-t', '4', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', source], { windowsHide: true })
       const log = await require('../check-persistence-compat.cjs').loadTypeScript('src/tests/recordingCursorFixture.ts').recordingCursorFixture()

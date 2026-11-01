@@ -116,7 +116,7 @@ function createU8bUiScenes(context) {
         bytes.write('RIFF'); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8); bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(1, 22); bytes.writeUInt32LE(48000, 24); bytes.writeUInt32LE(96000, 28); bytes.writeUInt16LE(2, 32); bytes.writeUInt16LE(16, 34); bytes.write('data', 36); bytes.writeUInt32LE(bytes.length - 44, 40)
         for (let i = 0; i < 48000; i++) bytes.writeInt16LE(Math.round(Math.sin(i * 440 * Math.PI * 2 / 48000) * 8000), 44 + i * 2)
         fs.writeFileSync(wav, bytes)
-        const original = path.resolve('node_modules/.cache/video-edit-play-start/1080p60-gop240-aac.mp4')
+        const original = path.resolve('.ui-tour/cache/video-edit-play-start/1080p60-gop240-aac.mp4')
         document.media[0] = { id: 'motion-source', name: '波形重试声音', kind: 'audio', path: wav, width: 0, height: 0, durationSeconds: 1 }
         document.items[0].kind = 'audio'
         const { makeVideoEditItemClip } = loadTypeScript('src/core/videoEdit/projectItems.ts')

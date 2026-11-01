@@ -5,7 +5,7 @@ const path = require('node:path')
 const sharp = require('sharp')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
@@ -18,7 +18,7 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 function createVideoEditAnnotationRelativeScene() {
   return { id: 'video-edit-annotation-relative', surface: '剪辑', name: '剪辑-批注绘制与助手处理', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/t155-annotation-relative'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve('.ui-tour/cache/t155-annotation-relative'); fs.mkdirSync(root, { recursive: true })
       const evidence = { shots: [], frames: [], paidCalls: 0 }; let client; let seeded
       const unblock = await blockPaidGeneration(app)
       const shot = async name => { await page.waitForTimeout(160); evidence.shots.push(name); await capture('step-' + String(evidence.shots.length).padStart(3, '0')) }
@@ -112,6 +112,7 @@ function createVideoEditAnnotationRelativeScene() {
         // 4. 用户审查：先确认圈那条（状态变“已确认”，默认的“未确认”筛选里收起），切到“全部”再“重开”；
         //    然后对箭头“撤销这次修改”，同一次处理的关键帧一步撤掉，两条都回到待处理，讨论记录保留。
         // 参数条上的“已改完 · 2”把批注面板带到前面；选中（展开）一条才出现它的确认、驳回按钮。
+        await takeOverVideoEdit(page)
         await options().getByRole('button', { name: '已改完 · 2', exact: true }).click()
         const panel = page.getByLabel('批注面板', { exact: true }); await panel.waitFor({ state: 'visible' })
         const row = number => panel.locator('[data-video-edit-annotation]').nth(number - 1)
