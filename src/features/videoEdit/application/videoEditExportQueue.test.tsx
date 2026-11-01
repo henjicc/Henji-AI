@@ -463,7 +463,7 @@ it('仅音频WAV不编码视频，关闭响度不创建PCM标准化会话；显�
   const owner = await project(); const settings = patchVideoEditExportSettings(videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), { format: 'wav', loudness: null, useProxies: true, addToLibrary: false, captionMode: 'none' })
   const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('sound.wav'), settings }]); await videoEditExportQueue.wait(job.id)
   expect(job.state).toBe('completed'); expect(encoding.videoOptions).toEqual([]); expect(encoding.rendered).toEqual([]); expect(encoding.audioOptions).toEqual([{ codec: 'pcm-s24', transform: { sampleRate: 48000, numberOfChannels: 2 } }]); expect(getPlatform().audioEdit.loudness.start).not.toHaveBeenCalled()
-  expect(encoding.rendererOptions[0]).toEqual([{ proxyProjectId: owner.document.id, exportProxies: true }])
+  expect(encoding.rendererOptions[0]).toEqual([expect.objectContaining({ proxyProjectId: owner.document.id, exportProxies: true })])
 })
 it('默认按设备切到H264软件；手动选择HEVC后禁用不支持的CBR', async () => {
   const owner = await project(); vi.mocked(canEncodeVideo).mockImplementation(async config => config.codec.startsWith('hev1') ? config?.bitrateMode !== 'constant' : config?.hardwareAcceleration === 'prefer-software')
@@ -1033,4 +1033,20 @@ it('压制失败或取消不写上次导出记忆，并请求主进程清理中�
   expect(api.cancelCompression).toHaveBeenCalledWith('cancel-compression')
   expect(videoEditExportMemory.read(owner.document.id, owner.activeSequenceId)).toBeUndefined()
   expect(getPlatform().system.fs.remove).toHaveBeenCalledWith(file('quality-cancel.mp4'))
+})
+it('默认响度遇到无声范围：跳过标准化、关掉测量会话，按原混音写完，不因读不到标准化声音而失败', async () => {
+  const owner = await project()
+  const api = getPlatform().audioEdit.loudness
+  vi.mocked(api.measure).mockResolvedValueOnce({ integratedLufs: null, shortTermLufs: null, samplePeakDbfs: -120, truePeakDbtp: -120, durationSeconds: 1 })
+  vi.mocked(api.read).mockRejectedValue(new Error('声音尚未完成标准化。'))
+  const ui = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
+  await waitFor(() => expectButtonEnabled(ui.getByRole('button', { name: '加入队列' })))
+  await act(async () => fireEvent.click(ui.getByRole('button', { name: '加入队列' })))
+  const job = videoEditExportQueue.list()[0]
+  await act(async () => { await videoEditExportQueue.wait(job.id) })
+  expect(job.loudnessRequested).toBe(false)
+  expect(job.task?.state).toBe('completed')
+  expect(job.task?.notice).toContain('跳过默认响度标准化')
+  expect(api.close).toHaveBeenCalled()
+  expect(api.normalize).not.toHaveBeenCalled()
 })

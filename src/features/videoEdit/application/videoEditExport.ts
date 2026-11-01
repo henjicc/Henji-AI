@@ -142,6 +142,9 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
         if (options?.loudnessRequested ?? loudnessSettings !== undefined) throw new Error('当前导出范围没有可测量的声音（静音、低于测量门限或不足 400 毫秒），无法按要求标准化响度。请添加可听声音、扩大范围，或关闭响度标准化后重新导出。')
         task.notice = '当前导出范围没有可测量的声音，已跳过默认响度标准化并保留原声音。'
         task.loudness = undefined
+        // 测量会话只交出标准化后的声音；跳过标准化就关掉它，按未标准化的原混音写入。
+        const skipped = soundSession; soundSession = undefined
+        await loudnessApi.close(skipped)
         logger.info('跳过无声范围的默认响度标准化', { event: 'video_edit.export.loudness_skipped', context: { projectId, taskId: task.id } })
       } else task.loudnessMeasurement = await loudnessApi.normalize(soundSession, loudness)
       task.controller.signal.throwIfAborted()
