@@ -81,8 +81,8 @@ function emissionUniform(params: VideoEditBuiltinParams, emission: GlowEmission)
   return [numeric(params, 'threshold') / 100, Math.max(0.001, numeric(params, 'threshold_smoothness') / 100 * 0.5), sourceOpacity, numeric(params, 'tint') / 100]
 }
 
-/** `params` 已补齐默认值；`layerOpacity` 是片段这一帧的不透明度，只有轮廓来源为主体时用到。 */
-export function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false, layerOpacity = 1): VideoEditBuiltinPlan {
+/** `params` 已补齐默认值。 */
+export function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
   const glow = createGlowPlanner(width, height, context)
   const emission: GlowEmission = params.mode === 'shape' ? 'shape' : 'bright'
   const source: VideoEditBuiltinTexture = emission === 'shape' && params.contour === 'subject' ? 'subject' : 'input'
@@ -91,7 +91,7 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
   if (params.view === 'source') { glow.pass('glow_source', source, 'output', emissionUniform(params, emission)); return glow.plan }
   if (split && strength === 0) { glow.pass('effect_opacity', 'input', 'output', [sourceOpacity, 0, 0, 0]); return glow.plan }
   if (strength === 0 && sourceOpacity === 1) { glow.pass('copy', 'input', 'output'); return glow.plan }
-  appendGlow(glow, params, width, height, context, split, emission, source, 'input', layerOpacity)
+  appendGlow(glow, params, width, height, context, split, emission, source, 'input')
   return glow.plan
 }
 
@@ -100,7 +100,7 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
  * `source` 是发光来源的纹理；`base` 是光要叠上去的画面（亮部、轮廓都是效果输入，光源纹理时是扫光、溶解画好的主图）。
  * 轮廓方式的光在内容后面：主图只按原画不透明度，光不给内容加核心提亮。
  */
-export function appendGlow(glow: GlowPlanner, params: VideoEditBuiltinParams, width: number, height: number, context: LayerEffectReference | undefined, split: boolean, emission: GlowEmission, source: VideoEditBuiltinTexture, base: VideoEditBuiltinTexture, layerOpacity = 1): void {
+export function appendGlow(glow: GlowPlanner, params: VideoEditBuiltinParams, width: number, height: number, context: LayerEffectReference | undefined, split: boolean, emission: GlowEmission, source: VideoEditBuiltinTexture, base: VideoEditBuiltinTexture): void {
   const { plan, alloc, pass } = glow
   const strength = numeric(params, 'strength') / 100
   const sourceOpacity = numeric(params, 'source_opacity', 100) / 100
@@ -152,8 +152,8 @@ export function appendGlow(glow: GlowPlanner, params: VideoEditBuiltinParams, wi
   const c: V4 = [gain, numeric(params, 'core_white') / 100, numeric(params, 'dither', 50) / 100, params.dither_mono === true ? 1 : 0]
   if (emission === 'shape') {
     if (source === 'subject' && !split) {
-      // 人物蒙版不带片段不透明度：光核与光晕一起乘上它，光跟着片段淡入淡出（其他来源的光取自已乘不透明度的输入）。
-      pass('glow_subject_composite', accumulated, 'output', uniform, [...core.map(value => value * layerOpacity) as V3, b[3]], [gain * layerOpacity, c[1], c[2], c[3]])
+      // 片段不透明度在效果链之后整体乘，光跟着片段一起淡入淡出。
+      pass('glow_subject_composite', accumulated, 'output', uniform, b, c)
       plan.passes.at(-1)!.mask = 'subject'
       return
     }
@@ -336,5 +336,5 @@ fn glowWithin(color: vec3f, shown: f32, light: vec3f, screen: bool, position: ve
 
 export const GLOW_PLANNER = definePlanner({
   id: 'glow', entries: GLOW_ENTRIES, shared: [GLOW_COMPOSITE_BLOCK], wgsl: GLOW_WGSL,
-  plan: (params, frame, instance) => planGlow(params, frame.width, frame.height, frame.layer, frame.split, instance.layerOpacity),
+  plan: (params, frame, instance) => planGlow(params, frame.width, frame.height, frame.layer, frame.split),
 })

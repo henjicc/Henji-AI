@@ -46,8 +46,8 @@ function encodedColor(value: unknown): [number, number, number] {
   return [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255) as [number, number, number]
 }
 
-/** `params` 已补齐默认值；`layerOpacity` 是片段这一帧的不透明度，只有轮廓来源为主体时用到。 */
-export function planStroke(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, layerOpacity = 1): VideoEditBuiltinPlan {
+/** `params` 已补齐默认值。 */
+export function planStroke(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
   const plan: VideoEditBuiltinPlan = { width, height, scratch: [], passes: [] }
   const pass = (entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a: V4 = ZERO, b: V4 = ZERO, original?: VideoEditBuiltinTexture): void => {
     plan.passes.push({ entry, source, target, ...(original !== undefined ? { original } : {}), uniforms: new Float32Array([width, height, width, height, ...a, ...b, ...ZERO]) })
@@ -65,7 +65,7 @@ export function planStroke(params: VideoEditBuiltinParams, width: number, height
   const field = Math.min(1, Math.max(0, (geometry.reach - STROKE_NEAR_MAX) / (STROKE_NEAR_BLEND - STROKE_NEAR_MAX)))
   if (field === 0) {
     pass('stroke_near', 'input', 'output', ...shade)
-    plan.passes.at(-1)!.uniforms.set([sourceOpacity, 0, subject ? 1 : 0, layerOpacity], 12)
+    plan.passes.at(-1)!.uniforms.set([sourceOpacity, 0, subject ? 1 : 0], 12)
     if (subject) plan.passes.at(-1)!.mask = 'subject'
     return plan
   }
@@ -75,7 +75,7 @@ export function planStroke(params: VideoEditBuiltinParams, width: number, height
   let current = 0
   for (const step of strokeJumpSteps(geometry.reach)) { pass('stroke_jfa', current, 1 - current, [step, 0, 0, 0]); current = 1 - current }
   pass('stroke_shade', current, 'output', ...shade, 'input')
-  plan.passes.at(-1)!.uniforms.set([sourceOpacity, field, subject ? 1 : 0, layerOpacity], 12)
+  plan.passes.at(-1)!.uniforms.set([sourceOpacity, field, subject ? 1 : 0], 12)
   if (subject) plan.passes.at(-1)!.mask = 'subject'
   return plan
 }
@@ -186,10 +186,10 @@ fn strokeColor(base: vec4f, sd: f32) -> vec4f {
  return vec4f(min(rgb, vec3f(alpha)), alpha);
 }
 // 轮廓是人物蒙版（a 人物，r 片段画面覆盖），与原画的 alpha 无关：描边带 D−E 按普通透明度叠在原画之上，只画在片段画面内。
-// 原画已经乘了片段不透明度 c.w，描边也乘上它：片段连同描边一起淡入淡出（等于先叠好再整体乘不透明度）。
+// 片段不透明度在效果链之后整体乘，这里按完整不透明的原画叠描边。
 fn strokeOver(base: vec4f, matte: vec4f, sd: f32) -> vec4f {
  let cover = strokeCover(matte.a, sd); let k = u.b.w * (cover.x - cover.y) * matte.r;
- return vec4f(u.b.rgb, 1.0) * (k * u.c.w) + base * u.c.x * (1.0 - k);
+ return vec4f(u.b.rgb, 1.0) * k + base * u.c.x * (1.0 - k);
 }
 // 距离场着色；c.y 是距离场的权重，小于 1 时与邻域取样的距离混合（3–4 像素的过渡区）。
 @fragment fn stroke_shade(v: Vertex) -> @location(0) vec4f {
@@ -221,6 +221,6 @@ fn strokeOver(base: vec4f, matte: vec4f, sd: f32) -> vec4f {
 
 export const STROKE_PLANNER = definePlanner({
   id: 'stroke', entries: STROKE_ENTRIES, wgsl: STROKE_WGSL,
-  plan: (params, frame, instance) => planStroke(params, frame.width, frame.height, frame.layer, instance.layerOpacity),
+  plan: (params, frame, instance) => planStroke(params, frame.width, frame.height, frame.layer),
   unfilteredSourceEntries: STROKE_FIELD_ENTRIES,
 })

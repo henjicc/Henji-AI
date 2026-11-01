@@ -24,7 +24,8 @@ const slot = (clip: VideoEditClip, index: number): string => `composite:clip:${c
 // Chain length never determines target count. The current picture and filtered output
 // ping-pong; fractional strength/masks need a third target to read both originals.
 // A translucent adjustment layer keeps one additional unchanged band for its final mix.
-const slots = (clip: VideoEditClip): string[] => Array.from({ length: effective(clip) ? clip.kind === 'adjustment' && clip.opacity < 1 ? 4 : 3 : 1 }, (_, index) => slot(clip, index))
+// 半透明的片段在效果链之后再乘不透明度，需要第四个目标：调整层保留原画以便按强度混合，普通片段放乘过不透明度的结果。
+const slots = (clip: VideoEditClip): string[] => Array.from({ length: effective(clip) ? clip.opacity < 1 ? 4 : 3 : 1 }, (_, index) => slot(clip, index))
 /**
  * 智能区域（4.7d）共用的两张画面：上传的低分辨率蒙版、按片段位置画到序列尺寸的蒙版。作用区域与人物蒙版（主体抠像、
  * 轮廓来源为主体）都经过它们，每次用完即提交，下一次上传排在已提交的工序之后，所以全场景只需要这两张。
@@ -98,10 +99,9 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       const previous = result; const previousKey = key
       try {
         // 效果时钟按片段自己的帧号与帧时长：复制、挪动片段观感不变，与只记相对位置的预渲染窗口一致；只在渲染时传递，不写入效果参数。
-        const builtin = plan.builtin && (plan.subject ? { ...plan.builtin, layerOpacity: clip.opacity } : plan.builtin)
         const subject = plan.builtin && plan.subject ? await runtime.subjectMatte(SUBJECT_DOCUMENT, await placeMask(runtime, clip, plan.subject, true)) : undefined
         const filtered = plan.builtin
-          ? await runtime.builtin(free[0], builtin!, result, frame - clip.start, renderScale, document.colorLuts, quality, logical, 1 / document.fps, subject)
+          ? await runtime.builtin(free[0], plan.builtin, result, frame - clip.start, renderScale, document.colorLuts, quality, logical, 1 / document.fps, subject)
           : await runtime.authorFilter(free[0], plan.instanceKey, plan.program, plan.parameters, result, plan.info, plan.program.frames.length ? await readFilterFrames?.(clip, plan, result) : [], plan.simulation, logical, current)
         current()
         if (plan.builtin && plan.mask) {
@@ -127,8 +127,13 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     if (!pictures.has(clip.id)) throw new Error(`合成片段“${clip.name}”尚未准备画面。`)
     const layer = { clip, picture: pictures.get(clip.id)! }
     if (!force && !effective(clip)) return layer
-    const normalized = await normalize(clip, [layer])
-    return { clip: identity(clip), picture: effective(clip) ? await apply(clip, normalized) : normalized }
+    if (!effective(clip)) return { clip: identity(clip), picture: await normalize(clip, [layer]) }
+    // 与 AE 一致，片段不透明度在效果链之后乘：效果看到的是完整不透明的画面（按透明度取轮廓的描边、发光不会随淡入淡出变形），
+    // 结果再整体乘一次；乘在画面里而不是交给最后的绘制，过渡两端拿到的画面同样带着不透明度。
+    const processed = await apply(clip, await normalize(clip, [{ clip: { ...clip, opacity: 1 }, picture: layer.picture }]))
+    const picture = clip.opacity < 1 ? await (await gpu()).mix(slot(clip, 3), 'transparent', processed, clip.opacity) : processed
+    current()
+    return { clip: identity(clip), picture }
   }
   const resolve = async (nodes: readonly VideoEditCompositeNode[]): Promise<Layer[]> => {
     const layers: Layer[] = []

@@ -143,7 +143,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     expect(result.presented).toBe(true); expect(failures).toEqual(['bad']); expect(calls).toBe(2)
     expectPixel(boundary.canvas(), [0, .5, 0, 1]); expect(owner.effects).toHaveLength(2)
   })
-  it('四个不同有效/关闭/零强度效果按原顺序处理，原几何和透明度只归一化一次', async () => {
+  it('四个不同有效/关闭/零强度效果按原顺序处理，原几何只归一化一次，不透明度在效果之后整体乘', async () => {
     const owner = clip('visual', 1, { start: 10, x: .2, y: -.1, scale: .5, rotation: 30, opacity: .5 })
     const effects = [plan('red', [1, 0, 0, .8], owner, 30, .5), plan('disabled', [0, 1, 0, 1], owner, 30, 1, false),
       plan('zero', [0, 0, 1, 1], owner, 30, 0), plan('yellow', [.5, .5, 0, .4], owner, 30, .25)]
@@ -155,19 +155,20 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     await result.completion
     expect(result.presented).toBe(true); expect(boundary.commits()).toBe(1)
     expect(boundary.filters.map(value => value.version)).toEqual(['version-red', 'version-yellow'])
-    expectPixel(boundary.filters[0].input, [.1, .05, 0, .25])
-    expectPixel(boundary.mixes.at(-1)!.output, [.3875, .06875, 0, .49375])
-    expectPixel(boundary.canvas(), [.3875, .06875, 0, 1])
+    expectPixel(boundary.filters[0].input, [.2, .1, 0, .5])
+    expect(boundary.mixes.at(-1)).toMatchObject({ amount: .5, leftKey: 'transparent' })
+    expectPixel(boundary.mixes.at(-1)!.output, [.2125, .04375, 0, .29375])
+    expectPixel(boundary.canvas(), [.2125, .04375, 0, 1])
     for (const [index, filtered] of boundary.filters.entries()) {
       const originalPlan = effects[index === 0 ? 0 : 3]
       expect(filtered.info).toEqual(originalPlan.info)
       expect(filtered.parameters).toEqual({ gain: .75 }); expect(filtered.frames).toEqual([])
     }
-    expect(boundary.draws[0].clips[0]).toEqual(original)
+    expect(boundary.draws[0].clips[0]).toEqual({ ...original, opacity: 1 })
     expect(boundary.draws.at(-1)!.clips[0]).not.toHaveProperty('trackingQuad')
     expect(boundary.draws.at(-1)!.clips[0]).toMatchObject({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 })
     expect(boundary.draws[0].deadline).toBeUndefined(); expect(boundary.draws.at(-1)!.deadline).toBe(1234)
-    expect(owner).toEqual(original); expect(reserved.size).toBe(3); expect(boundary.targets.size).toBe(3)
+    expect(owner).toEqual(original); expect(reserved.size).toBe(4); expect(boundary.targets.size).toBe(4)
   })
   it('四个有效效果轮用三个目标，不保留额外历史纹理或读写别名', async () => {
     const owner = clip('ordinary')

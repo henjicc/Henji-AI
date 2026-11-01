@@ -1534,8 +1534,9 @@ it('嵌套画面作为普通一层参与父效果与运动/不透明度关键帧
   const renderer = new VideoEditRenderer(document)
   try {
     await renderer.render(15, true)
-    expect(boundary.builtinParams).toHaveLength(1); expect(boundary.mixes).toContain(.5)
-    expect(boundary.evaluatedClips).toMatchObject([{ id: 'nested', x: .2, opacity: .5 }])
+    // 效果看到的是完整不透明的画面，不透明度在效果链之后整体乘（效果强度 .5 与不透明度 .5 各一次混合）。
+    expect(boundary.builtinParams).toHaveLength(1); expect(boundary.mixes.filter(amount => amount === .5)).toHaveLength(2)
+    expect(boundary.evaluatedClips).toMatchObject([{ id: 'nested', x: .2, opacity: 1 }])
   } finally { await renderer.dispose() }
 })
 it('子序列缩短后的父片段尾部渲染透明画面和静音，不冻结子序列最后一帧', async () => {
@@ -2251,8 +2252,9 @@ it('片内运动、不透明度、ColorGrade 关键帧在预览与导出同一�
   const read = () => ({ x: boundary.evaluatedClips[0].x, y: boundary.evaluatedClips[0].y, scale: boundary.evaluatedClips[0].scale, rotation: boundary.evaluatedClips[0].rotation, anchorX: boundary.evaluatedClips[0].anchorX, opacity: boundary.evaluatedClips[0].opacity, exposure: boundary.builtinParams.at(-1)?.exposure })
   try {
     await preview.render(15, true); const shown = read()
-    expect(shown).toEqual({ x: .2, y: -.1, scale: 1.5, rotation: 45, anchorX: .375, opacity: .6, exposure: 1 })
-    await exported.render(15); expect(read()).toEqual(shown)
+    // 不透明度在效果链之后乘：效果输入按 1 画，求值后的 .6 体现为效果之后的那次混合。
+    expect(shown).toEqual({ x: .2, y: -.1, scale: 1.5, rotation: 45, anchorX: .375, opacity: 1, exposure: 1 }); expect(boundary.mixes.at(-1)).toBeCloseTo(.6)
+    await exported.render(15); expect(read()).toEqual(shown); expect(boundary.mixes.at(-1)).toBeCloseTo(.6)
   } finally { await preview.dispose(); await exported.dispose() }
 })
 
