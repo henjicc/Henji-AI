@@ -286,13 +286,17 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     return () => { ownerDocument.removeEventListener('pointerdown', handler, true); ownerDocument.removeEventListener('mousedown', handler, true) }
   }, [open, overlay.id, scheduleClose])
 
+  // 调用方常每次渲染都传新的 options 数组与 renderPanel 函数；按文字内容决定要不要重新量宽，
+  // 否则父组件每次重绘（如拖动播放头）都会读计算样式、强制重算样式并重新量一遍文字。
+  const optionLabelsKey = JSON.stringify(getOptionLabels(options))
+  const customPanel = Boolean(renderPanel)
   useLayoutEffect(() => {
     if (!ref.current) return
     const btn = ref.current.querySelector('[data-dropdown-button]') as HTMLElement | null
     if (!btn) return
     const computeMinWidth = () => {
       const displayText = resolvedDisplay
-      const optionLabels = getOptionLabels(options)
+      const optionLabels = JSON.parse(optionLabelsKey) as string[]
       if (minWidthStrategy === 'none') {
         if (lastButtonMinWidthRef.current !== null || buttonMinWidthPx !== null) {
           lastButtonMinWidthRef.current = null
@@ -321,14 +325,14 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       // 菜单宽度按菜单项自己的留白（含选中勾槽）计算，不借用触发器留白（任务 4.3）
       const textWidth = measureElementTextWidth(btn, panelLabels, 0)
       // 自定义面板（renderPanel）没有选中勾，按动作菜单留白；选项列表是选值菜单，预留勾槽
-      const nextPanelMinWidth = textWidth === null ? null : resolveDropdownMenuWidth(textWidth, size, renderPanel ? 'none' : 'single')
+      const nextPanelMinWidth = textWidth === null ? null : resolveDropdownMenuWidth(textWidth, size, customPanel ? 'none' : 'single')
       if (nextPanelMinWidth !== null && lastPanelMinWidthRef.current !== nextPanelMinWidth) {
         lastPanelMinWidthRef.current = nextPanelMinWidth
         setPanelMinWidthPx(nextPanelMinWidth)
       }
     }
     computeMinWidth()
-  }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, renderPanel, resolvedDisplay, size])
+  }, [buttonMinWidthPx, customPanel, minWidthStrategy, optionLabelsKey, panelMinWidthPx, panelWidthStrategy, resolvedDisplay, size])
 
   const hasFixedPosition = fixedPos !== null
   useLayoutEffect(() => {
