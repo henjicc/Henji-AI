@@ -7,6 +7,7 @@ import { VideoEditRenderSession } from './videoEditRenderSession'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import { AUTHOR_GAIN_SOURCE } from './videoEditAuthorProbeSources'
 import { videoEditRenderFailures } from './videoEditRenderFailures'
+import { installAuthorTrustGate } from './videoEditAuthorTrust'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 export { runVideoEditCompositeProbe } from './videoEditCompositeProbe'
 export { runVideoEditCodeInputProbe } from './videoEditCodeInputProbe'
@@ -28,6 +29,8 @@ export async function runVideoEditCodeProbe(host: HTMLElement): Promise<Record<s
   let session: VideoEditRenderSession | undefined
   let snapshot: ImageBitmap | undefined
   const sceneNotices = new Set<string>()
+  // 实验在主线程编译内置夹具源码，不经过持有信任入口的剪辑 Worker；夹具是本机内容，不需询问。
+  const restoreTrust = installAuthorTrustGate(async () => {})
   try {
     const cold = performance.now()
     for (const text of [staticSource, titleSource, AUTHOR_GAIN_SOURCE]) await compiler.bundle(normalizeCodeMaterialFiles(text))
@@ -79,5 +82,5 @@ export async function runVideoEditCodeProbe(host: HTMLElement): Promise<Record<s
     await set('title', false); await render(0, true)
     canvas.dataset.codeExperiment = 'ready'
     return { completed: true, coldCompileMs, compileCacheMs, firstGpuFrameMs: first.elapsed, titleFirstMs: titleFirst.elapsed, hotFrames: hot.length, completedGpuFrameMs: { mean: hot.reduce((sum, value) => sum + value, 0) / hot.length, p95: percentile(hot, .95), max: Math.max(...hot) }, hotCpuEvaluationMs: { mean: cpu.reduce((sum, value) => sum + value, 0) / cpu.length, p95: percentile(cpu, .95) }, parameterResponseMs: parameter.elapsed, transparentOnBlack, filtered, changed, randomFramePixels: results, readbackCount: readbacks.length, resolution: [3840, 2160], recovered, ...(sceneNotices.size ? { sceneNotices: [...sceneNotices] } : {}) }
-  } finally { compiler.dispose(); snapshot?.close(); await session?.dispose() }
+  } finally { restoreTrust(); compiler.dispose(); snapshot?.close(); await session?.dispose() }
 }

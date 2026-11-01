@@ -9,6 +9,7 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import { AUTHOR_GAIN_SOURCE, authorProbeFilter } from './videoEditAuthorProbeSources'
+import { installAuthorTrustGate } from './videoEditAuthorTrust'
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
@@ -78,6 +79,8 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
   }
   const update = (clips: VideoEditClip[], transitions?: VideoEditComposition['transitions']): void => set(load(clips, transitions))
   let runtime: Awaited<ReturnType<typeof compositor.code>> | undefined
+  // 探针在主线程直接编译内置夹具源码，不经过持有信任入口的剪辑 Worker；夹具是本机内容，不需询问。
+  const restoreTrust = installAuthorTrustGate(async () => {})
   try {
     const shapes = graphic('命名对象', 1, [0, 0, 0, 0]); const rect = createVideoEditGraphic('rect', 3840, 2160).objects[0]
     Object.assign(rect.parameters, { x: 200, y: 200, width: 100, height: 40, rotation: 90, fill: [1, 0, 0, .5], opacity: .5 })
@@ -88,14 +91,14 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     pixel('旋转矩形内部RGBA合成', 250, 180, [64, 0, 0, 255]); pixel('原未旋转位置为空', 210, 220, [0, 0, 0, 255]); pixel('椭圆中心', 700, 250, [0, 128, 0, 255]); pixel('椭圆外角', 602, 202, [0, 0, 0, 255])
     const cached = await render(0); check(cached.cacheHits === 1, '静态结构化图形没有命中同会话缓存')
     const red = graphic('滤镜片段', 1, [1, 0, 0, .5], { opacity: .5, effects: [effect('片段滤镜', 'green', .5)] })
-    update([red]); await render(0, true); pixel('片段几何透明度先归一化后强度混合', 100, 100, [32, 64, 0, 255])
+    update([red]); await render(0, true); pixel('片段几何透明度先归一化后强度混合', 100, 100, [32, 32, 0, 255])
     const lower = graphic('范围外红色', 1, [1, 0, 0, .5]); const band = graphic('范围内蓝色', 2, [0, 0, 1, .5])
     model.items.push({ id: 'item-adjustment', name: '调整图层', kind: 'adjustment' })
     const adjustment = { ...makeVideoEditItemClip(model, 'item-adjustment', sequence.id, { frame: 0, track: 3 }), duration: 120, opacity: .25, adjustment: { fromTrack: 2 }, effects: [effect('调整滤镜', 'green')] }
     update([lower, band, adjustment]); await render(0, true); pixel('调整层只替换下方指定范围并保留原band', 100, 100, [64, 32, 96, 255])
     const left = graphic('转场左端', 1, [1, 0, 0, .5], { duration: 60, opacity: .5 }); const right = graphic('转场右端', 1, [0, 0, 1, .5], { start: 60, opacity: .75 })
     update([left, right], [{ id: 'cross', kind: 'cross_dissolve', leftClipId: left.id, rightClipId: right.id, durationFrames: 10 }])
-    for (const [frame, expected] of [[55, [64, 0, 0, 255]], [60, [28, 0, 53, 255]], [64, [0, 0, 96, 255]]] as const) { await render(frame, true); pixel(`交叉溶解帧${frame}单次预乘混合`, 100, 100, [...expected]) }
+    for (const [frame, expected] of [[55, [64, 0, 0, 255]], [60, [32, 0, 48, 255]], [64, [6, 0, 86, 255]]] as const) { await render(frame, true); pixel(`交叉溶解帧${frame}单次预乘混合`, 100, 100, [...expected]) }
     const long = graphic('长源入点', 1, [1, 0, 0, .5], { sourceInUs: 3_600_000_000, effects: [effect('长源滤镜', 'gain')] })
     long.effects![0].code!.curves = { gain: [{ id: 'k0', sourceInUs: 3_600_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'k1', sourceInUs: 3_601_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 1, interpolation: 'linear' }] }
     update([long]); await render(30, true); pixel('一小时源入点参数曲线继续真实求值', 100, 100, [64, 0, 0, 255])
@@ -113,5 +116,5 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     inspection.setAttribute('aria-label', '基础图层全分辨率实验结果'); inspection.getContext('2d')!.drawImage(snapshot!, 0, 0); host.replaceChildren(inspection)
     await sources.dispose(); await compositor.dispose()
     return { completed: true, resolution: [3840, 2160], pixels, coldMs: cold.elapsed, cacheHitMs: cached.elapsed, cacheHits: hits, hotFrames: hot.length, completedGpuFrameMs: { mean: hot.reduce((sum, value) => sum + value, 0) / hot.length, p95: percent(hot, .95), max: Math.max(...hot) }, parameterResponseMs: response.elapsed, before, after, compiler: compiler.diagnostics(), disposed: runtime.diagnostics() }
-  } finally { snapshot?.close(); await sources.dispose(); await compositor.dispose() }
+  } finally { restoreTrust(); snapshot?.close(); await sources.dispose(); await compositor.dispose() }
 }

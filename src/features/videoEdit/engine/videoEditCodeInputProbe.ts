@@ -3,6 +3,7 @@ import { addressCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { isUiInspectionActive } from '@/platform/runtime'
 import { VideoEditRenderer } from './videoEditRenderer'
 import { videoEditPreparationSnapshot } from './videoEditPreparationTiming'
+import { installAuthorTrustGate } from './videoEditAuthorTrust'
 
 /** Fixed four-input workload, only callable by the formal Electron inspection.
  * The scene supplies its own generated video; no project or user data is used. */
@@ -21,7 +22,10 @@ export async function runVideoEditCodeInputProbe(host: HTMLElement, path: string
   const base: VideoEditClip = { id: 'base', itemId: 'video-item', name: '原片', kind: 'video', start: 0, duration: 120, track: 1, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
   sequence.clips = [base, { ...base, id: 'code', itemId: 'code-item', kind: 'code', track: 2, code }]
   const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360; canvas.style.cssText = 'width:100%;max-height:65vh;object-fit:contain'; host.replaceChildren(canvas)
-  const renderer = new VideoEditRenderer(videoEditComposition(model, sequence.id), { surface: canvas.transferControlToOffscreen() })
+  // 渲染器在主线程读取作者声明，不经过持有信任入口的剪辑 Worker；验收夹具源码是本机内容，不需询问。
+  const restoreTrust = installAuthorTrustGate(async () => {})
+  let renderer: VideoEditRenderer
+  try { renderer = new VideoEditRenderer(videoEditComposition(model, sequence.id), { surface: canvas.transferControlToOffscreen() }) } catch (error) { restoreTrust(); throw error }
   const phases: Record<string, unknown> = {}
   const evidence: Record<string, unknown> = { completed: false, phases }
   const render = async (frame: number, sequential = false): Promise<void> => { const result = await renderer.render(frame, sequential, false, () => true, undefined, undefined, sequential ? 'final' : 'interactive'); await result.completion; if (!result.presented) throw new Error('输入测量帧没有提交') }
@@ -48,6 +52,7 @@ export async function runVideoEditCodeInputProbe(host: HTMLElement, path: string
     inspection.getContext('2d')!.drawImage(sample, 0, 0); host.replaceChildren(inspection)
     Object.assign(evidence, { completed: true, pixels, letterbox, diagnostics: renderer.codeDiagnostics() })
   } finally {
+    restoreTrust()
     await renderer.dispose()
     evidence.disposed = renderer.codeDiagnostics()
   }
