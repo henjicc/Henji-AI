@@ -1,5 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const { execFileSync } = require('node:child_process')
 
 /** Tooling reads the same formal version declaration; fixtures must not maintain a second version number. */
 function videoEditDocumentVersion() {
@@ -51,6 +52,9 @@ function readVideoEditFile(file) {
   const workRoot = path.dirname(path.dirname(projectRoot))
   const decode = (value) => {
     if (typeof value === 'string') {
+      // 代码版本的 git:<提交>:<仓库位置>:<文件> 里仓库位置同样相对项目，换成绝对路径后 codeVersionSource 才能读。
+      const git = /^git:([a-f0-9]{40}):([^:]+):([^:]+)$/.exec(value)
+      if (git) return `git:${git[1]}:${encodeURIComponent(decode(decodeURIComponent(git[2])))}:${git[3]}`
       if (value.startsWith('henji:/') && !value.startsWith('henji://')) return path.join(projectRoot, ...value.slice('henji:/'.length).split('/'))
       if (value.startsWith('henji://user/')) return path.join(workRoot, ...value.slice('henji://user/'.length).split('/'))
       return value
@@ -62,11 +66,13 @@ function readVideoEditFile(file) {
   return { format: 'henji-video-project', version: videoEditDocumentVersion(), id: raw.id, name: raw.name, revision: raw.revision, ...decode(raw.content) }
 }
 
-/** 代码版本的源码按文件存在项目的 代码/ 目录里；读回入口文件（readVideoEditFile 已把位置换成绝对路径）。 */
+/** 代码版本的源码存在项目 代码/ 目录的 Git 仓库里（旧工程是普通文件）；读回入口文件（readVideoEditFile 已把位置换成绝对路径）。 */
 function codeVersionSource(version) {
   const entry = version.files.find((file) => file.path === version.entry)
   if (!entry) throw new Error(`代码版本缺少入口文件：${version.entry}`)
-  return fs.readFileSync(entry.location, 'utf8')
+  const git = /^git:([a-f0-9]{40}):([^:]+):([^:]+)$/.exec(entry.location)
+  if (!git) return fs.readFileSync(entry.location, 'utf8')
+  return execFileSync('git', ['-C', decodeURIComponent(git[2]), 'show', `${git[1]}:${decodeURIComponent(git[3])}`], { encoding: 'utf8', windowsHide: true })
 }
 
 /**

@@ -11,11 +11,17 @@ async function makePicture(root) {
   if (!fs.existsSync(file)) await sharp({ create: { width: 3840, height: 2160, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 128 / 255 } } }).png().toFile(file)
   return file
 }
-async function inspectCodeControls({ page, app, capture, evidence, change, file, root, document, dynamicClip, staticClip, dynamicSource, snapshots, saved, seek, comparePng }) {
+async function inspectCodeControls({ page, app, capture, evidence, change, file, root, document, dynamicClip, staticClip, dynamicSource, snapshots, saved, seek, comparePng, revealVideoTrack }) {
   const button = name => page.getByRole('button', { name, exact: true })
   const png = () => page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => canvas.toDataURL('image/png'))
-  const select = async clip => { await page.locator(`[data-video-edit-clip="${clip.id}"]`).getByRole('button').nth(1).click(); await page.locator(`[data-video-edit-code-parameters="${clip.id}"]`).waitFor({ state: 'visible' }) }
+  const select = async clip => { await revealVideoTrack(page, clip.track); await page.locator(`[data-video-edit-clip="${clip.id}"]`).getByRole('button').nth(1).click(); await page.locator(`[data-video-edit-code-parameters="${clip.id}"]`).waitFor({ state: 'visible' }) }
   const codeOf = (value, clip = dynamicClip) => value.sequences[0].clips.find(value => value.id === clip.id).code
+  // 属性面板有宿主菜单时，重置在参数名的右键菜单里；没有时退回行尾按钮。
+  const reset = async (key, title) => {
+    if (await button(`重置${title}`).count()) { await button(`重置${title}`).click(); return }
+    await page.locator(`[data-video-edit-code-parameter="${key}"]`).getByText(title, { exact: true }).first().click({ button: 'right' })
+    await page.getByRole('menuitem', { name: `重置${title}`, exact: true }).click()
+  }
   await select(dynamicClip)
   assert.ok(await page.getByLabel('移动速度', { exact: true }).isVisible()); assert.ok(await page.getByLabel('标题文字', { exact: true }).isVisible()); assert.ok(await page.getByLabel('显示图形', { exact: true }).isVisible())
   assert.equal(await page.locator('[data-video-edit-code-parameter="logo"]').count(), 0)
@@ -51,21 +57,22 @@ async function inspectCodeControls({ page, app, capture, evidence, change, file,
   assert.equal((await comparePng(await png(), snapshots[60])).equal, false, '源时刻曲线必须实际改变中间画面')
   await capture('code-parameter-curve')
   await button('查看与编辑源码').click()
-  await page.getByLabel('代码素材源码', { exact: true }).fill(dynamicSource.replace('const x=', 'while(true){} const x='))
+  await page.getByLabel('代码素材源码', { exact: true }).fill(dynamicSource.replace('const x=', 'const x=;'))
   await button('检查并预览').click()
-  await page.getByText(/render 中仅允许 const 和最后一个 return/).first().waitFor({ state: 'visible' })
+  await page.locator('[data-video-edit-panel="effects"]').getByRole('alert').filter({ hasText: /\S/ }).first().waitFor({ state: 'visible', timeout: 20000 })
   assert.equal(codeOf(JSON.parse(fs.readFileSync(file, 'utf8'))).versionId, dynamicClip.code.versionId)
   await page.getByLabel('代码素材源码', { exact: true }).fill(dynamicSource.replaceAll('speed', 'pace'))
   await button('检查并预览').click(); await page.getByLabel('源码候选预览', { exact: true }).waitFor({ state: 'visible', timeout: 20000 })
   const errors = page.getByRole('alert').filter({ hasText: /\S/ })
   assert.equal(await errors.count(), 0, `恢复有效源码后不能残留整页或局部旧错误：${JSON.stringify(await errors.allTextContents())}`)
-  assert.equal(await button('应用已检查源码').isEnabled(), false)
+  assert.equal(await button('保存为新版本').isEnabled(), false)
   await page.getByLabel('确认参数与关键帧迁移', { exact: true }).check(); await capture('code-source-migration-candidate')
-  await button('应用已检查源码').click()
+  await button('保存为新版本').click()
   document = await saved(page, file, value => codeOf(value).versionId !== dynamicClip.code.versionId)
-  assert.equal(codeOf(document).curves, undefined); assert.equal(codeOf(document).parameters.pace, 80)
+  assert.equal(codeOf(document).curves, undefined); assert.equal(codeOf(document).parameters.speed, undefined)
+  assert.equal(codeOf(document).parameters.pace, undefined, '新参数没写过，跟随新版本默认值')
   await button('撤销').click(); await saved(page, file, value => codeOf(value).versionId === dynamicClip.code.versionId && codeOf(value).curves?.speed?.length === 2)
-  await button('重置移动速度').click(); await saved(page, file, value => !codeOf(value).curves && codeOf(value).parameters.speed === 80)
+  await reset('speed', '移动速度'); await saved(page, file, value => !codeOf(value).curves && codeOf(value).parameters.speed === 80)
   await select(staticClip)
   assert.equal(await page.locator('[data-video-edit-code-parameter="speed"]').count(), 0)
   await seek(page, 120); const withoutLogo = await png()
@@ -80,7 +87,7 @@ async function inspectCodeControls({ page, app, capture, evidence, change, file,
   assert.ok(actual.every((channel, index) => Math.abs(channel - expected[index]) <= 2), `透明PNG需只转换一次alpha：${JSON.stringify({ base, actual, expected })}`)
   evidence.controls = { curveMidpoint: 140, originalVersionRestored: true, migrationConfirmed: true, pngAlpha: { base, actual, expected }, imageBinding: codeOf(document, staticClip).parameters.logo, sourceEditor: true }
   await capture('code-image-parameter-4k')
-  await button('清除图片').click(); await saved(page, file, value => codeOf(value, staticClip).parameters.logo === null)
+  await button('清除画面').click(); await saved(page, file, value => codeOf(value, staticClip).parameters.logo === null)
   await page.waitForFunction(previous => document.querySelector('canvas[aria-label="剪辑画面"]').toDataURL('image/png') === previous, withoutLogo)
   await button('撤销').click(); await saved(page, file, value => Boolean(codeOf(value, staticClip).parameters.logo))
   await page.waitForFunction(previous => document.querySelector('canvas[aria-label="剪辑画面"]').toDataURL('image/png') === previous, withLogo)

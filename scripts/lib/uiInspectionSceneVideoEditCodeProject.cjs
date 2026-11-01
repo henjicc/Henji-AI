@@ -7,10 +7,18 @@ const { execFileSync } = require('node:child_process')
 const { createHash } = require('node:crypto')
 const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, codeVersionSource, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
+/**
+ * 关闭项目后工程用过的渲染 Worker 都要结束。两类按设计晚走或不走：留在剪辑项目页时备着的 32×32 空闲节目会话
+ * 等下次打开接管，从没装过本工程内容，不算本工程的资源；试渲染与作者检查的常驻离屏会话空闲 60 秒才回收，
+ * 所以等到它们的空闲期过去，真正泄漏的 Worker 仍会超时。
+ */
+async function waitProjectReleased(page) {
+  await page.waitForFunction(() => window.__videoLayoutEvidence.workers.every(worker => worker.terminated || (worker.direct && worker.renderSize?.width === 32 && worker.renderSize?.height === 32)), null, { timeout: 75000 })
+}
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
     dialog.showOpenDialog = async (...args) => ({ canceled: false, filePaths: args.at(-1)?.properties?.includes('openDirectory') ? [values.outputDirectory] : values.openPaths })
@@ -32,6 +40,8 @@ async function presented(page, frame) {
   }, frame, { timeout: 20000 })
 }
 async function seek(page, frame) {
+  // 外部助手刚改过工程时它仍是编辑者，用户定位前要先接管，否则点击标尺只会弹出接管询问。
+  await takeOverVideoEdit(page)
   const ruler = page.getByRole('slider', { name: '剪辑时间定位' })
   await ruler.click({ position: { x: Math.max(6, frame + .1), y: 12 } })
   for (let count = 0; count < 8; count++) {
@@ -41,6 +51,27 @@ async function seek(page, frame) {
   }
   assert.equal(Number(await ruler.getAttribute('aria-valuenow')), frame)
   await presented(page, frame)
+}
+/**
+ * 1440×900 下时间线画面轨区只放得下两三条轨，更高的轨停在吸顶字幕轨底下。画面轨区是自绘纵向滚动，
+ * Playwright 的 scrollIntoView 移不动它，只能像用户一样在画面轨区 Ctrl+滚轮，把轨道移到字幕轨以下。
+ */
+async function revealVideoTrack(page, index) {
+  const row = page.locator(`[data-video-edit-track][data-track-kind="video"][data-track-index="${index}"]`)
+  const area = await page.locator('[data-video-edit-track-region="video"]').boundingBox()
+  const caption = await page.locator('[data-video-edit-caption-track]').boundingBox()
+  const rect = await row.boundingBox(); assert.ok(area && rect, `时间线里找不到画面轨 ${index}`)
+  const top = caption ? caption.y + caption.height : area.y; const middle = (top + area.y + area.height) / 2
+  await page.mouse.move(area.x + VIDEO_EDIT_TRACK_HEADER_WIDTH + 120, middle)
+  await page.keyboard.down('Control')
+  try { await page.mouse.wheel(0, rect.y + rect.height / 2 - middle) } finally { await page.keyboard.up('Control') }
+  await page.waitForFunction(index => {
+    const row = document.querySelector(`[data-video-edit-track][data-track-kind="video"][data-track-index="${index}"]`)
+    const region = row?.closest('[data-video-edit-track-region]'); if (!row || !region) return false
+    const caption = document.querySelector('[data-video-edit-caption-track]')?.getBoundingClientRect()
+    const rect = row.getBoundingClientRect(); const area = region.getBoundingClientRect()
+    return rect.top >= (caption ? caption.bottom : area.top) - 1 && rect.bottom <= area.bottom + 1
+  }, index, { timeout: 5000 })
 }
 function percentile(values, p) { return [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * p))] }
 async function comparePng(actual, expected) {
@@ -120,6 +151,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         // Free video track 3 (code clips occupy 4; the monitor scene reuses this project and keeps 6/7 free).
         const freeTrack = page.locator('[data-track-kind="video"][data-track-index="3"]')
         await takeOverVideoEdit(page)
+        await revealVideoTrack(page, 3)
         await page.locator(`[data-video-edit-project-entry="${staticItem.id}"]`).dragTo(freeTrack, { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 6, y: 16 } })
         document = await saved(page, file, value => value.sequences[0].clips.length === 5)
         const staticClip = document.sequences[0].clips.find(clip => clip.itemId === staticItem.id)
@@ -141,7 +173,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
           snapshots[frame] = png
         }
         evidence.seeks = seeks
-        if (control) await control.inspectCodeControls({ page, app, capture, evidence, change, file, root, document, dynamicClip, staticClip, dynamicSource, snapshots, saved, seek, comparePng })
+        if (control) await control.inspectCodeControls({ page, app, capture, evidence, change, file, root, document, dynamicClip, staticClip, dynamicSource, snapshots, saved, seek, comparePng, revealVideoTrack })
         const beforeSource = document.codeMaterials.map(definition => definition.versions)
         const parameterAt = performance.now()
         await change([{ kind: 'set_properties', entityType: 'video_edit.clip', target: dynamicRef, properties: { 'video_edit.clip.code_parameters': { speed: 200, ink: [.9, .2, .1, .7] } } }])
@@ -233,7 +265,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         evidence.export.audioRms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length); assert.ok(evidence.export.audioRms > .01)
         const savedContent = readVideoEditFile(file)
         assert.ok(!/"(program|shader|instructions)"/.test(JSON.stringify(savedContent))); assert.deepEqual(savedContent.codeMaterials.map(definition => codeVersionSource(definition.versions[0])), [dynamicSource, staticSource])
-        await button(page, '关闭项目').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitProjectReleased(page)
         evidence.released = await workerSnapshot(page)
         const releases = evidence.released.events.filter(event => event.kind === 'dispose.completed' && event.codeResources?.gpu)
         assert.ok(releases.length >= 3, '试渲染、预览、导出都需释放代码GPU')
@@ -257,8 +289,14 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         await capture('code-mixed-reopened')
         for (const original of originals) { assert.equal(fs.statSync(original.file).size, original.size); assert.equal(fs.statSync(original.file).mtimeMs, original.mtime) }
         evidence.savedReopened = true; evidence.originalFilesUnchanged = true; evidence.completed = true; saveEvidence()
-      } catch (error) { evidence.failed = String(error); saveEvidence(); await capture('code-project-failed').catch(() => {}); throw error }
-      finally { await client?.close(); await disableMcp(page).catch(() => {}); await button(page, '关闭项目').click().catch(() => {}); await waitReleased(page).catch(() => {}) }
+      } catch (error) {
+        // 拖放中途超时会留下按住的鼠标，先松开，收尾的点击才不会被当成拖放的后续。
+        evidence.failed = String(error); evidence.workersAtFailure = await workerSnapshot(page).catch(() => null); saveEvidence(); await page.mouse.up().catch(() => {}); await capture('code-project-failed').catch(() => {}); throw error
+      } finally {
+        // 收尾只为释放资源：任何一步卡住都不能让场景挂起、掩盖真正的失败原因。
+        const bounded = (promise, ms = 15000) => Promise.race([Promise.resolve(promise).catch(() => {}), new Promise(resolve => setTimeout(resolve, ms).unref())])
+        await bounded(client?.close()); await bounded(disableMcp(page)); await bounded(button(page, '关闭项目').click()); await bounded(waitProjectReleased(page), 80000)
+      }
     },
   }
 }
