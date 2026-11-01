@@ -9,6 +9,7 @@ import { codeElementAuthorPoint } from '@/core/videoEdit/codeElementSelection'
 import { codeElementMoveDelta, codeElementOrientedPolygon, resizeCodeElement, rotateCodeElement, snapCodeElementMove, type CodeEditPoint } from '@/core/videoEdit/codeElementManipulation'
 import { readCodeElementOverride, type CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
 import { readVideoEditCodeElementEdit, updateVideoEditCodeElement, resetVideoEditCodeElement, askAssistantForVideoEditCodeElement, bakeVideoEditCodeElement, showVideoEditCodeElementSource, setVideoEditCodeElementAutoKeyframes, type VideoEditCodeElementTarget } from './application/videoEditCodeElementEditing'
+import { handleVideoEditElementEffectDragOver, handleVideoEditElementEffectDrop } from './panels/videoEditEffectDrag'
 import { hitVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames, type selectedVideoEditCodeElement } from './application/videoEditCodeElements'
 import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, type VideoEditGesture, type VideoEditInstance } from './application/videoEditService'
 
@@ -122,7 +123,7 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
     }} onKeyUp={event => { if (event.key.startsWith('Arrow')) { event.stopPropagation(); endNudge(true) } }}>
     {/* icon-token-allow: 选框与吸附线由当前作者几何计算，不是图标。 */}
     <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className="absolute inset-0 h-full w-full" aria-hidden>
-      <polygon data-code-element-edit-body data-code-element-selected points={points.map(point => `${point.x * 1000},${point.y * 1000}`).join(' ')} className="pointer-events-auto cursor-move fill-transparent stroke-accent" strokeWidth={2} vectorEffect="non-scaling-stroke" onPointerDown={event => start(event, 'move')} onDoubleClick={event => { event.stopPropagation(); run(editText) }} onContextMenu={event => menu.showMenu(event, [
+      <polygon data-code-element-edit-body data-code-element-selected points={points.map(point => `${point.x * 1000},${point.y * 1000}`).join(' ')} className="pointer-events-auto cursor-move fill-transparent stroke-accent" strokeWidth={2} vectorEffect="non-scaling-stroke" onPointerDown={event => start(event, 'move')} onDragOver={event => { handleVideoEditElementEffectDragOver(event, target.projectId) }} onDrop={event => { handleVideoEditElementEffectDrop(event, target, onError) }} onDoubleClick={event => { event.stopPropagation(); run(editText) }} onContextMenu={event => menu.showMenu(event, [
         { id: 'ask', label: '让助手改这里', icon: <MessageSquare size={UI_ICON_SIZE.sm} />, disabled: busy, onClick: () => run(() => requestAssistant()) },
         { id: 'hide', label: '隐藏元素', icon: <EyeOff size={UI_ICON_SIZE.sm} />, onClick: () => run(() => updateVideoEditCodeElement(target, { hidden: true })) },
         { id: 'reset', label: '重置该元素的覆盖', icon: <RotateCcw size={UI_ICON_SIZE.sm} />, onClick: () => run(() => resetVideoEditCodeElement(target)) },

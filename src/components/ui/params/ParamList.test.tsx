@@ -2,6 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import { ParamList } from './ParamList'
+import { UiFieldLayoutContext } from '../fieldLayout'
 import type { ParamFieldSpec } from './fieldSpec'
 
 afterEach(cleanup)
@@ -17,4 +18,12 @@ it('同一参数列表在蒙版与图层字段间切换时，新字段等待订�
   expect(screen.queryByText('density: 100')).toBeNull()
   view.rerender(<ParamList fields={[field('density')]} values={{ density: 25 }} contextKey="mask" renderControl={renderControl} />)
   expect(screen.getByText('density: 25')).toBeTruthy()
+})
+
+it('属性面板里只有列出的参数显示已改标记，没有修改记录的参数不显示', () => {
+  const view = render(<UiFieldLayoutContext.Provider value="property"><ParamList fields={[field('a'), field('b')]} values={{ a: 1, b: 2 }} modified={{ a: '用户手动改过' }} renderControl={spec => <span>{spec.key}</span>} /></UiFieldLayoutContext.Provider>)
+  expect(view.container.querySelectorAll('[data-ui-form-row-modified]')).toHaveLength(1)
+  expect(screen.getByRole('img', { name: '用户手动改过' })).toBeTruthy()
+  view.rerender(<UiFieldLayoutContext.Provider value="property"><ParamList fields={[field('a'), field('b')]} values={{ a: 1, b: 2 }} renderControl={spec => <span>{spec.key}</span>} /></UiFieldLayoutContext.Provider>)
+  expect(view.container.querySelectorAll('[data-ui-form-row-modified]')).toHaveLength(0)
 })

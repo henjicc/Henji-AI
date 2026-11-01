@@ -14,22 +14,31 @@ import { CodeKeyframePanel } from './CodeKeyframePanel'
 import { videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 import { CodeImageParameterControl } from './CodeImageParameterControl'
 import { CodeSourceEditor } from './CodeSourceEditor'
-import { selectedVideoEditCodeElement } from '../application/videoEditCodeElements'
+import { readSelectedVideoEditCodeElement } from '../application/videoEditCodeElements'
 import { codeParameterFields } from './params/fieldSpec'
+import { codeEditKey } from '@/core/videoEdit/codeEdits'
+import { codeEditNote } from './codeEditNote'
 import { ParamList } from './params/ParamList'
 import { ParamField } from './params/ParamField'
 import { CodeParamField } from './params/CodeParamField'
 
-/** 代码参数 / 对象参数：在效果控件里自成一节；效果链里的代码滤镜与图形文字样式里嵌在别的节内，只出各行（`bare`）。 */
-export function VideoEditParameterFields({ editor, onError, bare = false }: { editor: VideoEditParameterEditorState; onError: (reason: unknown) => void; bare?: boolean }): React.ReactElement {
+/**
+ * 代码参数 / 对象参数：在效果控件里自成一节；效果链里的代码滤镜与图形文字样式里嵌在别的节内，只出各行（`bare`）。
+ * 画面上选中了代码元素时，绑定到它的参数归元素视图的“属性”（`parameterKeys` 只列这些），片段这一节只列其余参数。
+ */
+export function VideoEditParameterFields({ editor, onError, bare = false, parameterKeys }: { editor: VideoEditParameterEditorState; onError: (reason: unknown) => void; bare?: boolean; parameterKeys?: readonly string[] }): React.ReactElement | null {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
-  const selected = 'code' in editor && !editor.target.effectId ? selectedVideoEditCodeElement(requireVideoEditInstance(editor.target.projectId)) : undefined
-  const chosen = selected?.entry.clip.id === editor.target.clipId ? selected : undefined
+  const selected = !parameterKeys && 'code' in editor && !editor.target.effectId ? readSelectedVideoEditCodeElement(requireVideoEditInstance(editor.target.projectId)) : undefined
+  const elementKeys = selected?.entry.clip.id === editor.target.clipId ? selected.parameterKeys : []
   const title = 'code' in editor ? editor.target.effectId ? '效果参数' : '代码参数' : '对象参数'
-  const fields = codeParameterFields(chosen ? editor.metadata.parameters.filter(parameter => chosen.parameterKeys.includes(parameter.key)) : editor.metadata.parameters, editor.metadata.types)
+  const parameters = editor.metadata.parameters.filter(parameter => parameterKeys ? parameterKeys.includes(parameter.key) : !elementKeys.includes(parameter.key))
+  if (!parameters.length && elementKeys.length) return null
+  const fields = codeParameterFields(parameters, editor.metadata.types)
+  // 修改记录只在片段自身的代码参数上：谁、何时手动改过，名称前一个中性小点。
+  const edits = 'code' in editor && !editor.target.effectId ? requireVideoEditInstance(editor.target.projectId).document.sequences.find(sequence => sequence.id === editor.target.sequenceId)?.clips.find(clip => clip.id === editor.target.clipId)?.edits : undefined
+  const modified = edits ? Object.fromEntries(parameters.flatMap(parameter => { const edit = Object.hasOwn(edits, codeEditKey.param(parameter.key)) ? edits[codeEditKey.param(parameter.key)] : undefined; return edit ? [[parameter.key, codeEditNote(edit)]] : [] })) : undefined
   const content = <div className="flex flex-col" data-video-edit-code-parameters={editor.target.clipId}>
-    {chosen && <div className={`py-1 text-xs text-accent-text ${UI_PROPERTY_INSET_CLASS}`} aria-label="已选元素">已选元素：{chosen.label}</div>}
-    <ParamList key={videoEditParameterTargetIdentity(editor.target)} fields={fields} values={editor.parameters} extras={editor.curves} contextKey={JSON.stringify(editor.sourceTime)} highlightedKeys={chosen?.parameterKeys}
+    <ParamList key={videoEditParameterTargetIdentity(editor.target)} fields={fields} values={editor.parameters} extras={editor.curves} contextKey={JSON.stringify(editor.sourceTime)} modified={modified}
       onReset={field => { try { resetVideoEditCodeParameter(editor.target, field.key) } catch (error) { onError(error) } }}
       renderControl={(field, value) => (field.type === 'image' || field.type === 'audio') ? 'code' in editor ? <ParamField field={field} value={value} gesture={{ begin() {}, finish() {}, cancel() {}, active: () => false, write() {}, atomic() {} }} image={<CodeImageParameterControl target={editor.target} parameterKey={field.key} title={field.title} mediaType={field.type} value={value as CodeImageReference | CodeAudioReference | null} />} /> : null :
         <CodeParamField target={editor.target} field={field} value={value} time={editor.sourceTime} onError={onError} onWrite={(next, gesture, at) => setVideoEditCodeParameter(editor.target, field.key, next, { gesture, time: at })} />}

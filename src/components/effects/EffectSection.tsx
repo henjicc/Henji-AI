@@ -27,13 +27,15 @@ interface SectionProps {
    */
   headerProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, unknown>
   headerRef?: (element: HTMLDivElement | null) => void
+  /** 整节与来源不同（如代码之外追加的效果）：名称后一个中性小点，字符串是悬停说明。 */
+  modified?: string
 }
 
 /**
  * 效果控件的一节（重要记录 019，对齐 AE）：标题行是四列里的 箭头 / fx / 名称 / 悬停才出现的整节动作（重置等），
  * 整行可点折叠；节与节之间一条分隔线，不画卡片。停用的一节标题变灰、内容变淡。说明放标题悬停提示。
  */
-export function EffectSection({ id, title, info, actions, children, enabled, onEnabledChange, open: controlled, onOpenChange, collapseLabel, toggleLabel, toggleTooltip, busy, headerProps, headerRef }: SectionProps): React.ReactElement {
+export function EffectSection({ id, title, info, actions, children, enabled, onEnabledChange, open: controlled, onOpenChange, collapseLabel, toggleLabel, toggleTooltip, busy, headerProps, headerRef, modified }: SectionProps): React.ReactElement {
   const [remembered, setRemembered] = useState(() => !collapsedSections.has(id))
   const open = controlled ?? remembered
   const toggle = (): void => {
@@ -55,7 +57,9 @@ export function EffectSection({ id, title, info, actions, children, enabled, onE
         label={toggleLabel ?? `${inactive ? '启用' : '停用'}${title}分区`} tooltip={toggleTooltip ?? (inactive ? `启用${title}` : `停用${title}（保留参数与关键帧）`)} onChange={onEnabledChange} />}</span>
       {/* 名称占名称列与数值列：窄面板里长名称不被数值列挤断；整节动作贴右，悬停才出现。 */}
       <span className="pointer-events-none relative col-span-2 flex min-w-0 items-center gap-1">
-        <span className={`min-w-0 flex-1 truncate text-xs font-semibold ${inactive ? 'text-text3' : 'text-text2'}`}>{title}</span>
+        <span className={`min-w-0 truncate text-xs font-semibold ${inactive ? 'text-text3' : 'text-text2'}`}>{title}</span>
+        {modified && <Tooltip content={modified} delay={200} asChild><span role="img" aria-label={modified} data-effect-section-modified className="pointer-events-auto flex h-4 w-3 shrink-0 items-center justify-center"><span className="h-1.5 w-1.5 rounded-full bg-text3" /></span></Tooltip>}
+        <span className="flex-1" />
         {actions && <span className={`pointer-events-auto flex shrink-0 items-center gap-0.5 ${UI_PROPERTY_REVEAL_CLASS}`}>{actions}</span>}
       </span>
     </div>

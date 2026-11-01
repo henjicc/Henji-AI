@@ -81,6 +81,22 @@ it('界面写入记为用户、一个手势一步撤销；重置删除记录，�
   expect(owner.document.codeMaterials).toEqual(versions)
 })
 
+it('单项重置：变换只去掉这一项，效果参数回到代码值或效果默认值，记录随之删除', async () => {
+  const { target, current } = await setup()
+  const user = videoEditCodeElementWriter('user')
+  user.updateVideoEditCodeElement(target, { dx: 12, rotation: 30 })
+  user.resetVideoEditCodeElementField(target, 'dx')
+  expect(current().elementOverrides!.title).toEqual({ rotation: 30 })
+  expect(Object.keys(current().edits!)).toEqual(['element:title:rotation'])
+  user.resetVideoEditCodeElementField(target, 'rotation')
+  expect(current().elementOverrides).toBeUndefined()
+  user.updateVideoEditCodeElementEffect(target, 'light', { values: { strength: 40 } }); user.updateVideoEditCodeElementEffect(target, 'blur', { enabled: false })
+  user.resetVideoEditCodeElementEffectParams(target, 'light', ['strength'])
+  expect(current().elementOverrides).toEqual({ title: { effects: { blur: { enabled: false } } } })
+  const key = user.addVideoEditCodeElementEffect(target, { id: 'glow', params: { strength: 30 } })
+  user.resetVideoEditCodeElementEffectParams(target, key, ['strength'])
+  expect(current().elementOverrides!.title.addedEffects![0].params.strength).not.toBe(30)
+})
 it('助手经通用动词读改元素三组属性，记为助手；越界整组拒绝，一次修改一步撤销', async () => {
   const { owner, target, current, ref } = await setup()
   selectVideoEditCodeElement(owner, target.clipId, 'title')

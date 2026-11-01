@@ -5,7 +5,7 @@ import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { CodeMaterialError, type CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { codeElementAtSource } from '@/core/videoEdit/codeElementSelection'
-import { selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames } from '../application/videoEditCodeElements'
+import { readSelectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames } from '../application/videoEditCodeElements'
 import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInlineStatus, UiLoading, UiTextArea, UiInput, UiOptionButton } from '@/components/ui'
 import { commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate, prepareVideoEditCodeCandidate, type VideoEditCodeApplyScope, type VideoEditCodeCandidate } from '../application/videoEditCodeCandidates'
 import type { VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
@@ -59,7 +59,7 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
     }).finally(() => { if (live) setCheckingFiles(false) })
     return () => { live = false }
   }, [owner, editor.code])
-  const selected = !editor.target.effectId && unchanged ? selectedVideoEditCodeElement(owner) : undefined
+  const selected = !editor.target.effectId && unchanged ? readSelectedVideoEditCodeElement(owner) : undefined
   const span = selected?.entry.clip.id === editor.target.clipId ? selected.element.sourceSpan : undefined
   useLayoutEffect(() => { if (span && draft.files[span.file] !== undefined) setActiveFile(span.file) }, [span, selected?.element.elementId, draft.files])
   useLayoutEffect(() => {

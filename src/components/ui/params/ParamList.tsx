@@ -24,6 +24,8 @@ export interface ParamListProps {
   onReset?: (field: ParamFieldSpec) => void
   resetDisabled?: (field: ParamFieldSpec, value: CodeParameterValue) => boolean
   highlightedKeys?: readonly string[]
+  /** 与来源不同的参数：键 → 悬停说明（空串用缺省“已改”）；属性面板排布在名称前画中性小点。 */
+  modified?: Readonly<Record<string, string>>
 }
 export interface ParamAnimationSlots { leading: ReactNode; labelTrailing?: ReactNode }
 const isAnimationSlots = (value: unknown): value is ParamAnimationSlots => typeof value === 'object' && value !== null && !isValidElement(value) && 'leading' in value
@@ -42,7 +44,7 @@ function createFieldStore() {
     update(props: ParamListProps, notify: boolean) {
       current = props
       for (const field of props.fields) {
-        const snapshot = JSON.stringify([props.values[field.key], props.extras?.[field.key], parameterVisible(field.visibleWhen, props.values), props.contextKey, props.highlightedKeys?.includes(field.key)])
+        const snapshot = JSON.stringify([props.values[field.key], props.extras?.[field.key], parameterVisible(field.visibleWhen, props.values), props.contextKey, props.highlightedKeys?.includes(field.key), props.modified?.[field.key]])
         if (snapshots.get(field.key) === snapshot) continue
         snapshots.set(field.key, snapshot)
         if (notify) listeners.get(field.key)?.forEach(listener => listener())
@@ -62,7 +64,7 @@ const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpe
   const menu = useUiPropertyMenu()
   // 新字段在本轮布局提交时发布；字段集合切换的首次渲染尚无快照。
   if (!snapshot) return null
-  const [value, , visible, , highlighted] = JSON.parse(snapshot) as [CodeParameterValue, unknown, boolean, string, boolean]
+  const [value, , visible, , highlighted, modified] = JSON.parse(snapshot) as [CodeParameterValue, unknown, boolean, string, boolean, string | null]
   if (!visible) return null
   const props = store.props
   if (property) {
@@ -73,7 +75,7 @@ const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpe
     const reset = props.onReset && (() => store.props.onReset?.(field))
     const resetDisabled = props.resetDisabled?.(field, value)
     return <div className={highlighted ? 'bg-selected-accent' : undefined} data-video-edit-code-parameter={field.source === 'code' ? field.key : undefined} data-video-edit-builtin-param={field.source === 'builtin' ? field.key : undefined} data-code-element-parameter={highlighted || undefined}>
-      <UiFormRow label={field.title} info={field.tooltip} infoDelay={PARAM_INFO_DELAY_MS} wide={WIDE_TYPES.has(field.type)} leading={slots?.leading} labelTrailing={slots?.labelTrailing}
+      <UiFormRow label={field.title} info={field.tooltip} infoDelay={PARAM_INFO_DELAY_MS} wide={WIDE_TYPES.has(field.type)} modified={modified == null ? undefined : modified || true} leading={slots?.leading} labelTrailing={slots?.labelTrailing}
         trailing={reset && !menu ? <UiIconButton size="2xs" aria-label={resetLabel} tooltip={resetLabel} disabled={resetDisabled} onClick={reset}><RotateCcw /></UiIconButton> : undefined}
         onContextMenu={reset && menu ? event => menu(event, [{ id: 'reset', label: resetLabel, icon: <RotateCcw size={UI_ICON_SIZE.sm} />, disabled: resetDisabled, onClick: reset }]) : undefined}>
         {props.renderControl(field, value)}

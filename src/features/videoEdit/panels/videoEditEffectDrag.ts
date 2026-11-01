@@ -5,6 +5,8 @@ import { applyVideoEditBuiltinEffect, applyVideoEditStylePiece } from '../applic
 import { requireVideoEditInstance } from '../application/videoEditService'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
+import type { CodeElementAddedEffect } from '@/core/videoEdit/codeElementOverrides'
+import { videoEditCodeElementWriter, type VideoEditCodeElementTarget } from '../application/videoEditCodeElementEditing'
 
 /**
  * 从效果面板把内置效果拖到时间线片段上（PR：效果拖到片段上即应用）。拖动数据带上内置效果 ID；
@@ -111,3 +113,34 @@ export function handleVideoEditEffectDrop(event: DropEvent, projectId: string, s
   }
   return true
 }
+/**
+ * 拖到代码元素（画面选框或效果控件的元素视图）上的效果：元素效果链只放内置画面效果的参数，
+ * 带作用区域、要分析素材的智能效果与风格件不能追加到元素上。
+ */
+export function readVideoEditElementEffectDrag(dataTransfer: DataTransfer | null, projectId: string): { id: string; params: CodeElementAddedEffect['params'] } | undefined {
+  const ref = readVideoEditEffectDrag(dataTransfer, projectId)
+  const resolved = ref ? resolveVideoEditLibraryEffects(ref) : undefined
+  const effect = resolved?.effects.length === 1 ? resolved.effects[0] : undefined
+  if (!resolved || resolved.media !== 'video' || resolved.needsSource || !effect?.builtin || effect.mask || effect.builtin.regions) return undefined
+  return { id: effect.builtin.id, params: effect.builtin.params as CodeElementAddedEffect['params'] }
+}
+/** 元素 dragover：拖的是效果就接管（能追加时显示复制，否则不可放下），返回 true；否则交给原有拖放。 */
+export function handleVideoEditElementEffectDragOver(event: DropEvent, projectId: string): boolean {
+  if (!readVideoEditStylePieceDrag(event.dataTransfer, projectId) && !readVideoEditEffectDrag(event.dataTransfer, projectId)) return false
+  event.preventDefault(); event.stopPropagation()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = readVideoEditElementEffectDrag(event.dataTransfer, projectId) ? 'copy' : 'none'
+  return true
+}
+/** 元素 drop：把效果追加到元素效果链末尾，一步撤销；返回 true 表示已处理。 */
+export function handleVideoEditElementEffectDrop(event: DropEvent, target: VideoEditCodeElementTarget, onError: (reason: unknown) => void): boolean {
+  const piece = readVideoEditStylePieceDrag(event.dataTransfer, target.projectId)
+  const effect = readVideoEditElementEffectDrag(event.dataTransfer, target.projectId)
+  if (!piece && !readVideoEditEffectDrag(event.dataTransfer, target.projectId)) return false
+  event.preventDefault(); event.stopPropagation(); endVideoEditEffectDrag()
+  try {
+    if (!effect) throw new Error(piece ? '风格件不能追加到画面元素上；请拖到片段上，或在代码里用 look() 引用它。' : '这个效果需要分析素材或带作用区域，只能加到视频、图片片段上。')
+    elementWriter.addVideoEditCodeElementEffect(target, effect)
+  } catch (error) { onError(error) }
+  return true
+}
+const elementWriter = videoEditCodeElementWriter('user')

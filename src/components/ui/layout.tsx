@@ -135,6 +135,8 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   labelTrailing?: ReactNode;
   /** 属性面板排布里控件需要整行宽度（曲线、色轮、点位板、多行文本）：名称一行，控件在下一行占满名称列与数值列。 */
   wide?: boolean;
+  /** 值与来源（代码、默认）不同：属性面板排布在名称前的窄列画一个中性小点；字符串是悬停说明（谁、何时改的）。 */
+  modified?: boolean | string;
   children: ReactNode;
 }
 
@@ -439,6 +441,7 @@ export function UiFormRow({
   leading,
   labelTrailing,
   wide = false,
+  modified,
   ...props
 }: UiFormRowProps): JSX.Element {
   const panelLabelWidth = useContext(FormLabelWidthContext);
@@ -458,7 +461,7 @@ export function UiFormRow({
     const control = <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>;
     const notes = hint || errorNode ? <div className="col-span-2 col-start-3 pb-1">{hint ? <p id={hintId} className={UI_TEXT_META_CLASS}>{hint}</p> : null}{errorNode}</div> : null;
     return <div data-ui-form-row="property" className={`${UI_PROPERTY_ROW_CLASS} ${className}`} {...props}>
-      <span aria-hidden="true" />
+      {modified ? <Tooltip asChild content={typeof modified === 'string' ? modified : '已改'}><span role="img" aria-label={typeof modified === 'string' ? modified : '已改'} data-ui-form-row-modified className="flex h-full items-center justify-center"><span className="h-1.5 w-1.5 rounded-full bg-text3" /></span></Tooltip> : <span aria-hidden="true" />}
       <span className="flex items-center justify-center">{leading}</span>
       {/* 名称后的悬停内容（关键帧导航）叠在名称列右端、不占宽度：占宽时窄面板里名称只剩一个字（重要记录 020） */}
       <div className="relative flex min-w-0 items-center">

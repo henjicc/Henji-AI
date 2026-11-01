@@ -122,12 +122,18 @@ function createVideoEditCodeAiScene() {
         await set(documentRef, { 'video_edit.document.program_playback': { frame, playing: false, playbackDirection: 1 } })
         await fresh(before, frame)
       }
+      // 外部 Agent 写入后编辑区暂停人工操作（AgentEditingGuard）；用户动手前先从标题栏接管，和真人一样。
+      const takeOver = async () => {
+        const button = page.getByRole('status').getByRole('button', { name: '接管', exact: true })
+        if (await button.isVisible().catch(() => false)) await button.click()
+      }
       const dock = async title => {
         const tab = page.locator('.dv-tab').filter({ has: page.getByText(title, { exact: true }) }).first()
         if (await tab.isVisible()) await tab.click()
         else {
-          await button('面板').click()
-          await button(title).click()
+          // 面板入口在标题栏菜单“窗口”里（按面板名列出）。
+          await page.getByRole('menubar', { name: '菜单栏' }).getByRole('menuitem', { name: '窗口', exact: true }).click()
+          await page.getByRole('menu', { name: '窗口' }).getByRole('menuitemcheckbox', { name: title, exact: true }).click()
         }
       }
       try {
@@ -186,6 +192,7 @@ function createVideoEditCodeAiScene() {
         })
         await step('03-pick-element', '点选标题并定位源码高亮', async item => {
           await focus(ref('video_edit.clip', codeClip.id))
+          await takeOver()
           const point = authorPointToMonitor(await canvas.boundingBox(), { x: 960, y: 540 })
           await page.mouse.click(point.x, point.y)
           await page.locator('[aria-label="代码元素选择层"] [data-code-element-selected="true"]').waitFor({ state: 'visible' })
@@ -200,7 +207,16 @@ function createVideoEditCodeAiScene() {
             text: node.value.slice(node.selectionStart, node.selectionEnd) }))
           assert.ok(item.sourceSelection.end > item.sourceSelection.start && /id:\s*"title"/.test(item.sourceSelection.text), '源码编辑器未高亮所选 title 的源码范围')
         })
+        await step('03b-element-view', '效果控件显示所选元素的变换与属性', async item => {
+          await dock('效果控件')
+          if (await button('收起源码编辑').isVisible()) await button('收起源码编辑').click()
+          const view = page.locator('[data-code-element-view="title"]')
+          await view.waitFor({ state: 'visible' }); await view.scrollIntoViewIfNeeded()
+          item.blocks = await view.locator('[data-code-element-block]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-code-element-block')))
+          assert.ok(item.blocks.includes('变换'), '元素视图缺少变换块')
+        })
         await step('04-annotations', '批注草稿、外部处理和用户审查', async item => {
+          await takeOver()
           if (await button('收起源码编辑').isVisible()) await button('收起源码编辑').click()
           // 批注是命令带里的工具：Alt+C 进入，7 选评论钉；聚焦真实节目宿主保证作用域。
           await page.locator('[data-video-edit-panel="program"]').evaluate(node => { node.tabIndex = -1; node.focus() })

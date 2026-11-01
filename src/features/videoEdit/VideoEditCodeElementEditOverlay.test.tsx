@@ -20,7 +20,7 @@ import { installVideoEditCodeElements, selectVideoEditCodeElement, selectedVideo
 import { bakeVideoEditCodeElement, readVideoEditCodeElementEdit, resetVideoEditCodeElement, setVideoEditCodeElementAutoKeyframes, showVideoEditCodeElementSource, updateVideoEditCodeElement, videoEditCodeElementHostSummary, videoEditCodeElementOverrideSummary } from './application/videoEditCodeElementEditing'
 import { readVideoEditCodeEditor } from './application/videoEditCodeParameters'
 import { CodeSourceEditor } from './panels/CodeSourceEditor'
-import { CodeParameterPanel } from './panels/CodeParameterPanel'
+import { VideoEditCodeElementsPanel } from './panels/VideoEditCodeElementsPanel'
 import { VideoEditCodeElementOverlay } from './VideoEditCodeElementOverlay'
 
 // Only compiler-worker/GPU trial boundaries are substituted; parsing, document,
@@ -117,9 +117,9 @@ it('默认静态，显式开启的属性按当前源时刻打帧；关闭冻结�
   setVideoEditView(owner.document.id, { frame: 15 }); expect(readVideoEditCodeElementEdit(target()).values.dx).toBeCloseTo(60)
   setVideoEditCodeElementAutoKeyframes(target(), false); expect(clip().elementOverrides?.box).toMatchObject({ dx: 60 }); expect(clip().elementOverrides?.box.curves).toBeUndefined()
 })
-it('绑定的文字样式复用通用面板，字号和字重写参数并可撤销', () => {
+it('选中元素的属性块复用通用文字样式面板，字号和字重写参数并可撤销', () => {
   selectVideoEditCodeElement(owner, clipId, 'title'); const onError = vi.fn()
-  const result = render(<CodeParameterPanel projectId={owner.document.id} sequenceId={owner.activeSequenceId} clipId={clipId} onError={onError} />)
+  const result = render(<VideoEditCodeElementsPanel instance={owner} clipId={clipId} onError={onError} />)
   const size = result.getByLabelText('文字字号'); fireEvent.focus(size); fireEvent.change(size, { target: { value: '80' } }); fireEvent.blur(size)
   act(observe)
   const weight = result.getByLabelText('文字字重'); fireEvent.focus(weight); fireEvent.change(weight, { target: { value: '700' } }); fireEvent.blur(weight)

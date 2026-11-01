@@ -71,7 +71,8 @@ export function VideoEditBuiltinParamRows({ params, values, gesture, animation }
     })} />
 }
 
-function BuiltinField({ field, value, gesture }: { field: ParamFieldSpec; value: CodeParameterValue; gesture: VideoEditBuiltinParamGesture }): React.ReactElement {
+/** 一个内置参数的控件：拖动会话结束前卸载时撤回。效果控件与代码元素的效果共用。 */
+export function BuiltinField({ field, value, gesture }: { field: ParamFieldSpec; value: CodeParameterValue; gesture: VideoEditBuiltinParamGesture }): React.ReactElement {
   const current = useRef(gesture); current.current = gesture
   const owns = useRef(false)
   useEffect(() => () => { if (owns.current && current.current.active()) current.current.cancel() }, [])

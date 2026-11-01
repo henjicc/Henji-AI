@@ -103,6 +103,22 @@ function resetVideoEditCodeElementEffectAs(actor: CodeEditActor, target: VideoEd
   const addedEffects = added ? current.override.addedEffects!.filter(effect => effect.key !== key) : current.override.addedEffects
   writeVideoEditCodeElementGroups(target, { effects: { ...cleanEffects(effects), ...(addedEffects?.length ? { addedEffects } : {}) } }, actor)
 }
+/** 一项效果的几个参数回到原值：代码给的效果去掉这些参数的覆盖与曲线；追加的效果回到效果默认值。 */
+function resetVideoEditCodeElementEffectParamsAs(actor: CodeEditActor, target: VideoEditCodeElementTarget, key: string, fields: readonly string[]): void {
+  const current = readVideoEditCodeElementEdit(target), effects = effectOverrides(current.override)
+  const added = current.override.addedEffects?.find(effect => effect.key === key)
+  let addedEffects = current.override.addedEffects
+  if (added) {
+    const definition = videoEditBuiltinEffect(added.id), params = { ...added.params }, curves = { ...added.curves }
+    for (const field of fields) { delete curves[field]; const fallback = definition?.params.find(param => param.key === field)?.default; if (fallback === undefined) delete params[field]; else params[field] = fallback as string | number | boolean }
+    addedEffects = addedEffects!.map(effect => effect === added ? { key, id: added.id, params, ...(Object.keys(curves).length ? { curves } : {}) } : effect)
+  } else if (Object.hasOwn(effects, key)) {
+    const values = { ...effects[key].values }, curves = { ...effects[key].curves }
+    for (const field of fields) { delete values[field]; delete curves[field] }
+    effects[key] = { ...effects[key], values, curves }
+  } else return
+  writeVideoEditCodeElementGroups(target, { effects: { ...cleanEffects(effects), ...(addedEffects?.length ? { addedEffects } : {}) } }, actor)
+}
 function ensureOverride(clip: ReturnType<typeof resolve>['clip'], id: string): CodeElementOverride {
   const values = clip.elementOverrides ??= {}
   const current = readCodeElementOverride(values, id)
@@ -136,6 +152,16 @@ function updateVideoEditCodeElementAs(actor: CodeEditActor, target: VideoEditCod
       else Object.assign(value, { [key]: next })
     }
   }, options.gesture)
+}
+/** 变换的一项回到代码给的值：去掉它的静态覆盖与曲线；不需要当前帧观察，隐藏的元素也能恢复显示。 */
+function resetVideoEditCodeElementFieldAs(actor: CodeEditActor, target: VideoEditCodeElementTarget, key: CodeElementOverrideKey): void {
+  edit(actor, target, clip => {
+    const override = readCodeElementOverride(clip.elementOverrides, target.elementId)
+    if (!override) return
+    delete override[key]
+    if (override.curves) { delete override.curves[key]; if (!Object.keys(override.curves).length) delete override.curves }
+    if (!Object.keys(override).length) delete clip.elementOverrides![target.elementId]
+  })
 }
 function resetVideoEditCodeElementAs(actor: CodeEditActor, target: VideoEditCodeElementTarget): void { edit(actor, target, clip => { if (clip.elementOverrides) delete clip.elementOverrides[target.elementId] }) }
 /** Explicitly arm/freeze transform channels. Static typography is never implicitly keyed. */
@@ -214,12 +240,14 @@ export function videoEditCodeElementWriter(actor: CodeEditActor) {
   return {
     updateVideoEditCodeElement: updateVideoEditCodeElementAs.bind(undefined, actor),
     resetVideoEditCodeElement: resetVideoEditCodeElementAs.bind(undefined, actor),
+    resetVideoEditCodeElementField: resetVideoEditCodeElementFieldAs.bind(undefined, actor),
     setVideoEditCodeElementAutoKeyframes: setVideoEditCodeElementAutoKeyframesAs.bind(undefined, actor),
     toggleVideoEditCodeElementKeyframe: toggleVideoEditCodeElementKeyframeAs.bind(undefined, actor),
     updateVideoEditCodeElementEffect: updateVideoEditCodeElementEffectAs.bind(undefined, actor),
     toggleVideoEditCodeElementEffectKeyframe: toggleVideoEditCodeElementEffectKeyframeAs.bind(undefined, actor),
     addVideoEditCodeElementEffect: addVideoEditCodeElementEffectAs.bind(undefined, actor),
     resetVideoEditCodeElementEffect: resetVideoEditCodeElementEffectAs.bind(undefined, actor),
+    resetVideoEditCodeElementEffectParams: resetVideoEditCodeElementEffectParamsAs.bind(undefined, actor),
     writeVideoEditCodeElementGroups: (target: VideoEditCodeElementTarget, groups: VideoEditCodeElementGroups, gesture?: VideoEditGesture) => writeVideoEditCodeElementGroups(target, groups, actor, gesture),
   }
 }
