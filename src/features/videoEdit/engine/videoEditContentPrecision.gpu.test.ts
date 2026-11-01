@@ -33,14 +33,16 @@ const document: VideoEditComposition = { ...createVideoEditSequence(), width: W,
 beforeAll(async () => { gpu = await init(); device = gpu.gpu as unknown as GpuDevice })
 afterAll(() => gpu?.dispose())
 
-it.each(['grain', 'animated-layer-effect', 'still', 'glitch-layer', 'glitch-still', 'glitch-static'] as const)('恒定 settled 声明或 static 模块的 %s 输出复用与逐帧直出像素一致', async kind => {
-  // 故障要横向有明暗变化的画面才看得出错位。static 模块不写 frameKey，随帧效果按第 0 帧，与先渲染哪一帧无关。
-  const glitch = kind.startsWith('glitch'), staticModule = kind === 'glitch-static', still = kind === 'still' || kind === 'glitch-still' || staticModule
-  const d = historyRasterDevice(glitch ? (width, height) => Uint8Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 255 : (Math.floor(i / 4) % width) * 37 % 256) : undefined)
+it.each(['grain', 'animated-layer-effect', 'still', 'glitch-layer', 'glitch-still', 'glitch-static', 'wave-layer', 'wave-still'] as const)('恒定 settled 声明或 static 模块的 %s 输出复用与逐帧直出像素一致', async kind => {
+  // 故障、波动要横向有明暗变化的画面才看得出错位。static 模块不写 frameKey，随帧效果按第 0 帧，与先渲染哪一帧无关。
+  // 波动的速度按宿主帧号换成的秒数走：速度为 0 时与帧号无关，照常复用。
+  const glitch = kind.startsWith('glitch'), wave = kind.startsWith('wave'), staticModule = kind === 'glitch-static', still = kind === 'still' || kind === 'glitch-still' || kind === 'wave-still' || staticModule
+  const d = historyRasterDevice(glitch || wave ? (width, height) => Uint8Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 255 : (Math.floor(i / 4) % width) * 37 % 256) : undefined)
   const effect = deterministicAuthorModule({ name: '效果复用', ...(staticModule ? { mode: 'static' as const } : { frameKey: () => 'settled' }), layers: () => [
     { id: 'base', bounds: [0, 0, W, H] as [number, number, number, number],
       ...(kind === 'animated-layer-effect' ? { effects: (time: number) => [{ id: 'color_grade', params: { exposure: (time - 1) * 3 } }] } : {}),
       ...(glitch ? { effects: () => [{ id: 'glitch' as const, params: { amount: 100, block_size: 100, rhythm: kind === 'glitch-still' ? 0 : 100 } }] } : {}),
+      ...(wave ? { effects: () => [{ id: 'wave' as const, params: { amount: 400, wavelength: 100, direction: 90, speed: kind === 'wave-still' ? 0 : 400 } }] } : {}),
       draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, W, H) } },
     ...(kind === 'grain' || staticModule ? [{ id: 'grain', adjust: () => [{ id: 'film_grain' as const, params: { amount: 70 } }] }] : []),
   ] }, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
@@ -75,16 +77,18 @@ it.each(['grain', 'animated-layer-effect', 'still', 'glitch-layer', 'glitch-stil
     if (still) expect(reused[0].pixels).toEqual(reused[1].pixels)
     else expect(reused[0].pixels).not.toEqual(reused[1].pixels)
     // 预览走复用与交互质量，导出逐帧直出与最终质量：同一帧逐像素相同。
-    if (glitch) expect((await run(true, 'interactive')).map(frame => frame.pixels)).toEqual(direct.map(frame => frame.pixels))
+    if (glitch || wave) expect((await run(true, 'interactive')).map(frame => frame.pixels)).toEqual(direct.map(frame => frame.pixels))
     expect(await device.popErrorScope()).toBeNull()
   } finally { loader.mockRestore(); vi.unstubAllGlobals() }
 })
-it('0.5 倍慢放的代码图层：调整层漏光按小数帧位置逐个输出帧变化，预览复用与导出直出逐像素相同', async () => {
-  // 源时间每个输出帧只走半帧；帧位置若取整，第 31、32 帧会落在同一帧上，光一顿一顿。
-  const d = historyRasterDevice()
+it.each(['调整层漏光', '图层波动'] as const)('0.5 倍慢放的代码图层：%s按小数帧位置逐个输出帧变化，预览复用与导出直出逐像素相同', async kind => {
+  // 源时间每个输出帧只走半帧；帧位置若取整，第 31、32 帧会落在同一帧上，光和波一顿一顿。波动要横向有明暗变化的画面才看得出平移。
+  const wave = kind === '图层波动'
+  const d = historyRasterDevice(wave ? (width, height) => Uint8Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 255 : (Math.floor(i / 4) % width) * 37 % 256) : undefined)
   const effect = deterministicAuthorModule({ name: '慢放漏光', frameKey: () => 'settled', layers: () => [
-    { id: 'base', bounds: [0, 0, W, H] as [number, number, number, number], draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, W, H) } },
-    { id: 'leak', adjust: () => [{ id: 'light_leak' as const, params: { amount: 100, speed: 100, flicker: 100 } }] },
+    { id: 'base', bounds: [0, 0, W, H] as [number, number, number, number], draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, W, H) },
+      ...(wave ? { effects: () => [{ id: 'wave' as const, params: { amount: 400, wavelength: 100, direction: 90, speed: 400 } }] } : {}) },
+    ...(wave ? [] : [{ id: 'leak', adjust: () => [{ id: 'light_leak' as const, params: { amount: 100, speed: 100, flicker: 100 } }] }]),
   ] }, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
   const loader = vi.spyOn(authorModules, 'loadAuthorModule').mockResolvedValue(effect)
   const code = { definitionId: 'definition', versionId: 'v', parameters: {} }

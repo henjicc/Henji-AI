@@ -9,7 +9,7 @@ export const VIDEO_EDIT_EFFECT_CATALOG: readonly { readonly group: VideoEditBuil
   { group: 'lens', ids: ['vignette', 'chromatic_aberration'] },
   { group: 'texture', ids: ['film_grain', 'halftone', 'dither_pattern', 'paper', 'scratches', 'retro_screen'] },
   { group: 'stylize', ids: ['mosaic', 'glitch', 'dissolve_reveal'] },
-  { group: 'distort', ids: [] },
+  { group: 'distort', ids: ['mirror', 'repeat', 'bulge', 'twirl', 'wave', 'corner_pin', 'displace'] },
   { group: 'frame', ids: ['crop', 'flip'] },
   { group: 'keying', ids: ['chroma_key'] },
   { group: 'recording', ids: ['recording_cursor', 'recording_zoom', 'recording_frame'] },

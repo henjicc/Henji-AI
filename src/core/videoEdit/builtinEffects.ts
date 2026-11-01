@@ -36,7 +36,8 @@ export interface VideoEditBuiltinEffectDefinition {
    * 同一段错法、强度为 0 等画面不变的帧照样复用。
    */
   frameSeed?: (params: VideoEditBuiltinParams, frame: number) => number
-  bleed?: (params: VideoEditBuiltinParams, reference: LayerEffectReference) => number
+  /** `prior`：前面效果已经外扩的量（逻辑像素），`reference` 的内容框已含这一圈；按真实几何算外扩的效果（透视、镜面中心）用它还原内容框。 */
+  bleed?: (params: VideoEditBuiltinParams, reference: LayerEffectReference, prior?: number) => number
   author?: { factory: string }
   id: string
   name: string

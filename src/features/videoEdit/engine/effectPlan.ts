@@ -25,8 +25,12 @@ export interface VideoEditBuiltinPass {
  * `underlay`：图层拆输出时叠在主图下面的那张 scratch。缺省是零 alpha 的光（相加照亮下方画面，`carriesLight`）；
  * `underlayKind: 'cover'` 是普通预乘画面（投影），按普通透明度遮挡。
  * `scratchFormat`：中间纹理不是画面而是数据时的格式（描边的种子坐标），优先于 `linearScratch`。
+ * `remap`：只按与输入无关的坐标变换重排像素、不改颜色（变形）。同一份规划可以原样作用在前面效果拆出的光与影上，
+ * 零 alpha 的光按预乘值取样照样成立。
+ * `remapField`：重排靠一张与输入无关的位移场时，拆成两段——`field` 只画位移场（输出格式 `format`），
+ * `warp` 按 `second` 上的位移场重排；主图与拆出的光影共用同一张位移场。
  */
-export interface VideoEditBuiltinPlan { underlay?: number; underlayKind?: 'cover'; width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean; scratchFormat?: 'rg32float' }
+export interface VideoEditBuiltinPlan { underlay?: number; underlayKind?: 'cover'; width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[]; resolvedGaussian?: ResolvedGaussianPlan; linearScratch?: boolean; scratchFormat?: 'rg32float'; remap?: boolean; remapField?: { format: 'rgba16float'; field: VideoEditBuiltinPlan; warp: VideoEditBuiltinPlan } }
 export type Vec4 = readonly [number, number, number, number]
 export const ZERO: Vec4 = [0, 0, 0, 0]
 

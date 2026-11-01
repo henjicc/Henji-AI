@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { BLACK_HEX, WHITE_HEX, VIDEO_EDIT_GLOW_TEST_COLORS } from '@/core/theme/colorTokens'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { resolveAuthorEffects } from '@/core/videoEdit/authorEffects'
+import { authorEffectBleed, resolveAuthorEffects, type AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
+import { videoEditEffectPresetSchema } from '@/core/videoEdit/effectPresets'
 import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
 import { VideoEditBuiltinEffectsGpu, type VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 import { VideoEditAuthorEffects } from './videoEditAuthorEffects'
@@ -15,6 +16,7 @@ import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { ditherPattern, halftone } from '../authorLibraries/effects.generated'
 import { ditherPixelSize } from '@/core/videoEdit/ditherPattern'
+import { bulge, cornerPin, displace, mirror, repeat, twirl, wave } from '@/features/videoEdit/authorLibraries/effects'
 
 // 投影、描边、扫光、溶解显影与发光“轮廓”的真实设备用例：正式 WGSL 与工序在 Dawn 上执行，按像素核对。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -85,14 +87,14 @@ async function clip(source: Uint8Array, id: string, params: Record<string, unkno
   } finally { input.destroy(); output.destroy() }
 }
 /** 图层模式：正式图层效果链编码，结果是层内叠好下层的预乘画面与 carriesLight。 */
-async function layer(source: Uint8Array, chainEffects: unknown[], defocus = { radius: 0, lens: false }, options: { width?: number; height?: number; reference?: LayerEffectReference; amount?: number } = {}): Promise<{ pixels: Uint8Array; carriesLight: boolean }> {
+async function layer(source: Uint8Array, chainEffects: unknown[], defocus = { radius: 0, lens: false }, options: { width?: number; height?: number; reference?: LayerEffectReference; amount?: number; environment?: AuthorEffectEnvironment } = {}): Promise<{ pixels: Uint8Array; carriesLight: boolean }> {
   const width = options.width ?? W, height = options.height ?? H
   const d = device as unknown as GpuDevice
   const author = new VideoEditAuthorGpu(d), chain = new VideoEditAuthorEffects(d, allocator())
   const input = texture(source, width, height), frame = target(width, height)
   try {
     await author.begin(frame); chain.begin(author.commandEncoder())
-    const resolved = resolveAuthorEffects(chainEffects).map(effect => ({ ...effect, amount: options.amount ?? effect.amount }))
+    const resolved = resolveAuthorEffects(chainEffects, options.environment).map(effect => ({ ...effect, amount: options.amount ?? effect.amount }))
     const result = await chain.encode('layer', input, width, height, resolved, options.reference ?? reference(), {}, undefined, defocus, value => author.mipmaps(value, width, height), 0)
     author.finish(); chain.commit()
     return { pixels: await read(result.picture, width, height), carriesLight: result.carriesLight }
@@ -598,4 +600,148 @@ describe('镜头光晕与漏光', () => {
     const clipped = over(await light(block(), 'light_leak', { amount: 120 }), black), layered = over(await light(block(), 'light_leak', { amount: 120 }, { split: true }), black)
     expect(Math.max(...clipped.map((value, index) => Math.abs(value - layered[index])))).toBeLessThanOrEqual(2)
   }, 60_000)
+})
+
+describe('变形（真实设备）', () => {
+  // 声明的外扩以外看不到内容：变形把内容推出内容框时，图层纹理不切掉它。描述由生成的作者工厂产出，走正式作者链。
+  const factories: Record<string, (params: never) => unknown> = { mirror, repeat, bulge, twirl, wave, corner_pin: cornerPin, displace }
+  const reaches: Array<[string, string, Record<string, unknown>, [number, number]?]> = [
+    ['镜像·斜着、中心偏右', 'mirror', { angle: 30, center_x: 80 }],
+    ['重复·网格错位', 'repeat', { columns: 4, rows: 3, stagger: 50, spacing: 20 }],
+    ['重复·直线', 'repeat', { mode: 'linear', count: 4, angle: 30, spacing: 30 }],
+    ['重复·环形放大', 'repeat', { mode: 'ring', count: 6, radius: 5, scale_step: 20, face_center: true }],
+    ['膨胀·平滑', 'bulge', { amount: 100, radius: 6 }],
+    ['膨胀·球面', 'bulge', { amount: 100, radius: 6, shape: 'sphere' }],
+    ['旋转扭曲·平滑', 'twirl', { angle: 300, radius: 5 }],
+    ['旋转扭曲·同心环', 'twirl', { mode: 'rings', angle: 200, radius: 5, rings: 4 }],
+    // 最外一圈与环外的过渡带一直转到半径外：两圈、柔和度 100%、各圈都转满角度时伸得最远。
+    ['旋转扭曲·同心环最宽过渡', 'twirl', { mode: 'rings', angle: 180, radius: 10, rings: 2, ring_softness: 100, ring_random: 0 }, [600, 100]],
+    ['波动·波浪', 'wave', { amount: 60, wavelength: 10, waveform: 'square' }],
+    ['波动·流动', 'wave', { mode: 'flow', amount: 60, wavelength: 10, detail: 100 }],
+    ['边角定位', 'corner_pin', { tr_x: 160, br_y: 180, bl_x: -40 }],
+    ['置换·噪声', 'displace', { amount: 60, scale: 0, detail: 100 }],
+    ['置换·自身亮度', 'displace', { source: 'luma', amount: 60 }],
+  ]
+  it.each(reaches)('外扩覆盖：%s', async (_, id, params, size = [60, 30]) => {
+    const [contentWidth, contentHeight] = size
+    const definition = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.find(value => value.id === id)!
+    const resolved = { ...videoEditBuiltinDefaults(definition), ...params } as Record<string, number>
+    const declared = Math.ceil(definition.bleed!(resolved, local(contentWidth, contentHeight, 0)) * 1080)
+    const pad = declared + 48, width = contentWidth + pad * 2, height = contentHeight + pad * 2
+    const data = canvas(width, height, (x, y) => x >= pad && x < pad + contentWidth && y >= pad && y < pad + contentHeight ? [255, 255, 255, 255] : undefined)
+    const pixels = (await layer(data, [factories[id](params as never)], undefined, { width, height, reference: local(contentWidth, contentHeight, pad) })).pixels
+    let outside = 0, inside = 0
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const alpha = at(pixels, x, y, width)[3]
+      if (x >= pad - declared && x < pad + contentWidth + declared && y >= pad - declared && y < pad + contentHeight + declared) inside = Math.max(inside, alpha)
+      else outside = Math.max(outside, alpha)
+    }
+    expect(inside).toBe(255); expect(outside).toBeLessThanOrEqual(1)
+  }, 60_000)
+
+  it('镜像左右对称；边角定位缩进的四角之外透明、重复边缘时铺满内容框；透明底的边缘不发黑', async () => {
+    const mirrored = await clip(nightData(), 'mirror', {})
+    for (let y = 0; y < H; y += 7) for (let x = 0; x < W / 2; x += 5) expect(at(mirrored, W - 1 - x, y)).toEqual(at(mirrored, x, y))
+    const quad = { tl_x: 25, tl_y: 25, tr_x: 75, tr_y: 25, bl_x: 25, bl_y: 75, br_x: 75, br_y: 75 }
+    const pinned = await clip(nightData(), 'corner_pin', quad)
+    expect(at(pinned, 2, 2)[3]).toBe(0); expect(at(pinned, W / 2, H / 2)[3]).toBe(255)
+    // 四角缩到一半：原画右下角的亮点（80, 50）落到（64, 41）附近。
+    expect(at(pinned, 64, 41)[0]).toBeGreaterThan(200)
+    const filled = await clip(nightData(), 'corner_pin', { ...quad, edges: 'clamp' })
+    expect(Math.min(...Array.from({ length: W * H }, (_, index) => filled[index * 4 + 3]))).toBe(255)
+    // 白色内容在透明底上变形：凡有覆盖的像素，去掉预乘后仍是白色（双线性取到纹理外按零边框，不混进黑色）。
+    const cases: Array<[string, Record<string, unknown>]> = [['twirl', { angle: 200 }], ['wave', { amount: 80, waveform: 'square' }], ['repeat', { mode: 'ring', count: 7, scale_step: -30 }], ['corner_pin', { tr_x: 90, tr_y: 20, br_x: 70 }]]
+    for (const [id, params] of cases) {
+      const white = canvas(W, H, (x, y) => (x - 48) ** 2 / 400 + (y - 32) ** 2 / 100 < 1 ? [255, 255, 255, 255] : undefined)
+      const pixels = (await layer(white, [{ id, params }])).pixels
+      for (let index = 0; index < W * H; index++) if (pixels[index * 4 + 3] > 8) expect(pixels[index * 4] / pixels[index * 4 + 3], id).toBeGreaterThan(0.97)
+    }
+  }, 60_000)
+
+  it('速度按效果时钟走：同一时刻逐像素相同，速度 0 时与时间无关', async () => {
+    // 片段效果链的时钟：片段内帧号乘每帧秒数（30 帧每秒）。
+    const run = async (id: string, params: Record<string, unknown>, time: number): Promise<string> => {
+      const input = texture(nightData()), output = target()
+      try {
+        await effects.render({ id, params: params as Record<string, number> }, { texture: input, width: W, height: H, format: 'rgba8unorm' }, output, time * 30, 1, [], 'final', undefined, 1 / 30)
+        return hash(await read(output))
+      } finally { input.destroy(); output.destroy() }
+    }
+    const cases: Array<[string, Record<string, unknown>]> = [['wave', { amount: 60 }], ['wave', { mode: 'flow', amount: 60 }], ['displace', { amount: 60 }]]
+    for (const [id, params] of cases) {
+      expect(await run(id, { ...params, speed: 100 }, 0.25)).toBe(await run(id, { ...params, speed: 100 }, 0.25))
+      expect(await run(id, { ...params, speed: 100 }, 0.25)).not.toBe(await run(id, { ...params, speed: 100 }, 0.5))
+      expect(await run(id, params, 0.25)).toBe(await run(id, params, 3))
+    }
+  }, 60_000)
+  // 图层上一律按透明取样：贴着内容框的不透明卡片变形后，框内也会露出透明处，内容框的直边不留在画面上。
+  it.each([['wave', {}], ['twirl', {}], ['bulge', { amount: -60 }]] as const)('不透明卡片图层加默认%s，不留内容框直边', async (id, params) => {
+    const contentWidth = 120, contentHeight = 60, pad = 96, width = contentWidth + pad * 2, height = contentHeight + pad * 2
+    const card = canvas(width, height, (x, y) => x >= pad && x < pad + contentWidth && y >= pad && y < pad + contentHeight ? [40 + (x - pad), 90, 160, 255] : undefined)
+    const pixels = (await layer(card, [{ id, params }], undefined, { width, height, reference: local(contentWidth, contentHeight, pad) })).pixels
+    let holes = 0
+    for (let y = pad; y < pad + contentHeight; y++) for (let x = pad; x < pad + contentWidth; x++) if (at(pixels, x, y, width)[3] <= 8) holes++
+    expect(holes).toBeGreaterThan(20)
+  }, 60_000)
+
+  // 方波每一段是整像素平移：[发光, 波动] 在同一段里等于把 [发光] 整体挪过去。光晕跟着走，内容框边上也不会被拉成条纹。
+  it('[发光, 波动] 的光晕随波动一起平移，内容框边缘不出条纹', async () => {
+    const contentWidth = 60, contentHeight = 30
+    const glow = { id: 'glow', params: { threshold: 0, strength: 60, radius: 30 } }
+    // 方向 90°：波往下走、画面左右平移；波长一个画面高、相位 −90°，内容附近都在同一段，整体左移 27 像素。
+    const waved = { id: 'wave', params: { amount: 50, wavelength: 100, direction: 90, waveform: 'square', phase: -90 } }
+    const pad = Math.ceil(authorEffectBleed(resolveAuthorEffects([glow, waved]), local(contentWidth, contentHeight, 0)) * 1080) + 8
+    expect(pad).toBeLessThan(260)
+    const width = contentWidth + pad * 2, height = contentHeight + pad * 2
+    const data = canvas(width, height, (x, y) => x >= pad && x < pad + contentWidth && y >= pad && y < pad + contentHeight ? [255, 255, 255, 255] : undefined)
+    const reference = local(contentWidth, contentHeight, pad)
+    const alone = (await layer(data, [glow], undefined, { width, height, reference })).pixels
+    const moved = (await layer(data, [glow, waved], undefined, { width, height, reference })).pixels
+    let worst = 0
+    for (let y = 0; y < height; y++) for (let x = 0; x + 27 < width; x++) for (let c = 0; c < 4; c++) worst = Math.max(worst, Math.abs(at(moved, x, y, width)[c] - at(alone, x + 27, y, width)[c]))
+    expect(worst).toBeLessThanOrEqual(1)
+  }, 60_000)
+
+  it('[投影, 边角定位] 的影子贴进透视；[投影, 重复阵列] 的每个副本都带影子', async () => {
+    const contentWidth = 60, contentHeight = 30, pad = 128, width = contentWidth + pad * 2, height = contentHeight + pad * 2
+    const data = canvas(width, height, (x, y) => x >= pad && x < pad + contentWidth && y >= pad && y < pad + contentHeight ? [255, 255, 255, 255] : undefined)
+    const reference = local(contentWidth, contentHeight, pad)
+    // 影子往右 10.8 像素、边缘清楚、不透明。
+    const shadow = { id: 'drop_shadow', params: { opacity: 100, distance: 20, softness: 0, direction: 0 } }
+    // 四角收进左半边：内容与影子一起被压窄，右半边（内容框里 x = 50）什么都没有。
+    const pinned = (await layer(data, [shadow, { id: 'corner_pin', params: { tr_x: 50, br_x: 50 } }], undefined, { width, height, reference })).pixels
+    expect(at(pinned, pad + 50, pad + 15, width)[3]).toBeLessThanOrEqual(8)
+    expect(at(pinned, pad + 33, pad + 15, width)[3]).toBeGreaterThan(200)
+    // 三列网格、间距 50%：左边副本的影子落在它右侧的格缝里（内容框坐标 x = −25）。
+    const copies = (await layer(data, [shadow, { id: 'repeat', params: { columns: 3, rows: 1, spacing: 50 } }], undefined, { width, height, reference })).pixels
+    const gap = at(copies, pad - 25, pad + 15, width)
+    expect(gap[3]).toBeGreaterThan(200); expect(gap[0]).toBeLessThan(40)
+  }, 60_000)
+  // 片段效果存完整参数表，风格件里总带着片段专用的边缘；图层上略过它（图层一律透明），与直接写同参数的波动逐像素相同。
+  it('片段上的波动（边缘为镜像）存成风格件，代码图层 look() 照常渲染', async () => {
+    const definition = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.find(value => value.id === 'wave')!
+    const params = { ...videoEditBuiltinDefaults(definition), amount: 60, edges: 'mirror' }
+    const preset = videoEditEffectPresetSchema.parse({ id: 'piece', name: '水波', media: 'video', effects: [{ id: 'fx', name: '波动', enabled: true, amount: 1, builtin: { id: 'wave', params } }] })
+    const white = canvas(W, H, (x, y) => (x - 48) ** 2 / 400 + (y - 32) ** 2 / 100 < 1 ? [255, 255, 255, 255] : undefined)
+    const looked = (await layer(white, [{ id: 'look', params: { name: '水波' } }], undefined, { environment: { presets: [preset] } })).pixels
+    const direct = (await layer(white, [{ id: 'wave', params: Object.fromEntries(Object.entries(params).filter(([key]) => key !== 'edges')) }])).pixels
+    expect(hash(looked)).toBe(hash(direct)); expect(Math.max(...looked)).toBe(255)
+  }, 60_000)
+
+  // 透视会把框外的影子、模糊边按射影外推放大：外扩按“内容框加前面外扩”经同一透视映射后的范围算，纹理边上不留切口。
+  it.each([
+    ['投影 → 地面透视 30/70', { id: 'drop_shadow', params: {} }, { tl_x: 30, tr_x: 70 }],
+    ['投影 → 角点拉出内容框', { id: 'drop_shadow', params: {} }, { tr_x: 160, br_y: 180, bl_x: -40 }],
+    ['模糊 → 地面透视 30/70', { id: 'blur', params: { amount: 40, repeat_edges: false } }, { tl_x: 30, tr_x: 70 }],
+  ] as const)('%s：影子、模糊边不被纹理边切掉', async (_, before, pin) => {
+    const contentWidth = 600, contentHeight = 340, chain = [before, { id: 'corner_pin', params: pin }]
+    const pad = Math.ceil(authorEffectBleed(resolveAuthorEffects(chain), local(contentWidth, contentHeight, 0)) * 1080)
+    const width = contentWidth + pad * 2, height = contentHeight + pad * 2
+    const data = canvas(width, height, (x, y) => x >= pad && x < pad + contentWidth && y >= pad && y < pad + contentHeight ? [255, 255, 255, 255] : undefined)
+    const pixels = (await layer(data, [...chain], undefined, { width, height, reference: local(contentWidth, contentHeight, pad) })).pixels
+    let border = 0
+    for (let x = 0; x < width; x++) border = Math.max(border, at(pixels, x, 0, width)[3], at(pixels, x, height - 1, width)[3])
+    for (let y = 0; y < height; y++) border = Math.max(border, at(pixels, 0, y, width)[3], at(pixels, width - 1, y, width)[3])
+    expect(border).toBeLessThanOrEqual(1)
+  }, 120_000)
 })

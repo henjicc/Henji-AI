@@ -587,6 +587,145 @@ export interface DissolveRevealParams {
   /** 半径；光晕能散多远。0 只贴着亮边；30（默认）约为画面高度的 2%；100 能铺满大半个画面。；默认 30；硬范围 0–100；单位 strength；分组 发光；可动画 true */
   readonly glow_radius?: number
 }
+
+export interface MirrorParams {
+  /** 角度；镜面朝哪个方向。0°（默认）沿竖线左右对称；90° 沿横线上下对称；45° 斜着对称。；默认 0；硬范围 -180–180；单位 degrees；可动画 true */
+  readonly angle?: number
+  /** 中心（水平）；镜面经过的左右位置，按内容宽度算。50%（默认）在正中；70% 时左边留得多，镜像伸出右边；30% 时左边窄的一条翻过去，再往右的地方按“边缘”补（代码图层上是透明）。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；可动画 true */
+  readonly center_x?: number
+  /** 中心（垂直）；镜面经过的上下位置，按内容高度算，0% 在顶边，100% 在底边。角度为 0° 时不起作用。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；可动画 true */
+  readonly center_y?: number
+  /** 保留；留下哪一半。前侧（默认）留左半边，角度 90° 时留上半边；后侧留另一半。；默认 "front"；可动画 true */
+  readonly side?: "front" | "back"
+  /** 边缘；变形取到画面外面时怎么办。重复边缘（默认）把最外一圈像素拉长，四边不出空缺；透明露出下面的轨道；镜像把画面翻过来接上。代码图层上外面一律透明。；默认 "clamp"；只用于调整层 adjust；可动画 true */
+  readonly edges?: "transparent" | "clamp" | "mirror"
+}
+
+export interface RepeatParams {
+  /** 方式；副本怎么排。网格（默认）铺成几行几列；直线沿一个方向排成一串；环形围着原来的位置排成一圈。；默认 "grid"；可动画 true */
+  readonly mode?: "grid" | "linear" | "ring"
+  /** 列数；网格横着排几个。3（默认）；1 只在竖直方向重复。可以输入到 100。；默认 3；常用 1–12；硬范围 1–100；单位 value；显隐 {"param":"mode","in":["grid"]}；可动画 true */
+  readonly columns?: number
+  /** 行数；网格竖着排几行。3（默认）；1 只在水平方向重复。可以输入到 100。；默认 3；常用 1–12；硬范围 1–100；单位 value；显隐 {"param":"mode","in":["grid"]}；可动画 true */
+  readonly rows?: number
+  /** 数量；一共几个副本。5（默认）；环形排 12 个像钟面。可以输入到 100，越多越慢。；默认 5；常用 1–12；硬范围 1–100；单位 value；显隐 {"param":"mode","in":["linear","ring"]}；可动画 true */
+  readonly count?: number
+  /** 间距；相邻副本之间空多少，按内容的宽和高算。0 紧挨着首尾相接；10%（默认）留一道窄缝；100% 空出一个内容那么宽。；默认 10；常用 0–100；硬范围 0–400；单位 percent；分组 排列；显隐 {"param":"mode","in":["grid","linear"]}；可动画 true */
+  readonly spacing?: number
+  /** 错位；隔一行往右错开多少，按一格的宽度算。0%（默认）上下对齐；50% 像砌砖一样错开半格。；默认 0；硬范围 0–100；单位 percent；分组 排列；显隐 {"param":"mode","in":["grid"]}；可动画 true */
+  readonly stagger?: number
+  /** 角度；直线往哪个方向排。0°（默认）横着排；90° 竖着排；45° 斜着排。；默认 0；硬范围 -180–180；单位 degrees；分组 排列；显隐 {"param":"mode","in":["linear"]}；可动画 true */
+  readonly angle?: number
+  /** 半径；环有多大，按画面高度算。30%（默认）约为画面高度的 30%；0 时副本都叠在一起。可以输入到 400%。；默认 30；常用 0–100；硬范围 0–400；单位 percent；分组 排列；显隐 {"param":"mode","in":["ring"]}；可动画 true */
+  readonly radius?: number
+  /** 朝向中心；副本跟着环转，底边都朝向圆心，像钟面上的刻度。默认关闭，副本都正着放。；默认 false；分组 排列；显隐 {"param":"mode","in":["ring"]}；可动画 true */
+  readonly face_center?: boolean
+  /** 逐个缩放；每往外一个副本放大或缩小多少。0%（默认）一样大；−20% 越往外越小；往正越往外越大，网格里最多长满一格。；默认 0；硬范围 -100–100；单位 percent；分组 递变；可动画 true */
+  readonly scale_step?: number
+  /** 逐个淡出；每往外一个副本淡多少。0%（默认）都不透明；30% 越往外越淡，像渐渐消失的残影。；默认 0；硬范围 0–100；单位 percent；分组 递变；可动画 true */
+  readonly opacity_step?: number
+}
+
+export interface BulgeParams {
+  /** 数量；鼓起或凹进多少。正数鼓起，中间被放大；负数凹进，向中心收缩；50（默认）明显鼓起，约放大两倍；0 不变形。；默认 50；硬范围 -100–100；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 半径；变形的圆有多大，按画面高度算。30%（默认）约为画面高度的 30%；圆外的画面不动。可以输入到 200%。；默认 30；常用 0–100；硬范围 0–200；单位 percent；可动画 true */
+  readonly radius?: number
+  /** 中心（水平）；鼓起的中心左右位置，按内容宽度算。50%（默认）在正中。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；可动画 true */
+  readonly center_x?: number
+  /** 中心（垂直）；鼓起的中心上下位置，按内容高度算，0% 在顶边，100% 在底边。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；可动画 true */
+  readonly center_y?: number
+  /** 形状；鼓起的样子。平滑（默认）中间放大、向圆边柔和过渡；球面像画面贴在一个球上，越靠近圆边压得越扁。；默认 "smooth"；可动画 true */
+  readonly shape?: "smooth" | "sphere"
+  /** 边缘；变形取到画面外面时怎么办。重复边缘（默认）把最外一圈像素拉长，四边不出空缺；透明露出下面的轨道；镜像把画面翻过来接上。代码图层上外面一律透明。；默认 "clamp"；只用于调整层 adjust；可动画 true */
+  readonly edges?: "transparent" | "clamp" | "mirror"
+}
+
+export interface TwirlParams {
+  /** 角度；中心转多少度。90°（默认）明显的漩涡；正数顺时针、负数逆时针；360° 以上拧成一圈圈的螺旋，可以输入到 ±1440°。；默认 90；常用 -360–360；硬范围 -1440–1440；单位 degrees；可动画 true */
+  readonly angle?: number
+  /** 半径；漩涡有多大，按画面高度算。40%（默认）约为画面高度的 40%；半径以外的画面不动。可以输入到 200%。；默认 40；常用 0–100；硬范围 0–200；单位 percent；可动画 true */
+  readonly radius?: number
+  /** 中心（水平）；漩涡中心的左右位置，按内容宽度算。50%（默认）在正中。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；可动画 true */
+  readonly center_x?: number
+  /** 中心（垂直）；漩涡中心的上下位置，按内容高度算，0% 在顶边，100% 在底边。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；可动画 true */
+  readonly center_y?: number
+  /** 方式；怎么转。平滑（默认）从中心到半径连续地越转越少；同心环把圆分成一圈圈，各转各的角度。；默认 "smooth"；可动画 true */
+  readonly mode?: "smooth" | "rings"
+  /** 边缘；变形取到画面外面时怎么办。重复边缘（默认）把最外一圈像素拉长，四边不出空缺；透明露出下面的轨道；镜像把画面翻过来接上。代码图层上外面一律透明。；默认 "clamp"；只用于调整层 adjust；可动画 true */
+  readonly edges?: "transparent" | "clamp" | "mirror"
+  /** 环数；分成几圈。6（默认）；20 以上是细密的一圈圈纹路。可以输入到 100。；默认 6；常用 2–20；硬范围 2–100；单位 value；分组 同心环；显隐 {"param":"mode","in":["rings"]}；可动画 true */
+  readonly rings?: number
+  /** 随机；各圈转的角度差多少。0% 全都转同样的角度；50%（默认）各圈在 0 到角度之间各转各的；100% 有的正转有的反转。；默认 50；硬范围 0–100；单位 percent；分组 同心环；显隐 {"param":"mode","in":["rings"]}；可动画 true */
+  readonly ring_random?: number
+  /** 柔和度；相邻两圈之间是断开还是连着。0% 一刀切开，边缘利落；30%（默认）稍有过渡；100% 圈与圈连成一片。；默认 30；硬范围 0–100；单位 percent；分组 同心环；显隐 {"param":"mode","in":["rings"]}；可动画 true */
+  readonly ring_softness?: number
+  /** 随机种子；换一个数，各圈转的角度就换一种搭配，环数和最大角度不变。；默认 0；硬范围 0–9999；单位 value；分组 同心环；显隐 {"param":"mode","in":["rings"]}；可动画 false */
+  readonly seed?: number
+}
+
+export interface WaveParams {
+  /** 幅度；起伏有多大。0 不变形；20（默认）约为画面高度的 1%，轻轻荡漾；100 约 5%，大幅度扭动。可以输入到 400。；默认 20；常用 0–100；硬范围 0–400；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 波长；一道波有多宽。0 约为画面高度的 1%，细密的波纹；40（默认）约 6%；100 约一个画面高，整幅缓缓弯曲。；默认 40；硬范围 0–100；单位 strength；可动画 true */
+  readonly wavelength?: number
+  /** 方式；起伏的样子。波浪（默认）一道道平行、整齐的波；流动是不规则的漩流，像隔着流水看。；默认 "wave"；可动画 true */
+  readonly mode?: "wave" | "flow"
+  /** 边缘；变形取到画面外面时怎么办。重复边缘（默认）把最外一圈像素拉长，四边不出空缺；透明露出下面的轨道；镜像把画面翻过来接上。代码图层上外面一律透明。；默认 "clamp"；只用于调整层 adjust；可动画 true */
+  readonly edges?: "transparent" | "clamp" | "mirror"
+  /** 方向；波往哪个方向走。0°（默认）往右走，画面上下起伏；90° 往下走，画面左右摆动。；默认 0；硬范围 -180–180；单位 degrees；分组 波形；显隐 {"param":"mode","in":["wave"]}；可动画 true */
+  readonly direction?: number
+  /** 波形；每道波的形状。正弦（默认）圆滑；三角是折线；方波一段段错开、断口整齐；锯齿缓缓推出再一下跳回。；默认 "sine"；分组 波形；显隐 {"param":"mode","in":["wave"]}；可动画 true */
+  readonly waveform?: "sine" | "triangle" | "square" | "sawtooth"
+  /** 细节；大漩流里再加多少细碎的小漩涡。0% 只有大而缓的流动；30%（默认）自然；100% 细碎的扭动很多。；默认 30；硬范围 0–100；单位 percent；分组 流动；显隐 {"param":"mode","in":["flow"]}；可动画 true */
+  readonly detail?: number
+  /** 随机种子；换一个数，流动的花样就换一种，大小和幅度不变。；默认 0；硬范围 0–9999；单位 value；分组 流动；显隐 {"param":"mode","in":["flow"]}；可动画 false */
+  readonly seed?: number
+  /** 相位；波走到了哪里。往大调，波浪往前推、流动往前流；转一整圈 360° 正好走过一道波。给它打关键帧让波动起来，可以输入到 ±100000°。；默认 0；常用 -180–180；硬范围 -100000–100000；单位 degrees；分组 变化；可动画 true */
+  readonly phase?: number
+  /** 速度；播放时波自己走多快。0（默认）不动；100 每秒走过一道波；负数反着走。；默认 0；常用 -100–100；硬范围 -400–400；单位 percent；分组 变化；可动画 false */
+  readonly speed?: number
+}
+
+export interface CornerPinParams {
+  /** 左上（水平）；左上角钉到的左右位置。0%（默认）就是原来的左边；按内容框的百分比，0% 在左边或顶边，100% 在右边或底边；可以拖到内容外面。；默认 0；常用 -50–150；硬范围 -1000–1100；单位 percent；可动画 true */
+  readonly tl_x?: number
+  /** 左上（垂直）；左上角钉到的上下位置。0%（默认）就是原来的顶边；按内容框的百分比，0% 在左边或顶边，100% 在右边或底边；可以拖到内容外面。；默认 0；常用 -50–150；硬范围 -1000–1100；单位 percent；可动画 true */
+  readonly tl_y?: number
+  /** 右上（水平）；右上角钉到的左右位置。100%（默认）就是原来的右边；按内容框的百分比，0% 在左边或顶边，100% 在右边或底边；可以拖到内容外面。；默认 100；常用 -50–150；硬范围 -1000–1100；单位 percent；可动画 true */
+  readonly tr_x?: number
+  /** 右上（垂直）；右上角钉到的上下位置。0%（默认）就是原来的顶边；按内容框的百分比，0% 在左边或顶边，100% 在右边或底边；可以拖到内容外面。；默认 0；常用 -50–150；硬范围 -1000–1100；单位 percent；可动画 true */
+  readonly tr_y?: number
+  /** 左下（水平）；左下角钉到的左右位置。0%（默认）就是原来的左边；按内容框的百分比，0% 在左边或顶边，100% 在右边或底边；可以拖到内容外面。；默认 0；常用 -50–150；硬范围 -1000–1100；单位 percent；可动画 true */
+  readonly bl_x?: number
+  /** 左下（垂直）；左下角钉到的上下位置。100%（默认）就是原来的底边；按内容框的百分比，0% 在左边或顶边，100% 在右边或底边；可以拖到内容外面。；默认 100；常用 -50–150；硬范围 -1000–1100；单位 percent；可动画 true */
+  readonly bl_y?: number
+  /** 右下（水平）；右下角钉到的左右位置。100%（默认）就是原来的右边；按内容框的百分比，0% 在左边或顶边，100% 在右边或底边；可以拖到内容外面。；默认 100；常用 -50–150；硬范围 -1000–1100；单位 percent；可动画 true */
+  readonly br_x?: number
+  /** 右下（垂直）；右下角钉到的上下位置。100%（默认）就是原来的底边；按内容框的百分比，0% 在左边或顶边，100% 在右边或底边；可以拖到内容外面。；默认 100；常用 -50–150；硬范围 -1000–1100；单位 percent；可动画 true */
+  readonly br_y?: number
+  /** 边缘；四个角围成的范围以外怎么办。透明（默认）露出下面的轨道，贴屏幕、贴画框时用；重复边缘把最外一圈像素拉长；镜像把画面翻过来接上，铺成透视的地面。代码图层上外面一律透明。；默认 "transparent"；只用于调整层 adjust；可动画 true */
+  readonly edges?: "transparent" | "clamp" | "mirror"
+}
+
+export interface DisplaceParams {
+  /** 数量；挪得多远。0 不变形；20（默认）约为画面高度的 1%；100 约 5%，扭得认不出来。可以输入到 400。；默认 20；常用 0–100；硬范围 0–400；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 来源；按什么挪。噪声（默认）是柔和起伏的随机图案，像热空气、水面；自身亮度按画面自己的明暗挪，亮处和暗处朝相反方向。；默认 "noise"；可动画 true */
+  readonly source?: "noise" | "luma"
+  /** 方向；亮的地方往哪边挪，暗的地方往反方向。45°（默认）往右下；0° 往右；90° 往下。；默认 45；硬范围 -180–180；单位 degrees；显隐 {"param":"source","in":["luma"]}；可动画 true */
+  readonly angle?: number
+  /** 边缘；变形取到画面外面时怎么办。重复边缘（默认）把最外一圈像素拉长，四边不出空缺；透明露出下面的轨道；镜像把画面翻过来接上。代码图层上外面一律透明。；默认 "clamp"；只用于调整层 adjust；可动画 true */
+  readonly edges?: "transparent" | "clamp" | "mirror"
+  /** 大小；起伏的一块有多大。0 约为画面高度的 1%，细碎的抖动；50（默认）约 8%，像热空气；100 约一半画面高，大片缓慢的弯曲。；默认 50；硬范围 0–100；单位 strength；分组 噪声；显隐 {"param":"source","in":["noise"]}；可动画 true */
+  readonly scale?: number
+  /** 细节；大起伏里再叠多少细碎的小起伏。0% 只有平缓的大起伏；30%（默认）自然；100% 细碎、像水面的碎波。；默认 30；硬范围 0–100；单位 percent；分组 噪声；显隐 {"param":"source","in":["noise"]}；可动画 true */
+  readonly detail?: number
+  /** 速度；播放时起伏自己变得多快。0（默认）不动；30 像缓缓上升的热浪；100 每秒换一遍花样。；默认 0；常用 -100–100；硬范围 -400–400；单位 percent；分组 噪声；显隐 {"param":"source","in":["noise"]}；可动画 false */
+  readonly speed?: number
+  /** 随机种子；换一个数，起伏的花样就换一种，大小和数量不变。；默认 0；硬范围 0–9999；单位 value；分组 噪声；显隐 {"param":"source","in":["noise"]}；可动画 false */
+  readonly seed?: number
+}
 export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'blur'; readonly params?: BlurParams }
   | { readonly id: 'sharpen'; readonly params?: SharpenParams }
@@ -611,6 +750,13 @@ export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'mosaic'; readonly params?: MosaicParams }
   | { readonly id: 'glitch'; readonly params?: GlitchParams }
   | { readonly id: 'dissolve_reveal'; readonly params?: DissolveRevealParams }
+  | { readonly id: 'mirror'; readonly params?: MirrorParams }
+  | { readonly id: 'repeat'; readonly params?: RepeatParams }
+  | { readonly id: 'bulge'; readonly params?: BulgeParams }
+  | { readonly id: 'twirl'; readonly params?: TwirlParams }
+  | { readonly id: 'wave'; readonly params?: WaveParams }
+  | { readonly id: 'corner_pin'; readonly params?: CornerPinParams }
+  | { readonly id: 'displace'; readonly params?: DisplaceParams }
 export interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }
 /** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */
 export interface RetiredBlurDescriptor { readonly id: 'gaussian_blur' | 'directional_blur' | 'zoom_blur' | 'lens_blur'; readonly params?: object }
@@ -638,4 +784,11 @@ export declare function scratches(params?: ScratchesParams): { readonly id: 'scr
 export declare function mosaic(params?: MosaicParams): { readonly id: 'mosaic'; readonly params: MosaicParams }
 export declare function glitch(params?: GlitchParams): { readonly id: 'glitch'; readonly params: GlitchParams }
 export declare function dissolve(params?: DissolveRevealParams): { readonly id: 'dissolve_reveal'; readonly params: DissolveRevealParams }
+export declare function mirror(params?: MirrorParams): { readonly id: 'mirror'; readonly params: MirrorParams }
+export declare function repeat(params?: RepeatParams): { readonly id: 'repeat'; readonly params: RepeatParams }
+export declare function bulge(params?: BulgeParams): { readonly id: 'bulge'; readonly params: BulgeParams }
+export declare function twirl(params?: TwirlParams): { readonly id: 'twirl'; readonly params: TwirlParams }
+export declare function wave(params?: WaveParams): { readonly id: 'wave'; readonly params: WaveParams }
+export declare function cornerPin(params?: CornerPinParams): { readonly id: 'corner_pin'; readonly params: CornerPinParams }
+export declare function displace(params?: DisplaceParams): { readonly id: 'displace'; readonly params: DisplaceParams }
 export declare function look(name: string, knobs?: Readonly<Record<string, number>>): LookDescriptor

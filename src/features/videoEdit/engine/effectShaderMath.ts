@@ -20,6 +20,16 @@
  */
 /** 内置效果通过 effectShaderPrelude 的具名共享块装配；独立使用时需同时装配色彩数学。 */
 export { COLOR_MATH_WGSL } from '@/core/imaging/effects/wgsl/colorMath'
+/**
+ * 与 WGSL `hash` 同一个无符号 32 位整数散列（不除以 2³²）：规划在 CPU 上从随机种子派生偏移、段号种子时用，
+ * 与着色器里的随机同源。JS 位运算是有符号 32 位，每一步转回无符号，负数进着色器转 u32 不会变成 0。
+ */
+export function effectHash(x: number, y: number, seed = 0): number {
+  let h = (Math.imul(x >>> 0, 1664525) + Math.imul(y >>> 0, 1013904223) + Math.imul(seed >>> 0, 2654435769)) >>> 0
+  h = (h ^ (h >>> 16)) >>> 0; h = Math.imul(h, 2246822519) >>> 0; h = (h ^ (h >>> 13)) >>> 0
+  h = Math.imul(h, 3266489917) >>> 0
+  return (h ^ (h >>> 16)) >>> 0
+}
 export const EFFECT_SHADER_MATH_WGSL = `
 // WGSL 的 smoothstep 在 e0 ≥ e1 时结果未定义；过渡宽度为 0 时给出确定的阶跃。
 fn ramp(e0: f32, e1: f32, x: f32) -> f32 { if (e1 > e0) { return smoothstep(e0, e1, x); } return select(0.0, 1.0, x >= e0); }

@@ -54,14 +54,20 @@ it('登记索引与有序目录接通规划、入口、精度、预览与三个�
   const host = ts.createCompilerHost({ noLib: true }); host.getSourceFile = name => name === source.fileName ? source : undefined
   const program = ts.createProgram([source.fileName], { noLib: true }, host)
   expect(authorEffectDiagnostics(source, program.getTypeChecker()).filter(value => value.message.includes('只能用于片段'))).toHaveLength(2)
+  // 同一个工厂写在调整层 adjust 里按整帧空间诊断，写在图层 effects 里按图层空间诊断。
+  const adjustSource = ts.createSourceFile('adjust.ts', 'import { fixture } from "henji-effects"; const layers = [{ id: "a", adjust: () => [fixture({ global: true })] }, { id: "b", effects: () => [fixture({ global: true })] }];', ts.ScriptTarget.Latest, true)
+  const adjustHost = ts.createCompilerHost({ noLib: true }); adjustHost.getSourceFile = name => name === adjustSource.fileName ? adjustSource : undefined
+  const adjustProgram = ts.createProgram([adjustSource.fileName], { noLib: true }, adjustHost)
+  expect(authorEffectDiagnostics(adjustSource, adjustProgram.getTypeChecker()).map(value => value.message).filter(message => message.includes('只能用于'))).toEqual([expect.stringContaining('只能用于整帧')])
   const { validateVideoEditLook, resolveVideoEditLookByName } = await import('@/core/videoEdit/authorEffects')
   const preset = { id: 'piece', name: '空间夹具', media: 'video' as const, effects: [{ id: 'member', name: '', enabled: false, amount: 0, builtin: { id: definition.id, params: {}, curves: { contour: [{ time: 0, value: false, interpolation: 'hold' as const }] } } }] }
-  expect(() => validateVideoEditLook(preset)).toThrow('只能用于片段')
-  expect(() => validateVideoEditLook(preset, 'frame')).toThrow('只能用于片段')
-  expect(() => resolveVideoEditLookByName(preset.name, { presets: [preset] })).toThrow('只能用于片段')
-  const explicit = { ...preset, effects: [{ ...preset.effects[0], builtin: { id: definition.id, params: { contour: true } } }] }
-  expect(() => resolveVideoEditLookByName(explicit.name, { presets: [explicit] })).toThrow('只能用于片段')
-  expect(() => resolveAuthorEffects([{ id: 'look', params: { name: explicit.name } }], { presets: [explicit] }, 0, 'grade', 'frame')).toThrow('只能用于片段')
+  // 风格件来自片段效果链、存完整参数表：图层与调整层里略过不属于该空间的参数（含曲线），照常解析；作者代码显式写仍报错（见上）。
+  expect(() => validateVideoEditLook(preset)).not.toThrow()
+  expect(() => validateVideoEditLook(preset, 'frame')).not.toThrow()
+  expect(resolveVideoEditLookByName(preset.name, { presets: [preset] }).id).toBe('piece')
+  const explicit = { ...preset, effects: [{ ...preset.effects[0], name: '成员', enabled: true, amount: 1, builtin: { id: definition.id, params: { contour: true } } }] }
+  expect(resolveAuthorEffects([{ id: 'look', params: { name: explicit.name } }], { presets: [explicit] })[0].params).toEqual({ enabled: true, local: false })
+  expect(resolveAuthorEffects([{ id: 'look', params: { name: explicit.name } }], { presets: [explicit] }, 0, 'grade', 'frame')[0].params).toEqual({ enabled: true, global: false })
 })
 
 it('定义与规划索引拒绝重复 id，错误指出两处导出来源', async () => {

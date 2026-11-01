@@ -60,6 +60,15 @@ export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeC
     }
     return undefined
   }
+  // 写在调整层 adjust 里的描述按整帧空间校验，其余（图层 effects、单独的常量）按图层。
+  const spaceOf = (node: ts.Node): 'layer' | 'frame' => {
+    for (let parent = node.parent; parent && !ts.isSourceFile(parent); parent = parent.parent) {
+      if (!ts.isPropertyAssignment(parent) && !ts.isMethodDeclaration(parent)) continue
+      const name = parent.name.getText(source)
+      if (name === 'adjust' || name === 'effects') return name === 'adjust' ? 'frame' : 'layer'
+    }
+    return 'layer'
+  }
   const validate = (node: ts.Node, requested: unknown, raw: unknown): void => {
     // 旧模糊 ID 与运行时一样先换成“模糊”的参数再检查。
     const retired = typeof requested === 'string' && raw && typeof raw === 'object' ? retiredBlurParams(requested, raw as Record<string, unknown>) : undefined
@@ -70,7 +79,7 @@ export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeC
       const param = definition.params.find(param => param.key === key)
       if (!param) continue // 字段和枚举由公共声明检查。
       try {
-        const issue = videoEditBuiltinParamSpaceIssue(param, 'layer')
+        const issue = videoEditBuiltinParamSpaceIssue(param, spaceOf(node))
         if (issue) throw new Error(issue)
         if (value !== undefined) videoEditBuiltinParamValue(param, value)
       }
@@ -92,7 +101,7 @@ export function authorEffectDiagnostics(source: ts.SourceFile, checker: ts.TypeC
     }
     if (ts.isObjectLiteralExpression(node)) {
       let parent: ts.Node | undefined = node.parent, inEffects = /EffectDescriptor/.test(checker.typeToString(checker.getContextualType(node) ?? checker.getTypeAtLocation(node)))
-      while (parent && !ts.isSourceFile(parent)) { if (ts.isPropertyAssignment(parent) && parent.name.getText(source) === 'effects') inEffects = true; parent = parent.parent }
+      while (parent && !ts.isSourceFile(parent)) { if (ts.isPropertyAssignment(parent) && ['effects', 'adjust'].includes(parent.name.getText(source))) inEffects = true; parent = parent.parent }
       if (inEffects) { const value = constant(node) as Record<string, unknown>; validate(node, value.id, value.params) }
     }
     ts.forEachChild(node, visit)

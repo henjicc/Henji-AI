@@ -1,5 +1,5 @@
 // 由 scripts/generate-author-effects.ts 生成，请修改效果登记后重新生成。
-import type { BlurParams, SharpenParams, ColorGradeParams, BlackWhiteParams, InvertParams, GradientMapParams, PosterizeParams, GlowParams, LightSweepParams, LensFlareParams, LightLeakParams, DropShadowParams, StrokeParams, VignetteParams, ChromaticAberrationParams, FilmGrainParams, HalftoneParams, DitherPatternParams, PaperParams, ScratchesParams, MosaicParams, GlitchParams, DissolveRevealParams } from '@/core/videoEdit/authorEffects.generated'
+import type { BlurParams, SharpenParams, ColorGradeParams, BlackWhiteParams, InvertParams, GradientMapParams, PosterizeParams, GlowParams, LightSweepParams, LensFlareParams, LightLeakParams, DropShadowParams, StrokeParams, VignetteParams, ChromaticAberrationParams, FilmGrainParams, HalftoneParams, DitherPatternParams, PaperParams, ScratchesParams, MosaicParams, GlitchParams, DissolveRevealParams, MirrorParams, RepeatParams, BulgeParams, TwirlParams, WaveParams, CornerPinParams, DisplaceParams } from '@/core/videoEdit/authorEffects.generated'
 export function blur(params: BlurParams = {}): { readonly id: 'blur'; readonly params: BlurParams } { return { id: 'blur', params } }
 export function sharpen(params: SharpenParams = {}): { readonly id: 'sharpen'; readonly params: SharpenParams } { return { id: 'sharpen', params } }
 export function colorGrade(params: ColorGradeParams = {}): { readonly id: 'color_grade'; readonly params: ColorGradeParams } { return { id: 'color_grade', params } }
@@ -23,3 +23,10 @@ export function scratches(params: ScratchesParams = {}): { readonly id: 'scratch
 export function mosaic(params: MosaicParams = {}): { readonly id: 'mosaic'; readonly params: MosaicParams } { return { id: 'mosaic', params } }
 export function glitch(params: GlitchParams = {}): { readonly id: 'glitch'; readonly params: GlitchParams } { return { id: 'glitch', params } }
 export function dissolve(params: DissolveRevealParams = {}): { readonly id: 'dissolve_reveal'; readonly params: DissolveRevealParams } { return { id: 'dissolve_reveal', params } }
+export function mirror(params: MirrorParams = {}): { readonly id: 'mirror'; readonly params: MirrorParams } { return { id: 'mirror', params } }
+export function repeat(params: RepeatParams = {}): { readonly id: 'repeat'; readonly params: RepeatParams } { return { id: 'repeat', params } }
+export function bulge(params: BulgeParams = {}): { readonly id: 'bulge'; readonly params: BulgeParams } { return { id: 'bulge', params } }
+export function twirl(params: TwirlParams = {}): { readonly id: 'twirl'; readonly params: TwirlParams } { return { id: 'twirl', params } }
+export function wave(params: WaveParams = {}): { readonly id: 'wave'; readonly params: WaveParams } { return { id: 'wave', params } }
+export function cornerPin(params: CornerPinParams = {}): { readonly id: 'corner_pin'; readonly params: CornerPinParams } { return { id: 'corner_pin', params } }
+export function displace(params: DisplaceParams = {}): { readonly id: 'displace'; readonly params: DisplaceParams } { return { id: 'displace', params } }

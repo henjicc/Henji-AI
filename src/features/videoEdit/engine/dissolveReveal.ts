@@ -1,4 +1,5 @@
 import { definePlanner } from './effectPlanner'
+import { effectHash } from './effectShaderMath'
 /**
  * 溶解显影的工序规划与 WGSL（剪辑内置效果 ABI）。
  *
@@ -35,9 +36,7 @@ export function blueNoiseLookup(): AdjustmentLookup {
 
 /** 种子 → 整数平移（蓝噪声）与哈希偏移（点阵）。 */
 export function seedOffset(seed: number): [number, number, number] {
-  // JS 的位运算结果是有符号 32 位，每一步都转回无符号，否则负数到着色器里转 u32 会变成 0，种子失效。
-  let h = Math.imul(Math.floor(seed), 2654435761) >>> 0
-  h = (h ^ (h >>> 16)) >>> 0; h = Math.imul(h, 2246822519) >>> 0; h = (h ^ (h >>> 13)) >>> 0
+  const h = effectHash(Math.floor(seed), 0)
   return [h % 64, (h >>> 8) % 64, h % 65_521]
 }
 

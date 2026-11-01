@@ -1,5 +1,6 @@
 import { definePlanner } from './effectPlanner'
 import { EFFECT_MATH_BLOCK } from './effectShaderPrelude'
+import { effectHash } from './effectShaderMath'
 /**
  * 故障的工序规划与 WGSL（剪辑内置效果 ABI）：三种方式各是一道取样工序，没有中间纹理。
  *
@@ -20,12 +21,6 @@ const DIGITAL_BLOCK_SHARE = 0.3
 const INVERT_FROM = 0.6
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
-/** 无符号 32 位整数混合，乘数与共用 WGSL 的 hash 相同。 */
-function mix32(a: number, b: number): number {
-  let h = (Math.imul(a >>> 0, 1664525) + Math.imul(b >>> 0, 1013904223)) >>> 0
-  h = (h ^ (h >>> 16)) >>> 0; h = Math.imul(h, 2246822519) >>> 0; h = (h ^ (h >>> 13)) >>> 0
-  h = Math.imul(h, 3266489917) >>> 0; return (h ^ (h >>> 16)) >>> 0
-}
 
 /** `params` 已补齐默认值；`segment` 是 `glitchFrameSeed` 给出的本帧错法段号。 */
 export function planGlitch(params: VideoEditBuiltinParams, width: number, height: number, segment: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
@@ -39,10 +34,10 @@ export function planGlitch(params: VideoEditBuiltinParams, width: number, height
   const blockHeight = glitchBlockPixels(n(params, 'block_size'), h)
   const blockWidth = mode === 0 ? blockHeight * GLITCH_BLOCK_ASPECT : blockHeight
   // 落在 24 位内，转成 float 交给着色器不丢精度。
-  const seed = mix32(Math.floor(n(params, 'seed')), segment) & 0xffffff
+  const seed = effectHash(Math.floor(n(params, 'seed')), segment) & 0xffffff
   let invert = [-1e6, -1e6]
-  if (mode === 0 && strength > INVERT_FROM && mix32(seed, 1) / 2 ** 32 < (strength - INVERT_FROM) / (1 - INVERT_FROM)) {
-    invert = [mix32(seed, 2) % Math.max(1, Math.ceil(content[0] / (2 * blockWidth))), mix32(seed, 3) % Math.max(1, Math.ceil(content[1] / (2 * blockHeight)))]
+  if (mode === 0 && strength > INVERT_FROM && effectHash(seed, 1) / 2 ** 32 < (strength - INVERT_FROM) / (1 - INVERT_FROM)) {
+    invert = [effectHash(seed, 2) % Math.max(1, Math.ceil(content[0] / (2 * blockWidth))), effectHash(seed, 3) % Math.max(1, Math.ceil(content[1] / (2 * blockHeight)))]
   }
   const radians = n(params, 'angle') * Math.PI / 180
   const split = mode === 2 ? 0 : Math.round(glitchSplitDistance(n(params, 'rgb_split')) * h)

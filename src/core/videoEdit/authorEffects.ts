@@ -48,20 +48,26 @@ function assertAuthorEffectSpace(definition: VideoEditBuiltinEffectDefinition, s
     : `${definition.name}按整幅画面算，请放进调整层 adjust。`)
   if (!['layer', ...(space === 'frame' ? ['frame'] : [])].includes(definition.space ?? '') || definition.media === 'audio') throw new Error(`${definition.id} 不能用于${space === 'frame' ? '调整层' : '图层'}，请使用片段效果链。`)
 }
-/** 在名称解析期校验整个风格件，不依赖当前帧、启用状态或动画求值后的参数。 */
+/**
+ * 在名称解析期校验整个风格件，不依赖当前帧、启用状态或动画求值后的参数。风格件里不属于当前空间的参数
+ * （片段、整帧专用）在这里不报错，取用时略过，见 `lookParams`。
+ */
 export function validateVideoEditLook(preset: VideoEditEffectPreset, space: 'layer' | 'frame' = 'layer', apiVersion = CODE_AUTHOR_API_VERSION): void {
   if (preset.media !== 'video') throw new Error('声音预设不能用于图层。')
   for (const effect of preset.effects) {
     if (!effect.builtin || effect.mask) throw new Error(`预设「${preset.name}」包含代码效果或蒙版，请使用片段效果链。`)
     const retired = retiredBlurParams(effect.builtin.id, effect.builtin.params)
-    const definition = requireVideoEditBuiltinEffect(retired ? 'blur' : effect.builtin.id)
-    assertAuthorEffectSpace(definition, space, apiVersion)
-    const keys = new Set([...Object.keys(retired ?? effect.builtin.params), ...Object.keys(effect.builtin.curves ?? {}), ...(preset.knobs ?? []).flatMap(knob => knob.mappings.filter(mapping => mapping.effectId === effect.id).map(mapping => mapping.parameter))])
-    for (const key of keys) {
-      const issue = videoEditBuiltinParamSpaceIssue(definition.params.find(param => param.key === key), space)
-      if (issue) throw new Error(`风格件「${preset.name}」的 ${definition.id}.${key}：${issue}`)
-    }
+    assertAuthorEffectSpace(requireVideoEditBuiltinEffect(retired ? 'blur' : effect.builtin.id), space, apiVersion)
   }
+}
+/**
+ * 风格件来自片段效果链，存的是完整参数表（含曲线与旋钮目标）：用在图层或调整层时，只取当前空间里起作用的参数，
+ * 片段、整帧专用的参数在这里本来就没有意义（变形的边缘在图层上恒为透明）。作者代码显式写这类参数仍按空间严格报错。
+ */
+function lookParams(id: string, params: Readonly<Record<string, unknown>>, space: 'layer' | 'frame'): Record<string, unknown> {
+  const retired = retiredBlurParams(id, params)
+  const definition = requireVideoEditBuiltinEffect(retired ? 'blur' : id)
+  return Object.fromEntries(Object.entries(params).filter(([key]) => !videoEditBuiltinParamSpaceIssue(definition.params.find(param => param.key === key), space)))
 }
 // 风格件修订替换快照对象；结构只展开一次，动画旋钮不进入缓存键。
 const lookEffects = new WeakMap<VideoEditEffectPreset, VideoEditEffectPreset['effects']>()
@@ -105,7 +111,7 @@ export function resolveAuthorEffects(value: unknown, environment: AuthorEffectEn
       for (const item of cachedLookEffects(preset)) {
         const evaluated = evaluateVideoEditEffect(item, presetFrame)
         // 停用条目仍校验空间，避免启用曲线后才暴露无效预设。
-        add(evaluated.builtin!.id, { ...evaluated.builtin!.params, ...overrides.get(item.id) }, evaluated.enabled === false ? 0 : evaluated.amount, preset.name)
+        add(evaluated.builtin!.id, lookParams(evaluated.builtin!.id, { ...evaluated.builtin!.params, ...overrides.get(item.id) }, space), evaluated.enabled === false ? 0 : evaluated.amount, preset.name)
       }
     } catch (cause) { throw new Error(`${layer}.${field}[${index}]：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
   })
@@ -115,7 +121,7 @@ export function authorEffectBleed(effects: readonly ResolvedAuthorEffect[], refe
   const value = effects.reduce((sum, effect) => {
     const pad = sum * reference.referenceSize.height
     const expanded = { ...reference, contentBounds: { ...reference.contentBounds, width: reference.contentBounds.width + pad * 2, height: reference.contentBounds.height + pad * 2 } }
-    return sum + (requireVideoEditBuiltinEffect(effect.id).bleed?.(effect.params, expanded) ?? 0)
+    return sum + (requireVideoEditBuiltinEffect(effect.id).bleed?.(effect.params, expanded, pad) ?? 0)
   }, 0)
   if (!Number.isFinite(value) || value < 0) throw new Error('图层效果外扩超出有限纹理尺寸。')
   return value

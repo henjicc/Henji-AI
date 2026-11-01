@@ -43,11 +43,13 @@ export class VideoEditAuthorEffects {
       this.cache.delete(slot)
     }
     const textures: EffectTexture[] = []
-    const take = (mips = false): GpuTexture => {
-      const mipLevelCount = mips ? 1 + Math.floor(Math.log2(Math.max(width, height))) : 1
-      const index = this.spare.findIndex(entry => entry.width === width && entry.height === height && entry.format === format && entry.mipLevelCount === mipLevelCount)
-      if (index < 0) this.releaseIdleSpare({ width, height })
-      const entry = index < 0 ? { texture: this.allocator.allocate(width, height, format, mipLevelCount), width, height, format, mipLevelCount, touched: this.frame } : this.spare.splice(index, 1)[0]
+    // `size`、`textureFormat` 只给数据纹理（变形的位移场）用；画面纹理按图层尺寸与链的格式取，换尺寸时先归还闲置档位。
+    const take = (mips = false, size?: { width: number; height: number }, textureFormat = format): GpuTexture => {
+      const w = size?.width ?? width, h = size?.height ?? height
+      const mipLevelCount = mips ? 1 + Math.floor(Math.log2(Math.max(w, h))) : 1
+      const index = this.spare.findIndex(entry => entry.width === w && entry.height === h && entry.format === textureFormat && entry.mipLevelCount === mipLevelCount)
+      if (index < 0 && !size) this.releaseIdleSpare({ width, height })
+      const entry = index < 0 ? { texture: this.allocator.allocate(w, h, textureFormat, mipLevelCount), width: w, height: h, format: textureFormat, mipLevelCount, touched: this.frame } : this.spare.splice(index, 1)[0]
       entry.touched = this.frame
       textures.push(entry); this.referenced.add(entry.texture); return entry.texture
     }
@@ -73,7 +75,11 @@ export class VideoEditAuthorEffects {
         // 只有交给合成器的最后一张图需要 mip（缩小绘制）；有 pose.blur 或下层时最后一张图还要再处理一道。
         const needsMips = !adjustment && index === effects.length - 1 && defocus.radius <= 0 && !hasUnderlay
         let target = take(needsMips && effect.amount === 1), light = plan.underlay === undefined ? undefined : take()
-        await encode(plan, image, target, undefined, light)
+        // 有拆出的光影要一起变形时，位移场只算一次，主图与每张光影共用。
+        const parts = plan.remap && underlays.length ? plan.remapField : undefined
+        const field = parts && take(false, parts.field, parts.format)
+        if (parts) await this.gpu.encodePlan(parts.field, parts.format, image, field!, undefined, environment.luts, this.batch)
+        await encode(parts ? parts.warp : plan, image, target, field, light)
         if (effect.amount !== 1) {
           const blended = take(needsMips); await encode(mix(effect.amount), target, blended, image); target = blended
           if (light) {
@@ -81,6 +87,13 @@ export class VideoEditAuthorEffects {
             const opacity = mix(effect.amount); opacity.passes[0].entry = 'effect_opacity'
             await encode(opacity, light, scaled); light = scaled
           }
+        }
+        // 只重排像素位置的变形让前面拆出的光与影也一起变形（与 AE 一致）：投影贴进透视、光晕随波动、影子跟着复制。
+        // 改颜色的效果不经过它们：零 alpha 的光反预乘后会被抹掉。合成时光与影仍按各自的叠法（零 alpha 相加、普通遮挡）。
+        if (plan.remap) for (const underlay of underlays) {
+          let moved = take(); await encode(parts ? parts.warp : plan, underlay.texture, moved, field)
+          if (effect.amount !== 1) { const blended = take(); await encode(mix(effect.amount), moved, blended, underlay.texture); moved = blended }
+          underlay.texture = moved
         }
         if (light) underlays.push({ texture: light, cover: plan.underlayKind === 'cover' })
         image = target
