@@ -264,7 +264,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     /** 暂停或拖动时播放头一动就推进一次（见下方 wake 的消息通道唤醒），不等轮询计时器。 */
     let wakeForView = (): void => {}
     const unsubscribeView = subscribeVideoEditView(() => {
-      if (stopped) return
+      // 剪辑关闭时的最后一次发布先于面板卸载到达，此时实例已注销，不能再按 ID 取节目命令。
+      if (stopped || instance.session.isEnded) return
       const command = videoEditProgramCommandIdentity(instance.document.id)
       const moved = observedAudioFrame !== instance.frame
       // 停止先于这次改动的画面请求发给 Worker：还没上屏的播放帧当场作废，预热的视频输入先收起，暂停帧不会排在停止前面。
