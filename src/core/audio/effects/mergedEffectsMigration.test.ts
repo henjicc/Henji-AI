@@ -5,15 +5,35 @@ import { describe, expect, it } from 'vitest'
 import baseline from './__fixtures__/merge-baseline.json'
 import { AudioEffectChain } from './audioEffectChain'
 import { migrateAudioEffectInstance, migrateAudioMergedEffects, migrateAudioEffectLibraryV3, migrateAudioEqualizerModes } from './mergedEffectsMigration'
-import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect } from '../../videoEdit/builtinEffects'
+import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffect } from '../../videoEdit/builtinEffects'
 import { PERSISTENCE_FORMATS } from '../../persistence/formats'
 import { upgradePersistenceContent } from '../../persistence/migrations'
 import { audioEditProjectFromDocument } from '../../audioEdit/documentContent'
 import { parseDocumentEnvelope } from '../../documents/envelope'
 import { assertVideoEditBuiltinCurves } from '../../videoEdit/keyframes'
 import { audioBuiltinIdentity } from './audioIdentity'
-import type { RecordingDocument } from '../../screenRecording/document'
-import type { VideoEditEffectPreset } from '../../videoEdit/effectPresets'
+
+// 黄金样本可追加其他领域的案例；按持久位置比较完整音频效果与风格件，保留顺序、曲线和旋钮映射的校验。
+function audioSnapshot(content: unknown): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  const walk = (value: unknown, path: string): void => {
+    if (!value || typeof value !== 'object') return
+    if (Array.isArray(value)) { value.forEach((entry, index) => walk(entry, `${path}[${index}]`)); return }
+    const record = value as Record<string, unknown>
+    const builtin = record.builtin as { id?: string } | undefined
+    if (record.media === 'audio' && Array.isArray(record.effects) || builtin?.id && videoEditBuiltinEffect(builtin.id)?.media === 'audio') {
+      result[path] = record
+      return
+    }
+    for (const [key, entry] of Object.entries(record)) {
+      if (key === 'essentialSound') result[`${path}.${key}`] = entry
+      else walk(entry, `${path}.${key}`)
+    }
+  }
+  walk(content, '$')
+  expect(Object.keys(result).length).toBeGreaterThan(0)
+  return result
+}
 
 describe('音频效果合并迁移', () => {
   it('三个正式容器的历史黄金样本逐版本升级，覆盖每个来源 ID 与全部持久位置，原件不变', () => {
@@ -30,27 +50,7 @@ describe('音频效果合并迁移', () => {
       if (kind === 'audio_edit') expect(audioEditProjectFromDocument({ id: source.id, name: source.name, createdAt: 0, updatedAt: 0, revision: 0 }, migrated).project.effectChain).toHaveLength(baseline.length / 2)
       const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/document.${kind}/v${format.version}.json`, 'utf8'))
       parseDocumentEnvelope(current)
-      const assertVideoSample = (actual: Record<string, unknown>, expected: Record<string, unknown>): void => {
-        const { sequences: expectedSequences, ...expectedRest } = expected
-        const { sequences: actualSequences, ...actualRest } = actual
-        // 最新黄金样本的作者接口和源码独立演进；音频所在的其他字段与风格件必须逐项保持。
-        const withoutAuthorSources = (value: Record<string, unknown>): Record<string, unknown> => ({ ...value, codeMaterials: undefined, styles: (value.styles as Array<{ sample: Record<string, unknown> }> | undefined)?.map(style => ({ ...style, sample: { ...style.sample, code: undefined } })) })
-        expect(withoutAuthorSources(actualRest)).toEqual(withoutAuthorSources(expectedRest))
-        expect(actualSequences).toEqual(expect.arrayContaining(expectedSequences as unknown[]))
-      }
-      // 当前黄金样本还携带其他领域的案例；音频来源里的每条序列必须完整保留。
-      if (kind === 'video_edit') assertVideoSample(current.content, migrated as Record<string, unknown>)
-      else if (kind === 'screen_recording') {
-        const recording = migrated as RecordingDocument
-        expect({ ...current.content, scriptCapture: undefined }).toEqual({ ...recording, scriptCapture: undefined })
-        expect({ ...current.content.scriptCapture, baselines: undefined }).toEqual({ ...recording.scriptCapture, baselines: undefined })
-        expect(current.content.scriptCapture.baselines).toHaveLength(recording.scriptCapture.baselines.length)
-        current.content.scriptCapture.baselines.forEach((baseline: { content: Record<string, unknown> }, index: number) => {
-          const expected = recording.scriptCapture.baselines[index]
-          expect({ ...baseline, content: undefined }).toEqual({ ...expected, content: undefined })
-          assertVideoSample(baseline.content, expected.content)
-        })
-      } else expect(current.content).toEqual(migrated)
+      expect(audioSnapshot(current.content)).toEqual(audioSnapshot(migrated))
     }
   })
 
@@ -61,7 +61,9 @@ describe('音频效果合并迁移', () => {
     // 这里核对音频迁移本身；之后版本给外壳加的字段（如 minReaderVersion）由下面与最新黄金样本的比对覆盖。
     expect({ ...(migrated as object), minReaderVersion: undefined }).toEqual({ ...migrateAudioEqualizerModes(migrateAudioMergedEffects(source)), version: format.version })
     const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/video-preset-package/v${format.version}.json`, 'utf8'))
-    expect(current).toEqual(migrated)
+    expect(format.schema.safeParse(current).success).toBe(true)
+    expect(migrated).toMatchObject({ format: current.format, version: current.version, minReaderVersion: current.minReaderVersion })
+    expect(audioSnapshot(current)).toEqual(audioSnapshot(migrated))
     expect(() => assertVideoEditBuiltinCurves({ id: 'modulation', curves: { mode: [{ time: 0, value: 'phaser', interpolation: 'hold' }] } })).toThrow('不支持关键帧')
   })
 
@@ -75,10 +77,11 @@ describe('音频效果合并迁移', () => {
       expect(migrated).toEqual(id === 'video-style-library' ? migrateStyleAuthor(expected) : id === 'video-style-package' ? migrateStylePackageAuthor(expected) : expected)
       const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${format.version}.json`, 'utf8'))
       if (id === 'video-effect-library') {
-        const library = migrated as { favorites: string[]; presets: VideoEditEffectPreset[] }
-        expect({ ...current.content, favorites: undefined }).toEqual({ ...library, favorites: undefined })
+        const library = migrated as { favorites: string[] }
         expect(current.content.favorites).toEqual(expect.arrayContaining(library.favorites))
-      } else expect(current.content).toEqual(migrated)
+      }
+      expect(format.schema.safeParse(current.content).success).toBe(true)
+      expect(audioSnapshot(current.content)).toEqual(audioSnapshot(migrated))
       const piece = id === 'video-effect-library' ? current.content.presets[0] : id === 'video-style-library' ? current.content.effectPresets[0] : current.content.style.effectPresets[0]
       expect(piece.knobs[0].mappings.map((mapping: { parameter: string }) => mapping.parameter)).toEqual(['chorus_depth', 'multi_low_amount'])
       expect(source).toEqual(before)

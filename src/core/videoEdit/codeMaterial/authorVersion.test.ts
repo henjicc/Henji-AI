@@ -1,12 +1,13 @@
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { AUTHOR_LIBRARIES, latestAuthorLibraryVersions } from './authorLibraries'
+import * as authorLibraries from './authorLibraries'
 import { CODE_AUTHOR_API_VERSION } from '../codeAuthorVersions'
 import fs from 'node:fs'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { PERSISTENCE_FORMATS } from '../../persistence/formats'
 import { upgradePersistenceContent } from '../../persistence/migrations'
-import { videoEditStyleSchema, videoEditStyleContentHash, videoEditTemplateContentHash } from '../styles/styleSchemas'
+import { STANDARD_STYLE_SAMPLE, videoEditStyleSchema, videoEditStyleContentHash, videoEditTemplateContentHash } from '../styles/styleSchemas'
 import { videoEditTemplateSchema } from '../styles/templateSchemas'
 import { HISTORICAL_PREVIEW_AUTHOR, pinPreviewAuthor, previewAuthorIdentity, resolvePreviewAuthor } from './authorVersion'
 
@@ -78,6 +79,31 @@ it('样片与模板摘要只计入源码实际导入的库，发行未用到的�
   // 实际导入的库换版本仍改变摘要。
   const older = { entry: 'main.js', files: { 'main.js': code.files['main.js'] } }
   expect(await videoEditTemplateContentHash({ kind: 'code', code: older, apiVersion: 9, libraries: { 'henji-layout': '1.1.0' } })).not.toBe(await videoEditTemplateContentHash({ kind: 'code', code: older, apiVersion: 9, libraries: { 'henji-layout': '1.2.0' } }))
+})
+
+it('兼容库发行只让实际导入该库的样片与模板摘要变化', async () => {
+  const code = { entry: 'main.js', files: {
+    'main.js': "export { default } from './title.js'",
+    'title.js': "import { layoutText } from 'henji-layout/text'; export default { draw() { layoutText('A') } }",
+    'unused.js': "import 'henji-effects'",
+  } }
+  const latest = latestAuthorLibraryVersions(CODE_AUTHOR_API_VERSION)
+  const previous = (library: string) => Object.keys(AUTHOR_LIBRARIES[library]).at(-2)!
+  const libraries = { ...latest, 'henji-layout': previous('henji-layout'), 'henji-effects': previous('henji-effects') }
+  const releases = vi.spyOn(authorLibraries, 'latestAuthorLibraryVersions').mockReturnValue(libraries)
+  try {
+    const sample = { ...STANDARD_STYLE_SAMPLE, anchors: [...STANDARD_STYLE_SAMPLE.anchors], code, apiVersion: CODE_AUTHOR_API_VERSION }
+    const hashes = () => Promise.all([
+      videoEditStyleContentHash({ guide: '样片', sample }),
+      videoEditTemplateContentHash({ kind: 'code', code, apiVersion: CODE_AUTHOR_API_VERSION }),
+    ])
+    const before = await hashes()
+    releases.mockReturnValue({ ...libraries, 'henji-effects': latest['henji-effects'] })
+    expect(await hashes()).toEqual(before)
+    releases.mockReturnValue({ ...libraries, 'henji-layout': latest['henji-layout'] })
+    const after = await hashes()
+    after.forEach((hash, index) => expect(hash).not.toBe(before[index]))
+  } finally { releases.mockRestore() }
 })
 
 it('缺版本的历史样片使用 effects 1.3 导出迁移，新写入记录当前接口', async () => {
