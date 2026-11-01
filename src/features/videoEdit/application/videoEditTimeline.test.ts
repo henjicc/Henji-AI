@@ -91,9 +91,9 @@ it('插入/覆盖后删除只删除放入的片段，原片段左右尾部保持
   const clipboard = readVideoEditClipboard(id)!; clipboard.clips[0].duration = 10
   for (const mode of ['insert', 'overwrite'] as const) {
     const baseline = owner.document
-    executeVideoEditTimelineEdit(id, sequence.id, { kind: 'place', clipboard, frame: 40, mode })
+    await executeVideoEditTimelineEdit(id, sequence.id, { kind: 'place', clipboard, frame: 40, mode })
     expect(owner.selectedClipIds).toHaveLength(1)
-    executeVideoEditTimelineEdit(id, sequence.id, { kind: 'delete', clipIds: owner.selectedClipIds })
+    await executeVideoEditTimelineEdit(id, sequence.id, { kind: 'delete', clipIds: owner.selectedClipIds })
     expect(getActiveVideoEditSequence(owner).clips.some(clip => clip.start === 50)).toBe(true)
     undoVideoEdit(id); undoVideoEdit(id)
     expect(JSON.stringify({ ...owner.document, revision: 0 })).toBe(JSON.stringify({ ...baseline, revision: 0 }))
@@ -119,7 +119,7 @@ it('64次指针预览不改剪辑/保存/历史，释放只提交一次且可撤
   const handle = beginVideoEditTimelineDrag(id, sequence.id)
   for (let index = 0; index < 64; index++) expect(previewVideoEditTimelineDrag(handle, { mode: 'move', delta: index }).clips[0].start).toBe(index)
   expect(owner.document).toBe(baseline); expect(owner.past.length).toBe(past); expect(owner.dirty).toBe(false); expect(JSON.stringify(savedVideoEdit(owner))).toBe(saved)
-  finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 20 })
+  await finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 20 })
   expect(owner.past.length).toBe(past + 1); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.start)).toEqual([20, 220])
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.start)).toEqual([0, 200])
   expect(() => previewVideoEditTimelineDrag(handle, { mode: 'move', delta: 1 })).toThrow('改变')
@@ -128,20 +128,20 @@ it('切换序列/选区/关闭重开后晚到释放不能修改新的目标', as
   const { owner, id, ids, sequence } = await fixture()
   let handle = beginVideoEditTimelineDrag(id, sequence.id)
   const second = appendVideoEditSequence(id); switchVideoEditSequence(id, second)
-  expect(() => finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 2 })).toThrow('改变')
+  await expect(finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 2 })).rejects.toThrow('改变')
   switchVideoEditSequence(id, sequence.id); handle = beginVideoEditTimelineDrag(id, sequence.id)
   setVideoEditTimelineView(id, { selectedClipIds: [ids[0]] })
-  expect(() => finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 2 })).toThrow('改变')
+  await expect(finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 2 })).rejects.toThrow('改变')
   handle = beginVideoEditTimelineDrag(id, sequence.id); await saveVideoEdit(id); await closeVideoEditProject(id)
   await reopenVideoEdit(owner.document.id)
-  expect(() => finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 2 })).toThrow('改变')
+  await expect(finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 2 })).rejects.toThrow('改变')
 })
 it('领域锁定覆盖手动、公共字段与拖动入口，通用事务失败完整恢复锁和片段', async () => {
   const { owner, id, ids, sequence } = await fixture()
   const track = sequence.tracks[1]; const ref = { kind: 'video_edit.clip', id: `${id}:${ids[0]}` }; const trackRef = { kind: 'video_edit.track', id: `${id}:${track.id}` }
   updateVideoEditTrack(id, sequence.id, track.id, { locked: true })
   const history = owner.past.length
-  expect(() => executeVideoEditTimelineEdit(id, sequence.id, { kind: 'delete', clipIds: ids })).toThrow('锁定')
+  await expect(executeVideoEditTimelineEdit(id, sequence.id, { kind: 'delete', clipIds: ids })).rejects.toThrow('锁定')
   const app = createApplicationHarness()
   try {
     const result = await app.change(ref, { 'video_edit.clip.x': .2 })

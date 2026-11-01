@@ -47,6 +47,13 @@ import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRunti
 import { nextVideoEditHistoryOrder, registerVideoEditDocumentRedo, undoVideoEditLibraryBefore } from './videoEditLibraryHistory'
 import { readDocumentSessionState, writeDocumentSessionState } from '@/commands/documents'
 import { registerReloadResumeView } from '@/core/documents/reloadResumeViews'
+import { setVideoEditMotionWorkerLifecycle } from './videoEditMotionWorkerLifecycle'
+
+setVideoEditMotionWorkerLifecycle({
+  isOpen: id => listVideoEditInstances().some(instance => instance.document.id === id),
+  ownerOf: id => listVideoEditInstances().find(instance => instance.document.sequences.some(sequence => sequence.id === id))?.document.id,
+  subscribe: subscribeVideoEditDomain,
+})
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -581,13 +588,38 @@ export function updateVideoEditSequenceSettings(projectId: string, sequenceId: s
   const { name, binId, motionBlur, ...timing } = settings
   editVideoSequence(projectId, sequenceId, sequence => ({ ...changeVideoEditSequenceSettings(sequence, timing), ...(name !== undefined ? { name } : {}), ...(motionBlur !== undefined ? { motionBlur } : {}), ...(binId !== undefined ? { binId: binId || undefined } : {}) }))
 }
-export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, preserveProgramAnchors: readonly string[] = [], preserveCaptions = false): VideoEditDocument {
+export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, spatial: import('./videoEditSpatialPropagation').VideoEditSpatialEditOptions): Promise<VideoEditDocument>
+export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, preserveProgramAnchors?: readonly string[], preserveCaptions?: boolean): VideoEditDocument
+export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, options: readonly string[] | import('./videoEditSpatialPropagation').VideoEditSpatialEditOptions = [], preserveCaptions = false): VideoEditDocument | Promise<VideoEditDocument> {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
   assertVideoEditWritable(instance)
   if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
   const before = instance.document
-  try { return applyVideoEditDocument(instance, update, true, false, preserveProgramAnchors, preserveCaptions) }
+  if ('signal' in options) {
+    const contentVersion = instance.contentVersion
+    return (async () => {
+      const context = { projectId: id, operation: options.operation ?? 'fields' }
+      logger.debug('空间编辑开始', { event: 'video_edit.spatial.edit.start', context })
+      try {
+        options.signal.throwIfAborted()
+        const candidate = update(before)
+        let planned = candidate
+        if (candidate.sequences.some(sequence => sequence.spatialCamera)) {
+          const { propagateVideoEditSpatialFields } = await import('./videoEditSpatialPropagation')
+          planned = await propagateVideoEditSpatialFields(before, candidate, options.signal, options)
+        }
+        options.signal.throwIfAborted()
+        if (requireVideoEditInstance(id) !== instance || instance.session.isEnded || instance.contentVersion !== contentVersion) throw new Error('空间传播期间剪辑已修改，请重新执行编辑。')
+        assertApplicationWritesAllowed(); assertVideoEditWritable(instance)
+        if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
+        const committed = applyVideoEditDocument(instance, current => withVideoEditCurrentMetadata(planned, current), true)
+        logger.debug('空间编辑已提交', { event: 'video_edit.spatial.edit.completed', context })
+        return committed
+      } catch (error) { logger.debug('空间编辑未提交', { event: 'video_edit.spatial.edit.failed', context, error }); publishCommandFact(instance, { operationId: crypto.randomUUID(), phase: 'failed', before, after: before }); throw error }
+    })()
+  }
+  try { return applyVideoEditDocument(instance, update, true, false, options, preserveCaptions) }
   catch (error) { publishCommandFact(instance, { operationId: crypto.randomUUID(), phase: 'failed', before, after: before }); throw error }
 }
 /** Streaming imports keep one undo boundary per request. Later edits keep their own boundaries.

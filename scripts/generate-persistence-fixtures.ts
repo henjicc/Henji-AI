@@ -31,9 +31,10 @@ import { ImageEditCommandHistoryV3 } from '../src/core/imageEdit/v3/commandHisto
 import { splitImageEditHistoryPagesV3 } from '../src/core/imageEdit/v3/historyPaging/checkpoint'
 import { buildDocumentEnvelope } from '../src/core/documents/envelope'
 import { buildProjectManifest } from '../src/core/documents/projectManifest'
-import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema, type VideoEditDocument } from '../src/core/videoEdit/document'
+import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema, videoEditNativeTemplateClipSchema, type VideoEditDocument } from '../src/core/videoEdit/document'
 import { makeVideoEditItemClip } from '../src/core/videoEdit/projectItems'
 import { setVideoEditClipTimeRemap } from '../src/core/videoEdit/clipSpeed'
+import { videoEditClipCurvesSchema, sliceVideoEditCurves, rescaleVideoEditCurves } from '../src/core/videoEdit/keyframes'
 import { videoEditFps } from '../src/core/videoEdit/time'
 import { bindVideoEditCaptionSpeech } from '../src/core/videoEdit/captionSpeech'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../src/core/videoEdit/codeAsset'
@@ -101,6 +102,18 @@ clip.scaleAspect = 1.2
 // 31：序列运动模糊改为总开关，片段可单独关掉自身变换动画的模糊。
 clip.motionBlur = false
 clip.curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 1, interpolation: 'ease' }] }
+const spatialCurves = videoEditClipCurvesSchema.parse({
+  depth: [{ time: 0, value: -.5, interpolation: 'linear' }, { time: 60, value: .5, interpolation: 'linear' }],
+  rotationX: [{ time: 0, value: 0, interpolation: 'ease' }, { time: 60, value: 30, interpolation: 'linear' }],
+  rotationY: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [.2, .1, .8, .9] }, { time: 60, value: 450, interpolation: 'linear' }],
+  anchorDepth: [{ time: 0, value: .1, interpolation: 'hold' }, { time: 60, value: .2, interpolation: 'hold' }],
+})
+Object.assign(clip, { spatial: { enabled: true }, depth: -.5, rotationX: 0, rotationY: 0, anchorDepth: .1, curves: { ...clip.curves, ...spatialCurves } })
+sequence.spatialCamera = { offsetX: .1, perspective: .25, defocus: 1,
+  framing: { target: { kind: 'clip', clipId: clip.id }, heightFraction: .6 }, aim: { kind: 'clip', clipId: clip.id }, focus: { kind: 'point', point: [0, 0, -.5] },
+  curves: { offsetY: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 60, value: .1, interpolation: 'linear' }],
+    framingHeightFraction: [{ time: 0, value: .6, interpolation: 'ease' }, { time: 60, value: .8, interpolation: 'linear' }] },
+  bindings: { focus: [{ time: 30, interpolation: 'hold', value: { kind: 'clip', clipId: clip.id } }, { time: 75, interpolation: 'hold', value: null }] } }
 clip.effects = [{ id: 'golden-grade', name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: { exposure: 0.25, temperature_kelvin: 5600, tint: 4, tone_lights: 12, mixer_orange_saturation: -10, wheel_mode: 'primary', global_hue: 200, global_strength: 6 }, curves: { temperature_kelvin: [{ time: 0, value: 5600, interpolation: 'linear' }, { time: 30, value: 6200, interpolation: 'linear' }] } } }, { id: 'golden-blur', name: '模糊', enabled: true, amount: 0.5, builtin: { id: 'blur', params: { mode: 'uniform', amount: 17.43, axis: 'both', repeat_edges: true } } }]
 sequence.clips.push(clip)
 sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', sourceText: '字幕原文、', translation: 'Golden caption' }]
@@ -179,7 +192,9 @@ const goldenStyle = { effectPresets: [goldenPiece], userPreferences: [{ id: 'gol
 document.styles = [{ ...goldenStyle, sample: { ...goldenStyle.sample, apiVersion: CODE_AUTHOR_API_VERSION, code: { entry: 'index.js', files: { 'index.js': source } } } }]
 sequence.styleId = goldenStyle.id
 const nativeGraphic = titleGraphic('lower_third', { text: '姓名', subtitle: '职务' }, 1920, 1080, 119 / 30)
-const nativeClipContent = { name: '人名条', kind: 'graphic' as const, graphic: nativeGraphic, track: 0, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
+const nativeClipContent = videoEditNativeTemplateClipSchema.parse({ name: '人名条', kind: 'graphic', graphic: nativeGraphic, track: 0, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '',
+  spatial: { enabled: true }, depth: -.3, rotationX: 12, rotationY: 30, anchorDepth: .1,
+  curves: rescaleVideoEditCurves(sliceVideoEditCurves(spatialCurves, 10, 50), time => time * 2, 120) })
 document.templates = [
   { id: 'golden-code-template', name: '代码标题模板', description: '换文字就能复用的标题。', version: 1, contentHash: 'b'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, origin: { id: 'golden-library-template', version: 3 }, body: { kind: 'code', definitionId: 'code-definition' } },
   { id: 'golden-native-template', name: '人名条', description: '人物首次出场时介绍姓名。', version: 2, contentHash: 'c'.repeat(64), updatedAt: timestamp, style: null, origin: null, body: { kind: 'native', content: { width: 1920, height: 1080, fps: 30, clips: [nativeClipContent] } } },
@@ -300,7 +315,8 @@ const values: Record<string, unknown> = {
   'image-layout-page':layoutPage,
   'image-layout-candidate':layoutCandidate,
   'creative-intent-page': (() => { const { draft, samples } = createMotionFixture('S01').input; return { version: 1, kind: 'samples', ownerRef: draft.ownerRef, sourceDigest: draft.sourceDigest, monoSpanUs: [samples[0].monoUs, samples[samples.length - 1].monoUs], seqSpan: [samples[0].seq, samples[samples.length - 1].seq], count: samples.length, entries: samples } })(),
-  'creative-intent-candidate': { version: MOTION_CANDIDATE_VERSION, ...optimizeMotionDraft(createMotionFixture('S01').input).candidates[0] },
+  'creative-intent-candidate': (() => { const candidate = optimizeMotionDraft(createMotionFixture('S01').input).candidates[0]; return { version: MOTION_CANDIDATE_VERSION, ...candidate,
+    motions: candidate.motions.map(motion => ({ ...motion, curves: { ...motion.curves, ...spatialCurves } })) } })(),
   'document.video_edit': videoContent,
   'document.canvas': { nodes: [{ id: 'golden-node', type: 'textDisplay', position: { x: 0, y: 0 }, data: { text: '黄金样本' } }], edges: [] },
   'document.audio_edit': { gainRegions: [{ id: 'gain', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 100, fadeOutFrames: 100, enabled: true }], repairs: [{ id: 'repair', kind: 'spectral_heal', startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 1000, strength: .5, enabled: true, strokes: [{ radius: .1, radiusY: .2, points: [{ x: .5, y: .5 }] }] }], source: { mediaType: 'audio', sourcePath: '/persistence-project/素材/voice.wav', audioPath: '/persistence-project/素材/voice.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '参考稿', transcript: [{ id: 'word', text: '你好', startFrame: 0, endFrame: 24000, included: true, locked: false, granularity: 'word' }], suggestions: [], cuts: [{ id: 'cut', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }],
@@ -332,7 +348,7 @@ const values: Record<string, unknown> = {
   'style-kits': legacyKits,
   'title-templates': legacyTitles,
   'video-style-library': goldenStyle,
-  'video-template-library': { id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'code', apiVersion: CODE_AUTHOR_API_VERSION, libraries: {}, code: { entry: 'main.ts', files: { 'main.ts': source } }, durationSeconds: 4 } },
+  'video-template-library': { id: 'golden-library-template', name: '黄金模板', description: '空间人名条。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'native', content: { width: 1920, height: 1080, fps: 30, clips: [nativeClipContent] } } },
   'video-style-package': { format: 'henji-video-style', style: { ...goldenStyle, imported: true }, templates: [{ id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'native', content: { width: 1920, height: 1080, fps: 30, clips: [nativeClipContent] } } }], media: { thumbnail: '/9j/4AAQ', anchors: ['/9j/4AAQ'] } },
   'text-presets': [{ id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) }],
   'export-memory': [{ projectId: 'golden-video_edit', sequenceId: 'main', presetId: VIDEO_EDIT_EXPORT_PRESETS[0].id, settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, useWebCache: true }, directory: '/exports', fileName: '成片 (2).mp4', requestedFileName: '成片.mp4', loudnessRequested: false, range: { startFrame: 0, endFrame: 300 }, rangeSource: 'content', completedAt: 1791504000000 }],
@@ -403,6 +419,27 @@ export function getImageLayoutFixtureResources(): readonly unknown[] {
   return [layoutPage, samplePage, layoutCandidate]
 }
 
+/**
+ * 音频案例早于空间字段与作者接口 10：剪辑 54、录制 57 给黄金片段补空间属性与序列相机；风格包 13 的原生模板换成带空间属性的同一人名条；
+ * 预设包 14 补一件带作者接口 10 代码快照的风格件（标题条目只出现在旧文件里，写不出空间片段）。
+ */
+function withSpatialVideo(value: unknown): unknown {
+  const video = value as VideoEditDocument
+  const fields = { spatial: clip.spatial, depth: clip.depth, rotationX: clip.rotationX, rotationY: clip.rotationY, anchorDepth: clip.anchorDepth }
+  return { ...video, sequences: video.sequences.map(entry => entry.id !== sequence.id ? entry : { ...entry, spatialCamera: structuredClone(sequence.spatialCamera),
+    clips: entry.clips.map(item => item.id !== clip.id ? item : { ...item, ...structuredClone(fields), curves: { ...item.curves, ...structuredClone(spatialCurves) } }) }) }
+}
+function withSpatialTemplates(formatId: string, value: unknown): unknown {
+  if (formatId === 'video-preset-package') {
+    const pack = value as { items: unknown[] }
+    return { ...pack, items: [...pack.items, { category: 'effect', preset: goldenPiece }] }
+  }
+  if (formatId !== 'video-style-package') return value
+  const pack = value as { templates: Array<{ body: { kind: string; content?: { clips: unknown[] } } }> }
+  return { ...pack, templates: pack.templates.map(template => template.body.kind !== 'native' || !template.body.content ? template
+    : { ...template, body: { ...template.body, content: { ...template.body.content, clips: [nativeClipContent] } } }) }
+}
+
 /** Explicit authoring tool. Never rewrite an existing golden sample. */
 export function generatePersistenceFixtures(root = process.cwd(), only?: string): number {
   for (const format of PERSISTENCE_FORMATS) {
@@ -419,13 +456,14 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
     }
     // 音频案例覆盖全部持久位置；当前构造器提供作者声明，不能被旧案例里的作者接口覆盖。
     let content = source ? upgradePersistenceContent(format, source.content ?? source, source.kindVersion ?? source.version) : format.schema.parse(values[format.id])
+    if (source && (format.id === 'video-preset-package' || format.id === 'video-style-package')) content = format.schema.parse(withSpatialTemplates(format.id, content))
     if (format.id === 'document.video_edit' || format.id === 'document.screen_recording') {
       const authorFixture = (value: unknown): unknown => {
         const video = value as VideoEditDocument
         const elementOverrides = { 'golden-motion': { effects: { goldenGlow: { enabled: false, values: { strength: 30 }, curves: { strength: [{ id: 'golden-effect-key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 30, interpolation: 'linear' as const }] } } }, addedEffects: [{ key: 'extraBlur', id: 'blur', params: { amount: 10 } }] } }
-        return { ...video, sequences: video.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.code ? { ...clip, elementOverrides, edits: { 'element:golden-motion:effect:goldenGlow:strength': { by: 'user' as const, at: 1793498400000 } } } : clip) })), codeMaterials: structuredClone(document.codeMaterials), styles: video.styles?.map(style => ({ ...style, sample: { ...style.sample, code: structuredClone(document.styles![0].sample.code) } })),
+        return withSpatialVideo({ ...video, sequences: video.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.code ? { ...clip, elementOverrides, edits: { 'element:golden-motion:effect:goldenGlow:strength': { by: 'user' as const, at: 1793498400000 } } } : clip) })), codeMaterials: structuredClone(document.codeMaterials), styles: video.styles?.map(style => ({ ...style, sample: { ...style.sample, code: structuredClone(document.styles![0].sample.code) } })),
           // 导出记录覆盖当前全部可选导出开关（含网页缓存）。
-          ...(video.exportHistory ? { exportHistory: video.exportHistory.map(entry => ({ ...entry, settings: { ...entry.settings, useWebCache: true } })) } : {}) }
+          ...(video.exportHistory ? { exportHistory: video.exportHistory.map(entry => ({ ...entry, settings: { ...entry.settings, useWebCache: true } })) } : {}) })
       }
       content = format.id === 'document.video_edit' ? authorFixture(content) : (() => {
         const recording = content as { scriptCapture: { baselines: Array<{ content: unknown }> } }

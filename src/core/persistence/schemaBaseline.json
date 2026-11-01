@@ -30,10 +30,10 @@
       "minReaderVersion": 1
     },
     "creative-intent-candidate": {
-      "version": 4,
-      "fingerprint": "44b96df9f304200d0ba33fbeef6e1c34b868796850ba857490292a09346f3078",
+      "version": 5,
+      "fingerprint": "079e98b9edc776b57ac7e98c389436d0bc03a97f4480ab3e2f95de37b8933d2d",
       "supportedFrom": 4,
-      "minReaderVersion": 4
+      "minReaderVersion": 5
     },
     "image-layout-page": {
       "version": 1,
@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 59,
-      "fingerprint": "2e23ea480a2fe16ac750549f69043d2a1958b7baa815bfe477198157a92f78f0",
+      "version": 60,
+      "fingerprint": "606923c87f03685b647640dae02e3de1b90bab995a89cf72c64f71815c505234",
       "supportedFrom": 17,
-      "minReaderVersion": 58
+      "minReaderVersion": 60
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 62,
-      "fingerprint": "03d60deaffd86415100903acf63ed6b80ef3c648c276b45d381edd976de063b9",
+      "version": 63,
+      "fingerprint": "015b309d891bd90afdb1f19b7dd2aaf403cd0119ab98f8f43f6fb5e592a3368e",
       "supportedFrom": 19,
-      "minReaderVersion": 61
+      "minReaderVersion": 63
     },
     "project": {
       "version": 3,
@@ -174,16 +174,16 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 15,
-      "fingerprint": "c34f5315e7eb774a21f141edafca55cc90f33d8cd708e11a62cf1cada8ac1812",
+      "version": 16,
+      "fingerprint": "107eaedeb4e9a0e211884c05b937496d0241400eac803c48a4f6b74f980a62c2",
       "supportedFrom": 1,
-      "minReaderVersion": 15
+      "minReaderVersion": 16
     },
     "code-author-api": {
-      "version": 14,
-      "fingerprint": "d76d5e3078ad7659cb45887a7154eab491d5ffcbf6563661346fe9bc01d35747",
+      "version": 15,
+      "fingerprint": "3a4c39b62358308fff4e31b4dff12b60ef75f7b0a7d86655728c4db1c6610638",
       "supportedFrom": 4,
-      "minReaderVersion": 14
+      "minReaderVersion": 15
     },
     "code-component": {
       "version": 1,
@@ -192,10 +192,10 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 20,
-      "fingerprint": "e7d3add526c1f12c4d300abe95f6c455e9e6b02f5b882c5e0e5a3e0523636b43",
+      "version": 21,
+      "fingerprint": "d1c3c23650b4487666fb698c65ee86c1db99bfc063093155400df96c2d0d8217",
       "supportedFrom": 6,
-      "minReaderVersion": 20
+      "minReaderVersion": 21
     },
     "settings": {
       "version": 16,
@@ -216,10 +216,10 @@
       "minReaderVersion": 3
     },
     "title-templates": {
-      "version": 9,
-      "fingerprint": "c1fa1e2d8924e3a910034c3b24f202b697edfd99b40ed68afc918bf9a71d5bb5",
+      "version": 10,
+      "fingerprint": "de0f225435b9b076907ea018142204fad045d10f7239475425af5997635920c4",
       "supportedFrom": 6,
-      "minReaderVersion": 6
+      "minReaderVersion": 10
     },
     "text-presets": {
       "version": 1,
@@ -240,10 +240,10 @@
       "minReaderVersion": 2
     },
     "video-preset-package": {
-      "version": 18,
-      "fingerprint": "1efd6d1ded6d7e77e891fbc7912a9ff7b671d7fe8c85b006855c7b91e5028305",
+      "version": 19,
+      "fingerprint": "6f27a5621b98375ed205287030d751497f9a4f4157536541d9e6f53e334e1151",
       "supportedFrom": 5,
-      "minReaderVersion": 18
+      "minReaderVersion": 19
     },
     "voice-library": {
       "version": 1,
@@ -288,10 +288,10 @@
       "minReaderVersion": 2
     },
     "subtitle-manifest": {
-      "version": 26,
-      "fingerprint": "2d68b64a97f1ca04a376c25cbf1a2cd82774957f77d82c363821427fdd935d81",
+      "version": 27,
+      "fingerprint": "ccfe1a63d5f2da03c63cfc2ef5d738af0720eb2bee241a7eba81fc6a24379251",
       "supportedFrom": 11,
-      "minReaderVersion": 25
+      "minReaderVersion": 27
     },
     "setting-records": {
       "version": 22,
@@ -324,22 +324,22 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 14,
-      "fingerprint": "30bb075908fb4c9272b167d4dcc393b57d52f148d74d9487d7d563533eb5ae12",
+      "version": 15,
+      "fingerprint": "6e745d04465af5cb3f6dc1b8fc8c2f205339d638af4926ff5e41057b765b74d6",
       "supportedFrom": 1,
-      "minReaderVersion": 14
+      "minReaderVersion": 15
     },
     "video-template-library": {
-      "version": 11,
-      "fingerprint": "f81db068e7c2b6b0761618bae96585684b863efd95228781c41b310b5c94fbdf",
+      "version": 12,
+      "fingerprint": "244e9d073907240807081b68b76809bb51a422097d0ebbf07526986d6eb53a99",
       "supportedFrom": 1,
-      "minReaderVersion": 11
+      "minReaderVersion": 12
     },
     "video-style-package": {
-      "version": 17,
-      "fingerprint": "ef8f4aaea18b8a2acd791bc02d6df2597c964f0c46333208039b259df1e440e6",
+      "version": 18,
+      "fingerprint": "1a6b0a0ba5526e8582f6e19c4b11532804e5419c668ea0f9c774a1dbcc7026a2",
       "supportedFrom": 1,
-      "minReaderVersion": 17
+      "minReaderVersion": 18
     },
     "workspace-layouts": {
       "version": 1,
@@ -396,10 +396,10 @@
       "minReaderVersion": 1
     },
     "video-effect-library": {
-      "version": 11,
-      "fingerprint": "5d86d45e21fa5cfffb7a749d243a1ea0e85c0688b085857f73eb09524e4b7fa1",
+      "version": 12,
+      "fingerprint": "b69c0d2a55414b44e1aae371aa9bcfce7822feb29c9167301dc92cc1364faf7a",
       "supportedFrom": 1,
-      "minReaderVersion": 11
+      "minReaderVersion": 12
     }
   },
   "devBreaks": [],

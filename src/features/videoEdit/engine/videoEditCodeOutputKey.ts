@@ -8,7 +8,9 @@ import { videoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
 import { renderFingerprintHash, renderSceneRecordFingerprint } from '@/core/videoEdit/renderFingerprint'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditCodePlan } from './videoEditCodeSources'
-import type { AuthorFingerprintInput } from './videoEditAuthorFingerprint'
+import { authorSpatialFingerprint, type AuthorFingerprintInput } from './videoEditAuthorFingerprint'
+import type { AuthorEffectMetadata } from './videoEditAuthorParameters'
+import type { CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 
 /** 对象字段顺序不构成内容差异，数组顺序仍是作者输入的一部分。 */
@@ -78,5 +80,6 @@ export function codeOutputKey(document: VideoEditComposition, plan: VideoEditCod
   return codeOutputSignature([plan.outputIdentity, plan.parameters, ...(textIdentity === undefined ? [] : [textIdentity]), ...(plan.simulation ? [plan.simulation.identity] : []), codeOutputScenes(document, plan), dependencies,
     declared?.digest ?? (!declared && program.mode === 'static' && !codeMaterialUsesAudio(program) ? 'static' : [context.time, context.localTime, sourceTime]),
     codeOutputObjectSignature(context.audio), context.audioTime, info.frameDuration, info.clip.duration, context.width, context.height, plan.divisor ?? 1,
-    documentFontRevision(), overrides, document.motionBlur === true, codeOutputObjectSignature(environment), quality])
+    documentFontRevision(), overrides, document.motionBlur === true, codeOutputObjectSignature(environment), quality,
+    ...authorSpatialFingerprint(program as CodeAuthorProgram & AuthorEffectMetadata, info)])
 }

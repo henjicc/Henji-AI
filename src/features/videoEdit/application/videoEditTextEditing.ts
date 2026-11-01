@@ -2,13 +2,16 @@ import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
 import { audibleVideoEditClips, videoEditComposition } from '@/core/videoEdit/document'
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, resolveVideoEditTextRanges, type VideoEditTextSelector, type VideoEditTextRange } from '@/core/videoEdit/textTranscript'
-import { deleteVideoEditTextRanges, extractVideoEditTextRanges, insertVideoEditTextRanges } from '@/core/videoEdit/textEdits'
+import { deleteVideoEditTextRanges, prepareVideoEditTextExcerpt, insertVideoEditTextRanges } from '@/core/videoEdit/textEdits'
+import { createVideoEditTimelineMapping } from '@/core/videoEdit/timelineEdits'
+import { copyVideoEditSequence } from '@/core/videoEdit/sequenceCopy'
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { getPlatform } from '@/platform/runtime'
 import { loadAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { videoEditSubtitleSequenceSignatureMatches } from './videoEditAutoSubtitles'
 import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
-import { editVideoProject, editVideoSequence, holdVideoEditActivity, requireVideoEditInstance } from './videoEditService'
+import { editVideoProject, editVideoSequence, holdVideoEditActivity, requireVideoEditInstance, withVideoEditCurrentMetadata } from './videoEditService'
+import { propagateVideoEditSpatialFields } from './videoEditSpatialPropagation'
 import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { resolveVideoEditTranscriptMatch } from './videoEditTranscriptQuery'
 import { verifyVideoEditSpeechMediaContent } from '../videoEditMediaContent'
@@ -31,14 +34,28 @@ export async function editVideoEditText(projectId: string, sequenceId: string, s
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('核对期间时间线已有修改，请重新选择文字。')
     const metadata = readVideoEditCodeMetadata(owner, document)
     let target = sequenceId
-    await withVideoEditCodeMetadata(() => editVideoProject(projectId, snapshot => {
-      if (action === 'delete') return deleteVideoEditTextRanges(snapshot, sequenceId, ranges, metadata)
-      if (action === 'insert') {
+    const { candidate, mapping } = await withVideoEditCodeMetadata(() => {
+      const mapping = createVideoEditTimelineMapping(sequenceId)
+      let candidate = document
+      if (action === 'delete') candidate = deleteVideoEditTextRanges(document, sequenceId, ranges, metadata, mapping)
+      else if (action === 'insert') {
         if (frame === undefined) throw new Error('insert 必须指定插入帧。')
-        return insertVideoEditTextRanges(snapshot, sequenceId, ranges, frame, metadata)
+        candidate = insertVideoEditTextRanges(document, sequenceId, ranges, frame, metadata, mapping)
+      } else {
+        const excerpt = prepareVideoEditTextExcerpt(document, sequenceId, ranges, metadata, mapping)
+        candidate = { ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? excerpt : sequence) }
       }
-      const excerpt = extractVideoEditTextRanges(snapshot, sequenceId, ranges, name, metadata); target = excerpt.id
-      return { ...snapshot, sequences: [...snapshot.sequences, excerpt] }
+      return { candidate, mapping }
+    })
+    let planned = await propagateVideoEditSpatialFields(document, candidate, signal ?? new AbortController().signal, { clipMap: mapping.clipMap, sequenceTimeMap: mapping.clock.maps })
+    if (action === 'extract') {
+      const excerpt = copyVideoEditSequence(planned.sequences.find(sequence => sequence.id === sequenceId)!); excerpt.name = name ?? '文本摘选'; target = excerpt.id
+      planned = { ...document, sequences: [...document.sequences, excerpt] }
+    }
+    await withVideoEditCodeMetadata(() => editVideoProject(projectId, current => {
+      signal?.throwIfAborted()
+      if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('文本剪辑规划期间时间线已有修改，请重新选择文字。')
+      return withVideoEditCurrentMetadata(planned, current)
     }))
     logger.info('文本剪辑完成', { event: 'video_edit.text.edit.completed', context: { projectId, sequenceId, action, ranges } })
     return { ranges, sequenceId: target, changed: owner.contentVersion !== contentVersion }

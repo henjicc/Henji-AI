@@ -1,3 +1,5 @@
+import { arrangeVideoEditDepthCapability, transitionVideoEditSpaceCapability, verifyVideoEditSpaceCapability } from '@/core/application-control/domains/videoEdit/videoEditSpatialCapabilities'
+import { executeVideoEditSpatialLayout, verifyVideoEditSpace, VideoEditSpatialFailure } from './videoEditSpatial'
 import { VideoEditCodeElementMutationExecutor } from './videoEditCodeElementReflection'
 import { VideoEditEffectLibraryMutationExecutor, VideoEditStylePieceCollectionExecutor, VideoEditStylePieceMutationExecutor } from './videoEditEffectPresetReflection'
 import { loadVideoEditHoverPreview } from './videoEditHoverPreview'
@@ -125,6 +127,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     return sequence ? { name: sequence.name, situation: `序列里有 ${sequence.captions?.length ?? 0} 条字幕。` } : undefined
   },
   failure(error) {
+    if (error instanceof VideoEditSpatialFailure) return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message, recoverable: true, details: { spatial: error.facts, execution: { notExecuted: true } } } }
     if (error instanceof Error && error.name === 'VideoEditCodeCompileTimeoutError') return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message, recoverable: true } }
     if (error instanceof VideoEditOperationFailure) {
       // 纯规划阶段的拒绝；已提交生成或保存失败不在此名单，不能抹掉执行事实。
@@ -181,6 +184,9 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, guardVideoEditDocumentAlgorithm(definition.id, async (raw, context) => {
+      if (definition.id === arrangeVideoEditDepthCapability.id) return executeVideoEditSpatialLayout(raw, 'arrange', context)
+      if (definition.id === transitionVideoEditSpaceCapability.id) return executeVideoEditSpatialLayout(raw, 'transition', context)
+      if (definition.id === verifyVideoEditSpaceCapability.id) return verifyVideoEditSpace(raw, context.signal)
       if (definition.id === upgradeVideoEditCodeMaterialsCapability.id) return upgradeVideoEditCodeMaterials(upgradeVideoEditCodeMaterialsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === commitVideoEditCodeProjectCapability.id) {
         const input = commitVideoEditCodeProjectCapability.inputSchema.parse(raw)
@@ -285,7 +291,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           message: `已渲染${observed.comparison ? '参考比较' : observed.contactSheet ? '联系表' : input.target.kind === 'program' ? `序列帧 ${input.target.frame}` : '源素材画面'}（${observed.width}×${observed.height}），用 read_application_media 并设置 mode="image" 直接查看画面。${observed.reused ? `按内容复用已有图片 ${resultRef.kind}:${resultRef.id}。` : ''}`,
           verification: { verified: true, target: resultRef, condition: '已用正式渲染器生成固定版本画面，并保存为可读取的图片。' } }
       }
-      if (definition.id === trimVideoEditClipCapability.id) return await trimVideoEditClip(trimVideoEditClipCapability.inputSchema.parse(raw))
+      if (definition.id === trimVideoEditClipCapability.id) return await trimVideoEditClip(trimVideoEditClipCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === placeVideoEditCreativeResultCapability.id) return await placeVideoEditCreativeResultFromCapability(placeVideoEditCreativeResultCapability.inputSchema.parse(raw), context.signal, context.callerGrant ? context.requestId : undefined)
       if (definition.id === openVideoEditClipSourceCapability.id) {
         // 回到来源（4.1）：与时间线右键 / 双击同一入口
@@ -370,7 +376,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           // Same razor semantics as the timeline: linked portions are cut together unless Linked Selection is off.
           const current = requireVideoEditInstance(id)
           const linked = videoEditPickRelations((current.activeSequenceId === sequence.id ? current : current.sequenceViews.get(sequence.id))?.linkedSelection !== false)
-          executeVideoEditTimelineEdit(id, sequence.id, { kind: definition.id === 'add_video_edit_frame_hold' ? 'frame_hold' : 'split', clipIds: [clipId], linked: definition.id === 'add_video_edit_frame_hold' ? false : linked, frame: input.frame! }); await saveVideoEdit(id); break
+          await executeVideoEditTimelineEdit(id, sequence.id, { kind: definition.id === 'add_video_edit_frame_hold' ? 'frame_hold' : 'split', clipIds: [clipId], linked: definition.id === 'add_video_edit_frame_hold' ? false : linked, frame: input.frame! }, context.signal); await saveVideoEdit(id); break
         }
         case 'import_video_edit_asset': {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')

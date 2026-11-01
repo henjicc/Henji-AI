@@ -140,7 +140,7 @@ it.each(['in', 'out'] as const)('R 比率拉伸拖 %s 边缘：吸附、实时�
 })
 
 it('速度对话框回读既有倒放与保持音调，关闭两项不改变速度或源范围且一步撤销（4.13）', async () => {
-  executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'speed', clipIds: [ids[0]], linked: false, change: { speed: { numerator: 2, denominator: 1 }, reverse: true, preservePitch: true } })
+  await executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'speed', clipIds: [ids[0]], linked: false, change: { speed: { numerator: 2, denominator: 1 }, reverse: true, preservePitch: true } })
   setVideoEditTimelineView(owner.document.id, { selectedClipIds: [ids[0]] })
   const baseline = owner.document; const history = owner.past.length
   const view = render(<SpeedKeyboardView />)
@@ -230,15 +230,16 @@ it('普通视频与代码多选，连续拖动仅本地预览，释放一次历�
   act(() => undoVideoEdit(owner.document.id)); expect(current().clips.map(clip => clip.start)).toEqual([0, 60]); expect(onError).not.toHaveBeenCalled()
 })
 
-it('字幕时间线点击与面板行双向选中，切换标记页后也能定位字幕，选中不推进撤销', async () => {
+it('字幕时间线与面板双向选中，时间线选择保留播放头，选中不推进撤销', async () => {
   vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([])
   const first = createVideoEditCaption(owner.document.id, current().id, { start: 0, duration: 30, text: '第一条' })
   const second = createVideoEditCaption(owner.document.id, current().id, { start: 60, duration: 30, text: '第二条' })
   const history = owner.past.length
   const view = render(<><View /><VirtuosoMockContext.Provider value={{ viewportHeight: 280, itemHeight: 56 }}><VideoEditTimedContentPanel instance={owner} onError={onError} /></VirtuosoMockContext.Provider></>)
   const secondBar = view.getByRole('button', { name: '定位字幕 第二条' })
+  const frame = owner.frame
   fireEvent.click(secondBar)
-  expect(owner.frame).toBe(60); expect(owner.activePanel).toBe('effects')
+  expect(owner.frame).toBe(frame); expect(owner.activePanel).toBe('effects')
   expect(selectedVideoEditSubtitleId(owner)).toBe(second)
   expect(secondBar.getAttribute('aria-pressed')).toBe('true')
   expect((await view.findByRole('button', { name: '字幕：第二条' })).getAttribute('aria-pressed')).toBe('true')
@@ -288,8 +289,8 @@ it('字幕独占一行，拖动与双端修剪仅提交一步；取消、锁定�
   expect(onError).not.toHaveBeenCalled()
 })
 
-it('框选与关联选择不误定位播放头；Shift 点击关联集合整体取消', () => {
-  executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'link', clipIds: ids })
+it('框选与关联选择不误定位播放头；Shift 点击关联集合整体取消', async () => {
+  await executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'link', clipIds: ids })
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const frame = owner.frame
   const y = trackClientY()
   fireEvent.pointerDown(host, event(header + 150, y + 20)); fireEvent.pointerMove(host, event(header + 10, y - 20)); fireEvent.pointerUp(host, event(header + 10, y - 20))
@@ -699,7 +700,7 @@ it('右键菜单消费正式启用状态与标签，延迟操作保留原片段�
 })
 
 it('关联片段右键按点击主对象定位项目与属性，代码素材保持自己的源禁用状态', async () => {
-  executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'group', clipIds: ids })
+  await executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'group', clipIds: ids })
   const view = render(<View />)
   fireEvent.contextMenu(view.getByRole('button', { name: '选择片段 代码' }), { clientX: 400, clientY: 80 })
   expect(view.getByRole('menuitem', { name: '打开源素材' }).getAttribute('aria-disabled')).toBe('true')
@@ -769,9 +770,9 @@ it('素材项拖放按重排后的原轨道命中，音画分界不产生伪落�
   expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
 })
 
-function linkedPair(): { picture: string; sound: string } {
+async function linkedPair(): Promise<{ picture: string; sound: string }> {
   editVideoProject(owner.document.id, document => { document = structuredClone(document); document.media[0].hasAudio = true; return document })
-  executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'separate_audio', clipIds: [ids[0]], audioTrack: 0 })
+  await executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'separate_audio', clipIds: [ids[0]], audioTrack: 0 })
   setVideoEditTimelineView(owner.document.id, { selectedClipIds: [] })
   return { picture: ids[0], sound: current().clips.find(clip => clip.kind === 'audio')!.id }
 }
@@ -779,7 +780,7 @@ const clipButton = (view: ReturnType<typeof render>, id: string): HTMLElement =>
 const syncBadges = (view: ReturnType<typeof render>) => Object.fromEntries([...view.container.querySelectorAll('[data-video-edit-sync-offset]')].map(badge => [badge.closest('[data-video-edit-clip]')!.getAttribute('data-video-edit-clip'), badge.textContent]))
 
 it('Alt 点击单独选中链接中的声音，松开 Alt 拖动后显示失步帧数，右键移入同步恢复且链接保留', async () => {
-  const { picture, sound } = linkedPair()
+  const { picture, sound } = await linkedPair()
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   fireEvent.pointerDown(clipButton(view, sound), event(header + 20, trackClientY(0))); fireEvent.pointerUp(host, event(header + 20, trackClientY(0)))
   expect(new Set(owner.selectedClipIds)).toEqual(new Set([picture, sound]))
@@ -801,7 +802,7 @@ it('Alt 点击单独选中链接中的声音，松开 Alt 拖动后显示失步�
 })
 
 it('链接选择开关关闭后点击只选一条；剃刀联动拆开链接组，Alt 剃刀只拆一条；解除链接后完全独立', async () => {
-  const { picture, sound } = linkedPair()
+  const { picture, sound } = await linkedPair()
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   const toggle = view.getByRole('button', { name: '链接选择' })
   expect(toggle.getAttribute('aria-pressed')).toBe('true')
@@ -831,8 +832,8 @@ it('链接选择开关关闭后点击只选一条；剃刀联动拆开链接组�
   expect(owner.selectedClipIds).toEqual([picture]); expect(onError).not.toHaveBeenCalled()
 })
 
-it('关闭链接选择后点击编组内片段仍选中整组，只有按住 Alt 才单独选中一条', () => {
-  executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'group', clipIds: ids })
+it('关闭链接选择后点击编组内片段仍选中整组，只有按住 Alt 才单独选中一条', async () => {
+  await executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'group', clipIds: ids })
   setVideoEditTimelineView(owner.document.id, { selectedClipIds: [], linkedSelection: false })
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
   fireEvent.pointerDown(clipButton(view, ids[0]), event(header + 20)); fireEvent.pointerUp(host, event(header + 20))
@@ -847,7 +848,7 @@ it('声道映射片段按每个片段声道各画一条波形并按声音流与�
     requests.push({ audioStream: request.audioStream ?? 0, audioChannel: request.audioChannel, channels: request.channels })
     return { version: `v${request.audioStream ?? 0}`, sampleRate: 48000, frameCount: 48000 * 30, startSeconds: 0, endSeconds: 30, amplitudeScale: 1, peakMax: .5, channelCount: 1, levels: [{ samplesPerBucket: 128, bucketCount: 11250, peak: [new Uint16Array(11250).fill(32768)], rms: [new Uint16Array(11250).fill(19660)] }] }
   })
-  const { sound } = linkedPair()
+  const { sound } = await linkedPair()
   editVideoProject(owner.document.id, document => { document = structuredClone(document);
     document.media[0].audioStreams = [{ channels: 1 }, { channels: 1 }]
     document.sequences[0].clips = document.sequences[0].clips.map(clip => clip.id === sound ? { ...clip, audioMapping: { format: 'stereo', sources: [{ stream: 0, channel: 0 }, { stream: 1, channel: 0 }] } } : clip)

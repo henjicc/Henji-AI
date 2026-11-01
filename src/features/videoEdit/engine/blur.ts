@@ -75,11 +75,17 @@ function lensLevels(planner: Planner, radius: number): { levels: VideoEditBuilti
   return { levels, wanted }
 }
 
-/** 镜头模糊：`radius` 是圆盘半径（目标像素）。 */
-export function planLensBlur(radius: number, highlights: number, repeatEdges: boolean, width: number, height: number): VideoEditBuiltinPlan {
-  if (radius < 0.5) return copyPlan(width, height)
+/**
+ * 镜头模糊：`radius` 是圆盘半径（目标像素）。空间景深在材料面上按两轴参考尺度给出椭圆半径 `radiusY`，
+ * 弥散圆在可感知阈值附近由 `strength` 与原图平滑混合，半径趋零时画面连续回到原图。
+ */
+export function planLensBlur(radius: number, highlights: number, repeatEdges: boolean, width: number, height: number, spatial?: { radiusY: number; strength: number }): VideoEditBuiltinPlan {
+  if (spatial ? spatial.strength === 0 : radius < 0.5) return copyPlan(width, height)
   const planner = new Planner(width, height)
-  planner.pass('blur_lens', lensLevels(planner, radius).levels.at(-1)!, 'output', [radius, highlights / 100 * 4, repeatEdges ? 1 : 0, 0])
+  const source = lensLevels(planner, Math.max(radius, spatial?.radiusY ?? radius)).levels.at(-1)!
+  const blurred = spatial && spatial.strength < 1 ? planner.alloc() : 'output'
+  planner.pass('blur_lens', source, blurred, [radius, highlights / 100 * 4, repeatEdges ? 1 : 0, spatial?.radiusY ?? 0])
+  if (blurred !== 'output') planner.pass('effect_mix', blurred, 'output', [spatial!.strength, 0, 0, 0])
   return finish(planner)
 }
 
@@ -251,19 +257,22 @@ export const BLUR_WGSL = `
 }
 
 /** 镜头圆盘：半径与位置按目标像素计；source 可以是降采样过的画面，偏移按目标像素换算。 */
-fn blurLensDisc(position: vec2f, radius: f32, highlight: f32, repeat: f32) -> vec4f {
+/** radiusY > 0 时圆盘纵向半径单独给出（空间材料面两轴尺度不同）；否则是正圆。 */
+fn blurLensDisc(position: vec2f, radius: f32, radiusY: f32, highlight: f32, repeat: f32) -> vec4f {
  // Jimenez 交错梯度噪声按像素旋转圆盘，打散相邻像素的取样条纹；不含帧种子以保持时间稳定。
  let rotation = 6.28318531 * fract(52.9829189 * fract(dot(floor(position), vec2f(.06711056, .00583715))));
  var sum = vec4f(0); var total = 0.0;
  for (var i = 0u; i < ${LENS_TAPS}u; i++) {
   let k = (f32(i) + .5) / ${LENS_TAPS}.0; let r = sqrt(k) * radius; let a = f32(i) * 2.39996323 + rotation;
-  let c = tapEdge((position + r * vec2f(cos(a), sin(a))) / u.size.xy, repeat);
+  var offset = r * vec2f(cos(a), sin(a));
+  if (radiusY > 0.0) { offset.y = sqrt(k) * radiusY * sin(a); }
+  let c = tapEdge((position + offset) / u.size.xy, repeat);
   let w = 1.0 + highlight * pow(max(max(c.r, c.g), c.b), 4.0); sum += c * w; total += w;
  }
  return sum / total;
 }
-/** 镜头模糊：a = (半径（目标像素）, 亮点加权, 重复边缘)。 */
-@fragment fn blur_lens(v: Vertex) -> @location(0) vec4f { return blurLensDisc(v.position.xy, u.a.x, u.a.y, u.a.z); }
+/** 镜头模糊：a = (半径（目标像素）, 亮点加权, 重复边缘, 纵向半径（0 为正圆）)。 */
+@fragment fn blur_lens(v: Vertex) -> @location(0) vec4f { return blurLensDisc(v.position.xy, u.a.x, u.a.w, u.a.y, u.a.z); }
 
 /**
  * 范围：本处模糊量占最糊处的比例（0 清楚、1 最糊）。b = (位置, 方向)，c = (方式, 清晰带半宽, 过渡, 本道一个像素合多少 H)，距离以 H 为 1。
@@ -291,7 +300,7 @@ fn blurRangeAmount(position: vec2f) -> f32 {
  let level = clamp(u.layer.y + log2(amount), 0.0, u.layer.x);
  let weight = max(0.0, 1.0 - abs(level - u.a.w));
  if (weight <= 0.0) { return before; }
- return before + blurLensDisc(v.position.xy, u.a.x * amount, u.a.y, u.a.z) * weight;
+ return before + blurLensDisc(v.position.xy, u.a.x * amount, 0.0, u.a.y, u.a.z) * weight;
 }
 
 /** 范围金字塔取一个纹素：画外按“重复边缘像素”取边缘或透明；第一层从预乘编码值换成线性光（保留超出 0–1 的高精度值）。 */

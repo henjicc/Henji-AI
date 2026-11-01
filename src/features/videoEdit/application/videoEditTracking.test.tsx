@@ -63,7 +63,7 @@ it('嵌套导出等待子序列跟踪，按完整快照提供子跟踪结果', a
   const { owner, id, sequenceId, video } = await project()
   editVideoEditTracker(id, sequenceId, video.id, tracker); await flush()
   editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips.find(clip => clip.id === video.id)!.effects = [{ id: 'nested-effect', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
-  nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '含跟踪的子序列')
+  await nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '含跟踪的子序列')
   const snapshot = getActiveVideoEditSequence(owner); const definition = status.mock.calls.at(-1)![0]
   let completed = false; const waiting = waitVideoEditTracking(snapshot, snapshot).then(() => { completed = true })
   await flush(); expect(completed).toBe(false)
@@ -194,7 +194,7 @@ it('嵌套跟踪准备中停止：等待重跑一次，再停止则给出终态�
   const controller = new AbortController()
   try {
     applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic')
-    const nested = nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '待分析的子序列')
+    const nested = await nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '待分析的子序列')
     editVideoEditTracker(id, sequenceId, nested.clip.id, tracker)
     editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
     const snapshot = getActiveVideoEditSequence(owner)
@@ -226,7 +226,7 @@ it('嵌套准备等待智能区域时修改子序列，快照完成后取帧仍�
   const controller = new AbortController()
   try {
     applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic')
-    const nested = nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '子序列')
+    const nested = await nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '子序列')
     editVideoEditTracker(id, sequenceId, nested.clip.id, tracker)
     editVideoSequence(id, sequenceId, sequence => { sequence = structuredClone(sequence); sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
     const snapshot = getActiveVideoEditSequence(owner)
@@ -298,7 +298,7 @@ it('导出等待保留原定义：用户删除跟踪不取消等待，结果仍�
 })
 it.each([false, true])('面板点选三候选后建立跟踪（嵌套=%s），按钮续跟/单步/停止，删除与撤销共用领域历史', async nested => {
   const { owner, id, sequenceId, video: original } = await project()
-  const video = nested ? nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '合成层').clip : original
+  const video = nested ? (await nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '合成层')).clip : original
   setVideoEditView(id, { frame: 0, selection: video.id })
   const maskEditing = { projectId: id, sequenceId, clipId: video.id, effectId: 'mask-effect', pen: true }
   setVideoEditMaskEditing(maskEditing)
@@ -332,7 +332,7 @@ it.each([false, true])('面板点选三候选后建立跟踪（嵌套=%s），�
 
 it('助手通用实体在嵌套层新建/纠错/绑定，子序列变化停止旧定义且Worker不再取旧结果', async () => {
   const { owner, id, sequenceId } = await project()
-  const nested = nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '跟踪合成')
+  const nested = await nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '跟踪合成')
   appendVideoEditClip(id)
   const text = getActiveVideoEditSequence(owner).clips.find(clip => clip.kind === 'text')!
   const app = createApplicationHarness(); const clipRef = { kind: 'video_edit.clip', id: `${id}:${nested.clip.id}` }

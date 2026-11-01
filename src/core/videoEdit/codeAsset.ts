@@ -9,9 +9,9 @@ import { formatMigrations } from '../persistence/formatMigrations'
 import { PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
 export const CODE_ASSET_MIME = 'application/x-henji-code'
-export const CODE_ASSET_VERSION = 20
+export const CODE_ASSET_VERSION = 21
 /** v20 可携带 fill 画面来源的作者接口；旧程序无法执行，必须明确要求升级。 */
-export const CODE_ASSET_MIN_READER_VERSION = 20
+export const CODE_ASSET_MIN_READER_VERSION = 21
 export const codeAssetSchema = z.object({
   format: z.literal('henji-code-asset'), version: z.literal(CODE_ASSET_VERSION), minReaderVersion: z.number().int().positive().optional(), name: z.string().trim().min(1).max(200),
   sourceVersion: z.object({ apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, entry: codeMaterialVersionSchema.shape.entry, files: codeMaterialVersionSchema.shape.files, imports: codeMaterialVersionSchema.shape.imports, libraries: codeMaterialVersionSchema.shape.libraries }).strict(),

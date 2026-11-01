@@ -1,5 +1,6 @@
 // 同一清单同时用于 Vitest 与门禁自检；GPU 算法测试不以设备缺失为由跳过。
 const GPU_TEST_FILES = [
+  'src/features/videoEdit/engine/videoEditSpatialComposite.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditAuthorSimulation.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditStyleCode.gpu.test.ts',
   'src/features/imageEdit/v3/gpu/imageEditorGpuMosaicV3.gpu.test.ts',

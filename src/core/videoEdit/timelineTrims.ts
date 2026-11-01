@@ -20,7 +20,7 @@ import { sliceVideoEditClipKeyframes } from './keyframes'
  */
 export type VideoEditTrimMode = 'ripple' | 'roll' | 'slip' | 'slide'
 export interface VideoEditTrim { mode: VideoEditTrimMode; clipIds: readonly string[]; edge?: 'in' | 'out'; delta: number }
-export interface VideoEditTrimResult { sequence: VideoEditSequence; delta: number }
+export interface VideoEditTrimResult { sequence: VideoEditSequence; delta: number; timeSplice?: { from: number; to: number; insertedFrames: number } }
 
 /** 与实际修剪共用约束计算；拒绝的方向同时保留原因（例如相邻轨道锁定）。 */
 export function videoEditTrimAvailability(document: VideoEditDocument, sequenceId: string, trim: Omit<VideoEditTrim, 'delta'>, metadata?: CodeMaterialMetadataReader) {
@@ -91,7 +91,7 @@ export function retimeVideoEditAnnotations(before: VideoEditSequence, clips: rea
   })
 }
 
-function ripple(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out', requested: number): { clips: VideoEditClip[]; delta: number } {
+function ripple(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out', requested: number): { clips: VideoEditClip[]; delta: number; timeSplice?: VideoEditTrimResult['timeSplice'] } {
   const { sequence } = context
   const range: Range = { lo: -Infinity, hi: Infinity }
   for (const clip of edited) {
@@ -120,7 +120,9 @@ function ripple(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out
     return moved.has(clip.id) ? { ...clip, start: clip.start + shift } : clip
   })
   assertNoTrackOverlap(clips, '波纹修剪会让其他轨道上的片段重叠，请调整范围或关闭那条轨道的同步锁定。')
-  return { clips, delta }
+  const cut = edge === 'in' ? Math.min(...edited.map(clip => clip.start)) : pivot
+  const from = edge === 'out' ? cut + Math.min(0, shift) : cut
+  return { clips, delta, timeSplice: { from, to: from + Math.max(0, -shift), insertedFrames: Math.max(0, shift) } }
 }
 
 function roll(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out', requested: number): { clips: VideoEditClip[]; delta: number } {
@@ -202,8 +204,8 @@ export function applyVideoEditTrim(document: VideoEditDocument, sequenceId: stri
   assertVideoEditClipsEditable(sequence, [...ids])
   if ((trim.mode === 'ripple' || trim.mode === 'roll') && !trim.edge) throw new Error('波纹编辑与滚动编辑需要指定修剪入点还是出点。')
   const context = new TrimContext(composition, sequence, metadata)
-  const result = trim.mode === 'ripple' ? ripple(context, edited, trim.edge!, trim.delta) : trim.mode === 'roll' ? roll(context, edited, trim.edge!, trim.delta) : trim.mode === 'slip' ? slip(context, edited, trim.delta) : slide(context, edited, trim.delta)
+  const result: { clips: VideoEditClip[]; delta: number; timeSplice?: VideoEditTrimResult['timeSplice'] } = trim.mode === 'ripple' ? ripple(context, edited, trim.edge!, trim.delta) : trim.mode === 'roll' ? roll(context, edited, trim.edge!, trim.delta) : trim.mode === 'slip' ? slip(context, edited, trim.delta) : slide(context, edited, trim.delta)
   if (!result.delta) return { sequence, delta: 0 }
   const fps = videoEditFps(sequence.frameRate)
-  return { sequence: retimeVideoEditContent(sequence, { ...sequence, clips: result.clips, annotations: retimeVideoEditAnnotations(sequence, result.clips, fps) }), delta: result.delta }
+  return { sequence: retimeVideoEditContent(sequence, { ...sequence, clips: result.clips, annotations: retimeVideoEditAnnotations(sequence, result.clips, fps) }), delta: result.delta, ...(result.timeSplice ? { timeSplice: result.timeSplice } : {}) }
 }

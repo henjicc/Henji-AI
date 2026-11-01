@@ -218,6 +218,19 @@ test('首屏违规冻结后只能缩减，显式 accept-new 也不能重新放�
   assert.deepEqual((await scan(root)).firstScreen.heavyModules, [])
 })
 
+test('作者 three 版本别名经 barrel 静态回拉会失败，动态与类型边保持懒加载', () => {
+  const entry = { from: 'src/main.tsx', to: 'src/barrel.ts', kind: 'static', specifier: './barrel' }
+  const load = { from: 'src/barrel.ts', to: 'src/spatialMatrices.ts', kind: 'dynamic', specifier: './spatialMatrices' }
+  for (const specifier of ['henji-author-three-0.186.1', 'henji-author-three-0.186.1/src/math/Matrix4.js', 'henji-author-three-0.200.0/webgpu']) {
+    const heavy = { from: 'src/spatialMatrices.ts', to: `node_modules/${specifier}`, kind: 'static', specifier }
+    assert.deepEqual(firstScreenReachability([entry, load, heavy]).heavyModules, [])
+    assert.deepEqual(firstScreenReachability([entry, { ...load, kind: 'type' }, heavy]).heavyModules, [])
+    const pulled = firstScreenReachability([entry, load, { ...load, kind: 'static' }, heavy])
+    assert.equal(pulled.heavyModules[0].target, specifier.split('/')[0])
+    assert.deepEqual(pulled.heavyModules[0].route.slice(0, 3), ['src/main.tsx', 'src/barrel.ts', 'src/spatialMatrices.ts'])
+  }
+})
+
 test('把静态环换成动态加载不能藏环，两个动态边组成的回路也会失败', async (t) => {
   const root = workspace(t)
   write(root, 'src/alias.ts', "export { value as alias } from './entry'")

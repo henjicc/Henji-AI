@@ -1,9 +1,9 @@
 import type { VideoEditClip } from '../videoEdit/document'
 import { evaluateVideoEditKeyframes, sliceVideoEditCurves, videoEditClipAnimatedValueSchemas, type VideoEditKeyframe } from '../videoEdit/keyframes'
 import { mergeMotionClipCurves } from '../videoEdit/motionDraft'
-import type { CompiledMotion, MotionCurveKey } from './motionCompiler'
+import { MOTION_CURVE_KEYS, type CompiledMotion } from './motionCompiler'
 
-const KEYS: readonly MotionCurveKey[] = ['x', 'y', 'rotation', 'scale', 'anchorX', 'anchorY']
+const KEYS = MOTION_CURVE_KEYS
 
 export function hasStaggerMotion(clip: VideoEditClip): boolean {
   return KEYS.some(key => (clip.curves?.[key]?.length ?? 0) > 1)

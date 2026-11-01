@@ -1,4 +1,14 @@
 import type { ResolvedVideoEditSceneRecord } from './scene/sceneResolve'
+import type { VideoEditSequence } from './document'
+
+/** 隐藏和区间外的相机目标仍贡献几何；只在确有引用时扩展旧指纹输入。 */
+export function videoEditSpatialTargetClips(sequence: Pick<VideoEditSequence, 'spatialCamera' | 'clips'>): VideoEditSequence['clips'] {
+  const camera = sequence.spatialCamera
+  if (!camera) return []
+  const targets = [camera.framing?.target, camera.aim, camera.focus, ...Object.values(camera.bindings ?? {}).flatMap(points => points.map(point => point.value))]
+  const ids = new Set(targets.flatMap(target => target?.kind === 'clip' ? [target.clipId] : []))
+  return sequence.clips.filter(clip => ids.has(clip.id))
+}
 
 /** 两个不同种子的 53 位字符串散列拼成 106 位，足够区分同一工程里的窗口内容。 */
 export function renderFingerprintHash(text: string): string {

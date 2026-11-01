@@ -14,6 +14,7 @@ import { defineShader, transformAngle, transformBoolean, transformColor, transfo
 import type { GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { SHADER_GRAPH_INPUT, SHADER_GRAPH_SECOND, type ShaderGraphCustomShader, type ShaderGraphLayer, type ShaderGraphSpec, shaderGraphCustomPropKind, shaderGraphLayerId, shaderGraphStructureKey } from '@/core/videoEdit/shaderGraph/spec'
 import { SHADER_COMPONENT_LOADERS } from './componentLoaders.generated'
+import { runVideoEditGpuSection } from '../videoEditGpuRootQueue'
 
 type Renderer = ReturnType<typeof shaderRendererGPU>
 // 框架的组件定义对象；类型来自 shaders 包，这里只按名称传递，不读内部字段以外的结构。
@@ -89,8 +90,10 @@ async function checkCustomWgsl(device: GpuDevice, shader: ShaderGraphCustomShade
   const filled = code.replace(/zero/g, () => zeros[index++] ?? '0.0')
   device.pushErrorScope('validation')
   const module = device.createShaderModule({ code: filled }) as { getCompilationInfo?: () => Promise<{ messages: ReadonlyArray<{ type: string; message: string; lineNum: number }> }> }
+  // 作用域只接住无效模块的错误；等待编译信息前弹出，避免与同设备其他区段交错。
+  const scope = device.popErrorScope()
   const info = await module.getCompilationInfo?.()
-  await device.popErrorScope()
+  await scope
   const error = info?.messages.find(message => message.type === 'error')
   if (error) {
     const line = error.lineNum - offset
@@ -330,32 +333,35 @@ export class ShaderGraphSession {
     }
     this.applyProps(request.props)
     const host = hostDevice(this.device)
-    const scopes = ['validation', 'out-of-memory', 'internal'] as const
-    scopes.forEach(scope => this.device.pushErrorScope(scope))
-    host.owner = this
-    let thrown: unknown
-    try {
-      // 首次渲染才建合成（宿主图层纹理在那时创建），所以先推进时间、再填宿主画面、再正式渲染。
-      const delta = request.timeSeconds - this.elapsed
-      this.elapsed = request.timeSeconds
-      const needsHost = this.hostTextures.size === 0 && [...this.nodes.values()].some(node => node.layer.type === SHADER_GRAPH_INPUT || node.layer.type === SHADER_GRAPH_SECOND)
-      if (needsHost) await this.draw(renderer, 0)
-      const encoder = this.device.createCommandEncoder() as unknown as Encoder
-      for (const { type, texture } of this.hostTextures.values()) {
-        const source = type === SHADER_GRAPH_SECOND ? request.second : request.input
-        if (!source) throw new ShaderGraphError(type === SHADER_GRAPH_SECOND ? '这张着色器图需要第二段画面（转场后段）。' : '这张着色器图需要输入画面，只能用作滤镜或转场。')
-        this.copy(encoder, 'upload', source, texture.unwrap(), 'rgba16float')
-      }
-      this.device.queue.submit([encoder.finish()])
-      await this.draw(renderer, delta)
-      if (this.computes) await this.draw(renderer, 0)
-      if (!this.target) throw new Error('着色器图没有产出画面。')
-      const present = this.device.createCommandEncoder() as unknown as Encoder
-      this.copy(present, 'present', this.target, request.output, request.outputFormat)
-      this.device.queue.submit([present.finish()])
-    } catch (error) { thrown = error }
-    host.owner = null
-    const errors = await Promise.all(scopes.map(() => this.device.popErrorScope())).catch(() => [])
+    // 三个作用域跨越着色器图的异步绘制，与 three 初始化、预热共用设备根队列。
+    const { thrown, errors } = await runVideoEditGpuSection(this.device, async () => {
+      const scopes = ['validation', 'out-of-memory', 'internal'] as const
+      scopes.forEach(scope => this.device.pushErrorScope(scope))
+      host.owner = this
+      let thrown: unknown
+      try {
+        // 首次渲染才建合成（宿主图层纹理在那时创建），所以先推进时间、再填宿主画面、再正式渲染。
+        const delta = request.timeSeconds - this.elapsed
+        this.elapsed = request.timeSeconds
+        const needsHost = this.hostTextures.size === 0 && [...this.nodes.values()].some(node => node.layer.type === SHADER_GRAPH_INPUT || node.layer.type === SHADER_GRAPH_SECOND)
+        if (needsHost) await this.draw(renderer, 0)
+        const encoder = this.device.createCommandEncoder() as unknown as Encoder
+        for (const { type, texture } of this.hostTextures.values()) {
+          const source = type === SHADER_GRAPH_SECOND ? request.second : request.input
+          if (!source) throw new ShaderGraphError(type === SHADER_GRAPH_SECOND ? '这张着色器图需要第二段画面（转场后段）。' : '这张着色器图需要输入画面，只能用作滤镜或转场。')
+          this.copy(encoder, 'upload', source, texture.unwrap(), 'rgba16float')
+        }
+        this.device.queue.submit([encoder.finish()])
+        await this.draw(renderer, delta)
+        if (this.computes) await this.draw(renderer, 0)
+        if (!this.target) throw new Error('着色器图没有产出画面。')
+        const present = this.device.createCommandEncoder() as unknown as Encoder
+        this.copy(present, 'present', this.target, request.output, request.outputFormat)
+        this.device.queue.submit([present.finish()])
+      } catch (error) { thrown = error }
+      host.owner = null
+      return { thrown, errors: await Promise.all(scopes.map(() => this.device.popErrorScope())).catch(() => []) }
+    })
     const message = this.gpuError ?? errors.find(error => error?.message)?.message
     const failure = renderer.getFailureReason()
     this.gpuError = undefined

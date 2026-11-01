@@ -79,7 +79,7 @@ describe('不可变资源统一解码', () => {
       digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` }
     readFile.mockResolvedValue(bytes)
     expect(await readMotionResource(resource)).toEqual(fixture('creative-intent-page'))
-    const newer = Buffer.from(JSON.stringify({ ...fixture('creative-intent-page'), version: 2 }))
+    const newer = Buffer.from(JSON.stringify({ ...fixture('creative-intent-page'), version: resourcePersistenceContract('creative-intent-page').version + 1 }))
     readFile.mockResolvedValue(newer)
     await expect(readMotionResource(resource)).rejects.toThrow('已被修改')
     await expect(readMotionResource({ ...resource, bytes: newer.length, digest: `sha256:${createHash('sha256').update(newer).digest('hex')}` })).rejects.toMatchObject({ code: 'newer-version' })

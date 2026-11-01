@@ -44,7 +44,7 @@ type DeleteChoice = 'none' | 'empty' | 'targeted' | string
 /**
  * PR“删除轨道”：视频轨与音频轨各选删除全部空轨道、目标轨道或某一条（或不删）。轨道上的片段一并删除，每类至少保留一条。
  */
-export function VideoEditDeleteTracksDialog({ sequence, kind, targetTrackIds, onSubmit, onClose }: { sequence: VideoEditSequence; kind: VideoEditTrackKind; targetTrackIds: readonly string[]; onSubmit: (trackIds: string[]) => void; onClose: () => void }): React.ReactElement {
+export function VideoEditDeleteTracksDialog({ sequence, kind, targetTrackIds, onSubmit, onClose }: { sequence: VideoEditSequence; kind: VideoEditTrackKind; targetTrackIds: readonly string[]; onSubmit: (trackIds: string[]) => void | Promise<void>; onClose: () => void }): React.ReactElement {
   const codes = videoEditTrackCodes(sequence)
   const [choice, setChoice] = useState<Record<VideoEditTrackKind, DeleteChoice>>({ video: kind === 'video' ? 'empty' : 'none', audio: kind === 'audio' ? 'empty' : 'none' })
   const [error, setError] = useState('')
@@ -56,8 +56,8 @@ export function VideoEditDeleteTracksDialog({ sequence, kind, targetTrackIds, on
     return lanes.some(track => track.id === choice[value]) ? [choice[value]] : []
   }
   const ids = [...chosen('video'), ...chosen('audio')]
-  const submit = (): void => {
-    try { onSubmit(ids); onClose() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+  const submit = async (): Promise<void> => {
+    try { await onSubmit(ids); onClose() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
   }
   return <UiModal isOpen title="删除轨道" onClose={onClose} footer={<><UiButton onClick={onClose}>取消</UiButton><UiButton variant="dangerSolid" disabled={!ids.length} onClick={submit}>{ids.length ? `删除 ${ids.length} 条轨道` : '删除'}</UiButton></>}>
     <div className="space-y-4" data-video-edit-delete-tracks>

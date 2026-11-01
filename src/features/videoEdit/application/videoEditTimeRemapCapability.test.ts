@@ -84,9 +84,9 @@ it('序列开着帧混合时，片段选帧采样会明确记下；序列默认�
   const owner = await fixture(); const id = owner.document.id
   const clip = () => owner.document.sequences[0].clips.find(value => value.id === 'a')!
   const { executeVideoEditTimelineEdit } = await import('./videoEditTimeline')
-  const setInterpolation = (frameInterpolation: 'nearest' | 'blend'): void => { executeVideoEditTimelineEdit(id, owner.document.sequences[0].id, { kind: 'speed', clipIds: ['a'], linked: { links: false, groups: false }, change: { frameInterpolation } }) }
-  setInterpolation('blend'); expect(clip().frameInterpolation).toBe('blend')
-  setInterpolation('nearest'); expect(clip().frameInterpolation).toBeUndefined()
+  const setInterpolation = async (frameInterpolation: 'nearest' | 'blend'): Promise<void> => { await executeVideoEditTimelineEdit(id, owner.document.sequences[0].id, { kind: 'speed', clipIds: ['a'], linked: { links: false, groups: false }, change: { frameInterpolation } }) }
+  await setInterpolation('blend'); expect(clip().frameInterpolation).toBe('blend')
+  await setInterpolation('nearest'); expect(clip().frameInterpolation).toBeUndefined()
   editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, frameBlend: true }) }))
-  setInterpolation('nearest'); expect(clip().frameInterpolation).toBe('nearest')
+  await setInterpolation('nearest'); expect(clip().frameInterpolation).toBe('nearest')
 })

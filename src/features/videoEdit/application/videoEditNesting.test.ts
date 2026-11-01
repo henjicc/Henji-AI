@@ -29,7 +29,7 @@ async function fixture() {
 it('UI 共用变换：一步撤销、双击定位子序列并复用标签、序列行可拖入父序列', async () => {
   const owner = await fixture(); const before = structuredClone(owner.document); const history = owner.past.length
   const parent = owner.document.sequences[0]
-  const result = nestVideoEditSelection({ projectId: owner.document.id, sequenceId: parent.id, clipIds: ['a'] }, '嵌套镜头')
+  const result = await nestVideoEditSelection({ projectId: owner.document.id, sequenceId: parent.id, clipIds: ['a'] }, '嵌套镜头')
   expect(result.movedClipIds).toEqual(['a', 'sound']); expect(owner.past.length).toBe(history + 1)
   openVideoEditNestedClip(owner.document.id, result.clip.id, 45)
   expect(owner.activeSequenceId).toBe(result.sequence.id); expect(owner.frame).toBe(15)

@@ -8,6 +8,15 @@ let highs: Highs
 beforeAll(async () => { highs = await highsLoader() })
 
 const aspect = 16 / 9
+it('二维防抖变换保留空间四值、轴心和全部空间曲线', () => {
+  const points = [{ time: 0, value: .1, interpolation: 'bezier' as const, bezier: [.2, -.2, .8, 1.2], easeRange: [.1, .9], easeValues: [.05, .3] }, { time: 60, value: .3, interpolation: 'linear' as const }]
+  const clip = { x: .1, y: -.1, scale: .5, rotation: 10, anchorX: .2, anchorY: .3, depth: .2, rotationX: 13, rotationY: -8, anchorDepth: .04, spatial: { enabled: true }, curves: { depth: points, rotationX: points, rotationY: points, anchorDepth: points } }
+  const before = structuredClone(clip)
+  const result = videoEditStabilizedPlacement(clip, { width: 1920, height: 1080 }, { width: 1920, height: 1080 }, { a: 1.02, b: .01, tx: .02, ty: -.01 })
+  expect(result.x).not.toBe(clip.x); expect(result.scale).not.toBe(clip.scale)
+  expect({ ...result, x: clip.x, y: clip.y, scale: clip.scale, rotation: clip.rotation }).toEqual(before)
+  expect(clip).toEqual(before)
+})
 /** 手持抖动：确定性的多频正弦叠加，可加一段匀速平移（运动镜头）。 */
 function shakyPath(frames: number, options: { amplitude?: number; pan?: number; roll?: number } = {}): VideoEditCameraSample[] {
   const amplitude = options.amplitude ?? 0.01

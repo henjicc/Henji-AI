@@ -189,6 +189,9 @@ const successData: Record<string, Record<string, unknown>> = {
   cancel_camera_stage_render_task: { taskRef: ref('camera_stage.render_task', 'task'), status: 'cancelled', resultRefs: [nodeRef], ...revisions },
   prepare_canvas_node_generation: { preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'image', options: {} }, submitInput: { documentId: 'canvas', nodeId: 'node' }, ...revisions },
   prepare_image_edit_outpaint: { documentRef: imageDocumentRef, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'image', options: {} }, message },
+  arrange_video_edit_depth: { documentRef, sequenceRef, changedRefs: [clipRef], achievedParallaxRatio: 2, maxProjectionErrorPx: 0.4, facts: [], saved: true, undoRef: documentRef, verification: { verified: true, condition: '已回读层次与参考构图' }, message: '已拉开 2 倍视差' },
+  transition_video_edit_space: { documentRef, sequenceRef, changedRefs: [clipRef], achievedParallaxRatio: 1.8, maxProjectionErrorPx: 0.6, facts: [{ code: 'framing_kept', clipRefs: [clipRef], sequenceFrame: 30, message: '主体取景保持', values: { errorPx: 0.6 } }], saved: true, undoRef: documentRef, verification: { verified: true, condition: '已回读区间两端' }, message: '已展开空间' },
+  verify_video_edit_space: { documentRef, sequenceRef, documentVersion: 'host:document:29', records: [], nextCursor: null, verificationKind: 'structural', message: '没有空间画面层' },
 }
 
 // 录制服务的会话控制、事件分页、理解/隐私、导入与成片回执；与各领域结果测试保持同形。

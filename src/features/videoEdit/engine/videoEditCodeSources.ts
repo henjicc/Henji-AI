@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_SPATIAL_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { authorBundleShapesText, authorTextMetadataKey } from './videoEditAuthorTextResources'
 import { codeOutputInputs, codeOutputKey, codeOutputSignature } from './videoEditCodeOutputKey'
 import { codeElementEdits } from '@/core/videoEdit/codeEdits'
@@ -37,7 +38,7 @@ import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame, codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
 import type { CodeMotionClock } from '@/core/videoEdit/codeMaterial/motionSampling'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
-import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
+import { videoEditClipMedia, videoEditPictureTransitionsAt, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
@@ -54,6 +55,11 @@ import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditTextResolution } from './videoEditTextSurface'
 import { videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
+import { authorSpaceInfo } from './videoEditAuthorThree'
+import { preparedSpatialBrand, type PreparedSpatialFrame, type SpatialCodeSources, type SpatialPrepareRequest, type SpatialSampleRequest, type SpatialPictureLease, type SpatialSceneSample, type SpatialSourceDescriptor } from './videoEditSpatialContracts'
+import type { AuthorEffectMetadata } from './videoEditAuthorParameters'
+import type { VideoEditGpuColorFormat } from './videoEditGpuFrame'
+import { authorSpatialFingerprint } from './videoEditAuthorFingerprint'
 import { WEB_TEXT_AUTHOR_API_VERSION, type WebTextDeclaration } from '@/core/videoEdit/webTextGeometry'
 
 const logger = createLogger('features.videoEdit.codeSources')
@@ -61,7 +67,7 @@ const logger = createLogger('features.videoEdit.codeSources')
 const SUBJECT_MATTE: NonNullable<VideoEditEffect['mask']> = { regionId: 'person', feather: 0, expand: 0 }
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'authorSpatialGenerator' | 'inspectAuthorScene' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'bundle' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CodeOutputFrame { sourceTime: ReturnType<typeof videoEditClipSourceTimeAt>; info: AuthorFrameInfo; overrides: Parameters<VideoEditCodeGpu['authorGenerator']>[7]; environment: ReturnType<typeof authorEffectEnvironmentForClip> }
@@ -78,7 +84,10 @@ export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; built
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 /** `sceneIssues`：这一帧的片子数据或画面参数中需要用户处理的问题，由渲染器和效果错误一起呈现。 */
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number; sceneIssues: string[] }
-export interface VideoEditCodePrepareOptions { observeElements?: boolean; exactInput?: (input: VideoEditCodeImageInput) => boolean; quality?: import('@/core/imaging/effects/descriptor').EffectQuality; authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
+export interface VideoEditCodePrepareOptions { observeElements?: boolean; exactInput?: (input: VideoEditCodeImageInput) => boolean; quality?: import('@/core/imaging/effects/descriptor').EffectQuality; authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>>;
+  spatialFrame?: import('@/core/videoEdit/spatialTypes').SpatialFrame
+  deferredGenerators?: ReadonlySet<string>
+}
 /** 渲染与指纹共用时间、动画、片子数据及画面输入求值；编译与不可变参数准备留在帧循环外。 */
 function codeFrameValues(document: VideoEditComposition, clip: VideoEditClip, program: CodeMaterialProgram,
   prepared: PreparedCodeMaterialParameters, inputs: VideoEditCodeInputs | undefined, generator: boolean,
@@ -146,7 +155,174 @@ function freezeProgram(program: CodeMaterialProgram): CodeMaterialProgram {
   freeze(program); return program
 }
 /** Visible-code session only. Programs stay in memory; source remains the document truth. */
-export class VideoEditCodeSources {
+export interface SpatialAuthorInputs {
+  assets: AuthorAssets
+  images: Readonly<Record<string, AuthorGpuImage>>
+  /** 同一网页票据或已准备的模拟只读视图；禁止在这里推进模拟。 */
+  info?: Partial<AuthorFrameInfo>
+}
+export interface SpatialAuthorHooks {
+  prepare?(clip: VideoEditClip, sourceTimes: readonly number[], signal: AbortSignal): Promise<void>
+  inputs?(plan: VideoEditCodePlan, sourceTime: number, signal: AbortSignal): Promise<SpatialAuthorInputs>
+}
+interface PreparedAuthorSpatialFrame {
+  request: SpatialPrepareRequest
+  epoch: number
+  released: boolean
+  evaluate: Map<string, (frame: number, window?: VideoEditTransitionWindow) => VideoEditCodePlan>
+  inputs: Map<string, SpatialAuthorInputs>
+  leases: Set<SpatialPictureLease>
+  borrows: Set<SpatialPictureLease>
+  centers: Map<string, SpatialPictureLease>
+}
+export class VideoEditCodeSources implements SpatialCodeSources {
+  private spatialHooks: SpatialAuthorHooks = {}
+  private readonly spatialFrames = new Map<PreparedSpatialFrame, PreparedAuthorSpatialFrame>()
+  /** 模拟准备与媒体输入共用曝光计划的精确源时刻，不能自行推进时间。 */
+  setSpatialAuthorHooks(hooks: SpatialAuthorHooks): void { this.spatialHooks = hooks }
+  async describeSpatialSources(composition: Readonly<VideoEditComposition>, signal: AbortSignal): Promise<readonly SpatialSourceDescriptor[]> {
+    const sources: SpatialSourceDescriptor[] = []
+    for (const clip of composition.clips) {
+      signal.throwIfAborted()
+      if (!clip.code || clip.kind !== 'code') continue
+      if (codeMaterialSource(composition, clip.code).apiVersion < CODE_AUTHOR_SPATIAL_MIN_API_VERSION) {
+        sources.push({ clipId: clip.id, kind: 'card', spaceDependency: false })
+        continue
+      }
+      const evaluate = await this.prepareGeneratorFrames(clip, signal)
+      const program = evaluate(clip.start).program as CodeMaterialProgram & AuthorEffectMetadata
+      sources.push({ clipId: clip.id, kind: program.worldScene ? 'worldScene' : 'card', spaceDependency: program.space === true })
+    }
+    return sources
+  }
+  private spatialState(prepared: PreparedSpatialFrame): PreparedAuthorSpatialFrame {
+    const state = this.spatialFrames.get(prepared)
+    if (!state || state.released || state.epoch !== this.epoch || this.disposed) throw new DOMException('空间帧已失效。', 'AbortError')
+    state.request.frame.signal.throwIfAborted(); state.request.frame.assertCurrent()
+    return state
+  }
+  async prepareSpatialFrame(request: SpatialPrepareRequest): Promise<PreparedSpatialFrame> {
+    logger.debug('空间作者帧准备开始', { event: 'video_edit.spatial_author.prepare.start', context: { requestId: request.frame.requestId } })
+    request.frame.signal.throwIfAborted(); request.frame.assertCurrent()
+    if (request.frame.composition !== this.document) throw new Error('空间帧必须使用当前代码会话的文档快照。')
+    const prepared: PreparedSpatialFrame = { [preparedSpatialBrand]: true }
+    const state: PreparedAuthorSpatialFrame = { request, epoch: this.epoch, released: false, evaluate: new Map(), inputs: new Map(), leases: new Set(), borrows: new Set(), centers: new Map() }
+    this.spatialFrames.set(prepared, state)
+    try {
+      this.runtime ??= await this.acquireRuntime()
+      for (const source of request.frame.sources) {
+        const clip = this.document.clips.find(value => value.id === source.clipId)
+        if (!clip?.code) continue
+        const evaluate = await this.prepareGeneratorFrames(clip, request.frame.signal)
+        this.spatialState(prepared)
+        state.evaluate.set(clip.id, evaluate)
+        const centerTime = request.plan.samples[0]?.clips.find(value => value.clipId === clip.id)?.centerSourceTime
+        const times = [...(centerTime === undefined ? [] : [centerTime]), ...request.plan.samples.flatMap(sample => sample.clips.filter(value => value.clipId === clip.id).map(value => source.kind === 'worldScene' && value.motionBlur ? value.sourceTime : value.centerSourceTime))]
+        await this.spatialHooks.prepare?.(clip, [...new Set(times)], request.frame.signal)
+        this.spatialState(prepared)
+      }
+      this.protectSpatialInstances()
+      logger.debug('空间作者帧准备完成', { event: 'video_edit.spatial_author.prepare.completed', context: { requestId: request.frame.requestId, sources: state.evaluate.size } })
+      return prepared
+    } catch (error) {
+      logger.warn('空间作者帧准备失败', { event: 'video_edit.spatial_author.prepare.failed', error, context: { requestId: request.frame.requestId } })
+      await this.releaseSpatialFrame(prepared); throw error
+    }
+  }
+  private async spatialValues(prepared: PreparedSpatialFrame, clipId: string, sequenceFrame: number, sourceTime: number,
+    centerSourceTime: number, frame: import('@/core/videoEdit/spatialTypes').SpatialFrame) {
+    const state = this.spatialState(prepared), { request } = state
+    const evaluate = state.evaluate.get(clipId)
+    if (!evaluate) throw new Error(`空间代码来源 ${clipId} 未准备。`)
+    const descriptor = request.frame.sources.find(value => value.clipId === clipId)!
+    const center = descriptor.kind !== 'worldScene'
+    const evaluatedFrame = center ? request.frame.sequenceFrame : sequenceFrame
+    const window = videoEditPictureTransitionsAt(this.document, evaluatedFrame).find(window => window.left.id === clipId || window.right.id === clipId)
+    const plan = evaluate(evaluatedFrame, window)
+    const clipTime = videoEditClipSourceTimeAt(plan.clip, evaluatedFrame - plan.clip.start, this.document.frameRate, plan.transitionHandles && plan.program!.mode === 'static')
+    const overrides = plan.clip.elementOverrides ? Object.fromEntries(Object.entries(plan.clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, clipTime)])) : undefined
+    const time = center ? centerSourceTime : sourceTime
+    const inputKey = JSON.stringify([clipId, time])
+    let inputs = center ? state.inputs.get(inputKey) : undefined
+    if (!inputs) {
+      inputs = await this.spatialHooks.inputs?.(plan, time, request.frame.signal)
+      if (!inputs && plan.imageKeys.size) throw new Error('空间作者媒体输入尚未接入帧准备器。')
+      inputs ??= { assets: {}, images: {} }
+      if (center) state.inputs.set(inputKey, inputs)
+    }
+    this.spatialState(prepared)
+    const info: AuthorFrameInfo = { ...inputs.info, time, frameDuration: 1 / this.document.fps,
+      clip: { time: plan.context.localTime, duration: plan.clip.duration / this.document.fps },
+      ...(descriptor.spaceDependency ? { space: await authorSpaceInfo(center ? request.plan.centerFrame : frame, clipId, time, centerSourceTime, request.plan.centerFrame.sequenceTime) } : {}) }
+    return { state, plan, inputs, info, descriptor, overrides }
+  }
+  async inspectSpatialSceneSamples(prepared: PreparedSpatialFrame): Promise<readonly SpatialSceneSample[]> {
+    const work = this.gpuWork.then(async () => {
+      const state = this.spatialState(prepared), result: SpatialSceneSample[] = []
+      const { plan: exposure, frame: request } = state.request
+      const center = { index: -1, sequenceFrame: request.sequenceFrame, frame: exposure.centerFrame,
+        clips: exposure.samples[0].clips.map(value => ({ ...value, sequenceFrame: request.sequenceFrame, sourceTime: value.centerSourceTime })) }
+      for (const sample of [center, ...exposure.samples]) for (const value of sample.clips) {
+        if (state.request.frame.sources.find(source => source.clipId === value.clipId)?.kind !== 'worldScene') continue
+        const { plan, inputs, info } = await this.spatialValues(prepared, value.clipId,
+          value.motionBlur ? value.sequenceFrame : state.request.frame.sequenceFrame,
+          value.motionBlur ? value.sourceTime : value.centerSourceTime, value.centerSourceTime,
+          value.motionBlur ? sample.frame : state.request.plan.centerFrame)
+        if (!this.runtime?.inspectAuthorScene) throw new Error('当前 GPU 会话不支持 three 场景检查。')
+        const worldBounds = await this.runtime.inspectAuthorScene(value.clipId, plan.program!, plan.context, plan.author, inputs.assets, info)
+        this.spatialState(prepared)
+        result.push({ clipId: value.clipId, sampleIndex: sample.index, sequenceFrame: sample.sequenceFrame, worldBounds })
+      }
+      return result
+    })
+    this.gpuWork = work.then(() => undefined, () => undefined)
+    return work
+  }
+  renderSpatialSample(request: SpatialSampleRequest): Promise<SpatialPictureLease> {
+    const work = this.gpuWork.then(async () => {
+      const { state, plan, inputs, info, descriptor, overrides } = await this.spatialValues(request.prepared, request.clipId, request.sequenceFrame, request.sourceTime, request.centerSourceTime, request.spatialFrame)
+      // 材料面只生成中心帧；租约的借用独立计数，A 释放一个样本不会回收整个材料面。
+      const centerKey = descriptor.kind === 'card' ? JSON.stringify([request.clipId, request.target.width, request.target.height, request.target.format]) : undefined
+      let picture = centerKey ? state.centers.get(centerKey) : undefined
+      const contentKey = JSON.stringify([request.target.key, plan.program!.bundle, plan.author, overrides, info.time, request.target.width, request.target.height, request.target.format,
+        state.request.frame.quality, ...authorSpatialFingerprint({ space: descriptor.spaceDependency }, info)])
+      if (!picture) {
+        if (!this.runtime?.authorSpatialGenerator) throw new Error('当前 GPU 会话不支持空间代码绘制。')
+        picture = await this.runtime.authorSpatialGenerator(request.clipId, plan.program!, plan.context, { ...request.target, key: contentKey }, plan.author, inputs.assets,
+          info, inputs.images, state.request.frame.quality, () => { this.spatialState(request.prepared) }, overrides,
+          this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip))
+        state.leases.add(picture)
+        this.spatialState(request.prepared)
+        if (centerKey) state.centers.set(centerKey, picture)
+      }
+      if (!centerKey) return picture
+      const held = picture
+      let released: Promise<void> | undefined
+      const borrowed: SpatialPictureLease = { ...held, release: afterUse => released ??= Promise.all([held.completion, afterUse]).then(() => undefined) }
+      state.borrows.add(borrowed)
+      return borrowed
+    })
+    this.gpuWork = work.then(() => undefined, () => undefined)
+    return work
+  }
+  generatorTargetCapacity(width: number, height: number, format: VideoEditGpuColorFormat): number {
+    return this.runtime?.generatorTargetCapacity?.(width, height, format) ?? Infinity
+  }
+  private protectSpatialInstances(): void {
+    this.runtime?.protectAuthorInstances?.(new Set([...this.spatialFrames.values()].flatMap(state => [...state.evaluate.keys()])))
+  }
+  async releaseSpatialFrame(prepared: PreparedSpatialFrame): Promise<void> {
+    const state = this.spatialFrames.get(prepared)
+    if (!state) return
+    state.released = true
+    await this.gpuWork
+    const borrowed = await Promise.allSettled([...state.borrows].map(lease => lease.release(Promise.resolve())))
+    const results = [...borrowed, ...await Promise.allSettled([...state.leases].map(lease => lease.release(Promise.resolve())))]
+    this.spatialFrames.delete(prepared)
+    this.protectSpatialInstances()
+    const errors = results.flatMap(result => result.status === 'rejected' ? [result.reason as unknown] : [])
+    if (errors.length) throw new AggregateError(errors, '空间帧资源释放失败。')
+  }
   private readonly cursorSources = new VideoEditRecordingCursorSource()
   private readonly zoomPointers = new VideoEditRecordingZoomPointers(this.cursorSources)
   private readonly known = new Map<string, KnownVersion>()
@@ -441,6 +617,7 @@ export class VideoEditCodeSources {
           }
         }
         if (chain.length) effects.set(clip.id, chain)
+        if (options.deferredGenerators?.has(clip.id)) continue
         if (clip.kind === 'graphic') {
           if (!clip.graphic) throw new CodeMaterialError('COMPATIBILITY', '图形片段缺少结构化对象。')
           let prepared = this.graphics.get(clip.graphic)
@@ -487,7 +664,7 @@ export class VideoEditCodeSources {
         const outcome = (await imageOutcome)?.[0]
         if (outcome?.status === 'rejected') throw outcome.reason
         const inputs = outcome?.status === 'fulfilled' ? outcome.value : undefined; assertCurrent()
-        await this.runtime?.retainAuthorInstances(new Set([...plans.filter(plan => plan.program).map(plan => plan.clip.id), ...[...effects.values()].flatMap(chain => chain.flatMap(effect => effect.builtin ? [] : [effect.instanceKey]))]))
+        await this.runtime?.retainAuthorInstances(new Set([...plans.filter(plan => plan.program).map(plan => plan.clip.id), ...options.deferredGenerators ?? [], ...[...effects.values()].flatMap(chain => chain.flatMap(effect => effect.builtin ? [] : [effect.instanceKey]))]))
         const contentKeys = new Map<VideoEditCodePlan, string | undefined>()
         for (const plan of plans) {
           if (plan.program) {
@@ -497,6 +674,9 @@ export class VideoEditCodeSources {
             plan.outputFrame = { sourceTime, overrides, environment: authorEffectEnvironmentForClip(document, plan.clip),
               info: { audio: plan.context.audio, audioTime: plan.context.audioTime, time: plan.context.time, frameDuration: 1 / document.fps,
                 clip: { time: plan.context.localTime, duration: plan.clip.duration / document.fps }, ...(Object.keys(web).length ? { web } : {}) } }
+            if (options.spatialFrame && (plan.program as CodeMaterialProgram & AuthorEffectMetadata).space) {
+              plan.outputFrame.info.space = await authorSpaceInfo(options.spatialFrame, plan.clip.id, plan.context.time, plan.context.time)
+            }
           }
           const contentKey = plan.program ? this.reuseOutputs ? await this.outputKey(document, plan, frame, inputs, options) : undefined : plan.static ? plan.key : undefined
           assertCurrent()
@@ -615,8 +795,11 @@ export class VideoEditCodeSources {
     if (this.disposed) return
     this.disposed = true; this.cursorSources.clear(); this.zoomPointers.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear(); this.inputFailures.clear()
     await Promise.allSettled([this.gpuWork])
+    const spatialReleases = await Promise.allSettled([...this.spatialFrames.keys()].map(prepared => this.releaseSpatialFrame(prepared)))
     this.spilledPictures.forEach(bitmap => bitmap.close()); this.spilledPictures.clear(); this.targetPictures.clear()
     try { this.runtime?.releaseUnused(new Set()) }
     finally { this.programs.clear(); this.programBytes = 0; this.lastOutputs.clear(); this.known.clear(); this.knownBytes = 0 }
+    const failures = spatialReleases.flatMap(result => result.status === 'rejected' ? [result.reason as unknown] : [])
+    if (failures.length) throw new AggregateError(failures, '空间代码会话释放失败。')
   }
 }

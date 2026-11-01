@@ -20,7 +20,7 @@ export function captureVideoEditSourceRange(projectId: string, component: VideoE
 }
 export function writeVideoEditSourceDrag(transfer: DataTransfer, projectId: string, component: VideoEditSourceRange['component']): void { transfer.setData(VIDEO_EDIT_SOURCE_DRAG_MIME, JSON.stringify(captureVideoEditSourceRange(projectId, component))) }
 /** `newTrack`: dropped beyond the outer tracks — the range lands on a new track of that kind (PR), in the same edit. */
-export function placeVideoEditSourceRange(projectId: string, input: VideoEditSourceRange, sequenceId: string, placement: { frame: number; track?: number; newTrack?: 'video' | 'audio'; mode?: VideoEditDropMode }): string[] {
+export async function placeVideoEditSourceRange(projectId: string, input: VideoEditSourceRange, sequenceId: string, placement: { frame: number; track?: number; newTrack?: 'video' | 'audio'; mode?: VideoEditDropMode }, signal?: AbortSignal): Promise<string[]> {
   input = videoEditSourceRangeSchema.parse(input)
   const owner = requireVideoEditInstance(projectId)
   if (input.projectId !== projectId) throw new Error('源范围属于另一剪辑，请先引用原素材。')
@@ -44,7 +44,7 @@ export function placeVideoEditSourceRange(projectId: string, input: VideoEditSou
   const newTracks = resolved ? [...added, ...resolved.newTracks].filter(track => resolved.clips.some(clip => clip.track === track.index)) : added
   const tracks = [...sequence.tracks, ...newTracks]
   const clips = resolved?.clips ?? placed.clips
-  const result = executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'place', frame: resolved?.frame ?? placement.frame, mode: resolved?.mode ?? 'paste', clipboard: { projectId, frameRate: sequence.frameRate, clips, annotations: [], tracks: tracks.map(track => ({ index: track.index, kind: track.kind })) }, ...(newTracks.length ? { newTracks } : {}), ...(resolved?.mode === 'insert' ? { targetTracks: [...new Set(clips.map(clip => clip.track))] } : {}) })
+  const result = await executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'place', frame: resolved?.frame ?? placement.frame, mode: resolved?.mode ?? 'paste', clipboard: { projectId, frameRate: sequence.frameRate, clips, annotations: [], tracks: tracks.map(track => ({ index: track.index, kind: track.kind })) }, ...(newTracks.length ? { newTracks } : {}), ...(resolved?.mode === 'insert' ? { targetTracks: [...new Set(clips.map(clip => clip.track))] } : {}) }, signal)
   const prior = new Set(sequence.clips.map(clip => clip.id)); const ids = result.clips.filter(clip => !prior.has(clip.id)).map(clip => clip.id)
   if (owner.activeSequenceId === sequenceId) setVideoEditTimelineView(projectId, { selectedClipIds: ids })
   return ids

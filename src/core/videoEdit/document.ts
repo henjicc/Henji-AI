@@ -1,5 +1,9 @@
+import { videoEditClipEnabled, videoEditPictureFilter } from './clipGeometry'
+export { videoEditClipEnabled, videoEditVisibleTrackIndexes, videoEditPictureFilter, videoEditPictureTransitionWindows, videoEditPictureTransitionsAt, type VideoEditPictureFilter } from './clipGeometry'
+import { composeVideoEditSequence } from './composition'
+import { spatialCameraSchema, spatialClipFields } from './spatialSchema'
+import { retimeSpatialCamera, splitSpatialCameraTarget } from './spatialPropagation'
 import { codeEditsSchema } from './codeEdits'
-import { authorEffectEnvironmentForStyle } from './authorEffects'
 import { foreignContentSchema } from '../contentTrust'
 import { videoEditGainDbSchema } from './loudness'
 import { videoEditExportSettingsSchema } from './exportPresets'
@@ -19,7 +23,7 @@ import { projectVideoEditNestedCaptions, projectVideoEditNestedContentClips } fr
 import { videoEditContentAnchorSchema, sliceVideoEditContentAnchor, assertVideoEditContentAnchors } from './contentAnchors'
 import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia } from './compositing'
-import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from './transitions'
+import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
 import { videoEditCodeImageGenerationSchema } from './codeImageGeneration'
 import { videoEditLabelSchema } from './labels'
@@ -88,6 +92,7 @@ function videoEditClipTimingExtensionFields() {
   return { timeRemap: videoEditTimeRemapSchema.optional(), frameInterpolation: videoEditFrameInterpolationSchema.optional(), pitchSemitones: z.number().finite().min(-24).max(24).optional() }
 }
 const videoEditClipStateSchema = z.object({
+  ...spatialClipFields,
   multicamCameraId: identifier.optional(),
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
   follow: videoEditClipFollowSchema.optional(),
@@ -142,7 +147,7 @@ export const videoEditClipSchema = videoEditClipStateSchema.extend({
   takes: z.array(videoEditClipTakeSchema).optional(),
 })
 /** 原生模板的内容：自成一体的文字与图形片段快照（start/track 相对组合起点），不带媒体、代码、跟踪或效果。 */
-export const videoEditNativeTemplateClipSchema = videoEditClipSchema.pick({ name: true, kind: true, track: true, start: true, duration: true, sourceInUs: true, sourceRemainder: true, x: true, y: true, scale: true, rotation: true, anchorX: true, anchorY: true, opacity: true, volume: true, text: true, textStyle: true, graphic: true, curves: true, enabled: true }).strip().superRefine((clip, ctx) => {
+export const videoEditNativeTemplateClipSchema = videoEditClipSchema.pick({ name: true, kind: true, track: true, start: true, duration: true, sourceInUs: true, sourceRemainder: true, x: true, y: true, scale: true, rotation: true, anchorX: true, anchorY: true, depth: true, rotationX: true, rotationY: true, anchorDepth: true, spatial: true, scaleAspect: true, opacity: true, volume: true, text: true, textStyle: true, graphic: true, curves: true, enabled: true }).strip().superRefine((clip, ctx) => {
   if (clip.kind !== 'graphic' && clip.kind !== 'text' || clip.kind === 'graphic' && !clip.graphic) ctx.addIssue({ code: 'custom', message: '原生模板只接受文字或图形片段。' })
 })
 export const videoEditNativeTemplateContentSchema = z.object({ width: z.number().int().min(16).max(8192), height: z.number().int().min(16).max(8192), fps: z.number().finite().positive().max(120), clips: z.array(videoEditNativeTemplateClipSchema).min(1) }).strict()
@@ -157,6 +162,7 @@ export type VideoEditProjectTemplate = z.infer<typeof videoEditProjectTemplateSc
 export type VideoEditNativeTemplateContent = z.infer<typeof videoEditNativeTemplateContentSchema>
 export type VideoEditNativeTemplateClip = z.infer<typeof videoEditNativeTemplateClipSchema>
 export const videoEditSequenceSchema = z.object({
+  spatialCamera: spatialCameraSchema.optional(),
   /** 序列按哪份工程风格副本创作（`styles` 中的 id）；绑定不改时间线上的任何东西。 */
   styleId: videoEditStyleIdSchema.optional(),
   multicam: videoEditMulticamSchema.optional(),
@@ -371,9 +377,6 @@ export function videoEditComposition(document: VideoEditDocument, sequenceId: st
   if (!sequence) throw new Error('目标序列不存在。')
   return composeVideoEditSequence(document, sequence)
 }
-function composeVideoEditSequence(document: Pick<VideoEditComposition, 'media' | 'items' | 'sequences' | 'styles' | 'templates' | 'colorLuts' | 'codeMaterials' | 'scenes' | 'revision' | 'foreign' | 'authorEffects'>, sequence: VideoEditSequence): VideoEditComposition {
-  return { ...sequence, ...(document.authorEffects ? { authorEffects: authorEffectEnvironmentForStyle(document.authorEffects, document.styles, sequence.styleId) } : {}), width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styles ? { styles: document.styles } : {}), ...(document.templates ? { templates: document.templates } : {}), ...(document.colorLuts ? { colorLuts: document.colorLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), ...(document.scenes ? { scenes: document.scenes } : {}), ...(document.foreign ? { foreign: document.foreign } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
-}
 export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' | 'items'>, clip: VideoEditClip): VideoEditMedia | undefined {
   const item = document.items.find(item => item.id === clip.itemId)
   return document.media.find(media => media.id === item?.mediaId)
@@ -424,44 +427,9 @@ export function videoEditDuration(document: Pick<VideoEditSequence, 'clips' | 'c
 /** 时间线帧 `timelineFrame` 上片段显示的源时间（秒），按片段速度与倒放换算（`clipSpeed.ts`）。 */
 export function clipSourceSeconds(clip: VideoEditClip, timelineFrame: number, fps: number): number { return videoEditClipSourceSecondsAt(clip, timelineFrame, fps) }
 /** 片段启用（PR“启用”）：只存停用，缺省即启用。停用的片段留在时间线上，但不画也不发声。 */
-export function videoEditClipEnabled(clip: Pick<VideoEditClip, 'enabled'>): boolean { return clip.enabled !== false }
 export function setVideoEditClipEnabled(clip: VideoEditClip, enabled: boolean): VideoEditClip {
   const { enabled: _enabled, ...rest } = clip
   return enabled ? rest : { ...rest, enabled: false }
-}
-/**
- * 轨道级显示：输出启用、且没被画面独奏排除的轨道序号；声音轨道总在其中（声音的独奏与静音由 audibleVideoEditClips 处理）。
- * 只回答轨道本身的问题，判断某个片段画不画一律用 videoEditPictureFilter。
- */
-export function videoEditVisibleTrackIndexes(document: Pick<VideoEditSequence, 'tracks'>): Set<number> {
-  const solo = document.tracks.some(track => track.kind === 'video' && track.enabled && track.solo)
-  return new Set(document.tracks.filter(track => track.enabled && (track.kind === 'audio' || !solo || track.solo)).map(track => track.index))
-}
-export interface VideoEditPictureFilter { has(clip: Pick<VideoEditClip, 'track' | 'enabled'>): boolean }
-/** 片段画面是否参与合成：所在轨道显示并且片段启用。 */
-export function videoEditPictureFilter(document: Pick<VideoEditSequence, 'tracks'>): VideoEditPictureFilter {
-  const tracks = videoEditVisibleTrackIndexes(document)
-  return { has: clip => videoEditClipEnabled(clip) && tracks.has(clip.track) }
-}
-function pictureTransition(window: VideoEditTransitionWindow, tracks: ReadonlySet<number>): VideoEditTransitionWindow[] {
-  if (!tracks.has(window.left.track)) return []
-  // 单侧过渡两边是同一个片段，只会整段保留或整段去掉。
-  const left = videoEditClipEnabled(window.left); const right = videoEditClipEnabled(window.right)
-  if (!left && !right) return []
-  return [left && right ? window : { ...window, empty: left ? 'right' : 'left' }]
-}
-/**
- * 参与合成的画面过渡（对齐 PR）：轨道隐藏或两侧都停用的过渡不出现；只停用一侧时过渡照常进行，`empty` 标出那一侧，按透明画。
- * 音频过渡不经过这里，停用片段不进混音即可。
- */
-export function videoEditPictureTransitionWindows(document: Pick<VideoEditSequence, 'tracks' | 'clips' | 'transitions'>): VideoEditTransitionWindow[] {
-  const tracks = videoEditVisibleTrackIndexes(document)
-  return (document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'video').flatMap(transition => pictureTransition(videoEditTransitionWindow(document, transition), tracks))
-}
-/** 指定帧上参与合成的画面过渡，规则同 videoEditPictureTransitionWindows。 */
-export function videoEditPictureTransitionsAt(document: Pick<VideoEditSequence, 'tracks' | 'clips' | 'transitions'>, frame: number): VideoEditTransitionWindow[] {
-  const tracks = videoEditVisibleTrackIndexes(document)
-  return videoEditTransitionsAt(document, frame).flatMap(window => pictureTransition(window, tracks))
 }
 export function activeVideoEditClips(document: VideoEditComposition, at: number): VideoEditClip[] {
   const picture = videoEditPictureFilter(document)
@@ -521,6 +489,7 @@ export function splitVideoEditClip(sequence: VideoEditSequence, id: string, at: 
     return [{ ...item, target, ...(item.clipId === id ? item.frame >= at ? { clipId: right.id } : spansSplit && item.target.kind !== 'element' ? { clipId: undefined } : {} : {}) }]
   }) }
   const origins = new Map([[right.id, { originalId: id, shift: 0 }], [id, { originalId: id, shift: 0 }]])
+  if (sequence.spatialCamera) next.spatialCamera = splitSpatialCameraTarget(sequence.spatialCamera, id, right.id, at)
   return retimeVideoEditContent(sequence, next, origins)
 }
 export function changeVideoEditSequenceSettings(sequence: VideoEditSequence, settings: Partial<Pick<VideoEditSequence, 'width' | 'height' | 'frameRate' | 'pixelAspectRatio' | 'sampleRate' | 'channels'>>): VideoEditSequence {
@@ -530,6 +499,7 @@ export function changeVideoEditSequenceSettings(sequence: VideoEditSequence, set
   if (sequence.captions?.some(caption => convert(caption.start + caption.duration) <= convert(caption.start))) throw new Error('新帧率会使部分字幕短于一帧。请先调整这些字幕的长度，再修改帧率。')
   if (sequence.transitions?.some(transition => convert(transition.durationFrames) < 2)) throw new Error('新帧率会使部分转场短于两帧。请先调整这些转场的长度，再修改帧率。')
   return videoEditSequenceSchema.parse({ ...sequence, ...settings,
+    ...(sequence.spatialCamera ? { spatialCamera: retimeSpatialCamera(sequence.spatialCamera, convert) } : {}),
     clips: sequence.clips.map(clip => ({ ...rescaleVideoEditClipKeyframes(clip, time => convert(clip.start + time) - convert(clip.start), convert(clip.start + clip.duration) - convert(clip.start)), start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start), ...(clip.fadeInFrames ? { fadeInFrames: Math.max(1, convert(clip.fadeInFrames)) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.max(1, convert(clip.fadeOutFrames)) } : {}) })),
     annotations: sequence.annotations.map(mark => mapVideoEditAnnotationTime(mark, convert)),
     ...(sequence.markers ? { markers: sequence.markers.map(mark => ({ ...mark, frame: convert(mark.frame) })) } : {}),

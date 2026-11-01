@@ -116,6 +116,18 @@ it('JS 直出路径按工程记录的版本解析，未登记的裸名列出可�
   expect(directAuthorBundle(pinned)!.libraries).toBeUndefined()
   expect(() => rewriteAuthorModule(pinned, 'main.js', path => path)).toThrow('找不到模块 three')
 })
+it('受管 JS 与注释里的同名文本均保留项目动态导入语义', async () => {
+  const create = vi.fn(() => { throw new Error('不应启动 esbuild') })
+  const compiler = new VideoEditCodeCompiler(create)
+  for (const entry of ['// createThree\nexport default { draw() {} };', 'export default { createThree() {} };']) {
+    const files = { entry: 'main.js', files: { 'main.js': `${entry}\nconst path = './data.js'; export const load = () => import(path);`, 'data.js': 'export const value = 3' } }
+    const bundle = await compiler.bundle(files)
+    expect(bundle.modules).toEqual(files)
+    expect(rewriteAuthorModule(bundle.modules!, 'main.js', path => `blob:${path}`)).toContain('blob:data.js')
+  }
+  expect(create).not.toHaveBeenCalled()
+  compiler.dispose()
+})
 
 it('JS 直出路径的 v4 源码导入内置库时明确拒绝，也不记录库版本', () => {
   const legacy = directAuthorBundle({ entry: 'main.js', files: { 'main.js': 'import * as T from "three"; export default T;' } })!

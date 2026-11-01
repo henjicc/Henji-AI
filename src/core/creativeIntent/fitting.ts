@@ -59,7 +59,7 @@ function subdivideNative(samples: readonly ScalarSample[], tolerance: number, co
     checkCancelled(control)
     const [a, b] = pending.pop()!; const segment = samples.slice(a, b + 1); const probes = intentSamples(segment, reference); const fitted = nativeCubic(probes)
     if (fitted && scalarError(probes, fitted, false).maxError <= tolerance) output.push(fitted[0])
-    else if (b - a <= 2) output.push(...segment.slice(0, -1).map(p => ({ time: p.time, value: p.value, interpolation: 'linear' as const })))
+    else if (b - a <= 1) output.push(...segment.slice(0, -1).map(p => ({ time: p.time, value: p.value, interpolation: 'linear' as const })))
     else { const middle = Math.floor((a + b) / 2); pending.push([middle, b], [a, middle]) }
   }
   output.push({ time: samples[samples.length - 1].time, value: samples[samples.length - 1].value, interpolation: 'linear' })

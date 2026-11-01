@@ -1,3 +1,4 @@
+import { videoEditSpatialJsonCamera } from './videoEditSpatial'
 import { createVideoEditCodeElementRegistration } from './videoEditCodeElementReflection'
 import { splitVideoEditRef } from './videoEditRefs'
 export { splitVideoEditRef } from './videoEditRefs'
@@ -113,6 +114,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     delete data.recordingCursor
   }
   if (ref.kind === 'video_edit.sequence') {
+    data.spatialCamera = videoEditSpatialJsonCamera(projectId, (found as typeof found & { spatialCamera?: import('@/core/videoEdit/spatialTypes').SpatialCamera }).spatialCamera)
     data.captionTrackEnabled ??= true
     data.captionTrackLocked ??= false
     data.motionBlur ??= false

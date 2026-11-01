@@ -1,0 +1,1200 @@
+{
+  "format": "henji-video-project",
+  "version": 10,
+  "id": "t16-formal",
+  "name": "三维空间样片",
+  "revision": 6,
+  "media": [
+    {
+      "id": "m-background",
+      "path": "D:\\VibeCode\\Henji-AI\\tickets\\16-三维空间\\evidence-A\\formal\\background.png",
+      "name": "背景",
+      "kind": "image",
+      "durationSeconds": 0,
+      "width": 1920,
+      "height": 1080,
+      "hasAudio": false
+    },
+    {
+      "id": "m-a",
+      "path": "D:\\VibeCode\\Henji-AI\\tickets\\16-三维空间\\evidence-A\\formal\\panel-0.png",
+      "name": "a",
+      "kind": "image",
+      "durationSeconds": 0,
+      "width": 720,
+      "height": 480,
+      "hasAudio": false
+    },
+    {
+      "id": "m-b",
+      "path": "D:\\VibeCode\\Henji-AI\\tickets\\16-三维空间\\evidence-A\\formal\\panel-1.png",
+      "name": "b",
+      "kind": "image",
+      "durationSeconds": 0,
+      "width": 720,
+      "height": 480,
+      "hasAudio": false
+    },
+    {
+      "id": "m-c",
+      "path": "D:\\VibeCode\\Henji-AI\\tickets\\16-三维空间\\evidence-A\\formal\\panel-2.png",
+      "name": "c",
+      "kind": "image",
+      "durationSeconds": 0,
+      "width": 720,
+      "height": 480,
+      "hasAudio": false
+    }
+  ],
+  "bins": [],
+  "items": [
+    {
+      "id": "item-text",
+      "name": "文字",
+      "kind": "text"
+    },
+    {
+      "id": "item-background",
+      "name": "背景",
+      "kind": "image",
+      "mediaId": "m-background"
+    },
+    {
+      "id": "item-panel-a",
+      "name": "a",
+      "kind": "image",
+      "mediaId": "m-a"
+    },
+    {
+      "id": "item-panel-b",
+      "name": "b",
+      "kind": "image",
+      "mediaId": "m-b"
+    },
+    {
+      "id": "item-panel-c",
+      "name": "c",
+      "kind": "image",
+      "mediaId": "m-c"
+    },
+    {
+      "id": "504bdcf8-7a70-4680-9cab-735a700f251f",
+      "name": "三维空间受管样片",
+      "kind": "code",
+      "code": {
+        "definitionId": "1fc7a149-e2e5-4fb0-be31-e6083e0ab1c4",
+        "versionId": "29c13d21-5cd2-4835-8106-1b0f7fe73f02",
+        "parameters": {}
+      }
+    }
+  ],
+  "sequences": [
+    {
+      "id": "main",
+      "frameRate": {
+        "numerator": 30,
+        "denominator": 1
+      },
+      "tracks": [
+        {
+          "id": "52a89606-de88-434f-826f-7c2b2de687ef",
+          "name": "音频 1",
+          "index": 0,
+          "kind": "audio",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        },
+        {
+          "id": "aeae8701-444b-4746-ade7-45192f222463",
+          "name": "视频 1",
+          "index": 1,
+          "kind": "video",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        },
+        {
+          "id": "9a84100b-b0af-4b42-aa1e-7f3c0f722b6f",
+          "name": "视频 2",
+          "index": 2,
+          "kind": "video",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        },
+        {
+          "id": "8994ba1a-0365-408b-a198-74a0f1c60e7f",
+          "name": "视频 3",
+          "index": 3,
+          "kind": "video",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        },
+        {
+          "id": "c7b11211-fdeb-4712-bb9d-7c8e434f3b12",
+          "name": "视频 4",
+          "index": 4,
+          "kind": "video",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        },
+        {
+          "id": "304115cf-6e3d-497f-98ca-578ab3f3dac1",
+          "name": "视频 5",
+          "index": 5,
+          "kind": "video",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        },
+        {
+          "id": "cc80f32a-06f0-4b75-a970-d9d2dc91d28b",
+          "name": "视频 6",
+          "index": 6,
+          "kind": "video",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        },
+        {
+          "id": "c142293f-e4f6-4702-9b16-7362e3f6d028",
+          "name": "视频 7",
+          "index": 7,
+          "kind": "video",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        },
+        {
+          "id": "track-8",
+          "name": "视频 8",
+          "index": 8,
+          "kind": "video",
+          "locked": false,
+          "enabled": true,
+          "muted": false,
+          "solo": false
+        }
+      ],
+      "clips": [
+        {
+          "id": "background",
+          "start": 0,
+          "duration": 240,
+          "itemId": "item-background",
+          "name": "背景",
+          "kind": "image",
+          "track": 1,
+          "sourceInUs": 0,
+          "sourceRemainder": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "x": 0,
+          "y": 0,
+          "scale": 1,
+          "rotation": 0,
+          "opacity": 1,
+          "volume": 0,
+          "text": ""
+        },
+        {
+          "id": "panel-a",
+          "start": 0,
+          "duration": 240,
+          "spatial": {
+            "enabled": true
+          },
+          "itemId": "item-panel-a",
+          "name": "panel-a",
+          "kind": "image",
+          "track": 2,
+          "sourceInUs": 0,
+          "sourceRemainder": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "x": -0.3,
+          "y": 0.16,
+          "scale": 0.3,
+          "rotation": 0,
+          "curves": {
+            "depth": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": -0.55,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": -0.55,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationX": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationY": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 32,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 32,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ]
+          },
+          "opacity": 1,
+          "volume": 0,
+          "text": ""
+        },
+        {
+          "id": "panel-b",
+          "start": 0,
+          "duration": 240,
+          "spatial": {
+            "enabled": true
+          },
+          "itemId": "item-panel-b",
+          "name": "panel-b",
+          "kind": "image",
+          "track": 3,
+          "sourceInUs": 0,
+          "sourceRemainder": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "x": 0,
+          "y": 0.2,
+          "scale": 0.3,
+          "rotation": 0,
+          "curves": {
+            "depth": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": -0.2,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": -0.2,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationX": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": -10,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": -10,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationY": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ]
+          },
+          "opacity": 1,
+          "volume": 0,
+          "text": ""
+        },
+        {
+          "id": "panel-c",
+          "start": 0,
+          "duration": 240,
+          "spatial": {
+            "enabled": true
+          },
+          "itemId": "item-panel-c",
+          "name": "panel-c",
+          "kind": "image",
+          "track": 4,
+          "sourceInUs": 0,
+          "sourceRemainder": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "x": 0.3,
+          "y": 0.16,
+          "scale": 0.3,
+          "rotation": 0,
+          "curves": {
+            "depth": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": -0.55,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": -0.55,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationX": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationY": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": -32,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": -32,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ]
+          },
+          "opacity": 1,
+          "volume": 0,
+          "text": ""
+        },
+        {
+          "id": "label",
+          "start": 0,
+          "duration": 240,
+          "spatial": {
+            "enabled": true
+          },
+          "itemId": "item-text",
+          "name": "label",
+          "kind": "text",
+          "track": 5,
+          "sourceInUs": 0,
+          "sourceRemainder": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "x": 0,
+          "y": 0.4,
+          "scale": 1,
+          "rotation": 0,
+          "curves": {
+            "depth": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0.5,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0.5,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationX": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationY": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ]
+          },
+          "opacity": 1,
+          "volume": 0,
+          "text": "景深　视差　遮挡",
+          "textStyle": {
+            "fontFamily": "HarmonyOS Sans SC",
+            "fontWeight": 400,
+            "fontStyle": "normal",
+            "fontSize": 44,
+            "fauxBold": false,
+            "fauxItalic": false,
+            "allCaps": false,
+            "smallCaps": false,
+            "superscript": false,
+            "subscript": false,
+            "underline": false,
+            "align": "center",
+            "verticalAlign": "middle",
+            "tracking": 0,
+            "kerning": "auto",
+            "leading": 0,
+            "baselineShift": 0,
+            "tsume": 0,
+            "fill": {
+              "enabled": true,
+              "color": "#F2F2F2"
+            },
+            "strokes": [],
+            "background": {
+              "enabled": false,
+              "color": "#000000",
+              "opacity": 0.7,
+              "padding": 12,
+              "radius": 0
+            },
+            "shadows": [],
+            "boxWidth": 0,
+            "boxHeight": 0
+          }
+        },
+        {
+          "id": "subtitle",
+          "start": 0,
+          "duration": 240,
+          "spatial": {
+            "enabled": true
+          },
+          "itemId": "item-text",
+          "name": "subtitle",
+          "kind": "text",
+          "track": 6,
+          "sourceInUs": 0,
+          "sourceRemainder": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "x": 0,
+          "y": -0.17,
+          "scale": 1,
+          "rotation": 0,
+          "curves": {
+            "depth": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0.22,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0.22,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationX": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationY": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ]
+          },
+          "opacity": 1,
+          "volume": 0,
+          "text": "平面开场，一镜到底展开",
+          "textStyle": {
+            "fontFamily": "HarmonyOS Sans SC",
+            "fontWeight": 400,
+            "fontStyle": "normal",
+            "fontSize": 52,
+            "fauxBold": false,
+            "fauxItalic": false,
+            "allCaps": false,
+            "smallCaps": false,
+            "superscript": false,
+            "subscript": false,
+            "underline": false,
+            "align": "center",
+            "verticalAlign": "middle",
+            "tracking": 0,
+            "kerning": "auto",
+            "leading": 0,
+            "baselineShift": 0,
+            "tsume": 0,
+            "fill": {
+              "enabled": true,
+              "color": "#F2F2F2"
+            },
+            "strokes": [],
+            "background": {
+              "enabled": false,
+              "color": "#000000",
+              "opacity": 0.7,
+              "padding": 12,
+              "radius": 0
+            },
+            "shadows": [],
+            "boxWidth": 0,
+            "boxHeight": 0
+          }
+        },
+        {
+          "id": "title",
+          "start": 0,
+          "duration": 240,
+          "spatial": {
+            "enabled": true
+          },
+          "itemId": "item-text",
+          "name": "title",
+          "kind": "text",
+          "track": 7,
+          "sourceInUs": 0,
+          "sourceRemainder": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "x": 0,
+          "y": -0.29,
+          "scale": 1,
+          "rotation": 0,
+          "curves": {
+            "depth": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0.35,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0.35,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationX": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ],
+            "rotationY": [
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 0
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 45
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "ease",
+                "time": 195
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 225
+              }
+            ]
+          },
+          "opacity": 1,
+          "volume": 0,
+          "text": "痕迹AI 三维空间",
+          "textStyle": {
+            "fontFamily": "HarmonyOS Sans SC",
+            "fontWeight": 700,
+            "fontStyle": "normal",
+            "fontSize": 124,
+            "fauxBold": false,
+            "fauxItalic": false,
+            "allCaps": false,
+            "smallCaps": false,
+            "superscript": false,
+            "subscript": false,
+            "underline": false,
+            "align": "center",
+            "verticalAlign": "middle",
+            "tracking": 0,
+            "kerning": "auto",
+            "leading": 0,
+            "baselineShift": 0,
+            "tsume": 0,
+            "fill": {
+              "enabled": true,
+              "color": "#F2F2F2"
+            },
+            "strokes": [],
+            "background": {
+              "enabled": false,
+              "color": "#000000",
+              "opacity": 0.7,
+              "padding": 12,
+              "radius": 0
+            },
+            "shadows": [],
+            "boxWidth": 0,
+            "boxHeight": 0
+          }
+        },
+        {
+          "id": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+          "start": 45,
+          "duration": 150,
+          "itemId": "504bdcf8-7a70-4680-9cab-735a700f251f",
+          "name": "受管三维场景",
+          "kind": "code",
+          "track": 8,
+          "code": {
+            "definitionId": "1fc7a149-e2e5-4fb0-be31-e6083e0ab1c4",
+            "versionId": "29c13d21-5cd2-4835-8106-1b0f7fe73f02",
+            "parameters": {}
+          },
+          "sourceInUs": 0,
+          "sourceRemainder": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "x": 0,
+          "y": 0,
+          "scale": 1,
+          "rotation": 0,
+          "curves": {
+            "opacity": [
+              {
+                "value": 0,
+                "interpolation": "linear",
+                "time": 0
+              },
+              {
+                "value": 1,
+                "interpolation": "hold",
+                "time": 30
+              },
+              {
+                "value": 1,
+                "interpolation": "linear",
+                "time": 135
+              },
+              {
+                "value": 0,
+                "interpolation": "hold",
+                "time": 149
+              }
+            ]
+          },
+          "opacity": 1,
+          "volume": 1,
+          "text": ""
+        }
+      ],
+      "annotations": [],
+      "spatialCamera": {
+        "curves": {
+          "perspective": [
+            {
+              "value": 0,
+              "interpolation": "hold",
+              "time": 0
+            },
+            {
+              "value": 0,
+              "interpolation": "ease",
+              "time": 45
+            },
+            {
+              "value": -1,
+              "interpolation": "hold",
+              "time": 135
+            },
+            {
+              "value": -1,
+              "interpolation": "ease",
+              "time": 195
+            },
+            {
+              "value": 0,
+              "interpolation": "hold",
+              "time": 225
+            }
+          ],
+          "offsetX": [
+            {
+              "value": 0,
+              "interpolation": "hold",
+              "time": 0
+            },
+            {
+              "value": 0,
+              "interpolation": "ease",
+              "time": 45
+            },
+            {
+              "value": 0.22,
+              "interpolation": "ease",
+              "time": 135
+            },
+            {
+              "value": 0.3,
+              "interpolation": "ease",
+              "time": 180
+            },
+            {
+              "value": 0,
+              "interpolation": "hold",
+              "time": 225
+            }
+          ],
+          "offsetY": [
+            {
+              "value": 0,
+              "interpolation": "hold",
+              "time": 0
+            },
+            {
+              "value": 0,
+              "interpolation": "ease",
+              "time": 45
+            },
+            {
+              "value": 0.07,
+              "interpolation": "hold",
+              "time": 135
+            },
+            {
+              "value": 0.07,
+              "interpolation": "ease",
+              "time": 195
+            },
+            {
+              "value": 0,
+              "interpolation": "hold",
+              "time": 225
+            }
+          ],
+          "defocus": [
+            {
+              "value": 0,
+              "interpolation": "hold",
+              "time": 0
+            },
+            {
+              "value": 0,
+              "interpolation": "ease",
+              "time": 132
+            },
+            {
+              "value": 10,
+              "interpolation": "hold",
+              "time": 150
+            },
+            {
+              "value": 10,
+              "interpolation": "ease",
+              "time": 186
+            },
+            {
+              "value": 0,
+              "interpolation": "hold",
+              "time": 210
+            }
+          ],
+          "focusDistance": [
+            {
+              "value": 2.45,
+              "interpolation": "hold",
+              "time": 0
+            },
+            {
+              "value": 2.45,
+              "interpolation": "ease",
+              "time": 150
+            },
+            {
+              "value": 1.65,
+              "interpolation": "hold",
+              "time": 180
+            }
+          ]
+        },
+        "bindings": {
+          "focus": [
+            {
+              "time": 0,
+              "value": null,
+              "interpolation": "hold"
+            },
+            {
+              "time": 128,
+              "value": {
+                "kind": "distance",
+                "distance": 2.45
+              },
+              "interpolation": "hold"
+            },
+            {
+              "time": 214,
+              "value": null,
+              "interpolation": "hold"
+            }
+          ]
+        }
+      },
+      "name": "序列 1",
+      "width": 1920,
+      "height": 1080,
+      "pixelAspectRatio": {
+        "numerator": 1,
+        "denominator": 1
+      },
+      "sampleRate": 48000,
+      "channels": 2,
+      "motionBlur": true
+    }
+  ],
+  "codeMaterials": [
+    {
+      "id": "1fc7a149-e2e5-4fb0-be31-e6083e0ab1c4",
+      "name": "三维空间受管样片",
+      "folder": "三维空间受管样片",
+      "defaultVersionId": "29c13d21-5cd2-4835-8106-1b0f7fe73f02",
+      "versions": [
+        {
+          "id": "29c13d21-5cd2-4835-8106-1b0f7fe73f02",
+          "apiVersion": 15,
+          "languageVersion": 4,
+          "entry": "main.ts",
+          "files": [
+            {
+              "path": "main.ts",
+              "location": "git:da247a161de18cea672710d227d2b86d70483bc3:henji%3A%2F%E4%BB%A3%E7%A0%81:legacy%2Fmaterials%2F%E4%B8%89%E7%BB%B4%E7%A9%BA%E9%97%B4%E5%8F%97%E7%AE%A1%E6%A0%B7%E7%89%87%2Fmain.ts",
+              "hash": "fa8634c6c84209a7313dd71f827f37218b95aa4980427a00676bb8f3255043ab"
+            }
+          ],
+          "libraries": {
+            "three": "0.186.1"
+          }
+        }
+      ]
+    }
+  ]
+}

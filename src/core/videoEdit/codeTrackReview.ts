@@ -48,7 +48,7 @@ export function reviewCodeTrackSeparation(source: ts.SourceFile, size?: { width:
   if (!exported || !ts.isObjectLiteralExpression(exported.expression)) return skip('入口不是直接导出的字面量')
   const root = exported.expression, width = literal(value(root, 'width')), height = literal(value(root, 'height'))
   if (root.properties.some(property => !propertyName(property)) || new Set(root.properties.map(propertyName)).size !== root.properties.length || literal(value(root, 'kind')) === 'filter') return skip('滤镜或不明入口属性')
-  if (typeof width !== 'number' || typeof height !== 'number' || width <= 0 || height <= 0 || member(root, 'draw') || member(root, 'createWebGPU') || member(root, 'createWebGL')) return skip('缺少固定画幅或使用整体绘制入口')
+  if (typeof width !== 'number' || typeof height !== 'number' || width <= 0 || height <= 0 || member(root, 'draw') || member(root, 'createWebGPU') || member(root, 'createWebGL') || member(root, 'createThree')) return skip('缺少固定画幅或使用整体绘制入口')
   if (size && (width !== size.width || height !== size.height)) return skip('代码画幅与所在序列尺寸或比例不一致')
   const layers = member(root, 'layers')
   if (!layers || !ts.isMethodDeclaration(layers) || !layers.body || layers.body.statements.length !== 1) return skip('图层由辅助函数、工厂或布局逻辑构建')

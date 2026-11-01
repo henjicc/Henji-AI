@@ -368,7 +368,7 @@ export function useTimelinePointer(options: Options) {
     if (gesture.kind === 'clip') gesture.variant = clipDragVariant(event)
     applyPointer(gesture); animateEdge()
   }
-  const up = (event: React.PointerEvent): void => {
+  const up = async (event: React.PointerEvent): Promise<void> => {
     const gesture = pointer.current
     if (!gesture || gesture.pointerId !== event.pointerId) return
     gesture.client = { x: event.clientX, y: event.clientY }
@@ -381,13 +381,13 @@ export function useTimelinePointer(options: Options) {
       if (previous.kind === 'clip') {
         if (previous.error) { finishVideoEditTimelineDrag(previous.handle); throw previous.error }
         const rearrange = previous.rearrange
-        if (rearrange && (rearrange.delta || rearrange.newTracks?.length || Object.entries(rearrange.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineRearrange(previous.handle, rearrange)
+        if (rearrange && (rearrange.delta || rearrange.newTracks?.length || Object.entries(rearrange.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) await finishVideoEditTimelineRearrange(previous.handle, rearrange)
         else if (rearrange) finishVideoEditTimelineDrag(previous.handle)
-        else if (previous.adjustment && (previous.adjustment.delta || previous.adjustment.newTracks?.length || Object.entries(previous.adjustment.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineDrag(previous.handle, previous.adjustment)
+        else if (previous.adjustment && (previous.adjustment.delta || previous.adjustment.newTracks?.length || Object.entries(previous.adjustment.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) await finishVideoEditTimelineDrag(previous.handle, previous.adjustment)
         else finishVideoEditTimelineDrag(previous.handle)
       } else if (previous.kind === 'transition' || previous.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, previous.moved)
       else if (previous.kind === 'trim') {
-        if (previous.moved && previous.trim) finishVideoEditTimelineTrim(previous.handle, previous.trim)
+        if (previous.moved && previous.trim) await finishVideoEditTimelineTrim(previous.handle, previous.trim)
         else finishVideoEditTimelineDrag(previous.handle)
       } else if (previous.kind === 'zoom') {
         const control = videoEditTimelineViewport(instance.document.id, sequence.id)

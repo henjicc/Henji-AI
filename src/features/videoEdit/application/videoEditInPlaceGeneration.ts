@@ -1,3 +1,4 @@
+import { propagateVideoEditSpatialFields } from './videoEditSpatialPropagation'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { createLogger } from '@/core/logging'
 import { completeInPlaceGeneration } from '@/core/services/inPlaceGeneration'
@@ -317,10 +318,11 @@ async function land(job: VideoEditInPlaceJob, taskId: string, signal: AbortSigna
   const prepared = await prepareVideoEditCreativeResult({ type: 'generation', recordId: taskId, outputIndex: 0 }, { signal, assertTarget, place: path => placeVideoEditFileInProject(requireVideoEditInstance(job.projectId), path) })
   assertTarget()
   let landed: ReturnType<typeof landVideoEditInPlaceResult> | undefined
-  await importVideoEditSources(job.projectId, [{ assetId: prepared.asset.id }], undefined, signal, (document, itemIds) => {
+  await importVideoEditSources(job.projectId, [{ assetId: prepared.asset.id }], undefined, signal, async (document, itemIds) => {
     const item = document.items.find(value => itemIds.includes(value.id) && document.media.some(media => media.id === value.mediaId && media.assetId === prepared.asset.id))
     if (!item) throw new Error('生成结果没有导入项目。')
     landed = landVideoEditInPlaceResult(document, job.plan, item.id, prepared.origin)
+    landed.document = await propagateVideoEditSpatialFields(document, landed.document, signal, { clipMap: landed.clipMap, sequenceTimeMap: landed.sequenceTimeMap })
     // 落位与已应用标记是同一份内容；保存响应丢失/崩溃重开仅保存，不再次放置。
     return { ...landed.document, inPlaceGenerations: (document.inPlaceGenerations ?? []).map(value => value.id === job.id ? { ...value, status: 'placing' as const, clipId: landed!.clipId } : value) }
   })

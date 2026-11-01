@@ -23,19 +23,23 @@ export function readVideoEditClipboard(projectId: string): VideoEditClipboard | 
   const value = clipboards.get(requireVideoEditInstance(projectId))
   return value && structuredClone(value)
 }
-export function executeVideoEditTimelineEdit(projectId: string, sequenceId: string, edit: VideoEditTimelineEdit): VideoEditSequence {
+export async function executeVideoEditTimelineEdit(projectId: string, sequenceId: string, edit: VideoEditTimelineEdit, signal: AbortSignal = new AbortController().signal): Promise<VideoEditSequence> {
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document
   const result = applyVideoEditTimelineEditResult(baseline, sequenceId, edit, readVideoEditCodeMetadata(owner, baseline)); const sequence = result.sequence
   logger.debug('提交时间线剪辑', { event: 'video_edit.timeline.edit.start', context: { projectId, sequenceId, operation: edit.kind } })
   try {
-    editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? sequence : value) }))
+    signal.throwIfAborted()
+    const update = (document: typeof baseline): typeof baseline => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? sequence : value) })
+    const committed = baseline.sequences.some(value => value.spatialCamera)
+      ? await editVideoProject(projectId, update, { signal, clipMap: result.clipMap, sequenceTimeMap: result.sequenceTimeMap })
+      : editVideoProject(projectId, update)
     if (owner.activeSequenceId === sequenceId && result.selectedClipIds) setVideoEditTimelineView(projectId, { selectedClipIds: result.selectedClipIds })
     else if (owner.activeSequenceId === sequenceId && edit.kind === 'separate_audio') {
       const original = new Set(baseline.sequences.find(value => value.id === sequenceId)!.clips.map(clip => clip.id))
       setVideoEditTimelineView(projectId, { selectedClipIds: expandVideoEditSelection(sequence, sequence.clips.filter(clip => !original.has(clip.id)).map(clip => clip.id), videoEditPickRelations(owner.linkedSelection !== false)) })
     }
     logger.debug('时间线剪辑已提交', { event: 'video_edit.timeline.edit.completed', context: { projectId, sequenceId, operation: edit.kind } })
-    return sequence
+    return committed.sequences.find(value => value.id === sequenceId)!
   } catch (error) { logger.debug('时间线剪辑未提交', { event: 'video_edit.timeline.edit.failed', error, context: { projectId, sequenceId, operation: edit.kind } }); throw error }
 }
 export async function separateVideoEditAudio(projectId: string, sequenceId: string, clipIds: string[], audioTrack: number, signal?: AbortSignal, linked: VideoEditRelations = true): Promise<void> {
@@ -82,14 +86,14 @@ export function previewVideoEditTimelineDrag(handle: VideoEditTimelineDrag, adju
   // Drags move exactly the selection; Alt/Linked Selection already decided whether partners belong to it.
   return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds, linked: false }, readVideoEditCodeMetadata(state.owner, state.baseline))
 }
-export function finishVideoEditTimelineDrag(handle: VideoEditTimelineDrag, adjustment?: VideoEditTimelineAdjustment): void {
+export async function finishVideoEditTimelineDrag(handle: VideoEditTimelineDrag, adjustment?: VideoEditTimelineAdjustment): Promise<void> {
   if (!adjustment) { drags.delete(handle); return }
   const state = requireDrag(handle)
   const sequence = previewVideoEditTimelineDrag(handle, adjustment)
   // Schema and source bounds are checked once on release, never for every pointer event.
   videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
   drags.delete(handle)
-  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds, linked: false })
+  await executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds, linked: false })
 }
 /** Premiere 修饰键拖动（Alt 复制、Ctrl+Alt 复制并插入、Ctrl 重排插入）：与普通拖动同一把手，预览与释放共用一份编辑。 */
 export type VideoEditTimelineRearrange = Omit<Extract<VideoEditTimelineEdit, { kind: 'rearrange' }>, 'kind' | 'clipIds'>
@@ -97,12 +101,12 @@ export function previewVideoEditTimelineRearrange(handle: VideoEditTimelineDrag,
   const state = requireDrag(handle)
   return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, { ...rearrange, kind: 'rearrange', clipIds: state.clipIds }, readVideoEditCodeMetadata(state.owner, state.baseline))
 }
-export function finishVideoEditTimelineRearrange(handle: VideoEditTimelineDrag, rearrange: VideoEditTimelineRearrange): void {
+export async function finishVideoEditTimelineRearrange(handle: VideoEditTimelineDrag, rearrange: VideoEditTimelineRearrange): Promise<void> {
   const state = requireDrag(handle)
   const sequence = previewVideoEditTimelineRearrange(handle, rearrange)
   videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
   drags.delete(handle)
-  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...rearrange, kind: 'rearrange', clipIds: state.clipIds })
+  await executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...rearrange, kind: 'rearrange', clipIds: state.clipIds })
 }
 /**
  * PR 修剪工具（波纹、滚动、外滑、内滑）与比率拉伸（R，4.13）的拖动：与片段拖动同一把手，预览与松手共用同一份编辑，
@@ -118,12 +122,12 @@ export function previewVideoEditTimelineTrim(handle: VideoEditTimelineDrag, trim
   // 选区已经按链接选择与 Alt 展开好，修剪恰好作用于它。
   return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, trimEdit(trim, state.clipIds), readVideoEditCodeMetadata(state.owner, state.baseline))
 }
-export function finishVideoEditTimelineTrim(handle: VideoEditTimelineDrag, trim: VideoEditTimelineTrimDrag): void {
+export async function finishVideoEditTimelineTrim(handle: VideoEditTimelineDrag, trim: VideoEditTimelineTrimDrag): Promise<void> {
   const state = requireDrag(handle)
   const sequence = previewVideoEditTimelineTrim(handle, trim)
   videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
   drags.delete(handle)
-  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, trimEdit(trim, state.clipIds))
+  await executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, trimEdit(trim, state.clipIds))
 }
 /**
  * PR 文字工具（T）：在视频轨道空白处单击，就地放一段文字片段（默认 3 秒，碰到后面的片段就缩短到空白为止），
@@ -193,7 +197,7 @@ export function addVideoEditTracks(projectId: string, sequenceId: string, reques
   return added
 }
 /** PR“删除轨道”：删除轨道连同上面的片段，一步编辑。 */
-export function deleteVideoEditTracks(projectId: string, sequenceId: string, trackIds: readonly string[]): void {
-  editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? removeVideoEditTracks(document, sequenceId, trackIds) : value) }))
+export async function deleteVideoEditTracks(projectId: string, sequenceId: string, trackIds: readonly string[], signal: AbortSignal = new AbortController().signal): Promise<void> {
+  await editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? removeVideoEditTracks(document, sequenceId, trackIds) : value) }), { signal, operation: 'delete' })
   logger.info('删除序列轨道', { event: 'video_edit.tracks.delete.completed', context: { projectId, sequenceId, count: trackIds.length } })
 }

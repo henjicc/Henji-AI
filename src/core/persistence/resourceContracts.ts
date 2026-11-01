@@ -29,6 +29,7 @@ const resourceVersions: Readonly<Record<PersistenceResourceId, number>> = {
 function createResourceContract(id: PersistenceResourceId): PersistenceFormat {
   const schema = resourceSchemas[id]
   return { id, name: id === 'screen-recording-tracks' ? '录制声音与摄像头轨道' : id.startsWith('image-layout') ? '随手摆原稿' : '创作意图原稿', version: resourceVersions[id],
+    ...(id === 'creative-intent-candidate' ? { minReaderVersion: resourceVersions[id] } : {}),
     schema, schemas: { content: schema }, migrations: formatMigrations(id), storage: 'file',
     versionSource: 'resource.version', readEntry: 'src/core/persistence/resourceContracts.ts::decodePersistenceResource',
     migrationEntry: 'src/core/persistence/formatMigrations.ts' }

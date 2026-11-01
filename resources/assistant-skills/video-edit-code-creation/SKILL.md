@@ -22,7 +22,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 - 代码图形与文字：Canvas2D 形状、路径、渐变、阴影辉光模糊、逐字逐词动效、遮罩揭示、数字滚动；需要点选和运动模糊的元素写成图层。
 - 粒子与场：种子哈希＋时间函数直接求位置，可寻帧（见 recipes-particles）；大规模用 WebGPU。
 - GPU：`createWebGPU` 与合成共用设备，可写多遍 WGSL、读下方画面与相邻帧做滤镜；160 多个 shaders 组件作为内置效果与转场使用。
-- 空间：多层图层视差和投影倍率做伪3D；WebGPU 可做光线步进、SDF 或真实网格。
+- 空间：先用风格件、内置效果，再用宿主展开/压平与景深层次能力；真实几何用受管 createThree。结构读回后再看同帧画面。
 - 素材与效果：就地生成图片或视频落到当前位置，调色、内置效果、转场与代码素材叠用。
 
 ## 做法
@@ -73,7 +73,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 字幕实体、花字、关键词、人名条 | [字幕配方](references/recipes-captions.md) |
 | 玻璃、图标、线条、圆角卡片 | [玻璃与线条](references/recipes-glass-lines.md) |
 | 粒子、光尘、爆散、星轨 | [粒子与场](references/recipes-particles.md) |
-| 三维镜头参考、代码视差 | [空间配方](references/recipes-3d.md) |
+| 空间构图、展开压平、three 内容 | [空间配方](references/recipes-3d.md) |
 | 模块契约、绘制、图层 | [作者接口](references/author-api.md) |
 | 预览卡顿、成本反馈 | [性能](references/performance.md) |
 | 音乐节拍、视频与网页画面 | [音频与画面输入](references/author-api-media.md) |

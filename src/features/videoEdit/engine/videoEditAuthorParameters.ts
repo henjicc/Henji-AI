@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_SPATIAL_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { CODE_AUTHOR_SIMULATION_MIN_API_VERSION, codeSimulationDeclaration, type AuthorSimulationDeclaration } from '@/core/videoEdit/codeSimulation'
 import { CodeMaterialError, type CodeParameterDeclaration, type CodeParameterTypeDefinition } from '@/core/videoEdit/codeMaterial/contract'
 import { parseCodeMaterialTypes, parseCodeMaterialV3Parameters } from '@/core/videoEdit/codeMaterial/parameterTypes'
@@ -11,6 +12,8 @@ export interface AuthorParameterMetadata {
 }
 
 export interface AuthorEffectMetadata extends AuthorParameterMetadata {
+  space?: boolean
+  worldScene?: boolean
   webText?: WebTextDeclaration
   name: string
   kind: 'generator' | 'filter'
@@ -26,6 +29,9 @@ export interface AuthorEffectMetadata extends AuthorParameterMetadata {
  * remain absent, rather than silently imposing a canvas or source duration.
  * `apiVersion` 是代码版本的作者接口版本（省略即 4）：v5 起才认片子数据参数，v4 代码里的同名自定义类型照旧有效。 */
 export function authorEffectMetadata(effect: AuthorModule, apiVersion?: number): AuthorEffectMetadata {
+  if (effect.space !== undefined && typeof effect.space !== 'boolean') throw new Error('space 必须为布尔值。')
+  if ((effect.createThree || effect.space) && (apiVersion ?? 4) < CODE_AUTHOR_SPATIAL_MIN_API_VERSION) throw new Error(`空间作者入口需要作者接口 v${CODE_AUTHOR_SPATIAL_MIN_API_VERSION}。`)
+  if (effect.createThree && (effect.kind === 'filter' || [effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU].some(Boolean))) throw new Error('createThree 只能作为独立生成入口。')
   if (effect.kind !== undefined && effect.kind !== 'generator' && effect.kind !== 'filter') throw new Error('效果 kind 必须为 generator 或 filter。')
   if (effect.mode !== undefined && effect.mode !== 'static' && effect.mode !== 'dynamic') throw new Error('效果 mode 必须为 static 或 dynamic。')
   const hints: Pick<AuthorEffectMetadata, 'width' | 'height' | 'durationSeconds'> = {}
@@ -56,7 +62,7 @@ export function authorEffectMetadata(effect: AuthorModule, apiVersion?: number):
       return [key, webTextSelectors(selectors, `webText.${key}`)]
     }))
   }
-  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...(simulation ? { simulation } : {}), ...hints, ...metadata, ...(webText ? { webText } : {}) }
+  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...(simulation ? { simulation } : {}), ...hints, ...metadata, ...(webText ? { webText } : {}), ...(effect.createThree || effect.space ? { space: true, ...(effect.createThree ? { worldScene: true } : {}) } : {}) }
 }
 
 /** Only control metadata is normalized. The author module has already executed

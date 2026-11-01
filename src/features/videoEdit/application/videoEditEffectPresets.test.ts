@@ -81,8 +81,9 @@ it('贝塞尔过冲预设应用到较短片段，修剪后参数仍可持久保�
   const preset = seedVideoEditEffectPreset(useVideoEditEffectLibraryStore.getState(), '模糊动画', [effect])
   await applyVideoEditStylePiece(id, sequenceId, [clip.id], findVideoEditGlobalStylePiece(id, sequenceId, preset.id)!.ref)
   const points = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects![0].builtin!.curves!.amount
-  expect(points.at(-1)?.time).toBe(clip.duration - 1)
-  expect(points.at(-1)?.value).toBeCloseTo(0.07125, 6)
+  // 修剪保留片段右边界控制点（与片段切分同一连续范围语义）。
+  expect(points.at(-1)?.time).toBe(clip.duration)
+  expect(points.at(-1)?.value).toBeCloseTo(0.0713693, 6)
   expect(points[0].easeValues).toEqual([0, 0.03])
 })
 it('加载收藏统一合并过渡与效果引用，去重并保留原存储，保存后读回目录引用', () => {

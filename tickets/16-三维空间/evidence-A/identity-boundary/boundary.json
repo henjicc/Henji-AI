@@ -1,0 +1,103 @@
+{
+  "commit": "c82f96eb16c229ed6587f9eccd342072f1feebd8",
+  "chrome": "156.0.8078.74",
+  "config": {
+    "name": "text",
+    "precise": false,
+    "half": false,
+    "effects": true,
+    "warp": false,
+    "nested": false,
+    "par": false,
+    "motion": false,
+    "text": true,
+    "boundary": true
+  },
+  "results": [
+    {
+      "epsilon": 0.01,
+      "frame": 36,
+      "name": "epsilon-0.01-f36.png",
+      "differentPixels": 479649,
+      "maxChannelDifference": 235
+    },
+    {
+      "epsilon": 0.01,
+      "frame": 37,
+      "name": "epsilon-0.01-f37.png",
+      "differentPixels": 0,
+      "maxChannelDifference": 0
+    },
+    {
+      "epsilon": 0.01,
+      "frame": 38,
+      "name": "epsilon-0.01-f38.png",
+      "differentPixels": 479649,
+      "maxChannelDifference": 235
+    },
+    {
+      "epsilon": 0.0001,
+      "frame": 36,
+      "name": "epsilon-0.0001-f36.png",
+      "differentPixels": 66464,
+      "maxChannelDifference": 20
+    },
+    {
+      "epsilon": 0.0001,
+      "frame": 37,
+      "name": "epsilon-0.0001-f37.png",
+      "differentPixels": 0,
+      "maxChannelDifference": 0
+    },
+    {
+      "epsilon": 0.0001,
+      "frame": 38,
+      "name": "epsilon-0.0001-f38.png",
+      "differentPixels": 66464,
+      "maxChannelDifference": 20
+    },
+    {
+      "epsilon": 0.000001,
+      "frame": 36,
+      "name": "epsilon-0.000001-f36.png",
+      "differentPixels": 4825,
+      "maxChannelDifference": 1
+    },
+    {
+      "epsilon": 0.000001,
+      "frame": 37,
+      "name": "epsilon-0.000001-f37.png",
+      "differentPixels": 0,
+      "maxChannelDifference": 0
+    },
+    {
+      "epsilon": 0.000001,
+      "frame": 38,
+      "name": "epsilon-0.000001-f38.png",
+      "differentPixels": 4825,
+      "maxChannelDifference": 1
+    },
+    {
+      "epsilon": 1e-8,
+      "frame": 36,
+      "name": "epsilon-1e-8-f36.png",
+      "differentPixels": 4825,
+      "maxChannelDifference": 1
+    },
+    {
+      "epsilon": 1e-8,
+      "frame": 37,
+      "name": "epsilon-1e-8-f37.png",
+      "differentPixels": 0,
+      "maxChannelDifference": 0
+    },
+    {
+      "epsilon": 1e-8,
+      "frame": 38,
+      "name": "epsilon-1e-8-f38.png",
+      "differentPixels": 4825,
+      "maxChannelDifference": 1
+    }
+  ],
+  "errors": []
+}

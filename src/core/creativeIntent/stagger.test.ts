@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { videoEditClipSchema, type VideoEditClip } from '../videoEdit/document'
 import { staggerMotion } from './stagger'
 import { videoEditClipValue } from '../videoEdit/keyframes'
+import { SPATIAL_KEYS } from '../videoEdit/spatialSchema'
 
 function clips() {
   const source = videoEditClipSchema.parse({ id: 'source', itemId: 'item', name: '标题', kind: 'text', text: '标题', start: 0, duration: 60, track: 1, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1 })
@@ -12,6 +13,15 @@ function clips() {
   return { source, a, b }
 }
 describe('错峰复制', () => {
+  it('错峰只复制二维动作，不移动或覆盖目标的空间曲线与轴心', () => {
+    const { source, a } = clips()
+    const points = [{ time: 0, value: .2, interpolation: 'bezier' as const, bezier: [.1, -.2, .7, 1.3] as [number, number, number, number], easeRange: [.2, .8] as [number, number], easeValues: [.1, .5] as [number, number] }, { time: 59, value: .5, interpolation: 'linear' as const }]
+    const target = { ...a, spatial: { enabled: true }, depth: .2, rotationX: 11, rotationY: -7, anchorDepth: .04, curves: Object.fromEntries(SPATIAL_KEYS.map(key => [key, structuredClone(points)])) }
+    const mixedSource = { ...source, spatial: { enabled: true }, depth: 9, curves: { ...source.curves, depth: [{ time: 5, value: 9, interpolation: 'hold' as const }] } }
+    const result = staggerMotion(mixedSource, [target], [5, 15], 4)[0]
+    expect(videoEditClipValue(result, 'x', 19)).toBeCloseTo(.1)
+    for (const key of SPATIAL_KEYS) { expect(result[key]).toEqual(target[key]); expect(result.curves?.[key]).toEqual(target.curves[key]) }
+  })
   it('保留各自基态、贝塞尔与相对缩放，按目标顺序错开且源输入不变', () => {
     const { source, a, b } = clips(), before = structuredClone(source)
     const result = staggerMotion(source, [a, b], [5, 15], 4)

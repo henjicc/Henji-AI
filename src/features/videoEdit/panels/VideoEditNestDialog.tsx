@@ -5,8 +5,8 @@ import { nestVideoEditSelection, type VideoEditNestTarget } from '../application
 export function VideoEditNestDialog({ target, onClose }: { target: VideoEditNestTarget; onClose: () => void }): React.ReactElement {
   const [name, setName] = useState('嵌套序列')
   const [error, setError] = useState('')
-  const submit = (): void => {
-    try { nestVideoEditSelection(target, name, false); onClose() }
+  const submit = async (): Promise<void> => {
+    try { await nestVideoEditSelection(target, name, false); onClose() }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
   }
   return <UiModal isOpen title="嵌套序列" onClose={onClose} footer={<><UiButton onClick={onClose}>取消</UiButton><UiButton variant="primary" disabled={!name.trim()} onClick={submit}>确定</UiButton></>}>

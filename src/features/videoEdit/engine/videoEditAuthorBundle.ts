@@ -1,5 +1,6 @@
 import type { BuildFailure, BuildOptions, BuildResult, Plugin } from 'esbuild-wasm'
 import ts from 'typescript'
+import { authorThreeDiagnostics } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 import { readStaticTextFonts, type StaticTextFonts } from '@/core/videoEdit/codeMaterial/textFonts'
 import { CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
@@ -48,7 +49,7 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
           if (node.properties.some(property => key(property) === 'adjust')) adjust.add(value)
         } else if (draw || id && spread) dynamicIds = true // 展开对象可能带来 draw 或 id，静态表就不完整。
         if (file === input.entry) {
-          const entry = node.properties.find(property => ['layers', 'draw', 'createWebGL', 'createWebGPU'].includes(key(property) ?? ''))
+          const entry = node.properties.find(property => ['layers', 'draw', 'createWebGL', 'createWebGPU', 'createThree'].includes(key(property) ?? ''))
           if (entry && !fallback) fallback = span(entry)
         }
       }
@@ -67,6 +68,8 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
 /** esbuild owns ESM linking, cycles, syntax and source maps. The host supplies an
  * immutable file snapshot, so imports cannot silently drift between frames. */
 export async function bundleAuthorFiles(input: CodeMaterialFiles, build: Build): Promise<AuthorBundle> {
+  const unsupported = authorThreeDiagnostics(ts, input.files, input.entry)[0]
+  if (unsupported) throw new CodeMaterialError('TYPE', unsupported.message, unsupported.span)
   const libraries: Record<string, string> = {}
   const textFonts = new Map<string, StaticTextFonts>()
   const plugin: Plugin = {

@@ -47,7 +47,7 @@ export function authorJsLocations(input: CodeMaterialFiles): CodeAuthorSourceLoc
           else layers[layerId] = span(value)
           if (properties.some(property => key(property) === 'adjust')) adjust.add(layerId)
         } else if (layer || id && spread) dynamicIds = true // 展开对象可能带来 draw 或 id，静态表就不完整。
-        if (file === input.entry && !fallback && properties.some(property => ['layers', 'draw', 'createWebGL', 'createWebGPU'].includes(key(property) ?? ''))) fallback = span(value)
+        if (file === input.entry && !fallback && properties.some(property => ['layers', 'draw', 'createWebGL', 'createWebGPU', 'createThree'].includes(key(property) ?? ''))) fallback = span(value)
       }
       for (const child of Object.values(value)) {
         if (node(child)) visit(child, value)

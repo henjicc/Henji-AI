@@ -83,7 +83,7 @@ export class VideoEditAuthorPrograms {
       if (previous) { this.instances.delete(key); await previous.runtime.dispose() }
       const effect = await this.module(program.bundle)
       if (this.closed) throw new Error('作者渲染会话已关闭。')
-      const runtime = new VideoEditAuthorRuntime(this.device, effect, program.bundle.locations, false, program.apiVersion, this.effectEnvironment, this.allocator)
+      const runtime = new VideoEditAuthorRuntime(this.device, effect, program.bundle.locations, false, program.apiVersion, this.effectEnvironment, this.allocator, program.bundle.modules?.libraries ?? program.bundle.libraries)
       this.instances.set(key, { program, fontRevision, runtime })
       return runtime
     })
@@ -112,6 +112,7 @@ export class VideoEditAuthorPrograms {
   }
 
   get canvasBytes(): number { return [...this.instances.values()].reduce((bytes, entry) => bytes + entry.runtime.canvasBytes, 0) }
+  get threeBytes(): number { return [...this.instances.values()].reduce((bytes, entry) => bytes + entry.runtime.threeBytes, 0) }
 
   protect(keys: ReadonlySet<string>): void { this.protectedKeys = new Set(keys) }
 

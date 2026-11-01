@@ -1,3 +1,4 @@
+import { SPATIAL_KEYS } from '@/core/videoEdit/spatialSchema'
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -238,7 +239,11 @@ it('相对参照选择不使用只清除参照，保留已选标注约束', asyn
   expect(videoMotionState(owner)!.constraints!.annotations).toEqual(annotations)
 })
 it('录制不自动播放；找位置没有示范；仅真实呈现姿态进入原稿；一步应用撤销重做且重开保留钉点和原稿', async () => {
-  const owner = await setup(); const id = owner.document.id; const history = owner.past.length
+  const owner = await setup(); const id = owner.document.id
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, spatial: { enabled: true }, depth: .2, rotationX: 7, rotationY: -11, anchorDepth: .04, curves: { ...clip.curves, ...Object.fromEntries(SPATIAL_KEYS.map(key => [key, [{ time: 0, value: .1, interpolation: 'bezier' as const, bezier: [.2, -.2, .8, 1.1], easeRange: [.1, .9], easeValues: [.05, .2] }, { time: clip.duration - 1, value: .2, interpolation: 'linear' as const }]])) } })) })) }))
+  const spatialBefore = structuredClone(getActiveVideoEditSequence(owner).clips[0])
+  const checkSpatial = (target: typeof spatialBefore): void => { for (const key of SPATIAL_KEYS) { expect(target[key]).toEqual(spatialBefore[key]); expect(target.curves?.[key]).toEqual(spatialBefore.curves?.[key]) } expect(target.spatial).toEqual(spatialBefore.spatial) }
+  const history = owner.past.length
   await startVideoMotion(id, 'place'); expect(owner.playing).toBe(false)
   present(owner, 0); present(owner, 20); expect(videoMotionState(owner)!.draft.takes).toHaveLength(0)
   const state = videoMotionState(owner)!
@@ -248,13 +253,13 @@ it('录制不自动播放；找位置没有示范；仅真实呈现姿态进入�
   expect(state.pending).toHaveLength(2); expect(state.draft.targets[0].editable).toEqual(['position'])
   await stopVideoMotion(id); await configureVideoMotion(id, { pinSampleId: state.recent.at(-1)!.sampleId }); await optimizeVideoMotion(id)
   expect(state.candidates.length).toBeGreaterThan(0); expect(owner.past).toHaveLength(history)
-  await applyVideoMotion(id); expect(owner.past).toHaveLength(history + 1); const applied = structuredClone(getActiveVideoEditSequence(owner).clips[0].curves)
+  await applyVideoMotion(id); expect(owner.past).toHaveLength(history + 1); checkSpatial(getActiveVideoEditSequence(owner).clips[0]); const applied = structuredClone(getActiveVideoEditSequence(owner).clips[0].curves)
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].curves?.x).toBeUndefined(); expect(owner.document.creativeIntents?.drafts[0].pins).toHaveLength(1)
-  undoVideoEdit(id, true); expect(getActiveVideoEditSequence(owner).clips[0].curves).toEqual(applied)
+  undoVideoEdit(id, true); expect(getActiveVideoEditSequence(owner).clips[0].curves).toEqual(applied); checkSpatial(getActiveVideoEditSequence(owner).clips[0])
   expect(videoMotionLiveResources(owner).length).toBeGreaterThan(0)
   const draftId = state.draft.id; const reopened = await reopenVideoEdit(id); await reopenVideoMotion(id, draftId)
   expect(reopened.selection).toBe(state.draft.targets[0].ref.id.slice(id.length + 1))
-  expect(videoMotionState(reopened)!.draft.pins).toHaveLength(1); expect(videoMotionState(reopened)!.original).toBeDefined(); expect(videoMotionState(reopened)!.recent).toHaveLength(2)
+  expect(videoMotionState(reopened)!.draft.pins).toHaveLength(1); expect(videoMotionState(reopened)!.original).toBeDefined(); expect(videoMotionState(reopened)!.recent).toHaveLength(2); checkSpatial(getActiveVideoEditSequence(reopened).clips[0])
 })
 it('后续手调拒绝旧候选写入，损坏的页读回失败且原作品不改变', async () => {
   const owner = await setup(); const id = owner.document.id; await startVideoMotion(id, 'place'); present(owner, 0)

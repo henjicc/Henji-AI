@@ -5,6 +5,8 @@ import { prepareAuthorTextParameters } from './videoEditAuthorTextResources'
 import { CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { assertCodeElementOverrideAllowed } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
+import { VideoEditAuthorThree } from './videoEditAuthorThree'
+import type { AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { resolveAuthorEffects, resolveAuthorElementEffects, authorEffectBleed, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
 import { gaussianSupport, type LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
@@ -100,6 +102,9 @@ export class VideoEditAuthorRuntime {
   private gl?: WebGL2RenderingContext
   private webgl?: AuthorWebGL
   private webgpu?: AuthorWebGPU
+  private three?: VideoEditAuthorThree
+  get worldBounds(): import('@/core/videoEdit/spatialTypes').SpatialBounds | null { return this.three?.worldBounds ?? null }
+  get threeBytes(): number { return this.three?.allocationBytes ?? 0 }
   private nativeOverrideTarget?: { texture: GpuTexture; width: number; height: number }
   private promotedTarget?: { texture: GpuTexture; width: number; height: number }
   private renderedTarget?: GpuTexture
@@ -110,7 +115,7 @@ export class VideoEditAuthorRuntime {
   private lastFrame?: { carriesLight?: boolean; effects?: Map<number, ResolvedAuthorEffect[]>; effectStates?: Map<number, import('@/core/videoEdit/authorEffects').AuthorElementEffectState[]>; layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides; directText?: Map<number, TextDrawObservation[]>; textUncovered?: Map<number, string[]>; textLayouts?: Map<string, number | undefined> }
   get carriesLight(): boolean { return this.lastFrame?.carriesLight === true }
   private readonly effectAllocator: VideoEditBuiltinScratchAllocator
-  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, private readonly apiVersion?: number, private readonly effectEnvironment: () => AuthorEffectEnvironment = () => ({}), private readonly allocator?: VideoEditBuiltinScratchAllocator) {
+  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, private readonly apiVersion?: number, private readonly effectEnvironment: () => AuthorEffectEnvironment = () => ({}), private readonly allocator?: VideoEditBuiltinScratchAllocator, private readonly libraries?: AuthorLibraryVersions) {
     this.parameterMetadata = authorEffectMetadata(effect, this.apiVersion)
     this.effectAllocator = allocator ?? {
       allocate: (width, height, format, mipLevelCount = 1) => this.texture(width, height, mipLevelCount > 1, format),
@@ -199,6 +204,16 @@ export class VideoEditAuthorRuntime {
     })
   }
   private renders: Promise<unknown> = Promise.resolve()
+  inspectThree(width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo): Promise<import('@/core/videoEdit/spatialTypes').SpatialBounds | null> {
+    const result = this.renders.then(async () => {
+      if (this.closed) throw new Error('代码效果会话已关闭。')
+      if (!this.effect.createThree || !info.space) throw new Error('场景边界检查需要 createThree 与空间上下文。')
+      this.three ??= await VideoEditAuthorThree.create(this.device, this.effect.createThree, width, height, this.libraries)
+      return this.three.update(authorParameterValues(this.parameterMetadata, params), assets, { ...info, space: info.space })
+    })
+    this.renders = result.catch(() => undefined)
+    return result
+  }
   /** One frame at a time per instance: a warm-up ahead of the playhead and a visible frame never share surfaces. */
   /**
    * `motionBlur`：序列的运动模糊总开关，管带位姿图层的快门取样。返回 Canvas 图层这一帧的沿用与上传统计（原生 GPU 入口没有）。
@@ -239,6 +254,19 @@ export class VideoEditAuthorRuntime {
         info = { ...info, simulation: input.sourceOrigin ? { at: time => simulation.at(relative(time)) } : simulation }
       }
       const whole: AuthorLayer = { id: AUTHOR_WHOLE_EFFECT_ID, name: this.effect.name, bounds: [0, 0, width, height], draw() {} }
+      if (!this.effect.space && !this.effect.createThree && info.space) { const { space: _space, ...plain } = info; info = plain }
+      if ((this.effect.space || this.effect.createThree) && !info.space) throw new Error('空间作者需要宿主提供当前样本的空间上下文。')
+      if (this.effect.createThree) {
+        this.three ??= await VideoEditAuthorThree.create(this.device, this.effect.createThree, width, height, this.libraries)
+        beforeCommit()
+        const target = resolveInitialTarget()
+        await this.three.render(target, outWidth, outHeight, params, assets, { ...info, space: info.space! }, beforeCommit)
+        beforeCommit()
+        this.renderedTarget = target
+        // 节点材质可输出零 alpha 光贡献，宿主不能仅凭包围几何证明它不存在。
+        this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params, carriesLight: true }
+        return undefined
+      }
       if ((this.effect.createWebGPU || this.effect.createWebGL) && overrides && Object.hasOwn(overrides, AUTHOR_WHOLE_EFFECT_ID)) {
         if (!this.nativeOverrideTarget || this.nativeOverrideTarget.width !== outWidth || this.nativeOverrideTarget.height !== outHeight) {
           const texture = this.texture(outWidth, outHeight, false, 'rgba8unorm', !!this.effect.createWebGPU)
@@ -686,6 +714,8 @@ export class VideoEditAuthorRuntime {
   async dispose(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    await this.renders
+    this.lastFrame = undefined
     const errors: unknown[] = []
     await this.renders
     await this.simulation?.dispose().catch(error => { errors.push(error) })
@@ -696,6 +726,7 @@ export class VideoEditAuthorRuntime {
     }
     await release(() => this.webgl?.dispose?.())
     await release(() => this.webgpu?.dispose?.())
+    await release(() => this.three?.dispose())
     if (this.ownsModule) await release(() => this.effect.dispose?.())
     await release(() => this.layerGpu?.dispose())
     await release(() => this.layerEffects?.dispose())

@@ -1,3 +1,5 @@
+import { SPATIAL_KEYS } from '@/core/videoEdit/spatialSchema'
+import type { VideoEditClip } from '@/core/videoEdit/document'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { act } from '@testing-library/react'
@@ -55,11 +57,13 @@ afterEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage()
 })
 const flush = async (): Promise<void> => { for (let i = 0; i < 12; i++) await Promise.resolve() }
+function expectSpatialUnchanged(actual: VideoEditClip, expected: VideoEditClip): void { for (const key of SPATIAL_KEYS) { expect(actual[key]).toEqual(expected[key]); expect(actual.curves?.[key]).toEqual(expected.curves?.[key]) } expect(actual.spatial).toEqual(expected.spatial) }
 
 async function project() {
   const owner = await createVideoEditProject(); const id = owner.document.id
   appendVideoEditMedia(id, { id: 'media1', name: '视频', path: resolve(tmpdir(), 'shot.mp4'), kind: 'video', durationSeconds: 10, width: 1920, height: 1080 })
   appendVideoEditClip(id, 'media1'); appendVideoEditClip(id)
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, spatial: { enabled: true }, depth: .12, rotationX: 9, rotationY: -6, anchorDepth: .03, curves: { ...clip.curves, ...Object.fromEntries(SPATIAL_KEYS.map(key => [key, [{ time: 0, value: .1, interpolation: 'bezier' as const, bezier: [.2, -.2, .8, 1.1], easeRange: [.1, .9], easeValues: [.05, .2] }, { time: clip.duration - 1, value: .2, interpolation: 'linear' as const }]])) } })) })) }))
   const sequence = getActiveVideoEditSequence(owner)
   return { owner, id, sequenceId: sequence.id, video: sequence.clips.find(clip => clip.kind === 'video')!, text: sequence.clips.find(clip => clip.kind === 'text')! }
 }
@@ -87,6 +91,7 @@ it('follow_video_edit_tracker：两点跟踪跟随旋转与缩放，绑定帧不
   const live = await app.call('follow_video_edit_tracker', input)
   expect(live, JSON.stringify(live)).toMatchObject({ ok: true, data: { verification: { verified: true } } })
   const following = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === text.id)!
+  expectSpatialUnchanged(following, text)
   expect(following.follow?.motion?.rotation).toBeCloseTo(0, 3); expect(following.follow?.motion?.size).toBeGreaterThan(0)
   const at0 = (await readVideoEditTrackingPlacement(id, sequenceId, text.id, 0))!
   expect(at0.x).toBeCloseTo(text.x, 4); expect(at0.rotation).toBeCloseTo(text.rotation, 3)
@@ -96,10 +101,14 @@ it('follow_video_edit_tracker：两点跟踪跟随旋转与缩放，绑定帧不
   const baked = await app.call('follow_video_edit_tracker', { ...input, apply: 'keyframes' })
   expect(baked, JSON.stringify(baked)).toMatchObject({ ok: true, data: { follow: null } })
   const clip = getActiveVideoEditSequence(owner).clips.find(entry => entry.id === text.id)!
+  expectSpatialUnchanged(clip, text)
   expect(clip.follow).toBeUndefined(); expect(clip.curves?.rotation?.length).toBeGreaterThan(1)
   expect(evaluateVideoEditClip(clip, 20).rotation).toBeCloseTo(at20.rotation, 2)
   act(() => { undoVideoEdit(id) })
   expect(getActiveVideoEditSequence(owner).clips.find(entry => entry.id === text.id)!.follow?.motion).toBeDefined()
+  expectSpatialUnchanged(getActiveVideoEditSequence(owner).clips.find(entry => entry.id === text.id)!, text)
+  expect(await app.change(input.clipRef, { 'video_edit.clip.follow': null })).toMatchObject({ ok: true })
+  expectSpatialUnchanged(getActiveVideoEditSequence(owner).clips.find(entry => entry.id === text.id)!, text)
   // 一点跟踪不能跟随旋转：拒绝并说明原因。
   editVideoEditTracker(id, sequenceId, video.id, { id: 'single', name: '一点', method: 'point', prompts: [{ timeUs: 0, points: [[0.4, 0.5, 1]] }] })
   const rejected = await app.call('follow_video_edit_tracker', { ...input, trackerRef: { kind: 'video_edit.tracker', id: `${id}:${videoEditTrackerEntityId(video.id, 'single')}` } })
@@ -119,6 +128,8 @@ it('stabilize_video_edit_clip：写入参数、等待相机运动分析并读回
   const off = await app.change({ kind: 'video_edit.clip', id: `${id}:${video.id}` }, { 'video_edit.clip.stabilization': null })
   expect(off, JSON.stringify(off)).toMatchObject({ ok: true })
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!.stabilization).toBeUndefined()
+  expectSpatialUnchanged(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!, video)
+  undoVideoEdit(id); expectSpatialUnchanged(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!, video)
 })
 
 it('track_video_edit_recording：光标与窗口跟踪直接由录制事件换算，不提交后台视觉跟踪', async () => {

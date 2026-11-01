@@ -1,3 +1,5 @@
+import type { SpatialPropagationRequest } from '@/core/videoEdit/spatialTypes'
+import { propagateVideoEditSpatialFields } from './videoEditSpatialPropagation'
 import { resolvePreviewAuthor, pinPreviewAuthor } from '@/core/videoEdit/codeMaterial/authorVersion'
 import { importedAuthorLibraries } from '@/core/videoEdit/codeMaterial/libraryImports'
 import { authorLibraryVersion } from '@/core/videoEdit/codeMaterial/authorLibraries'
@@ -88,7 +90,7 @@ function defaultVersion(document: VideoEditDocument, definitionId: string): Code
 }
 interface PreparedClip { clip: VideoEditClip; item?: VideoEditItem; layer: number }
 /** 放置一组片段：落点默认播放头、最上层可用视频轨；多层组合按层数占用连续视频轨，轨道不够就新建。整组一步撤销。 */
-function placeClips(owner: VideoEditInstance, document: VideoEditDocument, sequenceId: string, prepared: PreparedClip[], placement?: VideoEditDropPlacement): { document: VideoEditDocument; clipIds: string[] } {
+function placeClips(owner: VideoEditInstance, document: VideoEditDocument, sequenceId: string, prepared: PreparedClip[], placement?: VideoEditDropPlacement): { document: VideoEditDocument; clipIds: string[]; clipMap: SpatialPropagationRequest['clipMap']; sequenceTimeMap: SpatialPropagationRequest['sequenceTimeMap'] } {
   const sequence = document.sequences.find(value => value.id === sequenceId)
   if (!sequence) throw new Error('原模板落点序列不存在。')
   const frame = placement?.frame ?? (owner.activeSequenceId === sequenceId ? owner.frame : 0)
@@ -110,7 +112,7 @@ function placeClips(owner: VideoEditInstance, document: VideoEditDocument, seque
   const mode = placement?.mode ?? 'top'
   const resolved = resolveVideoEditDropMode(mode === 'top' ? { ...target, tracks: target.tracks.map(value => ({ ...value, locked: value.locked || !value.enabled })) } : target, clips, { frame, mode, targetTrackIds: owner.targetTrackIds })
   const result = applyVideoEditTimelineEditResult({ ...document, items }, sequenceId, { kind: 'place', mode: resolved.mode, frame: resolved.frame, clipboard: { projectId: owner.document.id, frameRate: sequence.frameRate, clips: resolved.clips, annotations: [] }, newTracks: [...added, ...resolved.newTracks], ...(resolved.mode === 'insert' ? { targetTracks: [...new Set(resolved.clips.map(clip => clip.track))] } : {}) })
-  return { document: { ...withTracks, sequences: withTracks.sequences.map(value => value.id === sequenceId ? result.sequence : value) }, clipIds: result.selectedClipIds ?? [] }
+  return { document: { ...withTracks, sequences: withTracks.sequences.map(value => value.id === sequenceId ? result.sequence : value) }, clipIds: result.selectedClipIds ?? [], clipMap: result.clipMap, sequenceTimeMap: result.sequenceTimeMap }
 }
 function nativeClips(document: VideoEditDocument, sequence: VideoEditSequence, template: VideoEditProjectTemplate, options: { durationSeconds?: number; texts?: readonly string[] }): PreparedClip[] {
   if (template.body.kind !== 'native') throw new Error('不是原生模板。')
@@ -146,6 +148,9 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
     const owner = requireVideoEditInstance(projectId)
     let template = scope === 'project' ? requireProjectTemplate(owner.document, templateId) : owner.document.templates?.find(value => value.origin?.id === templateId)
     let copied = false; let clipIds: string[] = []
+    const clipMap: SpatialPropagationRequest['clipMap'][number][] = []
+    const sequenceTimeMap: SpatialPropagationRequest['sequenceTimeMap'][number][] = []
+    const spatial = { signal: signal ?? new AbortController().signal, clipMap, sequenceTimeMap }
     if (!template) {
       await videoEditStyleLibrary.ready()
       const library = videoEditStyleLibrary.requireTemplate(templateId).template; copied = true
@@ -153,23 +158,23 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
       const meta = { id: newId(), name: library.name, description: library.description, version: 1, updatedAt: new Date().toISOString(), style: style ? { id: style.id, version: style.version } : null, origin: { id: library.id, version: library.version } }
       if (library.body.kind === 'native') {
         const registered = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: await videoEditTemplateContentHash(library.body), body: library.body })
-        editVideoProject(projectId, document => {
+        await editVideoProject(projectId, document => {
           const next = { ...withVideoEditTemplateStyle(document, style), templates: [...(document.templates ?? []), registered] }
           const sequence = next.sequences.find(value => value.id === sequenceId); if (!sequence) throw new Error('原模板落点序列不存在。')
-          const placed = placeClips(owner, next, sequenceId, nativeClips(next, sequence, registered, options), options.placement); clipIds = placed.clipIds; return placed.document
-        })
+          const placed = placeClips(owner, next, sequenceId, nativeClips(next, sequence, registered, options), options.placement); clipIds = placed.clipIds; clipMap.push(...placed.clipMap); sequenceTimeMap.push(...placed.sequenceTimeMap); return placed.document
+        }, spatial)
         template = registered
       } else {
         const body = library.body; let registered: VideoEditProjectTemplate | undefined
         const placement = { frame: owner.activeSequenceId === sequenceId ? owner.frame : 0, ...options.placement }
         external()
-        await createVideoEditPlacedCodeItems(projectId, [{ ...pinPreviewAuthor(body.code, body), files: body.code.files, entry: body.code.entry, name: library.name, trustContext: library.foreign ? [library.foreign] : [] }], (document, itemIds) => {
+        await createVideoEditPlacedCodeItems(projectId, [{ ...pinPreviewAuthor(body.code, body), files: body.code.files, entry: body.code.entry, name: library.name, trustContext: library.foreign ? [library.foreign] : [] }], async (document, itemIds) => {
           const item = document.items.find(value => value.id === itemIds[0])!
           registered = videoEditProjectTemplateSchema.parse({ ...meta, contentHash: '', body: { kind: 'code', definitionId: item.code!.definitionId } })
           const next = { ...withVideoEditTemplateStyle(document, style), templates: [...(document.templates ?? []), registered] }
           const sequence = next.sequences.find(value => value.id === sequenceId); if (!sequence) throw new Error('原模板落点序列不存在。')
           const placed = placeClips(owner, next, sequenceId, [codeClip(owner, next, sequence, item.code!.definitionId, { durationSeconds: options.durationSeconds ?? body.durationSeconds, parameters: options.parameters })], placement)
-          clipIds = placed.clipIds; return placed.document
+          clipIds = placed.clipIds; return propagateVideoEditSpatialFields(document, placed.document, spatial.signal, { clipMap: placed.clipMap, sequenceTimeMap: placed.sequenceTimeMap })
         }, signal)
         const hash = await codeVersionHash(defaultVersion(requireVideoEditInstance(projectId).document, (registered!.body as { definitionId: string }).definitionId))
         editVideoProject(projectId, document => ({ ...document, templates: document.templates!.map(value => value.id === registered!.id ? { ...value, contentHash: hash } : value) }))
@@ -183,8 +188,8 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
         const next = withVideoEditTemplateStyle(document, style)
         const sequence = next.sequences.find(value => value.id === sequenceId); if (!sequence) throw new Error('原模板落点序列不存在。')
         const prepared = chosen.body.kind === 'native' ? nativeClips(next, sequence, chosen, options) : [codeClip(owner, next, sequence, chosen.body.definitionId, options)]
-        const placed = placeClips(owner, next, sequenceId, prepared, options.placement); clipIds = placed.clipIds; return placed.document
-      }))
+        const placed = placeClips(owner, next, sequenceId, prepared, options.placement); clipIds = placed.clipIds; clipMap.push(...placed.clipMap); sequenceTimeMap.push(...placed.sequenceTimeMap); return placed.document
+      }, spatial))
     }
     if (owner.activeSequenceId === sequenceId) setVideoEditView(projectId, { selection: clipIds[0] ?? null })
     logger.info('template.apply.completed', '模板已加到时间线', { context: { projectId, sequenceId, copied, count: clipIds.length } })

@@ -43,6 +43,7 @@ function firstScreenReachability(edges, entry = 'src/main.tsx') {
     const from = queue[index]
     for (const edge of outgoing.get(from) ?? []) {
       const pkg = FIRST_SCREEN_HEAVY_PACKAGES.find((name) => edge.specifier === name || edge.specifier.startsWith(`${name}/`))
+        ?? (/^henji-author-three-[^/]+(?:\/|$)/.test(edge.specifier) ? edge.specifier.split('/')[0] : undefined)
       const target = pkg ?? edge.to
       const route = [...routes.get(from), target]
       if (pkg || FIRST_SCREEN_HEAVY_MODULE_PREFIXES.some((prefix) => edge.to.startsWith(prefix))) {

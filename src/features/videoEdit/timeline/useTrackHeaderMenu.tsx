@@ -27,7 +27,7 @@ export function useTrackHeaderMenu(instance: VideoEditInstance, sequence: VideoE
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const layouts = useSettingsStore(state => state.videoEditTrackHeaderButtons)
   const projectId = instance.document.id
-  const run = (operation: () => void): void => { try { operation() } catch (error) { onError(error) } }
+  const run = (operation: () => unknown): void => { try { void Promise.resolve(operation()).catch(onError) } catch (error) { onError(error) } }
   const show = (event: React.MouseEvent<HTMLElement>, trackId: string): void => {
     const track = sequence.tracks.find(value => value.id === trackId)
     if (!track) return

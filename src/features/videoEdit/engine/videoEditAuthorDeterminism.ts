@@ -113,9 +113,15 @@ function deterministicWebGPU(webgpu: AuthorWebGPU, fonts?: TextFontAccess): Auth
 
 /** 作者模块的每个入口都经 runAuthorDeterministic 执行；layers() 返回的图层与 GPU 入口返回的绘制对象同样包装。 */
 export function deterministicAuthorModule(effect: AuthorModule, apiVersion = CODE_AUTHOR_API_MIN_VERSION, fonts?: TextFontAccess): AuthorModule {
-  const { draw, layers, createWebGL, createWebGPU, frameKey, dispose } = effect
+  const { draw, layers, createWebGL, createWebGPU, createThree, frameKey, dispose } = effect
   return {
     ...effect,
+    ...(typeof createThree === 'function' ? { createThree: async (host: Parameters<typeof createThree>[0]) => {
+      const scene = await authorCall(fonts, 'createThree', 0, () => createThree.call(effect, host))
+      const update = scene.update
+      return { ...scene, update: (...args: Parameters<typeof update>) => authorCall(fonts, 'three', args[2].time, () => update.apply(scene, args)),
+        ...(scene.dispose ? { dispose: () => scene.dispose!() } : {}) }
+    } } : {}),
     ...(typeof frameKey === 'function' ? { frameKey: (...args: Parameters<typeof frameKey>) => authorCall(fonts, 'frameKey', args[3].time, () => frameKey.apply(effect, args)) } : {}),
     ...(typeof draw === 'function' ? { draw: (...args: Parameters<typeof draw>) => authorCall(fonts, 'draw', args[1], () => draw.apply(effect, args)) } : {}),
     ...(typeof layers === 'function' ? { layers: (...args: Parameters<typeof layers>) => {

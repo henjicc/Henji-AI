@@ -1,3 +1,4 @@
+import { propagateVideoEditSpatialFields, videoEditStoredSpatialCamera } from './videoEditSpatial'
 import { recordVideoEditCodeEdits } from '@/core/videoEdit/codeEdits'
 import { videoEditCodeEditActor } from './videoEditCodeElementReflection'
 import { validateVideoEditElementEffectWrite, videoEditClipEditsBase } from './videoEditCodeElementWrites'
@@ -31,7 +32,7 @@ import { fieldEffectContract, fieldWriterTable, type ApplicationEffectContract, 
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { videoEditAnnotationSchema, videoEditClipSchema, videoEditDocumentSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, createVideoEditSequence, changeVideoEditSequenceSettings, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
-import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CONTENT_CASCADES, VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE, VIDEO_EDIT_TIME_CASCADES, VIDEO_EDIT_COMPOSITE_CASCADES, VIDEO_EDIT_PROGRAM_SOURCE_CASCADE, videoEditCollectionValues, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
+import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_SPATIAL_CAMERA_CASCADE, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CONTENT_CASCADES, VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE, VIDEO_EDIT_TIME_CASCADES, VIDEO_EDIT_COMPOSITE_CASCADES, VIDEO_EDIT_PROGRAM_SOURCE_CASCADE, videoEditCollectionValues, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
 import { pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, revertVideoEditSourcePause, matchesVideoEditSourceCommand, videoEditSourceCommandIdentity, type VideoEditSourcePause } from './videoEditSource'
 import { videoEditCaptionSchema, videoEditMarkerSchema, reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
 import { assertVideoEditEntityExists, readVideoEditData, splitVideoEditRef } from './videoEditReflection'
@@ -76,8 +77,12 @@ function codeCascade(entityType: 'video_edit.item' | 'video_edit.code_version', 
   return { declarationId: `video_edit.code_${entityType.split('.').at(-1)}_${effect}`, effect, entityType, propertyIds: [], revisionScopes: ['video_edit'] }
 }
 function sourcePauseEffect(projectId: string): ApplicationEffectReceipt { return { effect: 'update', entityType: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.entityType, propertyIds: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.propertyIds, refs: [{ kind: 'video_edit.source', id: `${projectId}:source` }], origin: { kind: 'cascade', declarationId: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.declarationId } } }
-function cascades(before: VideoEditDocument, after: VideoEditDocument, direct: readonly ApplicationRef[] = []): ApplicationEffectReceipt[] {
+function cascades(before: VideoEditDocument, after: VideoEditDocument, direct: readonly ApplicationRef[] = [], directProperties: readonly string[] = []): ApplicationEffectReceipt[] {
   const effects: ApplicationEffectReceipt[] = []
+  if (!directProperties.includes('video_edit.sequence.spatial_camera')) for (const sequence of after.sequences) {
+    const previous = before.sequences.find(value => value.id === sequence.id)
+    if (previous && JSON.stringify(previous.spatialCamera) !== JSON.stringify(sequence.spatialCamera)) effects.push({ effect: 'update', entityType: 'video_edit.sequence', propertyIds: VIDEO_EDIT_SPATIAL_CAMERA_CASCADE.propertyIds, refs: [{ kind: 'video_edit.sequence', id: `${after.id}:${sequence.id}` }], origin: { kind: 'cascade', declarationId: VIDEO_EDIT_SPATIAL_CAMERA_CASCADE.declarationId } })
+  }
   for (const definition of after.codeMaterials ?? []) {
     const previous = before.codeMaterials?.find(value => value.id === definition.id)
     if (previous && previous.defaultVersionId !== definition.defaultVersionId) effects.push({ effect: CODE_DEFAULT_CASCADE.effect, entityType: CODE_DEFAULT_CASCADE.entityType, propertyIds: CODE_DEFAULT_CASCADE.propertyIds, refs: [{ kind: 'video_edit.code_material', id: `${after.id}:${definition.id}` }], origin: { kind: 'cascade', declarationId: CODE_DEFAULT_CASCADE.declarationId } })
@@ -155,10 +160,10 @@ function cascades(before: VideoEditDocument, after: VideoEditDocument, direct: r
   return effects
 }
 function content(document: VideoEditDocument): string { return JSON.stringify({ ...document, revision: 0 }) }
-function completed(before: VideoEditDocument, after: VideoEditDocument, refs: ApplicationRef[], viewBefore?: ProjectViewSnapshot, sourcePause?: VideoEditSourcePause): ApplicationCompletedStepResult {
+function completed(before: VideoEditDocument, after: VideoEditDocument, refs: ApplicationRef[], viewBefore?: ProjectViewSnapshot, sourcePause?: VideoEditSourcePause, directProperties: readonly string[] = []): ApplicationCompletedStepResult {
   const undoToken = crypto.randomUUID(); undo.set(undoToken, { owner: requireVideoEditInstance(before.id), before, after, refs, viewBefore, viewAfter: viewBefore ? projectViewSnapshot(before.id) : undefined, sourcePause })
   while (undo.size > 100) undo.delete(undo.keys().next().value!)
-  return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: refs, undoToken, cascadeEffects: [...cascades(before, after, refs), ...(sourcePause ? [sourcePauseEffect(before.id)] : [])], evidence: [{ kind: 'entity_state', fact: '剪辑已修改，可由同一剪辑历史撤销。', capturedAt: new Date().toISOString() }] }
+  return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: refs, undoToken, cascadeEffects: [...cascades(before, after, refs, directProperties), ...(sourcePause ? [sourcePauseEffect(before.id)] : [])], evidence: [{ kind: 'entity_state', fact: '剪辑已修改，可由同一剪辑历史撤销。', capturedAt: new Date().toISOString() }] }
 }
 /** 参数化体检与类型检查只作提示附在结果证据里，不阻止提交；界面不展示。typeReports 与 versions 一一对应。 */
 function withAuthoringHints(result: ApplicationCompletedStepResult, versions: Array<{ ref: ApplicationRef; versionId?: string }>, measurements: CodeFramePerformance[] = [], typeReports: CodeTypeCheckReport[] = []): ApplicationCompletedStepResult {
@@ -240,6 +245,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     }
     const data = await withVideoEditCodeMetadata(() => readVideoEditData(step.target))
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
+    const storedCamera = this.entityType === 'video_edit.sequence' && keys.includes('video_edit.sequence.spatial_camera') ? await videoEditStoredSpatialCamera(before, childId, data.spatialCamera, owner.frame) : undefined
     const anchorSequence = this.entityType === 'video_edit.clip' && keys.includes('video_edit.clip.content_anchor') ? before.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId)) : undefined
     const expectedAnchor = anchorSequence ? resolveVideoEditContentAnchor(projectId, anchorSequence.id, childId, data.contentAnchor ?? null) : undefined
     const annotation = this.entityType === 'video_edit.annotation' ? settleVideoEditAnnotationChange(before.sequences.flatMap(sequence => sequence.annotations).find(mark => mark.id === childId)!, data, { source: context?.exposure === 'ui' ? 'user' : 'agent' }, { transactionId: context?.requestId ?? crypto.randomUUID(), revision: before.revision + 1 }) : undefined
@@ -286,11 +292,11 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
             if (!sequence.multicam || value.cameras.length !== sequence.multicam.cameras.length || value.cameras.some((camera, index) => camera.id !== sequence.multicam!.cameras[index].id || camera.clipId !== sequence.multicam!.cameras[index].clipId)) throw new Error('只能修改现有机位名称、说话人和主音频，请保留机位引用和顺序。')
           }
           const next = changeVideoEditSequenceSettings(sequence, { width: Number(data.width), height: Number(data.height), frameRate: data.frameRate as typeof sequence.frameRate, pixelAspectRatio: data.pixelAspectRatio as typeof sequence.pixelAspectRatio, sampleRate: data.sampleRate as typeof sequence.sampleRate, channels: data.channels as typeof sequence.channels })
-          return { ...next, ...(keys.includes('video_edit.sequence.caption_track_enabled') ? { captionTrackEnabled: videoEditSequenceSchema.shape.captionTrackEnabled.unwrap().parse(data.captionTrackEnabled) } : {}), ...(keys.includes('video_edit.sequence.caption_track_locked') ? { captionTrackLocked: videoEditSequenceSchema.shape.captionTrackLocked.unwrap().parse(data.captionTrackLocked) } : {}), ...(keys.includes('video_edit.sequence.multicam') ? { multicam: videoEditSequenceSchema.shape.multicam.unwrap().parse(data.multicam) } : {}), ...(keys.includes('video_edit.sequence.motion_blur') ? { motionBlur: videoEditSequenceSchema.shape.motionBlur.unwrap().parse(data.motionBlur) || undefined } : {}), ...(keys.includes('video_edit.sequence.frame_blend') ? { frameBlend: videoEditSequenceSchema.shape.frameBlend.unwrap().parse(data.frameBlend) || undefined } : {}), ...(keys.includes('video_edit.sequence.style_id') ? { styleId: data.styleId ? String(data.styleId) : undefined } : {}), name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
+          return { ...next, ...(keys.includes('video_edit.sequence.spatial_camera') ? { spatialCamera: storedCamera } : {}), ...(keys.includes('video_edit.sequence.caption_track_enabled') ? { captionTrackEnabled: videoEditSequenceSchema.shape.captionTrackEnabled.unwrap().parse(data.captionTrackEnabled) } : {}), ...(keys.includes('video_edit.sequence.caption_track_locked') ? { captionTrackLocked: videoEditSequenceSchema.shape.captionTrackLocked.unwrap().parse(data.captionTrackLocked) } : {}), ...(keys.includes('video_edit.sequence.multicam') ? { multicam: videoEditSequenceSchema.shape.multicam.unwrap().parse(data.multicam) } : {}), ...(keys.includes('video_edit.sequence.motion_blur') ? { motionBlur: videoEditSequenceSchema.shape.motionBlur.unwrap().parse(data.motionBlur) || undefined } : {}), ...(keys.includes('video_edit.sequence.frame_blend') ? { frameBlend: videoEditSequenceSchema.shape.frameBlend.unwrap().parse(data.frameBlend) || undefined } : {}), ...(keys.includes('video_edit.sequence.style_id') ? { styleId: data.styleId ? String(data.styleId) : undefined } : {}), name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
         }
         // 速度属性（4.13）与其余属性一起写：速度改动交给速度编辑换算时长与内容。
         if (this.entityType === 'video_edit.clip' && sequence.clips.some(clip => clip.id === childId)) {
-          const next = updateVideoEditClipInSequence(document, sequence, childId, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1))))
+          const next = updateVideoEditClipInSequence(document, sequence, childId, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1))).map(key => key === 'spatialEnabled' ? 'spatial' : key))
           if (keys.some(key => ['video_edit.clip.element_overrides', 'video_edit.clip.code_parameters', 'video_edit.clip.code_curves'].includes(key))) {
             const original = sequence.clips.find(clip => clip.id === childId)!
             const changed = next.clips.find(clip => clip.id === childId)!
@@ -310,7 +316,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       }) }
     }
     // 换版本本身也要读声明，先等候选构造完成，再进入同步校验与试渲染。
-    const fontCandidate = await withVideoEditCodeMetadata(() => update(before))
+    const fontCandidate = await propagateVideoEditSpatialFields(before, await withVideoEditCodeMetadata(() => update(before)), context?.signal ?? new AbortController().signal)
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('读取代码参数期间剪辑已修改，请重读当前状态。')
     const compositeWrite = ['video_edit.effect', 'video_edit.transition'].includes(this.entityType) || keys.some(key => ['video_edit.clip.effect_ids', 'video_edit.clip.adjustment_from_track'].includes(key))
     let candidateRendered = false
@@ -366,7 +372,11 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('核对期间剪辑已有后续修改，请重读当前状态。')
     }
     const batch = videoEditTransactionBatch(context, projectId)
-    const after = withVideoEditCommitBatch(batch, () => editVideoProject(projectId, update))
+    const after = withVideoEditCommitBatch(batch, () => editVideoProject(projectId, current => {
+      context?.signal?.throwIfAborted()
+      if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('剪辑在属性规划期间已有后续修改，请重新读取。')
+      return withVideoEditCurrentMetadata(fontCandidate, current)
+    }))
     if (anchorSequence) {
       const sequence = after.sequences.find(sequence => sequence.id === anchorSequence.id)!
       const target = sequence.clips.find(clip => clip.id === childId)
@@ -383,7 +393,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.render_preference')) setVideoEditRenderPreference(projectId, data.renderPreference as unknown as VideoEditRenderPreference)
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.playback_resolution')) setVideoEditPlaybackResolution(projectId, data.playbackResolution as unknown as VideoEditPlaybackResolutionSetting)
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback')) setVideoEditView(projectId, data.programPlayback as ProjectViewSnapshot['program'])
-    return completed(before, after, [step.target], viewBefore, sourcePause)
+    return completed(before, after, [step.target], viewBefore, sourcePause, keys)
   }
   async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true, context)).evidence : [] }
   async undo(token: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> { return restore(token, false, context) }
@@ -392,7 +402,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
   readonly effectContract: ApplicationEffectContract
   constructor(readonly entityType: 'video_edit.sequence' | 'video_edit.bin' | 'video_edit.item' | 'video_edit.clip' | 'video_edit.annotation' | 'video_edit.code_material' | 'video_edit.code_version' | 'video_edit.marker' | 'video_edit.caption' | 'video_edit.track' | VideoEditCompositeEntityType) {
     this.effectContract = { direct: [], cascades: entityType === 'video_edit.sequence' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.sequence_tracks_${effect}`, effect, entityType: 'video_edit.track', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.code_material' ? (['create', 'delete'] as const).flatMap(effect => (['video_edit.item', 'video_edit.code_version'] as const).map(type => codeCascade(type, effect))) : entityType === 'video_edit.item' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.item_media_${effect}`, effect, entityType: 'video_edit.media', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.clip' ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : [] }
-    this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, ...VIDEO_EDIT_COMPOSITE_CASCADES, ...(entityType === 'video_edit.code_version' ? [CODE_DEFAULT_CASCADE] : []), ...(entityType === 'video_edit.track' ? [{ declarationId: 'video_edit.track_clips_delete', effect: 'delete' as const, entityType: 'video_edit.clip', propertyIds: [], revisionScopes: ['video_edit'] }] : [])] }
+    this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, VIDEO_EDIT_SPATIAL_CAMERA_CASCADE, ...VIDEO_EDIT_COMPOSITE_CASCADES, ...(entityType === 'video_edit.code_version' ? [CODE_DEFAULT_CASCADE] : []), ...(entityType === 'video_edit.track' ? [{ declarationId: 'video_edit.track_clips_delete', effect: 'delete' as const, entityType: 'video_edit.clip', propertyIds: [], revisionScopes: ['video_edit'] }] : [])] }
     if (entityType === 'video_edit.effect') this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, ...(['create', 'delete'] as const).flatMap(effect => [
       { declarationId: `video_edit.style_piece_code_${effect}`, effect, entityType: 'video_edit.code_material', propertyIds: [], revisionScopes: ['video_edit'] },
       codeCascade('video_edit.code_version', effect),
@@ -564,7 +574,16 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
         step = { ...step, operation: { ...step.operation, items } }
       }
       if (!isVideoEditContentCurrent(instance, contentVersion)) throw new Error('准备风格件期间剪辑已改变，请重试。')
-      const next = await withVideoEditCodeMetadata(() => { refs.length = 0; return videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(prepared))) })
+      // 元数据未就绪会重跑构造，每次都从同一份准备结果复制，避免重复叠加改动。
+      let candidate = await withVideoEditCodeMetadata(() => { refs.length = 0; return reconcileVideoEditTimedContent(before, update(structuredClone(prepared))) })
+      if (this.entityType === 'video_edit.sequence' && step.operation.kind === 'create') for (const ref of refs) {
+        const sequenceId = splitVideoEditRef(ref).childId, sequence = candidate.sequences.find(value => value.id === sequenceId)!
+        const raw = (sequence as unknown as Record<string, unknown>).spatialCamera
+        if (raw === undefined) continue
+        const spatialCamera = await videoEditStoredSpatialCamera(candidate, sequenceId, raw)
+        candidate = { ...candidate, sequences: candidate.sequences.map(value => value.id === sequenceId ? { ...value, spatialCamera } : value) }
+      }
+      const next = videoEditDocumentSchema.parse(await propagateVideoEditSpatialFields(before, candidate, context?.signal ?? new AbortController().signal))
       await ensureVideoEditChangedCodeMetadata(instance, before, next, context?.signal)
       assertVideoEditLockedTracks(before, next)
       if (['video_edit.effect', 'video_edit.transition'].includes(this.entityType)) {
@@ -589,7 +608,11 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           if (!isVideoEditContentCurrent(instance, contentVersion)) throw new Error('核对期间剪辑已有后续修改，请重读当前状态。')
         }
       }
-      const after = withVideoEditCommitBatch(videoEditTransactionBatch(context, before.id), () => editVideoProject(before.id, current => withVideoEditCurrentMetadata(next, current)))
+      const after = withVideoEditCommitBatch(videoEditTransactionBatch(context, before.id), () => editVideoProject(before.id, current => {
+        context?.signal?.throwIfAborted()
+        if (!isVideoEditContentCurrent(instance, contentVersion)) throw new Error('剪辑在集合规划期间已有后续修改，请重新读取。')
+        return withVideoEditCurrentMetadata(next, current)
+      }))
       const result = completed(before, after, refs)
       // 回执校验在执行器返回之后，已发布文件必须随事务补偿记录一起交回。
       if (createdFiles.length && result.undoToken) undo.get(result.undoToken)!.createdFiles = [...createdFiles]

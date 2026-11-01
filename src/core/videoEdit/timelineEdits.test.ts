@@ -25,6 +25,25 @@ function apply(document: ReturnType<typeof createVideoEditDocument>, edit: Param
   const sequence = applyVideoEditTimelineEdit(document, document.sequences[0].id, edit)
   return videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })
 }
+it('跨帧率粘贴同时缩放二维与空间曲线，保留目标相机', () => {
+  const { document, sequence } = fixture()
+  sequence.frameRate = { numerator: 30, denominator: 1 }
+  sequence.clips[0] = { ...sequence.clips[0], spatial: { enabled: true }, depth: .3,
+    curves: { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 30, value: .4, interpolation: 'linear' }],
+      rotationY: [{ time: 0, value: 20, interpolation: 'bezier', bezier: [.2, .4, .6, .9] }, { time: 30, value: 450, interpolation: 'linear' }] } }
+  const clipboard = copyVideoEditClips(document, sequence.id, ['a'], false)
+  sequence.frameRate = { numerator: 60, denominator: 1 }
+  sequence.spatialCamera = { perspective: 1, focus: { kind: 'distance', distance: 5 } }
+  const result = applyVideoEditTimelineEditResult(document, sequence.id, { kind: 'place', clipboard, frame: 500, mode: 'paste' })
+  const pasted = result.sequence.clips.find(clip => clip.id === result.selectedClipIds![0])!
+  expect(pasted.duration).toBe(120)
+  expect(pasted.curves?.x?.[1]).toMatchObject({ time: 60, value: .4 })
+  expect(pasted.curves?.rotationY?.[1]).toMatchObject({ time: 60, value: 450 })
+  expect(pasted.curves?.rotationY?.[0].bezier).toEqual([.2, .4, .6, .9])
+  expect(pasted.depth).toBe(.3)
+  expect(result.sequence.spatialCamera).toEqual(sequence.spatialCamera)
+  expect(clipboard.clips[0].curves?.rotationY?.[1].time).toBe(30)
+})
 it('添加帧定格切出独立的一帧，保留前后源时间及原视频引用', () => {
   const { document, sequence } = fixture()
   sequence.clips[1].start = 300
@@ -66,8 +85,8 @@ it('覆盖切段裁剪片段与内置效果曲线，并保留外侧淡入淡出'
   expect(left).toMatchObject({ duration: 30, fadeInFrames: 5 }); expect(left.fadeOutFrames).toBeUndefined()
   expect(right).toMatchObject({ duration: 20, fadeOutFrames: 5 }); expect(right.fadeInFrames).toBeUndefined()
   for (const clip of [left, right]) {
-    expect(clip.curves!.opacity!.every(point => point.time < clip.duration)).toBe(true)
-    expect(clip.effects![0].builtin!.curves!.exposure.every(point => point.time < clip.duration)).toBe(true)
+    expect(clip.curves!.opacity!.every(point => point.time <= clip.duration)).toBe(true)
+    expect(clip.effects![0].builtin!.curves!.exposure.every(point => point.time <= clip.duration)).toBe(true)
   }
   expect(right.curves!.opacity![0]).toMatchObject({ time: 0, value: expect.closeTo(40 / 59, 8) })
   expect(right.effects![0].builtin!.curves!.exposure[0].value).toBeCloseTo(40 / 59)

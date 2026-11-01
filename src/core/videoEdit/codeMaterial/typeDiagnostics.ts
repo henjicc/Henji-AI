@@ -1,5 +1,57 @@
 import type { CodeEffectSuggestion } from '../codeEffectReview'
 import type { CodeSourceSpan } from './contract'
+import type ts from 'typescript'
+
+/** 只解析静态默认导出；动态工厂留给运行时检查，不能把同名辅助方法当成作者入口。 */
+export function authorDefaultExpression(api: typeof ts, source: ts.SourceFile): ts.Expression | undefined {
+  const initializer = (name: string): ts.Expression | undefined => {
+    for (const statement of source.statements) if (api.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (api.isIdentifier(declaration.name) && declaration.name.text === name && declaration.initializer) return declaration.initializer
+    return undefined
+  }
+  for (const statement of source.statements) {
+    if (api.isExportAssignment(statement) && !statement.isExportEquals) return api.isIdentifier(statement.expression) ? initializer(statement.expression.text) ?? statement.expression : statement.expression
+    if (api.isExportDeclaration(statement) && !statement.moduleSpecifier && statement.exportClause && api.isNamedExports(statement.exportClause)) {
+      const named = statement.exportClause.elements.find(element => element.name.text === 'default')
+      if (named) return initializer((named.propertyName ?? named.name).text)
+    }
+  }
+  return undefined
+}
+
+/** 由已有 TS 解析器调用；不把编译器装进 core 的常驻依赖。 */
+export function authorThreeDiagnostics(api: typeof ts, files: Readonly<Record<string, string>>, entry: string): CodeTypeDiagnostic[] {
+  const parsed = Object.entries(files).filter(([file]) => /\.[cm]?[jt]sx?$/.test(file)).map(([file, text]) => api.createSourceFile(file, text, api.ScriptTarget.Latest, true))
+  const visit = (node: ts.Node, action: (node: ts.Node) => void): void => { action(node); api.forEachChild(node, child => visit(child, action)) }
+  const main = parsed.find(source => source.fileName === entry)
+  const target = main && authorDefaultExpression(api, main)
+  const managed = target && api.isObjectLiteralExpression(target) && target.properties.some(node => node.name &&
+    (api.isIdentifier(node.name) || api.isStringLiteral(node.name)) && node.name.text === 'createThree')
+  if (!managed) return []
+  const result: CodeTypeDiagnostic[] = []
+  for (const source of parsed) {
+    const constructors = new Set<string>(), namespaces = new Set<string>()
+    for (const statement of source.statements) {
+      if (!api.isImportDeclaration(statement) || !api.isStringLiteral(statement.moduleSpecifier) ||
+        !/^three(?:\/|$)/.test(statement.moduleSpecifier.text)) continue
+      const bindings = statement.importClause?.namedBindings
+      if (bindings && api.isNamespaceImport(bindings)) namespaces.add(bindings.name.text)
+      if (bindings && api.isNamedImports(bindings)) for (const item of bindings.elements) {
+        if (['ShaderMaterial', 'RawShaderMaterial'].includes((item.propertyName ?? item.name).text)) constructors.add(item.name.text)
+      }
+    }
+    visit(source, node => {
+      if (!api.isNewExpression(node)) return
+      const expression = node.expression
+      const unsupported = api.isIdentifier(expression) ? constructors.has(expression.text)
+        : api.isPropertyAccessExpression(expression) && api.isIdentifier(expression.expression) && namespaces.has(expression.expression.text) && ['ShaderMaterial', 'RawShaderMaterial'].includes(expression.name.text)
+      if (!unsupported) return
+      const start = node.getStart(source), end = node.getEnd(), a = source.getLineAndCharacterOfPosition(start), b = source.getLineAndCharacterOfPosition(end)
+      result.push({ code: 95002, message: 'createThree 使用 WebGPURenderer，不支持 GLSL ShaderMaterial/RawShaderMaterial；请使用节点材质或标准材质。',
+        span: { file: source.fileName, start, end, startLine: a.line + 1, startColumn: a.character + 1, endLine: b.line + 1, endColumn: b.character + 1 } })
+    })
+  }
+  return result
+}
 
 /** 作者源码类型检查的一条错误；位置是作者原文的行列，不是检查器内部改写后的位置。 */
 export interface CodeTypeDiagnostic { code: number; message: string; span: CodeSourceSpan }

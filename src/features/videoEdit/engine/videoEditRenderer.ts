@@ -63,6 +63,8 @@ import { isVideoEditRenderDivisor, videoEditRenderSize, videoEditOutputRenderDiv
 import { applyVideoEditParameterUpdate, type VideoEditParameterUpdate } from './videoEditParameterUpdate'
 import { VideoEditJumpPreview, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR, type VideoEditJumpPreviewLog } from './videoEditJumpPreview'
 import { VIDEO_EDIT_INPUT_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
+import type { SpatialExposurePlan, SpatialFrameRequest } from './videoEditSpatialContracts'
+import type { SpatialAuthorInputs } from './videoEditCodeSources'
 
 interface PlaybackStream {
   demux: string
@@ -2034,7 +2036,7 @@ export class VideoEditRenderer {
       logger.warn(message, { event: 'video_edit.effect.render_failed', error, context: { sequenceId: document.id, effectId: effect.id, frame } })
     }
     const decodeStart = performance.now()
-    if (!this.codeSources && (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length))) {
+    if (!this.codeSources && (document.spatialCamera || composite || active.some(clip => clip.spatial?.enabled || ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length))) {
       const { VideoEditCodeSources } = await import('./videoEditCodeSources')
       if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
       this.codeSources ??= new VideoEditCodeSources(document, async () => { const code = await this.compositor!.code(); code.setAuthorEffects({ ...this.document.authorEffects, luts: this.document.colorLuts }); return code }, undefined, () => { this.lookaheadOwner.lookaheadMetrics.codeHits++ }, this.reuseCodeOutputs)
@@ -2043,6 +2045,18 @@ export class VideoEditRenderer {
     readSignal?.throwIfAborted()
     const declarationsReady = this.codeSources?.prepareInputDeclarations(document, active)
     if (declarationsReady) await declarationsReady
+    const spatialSources = await this.codeSources?.describeSpatialSources({ ...document, clips: active }, readSignal ?? new AbortController().signal) ?? []
+    let spatial: { request: SpatialFrameRequest; plan: SpatialExposurePlan; compositionAt?: import('./videoEditSpatialExposurePlan').SpatialCompositionAt } | undefined
+    if (!cachedWindow && (document.spatialCamera || active.some(clip => clip.spatial?.enabled) || spatialSources.some(source => source.spaceDependency || source.kind === 'worldScene'))) {
+      const { prepareVideoEditSpatialGeometry } = await import('./videoEditSpatialPreparation')
+      const request: SpatialFrameRequest = { composition: document, sequenceFrame: frame,
+        output: { width: this.canvas.width, height: this.canvas.height, displayWidth: document.width, displayHeight: document.height },
+        quality, sessionKind: observeElements ? 'observe' : this.previewWidth ? 'preview' : 'export',
+        sources: spatialSources.filter(source => source.kind === 'worldScene'), requestId: `${document.id}:${epoch}:${requestOrder ?? 'nested'}:${frame}`,
+        signal: readSignal ?? new AbortController().signal, assertCurrent() { if (!canPresent()) throw new DOMException('旧空间画面已取消。', 'AbortError') } }
+      spatial = { request, ...await prepareVideoEditSpatialGeometry(request, sourceDocument) }
+    }
+    const deferredGenerators = new Set(spatial?.request.sources.map(source => source.clipId))
     const declarations = (instance: CodeMaterialInstance): readonly CodeParameterDeclaration[] | undefined => this.codeSources?.declarations(instance)
     const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code && { ...clip.code, parameters: videoEditCodeInputParameters(document, clip.code, declarations) }), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
     const imageMedia = [...imageIds].map(id => {
@@ -2070,7 +2084,7 @@ export class VideoEditRenderer {
     const imagesSettled = Promise.allSettled([imagesReady])
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
-    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { observeElements, exactInput: input => !approximateCodeInputs.has(input), quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
+    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { observeElements, spatialFrame: spatial?.plan.centerFrame, deferredGenerators, exactInput: input => !approximateCodeInputs.has(input), quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
       if (!codeMaterialUsesAudio(program)) return {}
       const source = codeAudioComposition(sourceDocument, sourceDocument.clips.find(value => value.id === clip.id) ?? clip, codeAudioReferenceMediaId(parameters))
       const audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)
@@ -2090,6 +2104,7 @@ export class VideoEditRenderer {
     let singleFrameReads = 0
     const showingIds = new Set(active.map(clip => clip.id))
     const picturesPending = active.map(async clip => {
+      if (deferredGenerators.has(clip.id)) return null
       if (clip.kind === 'sequence') {
         const child = videoEditNestedComposition(document, clip)!
         if (path.includes(child.id) || path.length >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH) throw new Error('嵌套序列存在循环或超过可渲染层数。')
@@ -2334,8 +2349,51 @@ export class VideoEditRenderer {
       const drawn = this.drawDocument(document)
       const effects = preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map<string, PreparedVideoEditEffect[]>()
       await this.disposeCodeInputs(new Set([...effects].flatMap(([id, chain]) => chain.flatMap(plan => !plan.builtin && plan.program.frames.length ? [JSON.stringify([id, plan.effect.id])] : []))), this.filterInputs)
-      const draw = async (): Promise<{ presented: boolean; completion: Promise<void> }> => composite ? renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), effects, gpu, frame, canPresent, deadline, document, nestedTarget, onEffectError, quality,
-        (clip, plan, input) => this.readFilterFrames(document, clip, plan, input, frame, quality, canPresent, nestedContext, path, sourceDocument, markApproximate, markProvenance)) : gpu.draw(drawn, active, pictures, canPresent, deadline, await nestedTarget?.(pictures))
+      const draw = async (): Promise<{ presented: boolean; completion: Promise<void> }> => {
+        const pictureMap = new Map(active.map((clip, index) => [clip.id, pictures[index]]))
+        const readFilterFrames: import('./videoEditCompositeScene').VideoEditFilterFrameReader = (clip, plan, input) => this.readFilterFrames(document, clip, plan, input, frame, quality, canPresent, nestedContext, path, sourceDocument, markApproximate, markProvenance)
+        if (spatial && !spatial.plan.centerFrame.flatIdentity && spatial.plan.groups.length) {
+          this.codeSources!.setSpatialAuthorHooks({ inputs: async (plan, _sourceTime, signal): Promise<SpatialAuthorInputs> => {
+            signal.throwIfAborted()
+            const assets: SpatialAuthorInputs['assets'] = {}, images: Record<string, NonNullable<AuthorGpuInputs['images']>[string]> = {}
+            const web: Record<string, import('./videoEditAuthorModule').AuthorWebFrame> = {}
+            if (plan.imageKeys.size) {
+              // 子样本按序消费同一输入目标；探测留下的 Promise 不能冒充该目标当前内容。
+              const sampleContext = { ...nestedContext, inputs: new Map(), pictures: new Map() }
+              const sampled = await this.prepareCodeInputs(sourceDocument, [plan.clip], plan.context.frame, false, quality, canPresent, sampleContext, path, markApproximate, false)
+              const uploads = new Map<string, ImageBitmap | VideoEditCodePicture>(sampled)
+              for (const media of imageMedia) uploads.set(media.id, await this.image(media, false, signal))
+              const inputs = await gpu.prepareImages(uploads, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
+              for (const [name, key] of plan.imageKeys) {
+                const input = inputs.get(key)
+                if (!input) throw new Error(`作者图片参数 ${name} 没有可绘制的源画面。`)
+                images[name] = { texture: input.texture, width: input.width, height: input.height }
+                Object.defineProperty(assets, name, { enumerable: true, get: () => { if (!input.source) throw new Error(`作者图片参数 ${name} 没有可绘制的源画面。`); return input.source } })
+                if (input.web) web[name] = input.web
+              }
+            }
+            const info: NonNullable<SpatialAuthorInputs['info']> = Object.keys(web).length ? { web } : {}
+            if (codeMaterialUsesAudio(plan.program!)) {
+              const source = codeAudioComposition(sourceDocument, sourceDocument.clips.find(clip => clip.id === plan.clip.id) ?? plan.clip, codeAudioReferenceMediaId(plan.inputParameters ?? {}))
+              info.audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)
+              info.audioTime = codeAudioTime(plan.clip, plan.context.frame, document.fps)
+            }
+            return { assets, images, info }
+          } })
+          const { renderVideoEditSpatialCompositeScene } = await import('./videoEditCompositeScene')
+          const lease = await renderVideoEditSpatialCompositeScene({ ...spatial, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
+          let completion = lease.completion
+          try {
+            const input = gpu.spatialPicture(lease)
+            const clip = { ...active[0], id: 'spatial:frame', kind: 'image' as const, x: 0, y: 0, anchorX: .5, anchorY: .5, scale: 1, scaleAspect: 1, rotation: 0, opacity: 1, effects: [], curves: undefined, trackingQuad: undefined, motionSamples: undefined }
+            const result = await gpu.draw(drawn, [clip], [input], canPresent, deadline, await nestedTarget?.([input]))
+            completion = Promise.all([lease.completion, result.completion]).then(() => undefined)
+            return { presented: result.presented, completion }
+          } finally { await lease.release(completion) }
+        }
+        return composite ? renderVideoEditCompositeScene(drawn, composite, pictureMap, effects, gpu, frame, canPresent, deadline, document, nestedTarget, onEffectError, quality, readFilterFrames)
+          : gpu.draw(drawn, active, pictures, canPresent, deadline, await nestedTarget?.(pictures))
+      }
       result = nestedRender ? await draw() : await this.exclusiveDraw(draw, frame, cachedWindow ? 'prerendered' : 'live', !approximatePictures, requestOrder, () => provenance)
     } catch (error) {
       if (canPresent()) throw error

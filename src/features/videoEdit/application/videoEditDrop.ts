@@ -1,3 +1,5 @@
+import { propagateVideoEditSpatialFields } from './videoEditSpatialPropagation'
+import type { SpatialPropagationRequest } from '@/core/videoEdit/spatialTypes'
 import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import { createLogger } from '@/core/logging'
 import { HENJI_DRAG_DATA_MIME, readHenjiDragData } from '@/contexts/dragDataTransfer'
@@ -94,7 +96,7 @@ export function videoEditDropPaths(transfer: DataTransfer): string[] {
  * 拖进空序列（Premiere“更改序列设置”）：仍放进这条序列、落在松手的位置，序列的画面尺寸与帧率改成第一个素材的，
  * 不另建序列；落点帧按新帧率换算，保持同一时刻。
  */
-export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly string[], sequenceId: string, placement: VideoEditDropPlacement, options: { targetTrackIds: readonly string[]; matchEmptySequence?: boolean; sequenceSettings?: VideoEditSequenceSettings; codeMetadata?: CodeMaterialMetadataReader }): { document: VideoEditDocument; selectedClip?: string; placedClips: VideoEditClip[]; resultSequence: VideoEditSequence; frameRate: VideoEditRatio } {
+export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly string[], sequenceId: string, placement: VideoEditDropPlacement, options: { targetTrackIds: readonly string[]; matchEmptySequence?: boolean; sequenceSettings?: VideoEditSequenceSettings; codeMetadata?: CodeMaterialMetadataReader }): { document: VideoEditDocument; selectedClip?: string; placedClips: VideoEditClip[]; resultSequence: VideoEditSequence; frameRate: VideoEditRatio; clipMap: SpatialPropagationRequest['clipMap']; sequenceTimeMap: SpatialPropagationRequest['sequenceTimeMap'] } {
   ids = ids.map(id => {
     if (!source.sequences.some(sequence => sequence.id === id)) return id
     const resolved = ensureVideoEditSequenceItem(source, id); source = resolved.document; return resolved.itemId
@@ -134,6 +136,8 @@ export function placeVideoEditDrop(source: VideoEditDocument, ids: readonly stri
     placedClips: resolved.clips,
     resultSequence: result.sequence,
     frameRate: sequence.frameRate,
+    clipMap: result.clipMap,
+    sequenceTimeMap: result.sequenceTimeMap,
   }
 }
 /** Placement is captured before metadata I/O; switching projects cannot redirect a drop. */
@@ -157,6 +161,9 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
 }
 async function applyVideoEditDropInput(projectId: string, input: VideoEditDropInput, placement: VideoEditDropPlacement | undefined, binId: string | undefined, options: VideoEditDropOptions): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
+  const clipMap: SpatialPropagationRequest['clipMap'][number][] = []
+  const sequenceTimeMap: SpatialPropagationRequest['sequenceTimeMap'][number][] = []
+  const spatial = { signal: options.signal ?? new AbortController().signal, clipMap, sequenceTimeMap }
   const targetTrackIds = owner.targetTrackIds.slice()
   let sequenceId = options.sequenceId ?? owner.activeSequenceId
   const createSequence = Boolean(placement && !owner.document.sequences.length)
@@ -168,7 +175,7 @@ async function applyVideoEditDropInput(projectId: string, input: VideoEditDropIn
   if (input.kind === 'source_range') {
     if (!placement) throw new Error('请把源范围拖入时间线或节目监视器。')
     logger.debug('源范围直接进入时间线编辑', { event: 'video_edit.drop.source_range.start', requestId: options.requestId, context: { projectId, sequenceId, component: input.component, inUs: input.inUs, outUs: input.outUs, placement } })
-    const ids = placeVideoEditSourceRange(projectId, input, sequenceId, placement)
+    const ids = await placeVideoEditSourceRange(projectId, input, sequenceId, placement, options.signal)
     if (!ids.length) throw new Error('源范围未生成片段，请检查源选区和目标轨道后重新拖入。')
     logger.debug('源范围片段已提交', { event: 'video_edit.drop.source_range.completed', requestId: options.requestId, context: { projectId, sequenceId, count: ids.length } })
     return ids
@@ -190,11 +197,14 @@ async function applyVideoEditDropInput(projectId: string, input: VideoEditDropIn
     if (createSequence) sequenceId = owner.activeSequenceId
     const result = placeVideoEditDrop(source, ids, sequenceId, placement, { targetTrackIds, matchEmptySequence: Boolean(options.createSequenceWhenEmpty), ...(options.sequenceSettings ? { sequenceSettings: options.sequenceSettings } : {}), codeMetadata: readVideoEditCodeMetadata(owner, source) })
     selectedClip = result.selectedClip
+    clipMap.push(...result.clipMap)
+    sequenceTimeMap.push(...result.sequenceTimeMap)
     return result.document
   }
+  const applyImported = async (document: VideoEditDocument, ids: string[]): Promise<VideoEditDocument> => propagateVideoEditSpatialFields(document, apply(document, ids), spatial.signal, spatial)
   let ids: string[]
   if (input.kind === 'items') ids = input.itemIds
-  else if (input.kind === 'code_asset') { const result = await importVideoEditCodeAsset(projectId, input.assetId, { binId, filterTarget, afterImport: apply }); ids = result.itemId ? [result.itemId] : [] }
+  else if (input.kind === 'code_asset') { const result = await importVideoEditCodeAsset(projectId, input.assetId, { binId, filterTarget, afterImport: applyImported }, options.signal); ids = result.itemId ? [result.itemId] : [] }
   else if (input.sources.some(source => source.path && matchHenjiExtension('audio_edit', source.path))) {
     // 音频编辑作品（.hjaud）：和“加入剪辑”一样以动态链接放进来，剪后的声音与一次性生成的普通字幕一起
     if (!input.sources.every(source => source.path && matchHenjiExtension('audio_edit', source.path))) throw new Error('音频编辑作品请单独拖入，不要和其他文件一起拖。')
@@ -204,11 +214,11 @@ async function applyVideoEditDropInput(projectId: string, input: VideoEditDropIn
   }
   else if (input.sources.every(source => source.path && !source.assetId)) {
     // 本地路径可能是文件夹（Premiere：拖入文件夹即按层级建素材箱）。
-    const result = await importVideoEditPathsAndFolders(projectId, input.sources.map(source => source.path!), binId, placement ? apply : undefined, { signal: options.signal })
+    const result = await importVideoEditPathsAndFolders(projectId, input.sources.map(source => source.path!), binId, placement ? applyImported : undefined, { signal: options.signal })
     ids = result.itemIds
     if (result.skipped) options.onSkipped?.(result.skipped)
-  } else ids = await importVideoEditSources(projectId, input.sources, binId, options.signal, apply)
-  if (input.kind === 'items') await withVideoEditCodeMetadata(() => editVideoProject(projectId, document => apply(document, ids)))
+  } else ids = await importVideoEditSources(projectId, input.sources, binId, options.signal, applyImported)
+  if (input.kind === 'items') await withVideoEditCodeMetadata(() => editVideoProject(projectId, document => apply(document, ids), spatial))
   if (selectedClip && owner.activeSequenceId === sequenceId) setVideoEditView(projectId, { selection: selectedClip })
   return ids
 }

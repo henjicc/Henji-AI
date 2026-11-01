@@ -7,7 +7,7 @@ import { recordVideoEditPreparation, videoEditGpuTimer, videoEditRenderDiagnosti
 import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { VideoSample } from 'mediabunny'
-import { rasterizeVideoEditText, videoEditTextResolution, type VideoEditTextRaster } from './videoEditTextSurface'
+import { rasterizeVideoEditText, videoEditTextRasterSize, videoEditTextResolution, type VideoEditTextRaster } from './videoEditTextSurface'
 import { defaultVideoEditTextStyle, scaleVideoEditTextStyle } from '@/core/videoEdit/text'
 import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
 import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_FRAME_BLEND_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader, videoEditFloatCodeLayerShader } from './videoEditGpuShaders'
@@ -56,6 +56,9 @@ export class VideoEditGpuCompositor {
   private image!: GpuRenderPipeline
   private codeImage!: GpuRenderPipeline
   private codeRuntime?: VideoEditCodeGpu
+  private spatialRuntime?: import('./videoEditSpatialComposite').VideoEditSpatialGpu
+  private spatialMultisampleBytes = 0
+  private spatialPeakBytes = 0
   private readonly authorRuntimes = new Map<string, VideoEditAuthorRuntime>()
   private bitmapBridge?: VideoEditGpuBitmapBridge
   private readonly inputBitmaps = new Set<ImageBitmap>()
@@ -207,15 +210,20 @@ export class VideoEditGpuCompositor {
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied', usage: 0x10 | 0x01 })
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
     this.device.pushErrorScope('validation')
-    // Independent pipelines compile concurrently; no synchronous driver compilation on the first frame.
-    const create = (descriptor: unknown): Promise<GpuRenderPipeline> => this.device.createRenderPipelineAsync?.(descriptor) ?? Promise.resolve(this.device.createRenderPipeline(descriptor))
-    const layers = this.layerPipelines(format, create)
-    const copyShader = this.device.createShaderModule({ code: VIDEO_EDIT_COPY_SHADER })
-    const copy = (entryPoint: string, format: string): Promise<GpuRenderPipeline> => create({ layout: 'auto', vertex: { module: copyShader, entryPoint: 'vs' }, fragment: { module: copyShader, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
-    const keys = Object.keys(layers) as Array<keyof LayerPipelines>
-    const pending = [...keys.map(key => layers[key]), copy('y', 'r8unorm'), copy('uv', 'rg8unorm'), copy('rgba', 'rgba8unorm'), copy('rgba', 'rgb10a2unorm'), copy('rgba', 'rgba16float')]
+    let keys: Array<keyof LayerPipelines>, pending: Array<Promise<GpuRenderPipeline>>
+    try {
+      // Independent pipelines compile concurrently; no synchronous driver compilation on the first frame.
+      const create = (descriptor: unknown): Promise<GpuRenderPipeline> => this.device.createRenderPipelineAsync?.(descriptor) ?? Promise.resolve(this.device.createRenderPipeline(descriptor))
+      const layers = this.layerPipelines(format, create)
+      keys = Object.keys(layers) as Array<keyof LayerPipelines>
+      const copyShader = this.device.createShaderModule({ code: VIDEO_EDIT_COPY_SHADER })
+      const copy = (entryPoint: string, format: string): Promise<GpuRenderPipeline> => create({ layout: 'auto', vertex: { module: copyShader, entryPoint: 'vs' }, fragment: { module: copyShader, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+      pending = [...keys.map(key => layers[key]), copy('y', 'r8unorm'), copy('uv', 'rg8unorm'), copy('rgba', 'rgba8unorm'), copy('rgba', 'rgb10a2unorm'), copy('rgba', 'rgba16float')]
+    } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
+    // 作用域是设备级栈：等待异步管线前弹出，避免与同设备其他区段交错；异步管线的失败由 Promise 交回。
+    const scope = this.device.popErrorScope()
     const results = await Promise.allSettled(pending)
-    const error = await this.device.popErrorScope()
+    const error = await scope
     const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
     if (failed) throw failed.reason
     if (error) throw new Error(`无法初始化剪辑 GPU 合成：${error.message}`)
@@ -509,6 +517,36 @@ export class VideoEditGpuCompositor {
     }
     return this.codeRuntime
   }
+  async spatial(): Promise<import('./videoEditSpatialComposite').VideoEditSpatialGpu> {
+    const runtime = await this.code()
+    if (!this.spatialRuntime) {
+      const { VideoEditSpatialGpu } = await import('./videoEditSpatialComposite')
+      this.assertDevice()
+      const multisampled = new Map<GpuTexture, number>()
+      this.spatialRuntime ??= new VideoEditSpatialGpu(this.device, {
+        allocate: (spec, mipLevelCount, sampleCount) => {
+          if (sampleCount === 1) return runtime.effectAllocator.allocate(spec.width, spec.height, spec.format, mipLevelCount)
+          const texture = this.device.createTexture({ size: [spec.width, spec.height], format: spec.format, usage: spec.usage, sampleCount })
+          const bytes = spec.width * spec.height * (spec.format === 'rgba16float' ? 8 : 4) * sampleCount
+          multisampled.set(texture, bytes); this.spatialMultisampleBytes += bytes
+          this.spatialPeakBytes = Math.max(this.spatialPeakBytes, this.spatialMultisampleBytes)
+          return texture
+        },
+        release: texture => {
+          const bytes = multisampled.get(texture)
+          if (bytes === undefined) runtime.effectAllocator.release(texture)
+          else { multisampled.delete(texture); this.spatialMultisampleBytes -= bytes; texture.destroy() }
+        },
+      })
+    }
+    return this.spatialRuntime
+  }
+  spatialPicture(lease: Pick<import('./videoEditSpatialContracts').SpatialPictureLease, 'texture' | 'width' | 'height' | 'format' | 'carriesLight'>): VideoEditCodePicture {
+    const picture = new VideoEditCodePicture(lease.texture, lease.width, lease.height, this.device, lease.format)
+    picture.carriesLight = lease.carriesLight
+    return picture
+  }
+  spatialDiagnostics() { return { multisampleBytes: this.spatialMultisampleBytes, peakMultisampleBytes: this.spatialPeakBytes } }
   codePerformance(): import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.codeRuntime?.framePerformance() ?? [] }
   captureCodePerformance(): () => import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.codeRuntime?.captureFramePerformance() ?? (() => []) }
   codeDiagnostics(): ReturnType<VideoEditCodeGpu['diagnostics']> | undefined { return this.codeRuntime?.diagnostics() }
@@ -591,7 +629,7 @@ export class VideoEditGpuCompositor {
   }
   /** 画面已准备完毕、只等刷新时刻时，可启动不绘制的低优先级准备。 */
   get waitingForPresentation(): boolean { return this.waits.size > 0 }
-  async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: VideoEditPicture[], shouldPresent: () => boolean, deadline?: number, target?: VideoEditCodePicture): Promise<{ presented: boolean; completion: Promise<void> }> {
+  async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: VideoEditPicture[], shouldPresent: () => boolean, deadline?: number, target?: VideoEditCodePicture, viewport?: VideoEditMaterialViewport): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
     // 8-bit-only frames draw straight into the canvas (unchanged); any high-precision input moves the whole frame
@@ -644,7 +682,8 @@ export class VideoEditGpuCompositor {
         const external = picture instanceof VideoSample
         const cachedVideo = picture instanceof VideoEditGpuFrame
         const code = picture instanceof VideoEditCodePicture
-        let width = document.width; let height = document.height
+        const reference = viewport ? { ...document, ...viewport.referenceSize } : document
+        let width = reference.width; let height = reference.height
         let textRaster: Omit<VideoEditTextRaster, 'canvas'> | undefined
         if (external) {
           const frame = picture.toVideoFrame(); frames.push(frame)
@@ -658,15 +697,21 @@ export class VideoEditGpuCompositor {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {
           const id = picture ? this.imageKey(picture) : `text:${clip.id}`
-          const resolution = videoEditTextResolution(clip.scale)
-          const key = picture ? id : JSON.stringify([document.width, document.height, clip.text, clip.textStyle, documentFontRevision(), resolution])
+          // 空间材料面按推近档位重新栅格文字，档位留在单张纹理技术范围内；一倍档沿用二维栅格。
+          const flat = videoEditTextResolution(clip.scale)
+          let resolution = flat * (viewport?.rasterTier ?? 1)
+          if (!picture && resolution > flat) {
+            const size = videoEditTextRasterSize(clip, reference)
+            while (resolution > flat && Math.max(size.width, size.height) * resolution > 8192) resolution /= 2
+          }
+          const key = picture ? id : JSON.stringify([reference.width, reference.height, clip.text, clip.textStyle, documentFontRevision(), resolution])
           let cached = this.textures.get(id)
           if (cached?.key !== key) {
             let source: ImageBitmap | OffscreenCanvas
             if (picture) source = picture
             else {
-              const textClip = this.pictureDivisor === 1 ? clip : { ...clip, textStyle: scaleVideoEditTextStyle(clip.textStyle ?? defaultVideoEditTextStyle(document.height * this.pictureDivisor), 1 / this.pictureDivisor) }
-              const raster = rasterizeVideoEditText(textClip, document, resolution)
+              const textClip = viewport || this.pictureDivisor === 1 ? clip : { ...clip, textStyle: scaleVideoEditTextStyle(clip.textStyle ?? defaultVideoEditTextStyle(document.height * this.pictureDivisor), 1 / this.pictureDivisor) }
+              const raster = rasterizeVideoEditText(textClip, reference, resolution)
               source = raster.canvas; textRaster = { x: raster.x, y: raster.y, width: raster.width, height: raster.height }
             }
             this.texture(id, key, source); cached = this.textures.get(id)!
@@ -701,11 +746,19 @@ export class VideoEditGpuCompositor {
         const { fit, aspect, rotation, center } = geometry(clip)
         if (textRaster) { width = textRaster.width; height = textRaster.height }
         const uniform = uniformFor(clip.id)
-        const quad=videoEditClipTrackingQuad(clip); let h=quad ? videoEditCornerPinMatrix(quad) : undefined
+        let quad = videoEditClipTrackingQuad(clip)
+        if (viewport) {
+          const original = quad ?? [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => {
+            const point = videoEditClipToFrame(clip, { width: pictureWidth, height: pictureHeight }, reference, u, v)
+            return [point.x, point.y]
+          })
+          quad = original.map(([x, y]) => [(x * reference.width - viewport.bounds.x) / viewport.bounds.width, (y * reference.height - viewport.bounds.y) / viewport.bounds.height]) as typeof quad
+        }
+        let h = quad ? videoEditCornerPinMatrix(quad) : undefined
         if (h && textRaster) {
           // Corner pin is defined on the entire source frame, while UVs now cover only the text's local rectangle.
-          const u = .5 + textRaster.x / document.width; const v = .5 + textRaster.y / document.height
-          const sx = textRaster.width / document.width; const sy = textRaster.height / document.height
+          const u = .5 + textRaster.x / reference.width; const v = .5 + textRaster.y / reference.height
+          const sx = textRaster.width / reference.width; const sy = textRaster.height / reference.height
           const denominator = h[6] * u + h[7] * v + h[8]
           if (Math.abs(denominator) < 1e-8) throw new Error('文字区域位于透视消失点，无法呈现。')
           h = [h[0] * sx, h[1] * sy, h[0] * u + h[1] * v + h[2], h[3] * sx, h[4] * sy, h[3] * u + h[4] * v + h[5], h[6] * sx, h[7] * sy, denominator].map(value => value / denominator) as typeof h
@@ -824,6 +877,7 @@ export class VideoEditGpuCompositor {
     await Promise.allSettled([...this.offscreen.values(), this.presentReady, ...this.downscale.values()])
     await Promise.allSettled([...this.uploads, ...this.copies])
     try { await this.disposeAuthorRuntimes() } catch (error) { failures.push(error) }
+    try { await this.spatialRuntime?.dispose() } catch (error) { failures.push(error) }
     try { await this.codeRuntime?.dispose() } catch (error) { failures.push(error) }
     for (const assets of this.authorAssets.values()) for (const image of Object.values(assets)) image.close()
     this.authorAssets.clear()
@@ -844,11 +898,18 @@ export class VideoEditGpuCompositor {
   async invalidateFontResources(): Promise<void> {
     await Promise.allSettled([...this.uploads, ...this.copies])
     await this.disposeAuthorRuntimes()
+    await this.spatialRuntime?.dispose(); this.spatialRuntime = undefined
     await this.codeRuntime?.dispose(); this.codeRuntime = undefined
     for (const [id, value] of this.textures) if (id.startsWith('text:')) {
       value.texture.destroy(); this.textures.delete(id)
     }
   }
 }
-import { videoEditClipCenterPosition, videoEditClipScaleAspect, type VideoEditClipPlacement } from '@/core/videoEdit/clipGeometry'
+import { videoEditClipCenterPosition, videoEditClipScaleAspect, videoEditClipToFrame, type VideoEditClipPlacement } from '@/core/videoEdit/clipGeometry'
+export interface VideoEditMaterialViewport {
+  referenceSize: { width: number; height: number }
+  bounds: { x: number; y: number; width: number; height: number }
+  /** 推近时材料面相对一倍栅格的二次幂档位；文字按二维档位乘此倍率重新栅格。 */
+  rasterTier?: number
+}
 import type { VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'

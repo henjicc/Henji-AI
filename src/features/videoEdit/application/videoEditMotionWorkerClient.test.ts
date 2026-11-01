@@ -1,10 +1,12 @@
+import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createMotionFixture } from '@/core/creativeIntent/fixtures/motionFixtures'
 import type { MotionWorkerRequest, MotionWorkerResponse } from '../engine/videoEditMotionWorkerProtocol'
-import { optimizeVideoEditMotionOffThread } from './videoEditMotionWorkerClient'
+import { optimizeVideoEditMotionOffThread, planVideoEditSpatialPropagationOffThread } from './videoEditMotionWorkerClient'
+import { setVideoEditMotionWorkerLifecycle } from './videoEditMotionWorkerLifecycle'
 
 const host = vi.hoisted(() => ({ owners: [{ document: { id: 'fixture:doc' } }], listeners: new Set<() => void>() }))
-vi.mock('./videoEditService', () => ({ listVideoEditInstances: () => host.owners, subscribeVideoEditDomain: (listener: () => void) => { host.listeners.add(listener); return () => host.listeners.delete(listener) } }))
+setVideoEditMotionWorkerLifecycle({ isOpen: id => host.owners.some(owner => owner.document.id === id), ownerOf: () => undefined, subscribe: listener => { host.listeners.add(listener); return () => host.listeners.delete(listener) } })
 class TestWorker {
   static instances: TestWorker[] = []
   onmessage: ((event: MessageEvent<MotionWorkerResponse>) => void) | null = null
@@ -12,7 +14,7 @@ class TestWorker {
   messages: MotionWorkerRequest[] = []
   terminate = vi.fn()
   constructor() { TestWorker.instances.push(this) }
-  postMessage(message: MotionWorkerRequest): void { this.messages.push(message); if (message.kind !== 'compile') queueMicrotask(() => this.respond({ kind: 'received' })) }
+  postMessage(message: MotionWorkerRequest): void { this.messages.push(message); if (message.kind === 'begin' || message.kind === 'page') queueMicrotask(() => this.respond({ kind: 'received' })) }
   respond(data: MotionWorkerResponse): void { this.onmessage?.(new MessageEvent('message', { data })) }
 }
 const result = { result: { candidates: [], unavailable: [] } }
@@ -61,4 +63,19 @@ it('计算失败不回收进程；成功后的闲置预算到期释放，不保�
   TestWorker.instances[1].respond(result); await next
   await vi.advanceTimersByTimeAsync(10000)
   expect(TestWorker.instances[1].terminate).toHaveBeenCalledOnce(); expect(host.listeners.size).toBe(0)
+})
+
+it('空间传播取消终止计算并拒收迟到结果，原快照不修改', async () => {
+  const document = createVideoEditDocument('空间任务'), sequence = createVideoEditSequence()
+  document.sequences = [sequence]
+  const composition = videoEditComposition(document, sequence.id), before = structuredClone(composition), controller = new AbortController()
+  const pending = planVideoEditSpatialPropagationOffThread({ before: { composition, revision: composition.revision, sequenceId: composition.id }, proposed: composition, operation: 'delete', clipMap: [], sequenceTimeMap: [], output: { width: 1920, height: 1080, displayWidth: 1920, displayHeight: 1080 }, quality: 'final', signal: controller.signal })
+  const rejected = expect(pending).rejects.toThrow('cancel-spatial')
+  const worker = TestWorker.instances[0], late = worker.onmessage
+  expect(worker.messages[0].kind).toBe('spatial-propagate')
+  expect(worker.messages[0]).not.toHaveProperty('request.signal')
+  controller.abort(new Error('cancel-spatial')); await rejected
+  late?.(new MessageEvent('message', { data: { kind: 'spatial-propagation', result: { composition, facts: [] } } }))
+  expect(worker.terminate).toHaveBeenCalledOnce()
+  expect(composition).toEqual(before)
 })

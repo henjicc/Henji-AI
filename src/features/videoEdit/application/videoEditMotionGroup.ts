@@ -19,7 +19,7 @@ export async function readVideoMotionGroup(id: string, draftId: string, offset: 
     if (requireVideoEditInstance(id) !== owner || owner.document.creativeIntents !== head) throw new Error('超级关键帧组已变化，请从第一页重新读取。')
   }
   async function* records(): AsyncGenerator<string> {
-    yield JSON.stringify({ kind: 'super-keyframes', draftId, units: { position: '画幅比例，中心为 [0.5,0.5]；写 x/y 时减去 0.5', rotationTurns: '圈；写 rotation 时乘 360', scaleXY: '倍率', monoUs: '同组单调微秒', frame: '序列整数帧；写关键帧 time 时减去片段 start' }, apply: '默认直接应用：先读取目标当前关键帧，保留未修改范围，在一次 change_application_entities 中写所有目标的 *.keyframes；整组一次撤销。只有用户要挑选时才生成候选。录制命令是证据，不可重放。' })
+    yield JSON.stringify({ kind: 'super-keyframes', draftId, scope: '只处理二维位置、缩放、平面旋转和锚点；目标的 depth、rotationX、rotationY、anchorDepth 数值与曲线原样保留，不从来源复制空间动画。', units: { position: '画幅比例，中心为 [0.5,0.5]；写 x/y 时减去 0.5', rotationTurns: '圈；写 rotation 时乘 360', scaleXY: '倍率', monoUs: '同组单调微秒', frame: '序列整数帧；写关键帧 time 时减去片段 start' }, apply: '默认直接应用：先读取目标当前关键帧，保留未修改范围，在一次 change_application_entities 中写所有目标的 *.keyframes；整组一次撤销。只有用户要挑选时才生成候选。录制命令是证据，不可重放。' })
     for (const target of draft!.targets) {
       const sequence = owner.document.sequences.find(value => value.clips.some(clip => `${id}:${clip.id}` === target.ref.id))
       const clip = sequence?.clips.find(value => `${id}:${value.id}` === target.ref.id)

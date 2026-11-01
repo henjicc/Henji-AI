@@ -93,10 +93,15 @@ export function planVideoEditBuiltinTransition(input: VideoEditBuiltinTransition
   return { width, height, scratch: plan.scratch, passes: plan.passes }
 }
 
+/** 阈值按最终输出像素定义，连接段的贡献及一阶导数都连续。 */
+export function spatialDefocusStrength(outputRadius: number): number {
+  const t = Math.max(0, Math.min(1, (outputRadius - .125) / .375))
+  return t * t * (3 - 2 * t)
+}
 /** pose.blur 使用编码预乘颜色，模糊效果的均匀方式仍在线性光处理。`radius` 是高斯标准差或镜头圆盘半径（像素）。 */
-export function planAuthorDefocus(width: number, height: number, radius: number, lens: boolean, preserveZeroAlpha = false): VideoEditBuiltinPlan {
+export function planAuthorDefocus(width: number, height: number, radius: number, lens: boolean, preserveZeroAlpha = false, spatial?: { radiusY: number; outputRadius: number }): VideoEditBuiltinPlan {
   // 亮点加权取模糊效果的默认值，pose.blur 的镜头散焦与“模糊”效果的镜头方式观感一致。
-  if (lens) return planLensBlur(radius, 50, false, width, height)
+  if (lens) return planLensBlur(radius, 50, false, width, height, spatial && { radiusY: spatial.radiusY, strength: spatialDefocusStrength(spatial.outputRadius) })
   const plan = planUniformBlur(radius / height, 'both', false, width, height, { frame: 0, quality: 'final' })
   // 光纹理的 RGB 独立于覆盖率；只有此输入允许在零 alpha 下参与共用高斯核。
   for (const pass of plan.passes) {

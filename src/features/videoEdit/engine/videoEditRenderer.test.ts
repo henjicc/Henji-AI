@@ -22,6 +22,15 @@ import { installVideoEditWebChannel, VideoEditWebInputs } from './videoEditWebIn
 import type { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 
 const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, borrows: [] as Array<[string, number | undefined]>, closed: 0, web: [] as Array<import('./videoEditAuthorModule').AuthorFrameInfo['web']> }))
+const spatialBoundary = vi.hoisted(() => ({ frames: [] as Array<Parameters<typeof import('./videoEditCompositeScene').renderVideoEditSpatialCompositeScene>[0]>, releases: 0 }))
+vi.mock('./videoEditCompositeScene', async importOriginal => {
+  const actual = await importOriginal<typeof import('./videoEditCompositeScene')>()
+  return { ...actual, renderVideoEditSpatialCompositeScene: async (options: Parameters<typeof actual.renderVideoEditSpatialCompositeScene>[0]) => {
+    spatialBoundary.frames.push(options)
+    return { texture: { createView() {}, destroy() {} }, width: options.drawn.width, height: options.drawn.height, format: 'rgba16float', owner: 'composite-host', highPrecision: true, carriesLight: false,
+      completion: Promise.resolve(), async release(afterUse: Promise<void>) { await afterUse; spatialBoundary.releases++ } }
+  } }
+})
 const placeholders = vi.hoisted(() => ({ released: 0 }))
 const boundary = vi.hoisted(() => ({ drawHook: undefined as (() => void) | undefined, pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, snapshotBytes: 100, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[], targetKeys: [] as string[], offscreenCompletion: undefined as Promise<void> | undefined }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
@@ -79,6 +88,7 @@ vi.mock('./videoEditGpuCompositor', async () => {
     return new VideoEditGpuFrame({ timestamp, duration, displayWidth: width, displayHeight: height, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 0, () => { placeholders.released++ })
   }
   async blankWebPicture(web: import('./videoEditAuthorModule').AuthorWebFrame) { return new VideoEditWebPicture({ createView: () => ({}), destroy: vi.fn() }, 1, 1, owner, web, false) }
+  spatialPicture(picture: import('./videoEditSpatialContracts').SpatialPictureLease) { return new VideoEditCodePicture(picture.texture, picture.width, picture.height, owner, picture.format) }
   async copyWebFrame(frame: NativeVideoFrame, _width: number, _height: number, texture?: import('@/core/imageEdit/worker/webgpuRuntimeSupport').GpuTexture) { frame.release(); return { texture: texture ?? { createView: () => ({}), destroy: vi.fn() }, owner } }
   async snapshot(sample: { timestamp: number; duration: number }, compact: boolean) {
     boundary.snapshotCalls.push(compact); await boundary.pendingSnapshot
@@ -108,6 +118,7 @@ vi.mock('./videoEditSeekDecoder', () => ({ VideoEditSeekDecoder: class {
   async dispose() { this.cache.deleteMedia(this.path) }
 } }))
 beforeEach(() => {
+  spatialBoundary.frames = []; spatialBoundary.releases = 0
   contentInputs.uploads = []; contentInputs.borrows = []; contentInputs.closed = 0; contentInputs.web = []
   boundary.pendingSchedule = undefined; boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.failOffscreenClip = undefined; boundary.released = []; boundary.pendingCode = undefined
@@ -354,6 +365,31 @@ function fixture(): ReturnType<typeof videoEditComposition> {
   document.sequences[0].clips = [clip]
   return videoEditComposition(document, document.sequences[0].id)
 }
+
+it.each([1, 4 / 3])('正式 Renderer 在 PAR=%s 时恒等旁路，空间帧共用显示尺寸且释放最终租约', async par => {
+  const document = fixture()
+  document.width *= par
+  document.pixelAspectRatio = { numerator: par === 1 ? 1 : 4, denominator: par === 1 ? 1 : 3 }
+  document.clips[0].spatial = { enabled: true }
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(10)
+    expect(spatialBoundary.frames).toHaveLength(0)
+    const changed = { ...document, clips: document.clips.map(clip => ({ ...clip, depth: -.5 })) }
+    await renderer.updateDocument(changed)
+    await renderer.render(10)
+    expect(spatialBoundary.frames).toHaveLength(1)
+    expect(spatialBoundary.frames[0].request.composition).toBe(changed)
+    expect(spatialBoundary.frames[0].request.output.displayWidth).toBe(document.width)
+    expect(spatialBoundary.frames[0].pictures.get(changed.clips[0].id)).toBeInstanceOf(VideoEditGpuFrame)
+    expect(spatialBoundary.releases).toBe(1)
+    expect(boundary.draws.at(-1)!.ids).toEqual(['spatial:frame'])
+    await renderer.updateDocument(document)
+    await renderer.render(10)
+    expect(spatialBoundary.frames).toHaveLength(1)
+    expect(boundary.draws.at(-1)!.ids).toEqual([document.clips[0].id])
+  } finally { await renderer.dispose() }
+})
 
 it('视频参数经共享解码与GPU画面进入图片输入，固定和跟随时间可随机寻帧', async () => {
   const document = fixture()

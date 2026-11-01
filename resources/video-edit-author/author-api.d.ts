@@ -48,6 +48,7 @@ export interface AuthorSimulationDeclaration { rate?: number; snapshotEvery?: nu
 export interface AuthorSimulationSampler { at(sourceSeconds: number): Readonly<SimulationData> }
 
 export interface AuthorFrameInfo {
+  space?: AuthorSpaceInfo
   simulation?: AuthorSimulationSampler
   time: number
   /** 一帧的秒数。 */
@@ -264,8 +265,8 @@ type AuthorParamValue<D> =
 export type AuthorParamValues<P extends readonly AuthorParamDeclaration[]> =
   string extends P[number]['key'] ? AuthorParams : { readonly [D in P[number] as D['key']]: AuthorParamValue<D> }
 
-export interface AuthorWebGL<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {
-  draw(time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
+export interface AuthorWebGL<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[], I extends AuthorFrameInfo = AuthorFrameInfo> {
+  draw(time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: I): void
   dispose?(): void | Promise<void>
 }
 /** 图片、视频参数在时间线上的纹理，预乘 alpha。 */
@@ -278,13 +279,16 @@ export interface AuthorGpuInputs {
   /** 图片、视频参数的纹理，键同参数名；片子数据派生的画面按 shot.input 键（没有画面的没有该键，同 AuthorAssets）。直接采样它，不要读 assets：读 assets 会把这一帧拷成位图。 */
   images: { readonly [key: string]: AuthorGpuImage }
 }
-export interface AuthorWebGPU<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {
-  draw(target: GPUTexture, time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo, inputs?: AuthorGpuInputs): void | Promise<void>
+export interface AuthorWebGPU<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[], I extends AuthorFrameInfo = AuthorFrameInfo> {
+  draw(target: GPUTexture, time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: I, inputs?: AuthorGpuInputs): void | Promise<void>
   dispose?(): void | Promise<void>
 }
 
 /** 默认导出的效果对象。 */
-export interface AuthorModule<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {
+export type AuthorSpatialFrameInfo = AuthorFrameInfo & { space: AuthorSpaceInfo }
+export interface AuthorModule<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[], I extends AuthorFrameInfo = AuthorFrameInfo> {
+  space?: boolean
+  createThree?(host: AuthorThreeHost): AuthorThreeScene<P> | Promise<AuthorThreeScene<P>>
   /** 图片参数名到 CSS 选择器列表；只自动覆盖舞台内普通 HTML Text，不包含伪元素、SVG、Canvas、表单、Shadow DOM 或 iframe。 */
   webText?: WebTextDeclaration
   name: string
@@ -308,15 +312,44 @@ export interface AuthorModule<P extends readonly AuthorParamDeclaration[] = read
    * 不得读 GPU、画布、素材像素或网页布局；只用参数、尺寸、时刻与模块自己的数据。宿主用它决定预渲染文件能否复用。
    * 漏报变化会留下旧画面；修正声明后用“删除渲染文件”恢复。
    */
-  frameKey?(params: AuthorParameters, width: number, height: number, info: AuthorFrameInfo): unknown
+  frameKey?(params: AuthorParameters, width: number, height: number, info: I): unknown
   /** 代码工程内的相对路径：这些文件对画面的影响全部体现在 frameKey 的返回值里，算代码身份时不计入它们；入口文件始终计入代码身份，不存在的路径忽略。没有 frameKey 时不起作用。 */
   dataFiles?: readonly string[]
-  draw?(ctx: OffscreenCanvasRenderingContext2D, time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
+  draw?(ctx: OffscreenCanvasRenderingContext2D, time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: I): void
   /** 每帧返回图层数组，按顺序从底到顶合成。 */
-  layers?(params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): AuthorLayer[]
+  layers?(params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: I): AuthorLayer[]
   simulation?: AuthorSimulationDeclaration
   createSimulation?(params: AuthorParamValues<P>, width: number, height: number, info: AuthorSimulationInfo): AuthorSimulation<SimulationData, SimulationData, P> | Promise<AuthorSimulation<SimulationData, SimulationData, P>>
-  createWebGL?(gl: WebGL2RenderingContext): AuthorWebGL<P>
-  createWebGPU?(device: GPUDevice): AuthorWebGPU<P> | Promise<AuthorWebGPU<P>>
+  createWebGL?(gl: WebGL2RenderingContext): AuthorWebGL<P, I>
+  createWebGPU?(device: GPUDevice): AuthorWebGPU<P, I> | Promise<AuthorWebGPU<P, I>>
   dispose?(): void | Promise<void>
+}
+
+/** 空间时钟均为秒；project 返回归一化屏幕 x/y 与深度。 */
+export interface AuthorSpaceInfo {
+  readonly camera: AuthorSpaceCamera
+  readonly sequenceTime: number; readonly sampleTime: number; readonly sourceTime: number; readonly centerSourceTime: number
+  readonly root: AuthorSpaceMatrix
+  readonly output: { width: number; height: number; displayWidth: number; displayHeight: number }
+  project(point: readonly [number, number, number]): readonly [number, number, number]
+}
+export interface AuthorThreeHost {
+  readonly camera: import('three').PerspectiveCamera
+  readonly width: number
+  readonly height: number
+}
+export interface AuthorThreeScene<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {
+  scene: import('three').Scene
+  update(params: AuthorParamValues<P>, assets: AuthorAssets, info: AuthorSpatialFrameInfo): void
+  dispose?(): void | Promise<void>
+}
+
+type AuthorSpaceVector = readonly [number, number, number]
+type AuthorSpaceMatrix = readonly [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]
+interface AuthorSpaceCamera {
+  position: AuthorSpaceVector; target: AuthorSpaceVector; up: AuthorSpaceVector
+  focalLengthMm: number; sensorWidthMm: number; focusDistance: number; fStop: number; defocus: number
+  near: number; far: number; fovYRadians: number
+  view: AuthorSpaceMatrix; projectionWebGpu: AuthorSpaceMatrix; projectionWebGl: AuthorSpaceMatrix
+  canonicalIdentity: boolean; resolvedAim: AuthorSpaceVector; resolvedFocus: AuthorSpaceVector; targetActive: boolean
 }

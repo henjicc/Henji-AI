@@ -21,6 +21,17 @@ function project(): VideoEditDocument {
 }
 const keys = (document: VideoEditDocument): string[] => videoEditRenderWindows(videoEditComposition(document, document.sequences[0].id), dependencies).map(window => window.key)
 
+it('隐藏相机目标的运动使相关预渲染失效，解除绑定后不再污染画面依赖', () => {
+  const document = project(), sequence = document.sequences[0]
+  sequence.clips.push({ ...sequence.clips[0], id: 'focus', start: 0, duration: 30, enabled: false })
+  sequence.spatialCamera = { focus: { kind: 'clip', clipId: 'focus' }, defocus: 1 }
+  const before = keys(document)
+  const moved = structuredClone(document); moved.sequences[0].clips.at(-1)!.depth = 1
+  expect(keys(moved).every((key, index) => key !== before[index])).toBe(true)
+  delete document.sequences[0].spatialCamera; delete moved.sequences[0].spatialCamera
+  expect(keys(moved)).toEqual(keys(document))
+})
+
 it('序列按剪辑点切分，长段等分到五秒，空隙仍可手动预渲染', () => {
   const document = project(); const windows = videoEditRenderWindows(videoEditComposition(document, document.sequences[0].id), dependencies)
   expect(windows.map(window => [window.startFrame, window.endFrame])).toEqual(Array.from({ length: 18 }, (_, index) => [index * 300, (index + 1) * 300]))

@@ -20,11 +20,19 @@ export function paintText(context: Context, clip: TextContent, width: number, he
 export function textResolution(scale: number): number { return 2 ** Math.max(0, Math.ceil(Math.log2(Math.max(1, scale)) - 1e-10)) }
 export interface TextRaster { canvas: OffscreenCanvas; x: number; y: number; width: number; height: number }
 /** Bounds are relative to the text origin, including glyph overhangs, shifted baselines and all appearance layers. */
-export function rasterizeText(clip: TextContent, frame: { width: number; height: number }, resolution = 1): TextRaster {
+function textRasterPlan(clip: TextContent, frame: { width: number; height: number }) {
   const probe = new OffscreenCanvas(1, 1).getContext('2d')!
   const style = clip.textStyle ?? defaultTextStyle(frame.height)
   const origin = { x: frame.width / 2, y: frame.height / 2 }
-  const plan = createTextDrawPlan(clip.text, style, { frame, anchor: textAlignmentAnchor(style, origin.x, origin.y), rasterOrigin: origin }, canvasTextPlanMeasure(probe))
+  return { origin, plan: createTextDrawPlan(clip.text, style, { frame, anchor: textAlignmentAnchor(style, origin.x, origin.y), rasterOrigin: origin }, canvasTextPlanMeasure(probe)) }
+}
+/** 一倍栅格的边界尺寸；推近重栅格据此把档位留在单张纹理技术范围内。 */
+export function textRasterSize(clip: TextContent, frame: { width: number; height: number }): { width: number; height: number } {
+  const { width, height } = textRasterPlan(clip, frame).plan.rasterBounds
+  return { width, height }
+}
+export function rasterizeText(clip: TextContent, frame: { width: number; height: number }, resolution = 1): TextRaster {
+  const { origin, plan } = textRasterPlan(clip, frame)
   const { x, y, width, height } = plan.rasterBounds
   // 分配前执行 GPU 上传尺寸限制，避免先创建无法使用的临时纹理。
   if (width * resolution > 8192 || height * resolution > 8192) throw new Error('文字栅格超过 GPU 单张纹理 8192 像素技术范围。')

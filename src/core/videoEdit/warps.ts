@@ -10,7 +10,7 @@ import { effectParam, type EffectParamText } from './effectIncludes'
 import { dropShadowOffset } from './dropShadow'
 import { dissolveCellSize } from './dissolveReveal'
 import type { LayerEffectReference } from './layerEffectGeometry'
-import { isVideoEditTrackQuad, videoEditCornerPinMatrix, videoEditTrackProject } from './tracking'
+import { isVideoEditTrackQuad, videoEditCornerPinMatrix, videoEditTrackProject } from './trackProjection'
 
 const { amount, signed, percent, angle, choice, toggle } = effectParam
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)

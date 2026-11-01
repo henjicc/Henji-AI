@@ -1,3 +1,4 @@
+import type { SpatialPropagationRequest } from './spatialTypes'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { videoEditClipMedia, videoEditPictureFilter, type VideoEditClip, type VideoEditCreativeSource, type VideoEditClipTake, type VideoEditDocument, type VideoEditSequence } from './document'
 import { makeVideoEditItemClip, placeVideoEditItem } from './projectItems'
@@ -203,7 +204,7 @@ function roomAfter(sequence: VideoEditSequence, clip: VideoEditClip): number {
   return (next.length ? Math.min(...next) : maxFrames(sequence)) - clip.start
 }
 
-export interface VideoEditInPlaceLanding { document: VideoEditDocument; clipId: string; newTrack: boolean; fallback?: 'clip_missing' | 'slot_taken' }
+export interface VideoEditInPlaceLanding { clipMap?: SpatialPropagationRequest['clipMap']; sequenceTimeMap?: SpatialPropagationRequest['sequenceTimeMap']; document: VideoEditDocument; clipId: string; newTrack: boolean; fallback?: 'clip_missing' | 'slot_taken' }
 /**
  * 把已导入项目的生成结果（素材项 `itemId`）按规划落进 `document` 的当前状态，返回整份新剪辑（一步编辑）。
  * 生成结果比规划短时片段跟着变短；替换保留镜头位置、变换与效果，链接声音一起换，原音画记为可切回版本。
@@ -265,7 +266,7 @@ export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: Vi
   const result = applyVideoEditTimelineEditResult(replaceSequence(base, placement.sequence), sequence.id, { kind: 'place', clipboard: { projectId: document.id, frameRate: sequence.frameRate, clips, annotations: [] }, frame, mode }, metadata)
   const placed = result.selectedClipIds?.[0]
   if (!placed) throw new Error('生成结果没有放进时间线。')
-  return { document: replaceSequence(document, result.sequence), clipId: placed, newTrack: Boolean(newTracks) || placement.sequence.tracks.length > sequence.tracks.length, ...(fallback ? { fallback } : {}) }
+  return { clipMap: result.clipMap, sequenceTimeMap: result.sequenceTimeMap, document: replaceSequence(document, result.sequence), clipId: placed, newTrack: Boolean(newTracks) || placement.sequence.tracks.length > sequence.tracks.length, ...(fallback ? { fallback } : {}) }
 }
 
 /**

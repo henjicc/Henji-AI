@@ -15,7 +15,7 @@ const MODE_NAMES = { ripple: '波纹编辑', roll: '滚动编辑', slip: '外滑
  * 助手的修剪能力（4.6）：与时间线修剪工具同一份编辑（timelineEdits 的 trim），链接片段按当前链接选择一起修剪；
  * 先算出实际能做到的帧数，做不到时说明原因，不写空历史。
  */
-export async function trimVideoEditClip(input: TrimInput) {
+export async function trimVideoEditClip(input: TrimInput, signal?: AbortSignal) {
   const id = input.documentRef.id
   const ref = splitVideoEditRef(input.clipRef)
   const owner = requireVideoEditInstance(id)
@@ -32,7 +32,7 @@ export async function trimVideoEditClip(input: TrimInput) {
     const availability = videoEditTrimAvailability(owner.document, sequence.id, { ...trim, clipIds: expandVideoEditSelection(sequence, [ref.childId], linked) }, readVideoEditCodeMetadata(owner, owner.document))
     throw new VideoEditOperationFailure(`${MODE_NAMES[input.mode]}已到边界；负方向可用 ${availability.negative.frames} 帧，正方向可用 ${availability.positive.frames} 帧，请按余量调整。`, { reason: 'trim_boundary', mode: input.mode, requestedFrames: input.frames, ...availability })
   }
-  executeVideoEditTimelineEdit(id, sequence.id, { kind: 'trim', ...trim, clipIds: [ref.childId], linked })
+  await executeVideoEditTimelineEdit(id, sequence.id, { kind: 'trim', ...trim, clipIds: [ref.childId], linked }, signal)
   await saveVideoEdit(id)
   const verified = await verifyVideoEditSaved(id, requireVideoEditInstance(id).document)
   const clamped = result.delta !== input.frames ? `（请求 ${input.frames} 帧，受素材余量或相邻片段限制）` : ''

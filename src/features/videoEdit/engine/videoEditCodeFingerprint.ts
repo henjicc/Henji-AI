@@ -81,6 +81,8 @@ export class VideoEditCodeFingerprint {
     const program = plan.program
     if (codeMaterialUsesAudio(program)) return { fallback: 'audio-dependent' }
     const effect = await this.module(program.bundle)
+    // 曝光计划未进入指纹 Worker 前，不能以中心或常量 frameKey 证明空间曝光相同。
+    if (effect.createThree || effect.space) return { fallback: 'spatial-exposure-required' }
     const declared = typeof effect.frameKey === 'function'
     if (!program.simulation && !declared && (effect.createWebGPU || effect.createWebGL)) return { fallback: 'native-gpu' }
     const inputs: Record<string, AuthorFingerprintInput> = {}

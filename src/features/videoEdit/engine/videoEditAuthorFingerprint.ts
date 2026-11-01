@@ -30,6 +30,14 @@ function fingerprintAsset(key: string, input: AuthorFingerprintInput): AuthorCan
   return asset
 }
 
+/** 不向二维键追加空槽；frameKey 常量不能遮掉宿主空间依赖。 */
+export function authorSpatialFingerprint(effect: Pick<AuthorModule, 'space' | 'createThree'>, info: AuthorFrameInfo): readonly unknown[] {
+  if (!effect.space && !effect.createThree) return []
+  if (!info.space) throw new Error('空间作者指纹缺少已求值的空间样本。')
+  const { project: _project, ...space } = info.space
+  return [space]
+}
+
 /** 使用版本的完整原始文件表，不能用打包结果：打包结果已把片子数据内联进了绘制代码。 */
 export function authorFrameCodeIdentity(files: CodeMaterialFiles, effect: AuthorModule, pinned: string): string {
   const excluded = new Set(!(files.apiVersion && files.apiVersion >= CODE_AUTHOR_SIMULATION_MIN_API_VERSION && effect.createSimulation) && typeof effect.frameKey === 'function' ? effect.dataFiles?.filter(path => path !== files.entry) ?? [] : [])
@@ -62,7 +70,7 @@ export function fingerprintAuthorFrameKey(effect: AuthorModule, size: { width: n
     const key = frameKeyJson(effect.frameKey!(params, size.width, size.height, frameInfo))
     const effects = apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION && effect.layers ? fingerprintLayerEffects(effect, size, params, info, inputs, environment, overrides, motionBlur, apiVersion) : undefined
     return { method: 'frameKey', digest: renderFingerprintHash(JSON.stringify([codeIdentity, size.width, size.height, key,
-      Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)), pictureParameters, overrides, motionBlur, ...(apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION ? [effects] : [])])) }
+      Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)), pictureParameters, overrides, motionBlur, ...(apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION ? [effects] : []), ...authorSpatialFingerprint(effect, info)])) }
   } catch (error) { return { fallback: `frame-key-error:${error instanceof Error ? error.message : String(error)}` } }
 }
 
@@ -72,6 +80,7 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
   overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = {}, apiVersion = 6): VideoEditFrameFingerprint {
   if (apiVersion >= CODE_AUTHOR_SIMULATION_MIN_API_VERSION && effect.createSimulation) return { fallback: 'simulation-history-required' }
   try {
+    if (effect.createThree || effect.space) return { fallback: 'spatial-render-required' }
     if (effect.createWebGL || effect.createWebGPU) return { fallback: 'native-gpu' }
     let recording = false
     const used = new Set<string>(), assets: Record<string, CanvasImageSource> = {}

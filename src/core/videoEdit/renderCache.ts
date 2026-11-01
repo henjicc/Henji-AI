@@ -1,4 +1,4 @@
-import { renderFingerprintHash as hash, renderSceneRecordFingerprint as recordDigest, type VideoEditCodeFingerprints } from './renderFingerprint'
+import { renderFingerprintHash as hash, renderSceneRecordFingerprint as recordDigest, videoEditSpatialTargetClips, type VideoEditCodeFingerprints } from './renderFingerprint'
 import { VIDEO_EDIT_RENDER_ENGINE_VERSION } from 'virtual:video-edit-render-engine'
 import { activeVideoEditEffects, videoEditEffectCodes } from './compositing'
 import { videoEditClipRetimed } from './clipSpeed'
@@ -184,7 +184,8 @@ class DigestContext {
     const visual = sequence.clips.filter(clip => clip.kind !== 'audio')
     // 子序列里代码读到的片子数据整份计入（连同其中的素材）：子序列的时间与父窗口的对应关系不在这里展开。
     const scenes = visual.flatMap(clip => this.sceneReferences(clip).flatMap(({ scene, sceneId }) => scene ? this.wholeScene(scene) : [`missing-scene:${sceneId}`]))
-    const digest = hash(JSON.stringify([{ ...picture, clips: visual.map(videoEditRenderPictureClip) }, this.style(sequence.styleId), this.references(visual), ...(scenes.length ? [scenes] : [])]))
+    const targets = videoEditSpatialTargetClips(sequence)
+    const digest = hash(JSON.stringify([{ ...picture, clips: visual.map(videoEditRenderPictureClip) }, this.style(sequence.styleId), this.references(visual), ...(scenes.length ? [scenes] : []), ...(targets.length ? [targets.map(videoEditRenderPictureClip), this.references(targets)] : [])]))
     this.visiting.delete(sequence.id)
     this.sequences.set(sequence, digest)
     return digest
@@ -260,6 +261,7 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
   const followSources = (clips: readonly VideoEditClip[]): VideoEditClip[] => {
     const result = [...clips]
     const seen = new Set(clips.map(clip => clip.id))
+    for (const target of videoEditSpatialTargetClips(document)) if (!seen.has(target.id)) { seen.add(target.id); result.push(target) }
     for (const clip of result) if (clip.follow && !seen.has(clip.follow.clipId)) {
       const source = document.clips.find(candidate => candidate.id === clip.follow!.clipId)
       if (source) { seen.add(source.id); result.push(source) }

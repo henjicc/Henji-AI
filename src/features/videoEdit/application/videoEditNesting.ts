@@ -7,7 +7,7 @@ import { editVideoProject, focusVideoEditPanel, getActiveVideoEditSequence, requ
 const logger = createLogger('features.videoEdit.nesting')
 export interface VideoEditNestTarget { projectId: string; sequenceId: string; clipIds: string[] }
 /** UI and assistants commit the same graph transform in one project history step. */
-export function nestVideoEditSelection(target: VideoEditNestTarget, name: string, linked = true): ReturnType<typeof nestVideoEditClips> {
+export async function nestVideoEditSelection(target: VideoEditNestTarget, name: string, linked = true, signal: AbortSignal = new AbortController().signal): Promise<ReturnType<typeof nestVideoEditClips>> {
   const owner = requireVideoEditInstance(target.projectId)
   const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)
   if (!sequence) throw new Error('原序列已移除。')
@@ -15,10 +15,10 @@ export function nestVideoEditSelection(target: VideoEditNestTarget, name: string
   logger.info('开始嵌套片段', { event: 'video_edit.nest.start', context: { projectId: target.projectId, sequenceId: target.sequenceId, count: ids.length } })
   try {
     const result = nestVideoEditClips(owner.document, target.sequenceId, ids, name)
-    editVideoProject(target.projectId, () => result.document)
+    const document = await editVideoProject(target.projectId, () => result.document, { signal, operation: 'nest' })
     if (owner.activeSequenceId === target.sequenceId) setVideoEditView(target.projectId, { selection: result.clip.id, playing: false })
     logger.info('片段已嵌套', { event: 'video_edit.nest.completed', context: { projectId: target.projectId, sequenceId: result.sequence.id, count: ids.length } })
-    return result
+    return { ...result, document, sequence: document.sequences.find(value => value.id === result.sequence.id)! }
   } catch (error) {
     logger.warn('片段嵌套失败', { event: 'video_edit.nest.failed', error, context: { projectId: target.projectId, sequenceId: target.sequenceId } }); throw error
   }

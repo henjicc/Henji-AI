@@ -19,6 +19,14 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles } from './videoEditAutoSubtitles'
 import { bindVideoEditClipsToWords } from './videoEditContentAnchors'
+import { planSpatialPropagation } from '@/core/videoEdit/spatialPropagation'
+import { evaluateSpatialFrame } from '@/core/videoEdit/spatialEvaluation'
+import { planVideoEditSpatialPropagationOffThread } from './videoEditMotionWorkerClient'
+import * as timelineEdits from '@/core/videoEdit/timelineEdits'
+import * as codeMaterialDocument from '@/core/videoEdit/codeMaterialDocument'
+import { VideoEditCodeMetadataPending } from './videoEditCodeState'
+
+vi.mock('./videoEditMotionWorkerClient', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditMotionWorkerClient')>(), planVideoEditSpatialPropagationOffThread: vi.fn((...args: Parameters<typeof planSpatialPropagation>) => planSpatialPropagation(...args)) }))
 
 const fileContent = { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) }
 beforeEach(() => {
@@ -51,6 +59,65 @@ it('batch fillers ripple-delete linked audio/video in one history step; stale se
   await expect(editVideoEditText(owner.document.id, sequence.id, { kind: 'words', ranges: [{ start: 0, end: 0 }] }, 'delete', undefined, undefined, sequence)).rejects.toThrow('已有修改')
   undoVideoEdit(owner.document.id); expect(owner.document.sequences).toEqual(before.sequences)
 })
+it.each(['delete', 'extract', 'insert'] as const)('文本 %s 在原身份下完成空间传播，子帧画面与源时钟一致并一步撤销', async action => {
+  const owner = await fixture(), id = owner.document.id
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence,
+    spatialCamera: { aim: { kind: 'clip' as const, clipId: 'v' }, curves: { offsetX: [{ time: 0, value: 0, interpolation: 'ease' as const }, { time: 150, value: .1, interpolation: 'hold' as const }] } },
+    clips: sequence.clips.map(clip => clip.id === 'v' ? { ...clip, spatial: { enabled: true }, curves: { x: [{ time: 0, value: 0, interpolation: 'linear' as const }, { time: 150, value: .2, interpolation: 'hold' as const }] } } : clip),
+  })) }))
+  const before = owner.document, sequence = before.sequences[0], history = owner.past.length
+  vi.mocked(planVideoEditSpatialPropagationOffThread).mockClear()
+  const result = await editVideoEditText(id, sequence.id, action === 'delete' ? { kind: 'fillers' } : { kind: 'text', text: '价格九元' }, action, 90)
+  const current = videoEditComposition(owner.document, result.sequenceId), original = videoEditComposition(before, sequence.id)
+  const output = { width: sequence.width, height: sequence.height, displayWidth: sequence.width, displayHeight: sequence.height }
+  for (const time of action === 'extract' ? [0, .125, 14.875, 29.875] : [0, 29.875, 74.875, 75, 89.875, 90, 119.875]) {
+    const sourceTime = action === 'extract' ? time + 30 : action === 'delete' ? time < 75 ? time + 15 : time + 30 : time < 90 ? time : time < 120 ? 90 : time - 30
+    const expected = evaluateSpatialFrame(original, sourceTime, output, 'final').camera.view
+    evaluateSpatialFrame(current, time, output, 'final').camera.view.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 8))
+  }
+  if (action === 'extract') expect(owner.document.sequences[0]).toEqual(sequence)
+  expect(planVideoEditSpatialPropagationOffThread).toHaveBeenCalledTimes(1)
+  expect(owner.past).toHaveLength(history + 1)
+  undoVideoEdit(id); expect(owner.document.sequences).toEqual(before.sequences)
+})
+it('文本空间规划期间的后续编辑不会被迟到结果覆盖', async () => {
+  const owner = await fixture(), id = owner.document.id, sequenceId = owner.document.sequences[0].id
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, spatialCamera: { aim: { kind: 'clip' as const, clipId: 'v' } } })) }))
+  let finish!: () => void
+  vi.mocked(planVideoEditSpatialPropagationOffThread).mockImplementationOnce(async request => { await new Promise<void>(resolve => { finish = resolve }); return planSpatialPropagation(request) })
+  const pending = editVideoEditText(id, sequenceId, { kind: 'fillers' }, 'delete')
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, name: '后续编辑' })) }))
+  const later = owner.document, history = owner.past.length
+  finish(); await expect(pending).rejects.toThrow('已有修改')
+  expect(owner.document).toBe(later); expect(owner.past).toHaveLength(history)
+})
+it('文本候选的代码元数据就绪后重建整批映射再提交', async () => {
+  const owner = await fixture(), id = owner.document.id, sequence = owner.document.sequences[0]
+  const apply = timelineEdits.applyVideoEditTimelineEditResult
+  let discarded: ReturnType<typeof timelineEdits.createVideoEditTimelineMapping> | undefined
+  vi.spyOn(timelineEdits, 'applyVideoEditTimelineEditResult').mockImplementationOnce((...args) => {
+    apply(...args); discarded = args[4]
+    throw new VideoEditCodeMetadataPending(Promise.resolve())
+  })
+  const result = await editVideoEditText(id, sequence.id, { kind: 'fillers' }, 'delete')
+  expect(result.changed).toBe(true)
+  expect(owner.document.sequences[0].clips.some(clip => discarded!.clipMap.some(map => map.toClipId === clip.id))).toBe(false)
+  expect(owner.document.sequences[0].clips.filter(clip => clip.kind === 'video').reduce((sum, clip) => sum + clip.duration, 0)).toBe(120)
+})
+it.each(['edit', 'cancel'] as const)('提交等待代码元数据期间发生 %s，重试仍拒绝旧候选', async action => {
+  const owner = await fixture(), id = owner.document.id, sequence = owner.document.sequences[0], controller = new AbortController()
+  let finish!: () => void
+  const ready = new Promise<void>(resolve => { finish = resolve })
+  const validation = vi.spyOn(codeMaterialDocument, 'validateCodeMaterialDocument').mockImplementationOnce(() => { throw new VideoEditCodeMetadataPending(ready) })
+  const pending = editVideoEditText(id, sequence.id, { kind: 'fillers' }, 'delete', undefined, undefined, undefined, controller.signal)
+  await vi.waitFor(() => expect(validation).toHaveBeenCalled())
+  if (action === 'edit') editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(value => ({ ...value, name: '后续修改' })) }))
+  else controller.abort()
+  const later = owner.document, history = owner.past.length
+  finish(); await expect(pending).rejects.toThrow()
+  expect(owner.document).toBe(later); expect(owner.past).toHaveLength(history)
+})
 it('excerpt and insertion share a single undo step without touching the source sequence or media', async () => {
   const owner = await fixture(); const before = structuredClone(owner.document); const sequence = owner.document.sequences[0]
   const history = owner.past.length
@@ -79,7 +146,7 @@ it('formal assistant reads mapped transcript, matches original text, extracts an
 
 it('公共文本读写递归消费嵌套词源，摘选保存后重开仍有词级时刻', async () => {
   const owner = await fixture(); const id = owner.document.id; const sequence = owner.document.sequences[0]
-  nestVideoEditSelection({ projectId: id, sequenceId: sequence.id, clipIds: sequence.clips.map(clip => clip.id) }, '嵌套口播')
+  await nestVideoEditSelection({ projectId: id, sequenceId: sequence.id, clipIds: sequence.clips.map(clip => clip.id) }, '嵌套口播')
   const app = createApplicationHarness()
   try {
     const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }; const documentRef = { kind: 'video_edit.document', id }
@@ -126,7 +193,7 @@ it('核对期间取消或编辑，不剪辑旧时间范围也不覆盖新编辑'
 
 it('嵌套父层候选沿真实叶子声音核对；没有身份的词源必须先重新定位', async () => {
   const owner = await fixture(); const sequenceId = owner.document.sequences[0].id
-  nestVideoEditSelection({ projectId: owner.document.id, sequenceId, clipIds: owner.document.sequences[0].clips.map(clip => clip.id) }, '嵌套词源')
+  await nestVideoEditSelection({ projectId: owner.document.id, sequenceId, clipIds: owner.document.sequences[0].clips.map(clip => clip.id) }, '嵌套词源')
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValueOnce({ ...fileContent, contentIdentity: 'b'.repeat(64) })
   const before = owner.document
   await expect(editVideoEditText(owner.document.id, sequenceId, { kind: 'text', text: '价格九元' }, 'extract')).rejects.toThrow('重新定位')

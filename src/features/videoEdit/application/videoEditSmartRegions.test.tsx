@@ -54,7 +54,7 @@ const flush = async (): Promise<void> => { for (let index = 0; index < 20; index
 it.each([false, true])('等待快照分析期间撤销效果（嵌套=%s），租约保留请求并能完成', async nested => {
   const { owner, id, video } = await project()
   applyVideoEditBuiltinEffect(id, owner.activeSequenceId, [video.id], 'smart:face_mosaic'); await flush()
-  if (nested) nestVideoEditSelection({ projectId: id, sequenceId: owner.activeSequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '子序列')
+  if (nested) await nestVideoEditSelection({ projectId: id, sequenceId: owner.activeSequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '子序列')
   const snapshot = structuredClone(getActiveVideoEditSequence(owner))
   const controller = new AbortController()
   let resolved = false
@@ -108,7 +108,7 @@ it('等待已取消信号立即结束；释放租约后取消没有现行文档�
 it('嵌套导出等待子序列智能区域，不因父片段没有文件而略过子遮罩', async () => {
   const { owner, id, video } = await project(); const sequenceId = owner.activeSequenceId
   applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic'); await flush()
-  nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '带区域的子序列')
+  await nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '带区域的子序列')
   const snapshot = getActiveVideoEditSequence(owner)
   let completed = false; const waiting = waitVideoEditSmartRegions(snapshot, snapshot).then(() => { completed = true })
   await flush(); expect(completed).toBe(false)

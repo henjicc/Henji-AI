@@ -16,7 +16,7 @@ export async function nestVideoEditClipsFromCapability(raw: unknown, context: Ca
   const sequence = owner.document.sequences.find(sequence => sequence.clips.some(clip => clip.id === ids[0]))
   if (!sequence || ids.some(id => !sequence.clips.some(clip => clip.id === id))) throw new Error('clipRefs 必须属于同一序列。')
   context.signal?.throwIfAborted()
-  const result = nestVideoEditSelection({ projectId: id, sequenceId: sequence.id, clipIds: ids }, input.name, input.linked !== false)
+  const result = await nestVideoEditSelection({ projectId: id, sequenceId: sequence.id, clipIds: ids }, input.name, input.linked !== false, context.signal)
   const document = owner.document
   await saveVideoEdit(id)
   const verified = requireVideoEditInstance(id) === owner && await verifyVideoEditSaved(id, document)

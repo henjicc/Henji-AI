@@ -114,7 +114,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
   finally { collecting.delete(owner) }
 }
 
-export async function importVideoEditCodeAsset(projectId: string, assetId: string, options: { binId?: string; filterTarget?: { sequenceId: string; clipId: string }; afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument } = {}, signal?: AbortSignal): Promise<{ definitionId: string; itemId?: string }> {
+export async function importVideoEditCodeAsset(projectId: string, assetId: string, options: { binId?: string; filterTarget?: { sequenceId: string; clipId: string }; afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument> } = {}, signal?: AbortSignal): Promise<{ definitionId: string; itemId?: string }> {
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   assertOwner(owner, contentVersion, signal)
   const { asset, manifest } = await readVideoEditCodeAsset(assetId, signal)

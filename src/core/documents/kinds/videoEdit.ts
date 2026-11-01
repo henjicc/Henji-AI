@@ -141,10 +141,12 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 55：新建代码素材默认作者接口 11，旧程序的作者接口枚举不认识它，会把整份剪辑判成内容无效；旧程序也会忽略元素效果覆盖，渲染出不同的画面。提高到 55 让它明确提示升级。
   // 56：新建代码素材默认作者接口 12（网页文本声明），旧程序的作者接口枚举不认识它，会把整份剪辑判成内容无效；提高到 56 让它明确提示升级。
   // 57：新建代码素材默认作者接口 13（累积模拟），旧程序的作者接口枚举不认识它，会把整份剪辑判成内容无效；提高到 57 让它明确提示升级。
-  minReaderVersion: 58,
+  minReaderVersion: 60,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 59 → 60：空间片段、相机与绑定轨迹，以及作者接口 15（createThree 与 space:true 空间入口）；片段关键帧允许右边界控制点，旧内容不补默认值。旧程序读不懂作者接口 15，最低可读版本提高到 60。
+    59: content => structuredClone(content),
     // 58 → 59：导出记录的设置新增可选 useWebCache，缺省不用网页缓存，最低可读版本保持 58。
     58: content => structuredClone(content),
     // 57 → 58：接受作者接口 14 的 fill 图层画面来源；旧源码、接口与库锁定原样保留。

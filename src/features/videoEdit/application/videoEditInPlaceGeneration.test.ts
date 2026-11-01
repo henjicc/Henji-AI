@@ -76,9 +76,9 @@ beforeEach(() => {
   state.opened = true; state.history = null; state.liveMissing = false; state.saveError = false
   fixture()
   // 导入：把生成结果作为素材项加进剪辑，再交给落位回调（一步编辑）
-  imports.mockImplementation(async (_projectId: string, _sources: unknown, _bin: unknown, _signal: unknown, after: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument) => {
+  imports.mockImplementation(async (_projectId: string, _sources: unknown, _bin: unknown, _signal: unknown, after: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>) => {
     const imported: VideoEditDocument = { ...state.document, media: [...state.document.media, { id: 'gen-media', name: '生成', path: 'D:/gen.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 5, assetId: 'asset-gen' }], items: [...state.document.items, { id: 'gen-item', name: '生成', kind: 'video', mediaId: 'gen-media' }] }
-    state.document = after(imported, ['gen-item'])
+    state.document = await after(imported, ['gen-item'])
     return ['gen-item']
   })
 })

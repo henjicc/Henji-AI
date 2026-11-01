@@ -56,17 +56,22 @@ export class VideoEditAuthorGpu {
     return pending
   }
   private async compile(format: string): Promise<void> {
-    const pipelines = new Map<string, GpuRenderPipeline>()
+    const entries = ['motion', 'mip']
     this.device.pushErrorScope('validation')
+    let pending: Array<Promise<GpuRenderPipeline>>
     try {
-      for (const entry of ['motion', 'mip']) {
+      pending = entries.map(entry => {
         const descriptor = this.descriptor(entry, format)
-        pipelines.set(`${entry}:${format}`, await (this.device.createRenderPipelineAsync?.(descriptor) ?? this.device.createRenderPipeline(descriptor)))
-      }
+        return Promise.resolve(this.device.createRenderPipelineAsync?.(descriptor) ?? this.device.createRenderPipeline(descriptor))
+      })
     } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
-    const error = await this.device.popErrorScope()
+    // 作用域是设备级栈：等待异步管线前弹出，避免与同设备其他区段交错；异步管线的失败由 Promise 交回。
+    const scope = this.device.popErrorScope()
+    let pipelines: GpuRenderPipeline[]
+    try { pipelines = await Promise.all(pending) } catch (error) { await scope.catch(() => null); throw error }
+    const error = await scope
     if (error) throw new Error(`作者图层 GPU 初始化失败：${error.message}`)
-    for (const [key, pipeline] of pipelines) this.pipelines.set(key, pipeline)
+    for (const [index, entry] of entries.entries()) this.pipelines.set(`${entry}:${format}`, pipelines[index])
   }
   private descriptor(entry: string, format: string): unknown {
     const module = this.device.createShaderModule({ code: entry === 'motion' ? motion : filter })

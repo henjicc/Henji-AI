@@ -41,7 +41,7 @@ interface Candidate { definition: CodeMaterialDefinition; item: VideoEditItem; f
 interface CodeAssetPublication {
   asset: CodeAsset; foreign?: ContentTrustReference | null; media: VideoEditMedia[]; mediaIds: ReadonlyMap<string, string>; origin: { assetId: string; contentIdentity: string }
   filterTarget?: { sequenceId: string; clipId: string }
-  afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument
+  afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>
   beforePublish(): Promise<void>
 }
 function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProgram, input: { name?: string; binId?: string }, initial?: Pick<CodeMaterialInstance, 'parameters' | 'curves'>, host = createVideoEditSequence()): Candidate {
@@ -90,7 +90,7 @@ export async function trialVideoEditAuthorSource(source: Parameters<typeof addre
  * executed in the render worker, trial-rendered, then becomes one atomic domain edit.
  * `typeReports` opts into author type checking: it runs beside bundling and the trial,
  * never blocks publication, and receives one report per input after the edit is committed. */
-async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication, afterCreate?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[]): Promise<Candidate[]> {
+async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication, afterCreate?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>, measurements?: CodeFramePerformance[], typeReports?: CodeTypeCheckReport[]): Promise<Candidate[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的代码素材。')
   const owner = requireVideoEditInstance(projectId)
@@ -165,8 +165,8 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       validateCodeMaterialDocument(candidateDocument, readVideoEditCodeMetadata(owner, candidateDocument), changedCodeMaterialVersions(baseline, candidateDocument))
       filterTrial = videoEditCodeValidationFrames(candidateDocument, [{ ...target, effectIds: [effect.id] }], { sequenceId: sequence.id, frame: Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)) })
     }
-    if (publication?.afterImport) candidateDocument = videoEditDocumentSchema.parse(publication.afterImport(candidateDocument, items.map(item => item.id)))
-    if (afterCreate) candidateDocument = videoEditDocumentSchema.parse(afterCreate(candidateDocument, items.map(item => item.id)))
+    if (publication?.afterImport) candidateDocument = videoEditDocumentSchema.parse(await publication.afterImport(candidateDocument, items.map(item => item.id)))
+    if (afterCreate) candidateDocument = videoEditDocumentSchema.parse(await afterCreate(candidateDocument, items.map(item => item.id)))
     const read = readVideoEditCodeMetadata(owner, candidateDocument)
     await ensureVideoEditChangedCodeMetadata(owner, baseline, candidateDocument, controller.signal)
     validateCodeMaterialDocument(candidateDocument, read, changedCodeMaterialVersions(baseline, candidateDocument))
@@ -194,7 +194,7 @@ export async function createVideoEditCodeItems(projectId: string, inputs: VideoE
   return (await createCheckedMaterials(projectId, inputs, 'generator', signal)).map(candidate => candidate.item.id)
 }
 /** Domain composition: creation and placement share the source trial and one undo boundary. */
-export async function createVideoEditPlacedCodeItems(projectId: string, inputs: VideoEditCodeInput[], afterCreate: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument, signal?: AbortSignal): Promise<string[]> {
+export async function createVideoEditPlacedCodeItems(projectId: string, inputs: VideoEditCodeInput[], afterCreate: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>, signal?: AbortSignal): Promise<string[]> {
   return (await createCheckedMaterials(projectId, inputs, 'generator', signal, undefined, afterCreate)).map(candidate => candidate.item.id)
 }
 /** General source creation publishes trusted generator or filter definitions. */
@@ -260,7 +260,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       trials.push(candidate({ ...result.definition, defaultVersionId: result.versionId }, result.program, {}))
     }
     let document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: [...definitions.values()] })
-    if (afterCreate) document = videoEditDocumentSchema.parse(afterCreate(document, added))
+    if (afterCreate) document = videoEditDocumentSchema.parse(await afterCreate(document, added))
     await ensureVideoEditChangedCodeMetadata(owner, baseline, document, controller.signal)
     const read = readVideoEditCodeMetadata(owner, document)
     validateCodeMaterialDocument(document, read, changedCodeMaterialVersions(baseline, document))

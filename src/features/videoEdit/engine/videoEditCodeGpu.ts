@@ -146,6 +146,52 @@ export class VideoEditCodeGpu {
   async authorFrameKey(...args: Parameters<VideoEditAuthorPrograms['frameKey']>): ReturnType<VideoEditAuthorPrograms['frameKey']> {
     return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().frameKey(...args) })
   }
+  async inspectAuthorScene(instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo): Promise<import('@/core/videoEdit/spatialTypes').SpatialBounds | null> {
+    return this.trackAuthor(async () => {
+      await this.ready; this.assertLive()
+      const runtime = await this.authors().instance(instanceKey, program)
+      return runtime.inspectThree(size.width, size.height, parameters, assets, info)
+    })
+  }
+  /** 空间 lease 使用独立目标；完成后由 lease 显式回收，不能与普通帧淘汰互相覆盖。 */
+  async authorSpatialGenerator(instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number },
+    target: import('./videoEditSpatialContracts').SpatialTargetSpec, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets,
+    info: AuthorFrameInfo, images: AuthorGpuInputs['images'], quality: EffectQuality, assertCurrent: () => void,
+    overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = this.effectEnvironment): Promise<import('./videoEditSpatialContracts').SpatialPictureLease> {
+    return this.trackAuthor(async () => {
+      await this.ready; this.assertLive(); assertCurrent()
+      const runtime = await this.authors().instance(instanceKey, program)
+      let texture = this.texture(target.width, target.height, target.format, 1, true, target.usage)
+      const textures = [texture]
+      let format = target.format
+      let release: Promise<void> | undefined
+      try {
+        const frameInfo = target.height === size.height ? info : { ...info, renderScale: target.height / size.height }
+        for (const image of Object.values(images)) this.assertInput(image.texture)
+        await runtime.render(texture, size.width, size.height, parameters, assets, frameInfo, overrides, { frames: [], images }, motionBlur,
+          { width: target.width, height: target.height }, environment, quality, assertCurrent, () => {
+            format = VIDEO_EDIT_PRECISE_FORMAT
+            texture = this.texture(target.width, target.height, format, 1, true, target.usage)
+            textures.push(texture)
+            return texture
+          })
+        assertCurrent()
+        const completion = this.device.queue.onSubmittedWorkDone()
+        return { texture: runtime.outputTexture ?? texture, owner: 'code-sources', width: target.width, height: target.height,
+          format, highPrecision: format === VIDEO_EDIT_PRECISE_FORMAT, carriesLight: runtime.carriesLight,
+          worldBounds: runtime.worldBounds, completion,
+          release: afterUse => release ??= Promise.allSettled([completion, afterUse]).then(results => {
+            for (const owned of textures) this.effectAllocator.release(owned)
+            const failed = results.find(result => result.status === 'rejected')
+            if (failed?.status === 'rejected') throw failed.reason
+          }) }
+      } catch (error) {
+        await this.device.queue.onSubmittedWorkDone().catch(() => undefined)
+        for (const owned of textures) this.effectAllocator.release(owned)
+        throw error
+      }
+    })
+  }
   async authorTextIdentity(...args: Parameters<VideoEditAuthorPrograms['textIdentity']>): ReturnType<VideoEditAuthorPrograms['textIdentity']> {
     return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().textIdentity(...args) })
   }
@@ -324,14 +370,14 @@ export class VideoEditCodeGpu {
     try { await pending }
     catch (error) { if (this.imageReady === pending) this.imageReady = undefined; throw error }
   }
-  private texture(width: number, height: number, format = 'rgba8unorm', mipLevelCount = 1, storage = true): GpuTexture {
+  private texture(width: number, height: number, format = 'rgba8unorm', mipLevelCount = 1, storage = true, usage = 0): GpuTexture {
     let pixels = 0
     for (let level = 0; level < mipLevelCount; level++) pixels += Math.max(1, Math.floor(width / 2 ** level)) * Math.max(1, Math.floor(height / 2 ** level))
     const bytes = pixels * videoEditGpuBytesPerPixel(format)
     const limit = (this.device as GpuDevice & { limits?: { maxTextureDimension2D: number } }).limits?.maxTextureDimension2D ?? 8192
     if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= limit)) throw new CodeMaterialError('BUDGET', `代码素材纹理尺寸超过设备上限 ${limit}。`)
     const textureStarted = performance.now()
-    const texture = this.device.createTexture({ size: [width, height], mipLevelCount, format, usage: 0x01 | 0x02 | 0x04 | 0x10 | (storage ? 0x08 : 0) })
+    const texture = this.device.createTexture({ size: [width, height], mipLevelCount, format, usage: usage | 0x01 | 0x02 | 0x04 | 0x10 | (storage ? 0x08 : 0) })
     recordVideoEditPreparation('textureAllocation', performance.now() - textureStarted)
     this.bytes += bytes
     this.textureBytes.set(texture, bytes)
@@ -790,7 +836,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
   }
 
   diagnostics(): { residentBytes: number; surfaces: number; glyphs: number; pipelines: number; pipelineCompiles: number; textureAllocations: number; externalCopies: number; generatorFrames: number; filterFrames: number; mixFrames: number; builtinFrames: number } {
-    return { ...this.counts, pipelineCompiles: this.counts.pipelineCompiles, externalCopies: this.counts.externalCopies, residentBytes: this.bytes + (this.authorPrograms?.canvasBytes ?? 0), surfaces: this.surfaces.size, glyphs: this.glyphs.size, pipelines: this.disposed ? 0 : 2 + Number(!!this.image) + this.mixPipelines.size }
+    return { ...this.counts, pipelineCompiles: this.counts.pipelineCompiles, externalCopies: this.counts.externalCopies, residentBytes: this.bytes + (this.authorPrograms?.canvasBytes ?? 0) + (this.authorPrograms?.threeBytes ?? 0), surfaces: this.surfaces.size, glyphs: this.glyphs.size, pipelines: this.disposed ? 0 : 2 + Number(!!this.image) + this.mixPipelines.size }
   }
   dispose(): Promise<void> {
     if (this.closing) return this.closing

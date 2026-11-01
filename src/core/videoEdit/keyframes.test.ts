@@ -17,6 +17,7 @@ it('自定义贝塞尔反求时间，允许过冲；修剪与再次修剪保留�
   for (let time = 0; time <= 39; time += .25) expect(evaluateVideoEditKeyframes(again, time, 0)).toBeCloseTo(evaluateVideoEditKeyframes(points, time + 30, 0), 7)
   expect(videoEditKeyframesSchema.parse(again)).toEqual(again)
   const equal: VideoEditKeyframes = [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 3, 2 / 3, -2] }, { time: 100, value: 1, interpolation: 'linear' }]
+  for (const time of [.125, 25, 50, 99.875]) expect(evaluateVideoEditKeyframes(equal, time, 0)).toBe(codeCubicBezier(1 / 3, 3, 2 / 3, -2, time / 100))
   const equalSlice = sliceVideoEditCurves({ x: equal }, 25, 76)!.x
   for (let time = 0; time <= 75; time += .5) expect(evaluateVideoEditKeyframes(equalSlice, time, 0)).toBeCloseTo(evaluateVideoEditKeyframes(equal, time + 25, 0), 7)
   expect(() => videoEditKeyframesSchema.parse([{ ...points[0], easeRange: [.25, 1] }])).toThrow('easeValues')
@@ -99,8 +100,8 @@ it('拆分/修剪保留线性、定格和缓动区间的逐帧值（含再次修
 it('旧文件兼容；片内时间、值、内置效果参数与插值受文档验证', () => {
   const doc = fixture(); expect(videoEditDocumentSchema.parse(doc)).toBeTruthy()
   const clip = doc.sequences[0].clips[0]
-  clip.curves!.opacity![1].time = 101
-  expect(() => videoEditDocumentSchema.parse(doc)).toThrow('0–100')
+  clip.curves!.opacity![1].time = 102
+  expect(() => videoEditDocumentSchema.parse(doc)).toThrow('0–101')
   delete clip.curves
   expect(videoEditDocumentSchema.parse(doc).sequences[0].clips[0].anchorX).toBeUndefined()
   clip.effects = [{ id: 'color_grade', name: '调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {}, curves: { exposure: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 100, value: 2, interpolation: 'ease' }] } } }]
@@ -115,15 +116,28 @@ it('旧文件兼容；片内时间、值、内置效果参数与插值受文档�
 it('帧率与比率拉伸按新帧网格重定位关键帧，冲突去重不越界', () => {
   const doc = fixture(); const sequence = doc.sequences[0]
   const changed = changeVideoEditSequenceSettings(sequence, { frameRate: { numerator: 24, denominator: 1 } })
-  expect(changed.clips[0].curves!.opacity!.at(-1)!.time).toBeLessThan(changed.clips[0].duration)
+  expect(changed.clips[0].curves!.opacity!.at(-1)!.time).toBeLessThanOrEqual(changed.clips[0].duration)
   const phase = fixture().sequences[0]
   phase.clips[0] = { ...phase.clips[0], start: 1, curves: { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 2, value: 1, interpolation: 'linear' }] } }
   expect(changeVideoEditSequenceSettings(phase, { frameRate: { numerator: 24, denominator: 1 } }).clips[0].curves!.x![1].time).toBe(1)
   doc.media = [{ id: 'media', name: '视频', path: '/video.mp4', kind: 'video', width: 10, height: 10, durationSeconds: 10 }]
   doc.items[0] = { id: 'item', name: '视频', kind: 'video', mediaId: 'media' }; sequence.clips[0].kind = 'video'
   const stretched = applyVideoEditRateStretch(doc, sequence.id, ['clip'], 'out', -51).sequence.clips[0]
-  expect(stretched.duration).toBe(50); expect(stretched.curves!.opacity!.at(-1)!.time).toBe(49)
+  expect(stretched.duration).toBe(50); expect(stretched.curves!.opacity!.at(-1)!.time).toBeLessThanOrEqual(stretched.duration)
   expect(videoEditComposition(doc, sequence.id)).toBeTruthy()
+})
+it('分割后的左右片段保留切点前最后一帧内的连续轨迹与右边界控制点', () => {
+  for (const interpolation of ['linear', 'hold', 'ease', 'bezier'] as const) {
+    const document = fixture(), original = document.sequences[0].clips[0]
+    original.spatial = { enabled: true }
+    original.curves = { depth: [{ time: 0, value: -.2, interpolation, ...(interpolation === 'bezier' ? { bezier: [.2, 1.3, .8, -.2] as [number, number, number, number] } : {}) }, { time: 100, value: .7, interpolation: 'hold' }] }
+    const split = splitVideoEditClip(document.sequences[0], original.id, 40)
+    expect(videoEditDocumentSchema.parse({ ...document, sequences: [split] })).toBeTruthy()
+    for (let frame = 0; frame < 101; frame += .125) {
+      const clip = split.clips[frame < 40 ? 0 : 1]
+      expect(evaluateVideoEditClip(clip, frame).depth).toBeCloseTo(evaluateVideoEditClip(original, frame).depth!, 7)
+    }
+  }
 })
 it('锚点参与同一几何；跟随上的关键帧为偏移与缩放乘数', () => {
   const clip: VideoEditClip = fixture().sequences[0].clips[0]

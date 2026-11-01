@@ -6,7 +6,8 @@ import { checkCancelled, CreativeIntentError, type ComputationControl, type Fram
 import { intentPose, intentEventProgress, motionIntentSchema, type MotionIntent } from './recipe'
 import { z } from 'zod'
 
-export type MotionCurveKey = 'x' | 'y' | 'scale' | 'rotation' | 'anchorX' | 'anchorY'
+export const MOTION_CURVE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY'] as const
+export type MotionCurveKey = typeof MOTION_CURVE_KEYS[number]
 export interface MotionCompileContext {
   /** Exact host conversion from composition ratios to existing clip offset semantics. */
   positionToNative: Affine; pivotToNative: Affine; clipStart: number; scaleFactor: number; rotationOffsetDegrees: number

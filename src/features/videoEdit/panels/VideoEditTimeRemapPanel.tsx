@@ -43,7 +43,7 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
   const preview = useMemo(() => points.length ? curveFromPoints(points, span) : undefined, [points, span])
   if (!videoEditClipSpeedSupported(clip.kind) || clip.frameHold) return null
   const apply = (change: VideoEditSpeedChange): void => {
-    try { executeVideoEditTimelineEdit(instance.document.id, sequence.id, { kind: 'speed', clipIds: [clip.id], linked: videoEditPickRelations(instance.linkedSelection !== false), change: { ripple: true, ...change } }) } catch (error) { onError(error) }
+    try { void executeVideoEditTimelineEdit(instance.document.id, sequence.id, { kind: 'speed', clipIds: [clip.id], linked: videoEditPickRelations(instance.linkedSelection !== false), change: { ripple: true, ...change } }).catch(onError) } catch (error) { onError(error) }
   }
   const enable = (on: boolean): void => {
     if (!on) { apply({ timeRemap: null }); return }

@@ -1,11 +1,13 @@
 import type { VideoEditSequence } from './document'
 import { remapVideoEditCaptionSpeech } from './captionSpeech'
 import { remapVideoEditContentAnchor } from './contentAnchors'
+import { remapSpatialCameraReferences } from './spatialPropagation'
 
 /** Copy all sequence-owned references together, keeping source media shared. */
 export function copyVideoEditSequence(source: VideoEditSequence): VideoEditSequence {
   const sequence = structuredClone(source); sequence.id = crypto.randomUUID(); sequence.name = `${source.name} 副本`
   const clips = new Map(source.clips.map(clip => [clip.id, crypto.randomUUID()]))
+  if (source.spatialCamera) sequence.spatialCamera = remapSpatialCameraReferences(source.spatialCamera, clips)
   const links = new Map(source.clips.filter(clip => clip.linkId).map(clip => [clip.linkId!, crypto.randomUUID()]))
   const groups = new Map(source.clips.filter(clip => clip.groupId).map(clip => [clip.groupId!, crypto.randomUUID()]))
   const tracks = new Map(source.tracks.map(track => [track.id, crypto.randomUUID()]))

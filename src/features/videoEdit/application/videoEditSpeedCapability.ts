@@ -21,12 +21,12 @@ export async function rippleVideoEditClipSpeed(raw: unknown, context: Capability
   if (!sequence || clipIds.some(id => !sequence.clips.some(clip => clip.id === id))) throw new Error('clipRefs 必须是同一序列的现有片段，请列出 video_edit.clip 后重试。')
   const view = owner.activeSequenceId === sequence.id ? owner : owner.sequenceViews.get(sequence.id)
   context.signal?.throwIfAborted()
-  const result = executeVideoEditTimelineEdit(id, sequence.id, { kind: 'speed', clipIds,
+  const result = await executeVideoEditTimelineEdit(id, sequence.id, { kind: 'speed', clipIds,
     linked: input.linked === false ? false : videoEditPickRelations(input.linked ?? (view?.linkedSelection !== false)),
     change: { ripple: true, ...(input.speedPercent !== undefined ? { speed: videoEditSpeedRatio(input.speedPercent / 100) } : { duration: input.durationFrames }),
       ...(input.reverse !== undefined ? { reverse: input.reverse } : {}), ...(input.preservePitch !== undefined ? { preservePitch: input.preservePitch } : {}),
     },
-  })
+  }, context.signal)
   const document = owner.document
   const changedClipRefs = result.clips.filter(clip => JSON.stringify(sequence.clips.find(before => before.id === clip.id)) !== JSON.stringify(clip))
     .map(clip => ({ kind: 'video_edit.clip' as const, id: `${id}:${clip.id}` }))
@@ -60,10 +60,10 @@ export async function rampVideoEditClipSpeed(raw: unknown, context: CapabilityEx
   const frameInterpolation = input.frameInterpolation ?? (curve.points.some(point => point.speed < 1) ? 'blend' : undefined)
   const view = owner.activeSequenceId === sequence.id ? owner : owner.sequenceViews.get(sequence.id)
   context.signal?.throwIfAborted()
-  const result = executeVideoEditTimelineEdit(id, sequence.id, { kind: 'speed', clipIds: [clip.id],
+  const result = await executeVideoEditTimelineEdit(id, sequence.id, { kind: 'speed', clipIds: [clip.id],
     linked: input.linked === false ? false : videoEditPickRelations(view?.linkedSelection !== false),
     change: { ripple: input.ripple !== false, timeRemap: curve, ...(frameInterpolation ? { frameInterpolation } : {}) },
-  })
+  }, context.signal)
   const document = owner.document
   const changedClipRefs = result.clips.filter(entry => JSON.stringify(sequence.clips.find(before => before.id === entry.id)) !== JSON.stringify(entry))
     .map(entry => ({ kind: 'video_edit.clip' as const, id: `${id}:${entry.id}` }))

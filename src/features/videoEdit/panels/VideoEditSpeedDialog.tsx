@@ -40,13 +40,13 @@ export function VideoEditSpeedDialog({ request, onClose }: { request: VideoEditS
     const stretched = stretchVideoEditClip(initial.clip, frames)
     setDuration(stretched.duration); setDurationText(videoEditFrameTimecode(stretched.duration, initial.fps)); setPercent(videoEditClipSpeedPercent(stretched)); setEdited('duration')
   }
-  const submit = (): void => {
+  const submit = async (): Promise<void> => {
     try {
       const change: VideoEditSpeedChange = {
         ...(edited === 'speed' ? { speed: videoEditSpeedRatio(percent / 100) } : edited === 'duration' ? { duration } : {}),
         ...(reverse !== initial.reverse ? { reverse } : {}), ...(preservePitch !== initial.preservePitch ? { preservePitch } : {}), ripple,
       }
-      if (change.speed || change.duration !== undefined || change.reverse !== undefined || change.preservePitch !== undefined) executeVideoEditTimelineEdit(request.projectId, request.sequenceId, { kind: 'speed', clipIds: request.clipIds, linked: false, change })
+      if (change.speed || change.duration !== undefined || change.reverse !== undefined || change.preservePitch !== undefined) await executeVideoEditTimelineEdit(request.projectId, request.sequenceId, { kind: 'speed', clipIds: request.clipIds, linked: false, change })
       onClose()
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
   }

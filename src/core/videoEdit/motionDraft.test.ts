@@ -5,6 +5,7 @@ import { defaultVideoEditTextStyle } from './text'
 import { videoEditClipSchema, videoEditComposition } from './document'
 import { mergeMotionClipCurves, motionClipBase, motionClipGeometry } from './motionDraft'
 import { videoEditClipValue } from './keyframes'
+import { SPATIAL_KEYS } from './spatialSchema'
 
 const clip = () => videoEditClipSchema.parse({ id: 'clip', itemId: 'item', name: '标题', kind: 'text', text: '标题', textStyle: defaultVideoEditTextStyle(1080), start: 10, duration: 100, track: 1, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, curves: { x: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [.2, 1.5, .7, -.3] }, { time: 99, value: 1, interpolation: 'linear' }] } })
 it('只替换候选涉及的范围和属性，外部普通贝塞尔与原片段保持不变', () => {
@@ -28,4 +29,14 @@ it('越界和重叠拒绝整次应用；素材路径重定位不改变运动基�
   expect(() => mergeMotionClipCurves(before, [motion, motion])).toThrow('同一时间')
   expect(() => mergeMotionClipCurves(before, [{ ...motion, range: [30, 100] }])).toThrow('片段范围')
   expect(motionClipBase({ ...before, name: '旧名称' })).toEqual(motionClipBase({ ...before, name: '新名称' }))
+})
+it('二维候选忽略候选中的空间曲线，保留目标四个空间值与带子区间的手工曲线', () => {
+  const spatialPoints = [{ time: 0, value: .2, interpolation: 'bezier' as const, bezier: [.2, -.3, .8, 1.2] as [number, number, number, number], easeRange: [.1, .9] as [number, number], easeValues: [.1, .4] as [number, number] }, { time: 99, value: .4, interpolation: 'linear' as const }]
+  const target = { ...clip(), spatial: { enabled: true }, depth: .3, rotationX: 21, rotationY: -12, anchorDepth: .08, curves: { ...clip().curves, ...Object.fromEntries(SPATIAL_KEYS.map(key => [key, structuredClone(spatialPoints)])) } }
+  const before = structuredClone(target)
+  const candidate = { takeId: 'mixed', range: [30, 60] as [number, number], keyCount: 2, maxErrors: {}, curves: { x: [{ time: 30, value: -.2, interpolation: 'linear' as const }, { time: 60, value: .3, interpolation: 'linear' as const }], ...Object.fromEntries(SPATIAL_KEYS.map(key => [key, [{ time: 30, value: 999, interpolation: 'hold' as const }]])) } }
+  const result = mergeMotionClipCurves(target, [candidate])
+  expect(videoEditClipValue(result, 'x', target.start + 30)).toBe(-.2)
+  for (const key of SPATIAL_KEYS) { expect(result[key]).toEqual(target[key]); expect(result.curves?.[key]).toEqual(target.curves?.[key]) }
+  expect(result.spatial).toEqual(target.spatial); expect(target).toEqual(before)
 })

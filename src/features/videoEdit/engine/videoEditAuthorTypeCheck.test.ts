@@ -18,6 +18,20 @@ const check = (input: string | CodeMaterialFiles, report?: string[]) => {
 const lines = (input: string | CodeMaterialFiles, report?: string[]): string[] => check(input, report).diagnostics.map(codeTypeDiagnosticLine)
 const color = JSON.stringify(APP_ACCENT_HEX)
 
+it('空间入口保留参数推断，并对未启用 TS 检查的 JS 场景返回材质源位置', () => {
+  const result = check({ entry: 'main.ts', files: { 'main.ts': 'export default { name: "空间", space: true, params: [{ key: "amount", type: "number", title: "量", default: 1 }], draw(ctx, t, p, w, h, assets, info) { info.space.project([0, 0, 0]); p.missing; } }' } })
+  expect(result.diagnostics).toHaveLength(1)
+  expect(result.diagnostics[0].message).toContain("'missing'")
+  const source = 'import { ShaderMaterial as Material } from "three"; export default { name: "空间", createThree() { return { scene: new Material(), update() {} }; } }'
+  const invalid = check({ entry: 'main.js', files: { 'main.js': source } })
+  expect(invalid.diagnostics).toHaveLength(1)
+  expect(source.slice(invalid.diagnostics[0].span.start, invalid.diagnostics[0].span.end)).toBe('new Material()')
+  const helper = 'import { ShaderMaterial } from "three"; const helpers = { createThree() { return new ShaderMaterial() } }; export default { createWebGL() { return helpers.createThree(); } }'
+  expect(check({ entry: 'main.js', files: { 'main.js': helper } }).diagnostics).toEqual([])
+  const named = source.replace('export default {', 'const author = {') + '; export { author as default };'
+  expect(check({ entry: 'main.js', files: { 'main.js': named } }).diagnostics).toHaveLength(1)
+})
+
 it('排版库挂载发行的真实声明，类型错误可检出；切回 v5 后同一源码不可用', () => {
   const read = vi.fn((library: string, version: string): AuthorLibraryTypePackage | undefined => library === 'henji-layout' ? JSON.parse(fs.readFileSync(path.join('resources/video-edit-author/frozen', library, version, 'types.json'), 'utf8')) as AuthorLibraryTypePackage : undefined)
   const typed = createAuthorTypeChecker({ ...AUTHOR_TYPE_ENVIRONMENT, libraryTypes: read })
@@ -78,7 +92,7 @@ describe('作者源码类型检查', () => {
   it('模块对象另有错误时仍指向真正的字段，不把 params 推断失败报成误导的错误', () => {
     const params = '[{ key: "amount", type: "number", title: "量", default: .5, min: 0, max: 1, step: .01 }]'
     expect(lines(`export default { nmae: "x", params: ${params}, draw(ctx, t, p) { ctx.globalAlpha = p.amount } }`)).toEqual([
-      "main.ts:1:18 TS2353 Object literal may only specify known properties, and 'nmae' does not exist in type 'AuthorModule<readonly AuthorParamDeclaration[]>'.",
+      expect.stringMatching(/^main.ts:1:18 TS2353 .*'nmae' does not exist in type/),
     ])
     // 没写 params 时不推断键名：宿主照常传入空参数对象，读到的是 undefined。
     expect(lines('export default { name: "x", draw(ctx, t, p) { ctx.globalAlpha = p.amount ?? 1 } }')).toEqual([])

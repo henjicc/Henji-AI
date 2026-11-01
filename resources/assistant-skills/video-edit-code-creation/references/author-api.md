@@ -1,3 +1,5 @@
+> 作者 API 15：真实几何用受管 createThree，宿主掌管相机、景深与曝光。其他入口仅显式 space:true 才获得 info.space。普通卡片中心生成一次；three 场景逐子时刻渲染。空间构图调用宿主能力，不手写投影、布局或景深。旧 API 按各自版本保留行为。见 [空间配方](recipes-3d.md)。
+
 # 作者接口：模块、绘制与图层
 
 代码素材是标准 ES 模块，在剪辑渲染 Worker 里直接执行，和合成共用同一个 GPU 设备。写普通 JS/TS：`let`、循环、类、闭包、`Math`、数组方法、相对导入都可以用；宿主不解析也不限制你的绘制代码。文字与动效见 author-text-motion，WebGPU/WebGL 与滤镜见 author-shaders，参数类型见 parameter-types。

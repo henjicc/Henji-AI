@@ -1,5 +1,8 @@
+import type { SpatialPropagationRequest } from './spatialTypes'
+import { VideoEditTimelineClock } from './timelineClock'
+import { splitSpatialCameraTarget, remapSpatialCameraReferences } from './spatialPropagation'
 import { clipVideoEditAnnotationTime, mapVideoEditAnnotationTime } from './annotations'
-import { sliceVideoEditClipKeyframes } from './keyframes'
+import { sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes } from './keyframes'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { adjustVideoEditClip, splitVideoEditClip, videoEditClipMedia, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
@@ -15,6 +18,10 @@ import { validateVideoEditTransitions, videoEditTransitionClipIds, type VideoEdi
 import { validateVideoEditAdjustmentRanges } from './compositing'
 import { applyVideoEditTrim, type VideoEditTrimMode } from './timelineTrims'
 import { applyVideoEditRateStretch, applyVideoEditSpeedChange, type VideoEditSpeedChange } from './clipSpeedEdits'
+
+export interface VideoEditTimelineMapping { clipMap: SpatialPropagationRequest['clipMap'][number][]; clock: VideoEditTimelineClock }
+export function createVideoEditTimelineMapping(sequenceId: string): VideoEditTimelineMapping { return { clipMap: [], clock: new VideoEditTimelineClock(sequenceId) } }
+type TimelineMapping = VideoEditTimelineMapping
 
 export interface VideoEditClipboard {
   projectId: string
@@ -129,7 +136,7 @@ function separateRightRelations(before: VideoEditSequence, clips: VideoEditClip[
     return next
   })
 }
-function splitClips(sequence: VideoEditSequence, ids: string[], frame: number): VideoEditSequence {
+function splitClips(sequence: VideoEditSequence, ids: string[], frame: number, mapping: TimelineMapping): VideoEditSequence {
   integer(frame)
   let next = sequence
   const rights = new Map<string, string>()
@@ -137,13 +144,17 @@ function splitClips(sequence: VideoEditSequence, ids: string[], frame: number): 
     const clip = next.clips.find(value => value.id === id)!
     if (!(frame > clip.start && frame < clip.start + clip.duration)) continue
     const before = new Set(next.clips.map(value => value.id))
+    const camera = next.spatialCamera
     next = splitVideoEditClip(next, id, frame)
-    rights.set(next.clips.find(value => !before.has(value.id))!.id, id)
+    const rightId = next.clips.find(value => !before.has(value.id))!.id
+    if (camera) next.spatialCamera = splitSpatialCameraTarget(camera, id, rightId, mapping.clock.sourceFrame(frame))
+    rights.set(rightId, id)
+    mapping.clipMap.push({ fromSequenceId: sequence.id, fromClipId: id, sourceRange: [mapping.clock.sourceFrame(frame), mapping.clock.sourceFrame(clip.start + clip.duration)], toSequenceId: sequence.id, toClipId: rightId })
   }
   if (next === sequence) throw new Error('请将播放头置于所选片段内部再拆分。')
   return { ...next, clips: separateRightRelations(sequence, next.clips, rights, frame) }
 }
-function holdFrame(sequence: VideoEditSequence, ids: string[], frame: number): VideoEditSequence {
+function holdFrame(sequence: VideoEditSequence, ids: string[], frame: number, mapping: TimelineMapping): VideoEditSequence {
   integer(frame)
   const originals = sequence.clips.filter(clip => ids.includes(clip.id))
   if (originals.some(clip => clip.frameHold || !['video', 'sequence'].includes(clip.kind) || clip.sourceComponent === 'audio'
@@ -151,9 +162,9 @@ function holdFrame(sequence: VideoEditSequence, ids: string[], frame: number): V
   let next = sequence
   for (const original of originals) {
     const source = videoEditClipSourceTimeAt(original, frame - original.start, sequence.frameRate)
-    if (frame > original.start) next = splitClips(next, [original.id], frame)
+    if (frame > original.start) next = splitClips(next, [original.id], frame, mapping)
     const middle = next.clips.find(clip => clip.track === original.track && clip.start === frame && clip.itemId === original.itemId)!
-    if (middle.duration > 1) next = splitClips(next, [middle.id], frame + 1)
+    if (middle.duration > 1) next = splitClips(next, [middle.id], frame + 1, mapping)
     next = { ...next, clips: next.clips.map(clip => {
       if (clip.track === original.track && clip.itemId === original.itemId && clip.start === frame + 1 && clip.start < original.start + original.duration) {
         const right = { ...clip }; delete right.linkId; delete right.groupId; return right
@@ -223,19 +234,21 @@ export function videoEditMoveTrackMap(sequence: VideoEditSequence, clipIds: read
 export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
   return applyVideoEditTimelineEditResult(document, sequenceId, edit, metadata).sequence
 }
-export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
+export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader, mapping = createVideoEditTimelineMapping(sequenceId)): { sequence: VideoEditSequence; selectedClipIds?: string[]; clipMap: SpatialPropagationRequest['clipMap']; sequenceTimeMap: SpatialPropagationRequest['sequenceTimeMap'] } {
   if (edit.kind === 'adjust' && edit.newTracks?.length) document = { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? withVideoEditTracks(value, edit.newTracks) : value) }
-  const result: { sequence: VideoEditSequence; selectedClipIds?: string[] } = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : edit.kind === 'trim' ? { sequence: applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata).sequence }
+  const trimmed = edit.kind === 'trim' ? applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata) : undefined
+  if (trimmed?.timeSplice) mapping.clock.splice(trimmed.timeSplice.from, trimmed.timeSplice.to, trimmed.timeSplice.insertedFrames)
+  const result: { sequence: VideoEditSequence; selectedClipIds?: string[] } = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit, mapping) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, mapping, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit, mapping) } : edit.kind === 'trim' ? { sequence: trimmed!.sequence }
     : edit.kind === 'speed' ? { sequence: applyVideoEditSpeedChange(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.change, metadata) }
-    : edit.kind === 'stretch' ? { sequence: applyVideoEditRateStretch(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.edge, edit.delta).sequence } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
+    : edit.kind === 'stretch' ? { sequence: applyVideoEditRateStretch(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.edge, edit.delta).sequence } : { sequence: applyClipEdit(document, sequenceId, edit, mapping, metadata) }
   result.sequence = { ...result.sequence, clips: retimeVideoEditContentClips(sequenceOf(document, sequenceId), result.sequence, new Map()) }
   if (edit.kind === 'frame_hold') result.selectedClipIds = result.sequence.clips.filter(clip => clip.frameHold && clip.start === edit.frame && edit.clipIds.some(id => sequenceOf(document, sequenceId).clips.find(original => original.id === id)?.itemId === clip.itemId)).map(clip => clip.id)
   if (result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('编辑结果超出序列时间边界。')
   validateVideoEditAdjustmentRanges(result.sequence)
   validateVideoEditTransitions({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? result.sequence : sequence) }, metadata)
-  return result
+  return { ...result, clipMap: mapping.clipMap, sequenceTimeMap: mapping.clock.maps }
 }
-function removeRange(sequence: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'range' }>): VideoEditSequence {
+function removeRange(sequence: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'range' }>, mapping: TimelineMapping): VideoEditSequence {
   integer(edit.from); integer(edit.to)
   if (edit.to <= edit.from) throw new Error('请先设置有效的入点和出点。')
   const tracks = new Set(edit.tracks.filter(index => sequence.tracks.some(track => track.index === index && !track.locked)))
@@ -243,12 +256,13 @@ function removeRange(sequence: VideoEditSequence, edit: Extract<VideoEditTimelin
   let next = sequence
   for (const frame of [edit.from, edit.to]) {
     const crossing = next.clips.filter(clip => tracks.has(clip.track) && clip.start < frame && frame < clip.start + clip.duration).map(clip => clip.id)
-    if (crossing.length) next = splitClips(next, crossing, frame)
+    if (crossing.length) next = splitClips(next, crossing, frame, mapping)
   }
   const removed = new Set(next.clips.filter(clip => tracks.has(clip.track) && clip.start >= edit.from && clip.start + clip.duration <= edit.to).map(clip => clip.id))
   if (!removed.size) throw new Error('入出点之间的目标轨道上没有片段。')
   let kept = next.clips.filter(clip => !removed.has(clip.id))
   if (edit.ripple) {
+    mapping.clock.splice(edit.from, edit.to, 0)
     const length = edit.to - edit.from; const affected = synchronizedTracks(next, [...tracks])
     kept = kept.map(clip => {
       if (!affected.has(clip.track) || clip.start + clip.duration <= edit.from) return clip
@@ -260,7 +274,7 @@ function removeRange(sequence: VideoEditSequence, edit: Extract<VideoEditTimelin
   const origins = new Map(kept.map(clip => [clip.id, { originalId: clip.id, shift: clip.start - next.clips.find(value => value.id === clip.id)!.start }]))
   return retimeVideoEditContent(next, { ...next, clips: kept, annotations: shiftAnnotations(next, kept) }, origins)
 }
-function rearrangeClips(document: VideoEditDocument, sequenceId: string, edit: Extract<VideoEditTimelineEdit, { kind: 'rearrange' }>, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds: string[] } {
+function rearrangeClips(document: VideoEditDocument, sequenceId: string, edit: Extract<VideoEditTimelineEdit, { kind: 'rearrange' }>, mapping: TimelineMapping, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds: string[] } {
   integer(edit.delta)
   if (edit.newTracks?.length) document = { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? withVideoEditTracks(value, edit.newTracks) : value) }
   const sequence = sequenceOf(document, sequenceId)
@@ -271,20 +285,24 @@ function rearrangeClips(document: VideoEditDocument, sequenceId: string, edit: E
   const snap = edit.snapThreshold === undefined ? 0 : snapOffset(clipboard.clips.flatMap(clip => [clip.start, clip.start + clip.duration]), [0, ...(edit.snapFrames ?? []), ...(sequence.markers ?? []).map(mark => mark.frame), ...sequence.clips.filter(clip => edit.mode !== 'insert' || !moving.has(clip.id)).flatMap(clip => [clip.start, clip.start + clip.duration])], edit.delta, edit.snapThreshold)
   const frame = Math.max(0, from + edit.delta + snap)
   const tracks = [...new Set(clipboard.clips.map(clip => edit.trackMap?.[clip.track] ?? clip.track))]
-  if (edit.mode !== 'insert') return placeClips(document, sequence, { kind: 'place', clipboard, frame, mode: edit.mode === 'copy' ? 'overwrite' : 'insert', ...(edit.trackMap ? { trackMap: edit.trackMap } : {}), targetTracks: tracks })
+  if (edit.mode !== 'insert') return placeClips(document, sequence, { kind: 'place', clipboard, frame, mode: edit.mode === 'copy' ? 'overwrite' : 'insert', ...(edit.trackMap ? { trackMap: edit.trackMap } : {}), targetTracks: tracks }, mapping)
   // Extract first; the drop frame moves left by the extracted ranges before it (a drop inside a range lands at its start).
-  const extracted = applyClipEdit(document, sequenceId, { kind: 'delete', clipIds: edit.clipIds, linked: false, ripple: true }, metadata)
+  const extracted = applyClipEdit(document, sequenceId, { kind: 'delete', clipIds: edit.clipIds, linked: false, ripple: true }, mapping, metadata)
   const shift = intervals(clipboard.clips).reduce((sum, range) => sum + Math.max(0, Math.min(frame, range.to) - range.from), 0)
-  return placeClips({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? extracted : value) }, extracted, { kind: 'place', clipboard, frame: frame - shift, mode: 'insert', ...(edit.trackMap ? { trackMap: edit.trackMap } : {}), targetTracks: tracks })
+  const placed = placeClips({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? extracted : value) }, extracted, { kind: 'place', clipboard, frame: frame - shift, mode: 'insert', ...(edit.trackMap ? { trackMap: edit.trackMap } : {}), targetTracks: tracks }, mapping)
+  const movedIds = new Map(clipboard.clips.map((clip, index) => [clip.id, placed.selectedClipIds[index]]))
+  if (placed.sequence.spatialCamera) placed.sequence.spatialCamera = remapSpatialCameraReferences(placed.sequence.spatialCamera, movedIds)
+  for (const clip of clipboard.clips) mapping.clipMap.push({ fromSequenceId: sequenceId, fromClipId: clip.id, sourceRange: [clip.start, clip.start + clip.duration], toSequenceId: sequenceId, toClipId: movedIds.get(clip.id)! })
+  return placed
 }
-function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' | 'range' | 'rearrange' | 'trim' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
+function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' | 'range' | 'rearrange' | 'trim' }>, mapping: TimelineMapping, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const sequence = sequenceOf(document, sequenceId)
   const ids = expandVideoEditSelection(sequence, edit.clipIds, edit.kind === 'sync' ? false : edit.linked ?? true); const selected = new Set(ids)
   if (!ids.length) throw new Error('请先选择片段。')
   assertVideoEditClipsEditable(sequence, ids)
   const clips = sequence.clips.filter(clip => selected.has(clip.id))
-  if (edit.kind === 'split') return splitClips(sequence, ids, edit.frame)
-  if (edit.kind === 'frame_hold') return holdFrame(sequence, ids, edit.frame)
+  if (edit.kind === 'split') return splitClips(sequence, ids, edit.frame, mapping)
+  if (edit.kind === 'frame_hold') return holdFrame(sequence, ids, edit.frame, mapping)
   if (edit.kind === 'sync') return syncClips(document, sequence, ids, edit.mode)
   if (edit.kind === 'adjust') {
     integer(edit.delta)
@@ -337,6 +355,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
         if (shift) assertVideoEditClipsEditable(sequence, [clip.id])
         return { ...clip, start: clip.start - shift }
       })
+      for (const range of [...ranges].reverse()) mapping.clock.splice(range.from, range.to, 0)
       // Linked partners on tracks outside sync lock stay put and show as out of sync (Premiere).
     }
     return retimeVideoEditContent(sequence, { ...sequence, clips: kept, annotations: shiftAnnotations(sequence, kept) })
@@ -386,7 +405,7 @@ function syncClips(document: VideoEditDocument, sequence: VideoEditSequence, ids
   return retimeVideoEditContent(sequence, { ...sequence, clips, annotations: shiftAnnotations(sequence, clips) }, origins)
 }
 
-function placeClips(document: VideoEditDocument, original: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'place' }>): { sequence: VideoEditSequence; selectedClipIds: string[] } {
+function placeClips(document: VideoEditDocument, original: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'place' }>, mapping: TimelineMapping): { sequence: VideoEditSequence; selectedClipIds: string[] } {
   integer(edit.frame)
   const sequence = withVideoEditTracks(original, edit.newTracks)
   if (edit.clipboard.projectId !== document.id) throw new Error('此剪贴板属于另一剪辑，请通过素材面板引用导入。')
@@ -395,7 +414,13 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
   const convert = (frame: number): number => rescaleVideoEditFrame(frame - from, edit.clipboard.frameRate, sequence.frameRate)
   const ids = new Map(edit.clipboard.clips.map(clip => [clip.id, crypto.randomUUID()]))
   const clipboardClips = edit.clipboard.clips.map(clip => ({ ...clip, ...(clip.contentAnchor ? { contentAnchor: remapVideoEditContentAnchor(clip.contentAnchor, ids) } : {}) }))
-  const incoming = remapRelations(clipboardClips.map(clip => ({ ...structuredClone(clip), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start) })))
+  const incoming = remapRelations(clipboardClips.map(clip => {
+    const duration = convert(clip.start + clip.duration) - convert(clip.start)
+    const clone = structuredClone(clip)
+    if (clone.effects) clone.effects = clone.effects.map(effect => ({ ...effect, id: crypto.randomUUID() }))
+    const animated = rescaleVideoEditClipKeyframes(clone, time => convert(clip.start + time) - convert(clip.start), duration)
+    return { ...animated, id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration }
+  }))
   assertTargets(sequence, incoming)
   assertNewInternalOverlap(edit.clipboard.clips, incoming)
   if (incoming.some(clip => !document.items.some(item => item.id === clip.itemId) || clip.duration < 1 || clip.start < 0 || clip.start + clip.duration > Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('剪贴板引用已移除，或粘贴范围超出序列边界。')
@@ -409,7 +434,8 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     const changing = sequence.clips.filter(clip => affected.has(clip.track) && clip.start + clip.duration > edit.frame).map(clip => clip.id)
     // Linked partners on tracks outside sync lock stay put and show as out of sync (Premiere).
     assertVideoEditClipsEditable(sequence, changing)
-    if (crossing.length) kept = splitClips(sequence, crossing.map(clip => clip.id), edit.frame)
+    if (crossing.length) kept = splitClips(sequence, crossing.map(clip => clip.id), edit.frame, mapping)
+    mapping.clock.splice(edit.frame, edit.frame, length)
     const shifted = kept.clips.map(clip => affected.has(clip.track) && clip.start >= edit.frame ? { ...clip, start: clip.start + length } : clip)
     kept = retimeVideoEditContent(kept, { ...kept, clips: shifted, annotations: shiftAnnotations(kept, shifted) })
   }
@@ -433,6 +459,18 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
         if (pieces.length) delete right.fadeInFrames
         pieces.push(right)
       }
+      if (kept.spatialCamera) {
+        // 覆盖区间仍需要原目标几何；瞬态身份只进入传播记录，不写入文档。
+        const removedId = crypto.randomUUID()
+        const removedStart = Math.max(clip.start, edit.frame)
+        mapping.clipMap.push({ fromSequenceId: sequence.id, fromClipId: clip.id, sourceRange: [removedStart, Math.min(end, clip.start + clip.duration)], toSequenceId: sequence.id, toClipId: removedId })
+        kept = { ...kept, spatialCamera: splitSpatialCameraTarget(kept.spatialCamera, clip.id, removedId, removedStart) }
+        const right = pieces.find(piece => piece.start === end)
+        if (right) {
+          mapping.clipMap.push({ fromSequenceId: sequence.id, fromClipId: removedId, sourceRange: [end, clip.start + clip.duration], toSequenceId: sequence.id, toClipId: right.id })
+          kept.spatialCamera = splitSpatialCameraTarget(kept.spatialCamera!, removedId, right.id, end)
+        }
+      }
       fragments.set(clip.id, pieces)
       for (const piece of pieces) origins.set(piece.id, { originalId: clip.id, shift: 0 })
     }
@@ -440,7 +478,7 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     const rightPieces = separateRightRelations(sequence, [...fragments.values()].flatMap(pieces => pieces.filter(clip => clip.start === end)), rights, end)
     const rightById = new Map(rightPieces.map(clip => [clip.id, clip]))
     for (const [id, pieces] of fragments) fragments.set(id, pieces.map(clip => rightById.get(clip.id) ?? clip))
-    kept = retimeVideoEditContent(sequence, { ...sequence, clips: sequence.clips.flatMap(clip => fragments.get(clip.id) ?? [clip]), annotations: sequence.annotations.flatMap(mark => {
+    kept = retimeVideoEditContent(sequence, { ...kept, clips: sequence.clips.flatMap(clip => fragments.get(clip.id) ?? [clip]), annotations: sequence.annotations.flatMap(mark => {
       const pieces = fragments.get(mark.clipId ?? '')
       if (!pieces) return [mark]
       const piece = pieces.find(clip => mark.frame >= clip.start && mark.frame < clip.start + clip.duration)

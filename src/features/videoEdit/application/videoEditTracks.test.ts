@@ -58,7 +58,7 @@ it('界面加删轨道各一步撤销；助手经通用集合新建与删除轨�
   const history = owner.past.length
   const [added] = addVideoEditTracks(projectId, sequenceId, [{ kind: 'audio', count: 1, slot: 1 }])
   expect(owner.past).toHaveLength(history + 1); expect(owner.document.sequences[0].tracks).toHaveLength(3)
-  deleteVideoEditTracks(projectId, sequenceId, [added])
+  await deleteVideoEditTracks(projectId, sequenceId, [added])
   expect(owner.document.sequences[0].tracks).toHaveLength(2)
   undoVideoEdit(projectId); expect(owner.document.sequences[0].tracks.some(track => track.id === added)).toBe(true)
   undoVideoEdit(projectId); expect(owner.document.sequences[0].tracks).toHaveLength(2)

@@ -10,10 +10,12 @@ import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import { deterministicAuthorModule, importAuthorDeterministic } from './videoEditAuthorDeterminism'
 import { authorModuleTextLayouts } from '../../../core/videoEdit/textDrawObservation'
 import { assertAuthorTrust } from './videoEditAuthorTrust'
+import type { AuthorSpaceInfo, AuthorThreeHost, AuthorThreeScene } from './videoEditAuthorThree'
 import type { WebTextDeclaration, WebTextImageMapping, WebTextResults } from '@/core/videoEdit/webTextGeometry'
 
 /** Executable ES module contract. These functions never cross a worker boundary. */
 export interface AuthorFrameInfo {
+  space?: AuthorSpaceInfo
   simulation?: AuthorSimulationSampler
   time: number
   frameDuration: number
@@ -116,6 +118,8 @@ export interface AuthorGpuInputs {
   images: Readonly<Record<string, AuthorGpuImage>>
 }
 export interface AuthorModule {
+  space?: boolean
+  createThree?(host: AuthorThreeHost): AuthorThreeScene | Promise<AuthorThreeScene>
   /** 图片参数名 → 需要同刻文本几何的 CSS 选择器；普通图片绑定不触发采样。 */
   webText?: WebTextDeclaration
   name: string
@@ -162,7 +166,8 @@ export async function loadAuthorModule(url: string, context?: ContentTrustRefere
     const loaded = await importAuthorDeterministic(() => importNativeModule(url), id => layouts.add(id), text?.fonts)
     const effect = loaded.default
     if (!effect || typeof effect.name !== 'string') throw new Error('默认导出需要效果名称 name。')
-    if (![effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU].some(value => typeof value === 'function')) throw new Error('效果需要 draw、layers、createWebGL 或 createWebGPU 入口。')
+    if (![effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU, effect.createThree].some(value => typeof value === 'function')) throw new Error('效果需要 draw、layers、createWebGL、createWebGPU 或 createThree 入口。')
+    if (effect.createThree && [effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU].some(Boolean)) throw new Error('createThree 不能与其他绘制入口同时声明。')
     if (effect.layers && (effect.createWebGL || effect.createWebGPU)) throw new Error('layers 不能与独立 GPU 绘制入口同时声明。')
     const wrapped = deterministicAuthorModule(effect, apiVersion, text?.fonts)
     if (text) {

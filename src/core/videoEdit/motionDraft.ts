@@ -1,5 +1,5 @@
 import type { Pose } from '../creativeIntent/contracts'
-import type { CompiledMotion, MotionCurveKey } from '../creativeIntent/motionCompiler'
+import { MOTION_CURVE_KEYS, type CompiledMotion, type MotionCurveKey } from '../creativeIntent/motionCompiler'
 import type { VideoEditClip, VideoEditComposition } from './document'
 import { videoEditClipPictureSize } from './clipGeometry'
 import { sliceVideoEditCurves, videoEditClipValue, writeVideoEditClipKeyframes, type VideoEditKeyframe } from './keyframes'
@@ -23,7 +23,9 @@ export function mergeMotionClipCurves(clip: VideoEditClip, motions: readonly Com
   for (const motion of [...motions].sort((a, b) => a.range[0] - b.range[0])) {
     const [start, end] = motion.range
     if (start < 0 || end < start || end >= clip.duration) throw new Error('示范超出片段范围，请缩短示范或延长片段后重试。')
-    for (const key of Object.keys(motion.curves) as MotionCurveKey[]) {
+    // 候选可读入空间曲线，但二维动作只能写自身支持的键；目标空间动画始终归原片段。
+    for (const key of MOTION_CURVE_KEYS) {
+      if (!motion.curves[key]?.length) continue
       if ((occupied.get(key) ?? -1) >= start) throw new Error('两次示范覆盖同一时间，请选择采用哪一次。')
       occupied.set(key, end)
       const original = next.curves?.[key]

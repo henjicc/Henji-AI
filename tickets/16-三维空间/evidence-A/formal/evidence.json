@@ -1,0 +1,5264 @@
+{
+  "commit": "fcdb24c8de02a0738ead56464af6997a73a17ae4",
+  "completed": true,
+  "operations": [
+    {
+      "name": "open_document",
+      "result": {
+        "ok": true,
+        "operationId": "1c500190-7539-45e9-bcba-09fb34862aa4",
+        "executionState": "completed",
+        "verificationState": "verified",
+        "result": {
+          "ok": true,
+          "data": {
+            "resultRef": {
+              "kind": "documents.document",
+              "id": "t16-formal"
+            },
+            "name": "三维空间样片",
+            "kind": "video_edit",
+            "embedded": false,
+            "verification": {
+              "verified": true,
+              "condition": "文档已由对应工具载入并切换到它的编辑器",
+              "target": {
+                "kind": "documents.document",
+                "id": "t16-formal"
+              }
+            }
+          }
+        },
+        "revision": 8,
+        "scopeRevisions": {
+          "navigation": 1,
+          "video_edit": 1
+        }
+      }
+    },
+    {
+      "name": "change_application_entities",
+      "result": {
+        "ok": true,
+        "operationId": "ff4e3d33-4512-4e8f-abd1-37a28c04a2cd",
+        "executionState": "completed",
+        "verificationState": "verified",
+        "result": {
+          "ok": true,
+          "data": {
+            "status": "completed",
+            "transactionRef": "transaction:28439ed3e9404e248deeee6113e2526d",
+            "undoRef": "undo:94c2c27ee21c4bb29c945cb17c6c57f7",
+            "verification": {
+              "verified": true,
+              "unmetConditions": [],
+              "checkedAt": "2026-11-01T10:33:54.430Z"
+            },
+            "resultingRevisions": {
+              "video_edit": 2
+            },
+            "resultRefs": [
+              {
+                "kind": "video_edit.code_material",
+                "id": "t16-formal:1fc7a149-e2e5-4fb0-be31-e6083e0ab1c4"
+              }
+            ],
+            "effects": [
+              {
+                "effect": "create",
+                "entityType": "video_edit.code_material",
+                "refs": [
+                  {
+                    "kind": "video_edit.code_material",
+                    "id": "t16-formal:1fc7a149-e2e5-4fb0-be31-e6083e0ab1c4"
+                  }
+                ],
+                "propertyIds": [],
+                "origin": {
+                  "kind": "direct"
+                }
+              },
+              {
+                "effect": "create",
+                "entityType": "video_edit.code_version",
+                "refs": [
+                  {
+                    "kind": "video_edit.code_version",
+                    "id": "t16-formal:29c13d21-5cd2-4835-8106-1b0f7fe73f02"
+                  }
+                ],
+                "propertyIds": [],
+                "origin": {
+                  "kind": "cascade",
+                  "declarationId": "video_edit.code_code_version_create"
+                }
+              },
+              {
+                "effect": "create",
+                "entityType": "video_edit.item",
+                "refs": [
+                  {
+                    "kind": "video_edit.item",
+                    "id": "t16-formal:504bdcf8-7a70-4680-9cab-735a700f251f"
+                  }
+                ],
+                "propertyIds": [],
+                "origin": {
+                  "kind": "cascade",
+                  "declarationId": "video_edit.code_item_create"
+                }
+              }
+            ]
+          }
+        },
+        "revision": 18,
+        "scopeRevisions": {
+          "video_edit": 2
+        }
+      }
+    },
+    {
+      "name": "change_application_entities",
+      "result": {
+        "ok": true,
+        "operationId": "72d259c5-8552-4059-9661-50ff4612a19f",
+        "executionState": "completed",
+        "verificationState": "verified",
+        "result": {
+          "ok": true,
+          "data": {
+            "status": "completed",
+            "transactionRef": "transaction:9797a8cf65c444bba3f507e6adc3f9a8",
+            "undoRef": "undo:cf743b19fc7748f494ed8f6a54f8a33f",
+            "verification": {
+              "verified": true,
+              "unmetConditions": [],
+              "checkedAt": "2026-11-01T10:33:54.569Z"
+            },
+            "resultingRevisions": {
+              "video_edit": 3
+            },
+            "resultRefs": [
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+              }
+            ],
+            "effects": [
+              {
+                "effect": "create",
+                "entityType": "video_edit.clip",
+                "refs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+                  }
+                ],
+                "propertyIds": [],
+                "origin": {
+                  "kind": "direct"
+                }
+              }
+            ]
+          }
+        },
+        "revision": 26,
+        "scopeRevisions": {
+          "video_edit": 3
+        }
+      }
+    },
+    {
+      "name": "transition_video_edit_space",
+      "result": {
+        "ok": true,
+        "operationId": "d04888fc-1fba-44aa-abd2-d54c0b6a61ed",
+        "executionState": "completed",
+        "verificationState": "verified",
+        "result": {
+          "ok": true,
+          "data": {
+            "documentRef": {
+              "kind": "video_edit.document",
+              "id": "t16-formal"
+            },
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "changedRefs": [
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-a"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-c"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-b"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:subtitle"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:title"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:label"
+              },
+              {
+                "kind": "video_edit.sequence",
+                "id": "t16-formal:main"
+              }
+            ],
+            "achievedParallaxRatio": 3.9333462671098536,
+            "maxProjectionErrorPx": 0.010014180991117706,
+            "facts": [
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:background"
+                  }
+                ],
+                "sequenceFrame": 45,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              },
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:label"
+                  }
+                ],
+                "sequenceFrame": 45,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              },
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:subtitle"
+                  }
+                ],
+                "sequenceFrame": 45,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              },
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:title"
+                  }
+                ],
+                "sequenceFrame": 45,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              },
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+                  }
+                ],
+                "sequenceFrame": 45,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              }
+            ],
+            "saved": true,
+            "undoRef": {
+              "kind": "video_edit.document",
+              "id": "t16-formal"
+            },
+            "verification": {
+              "verified": true,
+              "condition": "已由正式文档保存回读核对片段、相机与取景意图；可用 undo_video_edit 撤销。"
+            },
+            "message": "空间布局已应用，可一步撤销。"
+          }
+        },
+        "revision": 34,
+        "scopeRevisions": {
+          "video_edit": 4
+        }
+      }
+    },
+    {
+      "name": "transition_video_edit_space",
+      "result": {
+        "ok": true,
+        "operationId": "f57d5af0-c9d9-4ebc-a195-7171139ddae7",
+        "executionState": "completed",
+        "verificationState": "verified",
+        "result": {
+          "ok": true,
+          "data": {
+            "documentRef": {
+              "kind": "video_edit.document",
+              "id": "t16-formal"
+            },
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "changedRefs": [
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-a"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-c"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-b"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:subtitle"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:title"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:label"
+              },
+              {
+                "kind": "video_edit.sequence",
+                "id": "t16-formal:main"
+              }
+            ],
+            "achievedParallaxRatio": 1,
+            "maxProjectionErrorPx": 2.4457182613372134e-13,
+            "facts": [
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:background"
+                  }
+                ],
+                "sequenceFrame": 195,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              },
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:label"
+                  }
+                ],
+                "sequenceFrame": 195,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              },
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:subtitle"
+                  }
+                ],
+                "sequenceFrame": 195,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              },
+              {
+                "code": "clipped",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:title"
+                  }
+                ],
+                "sequenceFrame": 195,
+                "message": "空间卡片在视锥边界裁剪。",
+                "values": {
+                  "visibleVertices": 4
+                }
+              },
+              {
+                "code": "projection-residual",
+                "clipRefs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:panel-a"
+                  },
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:panel-c"
+                  },
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:panel-b"
+                  },
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:subtitle"
+                  },
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:title"
+                  },
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:label"
+                  }
+                ],
+                "sequenceFrame": 225,
+                "message": "压平保持主体包围框；相交轮廓和遮挡采用层中心近似。",
+                "values": {
+                  "maxProjectionErrorPx": 0
+                }
+              }
+            ],
+            "saved": true,
+            "undoRef": {
+              "kind": "video_edit.document",
+              "id": "t16-formal"
+            },
+            "verification": {
+              "verified": true,
+              "condition": "已由正式文档保存回读核对片段、相机与取景意图；可用 undo_video_edit 撤销。"
+            },
+            "message": "空间布局已应用，可一步撤销。"
+          }
+        },
+        "revision": 43,
+        "scopeRevisions": {
+          "video_edit": 5
+        }
+      }
+    },
+    {
+      "name": "change_application_entities",
+      "result": {
+        "ok": true,
+        "operationId": "fda723dd-be69-4d94-aade-a0a512b6a877",
+        "executionState": "completed",
+        "verificationState": "verified",
+        "result": {
+          "ok": true,
+          "data": {
+            "status": "completed",
+            "transactionRef": "transaction:abe1a0d423dd4044acb7725ee678bc99",
+            "undoRef": "undo:134c2b832b5949f2b4fc6aacc946fcf2",
+            "verification": {
+              "verified": true,
+              "unmetConditions": [],
+              "checkedAt": "2026-11-01T10:33:56.766Z"
+            },
+            "resultingRevisions": {
+              "video_edit": 11
+            },
+            "resultRefs": [
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-a"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-b"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-c"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:label"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:subtitle"
+              },
+              {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:title"
+              }
+            ],
+            "effects": [
+              {
+                "effect": "update",
+                "entityType": "video_edit.clip",
+                "refs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:panel-a"
+                  }
+                ],
+                "propertyIds": [
+                  "video_edit.clip.spatial_enabled",
+                  "video_edit.clip.x",
+                  "video_edit.clip.x.keyframes",
+                  "video_edit.clip.y",
+                  "video_edit.clip.y.keyframes",
+                  "video_edit.clip.scale",
+                  "video_edit.clip.scale.keyframes",
+                  "video_edit.clip.rotation",
+                  "video_edit.clip.rotation.keyframes",
+                  "video_edit.clip.depth.keyframes",
+                  "video_edit.clip.rotation_x.keyframes",
+                  "video_edit.clip.rotation_y.keyframes",
+                  "video_edit.clip.anchor_depth.keyframes"
+                ],
+                "origin": {
+                  "kind": "direct"
+                }
+              },
+              {
+                "effect": "update",
+                "entityType": "video_edit.clip",
+                "refs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:panel-b"
+                  }
+                ],
+                "propertyIds": [
+                  "video_edit.clip.spatial_enabled",
+                  "video_edit.clip.x",
+                  "video_edit.clip.x.keyframes",
+                  "video_edit.clip.y",
+                  "video_edit.clip.y.keyframes",
+                  "video_edit.clip.scale",
+                  "video_edit.clip.scale.keyframes",
+                  "video_edit.clip.rotation",
+                  "video_edit.clip.rotation.keyframes",
+                  "video_edit.clip.depth.keyframes",
+                  "video_edit.clip.rotation_x.keyframes",
+                  "video_edit.clip.rotation_y.keyframes",
+                  "video_edit.clip.anchor_depth.keyframes"
+                ],
+                "origin": {
+                  "kind": "direct"
+                }
+              },
+              {
+                "effect": "update",
+                "entityType": "video_edit.clip",
+                "refs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:panel-c"
+                  }
+                ],
+                "propertyIds": [
+                  "video_edit.clip.spatial_enabled",
+                  "video_edit.clip.x",
+                  "video_edit.clip.x.keyframes",
+                  "video_edit.clip.y",
+                  "video_edit.clip.y.keyframes",
+                  "video_edit.clip.scale",
+                  "video_edit.clip.scale.keyframes",
+                  "video_edit.clip.rotation",
+                  "video_edit.clip.rotation.keyframes",
+                  "video_edit.clip.depth.keyframes",
+                  "video_edit.clip.rotation_x.keyframes",
+                  "video_edit.clip.rotation_y.keyframes",
+                  "video_edit.clip.anchor_depth.keyframes"
+                ],
+                "origin": {
+                  "kind": "direct"
+                }
+              },
+              {
+                "effect": "update",
+                "entityType": "video_edit.clip",
+                "refs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:label"
+                  }
+                ],
+                "propertyIds": [
+                  "video_edit.clip.spatial_enabled",
+                  "video_edit.clip.x",
+                  "video_edit.clip.x.keyframes",
+                  "video_edit.clip.y",
+                  "video_edit.clip.y.keyframes",
+                  "video_edit.clip.scale",
+                  "video_edit.clip.scale.keyframes",
+                  "video_edit.clip.rotation",
+                  "video_edit.clip.rotation.keyframes",
+                  "video_edit.clip.depth.keyframes",
+                  "video_edit.clip.rotation_x.keyframes",
+                  "video_edit.clip.rotation_y.keyframes",
+                  "video_edit.clip.anchor_depth.keyframes"
+                ],
+                "origin": {
+                  "kind": "direct"
+                }
+              },
+              {
+                "effect": "update",
+                "entityType": "video_edit.clip",
+                "refs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:subtitle"
+                  }
+                ],
+                "propertyIds": [
+                  "video_edit.clip.spatial_enabled",
+                  "video_edit.clip.x",
+                  "video_edit.clip.x.keyframes",
+                  "video_edit.clip.y",
+                  "video_edit.clip.y.keyframes",
+                  "video_edit.clip.scale",
+                  "video_edit.clip.scale.keyframes",
+                  "video_edit.clip.rotation",
+                  "video_edit.clip.rotation.keyframes",
+                  "video_edit.clip.depth.keyframes",
+                  "video_edit.clip.rotation_x.keyframes",
+                  "video_edit.clip.rotation_y.keyframes",
+                  "video_edit.clip.anchor_depth.keyframes"
+                ],
+                "origin": {
+                  "kind": "direct"
+                }
+              },
+              {
+                "effect": "update",
+                "entityType": "video_edit.clip",
+                "refs": [
+                  {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:title"
+                  }
+                ],
+                "propertyIds": [
+                  "video_edit.clip.spatial_enabled",
+                  "video_edit.clip.x",
+                  "video_edit.clip.x.keyframes",
+                  "video_edit.clip.y",
+                  "video_edit.clip.y.keyframes",
+                  "video_edit.clip.scale",
+                  "video_edit.clip.scale.keyframes",
+                  "video_edit.clip.rotation",
+                  "video_edit.clip.rotation.keyframes",
+                  "video_edit.clip.depth.keyframes",
+                  "video_edit.clip.rotation_x.keyframes",
+                  "video_edit.clip.rotation_y.keyframes",
+                  "video_edit.clip.anchor_depth.keyframes"
+                ],
+                "origin": {
+                  "kind": "direct"
+                }
+              }
+            ]
+          }
+        },
+        "revision": 48,
+        "scopeRevisions": {
+          "video_edit": 11
+        }
+      }
+    },
+    {
+      "name": "read_application_entity",
+      "result": {
+        "ok": true,
+        "data": {
+          "ref": {
+            "kind": "video_edit.sequence",
+            "id": "t16-formal:main"
+          },
+          "entityType": "video_edit.sequence",
+          "properties": {
+            "video_edit.sequence.spatial_camera": {
+              "offsetX": 0,
+              "offsetY": 0,
+              "offsetZ": -1.613632411754478,
+              "framing": {
+                "target": {
+                  "kind": "clip",
+                  "targetRef": {
+                    "kind": "video_edit.clip",
+                    "id": "t16-formal:title"
+                  }
+                },
+                "heightFraction": 0.71
+              },
+              "curves": {
+                "framingHeightFraction": [
+                  {
+                    "value": 1,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 0.71,
+                    "interpolation": "hold",
+                    "time": 45
+                  },
+                  {
+                    "value": 0.71,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 1,
+                    "interpolation": "hold",
+                    "time": 136
+                  }
+                ],
+                "offsetX": [
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 45
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 136
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ],
+                "offsetY": [
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 45
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 136
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ],
+                "offsetZ": [
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": -1.613632411754478,
+                    "interpolation": "hold",
+                    "time": 45
+                  },
+                  {
+                    "value": -1.613632411754478,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 136
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ],
+                "rotationX": [
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 45
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 136
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ],
+                "rotationY": [
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 45
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 136
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ],
+                "rotationZ": [
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 45
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 136
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ],
+                "perspective": [
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "bezier",
+                    "bezier": [
+                      0.3333333333333333,
+                      0,
+                      0.6666666666666666,
+                      1
+                    ],
+                    "time": 45,
+                    "easeValues": [
+                      0,
+                      -1
+                    ],
+                    "easeRange": [
+                      0,
+                      1
+                    ]
+                  },
+                  {
+                    "value": -1,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 136
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ],
+                "defocus": [
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 45
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 135
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 136
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 0,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ],
+                "focusDistance": [
+                  {
+                    "value": 3.9506172839506175,
+                    "interpolation": "hold",
+                    "time": 0
+                  },
+                  {
+                    "value": 3.9506172839506175,
+                    "interpolation": "hold",
+                    "time": 195
+                  },
+                  {
+                    "value": 3.9506172839506175,
+                    "interpolation": "linear",
+                    "time": 225
+                  },
+                  {
+                    "value": 3.9506172839506175,
+                    "interpolation": "hold",
+                    "time": 226
+                  }
+                ]
+              },
+              "bindings": {
+                "framing": [
+                  {
+                    "time": 0,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 45,
+                    "value": {
+                      "kind": "clip",
+                      "targetRef": {
+                        "kind": "video_edit.clip",
+                        "id": "t16-formal:title"
+                      }
+                    },
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 136,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 195,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 225,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 226,
+                    "value": null,
+                    "interpolation": "hold"
+                  }
+                ],
+                "aim": [
+                  {
+                    "time": 0,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 45,
+                    "value": {
+                      "kind": "point",
+                      "point": [
+                        0,
+                        0,
+                        0
+                      ]
+                    },
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 136,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 195,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 225,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 226,
+                    "value": null,
+                    "interpolation": "hold"
+                  }
+                ],
+                "focus": [
+                  {
+                    "time": 0,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 45,
+                    "value": {
+                      "kind": "clip",
+                      "targetRef": {
+                        "kind": "video_edit.clip",
+                        "id": "t16-formal:title"
+                      }
+                    },
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 136,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 195,
+                    "value": {
+                      "kind": "distance",
+                      "distance": 3.9506172839506175
+                    },
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 225,
+                    "value": null,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "time": 226,
+                    "value": null,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          "revisions": {
+            "video_edit": 11
+          },
+          "capturedAt": "2026-11-01T10:33:56.797Z"
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "baselineId": "0a8ab78f-2217-4b2a-a7fb-f8726e7130c5",
+        "revision": 49,
+        "scopeRevisions": {
+          "video_edit": 11
+        }
+      }
+    },
+    {
+      "name": "change_application_entities",
+      "result": {
+        "ok": true,
+        "operationId": "68e4c91f-d79e-4ec1-a420-2d33b866f7ff",
+        "executionState": "completed",
+        "verificationState": "verified",
+        "result": {
+          "ok": true,
+          "data": {
+            "status": "completed",
+            "transactionRef": "transaction:fc74df1743dc4ee58c1e861d75f9e2be",
+            "undoRef": "undo:2f4eecbe27ac428498f4b5cbcc118831",
+            "verification": {
+              "verified": true,
+              "unmetConditions": [],
+              "checkedAt": "2026-11-01T10:33:56.870Z"
+            },
+            "resultingRevisions": {
+              "video_edit": 12
+            },
+            "resultRefs": [
+              {
+                "kind": "video_edit.sequence",
+                "id": "t16-formal:main"
+              }
+            ],
+            "effects": [
+              {
+                "effect": "update",
+                "entityType": "video_edit.sequence",
+                "refs": [
+                  {
+                    "kind": "video_edit.sequence",
+                    "id": "t16-formal:main"
+                  }
+                ],
+                "propertyIds": [
+                  "video_edit.sequence.spatial_camera"
+                ],
+                "origin": {
+                  "kind": "direct"
+                }
+              }
+            ]
+          }
+        },
+        "revision": 54,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 0,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 112059,
+          "resultRef": {
+            "kind": "asset",
+            "id": "0a94ee46-f924-4ba2-b1c0-23b9d123dbfd"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 0
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 0（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "0a94ee46-f924-4ba2-b1c0-23b9d123dbfd"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 57,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 44,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 112059,
+          "resultRef": {
+            "kind": "asset",
+            "id": "0a94ee46-f924-4ba2-b1c0-23b9d123dbfd"
+          },
+          "reused": true,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 44
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 44（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。按内容复用已有图片 asset:0a94ee46-f924-4ba2-b1c0-23b9d123dbfd。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "0a94ee46-f924-4ba2-b1c0-23b9d123dbfd"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 59,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 45,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 138962,
+          "resultRef": {
+            "kind": "asset",
+            "id": "b4cdffd2-6e94-4549-bb15-b0c9197bf3a3"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 45
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 45（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "b4cdffd2-6e94-4549-bb15-b0c9197bf3a3"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 61,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 46,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 0.040625,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 213180,
+          "resultRef": {
+            "kind": "asset",
+            "id": "1be40985-f71e-464c-92ef-d84221059b73"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 46
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 46（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "1be40985-f71e-464c-92ef-d84221059b73"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 65,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 75,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 1.0072916666666667,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 260782,
+          "resultRef": {
+            "kind": "asset",
+            "id": "f696e5dd-352a-4030-87d7-7e9d0c854bec"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 75
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 75（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "f696e5dd-352a-4030-87d7-7e9d0c854bec"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 67,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 105,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 2.0072916666666667,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 244661,
+          "resultRef": {
+            "kind": "asset",
+            "id": "79b0c4ca-f17a-4a24-9e74-f0315e678caa"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 105
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 105（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "79b0c4ca-f17a-4a24-9e74-f0315e678caa"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 71,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 135,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 3.0072916666666667,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 253057,
+          "resultRef": {
+            "kind": "asset",
+            "id": "6d72153b-9eb9-46e1-a1e5-bcb2bedefdf3"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 135
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 135（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "6d72153b-9eb9-46e1-a1e5-bcb2bedefdf3"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 73,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 150,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 3.5078125,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 482515,
+          "resultRef": {
+            "kind": "asset",
+            "id": "aff0efd5-c4c1-419c-b49e-b2ee01963023"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 150
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 150（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "aff0efd5-c4c1-419c-b49e-b2ee01963023"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 75,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 162,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 3.9072916666666666,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 476274,
+          "resultRef": {
+            "kind": "asset",
+            "id": "ba477414-a0bb-4bf5-96b3-d4e88d6766c6"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 162
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 162（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "ba477414-a0bb-4bf5-96b3-d4e88d6766c6"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 77,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 167,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 4.073958333333334,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 535491,
+          "resultRef": {
+            "kind": "asset",
+            "id": "cdac4003-bc7c-43b5-ad47-30b5d17ca975"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 167
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 167（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "cdac4003-bc7c-43b5-ad47-30b5d17ca975"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 79,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 168,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 4.107291666666667,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 545030,
+          "resultRef": {
+            "kind": "asset",
+            "id": "4e7e1ac7-9553-4f63-b087-7b2de81b5f76"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 168
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 168（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "4e7e1ac7-9553-4f63-b087-7b2de81b5f76"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 81,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 169,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 4.140625,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 555710,
+          "resultRef": {
+            "kind": "asset",
+            "id": "79cf3851-a95a-4bb9-a994-8e8d8f43df97"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 169
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 169（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "79cf3851-a95a-4bb9-a994-8e8d8f43df97"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 83,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 170,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 4.173958333333333,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 562518,
+          "resultRef": {
+            "kind": "asset",
+            "id": "05660796-f184-4891-b47c-4ec8a3428d4f"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 170
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 170（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "05660796-f184-4891-b47c-4ec8a3428d4f"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 85,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 180,
+              "sequenceId": "main",
+              "clips": [
+                {
+                  "clipId": "2252bfb8-99eb-46c8-ab6d-65bd52d6a11b",
+                  "elements": [
+                    {
+                      "id": "effect",
+                      "time": 4.5078125,
+                      "effectStates": [],
+                      "edits": {},
+                      "effects": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "byteLength": 567317,
+          "resultRef": {
+            "kind": "asset",
+            "id": "687c95b5-6053-4edf-9881-4e9d38851859"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 180
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 180（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "687c95b5-6053-4edf-9881-4e9d38851859"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 87,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 195,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 402114,
+          "resultRef": {
+            "kind": "asset",
+            "id": "12cbd4cd-8e8e-4dc2-9371-e48de2690930"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 195
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 195（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "12cbd4cd-8e8e-4dc2-9371-e48de2690930"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 89,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 210,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 269221,
+          "resultRef": {
+            "kind": "asset",
+            "id": "5eaf28c4-7253-4f68-a207-f53d3f37550b"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 210
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 210（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "5eaf28c4-7253-4f68-a207-f53d3f37550b"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 91,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 224,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 185104,
+          "resultRef": {
+            "kind": "asset",
+            "id": "5b6b9c1c-8ba1-4dca-aad9-de610cc5ccb4"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 224
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 224（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "5b6b9c1c-8ba1-4dca-aad9-de610cc5ccb4"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 93,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 225,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 147978,
+          "resultRef": {
+            "kind": "asset",
+            "id": "1cdcf555-6b45-4c61-a89c-f946e9a35096"
+          },
+          "reused": false,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 225
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 225（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "1cdcf555-6b45-4c61-a89c-f946e9a35096"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 95,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 226,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 112059,
+          "resultRef": {
+            "kind": "asset",
+            "id": "0a94ee46-f924-4ba2-b1c0-23b9d123dbfd"
+          },
+          "reused": true,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 226
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 226（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。按内容复用已有图片 asset:0a94ee46-f924-4ba2-b1c0-23b9d123dbfd。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "0a94ee46-f924-4ba2-b1c0-23b9d123dbfd"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 97,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "observe_video_edit_frame",
+      "result": {
+        "ok": true,
+        "data": {
+          "effects": [
+            {
+              "frame": 239,
+              "sequenceId": "main",
+              "clips": []
+            }
+          ],
+          "byteLength": 112059,
+          "resultRef": {
+            "kind": "asset",
+            "id": "0a94ee46-f924-4ba2-b1c0-23b9d123dbfd"
+          },
+          "reused": true,
+          "storage": "assets",
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "target": {
+            "kind": "program",
+            "sequenceRef": {
+              "kind": "video_edit.sequence",
+              "id": "t16-formal:main"
+            },
+            "frame": 239
+          },
+          "width": 1920,
+          "height": 1080,
+          "sourceWidth": 1920,
+          "sourceHeight": 1080,
+          "documentRevision": 11,
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "message": "已渲染序列帧 239（1920×1080），用 read_application_media 并设置 mode=\"image\" 直接查看画面。按内容复用已有图片 asset:0a94ee46-f924-4ba2-b1c0-23b9d123dbfd。",
+          "verification": {
+            "verified": true,
+            "condition": "已用正式渲染器生成固定版本画面，并保存为可读取的图片。",
+            "target": {
+              "kind": "asset",
+              "id": "0a94ee46-f924-4ba2-b1c0-23b9d123dbfd"
+            }
+          }
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 99,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    },
+    {
+      "name": "verify_video_edit_space",
+      "result": {
+        "ok": true,
+        "data": {
+          "documentRef": {
+            "kind": "video_edit.document",
+            "id": "t16-formal"
+          },
+          "sequenceRef": {
+            "kind": "video_edit.sequence",
+            "id": "t16-formal:main"
+          },
+          "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1",
+          "records": [
+            {
+              "kind": "camera",
+              "frame": 0,
+              "intent": {
+                "curves": {
+                  "perspective": [
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "ease",
+                      "time": 45
+                    },
+                    {
+                      "value": -1,
+                      "interpolation": "hold",
+                      "time": 135
+                    },
+                    {
+                      "value": -1,
+                      "interpolation": "ease",
+                      "time": 195
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 225
+                    }
+                  ],
+                  "offsetX": [
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "ease",
+                      "time": 45
+                    },
+                    {
+                      "value": 0.22,
+                      "interpolation": "ease",
+                      "time": 135
+                    },
+                    {
+                      "value": 0.3,
+                      "interpolation": "ease",
+                      "time": 180
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 225
+                    }
+                  ],
+                  "offsetY": [
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "ease",
+                      "time": 45
+                    },
+                    {
+                      "value": 0.07,
+                      "interpolation": "hold",
+                      "time": 135
+                    },
+                    {
+                      "value": 0.07,
+                      "interpolation": "ease",
+                      "time": 195
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 225
+                    }
+                  ],
+                  "defocus": [
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "ease",
+                      "time": 132
+                    },
+                    {
+                      "value": 10,
+                      "interpolation": "hold",
+                      "time": 150
+                    },
+                    {
+                      "value": 10,
+                      "interpolation": "ease",
+                      "time": 186
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 210
+                    }
+                  ],
+                  "focusDistance": [
+                    {
+                      "value": 2.45,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 2.45,
+                      "interpolation": "ease",
+                      "time": 150
+                    },
+                    {
+                      "value": 1.65,
+                      "interpolation": "hold",
+                      "time": 180
+                    }
+                  ]
+                },
+                "bindings": {
+                  "focus": [
+                    {
+                      "time": 0,
+                      "value": null,
+                      "interpolation": "hold"
+                    },
+                    {
+                      "time": 128,
+                      "value": {
+                        "kind": "distance",
+                        "distance": 2.45
+                      },
+                      "interpolation": "hold"
+                    },
+                    {
+                      "time": 214,
+                      "value": null,
+                      "interpolation": "hold"
+                    }
+                  ]
+                }
+              },
+              "position": [
+                0,
+                0,
+                3.9506172839506175
+              ],
+              "target": [
+                0,
+                0,
+                0
+              ],
+              "up": [
+                0,
+                1,
+                0
+              ],
+              "sensorWidthMm": 36,
+              "fovYRadians": 0.25178631814208996,
+              "fStop": 5.6,
+              "defocus": 0,
+              "resolvedAim": [
+                0,
+                0,
+                0
+              ],
+              "resolvedFocus": [
+                0,
+                0,
+                0
+              ],
+              "targetActive": true,
+              "focalLengthMm": 80,
+              "focusDistance": 3.9506172839506175,
+              "near": 0.003950617283950617,
+              "far": 7.901234567901235,
+              "canonicalIdentity": true,
+              "flatIdentity": true,
+              "zeroBasis": "effective-values-and-bindings",
+              "facts": [
+                {
+                  "code": "clipped",
+                  "clipRefs": [
+                    {
+                      "kind": "video_edit.clip",
+                      "id": "t16-formal:label"
+                    }
+                  ],
+                  "sequenceFrame": 0,
+                  "message": "空间卡片在视锥边界裁剪。",
+                  "values": {
+                    "visibleVertices": 4
+                  }
+                },
+                {
+                  "code": "clipped",
+                  "clipRefs": [
+                    {
+                      "kind": "video_edit.clip",
+                      "id": "t16-formal:subtitle"
+                    }
+                  ],
+                  "sequenceFrame": 0,
+                  "message": "空间卡片在视锥边界裁剪。",
+                  "values": {
+                    "visibleVertices": 4
+                  }
+                },
+                {
+                  "code": "clipped",
+                  "clipRefs": [
+                    {
+                      "kind": "video_edit.clip",
+                      "id": "t16-formal:title"
+                    }
+                  ],
+                  "sequenceFrame": 0,
+                  "message": "空间卡片在视锥边界裁剪。",
+                  "values": {
+                    "visibleVertices": 4
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 0,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-a"
+              },
+              "originalQuad": [
+                [
+                  -0.7583333333333333,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  -0.30833333333333335,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  -0.30833333333333335,
+                  -0.30999999999999994,
+                  0
+                ],
+                [
+                  -0.7583333333333333,
+                  -0.30999999999999994,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  -0.7583333333333333,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  -0.30833333333333335,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  -0.30833333333333335,
+                  -0.30999999999999994,
+                  0
+                ],
+                [
+                  -0.7583333333333333,
+                  -0.30999999999999994,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  0.07343750000000004,
+                  0.51
+                ],
+                [
+                  0.3265625,
+                  0.51
+                ],
+                [
+                  0.3265625,
+                  0.8099999999999999
+                ],
+                [
+                  0.07343750000000004,
+                  0.8099999999999999
+                ]
+              ],
+              "screenBounds": {
+                "x": 0.07343750000000004,
+                "y": 0.51,
+                "width": 0.25312499999999993,
+                "height": 0.29999999999999993
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                -0.5333333333333333,
+                -0.16,
+                0
+              ],
+              "centerWorld": [
+                -0.5333333333333334,
+                -0.16,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": false,
+              "ambiguousDepth": false,
+              "drawOrder": 1,
+              "inFrameFraction": 1,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:label"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:subtitle"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0.07343750000000004,
+                      0.51
+                    ],
+                    [
+                      0.3265625,
+                      0.51
+                    ],
+                    [
+                      0.3265625,
+                      0.8099999999999999
+                    ],
+                    [
+                      0.07343750000000004,
+                      0.8099999999999999
+                    ],
+                    [
+                      0.07343750000000004,
+                      0.51
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                2,
+                0,
+                0,
+                0,
+                0,
+                -2.37037037037037,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -3.3703703703703702,
+                -0.07901234567901264,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 0,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-b"
+              },
+              "originalQuad": [
+                [
+                  -0.22499999999999998,
+                  -0.050000000000000044,
+                  0
+                ],
+                [
+                  0.22499999999999998,
+                  -0.050000000000000044,
+                  0
+                ],
+                [
+                  0.22499999999999998,
+                  -0.35,
+                  0
+                ],
+                [
+                  -0.22499999999999998,
+                  -0.35,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  -0.22499999999999998,
+                  -0.050000000000000044,
+                  0
+                ],
+                [
+                  0.22499999999999998,
+                  -0.050000000000000044,
+                  0
+                ],
+                [
+                  0.22499999999999998,
+                  -0.35,
+                  0
+                ],
+                [
+                  -0.22499999999999998,
+                  -0.35,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  0.3734375,
+                  0.55
+                ],
+                [
+                  0.6265625,
+                  0.55
+                ],
+                [
+                  0.6265625,
+                  0.85
+                ],
+                [
+                  0.3734375,
+                  0.85
+                ]
+              ],
+              "screenBounds": {
+                "x": 0.3734375,
+                "y": 0.55,
+                "width": 0.25312500000000004,
+                "height": 0.29999999999999993
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0,
+                -0.2,
+                0
+              ],
+              "centerWorld": [
+                0,
+                -0.2,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": false,
+              "ambiguousDepth": false,
+              "drawOrder": 2,
+              "inFrameFraction": 1,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:label"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:subtitle"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0.3734375,
+                      0.55
+                    ],
+                    [
+                      0.6265625,
+                      0.55
+                    ],
+                    [
+                      0.6265625,
+                      0.85
+                    ],
+                    [
+                      0.3734375,
+                      0.85
+                    ],
+                    [
+                      0.3734375,
+                      0.55
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                2,
+                0,
+                0,
+                0,
+                0,
+                -2.37037037037037,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -1,
+                -0.3950617283950621,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 0,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-c"
+              },
+              "originalQuad": [
+                [
+                  0.30833333333333335,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  0.7583333333333333,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  0.7583333333333333,
+                  -0.30999999999999994,
+                  0
+                ],
+                [
+                  0.30833333333333335,
+                  -0.30999999999999994,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  0.30833333333333335,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  0.7583333333333333,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  0.7583333333333333,
+                  -0.30999999999999994,
+                  0
+                ],
+                [
+                  0.30833333333333335,
+                  -0.30999999999999994,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  0.6734375,
+                  0.51
+                ],
+                [
+                  0.9265625,
+                  0.51
+                ],
+                [
+                  0.9265625,
+                  0.8099999999999999
+                ],
+                [
+                  0.6734375,
+                  0.8099999999999999
+                ]
+              ],
+              "screenBounds": {
+                "x": 0.6734375,
+                "y": 0.51,
+                "width": 0.25312499999999993,
+                "height": 0.29999999999999993
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0.5333333333333333,
+                -0.16,
+                0
+              ],
+              "centerWorld": [
+                0.5333333333333334,
+                -0.16,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": false,
+              "ambiguousDepth": false,
+              "drawOrder": 3,
+              "inFrameFraction": 1,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:label"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:subtitle"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0.6734375,
+                      0.51
+                    ],
+                    [
+                      0.9265625,
+                      0.51
+                    ],
+                    [
+                      0.9265625,
+                      0.8099999999999999
+                    ],
+                    [
+                      0.6734375,
+                      0.8099999999999999
+                    ],
+                    [
+                      0.6734375,
+                      0.51
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                2,
+                0,
+                0,
+                0,
+                0,
+                -2.37037037037037,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                1.3703703703703705,
+                -0.07901234567901264,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 0,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:label"
+              },
+              "originalQuad": [
+                [
+                  -0.888888888888889,
+                  0.09999999999999998,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  0.09999999999999998,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  -0.9,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.9,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  -0.8888888888888888,
+                  0.09999999999999998,
+                  0
+                ],
+                [
+                  0.8888888888888888,
+                  0.09999999999999998,
+                  0
+                ],
+                [
+                  0.8888888888888888,
+                  -0.5,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.49999999999999994,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  5.551115123125783e-17,
+                  0.4
+                ],
+                [
+                  1,
+                  0.4
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  -1.1102230246251565e-16,
+                  1
+                ]
+              ],
+              "screenBounds": {
+                "x": -1.1102230246251565e-16,
+                "y": 0.4,
+                "width": 1,
+                "height": 0.6
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0,
+                -0.4,
+                0
+              ],
+              "centerWorld": [
+                2.6020852139652113e-17,
+                -0.2,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": true,
+              "ambiguousDepth": false,
+              "drawOrder": 4,
+              "inFrameFraction": 0.6000000000000001,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:subtitle"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0,
+                      0.4
+                    ],
+                    [
+                      1,
+                      0.4
+                    ],
+                    [
+                      1,
+                      0.83
+                    ],
+                    [
+                      0,
+                      0.83
+                    ],
+                    [
+                      0,
+                      0.4
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                7.901234567901236,
+                0,
+                0,
+                0,
+                0,
+                -7.901234567901235,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -3.950617283950618,
+                0.7901234567901233,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 0,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:subtitle"
+              },
+              "originalQuad": [
+                [
+                  -0.888888888888889,
+                  0.67,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  0.67,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  -0.32999999999999996,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.32999999999999996,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  0.8888888888888888,
+                  0.5,
+                  0
+                ],
+                [
+                  0.8888888888888888,
+                  -0.32999999999999996,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.32999999999999996,
+                  0
+                ],
+                [
+                  -0.8888888888888888,
+                  0.5000000000000001,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0.83
+                ],
+                [
+                  -1.1102230246251565e-16,
+                  0.83
+                ],
+                [
+                  5.551115123125783e-17,
+                  -1.1102230246251565e-16
+                ]
+              ],
+              "screenBounds": {
+                "x": -1.1102230246251565e-16,
+                "y": -1.1102230246251565e-16,
+                "width": 1,
+                "height": 0.8300000000000001
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0,
+                0.17,
+                0
+              ],
+              "centerWorld": [
+                -7.524101823513861e-17,
+                0.08500000000000003,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": true,
+              "ambiguousDepth": false,
+              "drawOrder": 5,
+              "inFrameFraction": 0.8300000000000001,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      0.71
+                    ],
+                    [
+                      0,
+                      0.71
+                    ],
+                    [
+                      0,
+                      0
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                7.901234567901236,
+                0,
+                0,
+                0,
+                0,
+                -7.901234567901235,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -3.950617283950618,
+                5.293827160493827,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 0,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:title"
+              },
+              "originalQuad": [
+                [
+                  -0.888888888888889,
+                  0.79,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  0.79,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  -0.20999999999999996,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.20999999999999996,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  0.8888888888888888,
+                  0.5,
+                  0
+                ],
+                [
+                  0.8888888888888888,
+                  -0.20999999999999996,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.20999999999999996,
+                  0
+                ],
+                [
+                  -0.8888888888888888,
+                  0.5,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0.71
+                ],
+                [
+                  -1.1102230246251565e-16,
+                  0.71
+                ],
+                [
+                  5.551115123125783e-17,
+                  0
+                ]
+              ],
+              "screenBounds": {
+                "x": -1.1102230246251565e-16,
+                "y": 0,
+                "width": 1,
+                "height": 0.71
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0,
+                0.29,
+                0
+              ],
+              "centerWorld": [
+                -4.3978905024764127e-17,
+                0.14500000000000002,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": true,
+              "ambiguousDepth": false,
+              "drawOrder": 6,
+              "inFrameFraction": 0.71,
+              "visibleFraction": 1,
+              "occludedBy": [],
+              "coverage": [],
+              "visibility": "estimated",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": true,
+              "clipFromUv": [
+                7.901234567901236,
+                0,
+                0,
+                0,
+                0,
+                -7.901234567901235,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -3.950617283950618,
+                6.241975308641976,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "camera",
+              "frame": 45,
+              "intent": {
+                "curves": {
+                  "perspective": [
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "ease",
+                      "time": 45
+                    },
+                    {
+                      "value": -1,
+                      "interpolation": "hold",
+                      "time": 135
+                    },
+                    {
+                      "value": -1,
+                      "interpolation": "ease",
+                      "time": 195
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 225
+                    }
+                  ],
+                  "offsetX": [
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "ease",
+                      "time": 45
+                    },
+                    {
+                      "value": 0.22,
+                      "interpolation": "ease",
+                      "time": 135
+                    },
+                    {
+                      "value": 0.3,
+                      "interpolation": "ease",
+                      "time": 180
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 225
+                    }
+                  ],
+                  "offsetY": [
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "ease",
+                      "time": 45
+                    },
+                    {
+                      "value": 0.07,
+                      "interpolation": "hold",
+                      "time": 135
+                    },
+                    {
+                      "value": 0.07,
+                      "interpolation": "ease",
+                      "time": 195
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 225
+                    }
+                  ],
+                  "defocus": [
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "ease",
+                      "time": 132
+                    },
+                    {
+                      "value": 10,
+                      "interpolation": "hold",
+                      "time": 150
+                    },
+                    {
+                      "value": 10,
+                      "interpolation": "ease",
+                      "time": 186
+                    },
+                    {
+                      "value": 0,
+                      "interpolation": "hold",
+                      "time": 210
+                    }
+                  ],
+                  "focusDistance": [
+                    {
+                      "value": 2.45,
+                      "interpolation": "hold",
+                      "time": 0
+                    },
+                    {
+                      "value": 2.45,
+                      "interpolation": "ease",
+                      "time": 150
+                    },
+                    {
+                      "value": 1.65,
+                      "interpolation": "hold",
+                      "time": 180
+                    }
+                  ]
+                },
+                "bindings": {
+                  "focus": [
+                    {
+                      "time": 0,
+                      "value": null,
+                      "interpolation": "hold"
+                    },
+                    {
+                      "time": 128,
+                      "value": {
+                        "kind": "distance",
+                        "distance": 2.45
+                      },
+                      "interpolation": "hold"
+                    },
+                    {
+                      "time": 214,
+                      "value": null,
+                      "interpolation": "hold"
+                    }
+                  ]
+                }
+              },
+              "position": [
+                0,
+                0,
+                3.9506172839506175
+              ],
+              "target": [
+                0,
+                0,
+                0
+              ],
+              "up": [
+                0,
+                1,
+                0
+              ],
+              "sensorWidthMm": 36,
+              "fovYRadians": 0.25178631814208996,
+              "fStop": 5.6,
+              "defocus": 0,
+              "resolvedAim": [
+                0,
+                0,
+                0
+              ],
+              "resolvedFocus": [
+                0,
+                0,
+                0
+              ],
+              "targetActive": true,
+              "focalLengthMm": 80,
+              "focusDistance": 3.9506172839506175,
+              "near": 0.003950617283950617,
+              "far": 7.901234567901235,
+              "canonicalIdentity": true,
+              "flatIdentity": true,
+              "zeroBasis": "effective-values-and-bindings",
+              "facts": [
+                {
+                  "code": "clipped",
+                  "clipRefs": [
+                    {
+                      "kind": "video_edit.clip",
+                      "id": "t16-formal:label"
+                    }
+                  ],
+                  "sequenceFrame": 45,
+                  "message": "空间卡片在视锥边界裁剪。",
+                  "values": {
+                    "visibleVertices": 4
+                  }
+                },
+                {
+                  "code": "clipped",
+                  "clipRefs": [
+                    {
+                      "kind": "video_edit.clip",
+                      "id": "t16-formal:subtitle"
+                    }
+                  ],
+                  "sequenceFrame": 45,
+                  "message": "空间卡片在视锥边界裁剪。",
+                  "values": {
+                    "visibleVertices": 4
+                  }
+                },
+                {
+                  "code": "clipped",
+                  "clipRefs": [
+                    {
+                      "kind": "video_edit.clip",
+                      "id": "t16-formal:title"
+                    }
+                  ],
+                  "sequenceFrame": 45,
+                  "message": "空间卡片在视锥边界裁剪。",
+                  "values": {
+                    "visibleVertices": 4
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 45,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-a"
+              },
+              "originalQuad": [
+                [
+                  -0.7583333333333333,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  -0.30833333333333335,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  -0.30833333333333335,
+                  -0.30999999999999994,
+                  0
+                ],
+                [
+                  -0.7583333333333333,
+                  -0.30999999999999994,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  -0.7583333333333333,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  -0.30833333333333335,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  -0.30833333333333335,
+                  -0.30999999999999994,
+                  0
+                ],
+                [
+                  -0.7583333333333333,
+                  -0.30999999999999994,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  0.07343750000000004,
+                  0.51
+                ],
+                [
+                  0.3265625,
+                  0.51
+                ],
+                [
+                  0.3265625,
+                  0.8099999999999999
+                ],
+                [
+                  0.07343750000000004,
+                  0.8099999999999999
+                ]
+              ],
+              "screenBounds": {
+                "x": 0.07343750000000004,
+                "y": 0.51,
+                "width": 0.25312499999999993,
+                "height": 0.29999999999999993
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                -0.5333333333333333,
+                -0.16,
+                0
+              ],
+              "centerWorld": [
+                -0.5333333333333334,
+                -0.16,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": false,
+              "ambiguousDepth": false,
+              "drawOrder": 1,
+              "inFrameFraction": 1,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:label"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:subtitle"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0.07343750000000004,
+                      0.51
+                    ],
+                    [
+                      0.3265625,
+                      0.51
+                    ],
+                    [
+                      0.3265625,
+                      0.8099999999999999
+                    ],
+                    [
+                      0.07343750000000004,
+                      0.8099999999999999
+                    ],
+                    [
+                      0.07343750000000004,
+                      0.51
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                2,
+                0,
+                0,
+                0,
+                0,
+                -2.37037037037037,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -3.3703703703703702,
+                -0.07901234567901264,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 45,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-b"
+              },
+              "originalQuad": [
+                [
+                  -0.22499999999999998,
+                  -0.050000000000000044,
+                  0
+                ],
+                [
+                  0.22499999999999998,
+                  -0.050000000000000044,
+                  0
+                ],
+                [
+                  0.22499999999999998,
+                  -0.35,
+                  0
+                ],
+                [
+                  -0.22499999999999998,
+                  -0.35,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  -0.22499999999999998,
+                  -0.050000000000000044,
+                  0
+                ],
+                [
+                  0.22499999999999998,
+                  -0.050000000000000044,
+                  0
+                ],
+                [
+                  0.22499999999999998,
+                  -0.35,
+                  0
+                ],
+                [
+                  -0.22499999999999998,
+                  -0.35,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  0.3734375,
+                  0.55
+                ],
+                [
+                  0.6265625,
+                  0.55
+                ],
+                [
+                  0.6265625,
+                  0.85
+                ],
+                [
+                  0.3734375,
+                  0.85
+                ]
+              ],
+              "screenBounds": {
+                "x": 0.3734375,
+                "y": 0.55,
+                "width": 0.25312500000000004,
+                "height": 0.29999999999999993
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0,
+                -0.2,
+                0
+              ],
+              "centerWorld": [
+                0,
+                -0.2,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": false,
+              "ambiguousDepth": false,
+              "drawOrder": 2,
+              "inFrameFraction": 1,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:label"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:subtitle"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0.3734375,
+                      0.55
+                    ],
+                    [
+                      0.6265625,
+                      0.55
+                    ],
+                    [
+                      0.6265625,
+                      0.85
+                    ],
+                    [
+                      0.3734375,
+                      0.85
+                    ],
+                    [
+                      0.3734375,
+                      0.55
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                2,
+                0,
+                0,
+                0,
+                0,
+                -2.37037037037037,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -1,
+                -0.3950617283950621,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 45,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:panel-c"
+              },
+              "originalQuad": [
+                [
+                  0.30833333333333335,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  0.7583333333333333,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  0.7583333333333333,
+                  -0.30999999999999994,
+                  0
+                ],
+                [
+                  0.30833333333333335,
+                  -0.30999999999999994,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  0.30833333333333335,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  0.7583333333333333,
+                  -0.010000000000000037,
+                  0
+                ],
+                [
+                  0.7583333333333333,
+                  -0.30999999999999994,
+                  0
+                ],
+                [
+                  0.30833333333333335,
+                  -0.30999999999999994,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  0.6734375,
+                  0.51
+                ],
+                [
+                  0.9265625,
+                  0.51
+                ],
+                [
+                  0.9265625,
+                  0.8099999999999999
+                ],
+                [
+                  0.6734375,
+                  0.8099999999999999
+                ]
+              ],
+              "screenBounds": {
+                "x": 0.6734375,
+                "y": 0.51,
+                "width": 0.25312499999999993,
+                "height": 0.29999999999999993
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0.5333333333333333,
+                -0.16,
+                0
+              ],
+              "centerWorld": [
+                0.5333333333333334,
+                -0.16,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": false,
+              "ambiguousDepth": false,
+              "drawOrder": 3,
+              "inFrameFraction": 1,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:label"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:subtitle"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0.6734375,
+                      0.51
+                    ],
+                    [
+                      0.9265625,
+                      0.51
+                    ],
+                    [
+                      0.9265625,
+                      0.8099999999999999
+                    ],
+                    [
+                      0.6734375,
+                      0.8099999999999999
+                    ],
+                    [
+                      0.6734375,
+                      0.51
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                2,
+                0,
+                0,
+                0,
+                0,
+                -2.37037037037037,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                1.3703703703703705,
+                -0.07901234567901264,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 45,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:label"
+              },
+              "originalQuad": [
+                [
+                  -0.888888888888889,
+                  0.09999999999999998,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  0.09999999999999998,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  -0.9,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.9,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  -0.8888888888888888,
+                  0.09999999999999998,
+                  0
+                ],
+                [
+                  0.8888888888888888,
+                  0.09999999999999998,
+                  0
+                ],
+                [
+                  0.8888888888888888,
+                  -0.5,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.49999999999999994,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  5.551115123125783e-17,
+                  0.4
+                ],
+                [
+                  1,
+                  0.4
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  -1.1102230246251565e-16,
+                  1
+                ]
+              ],
+              "screenBounds": {
+                "x": -1.1102230246251565e-16,
+                "y": 0.4,
+                "width": 1,
+                "height": 0.6
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0,
+                -0.4,
+                0
+              ],
+              "centerWorld": [
+                2.6020852139652113e-17,
+                -0.2,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": true,
+              "ambiguousDepth": false,
+              "drawOrder": 4,
+              "inFrameFraction": 0.6000000000000001,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:subtitle"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0,
+                      0.4
+                    ],
+                    [
+                      1,
+                      0.4
+                    ],
+                    [
+                      1,
+                      1
+                    ],
+                    [
+                      0,
+                      1
+                    ],
+                    [
+                      0,
+                      0.4
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                7.901234567901236,
+                0,
+                0,
+                0,
+                0,
+                -7.901234567901235,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -3.950617283950618,
+                0.7901234567901233,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 45,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:subtitle"
+              },
+              "originalQuad": [
+                [
+                  -0.888888888888889,
+                  0.67,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  0.67,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  -0.32999999999999996,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.32999999999999996,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  0.8888888888888888,
+                  0.5,
+                  0
+                ],
+                [
+                  0.8888888888888888,
+                  -0.32999999999999996,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.32999999999999996,
+                  0
+                ],
+                [
+                  -0.8888888888888888,
+                  0.5000000000000001,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0.83
+                ],
+                [
+                  -1.1102230246251565e-16,
+                  0.83
+                ],
+                [
+                  5.551115123125783e-17,
+                  -1.1102230246251565e-16
+                ]
+              ],
+              "screenBounds": {
+                "x": -1.1102230246251565e-16,
+                "y": -1.1102230246251565e-16,
+                "width": 1,
+                "height": 0.8300000000000001
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0,
+                0.17,
+                0
+              ],
+              "centerWorld": [
+                -7.524101823513861e-17,
+                0.08500000000000003,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": true,
+              "ambiguousDepth": false,
+              "drawOrder": 5,
+              "inFrameFraction": 0.8300000000000001,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:title"
+                },
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      0.83
+                    ],
+                    [
+                      0,
+                      0.83
+                    ],
+                    [
+                      0,
+                      0
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                7.901234567901236,
+                0,
+                0,
+                0,
+                0,
+                -7.901234567901235,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -3.950617283950618,
+                5.293827160493827,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            },
+            {
+              "kind": "card",
+              "frame": 45,
+              "clipRef": {
+                "kind": "video_edit.clip",
+                "id": "t16-formal:title"
+              },
+              "originalQuad": [
+                [
+                  -0.888888888888889,
+                  0.79,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  0.79,
+                  0
+                ],
+                [
+                  0.888888888888889,
+                  -0.20999999999999996,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.20999999999999996,
+                  0
+                ]
+              ],
+              "visiblePolygon": [
+                [
+                  0.8888888888888888,
+                  0.5,
+                  0
+                ],
+                [
+                  0.8888888888888888,
+                  -0.20999999999999996,
+                  0
+                ],
+                [
+                  -0.888888888888889,
+                  -0.20999999999999996,
+                  0
+                ],
+                [
+                  -0.8888888888888888,
+                  0.5,
+                  0
+                ]
+              ],
+              "screenPolygon": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0.71
+                ],
+                [
+                  -1.1102230246251565e-16,
+                  0.71
+                ],
+                [
+                  5.551115123125783e-17,
+                  0
+                ]
+              ],
+              "screenBounds": {
+                "x": -1.1102230246251565e-16,
+                "y": 0,
+                "width": 1,
+                "height": 0.71
+              },
+              "logicalBounds": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "anchorWorld": [
+                0,
+                0.29,
+                0
+              ],
+              "centerWorld": [
+                -4.3978905024764127e-17,
+                0.14500000000000002,
+                0
+              ],
+              "centerViewDepth": 3.9506172839506175,
+              "viewDepthRange": [
+                3.9506172839506175,
+                3.9506172839506175
+              ],
+              "cocRadiusPx": 0,
+              "cocRangePx": [
+                0,
+                0
+              ],
+              "behindCamera": false,
+              "clipped": true,
+              "ambiguousDepth": false,
+              "drawOrder": 6,
+              "inFrameFraction": 0.71,
+              "visibleFraction": null,
+              "occludedBy": [
+                {
+                  "kind": "video_edit.clip",
+                  "id": "t16-formal:2252bfb8-99eb-46c8-ab6d-65bd52d6a11b"
+                }
+              ],
+              "coverage": [
+                [
+                  [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      0.71
+                    ],
+                    [
+                      0,
+                      0.71
+                    ],
+                    [
+                      0,
+                      0
+                    ]
+                  ]
+                ]
+              ],
+              "visibility": "unknown",
+              "approximation": "layer-center",
+              "sceneBoundsSource": "none",
+              "focusOnCard": null,
+              "clipFromUv": [
+                7.901234567901236,
+                0,
+                0,
+                0,
+                0,
+                -7.901234567901235,
+                0,
+                0,
+                0,
+                0,
+                -1.0005002501250626,
+                -1,
+                -3.950617283950618,
+                6.241975308641976,
+                3.9486409871602475,
+                3.9506172839506175
+              ]
+            }
+          ],
+          "nextCursor": "{\"version\":\"bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1\",\"query\":\"[\\\"main\\\",[0,45,135,168,225,239],[]]\",\"offset\":14}",
+          "verificationKind": "structural",
+          "message": "已完成结构验证；透明内容和未知场景仍需看同帧画面。"
+        },
+        "revisionEpoch": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a",
+        "revision": 99,
+        "scopeRevisions": {
+          "video_edit": 12
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "frame": 0,
+      "name": "f000.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 44,
+      "name": "f044.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 45,
+      "name": "f045.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 46,
+      "name": "f046.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 75,
+      "name": "f075.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 105,
+      "name": "f105.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 135,
+      "name": "f135.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 150,
+      "name": "f150.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 162,
+      "name": "f162.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 167,
+      "name": "f167.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 168,
+      "name": "f168.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 169,
+      "name": "f169.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 170,
+      "name": "f170.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 180,
+      "name": "f180.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 195,
+      "name": "f195.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 210,
+      "name": "f210.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 224,
+      "name": "f224.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 225,
+      "name": "f225.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 226,
+      "name": "f226.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    },
+    {
+      "frame": 239,
+      "name": "f239.png",
+      "width": 1920,
+      "height": 1080,
+      "documentVersion": "bd5c5b3a-2750-45e4-b0d6-e34ac5d7324a:2229e1ce-4096-4d86-89c7-d08a343264e9:11:0:1"
+    }
+  ],
+  "errors": [],
+  "runtime": {
+    "electron": "44.9.3",
+    "chromium": "152.0.7977.167",
+    "gpu": {
+      "auxAttributes": {
+        "amdSwitchable": false,
+        "canSupportThreadedTextureMailbox": false,
+        "directMLFeatureLevel": "Not supported",
+        "dx12FeatureLevel": "Not supported",
+        "glImplementationParts": "(gl=none,angle=none)",
+        "glResetNotificationStrategy": 0,
+        "inProcessGpu": true,
+        "initializationTime": 0,
+        "isAsan": false,
+        "isClangCoverage": false,
+        "jpegDecodeAcceleratorSupported": false,
+        "optimus": false,
+        "overlayInfo": {
+          "bgra8OverlaySupport": "NONE",
+          "directComposition": false,
+          "nv12OverlaySupport": "NONE",
+          "p010OverlaySupport": "NONE",
+          "rgb10a2OverlaySupport": "NONE",
+          "supportsOverlays": false,
+          "yuy2OverlaySupport": "NONE"
+        },
+        "passthroughCmdDecoder": false,
+        "sandboxed": false,
+        "skiaBackendType": "None",
+        "subpixelFontRendering": true,
+        "supportsD3dSharedImages": false,
+        "supportsDirectML": false,
+        "supportsDx12": false,
+        "supportsVulkan": false,
+        "targetCpuBits": 64,
+        "visibilityCallbackCallCount": 0,
+        "vulkanVersion": "Not supported"
+      },
+      "gpuDevice": [
+        {
+          "active": false,
+          "deviceId": 9860,
+          "deviceString": "NVIDIA GeForce RTX 4090",
+          "driverVersion": "32.0.16.1047",
+          "gpuPreference": 2,
+          "revision": 161,
+          "subSysId": 385028318,
+          "vendorId": 4318
+        },
+        {
+          "active": false,
+          "deviceId": 9860,
+          "deviceString": "NVIDIA GeForce RTX 4090",
+          "driverVersion": "32.0.16.1047",
+          "gpuPreference": 0,
+          "revision": 161,
+          "subSysId": 385028318,
+          "vendorId": 4318
+        },
+        {
+          "active": false,
+          "deviceId": 9860,
+          "deviceString": "NVIDIA GeForce RTX 4090",
+          "driverVersion": "32.0.16.1047",
+          "gpuPreference": 0,
+          "revision": 161,
+          "subSysId": 385028318,
+          "vendorId": 4318
+        },
+        {
+          "active": false,
+          "deviceId": 9860,
+          "deviceString": "NVIDIA GeForce RTX 4090",
+          "driverVersion": "32.0.16.1047",
+          "gpuPreference": 0,
+          "revision": 161,
+          "subSysId": 385028318,
+          "vendorId": 4318
+        },
+        {
+          "active": false,
+          "deviceId": 140,
+          "deviceString": "Microsoft Basic Render Driver",
+          "driverVersion": "10.0.19041.5794",
+          "gpuPreference": 0,
+          "revision": 0,
+          "subSysId": 0,
+          "vendorId": 5140
+        }
+      ]
+    }
+  },
+  "comparisons": [
+    {
+      "left": 0,
+      "right": 44,
+      "differentChannels": 0,
+      "differentPixels": 0,
+      "maxChannelDifference": 0
+    },
+    {
+      "left": 44,
+      "right": 45,
+      "differentChannels": 20746,
+      "differentPixels": 10198,
+      "maxChannelDifference": 1
+    },
+    {
+      "left": 45,
+      "right": 46,
+      "differentChannels": 294514,
+      "differentPixels": 99119,
+      "maxChannelDifference": 25
+    },
+    {
+      "left": 224,
+      "right": 225,
+      "differentChannels": 163683,
+      "differentPixels": 54632,
+      "maxChannelDifference": 139
+    },
+    {
+      "left": 225,
+      "right": 226,
+      "differentChannels": 37350,
+      "differentPixels": 15741,
+      "maxChannelDifference": 2
+    },
+    {
+      "left": 0,
+      "right": 225,
+      "differentChannels": 37350,
+      "differentPixels": 15741,
+      "maxChannelDifference": 2
+    },
+    {
+      "left": 0,
+      "right": 239,
+      "differentChannels": 0,
+      "differentPixels": 0,
+      "maxChannelDifference": 0
+    }
+  ]
+}

@@ -375,7 +375,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     }
     case 'deselect_all': if (context.scope === 'project') setVideoEditProjectView(projectId, { selectedItemIds: [] }); else setVideoEditTimelineView(projectId, { selectedClipIds: [] }); return
     case 'toggle_link': await executeVideoEditCommand(context, linkToggle(context)); return
-    case 'cut': copyVideoEditTimeline(projectId, sequenceId, [...context.clipIds], false); executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'delete', clipIds: [...context.clipIds], linked: false, ripple: false }); return
+    case 'cut': copyVideoEditTimeline(projectId, sequenceId, [...context.clipIds], false); await executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'delete', clipIds: [...context.clipIds], linked: false, ripple: false }); return
     case 'zoom_to_sequence': videoEditTimelineViewport(projectId, sequenceId)!.zoomToSequence(); return
     case 'previous_screen': case 'next_screen': videoEditTimelineViewport(projectId, sequenceId)!.showScreen(id === 'next_screen' ? 1 : -1); return
     case 'increase_video_tracks': case 'decrease_video_tracks': case 'increase_audio_tracks': case 'decrease_audio_tracks': case 'expand_all_tracks': case 'minimize_all_tracks': { const [kind, resize] = trackResizes[id]; resizeVideoEditTracks(projectId, sequenceId, kind, resize); return }

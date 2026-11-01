@@ -5,6 +5,7 @@ import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/author
 import { AUTHOR_LIBRARIES, authorLibraryCompatibilityError, authorLibraryVersion, resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import type { CodeTypeCheckResult, CodeTypeDiagnostic } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
+import { authorDefaultExpression, authorThreeDiagnostics } from '@/core/videoEdit/codeMaterial/typeDiagnostics'
 
 /** 检查器的只读环境：TypeScript 标准库、WebGPU 类型与作者接口声明，都是文本。 */
 export interface AuthorTypeEnvironment {
@@ -54,11 +55,13 @@ declare global {
   type AuthorSimulationSampler = Api.AuthorSimulationSampler
   type AuthorSimulationInfo = Api.AuthorSimulationInfo
   type AuthorFrameInfo = Api.AuthorFrameInfo
+  type AuthorSpatialFrameInfo = Api.AuthorSpatialFrameInfo
   type AuthorParams = Api.AuthorParams
   type AuthorParameters = Api.AuthorParameters
   type AuthorAssets = Api.AuthorAssets
   type AuthorGpuInputs = Api.AuthorGpuInputs
   function ${MODULE_CHECK}<const P extends readonly Api.AuthorParamDeclaration[] = readonly Api.AuthorParamDeclaration[]>(module: Api.AuthorModule<P>): Api.AuthorModule<P>
+  function ${MODULE_CHECK}Spatial<const P extends readonly Api.AuthorParamDeclaration[] = readonly Api.AuthorParamDeclaration[]>(module: Api.AuthorModule<P, Api.AuthorSpatialFrameInfo>): Api.AuthorModule<P, Api.AuthorSpatialFrameInfo>
   // TypeScript 的 webworker 标准库漏了 WebGL 上下文的 canvas；宿主的 WebGL 上下文取自 OffscreenCanvas，
   // three 接管它时要写 new WebGLRenderer({ canvas: gl.canvas, context: gl })。
   interface WebGLRenderingContextBase { readonly canvas: OffscreenCanvas }
@@ -94,21 +97,13 @@ interface Insertion { at: number; length: number }
  */
 export function wrapAuthorEntry(file: string, text: string): { text: string; insertions: Insertion[] } {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, /\.[cm]?tsx?$/.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS)
-  const initializer = (name: string): ts.Expression | undefined => {
-    for (const statement of source.statements) if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name) && declaration.name.text === name && declaration.initializer) return declaration.initializer
-    return undefined
-  }
-  let target: ts.Expression | undefined
-  for (const statement of source.statements) {
-    if (ts.isExportAssignment(statement) && !statement.isExportEquals) target = ts.isIdentifier(statement.expression) ? initializer(statement.expression.text) ?? statement.expression : statement.expression
-    else if (ts.isExportDeclaration(statement) && !statement.moduleSpecifier && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
-      const named = statement.exportClause.elements.find(element => element.name.text === 'default')
-      if (named) target = initializer((named.propertyName ?? named.name).text)
-    }
-    if (target) break
-  }
+  const target = authorDefaultExpression(ts, source)
   if (!target) return { text, insertions: [] }
-  const start = target.getStart(source), end = target.getEnd(), prefix = `${MODULE_CHECK}(`
+  const spatial = ts.isObjectLiteralExpression(target) && target.properties.some(property => {
+    const name = property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : undefined
+    return name === 'createThree' || name === 'space' && ts.isPropertyAssignment(property) && property.initializer.kind === ts.SyntaxKind.TrueKeyword
+  })
+  const start = target.getStart(source), end = target.getEnd(), prefix = `${MODULE_CHECK}${spatial ? 'Spatial' : ''}(`
   return { text: `${text.slice(0, start)}${prefix}${text.slice(start, end)})${text.slice(end)}`, insertions: [{ at: start, length: prefix.length }, { at: end, length: 1 }] }
 }
 /** 检查器位置 → 原文位置；落在插入文字里的位置归到插入点。 */
@@ -250,7 +245,7 @@ export function createAuthorTypeChecker(environment: AuthorTypeEnvironment): Aut
       roots = reported.map(path => AUTHOR_ROOT + path)
       const program = service.getProgram()
       const checkedFiles: string[] = []
-      const diagnostics: CodeTypeDiagnostic[] = []
+      const diagnostics: CodeTypeDiagnostic[] = authorThreeDiagnostics(ts, files.files, files.entry).filter(diagnostic => reported.includes(diagnostic.span.file))
       const suggestions: CodeEffectSuggestion[] = []
       for (const path of reported) {
         const name = AUTHOR_ROOT + path

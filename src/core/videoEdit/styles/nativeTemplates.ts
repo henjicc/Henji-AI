@@ -2,6 +2,7 @@ import { scaleVideoEditTextStyle } from '../text'
 import { videoEditGraphicSchema } from '../graphics'
 import { videoEditNativeTemplateClipSchema, videoEditNativeTemplateContentSchema, type VideoEditClip, type VideoEditNativeTemplateClip, type VideoEditNativeTemplateContent, type VideoEditSequence } from '../document'
 import { videoEditFps } from '../time'
+import { rescaleVideoEditCurves } from '../keyframes'
 
 /**
  * 原生模板：一组文字与图形片段的快照。应用时按目标画幅缩放、按时长换算关键帧并重新生成对象标识；
@@ -28,7 +29,7 @@ export function instantiateNativeTemplate(content: VideoEditNativeTemplateConten
   return checked.clips.map(original => {
     const clip = structuredClone(original); clip.start = Math.round(original.start * factor); clip.duration = Math.max(1, Math.round((original.start + original.duration) * factor) - clip.start)
     if (clip.kind === 'text') { const value = nextText(); if (value !== undefined) clip.text = value; if (clip.textStyle) clip.textStyle = scaleVideoEditTextStyle(clip.textStyle, sy) }
-    if (clip.curves) for (const [key, points] of Object.entries(clip.curves)) clip.curves[key as keyof typeof clip.curves] = [...new Map(points.map(point => { const next = { ...point, time: Math.min(clip.duration - 1, Math.round(point.time * factor)) }; return [next.time, next] })).values()]
+    if (clip.curves) clip.curves = rescaleVideoEditCurves(clip.curves, time => Math.round(time * factor), clip.duration + 1)
     if (clip.graphic) {
       const gx = sequence.width / clip.graphic.width; const gy = sequence.height / clip.graphic.height
       clip.graphic.width = sequence.width; clip.graphic.height = sequence.height

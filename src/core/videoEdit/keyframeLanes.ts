@@ -12,6 +12,13 @@ export const VIDEO_EDIT_INTRINSIC_ANIMATION_ROWS = [
   { id: 'volume', label: '音量', keys: ['volume'] },
 ] as const satisfies readonly { id: string; label: string; keys: readonly VideoEditAnimatableKey[] }[]
 
+/** 空间曲线仍是普通片段曲线，关闭空间时也可随时间编辑，不能在派生时丢掉。 */
+const spatialAnimationRows = [
+  { id: 'depth', label: '深度', keys: ['depth'] },
+  { id: 'spatialRotation', label: '空间旋转', keys: ['rotationX', 'rotationY'] },
+  { id: 'anchorDepth', label: '轴心深度', keys: ['anchorDepth'] },
+] as const satisfies readonly { id: string; label: string; keys: readonly VideoEditAnimatableKey[] }[]
+
 /** 内置效果参数在界面上的一行（点位的水平、垂直合成一行）；由宿主按参数字段分组后传入。 */
 export interface VideoEditBuiltinAnimationField { key: string; title: string; keys: readonly string[]; discrete: boolean }
 
@@ -30,7 +37,7 @@ export type VideoEditKeyframeChanges = Record<string, VideoEditKeyframes>
 export function videoEditTrackKeyframeLanes(clips: readonly VideoEditClip[], fields: (builtinId: string) => readonly VideoEditBuiltinAnimationField[]): VideoEditKeyframeLane[] {
   const ordered = [...clips].sort((a, b) => a.start - b.start)
   const lanes: VideoEditKeyframeLane[] = []
-  for (const row of VIDEO_EDIT_INTRINSIC_ANIMATION_ROWS) {
+  for (const row of [...VIDEO_EDIT_INTRINSIC_ANIMATION_ROWS, ...spatialAnimationRows]) {
     const entries = ordered.flatMap((clip): VideoEditKeyframeLaneEntry[] => row.keys.some(key => clip.curves?.[key]?.length)
       ? [{ clip, source: { kind: 'intrinsic' }, channels: row.keys.map(key => ({ key, points: clip.curves?.[key] ?? [] })) }] : [])
     if (entries.length) lanes.push({ id: `intrinsic:${row.id}`, label: row.label, discrete: false, entries })

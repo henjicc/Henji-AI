@@ -1,4 +1,5 @@
-import type { VideoEditClip, VideoEditComposition } from './document'
+import { videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from './transitions'
+import type { VideoEditClip, VideoEditComposition, VideoEditSequence } from './document'
 
 /*
  * 片段画面坐标 ↔ 序列画面坐标（任务 4.10）。与合成器顶点着色器（`VIDEO_EDIT_LAYER_VERTEX`）同一套几何：
@@ -70,4 +71,41 @@ export function videoEditClipPixelScale(placement: VideoEditClipPlacement, pictu
 /** 纵向的同一比例：非等比缩放时与横向不同（跟踪框、光标这类按画面高度定大小的量用它）。 */
 export function videoEditClipPixelScaleY(placement: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize): number {
   return videoEditClipPixelScale(placement, picture, frame) * videoEditClipScaleAspect(placement)
+}
+
+export function videoEditClipEnabled(clip: Pick<VideoEditClip, 'enabled'>): boolean { return clip.enabled !== false }
+/**
+ * 轨道级显示：输出启用、且没被画面独奏排除的轨道序号；声音轨道总在其中（声音的独奏与静音由 audibleVideoEditClips 处理）。
+ * 只回答轨道本身的问题，判断某个片段画不画一律用 videoEditPictureFilter。
+ */
+export function videoEditVisibleTrackIndexes(document: Pick<VideoEditSequence, 'tracks'>): Set<number> {
+  const solo = document.tracks.some(track => track.kind === 'video' && track.enabled && track.solo)
+  return new Set(document.tracks.filter(track => track.enabled && (track.kind === 'audio' || !solo || track.solo)).map(track => track.index))
+}
+export interface VideoEditPictureFilter { has(clip: Pick<VideoEditClip, 'track' | 'enabled'>): boolean }
+/** 片段画面是否参与合成：所在轨道显示并且片段启用。 */
+export function videoEditPictureFilter(document: Pick<VideoEditSequence, 'tracks'>): VideoEditPictureFilter {
+  const tracks = videoEditVisibleTrackIndexes(document)
+  return { has: clip => videoEditClipEnabled(clip) && tracks.has(clip.track) }
+}
+
+function pictureTransition(window: VideoEditTransitionWindow, tracks: ReadonlySet<number>): VideoEditTransitionWindow[] {
+  if (!tracks.has(window.left.track)) return []
+  // 单侧过渡两边是同一个片段，只会整段保留或整段去掉。
+  const left = videoEditClipEnabled(window.left); const right = videoEditClipEnabled(window.right)
+  if (!left && !right) return []
+  return [left && right ? window : { ...window, empty: left ? 'right' : 'left' }]
+}
+/**
+ * 参与合成的画面过渡（对齐 PR）：轨道隐藏或两侧都停用的过渡不出现；只停用一侧时过渡照常进行，`empty` 标出那一侧，按透明画。
+ * 音频过渡不经过这里，停用片段不进混音即可。
+ */
+export function videoEditPictureTransitionWindows(document: Pick<VideoEditSequence, 'tracks' | 'clips' | 'transitions'>): VideoEditTransitionWindow[] {
+  const tracks = videoEditVisibleTrackIndexes(document)
+  return (document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'video').flatMap(transition => pictureTransition(videoEditTransitionWindow(document, transition), tracks))
+}
+/** 指定帧上参与合成的画面过渡，规则同 videoEditPictureTransitionWindows。 */
+export function videoEditPictureTransitionsAt(document: Pick<VideoEditSequence, 'tracks' | 'clips' | 'transitions'>, frame: number): VideoEditTransitionWindow[] {
+  const tracks = videoEditVisibleTrackIndexes(document)
+  return videoEditTransitionsAt(document, frame).flatMap(window => pictureTransition(window, tracks))
 }

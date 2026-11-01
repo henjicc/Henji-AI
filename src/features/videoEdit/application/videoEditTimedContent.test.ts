@@ -116,7 +116,7 @@ it('锁定字幕/标记编辑拒绝，复制序列建立唯一内容ID，拆分�
   const { owner, projectId, sequenceId } = await fixture()
   const captionId = createVideoEditCaption(projectId, sequenceId, { clipId: 'text-clip', start: 15, duration: 45, text: '原片段字幕' })
   createVideoEditMarker(projectId, sequenceId, { clipId: 'text-clip', frame: 30, name: '边界' })
-  executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'split', clipIds: ['text-clip'], frame: 30 })
+  await executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'split', clipIds: ['text-clip'], frame: 30 })
   expect(owner.document.sequences[0].captions).toHaveLength(2); undoVideoEdit(projectId); expect(owner.document.sequences[0].captions).toHaveLength(1)
   const duplicate = duplicateVideoEditSequence(projectId, sequenceId)
   const copied = owner.document.sequences.find(sequence => sequence.id === duplicate)!

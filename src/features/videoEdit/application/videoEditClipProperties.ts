@@ -4,7 +4,7 @@ import { writeVideoEditClipKeyframes, putVideoEditKeyframe, type VideoEditAnimat
 import { demonstrateVideoMotion, videoMotionState } from './videoEditMotionDraft'
 
 /** 效果控件里可直接调的片段固有属性（PR 的“运动 / 不透明度 / 音量”等固定效果）。 */
-export type VideoEditClipPropertyKey = VideoEditAnimatableKey
+export type VideoEditClipPropertyKey = 'x' | 'y' | 'scale' | 'rotation' | 'anchorX' | 'anchorY' | 'opacity' | 'volume'
 export type VideoEditClipPropertyPatch = Partial<Pick<VideoEditClip, VideoEditClipPropertyKey | 'scaleAspect' | 'name' | 'text' | 'textStyle' | 'effectsEnabled' | 'disabledIntrinsicSections' | 'snapToBeat'>>
 
 const PROPERTY_KEYS: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume']

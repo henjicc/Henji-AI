@@ -1,3 +1,5 @@
+import type { SpatialPropagationRequest } from '@/core/videoEdit/spatialTypes'
+import { propagateVideoEditSpatialFields } from './videoEditSpatialPropagation'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
@@ -128,6 +130,8 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       return await verifySaved(target, state)
     }
     let clipId: string | undefined; let itemId = ''; let expectedClip = ''; let expectedItem = ''
+    const clipMap: SpatialPropagationRequest['clipMap'][number][] = []
+    const sequenceTimeMap: SpatialPropagationRequest['sequenceTimeMap'][number][] = []
     const applyPlacement = (document: VideoEditDocument, itemIds: string[]): VideoEditDocument => {
       assertVideoEditResultTarget(target, signal)
       const item = document.items.find(item => itemIds.includes(item.id) && document.media.some(media => item.mediaId === media.id && sameAsset(media, asset)))
@@ -154,6 +158,8 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
           kind: 'place', mode: placement.mode, frame: placement.frame, newTracks: placed.addedTracks,
           clipboard: { projectId: document.id, frameRate: document.sequences.find(value => value.id === target.sequenceId)!.frameRate, clips: incoming, annotations: [] },
         })
+        clipMap.push(...edited.clipMap)
+        sequenceTimeMap.push(...edited.sequenceTimeMap)
         const clip = edited.sequence.clips.find(value => value.id === edited.selectedClipIds?.[0])!
         clipId = clip.id; expectedClip = JSON.stringify(videoEditClipSchema.parse(clip))
         const captions = result.captions === undefined && !result.linked ? edited.sequence.captions : [...(edited.sequence.captions ?? []), ...placedCaptions(edited.sequence, clip)]
@@ -179,8 +185,8 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
       expectedClip = JSON.stringify(videoEditClipSchema.parse(clip))
       return { ...document, sequences: document.sequences.map(value => value.id === sequence.id ? { ...sequence, clips: prior ? sequence.clips.map(value => value.id === prior.id ? clip : value) : [...sequence.clips, clip], ...(captions ? { captions } : {}) } : value) }
     }
-    await importVideoEditSources(target.projectId, [{ assetId: asset.id }], undefined, signal, (document, itemIds) => {
-      const next = applyPlacement(document, itemIds)
+    await importVideoEditSources(target.projectId, [{ assetId: asset.id }], undefined, signal, async (document, itemIds) => {
+      const next = await propagateVideoEditSpatialFields(document, applyPlacement(document, itemIds), signal ?? new AbortController().signal, { clipMap, sequenceTimeMap })
       return operationId ? { ...next, creativePlacements: [...(next.creativePlacements ?? []),
         { operationId, sequenceId: target.sequenceId, assetId: asset.id, itemId, clipId: clipId ?? '' }] } : next
     }, state.placement.mode === 'replace' ? [state.placement.clipId] : [])
