@@ -95,10 +95,10 @@ export async function webRecordingEditSource(recordingId: string, prefer: 'repla
     await fs.mkdir(pagesDirectory, { recursive: true })
     const eventStore = new RecordingEventStore(pagesDirectory)
     let sequence = 0
-    // Deterministic ids: the same recording and video always give the same pages, so edits keep matching hashes.
-    const collector = new CaptureLogCollector({ ownerRef, sourceDigest, originUs: 0, id: () => `e${sequence++}` }, async page => { await eventStore.write(page) }, error => logger.warn('网页录制事件页写入积压', { event: 'web_replay.edit_source.pressure', error: String(error) }))
+    // 相同录制与视频生成相同的页和哈希，剪辑引用才能复用。
+    const collector = new CaptureLogCollector({ ownerRef, sourceDigest, originUs: 0, id: () => `e${sequence++}` }, async page => { await eventStore.write(page) }, error => logger.error('网页录制的剪辑事件保存失败，请重试导入', { event: 'web_replay.edit_source.failed', error: String(error) }))
     collector.start(0)
-    for (const event of projected) collector.record(event.videoUs, event.payload)
+    await collector.recordBatch(projected.map(event => ({ monoUs: event.videoUs, payload: event.payload })))
     await collector.stop(frame.durationUs)
     pages = await readPages(pagesDirectory)
     logger.info('网页录制已投影成剪辑事件', { event: 'web_replay.edit_source.projected', context: { recordingId, kind, events: projected.length, pages: pages.length } })

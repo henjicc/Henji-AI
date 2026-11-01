@@ -37,6 +37,16 @@ export class CaptureLogCollector {
     if (this.pending.length >= 256) this.seal()
     return event
   }
+  /** 离线事件能等待写盘；每页写完再继续，避免把批量投影误判成实时录制积压。 */
+  async recordBatch(events: Iterable<{ monoUs: number; payload: CapturePayload }>): Promise<void> {
+    for (const event of events) {
+      this.record(event.monoUs, event.payload)
+      if (this.outstanding) {
+        await this.writer
+        if (this.failure) throw this.failure
+      }
+    }
+  }
   pause(monoUs: number): void {
     if (this.state !== 'recording') return
     this.record(monoUs, { kind: 'control', action: 'pause' })
