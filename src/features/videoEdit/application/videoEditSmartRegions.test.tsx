@@ -10,7 +10,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './videoEditCompositing'
 import { VideoEditSmartRegionControls } from '../panels/VideoEditSmartRegionControls'
-import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions, videoEditSmartRegionSegments, videoEditSmartRegionStatus, waitVideoEditSmartRegions } from './videoEditSmartRegions'
+import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions, videoEditSmartRegionSegments, videoEditSmartRegionStatus, videoEditSmartRegionStatusText, waitVideoEditSmartRegions } from './videoEditSmartRegions'
 import { nestVideoEditSelection } from './videoEditNesting'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -179,6 +179,26 @@ it('导出前等待区域分析：完成后继续；失败时给出用户语言�
     ensure.mockResolvedValueOnce({ state: 'failed', reason: 'model' })
     await expect(waitVideoEditSmartRegions(sequence, sequence)).rejects.toThrow('本地模型下载失败')
   } finally { app.dispose() }
+})
+
+it('主体描边按人物分析：只能加到画面素材（含效果控件改轮廓来源），加上即请求人物分析，region_status 报进度，导出等它完成', async () => {
+  const { owner, id, video, other } = await project()
+  const sequenceId = getActiveVideoEditSequence(owner).id
+  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [other.id], 'smart:subject_stroke')).toThrow('请选择视频或图片片段')
+  // 文字片段上的普通描边改成轮廓来源“主体”同样拒绝（效果控件与助手同一条规则）。
+  const [plain] = applyVideoEditBuiltinEffect(id, sequenceId, [other.id], 'stroke')
+  expect(() => updateVideoEditBuiltinEffect({ projectId: id, sequenceId, clipId: other.id }, plain, { params: { contour: 'subject' } })).toThrow('只能用在视频、图片片段上')
+  applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:subject_stroke'); await flush()
+  const sequence = getActiveVideoEditSequence(owner); const clip = sequence.clips.find(value => value.id === video.id)!
+  const effect = clip.effects![0]
+  expect(effect).toMatchObject({ name: '主体描边', builtin: { id: 'stroke', params: { contour: 'subject' } } }); expect(effect.mask).toBeUndefined()
+  const issued = ensure.mock.calls.at(-1)![0] as SmartRegionRequest
+  expect(issued).toMatchObject({ source: 'D:/media/interview.mp4', kind: 'person' })
+  expect(videoEditSmartRegionStatusText(owner.document, sequence.frameRate, clip, effect)).toBe('analyzing:0%')
+  const waiting = waitVideoEditSmartRegions(sequence, sequence)
+  progress!({ request: issued, status: { state: 'ready', segment: { path: 'C:/cache/p.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'rvm', summary: { value: 0.3, peak: 0 } } } })
+  expect(Object.values(await waiting)[0].person?.[0]).toMatchObject({ startUs: issued.startUs, endUs: issued.endUs })
+  expect(videoEditSmartRegionStatusText(owner.document, sequence.frameRate, clip, effect)).toBe('ready')
 })
 
 it('效果面板“智能”预设：人脸打码只加到所选的视频片段（文字片段跳过），一步撤销；效果控件改区域、清空区域', async () => {

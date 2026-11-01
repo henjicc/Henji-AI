@@ -13,7 +13,7 @@ import { RECORDING_FRAME_EFFECT } from '@/core/videoEdit/recordingFrame'
 import { recordingFrameContent, recordingZoomDraw, type RecordingEffectsRenderInput } from './videoEditRecordingZoomPlan'
 import { VideoEditRecordingZoomPointers } from './videoEditRecordingZoomSource'
 import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
-import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import { resolveVideoEditBuiltinParams, videoEditEffectUsesSubject } from '@/core/videoEdit/builtinEffects'
 import { expandPinnedCodeComponents } from '@/core/videoEdit/codeMaterial/components'
 import { codeMaterialFilesKey, codeVersionContentKey, documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { documentFontRevision } from '@/platform/fontFaces'
@@ -52,6 +52,8 @@ import { videoEditTextResolution } from './videoEditTextSurface'
 import { videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
 
 const logger = createLogger('features.videoEdit.codeSources')
+/** 人物蒙版取分析结果原样（不羽化、不扩展），收缩与柔化由效果自己按画面高度在 GPU 上做。 */
+const SUBJECT_MATTE: NonNullable<VideoEditEffect['mask']> = { regionId: 'person', feather: 0, expand: 0 }
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
 type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
@@ -66,8 +68,8 @@ interface CachedProgram { source: string; outputIdentity: string; program: CodeM
 export interface VideoEditCodePlan { clip: VideoEditClip; key: string; static: boolean; sourceTime?: ReturnType<typeof videoEditClipSourceTimeAt>; outputIdentity?: string; outputFrame?: CodeOutputFrame; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: number }
 /** `parameters`：交给作者滤镜的 params（scene 参数已换成解析结果）。 */
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
-/** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
-export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask }
+/** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d），`subject` 是声明 `subjectMatte` 的效果要的人物蒙版。 */
+export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask; subject?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 /** `sceneIssues`：这一帧的片子数据或画面参数中需要用户处理的问题，由渲染器和效果错误一起呈现。 */
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number; sceneIssues: string[] }
@@ -383,10 +385,12 @@ export class VideoEditCodeSources {
           }
           if (effect.builtin?.id === RECORDING_FRAME_EFFECT) { chain.push({ effect, builtin: { ...effect.builtin, frameContent: recordingFrameContent(clip, document) } }); continue }
           if (effect.builtin) {
-            if (!effect.mask) { chain.push({ effect, builtin: effect.builtin }); continue }
-            // 作用区域（4.7d 智能区域、4.10 手绘遮罩）：智能区域还没分析好时先不画这个效果；导出前会等分析完成。
-            const mask = await this.regionMask(document, clip, effect.mask, frame); assertCurrent()
-            if (mask) chain.push({ effect, builtin: effect.builtin, mask })
+            // 人物蒙版（主体抠像、轮廓来源为主体）与作用区域（4.7d 智能区域、4.10 手绘遮罩）：智能区域还没分析好时先不画这个效果；导出前会等分析完成。
+            const subject = videoEditEffectUsesSubject(effect.builtin) ? await this.regionMask(document, clip, SUBJECT_MATTE, frame, options.quality === 'final') : undefined; assertCurrent()
+            if (videoEditEffectUsesSubject(effect.builtin) && !subject) continue
+            const mask = effect.mask ? await this.regionMask(document, clip, effect.mask, frame, options.quality === 'final') : undefined; assertCurrent()
+            if (effect.mask && !mask) continue
+            chain.push({ effect, builtin: effect.builtin, ...(mask ? { mask } : {}), ...(subject ? { subject } : {}) })
             continue
           }
           if (!effect.code) continue
@@ -554,13 +558,18 @@ export class VideoEditCodeSources {
     return codeOutputKey(document, plan, dependencies, declared, options.quality, textIdentity)
   }
   /** 片段在这一帧的作用区域蒙版（智能区域按素材时间取分析结果，手绘遮罩按几何栅格化）；读取失败只记日志，效果按未就绪跳过。 */
-  private async regionMask(document: VideoEditComposition, clip: VideoEditClip, mask: NonNullable<VideoEditEffect['mask']>, frame: number): Promise<VideoEditSmartRegionMask | undefined> {
+  /**
+   * 读取失败时预览只记日志、这一帧先不画这个效果；最终画质（导出、预渲染、录屏成品）报错，不交出缺了效果的画面。
+   * 还没有分析结果（返回 undefined）不算失败，导出前由区域分析的等待保证就绪。
+   */
+  private async regionMask(document: VideoEditComposition, clip: VideoEditClip, mask: NonNullable<VideoEditEffect['mask']>, frame: number, strict: boolean): Promise<VideoEditSmartRegionMask | undefined> {
     const media = videoEditClipMedia(document, clip)
     const visual = media && (media.kind === 'video' || media.kind === 'image') ? media : undefined
     const timeUs = !visual || visual.kind === 'image' ? 0 : Math.round(videoEditSourceSeconds(videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, true)) * 1e6)
     const pathTimeUs = videoEditSourceSeconds(videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, true)) * 1e6
     try { return await videoEditEffectMask(mask, { trackerKeys: Object.fromEntries((clip.trackers ?? []).map(tracker => [tracker.id, videoEditTrackerResultKey(document, clip, media?.id ?? '', tracker)])), mediaUrl: visual?.path, picture: videoEditClipPictureSize(document, clip), timeUs, pathTimeUs }) } catch (error) {
-      logger.warn('作用区域蒙版读取失败', { event: 'video_edit.smart_region.mask_failed', error, context: { sequenceId: document.id, clipId: clip.id, region: mask.regionId } })
+      logger.warn('作用区域蒙版读取失败', { event: 'video_edit.smart_region.mask_failed', error, context: { sequenceId: document.id, clipId: clip.id, region: mask.regionId, strict } })
+      if (strict) throw new Error(`区域蒙版读取失败：片段“${clip.name}”的效果要用到的区域分析结果读不出来，请稍后重试导出；多次失败可在效果控件里重新分析。`, { cause: error })
       return undefined
     }
   }

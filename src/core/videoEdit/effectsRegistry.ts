@@ -56,7 +56,7 @@ export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[
 }))
 /** 智能文件夹（4.7d）：内置效果 + 作用区域的一键预设，加到视频、图片片段上后在效果控件里微调。 */
 export const VIDEO_EDIT_SMART_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_SMART_PRESETS.map(preset => ({
-  id: videoEditSmartPresetRef(preset.id), name: preset.name, category: 'smart', kind: 'effect', media: 'video', description: preset.description, tooltip: preset.tooltip, templateRef: videoEditSmartPresetRef(preset.id), aliases: [preset.id, preset.id.replaceAll('_', ' ')],
+  id: videoEditSmartPresetRef(preset.id), name: preset.name, category: 'smart', kind: 'effect', media: 'video', description: preset.description, tooltip: preset.description, templateRef: videoEditSmartPresetRef(preset.id), aliases: [preset.id, preset.id.replaceAll('_', ' ')],
 }))
 /** 登记表全部条目：过渡在前（按预设顺序），内置效果在后。 */
 export function videoEditEffectsRegistry(): VideoEditEffectsRegistryEntry[] {

@@ -1,5 +1,4 @@
-import type { RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
-import type { RecordingEffectsRenderInput } from './videoEditRecordingZoomPlan'
+import type { EffectPlannerInput } from './effectPlanner'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
@@ -102,9 +101,9 @@ export class VideoEditBuiltinEffectsGpu {
     const plan = planVideoEditBuiltinEffect(instance, { width, height, frame: 0 })
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
-  /** `input` 与 `output` 尺寸相同；`frame`、`frameDuration` 是效果时钟（片段自己的帧号与每帧秒数），随帧效果取种子、随时间变化的效果求秒数都用它；随时间变化的效果在第 0 帧以外缺帧时长会报错。 */
-  async render(instance: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize, frameDuration?: number): Promise<void> {
-    await this.encodePlan(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, frameDuration, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts)
+  /** `input`、`output` 与人物蒙版 `subject` 尺寸相同；`frame`、`frameDuration` 是效果时钟（片段自己的帧号与每帧秒数），随帧效果取种子、随时间变化的效果求秒数都用它；随时间变化的效果在第 0 帧以外缺帧时长会报错。 */
+  async render(instance: EffectPlannerInput, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize, frameDuration?: number, subject?: GpuTexture): Promise<void> {
+    await this.encodePlan(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, frameDuration, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts, undefined, undefined, subject)
   }
   /**
    * 带参数的视频过渡（4.7）：`outgoing` 前一段、`incoming` 后一段（单侧过渡两者可以是同一纹理，空着的一侧由参数标记），
@@ -120,7 +119,8 @@ export class VideoEditBuiltinEffectsGpu {
     ;(this.device.queue as typeof this.device.queue & UploadQueue).writeTexture({ texture }, Uint16Array.from(padded, half), { bytesPerRow: width * 8, rowsPerImage: height }, [width, height, depth])
     return texture
   }
-  async encodePlan(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly ColorLutAsset[] = [], batch?: BuiltinEncodingBatch, underlay?: GpuTexture): Promise<void> {
+  async encodePlan(plan: VideoEditBuiltinPlan, format: string, input: GpuTexture, output: GpuTexture, second?: GpuTexture, luts: readonly ColorLutAsset[] = [], batch?: BuiltinEncodingBatch, underlay?: GpuTexture, subject?: GpuTexture): Promise<void> {
+    if (!subject && plan.passes.some(pass => pass.source === 'subject' || pass.original === 'subject' || pass.mask === 'subject')) throw new Error('这个效果需要人物蒙版，人物还没有识别出来。')
     const scratchFormat = plan.scratchFormat ?? (plan.linearScratch ? plan.resolvedGaussian?.intermediateFormat ?? 'rgba16float' : format)
     const pipelines = await Promise.all(plan.passes.map(pass => this.pipeline(pass.entry, pass.target === 'output' || pass.target === plan.underlay && underlay ? format : scratchFormat)))
     if (this.disposed) throw new Error('原调色渲染已关闭。')
@@ -166,7 +166,7 @@ export class VideoEditBuiltinEffectsGpu {
     plan.passes.forEach((pass, index) => {
       for (const ref of [pass.source, pass.original, pass.mask, pass.target]) if (typeof ref === 'number') lastUse.set(ref, index)
     })
-    const texture = (ref: VideoEditBuiltinTexture): GpuTexture => ref === 'input' ? input : ref === 'second' ? second ?? input : ref === 'output' ? output : scratch[ref]
+    const texture = (ref: VideoEditBuiltinTexture): GpuTexture => ref === 'input' ? input : ref === 'second' ? second ?? input : ref === 'output' ? output : ref === 'subject' ? subject! : scratch[ref]
     const encoder = batch?.encoder ?? this.device.createCommandEncoder()
     plan.passes.forEach((pass, index) => {
       for (const ref of [pass.source, pass.original, pass.mask, pass.target]) {

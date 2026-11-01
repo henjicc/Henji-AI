@@ -4,14 +4,14 @@ import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSche
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditIntroducesCodeEffects, videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
 import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
-import { listVideoEditStylePieces } from './videoEditEffectPresets'
+import { listVideoEditStylePieces, videoEditEffectNeedsSource } from './videoEditEffectPresets'
 import { materializeVideoEditStylePiece } from './videoEditStyleCode'
 import { discardVideoEditCodeFiles } from './videoEditCodeStorage'
 import type { CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { assertVideoEditMaskTrackers } from './videoEditTrackingEdits'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { recordingZoomRegionsSchema, sortRecordingZoomRegions, RECORDING_ZOOM_EFFECT, type RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
-import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults, videoEditEffectNeedsSubject, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { assertVideoEditTransitionCreatable, videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, resizeVideoEditTransition, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
@@ -138,6 +138,8 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
   // 不认识的 ID 交给登记表报错（会列出可用的内置效果）。
   if (!resolved) { requireVideoEditBuiltinEffect(templateRef); throw new Error(`没有这个效果：${templateRef}。`) }
   const templates = resolved.effects.map(effect => params ? { ...effect, builtin: { ...effect.builtin!, params: normalizeVideoEditBuiltinParams(effect.builtin!.id, params) } } : effect)
+  // 传入的参数可以改出轮廓来源“主体”，按最终模板判断是否要分析素材。
+  const needsSource = templates.some(videoEditEffectNeedsSource)
   const created: string[] = []
   editVideoProject(projectId, document => {
     created.length = 0
@@ -146,8 +148,8 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     const locked = new Set(sequence.tracks.filter(track => track.locked).map(track => track.index))
     const media = resolved.media
     // 作用区域要逐帧分析素材画面：只加到视频、图片片段上。
-    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track) && (!resolved.needsSource || clip.kind === 'video' || clip.kind === 'image')).map(clip => clip.id))
-    if (!targets.size) throw new Error(noEffectTargetMessage(media, resolved.needsSource))
+    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track) && (!needsSource || clip.kind === 'video' || clip.kind === 'image')).map(clip => clip.id))
+    if (!targets.size) throw new Error(noEffectTargetMessage(media, needsSource))
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
       const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditBuiltinCurves(template.builtin, 0, clip.duration) } } : {}) }))
@@ -168,8 +170,8 @@ export async function applyVideoEditStylePiece(projectId: string, sequenceId: st
   const entry = listVideoEditStylePieces(projectId, sequenceId).find(entry => entry.ref === ref)
   if (!entry) throw new Error('风格件已移除，请重新选择。')
   const owner = requireVideoEditInstance(projectId), sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)!
-  // 作用区域要逐帧分析素材画面：只加到视频、图片片段上。
-  const needsSource = entry.preset.effects.some(effect => isSmartRegionMask(effect.mask))
+  // 作用区域与人物蒙版要逐帧分析素材画面：只加到视频、图片片段上。
+  const needsSource = entry.preset.effects.some(videoEditEffectNeedsSource)
   const targets = sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(entry.preset.media, clip) && !sequence.tracks.some(track => track.index === clip.track && track.locked) && (!needsSource || clip.kind === 'video' || clip.kind === 'image'))
   if (!targets.length) throw new Error(noEffectTargetMessage(entry.preset.media, needsSource))
   const created: string[] = []
@@ -202,6 +204,7 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
   editBuiltin(target, clip => {
     const effect = clip.effects?.find(effect => effect.id === effectId)
     if (!effect?.builtin) throw new Error('原内置效果已移除。')
+    const subjectBefore = videoEditEffectNeedsSubject(effect.builtin)
     if (changes.name !== undefined) effect.name = changes.name
     if (changes.enabled !== undefined) effect.enabled = changes.enabled
     if (changes.amount !== undefined) effect.amount = Math.min(1, Math.max(0, changes.amount))
@@ -230,6 +233,7 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
     }
     if (changes.regions !== undefined) effect.builtin = withVideoEditZoomRegions(effect.builtin, changes.regions)
     assertVideoEditKeyframeTimes(effect.builtin.curves, clip.duration, effect.name)
+    if (!subjectBefore && videoEditEffectNeedsSubject(effect.builtin) && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('主体抠像和轮廓来源为“主体”要识别素材里的人物，只能用在视频、图片片段上。')
     if (changes.mask === null) delete effect.mask
     else if (changes.mask) {
       assertVideoEditMaskTrackers(clip, changes.mask)
@@ -267,6 +271,7 @@ export async function copyVideoEditEffects(target: VideoEditCompositeTarget, sou
   if (!effects.length) throw new Error('来源片段没有效果可复制。')
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {
     const clip = requireEffectClip(sequence, target.clipId)
+    if (clip.kind !== 'video' && clip.kind !== 'image' && effects.some(videoEditEffectNeedsSource)) throw new Error('来源片段带智能区域或人物轮廓的效果，要分析素材画面，只能复制到视频、图片片段上。')
     clip.effects = effects.map(effect => effect.builtin?.curves ? { ...effect, builtin: { ...effect.builtin, curves: sliceVideoEditBuiltinCurves(effect.builtin, 0, clip.duration) } } : effect)
   }, signal)
 }

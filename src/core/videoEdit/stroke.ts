@@ -5,6 +5,7 @@ import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParams } from '.
 import { effectParam } from './effectIncludes'
 import type { LayerEffectReference } from './layerEffectGeometry'
 import { BLACK_HEX } from '../theme/colorTokens'
+import { subjectContourParam } from './subjectKey'
 
 /** 粗细 → 边宽（画面高度的比例）。指数曲线让滑块每一段的观感变化差不多：20 约 0.08%，50 约 0.43%，100 约 3.9%。 */
 export function strokeWidth(value: number): number { return 0.0006 * Math.expm1(4.2 * Math.max(0, value) / 100) }
@@ -32,9 +33,11 @@ const { amount, percent, choice, color } = effectParam
 export const STROKE_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
   space: 'layer', author: { factory: 'stroke' }, bleed: strokeBleed, id: 'stroke', name: '描边', group: 'outline', description: DESCRIPTION,
   aliases: ['勾边', '轮廓线', '外描边', 'outline', 'stroke'],
+  subjectMatte: params => params.contour === 'subject',
   params: [
     amount('width', 50, { name: '粗细', text: '边有多粗。0 没有描边；20 发丝细线；50（默认）约为画面高度的 0.4%，常规字幕描边；100 约 4%，粗壮的贴纸边。可以输入到 120。' }, 120),
     color('color', BLACK_HEX, { name: '颜色', text: '边的颜色。黑色（默认）让浅色字在亮画面上也看得清；白色做贴纸边。' }),
+    subjectContourParam({ name: '轮廓来源', text: '沿什么描边。内容透明度（默认）沿文字、图形和抠好的内容；主体沿自动识别的人物轮廓描，用在视频和图片片段上，画面本身不变。' }),
     choice('position', 'outside', [{ value: 'outside', label: '外侧' }, { value: 'inside', label: '内侧' }, { value: 'center', label: '居中' }], { group: '边缘', name: '位置', text: '边描在轮廓的哪一侧。外侧（默认）不遮住内容，字形不变；内侧描在内容里面，外形不变大；居中跨在轮廓线上。' }),
     percent('softness', 0, 0, { group: '边缘', name: '柔和度', text: '边的外缘清楚还是发虚。0%（默认）清楚利落；30% 微微发虚；100% 整条边都在渐变，像一层柔光。' }),
     percent('opacity', 100, 0, { group: '边缘', name: '不透明度', text: '边有多实。100%（默认）实色；50% 半透明，透出后面的画面。' }),

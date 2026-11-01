@@ -10,6 +10,7 @@ export { glowLevels } from '@/core/videoEdit/layerEffectGeometry'
  * →（色差）→ 全分辨率合成。中间纹理一律 rgba16float：光在线性光里累加，可以超过 1，到合成时才压回画面范围。
  * 每层高斯在本层纹素里的宽度固定，层越粗覆盖越远，所以大光晕的代价只比小光晕多几道很小的工序。
  * 着色折算成每层的 RGB 权重；色差调用“色差”效果的同一道工序，只作用在累加好的光晕上。
+ * 轮廓方式的轮廓来源为主体时，发光内容与光核改读人物蒙版（工序纹理 `subject`），光被人物挡住、叠到人物身后的背景上。
  */
 import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinPlan, VideoEditBuiltinTexture } from './videoEditBuiltinEffectPasses'
@@ -19,7 +20,7 @@ import { GLOW_ABERRATION_PREFIX } from '@/core/videoEdit/glow'
 import { includedEffectValues } from '@/core/videoEdit/effectIncludes'
 import { chromaticAberrationPass } from './chromaticAberration'
 
-export const GLOW_ENTRIES = ['glow_prefilter', 'glow_down', 'glow_blur', 'glow_up', 'glow_composite', 'glow_shape_composite', 'glow_shape_light', 'glow_source', 'glow_layer_image', 'glow_layer_light'] as const
+export const GLOW_ENTRIES = ['glow_prefilter', 'glow_down', 'glow_blur', 'glow_up', 'glow_composite', 'glow_shape_composite', 'glow_shape_light', 'glow_subject_composite', 'glow_source', 'glow_layer_image', 'glow_layer_light'] as const
 type V3 = [number, number, number]
 type V4 = readonly [number, number, number, number]
 const ZERO: V4 = [0, 0, 0, 0]
@@ -80,16 +81,17 @@ function emissionUniform(params: VideoEditBuiltinParams, emission: GlowEmission)
   return [numeric(params, 'threshold') / 100, Math.max(0.001, numeric(params, 'threshold_smoothness') / 100 * 0.5), sourceOpacity, numeric(params, 'tint') / 100]
 }
 
-/** `params` 已补齐默认值。 */
-export function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
+/** `params` 已补齐默认值；`layerOpacity` 是片段这一帧的不透明度，只有轮廓来源为主体时用到。 */
+export function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false, layerOpacity = 1): VideoEditBuiltinPlan {
   const glow = createGlowPlanner(width, height, context)
   const emission: GlowEmission = params.mode === 'shape' ? 'shape' : 'bright'
+  const source: VideoEditBuiltinTexture = emission === 'shape' && params.contour === 'subject' ? 'subject' : 'input'
   const strength = numeric(params, 'strength') / 100
   const sourceOpacity = numeric(params, 'source_opacity', 100) / 100
-  if (params.view === 'source') { glow.pass('glow_source', 'input', 'output', emissionUniform(params, emission)); return glow.plan }
+  if (params.view === 'source') { glow.pass('glow_source', source, 'output', emissionUniform(params, emission)); return glow.plan }
   if (split && strength === 0) { glow.pass('effect_opacity', 'input', 'output', [sourceOpacity, 0, 0, 0]); return glow.plan }
   if (strength === 0 && sourceOpacity === 1) { glow.pass('copy', 'input', 'output'); return glow.plan }
-  appendGlow(glow, params, width, height, context, split, emission, 'input', 'input')
+  appendGlow(glow, params, width, height, context, split, emission, source, 'input', layerOpacity)
   return glow.plan
 }
 
@@ -98,7 +100,7 @@ export function planGlow(params: VideoEditBuiltinParams, width: number, height: 
  * `source` 是发光来源的纹理；`base` 是光要叠上去的画面（亮部、轮廓都是效果输入，光源纹理时是扫光、溶解画好的主图）。
  * 轮廓方式的光在内容后面：主图只按原画不透明度，光不给内容加核心提亮。
  */
-export function appendGlow(glow: GlowPlanner, params: VideoEditBuiltinParams, width: number, height: number, context: LayerEffectReference | undefined, split: boolean, emission: GlowEmission, source: VideoEditBuiltinTexture, base: VideoEditBuiltinTexture): void {
+export function appendGlow(glow: GlowPlanner, params: VideoEditBuiltinParams, width: number, height: number, context: LayerEffectReference | undefined, split: boolean, emission: GlowEmission, source: VideoEditBuiltinTexture, base: VideoEditBuiltinTexture, layerOpacity = 1): void {
   const { plan, alloc, pass } = glow
   const strength = numeric(params, 'strength') / 100
   const sourceOpacity = numeric(params, 'source_opacity', 100) / 100
@@ -149,6 +151,12 @@ export function appendGlow(glow: GlowPlanner, params: VideoEditBuiltinParams, wi
   const b: V4 = [...core, params.blend === 'screen' ? 1 : 0]
   const c: V4 = [gain, numeric(params, 'core_white') / 100, numeric(params, 'dither', 50) / 100, params.dither_mono === true ? 1 : 0]
   if (emission === 'shape') {
+    if (source === 'subject' && !split) {
+      // 人物蒙版不带片段不透明度：光核与光晕一起乘上它，光跟着片段淡入淡出（其他来源的光取自已乘不透明度的输入）。
+      pass('glow_subject_composite', accumulated, 'output', uniform, [...core.map(value => value * layerOpacity) as V3, b[3]], [gain * layerOpacity, c[1], c[2], c[3]])
+      plan.passes.at(-1)!.mask = 'subject'
+      return
+    }
     if (!split) { pass('glow_shape_composite', accumulated, 'output', uniform, b, c); return }
     const light = alloc(width, height)
     pass('glow_shape_light', accumulated, light, uniform, b, c)
@@ -248,14 +256,17 @@ fn glowNoise(p: vec2f, mono: bool) -> vec3f {
  let b = glowHash(p, vec2f(17.873, 63.719)) + glowHash(p, vec2f(85.341, 23.553)) - 1.0;
  return vec3f(r, g, b);
 }
-// 光核与光晕共用正式提取、shoulder 与抖动公式；输出方式由宿主合成语义决定。
-fn glowLight(v: Vertex) -> vec3f {
- let uv = uvOf(v); let base = tapOriginal(uv);
- let dims = vec2f(textureDimensions(original));
+// 光核：贴着发光内容的那一点光，取发光内容在 1.5/1080 画面高度内的小十字平均。
+fn glowCore(image: texture_2d<f32>, v: Vertex) -> vec3f {
+ let uv = uvOf(v);
+ let dims = vec2f(textureDimensions(image));
  let h = select(dims.y, u.layer.z, u.layer.z > 0.0);
  let step = vec2f(1.5 / 1080.0 * h) / dims;
- let core = glowEmission(base) * 0.5 + (glowEmission(tapOriginal(uv + vec2f(step.x, 0.0))) + glowEmission(tapOriginal(uv - vec2f(step.x, 0.0))) + glowEmission(tapOriginal(uv + vec2f(0.0, step.y))) + glowEmission(tapOriginal(uv - vec2f(0.0, step.y)))) * 0.125;
- return glowTent(glowUv(v), 1.0 / u.size.zw) * u.c.x + core * u.b.rgb;
+ return glowEmission(textureSampleLevel(image, s, uv, 0.0)) * 0.5 + (glowEmission(textureSampleLevel(image, s, uv + vec2f(step.x, 0.0), 0.0)) + glowEmission(textureSampleLevel(image, s, uv - vec2f(step.x, 0.0), 0.0)) + glowEmission(textureSampleLevel(image, s, uv + vec2f(0.0, step.y), 0.0)) + glowEmission(textureSampleLevel(image, s, uv - vec2f(0.0, step.y), 0.0))) * 0.125;
+}
+// 光核与光晕共用正式提取、shoulder 与抖动公式；输出方式由宿主合成语义决定。
+fn glowLight(v: Vertex) -> vec3f {
+ return glowTent(glowUv(v), 1.0 / u.size.zw) * u.c.x + glowCore(original, v) * u.b.rgb;
 }
 fn glowColor(before: vec3f, light: vec3f, screen: bool, position: vec2f) -> vec3f {
  let b = toLinear(before);
@@ -280,6 +291,14 @@ fn glowColor(before: vec3f, light: vec3f, screen: bool, position: vec2f) -> vec3
  let base = tapOriginal(uvOf(v)) * u.a.z;
  let lit = glowColor(vec3f(0.0), glowLight(v), u.b.w > 0.5, v.position.xy);
  return base + vec4f(lit, glowPeak(lit)) * (1.0 - base.a);
+}
+// 轮廓来源为主体：光核来自人物蒙版（gradeMask 的 a），光被人物挡住（乘 1 − 人物），按混合模式叠到人物身后的原画上，
+// 只照亮片段画面内（乘 r 片段覆盖）：画中画里人物被片段边裁断时，边外不出光带。
+@fragment fn glow_subject_composite(v: Vertex) -> @location(0) vec4f {
+ let uv = uvOf(v); let base = tapOriginal(uv);
+ let matte = textureSampleLevel(gradeMask, s, uv, 0.0);
+ let light = (glowTent(glowUv(v), 1.0 / u.size.zw) * u.c.x + glowCore(gradeMask, v) * u.b.rgb) * (1.0 - matte.a) * matte.r;
+ return glowOnto(straight(base), base.a * u.a.z, light, u.b.w > 0.5, v.position.xy);
 }
 // 轮廓方式的图层下层：光整个在内容后面，与片段入口一样按混合模式叠到黑底上（相加或滤色），再作为零 alpha 光交出去。
 @fragment fn glow_shape_light(v: Vertex) -> @location(0) vec4f {
@@ -317,5 +336,5 @@ fn glowWithin(color: vec3f, shown: f32, light: vec3f, screen: bool, position: ve
 
 export const GLOW_PLANNER = definePlanner({
   id: 'glow', entries: GLOW_ENTRIES, shared: [GLOW_COMPOSITE_BLOCK], wgsl: GLOW_WGSL,
-  plan: (params, frame) => planGlow(params, frame.width, frame.height, frame.layer, frame.split),
+  plan: (params, frame, instance) => planGlow(params, frame.width, frame.height, frame.layer, frame.split, instance.layerOpacity),
 })

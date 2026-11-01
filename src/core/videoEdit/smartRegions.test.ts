@@ -76,7 +76,7 @@ describe('智能区域：缓存格式与蒙版', () => {
   })
   it('智能预设：引用的内置效果与参数都已登记；模板引用解析内置效果与预设', () => {
     expect(() => validateVideoEditSmartPresets()).not.toThrow()
-    expect(VIDEO_EDIT_SMART_PRESETS.map(preset => preset.mask.regionId)).toEqual(expect.arrayContaining(['face', 'background', 'text']))
+    expect(VIDEO_EDIT_SMART_PRESETS.map(preset => preset.mask?.regionId)).toEqual(expect.arrayContaining(['face', 'background', 'text']))
     expect(resolveVideoEditEffectTemplate('smart:face_mosaic')).toMatchObject({ builtinId: 'mosaic', mask: { regionId: 'face' } })
     expect(resolveVideoEditEffectTemplate('effect:blur')).toEqual({ builtinId: 'blur' })
     expect(resolveVideoEditEffectTemplate('smart:nope')).toBeUndefined()

@@ -36,6 +36,11 @@ export interface VideoEditBuiltinEffectDefinition {
    * 同一段错法、强度为 0 等画面不变的帧照样复用。
    */
   frameSeed?: (params: VideoEditBuiltinParams, frame: number) => number
+  /**
+   * 按自动识别的人物轮廓工作（只用于片段）：宿主分析片段素材里的人物，把这一帧的人物蒙版作为工序纹理 `subject` 交给规划；
+   * 还没分析好时这一帧先不画这个效果，导出前等分析完成。
+   */
+  subjectMatte?: (params: VideoEditBuiltinParams) => boolean
   /** `prior`：前面效果已经外扩的量（逻辑像素），`reference` 的内容框已含这一圈；按真实几何算外扩的效果（透视、镜面中心）用它还原内容框。 */
   bleed?: (params: VideoEditBuiltinParams, reference: LayerEffectReference, prior?: number) => number
   author?: { factory: string }
@@ -193,6 +198,21 @@ export function resolveVideoEditBuiltinParams(instance: { id: string; params: Re
     const value = (instance.params[param.key] ?? param.default) as VideoEditBuiltinParamValue
     return [param.key, param.type === 'number' && typeof value === 'number' ? Math.min(param.max, Math.max(param.min, value)) : value]
   }))
+}
+/** 这一帧要不要片段素材的人物蒙版（参数已按这一帧求值）；已移除的效果不要。渲染准备与合成用它。 */
+export function videoEditEffectUsesSubject(instance: { id: string; params: Readonly<Record<string, unknown>> } | undefined): boolean {
+  const definition = instance && definitions.get(instance.id)
+  return Boolean(instance && definition?.subjectMatte?.(resolveVideoEditBuiltinParams(instance)))
+}
+/**
+ * 片段上任一帧会不会用到人物蒙版：静态参数，或某个关键帧的取值（如发光按关键帧切到轮廓方式）。
+ * 分析请求、导出等待、状态与“只能用于视频图片片段”的校验用它，按帧跳过的效果不会漏掉分析。
+ */
+export function videoEditEffectNeedsSubject(instance: { id: string; params: Readonly<Record<string, unknown>>; curves?: Readonly<Record<string, readonly { value: unknown }[]>> } | undefined): boolean {
+  const subjectMatte = instance && definitions.get(instance.id)?.subjectMatte
+  if (!instance || !subjectMatte) return false
+  const params = resolveVideoEditBuiltinParams(instance)
+  return subjectMatte(params) || Object.entries(instance.curves ?? {}).some(([key, points]) => points.some(point => subjectMatte({ ...params, [key]: point.value as VideoEditBuiltinParamValue })))
 }
 export function isVideoEditBuiltinParamDefault(param: VideoEditBuiltinParam, value: unknown): boolean { return value === undefined || value === param.default }
 /** 给助手的结构化目录：每个效果的作用与参数语义（范围、默认值、单位、取值含义）。 */

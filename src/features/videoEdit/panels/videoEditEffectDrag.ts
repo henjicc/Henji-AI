@@ -1,7 +1,6 @@
 import { notificationText } from '@/i18n/notifications'
-import { resolveVideoEditLibraryEffects, type VideoEditStylePieceEntry } from '../application/videoEditEffectPresets'
+import { resolveVideoEditLibraryEffects, videoEditEffectNeedsSource, type VideoEditStylePieceEntry } from '../application/videoEditEffectPresets'
 import { videoEditEffectAccepts } from '@/core/videoEdit/compositing'
-import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { applyVideoEditBuiltinEffect, applyVideoEditStylePiece } from '../application/videoEditCompositing'
 import { requireVideoEditInstance } from '../application/videoEditService'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
@@ -54,7 +53,7 @@ export function clearVideoEditEffectDropTarget(): void { setDropTarget(null) }
 export function videoEditEffectDropClips(sequence: Pick<VideoEditSequence, 'clips' | 'tracks'>, hitClipId: string, selectedClipIds: readonly string[], source?: string | VideoEditStylePieceEntry): string[] {
   const candidates = selectedClipIds.includes(hitClipId) ? selectedClipIds : [hitClipId]
   const locked = new Set(sequence.tracks.filter(track => track.locked).map(track => track.index))
-  const template = typeof source === 'string' ? resolveVideoEditLibraryEffects(source) : source && { media: source.preset.media, needsSource: source.preset.effects.some(effect => isSmartRegionMask(effect.mask)) }
+  const template = typeof source === 'string' ? resolveVideoEditLibraryEffects(source) : source && { media: source.preset.media, needsSource: source.preset.effects.some(videoEditEffectNeedsSource) }
   if (source && !template) return []
   const media = template?.media ?? 'video'
   // 智能效果（带作用区域）只加到视频、图片片段（与松手时同一规则）。

@@ -745,3 +745,110 @@ describe('变形（真实设备）', () => {
     expect(border).toBeLessThanOrEqual(1)
   }, 120_000)
 })
+describe('主体抠像与主体轮廓', () => {
+  /** 人物蒙版 `subject` 与输入同尺寸，由合成场景按片段几何放好：a 取 `matte` 的 alpha，r 为片段画面覆盖（整幅都是片段）。 */
+  async function keyed(source: Uint8Array, matte: Uint8Array, id: string, params: Record<string, unknown>, layerOpacity?: number): Promise<Uint8Array> {
+    const input = texture(source), subject = texture(Uint8Array.from(matte, (value, index) => index % 4 === 3 ? value : 255)), output = target()
+    try {
+      await effects.render({ id, params: params as Record<string, number>, ...(layerOpacity === undefined ? {} : { layerOpacity }) }, { texture: input, width: W, height: H, format: 'rgba8unorm' }, output, 0, 1, [], 'final', undefined, undefined, subject)
+      return await read(output)
+    } finally { input.destroy(); subject.destroy(); output.destroy() }
+  }
+  const SUBJECT = [40, 60, 160], BACKDROP = [230, 220, 120]
+  const inBox = (x: number, y: number): boolean => x >= 30 && x < 66 && y >= 16 && y < 48
+  const white = (value: number): number[] => [value, value, value, value]
+
+  it('蒙版内保留原画、蒙版外透明，预乘成立；去掉主体反过来只留背景', async () => {
+    const picture = canvas(W, H, (x, y) => [...(inBox(x, y) ? SUBJECT : BACKDROP), 255])
+    const matte = canvas(W, H, (x, y) => inBox(x, y) ? white(255) : undefined)
+    const kept = await keyed(picture, matte, 'subject_key', {})
+    expect(at(kept, 48, 32)).toEqual([...SUBJECT, 255]); expect(at(kept, 5, 5)).toEqual([0, 0, 0, 0])
+    for (let index = 0; index < kept.length; index += 4) for (let c = 0; c < 3; c++) expect(kept[index + c]).toBeLessThanOrEqual(kept[index + 3])
+    const removed = await keyed(picture, matte, 'subject_key', { invert: true })
+    expect(at(removed, 48, 32)[3]).toBe(0); expect(at(removed, 5, 5)).toEqual([...BACKDROP, 255])
+  })
+
+  it('收缩 / 扩展移动人物边缘，“去掉主体”时作用在保留的背景上（方向反过来）', async () => {
+    const picture = canvas(W, H, (x, y) => [...(inBox(x, y) ? SUBJECT : BACKDROP), 255])
+    const matte = canvas(W, H, (x, y) => inBox(x, y) ? white(255) : undefined)
+    // H = 64：±100 约 0.64 像素，边上一圈按 0.64 的权重移进或移出；柔化默认值在这个尺寸下不到 0.3 像素，不模糊。
+    const alpha = async (choke: number, invert: boolean, x: number): Promise<number> => at(await keyed(picture, matte, 'subject_key', { choke, invert }), x, 32)[3]
+    const near = (value: number, expected: number): void => expect(Math.abs(value - expected)).toBeLessThanOrEqual(3)
+    near(await alpha(100, false, 66), 163); near(await alpha(100, false, 65), 255)
+    near(await alpha(-100, false, 65), 92); near(await alpha(-100, false, 66), 0)
+    // 去掉主体：扩展让保留的背景长进人物（人物边上一圈只剩 0.36），收缩让背景退开（人物外一圈也去掉 0.64）。
+    near(await alpha(100, true, 65), 163); near(await alpha(100, true, 66), 255)
+    near(await alpha(-100, true, 66), 92); near(await alpha(-100, true, 65), 0)
+  })
+
+  it('边缘柔化：人物边上的透明度单调过渡，去掉主体时反过来', async () => {
+    const picture = canvas(W, H, (x, y) => [...(inBox(x, y) ? SUBJECT : BACKDROP), 255])
+    const matte = canvas(W, H, (x, y) => inBox(x, y) ? white(255) : undefined)
+    for (const invert of [false, true]) {
+      const pixels = await keyed(picture, matte, 'subject_key', { feather: 100, invert })
+      const row = Array.from({ length: 12 }, (_, index) => at(pixels, 60 + index, 32)[3])
+      for (let index = 1; index < row.length; index++) expect(invert ? row[index] - row[index - 1] : row[index - 1] - row[index]).toBeGreaterThanOrEqual(0)
+      expect(row.filter(value => value > 8 && value < 247).length).toBeGreaterThanOrEqual(2)
+      expect(invert ? row[0] : row.at(-1)).toBe(0)
+    }
+  })
+
+  it('半透明边缘换成附近人物的颜色：叠到新底色上比直接相乘更接近人物本色，人物内部不变', async () => {
+    // 原画 = α·人物色 + (1 − α)·原背景色，α 沿横向从 0 升到 1；人物蒙版就是 α。
+    const alphaAt = (x: number): number => Math.min(1, Math.max(0, (x - 40) / 16))
+    const picture = canvas(W, H, x => [...SUBJECT.map((value, c) => Math.round(alphaAt(x) * value + (1 - alphaAt(x)) * BACKDROP[c])), 255])
+    const matte = canvas(W, H, x => white(Math.round(alphaAt(x) * 255)))
+    const pixels = await keyed(picture, matte, 'subject_key', {})
+    expect(at(pixels, 80, 32)).toEqual([...SUBJECT, 255])
+    for (let x = 44; x < 52; x++) {
+      const alpha = Math.round(alphaAt(x) * 255) / 255
+      const decontaminated = Math.max(...SUBJECT.map((value, c) => Math.abs(at(pixels, x, 32)[c] - alpha * value)))
+      const multiplied = Math.max(...SUBJECT.map((value, c) => Math.abs(at(picture, x, 32)[c] * alpha - alpha * value)))
+      expect(decontaminated).toBeLessThan(multiplied * 0.65)
+      for (let c = 0; c < 3; c++) expect(at(pixels, x, 32)[c]).toBeLessThanOrEqual(at(pixels, x, 32)[3])
+    }
+  })
+
+  it('蒙版取内容自己的 alpha 时，轮廓来源“主体”的描边（两条路径）与发光和内容透明度方式一致', async () => {
+    const title = titleData()
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['stroke', { width: 50, color: WHITE_HEX }], ['stroke', { width: 110, color: WHITE_HEX, position: 'center' }],
+      ['glow', { mode: 'shape', strength: 60, radius: 40, tint_inner: VIDEO_EDIT_GLOW_TEST_COLORS.inner, tint_outer: VIDEO_EDIT_GLOW_TEST_COLORS.outer }],
+    ]
+    for (const [id, params] of cases) {
+      const alpha = await keyed(title, title, id, params)
+      const subject = await keyed(title, title, id, { ...params, contour: 'subject' })
+      // 半透明内容（圆点）在两种方式里本来就按不同的叠法计算，只比较完全透明与完全不透明处。
+      for (let index = 0; index < title.length; index += 4) if (title[index + 3] === 0 || title[index + 3] === 255) for (let c = 0; c < 4; c++) expect(Math.abs(alpha[index + c] - subject[index + c])).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('主体描边叠在不透明原画之上：人物内外远处原样，边落在人物外的背景上；片段淡出时描边一起淡', async () => {
+    const picture = canvas(W, H, (x, y) => [...(inBox(x, y) ? SUBJECT : BACKDROP), 255])
+    const matte = canvas(W, H, (x, y) => inBox(x, y) ? white(255) : undefined)
+    const pixels = await keyed(picture, matte, 'stroke', { width: 110, color: WHITE_HEX, contour: 'subject' })
+    expect(at(pixels, 48, 32)).toEqual([...SUBJECT, 255]); expect(at(pixels, 5, 5)).toEqual([...BACKDROP, 255])
+    expect(at(pixels, 67, 32)).toEqual([255, 255, 255, 255])
+    // 片段不透明度 40% 已乘进输入（预乘）；描边带上与原画同样只剩 40%。
+    const faded = canvas(W, H, (x, y) => [...(inBox(x, y) ? SUBJECT : BACKDROP).map(value => Math.round(value * 0.4)), 102])
+    const fading = await keyed(faded, matte, 'stroke', { width: 110, color: WHITE_HEX, contour: 'subject' }, 0.4)
+    expect(at(fading, 67, 32).map(value => Math.abs(value - 102)).every(diff => diff <= 1)).toBe(true)
+    expect(at(fading, 5, 5)).toEqual(at(faded, 5, 5))
+  })
+
+  it('主体发光：人物内部不变、身后背景变亮；片段淡出时光一起淡', async () => {
+    const DARK = [16, 16, 20]
+    const params = { mode: 'shape', strength: 60, radius: 40, contour: 'subject' }
+    const matte = canvas(W, H, (x, y) => inBox(x, y) ? white(255) : undefined)
+    const lit = await keyed(canvas(W, H, (x, y) => [...(inBox(x, y) ? SUBJECT : DARK), 255]), matte, 'glow', params)
+    expect(at(lit, 48, 32).map((value, c) => Math.abs(value - [...SUBJECT, 255][c])).every(diff => diff <= 1)).toBe(true)
+    const full = at(lit, 70, 32)[0] - DARK[0]
+    expect(full).toBeGreaterThan(20)
+    // 片段不透明度 40% 已乘进输入；光也只剩一部分（在线性光里乘，编码后不是正好 40%）。
+    const faded = canvas(W, H, (x, y) => [...(inBox(x, y) ? SUBJECT : DARK).map(value => Math.round(value * 0.4)), 102])
+    const fading = await keyed(faded, matte, 'glow', params, 0.4)
+    const dim = at(fading, 70, 32)[0] - at(faded, 70, 32)[0]
+    expect(dim).toBeGreaterThan(0); expect(dim).toBeLessThan(full * 0.75)
+    expect(at(fading, 48, 32).map((value, c) => Math.abs(value - at(faded, 48, 32)[c])).every(diff => diff <= 1)).toBe(true)
+  })
+})

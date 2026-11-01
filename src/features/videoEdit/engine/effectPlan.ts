@@ -7,10 +7,14 @@ import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShader
  * 把一个内置效果实例翻译成 GPU 工序（纯函数，可单测）：每道工序是一个着色器入口、输入、输出和 16 个 float 的参数。
  * 空间量一律按“输入画面高度”换算成像素，再按需降采样：同一个效果在任何渲染尺寸下看起来一样，大半径模糊的代价也有上限。
  */
-/** `second` 只在过渡里出现：后一段画面（`input` 是前一段）。 */
-export type VideoEditBuiltinTexture = 'input' | 'second' | 'output' | number
+/**
+ * `second` 只在过渡里出现：后一段画面（`input` 是前一段）。
+ * `subject` 是片段素材这一帧的人物蒙版，与 `input` 同尺寸、逐像素对齐：a 为人物的覆盖，r 为片段画面的覆盖
+ * （片段画面外的取样不算数，叠加的描边、光只画在片段画面内）。只有声明 `subjectMatte` 的效果会用到。
+ */
+export type VideoEditBuiltinTexture = 'input' | 'second' | 'output' | 'subject' | number
 export interface VideoEditBuiltinPass {
-  /** HSL 选区蒙版；仅局部锐化同时需要原画面、线性模糊画面和蒙版。 */
+  /** 第三个输入（`gradeMask` 绑定）：HSL 选区蒙版（局部锐化同时需要原画面、线性模糊画面和蒙版），或人物蒙版。 */
   mask?: VideoEditBuiltinTexture
   lookup?: AdjustmentLookup
   entry: VideoEditBuiltinEffectEntry

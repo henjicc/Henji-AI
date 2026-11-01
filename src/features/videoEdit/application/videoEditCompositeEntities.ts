@@ -10,7 +10,7 @@ import { validateVideoEditTransitionParams } from '@/core/videoEdit/transitionPa
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { makeVideoEditBuiltinEffect, makeVideoEditEffect, withVideoEditZoomRegions } from './videoEditCompositing'
-import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
+import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinEffectMedia, videoEditBuiltinRefId, videoEditEffectNeedsSubject } from '@/core/videoEdit/builtinEffects'
 import { videoEditSmartRegionStatusText } from './videoEditSmartRegions'
 import { assertVideoEditMaskTrackers, putVideoEditTracker } from './videoEditTrackingEdits'
 import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
@@ -117,6 +117,7 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       if (JSON.stringify(mask) !== JSON.stringify(owner.effect.mask)) assertMaskClip(document, owner.clip, mask as VideoEditEffectMask | undefined)
       const curves = videoEditCurvesSchema.parse(data.frameCurves ?? {})
       validateVideoEditBuiltinCurves({ id: builtin.id, curves }, owner.effect.builtin?.curves)
+      if (!videoEditEffectNeedsSubject(builtin)) assertSubjectClip(document, owner.clip, { id: builtin.id, params, curves })
       const zoom = withVideoEditZoomRegions<{ id: string; regions?: RecordingZoomRegion[] }>({ id: builtin.id }, data.regions)
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params, ...(Object.keys(curves).length ? { curves } : {}), ...(zoom.regions ? { regions: zoom.regions } : {}) }, ...(mask ? { mask } : {}) })
       delete owner.effect.mask; Object.assign(owner.effect, next)
@@ -186,6 +187,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     if (values.frameCurves !== undefined) { effect.builtin!.curves = videoEditCurvesSchema.parse(values.frameCurves); validateVideoEditBuiltinCurves(effect.builtin!) }
     if (values.regions !== undefined) effect.builtin = withVideoEditZoomRegions(effect.builtin!, values.regions)
     Object.assign(effect, videoEditEffectSchema.parse(effect))
+    assertSubjectClip(document, clip, effect.builtin!)
     if (values.mask) {
       assertMaskClip(document, clip, values.mask as VideoEditEffectMask)
       Object.assign(effect, videoEditEffectSchema.parse({ ...effect, mask: values.mask }))
@@ -205,6 +207,12 @@ function assertMaskClip(document: VideoEditDocument, clip: VideoEditClip, mask: 
   if (!isSmartRegionMask(mask)) return
   const media = videoEditClipMedia(document, clip)
   if (!media || (media.kind !== 'video' && media.kind !== 'image')) throw new Error(`片段“${clip.name}”不是视频或图片片段，智能区域只能用在视频、图片片段上；文字、图形、代码与调整图层上的效果请作用于整个画面（mask 写 null），或用手绘遮罩（region_id: shapes）。`)
+}
+/** 按人物轮廓工作的效果（主体抠像、轮廓来源为主体）同样要分析素材画面，只能用在视频、图片片段上。 */
+function assertSubjectClip(document: VideoEditDocument, clip: VideoEditClip, builtin: Parameters<typeof videoEditEffectNeedsSubject>[0]): void {
+  if (!videoEditEffectNeedsSubject(builtin)) return
+  const media = videoEditClipMedia(document, clip)
+  if (!media || (media.kind !== 'video' && media.kind !== 'image')) throw new Error(`片段“${clip.name}”不是视频或图片片段，主体抠像和轮廓来源为“主体”的效果要识别素材里的人物，只能用在视频、图片片段上。`)
 }
 export function removeVideoEditCompositeEntities(document: VideoEditDocument, type: VideoEditCompositeEntityType, parentId: string, ids: string[]): void {
   for (const id of ids) {

@@ -92,7 +92,8 @@ async function read(texture: GpuTexture, width = W, height = H): Promise<Uint8Ar
 }
 async function run(id: string, params: Record<string, unknown> = {}, frame = 0): Promise<Uint8Array> {
   const source = input(); const target = output()
-  await effects.render({ id, params: params as Record<string, number> }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, frame)
+  // 按人物轮廓工作的效果拿输入自己当人物蒙版（整幅不透明，即整幅都是人物）。
+  await effects.render({ id, params: params as Record<string, number> }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, frame, 1, [], 'interactive', undefined, undefined, source)
   return read(target)
 }
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.subarray((y * W + x) * 4, (y * W + x) * 4 + 4)]

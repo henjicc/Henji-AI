@@ -5,6 +5,8 @@ import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/docum
 import type { VideoEditCompositeNode } from '@/core/videoEdit/compositing'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
+import { videoEditEffectUsesSubject } from '@/core/videoEdit/builtinEffects'
+import type { VideoEditSmartRegionMask } from './videoEditSmartRegionMasks'
 import { videoEditTransitionPictureClips, videoEditTransitionRender } from '@/core/videoEdit/transitions'
 import type { PreparedVideoEditEffect } from './videoEditCodeSources'
 import type { VideoEditCodePicture, VideoEditCodeGpu } from './videoEditCodeGpu'
@@ -24,24 +26,31 @@ const slot = (clip: VideoEditClip, index: number): string => `composite:clip:${c
 // A translucent adjustment layer keeps one additional unchanged band for its final mix.
 const slots = (clip: VideoEditClip): string[] => Array.from({ length: effective(clip) ? clip.kind === 'adjustment' && clip.opacity < 1 ? 4 : 3 : 1 }, (_, index) => slot(clip, index))
 /**
- * 智能区域（4.7d）共用的两张画面：上传的低分辨率蒙版、按片段位置画到序列尺寸的蒙版。每个带区域的效果依次使用，
- * 用完即提交，所以全场景只需要这两张。
+ * 智能区域（4.7d）共用的两张画面：上传的低分辨率蒙版、按片段位置画到序列尺寸的蒙版。作用区域与人物蒙版（主体抠像、
+ * 轮廓来源为主体）都经过它们，每次用完即提交，下一次上传排在已提交的工序之后，所以全场景只需要这两张。
  */
 const MASK_SOURCE = 'composite:mask:source'; const MASK_DOCUMENT = 'composite:mask:document'
-const masked = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).some(effect => effect.mask)
+/** 人物蒙版在片段画面外延续后的那张（工序纹理 `subject`）。 */
+const SUBJECT_DOCUMENT = 'composite:mask:subject'
+const subjectUsed = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).some(effect => videoEditEffectUsesSubject(effect.builtin))
+const masked = (clip: VideoEditClip): boolean => subjectUsed(clip) || activeVideoEditEffects(clip).some(effect => effect.mask)
+const maskKeys = (keys: Set<string>, clip: VideoEditClip): void => {
+  if (masked(clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT)
+  if (subjectUsed(clip)) keys.add(SUBJECT_DOCUMENT)
+}
 /** Reserve the entire frame together with generated pictures before releasing old targets. */
 export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditCompositeNode[]): Set<string> {
   const keys = new Set<string>()
   const visit = (node: VideoEditCompositeNode): void => {
-    if (node.kind === 'clip') { if (effective(node.clip)) slots(node.clip).forEach(key => keys.add(key)); if (masked(node.clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT) }
+    if (node.kind === 'clip') { if (effective(node.clip)) slots(node.clip).forEach(key => keys.add(key)); maskKeys(keys, node.clip) }
     else if (node.kind === 'transition') {
-      for (const clip of videoEditTransitionPictureClips(node.window)) { slots(clip).forEach(key => keys.add(key)); if (masked(clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT) }
+      for (const clip of videoEditTransitionPictureClips(node.window)) { slots(clip).forEach(key => keys.add(key)); maskKeys(keys, clip) }
       keys.add(`composite:transition:${node.window.transition.id}`)
     } else {
       node.children.forEach(visit)
       if (effective(node.clip) && node.clip.opacity > 0) {
         slots(node.clip).forEach(key => keys.add(key))
-        if (masked(node.clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT)
+        maskKeys(keys, node.clip)
       }
     }
   }
@@ -71,6 +80,14 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     current(); if (!result.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
     return target
   }
+  /** 低分辨率蒙版按片段自己的位置、缩放、旋转画到序列尺寸，与片段画面逐像素对齐。 */
+  const placeMask = async (runtime: VideoEditCodeGpu, clip: VideoEditClip, mask: VideoEditSmartRegionMask, subject = false): Promise<VideoEditCodePicture> => {
+    const source = await runtime.uploadMask(MASK_SOURCE, mask.width, mask.height, mask.data, subject)
+    const region = await runtime.target(MASK_DOCUMENT, document.width, document.height); current()
+    const drawn = await compositor.draw(document, [{ ...clip, opacity: 1 }], [source], shouldPresent, undefined, region)
+    watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
+    return region
+  }
   const apply = async (clip: VideoEditClip, input: VideoEditCodePicture): Promise<VideoEditCodePicture> => {
     const runtime = await gpu(); const targets = slots(clip); const preserve = clip.kind === 'adjustment' && clip.opacity < 1
     let result = input; let key = targets[0]
@@ -81,16 +98,15 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       const previous = result; const previousKey = key
       try {
         // 效果时钟按片段自己的帧号与帧时长：复制、挪动片段观感不变，与只记相对位置的预渲染窗口一致；只在渲染时传递，不写入效果参数。
+        const builtin = plan.builtin && (plan.subject ? { ...plan.builtin, layerOpacity: clip.opacity } : plan.builtin)
+        const subject = plan.builtin && plan.subject ? await runtime.subjectMatte(SUBJECT_DOCUMENT, await placeMask(runtime, clip, plan.subject, true)) : undefined
         const filtered = plan.builtin
-          ? await runtime.builtin(free[0], plan.builtin, result, frame - clip.start, renderScale, document.colorLuts, quality, logical, 1 / document.fps)
+          ? await runtime.builtin(free[0], builtin!, result, frame - clip.start, renderScale, document.colorLuts, quality, logical, 1 / document.fps, subject)
           : await runtime.authorFilter(free[0], plan.instanceKey, plan.program, plan.parameters, result, plan.info, plan.program.frames.length ? await readFilterFrames?.(clip, plan, result) : [])
         current()
         if (plan.builtin && plan.mask) {
-          // 区域蒙版按片段自己的位置、缩放、旋转画到序列尺寸，与片段画面逐像素对齐；只在区域内混入效果。
-          const source = await runtime.uploadMask(MASK_SOURCE, plan.mask.width, plan.mask.height, plan.mask.data)
-          const region = await runtime.target(MASK_DOCUMENT, document.width, document.height); current()
-          const drawn = await compositor.draw(document, [{ ...clip, opacity: 1 }], [source], shouldPresent, undefined, region)
-          watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
+          // 只在区域内混入效果。
+          const region = await placeMask(runtime, clip, plan.mask)
           result = await runtime.maskedMix(free[1], result, filtered, region, plan.effect.amount); key = free[1]; current()
         } else if (plan.effect.amount === 1) { result = filtered; key = free[0] }
         else { result = await runtime.mix(free[1], result, filtered, plan.effect.amount); key = free[1]; current() }

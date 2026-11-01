@@ -7,6 +7,7 @@ import { glow, blur, look } from '@/features/videoEdit/authorLibraries/effects'
 import type { VideoEditEffectPreset } from './effectPresets'
 import { videoEditEffectsRegistry } from './effectsRegistry'
 import { blurAmountForSigma, blurBleed, blurZoomRange } from './blur'
+import { normalizeVideoEditBuiltinParams } from './builtinEffects'
 
 describe('作者图层效果解析', () => {
   it('模糊四种方式是同一个效果，图层与片段目录都能找到', () => {
@@ -132,4 +133,12 @@ it('画面效果只能进调整层或片段链，空间校验包含 look 展开�
   for (const descriptor of [[{ id: 'vignette' }], [look('镜头')]]) {
     expect(() => resolveAuthorEffects(descriptor, { presets: [preset] }, 0, 'title', 'layer', 8)).toThrow(/请使用片段效果链.*升级作者接口.*adjust/)
   }
+})
+
+it('片段上存下的描边（含片段专用的轮廓来源）可作风格件用在图层上：轮廓来源不论取值都跳过', () => {
+  const preset: VideoEditEffectPreset = { id: 'white-edge', name: '白边', media: 'video', effects: [{ id: 'edge', name: '描边', enabled: true, amount: 1, builtin: { id: 'stroke', params: normalizeVideoEditBuiltinParams('stroke', { width: 30 }) } }] }
+  expect(preset.effects[0].builtin!.params.contour).toBe('alpha')
+  expect(resolveAuthorEffects([look('白边')], { presets: [preset] })[0].params).not.toHaveProperty('contour')
+  const subject = structuredClone(preset); subject.effects[0].builtin!.params.contour = 'subject'
+  expect(resolveAuthorEffects([look('白边')], { presets: [subject] })[0].params).not.toHaveProperty('contour')
 })

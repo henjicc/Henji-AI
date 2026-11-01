@@ -11,6 +11,7 @@ import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinParam, VideoEdit
 import { WHITE_HEX } from '../theme/colorTokens'
 import { CHROMATIC_ABERRATION_DEFINITION } from './chromaticAberration'
 import { effectParam, includedEffectParams, includedEffectValues, type IncludedParamOverride } from './effectIncludes'
+import { subjectContourParam } from './subjectKey'
 
 /** 发光里包含的色差参数的键前缀。 */
 export const GLOW_ABERRATION_PREFIX = 'aberration'
@@ -22,10 +23,12 @@ const BRIGHT_ONLY = { visibleWhen: { param: 'mode', in: ['bright'] } }
 export const GLOW_EFFECT_DEFINITION: VideoEditBuiltinEffectDefinition = {
   precision: params => params.view !== 'source' && Number(params.strength) > 0,
   space: 'layer', author: { factory: 'glow' }, bleed: (p, r) => layerEffectBleed('glow', p, r), id: 'glow', name: '发光', group: 'light', aliases: ['外发光', '轮廓发光', '辉光', '光晕', 'outer glow', 'bloom'], description: DESCRIPTION,
+  subjectMatte: params => params.mode === 'shape' && params.contour === 'subject',
   params: [
     amount('strength', 40, { name: '强度', text: '光晕有多亮。0 不发光；20 含蓄的柔光；40（默认）明显的光晕；70 以上是强烈的霓虹辉光。' }),
     amount('radius', 60, { name: '半径', text: '光晕能散多远。0 只贴着边缘一圈；60（默认）约为画面高度的 8%；100 能铺满大半个画面。只改变散开的距离，中心亮度基本不变。' }),
     choice('mode', 'bright', [{ value: 'bright', label: '亮部' }, { value: 'shape', label: '轮廓' }], { name: '方式', text: '什么发光。亮部（默认）按画面亮度，亮的地方发光、光的颜色跟着原画；轮廓按文字和图形的形状发光，深色的字也能发出光，光的颜色由“着色”组的内圈、外圈颜色决定。' }),
+    { ...subjectContourParam({ name: '轮廓来源', text: '按什么形状发光。内容透明度（默认）按文字、图形和抠好的内容；主体按自动识别的人物轮廓，光落在人物身后的背景上，用在视频和图片片段上，画面本身不变。' }), visibleWhen: { param: 'mode', in: ['shape'] } },
     { ...amount('threshold', 60, { group: '输入', name: '阈值', text: '画面里多亮的地方才发光。0 所有内容都发光（给文字加外发光时用）；60（默认）只有明显的亮部；85 以上只剩灯光、反光这类最亮处。' }), ...BRIGHT_ONLY },
     { ...amount('threshold_smoothness', 30, { group: '输入', name: '阈值平滑度', text: '阈值附近是一刀切还是慢慢过渡。0 刚过阈值才发光，边界生硬；30（默认）自然；100 接近阈值的部分也微微发光。' }), ...BRIGHT_ONLY },
     amount('falloff', 70, { group: '光晕', name: '拖尾', text: '远处的光留得多少。0 光集中在近处，很快消失；70（默认）自然的光雾；100 远处留下大片淡光，最像真实镜头。' }),

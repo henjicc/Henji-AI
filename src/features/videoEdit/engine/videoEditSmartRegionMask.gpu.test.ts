@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+import { WHITE_HEX } from '@/core/theme/colorTokens'
 import { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import { resolveObjectURL } from 'node:buffer'
 import { testAuthorBundle, testAuthorProgram, testAuthorModule } from './videoEditAuthorTestFixtures'
@@ -165,4 +166,102 @@ describe('剪辑智能区域混合（真实设备）', () => {
       expect(chain.diagnostics().builtinFrames).toBe(40)
     } finally { await chain.dispose(); for (const buffer of buffers.values()) buffer.destroy() }
   }, 60_000)
+  it('主体抠像经合成场景取到人物蒙版：人物蒙版按片段画到画面上，人物外变透明；共用画面之外多留一张延续后的人物蒙版', async () => {
+    const raw = gpu.gpu
+    const device = new Proxy(raw, { get: (target, key) => key === 'createTexture'
+      ? (descriptor: { usage: number }) => target.createTexture({ ...descriptor, usage: descriptor.usage | 0x01 } as never)
+      : (Reflect.get(target, key) as unknown) instanceof Function ? (Reflect.get(target, key) as (...args: unknown[]) => unknown).bind(target) : Reflect.get(target, key) })
+    const chain = new VideoEditCodeGpu(device as unknown as GpuDevice)
+    const sequence = createVideoEditSequence()
+    const effect = { id: 'key', name: '主体抠像', enabled: true, amount: 1, builtin: { id: 'subject_key', params: {} } }
+    const clip: VideoEditClip = { id: 'person', itemId: 'person', name: '采访', kind: 'image', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '', effects: [effect] }
+    const document: VideoEditComposition = { ...sequence, width: W, height: H, fps: 30, revision: 0, media: [], items: [], clips: [clip] }
+    const nodes = buildVideoEditCompositePlan(document.clips)
+    const shapes = { ...clip, effects: [{ ...effect, builtin: { id: 'invert', params: {} }, mask: { regionId: 'shapes' as const, shapes: [{ id: 'all', kind: 'rect' as const, points: [[0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0]] as [number, number, number, number, number, number][] }] } }] }
+    const subjectKeys = videoEditCompositeSurfaceKeys(nodes), shapeKeys = videoEditCompositeSurfaceKeys(buildVideoEditCompositePlan([shapes]))
+    expect([...shapeKeys].every(key => subjectKeys.has(key))).toBe(true); expect(subjectKeys.size).toBe(shapeKeys.size + 1)
+    const source = await chain.target('source', W, H, 'rgba8unorm')
+    raw.queue.writeTexture({ texture: source.texture as never }, Uint8Array.from({ length: W * H * 4 }, (_, index) => [40, 60, 160, 255][index % 4]), { bytesPerRow: W * 4 }, [W, H])
+    const final = await chain.target('final', W, H, 'rgba8unorm')
+    const module = raw.createShaderModule({ code: videoEditLayerShader(false, true) })
+    const pipeline = raw.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm', blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
+    const sampler = raw.createSampler({ magFilter: 'linear', minFilter: 'linear' })
+    const uniforms = raw.createBuffer({ size: 96, usage: 0x08 | 0x40 })
+    raw.queue.writeBuffer(uniforms, 0, new Float32Array([1, 1, 1, 0, 0, 0, 1, 0, H / W, W / H, 0, 0, ...new Array<number>(12).fill(0)]))
+    // 只替换画布边界：片段整幅铺满画面；蒙版上传、放置与效果链都是正式实现。
+    const compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'> = {
+      code: async () => chain,
+      draw: async (_document, _clips, pictures, _shouldPresent, _deadline, target = final) => {
+        const encoder = raw.createCommandEncoder()
+        const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.texture.createView() as never, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
+        for (const picture of pictures) {
+          if (!(picture instanceof VideoEditCodePicture)) throw new Error('GPU fixture requires an owned picture')
+          pass.setPipeline(pipeline)
+          pass.setBindGroup(0, raw.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: picture.texture.createView() as never }, { binding: 1, resource: sampler }, { binding: 2, resource: { buffer: uniforms } }] }))
+          pass.draw(6)
+        }
+        pass.end(); raw.queue.submit([encoder.finish()])
+        return { presented: true, completion: raw.queue.onSubmittedWorkDone() }
+      },
+    }
+    const matte = new Uint8Array(W * H)
+    for (let y = 0; y < H; y++) for (let x = 0; x < W / 2; x++) matte[y * W + x] = 255
+    const plans: PreparedVideoEditEffect[] = [{ effect, builtin: effect.builtin, subject: { width: W, height: H, data: matte } }]
+    try {
+      const rendered = await renderVideoEditCompositeScene(document, nodes, new Map([[clip.id, source]]), new Map([[clip.id, plans]]), compositor, 0, () => true)
+      await rendered.completion
+      const pixels = await read(final.texture)
+      expect(pixel(pixels, 1, 1)).toEqual([40, 60, 160, 255])
+      expect(pixel(pixels, W - 1, 1)).toEqual([0, 0, 0, 0])
+    } finally { await chain.dispose(); uniforms.destroy() }
+  }, 30_000)
+
+  it('画中画：人物在片段边上被裁断时，片段外的取样不算数——主体描边、主体发光不沿裁切线画边、不画到片段外，收缩不从裁切线吃进人物', async () => {
+    const PW = 64, PH = 48, CLIP = 40
+    const raw = gpu.gpu
+    const device = new Proxy(raw, { get: (target, key) => key === 'createTexture'
+      ? (descriptor: { usage: number }) => target.createTexture({ ...descriptor, usage: descriptor.usage | 0x01 } as never)
+      : (Reflect.get(target, key) as unknown) instanceof Function ? (Reflect.get(target, key) as (...args: unknown[]) => unknown).bind(target) : Reflect.get(target, key) })
+    const host = device as unknown as GpuDevice
+    const chain = new VideoEditCodeGpu(host)
+    const picture = (data: (x: number, y: number) => number[]): VideoEditCodePicture => {
+      const texture = raw.createTexture({ size: [PW, PH], format: 'rgba8unorm', usage: 0x04 | 0x02 | 0x01 })
+      raw.queue.writeTexture({ texture }, Uint8Array.from({ length: PW * PH * 4 }, (_, index) => data((index >> 2) % PW, Math.floor((index >> 2) / PW))[index % 4]), { bytesPerRow: PW * 4 }, [PW, PH])
+      return new VideoEditCodePicture(texture as unknown as GpuTexture, PW, PH, host)
+    }
+    /** 读回为 0–255；发光输出是 rgba16float，按半精度换算。 */
+    const readBack = async (picture: VideoEditCodePicture): Promise<Uint8Array> => {
+      const bpp = picture.highPrecision ? 8 : 4, bytesPerRow = Math.ceil(PW * bpp / 256) * 256
+      const buffer = raw.createBuffer({ size: bytesPerRow * PH, usage: BUFFER_MAP_READ | BUFFER_COPY_DST })
+      const encoder = raw.createCommandEncoder()
+      encoder.copyTextureToBuffer({ texture: picture.texture as never }, { buffer, bytesPerRow }, { width: PW, height: PH, depthOrArrayLayers: 1 })
+      raw.queue.submit([encoder.finish()]); await buffer.mapAsync(BUFFER_MAP_READ)
+      const mapped = buffer.getMappedRange(), pixels = new Uint8Array(PW * PH * 4)
+      for (let y = 0; y < PH; y++) {
+        if (picture.highPrecision) { const row = new Uint16Array(mapped, y * bytesPerRow, PW * 4); for (let x = 0; x < row.length; x++) pixels[y * PW * 4 + x] = Math.round(Math.min(1, Math.max(0, videoEditHalfToFloat(row[x]))) * 255) }
+        else pixels.set(new Uint8Array(mapped, y * bytesPerRow, PW * 4), y * PW * 4)
+      }
+      buffer.unmap(); buffer.destroy(); return pixels
+    }
+    const at = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.subarray((y * PW + x) * 4, (y * PW + x) * 4 + 4)]
+    // 片段只占左边 40 列（右边透明）；人物从第 20 列一直到片段右边，被片段边裁断。放好的蒙版：r = 人物 × 片段覆盖，a = 片段覆盖。
+    const inClip = (x: number): boolean => x < CLIP, person = (x: number, y: number): boolean => x >= 20 && y >= 10
+    const placed = picture((x, y) => inClip(x) ? [person(x, y) ? 255 : 0, 0, 0, 255] : [0, 0, 0, 0])
+    const input = picture((x, y) => inClip(x) ? (person(x, y) ? [40, 60, 160, 255] : [20, 20, 24, 255]) : [0, 0, 0, 0])
+    try {
+      const subject = await chain.subjectMatte('subject', placed)
+      const matte = await readBack(subject)
+      expect(at(matte, 50, 30)).toEqual([0, 0, 0, 0]); expect(at(matte, 10, 30)).toEqual([255, 255, 255, 0]); expect(at(matte, 30, 30)).toEqual([255, 255, 255, 255])
+      for (const [id, params] of [['stroke', { width: 110, color: WHITE_HEX, position: 'center', contour: 'subject' }], ['glow', { mode: 'shape', strength: 80, radius: 40, contour: 'subject' }]] as const) {
+        const output = await readBack(await chain.builtin(`out-${id}`, { id, params }, input, 0, 1, [], 'final', undefined, undefined, subject))
+        for (let y = 0; y < PH; y++) for (let x = CLIP; x < PW; x++) expect(at(output, x, y)[3], `${id} ${x},${y}`).toBe(0)
+        // 裁切线内侧（人物贴着片段右边）原样；人物左边的轮廓照常描边、发光。
+        expect(at(output, CLIP - 1, 30).map((value, c) => Math.abs(value - [40, 60, 160, 255][c])).every(diff => diff <= 1), id).toBe(true)
+        expect(at(output, 19, 30)[0], id).toBeGreaterThan(60)
+      }
+      // H = 48 时收缩 −100 约 0.48 像素：人物左边被收进，贴着裁切线的那一列不受影响。
+      const keyed = await readBack(await chain.builtin('out-key', { id: 'subject_key', params: { choke: -100 } }, input, 0, 1, [], 'final', undefined, undefined, subject))
+      expect(at(keyed, CLIP - 1, 30)[3]).toBe(255); expect(at(keyed, 20, 30)[3]).toBeLessThan(160); expect(at(keyed, CLIP, 30)[3]).toBe(0)
+    } finally { await chain.dispose(); placed.texture.destroy(); input.texture.destroy() }
+  }, 30_000)
 })

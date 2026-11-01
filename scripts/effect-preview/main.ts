@@ -4,6 +4,8 @@ import { parameterVisible } from '@/core/imaging/parameterVisibility'
 /**
  * 内置效果预览：素材画进 1920×1080 纹理，交给剪辑的正式内置效果执行器，结果叠到所选底色上显示。
  * 参数面板直接由效果登记生成，界面上调的就是软件里的同一组参数。
+ * 按人物轮廓工作的效果（主体抠像、轮廓来源为主体）读人物蒙版：合成人物素材带一张按智能区域分辨率画好再放大的蒙版，
+ * 其他素材用自身的透明度当蒙版。
  */
 import { videoEditBuiltinDefaults, videoEditBuiltinEffect, type VideoEditBuiltinEffectDefinition, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import { VideoEditBuiltinEffectsGpu } from '@/features/videoEdit/engine/videoEditBuiltinEffectsGpu'
@@ -26,6 +28,7 @@ const effects = new VideoEditBuiltinEffectsGpu(device as unknown as GpuDevice, s
 const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
 const input = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage })
 const output = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage })
+const subject = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage })
 // 按图层合成：主图与下层（光或影）各一张，再在层内叠好。
 const layerImage = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage }); const layerUnder = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage })
 
@@ -87,20 +90,57 @@ function darkLabel(ctx: OffscreenCanvasRenderingContext2D): void {
   ctx.fillStyle = sampleColors.badge; ctx.beginPath(); ctx.roundRect(W / 2 - 260, H / 2 + 120, 520, 110, 55); ctx.fill()
   ctx.fillStyle = WHITE_HEX; ctx.font = '700 60px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'; ctx.fillText('标签', W / 2, H / 2 + 175)
 }
+/** 合成人物：亮背景前的人像，头顶一缕缕半透明的深色发丝（换到深色底上最容易看出原背景色的白边）。 */
+function personFigure(ctx: OffscreenCanvasRenderingContext2D): void {
+  ctx.fillStyle = sampleColors.badge; ctx.beginPath(); ctx.ellipse(W / 2, H + 60, 430, 400, 0, Math.PI, 0); ctx.fill()
+  ctx.fillStyle = sampleColors.windowWarm; ctx.beginPath(); ctx.ellipse(W / 2, 470, 150, 190, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = sampleColors.darkTitle; ctx.beginPath(); ctx.ellipse(W / 2, 410, 178, 160, 0, Math.PI, 0); ctx.fill()
+  let seed = 11; const random = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647
+  ctx.strokeStyle = sampleColors.darkTitle; ctx.lineCap = 'round'
+  for (let i = 0; i < 220; i++) {
+    const angle = Math.PI * (1.02 + random() * 0.96); const reach = 30 + random() * 130; const bend = (random() - 0.5) * 60
+    const x0 = W / 2 + Math.cos(angle) * 160, y0 = 410 + Math.sin(angle) * 145
+    ctx.globalAlpha = 0.2 + random() * 0.6; ctx.lineWidth = 0.8 + random() * 2.2
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(x0 + Math.cos(angle) * reach / 2 + bend, y0 + Math.sin(angle) * reach / 2, x0 + Math.cos(angle) * reach, y0 + Math.sin(angle) * reach); ctx.stroke()
+  }
+  ctx.globalAlpha = 1
+}
+function personScene(ctx: OffscreenCanvasRenderingContext2D): void {
+  const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, sampleColors.moon); sky.addColorStop(1, sampleColors.windowCool); ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = sampleColors.neonRed; ctx.fillRect(0, 300, W, 40)
+  const figure = new OffscreenCanvas(W, H); personFigure(figure.getContext('2d')!); ctx.drawImage(figure, 0, 0)
+}
+/** 人物蒙版：智能区域的人物分析是长边 512 的蒙版，按片段几何双线性放大到画面尺寸。 */
+function personMatte(ctx: OffscreenCanvasRenderingContext2D): void {
+  const figure = new OffscreenCanvas(W, H); const figureContext = figure.getContext('2d')!
+  personFigure(figureContext); figureContext.globalCompositeOperation = 'source-in'; figureContext.fillStyle = WHITE_HEX; figureContext.fillRect(0, 0, W, H)
+  const small = new OffscreenCanvas(512, Math.round(512 * H / W)); const smallContext = small.getContext('2d')!
+  smallContext.imageSmoothingQuality = 'high'; smallContext.drawImage(figure, 0, 0, small.width, small.height)
+  ctx.imageSmoothingQuality = 'low'; ctx.drawImage(small, 0, 0, W, H)
+}
 let photo: ImageBitmap | undefined
-const samples: Record<string, { name: string; params: Partial<VideoEditBuiltinParams>; draw(ctx: OffscreenCanvasRenderingContext2D): void }> = {
+const samples: Record<string, { name: string; params: Partial<VideoEditBuiltinParams>; draw(ctx: OffscreenCanvasRenderingContext2D): void; matte?(ctx: OffscreenCanvasRenderingContext2D): void }> = {
   title: { name: '透明底文字', params: { threshold: 0 }, draw: neonTitle },
   dark: { name: '透明底深色字', params: { threshold: 0 }, draw: darkLabel },
   night: { name: '夜景灯光', params: { threshold: 60 }, draw: nightScene },
+  person: { name: '合成人物', params: { threshold: 60, contour: 'subject' }, draw: personScene, matte: personMatte },
   photo: { name: '拖入的图片', params: { threshold: 60 }, draw: ctx => { if (photo) { const s = Math.max(W / photo.width, H / photo.height); ctx.drawImage(photo, (W - photo.width * s) / 2, (H - photo.height * s) / 2, photo.width * s, photo.height * s) } } },
 }
 const sampleSelect = $<HTMLSelectElement>('sample')
 for (const [key, sample] of Object.entries(samples)) sampleSelect.add(new Option(sample.name, key))
 
 function loadSample(): void {
+  const sample = samples[sampleSelect.value]
   const raster = new OffscreenCanvas(W, H); const ctx = raster.getContext('2d')!
-  samples[sampleSelect.value].draw(ctx)
+  sample.draw(ctx)
   device.queue.copyExternalImageToTexture({ source: raster }, { texture: input, premultipliedAlpha: true }, [W, H])
+  const matte = new OffscreenCanvas(W, H); const matteContext = matte.getContext('2d')!
+  if (sample.matte) sample.matte(matteContext)
+  else { matteContext.drawImage(raster, 0, 0); matteContext.globalCompositeOperation = 'source-in'; matteContext.fillStyle = WHITE_HEX; matteContext.fillRect(0, 0, W, H) }
+  // 人物蒙版的 a 是人物、r 是片段画面覆盖：预览画面整幅都是片段，r 恒为 1。
+  const pixels = matteContext.getImageData(0, 0, W, H).data
+  for (let index = 0; index < pixels.length; index += 4) pixels.fill(255, index, index + 3)
+  device.queue.writeTexture({ texture: subject }, pixels, { bytesPerRow: W * 4 }, [W, H])
 }
 
 // ---- 参数面板（由效果登记生成）
@@ -178,12 +218,12 @@ async function render(): Promise<void> {
       const layer = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
       const plan = planVideoEditBuiltinEffect({ ...instance, params: { ...videoEditBuiltinDefaults(definition()), ...params } } as never, { width: W, height: H, frame: frame++, frameDuration: FRAME_DURATION, layer, split: true })
       const image = plan.underlay === undefined ? output : layerImage
-      await effects.encodePlan(plan, 'rgba8unorm', input as unknown as GpuTexture, image as unknown as GpuTexture, undefined, [], undefined, layerUnder as unknown as GpuTexture)
+      await effects.encodePlan(plan, 'rgba8unorm', input as unknown as GpuTexture, image as unknown as GpuTexture, undefined, [], undefined, layerUnder as unknown as GpuTexture, subject as unknown as GpuTexture)
       if (plan.underlay !== undefined) {
         const over: VideoEditBuiltinPlan = { width: W, height: H, scratch: [], passes: [{ entry: 'effect_over', source: 'input', original: 'second', target: 'output', uniforms: new Float32Array([W, H, W, H, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) }] }
         await effects.encodePlan(over, 'rgba8unorm', layerImage as unknown as GpuTexture, output as unknown as GpuTexture, layerUnder as unknown as GpuTexture)
       }
-    } else await effects.render(instance as never, { texture: input as unknown as GpuTexture, width: W, height: H, format: 'rgba8unorm' }, output as unknown as GpuTexture, frame++, 1, [], 'interactive', undefined, FRAME_DURATION)
+    } else await effects.render(instance as never, { texture: input as unknown as GpuTexture, width: W, height: H, format: 'rgba8unorm' }, output as unknown as GpuTexture, frame++, 1, [], 'interactive', undefined, FRAME_DURATION, subject as unknown as GpuTexture)
     await device.queue.onSubmittedWorkDone()
   }
   const elapsed = performance.now() - started

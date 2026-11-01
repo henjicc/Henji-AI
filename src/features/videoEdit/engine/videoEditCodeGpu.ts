@@ -14,6 +14,7 @@ import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import { planSubjectFootprint } from './subjectKey'
 import type { VideoEditBuiltinPlan } from './effectPlan'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
 import { effectClockSeconds } from './effectPlanner'
@@ -111,7 +112,7 @@ const imageShader = `${shapeShader}
 /** `web`：网页参数这一帧的页面信息（作者代码的 `info.web[参数名]`）。 */
 export interface VideoEditCodeImageInput { texture: GpuTexture; width: number; height: number; owner: GpuDevice; premultiplied: boolean; source?: CanvasImageSource; web?: import('./videoEditAuthorModule').AuthorWebFrame }
 
-interface Surface { picture: VideoEditCodePicture; lastUsedFrame: number; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer; maskData?: Uint8Array; maskRgba?: Uint8Array }
+interface Surface { picture: VideoEditCodePicture; lastUsedFrame: number; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer; maskData?: Uint8Array; maskSubject?: boolean; maskRgba?: Uint8Array }
 /**
  * 着色器结果按原画透明度裁回：先拷进中间纹理，再与原画（second）的 alpha 相乘写回同一张输出。
  * 第二道的遮罩槽也绑原画，避免把正在写的输出同时当作取样纹理。
@@ -527,16 +528,30 @@ struct Mix { amount:vec4f, color:vec4f }
    * 智能区域蒙版（4.7d）：把 0–255 的单通道蒙版写进一张 rgba8 画面（四个通道都是蒙版值，即预乘的白色），
    * 之后由合成器按片段的位置、缩放、旋转画到序列尺寸上，与片段画面逐像素对齐。
    */
-  async uploadMask(key: string, width: number, height: number, data: Uint8Array): Promise<VideoEditCodePicture> {
+  async uploadMask(key: string, width: number, height: number, data: Uint8Array, subject = false): Promise<VideoEditCodePicture> {
     if (data.length !== width * height) throw new CodeMaterialError('CONTEXT', '智能区域蒙版尺寸不符。')
     await this.ready; this.assertLive()
     const target = this.surface(key, width, height, 'rgba8unorm', true)
-    if (target.maskData === data) return target.picture
+    if (target.maskData === data && target.maskSubject === subject) return target.picture
     const rgba = target.maskRgba ??= new Uint8Array(width * height * 4)
-    for (let index = 0; index < data.length; index++) { const value = data[index]; rgba[index * 4] = value; rgba[index * 4 + 1] = value; rgba[index * 4 + 2] = value; rgba[index * 4 + 3] = value }
+    // 人物蒙版写成不透明的灰度（颜色是蒙版、alpha 为 1）：画到画面上后 alpha 就是片段画面的覆盖，`subjectMatte` 据此换成工序纹理。
+    for (let index = 0; index < data.length; index++) { const value = data[index]; rgba[index * 4] = value; rgba[index * 4 + 1] = value; rgba[index * 4 + 2] = value; rgba[index * 4 + 3] = subject ? 255 : value }
     const queue = this.device.queue as GpuDevice['queue'] & { writeTexture(destination: unknown, data: ArrayBufferView, layout: unknown, size: unknown): void }
     queue.writeTexture({ texture: target.picture.texture }, rgba, { bytesPerRow: width * 4, rowsPerImage: height }, [width, height])
-    target.maskData = data
+    target.maskData = data; target.maskSubject = subject
+    return target.picture
+  }
+  /**
+   * 按片段几何放好的人物蒙版（`uploadMask(…, subject)` 画到画面上：r 为人物、a 为片段覆盖）→ 工序纹理 `subject`
+   * （a 为人物、r 为片段覆盖）。效果据片段覆盖不把画中画的片段裁切线当成人物轮廓，描边与光也只画在片段画面内。
+   */
+  async subjectMatte(key: string, placed: VideoEditCodePicture): Promise<VideoEditCodePicture> {
+    await this.ready; this.assertLive(); this.assertInput(placed.texture)
+    if (placed.owner !== this.device) throw new CodeMaterialError('CONTEXT', '人物蒙版必须属于当前GPU设备。')
+    const target = this.surface(key, placed.width, placed.height, 'rgba8unorm')
+    if (target.picture.texture === placed.texture) throw new CodeMaterialError('CONTEXT', '人物蒙版输入输出不能引用同一纹理。')
+    await this.builtins().encodePlan(planSubjectFootprint(placed.width, placed.height), 'rgba8unorm', placed.texture, target.picture.texture)
+    this.assertLive()
     return target.picture
   }
   private async prepareMaskedMix(format: VideoEditGpuColorFormat): Promise<GpuRenderPipeline> {
@@ -591,20 +606,25 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }
-  /** 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame`、`frameDuration` 是效果时钟（片段自己的帧号与每帧秒数），原生效果与着色器图效果共用；第 0 帧以外缺帧时长会报错。 */
-  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1, luts: readonly import('@/core/videoEdit/colorLutAsset').ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: { width: number; height: number }, frameDuration?: number): Promise<VideoEditCodePicture> {
+  /**
+   * 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame`、`frameDuration` 是效果时钟（片段自己的帧号与每帧秒数），原生效果与着色器图效果共用；第 0 帧以外缺帧时长会报错。
+   * `subject` 是按片段几何画到同一尺寸的人物蒙版，只给声明 `subjectMatte` 的效果。
+   */
+  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1, luts: readonly import('@/core/videoEdit/colorLutAsset').ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: { width: number; height: number }, frameDuration?: number, subject?: VideoEditCodePicture): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '内置效果输入必须属于当前GPU设备。')
+    if (subject && (subject.owner !== this.device || subject.width !== input.width || subject.height !== input.height)) throw new CodeMaterialError('CONTEXT', '人物蒙版必须与效果输入同设备同尺寸。')
+    if (subject) this.assertInput(subject.texture)
     const runtime = this.builtins()
     const format = input.highPrecision || videoEditEffectNeedsFloat(instance, { width: input.width, height: input.height, quality, renderScale, referenceSize: referenceSize ?? { width: Math.round(input.width / renderScale), height: Math.round(input.height / renderScale) } }) ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
     const target = this.surface(key, input.width, input.height, format)
-    if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
+    if (target.picture.texture === input.texture || target.picture.texture === subject?.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
     if (isShaderGraphEffect(instance.id)) {
       // `shaders` 组件效果：着色器图 [@input, 组件]，时间与原生效果同一时钟（帧号 × 帧时长）。
       const params = resolveVideoEditBuiltinParams(instance)
       await this.shaderGraphs().render(shaderGraphEffectSpec(instance.id, params), { timeSeconds: effectClockSeconds(frameDuration, frame), width: input.width, height: input.height, input: input.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphEffectProps(instance.id, params)]]) })
       if (shaderGraphEffectKeepsSourceAlpha(instance.id, params)) await runtime.encodePlan(sourceAlphaPlan(input.width, input.height), format, target.picture.texture, target.picture.texture, input.texture)
-    } else await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format }, target.picture.texture, frame, renderScale, luts, quality, referenceSize, frameDuration)
+    } else await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format }, target.picture.texture, frame, renderScale, luts, quality, referenceSize, frameDuration, subject?.texture)
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }

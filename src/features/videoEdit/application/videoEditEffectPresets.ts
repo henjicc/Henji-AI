@@ -10,7 +10,8 @@ import { migrateVideoEditMergedEffects } from '@/core/videoEdit/mergedEffectsMig
 import { createLogger } from '@/core/logging'
 import { videoEditEffectSchema, type VideoEditEffect } from '@/core/videoEdit/compositing'
 import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPresets'
-import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
+import { isRemovedVideoEditBuiltinEffect, normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffectMedia, videoEditBuiltinRefId, videoEditEffectNeedsSubject } from '@/core/videoEdit/builtinEffects'
+import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { VIDEO_EDIT_EFFECT_CATEGORIES, videoEditEffectsRegistry, type VideoEditEffectsRegistryEntry } from '@/core/videoEdit/effectsRegistry'
 
 import { assertVideoEditStylePieceNames, resolveVideoEditStylePieceEffects, videoEditEffectLibrarySchema as dataSchema } from '@/core/videoEdit/effectPresets'
@@ -188,11 +189,14 @@ registerVideoEditStylePieceRestore(async saved => {
 export const VIDEO_EDIT_EFFECT_LIBRARY_SCOPE = 'video_edit.effects'
 export function videoEditEffectLibraryRevisions(): Record<string, number> { return { [VIDEO_EDIT_EFFECT_LIBRARY_SCOPE]: useVideoEditEffectLibraryStore.getState().revision } }
 
+/** 智能区域和人物蒙版都要分析片段素材，只能加到视频、图片片段上（内置效果、智能预设、风格件与拖放共用）。 */
+export function videoEditEffectNeedsSource(effect: Pick<VideoEditEffect, 'mask' | 'builtin'>): boolean { return isSmartRegionMask(effect.mask) || videoEditEffectNeedsSubject(effect.builtin) }
 /** 内置效果与智能预设的模板；风格件走 `applyVideoEditStylePiece`。 */
 export function resolveVideoEditLibraryEffects(ref: string): { media: 'video' | 'audio'; effects: Omit<VideoEditEffect, 'id'>[]; needsSource: boolean } | undefined {
   const template = resolveVideoEditEffectTemplate(ref)
   if (!template) return undefined
-  return { media: videoEditBuiltinEffectMedia(template.builtinId), effects: [{ name: template.name ?? requireVideoEditBuiltinEffect(template.builtinId).name, enabled: true, amount: 1, builtin: { id: template.builtinId, params: normalizeVideoEditBuiltinParams(template.builtinId, template.params) }, ...(template.mask ? { mask: template.mask } : {}) }], needsSource: Boolean(template.mask) }
+  const effect: Omit<VideoEditEffect, 'id'> = { name: template.name ?? requireVideoEditBuiltinEffect(template.builtinId).name, enabled: true, amount: 1, builtin: { id: template.builtinId, params: normalizeVideoEditBuiltinParams(template.builtinId, template.params) }, ...(template.mask ? { mask: template.mask } : {}) }
+  return { media: videoEditBuiltinEffectMedia(template.builtinId), effects: [effect], needsSource: videoEditEffectNeedsSource(effect) }
 }
 export type VideoEditLibraryEntry = Omit<VideoEditEffectsRegistryEntry, 'category'> & { category: VideoEditEffectsRegistryEntry['category'] | 'presets'; aliases?: readonly string[]; piece?: VideoEditStylePieceEntry }
 /** 效果面板“风格件”文件夹的条目；有风格成员时按“全局 / 风格名”分组，同名项靠分组区分归属。 */

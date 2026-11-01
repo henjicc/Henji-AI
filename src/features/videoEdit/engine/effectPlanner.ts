@@ -6,7 +6,12 @@ import type { RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
 import type { RecordingEffectsRenderInput } from './videoEditRecordingZoomPlan'
 import type { VideoEditBuiltinPlan } from './effectPlan'
 
-export type EffectPlannerInput = VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput
+/**
+ * 按人物轮廓叠上去的内容（主体描边、主体发光）不从输入取透明度；合成场景给出片段这一帧已经乘进输入的不透明度（含淡入淡出），
+ * 叠加跟着片段一起淡。只在渲染时传，不存档。
+ */
+export interface SubjectLayerInput { layerOpacity?: number }
+export type EffectPlannerInput = VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput & SubjectLayerInput
 /**
  * 效果时钟。两条路径的时间基准不同，是有意的：
  * - 片段效果链：`frame` 是片段内的时间线帧号（整数）。不跟片段的变速、倒放、时间重映射走，剃刀剪开后从 0 重新算。

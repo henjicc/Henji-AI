@@ -28,6 +28,11 @@ import { installAuthorTrustGate, assertAuthorTrust } from './videoEditAuthorTrus
 import { createContentTrustTestSession } from '../../../../electron/main/services/content-trust/test-support'
 
 const logWarn = vi.hoisted(() => vi.fn())
+const maskFailure = vi.hoisted(() => ({ fail: false }))
+vi.mock('./videoEditEffectMasks', async importOriginal => {
+  const actual = await importOriginal<typeof import('./videoEditEffectMasks')>()
+  return { ...actual, videoEditEffectMask: async (...args: Parameters<typeof actual.videoEditEffectMask>) => { if (maskFailure.fail) throw new Error('区域缓存读取失败'); return actual.videoEditEffectMask(...args) } }
+})
 it('真实前瞻预热携带来源，在询问与拒绝状态都不求值，允许后才执行作者模块', async () => {
   const document = fixture('globalThis.__aheadTrustExecutions=(globalThis.__aheadTrustExecutions||0)+1;' + source())
   const foreign = { id: 'ahead-external', sourceType: 'template' as const, sourceName: '外来预热模板' }
@@ -317,6 +322,17 @@ it('static code picture cache does not freeze its native animated effect mask', 
     expect(last.mask!.data[pixel]).toBe(0)
     expect(boundary.generator).toHaveBeenCalledTimes(1)
   } finally { await boundary.sources.dispose() }
+})
+
+it('区域蒙版读取失败：预览这一帧先不画这个效果，最终画质（导出、预渲染、录屏成品）报错', async () => {
+  const document = fixture(); const shape = { ...createVideoEditMaskShape('rect', 'mask'), feather: 0 }
+  document.clips[0].effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'blur', params: {} }, mask: { regionId: 'shapes', shapes: [shape] } }]
+  const boundary = boundaries(document)
+  maskFailure.fail = true
+  try {
+    expect((await boundary.sources.prepare(document, document.clips, 0, () => true)).effects.get('clip') ?? []).toEqual([])
+    await expect(boundary.sources.prepare(document, document.clips, 0, () => true, undefined, { quality: 'final' })).rejects.toThrow('区域蒙版读取失败')
+  } finally { maskFailure.fail = false; await boundary.sources.dispose() }
 })
 
 describe('可见代码源与固定内容复用', () => {

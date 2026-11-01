@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { videoEditClipMedia, type VideoEditClip, type VideoEditDocument, type VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
+import { videoEditEffectNeedsSubject } from '@/core/videoEdit/builtinEffects'
 import { smartRegionAnalysisKind, type SmartRegionAnalysisKind } from '@/core/videoEdit/smartRegions'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -14,8 +15,9 @@ import { videoEditReachableSequences } from '@/core/videoEdit/sequenceGraph'
 import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
 
 /*
- * 智能区域协调（任务 4.7d，渲染层）：打开着的剪辑里，凡是挂了“作用区域”的内置画面效果，就按片段用到的素材范围
- * 请求后台分析（主进程去重、缓存），记下每个请求的进度与结果，供效果控件显示、预览与导出取用、助手读取。
+ * 智能区域协调（任务 4.7d，渲染层）：打开着的剪辑里，凡是挂了“作用区域”的内置画面效果，以及按人物轮廓工作的效果
+ * （主体抠像、轮廓来源为主体），就按片段用到的素材范围请求后台分析（主进程去重、缓存），记下每个请求的进度与结果，
+ * 供效果控件显示、预览与导出取用、助手读取。
  * 不依赖页面是否打开：助手在后台给片段加“人脸打码”也会立刻开始分析。
  */
 
@@ -39,6 +41,22 @@ export function videoEditSmartRegionRequest(document: Pick<VideoEditDocument, 'm
   return media ? requestFor(media, smartRegionAnalysisKind(effect.mask.regionId), clip, videoEditFps(frameRate)) : undefined
 }
 
+/** 按人物轮廓工作的效果要的人物分析；效果不用人物蒙版、或片段不是画面素材时为 undefined。 */
+export function videoEditSubjectRegionRequest(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'builtin'>): SmartRegionRequest | undefined {
+  if (!videoEditEffectNeedsSubject(effect.builtin)) return undefined
+  const media = videoEditClipMedia(document, clip)
+  return media ? requestFor(media, 'person', clip, videoEditFps(frameRate)) : undefined
+}
+/** 效果用到的全部分析：作用区域与人物蒙版可以同时需要，同一种分析只请求一次。 */
+function effectRequests(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask' | 'builtin'>): SmartRegionRequest[] {
+  const requests = [videoEditSmartRegionRequest(document, frameRate, clip, effect), videoEditSubjectRegionRequest(document, frameRate, clip, effect)].filter((request): request is SmartRegionRequest => Boolean(request))
+  return [...new Map(requests.map(request => [smartRegionRequestKey(request), request])).values()]
+}
+/** 效果用到的每个分析与当前状态（尚未登记的按刚开始分析）。 */
+export function videoEditEffectRegionStatuses(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask' | 'builtin'>): Array<{ request: SmartRegionRequest; status: SmartRegionStatus }> {
+  return effectRequests(document, frameRate, clip, effect).map(request => ({ request, status: entries.get(smartRegionRequestKey(request))?.status ?? { state: 'analyzing', progress: 0 } }))
+}
+
 function requestFor(media: VideoEditMedia, kind: SmartRegionAnalysisKind, clip: VideoEditClip, fps: number): SmartRegionRequest | undefined {
   if (media.kind !== 'video' && media.kind !== 'image') return undefined
   const still = media.kind === 'image'
@@ -54,8 +72,7 @@ function neededRequests(): Map<string, SmartRegionRequest> {
   for (const instance of listVideoEditInstances()) {
     const document = instance.document
     for (const sequence of document.sequences) for (const clip of sequence.clips) for (const effect of clip.effects ?? []) {
-      const request = videoEditSmartRegionRequest(document, sequence.frameRate, clip, effect)
-      if (request) needed.set(smartRegionRequestKey(request), request)
+      for (const request of effectRequests(document, sequence.frameRate, clip, effect)) needed.set(smartRegionRequestKey(request), request)
     }
   }
   for (const requests of waitLeases.values()) for (const [key, request] of requests) needed.set(key, request)
@@ -124,8 +141,21 @@ export function videoEditSmartRegionStatus(document: Pick<VideoEditDocument, 'me
   return entries.get(smartRegionRequestKey(request))?.status ?? { state: 'analyzing', progress: 0 }
 }
 
-/** 给助手读的状态文字：'' 没有作用区域；ready；analyzing:45%；failed:<给用户的说明>。 */
-export function videoEditSmartRegionStatusText(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask'>): string {
+function statusText(status: SmartRegionStatus): string {
+  if (status.state === 'ready') return 'ready'
+  if (status.state === 'analyzing') return `analyzing:${Math.round(status.progress * 100)}%`
+  return `failed:${videoEditSmartRegionFailureText(status.reason)}`
+}
+/** 给助手读的状态文字：'' 没有作用区域也不用人物蒙版；ready；analyzing:45%；failed:<给用户的说明>。人物分析没好时先报它。 */
+export function videoEditSmartRegionStatusText(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask' | 'builtin'>): string {
+  if (videoEditEffectNeedsSubject(effect.builtin)) {
+    const request = videoEditSubjectRegionRequest(document, frameRate, clip, effect)
+    const subject = request ? statusText(entries.get(smartRegionRequestKey(request))?.status ?? { state: 'analyzing', progress: 0 }) : 'failed:片段不是视频或图片，人物轮廓不会生效。'
+    if (subject !== 'ready' || !effect.mask) return subject
+  }
+  return maskStatusText(document, frameRate, clip, effect)
+}
+function maskStatusText(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask'>): string {
   if (!effect.mask) return ''
   if (effect.mask.regionId === 'tracker') {
     const trackerId = effect.mask.trackerId
@@ -146,10 +176,7 @@ export function videoEditSmartRegionStatusText(document: Pick<VideoEditDocument,
   }
   if (!isSmartRegionMask(effect.mask)) return 'ready'
   const status = videoEditSmartRegionStatus(document, frameRate, clip, effect)
-  if (!status) return 'failed:片段不是视频或图片，作用区域不会生效。'
-  if (status.state === 'ready') return 'ready'
-  if (status.state === 'analyzing') return `analyzing:${Math.round(status.progress * 100)}%`
-  return `failed:${videoEditSmartRegionFailureText(status.reason)}`
+  return status ? statusText(status) : 'failed:片段不是视频或图片，作用区域不会生效。'
 }
 
 /** 重新分析（失败后的“重试”）。 */
@@ -184,8 +211,7 @@ export async function waitVideoEditSmartRegions(document: Pick<VideoEditDocument
   const requests = new Map<string, SmartRegionRequest>()
   for (const reachable of videoEditReachableSequences(document, sequence)) for (const clip of reachable.clips) for (const effect of clip.effects ?? []) {
     if (!effect.enabled || effect.amount <= 0) continue
-    const request = videoEditSmartRegionRequest(document, reachable.frameRate, clip, effect)
-    if (request) requests.set(smartRegionRequestKey(request), request)
+    for (const request of effectRequests(document, reachable.frameRate, clip, effect)) requests.set(smartRegionRequestKey(request), request)
   }
   if (!requests.size) { signal?.throwIfAborted(); return {} }
   const lease = {}; waitLeases.set(lease, requests)
@@ -200,7 +226,7 @@ export async function waitVideoEditSmartRegions(document: Pick<VideoEditDocument
         const statuses = [...requests.keys()].map(key => entries.get(key)?.status)
         if (statuses.some(status => !status)) { finish(); reject(new Error('所需区域分析已被取消，请重新导出。')); return }
         const failed = statuses.find(status => status?.state === 'failed')
-        if (failed?.state === 'failed') { finish(); reject(new Error(`作用区域分析失败：${videoEditSmartRegionFailureText(failed.reason)}`)); return }
+        if (failed?.state === 'failed') { finish(); reject(new Error(`区域分析失败：${videoEditSmartRegionFailureText(failed.reason)}`)); return }
         if (statuses.every(status => status?.state === 'ready')) { finish(); resolve(videoEditSmartRegionSegments(requests)) }
       }
       const abort = (): void => { finish(); reject(signal?.reason ?? new DOMException('已取消', 'AbortError')) }
