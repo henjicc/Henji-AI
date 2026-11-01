@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import path from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { TextFontSession } from '@/core/imaging/vectorContent/shaping/fontPolicy'
+import { withTextFontSession } from '@/core/imaging/vectorContent/shaping/fontContext'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
@@ -155,11 +158,18 @@ it('文字复核经正式 describe、查询和实体回读返回三类实际绘�
   const { owner, input } = await codeFixture(), app = createApplicationHarness()
   const { Canvas } = createTextCanvasRecorder(); vi.stubGlobal('OffscreenCanvas', Canvas)
   const measure = new Canvas(1, 1).getContext(); measure.reset = () => {}
-  MotionWorker.textDraws = recordAuthorCanvas({ width: 1000, height: 1000 }, measure, [1, 0, 0, 1, 0, 0], ctx => {
+  // 排版库只在宿主备好的字体会话里取字形；这里用本机字体，缺字按 .notdef 排，不影响超框、裁切与截断的判定。
+  const file = ['C:/Windows/Fonts/calibri.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', '/System/Library/Fonts/Supplemental/Arial.ttf'].find(existsSync)
+  if (!file) throw new Error('需要本机可用字体')
+  const data = readFileSync(file), fonts = new TextFontSession('win32', async () => ({ bytes: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer }))
+  await fonts.prepare()
+  const access = { owner: {}, chain: fonts.chain.bind(fonts), choose: fonts.choose.bind(fonts), onClose: () => {} }
+  MotionWorker.textDraws = withTextFontSession(access, () => recordAuthorCanvas({ width: 1000, height: 1000 }, measure, [1, 0, 0, 1, 0, 0], ctx => {
     drawText(ctx, layoutText('中文长标题', { fontSize: 30 }, { maxWidth: 10, wrap: 'none' }))
     drawText(ctx, layoutText('第一行\n第二行', { fontSize: 30 }, { maxLines: 1 }))
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, 5, 100); ctx.clip(); drawText(ctx, layoutText('会被裁掉', { fontSize: 30 })); ctx.restore()
-  }).textDraws
+  }).textDraws)
+  fonts.close()
   try {
     const described = await app.requireResult('describe_application_entities', { entityTypes: ['video_edit.sequence'], refs: [input.sequenceRef] })
     expect(described.entities).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'video_edit.sequence' })]))

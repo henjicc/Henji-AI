@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import path from 'path'
+import { pathToFileURL } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
 import testSuites from './scripts/lib/testSuites.cjs'
 import CostSequencer from './scripts/lib/costSequencer.mjs'
@@ -28,6 +29,14 @@ export default defineConfig(({ mode }) => {
         const filename = queryIndex < 0 ? id : id.slice(0, queryIndex)
         if (!filename.endsWith('.wgsl')) return null
         return `export default ${JSON.stringify(readFileSync(filename, 'utf8'))}`
+      },
+    }, {
+      // 作者内置库（HarfBuzz 等 Emscripten 模块）按 import.meta.url 找同目录的 wasm；jsdom 用例里 import.meta.url
+      // 是 http://localhost 地址，Node 端读文件会失败，所以换回模块自己的 file 地址。
+      name: 'vitest-author-vendor-url',
+      transform(code, id) {
+        if (!/[\\/]resources[\\/]video-edit-author[\\/]vendor[\\/].+\.mjs$/.test(id) || !code.includes('import.meta.url')) return null
+        return { code: code.replaceAll('import.meta.url', JSON.stringify(pathToFileURL(id).href)), map: null }
       },
     }, videoEditRenderEngineVersion({ fixed: 'test' })],
     resolve: {
