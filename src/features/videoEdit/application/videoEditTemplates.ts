@@ -22,7 +22,7 @@ import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, set
 import { ensureVideoEditRetargetMetadata, withVideoEditCodeMetadata, withVideoEditUnreadableCodeVersions, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditCodeVersions, createVideoEditPlacedCodeItems } from './videoEditCodeService'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
-import { videoEditTemplateStyle } from './videoEditPresetCatalog'
+import { findVideoEditStyle, videoEditTemplateStyle } from './videoEditPresetCatalog'
 import type { VideoEditDropPlacement } from './videoEditDrop'
 
 const logger = createLogger('features.videoEdit.templates')
@@ -210,7 +210,9 @@ export function createVideoEditTemplate(projectId: string, sequenceId: string, c
     const styleId = options.styleId === undefined ? sequence.styleId : options.styleId
     // 风格库按需读取：引用库里的风格或要存进风格库时先读完，任何写入之前就能判断风格在不在。
     if (options.global || styleId && !document.styles?.some(value => value.id === styleId)) await videoEditStyleLibrary.ready()
-    const sourceStyle = videoEditTemplateStyle({ style: styleId ? { id: styleId } : null }, document.styles)
+    // 调用方给的风格 id 找不到是输入有误，要引导重新列出风格，不是“已有模板的风格不可用”。
+    const sourceStyle = styleId ? findVideoEditStyle(styleId, document.styles) : undefined
+    if (styleId && !sourceStyle) throw new Error(`NOT_FOUND：没有这个风格（${styleId}），请重新列出 video_edit.style 或 video_edit.project_style。`)
     const style = sourceStyle ? { id: sourceStyle.id, version: sourceStyle.version } : null
     const meta = { id: newId(), name: options.name, description: options.description ?? '', version: 1, updatedAt: new Date().toISOString(), style, origin: null }
     let template: VideoEditProjectTemplate

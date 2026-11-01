@@ -26,10 +26,15 @@ export type VideoEditPresetSource =
   | { category: 'text'; preset: VideoEditSubtitlePreset }
   | { category: 'effect'; preset: VideoEditEffectPreset }
   | { category: 'transition'; kind: VideoEditTransitionKind }
-/** 工程模板优先携带工程风格副本；库模板使用其所属的库风格。 */
+/** 按 id 找风格：工程风格副本优先，其次风格库。 */
+export function findVideoEditStyle(id: string, styles?: readonly VideoEditStyle[]): VideoEditStyle | undefined {
+  return styles?.find(style => style.id === id) ?? videoEditStyleLibrary.findStyle(id)?.style
+}
+/** 已有模板记下的所属风格；风格之后被删掉或没导入时报“已不可用”，引导恢复或改指定。 */
 export function videoEditTemplateStyle(template: { style: { id: string } | null }, styles?: readonly VideoEditStyle[]): VideoEditStyle | undefined {
-  const style = template.style ? styles?.find(style => style.id === template.style!.id) ?? videoEditStyleLibrary.findStyle(template.style.id)?.style : undefined
-  if (template.style && !style) throw new Error(`模板所属风格（${template.style.id}）已不可用，请恢复该风格或重新指定模板所属风格。`)
+  if (!template.style) return undefined
+  const style = findVideoEditStyle(template.style.id, styles)
+  if (!style) throw new Error(`模板所属风格（${template.style.id}）已不可用，请恢复该风格或重新指定模板所属风格。`)
   return style
 }
 export interface VideoEditPresetEntry {
