@@ -8,8 +8,13 @@ export function codeMaterialImageParameterKeys(declarations: readonly CodeParame
   return new Set([...declarations.flatMap(parameter => parameter.type === 'image' ? [parameter.key] : []), ...Object.keys(derived)])
 }
 
+/**
+ * 声明了 audio 参数，或代码里读了 `info.audio` / `audioTime`（不声明时宿主给默认混音的分析）都算用到声音。
+ * 按源码文字宽松判断：误判只多做一次声音分析，漏判则作者拿不到声音、缓存也会把随声音变的画面当成不变。
+ */
 export function codeMaterialUsesAudio(program: CodeAuthorProgram): boolean {
-  return program.parameters.some(parameter => parameter.type === 'audio')
+  const sources = [program.bundle.code, ...Object.values(program.bundle.modules?.files ?? {})]
+  return program.parameters.some(parameter => parameter.type === 'audio') || sources.some(source => /\baudio(?:Time)?\b/.test(source))
 }
 /** 运行期传入声明以确定语义；未加载源码的文档依赖扫描仅收集可验证的引用标识。 */
 export function codeMaterialImageIds(instance?: CodeMaterialInstance, declarations?: readonly CodeParameterDeclaration[], derived: Readonly<Record<string, CodeImageReference>> = {}): Set<string> {
