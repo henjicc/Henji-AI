@@ -89,6 +89,17 @@ export function authorStillRaster(crop: { x: number; y: number; width: number; h
   return right > left && bottom > top ? { x: left, y: top, width: right - left, height: bottom - top } : null
 }
 
+/**
+ * 静止层组栅格的纹理边长：内容范围逐帧变化时（逐字出现、伸长的线条）按精确尺寸就会每帧新建一张大纹理。
+ * 范围只许偏大（多出的部分透明），所以大于 256 像素的边按边长的 1/8 到 1/4 一档向上取整，档内变化沿用同一张纹理；
+ * 尺寸只由所需尺寸决定、与之前的帧无关，同一帧总得到同样的画面。小边保持精确，上传字节最少。不超过整帧尺寸 `limit`。
+ */
+export function authorStillSurfaceSize(need: number, limit: number): number {
+  if (need < 256) return need
+  const step = 2 ** Math.floor(Math.log2(need)) / 4
+  return Math.max(need, Math.min(limit, Math.ceil(need / step) * step))
+}
+
 export function authorPoseMatrix(pose: AuthorPose): CodeMatrix {
   // Frameflow rotation is in radians, matching Canvas2D.
   const c = Math.cos(pose.rotation ?? 0), s = Math.sin(pose.rotation ?? 0)

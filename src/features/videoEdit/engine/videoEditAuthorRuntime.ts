@@ -19,7 +19,7 @@ import type { CodeLayerStatistics } from '@/core/videoEdit/codeMaterial/performa
 import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
 import { codeSimulationIdentity, type CodeSimulationInput } from '@/core/videoEdit/codeSimulation'
 import { VideoEditAuthorSimulation } from './videoEditAuthorSimulation'
-import { authorFrameExposure, authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups, authorStillRaster } from './videoEditAuthorLayers'
+import { authorFrameExposure, authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups, authorStillRaster, authorStillSurfaceSize } from './videoEditAuthorLayers'
 import { authorCanvasContent, type AuthorCanvasBox } from './videoEditAuthorCanvasBounds'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
@@ -473,10 +473,11 @@ export class VideoEditAuthorRuntime {
           const recorded = parts.every(part => part.painted) ? parts.map(part => part.painted!) : undefined
           const analysed = recorded ? contentOf(recorded) : { bounds: undefined, scalable: false }
           const rx = analysed.scalable ? sx : 1, ry = analysed.scalable ? sy : 1
-          const raster = analysed.bounds === null ? null : authorStillRaster(crop, analysed.bounds, rx, ry, rx === 1 ? width : outWidth, ry === 1 ? height : outHeight)
+          const exact = analysed.bounds === null ? null : authorStillRaster(crop, analysed.bounds, rx, ry, rx === 1 ? width : outWidth, ry === 1 ? height : outHeight)
           // 什么也没画（或全在裁剪外）：不占纹理、不画。
-          if (!raster) { statistics.reused += layers; statistics.video += video; return }
+          if (!exact) { statistics.reused += layers; statistics.video += video; return }
           const mips = !!scale && rx === 1 && ry === 1
+          const raster = { ...exact, width: authorStillSurfaceSize(exact.width, rx === 1 ? width : outWidth), height: authorStillSurfaceSize(exact.height, ry === 1 ? height : outHeight) }
           const surface = this.surface(surfaceIndex, raster.width, raster.height, false, mips)
           used.add(surfaceIndex)
           const content = recorded && { key: `${slot}\u0000${width}x${height}\u0000${raster.x},${raster.y}\u0000${rx},${ry}`, parts: recorded }

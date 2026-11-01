@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups } from './videoEditAuthorLayers'
+import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups, authorStillSurfaceSize } from './videoEditAuthorLayers'
 import type { AuthorLayer, AuthorModule } from './videoEditAuthorModule'
 
 const effect: AuthorModule = { name: '运动层' }
@@ -93,4 +93,11 @@ describe('相邻无位姿图层的分组', () => {
     expect(authorStillCrop([[-10, -10, 200, 30]], 100, 50)).toEqual({ x: 0, y: 0, width: 100, height: 30 })
     expect(authorStillCrop([[120, 0, 140, 10]], 100, 50)).toBeNull()
   })
+})
+
+it('静止层组的大纹理边长按档取整，档内逐帧伸长沿用同一尺寸，小边保持精确', () => {
+  expect(authorStillSurfaceSize(120, 3840)).toBe(120)
+  const width = authorStillSurfaceSize(2371, 3840)
+  for (let need = 2372; need <= width; need++) expect(authorStillSurfaceSize(need, 3840)).toBe(width)
+  expect(authorStillSurfaceSize(3800, 3840)).toBe(3840)
 })
