@@ -24,8 +24,7 @@ const slot = (clip: VideoEditClip, index: number): string => `composite:clip:${c
 // Chain length never determines target count. The current picture and filtered output
 // ping-pong; fractional strength/masks need a third target to read both originals.
 // A translucent adjustment layer keeps one additional unchanged band for its final mix.
-// 半透明的片段在效果链之后再乘不透明度，需要第四个目标：调整层保留原画以便按强度混合，普通片段放乘过不透明度的结果。
-const slots = (clip: VideoEditClip): string[] => Array.from({ length: effective(clip) ? clip.opacity < 1 ? 4 : 3 : 1 }, (_, index) => slot(clip, index))
+const slots = (clip: VideoEditClip): string[] => Array.from({ length: effective(clip) ? clip.kind === 'adjustment' && clip.opacity < 1 ? 4 : 3 : 1 }, (_, index) => slot(clip, index))
 /**
  * 智能区域（4.7d）共用的两张画面：上传的低分辨率蒙版、按片段位置画到序列尺寸的蒙版。作用区域与人物蒙版（主体抠像、
  * 轮廓来源为主体）都经过它们，每次用完即提交，下一次上传排在已提交的工序之后，所以全场景只需要这两张。
@@ -89,7 +88,8 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
     return region
   }
-  const apply = async (clip: VideoEditClip, input: VideoEditCodePicture): Promise<VideoEditCodePicture> => {
+  /** `fade`：普通片段在效果链之后整体乘不透明度（与 AE 一致）；调整层按强度与原画混合。 */
+  const apply = async (clip: VideoEditClip, input: VideoEditCodePicture, fade = false): Promise<VideoEditCodePicture> => {
     const runtime = await gpu(); const targets = slots(clip); const preserve = clip.kind === 'adjustment' && clip.opacity < 1
     let result = input; let key = targets[0]
     for (const plan of effects.get(clip.id) ?? []) {
@@ -120,6 +120,8 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     if (preserve && result !== input) {
       const target = targets.find(target => target !== key && target !== targets[0])!
       result = await runtime.mix(target, input, result, clip.opacity); current()
+    } else if (fade && clip.opacity < 1) {
+      result = await runtime.mix(targets.find(target => target !== key)!, 'transparent', result, clip.opacity); current()
     }
     return result
   }
@@ -130,10 +132,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     if (!effective(clip)) return { clip: identity(clip), picture: await normalize(clip, [layer]) }
     // 与 AE 一致，片段不透明度在效果链之后乘：效果看到的是完整不透明的画面（按透明度取轮廓的描边、发光不会随淡入淡出变形），
     // 结果再整体乘一次；乘在画面里而不是交给最后的绘制，过渡两端拿到的画面同样带着不透明度。
-    const processed = await apply(clip, await normalize(clip, [{ clip: { ...clip, opacity: 1 }, picture: layer.picture }]))
-    const picture = clip.opacity < 1 ? await (await gpu()).mix(slot(clip, 3), 'transparent', processed, clip.opacity) : processed
-    current()
-    return { clip: identity(clip), picture }
+    return { clip: identity(clip), picture: await apply(clip, await normalize(clip, [{ clip: { ...clip, opacity: 1 }, picture: layer.picture }]), true) }
   }
   const resolve = async (nodes: readonly VideoEditCompositeNode[]): Promise<Layer[]> => {
     const layers: Layer[] = []

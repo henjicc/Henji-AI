@@ -168,7 +168,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     expect(boundary.draws.at(-1)!.clips[0]).not.toHaveProperty('trackingQuad')
     expect(boundary.draws.at(-1)!.clips[0]).toMatchObject({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 })
     expect(boundary.draws[0].deadline).toBeUndefined(); expect(boundary.draws.at(-1)!.deadline).toBe(1234)
-    expect(owner).toEqual(original); expect(reserved.size).toBe(4); expect(boundary.targets.size).toBe(4)
+    expect(owner).toEqual(original); expect(reserved.size).toBe(3); expect(boundary.targets.size).toBe(3)
   })
   it('四个有效效果轮用三个目标，不保留额外历史纹理或读写别名', async () => {
     const owner = clip('ordinary')
