@@ -9,6 +9,7 @@ import { getDataRootDir } from '../image/path-utils'
 import { normalizeLocalSource } from '../image/source'
 import { createMainLogger } from '../logging'
 import { getDocumentService } from '../documents/runtime'
+import { getTempDir } from '../system'
 import { resolveCanvasMediaSchema } from '../canvas-media-schema'
 import { decodeCanvasImageReference, parseCanvasDocumentGraph } from '../../../../src/core/canvas/canvasDocumentGraph'
 import { mapCanvasNodeMediaReferences } from '../../../../src/core/canvas/nodeMediaReferences'
@@ -30,7 +31,12 @@ const inputSchema = z.object({
 }).strict()
 
 async function sources(ref: z.infer<typeof inputSchema>['ref']): Promise<string[]> {
-  if (ref.kind === 'observation.image') return [ref.id]
+  if (ref.kind === 'observation.image') {
+    // 观察图引用就是临时观察缓存里按内容哈希命名的文件；不在缓存目录里的路径不是观察图。
+    const directory = path.resolve(getTempDir(), 'henji-observations'), file = path.resolve(ref.id)
+    if (path.dirname(file) !== directory || !/^[0-9a-f]{64}\.png$/.test(path.basename(file))) failure('INVALID_REFERENCE', '这不是取帧观察返回的观察图引用。')
+    return [file]
+  }
   // 参数只作为完整业务主键交给各自的仓库，绝不作为文件路径或 SQL 片段；仓库返回已换回的绝对路径。
   if (ref.kind === 'asset') {
     const filePath = getAssetFilePath(ref.id)

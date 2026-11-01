@@ -45,9 +45,12 @@ export class ApplicationToolDispatcher {
     this.connections.assertActive(callerId)
     try {
       const input = readMediaInputSchema.parse(args)
-      const authorized = await this.host.execute(callerId, 'read_application_entity', { ref: input.ref, propertyIds: [] }, signal)
-      this.connections.assertActive(callerId)
-      if (!authorized.ok) return { ...authorized, ok: false }
+      // 观察图是取帧时写进临时缓存的图片，没有对应的应用实体可回读；由媒体读取按缓存目录核对引用。
+      if (input.ref.kind !== 'observation.image') {
+        const authorized = await this.host.execute(callerId, 'read_application_entity', { ref: input.ref, propertyIds: [] }, signal)
+        this.connections.assertActive(callerId)
+        if (!authorized.ok) return { ...authorized, ok: false }
+      }
       if (signal.aborted) return applicationFailure('ABORTED:媒体读取已取消。')
       const media = await readApplicationMediaResource(input, metadataOnly)
       this.connections.assertActive(callerId)

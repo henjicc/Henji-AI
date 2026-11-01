@@ -131,9 +131,14 @@ function createVideoEditCodeAiScene() {
         const tab = page.locator('.dv-tab').filter({ has: page.getByText(title, { exact: true }) }).first()
         if (await tab.isVisible()) await tab.click()
         else {
-          // 面板入口在标题栏菜单“窗口”里（按面板名列出）。
-          await page.getByRole('menubar', { name: '菜单栏' }).getByRole('menuitem', { name: '窗口', exact: true }).click()
-          await page.getByRole('menu', { name: '窗口' }).getByRole('menuitemcheckbox', { name: title, exact: true }).click()
+          // 面板入口在标题栏菜单“窗口”里（按面板名列出），菜单项是开关：面板已开但收在标签溢出里时，关掉再打开才会到前台。
+          const open = async () => {
+            await page.getByRole('menubar', { name: '菜单栏' }).getByRole('menuitem', { name: '窗口', exact: true }).click()
+            return page.getByRole('menu', { name: '窗口' }).getByRole('menuitemcheckbox', { name: title, exact: true })
+          }
+          let entry = await open()
+          if (await entry.getAttribute('aria-checked') === 'true') { await entry.click(); entry = await open() }
+          await entry.click()
         }
       }
       try {
@@ -263,14 +268,20 @@ function createVideoEditCodeAiScene() {
           item.agentParameters = (await read(ref('video_edit.clip', codeClip.id), ['video_edit.clip.code_parameters'])).data.properties['video_edit.clip.code_parameters']
           assert.equal(item.agentParameters.size, 112, '外部 Agent 的字号修改没有读回')
           const row = panel.locator(`[data-video-edit-annotation="${mark.id}"]`)
-          await row.getByText('已改完', { exact: true }).waitFor({ state: 'visible' })
+          // 状态词和时间码在同一行里，按包含匹配。
+          await row.getByText('已改完').waitFor({ state: 'visible' })
           item.addressed = (await read(markRef, ['video_edit.annotation.status', 'video_edit.annotation.thread'])).data.properties
           assert.equal(item.addressed['video_edit.annotation.status'], 'addressed', '外部 Agent 处理后状态不是已改完')
           assert.ok(item.addressed['video_edit.annotation.thread'].some(message => message.id === reply.id), '外部 Agent 处理回复未保存')
           item.reviewCapture = await capture('code-ai-04-addressed')
+          // 外部 Agent 刚写过，助手操作中的遮挡又会出现：先接管再点。
+          await takeOver()
           await row.getByRole('button', { name: '确认', exact: true }).click()
           item.resolved = await waitRead(markRef, 'video_edit.annotation.status', value => value === 'resolved', '用户确认后状态没有变为已确认')
-          await row.getByText('已确认', { exact: true }).waitFor({ state: 'visible' })
+          // 默认筛选不列已确认的批注：切到“已确认”再看，并展开这一条拿到“重开”。
+          if (!await row.isVisible()) { await panel.getByRole('button', { name: '筛选批注', exact: true }).click(); await page.getByRole('option', { name: '已确认', exact: true }).click() }
+          await row.getByText('已确认').waitFor({ state: 'visible' })
+          if (!await row.getByRole('button', { name: '重开', exact: true }).isVisible()) await row.getByRole('button', { name: /^跳到标注/ }).click()
           // 先重开再尝试，防止“resolved -> resolved”无操作捷径掩盖权限漏洞。
           await row.getByRole('button', { name: '重开', exact: true }).click()
           await waitRead(markRef, 'video_edit.annotation.status', value => value === 'open', '用户重开后状态未恢复待处理')
@@ -287,12 +298,14 @@ function createVideoEditCodeAiScene() {
           item.result = result
           const data = result.result?.data ?? result.data
           assert.equal(data?.verification?.verified, true, `批注取帧没有验证成功：${JSON.stringify(result).slice(0, 400)}`)
-          assert.equal(data?.resultRef?.kind, 'asset', '批注取帧没有返回媒体资产引用')
+          // 未要求收进素材库时返回临时观察图引用，同样经 read_application_media 读回字节。
+          assert.ok(['asset', 'observation.image'].includes(data?.resultRef?.kind), '批注取帧没有返回可读回的媒体引用')
           result.data = data
           const media = await callTool(client, 'read_application_media', { ref: result.data.resultRef, offset: 0, length: 256 })
           item.media = { ...media.data, base64: undefined }
           assert.match(media.data.mimeType, /^image\//, '返回媒体不是图片')
-          assert.ok(media.data.byteLength > 0 && media.data.base64, '返回图片媒体为空')
+          // 图片默认按 MCP 标准图片返回（不带 base64 字段），读回尺寸即可确认内容。
+          assert.ok(media.data.width > 0 && media.data.height > 0, '返回图片媒体为空')
         })
         await step('06-fonts', '字体悬停预览、Esc 恢复和一步撤销', async item => {
           // 同一工程，代码结束后创建原生文字，确保文字预览没有被 shader 背景遮住。
@@ -304,9 +317,10 @@ function createVideoEditCodeAiScene() {
           const project = await saved(page, file, value => value.sequences[0].clips.some(clip => clip.name === '字体验收文字'))
           textClip = project.sequences[0].clips.find(clip => clip.name === '字体验收文字')
           const textRef = ref('video_edit.clip', textClip.id)
-          await seek(150); await focus(textRef); await dock('效果控件')
+          await takeOver(); await seek(150); await focus(textRef); await dock('效果控件')
           const property = 'video_edit.clip.text_style'
           item.before = (await read(textRef, [property])).data.properties[property]
+          await takeOver()
           const picker = button('文字字体'); await picker.waitFor({ state: 'visible' }); await picker.click()
           const search = page.getByRole('textbox', { name: '搜索字体', exact: true })
           await search.fill('黑')
@@ -336,7 +350,9 @@ function createVideoEditCodeAiScene() {
           const beforeEscape = (await snapshot()).requestedAt
           await page.keyboard.press('Escape'); await fresh(beforeEscape, 150)
           item.restored = await waitRead(textRef, property, value => JSON.stringify(value) === JSON.stringify(item.before), 'Esc 没有恢复原文字样式')
+          // Esc 后浮层的收起动画未结束时，这一下会被当成再次关闭：没看到搜索框就再点一次。
           await picker.click()
+          if (!await search.isVisible({ timeout: 1000 }).catch(() => false)) await picker.click()
           await options.nth(1).waitFor({ state: 'visible' })
           const beforeSelection = (await snapshot()).requestedAt
           item.chosenOption = await options.nth(1).innerText(); await options.nth(1).click()
@@ -350,7 +366,7 @@ function createVideoEditCodeAiScene() {
           item.undoPresentation = await fresh(beforeUndo, 150)
         })
         await step('07-style', '从风格面板把内置风格绑定到序列', async item => {
-          await seek(25); await focus(ref('video_edit.clip', codeClip.id))
+          await seek(25); await focus(ref('video_edit.clip', codeClip.id)); await takeOver()
           const card = page.locator('[data-video-edit-style="tech-info"]')
           // 聚焦片段会异步把效果控件推到前台；切到风格后确认风格卡片真的可见再操作。
           for (let attempt = 0; attempt < 3 && !(await card.isVisible()); attempt++) { await dock('风格'); await card.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {}) }
@@ -363,7 +379,7 @@ function createVideoEditCodeAiScene() {
           assert.ok(item.applied.sections >= 14 && item.applied.sample.length > 0, '绑定的风格不是完整说明书与样片')
         })
         await step('08-shader-effect', '效果库添加色差并重渲染', async item => {
-          await seek(130); await focus(ref('video_edit.clip', 'base')); await dock('效果')
+          await seek(130); await focus(ref('video_edit.clip', 'base')); await takeOver(); await dock('效果')
           const before = await snapshot(); item.before = before
           const entry = page.locator('[data-video-edit-effects-entry="effect:chromatic_aberration"]')
           await entry.waitFor({ state: 'visible' }); await entry.dblclick()
@@ -374,7 +390,7 @@ function createVideoEditCodeAiScene() {
           const controls = page.locator(`[data-video-edit-effect="${effect.id}"]`)
           await controls.waitFor({ state: 'visible' })
           await controls.getByLabel('数量', { exact: true }).waitFor({ state: 'visible' })
-          await controls.getByLabel('角度', { exact: true }).waitFor({ state: 'visible' })
+          await controls.getByLabel('方式', { exact: true }).waitFor({ state: 'visible' })
           item.after = await fresh(before.requestedAt, 130)
         })
         await step('09-performance', '汇总呈现耗时与主线程长任务', async item => {

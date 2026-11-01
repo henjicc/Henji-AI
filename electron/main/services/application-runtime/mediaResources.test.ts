@@ -19,6 +19,7 @@ vi.mock('../documents/runtime', () => ({ getDocumentService: () => ({ readDocume
   return { content: state.project }
 } }) }))
 vi.mock('../canvas-media-schema', () => ({ resolveCanvasMediaSchema: () => [] }))
+vi.mock('../system', () => ({ getTempDir: () => state.root }))
 vi.mock('../../protocol', () => ({
   isPathWithinAllowedMediaRoots: (value: string) => { const relative = path.relative(state.root, value); return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative)) },
   inferMimeFromPath: (value: string) => ({ '.png': 'image/png', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg' })[path.extname(value)] ?? 'application/octet-stream',
@@ -26,13 +27,16 @@ vi.mock('../../protocol', () => ({
 import { readApplicationMediaResource } from './mediaResources'
 
 let directory: string
-it('观察缓存引用无需登记素材即可读回实际图片', async () => {
-  const filename = path.join(state.root, 'observation.png')
+it('观察缓存引用无需登记素材即可读回实际图片，缓存目录外的路径不当观察图', async () => {
+  await fs.mkdir(path.join(state.root, 'henji-observations'), { recursive: true })
+  const filename = path.join(state.root, 'henji-observations', `${'a'.repeat(64)}.png`)
   await sharp({ create: { width: 32, height: 18, channels: 3, background: 'black' } }).png().toFile(filename)
   const image = await readApplicationMediaResource({ ref: { kind: 'observation.image', id: filename }, mode: 'image' })
   expect(image).toMatchObject({ mode: 'image', width: 32, height: 18, mimeType: 'image/jpeg' })
   expect((await sharp(Buffer.from(image.base64, 'base64')).metadata()).width).toBe(32)
   expect(state.rows.size).toBe(0)
+  await fs.copyFile(filename, path.join(state.root, 'other.png'))
+  await expect(readApplicationMediaResource({ ref: { kind: 'observation.image', id: path.join(state.root, 'other.png') }, mode: 'image' })).rejects.toMatchObject({ code: 'INVALID_REFERENCE' })
 })
 beforeAll(async () => { directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-mcp-media-')); state.root = path.join(directory, 'allowed'); await fs.mkdir(state.root) })
 afterAll(async () => { await fs.rm(directory, { recursive: true, force: true }) })
