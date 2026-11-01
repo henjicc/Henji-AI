@@ -78,6 +78,7 @@ export type CodeAuthorApiVersion = CodeAuthorProgram['apiVersion']
 export interface CodeAuthorProgram extends CodeMaterialMetadata {
   apiVersion: CodeAuthorApiVersionNumber
   webText?: WebTextDeclaration
+  simulation?: Required<import('./codeSimulation').AuthorSimulationDeclaration>
   languageVersion: 4
   bundle: CodeAuthorBundle
   frames: number[]

@@ -1,3 +1,4 @@
+import { codeSimulationIdentity } from '@/core/videoEdit/codeSimulation'
 import { loadAuthorCandidate, readAuthorCandidateMetadata, releaseAuthorCandidate } from './videoEditAuthorCandidates'
 import type { CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
@@ -93,7 +94,7 @@ export class VideoEditGpuCompositor {
   }
 
   /** Candidate frames use the same worker/device as the timeline, before publication. */
-  async renderAuthorFrame(url: string, params: AuthorParameters, info: AuthorFrameInfo, assets?: Record<string, ImageBitmap>, options?: { overrides?: AuthorElementOverrides; locations?: AuthorSourceLocations; observe?: boolean; apiVersion?: number; bundle?: CodeAuthorBundle }): Promise<{ bitmap: ImageBitmap; elapsedMs: number; elements?: AuthorElementObservation[] }> {
+  async renderAuthorFrame(url: string, params: AuthorParameters, info: AuthorFrameInfo, assets?: Record<string, ImageBitmap>, options?: { overrides?: AuthorElementOverrides; locations?: AuthorSourceLocations; observe?: boolean; apiVersion?: number; bundle?: CodeAuthorBundle }, signal?: AbortSignal): Promise<{ bitmap: ImageBitmap; elapsedMs: number; elements?: AuthorElementObservation[] }> {
     await this.ready
     if (assets) {
       for (const image of Object.values(this.authorAssets.get(url) ?? {})) image.close()
@@ -114,10 +115,14 @@ export class VideoEditGpuCompositor {
 @fragment fn fs(@builtin(position) p:vec4f)->@location(0) vec4f { return textureLoad(picture,vec2i(p.xy),0); }` })
       this.authorPresentation = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: this.canvasFormat }] }, primitive: { topology: 'triangle-list' } })
     }
+    const assertCurrent = () => { if (signal?.aborted) throw new DOMException('试画已取消。', 'AbortError') }
     const started = performance.now()
     this.device.pushErrorScope('validation')
     try {
-      await runtime.render(this.authorTarget.texture, width, height, params, this.authorAssets.get(url) ?? {}, info, options?.overrides)
+      const simulationInput = { identity: codeSimulationIdentity(url, params, { width, height }, runtime.parameterMetadata.simulation), parametersAt: () => params, signal, assertCurrent }
+      assertCurrent()
+      await runtime.render(this.authorTarget.texture, width, height, params, this.authorAssets.get(url) ?? {}, info, options?.overrides, undefined, true, undefined, undefined, 'interactive', assertCurrent, undefined, simulationInput)
+      assertCurrent()
       const rendered = runtime.outputTexture ?? this.authorTarget.texture
       const precise = rendered.format === VIDEO_EDIT_PRECISE_FORMAT
       if (precise && !this.authorFloatPresentation) {
@@ -132,6 +137,7 @@ export class VideoEditGpuCompositor {
     } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
     const error = await this.device.popErrorScope()
     if (error) throw new Error(`作者效果 GPU 执行失败：${error.message}`)
+    assertCurrent()
     return { elapsedMs: performance.now() - started, bitmap: this.canvas.transferToImageBitmap(), ...(options?.observe ? { elements: runtime.observeElements() } : {}) }
   }
   private copyY!: GpuRenderPipeline

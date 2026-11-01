@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_SIMULATION_MIN_API_VERSION } from '@/core/videoEdit/codeSimulation'
 import { CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { assertCodeElementOverrideAllowed } from '@/core/videoEdit/codeElementOverrides'
 import { resolveAuthorElementEffects, authorEffectsFingerprint, type AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
@@ -31,7 +32,7 @@ function fingerprintAsset(key: string, input: AuthorFingerprintInput): AuthorCan
 
 /** 使用版本的完整原始文件表，不能用打包结果：打包结果已把片子数据内联进了绘制代码。 */
 export function authorFrameCodeIdentity(files: CodeMaterialFiles, effect: AuthorModule, pinned: string): string {
-  const excluded = new Set(typeof effect.frameKey === 'function' ? effect.dataFiles?.filter(path => path !== files.entry) ?? [] : [])
+  const excluded = new Set(!(files.apiVersion && files.apiVersion >= CODE_AUTHOR_SIMULATION_MIN_API_VERSION && effect.createSimulation) && typeof effect.frameKey === 'function' ? effect.dataFiles?.filter(path => path !== files.entry) ?? [] : [])
   return renderFingerprintHash(JSON.stringify([codeMaterialFilesKey({ ...files, files: Object.fromEntries(Object.entries(files.files).filter(([path]) => !excluded.has(path))) }), pinned]))
 }
 
@@ -54,6 +55,7 @@ function frameKeyJson(value: unknown, active = new Set<object>()): string {
 export function fingerprintAuthorFrameKey(effect: AuthorModule, size: { width: number; height: number }, params: AuthorParameters,
   info: AuthorFrameInfo, inputs: Readonly<Record<string, AuthorFingerprintInput>>, codeIdentity: string,
   pictureParameters: unknown, overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = {}, apiVersion = 6): VideoEditFrameFingerprint {
+  if (apiVersion >= CODE_AUTHOR_SIMULATION_MIN_API_VERSION && effect.createSimulation) return { fallback: 'simulation-history-required' }
   try {
     const frameInfo = Object.defineProperties({} as AuthorFrameInfo, Object.getOwnPropertyDescriptors(info))
     frameInfo.exposure = authorFrameExposure(effect, info, motionBlur)
@@ -68,6 +70,7 @@ export function fingerprintAuthorFrameKey(effect: AuthorModule, size: { width: n
 export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: number; height: number }, params: AuthorParameters,
   info: AuthorFrameInfo, inputs: Readonly<Record<string, AuthorFingerprintInput>>, measure: OffscreenCanvasRenderingContext2D,
   overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = {}, apiVersion = 6): VideoEditFrameFingerprint {
+  if (apiVersion >= CODE_AUTHOR_SIMULATION_MIN_API_VERSION && effect.createSimulation) return { fallback: 'simulation-history-required' }
   try {
     if (effect.createWebGL || effect.createWebGPU) return { fallback: 'native-gpu' }
     let recording = false
@@ -152,4 +155,12 @@ function fingerprintLayerEffects(effect: AuthorModule, size: { width: number; he
     const effects = resolveAuthorElementEffects(layer.effects?.(info.time) ?? [], overrides?.[authorLayerId(layer, index)], environment, info.clip.time / info.frameDuration, authorLayerId(layer, index), 'layer', apiVersion).effects
     return [authorEffectsFingerprint(effects, environment, authorFramePosition(effect, info)), center?.blur ?? 0, center?.scaleX ?? center?.scale ?? 1, center?.scaleY ?? center?.scale ?? 1, layer.blurShape]
   })
+}
+
+/** 模拟帧指纹只读完整身份；不为探测指纹执行作者的工厂、绘制或 frameKey。 */
+export function fingerprintAuthorSimulation(effect: AuthorModule, identity: string, size: { width: number; height: number },
+  info: AuthorFrameInfo, inputs: Readonly<Record<string, AuthorFingerprintInput>>, parameters: unknown,
+  overrides: AuthorElementOverrides | undefined, motionBlur: boolean, environment: AuthorEffectEnvironment): VideoEditFrameFingerprint {
+  return { method: 'simulation', digest: renderFingerprintHash(JSON.stringify([identity, size.width, size.height, info,
+    authorFrameExposure(effect, info, motionBlur), inputs, parameters, overrides, motionBlur, environment])) }
 }

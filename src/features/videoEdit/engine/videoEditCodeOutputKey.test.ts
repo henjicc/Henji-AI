@@ -36,3 +36,19 @@ it('相同不可变子树只推导一次，替换快照才重新遍历', () => {
   expect(read).toHaveBeenCalledOnce()
   expect(codeOutputObjectSignature({ audio: { levels: [1, 2, 4] } })).not.toBe(first)
 })
+
+it('模拟按历史推进：当前帧参数与声明键都不变时，模拟身份变化也改变输出复用键', async () => {
+  const { codeOutputKey } = await import('./videoEditCodeOutputKey')
+  const document: VideoEditComposition = { ...createVideoEditSequence(), fps: 30, revision: 0, items: [], media: [] }
+  const clip = { id: 'clip', itemId: 'item', name: '模拟', kind: 'code', track: 1, start: 0, duration: 90, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } as unknown as VideoEditCodePlan['clip']
+  const plan = (identity: string) => ({
+    clip, key: 'output', static: false, parameters: { amount: .5 }, author: {}, transitionHandles: false, inputParameters: {}, imageKeys: new Map(),
+    program: { mode: 'dynamic', parameters: [], frames: [] }, outputIdentity: 'source',
+    context: { width: 64, height: 64, time: 2, localTime: 2, sequenceTime: 2, frame: 60, fps: 30 },
+    outputFrame: { sourceTime: { sourceInUs: 2_000_000 }, overrides: undefined, info: { frameDuration: 1 / 30, clip: { duration: 3 } }, environment: {} },
+    simulation: { identity },
+  }) as unknown as VideoEditCodePlan
+  const declared = { digest: 'same-frame-key' } as Parameters<typeof codeOutputKey>[3]
+  expect(codeOutputKey(document, plan('early-a'), {}, declared)).toBe(codeOutputKey(document, plan('early-a'), {}, declared))
+  expect(codeOutputKey(document, plan('early-b'), {}, declared)).not.toBe(codeOutputKey(document, plan('early-a'), {}, declared))
+})

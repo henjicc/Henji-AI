@@ -153,6 +153,7 @@ class DigestContext {
    * 片段一律整份计入，也就不读它们的声明（读取中还要多等一轮编译）。
    */
   private sceneRange(clip: VideoEditClip, instance: CodeMaterialInstance, key: string): ResolvedVideoEditScene | undefined {
+    if (this.declarations?.simulation?.(instance)) return undefined
     return instance === clip.code && clip.kind === 'code' && !videoEditClipRetimed(clip) ? videoEditCodeInputs(this.document, instance, this.declarations)?.scenes[key] : undefined
   }
   /**

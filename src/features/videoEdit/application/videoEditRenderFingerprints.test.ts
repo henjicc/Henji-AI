@@ -37,7 +37,7 @@ it('每个片段的 render_cache 日志汇总声明、录制、版本摘要帧�
   videoEditRenderFingerprints(owner, composition, 'fonts:1', {}); await finish()
   expect(state.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
     event: 'video_edit.render_cache.completed', context: expect.objectContaining({ clipId: 'code',
-      methods: { frameKey: 1, recording: 1, version: 1 }, fallbacks: { 'frame-key-error:test': 1 } }),
+      methods: expect.objectContaining({ frameKey: 1, recording: 1, version: 1 }), fallbacks: { 'frame-key-error:test': 1 } }),
   }))
 })
 

@@ -154,7 +154,7 @@ export default {
 
 ## 确定性与性能
 
-- 同一参数、同一 `time` 必须得到同一画面：随机用自己写的种子哈希（见 author-text-motion），不用 `Math.random()`、`Date.now()` 或跨帧累积状态。宿主按帧缓存并可能乱序取帧，跨帧状态会在拖动、导出时出错。
+- 同一参数历史、同一 `time` 必须得到同一画面。解析动画按时间直接取样；需要累积状态时使用下方的 `createSimulation` 与 `info.simulation.at(time)`，模拟随机值用 `info.random()`，不要在 draw 中推进世界。
 - 不访问网络、文件或 DOM；外部图片走 image 参数。
 - 宿主不设语言预算或绘制数量上限。试渲染与取帧会返回 `performance`：`cpuMs`、`gpuMs`（提交到队列完成的墙钟）、`budgetMs`（`1000/fps`），Canvas 图层另有 `layers` 沿用与上传统计。超出预算不拒绝画面，按反馈优化最贵的部分：缓存不随时间变化的路径和渐变、减少逐帧 `getImageData`、把逐像素工作移到 createWebGPU。
 
@@ -223,3 +223,15 @@ export default {
 ## 效果身份 key（API 11）
 
 效果描述可以带稳定身份 `key`：`{ id: 'glow', key: 'titleGlow', params: { … } }`。缺省时 key 就是效果 ID，同一元素里第二个同 ID 的效果为 `glow#2`，风格件为 `look:<名称>`；同一元素里 key 重复直接报错。用户在效果控件里、助手经 `video_edit.code_element` 按 key 改这个元素的效果参数、关掉代码给的效果或在链末追加效果，这些覆盖单独存放，不改源码；改代码时保持元素 id 与 key 不变，否则覆盖会显示为“代码里已没有这个效果”。工厂的 `{ key }` 第二参数随下一版 henji-effects 提供，在那之前直接写效果描述对象。API 10 及更早的代码写 key 会报错。源码新用到的 key 与已有追加效果相同时，追加效果自动换成 `<效果 ID>+N`，代码给的那一项保留这个 key。
+
+## 累积模拟（作者 API 13）
+
+在模块的 `createSimulation(params, width, height, info)` 工厂内创建每个实例自己的状态，异步准备可以在这里完成；包括 `await` 之后，随机值只用 `info.random()`，不用 `Math.random()` 或 `Date.now()`。`simulation: { rate: 120, snapshotEvery: 120, seed: 0 }` 可省略，默认即这些值；不能同时声明 `mode: 'static'`。
+
+工厂返回 `step(params, info)`、`snapshot()`、`restore(snapshot)`、`read()`、`dispose()`，可选 `interpolate(left, right, alpha)`。工厂之后的方法均为同步。`step` 每次从第 n 步推进到 n+1，`info.time = n / rate` 为模拟时间，参数按该步对应的源时间求值，`info.dt = 1 / rate`；随机值使用 `info.random()`。画幅是逻辑作者画幅，预览分辨率不会改变物理大小。
+
+`snapshot` 保存所有影响未来的状态，包括物理世界外的计数、句柄表和延迟事件；返回普通数据树或数值缓冲。`restore` 收到独立副本；`read` 返回用于画面的数据。绘制入口通过 `info.simulation.at(t)` 读取当前帧中心或曝光区间的视图；不要在绘制时推进世界，也不要查询当前曝光区间以外的历史。同一时刻取一次视图再供各图层使用；完整步视图在准备时复制、冻结，插值按时刻缓存，数值缓冲也按只读使用。没有插值方法时保持前一个完整步；有插值时只根据两个只读视图计算结果。
+
+世界放在工厂闭包中，不能放模块顶层。生成片段从源时间 0 起算；附加滤镜从片段首帧的源入点起算，随片段源时间推进，倒放源沿播放方向计步。跳转由宿主恢复、续算；参数曲线或源码变化后自动重建。`dispose` 释放世界与事件队列。快照只留在内存，不保存到工程。
+
+物理可导入 `@dimforge/rapier3d-deterministic-compat`，固定作者库 `0.21.0-henji.1`（上游 `0.21.0`）；在工厂里 `await RAPIER.init()`。每步设置 `world.timestep = info.dt` 后调用一次 `world.step()`。快照用 `world.takeSnapshot()`；恢复时先成功创建 `RAPIER.World.restoreSnapshot(bytes)`，再释放旧世界并重新获取刚体句柄；`EventQueue` 单独管理和释放。

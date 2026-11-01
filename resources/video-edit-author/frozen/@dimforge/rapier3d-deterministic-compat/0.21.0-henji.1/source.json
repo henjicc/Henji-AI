@@ -1,0 +1,10 @@
+{
+  "name": "@dimforge/rapier3d-deterministic-compat",
+  "version": "0.21.0",
+  "integrity": "sha512-n7JuU62Obljlgq+OeH2DHhTmRSjRzwuJPl54tS9pFIzVQyvXsO5CH+a5KkIRBtnFWDbg1Zicv9BulG0jfBAopA==",
+  "url": "https://registry.npmjs.org/@dimforge/rapier3d-deterministic-compat/-/rapier3d-deterministic-compat-0.21.0.tgz",
+  "license": "Apache-2.0",
+  "files": {
+    "dist/rapier.mjs": "9f0c4ea949c1d632228f7b2557b4fdbe20b1981d131dffb55c0b19f89f6769b6"
+  }
+}

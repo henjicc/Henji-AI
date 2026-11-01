@@ -16,7 +16,7 @@ export function renderFingerprintHash(text: string): string {
 }
 
 /** 指纹失败按窗口回退；缺帧不能当成空画面。 */
-export type VideoEditFrameFingerprint = { digest: string; fallback?: undefined; method?: 'frameKey' | 'recording' } | { digest?: undefined; fallback: string; method?: undefined }
+export type VideoEditFrameFingerprint = { digest: string; fallback?: undefined; method?: 'frameKey' | 'recording' | 'simulation' } | { digest?: undefined; fallback: string; method?: undefined }
 export interface VideoEditClipFingerprints { signature?: string; startFrame?: number; endFrame?: number; frames: ReadonlyMap<number, VideoEditFrameFingerprint> }
 export type VideoEditCodeFingerprints = ReadonlyMap<string, VideoEditClipFingerprints>
 

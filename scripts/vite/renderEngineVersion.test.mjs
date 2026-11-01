@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { computeRenderEngineVersion } from './renderEngineVersion.mjs'
+import { computeRenderEngineVersion, videoEditRenderEngineVersion } from './renderEngineVersion.mjs'
+import { build } from 'vite'
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'render-engine-'))
@@ -15,6 +16,20 @@ function fixture() {
   write('outside.ts', 'export const unrelated = 1\n')
   return { root, write, version: async () => (await computeRenderEngineVersion({ root, closures: ['entry.ts'], files: ['session.ts'] })).version }
 }
+
+test('生产 Worker 和主渲染入口解析同一引擎身份', async t => {
+  const { root, write } = fixture()
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  write('package.json', '{"name":"simulation-worker-fixture","private":true}')
+  write('tsconfig.json', '{"compilerOptions":{}}')
+  write('index.html', '<script type="module" src="/main.ts"></script>')
+  write('main.ts', "import { VIDEO_EDIT_RENDER_ENGINE_VERSION as version } from 'virtual:video-edit-render-engine';console.log(version);new Worker(new URL('./worker.ts',import.meta.url),{type:'module'});")
+  write('worker.ts', "import { VIDEO_EDIT_RENDER_ENGINE_VERSION as version } from 'virtual:video-edit-render-engine';self.postMessage(version);")
+  const built = await build({ root, configFile: false, publicDir: false, logLevel: 'silent', esbuild: { tsconfigRaw: { compilerOptions: {} } }, css: { postcss: { plugins: [] } }, plugins: [videoEditRenderEngineVersion({ fixed: 'simulation-worker-identity' })], worker: { format: 'es' }, build: { write: false, minify: false } })
+  const scripts = built.output.filter(file => file.fileName.endsWith('.js'))
+  assert.equal(scripts.length, 2)
+  for (const file of scripts) assert.match(file.code ?? file.source, /simulation-worker-identity/)
+})
 
 test('闭包内的运行逻辑变了版本就变；只改注释、空白或类型不变', async t => {
   const { root, write, version } = fixture()
@@ -67,4 +82,23 @@ test('持久化的迁移实现在闭包里：渲染时会用到，改了版本�
   assert.equal(await version(), initial)
   write('src/core/persistence/formatMigrations.ts', "import { persistenceMessage } from './messages'\nexport const formatMigrations = (id: string) => id === 'code-component' ? [(value: unknown) => ({ value })] : persistenceMessage(id)\n")
   assert.notEqual(await version(), initial)
+})
+
+
+test('作者库构建目录与新增冻结版本不改变引擎身份，库运行辅助逻辑仍在闭包内', async t => {
+  const { root, write, version } = fixture()
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  fs.mkdirSync(path.join(root, 'src/core/videoEdit/codeMaterial'), { recursive: true })
+  write('src/core/videoEdit/codeMaterial/authorLibraries.ts', 'export const AUTHOR_LIBRARIES = { physics: { "1.0.0": {} } }')
+  write('entry.ts', "import { AUTHOR_LIBRARIES } from '@/core/videoEdit/codeMaterial/authorLibraries';export const get = () => AUTHOR_LIBRARIES.physics")
+  const first = await version()
+  fs.mkdirSync(path.join(root, 'resources/author-libs/@scope/physics/1.0.0'), { recursive: true })
+  write('resources/author-libs/@scope/physics/1.0.0/index.mjs', 'export const force = 1')
+  assert.equal(await version(), first)
+  fs.mkdirSync(path.join(root, 'resources/video-edit-author/frozen/physics/2.0.0'), { recursive: true })
+  write('resources/video-edit-author/frozen/physics/2.0.0/index.mjs', 'export const force = 2')
+  write('src/core/videoEdit/codeMaterial/authorLibraries.ts', 'export const AUTHOR_LIBRARIES = { physics: { "1.0.0": {}, "2.0.0": {} } }')
+  assert.equal(await version(), first)
+  write('entry.ts', "import { AUTHOR_LIBRARIES } from '@/core/videoEdit/codeMaterial/authorLibraries';export const get = () => Object.keys(AUTHOR_LIBRARIES.physics)")
+  assert.notEqual(await version(), first)
 })

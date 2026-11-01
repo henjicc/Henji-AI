@@ -74,7 +74,7 @@ async function runAuthorTimeline(page, app, { capture, root, spec, project, sour
       await change([{ kind: 'set_properties', entityType: target.kind, target, properties: { 'video_edit.clip.code_parameters': parameters } }])
       await page.waitForFunction(previous => document.querySelector('canvas[aria-label="剪辑画面"]')?.toDataURL('image/png') === previous, png, { timeout: 30000 })
     }
-    const observed = await callTool(client, 'observe_video_edit_frame', { documentRef, target: { kind: 'program', sequenceRef, frame }, maxWidth: spec.width })
+    const observed = await callTool(client, 'observe_video_edit_frame', { documentRef, target: { kind: 'program', sequenceRef, frame }, maxWidth: spec.width, saveToAssets: true })
     assert.ok(observed.data?.verification?.verified, JSON.stringify(observed))
     const media = await readAllMedia(client, observed.data.resultRef, { chunkBytes: 65536 })
     fs.writeFileSync(path.join(root, 'formal-observation.png'), media.bytes)
@@ -93,9 +93,28 @@ async function runAuthorTimeline(page, app, { capture, root, spec, project, sour
     const intervals = ordered.slice(1).map((sample, index) => sample.at - ordered[index].at).sort((a, b) => a - b)
     evidence.playback = { samples: unique, warmP95Ms: durations[Math.ceil(durations.length * .95) - 1], completionIntervalP95Ms: intervals[Math.ceil(intervals.length * .95) - 1], completedFps: (ordered.length - 1) * 1000 / (ordered.at(-1).at - ordered[0].at), note: '请求到 GPU 完成延迟与连续完成间隔分开报告，非物理屏幕呈现' }
     store()
+    if (spec.previewCache) {
+      const before = await callTool(client, 'read_application_entity', { ref: documentRef })
+      await callTool(client, 'render_video_edit_preview', operationEnvelope([before], { documentRef, scope: 'all', range: { startFrame: frame, endFrame: frame + spec.frames } }))
+      for (const deadline = performance.now() + 120000;;) {
+        const read = await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.render_cache'] })
+        evidence.previewCache = read.data.properties['video_edit.document.render_cache']; store()
+        const windows = evidence.previewCache.windows.filter(window => window.startFrame < frame + spec.frames && window.endFrame > frame)
+        if (windows.length && windows.every(window => window.state === 'ready')) break
+        assert.ok(performance.now() < deadline, '作者预渲染未就绪')
+        await page.waitForTimeout(500)
+      }
+      const entries = await page.evaluate(id => window.henjiNative.mediaCache.renderList(id), seeded.documentId)
+      const entry = entries.find(value => value.startFrame <= frame && value.endFrame > frame)
+      assert.ok(entry, '正式预渲染文件缺失')
+      const png = path.join(root, 'formal-prerender.png')
+      execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', entry.path, '-vf', `select=eq(n\\,${frame - entry.startFrame})`, '-frames:v', '1', png], { windowsHide: true, timeout: 60000 })
+      evidence.prerenderDifference = await compareFrames(png, path.join(root, 'formal-observation.png'))
+      assert.ok(evidence.prerenderDifference.psnr === null || evidence.prerenderDifference.psnr >= 30, '预渲染内容与实时画面不同')
+    }
     const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
     const exportStarted = performance.now()
-    const exported = await callTool(client, 'export_video_edit', operationEnvelope([baseline], { documentRef, range: { startFrame: frame, endFrame: frame + spec.frames }, settings: { format: 'mp4', width: spec.width, height: spec.height, fps: 60, videoBitrateMbps: 60, audioBitrateKbps: 192, fit: 'fit', loudness: null, encoderPreference: 'software', audioEnabled: false, addToLibrary: false } }))
+    const exported = await callTool(client, 'export_video_edit', operationEnvelope([baseline], { documentRef, range: { startFrame: frame, endFrame: frame + spec.frames }, settings: { format: 'mp4', width: spec.width, height: spec.height, fps: 60, videoBitrateMbps: 60, audioBitrateKbps: 192, fit: 'fit', loudness: null, encoderPreference: 'software', audioEnabled: false, addToLibrary: false, ...(spec.previewCache ? { usePreviews: true } : {}) } }))
     const jobId = (exported.data ?? exported.result?.data)?.queue?.[0]?.id; assert.ok(jobId, JSON.stringify(exported))
     let job
     for (let attempt = 0; attempt < 240; attempt++) {

@@ -241,3 +241,15 @@ it('作者调整层不要求 bounds 或 draw，禁止同时声明绘制与效果
   expect(lines('export default { name:"调整", layers:()=>[{id:"grade", adjust:t=>[{id:"vignette",params:{amount:20}}], pose:t=>({opacity:.5})}] }')).toEqual([])
   for (const field of ['draw(ctx,t){}', 'effects:t=>[]', 'fill:()=>({})']) expect(lines(`export default { name:"调整", layers:()=>[{id:"grade", adjust:t=>[], ${field}}] }`).length).toBeGreaterThan(0)
 })
+
+
+it('模拟工厂返回的 step 参数沿模块声明定型，模拟类型可直接引用', () => {
+  const source = `const declaration: AuthorSimulationDeclaration = { rate: 120 };
+export default { name: '模拟参数', simulation: declaration,
+  params: [{ key: 'force', type: 'number', default: 1, min: 0, max: 10, step: .1 }],
+  createSimulation() { let x = 0; return { step(params) { x += params.force; }, snapshot: () => x, restore(value) { x = Number(value) }, read: () => x, dispose() {} } },
+  draw(ctx, time, params, width, height, assets, info) { const sampler: AuthorSimulationSampler = info.simulation; sampler.at(time); }
+};`
+  expect(lines(source)).toEqual([])
+  expect(lines(source.replace('x += params.force;', 'const invalid: string = params.force;'))).toEqual([expect.stringContaining('number')])
+})

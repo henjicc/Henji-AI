@@ -1,0 +1,16 @@
+{
+  "library": "@dimforge/rapier3d-deterministic-compat",
+  "version": "0.21.0-henji.1",
+  "inputs": {
+    "scripts/freeze-rapier-library.ts": "ebcfa05c8bd0724db3ef58bbc5f4f967c6509204b655340c075619193527044c",
+    "scripts/lib/frozenAuthorLibraries.ts": "c9e21f5d045477b64ee69eb1e45de61f7b587b2a7259d703c9686dc622290708"
+  },
+  "outputs": {
+    "upstream.mjs": "9f6c48d258a9b242b86e5c6127b27a6d198fdbce3b49b57b229999991beaa09c",
+    "rapier.mjs": "d87a6d1beff21dae14bd69e429584abaa22d038f77382aeccf7ed83c05bddf16",
+    "types.json": "64d4b1d466d529536f04efe46e37b1b3d2738e03a9838a689f9377b644d591a6",
+    "LICENSE": "4c05555705e3efde601fb1252ae48f1d63992af8a8fb8947745b7fa834e8f519",
+    "source.json": "8e2aca51b28a15975119c6274f28f51f6103e785032a4baf05353584a521b741",
+    "NOTICE.txt": "d5e37c0963e768eb25c68c4b3206b93bade049c78b02935bf00a23e16375047b"
+  }
+}

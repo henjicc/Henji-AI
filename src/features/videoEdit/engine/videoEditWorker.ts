@@ -115,6 +115,7 @@ let effectWarnings = new Set<string>()
 // 排队或正在准备的前台帧优先；GPU 呈现回执后仅在 Worker 队列空档发起准备。
 let foregroundFrames = 0
 let hoverRequest: AbortController | undefined
+const authorRequests = new Map<string, AbortController>()
 let hoverEpoch = 0
 let latestRender: { frame: number; sequential: boolean } | undefined
 /**
@@ -234,6 +235,10 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
     }).catch(error => self.postMessage({ id: request.id, ...(controller.signal.aborted ? { skipped: true } : videoEditRenderFailure(error)) } satisfies RenderResponse))
     return
   }
+  if (request.kind === 'authorFrame' || request.kind === 'authorRelease') authorRequests.get(request.url)?.abort()
+  if (request.kind === 'init' || request.kind === 'dispose') { for (const controller of authorRequests.values()) controller.abort(); authorRequests.clear() }
+  const authorController = request.kind === 'authorFrame' ? new AbortController() : undefined
+  if (request.kind === 'authorFrame') authorRequests.set(request.url, authorController!)
   if (request.kind === 'dispose') textController.abort()
   if (request.kind === 'dispose') closeTextFontChannel()
   // 字体、代理切换和起播也要先让后台现场画面退场，不能等 render 排到队首才取消。
@@ -331,8 +336,10 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         self.postMessage({ id: request.id, authorMetadata } satisfies RenderResponse)
       } else if (request.kind === 'authorFrame') {
         if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
-        const result = await renderer.renderAuthorFrame(request.url, request.params, request.info, request.assets, request.options)
-        self.postMessage({ id: request.id, bitmap: result.bitmap, gpuMs: result.elapsedMs, elements: result.elements } satisfies RenderResponse, { transfer: [result.bitmap] })
+        try {
+          const result = await renderer.renderAuthorFrame(request.url, request.params, request.info, request.assets, request.options, authorController!.signal)
+          self.postMessage({ id: request.id, bitmap: result.bitmap, gpuMs: result.elapsedMs, elements: result.elements } satisfies RenderResponse, { transfer: [result.bitmap] })
+        } finally { if (authorRequests.get(request.url) === authorController) authorRequests.delete(request.url) }
       } else if (request.kind === 'fonts') {
         const started = performance.now()
         if (request.fonts.length) {

@@ -27,12 +27,12 @@ export function validateFrozenAuthorHistory(root: string): void {
   const ref = releaseRef()
   const committed = execFileSync('git', ['ls-tree', '-r', '-z', '--name-only', ref, '--', FROZEN_ROOT], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean)
   const versions = new Map<string, string[]>()
+  const boundaries = committed.filter(file => file.endsWith('/release.json')).map(file => file.slice(0, -'/release.json'.length))
   for (const file of committed) {
-    const parts = file.slice(FROZEN_ROOT.length + 1).split('/')
-    if (parts.length < 3) throw new Error(`冻结库基准路径无效：${file}`)
-    const version = `${FROZEN_ROOT}/${parts[0]}/${parts[1]}`
+    const version = boundaries.find(directory => file.startsWith(`${directory}/`))
+    if (!version) throw new Error(`冻结库基准路径没有发行清单：${file}`)
     const list = versions.get(version) ?? []
-    list.push(parts.slice(2).join('/')); versions.set(version, list)
+    list.push(file.slice(version.length + 1)); versions.set(version, list)
     const current = path.join(root, file)
     if (!fs.existsSync(current) || !fs.lstatSync(current).isFile()) throw new Error(`已冻结版本文件不得删除或替换：${file}`)
     const original = execFileSync('git', ['show', `${ref}:${file}`], { cwd: root, maxBuffer: 64 * 1024 * 1024 })
@@ -42,10 +42,10 @@ export function validateFrozenAuthorHistory(root: string): void {
     if (JSON.stringify(directoryFiles(path.join(root, version))) !== JSON.stringify(files.sort())) throw new Error(`已冻结版本目录不得增加或删除文件：${version}`)
   }
   // 新发行也必须是完整可校验的目录；不能用不包含产物的空清单混过首次登记。
-  const manifests = directoryFiles(path.join(root, FROZEN_ROOT)).filter(file => file.split('/').length === 3 && file.endsWith('/release.json'))
+  const manifests = directoryFiles(path.join(root, FROZEN_ROOT)).filter(file => file.endsWith('/release.json'))
   for (const file of manifests) {
-    const [library, version] = file.split('/')
-    readFrozenAuthorRelease(path.join(root, FROZEN_ROOT, library, version), library, version)
+    const directory = path.posix.dirname(file), version = path.posix.basename(directory), library = path.posix.dirname(directory)
+    readFrozenAuthorRelease(path.join(root, FROZEN_ROOT, directory), library, version)
   }
 }
 

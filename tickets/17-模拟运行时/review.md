@@ -16,3 +16,6 @@
 13. 引擎版本散列不依赖是否先跑过 build:author-libs（只散列冻结目录或改为只靠片段指纹里的库身份，新冻结版本不让全部预渲染失效）——查实后按更稳的做。
 14. 冻结 upstream.mjs 去掉 sourceMappingURL；init 失败不永久缓存。
 15. 清理：NaN/Infinity/undefined 报准确错误；save 不重复快照 S0、不重复遍历；导出 AuthorSimulationDeclaration/Sampler 类型；step params 按 AuthorParamValues<P> 定型。
+
+## 第 14 条裁定（11-01）
+`0.21.0-henji.1` 只存在于任务分支，main 与任何发行都没有它，没有素材钉住它；门禁基准是当前 HEAD，不是发行账本。所以**直接改 henji.1 原地重冻**（去掉 upstream.mjs 的 sourceMappingURL，init 失败不永久缓存、可重试），连同 release.json 摘要、类型清单与引用它的样本一起更新后提交；不新增 henji.2，免得留下没人用的版本。提交前用 `HENJI_PERSISTENCE_RELEASE_REF=main` 跑 vendor --check（以 main 为基准时它是首次登记，仍走完整校验），提交后再按默认 HEAD 跑一次。

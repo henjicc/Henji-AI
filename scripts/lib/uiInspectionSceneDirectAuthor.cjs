@@ -13,10 +13,11 @@ function createDirectAuthorScene() {
       const root = path.resolve(process.env.HENJI_DIRECT_AUTHOR_PROBE)
       const spec = JSON.parse(fs.readFileSync(path.join(root, 'input.json'), 'utf8').replace(/^\uFEFF/, ''))
       if (spec.yogaTimeline) return require('./uiInspectionSceneYogaAuthor.cjs').runYogaAuthorTimeline(page, app, { capture, root, spec })
-      const host = await app.evaluate(({ app }) => ({ features: app.getGPUFeatureStatus(), versions: { electron: process.versions.electron, chrome: process.versions.chrome } }))
+      const host = await app.evaluate(({ app }) => ({ appPath: app.getAppPath(), features: app.getGPUFeatureStatus(), versions: { electron: process.versions.electron, chrome: process.versions.chrome } }))
+      fs.writeFileSync(path.join(root, 'host.json'), JSON.stringify(host, null, 2))
       const adaptations = [...(spec.adaptations ?? [])]
       const imageSources = Object.fromEntries(Object.entries(spec.assets ?? {}).map(([key, file]) => [key, `data:image/png;base64,${fs.readFileSync(file).toString('base64')}`]))
-      const sourceFiles = spec.sourceFiles ? { entry: spec.entry, files: Object.fromEntries(Object.entries(spec.sourceFiles).map(([name, file]) => [name, fs.readFileSync(file, 'utf8')])) } : undefined
+      const sourceFiles = spec.sourceFiles ? { ...(spec.apiVersion ? { apiVersion: spec.apiVersion } : {}), ...(spec.libraries ? { libraries: spec.libraries } : {}), entry: spec.entry, files: Object.fromEntries(Object.entries(spec.sourceFiles).map(([name, file]) => [name, fs.readFileSync(file, 'utf8')])) } : undefined
       const result = sourceFiles ? undefined : await build({ entryPoints: [spec.entry], bundle: true, write: false, sourcemap: 'inline', format: 'esm', platform: 'browser', plugins: [{ name: 'worker-canvas-adapter', setup(build) {
         build.onLoad({ filter: /chip3d\.js$/ }, args => {
           let contents = fs.readFileSync(args.path, 'utf8')
@@ -41,6 +42,11 @@ function createDirectAuthorScene() {
       assert.ok(workerFile, '缺少最新节目 Worker 产物')
       const evidence = await page.evaluate(async ({ source, sourceFiles, composition, workerFile, compilerFile, spec, imageSources }) => {
         let locations, compileMs, compileCacheHit
+        for (const url of spec.moduleProbeUrls ?? []) {
+          const response = await fetch(url)
+          if (!response.ok || !response.headers.get('content-type')?.includes('javascript')) throw new Error(`作者库响应无效：${url} ${response.status} ${response.headers.get('content-type')}`)
+          await response.arrayBuffer()
+        }
         if (sourceFiles) {
           const compiler = new Worker(new URL(`./assets/${compilerFile}`, location.href), { type: 'module' })
           try {
@@ -62,6 +68,16 @@ function createDirectAuthorScene() {
         let id = 0
         const pending = new Map()
         worker.onmessage = ({ data }) => {
+          if (data.kind === 'code.trust') {
+            void (async () => {
+              try {
+                const trust = await window.henjiNative.applicationControl.contentTrust({ action: 'check', query: { contents: data.request.context ?? [] } })
+                if (trust.state !== 'allowed') throw new Error('验收源码等待用户确认，尚未运行。')
+                worker.postMessage({ kind: 'code.trustResult', token: data.token })
+              } catch (error) { worker.postMessage({ kind: 'code.trustResult', token: data.token, error: String(error) }) }
+            })()
+            return
+          }
           if (!pending.has(data.id) || data.phase === 'submitted') return
           const job = pending.get(data.id); pending.delete(data.id); clearTimeout(job.timer)
           if (data.error) job.reject(new Error(data.error)); else job.resolve(data)
@@ -81,11 +97,11 @@ function createDirectAuthorScene() {
         let elements
         try {
           await request({ kind: 'init', document: composition, previewWidth: spec.width })
-          const metadata = spec.readMetadata ? (await request({ kind: 'authorMetadata', url, locations })).authorMetadata : undefined
+          const metadata = spec.readMetadata ? (await request({ kind: 'authorMetadata', url, locations, apiVersion: spec.apiVersion })).authorMetadata : undefined
           const images = Object.fromEntries(await Promise.all(Object.entries(imageSources).map(async ([key, source]) => [key, await createImageBitmap(await (await fetch(source)).blob(), { colorSpaceConversion: spec.rawAssets?.includes(key) ? 'none' : 'default' })])))
           for (let index = 0; index < spec.frames; index++) {
             const time = spec.sampleTimes?.[index] ?? spec.time + index / 60
-            const result = await request({ kind: 'authorFrame', url, ...(index === 0 ? { assets: images } : {}), params: spec.params ?? {}, info: { time, frameDuration: 1 / 60, clip: { time, duration: spec.duration } }, options: { overrides: spec.overrides, locations, observe: index === 0 && spec.observe === true } }, index === 0 ? Object.values(images) : [])
+            const result = await request({ kind: 'authorFrame', url, ...(index === 0 ? { assets: images } : {}), params: spec.params ?? {}, info: { time, frameDuration: 1 / 60, clip: { time, duration: spec.duration } }, options: { apiVersion: spec.apiVersion, overrides: spec.overrides, locations, observe: index === 0 && spec.observe === true } }, index === 0 ? Object.values(images) : [])
             if (result.elements) elements = result.elements
             durations.push(result.gpuMs)
             ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(result.bitmap, 0, 0); result.bitmap.close()
@@ -98,6 +114,7 @@ function createDirectAuthorScene() {
           for (const job of pending.values()) clearTimeout(job.timer)
         }
       }, { source: result?.outputFiles[0].text, sourceFiles, composition, workerFile, compilerFile, spec, imageSources })
+      for (const [left, right] of spec.equalFrames ?? []) assert.equal(evidence.snapshots[left], evidence.snapshots[right], `重复源时刻画面不一致：${left}/${right}`)
       if (sourceFiles) assert.equal(evidence.compileCacheHit, true, '正式共享打包缓存未命中')
       if (spec.expectedElements) assert.deepEqual(evidence.elements?.map(element => element.id), spec.expectedElements)
       if (spec.readMetadata) {

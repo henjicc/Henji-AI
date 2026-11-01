@@ -864,6 +864,48 @@ it('指纹计划复用正式参数和时间求值，但不调用生成器或复�
 })
 
 
+it('模拟生成器和滤镜传递源时间曲线，修改早期历史使身份变化', async () => {
+  const { CODE_AUTHOR_SIMULATION_MIN_API_VERSION } = await import('@/core/videoEdit/codeSimulation')
+  const code = source('dynamic').replace('step:.01', 'step:.01,animatable:true').replace('draw(ctx', 'createSimulation(){ throw new Error("只读声明不应建世界") },draw(ctx')
+  const document = fixture(code)
+  document.codeMaterials![0].versions[0].apiVersion = CODE_AUTHOR_SIMULATION_MIN_API_VERSION
+  document.clips[0].code!.curves = { amount: [
+    { id: 'a', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: .1, interpolation: 'linear' },
+    { id: 'b', sourceInUs: 1_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: .5, interpolation: 'linear' },
+  ] }
+  const boundary = boundaries(document)
+  try {
+    const evaluate = await boundary.sources.prepareGeneratorFrames(document.clips[0], new AbortController().signal)
+    const plan = evaluate(2 * document.fps)
+    expect(plan.author.amount).toBe(.5)
+    expect(plan.simulation!.parametersAt(0, 120).amount).toBe(.1)
+    expect(plan.simulation!.parametersAt(60, 120).amount).toBeCloseTo(.3)
+    expect(plan.simulation!.sourceTime).toMatchObject({ sourceInUs: 2_000_000 })
+    await boundary.sources.prepare(document, document.clips, 2 * document.fps, () => true)
+    const call = boundary.generator.mock.lastCall as unknown as Parameters<VideoEditCodeGpu['authorGenerator']>
+    expect(call[14]?.identity).toBe(plan.simulation!.identity)
+    const changed = structuredClone(document)
+    changed.clips[0].code!.curves!.amount[0].value = .4
+    const other = boundaries(changed)
+    try {
+      const next = (await other.sources.prepareGeneratorFrames(changed.clips[0], new AbortController().signal))(2 * changed.fps)
+      expect(next.author.amount).toBe(.5)
+      expect(next.simulation!.identity).not.toBe(plan.simulation!.identity)
+    } finally { await other.sources.dispose() }
+    const filterDocument = fixture(code.replace('kind:"generator"', 'kind:"filter"'))
+    filterDocument.codeMaterials![0].versions[0].apiVersion = CODE_AUTHOR_SIMULATION_MIN_API_VERSION
+    const base = filterDocument.clips[0]
+    base.code!.curves = document.clips[0].code!.curves
+    filterDocument.clips = [{ ...base, kind: 'video', code: undefined, effects: [{ id: 'sim-filter', name: '模拟', enabled: true, amount: 1, code: base.code }] }]
+    const filter = boundaries(filterDocument)
+    try {
+      const prepared = await filter.sources.prepare(filterDocument, filterDocument.clips, 2 * filterDocument.fps, () => true)
+      const effect = prepared.effects.get(base.id)![0] as PreparedVideoEditCodeEffect
+      expect(effect.parameters.amount).toBe(.5)
+      expect(effect.simulation!.parametersAt(0, 120).amount).toBe(.1)
+    } finally { await filter.sources.dispose() }
+  } finally { await boundary.sources.dispose() }
+})
 it('节目输出复用跨帧与局部编辑，参数、dataFiles、质量、观察和会话替换仍执行作者', async () => {
   let document = fixture(source('dynamic').replace('draw(ctx', 'dataFiles:["data.json"],frameKey(){return 1},draw(ctx'))
   document.codeMaterials![0].versions[0].files.push({ ...testCodeManifest('{"value":1}', document).files[0], path: 'data.json' })
@@ -942,6 +984,32 @@ it('失败或取消的覆写不能恢复旧内容键；spill 的目标不得在�
 })
 
 
+it.each([false, true])('长素材附加模拟从片段首帧起步，曲线按真实源时间取值（倒放 %s）', async reverse => {
+  const { CODE_AUTHOR_SIMULATION_MIN_API_VERSION } = await import('@/core/videoEdit/codeSimulation')
+  const { videoEditClipSourceTimeAt } = await import('@/core/videoEdit/clipSpeed')
+  const { videoEditSourceSeconds } = await import('@/core/videoEdit/time')
+  const code = source('dynamic').replace('durationSeconds:10', 'durationSeconds:7200').replace('kind:"generator"', 'kind:"filter"').replace('step:.01', 'step:.01,animatable:true').replace('draw(ctx', 'createSimulation(){ throw new Error("metadata only") },draw(ctx')
+  const document = fixture(code)
+  document.codeMaterials![0].versions[0].apiVersion = CODE_AUTHOR_SIMULATION_MIN_API_VERSION
+  const base = document.clips[0]
+  base.sourceInUs = 3_600_000_000; if (reverse) base.reverse = true; base.speed = { numerator: 2, denominator: 1 }
+  base.code!.curves = { amount: [
+    { id: 'a', sourceInUs: 3_590_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' },
+    { id: 'b', sourceInUs: 3_610_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 1, interpolation: 'linear' },
+  ] }
+  document.clips = [{ ...base, kind: 'video', code: undefined, effects: [{ id: 'simulation', name: '模拟', enabled: true, amount: 1, code: base.code }] }]
+  const boundary = boundaries(document)
+  try {
+    const first = (await boundary.sources.prepare(document, document.clips, base.start, () => true)).effects.get(base.id)![0] as PreparedVideoEditCodeEffect
+    expect(videoEditSourceSeconds(first.simulation!.sourceTime!)).toBe(0)
+    const origin = videoEditSourceSeconds(videoEditClipSourceTimeAt(base, 0, document.frameRate))
+    expect(first.simulation!.parametersAt(0, 120).amount).toBeCloseTo((origin - 3590) / 20, 8)
+    expect(first.simulation!.parametersAt(120, 120).amount).toBeCloseTo((origin + (reverse ? -1 : 1) - 3590) / 20, 8)
+    const later = (await boundary.sources.prepare(document, document.clips, base.start + document.fps, () => true)).effects.get(base.id)![0] as PreparedVideoEditCodeEffect
+    expect(videoEditSourceSeconds(later.simulation!.sourceTime!)).toBeCloseTo(2)
+    expect(later.simulation!.identity).toBe(first.simulation!.identity)
+  } finally { await boundary.sources.dispose() }
+})
 it.each(['static', 'dynamic'] as const)('默认会话复用精确输入的 %s 输出', async mode => {
   const document = fixture(source(mode)), boundary = boundaries(document)
   try {

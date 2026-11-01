@@ -1,0 +1,3 @@
+Rapier 3D deterministic-compat 0.21.0 — Dimforge, Apache-2.0.
+Henji removes the upstream ESM sourceMappingURL; embedded WebAssembly is unchanged.
+Henji adds a shared init Promise with retry after failure in rapier.mjs; see source.json and LICENSE.

@@ -12,13 +12,14 @@ import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 
-const candidates = vi.hoisted(() => ({ disposals: [] as Array<Mock<[], Promise<void>>> }))
+const candidates = vi.hoisted(() => ({ render: vi.fn(async (..._args: unknown[]) => {}), disposals: [] as Array<Mock<[], Promise<void>>> }))
 vi.mock('./videoEditAuthorModule', async importOriginal => ({
   ...await importOriginal<typeof import('./videoEditAuthorModule')>(),
   loadAuthorModule: vi.fn(async () => ({ name: '候选预览' })),
 }))
 vi.mock('./videoEditAuthorRuntime', () => ({ VideoEditAuthorRuntime: class {
-  readonly parameterMetadata = { name: '候选预览' }
+  readonly parameterMetadata = { name: '候选预览', simulation: {} }
+  render = candidates.render
   readonly dispose
   constructor(_device: unknown, _effect: unknown, _locations: unknown, _ownsModule: unknown, _apiVersion: unknown, _environment: unknown, allocator: VideoEditBuiltinScratchAllocator) {
     const texture = allocator.allocate(32, 16, 'rgba16float', 2)
@@ -620,4 +621,35 @@ describe('高位深合成（任务 2.7）', () => {
     expect(destroyed.mock.calls.length).toBeGreaterThan(before)
     expect(compositor.precisionDiagnostics().preciseTargetBytes).toBe(0)
   })
+})
+
+
+it('试画给共享运行时传入模拟参数与取消信号，取消后不提交画面', async () => {
+  const { compositor, device, output } = copyFixture(async () => {})
+  Object.assign(output, { transferToImageBitmap: () => ({ close() {} }) })
+  const controller = new AbortController()
+  const info = { time: 30, frameDuration: 1 / 25, clip: { time: 30, duration: 60 } }
+  candidates.render.mockImplementationOnce(async (...args: unknown[]) => {
+    const input = args[14] as import('@/core/videoEdit/codeSimulation').CodeSimulationInput
+    expect(input.signal).toBe(controller.signal)
+    expect(input.parametersAt(0, 120)).toEqual({ force: 2 })
+    expect(input.identity).toBeTruthy()
+    controller.abort()
+  })
+  try {
+    await expect(compositor.renderAuthorFrame('candidate', { force: 2 }, info, undefined, { apiVersion: 9 }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(device.queue.submit).not.toHaveBeenCalled()
+  } finally { await compositor.dispose() }
+})
+
+
+it('试画在 GPU 完成等待期间取消也不会生成位图', async () => {
+  const controller = new AbortController()
+  const { compositor, output } = copyFixture(async () => { controller.abort() })
+  const transfer = vi.fn()
+  Object.assign(output, { transferToImageBitmap: transfer })
+  try {
+    await expect(compositor.renderAuthorFrame('candidate', {}, { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } }, undefined, { apiVersion: 9 }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(transfer).not.toHaveBeenCalled()
+  } finally { await compositor.dispose() }
 })

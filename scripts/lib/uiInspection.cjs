@@ -346,6 +346,7 @@ async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs
   }
   const app = await launchElectronApp({
     mainEntry,
+    appPath: root,
     cwd: root,
     isolateUserData: profile === 'temporary',
     useElectronApi: true,

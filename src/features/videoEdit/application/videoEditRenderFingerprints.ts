@@ -180,10 +180,11 @@ export function videoEditRenderFingerprints(owner: VideoEditInstance, compositio
         for (const { clip, entry, from, until } of entries) {
           if (reported.has(clip.id) || entry.frames.size < until - from) continue
           reported.add(clip.id)
-          const methods = { frameKey: 0, recording: 0, version: 0 }, reasons = new Map<string, number>()
+          const methods = { frameKey: 0, recording: 0, simulation: 0, version: 0 }, reasons = new Map<string, number>()
           for (const value of entry.frames.values()) {
             if (value.fallback) { methods.version++; reasons.set(value.fallback, (reasons.get(value.fallback) ?? 0) + 1) }
             else if (value.method === 'frameKey') methods.frameKey++
+            else if (value.method === 'simulation') methods.simulation++
             else methods.recording++
           }
           logger.info(reasons.size ? '部分代码帧使用版本摘要' : '片段代码帧指纹计算完成', { event: 'video_edit.render_cache.completed', context: { sequenceId: composition.id, clipId: clip.id, phase: 'fingerprint', methods, fallbacks: Object.fromEntries(reasons) } })

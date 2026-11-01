@@ -1,5 +1,6 @@
+import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
 import type { VideoEditCodeDeclarationReader } from '@/core/videoEdit/codeInputParameters'
-import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata, VideoEditCodeMetadataPending } from './videoEditCodeState'
+import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeProgram, VideoEditCodeMetadataPending } from './videoEditCodeState'
 import type { VideoEditInstance } from './videoEditService'
 
 /** 读不出声明（源码缺失或编译不过）以后，隔这么久才在后台重读一次：失败可能是暂时的，但不能每次重绘都触发一次编译。 */
@@ -25,14 +26,14 @@ function retry(owner: VideoEditInstance, versionId: string, definitionId: string
  * 每隔 RETRY_UNREADABLE_MS 在后台重读一次，读好了通知订阅方，失败只刷新失败时刻。
  */
 export function videoEditCodeDeclarationReader(owner: VideoEditInstance): VideoEditCodeDeclarationReader {
-  const read = readVideoEditCodeMetadata(owner, owner.document)
-  return instance => {
+  const read = (instance: CodeMaterialInstance) => readVideoEditCodeProgram(owner, owner.document, instance)
+  const metadata = (instance: CodeMaterialInstance) => {
     const failure = unreadable.get(owner)?.get(instance.versionId)
     if (failure) {
       if (!failure.retrying && performance.now() - failure.at >= RETRY_UNREADABLE_MS) retry(owner, instance.versionId, instance.definitionId, failure)
       return undefined
     }
-    try { return read(instance).parameters }
+    try { return read(instance) }
     catch (error) {
       if (!(error instanceof VideoEditCodeMetadataPending)) return undefined
       void error.ready.catch(() => {
@@ -42,6 +43,7 @@ export function videoEditCodeDeclarationReader(owner: VideoEditInstance): VideoE
       throw error
     }
   }
+  return Object.assign((instance: CodeMaterialInstance) => metadata(instance)?.parameters, { simulation: (instance: CodeMaterialInstance) => { const value = metadata(instance); return value ? !!value.simulation : undefined } })
 }
 /** 等声明读好（读不出来的按 undefined）再执行：用到声明的结果要和最终的一致时（回收预渲染文件、分析画面输入）用它。 */
 export async function settleVideoEditCodeDeclarations<T>(operation: () => T): Promise<T> {

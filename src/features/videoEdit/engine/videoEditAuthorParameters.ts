@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_SIMULATION_MIN_API_VERSION, codeSimulationDeclaration, type AuthorSimulationDeclaration } from '@/core/videoEdit/codeSimulation'
 import { CodeMaterialError, type CodeParameterDeclaration, type CodeParameterTypeDefinition } from '@/core/videoEdit/codeMaterial/contract'
 import { parseCodeMaterialTypes, parseCodeMaterialV3Parameters } from '@/core/videoEdit/codeMaterial/parameterTypes'
 import type { AuthorModule, AuthorParameters } from './videoEditAuthorModule'
@@ -17,6 +18,7 @@ export interface AuthorEffectMetadata extends AuthorParameterMetadata {
   width?: number
   height?: number
   durationSeconds?: number
+  simulation?: Required<AuthorSimulationDeclaration>
   frames: number[]
 }
 
@@ -33,6 +35,16 @@ export function authorEffectMetadata(effect: AuthorModule, apiVersion?: number):
     if (!Number.isFinite(value) || value <= 0 || key !== 'durationSeconds' && !Number.isSafeInteger(value)) throw new Error(`效果 ${key} 必须为有效正数。`)
     hints[key] = value
   }
+  let simulation: Required<AuthorSimulationDeclaration> | undefined
+  if ((apiVersion ?? 4) >= CODE_AUTHOR_SIMULATION_MIN_API_VERSION) {
+    if (effect.simulation !== undefined && typeof effect.createSimulation !== 'function') throw new Error('simulation 声明需要 createSimulation 工厂。')
+    if (effect.createSimulation !== undefined) {
+      if (typeof effect.createSimulation !== 'function') throw new Error('createSimulation 必须是函数。')
+      if (effect.mode === 'static') throw new Error('模拟效果不能声明 mode: static。')
+      if (effect.simulation !== undefined && (!effect.simulation || typeof effect.simulation !== 'object' || Array.isArray(effect.simulation))) throw new Error('simulation 声明必须是对象。')
+      simulation = codeSimulationDeclaration(effect.simulation)
+    }
+  }
   const frames = [...(effect.frames ?? [])]
   if (frames.some(offset => !Number.isFinite(offset) || offset === 0) || new Set(frames).size !== frames.length) throw new Error('相邻帧偏移必须为不重复的非零有限数值。')
   const metadata = authorParameterMetadata(effect, apiVersion)
@@ -44,7 +56,7 @@ export function authorEffectMetadata(effect: AuthorModule, apiVersion?: number):
       return [key, webTextSelectors(selectors, `webText.${key}`)]
     }))
   }
-  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...hints, ...metadata, ...(webText ? { webText } : {}) }
+  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...(simulation ? { simulation } : {}), ...hints, ...metadata, ...(webText ? { webText } : {}) }
 }
 
 /** Only control metadata is normalized. The author module has already executed

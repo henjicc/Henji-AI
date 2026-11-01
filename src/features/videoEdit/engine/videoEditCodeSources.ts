@@ -1,6 +1,9 @@
 import { authorBundleShapesText, authorTextMetadataKey } from './videoEditAuthorTextResources'
 import { codeOutputInputs, codeOutputKey, codeOutputSignature } from './videoEditCodeOutputKey'
 import { codeElementEdits } from '@/core/videoEdit/codeEdits'
+import { VIDEO_EDIT_RENDER_ENGINE_VERSION } from 'virtual:video-edit-render-engine'
+import { codeSimulationIdentity, codeSimulationRelativeTime, codeSimulationSourceTime, type CodeSimulationInput } from '@/core/videoEdit/codeSimulation'
+import { renderSceneRecordFingerprint } from '@/core/videoEdit/renderFingerprint'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
 import { readAuthorMetadataCache, writeAuthorMetadataCache } from './videoEditAuthorMetadataCache'
@@ -29,7 +32,7 @@ import type { AuthorAssets, AuthorFrameInfo, AuthorGpuImage } from './videoEditA
 import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import { videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { offsetVideoEditSource, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame, codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
 import type { CodeMotionClock } from '@/core/videoEdit/codeMaterial/motionSampling'
@@ -67,9 +70,9 @@ interface CachedProgram { source: string; outputIdentity: string; program: CodeM
  * `divisor`：这一帧代码生成器的回放分辨率缩小倍数，与缓存键一起取，画面与键始终一致。
  * `imageKeys` 是帧期画面绑定，资源别名不受持久媒体 ID 的长度限制；`author` 是交给作者代码的 params。
  */
-export interface VideoEditCodePlan { clip: VideoEditClip; key: string; static: boolean; sourceTime?: ReturnType<typeof videoEditClipSourceTimeAt>; outputIdentity?: string; outputFrame?: CodeOutputFrame; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: number }
+export interface VideoEditCodePlan { simulation?: CodeSimulationInput; clip: VideoEditClip; key: string; static: boolean; sourceTime?: ReturnType<typeof videoEditClipSourceTimeAt>; outputIdentity?: string; outputFrame?: CodeOutputFrame; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: number }
 /** `parameters`：交给作者滤镜的 params（scene 参数已换成解析结果）。 */
-export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
+export interface PreparedVideoEditCodeEffect { simulation?: CodeSimulationInput; effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d），`subject` 是声明 `subjectMatte` 的效果要的人物蒙版。 */
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask; subject?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
@@ -86,8 +89,28 @@ function codeFrameValues(document: VideoEditComposition, clip: VideoEditClip, pr
   const derived = generator ? inputs?.derived : undefined
   const imageParameters = codeMaterialImageParameterKeys(program.parameters, derived)
   const frameParameters = codeMediaFrameParameters(clip, derived && Object.keys(derived).length ? { ...parameters, ...derived } : parameters, frame, document.frameRate, imageParameters)
-  return { context, sourceTime, inputParameters: { ...parameters, ...derived }, parameters: frameParameters.parameters, imageKeys: frameParameters.images,
+  const origin = generator ? undefined : videoEditClipSourceTimeAt(clip, 0, document.frameRate)
+  const simulation = program.simulation ? simulationFrameInput(program, prepared, inputs, context, sourceTime, origin, clip.reverse ? -1 : 1) : undefined
+  return { context, sourceTime, ...(simulation ? { simulation } : {}), inputParameters: { ...parameters, ...derived }, parameters: frameParameters.parameters, imageKeys: frameParameters.images,
     author: videoEditCodeAuthorParameters(frameParameters.parameters, inputs), transitionHandles: Boolean(window) }
+}
+const simulationInputs = new WeakMap<PreparedCodeMaterialParameters, { program: CodeMaterialProgram; inputs?: VideoEditCodeInputs; width: number; height: number; originKey: string; input: CodeSimulationInput }>()
+function simulationFrameInput(program: CodeMaterialProgram, prepared: PreparedCodeMaterialParameters, inputs: VideoEditCodeInputs | undefined,
+  size: { width: number; height: number }, sourceTime: import('@/core/videoEdit/time').VideoEditSourceTime, sourceOrigin?: import('@/core/videoEdit/time').VideoEditSourceTime, sourceDirection: 1 | -1 = 1): CodeSimulationInput {
+  const originKey = JSON.stringify([sourceOrigin, sourceDirection])
+  let cached = simulationInputs.get(prepared)
+  if (!cached || cached.program !== program || cached.inputs !== inputs || cached.width !== size.width || cached.height !== size.height || cached.originKey !== originKey) {
+    const scenes = Object.entries(inputs?.scenes ?? {}).map(([key, scene]) => [key, scene.scene, scene.schema,
+      scene.records.map(renderSceneRecordFingerprint), scene.timetables.map(table => [table.container?.id, table.kind, String(table.end), table.inputs,
+        table.shots.map(({ record, ...shot }) => [record.id, shot])])])
+    const source = { engine: VIDEO_EDIT_RENDER_ENGINE_VERSION, apiVersion: program.apiVersion, code: program.bundle.code, modules: program.bundle.modules?.files, libraries: program.bundle.libraries }
+    const input: CodeSimulationInput = {
+      identity: codeSimulationIdentity(source, [program.parameters, prepared.values, [...prepared.curves], scenes, originKey], size, program.simulation),
+      parametersAt: (step, rate) => videoEditCodeAuthorParameters(evaluateCodeMaterialParameters(prepared, sourceOrigin ? offsetVideoEditSource(sourceOrigin, step * sourceDirection, { numerator: rate, denominator: 1 }, true) : codeSimulationSourceTime(step, rate)), inputs),
+    }
+    cached = { program, inputs, originKey, width: size.width, height: size.height, input }; simulationInputs.set(prepared, cached)
+  }
+  return { ...cached.input, sourceTime: sourceOrigin ? codeSimulationRelativeTime(sourceTime, sourceOrigin, sourceDirection) : sourceTime, ...(sourceOrigin ? { sourceOrigin, sourceDirection } : {}) }
 }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
 interface InputFailureScope { sequenceId: string; clipId: string; effectId?: string; frame: number }
@@ -335,7 +358,7 @@ export class VideoEditCodeSources {
     const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
     const transitionByClip = new Map(options.transitions?.flatMap(window => [[window.left.id, window], [window.right.id, window]] as const))
     /** `generator`：代码片段本身（只有它取派生的画面输入；附加滤镜的 scene 参数只换成解析结果）。 */
-    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram, generator: boolean, effectId?: string): Promise<Pick<VideoEditCodePlan, 'context' | 'sourceTime' | 'parameters' | 'inputParameters' | 'imageKeys' | 'author' | 'transitionHandles' | 'motion'>> => {
+    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram, generator: boolean, effectId?: string): Promise<Pick<VideoEditCodePlan, 'context' | 'sourceTime' | 'parameters' | 'inputParameters' | 'imageKeys' | 'author' | 'transitionHandles' | 'motion' | 'simulation'>> => {
       const scope = { sequenceId: document.id, clipId: clip.id, ...(effectId ? { effectId } : {}), frame }
       try {
         let animation = this.parameters.get(instance)
@@ -352,6 +375,7 @@ export class VideoEditCodeSources {
         if (options.audio) Object.assign(values.context, await options.audio(clip, program, evaluateCodeMaterialParameters(animation.prepared, values.sourceTime), controller.signal))
         assertCurrent()
         this.inputFailures.delete(inputFailureInstance(scope))
+        if (values.simulation) values.simulation = { ...values.simulation, owner: { sequenceId: document.id, clipId: clip.id, ...(effectId ? { effectId } : {}) }, signal: controller.signal, assertCurrent }
         return values
       } catch (error) {
         assertCurrent()
@@ -402,11 +426,11 @@ export class VideoEditCodeSources {
             const key = identity(effect.code.definitionId, effect.code.versionId)
             const { program } = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
             if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
-            const { author, context, transitionHandles } = await animated(clip, effect.code, program, false, effect.id)
+            const { author, context, transitionHandles, simulation } = await animated(clip, effect.code, program, false, effect.id)
             // 回放分辨率降低时滤镜的输入、输出按序列缩小后的尺寸给出（任务 4.9），比例随 info 告诉作者。
             const divisor = this.runtime?.renderDivisor ?? 1
             const renderScale = divisor === 1 ? undefined : videoEditRenderSize(document.width, document.height, divisor).height / document.height
-            chain.push({ effect, version: key, instanceKey: `${clip.id}:${effect.id}`, info: { audio: context.audio, audioTime: context.audioTime, time: context.time, frameDuration: 1 / document.fps, clip: { time: context.localTime, duration: clip.duration / document.fps }, ...(renderScale ? { renderScale } : {}) }, program, context, transitionHandles, parameters: author })
+            chain.push({ effect, ...(simulation ? { simulation } : {}), version: key, instanceKey: `${clip.id}:${effect.id}`, info: { audio: context.audio, audioTime: context.audioTime, time: context.time, frameDuration: 1 / document.fps, clip: { time: context.localTime, duration: clip.duration / document.fps }, ...(renderScale ? { renderScale } : {}) }, program, context, transitionHandles, parameters: author })
           } catch (error) {
             assertCurrent()
             if (!options.onEffectError) throw error
@@ -435,11 +459,11 @@ export class VideoEditCodeSources {
         const key = identity(clip.code.definitionId, clip.code.versionId)
         const { program, outputIdentity } = await this.program(key, version, controller.signal, pinned); assertCurrent()
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
-        const { parameters, inputParameters, imageKeys, author, context, sourceTime, transitionHandles, motion } = await animated(clip, clip.code, program, true)
+        const { parameters, inputParameters, imageKeys, author, context, sourceTime, transitionHandles, motion, simulation } = await animated(clip, clip.code, program, true)
         const divisor = this.runtime?.renderDivisor ?? 1
         const target = `code:output:${clip.id}`
         keys.add(target)
-        plans.push({ clip, key: target, static: program.mode === 'static', program, outputIdentity, sourceTime, parameters, inputParameters, imageKeys, author, context, transitionHandles, ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
+        plans.push({ clip, key: target, static: program.mode === 'static', program, outputIdentity, sourceTime, parameters, inputParameters, imageKeys, author, context, transitionHandles, ...(simulation ? { simulation } : {}), ...(motion ? { motion } : {}), ...(divisor === 1 ? {} : { divisor }) })
       }
       assertCurrent(); if (!options.preparationOnly) this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0, sceneIssues }
@@ -532,7 +556,7 @@ export class VideoEditCodeSources {
                 } })
               }
               const { info, overrides, environment } = plan.outputFrame!
-              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, environment, options.quality, assertCurrent)
+              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, environment, options.quality, assertCurrent, ...(plan.simulation ? [plan.simulation] : []))
             }
             assertCurrent()
             if (contentKey) this.lastOutputs.set(plan.key, { key: contentKey, picture })

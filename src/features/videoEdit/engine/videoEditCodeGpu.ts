@@ -1,3 +1,4 @@
+import type { CodeSimulationInput } from '@/core/videoEdit/codeSimulation'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
@@ -151,10 +152,10 @@ export class VideoEditCodeGpu {
    * `divisor`：输出比例的倒数。输出纹理按比例分配，画面的放置尺寸仍是
    * `size`；Canvas 作者坐标不变，WebGPU / WebGL 入口拿到缩小后的 target 与 width/height，`info.renderScale` 给出比例。
    */
-  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}, divisor: number = 1, environment: AuthorEffectEnvironment = this.effectEnvironment, quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}): Promise<VideoEditCodePicture> {
-    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur, images, divisor, environment, quality, beforeCommit))
+  async authorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, motionBlur = true, images: AuthorGpuInputs['images'] = {}, divisor: number = 1, environment: AuthorEffectEnvironment = this.effectEnvironment, quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}, simulation?: CodeSimulationInput): Promise<VideoEditCodePicture> {
+    return this.trackAuthor(() => this.renderAuthorGenerator(key, instanceKey, program, size, parameters, assets, info, overrides, motionBlur, images, divisor, environment, quality, beforeCommit, simulation))
   }
-  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images'], divisor: number, environment: AuthorEffectEnvironment, quality: EffectQuality, beforeCommit: () => void): Promise<VideoEditCodePicture> {
+  private async renderAuthorGenerator(key: string, instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, overrides: AuthorElementOverrides | undefined, motionBlur: boolean, images: AuthorGpuInputs['images'], divisor: number, environment: AuthorEffectEnvironment, quality: EffectQuality, beforeCommit: () => void, simulation?: CodeSimulationInput): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive()
     const runtime = await this.authors().instance(instanceKey, program)
     this.assertLive()
@@ -172,18 +173,18 @@ export class VideoEditCodeGpu {
     const timer = videoEditGpuTimer(this.device), timed = timer?.begin('author')
     // 完整分辨率按原样调用（不多传参数、不改 info），画面与之前逐像素相同。
     const layers = output
-      ? await runtime.render(initialTarget, size.width, size.height, parameters, assets, { ...info, renderScale: output.height / size.height }, overrides, { frames: [], images }, motionBlur, output, environment, quality, beforeCommit, promote)
-      : await runtime.render(initialTarget, size.width, size.height, parameters, assets, info, overrides, { frames: [], images }, motionBlur, undefined, environment, quality, beforeCommit, promote)
+      ? await runtime.render(initialTarget, size.width, size.height, parameters, assets, { ...info, renderScale: output.height / size.height }, overrides, { frames: [], images }, motionBlur, output, environment, quality, beforeCommit, promote, simulation)
+      : await runtime.render(initialTarget, size.width, size.height, parameters, assets, info, overrides, { frames: [], images }, motionBlur, undefined, environment, quality, beforeCommit, promote, simulation)
     timer?.end(timed)
     target.picture.carriesLight = program.apiVersion >= 7 && runtime.carriesLight
     const completed = this.trackPerformance(key, { frame: Math.floor(info.time / info.frameDuration), cpuMs: performance.now() - started, gpuMs: 0, budgetMs: info.frameDuration * 1000, ...(layers ? { layers } : {}) }, started, started, performance.now())
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
     return target.picture
   }
-  async authorFilter(key: string, instanceKey: string, program: CodeAuthorProgram, parameters: Readonly<Record<string, unknown>>, input: VideoEditCodePicture, info: AuthorFrameInfo, frames: AuthorGpuInputs['frames'] = []): Promise<VideoEditCodePicture> {
-    return this.trackAuthor(() => this.renderAuthorFilter(key, instanceKey, program, parameters, input, info, frames))
+  async authorFilter(key: string, instanceKey: string, program: CodeAuthorProgram, parameters: Readonly<Record<string, unknown>>, input: VideoEditCodePicture, info: AuthorFrameInfo, frames: AuthorGpuInputs['frames'] = [], simulation?: CodeSimulationInput, logicalSize?: { width: number; height: number }, beforeCommit: () => void = () => {}): Promise<VideoEditCodePicture> {
+    return this.trackAuthor(() => this.renderAuthorFilter(key, instanceKey, program, parameters, input, info, frames, simulation, logicalSize, beforeCommit))
   }
-  private async renderAuthorFilter(key: string, instanceKey: string, program: CodeAuthorProgram, parameters: Readonly<Record<string, unknown>>, input: VideoEditCodePicture, info: AuthorFrameInfo, frames: AuthorGpuInputs['frames']): Promise<VideoEditCodePicture> {
+  private async renderAuthorFilter(key: string, instanceKey: string, program: CodeAuthorProgram, parameters: Readonly<Record<string, unknown>>, input: VideoEditCodePicture, info: AuthorFrameInfo, frames: AuthorGpuInputs['frames'], simulation: CodeSimulationInput | undefined, logicalSize: { width: number; height: number } | undefined, beforeCommit: () => void): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     if (input.owner !== this.device) throw new Error('作者滤镜输入不属于当前渲染设备。')
     if (frames.length !== program.frames.length || frames.some((frame, index) => frame.offset !== program.frames[index])) throw new Error(`滤镜「${program.name}」声明了相邻帧 ${program.frames.join('、')}，渲染会话尚未提供匹配输入。`)
@@ -200,7 +201,8 @@ export class VideoEditCodeGpu {
     const timer = videoEditGpuTimer(this.device), timed = timer?.begin('author')
     let layers: Awaited<ReturnType<typeof runtime.render>>
     try {
-      layers = await runtime.render(() => acquire(input.textureFormat), input.width, input.height, parameters, {}, info, undefined, { current: input.texture, frames, images: {} }, true, undefined, this.effectEnvironment, 'interactive', () => {}, () => acquire(VIDEO_EDIT_PRECISE_FORMAT))
+      const size = program.simulation ? logicalSize ?? input : input
+      layers = await runtime.render(() => acquire(input.textureFormat), size.width, size.height, parameters, {}, info, undefined, { current: input.texture, frames, images: {} }, true, program.simulation ? input : undefined, this.effectEnvironment, 'interactive', beforeCommit, () => acquire(VIDEO_EDIT_PRECISE_FORMAT), simulation)
     } finally {
       this.pending = this.device.queue.onSubmittedWorkDone()
       timer?.end(timed)
@@ -218,6 +220,7 @@ export class VideoEditCodeGpu {
     return this.trackAuthor(async () => {
       await this.ready; this.assertLive()
       const runtime = await this.authors().instance(instanceKey, program); this.assertLive()
+      if (program.simulation) return
       const initialTarget = (): GpuTexture => this.surface(`warm:${instanceKey}`, size.width, size.height).picture.texture
       const input = filter ? this.surface(`warm:input:${instanceKey}`, size.width, size.height) : undefined
       // The picture is discarded: free it at once (destroy waits for the submitted work) instead of holding a full frame per warmed instance.

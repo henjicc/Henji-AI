@@ -1,3 +1,4 @@
+import ts from 'typescript'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
@@ -66,6 +67,15 @@ const rawTextPlugin = {
   name: 'render-engine-raw-text',
   setup(build) {
     build.onLoad({ filter: /.*/ }, async args => {
+      // 冻结版本与库 pin 已进入片段身份，只排除发行目录数据，保留解析/校验函数的运行逻辑。
+      if (slash(args.path).endsWith('/src/core/videoEdit/codeMaterial/authorLibraries.ts')) {
+        const source = await fs.promises.readFile(args.path, 'utf8')
+        const parsed = ts.createSourceFile(args.path, source, ts.ScriptTarget.Latest, true)
+        const registry = parsed.statements.filter(ts.isVariableStatement).flatMap(statement => [...statement.declarationList.declarations])
+          .find(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === 'AUTHOR_LIBRARIES')?.initializer
+        if (!registry || !ts.isObjectLiteralExpression(registry)) throw new Error('作者库发行登记必须是可识别的对象声明。')
+        return { contents: source.slice(0, registry.getStart(parsed)) + '{}' + source.slice(registry.end), loader: 'ts' }
+      }
       const wgsl = args.path.endsWith('.wgsl')
       if (!wgsl && args.suffix !== '?raw') return undefined
       const source = await fs.promises.readFile(args.path, 'utf8')
@@ -155,16 +165,26 @@ export function videoEditRenderEngineVersion(options = {}) {
     current.catch(() => { if (pending === current) pending = undefined })
     return current
   }
-  return {
-    name: 'henji:video-edit-render-engine-version',
-    configResolved(config) { root ??= config.root },
-    buildStart() { if (fixed === undefined && !pending) compute() },
+  const modulePlugin = {
+    name: 'henji:video-edit-render-engine-module',
     resolveId(id) { return id === MODULE_ID ? RESOLVED_ID : undefined },
     async load(id) {
       if (id !== RESOLVED_ID) return undefined
       const version = fixed ?? await (pending ?? compute())
       return `export const VIDEO_EDIT_RENDER_ENGINE_VERSION = ${JSON.stringify(version)}\n`
     },
+  }
+  return {
+    ...modulePlugin,
+    name: 'henji:video-edit-render-engine-version',
+    configResolved(config) {
+      root ??= config.root
+      // 构建使用 Vite 4 的列表，Vitest 使用 Vite 5 的工厂；解析器共用主构建的身份 Promise。
+      const workerPlugins = config.worker.plugins
+      if (Array.isArray(workerPlugins)) workerPlugins.unshift(modulePlugin)
+      else config.worker.plugins = async (...args) => [modulePlugin, ...await workerPlugins(...args)]
+    },
+    buildStart() { if (fixed === undefined && !pending) compute() },
     async handleHotUpdate({ file, server }) {
       if (fixed !== undefined || !watched.has(fileKey(file))) return undefined
       const previous = await (pending ?? Promise.resolve(undefined)).catch(() => undefined)

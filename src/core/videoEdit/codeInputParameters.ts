@@ -21,7 +21,9 @@ import type { VideoEditScene } from './scene/sceneSchema'
  * （解析结果与派生参数都不逐帧重算、不深拷贝），文档变了才重新解析。作者代码因此可以按 params.<key> 的对象身份
  * 缓存自己的派生数据；解析结果是共享的，作者代码不能修改它。
  */
-export type VideoEditCodeDeclarationReader = (instance: CodeMaterialInstance) => readonly CodeParameterDeclaration[] | undefined
+export type VideoEditCodeDeclarationReader = ((instance: CodeMaterialInstance) => readonly CodeParameterDeclaration[] | undefined) & {
+  simulation?: (instance: CodeMaterialInstance) => boolean | undefined
+}
 export type VideoEditCodeSceneDocument = Pick<VideoEditComposition, 'media' | 'scenes'>
 /** `from`：问题从片段素材时间的哪一刻起影响画面（例如取帧车道截断以后的内容）；省略表示整段都受影响。 */
 export interface VideoEditCodeSceneIssue { readonly parameter: string; readonly scene: VideoEditScene; readonly issue: VideoEditSceneResolveIssue; readonly from?: number }

@@ -1,3 +1,5 @@
+import { videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { VIDEO_EDIT_RENDER_ENGINE_VERSION } from 'virtual:video-edit-render-engine'
 import { withTextFontSession } from '@/core/imaging/vectorContent/shaping/fontContext'
 import { prepareAuthorTextParameters } from './videoEditAuthorTextResources'
 import { CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
@@ -13,7 +15,9 @@ import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntim
 import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeLayerStatistics } from '@/core/videoEdit/codeMaterial/performance'
 import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
-import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups, authorStillRaster } from './videoEditAuthorLayers'
+import { codeSimulationIdentity, type CodeSimulationInput } from '@/core/videoEdit/codeSimulation'
+import { VideoEditAuthorSimulation } from './videoEditAuthorSimulation'
+import { authorFrameExposure, authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups, authorStillRaster } from './videoEditAuthorLayers'
 import { authorCanvasContent, type AuthorCanvasBox } from './videoEditAuthorCanvasBounds'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
@@ -100,6 +104,7 @@ export class VideoEditAuthorRuntime {
   private renderedTarget?: GpuTexture
   get outputTexture(): GpuTexture | undefined { return this.renderedTarget }
   private closed = false
+  private simulation?: VideoEditAuthorSimulation
   readonly parameterMetadata: AuthorEffectMetadata
   private lastFrame?: { carriesLight?: boolean; effects?: Map<number, ResolvedAuthorEffect[]>; effectStates?: Map<number, import('@/core/videoEdit/authorEffects').AuthorElementEffectState[]>; layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides; directText?: Map<number, TextDrawObservation[]>; textUncovered?: Map<number, string[]>; textLayouts?: Map<string, number | undefined> }
   get carriesLight(): boolean { return this.lastFrame?.carriesLight === true }
@@ -199,12 +204,12 @@ export class VideoEditAuthorRuntime {
    * `output`：`target` 的像素尺寸，缺省等于画布尺寸 `width`×`height`。回放分辨率降低时比画布小：Canvas 图层的作者坐标仍是
    * 画布像素，由宿主按比例缩小栅格与合成；WebGPU / WebGL 入口拿到的 target 与 width/height 是缩小后的像素尺寸。
    */
-  render(target: GpuTexture | (() => GpuTexture), width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}, promote?: () => GpuTexture): Promise<CodeLayerStatistics | undefined> {
-    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur, output, environment, quality, beforeCommit, promote))
+  render(target: GpuTexture | (() => GpuTexture), width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}, promote?: () => GpuTexture, simulationInput?: CodeSimulationInput): Promise<CodeLayerStatistics | undefined> {
+    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs, motionBlur, output, environment, quality, beforeCommit, promote, simulationInput))
     this.renders = result.catch(() => undefined)
     return result
   }
-  private async renderFrame(initialTarget: GpuTexture | (() => GpuTexture), width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}, promote?: () => GpuTexture): Promise<CodeLayerStatistics | undefined> {
+  private async renderFrame(initialTarget: GpuTexture | (() => GpuTexture), width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs, motionBlur = true, output?: { width: number; height: number }, environment: AuthorEffectEnvironment = this.effectEnvironment(), quality: EffectQuality = 'interactive', beforeCommit: () => void = () => {}, promote?: () => GpuTexture, simulationInput?: CodeSimulationInput): Promise<CodeLayerStatistics | undefined> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
     this.renderedTarget = undefined
     const resolveInitialTarget = (): GpuTexture => typeof initialTarget === 'function' ? initialTarget() : initialTarget
@@ -220,6 +225,18 @@ export class VideoEditAuthorRuntime {
       const preparing = prepareAuthorTextParameters(this.effect, params)
       const text = preparing && await preparing
       if (!Number.isFinite(info.time) || !(info.frameDuration > 0) || !Number.isFinite(info.clip?.time) || !(info.clip.duration > 0)) throw new Error('效果需要有效的帧时间和片段时间。')
+      if (this.parameterMetadata.simulation) {
+        const input = simulationInput ?? { identity: codeSimulationIdentity(this.locations, params, { width, height }, this.parameterMetadata.simulation), parametersAt: () => params }
+        const identity = codeSimulationIdentity([VIDEO_EDIT_RENDER_ENGINE_VERSION, input.identity], this.parameterMetadata.parameters, { width, height }, this.parameterMetadata.simulation)
+        if (this.simulation?.identity !== identity) {
+          await this.simulation?.dispose()
+          this.simulation = new VideoEditAuthorSimulation(this.effect.createSimulation!.bind(this.effect), this.parameterMetadata.simulation, { width, height }, identity, this.effect.durationSeconds)
+        }
+        const exposure = authorFrameExposure(this.effect, info, motionBlur)
+        const relative = (time: number) => input.sourceOrigin ? (time - videoEditSourceSeconds(input.sourceOrigin)) * (input.sourceDirection ?? 1) : time
+        const simulation = await this.simulation.prepare({ start: Math.min(relative(exposure.start), relative(exposure.end)), end: Math.max(relative(exposure.start), relative(exposure.end)), center: relative(info.time), input: { ...input, identity, parametersAt: (step, rate) => authorParameterValues(this.parameterMetadata, input.parametersAt(step, rate)), assertCurrent: () => { beforeCommit(); input.assertCurrent?.() } } })
+        info = { ...info, simulation: input.sourceOrigin ? { at: time => simulation.at(relative(time)) } : simulation }
+      }
       const whole: AuthorLayer = { id: AUTHOR_WHOLE_EFFECT_ID, name: this.effect.name, bounds: [0, 0, width, height], draw() {} }
       if ((this.effect.createWebGPU || this.effect.createWebGL) && overrides && Object.hasOwn(overrides, AUTHOR_WHOLE_EFFECT_ID)) {
         if (!this.nativeOverrideTarget || this.nativeOverrideTarget.width !== outWidth || this.nativeOverrideTarget.height !== outHeight) {
@@ -228,7 +245,7 @@ export class VideoEditAuthorRuntime {
           this.textures.add(texture); this.nativeOverrideTarget = { texture, width: outWidth, height: outHeight }
         }
         const picture = this.nativeOverrideTarget.texture
-        const statistics = await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur, output)
+        const statistics = await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur, output, environment, quality, beforeCommit, promote, simulationInput)
         const target = resolveInitialTarget()
         await this.layers.begin(target)
         const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID], motionBlur)
@@ -668,8 +685,11 @@ export class VideoEditAuthorRuntime {
   async dispose(): Promise<void> {
     if (this.closed) return
     this.closed = true
-    this.lastFrame = undefined
     const errors: unknown[] = []
+    await this.renders
+    await this.simulation?.dispose().catch(error => { errors.push(error) })
+    this.simulation = undefined
+    this.lastFrame = undefined
     const release = async (action: () => unknown): Promise<void> => {
       try { await action() } catch (error) { errors.push(error) }
     }

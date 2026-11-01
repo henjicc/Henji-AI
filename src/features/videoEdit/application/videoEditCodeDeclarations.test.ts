@@ -4,7 +4,7 @@ import type { VideoEditInstance } from './videoEditService'
 const state = vi.hoisted(() => ({ read: vi.fn(), ensure: vi.fn() }))
 vi.mock('./videoEditCodeState', () => {
   class VideoEditCodeMetadataPending extends Error { constructor(readonly ready: Promise<void>) { super('正在读取代码参数…') } }
-  return { VideoEditCodeMetadataPending, readVideoEditCodeMetadata: () => state.read, ensureVideoEditCodeParameterMetadata: state.ensure }
+  return { VideoEditCodeMetadataPending, readVideoEditCodeProgram: (_owner: unknown, _document: unknown, instance: unknown) => state.read(instance), ensureVideoEditCodeParameterMetadata: state.ensure }
 })
 const { settleVideoEditCodeDeclarations, subscribeVideoEditCodeDeclarations, videoEditCodeDeclarationReader } = await import('./videoEditCodeDeclarations')
 const { VideoEditCodeMetadataPending } = await import('./videoEditCodeState')
@@ -54,4 +54,15 @@ describe('应用层的代码声明读取器', () => {
       expect(state.read).toHaveBeenCalledTimes(2)
     } finally { unsubscribe() }
   })
+})
+
+
+it('模拟声明与参数共用已检查的程序，普通模块和模拟模块明确区分', () => {
+  const read = videoEditCodeDeclarationReader({ document: {} } as VideoEditInstance)
+  const parameters: unknown[] = []
+  state.read.mockReturnValue({ parameters })
+  expect(read.simulation!(instance)).toBe(false)
+  state.read.mockReturnValue({ parameters, simulation: { rate: 120 } })
+  expect(read.simulation!(instance)).toBe(true)
+  expect(read(instance)).toBe(parameters)
 })

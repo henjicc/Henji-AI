@@ -48,6 +48,11 @@ declare global {
   type AuthorLayer = Api.AuthorLayer
   type AuthorPose = Api.AuthorPose
   type AuthorRect = Api.AuthorRect
+  type SimulationData = Api.SimulationData
+  type AuthorSimulation<S extends SimulationData = SimulationData, V extends SimulationData = SimulationData, P extends readonly Api.AuthorParamDeclaration[] = readonly Api.AuthorParamDeclaration[]> = Api.AuthorSimulation<S, V, P>
+  type AuthorSimulationDeclaration = Api.AuthorSimulationDeclaration
+  type AuthorSimulationSampler = Api.AuthorSimulationSampler
+  type AuthorSimulationInfo = Api.AuthorSimulationInfo
   type AuthorFrameInfo = Api.AuthorFrameInfo
   type AuthorParams = Api.AuthorParams
   type AuthorParameters = Api.AuthorParameters

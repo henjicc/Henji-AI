@@ -34,7 +34,21 @@ export interface AuthorAudioAnalysis {
   barOrigin: number
 }
 
+export type SimulationData = null | boolean | number | string | SimulationData[] | { [key: string]: SimulationData } | ArrayBuffer | ArrayBufferView
+export interface AuthorSimulationInfo { readonly step: number; readonly time: number; readonly dt: number; readonly random: () => number }
+export interface AuthorSimulation<S extends SimulationData = SimulationData, V extends SimulationData = SimulationData, P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {
+  step(params: AuthorParamValues<P>, info: AuthorSimulationInfo): void
+  snapshot(): S
+  restore(snapshot: S): void
+  read(): V
+  interpolate?(left: Readonly<V>, right: Readonly<V>, alpha: number): V
+  dispose(): void
+}
+export interface AuthorSimulationDeclaration { rate?: number; snapshotEvery?: number; seed?: number }
+export interface AuthorSimulationSampler { at(sourceSeconds: number): Readonly<SimulationData> }
+
 export interface AuthorFrameInfo {
+  simulation?: AuthorSimulationSampler
   time: number
   /** 一帧的秒数。 */
   frameDuration: number
@@ -289,6 +303,8 @@ export interface AuthorModule<P extends readonly AuthorParamDeclaration[] = read
   draw?(ctx: OffscreenCanvasRenderingContext2D, time: number, params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   /** 每帧返回图层数组，按顺序从底到顶合成。 */
   layers?(params: AuthorParamValues<P>, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): AuthorLayer[]
+  simulation?: AuthorSimulationDeclaration
+  createSimulation?(params: AuthorParamValues<P>, width: number, height: number, info: AuthorSimulationInfo): AuthorSimulation<SimulationData, SimulationData, P> | Promise<AuthorSimulation<SimulationData, SimulationData, P>>
   createWebGL?(gl: WebGL2RenderingContext): AuthorWebGL<P>
   createWebGPU?(device: GPUDevice): AuthorWebGPU<P> | Promise<AuthorWebGPU<P>>
   dispose?(): void | Promise<void>

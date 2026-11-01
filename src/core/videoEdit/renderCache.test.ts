@@ -4,6 +4,7 @@ import { addLegacyVideoEditTracks } from './testFixtures'
 import { videoEditRenderWindows, videoEditRenderWindowSet, type VideoEditRenderDependencies } from './renderCache'
 import { parseCodeMaterialV3Parameters } from './codeMaterial/parameterTypes'
 import { GOLDEN_SCENE_DECLARATION, goldenScene } from './scene/sceneTestFixtures'
+import { CODE_AUTHOR_SIMULATION_MIN_API_VERSION } from './codeSimulation'
 
 const dependencies = { fontRevision: 1, analysis: '' }
 function project(): VideoEditDocument {
@@ -184,6 +185,19 @@ it('片子数据只让与改动记录时段相交的窗口失效；读不到代�
   const plain = project(), plainBefore = keys(plain)
   plain.scenes = [goldenScene('a')]
   expect(keys(plain)).toEqual(plainBefore)
+})
+
+it('模拟的早期片子记录变化使后续窗口失效，无关片子仍不影响', () => {
+  const base = film()
+  base.codeMaterials = [{ id: 'film', name: '模拟', defaultVersionId: 'v5', versions: [{ id: 'v5', apiVersion: CODE_AUTHOR_SIMULATION_MIN_API_VERSION, languageVersion: 4, entry: 'main.ts', files: [] }] }]
+  const simulated = { ...resolved, codeDeclarations: Object.assign(() => filmDeclarations, { simulation: () => true }) }
+  const before = keysWith(base, simulated), changed = structuredClone(base)
+  changed.scenes![0].records.find(record => record.id === 'seg-switch')!.values.name = '历史输入'
+  expect(keysWith(changed, simulated).every((key, index) => key !== before[index])).toBe(true)
+  const plainBefore = keysWith(base, resolved)
+  expect(keysWith(changed, resolved).map((key, index) => key === plainBefore[index])).toEqual([false, true, true])
+  const unrelated = structuredClone(base); unrelated.scenes!.push({ ...goldenScene('a'), id: 'unrelated' })
+  expect(keysWith(unrelated, simulated)).toEqual(before)
 })
 
 it('片子数据引用的素材换了源文件时用到它的段失效、无关素材不影响；子序列里代码读的片子数据改了，父序列的段也失效', () => {

@@ -3,6 +3,7 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
+import type { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 
 const author = vi.hoisted(() => ({ render: vi.fn(), dispose: vi.fn(), instance: vi.fn(), constructed: vi.fn() }))
@@ -183,7 +184,7 @@ it('参数与时间变化复用目标，完整参数、素材和覆盖直接传�
     const nextInfo = { ...info, time: 2 }
     const second = await runtime.authorGenerator('frame', 'clip', program, size, { title: 'B' }, assets, nextInfo, overrides)
     expect(second).toBe(first)
-    expect(author.render).toHaveBeenLastCalledWith(first.texture, 16, 16, { title: 'B' }, assets, nextInfo, overrides, { frames: [], images: {} }, true, undefined, {}, 'interactive', expect.any(Function), expect.any(Function))
+    expect(author.render).toHaveBeenLastCalledWith(first.texture, 16, 16, { title: 'B' }, assets, nextInfo, overrides, { frames: [], images: {} }, true, undefined, {}, 'interactive', expect.any(Function), expect.any(Function), undefined)
     expect(runtime.diagnostics()).toMatchObject({ surfaces: 1, textureAllocations: 1, generatorFrames: 2 })
   } finally { await runtime.dispose() }
   expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })
@@ -195,15 +196,15 @@ it('1/2 回放分辨率：输出纹理减半、放置尺寸不变，作者拿到
   try {
     const half = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info, undefined, true, {}, 2)
     expect([half.width, half.height, half.displayWidth, half.displayHeight]).toEqual([1920, 1080, 3840, 2160])
-    expect(author.render).toHaveBeenLastCalledWith(half.texture, 3840, 2160, {}, {}, { ...info, renderScale: .5 }, undefined, { frames: [], images: {} }, true, { width: 1920, height: 1080 }, {}, 'interactive', expect.any(Function), expect.any(Function))
+    expect(author.render).toHaveBeenLastCalledWith(half.texture, 3840, 2160, {}, {}, { ...info, renderScale: .5 }, undefined, { frames: [], images: {} }, true, { width: 1920, height: 1080 }, {}, 'interactive', expect.any(Function), expect.any(Function), undefined)
     const reduced = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info, undefined, true, {}, 1.5)
     expect([reduced.width, reduced.height, reduced.displayWidth, reduced.displayHeight]).toEqual([2560, 1440, 3840, 2160])
-    expect(author.render).toHaveBeenLastCalledWith(reduced.texture, 3840, 2160, {}, {}, { ...info, renderScale: 2 / 3 }, undefined, { frames: [], images: {} }, true, { width: 2560, height: 1440 }, {}, 'interactive', expect.any(Function), expect.any(Function))
+    expect(author.render).toHaveBeenLastCalledWith(reduced.texture, 3840, 2160, {}, {}, { ...info, renderScale: 2 / 3 }, undefined, { frames: [], images: {} }, true, { width: 2560, height: 1440 }, {}, 'interactive', expect.any(Function), expect.any(Function), undefined)
     // 切回完整分辨率：换一张整幅纹理，调用与以前逐项相同
     const full = await runtime.authorGenerator('frame', 'clip', program, size, {}, {}, info)
     expect([full.width, full.height, full.displayWidth, full.displayHeight]).toEqual([3840, 2160, 3840, 2160])
     expect(full).not.toBe(half)
-    expect(author.render).toHaveBeenLastCalledWith(full.texture, 3840, 2160, {}, {}, info, undefined, { frames: [], images: {} }, true, undefined, {}, 'interactive', expect.any(Function), expect.any(Function))
+    expect(author.render).toHaveBeenLastCalledWith(full.texture, 3840, 2160, {}, {}, info, undefined, { frames: [], images: {} }, true, undefined, {}, 'interactive', expect.any(Function), expect.any(Function), undefined)
     expect(runtime.renderDivisor).toBe(1); runtime.setRenderDivisor(4); expect(runtime.renderDivisor).toBe(4)
   } finally { await runtime.dispose() }
 })
@@ -213,7 +214,7 @@ it('放大导出中的高分辨率作者按实际纹理传 renderScale，保持�
   try {
     const output = await runtime.authorGenerator('frame', 'clip', program, { width: 8192, height: 4320 }, {}, {}, info, undefined, true, {}, .5)
     expect([output.width, output.height, output.displayWidth, output.displayHeight]).toEqual([8192, 4320, 8192, 4320])
-    expect(author.render).toHaveBeenLastCalledWith(output.texture, 8192, 4320, {}, {}, { ...info, renderScale: 1 }, undefined, { frames: [], images: {} }, true, { width: 8192, height: 4320 }, {}, 'interactive', expect.any(Function), expect.any(Function))
+    expect(author.render).toHaveBeenLastCalledWith(output.texture, 8192, 4320, {}, {}, { ...info, renderScale: 1 }, undefined, { frames: [], images: {} }, true, { width: 8192, height: 4320 }, {}, 'interactive', expect.any(Function), expect.any(Function), undefined)
   } finally { await runtime.dispose() }
 })
 
@@ -303,11 +304,11 @@ it('成本报告带上各片段图层的沿用与上传统计，同一序列帧�
 it('层式作者滤镜首层升档回传实际目标，生成与预热也不先分配八位输出', async () => {
   const { runtime, program } = fixture()
   const initialCalls = vi.fn()
-  author.instance.mockResolvedValue({ render: async (initial: unknown, ...args: unknown[]) => {
-    const promote = args[args.length - 1] as () => unknown
+  author.instance.mockResolvedValue({ render: async (...args: Parameters<VideoEditAuthorRuntime['render']>) => {
+    const [initial, , , , , , , , , , , , , promote] = args
     expect(typeof initial).toBe('function')
     initialCalls(typeof initial)
-    promote()
+    promote!()
   } })
   try {
     const input = await runtime.target('input', 16, 16)

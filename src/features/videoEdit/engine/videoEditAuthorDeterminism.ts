@@ -11,11 +11,11 @@ import { TEXT_LAYOUT_OBSERVER, type TextLayoutObserverGlobal } from '../../../co
  * 定种子的序列，Date.now / performance.now 换成由时刻推出的值；离开作者函数立即换回。
  * 异步入口只覆盖到第一个 await 之前；`new Date()` 不拦。
  */
-export function runAuthorDeterministic<T>(key: string, time: number | undefined, call: () => T): T {
+export function runAuthorDeterministic<T>(key: string, time: number | undefined, call: () => T, explicitRandom?: () => number): T {
   const timing = globalThis.performance
   const random = Math.random, dateNow = Date.now, ownNow = Object.hasOwn(timing, 'now'), now = timing.now
   const ms = Number.isFinite(time) ? time! * 1000 : 0
-  Math.random = seededRandom(key, time)
+  Math.random = explicitRandom ?? seededRandom(key, time)
   Date.now = () => Math.floor(ms)
   timing.now = () => ms
   try { return call() } finally {

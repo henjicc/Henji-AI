@@ -17,7 +17,7 @@ import { loadAuthorModule, type AuthorModule, type AuthorFrameInfo } from './vid
 import { authorEffectMetadata, authorParameterValues } from './videoEditAuthorParameters'
 import { prepareAuthorModuleUrls } from './videoEditAuthorModules'
 import { authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
-import { authorFrameCodeIdentity, fingerprintAuthorFrame, fingerprintAuthorFrameKey, type AuthorFingerprintInput } from './videoEditAuthorFingerprint'
+import { fingerprintAuthorSimulation, authorFrameCodeIdentity, fingerprintAuthorFrame, fingerprintAuthorFrameKey, type AuthorFingerprintInput } from './videoEditAuthorFingerprint'
 
 /** 属于预渲染会话的 Worker；使用正式编译、信任、参数与时间求值入口，完全不获取 GPU。 */
 export class VideoEditCodeFingerprint {
@@ -82,7 +82,7 @@ export class VideoEditCodeFingerprint {
     if (codeMaterialUsesAudio(program)) return { fallback: 'audio-dependent' }
     const effect = await this.module(program.bundle)
     const declared = typeof effect.frameKey === 'function'
-    if (!declared && (effect.createWebGPU || effect.createWebGL)) return { fallback: 'native-gpu' }
+    if (!program.simulation && !declared && (effect.createWebGPU || effect.createWebGL)) return { fallback: 'native-gpu' }
     const inputs: Record<string, AuthorFingerprintInput> = {}
     let hasWeb = false
     for (const [key] of plan.imageKeys) {
@@ -112,11 +112,15 @@ export class VideoEditCodeFingerprint {
     const preparing = prepareAuthorTextParameters(effect, params)
     const text = preparing && await preparing
     let result: VideoEditFrameFingerprint
-    if (declared) {
+    if (program.simulation) {
+      if (!plan.simulation) return { fallback: 'simulation-history-required' }
+      result = fingerprintAuthorSimulation(effect, plan.simulation.identity, plan.context, info, inputs, plan.parameters, overrides,
+        this.document.motionBlur === true, { ...this.document.authorEffects, luts: this.document.colorLuts })
+    } else if (declared) {
       let identity = this.codeIdentities.get(program.bundle)
       if (!identity) {
         const version = codeMaterialVersion(this.document, plan.clip.code!)
-        const files = { ...resolveCodeMaterialFiles(version, documentCodeSourceResolver()), apiVersion: program.apiVersion, libraries: version.libraries }
+        const files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles = { ...resolveCodeMaterialFiles(version, documentCodeSourceResolver()), apiVersion: program.apiVersion, libraries: version.libraries }
         identity = authorFrameCodeIdentity(files, effect, codeVersionContentKey({ ...version, files: [] }))
         this.codeIdentities.set(program.bundle, identity)
       }

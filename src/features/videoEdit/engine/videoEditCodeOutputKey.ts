@@ -74,7 +74,8 @@ export function codeOutputKey(document: VideoEditComposition, plan: VideoEditCod
   declared: VideoEditFrameFingerprint | undefined, quality: EffectQuality = 'interactive', textIdentity?: string): string {
   const program = plan.program!, context = plan.context
   const { sourceTime, overrides, info, environment } = plan.outputFrame!
-  return codeOutputSignature([plan.outputIdentity, plan.parameters, ...(textIdentity === undefined ? [] : [textIdentity]), codeOutputScenes(document, plan), dependencies,
+  // 模拟按全部历史推进：曲线早段变化、当前帧参数不变时也必须失效，所以并入模拟身份。
+  return codeOutputSignature([plan.outputIdentity, plan.parameters, ...(textIdentity === undefined ? [] : [textIdentity]), ...(plan.simulation ? [plan.simulation.identity] : []), codeOutputScenes(document, plan), dependencies,
     declared?.digest ?? (!declared && program.mode === 'static' && !codeMaterialUsesAudio(program) ? 'static' : [context.time, context.localTime, sourceTime]),
     codeOutputObjectSignature(context.audio), context.audioTime, info.frameDuration, info.clip.duration, context.width, context.height, plan.divisor ?? 1,
     documentFontRevision(), overrides, document.motionBlur === true, codeOutputObjectSignature(environment), quality])

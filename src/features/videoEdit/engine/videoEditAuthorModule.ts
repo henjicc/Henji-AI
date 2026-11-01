@@ -1,3 +1,4 @@
+import type { AuthorSimulation, AuthorSimulationDeclaration, AuthorSimulationInfo, AuthorSimulationSampler } from '@/core/videoEdit/codeSimulation'
 import type { CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import { resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import { prepareAuthorTextResources } from './videoEditAuthorTextResources'
@@ -13,6 +14,7 @@ import type { WebTextDeclaration, WebTextImageMapping, WebTextResults } from '@/
 
 /** Executable ES module contract. These functions never cross a worker boundary. */
 export interface AuthorFrameInfo {
+  simulation?: AuthorSimulationSampler
   time: number
   frameDuration: number
   /** frameKey 中提供：包含中心时刻的曝光范围（素材秒数）及有效快门角度。 */
@@ -134,6 +136,8 @@ export interface AuthorModule {
   dataFiles?: readonly string[]
   draw?(ctx: OffscreenCanvasRenderingContext2D, time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   layers?(params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): AuthorLayer[]
+  simulation?: AuthorSimulationDeclaration
+  createSimulation?(params: AuthorParameters, width: number, height: number, info: AuthorSimulationInfo): AuthorSimulation | Promise<AuthorSimulation>
   createWebGL?(gl: WebGL2RenderingContext): AuthorWebGL
   createWebGPU?(device: GpuDevice): AuthorWebGPU | Promise<AuthorWebGPU>
   dispose?(): void | Promise<void>

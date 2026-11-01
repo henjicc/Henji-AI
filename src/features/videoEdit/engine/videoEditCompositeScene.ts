@@ -102,7 +102,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
         const subject = plan.builtin && plan.subject ? await runtime.subjectMatte(SUBJECT_DOCUMENT, await placeMask(runtime, clip, plan.subject, true)) : undefined
         const filtered = plan.builtin
           ? await runtime.builtin(free[0], builtin!, result, frame - clip.start, renderScale, document.colorLuts, quality, logical, 1 / document.fps, subject)
-          : await runtime.authorFilter(free[0], plan.instanceKey, plan.program, plan.parameters, result, plan.info, plan.program.frames.length ? await readFilterFrames?.(clip, plan, result) : [])
+          : await runtime.authorFilter(free[0], plan.instanceKey, plan.program, plan.parameters, result, plan.info, plan.program.frames.length ? await readFilterFrames?.(clip, plan, result) : [], plan.simulation, logical, current)
         current()
         if (plan.builtin && plan.mask) {
           // 只在区域内混入效果。

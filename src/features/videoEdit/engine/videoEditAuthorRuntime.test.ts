@@ -12,6 +12,7 @@ import { makeCodeMaterialDefinition, appendCodeMaterialVersion } from '@/core/vi
 import { addressCodeMaterialFiles, documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
 import { AUTHOR_LIBRARIES, latestAuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import { CODE_AUTHOR_DEFAULT_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
+import { CODE_AUTHOR_SIMULATION_MIN_API_VERSION } from '@/core/videoEdit/codeSimulation'
 import { collectVideoEditCodeMotion } from '@/core/videoEdit/codeMotionReview'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
@@ -201,6 +202,19 @@ it('releases the module even when an instance disposer fails, without retrying d
   expect(moduleDispose).toHaveBeenCalledOnce()
   await runtime.dispose()
   expect(dispose).toHaveBeenCalledOnce()
+})
+
+it('模拟释放失败仍释放 GPU 和模块资源', async () => {
+  const gpuDispose = vi.fn(), moduleDispose = vi.fn()
+  const runtime = new VideoEditAuthorRuntime({} as GpuDevice, {
+    name: '模拟清理',
+    createSimulation: () => ({ step() {}, snapshot: () => 0, restore() {}, read: () => 0, dispose() { throw new Error('simulation cleanup') } }),
+    createWebGPU: () => ({ draw() {}, dispose: gpuDispose }), dispose: moduleDispose,
+  }, undefined, true, CODE_AUTHOR_SIMULATION_MIN_API_VERSION)
+  await runtime.render({ createView: () => ({}), destroy() {} }, 10, 10, {}, {}, { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } })
+  await expect(runtime.dispose()).rejects.toThrow('代码效果资源释放失败')
+  expect(gpuDispose).toHaveBeenCalledOnce(); expect(moduleDispose).toHaveBeenCalledOnce()
+  await runtime.dispose()
 })
 
 it('passes borrowed current and neighbouring GPU textures directly and never destroys them', async () => {
@@ -615,7 +629,7 @@ it('新建源码版本显式固定新版库，经冻结模块实际绘制后复�
       return [{ id: 'title', bounds: [0,0,100,50], pose: t => ({ scale: 1 + t / 10 }), draw(ctx) { drawText(ctx, layout) } }];
     } };`
   let effect: AuthorModule | undefined
-  const compile = async (files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) => {
+  const compile = async (files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles): Promise<import('@/core/videoEdit/codeAuthorProgram').CodeAuthorProgram> => {
     const bundle = await bundleAuthorFiles(files, build)
     let code = bundle.code
     for (const [name, version] of Object.entries(bundle.libraries ?? {})) {
@@ -893,6 +907,26 @@ it.each(['layer', 'native', 'promoted'] as const)('作者纹理换尺寸分配�
   for (const texture of textures) expect(texture.destroy).toHaveBeenCalledOnce()
 })
 
+
+it('替换模拟期间关闭会话，等待在途渲染后释放实际活动世界', async () => {
+  const { device } = canvasHarness()
+  let firstDisposed = false
+  const first = vi.fn(() => { firstDisposed = true })
+  const second = vi.fn(), create = vi.fn()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '释放竞态', createSimulation() {
+    create()
+    return { step() {}, snapshot: () => 0, restore() {}, read: () => 0, dispose: create.mock.calls.length === 1 ? first : second }
+  }, createWebGPU: () => ({ draw() {} }) }, undefined, true, CODE_AUTHOR_SIMULATION_MIN_API_VERSION)
+  const render = (identity: string) => runtime.render(output, 100, 50, {}, {}, frameInfo(0), undefined, undefined, false, undefined, {}, 'interactive', () => {}, undefined, { identity, parametersAt: () => ({}) })
+  await render('first')
+  const rendering = render('second')
+  for (let i = 0; i < 10 && !firstDisposed; i++) await Promise.resolve()
+  expect(firstDisposed).toBe(true)
+  const closing = runtime.dispose()
+  await rendering; await closing
+  expect(create).toHaveBeenCalledTimes(2)
+  expect(first).toHaveBeenCalledOnce(); expect(second).toHaveBeenCalledOnce()
+})
 it('冻结作者库 look 旋钮经正式打包加载和作者运行时进入图层效果，缺失时保留上一帧观察', async () => {
   const { device } = canvasHarness()
   const bundle = await bundleAuthorFiles({ apiVersion: 7, libraries: { 'henji-effects': '1.2.0' }, entry: 'main.js', files: { 'main.js': `import { look } from 'henji-effects'; export default { name:'风格件标题', layers() { return [{ id:'title', bounds:[0,0,20,10], effects:()=>[look('轻柔',{soft:75})], draw(ctx){ctx.fillRect(0,0,20,10)} }] } }` } }, build)
