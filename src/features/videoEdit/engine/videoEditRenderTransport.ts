@@ -1,5 +1,6 @@
 import type { VideoEditRenderPrecision } from './videoEditRenderer'
 import type { WebSourceProvenance } from '@/platform/contracts/videoFrames'
+import type { NativeVideoDecoderStatus } from '@/platform/contracts/videoDecoderTypes'
 import { needsVideoEditTextPreflight, VideoEditTextPreflight } from './videoEditTextPreflight'
 import { serveFontChannel, type FontPort } from '@/core/imaging/vectorContent/shaping/fontChannel'
 import { captureTextFontSnapshot } from '@/platform/textFontSnapshot'
@@ -57,6 +58,11 @@ export function warmVideoEditNativeDecoder(): Promise<void> {
   return nativeWarmup
 }
 
+/** 按服务状态，此刻新建的会话是否用原生解码（服务能握手，且诊断变量没有强制浏览器解码）。 */
+export function videoEditNativeDecoding(status: NativeVideoDecoderStatus): boolean {
+  return status.available && status.forcedBackend !== 'browser'
+}
+
 /** A bounded request stream owned by a view/export, independent from the project lifetime. */
 export interface VideoEditRenderHost {
   authorEffects?(): AuthorEffectEnvironment
@@ -106,6 +112,9 @@ export class VideoEditRenderTransport {
   private readonly content = new VideoEditMediaContentVerifier()
   /** The frame channel handed to the worker for native decoding, disconnected after the worker is gone. */
   private route?: string
+  private nativeDecodingValue = false
+  /** 本会话是否用原生解码：Worker 初始化时按服务状态定下，会话期间不再改变；初始化失败为 undefined。 */
+  nativeDecoding(): Promise<boolean | undefined> { return this.ready.then(() => this.nativeDecodingValue, () => undefined) }
   readonly canvas: OffscreenCanvas
   get previewPreparationMs(): number { return 0 }
   get previewBytes(): number { return 0 }
@@ -219,7 +228,7 @@ export class VideoEditRenderTransport {
       if (this.disposed) { platform.videoFrames.disconnect(channel.route); return { nativeAvailable: false } }
       this.route = channel.route
       this.worker.postMessage({ kind: 'nativeFrames.attach', port: channel.port } satisfies NativeFramesRequest, [channel.port])
-      return { nativeAvailable: status.available && forced !== 'browser', ...(forced ? { forced } : {}) }
+      return { nativeAvailable: videoEditNativeDecoding(status), ...(forced ? { forced } : {}) }
     } catch (error) {
       logger.warn('原生解码通道不可用，剪辑预览只用后备解码', { event: 'video_edit.decode.native.channel_failed', error })
       return { nativeAvailable: false, ...(forced ? { forced } : {}) }
@@ -351,7 +360,7 @@ export class VideoEditRenderTransport {
     this.stopTextFonts = serveFontChannel(textFonts.port1 as unknown as FontPort, () => captureTextFontSnapshot(platform, this.fixedFontSnapshot), error => logger.warn('文字字体准备失败', { event: 'video_edit.text_fonts.prepare.failed', error }))
     this.worker.postMessage({ kind: 'textFonts.attach', port: textFonts.port2 } satisfies TextFontChannelAttach, [textFonts.port2])
     // Verify original media before dependent code/font preparation or opening a decoder channel.
-    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, cacheWebOutput: options.cacheWebOutput, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
+    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { this.nativeDecodingValue = decode.nativeAvailable; const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, cacheWebOutput: options.cacheWebOutput, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
     void this.ready.then(() => { this.readySettled = true }, () => undefined)
     this.stopFonts = subscribeFontLibrary(() => {
       if (this.fixedTextFonts || this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return

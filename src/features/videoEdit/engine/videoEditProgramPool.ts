@@ -2,6 +2,7 @@ import { createVideoEditSequence, type VideoEditComposition } from '@/core/video
 import { createLogger } from '@/core/logging'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditRenderSession } from './videoEditRenderSession'
+import { videoEditNativeDecoding } from './videoEditRenderTransport'
 import { videoEditTimingContext, videoEditTimingEvent } from './videoEditFirstFrameTiming'
 
 const logger = createLogger('features.videoEdit.programPool')
@@ -19,11 +20,13 @@ export function createVideoEditProgramSurface(width: number, height: number): HT
   surface.setAttribute('aria-label', '剪辑画面'); surface.className = 'h-full w-full object-contain'
   return surface
 }
+function release(entry: Program, reason: string): void {
+  logger.info('空闲节目会话已回收', { event: 'video_edit.program.pool.released', context: { reason } })
+  void entry.renderer.dispose()
+}
 function retire(reason: string): void {
   const previous = spare; spare = undefined
-  if (!previous) return
-  logger.info('空闲节目会话已回收', { event: 'video_edit.program.pool.released', context: { reason } })
-  void previous.renderer.dispose()
+  if (previous) release(previous, reason)
 }
 async function checkMemoryAndPrepare(): Promise<void> {
   if (checking) return checking
@@ -77,11 +80,14 @@ export function retainVideoEditProgramWarmup(): () => void {
 }
 
 /** Ownership moves to the visible monitor. A used project session never returns to this pool. */
-export function takeVideoEditProgram(projectId: string, sequenceId: string): Program | undefined {
+export async function takeVideoEditProgram(projectId: string, sequenceId: string): Promise<Program | undefined> {
   const entry = spare
   if (!entry) return
   if (entry.renderer.terminated) { retire('session-terminated'); return }
   spare = undefined
+  // 会话能否用原生解码在预建时就定下了；之后服务可能已崩溃、被移除或恢复，接管前按此刻的状态核对，不一致就新建会话。
+  const [prepared, status] = await Promise.all([entry.renderer.nativeDecoding(), Promise.resolve().then(() => getPlatform().videoDecoder.status()).catch(() => undefined)])
+  if (prepared !== (status ? videoEditNativeDecoding(status) : false)) { release(entry, 'native-status-changed'); return }
   entry.renderer.adoptProject(projectId)
   const timing = videoEditTimingContext(projectId, sequenceId)
   if (timing) videoEditTimingEvent(timing, 'render.session.adopted', { ready: entry.ready })

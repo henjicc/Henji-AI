@@ -122,8 +122,8 @@ async function stepFrames(page, count) {
 function createVideoEditNativeFaultsScene() {
   return {
     id: 'video-edit-native-faults', surface: '剪辑', name: '剪辑-原生解码五类故障的回退就地提示与恢复', writesUserData: true,
-    // Injected on purpose (timeout phase): the heartbeat reports the hung service before ending it.
-    expectedLogEvents: ['video_decoder.service.hung'],
+    // 故意注入的故障：超时阶段心跳先报告服务卡死再结束它；坏文件阶段关闭工程时，封面无法从损坏的素材生成。
+    expectedLogEvents: ['video_decoder.service.hung', 'documents.cover.save.failed'],
     setup: async (page, app, { capture }) => {
       fs.rmSync(ROOT, { recursive: true, force: true }); fs.mkdirSync(ROOT, { recursive: true })
       const { ffmpegPath } = require('./mediaBinaries.cjs')

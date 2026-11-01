@@ -36,6 +36,7 @@ vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: clas
   async prepareGpu() {}
   async captureHoverFrame() { return undefined }
   adoptProject() {}
+  async nativeDecoding() { return false }
   preopenSequence = pixel.preopen
   constructor() { pixel.sessions++ }
   updateDocument = pixel.update
