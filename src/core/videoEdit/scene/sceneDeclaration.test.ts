@@ -2,6 +2,8 @@ import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parseDocumentText } from '../../documents/envelope'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '../../persistence/schemaVersions'
+import { PERSISTENCE_FORMATS } from '../../persistence/formats'
+import { upgradePersistenceContent } from '../../persistence/migrations'
 import { CodeMaterialError } from '../codeMaterial/contract'
 import { videoEditDocumentSchema } from '../document'
 import { parseCodeSceneSchema, validateCodeSceneRecords } from './sceneDeclaration'
@@ -9,7 +11,11 @@ import { videoEditSceneReferenceIssues } from './sceneSchema'
 import { GOLDEN_SCENE_DECLARATION, goldenScene } from './sceneTestFixtures'
 
 type Content = { scenes: Array<{ records: Array<{ parent?: string }> }>; sequences: Array<{ clips: Array<{ id: string; code?: { parameters: Record<string, unknown> } }> }> }
-const golden = (): Content => parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v47.json', 'utf8')).content as Content
+// v47 带齐片子数据案例；历史样本先逐版本升级，才是当前读者实际拿到的内容。
+const golden = (): Content => {
+  const fixture = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v47.json', 'utf8'))
+  return upgradePersistenceContent(PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!, fixture.content, fixture.kindVersion) as Content
+}
 const parseDocument = (content: Content) => videoEditDocumentSchema.safeParse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...content })
 
 describe('片子数据', () => {

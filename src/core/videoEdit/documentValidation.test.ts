@@ -2,10 +2,14 @@ import fs from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { parseDocumentText } from '../documents/envelope'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
+import { PERSISTENCE_FORMATS } from '../persistence/formats'
+import { upgradePersistenceContent } from '../persistence/migrations'
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import { freezeVideoEditDocument, parseVideoEditDocument } from './documentValidation'
 
-const content = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v47.json', 'utf8')).content as object
+// v47 带齐片子数据与代码参数案例；历史样本先逐版本升级，才是当前读者实际拿到的内容。
+const fixture = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v47.json', 'utf8'))
+const content = upgradePersistenceContent(PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!, fixture.content, fixture.kindVersion) as object
 const base = parseVideoEditDocument({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...content })
 const scene = base.scenes![0]
 const definition = base.codeMaterials![0]
