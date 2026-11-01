@@ -64,11 +64,19 @@ export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[
 export const VIDEO_EDIT_SMART_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_SMART_PRESETS.map(preset => ({
   id: videoEditSmartPresetRef(preset.id), name: preset.name, category: 'smart', kind: 'effect', media: 'video', description: preset.description, tooltip: preset.description, templateRef: videoEditSmartPresetRef(preset.id), aliases: [preset.id, preset.id.replaceAll('_', ' ')],
 }))
-/** 登记表全部条目：过渡在前（按预设顺序），内置效果在后。 */
+/**
+ * 登记表全部条目：过渡在前（按预设顺序），内置效果在后。分到“更多”的过渡与“更多”里的少用效果同一个文件夹，
+ * 归在其中“其他”一组，排在最后，与大理石相邻。
+ */
 export function videoEditEffectsRegistry(): VideoEditEffectsRegistryEntry[] {
+  const transitions = VIDEO_EDIT_TRANSITION_PRESETS.map((preset): VideoEditEffectsRegistryEntry => {
+    const more = 'group' in preset && preset.group === '更多'
+    return { id: `transition:${preset.kind}`, name: preset.name, category: more ? 'more' : preset.medium === 'audio' ? 'audio_transition' : 'video_transition', kind: 'transition', media: preset.medium, description: preset.description, tooltip: preset.tooltip, transitionKind: preset.kind, aliases: [preset.kind, preset.kind.replaceAll('_', ' ')], ...('group' in preset ? { group: more ? VIDEO_EDIT_BUILTIN_GROUP_NAMES.other : preset.group } : {}), ...(videoEditTransitionParamDefinitions(preset.kind).length ? { params: videoEditTransitionParamDefinitions(preset.kind) } : {}) }
+  })
   return [
-    ...VIDEO_EDIT_TRANSITION_PRESETS.map((preset): VideoEditEffectsRegistryEntry => ({ id: `transition:${preset.kind}`, name: preset.name, category: preset.medium === 'audio' ? 'audio_transition' : 'video_transition', kind: 'transition', media: preset.medium, description: preset.description, tooltip: preset.tooltip, transitionKind: preset.kind, aliases: [preset.kind, preset.kind.replaceAll('_', ' ')], ...('group' in preset ? { group: preset.group } : {}), ...(videoEditTransitionParamDefinitions(preset.kind).length ? { params: videoEditTransitionParamDefinitions(preset.kind) } : {}) })),
+    ...transitions.filter(entry => entry.category !== 'more'),
     ...VIDEO_EDIT_BUILTIN_EFFECTS,
     ...VIDEO_EDIT_SMART_EFFECTS,
+    ...transitions.filter(entry => entry.category === 'more'),
   ]
 }

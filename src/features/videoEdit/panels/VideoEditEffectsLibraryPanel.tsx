@@ -54,8 +54,7 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
   const folders = [
     { id: 'favorites', name: '收藏', entries: filterVideoEditLibraryEntries(entries.filter(entry => favorites.includes(entry.id)), query, '收藏') },
     { id: 'presets', name: '风格件', entries: matching.filter(entry => entry.category === 'presets') },
-    ...VIDEO_EDIT_EFFECT_CATEGORIES.map(category => ({ ...category, entries: matching.filter(entry => entry.category === category.id && entry.group !== '更多') })),
-    { id: 'more', name: '更多', entries: matching.filter(entry => entry.group === '更多') },
+    ...VIDEO_EDIT_EFFECT_CATEGORIES.map(category => ({ ...category, entries: matching.filter(entry => entry.category === category.id) })),
   ]
     .filter(folder => folder.entries.length)
   const isDefault = (entry: VideoEditLibraryEntry): boolean => Boolean(entry.transitionKind && videoEditDefaultTransitionKind(defaults, videoEditTransitionMedium(entry.transitionKind)) === entry.transitionKind)
