@@ -57,7 +57,8 @@ describe('音频效果合并迁移', () => {
     const source = JSON.parse(fs.readFileSync('tests/fixtures/audio-effect-merge/preset_package.json', 'utf8'))
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'video-preset-package')!
     const migrated = upgradePersistenceContent(format, source, source.version)
-    expect(migrated).toEqual({ ...migrateAudioEqualizerModes(migrateAudioMergedEffects(source)), version: format.version })
+    // 这里核对音频迁移本身；之后版本给外壳加的字段（如 minReaderVersion）由下面与最新黄金样本的比对覆盖。
+    expect({ ...(migrated as object), minReaderVersion: undefined }).toEqual({ ...migrateAudioEqualizerModes(migrateAudioMergedEffects(source)), version: format.version })
     const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/video-preset-package/v${format.version}.json`, 'utf8'))
     expect(current).toEqual(migrated)
     expect(() => assertVideoEditBuiltinCurves({ id: 'modulation', curves: { mode: [{ time: 0, value: 'phaser', interpolation: 'hold' }] } })).toThrow('不支持关键帧')
