@@ -10,7 +10,7 @@ import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { videoEditHalfToFloat } from './videoEditGpuShaders'
 import { planStroke, strokeJumpSteps } from './stroke'
-import type { VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
+import { planVideoEditBuiltinEffect, type VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
 import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { ditherPattern, halftone } from '../authorLibraries/effects.generated'
@@ -548,5 +548,54 @@ describe('质感', () => {
     expect(await scratches(busy, 7)).not.toBe(hash(night))
     expect(await scratches({ ...busy, hold: 100 }, 7)).toBe(await scratches({ ...busy, hold: 100 }, 300))
     expect(await scratches({ ...busy, amount: 0 }, 7)).toBe(hash(night))
+  }, 60_000)
+})
+
+describe('镜头光晕与漏光', () => {
+  /** 片段入口，或图层拆输出（主图叠在零 alpha 光上）；漏光的时间是效果时钟的 帧号 × 帧时长（这里 30 fps）。 */
+  async function light(source: Uint8Array, id: string, params: Record<string, unknown>, options: { frame?: number; split?: boolean } = {}): Promise<Uint8Array> {
+    const instance = { id, params } as never, frame = options.frame ?? 0, frameDuration = 1 / 30
+    const input = texture(source), output = target(), image = target(), under = target()
+    try {
+      if (!options.split) await effects.render(instance, { texture: input, width: W, height: H, format: 'rgba8unorm' }, output, frame, 1, [], 'final', undefined, frameDuration)
+      else {
+        const plan = planVideoEditBuiltinEffect(instance, { width: W, height: H, frame, frameDuration, split: true })
+        expect(plan.underlay).toBeDefined()
+        await effects.encodePlan(plan, 'rgba8unorm', input, image, undefined, [], undefined, under)
+        const compose: VideoEditBuiltinPlan = { width: W, height: H, scratch: [], passes: [{ entry: 'effect_over', source: 'input', original: 'second', target: 'output', uniforms: new Float32Array([W, H, W, H, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) }] }
+        await effects.encodePlan(compose, 'rgba8unorm', image, output, under)
+      }
+      return await read(output)
+    } finally { [input, output, image, under].forEach(value => value.destroy()) }
+  }
+  const brightness = (pixels: Uint8Array, x: number, y: number): number => at(pixels, x, y).slice(0, 3).reduce((sum, value) => sum + value, 0)
+  const dark = (): Uint8Array => canvas(W, H, () => [14, 14, 16, 255])
+  /** 透明底上一块不透明的字块：半透明处两种输出本来就按不同的透明度语义叠光（与发光相同），这里只比完全透明与不透明。 */
+  const block = (): Uint8Array => canvas(W, H, (x, y) => x >= 30 && x < 70 && y >= 20 && y < 44 ? [200, 200, 210, 255] : undefined)
+
+  it('镜头光晕：只给画面加光；光源移出画面时边上的光连续变暗、过边缘不跳变；拆输出与片段一致', async () => {
+    const night = nightData(), flare = await light(night, 'lens_flare', {})
+    expect(Math.min(...flare.map((value, index) => value - night[index]))).toBeGreaterThanOrEqual(-1)
+    expect(brightness(flare, 24, 16)).toBeGreaterThan(740)
+    // 只看光雾：没有星芒与拉丝时，光源离画面右边缘由近到远，边上一点的亮度单调变暗。
+    const edge: number[] = []
+    for (const x of [98, 99, 100, 100.5, 101, 102, 104, 110, 120]) edge.push(brightness(await light(dark(), 'lens_flare', { light_x: x, light_y: 25, rays: 0, streak: 0 }), 88, 16))
+    for (let index = 1; index < edge.length; index++) expect(edge[index], `第 ${index} 个位置`).toBeLessThanOrEqual(edge[index - 1] + 8)
+    expect(Math.abs(edge[2] - edge[3])).toBeLessThanOrEqual(12)
+    expect(edge[0] - edge.at(-1)!).toBeGreaterThan(300)
+    const black = [0, 0, 0, 255], params = { ghosts: 60, light_x: 40 }
+    const clipped = over(await light(block(), 'lens_flare', params), black), layered = over(await light(block(), 'lens_flare', params, { split: true }), black)
+    // 片段先压锐利的光再叠光雾，图层下层先有光雾再加锐利的光：两者都接近白时肩部压缩的先后差几级。
+    expect(Math.max(...clipped.map((value, index) => Math.abs(value - layered[index])))).toBeLessThanOrEqual(3)
+  }, 60_000)
+  it('漏光：从所选方向渗进来；速度 > 0 时光形随效果时钟流动；拆输出与片段一致', async () => {
+    const corner = await light(dark(), 'light_leak', {})
+    expect(brightness(corner, 3, 3)).toBeGreaterThan(brightness(corner, 92, 60) + 150)
+    const right = await light(dark(), 'light_leak', { side: 'right' })
+    expect(brightness(right, 92, 32)).toBeGreaterThan(brightness(right, 3, 32) + 150)
+    expect(hash(await light(dark(), 'light_leak', { speed: 100, flicker: 0 }, { frame: 0 }))).not.toBe(hash(await light(dark(), 'light_leak', { speed: 100, flicker: 0 }, { frame: 90 })))
+    const black = [0, 0, 0, 255]
+    const clipped = over(await light(block(), 'light_leak', { amount: 120 }), black), layered = over(await light(block(), 'light_leak', { amount: 120 }, { split: true }), black)
+    expect(Math.max(...clipped.map((value, index) => Math.abs(value - layered[index])))).toBeLessThanOrEqual(2)
   }, 60_000)
 })

@@ -163,6 +163,8 @@ function buildPanel(): void {
 }
 
 // ---- 渲染
+// 每次重画前进一帧，按 60 fps 的帧时长给效果时钟，随时间变化的效果（漏光）在预览里也会动。
+const FRAME_DURATION = 1 / 60
 let frame = 0; let pending = false; let again = false; const timings: number[] = []
 async function render(): Promise<void> {
   if (pending) { again = true; return }
@@ -174,14 +176,14 @@ async function render(): Promise<void> {
     if ($<HTMLInputElement>('layer').checked) {
       // 与代码图层同一条路径：拆成主图与下层，下层在主图下面叠好（零 alpha 的光按相加叠到底色上）。
       const layer = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
-      const plan = planVideoEditBuiltinEffect({ ...instance, params: { ...videoEditBuiltinDefaults(definition()), ...params } } as never, { width: W, height: H, frame: frame++, layer, split: true })
+      const plan = planVideoEditBuiltinEffect({ ...instance, params: { ...videoEditBuiltinDefaults(definition()), ...params } } as never, { width: W, height: H, frame: frame++, frameDuration: FRAME_DURATION, layer, split: true })
       const image = plan.underlay === undefined ? output : layerImage
       await effects.encodePlan(plan, 'rgba8unorm', input as unknown as GpuTexture, image as unknown as GpuTexture, undefined, [], undefined, layerUnder as unknown as GpuTexture)
       if (plan.underlay !== undefined) {
         const over: VideoEditBuiltinPlan = { width: W, height: H, scratch: [], passes: [{ entry: 'effect_over', source: 'input', original: 'second', target: 'output', uniforms: new Float32Array([W, H, W, H, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) }] }
         await effects.encodePlan(over, 'rgba8unorm', layerImage as unknown as GpuTexture, output as unknown as GpuTexture, layerUnder as unknown as GpuTexture)
       }
-    } else await effects.render(instance as never, { texture: input as unknown as GpuTexture, width: W, height: H, format: 'rgba8unorm' }, output as unknown as GpuTexture, frame++)
+    } else await effects.render(instance as never, { texture: input as unknown as GpuTexture, width: W, height: H, format: 'rgba8unorm' }, output as unknown as GpuTexture, frame++, 1, [], 'interactive', undefined, FRAME_DURATION)
     await device.queue.onSubmittedWorkDone()
   }
   const elapsed = performance.now() - started

@@ -8,7 +8,6 @@ import { VIDEO_EDIT_BUILTIN_EFFECT_SHADER, VIDEO_EDIT_UNFILTERED_SOURCE_ENTRIES,
 import type { CubeLut } from '@/core/videoEdit/cubeLut'
 import type { ColorLutAsset } from '@/core/videoEdit/colorLutAsset'
 import { fetchVideoEditColorLut } from './videoEditColorLutSource'
-import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
 import type { EffectQuality, EffectSize } from '@/core/imaging/effects/descriptor'
 
 export type VideoEditLutLoader = (asset: ColorLutAsset) => Promise<CubeLut>
@@ -103,9 +102,9 @@ export class VideoEditBuiltinEffectsGpu {
     const plan = planVideoEditBuiltinEffect(instance, { width, height, frame: 0 })
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
-  /** `input` 与 `output` 尺寸相同；`frame` 是片段自己的帧号，只用作随帧效果（颗粒、故障）的确定种子。 */
-  async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize): Promise<void> {
-    await this.encodePlan(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts)
+  /** `input` 与 `output` 尺寸相同；`frame`、`frameDuration` 是效果时钟（片段自己的帧号与每帧秒数），随帧效果取种子、随时间变化的效果求秒数都用它；随时间变化的效果在第 0 帧以外缺帧时长会报错。 */
+  async render(instance: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize, frameDuration?: number): Promise<void> {
+    await this.encodePlan(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, frameDuration, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts)
   }
   /**
    * 带参数的视频过渡（4.7）：`outgoing` 前一段、`incoming` 后一段（单侧过渡两者可以是同一纹理，空着的一侧由参数标记），

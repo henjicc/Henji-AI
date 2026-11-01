@@ -871,7 +871,8 @@ it('调整层切开静止组、按作者画幅执行，仅 opacity 和 clip 参�
     expect(layerDraw.mock.invocationCallOrder[0]).toBeLessThan(effectEncode.mock.invocationCallOrder[0])
     expect(layerDraw.mock.invocationCallOrder[1]).toBeGreaterThan(layerCopy.mock.invocationCallOrder[0])
     expect(effectEncode.mock.calls[0].slice(2, 6)).toMatchObject([50, 25, [{ id: 'film_grain', params: { amount: 42 } }], { referenceSize: { width: 100, height: 50 }, rasterScale: .5 }])
-    expect(effectEncode.mock.calls[0][10]).toBe(6); expect(effectEncode.mock.calls[0][12]).toEqual({ opacity: .35 })
+    // 调整层的效果时钟与普通图层同源：模块帧号与每帧秒数都取自本帧信息。
+    expect(effectEncode.mock.calls[0].slice(10, 12)).toEqual([6, 1 / 60]); expect(effectEncode.mock.calls[0][13]).toEqual({ opacity: .35 })
     const observed = runtime.observeElements(), adjust = observed.find(element => element.id === 'grade')!
     expect(adjust).toMatchObject({ kind: 'adjust', sourceSpan, clip: [10.5, 4, 80, 40], corners: [], opacity: .35, effects: [{ id: 'film_grain', params: { amount: 42 } }] })
     expect(adjust).not.toHaveProperty('bounds')

@@ -27,11 +27,11 @@ export class VideoEditAuthorEffects {
     this.batch = { encoder, uniformIndex: 0, taken: new Set(), created: new Set() }
   }
   async encode(slot: string, input: GpuTexture, width: number, height: number, effects: readonly ResolvedAuthorEffect[], context: LayerEffectReference,
-    environment: AuthorEffectEnvironment, contentKey: string | undefined, defocus: { radius: number; lens: boolean }, mipmaps: (texture: GpuTexture) => void, frame: number, needsFloat = defocus.radius > 0 || effects.some(effect => videoEditEffectNeedsFloat(effect, { width, height, referenceSize: context.referenceSize, renderScale: 1, layer: context })), adjustment?: { opacity: number }): Promise<AuthorEffectOutput> {
+    environment: AuthorEffectEnvironment, contentKey: string | undefined, defocus: { radius: number; lens: boolean }, mipmaps: (texture: GpuTexture) => void, frame: number, frameDuration?: number, needsFloat = defocus.radius > 0 || effects.some(effect => videoEditEffectNeedsFloat(effect, { width, height, referenceSize: context.referenceSize, renderScale: 1, layer: context })), adjustment?: { opacity: number }): Promise<AuthorEffectOutput> {
     if (!this.batch) throw new Error('图层效果尚未开始编码。')
     this.used.add(slot)
     const format = input.format === 'rgba16float' || needsFloat ? 'rgba16float' : 'rgba8unorm'
-    const key = JSON.stringify([format, contentKey, width, height, context, authorEffectsFingerprint(effects, environment, frame), defocus, adjustment])
+    const key = JSON.stringify([format, contentKey, width, height, context, authorEffectsFingerprint(effects, environment, frame), frameDuration, defocus, adjustment])
     const cached = this.cache.get(slot)
     if (contentKey !== undefined && cached?.key === key) return cached.output
     // 内容键失效即撤销缓存资格；同尺寸像素可以覆写，取消后必须重新编码才能发布。
@@ -62,13 +62,13 @@ export class VideoEditAuthorEffects {
       // 下层按产生顺序记录：光（零 alpha，相加照亮下方）与影（cover，普通预乘遮挡）。
       const underlays: Array<{ texture: GpuTexture; cover: boolean }> = []
       const plans = effects.map(effect => planVideoEditBuiltinEffect(effect, adjustment
-        ? { width, height, frame, referenceSize: context.referenceSize, renderScale: context.rasterScale, quality: context.quality, split: true }
-        : { width, height, frame, layer: context, split: true }))
+        ? { width, height, frame, frameDuration, referenceSize: context.referenceSize, renderScale: context.rasterScale, quality: context.quality, split: true }
+        : { width, height, frame, frameDuration, layer: context, split: true }))
       const hasUnderlay = plans.some(plan => plan.underlay !== undefined)
       for (const [index, effect] of effects.entries()) {
         // 调整层的每道效果都接收完整画面；拆出的光与影不能绕过后续调色。
         const plan = adjustment && plans[index].underlay !== undefined
-          ? planVideoEditBuiltinEffect(effect, { width, height, frame, referenceSize: context.referenceSize, renderScale: context.rasterScale, quality: context.quality })
+          ? planVideoEditBuiltinEffect(effect, { width, height, frame, frameDuration, referenceSize: context.referenceSize, renderScale: context.rasterScale, quality: context.quality })
           : plans[index]
         // 只有交给合成器的最后一张图需要 mip（缩小绘制）；有 pose.blur 或下层时最后一张图还要再处理一道。
         const needsMips = !adjustment && index === effects.length - 1 && defocus.radius <= 0 && !hasUnderlay

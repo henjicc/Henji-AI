@@ -118,7 +118,8 @@ it('规划随帧号变化的效果必须声明 frameSeed，种子相同的帧规
   for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => VIDEO_EDIT_EFFECT_PLANNER_BY_ID.has(value.id))) {
     const params = videoEditBuiltinDefaults(definition)
     for (const context of definition.space === 'layer' ? [undefined, layer] : [undefined]) {
-      const plans = frames.map(frame => planVideoEditBuiltinEffect({ id: definition.id, params }, { width: 64, height: 36, frame, ...(context ? { layer: context } : {}) }))
+      // 给出非零帧时长：随时间连续变化的效果（漏光）也必须只按种子求时间。
+      const plans = frames.map(frame => planVideoEditBuiltinEffect({ id: definition.id, params }, { width: 64, height: 36, frame, frameDuration: 1 / 30, ...(context ? { layer: context } : {}) }))
       const seeds = frames.map(frame => definition.frameSeed?.(params, frame) ?? 0)
       // 没有声明的效果所有帧同种子；声明了的，同种子的帧必须得到同一份规划，否则复用键会拿到别的帧的画面。
       frames.forEach((_frame, index) => expect(plans[index], `${definition.id} 第 ${frames[index]} 帧`).toEqual(plans[seeds.indexOf(seeds[index])]))

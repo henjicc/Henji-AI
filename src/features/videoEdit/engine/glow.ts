@@ -1,4 +1,4 @@
-import { definePlanner } from './effectPlanner'
+import { definePlanner, type EffectShaderBlock } from './effectPlanner'
 import { glowLevelWeights, GLOW_GAIN } from '@/core/videoEdit/glowEnergy'
 export { glowLevelWeights } from '@/core/videoEdit/glowEnergy'
 import { glowLevels, type LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
@@ -272,11 +272,8 @@ fn glowColor(before: vec3f, light: vec3f, screen: bool, position: vec2f) -> vec3
  return clamp(encoded + glowNoise(position - u.layer.xy, u.c.w > 0.5) * (u.c.z * 2.0 / 255.0) * changed, vec3f(0.0), vec3f(1.0));
 }
 @fragment fn glow_composite(v: Vertex) -> @location(0) vec4f {
- let base = tapOriginal(uvOf(v)); let shown = base.a * u.a.z;
- let lit = glowColor(straight(base) * shown, glowLight(v), u.b.w > 0.5, v.position.xy);
- let alpha = max(shown, glowPeak(lit));
- if (alpha <= 0.00001) { return vec4f(0.0); }
- return vec4f(min(lit, vec3f(alpha)), alpha);
+ let base = tapOriginal(uvOf(v));
+ return glowOnto(straight(base), base.a * u.a.z, glowLight(v), u.b.w > 0.5, v.position.xy);
 }
 // 轮廓方式：光在内容后面，按显示出来的 alpha 挡住（原画不透明度为 0 时光完整露出，与图层拆输出一致）。
 @fragment fn glow_shape_composite(v: Vertex) -> @location(0) vec4f {
@@ -289,9 +286,8 @@ fn glowColor(before: vec3f, light: vec3f, screen: bool, position: vec2f) -> vec3
  return vec4f(glowColor(vec3f(0.0), glowLight(v), u.b.w > 0.5, v.position.xy), 0.0);
 }
 @fragment fn glow_layer_image(v: Vertex) -> @location(0) vec4f {
- let base = tapOriginal(uvOf(v)); let shown = base.a * u.a.z;
- let lit = glowColor(straight(base), glowLight(v), u.b.w > 0.5, v.position.xy);
- return vec4f(lit * shown, shown);
+ let base = tapOriginal(uvOf(v));
+ return glowWithin(straight(base), base.a * u.a.z, glowLight(v), u.b.w > 0.5, v.position.xy);
 }
 @fragment fn glow_layer_light(v: Vertex) -> @location(0) vec4f {
  return vec4f(glowColor(vec3f(0.0), glowLight(v), false, v.position.xy), 0.0);
@@ -303,7 +299,23 @@ fn glowColor(before: vec3f, light: vec3f, screen: bool, position: vec2f) -> vec3
 }
 `
 
+/**
+ * 光加到画面上的规则（glowColor 的相加或滤色），发光、镜头光晕、漏光共用。`color` 是直通色，`shown` 是显示出来的不透明度。
+ * glowOnto：片段上光可以照亮透明处，不透明度升到光的峰值；glowWithin：图层拆输出的主图，光只加在内容范围内，内容外的光由零 alpha 的下层交出。
+ */
+export const GLOW_COMPOSITE_BLOCK: EffectShaderBlock = { name: 'glow-composite', wgsl: `
+fn glowOnto(color: vec3f, shown: f32, light: vec3f, screen: bool, position: vec2f) -> vec4f {
+ let lit = glowColor(color * shown, light, screen, position);
+ let alpha = max(shown, glowPeak(lit));
+ if (alpha <= 0.00001) { return vec4f(0.0); }
+ return vec4f(min(lit, vec3f(alpha)), alpha);
+}
+fn glowWithin(color: vec3f, shown: f32, light: vec3f, screen: bool, position: vec2f) -> vec4f {
+ return vec4f(glowColor(color, light, screen, position) * shown, shown);
+}
+` }
+
 export const GLOW_PLANNER = definePlanner({
-  id: 'glow', entries: GLOW_ENTRIES, wgsl: GLOW_WGSL,
+  id: 'glow', entries: GLOW_ENTRIES, shared: [GLOW_COMPOSITE_BLOCK], wgsl: GLOW_WGSL,
   plan: (params, frame) => planGlow(params, frame.width, frame.height, frame.layer, frame.split),
 })

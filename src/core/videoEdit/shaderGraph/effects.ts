@@ -123,9 +123,6 @@ export function shaderGraphEffectProps(id: string, values: Readonly<VideoEditBui
   return shaderComponentProps(component, values)
 }
 
-/** 渲染时钟（片段内秒数），只在渲染时传递，不写入效果参数。 */
-export interface VideoEditShaderClock { shaderTimeSeconds?: number }
-
 /** 一项着色器效果对应的着色器图：先画片段画面，再叠生成器或套滤镜。组件图层 id 固定为 `fx`；封装效果按参数里的方式选组件。 */
 export function shaderGraphEffectSpec(id: string, params: Readonly<VideoEditBuiltinParams> = {}): ShaderGraphSpec {
   const wrapped = WRAPPED.get(id)

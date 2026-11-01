@@ -4,7 +4,7 @@ import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinGroup } from './
 export const VIDEO_EDIT_EFFECT_CATALOG: readonly { readonly group: VideoEditBuiltinGroup; readonly ids: readonly string[] }[] = [
   { group: 'blur', ids: ['blur', 'sharpen'] },
   { group: 'color', ids: ['color_grade', 'black_white', 'invert', 'gradient_map', 'posterize', 'film_look'] },
-  { group: 'light', ids: ['glow', 'light_sweep'] },
+  { group: 'light', ids: ['glow', 'light_sweep', 'lens_flare', 'light_leak'] },
   { group: 'outline', ids: ['drop_shadow', 'stroke'] },
   { group: 'lens', ids: ['vignette', 'chromatic_aberration'] },
   { group: 'texture', ids: ['film_grain', 'halftone', 'dither_pattern', 'paper', 'scratches', 'retro_screen'] },

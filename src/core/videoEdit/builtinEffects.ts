@@ -31,8 +31,9 @@ export interface VideoEditBuiltinEffectDefinition {
   /** layer 可用于作者图层及片段；不写只用于片段。 */
   space?: 'layer' | 'frame' | 'clip'
   /**
-   * 规划随宿主帧号变化的效果必须声明：返回这一帧真正用到的种子值。返回值相同的帧必须得到相同的规划；
-   * 输出复用键与指纹并入返回值而不是帧号，同一段错法、强度为 0 等画面不变的帧照样复用。
+   * 规划随效果时钟变化的效果必须声明：返回这一帧规划真正依赖的值（整帧序号、段号或带小数的帧位置；画面不变时返回常量）。
+   * 帧时长相同且返回值相同的帧必须得到相同的规划。输出复用键与指纹并入返回值而不是帧号（帧时长由各自的键另行覆盖），
+   * 同一段错法、强度为 0 等画面不变的帧照样复用。
    */
   frameSeed?: (params: VideoEditBuiltinParams, frame: number) => number
   bleed?: (params: VideoEditBuiltinParams, reference: LayerEffectReference) => number

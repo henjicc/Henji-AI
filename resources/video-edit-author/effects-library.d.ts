@@ -370,6 +370,50 @@ export interface LightSweepParams {
   readonly glow_radius?: number
 }
 
+export interface LensFlareParams {
+  /** 亮度；光源有多亮。0 没有光；30 柔和的一点灯光；60（默认）明显的强光，中心发白；100 以上中心大片发白，可以输入到 400。；默认 60；常用 0–100；硬范围 0–400；单位 strength；可动画 true */
+  readonly brightness?: number
+  /** 光源位置（水平）；光源在画面里左右的位置。0% 在左边缘，100% 在右边缘，25%（默认）偏左；可以输入画外的值，例如 120%，光从右边漏进来。；默认 25；常用 0–100；硬范围 -100–200；单位 percent；可动画 true */
+  readonly light_x?: number
+  /** 光源位置（垂直）；光源上下的位置。0% 在顶边，100% 在底边，25%（默认）偏上；输入负数光源到画面上方。；默认 25；常用 0–100；硬范围 -100–200；单位 percent；可动画 true */
+  readonly light_y?: number
+  /** 颜色；光的颜色，光晕、星芒、拉丝和鬼影一起变。白色（默认）；暖黄像夕阳，淡蓝像冷光灯。很亮时中心仍会发白。；默认 "#ffffff"；可动画 true */
+  readonly color?: string
+  /** 光晕大小；光晕散多远，和发光的半径同一把尺子。0 只剩贴着光源的一小团；30 约为画面高度的 2%；60（默认）约 8%，四周一圈柔和的光雾；100 能铺满大半个画面。；默认 60；常用 0–100；硬范围 0–150；单位 strength；分组 光芒；可动画 true */
+  readonly size?: number
+  /** 星芒；光源周围放射的细光线有多明显。0 没有；20（默认）淡淡的几道；60 以上清楚的星形光芒。；默认 20；硬范围 0–100；单位 strength；分组 光芒；可动画 true */
+  readonly rays?: number
+  /** 星芒数量；星芒有几道。4 是十字；6（默认）像六叶光圈拍出的星芒；8 以上更细密。星芒为 0 时不起作用。；默认 6；常用 2–16；硬范围 2–32；单位 value；分组 光芒；可动画 false */
+  readonly ray_count?: number
+  /** 横向拉丝；一条横贯画面的细长光线，像宽银幕镜头。0 没有；30（默认）淡淡一条；70 以上明显的光条，亮度越高拉得越长。；默认 30；硬范围 0–100；单位 strength；分组 光芒；可动画 true */
+  readonly streak?: number
+  /** 鬼影；沿光源和画面中心的连线排开的一串淡淡的圆形光斑，像老镜头里的反射。0（默认）没有；30 隐约可见；70 以上很明显。；默认 0；硬范围 0–100；单位 strength；分组 鬼影；可动画 true */
+  readonly ghosts?: number
+  /** 色散；鬼影边缘的彩虹色。0 没有彩边；30（默认）淡淡的一圈；100 明显的彩虹边。鬼影为 0 时不起作用。；默认 30；硬范围 0–100；单位 strength；分组 鬼影；可动画 true */
+  readonly ghost_dispersion?: number
+}
+
+export interface LightLeakParams {
+  /** 强度；漏光有多亮。0 没有；50（默认）一角明显泛暖；100 以上大半个画面被光冲淡，可以输入到 200。；默认 50；常用 0–100；硬范围 0–200；单位 strength；可动画 true */
+  readonly amount?: number
+  /** 方向；光从哪边渗进来。左上（默认）从左上角斜着进来；上、下、左、右从一条边进来，光沿着这条边铺开。；默认 "top_left"；可动画 true */
+  readonly side?: "top_left" | "top" | "top_right" | "right" | "bottom_right" | "bottom" | "bottom_left" | "left"
+  /** 范围；光往画面里铺得多深。50%（默认）约到画面三分之一；20% 只贴着边缘一小片；100% 铺过大半个画面。；默认 50；硬范围 0–100；单位 percent；分组 光；可动画 true */
+  readonly spread?: number
+  /** 条纹；顺着光进来的方向的明暗条纹，像光从缝里透进来。0 一整片柔光；30（默认）隐约的几道；80 以上清楚的光带。；默认 30；硬范围 0–100；单位 strength；分组 光；可动画 true */
+  readonly streaks?: number
+  /** 中心颜色；光最亮处的颜色，暖白（默认）。很亮时还会更接近白色。；默认 "#ffe8c8"；分组 颜色；可动画 true */
+  readonly hot_color?: string
+  /** 边缘颜色；光渐渐变淡处的颜色，橙色（默认）；换成玫红、品红是更浓的胶片味。；默认 "#ff8a4a"；分组 颜色；可动画 true */
+  readonly edge_color?: string
+  /** 闪烁；亮度一明一暗地起伏。0% 稳定不变；20%（默认）轻轻地呼吸；70% 以上明显地跳动。；默认 20；硬范围 0–100；单位 percent；分组 变化；可动画 true */
+  readonly flicker?: number
+  /** 速度；光形慢慢流动的快慢。0% 静止；30%（默认）几秒里缓缓变化；100% 流动得很明显。；默认 30；硬范围 0–100；单位 percent；分组 变化；可动画 false */
+  readonly speed?: number
+  /** 随机种子；换一个数，光的形状和起伏就换一种，亮度和范围不变。同一部片子几处都用漏光时各填不同的数。；默认 0；硬范围 0–9999；单位 value；分组 变化；可动画 false */
+  readonly seed?: number
+}
+
 export interface DropShadowParams {
   /** 不透明度；影子有多深。0 没有投影；40%（默认）淡淡的影子，像纸片稍稍离开桌面；80% 以上是浓重的影子。；默认 40；硬范围 0–100；单位 percent；可动画 true */
   readonly opacity?: number
@@ -553,6 +597,8 @@ export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'posterize'; readonly params?: PosterizeParams }
   | { readonly id: 'glow'; readonly params?: GlowParams }
   | { readonly id: 'light_sweep'; readonly params?: LightSweepParams }
+  | { readonly id: 'lens_flare'; readonly params?: LensFlareParams }
+  | { readonly id: 'light_leak'; readonly params?: LightLeakParams }
   | { readonly id: 'drop_shadow'; readonly params?: DropShadowParams }
   | { readonly id: 'stroke'; readonly params?: StrokeParams }
   | { readonly id: 'vignette'; readonly params?: VignetteParams }
@@ -578,6 +624,8 @@ export declare function gradientMap(params?: GradientMapParams): { readonly id: 
 export declare function posterize(params?: PosterizeParams): { readonly id: 'posterize'; readonly params: PosterizeParams }
 export declare function glow(params?: GlowParams): { readonly id: 'glow'; readonly params: GlowParams }
 export declare function lightSweep(params?: LightSweepParams): { readonly id: 'light_sweep'; readonly params: LightSweepParams }
+export declare function lensFlare(params?: LensFlareParams): { readonly id: 'lens_flare'; readonly params: LensFlareParams }
+export declare function lightLeak(params?: LightLeakParams): { readonly id: 'light_leak'; readonly params: LightLeakParams }
 export declare function shadow(params?: DropShadowParams): { readonly id: 'drop_shadow'; readonly params: DropShadowParams }
 export declare function stroke(params?: StrokeParams): { readonly id: 'stroke'; readonly params: StrokeParams }
 export declare function vignette(params?: VignetteParams): { readonly id: 'vignette'; readonly params: VignetteParams }

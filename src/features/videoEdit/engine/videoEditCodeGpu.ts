@@ -16,7 +16,8 @@ import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositin
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import type { VideoEditBuiltinPlan } from './effectPlan'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
-import { isShaderGraphEffect, shaderGraphEffectKeepsSourceAlpha, shaderGraphEffectProps, shaderGraphEffectSpec, type VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
+import { effectClockSeconds } from './effectPlanner'
+import { isShaderGraphEffect, shaderGraphEffectKeepsSourceAlpha, shaderGraphEffectProps, shaderGraphEffectSpec} from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import { isDissolveTransitionSource } from '@/core/videoEdit/transitionSources'
 import { isGlTransition, type GlTransitionKind } from '@/core/videoEdit/glTransitions/transitions'
@@ -587,8 +588,8 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }
-  /** 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame` 是片段自己的帧号，只用作随帧效果的确定种子。 */
-  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1, luts: readonly import('@/core/videoEdit/colorLutAsset').ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: { width: number; height: number }): Promise<VideoEditCodePicture> {
+  /** 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame`、`frameDuration` 是效果时钟（片段自己的帧号与每帧秒数），原生效果与着色器图效果共用；第 0 帧以外缺帧时长会报错。 */
+  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1, luts: readonly import('@/core/videoEdit/colorLutAsset').ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: { width: number; height: number }, frameDuration?: number): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '内置效果输入必须属于当前GPU设备。')
     const runtime = this.builtins()
@@ -596,12 +597,11 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     const target = this.surface(key, input.width, input.height, format)
     if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
     if (isShaderGraphEffect(instance.id)) {
-      // `shaders` 组件效果：着色器图 [@input, 组件]，时间是片段内秒数（由合成场景给出）。
-      const time = (instance as VideoEditShaderClock).shaderTimeSeconds ?? 0
+      // `shaders` 组件效果：着色器图 [@input, 组件]，时间与原生效果同一时钟（帧号 × 帧时长）。
       const params = resolveVideoEditBuiltinParams(instance)
-      await this.shaderGraphs().render(shaderGraphEffectSpec(instance.id, params), { timeSeconds: time, width: input.width, height: input.height, input: input.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphEffectProps(instance.id, params)]]) })
+      await this.shaderGraphs().render(shaderGraphEffectSpec(instance.id, params), { timeSeconds: effectClockSeconds(frameDuration, frame), width: input.width, height: input.height, input: input.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphEffectProps(instance.id, params)]]) })
       if (shaderGraphEffectKeepsSourceAlpha(instance.id, params)) await runtime.encodePlan(sourceAlphaPlan(input.width, input.height), format, target.picture.texture, target.picture.texture, input.texture)
-    } else await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format }, target.picture.texture, frame, renderScale, luts, quality, referenceSize)
+    } else await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format }, target.picture.texture, frame, renderScale, luts, quality, referenceSize, frameDuration)
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }

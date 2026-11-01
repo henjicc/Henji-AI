@@ -79,6 +79,45 @@ it.each(['grain', 'animated-layer-effect', 'still', 'glitch-layer', 'glitch-stil
     expect(await device.popErrorScope()).toBeNull()
   } finally { loader.mockRestore(); vi.unstubAllGlobals() }
 })
+it('0.5 倍慢放的代码图层：调整层漏光按小数帧位置逐个输出帧变化，预览复用与导出直出逐像素相同', async () => {
+  // 源时间每个输出帧只走半帧；帧位置若取整，第 31、32 帧会落在同一帧上，光一顿一顿。
+  const d = historyRasterDevice()
+  const effect = deterministicAuthorModule({ name: '慢放漏光', frameKey: () => 'settled', layers: () => [
+    { id: 'base', bounds: [0, 0, W, H] as [number, number, number, number], draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.fillRect(0, 0, W, H) } },
+    { id: 'leak', adjust: () => [{ id: 'light_leak' as const, params: { amount: 100, speed: 100, flicker: 100 } }] },
+  ] }, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION)
+  const loader = vi.spyOn(authorModules, 'loadAuthorModule').mockResolvedValue(effect)
+  const code = { definitionId: 'definition', versionId: 'v', parameters: {} }
+  const doc: VideoEditComposition = { ...document, clips: [{ ...clip, kind: 'code', code, duration: 90, speed: { numerator: 1, denominator: 2 } }],
+    codeMaterials: [{ id: 'definition', name: '慢放漏光', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, languageVersion: 4, ...testCodeManifest('export default { name: "慢放漏光", draw() {} }', {}) }] }] }
+  const compiler = { bundle: async (files: CodeMaterialFiles) => testAuthorBundle(files), dispose() {} }
+  const run = async (reuse: boolean, quality: 'interactive' | 'final') => {
+    const host = new VideoEditCodeGpu(d), sources = new VideoEditCodeSources(doc, async () => host, compiler, undefined, reuse)
+    const results: Array<{ pixels: Uint8Array; hits: number }> = []
+    try {
+      for (const frame of [30, 31, 32]) {
+        const prepared = await sources.prepare(doc, doc.clips, frame, () => true, undefined, { quality })
+        const picture = prepared.pictures.get('c') as VideoEditCodePicture
+        const bytesPerRow = W * (picture.highPrecision ? 8 : 4)
+        const buffer = gpu.gpu.createBuffer({ size: bytesPerRow * H, usage: 0x01 | 0x08 }), encoder = gpu.gpu.createCommandEncoder()
+        encoder.copyTextureToBuffer({ texture: picture.texture as never }, { buffer, bytesPerRow }, [W, H])
+        gpu.gpu.queue.submit([encoder.finish()]); await buffer.mapAsync(0x01)
+        results.push({ pixels: new Uint8Array(buffer.getMappedRange().slice(0)), hits: prepared.cacheHits })
+        buffer.unmap(); buffer.destroy()
+      }
+      return results
+    } finally { await sources.dispose(); await host.dispose() }
+  }
+  device.pushErrorScope('validation')
+  try {
+    const exported = await run(false, 'final'), previewed = await run(true, 'interactive')
+    expect(previewed.map(frame => frame.hits)).toEqual([0, 0, 0])
+    expect(previewed.map(frame => frame.pixels)).toEqual(exported.map(frame => frame.pixels))
+    expect(exported[0].pixels).not.toEqual(exported[1].pixels)
+    expect(exported[1].pixels).not.toEqual(exported[2].pixels)
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { loader.mockRestore(); vi.unstubAllGlobals() }
+})
 function compositor(): VideoEditGpuCompositor {
   const canvas = { width: W, height: H, getContext: () => ({ configure() {} }) } as unknown as OffscreenCanvas
   return new VideoEditGpuCompositor(canvas, { ready: Promise.resolve(), device, canvasFormat: 'rgba8unorm', assertDevice() {} } as unknown as VideoEditGpuCompositor)
@@ -472,7 +511,7 @@ it('调整层效果链中产光的完整输出进入后续调色，与片段串�
     const effects = resolveAuthorEffects(descriptors, {}, 0, 'adjust', 'frame')
     const reference = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: W, height: H }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'final' as const }
     await author.begin(stack.texture); chain.begin(author.commandEncoder())
-    const actual = await chain.encode('adjust', input.texture, W, H, effects, reference, {}, undefined, { radius: 0, lens: false }, () => {}, 0, true, { opacity: 1 })
+    const actual = await chain.encode('adjust', input.texture, W, H, effects, reference, {}, undefined, { radius: 0, lens: false }, () => {}, 0, undefined, true, { opacity: 1 })
     author.finish(); chain.commit()
     await builtin.render(effects[0], { texture: input.texture, width: W, height: H, format: 'rgba16float' }, glow.texture, 0, 1, [], 'final')
     await builtin.render(effects[1], { texture: glow.texture, width: W, height: H, format: 'rgba16float' }, expected.texture, 0, 1, [], 'final')

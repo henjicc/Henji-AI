@@ -417,3 +417,6 @@ export const VIDEO_EDIT_EFFECT_PREVIEW_COLORS = {
 
 /** 发光像素回归的固定着色输入，保持已登记画面基线。 */
 export const VIDEO_EDIT_GLOW_TEST_COLORS = { inner: '#ff8040', outer: '#4080ff' } as const;
+
+/** 剪辑内置效果“漏光”的默认颜色（画面内容色）：最亮处暖白、边缘橙。 */
+export const VIDEO_EDIT_LIGHT_LEAK_DEFAULT_HEX = { hot: '#ffe8c8', edge: '#ff8a4a' } as const;

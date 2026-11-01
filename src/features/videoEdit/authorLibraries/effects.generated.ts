@@ -1,5 +1,5 @@
 // 由 scripts/generate-author-effects.ts 生成，请修改效果登记后重新生成。
-import type { BlurParams, SharpenParams, ColorGradeParams, BlackWhiteParams, InvertParams, GradientMapParams, PosterizeParams, GlowParams, LightSweepParams, DropShadowParams, StrokeParams, VignetteParams, ChromaticAberrationParams, FilmGrainParams, HalftoneParams, DitherPatternParams, PaperParams, ScratchesParams, MosaicParams, GlitchParams, DissolveRevealParams } from '@/core/videoEdit/authorEffects.generated'
+import type { BlurParams, SharpenParams, ColorGradeParams, BlackWhiteParams, InvertParams, GradientMapParams, PosterizeParams, GlowParams, LightSweepParams, LensFlareParams, LightLeakParams, DropShadowParams, StrokeParams, VignetteParams, ChromaticAberrationParams, FilmGrainParams, HalftoneParams, DitherPatternParams, PaperParams, ScratchesParams, MosaicParams, GlitchParams, DissolveRevealParams } from '@/core/videoEdit/authorEffects.generated'
 export function blur(params: BlurParams = {}): { readonly id: 'blur'; readonly params: BlurParams } { return { id: 'blur', params } }
 export function sharpen(params: SharpenParams = {}): { readonly id: 'sharpen'; readonly params: SharpenParams } { return { id: 'sharpen', params } }
 export function colorGrade(params: ColorGradeParams = {}): { readonly id: 'color_grade'; readonly params: ColorGradeParams } { return { id: 'color_grade', params } }
@@ -9,6 +9,8 @@ export function gradientMap(params: GradientMapParams = {}): { readonly id: 'gra
 export function posterize(params: PosterizeParams = {}): { readonly id: 'posterize'; readonly params: PosterizeParams } { return { id: 'posterize', params } }
 export function glow(params: GlowParams = {}): { readonly id: 'glow'; readonly params: GlowParams } { return { id: 'glow', params } }
 export function lightSweep(params: LightSweepParams = {}): { readonly id: 'light_sweep'; readonly params: LightSweepParams } { return { id: 'light_sweep', params } }
+export function lensFlare(params: LensFlareParams = {}): { readonly id: 'lens_flare'; readonly params: LensFlareParams } { return { id: 'lens_flare', params } }
+export function lightLeak(params: LightLeakParams = {}): { readonly id: 'light_leak'; readonly params: LightLeakParams } { return { id: 'light_leak', params } }
 export function shadow(params: DropShadowParams = {}): { readonly id: 'drop_shadow'; readonly params: DropShadowParams } { return { id: 'drop_shadow', params } }
 export function stroke(params: StrokeParams = {}): { readonly id: 'stroke'; readonly params: StrokeParams } { return { id: 'stroke', params } }
 export function vignette(params: VignetteParams = {}): { readonly id: 'vignette'; readonly params: VignetteParams } { return { id: 'vignette', params } }

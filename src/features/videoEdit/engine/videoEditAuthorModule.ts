@@ -73,12 +73,15 @@ export interface AuthorWebGL {
   draw(time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   dispose?(): void | Promise<void>
 }
+/** 源时间换成帧位置的细分：整帧仍是整数，小数帧按 1/1024 帧取值，去掉浮点误差，预览、导出与指纹取到同一个值。 */
+const FRAME_POSITION_STEPS = 1024
 /**
- * 图层效果按帧取种子用的帧号：渲染、输出复用键与预渲染指纹都取这同一个值，预览与导出才一致。
- * static 模块承诺画面不随时间变，输出键也不含时间，随帧效果一律取第 0 帧，结果不取决于先渲染哪一帧。
+ * 图层与调整层的效果时钟：代码素材源时间对应的帧位置，可以带小数，慢放、时间重映射时每个输出帧都前进。
+ * 渲染、输出复用键与预渲染指纹都取这同一个值，预览与导出才一致。
+ * static 模块承诺画面不随时间变，输出键也不含时间，一律取 0，结果不取决于先渲染哪一帧。
  */
-export function authorFrameNumber(module: Pick<AuthorModule, 'mode'>, info: Pick<AuthorFrameInfo, 'time' | 'frameDuration'>): number {
-  return module.mode === 'static' ? 0 : Math.round(info.time / info.frameDuration)
+export function authorFramePosition(module: Pick<AuthorModule, 'mode'>, info: Pick<AuthorFrameInfo, 'time' | 'frameDuration'>): number {
+  return module.mode === 'static' ? 0 : Math.round(info.time / info.frameDuration * FRAME_POSITION_STEPS) / FRAME_POSITION_STEPS
 }
 export function isAuthorAdjustment(layer: AuthorLayer, apiVersion: number): boolean {
   // 旧接口的同名字段属于作者数据，宿主不能读取或重写作者对象。
