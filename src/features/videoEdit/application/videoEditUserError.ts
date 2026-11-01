@@ -19,5 +19,13 @@ export function videoEditUserErrorMessage(reason: unknown): string {
     logger.warn('剪辑操作返回了内部错误文本', { event: 'video_edit.error.internal_text', context: { message: message.slice(0, 500) } })
     return /too_big|too_small/.test(message) ? '数值超出允许范围，已保持原值。' : '这次修改的内容无效，已保持原值。'
   }
+  // 主进程原样转来的文件系统错误带错误码和内部路径，只进日志
+  const code = /\b(ENOENT|EPERM|EACCES|EBUSY|ENOSPC|EISDIR|ENOTDIR|EMFILE)\b:/.exec(message)?.[1]
+  if (code) {
+    logger.warn('剪辑操作返回了文件系统错误', { event: 'video_edit.error.file_system', context: { message: message.slice(0, 500) } })
+    if (code === 'ENOENT' || code === 'ENOTDIR') return '找不到需要的文件，它可能已被移动或删除。'
+    if (code === 'ENOSPC') return '磁盘空间不足，请清理后重试。'
+    return '文件暂时无法读写，请检查它是否只读或被其他程序占用。'
+  }
   return message
 }

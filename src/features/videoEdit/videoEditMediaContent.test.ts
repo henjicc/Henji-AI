@@ -27,7 +27,9 @@ class WorkerBoundary {
   onmessage?: (event: MessageEvent<RenderResponse>) => void
   terminate = vi.fn()
   constructor() { workers.push(this) }
-  postMessage(request: RenderRequest) {
+  postMessage(request: RenderRequest | { kind: 'textFonts.attach' }) {
+    // 字体通道在 Worker 创建时就接上，不属于解码或 GPU 工作
+    if (request.kind === 'textFonts.attach') return
     this.messages.push(request)
     queueMicrotask(() => this.onmessage?.({ data: { id: request.id, presented: true } } as MessageEvent<RenderResponse>))
   }

@@ -1,6 +1,7 @@
 import { audibleVideoEditClips, videoEditClipMedia, videoEditNestedComposition, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { getPlatform } from '@/platform/runtime'
+import { videoEditSourceReadError } from './engine/videoEditSourceErrors'
 
 export function videoEditMediaContentKey(media: VideoEditMedia): string {
   return JSON.stringify([media.id, media.path, media.sourceRevision, media.assetContent])
@@ -22,12 +23,14 @@ export async function verifyVideoEditMediaContent(media: VideoEditMedia, signal?
   signal?.throwIfAborted()
   const expected = media.assetContent
   if (!expected?.contentIdentity) return
-  try {
-    const current = await inspectVideoEditMediaContent(media, signal)
-    if (current.contentIdentity !== expected.contentIdentity || current.sizeBytes !== expected.sizeBytes || current.fileModifiedAt !== expected.fileModifiedAt) throw new Error('源文件内容已改变')
-  } catch (error) {
+  let current: Awaited<ReturnType<typeof inspectVideoEditMediaContent>>
+  try { current = await inspectVideoEditMediaContent(media, signal) } catch (error) {
     signal?.throwIfAborted()
-    throw new Error(`素材“${media.name}”的源文件已改变或丢失，请重新定位源素材。`, { cause: error })
+    // 读不到文件与解码读不到共用同一句提示，告诉用户去哪里重新定位。
+    throw videoEditSourceReadError(media.name, error)
+  }
+  if (current.contentIdentity !== expected.contentIdentity || current.sizeBytes !== expected.sizeBytes || current.fileModifiedAt !== expected.fileModifiedAt) {
+    throw new Error(`素材“${media.name}”的源文件已改变或丢失，请重新定位源素材。`)
   }
 }
 
