@@ -175,7 +175,10 @@ function normalizeMetaFromArgs(level: LogLevel, args: DynamicValue[]): { message
     const [error, contextOrMeta, maybeMeta, ...remaining] = rest
 
     const baseMeta: LogCallMeta = {}
-    if (error !== undefined) {
+    // error 也接受与 warn/info 相同的 `(message, { event, error, context })` 写法：带元信息键的普通对象不是错误本身。
+    if (isRecord(error) && !(error instanceof Error) && pickMetaFromRecord(error).hasMeta) {
+      assignMetaFromRecord(baseMeta, error)
+    } else if (error !== undefined) {
       baseMeta.error = error
     }
 
