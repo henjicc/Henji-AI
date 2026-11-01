@@ -287,7 +287,11 @@ export async function renderVideoEditSpatialCompositeScene(options: {
         const picture = await materialPicture(material, source)
         completion = picture.completion
         return picture
-      } finally { await raw.release(completion) }
+      } finally {
+        // 释放本身等 GPU 用完才回收纹理；这里不必同步等它，否则每个曝光样本都要停下等一次 GPU。
+        // 帧结束时 releaseSpatialFrame 会等全部租约落定，失败照样从那里抛出。
+        void raw.release(completion).catch(() => undefined)
+      }
     },
   }
   const host = createVideoEditSpatialHost(request, spatial, {

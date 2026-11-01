@@ -711,9 +711,52 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     const runtime = this.glTransitions()
     await Promise.all(kinds.map(kind => runtime.prepare(kind, 'rgba8unorm')))
   }
+  /**
+   * 效果、空间材料与曝光的临时纹理按尺寸/格式/层级复用。D3D12 下每建一张大纹理都要在 GPU 进程里分配资源并懒清零，
+   * 空间帧每帧几十张时 GPU 进程主线程被建纹理占满，显卡本身却闲着。归还的纹理留到两次 releaseUnused 之后才销毁；
+   * 取回时先清成透明，与新建纹理的初始内容一致（有的效果只写支持区域）。
+   */
   readonly effectAllocator: import('./videoEditBuiltinEffectsGpu').VideoEditBuiltinScratchAllocator = {
-      allocate: (width, height, format, mipLevelCount, storage = false) => this.texture(width, height, format, mipLevelCount, storage),
-      release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes },
+    allocate: (width, height, format, mipLevelCount = 1, storage = false) => {
+      const key = `${width}x${height}:${format}:${mipLevelCount}:${storage}`
+      const pooled = this.scratchPool.get(key)?.pop()
+      if (pooled) { const bytes = this.textureBytes.get(pooled.texture) ?? 0; this.scratchIdleBytes -= bytes; this.bytes += bytes; this.clearScratch(pooled.texture, mipLevelCount); return pooled.texture }
+      const texture = this.texture(width, height, format, mipLevelCount, storage)
+      this.scratchKeys.set(texture, key)
+      return texture
+    },
+    release: texture => {
+      const key = this.scratchKeys.get(texture), bytes = this.textureBytes.get(texture) ?? 0
+      if (!key || this.disposed) { texture.destroy(); this.bytes -= bytes; return }
+      const list = this.scratchPool.get(key) ?? []
+      list.push({ texture, generation: this.scratchGeneration }); this.scratchPool.set(key, list)
+      // 驻留计账只算在用的纹理；闲置池另按上限回收。
+      this.bytes -= bytes; this.scratchIdleBytes += bytes
+      if (this.scratchIdleBytes > MAX_RESIDENT_BYTES / 4) this.evictScratch(Infinity)
+    },
+  }
+  private readonly scratchPool = new Map<string, Array<{ texture: GpuTexture; generation: number }>>()
+  private readonly scratchKeys = new WeakMap<GpuTexture, string>()
+  private scratchGeneration = 0
+  private scratchIdleBytes = 0
+  private clearScratch(texture: GpuTexture, mipLevelCount: number): void {
+    const encoder = this.device.createCommandEncoder()
+    const view = texture as GpuTexture & { createView(descriptor: unknown): unknown }
+    for (let level = 0; level < mipLevelCount; level++) {
+      encoder.beginRenderPass({ colorAttachments: [{ view: view.createView({ baseMipLevel: level, mipLevelCount: 1 }), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }] }).end()
+    }
+    this.device.queue.submit([encoder.finish()])
+  }
+  /** `before`：销毁在这一代之前归还的（释放全部时传最大整数）；Infinity 表示按最早归还的顺序销毁到闲置上限的一半。 */
+  private evictScratch(before: number): void {
+    const entries = [...this.scratchPool].flatMap(([key, list]) => list.map(entry => ({ key, entry }))).sort((a, b) => a.entry.generation - b.entry.generation)
+    for (const { key, entry } of entries) {
+      if (before === Infinity ? this.scratchIdleBytes <= MAX_RESIDENT_BYTES / 8 : entry.generation >= before) break
+      const list = this.scratchPool.get(key)!
+      list.splice(list.indexOf(entry), 1); if (!list.length) this.scratchPool.delete(key)
+      const bytes = this.textureBytes.get(entry.texture) ?? 0
+      entry.texture.destroy(); this.scratchIdleBytes -= bytes
+    }
   }
   private builtins(): VideoEditBuiltinEffectsGpu {
     return this.builtinRuntime ??= new VideoEditBuiltinEffectsGpu(this.device, this.sampler, this.effectAllocator)
@@ -783,6 +826,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
       else this.releaseIdleAlternates(key)
     }
     this.builtinRuntime?.releaseIdle(); this.graphCache?.releaseIdle()
+    this.evictScratch(++this.scratchGeneration - 2)
   }
   /** WebGPU exposes no available-VRAM query. Use the owned texture-byte budget,
    * reserving half for layers/effects; resolution determines the target count. */
@@ -858,7 +902,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
       deviceErrors.delete(this.device)
     }
     this.batchMixBuffers.forEach(buffer => buffer.destroy()); this.batchMixBuffers.length = 0
-    this.releaseUnused(new Set()); this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; this.glTransitionRuntime?.dispose(); this.glTransitionRuntime = undefined; this.transparentPixel?.destroy(); this.transparentPixel = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
+    this.releaseUnused(new Set()); this.evictScratch(Number.MAX_SAFE_INTEGER); this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; this.glTransitionRuntime?.dispose(); this.glTransitionRuntime = undefined; this.transparentPixel?.destroy(); this.transparentPixel = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
     this.glyphs.clear(); this.glyphBytes = 0; this.image = undefined; this.mixPipelines.clear(); this.maskedMixPipelines.clear()
     if (failures.length) throw new AggregateError(failures, '代码渲染资源释放失败。')
   }
