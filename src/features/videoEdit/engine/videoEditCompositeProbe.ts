@@ -82,7 +82,7 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     const shapes = graphic('命名对象', 1, [0, 0, 0, 0]); const rect = createVideoEditGraphic('rect', 3840, 2160).objects[0]
     Object.assign(rect.parameters, { x: 200, y: 200, width: 100, height: 40, rotation: 90, fill: [1, 0, 0, .5], opacity: .5 })
     const ellipse = createVideoEditGraphic('ellipse', 3840, 2160).objects[0]; Object.assign(ellipse.parameters, { x: 600, y: 200, width: 200, height: 100, fill: [0, 1, 0, .5] })
-    const title = createVideoEditGraphic('text', 3840, 2160).objects[0]; Object.assign(title.parameters, { x: 1920, y: 1250, text: '原生图层 · 4K', fontSize: 160, align: 'center', color: [1, 1, 1, 1] })
+    const title = createVideoEditGraphic('text', 3840, 2160).objects[0]; Object.assign(title.parameters, { x: 1920, y: 1250, text: '原生图层 · 4K' }); title.textStyle = { ...title.textStyle!, fontSize: 160, align: 'center' }
     shapes.graphic!.objects = [rect, ellipse, title]
     update([shapes]); const cold = await render(0, true); runtime = await compositor.code()
     pixel('旋转矩形内部RGBA合成', 250, 180, [64, 0, 0, 255]); pixel('原未旋转位置为空', 210, 220, [0, 0, 0, 255]); pixel('椭圆中心', 700, 250, [0, 128, 0, 255]); pixel('椭圆外角', 602, 202, [0, 0, 0, 255])
