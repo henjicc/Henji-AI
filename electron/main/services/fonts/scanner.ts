@@ -1,4 +1,5 @@
-import { readFile, stat, readdir, mkdir, writeFile, rename } from 'node:fs/promises'
+import { writeBufferAtomically } from '../fs/atomic-file'
+import { readFile, stat, readdir, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { discoverSystemFonts, FONT_FILE_EXTENSION, type FontDiscovery } from './discovery'
@@ -33,9 +34,8 @@ export class FontScanner {
         for (const value of parsed) faces.push({ face: { ...value.face, id: createHash('sha256').update(`${file}:${value.index}:${signature}:${JSON.stringify(value.face.variation ?? {})}`).digest('hex'), imported: importedSet.has(file) }, path: file, index: value.index, signature })
       } catch (error) { failures.push(`${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`) }
     }
+    await writeBufferAtomically(path.join(this.library, 'catalog-cache.json'), Buffer.from(JSON.stringify(next)))
     this.cache = next
-    const temp = path.join(this.library, 'catalog-cache.tmp')
-    await writeFile(temp, JSON.stringify(next)); await rename(temp, path.join(this.library, 'catalog-cache.json'))
     return { faces, failures }
   }
   async importFile(source: string): Promise<void> {
@@ -45,14 +45,21 @@ export class FontScanner {
     const parsed = parseFontFile(bytes)
     if (!parsed.length) throw new Error('字体文件中没有可用样式。')
     const hash = createHash('sha256').update(bytes).digest('hex')
-    // Hash is the library filename. Equivalent content never creates another asset, even with a different filename.
+    // 内容哈希作文件名，使改名后的相同字体仍指向同一资产。
     const existing = (await readdir(this.library)).find(name => name.startsWith(`${hash}.`))
     if (existing) return
     await writeFile(path.join(this.library, `${hash}${path.extname(source).toLowerCase()}`), bytes, { flag: 'wx' })
   }
-  async read(face: InternalFace): Promise<Uint8Array> {
-    const info = await stat(face.path)
-    if (`${info.size}:${info.mtimeMs}` !== face.signature) throw new Error('字体已发生变化，请刷新字体列表。')
-    return new Uint8Array(standaloneFont(await readFile(face.path), face.index))
+  async read(face: InternalFace, fixed = false): Promise<Uint8Array> {
+    const changed = (): Error => new Error(fixed ? '字体在导出期间被修改' : '字体已发生变化，请刷新字体列表。')
+    const inspect = () => stat(face.path).catch(error => { if (fixed && (error as NodeJS.ErrnoException).code === 'ENOENT') throw changed(); throw error })
+    const info = await inspect()
+    if (`${info.size}:${info.mtimeMs}` !== face.signature) throw changed()
+    const bytes = await readFile(face.path).catch(error => { if (fixed && (error as NodeJS.ErrnoException).code === 'ENOENT') throw changed(); throw error })
+    const normalized = await standaloneFont(bytes, face.index)
+    // 解压可能跨越一次文件替换；不能把新目录里的字节发布到旧快照。
+    const after = await inspect()
+    if (`${after.size}:${after.mtimeMs}` !== face.signature) throw changed()
+    return new Uint8Array(normalized)
   }
 }

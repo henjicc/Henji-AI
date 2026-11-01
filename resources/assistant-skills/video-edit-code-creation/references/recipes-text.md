@@ -9,7 +9,7 @@
 - 整段先用 `layoutText` 排好，一次 `drawText(ctx, layout, { graphemes: (g, i) => ({ y, opacity }) })` 给出每个字素的动画；不要另排单字。容器先动，字素仅晚约 .06 秒跟随，间隔约 .01 秒、局部位移约 .12 字号；不单独做原地淡入上浮。
 - 底板按整段显示：默认首个字素可见就出现；需要淡入时传 `backgroundAndDecorationOpacity: clamp01(time / .3)`，它同时控制整段装饰线。所有字素的发光与外描边先画，再画各字填色及其内/居中描边，外描边不遮住正文。
 - 错峰跨度为 (n−1)×间隔；建议 ≤0.6 秒，长标题分拍或压缩间隔，不删字。
-- 复杂连字／组合字形逐字绘制会失去连写，必要时改为逐词或整行裁切揭示。中文关键词先按语义分段，每段作为独立 text 参数或 table 行。
+- 连字与组合字形保持完整字形簇，共享字形簇由首字素决定位姿与揭示。中文关键词先按语义分段，每段作为独立 text 参数或 table 行。
 - 逐词排连续短语时按排版结果的完整段宽度摆放并留间隔；横向排不下给 `maxWidth` 让排版库折行，不靠单字长度×字号估计。
 - 随配音揭示必须有真实词级时刻；按时刻表或实例曲线求进度。按字数比例推算只叫近似，不能称逐词识别。
 
@@ -19,6 +19,7 @@
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"
+export const textFonts = { bindings: [{ text: "title", style: "style" }] }
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 export default {
@@ -31,7 +32,7 @@ export default {
     { key: "each", type: "number", title: "字符间隔秒", default: .012, min: 0, max: .06, step: .005 }
   ],
   layers(params, width, height) {
-    const layout = layoutText(params.title, params.style, { maxWidth: width * .84, maxLines: 1, forceGraphemes: true, fit: { minFontSize: 40 }, anchor: { x: width * .08, y: height / 2, horizontal: 0, vertical: .5 } })
+    const layout = layoutText(params.title, params.style, { maxWidth: width * .84, maxLines: 1, fit: { minFontSize: 40 }, anchor: { x: width * .08, y: height / 2, horizontal: 0, vertical: .5 } })
     const { x: x0, y: y0, width: w, height: h } = layout.box, size = layout.style.fontSize
     const count = layout.graphemes.length
     const each = Math.min(params.each, .18 / Math.max(1, count - 1))
@@ -50,7 +51,7 @@ export default {
 }
 ```
 
-整段布局每帧按内容和字体代次复用；返回值深度只读。不要对每个字另调 `layoutText`，否则整段的超框与截断无法随绘制复核。同一帧全部排出的字素透明度都大于 0 才视为揭示完成；完成后仍会报告原布局的遗漏行。分层图集至少按 2× 栅格化（超大纹理会降档），同档缓存复用，逐帧动画不重画；落定仍沿用同一图集和对齐方式，避免边缘闪变。
+整段布局每帧按内容和字体代次复用；返回值深度只读。不要对每个字另调 `layoutText`，否则整段的超框与截断无法随绘制复核。同一帧全部排出的字素透明度都大于 0 才视为揭示完成；完成后仍会报告原布局的遗漏行。整段与逐字绘制复用同一字形几何；普通文字按轮廓绘制，描边与阴影按当前采样密度缓存。静止图层可用 cacheKey 复用，内容或样式变化时更新键。
 
 ## 对齐、字距、行距
 

@@ -265,6 +265,23 @@ it('标出能否单独栅格后叠加（只用 source-over）与 save/restore �
   expect(calls).toEqual([['set', 'fillStyle', 'red'], ['reset'], ['setTransform', 2, 0, 0, 2, 4, 4], ['fillRect', 0, 0, 1, 1]])
 })
 
+it('内部文字轮廓按内容身份录制重放，普通 Path2D 不能通过伪造属性获得缓存身份', () => {
+  vi.stubGlobal('Path2D', class { constructor(readonly svg: string) {} })
+  try {
+    const a = createTextOutline('M0 0L1 1', 'font-a/glyph-1'), b = createTextOutline('M0 0L1 1', 'font-a/glyph-1')
+    const record = (path: Path2D) => recordAuthorCanvas(size, measuring(), [1, 0, 0, 1, 0, 0], ctx => ctx.fill(path), true)
+    const first = record(a), second = record(b)
+    expect(first.comparable).toBe(true)
+    expect(sameAuthorCanvasRecording(first, second)).toBe(true)
+    expect(JSON.stringify(first.ops)).toBe(JSON.stringify(second.ops))
+    expect(sameAuthorCanvasRecording(first, record(createTextOutline('M0 0L2 2', 'font-b/glyph-1')))).toBe(false)
+    expect(record(Object.assign(new Path2D('M0 0L1 1'), { outline: 'font-a/glyph-1' })).comparable).toBe(false)
+    const fill = vi.fn()
+    replayAuthorCanvas(first, { fill } as unknown as OffscreenCanvasRenderingContext2D, () => { throw new Error('no asset') })
+    expect(fill).toHaveBeenCalledWith(a)
+  } finally { vi.unstubAllGlobals() }
+})
+
 it('旧库自建离屏画布的真实文字才触发覆盖警告，纯图形画布不触发且追踪作用域恢复', () => {
   class Context {
     constructor(readonly canvas: object) {}
@@ -283,3 +300,4 @@ it('旧库自建离屏画布的真实文字才触发覆盖警告，纯图形画�
     expect(Context.prototype.fillText).toBe(fill)
   } finally { vi.unstubAllGlobals() }
 })
+import { createTextOutline } from './videoEditTextOutlines'

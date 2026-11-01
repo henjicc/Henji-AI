@@ -1,0 +1,4475 @@
+{
+  "schema": 1,
+  "seed": 10102026,
+  "css": {
+    "whiteSpace": "pre-wrap",
+    "wordBreak": "normal",
+    "lineBreak": "auto",
+    "overflowWrap": "break-word",
+    "textAutospace": "no-autospace",
+    "textSpacingTrim": "normal",
+    "fontVariantLigatures": "no-common-ligatures"
+  },
+  "sources": [
+    {
+      "file": "smoke.ndjson",
+      "sha256": "480d252a4cb5114f33af57aad6421c698f7939df5d7b26cff8198a4ce9005450"
+    },
+    {
+      "file": "rich.ndjson",
+      "sha256": "2d8cf9c9ba15656a6f26c7d3becd63fe84ba87fab9dc12eb8b939779c7b4f3e8"
+    },
+    {
+      "file": "facts.ndjson",
+      "sha256": "73b58cdedc952456ef4b7f87b6514e94994cf66f0af02495cce667a5ab5f68ed"
+    },
+    {
+      "file": "reports.ndjson",
+      "sha256": "0e5df7514bc0ea392b904dca702c7814d2cd2fadf5d4dc0f4a6276992e43b62f"
+    },
+    {
+      "file": "LineBreakTest.txt",
+      "sha256": "e69884e0dde6a8724873f885d68c52dc14518abf9ae4ca9e2283b8773db3b752"
+    },
+    {
+      "file": "GraphemeBreakTest.txt",
+      "sha256": "e2d134d2c52919bace503ebb6a551c1855fe1a1faec18478c78fff254a1793ec"
+    }
+  ],
+  "cases": [
+    {
+      "id": "R001",
+      "text": "痕迹AI",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/author-text-motion.md:16",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R002",
+      "text": "痕迹AI",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/author-text-motion.md:16",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R003",
+      "text": "逐字入场",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/author-text-motion.md:59",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R004",
+      "text": "逐字入场",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/author-text-motion.md:59",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R005",
+      "text": "让灵感浮出画面",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text.md:27",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R006",
+      "text": "让灵感浮出画面",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text.md:27",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R007",
+      "text": "输入一个好想法",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md:19",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R008",
+      "text": "输入一个好想法",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md:19",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R009",
+      "text": "指标",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md:62",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R010",
+      "text": "指标",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md:62",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R011",
+      "text": "0",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketLatin",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md:63",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R012",
+      "text": "0",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketLatin",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md:63",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R013",
+      "text": "%",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketLatin",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md:64",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R014",
+      "text": "%",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketLatin",
+      "origin": {
+        "file": "resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md:64",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R015",
+      "text": "HMMH",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketLatin",
+      "origin": {
+        "file": "src/features/videoEdit/authorLibraries/textPixels.test.ts:35",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R016",
+      "text": "HMMH",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketLatin",
+      "origin": {
+        "file": "src/features/videoEdit/authorLibraries/textPixels.test.ts:35",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R017",
+      "text": "fW",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketLatin",
+      "origin": {
+        "file": "src/features/videoEdit/authorLibraries/textPixels.test.ts:82",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R018",
+      "text": "fW",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketLatin",
+      "origin": {
+        "file": "src/features/videoEdit/authorLibraries/textPixels.test.ts:82",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R019",
+      "text": "信息越多，越难判断\nAI 帮你做减法 2026",
+      "width": 400,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "src/features/videoEdit/authorLibraries/textPixels.test.ts:112",
+        "license": "project"
+      }
+    },
+    {
+      "id": "R020",
+      "text": "信息越多，越难判断\nAI 帮你做减法 2026",
+      "width": 95.984375,
+      "size": 32,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "file": "src/features/videoEdit/authorLibraries/textPixels.test.ts:112",
+        "license": "project"
+      }
+    },
+    {
+      "id": "P001",
+      "text": "中文段落用于测试换行行为，看看浏览器如何在汉字之间断行。",
+      "width": 150,
+      "size": 16,
+      "language": "zh-Hans",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "中文段落用于测试换行行为，看看浏览器如何在汉字之间断行。",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "smoke/cjk-zh",
+        "original": "rebuild/lab/smoke-cases.ndjson, with overflow-wrap: break-word",
+        "family": "smoke/cjk-zh",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P002",
+      "text": "甲乙丙)first户",
+      "width": 45,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "甲乙丙)first户",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-002357ea6ef74b79",
+        "original": "src/layout.test.ts:1732 keeps text after a mark that ends CJK text where the engine keeps the pair",
+        "family": "facts/layout.test.ts:1732",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P003",
+      "text": "丙'first",
+      "width": 22,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "丙'first",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-00538dbc40167350",
+        "original": "src/layout.test.ts:739 a mark after CJK text stays with it, and each engine keeps the text after the mark as its pair rules do (#293)",
+        "family": "facts/layout.test.ts:739",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P004",
+      "text": "丙|1234",
+      "width": 1,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "丙|1234",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-007e6cfdf85111f0",
+        "original": "src/layout.test.ts:739 a mark after CJK text stays with it, and each engine keeps the text after the mark as its pair rules do (#293)",
+        "family": "facts/layout.test.ts:739",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P005",
+      "text": "丙|first",
+      "width": 100000,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "丙|first",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-00937b38e718463e",
+        "original": "src/layout.test.ts:739 a mark after CJK text stays with it, and each engine keeps the text after the mark as its pair rules do (#293)",
+        "family": "facts/layout.test.ts:739",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P006",
+      "text": "foo-bar日本語",
+      "width": 1,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "foo-bar日本語",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-00caacc9dac7c72e",
+        "original": "src/layout.test.ts:2119 keep-all keeps CJK-containing no-space runs cohesive with punctuation fallback boundaries",
+        "family": "facts/layout.test.ts:2119",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P007",
+      "text": "abc123日本語",
+      "width": 68.5,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "abc123日本語",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-01148b2dffedfaf2",
+        "original": "src/layout.test.ts:2119 keep-all keeps CJK-containing no-space runs cohesive with punctuation fallback boundaries",
+        "family": "facts/layout.test.ts:2119",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P008",
+      "text": "丙|first",
+      "width": 25.767708333333335,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "丙|first",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-01809761df31c25f",
+        "original": "src/layout.test.ts:739 a mark after CJK text stays with it, and each engine keeps the text after the mark as its pair rules do (#293)",
+        "family": "facts/layout.test.ts:739",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P009",
+      "text": "甲乙丙?first户",
+      "width": 82.671875,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "甲乙丙?first户",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-0196229d8e74f3a8",
+        "original": "src/layout.test.ts:1732 keeps text after a mark that ends CJK text where the engine keeps the pair",
+        "family": "facts/layout.test.ts:1732",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P010",
+      "text": "foo—bar日本語",
+      "width": 69,
+      "size": 16,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "foo—bar日本語",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-01ca413ab8905c6b",
+        "original": "src/layout.test.ts:2119 keep-all keeps CJK-containing no-space runs cohesive with punctuation fallback boundaries",
+        "family": "facts/layout.test.ts:2119",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P011",
+      "text": "the interna­tion­al",
+      "width": 54,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "the ",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "inter",
+          "size": 16,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "na­tion­al",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "report-23cd6052bc54f415",
+        "original": "github.com/chenglou/pretext/issues/323, as filed",
+        "family": "report/#323",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P012",
+      "text": "the interna­tion­al",
+      "width": 52.5,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "the ",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "inter",
+          "size": 16,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "na­tion­al",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "report-953b7e9cd05588ed",
+        "original": "github.com/chenglou/pretext/issues/323, as filed",
+        "family": "report/#323",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P013",
+      "text": "the interna­tion­al",
+      "width": 56,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "the ",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "inter",
+          "size": 16,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "na­tion­al",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "report-b980d5159851daba",
+        "original": "github.com/chenglou/pretext/issues/323, as filed",
+        "family": "report/#323",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P014",
+      "text": "alpha beta   gamma \n delta epsilon zeta",
+      "width": 90,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "alpha",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": " ",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "beta",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "   ",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "gamma",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": " \n ",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "delta epsilon zeta",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "smoke/bare-space-nodes",
+        "original": "rebuild/lab/smoke-cases.ndjson, with overflow-wrap: break-word",
+        "family": "smoke/bare-space-nodes",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P015",
+      "text": "hello   world    \nnext line   ",
+      "width": 90,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "hello   world    \nnext line   ",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "smoke/pre-wrap-trailing-spaces",
+        "original": "rebuild/lab/smoke-cases.ndjson, with overflow-wrap: break-word",
+        "family": "smoke/pre-wrap-trailing-spaces",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P016",
+      "text": "in­com­pre­hen­si­bil­i­ties are rare",
+      "width": 60,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "in­com­pre­hen­si­bil­i­ties are rare",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "smoke/soft-hyphen",
+        "original": "rebuild/lab/smoke-cases.ndjson, with overflow-wrap: break-word",
+        "family": "smoke/soft-hyphen",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P017",
+      "text": "x 日本語­abcdefg",
+      "width": 127.334375,
+      "size": 16,
+      "language": "ja",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "x 日本",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "語­abcdefg",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-0230206f8d5f994c",
+        "original": "a soft hyphen whose hyphen doesn't fit after a break between two text segments (#433; src/layout.test.ts, Blink returns an unfit soft hyphen to the latest earlier break that leaves room for the hyphen)",
+        "family": "rich/soft-hyphen-return/item-edge-between-ideographs",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P018",
+      "text": "￼Bitte die Nebenrollen-Ta­kes vor",
+      "width": 136,
+      "size": 10,
+      "language": "en",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "￼",
+          "size": 10,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "Bitte die Nebenrollen-Ta­kes vor",
+          "size": 10,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-0490b748eb8fc0db",
+        "original": "a soft hyphen whose hyphen doesn't fit after a break between two text segments (#433; src/layout.test.ts, Blink returns an unfit soft hyphen to the latest earlier break that leaves room for the hyphen)",
+        "family": "rich/soft-hyphen-return/padded-span",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P019",
+      "text": "Name\tvalue\t\tcol two\tmore text here",
+      "width": 352.1015625,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "Name",
+          "size": 20,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "\tvalue\t",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "\tcol two",
+          "size": 16,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "\tmore text here",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-0506ac5c425a308d",
+        "original": "white-space: pre-wrap on the paragraph, as an editor sets it (#173; src/layout.test.ts, rich-inline invariants)",
+        "family": "rich/pre-wrap/tabs-across-items",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P020",
+      "text": "x ab-cd­efgh",
+      "width": 36.453125,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "x ",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "ab-cd­efgh",
+          "size": 16,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-07e2174dc2a68faa",
+        "original": "a soft hyphen whose hyphen doesn't fit after a break between two text segments (#433; src/layout.test.ts, Blink returns an unfit soft hyphen to the latest earlier break that leaves room for the hyphen)",
+        "family": "rich/soft-hyphen-return/bold-word",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P021",
+      "text": "AA­ B",
+      "width": 25.765625,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "AA­ B",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-011dd10c32907aad",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P022",
+      "text": "AA­ B",
+      "width": 21.317708333333332,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "AA­ B",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-012d47992d2bebc0",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P023",
+      "text": "AA B",
+      "width": 20.4375,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "AA B",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-01de962034d01b38",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P024",
+      "text": "QA XA q",
+      "width": 23.101041666666667,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "QA XA q",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-06e5fefad4e92ab9",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P025",
+      "text": "AA­ B",
+      "width": 15,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "AA­ B",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-072bc3e965c1cf7a",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P026",
+      "text": "QA XA q",
+      "width": 60.453125,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "QA XA q",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-07f5f1bc031d05e3",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P027",
+      "text": "AA B",
+      "width": 1,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "AA B",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-0ddf325bd8abfccc",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P028",
+      "text": "AA B",
+      "width": 36.465625,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "AA B",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-0fc6abbfae14c087",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P029",
+      "text": "QA XA q",
+      "width": 22.203125,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "QA XA q",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-19f55256e19fb728",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P030",
+      "text": "AA B",
+      "width": 35.578125,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "AA B",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "facts-1d1511ebe2906905",
+        "original": "src/layout.test.ts:3764 the Safari profile keeps the kerning between a word and a following space",
+        "family": "facts/layout.test.ts:3764",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P031",
+      "text": "すると、一生懸命にのぼった甲斐があって、さっきまで自分がいた血の池は、今ではもう暗の底にいつの間にかかくれて居ります。それからあのぼんやり光っている恐しい針の山も、足の下になってしまいました。この分でのぼって行けば、地獄からぬけ出すのも、存外わけがないかも知れません。犍陀多は両手を蜘蛛の糸にからみながら、ここへ来てから何年にも出した事のない声で、「しめた。しめた。」と笑いました。ところがふと気がつきますと、蜘蛛の糸の下の方には、数限もない罪人たちが、自分ののぼった後をつけて、まるで蟻の行列のように、やはり上へ上へ一心によじのぼって来るではございませんか。犍陀多はこれを見ると、驚いたのと恐しいのとで、しばらくはただ、莫迦のように大きな口を開いたまま、眼ばかり動かして居りました。自分一人でさえ断れそうな、この細い蜘蛛の糸が、どうしてあれだけの人数の重みに堪える事が出来ましょう。もし万一途中で断れたと致しましたら、折角ここへまでのぼって来たこの肝腎な自分までも、元の地獄へ逆落しに落ちてしまわなければなりません。そんな事があったら、大変でございます。が、そう云う中にも、罪人たちは何百となく何千となく、まっ暗な血の池の底から、うようよと這い上って、細く光っている蜘蛛の糸を、一列になりながら、せっせとのぼって参ります。今の中にどうかしなければ、糸はまん中から二つに断れて、落ちてしまうのに違いありません。",
+      "width": 480,
+      "size": 20,
+      "language": "ja",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "すると、一生懸命にのぼった甲斐があって、さっきまで自分がいた血の池は、今ではもう暗の底にいつの間にかかくれて居ります。それからあのぼんやり光っている恐しい針の山も、足の下になってしまいました。この分でのぼって行けば、地獄からぬけ出すのも、存外わけがないかも知れません。犍陀多は両手を蜘蛛の糸にからみながら、ここへ来てから何年にも出した事のない声で、「しめた。しめた。」と笑いました。ところがふと気がつきますと、蜘蛛の糸の下の方には、数限もない罪人たちが、自分ののぼった後をつけて、まるで蟻の行列のように、やはり上へ上へ一心によじのぼって来るではございませんか。犍陀多はこれを見ると、驚いたのと恐しいのとで、しばらくはただ、莫迦のように大きな口を開いたまま、眼ばかり動かして居りました。自分一人でさえ断れそうな、この細い蜘蛛の糸が、どうしてあれだけの人数の重みに堪える事が出来ましょう。もし万一途中で断れたと致しましたら、折角ここへまでのぼって来たこの肝腎な自分までも、元の地獄へ逆落しに落ちてしまわなければなりません。そんな事があったら、大変でございます。が、そう云う中にも、罪人たちは何百となく何千となく、まっ暗な血の池の底から、うようよと這い上って、細く光っている蜘蛛の糸を、一列になりながら、せっせとのぼって参ります。今の中にどうかしなければ、糸はまん中から二つに断れて、落ちてしまうのに違いありません。",
+          "size": 20,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "real-ja-kumo-no-ito-l11-w480",
+        "original": "corpora/ja-kumo-no-ito.txt:11",
+        "family": "real/ja-kumo-no-ito",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P032",
+      "text": "後にはただ極楽の蜘蛛の糸が、きらきらと細く光りながら、月も星もない空の中途に、短く垂れているばかりでございます。",
+      "width": 600,
+      "size": 20,
+      "language": "ja",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "後にはただ極楽の蜘蛛の糸が、きらきらと細く光りながら、月も星もない空の中途に、短く垂れているばかりでございます。",
+          "size": 20,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "real-ja-kumo-no-ito-l14-w600",
+        "original": "corpora/ja-kumo-no-ito.txt:14",
+        "family": "real/ja-kumo-no-ito",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P033",
+      "text": "しかし極楽の蓮池の蓮は、少しもそんな事には頓着致しません。その玉のような白い花は、御釈迦様の御足のまわりに、ゆらゆら萼を動かして、そのまん中にある金色の蕊からは、何とも云えない好い匂が、絶間なくあたりへ溢れて居ります。極楽ももう午に近くなったのでございましょう。",
+      "width": 720,
+      "size": 20,
+      "language": "ja",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "しかし極楽の蓮池の蓮は、少しもそんな事には頓着致しません。その玉のような白い花は、御釈迦様の御足のまわりに、ゆらゆら萼を動かして、そのまん中にある金色の蕊からは、何とも云えない好い匂が、絶間なくあたりへ溢れて居ります。極楽ももう午に近くなったのでございましょう。",
+          "size": 20,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "real-ja-kumo-no-ito-l17-w720",
+        "original": "corpora/ja-kumo-no-ito.txt:17",
+        "family": "real/ja-kumo-no-ito",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P034",
+      "text": "ある日の事でございます。御釈迦様は極楽の蓮池のふちを、独りでぶらぶら御歩きになっていらっしゃいました。池の中に咲いている蓮の花は、みんな玉のようにまっ白で、そのまん中にある金色の蕊からは、何とも云えない好い匂が、絶間なくあたりへ溢れて居ります。極楽は丁度朝なのでございましょう。",
+      "width": 240,
+      "size": 20,
+      "language": "ja",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "ある日の事でございます。御釈迦様は極楽の蓮池のふちを、独りでぶらぶら御歩きになっていらっしゃいました。池の中に咲いている蓮の花は、みんな玉のようにまっ白で、そのまん中にある金色の蕊からは、何とも云えない好い匂が、絶間なくあたりへ溢れて居ります。極楽は丁度朝なのでございましょう。",
+          "size": 20,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "real-ja-kumo-no-ito-l2-w240",
+        "original": "corpora/ja-kumo-no-ito.txt:2",
+        "family": "real/ja-kumo-no-ito",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P035",
+      "text": "御釈迦様は地獄の容子を御覧になりながら、この犍陀多には蜘蛛を助けた事があるのを御思い出しになりました。そうしてそれだけの善い事をした報には、出来るなら、この男を地獄から救い出してやろうと御考えになりました。幸い、側を見ますと、翡翠のような色をした蓮の葉の上に、極楽の蜘蛛が一匹、美しい銀色の糸をかけて居ります。御釈迦様はその蜘蛛の糸をそっと御手に御取りになって、玉のような白蓮の間から、遥か下にある地獄の底へ、まっすぐにそれを御下しなさいました。",
+      "width": 320,
+      "size": 20,
+      "language": "ja",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "御釈迦様は地獄の容子を御覧になりながら、この犍陀多には蜘蛛を助けた事があるのを御思い出しになりました。そうしてそれだけの善い事をした報には、出来るなら、この男を地獄から救い出してやろうと御考えになりました。幸い、側を見ますと、翡翠のような色をした蓮の葉の上に、極楽の蜘蛛が一匹、美しい銀色の糸をかけて居ります。御釈迦様はその蜘蛛の糸をそっと御手に御取りになって、玉のような白蓮の間から、遥か下にある地獄の底へ、まっすぐにそれを御下しなさいました。",
+          "size": 20,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "real-ja-kumo-no-ito-l5-w320",
+        "original": "corpora/ja-kumo-no-ito.txt:5",
+        "family": "real/ja-kumo-no-ito",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P036",
+      "text": "Great work! 👏👏👏 This is exactly what we needed 🎯 for the project 🚀",
+      "width": 449,
+      "size": 15,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "Great work! 👏👏👏 This is exactly what we needed 🎯 for the project ",
+          "size": 15,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "🚀",
+          "size": 20,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-008ae044b06f8317",
+        "original": "src/test-data.ts Emoji dense, split into styled runs",
+        "family": "rich/runs",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P037",
+      "text": "这是一段中文文本，用于测试文本布局库对中日韩字符的支持。每个字符之间都可以断行。",
+      "width": 669,
+      "size": 17,
+      "language": "zh",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "这是一段中文文本，用于测",
+          "size": 12,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "试文本布局库对中日韩字符的支持。每个字符之间",
+          "size": 20,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "都可以断行。",
+          "size": 17,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-00989dc45922fe28",
+        "original": "src/test-data.ts Chinese, split into styled runs",
+        "family": "rich/runs",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P038",
+      "text": "One thing I noticed is that the line breaking algorithm doesn't handle hyphenation. Is that on the roadmap?",
+      "width": 1062.921875,
+      "size": 15,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "One th",
+          "size": 15,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "ing I",
+          "size": 15,
+          "weight": 400,
+          "spacing": -0.5
+        },
+        {
+          "text": " noticed ",
+          "size": 15,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "is that the line breaking algorithm doesn't handle hyphenation. Is that on the roadmap?",
+          "size": 24,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-00d04f5d1f50a0e3",
+        "original": "src/test-data.ts Latin hyphenation, split into styled runs",
+        "family": "rich/runs",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P039",
+      "text": "이것은 텍스트 레이아웃 라이브러리의 테스트입니다. 한국어 텍스트를 올바르게 처리할 수 있는지 확인합니다.",
+      "width": 751.625,
+      "size": 16,
+      "language": "ko",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "이것은 텍스트",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": " 레이아웃",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": " 라이브러리의 테스트입니다. 한국어",
+          "size": 16,
+          "weight": 400,
+          "spacing": 2
+        },
+        {
+          "text": " 텍스트를 올바르게 처리할 수 있는지 확인합니다.",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-00d39da79bdafded",
+        "original": "src/test-data.ts Korean, split into styled runs",
+        "family": "rich/runs",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "P040",
+      "text": "The key insight is that you can cache word measurements separately from layout results. This gives you the best of both worlds.",
+      "width": 971.75,
+      "size": 16,
+      "language": "en",
+      "font": "TicketLatin",
+      "runs": [
+        {
+          "text": "The key insight is that you can cache word measurements separately from layout results. This gives yo",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "u t",
+          "size": 16,
+          "weight": 400,
+          "spacing": 2
+        },
+        {
+          "text": "he best of both worlds.",
+          "size": 16,
+          "weight": 400,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "url": "https://github.com/chenglou/pretext/tree/v1.0.0/harness",
+        "caseId": "rich-00ee3ce54fe531af",
+        "original": "src/test-data.ts Latin caching, split into styled runs",
+        "family": "rich/runs",
+        "license": "MIT",
+        "variation": "统一 pre-wrap / normal / break-word；同字节本机字体；移除盒装饰（如有），保留文本/run/字号/间距/宽度"
+      }
+    },
+    {
+      "id": "U001",
+      "text": "前❗❗后结束",
+      "width": 80,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 27,
+        "rule": "× 2757 × 2757 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U002",
+      "text": "前❗ ❗后结束",
+      "width": 80.078125,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 28,
+        "rule": "× 2757 × 0020 ÷ 2757 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U003",
+      "text": "前❗̈❗后结束",
+      "width": 80.15625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 29,
+        "rule": "× 2757 × 0308 × 2757 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U004",
+      "text": "前❗̈ ❗后结束",
+      "width": 80.234375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 30,
+        "rule": "× 2757 × 0308 × 0020 ÷ 2757 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U005",
+      "text": "前❗§后结束",
+      "width": 80.3125,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 31,
+        "rule": "× 2757 × 00A7 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U006",
+      "text": "前❗ §后结束",
+      "width": 80.390625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 32,
+        "rule": "× 2757 × 0020 ÷ 00A7 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U007",
+      "text": "前❗̈§后结束",
+      "width": 80.46875,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 33,
+        "rule": "× 2757 × 0308 × 00A7 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U008",
+      "text": "前❗̈ §后结束",
+      "width": 80.546875,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 34,
+        "rule": "× 2757 × 0308 × 0020 ÷ 00A7 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U009",
+      "text": "前❗ᬅ后结束",
+      "width": 80.625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 35,
+        "rule": "× 2757 ÷ 1B05 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U010",
+      "text": "前❗ ᬅ后结束",
+      "width": 80.703125,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/LineBreakTest.txt",
+        "line": 36,
+        "rule": "× 2757 × 0020 ÷ 1B05 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U011",
+      "text": "前ä后结束",
+      "width": 96.15625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 750,
+        "rule": "÷ 0061 × 0308 ÷",
+        "wrapper": "前",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U012",
+      "text": "前🇦🇧🇨b后结束",
+      "width": 96.171875,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 756,
+        "rule": "÷ 1F1E6 × 1F1E7 ÷ 1F1E8 ÷ 0062 ÷",
+        "wrapper": "前",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U013",
+      "text": "前a🇦🇧‍🇨b后结束",
+      "width": 96.1875,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 758,
+        "rule": "÷ 0061 ÷ 1F1E6 × 1F1E7 × 200D ÷ 1F1E8 ÷ 0062 ÷",
+        "wrapper": "前",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U014",
+      "text": "前a🇦🇧🇨🇩b后结束",
+      "width": 96.203125,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 760,
+        "rule": "÷ 0061 ÷ 1F1E6 × 1F1E7 ÷ 1F1E8 × 1F1E9 ÷ 0062 ÷",
+        "wrapper": "前",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U015",
+      "text": "前äb后结束",
+      "width": 96.21875,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 762,
+        "rule": "÷ 0061 × 0308 ÷ 0062 ÷",
+        "wrapper": "前",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U016",
+      "text": "前👶🏿👶后结束",
+      "width": 96.234375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 765,
+        "rule": "÷ 1F476 × 1F3FF ÷ 1F476 ÷",
+        "wrapper": "前",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U017",
+      "text": "前a🏿👶‍🛑后结束",
+      "width": 96.25,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 767,
+        "rule": "÷ 0061 × 1F3FF ÷ 1F476 × 200D × 1F6D1 ÷",
+        "wrapper": "前",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U018",
+      "text": "前👶🏿̈‍👶🏿后结束",
+      "width": 96.265625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 768,
+        "rule": "÷ 1F476 × 1F3FF × 0308 × 200D × 1F476 × 1F3FF ÷",
+        "wrapper": "前",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U019",
+      "text": "前☺️🛑‍🛑后结束",
+      "width": 96.28125,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 769,
+        "rule": "÷ 1F6D1 × 200D × 1F6D1 ÷",
+        "wrapper": "前☺️",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "U020",
+      "text": "前𠀀a‍🛑后结束",
+      "width": 96.296875,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 770,
+        "rule": "÷ 0061 × 200D ÷ 1F6D1 ÷",
+        "wrapper": "前𠀀",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "H001",
+      "text": "文字AI20进入画面Hello未来",
+      "width": 59.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 0,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H002",
+      "text": "文字AI21进入画面Hello未来",
+      "width": 111.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 1,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H003",
+      "text": "文字AI22进入画面Hello未来",
+      "width": 180,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 2,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H004",
+      "text": "文字AI23进入画面Hello未来",
+      "width": 120.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 3,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H005",
+      "text": "文字AI24进入画面Hello未来",
+      "width": 196.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 4,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H006",
+      "text": "文字AI25进入画面Hello未来",
+      "width": 287.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 5,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H007",
+      "text": "文字AI26进入画面Hello未来",
+      "width": 60,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 6,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H008",
+      "text": "文字AI27进入画面Hello未来",
+      "width": 112.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 7,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H009",
+      "text": "文字AI28进入画面Hello未来",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 8,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H010",
+      "text": "文字AI29进入画面Hello未来",
+      "width": 120.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 9,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H011",
+      "text": "文字AI30进入画面Hello未来",
+      "width": 195.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 10,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H012",
+      "text": "文字AI31进入画面Hello未来",
+      "width": 287.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 11,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H013",
+      "text": "文字AI32进入画面Hello未来",
+      "width": 59.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 12,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H014",
+      "text": "文字AI33进入画面Hello未来",
+      "width": 111.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 13,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H015",
+      "text": "文字AI34进入画面Hello未来",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 0,
+        "index": 14,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H016",
+      "text": "文字 AI 20 进入画面 Hello 未来",
+      "width": 60,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 0,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H017",
+      "text": "文字 AI 21 进入画面 Hello 未来",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 1,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H018",
+      "text": "文字 AI 22 进入画面 Hello 未来",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 2,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H019",
+      "text": "文字 AI 23 进入画面 Hello 未来",
+      "width": 120.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 3,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H020",
+      "text": "文字 AI 24 进入画面 Hello 未来",
+      "width": 196,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 4,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H021",
+      "text": "文字 AI 25 进入画面 Hello 未来",
+      "width": 287.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 5,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H022",
+      "text": "文字 AI 26 进入画面 Hello 未来",
+      "width": 59.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 6,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H023",
+      "text": "文字 AI 27 进入画面 Hello 未来",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 7,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H024",
+      "text": "文字 AI 28 进入画面 Hello 未来",
+      "width": 180,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 8,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H025",
+      "text": "文字 AI 29 进入画面 Hello 未来",
+      "width": 120.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 9,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H026",
+      "text": "文字 AI 30 进入画面 Hello 未来",
+      "width": 196,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 10,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H027",
+      "text": "文字 AI 31 进入画面 Hello 未来",
+      "width": 288.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 11,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H028",
+      "text": "文字 AI 32 进入画面 Hello 未来",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 12,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H029",
+      "text": "文字 AI 33 进入画面 Hello 未来",
+      "width": 112.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 13,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H030",
+      "text": "文字 AI 34 进入画面 Hello 未来",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 1,
+        "index": 14,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H031",
+      "text": "他说：“你好（世界20）！”下一句。",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 0,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H032",
+      "text": "他说：“你好（世界21）！”下一句。",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 1,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H033",
+      "text": "他说：“你好（世界22）！”下一句。",
+      "width": 180,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 2,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H034",
+      "text": "他说：“你好（世界23）！”下一句。",
+      "width": 120.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 3,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H035",
+      "text": "他说：“你好（世界24）！”下一句。",
+      "width": 195.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 4,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H036",
+      "text": "他说：“你好（世界25）！”下一句。",
+      "width": 288,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 5,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H037",
+      "text": "他说：“你好（世界26）！”下一句。",
+      "width": 60,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 6,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H038",
+      "text": "他说：“你好（世界27）！”下一句。",
+      "width": 112.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 7,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H039",
+      "text": "他说：“你好（世界28）！”下一句。",
+      "width": 180.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 8,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H040",
+      "text": "他说：“你好（世界29）！”下一句。",
+      "width": 119.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 9,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H041",
+      "text": "他说：“你好（世界30）！”下一句。",
+      "width": 196,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 10,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H042",
+      "text": "他说：“你好（世界31）！”下一句。",
+      "width": 288,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 11,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H043",
+      "text": "他说：“你好（世界32）！”下一句。",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 12,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H044",
+      "text": "他说：“你好（世界33）！”下一句。",
+      "width": 112.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 13,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H045",
+      "text": "他说：“你好（世界34）！”下一句。",
+      "width": 180,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 2,
+        "index": 14,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H046",
+      "text": "开始了吗？！当然……继续，结束。20",
+      "width": 59.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 0,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H047",
+      "text": "开始了吗？！当然……继续，结束。21",
+      "width": 111.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 1,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H048",
+      "text": "开始了吗？！当然……继续，结束。22",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 2,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H049",
+      "text": "开始了吗？！当然……继续，结束。23",
+      "width": 119.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 3,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H050",
+      "text": "开始了吗？！当然……继续，结束。24",
+      "width": 196.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 4,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H051",
+      "text": "开始了吗？！当然……继续，结束。25",
+      "width": 287.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 5,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H052",
+      "text": "开始了吗？！当然……继续，结束。26",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 6,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H053",
+      "text": "开始了吗？！当然……继续，结束。27",
+      "width": 112.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 7,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H054",
+      "text": "开始了吗？！当然……继续，结束。28",
+      "width": 180,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 8,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H055",
+      "text": "开始了吗？！当然……继续，结束。29",
+      "width": 120,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 9,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H056",
+      "text": "开始了吗？！当然……继续，结束。30",
+      "width": 195.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 10,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H057",
+      "text": "开始了吗？！当然……继续，结束。31",
+      "width": 288.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 11,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H058",
+      "text": "开始了吗？！当然……继续，结束。32",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 12,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H059",
+      "text": "开始了吗？！当然……继续，结束。33",
+      "width": 111.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 13,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H060",
+      "text": "开始了吗？！当然……继续，结束。34",
+      "width": 180.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 3,
+        "index": 14,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H061",
+      "text": "增长-20.25% 温度20℃ 距离20km",
+      "width": 60,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 0,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H062",
+      "text": "增长-21.25% 温度21℃ 距离21km",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 1,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H063",
+      "text": "增长-22.25% 温度22℃ 距离22km",
+      "width": 180.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 2,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H064",
+      "text": "增长-23.25% 温度23℃ 距离23km",
+      "width": 120,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 3,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H065",
+      "text": "增长-24.25% 温度24℃ 距离24km",
+      "width": 196,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 4,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H066",
+      "text": "增长-25.25% 温度25℃ 距离25km",
+      "width": 288,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 5,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H067",
+      "text": "增长-26.25% 温度26℃ 距离26km",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 6,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H068",
+      "text": "增长-27.25% 温度27℃ 距离27km",
+      "width": 111.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 7,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H069",
+      "text": "增长-28.25% 温度28℃ 距离28km",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 8,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H070",
+      "text": "增长-29.25% 温度29℃ 距离29km",
+      "width": 119.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 9,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H071",
+      "text": "增长-30.25% 温度30℃ 距离30km",
+      "width": 195.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 10,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H072",
+      "text": "增长-31.25% 温度31℃ 距离31km",
+      "width": 287.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 11,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H073",
+      "text": "增长-32.25% 温度32℃ 距离32km",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 12,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H074",
+      "text": "增长-33.25% 温度33℃ 距离33km",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 13,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H075",
+      "text": "增长-34.25% 温度34℃ 距离34km",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 4,
+        "index": 14,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H076",
+      "text": "访问https://example.com/typography/20AVATAR然后继续",
+      "width": 60,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 0,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H077",
+      "text": "访问https://example.com/typography/21AVATAR然后继续",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 1,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H078",
+      "text": "访问https://example.com/typography/22AVATAR然后继续",
+      "width": 180,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 2,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H079",
+      "text": "访问https://example.com/typography/23AVATAR然后继续",
+      "width": 119.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 3,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H080",
+      "text": "访问https://example.com/typography/24AVATAR然后继续",
+      "width": 196.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 4,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H081",
+      "text": "访问https://example.com/typography/25AVATAR然后继续",
+      "width": 288.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 5,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H082",
+      "text": "访问https://example.com/typography/26AVATAR然后继续",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 6,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H083",
+      "text": "访问https://example.com/typography/27AVATAR然后继续",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 7,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H084",
+      "text": "访问https://example.com/typography/28AVATAR然后继续",
+      "width": 180.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 8,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H085",
+      "text": "访问https://example.com/typography/29AVATAR然后继续",
+      "width": 120.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 9,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H086",
+      "text": "访问https://example.com/typography/30AVATAR然后继续",
+      "width": 195.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 10,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H087",
+      "text": "访问https://example.com/typography/31AVATAR然后继续",
+      "width": 287.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 11,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H088",
+      "text": "访问https://example.com/typography/32AVATAR然后继续",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 12,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H089",
+      "text": "访问https://example.com/typography/33AVATAR然后继续",
+      "width": 112.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 13,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H090",
+      "text": "访问https://example.com/typography/34AVATAR然后继续",
+      "width": 180,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 5,
+        "index": 14,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H091",
+      "text": "第一行20\n第二行\n窄列结束",
+      "width": 16,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 0,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H092",
+      "text": "第一行21\n第二行\n窄列结束",
+      "width": 18,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 1,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H093",
+      "text": "第一行22\n第二行\n窄列结束",
+      "width": 20,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 2,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H094",
+      "text": "第一行23\n第二行\n窄列结束",
+      "width": 22,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 3,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H095",
+      "text": "第一行24\n第二行\n窄列结束",
+      "width": 24,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 4,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H096",
+      "text": "第一行25\n第二行\n窄列结束",
+      "width": 288.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 5,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H097",
+      "text": "第一行26\n第二行\n窄列结束",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 6,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H098",
+      "text": "第一行27\n第二行\n窄列结束",
+      "width": 112.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 7,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H099",
+      "text": "第一行28\n第二行\n窄列结束",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 8,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H100",
+      "text": "第一行29\n第二行\n窄列结束",
+      "width": 119.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 9,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H101",
+      "text": "第一行30\n第二行\n窄列结束",
+      "width": 195.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 10,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H102",
+      "text": "第一行31\n第二行\n窄列结束",
+      "width": 288.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 11,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H103",
+      "text": "第一行32\n第二行\n窄列结束",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 12,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H104",
+      "text": "第一行33\n第二行\n窄列结束",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 13,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H105",
+      "text": "第一行34\n第二行\n窄列结束",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 6,
+        "index": 14,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H106",
+      "text": "标题20小字office与粗体AV继续",
+      "width": 60,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题20",
+          "size": 20,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 15,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 24,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 0,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H107",
+      "text": "标题21小字office与粗体AV继续",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题21",
+          "size": 28,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 21,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 33.6,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 1,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H108",
+      "text": "标题22小字office与粗体AV继续",
+      "width": 180,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题22",
+          "size": 36,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 27,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 43.199999999999996,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 2,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H109",
+      "text": "标题23小字office与粗体AV继续",
+      "width": 119.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题23",
+          "size": 20,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 15,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 24,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 3,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H110",
+      "text": "标题24小字office与粗体AV继续",
+      "width": 196.015625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题24",
+          "size": 28,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 21,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 33.6,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 4,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H111",
+      "text": "标题25小字office与粗体AV继续",
+      "width": 288.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题25",
+          "size": 36,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 27,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 43.199999999999996,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 5,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H112",
+      "text": "标题26小字office与粗体AV继续",
+      "width": 60.015625,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题26",
+          "size": 20,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 15,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 24,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 6,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H113",
+      "text": "标题27小字office与粗体AV继续",
+      "width": 112,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题27",
+          "size": 28,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 21,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 33.6,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 7,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H114",
+      "text": "标题28小字office与粗体AV继续",
+      "width": 179.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题28",
+          "size": 36,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 27,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 43.199999999999996,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 8,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H115",
+      "text": "标题29小字office与粗体AV继续",
+      "width": 119.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题29",
+          "size": 20,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 15,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 24,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 9,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H116",
+      "text": "标题30小字office与粗体AV继续",
+      "width": 196,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题30",
+          "size": 28,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 21,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 33.6,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 10,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H117",
+      "text": "标题31小字office与粗体AV继续",
+      "width": 287.984375,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题31",
+          "size": 36,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 27,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 43.199999999999996,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 11,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H118",
+      "text": "标题32小字office与粗体AV继续",
+      "width": 59.984375,
+      "size": 20,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题32",
+          "size": 20,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 15,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 24,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 12,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H119",
+      "text": "标题33小字office与粗体AV继续",
+      "width": 111.984375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题33",
+          "size": 28,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 21,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 33.6,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 13,
+        "seed": 10102026,
+        "license": "project"
+      }
+    },
+    {
+      "id": "H120",
+      "text": "标题34小字office与粗体AV继续",
+      "width": 180.015625,
+      "size": 36,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "runs": [
+        {
+          "text": "标题34",
+          "size": 36,
+          "weight": 700,
+          "spacing": 0
+        },
+        {
+          "text": "小字offic",
+          "size": 27,
+          "weight": 400,
+          "spacing": 0
+        },
+        {
+          "text": "e与粗体AV继续",
+          "size": 43.199999999999996,
+          "weight": 700,
+          "spacing": 0
+        }
+      ],
+      "origin": {
+        "generator": "8 families × 15",
+        "family": 7,
+        "index": 14,
+        "seed": 10102026,
+        "license": "project"
+      }
+    }
+  ],
+  "unicodeCompatibility": [
+    {
+      "id": "control-U011",
+      "text": "前\r‍后结束",
+      "width": 80,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 39,
+        "rule": "÷ 000D ÷ 200D ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U012",
+      "text": "前\r̈‍后结束",
+      "width": 80.078125,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 40,
+        "rule": "÷ 000D ÷ 0308 × 200D ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U013",
+      "text": "前\r🇦后结束",
+      "width": 80.15625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 41,
+        "rule": "÷ 000D ÷ 1F1E6 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U014",
+      "text": "前\r̈🇦后结束",
+      "width": 80.234375,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 42,
+        "rule": "÷ 000D ÷ 0308 ÷ 1F1E6 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U015",
+      "text": "前\n‍后结束",
+      "width": 80.3125,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 77,
+        "rule": "÷ 000A ÷ 200D ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U016",
+      "text": "前\n̈‍后结束",
+      "width": 80.390625,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 78,
+        "rule": "÷ 000A ÷ 0308 × 200D ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U017",
+      "text": "前\n🇦后结束",
+      "width": 80.46875,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 79,
+        "rule": "÷ 000A ÷ 1F1E6 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U018",
+      "text": "前\n̈🇦后结束",
+      "width": 80.546875,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 80,
+        "rule": "÷ 000A ÷ 0308 ÷ 1F1E6 ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U019",
+      "text": "前\r̈\r后结束",
+      "width": 80,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 28,
+        "rule": "÷ 000D ÷ 0308 ÷ 000D ÷",
+        "license": "Unicode-3.0"
+      }
+    },
+    {
+      "id": "control-U020",
+      "text": "前\r̈\n后结束",
+      "width": 80.078125,
+      "size": 28,
+      "language": "zh-CN",
+      "font": "TicketCJK",
+      "origin": {
+        "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+        "line": 30,
+        "rule": "÷ 000D ÷ 0308 ÷ 000A ÷",
+        "license": "Unicode-3.0"
+      }
+    }
+  ],
+  "bidiCompatibility": [
+    {
+      "id": "facts-00cc74ca1670ec71",
+      "origin": "src/layout.test.ts:611 closing punctuation and nonstarters stay with the text before them (#225)",
+      "paragraph": {
+        "runs": [
+          {
+            "text": "中（ابب） ",
+            "node": "text",
+            "font": {
+              "family": "Arial",
+              "size": 16,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          }
+        ],
+        "font": {
+          "family": "Arial",
+          "size": 16,
+          "weight": 400,
+          "style": "normal"
+        },
+        "letterSpacing": 0,
+        "wordSpacing": 0,
+        "width": 48,
+        "lineHeight": 20,
+        "whiteSpace": "normal",
+        "wordBreak": "normal",
+        "overflowWrap": "break-word",
+        "lineBreak": "auto",
+        "tabSize": 8,
+        "direction": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "id": "rich-003b2ac743b6026e",
+      "origin": "src/test-data.ts Numbers+RTL, split into styled runs",
+      "paragraph": {
+        "runs": [
+          {
+            "text": "The pric",
+            "node": "span",
+            "font": {
+              "family": "\"Helvetica Neue\"",
+              "size": 20,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "e is $4",
+            "node": "span",
+            "font": {
+              "family": "\"Helvetica Neue\"",
+              "size": 24,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "2.99 (approximately ٤٢٫",
+            "node": "text",
+            "font": {
+              "family": "\"Helvetica Neue\"",
+              "size": 15,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "٩٩ ريال or ₪158.50) including tax.",
+            "node": "span",
+            "font": {
+              "family": "\"Times New Roman\"",
+              "size": 15,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          }
+        ],
+        "font": {
+          "family": "\"Helvetica Neue\"",
+          "size": 15,
+          "weight": 400,
+          "style": "normal"
+        },
+        "letterSpacing": 0,
+        "wordSpacing": 0,
+        "width": 418.34375,
+        "lineHeight": 19,
+        "whiteSpace": "normal",
+        "wordBreak": "normal",
+        "overflowWrap": "break-word",
+        "lineBreak": "auto",
+        "tabSize": 8,
+        "direction": "rtl",
+        "lang": "ar"
+      }
+    },
+    {
+      "id": "rich-003ce4f88631aab7",
+      "origin": "src/test-data.ts Mixed en+he, split into styled runs",
+      "paragraph": {
+        "runs": [
+          {
+            "text": "The project name is פרויקט חדש and it wa",
+            "node": "span",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 400,
+              "style": "italic"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "s st",
+            "node": "text",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "arted last month by the research team.",
+            "node": "span",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 400,
+              "style": "italic"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          }
+        ],
+        "font": {
+          "family": "Georgia",
+          "size": 17,
+          "weight": 400,
+          "style": "normal"
+        },
+        "letterSpacing": 0,
+        "wordSpacing": 0,
+        "width": 255.5625,
+        "lineHeight": 21,
+        "whiteSpace": "normal",
+        "wordBreak": "normal",
+        "overflowWrap": "break-word",
+        "lineBreak": "auto",
+        "tabSize": 8,
+        "direction": "rtl",
+        "lang": "he"
+      }
+    },
+    {
+      "id": "rich-00458c2982aeb50d",
+      "origin": "src/test-data.ts Long mixed, split into styled runs",
+      "paragraph": {
+        "runs": [
+          {
+            "text": "In the heart of القاهرة",
+            "node": "text",
+            "font": {
+              "family": "Arial",
+              "size": 16,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": " القديمة, you can find ancient mosques alongside modern cafés. The c",
+            "node": "span",
+            "font": {
+              "family": "\"Courier New\"",
+              "size": 16,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "ity's history spans millennia. كل شارع يحكي قصة مختلفة about th",
+            "node": "span",
+            "font": {
+              "family": "Arial",
+              "size": 16,
+              "weight": 400,
+              "style": "italic"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "e rich cultural heritage.",
+            "node": "span",
+            "font": {
+              "family": "Arial",
+              "size": 13,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          }
+        ],
+        "font": {
+          "family": "Arial",
+          "size": 16,
+          "weight": 400,
+          "style": "normal"
+        },
+        "letterSpacing": 0,
+        "wordSpacing": 0,
+        "width": 1331.215625,
+        "lineHeight": 20,
+        "whiteSpace": "normal",
+        "wordBreak": "normal",
+        "overflowWrap": "break-word",
+        "lineBreak": "auto",
+        "tabSize": 8,
+        "direction": "rtl",
+        "lang": "ar"
+      }
+    },
+    {
+      "id": "rich-004ad8b71b76a063",
+      "origin": "src/test-data.ts Mixed en+he, split into styled runs",
+      "paragraph": {
+        "runs": [
+          {
+            "text": "The project name is פרויקט חדש and it was started ",
+            "node": "span",
+            "font": {
+              "family": "\"Helvetica Neue\"",
+              "size": 15,
+              "weight": 700,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "last month by the research team.",
+            "node": "span",
+            "font": {
+              "family": "\"Helvetica Neue\"",
+              "size": 12,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          }
+        ],
+        "font": {
+          "family": "\"Helvetica Neue\"",
+          "size": 15,
+          "weight": 400,
+          "style": "normal"
+        },
+        "letterSpacing": 0,
+        "wordSpacing": 0,
+        "width": 372,
+        "lineHeight": 19,
+        "whiteSpace": "normal",
+        "wordBreak": "normal",
+        "overflowWrap": "break-word",
+        "lineBreak": "auto",
+        "tabSize": 8,
+        "direction": "rtl",
+        "lang": "he"
+      }
+    },
+    {
+      "id": "rich-007b89ad5bdcc416",
+      "origin": "src/test-data.ts Mixed en+ar, split into styled runs",
+      "paragraph": {
+        "runs": [
+          {
+            "text": "The meeting is sched",
+            "node": "span",
+            "font": {
+              "family": "\"Courier New\"",
+              "size": 17,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "uled for يوم الثلاثاء at the main office. Please bri",
+            "node": "span",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 700,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "ng your مستندات with you.",
+            "node": "span",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 400,
+              "style": "italic"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          }
+        ],
+        "font": {
+          "family": "Georgia",
+          "size": 17,
+          "weight": 400,
+          "style": "normal"
+        },
+        "letterSpacing": 0,
+        "wordSpacing": 0,
+        "width": 89.359375,
+        "lineHeight": 21,
+        "whiteSpace": "normal",
+        "wordBreak": "normal",
+        "overflowWrap": "break-word",
+        "lineBreak": "auto",
+        "tabSize": 8,
+        "direction": "rtl",
+        "lang": "ar"
+      }
+    },
+    {
+      "id": "rich-00801a7ed2529a70",
+      "origin": "src/test-data.ts Numbers+RTL, split into styled runs",
+      "paragraph": {
+        "runs": [
+          {
+            "text": "The price is $42.99 (approximately ٤٢٫٩٩ ريال or ",
+            "node": "span",
+            "font": {
+              "family": "\"Courier New\"",
+              "size": 15,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "₪158.50) inclu",
+            "node": "text",
+            "font": {
+              "family": "\"Helvetica Neue\"",
+              "size": 15,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "din",
+            "node": "span",
+            "font": {
+              "family": "\"Helvetica Neue\"",
+              "size": 15,
+              "weight": 400,
+              "style": "italic"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "g tax.",
+            "node": "span",
+            "font": {
+              "family": "\"Helvetica Neue\"",
+              "size": 15,
+              "weight": 400,
+              "style": "italic"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          }
+        ],
+        "font": {
+          "family": "\"Helvetica Neue\"",
+          "size": 15,
+          "weight": 400,
+          "style": "normal"
+        },
+        "letterSpacing": 0,
+        "wordSpacing": 0,
+        "width": 566.09375,
+        "lineHeight": 19,
+        "whiteSpace": "normal",
+        "wordBreak": "normal",
+        "overflowWrap": "break-word",
+        "lineBreak": "auto",
+        "tabSize": 8,
+        "direction": "rtl",
+        "lang": "ar"
+      }
+    },
+    {
+      "id": "rich-00e6c5cf2eac51c2",
+      "origin": "src/test-data.ts Hebrew short, split into styled runs",
+      "paragraph": {
+        "runs": [
+          {
+            "text": "שלום עולם, זוהי בדיקה למדידת טקסט עברי ושב",
+            "node": "span",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": -0.5,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "י",
+            "node": "span",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 700,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "רת ש",
+            "node": "span",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 700,
+              "style": "normal"
+            },
+            "letterSpacing": 0,
+            "wordSpacing": 0,
+            "lang": null
+          },
+          {
+            "text": "ורות",
+            "node": "span",
+            "font": {
+              "family": "Georgia",
+              "size": 17,
+              "weight": 400,
+              "style": "normal"
+            },
+            "letterSpacing": 2,
+            "wordSpacing": 0,
+            "lang": null
+          }
+        ],
+        "font": {
+          "family": "Georgia",
+          "size": 17,
+          "weight": 400,
+          "style": "normal"
+        },
+        "letterSpacing": 0,
+        "wordSpacing": 0,
+        "width": 86.90625,
+        "lineHeight": 21,
+        "whiteSpace": "normal",
+        "wordBreak": "normal",
+        "overflowWrap": "break-word",
+        "lineBreak": "auto",
+        "tabSize": 8,
+        "direction": "rtl",
+        "lang": "he"
+      }
+    }
+  ],
+  "selectionCorrection": "首轮误把混合 bidi 放进200分母；现按设计移至独立兼容组，原数据保留在首次报告，不按成功/失败筛选。"
+}

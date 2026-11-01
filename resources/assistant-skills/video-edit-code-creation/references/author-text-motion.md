@@ -1,6 +1,20 @@
 # 文字与动效
 
-动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，与剪辑文字工具同一套引擎，画出来和文字工具一致。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。作者接口 v6 起可用（见 code-project 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
+动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.0.0（见 code-project 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
+
+## 字体声明
+
+固定字体在模块顶层导出静态 `textFonts`；参数文字通过 `bindings` 绑定内容与样式。声明只能用字面量或模块常量，不能调用函数或等待网络。宿主在模块求值、首帧和参数变化前准备所需字体，`layoutText` 保持同步。
+
+```ts
+export const textFonts = {
+  faces: [{ family: "Noto Sans SC", weight: 700 }],
+  text: ["固定标题"],
+  bindings: [{ text: "title", style: "titleStyle" }]
+}
+```
+
+只用默认字体的 400/700 正常或斜体可省略声明；静态可读样式会自动准备，动态字体或参数样式覆盖请声明 faces/bindings，未准备字形会按同族最近样式匹配并记录诊断；固定自定义字体、动态选择范围及参数字形应完整声明。字体缺失会按整簇回退，检查布局的 `diagnostics` 并核对实际画面；品牌字体要先确认本机存在。`ligatures` 是 `layoutText` 选项，逐字动画不需要 `forceGraphemes`。emoji 使用系统绘制，其颜色和墨迹取决于平台；需要矢量描边生长或挤出时选普通轮廓文字。
 
 ## 文字参数与样式
 
@@ -10,6 +24,7 @@
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"
+export const textFonts = { bindings: [{ text: "title", style: "titleStyle" }] }
 export default {
   name: "样式标题", kind: "generator", mode: "static", width: 1920, height: 1080,
   params: [
@@ -41,16 +56,17 @@ export default {
 
 返回值都是作品像素：`box`（底板、选框、遮罩按它算）、`lines`（每行 `text`、`x`、`y`、`width`、`height`、`baseline`）、`graphemes`（每个字素 `text`、`x`、`y` 为基线、`advance`、`line`、`style`）、`style`（缩字号后的实际样式，`fit.fontSize` 为实际字号）、`totalLines`，以及 `truncated`、`omittedRanges`、`overflow`。原文不能被静默截掉：`truncated` 为真时加 `fit`、加高盒子或分拍；用排版库画的文字，复核能检查超框。
 
-drawText 按当前变换、`globalAlpha` 与 clip 绘制。同内容、样式、选项和字体代次的 `layoutText` 返回同一深度只读布局，可在 `layers()` 中调用。静态整段位图与逐字图集按布局、分辨率档位和颜色空间复用；每布局最多 4 张（包含整段层），LRU 淘汰时关闭。Canvas、pose 和字素 scale 自动选择最高 4× 分辨率，图集最低 2×，超大纹理会降档。更大放大需求可提高字号。带 `graphemes` 的调用全程沿用图集，落定不换抗锯齿路径；落定后可用 `cacheKey` 跳过整层录制。
+drawText 按当前变换、`globalAlpha` 与 clip 绘制。相同内容、样式、选项和字体字节可复用只读布局；可在 `layers()` 中排版。普通文字按字形轮廓绘制，描边与阴影按当前采样密度缓存。静止图层可用 `cacheKey` 复用，但参数或文字变化必须更新键。
 
 ## 逐字与逐词动画
 
 绘制顺序是整段底板 → 所有字素的阴影/发光与外描边 → 各字填色及其内/居中描边 → 整段装饰线，字素的变换和透明度同时作用于上下两层。底板和装饰线不随字逐个出现或移动：默认首个字素可见就显示整段；在 `drawText` 选项传 `backgroundAndDecorationOpacity`（0–1）可单独隐藏或淡入淡出整段层，例如 `{ backgroundAndDecorationOpacity: clamp01(time / .3), graphemes: ... }`。
 
-逐字动画只排整段，在一次 `drawText` 的 `graphemes` 回调里返回动画参数；字素簇各自栅格进共享图集，不会裁入相邻字的斜体像素。`x/y` 是相对排版位置的像素偏移，`scale/rotate` 围绕字素基线起点（旋转为弧度），`opacity` 为 0–1，返回 `null` 隐藏。容器先移动，子元素只晚一点跟随，透明度先于位移完成；不单独做原地淡入上浮：
+逐字动画只排整段，在一次 `drawText` 的 `graphemes` 回调里返回动画参数；完整字素簇保持一起绘制。`x/y` 是相对排版位置的像素偏移，`scale/rotate` 围绕字素基线起点（旋转为弧度），`opacity` 为 0–1，返回 `null` 隐藏。容器先移动，子元素只晚一点跟随，透明度先于位移完成；不单独做原地淡入上浮：
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"
+export const textFonts = { bindings: [{ text: "text", style: "style" }] }
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 export default {
@@ -72,22 +88,22 @@ export default {
 }
 ```
 
-- 字素模式会失去字素之间的连写和字距塑形；组合字素簇内部保持一起绘制。整段静态 drawText 保留原生整行塑形。字素的 `positionKind` 为 `"native-estimate"` 时，位置是整行塑形的推进估计：中文逐字没问题，英文字偶距、连字与组合字形逐字画会有细微差别，必要时改为逐词或整行裁切揭示。
+- 整段绘制与逐字动画共用同一几何。可选连字默认关闭，需要时传 `ligatures: true`；共享字形簇由首字素决定位姿与揭示，不能单独拆出半个连字。
 - 逐词：按 `graphemes[i].line` 与原文范围（`source`）把字素归成词，词首 `x` 定位，让同一词的字素回调使用同一组进度；独立词卡片可各自排版并绘制。
 
 同一帧所有排出的字素透明度都大于 0，复核才开始检查整段超框与截断；遗漏行仍来自整段布局事实。索引数量或数组也可用于明确的打字揭示，但平滑入场使用上面的回调。
 
-揭示结束后仍保留 `graphemes` 参数，沿用同一图集；不要为“优化”切换成无选项的整段调用，否则两条路径的塑形与采样差异可能使边缘一闪。
+揭示结束后可保留 `graphemes` 参数；同一布局的整段与逐字绘制使用相同字形和位置。
 
 ## 盒子布局：layoutBoxes
 
 `layoutBoxes(tree, { width, height })` 按 CSS flex 规则排一棵框树，返回以 id 为键的框 `{ x, y, width, height, contentBox, text? }`。节点 `style` 写 `flexDirection`（默认 `"row"`）、`gap`、`padding`、`margin`、`width`/`height`（数字或 `"50%"`）、`alignItems`、`justifyContent`、`flexGrow` 等；带 `text: { content, style, options }` 的节点自动量字，宽度跟内容走。绘制该节点文字时先 `ctx.translate(box.contentBox.x, box.contentBox.y)` 再 `drawText(ctx, box.text)`。人名条、卡片、标签组这类“底板包住几行字”的版式用它算，不手算宽高。id 不能重复，文字节点不能有子框。
 
-1.2.0 起根节点省略宽高或写 `"auto"` 时按内容收缩，画幅 size 是尺寸上限与百分比参照；铺满画幅须显式写 `style: { width: "100%", height: "100%" }`。卡片可只给 width，height 随内容；整组居中放在图层 pose 中，或用显式满幅容器居中。
+根节点省略宽高或写 `"auto"` 时按内容收缩，画幅 size 是尺寸上限与百分比参照；铺满画幅须显式写 `style: { width: "100%", height: "100%" }`。卡片可只给 width，height 随内容；整组居中放在图层 pose 中，或用显式满幅容器居中。
 
 文字 `options.maxLines/maxHeight` 的测量高度按实际显示行数返回，不为遗漏行留白；`totalLines/truncated/omittedRanges` 仍保存完整事实。需要正文全部可读时用 fit、增宽或改版，不能用截断隐藏原文。
 
-同一 row 用 `alignItems: "baseline"`（单项可用 `alignSelf: "baseline"`），标签、数值和单位按首行 `alphabeticBaseline` 自动对齐，不手写 y 补偿；嵌套容器沿用首个参考子节点的基线。用 `lines[0].baseline` 会混用中线，手工叠加会重复补偿。完整表格参数与数据卡见 recipes-text-data。
+同一 row 用 `alignItems: "baseline"`（单项可用 `alignSelf: "baseline"`），标签、数值和单位按首行 `alphabeticBaseline` 自动对齐，不手写 y 补偿；嵌套容器沿用首个参考子节点的基线。使用排版库的基线对齐即可，不再手工叠加补偿。完整表格参数与数据卡见 recipes-text-data。
 
 ## 缓动、弹簧与随机
 

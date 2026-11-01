@@ -1,4 +1,5 @@
 import { create, type Font } from 'fontkit'
+import { convert } from 'fontverter'
 import { normalizeFontFace, type FontFaceInfo } from '../../../../src/core/fonts/catalog'
 
 type NameRecords = Record<string, Record<string, string>>
@@ -40,12 +41,13 @@ export function parseFontFile(bytes: Buffer): ParsedFontFace[] {
   })
 }
 
-/** TTC faces need standalone sfnt data for FontFace. Preserve every table and glyph, no subsetting. */
-export function standaloneFont(bytes: Buffer, index: number): Buffer {
+/** HarfBuzz 与 FontFace 共用完整 SFNT；压缩字体在字体 CPU worker 解码，不能用 subset 丢表。 */
+export async function standaloneFont(bytes: Buffer, index: number): Promise<Buffer> {
+  const signature = bytes.toString('ascii', 0, 4)
+  if (signature === 'wOFF' || signature === 'wOF2') return convert(bytes, 'sfnt')
   if (bytes.toString('ascii', 0, 4) !== 'ttcf') {
-    const signature = bytes.toString('ascii', 0, 4)
-    if (signature === 'OTTO' || signature === 'wOFF' || signature === 'wOF2' || bytes.readUInt32BE(0) === 0x00010000) return bytes
-    // fontkit decodes macOS resource-fork directories; use its verified sfnt resource offsets.
+    if (signature === 'OTTO' || signature === 'true' || bytes.readUInt32BE(0) === 0x00010000) return bytes
+    // dfont 的资源偏移由 fontkit 解析，提取时保留所有字体表。
     const collection = create(bytes) as unknown as { type: string; header?: { dataOffset: number }; sfnt?: { refList: Array<{ dataOffset: number }> } }
     if (collection.type !== 'DFont' || !collection.header || !collection.sfnt) throw new Error('字体格式不能用于画面渲染。')
     const ref = collection.sfnt.refList[index]

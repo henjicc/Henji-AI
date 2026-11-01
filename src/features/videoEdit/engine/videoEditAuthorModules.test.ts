@@ -89,7 +89,8 @@ it('JS 直出路径把内置库的静态、字面动态与运行时动态导入�
   for (const specifier of ['three/addons/../../build/three.cjs', 'lodash']) {
     const url = resolve(specifier)
     expect(url.startsWith('data:text/javascript,'), specifier).toBe(true)
-    expect(decodeURIComponent(url)).toContain(`找不到模块 ${specifier}（由 main.js 导入）。可用的内置库：three@0.186.1`)
+    expect(decodeURIComponent(url)).toContain(`找不到模块 ${specifier}（由 main.js 导入）。可用的内置库：`)
+    expect(decodeURIComponent(url)).toContain('three@0.186.1')
   }
   expect(resolve('./local.js')).toBe('./local.js')
 })
@@ -103,7 +104,7 @@ it('项目根目录的同名文件导入内置库名时报出遮挡，而不是�
 
 it('JS 直出路径按工程记录的版本解析，未登记的裸名列出可用的内置库', () => {
   const unknown = directAuthorBundle({ entry: 'main.js', files: { 'main.js': 'import _ from "lodash";' } })!
-  expect(() => rewriteAuthorModule(unknown.modules!, 'main.js', path => path)).toThrow(/找不到模块 lodash（由 main\.js 导入）。可用的内置库：three@0\.186\.1/)
+  expect(() => rewriteAuthorModule(unknown.modules!, 'main.js', path => path)).toThrow(/找不到模块 lodash（由 main\.js 导入）。可用的内置库：/)
   const pinned = { entry: 'main.js', apiVersion: 5 as const, files: { 'main.js': 'import * as T from "three";' }, libraries: { three: '0.999.0' } }
   expect(directAuthorBundle(pinned)!.libraries).toBeUndefined()
   expect(() => rewriteAuthorModule(pinned, 'main.js', path => path)).toThrow('找不到模块 three')

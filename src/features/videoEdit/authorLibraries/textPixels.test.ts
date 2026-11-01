@@ -15,7 +15,7 @@ let results: { resting: Difference; background: Difference; firstBackground: Dif
 
 // 指令替身不能发现字素之间的覆盖或二次采样；独立无界面 Chromium 使用真实 OffscreenCanvas 读回像素。
 beforeAll(async () => {
-  const bundle = await build({ stdin: { contents: `export * from './src/features/videoEdit/authorLibraries/text'; export * from './src/core/imaging/vectorContent/textDrawPlan'; export * from './src/core/imaging/vectorContent/textDrawPlanCanvas'; export * from './src/services/vectorContent/appearance'; export * from './src/features/videoEdit/engine/videoEditAuthorCanvasRecorder'`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', globalName: 'textPixels', platform: 'browser' })
+  const bundle = await build({ stdin: { contents: `export * from './resources/video-edit-author/frozen/henji-layout/1.2.0/text.mjs'; export * from './src/core/imaging/vectorContent/textDrawPlan'; export * from './src/core/imaging/vectorContent/textDrawPlanCanvas'; export * from './src/services/vectorContent/appearance'; export * from './src/features/videoEdit/engine/videoEditAuthorCanvasRecorder'`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', globalName: 'textPixels', platform: 'browser' })
   const browser = await chromium.launch({ headless: true, ...(existsSync(chromium.executablePath()) ? {} : { channel: 'chrome' }) })
   try {
     const page = await browser.newPage()

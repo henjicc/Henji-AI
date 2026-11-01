@@ -1,3 +1,4 @@
+import { disposeFonts } from './services/fonts/service'
 import { registerApplicationControlIpc, watchApplicationHostRenderer } from './ipc/application-control'
 import { registerAppMenuIpc } from './ipc/app-menu'
 import { app, BrowserWindow, crashReporter, dialog } from 'electron'
@@ -285,7 +286,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [closeRecordingControl, stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [disposeFonts, closeRecordingControl, stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 }, async () => {
   try {

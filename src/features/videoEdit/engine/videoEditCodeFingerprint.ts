@@ -1,3 +1,5 @@
+import { withTextFontSession } from '@/core/imaging/vectorContent/shaping/fontContext'
+import { prepareAuthorTextParameters } from './videoEditAuthorTextResources'
 import { videoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
 import { videoEditSceneFootprints, videoEditSceneRecordsInRange } from '@/core/videoEdit/scene/sceneFootprint'
 import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
@@ -45,7 +47,7 @@ export class VideoEditCodeFingerprint {
     if (!module) {
       module = prepareAuthorModuleUrls(bundle).then(async urls => {
         this.releases.push(urls.dispose)
-        return loadAuthorModule(urls.url, [...bundle.trustContext ?? bundle.modules?.trustContext ?? [], ...this.document.foreign ? [this.document.foreign] : []], bundle.apiVersion)
+        return loadAuthorModule(urls.url, [...bundle.trustContext ?? bundle.modules?.trustContext ?? [], ...this.document.foreign ? [this.document.foreign] : []], bundle.apiVersion, bundle)
       })
       this.modules.set(bundle, module)
     }
@@ -107,6 +109,8 @@ export class VideoEditCodeFingerprint {
     const sourceTime = videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, this.document.frameRate, plan.transitionHandles && program.mode === 'static')
     const overrides = plan.clip.elementOverrides ? Object.fromEntries(Object.entries(plan.clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
     const params = authorParameterValues({ ...program, types: program.types ?? {} }, plan.author)
+    const preparing = prepareAuthorTextParameters(effect, params)
+    const text = preparing && await preparing
     let result: VideoEditFrameFingerprint
     if (declared) {
       let identity = this.codeIdentities.get(program.bundle)
@@ -116,13 +120,14 @@ export class VideoEditCodeFingerprint {
         identity = authorFrameCodeIdentity(files, effect, codeVersionContentKey({ ...version, files: [] }))
         this.codeIdentities.set(program.bundle, identity)
       }
-      result = fingerprintAuthorFrameKey(effect, plan.context, params, info, inputs, identity, plan.parameters, overrides, this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion)
+      result = withTextFontSession(text?.fonts, () => fingerprintAuthorFrameKey(effect, plan.context, params, info, inputs, identity, plan.parameters, overrides, this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion))
     } else {
       const measure = this.measure ??= new OffscreenCanvas(1, 1).getContext('2d') ?? undefined
       if (!measure) return { fallback: 'canvas-unavailable' }
-      result = fingerprintAuthorFrame(effect, plan.context, params, info, inputs, measure, overrides, this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion)
+      result = withTextFontSession(text?.fonts, () => fingerprintAuthorFrame(effect, plan.context, params, info, inputs, measure, overrides, this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion))
     }
     if (!result.digest) return result
+    if (text) result = { ...result, digest: renderFingerprintHash(JSON.stringify([result.digest, text.identity])) }
     const scenes = videoEditCodeInputs(this.document, plan.clip.code, () => program.parameters)?.scenes
     const time = codeMediaInputClipSeconds(plan.clip, frame, this.document.frameRate)
     const records = Object.entries(scenes ?? {}).map(([key, scene]) => [key, videoEditSceneRecordsInRange(videoEditSceneFootprints(scene), time, time + 1 / this.document.fps).map(renderSceneRecordFingerprint)])

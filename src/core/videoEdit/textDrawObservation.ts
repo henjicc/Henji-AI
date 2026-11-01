@@ -29,6 +29,7 @@ export type TextRasterProvider = {
   getContextAttributes?: () => { colorSpace?: TextRasterContext['colorSpace'] }
 }
 export interface TextDrawFact extends Pick<TextDrawPlan, 'sourceText' | 'box' | 'contentSize' | 'visibleContentSize' | 'inkBounds' | 'appearanceBounds' | 'boundsKind' | 'overflow' | 'truncated' | 'omittedRanges' | 'totalLines' | 'fit'> {
+  fontDiagnostics?: readonly string[]
   layoutId?: string
   /** 字素揭示尚未完成时不能将有意省略当成正文缺失。 */
   revealComplete?: boolean

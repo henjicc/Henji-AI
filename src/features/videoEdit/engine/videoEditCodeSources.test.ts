@@ -14,6 +14,7 @@ import * as inputHashes from '@/utils/save/hash'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeSources, type PreparedVideoEditCodeEffect } from './videoEditCodeSources'
+import { CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditCodePicture, VideoEditCodeImageInput } from './videoEditCodeGpu'
 
@@ -51,6 +52,8 @@ it('真实前瞻预热携带来源，在询问与拒绝状态都不求值，允�
   } finally { await sources.dispose(); installAuthorTrustGate(async () => { throw new Error('代码信任检查尚未就绪') }); trust.dispose(); Reflect.deleteProperty(globalThis, '__aheadTrustExecutions') }
 })
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: logWarn }) }))
+// 文字元数据键需要真实字体通道；这里只验证输出键是否带上文字身份。
+vi.mock('./videoEditAuthorTextResources', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditAuthorTextResources')>(), authorTextMetadataKey: async (_bundle: unknown, source: string) => source }))
 function source(mode: 'static' | 'dynamic' = 'static', name = '新图形', kind = 'generator'): string {
   return `export default {name:"${name}",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:10,params:[{key:"amount",type:"number",title:"强度",default:.5,min:0,max:1,step:.01}],${kind === 'filter' ? 'createWebGPU(){return {draw(){}};}' : `draw(ctx,t,p){ctx.fillStyle="rgba(255,0,0,.5)";ctx.fillRect(${mode === 'dynamic' ? 't*20+' : ''}p.amount*100,0,200,100);}`}}`
 }
@@ -861,6 +864,35 @@ it('节目输出复用跨帧与局部编辑，参数、dataFiles、质量、观�
     expect((await prepare(5, { quality: 'final' })).cacheHits).toBe(0)
     await boundary.sources.replaceContent(document); boundary.sources.updateDocument(document)
     expect((await prepare(5, { quality: 'final' })).cacheHits).toBe(0)
+  } finally { await boundary.sources.dispose() }
+})
+
+it('相同 frameKey 与源码下字体身份变化必须重画，不能依赖销毁来源缓存', async () => {
+  const document = fixture(source('static'))
+  document.codeMaterials![0].versions[0].apiVersion = CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION
+  const boundary = boundaries(document)
+  boundary.compiler.bundle.mockImplementation(async code => ({ ...testAuthorBundle(code), libraries: { 'henji-layout': '2.0.0' }, textFonts: [] }))
+  const runtime = await boundary.acquire()
+  let textIdentity = 'font-a'
+  Object.assign(runtime, { authorTextIdentity: async () => textIdentity, authorFrameKey: async () => ({ digest: 'same' }) })
+  const prepare = () => boundary.sources.prepare(document, document.clips, 0, () => true)
+  try {
+    await prepare(); expect((await prepare()).cacheHits).toBe(1)
+    textIdentity = 'font-b'
+    expect((await prepare()).cacheHits).toBe(0)
+    expect(boundary.generator).toHaveBeenCalledTimes(2)
+  } finally { await boundary.sources.dispose() }
+})
+
+it('旧接口逐帧输出键不向作者运行时取文字身份', async () => {
+  const document = fixture(source('static')), boundary = boundaries(document)
+  const runtime = await boundary.acquire()
+  const textIdentity = vi.fn(async () => 'font-a')
+  Object.assign(runtime, { authorTextIdentity: textIdentity, authorFrameKey: async () => ({ digest: 'same' }) })
+  try {
+    await boundary.sources.prepare(document, document.clips, 0, () => true)
+    expect((await boundary.sources.prepare(document, document.clips, 1, () => true)).cacheHits).toBe(1)
+    expect(textIdentity).not.toHaveBeenCalled()
   } finally { await boundary.sources.dispose() }
 })
 

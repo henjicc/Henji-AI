@@ -71,10 +71,10 @@ export function codeOutputScenes(document: VideoEditComposition, plan: VideoEdit
 
 /** 声明摘要由作者指纹入口计算，输出复用只补宿主输入与环境身份。 */
 export function codeOutputKey(document: VideoEditComposition, plan: VideoEditCodePlan, dependencies: Readonly<Record<string, AuthorFingerprintInput>>,
-  declared: VideoEditFrameFingerprint | undefined, quality: EffectQuality = 'interactive'): string {
+  declared: VideoEditFrameFingerprint | undefined, quality: EffectQuality = 'interactive', textIdentity?: string): string {
   const program = plan.program!, context = plan.context
   const { sourceTime, overrides, info, environment } = plan.outputFrame!
-  return codeOutputSignature([plan.outputIdentity, plan.parameters, codeOutputScenes(document, plan), dependencies,
+  return codeOutputSignature([plan.outputIdentity, plan.parameters, ...(textIdentity === undefined ? [] : [textIdentity]), codeOutputScenes(document, plan), dependencies,
     declared?.digest ?? (!declared && program.mode === 'static' && !codeMaterialUsesAudio(program) ? 'static' : [context.time, context.localTime, sourceTime]),
     codeOutputObjectSignature(context.audio), context.audioTime, info.frameDuration, info.clip.duration, context.width, context.height, plan.divisor ?? 1,
     documentFontRevision(), overrides, document.motionBlur === true, codeOutputObjectSignature(environment), quality])

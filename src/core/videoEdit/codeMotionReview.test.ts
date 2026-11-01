@@ -67,13 +67,14 @@ it('文字墨迹与录制 clip 各用所属矩阵投影到查询序列，不把�
     sourceText: '标题', box: { x: 0, y: 0, width: 50, height: 20 }, constraint: { x: 0, y: 0, width: 50, height: 20 },
     contentSize: { width: 50, height: 20 }, visibleContentSize: { width: 50, height: 20 }, inkBounds: { x: 0, y: 0, width: 50, height: 20 }, appearanceBounds: { x: -100, y: -100, width: 300, height: 300 }, boundsKind: 'measured',
     overflow: { full: { width: false, height: false, lines: false }, visible: { width: false, height: false, lines: false } }, truncated: false, omittedRanges: [], totalLines: 1, actualLines: 1,
-    fit: { applied: false, failed: false, fontSize: 20, scale: 1 }, matrix: [1, 0, 0, 1, 20, 0], clips: [[[0, 0], [40, 0], [40, 100], [0, 100]]], opacity: 1, uncovered: [],
+    fit: { applied: false, failed: false, fontSize: 20, scale: 1 }, matrix: [1, 0, 0, 1, 20, 0], clips: [[[0, 0], [40, 0], [40, 100], [0, 100]]], opacity: 1, uncovered: [], fontDiagnostics: ['测试字体使用同族最近的已准备字形'],
   }
   const result = await run(async (local, frame) => {
     const value = await observe(local, 0); value.frame = frame
     Object.assign(value.clips[0].elements[0], { matrix: [1, 0, 0, 1, 80, 100], textDraws: [draw] })
     return value
   })
+  expect(result.warnings.filter(warning => warning.includes('测试字体使用同族最近的已准备字形'))).toHaveLength(1)
   const records = result.records.filter(record => record.kind.startsWith('text_'))
   expect(records).toHaveLength(1)
   expect(records[0]).toMatchObject({ kind: 'text_clipped', timeline: { from: 0, to: 120 }, textOverflow: { matrix: [1, 0, 0, 1, 100, 100], clippedBy: ['clip'] } })
@@ -109,6 +110,8 @@ it('只对实际绘制旧文字的图层提示未覆盖，短查询说明稳定�
   const result = await collectVideoEditCodeMotion(composition, { from: 0, to: 2 }, { version: program }, {}, observer)
   expect(result.records.some(record => record.kind.startsWith('text_'))).toBe(false)
   expect(result.warnings.join(' ')).toContain('这些图层未使用排版库')
+  expect(result.warnings.join(' ')).toContain('upgradeLibraries:true')
+  expect(result.warnings.join(' ')).toContain('upgradeAuthorApi:true')
   expect(result.warnings.join(' ')).toContain('短于文字检查')
 })
 

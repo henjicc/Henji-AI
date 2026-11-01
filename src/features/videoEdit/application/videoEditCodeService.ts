@@ -34,8 +34,8 @@ import type { ContentTrustReference } from '@/core/contentTrust'
 import { inheritApplicationConfirmation } from '@/core/application-control/userConfirmation'
 
 const logger = createLogger('features.videoEdit.code')
-export interface VideoEditCodeInput { trustContext?: ContentTrustReference[]; projectEntry?: string; source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
-export interface VideoEditCodeVersionInput { makeDefault?: boolean; trustContext?: ContentTrustReference[]; libraries?: Readonly<Record<string, string>>; projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
+export interface VideoEditCodeInput { apiVersion?: CodeAuthorApiVersion; libraries?: Readonly<Record<string, string>>; trustContext?: ContentTrustReference[]; projectEntry?: string; source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
+export interface VideoEditCodeVersionInput { apiVersion?: CodeAuthorApiVersion; makeDefault?: boolean; trustContext?: ContentTrustReference[]; libraries?: Readonly<Record<string, string>>; projectCommit?: string; source?: string; files?: Record<string, string>; entry?: string; definitionId: string }
 interface Candidate { definition: CodeMaterialDefinition; item: VideoEditItem; filter?: CodeMaterialInstance }
 interface CodeAssetPublication {
   asset: CodeAsset; foreign?: ContentTrustReference | null; media: VideoEditMedia[]; mediaIds: ReadonlyMap<string, string>; origin: { assetId: string; contentIdentity: string }
@@ -112,9 +112,9 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       const project = input.projectEntry ? await prepareProjectCodePublication(projectId, input.projectEntry, undefined, input.name) : undefined
       const contents = { ...(project?.contents ?? codeFilesFromInput(input)), trustContext: publication ? publication.foreign === null ? [] : [publication.foreign ?? { id: publication.origin.assetId, sourceName: publication.asset.name, sourceType: 'code_asset' as const }] : input.trustContext ?? project?.contents.trustContext ?? [] }
       const prepared = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
-      const libraries = publication?.asset.sourceVersion.libraries
+      const libraries = publication ? publication.asset.sourceVersion.libraries : input.libraries
       // 代码资产按它记录的作者接口与内置库重建，v4 资产导入后仍是 v4。
-      const pinned = publication ? { apiVersion: publication.asset.sourceVersion.apiVersion as CodeAuthorApiVersion } : {}
+      const pinned = publication ? { apiVersion: publication.asset.sourceVersion.apiVersion as CodeAuthorApiVersion } : { apiVersion: input.apiVersion }
       const publicationState = { ...prepared, ...pinned, ...(libraries ? { libraries } : {}) }
       const typeCheck = typeReports ? startVideoEditCodeTypeCheck(codeVersionCompilation(contents, publicationState), publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
@@ -245,7 +245,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       const project = entry ? await prepareProjectCodePublication(projectId, entry, input.projectCommit) : undefined
       const contents = { ...(project?.contents ?? codeFilesFromInput(input)), trustContext: input.trustContext ?? project?.contents.trustContext ?? codeMaterialTrustContext(baseline, { definitionId: definition.id }) }
       const prepared = project?.publication ?? await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles)
-      const publicationState = { ...codeVersionInheritance(definition.versions.find(version => version.id === definition.defaultVersionId)!, documentCodeSourceResolver()), ...prepared, ...(input.libraries ? { libraries: input.libraries } : {}) }
+      const publicationState = { ...codeVersionInheritance(definition.versions.find(version => version.id === definition.defaultVersionId)!, documentCodeSourceResolver()), ...prepared, apiVersion: input.apiVersion ?? definition.versions.find(version => version.id === definition.defaultVersionId)!.apiVersion as CodeAuthorApiVersion, ...(input.libraries ? { libraries: input.libraries } : {}) }
       const typeCheck = typeReports ? startVideoEditCodeTypeCheck(codeVersionCompilation(contents, publicationState), publicationState.imports, typeAbort.signal) : undefined
       if (typeCheck) typeChecks.push(typeCheck)
       const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState, codeMaterialTrustContext(baseline, { definitionId: definition.id })), typeCheck ? [typeCheck] : [], controller.signal)

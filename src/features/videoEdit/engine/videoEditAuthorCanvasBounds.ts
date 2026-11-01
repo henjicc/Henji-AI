@@ -302,6 +302,7 @@ function analyze(recording: AuthorCanvasRecording, measure: OffscreenCanvasRende
       case 'strokeRect': { const box = corners(matrix, a, b, a + c, b + d); paint(box && expand(box, strokeWidth())); break }
       case 'fillText': text(args[0], b, c, false); break
       case 'strokeText': text(args[0], b, c, true); break
+      case 'textAppearance': paint(corners(matrix, b, c, b + d, c + e)); break
       case 'drawImage': {
         const rest = args.slice(1) as number[]
         if (rest.length === 2) { const size = imageSize(args[0], assetSize); paint(size && corners(matrix, rest[0], rest[1], rest[0] + size[0], rest[1] + size[1])) }

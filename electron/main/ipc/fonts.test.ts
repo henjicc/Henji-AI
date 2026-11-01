@@ -14,7 +14,7 @@ it('所有字体 IPC 校验本应用来源；只接受已知 ID，导入路径�
   const read = state.handlers.get(FONTS_IPC.readFace)!
   expect((await read(event, { id: '../secret.ttf' })).ok).toBe(false); expect(state.read).not.toHaveBeenCalled()
   expect((await read(event, { id: 'a'.repeat(64), path: 'secret.ttf' })).ok).toBe(false)
-  expect((await read(event, { id: 'a'.repeat(64) })).ok).toBe(true); expect(state.read).toHaveBeenCalledWith('a'.repeat(64))
+  expect((await read(event, { id: 'a'.repeat(64) })).ok).toBe(true); expect(state.read).toHaveBeenCalledWith('a'.repeat(64), undefined)
   const importFont = state.handlers.get(FONTS_IPC.importFiles)!
   expect((await importFont(event, { paths: ['unapproved.ttf'] })).ok).toBe(false); expect(state.dialog).not.toHaveBeenCalled()
   expect((await importFont(event, undefined)).ok).toBe(true); expect(state.import).toHaveBeenCalledWith(['native-selected.ttf'])

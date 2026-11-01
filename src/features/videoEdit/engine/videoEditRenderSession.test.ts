@@ -1,3 +1,7 @@
+import { loadFontLibrary } from '@/platform/fonts'
+import { rememberTransientCodeSource } from '@/core/videoEdit/codeMaterial/sources'
+import { readStaticTextFonts } from '@/core/videoEdit/codeMaterial/textFonts'
+import ts from 'typescript'
 import path from 'node:path'
 import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -9,6 +13,7 @@ import { createVideoEditSequence, videoEditClipSchema, videoEditComposition } fr
 import { addLegacyVideoEditTracks, createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditRenderTransport } from './videoEditRenderTransport'
+import { VideoEditTextPreflight } from './videoEditTextPreflight'
 import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 
@@ -18,14 +23,18 @@ const platform = vi.hoisted(() => ({
   status: vi.fn(async () => ({ available: true, forcedBackend: null as 'native' | 'browser' | null })),
   connect: vi.fn(async () => ({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })),
   disconnect: vi.fn(),
+  fontCatalog: vi.fn(async () => ({ faces: [], revision: 1, sources: {} })),
   dirname: vi.fn(async (path: string) => path.slice(0, path.lastIndexOf('/'))),
   logs: [] as Array<{ level: string; message: string; meta: unknown }>,
 }))
-vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect }, system: { paths: { dirname: platform.dirname } } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ fonts: { list: platform.fontCatalog, onChanged: () => () => undefined }, settings: { get: async () => null }, videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect }, system: { paths: { dirname: platform.dirname } } }) }))
 vi.mock('@/services/imageSource', () => ({ toFetchableMediaUrl: (path: string) => `url:${path}`, isLikelyLocalImagePath: (path: string) => /^[A-Z]:/.test(path) }))
 vi.mock('../videoEditMediaContent', () => ({ VideoEditMediaContentVerifier: class { async check() {} dispose() {} } }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: (message: string, meta: unknown) => platform.logs.push({ level: 'debug', message, meta }), info: (message: string, meta: unknown) => platform.logs.push({ level: 'info', message, meta }), warn: (message: string, meta: unknown) => platform.logs.push({ level: 'warn', message, meta }) }) }))
 
+const textCompiler = vi.hoisted(() => ({ bundle: vi.fn() }))
+vi.mock('./videoEditSharedCompiler', () => ({ prepareVideoEditAuthorBundle: textCompiler.bundle }))
+vi.mock('@/core/videoEdit/codeMaterial/sources', async importOriginal => ({ ...await importOriginal<typeof import('@/core/videoEdit/codeMaterial/sources')>(), loadCodeSourceReferences: vi.fn(async () => undefined) }))
 const workers: FakeWorker[] = []
 class FakeWorker {
   respond = true
@@ -71,12 +80,15 @@ function composition(): VideoEditComposition {
     items: [], tracks: [], clips: [], annotations: [],
   } as unknown as VideoEditComposition
 }
-beforeEach(() => {
+beforeEach(async () => {
+  textCompiler.bundle.mockReset().mockImplementation(async () => ({ code: '', map: '', locations: { layers: {} }, apiVersion: 10, libraries: { 'henji-layout': '2.0.0' }, textEntry: 'main.js', textFonts: [{ file: 'main.js', ...readStaticTextFonts(ts.createSourceFile('main.js', `import {layoutText} from 'henji-layout/text'; export default { draw(){ layoutText('标题') } }`, ts.ScriptTarget.Latest, true), 10) }] }))
   workers.length = 0; platform.logs = []; proxyState.sources = {}
   platform.status.mockReset().mockResolvedValue({ available: true, forcedBackend: null })
   platform.connect.mockReset().mockResolvedValue({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })
   platform.disconnect.mockReset()
+  platform.fontCatalog.mockReset().mockResolvedValue({ faces: [], revision: 1, sources: {} })
   platform.dirname.mockClear()
+  await loadFontLibrary()
 })
 afterEach(() => { vi.useRealTimers() })
 
@@ -113,6 +125,7 @@ it('字体范围展开嵌套序列时不沿用外层转场', async () => {
   parent.clips = [{ ...base, id: 'nested', kind: 'sequence', itemId: 'nested-item' }, { ...base, id: 'after', start: 30 }]
   parent.transitions = [{ id: 'cross', kind: 'cross_dissolve', leftClipId: 'nested', rightClipId: 'after', durationFrames: 10 }]
   project.sequences.push(parent)
+  project.codeMaterials = [{ id: 'code', name: '代码', defaultVersionId: 'version-0', versions: [0, 1].map(index => ({ id: `version-${index}`, languageVersion: 4, apiVersion: 7, entry: 'main.js', files: [{ path: 'main.js', hash: 'a'.repeat(64), location: rememberTransientCodeSource('a'.repeat(64), 'export default {}') }] })) }]
   const fonts = vi.fn(async (_document: VideoEditComposition) => [])
   const session = new VideoEditRenderTransport({ fonts, proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, parent.id))
   await session.prepareGpu()
@@ -126,6 +139,7 @@ it('初始化不读取代码字体，逐帧只请求当前范围，连续帧复�
   const sequence = project.sequences[0]
   const base = makeVideoEditItemClip(project, 'item', sequence.id, { frame: 0, duration: 20 })
   sequence.clips = [0, 60].map((start, index) => ({ ...base, id: `clip-${index}`, kind: 'code' as const, start, code: { definitionId: 'code', versionId: `version-${index}`, parameters: {} } }))
+  project.codeMaterials = [{ id: 'code', name: '代码', defaultVersionId: 'version-0', versions: [0, 1].map(index => ({ id: `version-${index}`, languageVersion: 4, apiVersion: 7, entry: 'main.js', files: [{ path: 'main.js', hash: 'a'.repeat(64), location: rememberTransientCodeSource('a'.repeat(64), 'export default {}') }] })) }]
   const fonts = vi.fn(async (_document: VideoEditComposition) => [])
   const session = new VideoEditRenderTransport({ fonts, proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, sequence.id))
   await session.prepareGpu()
@@ -139,6 +153,63 @@ it('初始化不读取代码字体，逐帧只请求当前范围，连续帧复�
   await session.present(60)
   expect(fonts.mock.lastCall![0].clips.map(clip => clip.id)).toEqual(['clip-1'])
   expect(workers[0].messages.find(entry => entry.message.kind === 'init')!.message).toMatchObject({ codeSources: {} })
+  await session.dispose()
+})
+
+it.each([7, 8, 9] as const)('API %s 的播放、拖动和参数更新不进入文字预检，切换新接口后才准备', async apiVersion => {
+  const project = createVideoEditTestDocument('旧作者路径'), sequence = project.sequences[0]
+  project.items = [{ id: 'item', name: '占位', kind: 'text' }]
+  const clip = makeVideoEditItemClip(project, 'item', sequence.id, { frame: 0, duration: 100 })
+  sequence.clips = [{ ...clip, kind: 'code', code: { definitionId: 'code', versionId: 'version', parameters: {} } }]
+  project.codeMaterials = [{ id: 'code', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', languageVersion: 4, apiVersion, entry: 'main.js', files: [{ path: 'main.js', hash: 'a'.repeat(64), location: rememberTransientCodeSource('a'.repeat(64), 'export default {}') }] }] }]
+  const prepare = vi.spyOn(VideoEditTextPreflight.prototype, 'prepare')
+  const session = new VideoEditRenderTransport({ fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, sequence.id))
+  try {
+    await session.prepareGpu()
+    for (const frame of [0, 1, 2, 90, 3, 80]) await session.present(frame, frame < 3, frame >= 3)
+    sequence.clips[0].code!.parameters.offset = 10
+    await session.updateDocument(videoEditComposition({ ...project, revision: project.revision + 1 }, sequence.id))
+    await session.present(4)
+    expect(prepare).not.toHaveBeenCalled()
+    expect(textCompiler.bundle).not.toHaveBeenCalled()
+    expect(workers[0].messages.some(({ message }) => message.kind === 'prepareText')).toBe(false)
+    const current = structuredClone(project)
+    current.codeMaterials![0].versions[0].apiVersion = 10
+    await session.replaceContent(videoEditComposition(current, sequence.id))
+    await session.present(5)
+    expect(prepare).toHaveBeenCalledOnce()
+    expect(textCompiler.bundle).toHaveBeenCalledOnce()
+    prepare.mockClear()
+    await session.updateDocument(videoEditComposition(project, sequence.id))
+    await session.present(6)
+    expect(prepare).not.toHaveBeenCalled()
+  } finally { await session.dispose(); prepare.mockRestore() }
+})
+
+it('字体屏障在 render 入队之前，两帧共用准备且不互相取消', async () => {
+  const project = createVideoEditTestDocument('字体屏障')
+  project.items = [{ id: 'item', name: '占位', kind: 'text' }]
+  const sequence = project.sequences[0]
+  const clip = makeVideoEditItemClip(project, 'item', sequence.id, { frame: 0, duration: 20 })
+  sequence.clips = [{ ...clip, kind: 'code', code: { definitionId: 'code', versionId: 'version', parameters: {} } }]
+  project.codeMaterials = [{ id: 'code', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', languageVersion: 4, apiVersion: 10, entry: 'main.js', files: [{ path: 'main.js', hash: 'a'.repeat(64), location: rememberTransientCodeSource('a'.repeat(64), 'export default {}') }] }] }]
+  const session = new VideoEditRenderTransport({ fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, sequence.id))
+  await session.prepareGpu()
+  const worker = workers[0]; worker.respond = false
+  const first = session.present(0, true)
+  await vi.waitFor(() => expect(worker.messages.at(-1)?.message.kind).toBe('prepareText'))
+  const firstRequest = worker.messages.at(-1)!.message as Extract<RenderRequest, { kind: 'prepareText' }>
+  expect(worker.messages.some(item => item.message.kind === 'render')).toBe(false)
+  const next = session.present(1, true)
+  await new Promise(resolve => setTimeout(resolve, 10))
+  expect(worker.messages.filter(item => item.message.kind === 'prepareText')).toHaveLength(1)
+  worker.respond = true
+  worker.onmessage?.({ data: { id: firstRequest.id } } as MessageEvent)
+  expect((await first).skipped).not.toBe(true)
+  await next
+  expect(worker.messages.filter(item => item.message.kind === 'render').map(item => item.message)).toEqual([expect.objectContaining({ frame: 0 }), expect.objectContaining({ frame: 1 })])
+  await session.present(2, true)
+  expect(worker.messages.filter(item => item.message.kind === 'prepareText')).toHaveLength(1)
   await session.dispose()
 })
 
@@ -372,7 +443,7 @@ it('跟踪结果带版本原样发送 Worker，关闭后不再发送', async () 
   const session = new VideoEditRenderSession(composition())
   const tracks = { key: { url: 'henji-media://local/track.htrk', version: '2' } }
   session.setTracks(tracks)
-  expect(workers[0].messages[0].message).toEqual({ kind: 'tracks', tracks, id: 0 })
+  expect(workers[0].messages.find(entry => entry.message.kind === 'tracks')?.message).toEqual({ kind: 'tracks', tracks, id: 0 })
   await session.present(0); await session.dispose()
   const count = workers[0].messages.length
   session.setTracks({}); expect(workers[0].messages.length).toBe(count)
@@ -381,7 +452,12 @@ it('跟踪结果带版本原样发送 Worker，关闭后不再发送', async () 
 it('原生可用时先把帧通道端口交给 Worker 再初始化，并附上本地源文件路径；关闭后断开通道', async () => {
   const session = new VideoEditRenderSession(composition())
   await session.present(0)
-  const [attach, init] = workers[0].messages
+  const attach = workers[0].messages.find(entry => entry.message.kind === 'nativeFrames.attach')!
+  const init = workers[0].messages.find(entry => entry.message.kind === 'init')!
+  const kinds = workers[0].messages.map(entry => entry.message.kind)
+  expect(kinds).toContain('textFonts.attach')
+  expect(kinds.indexOf('textFonts.attach')).toBeLessThan(kinds.indexOf('init'))
+  expect(kinds.indexOf('nativeFrames.attach')).toBeLessThan(kinds.indexOf('init'))
   expect(attach.message).toEqual({ kind: 'nativeFrames.attach', port: { kind: 'port' } }); expect(attach.transfer).toEqual([{ kind: 'port' }])
   expect(init.message).toMatchObject({ kind: 'init', decode: { nativeAvailable: true, localPaths: { 'url:D:/prores.mov': 'D:/prores.mov' } } })
   expect((init.message as Extract<RenderRequest, { kind: 'init' }>).document.media.map(media => media.path)).toEqual(['url:D:/prores.mov', 'url:D:/a.png', 'url:https://example.com/a.mp4'])
@@ -396,11 +472,11 @@ it('诊断强制浏览器时仍接帧通道（网页画面经它到达）但不�
   platform.status.mockResolvedValue({ available: true, forcedBackend: 'browser' })
   const forced = new VideoEditRenderSession(composition()); await forced.present(0)
   expect(platform.connect).toHaveBeenCalledOnce()
-  expect(workers[0].messages[0].message).toMatchObject({ kind: 'nativeFrames.attach' })
-  expect(workers[0].messages[1].message).toMatchObject({ kind: 'init', decode: { nativeAvailable: false, forced: 'browser' } })
+  expect(workers[0].messages.some(entry => entry.message.kind === 'nativeFrames.attach')).toBe(true)
+  expect(workers[0].messages.find(entry => entry.message.kind === 'init')?.message).toMatchObject({ kind: 'init', decode: { nativeAvailable: false, forced: 'browser' } })
   platform.status.mockResolvedValue({ available: true, forcedBackend: null }); platform.connect.mockRejectedValue(new Error('显卡帧通道建立超时。'))
   const failed = new VideoEditRenderSession(composition()); await failed.present(0)
-  expect(workers[1].messages[0].message).toMatchObject({ kind: 'init', decode: { nativeAvailable: false } })
+  expect(workers[1].messages.find(entry => entry.message.kind === 'init')?.message).toMatchObject({ kind: 'init', decode: { nativeAvailable: false } })
   expect(platform.logs.filter(entry => entry.level === 'warn')).toEqual([expect.objectContaining({ level: 'warn', meta: expect.objectContaining({ event: 'video_edit.decode.native.channel_failed' }) })])
   await Promise.all([forced.dispose(), failed.dispose()]); expect(platform.disconnect).toHaveBeenCalledOnce()
 })
@@ -571,6 +647,7 @@ it('批量帧指纹先按当前帧同步代码字体，再发送受预算约束�
   project.items = [{ id: 'text', name: '文字', kind: 'text' }]
   const base = makeVideoEditItemClip(project, 'text', sequence.id, { frame: 0, duration: 20 })
   sequence.clips = [{ ...base, id: 'code-a', kind: 'code', start: 30 }, { ...base, id: 'code-b', kind: 'code', start: 60 }]
+  project.codeMaterials = [{ id: 'code', name: '代码', defaultVersionId: 'version-0', versions: [0, 1].map(index => ({ id: `version-${index}`, languageVersion: 4, apiVersion: 7, entry: 'main.js', files: [{ path: 'main.js', hash: 'a'.repeat(64), location: rememberTransientCodeSource('a'.repeat(64), 'export default {}') }] })) }]
   const fonts = vi.fn(async (_document: VideoEditComposition) => [])
   const session = new VideoEditRenderTransport({ fonts, proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, sequence.id))
   try {
@@ -619,4 +696,43 @@ it('独立任务固定 look 快照，离屏复用刷新；并发工程的显式�
     await second.replaceContent(pinned)
     expect(documents(secondWorker).at(-1)?.authorEffects?.presets?.[0].name).toBe('工程副本')
   } finally { await first.dispose(); await second.dispose() }
+})
+
+it('暂停取消字体准备中的播放帧，准备完成后也不能提交旧画面', async () => {
+  const project = createVideoEditTestDocument('字体屏障')
+  project.items = [{ id: 'item', name: '占位', kind: 'text' }]
+  const sequence = project.sequences[0]
+  const clip = makeVideoEditItemClip(project, 'item', sequence.id, { frame: 0, duration: 20 })
+  sequence.clips = [{ ...clip, kind: 'code', code: { definitionId: 'code', versionId: 'version', parameters: {} } }]
+  project.codeMaterials = [{ id: 'code', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', languageVersion: 4, apiVersion: 10, entry: 'main.js', files: [{ path: 'main.js', hash: 'a'.repeat(64), location: rememberTransientCodeSource('a'.repeat(64), 'export default {}') }] }] }]
+  const session = new VideoEditRenderTransport({ fonts: async () => [], proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, sequence.id))
+  await session.prepareGpu()
+  const worker = workers[0]; worker.respond = false
+  const first = session.present(0, true, false, performance.now() + 100)
+  await vi.waitFor(() => expect(worker.messages.at(-1)?.message.kind).toBe('prepareText'))
+  const firstRequest = worker.messages.at(-1)!.message as Extract<RenderRequest, { kind: 'prepareText' }>
+  expect(worker.messages.some(item => item.message.kind === 'render')).toBe(false)
+  session.stopPlayback(0)
+  worker.onmessage?.({ data: { id: firstRequest.id } } as MessageEvent)
+  expect((await first).skipped).toBe(true)
+  expect(worker.messages.some(item => item.message.kind === 'render')).toBe(false)
+  worker.respond = true
+  await session.dispose()
+})
+
+it('固定导出跨帧只用起始目录，保留已有字体且不重置 FontFaceSet', async () => {
+  const document = composition()
+  const fonts = vi.fn(async (_document: VideoEditComposition, fixed?: {revision: number}) => {
+    expect(fixed?.revision).toBe(1)
+    return [{face:{...GENERIC_FONT_FACES[0],id:'fixed-face'},bytes:new Uint8Array([1])}]
+  })
+  const session = new VideoEditRenderTransport({fonts,proxies:async()=>({}),maskUpdateTime:()=>undefined},document,{fixedTextFonts:true})
+  try {
+    await session.present(0)
+    platform.fontCatalog.mockResolvedValue({faces:[],revision:2,sources:{}})
+    await session.updateDocument({...document,revision:1})
+    await session.present(1)
+    expect(platform.fontCatalog).toHaveBeenCalledOnce()
+    expect(workers[0].messages.filter(item=>item.message.kind==='fonts').every(item=>!(item.message as Extract<RenderRequest,{kind:'fonts'}>).reset)).toBe(true)
+  } finally { await session.dispose() }
 })

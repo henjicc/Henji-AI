@@ -1,4 +1,4 @@
-/** Public metadata only: filesystem paths never cross the font boundary. */
+/** 字体样式元数据；文件身份仅通过导出会话的独立清单传递。 */
 export interface FontFaceInfo {
   id: string
   family: string
@@ -16,6 +16,9 @@ export interface FontFaceInfo {
   variation?: Record<string, number>
 }
 export interface FontCatalog { faces: FontFaceInfo[]; revision: number }
+/** 导出固定目录的文件身份；只在会话内传递，不写入作品。 */
+export interface FontFileSource { face: FontFaceInfo; path: string; index: number; signature: string }
+export interface FixedFontCatalog extends FontCatalog { sources: Record<string, FontFileSource> }
 /**
  * Font name tables are untrusted: fontkit returns null for absent records (postscriptName is often missing).
  * Every name crosses this boundary as a trimmed string; a face with no usable name is dropped, never half-kept.

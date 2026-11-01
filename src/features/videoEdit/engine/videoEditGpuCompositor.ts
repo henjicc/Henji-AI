@@ -1,3 +1,5 @@
+import { loadAuthorCandidate, readAuthorCandidateMetadata, releaseAuthorCandidate } from './videoEditAuthorCandidates'
+import type { CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
 import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 import { recordVideoEditPreparation, videoEditGpuTimer, videoEditRenderDiagnosticsEnabled } from './videoEditPreparationTiming'
@@ -19,7 +21,7 @@ import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
-import { loadAuthorModule, type AuthorFrameInfo, type AuthorParameters, type AuthorWebFrame } from './videoEditAuthorModule'
+import { type AuthorFrameInfo, type AuthorParameters, type AuthorWebFrame } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import type { AuthorElementObservation, AuthorElementOverrides } from './videoEditAuthorElements'
@@ -60,18 +62,19 @@ export class VideoEditGpuCompositor {
   private authorPresentation?: GpuRenderPipeline
   private authorTarget?: { texture: GpuTexture; width: number; height: number }
 
-  private async authorRuntime(url: string, locations?: AuthorSourceLocations, apiVersion?: number): Promise<VideoEditAuthorRuntime> {
+  private async authorRuntime(url: string, locations?: AuthorSourceLocations, apiVersion?: number, bundle?: CodeAuthorBundle): Promise<VideoEditAuthorRuntime> {
     await this.ready
     let runtime = this.authorRuntimes.get(url)
     if (!runtime) {
-      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url, undefined, apiVersion), locations, true, apiVersion, undefined, (await this.code()).effectAllocator)
+      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorCandidate(url, bundle, apiVersion), locations, false, apiVersion, undefined, (await this.code()).effectAllocator)
       this.authorRuntimes.set(url, runtime)
     }
     return runtime
   }
   /** Metadata and candidate drawing share the executed module and its lifetime. */
-  async readAuthorMetadata(url: string, locations?: AuthorSourceLocations, apiVersion?: number): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
-    return structuredClone((await this.authorRuntime(url, locations, apiVersion)).parameterMetadata)
+  async readAuthorMetadata(url: string, locations?: AuthorSourceLocations, apiVersion?: number, bundle?: CodeAuthorBundle): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
+    void locations
+    return readAuthorCandidateMetadata(url, apiVersion, bundle)
   }
   async releaseAuthor(url: string): Promise<void> {
     const runtime = this.authorRuntimes.get(url)
@@ -79,24 +82,24 @@ export class VideoEditGpuCompositor {
     const assets = this.authorAssets.get(url)
     this.authorAssets.delete(url)
     try { await runtime?.dispose() }
-    finally { if (assets) for (const image of Object.values(assets)) image.close() }
+    finally { await releaseAuthorCandidate(url); if (assets) for (const image of Object.values(assets)) image.close() }
   }
   private async disposeAuthorRuntimes(): Promise<void> {
-    const runtimes = [...this.authorRuntimes.values()]
+    const runtimes = [...this.authorRuntimes.entries()]
     this.authorRuntimes.clear()
-    const released = await Promise.allSettled(runtimes.map(runtime => runtime.dispose()))
+    const released = await Promise.allSettled(runtimes.map(async ([url, runtime]) => { try { await runtime.dispose() } finally { await releaseAuthorCandidate(url) } }))
     const failures = released.flatMap(result => result.status === 'rejected' ? [result.reason] : [])
     if (failures.length) throw new AggregateError(failures, '作者预览资源释放失败。')
   }
 
   /** Candidate frames use the same worker/device as the timeline, before publication. */
-  async renderAuthorFrame(url: string, params: AuthorParameters, info: AuthorFrameInfo, assets?: Record<string, ImageBitmap>, options?: { overrides?: AuthorElementOverrides; locations?: AuthorSourceLocations; observe?: boolean; apiVersion?: number }): Promise<{ bitmap: ImageBitmap; elapsedMs: number; elements?: AuthorElementObservation[] }> {
+  async renderAuthorFrame(url: string, params: AuthorParameters, info: AuthorFrameInfo, assets?: Record<string, ImageBitmap>, options?: { overrides?: AuthorElementOverrides; locations?: AuthorSourceLocations; observe?: boolean; apiVersion?: number; bundle?: CodeAuthorBundle }): Promise<{ bitmap: ImageBitmap; elapsedMs: number; elements?: AuthorElementObservation[] }> {
     await this.ready
     if (assets) {
       for (const image of Object.values(this.authorAssets.get(url) ?? {})) image.close()
       this.authorAssets.set(url, assets)
     }
-    const runtime = await this.authorRuntime(url, options?.locations, options?.apiVersion)
+    const runtime = await this.authorRuntime(url, options?.locations, options?.apiVersion, options?.bundle)
     const width = this.canvas.width, height = this.canvas.height
     if (!this.authorTarget || this.authorTarget.width !== width || this.authorTarget.height !== height) {
       this.authorTarget?.texture.destroy()

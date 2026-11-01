@@ -1,3 +1,4 @@
+import { migrateVideoAuthor, migrateRecordingAuthor } from '../videoEdit/styles/authorVersionMigration'
 import { readFileSync } from 'node:fs'
 import { expect, it } from 'vitest'
 import { migrateAudioEqualizerModes, migrateAudioMergedEffects } from '../audio/effects/mergedEffectsMigration'
@@ -11,11 +12,12 @@ it('效果登记顺延保留音频合并迁移，已登记样本与旧作者源�
     const previous = format.version - 1
     const read = (version: number): unknown => JSON.parse(readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')).content
     const released = read(previous), before = structuredClone(released)
-    expect(upgradePersistenceContent(format, released, previous)).toEqual(released)
+    const migrateAuthor = id === 'document.video_edit' ? migrateVideoAuthor : migrateRecordingAuthor
+    expect(upgradePersistenceContent(format, released, previous)).toEqual(format.schema.parse(migrateAuthor(released)))
     expect(released).toEqual(before)
     const audio = read(audioVersion), audioBefore = structuredClone(audio)
     const migrateTransitions = id === 'document.video_edit' ? migrateVideoEditTransitions : migrateRecordingTransitions
-    expect(upgradePersistenceContent(format, audio, audioVersion)).toEqual(format.schema.parse(migrateTransitions(migrateAudioEqualizerModes(migrateAudioMergedEffects(audio)))))
+    expect(upgradePersistenceContent(format, audio, audioVersion)).toEqual(format.schema.parse(migrateAuthor(migrateTransitions(migrateAudioEqualizerModes(migrateAudioMergedEffects(audio))))))
     expect(audio).toEqual(audioBefore)
     // 正式生成的新样本含 all；迁移不能把已登记作者接口和库锁定提升到新接口。
     const current = read(format.version)

@@ -3,7 +3,7 @@ import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { createTestStyleLibraryIo } from './videoEditStyleTestKit'
 import { ContentTrustSession, installContentTrustSession } from '../../../../electron/main/services/content-trust/runtime'
 import fsp from 'node:fs/promises'
-import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
+import { CODE_AUTHOR_API_VERSION, CODE_AUTHOR_DEFAULT_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
 import { latestAuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import path from 'node:path'
 import { createTestEnvironment } from '../../../../electron/main/services/documents/documents.test-support'
@@ -58,7 +58,7 @@ import { exportVideoEditPresetPackage, importVideoEditPresetPackage } from './vi
 /** 短活共用的离屏会话按设计常驻；回收它之后不应再有任何渲染器存活。 */
 async function expectRenderersReleased(): Promise<void> { await videoEditOffscreenPool.dispose(); expect(boundary.activeRenderers).toBe(0) }
 
-const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[], apiVersion: 4 as 4 | 5 | 6 }))
+const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[], honorApiVersion: false, apiVersion: 4 as 4 | 5 | 6 | 7 | 8 }))
 // Only thread/pixel boundaries are replaced. AST language checks, domain
 // validation, public tool registry, transactions and save/reopen are real.
 vi.mock('../engine/videoEditCodeCompiler', async () => {
@@ -78,7 +78,7 @@ vi.mock('../engine/videoEditCodeCompiler', async () => {
 })
 vi.mock('./videoEditAuthorInspection', async () => {
  const { testAuthorProgram } = await import('../engine/videoEditAuthorTestFixtures')
- return { inspectVideoEditAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => ({ ...testAuthorProgram(bundle), apiVersion: boundary.apiVersion }) }
+ return { inspectVideoEditAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => ({ ...testAuthorProgram(bundle), apiVersion: boundary.honorApiVersion ? bundle.apiVersion : boundary.apiVersion }) }
 })
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
@@ -106,6 +106,28 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 const source = "export default {name:\"原创移动圆\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:4,params:[{key:\"amount\",type:\"number\",title:\"透明度\",default:.5,min:0,max:1,step:.01,animatable:true}],draw(ctx,t,p){ctx.fillRect(100+t*20,100,500,500)}}"
 
 const files = new Map<string, string>()
+it('编辑非默认历史片段保持该片段的作者接口和库，显式升级过的默认版本不影响候选', async () => {
+  boundary.honorApiVersion = true
+  try {
+    let owner = await createLegacyTrackVideoEditProject()
+    const id = owner.document.id
+    const text = source.replace('ctx.fillRect', 'void import("henji-layout/text");ctx.fillRect')
+    const [item] = await createVideoEditCodeItems(id, [{ source: text, apiVersion: 6, libraries: { 'henji-layout': '1.0.0' } }])
+    appendVideoEditItems(id, [item], owner.activeSequenceId)
+    const clip = getActiveVideoEditSequence(owner).clips[0], definitionId = clip.code!.definitionId
+    const historical = structuredClone(owner.document)
+    delete historical.codeMaterials![0].versions[0].libraries
+    await saveVideoEdit(id); await closeVideoEditProject(id)
+    replaceSavedVideoEdit(id, historical); owner = await reopenVideoEdit(id)
+    await createVideoEditCodeVersions(id, [{ definitionId, source: text, apiVersion: 10, libraries: { 'henji-layout': '1.2.0' } }])
+    const candidate = await prepareVideoEditCodeCandidate({ projectId: id, sequenceId: owner.activeSequenceId, clipId: clip.id, versionId: clip.code!.versionId }, text.replace('100+t', '150+t'))
+    try {
+      commitVideoEditCodeCandidate(candidate)
+      const actual = owner.document.codeMaterials![0].versions.find(version => version.id === candidate.versionId)!
+      expect(actual).toMatchObject({ apiVersion: 6, libraries: { 'henji-layout': '1.0.0' } })
+    } finally { disposeVideoEditCodeCandidate(candidate) }
+  } finally { boundary.honorApiVersion = false }
+})
 it('编译期间及源码候选等待期间的元数据不使内容检查失效或被提交覆盖', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
   let release!: () => void
@@ -865,7 +887,7 @@ it('内置库升级通过正式描述、能力调用和读回，源码不变也�
     let owner = await createLegacyTrackVideoEditProject()
     const id = owner.document.id
     const librarySource = source.replace('ctx.fillRect', 'void import("henji-layout/text");ctx.fillRect')
-    const [definitionId] = await createVideoEditCodeMaterials(id, [{ source: librarySource }])
+    const [definitionId] = await createVideoEditCodeMaterials(id, [{ source: librarySource, apiVersion: 6 }])
     // 历史版本夹具只改变库记录，实际升级仍经过正式编译、试绘边界、保存与改指事务。
     const historical = structuredClone(owner.document); historical.codeMaterials![0].versions[0].libraries = { 'henji-layout': '1.0.0' }
     await saveVideoEdit(id); await closeVideoEditProject(id)
@@ -877,19 +899,26 @@ it('内置库升级通过正式描述、能力调用和读回，源码不变也�
     const described = await app.requireResult('describe_application_entities', { entityTypes: ['video_edit.code_material', 'video_edit.clip'], refs: [materialRef] })
     expect(described.entities).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'video_edit.code_material' })]))
     const result = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeLibraries: true })
-    expect(result.upgrades).toEqual([expect.objectContaining({ oldVersion: first, changedFiles: [], retargetedClips: 1 })])
+    expect(result.upgrades).toEqual([expect.objectContaining({ oldVersion: first, apiVersion: 6, changedFiles: [], retargetedClips: 1 })])
     expect(result.verified).toBe(true)
     const disk = savedVideoEdit(id), definition = disk.codeMaterials![0], latest = definition.versions.find(version => version.id === definition.defaultVersionId)!
-    expect(latest.libraries).toEqual({ 'henji-layout': latestAuthorLibraryVersions(CODE_AUTHOR_API_VERSION)['henji-layout'] })
+    expect(latest.libraries).toEqual({ 'henji-layout': latestAuthorLibraryVersions(latest.apiVersion)['henji-layout'] })
     expect(latest.files.map(({ path, hash }) => ({ path, hash }))).toEqual(definition.versions[0].files.map(({ path, hash }) => ({ path, hash })))
     const clipRef = { kind: 'video_edit.clip', id: `${id}:${clipId}` }
     expect((await app.read(clipRef, ['video_edit.clip.code_version_id'])).properties).toEqual({ 'video_edit.clip.code_version_id': latest.id })
     expect((await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeLibraries: true })).upgrades).toEqual([])
+    boundary.honorApiVersion = true
+    const upgradedApi = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeAuthorApi: true })
+    expect(upgradedApi.upgrades).toEqual([expect.objectContaining({ apiVersion: 10, oldVersion: latest.id, changedFiles: [] })])
+    expect(savedVideoEdit(id).codeMaterials![0].versions.at(-1)).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION, libraries: { 'henji-layout': latestAuthorLibraryVersions(CODE_AUTHOR_API_VERSION)['henji-layout'] } })
+    expect((await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeAuthorApi: true })).upgrades).toEqual([])
+    undoVideoEdit(id)
+    expect((await app.read(clipRef, ['video_edit.clip.code_version_id'])).properties).toEqual({ 'video_edit.clip.code_version_id': latest.id })
     undoVideoEdit(id)
     expect((await app.read(clipRef, ['video_edit.clip.code_version_id'])).properties).toEqual({ 'video_edit.clip.code_version_id': first })
     expect(owner.document.codeMaterials![0].versions).toHaveLength(1)
     expect(owner.document.codeMaterials![0].versions[0].libraries).toEqual({ 'henji-layout': '1.0.0' })
-  } finally { app.dispose(); boundary.apiVersion = 4 }
+  } finally { app.dispose(); boundary.apiVersion = 4; boundary.honorApiVersion = false }
 })
 it('图层变换覆盖收录并导入为素材初始值，新片段独立复制且保存重开不丢失', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
@@ -1219,7 +1248,7 @@ it('公共入口创建 TS 代码素材附带类型检查结论，加载或试渲
     const result = await create(typo)
     expect(result).toMatchObject({ ok: true })
     expect(result.data!.evidence.find(value => value.fact.startsWith('类型检查发现 1 处问题'))).toMatchObject({ kind: 'observation', data: { status: 'checked', checkedFiles: ['main.ts'], total: 1, diagnostics: [expect.objectContaining({ file: 'main.ts', line: 1, column: typo.indexOf('fillStlye') + 1, code: 2551 })] } })
-    expect(typeCheck).toHaveBeenCalledWith(expect.objectContaining({ entry: 'main.ts', apiVersion: CODE_AUTHOR_API_VERSION }), ['main.ts'], expect.any(AbortSignal))
+    expect(typeCheck).toHaveBeenCalledWith(expect.objectContaining({ entry: 'main.ts', apiVersion: CODE_AUTHOR_DEFAULT_API_VERSION }), ['main.ts'], expect.any(AbortSignal))
     expect((await create(source)).data!.evidence.find(value => value.fact.startsWith('类型检查'))?.fact).toBe('类型检查通过：main.ts。')
     // 读取声明失败（拼错 name）：原错误信息保留在前，类型检查指出拼错的字段。
     const missingName = await create(source.replace('name:', 'nmae:'))

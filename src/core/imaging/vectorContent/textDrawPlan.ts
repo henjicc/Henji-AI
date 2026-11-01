@@ -166,7 +166,7 @@ interface PlanSeed {
 }
 const evaluation = { sourceVersion: 'text-draw-plan', time: { kind: 'static' as const }, referenceGrid: { width: 1, height: 1 }, quality: 'final' as const }
 
-function union(a: TextPlanRect | null, b: TextPlanRect | null): TextPlanRect | null {
+export function union(a: TextPlanRect | null, b: TextPlanRect | null): TextPlanRect | null {
   if (!a) return b
   if (!b) return a
   const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y)
@@ -398,7 +398,7 @@ function richSeed(content: RichTextContent, constraints: TextDrawConstraints, me
   return { kind: 'rich', autoHeight: constraints.box?.height === undefined && !content.box.height, anchorVertical: constraints.anchor?.vertical ?? 0, sourceText, spans, lines, batches, box, contentTop, contentSize, visibleContentSize: contentSize, totalLines: lines.length, omittedRanges, probe: { overhang: 0, ascent: 0, descent: 0 } }
 }
 
-function appearanceBounds(ink: TextPlanRect | null, layout: TextLayout): TextPlanRect | null {
+export function appearanceBounds(ink: TextPlanRect | null, layout: TextLayout): TextPlanRect | null {
   const { style } = layout
   const outlineBounds = (rect: TextPlanRect, radius: number): TextPlanRect => {
     const result = expand(rect, radius)
@@ -563,6 +563,34 @@ function assemble(seed: PlanSeed, style: TextStyle, constraints: TextDrawConstra
   }
 }
 
+export function fitTextLayout<T extends { style: TextStyle }>(textStyle: TextStyle, constraints: TextDrawConstraints, makeSeed: (size: number) => T, fits: (value: T) => boolean): T & { fit: TextDrawPlan['fit'] } {
+  const fit = constraints.fit
+  const fitActive = !!fit && (fit.trigger !== 'maxLines' || constraints.maxLines !== undefined)
+  let selected = makeSeed(fitActive && fit ? fit.maxFontSize ?? textStyle.fontSize : textStyle.fontSize)
+  if (fit) {
+    const min = fit.minFontSize, max = fit.maxFontSize ?? textStyle.fontSize, step = fit.step ?? 1, iterations = fit.iterations ?? 12
+    if (![min, max, step].every(Number.isFinite) || min < 1 || max < min || step <= 0 || !Number.isSafeInteger(Math.floor((max - min) / step)) || !Number.isInteger(iterations) || iterations < 1 || iterations > 64) throw new TextDrawPlanError('BUDGET', '自动字号需要有效的上下限、步长和迭代次数。')
+    if (fitActive && !fits(selected)) {
+      selected = makeSeed(min)
+      if (fit.algorithm === 'continuous') {
+        let low = min, high = max
+        for (let i = 0; i < iterations; i++) {
+          const mid = (low + high) / 2, candidate = makeSeed(mid)
+          if (fits(candidate)) { selected = candidate; low = mid } else high = mid
+        }
+      } else if (fits(selected)) {
+        let low = 1, high = Math.floor((max - min) / step)
+        while (low <= high) {
+          const mid = Math.floor((low + high) / 2), candidate = makeSeed(min + mid * step)
+          if (fits(candidate)) { selected = candidate; low = mid + 1 } else high = mid - 1
+        }
+      }
+    }
+  }
+  const failed = fitActive && !fits(selected)
+  return { ...selected, fit: { applied: fitActive, failed, fontSize: selected.style.fontSize, scale: selected.style.fontSize / textStyle.fontSize, ...(failed ? { error: { code: 'BUDGET' as const, message: '最小字号仍无法满足文字约束。' } } : {}) } }
+}
+
 function selectTextPlan(input: string | RichTextContent, textStyle: TextStyle, constraints: TextDrawConstraints, measureInput: TextPlanMeasure): { seed: PlanSeed; style: TextStyle; measure: TextPlanMeasure; fit: TextDrawPlan['fit'] } {
   if (!Number.isFinite(textStyle.fontSize) || textStyle.fontSize < 1 || !Number.isFinite(textStyle.fontWeight)) throw new TextDrawPlanError('BUDGET', '文字字号或字重无效。')
   // flex 收缩或 padding 可以得到零内容框；保留超框/遗漏事实，不能把合法的折叠状态当成排版失败。
@@ -623,32 +651,8 @@ function selectTextPlan(input: string | RichTextContent, textStyle: TextStyle, c
     seed.probe = probe
     return { seed, style, measure }
   }
-  const fit = constraints.fit
-  const fitActive = !!fit && (fit.trigger !== 'maxLines' || constraints.maxLines !== undefined)
-  let selected = makeSeed(fitActive && fit ? fit.maxFontSize ?? textStyle.fontSize : textStyle.fontSize)
-  const fits = (value: typeof selected): boolean => !Object.values(seedOverflow(value.seed, constraints)).some(Boolean)
-  if (fit) {
-    const min = fit.minFontSize, max = fit.maxFontSize ?? textStyle.fontSize, step = fit.step ?? 1, iterations = fit.iterations ?? 12
-    if (![min, max, step].every(Number.isFinite) || min < 1 || max < min || step <= 0 || !Number.isSafeInteger(Math.floor((max - min) / step)) || !Number.isInteger(iterations) || iterations < 1 || iterations > 64) throw new TextDrawPlanError('BUDGET', '自动字号需要有效的上下限、步长和迭代次数。')
-    if (fitActive && !fits(selected)) {
-      selected = makeSeed(min)
-      if (fit.algorithm === 'continuous') {
-        let low = min, high = max
-        for (let i = 0; i < iterations; i++) {
-          const mid = (low + high) / 2, candidate = makeSeed(mid)
-          if (fits(candidate)) { selected = candidate; low = mid } else high = mid
-        }
-      } else if (fits(selected)) {
-        let low = 1, high = Math.floor((max - min) / step)
-        while (low <= high) {
-          const mid = Math.floor((low + high) / 2), candidate = makeSeed(min + mid * step)
-          if (fits(candidate)) { selected = candidate; low = mid + 1 } else high = mid - 1
-        }
-      }
-    }
-  }
-  const failed = fitActive && !fits(selected)
-  return { ...selected, seed: limitSeed(selected.seed, constraints), fit: { applied: fitActive, failed, fontSize: selected.style.fontSize, scale: selected.style.fontSize / textStyle.fontSize, ...(failed ? { error: { code: 'BUDGET' as const, message: '最小字号仍无法满足文字约束。' } } : {}) } }
+  const selected = fitTextLayout(textStyle, constraints, makeSeed, value => !Object.values(seedOverflow(value.seed, constraints)).some(Boolean))
+  return { ...selected, seed: limitSeed(selected.seed, constraints) }
 }
 
 export interface TextLinePlan extends Pick<TextDrawPlan, 'style' | 'contentSize' | 'fit'> {

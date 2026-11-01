@@ -1,4 +1,6 @@
 import { documentFontRevision } from '@/platform/fontFaces'
+import { withTextFontSession } from '@/core/imaging/vectorContent/shaping/fontContext'
+import { prepareAuthorTextParameters } from './videoEditAuthorTextResources'
 import type { AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -42,7 +44,7 @@ export class VideoEditAuthorPrograms {
     const module = prepareAuthorModuleUrls(bundle).then(async urls => {
       release = urls.dispose
       const context = bundle.trustContext ?? bundle.modules?.trustContext ?? []
-      return loadAuthorModule(urls.url, context, bundle.apiVersion)
+      return loadAuthorModule(urls.url, context, bundle.apiVersion, bundle)
     }).catch(error => {
       this.modules.delete(bundle)
       release()
@@ -89,6 +91,12 @@ export class VideoEditAuthorPrograms {
 
   observe(key: string): ReturnType<VideoEditAuthorRuntime['observeElements']> { return this.instances.get(key)?.runtime.observeElements() ?? [] }
 
+  async textIdentity(program: CodeAuthorProgram, parameters: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<string | undefined> {
+    const effect = await this.module(program.bundle)
+    const preparing = prepareAuthorTextParameters(effect, authorParameterValues({ ...program, types: program.types ?? {} }, parameters), signal)
+    return preparing && (await preparing).identity
+  }
+
   async frameKey(program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, info: AuthorFrameInfo,
     overrides: AuthorElementOverrides | undefined, motionBlur: boolean, divisor: number, environment: AuthorEffectEnvironment, inputs: Readonly<Record<string, AuthorFingerprintInput>>): Promise<VideoEditFrameFingerprint | undefined> {
     const effect = await this.module(program.bundle)
@@ -97,7 +105,10 @@ export class VideoEditAuthorPrograms {
     const frameInfo = output ? { ...info, renderScale: output.height / size.height } : info
     // 原生 GPU 作者看到实际纹理尺寸，Canvas 作者仍使用逻辑画幅。
     const dimensions = output && (effect.createWebGPU || effect.createWebGL) ? output : size
-    return fingerprintAuthorFrameKey(effect, dimensions, authorParameterValues({ ...program, types: program.types ?? {} }, parameters), frameInfo, inputs, '', undefined, overrides, motionBlur, environment, program.apiVersion)
+    const params = authorParameterValues({ ...program, types: program.types ?? {} }, parameters)
+    const preparing = prepareAuthorTextParameters(effect, params)
+    const text = preparing && await preparing
+    return withTextFontSession(text?.fonts, () => fingerprintAuthorFrameKey(effect, dimensions, params, frameInfo, inputs, text?.identity ?? '', undefined, overrides, motionBlur, environment, program.apiVersion))
   }
 
   get canvasBytes(): number { return [...this.instances.values()].reduce((bytes, entry) => bytes + entry.runtime.canvasBytes, 0) }

@@ -37,6 +37,7 @@ import { setVideoEditClipTimeRemap } from '../src/core/videoEdit/clipSpeed'
 import { videoEditFps } from '../src/core/videoEdit/time'
 import { bindVideoEditCaptionSpeech } from '../src/core/videoEdit/captionSpeech'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../src/core/videoEdit/codeAsset'
+import { HISTORICAL_PREVIEW_AUTHOR } from '../src/core/videoEdit/codeMaterial/authorVersion'
 import { CODE_AUTHOR_API_VERSION } from '../src/core/videoEdit/codeMaterialPersistence'
 import { titleGraphic } from '../src/core/videoEdit/titleGraphics'
 import { GOLDEN_SCENE_DECLARATION, goldenScene } from '../src/core/videoEdit/scene/sceneTestFixtures'
@@ -174,8 +175,8 @@ const goldenPiece = videoEditEffectPresetSchema.parse({ ...goldenBuiltinPiece,
   effects: [...goldenBuiltinPiece.effects, { id: 'piece-code', name: '风格滤镜', enabled: true, amount: .8, code: { definitionId: 'style-filter', versionId: 'style-filter-version', parameters: { gain: .5 } } }],
   codeSnapshots: { 'piece-code': { version: { id: 'style-filter-version', apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4, entry: 'main.ts', files: [{ path: 'main.ts', location: `asset:${styleFilterHash}`, hash: styleFilterHash }], libraries: { 'henji-effects': '1.3.0' } }, codeSources: [{ hash: styleFilterHash, source: styleFilterSource }], ...styleCodeDeclarations(styleFilterMetadata) } },
 })
-const goldenStyle = { effectPresets: [goldenPiece], userPreferences: [{ id: 'golden-style-memory', content: '标题少用装饰线。', source: 'user' as const, updatedAt: timestamp, revision: 1 }], id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 3840, height: 2160, durationSeconds: 24, fps: 60, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8, 12.4, 15, 18.2, 23.2] } }
-document.styles = [{ ...goldenStyle, sample: { ...goldenStyle.sample, code: { entry: 'index.js', files: { 'index.js': source } } } }]
+const goldenStyle = { effectPresets: [goldenPiece], userPreferences: [{ id: 'golden-style-memory', content: '标题少用装饰线。', source: 'user' as const, updatedAt: timestamp, revision: 1 }], id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { ...HISTORICAL_PREVIEW_AUTHOR, code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 3840, height: 2160, durationSeconds: 24, fps: 60, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8, 12.4, 15, 18.2, 23.2] } }
+document.styles = [{ ...goldenStyle, sample: { ...goldenStyle.sample, apiVersion: CODE_AUTHOR_API_VERSION, code: { entry: 'index.js', files: { 'index.js': source } } } }]
 sequence.styleId = goldenStyle.id
 const nativeGraphic = titleGraphic('lower_third', { text: '姓名', subtitle: '职务' }, 1920, 1080, 119 / 30)
 const nativeClipContent = { name: '人名条', kind: 'graphic' as const, graphic: nativeGraphic, track: 0, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
@@ -331,7 +332,7 @@ const values: Record<string, unknown> = {
   'style-kits': legacyKits,
   'title-templates': legacyTitles,
   'video-style-library': goldenStyle,
-  'video-template-library': { id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'code', code: { entry: 'main.ts', files: { 'main.ts': source } }, durationSeconds: 4 } },
+  'video-template-library': { id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'code', apiVersion: CODE_AUTHOR_API_VERSION, libraries: {}, code: { entry: 'main.ts', files: { 'main.ts': source } }, durationSeconds: 4 } },
   'video-style-package': { format: 'henji-video-style', style: { ...goldenStyle, imported: true }, templates: [{ id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'native', content: { width: 1920, height: 1080, fps: 30, clips: [nativeClipContent] } } }], media: { thumbnail: '/9j/4AAQ', anchors: ['/9j/4AAQ'] } },
   'text-presets': [{ id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) }],
   'export-memory': [{ projectId: 'golden-video_edit', sequenceId: 'main', presetId: VIDEO_EDIT_EXPORT_PRESETS[0].id, settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings, directory: '/exports', fileName: '成片 (2).mp4', requestedFileName: '成片.mp4', loudnessRequested: false, range: { startFrame: 0, endFrame: 300 }, rangeSource: 'content', completedAt: 1791504000000 }],

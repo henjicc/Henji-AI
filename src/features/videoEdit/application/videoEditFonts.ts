@@ -26,7 +26,7 @@ export async function videoEditFontUses(document: VideoEditDocument | VideoEditC
   for (const [versionId, program] of programs) metadata.set(versionId, program)
   return collectVideoEditFonts(document, read)
 }
-export async function prepareVideoEditFonts(document: VideoEditDocument | VideoEditComposition): Promise<FontPayload[]> {
+export async function prepareVideoEditFonts(document: VideoEditDocument | VideoEditComposition, fixed?: import('@/core/fonts/catalog').FixedFontCatalog): Promise<FontPayload[]> {
   const startedAt = performance.now()
   const uses = await videoEditFontUses(document)
   const usesMs = performance.now() - startedAt
@@ -34,11 +34,11 @@ export async function prepareVideoEditFonts(document: VideoEditDocument | VideoE
     logger.info('剪辑字体准备完成', { event: 'video_edit.fonts.prepared', context: { documentId: document.id, usesMs, fonts: 0 } })
     return []
   }
-  await loadFontLibrary()
+  if (!fixed) await loadFontLibrary()
   const libraryMs = performance.now() - startedAt - usesMs
-  const missing = missingVideoEditFonts(uses, fontLibrarySnapshot().faces)
+  const missing = missingVideoEditFonts(uses, (fixed ?? fontLibrarySnapshot()).faces)
   if (missing.length) logger.warn('剪辑中有字体缺失，将使用系统无衬线字体', { event: 'video_edit.fonts.missing', context: { documentId: document.id, fonts: missing } })
-  const payloads = await prepareFontPayloads([...new Set(uses.map(use => use.font))])
+  const payloads = await prepareFontPayloads([...new Set(uses.map(use => use.font))], fixed)
   logger.info('剪辑字体准备完成', { event: 'video_edit.fonts.prepared', context: { documentId: document.id, usesMs, libraryMs, payloadMs: performance.now() - startedAt - usesMs - libraryMs, fonts: payloads.length } })
   return payloads
 }

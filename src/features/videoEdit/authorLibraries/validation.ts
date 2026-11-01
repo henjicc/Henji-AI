@@ -24,9 +24,10 @@ const flexStyleShape = {
 const flexStyleSchema = z.object(flexStyleShape).strict() satisfies z.ZodType<FlexStyle>
 const sizeSchema = z.object({ width: nonnegative, height: nonnegative, direction: z.enum(['ltr', 'rtl']).optional() }).strict()
 const positive = finite.positive({ error: '必须为有限正数' })
-const textOptionsSchema = z.object({
+export const textOptionsSchema = z.object({
   maxWidth: nonnegative.optional(), maxHeight: nonnegative.optional(), maxLines: positive.int().optional(),
-  wrapWidth: nonnegative.optional(), wrap: z.enum(['grapheme', 'word', 'none']).optional(),
+  wrapWidth: nonnegative.optional(), wrap: z.enum(['normal', 'grapheme', 'word', 'none']).optional(),
+  ligatures: z.boolean().optional(), autospace: z.boolean().optional(),
   fit: z.union([z.literal(false), z.object({
     minFontSize: positive.min(1), maxFontSize: positive.optional(), step: positive.optional(),
     algorithm: z.enum(['grid', 'continuous']).optional(), iterations: positive.int().optional(), trigger: z.enum(['overflow', 'maxLines']).optional(),

@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { createRecordingDocument, type RecordingDocument } from '@/core/screenRecording/document'
 import { recordingProductInputSchema } from '@/core/application-control/domains/screenRecording/productCapability'
 
-const state = vi.hoisted(() => ({ content: null as RecordingDocument | null, revision: 1, files: new Map<string, Uint8Array>(), frames: [] as number[], fail: false, dispose: vi.fn(), cancel: vi.fn(), prepare: vi.fn(), block: null as (() => Promise<void>) | null }))
+const state = vi.hoisted(() => ({ content: null as RecordingDocument | null, revision: 1, files: new Map<string, Uint8Array>(), frames: [] as number[], fail: false, dispose: vi.fn(), cancel: vi.fn(), prepare: vi.fn(), renderSetup: vi.fn(), block: null as (() => Promise<void>) | null }))
 vi.mock('@/platform', () => ({ getPlatform: () => ({
   documents: { readDocument: async () => ({ meta: { kind: 'screen_recording', revision: state.revision, name: '教程', createdAt: Date.now() }, content: structuredClone(state.content) }) },
   system: { paths: { join: async (...parts: string[]) => parts.join('/'), appDirectories: async () => ({ folders: { exports: '/exports' } }) }, fs: {
@@ -20,6 +20,7 @@ vi.mock('@/features/videoEdit', () => ({
   inspectVideoEditMedia: async (path: string) => ({ id: crypto.randomUUID(), path, name: '屏幕', kind: 'video', width: 1920, height: 1080, durationSeconds: 20 }),
   waitVideoEditSmartRegions: async () => ({}), waitVideoEditTracking: async () => {}, videoEditTrackResults: () => ({}),
   VideoEditRenderSession: class {
+    constructor(_composition: unknown, options: unknown) { state.renderSetup(options) }
     canvas = { convertToBlob: async () => ({ arrayBuffer: async () => new Uint8Array([137, 80, 78, 71]).buffer }) }
     setSmartRegions(): void {} setTracks(): void {}
     async render(frame: number): Promise<void> { state.frames.push(frame); if (state.block) await state.block(); if (state.fail) throw new Error('精确帧解码失败') }
@@ -40,6 +41,7 @@ beforeEach(() => {
 it('图文经正式编译与像素边界，独占写入并回读，两种文本文档与图片一致', async () => {
   const result = await exportRecordingProduct(state.content!.sessionId!, { product: 'steps' }, new AbortController().signal)
   expect(result.state).toBe('completed'); expect(result.verified).toBe(true)
+  expect(state.renderSetup).toHaveBeenCalledWith({ fixedTextFonts: true })
   expect(result.files).toEqual(['step-001.png', 'steps.md', 'steps.html']); expect(state.frames).toEqual([300])
   const md = [...state.files].find(([path]) => path.endsWith('steps.md'))![1]
   expect(new TextDecoder().decode(md)).toContain('打开项目')
@@ -49,6 +51,7 @@ it('图文经正式编译与像素边界，独占写入并回读，两种文本�
 it('单步 GIF 有界取首段，不烤入无限长录制；图片方向明确', async () => {
   const result = await exportRecordingProduct(state.content!.sessionId!, { product: 'gif' }, new AbortController().signal)
   expect(result.verified).toBe(true); expect(result.warnings.join(' ')).toContain('15 秒')
+  expect(state.renderSetup).toHaveBeenCalledWith({ fixedTextFonts: true })
   expect(state.prepare).toHaveBeenCalledWith(expect.objectContaining({ frameCount: 150, format: 'gif', orientation: 'top-down', fps: 10, width: 640 }))
   expect(state.frames[0]).toBe(0); expect(state.frames.at(-1)).toBe(447)
 })

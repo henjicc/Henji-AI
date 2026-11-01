@@ -1,4 +1,9 @@
 import { build } from 'esbuild-wasm'
+import fs from 'node:fs'
+import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
+import { upgradePersistenceContent } from '@/core/persistence/migrations'
+import { videoEditStyleSchema } from '@/core/videoEdit/styles/styleSchemas'
+import { resolvePreviewAuthor } from '@/core/videoEdit/codeMaterial/authorVersion'
 import { bundleAuthorFiles } from './videoEditAuthorBundle'
 import generatedFactories from '../authorLibraries/effects.generated.ts?raw'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
@@ -435,6 +440,41 @@ it.each(['native', 'layers'] as const)('代码输出热命中与固定前序帧�
     if (kind === 'layers') expect(cached.map(frame => frame.format)).toEqual(['rgba8unorm', 'rgba16float', 'rgba16float', 'rgba8unorm'])
     expect(await device.popErrorScope()).toBeNull()
   } finally { loader.mockRestore(); vi.unstubAllGlobals() }
+})
+
+it.each([['document.video_edit', 52], ['document.screen_recording', 55]] as const)('main API 9 调整层样片经 %s 迁移后可执行且逐像素不变', async (id, version) => {
+  const format = PERSISTENCE_FORMATS.find(format => format.id === id)!
+  const original = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')) as { content: unknown }
+  const migrated = upgradePersistenceContent(format, original.content, version)
+  const sample = (value: unknown): ReturnType<typeof videoEditStyleSchema.parse>['sample'] => {
+    if (id === 'document.video_edit') return videoEditStyleSchema.parse((value as { styles: unknown[] }).styles[0]).sample
+    const recording = value as { scriptCapture: { baselines: Array<{ content: unknown }> } }
+    const video = recording.scriptCapture.baselines.find(baseline => (baseline.content as { format?: string }).format === 'henji-video-project')!.content as { styles: unknown[] }
+    return videoEditStyleSchema.parse(video.styles[0]).sample
+  }
+  const before = sample(original.content), after = sample(migrated)
+  expect(after.code).toEqual(before.code)
+  expect(before.code.files[before.code.entry]).toContain('golden-adjust')
+  expect(after.apiVersion).toBe(9)
+  const d = historyRasterDevice(), host = new VideoEditCodeGpu(d)
+  const render = async (sample: typeof after, apiVersion: 9): Promise<number[]> => {
+    const bundle = await bundleAuthorFiles({ ...sample.code, ...resolvePreviewAuthor(sample), apiVersion }, build)
+    const loaded = await import(/* @vite-ignore */ 'data:text/javascript;base64,' + Buffer.from(bundle.code).toString('base64')) as { default: AuthorModule }
+    const runtime = new VideoEditAuthorRuntime(d, deterministicAuthorModule(loaded.default, bundle.apiVersion), bundle.locations, true, bundle.apiVersion, undefined, host.effectAllocator)
+    try {
+      const target = await host.target('migration', W, H), precise = await host.target('migration-float', W, H, 'rgba16float')
+      await runtime.render(target.texture, W, H, {}, {}, { time: .5, frameDuration: 1 / 60, clip: { time: .5, duration: 4 } }, undefined, undefined, false, undefined, {}, 'final', () => {}, () => precise.texture)
+      expect(runtime.observeElements().find(element => element.id === 'golden-adjust')).toMatchObject({ kind: 'adjust', effects: [{ id: 'vignette' }] })
+      return row(runtime.outputTexture!)
+    } finally { await runtime.dispose() }
+  }
+  device.pushErrorScope('validation')
+  try {
+    const baseline = await render(before, 9), result = await render(after, after.apiVersion as 9)
+    expect(result).toEqual(baseline)
+    expect(result.some((value, index) => index % 4 < 3 && value > 0)).toBe(true)
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { await host.dispose(); vi.unstubAllGlobals() }
 })
 
 it('真实作者打包/加载/调整层的暗角、颗粒和整体调色与片段同参数逐像素一致，opacity 混合所有通道且 clip 外不变', async () => {

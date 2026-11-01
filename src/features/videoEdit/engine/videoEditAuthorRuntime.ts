@@ -1,3 +1,5 @@
+import { withTextFontSession } from '@/core/imaging/vectorContent/shaping/fontContext'
+import { prepareAuthorTextParameters } from './videoEditAuthorTextResources'
 import { CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { assertCodeElementOverrideAllowed } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
@@ -215,6 +217,8 @@ export class VideoEditAuthorRuntime {
     const changedSurfaces = new Set<Surface>()
     try {
       params = authorParameterValues(this.parameterMetadata, params)
+      const preparing = prepareAuthorTextParameters(this.effect, params)
+      const text = preparing && await preparing
       if (!Number.isFinite(info.time) || !(info.frameDuration > 0) || !Number.isFinite(info.clip?.time) || !(info.clip.duration > 0)) throw new Error('效果需要有效的帧时间和片段时间。')
       const whole: AuthorLayer = { id: AUTHOR_WHOLE_EFFECT_ID, name: this.effect.name, bounds: [0, 0, width, height], draw() {} }
       if ((this.effect.createWebGPU || this.effect.createWebGL) && overrides && Object.hasOwn(overrides, AUTHOR_WHOLE_EFFECT_ID)) {
@@ -235,8 +239,8 @@ export class VideoEditAuthorRuntime {
         return statistics
       }
       if (this.effect.createWebGPU) {
-        this.webgpu ??= await this.effect.createWebGPU(this.device)
-        await this.webgpu.draw(resolveInitialTarget(), info.time, params, outWidth, outHeight, assets, info, inputs)
+        this.webgpu ??= await withTextFontSession(text?.fonts, () => this.effect.createWebGPU!(this.device))
+        await withTextFontSession(text?.fonts, () => this.webgpu!.draw(resolveInitialTarget(), info.time, params, outWidth, outHeight, assets, info, inputs))
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return undefined
       }
@@ -246,14 +250,14 @@ export class VideoEditAuthorRuntime {
           const canvas = new OffscreenCanvas(width, height)
           this.gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true }) ?? undefined
           if (!this.gl) throw new Error('WebGL2 不可用。')
-          this.webgl = this.effect.createWebGL(this.gl)
+          this.webgl = withTextFontSession(text?.fonts, () => this.effect.createWebGL!(this.gl!))
         }
         const gl = this.gl, canvas = gl.canvas as OffscreenCanvas
         if (canvas.width !== outWidth) canvas.width = outWidth
         if (canvas.height !== outHeight) canvas.height = outHeight
         gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, outWidth, outHeight)
         gl.disable(gl.SCISSOR_TEST); gl.colorMask(true, true, true, true); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
-        this.webgl!.draw(info.time, params, outWidth, outHeight, assets, info)
+        withTextFontSession(text?.fonts, () => this.webgl!.draw(info.time, params, outWidth, outHeight, assets, info))
         this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: resolveInitialTarget(), premultipliedAlpha: true }, [outWidth, outHeight])
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return { reused: 0, redrawn: 0, direct: 0, video: 0, uploads: 1, uploadBytes: outWidth * outHeight * 4 }
@@ -315,7 +319,7 @@ export class VideoEditAuthorRuntime {
         const directText = new Map<number, TextDrawObservation[]>()
         const textUncovered = new Map<number, string[]>(), textLayouts = new Map<string, number | undefined>([...authorModuleTextLayouts.get(this.effect) ?? []].map(id => [id, undefined]))
         let textLayer: number | undefined, recordedLayouts: Map<string, number | undefined> | undefined
-        const authorCall = <T>(run: () => T): T => observeTextLayouts(id => { textLayouts.set(id, textLayer); recordedLayouts?.set(id, textLayer) }, () => trackAuthorCanvasText(run))
+        const authorCall = <T>(run: () => T): T => observeTextLayouts(id => { textLayouts.set(id, textLayer); recordedLayouts?.set(id, textLayer) }, () => withTextFontSession(text?.fonts, () => trackAuthorCanvasText(run)))
         const textContext = (ctx: OffscreenCanvasRenderingContext2D, index: number): OffscreenCanvasRenderingContext2D => {
           textLayer = index
           if ((ctx as TextDrawObserverContext)[TEXT_DRAW_OBSERVER]) { (ctx as TextDrawObserverContext)[TEXT_LAYER_CONTEXT]?.(index); return ctx }

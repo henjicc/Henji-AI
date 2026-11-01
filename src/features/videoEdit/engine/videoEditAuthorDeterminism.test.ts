@@ -3,9 +3,36 @@ import { TEXT_LAYOUT_OBSERVER, observeTextLayouts, type TextLayoutObserverGlobal
 import { expect, it } from 'vitest'
 import type { AuthorFrameInfo, AuthorModule } from './videoEditAuthorModule'
 import { deterministicAuthorModule, importAuthorDeterministic } from './videoEditAuthorDeterminism'
+import { currentTextFontSession, withTextFontSession } from '@/core/imaging/vectorContent/shaping/fontContext'
+import type { TextFontAccess } from '@/core/imaging/vectorContent/shaping/fontSession'
 
 const info = (time: number): AuthorFrameInfo => ({ time, frameDuration: 1 / 30, clip: { time, duration: 2 } })
 const ctx = {} as OffscreenCanvasRenderingContext2D
+
+it('异步 GPU 入口跨 await 保留本次字体，并与其他模块求值串行隔离', async () => {
+  const owner = {}, events: string[] = []
+  const fonts = (identity: string): TextFontAccess => ({ owner, chain: () => ({ identity, faces: [], candidates: [] }), choose: () => { throw new Error('此例不整形') } })
+  const initial = fonts('initial'), selected = fonts('selected'), other = fonts('other')
+  const record = () => events.push(currentTextFontSession().chain().identity)
+  const effect = deterministicAuthorModule({ name: 'async', createWebGPU: async () => {
+    record(); await Promise.resolve(); record()
+    return { draw: async () => { record(); await Promise.resolve(); record() } }
+  } }, undefined, initial)
+  const pending = withTextFontSession(selected, () => effect.createWebGPU!({} as Parameters<NonNullable<AuthorModule['createWebGPU']>>[0]))
+  const imported = importAuthorDeterministic(async () => { record(); await Promise.resolve(); record() }, undefined, other)
+  const gpu = await pending
+  await imported
+  await withTextFontSession(selected, () => gpu.draw({} as Parameters<typeof gpu.draw>[0], 0, {}, 1, 1, {}, info(0)))
+  expect(events).toEqual(['selected', 'selected', 'other', 'other', 'selected', 'selected'])
+  let release!: () => void, started!: () => void
+  const entered = new Promise<void>(resolve => { started = resolve })
+  const occupied = importAuthorDeterministic(async () => { started(); await new Promise<void>(resolve => { release = resolve }) }, undefined, initial)
+  await entered
+  const secondDraw = withTextFontSession(selected, () => gpu.draw({} as Parameters<typeof gpu.draw>[0], 0, {}, 1, 1, {}, info(0)))
+  release(); await occupied; await secondDraw
+  expect(events.slice(-2)).toEqual(['selected', 'selected'])
+  expect(() => currentTextFontSession()).toThrow('宿主')
+})
 
 it('作者入口里的随机数与时钟只由入口和时刻决定：同一帧重复渲染得到同一串数，换帧才变；离开作者代码立即恢复', () => {
   const seen: Array<[string, number, number, number]> = []

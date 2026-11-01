@@ -5,6 +5,7 @@ import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'
 import { AUTHOR_LIBRARIES, authorLibraryVersion, authorLibraryCompatibilityError, authorLibraryImportTable, describeAuthorLibraries, resolveAuthorLibraryModule, type AuthorLibraryVersions, type ResolvedAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import { CODE_AUTHOR_LIBRARIES_MIN_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
+import { CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 
 const BARE_SPECIFIER = /^(?![./]|[a-z][a-z0-9+.-]*:)/i
 
@@ -121,8 +122,9 @@ export function rewriteAuthorModule(files: CodeMaterialFiles, path: string, urlF
   return code
 }
 
-/** JS 原文直接交给浏览器；只有 TypeScript 兼容输入才进入转译线程。 */
+/** 文字新版接口在编译线程解析静态字体声明；旧 JS 仍直接交给浏览器。 */
 export function directAuthorBundle(files: CodeMaterialFiles): CodeAuthorBundle | undefined {
+  if ((files.apiVersion ?? 4) >= CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION) return undefined
   if (Object.keys(files.files).some(path => /\.[cm]?tsx?$/.test(path))) return undefined
   const libraries = usedAuthorLibraries(files)
   return { code: files.files[files.entry], map: '', locations: { layers: {} }, modules: files, ...(libraries ? { libraries } : {}), ...(files.apiVersion !== undefined ? { apiVersion: files.apiVersion } : {}) }

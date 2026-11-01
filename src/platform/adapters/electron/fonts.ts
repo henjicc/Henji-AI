@@ -4,5 +4,5 @@ function native(): FontsPlatform {
   return window.henjiNative.fonts
 }
 export function createElectronFonts(): FontsPlatform {
-  return { list: () => native().list(), importFiles: () => native().importFiles(), remove: id => native().remove(id), readFace: id => native().readFace(id), onChanged: handler => native().onChanged(handler) }
+  return { list: fixed => native().list(fixed), importFiles: () => native().importFiles(), remove: id => native().remove(id), readFace: (id, source) => native().readFace(id, source), onChanged: handler => native().onChanged(handler) }
 }

@@ -118,3 +118,24 @@ it('Worker 字体变化后同一程序重建实例，不能沿用旧字体的内
     expect(runtimeDispose).toHaveBeenCalledOnce()
   } finally { await pool.dispose(); fonts.dispose(); vi.unstubAllGlobals() }
 })
+
+it('frameKey 在求值前准备本次参数字体，字体变化进入内容键', async () => {
+  const { TextFontSession } = await import('@/core/imaging/vectorContent/shaping/fontPolicy')
+  const { currentTextFontSession } = await import('@/core/imaging/vectorContent/shaping/fontContext')
+  const { AuthorTextResources } = await import('./videoEditAuthorTextResources')
+  const fs = await import('node:fs'), { convert } = await import('fontverter')
+  const bytes = await convert(fs.readFileSync('node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2'), 'sfnt')
+  const fonts = new TextFontSession('win32', async () => ({bytes:Uint8Array.from(bytes).buffer}))
+  const source = {...bundle(),apiVersion:10 as const,textEntry:'main.js',textFonts:[{file:'main.js',declaration:{},parameters:[{key:'font',type:'font' as const}],diagnostics:[]}]}
+  const resource = new AuthorTextResources({fonts,revision:1,release:()=>fonts.close()},source)
+  const effect = {name:'参数字体',params:[{key:'font',type:'font' as const,title:'字体',default:'Arial'}],draw(){},frameKey:(params: Record<string,unknown>)=>currentTextFontSession().chain({family:String(params.font)}).identity}
+  resource.bind(effect); load.mockResolvedValue(effect)
+  const pool = new VideoEditAuthorPrograms({} as GpuDevice), program = await pool.inspect(source)
+  const info = {time:0,frameDuration:1/30,clip:{time:0,duration:1}}
+  try {
+    const first = await pool.frameKey(program,{width:100,height:100},{font:'Arial'},info,undefined,false,1,{}, {})
+    const second = await pool.frameKey(program,{width:100,height:100},{font:'Georgia'},info,undefined,false,1,{}, {})
+    expect(first?.digest).toBeDefined(); expect(second?.digest).toBeDefined()
+    expect(second?.digest).not.toBe(first?.digest)
+  } finally {await pool.dispose();resource.close()}
+})

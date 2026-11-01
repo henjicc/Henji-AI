@@ -1,3 +1,4 @@
+import { authorBundleShapesText, authorTextMetadataKey } from './videoEditAuthorTextResources'
 import { codeOutputInputs, codeOutputKey, codeOutputSignature } from './videoEditCodeOutputKey'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
@@ -53,7 +54,7 @@ import { videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorFrameKey' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'bundle' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CodeOutputFrame { sourceTime: ReturnType<typeof videoEditClipSourceTimeAt>; info: AuthorFrameInfo; overrides: Parameters<VideoEditCodeGpu['authorGenerator']>[7]; environment: ReturnType<typeof authorEffectEnvironmentForClip> }
@@ -283,9 +284,10 @@ export class VideoEditCodeSources {
       const started = performance.now()
       const bundle = await this.compiler.bundle(files, signal); signal.throwIfAborted()
       this.runtime ??= await this.acquireRuntime(); signal.throwIfAborted()
-      const metadata = await readAuthorMetadataCache(source); signal.throwIfAborted()
+      const metadataKey = await authorTextMetadataKey(bundle, source); signal.throwIfAborted()
+      const metadata = await readAuthorMetadataCache(metadataKey); signal.throwIfAborted()
       const program = metadata ? { ...metadata, bundle } : await this.runtime.inspectAuthor(bundle); signal.throwIfAborted()
-      if (!metadata) writeAuthorMetadataCache(source, program)
+      if (!metadata) writeAuthorMetadataCache(metadataKey, program)
       recordVideoEditPreparation('sourceCompilation', performance.now() - started)
       if (program.apiVersion !== version.apiVersion || program.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '代码源码协议与固定版本声明不一致。')
       // 同一版本可能同时在准备（帧准备、前瞻、片子数据声明）：先完成的那份入缓存，后到的沿用它，不重复计入字节预算。
@@ -547,7 +549,9 @@ export class VideoEditCodeSources {
     const program = plan.program!, context = plan.context
     const { overrides, info, environment } = plan.outputFrame!
     const declared = await this.runtime?.authorFrameKey?.(program, context, plan.author, info, overrides, document.motionBlur === true, plan.divisor ?? 1, environment, dependencies)
-    return codeOutputKey(document, plan, dependencies, declared, options.quality)
+    // 旧接口没有文字身份，逐帧不进入作者运行时取身份。
+    const textIdentity = authorBundleShapesText(program.bundle) ? await this.runtime?.authorTextIdentity?.(program, plan.author) : undefined
+    return codeOutputKey(document, plan, dependencies, declared, options.quality, textIdentity)
   }
   /** 片段在这一帧的作用区域蒙版（智能区域按素材时间取分析结果，手绘遮罩按几何栅格化）；读取失败只记日志，效果按未就绪跳过。 */
   private async regionMask(document: VideoEditComposition, clip: VideoEditClip, mask: NonNullable<VideoEditEffect['mask']>, frame: number): Promise<VideoEditSmartRegionMask | undefined> {

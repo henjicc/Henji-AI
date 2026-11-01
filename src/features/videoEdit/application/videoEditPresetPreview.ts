@@ -6,6 +6,7 @@ import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { VIDEO_EDIT_AUTHOR_CONTENT_COLORS } from '@/core/theme/colorTokens'
 import { addressCodeMaterialFiles, normalizeCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { codeVersionCompilation } from '@/core/videoEdit/codeMaterialVersions'
+import { resolvePreviewAuthor, HISTORICAL_PREVIEW_AUTHOR, type AuthorVersionPin } from '@/core/videoEdit/codeMaterial/authorVersion'
 import { createVideoEditSequence, videoEditComposition, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { instantiateNativeTemplate } from '@/core/videoEdit/styles/nativeTemplates'
@@ -85,10 +86,10 @@ function start(size: { width: number; height: number }, fps = PRESET_PREVIEW_FPS
   const document: VideoEditDocument = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: PREVIEW_DOCUMENT_ID, name: '预设预览', revision: ++previewRevision, media: [], bins: [], items: [], sequences: [sequence], codeMaterials: [] }
   return { document, sequence }
 }
-async function codeClip(builder: Builder, source: Parameters<typeof normalizeCodeMaterialFiles>[0], parameters: CodeParameterValues, placement: { frame: number; track: number; seconds: number; sourceInSeconds?: number }, signal: AbortSignal): Promise<string> {
+async function codeClip(builder: Builder, source: Parameters<typeof normalizeCodeMaterialFiles>[0], parameters: CodeParameterValues, placement: { frame: number; track: number; seconds: number; sourceInSeconds?: number }, signal: AbortSignal, author: AuthorVersionPin = HISTORICAL_PREVIEW_AUTHOR): Promise<string> {
   const files = normalizeCodeMaterialFiles(source)
   const { codeSources: _sources, ...manifest } = await addressCodeMaterialFiles(files)
-  const program = await compileVideoEditCode(codeVersionCompilation(files, {}), signal); signal.throwIfAborted()
+  const program = await compileVideoEditCode(codeVersionCompilation(files, resolvePreviewAuthor(author)), signal); signal.throwIfAborted()
   const versionId = crypto.randomUUID(); const definitionId = crypto.randomUUID(); const itemId = crypto.randomUUID()
   builder.document.codeMaterials!.push({ id: definitionId, name: '预设样片', defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, ...(files.trustContext?.[0] ? { foreign: files.trustContext[0] } : {}), apiVersion: program.apiVersion, languageVersion: program.languageVersion, ...(program.bundle.libraries ? { libraries: program.bundle.libraries } : {}) }] })
   // A personal copy may have dropped a parameter the reel sets; pass only what the component declares.
@@ -107,7 +108,7 @@ async function codeClip(builder: Builder, source: Parameters<typeof normalizeCod
 async function styleSample(sample: VideoEditStyleSample, size: { width: number; height: number }, signal: AbortSignal, fps = PRESET_PREVIEW_FPS, trustContext: ContentTrustReference[] = []): Promise<Builder> {
   const builder = start(size, fps)
   // A sample may declare a shorter durationSeconds hint; the style's own sample setting is authoritative.
-  await codeClip(builder, { ...sample.code, trustContext }, {}, { frame: 0, track: 1, seconds: sample.durationSeconds }, signal)
+  await codeClip(builder, { ...sample.code, trustContext }, {}, { frame: 0, track: 1, seconds: sample.durationSeconds }, signal, sample)
   return builder
 }
 async function build(source: VideoEditPresetSource, size: { width: number; height: number }, signal: AbortSignal): Promise<Builder> {
@@ -121,7 +122,7 @@ async function build(source: VideoEditPresetSource, size: { width: number; heigh
       const builder = start(size)
       if (source.style) { builder.document.styles = [source.style]; builder.sequence.styleId = source.style.id }
       await backdropClip(builder, 4)
-      if (source.body.kind === 'code') { await codeClip(builder, { ...source.body.code, trustContext: source.trustContext }, {}, { frame: 0, track: 2, seconds: source.body.durationSeconds ?? 4 }, signal); return builder }
+      if (source.body.kind === 'code') { await codeClip(builder, { ...source.body.code, trustContext: source.trustContext }, {}, { frame: 0, track: 2, seconds: source.body.durationSeconds ?? 4 }, signal, source.body); return builder }
       for (const snapshot of instantiateNativeTemplate(source.body.content, builder.sequence)) {
         const itemId = crypto.randomUUID(); const track = 2 + snapshot.track
         builder.document.items.push({ id: itemId, name: snapshot.name, kind: snapshot.kind, ...(snapshot.graphic ? { graphic: structuredClone(snapshot.graphic) } : {}) })

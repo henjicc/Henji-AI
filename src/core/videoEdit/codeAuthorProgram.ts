@@ -50,6 +50,9 @@ export interface CodeAuthorSourceLocations {
   fallback?: CodeSourceSpan
 }
 export interface CodeAuthorBundle {
+  /** 文字新版接口的可达模块静态字体资源；只存在于可重建编译产物，不落盘。 */
+  textEntry?: string
+  textFonts?: ReadonlyArray<{ file: string } & import('./codeMaterial/textFonts').StaticTextFonts>
   /** 导入标记随可重建产物传递；运行许可始终由宿主判断。 */
   trustContext?: ContentTrustReference[]
   code: string

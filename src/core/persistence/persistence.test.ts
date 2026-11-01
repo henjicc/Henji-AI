@@ -51,10 +51,18 @@ it('历史 imported 风格及模板升级只保留原数据，不赋予外来代
     const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')) as { content: Record<string, unknown> }
     const previous = { ...raw.content, imported: true }
     const current = upgradePersistenceContent(format, previous, version)
-    expect(current).toEqual(previous)
+    expect(withoutPreviewPins(current)).toEqual(withoutPreviewPins(previous))
     expect(current).not.toHaveProperty('foreign')
   }
 })
+// 历史回归比较原字段；新增的样片解释版本另由 authorVersion.test.ts 验证。
+function withoutPreviewPins(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutPreviewPins)
+  if (!value || typeof value !== 'object') return value
+  const result = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, withoutPreviewPins(child)]))
+  if (result.code && typeof result.code === 'object' && 'files' in result.code) { delete result.apiVersion; delete result.libraries }
+  return result
+}
 import baseline from './schemaBaseline.json'
 import { PersistenceError, upgradePersistenceContent } from './migrations'
 import { persistenceSchemaStructure } from './fingerprint'
@@ -107,7 +115,7 @@ it('旧剪辑、录制快照和字幕回填记录仅移除字幕链接标记，�
     if (id === 'subtitle-manifest') expected.version = format.version
     const upgraded = upgradePersistenceContent(format, content, version)
     // 比较完整内容，连同未知于迁移函数的字幕字段一起保护。
-    expect(upgraded).toEqual(id.startsWith('document.') ? migrateVideoEditMergedEffects(expected) : expected)
+    expect(withoutPreviewPins(upgraded)).toEqual(withoutPreviewPins(id.startsWith('document.') ? migrateVideoEditMergedEffects(expected) : expected))
     expect(content).toEqual(original)
     expect(format.schema.safeParse(upgraded).success).toBe(true)
     const latest = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${format.version}.json`, 'utf8'))
@@ -127,7 +135,7 @@ it('v6 排版库的嵌套格式拒绝旧读者，逐版本迁移保留旧代码�
     const upgraded = upgradePersistenceContent(format, input, previous)
     expect(input).toEqual(original)
     if (id === 'code-asset') expect((upgraded as { sourceVersion: unknown }).sourceVersion).toEqual(old.sourceVersion)
-    else expect(upgraded).toEqual(ownedCaptions(id, original))
+    else expect(withoutPreviewPins(upgraded)).toEqual(withoutPreviewPins(ownedCaptions(id, original)))
     const latest = read(id, format.version)
     const content = id.startsWith('document.') ? latest.content : latest
     expect(format.schema.safeParse(content).success).toBe(true)
@@ -143,7 +151,7 @@ it('v6 排版库的嵌套格式拒绝旧读者，逐版本迁移保留旧代码�
 it('工程入口元数据是可选增量；保留旧记录并读回新黄金样本的完整闭包', () => {
   const format = PERSISTENCE_FORMATS.find(value => value.id === 'code-version')!
   const old = JSON.parse(fs.readFileSync('tests/fixtures/persistence/code-version/v2.json', 'utf8'))
-  expect(upgradePersistenceContent(format, old, 2)).toEqual(old)
+  expect(withoutPreviewPins(upgradePersistenceContent(format, old, 2))).toEqual(withoutPreviewPins(old))
   const current = JSON.parse(fs.readFileSync('tests/fixtures/persistence/code-version/v3.json', 'utf8'))
   expect(format.schema.parse(current)).toEqual(current)
   expect(current.project).toEqual({ commit: 'a'.repeat(40), entry: 'entries/title.ts' })
@@ -165,7 +173,7 @@ it('视频参数取帧时间表是可选增量：嵌入它的格式只升版本�
     expect(format.schema.safeParse(upgraded).success).toBe(true)
     // 版本戳之外原样保留。
     const unstamped = (value: unknown): unknown => { if (!value || typeof value !== 'object' || Array.isArray(value)) return value; const { version: _version, minReaderVersion: _minimum, ...rest } = value as Record<string, unknown>; return rest }
-    expect(unstamped(upgraded)).toEqual(unstamped(ownedCaptions(id, content)))
+    expect(withoutPreviewPins(unstamped(upgraded))).toEqual(withoutPreviewPins(unstamped(ownedCaptions(id, content))))
   }
   const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v36.json', 'utf8'))
   const parse = (content: unknown) => videoEditDocumentSchema.safeParse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(content)) as object) })
@@ -186,7 +194,7 @@ it('视频参数取帧时间表是可选增量：嵌入它的格式只升版本�
 it('剪辑内容 v41：网页画面引用是可选增量，v40 样本原样升上来；新样本读回网页引用，落盘 schema 与运行时校验对非法取景一致拒绝', () => {
   const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
   const v40 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v40.json', 'utf8'))
-  expect(upgradePersistenceContent(format, structuredClone(v40.content), 40)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(v40.content)))
+  expect(withoutPreviewPins(upgradePersistenceContent(format, structuredClone(v40.content), 40))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(v40.content))))
   const v41 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v41.json', 'utf8'))
   const parse = (content: unknown) => videoEditDocumentSchema.safeParse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: 'golden', name: '黄金样本', revision: 0, ...(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(content)) as object) })
   const parsed = parse(v41.content)
@@ -222,7 +230,7 @@ it('剪辑内容 v37：片段停用、片子数据与内置库，旧样本原样
   for (const [id, previous] of [['document.video_edit', 36], ['document.screen_recording', 39], ['code-version', 3], ['code-asset', 8], ['subtitle-manifest', 21], ['code-author-api', 4]] as const) {
     const raw = read(id, previous)
     const content = id.startsWith('document.') ? parseDocumentText(JSON.stringify(raw)).content : raw
-    expect(unstamped(upgradePersistenceContent(versioned(id), structuredClone(content), previous))).toEqual(unstamped(ownedCaptions(id, content)))
+    expect(withoutPreviewPins(unstamped(upgradePersistenceContent(versioned(id), structuredClone(content), previous)))).toEqual(withoutPreviewPins(unstamped(ownedCaptions(id, content))))
   }
   const envelope = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v37.json', 'utf8'))
   expect(envelope).toMatchObject({ kindVersion: 37, kindMinReaderVersion: 37 })
@@ -250,7 +258,7 @@ it('Git 引用格式提高最低可读版本；旧引用纯迁移不做 I/O、�
   const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
   const before = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v33.json', 'utf8'))
   const original = structuredClone(before.content)
-  expect(upgradePersistenceContent(format, before.content, 33)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(original)))
+  expect(withoutPreviewPins(upgradePersistenceContent(format, before.content, 33))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(original))))
   expect(before.content).toEqual(original)
   const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v34.json', 'utf8'))
   expect(current.kindMinReaderVersion).toBe(34)
@@ -385,7 +393,7 @@ describe('所有登记格式的黄金样本', () => {
     const original = JSON.stringify(previous)
     expect(format.version).toBeGreaterThanOrEqual(34)
     expect(format.minReaderVersion).toBeGreaterThanOrEqual(34)
-    expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(migrateVideoEditMergedEffects(migrateEmbeddedVideoEditMotionBlurMaster(previous.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(format, previous.content, 26))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateEmbeddedVideoEditMotionBlurMaster(previous.content))))
     expect(JSON.stringify(previous)).toBe(original)
     const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v27.json', 'utf8'))
     expect(current).toMatchObject({ kindVersion: 27, kindMinReaderVersion: 26, content: { scriptCapture: { baselines: [{ content: { styles: [{ userPreferences: [{ content: '标题少用装饰线。' }] }] } }] } } })
@@ -394,7 +402,7 @@ describe('所有登记格式的黄金样本', () => {
   it('剪辑 v24 原样升到 v25；v25 样本带箭头、椭圆、文字、编号圆点批注与颜色', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v24.json', 'utf8'))
-    expect(upgradePersistenceContent(format, previous.content, 24)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditMotionBlurMaster(previous.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(format, previous.content, 24))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditMotionBlurMaster(previous.content))))
     const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v25.json', 'utf8'))
     expect(current).toMatchObject({ kindVersion: 25, kindMinReaderVersion: 25 })
     const marks = (current.content as { sequences: Array<{ annotations: Array<{ target: { kind: string }; style?: { color: string } }> }> }).sequences[0].annotations
@@ -405,7 +413,7 @@ describe('所有登记格式的黄金样本', () => {
   it('剪辑 v26 原样升到 v27；v27 样本序列开着运动模糊与帧混合', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v26.json', 'utf8'))
-    expect(upgradePersistenceContent(format, previous.content, 26)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditMotionBlurMaster(previous.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(format, previous.content, 26))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditMotionBlurMaster(previous.content))))
     const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v27.json', 'utf8'))
     expect(current).toMatchObject({ kindVersion: 27, kindMinReaderVersion: 27, content: { sequences: [{ motionBlur: true, frameBlend: true }] } })
   })
@@ -413,7 +421,7 @@ describe('所有登记格式的黄金样本', () => {
   it('剪辑 v25 原样升到 v26；v26 样本带非等比缩放与粗线批注；字幕回填记录 v16 只改版本号升到 v17', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
     const previous = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v25.json', 'utf8'))
-    expect(upgradePersistenceContent(format, previous.content, 25)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditMotionBlurMaster(previous.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(format, previous.content, 25))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditMotionBlurMaster(previous.content))))
     const current = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v26.json', 'utf8'))
     expect(current).toMatchObject({ kindVersion: 26, kindMinReaderVersion: 26 })
     const sequence = (current.content as { sequences: Array<{ clips: Array<{ id: string; scaleAspect?: number }>; annotations: Array<{ style?: { weight?: string } }> }> }).sequences[0]
@@ -421,7 +429,7 @@ describe('所有登记格式的黄金样本', () => {
     expect(sequence.annotations.map(mark => mark.style?.weight ?? 'regular')).toEqual(['regular', 'bold', 'regular', 'regular', 'regular'])
     const manifest = PERSISTENCE_FORMATS.find(value => value.id === 'subtitle-manifest')!
     const v16 = JSON.parse(fs.readFileSync('tests/fixtures/persistence/subtitle-manifest/v16.json', 'utf8'))
-    expect(upgradePersistenceContent(manifest, v16, 16)).toEqual({ ...v16, version: manifest.version })
+    expect(withoutPreviewPins(upgradePersistenceContent(manifest, v16, 16))).toEqual(withoutPreviewPins({ ...v16, version: manifest.version }))
   })
 
   it('剪辑 v29：音频编辑动态链接的字幕段与成品时间线是可选字段，最低可读版本不变；v28 原样升上来', () => {
@@ -432,7 +440,7 @@ describe('所有登记格式的黄金样本', () => {
     expect(content.sequences[0].captions.find(caption => caption.id === 'golden-linked-caption')?.linkedCaptionId).toBe('transcript-0')
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
     const v28 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v28.json', 'utf8'))
-    expect(upgradePersistenceContent(format, v28.content, 28)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditMotionBlurMaster(v28.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(format, v28.content, 28))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditMotionBlurMaster(v28.content))))
   })
 
   it('样片画布放宽到 4K60：剪辑 v30、录制会话 v33、风格库 v3、风格包 v3 只放宽范围，最低可读版本不变；旧样本原样升上来', () => {
@@ -440,14 +448,14 @@ describe('所有登记格式的黄金样本', () => {
     const v30 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v30.json', 'utf8'))
     expect(v30).toMatchObject({ kindVersion: 30, kindMinReaderVersion: 28, content: { styles: [{ sample: { width: 3840, height: 2160, fps: 60 } }] } })
     const v29 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v29.json', 'utf8'))
-    expect(upgradePersistenceContent(versioned('document.video_edit'), v29.content, 29)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(migrateVideoEditMotionBlurMaster(v29.content))))
+    expect(withoutPreviewPins(upgradePersistenceContent(versioned('document.video_edit'), v29.content, 29))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(migrateVideoEditMotionBlurMaster(v29.content)))))
     const recording = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v32.json', 'utf8'))
-    expect(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 32)).toEqual(migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(migrateEmbeddedVideoEditMotionBlurMaster(recording.content))))
+    expect(withoutPreviewPins(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 32))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(migrateEmbeddedVideoEditMotionBlurMaster(recording.content)))))
     for (const id of ['video-style-library', 'video-style-package']) {
       const format = versioned(id)
       expect(format.version).toBeGreaterThanOrEqual(3)
       const previous = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v2.json`, 'utf8')) as { content: unknown }
-      expect(upgradePersistenceContent(format, previous.content, 2)).toEqual(previous.content)
+      expect(withoutPreviewPins(upgradePersistenceContent(format, previous.content, 2))).toEqual(withoutPreviewPins(previous.content))
       const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v3.json`, 'utf8')) as { minReaderVersion: number; content: { sample?: unknown; style?: { sample: unknown } } }
       expect(current.minReaderVersion).toBe(1)
       expect(current.content.sample ?? current.content.style?.sample).toMatchObject({ width: 3840, height: 2160, fps: 60 })
@@ -464,14 +472,14 @@ describe('所有登记格式的黄金样本', () => {
     expect(v32).toMatchObject({ kindVersion: 32, kindMinReaderVersion: 31, content: { styles: [{ sample: { durationSeconds: 24 } }] } })
     expect((v32.content as { styles: Array<{ sample: { anchors: number[] } }> }).styles[0].sample.anchors).toHaveLength(9)
     const v31 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v31.json', 'utf8'))
-    expect(upgradePersistenceContent(versioned('document.video_edit'), v31.content, 31)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(v31.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(versioned('document.video_edit'), v31.content, 31))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(v31.content))))
     const recording = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v34.json', 'utf8'))
-    expect(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 34)).toEqual(migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(recording.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 34))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(recording.content))))
     for (const id of ['video-style-library', 'video-style-package']) {
       const format = versioned(id)
       expect(format.version).toBeGreaterThanOrEqual(4)
       const previous = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v3.json`, 'utf8')) as { content: unknown }
-      expect(upgradePersistenceContent(format, previous.content, 3)).toEqual(previous.content)
+      expect(withoutPreviewPins(upgradePersistenceContent(format, previous.content, 3))).toEqual(withoutPreviewPins(previous.content))
       const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v4.json`, 'utf8')) as { minReaderVersion: number; content: { sample?: unknown; style?: { sample: unknown } } }
       expect(current.minReaderVersion).toBe(1)
       expect(current.content.sample ?? current.content.style?.sample).toMatchObject({ durationSeconds: 24, anchors: [1.2, 3.2, 5.2, 6.4, 7.8, 12.4, 15, 18.2, 23.2] })
@@ -484,9 +492,9 @@ describe('所有登记格式的黄金样本', () => {
     expect(v33).toMatchObject({ kindVersion: 33, kindMinReaderVersion: 31 })
     expect((v33.content as { sequences: Array<{ transitions: Array<{ kind: string }> }> }).sequences[0].transitions.map(item => item.kind)).toContain('gl.Cube')
     const v32 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v32.json', 'utf8'))
-    expect(upgradePersistenceContent(versioned('document.video_edit'), v32.content, 32)).toEqual(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(v32.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(versioned('document.video_edit'), v32.content, 32))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateVideoEditCaptionOwnership(v32.content))))
     const recording = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.screen_recording/v35.json', 'utf8'))
-    expect(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 35)).toEqual(migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(recording.content)))
+    expect(withoutPreviewPins(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 35))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(recording.content))))
   })
 
   for (const format of PERSISTENCE_FORMATS) {

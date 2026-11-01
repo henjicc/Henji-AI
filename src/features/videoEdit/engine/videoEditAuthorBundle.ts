@@ -1,5 +1,7 @@
 import type { BuildFailure, BuildOptions, BuildResult, Plugin } from 'esbuild-wasm'
 import ts from 'typescript'
+import { readStaticTextFonts, type StaticTextFonts } from '@/core/videoEdit/codeMaterial/textFonts'
+import { CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
@@ -62,6 +64,7 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
  * immutable file snapshot, so imports cannot silently drift between frames. */
 export async function bundleAuthorFiles(input: CodeMaterialFiles, build: Build): Promise<AuthorBundle> {
   const libraries: Record<string, string> = {}
+  const textFonts = new Map<string, StaticTextFonts>()
   const plugin: Plugin = {
     name: 'author-project',
     setup(api) {
@@ -78,7 +81,20 @@ export async function bundleAuthorFiles(input: CodeMaterialFiles, build: Build):
         libraries[resolved.library.library] = resolved.library.version
         return { path: resolved.library.url, external: true }
       })
-      api.onLoad({ filter: /.*/, namespace: 'author-project' }, args => ({ contents: input.files[args.path], loader: /\.(?:wgsl|glsl)$/.test(args.path) ? 'text' : /\.json$/.test(args.path) ? 'json' : /\.tsx$/.test(args.path) ? 'tsx' : /\.ts$/.test(args.path) ? 'ts' : 'js' }))
+      api.onLoad({ filter: /.*/, namespace: 'author-project' }, args => {
+        const text = input.files[args.path]
+        if ((input.apiVersion ?? 4) >= CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION && /\.[cm]?[jt]sx?$/.test(args.path)) {
+          const source = ts.createSourceFile(args.path, text, ts.ScriptTarget.Latest, true, /\.tsx$/.test(args.path) ? ts.ScriptKind.TSX : /\.ts$/.test(args.path) ? ts.ScriptKind.TS : ts.ScriptKind.JS)
+          const resources = readStaticTextFonts(source, input.apiVersion!)
+          const errors = resources.diagnostics.filter(value => value.severity === 'error').map(value => {
+            const start = source.getLineAndCharacterOfPosition(value.start)
+            return { text: value.message, location: { file: args.path, line: start.line + 1, column: new TextEncoder().encode(text.slice(source.getLineStarts()[start.line], value.start)).length, length: new TextEncoder().encode(text.slice(value.start, value.end)).length, lineText: text.slice(source.getLineStarts()[start.line]).split(/\r?\n/, 1)[0] } }
+          })
+          if (errors.length) return { errors }
+          if (resources.usesText || args.path === input.entry || resources.parameters?.length) textFonts.set(args.path, resources)
+        }
+        return { contents: text, loader: /\.(?:wgsl|glsl)$/.test(args.path) ? 'text' : /\.json$/.test(args.path) ? 'json' : /\.tsx$/.test(args.path) ? 'tsx' : /\.ts$/.test(args.path) ? 'ts' : 'js' }
+      })
     },
   }
   let result: BuildResult
@@ -107,5 +123,8 @@ export async function bundleAuthorFiles(input: CodeMaterialFiles, build: Build):
   if (output === undefined || map === undefined) throw new Error('作者模块未生成完整代码和源码定位信息。')
   // 打包后只剩一个模块：运行时才确定的 import(...) 按入口文件报错；插入只改动所在行的列号，源码定位仍按行对得上。
   const code = rewriteRuntimeAuthorImports(output, input.entry, input)
-  return { code, map, locations: authorSourceLocations(input), ...(Object.keys(libraries).length ? { libraries } : {}), ...(input.apiVersion !== undefined ? { apiVersion: input.apiVersion } : {}) }
+  // JS 保持完整原生模块图，运行时 import(name) 仍由模块地址表解析项目文件。
+  const shapedText = (input.apiVersion ?? 4) >= CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION
+  const modules = shapedText && !Object.keys(input.files).some(path => /\.[cm]?tsx?$/.test(path)) ? input : undefined
+  return { code, map, locations: authorSourceLocations(input), ...(modules ? { modules } : {}), ...(shapedText ? { textEntry: input.entry, textFonts: [...textFonts].sort(([a], [b]) => a.localeCompare(b)).map(([file, resources]) => ({ file, ...resources })) } : {}), ...(Object.keys(libraries).length ? { libraries } : {}), ...(input.apiVersion !== undefined ? { apiVersion: input.apiVersion } : {}) }
 }

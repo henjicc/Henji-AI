@@ -1,0 +1,118 @@
+{
+  "package": "@chenglou/pretext",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chenglou/pretext.git"
+  },
+  "license": "MIT",
+  "tarball": "https://registry.npmjs.org/@chenglou/pretext/-/pretext-1.0.0.tgz",
+  "integrity": "sha512-BxKiDMxWJhyzL8asvcgg3T9YnUU7OUFsKO8oRaR2SYAPX4Sh2wM9gqTBjrBaZ4fnl84cEQ8czC0Q1M83z3chsA==",
+  "files": {
+    "analysis.d.ts": {
+      "upstream": "dist/analysis.d.ts",
+      "upstreamSha256": "f5188bf5ed3efb8f828a18d1c652b860bc93735c6fc643c36c6d136f9a3fd4f8",
+      "sha256": "f5188bf5ed3efb8f828a18d1c652b860bc93735c6fc643c36c6d136f9a3fd4f8"
+    },
+    "analysis.js": {
+      "upstream": "dist/analysis.js",
+      "upstreamSha256": "dafaebbf449ff0c365f31395a7f4a643ec6da2a75c4427afc1bda2073bd70841",
+      "sha256": "dafaebbf449ff0c365f31395a7f4a643ec6da2a75c4427afc1bda2073bd70841"
+    },
+    "gecko-line-breaks.d.ts": {
+      "upstream": "dist/gecko-line-breaks.d.ts",
+      "upstreamSha256": "d9fd91370a82dd9ccdbb0ac312aaf502d18a97d36b2db706c56e0a7425a9c000",
+      "sha256": "d9fd91370a82dd9ccdbb0ac312aaf502d18a97d36b2db706c56e0a7425a9c000"
+    },
+    "gecko-line-breaks.js": {
+      "upstream": "dist/gecko-line-breaks.js",
+      "upstreamSha256": "cfe86d9aaac8936705bbf0306aef56cbc3ca77788b01a143d8860600646168f9",
+      "sha256": "cfe86d9aaac8936705bbf0306aef56cbc3ca77788b01a143d8860600646168f9"
+    },
+    "graphemes.d.ts": {
+      "upstream": "dist/graphemes.d.ts",
+      "upstreamSha256": "383858b06d2d1eefbc794f856e3845ea2659def96a22f51095829e59953c6227",
+      "sha256": "383858b06d2d1eefbc794f856e3845ea2659def96a22f51095829e59953c6227"
+    },
+    "graphemes.js": {
+      "upstream": "dist/graphemes.js",
+      "upstreamSha256": "4b1eb620fe4f6cb7bd408bc3086fc188ff6674bec9fa0604e3646e78e8aa531c",
+      "sha256": "4b1eb620fe4f6cb7bd408bc3086fc188ff6674bec9fa0604e3646e78e8aa531c"
+    },
+    "han-kerning.d.ts": {
+      "upstream": "dist/han-kerning.d.ts",
+      "upstreamSha256": "0cc2f2426da0efa4fe13b1bef961497bdec954f132e7479106e3d9ef61a3d9b4",
+      "sha256": "57bebe2ca0c5ddfa35da77d933406a30df7194a1b3c2202bfa7f2006fc9f5aff"
+    },
+    "han-kerning.js": {
+      "upstream": "dist/han-kerning.js",
+      "upstreamSha256": "06a1fc1b22d80fad0bfebb8c11c61c111edc0088bc24af7435a0570c1288ea8a",
+      "sha256": "260c87d9dfd910047115b652148e998600c473f80d835a9f171ee9ceb8456e9c"
+    },
+    "layout.d.ts": {
+      "upstream": "dist/layout.d.ts",
+      "upstreamSha256": "f58a8ee52e418572e514555316c081ecfb83b929668d234a0879e594dbd5d332",
+      "sha256": "f58a8ee52e418572e514555316c081ecfb83b929668d234a0879e594dbd5d332"
+    },
+    "line-break.d.ts": {
+      "upstream": "dist/line-break.d.ts",
+      "upstreamSha256": "5a03d58502fc4164010da677f7b3423cb1042fe566b63aae1f7ee52c7154010c",
+      "sha256": "5a03d58502fc4164010da677f7b3423cb1042fe566b63aae1f7ee52c7154010c"
+    },
+    "line-break.js": {
+      "upstream": "dist/line-break.js",
+      "upstreamSha256": "b8d5791cfccc573191befb6bd3969f0b5df8d3f432817f8c03c22824afec265b",
+      "sha256": "6a5bdd356050cccdc9d4a14643ca272a786803bb9f30ce3748beaa1440e0f5fe"
+    },
+    "line-breaks.d.ts": {
+      "upstream": "dist/line-breaks.d.ts",
+      "upstreamSha256": "e1200d50b630cac910544581f9c9907b1cdc9253ad8cf0d8c759eecc51175427",
+      "sha256": "e1200d50b630cac910544581f9c9907b1cdc9253ad8cf0d8c759eecc51175427"
+    },
+    "line-breaks.js": {
+      "upstream": "dist/line-breaks.js",
+      "upstreamSha256": "d3dbc44c317536b65c058a16e012d5140271bc57f9d67db284262a0143613abb",
+      "sha256": "d3dbc44c317536b65c058a16e012d5140271bc57f9d67db284262a0143613abb"
+    },
+    "line-text.d.ts": {
+      "upstream": "dist/line-text.d.ts",
+      "upstreamSha256": "92a16af06cb97b2f68dd56c6a5cc481a77478de8542d090fdf09194119799f17",
+      "sha256": "92a16af06cb97b2f68dd56c6a5cc481a77478de8542d090fdf09194119799f17"
+    },
+    "measurement.d.ts": {
+      "upstream": "dist/measurement.d.ts",
+      "upstreamSha256": "22e50552de2dced77f8471f938f6967659ecfe2f515eebc15035deb8ece8dfa3",
+      "sha256": "22e50552de2dced77f8471f938f6967659ecfe2f515eebc15035deb8ece8dfa3"
+    },
+    "prepare.d.ts": {
+      "upstream": "dist/prepare.d.ts",
+      "upstreamSha256": "a999c15a87b4f4ba35a2ade16e02b8d93e139c2cbfe6868be08285fa4608ce41",
+      "sha256": "a999c15a87b4f4ba35a2ade16e02b8d93e139c2cbfe6868be08285fa4608ce41"
+    },
+    "rich-inline.d.ts": {
+      "upstream": "dist/rich-inline.d.ts",
+      "upstreamSha256": "b8bf7b372b0cc1f11bba4891ef588ed3458c6ffc8aa933fb36b4a3047e215b80",
+      "sha256": "b8bf7b372b0cc1f11bba4891ef588ed3458c6ffc8aa933fb36b4a3047e215b80"
+    },
+    "generated/engine-break-data.d.ts": {
+      "upstream": "dist/generated/engine-break-data.d.ts",
+      "upstreamSha256": "b320d38789c6d710e577cf3addd1fb1698d871f208859d150cb0d6ea1881fff8",
+      "sha256": "b320d38789c6d710e577cf3addd1fb1698d871f208859d150cb0d6ea1881fff8"
+    },
+    "generated/engine-break-data.js": {
+      "upstream": "dist/generated/engine-break-data.js",
+      "upstreamSha256": "9309fb6f223a7f0d1b7d613cada043257b6908348939a15a96fa036e0b660dd3",
+      "sha256": "9309fb6f223a7f0d1b7d613cada043257b6908348939a15a96fa036e0b660dd3"
+    },
+    "generated/webkit-generic-families.d.ts": {
+      "upstream": "dist/generated/webkit-generic-families.d.ts",
+      "upstreamSha256": "7ac3efea372133fa7fc035f8e6526c5dabbfb770bc38d59b26f7ea2b125b86e6",
+      "sha256": "7ac3efea372133fa7fc035f8e6526c5dabbfb770bc38d59b26f7ea2b125b86e6"
+    }
+  },
+  "gitHead": "4a98f37b1e5396a73197f17c13f3128c15d8c17c",
+  "localArtifacts": {
+    "LICENSE": "b0bc6870efb4e667f911d5f6b52fc9b321d634a0469a17464e35da244c28f128",
+    "henji.patch": "69b84347fd308a70b176929b1ee8546fe87db5445c69fcb9e017d2e04e0654c4"
+  }
+}

@@ -1,3 +1,4 @@
+import { pinPreviewAuthor } from '@/core/videoEdit/codeMaterial/authorVersion'
 import { writeMemory } from '@/services/assistantMemory/memoryService'
 import { migrateVideoEditMergedEffects } from '@/core/videoEdit/mergedEffectsMigration'
 import { subscribeRestored } from '@/services/recycle'
@@ -108,6 +109,7 @@ export class VideoEditStyleLibrary {
       const previous = this.styles.get(style.id)
       if (previous?.builtin && !preferencesOnly) throw new Error('内置风格只读；要修改请先复制成个人风格。')
       const value = videoEditStyleSchema.parse({ ...(preferencesOnly && previous ? { ...previous.style, userPreferences: style.userPreferences, version: style.version } : style), updatedAt: new Date().toISOString() })
+      value.sample = { ...value.sample, ...pinPreviewAuthor(value.sample.code, value.sample) }
       const dir = await this.io.join(await this.io.root(), 'styles', value.id); await this.io.mkdir(dir)
       let current = this.styles.get(value.id)?.media ?? { anchors: [] }
       if (media) {
@@ -155,6 +157,7 @@ export class VideoEditStyleLibrary {
   }
 
   private async putTemplate(template: VideoEditTemplate): Promise<VideoEditLibraryTemplate> {
+    if (template.body.kind === 'code') template = { ...template, body: { ...template.body, ...pinPreviewAuthor(template.body.code, template.body) } }
     const previous = this.templates.get(template.id)?.template
     const hash = await videoEditTemplateContentHash(template.body)
     const changed = !previous || previous.contentHash !== hash

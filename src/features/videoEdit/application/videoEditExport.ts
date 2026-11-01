@@ -123,7 +123,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     // Mix in the delivery layout before measuring loudness. Downmixing after normalization
     // changes LUFS; the shared mixer already resamples and maps mono/stereo correctly.
     const renderDocument = { ...pictures, sampleRate: settings.sampleRate, channels: settings.channels }
-    renderer = new VideoEditRenderSession(renderDocument, { proxyProjectId: settings.useProxies ? projectId : undefined, exportProxies: settings.useProxies })
+    renderer = new VideoEditRenderSession(renderDocument, { proxyProjectId: settings.useProxies ? projectId : undefined, exportProxies: settings.useProxies, fixedTextFonts: true })
     const picture = settings.videoEnabled ? await prepareVideoEditExportFrame(renderer, document, settings) : undefined
     renderer.setSmartRegions(smartRegions)
     renderer.setTracks(videoEditTrackResults(document))

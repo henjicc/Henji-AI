@@ -1,3 +1,4 @@
+import { migrateVideoAuthor } from '../../videoEdit/styles/authorVersionMigration'
 import { migrateAudioMergedEffects, migrateAudioEqualizerModes } from '../../audio/effects/mergedEffectsMigration'
 import { migrateVideoEditTransitions } from '../../videoEdit/transitionMigration'
 import { z } from 'zod'
@@ -137,10 +138,12 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 代码版本可写作者接口 v5 与内置库 libraries，旧程序读不懂这些（作者接口最高只认 v4），提高到 37，让旧程序明确提示升级。
   // 38：作者接口 v6 可使用排版库；旧程序无法执行，最低可读版本同步提高。
   // 47：内置效果换成合并后的“模糊”（blur），旧程序不认识这个效果，会把整份剪辑当成内容无效，提高到 47 让它明确提示升级。
-  minReaderVersion: 53,
+  minReaderVersion: 54,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 53 → 54：接受作者接口 10，样片补固定历史版本。
+    53: migrateVideoAuthor,
     // 52 → 53：风格件可带代码滤镜快照，历史内容原样保留。
     52: content => structuredClone(content),
     // 51 → 52：容器接受作者接口 v9 的调整层，旧源码与接口保持原样。

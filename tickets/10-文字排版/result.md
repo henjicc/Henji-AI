@@ -521,3 +521,522 @@ node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.h
 ```
 
 本轮交付为可复现的配对/停止专项与失败证据，**不是ticket10完成**。本地提交 `823943658`，未push；本分支代码工作区干净。
+
+## 2026-11-01 收尾启动：吸收 main 冲突，停止执行
+
+- 已读取 review.md 末尾最新裁定：实验 5 判定通过，本轮没有推翻或重测该结论。
+- 起点为 `task/10-文字排版` 的 `823943658b4903f1f0234b31d5bf23bc74f8c51a`，工作区干净。执行 `git merge main`，目标为 `d475ecd48d55c323c85004d822896c1a860909de`，退出码 1，共 20 个冲突文件。
+- 冲突包括：持久格式登记、迁移、基线与发布承诺，剪辑/录制 descriptor，风格/模板 schema 与应用入口，作者运行时、指纹、合成器、渲染 transport，以及黄金样本生成器与四份同版本样本。任务分支的剪辑 v46、录制 v49 与 main 的既有版本发生占号冲突；风格库 v7、风格包 v10 的黄金样本也发生 add/add 冲突。后续需要保留 main 已登记历史，再顺延本票版本，不能直接选择整侧覆盖。
+- 按本轮“哪一步不过就停下回报”，未解决冲突或继续产品修改、实验与冻结。已执行 `git merge --abort` 成功，HEAD 恢复上述起点，`git status --short --branch` 确认任务代码工作区干净，无遗留合并状态。
+- 描边/阴影文字空白本轮尚未修复；实验 6–8 未运行；henji-layout 2.0.0 未冻结，新建默认仍 API 7，技能未修改。指定专项检查、GPU 验证与 L2 验证本轮均未运行，不能报告通过；无代码改动，未发起独立审查。
+- 本轮没有新提交、推送、切分支或合并到 main；主工作区只追加本 result.md。未操作端口 9334 的开发版，未启动实验进程，未操作 D:/视频制作；node_modules 与 FFmpeg 均确认仍为指向主仓库的 Junction，未安装、卸载或删除依赖。
+
+## 2026-11-01 文字外观边界修复与实验 6：L2 字体准备失败，停止收尾
+
+起点仍为 `823943658`，分支 `task/10-文字排版`。实验 5 沿用 review.md 最新“配对通过”裁定。本轮没有切分支、推送或合并 main；未触碰 9334 开发实例、D:/视频制作、主工作区其他文件，未安装/卸载依赖或操作 node_modules / FFmpeg 联接点。**本轮尚未提交：L2 未通过，不能把工作区改动称为已完成提交。**
+
+### 描边阴影空白修复与实际排查范围
+
+`TextAppearance` 携带含描边/阴影与栅格取整留边的局部范围，录制为数值参数；共享 `authorCanvasContent` 将其经过当前仿射变换、Canvas 效果与裁剪并入内容边界。纯外观文字不再被当作空内容，混合图层也不会仅按其他图形范围裁剪。回归覆盖纯文字、混合图层、旋转缩放、滤镜与裁剪，且边界分析不得执行延迟栅格回调。
+
+同源排查检查了外观创建、全部 `drawTextAppearance` / `TEXT_APPEARANCE_DRAW` 调用方、录制、重放、静止组合与动态层范围；冻结 1.0–1.2 未使用该内部符号。纯轮廓路径没有本次漏计操作的问题。精确测试 3 文件 **22 项通过**。未把这一结论外推为全部作者运行时已通过。
+
+独立隐藏 Electron/profile、随机 HTTP 端口，正式 Worker 优化专项构建完成外观矩阵。20/200/1000 字 × 1080p/4K × API7/API8 共 12 个场景均有首帧墨迹；API8 热帧无整画布临时分配，专项退出 0。目视打开 API8 1080p 的 20 字截图，白色文字和橙色描边均可见。数据按同字体/同字重记录；这里是依次执行的新旧场景，不是逐帧交替配对，不能冒充负载下性能门槛裁定。
+
+| 分辨率 | 字数 | 旧 1.2.0 文字阶段 P50/P95 ms | API8 文字阶段 P50/P95 ms | API8 首帧墨迹通道数 |
+|---|---:|---:|---:|---:|
+| 1920×1080 | 20 | 0.70 / 1.20 | 1.50 / 1.90 | 39,653 |
+| 1920×1080 | 200 | 5.20 / 6.70 | 12.10 / 15.60 | 373,393 |
+| 1920×1080 | 1000 | 22.80 / 35.10 | 64.40 / 90.40 | 1,856,599 |
+| 3840×2160 | 20 | 0.90 / 1.50 | 2.50 / 3.30 | 39,653 |
+| 3840×2160 | 200 | 5.80 / 8.70 | 16.30 / 20.80 | 372,981 |
+| 3840×2160 | 1000 | 36.90 / 49.10 | 65.00 / 80.70 | 1,852,940 |
+
+外观重绘明显慢于旧版，不能写“整体性能更快”。设计将外观成本单列，不套典型纯填充 200 字门槛；1000 字是压力样本，以上保留其实际超预算结果。本轮没有重做实验 5 的通过裁定。
+
+### 实验 6：描边生长与 three 挤出
+
+新增 `scripts/text-layout-outline-experiment.ts`，复用正式 `createShapedTextPlan` / `TextShaper` 的 HB 轮廓与已安装 three 的 `SVGLoader` / `ExtrudeGeometry`，未手写曲线离散或三角化。独立 Electron 运行，1920×1080，Noto Sans SC、48px、文件默认字重 100，文本 `OB8国文字排版` 重复截取 20/200 字；5 次预热、30 次计量。首次脚本未准备默认 sans-serif，尚未测量即抛错；已纠正实验准备后实际运行，下表只记完整有效运行。
+
+| 字数 | 排版 ms | 几何准备 ms | 首次 GPU 绘制并等待 ms | 描边 P50/P95/max ms | three 绘制并等待 P50/P95/max ms |
+|---|---:|---:|---:|---:|---:|
+| 20 | 38.50 | 32.10 | 23.30 | 0.10 / 0.10 / 0.20 | 0.20 / 0.60 / 0.70 |
+| 200 | 24.60 | 16.50 | 12.50 | 0.40 / 0.50 / 0.60 | 0.40 / 0.60 / 0.70 |
+
+两规模均复用 8 个字形几何，热帧前后 GPU geometry 数 **8→8**，几何 attribute 数组 964,224 bytes；O/B/8 洞数为 1/2/2。全部几何顶点有限；挤出正面与 Path2D 填充，距轮廓至少 2px 的内部差异 **0**。25%/50%/100% 描边非零通道数：20 字 32,418/37,512/37,578，200 字 339,789/385,863/386,427。正面截图已目视核对，专项通过。AA 边缘不作 exact 比较，未验证倾斜视角；这只是轮廓消费成本与正面几何实验，不是三维字产品或完整播放器性能结论，没有与旧库不存在的轮廓接口伪造性能配对。
+
+### 停止点、验证与审查
+
+显式 9 文件 L2 入口（含当时尚未运行的回退探针）选取 bounds、recorder、runtime、shapedText 四个直接消费者测试：**50 项通过、8 项失败**。失败全部在 `src/features/videoEdit/engine/videoEditAuthorRuntime.test.ts`，错误为“文字排版需要宿主先准备本模块声明的字体”，涉及字素动画、动态层纹理复用两种 cacheKey、文字事实沿用、未绘制布局、flex 测量、save/restore 合并及模块常量布局。调用链为 `currentTextFontSession` → `prepareTextLayout` → `layoutText`；部分发生在绘制之前。该测试文件本轮未改，但没有运行改前基线，不能据此断言失败已证明与本次无关。
+
+`verify:changed` 在精确 Vitest 步骤退出 1，未执行后续 ESLint/renderer tsc；**不能报告 L2 通过**。按“哪一步不过就停下回报”停止，不修掉/跳过这些失败以继续发行。`check:persistence-compat`、`check:assistant-capabilities`、`check:skill-sync`、vendor --check 和其他 GPU 测试本轮未执行。相关 GPU 证据仅上面的外观矩阵与实验 6；不是全套 GPU 门禁通过。
+
+独立审查 2 轮：第 1 轮修复和实验 6 无重要/小问题；第 2 轮发现尚未执行的实验 7 探针可能在选脸记录为空时误判通过。停止收尾时已撤掉该未执行分支及其插桩，未把它留下或当成实验 7 证据。实验 7–8 **未运行**；2.0.0 **未冻结**，新建默认 **仍 API7**，技能 **未改**；尚未到最后合并 main 的步骤。最终保留 8 个文件的本轮改动（7 个已跟踪修改、1 个新增实验脚本），无暂存/提交。
+
+### 可复现证据
+
+本工作树 `.tmp/text-layout-acceptance/`，不提交字体/截图/profile：
+
+| 文件 | SHA-256 |
+|---|---|
+| appearance-fixed-report.json | `98819682e5cfc8d3e9c498565c112f18d20ee84b39ad1e8f9e9633f9c5168c28` |
+| outlines-report.json | `61a0ad3b4151c405b39df04d2e8e90ce4af363e25a308b55b85a01d14be99aa5` |
+
+```powershell
+node scripts/prepare-text-layout-acceptance.ts --worker
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.html --phase appearance --out .tmp/text-layout-acceptance/appearance-fixed-report.json
+node scripts/prepare-text-layout-acceptance.ts --outlines
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/outlines.html --out .tmp/text-layout-acceptance/outlines-report.json
+$env:NODE_OPTIONS='--max-old-space-size=8192'
+npm run verify:changed -- --level L2 --test src/features/videoEdit/engine/videoEditAuthorCanvasBounds.test.ts --test src/features/videoEdit/engine/videoEditAuthorCanvasRecorder.test.ts --test src/features/videoEdit/engine/videoEditAuthorRuntime.test.ts --test src/features/videoEdit/authorLibraries/shapedText.test.ts src/features/videoEdit/engine/videoEditTextOutlines.ts src/features/videoEdit/authorLibraries/shapedText.ts src/features/videoEdit/engine/videoEditAuthorCanvasRecorder.ts src/features/videoEdit/engine/videoEditAuthorCanvasBounds.ts src/features/videoEdit/engine/videoEditAuthorCanvasBounds.test.ts scripts/text-layout-worker-experiment.ts scripts/prepare-text-layout-acceptance.ts scripts/text-layout-outline-experiment.ts
+```
+
+最后一条为停止后去掉已撤销探针的准确复现清单；本轮实际失败命令额外包含当时的 `scripts/text-layout-worker-probe.mjs`。移除未运行分支后只检查 `git diff --check`，没有声称 L2 已复跑。继续工作需要先处理这 8 项字体准备失败，再恢复实验 7–8和后续冻结/合并/全部门禁。
+
+## 2026-11-01 最终完成：L2 修复、实验 7–8、冻结 2.0.0 与吸收 main
+
+本节是本票最终状态，取代前文的停止点；保留历史失败和测量记录供追溯。按本轮授权自行修复测试、门禁与合并冲突，没有降低已定门槛或更换依赖。实验 1–5 沿用 review.md 的通过裁定，实验 6 沿用上一节已完成实测，本轮没有伪称重新执行 1–6。
+
+### 提交与交付
+
+- `6ae9c141f`：修复文字外观边界，并给作者运行时测试补齐正式字体准备屏障。测试使用 TextFontSession 与 AuthorTextResources 的 prepare/bind/close，模块常量初始化也绑定已准备会话；没有绕过运行时字体要求。旧位图行为测试明确引用冻结 1.2.0。
+- `17e48a365`：完成实验 7–8、修正彩色字形识别，冻结 henji-layout 2.0.0，新建默认作者 API 8，并更新五份技能参考，只说明新能力怎么用。
+- `9457e73d0`：合并 main `b2d1d5ce1`（包含 11、13、20），处理冲突及字体缓存原子发布问题。双亲为 `17e48a365`、`b2d1d5ce1`。
+- 最终分支 `task/10-文字排版`，代码工作区干净；没有 push、切分支、合并到 main 或在主工作区提交。仅按授权追加本 result.md。未动 9334、D:/视频制作、node_modules 与 FFmpeg 联接点，未执行 npm install/ci/uninstall，未改界面。
+
+### 实验 7：正式 Worker 字体回退与身份
+
+源码版、冻结版以及合并后冻结版均通过。最终证据为 `.tmp/text-layout-acceptance/fallback-postmerge-report.json`：11 个场景覆盖假名、扩展汉字 U+20000/U+20001、ZWJ 女程序员、VS 爱心、旗帜、组合附加符、缺字、同名字体字节替换及可变字重 100/900。正式 authorMetadata/authorFrame 链路记录实际选脸、字节 hash、字体链与 cluster；各场景 seek `[0,7,1,9,0]` 像素一致且非空，ZWJ/VS 有彩色像素。六个正常非替换场景通过 CDP 读取实际 DOM 字体，核对 6/6 通过。
+
+Segoe UI Emoji 的 COLRv0 基底存在 outline，单凭“有 outline”会误走黑色轮廓。共享 HarfBuzz 适配层识别 PNG、COLRv1 paint、COLRv0 layers；emoji 簇在无轮廓或彩色情形使用系统 Canvas，仍保持 HB 几何。回归覆盖“有轮廓但为彩色字形”，不以 glyph ID 存在替代实际绘制支持。
+
+同名字体字节变化改变 hash；可变轴变化保持字体字节 hash，但改变字体链及正式 fingerprintAuthorFrame 指纹。四种身份指纹互异。缺字有诊断，字素不拆。排查覆盖选脸、HB 成形、彩色路由、模块字体准备、Worker、帧指纹和直接导出消费者；没有执行本轮全流程编码成片验收。
+
+实际字体格式样本来自固定上游提交，下载物仅留在 .tmp，没有改变应用依赖：
+
+- HarfBuzz `0ba555a3d4f00a5d2909b0cf8720e04b8fe83ff0`：MORXTwentyeight.ttf 的 morx 212 bytes，期望 advances `[1394,529,510,510,510]`，实测 `[638,529,556,510,674,510,510]`；kerx 样本 9f0def61bfa49ffb44ba45c8703eee567c5bb816.ttf 的 kerx 86 bytes，期望 `[560,560]`，实测 `[600,600]`。当前 tiny 构建不支持这两个样本要求的 AAT 行为，明确保留此边界。
+- googlefonts/color-fonts `0046ea4c3b69e9fbbe464c2594816894e3aa5e4b` 的 twemoji_smiley-sbix.ttf：sbix 21,596 bytes，advance 1275，有 85 bytes outline，但走系统彩色 Canvas。
+- googlefonts/noto-emoji `99701e07d3d1fe1bdbcdb14964547f0fd592966f` 的 2D/fonts/NotoColorEmoji.ttf：CBDT 10,636,164 bytes、CBLC 16,132 bytes，advance 2550、无 outline，走系统彩色 Canvas。两个位图样本均得到非空彩色画面（墨迹 4,172）。
+
+验证平台是 Windows；macOS 未验。系统 emoji 的颜色、基线、墨迹和抗锯齿依平台，不保证复现自定义彩色字体原始像素。
+
+### 实验 8：表格数字、列宽与 DOM 对照
+
+最终 `.tmp/text-layout-acceptance/table-postmerge-report.json` 通过。Calibri 数字 0–9 advance 均为 1038/2048；Gabriola 无 tnum，数字 advances 为 `[1632,937,1345,1353,1622,1398,1642,1562,1559,1629]/4096`，发出明确诊断。正负、小数、百分比、空格千分符均记录量度；没有错误要求符号也与数字同宽。
+
+| 场景 | 最终列宽 | 非零内容宽单元格最大 DOM 字位差 px | 溢出 |
+|---|---|---:|---|
+| auto，500 | 283.6689453125 / 212.3310546875 | 0.0234375 | 否 |
+| narrow，120 | 164.05078125 / 139.734375 | 0.0188751220703125 | 是 |
+| fixed，360 | 80 / 276 | 0.015289306640625 | 否 |
+| fixed-zero，100 | 0 / 139.734375 | 不纳入零宽字位门槛 | 是 |
+
+列框不重叠，同位数 111/999 保持稳定。真实黑字白底、红色列框截图已检查。零宽列只验证列框与溢出语义；其全部字位若强行对照 CSS，最大差为 14.927083969116211 px，不能将其归入上述 0.02344 px 结论。DOM 按同一最终列宽逐格核对，不宣称完整 CSS auto-table 列宽分配算法一致。
+
+合并后重新生成正式 Worker 与冻结库实验入口，15 张回退截图、4 张表格截图与合并前冻结版逐字节相同（19/19）；不是仅复用旧报告。
+
+### 冻结、技能与合并兼容
+
+2.0.0 冻结目录包含独立 HarfBuzz index/mjs/wasm、Pretext/HarfBuzz 来源与许可、patch、声明及 text/flex/table 产物。冻结脚本按二进制保存 wasm，通过相对 external 避免第二个 wasm 实例；上游可选 EmscriptenModule 仅以临时 ambient 辅助声明构建，不改依赖、不泄漏内部类型。冻结提交后文件未再变化，提交后默认持久保护检查通过。
+
+新建默认 `CODE_AUTHOR_DEFAULT_API_VERSION=CODE_AUTHOR_API_VERSION`，即 API 8。技能参考 author-api、author-text-motion、code-project、recipes-text-data、recipes-text 说明静态 textFonts/faces/bindings、统一几何与 table 使用，删除过时图集/逐字丢失连写描述；5 技能 25 共享文件同步通过。
+
+合并保留 main 的效果环境、精度和导出路径，同时保留本票字体会话/API 8。冲突格式按 main 历史顺延：document.video_edit 49、document.screen_recording 52、video-style-library 8、video-style-package 11；template-library 7、code-version 9、code-asset 14、作者 API 8。main 历史黄金样本和兼容登记保持原字节，四份新版本样本由生成器重建。未标版本历史预览效果固定为合并前的 effects 1.2.0、layout 1.2.0/API 7；显式历史 effects 1.0.0 引用仍保留。
+
+### 失败修复、同源排查与独立审查
+
+- 初始 8 项“宿主未准备字体”失败通过正式准备屏障修复；合并后升级夹具显式按 API 6 创建，显式升级 API 8 按合法最新兼容库断言，未把合法 layout 2.0.0 升级锁死为 1.2.0。
+- Windows 字体缓存 rename 实际发生 EPERM：scanner 采用已有 writeBufferAtomically，只有成功发布后才更新内存缓存；字体监听忽略该原子写入产生的 `.catalog-cache.json.<uuid>.tmp`，避免临时文件引发自激扫描。覆盖 scanner、原子文件与 watcher，共 15 项专项测试通过。正式 fonts/worker.ts 独立构建并实际启动，连续两次扫描均 1,756 字体脸、跳过 5 候选，实际读取字体 17,396,628 bytes，确认共享日志依赖可在 Worker 装载；这不是完整 Electron 发行构建。
+- 高负载下 Worker 首次 import 钩子超时以降低测试并发处理，没有增加超时、删除断言或改变性能门槛；类型检查分配 8GB heap。最终 L2 明确传入 176 个现存改动文件；已删除旧 textGraphemeAtlas.ts 单列记录，由替代实现消费者测试覆盖，未把不存在的路径交给 ESLint。
+- 外观边界排查包括生成、录制、回放、纯文字、混合图层、变换/滤镜/裁剪、静止组合和动态层；冻结 1.x 不使用该新内部符号，未发现同源漏计。字体排查覆盖共享发布、监听、Worker 生命周期；历史版本排查覆盖预览样片/模板及显式引用。结论不扩展为全部平台或全部产品功能已经验收。
+- 本轮独立干净上下文审查四组共 9 轮（边界 2、发行 2、合并 3、字体缓存 2）。两项重要问题分别为历史 effects 错误固定 1.0、原子临时文件触发 watcher 自激，均修复并回归；测试绑定和技能描述的小问题也已处理。没有未决重要问题。
+
+### 最终门禁与复现
+
+全部在本任务分支串行执行，未运行全量 npm test 或完整 electron:build：
+
+- `verify:changed -- --level L2 <本分支全部现存改动文件...>`：37 测试文件、836 项通过；改动文件 ESLint、renderer/electron 类型检查、依赖图、main imports、IPC 和持久基线通过。日志 `.tmp/t10-final-l2.log`，显式文件清单 `.tmp/t10-final-files.txt`，删除清单 `.tmp/t10-final-removed-files.txt`。
+- `check:persistence-compat`：66 格式通过；提交后不设置保护 ref 覆盖，再按默认保护运行仍通过，日志 `.tmp/t10-postcommit-persistence.log`。
+- `check:assistant-capabilities`：结构、15 项覆盖及 31 文件 237 项不变量通过，日志 `.tmp/t10-final-capabilities.log`。
+- `check:skill-sync`：5 技能 25 文件通过，日志 `.tmp/t10-final-skills.log`。
+- `node scripts/check-text-layout-vendor.cjs --check`：固定字节、许可、patch 反向还原、Pretext 7 模块无 Canvas 可达图通过，日志 `.tmp/t10-final-vendor.log`。
+- 相关 GPU：ContentPrecision 10、GpuPrecision 4、PlaybackResolution 5，共 3 文件 19 项通过，日志 `.tmp/t10-final-gpu.log`。
+- 实验 7–8 合并后冻结版 gate 均 true、failures 均为空，日志 `.tmp/t10-postmerge-fallback.log`、`.tmp/t10-postmerge-table.log`。未重做或降低已裁定实验 5 的负载配对标准，也不将实验 6 外观压力成本描述为整体性能更快。
+
+```powershell
+$env:NODE_OPTIONS='--max-old-space-size=8192'
+$env:VITEST_MAX_THREADS='2'
+$env:VITEST_MIN_THREADS='1'
+$env:VITEST_MAX_FORKS='1'
+$env:VITEST_MIN_FORKS='1'
+$env:npm_config_script_shell=(Get-Process -Id $PID).Path
+$files=@(git diff --name-only --diff-filter=ACMRT b2d1d5ce1 HEAD)
+npm run verify:changed -- --level L2 --test src/features/videoEdit/engine/videoEditAuthorRuntime.test.ts --test electron/main/services/fs/atomic-file.test.ts @files
+npm run check:persistence-compat
+npm run check:assistant-capabilities
+npm run check:skill-sync
+node scripts/check-text-layout-vendor.cjs --check
+npm run test:gpu -- src/features/videoEdit/engine/videoEditGpuPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditContentPrecision.gpu.test.ts src/features/videoEdit/engine/videoEditPlaybackResolution.gpu.test.ts
+node scripts/prepare-text-layout-font-formats.ts
+node scripts/prepare-text-layout-acceptance.ts --worker --table --frozen
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/worker.html --phase fallback --out .tmp/text-layout-acceptance/fallback-postmerge-report.json
+node scripts/run-text-layout-dom.cjs --page .tmp/text-layout-acceptance/table.html --out .tmp/text-layout-acceptance/table-postmerge-report.json
+```
+
+script_shell 仅为当前进程使用 PowerShell，避免显式文件参数超出 cmd.exe 命令长度；没有改变全局 npm 配置。
+
+| 最终证据（相对本任务工作树） | SHA-256 |
+|---|---|
+| .tmp/text-layout-acceptance/fallback-postmerge-report.json | `6cdcda9c9fb28bff458dd743cbfae7d9aa0968c6758f5a070be8bc0a1bd9388f` |
+| .tmp/text-layout-acceptance/table-postmerge-report.json | `2b5db0ed0813bd36aed667e532800ddd61843f3146d88267238b53f7d65d4bbe` |
+| resources/video-edit-author/frozen/henji-layout/2.0.0/release.json | `8be76128a960d4cf5691b1d2a89bff9f8f971e59a5fc04667dde21fbfe74f8f5` |
+| .tmp/t10-final-l2.log | `862378978220ce0929311b5b013d3ef5eb3273f6bb2a5bafad626644abf6e544` |
+| .tmp/t10-final-gpu.log | `fab568f99d4d951102140bf5f844de160a88382e304233ad5f670ffb18641cd3` |
+
+最终结论：本轮要求的修复、实验 7–8、冻结 2.0.0、默认 API 8、技能同步、吸收 main、全部指定门禁与任务分支提交均完成；未验平台、AAT 与完整编码成片边界如上，未 push。
+
+## 综合审查修复（2026-11-01）
+
+按 `review.md` 最后一节裁定处理 `review-combined.md` 全部 13 项及 outputKey/frameKey 两条建议。起点 `b7df3d5ca`；在 `task/10-文字排版` 合入 main `535d9bd7f`（含 19-U12/U13）。未发行 2.0.1，重新冻结尚未进入 main 的 **henji-layout 2.0.0**。
+
+### 逐条处理与精确覆盖
+
+| 条目 | 修复与验证 |
+|---|---|
+| 1 | 默认准备 400/700 × normal/italic；静态提取 text/table/flex 的字面字体、常量和对象展开，保留入口向 helper 传递的参数元数据。`params.style` 的展开与后置字重覆盖按实际顺序解析。未知组合在同族已准备字体中按 CSS 规则匹配，日志去重并进入 codeMotionReview。真实冻结运行时覆盖零声明 700、斜体、已声明族 700、展开参数再覆盖字重；另测 table 字符串行、样式继承及 helper 入口。 |
+| 2 | 历史缺字段快照固定 API 7 + effects 1.3.0/layout 1.2.0；无字段且使用 effects 1.3.0 导出的迁移样本通过。历史完整迁移链保留。 |
+| 3 | 平台候选表、通用族映射、同族匹配和 choose 随 `font-session.mjs` 冻结；宿主只交目录和按 ID 读取字节。冻结输入 337 项均为逻辑相对路径且摘要吻合。 |
+| 4 | 准备和 choose 都按当前字素固定次序选脸。`2026 ①`、`2026 ①年` 中 ① 的字体哈希与 face 相同；额外补肤色修饰符、VS16 单独出现与混合 emoji 的等价测试。 |
+| 5 | 仅需要文字的模块进入文字准备；保留跨模块参数但不把纯 helper 误当文字内容。按字素覆盖懒读候选，按内容哈希共享字节，宿主不长期保留已交付字节。纯 GPU 模块不捕获字体目录。内存配对见下表。 |
+| 6 | HarfBuzz 轮廓、Path2D 分别按约 4MiB 软预算 LRU 回收；超预算后能重建同一内容，已交付轮廓仍有效。 |
+| 7 | 导出捕获主进程磁盘字体快照，包含尚未读取的字体；后续安装、删除、替换不改变读回字节。henji-layout 1.x 字体集合保留，不在导出中 reset；渲染传输测试确认后续帧完成且始终使用起始目录。关闭丢弃迟到读回；退出等待尚在复制、释放的快照后才停字体线程。 |
+| 8 | 新写入缺 apiVersion 的样片/库模板默认 API 8；显式 API 缺库版本取该 API 最新兼容库。助手字段描述公开 apiVersion/libraries；读历史数据和新写入不共用缺字段默认值。 |
+| 9 | 可取消字体 preflight 在 RenderTransport 的 render 入队前完成，Worker 用独立准备队列；暂停、更新内容、后到帧取消旧准备，旧画面不会迟到提交。坏滤镜仍走原有可恢复失败路径。 |
+| 10 | review 区分 upgradeLibraries 与 upgradeAuthorApi；技能改为新源码 API 8，并明确默认四种字形与显式字体声明语义。 |
+| 11 | 冻结输入使用仓库逻辑路径，node_modules 联接不泄露物理工作树路径；没有绝对路径或 `../` 输入。 |
+| 12 | 应用许可清单补 Pretext、harfbuzzjs、HarfBuzz 及完整许可文本；严格生成通过。 |
+| 13 | 录屏产物创建渲染导出会话时同样传 fixedTextFonts，共用第 7 条快照与释放实现。 |
+| 附加建议 | 文字身份显式进入 CodeSources outputKey；AuthorPrograms.frameKey 求值前准备实际参数字体，在同一字体上下文执行。参数字体变化会改变输出/帧键，覆盖共享指纹与渲染路径。 |
+
+### 持久格式与 main 合并
+
+| 格式 | 合入 main 版本 → 本分支版本 |
+|---|---|
+| document.video_edit | 50 → 51 |
+| document.screen_recording | 53 → 54 |
+| video-style-library | 8 → 9 |
+| video-style-package | 11 → 12 |
+| video-template-library | 6 → 7 |
+| code-version | 8 → 9 |
+| code-asset | 13 → 14 |
+| code-author-api | 7 → 8 |
+
+每种仅推进一次，保持 main 的音频效果/转场迁移，再追加作者版本迁移。使用正式 `generatePersistenceFixtures` 按格式生成 8 种新样本；`persistence:baseline`、`persistence:release-snapshot` 以合入的 main 为基准重新生成。main 的 **252 份历史黄金样本 Git 对象摘要全部未变**。音频迁移测试继续逐字段检查音频结果，允许后续迁移增加作者元数据；完整最终结构由黄金样本校验。
+
+### 内存前后（同一负载）
+
+独立 Node `--expose-gc` 进程，比较 b7df3d5ca 原字体会话与最终冻结字体会话。两侧使用相同 SFNT、相同默认四种字形和 `2026 ①年 标题排版 あいう 😀`；执行完成后 GC，测读侧持有字节、候选链实际共享 ArrayBuffer 与进程 RSS 增量。基线模拟原宿主长期字节缓存，修复侧按实际转交方式不保留。
+
+| 指标 | 修复前 | 修复后 |
+|---|---:|---:|
+| 读侧长期保留 | 106,547,908 B | 0 B |
+| 字体会话独立字节 | 426,191,632 B | 28,789,868 B |
+| 两侧合计常驻字体字节 | 508.06 MiB | 27.46 MiB |
+| 进程 RSS 增量 | 523.43 MiB | 82.31 MiB |
+
+这是固定负载的配对测量，不代表整个应用、所有字体或峰值内存；RSS 还包含 WASM 与分配器。轮廓软预算另由驱逐后重建测试验证。原始 JSON 保存在 `.tmp/t10-review-memory-before.json`、`after.json`。
+
+### 重冻后实验 1–3 与真实作者链路
+
+Windows，Electron 44.9.3 / Chromium 152.0.7977.167；正式作者/Worker 模块专项构建，独立隐藏 Electron、临时 profile、随机端口，不连接 9334。
+
+| 对照 | 最终结果 |
+|---|---|
+| 实验 1/2：200 例断点 | 196/200；同批上游 Pretext 197/200 |
+| 实验 2：几何 | 193/200；非 emoji 且非接受项全部满足 ≤1/32px |
+| 实验 2：600 临界宽度 | 588/600 断点一致；非接受项的断点/几何门禁均通过 |
+| 实验 3：3 字体 × 7 标点场景 × 1x/4x | 42 组；位置/宽度最大误差 0.01041794px；逐字落定与整块绘制差异通道数全部 0 |
+| 实验 3：自动间距 | 中文AI中文 160→168、中文2026中文 192→200，与 DOM 相同；已有空格的 192 保持不变 |
+| 真实作者链路 | 假名、扩展汉字、emoji ZWJ/VS/旗帜、组合符、预期缺字、同名字重、可变轴共 11 场景，门禁 passed，无非预期缺字 |
+
+断点差异仅 P022/P027/U004/U007；接受集合仍为裁定的 P022/P027/U003/U004/U007/U008/U018，没有增删接受项或放宽门槛。复测中发现 U017 的 `a🏿` 漏预热 emoji 字体，已修正 Emoji_Presentation/VS16 检测并补测试；最终恢复旧结果 **0.00325775px**，与此前已通过的 `verified-second-ruling-report.json` 比较，无新增断点或几何回退。实验 3 叠图已抽查 4x 括号和日文引号，位置一致，边缘差异属于栅格抗锯齿。
+
+实验 4–8 沿用前次已通过的独立证据；本轮因字体选脸变动额外复跑真实 Worker 回退/格式/字重/轴链路，不把此次结果写成重新测过全部性能矩阵。macOS 实机未在本轮验证。
+
+### 验证与审查
+
+- `verify:changed -- --level L2`：本次显式 93 文件完整通过（28 文件 **608 测试**、ESLint、渲染层与 Electron 两套 tsc、依赖图、main imports、IPC 对账、持久基线）；随后仅补强两个现有测试文件的断言，对该增量再次运行 L2，**16 测试**及所选静态检查通过。两次合计覆盖本次 95 文件，未扫描整片脏工作区。
+- 真实 GPU：ContentPrecision / GpuPrecision / PlaybackResolution，**3 文件 21 测试通过**；真实作者链路另见上节。
+- `check:assistant-capabilities`：结构检查、**15 项覆盖 + 31 文件 238 项不变量通过**；`check:skill-sync`：**5 技能、25 文件通过**。
+- `node scripts/check-text-layout-vendor.cjs --check`：固定字节、许可、反向补丁与 **7 模块零 Canvas 可达图通过**；`validateFrozenAuthorHistory` 以合入的 main `535d9bd7f` 为基准通过，已发布冻结目录未修改。
+- `check:persistence-compat`：**66 格式通过**；正式基线/发布承诺已再生成；`git diff --check` 通过。
+- `gen:licenses -- --strict`：完整生成 **1,240 组件、634 许可文本**，最终同输入复查通过；脚本仍记录原有 jsonify@0.0.1 缺许可全文，不是本次新增依赖。
+- 精确验证完整日志：`.tmp/t10-review-l2-final.log`、`t10-review-test-contracts-final.log`、`t10-review-gpu-final.log`、`t10-review-capabilities-final.log`、`t10-review-skills-final.log`、`t10-review-vendor-final.log`、`t10-review-persistence-final.log`、`t10-review-licenses-strict.log`。历史兼容复现时设 `HENJI_PERSISTENCE_RELEASE_REF=535d9bd7f`，避免将任务分支尚未发布的旧冻结版本误作 main 发布基准。
+
+三轮独立审查共发现 5 项重要问题：暂停后的迟到帧、坏滤镜预热中断、样式字符串误作正文/常量漏提取、table 字符串漏提取、helper 入口参数丢失，均已修复并经针对性测试；两项快照释放/复制与退出竞态也已修复。第三轮后的自审补查了 U017 选脸回退并修复；没有未处理的重要审查项。实际同源排查覆盖文字/table/flex 静态提取、模块入口与依赖、预览/导出/录屏、frameKey/outputKey、暂停与内容更新，以及旧样片/库模板的新写入与历史读取；未扩展成全项目审计。
+
+node_modules、FFmpeg 保持原联接点；没有安装/卸载依赖、改 UI 或接触 D:/视频制作。许可证严格生成所需录音构建已核对源码一致后，从主工作树现有产物只读复制到本工作树 ignored target；没有修改依赖或主工作树构建。最终门禁串行执行。主工作树只追加本 result；只在 task/10-文字排版 提交，不合并到 main、不切分支、不 push。
+
+原始证据不提交字体、截图、日志或临时构建：
+
+| 文件 | SHA-256 |
+|---|---|
+| `.tmp/text-layout-acceptance/review-123-report.json` | `48a639675214df8241b21e928224db0114e53fcd8b9ce847e24183df282760de` |
+| `.tmp/text-layout-acceptance/review-author-chain.json` | `7bff85bde191f01f9fac462fa379707b802e4789820d614bf7168dd78edbf0a7` |
+| `.tmp/t10-review-memory-before.json` | `9aba23d01965266f91315f95f13b36998723ea00f20ee98ef62795cb161e59df` |
+| `.tmp/t10-review-memory-after.json` | `2817be45c35937347b1a93ab9ec3ad354e86cc45643fb2af0cca08e08b86ca60` |
+
+
+## 第二轮审查修复（2026-11-01）
+
+**状态：未完成，不能合入 main。** A/B、D、F–K 的修复与验证已落实；C 的预检与双帧行为已修复，但扩展性能门禁仍有一项失败；最终合入 main 时发现历史样片迁移的重要兼容问题，待裁定后才能完成最终提交。没有放宽门槛或把失败记录成通过。
+
+### 提交与合并状态
+
+- 起点 `1d2655170`，始终在 `task/10-文字排版`。
+- 已追加提交 `b45442a2e30a9d892a5c3a4b6946ef541eabb666`：修复字体快照与动态文字预检，包含第一次合入 main `c9ec3f324`。
+- 验证期间 main 又合入 19-U9 调整层，随后执行 `git merge --no-commit main`，基准为 `26b5e6e01d8d1faa79cda3a4b3ea095f19c47072`。内容冲突已处理，Git 没有未解决冲突；因下述重要问题，**此次 merge 尚未提交**，其改动与新样本保留在本工作区。
+- 当前整合版本：作者接口 **10**、剪辑 **53**、录制 **56**、代码版本 **11**、代码资产 **16**、风格库 **9**、模板库 **7**、风格包 **12**。各格式相对本次合入 main 只升一次。
+- 正式脚本已生成 8 种格式的新样本、基线和发布承诺；main 的 **262 份历史黄金样本逐字节未变**。所有兼容/冻结历史检查固定使用上述 main 提交作基准，避免浮动 main 在检查中途前进。
+- 没有 push、切换分支、合并到 main、安装/卸载依赖或改 UI。两处随 main 合入的 TSX 文件与 main 一致。本任务的 node_modules、FFmpeg 联接点保留；没有接触端口 9334、用户浏览器/账号、外部聊天服务或 D:/视频制作。主工作区仅追加本 result。
+
+### A–K 处理
+
+| 条目 | 本轮实现与证据 |
+|---|---|
+| A | 删除整目录复制、临时快照目录及释放 IPC；开始导出只固定路径/大小/修改时间清单。字体从原位置按需读取，已读字节由导出会话保留。首次读取前变化/删除、读取中变化明确失败；固定清单的未读字体和重复读取均有测试。上一轮内存表不能作为此版本的内存测量：本轮按裁定保留会话已读字节。 |
+| B | 静态声明与参数实际字符串共同准备；slice、模板、数组/JSON、嵌套动态 flex 树读取参数字符，确实无法确定的动态来源准备完整默认候选。候选次序仍由冻结库决定。真实 Worker 的 ★、✓、①、韩文、扩展汉字四场景全部通过。 |
+| C | 编译元数据推导需求，仅 API 10 且实际使用 layout 2 文字时预检；按文字/字体身份与目录修订去重，不重新执行作者模块。先初始化字体目录再预检；较早帧共享准备不被后帧取消，提交保持双帧顺序。行为测试通过；性能结果见下，仍有一项未达标。 |
+| D | 字体服务释放纳入 bindApplicationShutdown；不再有独立快照退出监听。 |
+| E | 保留固定库快照 layout 1.2.0 / effects 1.3.0，没有加入“必须等于最新库”门禁。历史 API 7 遇到新 main API 9 样片的冲突单独列为待裁定项。 |
+| F | 固定快照与普通字体准备共用 resolveFont，匹配逻辑一份。 |
+| G | 为本次格式迁移补齐 N → N+1 注释，顺延号与主分支迁移并存。 |
+| H | 音频迁移恢复严格结构比较；允许的作者版本元数据通过显式预期构造，不使用宽泛 toMatchObject 吞掉其他差异。 |
+| I | 动态且未准备的字体族按模块自身已准备默认字体回退；记录一次诊断，不借用其他模块的准备状态，不逐帧抛错。 |
+| J | GPU/作者验证使用带 libraries 的真实 bundle；合并调整层时同步保留 API 参数和字体上下文。 |
+| K | Pretext 指向实际 chunk-O4UYAFHA.mjs；冻结器按目标库版本更新对应登记，不误命中别的版本。 |
+
+henji-layout **2.0.0 已重冻**：344 项输入与当前文件摘要一致，21 个产物完整校验；最后一次仅刷新迁移注释的输入摘要，运行产物字节不变。已发布冻结目录相对合入 main 未修改。
+
+### C：配对性能与未达标项
+
+基线源码固定 `1d2655170`；修复侧为本次合并后的实际 Transport、Worker、作者运行时与 GPU。只替换编译/I/O 边界，两侧共用相同字体。Windows，Electron 44.9.3 / Chromium 152.0.7977.167，1920×1080、200 字逐字位姿；独立隐藏 Electron、隔离 profile、随机端口。本任务内重任务串行执行，未控制机器上其他任务。
+
+最终扩展实验对同一百帧轨迹执行四轮交替，每个模式 **400 对已完成帧**，不删除尾部样本。新文字在基线标为 API 8、修复侧按合并编号标为 API 10。单位 ms，数值为 P50 / P95：
+
+| 工程与模式 | 修复前 | 修复后 | P95 差值 |
+|---|---:|---:|---:|
+| API 7 播放 | 20.0 / 24.8 | 19.9 / 24.9 | +0.1 |
+| API 7 往返拖动 | 19.9 / 24.7 | 19.6 / 25.8 | **+1.1，失败** |
+| 新文字播放 | 9.4 / 12.9 | 9.1 / 12.5 | -0.4 |
+| 新文字往返拖动 | 9.1 / 12.9 | 9.0 / 12.5 | -0.4 |
+
+非文字参数编辑也测量：旧工程 P95 26.6→24.6，新文字 15.1→12.5。预检消息：旧 API 从 1,252 次降到 **0**，新文字从 1,252 次降到 **1**；作者源码装载从约 402 次降到 **1**。另测每种引擎 20 个双帧在途批次：基线每批取消一帧（合计 20），修复侧 **0 帧取消**。批次完成的帧数不同，因此原始批次耗时单独保留，不用它冒充相同工作量的性能对比。
+
+保留全部测量：合并后首次 100 对帧中旧拖动 +3.1ms、新播放 +1.3ms 失败；追加阶段记录的 100 对诊断通过；400 对扩展实验仍有上述 +1.1ms 失败。**不能挑选通过的一轮宣称 C 已验收。** 400 对旧拖动的 authorRaster P95 两侧均约 4.6ms、presentComplete 均约 17.7ms、codeReady 为 7.5→7.6ms，尚未定位出可据此修复的确定热点；不得用调参、删除样本或放宽 +1ms 掩盖失败。后续仍需定位并获得原门槛下的有效证据。
+
+### 自动验证与实际边界
+
+- `npm run verify:changed -- --level L2 <本次95文件>` 完整通过：**35 文件 766 测试**、ESLint、渲染层与 Electron 两套 tsc、依赖图、主进程导入、IPC 对账、持久基线。显式范围保存在 `.tmp/t10-r2-files.json`，日志 `.tmp/t10-r2-l2-complete.log`。随后只扩展专项性能脚本的样本轮数，脚本经 esbuild 构建并实际运行。
+- 两套 tsc 另有独立通过记录：`.tmp/t10-r2-renderer-tsc-final.log`、`t10-r2-electron-tsc-final.log`。
+- 真实 GPU：ContentPrecision / GpuPrecision / PlaybackResolution，**3 文件 26 测试通过**，含 main 调整层像素路径；日志 `.tmp/t10-r2-gpu-final.log`。
+- 真实作者链路：**11 场景、4 种格式**，同名字体/字重/可变轴与回退门禁通过；动态参数/未知来源 **4 场景通过**，已目视数组 JSON 截图，无方框。macOS 实机未验；没有把 Worker 专项冒充用户工程 GUI 验收。
+- `check:assistant-capabilities`：15 项覆盖 + **31 文件 238 项不变量通过**；`check:skill-sync`：**5 技能、25 文件通过**。
+- `node scripts/check-text-layout-vendor.cjs --check`：固定字节、许可、反向补丁、Pretext **7 模块无 Canvas 可达图通过**；冻结历史以本次合入 main 为基准通过。
+- `gen:licenses -- --strict`：**1,240 组件、634 份许可文本通过**；原有 jsonify@0.0.1 缺许可全文提示仍在，不是新增依赖。
+- `check:persistence-compat`：**66 格式通过**。样本结构/摘要门禁通过不代表下述历史样片执行语义已正确。
+- 源码 `git diff --check` 通过；冻结产物中的上游许可注释保持生成器原字节，不手改冻结输出以迎合空白检查。
+
+其余日志：`.tmp/t10-r2-{capabilities,skills,persistence,vendor,frozen-history,licenses}-final.log`。同源排查覆盖字体快照首次/重复/迟到读取、预览/导出/录屏、文字/table/flex 与辅助模块、frameKey/outputKey、暂停/内容更新/字体重置和双帧队列；未扩展为全项目审计。API 9 历史调整层样片是实际发现但尚未修复的兼容缺陷。
+
+### 独立审查与需 Claude 裁定/复核
+
+本轮进行了两次独立只读预审：首次发现冻结许可目标匹配小问题及原有动态 flex 树同源缺口，均已修复；合并增量复审发现 **1 项重要问题，尚未处理**：
+
+- `src/core/documents/kinds/videoEdit.ts:146` 与 `src/core/documents/kinds/screenRecording.ts:17` 复用 `styles/authorVersionMigration.ts:6`，把缺版本样片固定为 API 7。
+- 本次 main 的剪辑 v52 / 录制 v55 黄金样本已包含只有 adjust 的 golden-adjust 图层；main 预览按当时默认 **API 9** 编译。迁移后 API 7 忽略 adjust，运行时会报“缺少 draw(ctx,t)”。当前新 v53/v56 样本也呈现 API 7 与调整层源码并存。现有结构比较测试不能证明这类样片仍可执行。
+- 已向用户提出具体方案：把缺版本历史预览接口固定为本次合入基准 **API 9**，同时保留 E 的 layout 1.2.0 / effects 1.3.0 固定库快照，补迁移后真实调整层执行测试并重新生成样本/承诺。**尚未获答复，未擅自修改历史迁移语义。**
+- 按本次“重要问题仍存在就停下重新考虑方案”和“改变设计方向才停下”的要求，最终 merge 不提交。需 Claude 裁定上述历史接口方案；C 的 400 对性能失败与阶段数据也列入复核，不能视作已达标或授权降低门槛。
+
+没有调用 Claude 或任何外部聊天服务。待裁定后还需修复重要问题、完成 C 的原门槛验收、重跑受影响验证并提交最终 merge。工作区因此有意保留未提交整合结果，不声称干净或全部完成。
+
+## 阻塞修复（2026-11-01，接手 Codex）
+
+**状态：两项阻塞已按 review.md「第二轮修复后的两项阻塞裁定」修复，合入 main 完成，可交合并审查。** 由 Claude 接手中断的 Codex 任务：上一位留下的半截合并（MERGE_HEAD 26b5e6e01）与 103 个未提交文件逐个核对后保留，补完后提交；思路有偏差的地方（文字接口号写成字面量、预检排队判断、textFonts 被脚本直读）已改正。
+
+### 提交（task/10-文字排版，未 push）
+
+| 提交 | 内容 |
+|---|---|
+| `6e23409c0` | 合入 main 26b5e6e01（19-U0/U9）；文字新版作者接口顺延为 **10**；历史快照改为作者接口 **9**；文字门槛统一用 `CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION`；技能文档接口号同步 |
+| `4aea54b1c` | 旧接口逐帧零开销（阻塞 2） |
+| `7d2b9def5` | 模板摘要判等补 API 9 用例（审查第 1 轮） |
+| `f5b287556` | 合入 main d3f0cda99（U1/U2/U4/U14），持久格式按 main 下一号顺延 |
+| `2c3022516`、`63b13bc5c` | 新旧文字接口切换中途的过期帧跳过（审查第 2、3 轮） |
+| `ebd46afea`、`a6ef9c98b` | 合入 main 6791bee54（U3）、ea972d1ec（U5）；最后一步为 merge main |
+| `71358ecc7` | 验收脚本经 esbuild 读取 textFonts（直读无法解析无扩展名导入） |
+
+最终版本相对 main ea972d1ec 各升一次：剪辑 **54**、录制 **57**、风格库 **10**、风格包 **13**、本机效果库 **7**、预设包 **14**、代码版本 **11**、代码资产 **16**、作者接口 **10**、模板库 **7**。U14 让效果库与预设包携带代码快照，快照内的代码版本接受作者接口 10 后结构变化，所以这两种也随之升版并提高最低可读版本；迁移原样保留旧快照的接口与库。样本由正式生成器写出，基线与发布承诺从 main 重新登记/追加；main 的 **268** 份历史样本逐字节不变，发布承诺只增不改。henji-layout 2.0.0（未进 main）每次合并后按新输入重冻：U14 合并那次只有压缩标识符与分块名变化（chunk-KEGFWR6E，许可登记随之更新），U3/U5 两次运行产物字节不变。
+
+### 阻塞 1：main 的 API 9 调整层样片
+
+- 根因：`HISTORICAL_PREVIEW_AUTHOR` 的含义是“10 合并前 main 上没记版本的样片按什么编译”，原值作者接口 7，迁移后调整层被忽略、报缺少 draw。改为 **作者接口 9**，库保持合并时 main 的最新版 henji-layout 1.2.0 / henji-effects 1.3.0 / three 0.186.1 / opentype.js 2.0.0；之后合入的 U1–U5、U14 都未改作者接口、未新增库版本，已逐次核对。按 E 的裁定未加“等于最新库”门禁。
+- 测试：`videoEditContentPrecision.gpu.test.ts` 用 main 的剪辑 v52、录制 v55 黄金样本（只含 adjust 的 golden-adjust 图层）迁移后真实打包、加载、渲染，断言观察到 vignette 调整层，并与按 API 9 编译的结果**逐像素一致**、有非零像素；把快照改回 7 时两例失败。
+
+### 阻塞 2：旧 API 零开销
+
+- 根因：文字预检与文字身份按每帧、每个代码片段求值；旧接口工程虽不发请求，仍逐帧遍历片段、建提交链，Worker 输出键还进作者运行时取文字身份，渲染、frameKey 与指纹各多等一轮已完成的 Promise。
+- 修复：内容更新时判定一次工程是否引用 API ≥ 10 代码（缺失版本引用不报错，留给正式渲染）；不引用时 present 不进预检、不建提交链。Worker 按编译产物同步判断模块是否持有文字资源，旧接口不取文字身份、不等待，输出键与 main 完全相同。入口定一次是否预检，等待期间内容在新旧接口间切换则按过期帧跳过（VideoEditPreview 收到 skipped 会重新请求），一直用旧接口的工程判断不会翻转。
+- 测试：API 7/8/9 播放、拖动、参数更新不调用预检、不编译元数据、不发 prepareText，切到 API 10 后才准备、切回后停止；旧接口输出键不向运行时取文字身份，新接口字体身份变化仍重画。
+
+**配对 A/B + A/A**（最终代码 `63b13bc5c`；U5 合并只改图层效果时钟，不在被测路径上）。Windows，Electron 44.9.3 / Chromium 152.0.7977.167，1920×1080、200 字逐字位姿，隐藏 Electron、隔离 profile、随机端口（未用 9334）。四会话逐帧轮换：修复后 B、修复前 A（`1d2655170`）、同源码 A′、A″；四轮×100 帧，每模式每会话 **400 个完成帧**、不删尾部。噪声 = 三个同源码会话两两 P95 差绝对值的最大值（同样本量）；判定：B−A ≤ 噪声且 ≤ +1 ms。单位 ms，P50/P95：
+
+| 工程 | 模式 | 修复前 A | 修复后 B | P95 差 | A/A 噪声 | 判定 |
+|---|---|---:|---:|---:|---:|---|
+| API 7 旧工程 | 播放 | 19.6 / 22.6 | 19.5 / 22.6 | 0.0 | 0.7 | 通过 |
+| API 7 旧工程 | 来回拖动 | 19.4 / 23.0 | 19.5 / 22.4 | −0.6 | 0.4 | 通过 |
+| API 7 旧工程 | 参数编辑 | 21.5 / 25.1 | 19.5 / 22.7 | −2.4 | 1.4 | 通过 |
+| API 10 文字工程 | 播放 | 8.6 / 12.0 | 8.4 / 11.6 | −0.4 | 0.9 | 通过 |
+| API 10 文字工程 | 来回拖动 | 8.4 / 11.5 | 8.1 / 11.5 | 0.0 | 0.3 | 通过 |
+| API 10 文字工程 | 参数编辑 | 10.7 / 14.4 | 8.5 / 11.9 | −2.5 | 1.0 | 通过 |
+
+prepareText 请求：旧工程修复前 1,252 次 → **0**；文字工程 1,252 → **1**。修复前文字工程按 API 8 标记（修复前的接口号）。双帧在途 20 批：修复前每批取消一帧（合计 20），修复后 0 帧取消，因两侧完成帧数不同，批次耗时（修复后约为两帧之和）不作性能对比。前一次在 `f5b287556` 上的同设计实验同样通过（旧工程拖动 −0.6、播放 −0.7，均在噪声内）。原始数据：`.tmp/text-layout-preflight/fix3-paired-final.json`、`fix3-paired.json`（工作树 D:/VibeCode/Henji-AI-t10）。
+
+### 验证（均在本任务工作树，串行经排队脚本）
+
+- `npm run verify:changed -- --level L2`（本轮 80 个文件，`--test` 补 10 个直接消费者）：**34 文件 799 测试**、ESLint、渲染层与 Electron 两套 tsc、登记格式与样本基线全部通过（`ebd46afea`；tsc 需 `--max-old-space-size=8192`，默认堆 4 GB 会 OOM）。之后的 `63b13bc5c`、U5 合并另跑两套 tsc 与 12 文件 508 项相关测试通过。
+- 真实 GPU：GpuPrecision / ContentPrecision / PlaybackResolution **3 文件 31 测试通过**（含两例调整层迁移）。
+- 真实作者链路（冻结 2.0.0）：fallback 阶段 **11 场景、4 种格式**、DOM 字体对照 6 项通过；动态参数 4 场景通过，★ ✓ ① 한 𠀀 经 slice / 模板 / JSON 数组 / 未知来源均无方框（已目视叠黑底截图）。
+- `node scripts/check-text-layout-vendor.cjs --check` 通过（7 模块）；`check:persistence-compat` **66 种格式**通过，冻结历史以 main 为基准（`HENJI_PERSISTENCE_RELEASE_REF=main`）；`gen:licenses -- --strict` **1,240 组件、634 份许可**（jsonify@0.0.1 缺全文为原有提示）；`check:assistant-capabilities` 覆盖检查 + **31 文件 238 项**；`check:skill-sync` **5 技能、25 文件**。
+- 同源排查范围：作者接口字面量（textFonts、打包、候选、模块图、模板摘要、文字资源）已全部改用常量；逐帧路径（present、预检、输出键、作者运行时 render、frameKey、指纹）已逐一去掉旧接口的等待与求值；U14 新增的代码快照位置（风格件、效果库、预设包）都显式记录 apiVersion，不会随默认接口 10 换解释版本。macOS 实机未验。
+
+### 独立审查（3 轮，均为新上下文只读子代理）
+
+- 第 1 轮（high）：无重要问题。小问题 3：预检排队在内容切换瞬间可能乱序 → 已修；模板摘要门槛缺 API 9 用例 → 已补（门槛退回 9 时该例失败）；历史快照为手抄常量、无门禁 → 按 E 不加门禁，每次合并人工核对（本次已核对至 ea972d1ec）。
+- 第 2 轮（high）：无重要问题。小问题 2：入口定预检后文档在等待中切换会漏预检 → 已修（过期帧跳过）；从文字工程切到旧工程后第一帧要等仍在准备的旧预检帧 → 不修，只发生在切换瞬间且旧帧随后即被跳过，去掉等待要在排队里携带内容代次，复杂度不值得。
+- 第 3 轮（medium）：无重要问题。小问题 1：过期判断未覆盖预检与排队等待之后 → 已修（并入提交前的代次判断）。审查确认导出、渲染缓存、多机位、跟踪取帧、候选预览、代码探测、源画面等 present 调用方均先更新内容再出画，不会收到新增的 skipped。
+
+### 原有问题与待 Claude 复核（未在本次修改）
+
+1. main 原有失败：`documentValidation.test.ts`（v47 原样解析遇旧轨道效果）、`scene/sceneDeclaration.test.ts`、`audio/effects/mergedEffectsMigration.test.ts`（预设包迁移结果多出 minReaderVersion）在 main 57244bb1a 上同样失败。
+2. main U14 的代码快照没有进入任何黄金样本：效果库、风格库、风格包、预设包、剪辑的样本取自 audio-effect-merge 升级结果，生成器里带快照的 goldenPiece 未被使用（本分支新增的效果库 v7、预设包 v14 样本同样不含快照）。建议 main 侧补样本。
+3. `previewAuthorIdentity` 把未导入的库也按“该接口最新版”计入风格样片摘要，以后发行兼容的新库版本会让已保存的 API 10 样片被误判需要重渲（本分支早先引入，不是本次）。建议摘要只纳入实际导入的库。
+4. 工作树有上一位留下的 stash `t10-r2-fixes-before-main-merge-20261101`，未动。
+
+没有 push、合并到 main、切分支、安装/卸载依赖、改 UI；没有使用用户浏览器、网页账号、外部聊天服务或端口 9334，没有接触 D:/视频制作。node_modules、FFmpeg 联接点保留。主工作区只追加本 result。
+
+## 第三轮审查修复（2026-11-01）
+
+**状态：重要 1、2 与小问题 1、3 已按 review.md「第三轮审查与裁定」处理；main 85e7220fe 已合入。** 小问题 2 按裁定不修。
+
+### 提交（task/10-文字排版，未 push）
+
+| 提交 | 内容 |
+|---|---|
+| `aef9dbed7` | 文字静态分析改为保守证明（新文件 `codeMaterial/textCoverage.ts`）；准备补齐 JSON、大写与“证明为空”；样片/模板摘要只计入实际导入的库；精确测试与属性测试；A/B 基线改为参数（默认 main） |
+| `bdac132ca` | 合入 main 85e7220fe（19-U6 变形效果、三处原有失败测试的修复、模板登记报错修复），无冲突 |
+| `114a68801` | 真实作者链路补常量拼接、常量数组模板与纯字面量模块三个场景 |
+
+### 重要 1、2：保守原则
+
+根因：旧实现用两个口径不同的遍历，判断“已知”时跟进模块常量、收集字符时不跟进（重要 1）；同时把宽度、id、表格选项等当成动态文字（重要 2）。重写后：
+
+- **只进文字位置**：按排版库输入结构下行。layoutText 只看文字与富文本 runs[].text；表格只看 rows 的单元格（字符串或 `{text}`）；flex 只看 `text.content` 与 children。样式位置交给原有的字体收集，表格列、选项、尺寸、id 不参与判断。
+- **判断与收集同一次求值**：`known(expr)` 一边收字符一边给出覆盖等级。可证明的写法有：字面量；模块常量与局部常量；常量数组下标与解构；模板与拼接；条件；作者参数及其 slice/substring/trim 等子串、map/join、for-of/forEach 元素；数字格式化（算术、Math、toFixed）。数字、undefined、数组逗号等非字符串转成文字时，补一组固定 ASCII 字符。
+- **其余一律完整候选集**：函数返回值、未知方法（含 toLowerCase、normalize）、跨模块导入的常量；可能被改写或逃出的对象，例如 `const LINES=[]; LINES.push(...)`、导出的常量数组、传给未知函数的常量；被别名、传递或转导出的排版函数；运行时 `import(变量)`；`eval`。对象可信由只读证明决定：所有引用都只读，经过本地辅助函数形参、内置读方法与回调时继续追踪。作者参数只认宿主入口（draw/layers/frameKey）的 `params`，以及每个调用点都原样传入它的本地函数形参。
+- **准备侧同源缺口一并补齐**：
+  - 以 `"` 开头的参数 JSON 字符串也按解析后的字符准备；
+  - allCaps/smallCaps 与 toUpperCase 让字体按大写形式选择，所以准备时加入大写形式；
+  - 表格为数字列排出 0–9，因此一并收集；
+  - 合并准备原来把“证明为空”的文字当成未指定，退回完整候选集，与逐资源预检不一致；现在只有 `text === undefined` 才准备完整集。
+- **同源排查中修掉的实现缺陷**：下标是标识符（`params[key]`）时被当成静态键 `key`。
+
+精确测试（`textFonts.test.ts` 新增 5 例），逐项对应 review-round3 的写法：
+- `params.label+MARK`、`` `${params.label}${ICONS[0]}` ``、`params.items.map(i=>i.name).join(SEP)` 都逐字准备到 ★①✓한𠀀；
+- 计算出的列宽、表格选项、flex id/宽度/选项、富文本段落与样式数值都不触发完整集；
+- 局部常量、循环、回调下标、解构、辅助函数传参、百分比与 toFixed 可以证明；
+- 13 种不可证明的写法与两种转导出都退回完整集；
+- 纯字面量模块只准备自己的字符和大写形式。
+
+### 属性测试（执行核对）
+
+`src/features/videoEdit/engine/videoEditTextCoverage.test.ts`，固定种子 `0x7e47`，360 个模块，三类各 120 个：
+- **组合范围**：
+  - 可证明的写法：字面量、模块常量、常量数组下标、常量数组 join、局部常量、模板字符串（两段插值）、`+` 拼接、条件；
+  - 加入参数：参数、参数 slice、参数数组 map/join、`Math.round` 百分比、`String(数字参数)` 拼接、toFixed；
+  - 动态写法：函数返回值、运行时 push 的常量数组、运行时改写的常量对象、toLowerCase、内联数组 map；其中前两类返回 `String.fromCodePoint` 生成的源码里没有的字符。
+  - 表达式最多嵌套 3 层，放进 5 种语句：layoutText；layoutTable（计算列宽和选项）；循环里的 layoutBoxes（计算 id 和宽度）；常量数组 forEach；参数行 for-of。
+- **执行**：用正式的 `readStaticTextFonts` 分析源码，`AuthorTextResources.bind/prepare` 走 `prepareTextFontResources` 与 `TextFontSession`。随后真实调用作者的 draw，排版用正式的 layoutText/layoutTable/layoutBoxes（shapedText 路径）。拦截 `TextFontSession.choose` 记录实际交给字体选择的每个字素，拦截 `prepare` 记录准备集。参数实际值与声明默认值不同。
+- **断言**：
+  - 准备集不是完整集时，实际排版的每个字符都在准备集里。孤立代理项除外：UTF-16 slice 会切开代理对，它不是 Unicode 字符，任何字体都没有字形。
+  - 纯字面量和可证明的写法从不退回完整集。
+  - 动态类里至少 1/4 的模块退回完整集，同时也有被证明的组合。
+- **本种子结果**：可证明 120 + 120，动态类证明 50、完整集 70，共核对 4,418 个字素。
+- **额外压测**（未提交）：另 8 个种子各 900 个模块，共 7,200 个模块、约 8.9 万个字素，全部通过。压测期间暴露并修掉一处精度缺口：作者参数的派生值作为内置读方法的实参（`list.join(params.t0.slice(...))`）被误判为逃出。接收者是否为数据值按声明形态判断，避免证明 params 只读时依赖 params 自身。
+
+### 小问题 1：摘要只算实际导入的库
+
+`previewAuthorIdentity(code, pin)` 用 `importedAuthorLibraries` 只纳入源码实际导入的库；源码解析失败时退回已记录的固定版本。两个调用方（风格样片、代码模板）都传入源码。历史迁移样片（API 9 + 合并时的库）摘要不变，原有测试照常通过。新测试覆盖三点：
+- API 10 样片只导入 henji-layout 时，身份恰为 `{10, {henji-layout: 2.0.0}}`；
+- 记录里多出未导入的库，样片摘要和模板摘要都不变；
+- 实际导入的库换版本，摘要仍然改变。
+
+### 小问题 3：以 main 为基线的配对 A/B
+
+方法沿用上轮：
+- **环境**：隐藏 Electron 44.9.3，隔离 profile，随机端口（未用 9334），1920×1080，200 字逐字位姿；Transport、Worker、作者运行时与 GPU 都是正式代码，只替换编译与 I/O 边界。
+- **会话轮换**：四个会话逐帧轮换，依次为分支 B、main A，以及两个同源码 A′、A″。共四轮，每轮 100 帧；每个模式每个会话 400 个完成帧，不删尾部样本。
+- **判定**：噪声取三个 main 会话两两之间 P95 差的最大值；B−A 同时 ≤ 噪声且 ≤ +1 ms 才算通过。
+- **两侧工程**：基线为 main `85e7220fe`（含 U6）。旧工程两侧都是 API 7 / henji-layout 1.2.0。文字工程按每侧最新的作者接口编写，同一份内容：main 为 API 9 / 1.2.0（Canvas 文字），分支为 API 10 / 2.0.0（整形文字）。
+- **数据位置**：原始数据在工作树 `.tmp/text-layout-preflight/r3-main-paired.json`、`r3-main-paired-2.json`。
+
+结果（ms，P50 / P95）：
+
+| 工程 | 模式 | 第 1 次：main | 分支 | P95 差 | 噪声 | 第 2 次：main | 分支 | P95 差 | 噪声 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| API 7 旧工程 | 播放 | 19.0 / 21.0 | 19.0 / 21.4 | +0.4 | 0.4 | 18.7 / 21.0 | 18.9 / 21.0 | 0.0 | 0.0 |
+| API 7 旧工程 | 来回拖动 | 18.6 / 21.0 | 19.0 / 21.1 | +0.1 | 0.5 | 18.6 / 20.9 | 18.5 / 20.5 | −0.4 | 0.3 |
+| API 7 旧工程 | 参数编辑 | 19.0 / 21.1 | 19.0 / 21.5 | **+0.4** | 0.2 | 18.6 / 20.6 | 18.9 / 20.9 | +0.3 | 0.4 |
+| 文字工程 | 播放 | 19.0 / 21.2 | 7.5 / 10.1 | −11.1 | 0.2 | 19.0 / 20.9 | 7.6 / 10.0 | −10.9 | 0.2 |
+| 文字工程 | 来回拖动 | 18.9 / 21.1 | 7.4 / 10.0 | −11.1 | 0.1 | 18.9 / 21.0 | 7.1 / 10.0 | −11.0 | 0.1 |
+| 文字工程 | 参数编辑 | 19.0 / 21.2 | 7.5 / 10.1 | −11.1 | 0.2 | 18.9 / 21.0 | 7.4 / 10.0 | −11.0 | 0.1 |
+
+- **结论**：没有任何一项比 main 慢超过 1 ms，按本轮“慢超过 1 ms 且超出噪声才查根因”的标准无需修复。第 1 次旧工程参数编辑 +0.4 ms 高于 0.2 ms 的噪声，没有达到上轮“在噪声内”的要求，**不把它当作通过隐藏**。重复实验中同项 +0.3 ms，在 0.4 ms 噪声内，第 2 次全部通过。
+- **定位**：在第 1 次数据里拆分这 0.4 ms：
+  - 主线程侧（updateDocument、提交与往返，即总耗时减 Worker 渲染）四个会话的 P95 都是 0.50 ms；
+  - Worker 内 authorRaster（3.3/3.4）与 codeReady（6.2–6.4）两侧一致；
+  - 差异全部落在 GPU 呈现等待 presentComplete（15.6 对 15.2）。同源码会话 A″ 在播放、拖动中该项也到 15.7–15.8。
+  - 判断为呈现抖动，不是分支代码的开销。每 100 帧一轮的 A/A 差在 −0.5～+0.8 ms 之间，计时分辨率为 0.1 ms。
+- **请求计数**：
+  - 旧工程分支侧 prepareText **0 次**；只在初始化时多 1 条 `textFonts.attach`，其余请求与 main 逐项相同（render 1,252、code.source 1、parameters 400）。
+  - 文字工程分支侧 prepareText 1、fonts 1。同内容下，分支的整形文字比 main 的 Canvas 文字 P95 快约 11 ms。
+
+### 合并 main 与持久版本
+
+- 合入 main `85e7220fe`（19-U6 变形效果，documentValidation、sceneDeclaration、mergedEffectsMigration 三个原有失败用例的修复，模板登记报错修复），自动合并无冲突。
+- main 这期间**没有升任何持久格式或作者接口**（U15a 尚未合进 main），也没有新增冻结库版本，所以本分支的编号不需要顺延：剪辑 54、录制 57、风格库 10、风格包 13、效果库 7、预设包 14、代码版本 11、代码资产 16、作者接口 10、模板库 7。U15a 申请的作者接口 10、剪辑 54 与本分支相同，谁先合进 main 谁占号，后合的一方顺延。
+- 历史快照保持 API 9 / henji-layout 1.2.0 / henji-effects 1.3.0 / three 0.186.1 / opentype.js 2.0.0，等于合并时 main 的最新值。
+- henji-layout 2.0.0 冻结核对通过（7 模块，产物不变）。
+
+### 验证（均在本任务工作树，经排队脚本）
+
+- **类型检查**：渲染层与 Electron 两套 tsc 通过（`--max-old-space-size=8192`）。
+- **精确测试**：
+  - textFonts、textFontPreparation、authorVersion、TextCoverage，加 7 个直接消费者：styleCodeSnapshot、videoEditStyles、AuthorTextResources、RenderSession、TextPreflight、AuthorBundle、shapedText；
+  - 合并后再跑 main 改动重叠的测试（mergedEffectsMigration、documentValidation、sceneDeclaration、effectRegistration、videoEditStyles）：8 文件 71 项通过。
+- **真实作者链路**（冻结 2.0.0，真实 Worker 与系统字体）：
+  - 动态阶段 **7 场景**通过，含新增的常量拼接、常量数组模板、纯字面量模块；门禁要求这三项走逐字准备，不能退回完整集；
+  - ★ ✓ ① 한 𠀀 全部有墨迹、无缺字，已目视叠黑底截图（`.tmp/text-layout-acceptance/r3-dynamic-captures/`）；
+  - fallback 阶段门禁通过。
+- **其他检查**：
+  - `check:persistence-compat` 66 种格式通过（`HENJI_PERSISTENCE_RELEASE_REF=main`）；
+  - `check:assistant-capabilities` 31 文件 238 项通过；
+  - `check:skill-sync` 5 技能、25 文件通过；
+  - `check-text-layout-vendor --check` 通过。
+- **`verify:changed -- --level L2`**：显式传入本轮 12 个文件，并用 `--test` 指定 11 个直接消费者（自动解析相关测试超过 45 秒预算）。在合并后的 HEAD 上**通过**：11 文件 102 测试、改动文件 ESLint、渲染层与 Electron 增量类型检查。需要 `NODE_OPTIONS=--max-old-space-size=8192`，默认 4 GB 堆会在增量 tsc 中 OOM（退出码 134）。日志 `.tmp/t10-r3-l2.log`。
+- **lint**：`src` 范围没有问题。专项脚本里原有的 console 与十六进制颜色两处提示不在 lint 范围内，也不是本轮引入的。
+
+### 原有问题与说明
+
+1. 静态分析让常见写法逐字准备，但跨模块导入的文字常量、作者自定义函数的返回值仍按保守原则预载完整默认候选集，会更慢、更占内存，画面正确。
+2. 工作树里上一位留下的 stash 没有动。

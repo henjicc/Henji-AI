@@ -128,10 +128,11 @@ export default {
 
 draw 里的坐标始终是画布像素，`setTransform`、`resetTransform`、`getTransform` 也一样（运动层的栅格缩放由宿主叠上）。渐变、图案对象（含图案的 `setTransform`）可以缓存到模块变量跨帧复用；预先画好、反复贴的图块缓存成 `transferToImageBitmap()` 得到的 ImageBitmap，不要缓存 OffscreenCanvas。
 
-`layoutText` 按内容、样式、选项与字体代次复用只读布局，可在 `layers()` 中调用。逐字用一次 `drawText` 的 `graphemes` 回调返回位移与透明度，null 隐藏。图集全程沿用，落定不换路径；底板和装饰线保持整段，用 `backgroundAndDecorationOpacity` 控制。分层、连写、档位和 flex 内容尺寸、截断、基线规则见 author-text-motion；表格字段对象与数据卡见 recipes-text-data。
+`layoutText` 按内容、样式、选项与字体字节复用只读布局，可在 `layers()` 中调用。逐字用一次 `drawText` 的 `graphemes` 回调返回位移与透明度，null 隐藏。整段与逐字绘制共用字素几何；底板和装饰线保持整段，用 `backgroundAndDecorationOpacity` 控制。分层、连写、档位和 flex 内容尺寸、截断、基线规则见 author-text-motion；字体静态声明见 author-text-motion；简单数字表用 `henji-layout/table`，用法见 recipes-text-data。
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"
+export const textFonts = { bindings: [{ text: "title", style: "titleStyle" }] }
 export default {
   name: "分层标题", kind: "generator", mode: "dynamic", width: 1920, height: 1080,
   params: [
@@ -184,7 +185,7 @@ TS 文件（含默认入口 main.ts）在打包的同时按作者接口做类型
 
 ## API 7：图层效果链与 henji-effects
 
-新源码使用作者接口 7，`henji-effects` 随代码版本冻结（新源码锁定 1.3.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / lens 镜头）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic`、`shadow`、`stroke`、`lightSweep`、`dissolve` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
+新源码使用作者接口 10，`henji-effects` 随代码版本冻结（新源码锁定 1.3.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / lens 镜头）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic`、`shadow`、`stroke`、`lightSweep`、`dissolve` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
 
 `effects(t)` 每个可见层在中心作者时间求值一次，时间与 draw 相同；位姿仍按曝光采样。即使 draw 的 cacheKey 恒定，effects 仍逐帧求值。静态无 pose 的效果层也独立栅格；尽量给 bounds（内容在作者坐标中的矩形），省略时按完整作者画幅。宿主根据整链支撑外扩，不需要把光晕手工塞进 bounds。效果先于位姿变换、opacity、clip 和运动曝光；效果本身不多次曝光。
 

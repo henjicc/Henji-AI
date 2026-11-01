@@ -6,12 +6,13 @@
 
 ## 打字机与光标
 
-底板默认从首个字素出现时就整段显示，不逐字切成小底板；用 `backgroundAndDecorationOpacity`（0–1）单独控制整段底板与装饰线的显隐或淡入。阴影和外描边置于下层，填色后再画内描边与居中描边。打完后仍沿用同一图集；动画图集独立绘制字素簇，会失去字素之间的连写。
+底板默认从首个字素出现时就整段显示，不逐字切成小底板；用 `backgroundAndDecorationOpacity`（0–1）单独控制整段底板与装饰线的显隐或淡入。阴影和外描边置于下层，填色后再画内描边与居中描边。整段与逐字揭示使用相同几何，字素簇不会拆开。
 
-可见字数由时间直接求：`Math.floor(progress * n)`，n 是整句排版结果的字素数。整句用 `layoutText` 定下折行与光标位置，再用 `drawText(ctx, full, { graphemes: shown })` 显示前 shown 个字素，不重新排版前缀、不另排单字。同内容布局与字素图集跨帧复用，绘制事实保留整句约束和遗漏。光标放在最后一个已显示字素的 `x + advance`、所在行的 `y` 与 `height` 上；用矩形，不用字体里的方块符号。时间决定显隐，随机寻帧不会重打字。输入中常亮，结束后每秒 2 次闪烁。需要平滑错峰入场时用 recipes-text 的字素动画回调。
+可见字数由时间直接求：`Math.floor(progress * n)`，n 是整句排版结果的字素数。整句用 `layoutText` 定下折行与光标位置，再用 `drawText(ctx, full, { graphemes: shown })` 显示前 shown 个字素，不重新排版前缀、不另排单字。同内容布局与字形资源跨帧复用，绘制事实保留整句约束和遗漏。光标放在最后一个已显示字素的 `x + advance`、所在行的 `y` 与 `height` 上；用矩形，不用字体里的方块符号。时间决定显隐，随机寻帧不会重打字。输入中常亮，结束后每秒 2 次闪烁。需要平滑错峰入场时用 recipes-text 的字素动画回调。
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"
+export const textFonts = { bindings: [{ text: "value", style: "style" }] }
 const clamp01 = v => Math.min(1, Math.max(0, v))
 export default {
   name: "终端输入", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 5,
@@ -21,7 +22,7 @@ export default {
     { key: "seconds", type: "number", title: "输入秒数", default: 1.4, min: .4, max: 3, step: .1 }
   ],
   layers(params, width, height) {
-    const x = width * .08, y = height * .4, options = { maxWidth: width * .84, forceGraphemes: true }
+    const x = width * .08, y = height * .4, options = { maxWidth: width * .84 }
     const full = layoutText(params.value, params.style, options), size = full.style.fontSize
     const marks = full.graphemes
     return [{ id: "terminal", bounds: [x, y, x + width * .84, y + Math.max(full.box.height, size * 1.25)], draw(ctx, time) {
@@ -46,6 +47,31 @@ export default {
 左对齐随位数增长会挤单位：用 `layoutText` 的 `anchor` 把数字右锚（`horizontal: 1`），或先排终值、取它的 `box.width` 作固定盒宽（`box: { width }` 配 `align: "right"`），不让单位每帧随数宽抖动。数字选等宽字体。千分号、小数点、负号与单位分开排版时，按各自 `lines[0].alphabeticBaseline` 对齐字母基线（`baseline` 默认是中线，字号不同时对不齐）。
 
 停留帧复查目标值和单位；开始、位数跨越、最后一帧检查跳动；数字落定对齐说到该数据的配音重音。价格／人名／统计量不得用样例默认值替代用户事实。
+
+## 简单数字表
+
+`layoutTable` 负责列宽、逐格换行和行高。数字列设 `numeric: true`，启用字体等宽数字并默认右对齐；输入是已格式化字符串。固定列用 `width`，自动列省略。若 `overflow` 为真就加宽、减小字号或分表；若 `diagnostics` 提示数字不等宽就换字体。无跨行跨列，复杂表格交给网页。
+
+```ts
+import { layoutTable } from "henji-layout/table"
+import { drawText } from "henji-layout/text"
+export const textFonts = { faces: [{ family: "Calibri" }] }
+export default {
+  name: "数据表", kind: "generator", mode: "static",
+  draw(ctx) {
+    const table = layoutTable({
+      columns: [{ key: "label" }, { key: "value", numeric: true }],
+      rows: [{ label: "收入", value: "1,234.50" }, { label: "增长", value: "12.5%" }],
+      style: { fontFamily: "Calibri", fontSize: 40 }
+    }, { width: 800, cellPadding: 16, columnGap: 12, rowGap: 8 })
+    ctx.save(); ctx.translate(120, 160)
+    for (const cell of table.cells) drawText(ctx, cell.text)
+    ctx.restore()
+  }
+}
+```
+
+每格的 `box` 用于底板和边框，`contentBox` 是内边距后的文字框；`text` 已带格内对齐位置，直接交给 `drawText`。相同位数的数字换值保持稳定，数值位数改变时用固定列宽控制版面。
 
 ## 内容自适应的数据卡
 

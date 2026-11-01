@@ -1,6 +1,33 @@
 import { expect, it } from 'vitest'
 import { build } from 'esbuild-wasm'
 import { authorSourceLocations, bundleAuthorFiles } from './videoEditAuthorBundle'
+import { directAuthorBundle, rewriteAuthorModule } from './videoEditAuthorModules'
+
+it('API10 字体分析后 JS 可变本地导入仍走原生项目地址表', async () => {
+  const files = { apiVersion: 10 as const, entry: 'main.js', files: { 'main.js': `export const load = name => import(name); export default {name:'动态模块',draw(){}}`, 'helper.js': 'export const value=42' } }
+  const bundle = await bundleAuthorFiles(files, build)
+  expect(bundle.modules).toEqual(files)
+  expect(rewriteAuthorModule(bundle.modules!, files.entry, path => `blob:${path}`)).toContain('blob:helper.js')
+})
+
+it('API10 正式编译只提取可达模块字体和绑定默认值，携带原文诊断且不执行作者代码', async () => {
+  const files = { apiVersion: 10 as const, entry: 'main.js', libraries: { 'henji-layout': '1.2.0' }, files: {
+    'main.js': `import './title.js'; globalThis.__font_resource_executed=true; export default {name:'标题',draw(){}}`,
+    'title.js': `import {layoutText as text} from 'henji-layout/text'; export const textFonts={bindings:[{text:'title',style:'style'}]}; export default {params:[{key:'title',type:'text',default:'你好'}, {key:'style',type:'textStyle',default:{fontFamily:'Arial'}}], draw(){text('A',{fontFamily:'Other'},{forceGraphemes:true})}}`,
+    'unused.js': `export const textFonts = dynamicFontFactory()`,
+  } }
+  expect(directAuthorBundle(files)).toBeUndefined()
+  const bundle = await bundleAuthorFiles(files, build)
+  expect(bundle.textFonts?.map(value => value.file)).toEqual(['main.js', 'title.js'])
+  expect(bundle.textFonts?.[1].defaults).toEqual({ title: '你好', style: { fontFamily: 'Arial' } })
+  expect(bundle.textFonts?.[1].diagnostics).toEqual([expect.objectContaining({ severity: 'warning', message: expect.stringContaining('忽略 forceGraphemes') })])
+  expect(Object.hasOwn(globalThis, '__font_resource_executed')).toBe(false)
+  expect((await bundleAuthorFiles({ ...files, apiVersion: 7 }, build)).textFonts).toBeUndefined()
+})
+it('不可静态读取的字体声明在模块执行前失败，中文前缀后的错误仍定位原文', async () => {
+  const text = `const 标题='你好';\nexport const textFonts = (()=>{throw new Error('不要执行')})();\nexport default {name:'标题',draw(){}}`
+  await expect(bundleAuthorFiles({ apiVersion: 10, entry: 'main.js', files: { 'main.js': text } }, build)).rejects.toMatchObject({ code: 'SYNTAX', sourceSpan: expect.objectContaining({ file: 'main.js', startLine: 2 }) })
+})
 
 it('bundles ordinary JS, relative imports, JSON and cycles without executing author code', async () => {
   const bundle = await bundleAuthorFiles({ entry: 'main.js', files: {
@@ -116,6 +143,15 @@ it('效果工厂导入保留在冻结模块图，API 6 不可使用', async () =
   const bundle = await bundleAuthorFiles(files, build)
   expect(bundle.code).toContain('henji-media://author-lib/henji-effects/1.0.0/index.mjs')
   await expect(bundleAuthorFiles({ ...files, apiVersion: 6 }, build)).rejects.toThrow(/v7|接口 7/)
+})
+
+it('入口把文字交给 helper 时仍保留入口字体参数，纯模块不触发默认回退预载', async () => {
+  const bundle = await bundleAuthorFiles({apiVersion:10,entry:'main.js',files:{
+    'main.js':`import {paint} from './helper.js';export default {params:[{key:'style',type:'textStyle',default:{fontFamily:'Georgia',fontWeight:700}}],draw(ctx,t,params){paint(params.style)}}`,
+    'helper.js':`import {layoutText} from 'henji-layout/text';export const paint=style=>layoutText('Hello',style)`
+  }},build)
+  expect(bundle.textFonts?.find(resource=>resource.file==='main.js')).toMatchObject({usesText:false,parameters:[{key:'style',type:'textStyle'}],defaults:{style:{fontFamily:'Georgia',fontWeight:700}}})
+  expect(bundle.textFonts?.find(resource=>resource.file==='helper.js')?.declaration.text).toEqual(['Hello'])
 })
 
 it('真实打包分别登记同文件多个调整层及跨文件调整层的精确源码范围', async () => {

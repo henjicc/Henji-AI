@@ -4,7 +4,8 @@ import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
 import { createRequire } from 'node:module'
-import { buildSync } from 'esbuild'
+import { pathToFileURL } from 'node:url'
+import { build } from 'esbuild'
 import { createContentTrustTestSession } from '../../../../electron/main/services/content-trust/test-support'
 
 afterEach(() => { Reflect.deleteProperty(globalThis, '__contentTrustExecutions') })
@@ -13,7 +14,10 @@ it('原生作者 import 在顶层求值前检查选择，声明读取也不能�
   // Vite 的测试 VM 没有原生 import 回调；在普通 Node 模块里检验同一作者加载器的真实求值顺序。
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-author-trust-'))
   const modulePath = path.join(directory, 'author.cjs')
-  buildSync({ stdin: { contents: "export {loadAuthorModule} from './src/features/videoEdit/engine/videoEditAuthorModule';export {installAuthorTrustGate} from './src/features/videoEdit/engine/videoEditAuthorTrust'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', outfile: modulePath, alias: { '@': path.resolve('src') }, define: { 'import.meta.env': '{}' }, logLevel: 'silent' })
+  await build({ stdin: { contents: "export {loadAuthorModule} from './src/features/videoEdit/engine/videoEditAuthorModule';export {installAuthorTrustGate} from './src/features/videoEdit/engine/videoEditAuthorTrust'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', outfile: modulePath, alias: { '@': path.resolve('src') }, define: { 'import.meta.env': '{}' }, logLevel: 'silent', plugins: [{ name: 'native-font-runtime', setup(api) {
+    api.onResolve({ filter: /fontPolicy$/ }, () => ({ path: pathToFileURL(path.resolve('resources/video-edit-author/frozen/henji-layout/2.0.0/font-session.mjs')).href, external: true }))
+    api.onResolve({ filter: /harfbuzzjs.*index\.mjs$/ }, () => ({ path: pathToFileURL(path.resolve('resources/video-edit-author/vendor/harfbuzzjs/1.6.4/index.mjs')).href, external: true }))
+  } }] })
   const { loadAuthorModule, installAuthorTrustGate } = createRequire(path.resolve('package.json'))(modulePath) as Pick<typeof import('./videoEditAuthorModule'), 'loadAuthorModule'> & Pick<typeof import('./videoEditAuthorTrust'), 'installAuthorTrustGate'>
   const record = { id: 'external', sourceType: 'code_asset' as const, sourceName: '作者代码' }
   const query = { contents: [record] }

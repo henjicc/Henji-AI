@@ -143,6 +143,9 @@ export class VideoEditCodeGpu {
   async authorFrameKey(...args: Parameters<VideoEditAuthorPrograms['frameKey']>): ReturnType<VideoEditAuthorPrograms['frameKey']> {
     return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().frameKey(...args) })
   }
+  async authorTextIdentity(...args: Parameters<VideoEditAuthorPrograms['textIdentity']>): ReturnType<VideoEditAuthorPrograms['textIdentity']> {
+    return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().textIdentity(...args) })
+  }
   /**
    * `divisor`：输出比例的倒数。输出纹理按比例分配，画面的放置尺寸仍是
    * `size`；Canvas 作者坐标不变，WebGPU / WebGL 入口拿到缩小后的 target 与 width/height，`info.renderScale` 给出比例。

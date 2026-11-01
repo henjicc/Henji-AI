@@ -1,3 +1,7 @@
+import { needsVideoEditTextPreflight, VideoEditTextPreflight } from './videoEditTextPreflight'
+import { serveFontChannel, type FontPort } from '@/core/imaging/vectorContent/shaping/fontChannel'
+import { captureTextFontSnapshot } from '@/platform/textFontSnapshot'
+import type { TextFontChannelAttach } from './videoEditTextFontChannel'
 import { authorEffectEnvironmentForStyle, type AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import { prepareVideoEditAuthorBundle } from './videoEditSharedCompiler'
 import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
@@ -14,7 +18,7 @@ import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, Render
 import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
 import type { VideoEditTrackResults } from './videoEditTrackResults'
 import type { VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
-import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
+import { captureFixedFontCatalog, fontLibrarySnapshot, loadFontLibrary, subscribeFontLibrary } from '@/platform/fonts'
 import { loadDocumentFont, pinDocumentFonts, releaseDocumentFonts } from '@/platform/fontFaces'
 import { videoEditParameterUpdate, videoEditParameterNeedsFonts } from './videoEditParameterUpdate'
 import { documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
@@ -55,7 +59,7 @@ export function warmVideoEditNativeDecoder(): Promise<void> {
 export interface VideoEditRenderHost {
   authorEffects?(): AuthorEffectEnvironment
 
-  fonts(document: VideoEditComposition): Promise<import('@/platform/fonts').FontPayload[]>
+  fonts(document: VideoEditComposition, fixed?: import('@/core/fonts/catalog').FixedFontCatalog): Promise<import('@/platform/fonts').FontPayload[]>
   proxies(projectId: string, forExport: boolean): Promise<Record<string, VideoProxyResult>>
   maskUpdateTime(sequenceId: string, revision: number): number | undefined
   readCodeMetadata?(key: string): Promise<import('./videoEditAuthorMetadataCache').AuthorCachedMetadata | undefined>
@@ -71,6 +75,7 @@ export interface VideoEditRenderTransportOptions {
   proxyProjectId?: string
   exportProxies?: boolean
   requestTimeoutMs?: number
+  fixedTextFonts?: boolean
 }
 export class VideoEditRenderTransport {
   private readonly contentTrustIds = new Set<string>()
@@ -104,6 +109,20 @@ export class VideoEditRenderTransport {
   private fontsRevision = -1
   private fontIds = new Set<string>()
   private stopFonts?: () => void
+  private stopTextFonts?: () => void
+  private playbackEpoch = 0
+  private needsTextPreflight: boolean
+  private readonly textPreflight = new VideoEditTextPreflight(async (requests, signal) => {
+    const result = await this.request({ kind: 'prepareText', requests }, [], undefined, signal)
+    if (result.skipped) throw new Error('文字准备已取消')
+  }, async () => {
+    // 首次文字请求之前完成目录加载，避免加载通知重置正在准备的字体租约。
+    if (!this.fixedTextFonts) await loadFontLibrary()
+    await this.syncFonts(this.document)
+  })
+  private contentEpoch = 0
+  private submissionTail?: Promise<void>
+  private fixedFontSnapshot?: ReturnType<typeof captureFixedFontCatalog>
   private fontSync = Promise.resolve()
   /** Font syncs started and not settled yet; none means `fontScope` describes what the Worker holds. */
   private fontSyncsPending = 0
@@ -146,25 +165,27 @@ export class VideoEditRenderTransport {
   }
   private fontKey(document: VideoEditComposition): string {
     const scoped = this.fontsDocument(document)
-    return JSON.stringify([scoped.clips.map(clip => clip.id), scoped.sequences?.map(sequence => [sequence.id, sequence.clips.map(clip => clip.id)]), fontLibrarySnapshot().revision])
+    return JSON.stringify([scoped.clips.map(clip => clip.id), scoped.sequences?.map(sequence => [sequence.id, sequence.clips.map(clip => clip.id)]), (this.fixedTextFonts ? this.fontsRevision : fontLibrarySnapshot().revision)])
   }
   private async applyFonts(document: VideoEditComposition): Promise<void> {
     const scoped = this.fontsDocument(document)
     const key = this.fontKey(document)
     if (document === this.fontDocument && key === this.fontScope) return
-    const fonts = await this.host.fonts(scoped)
+    const fixed = await this.fixedFontSnapshot
+    const fonts = await this.host.fonts(scoped, fixed)
     if (this.disposed) return
     pinDocumentFonts(this, fonts.map(payload => payload.face.id))
     await Promise.all(fonts.map(loadDocumentFont))
-    const revision = fontLibrarySnapshot().revision
+    const revision = fixed?.revision ?? fontLibrarySnapshot().revision
     const changed = revision !== this.fontsRevision
+    if (changed) this.textPreflight.invalidate()
     const additions = fonts.filter(payload => changed || !this.fontIds.has(payload.face.id))
-    const usedIds = new Set(fonts.map(payload => payload.face.id))
+    const usedIds = new Set([...(this.fixedTextFonts ? this.fontIds : []), ...fonts.map(payload => payload.face.id)])
     const removed = [...this.fontIds].some(id => !usedIds.has(id))
-    if (additions.length || removed || changed && this.fontsRevision >= 0) await this.request({ kind: 'fonts', fonts: additions, availableIds: [...usedIds], reset: changed && this.fontsRevision >= 0 })
+    if (additions.length || removed || changed && this.fontsRevision >= 0) await this.request({ kind: 'fonts', fonts: additions, availableIds: [...usedIds], reset: !this.fixedTextFonts && changed && this.fontsRevision >= 0, fixedTextFonts: this.fixedTextFonts })
     this.fontsRevision = revision
     this.fontIds = usedIds
-    this.fontScope = key
+    this.fontScope = this.fontKey(document)
     this.fontDocument = document
     if (additions.length || removed || changed) this.fontPresentationRevision++
   }
@@ -204,11 +225,14 @@ export class VideoEditRenderTransport {
   private proxyProjectId?: string
   private readonly exportProxies: boolean
   private readonly requestTimeoutMs: number
+  private readonly fixedTextFonts: boolean
   constructor(private readonly host: VideoEditRenderHost, private document: VideoEditComposition, options: VideoEditRenderTransportOptions = {}) {
+    this.needsTextPreflight = needsVideoEditTextPreflight(document)
     const { previewWidth, surface, cacheBudgetBytes, proxyProjectId } = options
     this.proxyProjectId = proxyProjectId
     this.exportProxies = options.exportProxies ?? false
     this.requestTimeoutMs = options.requestTimeoutMs ?? 60_000
+    this.fixedTextFonts = options.fixedTextFonts ?? false
     this.effectSnapshot = document.authorEffects ?? host.authorEffects?.() ?? {}
     this.liveEffects = !!surface && !document.authorEffects
     activeTransports.add(this)
@@ -318,11 +342,16 @@ export class VideoEditRenderTransport {
       this.fail(error, { filename: event.filename, line: event.lineno, column: event.colno, workerMessage: event.message })
     }
     this.worker.onmessageerror = () => this.fail(new VideoEditRenderWorkerError('剪辑画面结果无法读取，请重新加载预览。'))
+    if (this.fixedTextFonts) this.fixedFontSnapshot = captureFixedFontCatalog()
+    const textFonts = new MessageChannel()
+    const platform = /Macintosh|Mac OS X/.test(navigator.userAgent) ? 'darwin' : 'win32'
+    this.stopTextFonts = serveFontChannel(textFonts.port1 as unknown as FontPort, () => captureTextFontSnapshot(platform, this.fixedFontSnapshot), error => logger.warn('文字字体准备失败', { event: 'video_edit.text_fonts.prepare.failed', error }))
+    this.worker.postMessage({ kind: 'textFonts.attach', port: textFonts.port2 } satisfies TextFontChannelAttach, [textFonts.port2])
     // Verify original media before dependent code/font preparation or opening a decoder channel.
     this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
     void this.ready.then(() => { this.readySettled = true }, () => undefined)
     this.stopFonts = subscribeFontLibrary(() => {
-      if (this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return
+      if (this.fixedTextFonts || this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return
       this.fontRefresh = this.ready.then(async () => {
         while (!this.disposed && fontLibrarySnapshot().revision !== this.fontsRevision) await this.syncFonts(this.document)
       }).catch(error => logger.warn('剪辑字体更新失败', { event: 'video_edit.fonts.update.failed', error })).finally(() => { this.fontRefresh = undefined })
@@ -344,9 +373,9 @@ export class VideoEditRenderTransport {
   }
   async prepareGpu(): Promise<void> { await this.ready; await this.request({ kind: 'prepareGpu' }) }
   async releaseAuthor(url: string): Promise<void> { await this.ready; await this.request({ kind: 'authorRelease', url }) }
-  async readAuthorMetadata(url: string, locations?: import('./videoEditAuthorBundle').AuthorSourceLocations, apiVersion?: number): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
+  async readAuthorMetadata(url: string, locations?: import('./videoEditAuthorBundle').AuthorSourceLocations, apiVersion?: number, bundle?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
     await this.ready
-    const result = await this.request({ kind: 'authorMetadata', url, locations, apiVersion })
+    const result = await this.request({ kind: 'authorMetadata', url, locations, apiVersion, bundle })
     if (!result.authorMetadata) throw new Error('作者模块未返回参数声明，请重新检查源码。')
     return result.authorMetadata
   }
@@ -364,24 +393,34 @@ export class VideoEditRenderTransport {
     for (const timer of this.backgroundTimers.values()) clearTimeout(timer)
     this.backgroundTimers.clear()
     for (const controller of this.compilations.values()) controller.abort()
-    this.compilations.clear(); this.stopFonts?.(); releaseDocumentFonts(this); this.content.dispose()
+    this.textPreflight.close()
+    this.compilations.clear(); this.stopFonts?.(); this.stopTextFonts?.(); this.releaseFontSnapshot(); releaseDocumentFonts(this); this.content.dispose()
     this.canvas.width = this.canvas.height = 1
     this.disconnectNative()
     logger.warn('剪辑渲染会话已中止', { event: 'video_edit.render.session.failed', error, context: { sequenceId: this.document.id, ...detail } })
+  }
+  private releaseFontSnapshot(): void {
+    this.textPreflight.close()
+    if (!this.fixedFontSnapshot) return
+    this.fixedFontSnapshot = undefined
   }
   private disconnectNative(): void {
     if (!this.route) return
     const route = this.route; this.route = undefined
     try { getPlatform().videoFrames.disconnect(route) } catch { /* the platform is gone with the page */ }
   }
-  private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
+  private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void, signal?: AbortSignal): Promise<RenderResponse> {
     if (this.disposed) return Promise.reject(this.failure ?? new Error('剪辑渲染已关闭。'))
     // 最后一道防线：调用方应先按自己的在途数限流（节目预览见 VideoEditPreview），排满时按背压拒绝。
     if (this.pending.size >= VIDEO_EDIT_RENDER_QUEUE_LIMIT) return Promise.reject(new VideoEditRenderBusyError())
     const id = ++this.nextId
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.fail(new Error('剪辑渲染超过时限，已停止当前画面任务。请检查代码效果后重新加载预览；已保存的作品不受影响。')), this.requestTimeoutMs)
-      this.pending.set(id, { resolve, reject, submitted, timer })
+      const abort = (): void => { clearTimeout(timer); this.pending.delete(id); resolve({ id, skipped: true, presented: false }) }
+      const cleanup = (): void => signal?.removeEventListener('abort', abort)
+      this.pending.set(id, { resolve: value => { cleanup(); resolve(value) }, reject: error => { cleanup(); reject(error) }, submitted, timer })
+      signal?.addEventListener('abort', abort, { once: true })
+      if (signal?.aborted) { abort(); return }
       try { this.worker.postMessage({ ...request, id }, transfer) }
       catch (error) { this.fail(error instanceof Error ? error : new Error(String(error))) }
     })
@@ -389,6 +428,7 @@ export class VideoEditRenderTransport {
   // 初始化只传清单，Worker 在当前帧或预热窗口真正需要时请求文件。
   private codeSources(_document: VideoEditComposition): Promise<Record<string, string>> { return Promise.resolve({}) }
   async updateDocument(document: VideoEditComposition, original = false): Promise<void> {
+    this.contentEpoch++
     await this.ready
     this.timing = videoEditTimingContext(this.proxyProjectId, document.id)
     // Asking for originals only needs a rebuild when proxies are loaded; otherwise a parameter edit keeps the fast path.
@@ -397,7 +437,7 @@ export class VideoEditRenderTransport {
     const update = !effectsChanged && (!original || Object.keys(this.proxies).length === 0) && videoEditParameterUpdate(this.document, document)
     if (update) {
       if (videoEditParameterNeedsFonts(this.document, update)) await this.syncFonts(document)
-      await this.request({ kind: 'parameters', update }); this.document = document; return
+      await this.request({ kind: 'parameters', update }); this.document = document; this.needsTextPreflight = needsVideoEditTextPreflight(document); return
     }
     const started = performance.now(); const steps: Record<string, number> = {}
     const step = async (name: string, work: Promise<unknown>): Promise<void> => { const at = performance.now(); await work; steps[name] = Math.round(performance.now() - at); if (this.timing) videoEditTimingEvent(this.timing, `render.update.${name}`, { durationMs: steps[name] }) }
@@ -405,10 +445,12 @@ export class VideoEditRenderTransport {
     let codeSources: Record<string, string> = {}
     await step('code', this.codeSources(document).then(value => { codeSources = value }))
     await step('worker', this.request({ kind: 'update', timing: this.timing, document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() })); this.document = document
+    this.needsTextPreflight = needsVideoEditTextPreflight(document)
     logger.info('剪辑渲染文档已更新', { event: 'video_edit.render.document.updated', context: { sequenceId: document.id, durationMs: Math.round(performance.now() - started), steps } })
   }
   /** Exclusive offscreen lease boundary. Candidate revisions need not be monotonic. */
   async replaceContent(document: VideoEditComposition): Promise<void> {
+    this.contentEpoch++
     await this.ready
     this.effectSnapshot = document.authorEffects ?? this.host.authorEffects?.() ?? {}
     await this.content.check(document)
@@ -416,6 +458,7 @@ export class VideoEditRenderTransport {
     const codeSources = await this.codeSources(document)
     await this.request({ kind: 'replaceContent', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document) })
     this.document = document
+    this.needsTextPreflight = needsVideoEditTextPreflight(document)
     this.canvas.width = document.width; this.canvas.height = document.height
   }
   /** Called by the sequence change notification before React commits the new panels. */
@@ -442,7 +485,7 @@ export class VideoEditRenderTransport {
    * on screen yet (answered `skipped`), then releases the playback decoders in queue order. Send it before the request of
    * the frame that follows (the paused frame, a new run).
    */
-  stopPlayback(frame: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'stopPlayback', id: 0, frame } satisfies RenderRequest) }
+  stopPlayback(frame: number): void { this.playbackEpoch++;  if (!this.disposed) this.worker.postMessage({ kind: 'stopPlayback', id: 0, frame } satisfies RenderRequest) }
   /** 智能区域（4.7d）：已分析好的段落交给 Worker，下一次渲染即使用。 */
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
   /** Ready pre-rendered windows of the current sequence (program playback only); local files map to worker URLs here. */
@@ -453,19 +496,39 @@ export class VideoEditRenderTransport {
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false): Promise<RenderResponse> {
-    // 会话已就绪、这一帧要的字体也已在 Worker 里时不经任何等待，请求在调用方的同一个任务里发出（拖动时不排到界面更新之后）。
-    if (!this.readySettled) await this.ready
-    if (this.effectsChanged()) await this.updateDocument(this.document)
-    this.frame = frame
-    if (this.fontSyncsPending || this.document !== this.fontDocument || this.fontKey(this.document) !== this.fontScope) await this.syncFonts(this.document)
-    const document = this.document
-    const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(requireLive ? { requireLive: true } : {}), ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
-    const at = result.presented ? this.host.maskUpdateTime(document.id, document.revision) : undefined
-    if (at !== undefined && result.presented) {
-      const durationMs = performance.now() - at
-      logger.debug('遮罩更新出画', { event: 'video_edit.mask.present.completed', context: { sequenceId: document.id, revision: document.revision, frame, durationMs, displayFrames: durationMs * document.fps / 1000, gpuMs: result.gpuMs } })
-    }
-    return result
+    if (this.disposed) throw this.failure ?? new Error('剪辑渲染已关闭。')
+    // 入口定一次是否预检，排队与预检用同一判断；不预检的帧也排在已登记的预检帧之后提交，内容切换时不乱序。旧接口工程从无登记帧，不会等待。
+    const preflight = this.needsTextPreflight
+    const previousSubmission = this.submissionTail
+    let releaseSubmission!: () => void
+    const submission = preflight ? new Promise<void>(resolve => { releaseSubmission = resolve }) : undefined
+    if (submission) this.submissionTail = submission
+    const submittedInOrder = (): void => { if (submission) { releaseSubmission(); if (this.submissionTail === submission) this.submissionTail = undefined } }
+    try {
+      const playbackEpoch = this.playbackEpoch
+      // 会话已就绪、这一帧要的字体也已在 Worker 里时不经任何等待，请求在调用方的同一个任务里发出（拖动时不排到界面更新之后）。
+      if (!this.readySettled) await this.ready
+      if (this.effectsChanged()) await this.updateDocument(this.document)
+      const contentEpoch = this.contentEpoch
+      this.frame = frame
+      if (this.fontSyncsPending || this.document !== this.fontDocument || this.fontKey(this.document) !== this.fontScope) await this.syncFonts(this.document)
+      if (deadline !== undefined && playbackEpoch !== this.playbackEpoch) return { id: 0, skipped: true, presented: false }
+      const document = this.document
+      const preparing = preflight ? this.textPreflight.prepare(document, frame, () => this.fontsRevision) : undefined
+      if (preparing) await preparing
+      if (previousSubmission) await previousSubmission
+      // 等待期间内容在新旧文字接口之间切换时，入口的预检判断已不适用当前文档，按过期帧跳过，调用方会按最新内容重新请求。
+      if (contentEpoch !== this.contentEpoch || preflight !== this.needsTextPreflight || deadline !== undefined && playbackEpoch !== this.playbackEpoch) return { id: 0, skipped: true, presented: false }
+      const rendering = this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(requireLive ? { requireLive: true } : {}), ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
+      submittedInOrder()
+      const result = await rendering
+      const at = result.presented ? this.host.maskUpdateTime(document.id, document.revision) : undefined
+      if (at !== undefined && result.presented) {
+        const durationMs = performance.now() - at
+        logger.debug('遮罩更新出画', { event: 'video_edit.mask.present.completed', context: { sequenceId: document.id, revision: document.revision, frame, durationMs, displayFrames: durationMs * document.fps / 1000, gpuMs: result.gpuMs } })
+      }
+      return result
+    } finally { submittedInOrder() }
   }
   async captureHoverFrame(document: VideoEditComposition, frame: number, allowRender: boolean, signal: AbortSignal): Promise<Uint8Array | undefined> {
     await this.ready
@@ -522,7 +585,7 @@ export class VideoEditRenderTransport {
     activeTransports.delete(this)
     for (const controller of this.compilations.values()) controller.abort()
     this.compilations.clear()
-    this.stopFonts?.()
+    this.stopFonts?.(); this.stopTextFonts?.(); this.releaseFontSnapshot()
     releaseDocumentFonts(this)
     this.content.dispose()
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('剪辑渲染已关闭。')) }

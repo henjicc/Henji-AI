@@ -1,3 +1,4 @@
+import { migrateRecordingAuthor } from '../../videoEdit/styles/authorVersionMigration'
 import { migrateAudioMergedEffects, migrateAudioEqualizerModes } from '../../audio/effects/mergedEffectsMigration'
 import { migrateRecordingTransitions } from '../../videoEdit/transitionMigration'
 import { migrateRecordingCaptionOwnership } from '../../videoEdit/captionOwnershipMigration'
@@ -9,9 +10,11 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 56, minReaderVersion: 56,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 57, minReaderVersion: 57,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 56 → 57：接受作者接口 10，样片补固定历史版本。
+    56: migrateRecordingAuthor,
     // 55 → 56：嵌入剪辑的风格件可带代码滤镜快照，历史基线原样保留。
     55: content => structuredClone(content),
     // 54 → 55：嵌入剪辑接受作者接口 v9 的调整层，旧源码与接口保持原样。

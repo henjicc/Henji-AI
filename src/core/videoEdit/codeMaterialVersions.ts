@@ -1,5 +1,5 @@
 import type { ContentTrustReference } from '../contentTrust'
-import { CODE_AUTHOR_API_VERSION, CODE_AUTHOR_LIBRARIES_MIN_API_VERSION, codeMaterialDefinitionSchema } from './codeMaterialPersistence'
+import { CODE_AUTHOR_DEFAULT_API_VERSION, CODE_AUTHOR_LIBRARIES_MIN_API_VERSION, codeMaterialDefinitionSchema } from './codeMaterialPersistence'
 import type { CodeMaterialDefinition, CodeMaterialVersion } from './codeMaterialPersistence'
 import { CodeMaterialError } from './codeMaterial/contract'
 import type { CodeAuthorApiVersion, CodeAuthorProgram as CodeMaterialProgram } from './codeAuthorProgram'
@@ -36,7 +36,7 @@ function versionLibraries(publication: CodeVersionPublication, program: CodeMate
 }
 /** 对每个源码导入，明确版本优先，其次继承记录或历史缺省，最后才选兼容最新版。 */
 export function codeVersionCompilation(files: CodeMaterialFiles, publication: Partial<CodeVersionPublication>): CodeMaterialFiles {
-  const apiVersion = publication.apiVersion ?? CODE_AUTHOR_API_VERSION
+  const apiVersion = publication.apiVersion ?? CODE_AUTHOR_DEFAULT_API_VERSION
   const choices = { ...latestAuthorLibraryVersions(apiVersion), ...publication.previousImports, ...inheritedLibraries(publication), ...explicitLibraries(publication) }
   const libraries = importedAuthorLibraries({ ...files, libraries: choices })
   return { ...files, apiVersion, libraries }
@@ -75,7 +75,7 @@ export async function appendCodeMaterialVersion(definition: CodeMaterialDefiniti
     break
   }
   const addressed = await addressCodeMaterialFiles(source)
-  const versionPublication: CodeVersionPublication = { ...codeVersionInheritance(previousVersion, resolver), ...publication, name: definition.name, inheritedLibraries: publication.inheritedLibraries ?? previousVersion.libraries }
+  const versionPublication: CodeVersionPublication = { ...codeVersionInheritance(previousVersion, resolver), ...publication, apiVersion: publication.apiVersion ?? previousVersion.apiVersion as CodeAuthorApiVersion, name: definition.name, inheritedLibraries: publication.inheritedLibraries ?? previousVersion.libraries }
   // 内容键含内置库，而内置库要等编译出作者接口版本才定，所以已有版本在编译后、写文件前再找。
   const found: { version?: CodeMaterialVersion } = {}
   const result = await makeCodeMaterialDefinition(source, async files => {

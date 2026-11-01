@@ -1,3 +1,6 @@
+import type { CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
+import { resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { prepareAuthorTextResources } from './videoEditAuthorTextResources'
 import { CODE_AUTHOR_API_MIN_VERSION, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import type { EffectDescriptor } from '@/core/videoEdit/authorEffects.generated'
 import type { ContentTrustReference } from '@/core/contentTrust'
@@ -137,19 +140,30 @@ const importNativeModule = new Function('url', 'return import(url)') as (url: st
 
 /** Native import resolves relative dependencies and cycles using standard ESM semantics.
  * Every entry runs with seeded randomness and frame-derived clocks (see videoEditAuthorDeterminism). */
-export async function loadAuthorModule(url: string, context?: ContentTrustReference[], apiVersion = CODE_AUTHOR_API_MIN_VERSION): Promise<AuthorModule> {
+export async function loadAuthorModule(url: string, context?: ContentTrustReference[], apiVersion = CODE_AUTHOR_API_MIN_VERSION, bundle?: CodeAuthorBundle): Promise<AuthorModule> {
   await assertAuthorTrust({ url, context })
+  const text = await prepareAuthorTextResources(bundle)
   try {
+    if (text && bundle?.libraries?.['henji-layout']) {
+      const library = resolveAuthorLibraryModule('henji-layout/text', bundle.libraries)
+      if (library) await importNativeModule(library.url)
+    }
     const layouts = new Set<string>()
-    const loaded = await importAuthorDeterministic(() => importNativeModule(url), id => layouts.add(id))
+    const loaded = await importAuthorDeterministic(() => importNativeModule(url), id => layouts.add(id), text?.fonts)
     const effect = loaded.default
     if (!effect || typeof effect.name !== 'string') throw new Error('默认导出需要效果名称 name。')
     if (![effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU].some(value => typeof value === 'function')) throw new Error('效果需要 draw、layers、createWebGL 或 createWebGPU 入口。')
     if (effect.layers && (effect.createWebGL || effect.createWebGPU)) throw new Error('layers 不能与独立 GPU 绘制入口同时声明。')
-    const wrapped = deterministicAuthorModule(effect, apiVersion)
+    const wrapped = deterministicAuthorModule(effect, apiVersion, text?.fonts)
+    if (text) {
+      text.bind(wrapped)
+      const dispose = wrapped.dispose
+      wrapped.dispose = async () => { try { await dispose?.() } finally { text.close() } }
+    }
     authorModuleTextLayouts.set(wrapped, layouts)
     return wrapped
   } catch (cause) {
+    text?.close()
     throw new Error(`加载代码效果 ${url} 失败：${cause instanceof Error ? cause.message : String(cause)}`, { cause })
   }
 }

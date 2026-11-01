@@ -36,7 +36,7 @@ it('v6 样片的预览文档沿用编译版本，允许排版与字体库导入'
     const bundle = await bundleAuthorFiles({ ...files, apiVersion: 6 }, build)
     return { ...testAuthorProgram(testAuthorBundle({ ...files, apiVersion: 6 })), bundle }
   })
-  const { composition: document } = await styleSampleTimeline({ code, width: 320, height: 180, durationSeconds: 2, fps: 30, thumbnail: 0, anchors: [0] }, new AbortController().signal)
+  const { composition: document } = await styleSampleTimeline({ code, apiVersion: 6, libraries: { 'henji-layout': '1.0.0', 'opentype.js': '2.0.0' }, width: 320, height: 180, durationSeconds: 2, fps: 30, thumbnail: 0, anchors: [0] }, new AbortController().signal)
   const instance = document.clips[0].code!
   const version = document.codeMaterials![0].versions[0]
   expect(version).toMatchObject({ apiVersion: 6, languageVersion: 4 })

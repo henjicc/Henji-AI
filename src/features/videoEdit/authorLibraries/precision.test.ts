@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { createTextCanvasRecorder } from '../../../core/imaging/vectorContent/textDrawPlanCanvas.testSupport'
-import { layoutBoxes, ready, type FlexNode, type FlexStyle } from './flex'
-import { layoutText, type TextOptions, type TextStyleInput } from './text'
+import { layoutBoxes, ready, type FlexNode, type FlexStyle } from './frozenLayout.testSupport'
+import { layoutText, type TextOptions, type TextStyleInput } from './frozenLayout.testSupport'
 
 let advance = 7.1
 beforeAll(async () => {

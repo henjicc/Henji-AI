@@ -4,6 +4,8 @@ import { styleMemoryEntriesSchema } from '../../assistant/memoryEntries'
 import { codeMaterialFilesSchema, type CodeMaterialFiles } from '../codeMaterial/sources'
 import { sha256HexString } from '../../../utils/save/hash'
 import { STYLE_GUIDE_MAX_LENGTH } from './styleGuide'
+import { codeAuthorApiVersionSchema, codeAuthorLibrariesSchema } from '../codeMaterialPersistence'
+import { previewAuthorIdentity } from '../codeMaterial/authorVersion'
 import { videoEditEffectPresetSchema, type VideoEditEffectPreset } from '../effectPresets'
 
 /**
@@ -28,6 +30,7 @@ export const STANDARD_STYLE_SAMPLE = { width: 1280, height: 720, durationSeconds
  */
 export const NEW_STYLE_SAMPLE = { width: 1920, height: 1080, durationSeconds: 11, fps: 30, thumbnail: 1.5, anchors: [1.5, 3.2, 5.8, 7.8, 9.2, 10.6] } as const
 export const videoEditStyleSampleSchema = z.object({
+  apiVersion: codeAuthorApiVersionSchema.optional(), libraries: codeAuthorLibrariesSchema.optional(),
   code: codeMaterialFilesSchema.describe('样片作者代码 { entry, files }：标准 ES 模块，默认导出带 layers(params, width, height, assets, info) 的生成器，按标准分镜演示风格。'),
   width: dimension.default(STANDARD_STYLE_SAMPLE.width), height: dimension.default(STANDARD_STYLE_SAMPLE.height),
   // 30 秒、锚点 10 张（剪辑 32 / 录制会话 35 / 风格库 4 / 风格包 4 放宽，2026-10-27 用户要求：样片在标准分镜后多演示几种组件）。
@@ -67,6 +70,7 @@ export const videoEditTemplateMetaShape = {
   style: videoEditTemplateStyleSchema.nullable(),
 }
 export const videoEditTemplateCodeBodySchema = z.object({
+  apiVersion: codeAuthorApiVersionSchema.optional(), libraries: codeAuthorLibrariesSchema.optional(),
   kind: z.literal('code'), code: codeMaterialFilesSchema.describe('带参数的作者代码：该改的文字、图片、主色写成 params，默认值就是登记时画面上的内容。'),
   durationSeconds: z.number().finite().min(.5).max(600).optional().describe('应用时的默认时长（秒）；省略时用源码 durationSeconds 或 5 秒。'),
 }).strict()
@@ -82,11 +86,19 @@ function stylePieceContent(preset: VideoEditEffectPreset): unknown {
 }
 /** 风格内容摘要：说明书、样片源码与样片设置（与 Frameflow styleRevision 同口径）。 */
 export function videoEditStyleContentHash(style: Pick<VideoEditStyle, 'guide' | 'sample' | 'userPreferences' | 'effectPresets'>): Promise<string> {
-  const { code, ...settings } = style.sample
+  const { code, apiVersion, libraries, ...settings } = style.sample
+  const author = previewAuthorIdentity(code, { apiVersion, libraries })
+  if (author) Object.assign(settings, author)
   return sha256HexString(json({ guide: style.guide.replace(/\r\n?/g, '\n'), files: sortedFiles(code), settings, ...(style.userPreferences?.length ? { userPreferences: style.userPreferences } : {}), ...(style.effectPresets?.length ? { effectPresets: style.effectPresets.map(stylePieceContent) } : {}) }))
 }
 /** 模板内容摘要：只看内容，名称与说明不参与。 */
-export function videoEditTemplateContentHash(body: unknown): Promise<string> { return sha256HexString(json(body)) }
+export function videoEditTemplateContentHash(body: unknown): Promise<string> {
+  if (body && typeof body === 'object' && 'kind' in body && body.kind === 'code' && 'code' in body) {
+    const { apiVersion, libraries, ...content } = body as z.infer<typeof videoEditTemplateCodeBodySchema>
+    return sha256HexString(json({ ...content, ...previewAuthorIdentity(content.code, { apiVersion, libraries }) }))
+  }
+  return sha256HexString(json(body))
+}
 function sortedFiles(code: CodeMaterialFiles): unknown { return { entry: code.entry, files: Object.keys(code.files).sort().map(path => [path, code.files[path].replace(/\r\n?/g, '\n')]) } }
 /** Frameflow 的渲染语义：内容变了（或从未渲染）才加 1。 */
 export function nextVideoEditStyleVersion(style: Pick<VideoEditStyle, 'version' | 'contentHash'>, contentHash: string): { version: number; changed: boolean } {

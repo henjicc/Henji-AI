@@ -28,7 +28,7 @@ beforeEach(() => {
   boundary.faces = [{ face: { ...GENERIC_FONT_FACES[0], id: 'a'.repeat(64), family: 'TestFont', fullName: 'TestFont', aliases: [], imported: false }, path: path.resolve('node_modules/.cache/system-fonts/font.ttf'), index: 0, signature: '1:0' }]
   service = new FontService(library)
 })
-afterEach(() => { service.dispose(); vi.useRealTimers() })
+afterEach(async () => { await service.dispose(); vi.useRealTimers() })
 it('主进程回收导入字体再让 Worker 扫描，系统字体不进入回收服务', async () => {
   await expect(service.remove(boundary.faces[0].face.id)).rejects.toThrow('系统字体')
   expect(trashUserFile).not.toHaveBeenCalled()
@@ -42,7 +42,12 @@ it('主进程回收导入字体再让 Worker 扫描，系统字体不进入回�
 })
 it('目录缓存在主线程复用；目录新增和字体修改防抖刷新，缓存文件不会触发重扫', async () => {
   const first = await service.list(); expect(first.faces[0]).not.toHaveProperty('path'); await service.list(); expect(boundary.requests).toHaveLength(1)
-  boundary.watchers.get(library)!('change', 'catalog-cache.json'); await service.list(); expect(boundary.requests).toHaveLength(1)
+  boundary.send.mockClear()
+  for (const name of ['catalog-cache.json', 'catalog-cache.tmp', '.catalog-cache.json.12345678-1234-1234-1234-123456789abc.tmp']) {
+    boundary.watchers.get(library)!('rename', name); boundary.watchers.get(library)!('change', name)
+  }
+  vi.advanceTimersByTime(200); expect(boundary.send).not.toHaveBeenCalled()
+  await service.list(); expect(boundary.requests).toHaveLength(1)
   const root = path.dirname(boundary.faces[0].path); boundary.watchers.get(root)!('rename', 'new-folder'); boundary.watchers.get(root)!('change', 'font.ttf')
   boundary.send.mockClear(); vi.advanceTimersByTime(199); expect(boundary.send).not.toHaveBeenCalled(); vi.advanceTimersByTime(1); expect(boundary.send).toHaveBeenCalledTimes(1)
   await service.list(); expect(boundary.requests).toHaveLength(2)
@@ -70,4 +75,16 @@ it('系统目录不可解析候选只记诊断日志，显式导入失败仍保�
   boundary.failedImport = true
   await expect(service.importFiles(['broken.ttf'])).rejects.toThrow('bad font')
   expect(boundary.error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'fonts.import.failed' }))
+})
+
+it('导出只固定目录清单，不复制或预读任何字体；读取使用固定身份', async () => {
+  const snapshot = await service.captureSnapshot()
+  expect(boundary.requests.map(request => request.kind)).toEqual(['scan'])
+  const face = snapshot.faces[0], source = snapshot.sources[face.id]
+  boundary.faces = []
+  await service.importFiles([])
+  expect((await service.readFace(face.id, source)).face).toEqual(face)
+  expect(boundary.requests.at(-1)).toMatchObject({ kind: 'read', face: source, fixed: true })
+  await service.dispose()
+  expect(boundary.terminate).toHaveBeenCalledOnce()
 })

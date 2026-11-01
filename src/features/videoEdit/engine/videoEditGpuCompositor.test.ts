@@ -33,6 +33,8 @@ it('候选预览效果纳入宿主预算，字体重置与关闭先释放作者�
     for (let cycle = 0; cycle < 2; cycle++) {
       await compositor.readAuthorMetadata('candidate', undefined, 7)
       const host = await compositor.code()
+      expect(host.diagnostics().residentBytes).toBe(0)
+      await compositor['authorRuntime']('candidate', undefined, 7)
       const hostDispose = vi.spyOn(host, 'dispose')
       const candidateDispose = candidates.disposals.at(-1)!
       expect(host.diagnostics().residentBytes).toBe((32 * 16 + 16 * 8) * 8)

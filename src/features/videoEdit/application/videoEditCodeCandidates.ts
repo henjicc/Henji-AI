@@ -6,7 +6,7 @@ import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { prepareCodeVersionPublication, discardVideoEditCodeFiles } from './videoEditCodeStorage'
 import { documentCodeSourceResolver, loadCodeSourceReferences, normalizeCodeMaterialFiles, type CodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
-import { appendCodeMaterialVersion } from '@/core/videoEdit/codeMaterialVersions'
+import { appendCodeMaterialVersion, codeVersionInheritance } from '@/core/videoEdit/codeMaterialVersions'
 import type { CodeMaterialMigrationImpact } from '@/core/videoEdit/codeMaterialAnimation'
 import { retargetCodeMaterialInstances, validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditComposition, videoEditDocumentSchema, type VideoEditDocument } from '@/core/videoEdit/document'
@@ -72,8 +72,9 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   }
   logger.info('检查源码候选', { event: 'video_edit.code.candidate.start', context: { projectId: target.projectId, clipId: target.clipId, scope } })
   try {
-    await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
-    const appended = await appendCodeMaterialVersion(definition, { ...normalizeCodeMaterialFiles(source), trustContext: [] }, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline), await prepareCodeVersionPublication(target.projectId, normalizeCodeMaterialFiles(source), undefined, undefined, createdFiles), codeMaterialTrustContext(baseline, { definitionId: definition.id }))
+    const sourceVersion = definition.versions.find(version => version.id === target.versionId)!
+    await loadCodeSourceReferences(sourceVersion)
+    const appended = await appendCodeMaterialVersion(definition, { ...normalizeCodeMaterialFiles(source), trustContext: [] }, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline), { ...codeVersionInheritance(sourceVersion, documentCodeSourceResolver(baseline)), ...await prepareCodeVersionPublication(target.projectId, normalizeCodeMaterialFiles(source), undefined, undefined, createdFiles), inheritedLibraries: sourceVersion.libraries ?? {}, apiVersion: sourceVersion.apiVersion as import('@/core/videoEdit/codeAuthorProgram').CodeAuthorApiVersion }, codeMaterialTrustContext(baseline, { definitionId: definition.id }))
     controller.signal.throwIfAborted(); newVersion = appended.versionId
     if (appended.kindUnverified) logger.warn('原有代码版本都读不到，新版本未核对素材种类', { event: 'video_edit.code.version.kind_unverified', context: { projectId: target.projectId, definitionId: definition.id, versionId: newVersion } })
     const version = appended.definition.versions.find(version => version.id === newVersion)!

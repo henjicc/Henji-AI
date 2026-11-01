@@ -1,3 +1,4 @@
+import { migrateVideoAuthor, migrateRecordingAuthor, migrateStyleAuthor, migrateStylePackageAuthor } from '../../videoEdit/styles/authorVersionMigration'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -23,7 +24,7 @@ describe('音频效果合并迁移', () => {
       const format = PERSISTENCE_FORMATS.find(value => value.id === `document.${kind}`)!
       const migrated = upgradePersistenceContent(format, source.content, source.kindVersion)
       const expected = migrateAudioEqualizerModes(migrateAudioMergedEffects(source.content))
-      expect(migrated).toEqual(expected)
+      expect(migrated).toEqual(kind === 'video_edit' ? migrateVideoAuthor(expected) : kind === 'screen_recording' ? migrateRecordingAuthor(expected) : expected)
       expect(format.schema.safeParse(migrated).success).toBe(true)
       expect(source).toEqual(before)
       if (kind === 'audio_edit') expect(audioEditProjectFromDocument({ id: source.id, name: source.name, createdAt: 0, updatedAt: 0, revision: 0 }, migrated).project.effectChain).toHaveLength(baseline.length / 2)
@@ -70,7 +71,8 @@ describe('音频效果合并迁移', () => {
       const before = structuredClone(source)
       const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
       const migrated = upgradePersistenceContent(format, source.content, source.version)
-      expect(migrated).toEqual(migrateAudioEqualizerModes(id === 'video-effect-library' ? migrateAudioEffectLibraryV3(source.content) : migrateAudioMergedEffects(source.content)))
+      const expected = migrateAudioEqualizerModes(id === 'video-effect-library' ? migrateAudioEffectLibraryV3(source.content) : migrateAudioMergedEffects(source.content))
+      expect(migrated).toEqual(id === 'video-style-library' ? migrateStyleAuthor(expected) : id === 'video-style-package' ? migrateStylePackageAuthor(expected) : expected)
       const current = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${format.version}.json`, 'utf8'))
       if (id === 'video-effect-library') {
         const library = migrated as { favorites: string[]; presets: VideoEditEffectPreset[] }

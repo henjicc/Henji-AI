@@ -10,7 +10,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { testCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { STYLE_GUIDE_SECTIONS } from '@/core/videoEdit/styles/styleGuide'
-import { NEW_STYLE_SAMPLE, videoEditStyleContentHash } from '@/core/videoEdit/styles/styleSchemas'
+import { NEW_STYLE_SAMPLE, videoEditStyleContentHash, videoEditTemplateContentHash } from '@/core/videoEdit/styles/styleSchemas'
 import { BLANK_STYLE_SAMPLE_SOURCE } from '@/core/videoEdit/styles/blankSample'
 import { VIDEO_EDIT_STYLE_PACKAGE_VERSION } from '@/core/videoEdit/styles/templateSchemas'
 import { createApplicationHarness } from '@/tests/applicationHarness'
@@ -22,8 +22,8 @@ import { videoEditPresetPreferences } from './videoEditPresetPreferences'
 import { exportVideoEditStylePackage, importVideoEditStylePackage, type VideoEditStylePackageIo } from './videoEditStylePackages'
 import { videoEditStyleHostSummary } from './videoEditStyles'
 import { applyVideoEditTemplate, createVideoEditTemplate, detachVideoEditTemplateInstances, promoteVideoEditTemplate, updateVideoEditTemplate, videoEditTemplateInstances } from './videoEditTemplates'
-import { createVideoEditCodeItems } from './videoEditCodeService'
-import { editVideoProject, requireVideoEditInstance, undoVideoEdit } from './videoEditService'
+import { createVideoEditCodeItems, createVideoEditCodeVersions } from './videoEditCodeService'
+import { editVideoProject, requireVideoEditInstance, undoVideoEdit, saveVideoEdit } from './videoEditService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
@@ -59,6 +59,35 @@ const CARD = `export default { name: "档案人名条", kind: "generator", mode:
   params: [{ key: "name", type: "text", title: "姓名", default: "林一", maxLength: 40, layer: "card" }],
   layers(params, width, height) { return [{ id: "card", bounds: [0, 0, width, height], draw(ctx) { ctx.fillStyle = "${BLACK_HEX}"; ctx.fillRect(0, 0, width, height) } }] } }
 `
+// 9 是调整层接口：低于文字新版的模板仍按源码摘要判等，换接口不白白升版本。
+it.each([6, 9])('显式旧 API %s 模板应用、更新与收录保持版本，不把未导入的新库带进发布', async apiVersion => {
+  await videoEditStyleLibrary.ready()
+  const owner = await createVideoEditTestProject(), id = owner.document.id
+  const body = { kind: 'code' as const, apiVersion, libraries: {}, code: { entry: 'index.js', files: { 'index.js': CARD } } }
+  let template = (await videoEditStyleLibrary.saveTemplate({ id: 'pinned-card', name: '固定版本标题', description: '', version: 1, contentHash: '', updatedAt: new Date().toISOString(), style: null, body })).template
+  const applied = await applyVideoEditTemplate(id, owner.activeSequenceId, 'library', template.id)
+  expect(requireVideoEditInstance(id).document.codeMaterials![0].versions[0].apiVersion).toBe(apiVersion)
+  template = (await videoEditStyleLibrary.saveTemplate({ ...template, body: { ...body, code: { ...body.code, files: { 'index.js': CARD.replace(BLACK_HEX, WHITE_HEX) } } } })).template
+  await updateVideoEditTemplate(id, applied.template.id, { kind: 'library' })
+  expect(requireVideoEditInstance(id).document.codeMaterials![0].versions.at(-1)?.apiVersion).toBe(apiVersion)
+  const current = requireVideoEditInstance(id).document, version = current.codeMaterials![0].versions.at(-1)!
+  const sourceHash = await videoEditTemplateContentHash({ kind: 'code', entry: version.entry, files: version.files.map(file => [file.path, file.hash]).sort(), imports: version.imports ?? [] })
+  const prior = current.templates![0]
+  editVideoProject(id, document => ({ ...document, templates: document.templates!.map(item => item.id === prior.id ? { ...item, contentHash: sourceHash } : item) }))
+  const unchanged = await updateVideoEditTemplate(id, applied.template.id, { kind: 'version', versionId: version.id })
+  expect(unchanged.template).toMatchObject({ version: prior.version, contentHash: sourceHash })
+  const promoted = await promoteVideoEditTemplate(id, applied.template.id)
+  expect(promoted.library.body).toMatchObject({ apiVersion, libraries: {} })
+  await saveVideoEdit(id)
+  expect(savedVideoEdit(id).codeMaterials![0].versions.at(-1)?.apiVersion).toBe(apiVersion)
+  await detachVideoEditTemplateInstances(id, owner.activeSequenceId, applied.clipIds)
+  const separated = requireVideoEditInstance(id).document.codeMaterials!.at(-1)!
+  expect(separated.versions[0]).toMatchObject({ apiVersion })
+  const [newVersion] = await createVideoEditCodeVersions(id, [{ definitionId: current.codeMaterials![0].id, source: CARD.replace(BLACK_HEX, WHITE_HEX), apiVersion: 10 }])
+  const upgraded = await updateVideoEditTemplate(id, applied.template.id, { kind: 'version', versionId: newVersion })
+  expect(upgraded.template.version).toBe(prior.version + 1)
+  expect(upgraded.template.contentHash).not.toBe(sourceHash)
+})
 let io: ReturnType<typeof createTestStyleLibraryIo>
 beforeEach(async () => {
   trialDocuments.length = 0

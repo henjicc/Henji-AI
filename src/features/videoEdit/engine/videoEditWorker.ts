@@ -1,3 +1,6 @@
+import type { TextPreflightRequest } from './videoEditTextPreflight'
+import { readAuthorCandidateMetadata, releaseAuthorCandidate, closeAuthorCandidates } from './videoEditAuthorCandidates'
+import { renewTextFontLease, acquireSharedTextFontLease, attachTextFontChannel, closeTextFontChannel, type TextFontChannelAttach } from './videoEditTextFontChannel'
 import { videoEditRenderFailure, installVideoEditWorkerErrorReporting } from './videoEditGpuFailure'
 import { setVideoEditCodeGpuErrorObserver } from './videoEditCodeGpu'
 import { VideoEditCodeFingerprint } from './videoEditCodeFingerprint'
@@ -38,9 +41,10 @@ installVideoEditWorkerErrorReporting(self)
  */
 export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
 export type RenderRequest = { id: number } & (
+  { kind: 'prepareText'; requests: TextPreflightRequest[] } |
   { kind: 'fingerprint'; clipId: string; frame: number; endFrame: number; budgetMs: number; webContent: Record<string, string> } |
   { kind: 'stopPlayback'; frame: number } |
-  { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
+  { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean; fixedTextFonts?: boolean } |
   { kind: 'init'; traceFrames?: boolean; /** 渲染诊断（GPU 时间戳与事件循环迟滞探针），只供基准与排障。 */ diagnostics?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'replaceContent'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths: Record<string, string> }
   | { kind: 'invalidate'; revision: number }
@@ -50,7 +54,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'outputScale'; scale: number; renderAtOutputResolution: boolean }
   | { kind: 'arm'; frame: number }
   | { kind: 'prepareGpu' }
-  | { kind: 'authorMetadata'; url: string; locations?: import('./videoEditAuthorBundle').AuthorSourceLocations; apiVersion?: number }
+  | { kind: 'authorMetadata'; url: string; locations?: import('./videoEditAuthorBundle').AuthorSourceLocations; apiVersion?: number; bundle?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle }
   | { kind: 'authorRelease'; url: string }
   | { kind: 'authorFrame'; assets?: Record<string, ImageBitmap>; url: string; params: import('./videoEditAuthorModule').AuthorParameters; info: import('./videoEditAuthorModule').AuthorFrameInfo; options?: Parameters<VideoEditRenderer['renderAuthorFrame']>[4] }
   | { kind: 'preopen'; document: VideoEditComposition; frame: number; localPaths: Record<string, string>; timing?: VideoEditTimingContext }
@@ -87,6 +91,8 @@ const timingEvent = (stage: string, durationMs?: number): void => {
 }
 let renderer: VideoEditRenderer | undefined
 let fingerprints: VideoEditCodeFingerprint | undefined
+let textController = new AbortController()
+let textQueue: Promise<unknown> = Promise.resolve()
 let fonts: LoadedFontFaces | undefined
 let direct = false
 let revision = 0
@@ -169,6 +175,8 @@ async function disposeRenderer(): Promise<void> {
   releasePreopened()
   await fingerprints?.dispose(); fingerprints = undefined
   await renderer?.dispose()
+  await closeAuthorCandidates()
+  renewTextFontLease()
   await nativeBackend?.disposeIdle()
   await nativeBackend?.settled(); router?.dispose()
   nativeBackend = undefined; router = undefined; decodeLookahead = undefined
@@ -200,14 +208,34 @@ installCodeSourceReader(file => sharedCompilation.read(file))
 installAuthorMetadataCache({ read: key => sharedCompilation.metadata(key), write: async (key, metadata) => { await sharedCompilation.metadata(key, metadata) } })
 installAuthorNativeModules(files => sharedCompilation.modules(files))
 installVideoEditWebChannel(() => nativeFrames)
-self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse>) => {
+self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse | TextFontChannelAttach>) => {
   if (videoEditRenderDiagnosticsEnabled()) probeVideoEditTask(`message.${event.data.kind}`, () => receive(event))
   else receive(event)
 }
-function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse>): void {
+function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse | TextFontChannelAttach>): void {
   if (event.data.kind === 'code.trustResult' || event.data.kind === 'code.compiled' || event.data.kind === 'code.source' || event.data.kind === 'code.metadataResult' || event.data.kind === 'code.moduleUrls') { sharedCompilation.receive(event.data); return }
+  if (event.data.kind === 'textFonts.attach') { attachTextFontChannel(event.data.port); return }
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
+  if (request.kind === 'prepareText') {
+    const controller = textController
+    textQueue = textQueue.catch(() => undefined).then(async () => {
+      for (const item of request.requests) {
+        controller.signal.throwIfAborted()
+        const lease = await acquireSharedTextFontLease(item.version)
+        try { await lease.fonts.prepare(item.declaration, controller.signal) }
+        catch (error) {
+          if (!item.optional || controller.signal.aborted) throw error
+          log('debug', '滤镜字体准备失败，交由正式渲染报告', 'video_edit.text_fonts.effect_skipped', { error: String(error) })
+        }
+        finally { lease.release() }
+      }
+      self.postMessage({ id: request.id } satisfies RenderResponse)
+    }).catch(error => self.postMessage({ id: request.id, ...(controller.signal.aborted ? { skipped: true } : videoEditRenderFailure(error)) } satisfies RenderResponse))
+    return
+  }
+  if (request.kind === 'dispose') textController.abort()
+  if (request.kind === 'dispose') closeTextFontChannel()
   // 字体、代理切换和起播也要先让后台现场画面退场，不能等 render 排到队首才取消。
   if (request.kind !== 'hoverFrame' && request.kind !== 'cancelHoverFrame' && request.kind !== 'renderCache') {
     latestForegroundRequest = request
@@ -290,7 +318,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
           self.postMessage({ id: request.id, hoverBytes: controller.signal.aborted ? undefined : hoverBytes } satisfies RenderResponse)
         } finally { if (hoverRequest === controller) hoverRequest = undefined }
       } else if (request.kind === 'authorRelease') {
-        await renderer?.releaseAuthor(request.url)
+        await renderer?.releaseAuthor(request.url); await releaseAuthorCandidate(request.url)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'fingerprint') {
         if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
@@ -299,7 +327,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         self.postMessage({ id: request.id, fingerprints: values } satisfies RenderResponse)
       } else if (request.kind === 'authorMetadata') {
         if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
-        const authorMetadata = await renderer.readAuthorMetadata(request.url, request.locations, request.apiVersion)
+        const authorMetadata = await readAuthorCandidateMetadata(request.url, request.apiVersion, request.bundle)
         self.postMessage({ id: request.id, authorMetadata } satisfies RenderResponse)
       } else if (request.kind === 'authorFrame') {
         if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
@@ -313,7 +341,15 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
           for (const payload of request.fonts) await fonts.load(payload)
         }
         fonts?.retainIds(request.availableIds)
-        if (request.reset) await renderer?.invalidateFontResources()
+        if (request.reset && !request.fixedTextFonts) {
+          textController.abort()
+          await textQueue
+          textController = new AbortController()
+          await fingerprints?.dispose(); fingerprints = undefined
+          await renderer?.invalidateFontResources()
+          await closeAuthorCandidates()
+          if (!request.fixedTextFonts) renewTextFontLease()
+        }
         recordVideoEditPreparation('fontLoad', performance.now() - started)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {

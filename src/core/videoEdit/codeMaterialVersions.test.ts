@@ -1,10 +1,11 @@
 import { importedAuthorLibraries } from './codeMaterial/libraryImports'
+import { latestAuthorLibraryVersions } from './codeMaterial/authorLibraries'
 import { addressCodeMaterialFiles, documentCodeSourceResolver, type CodeMaterialFiles } from './codeMaterial/sources'
 import { testCodeSource } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it, vi } from 'vitest'
 import { testAuthorBundle, testAuthorProgram } from '../../features/videoEdit/engine/videoEditAuthorTestFixtures'
-import { CODE_AUTHOR_API_VERSION, codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
+import { CODE_AUTHOR_DEFAULT_API_VERSION, codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition, type CodeSourceCompiler, type CodeVersionPublication } from './codeMaterialVersions'
 import { videoEditDocumentSchema } from './document'
 import { codeVersionContentKey } from './codeMaterial/sources'
@@ -22,7 +23,8 @@ describe('作者接口与内置库版本保持一致', () => {
   it('逐库解析明确、继承、历史缺省和新增导入；无记录旧源码原样保存复用', async () => {
     const text = 'import "henji-layout/text";' + source()
     const created = await makeCodeMaterialDefinition(text, compile, publication)
-    expect(created.definition.versions[0].libraries).toEqual({ 'henji-layout': '1.2.0' })
+    const layout = latestAuthorLibraryVersions(CODE_AUTHOR_DEFAULT_API_VERSION)['henji-layout']
+    expect(created.definition.versions[0].libraries).toEqual({ 'henji-layout': layout })
     const frozen = structuredClone(created.definition)
     frozen.versions[0].libraries = { 'henji-layout': '1.1.0' }
     const preserved = await appendCodeMaterialVersion(frozen, text, compile, documentCodeSourceResolver(), publication)
@@ -40,7 +42,7 @@ describe('作者接口与内置库版本保持一致', () => {
     expect(upgraded.definition.versions.at(-1)?.libraries).toEqual({ 'henji-layout': '1.1.0' })
     const three = await makeCodeMaterialDefinition('import "three";' + source(), compile, publication)
     const added = await appendCodeMaterialVersion(three.definition, 'import "three";' + text, compile, documentCodeSourceResolver(), publication)
-    expect(added.definition.versions.at(-1)?.libraries).toEqual({ three: '0.186.1', 'henji-layout': '1.2.0' })
+    expect(added.definition.versions.at(-1)?.libraries).toEqual({ three: '0.186.1', 'henji-layout': layout })
     const unchanged = await appendCodeMaterialVersion(three.definition, 'import "three";' + source(), compile, documentCodeSourceResolver(), publication)
     expect(unchanged.versionId).toBe(three.definition.defaultVersionId)
   })
@@ -49,11 +51,11 @@ describe('作者接口与内置库版本保持一致', () => {
     // 模拟打包器报告源码导入了 three。
     const importsThree: CodeSourceCompiler = async files => { inputs.push(files); const program = await compile(files); return { ...program, bundle: { ...program.bundle, libraries: { three: '0.186.1' } } } }
     const { definition } = await makeCodeMaterialDefinition('import "three";'+source(), importsThree, publication)
-    expect(inputs[0]).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION }); expect(inputs[0].libraries).toEqual({ three: '0.186.1' })
+    expect(inputs[0]).toMatchObject({ apiVersion: CODE_AUTHOR_DEFAULT_API_VERSION }); expect(inputs[0].libraries).toEqual({ three: '0.186.1' })
     expect(definition.versions[0]).toMatchObject({ apiVersion: inputs[0].apiVersion, libraries: { three: '0.186.1' } })
     // 追加版本按前一版记录的库版本解析，并照旧记录。
     const next = await appendCodeMaterialVersion(definition, 'import "three";'+source(.6), importsThree, documentCodeSourceResolver(), publication)
-    expect(inputs.at(-1)).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION, libraries: { three: '0.186.1' } })
+    expect(inputs.at(-1)).toMatchObject({ apiVersion: CODE_AUTHOR_DEFAULT_API_VERSION, libraries: { three: '0.186.1' } })
     expect(next.definition.versions.find(version => version.id === next.versionId)).toMatchObject({ apiVersion: inputs.at(-1)?.apiVersion, libraries: { three: '0.186.1' } })
     // 未导入的库不参与版本身份，避免原样保存产生重复版本。
     expect((await makeCodeMaterialDefinition(source(), compile, publication)).definition.versions[0].libraries).toBeUndefined()
@@ -73,16 +75,16 @@ describe('作者接口与内置库版本保持一致', () => {
     expect(appended.definition.versions.find(version => version.id === appended.versionId)?.apiVersion).toBe(appended.program.apiVersion)
   })
 
-  it('候选还原到某个 v4 版本的原源码时得到当前接口的新版本，程序与记录的作者接口一致', async () => {
+  it('编辑沿用原作者接口，显式升级后还原源码仍保持升级后的接口', async () => {
     const { definition } = await makeCodeMaterialDefinition(source(), compile, { ...publication, apiVersion: 4 })
     const legacy = definition.versions[0]
     // 先改一版再改回原源码：与 v4 那版源码完全相同。
-    const changed = await appendCodeMaterialVersion(definition, source(.7), compile, documentCodeSourceResolver(), publication)
+    const changed = await appendCodeMaterialVersion(definition, source(.7), compile, documentCodeSourceResolver(), { ...publication, apiVersion: 10 })
     const restored = await appendCodeMaterialVersion({ ...changed.definition, defaultVersionId: changed.versionId }, source(), compile, documentCodeSourceResolver(), publication)
     const version = restored.definition.versions.find(value => value.id === restored.versionId)!
     expect(restored.versionId).not.toBe(legacy.id)
     // 登记元数据时按这条核对（videoEditCodeState 的“源码语言版本与检查结果不一致”）。
-    expect(version.apiVersion).toBe(CODE_AUTHOR_API_VERSION); expect(restored.program.apiVersion).toBe(version.apiVersion)
+    expect(version.apiVersion).toBe(10); expect(restored.program.apiVersion).toBe(version.apiVersion)
     expect(codeVersionContentKey(version)).not.toBe(codeVersionContentKey(legacy))
     // 源码和作者接口均未变化时，复用同一不可变版本。
     const again = await appendCodeMaterialVersion(restored.definition, source(), compile, documentCodeSourceResolver(), publication)

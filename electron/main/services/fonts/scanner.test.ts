@@ -1,8 +1,10 @@
+import fs from 'node:fs/promises'
 import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtemp, mkdir, copyFile, readFile, readdir, rm, utimes, symlink, realpath } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { Font } from 'fontkit'
+import { create, type Font } from 'fontkit'
+import { convert } from 'fontverter'
 import { FontScanner } from './scanner'
 import * as metadata from './metadata'
 import { discoverSystemFonts } from './discovery'
@@ -52,15 +54,64 @@ it('导入按内容去重，路径只在内部保留；文件移除后扫描不�
   await scanner.importFile(source); await scanner.importFile(renamed)
   expect((await readdir(library)).filter(name => name.endsWith('.woff2'))).toHaveLength(1)
   const result = await scanner.scan(); const imported = result.faces.find(value => value.face.imported)!
-  expect(imported.face).not.toHaveProperty('path'); expect(await scanner.read(imported)).toEqual(new Uint8Array(await readFile(source)))
+  expect(imported.face).not.toHaveProperty('path'); expect(await scanner.read(imported)).toEqual(new Uint8Array(await convert(await readFile(source), 'sfnt')))
   await rm(imported.path); expect((await scanner.scan()).faces.some(value => value.face.imported)).toBe(false)
   await mkdir(path.join(root, 'bad')); await expect(scanner.importFile(path.join(root, 'bad.txt'))).rejects.toThrow('请选择')
 })
-it('TTC 提取保留表，重新计算独立 sfnt 的偏移和校验；非法索引拒绝', () => {
+it('固定清单延迟读取校验文件身份，首次读取前变化或删除明确失败', async () => {
+  const { source, library } = await setup()
+  const scanner = new FontScanner(library, async () => [source])
+  const { faces } = await scanner.scan()
+  expect(await scanner.read(faces[0], true)).toEqual(await scanner.read(faces[0]))
+  await utimes(source, new Date(), new Date(Date.now() + 10000))
+  await expect(scanner.read(faces[0], true)).rejects.toThrow('字体在导出期间被修改')
+  await rm(source)
+  await expect(scanner.read(faces[0], true)).rejects.toThrow('字体在导出期间被修改')
+})
+it('TTC 提取保留表，重新计算独立 sfnt 的偏移和校验；非法索引拒绝', async () => {
   const bytes = Buffer.alloc(60); bytes.write('ttcf'); bytes.writeUInt32BE(1, 8); bytes.writeUInt32BE(16, 12)
   bytes.writeUInt32BE(0x00010000, 16); bytes.writeUInt16BE(1, 20); bytes.write('head', 28); bytes.writeUInt32BE(44, 36); bytes.writeUInt32BE(12, 40)
-  const output = metadata.standaloneFont(bytes, 0)
+  const output = await metadata.standaloneFont(bytes, 0)
   expect(output.readUInt32BE(20)).toBe(28); expect(output.toString('ascii', 12, 16)).toBe('head')
   let checksum = 0; for (let at = 0; at < output.length; at += 4) checksum = (checksum + output.readUInt32BE(at)) >>> 0
-  expect(checksum).toBe(0xb1b0afba); expect(() => metadata.standaloneFont(bytes, 1)).toThrow('不存在')
+  expect(checksum).toBe(0xb1b0afba); await expect(metadata.standaloneFont(bytes, 1)).rejects.toThrow('不存在')
+})
+
+it('WOFF 与 WOFF2 规范化保留完整表、可变轴、字形与轮廓，读取中变化拒绝发布', async () => {
+  const { source, library } = await setup()
+  const original = await readFile(source)
+  const sfnt = await metadata.standaloneFont(original, 0)
+  const parsed = create(original) as Font
+  const restored = create(sfnt) as Font
+  expect(restored.variationAxes).toEqual(parsed.variationAxes)
+  expect(restored.characterSet).toEqual(parsed.characterSet)
+  expect(restored.numGlyphs).toEqual(parsed.numGlyphs)
+  for (const point of [65, 97, 48]) expect(restored.glyphForCodePoint(point).path.toSVG()).toEqual(parsed.glyphForCodePoint(point).path.toSVG())
+  const woff = await convert(sfnt, 'woff')
+  const roundtrip = await metadata.standaloneFont(woff, 0)
+  const tables = (bytes: Buffer) => Array.from({ length: bytes.readUInt16BE(4) }, (_, i) => {
+    const at = 12 + i * 16, start = bytes.readUInt32BE(at + 8), length = bytes.readUInt32BE(at + 12)
+    return [bytes.toString('ascii', at, at + 4), bytes.subarray(start, start + length)]
+  })
+  expect(tables(roundtrip)).toEqual(tables(sfnt))
+  const scanner = new FontScanner(library, async () => [source])
+  const { faces } = await scanner.scan()
+  const normalize = metadata.standaloneFont
+  vi.spyOn(metadata, 'standaloneFont').mockImplementation(async (bytes, index) => {
+    const result = await normalize(bytes, index)
+    await utimes(source, new Date(), new Date(Date.now() + 5000))
+    return result
+  })
+  await expect(scanner.read(faces[0])).rejects.toThrow('发生变化')
+})
+
+it('缓存替换遇到临时占用会重试，发布完成后重启可读回完整目录', async () => {
+  const { source, library } = await setup()
+  const scanner = new FontScanner(library, async () => [source])
+  const first = await scanner.scan()
+  const rename = vi.spyOn(fs, 'rename').mockRejectedValueOnce(Object.assign(new Error('暂时占用'), { code: 'EPERM' }))
+  expect((await scanner.scan()).faces).toEqual(first.faces)
+  expect(rename).toHaveBeenCalledTimes(2)
+  expect((await new FontScanner(library, async () => [source]).scan()).faces).toEqual(first.faces)
+  expect((await readdir(library)).filter(name => name.endsWith('.tmp'))).toEqual([])
 })

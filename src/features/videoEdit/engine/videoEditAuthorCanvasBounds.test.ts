@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { authorCanvasContent, scaleAuthorCanvasEffect } from './videoEditAuthorCanvasBounds'
 import { AuthorCanvasAsset, recordAuthorCanvas, replayAuthorCanvas } from './videoEditAuthorCanvasRecorder'
+import { drawTextAppearance } from './videoEditTextOutlines'
 
 /** 只用来量字的 2D 上下文替身：默认状态与真实画布相同，字宽 = 字数 × 字号 / 2，上 0.8、下 0.2 字号。 */
 function measureContext(): OffscreenCanvasRenderingContext2D {
@@ -21,6 +22,28 @@ const content = (draw: (ctx: OffscreenCanvasRenderingContext2D) => void, assetSi
 const contains = (outer: readonly number[], inner: readonly number[]): boolean => outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3]
 
 describe('Canvas 录制的内容范围', () => {
+  it('延迟文字外观计入纯文字和混合图层范围，并遵守变换、效果与裁剪', () => {
+    const appearance = { identity: 'stroke-shadow-title', bounds: { x: -10, y: -20, width: 60, height: 40 }, draw: () => { throw new Error('边界分析不得执行栅格绘制') } }
+    const title = content(ctx => {
+      ctx.translate(100, 80); ctx.rotate(Math.PI / 2); ctx.scale(2, 2)
+      drawTextAppearance(ctx, appearance)
+    })
+    expect(contains(title.bounds!, [60, 60, 140, 180])).toBe(true)
+    expect(contains([57, 57, 143, 183], title.bounds!)).toBe(true)
+    const mixed = content(ctx => {
+      ctx.fillRect(0, 0, 10, 10)
+      ctx.save(); ctx.translate(400, 300); ctx.filter = 'blur(4px)'
+      drawTextAppearance(ctx, appearance); ctx.restore()
+    })
+    expect(contains(mixed.bounds!, [0, 0, 464, 334])).toBe(true)
+    const clipped = content(ctx => {
+      ctx.beginPath(); ctx.rect(0, 0, 20, 10); ctx.clip()
+      drawTextAppearance(ctx, appearance)
+    })
+    expect(contains(clipped.bounds!, [0, 0, 20, 10])).toBe(true)
+    expect(contains([-2, -2, 22, 12], clipped.bounds!)).toBe(true)
+  })
+
   it('按变换、线宽、阴影和裁剪保守外扩，只偏大不偏小', () => {
     const rect = content(ctx => { ctx.translate(100, 50); ctx.scale(2, 2); ctx.fillStyle = 'red'; ctx.fillRect(10, 10, 20, 5) })
     expect(rect.bounds).toBeDefined()

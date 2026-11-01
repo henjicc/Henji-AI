@@ -1,3 +1,5 @@
+import { withTextFontSession, importWithTextFontSession, resolvedTextFontSession } from '@/core/imaging/vectorContent/shaping/fontContext'
+import type { TextFontAccess } from '@/core/imaging/vectorContent/shaping/fontSession'
 import { CODE_AUTHOR_API_MIN_VERSION, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { authorLayerId } from './videoEditAuthorElements'
 import type { AuthorLayer, AuthorModule, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
@@ -38,21 +40,24 @@ export function seededRandom(key: string, time: number | undefined): () => numbe
   }
 }
 
-let imports: Promise<unknown> = Promise.resolve()
+let asynchronousCalls: Promise<unknown> = Promise.resolve()
+function serialized<T>(call: () => Promise<T>): Promise<T> {
+  const result = asynchronousCalls.then(call)
+  asynchronousCalls = result.catch(() => undefined)
+  return result
+}
 /**
  * 模块顶层代码在 import 时执行一次，播放与预渲染各加载一份：顶层随机数也要相同。一次只加载一个模块，
  * 加载期间 Math.random 固定种子；时钟照常（同一 Worker 里的计时与缓存时效还在用）。
  */
-export function importAuthorDeterministic<T>(load: () => Promise<T>, observeLayout?: (id: string) => void): Promise<T> {
-  const result = imports.then(async () => {
+export function importAuthorDeterministic<T>(load: () => Promise<T>, observeLayout?: (id: string) => void, fonts?: TextFontAccess): Promise<T> {
+  return serialized(async () => {
     const random = Math.random
     const host = globalThis as TextLayoutObserverGlobal, previous = host[TEXT_LAYOUT_OBSERVER]
     host[TEXT_LAYOUT_OBSERVER] = observeLayout
     Math.random = seededRandom('module', 0)
-    try { return await load() } finally { Math.random = random; host[TEXT_LAYOUT_OBSERVER] = previous }
+    try { return await importWithTextFontSession(fonts, load) } finally { Math.random = random; host[TEXT_LAYOUT_OBSERVER] = previous }
   })
-  imports = result.catch(() => undefined)
-  return result
 }
 
 /*
@@ -60,52 +65,63 @@ export function importAuthorDeterministic<T>(load: () => Promise<T>, observeLayo
  * 方法仍以原对象为 this 调用，作者存在 this 上的状态照常可用。
  */
 
-function deterministicLayer(layer: AuthorLayer, index: number, apiVersion: number): AuthorLayer {
+function authorCall<T>(fonts: TextFontAccess | undefined, key: string, time: number | undefined, call: () => T): T {
+  return withTextFontSession(resolvedTextFontSession(fonts), () => runAuthorDeterministic(key, time, call))
+}
+
+/** 异步作者入口与模块求值共用队列，跨 await 保留本次参数的字体，不能串到别的模块。 */
+function authorAsync<T>(fonts: TextFontAccess | undefined, key: string, time: number | undefined, call: () => T | Promise<T>): Promise<T> {
+  if (!fonts) return Promise.resolve(runAuthorDeterministic(key, time, call))
+  const prepared = resolvedTextFontSession(fonts)
+  return serialized(() => importWithTextFontSession(prepared, async () => runAuthorDeterministic(key, time, call)))
+}
+
+function deterministicLayer(layer: AuthorLayer, index: number, apiVersion: number, fonts?: TextFontAccess): AuthorLayer {
   if (!layer || typeof layer !== 'object') return layer
   const key = authorLayerId(layer, index), draw = layer.draw, pose = layer.pose, effects = layer.effects
   const adjust = apiVersion >= CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION ? layer.adjust : undefined
   return {
     ...layer,
-    ...(typeof effects === 'function' ? { effects: (time: number) => runAuthorDeterministic(`effects:${key}`, time, () => effects.call(layer, time)) } : {}),
-    ...(typeof adjust === 'function' ? { adjust: (time: number) => runAuthorDeterministic(`adjust:${key}`, time, () => adjust.call(layer, time)) } : {}),
-    ...(typeof draw === 'function' ? { draw: (ctx: OffscreenCanvasRenderingContext2D, time: number) => runAuthorDeterministic(`draw:${key}`, time, () => draw.call(layer, ctx, time)) } : {}),
-    ...(typeof pose === 'function' ? { pose: (time: number) => runAuthorDeterministic(`pose:${key}`, time, () => pose.call(layer, time)) } : {}),
+    ...(typeof effects === 'function' ? { effects: (time: number) => authorCall(fonts, `effects:${key}`, time, () => effects.call(layer, time)) } : {}),
+    ...(typeof adjust === 'function' ? { adjust: (time: number) => authorCall(fonts, `adjust:${key}`, time, () => adjust.call(layer, time)) } : {}),
+    ...(typeof draw === 'function' ? { draw: (ctx: OffscreenCanvasRenderingContext2D, time: number) => authorCall(fonts, `draw:${key}`, time, () => draw.call(layer, ctx, time)) } : {}),
+    ...(typeof pose === 'function' ? { pose: (time: number) => authorCall(fonts, `pose:${key}`, time, () => pose.call(layer, time)) } : {}),
   }
 }
 
-function deterministicWebGL(webgl: AuthorWebGL): AuthorWebGL {
+function deterministicWebGL(webgl: AuthorWebGL, fonts?: TextFontAccess): AuthorWebGL {
   if (!webgl || typeof webgl !== 'object' || typeof webgl.draw !== 'function') return webgl
   const { draw, dispose } = webgl
   return {
     ...webgl,
-    draw: (...args) => runAuthorDeterministic('webgl', args[0], () => draw.apply(webgl, args)),
-    ...(typeof dispose === 'function' ? { dispose: () => dispose.call(webgl) } : {}),
+    draw: (...args) => authorCall(fonts, 'webgl', args[0], () => draw.apply(webgl, args)),
+    ...(typeof dispose === 'function' ? { dispose: () => authorAsync(fonts, 'dispose:webgl', 0, () => dispose.call(webgl)) } : {}),
   }
 }
 
-function deterministicWebGPU(webgpu: AuthorWebGPU): AuthorWebGPU {
+function deterministicWebGPU(webgpu: AuthorWebGPU, fonts?: TextFontAccess): AuthorWebGPU {
   if (!webgpu || typeof webgpu !== 'object' || typeof webgpu.draw !== 'function') return webgpu
   const { draw, dispose } = webgpu
   return {
     ...webgpu,
-    draw: (...args) => runAuthorDeterministic('webgpu', args[1], () => draw.apply(webgpu, args)),
-    ...(typeof dispose === 'function' ? { dispose: () => dispose.call(webgpu) } : {}),
+    draw: (...args) => authorAsync(fonts, 'webgpu', args[1], () => draw.apply(webgpu, args)),
+    ...(typeof dispose === 'function' ? { dispose: () => authorAsync(fonts, 'dispose:webgpu', 0, () => dispose.call(webgpu)) } : {}),
   }
 }
 
 /** 作者模块的每个入口都经 runAuthorDeterministic 执行；layers() 返回的图层与 GPU 入口返回的绘制对象同样包装。 */
-export function deterministicAuthorModule(effect: AuthorModule, apiVersion = CODE_AUTHOR_API_MIN_VERSION): AuthorModule {
+export function deterministicAuthorModule(effect: AuthorModule, apiVersion = CODE_AUTHOR_API_MIN_VERSION, fonts?: TextFontAccess): AuthorModule {
   const { draw, layers, createWebGL, createWebGPU, frameKey, dispose } = effect
   return {
     ...effect,
-    ...(typeof frameKey === 'function' ? { frameKey: (...args: Parameters<typeof frameKey>) => runAuthorDeterministic('frameKey', args[3].time, () => frameKey.apply(effect, args)) } : {}),
-    ...(typeof draw === 'function' ? { draw: (...args: Parameters<typeof draw>) => runAuthorDeterministic('draw', args[1], () => draw.apply(effect, args)) } : {}),
+    ...(typeof frameKey === 'function' ? { frameKey: (...args: Parameters<typeof frameKey>) => authorCall(fonts, 'frameKey', args[3].time, () => frameKey.apply(effect, args)) } : {}),
+    ...(typeof draw === 'function' ? { draw: (...args: Parameters<typeof draw>) => authorCall(fonts, 'draw', args[1], () => draw.apply(effect, args)) } : {}),
     ...(typeof layers === 'function' ? { layers: (...args: Parameters<typeof layers>) => {
-      const list = runAuthorDeterministic('layers', args[4]?.time, () => layers.apply(effect, args))
-      return Array.isArray(list) ? list.map((layer, index) => deterministicLayer(layer, index, apiVersion)) : list
+      const list = authorCall(fonts, 'layers', args[4]?.time, () => layers.apply(effect, args))
+      return Array.isArray(list) ? list.map((layer, index) => deterministicLayer(layer, index, apiVersion, resolvedTextFontSession(fonts))) : list
     } } : {}),
-    ...(typeof createWebGL === 'function' ? { createWebGL: (gl: WebGL2RenderingContext) => deterministicWebGL(runAuthorDeterministic('create', 0, () => createWebGL.call(effect, gl))) } : {}),
-    ...(typeof createWebGPU === 'function' ? { createWebGPU: async (device: Parameters<typeof createWebGPU>[0]) => deterministicWebGPU(await runAuthorDeterministic('create', 0, () => createWebGPU.call(effect, device))) } : {}),
-    ...(typeof dispose === 'function' ? { dispose: () => dispose.call(effect) } : {}),
+    ...(typeof createWebGL === 'function' ? { createWebGL: (gl: WebGL2RenderingContext) => deterministicWebGL(authorCall(fonts, 'create', 0, () => createWebGL.call(effect, gl)), fonts) } : {}),
+    ...(typeof createWebGPU === 'function' ? { createWebGPU: async (device: Parameters<typeof createWebGPU>[0]) => deterministicWebGPU(await authorAsync(fonts, 'create', 0, () => createWebGPU.call(effect, device)), fonts) } : {}),
+    ...(typeof dispose === 'function' ? { dispose: () => authorAsync(fonts, 'dispose', 0, () => dispose.call(effect)) } : {}),
   }
 }

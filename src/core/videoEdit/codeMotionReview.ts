@@ -81,6 +81,7 @@ export async function collectVideoEditCodeMotion(root: VideoEditComposition, ran
           }
           for (const [drawIndex, draw] of (element.textDraws ?? []).entries()) {
             draw.uncovered.forEach(reason => uncoveredText.add(reason))
+            draw.fontDiagnostics?.forEach(reason => uncoveredText.add(reason))
             if (draw.boundsKind !== 'measured') uncoveredText.add('墨迹范围只有估计值，未覆盖正文裁切判定')
             const matrix = codeMultiply(element.matrix, draw.matrix)
             const localPoint = ([x, y]: [number, number]): [number, number] => toOutput(codePoint(element.matrix, x, y))
@@ -133,7 +134,7 @@ export async function collectVideoEditCodeMotion(root: VideoEditComposition, ran
   if (textCoverage.size) warnings.push('文字超框与截断只在排版内容连续稳定至少0.3秒时报，位姿运动不影响判定；字素揭示未完成时不判。裁切逐帧检查后合并，区间内已完全揭开的入场遮罩不报。任意 Canvas clip、滤镜遮挡、后续覆盖和跨图层合成的可见性未覆盖；墨迹伸出、阴影或外观越界不作内容超框。')
   if (textCoverage.size && range.to - range.from < Math.max(3, Math.ceil(.3 * root.fps))) warnings.push('查询区间短于文字检查所需的最小连续帧数（至少3帧且0.3秒），本次无法形成稳定区间；请扩大 from/to。')
   const missingText = new Set([...textCoverage.values()].filter(value => !value.drawn).map(value => value.name))
-  if (missingText.size) warnings.push(`这些图层未使用排版库或未提供新版 drawText 绘制事实，无法检查文字超框：${[...missingText].join('、')}。请调用 upgrade_video_edit_code_materials，指定这些素材并设置 upgradeLibraries:true，升级内置库并改指引用。`)
+  if (missingText.size) warnings.push(`这些图层未使用排版库或未提供新版 drawText 绘制事实，无法检查文字超框：${[...missingText].join('、')}。请调用 upgrade_video_edit_code_materials，指定这些素材并设置 upgradeLibraries:true，保留原作者接口并升级兼容库；要使用新文字引擎，请明确设置 upgradeAuthorApi:true 升级作者接口并改指引用。`)
   if (uncoveredText.size) warnings.push(`文字绘制观察未覆盖：${[...uncoveredText].join('、')}。`)
   return { records, sampledFrames, sampledElements, warnings }
 }

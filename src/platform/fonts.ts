@@ -1,5 +1,5 @@
 import { getPlatform } from './runtime'
-import { GENERIC_FONT_FACES, fontMatchesName, normalizeFontFace, type FontCatalog, type FontFaceInfo, type FontPreferences } from '../core/fonts/catalog'
+import { GENERIC_FONT_FACES, fontMatchesName, normalizeFontFace, type FontCatalog, type FixedFontCatalog, type FontFaceInfo, type FontPreferences } from '../core/fonts/catalog'
 import { createLogger } from '../core/logging'
 const logger = createLogger('services.fonts')
 export interface FontLibrarySnapshot extends FontCatalog { loading: boolean; error: string; preferences: FontPreferences }
@@ -58,8 +58,8 @@ function writePreferences(preferences: FontPreferences): void {
 }
 export function favoriteFont(family: string): void { const previous = snapshot.preferences; writePreferences({ ...previous, favorites: previous.favorites.includes(family) ? previous.favorites.filter(value => value !== family) : [...previous.favorites, family] }) }
 export function rememberFont(family: string): void { writePreferences({ ...snapshot.preferences, recent: [family, ...snapshot.preferences.recent.filter(value => value !== family)] }) }
-export function resolveFont(name: string): FontFaceInfo | undefined {
-  return snapshot.faces.find(face => face.fullName.toLocaleLowerCase() === name.toLocaleLowerCase()) ?? snapshot.faces.filter(face => fontMatchesName(face, name)).sort((a, b) => Math.abs(a.weight - 400) - Math.abs(b.weight - 400) || Number(a.italic) - Number(b.italic))[0]
+export function resolveFont(name: string, faces: readonly FontFaceInfo[] = snapshot.faces): FontFaceInfo | undefined {
+  return faces.find(face => face.fullName.toLocaleLowerCase() === name.toLocaleLowerCase()) ?? faces.filter(face => fontMatchesName(face, name)).sort((a, b) => Math.abs(a.weight - 400) - Math.abs(b.weight - 400) || Number(a.italic) - Number(b.italic))[0]
 }
 export function validateFontName(name: string): void {
   if (GENERIC_FONT_FACES.some(face => face.family === name)) return
@@ -87,10 +87,30 @@ export function readFontPayload(face: FontFaceInfo): Promise<FontPayload> {
   } else { facesLoaded.delete(face.id); facesLoaded.set(face.id, pending) }
   return pending
 }
-export async function prepareFontPayloads(names: readonly string[]): Promise<FontPayload[]> {
+export async function prepareFontPayloads(names: readonly string[], fixed?: FixedFontCatalog): Promise<FontPayload[]> {
   // CSS 通用字体由浏览器解析，既没有可传递字体字节，也无需等待系统字体目录扫描。
   if (names.every(name => GENERIC_FONT_FACES.some(face => fontMatchesName(face, name)))) return []
-  await loadFontLibrary()
-  const faces = [...new Map(names.map(name => resolveFont(name)).filter((face): face is FontFaceInfo => Boolean(face && !face.id.startsWith('generic:'))).map(face => [face.id, face])).values()]
-  return Promise.all(faces.map(readFontPayload))
+  if (!fixed) await loadFontLibrary()
+  const faces = [...new Map(names.map(name => resolveFont(name, fixed?.faces)).filter((face): face is FontFaceInfo => Boolean(face && !face.id.startsWith('generic:'))).map(face => [face.id, face])).values()]
+  return Promise.all(faces.map(face => fixed ? readFixedFontPayload(fixed, face) : readFontPayload(face)))
+}
+
+const fixedPayloads = new WeakMap<FixedFontCatalog, Map<string, Promise<FontPayload>>>()
+/** 已读取的字节属于导出会话；目录后续变化不能改变同一次导出的字形。 */
+export function readFixedFontPayload(catalog: FixedFontCatalog, face: FontFaceInfo): Promise<FontPayload> {
+  let cache = fixedPayloads.get(catalog)
+  if (!cache) { cache = new Map(); fixedPayloads.set(catalog, cache) }
+  let pending = cache.get(face.id)
+  if (!pending) {
+    const source = catalog.sources[face.id]
+    if (!source) return Promise.reject(new Error('字体不在导出快照中'))
+    pending = getPlatform().fonts.readFace(face.id, source).catch(error => { cache.delete(face.id); throw error })
+    cache.set(face.id, pending)
+  }
+  return pending
+}
+export async function captureFixedFontCatalog(): Promise<FixedFontCatalog> {
+  const catalog = await getPlatform().fonts.list(true)
+  if (!catalog.sources) throw new Error('字体目录快照缺少文件身份')
+  return { ...catalog, sources: catalog.sources }
 }

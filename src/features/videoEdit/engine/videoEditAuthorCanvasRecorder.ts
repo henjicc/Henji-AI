@@ -4,6 +4,8 @@ import { codePoint } from '../../../core/videoEdit/codeMaterial/geometry'
 import type { AuthorCanvasReviewObservation } from '../../../core/videoEdit/codeAuthorProgram'
 import { videoEditQuadOutside } from '../../../core/videoEdit/textOverflowReview'
 import { parseColor } from '../../../core/theme/themeColor'
+import { textOutlineIdentity, textOutlinePath, TEXT_OUTLINE_DRAW, TEXT_APPEARANCE_DRAW, type TextAppearance } from './videoEditTextOutlines'
+import type { TextOutline } from '@/core/imaging/vectorContent/shaping/harfbuzz'
 
 /**
  * Canvas 作者图层的绘制指令录制与重放。
@@ -26,6 +28,16 @@ export class AuthorCanvasUnrecordable extends Error {}
 
 type Value = unknown
 type Matrix = [number, number, number, number, number, number]
+
+const outlinePaths = new WeakMap<OutlineRef, object | (() => object)>()
+const appearanceDraws = new WeakMap<AppearanceRef, TextAppearance['draw']>()
+class AppearanceRef {
+  constructor(readonly appearance: string, draw: TextAppearance['draw']) { appearanceDraws.set(this, draw); Object.freeze(this) }
+}
+/** 可枚举数据只有内容身份；真实 Path2D 留在弱引用表，指纹不依赖进程对象编号。 */
+class OutlineRef {
+  constructor(readonly outline: string, path: object) { outlinePaths.set(this, path); Object.freeze(this) }
+}
 
 /** 作者自己的位图：ImageBitmap 创建后内容不再变，同一对象跨帧得到同一编号，按编号比对。 */
 class ImageRef {
@@ -103,7 +115,7 @@ const PATH = new Set(['closePath', 'moveTo', 'lineTo', 'bezierCurveTo', 'quadrat
 /** 不传 Path2D 时用当前路径的指令。 */
 const USES_PATH = new Set(['fill', 'stroke', 'clip'])
 /** 往画布上落像素的指令：叠加方式不是 source-over 时会改动下面已有的内容。 */
-const PAINT = new Set(['fill', 'stroke', 'fillRect', 'strokeRect', 'fillText', 'strokeText', 'drawImage'])
+const PAINT = new Set(['fill', 'stroke', 'fillRect', 'strokeRect', 'fillText', 'strokeText', 'drawImage', 'textAppearance'])
 const multiply = (m: Matrix, n: Matrix): Matrix => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]]
 const invert = (m: Matrix): Matrix => {
   const det = m[0] * m[3] - m[1] * m[2]
@@ -191,6 +203,8 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   }
   const encode = (value: Value): Value => {
     if (value === null || value === undefined || typeof value !== 'object') return value
+    const outline = textOutlineIdentity(value)
+    if (outline !== undefined) return new OutlineRef(outline, value)
     if (value instanceof AuthorCanvasAsset) { assets.add(value.key); return { asset: value.key } }
     if (value instanceof GradientRecord) return { gradient: idOf(value) ?? adopt(value) }
     if (value instanceof PatternRecord) return { pattern: idOf(value) ?? adopt(value) }
@@ -329,6 +343,15 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   const context = new Proxy(target, {
     get(_, property) {
       if (property === TEXT_LAYER_CONTEXT) return (index: number): void => { layerIndex = index }
+      if (property === TEXT_OUTLINE_DRAW) return (outline: TextOutline, stroke: boolean): void => {
+        const name = stroke ? 'stroke' : 'fill', path = new OutlineRef(outline.identity, () => textOutlinePath(outline))
+        apply(name, [path]); ops.push([name, path])
+      }
+      if (property === TEXT_APPEARANCE_DRAW) return (appearance: TextAppearance): void => {
+        apply('textAppearance', [])
+        const { x, y, width, height } = appearance.bounds
+        ops.push(['textAppearance', new AppearanceRef(appearance.identity, appearance.draw), x, y, width, height])
+      }
       if (property === TEXT_RASTER_CONTEXT) {
         if (stable) throw new AuthorCanvasUnrecordable('文字栅格依赖实际图层栅格尺寸')
         return () => ({ matrix: [...matrix], colorSpace: (measure as TextRasterProvider).getContextAttributes?.().colorSpace ?? 'srgb' })
@@ -374,6 +397,7 @@ export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: Offscr
   const gradients = new Map<number, CanvasGradient>(), patterns = new Map<number, CanvasPattern | null>()
   const decode = (value: Value): Value => {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
+    if (value instanceof OutlineRef) { const path = outlinePaths.get(value); return typeof path === 'function' ? path() : path }
     if (value instanceof ImageRef) return (value.image as RestorableTextBitmap<ImageBitmap>)[TEXT_BITMAP_RESTORE]?.() ?? value.image
     const record = value as Record<string, Value>
     if ('asset' in record) return asset(record.asset as string)
@@ -396,6 +420,7 @@ export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: Offscr
     } else if (name === 'stop') gradients.get(args[0] as number)?.addColorStop(args[1] as number, args[2] as string)
     else if (name === 'pattern') patterns.set(args[0] as number, ctx.createPattern(decode(args[1]) as CanvasImageSource, (args[2] as string | null) ?? null))
     else if (name === 'patternTransform') patterns.get(args[0] as number)?.setTransform(matrixInit(args.slice(1) as number[]))
+    else if (name === 'textAppearance') appearanceDraws.get(args[0] as AppearanceRef)!(ctx)
     else if (name === 'setTransform') ctx.setTransform(...multiply(transform, matrixOf(args.map(decode))))
     else if (name === 'resetTransform') ctx.setTransform(...transform)
     else if (name === 'reset') { ctx.reset(); ctx.setTransform(...transform) }

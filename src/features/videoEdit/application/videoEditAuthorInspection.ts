@@ -32,7 +32,7 @@ export async function inspectVideoEditAuthor(bundle: CodeAuthorBundle, signal?: 
     controller.signal.addEventListener('abort', terminate, { once: true })
     controller.signal.throwIfAborted()
     // 参数声明按同一作者接口解析：v5 起认片子数据参数，v4 代码里的同名自定义类型照旧有效。
-    const metadata = await lease.run(videoEditComposition(document, sequence.id), session => session.readAuthorMetadata(url, bundle.locations, bundle.apiVersion))
+    const metadata = await lease.run(videoEditComposition(document, sequence.id), session => session.readAuthorMetadata(url, bundle.locations, bundle.apiVersion, bundle))
     controller.signal.throwIfAborted()
     await lease.session.releaseAuthor(url)
     succeeded = true

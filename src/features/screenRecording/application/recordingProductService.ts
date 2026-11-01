@@ -72,7 +72,7 @@ export async function exportRecordingProduct(sessionId: string, options: { produ
       const composition = videoEditComposition(draft, plan.sequenceIds[0])
       const regions = await waitVideoEditSmartRegions(composition, composition, controller.signal)
       await waitVideoEditTracking(composition, composition, controller.signal)
-      renderer = new VideoEditRenderSession(composition); renderer.setSmartRegions(regions); renderer.setTracks(videoEditTrackResults(composition))
+      renderer = new VideoEditRenderSession(composition, { fixedTextFonts: true }); renderer.setSmartRegions(regions); renderer.setTracks(videoEditTrackResults(composition))
       const originUs = Math.min(...selectedMedia.map(media => media.monoUs))
       const frameAt = (us: number): number => Math.max(0, Math.floor((us - originUs) * composition.fps / 1e6))
       const write = async (name: string, bytes: Uint8Array): Promise<string> => {
