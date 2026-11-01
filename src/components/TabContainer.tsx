@@ -54,11 +54,13 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
         startDelayMs: import.meta.env.DEV ? 15000 : 0,
     }), [])
 
+    // 工作区外壳只裁切、永不滚动：停靠面板把未显示面板的内容层停在面板区之外，overflow-hidden
+    // 仍允许拖放自动滚动、scrollIntoView 和聚焦把整个工作区顶上去；overflow-clip 连程序滚动也禁止。
     return (
         <div
             ref={containerRef}
             data-ui-workspace-inset-root
-            className="flex-1 min-h-0 overflow-hidden pt-10 transition-[padding]"
+            className="flex-1 min-h-0 overflow-clip pt-10 transition-[padding]"
             style={{
                 paddingLeft: insetLeft,
                 paddingRight: insetRight,
