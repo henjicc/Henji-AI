@@ -78,6 +78,8 @@ pub trait VideoPlatform: Send + Sync {
     fn close_client_handle(&self, handle: u64) -> Result<(), String>;
     /// 本进程显存占用与预算（字节）。
     fn local_memory(&self) -> Option<(u64, u64)>;
+    /// 本进程被换到系统内存的显存占用（字节）：本地显存不够时驱动按此外溢，而不一定收缩预算。
+    fn non_local_memory(&self) -> Option<u64> { None }
     /// 显卡设备已丢失时返回原因（驱动重置、设备移除）。设备无法在本进程内恢复：服务应退出，由主进程重启（3.1）。
     fn device_lost(&self) -> Option<String>;
     /// 硬件解码设备；不可用时返回原因（会话改用软解）。

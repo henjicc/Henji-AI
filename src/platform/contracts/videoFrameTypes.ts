@@ -444,6 +444,8 @@ export interface VideoFrameNativeStats {
   workingSetBytes?: number
   privateBytes?: number
   gpuLocalMemory: { currentUsageBytes: number; budgetBytes: number } | null
+  /** 本进程被换到系统内存的显存（字节）；平台不提供时为 null。 */
+  gpuNonLocalUsageBytes?: number | null
   streams: Array<{ streamId: string; kind?: 'test' | 'decoder'; format: VideoSharedFormat | null; width: number; height: number; running: boolean; counters: VideoFrameNativeStreamCounters }>
   audioSessions?: number
   /** 资源预算的上限与占用（3.1）。 */

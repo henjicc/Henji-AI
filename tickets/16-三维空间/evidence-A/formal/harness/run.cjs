@@ -36,6 +36,8 @@ async function assets(){fs.mkdirSync(out,{recursive:true});const files=[];const 
  for(const frame of frames){const result=await invoke('observe_video_edit_frame',{documentRef,target:{kind:'program',sequenceRef,frame},maxWidth:1920,saveToAssets:true});const data=result.data;assert.ok(data.verification.verified,JSON.stringify(data));const media=await readAllMedia(client,data.resultRef,{chunkBytes:262144});const name=`f${String(frame).padStart(3,'0')}.png`;fs.writeFileSync(path.join(out,name),media.bytes);evidence.frames.push({frame,name,width:data.width,height:data.height,documentVersion:data.documentVersion});store();console.log(name)}
  await invoke('verify_video_edit_space',{documentRef,sequenceRef,frames:[0,45,135,168,225,239]})
  saved=readVideoEditFile(seeded.file);fs.writeFileSync(path.join(out,'saved-project.json'),JSON.stringify(saved,null,2));assert.ok(saved.codeMaterials.some(material=>material.versions.some(v=>v.apiVersion>=15)))
+ // 整帧性能（P5）用播放基准台测：把整个工程复制出隔离资料目录，交给 bench:video-edit --project。
+ if(process.env.T16_P5_PROJECT){let projectRoot=path.dirname(seeded.file);while(!fs.existsSync(path.join(projectRoot,'.henji','project.json'))&&path.dirname(projectRoot)!==projectRoot)projectRoot=path.dirname(projectRoot);fs.rmSync(process.env.T16_P5_PROJECT,{recursive:true,force:true});fs.cpSync(projectRoot,process.env.T16_P5_PROJECT,{recursive:true});evidence.p5Project={from:projectRoot,documentId:seeded.documentId}}
  evidence.completed=true;store()
  }finally{await client?.close().catch(()=>{});await disableMcp(session.page).catch(()=>{});await session.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})

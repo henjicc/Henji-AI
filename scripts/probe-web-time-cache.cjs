@@ -90,7 +90,8 @@ async function main() {
   report.ffmpegVersion = (await run('version', ['-version'])).text
   const instance = await launchElectronApp({ mainEntry, cwd: root, isolateUserData: true, useElectronApi: true,
     extraEnv: { HENJI_WEB_CACHE_PROBE_OUTPUT: output } })
-  const timer = setTimeout(() => { void instance.app.close() }, 180000)
+  // 整体验收要先补录再逐帧读，600 帧超过三分钟；其余专项仍按三分钟限时。
+  const timer = setTimeout(() => { void instance.app.close() }, process.argv.some(value => value.startsWith('--acceptance-only=')) ? 900000 : 180000)
   try {
     if (process.argv.includes('--memory-pressure-only')) {
       report.memory = await instance.app.evaluate((_electron, binary) => globalThis.webTimeCacheProbe.memory(binary), ffmpeg)

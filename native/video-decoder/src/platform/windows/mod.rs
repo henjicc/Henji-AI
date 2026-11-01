@@ -67,6 +67,10 @@ impl VideoPlatform for WindowsPlatform {
         self.gpu.local_memory()
     }
 
+    fn non_local_memory(&self) -> Option<u64> {
+        self.gpu.non_local_memory()
+    }
+
     fn device_lost(&self) -> Option<String> {
         self.gpu.removed_reason()
     }

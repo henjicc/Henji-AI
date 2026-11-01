@@ -35,13 +35,16 @@ export async function memoryProbe(output: string, ffmpeg: string): Promise<unkno
     cacheRoot: () => cacheRoot, canScan: async () => false, published: () => { published++ },
     memoryTight: async signal => { const memory = (await service.stats({ signal, timeoutMs: 2_000 })).gpuLocalMemory; return { tight: !!memory && memory.budgetBytes - memory.currentUsageBytes < 1024 ** 3, context: memory ?? undefined } } })
   const pages = new WebSourcePages(logger, () => undefined, registrations, scheduler)
-  const host = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } })
+  const host = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, preload: path.join(output, 'preload', 'decode.cjs') } })
   const target: VideoFrameTarget = { id: host.webContents.id, get mainFrame() { return host.webContents.mainFrame }, isDestroyed: () => host.isDestroyed(), send: () => undefined, onGone: () => () => undefined }
   const pause = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
   let foreground: Promise<void> | undefined, resume: (() => void) | undefined
   try {
     await capability.check()
-    const source = await pages.open(target, { route: 'memory', path: root, width: 640, height: 360, region: [0, 0, 640, 360], scale: 1, trust: [] })
+    // 与正式消费方一样：宿主页面先就绪，开页登记可信来源后补录才有对象可录。
+    await host.loadURL('data:text/html,<title>Memory probe</title>')
+    const source = await activity.foreground(() => pages.open(target, { route: 'memory', path: root, width: 640, height: 360, region: [0, 0, 640, 360], scale: 1, trust: [] }))
+    if (!registrations.get(source.streamId)) throw new Error('正式开页未登记可信来源')
     pages.cacheDemand(target.id, { streamId: source.streamId, time: 0, latest: true, cacheGrid: { rate: { numerator: 30, denominator: 1 }, phase: { numerator: '0', denominator: '1' } } })
     const deadline = performance.now() + 120_000
     while (!started && performance.now() < deadline) await pause(50)
@@ -55,8 +58,8 @@ export async function memoryProbe(output: string, ffmpeg: string): Promise<unkno
       await service.startTestStream({ streamId, format: 'rgbaf16', width: 4096, height: 4096, fps: 30, poolSize: 8 })
       textures.push(streamId)
       await pause(100)
-      const memory = (await service.stats()).gpuLocalMemory
-      samples.push({ streamId, pid: service.pid, memory })
+      const stats = await service.stats(), memory = stats.gpuLocalMemory
+      samples.push({ streamId, pid: service.pid, memory, nonLocalBytes: stats.gpuNonLocalUsageBytes })
       await fs.writeFile(path.join(output, 'memory-progress.json'), JSON.stringify({ initial, samples, lifecycle, released }, null, 2))
       if (memory && memory.budgetBytes - memory.currentUsageBytes < 1024 ** 3) {
         for (let wait = 0; wait < 40 && !released; wait++) await pause(100)

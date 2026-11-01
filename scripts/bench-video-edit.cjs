@@ -163,7 +163,7 @@ async function main(options) {
   }
   const recording = options.project ? null : ensureBenchRecording()
 
-  const launched = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT, isolateUserData: true, useElectronApi: true, skipOnboarding: true })
+  const launched = await launchElectronApp({ mainEntry: MAIN_ENTRY, appPath: ROOT, cwd: ROOT, isolateUserData: true, useElectronApi: true, skipOnboarding: true })
   const { app, page } = launched
   let client
   let browserWindow
@@ -193,6 +193,9 @@ async function main(options) {
     let file
     if (projectFolder) {
       const project = await page.evaluate(folder => window.henjiNative.documents.registerExternalProject(folder), projectFolder)
+      // 登记的外部工程带外来标记，里面的代码首次运行要等人确认，无人值守的播放会停在第一个代码片段前。
+      // 基准台只跑隔离资料目录（上面已校验），在这份临时资料里打开“允许运行外来内容里的代码”。
+      await page.evaluate(() => window.henjiNative.applicationControl.contentTrust({ action: 'set-policy', allow: true }))
       documentId = options.document ?? project.mainVideoEditId
       if (!documentId) throw new Error('工程没有主剪辑，请用 --document 指定剪辑文档 ID')
       const documents = await page.evaluate(() => window.henjiNative.documents.listDocuments({ kind: 'video_edit', includeDrafts: true, includeMissing: false }))

@@ -73,6 +73,14 @@ mod imp {
             unsafe { adapter.QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info) }.ok()?;
             Some((info.CurrentUsage, info.Budget))
         }
+
+        /// 本进程被换到系统内存的显存占用（字节）。
+        pub fn non_local_memory(&self) -> Option<u64> {
+            let adapter = self.adapter.cast::<IDXGIAdapter3>().ok()?;
+            let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
+            unsafe { adapter.QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &mut info) }.ok()?;
+            Some(info.CurrentUsage)
+        }
     }
 
     fn adapter_value(desc: &DXGI_ADAPTER_DESC1) -> Value {

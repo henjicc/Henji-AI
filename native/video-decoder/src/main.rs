@@ -146,6 +146,7 @@ impl Service {
         let (cpu_ms, handle_count) = platform::process_usage();
         let (working_set, private_bytes) = platform::process_memory();
         let memory = self.platform.as_ref().and_then(|platform| platform.local_memory());
+        let non_local = self.platform.as_ref().and_then(|platform| platform.non_local_memory());
         json!({
             "pid": std::process::id(),
             "cpuMs": cpu_ms,
@@ -153,6 +154,7 @@ impl Service {
             "workingSetBytes": working_set,
             "privateBytes": private_bytes,
             "gpuLocalMemory": memory.map(|(usage, budget)| json!({ "currentUsageBytes": usage, "budgetBytes": budget })),
+            "gpuNonLocalUsageBytes": non_local,
             "streams": self.streams.stats(),
             "audioSessions": self.audio.count(),
             "budget": self.budget.stats(),

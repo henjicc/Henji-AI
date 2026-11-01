@@ -20,7 +20,7 @@ async function runCodeOutputBench(options) {
   await build({ configFile: false, logLevel: 'warn', root: path.join(ROOT, 'tests/fixtures/bench/video-edit/code-output'), base: './',
     plugins: [videoEditRenderEngineVersion()], resolve: { alias: { '@': path.join(ROOT, 'src') } }, worker: { format: 'es' },
     build: { outDir: path.join(OUT, 'renderer'), emptyOutDir: false, minify: false } })
-  const launched = await launchElectronApp({ mainEntry, cwd: ROOT, isolateUserData: true, useElectronApi: true })
+  const launched = await launchElectronApp({ mainEntry, appPath: ROOT, cwd: ROOT, isolateUserData: true, useElectronApi: true })
   const { app, page } = launched
   const evidence = { measurements: '1920×1080、30fps、三个重叠代码片段；八次热身后24次；Worker请求到GPU完成，不是物理扫描上屏。', runs: [] }
   try {
