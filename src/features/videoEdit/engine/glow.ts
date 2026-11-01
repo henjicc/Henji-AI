@@ -336,5 +336,5 @@ fn glowWithin(color: vec3f, shown: f32, light: vec3f, screen: bool, position: ve
 
 export const GLOW_PLANNER = definePlanner({
   id: 'glow', entries: GLOW_ENTRIES, shared: [GLOW_COMPOSITE_BLOCK], wgsl: GLOW_WGSL,
-  plan: (params, frame, instance) => planGlow(params, frame.width, frame.height, frame.layer, frame.split),
+  plan: (params, frame) => planGlow(params, frame.width, frame.height, frame.layer, frame.split),
 })

@@ -221,6 +221,6 @@ fn strokeOver(base: vec4f, matte: vec4f, sd: f32) -> vec4f {
 
 export const STROKE_PLANNER = definePlanner({
   id: 'stroke', entries: STROKE_ENTRIES, wgsl: STROKE_WGSL,
-  plan: (params, frame, instance) => planStroke(params, frame.width, frame.height, frame.layer),
+  plan: (params, frame) => planStroke(params, frame.width, frame.height, frame.layer),
   unfilteredSourceEntries: STROKE_FIELD_ENTRIES,
 })
