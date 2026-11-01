@@ -118,12 +118,17 @@ function timeline(state: VideoMotionState): Timeline | null {
   return { sequenceRef: { kind: 'video_edit.sequence', id: `${state.owner.document.id}:${seq.id}` }, frame: evidence.frame, fps: seq.frameRate, visitRef: `${state.owner.document.id}:${seq.id}/${runtime.visit}` }
 }
 function mono(state: VideoMotionState): number { return Math.max(0, Math.round((performance.now() - runtimes.get(state.owner)!.startedAt) * 1000)) }
-/** 开始、暂停和轨迹折返划分连续段；所有段落仍属于同一个原稿。 */
+/** 拖动与否以这一帧上屏时的事实为准；时钟分段和采样分类必须读同一个值。 */
+function presentedScrubbing(state: VideoMotionState): boolean { return !!(state.presentation?.scrubbing ?? state.owner.scrubbing) }
+/**
+ * 开始、暂停和轨迹折返划分连续段；所有段落仍属于同一个原稿。
+ * 访问身份与时间轴区间只由本段实际采到的样本确定，尚无样本时保持为空，不按播放头预估。
+ */
 function beginAutomaticTake(state: VideoMotionState, at = mono(state)): void {
   if (!state.automatic) return
   const runtime = runtimes.get(state.owner)!
   runtime.takeId = crypto.randomUUID()
-  state.draft.takes.push({ id: runtime.takeId, intent: 'demonstrate', pathDemonstration: false, placement: true, monoSpanUs: [at, at], direction: 0, visitRef: null, timelineRange: [state.owner.frame, state.owner.frame], samplePages: [], geometryDigest: activeTarget(state).geometryDigest })
+  state.draft.takes.push({ id: runtime.takeId, intent: 'demonstrate', pathDemonstration: false, placement: true, monoSpanUs: [at, at], direction: 0, visitRef: null, timelineRange: null, samplePages: [], geometryDigest: activeTarget(state).geometryDigest })
 }
 function endAutomaticTake(state: VideoMotionState): void {
   const take = state.draft.takes.find(value => value.id === runtimes.get(state.owner)?.takeId)
@@ -243,16 +248,14 @@ function captureClock(state: VideoMotionState): void {
   const at = Math.max(mono(state), state.draft.clockSegments.at(-1)?.monoSpanUs[1] ?? 0)
   let previous = state.draft.clockSegments.at(-1)
   const direction = previous?.end ? Math.sign(t.frame - previous.end.frame) : 0
-  const scrubbing = state.presentation?.scrubbing ?? state.owner.scrubbing
+  const scrubbing = presentedScrubbing(state)
   const seek = Boolean(previous?.end && !state.owner.playing && !scrubbing && direction)
   const previousDirection = state.automatic ? state.draft.takes.find(take => take.id === runtime.takeId)?.direction ?? 0 : runtime.lastDirection
   const reverse = Boolean(direction && previousDirection && direction !== previousDirection)
   const currentTake = state.draft.takes.find(take => take.id === runtime.takeId)
-  const becomesTrajectory = (state.owner.playing || scrubbing) && (runtime.pointerActive || Boolean(runtime.pendingEvent))
-  const firstSampleAt = currentTake ? Math.min(...currentTake.samplePages.map(page => page.monoSpanUs[0]), ...state.pending.filter(sample => sample.takeRef === currentTake.id).map(sample => sample.monoUs)) : Infinity
-  const crossedSeek = state.draft.clockSegments.some(clock => clock.mode === 'seek' && clock.monoSpanUs[0] > firstSampleAt)
   // 不把定位跳转或折返硬拼成单调轨迹；保留全部原始段与墙钟，算法无需补造路径。
-  if (state.automatic && currentTake && (reverse || seek && !currentTake.placement || becomesTrajectory && currentTake.placement && crossedSeek)) {
+  // 摆放段转为轨迹时的拆分由 capturePose 按同一次采样分类决定。
+  if (state.automatic && currentTake && (reverse || seek && !currentTake.placement)) {
     currentTake.monoSpanUs[1] = at
     beginAutomaticTake(state, at)
   }
@@ -277,20 +280,26 @@ function capturePose(state: VideoMotionState, event: MotionSample['event'], inpu
   const runtime = runtimes.get(state.owner)!; const clock = state.draft.clockSegments.find(s => s.id === (anchor?.clockId ?? runtime.clockId)); const at = anchor?.monoUs ?? clock?.anchors.at(-1)?.monoUs ?? mono(state); const t = anchor?.timeline ?? timeline(state)
   if (!t) { state.message = '请等待片段画面显示后继续示范。'; publish(state, false); return }
   runtime.lastFrame = t.frame
+  // 没有时钟段就不产生样本，示范段的访问身份与区间也不能被这次调用改动。
+  if (!clock) return
+  const captureKind = classifyMotionCapture(true, state.owner.playing, presentedScrubbing(state), Boolean(runtime.pointerActive && runtime.gestureOrigin && runtime.gestureOrigin.timeline.frame !== t.frame))
+  const current = state.draft.takes.find(v => v.id === runtime.takeId)
+  // 摆放段可以跨定位跳转，轨迹段不能；转为轨迹前若本段已采样的墙钟内有跳转，从这一采样起另开一段。
+  if (state.automatic && captureKind === 'trajectory' && current?.placement && current.timelineRange && state.draft.clockSegments.some(c => c.mode === 'seek' && c.monoSpanUs[0] > current.monoSpanUs[0])) {
+    current.monoSpanUs[1] = at; beginAutomaticTake(state, at)
+  }
   if (!runtime.takeId) {
     runtime.takeId = crypto.randomUUID()
-    state.draft.takes.push({ id: runtime.takeId, intent: 'demonstrate', pathDemonstration: false, ...(state.capture === 'place' || state.automatic && !state.owner.playing && !state.owner.scrubbing ? { placement: true as const } : {}), monoSpanUs: [at, at], direction: 0, visitRef: t.visitRef, timelineRange: [t.frame, t.frame], samplePages: [], geometryDigest: activeTarget(state).geometryDigest })
+    state.draft.takes.push({ id: runtime.takeId, intent: 'demonstrate', pathDemonstration: false, ...(state.capture === 'place' || state.automatic && !state.owner.playing && !presentedScrubbing(state) ? { placement: true as const } : {}), monoSpanUs: [at, at], direction: 0, visitRef: t.visitRef, timelineRange: [t.frame, t.frame], samplePages: [], geometryDigest: activeTarget(state).geometryDigest })
   }
   const take = state.draft.takes.find(v => v.id === runtime.takeId)!
-  if (state.automatic && !take.samplePages.length && !state.pending.some(sample => sample.takeRef === take.id)) {
-    take.timelineRange = [t.frame, t.frame]; take.direction = 0
-  }
+  // 区间为空即本段尚无样本；不能用“已落盘页 + 待写样本”判断，写页期间两者都暂时为空。
+  // 墙钟起点也从第一个样本算起：开段到首个样本之间的定位跳转不属于这段示范。
+  if (!take.timelineRange) { take.timelineRange = [t.frame, t.frame]; take.direction = 0; take.monoSpanUs[0] = at }
   if (take.visitRef === null) take.visitRef = t.visitRef
-  if (take.direction === 0 && take.timelineRange![0] !== t.frame) take.direction = Math.sign(t.frame - take.timelineRange![0]) as -1 | 1
-  take.monoSpanUs[1] = at; take.timelineRange![1] = t.frame
-  const captureKind = classifyMotionCapture(true, state.owner.playing, !!state.owner.scrubbing, Boolean(runtime.pointerActive && runtime.gestureOrigin && runtime.gestureOrigin.timeline.frame !== t.frame))
+  if (take.direction === 0 && take.timelineRange[0] !== t.frame) take.direction = Math.sign(t.frame - take.timelineRange[0]) as -1 | 1
+  take.monoSpanUs[1] = at; take.timelineRange[1] = t.frame
   if (state.automatic && captureKind === 'trajectory') delete take.placement
-  if (!clock) return
   const sample: MotionSample = { sampleId: crypto.randomUUID(), seq: runtime.seq++, monoUs: at, timeline: t, clockSegmentRef: clock.id, takeRef: take.id, targetRef: activeTarget(state).ref, pose: structuredClone(anchor?.pose ?? state.pose), quality: 'presented', confirmed: true, gestureKind: state.property === 'position' ? 'move' : state.property === 'rotationTurns' ? 'rotate' : 'scale', event }
   if (!state.automatic && !activeTarget(state).editable.includes(state.property)) activeTarget(state).editable.push(state.property)
   state.pending.push(sample); state.recent.push(sample); state.endpoints = [state.endpoints?.[0] ?? sample, sample]

@@ -6,9 +6,11 @@ import { renderHook } from '@testing-library/react'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { optimizeMotionDraft } from '@/core/creativeIntent/candidates'
+import { prepareMotionTakes } from '@/core/creativeIntent/sampling'
+import type { MotionSample } from '@/core/creativeIntent/contracts'
 import { createVideoEditTestProject, reopenVideoEdit, failVideoEditSaves } from './videoEditDocumentTestKit'
 import { appendVideoEditClip, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
-import { pauseVideoMotion, resumeVideoMotion, startVideoMotion, demonstrateVideoMotion, recordVideoMotionPresentation, videoMotionState, videoMotionComposition, setVideoMotionOptions, setVideoMotionPointer, stopVideoMotion, optimizeVideoMotion, applyVideoMotion, configureVideoMotion, reopenVideoMotion, videoMotionLiveResources, setVideoMotionIntent, previewVideoMotion, pinVideoMotionFrame } from './videoEditMotionDraft'
+import { pauseVideoMotion, resumeVideoMotion, startVideoMotion, demonstrateVideoMotion, recordVideoMotionPresentation, videoMotionState, videoMotionComposition, setVideoMotionOptions, setVideoMotionPointer, stopVideoMotion, optimizeVideoMotion, applyVideoMotion, configureVideoMotion, reopenVideoMotion, videoMotionLiveResources, setVideoMotionIntent, previewVideoMotion, pinVideoMotionFrame, flushVideoMotion } from './videoEditMotionDraft'
 import { readMotionPages } from './videoEditMotionResources'
 import { useVideoEditMotionGesture } from '../panels/useVideoEditMotionGesture'
 import { configureVideoMotionConstraints, organizeVideoMotionAnnotation } from './videoEditMotionDraft'
@@ -92,11 +94,12 @@ it('自动采集保留同组多目标，不把纯时间轴定位录成动作，�
   setVideoMotionPointer(id, false)
   await stopVideoMotion(id)
   expect(next.draft.targets).toHaveLength(2)
-  expect(next.draft.takes, JSON.stringify(next.draft.takes.map(take => ({ range: take.timelineRange, place: take.placement, visit: take.visitRef })))) .toHaveLength(2)
-  expect(next.draft.takes[1].placement).toBeUndefined()
-  const samples = []
+  // 第二个片段先定位再按下：定位发生在本段首个样本之前，不属于这段示范，按下再拖动是同一段轨迹。
+  expect(next.draft.takes.map(take => [take.placement ?? false, take.timelineRange])).toEqual([[true, [12, 12]], [false, [second.start, second.start + 10]]])
+  const samples: MotionSample[] = []
   for await (const page of readMotionPages(id, next.draft)) if (page.kind === 'samples') samples.push(...page.entries)
   expect(new Set(samples.map(sample => sample.targetRef.id)).size).toBe(2)
+  expect(() => prepareMotionTakes(next.draft, samples)).not.toThrow()
   expect(getActiveVideoEditSequence(owner).clips[0].rotation).toBe(first.rotation)
 })
 it('多目标候选按各片段起点映射关键帧，整组应用只增加一次作品历史', async () => {
@@ -139,6 +142,54 @@ it('自动轨迹折返保留同组全部采样，连续段符合原稿时钟与�
   expect(samples.filter(sample => sample.event === 'sample').map(sample => sample.timeline!.frame)).toEqual([10, 20, 10, 5])
   await configureVideoMotion(id, { selectedTakeIds: [state.draft.takes[1].id] })
   await expect(optimizeVideoMotion(id)).resolves.toBeUndefined()
+})
+// 真实录制的段落元数据必须与实际样本一致，否则整理时整组原稿被拒（take-visit / take-gap）。
+const presentEvidence = (owner: Awaited<ReturnType<typeof setup>>, frame: number, scrubbing?: boolean) => { setVideoEditView(owner.document.id, { frame }); recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame, revision: videoMotionComposition(owner)!.revision, at: performance.now(), ...(scrubbing === undefined ? {} : { scrubbing }) }) }
+const placeAt = (owner: Awaited<ReturnType<typeof setup>>, frame: number, x: number) => {
+  const id = owner.document.id, state = videoMotionState(owner)!
+  presentEvidence(owner, frame); setVideoMotionPointer(id, true)
+  demonstrateVideoMotion(id, { ...state.pose, position: [x, .5] }); presentEvidence(owner, frame)
+  demonstrateVideoMotion(id, state.pose, 'up'); presentEvidence(owner, frame); setVideoMotionPointer(id, false)
+}
+const preparedRecording = async (owner: Awaited<ReturnType<typeof setup>>) => {
+  const state = videoMotionState(owner)!, samples: MotionSample[] = []
+  for await (const page of readMotionPages(owner.document.id, state.draft)) if (page.kind === 'samples') samples.push(...page.entries)
+  return () => prepareMotionTakes(state.draft, samples)
+}
+it('原稿分页写入期间继续摆放，示范段区间不被重置', async () => {
+  const owner = await setup(), id = owner.document.id
+  await startVideoMotion(id); placeAt(owner, 0, .55)
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve })
+  const write = vi.mocked(getPlatform().system.fs.writeFile).getMockImplementation()!
+  vi.mocked(getPlatform().system.fs.writeFile).mockImplementationOnce(async (...args) => { await gate; return write(...args) })
+  const flushing = flushVideoMotion(videoMotionState(owner)!)
+  placeAt(owner, 10, .6)
+  release(); await flushing; await stopVideoMotion(id)
+  expect(videoMotionState(owner)!.draft.takes.map(take => take.timelineRange)).toEqual([[0, 10]])
+  expect(await preparedRecording(owner)).not.toThrow()
+})
+it('摆放段跨过定位后转为轨迹另起一段；迟到的松手按上屏时的拖动状态归类', async () => {
+  const owner = await setup(), id = owner.document.id
+  await startVideoMotion(id); placeAt(owner, 0, .55); placeAt(owner, 10, .6)
+  const state = videoMotionState(owner)!
+  presentEvidence(owner, 20); setVideoMotionPointer(id, true)
+  demonstrateVideoMotion(id, { ...state.pose, position: [.65, .5] }); presentEvidence(owner, 20)
+  // 按住指针时用方向键定位：不在播放也不在拖动播放头。
+  presentEvidence(owner, 30); demonstrateVideoMotion(id, { ...state.pose, position: [.7, .5] }); presentEvidence(owner, 30)
+  setVideoMotionPointer(id, false); await stopVideoMotion(id)
+  expect(state.draft.takes.map(take => [take.placement ?? false, take.timelineRange])).toEqual([[true, [0, 20]], [false, [30, 30]]])
+  expect(await preparedRecording(owner)).not.toThrow()
+
+  const late = await setup(), lateId = late.document.id
+  await startVideoMotion(lateId); placeAt(late, 0, .55); placeAt(late, 10, .6)
+  const lateState = videoMotionState(late)!
+  setVideoMotionPointer(lateId, true); demonstrateVideoMotion(lateId, { ...lateState.pose, position: [.65, .5] }); presentEvidence(late, 10)
+  demonstrateVideoMotion(lateId, lateState.pose, 'up'); setVideoMotionPointer(lateId, false)
+  // 松手那帧不在拖动中上屏，回执到达时用户已按下时间标尺。
+  setVideoEditView(lateId, { scrubbing: true }); presentEvidence(late, 10, false); setVideoEditView(lateId, { scrubbing: false })
+  await stopVideoMotion(lateId)
+  expect(lateState.draft.takes.map(take => take.placement)).toEqual([true])
+  expect(await preparedRecording(late)).not.toThrow()
 })
 
 it('节拍吸附从片段通用开关进入正式整理；原稿不吸附、钉点优先、标记变化拒绝旧候选', async () => {
