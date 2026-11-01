@@ -4,7 +4,7 @@ const path = require('node:path')
 const sharp = require('sharp')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
-const { openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const { presented, png, pixelDifference, mediaProbe } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
@@ -103,6 +103,8 @@ function createVideoEditObservationScene() {
             if (job && ['completed', 'failed', 'cancelled'].includes(job.state)) break
             await page.waitForTimeout(500)
           }
+          const done = page.getByRole('dialog', { name: '导出完成' })
+          if (await done.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false)) { await done.getByRole('button', { name: '完成', exact: true }).click(); await done.waitFor({ state: 'hidden' }) }
           assert.equal(job?.state, 'completed', JSON.stringify(job)); assert.ok(job.outputReady && job.path && fs.existsSync(job.path), JSON.stringify(job))
           const { ffprobePath } = require('./mediaBinaries.cjs')
           const video = mediaProbe(ffprobePath, job.path).streams.find(value => value.codec_type === 'video')
@@ -198,6 +200,9 @@ function createVideoEditObservationScene() {
         }
         await observe('input-export-frame', { kind: 'program', frame: 60 })
         evidence.inputExport = await exportFrame('input', 60, path.join(root, 'input-export-frame.png'), { left: 0, top: 0, width: 640, height: 360 }); store()
+        // 代码图层的位姿模糊归序列的运动模糊总开关管；夹具序列默认关着，前面的取帧不受模糊影响。
+        const blurSwitch = await callTool(client, 'change_application_entities', operationEnvelope([await callTool(client, 'read_application_entity', { ref: sequenceRef })], { summary: '打开运动模糊总开关', changes: [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.motion_blur': true } }] }))
+        assert.equal(blurSwitch.executionState, 'completed', JSON.stringify(blurSwitch))
         const motionBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
         const motionCreated = await callTool(client, 'change_application_entities', operationEnvelope([motionBaseline], { summary: '创建API2运动曝光验收素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: documentRef, items: [{ properties: { 'video_edit.code_material.source': MOTION_SOURCE } }] }] }))
         assert.equal(motionCreated.verificationState, 'verified', JSON.stringify(motionCreated))
@@ -329,6 +334,8 @@ function createVideoEditObservationScene() {
         playbackEvidence.runtime = await app.evaluate(async ({ app }) => ({ electron: process.versions.electron, chrome: process.versions.chrome, gpu: await app.getGPUInfo('basic') }))
         const programWorkers = (await workerSnapshot(page)).workers.filter(worker => worker.direct && worker.sequenceId === 'main')
         assert.ok(programWorkers.length, '必须找到实际节目Worker，零样本不能证明释放')
+        // 前面经 MCP 改过序列，人的点击要先接管。
+        await takeOverVideoEdit(page)
         await page.getByRole('button', { name: '关闭项目', exact: true }).click()
         await page.waitForFunction(ids => window.__videoLayoutEvidence.workers.filter(worker => ids.includes(worker.id)).every(worker => worker.terminated), programWorkers.map(worker => worker.id), { timeout: 10000 })
         const released = (await workerSnapshot(page)).events.filter(event => event.kind === 'dispose.completed' && programWorkers.some(worker => worker.id === event.worker))
@@ -346,7 +353,7 @@ function createVideoEditObservationScene() {
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         const close = page.getByRole('button', { name: '关闭项目', exact: true })
-        if (await close.isVisible().catch(() => false)) await close.click()
+        if (await close.isVisible().catch(() => false)) { await takeOverVideoEdit(page).catch(() => {}); await close.click() }
       }
     },
   }

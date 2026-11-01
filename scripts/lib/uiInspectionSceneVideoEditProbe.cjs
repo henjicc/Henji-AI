@@ -99,7 +99,7 @@ function createVideoEditProbeScene() {
   return {
     id: 'video-edit-engine-probe', surface: '剪辑', name: '剪辑-工程与MCP合成导出闭环', writesUserData: true,
     // The fault phase denies writes on purpose; every other application error still fails the scene.
-    expectedLogEvents: ['video_edit.save.failed'],
+    expectedLogEvents: ['video_edit.save.failed', 'documents.save.failed'],
     // 故障阶段最后停在已重新定位的工程上；关掉它，后序场景（与 --only 单跑时一样）从“打开工程”开始。
     cleanup: async (page) => {
       await page.keyboard.press('Escape')
@@ -440,12 +440,13 @@ function createVideoEditProbeScene() {
         }
         // 2) Save failure: deny creating files in the project's folder, so the atomic staged write cannot start.
         {
-          const before = JSON.parse(projectText()).sequences[1].clips.length
+          // 就地写字与退出编辑各占一步撤销，撤销的不一定是建片段；只核对失败期间的那步修改最终落盘。
+          const before = projectText()
           const account = os.userInfo().username; const acl = args => execFileSync('icacls', [path.dirname(multiOpened.file), ...args], { windowsHide: true, stdio: 'pipe' })
           acl(['/deny', `${account}:(W)`])
           try {
             await button(page, '撤销').click()
-            await page.getByText(/项目未能保存到磁盘/).first().waitFor({ state: 'visible', timeout: 10000 })
+            await page.getByText(/剪辑未能保存到磁盘/).first().waitFor({ state: 'visible', timeout: 10000 })
             evidence.faults.saveFailure = { alerts: await alerts() }
             assert.ok(!evidence.faults.saveFailure.alerts.some(text => /EISDIR|EPERM|ENOENT|illegal operation/i.test(text)), `保存失败提示不得暴露原始系统错误：${evidence.faults.saveFailure.alerts}`)
             await capture('video-edit-fault-save-failed')
@@ -454,9 +455,9 @@ function createVideoEditProbeScene() {
             evidence.faults.saveFailure.alertsAfterClose = await alerts()
           } finally { acl(['/remove:d', account]) }
           const deadline = performance.now() + 45000; let recovered
-          do { await page.waitForTimeout(250); recovered = JSON.parse(projectText()) } while (recovered.sequences[1].clips.length !== before - 1 && performance.now() < deadline)
-          assert.equal(recovered.sequences[1].clips.length, before - 1, '恢复写入后自动重试须保存失败期间的修改')
-          await page.waitForFunction(() => ![...document.querySelectorAll('[role=alert]')].some(alert => /项目未能保存到磁盘/.test(alert.textContent ?? '')), null, { timeout: 5000 })
+          do { await page.waitForTimeout(250); recovered = projectText() } while (recovered === before && performance.now() < deadline)
+          assert.notEqual(recovered, before, '恢复写入后自动重试须保存失败期间的修改')
+          await page.waitForFunction(() => ![...document.querySelectorAll('[role=alert]')].some(alert => /剪辑未能保存到磁盘/.test(alert.textContent ?? '')), null, { timeout: 5000 })
           evidence.faults.saveFailure.recovered = true; evidence.faults.saveFailure.alertsAfterRecovery = await alerts()
           fs.writeFileSync(path.join(root, 'evidence-final.json'), JSON.stringify(evidence, null, 2))
         }
@@ -471,6 +472,7 @@ function createVideoEditProbeScene() {
           evidence.faults.missingSource = { alerts: await alerts(), canvas: await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => ({ ...canvas.dataset })).catch(error => String(error)), body: (await page.locator('body').innerText()).slice(-800) }
           assert.ok(evidence.faults.missingSource.alerts.some(text => text.includes('找不到素材「1920-30.mp4」的源文件') && text.includes('重新定位源文件')), JSON.stringify(evidence.faults.missingSource.alerts))
           assert.ok(!evidence.faults.missingSource.alerts.some(text => text.includes('henji-media')), '缺失提示不得暴露内部地址')
+          assert.ok(!evidence.faults.missingSource.alerts.some(text => /(ENOENT|EPERM|EACCES)|realpath/.test(text)), `缺失提示不得暴露原始系统错误：${evidence.faults.missingSource.alerts}`)
           await capture('video-edit-fault-missing-source')
           const videoItem = missing.items.find(item => missing.media.find(media => media.id === item.mediaId)?.kind === 'video')
           await dialogs(app, [specs[0].source], ''); await entry(page, videoItem.id).click({ button: 'right' }); await menuItem(page, '重新定位源文件').click()

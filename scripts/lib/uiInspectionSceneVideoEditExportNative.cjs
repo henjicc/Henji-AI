@@ -203,23 +203,24 @@ async function armChannelFault(page, plan) {
     window.addEventListener('message', event => {
       const data = event.data; const real = event.ports?.[0]
       if (proxied.has(event) || data?.type !== 'henji:video-frames-port' || !real || !state.armed) return
-      state.armed = false; state.route = data.route
+      // 预览取帧也会新开通道：每个通道都代理，只对打开了导出连续解码的那个下手。
+      let exportPort = false; const pending = {}
       event.stopImmediatePropagation()
       const channel = new MessageChannel(); const worker = channel.port1
       const transfers = message => [message?.frame, message?.result?.data].filter(value => value instanceof VideoFrame || value instanceof ArrayBuffer)
       worker.onmessage = ({ data: message }) => {
-        if (message?.type === 'request' && message.call?.method === 'frameAt') {
+        if (exportPort && message?.type === 'request' && message.call?.method === 'frameAt') {
           state.frameAtRequests++
           if (state.plan.failFrameAt) { state.frameAtFailed++; worker.postMessage({ type: 'response', id: message.id, error: '注入：单帧读取失败' }); return }
         }
-        if (message?.type === 'request' && message.call?.method === 'openDecoder') state.pending[message.id] = message.call.params.purpose
+        if (message?.type === 'request' && message.call?.method === 'openDecoder') pending[message.id] = message.call.params.purpose
         real.postMessage(message, transfers(message))
       }
       real.onmessage = ({ data: message }) => {
-        if (message?.type === 'response' && message.id in state.pending) { if (message.result?.streamId) state.purposes[message.result.streamId] = state.pending[message.id]; delete state.pending[message.id] }
+        if (message?.type === 'response' && message.id in pending) { if (message.result?.streamId) state.purposes[message.result.streamId] = pending[message.id]; if (pending[message.id] === 'playback' && state.armed) { exportPort = true; state.armed = false; state.route = data.route } delete pending[message.id] }
         const meta = message?.type === 'frame' ? message.meta : undefined
         const sourceFrame = meta ? Math.round((meta.ptsUs ?? meta.timestampUs) * 60 / 1e6) : -1
-        if (meta?.request?.kind === 'schedule' && state.purposes[meta.streamId] === 'playback' && state.plan.drop.includes(sourceFrame) && !state.dropped.includes(sourceFrame)) {
+        if (exportPort && meta?.request?.kind === 'schedule' && state.purposes[meta.streamId] === 'playback' && state.plan.drop.includes(sourceFrame) && !state.dropped.includes(sourceFrame)) {
           state.dropped.push(sourceFrame)
           real.postMessage({ type: 'release', frame: message.frame, token: message.token }, [message.frame])
           return
@@ -237,7 +238,7 @@ function createVideoEditExportNativeScene() {
   return {
     id: 'video-edit-export-native', surface: '剪辑', name: '剪辑-原生专业格式导出逐帧精确、与预览一致、精确帧或失败', writesUserData: true,
     // The failing single-frame read stops one export on purpose; every other error still fails the scene.
-    expectedLogEvents: ['video_edit.export.failed'],
+    expectedLogEvents: ['video_edit.export.failed', 'video_edit.export_queue.failed'],
     setup: async (page, app, { capture }) => {
       fs.mkdirSync(ROOT, { recursive: true })
       const evidence = { startedAt: new Date().toISOString(), cases: [], phases: [] }
@@ -320,16 +321,22 @@ function createVideoEditExportNativeScene() {
           await confirmVideoEditExport(page, undefined, output)
           if (cancelAt !== undefined) {
             await page.waitForFunction(percent => Number(document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') ?? 0) >= percent, cancelAt, { timeout: 120000 })
-            await page.getByRole('button', { name: /^取消导出/ }).click()
+            await page.getByRole('dialog').getByRole('button', { name: '取消导出', exact: true }).click()
             await button(page, '确认取消导出').click()
           }
           const terminal = page.getByRole('dialog', { name: /^导出(完成|失败|已取消|已中断)$/ })
           await terminal.waitFor({ state: 'visible', timeout: 600000 })
           const ms = performance.now() - started; const cpuAfter = nativeCpuSeconds(); const metricsAfter = await app.evaluate(({ app }) => app.getAppMetrics())
-          const task = (await callTool(client, 'query_video_edit_export', { documentRef: projectRef(document.id), detail: 'full' })).data.queue.find(job => job.path && path.resolve(job.path) === path.resolve(output))
+          const queue = (await callTool(client, 'query_video_edit_export', { documentRef: projectRef(document.id), detail: 'full' })).data.queue
+          // 取消或失败的任务不报告成品位置，认领本文档最近的一次导出。
+          const task = queue.find(job => job.path && path.resolve(job.path) === path.resolve(output)) ?? queue.filter(job => !job.path).at(-1)
+          assert.ok(task, `导出队列里找不到这次导出：${JSON.stringify(queue.map(job => ({ state: job.state, path: job.path })))}`)
           const visibleAlerts = await alerts()
           await terminal.getByRole('button', { name: '完成', exact: true }).click()
           await terminal.waitFor({ state: 'hidden' })
+          // 取消后导出设置对话框回到前台，供用户改了再导；验收直接关掉。
+          const settings = page.getByRole('dialog', { name: '导出', exact: true })
+          if (await settings.isVisible()) { await page.keyboard.press('Escape'); await settings.waitFor({ state: 'hidden' }) }
           const logs = await page.evaluate(async afterTimestamp => (await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10), afterTimestamp, domainPrefix: 'features.videoEdit.export', limit: 50 })).events.filter(event => /^video_edit\.export\.(completed|failed|cancelled)$/.test(event.event)).map(event => ({ event: event.event, context: event.context, error: event.error })), startedAt)
           const cpu = (metrics, type) => metrics.filter(metric => metric.type === type).reduce((sum, metric) => sum + (metric.cpu?.cumulativeCPUUsage ?? 0), 0)
           return { ms, task, log: logs[0] ?? null, nativeCpuSeconds: cpuBefore === null || cpuAfter === null ? null : cpuAfter - cpuBefore, nativeCores: cpuBefore === null || cpuAfter === null ? null : (cpuAfter - cpuBefore) / (ms / 1000), rendererCpuSeconds: cpu(metricsAfter, 'Tab') - cpu(metricsBefore, 'Tab'), gpuCpuSeconds: cpu(metricsAfter, 'GPU') - cpu(metricsBefore, 'GPU'), alerts: visibleAlerts }
@@ -388,9 +395,12 @@ function createVideoEditExportNativeScene() {
           const { tracks, group } = placements.prores
           const id = `export-alpha-${Date.now()}`
           const background = groups(group, [0], id)
-          const overlayPicture = { ...structuredClone(placements.alpha.group[0]), id: `${id}-overlay`, linkId: undefined, track: pictureTrack('prores') + 1, start: 0, duration: CLIP_FRAMES, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
+          // 叠加层放在新开的最上层视频轨：紧邻的编号可能是音频轨，画面按轨道编号从低到高叠放。
+          const overlayTrack = Math.max(...tracks.map(track => track.index)) + 1
+          const overlayTracks = [...tracks, { ...structuredClone(tracks.find(track => track.index === pictureTrack('prores'))), id: `${id}-overlay-track`, name: '视频 2', index: overlayTrack }]
+          const overlayPicture = { ...structuredClone(placements.alpha.group[0]), id: `${id}-overlay`, linkId: undefined, track: overlayTrack, start: 0, duration: CLIP_FRAMES, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
           delete overlayPicture.linkId
-          const document = variant(base, id, 'ProRes 4444 透明叠加导出验收', tracks, [...background, overlayPicture])
+          const document = variant(base, id, 'ProRes 4444 透明叠加导出验收', overlayTracks, [...background, overlayPicture])
           const output = path.join(ROOT, `${id}.mp4`)
           await open(document, output)
           const previews = await previewFrames(document, PREVIEW_FRAMES)
@@ -438,7 +448,7 @@ function createVideoEditExportNativeScene() {
             await change(ref, { 'video_edit.document.timeline_view': { ...view, inFrame: null, outFrame: null } })
             await dialogs(app, [], cancelled)
             const cancel = await exportUi(document, cancelled, { cancelAt: 20 })
-            assert.equal(cancel.task.state, 'cancelled'); assert.equal(fs.existsSync(cancelled), false, '取消后不应留下未完成文件')
+            assert.equal(cancel.task.state, 'cancelled'); for (const file of new Set([cancelled, cancel.task.path].filter(Boolean))) assert.equal(fs.existsSync(file), false, `取消后不应留下未完成文件：${file}`)
             evidence.range = { output, exportMs: run.ms, ...verified, cancel: { state: cancel.task.state, removed: true } }
             store()
           }

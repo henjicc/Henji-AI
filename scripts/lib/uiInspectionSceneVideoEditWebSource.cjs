@@ -121,15 +121,18 @@ function createVideoEditWebSourceScene() {
         const shoot = async (frame, name) => {
           const started = Date.now()
           await playback(frame)
-          // 网页取帧不阻塞：精确画面没到时先用上一幅顶上并标为近似，停稳后再换精确画面；按精确那一次取图。
-          await page.waitForFunction(value => { const surface = document.querySelector('canvas[aria-label="剪辑画面"]'); return surface?.dataset.presentedFrame === String(value) && surface.dataset.approximate !== 'true' }, frame, { timeout: 120000 })
+          // 网页取帧不阻塞：精确画面没到时先用上一幅顶上并标为近似，网页缓存的画面停稳后也会按实时来源重画；按实时精确那一次取图。
+          await page.waitForFunction(value => { const surface = document.querySelector('canvas[aria-label="剪辑画面"]'); return surface?.dataset.presentedFrame === String(value) && surface.dataset.approximate !== 'true' && surface.dataset.provenance !== 'web-cache' }, frame, { timeout: 120000 })
           const png = await canvas.evaluate(element => element.toDataURL('image/png'))
           const file = path.join(ROOT, `${name}.png`)
           fs.writeFileSync(file, Buffer.from(png.split(',')[1], 'base64'))
-          return { frame, file, elapsedMs: Date.now() - started }
+          const webTier = await canvas.evaluate(element => element.dataset.webTier)
+          return { frame, file, webTier, elapsedMs: Date.now() - started }
         }
         // 前后跳：每一帧的条码都应是这一刻；同一帧两次取到的画面逐像素相同。
         const order = [90, 30, 150, 60, 30, 120, 90, 0, 179]
+        // 监视器按显示尺寸选网页栅格档：首幅画面上屏前还是初始档，先取一幅让档位定下来，前后两次取帧才是同一档。
+        await shoot(0, 'preview-warmup')
         for (const [index, frame] of order.entries()) {
           const shot = await shoot(frame, `preview-${index}-${frame}`)
           shot.timeCode = await readTimeCode(shot.file)
@@ -146,6 +149,7 @@ function createVideoEditWebSourceScene() {
         await capture('web-source-preview')
         const twice = frame => evidence.preview.filter(shot => shot.frame === frame).map(shot => shot.file)
         // Chromium 给带 CSS 动画的元素栅格时与之前的状态有关：柔和阴影边缘可能差 1/255，其余逐像素相同。按内部一致性标准的最大差判定。
+        for (const frame of [90, 30]) assert.equal(new Set(evidence.preview.filter(shot => shot.frame === frame).map(shot => shot.webTier)).size, 1, `第 ${frame} 帧两次取帧的网页栅格档不同`)
         evidence.repeat = { 90: await difference(...twice(90)), 30: await difference(...twice(30)) }
         store()
         assert.ok(evidence.repeat[90].maximumDelta <= 2 && evidence.repeat[30].maximumDelta <= 2, `同一时刻两次取帧超出内部一致性标准：${JSON.stringify(evidence.repeat)}`)
