@@ -20,15 +20,18 @@ function clip(patch: Partial<VideoEditClip> = {}): VideoEditClip {
 }
 
 describe('智能区域：合成场景', () => {
-  it('带区域的效果：上传蒙版、按片段位置画到序列尺寸，再只在区域内按强度混入；保留两张共用画面', async () => {
+  it('带区域的效果：上传蒙版、按片段位置画到序列尺寸，再只在区域内按强度混入；相同区域共用放置画面', async () => {
     const owner = clip()
     const document: VideoEditComposition = { ...createVideoEditSequence(), width: 1920, height: 1080, fps: 30, clips: [owner], media: [], items: [], revision: 0 }
     const nodes = buildVideoEditCompositePlan([owner])
     const keys = videoEditCompositeSurfaceKeys(nodes)
-    expect(keys.has('composite:mask:source') && keys.has('composite:mask:document')).toBe(true)
+    const regionKey = [...keys].find(key => key.startsWith('composite:mask:document:'))!
+    expect(keys.has('composite:mask:source')).toBe(true)
+    expect(regionKey).toBeDefined()
     const calls: string[] = []
     const targets = new Map<string, VideoEditCodePicture>()
     const runtime = {
+      beginBuiltinBatch: vi.fn(async () => ({})), finishBuiltinBatch: vi.fn(), abandonBuiltinBatch: vi.fn(),
       target: vi.fn(async (key: string, width: number, height: number) => { calls.push(`target:${key}`); if (!targets.has(key)) targets.set(key, picture(width, height)); return targets.get(key)! }),
       builtin: vi.fn(async (key: string) => { calls.push(`builtin:${key}`); return picture() }),
       uploadMask: vi.fn(async (key: string, width: number, height: number) => { calls.push(`upload:${key}:${width}x${height}`); return picture(width, height) }),
@@ -44,10 +47,12 @@ describe('智能区域：合成场景', () => {
     const prepared = new Map<string, PreparedVideoEditEffect[]>([['c', [{ effect: owner.effects![0], builtin: owner.effects![0].builtin!, mask }]]])
     const result = await renderVideoEditCompositeScene(document, nodes, new Map([['c', picture()]]), prepared, compositor, 0, () => true)
     await result.completion
-    expect(calls).toEqual(['target:composite:clip:c:0', 'builtin:composite:clip:c:1', 'upload:composite:mask:source:512x288', 'target:composite:mask:document', 'maskedMix:composite:clip:c:2:0.75'])
+    expect(calls).toEqual(['target:composite:clip:c:0', 'upload:composite:mask:source:512x288', `target:${regionKey}`, 'builtin:composite:clip:c:1', 'maskedMix:composite:clip:c:2:0.75'])
     // 第二次绘制就是蒙版：同一片段的位置、缩放、旋转，不带不透明度，画进序列尺寸的蒙版画面。
+    expect(runtime.finishBuiltinBatch).toHaveBeenCalledTimes(1)
+    expect(runtime.abandonBuiltinBatch).not.toHaveBeenCalled()
     const regionDraw = draws[1]
-    expect(regionDraw.target).toBe(targets.get('composite:mask:document'))
+    expect(regionDraw.target).toBe(targets.get(regionKey))
     expect(regionDraw.clips[0]).toMatchObject({ x: 0.2, y: -0.1, scale: 0.5, rotation: 15, opacity: 1 })
   })
 })

@@ -22,11 +22,11 @@ function half(value: number): number {
 interface LayoutDevice { createBindGroupLayout(descriptor: unknown): unknown; createPipelineLayout(descriptor: unknown): unknown }
 /** 中间纹理由宿主分配（计入宿主的显存预算），按尺寸与格式复用。 */
 export interface VideoEditBuiltinScratchAllocator { allocate(width: number, height: number, format: string, mipLevelCount?: number, storage?: boolean): GpuTexture; release(texture: GpuTexture): void }
-export interface BuiltinEncodingBatch { encoder: ReturnType<GpuDevice['createCommandEncoder']>; uniformIndex: number; taken: Set<Scratch>; created?: Set<Scratch> }
+export interface BuiltinEncodingBatch { encoder: ReturnType<GpuDevice['createCommandEncoder']>; uniformIndex: number; taken: Set<Scratch>; created?: Set<Scratch>; mixIndex?: number }
 interface Scratch { texture: GpuTexture; width: number; height: number; format: string; used: boolean; idleFrames: number }
 
 /**
- * 内置效果的 GPU 执行器：按 `planVideoEditBuiltinEffect` 的工序逐道绘制，一个效果一次提交。
+ * 内置效果的 GPU 执行器：按规划逐道绘制，批次内共享编码器与独占的 uniform 槽。
  * 管线按（入口, 输出格式）懒编译；中间纹理按需取用，`releaseIdle` 释放上一帧以来没用到的。
  */
 export class VideoEditBuiltinEffectsGpu {

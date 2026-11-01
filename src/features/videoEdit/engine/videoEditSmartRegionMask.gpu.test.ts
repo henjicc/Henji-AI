@@ -51,6 +51,33 @@ async function read(texture: GpuTexture): Promise<Uint8Array> {
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.subarray((y * W + x) * 4, (y * W + x) * 4 + 4)]
 
 describe('剪辑智能区域混合（真实设备）', () => {
+  it('整链一次提交与逐次提交逐字节相同，重复目标上的强度、区域和末尾不透明度互不覆盖', async () => {
+    const source = await runtime.target('batch-source', W, H)
+    const data = Uint8Array.from({ length: W * H * 4 }, (_, index) => [31, 53, 79, 153][index % 4])
+    gpu.gpu.queue.writeTexture({ texture: source.texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
+    const left = await runtime.uploadMask('batch-left', W, H, Uint8Array.from({ length: W * H }, (_, index) => index % W < W / 2 ? 255 : 0))
+    const right = await runtime.uploadMask('batch-right', W, H, Uint8Array.from({ length: W * H }, (_, index) => index % W >= W / 2 ? 255 : 0))
+    const render = async (batched: boolean): Promise<Uint8Array> => {
+      const submitted = vi.spyOn(gpu.gpu.queue, 'submit')
+      try {
+        const batch = batched ? await runtime.beginBuiltinBatch() : undefined
+        let result = source
+        for (let index = 0; index < 6; index++) {
+          const filtered = await runtime.builtin('batch-a', { id: index % 2 ? 'black_white' : 'invert', params: {} }, result, 0, 1, [], 'interactive', undefined, 1 / 30, undefined, batch)
+          result = await runtime.maskedMix('batch-b', result, filtered, index % 2 ? right : left, .17 + index * .11, batch)
+          result = await runtime.mix('batch-c', source, result, .91 - index * .07, undefined, batch)
+        }
+        result = await runtime.mix('batch-a', 'transparent', result, .43, undefined, batch)
+        if (batch) runtime.finishBuiltinBatch(batch)
+        expect(submitted).toHaveBeenCalledTimes(batched ? 1 : 19)
+        submitted.mockRestore()
+        return read(result.texture)
+      } finally { submitted.mockRestore() }
+    }
+    const expected = await render(false)
+    expect(await render(true)).toEqual(expected)
+    expect(await render(true)).toEqual(expected)
+  }, 30_000)
   it('蒙版上传为预乘白色；区域内按强度混入效果画面，区域外保持原画面', async () => {
     const base = await runtime.uploadMask('base', W, H, new Uint8Array(W * H).fill(255))
     const effected = await runtime.uploadMask('effected', W, H, new Uint8Array(W * H))
@@ -179,7 +206,8 @@ describe('剪辑智能区域混合（真实设备）', () => {
     const nodes = buildVideoEditCompositePlan(document.clips)
     const shapes = { ...clip, effects: [{ ...effect, builtin: { id: 'invert', params: {} }, mask: { regionId: 'shapes' as const, shapes: [{ id: 'all', kind: 'rect' as const, points: [[0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0]] as [number, number, number, number, number, number][] }] } }] }
     const subjectKeys = videoEditCompositeSurfaceKeys(nodes), shapeKeys = videoEditCompositeSurfaceKeys(buildVideoEditCompositePlan([shapes]))
-    expect([...shapeKeys].every(key => subjectKeys.has(key))).toBe(true); expect(subjectKeys.size).toBe(shapeKeys.size + 1)
+    expect([...subjectKeys].some(key => key.startsWith('composite:mask:subject:'))).toBe(true)
+    expect([...shapeKeys].some(key => key.startsWith('composite:mask:document:'))).toBe(true)
     const source = await chain.target('source', W, H, 'rgba8unorm')
     raw.queue.writeTexture({ texture: source.texture as never }, Uint8Array.from({ length: W * H * 4 }, (_, index) => [40, 60, 160, 255][index % 4]), { bytesPerRow: W * 4 }, [W, H])
     const final = await chain.target('final', W, H, 'rgba8unorm')

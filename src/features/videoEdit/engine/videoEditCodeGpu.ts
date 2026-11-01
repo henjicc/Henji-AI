@@ -14,7 +14,8 @@ import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
-import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import { VideoEditBuiltinEffectsGpu, type BuiltinEncodingBatch } from './videoEditBuiltinEffectsGpu'
+import { planVideoEditBuiltinEffect } from './videoEditBuiltinEffectPasses'
 import { planSubjectFootprint } from './subjectKey'
 import type { VideoEditBuiltinPlan } from './effectPlan'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
@@ -256,6 +257,20 @@ export class VideoEditCodeGpu {
   private readonly maskedMixPipelines = new Map<VideoEditGpuColorFormat, Promise<GpuRenderPipeline>>()
   private sampler: unknown
   private builtinRuntime?: VideoEditBuiltinEffectsGpu
+  private readonly batchMixBuffers: GpuBuffer[] = []
+  async beginBuiltinBatch(): Promise<BuiltinEncodingBatch> {
+    await this.ready; this.assertLive()
+    // 透明端点先初始化，不能在一条尚未提交的链中插入初始化提交。
+    this.transparent()
+    return { encoder: this.device.createCommandEncoder(), uniformIndex: 0, taken: new Set(), created: new Set(), mixIndex: 0 }
+  }
+  finishBuiltinBatch(batch: BuiltinEncodingBatch): void { this.assertLive(); this.submit(batch.encoder) }
+  abandonBuiltinBatch(batch: BuiltinEncodingBatch): void { this.builtins().abandon(batch) }
+  private mixBuffer(target: Surface, batch?: BuiltinEncodingBatch): GpuBuffer {
+    if (!batch) return target.mixBuffer ??= this.device.createBuffer({ size: 32, usage: 0x08 | 0x40 })
+    const index = batch.mixIndex ?? 0; batch.mixIndex = index + 1
+    return this.batchMixBuffers[index] ??= this.device.createBuffer({ size: 32, usage: 0x08 | 0x40 })
+  }
   private graphCache?: ShaderGraphCache
   private glTransitionRuntime?: VideoEditGlTransitionsGpu
   private bytes = 0
@@ -503,7 +518,7 @@ struct Mix { amount:vec4f, color:vec4f }
    * `through`：黑场／白场过渡经过的预乘纯色；不传为直接混合（交叉溶解、效果强度）。
    * 一侧传 `'transparent'`（过渡里停用的片段）时那一侧按透明画，尺寸取另一侧。
    */
-  async mix(key: string, leftInput: VideoEditCodePicture | 'transparent', rightInput: VideoEditCodePicture | 'transparent', amount: number, through?: readonly [number, number, number, number]): Promise<VideoEditCodePicture> {
+  async mix(key: string, leftInput: VideoEditCodePicture | 'transparent', rightInput: VideoEditCodePicture | 'transparent', amount: number, through?: readonly [number, number, number, number], batch?: BuiltinEncodingBatch): Promise<VideoEditCodePicture> {
     const size = leftInput === 'transparent' ? rightInput : leftInput
     if (size === 'transparent') throw new CodeMaterialError('CONTEXT', '透明混合至少需要一侧画面。')
     const left = leftInput === 'transparent' ? undefined : leftInput; const right = rightInput === 'transparent' ? undefined : rightInput
@@ -518,13 +533,13 @@ struct Mix { amount:vec4f, color:vec4f }
     const pipeline = this.mixPipelines.get(format)!
     const target = this.surface(key, size.width, size.height, format)
     if (target.picture.texture === left?.texture || target.picture.texture === right?.texture) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
-    target.mixBuffer ??= this.device.createBuffer({ size: 32, usage: 0x08 | 0x40 })
-    this.device.queue.writeBuffer(target.mixBuffer, 0, new Float32Array([amount, through ? 1 : 0, 0, 0, ...(through ?? [0, 0, 0, 0])]))
-    const encoder = this.device.createCommandEncoder()
+    const buffer = this.mixBuffer(target, batch)
+    this.device.queue.writeBuffer(buffer, 0, new Float32Array([amount, through ? 1 : 0, 0, 0, ...(through ?? [0, 0, 0, 0])]))
+    const encoder = batch?.encoder ?? this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
     pass.setPipeline(pipeline)
-    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: (left?.texture ?? this.transparent()).createView() }, { binding: 1, resource: (right?.texture ?? this.transparent()).createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: target.mixBuffer } }] }))
-    pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
+    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: (left?.texture ?? this.transparent()).createView() }, { binding: 1, resource: (right?.texture ?? this.transparent()).createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer } }] }))
+    pass.draw(3); pass.end(); if (!batch) this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }
   /**
@@ -592,7 +607,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     return pending
   }
   /** 只在区域内混入效果（4.7d）：`region` 是序列尺寸的蒙版画面（取 alpha），`amount` 是效果强度。 */
-  async maskedMix(key: string, base: VideoEditCodePicture, effected: VideoEditCodePicture, region: VideoEditCodePicture, amount: number): Promise<VideoEditCodePicture> {
+  async maskedMix(key: string, base: VideoEditCodePicture, effected: VideoEditCodePicture, region: VideoEditCodePicture, amount: number, batch?: BuiltinEncodingBatch): Promise<VideoEditCodePicture> {
     if ([effected, region].some(picture => picture.owner !== this.device || picture.width !== base.width || picture.height !== base.height) || base.owner !== this.device || !Number.isFinite(amount) || amount < 0 || amount > 1) throw new CodeMaterialError('CONTEXT', '区域混合需要同设备同尺寸画面和0到1的强度。')
     const format = base.highPrecision || effected.highPrecision ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
     await this.ready; this.assertLive()
@@ -600,20 +615,20 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     for (const picture of [base, effected, region]) this.assertInput(picture.texture)
     const target = this.surface(key, base.width, base.height, format)
     if ([base, effected, region].some(picture => picture.texture === target.picture.texture)) throw new CodeMaterialError('CONTEXT', '区域混合输入输出不能引用同一纹理。')
-    target.mixBuffer ??= this.device.createBuffer({ size: 32, usage: 0x08 | 0x40 })
-    this.device.queue.writeBuffer(target.mixBuffer, 0, new Float32Array([amount, 0, 0, 0]))
-    const encoder = this.device.createCommandEncoder()
+    const buffer = this.mixBuffer(target, batch)
+    this.device.queue.writeBuffer(buffer, 0, new Float32Array([amount, 0, 0, 0]))
+    const encoder = batch?.encoder ?? this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
     pass.setPipeline(pipeline)
-    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: base.texture.createView() }, { binding: 1, resource: effected.texture.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: target.mixBuffer } }, { binding: 4, resource: region.texture.createView() }] }))
-    pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
+    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: base.texture.createView() }, { binding: 1, resource: effected.texture.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer } }, { binding: 4, resource: region.texture.createView() }] }))
+    pass.draw(3); pass.end(); if (!batch) this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }
   /**
    * 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame`、`frameDuration` 是效果时钟（片段自己的帧号与每帧秒数），原生效果与着色器图效果共用；第 0 帧以外缺帧时长会报错。
    * `subject` 是按片段几何画到同一尺寸的人物蒙版，只给声明 `subjectMatte` 的效果。
    */
-  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1, luts: readonly import('@/core/videoEdit/colorLutAsset').ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: { width: number; height: number }, frameDuration?: number, subject?: VideoEditCodePicture): Promise<VideoEditCodePicture> {
+  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1, luts: readonly import('@/core/videoEdit/colorLutAsset').ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: { width: number; height: number }, frameDuration?: number, subject?: VideoEditCodePicture, batch?: BuiltinEncodingBatch): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '内置效果输入必须属于当前GPU设备。')
     if (subject && (subject.owner !== this.device || subject.width !== input.width || subject.height !== input.height)) throw new CodeMaterialError('CONTEXT', '人物蒙版必须与效果输入同设备同尺寸。')
@@ -623,12 +638,13 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     const target = this.surface(key, input.width, input.height, format)
     if (target.picture.texture === input.texture || target.picture.texture === subject?.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
     if (isShaderGraphEffect(instance.id)) {
+      if (batch) throw new CodeMaterialError('CONTEXT', '封装着色器效果需要独立提交。')
       // `shaders` 组件效果：着色器图 [@input, 组件]，时间与原生效果同一时钟（帧号 × 帧时长）。
       const params = resolveVideoEditBuiltinParams(instance)
       await this.shaderGraphs().render(shaderGraphEffectSpec(instance.id, params), { timeSeconds: effectClockSeconds(frameDuration, frame), width: input.width, height: input.height, input: input.texture, output: target.picture.texture, outputFormat: format, props: new Map([['fx', shaderGraphEffectProps(instance.id, params)]]) })
       if (shaderGraphEffectKeepsSourceAlpha(instance.id, params)) await runtime.encodePlan(sourceAlphaPlan(input.width, input.height), format, target.picture.texture, target.picture.texture, input.texture)
-    } else await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format }, target.picture.texture, frame, renderScale, luts, quality, referenceSize, frameDuration, subject?.texture)
-    this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
+    } else await runtime.encodePlan(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale, quality, referenceSize, frameDuration }), format, input.texture, target.picture.texture, undefined, luts, batch, undefined, subject?.texture)
+    this.assertLive(); if (!batch) this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }
   private transparentPixel?: GpuTexture
@@ -636,9 +652,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
   private transparent(): GpuTexture {
     if (!this.transparentPixel) {
       this.transparentPixel = this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
-      const encoder = this.device.createCommandEncoder()
-      encoder.beginRenderPass({ colorAttachments: [{ view: this.transparentPixel.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] }).end()
-      this.device.queue.submit([encoder.finish()])
+      // WebGPU 首次读取会把新纹理初始化为零，透明端点无需额外提交。
     }
     return this.transparentPixel
   }
@@ -797,6 +811,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
       (this.device as DeviceErrorSource).removeEventListener?.('uncapturederror', this.errors.listener)
       deviceErrors.delete(this.device)
     }
+    this.batchMixBuffers.forEach(buffer => buffer.destroy()); this.batchMixBuffers.length = 0
     this.releaseUnused(new Set()); this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; this.glTransitionRuntime?.dispose(); this.glTransitionRuntime = undefined; this.transparentPixel?.destroy(); this.transparentPixel = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
     this.glyphs.clear(); this.glyphBytes = 0; this.image = undefined; this.mixPipelines.clear(); this.maskedMixPipelines.clear()
     if (failures.length) throw new AggregateError(failures, '代码渲染资源释放失败。')

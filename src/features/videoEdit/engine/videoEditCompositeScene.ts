@@ -15,6 +15,8 @@ import { VIDEO_EDIT_PRECISE_FORMAT, videoEditPictureHighPrecision } from './vide
 import type { VideoEditTrackedClip } from './videoEditTrackResults'
 import type { AuthorGpuInputs } from './videoEditAuthorModule'
 import type { PreparedVideoEditCodeEffect } from './videoEditCodeSources'
+import type { BuiltinEncodingBatch } from './videoEditBuiltinEffectsGpu'
+import { isShaderGraphEffect } from '@/core/videoEdit/shaderGraph/effects'
 
 export type VideoEditFilterFrameReader = (clip: VideoEditClip, plan: PreparedVideoEditCodeEffect, input: VideoEditCodePicture) => Promise<AuthorGpuInputs['frames']>
 
@@ -26,17 +28,22 @@ const slot = (clip: VideoEditClip, index: number): string => `composite:clip:${c
 // A translucent adjustment layer keeps one additional unchanged band for its final mix.
 const slots = (clip: VideoEditClip): string[] => Array.from({ length: effective(clip) ? clip.kind === 'adjustment' && clip.opacity < 1 ? 4 : 3 : 1 }, (_, index) => slot(clip, index))
 /**
- * 智能区域（4.7d）共用的两张画面：上传的低分辨率蒙版、按片段位置画到序列尺寸的蒙版。作用区域与人物蒙版（主体抠像、
- * 轮廓来源为主体）都经过它们，每次用完即提交，下一次上传排在已提交的工序之后，所以全场景只需要这两张。
+ * 智能区域的低分辨率上传纹理全场景共用；同一片段里配置相同的作用区域共用放置结果。
+ * 批次开始前分别放置不同区域，避免后续上传覆盖批次尚未读取的蒙版。
  */
 const MASK_SOURCE = 'composite:mask:source'; const MASK_DOCUMENT = 'composite:mask:document'
 /** 人物蒙版在片段画面外延续后的那张（工序纹理 `subject`）。 */
 const SUBJECT_DOCUMENT = 'composite:mask:subject'
+const regionKey = (clip: VideoEditClip, effect: VideoEditEffect, subject = false): string => subject ? `${SUBJECT_DOCUMENT}:${clip.id}` : `${MASK_DOCUMENT}:${clip.id}:${JSON.stringify(effect.mask)}`
 const subjectUsed = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).some(effect => videoEditEffectUsesSubject(effect.builtin))
 const masked = (clip: VideoEditClip): boolean => subjectUsed(clip) || activeVideoEditEffects(clip).some(effect => effect.mask)
 const maskKeys = (keys: Set<string>, clip: VideoEditClip): void => {
-  if (masked(clip)) keys.add(MASK_SOURCE).add(MASK_DOCUMENT)
-  if (subjectUsed(clip)) keys.add(SUBJECT_DOCUMENT)
+  if (masked(clip)) keys.add(MASK_SOURCE)
+  if (subjectUsed(clip)) keys.add(MASK_DOCUMENT)
+  for (const effect of activeVideoEditEffects(clip)) {
+    if (effect.mask) keys.add(regionKey(clip, effect))
+    if (videoEditEffectUsesSubject(effect.builtin)) keys.add(regionKey(clip, effect, true))
+  }
 }
 /** Reserve the entire frame together with generated pictures before releasing old targets. */
 export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditCompositeNode[]): Set<string> {
@@ -81,9 +88,9 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     return target
   }
   /** 低分辨率蒙版按片段自己的位置、缩放、旋转画到序列尺寸，与片段画面逐像素对齐。 */
-  const placeMask = async (runtime: VideoEditCodeGpu, clip: VideoEditClip, mask: VideoEditSmartRegionMask, subject = false): Promise<VideoEditCodePicture> => {
+  const placeMask = async (runtime: VideoEditCodeGpu, clip: VideoEditClip, mask: VideoEditSmartRegionMask, subject = false, key = MASK_DOCUMENT): Promise<VideoEditCodePicture> => {
     const source = await runtime.uploadMask(MASK_SOURCE, mask.width, mask.height, mask.data, subject)
-    const region = await runtime.target(MASK_DOCUMENT, document.width, document.height); current()
+    const region = await runtime.target(key, document.width, document.height); current()
     const drawn = await compositor.draw(document, [{ ...clip, opacity: 1 }], [source], shouldPresent, undefined, region)
     watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
     return region
@@ -92,38 +99,57 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
   const apply = async (clip: VideoEditClip, input: VideoEditCodePicture, fade = false): Promise<VideoEditCodePicture> => {
     const runtime = await gpu(); const targets = slots(clip); const preserve = clip.kind === 'adjustment' && clip.opacity < 1
     let result = input; let key = targets[0]
+    const placed = new Map<string, VideoEditCodePicture>()
+    const masks = new Map<PreparedVideoEditEffect, { region?: VideoEditCodePicture; subject?: VideoEditCodePicture }>()
     for (const plan of effects.get(clip.id) ?? []) {
-      if (clip.effectsEnabled === false || !plan.effect.enabled || plan.effect.amount <= 0) continue
-      current()
-      const free = targets.filter(target => target !== key && (!preserve || target !== targets[0]))
-      const previous = result; const previousKey = key
-      try {
-        // 效果时钟按片段自己的帧号与帧时长：复制、挪动片段观感不变，与只记相对位置的预渲染窗口一致；只在渲染时传递，不写入效果参数。
-        const subject = plan.builtin && plan.subject ? await runtime.subjectMatte(SUBJECT_DOCUMENT, await placeMask(runtime, clip, plan.subject, true)) : undefined
-        const filtered = plan.builtin
-          ? await runtime.builtin(free[0], plan.builtin, result, frame - clip.start, renderScale, document.colorLuts, quality, logical, 1 / document.fps, subject)
-          : await runtime.authorFilter(free[0], plan.instanceKey, plan.program, plan.parameters, result, plan.info, plan.program.frames.length ? await readFilterFrames?.(clip, plan, result) : [], plan.simulation, logical, current)
+      if (clip.effectsEnabled === false || !plan.effect.enabled || plan.effect.amount <= 0 || !plan.builtin) continue
+      const regionTarget = regionKey(clip, plan.effect), subjectTarget = regionKey(clip, plan.effect, true)
+      const region = plan.mask ? placed.get(regionTarget) ?? await placeMask(runtime, clip, plan.mask, false, regionTarget) : undefined
+      const subject = plan.subject ? placed.get(subjectTarget) ?? await runtime.subjectMatte(subjectTarget, await placeMask(runtime, clip, plan.subject, true)) : undefined
+      if (region) placed.set(regionTarget, region)
+      if (subject) placed.set(subjectTarget, subject)
+      masks.set(plan, { region, subject }); current()
+    }
+    let batch: BuiltinEncodingBatch | undefined
+    const flush = (): void => { if (batch) { runtime.finishBuiltinBatch(batch); batch = undefined } }
+    try {
+      for (const plan of effects.get(clip.id) ?? []) {
+        if (clip.effectsEnabled === false || !plan.effect.enabled || plan.effect.amount <= 0) continue
         current()
-        if (plan.builtin && plan.mask) {
-          // 只在区域内混入效果。
-          const region = await placeMask(runtime, clip, plan.mask)
-          result = await runtime.maskedMix(free[1], result, filtered, region, plan.effect.amount); key = free[1]; current()
-        } else if (plan.effect.amount === 1) { result = filtered; key = free[0] }
-        else { result = await runtime.mix(free[1], result, filtered, plan.effect.amount); key = free[1]; current() }
-      } catch (error) {
-        current()
-        if (plan.builtin || !onEffectError) throw error
-        result = previous; key = previousKey
-        onEffectError(plan.effect, error)
+        const free = targets.filter(target => target !== key && (!preserve || target !== targets[0]))
+        const previous = result; const previousKey = key
+        try {
+          // 效果时钟按片段自己的帧号与帧时长：复制、挪动片段观感不变，与只记相对位置的预渲染窗口一致；只在渲染时传递，不写入效果参数。
+          const native = plan.builtin && !isShaderGraphEffect(plan.builtin.id)
+          if (native) batch ??= await runtime.beginBuiltinBatch()
+          else flush()
+          const subject = masks.get(plan)?.subject
+          const filtered = plan.builtin
+            ? await runtime.builtin(free[0], plan.builtin, result, frame - clip.start, renderScale, document.colorLuts, quality, logical, 1 / document.fps, subject, batch)
+            : await runtime.authorFilter(free[0], plan.instanceKey, plan.program, plan.parameters, result, plan.info, plan.program.frames.length ? await readFilterFrames?.(clip, plan, result) : [], plan.simulation, logical, current)
+          current()
+          if (plan.builtin && plan.mask) {
+            // 只在区域内混入效果。
+            const region = masks.get(plan)!.region!
+            result = await runtime.maskedMix(free[1], result, filtered, region, plan.effect.amount, batch); key = free[1]; current()
+          } else if (plan.effect.amount === 1) { result = filtered; key = free[0] }
+          else { result = await runtime.mix(free[1], result, filtered, plan.effect.amount, undefined, batch); key = free[1]; current() }
+        } catch (error) {
+          current()
+          if (plan.builtin || !onEffectError) throw error
+          result = previous; key = previousKey
+          onEffectError(plan.effect, error)
+        }
       }
-    }
-    if (preserve && result !== input) {
-      const target = targets.find(target => target !== key && target !== targets[0])!
-      result = await runtime.mix(target, input, result, clip.opacity); current()
-    } else if (fade && clip.opacity < 1) {
-      result = await runtime.mix(targets.find(target => target !== key)!, 'transparent', result, clip.opacity); current()
-    }
-    return result
+      if (preserve && result !== input) {
+        const target = targets.find(target => target !== key && target !== targets[0])!
+        result = await runtime.mix(target, input, result, clip.opacity, undefined, batch); current()
+      } else if (fade && clip.opacity < 1) {
+        result = await runtime.mix(targets.find(target => target !== key)!, 'transparent', result, clip.opacity, undefined, batch); current()
+      }
+      flush()
+      return result
+    } catch (error) { if (batch) runtime.abandonBuiltinBatch(batch); throw error }
   }
   const resolveClip = async (clip: VideoEditClip, force = false): Promise<Layer> => {
     if (!pictures.has(clip.id)) throw new Error(`合成片段“${clip.name}”尚未准备画面。`)

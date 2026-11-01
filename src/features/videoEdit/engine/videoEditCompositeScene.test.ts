@@ -66,7 +66,9 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
     if (!values) throw new Error('缺少GPU像素边界fixture')
     return [values[0] * values[3], values[1] * values[3], values[2] * values[3], values[3]]
   }
-  const runtime: Pick<VideoEditCodeGpu, 'target' | 'authorFilter' | 'mix' | 'builtin'> = {
+  const runtime: Pick<VideoEditCodeGpu, 'target' | 'authorFilter' | 'mix' | 'builtin' | 'beginBuiltinBatch' | 'finishBuiltinBatch' | 'abandonBuiltinBatch'> = {
+    beginBuiltinBatch: async () => ({ encoder: {} as ReturnType<GpuDevice['createCommandEncoder']>, uniformIndex: 0, taken: new Set() }),
+    finishBuiltinBatch: () => {}, abandonBuiltinBatch: () => {},
     builtin: async (key, instance, input, frame, _renderScale, _luts, _quality, _reference, frameDuration) => { options.onBuiltin?.(instance, frame, frameDuration); const destination = target(key, input.width, input.height); data.set(destination.texture, pixel(input)); return destination },
     target: async (key, width, height, format = 'rgba8unorm') => { formats.set(key, format); return target(key, width, height) },
     authorFilter: async (key, _instanceKey, program, parameters, input, info, frames = []) => {
