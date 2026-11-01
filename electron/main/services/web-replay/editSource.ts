@@ -91,15 +91,20 @@ export async function webRecordingEditSource(recordingId: string, prefer: 'repla
   const pagesDirectory = path.join(directory, EDIT_EVENTS_DIRECTORY, `${path.basename(video, '.mp4')}-${digest.slice(0, 12)}`)
   let pages = await readPages(pagesDirectory).catch(() => [] as CaptureLogPage[])
   if (!pages.length || pages[0].sourceDigest !== sourceDigest) {
-    await fs.rm(pagesDirectory, { recursive: true, force: true })
-    await fs.mkdir(pagesDirectory, { recursive: true })
-    const eventStore = new RecordingEventStore(pagesDirectory)
-    let sequence = 0
-    // 相同录制与视频生成相同的页和哈希，剪辑引用才能复用。
-    const collector = new CaptureLogCollector({ ownerRef, sourceDigest, originUs: 0, id: () => `e${sequence++}` }, async page => { await eventStore.write(page) }, error => logger.error('网页录制的剪辑事件保存失败，请重试导入', { event: 'web_replay.edit_source.failed', error: String(error) }))
-    collector.start(0)
-    await collector.recordBatch(projected.map(event => ({ monoUs: event.videoUs, payload: event.payload })))
-    await collector.stop(frame.durationUs)
+    // 先写进临时目录，全部页写完才换成正式目录名：中途写失败时不会留下缺尾页、却被下次当缓存复用的目录。
+    const staging = `${pagesDirectory}.tmp-${process.pid}-${Date.now()}`
+    await fs.mkdir(staging, { recursive: true })
+    try {
+      const eventStore = new RecordingEventStore(staging)
+      let sequence = 0
+      // 相同录制与视频生成相同的页和哈希，剪辑引用才能复用。
+      const collector = new CaptureLogCollector({ ownerRef, sourceDigest, originUs: 0, id: () => `e${sequence++}` }, async page => { await eventStore.write(page) }, error => logger.error('网页录制的剪辑事件保存失败，请重试导入', { event: 'web_replay.edit_source.failed', error: String(error) }))
+      collector.start(0)
+      await collector.recordBatch(projected.map(event => ({ monoUs: event.videoUs, payload: event.payload })))
+      await collector.stop(frame.durationUs)
+      await fs.rm(pagesDirectory, { recursive: true, force: true })
+      await fs.rename(staging, pagesDirectory)
+    } finally { await fs.rm(staging, { recursive: true, force: true }) }
     pages = await readPages(pagesDirectory)
     logger.info('网页录制已投影成剪辑事件', { event: 'web_replay.edit_source.projected', context: { recordingId, kind, events: projected.length, pages: pages.length } })
   }

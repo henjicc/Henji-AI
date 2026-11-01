@@ -63,3 +63,18 @@ it('导入写盘失败时拒绝返回成功，报告保存失败而不是要求�
   expect(state.error.mock.calls[0][1]).toMatchObject({ event: 'web_replay.edit_source.failed', error: 'Error: disk full' })
   expect(state.info).not.toHaveBeenCalled()
 })
+
+it('写到中途失败后重试：不复用缺尾页的目录，重新生成完整的一批页', async () => {
+  const original = RecordingEventStore.prototype.write
+  let calls = 0
+  vi.spyOn(RecordingEventStore.prototype, 'write').mockImplementation(async function (this: RecordingEventStore, ...args: Parameters<RecordingEventStore['write']>) {
+    if (++calls === 3) throw new Error('disk full')
+    return original.apply(this, args)
+  })
+  await expect(webRecordingEditSource(recordingId)).rejects.toThrow('disk full')
+  vi.restoreAllMocks()
+  const result = await webRecordingEditSource(recordingId)
+  const pages = []
+  for await (const page of new RecordingEventStore(path.dirname(result.cursor!.pages[0].path)).recover()) pages.push(page)
+  expect(pages.flatMap(page => page.entries).filter(event => event.kind === 'cursor')).toHaveLength(1250)
+})
