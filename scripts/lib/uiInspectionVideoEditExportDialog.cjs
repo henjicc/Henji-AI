@@ -47,6 +47,10 @@ async function confirmVideoEditExport(page, onOpen, outputPath) {
   })
   if (await dialog.getByRole('button', { name: '导出', exact: true }).isDisabled()) {
     await dialog.getByRole('button', { name: '导出格式', exact: true }).click()
+    // 预设适配会触发新一轮设备探测；菜单刚展开时的禁用态不是最终支持结论。
+    await page.waitForFunction(() => [...document.querySelectorAll('[role="option"]')].some(option =>
+      ['MP4 · H.264', 'MP4 · HEVC (H.265)'].includes(option.textContent.trim())
+      && option.getAttribute('aria-disabled') !== 'true' && !option.disabled))
     const avc = page.getByRole('option', { name: 'MP4 · H.264', exact: true })
     const codec = !await avc.isDisabled() ? avc : page.getByRole('option', { name: 'MP4 · HEVC (H.265)', exact: true })
     assert.ok(!await codec.isDisabled(), '此场景规格须有可用编码组合')

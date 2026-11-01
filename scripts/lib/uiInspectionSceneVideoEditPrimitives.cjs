@@ -5,7 +5,7 @@ const path = require('node:path')
 const sharp = require('sharp')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
 const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
@@ -15,10 +15,11 @@ function createVideoEditPrimitivesScene() {
       const root = path.resolve('.ui-tour/cache/t151-primitives'); fs.mkdirSync(root, { recursive: true })
       const evidence = { shots: [], frames: [], paidCalls: 0 }; let client; let seeded
       const unblock = await blockPaidGeneration(app)
-      const controls = page.locator('[data-creative-intent-controls]')
+      const microphone = page.getByRole('switch', { name: '麦克风', exact: true })
+      const controls = page.locator('[data-panel-scroll-region]').filter({ has: microphone })
       const trigger = () => page.getByRole('button', { name: /^(超级关键帧|正在示范)$/ })
       const panel = async () => { await takeOverVideoEdit(page); if (!await controls.isVisible()) await trigger().click(); await controls.waitFor({ state: 'visible' }) }
-      const close = async () => { await takeOverVideoEdit(page); if (await controls.isVisible()) { await trigger().click(); await controls.waitFor({ state: 'hidden' }) } }
+      const close = async () => { await takeOverVideoEdit(page); if (await controls.isVisible()) { await page.keyboard.press('Escape'); await controls.waitFor({ state: 'hidden' }) } }
       const shot = async name => { await page.waitForTimeout(240); evidence.shots.push(name); await capture('step-' + String(evidence.shots.length).padStart(3, '0')) }
       const presented = async frame => page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), frame)
       const saved = async test => { for (let i = 0; i < 200; i++) { const doc = readVideoEditFile(seeded.file); if (test(doc)) return doc; await page.waitForTimeout(50) } assert.fail('文档没有保存预期动作') }
@@ -33,6 +34,7 @@ function createVideoEditPrimitivesScene() {
           await api.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
         }, { source, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId); await presented(0)
+        await assignIsolatedMcpPort(page)
         const identity = await authorizeMcpConnection(page, { name: '动作原语免费验收' })
         client = await connectMcpClient(identity.config, 'Henji primitives Reality')
         const projectRef = { kind: 'video_edit.document', id: seeded.documentId }; const clipRef = { kind: 'video_edit.clip', id: seeded.documentId + ':motion-clip' }
@@ -55,23 +57,47 @@ function createVideoEditPrimitivesScene() {
           await page.mouse.up(); await page.waitForTimeout(80)
         }
         await shot('单素材基态：无阶梯缺口')
-        await panel(); await button(page, '开始示范').click(); await drag(.12)
-        // Demonstrate two real revolutions through pointer gestures; never inject draft samples.
+        await panel()
+        if (await microphone.getAttribute('aria-checked') === 'true') await microphone.click()
+        await button(page, '开始录制').click(); await button(page, '暂停').waitFor(); await drag(.12)
+        // 两周动作必须来自真实指针采集，不能注入原稿采样。
         for (let i = 1; i <= 32; i++) {
           await scrub(Math.round(i * 240 / 32))
           const a = (i - 1) * Math.PI / 8; const b = i * Math.PI / 8
           await drag(.12 * (Math.cos(b) - Math.cos(a)), .12 * (Math.sin(b) - Math.sin(a)))
         }
-        await panel(); await button(page, '结束示范').click(); await button(page, '开始示范').waitFor({ state: 'visible' })
-        await button(page, '整理').click(); await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 })
-        evidence.autoCandidateText = await controls.textContent()
+        await panel(); await button(page, '完成').click(); await button(page, '交给 AI').waitFor({ state: 'visible' }); await close()
+        const assistantClose = button(page, '收起智能助手')
+        if (await assistantClose.isVisible()) await assistantClose.click()
+        const recorded = await saved(doc => doc.creativeIntents?.drafts[0]?.takes.some(take => take.samplePages.length))
+        const draftRef = { kind: 'video_edit.intent_draft', id: `${seeded.documentId}:${encodeURIComponent(recorded.creativeIntents.drafts[0].id)}` }
+        const change = async (ref, properties) => {
+          const result = await callTool(client, 'change_application_entities', operationEnvelope([await read(ref)], { summary: '动作原语验收', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] }))
+          assert.equal(result.executionState, 'completed', JSON.stringify(result))
+        }
+        // 录制面板负责采集与交接，动作整理和整组应用使用正式公共能力。
+        const organize = async motionIntent => {
+          const result = await callTool(client, 'organize_video_edit_intent', operationEnvelope([await read(draftRef)], { draftRef, ...(motionIntent ? { motionIntent } : {}) }))
+          assert.equal(result.executionState, 'completed', JSON.stringify(result))
+          const candidates = []
+          for (const ref of result.result.data.candidateRefs) {
+            const observation = await read(ref, ['video_edit.intent_candidate.details'])
+            candidates.push({ ref, ...observation.data.properties['video_edit.intent_candidate.details'].proposal })
+          }
+          assert(candidates.length, '整理应生成可读回的候选')
+          return candidates
+        }
+        const automatic = await organize()
+        evidence.autoCandidateText = automatic.map(candidate => candidate.label).join('；')
         assert.match(evidence.autoCandidateText, /环绕|闭合循环/)
-        await page.getByLabel('整理动作', { exact: true }).click(); await page.getByRole('option', { name: '弹跳', exact: true }).click()
-        await button(page, '整理').click(); await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 }); await shot('弹跳与原稿候选')
-        await page.getByLabel('整理动作', { exact: true }).click(); await page.getByRole('option', { name: '环绕', exact: true }).click()
-        await button(page, '整理').click(); await button(page, '应用').waitFor({ state: 'visible', timeout: 90000 }); await shot('环绕与原稿候选')
-        const choose = controls.getByRole('button').filter({ hasText: '沿椭圆环绕 B' }); await choose.click()
-        await button(page, '应用').click()
+        const bounce = await organize({ kind: 'bounce', from: [.62, .5], to: [.62, .5], heightRatio: .12, count: 4, decay: .7 })
+        assert(bounce.some(candidate => candidate.label === '逐次弹跳')); evidence.bounceCandidates = bounce
+        await shot('弹跳与原稿候选')
+        const orbit = await organize({ kind: 'orbit', center: [.5, .5], radiusXY: [.12, .12], startTurns: 0, sweepTurns: 2 })
+        const candidate = orbit.find(candidate => candidate.label === '沿椭圆环绕'); assert(candidate)
+        evidence.orbitCandidates = orbit
+        await change(candidate.ref, { 'video_edit.intent_candidate.selected': true }); await shot('环绕与原稿候选')
+        await change(candidate.ref, { 'video_edit.intent_candidate.applied': true })
         const applied = await saved(doc => doc.creativeIntents?.drafts[0].applications.at(-1)?.saved && doc.sequences[0].clips[0].curves?.x?.length)
         evidence.applied = applied.sequences[0].clips[0].curves
         await close(); await shot('应用后普通关键帧属性单行')
@@ -86,12 +112,13 @@ function createVideoEditPrimitivesScene() {
         assert.ok(Math.abs(geometry.nameY - geometry.inputY) < 12, JSON.stringify(geometry))
         const toolbar = await page.getByRole('toolbar', { name: '节目监视器控制', exact: true }).evaluate(el => ({ height: el.getBoundingClientRect().height, text: el.textContent }))
         evidence.toolbar = toolbar; assert.ok(toolbar.height <= 44, JSON.stringify(toolbar))
-        // Full Electron capturePage sequence: every integer frame, both complete revolutions.
+        // 逐整数帧保留完整两周的正式 Electron 画面。
         for (let frame = 0; frame <= 240; frame++) {
           await playback(frame); await capture('orbit-frame-' + String(frame).padStart(3, '0'))
           evidence.frames.push({ frame, presented: Number(await page.getByLabel('剪辑画面', { exact: true }).getAttribute('data-presented-frame')) })
         }
         await playback(60)
+        await takeOverVideoEdit(page)
         const before = JSON.stringify((await saved(doc => !!doc.sequences[0].clips[0].curves)).sequences[0].clips[0].curves)
         await page.locator('[data-video-edit-property-row="位置"]').hover()
         await button(page, '位置关键帧轨与插值').click()
@@ -105,7 +132,7 @@ function createVideoEditPrimitivesScene() {
         await button(page, '撤销').click()
         await saved(doc => !doc.sequences[0].clips[0].curves?.x); await shot('撤销整组候选')
         await panel(); await shot('窄面板与唯一主动作')
-        const action = controls.getByRole('button', { name: /^(应用|整理|重试保存)$/ })
+        const action = controls.getByRole('button', { name: '交给 AI', exact: true })
         assert.equal(await action.count(), 1)
         evidence.panelGeometry = await controls.evaluate(el => ({ width: el.clientWidth, scrollWidth: el.scrollWidth, text: el.textContent }))
         assert.ok(evidence.panelGeometry.scrollWidth <= evidence.panelGeometry.width + 1)

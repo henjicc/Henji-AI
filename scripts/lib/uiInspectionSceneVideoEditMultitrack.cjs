@@ -6,7 +6,7 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const { execFileSync } = require('node:child_process')
 const mediaBinaries = require('./mediaBinaries.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { installNativeMixHarness } = require('./uiInspectionSceneVideoEditNativeAudio.cjs')
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
@@ -42,8 +42,25 @@ const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true 
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
 const clipNode = (page, id) => page.locator(`[data-video-edit-clip="${id}"]`)
 const trackRow = (page, index) => page.locator(`[data-video-edit-track][data-track-index="${index}"]`)
-/** Scrolls the timeline vertically so a track row is at the top: clips mount only inside the viewport (few rows fit at 960x640). */
-const showTrack = (page, index) => page.locator('[data-video-edit-timeline-viewport]').evaluate((host, index) => { const row = host.querySelector(`[data-track-index="${index}"]`); host.scrollTop = Math.max(0, row.offsetTop - 28) }, index)
+/** 用 Ctrl+滚轮在对应分区滚动，让轨道中心实际进入可见区。 */
+async function showTrack(page, index) {
+  const row = trackRow(page, index)
+  const kind = await row.getAttribute('data-track-kind')
+  const area = await page.locator(`[data-video-edit-track-region="${kind}"]`).boundingBox()
+  const rect = await row.boundingBox(); assert(area && rect)
+  await page.mouse.move(area.x + 120, area.y + area.height / 2)
+  await page.keyboard.down('Control')
+  try { await page.mouse.wheel(0, rect.y + rect.height / 2 - (area.y + area.height / 2)) }
+  finally { await page.keyboard.up('Control') }
+  await page.waitForFunction(index => {
+    const row = document.querySelector(`[data-video-edit-track][data-track-index="${index}"]`)
+    const region = row?.closest('[data-video-edit-track-region]')
+    if (!row || !region) return false
+    const rect = row.getBoundingClientRect(), area = region.getBoundingClientRect()
+    const center = rect.top + rect.height / 2
+    return center >= area.top && center <= area.bottom
+  }, index)
+}
 // 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
 const readProject = readVideoEditFile
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
@@ -230,6 +247,7 @@ function createVideoEditMultitrackScene() {
         }
         evidence.media = project.media; evidence.phases.push('导入记录全部声音流（与 ffprobe 一致）'); store()
 
+        await assignIsolatedMcpPort(page)
         const identity = await authorizeMcpConnection(page, { name: '多音轨验收' })
         client = await connectMcpClient(identity.config, 'Henji multitrack Reality')
         const projectRef = { kind: 'video_edit.document', id: project.id }
@@ -261,29 +279,33 @@ function createVideoEditMultitrackScene() {
         }
 
         phase('放入时间线：画面加每条声音流一个链接音频片段')
+        const initialTrackCount = project.sequences[0].tracks.length
         let placed = await append('mxf', 0, 5)
-        assertGroup(placed.group, [['audio', 0, null], ['audio', 8, mono(1)], ['audio', 9, mono(2)], ['audio', 10, mono(3)]], 'MXF 四条单声道')
-        assert.deepEqual(placed.project.sequences[0].tracks.filter(track => track.kind === 'audio').map(track => [track.name, track.index]), [['音频 1', 0], ['音频 2', 8], ['音频 3', 9], ['音频 4', 10]])
+        const audioTracks = placed.project.sequences[0].tracks.filter(track => track.kind === 'audio')
+        const [audio1, audio2, audio3, audio4] = audioTracks.map(track => track.index)
+        assertGroup(placed.group, [['audio', audio1, null], ['audio', audio2, mono(1)], ['audio', audio3, mono(2)], ['audio', audio4, mono(3)]], 'MXF 四条单声道')
+        assert.deepEqual(audioTracks.map(track => track.name), ['音频 1', '音频 2', '音频 3', '音频 4'])
         // OBS through a real drag onto picture track 1 at frame 135 (2px per frame).
-        await trackRow(page, 1).scrollIntoViewIfNeeded()
+        await showTrack(page, 1)
         await page.locator('[data-video-edit-timeline-viewport]').evaluate(host => { host.scrollLeft = 0 })
         const beforeDrag = readProject(file).sequences[0].clips.length
         await entry(page, items.obs.id).dragTo(trackRow(page, 1), { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 270, y: 16 }, timeout: 10000 })
         project = await saved(page, file, value => value.sequences[0].clips.length === beforeDrag + 3, 'OBS 拖入后应新增画面加两个立体声片段')
-        assertGroup(project.sequences[0].clips.filter(clip => clip.itemId === items.obs.id), [['audio', 0, null], ['audio', 8, stereo([1, 0], [1, 1])]], 'OBS 双轨立体声（拖放）')
+        assertGroup(project.sequences[0].clips.filter(clip => clip.itemId === items.obs.id), [['audio', audio1, null], ['audio', audio2, stereo([1, 0], [1, 1])]], 'OBS 双轨立体声（拖放）')
         assert.equal(project.sequences[0].clips.find(clip => clip.itemId === items.obs.id).start, 135)
         placed = await append('mov', 270, 3)
-        assertGroup(placed.group, [['audio', 0, null], ['audio', 8, mono(1)]], 'MOV 立体声加单声道')
+        assertGroup(placed.group, [['audio', audio1, null], ['audio', audio2, mono(1)]], 'MOV 立体声加单声道')
         placed = await append('single', 405, 2)
-        assertGroup(placed.group, [['audio', 0, null]], '单条立体声的普通视频')
+        assertGroup(placed.group, [['audio', audio1, null]], '单条立体声的普通视频')
         project = placed.project
-        assert.equal(project.sequences[0].tracks.length, 11, '只为 MXF 新增了三条音频轨')
+        assert.equal(project.sequences[0].tracks.length, initialTrackCount + 3, '只为 MXF 新增了三条音频轨')
         evidence.placements = project.sequences[0].clips.map(clip => ({ item: project.items.find(item => item.id === clip.itemId).name, kind: clip.kind, sourceComponent: clip.sourceComponent, track: clip.track, start: clip.start, linkId: clip.linkId, audioMapping: clip.audioMapping ?? null }))
         evidence.phases.push('四种素材铺轨与链接（菜单与真实拖放）'); store()
 
         phase('轨道头与波形显示声道类型')
         const viewport = page.locator('[data-video-edit-timeline-viewport]')
-        await viewport.evaluate(host => { const row = host.querySelector('[data-track-kind="audio"]'); host.scrollTop = Math.max(0, row.offsetTop - 28); host.scrollLeft = 0 })
+        await viewport.evaluate(host => { host.scrollLeft = 0 })
+        await showTrack(page, audio1)
         const formatOf = clip => { const media = project.media.find(media => media.id === project.items.find(item => item.id === clip.itemId).mediaId); return clip.kind === 'video' && clip.sourceComponent === 'video' ? undefined : clip.audioMapping?.format ?? (media.audioStreams[0].channels === 1 ? 'mono' : 'stereo') }
         const expectedHeaders = Object.fromEntries(project.sequences[0].tracks.filter(track => track.kind === 'audio').map(track => { const formats = new Set(project.sequences[0].clips.filter(clip => clip.track === track.index).map(formatOf).filter(Boolean)); return [track.id, formats.size > 1 ? 'mixed' : [...formats][0]] }))
         const headers = await page.locator('[data-video-edit-track-channels]').evaluateAll(nodes => Object.fromEntries(nodes.map(node => [node.closest('[data-video-edit-track]').getAttribute('data-video-edit-track'), node.getAttribute('data-video-edit-track-channels')])))
@@ -294,12 +316,12 @@ function createVideoEditMultitrackScene() {
         // at a time, so each row is scrolled into view before its waveform is read.
         const lanes = {}
         for (const clip of visibleSound) {
-          await viewport.evaluate((host, track) => { const row = host.querySelector(`[data-track-index="${track}"]`); host.scrollTop = Math.max(0, row.offsetTop - 28); host.scrollLeft = 0 }, clip.track)
+          await showTrack(page, clip.track)
           const wave = page.locator(`[data-video-edit-waveform="${clip.id}"]`)
           await wave.waitFor({ state: 'attached', timeout: 30000 })
           lanes[clip.id] = Number(await wave.getAttribute('data-waveform-lanes'))
         }
-        await viewport.evaluate(host => { const row = host.querySelector('[data-track-kind="audio"]'); host.scrollTop = Math.max(0, row.offsetTop - 28); host.scrollLeft = 0 })
+        await showTrack(page, audio1)
         for (const clip of visibleSound) {
           const media = project.media.find(media => media.id === project.items.find(item => item.id === clip.itemId).mediaId)
           assert.equal(lanes[clip.id], clip.audioMapping ? clip.audioMapping.sources.length : Math.min(2, media.audioStreams[0].channels), `片段 ${clip.id} 波形条数`)
@@ -328,15 +350,15 @@ function createVideoEditMultitrackScene() {
         await mix('使用文件铺轨后整条序列')
 
         phase('轨道头静音、独奏与效果控件音量')
-        await trackRow(page, 8).scrollIntoViewIfNeeded()
-        await button(page, '音频 2静音').click(); await saved(page, file, value => value.sequences[0].tracks.find(track => track.index === 8).muted, '静音音频 2 未保存')
+        await showTrack(page, audio2)
+        await button(page, '音频 2静音').click(); await saved(page, file, value => value.sequences[0].tracks.find(track => track.index === audio2).muted, '静音音频 2 未保存')
         await mix('静音音频 2')
         await button(page, '音频 2静音').click(); await button(page, '音频 3独奏').click()
-        await saved(page, file, value => !value.sequences[0].tracks.find(track => track.index === 8).muted && value.sequences[0].tracks.find(track => track.index === 9).solo, '独奏音频 3 未保存')
+        await saved(page, file, value => !value.sequences[0].tracks.find(track => track.index === audio2).muted && value.sequences[0].tracks.find(track => track.index === audio3).solo, '独奏音频 3 未保存')
         await mix('独奏音频 3')
         await shot('multitrack-solo')
         await button(page, '音频 3独奏').click(); await saved(page, file, value => !value.sequences[0].tracks.some(track => track.solo), '取消独奏未保存')
-        const fourth = readProject(file).sequences[0].clips.find(clip => clip.start === 0 && clip.track === 10)
+        const fourth = readProject(file).sequences[0].clips.find(clip => clip.start === 0 && clip.track === audio4)
         await showTrack(page, fourth.track); await clipNode(page, fourth.id).scrollIntoViewIfNeeded()
         await page.keyboard.down('Alt')
         try { await clipNode(page, fourth.id).getByRole('button', { name: `选择片段 ${fourth.name}`, exact: true }).click() } finally { await page.keyboard.up('Alt') }
@@ -360,17 +382,17 @@ function createVideoEditMultitrackScene() {
         assert.deepEqual(project.items.find(item => item.id === items.mxf.id).audioChannels, [stereo([0, 0], [1, 0]), stereo([2, 0], [3, 0])])
         assert.equal(JSON.stringify(project.sequences[0].clips), clipsBefore, '已在时间线上的片段不应改变')
         placed = await append('mxf', 540, 3)
-        assertGroup(placed.group, [['audio', 0, stereo([0, 0], [1, 0])], ['audio', 8, stereo([2, 0], [3, 0])]], 'MXF 两两合成立体声')
+        assertGroup(placed.group, [['audio', audio1, stereo([0, 0], [1, 0])], ['audio', audio2, stereo([2, 0], [3, 0])]], 'MXF 两两合成立体声')
         await entry(page, items.obs.id).click(); await entry(page, items.obs.id).click({ button: 'right' }); await menuItem(page, '音频声道…').click()
         await presetSelect.waitFor({ state: 'visible', timeout: 15000 }); await presetSelect.selectOption('mono')
         await button(page.getByRole('dialog'), '确定').click()
         await saved(page, file, value => value.items.find(item => item.id === items.obs.id).audioChannels?.length === 4, 'OBS 素材项音频声道未保存')
         placed = await append('obs', 675, 5)
-        assertGroup(placed.group, [['audio', 0, mono(0, 0)], ['audio', 8, mono(0, 1)], ['audio', 9, mono(1, 0)], ['audio', 10, mono(1, 1)]], 'OBS 两条立体声拆为四个单声道')
+        assertGroup(placed.group, [['audio', audio1, mono(0, 0)], ['audio', audio2, mono(0, 1)], ['audio', audio3, mono(1, 0)], ['audio', audio4, mono(1, 1)]], 'OBS 两条立体声拆为四个单声道')
         evidence.phases.push('预设立体声两两合成、单声道拆分；已在时间线的片段不变'); store()
 
         phase('时间线片段音频声道：只改源声道')
-        const second = readProject(file).sequences[0].clips.find(clip => clip.start === 0 && clip.track === 8)
+        const second = readProject(file).sequences[0].clips.find(clip => clip.start === 0 && clip.track === audio2)
         await viewport.evaluate(host => { host.scrollLeft = 0 })
         await showTrack(page, second.track); await clipNode(page, second.id).scrollIntoViewIfNeeded()
         await clipNode(page, second.id).click({ button: 'right' }); await menuItem(page, '音频声道…').click()
@@ -380,7 +402,7 @@ function createVideoEditMultitrackScene() {
         await source.selectOption('3:0'); await page.waitForTimeout(300); await shot('multitrack-clip-audio-channels')
         await button(page.getByRole('dialog'), '确定').click()
         project = await saved(page, file, value => JSON.stringify(value.sequences[0].clips.find(clip => clip.id === second.id).audioMapping) === JSON.stringify(mono(3)), '片段源声道未保存')
-        await viewport.evaluate(host => { const row = host.querySelector('[data-track-kind="audio"]'); host.scrollTop = Math.max(0, row.offsetTop - 28) })
+        await showTrack(page, audio1)
         await page.waitForTimeout(800); await shot('multitrack-after-mapping')
         evidence.phases.push('片段源声道改为声音流 4'); store()
 
@@ -412,14 +434,16 @@ function createVideoEditMultitrackScene() {
         await entry(page, items.mxf.id).dblclick()
         await page.waitForFunction(() => document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready', undefined, { timeout: 30000 })
         const sourcePanel = page.locator('[data-video-edit-panel="source"]').first()
-        await button(sourcePanel, '正向').click()
+        await button(sourcePanel, '播放源素材').click()
         await page.waitForFunction(() => [...(document.querySelector('[aria-label="源播放电平"]')?.querySelectorAll('[data-video-edit-level-channel]') ?? [])].some(node => Number(node.dataset.peak) > .01), undefined, { timeout: 15000 })
         let sessions = 0
         for (let attempt = 0; attempt < 100 && sessions < 4; attempt++) { sessions = (await page.evaluate(() => window.henjiNative.videoFrames.stats())).native?.audioSessions ?? 0; if (sessions < 4) await page.waitForTimeout(50) }
         evidence.sourceMonitor = { audioSessions: sessions, levels: await page.locator('[aria-label="源播放电平"] [data-video-edit-level-channel]').evaluateAll(nodes => nodes.map(node => ({ peak: Number(node.dataset.peak), rms: Number(node.dataset.rms) }))) }
         await shot('multitrack-source-monitor')
         assert.ok(sessions >= 4, `源监视器应为 MXF 的四条声音流各开一个原生声音会话，实际 ${sessions}`)
-        await button(sourcePanel, '停止').click(); await closeVideoEditDockPanel(page, '源监视器')
+        const pauseSource = button(sourcePanel, '暂停源素材')
+        if (await pauseSource.isVisible()) await pauseSource.click()
+        await closeVideoEditDockPanel(page, '源监视器')
         evidence.phases.push('源监视器读取全部四条声音流并出声'); store()
 
         phase('旧工程：无声音流清单、画面声音合一片段')
@@ -437,6 +461,10 @@ function createVideoEditMultitrackScene() {
         await dialogs(app, [legacyFile], legacyFile); await openVideoEditFile(page, legacyFile); await presented(page, 0)
         await page.waitForTimeout(1500)
         assert.equal(hash(legacyFile), legacyHash, '打开旧工程不应改写文件')
+        await shot('multitrack-legacy-project')
+        await button(page, '关闭项目').click()
+        // 原生统计涵盖所有渲染会话；先释放节目预读，才能单独核对混音器打开的声音流。
+        await page.waitForFunction(async () => ((await window.henjiNative.videoFrames.stats()).native?.audioSessions ?? 0) === 0)
         const legacyComposition = composition(legacy, legacy.sequences[0], ++revision)
         const baselineSessions = await sessionsNow()
         await openHarness()
@@ -447,8 +475,6 @@ function createVideoEditMultitrackScene() {
         evidence.legacy = { file: legacyFile, unchangedAfterOpen: true, baselineSessions, maxSessions: legacyMix.maxSessions, results: legacyResults }; store()
         assertMatches(legacyResults, '旧工程合一片段（只播放第一条声音流）', true)
         assert.equal(legacyMix.maxSessions - baselineSessions, 1, '旧工程合一片段只打开第一条声音流')
-        await shot('multitrack-legacy-project')
-        await button(page, '关闭项目').click()
         assert.equal(hash(legacyFile), legacyHash, '关闭旧工程后文件不应改变')
         for (const original of originals) assert.equal(hash(original.file), original.hash, `${original.file} 原素材不应改变`)
         let remaining = -1

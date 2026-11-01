@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const sharp = require('sharp')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
@@ -64,8 +64,14 @@ function createVideoEditExplanationScene() {
         if (await dropdown.isVisible()) { await dropdown.click(); return page.getByRole('option') }
         return review().getByRole('radio')
       }
-      const panel = async () => { if (!await review().isVisible()) await trigger().click() }
-      const close = async () => { if (await review().isVisible()) { await trigger().click(); await page.waitForTimeout(180) } }
+      const panel = async () => { await takeOverVideoEdit(page); if (!await review().isVisible()) await trigger().click() }
+      const close = async () => { await takeOverVideoEdit(page); if (await review().isVisible()) { await trigger().click(); await page.waitForTimeout(180) } }
+      const pickProgramPoint = async (x, y) => {
+        await review().waitFor({ state: 'hidden' })
+        const current = await page.locator('[data-video-edit-program-display]').boundingBox(); assert(current)
+        await page.mouse.click(current.x + current.width * x, current.y + current.height * y)
+        await review().waitFor({ state: 'visible' })
+      }
       const shot = async name => {
         const suffix = `step-${String(evidence.frames.length + 1).padStart(3, '0')}`
         // Wait for the compositor after the renderer receipt / popover animation.
@@ -128,6 +134,7 @@ function createVideoEditExplanationScene() {
         await playback(20, true)
         for (let i = 0; i < 3; i++) { await page.waitForTimeout(200); await shot('04-播放-' + i) }
         await playback(80)
+        await takeOverVideoEdit(page)
         // 节目画面不再分模式（重要记录 019）：命令带选着选择工具时直接拖画面。
         await page.getByRole('group', { name: '时间线工具', exact: true }).getByRole('button', { name: '选择工具', exact: true }).click()
         const box = await page.locator('[data-video-edit-program-display]').boundingBox(); assert(box)
@@ -180,7 +187,7 @@ function createVideoEditExplanationScene() {
         const coarse = page.getByText('这句时间不够精确，请点选对象', { exact: true }).first()
         await coarse.waitFor(); await coarse.scrollIntoViewIfNeeded(); await shot('11d-粗时间就地确认')
         options = await referenceOptions(); await options.filter({ hasText: '其他…' }).click()
-        await page.mouse.click(box.x + box.width * .5, box.y + box.height * .5)
+        await pickProgramPoint(.5, .5)
         await review().waitFor(); await page.getByLabel('保护', { exact: true }).first().waitFor()
         const proposal = page.getByText(/移到右侧/).first()
         await proposal.waitFor(); await proposal.scrollIntoViewIfNeeded(); await shot('11b-绑定后当前差异候选')
@@ -190,7 +197,7 @@ function createVideoEditExplanationScene() {
         const mainClip = liveClips.find(clip => clip.id === 'motion-clip'), overlapClip = liveClips.find(clip => clip.id === 'overlap-clip')
         const pickX = [mainClip.x + .5 - mainClip.scale * .45, mainClip.x + .5 + mainClip.scale * .45].find(x => Math.abs(x - overlapClip.x - .5) > overlapClip.scale / 2 + .001)
         assert.ok(pickX !== undefined, '夹具应保留一个只命中 V1 的画面位置')
-        await page.mouse.click(box.x + box.width * pickX, box.y + box.height * (mainClip.y + .5)); await page.waitForTimeout(200)
+        await pickProgramPoint(pickX, mainClip.y + .5); await page.waitForTimeout(200)
         await saved(doc => JSON.stringify(doc.creativeIntents.sessions[0].bindings) !== JSON.stringify(beforeBinding)); await proposal.scrollIntoViewIfNeeded(); await shot('11c-改绑定更新候选')
         evidence.bindingsBefore = beforeBinding; evidence.bindingsAfter = readVideoEditFile(seeded.file).creativeIntents.sessions[0].bindings
         assert.doesNotMatch(await review().innerText(), /\d+(?:\.\d+)?%|位置 \d|对象 \d|候选更新|上一页|下一页|不会重放/)
@@ -211,6 +218,7 @@ function createVideoEditExplanationScene() {
         assert.equal(applied.executionState, 'completed', JSON.stringify(applied))
         evidence.flow = { basis: 'f09b6bf3b / creativeIntentFields.ts', changed: '生成后通过正式候选属性应用', assertions: '保留指代、真实音频对齐、应用与撤销' }
          await saved(doc => JSON.stringify(doc.sequences[0].clips) !== JSON.stringify(beforeMotion)); await shot('11f-正式动作应用')
+        await takeOverVideoEdit(page)
         await page.keyboard.press('Escape'); await page.keyboard.press('Control+z'); await saved(doc => JSON.stringify(doc.sequences[0].clips) === JSON.stringify(beforeMotion)); await shot('11g-动作一步撤销')
         await panel(); await button(page, '删除讲解').click(); await shot('12-删除确认')
         await page.getByRole('dialog', { name: '删除本次讲解', exact: true }).getByRole('button', { name: '删除', exact: true }).click(); await saved(doc => doc.creativeIntents?.sessions.length === 0); await close(); await shot('13-删除完成')

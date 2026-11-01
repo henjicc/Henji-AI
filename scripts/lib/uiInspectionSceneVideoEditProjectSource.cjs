@@ -4,9 +4,9 @@ const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeomet
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true })
@@ -82,6 +82,12 @@ function createVideoEditProjectSourceScene() {
       const originalStats = [video, picture, audio].map(file => ({ file, size: fs.statSync(file).size, mtime: fs.statSync(file).mtimeMs }))
       let client
       await observeWorkers(page)
+      const releaseProject = async () => {
+        await leaveVideoEditProject(page, '保存')
+        // 剪辑首页会保留空闲节目预热会话；离开工作区后才验证全部 Worker 释放。
+        await button(page, '生成').first().click()
+        await waitReleased(page)
+      }
       try {
         // Native decoding is the primary path (2.3): local video and sound items play through native source views; the
         // diagnostic setting forcing the browser keeps the media elements. Each mode asserts its own real elements.
@@ -125,7 +131,8 @@ function createVideoEditProjectSourceScene() {
         assert.equal(cached.cachePath, thumbnail.cachePath); assert.ok(evidence.thumbnailCache.preservedMtime)
 
         const programmeFrame = await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow')
-        const savedBeforePreview = JSON.stringify(readVideoEditFile(file))
+        const previewContent = () => JSON.stringify(readVideoEditFile(file), (key, value) => ['revision', 'exportHistory', 'updatedAt'].includes(key) ? undefined : value)
+        const savedBeforePreview = previewContent()
         const openedAt = performance.now(); await entry(page, videoId).dblclick(); await ready(page, 'video')
         evidence.firstSourcePresentationMs = performance.now() - openedAt
         evidence.sourceVideo = await page.locator('[data-video-edit-source-media="video"]').evaluate(media => media instanceof HTMLVideoElement
@@ -137,6 +144,7 @@ function createVideoEditProjectSourceScene() {
         assert.equal(evidence.sourceVideo.width, 3840); assert.equal(evidence.sourceVideo.height, 2160)
         const seekAt = performance.now(); await sourceSeek(page, 0.5, native, FRAME); evidence.sourceSeekMs = performance.now() - seekAt
         await capture('video-project-source-4k60')
+        await assignIsolatedMcpPort(page)
         const identity = await authorizeMcpConnection(page, { name: '项目源回环' })
         client = await connectMcpClient(identity.config, 'Video project source Reality')
         const ref = { kind: 'video_edit.source', id: `${document.id}:source` }
@@ -153,6 +161,7 @@ function createVideoEditProjectSourceScene() {
           assert.equal(evidence.sourceMcp['video_edit.source.time_us'], 1000000); assert.equal(evidence.sourceMcp['video_edit.source.volume'], 0.2)
           assert.equal(evidence.sourceMcp['video_edit.source.presented_time_us'], Number(await page.locator('[data-video-edit-source-canvas]').getAttribute('data-presented-time-us')), '源实体报告的呈现时间就是画布确认的画面')
         } else assert.deepEqual(await page.locator('[data-video-edit-source-media="video"]').evaluate(video => ({ time: video.currentTime, volume: video.volume })), { time: 1, volume: 0.2 })
+        await takeOverVideoEdit(page)
         await sourceSeek(page, 0, native, FRAME)
         // Count actually presented pictures: media presentation callbacks with frame counters (browser) or the native
         // canvas's confirmed timestamps (every picture the render session presents); never rAF callbacks.
@@ -189,8 +198,8 @@ function createVideoEditProjectSourceScene() {
         await entry(page, imageId).dblclick(); await ready(page, 'image'); await capture('video-project-source-image')
         await closeVideoEditDockPanel(page, '源监视器'); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
         assert.equal(await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'), programmeFrame)
-        assert.equal(JSON.stringify(readVideoEditFile(file)), savedBeforePreview, '源预览不写工程或改变节目会话')
-        evidence.previewIsolation = { programmeFrame, projectUnchanged: true, audioDecoders: 1, hiddenSourceReleased: true }
+        assert.equal(previewContent(), savedBeforePreview, '源预览不改工程内容或节目会话')
+        evidence.previewIsolation = { programmeFrame, projectUnchanged: true, audioDecoders: 1, hiddenSourceReleased: true, peakWorkers: (await workerSnapshot(page)).peakLive }
 
         await enterBin(page, binId)
         await entry(page, videoId).click({ button: 'right' }); await menuItem(page, '按此素材新建序列').click(); await page.getByLabel('序列名称', { exact: true }).fill('4K60 匹配序列'); await page.getByRole('dialog', { name: '按素材新建序列' }).getByRole('button', { name: '新建', exact: true }).click()
@@ -203,14 +212,16 @@ function createVideoEditProjectSourceScene() {
         await saved(page, file, value => value.sequences.find(item => item.id === sequence.id)?.sampleRate === 44100)
         await capture('video-project-matched-sequence')
         await page.getByRole('tab', { name: '序列 1', exact: true }).click()
+        const emptySequenceId = document.sequences[0].id
         // Timeline content: ruler row (28px) above track rows; lanes start after the 208px track header.
         const timeline = page.locator('[data-video-edit-track][data-track-kind="video"]').first()
         await entry(page, videoId).dragTo(timeline, { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 6, y: 16 } })
-        document = await saved(page, file, value => value.sequences.length === 3)
-        const dropped = document.sequences.at(-1)
+        document = await saved(page, file, value => value.sequences.find(sequence => sequence.id === emptySequenceId)?.clips.length === (videoHasAudio ? 2 : 1))
+        const dropped = document.sequences.find(sequence => sequence.id === emptySequenceId)
+        assert.equal(document.sequences.length, 2, '拖入空序列应就地匹配设置，不另建序列')
         assert.equal(dropped.width, 3840); assert.deepEqual(dropped.frameRate, { numerator: 60, denominator: 1 }); assert.equal(dropped.clips[0].start, 0)
-        evidence.emptyTimelineDrop = { newSequenceId: dropped.id, originalEmpty: document.sequences[0].clips.length === 0 }
-        await button(page, '关闭项目').click(); await waitReleased(page)
+        evidence.emptyTimelineDrop = { sequenceId: dropped.id, reusedExisting: dropped.id === emptySequenceId }
+        await releaseProject()
         await dialogs(app, [file], file); await openVideoEditFile(page, file)
         await enterBin(page, binId)
         await entry(page, sequence.id).dblclick(); await button(page, '序列设置').click()
@@ -223,7 +234,7 @@ function createVideoEditProjectSourceScene() {
         await toRoot(page); await entry(page, imageId).click({ button: 'right' }); await menuItem(page, '从素材移除').click()
         await saved(page, file, value => value.media.length === 2); assert.ok(fs.existsSync(picture), '移除项目引用不能删除源文件')
         await button(page, '撤销').click(); await saved(page, file, value => value.media.length === 3)
-        await button(page, '关闭项目').click(); await waitReleased(page)
+        await releaseProject()
 
         // Maximum project-item and bin scale; all sources are existing original references.
         const scale = readVideoEditFile(file); scale.id = 'project-source-scale'; scale.name = '500素材项压力工程'
@@ -232,8 +243,13 @@ function createVideoEditProjectSourceScene() {
         scale.items = Array.from({ length: 500 }, (_, index) => ({ ...sourceItem, id: `scale-item-${index}`, name: `4K60 ${String(index).padStart(3, '0')}`, binId: undefined }))
         scale.sequences = [scale.sequences[0]]; scale.sequences[0].clips = []; scale.sequences[0].annotations = []
         const scaleFile = path.join(root, 'scale.hjvid'); fs.writeFileSync(scaleFile, JSON.stringify(scale))
-        const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await openVideoEditFile(page, scaleFile); await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
-        evidence.scale = { items: 500, bins: 200, firstVisibleMs: performance.now() - scaleStarted, mountedItems: await page.locator('[data-video-edit-project-entry]').count(), mountedBins: await page.locator('[data-entry-kind="bin"]').count() }
+        const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await openVideoEditFile(page, scaleFile)
+        await entry(page, 'scale-bin-0').waitFor({ state: 'visible' })
+        const mountedBins = await page.locator('[data-entry-kind="bin"]').count()
+        // 素材箱优先排序时先验证箱列表，再搜索全部素材项，不能等待尚未挂载的第 201 行。
+        await page.getByLabel('搜索素材', { exact: true }).fill('4K60')
+        await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
+        evidence.scale = { items: 500, bins: 200, firstVisibleMs: performance.now() - scaleStarted, mountedItems: await page.locator('[data-video-edit-project-entry]').count(), mountedBins }
         assert.ok(evidence.scale.mountedItems < 80); assert.ok(evidence.scale.mountedBins < 80)
         await button(page, '视图与排序').click(); await button(page, '缩略图视图').click(); await page.waitForTimeout(500)
         evidence.scale.gridMountedItems = await page.locator('[data-video-edit-project-entry]').count(); assert.ok(evidence.scale.gridMountedItems < 80)
@@ -242,11 +258,12 @@ function createVideoEditProjectSourceScene() {
         await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
         await page.getByLabel('素材项列表', { exact: true }).hover(); await page.mouse.wheel(0, 50000)
         await entry(page, 'scale-item-499').waitFor({ state: 'visible' }); await capture('video-project-scale-end')
-        await button(page, '关闭项目').click(); await waitReleased(page)
+        await releaseProject()
         // Render workers at once: the program's, plus on the native path the source view's picture session and, for an
         // item with sound, its sound session (tasks 2.2, 2.3); the browser path's source monitor uses media elements.
         const expectedPeak = 1 + (native ? 1 + (videoHasAudio ? 1 : 0) : 0)
-        evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0); assert.equal(evidence.resources.peakLive, expectedPeak, `同时运行的渲染 Worker 应为 ${expectedPeak}`)
+        evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
+        assert.equal(evidence.previewIsolation.peakWorkers, expectedPeak, `源预览同时运行的渲染 Worker 应为 ${expectedPeak}`)
         assert.equal(await page.locator('[data-video-edit-source-media]').count(), 0)
         for (const original of originalStats) { const current = fs.statSync(original.file); assert.equal(current.size, original.size); assert.equal(current.mtimeMs, original.mtime) }
         evidence.completed = true

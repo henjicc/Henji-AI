@@ -29,8 +29,8 @@ function createVideoEditMotionDraftScene() {
       let client; let seeded
       const controls = page.getByRole('switch', { name: '麦克风', exact: true })
       const trigger = () => page.getByRole('button', { name: /^(超级关键帧|正在示范)$/ })
-      const panel = async () => { if (!await controls.isVisible()) await trigger().click(); await controls.waitFor({ state: 'visible' }) }
-      const closePanel = async () => { if (await controls.isVisible()) { await page.keyboard.press('Escape'); await controls.waitFor({ state: 'hidden' }) } }
+      const panel = async () => { await takeOverVideoEdit(page); if (!await controls.isVisible()) await trigger().click(); await controls.waitFor({ state: 'visible' }) }
+      const closePanel = async () => { await takeOverVideoEdit(page); if (await controls.isVisible()) { await page.keyboard.press('Escape'); await controls.waitFor({ state: 'hidden' }) } }
       const shot = async name => {
         await page.waitForTimeout(250) // 等待面板过渡结束，再保留目视证据。
         const suffix = `step-${String(evidence.frames.length + 1).padStart(3, '0')}`
