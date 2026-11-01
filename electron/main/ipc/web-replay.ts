@@ -7,6 +7,7 @@ import { recordingEncodingFields } from '../../../src/core/screenRecording/encod
 import { registerIpcHandler, parseVoid } from './registry'
 import { assertTrustedApplicationSender } from './application-control'
 import { webRecordingEditSource } from '../services/web-replay/editSource'
+import { removeWebRecordingTake } from '../services/web-replay/runtime'
 import { backupAudioDirectory, exportWebRecordingVideos, importWebRecordingToProject, mixWebRecordingAudio, renameWebRecordings, listWebRecordings, readWebRecording, removeWebRecording, restoreWebRecording, revealWebRecording, setWebReplayEnabled, onWebReplayStateChanged, renderWebRecording, cancelWebRecordingRender, startWebRecording, stopWebRecording, webReplayState } from '../services/web-replay/runtime'
 
 const uuid = z.string().uuid()
@@ -36,7 +37,7 @@ export function registerWebReplayIpc(): void {
     return renderWebRecording(request, jobId, progress => { if (!sender.isDestroyed()) sender.send(WEB_REPLAY_CHANNELS.renderProgress, progress) })
   })
   registerIpcHandler(WEB_REPLAY_CHANNELS.cancelRender, raw => z.union([z.object({ jobId: uuid }).strict(), z.object({ recordingId: uuid }).strict()]).parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return cancelWebRecordingRender(input) })
-  registerIpcHandler(WEB_REPLAY_CHANNELS.remove, raw => z.object({ recordingId: uuid }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await removeWebRecording(input.recordingId) })
+  registerIpcHandler(WEB_REPLAY_CHANNELS.remove, raw => z.object({ recordingId: uuid, take: webReplayTakeNameSchema.optional() }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return input.take ? removeWebRecordingTake(input.recordingId, input.take) : removeWebRecording(input.recordingId) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.restore, raw => z.object({ recordingId: uuid }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await restoreWebRecording(input.recordingId) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.read, raw => z.object({ recordingId: uuid, track: z.enum(['data', 'behavior', 'text', 'boxes', 'timemap']), offset: z.number().int().nonnegative(), limit: z.number().int().min(1), query: z.string().trim().min(1).max(200).optional(), take: webReplayTakeNameSchema.optional(), ...boxTrackQueryShape }).strict().refine(validBoxTimeRange, { path: ['toSeconds'], message: 'toSeconds 不得小于 fromSeconds' }).parse(raw), async (input, event) => { assertTrustedApplicationSender(event); return readWebRecording(input) })
   registerIpcHandler(WEB_REPLAY_CHANNELS.reveal, raw => z.object({ recordingId: uuid, file: z.string().min(1).optional() }).strict().parse(raw), async (input, event) => { assertTrustedApplicationSender(event); await revealWebRecording(input.recordingId, input.file) })

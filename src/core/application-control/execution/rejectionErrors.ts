@@ -26,6 +26,7 @@ export const REJECTED_BEFORE_WRITE_ERROR_NAMES: ReadonlySet<string> = new Set([
   'WebReplayBusyError',
   'WebReplayJobNotFoundError',
   'WebReplayCancelledError',
+  'WebReplayTakeRemovalRejectedError',
 ])
 
 /** 错误本身或它包着的原因（cause 链）是写入前的拒绝。处理器加了改道说明再抛出时，用 cause 保留原错误。 */

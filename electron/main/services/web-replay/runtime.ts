@@ -24,7 +24,7 @@ import { readBoxTrack } from './boxTrackReader'
 import { newestReplayName, REPLAY_CLEAN_SUFFIX } from '../../../../src/core/webReplay/replayVideos'
 import { checkDirectorAgainstRecording, parseWebReplayDirector, WebReplayDirectorError, type WebReplayDirector } from '../../../../src/core/webReplay/director'
 import type { WebRecordingTakeInfo } from '../../../../src/platform/contracts/webReplay'
-import { listWebReplayTakes, readWebReplayTake, readWebReplayTakeBehavior, renderWebReplayTake, TAKE_FILES, TAKES_DIRECTORY, type WebReplayTakeSummary } from './takes'
+import { listWebReplayTakes, readWebReplayTake, readWebReplayTakeBehavior, renderWebReplayTake, webReplayTakeManifestSchema, TAKE_FILES, TAKES_DIRECTORY, type WebReplayTakeManifest, type WebReplayTakeSummary } from './takes'
 
 const logger = createMainLogger('main.web_replay')
 const importedRecordingSources = new Map<string, ContentTrustReference>()
@@ -221,16 +221,72 @@ export async function removeWebRecording(recordingId: string): Promise<void> {
   logger.info('网页录制已移到回收区', { event: 'web_replay.recording.removed', context: { recordingId, projectId: location.projectId } })
 }
 
+/** 版本复用录制的目录、原位置记录与删除时刻格式，回收副本独立编号，重出同名版本也不会覆盖它。 */
+export async function removeWebRecordingTake(recordingId: string, name: string): Promise<string> {
+  const context = { recordingId, take: name }
+  logger.info('开始删除网页重演版本', { event: 'web_replay.take.remove.start', context })
+  let moved = false
+  try {
+    const directory = await resolveWebRecordingDirectory(recordingId)
+    const take = await readWebReplayTake(directory, name)
+    if ((server?.apps() ?? []).some(app => app.recordingId === recordingId)) throw new Error('这段网页录制还在进行，请先停止')
+    if (webReplayRenderJobs.active(recordingId)) throw new Error('这段网页录制正在重演，请等待完成或先取消重演')
+    const id = crypto.randomUUID()
+    const trash = path.join(webRecordingsRoot(), TRASH)
+    await fs.mkdir(trash, { recursive: true })
+    await fs.writeFile(trashOrigin(id), JSON.stringify({ directory: take.directory }))
+    try {
+      await markWebRecordingTrashed(trash, id)
+      await moveWebRecordingDirectory(take.directory, path.join(trash, id))
+      moved = true
+    } catch (error) {
+      // 跨盘移动可能已经复制完整、但只删掉部分源文件；副本在时必须保留恢复信息，并报告结果未知。
+      moved = await fs.access(path.join(trash, id)).then(() => true, () => false)
+      if (!moved) {
+        await fs.rm(trashOrigin(id), { force: true })
+        await forgetWebRecordingTrashMark(trash, id)
+      }
+      throw error
+    }
+    logger.info('网页重演版本已移到回收区', { event: 'web_replay.take.remove.completed', context: { ...context, trashId: id } })
+    return id
+  } catch (error) {
+    logger.warn('网页重演版本删除失败', { event: 'web_replay.take.remove.failed', context, error: String(error) })
+    if (!moved) throw Object.assign(new Error(error instanceof Error ? error.message : String(error)), { name: 'WebReplayTakeRemovalRejectedError' })
+    throw error
+  }
+}
+
+async function trashedTake(directory: string): Promise<WebReplayTakeManifest | null> {
+  const text = await fs.readFile(path.join(directory, TAKE_FILES.manifest), 'utf8').catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  })
+  return text === null ? null : webReplayTakeManifestSchema.parse(JSON.parse(text))
+}
+
 export async function restoreWebRecording(recordingId: string): Promise<void> {
-  const trashed = path.join(webRecordingsRoot(), TRASH, recordingId)
-  const origin = await fs.readFile(trashOrigin(recordingId), 'utf8').then(text => (JSON.parse(text) as { directory: string }).directory, () => null)
-  const target = origin ?? path.join(webRecordingsRoot(), (await new WebRecordingStore(trashed).readManifest()).id)
-  if (await fs.access(target).then(() => true, () => false)) throw new Error('原位置已有同名的文件夹，没能恢复这段网页录制')
-  await fs.mkdir(path.dirname(target), { recursive: true })
-  await moveWebRecordingDirectory(trashed, target)
-  await forgetWebRecordingTrashMark(path.dirname(trashed), recordingId)
-  if (origin) { await getDocumentService().indexDocumentAt(target); await fs.rm(trashOrigin(recordingId), { force: true }) }
-  logger.info('网页录制已恢复', { event: 'web_replay.recording.restored', context: { recordingId } })
+  logger.info('开始恢复网页录制内容', { event: 'web_replay.recording.restore.start', context: { recordingId } })
+  try {
+    const trashed = path.join(webRecordingsRoot(), TRASH, recordingId)
+    const take = await trashedTake(trashed)
+    const origin = await fs.readFile(trashOrigin(recordingId), 'utf8').then(text => (JSON.parse(text) as { directory: string }).directory, () => null)
+    // 导入副本的 take 可能仍带来源录制 ID；原位置才是恢复的权威，不能据 take 内的 ID 移进另一段录制。
+    if (take) {
+      if (!origin) throw new Error('这个网页重演版本缺少原位置记录，没能恢复')
+      await new WebRecordingStore(path.dirname(path.dirname(origin))).readManifest().catch(() => { throw new Error('所属网页录制不在原位置或无法读取，请先恢复录制或将它放回原位置，再恢复版本') })
+    }
+    const target = origin ?? path.join(webRecordingsRoot(), (await new WebRecordingStore(trashed).readManifest()).id)
+    if (await fs.access(target).then(() => true, () => false)) throw new Error(take ? '原位置已有同名的文件夹，没能恢复这个网页重演版本' : '原位置已有同名的文件夹，没能恢复这段网页录制')
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    await moveWebRecordingDirectory(trashed, target)
+    await forgetWebRecordingTrashMark(path.dirname(trashed), recordingId)
+    if (origin) { if (!take) await getDocumentService().indexDocumentAt(target); await fs.rm(trashOrigin(recordingId), { force: true }) }
+    logger.info('网页录制内容已恢复', { event: 'web_replay.recording.restored', context: { recordingId, take: take?.name } })
+  } catch (error) {
+    logger.warn('网页录制内容恢复失败', { event: 'web_replay.recording.restore.failed', context: { recordingId }, error: String(error) })
+    throw error
+  }
 }
 
 /** 回收副本使用自己的目录身份，重复删除同一录制也能分别找到。 */
@@ -241,13 +297,15 @@ export async function listDeletedWebRecordings(): Promise<import('../../../../sr
     throw error
   })
   return Promise.all(entries.filter(entry => entry.isDirectory()).map(async entry => {
-    const manifest = await new WebRecordingStore(path.join(trash, entry.name)).readManifest()
+    const directory = path.join(trash, entry.name)
+    const take = await trashedTake(directory)
+    const manifest = take ? null : await new WebRecordingStore(directory).readManifest()
     const marker = await fs.readFile(path.join(trash, `${entry.name}.deleted-at`), 'utf8').catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Date().toISOString()
       throw error
     })
     const deletedAt = Date.parse(marker)
-    return { id: `web-recording:${entry.name}`, name: webRecordingTitle(manifest), category: '网页录制', deletedAt }
+    return { id: `web-recording:${entry.name}`, name: take ? take.name : webRecordingTitle(manifest!), category: take ? '网页重演版本' : '网页录制', deletedAt }
   }))
 }
 

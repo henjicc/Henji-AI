@@ -131,6 +131,8 @@ export interface WebReplayPlatform {
   recordings(): Promise<WebRecordingSummary[]>
   /** Moves a recording to the trash folder; `restore` brings it back. */
   remove(recordingId: string): Promise<void>
+  /** 单个版本进入同一回收区，返回供撤销与恢复使用的回收副本标识。 */
+  removeTake(recordingId: string, take: string): Promise<string>
   restore(recordingId: string): Promise<void>
   /** Live frames while a replay renders (about five per second). */
   onRenderProgress(listener: (event: WebReplayRenderProgress) => void): () => void

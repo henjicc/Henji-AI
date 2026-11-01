@@ -8,6 +8,7 @@ export function createWebReplayApi(invoke: <T>(channel: string, payload?: unknow
     stop: recordingId => invoke(WEB_REPLAY_CHANNELS.stop, { recordingId }),
     recordings: () => invoke(WEB_REPLAY_CHANNELS.recordings),
     remove: recordingId => invoke(WEB_REPLAY_CHANNELS.remove, { recordingId }),
+    removeTake: (recordingId, take) => invoke(WEB_REPLAY_CHANNELS.remove, { recordingId, take }),
     restore: recordingId => invoke(WEB_REPLAY_CHANNELS.restore, { recordingId }),
     onRenderProgress: handler => subscribe(WEB_REPLAY_CHANNELS.renderProgress, value => handler(value as WebReplayRenderProgress)),
     render: (request, jobId) => invoke(WEB_REPLAY_CHANNELS.render, { ...request, ...(jobId ? { jobId } : {}) }),

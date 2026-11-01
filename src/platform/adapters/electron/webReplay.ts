@@ -15,6 +15,7 @@ export function createElectronWebReplay(): WebReplayPlatform {
     stop: id => native().stop(id),
     recordings: () => native().recordings(),
     remove: id => native().remove(id),
+    removeTake: (id, take) => native().removeTake(id, take),
     restore: id => native().restore(id),
     onRenderProgress: listener => native().onRenderProgress(listener),
     render: async (request, jobId) => { await contentTrustConfirmation().prepare('web_recording', request.recordingId); return native().render(request, jobId) },

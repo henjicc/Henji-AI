@@ -22,7 +22,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
   ],
   screen_recording: [
     { file: 'src/features/screenRecording/application/recordingUnderstanding.test.ts', title: '正式能力生成→读回→人工校正→通用撤销；生成也在同一事务撤销' },
-    { file: 'src/features/screenRecording/application/recordingUnderstanding.test.ts', title: '取消、保存失败与分析期间修改不覆盖原结果，不启动转写' },
+    { file: 'src/tests/applicationHarness.webReplayTake.test.ts', title: '正式 describe→通用删除→读回：版本进现有回收区且读不到，撤销后视频及轨道回来，其他版本不变' },
   ],
   video_edit: [
     { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '公共修改与手动编辑共用历史并可保存重开' },
