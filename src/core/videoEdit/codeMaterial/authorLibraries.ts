@@ -45,6 +45,9 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
     '1.2.0': { license: 'Apache-2.0', minApiVersion: 7, frozen: 'resources/video-edit-author/frozen/henji-effects/1.2.0', modules: { 'henji-effects': 'index.mjs' }, types: { mount: 'henji-effects', license: 'Apache-2.0', source: 'frozen' } },
     // 1.3.0：新增投影 shadow、描边 stroke、扫光 lightSweep、溶解显影 dissolve 工厂，发光多“轮廓”方式（mode: 'shape'）。
     '1.3.0': { license: 'Apache-2.0', minApiVersion: 7, frozen: 'resources/video-edit-author/frozen/henji-effects/1.3.0', modules: { 'henji-effects': 'index.mjs' }, types: { mount: 'henji-effects', license: 'Apache-2.0', source: 'frozen' } },
+    // 1.4.0：效果库第二批全部工厂——渐变 gradient（也可作图层 fill）、渐变映射、色调分离、反相、半调、抖动点阵、纸张、划痕、故障、镜像、重复阵列、
+    // 膨胀、旋转扭曲、波动、边角定位、置换、暗角、颗粒、镜头光晕、漏光，以及效果的 key 选项（点选元素时保持稳定身份）。
+    '1.4.0': { license: 'Apache-2.0', minApiVersion: 7, frozen: 'resources/video-edit-author/frozen/henji-effects/1.4.0', modules: { 'henji-effects': 'index.mjs' }, types: { mount: 'henji-effects', license: 'Apache-2.0', source: 'frozen' } },
   },
   three: {
     '0.186.1': {
