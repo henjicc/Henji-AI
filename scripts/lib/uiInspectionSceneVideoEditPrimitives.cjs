@@ -127,7 +127,8 @@ function createVideoEditPrimitivesScene() {
         await saved(doc => JSON.stringify(doc.sequences[0].clips[0].curves) !== before)
         await shot('普通贝塞尔手动编辑')
         await page.keyboard.press('Escape')
-        await button(page, '撤销').click()
+        // 改插值与拖缓动手柄是两步编辑，各占一步撤销。
+        for (let step = 0; step < 2; step++) await button(page, '撤销').click()
         await saved(doc => JSON.stringify(doc.sequences[0].clips[0].curves) === before); await shot('撤销手动编辑')
         await button(page, '撤销').click()
         await saved(doc => !doc.sequences[0].clips[0].curves?.x); await shot('撤销整组候选')
