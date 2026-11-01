@@ -26,6 +26,7 @@ export interface ApplicationPlanRequest {
 }
 
 export interface ApplicationExecutionContext extends ApplicationControlAccessContext {
+  operationOrigin?: import('zod').z.infer<typeof import('../operationReview').operationOriginSchema>
   requestId: string
   signal?: AbortSignal
   /** 仅由事务引擎创建；领域单步入口据此复用本批次，不逐字段确认。 */

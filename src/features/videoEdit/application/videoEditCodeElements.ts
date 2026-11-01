@@ -1,3 +1,6 @@
+import { applyAuthorElementEffectOverride, authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
+import { codeElementEdits } from '@/core/videoEdit/codeEdits'
+import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditPictureFilter, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
@@ -6,7 +9,8 @@ import { videoEditFadeOpacity } from '@/core/videoEdit/fades'
 import { videoEditClipPictureSize, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
 import { codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, cycleCodeElement, hitCodeElementIndex, prepareAuthorElementIndex, type CodeElementIndex } from '@/core/videoEdit/codeElementSelection'
 import type { CodeElementBounds } from '@/core/videoEdit/codeMaterial/geometry'
-import type { CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
+import type { AuthorElementObservation, CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
+import type { VideoEditSourceTime } from '@/core/videoEdit/time'
 import { authorOverrideMatrix } from '@/core/videoEdit/codeAuthorGeometry'
 import { codePoint } from '@/core/videoEdit/codeMaterial/geometry'
 import { evaluateCodeElementOverride, readCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
@@ -47,6 +51,15 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
   // Direct manipulation must remain responsive while the next frame is rendering.
   // Reuse only the exact same source time and parameter state; apply host transforms,
   // never call author code or infer drawing operations on the UI thread.
+  const refreshEffects = (author: AuthorElementObservation, clip: VideoEditClip, time: VideoEditSourceTime): AuthorElementObservation => {
+    if (!author.effectStates) return author
+    const code = author.effectStates.filter(state => !state.added && !state.missing).map(({ key, id, name, codeValues }) => ({ key, id, ...(name === undefined ? {} : { name }), codeValues }))
+    let resolved
+    // 风格件失效等错误由下一次正式渲染报告；这里只是渲染完成前的即时读回，保留上一帧的观察。
+    try { resolved = applyAuthorElementEffectOverride(code, evaluateCodeElementOverride(readCodeElementOverride(clip.elementOverrides, author.id) ?? {}, time), authorEffectEnvironmentForClip(instance.document, clip), frame - clip.start, author.id, author.kind === 'adjust' ? 'frame' : 'layer', codeMaterialVersion(instance.document, clip.code!).apiVersion) } catch { return author }
+    // 只替换代码效果与追加效果；pose.blur 由下一次渲染按位姿报告。
+    return { ...author, effects: [...resolved.effects, ...(author.effects ?? []).filter(effect => effect.source === 'pose.blur')], effectStates: resolved.states, edits: codeElementEdits(clip.edits, author.id, author.parameterKeys) }
+  }
   for (const [id, entry] of cached.elements) {
     const raw = sequence.clips.find(clip => clip.id === id)
     if (!raw || raw.kind !== 'code' || !picture.has(raw) || frame < raw.start || frame >= raw.start + raw.duration || JSON.stringify(raw.code) !== JSON.stringify(entry.clip.code)) continue
@@ -56,14 +69,14 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
       const author = bound.author
       if (author.kind === 'adjust') {
         const override = evaluateCodeElementOverride(readCodeElementOverride(raw.elementOverrides, author.id) ?? {}, time)
-        return override.hidden ? [] : [{ ...author, opacity: (author.baseOpacity ?? 1) * (override.opacity ?? 1) }]
+        return override.hidden ? [] : [{ ...refreshEffects(author, raw, time), opacity: (author.baseOpacity ?? 1) * (override.opacity ?? 1) }]
       }
       if (!author?.baseMatrix || !author.bounds) return []
       const override = evaluateCodeElementOverride(readCodeElementOverride(raw.elementOverrides, author.id) ?? {}, time)
       if (override.hidden) return []
       const matrix = authorOverrideMatrix(author.baseMatrix, author.bounds, override)
       const [x, y, right, bottom] = author.bounds
-      return [{ ...author, matrix, opacity: (author.baseOpacity ?? 1) * (override.opacity ?? 1), corners: [[x, y], [right, y], [right, bottom], [x, bottom]].map(([x, y]) => codePoint(matrix, x, y)) }]
+      return [{ ...refreshEffects(author, raw, time), matrix, opacity: (author.baseOpacity ?? 1) * (override.opacity ?? 1), corners: [[x, y], [right, y], [right, bottom], [x, bottom]].map(([x, y]) => codePoint(matrix, x, y)) }]
     })
     const evaluated = evaluateVideoEditClip(raw, frame)
     const opacity = evaluated.opacity * videoEditFadeOpacity(raw, frame)
@@ -135,7 +148,12 @@ export function resolveVideoEditElementAnnotation(instance: VideoEditInstance, m
   const sequence = instance.document.sequences.find(sequence => sequence.id === sequenceId)!
   return { mark: { ...mark, target: { ...mark.target, region: videoEditCodeElementRegion(entry, element, sequence) } }, missing: false, label: codeElementLabel(element) }
 }
-export function videoEditSelectedCodeElementContext(instance: VideoEditInstance): { clipRef: string; elementId: string; sourceSpan?: CodeElementBounds['sourceSpan']; parameterKeys: string[]; effects?: import('@/core/videoEdit/authorEffects').ResolvedAuthorEffect[] } | null {
+export const VIDEO_EDIT_CODE_ELEMENT = 'video_edit.code_element'
+/** 代码元素的稳定引用：剪辑、序列、片段与作者图层 id。 */
+export function videoEditCodeElementRef(target: { projectId: string; sequenceId: string; clipId: string; elementId: string }): { kind: typeof VIDEO_EDIT_CODE_ELEMENT; id: string } {
+  return { kind: VIDEO_EDIT_CODE_ELEMENT, id: [target.projectId, target.sequenceId, target.clipId, target.elementId].map(encodeURIComponent).join(':') }
+}
+export function videoEditSelectedCodeElementContext(instance: VideoEditInstance): { clipRef: string; elementRef: ReturnType<typeof videoEditCodeElementRef>; elementId: string; sourceSpan?: CodeElementBounds['sourceSpan']; parameterKeys: string[]; effects?: import('@/core/videoEdit/authorEffects').ResolvedAuthorEffect[] } | null {
   const selected = readSelectedVideoEditCodeElement(instance)
-  return selected ? { clipRef: `video_edit.clip:${instance.document.id}:${selected.entry.clip.id}`, elementId: selected.element.elementId, ...(selected.element.sourceSpan ? { sourceSpan: selected.element.sourceSpan } : {}), parameterKeys: selected.parameterKeys, effects: selected.element.author?.effects } : null
+  return selected ? { clipRef: `video_edit.clip:${instance.document.id}:${selected.entry.clip.id}`, elementRef: videoEditCodeElementRef({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: selected.entry.clip.id, elementId: selected.element.elementId }), elementId: selected.element.elementId, ...(selected.element.sourceSpan ? { sourceSpan: selected.element.sourceSpan } : {}), parameterKeys: selected.parameterKeys, effects: selected.element.author?.effects } : null
 }

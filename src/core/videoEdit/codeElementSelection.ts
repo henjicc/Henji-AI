@@ -24,7 +24,7 @@ function hitAuthorBounds(author: AuthorElementObservation, x: number, y: number)
 }
 
 export const videoEditSelectedCodeElementContextSchema = z.object({
-  clipRef: z.string().min(1), elementId: z.string().min(1),
+  clipRef: z.string().min(1), elementRef: z.object({ kind: z.literal('video_edit.code_element'), id: z.string().min(1) }).strict(), elementId: z.string().min(1),
   sourceSpan: z.object({ file: z.string().min(1), start: z.number().int().nonnegative(), end: z.number().int().positive(), startLine: z.number().int().positive(), startColumn: z.number().int().positive(), endLine: z.number().int().positive(), endColumn: z.number().int().positive() }).strict().optional(),
   parameterKeys: z.array(z.string().min(1)),
   effects: z.array(authorResolvedEffectSchema).optional(),

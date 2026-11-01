@@ -3,6 +3,7 @@ import type { ApplicationExecutionContext } from './execution/types'
 /** 由可信宿主创建调用身份，工具参数不能冒充调用者。 */
 export interface ApplicationCallerGrant {
   readonly callerId: string
+  readonly operationOrigin?: ApplicationExecutionContext['operationOrigin']
 }
 
 const grants = new WeakSet<ApplicationCallerGrant>()
@@ -34,6 +35,7 @@ export function applicationCallerAccess(
     exposure: 'local_adapter',
     acceptedDataClasses: new Set(['C0', 'C1', 'C2']),
     requestId,
+    operationOrigin: grant.operationOrigin,
     signal,
   }
 }

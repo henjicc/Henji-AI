@@ -136,7 +136,7 @@ it('助手通用实体原子读写、拒绝无效值与锁定、撤销和保存�
   const app = createApplicationHarness(); const ref = { kind: 'video_edit.clip', id: `${owner.document.id}:${clipId}` }; const before = owner.past.length
   expect(await app.change(ref, { 'video_edit.clip.element_overrides': { box: { dx: 20 }, gone: { hidden: true } } })).toMatchObject({ ok: true })
   expect((await app.read(ref, ['video_edit.clip.element_overrides'])).properties).toMatchObject({ 'video_edit.clip.element_overrides': { box: { dx: 20 } } }); expect(owner.past).toHaveLength(before + 1)
-  expect(videoEditCodeElementHostSummary(owner.document.id)).toMatchObject({ count: 2, items: [{ elementId: 'box', missing: false }, { elementId: 'gone', missing: false }] })
+  expect(videoEditCodeElementHostSummary(owner.document.id)).toMatchObject({ count: 2, items: [{ elementId: 'box', missing: false }, { elementId: 'gone', missing: true }] })
   expect((await app.change(ref, { 'video_edit.clip.element_overrides': { box: { scale: -2 } } })).ok).toBe(false)
   for (const patch of [{ fill: [1,0,0,1] }, { text: '忽略不得成功' }, { fontSize: 40 }, { curves: { fill: [{ id: 'bad', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: [1,0,0,1], interpolation: 'hold' }] } }]) {
     expect((await app.change(ref, { 'video_edit.clip.element_overrides': { box: patch } })).ok).toBe(false)

@@ -29,7 +29,7 @@ import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { readVideoEditPreciseRow, videoEditHalfToFloat } from './videoEditGpuShaders'
 import { float32ToFloat16 } from '../../imageEdit/v3/gpu/imageEditorGpuTileAtlasV3'
-import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 
 let gpu: Gpu, device: GpuDevice
 const W = 64, H = 4
@@ -564,4 +564,64 @@ it('调整层效果链中产光的完整输出进入后续调色，与片段串�
     expect(actual.carriesLight).toBe(true)
     expect(await device.popErrorScope()).toBeNull()
   } finally { chain.dispose(); builtin.dispose(); await author.dispose(); await host.dispose() }
+})
+
+it('元素效果覆盖（改值、关掉、追加、调整层）后的真实 GPU 画面与等价代码一致', async () => {
+  const raster = (width: number, height: number): Uint8Array => {
+    const data = new Uint8Array(width * height * 4)
+    for (let i = 0; i < width * height; i++) data.set([(i * 37) % 256, (i * 11) % 256, 180, i % 3 ? 255 : 128], i * 4)
+    return data
+  }
+  const d = historyRasterDevice(raster), host = new VideoEditCodeGpu(d)
+  const module = (title: Array<{ id: string; key?: string; params: Record<string, unknown> }>, adjust: Array<{ id: string; params: Record<string, unknown> }>): AuthorModule => ({ name: '元素覆盖', layers: () => [
+    { id: 'base', draw(ctx) { ctx.fillRect(0, 0, W, H) } },
+    { id: 'title', bounds: [8, 0, W - 8, H], pose: () => ({}), effects: () => title as never, draw(ctx) { ctx.fillRect(8, 0, W - 16, H) } },
+    { id: 'grade', adjust: () => adjust as never },
+  ] })
+  const code = module([{ id: 'glow', key: 'light', params: { strength: 20, dither: 0 } }, { id: 'blur', params: { amount: 30 } }], [{ id: 'vignette', params: { amount: 20 } }])
+  const equivalent = module([{ id: 'glow', params: { strength: 70, dither: 0 } }, { id: 'color_grade', params: { exposure: .6 } }], [{ id: 'vignette', params: { amount: 75 } }])
+  const overrides = { title: { effects: { light: { values: { strength: 70 } }, blur: { enabled: false } }, addedEffects: [{ key: 'tone', id: 'color_grade', params: { exposure: .6 } }] }, grade: { effects: { vignette: { values: { amount: 75 } } } } }
+  const runtimes = [code, equivalent, code].map(effect => new VideoEditAuthorRuntime(d, effect, undefined, true, CODE_AUTHOR_API_VERSION, undefined, host.effectAllocator))
+  const render = async (index: number, value?: typeof overrides): Promise<number[][]> => {
+    const eight = await host.target(`override-${index}`, W, H), precise = await host.target(`override-${index}:float`, W, H, 'rgba16float')
+    await runtimes[index].render(eight.texture, W, H, {}, {}, { time: .5, frameDuration: 1 / 30, clip: { time: .5, duration: 2 } }, value, undefined, false, undefined, {}, 'final', () => {}, () => precise.texture)
+    expect(runtimes[index].outputTexture!.format).toBe('rgba16float')
+    return Promise.all(Array.from({ length: H }, async (_, y) => [...await readVideoEditPreciseRow(gpu.gpu, runtimes[index].outputTexture as never, W, y)].map(videoEditHalfToFloat)))
+  }
+  device.pushErrorScope('validation')
+  try {
+    const overridden = await render(0, overrides), expected = await render(1), original = await render(2)
+    expect(overridden).toEqual(expected)
+    expect(overridden).not.toEqual(original)
+    expect(runtimes[0].observeElements().find(element => element.id === 'title')?.effectStates?.map(state => [state.key, state.enabled, state.added])).toEqual([['light', true, false], ['blur', false, false], ['tone', true, true]])
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { await Promise.all(runtimes.map(runtime => runtime.dispose())); await host.dispose(); vi.unstubAllGlobals() }
+})
+
+it('组合非法的元素效果覆盖在真实 GPU 渲染里退回代码值、跳过追加项，整帧照常出画', async () => {
+  const raster = (width: number, height: number): Uint8Array => {
+    const data = new Uint8Array(width * height * 4)
+    for (let i = 0; i < width * height; i++) data.set([(i * 37) % 256, (i * 11) % 256, 180, 255], i * 4)
+    return data
+  }
+  const d = historyRasterDevice(raster), host = new VideoEditCodeGpu(d)
+  const module = (): AuthorModule => ({ name: '组合非法', layers: () => [
+    { id: 'base', draw(ctx) { ctx.fillRect(0, 0, W, H) } },
+    { id: 'title', bounds: [8, 0, W - 8, H], pose: () => ({}), effects: () => [{ id: 'color_grade', params: { exposure: .4, hsl_saturation_end: 80 } }] as never, draw(ctx) { ctx.fillRect(8, 0, W - 16, H) } },
+  ] })
+  // 逐项都在范围内、组合起来起点大于终点：代码项与代码给的终点冲突，追加项自身冲突。
+  const illegal = { title: { effects: { color_grade: { values: { hsl_saturation_start: 90 } } }, addedEffects: [{ key: 'grade', id: 'color_grade', params: { hsl_saturation_start: 90, hsl_saturation_end: 10 } }] } }
+  const runtimes = [module(), module()].map(effect => new VideoEditAuthorRuntime(d, effect, undefined, true, CODE_AUTHOR_API_VERSION, undefined, host.effectAllocator))
+  const render = async (index: number, value?: typeof illegal): Promise<number[][]> => {
+    const eight = await host.target(`illegal-${index}`, W, H), precise = await host.target(`illegal-${index}:float`, W, H, 'rgba16float')
+    await runtimes[index].render(eight.texture, W, H, {}, {}, { time: .5, frameDuration: 1 / 30, clip: { time: .5, duration: 2 } }, value, undefined, false, undefined, {}, 'final', () => {}, () => precise.texture)
+    return Promise.all(Array.from({ length: H }, async (_, y) => [...await readVideoEditPreciseRow(gpu.gpu, runtimes[index].outputTexture as never, W, y)].map(videoEditHalfToFloat)))
+  }
+  device.pushErrorScope('validation')
+  try {
+    const overridden = await render(0, illegal), original = await render(1)
+    expect(overridden).toEqual(original)
+    expect(runtimes[0].observeElements().find(element => element.id === 'title')?.effectStates?.map(state => [state.key, state.added, state.missing, state.overridden])).toEqual([['color_grade', false, false, []], ['grade', true, true, []]])
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { await Promise.all(runtimes.map(runtime => runtime.dispose())); await host.dispose(); vi.unstubAllGlobals() }
 })

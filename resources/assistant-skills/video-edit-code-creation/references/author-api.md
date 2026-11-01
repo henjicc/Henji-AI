@@ -185,7 +185,7 @@ TS 文件（含默认入口 main.ts）在打包的同时按作者接口做类型
 
 ## API 7：图层效果链与 henji-effects
 
-新源码使用作者接口 10，`henji-effects` 随代码版本冻结（新源码锁定 1.3.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / lens 镜头）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic`、`shadow`、`stroke`、`lightSweep`、`dissolve` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
+新源码使用作者接口 11，`henji-effects` 随代码版本冻结（新源码锁定 1.3.0）。API 4–6 保留原行为，不自动升级。支持 `glow`、`blur`（`mode` 选 uniform 均匀 / directional 方向 / radial 放射 / lens 镜头）、`chromaticAberration`、`colorGrade`、`sharpen`、`blackWhite`、`mosaic`、`shadow`、`stroke`、`lightSweep`、`dissolve` 和 `look`。工厂仅返回描述，不执行 GPU。参数、默认值、硬范围、单位和动画说明来自同一内置登记表及冻结声明；未知字段、NaN、Infinity、越界值会报错，不自动夹值。
 
 `effects(t)` 每个可见层在中心作者时间求值一次，时间与 draw 相同；位姿仍按曝光采样。即使 draw 的 cacheKey 恒定，effects 仍逐帧求值。静态无 pose 的效果层也独立栅格；尽量给 bounds（内容在作者坐标中的矩形），省略时按完整作者画幅。宿主根据整链支撑外扩，不需要把光晕手工塞进 bounds。效果先于位姿变换、opacity、clip 和运动曝光；效果本身不多次曝光。
 
@@ -219,3 +219,7 @@ export default {
 `{ id: 'grade', adjust: t => [效果描述…], clip?, pose?: t => ({ opacity }) }`：给本模块里在它之前（下层）合成好的全部图层整体加效果，按作者画幅换算；与 draw、fill、effects 互斥。pose 只用 opacity（与原画混合），clip 限定作用范围。暗角、颗粒这类整幅效果只能放在 adjust 或片段效果链里，放进普通图层的 effects 会报错。取帧观察里它是 kind 为 adjust 的元素，没有画面选框，按 id 或源码定位。grain、vignette 工厂随下一版 henji-effects 提供，在那之前直接写效果描述对象。
 
 调整层里的效果按反预乘计算：透明底的零 alpha 光会被去掉（调色、暗角、颗粒都一样）；要处理光，在产生光的图层 effects 里调。有不透明背景时光已叠入背景，不受影响。
+
+## 效果身份 key（API 11）
+
+效果描述可以带稳定身份 `key`：`{ id: 'glow', key: 'titleGlow', params: { … } }`。缺省时 key 就是效果 ID，同一元素里第二个同 ID 的效果为 `glow#2`，风格件为 `look:<名称>`；同一元素里 key 重复直接报错。用户在效果控件里、助手经 `video_edit.code_element` 按 key 改这个元素的效果参数、关掉代码给的效果或在链末追加效果，这些覆盖单独存放，不改源码；改代码时保持元素 id 与 key 不变，否则覆盖会显示为“代码里已没有这个效果”。工厂的 `{ key }` 第二参数随下一版 henji-effects 提供，在那之前直接写效果描述对象。API 10 及更早的代码写 key 会报错。源码新用到的 key 与已有追加效果相同时，追加效果自动换成 `<效果 ID>+N`，代码给的那一项保留这个 key。

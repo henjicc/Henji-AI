@@ -909,7 +909,7 @@ it('内置库升级通过正式描述、能力调用和读回，源码不变也�
     expect((await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeLibraries: true })).upgrades).toEqual([])
     boundary.honorApiVersion = true
     const upgradedApi = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeAuthorApi: true })
-    expect(upgradedApi.upgrades).toEqual([expect.objectContaining({ apiVersion: 10, oldVersion: latest.id, changedFiles: [] })])
+    expect(upgradedApi.upgrades).toEqual([expect.objectContaining({ apiVersion: CODE_AUTHOR_API_VERSION, oldVersion: latest.id, changedFiles: [] })])
     expect(savedVideoEdit(id).codeMaterials![0].versions.at(-1)).toMatchObject({ apiVersion: CODE_AUTHOR_API_VERSION, libraries: { 'henji-layout': latestAuthorLibraryVersions(CODE_AUTHOR_API_VERSION)['henji-layout'] } })
     expect((await app.requireResult('upgrade_video_edit_code_materials', { documentRef: parent, materialRefs: [materialRef], upgradeAuthorApi: true })).upgrades).toEqual([])
     undoVideoEdit(id)
@@ -935,6 +935,12 @@ it('图层变换覆盖收录并导入为素材初始值，新片段独立复制�
   expect(decodeCodeAsset(bytes.get(filePath)!).elementOverrides?.circle.dx).toBe(90)
   await saveVideoEdit(id); const reopened = await reopenVideoEdit(id)
   expect(getActiveVideoEditSequence(reopened).clips.find(clip => clip.id === first)!.elementOverrides!.circle.dx).toBe(90)
+})
+it('代码资产带进来的元素效果覆盖与素材项写入同一套校验：旧作者接口不能带效果覆盖', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id, items = owner.document.items.length
+  const asset = { ...codeAssetFixture(), elementOverrides: { circle: { addedEffects: [{ key: 'soft', id: 'blur', params: {} }] } } }
+  await expect(createVideoEditCodeAssetInstance(id, importPublication(asset))).rejects.toThrow(/元素「circle」.*升级/)
+  expect(owner.document.items).toHaveLength(items)
 })
 it('代码资产图片局部ID重映射和依赖媒体在同一次历史提交中发布', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id

@@ -59,6 +59,13 @@ it('轻量 JS 导航保留元素与工厂范围，重复 ID 不误指到某个�
   expect(text.slice(locations.layers.title.start, locations.layers.title.end)).toBe('{id:"title", draw(){}}')
   expect(locations.layers.same).toBeUndefined()
   expect(locations.fallback?.startLine).toBe(1)
+  // 重复或非字面量 id 让静态表不完整，宿主不能凭它断定元素已删除。
+  expect(locations.staticLayerIds).toBeUndefined()
+  const literal = (layers: string) => authorJsLocations({ entry: 'main.js', files: { 'main.js': `export default {layers(){return [${layers}]}}` } }).staticLayerIds
+  expect(literal('{id:"a",draw(){}},{id:"b",adjust:()=>[]}')).toBe(true)
+  // 写了 adjust 的字面量图层不等当前帧观察就能认出是调整层。
+  expect(authorJsLocations({ entry: 'main.js', files: { 'main.js': 'export default {layers(){return [{id:"a",draw(){}},{id:"b",adjust:()=>[]}]}}' } }).adjustLayerIds).toEqual(['b'])
+  for (const layers of ['{id:`a${1}`,draw(){}}', '{...base,draw(){}}', '{draw(){}}', '{id:"a",...card()}']) expect(literal(layers)).toBeUndefined()
 })
 
 it('JSON 模块改写同时移除静态和动态导入的 JSON 属性', async () => {

@@ -74,7 +74,7 @@ const source = `export default {
   motionBlur: { shutter: 180, maxSamples: 16 },
   params: ${JSON.stringify(Object.entries(parameters).map(([key, value]) => ({ key, ...value })))},
   layers() {
-    return [{ id: "golden-adjust", adjust: () => [{ id: "vignette", params: { amount: 20 } }] }, { id: "golden-motion", bounds: [0, 0, 100, 100], blurShape: "lens", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = "${BLACK_HEX}"; ctx.fillRect(0, 0, 100, 100) } }]
+    return [{ id: "golden-adjust", adjust: () => [{ id: "vignette", params: { amount: 20 } }] }, { id: "golden-motion", bounds: [0, 0, 100, 100], effects: () => [{ id: "glow", key: "goldenGlow", params: { strength: 20 } }], blurShape: "lens", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = "${BLACK_HEX}"; ctx.fillRect(0, 0, 100, 100) } }]
   }
 }
 `
@@ -322,7 +322,7 @@ const values: Record<string, unknown> = {
   'code-author-api': { apiVersion: CODE_AUTHOR_API_VERSION },
   'code-component': { schemaVersion: 1, name: '组件', version: 1, description: '黄金组件', exports: ['value'], imports: [] },
   // 代码资产 v12：网页参数随资产带上网页路径（不打包网页文件夹）。
-  'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], parameters: { label: '黄金样本', page: { kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', time: 1.5 } }, curves: {}, images: [] }),
+  'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], elementOverrides: { 'golden-motion': { addedEffects: [{ key: 'extraBlur', id: 'blur', params: { amount: 10 } }] } }, parameters: { label: '黄金样本', page: { kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', time: 1.5 } }, curves: {}, images: [] }),
   'image-header': { format: 'henji-image-document', version: 1, id: image.id, revision: 0, kindVersion: 1, createdAt: timestamp, updatedAt: timestamp, contentRevision: 0, emptyUntilRevision: 0, summary: { width: 32, height: 40, layers: image.layers.length } },
   'image-package': { packageFormat: 'henjiimg', packageVersion: IMAGE_PACKAGE_VERSION, createdAt: timestamp, document: working, resources: [...image.creativeIntents.resources.map(r=>({resourceId:r.resourceId,sha256:r.digest.slice(7),byteLength:r.bytes,path:r.path,mediaType:'application/vnd.henji.layout+json'})),{resourceId:historyId,sha256:historyId.slice(7),byteLength:historyBytes.byteLength,path:`resources/${historyId.slice(7)}`,mediaType:'application/vnd.henji.image-history+json'}] },
   'image-working-copy': working,
@@ -422,7 +422,8 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
     if (format.id === 'document.video_edit' || format.id === 'document.screen_recording') {
       const authorFixture = (value: unknown): unknown => {
         const video = value as VideoEditDocument
-        return { ...video, codeMaterials: structuredClone(document.codeMaterials), styles: video.styles?.map(style => ({ ...style, sample: { ...style.sample, code: structuredClone(document.styles![0].sample.code) } })) }
+        const elementOverrides = { 'golden-motion': { effects: { goldenGlow: { enabled: false, values: { strength: 30 }, curves: { strength: [{ id: 'golden-effect-key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 30, interpolation: 'linear' as const }] } } }, addedEffects: [{ key: 'extraBlur', id: 'blur', params: { amount: 10 } }] } }
+        return { ...video, sequences: video.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.code ? { ...clip, elementOverrides, edits: { 'element:golden-motion:effect:goldenGlow:strength': { by: 'user' as const, at: 1793498400000 } } } : clip) })), codeMaterials: structuredClone(document.codeMaterials), styles: video.styles?.map(style => ({ ...style, sample: { ...style.sample, code: structuredClone(document.styles![0].sample.code) } })) }
       }
       content = format.id === 'document.video_edit' ? authorFixture(content) : (() => {
         const recording = content as { scriptCapture: { baselines: Array<{ content: unknown }> } }

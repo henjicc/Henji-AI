@@ -1,32 +1,32 @@
 // 由 scripts/generate-author-effects.ts 生成，请修改效果登记后重新生成。
 import type { BlurParams, SharpenParams, ColorGradeParams, BlackWhiteParams, InvertParams, GradientMapParams, PosterizeParams, GlowParams, LightSweepParams, LensFlareParams, LightLeakParams, DropShadowParams, StrokeParams, VignetteParams, ChromaticAberrationParams, FilmGrainParams, HalftoneParams, DitherPatternParams, PaperParams, ScratchesParams, MosaicParams, GlitchParams, DissolveRevealParams, MirrorParams, RepeatParams, BulgeParams, TwirlParams, WaveParams, CornerPinParams, DisplaceParams } from '@/core/videoEdit/authorEffects.generated'
-export function blur(params: BlurParams = {}): { readonly id: 'blur'; readonly params: BlurParams } { return { id: 'blur', params } }
-export function sharpen(params: SharpenParams = {}): { readonly id: 'sharpen'; readonly params: SharpenParams } { return { id: 'sharpen', params } }
-export function colorGrade(params: ColorGradeParams = {}): { readonly id: 'color_grade'; readonly params: ColorGradeParams } { return { id: 'color_grade', params } }
-export function blackWhite(params: BlackWhiteParams = {}): { readonly id: 'black_white'; readonly params: BlackWhiteParams } { return { id: 'black_white', params } }
-export function invert(params: InvertParams = {}): { readonly id: 'invert'; readonly params: InvertParams } { return { id: 'invert', params } }
-export function gradientMap(params: GradientMapParams = {}): { readonly id: 'gradient_map'; readonly params: GradientMapParams } { return { id: 'gradient_map', params } }
-export function posterize(params: PosterizeParams = {}): { readonly id: 'posterize'; readonly params: PosterizeParams } { return { id: 'posterize', params } }
-export function glow(params: GlowParams = {}): { readonly id: 'glow'; readonly params: GlowParams } { return { id: 'glow', params } }
-export function lightSweep(params: LightSweepParams = {}): { readonly id: 'light_sweep'; readonly params: LightSweepParams } { return { id: 'light_sweep', params } }
-export function lensFlare(params: LensFlareParams = {}): { readonly id: 'lens_flare'; readonly params: LensFlareParams } { return { id: 'lens_flare', params } }
-export function lightLeak(params: LightLeakParams = {}): { readonly id: 'light_leak'; readonly params: LightLeakParams } { return { id: 'light_leak', params } }
-export function shadow(params: DropShadowParams = {}): { readonly id: 'drop_shadow'; readonly params: DropShadowParams } { return { id: 'drop_shadow', params } }
-export function stroke(params: StrokeParams = {}): { readonly id: 'stroke'; readonly params: StrokeParams } { return { id: 'stroke', params } }
-export function vignette(params: VignetteParams = {}): { readonly id: 'vignette'; readonly params: VignetteParams } { return { id: 'vignette', params } }
-export function chromaticAberration(params: ChromaticAberrationParams = {}): { readonly id: 'chromatic_aberration'; readonly params: ChromaticAberrationParams } { return { id: 'chromatic_aberration', params } }
-export function grain(params: FilmGrainParams = {}): { readonly id: 'film_grain'; readonly params: FilmGrainParams } { return { id: 'film_grain', params } }
-export function halftone(params: HalftoneParams = {}): { readonly id: 'halftone'; readonly params: HalftoneParams } { return { id: 'halftone', params } }
-export function ditherPattern(params: DitherPatternParams = {}): { readonly id: 'dither_pattern'; readonly params: DitherPatternParams } { return { id: 'dither_pattern', params } }
-export function paper(params: PaperParams = {}): { readonly id: 'paper'; readonly params: PaperParams } { return { id: 'paper', params } }
-export function scratches(params: ScratchesParams = {}): { readonly id: 'scratches'; readonly params: ScratchesParams } { return { id: 'scratches', params } }
-export function mosaic(params: MosaicParams = {}): { readonly id: 'mosaic'; readonly params: MosaicParams } { return { id: 'mosaic', params } }
-export function glitch(params: GlitchParams = {}): { readonly id: 'glitch'; readonly params: GlitchParams } { return { id: 'glitch', params } }
-export function dissolve(params: DissolveRevealParams = {}): { readonly id: 'dissolve_reveal'; readonly params: DissolveRevealParams } { return { id: 'dissolve_reveal', params } }
-export function mirror(params: MirrorParams = {}): { readonly id: 'mirror'; readonly params: MirrorParams } { return { id: 'mirror', params } }
-export function repeat(params: RepeatParams = {}): { readonly id: 'repeat'; readonly params: RepeatParams } { return { id: 'repeat', params } }
-export function bulge(params: BulgeParams = {}): { readonly id: 'bulge'; readonly params: BulgeParams } { return { id: 'bulge', params } }
-export function twirl(params: TwirlParams = {}): { readonly id: 'twirl'; readonly params: TwirlParams } { return { id: 'twirl', params } }
-export function wave(params: WaveParams = {}): { readonly id: 'wave'; readonly params: WaveParams } { return { id: 'wave', params } }
-export function cornerPin(params: CornerPinParams = {}): { readonly id: 'corner_pin'; readonly params: CornerPinParams } { return { id: 'corner_pin', params } }
-export function displace(params: DisplaceParams = {}): { readonly id: 'displace'; readonly params: DisplaceParams } { return { id: 'displace', params } }
+export function blur(params: BlurParams = {}, options: { readonly key?: string } = {}): { readonly id: 'blur'; readonly key?: string; readonly params: BlurParams } { return { id: 'blur', params, ...options } }
+export function sharpen(params: SharpenParams = {}, options: { readonly key?: string } = {}): { readonly id: 'sharpen'; readonly key?: string; readonly params: SharpenParams } { return { id: 'sharpen', params, ...options } }
+export function colorGrade(params: ColorGradeParams = {}, options: { readonly key?: string } = {}): { readonly id: 'color_grade'; readonly key?: string; readonly params: ColorGradeParams } { return { id: 'color_grade', params, ...options } }
+export function blackWhite(params: BlackWhiteParams = {}, options: { readonly key?: string } = {}): { readonly id: 'black_white'; readonly key?: string; readonly params: BlackWhiteParams } { return { id: 'black_white', params, ...options } }
+export function invert(params: InvertParams = {}, options: { readonly key?: string } = {}): { readonly id: 'invert'; readonly key?: string; readonly params: InvertParams } { return { id: 'invert', params, ...options } }
+export function gradientMap(params: GradientMapParams = {}, options: { readonly key?: string } = {}): { readonly id: 'gradient_map'; readonly key?: string; readonly params: GradientMapParams } { return { id: 'gradient_map', params, ...options } }
+export function posterize(params: PosterizeParams = {}, options: { readonly key?: string } = {}): { readonly id: 'posterize'; readonly key?: string; readonly params: PosterizeParams } { return { id: 'posterize', params, ...options } }
+export function glow(params: GlowParams = {}, options: { readonly key?: string } = {}): { readonly id: 'glow'; readonly key?: string; readonly params: GlowParams } { return { id: 'glow', params, ...options } }
+export function lightSweep(params: LightSweepParams = {}, options: { readonly key?: string } = {}): { readonly id: 'light_sweep'; readonly key?: string; readonly params: LightSweepParams } { return { id: 'light_sweep', params, ...options } }
+export function lensFlare(params: LensFlareParams = {}, options: { readonly key?: string } = {}): { readonly id: 'lens_flare'; readonly key?: string; readonly params: LensFlareParams } { return { id: 'lens_flare', params, ...options } }
+export function lightLeak(params: LightLeakParams = {}, options: { readonly key?: string } = {}): { readonly id: 'light_leak'; readonly key?: string; readonly params: LightLeakParams } { return { id: 'light_leak', params, ...options } }
+export function shadow(params: DropShadowParams = {}, options: { readonly key?: string } = {}): { readonly id: 'drop_shadow'; readonly key?: string; readonly params: DropShadowParams } { return { id: 'drop_shadow', params, ...options } }
+export function stroke(params: StrokeParams = {}, options: { readonly key?: string } = {}): { readonly id: 'stroke'; readonly key?: string; readonly params: StrokeParams } { return { id: 'stroke', params, ...options } }
+export function vignette(params: VignetteParams = {}, options: { readonly key?: string } = {}): { readonly id: 'vignette'; readonly key?: string; readonly params: VignetteParams } { return { id: 'vignette', params, ...options } }
+export function chromaticAberration(params: ChromaticAberrationParams = {}, options: { readonly key?: string } = {}): { readonly id: 'chromatic_aberration'; readonly key?: string; readonly params: ChromaticAberrationParams } { return { id: 'chromatic_aberration', params, ...options } }
+export function grain(params: FilmGrainParams = {}, options: { readonly key?: string } = {}): { readonly id: 'film_grain'; readonly key?: string; readonly params: FilmGrainParams } { return { id: 'film_grain', params, ...options } }
+export function halftone(params: HalftoneParams = {}, options: { readonly key?: string } = {}): { readonly id: 'halftone'; readonly key?: string; readonly params: HalftoneParams } { return { id: 'halftone', params, ...options } }
+export function ditherPattern(params: DitherPatternParams = {}, options: { readonly key?: string } = {}): { readonly id: 'dither_pattern'; readonly key?: string; readonly params: DitherPatternParams } { return { id: 'dither_pattern', params, ...options } }
+export function paper(params: PaperParams = {}, options: { readonly key?: string } = {}): { readonly id: 'paper'; readonly key?: string; readonly params: PaperParams } { return { id: 'paper', params, ...options } }
+export function scratches(params: ScratchesParams = {}, options: { readonly key?: string } = {}): { readonly id: 'scratches'; readonly key?: string; readonly params: ScratchesParams } { return { id: 'scratches', params, ...options } }
+export function mosaic(params: MosaicParams = {}, options: { readonly key?: string } = {}): { readonly id: 'mosaic'; readonly key?: string; readonly params: MosaicParams } { return { id: 'mosaic', params, ...options } }
+export function glitch(params: GlitchParams = {}, options: { readonly key?: string } = {}): { readonly id: 'glitch'; readonly key?: string; readonly params: GlitchParams } { return { id: 'glitch', params, ...options } }
+export function dissolve(params: DissolveRevealParams = {}, options: { readonly key?: string } = {}): { readonly id: 'dissolve_reveal'; readonly key?: string; readonly params: DissolveRevealParams } { return { id: 'dissolve_reveal', params, ...options } }
+export function mirror(params: MirrorParams = {}, options: { readonly key?: string } = {}): { readonly id: 'mirror'; readonly key?: string; readonly params: MirrorParams } { return { id: 'mirror', params, ...options } }
+export function repeat(params: RepeatParams = {}, options: { readonly key?: string } = {}): { readonly id: 'repeat'; readonly key?: string; readonly params: RepeatParams } { return { id: 'repeat', params, ...options } }
+export function bulge(params: BulgeParams = {}, options: { readonly key?: string } = {}): { readonly id: 'bulge'; readonly key?: string; readonly params: BulgeParams } { return { id: 'bulge', params, ...options } }
+export function twirl(params: TwirlParams = {}, options: { readonly key?: string } = {}): { readonly id: 'twirl'; readonly key?: string; readonly params: TwirlParams } { return { id: 'twirl', params, ...options } }
+export function wave(params: WaveParams = {}, options: { readonly key?: string } = {}): { readonly id: 'wave'; readonly key?: string; readonly params: WaveParams } { return { id: 'wave', params, ...options } }
+export function cornerPin(params: CornerPinParams = {}, options: { readonly key?: string } = {}): { readonly id: 'corner_pin'; readonly key?: string; readonly params: CornerPinParams } { return { id: 'corner_pin', params, ...options } }
+export function displace(params: DisplaceParams = {}, options: { readonly key?: string } = {}): { readonly id: 'displace'; readonly key?: string; readonly params: DisplaceParams } { return { id: 'displace', params, ...options } }

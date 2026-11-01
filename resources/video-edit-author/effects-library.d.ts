@@ -727,68 +727,69 @@ export interface DisplaceParams {
   readonly seed?: number
 }
 export type BuiltinLayerEffectDescriptor =
-  | { readonly id: 'blur'; readonly params?: BlurParams }
-  | { readonly id: 'sharpen'; readonly params?: SharpenParams }
-  | { readonly id: 'color_grade'; readonly params?: ColorGradeParams }
-  | { readonly id: 'black_white'; readonly params?: BlackWhiteParams }
-  | { readonly id: 'invert'; readonly params?: InvertParams }
-  | { readonly id: 'gradient_map'; readonly params?: GradientMapParams }
-  | { readonly id: 'posterize'; readonly params?: PosterizeParams }
-  | { readonly id: 'glow'; readonly params?: GlowParams }
-  | { readonly id: 'light_sweep'; readonly params?: LightSweepParams }
-  | { readonly id: 'lens_flare'; readonly params?: LensFlareParams }
-  | { readonly id: 'light_leak'; readonly params?: LightLeakParams }
-  | { readonly id: 'drop_shadow'; readonly params?: DropShadowParams }
-  | { readonly id: 'stroke'; readonly params?: StrokeParams }
-  | { readonly id: 'vignette'; readonly params?: VignetteParams }
-  | { readonly id: 'chromatic_aberration'; readonly params?: ChromaticAberrationParams }
-  | { readonly id: 'film_grain'; readonly params?: FilmGrainParams }
-  | { readonly id: 'halftone'; readonly params?: HalftoneParams }
-  | { readonly id: 'dither_pattern'; readonly params?: DitherPatternParams }
-  | { readonly id: 'paper'; readonly params?: PaperParams }
-  | { readonly id: 'scratches'; readonly params?: ScratchesParams }
-  | { readonly id: 'mosaic'; readonly params?: MosaicParams }
-  | { readonly id: 'glitch'; readonly params?: GlitchParams }
-  | { readonly id: 'dissolve_reveal'; readonly params?: DissolveRevealParams }
-  | { readonly id: 'mirror'; readonly params?: MirrorParams }
-  | { readonly id: 'repeat'; readonly params?: RepeatParams }
-  | { readonly id: 'bulge'; readonly params?: BulgeParams }
-  | { readonly id: 'twirl'; readonly params?: TwirlParams }
-  | { readonly id: 'wave'; readonly params?: WaveParams }
-  | { readonly id: 'corner_pin'; readonly params?: CornerPinParams }
-  | { readonly id: 'displace'; readonly params?: DisplaceParams }
-export interface LookDescriptor { readonly id: 'look'; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }
+  | { readonly id: 'blur'; readonly key?: string; readonly params?: BlurParams }
+  | { readonly id: 'sharpen'; readonly key?: string; readonly params?: SharpenParams }
+  | { readonly id: 'color_grade'; readonly key?: string; readonly params?: ColorGradeParams }
+  | { readonly id: 'black_white'; readonly key?: string; readonly params?: BlackWhiteParams }
+  | { readonly id: 'invert'; readonly key?: string; readonly params?: InvertParams }
+  | { readonly id: 'gradient_map'; readonly key?: string; readonly params?: GradientMapParams }
+  | { readonly id: 'posterize'; readonly key?: string; readonly params?: PosterizeParams }
+  | { readonly id: 'glow'; readonly key?: string; readonly params?: GlowParams }
+  | { readonly id: 'light_sweep'; readonly key?: string; readonly params?: LightSweepParams }
+  | { readonly id: 'lens_flare'; readonly key?: string; readonly params?: LensFlareParams }
+  | { readonly id: 'light_leak'; readonly key?: string; readonly params?: LightLeakParams }
+  | { readonly id: 'drop_shadow'; readonly key?: string; readonly params?: DropShadowParams }
+  | { readonly id: 'stroke'; readonly key?: string; readonly params?: StrokeParams }
+  | { readonly id: 'vignette'; readonly key?: string; readonly params?: VignetteParams }
+  | { readonly id: 'chromatic_aberration'; readonly key?: string; readonly params?: ChromaticAberrationParams }
+  | { readonly id: 'film_grain'; readonly key?: string; readonly params?: FilmGrainParams }
+  | { readonly id: 'halftone'; readonly key?: string; readonly params?: HalftoneParams }
+  | { readonly id: 'dither_pattern'; readonly key?: string; readonly params?: DitherPatternParams }
+  | { readonly id: 'paper'; readonly key?: string; readonly params?: PaperParams }
+  | { readonly id: 'scratches'; readonly key?: string; readonly params?: ScratchesParams }
+  | { readonly id: 'mosaic'; readonly key?: string; readonly params?: MosaicParams }
+  | { readonly id: 'glitch'; readonly key?: string; readonly params?: GlitchParams }
+  | { readonly id: 'dissolve_reveal'; readonly key?: string; readonly params?: DissolveRevealParams }
+  | { readonly id: 'mirror'; readonly key?: string; readonly params?: MirrorParams }
+  | { readonly id: 'repeat'; readonly key?: string; readonly params?: RepeatParams }
+  | { readonly id: 'bulge'; readonly key?: string; readonly params?: BulgeParams }
+  | { readonly id: 'twirl'; readonly key?: string; readonly params?: TwirlParams }
+  | { readonly id: 'wave'; readonly key?: string; readonly params?: WaveParams }
+  | { readonly id: 'corner_pin'; readonly key?: string; readonly params?: CornerPinParams }
+  | { readonly id: 'displace'; readonly key?: string; readonly params?: DisplaceParams }
+export interface LookDescriptor { readonly id: 'look'; readonly key?: string; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }
 /** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */
-export interface RetiredBlurDescriptor { readonly id: 'gaussian_blur' | 'directional_blur' | 'zoom_blur' | 'lens_blur'; readonly params?: object }
+export interface RetiredBlurDescriptor { readonly id: 'gaussian_blur' | 'directional_blur' | 'zoom_blur' | 'lens_blur'; readonly key?: string; readonly params?: object }
 export type EffectDescriptor = BuiltinLayerEffectDescriptor | LookDescriptor | RetiredBlurDescriptor
-export declare function blur(params?: BlurParams): { readonly id: 'blur'; readonly params: BlurParams }
-export declare function sharpen(params?: SharpenParams): { readonly id: 'sharpen'; readonly params: SharpenParams }
-export declare function colorGrade(params?: ColorGradeParams): { readonly id: 'color_grade'; readonly params: ColorGradeParams }
-export declare function blackWhite(params?: BlackWhiteParams): { readonly id: 'black_white'; readonly params: BlackWhiteParams }
-export declare function invert(params?: InvertParams): { readonly id: 'invert'; readonly params: InvertParams }
-export declare function gradientMap(params?: GradientMapParams): { readonly id: 'gradient_map'; readonly params: GradientMapParams }
-export declare function posterize(params?: PosterizeParams): { readonly id: 'posterize'; readonly params: PosterizeParams }
-export declare function glow(params?: GlowParams): { readonly id: 'glow'; readonly params: GlowParams }
-export declare function lightSweep(params?: LightSweepParams): { readonly id: 'light_sweep'; readonly params: LightSweepParams }
-export declare function lensFlare(params?: LensFlareParams): { readonly id: 'lens_flare'; readonly params: LensFlareParams }
-export declare function lightLeak(params?: LightLeakParams): { readonly id: 'light_leak'; readonly params: LightLeakParams }
-export declare function shadow(params?: DropShadowParams): { readonly id: 'drop_shadow'; readonly params: DropShadowParams }
-export declare function stroke(params?: StrokeParams): { readonly id: 'stroke'; readonly params: StrokeParams }
-export declare function vignette(params?: VignetteParams): { readonly id: 'vignette'; readonly params: VignetteParams }
-export declare function chromaticAberration(params?: ChromaticAberrationParams): { readonly id: 'chromatic_aberration'; readonly params: ChromaticAberrationParams }
-export declare function grain(params?: FilmGrainParams): { readonly id: 'film_grain'; readonly params: FilmGrainParams }
-export declare function halftone(params?: HalftoneParams): { readonly id: 'halftone'; readonly params: HalftoneParams }
-export declare function ditherPattern(params?: DitherPatternParams): { readonly id: 'dither_pattern'; readonly params: DitherPatternParams }
-export declare function paper(params?: PaperParams): { readonly id: 'paper'; readonly params: PaperParams }
-export declare function scratches(params?: ScratchesParams): { readonly id: 'scratches'; readonly params: ScratchesParams }
-export declare function mosaic(params?: MosaicParams): { readonly id: 'mosaic'; readonly params: MosaicParams }
-export declare function glitch(params?: GlitchParams): { readonly id: 'glitch'; readonly params: GlitchParams }
-export declare function dissolve(params?: DissolveRevealParams): { readonly id: 'dissolve_reveal'; readonly params: DissolveRevealParams }
-export declare function mirror(params?: MirrorParams): { readonly id: 'mirror'; readonly params: MirrorParams }
-export declare function repeat(params?: RepeatParams): { readonly id: 'repeat'; readonly params: RepeatParams }
-export declare function bulge(params?: BulgeParams): { readonly id: 'bulge'; readonly params: BulgeParams }
-export declare function twirl(params?: TwirlParams): { readonly id: 'twirl'; readonly params: TwirlParams }
-export declare function wave(params?: WaveParams): { readonly id: 'wave'; readonly params: WaveParams }
-export declare function cornerPin(params?: CornerPinParams): { readonly id: 'corner_pin'; readonly params: CornerPinParams }
-export declare function displace(params?: DisplaceParams): { readonly id: 'displace'; readonly params: DisplaceParams }
-export declare function look(name: string, knobs?: Readonly<Record<string, number>>): LookDescriptor
+export interface EffectOptions { readonly key?: string }
+export declare function blur(params?: BlurParams, options?: EffectOptions): { readonly id: 'blur'; readonly key?: string; readonly params: BlurParams }
+export declare function sharpen(params?: SharpenParams, options?: EffectOptions): { readonly id: 'sharpen'; readonly key?: string; readonly params: SharpenParams }
+export declare function colorGrade(params?: ColorGradeParams, options?: EffectOptions): { readonly id: 'color_grade'; readonly key?: string; readonly params: ColorGradeParams }
+export declare function blackWhite(params?: BlackWhiteParams, options?: EffectOptions): { readonly id: 'black_white'; readonly key?: string; readonly params: BlackWhiteParams }
+export declare function invert(params?: InvertParams, options?: EffectOptions): { readonly id: 'invert'; readonly key?: string; readonly params: InvertParams }
+export declare function gradientMap(params?: GradientMapParams, options?: EffectOptions): { readonly id: 'gradient_map'; readonly key?: string; readonly params: GradientMapParams }
+export declare function posterize(params?: PosterizeParams, options?: EffectOptions): { readonly id: 'posterize'; readonly key?: string; readonly params: PosterizeParams }
+export declare function glow(params?: GlowParams, options?: EffectOptions): { readonly id: 'glow'; readonly key?: string; readonly params: GlowParams }
+export declare function lightSweep(params?: LightSweepParams, options?: EffectOptions): { readonly id: 'light_sweep'; readonly key?: string; readonly params: LightSweepParams }
+export declare function lensFlare(params?: LensFlareParams, options?: EffectOptions): { readonly id: 'lens_flare'; readonly key?: string; readonly params: LensFlareParams }
+export declare function lightLeak(params?: LightLeakParams, options?: EffectOptions): { readonly id: 'light_leak'; readonly key?: string; readonly params: LightLeakParams }
+export declare function shadow(params?: DropShadowParams, options?: EffectOptions): { readonly id: 'drop_shadow'; readonly key?: string; readonly params: DropShadowParams }
+export declare function stroke(params?: StrokeParams, options?: EffectOptions): { readonly id: 'stroke'; readonly key?: string; readonly params: StrokeParams }
+export declare function vignette(params?: VignetteParams, options?: EffectOptions): { readonly id: 'vignette'; readonly key?: string; readonly params: VignetteParams }
+export declare function chromaticAberration(params?: ChromaticAberrationParams, options?: EffectOptions): { readonly id: 'chromatic_aberration'; readonly key?: string; readonly params: ChromaticAberrationParams }
+export declare function grain(params?: FilmGrainParams, options?: EffectOptions): { readonly id: 'film_grain'; readonly key?: string; readonly params: FilmGrainParams }
+export declare function halftone(params?: HalftoneParams, options?: EffectOptions): { readonly id: 'halftone'; readonly key?: string; readonly params: HalftoneParams }
+export declare function ditherPattern(params?: DitherPatternParams, options?: EffectOptions): { readonly id: 'dither_pattern'; readonly key?: string; readonly params: DitherPatternParams }
+export declare function paper(params?: PaperParams, options?: EffectOptions): { readonly id: 'paper'; readonly key?: string; readonly params: PaperParams }
+export declare function scratches(params?: ScratchesParams, options?: EffectOptions): { readonly id: 'scratches'; readonly key?: string; readonly params: ScratchesParams }
+export declare function mosaic(params?: MosaicParams, options?: EffectOptions): { readonly id: 'mosaic'; readonly key?: string; readonly params: MosaicParams }
+export declare function glitch(params?: GlitchParams, options?: EffectOptions): { readonly id: 'glitch'; readonly key?: string; readonly params: GlitchParams }
+export declare function dissolve(params?: DissolveRevealParams, options?: EffectOptions): { readonly id: 'dissolve_reveal'; readonly key?: string; readonly params: DissolveRevealParams }
+export declare function mirror(params?: MirrorParams, options?: EffectOptions): { readonly id: 'mirror'; readonly key?: string; readonly params: MirrorParams }
+export declare function repeat(params?: RepeatParams, options?: EffectOptions): { readonly id: 'repeat'; readonly key?: string; readonly params: RepeatParams }
+export declare function bulge(params?: BulgeParams, options?: EffectOptions): { readonly id: 'bulge'; readonly key?: string; readonly params: BulgeParams }
+export declare function twirl(params?: TwirlParams, options?: EffectOptions): { readonly id: 'twirl'; readonly key?: string; readonly params: TwirlParams }
+export declare function wave(params?: WaveParams, options?: EffectOptions): { readonly id: 'wave'; readonly key?: string; readonly params: WaveParams }
+export declare function cornerPin(params?: CornerPinParams, options?: EffectOptions): { readonly id: 'corner_pin'; readonly key?: string; readonly params: CornerPinParams }
+export declare function displace(params?: DisplaceParams, options?: EffectOptions): { readonly id: 'displace'; readonly key?: string; readonly params: DisplaceParams }
+export declare function look(name: string, knobs?: Readonly<Record<string, number>>, options?: EffectOptions): LookDescriptor

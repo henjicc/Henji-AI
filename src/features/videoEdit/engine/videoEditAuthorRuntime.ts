@@ -4,7 +4,7 @@ import { CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/code
 import { assertCodeElementOverrideAllowed } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
-import { resolveAuthorEffects, authorEffectBleed, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
+import { resolveAuthorEffects, resolveAuthorElementEffects, authorEffectBleed, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
 import { gaussianSupport, type LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
 import { BLUR_AMOUNT_MAX, blurAmountForSigma } from '@/core/videoEdit/blur'
 import { VideoEditAuthorEffects } from './videoEditAuthorEffects'
@@ -101,7 +101,7 @@ export class VideoEditAuthorRuntime {
   get outputTexture(): GpuTexture | undefined { return this.renderedTarget }
   private closed = false
   readonly parameterMetadata: AuthorEffectMetadata
-  private lastFrame?: { carriesLight?: boolean; effects?: Map<number, ResolvedAuthorEffect[]>; layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides; directText?: Map<number, TextDrawObservation[]>; textUncovered?: Map<number, string[]>; textLayouts?: Map<string, number | undefined> }
+  private lastFrame?: { carriesLight?: boolean; effects?: Map<number, ResolvedAuthorEffect[]>; effectStates?: Map<number, import('@/core/videoEdit/authorEffects').AuthorElementEffectState[]>; layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides; directText?: Map<number, TextDrawObservation[]>; textUncovered?: Map<number, string[]>; textLayouts?: Map<string, number | undefined> }
   get carriesLight(): boolean { return this.lastFrame?.carriesLight === true }
   private readonly effectAllocator: VideoEditBuiltinScratchAllocator
   constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true, private readonly apiVersion?: number, private readonly effectEnvironment: () => AuthorEffectEnvironment = () => ({}), private readonly allocator?: VideoEditBuiltinScratchAllocator) {
@@ -171,7 +171,7 @@ export class VideoEditAuthorRuntime {
         const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? this.locations?.fallback
         return [{ kind: 'adjust', ...(layer.clip ? { clip: [...layer.clip] as [number, number, number, number] } : {}), id, name: layer.name ?? id, matrix: [...IDENTITY] as Matrix, corners: [],
           ...(sourceSpan ? { sourceSpan } : {}), parameterKeys: (this.effect.params ?? []).filter(parameter => parameter.layer === id).map(parameter => parameter.key), textParameterKeys: [],
-          effects: frame.effects?.get(index) ?? [], effectsTime: frame.time, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1) }]
+          effects: frame.effects?.get(index) ?? [], effectStates: frame.effectStates?.get(index) ?? [], effectsTime: frame.time, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1) }]
       }
       const bounds = layer.bounds ?? [0, 0, frame.width, frame.height]
       const matrix = authorPoseMatrix(pose)
@@ -185,7 +185,7 @@ export class VideoEditAuthorRuntime {
       const unassignedTextLayouts = attachedUnassigned ? [] : [...frame.textLayouts ?? []].filter(([, owner]) => owner === undefined).map(([id]) => id)
       attachedUnassigned = true
       const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? (layer.factory && this.locations?.factories?.[layer.factory.file]?.[layer.factory.name]) ?? this.locations?.fallback
-      return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), effects: frame.effects?.get(index) ?? [], effectsTime: frame.time, baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1),
+      return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), effects: frame.effects?.get(index) ?? [], effectStates: frame.effectStates?.get(index) ?? [], effectsTime: frame.time, baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1),
         ...(textDraws ? { textDraws: structuredClone(textDraws).map(draw => ({ ...draw,
           // 运动层的 GPU scissor 在作者画幅坐标裁切；内部 Canvas clip 已由录制保存。
           ...(posed && layer.clip ? { stageClip: [...layer.clip] as [number, number, number, number] } : {}),
@@ -458,6 +458,7 @@ export class VideoEditAuthorRuntime {
       if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组。')
       for (const layer of list) isAuthorAdjustment(layer, this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION)
       const evaluated = new Map<number, ResolvedAuthorEffect[]>()
+      const effectStates = new Map<number, import('@/core/videoEdit/authorEffects').AuthorElementEffectState[]>()
       let carriesLight = false
       const drawStill = (ctx: OffscreenCanvasRenderingContext2D, still: AuthorLayer, position: number): void => {
         ctx.save()
@@ -509,7 +510,8 @@ export class VideoEditAuthorRuntime {
         try {
           if (isAuthorAdjustment(layer, this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION)) {
             assertCodeElementOverrideAllowed('adjust', override)
-            const effects = resolveAuthorEffects(authorCall(() => layer.adjust!(info.time)), environment, info.clip.time / info.frameDuration, id, 'frame')
+            const resolved = resolveAuthorElementEffects(authorCall(() => layer.adjust!(info.time)), override, environment, info.clip.time / info.frameDuration, id, 'frame', this.apiVersion)
+            const effects = resolved.effects; effectStates.set(index, resolved.states)
             evaluated.set(index, effects)
             const pose: import('./videoEditAuthorModule').AuthorPose | null = layer.pose ? authorCall(() => layer.pose!(info.time)) : {}
             const opacity = Math.max(0, Math.min(1, (pose?.opacity ?? 1) * (override?.opacity ?? 1)))
@@ -550,7 +552,8 @@ export class VideoEditAuthorRuntime {
           const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration)).find(Boolean)
           const need = Math.max(1, ...samples.flatMap(sample => sample.pose ? [Math.hypot(sample.pose.matrix[0], sample.pose.matrix[1]), Math.hypot(sample.pose.matrix[2], sample.pose.matrix[3])] : []))
           if (hasEffects && typeof layer.effects !== 'function') throw new Error('effects 必须是函数。')
-          const effects = hasEffects ? resolveAuthorEffects(authorCall(() => layer.effects!(info.time)), environment, info.clip.time / info.frameDuration, id, 'layer', this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION) : []
+          const resolved = resolveAuthorElementEffects(hasEffects ? authorCall(() => layer.effects!(info.time)) : [], override, environment, info.clip.time / info.frameDuration, id, 'layer', this.apiVersion ?? CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION)
+          const effects = resolved.effects; effectStates.set(index, resolved.states)
           evaluated.set(index, effects)
           const reference = (rasterScale: number, pad = 0): LayerEffectReference => ({ referenceSize: { width, height }, contentBounds: bounds, rasterScale, rasterOrigin: [pad, pad], quality })
           const paddingByScale = new Map<number, number>()
@@ -635,7 +638,7 @@ export class VideoEditAuthorRuntime {
       this.layerEffects?.commit()
       this.renderedTarget = target
       this.history = history
-      this.lastFrame = { carriesLight, effects: evaluated, layers: list, width, height, time: info.time, parameters: params, overrides, directText, textUncovered, textLayouts }
+      this.lastFrame = { carriesLight, effects: evaluated, effectStates, layers: list, width, height, time: info.time, parameters: params, overrides, directText, textUncovered, textLayouts }
       // Still-group textures follow the grouping: drop the ones no group used this frame.
       this.surfaces.forEach((surface, index) => { if (surface && !surface.canvas && !used.has(index)) { this.release(surface); delete this.surfaces[index] } })
       while (this.surfaces.length > list.length * 2) {

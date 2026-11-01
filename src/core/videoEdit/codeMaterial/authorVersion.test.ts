@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { AUTHOR_LIBRARIES, latestAuthorLibraryVersions } from './authorLibraries'
+import { CODE_AUTHOR_API_VERSION } from '../codeAuthorVersions'
 import fs from 'node:fs'
 import { expect, it } from 'vitest'
 import { PERSISTENCE_FORMATS } from '../../persistence/formats'
@@ -13,7 +14,8 @@ const read = (id: string, version: number) => JSON.parse(fs.readFileSync(`tests/
 it('历史样片与代码模板迁移固定解释版本，原件、内容摘要、版本与预览媒体不变', async () => {
   for (const id of ['video-style-library', 'video-template-library', 'video-style-package', 'document.video_edit', 'document.screen_recording']) {
     const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
-    const previous = format.version - 1
+    // 补固定解释版本的那一步迁移之前的样本；之后的版本只追加，不再改动这些位置。
+    const previous = ({ 'video-style-library': 9, 'video-template-library': 6, 'video-style-package': 12, 'document.video_edit': 53, 'document.screen_recording': 56 } as Record<string, number>)[id]
     const original = read(id, previous).content, frozen = structuredClone(original)
     const upgraded = upgradePersistenceContent(format, original, previous)
     expect(original).toEqual(frozen)
@@ -53,7 +55,7 @@ it('显式版本经过写入读回保留，旧源码版本不被隐式升级，�
   sample.sample.apiVersion = 6; sample.sample.libraries = { 'henji-layout': '1.0.0' }
   expect(upgradePersistenceContent(format, JSON.parse(JSON.stringify(sample)), 6)).toEqual(sample)
   const source = { entry: 'main.js', files: { 'main.js': "import { layoutText } from 'henji-layout/text'; export default { draw() { return layoutText('A') } }" } }
-  expect(pinPreviewAuthor(source)).toEqual({ apiVersion: 10, libraries: { 'henji-layout': '2.0.0' } })
+  expect(pinPreviewAuthor(source)).toEqual({ apiVersion: CODE_AUTHOR_API_VERSION, libraries: { 'henji-layout': '2.0.0' } })
   expect(pinPreviewAuthor(source, { apiVersion: 10 }).libraries['henji-layout']).toBe('2.0.0')
   expect(pinPreviewAuthor(source, { apiVersion: 6, libraries: { 'henji-layout': '1.0.0' } })).toEqual({ apiVersion: 6, libraries: { 'henji-layout': '1.0.0' } })
   expect(() => resolvePreviewAuthor({ apiVersion: 10, libraries: { 'henji-layout': '99.0.0' } })).toThrow('未提供')
@@ -87,7 +89,7 @@ it('缺版本的历史样片使用 effects 1.3 导出迁移，新写入记录当
   const effects = await import(/* @vite-ignore */ pathToFileURL(path.resolve(release.frozen!, 'index.mjs')).href) as { shadow: () => unknown }
   expect(effects.shadow()).toBeDefined()
   expect(migrated.sample.apiVersion).toBe(9)
-  expect(pinPreviewAuthor(code).apiVersion).toBe(10)
+  expect(pinPreviewAuthor(code).apiVersion).toBe(CODE_AUTHOR_API_VERSION)
 })
 
 it('未标记样片固定迁移前的效果解释，方向模糊不退回高斯模糊', async () => {

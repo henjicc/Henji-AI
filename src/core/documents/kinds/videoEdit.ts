@@ -138,10 +138,13 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 代码版本可写作者接口 v5 与内置库 libraries，旧程序读不懂这些（作者接口最高只认 v4），提高到 37，让旧程序明确提示升级。
   // 38：作者接口 v6 可使用排版库；旧程序无法执行，最低可读版本同步提高。
   // 47：内置效果换成合并后的“模糊”（blur），旧程序不认识这个效果，会把整份剪辑当成内容无效，提高到 47 让它明确提示升级。
-  minReaderVersion: 54,
+  // 55：新建代码素材默认作者接口 11，旧程序的作者接口枚举不认识它，会把整份剪辑判成内容无效；旧程序也会忽略元素效果覆盖，渲染出不同的画面。提高到 55 让它明确提示升级。
+  minReaderVersion: 55,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 54 → 55：新增可选的元素效果覆盖、片段修改记录与作者接口 11（效果 key），已有内容原样保留；旧程序读不懂接口 11、会忽略效果覆盖，最低可读版本提高到 55。
+    54: content => structuredClone(content),
     // 53 → 54：接受作者接口 10，样片补固定历史版本。
     53: migrateVideoAuthor,
     // 52 → 53：风格件可带代码滤镜快照，历史内容原样保留。

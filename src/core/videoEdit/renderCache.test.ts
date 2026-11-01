@@ -34,6 +34,9 @@ it('修改只让依赖它的窗口失效：片段参数、嵌套序列内容与�
   expect(keys(nested).map((key, index) => key === before[index])).toEqual([...Array(12).fill(true), ...Array(6).fill(false)])
   const quiet = structuredClone(base); quiet.sequences[0].clips[0].volume = 0; quiet.sequences[1].clips[0].volume = 0
   expect(keys(quiet)).toEqual(before)
+  // 修改记录只是谁在何时改过：改值后又改回、或只有记录不同的副本，都共用同一份预渲染。
+  const recorded = structuredClone(base); recorded.sequences[0].clips[0].edits = { 'param:amount': { by: 'user', at: 1 } }
+  expect(keys(recorded)).toEqual(before)
   const relinked = structuredClone(base); relinked.media[0].sourceRevision = 'replaced'
   expect(keys(relinked).map((key, index) => key === before[index])).toEqual([...Array(9).fill(false), ...Array(3).fill(true), ...Array(6).fill(false)])
   expect(videoEditRenderWindows(videoEditComposition(base, base.sequences[0].id), { ...dependencies, fontRevision: 2 }).every((window, index) => window.key !== before[index])).toBe(true)

@@ -2,11 +2,11 @@ import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
 import type { AuthorElementObservation } from '@/core/videoEdit/codeAuthorProgram'
 export type { AuthorElementObservation } from '@/core/videoEdit/codeAuthorProgram'
 import { codePoint } from '@/core/videoEdit/codeMaterial/geometry'
-import type { CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
+import type { EvaluatedCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
 import type { AuthorLayer, AuthorModule, AuthorParameters } from './videoEditAuthorModule'
 
 /** The host edits placement only. Text and paint belong to declared parameters. */
-export type AuthorElementOverride = Pick<CodeElementOverrideValues, 'dx' | 'dy' | 'scale' | 'scaleX' | 'scaleY' | 'rotation' | 'opacity' | 'hidden'>
+export type AuthorElementOverride = EvaluatedCodeElementOverride
 export type AuthorElementOverrides = Readonly<Record<string, AuthorElementOverride>>
 export const AUTHOR_WHOLE_EFFECT_ID = 'effect'
 

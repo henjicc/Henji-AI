@@ -166,4 +166,8 @@ it('真实打包分别登记同文件多个调整层及跨文件调整层的精�
     expect(files[span.file as keyof typeof files].slice(span.start, span.end)).toBe(`{id:'${id}',adjust:()=>[]}`)
   }
   expect(bundle.locations.layers.a).not.toEqual(bundle.locations.layers.b)
+  expect(bundle.locations.staticLayerIds).toBe(true)
+  expect(bundle.locations.adjustLayerIds?.sort()).toEqual(['a', 'b', 'remote'])
+  const dynamic = await bundleAuthorFiles({ apiVersion: 9, entry: 'main.js', files: { 'main.js': "export default {name:'调整',layers:()=>[1,2].map(i=>({id:'card'+i,draw(){}}))}" } }, build)
+  expect(dynamic.locations.staticLayerIds).toBeUndefined()
 })

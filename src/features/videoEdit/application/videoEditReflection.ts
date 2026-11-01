@@ -1,3 +1,4 @@
+import { createVideoEditCodeElementRegistration } from './videoEditCodeElementReflection'
 import { splitVideoEditRef } from './videoEditRefs'
 export { splitVideoEditRef } from './videoEditRefs'
 import { createCodeProjectRegistrations } from './videoEditCodeProjectReflection'
@@ -323,5 +324,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), ...createCodeProjectRegistrations(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditEffectLibraryRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createFontRegistration(), ...createVideoEditStyleRegistrations(), ...createVideoEditSceneRegistrations()]
+  })), createVideoEditCodeElementRegistration(), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), ...createCodeProjectRegistrations(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditEffectLibraryRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createFontRegistration(), ...createVideoEditStyleRegistrations(), ...createVideoEditSceneRegistrations()]
 }

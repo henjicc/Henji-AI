@@ -6,6 +6,7 @@ import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstanc
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { importAssetCodeComponents, discardProjectCodeComponents, discardVideoEditCodeFiles } from './videoEditCodeStorage'
 import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoEdit/codeAsset'
+import { validateCodeElementOverridesWithoutObservation } from '@/core/videoEdit/authorEffects'
 import { prepareProjectCodePublication, prepareCodeVersionPublication } from './videoEditCodeStorage'
 import { addressCodeMaterialFiles, loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
@@ -139,6 +140,8 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       const checked = candidate(definition, program, publication && program.kind === 'filter' ? { name: input.name } : input, initial, baseline.sequences.find(sequence => sequence.id === owner.activeSequenceId))
       if (publication?.asset.elementOverrides) {
         if (program.kind !== 'generator') throw new Error('元素覆盖需要代码生成素材。')
+        // 资产带进来的元素覆盖是新写入的内容，与素材项写入同一套校验。
+        validateCodeElementOverridesWithoutObservation(publication.asset.elementOverrides, undefined, { luts: baseline.colorLuts }, program.apiVersion, false)
         checked.item.elementOverrides = structuredClone(publication.asset.elementOverrides)
       }
       candidates.push(checked)

@@ -1,6 +1,11 @@
+import { recordVideoEditCodeEdits } from '@/core/videoEdit/codeEdits'
+import { videoEditCodeEditActor } from './videoEditCodeElementReflection'
+import { validateVideoEditElementEffectWrite, videoEditClipEditsBase } from './videoEditCodeElementWrites'
 import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { codeElementOverrideGeometryKeys } from '@/core/videoEdit/codeElementOverrides'
+import { validateCodeElementOverridesWithoutObservation } from '@/core/videoEdit/authorEffects'
+import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { z } from 'zod'
 import { withVideoEditCodeMetadata, ensureVideoEditChangedCodeMetadata, ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import { materializeVideoEditStylePiece } from './videoEditStyleCode'
@@ -267,7 +272,12 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       // 剪辑名是文件名，不在内容里改（name 只读）；其余剪辑视图属性在上面直接写入实例
       if (this.entityType === 'video_edit.document') return document
       if (this.entityType === 'video_edit.bin') return { ...document, bins: document.bins.map(item => item.id === childId ? videoEditBinSchema.parse(data) : item) }
-      if (this.entityType === 'video_edit.item') return { ...document, items: document.items.map(item => item.id === childId ? videoEditItemSchema.parse(data) : item) }
+      if (this.entityType === 'video_edit.item') {
+        const next = videoEditItemSchema.parse(data)
+        // 素材项不在时间线上，没有当前帧观察；与片段元素覆盖同一套校验里与观察无关的部分在这里严格执行。
+        if (keys.includes('video_edit.item.element_overrides') && next.code) validateCodeElementOverridesWithoutObservation(next.elementOverrides, document.items.find(item => item.id === childId)?.elementOverrides, { luts: document.colorLuts }, codeMaterialVersion(document, next.code).apiVersion)
+        return { ...document, items: document.items.map(item => item.id === childId ? next : item) }
+      }
       if (this.entityType === 'video_edit.code_material') return { ...document, codeMaterials: document.codeMaterials?.map(definition => definition.id === childId ? { ...definition, name: String(data.name) } : definition) }
       return { ...document, sequences: document.sequences.map(sequence => {
         if (this.entityType === 'video_edit.sequence' && sequence.id === childId) {
@@ -281,6 +291,14 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
         // 速度属性（4.13）与其余属性一起写：速度改动交给速度编辑换算时长与内容。
         if (this.entityType === 'video_edit.clip' && sequence.clips.some(clip => clip.id === childId)) {
           const next = updateVideoEditClipInSequence(document, sequence, childId, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1))))
+          if (keys.some(key => ['video_edit.clip.element_overrides', 'video_edit.clip.code_parameters', 'video_edit.clip.code_curves'].includes(key))) {
+            const original = sequence.clips.find(clip => clip.id === childId)!
+            const changed = next.clips.find(clip => clip.id === childId)!
+            // 元素效果与 video_edit.code_element.effects 同一套严格校验；只查本次改动的项。
+            if (keys.includes('video_edit.clip.element_overrides') && original.kind === 'code' && original.code) for (const [elementId, value] of Object.entries(changed.elementOverrides ?? {})) validateVideoEditElementEffectWrite({ projectId, sequenceId: sequence.id, clipId: childId, versionId: original.code.versionId, elementId }, value)
+            const base = keys.includes('video_edit.clip.element_overrides') && original.kind === 'code' && original.code ? videoEditClipEditsBase({ projectId, sequenceId: sequence.id, clipId: childId, versionId: original.code.versionId }, original, changed) : original
+            recordVideoEditCodeEdits(base, changed, videoEditCodeEditActor(context))
+          }
           if (keys.includes('video_edit.clip.follow')) assertVideoEditClipFollow(next, next.clips.find(clip => clip.id === childId)!)
           return next
         }

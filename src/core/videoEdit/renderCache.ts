@@ -28,10 +28,10 @@ export const VIDEO_EDIT_RENDER_WINDOW_SECONDS = 5
 export const VIDEO_EDIT_RENDER_MIN_SECONDS = 0.5
 export interface VideoEditRenderWindow { index: number; startFrame: number; endFrame: number; key: string; heavy: boolean; fingerprintPending?: boolean }
 
-/** 声音相关字段不影响画面，修改音量不让预览文件失效。 */
-export function videoEditRenderPictureClip(clip: VideoEditClip): Omit<VideoEditClip, 'volume' | 'audioMapping' | 'preservePitch' | 'pitchSemitones' | 'linkId' | 'groupId' | 'takes' | 'creativeSource' | 'audioRole' | 'remix' | 'snapToBeat' | 'templateId' | 'contentAnchor' | 'name'> {
+/** 声音相关字段与修改记录不影响画面，修改音量、改值后又改回都不让预览文件失效。 */
+export function videoEditRenderPictureClip(clip: VideoEditClip): Omit<VideoEditClip, 'volume' | 'audioMapping' | 'preservePitch' | 'pitchSemitones' | 'linkId' | 'groupId' | 'takes' | 'creativeSource' | 'audioRole' | 'remix' | 'snapToBeat' | 'templateId' | 'contentAnchor' | 'name' | 'edits'> {
   const { volume: _volume, audioMapping: _mapping, preservePitch: _pitch, pitchSemitones: _semitones, linkId: _link, groupId: _group,
-    takes: _takes, creativeSource: _creative, audioRole: _role, remix: _remix, snapToBeat: _snap, templateId: _template, contentAnchor: _anchor, name: _name, ...rest } = clip
+    takes: _takes, creativeSource: _creative, audioRole: _role, remix: _remix, snapToBeat: _snap, templateId: _template, contentAnchor: _anchor, name: _name, edits: _edits, ...rest } = clip
   return rest
 }
 

@@ -11,13 +11,14 @@ const name = (value: unknown): string | undefined => node(value) ? value.type ==
 export function authorJsLocations(input: CodeMaterialFiles): CodeAuthorSourceLocations {
   const layers: Record<string, CodeSourceSpan> = Object.create(null)
   const factories: Record<string, Record<string, CodeSourceSpan>> = Object.create(null)
-  const duplicates = new Set<string>()
+  const duplicates = new Set<string>(), adjust = new Set<string>()
   let fallback: CodeSourceSpan | undefined
+  let dynamicIds = false
   for (const [file, text] of Object.entries(input.files)) {
     if (!/\.[cm]?js$/.test(file)) continue
     let root: Node
     try { root = parse(text, { ecmaVersion: 'latest', sourceType: 'module' }) as unknown as Node }
-    catch { continue }
+    catch { dynamicIds = true; continue }
     const starts = [0]
     for (let index = 0; index < text.length; index++) if (text[index] === '\n') starts.push(index + 1)
     const position = (offset: number): [number, number] => {
@@ -39,10 +40,13 @@ export function authorJsLocations(input: CodeMaterialFiles): CodeAuthorSourceLoc
         const key = (property: Node): string | undefined => property.computed ? undefined : name(property.key)
         const id = properties.find(property => key(property) === 'id')
         const layerId = id && node(id.value) && id.value.type === 'Literal' ? name(id.value) : undefined
-        if (layerId && properties.some(property => key(property) === 'draw')) {
+        const layer = properties.some(property => ['draw', 'adjust'].includes(key(property) ?? ''))
+        const spread = properties.some(property => property.type === 'SpreadElement')
+        if (layer && layerId && !spread) {
           if (Object.hasOwn(layers, layerId)) duplicates.add(layerId)
           else layers[layerId] = span(value)
-        }
+          if (properties.some(property => key(property) === 'adjust')) adjust.add(layerId)
+        } else if (layer || id && spread) dynamicIds = true // 展开对象可能带来 draw 或 id，静态表就不完整。
         if (file === input.entry && !fallback && properties.some(property => ['layers', 'draw', 'createWebGL', 'createWebGPU'].includes(key(property) ?? ''))) fallback = span(value)
       }
       for (const child of Object.values(value)) {
@@ -55,5 +59,6 @@ export function authorJsLocations(input: CodeMaterialFiles): CodeAuthorSourceLoc
     if (Object.keys(functions).length) factories[file] = functions
   }
   for (const key of duplicates) delete layers[key]
-  return { layers, factories, ...(fallback ? { fallback } : {}) }
+  const adjustLayerIds = [...adjust].filter(id => Object.hasOwn(layers, id))
+  return { layers, factories, ...(fallback ? { fallback } : {}), ...(dynamicIds || duplicates.size ? {} : { staticLayerIds: true as const }), ...(adjustLayerIds.length ? { adjustLayerIds } : {}) }
 }

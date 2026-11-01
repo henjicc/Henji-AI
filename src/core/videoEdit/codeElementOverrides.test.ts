@@ -29,6 +29,9 @@ it('未声明的外观覆盖与曲线必须拒绝，不允许保存后静默忽�
 it('只有明确的源码身份列表才标记失效，缺失元素仍保留覆盖', () => {
   const ids = new Set(['box'])
   expect(codeElementOverrideStatus({ box: { dx: 1 }, gone: { hidden: true } }, ids)).toEqual([{ elementId: 'box', missing: false }, { elementId: 'gone', missing: true }])
+
+  // 代码里已没有的效果 key 同样保留改动，只标为 missing。
+  expect(codeElementOverrideStatus({ box: { effects: { glow: { values: { strength: 3 } }, gone: { enabled: false } } } }, ids, new Map([['box', new Set(['glow'])]]))).toEqual([{ elementId: 'box', missing: false, effects: [{ key: 'glow', missing: false }, { key: 'gone', missing: true }] }])
 })
 it('元素贝塞尔过冲按透明度范围夹取，不中断绘制', () => {
   const curve = [{ id: 'a', ...time(0), value: 0, interpolation: 'bezier' as const, bezier: [1 / 3, 3, 2 / 3, 3] as [number, number, number, number] }, { id: 'b', ...time(1000000), value: 1, interpolation: 'linear' as const }]

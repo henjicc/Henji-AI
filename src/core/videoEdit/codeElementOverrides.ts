@@ -5,6 +5,16 @@ import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe } from './ke
 import type { VideoEditSourceTime } from './time'
 
 const number = z.number().finite()
+export const codeElementEffectKeySchema = z.string().min(1).refine(key => key !== '__proto__', '效果 key 不能是 __proto__。')
+const effectValues = z.record(codeElementEffectKeySchema, z.union([z.number().finite(), z.string(), z.boolean()]))
+export const codeElementEffectCurvesSchema = z.record(codeElementEffectKeySchema, z.array(codeMaterialKeyframeSchema).min(1)).superRefine((value, ctx) => {
+  for (const [key, raw] of Object.entries(value)) {
+    const points = [...raw].sort(compareCodeMaterialTime)
+    if (points.some((point, i) => i > 0 && compareCodeMaterialTime(points[i - 1], point) === 0)) ctx.addIssue({ code: 'custom', message: `效果 ${key} 的关键帧时刻重复。` })
+  }
+})
+export const codeElementEffectOverrideSchema = z.object({ enabled: z.boolean().optional(), values: effectValues.optional(), curves: codeElementEffectCurvesSchema.optional() }).strict()
+export const codeElementAddedEffectSchema = z.object({ key: codeElementEffectKeySchema, id: z.string().min(1), params: effectValues, curves: codeElementEffectCurvesSchema.optional() }).strict()
 export const codeElementOverrideValuesSchema = z.object({
   dx: number.min(-32768).max(32768).optional(), dy: number.min(-32768).max(32768).optional(),
   scale: number.min(.001).max(1024).optional(), scaleX: number.min(.001).max(1024).optional(), scaleY: number.min(.001).max(1024).optional(),
@@ -15,7 +25,9 @@ export type CodeElementOverrideValues = z.infer<typeof codeElementOverrideValues
 export type CodeElementOverrideKey = keyof CodeElementOverrideValues
 export const CODE_ELEMENT_OVERRIDE_KEYS = Object.keys(codeElementOverrideValuesSchema.shape) as CodeElementOverrideKey[]
 const curves = z.partialRecord(z.enum(CODE_ELEMENT_OVERRIDE_KEYS as [CodeElementOverrideKey, ...CodeElementOverrideKey[]]), z.array(codeMaterialKeyframeSchema).min(1))
-export const codeElementOverrideSchema = codeElementOverrideValuesSchema.extend({ curves: curves.optional() }).superRefine((value, ctx) => {
+export const codeElementOverrideSchema = codeElementOverrideValuesSchema.extend({ curves: curves.optional(), effects: z.record(codeElementEffectKeySchema, codeElementEffectOverrideSchema).optional(), addedEffects: z.array(codeElementAddedEffectSchema).optional() }).superRefine((value, ctx) => {
+  const keys = value.addedEffects?.map(effect => effect.key) ?? []
+  if (new Set(keys).size !== keys.length) ctx.addIssue({ code: 'custom', message: '追加效果的 key 不能重复。' })
   for (const [key, points] of Object.entries(value.curves ?? {})) {
     const field = key as CodeElementOverrideKey
     const sorted = [...points].sort(compareCodeMaterialTime)
@@ -28,7 +40,7 @@ export const codeElementOverrideSchema = codeElementOverrideValuesSchema.extend(
   }
 })
 const overridesRecord = z.record(z.string().min(1).regex(/^(?!__proto__$)[\s\S]+$/, '此元素标识与对象保留名称冲突，请在源码中修改标识。'), codeElementOverrideSchema).superRefine((values, ctx) => {
-  const ids = Object.values(values).flatMap(value => Object.values(value.curves ?? {}).flatMap(points => points.map(point => point.id)))
+  const ids = Object.values(values).flatMap(value => [...Object.values(value.curves ?? {}), ...Object.values(value.effects ?? {}).flatMap(effect => Object.values(effect.curves ?? {})), ...(value.addedEffects ?? []).flatMap(effect => Object.values(effect.curves ?? {}))].flatMap(points => points.map(point => point.id)))
   if (new Set(ids).size !== ids.length) ctx.addIssue({ code: 'custom', message: '元素覆盖的关键帧标识不能重复。' })
 })
 // Zod filters __proto__ before validating record keys; reject it before that filter
@@ -39,6 +51,9 @@ export const codeElementOverridesSchema = z.preprocess((value, ctx) => {
 }, overridesRecord)
 export type CodeElementOverride = z.infer<typeof codeElementOverrideSchema>
 export type CodeElementOverrides = z.infer<typeof codeElementOverridesSchema>
+export type CodeElementEffectOverride = z.infer<typeof codeElementEffectOverrideSchema>
+export type CodeElementAddedEffect = z.infer<typeof codeElementAddedEffectSchema>
+export type EvaluatedCodeElementOverride = CodeElementOverrideValues & { effects?: Record<string, Omit<CodeElementEffectOverride, 'curves'>>; addedEffects?: Array<Omit<CodeElementAddedEffect, 'curves'>> }
 export function readCodeElementOverride(values: CodeElementOverrides | undefined, id: string): CodeElementOverride | undefined { return values && Object.hasOwn(values, id) ? values[id] : undefined }
 
 /** 调整层没有可变换的几何，静态值与动画通道遵守同一约束。 */
@@ -53,21 +68,41 @@ export function assertCodeElementOverrideAllowed(kind: 'adjust' | undefined, val
 }
 
 /** Source-anchored curves survive trimming, speed changes and reversed playback. */
-export function evaluateCodeElementOverride(value: CodeElementOverride, time: VideoEditSourceTime): CodeElementOverrideValues {
-  const result: Record<string, unknown> = { ...value }; delete result.curves
+export function evaluateCodeElementOverride(value: CodeElementOverride, time: VideoEditSourceTime): EvaluatedCodeElementOverride {
+  const { effects, addedEffects, curves: _curves, ...result } = value
+  const values: Record<string, unknown> = { ...result }
   for (const [key, raw] of Object.entries(value.curves ?? {})) {
     const points = [...raw].sort(compareCodeMaterialTime)
     let lo = 0; let hi = points.length - 1
-    if (compareCodeMaterialTime(time, points[lo]) <= 0) result[key] = points[lo].value
-    else if (compareCodeMaterialTime(time, points[hi]) >= 0) result[key] = points[hi].value
+    if (compareCodeMaterialTime(time, points[lo]) <= 0) values[key] = points[lo].value
+    else if (compareCodeMaterialTime(time, points[hi]) >= 0) values[key] = points[hi].value
     else {
       while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (compareCodeMaterialTime(points[mid], time) <= 0) lo = mid; else hi = mid }
       const seconds = (at: VideoEditSourceTime): number => at.sourceInUs + at.sourceRemainder.numerator / at.sourceRemainder.denominator
-      result[key] = interpolateVideoEditKeyframe(points[lo].value, points[hi].value, (seconds(time) - seconds(points[lo])) / (seconds(points[hi]) - seconds(points[lo])), points[lo].interpolation, undefined, points[lo].bezier)
+      values[key] = interpolateVideoEditKeyframe(points[lo].value, points[hi].value, (seconds(time) - seconds(points[lo])) / (seconds(points[hi]) - seconds(points[lo])), points[lo].interpolation, undefined, points[lo].bezier)
     }
-    result[key] = clampVideoEditAnimationValue(result[key] as CodeMaterialKeyframe['value'], codeElementOverrideValuesSchema.shape[key as CodeElementOverrideKey])
+    values[key] = clampVideoEditAnimationValue(values[key] as CodeMaterialKeyframe['value'], codeElementOverrideValuesSchema.shape[key as CodeElementOverrideKey])
   }
-  return codeElementOverrideValuesSchema.parse(result)
+  return { ...codeElementOverrideValuesSchema.parse(values),
+    ...(effects ? { effects: Object.fromEntries(Object.entries(effects).map(([key, effect]) => [key, { ...(effect.enabled === undefined ? {} : { enabled: effect.enabled }), values: evaluateCodeElementEffectValues(effect.values ?? {}, effect.curves, time) }])) } : {}),
+    ...(addedEffects ? { addedEffects: addedEffects.map(({ curves, ...effect }) => ({ ...effect, params: evaluateCodeElementEffectValues(effect.params, curves, time) })) } : {}),
+  }
+}
+
+/** 效果参数与变换用同一套源时间和插值器；范围由实际效果定义在叠加时钳制。 */
+export function evaluateCodeElementEffectValues(values: Record<string, string | number | boolean>, curves: CodeElementEffectOverride['curves'], time: VideoEditSourceTime): Record<string, string | number | boolean> {
+  const result = { ...values }
+  for (const [key, raw] of Object.entries(curves ?? {})) {
+    const points = [...raw].sort(compareCodeMaterialTime)
+    const right = points.findIndex(point => compareCodeMaterialTime(point, time) > 0)
+    const left = points[Math.max(0, right < 0 ? points.length - 1 : right - 1)]
+    const end = points[right < 0 ? points.length - 1 : right]
+    const at = (point: VideoEditSourceTime): number => point.sourceInUs + point.sourceRemainder.numerator / point.sourceRemainder.denominator
+    const value = left === end ? left.value : interpolateVideoEditKeyframe(left.value, end.value, Math.max(0, (at(time) - at(left)) / (at(end) - at(left))), left.interpolation, undefined, left.bezier)
+    // 写入已按效果参数类型校验；存档里类型不对的点按容错读取丢弃，回到静态值。
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') result[key] = value
+  }
+  return result
 }
 
 export function codeInverseMatrix(m: CodeMatrix): CodeMatrix {
@@ -77,6 +112,6 @@ export function codeInverseMatrix(m: CodeMatrix): CodeMatrix {
 }
 
 /** Missing is derived from source identity, never persisted into an override or inferred from one hidden frame. */
-export function codeElementOverrideStatus(overrides: CodeElementOverrides, sourceIds: ReadonlySet<string>): Array<{ elementId: string; missing: boolean }> {
-  return Object.keys(overrides).map(elementId => ({ elementId, missing: !sourceIds.has(elementId) }))
+export function codeElementOverrideStatus(overrides: CodeElementOverrides, sourceIds: ReadonlySet<string>, effectKeys?: ReadonlyMap<string, ReadonlySet<string>>): Array<{ elementId: string; missing: boolean; effects?: Array<{ key: string; missing: boolean }> }> {
+  return Object.entries(overrides).map(([elementId, value]) => ({ elementId, missing: !sourceIds.has(elementId), ...(value.effects ? { effects: Object.keys(value.effects).map(key => ({ key, missing: !sourceIds.has(elementId) || effectKeys?.has(elementId) === true && !effectKeys.get(elementId)!.has(key) })) } : {}) }))
 }

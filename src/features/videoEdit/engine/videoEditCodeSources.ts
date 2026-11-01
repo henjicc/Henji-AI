@@ -1,5 +1,6 @@
 import { authorBundleShapesText, authorTextMetadataKey } from './videoEditAuthorTextResources'
 import { codeOutputInputs, codeOutputKey, codeOutputSignature } from './videoEditCodeOutputKey'
+import { codeElementEdits } from '@/core/videoEdit/codeEdits'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { authorEffectEnvironmentForClip } from '@/core/videoEdit/authorEffects'
 import { readAuthorMetadataCache, writeAuthorMetadataCache } from './videoEditAuthorMetadataCache'
@@ -578,7 +579,7 @@ export class VideoEditCodeSources {
       if (!clip.code || clip.kind !== 'code' || frame < clip.start || frame >= clip.start + clip.duration) return []
       const program = this.programs.get(identity(clip.code.definitionId, clip.code.versionId))?.program
       if (!program) return []
-      return [{ clipId: clip.id, versionId: clip.code.versionId, ...codeMaterialSize(program, this.document), elements: this.runtime?.observeAuthor(clip.id) ?? [] }]
+      return [{ clipId: clip.id, versionId: clip.code.versionId, ...codeMaterialSize(program, this.document), ...(clip.edits ? { edits: clip.edits } : {}), elements: (this.runtime?.observeAuthor(clip.id) ?? []).map(element => ({ ...element, edits: codeElementEdits(clip.edits, element.id, element.parameterKeys) })) }]
     })
     return { sequenceId: this.document.id, revision: this.document.revision, frame, clips }
   }

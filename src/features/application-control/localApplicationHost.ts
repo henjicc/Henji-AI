@@ -61,7 +61,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
       let dispatched = false
       try {
         if (!ready) throw new Error('应用尚未就绪，请稍后重试。')
-        const grant = createApplicationCallerGrant({ callerId })
+        const grant = createApplicationCallerGrant({ callerId, operationOrigin: request.data.operationOrigin })
         grants.set(requestId, grant)
         const definition = definitions.find((item) => item.id === capabilityId)
         if (!definition) throw new Error('此读取工具不可用，请重新连接。')

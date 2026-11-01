@@ -3,7 +3,8 @@ import { createVideoEditSequence, videoEditComposition, videoEditDuration, type 
 import { videoEditIsDefaultAudioMapping, videoEditItemAudioLayout, type VideoEditAudioMapping } from './audioChannels'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from './time'
 import { clampVideoEditSequenceSize } from './sequenceSize'
-import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
+import { codeMaterialVersion, type CodeMaterialMetadataReader } from './codeMaterialDocument'
+import { validateCodeElementOverridesWithoutObservation } from './authorEffects'
 import { codeMaterialMediaIds } from './codeMaterialResources'
 import { codeMaterialSize } from './codeMaterialTiming'
 
@@ -53,6 +54,11 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   if (target.locked) throw new Error('目标轨道已锁定。')
   const program = item.code ? codeMetadata?.(item.code) : undefined
   if (item.kind === 'code' && (!program || !item.code)) throw new Error('代码素材尚未完成源码检查，不能添加占位片段。')
+  // 素材项的初始元素覆盖进入新片段，与素材项写入、代码资产导入同一套校验。
+  if (item.code && item.elementOverrides) {
+    try { validateCodeElementOverridesWithoutObservation(item.elementOverrides, undefined, { luts: document.colorLuts }, codeMaterialVersion(document, item.code).apiVersion, false) }
+    catch (cause) { throw new Error(`素材项「${item.name}」的初始元素覆盖无效，请先修改 video_edit.item.element_overrides：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
+  }
   const sourceInUs = placement.sourceInUs ?? item.sourceRange?.inUs ?? 0
   const sourceOutUs = placement.sourceOutUs ?? item.sourceRange?.outUs ?? (sourceDuration !== undefined ? Math.round(sourceDuration * 1e6) : undefined)
   const ranged = placement.sourceInUs !== undefined || placement.sourceOutUs !== undefined || item.sourceRange !== undefined

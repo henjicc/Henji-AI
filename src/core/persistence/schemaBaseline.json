@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 54,
-      "fingerprint": "793295e4da3603eea4e53963c3a4cfa96d369c17f976c10ef4d7ea96c8d1b84b",
+      "version": 55,
+      "fingerprint": "d63120723af2463706be06867f6967efce2585408c209744dcfdd0f05a095c69",
       "supportedFrom": 17,
-      "minReaderVersion": 54
+      "minReaderVersion": 55
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 57,
-      "fingerprint": "bdbf0635f95508f806f64b068d7a4b891542d05d9b917639eeb03a07f3838b47",
+      "version": 58,
+      "fingerprint": "99082638ad2e4b411e2e6e5a17f5d22a768c9debcc6f3c3222611164c7f3a12e",
       "supportedFrom": 19,
-      "minReaderVersion": 57
+      "minReaderVersion": 58
     },
     "project": {
       "version": 3,
@@ -174,16 +174,16 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 11,
-      "fingerprint": "3c2225d481dd60fcbebbbebab818a87623921936aad8108f07d6e39067d2adc9",
+      "version": 12,
+      "fingerprint": "57a6ea3ca6f9ff2c34521cc2a47755b856f08b219e8645c0e8691d71b0fd8b6e",
       "supportedFrom": 1,
-      "minReaderVersion": 11
+      "minReaderVersion": 12
     },
     "code-author-api": {
-      "version": 10,
-      "fingerprint": "14ab8dc2748e3946deba87b58d793d6aa259d236154105f041fbbfe4a776c728",
+      "version": 11,
+      "fingerprint": "99139f4e8b0c71c4a41f968a5aaef27db24ada48cb307731aaf30e8a76f9d526",
       "supportedFrom": 4,
-      "minReaderVersion": 10
+      "minReaderVersion": 11
     },
     "code-component": {
       "version": 1,
@@ -192,10 +192,10 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 16,
-      "fingerprint": "94ea3af64f5ae59b751ff5a6e09b9a1a3840fe19500755094d19b836b55f6861",
+      "version": 17,
+      "fingerprint": "413117a8dd7a44ea10c2798ac240532aa3e29de3d2afdec749e57338695e1667",
       "supportedFrom": 6,
-      "minReaderVersion": 16
+      "minReaderVersion": 17
     },
     "settings": {
       "version": 16,
@@ -240,10 +240,10 @@
       "minReaderVersion": 2
     },
     "video-preset-package": {
-      "version": 14,
-      "fingerprint": "7216ad21fbaff9c286c2105ae08d0fdf14fe0a9837e5cc2c553e96c586a14437",
+      "version": 15,
+      "fingerprint": "fc94ea329c97a721b23fe8f42adf377d59b47796ef922bf3df7c25d872b8bcf8",
       "supportedFrom": 5,
-      "minReaderVersion": 14
+      "minReaderVersion": 15
     },
     "voice-library": {
       "version": 1,
@@ -288,8 +288,8 @@
       "minReaderVersion": 2
     },
     "subtitle-manifest": {
-      "version": 25,
-      "fingerprint": "efbdcb6e210b500734e88357023a1f400f53df1c279fda2257cf3c12deffa234",
+      "version": 26,
+      "fingerprint": "2d68b64a97f1ca04a376c25cbf1a2cd82774957f77d82c363821427fdd935d81",
       "supportedFrom": 11,
       "minReaderVersion": 25
     },
@@ -324,22 +324,22 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 10,
-      "fingerprint": "631ac4d48acb036f1654eeed6117050df229ca76e61fc00e4f39f23d83b9242f",
+      "version": 11,
+      "fingerprint": "a0e850bebbe87d4e955ac67ea7b350173af6b6d750ffe2081f9b24a8b0037f4a",
       "supportedFrom": 1,
-      "minReaderVersion": 10
+      "minReaderVersion": 11
     },
     "video-template-library": {
-      "version": 7,
-      "fingerprint": "2864ef08bc9a3ff8d267dc8235d23694aff39b533ad9cd56a4981d451c577dac",
+      "version": 8,
+      "fingerprint": "fdf07eb3f09a076b569b4d4fe60b005c86d9e84d1c3ec836f0fd47f32cee4773",
       "supportedFrom": 1,
-      "minReaderVersion": 7
+      "minReaderVersion": 8
     },
     "video-style-package": {
-      "version": 13,
-      "fingerprint": "d6224b3d1195d6c1454c8b86e0a9fdfea085aa4b264d2e24dde7d530022887b0",
+      "version": 14,
+      "fingerprint": "e52c30a68f2fc4f9c471430be6095940516d587220bf2ceb09f82201e520551c",
       "supportedFrom": 1,
-      "minReaderVersion": 13
+      "minReaderVersion": 14
     },
     "workspace-layouts": {
       "version": 1,
@@ -396,10 +396,10 @@
       "minReaderVersion": 1
     },
     "video-effect-library": {
-      "version": 7,
-      "fingerprint": "ec6bd99db6e4c65800912a0e6ec963a6829416cffb5d2db94eb41101ef9c9429",
+      "version": 8,
+      "fingerprint": "ac4dbb72a25f26670653e504dc3ad8e0a1ef9422ef894a5d09a1ef06164e3f57",
       "supportedFrom": 1,
-      "minReaderVersion": 7
+      "minReaderVersion": 8
     }
   },
   "devBreaks": [],

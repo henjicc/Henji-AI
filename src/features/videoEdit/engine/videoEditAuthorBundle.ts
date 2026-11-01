@@ -15,9 +15,10 @@ type Build = (options: BuildOptions) => Promise<BuildResult>
 /** Syntax is read for navigation only, never to approve/reject author JS. */
 export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLocations {
   const layers: Record<string, CodeSourceSpan> = Object.create(null)
-  const duplicates = new Set<string>()
+  const duplicates = new Set<string>(), adjust = new Set<string>()
   const factories: Record<string, Record<string, CodeSourceSpan>> = Object.create(null)
   let fallback: CodeSourceSpan | undefined
+  let dynamicIds = false
   for (const [file, text] of Object.entries(input.files)) {
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, /\.tsx?$/.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS)
@@ -39,11 +40,13 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
         const key = (property: ts.ObjectLiteralElementLike): string | undefined => property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : undefined
         const draw = node.properties.find(property => ['draw', 'adjust'].includes(key(property) ?? ''))
         const id = node.properties.find(property => key(property) === 'id')
-        if (draw && id && ts.isPropertyAssignment(id) && ts.isStringLiteral(id.initializer)) {
+        const spread = node.properties.some(ts.isSpreadAssignment)
+        if (draw && id && ts.isPropertyAssignment(id) && ts.isStringLiteral(id.initializer) && !spread) {
           const value = id.initializer.text
           if (Object.hasOwn(layers, value)) duplicates.add(value)
           else layers[value] = span(node)
-        }
+          if (node.properties.some(property => key(property) === 'adjust')) adjust.add(value)
+        } else if (draw || id && spread) dynamicIds = true // 展开对象可能带来 draw 或 id，静态表就不完整。
         if (file === input.entry) {
           const entry = node.properties.find(property => ['layers', 'draw', 'createWebGL', 'createWebGPU'].includes(key(property) ?? ''))
           if (entry && !fallback) fallback = span(entry)
@@ -57,7 +60,8 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
   }
   // Ambiguous/dynamic IDs use the defining entry span; never point to an arbitrary duplicate.
   for (const id of duplicates) delete layers[id]
-  return { layers, factories, ...(fallback ? { fallback } : {}) }
+  const adjustLayerIds = [...adjust].filter(id => Object.hasOwn(layers, id))
+  return { layers, factories, ...(fallback ? { fallback } : {}), ...(dynamicIds || duplicates.size ? {} : { staticLayerIds: true as const }), ...(adjustLayerIds.length ? { adjustLayerIds } : {}) }
 }
 
 /** esbuild owns ESM linking, cycles, syntax and source maps. The host supplies an

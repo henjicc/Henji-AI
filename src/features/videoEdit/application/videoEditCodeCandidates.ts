@@ -1,4 +1,5 @@
 import { codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
+import { dropCodeElementEdits } from '@/core/videoEdit/codeEdits'
 import { changedCodeMaterialVersions } from '@/core/videoEdit/codeMaterialDocument'
 import { ensureVideoEditChangedCodeMetadata, ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
@@ -100,6 +101,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     if (!target.effectId && scope === 'single' && options.clearElementOverrides?.length) {
       const clip = moved.document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips.find(clip => clip.id === target.clipId)!
       for (const id of options.clearElementOverrides) delete clip.elementOverrides?.[id]
+      dropCodeElementEdits(clip, options.clearElementOverrides)
       if (clip.elementOverrides && !Object.keys(clip.elementOverrides).length) delete clip.elementOverrides
     }
     const document = videoEditDocumentSchema.parse(moved.document)

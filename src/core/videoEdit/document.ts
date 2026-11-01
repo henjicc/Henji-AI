@@ -1,3 +1,4 @@
+import { codeEditsSchema } from './codeEdits'
 import { authorEffectEnvironmentForStyle } from './authorEffects'
 import { foreignContentSchema } from '../contentTrust'
 import { videoEditGainDbSchema } from './loudness'
@@ -98,6 +99,7 @@ const videoEditClipStateSchema = z.object({
   templateId: identifier.optional(),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
   elementOverrides: codeElementOverridesSchema.optional(),
+  edits: codeEditsSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).optional(), adjustment: videoEditAdjustmentSchema.optional(),
   effectsEnabled: z.boolean().optional(),
   disabledIntrinsicSections: z.array(videoEditIntrinsicSectionSchema).refine(values => new Set(values).size === values.length, '固有分区不能重复。').optional(),

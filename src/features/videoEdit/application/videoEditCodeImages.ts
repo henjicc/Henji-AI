@@ -1,3 +1,4 @@
+import { recordVideoEditCodeEdits } from '@/core/videoEdit/codeEdits'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance } from './videoEditService'
 import { validateCodeMaterialParameterValue } from '@/core/videoEdit/codeMaterial/parameters'
@@ -23,7 +24,10 @@ export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarg
   const media = mediaId ? document.media.find(media => media.id === mediaId) : undefined
   if (mediaId && (!media || !(declaration.type === 'audio' ? ['audio', 'video'] : ['image', 'video']).includes(media.kind))) throw new Error('请选择与参数类型匹配的剪辑素材。')
   if (below && declaration.type !== 'image') throw new Error('下方画面只能绑定 image 参数。')
+  const before = target.effectId ? undefined : structuredClone(clip)
   code.parameters[key] = validateCodeMaterialParameterValue(declaration, below ? { kind: 'sequence', mediaId: 'below' } : media ? { kind: declaration.type === 'audio' ? 'audio' : media.kind, mediaId: media.id, ...(time === undefined ? {} : { time }) } : null)
+  // 选媒体与回填生成图片只由界面发起；助手改媒体参数走通用 code_parameters，由执行器按操作来源记录。
+  if (before) recordVideoEditCodeEdits(before, clip, 'user')
   const frame = Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? clip.start))
   await trialVideoEditCodeDocument(owner, contentVersion, document, sequence.id, frame, signal, [{ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: [target.effectId] } : {}) }])
   return document

@@ -248,7 +248,7 @@ export class ApplicationHostBridge {
         if (options.operation) this.operations?.dispatched(options.operation, requestId, host.registration.rendererEpoch)
         host.transport.send('application:host:request', { requestId, rendererEpoch: host.registration.rendererEpoch, callerId, capabilityId, input,
           paidReceipt: options.operation ? { operationId: options.operation.operationId, callerId } : undefined,
-          operationId: options.operation ? applicationInvocationId(callerId, options.operation.operationId) : undefined, expectedRevisions: options.operation?.expectedRevisions,
+          operationId: options.operation ? applicationInvocationId(callerId, options.operation.operationId) : undefined, operationOrigin: options.operation?.origin, expectedRevisions: options.operation?.expectedRevisions,
           paidGenerationEstimate: options.operation?.paidGenerationEstimate,
           reviewTarget: options.reviewTarget, caller: this.describeCaller?.(callerId), recoveryVerification: options.operation?.recoveryVerification ?? options.recoveryVerification, recoveryOperation: options.operation?.recoveryOperation ?? options.recoveryOperation } satisfies LocalHostRequest)
       } catch (error) {

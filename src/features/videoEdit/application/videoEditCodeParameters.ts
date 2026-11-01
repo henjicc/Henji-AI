@@ -1,3 +1,4 @@
+import { codeEditKey, recordVideoEditCodeEdits, type CodeEditActor } from '@/core/videoEdit/codeEdits'
 import { jsonEqual } from '@/core/jsonEqual'
 import { compareCodeMaterialTime, evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialKeyframe } from '@/core/videoEdit/codeMaterialAnimation'
@@ -60,7 +61,7 @@ export function readVideoEditGraphicEditor(projectId: string, sequenceId: string
   const prepared = prepareCodeMaterialParameters(value.metadata, value.binding)
   return { target, name: value.metadata.name, metadata: value.metadata, frame, sourceTime, object: structuredClone(value.binding), parameters: evaluateCodeMaterialParameters(prepared, sourceTime), curves: Object.fromEntries([...prepared.curves].map(([key, curve]) => [key, structuredClone(curve.points)])) }
 }
-function edit(target: VideoEditParameterTarget, change: (document: VideoEditDocument, value: ReturnType<typeof resolve>) => void, gesture?: VideoEditGesture): void {
+function edit(actor: CodeEditActor, target: VideoEditParameterTarget, change: (document: VideoEditDocument, value: ReturnType<typeof resolve>) => void, gesture?: VideoEditGesture, resets: readonly string[] = []): void {
   if (gesture && gesture.projectId !== target.projectId) throw new Error('参数调整不属于此剪辑。')
   const update = (document: VideoEditDocument): VideoEditDocument => {
     const { sequence, clip } = resolve(document, target)
@@ -68,6 +69,7 @@ function edit(target: VideoEditParameterTarget, change: (document: VideoEditDocu
     const draft = structuredClone(clip)
     const next = { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips: sequence.clips.map(value => value === clip ? draft : value) } : value) }
     change(next, resolve(next, target))
+    if ('versionId' in target && !target.effectId) recordVideoEditCodeEdits(clip, draft, actor, resets)
     videoEditClipSchema.parse(draft)
     if (jsonEqual(draft, clip)) return document
     return next
@@ -87,37 +89,37 @@ function upsert(points: CodeMaterialKeyframe[], time: VideoEditSourceTime, value
   const point: CodeMaterialKeyframe = { ...current, ...time, id: current?.id ?? crypto.randomUUID(), value, interpolation: current?.interpolation ?? (discrete ? 'hold' : 'linear') }
   return [...points.filter(point => point !== current), point].sort(compareCodeMaterialTime)
 }
-export function setVideoEditCodeParameter(target: VideoEditParameterTarget, key: string, raw: unknown, options: { gesture?: VideoEditGesture; time?: VideoEditSourceTime } = {}): void {
+function setVideoEditCodeParameterAs(actor: CodeEditActor, target: VideoEditParameterTarget, key: string, raw: unknown, options: { gesture?: VideoEditGesture; time?: VideoEditSourceTime } = {}): void {
   const { parameter } = declaration(target, key); const value = validateCodeMaterialParameterValue(parameter, raw)
-  edit(target, (_document, { binding: code }) => {
+  edit(actor, target, (_document, { binding: code }) => {
     if (options.time && code.curves?.[key]?.length) {
       if ((parameter.type === 'image' || parameter.type === 'audio')) throw new Error('媒体参数不支持关键帧。')
       code.curves[key] = upsert(code.curves[key], options.time, value as CodeMaterialKeyframe['value'], !codeParameterSupportsInterpolation(parameter))
     } else code.parameters[key] = value
   }, options.gesture)
 }
-export function resetVideoEditCodeParameter(target: VideoEditParameterTarget, key: string): void {
+function resetVideoEditCodeParameterAs(actor: CodeEditActor, target: VideoEditParameterTarget, key: string): void {
   const { parameter } = declaration(target, key)
-  edit(target, (_document, { binding: code }) => { code.parameters[key] = structuredClone(parameter.default); if (code.curves) { delete code.curves[key]; if (!Object.keys(code.curves).length) delete code.curves } })
+  edit(actor, target, (_document, { binding: code }) => { code.parameters[key] = structuredClone(parameter.default); if (code.curves) { delete code.curves[key]; if (!Object.keys(code.curves).length) delete code.curves } }, undefined, [codeEditKey.param(key)])
 }
-export function addVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: string, time: VideoEditSourceTime): void {
+function addVideoEditCodeKeyframeAs(actor: CodeEditActor, target: VideoEditParameterTarget, key: string, time: VideoEditSourceTime): void {
   const { metadata, parameter } = declaration(target, key)
   if ((parameter.type === 'image' || parameter.type === 'audio') || !parameter.animatable) throw new Error('此参数不支持关键帧。')
-  edit(target, (_document, { binding: code }) => {
+  edit(actor, target, (_document, { binding: code }) => {
     const value = evaluateCodeMaterialParameters(prepareCodeMaterialParameters(metadata, code), time)[key] as CodeMaterialKeyframe['value']
     code.curves = { ...(code.curves ?? {}), [key]: upsert(code.curves?.[key] ?? [], time, value, !codeParameterSupportsInterpolation(parameter)) }
   })
 }
-export function updateVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: string, id: string, changes: Partial<Pick<CodeMaterialKeyframe, 'sourceInUs' | 'sourceRemainder' | 'value' | 'interpolation' | 'bezier'>>, gesture?: VideoEditGesture): void {
+function updateVideoEditCodeKeyframeAs(actor: CodeEditActor, target: VideoEditParameterTarget, key: string, id: string, changes: Partial<Pick<CodeMaterialKeyframe, 'sourceInUs' | 'sourceRemainder' | 'value' | 'interpolation' | 'bezier'>>, gesture?: VideoEditGesture): void {
   declaration(target, key)
-  edit(target, (_document, { binding: code }) => {
+  edit(actor, target, (_document, { binding: code }) => {
     const points = code.curves?.[key]
     if (!points?.some(point => point.id === id)) throw new Error('原关键帧已移除。')
     code.curves![key] = points.map(point => point.id === id ? { ...point, ...changes } : point).sort(compareCodeMaterialTime)
   }, gesture)
 }
-export function deleteVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: string, id: string): void {
-  edit(target, (_document, { binding: code }) => {
+function deleteVideoEditCodeKeyframeAs(actor: CodeEditActor, target: VideoEditParameterTarget, key: string, id: string): void {
+  edit(actor, target, (_document, { binding: code }) => {
     const points = code.curves?.[key]
     if (!points?.some(point => point.id === id)) throw new Error('原关键帧已移除。')
     const remaining = points.filter(point => point.id !== id)
@@ -125,10 +127,10 @@ export function deleteVideoEditCodeKeyframe(target: VideoEditParameterTarget, ke
     else { delete code.curves![key]; if (!Object.keys(code.curves!).length) delete code.curves }
   })
 }
-/** Whole-curve commit shared by parameter animation adapters; validation precedes the one history edit. */
-export function setVideoEditCodeParameterCurve(target: VideoEditParameterTarget, key: string, points: CodeMaterialKeyframe[]): void {
+/** 整条曲线先校验，再与修改记录一起提交到历史。 */
+function setVideoEditCodeParameterCurveAs(actor: CodeEditActor, target: VideoEditParameterTarget, key: string, points: CodeMaterialKeyframe[]): void {
   const { metadata } = declaration(target, key)
-  edit(target, (_document, { binding }) => {
+  edit(actor, target, (_document, { binding }) => {
     const curves = { ...binding.curves, [key]: structuredClone(points) }
     prepareCodeMaterialParameters(metadata, { ...binding, curves })
     binding.curves = curves
@@ -137,3 +139,16 @@ export function setVideoEditCodeParameterCurve(target: VideoEditParameterTarget,
 export type VideoEditCodeEditorState = ReturnType<typeof readVideoEditCodeEditor>
 export type VideoEditGraphicEditorState = ReturnType<typeof readVideoEditGraphicEditor>
 export type VideoEditParameterEditorState = VideoEditCodeEditorState | VideoEditGraphicEditorState
+
+/** 人与助手在边界绑定来源，底层写入不能省略 actor。 */
+export function videoEditCodeParameterWriter(actor: CodeEditActor) {
+  return {
+    setVideoEditCodeParameter: setVideoEditCodeParameterAs.bind(undefined, actor),
+    resetVideoEditCodeParameter: resetVideoEditCodeParameterAs.bind(undefined, actor),
+    addVideoEditCodeKeyframe: addVideoEditCodeKeyframeAs.bind(undefined, actor),
+    updateVideoEditCodeKeyframe: updateVideoEditCodeKeyframeAs.bind(undefined, actor),
+    deleteVideoEditCodeKeyframe: deleteVideoEditCodeKeyframeAs.bind(undefined, actor),
+    setVideoEditCodeParameterCurve: setVideoEditCodeParameterCurveAs.bind(undefined, actor),
+  }
+}
+export const { setVideoEditCodeParameter, resetVideoEditCodeParameter, addVideoEditCodeKeyframe, updateVideoEditCodeKeyframe, deleteVideoEditCodeKeyframe, setVideoEditCodeParameterCurve } = videoEditCodeParameterWriter('user')

@@ -5,7 +5,7 @@ import type { AuthorModule } from './videoEditAuthorModule'
 import { videoEditRenderWindows } from '@/core/videoEdit/renderCache'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
-import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import * as builtinEffects from '@/core/videoEdit/builtinEffects'
 
 const measure = { reset() {}, fillStyle: 'black', globalAlpha: 1, getImageData() {} } as unknown as OffscreenCanvasRenderingContext2D
@@ -284,4 +284,19 @@ it.each([4, 7, 8])('API %s 不读取继承的 adjust，保留自定义字段的�
   expect(first.digest).toBeTruthy()
   Reflect.set(layer, 'adjust', 2)
   expect(fingerprintAuthorFrame(data, size, {}, info, {}, measure, undefined, false, {}, apiVersion)).not.toEqual(first)
+})
+
+it('元素效果覆盖进入录制与声明键指纹；录制指纹与等价代码相同', () => {
+  type Descriptor = { id: string; key?: string; params: Record<string, unknown> }
+  const module = (title: Descriptor[], adjust: Descriptor[]): AuthorModule => ({ name: '覆盖', frameKey: () => 'fixed', layers: () => [{ id: 'title', effects: () => title as never, draw(ctx) { ctx.fillRect(0, 0, 10, 10) } }, { id: 'grade', adjust: () => adjust as never }] })
+  const code = module([{ id: 'glow', key: 'light', params: { strength: 20 } }], [{ id: 'vignette', params: { amount: 20 } }])
+  const overrides = (strength: number) => ({ title: { effects: { light: { values: { strength } } }, addedEffects: [{ key: 'tone', id: 'color_grade', params: { exposure: .5 } }] }, grade: { effects: { vignette: { enabled: false } } } })
+  const recorded = (effect: AuthorModule, value?: ReturnType<typeof overrides>) => fingerprintAuthorFrame(effect, size, {}, info, {}, measure, value, false, {}, CODE_AUTHOR_API_VERSION)
+  const declared = (value?: ReturnType<typeof overrides>) => fingerprintAuthorFrameKey(code, size, {}, info, {}, 'code', {}, value, false, {}, CODE_AUTHOR_API_VERSION)
+  expect(recorded(code, overrides(60)).digest).toBeTruthy()
+  expect(recorded(code, overrides(60))).toEqual(recorded(module([{ id: 'glow', params: { strength: 60 } }, { id: 'color_grade', params: { exposure: .5 } }], [])))
+  expect(recorded(code, overrides(61))).not.toEqual(recorded(code, overrides(60)))
+  expect(declared(overrides(60)).digest).toBeTruthy()
+  expect(declared(overrides(61))).not.toEqual(declared(overrides(60)))
+  expect(declared()).not.toEqual(declared(overrides(60)))
 })

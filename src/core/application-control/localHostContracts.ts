@@ -5,6 +5,7 @@ import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
 import { applicationUserConfirmationSchema, paidApprovalProgressSchema } from './userConfirmation'
 import { uiPaidApprovalSchema, paidOperationReceiptSchema, type PaidApprovalDecision } from './paidApproval'
 import type { OperationReviewCommand, OperationReviewSnapshot } from './operationReview'
+import { operationOriginSchema } from './operationReview'
 
 export const APPLICATION_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
 export const APPLICATION_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
@@ -13,6 +14,7 @@ export const localHostRequestSchema = z.object({
   requestId: z.string().uuid(), rendererEpoch: z.string().uuid(), callerId: z.string().uuid(),
   capabilityId: z.enum(APPLICATION_CAPABILITY_IDS), input: z.record(z.string(), z.unknown()),
   operationId: z.string().uuid().optional(),
+  operationOrigin: operationOriginSchema.optional(),
   expectedRevisions: z.record(z.string(), z.number()).optional(),
   reviewTarget: z.boolean().optional(),
   /** 谁在操作：供界面标出“助手正在编辑”；内置助手只有类型，外部连接带用户起的名字。不参与授权。 */

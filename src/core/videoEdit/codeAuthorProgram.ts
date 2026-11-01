@@ -8,6 +8,8 @@ export interface AuthorElementObservation {
   kind?: 'adjust'
   clip?: [number, number, number, number]
   effects?: import('./authorEffects').ResolvedAuthorEffect[]
+  effectStates?: import('./authorEffects').AuthorElementEffectState[]
+  edits?: import('./codeEdits').CodeEdits
   effectsTime?: number
   id: string
   name: string
@@ -32,7 +34,7 @@ export interface CodeAuthorFrameObservation {
   sequenceId: string
   revision: number
   frame: number
-  clips: Array<{ clipId: string; versionId: string; width: number; height: number; elements: AuthorElementObservation[] }>
+  clips: Array<{ clipId: string; versionId: string; width: number; height: number; edits?: import('./codeEdits').CodeEdits; elements: AuthorElementObservation[] }>
 }
 /** 录制到的几何事实；不是对最终像素或卡片语义的推断。坐标在作者图层内。 */
 export interface AuthorCanvasReviewObservation {
@@ -46,6 +48,10 @@ export interface AuthorCanvasReviewObservation {
 
 export interface CodeAuthorSourceLocations {
   layers: Record<string, CodeSourceSpan>
+  /** 源码里每个作者图层对象的 id 都是唯一的字面量：layers 列全了，不在其中的元素才能断定已从源码删除。 */
+  staticLayerIds?: true
+  /** layers 里写了 adjust 的图层 id；作者接口支持调整层时它们是调整层，不必等当前帧观察。 */
+  adjustLayerIds?: string[]
   factories?: Record<string, Record<string, CodeSourceSpan>>
   fallback?: CodeSourceSpan
 }
