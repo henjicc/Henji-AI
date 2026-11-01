@@ -7,6 +7,7 @@ import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import type { CodeElementAddedEffect } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditCodeElementWriter, type VideoEditCodeElementTarget } from '../application/videoEditCodeElementEditing'
+import { videoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 
 /**
  * 从效果面板把内置效果拖到时间线片段上（PR：效果拖到片段上即应用）。拖动数据带上内置效果 ID；
@@ -71,6 +72,14 @@ interface DropEvent { dataTransfer: DataTransfer | null; target: EventTarget | n
 function clipUnder(event: DropEvent): string | undefined {
   const hit = elementOfEventTarget(event.target)?.closest('[data-video-edit-clip]') ?? globalThis.document?.elementFromPoint?.(event.clientX, event.clientY)?.closest('[data-video-edit-clip]')
   return hit?.getAttribute('data-video-edit-clip') ?? undefined
+}
+/**
+ * 拖的是生成器、落点下又没有片段（轨道空白处或新建轨道的空白）时返回生成器 ID：松手新建一段图形片段（`dropVideoEditGenerator`），
+ * 由时间线按素材的落点规则预演与放下；落在片段上仍按普通效果加到片段上，在它的范围里生成。
+ */
+export function videoEditGeneratorEmptyDrop(event: DropEvent, projectId: string): string | undefined {
+  const builtinId = readVideoEditEffectDrag(event.dataTransfer, projectId)
+  return builtinId && videoEditBuiltinEffect(builtinId)?.stage === 'generator' && !clipUnder(event) ? builtinId : undefined
 }
 /**
  * 时间线 dragover：拖的是内置效果或风格件就接管，返回 true；否则返回 false 交给原有拖放。给了 `target` 时按松手规则算出会加上效果的

@@ -72,7 +72,8 @@ import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
 import { videoEditTransitionEditPoints, videoEditTransitionFit, videoEditTransitionPairCut, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionPair, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { placeVideoEditTransition, selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, videoEditDefaultTransitionFrames, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
 import { readVideoEditTransitionDrag } from '../panels/videoEditTransitionDrag'
-import { clearVideoEditEffectDropTarget, handleVideoEditEffectDragOver, handleVideoEditEffectDrop } from '../panels/videoEditEffectDrag'
+import { clearVideoEditEffectDropTarget, endVideoEditEffectDrag, handleVideoEditEffectDragOver, handleVideoEditEffectDrop, videoEditGeneratorEmptyDrop } from '../panels/videoEditEffectDrag'
+import { dropVideoEditGenerator, placeVideoEditGenerator } from '../application/videoEditGenerators'
 import { VideoEditEffectDropTargets, VideoEditTransitionDropBlock } from './VideoEditTimelineDropFeedback'
 import { useVideoEditInPlaceMenu } from './useVideoEditInPlaceMenu'
 import { VideoEditInPlacePlaceholders } from './VideoEditInPlacePlaceholders'
@@ -459,12 +460,17 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-hairline bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
         </div>
   }
-  /** 从素材面板拖来的素材项：按松手时同一套规则预演，得到将要落下的片段（虚影）；预演不了时只显示落点提示。 */
-  const previewGhosts = (at: VideoEditDropPlacement): { ghosts?: VideoEditClip[]; shifted?: VideoEditClip[] } => {
-    const drag = readActiveVideoEditItemDrag()
-    if (!drag || drag.projectId !== projectId) return {}
+  /**
+   * 从素材面板拖来的素材项、拖到空白处的生成器：按松手时同一套规则预演，得到将要落下的片段（虚影）；预演不了时只显示落点提示。
+   */
+  const previewGhosts = (at: VideoEditDropPlacement, generator?: string): { ghosts?: VideoEditClip[]; shifted?: VideoEditClip[] } => {
+    const drag = generator ? undefined : readActiveVideoEditItemDrag()
+    if (!generator && (!drag || drag.projectId !== projectId)) return {}
     try {
-      const result = placeVideoEditDrop(instance.document, drag.itemIds, sequence.id, at, { targetTrackIds: instance.targetTrackIds, matchEmptySequence: !sequence.clips.length, codeMetadata: readVideoEditCodeMetadata(instance, instance.document) })
+      const codeMetadata = readVideoEditCodeMetadata(instance, instance.document)
+      const result = generator
+        ? { ...placeVideoEditGenerator(instance.document, sequence.id, generator, at, { targetTrackIds: instance.targetTrackIds, codeMetadata }), frameRate: sequence.frameRate }
+        : placeVideoEditDrop(instance.document, drag!.itemIds, sequence.id, at, { targetTrackIds: instance.targetTrackIds, matchEmptySequence: !sequence.clips.length, codeMetadata })
       // 空序列会改成素材的帧率：虚影按当前时间线的帧率换算回来显示，位置与时长看上去和松手后一致
       const toView = (frame: number): number => rescaleVideoEditFrame(frame, result.frameRate, sequence.frameRate)
       const view = (clip: VideoEditClip): VideoEditClip => ({ ...clip, start: toView(clip.start), duration: Math.max(1, toView(clip.start + clip.duration) - toView(clip.start)) })
@@ -517,7 +523,16 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       }}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); pointer.cancel() } }}
       onDragOver={event => {
-        if (handleVideoEditEffectDragOver(event, projectId, { sequence, selectedClipIds: instance.selectedClipIds })) return
+        const generator = videoEditGeneratorEmptyDrop(event, projectId)
+        if (generator) {
+          // 生成器拖到空白处：预演新建的图形片段，和拖入素材一样画虚影。
+          event.preventDefault(); clearVideoEditEffectDropTarget()
+          const at = placement(event); event.dataTransfer.dropEffect = at ? 'copy' : 'none'
+          setHint(current => !at ? null : current && current.frame === at.frame && current.track === at.track && current.newTrack === at.newTrack && current.mode === at.mode ? current : { ...at, ...previewGhosts(at, generator) })
+          return
+        }
+        // 生成器从空白处移到片段上：改为加到片段上，收起新建片段的虚影。
+        if (handleVideoEditEffectDragOver(event, projectId, { sequence, selectedClipIds: instance.selectedClipIds })) { setHint(null); return }
         const transitionKind = readVideoEditTransitionDrag(event.dataTransfer, projectId)
         if (transitionKind) {
           event.preventDefault()
@@ -540,6 +555,15 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         }
         dropLogger.debug('时间线收到拖放', { event: 'video_edit.drop.received', requestId, context: { ...context, types: Array.from(event.dataTransfer.types), clientX: event.clientX, clientY: event.clientY } })
         try {
+          const generator = videoEditGeneratorEmptyDrop(event, projectId)
+          if (generator) {
+            event.preventDefault(); event.stopPropagation(); setHint(null); endVideoEditEffectDrag()
+            const at = placement(event)
+            if (!at) throw new Error('拖入位置不在可用轨道上，请把生成器拖到时间线轨道内。')
+            dropLogger.debug('拖放交给生成器处理', { event: 'video_edit.drop.routed', requestId, context: { ...context, kind: 'generator' } })
+            void dropVideoEditGenerator(projectId, sequence.id, generator, at).catch(fail)
+            return
+          }
           if (handleVideoEditEffectDrop(event, projectId, sequence.id, instance.selectedClipIds, fail)) {
             dropLogger.debug('拖放交给效果处理', { event: 'video_edit.drop.routed', requestId, context: { ...context, kind: 'effect' } }); return
           }

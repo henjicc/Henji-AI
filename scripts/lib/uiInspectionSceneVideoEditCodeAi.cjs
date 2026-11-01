@@ -215,6 +215,23 @@ function createVideoEditCodeAiScene() {
           item.blocks = await view.locator('[data-code-element-block]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-code-element-block')))
           assert.ok(item.blocks.includes('变换'), '元素视图缺少变换块')
         })
+        await step('03c-generator-drop', '从效果库把渐变拖到轨道空白处新建一段', async item => {
+          await takeOver()
+          await page.locator('.dv-tab', { hasText: '效果' }).filter({ hasNotText: '控件' }).first().click()
+          await page.getByRole('textbox', { name: '搜索效果' }).fill('渐变')
+          const entry = page.locator('[data-video-edit-effects-entry="effect:gradient"]').first()
+          await entry.waitFor({ state: 'visible' })
+          const box = await page.locator(`[data-video-edit-clip="${codeClip.id}"]`).first().boundingBox()
+          const before = (await saved(page, file, () => true)).sequences[0].clips.length
+          const viewport = page.locator('[data-video-edit-timeline-viewport]').first(); const area = await viewport.boundingBox()
+          // 落在代码片段同一轨道、片段结束后的空白处
+          await entry.dragTo(viewport, { targetPosition: { x: box.x + box.width + 120 - area.x, y: box.y + box.height / 2 - area.y } })
+          const project = await saved(page, file, value => value.sequences[0].clips.some(clip => clip.effects?.[0]?.builtin?.id === 'gradient'))
+          const clip = project.sequences[0].clips.find(value => value.effects?.[0]?.builtin?.id === 'gradient')
+          item.generatorClip = { start: clip.start, track: clip.track, kind: clip.kind, effects: clip.effects.map(effect => effect.builtin?.id) }
+          assert.equal(project.sequences[0].clips.length, before + 1, '渐变没有新建一段片段')
+          await page.getByRole('textbox', { name: '搜索效果' }).fill('')
+        })
         await step('04-annotations', '批注草稿、外部处理和用户审查', async item => {
           await takeOver()
           if (await button('收起源码编辑').isVisible()) await button('收起源码编辑').click()

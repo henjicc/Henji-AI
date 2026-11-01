@@ -11,11 +11,11 @@ afterEach(() => cleanup())
 
 it('空文件夹无论是否搜索都隐藏，有条目的分类仍可搜索和显示', () => {
   useVideoEditEffectLibraryStore.setState({ favorites: [], presets: [] })
-  const instance = { selectedClipIds: [] } as unknown as VideoEditInstance
+  const instance = { selectedClipIds: [], activeSequenceId: 's', document: { id: 'p', sequences: [] } } as unknown as VideoEditInstance
   const { container, getByRole } = render(createElement(VideoEditEffectsLibraryPanel, { instance, onError: vi.fn() }))
   for (const folder of container.querySelectorAll('[data-video-edit-effects-folder][aria-expanded="true"]')) expect(folder.querySelector('[data-video-edit-effects-entry]')).not.toBeNull()
-  for (const id of ['favorites', 'presets', 'generator']) expect(container.querySelector(`[data-video-edit-effects-folder="${id}"]`)).toBeNull()
-  expect(container.querySelector('[data-video-edit-effects-folder="video_effect"]')).not.toBeNull()
+  for (const id of ['favorites', 'presets']) expect(container.querySelector(`[data-video-edit-effects-folder="${id}"]`)).toBeNull()
+  for (const id of ['video_effect', 'generator']) expect(container.querySelector(`[data-video-edit-effects-folder="${id}"]`)).not.toBeNull()
   fireEvent.change(getByRole('textbox', { name: '搜索效果' }), { target: { value: '完全不存在的效果' } })
   expect(container.querySelector('[data-video-edit-effects-folder]')).toBeNull()
   fireEvent.change(getByRole('textbox', { name: '搜索效果' }), { target: { value: '模糊' } })
