@@ -81,8 +81,11 @@ export function reviewCodeEffectUsage(source: ts.SourceFile): CodeEffectSuggesti
       if (property) {
         if (property === 'shadowBlur') {
           const blur = number(node.right), offset = offsetShadow(node, contexts)
-          const factory = factories.has('dropShadow') ? 'dropShadow' : offset ? undefined : factories.has('glow') ? 'glow' : undefined
-          if (factory && (blur === undefined || blur > 0)) add(node, factory, `Canvas shadowBlur ${offset ? '含偏移投影' : '是虚化阴影候选'}；先查风格件，再看画面核对 ${factory}，不能据此证明算法等价。`, blur === undefined ? 'structural_candidate' : 'static_assignment')
+          // 带偏移的是投影，不带偏移的虚化阴影像光晕；值随参数或时间变时每帧重算模糊，暗底上的柔和过渡还是 8 位栅格、会出色带。
+          const factory = offset ? 'shadow' : 'glow'
+          if (blur === undefined || blur > 0) add(node, factory, blur === undefined
+            ? `Canvas shadowBlur 随参数或时间变化，每帧重算模糊，暗底上的柔和${offset ? '阴影' : '光晕'}还会出色带；改用图层效果 ${factory}()（高精度合成），不能据此证明算法等价。`
+            : `Canvas shadowBlur ${offset ? '含偏移投影' : '是虚化阴影候选'}；先查风格件，再看画面核对 ${factory}()，不能据此证明算法等价。`, blur === undefined ? 'structural_candidate' : 'static_assignment')
         }
         if (property === 'filter') {
           const filter = text(node.right)
@@ -90,6 +93,8 @@ export function reviewCodeEffectUsage(source: ts.SourceFile): CodeEffectSuggesti
         }
       }
     }
+    if (ts.isCallExpression(node) && ['createLinearGradient', 'createRadialGradient', 'createConicGradient'].includes(member(node.expression, contexts)))
+      add(node, 'gradient', 'Canvas 渐变是 8 位栅格，暗底上大面积使用会出一圈圈色带；背景、卡片底色这类大块渐变改用图层 fill: () => gradient(...)（高精度合成、末道统一抖动），小面积装饰可以保留。', 'structural_candidate')
     if (ts.isObjectLiteralExpression(node)) {
       const names = node.properties.flatMap(property => property.name ? [property.name.getText(source)] : [])
       if (names.includes('effects') && names.includes('draw') && !names.includes('bounds') && !node.properties.some(ts.isSpreadAssignment)) add(node, 'blur', '效果层未声明 bounds，将按完整作者画幅栅格；给出包含内容的 bounds 可减少中间纹理。', 'structural_candidate')

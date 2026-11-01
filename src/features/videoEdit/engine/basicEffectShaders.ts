@@ -52,16 +52,14 @@ ${GAUSSIAN_WGSL}
 
 /**
  * 暗角：a = (数量 0..1, 开始位置, 羽化宽度, 宽高比)，b.rgb 四周的颜色；距离按画面形状归一化，角落为 1。
- * 平滑渐变在暗底上会出色带：被暗角改动的像素加 ±半级（1/510）抖动，加在预乘值上，叠到底色后正好是半级，不随透明度缩小。
+ * 不在这里抖动：数量不为 0 时整帧在高精度里合成，末道转换按最终画面加半级抖动，暗底上的平滑过渡不出色带。
  */
 @fragment fn vignette(v: Vertex) -> @location(0) vec4f {
  let uv = uvOf(v); let c = tap(uv);
  let q = (uv - 0.5) * vec2f(u.a.w, 1.0);
  let r = length(q) / length(vec2f(u.a.w, 1.0) * 0.5);
  let t = u.a.x * smoothstep(u.a.y - u.a.z * 0.5, u.a.y + u.a.z * 0.5, r);
- let shaded = premul(mix(straight(c), u.b.rgb, t), c.a);
- let dither = select(0.0, (hash(vec2u(v.position.xy), 0u) - 0.5) / 255.0, t > 0.0 && c.a > 0.0);
- return vec4f(clamp(shaded.rgb + dither, vec3f(0.0), vec3f(c.a)), c.a);
+ return premul(mix(straight(c), u.b.rgb, t), c.a);
 }
 
 /** a = (强度, 颗粒大小（目标像素）, 种子, 单色)；中间调最明显，暗部与高光收敛。 */

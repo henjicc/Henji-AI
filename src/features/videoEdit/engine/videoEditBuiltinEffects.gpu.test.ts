@@ -517,27 +517,6 @@ describe('剪辑内置效果（真实设备）', () => {
     expect(Math.abs(black[at(W - 1, H - 1)] - Math.round(corner * 0.4))).toBeLessThanOrEqual(1)
     expect(Math.abs(white[at(0, H - 1) + 1] - Math.round(original[at(0, H - 1) + 1] + (255 - original[at(0, H - 1) + 1]) * 0.6))).toBeLessThanOrEqual(1)
   }, 30_000)
-  it('暗角抖动按叠到底色后的半级算：暗底平滑渐变上打散色带，半透明画面的抖动不随透明度变小', async () => {
-    const width = 512, height = 64
-    const flat = (alpha: number): GpuTexture => {
-      const texture = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC })
-      const data = new Uint8Array(width * height * 4)
-      for (let i = 0; i < width * height; i++) data.set([Math.round(24 * alpha), Math.round(24 * alpha), Math.round(24 * alpha), Math.round(255 * alpha)], i * 4)
-      device.queue.writeTexture({ texture }, data, { bytesPerRow: width * 4 }, [width, height])
-      return texture as unknown as GpuTexture
-    }
-    const levels = async (alpha: number): Promise<number> => {
-      const source = flat(alpha), target = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC }) as unknown as GpuTexture
-      await effects.render({ id: 'vignette', params: { amount: 100, midpoint: 50, feather: 100 } }, { texture: source, width, height, format: 'rgba8unorm' }, target, 0)
-      const pixels = await read(target, width, height)
-      // 中间一行从中心到右边缘：没有抖动时同值像素连成长段（色带），抖动后相邻像素交错。
-      const row = Array.from({ length: width / 2 }, (_, x) => pixels[((height / 2) * width + width / 2 + x) * 4])
-      return row.slice(1).filter((value, x) => value !== row[x]).length
-    }
-    const opaque = await levels(1), half = await levels(0.5)
-    // 24 级到 0 级的渐变只有 24 个台阶；抖动后变化点远多于台阶数，半透明画面同样多。
-    expect(opaque).toBeGreaterThan(60); expect(half).toBeGreaterThan(40)
-  }, 30_000)
   it('模糊四种方式守恒亮度：整幅不透明画面的平均亮度不变；不重复边缘时四边向透明淡出', async () => {
     const original = await run('blur', { amount: 0 })
     const mean = (pixels: Uint8Array, channel = 1) => Array.from({ length: W * H }, (_, i) => pixels[i * 4 + channel]).reduce((sum, value) => sum + value, 0) / (W * H)
@@ -1269,6 +1248,30 @@ describe('渐变生成器（真实设备）', () => {
     try {
       await effects.render({ id: 'gradient', params: params as never }, { texture: source as unknown as GpuTexture, width, height, format: 'rgba16float' }, precise as unknown as GpuTexture, 0)
       await effects.render({ id: 'gradient', params: params as never }, { texture: source as unknown as GpuTexture, width, height, format: 'rgba8unorm' }, eight as unknown as GpuTexture, 0)
+      const module = device.createShaderModule({ code: VIDEO_EDIT_PRESENT_SHADER })
+      const pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
+      const encoder = device.createCommandEncoder()
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: presented.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }] })
+      pass.setPipeline(pipeline); pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: precise.createView() }] }))
+      pass.draw(3); pass.end(); device.queue.submit([encoder.finish()])
+      const dithered = await read(presented as unknown as GpuTexture, width, height), banded = await read(eight as unknown as GpuTexture, width, height)
+      expect(detectVideoEditBanding(new Uint8ClampedArray(dithered.buffer), width, height)).toEqual([])
+      expect(detectVideoEditBanding(new Uint8ClampedArray(banded.buffer), width, height).length).toBeGreaterThan(0)
+    } finally { source.destroy(); precise.destroy(); eight.destroy(); presented.destroy() }
+  }, 60_000)
+  it('暗角不在效果里抖动：4K 暗台面 14/255 上在 16 位里算、末道抖动后 8 位不出色带；直接写进 8 位会出色带', async () => {
+    const width = 3840, height = 2160, params = { amount: 60, midpoint: 40, feather: 100, color: BLACK_HEX }
+    expect(videoEditEffectNeedsFloat({ id: 'vignette', params }, { width, height, renderScale: 1, referenceSize: { width, height } })).toBe(true)
+    const table = new Uint8Array(width * height * 4)
+    for (let index = 0; index < table.length; index += 4) table.set([14, 14, 14, 255], index)
+    const source = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST })
+    device.queue.writeTexture({ texture: source }, table, { bytesPerRow: width * 4 }, [width, height])
+    const precise = device.createTexture({ size: [width, height], format: 'rgba16float', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC })
+    const eight = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: RENDER_ATTACHMENT | TEXTURE_COPY_SRC })
+    const presented = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: RENDER_ATTACHMENT | TEXTURE_COPY_SRC })
+    try {
+      await effects.render({ id: 'vignette', params: params as never }, { texture: source as unknown as GpuTexture, width, height, format: 'rgba16float' }, precise as unknown as GpuTexture, 0)
+      await effects.render({ id: 'vignette', params: params as never }, { texture: source as unknown as GpuTexture, width, height, format: 'rgba8unorm' }, eight as unknown as GpuTexture, 0)
       const module = device.createShaderModule({ code: VIDEO_EDIT_PRESENT_SHADER })
       const pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
       const encoder = device.createCommandEncoder()

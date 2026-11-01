@@ -1,6 +1,6 @@
 /**
  * 暗角：画面四周按椭圆渐变混向所选颜色（黑色是普通暗角，白色是四周提亮）。
- * 平滑渐变在暗底上容易出一圈圈色带，着色器在暗角改动过的像素上加半级亮度的抖动（按叠到底色后的画面算，不随透明度缩小）。
+ * 平滑渐变在暗底上容易出一圈圈色带：数量不为 0 时声明高精度，整帧在 rgba16float 里合成，由末道转换按最终画面统一抖动。
  */
 import type { VideoEditBuiltinEffectDefinition } from './builtinEffects'
 import { effectParam } from './effectIncludes'
