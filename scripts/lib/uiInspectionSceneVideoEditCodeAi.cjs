@@ -362,19 +362,18 @@ function createVideoEditCodeAiScene() {
           item.applied = { id: applied.id, name: applied.name, version: applied.version, sections: (applied.guide.match(/^## /gm) ?? []).length, sample: Object.keys(applied.sample.code.files) }
           assert.ok(item.applied.sections >= 14 && item.applied.sample.length > 0, '绑定的风格不是完整说明书与样片')
         })
-        await step('08-shader-effect', '效果库添加镜头色差并重渲染', async item => {
+        await step('08-shader-effect', '效果库添加色差并重渲染', async item => {
           await seek(130); await focus(ref('video_edit.clip', 'base')); await dock('效果')
           const before = await snapshot(); item.before = before
-          // “色差”是旧 CPU 效果；“镜头色差”才是 shaders 框架的 ChromaticAberration。
-          const entry = page.locator('[data-video-edit-effects-entry]').filter({ hasText: '镜头色差' }).first()
+          const entry = page.locator('[data-video-edit-effects-entry="effect:chromatic_aberration"]')
           await entry.waitFor({ state: 'visible' }); await entry.dblclick()
           const project = await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === 'base').effects?.length === 1)
           const effect = project.sequences[0].clips.find(clip => clip.id === 'base').effects[0]
           item.effect = effect
-          assert.equal(effect.builtin?.id, 'shaders.ChromaticAberration', '添加的不是着色器镜头色差滤镜')
+          assert.equal(effect.builtin?.id, 'chromatic_aberration', '添加的不是色差效果')
           const controls = page.locator(`[data-video-edit-effect="${effect.id}"]`)
           await controls.waitFor({ state: 'visible' })
-          await controls.getByLabel('强度', { exact: true }).waitFor({ state: 'visible' })
+          await controls.getByLabel('数量', { exact: true }).waitFor({ state: 'visible' })
           await controls.getByLabel('角度', { exact: true }).waitFor({ state: 'visible' })
           item.after = await fresh(before.requestedAt, 130)
         })

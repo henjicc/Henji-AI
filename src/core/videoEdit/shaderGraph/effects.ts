@@ -21,13 +21,20 @@ const GROUPS: Readonly<Record<string, VideoEditBuiltinGroup>> = {
 
 /**
  * 与剪辑内置效果同目的的组件不单独列为效果，剪辑里用对应的内置效果：
- * 黑白、反相、翻转；模糊（高斯、方向、缩放、镜头虚化）、锐度、调色（亮度对比度、曝光、饱和度、色相、自然饱和度、着色）、
- * 颗粒、暗角、像素化（并入马赛克）、投影；八种渐变与色轮（并入“渐变”）。
+ * 黑白、反相、翻转；模糊（高斯、方向、缩放、镜头虚化，旋转、移轴、渐进并入“模糊”的方式与范围）、锐度、
+ * 调色（亮度对比度、曝光、饱和度、色相、自然饱和度、着色）、色调分离、渐变映射（含双色、三色调）、胶片模拟；
+ * 颗粒、暗角、像素化（并入马赛克）、投影、发光、色差；半调网点、抖动点阵、纸张、划痕、老式画面（录像带、显像管）；
+ * 故障（含条带错位、压缩失真）、镜头光晕、漏光；镜像、重复阵列、膨胀（含球面化）、旋转扭曲（含同心旋转）、
+ * 波动（含流场）、边角定位、置换；八种渐变与色轮（并入“渐变”）。
  */
-const SAME_AS_BUILTIN = new Set(['Grayscale', 'Invert', 'Flip', 'Blur', 'LinearBlur', 'ZoomBlur', 'BokehBlur', 'Sharpness', 'BrightnessContrast', 'Exposure', 'Saturation', 'HueShift', 'Vibrance', 'Tint', 'FilmGrain', 'Vignette', 'Pixelate', 'DropShadow',
+const SAME_AS_BUILTIN = new Set(['Grayscale', 'Invert', 'Flip', 'Blur', 'LinearBlur', 'ZoomBlur', 'BokehBlur', 'AngularBlur', 'TiltShift', 'ProgressiveBlur', 'Sharpness',
+  'BrightnessContrast', 'Exposure', 'Saturation', 'HueShift', 'Vibrance', 'Tint', 'Posterize', 'Duotone', 'Tritone', 'GradientMap', 'FilmStock',
+  'FilmGrain', 'Vignette', 'Pixelate', 'DropShadow', 'Glow', 'ChromaticAberration', 'Halftone', 'Dither', 'Paper', 'Scratches', 'VHS', 'CRTScreen',
+  'Glitch', 'BarShift', 'CompressionArtifacts', 'LensFlare', 'LightLeak',
+  'Mirror', 'Repeater', 'Bulge', 'Spherize', 'Twirl', 'ConcentricSpin', 'WaveDistortion', 'FlowField', 'CornerPin', 'DisplacementMap',
   'LinearGradient', 'RadialGradient', 'ConicGradient', 'DiamondGradient', 'MultiPointGradient', 'MeshGradient', 'FlowingGradient', 'ColorWheel'])
-/** 图形工具与代码都能画的图形（Shapes 分组整组不登记）、纯色、立体感重的流体团，都不作为效果登记。 */
-const RETIRED = new Set(['SolidColor', 'Blob'])
+/** 图形工具与代码都能画的图形（Shapes 分组整组不登记）、纯色、立体感重的流体团、分通道模糊、扩散模糊、负感，都不作为效果登记。 */
+const RETIRED = new Set(['SolidColor', 'Blob', 'ChannelBlur', 'DiffuseBlur', 'Solarize'])
 /** 可作为片段效果的组件：滤镜与没有并入“生成”的生成器（转场另行登记，分组容器不单独成效果）。 */
 export const SHADER_GRAPH_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = SHADER_COMPONENTS
   .filter(component => (component.role === 'generator' || component.role === 'filter') && GROUPS[component.category] && !SAME_AS_BUILTIN.has(component.name) && !RETIRED.has(component.name) && !WRAPPED_GENERATOR_SOURCES.has(component.name))

@@ -195,7 +195,7 @@ TS 文件（含默认入口 main.ts）在打包的同时按作者接口做类型
 
 `effects(t)` 每个可见层在中心作者时间求值一次，时间与 draw 相同；位姿仍按曝光采样。即使 draw 的 cacheKey 恒定，effects 仍逐帧求值。静态无 pose 的效果层也独立栅格；尽量给 bounds（内容在作者坐标中的矩形），省略时按完整作者画幅。宿主根据整链支撑外扩，不需要把光晕手工塞进 bounds。效果先于位姿变换、opacity、clip 和运动曝光；效果本身不多次曝光。
 
-空间量按完整作者画幅高度计算，不按小 bounds 或外扩后的纹理高度。blur 的 `amount`（模糊度）四种方式共用：40 约为画面高度 1% 的背景虚化，常用 0–100、可以写得更大；方向用 `angle`，放射用内容范围中的 `center_x/center_y` 百分比，镜头用 `highlights` 控制光斑亮度。不要把 Canvas 像素直接填进模糊度。pose.blur 保留原画面像素语义，最终使用 GPU 虚化，含 `blurShape: "lens"`。
+空间量按完整作者画幅高度计算，不按小 bounds 或外扩后的纹理高度。blur 的 `amount`（模糊度）五种方式共用：40 约为画面高度 1% 的背景虚化，常用 0–100、可以写得更大；方向用 `angle`，放射用内容范围中的 `center_x/center_y` 百分比，镜头用 `highlights` 控制光斑亮度。不要把 Canvas 像素直接填进模糊度。pose.blur 保留原画面像素语义，最终使用 GPU 虚化，含 `blurShape: "lens"`。
 
 主图像按数组顺序处理；glow 产生的光保留产生时的状态，后续显式效果不改它。因此 `[blur(), glow()]` 先模糊后发光，`[glow(), blur()]` 只模糊主体；最终 pose.blur 同时处理主体与光，并使用固定质量规划。主体与光先在透明层内合成普通预乘 RGBA，再统一施加位姿、裁剪、不透明度和曝光权重。glow.blend 只控制本层主体的核心提亮；下方画面上的光总是相加。source_opacity=0 留纯光，pose.opacity=0 连光一起隐藏。
 

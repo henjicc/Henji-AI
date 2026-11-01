@@ -14,12 +14,10 @@ export const VIDEO_EDIT_EFFECT_CATALOG: readonly { readonly group: VideoEditBuil
   { group: 'keying', ids: ['chroma_key', 'subject_key'] },
   { group: 'recording', ids: ['recording_cursor', 'recording_zoom', 'recording_frame'] },
   { group: 'generator', ids: ['gradient', 'noise', 'pattern', 'light_background', 'shaders.Waveform', 'shaders.Ripples', 'shaders.Spiral', 'shaders.Swirl', 'shaders.SineWave', 'shaders.FallingLines', 'shaders.StudioBackground'] },
-  { group: 'shader_texture', ids: ['shaders.Marble', 'shaders.Scratches'] },
-  { group: 'shader_material', ids: ['shaders.BrushedMetal', 'shaders.CarbonFiber', 'shaders.Chrome', 'shaders.Crystal', 'shaders.Emboss', 'shaders.Frost', 'shaders.Glass', 'shaders.Goo', 'shaders.Heatmap', 'shaders.Hologram', 'shaders.Holographic', 'shaders.LightEdge', 'shaders.LiquidMetal', 'shaders.Nebula', 'shaders.Neon', 'shaders.Obsidian', 'shaders.Plastic', 'shaders.ThinFilm', 'shaders.Voxels', 'shaders.Water'] },
-  { group: 'shader_blur', ids: ['shaders.AngularBlur', 'shaders.ChannelBlur', 'shaders.DiffuseBlur', 'shaders.ProgressiveBlur', 'shaders.TiltShift'] },
-  { group: 'shader_distort', ids: ['shaders.BarShift', 'shaders.Bend', 'shaders.Bulge', 'shaders.ConcentricSpin', 'shaders.CornerPin', 'shaders.DisplacementMap', 'shaders.FlowField', 'shaders.FlutedGlass', 'shaders.Form3D', 'shaders.GlassTiles', 'shaders.Kaleidoscope', 'shaders.Mirror', 'shaders.Perspective', 'shaders.PolarCoordinates', 'shaders.RectangularCoordinates', 'shaders.Repeater', 'shaders.Spherize', 'shaders.Stretch', 'shaders.Twirl', 'shaders.WaveDistortion'] },
-  { group: 'shader_adjust', ids: ['shaders.Duotone', 'shaders.FilmStock', 'shaders.Posterize', 'shaders.Solarize', 'shaders.Tritone'] },
-  { group: 'shader_stylize', ids: ['shaders.Chalkboard', 'shaders.ChromaticAberration', 'shaders.CompressionArtifacts', 'shaders.ContourLines', 'shaders.CRTScreen', 'shaders.Dither', 'shaders.Engraving', 'shaders.Glitch', 'shaders.Glow', 'shaders.GradientMap', 'shaders.Halftone', 'shaders.LensDistortion', 'shaders.LensFlare', 'shaders.LightLeak', 'shaders.Paper', 'shaders.ReflectivePlane', 'shaders.Sparkle', 'shaders.Stone', 'shaders.VHS', 'shaders.Watercolor', 'shaders.Wool'] },
+  { group: 'art', ids: ['shaders.Watercolor', 'shaders.Engraving', 'shaders.Chalkboard', 'shaders.ContourLines', 'shaders.Wool', 'shaders.Stone'] },
+  { group: 'glass_material', ids: ['shaders.FlutedGlass', 'shaders.GlassTiles', 'shaders.BrushedMetal', 'shaders.CarbonFiber', 'shaders.Chrome', 'shaders.Crystal', 'shaders.Emboss', 'shaders.Frost', 'shaders.Glass', 'shaders.Goo', 'shaders.Heatmap', 'shaders.Hologram', 'shaders.Holographic', 'shaders.LightEdge', 'shaders.LiquidMetal', 'shaders.Nebula', 'shaders.Neon', 'shaders.Obsidian', 'shaders.Plastic', 'shaders.ThinFilm', 'shaders.Voxels', 'shaders.Water'] },
+  { group: 'rare_distort_light', ids: ['shaders.Kaleidoscope', 'shaders.PolarCoordinates', 'shaders.RectangularCoordinates', 'shaders.Bend', 'shaders.Stretch', 'shaders.LensDistortion', 'shaders.Form3D', 'shaders.Sparkle', 'shaders.ReflectivePlane', 'shaders.Perspective'] },
+  { group: 'other', ids: ['shaders.Marble'] },
   { group: 'audio_level', ids: ['gain_balance', 'stereo_width'] },
   { group: 'audio_dynamics', ids: ['compressor', 'limiter', 'speech_leveler', 'noise_gate', 'de_esser'] },
   { group: 'audio_delay', ids: ['delay_echo'] },
@@ -31,6 +29,9 @@ export const VIDEO_EDIT_EFFECT_CATALOG: readonly { readonly group: VideoEditBuil
   { group: 'audio_pitch', ids: ['pitch_shift'] },
 ]
 
+/** 这几组进“更多”文件夹（默认折叠）：少用、原样保留的着色器组件。 */
+const MORE_GROUPS: ReadonlySet<VideoEditBuiltinGroup> = new Set(['art', 'glass_material', 'rare_distort_light', 'other'])
+
 /** 严格全覆盖：漏排、重复排和失效的 ID 都在装配时指出，不能悄悄退回导出名排序。 */
 export function orderVideoEditEffects(definitions: ReadonlyMap<string, VideoEditBuiltinEffectDefinition>): readonly VideoEditBuiltinEffectDefinition[] {
   const ordered: VideoEditBuiltinEffectDefinition[] = [], seen = new Set<string>()
@@ -38,7 +39,7 @@ export function orderVideoEditEffects(definitions: ReadonlyMap<string, VideoEdit
     if (seen.has(id)) throw new Error(`效果目录重复 ID：${id}。`)
     const definition = definitions.get(id)
     if (!definition) throw new Error(`效果目录的 ${id} 尚未登记。`)
-    seen.add(id); ordered.push({ ...definition, group })
+    seen.add(id); ordered.push({ ...definition, group, ...(MORE_GROUPS.has(group) ? { category: 'more' as const } : {}) })
   }
   const missing = [...definitions.keys()].filter(id => !seen.has(id))
   if (missing.length) throw new Error(`效果目录缺少：${missing.join('、')}。`)

@@ -184,7 +184,7 @@ describe('shader graph effects', () => {
   }, 300_000)
   it('warms effect and transition graphs found in the edit so the first real frame does not compile', async () => {
     const cache = new ShaderGraphCache(device)
-    const specs = videoEditShaderGraphWarmSpecs([{ clips: [{ effects: [{ builtin: { id: 'shaders.Posterize' } }, { builtin: { id: 'blur' } }, { builtin: { id: 'shaders.Posterize' } }] }], transitions: [{ kind: 'shaders.LinearWipe' }, { kind: 'wipe' }] }], kind => kind.startsWith('shaders.') ? shaderGraphTransitionSpec(kind as never) : undefined)
+    const specs = videoEditShaderGraphWarmSpecs([{ clips: [{ effects: [{ builtin: { id: 'shaders.Kaleidoscope' } }, { builtin: { id: 'blur' } }, { builtin: { id: 'shaders.Kaleidoscope' } }] }], transitions: [{ kind: 'shaders.LinearWipe' }, { kind: 'wipe' }] }], kind => kind.startsWith('shaders.') ? shaderGraphTransitionSpec(kind as never) : undefined)
     expect(specs).toHaveLength(2)
     await cache.warm(specs)
     const input = texture(); const output = texture(); fill(input, () => [10, 20, 30, 255])
@@ -279,10 +279,8 @@ describe('shader graph effects', () => {
     const cache = new ShaderGraphCache(device)
     const input = texture()
     const crt = (amount: number) => resolveVideoEditBuiltinParams({ id: 'retro_screen', params: { mode: 'crt', amount } })
-    const screen = SHADER_GRAPH_EFFECT_DEFINITIONS.find(definition => definition.id === 'shaders.CRTScreen')!
     const clips = [
       { id: 'retro_screen', values: crt(60) }, { id: 'retro_screen', values: crt(100) }, { id: 'retro_screen', values: crt(60) }, { id: 'retro_screen', values: crt(100) },
-      { id: 'shaders.CRTScreen', values: videoEditBuiltinDefaults(screen) },
     ]
     const render = async (target: { render(request: Parameters<ShaderGraphSession['render']>[0]): Promise<void> }, props: Record<string, unknown>): Promise<Uint8Array> => {
       const output = texture()

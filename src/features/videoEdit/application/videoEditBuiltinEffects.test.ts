@@ -122,7 +122,7 @@ it('shaders 组件效果与转场通过正式通用实体可读；助手创建�
     const clipRef = { kind: 'video_edit.clip', id: `${id}:${clipIds[0]}` }
     const baseline = await app.read(clipRef)
     const history = owner.past.length
-    const created = await app.call('change_application_entities', { summary: '波浪扭曲', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:shaders.WaveDistortion', 'video_edit.effect.parameters': { strength: 0.45 } } }] }] }, baseline.revisions as Record<string, number>)
+    const created = await app.call('change_application_entities', { summary: '拉伸', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: clipRef, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:shaders.Stretch', 'video_edit.effect.parameters': { strength: 0.45 } } }] }] }, baseline.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
     expect(owner.past).toHaveLength(history + 1)
     const effect = getActiveVideoEditSequence(owner).clips[0].effects![0]

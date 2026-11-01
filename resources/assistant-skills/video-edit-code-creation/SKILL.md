@@ -79,7 +79,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 音乐节拍、视频与网页画面 | [音频与画面输入](references/author-api-media.md) |
 | 文字参数与样式、量字、逐字、缓动 | [文字动效接口](references/author-text-motion.md) |
 | WebGPU、WebGL、滤镜、相邻帧 | [GPU 接口](references/author-shaders.md) |
-| 查内置 shaders 组件名称与角色 | [纹理](references/shader-components-textures.md)／[续](references/shader-components-textures-2.md)、[图形材质](references/shader-components-shapes.md)／[续](references/shader-components-shapes-2.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
+| 查内置 shaders 组件名称与角色 | [纹理](references/shader-components-textures.md)、[图形材质](references/shader-components-shapes.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
 | 用户标注发现、定位、回复 | [标注协议](references/annotations.md) |
 | 代码工程结构、参数化、拆文件 | [代码工程](references/code-project.md)、[参数化](references/parametric.md)、[多文件组件](references/multifile-components.md) |
 | 参数类型、分组、条件、自定义类型 | [参数类型](references/parameter-types.md) |

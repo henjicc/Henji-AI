@@ -117,8 +117,8 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
 describe('正式合成场景的预乘RGBA编排与有界目标', () => {
   it('效果时钟是片段内帧号与帧时长：24/60fps 同一秒的时间相同，且不改持久参数', async () => {
     for (const fps of [24, 60]) {
-      const builtin = { id: 'shaders.WaveDistortion', params: { strength: 0.5 } }
-      const effect = { id: 'wave', name: '波浪', amount: 1, enabled: true, builtin }
+      const builtin = { id: 'shaders.Stretch', params: { strength: 0.5 } }
+      const effect = { id: 'stretch', name: '拉伸', amount: 1, enabled: true, builtin }
       const owner = clip('visual', 1, { effects: [effect], start: fps / 2 })
       const document = { ...composition([owner]), fps, frameRate: { numerator: fps, denominator: 1 } }
       const nodes = buildVideoEditCompositePlan(document.clips)
@@ -129,7 +129,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
       expect(seedFrame! * duration!).toBeCloseTo(0.5, 12)
       // 复制到别处的片段与只记相对位置的预渲染窗口取同一个种子帧。
       expect(seedFrame).toBe(fps / 2)
-      expect(builtin).toEqual({ id: 'shaders.WaveDistortion', params: { strength: 0.5 } })
+      expect(builtin).toEqual({ id: 'shaders.Stretch', params: { strength: 0.5 } })
     }
   })
   it('代码效果执行失败跳过该项并报告，后续效果继续，保留整帧与原链', async () => {

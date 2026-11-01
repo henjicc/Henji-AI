@@ -13,6 +13,7 @@ const ROOT = path.resolve(__dirname, '..')
 const CATALOG = path.join(ROOT, 'src/core/videoEdit/shaderGraph/components.generated.json')
 const LOADERS = path.join(ROOT, 'src/features/videoEdit/engine/shaderEngines/componentLoaders.generated.ts')
 const TRANSITIONS = path.join(ROOT, 'src/core/videoEdit/shaderGraph/transitionKinds.generated.ts')
+const EFFECT_CATALOG = path.join(ROOT, 'src/core/videoEdit/effectCatalog.ts')
 const REFERENCE_DIR = path.join(ROOT, 'resources/assistant-skills/video-edit-code-creation/references')
 const ZH = require('../src/core/videoEdit/shaderGraph/zh.json')
 const EXCLUSIONS = require('./shader-component-exclusions.cjs')
@@ -78,7 +79,9 @@ async function build() {
     '] as const',
     '',
   ].join('\n')
-  const usable = components.filter(value => !value.excluded && !value.usesPointer && value.role !== 'transition')
+  // 助手参考只列效果面板里真有的组件：效果目录是全覆盖的唯一顺序表，未登记、已撤下或并进原生效果的组件都不在其中。
+  const listed = new Set([...fs.readFileSync(EFFECT_CATALOG, 'utf8').matchAll(/'shaders\.(\w+)'/g)].map(match => match[1]))
+  const usable = components.filter(value => !value.excluded && !value.usesPointer && value.role !== 'transition' && listed.has(value.name))
   const ROLE = { generator: '生成', filter: '滤镜', transition: '转场', group: '分组' }
   // 助手参考每份不超过 8KB（技能读取上限）：按用途分文件，超出时同一组再续一份。
   const GROUPS = [
