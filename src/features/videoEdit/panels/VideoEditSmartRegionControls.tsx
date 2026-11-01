@@ -15,7 +15,8 @@ import { VideoEditMaskCreateButtons, VideoEditMaskShapeControls } from './VideoE
 import { openSettingsPanel } from '@/stores/uiStore'
 import { requireVideoEditInstance } from '../application/videoEditService'
 import type { VideoEditCompositeTarget } from '../application/videoEditCompositing'
-import { retryVideoEditSmartRegion, subscribeVideoEditSmartRegions, videoEditSmartRegionFailureText, videoEditSmartRegionRequest, videoEditSmartRegionStatus, videoEditSmartRegionsRevision } from '../application/videoEditSmartRegions'
+import { retryVideoEditSmartRegion, subscribeVideoEditSmartRegions, videoEditEffectRegionStatuses, videoEditSmartRegionFailureText, videoEditSmartRegionRequest, videoEditSmartRegionStatus, videoEditSmartRegionsRevision, videoEditSubjectRegionRequest } from '../application/videoEditSmartRegions'
+import { smartRegionRequestKey, type SmartRegionRequest, type SmartRegionStatus } from '@/platform/contracts/smartRegions'
 import type { VideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 
 const WHOLE = 'whole'
@@ -33,6 +34,21 @@ function Row({ label, ...props }: Omit<React.ComponentProps<typeof VideoEditProp
  * 智能区域在后台分析，这里显示进度；失败给出用户能处理的说明与重试（模型下载失败可直接去设置下载）。
  * 手绘遮罩任何画面片段都能用；智能区域要分析素材画面，只给视频、图片片段。
  */
+/** 画面分析的进度与失败：分析期间效果暂不出现，失败时给重试；缺模型时直接去下载。 */
+function AnalysisStatus({ status, request, subject }: { status: SmartRegionStatus | undefined; request: SmartRegionRequest | undefined; subject: string }): React.ReactElement | null {
+  if (status?.state === 'analyzing') return <p className={`py-1 text-2xs text-text3 ${UI_PROPERTY_INSET_CLASS}`} role="status" data-video-edit-smart-region-status="analyzing">
+    正在分析{subject === '人物' ? '人物' : '画面'}{status.progress > 0 ? ` ${Math.round(status.progress * 100)}%` : ''}，完成后效果自动出现
+  </p>
+  if (status?.state !== 'failed') return null
+  return <div className={UI_PROPERTY_INSET_CLASS} data-video-edit-smart-region-status="failed">
+    <UiError size="sm" align="start" title={`${subject}分析失败`} message={videoEditSmartRegionFailureText(status.reason)}
+      actions={<span className="flex gap-1">
+        {request && <UiButton size="sm" onClick={() => retryVideoEditSmartRegion(request)}>重试</UiButton>}
+        {status.reason === 'model' && <UiButton size="sm" onClick={() => openSettingsPanel({ tab: 'files', sectionId: 'files-models' })}>去下载模型</UiButton>}
+      </span>} />
+  </div>
+}
+
 export function VideoEditSmartRegionControls({ target, effect, gesture }: { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; gesture: VideoEditBuiltinParamGesture }): React.ReactElement | null {
   useSyncExternalStore(subscribeVideoEditSmartRegions, videoEditSmartRegionsRevision)
   useSyncExternalStore(subscribeVideoEditTracking, videoEditTrackingRevision)
@@ -47,6 +63,9 @@ export function VideoEditSmartRegionControls({ target, effect, gesture }: { targ
   const region = mask ? mask.regionId === 'tracker' ? { defaults: VIDEO_EDIT_TRACKER_MASK_DEFAULTS } : SMART_REGIONS[mask.regionId] : undefined
   const status = isSmartRegionMask(mask) ? videoEditSmartRegionStatus(document, sequence.frameRate, clip, effect) : undefined
   const request = isSmartRegionMask(mask) ? videoEditSmartRegionRequest(document, sequence.frameRate, clip, effect) : undefined
+  // 主体抠像、主体描边这类按人物轮廓工作的效果另有一份人物分析；和作用区域是同一份分析时上面已经显示过。
+  const subject = analyzable ? videoEditSubjectRegionRequest(document, sequence.frameRate, clip, effect) : undefined
+  const subjectStatus = subject && (!request || smartRegionRequestKey(request) !== smartRegionRequestKey(subject)) ? videoEditEffectRegionStatuses(document, sequence.frameRate, clip, effect).find(entry => smartRegionRequestKey(entry.request) === smartRegionRequestKey(subject))?.status : undefined
   const tracker = mask?.regionId === 'tracker' ? clip.trackers?.find(tracker => tracker.id === mask.trackerId) : undefined
   const trackingRequest = tracker && videoEditTrackingRequest(document, sequence.frameRate, clip, tracker)
   const trackingStatus = videoEditTrackingStatus(trackingRequest?.definition)
@@ -89,16 +108,8 @@ export function VideoEditSmartRegionControls({ target, effect, gesture }: { targ
       <Row label="反转" tooltip="作用到区域以外的部分">
         <span className="flex shrink-0 items-center"><UiSwitch aria-label="反转作用区域" checked={Boolean(mask.invert)} onCheckedChange={checked => gesture.commit({ mask: checked ? { ...mask, invert: true } : without(mask, 'invert') })} /></span>
       </Row>
-      {status?.state === 'analyzing' && <p className={`py-1 text-2xs text-text3 ${UI_PROPERTY_INSET_CLASS}`} role="status" data-video-edit-smart-region-status="analyzing">
-        正在分析画面{status.progress > 0 ? ` ${Math.round(status.progress * 100)}%` : ''}，完成后效果自动出现
-      </p>}
-      {status?.state === 'failed' && <div className={UI_PROPERTY_INSET_CLASS} data-video-edit-smart-region-status="failed">
-        <UiError size="sm" align="start" title="作用区域分析失败" message={videoEditSmartRegionFailureText(status.reason)}
-          actions={<span className="flex gap-1">
-            {request && <UiButton size="sm" onClick={() => retryVideoEditSmartRegion(request)}>重试</UiButton>}
-            {status.reason === 'model' && <UiButton size="sm" onClick={() => openSettingsPanel({ tab: 'files', sectionId: 'files-models' })}>去下载模型</UiButton>}
-          </span>} />
-      </div>}
+      <AnalysisStatus status={status} request={request} subject="作用区域" />
     </>}
+    {subjectStatus && <AnalysisStatus status={subjectStatus} request={subject} subject="人物" />}
   </div>
 }

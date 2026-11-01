@@ -241,3 +241,22 @@ it('效果控件的作用区域：选区域后出现羽化 / 扩展 / 反转与�
   expect(textView.getByLabelText('创建椭圆遮罩')).toBeTruthy(); expect(textView.queryByRole('status')).toBeNull()
   cleanup()
 })
+
+it('主体描边在效果控件里显示人物分析进度；失败给出说明与重试', async () => {
+  const { owner, id, video } = await project()
+  const sequenceId = getActiveVideoEditSequence(owner).id
+  applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:subject_stroke')
+  await flush()
+  const target = { projectId: id, sequenceId, clipId: video.id }
+  const effect = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!.effects![0] as VideoEditBuiltinEffect
+  const gesture = { identity: 'subject-test', begin: vi.fn(), finish: vi.fn(), cancel: vi.fn(), active: () => false, commit: vi.fn() }
+  const view = render(<VideoEditSmartRegionControls target={target} effect={effect} gesture={gesture} />)
+  expect(view.getByRole('status').textContent).toContain('正在分析人物')
+  const issued = ensure.mock.calls.at(-1)![0]
+  act(() => { progress!({ request: issued, status: { state: 'failed', reason: 'model' } }) })
+  expect(view.getByRole('alert').textContent).toContain('人物分析失败')
+  fireEvent.click(view.getByText('重试'))
+  await flush()
+  expect(ensure).toHaveBeenLastCalledWith(issued)
+  cleanup()
+})
