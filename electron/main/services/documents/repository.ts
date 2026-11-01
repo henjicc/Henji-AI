@@ -71,6 +71,7 @@ import {
 import { collectContainerMedia, copyKeepingBoth, rewriteContentPaths, transferContainerMedia } from './media-transfer'
 import { rehomeVideoMotionResources } from './video-motion-resources'
 import { checkEntryName, readEntryNameKeys, requireEntryName } from './name-check'
+import { DocumentReadFailures } from './read-failures'
 import type { PackageAdapterRegistry, PackageDocumentAdapter, PackageDocumentHeaderPatch } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
 
@@ -172,8 +173,10 @@ function sameContainer(left: DocumentContainerRef, right: DocumentContainerRef):
 
 export class DocumentRepository {
   private readonly executor = new KeyedSerialExecutor()
+  private readonly readFailures: DocumentReadFailures
 
   constructor(private readonly options: DocumentRepositoryOptions) {
+    this.readFailures = new DocumentReadFailures(options.workspace.style, options)
     options.workspace.registerDocumentLockDirectory(options.lockDirectory)
   }
 
@@ -199,11 +202,13 @@ export class DocumentRepository {
   }
 
   async read(target: DocumentTarget): Promise<DocumentReadResult> {
+    let repeated = false
+    const onFailure = (_error: unknown, cached: boolean): void => { repeated = cached }
     try {
-      const file = await this.locate(target)
+      const file = await this.locate(target, onFailure)
       if (!file.envelope) throw new DocumentUnsupportedError('这种文档请在它自己的编辑器里打开。')
       const container = await this.workspace.containerForPath(file.path)
-      const decoded = await this.decode(file, container)
+      const decoded = await this.readFailures.read(file.path, () => this.decode(file, container), onFailure, { documentId: target.id, stat: file.stat })
       const references = await this.inspectReferences(decoded.report)
       this.warnProgramReferences('read', file, decoded.report)
       this.logger.debug('文档已读取', {
@@ -218,7 +223,7 @@ export class DocumentRepository {
         unresolved: decoded.report.unresolved,
       }
     } catch (error) {
-      this.logFailure('read', { documentId: target.id }, error)
+      if (!repeated) this.logFailure('read', { documentId: target.id }, error)
       throw error
     }
   }
@@ -664,17 +669,17 @@ export class DocumentRepository {
    * 给了位置就先按位置找并核对 ID，找不到再按索引里的位置找；
    * 仍找不到时（文件刚在资源管理器里改名或移动，索引还没跟上）刷新索引后再找一次。
    */
-  private async locate(target: DocumentTarget): Promise<LoadedDocumentFile> {
+  private async locate(target: DocumentTarget, onReadFailure?: (error: unknown, repeated: boolean) => void): Promise<LoadedDocumentFile> {
     try {
-      return await this.locateOnce(target)
+      return await this.locateOnce(target, onReadFailure)
     } catch (error) {
       if (!(error instanceof DocumentNotFoundError) || !this.options.refreshProjects) throw error
       await this.options.refreshProjects()
-      return await this.locateOnce(target)
+      return await this.locateOnce(target, onReadFailure)
     }
   }
 
-  private async locateOnce(target: DocumentTarget): Promise<LoadedDocumentFile> {
+  private async locateOnce(target: DocumentTarget, onReadFailure?: (error: unknown, repeated: boolean) => void): Promise<LoadedDocumentFile> {
     const candidates: string[] = []
     if (target.path !== undefined) {
       if (!path.isAbsolute(target.path)) throw new DocumentLocationError('文档位置无效。')
@@ -685,7 +690,8 @@ export class DocumentRepository {
     for (const candidate of candidates) {
       if (!this.options.kinds.forFileName(path.basename(candidate))) continue
       try {
-        const file = await loadDocumentFile(candidate, this.fileDependencies(), target.id)
+        const load = () => loadDocumentFile(candidate, this.fileDependencies(), target.id)
+        const file = onReadFailure ? await this.readFailures.read(candidate, load, onReadFailure, { documentId: target.id }) : await load()
         if (file.header.id === target.id) return file
       } catch (error) {
         if (error instanceof DocumentNotFoundError) continue

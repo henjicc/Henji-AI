@@ -5,16 +5,16 @@ import path from 'node:path'
 import { buildDocumentEnvelope, carryDocumentEnvelopeForward } from '../../../../src/core/documents/envelope'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { sameEntryName } from '../../../../src/core/documents/naming'
-import { INTERNAL_FOLDER_NAME, ProjectManifestError, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
+import { INTERNAL_FOLDER_NAME, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
 import type { DocumentIndexScanReport } from '../../../../src/core/documents/types'
-import { PersistenceError } from '../../../../src/core/persistence/migrations'
 import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pathSyntax'
 import { writeJsonFile } from '../fs/json-file'
 import { isUnavailableTraversalEntry, resolveLinkedPath } from '../fs/traversal'
 import type { MainLogger } from '../logging/main-logger'
 import type { IndexedDocument } from './catalog'
 import { indexedFromFile, loadDocumentFile, statDocumentLocation, summarizeFile, type LoadedDocumentFile } from './document-file'
-import { DocumentFormatError, DocumentNotFoundError, DocumentUnsupportedError, errorCode } from './errors'
+import { DocumentNotFoundError, DocumentUnsupportedError, errorCode } from './errors'
+import { DocumentReadFailures, isUnreadableFileContent } from './read-failures'
 import type { PackageAdapterRegistry } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
 
@@ -54,19 +54,6 @@ interface ProjectCandidate {
 type MutableReport = Omit<DocumentIndexScanReport, 'durationMs'>
 
 
-/** 内容错误可以跳过；备份/磁盘错误仍须中止本轮，保留原索引。 */
-function isUnreadableFileContent(error: unknown): boolean {
-  let cause = error
-  const seen = new Set<unknown>()
-  while (cause instanceof Error && !seen.has(cause)) {
-    seen.add(cause)
-    if (/^E[A-Z0-9]+$/.test(errorCode(cause) ?? '') || (cause instanceof PersistenceError && cause.code === 'backup-failed')) return false
-    cause = cause.cause
-  }
-  return error instanceof DocumentFormatError || error instanceof ProjectManifestError
-    || error instanceof SyntaxError || (error instanceof PersistenceError && error.code !== 'backup-failed')
-}
-
 function isMissing(error: unknown): boolean {
   return error instanceof DocumentNotFoundError || errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR'
 }
@@ -89,8 +76,11 @@ export class DocumentIndexScanner {
   private readonly invalidPaths = new Set<string>()
   private readonly skippedPaths = new Set<string>()
   private documentAliases = new Map<string, string>()
+  private readonly readFailures: DocumentReadFailures
 
-  constructor(private readonly options: DocumentIndexScannerOptions) {}
+  constructor(private readonly options: DocumentIndexScannerOptions) {
+    this.readFailures = new DocumentReadFailures(options.workspace.style, options)
+  }
 
   private get workspace(): DocumentWorkspace {
     return this.options.workspace
@@ -403,12 +393,15 @@ export class DocumentIndexScanner {
     const catalog = this.workspace.catalog
     let file: LoadedDocumentFile
     try {
-      file = await loadDocumentFile(candidate.path, { kinds: this.options.kinds, adapters: this.options.adapters })
+      file = await this.readFailures.read(candidate.physicalPath,
+        () => loadDocumentFile(candidate.path, { kinds: this.options.kinds, adapters: this.options.adapters }),
+        (error, repeated) => {
+          if (isUnreadableFileContent(error) || isMissing(error)) this.recordInvalid(candidate.path, error, report, false, !repeated)
+        })
     } catch (error) {
       if (error instanceof DocumentUnsupportedError) return null
       if (isUnavailableTraversalEntry(error)) { this.skipEntry(candidate.path, error); return null }
       if (!isUnreadableFileContent(error) && !isMissing(error)) throw error
-      this.recordInvalid(candidate.path, error, report)
       return null
     }
     report.readDocuments += 1
@@ -429,23 +422,27 @@ export class DocumentIndexScanner {
     if (!existing || samePath(this.workspace.style, existing.path, candidatePath)) return false
     try {
       if (samePath(this.workspace.style, await resolveLinkedPath(existing.path), await resolveLinkedPath(candidatePath))) return false
-      const other = await loadDocumentFile(existing.path, { kinds: this.options.kinds, adapters: this.options.adapters })
+      const other = await this.readFailures.read(await resolveLinkedPath(existing.path),
+        () => loadDocumentFile(existing.path, { kinds: this.options.kinds, adapters: this.options.adapters }),
+        (error, repeated) => {
+          if (isUnreadableFileContent(error)) this.recordInvalid(existing.path, error, report, false, !repeated)
+        })
       return other.header.id === id
     } catch (error) {
       if (isMissing(error) || error instanceof DocumentUnsupportedError) return false
       if (isUnreadableFileContent(error)) {
-        this.recordInvalid(existing.path, error, report)
         return false
       }
       throw error
     }
   }
 
-  private recordInvalid(target: string, error: unknown, report: MutableReport, project = false): void {
+  private recordInvalid(target: string, error: unknown, report: MutableReport, project = false, log = true): void {
     const key = pathKey(this.workspace.style, target) ?? target
     if (this.invalidPaths.has(key)) return
     this.invalidPaths.add(key)
     report.invalid += 1
+    if (!log) return
     this.options.logger.warn(project ? '项目说明无法读取，跳过这个项目' : '跳过无法识别的文档文件', {
       event: project ? 'documents.index.project_invalid' : 'documents.index.document_invalid',
       context: { path: target }, error,
