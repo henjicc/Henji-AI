@@ -76,7 +76,7 @@ export function videoEditExportQualityOf(settings: VideoEditExportSettings): Vid
 }
 /** 比较基线与当前设置须经过相同的序列解析和设备适配，避免把自动适配标成用户修改。 */
 export function videoEditExportPresetModified(settings: VideoEditExportSettings, preset: VideoEditExportPreset): boolean {
-  const normalize = (value: VideoEditExportSettings): unknown => ({ ...value, usePreviews: value.usePreviews ?? false, renderAtOutputResolution: value.renderAtOutputResolution ?? true })
+  const normalize = (value: VideoEditExportSettings): unknown => ({ ...value, usePreviews: value.usePreviews ?? false, useWebCache: value.useWebCache ?? false, renderAtOutputResolution: value.renderAtOutputResolution ?? true })
   return !equal(normalize(settings), normalize(preset.settings))
 }
 export function videoEditExportChangedFields(settings: VideoEditExportSettings, preset: VideoEditExportPreset): Array<keyof VideoEditExportEncoding> {

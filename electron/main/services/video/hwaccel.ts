@@ -9,6 +9,16 @@ type H264EncoderId = 'h264_nvenc' | 'h264_qsv' | 'h264_amf' | 'h264_videotoolbox
 export type HwEncoderId = H264EncoderId | 'hevc_nvenc' | 'hevc_qsv' | 'hevc_amf' | 'hevc_videotoolbox'
 export type EncoderChoice = H264EncoderId | 'cpu'
 
+/** 网页缓存只接受已经实探通过的 HEVC444；不得在会话资源不足时悄悄换成 420 或软编。 */
+export function webCacheEncodeArgs(fps: number, qp = 0): string[] {
+  const gop = Math.max(1, Math.round(fps / 2))
+  // NVENC 的全帧内编码必须显式用 g=0，g=1 会保留预设的帧间间隔而拒绝初始化。
+  return ['-c:v', 'hevc_nvenc', '-preset', 'p5', '-tune', qp === 0 ? 'lossless' : 'hq', '-rc', 'constqp', '-qp', String(qp),
+    '-pix_fmt', 'yuv444p', '-bf', '0', '-g', String(gop === 1 ? 0 : gop), '-rc-lookahead', '0', '-forced-idr', '1']
+}
+
+export const WEB_CACHE_COLOR_ARGS = ['-colorspace', 'bt709', '-color_range', 'tv', '-color_primaries', 'bt709', '-color_trc', 'iec61966-2-1'] as const
+
 export interface VideoEncoderProfile<Id extends string = EncoderChoice> {
   id: Id
   label: string

@@ -81,7 +81,7 @@ pub trait VideoPlatform: Send + Sync {
     /// 显卡设备已丢失时返回原因（驱动重置、设备移除）。设备无法在本进程内恢复：服务应退出，由主进程重启（3.1）。
     fn device_lost(&self) -> Option<String>;
     /// 硬件解码设备；不可用时返回原因（会话改用软解）。
-    fn hardware_device(&self) -> Result<HardwareDevice, String>;
+    fn hardware_device(&self, codec: ff::AVCodecID, format: i32) -> Result<HardwareDevice, String>;
     /// 设备是否有某个硬件解码配置（名字见握手 `videoDecoderProfiles.named`）。
     fn has_decoder_profile(&self, name: &str) -> bool;
     /// 为解码会话建立输出（纹理池 + 转换器）。

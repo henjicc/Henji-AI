@@ -81,5 +81,7 @@ export interface VideoFramesPlatform {
    * 之后文件夹变化经 `onWebContentChanged` 通知。
    */
   watchWebContent(paths: string[]): Promise<Record<string, string | null>>
+  /** 本窗口的节目操作/导出/预渲染活动；主进程在窗口导航或退出时释放。 */
+  webCacheForeground(active: boolean): Promise<void>
   onWebContentChanged(listener: (change: WebSourceContentChange) => void): () => void
 }

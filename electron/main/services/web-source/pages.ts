@@ -1,10 +1,16 @@
 import { codeWebBoxesIssue, codeWebFolderOf, codeWebView } from '../../../../src/core/videoEdit/codeMaterial/webSource'
-import type { WebSourceCaptureRequest, WebSourceCaptureResult, WebSourceContentChange, WebSourceInfo, WebSourceOpenRequest } from '../../../../src/platform/contracts/videoFrameTypes'
+import type { WebSourceCacheRequest, WebSourceCaptureRequest, WebSourceCaptureResult, WebSourceContentChange, WebSourceInfo, WebSourceOpenRequest } from '../../../../src/platform/contracts/videoFrameTypes'
 import type { MainLogger } from '../logging/main-logger'
 import type { VideoFrameTarget } from '../video-decoder'
 import { WebSourceContent } from './content'
 import { WebSourcePage } from './page'
 import { resolveWebSourceFolder } from './site'
+import { contentTrustQuerySchema } from '../../../../src/core/contentTrust'
+import type { WebCacheRegistrations } from './registration'
+import { webTimeGridFromFraction } from '../../../../src/core/videoEdit/webTimeCache'
+import type { WebCacheReader } from './reader'
+import { WebCacheReadTiming } from './readTiming'
+import type { WebCacheExportWriter } from './exportWriter'
 import { webTextSelectors } from '../../../../src/core/videoEdit/webTextGeometry'
 
 const ROUTE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
@@ -25,7 +31,8 @@ export function parseWebSourceOpenRequest(input: unknown): WebSourceOpenRequest 
   if (typeof fields.route !== 'string' || !ROUTE_PATTERN.test(fields.route)) throw new Error('网页来源参数 route 无效')
   if (['width', 'height', 'region', 'scale'].some(key => fields[key] === undefined)) throw new Error('网页来源需要 width、height、region 与 scale')
   const view = codeWebView({ width: fields.width as number, height: fields.height as number, region: fields.region as number[], scale: fields.scale as number }, 'output')
-  return { route: fields.route, path: sourcePath(fields.path), ...view }
+  const trust = fields.trust === undefined ? undefined : contentTrustQuerySchema.parse({ contents: fields.trust }).contents
+  return { route: fields.route, path: sourcePath(fields.path), ...view, ...(trust ? { trust } : {}) }
 }
 
 export function parseWebSourceCaptureRequest(input: unknown): WebSourceCaptureRequest {
@@ -35,8 +42,26 @@ export function parseWebSourceCaptureRequest(input: unknown): WebSourceCaptureRe
   if (fields.boxes !== undefined) { const issue = codeWebBoxesIssue(fields.boxes); if (issue) throw new Error(issue) }
   if (fields.scale !== undefined && (typeof fields.scale !== 'number' || !Number.isFinite(fields.scale) || fields.scale <= 0 || fields.scale > 8192)) throw new Error('网页取帧倍率需要大于 0 且不超过 8192')
   if (fields.latest !== undefined && typeof fields.latest !== 'boolean') throw new Error('网页取帧 latest 需要布尔值')
+  if (fields.precision !== undefined && fields.precision !== 'exact' && fields.precision !== 'web-cache') throw new Error('网页取帧精度无效')
+  if (fields.cachePolicy !== undefined && fields.cachePolicy !== 'adaptive') throw new Error('网页缓存读取策略无效')
+  if (fields.cacheWrite !== undefined && typeof fields.cacheWrite !== 'boolean') throw new Error('网页缓存写入标记无效')
   const text = fields.text === undefined ? undefined : webTextSelectors(fields.text)
-  return { streamId: fields.streamId as string, ticket: fields.ticket as string, time: fields.time, ...(fields.boxes ? { boxes: fields.boxes as string[] } : {}), ...(text?.length ? { text } : {}), ...(fields.scale !== undefined ? { scale: fields.scale as number } : {}), ...(fields.latest !== undefined ? { latest: fields.latest as boolean } : {}) }
+  return { streamId: fields.streamId as string, ticket: fields.ticket as string, time: fields.time, ...(fields.boxes ? { boxes: fields.boxes as string[] } : {}), ...(text?.length ? { text } : {}), ...(fields.scale !== undefined ? { scale: fields.scale as number } : {}), ...(fields.latest !== undefined ? { latest: fields.latest as boolean } : {}),
+    ...(fields.precision !== undefined ? { precision: fields.precision } : {}), ...(fields.cacheWrite !== undefined ? { cacheWrite: fields.cacheWrite } : {}), ...(fields.cachePolicy !== undefined ? { cachePolicy: fields.cachePolicy } : {}), ...(fields.cacheGrid !== undefined ? { cacheGrid: parseCacheGrid(fields.cacheGrid) } : {}) }
+}
+
+export function parseWebSourceCacheRequest(input: unknown): WebSourceCacheRequest {
+  const fields = record(input, '网页补录需求')
+  const { ticket: _ticket, ...capture } = parseWebSourceCaptureRequest({ ...fields, ticket: 'cache' })
+  if (!capture.cacheGrid) throw new Error('网页补录需要采样网格')
+  return { ...capture, cacheGrid: capture.cacheGrid }
+}
+
+function parseCacheGrid(input: unknown): WebSourceCacheRequest['cacheGrid'] {
+  const grid = record(input, '网页采样网格'), rate = record(grid.rate, '网页采样帧率'), phase = record(grid.phase, '网页采样相位')
+  if (typeof rate.numerator !== 'number' || typeof rate.denominator !== 'number' || typeof phase.numerator !== 'string' || !/^\d+$/.test(phase.numerator)
+    || typeof phase.denominator !== 'string' || !/^[1-9]\d*$/.test(phase.denominator)) throw new Error('网页采样网格无效')
+  return webTimeGridFromFraction({ numerator: rate.numerator, denominator: rate.denominator }, { numerator: BigInt(phase.numerator), denominator: BigInt(phase.denominator) })
 }
 
 /**
@@ -55,6 +80,7 @@ export function parseWebSourcePaths(input: unknown): string[] {
  */
 export class WebSourcePages {
   private readonly pages = new Map<string, WebSourcePage>()
+  private readonly pageTrust = new Map<string, WebSourceOpenRequest['trust']>()
   private readonly watchedTargets = new Map<number, () => void>()
   /** 每个页面上一次记下的失败原因：页面坏掉时每帧都会失败，同一原因只记一次，恢复或原因变了再记。 */
   private readonly lastFailure = new Map<string, string>()
@@ -66,12 +92,19 @@ export class WebSourcePages {
   private readonly interests = new Map<number, Map<string, string[]>>()
   private nextId = 1
   private readonly content: WebSourceContent
+  private readonly cacheDemands = new Map<string, WebSourceCacheRequest>()
+  private readonly readTiming = new WebCacheReadTiming()
 
-  constructor(private readonly logger: Pick<MainLogger, 'debug' | 'info' | 'warn'>, broadcast: (change: WebSourceContentChange) => void) {
+  constructor(private readonly logger: Pick<MainLogger, 'debug' | 'info' | 'warn'>, broadcast: (change: WebSourceContentChange) => void, readonly registrations?: WebCacheRegistrations,
+    private readonly cache?: { demand(page: WebSourcePage, request: WebSourceCacheRequest): void; dispose(): void }, private readonly reader?: WebCacheReader, private readonly exportWriter?: WebCacheExportWriter) {
     this.content = new WebSourceContent((root, contentHash, paths) => {
       for (const page of this.pages.values()) if (page.folder.root === root) {
+        this.registrations?.remove(page.streamId)
         void page.reload(contentHash).then(
-          () => this.logger.info('网页来源已按新内容重新载入', { event: 'web_source.page.reloaded', context: { streamId: page.streamId, contentHash, ...page.capturePath } }),
+          async () => {
+            this.logger.info('网页来源已按新内容重新载入', { event: 'web_source.page.reloaded', context: { streamId: page.streamId, contentHash, ...page.capturePath } })
+            await this.register(page)
+          },
           error => this.failed(page, 'web_source.page.reload_failed', '网页来源重新载入失败', error),
         )
       }
@@ -109,7 +142,7 @@ export class WebSourcePages {
     if (target.isDestroyed()) throw new Error('目标窗口已关闭')
     const startedAt = Date.now()
     const streamId = `web-${this.nextId++}`
-    const { route, path, ...view } = request
+    const { route, path, trust, ...view } = request
     const context = { streamId, targetId: target.id, route, path, width: view.width, height: view.height, region: view.region, scale: view.scale }
     const retrying = this.lastOpenFailure.has(path)
     if (!retrying) this.logger.info('打开网页来源', { event: 'web_source.page.open.start', context })
@@ -125,10 +158,14 @@ export class WebSourcePages {
         reason => this.logger.warn('网页快照取帧不可用，使用普通页面绘制', { event: 'web_source.capture.fallback', context: { streamId, captureMode: 'compositor', reason } }),
       )
       this.pages.set(streamId, page)
+      this.pageTrust.set(streamId, trust)
       this.watchTarget(target)
       await page.open()
+      await this.register(page)
     } catch (error) {
       this.pages.delete(streamId)
+      this.pageTrust.delete(streamId)
+      this.registrations?.remove(streamId)
       page?.close()
       if (retained) this.content.release(retained)
       const reason = error instanceof Error ? error.message : String(error)
@@ -148,12 +185,28 @@ export class WebSourcePages {
     if (!page || page.target.id !== targetId) throw new Error('网页来源不存在或不属于当前窗口')
     const startedAt = performance.now()
     if (request.text?.length) this.logger.debug('采样网页文本几何', { event: 'web_source.text_geometry.start', context: { streamId: page.streamId, ticket: request.ticket, time: request.time, selectors: request.text.length } })
+    const selection = request.precision === 'web-cache' && request.cachePolicy === 'adaptive' ? this.readTiming.select(page.contentHash, request) : undefined
     try {
+      if (selection?.changed) this.logger.debug('网页画面按实测耗时选择来源', { event: 'web_source.cache.selection', context: { streamId: page.streamId, reason: selection.reason, liveMs: selection.liveMs, cacheMs: selection.cacheMs } })
+      // 缓存帧不带文字几何：要文字位置的请求只走实时取帧。
+      const cached = request.text?.length || selection && !selection.cache ? undefined : await this.reader?.capture(page, request)
+      if (cached) {
+        if (selection && !cached.dropped) this.readTiming.record(selection.key, true, performance.now() - startedAt, selection.warmup)
+        return cached
+      }
+      try {
+        const written = request.text?.length ? undefined : await this.exportWriter?.capture(page, request)
+        if (written) return written
+      } catch (error) {
+        this.logger.warn('网页精确导出缓存不可用，继续实时取帧', { event: 'web_source.export_cache.failed', error, context: { streamId: page.streamId, time: request.time } })
+      }
+      const liveStarted = performance.now()
       const { boxes, text, duration, unsettled, dropped, pixelWidth, pixelHeight } = await page.capture(request.time, request.ticket, request.boxes, request)
       if (dropped) {
         this.logger.debug('过时网页取帧已丢弃', { event: 'web_source.capture.dropped', context: { streamId: page.streamId, ticket: request.ticket, time: request.time } })
         return { boxes, duration, contentHash: page.contentHash, dropped, pixelWidth, pixelHeight }
       }
+      if (selection) this.readTiming.record(selection.key, false, performance.now() - liveStarted, selection.warmup)
       this.logger.debug('网页取帧完成', { event: 'web_source.capture.completed', context: { streamId: page.streamId, ticket: request.ticket, time: request.time, scale: request.scale, pixelWidth, pixelHeight, elapsedMs: performance.now() - startedAt, ...page.capturePath } })
       if (this.lastFailure.delete(page.streamId)) this.logger.info('网页取帧已恢复', { event: 'web_source.capture.recovered', context: { streamId: page.streamId } })
       if (unsettled && !this.unsettled.has(page.streamId)) {
@@ -161,7 +214,7 @@ export class WebSourcePages {
         this.logger.warn('网页在 seek 之后一直在变，取帧按最新画面（页面没按约定停住，同一时刻的画面可能不一致）', { event: 'web_source.capture.not_static', context: { streamId: page.streamId, time: request.time } })
       }
       if (text) this.logger.debug('网页文本几何采样完成', { event: 'web_source.text_geometry.completed', context: { streamId: page.streamId, ticket: request.ticket, time: text.time, sampleMs: text.sampleMs, serializationMs: text.serializationMs, bytes: text.bytes, statuses: Object.values(text.results).map(value => value.status), reasons: Object.values(text.results).flatMap(value => value.status === 'unavailable' ? [{ reason: value.reason, details: value.details ?? [] }] : []), graphemes: Object.values(text.results).reduce((sum, value) => sum + (value.status === 'ready' ? value.geometry.graphemes.length : 0), 0) } })
-      return { boxes, ...(text ? { text } : {}), duration, contentHash: text?.contentHash ?? page.contentHash, pixelWidth, pixelHeight }
+      return { provenance: 'live', boxes, ...(text ? { text } : {}), duration, contentHash: text?.contentHash ?? page.contentHash, pixelWidth, pixelHeight }
     } catch (error) {
       if (request.text?.length) this.logger.debug('网页文本几何采样失败', { event: 'web_source.text_geometry.failed', context: { streamId: page.streamId, ticket: request.ticket, time: request.time } })
       this.failed(page, 'web_source.capture.failed', '网页取帧失败', error, { time: request.time })
@@ -169,9 +222,22 @@ export class WebSourcePages {
     }
   }
 
+  private async register(page: WebSourcePage): Promise<void> {
+    if (this.pages.get(page.streamId) !== page) return
+    try { await this.registrations?.register(page, this.pageTrust.get(page.streamId)) }
+    catch (error) { this.logger.warn('网页后台登记不可用，继续实时网页', { event: 'web_source.registration.failed', error, context: { streamId: page.streamId } }) }
+    // 热重载会撤销旧批次；已收到的最新需求跟随登记完成重放，不能由一次空登记永久丢弃。
+    const demand = this.cacheDemands.get(page.streamId)
+    if (demand && this.pages.get(page.streamId) === page) this.cache?.demand(page, demand)
+    if (demand) this.reader?.prepare(page)
+  }
+
   cancel(targetId: number, streamId: string, ticket: string): boolean {
     const page = this.pages.get(streamId)
-    return page?.target.id === targetId ? page.cancel(ticket) : false
+    if (page?.target.id !== targetId) return false
+    const cacheCancelled = this.reader?.cancel(streamId, ticket)
+    const writeCancelled = this.exportWriter?.cancel(streamId, ticket)
+    return page.cancel(ticket) || !!cacheCancelled || !!writeCancelled
   }
 
   private failed(page: WebSourcePage, event: string, message: string, error: unknown, context: Record<string, unknown> = {}): void {
@@ -185,6 +251,12 @@ export class WebSourcePages {
     const page = this.pages.get(streamId)
     if (!page || page.target.id !== targetId) return false
     this.pages.delete(streamId)
+    this.pageTrust.delete(streamId)
+    this.cacheDemands.delete(streamId)
+    this.readTiming.close(streamId)
+    this.reader?.close(streamId)
+    this.exportWriter?.close(streamId)
+    this.registrations?.remove(streamId)
     this.lastFailure.delete(streamId)
     this.unsettled.delete(streamId)
     page.close()
@@ -210,9 +282,23 @@ export class WebSourcePages {
     this.watchedTargets.set(target.id, stop)
   }
 
+  cacheDemand(targetId: number, request: WebSourceCacheRequest): void {
+    const page = this.pages.get(request.streamId)
+    if (!page || page.target.id !== targetId) throw new Error('网页来源不存在或不属于当前窗口')
+    this.cacheDemands.set(page.streamId, request)
+    this.reader?.prepare(page)
+    this.cache?.demand(page, request)
+  }
+
   dispose(): void {
+    this.exportWriter?.dispose()
+    this.reader?.dispose()
+    this.cache?.dispose()
+    this.registrations?.dispose()
     for (const page of this.pages.values()) page.close()
     this.pages.clear()
+    this.pageTrust.clear()
+    this.cacheDemands.clear()
     for (const stop of this.watchedTargets.values()) stop()
     this.watchedTargets.clear()
     this.interests.clear()

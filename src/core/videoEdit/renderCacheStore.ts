@@ -10,6 +10,7 @@ const windowKey = z.string().min(1).max(200)
 const profile = z.string().min(1).max(200)
 
 export const videoRenderCacheEntrySchema = z.object({
+  provenance: z.enum(['live', 'web-cache']).optional(),
   projectId, sequenceId: z.string().min(1).max(200), windowKey, profile,
   startFrame: z.number().int().min(0), endFrame: z.number().int().min(1),
   width: z.number().int().positive(), height: z.number().int().positive(), fps: z.number().positive(),

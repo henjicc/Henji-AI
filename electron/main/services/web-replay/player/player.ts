@@ -7,7 +7,7 @@ import type { WebRecordingBehaviorEvent, WebRecordingData, WebRecordingManifest,
 import type { WebReplayDirector } from '../../../../../src/core/webReplay/director'
 import { planWebReplay } from '../../../../../src/core/webReplay/directorPlan'
 import type { DirectorTimeline, WebReplayTimeMapFile } from '../../../../../src/core/webReplay/directorTimeline'
-import type { ReplayBoot, ReplayFrameReport, ReplayHostResult, ReplayHttpRequest, ReplayHttpResult, ReplayReport } from '../../../../../packages/web-replay-probe/src/replay/types'
+import type { ReplayFrameReport, ReplayHostResult, ReplayHttpRequest, ReplayHttpResult, ReplayReport } from '../../../../../packages/web-replay-probe/src/replay/types'
 import { REPLAY_CONTROL } from '../../../../../packages/web-replay-probe/src/replay/types'
 import { DEFAULT_LOCATOR_OPTIONS } from '../../../../../packages/web-replay-probe/src/shared/locatorOptions'
 import { createMainLogger } from '../../logging'
@@ -15,7 +15,8 @@ import { digestBase64, WebRecordingStore } from '../store'
 import { PaintFrameCapture, tokenIndex, tokenSidePx } from './capture'
 import { FrameEncoder, prepareFrameEncoder } from './encoder'
 import type { FrameSource, TakenFrame } from './frameSource'
-import { GpuCaptureError, GpuFrameCapture, isReplayReader } from './gpuCapture'
+import { GpuCaptureError, GpuFrameCapture } from './gpuCapture'
+import { registerReplayBoot, type ReplayBootReply } from './boot'
 import { DirectorInput, TakeTrack } from './directorInput'
 import { InputDispatcher } from './input'
 import { BOOTSTRAP_PATH, installReplaySite } from './site'
@@ -84,15 +85,12 @@ export interface ReplayOptions {
   director?: WebReplayDirector
 }
 
-type BootReply = { phase: 'bootstrap'; storage: unknown } | { phase: 'app'; boot: ReplayBoot } | { phase: 'reader' } | { phase: 'none' }
-
 const players = new Map<number, WebRecordingPlayer>()
 let ipcInstalled = false
 function installIpc(): void {
   if (ipcInstalled) return
   ipcInstalled = true
   const route = (event: IpcMainEvent | IpcMainInvokeEvent): WebRecordingPlayer | undefined => players.get(event.sender.id)
-  ipcMain.on('web-replay:boot', (event, url: unknown) => { event.returnValue = isReplayReader(event.sender.id) ? { phase: 'reader' } : route(event)?.boot(String(url)) ?? { phase: 'none' } })
   ipcMain.on('web-replay:bootstrapped', event => route(event)?.bootstrapped())
   ipcMain.on('web-replay:report', (event, report: ReplayReport) => route(event)?.report(report))
   ipcMain.handle('web-replay:http', (event, request: ReplayHttpRequest) => { const p = route(event); if (!p) throw new Error('不是重演窗口'); return p.http(request) })
@@ -175,7 +173,7 @@ export class WebRecordingPlayer {
 
   // ---- IPC from the replay page
 
-  boot(url: string): BootReply {
+  boot(url: string): ReplayBootReply {
     logger.info('网页重演页面请求启动数据', { event: 'web_replay.replay.boot', context: { url } })
     if (new URL(url).pathname === BOOTSTRAP_PATH) return { phase: 'bootstrap', storage: this.storage }
     return {
@@ -293,6 +291,7 @@ export class WebRecordingPlayer {
       this.rejectReady?.(injectionFailure)
     })
     players.set(contents.id, this)
+    const stopBoot = registerReplayBoot(contents.id, url => this.boot(url))
     // From the first paint on: shared textures must go back to the browser's small pool.
     source?.attach(contents)
     // Commands sent before the page has a renderer never answer, so every call is time-limited.
@@ -559,6 +558,7 @@ export class WebRecordingPlayer {
       this.ready = null
       this.rejectReady = null
       players.delete(contents.id)
+      stopBoot()
       await input.dispose()
       if (!win.isDestroyed()) win.destroy()
       await ses.clearStorageData().catch(() => undefined)

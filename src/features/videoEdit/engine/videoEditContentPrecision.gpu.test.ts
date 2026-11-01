@@ -141,6 +141,24 @@ function fill(texture: GpuTexture, value: number[]): void {
   gpu.gpu.queue.writeTexture({ texture: texture as never }, data, { bytesPerRow: W * 8 }, [W, H])
 }
 
+it('网页同尺寸占位跨合成器共享，作者尺寸与透明像素正确，单个宿主关闭不销毁共享输入', async () => {
+  const first = compositor(), second = compositor(), host = new VideoEditCodeGpu(device)
+  device.pushErrorScope('validation')
+  try {
+    const web = { time: 0, width: W, height: H, region: [0, 0, W, H] as [number, number, number, number], scale: 1, duration: null, boxes: {} }
+    const a = await first.blankWebPicture(web), b = await second.blankWebPicture(web)
+    expect(a.texture).toBe(b.texture)
+    expect([a.width, a.height]).toEqual([W, H])
+    const prepared = await second.prepareImages(new Map([['page', b]]), () => true)
+    expect([prepared.get('page')!.width, prepared.get('page')!.height]).toEqual([W, H])
+    await first.dispose()
+    const output = await host.target('blank', W, H, 'rgba16float')
+    await second.draw(document, [clip], [b], () => true, undefined, output)
+    expect(await row(output.texture)).toEqual(Array(W * 4).fill(0))
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { await first.dispose(); await second.dispose(); await host.dispose() }
+})
+
 it('正式作者层栈累加零 alpha 光，嵌套与 opacity 交接保持超白；素材输入仍钳制', async () => {
   const host = new VideoEditCodeGpu(device), author = new VideoEditAuthorGpu(device), comp = compositor()
   device.pushErrorScope('validation')

@@ -102,7 +102,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   let singleFrameReads = 0
   let failedFrame: number | undefined
   const started = performance.now()
-  const phases = { audioMs: 0, renderMs: 0, copyMs: 0, encodeMs: 0, frames: 0, previewFrames: 0, previewMs: 0, compositeFrames: 0, compositeMs: 0 }
+  // webCache* 按网页画面来源计，与预览文件/现场合成两类相交（取自含网页缓存的预览文件的帧两边都算）。
+  const phases = { audioMs: 0, renderMs: 0, copyMs: 0, encodeMs: 0, frames: 0, previewFrames: 0, previewMs: 0, compositeFrames: 0, compositeMs: 0, webCacheFrames: 0, webCacheMs: 0 }
   let measuredAt = started
   logger.info('开始导出剪辑', { event: 'video_edit.export.start', context: { projectId, taskId: task.id, ...range } })
   try {
@@ -123,7 +124,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     // Mix in the delivery layout before measuring loudness. Downmixing after normalization
     // changes LUFS; the shared mixer already resamples and maps mono/stereo correctly.
     const renderDocument = { ...pictures, sampleRate: settings.sampleRate, channels: settings.channels }
-    renderer = new VideoEditRenderSession(renderDocument, { proxyProjectId: settings.useProxies ? projectId : undefined, exportProxies: settings.useProxies, fixedTextFonts: true })
+    renderer = new VideoEditRenderSession(renderDocument, { proxyProjectId: settings.useProxies ? projectId : undefined, exportProxies: settings.useProxies, fixedTextFonts: true, ...(settings.videoEnabled ? { cacheWebOutput: true } : {}) })
     const picture = settings.videoEnabled ? await prepareVideoEditExportFrame(renderer, document, settings) : undefined
     renderer.setSmartRegions(smartRegions)
     renderer.setTracks(videoEditTrackResults(document))
@@ -190,12 +191,13 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       phases.audioMs += performance.now() - audioStarted
       if (video) {
         const renderStarted = performance.now()
-        const result = await exact(frame, renderer.render(frame, true))
+        const result = await exact(frame, renderer.render(frame, true, settings.useWebCache === true ? 'web-cache' : 'exact'))
         singleFrameReads += result.singleFrameReads ?? 0
         const renderMs = performance.now() - renderStarted
         phases.renderMs += renderMs
         if (result.renderCached) { phases.previewFrames++; phases.previewMs += renderMs }
         else { phases.compositeFrames++; phases.compositeMs += renderMs }
+        if (result.provenance === 'web-cache') { phases.webCacheFrames++; phases.webCacheMs += renderMs }
         const copyStarted = performance.now()
         picture!.copy()
         phases.copyMs += performance.now() - copyStarted

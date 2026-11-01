@@ -96,6 +96,22 @@ describe('videoFrames preload', () => {
     expect(late.close).toHaveBeenCalledOnce()
   })
 
+  it('按缓存可见尺寸创建帧视图，原帧与交回帧分别在主线程释放', async () => {
+    const { api, receive } = await create(), original = frame(), cropped = frame()
+    const construct = vi.fn()
+    vi.stubGlobal('VideoFrame', class { constructor(source: unknown, init: unknown) { construct(source, init); return cropped } })
+    const route = api.connect(), page = announcements[0].port
+    const value = { ...meta(route), displaySize: { width: 257, height: 259 } }
+    const release = vi.fn()
+    await receive({ importedSharedTexture: { getVideoFrame: () => original, release } }, value)
+    expect(construct).toHaveBeenCalledWith(original, { displayWidth: 257, displayHeight: 259 })
+    expect(original.close).toHaveBeenCalledOnce()
+    expect(cropped.close).not.toHaveBeenCalled()
+    expect(release).toHaveBeenCalledOnce()
+    page.postMessage({ type: 'release', frame: cropped, token: 1 })
+    expect(cropped.close).toHaveBeenCalledOnce()
+  })
+
   it('posts decoder schedule events to the port of the owning route and exposes decoder requests', async () => {
     const { ipcRenderer } = await import('electron')
     const invoke = vi.fn(async (_channel: string, _payload?: unknown) => ({}))

@@ -20,8 +20,10 @@ import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution }
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 import { startVideoMotion, setVideoMotionOptions, setVideoMotionPointer, videoMotionState, videoMotionComposition } from './application/videoEditMotionDraft'
 const stopNotification = vi.hoisted(() => vi.fn())
-const pixel = vi.hoisted(() => ({ refinement: undefined as ((result: RenderResponse, error?: Error) => void) | undefined, presentation: undefined as ((frame: number, source: VideoEditPresentedSource, authorElements?: CodeAuthorFrameObservation) => void) | undefined, preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean; presentedSource?: VideoEditPresentedSource; effectErrors?: string[]; skipped?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
+const pixel = vi.hoisted(() => ({ refinement: undefined as ((result: RenderResponse, error?: Error) => void) | undefined, presentation: undefined as ((frame: number, source: VideoEditPresentedSource, authorElements?: CodeAuthorFrameObservation, provenance?: 'live' | 'web-cache') => void) | undefined, preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; precision?: string; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean; presentedSource?: VideoEditPresentedSource; effectErrors?: string[]; skipped?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn(), webScale: vi.fn(async (_scale: number) => undefined) }))
 const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
+// 网页显示档位只在合成里有网页时生效；这里的片段替身没有真实网页代码素材，按“有网页”处理。
+vi.mock('./application/videoEditWebContent', async importOriginal => ({ ...await importOriginal<typeof import('./application/videoEditWebContent')>(), videoEditCompositionHasWeb: () => true }))
 vi.mock('./engine/videoEditAudioScrub', async importOriginal => ({ ...await importOriginal<typeof import('./engine/videoEditAudioScrub')>(), VideoEditAudioScrubber: class { request = scrub.request; stop = scrub.stop } }))
 vi.mock('./application/videoEditProjectCover', () => ({ registerVideoEditProgramCoverCapture: vi.fn(), saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -41,14 +43,15 @@ vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: clas
   dispose = pixel.dispose
   mixAudio = pixel.mixAudio
   setRenderDivisor = pixel.scale
+  setWebDisplayScale = pixel.webScale
   armPlayback = pixel.arm
   stopPlayback = stopNotification
   setSmartRegions = vi.fn()
-  present(frame: number, sequential?: boolean, scrubbing?: boolean | 'fast', deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, scrubbing, deadline, resolve, reject: error => { if (error instanceof VideoEditRenderWorkerError) this.terminalError = error; reject(error) }, submitted })) }
+  present(frame: number, sequential?: boolean, scrubbing?: boolean | 'fast', deadline?: number, submitted?: () => void, ...rest: unknown[]) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, scrubbing, deadline, precision: rest[5] as string | undefined, resolve, reject: error => { if (error instanceof VideoEditRenderWorkerError) this.terminalError = error; reject(error) }, submitted })) }
 } }))
 beforeEach(() => {
   stopNotification.mockClear()
-  vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.preopen.mockClear(); pixel.arm.mockClear(); pixel.invalidate.mockClear(); pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined); pixel.scale.mockReset(); pixel.scale.mockResolvedValue(undefined); localStorage.clear(); resetVideoEditPlaybackResolutionCache()
+  vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.preopen.mockClear(); pixel.arm.mockClear(); pixel.invalidate.mockClear(); pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined); pixel.scale.mockReset(); pixel.scale.mockResolvedValue(undefined); pixel.webScale.mockClear(); localStorage.clear(); resetVideoEditPlaybackResolutionCache()
   vi.spyOn(getPlatform().system, 'memoryInfo').mockResolvedValue({ availableBytes: 4 * 1024 ** 3, totalBytes: 8 * 1024 ** 3 })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/preview.hjvid')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
@@ -359,7 +362,7 @@ it('跳转后精确画面还在解时不预热（预热在 Worker 里排在它�
   await act(async () => { setVideoEditView(instance.document.id, { frame: 50 }); await vi.advanceTimersByTimeAsync(10) })
   expect(pixel.arm).toHaveBeenCalledTimes(armed)
   await act(async () => { exact.resolve({ sourceTimestamps: [50 / 30], presented: true }); await vi.advanceTimersByTimeAsync(10) })
-  expect(pixel.arm).toHaveBeenLastCalledWith(50)
+  expect(pixel.arm).toHaveBeenLastCalledWith(50, 'web-cache')
   view.unmount()
 })
 it('切换序列（含尺寸不同的序列）复用同一渲染会话只换文档，不销毁也不重建', async () => {
@@ -699,6 +702,50 @@ it('回放分辨率（4.9）：暂停也用 1/8 时，设为封面先按完整�
   expect(onError).not.toHaveBeenCalled(); view.unmount()
 })
 
+it('节目暂停画面放行网页缓存；设为封面时屏幕上是缓存来源就按精确来源重画再取图', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; appendVideoEditClip(id)
+  const toBlob = vi.fn((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })))
+  HTMLCanvasElement.prototype.toBlob = toBlob as unknown as HTMLCanvasElement['toBlob']
+  const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  expect(pixel.requests[0].precision).toBe('web-cache')
+  await act(async () => { pixel.presentation?.(0, 'live', undefined, 'web-cache'); pixel.requests[0].resolve({ sourceTimestamps: [], presented: true }); await vi.advanceTimersByTimeAsync(5) })
+  const poster = setVideoEditPosterFrame(id)
+  await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+  expect(pixel.requests.at(-1)).toMatchObject({ frame: 0, precision: 'exact' }); expect(toBlob).not.toHaveBeenCalled()
+  await act(async () => { pixel.presentation?.(0, 'live', undefined, 'live'); pixel.requests.at(-1)!.resolve({ sourceTimestamps: [], presented: true }); await vi.advanceTimersByTimeAsync(20) })
+  await act(async () => { await poster })
+  expect(toBlob).toHaveBeenCalledTimes(1)
+  expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+
+it('网页输入按节目在屏幕上的实际显示档位光栅化，档位变化重画当前帧', async () => {
+  let resized: ResizeObserverCallback | undefined
+  vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { resized = callback } observe() {} disconnect() {} unobserve() {} })
+  const owner = (await createVideoEditProject())!; appendVideoEditClip(owner.document.id)
+  const sequence = getActiveVideoEditSequence(owner)
+  const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [], presented: true }); await vi.advanceTimersByTimeAsync(5) })
+  const requested = pixel.requests.length
+  await act(async () => { resized?.([{ devicePixelContentBoxSize: [{ inlineSize: sequence.width * 0.45, blockSize: sequence.height * 0.45 }], contentRect: {} } as unknown as ResizeObserverEntry], {} as ResizeObserver); await vi.advanceTimersByTimeAsync(10) })
+  expect(pixel.webScale).toHaveBeenLastCalledWith(0.5)
+  expect(pixel.requests.length).toBe(requested + 1)
+  // 封面收录档位 1 请求的画面：低档位画面在屏幕上时先按档位 1 重画，取完回到显示档位。
+  const toBlob = vi.fn((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })))
+  HTMLCanvasElement.prototype.toBlob = toBlob as unknown as HTMLCanvasElement['toBlob']
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [], presented: true }); await vi.advanceTimersByTimeAsync(5) })
+  const poster = setVideoEditPosterFrame(owner.document.id)
+  await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+  expect(pixel.webScale).toHaveBeenLastCalledWith(1); expect(toBlob).not.toHaveBeenCalled()
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [], presented: true }); await vi.advanceTimersByTimeAsync(20) })
+  await act(async () => { await poster })
+  expect(toBlob).toHaveBeenCalledTimes(1)
+  await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+  expect(pixel.webScale).toHaveBeenLastCalledWith(0.5)
+  expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+
 it('删除唯一空序列时已挂载节目会话安全退出，撤销后可重新挂载', async () => {
   const owner = await createVideoEditProject(); const id = owner.document.id; const onError = vi.fn()
   const view = render(<VideoEditPreview instance={owner} onError={onError} />)
@@ -750,14 +797,14 @@ it('松手等待暂停现场画面后再预热，回到曾预热的位置仍重�
   await act(async () => { setVideoEditView(id, { scrubbing: false }) })
   expect(pixel.arm).not.toHaveBeenCalled()
   await completeProgramFrames(1)
-  expect(pixel.arm).toHaveBeenLastCalledWith(20)
+  expect(pixel.arm).toHaveBeenLastCalledWith(20, 'web-cache')
   const count = pixel.arm.mock.calls.length
   // Leaving and returning to the same position has invalidated the old Worker schedule, even before another picture arrives.
   await act(async () => { setVideoEditView(id, { frame: 40, scrubbing: true }); setVideoEditView(id, { frame: 20, scrubbing: false }) })
   expect(pixel.arm).toHaveBeenCalledTimes(count)
   await completeProgramFrames(2)
   expect(pixel.arm).toHaveBeenCalledTimes(count + 1)
-  expect(pixel.arm).toHaveBeenLastCalledWith(20)
+  expect(pixel.arm).toHaveBeenLastCalledWith(20, 'web-cache')
   view.unmount()
   await act(async () => { await vi.advanceTimersByTimeAsync(5) })
   expect(pixel.arm).toHaveBeenCalledTimes(count + 1)
@@ -1014,7 +1061,7 @@ it('ready 缓存拖动不做停留重取，松手和缓存内远跳保留现场�
     pixel.refinement!({ id: 0, phase: 'refined', frame: 50, sequenceId: instance.activeSequenceId, revision: instance.document.revision, presented: true })
     await vi.advanceTimersByTimeAsync(2)
   })
-  expect(pixel.arm).toHaveBeenLastCalledWith(50)
+  expect(pixel.arm).toHaveBeenLastCalledWith(50, 'web-cache')
   expect(view.queryByText('现场效果失败')).toBeNull()
   await act(async () => {
     pixel.refinement!({ id: 0, phase: 'refined', frame: 50, sequenceId: instance.activeSequenceId, revision: instance.document.revision }, new Error('现场读取失败'))

@@ -22,6 +22,16 @@ interface ClosableFrame {
   close(): void
 }
 
+/** Electron 共享纹理的显示尺寸沿用 codedSize；WebCodecs 只调整帧视图，不读回像素。 */
+export function sharedVideoFrame(imported: Pick<Electron.SharedTextureImported, 'getVideoFrame'>, displaySize?: VideoFrameMeta['displaySize']): ClosableFrame {
+  const original: ClosableFrame = imported.getVideoFrame()
+  if (!displaySize) return original
+  try {
+    const Constructor = (globalThis as unknown as { VideoFrame: new (frame: ClosableFrame, init: { displayWidth: number; displayHeight: number }) => ClosableFrame }).VideoFrame
+    return new Constructor(original, { displayWidth: displaySize.width, displayHeight: displaySize.height })
+  } finally { original.close() }
+}
+
 interface FramePort {
   postMessage(message: unknown, transfer: unknown[]): void
   onmessage: ((event: { data: unknown }) => void) | null
@@ -57,6 +67,7 @@ const PORT_CALL_CHANNELS: Record<VideoFramePortCall['method'], string> = {
   closeAudio: 'videoFrames:closeAudio',
   openWeb: 'videoFrames:openWeb',
   captureWeb: 'videoFrames:captureWeb',
+  cacheWeb: 'videoFrames:cacheWeb',
   cancelWeb: 'videoFrames:cancelWeb',
   closeWeb: 'videoFrames:closeWeb',
 }
@@ -106,7 +117,7 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
     counters.received += 1
     try {
       const meta = isFrameMeta(args[0]) ? args[0] : null
-      const frame: ClosableFrame = imported.getVideoFrame()
+      const frame = sharedVideoFrame(imported, meta?.displaySize)
       const route = meta ? routes.get(meta.route) : undefined
       if (!meta || !route) {
         counters.dropped += 1
@@ -230,6 +241,7 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
       }
     },
     watchWebContent: (paths) => nativeInvoke('videoFrames:watchWebContent', { paths }),
+    webCacheForeground: (active) => nativeInvoke('videoFrames:webCacheForeground', { active }),
     onWebContentChanged: (handler) => {
       const listener = (_event: Electron.IpcRendererEvent, change: WebSourceContentChange): void => handler(change)
       ipcRenderer.on(WEB_SOURCE_CONTENT_CHANGED_CHANNEL, listener)

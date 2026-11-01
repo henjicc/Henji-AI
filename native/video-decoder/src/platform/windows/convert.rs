@@ -308,6 +308,7 @@ pub struct Converter {
     semi_shader: Option<ID3D11ComputeShader>,
     upload: Option<UploadBuffer>,
     semi: Option<SemiTexture>,
+    cuda: Option<super::cuda::Buffer>,
     target: Option<(ID3D11Texture2D, ID3D11UnorderedAccessView)>,
     staging: Vec<ID3D11Texture2D>,
     staging_next: usize,
@@ -363,6 +364,7 @@ impl Converter {
             semi_shader: None,
             upload: None,
             semi: None,
+            cuda: None,
             target: None,
             staging: Vec::new(),
             staging_next: 0,
@@ -578,11 +580,12 @@ impl Converter {
     /// 写入一帧。`path` 由会话按帧格式选好；`premultiplied` 为源透明是否预乘。
     ///
     /// # Safety
-    /// `frame` 必须是有效帧；硬件帧须来自同一 D3D11 设备。
+    /// `frame` 必须是有效帧；硬件帧须来自本平台选定的同适配器 D3D11/CUDA 设备。
     pub unsafe fn write(&mut self, frame: *const ff::AVFrame, slot: &SharedSlot, path: WritePath, color: &ColorInfo, premultiplied: bool) -> Result<WriteStats, String> {
         match path {
             WritePath::CopyNv12 => unsafe { self.copy_nv12(frame, slot) },
             WritePath::ShaderSemiPlanar => unsafe { self.semiplanar(frame, slot, color) },
+            WritePath::CudaPlanar => unsafe { self.cuda_planar(frame, slot, color, premultiplied) },
             WritePath::UploadNv12 => unsafe { self.upload_nv12(frame, slot) },
             WritePath::ShaderPlanar => unsafe { self.planar(frame, slot, color, premultiplied) },
             WritePath::CpuFallback => {
@@ -594,6 +597,32 @@ impl Converter {
                 Ok(stats)
             }
         }
+    }
+
+    unsafe fn cuda_planar(&mut self, frame: *const ff::AVFrame, slot: &SharedSlot, color: &ColorInfo, premultiplied: bool) -> Result<WriteStats, String> {
+        // 只借用帧元数据计算 HLSL 布局，绝不在 CPU 解引用 CUDA 的平面地址。
+        let mut layout = unsafe { std::ptr::read(frame) };
+        layout.format = ff::AVPixelFormat::AV_PIX_FMT_YUV444P as i32;
+        let (params, copies, bytes) = unsafe { planar_layout(&layout, color, premultiplied)? };
+        if self.cuda.is_none() {
+            self.cuda = Some(unsafe { super::cuda::Buffer::new(&self.gpu, frame, bytes)? });
+        }
+        let shader = self.shader(false)?;
+        let constants = self.constants()?;
+        let target = self.target()?;
+        let started = Instant::now();
+        let cuda = self.cuda.as_mut().ok_or("CUDA 互操作缓冲未建立")?;
+        let view = cuda.view.clone();
+        // 与其他 D3D11 提交共用设备锁，map/unmap 负责两种 API 的 GPU 所有权转移。
+        let gpu = self.gpu.clone();
+        let context = gpu.lock();
+        unsafe { cuda.copy(frame, &copies, bytes)? };
+        let upload_us = started.elapsed().as_micros() as u64;
+        Self::write_constants(&context, &constants, &params)?;
+        acquire(slot)?;
+        self.dispatch(&context, &shader, &constants, &[Some(view)], &target, slot);
+        release(slot, &context)?;
+        Ok(WriteStats { upload_us, submit_us: started.elapsed().as_micros() as u64 - upload_us, map_us: 0 })
     }
 
     unsafe fn copy_nv12(&mut self, frame: *const ff::AVFrame, slot: &SharedSlot) -> Result<WriteStats, String> {

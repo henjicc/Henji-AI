@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import type { VideoEditClip, VideoEditDocument } from '@/core/videoEdit/document'
+import type { VideoEditClip, VideoEditComposition, VideoEditDocument } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditCodeMetadataPending } from './videoEditCodeState'
 
@@ -96,6 +96,11 @@ function webPathsOf(clip: VideoEditClip): readonly string[] {
   const paths = [...found]
   clipPaths.set(clip, paths)
   return paths
+}
+
+/** 合成（含嵌套序列）里是否用到网页：没有网页时节目不必为网页显示档位重画。 */
+export function videoEditCompositionHasWeb(composition: Pick<VideoEditComposition, 'clips' | 'sequences'>): boolean {
+  return [composition, ...(composition.sequences ?? [])].some(sequence => sequence.clips.some(clip => webPathsOf(clip).length > 0))
 }
 
 /** 打开着的剪辑引用的网页路径整份交给主进程监视；清单没变时不重发。 */

@@ -107,6 +107,7 @@ pub enum Received {
 }
 
 pub struct Decoder {
+    purpose: Purpose,
     context: *mut ff::AVCodecContext,
     pub name: String,
     pub hardware_requested: bool,
@@ -116,6 +117,13 @@ pub struct Decoder {
     pub immediate_output: bool,
     /// 按硬解只开了一个解码线程；硬件初始化失败、实际落到软解时，调用方应按软解重新打开（多线程）。
     pub single_thread_for_hardware: bool,
+    _selection: Option<Box<HardwareSelection>>,
+}
+
+struct HardwareSelection {
+    format: ff::AVPixelFormat,
+    content_format: i32,
+    platform: std::sync::Arc<dyn crate::platform::VideoPlatform>,
 }
 
 unsafe impl Send for Decoder {}
@@ -132,10 +140,33 @@ unsafe extern "C" fn get_format(context: *mut ff::AVCodecContext, formats: *cons
     let mut software = ff::AVPixelFormat::AV_PIX_FMT_NONE;
     let mut cursor = formats;
     unsafe {
-        let hardware = (*context).opaque as usize as c_int;
+        let selection = &mut *((*context).opaque as *mut HardwareSelection);
+        // 容器快速打开时像素格式可能未知；get_format 此时已由 FFmpeg 解析 SPS，避免自行解析码流。
+        if selection.content_format != (*context).sw_pix_fmt as i32 {
+            selection.content_format = (*context).sw_pix_fmt as i32;
+            match selection.platform.hardware_device((*context).codec_id, (*context).sw_pix_fmt as i32) {
+                Ok(mut device) => {
+                    if let Some(format) = hardware_pixel_format((*context).codec, device.device_type) {
+                        ff::av_buffer_unref(&mut (*context).hw_device_ctx);
+                        (*context).hw_device_ctx = device.reference;
+                        selection.format = format;
+                    } else {
+                        ff::av_buffer_unref(&mut device.reference);
+                    }
+                }
+                Err(reason) => {
+                    crate::logging::warn("decode.hardware_unavailable", &reason, serde_json::json!({ "format": selection.content_format }));
+                }
+            }
+        }
+        let hardware = selection.format as c_int;
         while *cursor != ff::AVPixelFormat::AV_PIX_FMT_NONE {
             let format = *cursor;
             if !(*context).hw_device_ctx.is_null() && hardware > 0 && format as c_int == hardware {
+                // NVDEC 按 SPS 的实际 DPB 大小建池；这里只额外保留候选与前瞻两帧。
+                if format == ff::AVPixelFormat::AV_PIX_FMT_CUDA && (*context).sw_pix_fmt == ff::AVPixelFormat::AV_PIX_FMT_YUV444P {
+                    (*context).extra_hw_frames = 2;
+                }
                 return format;
             }
             let descriptor = ff::av_pix_fmt_desc_get(format);
@@ -189,6 +220,7 @@ pub struct DecoderSetup<'a> {
     /// 平台硬件解码设备的新引用（不硬解时为 None）。
     pub hardware: Option<crate::platform::HardwareDevice>,
     pub device_profiles: &'a dyn Fn(&str) -> bool,
+    pub platform: std::sync::Arc<dyn crate::platform::VideoPlatform>,
 }
 
 impl Decoder {
@@ -219,16 +251,19 @@ impl Decoder {
         if unsafe { ff::avcodec_parameters_to_context(context, parameters) } < 0 {
             return Err(fail(&mut context, "无法设置解码参数".into()));
         }
+        let mut selection = None;
         let hardware_requested = match setup.hardware {
             Some(mut device) => match hardware_pixel_format(codec, device.device_type) {
                 Some(format) => {
+                    let mut state = Box::new(HardwareSelection { format, content_format: parameters.format, platform: setup.platform });
                     unsafe {
                         (*context).hw_device_ctx = device.reference;
-                        (*context).opaque = format as c_int as usize as *mut std::ffi::c_void;
+                        (*context).opaque = (&mut *state as *mut HardwareSelection).cast();
                         (*context).get_format = Some(get_format);
                         // 解码表面复制后立即归还；多留几张给候选帧、前瞻帧与在途复制。
                         (*context).extra_hw_frames = 4;
                     }
+                    selection = Some(state);
                     true
                 }
                 None => {
@@ -261,7 +296,7 @@ impl Decoder {
             return Err(fail(&mut context, format!("无法打开解码器 {name}：{}", error_text(opened))));
         }
         let immediate_output = intra_only && setup.purpose == Purpose::Seek;
-        Ok(Self { context, name, hardware_requested, intra_only, all_frames_key: setup.all_frames_key, immediate_output, single_thread_for_hardware: hardware_requested })
+        Ok(Self { purpose: setup.purpose, context, name, hardware_requested, intra_only, all_frames_key: setup.all_frames_key, immediate_output, single_thread_for_hardware: hardware_requested, _selection: selection })
     }
 
     /// 送入一个包（None 表示开始排空）。返回 false 表示解码器暂不接收（先取帧）。
@@ -300,6 +335,22 @@ impl Decoder {
 
     pub fn flush(&mut self) {
         unsafe { ff::avcodec_flush_buffers(self.context) };
+    }
+
+    /// HEVC 段的关键帧分布来自当前容器；单帧尾段不能改变下一段的定位语义。
+    pub fn set_segment_keys(&mut self, all_frames_key: bool) {
+        self.all_frames_key = all_frames_key;
+        self.intra_only = all_frames_key;
+        self.immediate_output = all_frames_key && self.purpose == Purpose::Seek;
+    }
+
+    pub fn hardware_surfaces(&self) -> Option<u64> {
+        unsafe {
+            let reference = (*self.context).hw_frames_ctx;
+            if reference.is_null() { return None; }
+            let count = (*((*reference).data as *const ff::AVHWFramesContext)).initial_pool_size;
+            (count > 0).then_some(count as u64)
+        }
     }
 
     /// 之后送入的包是否跳过非参考帧：定位走向目标的途中，这些帧既不显示、也不被别的帧参考（H.264/HEVC 的

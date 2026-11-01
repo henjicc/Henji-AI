@@ -15,6 +15,8 @@
 
 mod audio;
 mod budget;
+mod cache_lock;
+mod cache_activity;
 mod cancel;
 mod convert;
 mod decode;
@@ -200,6 +202,8 @@ impl Service {
 fn main() {
     let started = Instant::now();
     let mut service = Service::new();
+    let mut cache_locks = cache_lock::CacheLocks::default();
+    let mut cache_activity = cache_activity::CacheActivity::default();
     logging::info(
         "service.started",
         "原生视频解码服务已启动",
@@ -240,6 +244,15 @@ fn main() {
             }
         };
         match request.command {
+            Command::WebCacheForeground { active } => respond(&request.id, cache_activity.foreground(active).map(|()| json!({ "active": active }))),
+            Command::WebCacheSubmission { lease } => respond(&request.id, cache_activity.acquire(lease).map(|acquired| json!({ "acquired": acquired }))),
+            Command::WebCacheSubmissionRelease { lease } => respond(&request.id, Ok(json!({ "released": cache_activity.release(&lease) }))),
+            Command::WebCacheLock { key, lease } => respond(&request.id, cache_locks.acquire(key, lease).map(|acquired| json!({ "acquired": acquired }))),
+            Command::WebCacheUnlock { key, lease } => respond(&request.id, Ok(json!({ "released": cache_locks.release(&key, &lease) }))),
+            Command::WebCacheCommit { key, lease, temporary, destination } => respond(&request.id, cache_locks.commit(&key, &lease, std::path::Path::new(&temporary), std::path::Path::new(&destination)).map(|()| json!({ "committed": true }))),
+            Command::WebCacheRollback { key, lease } => respond(&request.id, cache_locks.rollback(&key, &lease).map(|()| json!({ "rolledBack": true }))),
+            Command::WebCachePrepare { key, lease, destination } => respond(&request.id, cache_locks.prepare(&key, &lease, std::path::Path::new(&destination)).map(|()| json!({ "prepared": true }))),
+            Command::WebCacheDiscard { key, lease, destination } => respond(&request.id, cache_locks.discard(&key, &lease, std::path::Path::new(&destination)).map(|removed| json!({ "removed": removed }))),
             Command::Hello { client_pid, limits } => {
                 if let Some(limits) = limits {
                     service.budget.override_limits(limits);
@@ -305,6 +318,12 @@ fn main() {
                 // 被新请求取代时客户端按请求 ID 取消；会话处理完（或派发失败丢下命令）时自动出表。
                 let cancel = CancelToken::register(&service.cancels, &request.id);
                 if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::FrameAt { request_id: request.id.clone(), time, ticket, key_only, cancel }) {
+                    respond(&request.id, Err(error));
+                }
+            }
+            Command::SetDecoderSegment { stream_id, path } => {
+                let cancel = CancelToken::register(&service.cancels, &request.id);
+                if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::Segment { request_id: request.id.clone(), path, cancel }) {
                     respond(&request.id, Err(error));
                 }
             }

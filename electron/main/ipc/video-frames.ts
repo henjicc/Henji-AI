@@ -24,7 +24,7 @@ import {
   type VideoFrameStreamInfo,
   type VideoFrameTarget,
 } from '../services/video-decoder'
-import { getWebSourcePages, parseWebSourceCaptureRequest, parseWebSourceOpenRequest, parseWebSourcePaths } from '../services/web-source'
+import { getWebCacheActivity, getWebSourcePages, parseWebSourceCacheRequest, parseWebSourceCaptureRequest, parseWebSourceOpenRequest, parseWebSourcePaths } from '../services/web-source'
 import type { WebSourceCaptureRequest, WebSourceCaptureResult, WebSourceInfo, WebSourceOpenRequest } from '../../../src/platform/contracts/videoFrameTypes'
 import { parseStringField, parseVoid, registerIpcHandler } from './registry'
 
@@ -74,6 +74,10 @@ export function isVideoFrameTestPatternAllowed(isPackaged: boolean, env: NodeJS.
 }
 
 export function registerVideoFramesIpc(): void {
+  registerIpcHandler('videoFrames:webCacheForeground', (input: unknown): boolean => {
+    if (!input || typeof input !== 'object' || !('active' in input) || typeof input.active !== 'boolean') throw new Error('网页补录前台活动需要 active 布尔值')
+    return input.active
+  }, async (active, event) => { await getWebCacheActivity()?.setForeground(webContentsFrameTarget(event.sender), active) })
   registerIpcHandler<ReturnType<typeof parseVideoFrameTestStreamRequest>, VideoFrameStreamInfo>(
     'videoFrames:openTestStream',
     parseVideoFrameTestStreamRequest,
@@ -102,9 +106,16 @@ export function registerVideoFramesIpc(): void {
   registerIpcHandler<VideoAudioReadRequest, VideoAudioReadResult>('videoFrames:readAudio', parseVideoAudioReadRequest, (request, event) => getVideoAudioSessions().read(event.sender.id, request))
   registerIpcHandler<string, boolean>('videoFrames:closeAudio', parseVideoAudioCloseRequest, (audioId, event) => getVideoAudioSessions().close(audioId, event.sender.id))
   // 网页来源：离屏页面按页面时间出画面，画面与解码帧走同一条通道；页面归属打开它的窗口与通道。
-  registerIpcHandler<WebSourceOpenRequest, WebSourceInfo>('videoFrames:openWeb', parseWebSourceOpenRequest, (request, event) => getWebSourcePages().open(webContentsFrameTarget(event.sender), request))
-  registerIpcHandler<WebSourceCaptureRequest, WebSourceCaptureResult>('videoFrames:captureWeb', parseWebSourceCaptureRequest, (request, event) => getWebSourcePages().capture(event.sender.id, request))
+  registerIpcHandler<WebSourceOpenRequest, WebSourceInfo>('videoFrames:openWeb', parseWebSourceOpenRequest, (request, event) => {
+    const work = (): Promise<WebSourceInfo> => getWebSourcePages().open(webContentsFrameTarget(event.sender), request)
+    return getWebCacheActivity()?.foreground(work) ?? work()
+  })
+  registerIpcHandler<WebSourceCaptureRequest, WebSourceCaptureResult>('videoFrames:captureWeb', parseWebSourceCaptureRequest, (request, event) => {
+    const work = (): Promise<WebSourceCaptureResult> => getWebSourcePages().capture(event.sender.id, request)
+    return getWebCacheActivity()?.foreground(work) ?? work()
+  })
   registerIpcHandler<{ streamId: string; ticket: string }, boolean>('videoFrames:cancelWeb', parseVideoFrameAtCancelRequest, (request, event) => getWebSourcePages().cancel(event.sender.id, request.streamId, request.ticket))
+  registerIpcHandler('videoFrames:cacheWeb', parseWebSourceCacheRequest, (request, event) => getWebSourcePages().cacheDemand(event.sender.id, request))
   registerIpcHandler<string, boolean>('videoFrames:closeWeb', (input) => parseStringField(input, 'streamId'), (streamId, event) => getWebSourcePages().close(event.sender.id, streamId))
   registerIpcHandler<string[], Record<string, string | null>>('videoFrames:watchWebContent', parseWebSourcePaths, (paths, event) => getWebSourcePages().watchContent(webContentsFrameTarget(event.sender), paths))
   // 通道断开（preload disconnect）时关闭该通道上仍打开的会话（画面、声音与网页）：消费方 Worker 被终止时可能来不及自行关闭。

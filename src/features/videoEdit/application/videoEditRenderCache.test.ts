@@ -8,9 +8,10 @@ const state = vi.hoisted(() => ({
   instances: [] as Array<{ document: { id: string }; contentVersion?: number; playing: boolean; scrubbing: boolean; busy: boolean; playbackDirection?: number; frame?: number }>,
   composition: {} as unknown,
   windows: [{ key: 'window', startFrame: 0, endFrame: 3, heavy: true }] as TestWindow[],
-  render: vi.fn(async (..._args: unknown[]) => {}), dispose: vi.fn(async () => {}), add: vi.fn(async (..._args: unknown[]) => {}),
+  render: vi.fn(async (..._args: unknown[]): Promise<void | { provenance: 'live' | 'web-cache' }> => {}), dispose: vi.fn(async () => {}), add: vi.fn(async (..._args: unknown[]) => {}),
   discard: vi.fn(async () => {}), commit: vi.fn(async (..._args: unknown[]) => ({})), cancel: vi.fn(async () => {}),
   remove: vi.fn(async (..._args: unknown[]) => 0), list: vi.fn(async () => []),
+  webCacheForeground: vi.fn(async (_active: boolean) => undefined),
   fingerprints: vi.fn((..._args: unknown[]): undefined => undefined),
   fingerprintListeners: new Set<() => void>(),
   trackingListeners: new Set<() => void>(), smartRegionListeners: new Set<() => void>(),
@@ -32,10 +33,10 @@ vi.mock('@/services/mediaCache/hardwareCapabilities', () => ({ resolveRenderCach
 vi.mock('@/core/videoEdit/renderBitrate', () => ({ videoEditRenderEncoding: () => ({ profile: 'test', codec: 'h264' }) }))
 vi.mock('@/core/videoEdit/renderCache', () => ({ videoEditRenderWindowRanges: () => state.windows.map(({ startFrame, endFrame }) => ({ startFrame, endFrame })), videoEditRenderWindowSet: (...args: unknown[]) => state.windowSet(...args) }))
 vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: state.fontRevision }) }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoFrames: { webCacheForeground: state.webCacheForeground }, settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
   renderList: state.list, renderRemove: state.remove, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
 } }) }))
-vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class { canvas = {}; render = state.render; dispose = state.dispose; setSmartRegions() {} setTracks() {} constructor() { state.sessions++ } } }))
+vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class { canvas = {}; async render(...args: unknown[]) { return { provenance: 'live', ...await state.render(...args) } } dispose = state.dispose; setSmartRegions() {} setTracks() {} constructor() { state.sessions++ } } }))
 vi.mock('../engine/videoEditExportEncoder', () => ({ videoEditExportVideoOptions: () => ({}) }))
 vi.mock('./videoEditTracking', () => ({ subscribeVideoEditTracking: (listener: () => void) => { state.trackingListeners.add(listener); return () => state.trackingListeners.delete(listener) }, videoEditTrackResults: () => state.tracks, waitVideoEditTracking: async () => {} }))
 vi.mock('./videoEditSmartRegions', () => ({ subscribeVideoEditSmartRegions: (listener: () => void) => { state.smartRegionListeners.add(listener); return () => state.smartRegionListeners.delete(listener) }, videoEditSmartRegionSegments: () => state.smartRegions, waitVideoEditSmartRegions: async () => ({}) }))
@@ -705,4 +706,18 @@ it('删除在首次索引读取阶段也响应取消，取消后不迟到删除�
   index.resolve(); await vi.advanceTimersByTimeAsync(1)
   expect(state.remove).not.toHaveBeenCalled()
   expect((await renderVideoEditRenderCache(owner.document.id, { scope: 'all' })).cancelled).toBe(false)
+})
+
+ it('预渲染按实际来源登记，自动放行缓存、手动仍精确，旧条目保持可读', async () => {
+  const projectId = state.instances[0].document.id
+  state.render.mockResolvedValueOnce({ provenance: 'web-cache' })
+  await renderVideoEditRenderCache(projectId, { scope: 'all', auto: true })
+  expect(state.render.mock.calls.every(call => call[2] === 'web-cache')).toBe(true)
+  expect(state.commit.mock.calls[0][0]).toMatchObject({ entry: { provenance: 'web-cache' } })
+  const composition = state.composition as Parameters<typeof readyVideoEditRenderWindows>[1]
+  expect(readyVideoEditRenderWindows(projectId, composition)[0]).toMatchObject({ provenance: 'web-cache' })
+  state.render.mockClear()
+  await renderVideoEditRenderCache(projectId, { scope: 'all' })
+  expect(state.render.mock.calls.every(call => call[2] === 'exact')).toBe(true)
+  expect(state.commit.mock.calls.at(-1)?.[0]).toMatchObject({ entry: { provenance: 'live' } })
 })

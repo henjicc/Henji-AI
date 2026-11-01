@@ -51,6 +51,13 @@ type OrphanCollector = (live: { video_edit?: ReadonlySet<string>; audio_edit?: R
 const ENFORCE_INTERVAL_MS = 60_000
 const STALE_TEMPORARY_MS = 24 * 60 * 60 * 1000
 
+export interface MediaCacheFamilyEntry extends MediaCacheFileEntry {
+  temporary: boolean
+  fileCount: number
+  remove(): Promise<boolean>
+}
+interface CacheEntry extends MediaCacheFileEntry { category: MediaCacheCategory; temporary: boolean; fileCount: number; remove?: () => Promise<boolean> }
+
 export class MediaCacheManager {
   private root: string | null | undefined
   private enforcing: Promise<void> | undefined
@@ -58,6 +65,7 @@ export class MediaCacheManager {
   private readonly protectors = new Set<ProtectFile>()
   private readonly orphanCollectors = new Set<OrphanCollector>()
   private readonly listeners = new Set<() => void>()
+  private readonly families = new Set<{ category: MediaCacheCategory; directory: () => string | undefined; list: () => Promise<MediaCacheFamilyEntry[]> }>()
   /** 应用退出后不再开始任何维护或设置读写（主进程退出流程会关闭数据库）。 */
   private stopped = false
 
@@ -89,6 +97,10 @@ export class MediaCacheManager {
   stop(): void { this.stopped = true }
 
   protect(callback: ProtectFile): () => void { this.protectors.add(callback); return () => { this.protectors.delete(callback) } }
+  registerFamilies(category: MediaCacheCategory, directory: () => string | undefined, list: () => Promise<MediaCacheFamilyEntry[]>): () => void {
+    const source = { category, directory, list }; this.families.add(source)
+    return () => { this.families.delete(source) }
+  }
   registerOrphanCollector(callback: OrphanCollector): void { this.orphanCollectors.add(callback) }
   onChange(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private changed(): void { for (const listener of this.listeners) { try { listener() } catch { /* listener failure must not stop cache work */ } } }
@@ -146,12 +158,14 @@ export class MediaCacheManager {
     return { budgetBytes: fixed === null ? autoBudgetBytes : fixed * 1024 ** 3, autoBudgetBytes, availableBytes }
   }
 
-  private async listFiles(category?: MediaCacheCategory): Promise<Array<MediaCacheFileEntry & { category: MediaCacheCategory; temporary: boolean }>> {
-    const files: Array<MediaCacheFileEntry & { category: MediaCacheCategory; temporary: boolean }> = []
+  private async listFiles(category?: MediaCacheCategory): Promise<CacheEntry[]> {
+    const files: CacheEntry[] = []
     for (const current of category ? [category] : MEDIA_CACHE_CATEGORIES) {
       const directory = this.categoryDirectory(current)
       if (!directory) continue
       const walk = async (folder: string): Promise<void> => {
+        const family = [...this.families].find(source => source.category === current && source.directory() === folder)
+        if (family) { files.push(...(await family.list()).map(entry => ({ ...entry, category: current }))); return }
         let entries
         try { entries = await fs.readdir(folder, { withFileTypes: true }) } catch { return }
         for (const entry of entries) {
@@ -161,7 +175,7 @@ export class MediaCacheManager {
           if (!entry.isFile()) continue
           try {
             const stat = await fs.stat(target)
-            files.push({ file: target, size: stat.size, usedMs: stat.mtimeMs, category: current, temporary: entry.name.endsWith('.tmp') })
+            files.push({ file: target, size: stat.size, usedMs: stat.mtimeMs, category: current, temporary: entry.name.endsWith('.tmp'), fileCount: 1 })
           } catch { /* removed concurrently */ }
         }
       }
@@ -174,7 +188,7 @@ export class MediaCacheManager {
     const files = await this.listFiles()
     const categories = MEDIA_CACHE_CATEGORIES.map(category => {
       const own = files.filter(file => file.category === category)
-      return { category, bytes: own.reduce((sum, file) => sum + file.size, 0), files: own.length }
+      return { category, bytes: own.reduce((sum, file) => sum + file.size, 0), files: own.reduce((sum, file) => sum + file.fileCount, 0) }
     })
     const totalBytes = categories.reduce((sum, item) => sum + item.bytes, 0)
     return { categories, totalBytes, ...(await this.budgetBytes(totalBytes)) }
@@ -190,8 +204,11 @@ export class MediaCacheManager {
     const files = await this.listFiles(category === 'all' ? undefined : category)
     let removedFiles = 0, removedBytes = 0, skippedFiles = 0
     for (const file of files) {
-      if ((file.temporary && Date.now() - file.usedMs < STALE_TEMPORARY_MS) || this.isProtected(file.file)) { skippedFiles++; continue }
-      try { await removeUnmanagedCachePath(file.file, { force: true }); removedFiles++; removedBytes += file.size } catch { skippedFiles++ }
+      if ((file.temporary && Date.now() - file.usedMs < STALE_TEMPORARY_MS) || this.isProtected(file.file)) { skippedFiles += file.fileCount; continue }
+      try {
+        if (file.remove ? await file.remove() : (await removeUnmanagedCachePath(file.file, { force: true }), true)) { removedFiles += file.fileCount; removedBytes += file.size }
+        else skippedFiles += file.fileCount
+      } catch { skippedFiles += file.fileCount }
     }
     this.host.logger.info('缓存已清除', { event: 'media_cache.clear.completed', context: { category, removedFiles, removedBytes, skippedFiles } })
     this.changed()
@@ -213,11 +230,13 @@ export class MediaCacheManager {
       const files = await this.listFiles()
       const { budgetBytes } = await this.budgetBytes(files.reduce((sum, file) => sum + file.size, 0))
       const now = Date.now()
-      const staleTemporary = files.filter(file => file.temporary && now - file.usedMs > STALE_TEMPORARY_MS)
+      const staleTemporary = files.filter(file => file.temporary && now - file.usedMs > STALE_TEMPORARY_MS && !this.isProtected(file.file))
       const plan = planMediaCacheEviction(files.filter(file => !file.temporary), { nowMs: now, retentionDays: settings.retentionDays, budgetBytes, protect: entry => this.isProtected(entry.file) })
       let removedFiles = 0, removedBytes = 0
       for (const entry of [...staleTemporary, ...plan]) {
-        try { await removeUnmanagedCachePath(entry.file, { force: true }); removedFiles++; removedBytes += entry.size } catch { /* in use: next round */ }
+        try {
+          if (entry.remove ? await entry.remove() : (await removeUnmanagedCachePath(entry.file, { force: true }), true)) { removedFiles += entry.fileCount; removedBytes += entry.size }
+        } catch { /* in use: next round */ }
       }
       if (removedFiles) {
         this.host.logger.info('已按缓存设置清理', { event: 'media_cache.enforce.completed', context: { removedFiles, removedBytes, budgetBytes, retentionDays: settings.retentionDays } })

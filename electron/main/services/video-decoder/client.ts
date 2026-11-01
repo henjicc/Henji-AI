@@ -204,6 +204,43 @@ export class VideoDecoderService {
     return this.call<VideoDecoderProbeResult>({ type: 'probe', path: filePath }, options)
   }
 
+  /** 缓存租约不能按请求取消：获取回复迟到时，调用方仍须按原 token 释放。 */
+  async webCacheLock(key: string, lease: string): Promise<{ acquired: boolean }> {
+    return this.cacheCall({ type: 'web_cache_lock', key, lease })
+  }
+  async webCacheUnlock(key: string, lease: string): Promise<{ released: boolean }> {
+    return this.cacheCall({ type: 'web_cache_unlock', key, lease })
+  }
+  async webCacheCommit(key: string, lease: string, temporary: string, destination: string): Promise<void> {
+    await this.cacheCall({ type: 'web_cache_commit', key, lease, temporary, destination })
+  }
+  async webCacheRollback(key: string, lease: string): Promise<void> {
+    await this.cacheCall({ type: 'web_cache_rollback', key, lease })
+  }
+  async webCachePrepare(key: string, lease: string, destination: string): Promise<void> {
+    await this.cacheCall({ type: 'web_cache_prepare', key, lease, destination })
+  }
+  async webCacheDiscard(key: string, lease: string, destination: string): Promise<{ removed: boolean }> {
+    return this.cacheCall({ type: 'web_cache_discard', key, lease, destination })
+  }
+
+  async webCacheForeground(active: boolean): Promise<void> {
+    await this.cacheCall({ type: 'web_cache_foreground', active })
+  }
+  async webCacheSubmission(lease: string): Promise<{ acquired: boolean }> {
+    return this.cacheCall({ type: 'web_cache_submission', lease })
+  }
+  async webCacheSubmissionRelease(lease: string): Promise<void> {
+    await this.cacheCall({ type: 'web_cache_submission_release', lease })
+  }
+
+  private async cacheCall<T>(command: VideoDecoderCommand): Promise<T> {
+    // 租约属于当前原生进程；禁止在旧调用的 await 间隙自动启动新进程并把获取/提交送入新代次。
+    const child = this.child
+    if (!child || this.stateValue !== 'ready') throw new VideoDecoderError('SESSION_GONE', '网页缓存段写锁所属进程不可用')
+    return await this.send(child, command, this.options.requestTimeoutMs) as T
+  }
+
   /** 原生服务主动发出的事件（帧就绪、流结束）。返回取消订阅函数。 */
   onEvent(listener: (event: VideoDecoderEvent) => void): () => void {
     this.eventListeners.add(listener)
@@ -222,6 +259,11 @@ export class VideoDecoderService {
   /** 打开解码会话：原生服务打开文件并解出第一帧后才响应（大文件或慢盘可能较久）。 */
   async openDecoder(request: VideoDecoderOpenRequest, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderDecoderStarted> {
     return this.call<VideoDecoderDecoderStarted>({ type: 'open_decoder', ...request }, options)
+  }
+
+  /** 切换同一变体的独立段，保留原生解码器与共享纹理池。 */
+  async setDecoderSegment(streamId: string, path: string, options: VideoDecoderRequestOptions = {}): Promise<{ streamId: string }> {
+    return this.call<{ streamId: string }>({ type: 'set_decoder_segment', streamId, path }, options)
   }
 
   /**
@@ -364,7 +406,7 @@ export class VideoDecoderService {
     return new Promise<unknown>((resolve, reject) => {
       const startedAt = this.options.now()
       const cancelNative = () => {
-        if (command.type === 'probe' || command.type === 'frame_at') this.writeCommand(child, this.allocateId(), { type: 'cancel', targetId: id })
+        if (command.type === 'probe' || command.type === 'frame_at' || command.type === 'set_decoder_segment') this.writeCommand(child, this.allocateId(), { type: 'cancel', targetId: id })
       }
       const timer = setTimeout(() => {
         this.pending.delete(id)

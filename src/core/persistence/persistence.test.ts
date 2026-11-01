@@ -23,7 +23,7 @@ it('高级导出编码跨预设、剪辑历史、录制嵌入快照读回，旧�
   }
 })
 
-it('输出渲染开关跨剪辑、录制快照与导出预设迁移保留；旧记录缺省语义由设置解析补齐', async () => {
+it('输出渲染与网页缓存开关跨剪辑、录制快照与导出预设迁移保留；旧记录缺省语义由设置解析补齐', async () => {
   const { resolveVideoEditExportSettings } = await import('../videoEdit/exportPresets')
   const sequence = { width: 1920, height: 1080, fps: 30, sampleRate: 48000, channels: 2 }
   for (const [id, previous] of [['document.video_edit', 43], ['document.screen_recording', 46], ['export-presets', 2]] as const) {
@@ -42,7 +42,14 @@ it('输出渲染开关跨剪辑、录制快照与导出预设迁移保留；旧�
     const current = upgradePersistenceContent(format, read(format.version), format.version)
     expect(settingsIn(current).renderAtOutputResolution).toBe(false)
     expect(resolveVideoEditExportSettings(settingsIn(current) as Parameters<typeof resolveVideoEditExportSettings>[0], sequence).renderAtOutputResolution).toBe(false)
+    expect(settings).not.toHaveProperty('useWebCache')
+    expect(resolveVideoEditExportSettings(settings as Parameters<typeof resolveVideoEditExportSettings>[0], sequence).useWebCache).toBe(false)
+    expect(resolveVideoEditExportSettings(settingsIn(current) as Parameters<typeof resolveVideoEditExportSettings>[0], sequence).useWebCache).toBe(true)
   }
+  const memory = PERSISTENCE_FORMATS.find(value => value.id === 'export-memory')!
+  const remembered = (version: number): Parameters<typeof resolveVideoEditExportSettings>[0] => (upgradePersistenceContent(memory, JSON.parse(fs.readFileSync(`tests/fixtures/persistence/export-memory/v${version}.json`, 'utf8')).content, version) as Array<{ settings: Parameters<typeof resolveVideoEditExportSettings>[0] }>)[0].settings
+  expect(resolveVideoEditExportSettings(remembered(2), sequence).useWebCache).toBe(false)
+  expect(resolveVideoEditExportSettings(remembered(memory.version), sequence).useWebCache).toBe(true)
 })
 
 it('历史 imported 风格及模板升级只保留原数据，不赋予外来代码标记', () => {

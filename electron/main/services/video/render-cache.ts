@@ -10,8 +10,8 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
  * 渲染层先 begin 拿到临时文件、按块写入编码结果，再 commit 原子改名；中途失败或取消 discard。
  * 说明记录所属剪辑与序列：删除剪辑、删除序列、启动时发现剪辑已不存在，都按它回收。
  */
-export function videoRenderCacheKey(windowKey: string, profile: string, projectId: string): string {
-  return createHash('sha256').update(JSON.stringify(['render-v2', projectId, windowKey, profile])).digest('hex')
+export function videoRenderCacheKey(windowKey: string, profile: string, projectId: string, provenance?: VideoRenderCacheEntry['provenance']): string {
+  return createHash('sha256').update(JSON.stringify(['render-v2', projectId, windowKey, profile, ...(provenance === 'web-cache' ? ['web-cache'] : [])])).digest('hex')
 }
 
 interface Pending { key: string; projectId: string }
@@ -64,12 +64,25 @@ export class VideoRenderCacheService {
     const pending = this.pending.get(temporaryPath)
     const key = videoRenderCacheKey(entry.windowKey, entry.profile, entry.projectId)
     if (!pending || pending.key !== key || pending.projectId !== entry.projectId) throw new Error('预渲染临时文件无效。')
-    this.pending.delete(temporaryPath)
     const bytes = (await fs.stat(temporaryPath)).size
     if (!bytes) { await this.discard(temporaryPath); throw new Error('预渲染文件为空。') }
-    const file = await this.files.adopt(key, temporaryPath)
-    await this.metadata.write(key, Buffer.from(JSON.stringify({ ...entry, bytes })))
-    return { ...entry, path: file, bytes }
+    const publishedKey = videoRenderCacheKey(entry.windowKey, entry.profile, entry.projectId, entry.provenance)
+    let staged = temporaryPath
+    try {
+      // 来源决定内容身份，精确重渲染不能覆盖仍被播放会话持有的网页缓存文件。
+      if (publishedKey !== key) {
+        const variant = await this.files.prepareTemporary(publishedKey)
+        if (!variant) throw new Error('作品目录不可用，暂时无法预渲染。')
+        await fs.rename(staged, variant)
+        staged = variant
+      }
+      const file = await this.files.adopt(publishedKey, staged)
+      await this.metadata.write(publishedKey, Buffer.from(JSON.stringify({ ...entry, bytes })))
+      return { ...entry, path: file, bytes }
+    } catch (error) {
+      await removeUnmanagedCachePath(staged, { force: true }).catch(() => undefined)
+      throw error
+    } finally { this.pending.delete(temporaryPath) }
   }
 
   async discard(temporaryPath: string): Promise<void> {

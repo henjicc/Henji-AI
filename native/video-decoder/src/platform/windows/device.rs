@@ -92,6 +92,10 @@ mod imp {
         ("h264", D3D11_DECODER_PROFILE_H264_VLD_NOFGT),
         ("hevc_main", D3D11_DECODER_PROFILE_HEVC_VLD_MAIN),
         ("hevc_main10", D3D11_DECODER_PROFILE_HEVC_VLD_MAIN10),
+        // Windows SDK dxva.h 的 RExt 档案；保留原始 GUID，避免未命名档案被误判为不支持。
+        ("hevc_main444", GUID::from_u128(0x4008018f_f537_4b36_98cf_61af8a2c1a33)),
+        ("hevc_main444_10", GUID::from_u128(0x0dabeffa_4458_4602_bc03_0795659d617c)),
+        ("hevc_main444_12", GUID::from_u128(0x9798634d_fe9d_48e5_b4da_dbec45b3df01)),
         ("vp9_profile0", D3D11_DECODER_PROFILE_VP9_VLD_PROFILE0),
         ("vp9_10bit_profile2", D3D11_DECODER_PROFILE_VP9_VLD_10BIT_PROFILE2),
         ("av1_profile0", D3D11_DECODER_PROFILE_AV1_VLD_PROFILE0),
@@ -110,7 +114,7 @@ mod imp {
             }
         }
         let named: Vec<&str> = NAMED_DECODER_PROFILES.iter().filter(|(_, guid)| guids.contains(guid)).map(|(name, _)| *name).collect();
-        json!({ "available": true, "count": count, "named": named })
+        json!({ "available": true, "count": count, "named": named, "guids": guids.iter().map(|guid| format!("{guid:?}")).collect::<Vec<_>>() })
     }
 
     /// 各共享格式在本设备上的纹理支持（只用于诊断日志；能否被 Chromium 导入以实测为准）。

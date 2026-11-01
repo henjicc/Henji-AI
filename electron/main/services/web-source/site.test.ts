@@ -45,3 +45,23 @@ it('内容指纹随文件内容变化，内容不变时不变', async () => {
   fs.writeFileSync(path.join(root, 'assets', 'app.js'), 'export const changed = true')
   expect(await webSourceContentHash(root)).not.toBe(first)
 })
+
+it('保留大小与修改时间的改写仍然使内容失效，新增和删除也参与全量指纹', async () => {
+  const { root } = site()
+  const file = path.join(root, 'assets', 'app.js')
+  const fixed = new Date('2026-01-01T00:00:00Z')
+  fs.utimesSync(file, fixed, fixed)
+  const first = await webSourceContentHash(root)
+  const size = fs.statSync(file).size
+  fs.writeFileSync(file, 'export []')
+  fs.utimesSync(file, fixed, fixed)
+  expect(fs.statSync(file).size).toBe(size)
+  expect(fs.statSync(file).mtimeMs).toBe(fixed.getTime())
+  const changed = await webSourceContentHash(root)
+  expect(changed).not.toBe(first)
+  const added = path.join(root, 'assets', 'extra.txt')
+  fs.writeFileSync(added, 'x')
+  expect(await webSourceContentHash(root)).not.toBe(changed)
+  fs.unlinkSync(added)
+  expect(await webSourceContentHash(root)).toBe(changed)
+})

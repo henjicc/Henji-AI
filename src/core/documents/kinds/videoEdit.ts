@@ -145,6 +145,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 58 → 59：导出记录的设置新增可选 useWebCache，缺省不用网页缓存，最低可读版本保持 58。
+    58: content => structuredClone(content),
     // 57 → 58：接受作者接口 14 的 fill 图层画面来源；旧源码、接口与库锁定原样保留。
     57: content => structuredClone(content),
     // 54 → 55：新增可选的元素效果覆盖、片段修改记录与作者接口 11（效果 key），已有内容原样保留；旧程序读不懂接口 11、会忽略效果覆盖，最低可读版本提高到 55。

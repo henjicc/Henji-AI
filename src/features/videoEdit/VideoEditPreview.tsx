@@ -24,6 +24,9 @@ import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
+import type { VideoEditRenderPrecision } from './engine/videoEditRenderer'
+import { videoEditWebDisplayTier } from './engine/videoEditWebInputs'
+import { videoEditCompositionHasWeb } from './application/videoEditWebContent'
 import { retainExplanationPixels } from './application/videoEditExplanationVisual'
 import { videoEditParameterUpdate, videoEditParameterAffectsAudio } from './engine/videoEditParameterUpdate'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
@@ -362,6 +365,15 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     // 回放分辨率（4.9）：播放用所选分辨率，暂停默认回到完整；选帧、设封面期间强制完整。
     let appliedDivisor: VideoEditRenderDivisor = 1
     let captureFull = 0
+    // 节目上屏的播放、拖动与暂停可用网页缓存；选帧、封面与讲解录制收录的是精确画面。起播预热与每帧请求共用这一个值。
+    let appliedPrecision: VideoEditRenderPrecision = 'web-cache'
+    // 节目画面在屏幕上的物理像素（随窗口、显示比例与显示器缩放变化）：网页输入按它相对序列尺寸的离散档位光栅化。
+    let displayPixels: { width: number; height: number } | undefined
+    /** 只跟随屏幕显示的档位（带迟滞）；选帧、封面与讲解录制期间实际请求用档位 1，结束后回到它。 */
+    let displayTier: number | undefined
+    let appliedWebTier = 1
+    /** 每次请求发出时的网页档位：选帧只收录按档位 1 请求的画面，晚到的旧档位回执不能冒充。 */
+    const requestedWebTiers = new WeakMap<object, number>()
     const audioScheduler = new VideoEditAudioScheduler()
     const scrubber = new VideoEditAudioScrubber()
     const scrubAudio = (seconds: number, mode: 'drag' | 'step'): void => {
@@ -406,7 +418,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const duration = Math.min(Math.round(VIDEO_EDIT_AUDIO_BLOCK_SECONDS * document.sampleRate), Math.round(videoEditDuration(document) / document.fps * document.sampleRate) - firstSample) / document.sampleRate
           if (duration > 0) { const block = { document, from, duration, buffer: (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration), ready: false }; firstBlock = block; block.buffer.then(() => { block.ready = true }, () => undefined) }
         }
-        if (!stopped) await renderer.armPlayback(frame)
+        if (!stopped) await renderer.armPlayback(frame, appliedPrecision)
       } catch (error) {
         if (armedDocument === document && armedFrame === frame) armedFrame = -1
         logger.debug('起播预热未完成', { event: 'video_edit.preview.arm_failed', error, context: { projectId: instance.document.id } })
@@ -438,9 +450,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (error) { backgroundFailure = { composition, frame: instance.frame, error }; wake(0) }
       else if (result.presented) { pausedPicture = true; setEffectFailure(result.effectErrors?.join('\n') ?? null); wake(0) }
     }
-    renderer.onPresentation = (frame, source, authorElements) => {
+    renderer.onPresentation = (frame, source, authorElements, provenance = 'live') => {
       if (stopped || session.current !== renderer || canvas.current !== surface) return
       if (surface.dataset.presentedSource !== source) surface.dataset.presentedSource = source
+      // 屏幕上画面的实际来源只认上屏通知：后台补画的暂停帧没有回执。
+      if (surface.dataset.provenance !== provenance) surface.dataset.provenance = provenance
       if (source === 'live' && authorElements && listVideoEditInstances().includes(instance) && instance.activeSequenceId === authorElements.sequenceId && authorElements.frame === frame && frame === instance.frame && !instance.playing && !instance.scrubbing) {
         installVideoEditCodeElements(instance, authorElements)
       }
@@ -480,7 +494,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.approximate = String(!!result.approximate)
       surface.dataset.presentedFrame = String(target)
-      surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor)
+      surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor); surface.dataset.webTier = videoEditCompositionHasWeb(composition) ? String(requestedWebTiers.get(result) ?? appliedWebTier) : '1'
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
       if (failedDocument === undefined) { setRenderFailure(null); setTrustFailure(undefined); failedRetryMs = 2000 }
@@ -499,7 +513,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
       captureFull++
       try {
-        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
+        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.provenance === 'web-cache' || surface.dataset.webTier !== '1' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
           current()
           if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
           await new Promise(resolve => setTimeout(resolve, 5))
@@ -524,6 +538,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const immediate = new MessageChannel()
     let immediatePending = false
     immediate.port1.onmessage = () => { immediatePending = false; if (!stopped) void step() }
+    const displayObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(([entry]) => {
+      if (!entry) return
+      const box = entry.devicePixelContentBoxSize?.[0]
+      displayPixels = { width: box?.inlineSize ?? entry.contentRect.width * window.devicePixelRatio, height: box?.blockSize ?? entry.contentRect.height * window.devicePixelRatio }
+      wake(0)
+    })
+    try { displayObserver?.observe(surface, { box: 'device-pixel-content-box' }) } catch { displayObserver?.observe(surface) }
     const wake = (delay: number): void => {
       if (stopped) return
       if (stepping) { wakeAfterStep = Math.min(wakeAfterStep ?? delay, delay); return }
@@ -558,7 +579,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     }
     const requestFrame = (playback: boolean, ...args: Parameters<VideoEditRenderSession['present']>): ReturnType<VideoEditRenderSession['present']> => {
       framesInFlight++; if (playback) playbackInFlight++
-      return renderer.present(...args).finally(() => { framesInFlight--; if (playback) playbackInFlight-- })
+      args[10] = appliedPrecision
+      const webTier = appliedWebTier
+      return renderer.present(...args).then(result => { requestedWebTiers.set(result, webTier); return result }).finally(() => { framesInFlight--; if (playback) playbackInFlight-- })
     }
     const advance = async (turn: { readonly released: boolean; handOff: () => void }): Promise<void> => {
       let requestCommand: object | undefined
@@ -626,6 +649,16 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (stopped) return
           appliedDivisor = divisor; lastRequested = -1
         }
+        appliedPrecision = captureFull > 0 || historyEnabled ? 'exact' : 'web-cache'
+        if (displayPixels) displayTier = videoEditWebDisplayTier(Math.min(displayPixels.width / document.width, displayPixels.height / document.height), displayTier)
+        const webTier = captureFull > 0 || historyEnabled ? 1 : displayTier ?? 1
+        if (webTier !== appliedWebTier && videoEditCompositionHasWeb(document)) {
+          await renderer.setWebDisplayScale(webTier)
+          if (stopped) return
+          appliedWebTier = webTier; lastRequested = -1
+        }
+        // 选帧与封面：屏幕上是网页缓存来源的画面且没有在途请求时，按精确来源重画这一帧。
+        if (appliedPrecision === 'exact' && surface.dataset.provenance === 'web-cache' && framesInFlight === 0) lastRequested = -1
         if (current.playing && (!wasPlaying || direction !== current.playbackDirection || activeCommand !== command)) {
           // 上一轮（定位前）的帧还占着渲染队列：等它们回执再起播（回执会唤醒调度），起播帧不排到满队列后面被拒。
           if (framesInFlight >= PROGRAM_FRAMES_IN_FLIGHT) return
@@ -850,7 +883,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     stopCurrent = (): void => {
       if (retired) return
       void flushVideoEditRenderPerformance()
-      retired = true; pauseSettled.current = () => Promise.resolve(); releaseSettleWaiters(); for (const event of idleEvents) window.removeEventListener(event, interaction, true); stopHoverFrames(); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); immediate.port1.close(); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
+      retired = true; pauseSettled.current = () => Promise.resolve(); releaseSettleWaiters(); for (const event of idleEvents) window.removeEventListener(event, interaction, true); stopHoverFrames(); displayObserver?.disconnect(); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); immediate.port1.close(); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
       const closeAudio = (): Promise<void> | undefined => { meter?.dispose(); return audio?.close() }
       programReleases.set(instance, Promise.allSettled([meter ? finishVideoEditAudioFade().then(closeAudio) : closeAudio(), renderer.dispose(), audioRenderer?.dispose()]))
       retainExplanationPixels(surface, -1)

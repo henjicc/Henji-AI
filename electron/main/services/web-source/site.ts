@@ -1,9 +1,8 @@
-import crypto from 'node:crypto'
-import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { codeWebFolderOf } from '../../../../src/core/videoEdit/codeMaterial/webSource'
 import { inferMimeFromPath } from '../../protocol'
+import { hashWebSourceFiles } from './hashes'
 
 /** 网页来源在离屏页面里的站点：只由处理器从网页文件夹提供，不对应任何真实主机。 */
 export const WEB_SOURCE_ORIGIN = 'https://web-source.henji.invalid'
@@ -60,19 +59,6 @@ export async function serveWebSourceFile(root: string, request: Request): Promis
   return new Response(new Uint8Array(await fsp.readFile(file)), { headers: { 'content-type': type, 'cache-control': 'no-store' } })
 }
 
-/** 内容指纹：全部文件按相对路径排序后，路径与各自 SHA-256 的汇总。文件按大小与修改时间记住上一次的散列，没变的不重读。 */
-const fileHashes = new Map<string, { size: number; mtimeMs: number; hash: string }>()
-async function fileHash(file: string, size: number, mtimeMs: number): Promise<string> {
-  const known = fileHashes.get(file)
-  if (known && known.size === size && known.mtimeMs === mtimeMs) return known.hash
-  const hash = await new Promise<string>((resolve, reject) => {
-    const digest = crypto.createHash('sha256')
-    fs.createReadStream(file).on('data', chunk => digest.update(chunk)).on('error', reject).on('end', () => resolve(digest.digest('hex')))
-  })
-  fileHashes.set(file, { size, mtimeMs, hash })
-  return hash
-}
-
 /** 网页文件夹里的全部文件（相对路径用正斜杠，按路径排序）；散列与打包、复制共用。 */
 export async function webSourceFiles(root: string): Promise<Array<{ relative: string; file: string; size: number; mtimeMs: number }>> {
   const files: Array<{ relative: string; file: string; size: number; mtimeMs: number }> = []
@@ -89,7 +75,5 @@ export async function webSourceFiles(root: string): Promise<Array<{ relative: st
 }
 
 export async function webSourceContentHash(root: string): Promise<string> {
-  const digest = crypto.createHash('sha256')
-  for (const item of await webSourceFiles(root)) digest.update(`${item.relative}\0${await fileHash(item.file, item.size, item.mtimeMs)}\n`)
-  return digest.digest('hex')
+  return (await hashWebSourceFiles(await webSourceFiles(root))).contentHash
 }

@@ -118,7 +118,7 @@ sequence.annotations = [
   goldenMark('golden-annotation-marker', { kind: 'marker', x: .8, y: .8, number: 2 }, '第二步在这里停顿', { color: 'green' }),
 ] as typeof sequence.annotations
 document.exportHistory = [{ id: 'golden-export', taskId: 'golden-render', sequenceId: sequence.id, name: '黄金导出', presetName: '自定义导出', rangeSource: 'explicit',
-  path: '/persistence-project/导出/黄金.mp4', completedAt: Date.parse(timestamp), settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, renderAtOutputResolution: false },
+  path: '/persistence-project/导出/黄金.mp4', completedAt: Date.parse(timestamp), settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, renderAtOutputResolution: false, useWebCache: true },
   range: { startFrame: 0, endFrame: 30 }, assetRef: { kind: 'asset', id: 'golden-export-asset' } }]
 // 29：动态链接的音频编辑成品记着它由源录音的哪些采样帧区间拼成
 document.media.push({ id: 'golden-voice', name: '口播 · 剪后声音', path: '/persistence-project/生成结果/finished-golden.wav', kind: 'audio', width: 0, height: 0, durationSeconds: 3, hasAudio: true, linkedTimeline: { sampleRate: 48000, spans: [0, 48000, 96000, 192000] } })
@@ -335,8 +335,8 @@ const values: Record<string, unknown> = {
   'video-template-library': { id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'code', apiVersion: CODE_AUTHOR_API_VERSION, libraries: {}, code: { entry: 'main.ts', files: { 'main.ts': source } }, durationSeconds: 4 } },
   'video-style-package': { format: 'henji-video-style', style: { ...goldenStyle, imported: true }, templates: [{ id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'native', content: { width: 1920, height: 1080, fps: 30, clips: [nativeClipContent] } } }], media: { thumbnail: '/9j/4AAQ', anchors: ['/9j/4AAQ'] } },
   'text-presets': [{ id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) }],
-  'export-memory': [{ projectId: 'golden-video_edit', sequenceId: 'main', presetId: VIDEO_EDIT_EXPORT_PRESETS[0].id, settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings, directory: '/exports', fileName: '成片 (2).mp4', requestedFileName: '成片.mp4', loudnessRequested: false, range: { startFrame: 0, endFrame: 300 }, rangeSource: 'content', completedAt: 1791504000000 }],
-  'export-presets': [{ ...VIDEO_EDIT_EXPORT_PRESETS[0], id: 'golden-export', name: '黄金导出', settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, renderAtOutputResolution: false } }],
+  'export-memory': [{ projectId: 'golden-video_edit', sequenceId: 'main', presetId: VIDEO_EDIT_EXPORT_PRESETS[0].id, settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, useWebCache: true }, directory: '/exports', fileName: '成片 (2).mp4', requestedFileName: '成片.mp4', loudnessRequested: false, range: { startFrame: 0, endFrame: 300 }, rangeSource: 'content', completedAt: 1791504000000 }],
+  'export-presets': [{ ...VIDEO_EDIT_EXPORT_PRESETS[0], id: 'golden-export', name: '黄金导出', settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, renderAtOutputResolution: false, useWebCache: true } }],
   'preset-preferences': [{ category: 'style', id: 'golden-kit', rating: 5, isDefault: true }, { category: 'transition', id: 'cross_dissolve', rating: 3, isDefault: false }],
   'video-preset-package': { format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: [...legacyPresetItems, { category: 'effect', preset: goldenPiece }] },
   'voice-library': [{ voiceId: 'golden-voice', voiceName: '黄金音色', providerId: 'kie', createdAt: timestamp, updatedAt: timestamp, status: 'ready', activated: true }],
@@ -423,7 +423,9 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
       const authorFixture = (value: unknown): unknown => {
         const video = value as VideoEditDocument
         const elementOverrides = { 'golden-motion': { effects: { goldenGlow: { enabled: false, values: { strength: 30 }, curves: { strength: [{ id: 'golden-effect-key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 30, interpolation: 'linear' as const }] } } }, addedEffects: [{ key: 'extraBlur', id: 'blur', params: { amount: 10 } }] } }
-        return { ...video, sequences: video.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.code ? { ...clip, elementOverrides, edits: { 'element:golden-motion:effect:goldenGlow:strength': { by: 'user' as const, at: 1793498400000 } } } : clip) })), codeMaterials: structuredClone(document.codeMaterials), styles: video.styles?.map(style => ({ ...style, sample: { ...style.sample, code: structuredClone(document.styles![0].sample.code) } })) }
+        return { ...video, sequences: video.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.code ? { ...clip, elementOverrides, edits: { 'element:golden-motion:effect:goldenGlow:strength': { by: 'user' as const, at: 1793498400000 } } } : clip) })), codeMaterials: structuredClone(document.codeMaterials), styles: video.styles?.map(style => ({ ...style, sample: { ...style.sample, code: structuredClone(document.styles![0].sample.code) } })),
+          // 导出记录覆盖当前全部可选导出开关（含网页缓存）。
+          ...(video.exportHistory ? { exportHistory: video.exportHistory.map(entry => ({ ...entry, settings: { ...entry.settings, useWebCache: true } })) } : {}) }
       }
       content = format.id === 'document.video_edit' ? authorFixture(content) : (() => {
         const recording = content as { scriptCapture: { baselines: Array<{ content: unknown }> } }

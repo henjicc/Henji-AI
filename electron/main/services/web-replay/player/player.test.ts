@@ -132,7 +132,6 @@ vi.mock('../store', () => ({ WebRecordingStore: class {}, digestBase64: vi.fn() 
 vi.mock('./gpuCapture', () => {
   class GpuCaptureError extends Error {}
   return {
-    isReplayReader: () => false,
     GpuCaptureError,
     GpuFrameCapture: class {
       async open(): Promise<void> { fake.gpuOpened += 1; if (!fake.gpuBreaksMidway) throw new Error('no WebGPU here') }

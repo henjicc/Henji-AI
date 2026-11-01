@@ -33,5 +33,6 @@ export interface HenjiVideoFramesApi {
    * 之后文件夹变化经 `onWebContentChanged` 通知。
    */
   watchWebContent: (paths: string[]) => Promise<Record<string, string | null>>
+  webCacheForeground: (active: boolean) => Promise<void>
   onWebContentChanged: (handler: (change: WebSourceContentChange) => void) => () => void
 }

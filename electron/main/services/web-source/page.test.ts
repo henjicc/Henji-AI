@@ -1,6 +1,8 @@
 import { sharedTexture, type WebFrameMain } from 'electron'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { WebSourcePage } from './page'
+import { WebCacheSubmissions } from './submissions'
+vi.mock('./session', () => ({ webSourceSession: () => ({ partition: 'test', observe: async () => undefined, release: () => undefined }) }))
 import { WEB_TEXT_SAMPLER_VERSION } from '../../../../src/core/videoEdit/webTextGeometry'
 
 const boundary = vi.hoisted(() => {
@@ -282,4 +284,156 @@ it('超过设备倍率才重建页面，之后降倍率保留页面并继续取�
   expect(await lowered).toMatchObject({ pixelWidth: 50, pixelHeight: 50 })
   expect(boundary.create).toHaveBeenCalledTimes(creations)
   expect(boundary.contents.debugger.sendCommand).toHaveBeenLastCalledWith('Emulation.setDeviceMetricsOverride', expect.objectContaining({ deviceScaleFactor: 2 }))
+})
+
+it('可靠快照只允许快照路径，身份不符作废并拒绝倒退；关闭或重载使已交付帧失效', async () => {
+  page.close()
+  page = new WebSourcePage('recording', { id: 1, mainFrame: {} as WebFrameMain, isDestroyed: () => false, send: vi.fn(), onGone: () => () => undefined },
+    'route', { root: 'site' }, { width: 100, height: 100, region: [0, 0, 100, 100], scale: 1 }, 'hash', vi.fn(), boundary.fallback, new WebCacheSubmissions({ info: vi.fn() }))
+  await page.open()
+  const readSnapshot = vi.fn(async (texture: { release: () => void }) => {
+    texture.release()
+    return { width: 100, height: 100, format: 'yuv444p' as const, changed: true, dirty: { x: 0, y: 0, width: 100, height: 100 }, bitmap: () => Buffer.alloc(30000), previewJpeg: () => '' }
+  })
+  await expect(page.captureReliable(0, 'fallback', { readSnapshot })).rejects.toThrow('html-in-canvas')
+  // 失败后的完整重载以正式生命周期完成，再安排可用的快照边界。
+  await page.reload('hash')
+  page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
+  const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+    if (code.includes('const paint =')) {
+      paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
+      return { boxes: null, restore: Array(1024).fill(0) }
+    }
+    return true
+  })
+  const first = await page.captureReliable(0, 'accepted', { readSnapshot })
+  expect(first.isCurrent()).toBe(true)
+  expect(await first.validate()).toBe(true)
+  expect(readSnapshot).toHaveBeenCalledOnce()
+  const stale = expect(page.captureReliable(1, 'stale', { readSnapshot: async texture => { texture.release(); return null } })).rejects.toThrow('身份校验')
+  await stale
+  expect(first.isCurrent()).toBe(false)
+  expect(await first.validate()).toBe(false)
+  expect(sharedTexture.sendSharedTexture).not.toHaveBeenCalled()
+})
+
+it('取消正在读回的可靠快照，迟到结果不能取得发布资格', async () => {
+  page.close()
+  page = new WebSourcePage('recording', { id: 1, mainFrame: {} as WebFrameMain, isDestroyed: () => false, send: vi.fn(), onGone: () => () => undefined },
+    'route', { root: 'site' }, { width: 100, height: 100, region: [0, 0, 100, 100], scale: 1 }, 'hash', vi.fn(), boundary.fallback, new WebCacheSubmissions({ info: vi.fn() }))
+  await page.open()
+  page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
+  const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async () => {
+    paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
+    return { boxes: null, restore: Array(1024).fill(0) }
+  })
+  let finish!: () => void
+  const captured = expect(page.captureReliable(0, 'cancelled', { readSnapshot: async texture => {
+    texture.release()
+    await new Promise<void>(resolve => { finish = resolve })
+    return null
+  } })).rejects.toThrow('已取消')
+  await vi.advanceTimersByTimeAsync(0)
+  expect(page.cancel('cancelled')).toBe(true)
+  finish()
+  await captured
+  expect(boundary.release).toHaveBeenCalledOnce()
+})
+
+it('精确导出只seek一次，身份验证后同一纹理附原始像素交付，引用由消费端释放', async () => {
+  const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
+  const restore = Array.from({ length: 1024 }, (_, index) => index % 256)
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+    if (code.includes('const paint =')) {
+      paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 101, height: 101 } } } })
+      return { boxes: null, restore }
+    }
+    return true
+  })
+  const readSnapshot = vi.fn(async (texture: { release(): void; textureInfo: { codedSize: { width: number; height: number }; visibleRect: { x: number; y: number; width: number; height: number } } }) => {
+    expect(texture.textureInfo.codedSize).toEqual({ width: 101, height: 101 })
+    expect(texture.textureInfo.visibleRect).toEqual({ x: 0, y: 0, width: 100, height: 100 })
+    texture.release()
+    expect(boundary.release).not.toHaveBeenCalled()
+    return { width: 100, height: 100, format: 'yuv444p' as const, changed: true, dirty: { x: 0, y: 0, width: 100, height: 100 }, bitmap: () => Buffer.alloc(30000), previewJpeg: () => '' }
+  })
+  const result = await page.captureReliable(0, 'export', { readSnapshot }, undefined, undefined, {})
+  expect(result.isCurrent()).toBe(true)
+  expect(boundary.contents.executeJavaScript.mock.calls.filter(([code]) => code.includes('page.seek(0)'))).toHaveLength(1)
+  expect(sharedTexture.sendSharedTexture).toHaveBeenCalledOnce()
+  expect(vi.mocked(sharedTexture.sendSharedTexture).mock.calls[0][1]).toMatchObject({ webRestore: restore, displaySize: { width: 100, height: 100 }, request: { id: 'export' } })
+  expect(boundary.release).toHaveBeenCalledOnce()
+})
+
+it('快照提交后抢占阻止读回，恢复不重复seek；暂停时取消归还尚未交出的纹理', async () => {
+  page.close()
+  const submissions = new WebCacheSubmissions({ info: vi.fn() })
+  page = new WebSourcePage('recording', { id: 1, mainFrame: {} as WebFrameMain, isDestroyed: () => false, send: vi.fn(), onGone: () => () => undefined },
+    'route', { root: 'site' }, { width: 100, height: 100, region: [0, 0, 100, 100], scale: 1 }, 'hash', vi.fn(), boundary.fallback, submissions)
+  await page.open()
+  page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
+  const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
+  let hold!: ReturnType<WebCacheSubmissions['hold']>
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async () => {
+    paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
+    hold = submissions.hold('playing')
+    return { boxes: null, restore: Array(1024).fill(0) }
+  })
+  const readSnapshot = vi.fn(async (texture: { release: () => void }) => {
+    texture.release()
+    return { width: 100, height: 100, format: 'yuv444p' as const, changed: true, dirty: { x: 0, y: 0, width: 100, height: 100 }, bitmap: () => Buffer.alloc(30000), previewJpeg: () => '' }
+  })
+  const first = page.captureReliable(0, 'resume', { readSnapshot })
+  await vi.advanceTimersByTimeAsync(0); await hold.drained
+  expect(readSnapshot).not.toHaveBeenCalled()
+  const controller = new AbortController()
+  const queued = expect(page.captureReliable(1, 'queued', { readSnapshot }, undefined, controller.signal)).rejects.toThrow('取消排队')
+  controller.abort(new Error('取消排队'))
+  await queued
+  expect(readSnapshot).not.toHaveBeenCalled()
+  const seeks = boundary.contents.executeJavaScript.mock.calls.length, windows = boundary.create.mock.calls.length
+  hold.resume()
+  const firstFrame = await first
+  await vi.advanceTimersByTimeAsync(0)
+  expect(firstFrame.isCurrent()).toBe(true)
+  expect(boundary.contents.executeJavaScript).toHaveBeenCalledTimes(seeks)
+  expect(boundary.create).toHaveBeenCalledTimes(windows)
+  const cancelled = expect(page.captureReliable(1, 'cancel-paused', { readSnapshot })).rejects.toThrow('已取消')
+  await vi.advanceTimersByTimeAsync(0); await hold.drained
+  expect(page.cancel('cancel-paused')).toBe(true)
+  await cancelled
+  expect(readSnapshot).toHaveBeenCalledOnce()
+  expect(boundary.release).toHaveBeenCalledTimes(2)
+  hold.resume()
+})
+
+it('开页在实际提交点等待抢占，任务取消无需恢复且不进入后续快照准备', async () => {
+  page.close()
+  const submissions = new WebCacheSubmissions({ info: vi.fn() })
+  page = new WebSourcePage('recording', { id: 1, mainFrame: {} as WebFrameMain, isDestroyed: () => false, send: vi.fn(), onGone: () => () => undefined },
+    'route', { root: 'site' }, { width: 100, height: 100, region: [0, 0, 100, 100], scale: 1 }, 'hash', vi.fn(), boundary.fallback, submissions)
+  const hold = submissions.hold('playing'), controller = new AbortController()
+  const windows = boundary.create.mock.calls.length
+  const cancelled = expect(page.open(controller.signal)).rejects.toThrow('取消开页')
+  await vi.advanceTimersByTimeAsync(0)
+  controller.abort(new Error('取消开页'))
+  await cancelled
+  expect(boundary.create).toHaveBeenCalledTimes(windows)
+  hold.resume()
+  let readyHold!: ReturnType<WebCacheSubmissions['hold']>
+  boundary.contents.executeJavaScript.mockImplementationOnce(async () => {
+    readyHold = submissions.hold('dragging')
+    return {}
+  })
+  const prepareCalls = boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.length
+  const next = new AbortController()
+  const opened = expect(page.open(next.signal)).rejects.toThrow('取消准备')
+  await vi.advanceTimersByTimeAsync(0); await readyHold.drained
+  expect(boundary.contents.executeJavaScriptInIsolatedWorld).toHaveBeenCalledTimes(prepareCalls)
+  next.abort(new Error('取消准备'))
+  await opened
+  expect(boundary.fallback).not.toHaveBeenCalled()
+  readyHold.resume()
 })

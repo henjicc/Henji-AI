@@ -57,8 +57,9 @@ function decoderStarted(request: VideoDecoderOpenRequest): VideoDecoderDecoderSt
 }
 
 function createService() {
-  let eventListener: ((event: VideoDecoderEvent) => void) | null = null
-  let lifecycleListener: ((event: VideoDecoderLifecycleEvent) => void) | null = null
+  const eventListeners = new Set<(event: VideoDecoderEvent) => void>()
+  const lifecycleListeners = new Set<(event: VideoDecoderLifecycleEvent) => void>()
+  const emit = (event: VideoDecoderEvent): void => { for (const listener of eventListeners) listener(event) }
   const notifications: Array<{ streamId: string; slot: number }> = []
   const stopped: string[] = []
   const closedHandles: string[][] = []
@@ -82,12 +83,12 @@ function createService() {
       return true
     }),
     onEvent: (listener) => {
-      eventListener = listener
-      return () => { eventListener = null }
+      eventListeners.add(listener)
+      return () => { eventListeners.delete(listener) }
     },
     onLifecycle: (listener) => {
-      lifecycleListener = listener
-      return () => { lifecycleListener = null }
+      lifecycleListeners.add(listener)
+      return () => { lifecycleListeners.delete(listener) }
     },
     closeClientHandles: vi.fn(async (handles: string[]) => {
       closedHandles.push(handles)
@@ -100,9 +101,9 @@ function createService() {
     notifications,
     stopped,
     closedHandles,
-    emit: (event: VideoDecoderEvent) => eventListener?.(event),
-    lifecycle: (event: VideoDecoderLifecycleEvent) => lifecycleListener?.(event),
-    frame: (streamId: string, slot: number, frameIndex = slot) => eventListener?.({ event: 'frame', streamId, slot, frameIndex, timestampUs: frameIndex * 16667 }),
+    emit,
+    lifecycle: (event: VideoDecoderLifecycleEvent) => { for (const listener of lifecycleListeners) listener(event) },
+    frame: (streamId: string, slot: number, frameIndex = slot) => emit({ event: 'frame', streamId, slot, frameIndex, timestampUs: frameIndex * 16667 }),
     beforeStartResolves: (callback: (streamId: string) => void) => { beforeStartResolves = callback },
   }
 }
@@ -160,6 +161,25 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 const request = { route: 'vf-route-1', format: 'nv12' as const, width: 3840, height: 2160, fps: 60 }
 
 describe('VideoFrameBridge', () => {
+  it('共用原生服务的实探与业务桥分配不同流身份，关闭实探不影响业务帧', async () => {
+    const native = createService(), businessTextures = createSharedTexture(), probeTextures = createSharedTexture()
+    const business = new VideoFrameBridge({ service: native.service, sharedTexture: businessTextures.api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    const probe = new VideoFrameBridge({ service: native.service, sharedTexture: probeTextures.api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    try {
+      const first = await business.openTestStream(createTarget().target, request)
+      const second = await probe.openTestStream(createTarget().target, request)
+      expect(first.streamId).not.toBe(second.streamId)
+      native.frame(second.streamId, 0, 0)
+      expect(probeTextures.sends).toHaveLength(1)
+      expect(businessTextures.sends).toHaveLength(0)
+      expect(native.notifications).toEqual([])
+      await probe.dispose()
+      native.frame(first.streamId, 0, 0)
+      expect(businessTextures.sends).toHaveLength(1)
+      expect(native.notifications).toEqual([])
+    } finally { await business.dispose(); await probe.dispose() }
+  })
+
   it('imports each frame by its slot handle, sends it to the requesting frame and recycles the slot after all references are released', async () => {
     const native = createService()
     const shared = createSharedTexture()
@@ -264,10 +284,29 @@ describe('VideoFrameBridge', () => {
     expect(hasGoneListener()).toBe(false)
     native.frame('vf-1', 1)
     expect(shared.imports).toHaveLength(1)
-    expect(native.notifications).toEqual([{ streamId: 'vf-1', slot: 1 }])
+    expect(native.notifications).toEqual([])
     shared.imports[0].allReleased()
-    expect(native.notifications).toHaveLength(1)
+    expect(native.notifications).toHaveLength(0)
     expect((await bridge.stats()).unreleasedImports).toBe(0)
+  })
+
+  it('发送失败已移除的流仍须等待原生关流完成才结束 dispose', async () => {
+    const native = createService()
+    let finish!: () => void
+    vi.mocked(native.service.stopStream).mockImplementation(streamId => new Promise(resolve => {
+      finish = () => resolve({ streamId, stopped: true, final: null })
+    }))
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: createSharedTexture(async () => { throw new Error('reader gone') }).api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    const info = await bridge.openDecoder(createTarget().target, { route: 'test', path: 'fixture.mp4', purpose: 'seek' })
+    native.frame(info.streamId, 0)
+    await flush()
+    let disposed = false
+    const disposing = bridge.dispose().then(() => { disposed = true })
+    await flush()
+    expect(disposed).toBe(false)
+    finish()
+    await disposing
+    expect(disposed).toBe(true)
   })
 
   it('closes all streams of a page that navigated, crashed or was destroyed', async () => {
@@ -400,6 +439,83 @@ describe('VideoFrameBridge decoder sessions', () => {
     expect(await bridge.cancelSchedule(7, 'vf-1', 's1')).toBe(true)
     await bridge.closeStream('vf-1', 'requested', 7)
     await expect(bridge.frameAt(7, { streamId: 'vf-1', time: 1, ticket: 't2' })).rejects.toThrow()
+  })
+
+  it('缓存交付改写来源身份并裁边，失效帧归还原槽且不送出', async () => {
+    const native = createService(), textures = createSharedTexture()
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: textures.api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    const info = await bridge.openDecoder(createTarget(7).target, decoderRequest)
+    vi.mocked(native.service.frameAt).mockImplementation(async (streamId, _time, ticket) => {
+      native.emit({ event: 'frame', streamId, slot: 0, frameIndex: 0, timestampUs: 0, ptsUs: 0, durationUs: 16666, request: { kind: 'frame_at', id: ticket } })
+      return { found: true, ticket, ptsUs: 0, seeked: false, decodeMs: 0 }
+    })
+    const delivery = { streamId: 'web-source', route: 'web-route', timestampUs: 2000000, width: 3839, height: 2159, accept: () => true }
+    await bridge.frameAt(7, { streamId: info.streamId, time: 0, ticket: 'hit' }, delivery)
+    expect(textures.sends[0].meta).toMatchObject({ streamId: 'web-source', route: 'web-route', timestampUs: 2000000 })
+    expect(textures.imports[0].options.textureInfo).toMatchObject({ timestamp: 2000000, visibleRect: { x: 0, y: 0, width: 3839, height: 2159 } })
+    textures.imports[0].allReleased()
+    await expect(bridge.frameAt(7, { streamId: info.streamId, time: 0, ticket: 'stale' }, { ...delivery, accept: () => false })).rejects.toThrow('已失效')
+    expect(textures.sends).toHaveLength(1)
+    expect(native.notifications).toHaveLength(2)
+    await bridge.dispose()
+  })
+
+  it('共享解码会话逐次交付到窗口，窗口退出与取消只结束自己的请求', async () => {
+    const native = createService(), textures = createSharedTexture(), first = createTarget(7), second = createTarget(8)
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: textures.api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    try {
+      const info = await bridge.openSharedDecoder(decoderRequest)
+      const delivery = { streamId: 'web-source', route: 'web-route', timestampUs: 0, width: 3840, height: 2160, accept: () => true, ticket: 'same-ticket' }
+      await expect(bridge.frameAt(7, { streamId: info.streamId, time: 0, ticket: 'unrouted' })).rejects.toMatchObject({ code: 'SESSION_GONE' })
+      vi.mocked(native.service.frameAt).mockImplementationOnce((_id, _time, _ticket, options) => new Promise((_, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new VideoDecoderError('CANCELLED', 'cancelled')), { once: true })
+      }))
+      const pending = bridge.frameAt(7, { streamId: info.streamId, time: 0, ticket: 'first' }, { ...delivery, target: first.target })
+      expect(bridge.cancelFrameAt(8, info.streamId, 'first')).toBe(false)
+      first.destroy(); first.gone('closed')
+      await expect(pending).rejects.toMatchObject({ code: 'CANCELLED' })
+      await bridge.closeTarget(7, 'closed')
+      expect(await bridge.closeStream(info.streamId, 'requested', 8)).toBe(false)
+      expect(native.stopped).toEqual([])
+      vi.mocked(native.service.frameAt).mockImplementation(async (streamId, _time, ticket) => {
+        native.emit({ event: 'frame', streamId, slot: 0, frameIndex: 0, timestampUs: 0, ptsUs: 0, request: { kind: 'frame_at', id: 'first' } })
+        native.emit({ event: 'frame', streamId, slot: 1, frameIndex: 1, timestampUs: 0, ptsUs: 0, request: { kind: 'frame_at', id: ticket } })
+        return { found: true, ticket, seeked: false, decodeMs: 0 }
+      })
+      await bridge.frameAt(8, { streamId: info.streamId, time: 0, ticket: 'second' }, { ...delivery, target: second.target })
+      expect(textures.sends).toHaveLength(1)
+      expect(textures.sends[0].options.frame).toBe(second.mainFrame)
+      expect(textures.sends[0].meta).toMatchObject({ request: { id: 'same-ticket' }, streamId: 'web-source' })
+      textures.imports[0].allReleased()
+      expect(native.notifications.map(frame => frame.slot)).toEqual([0, 1])
+    } finally { await bridge.dispose() }
+    expect(native.stopped).toHaveLength(1)
+  })
+
+  it('共享会话旧窗口导航后的迟到发送失败不关闭另一个窗口的读取', async () => {
+    const native = createService(), first = createTarget(7), second = createTarget(8)
+    let rejectSend!: (error: Error) => void
+    const textures = createSharedTexture(async options => {
+      if (options.frame === first.mainFrame) await new Promise<void>((_resolve, reject) => { rejectSend = reject })
+    })
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: textures.api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    try {
+      const info = await bridge.openSharedDecoder(decoderRequest)
+      vi.mocked(native.service.frameAt).mockImplementation(async (streamId, _time, ticket) => {
+        native.emit({ event: 'frame', streamId, slot: ticket === 'first' ? 0 : 1, frameIndex: 0, timestampUs: 0, ptsUs: 0, request: { kind: 'frame_at', id: ticket } })
+        return { found: true, ticket, seeked: false, decodeMs: 0 }
+      })
+      const delivery = { streamId: 'web', route: 'web', timestampUs: 0, width: 3840, height: 2160, accept: () => true }
+      const abandoned = bridge.frameAt(7, { streamId: info.streamId, time: 0, ticket: 'first' }, { ...delivery, target: first.target })
+      first.gone('navigated')
+      await expect(abandoned).rejects.toThrow('目标窗口已关闭')
+      const next = bridge.frameAt(8, { streamId: info.streamId, time: 1, ticket: 'second' }, { ...delivery, target: second.target })
+      rejectSend(new Error('old render frame gone'))
+      await expect(next).resolves.toMatchObject({ found: true })
+      await flush()
+      expect(native.stopped).toEqual([])
+      for (const imported of textures.imports) imported.allReleased()
+    } finally { await bridge.dispose() }
   })
 
   it('放弃在途取帧：只有发起窗口能按票据中止自己会话的取帧，中止经信号交给解码服务；已结束的取帧找不到', async () => {

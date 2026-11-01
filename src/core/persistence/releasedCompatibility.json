@@ -415,7 +415,8 @@
         "55": "d63120723af2463706be06867f6967efce2585408c209744dcfdd0f05a095c69",
         "56": "9d6e78eee2966a790a3151ff461481566d06e2141cd9ba42a5089e4b009f7d64",
         "57": "7df27a2f12f8c8f9172b4b311cfeba01e719296853bdfef4343cfbb70435a099",
-        "58": "51cac546fd7a5f09631dcc1b3021f9e30954b9a32da27d0667c353426da1d27e"
+        "58": "51cac546fd7a5f09631dcc1b3021f9e30954b9a32da27d0667c353426da1d27e",
+        "59": "2e23ea480a2fe16ac750549f69043d2a1958b7baa815bfe477198157a92f78f0"
       },
       "readers": {
         "17": 17,
@@ -452,7 +453,8 @@
         "55": 55,
         "56": 56,
         "57": 57,
-        "58": 58
+        "58": 58,
+        "59": 58
       },
       "samples": {
         "v17.json": "04f30f2c819759b07c9ca5415541f277636eddce7dd1ee5808abd2e7ee34e414",
@@ -496,7 +498,8 @@
         "v55.json": "20896b1bff7fb15e6d01695a3e305552b04d7e3557fe56ff97f246fc395d9de4",
         "v56.json": "094630bb9ffb22319c2b180e4622c3fcb8f9b2f3d16b53dde97de7fe06f499f7",
         "v57.json": "ca411b36fdd4736ae88a7df17cc9a6ad1785d577f0a8deb3dfd7b28a7320b212",
-        "v58.json": "8f727a8fe1125391d3da48ea2d04027e5122d7a4a4969a2fdc9b2ef689060592"
+        "v58.json": "8f727a8fe1125391d3da48ea2d04027e5122d7a4a4969a2fdc9b2ef689060592",
+        "v59.json": "3742ccc175f797d8467e40ee34cb07f19eaf5570fa464cea38fc3fbef96a92c6"
       }
     },
     "document.canvas": {
@@ -630,7 +633,8 @@
         "58": "99082638ad2e4b411e2e6e5a17f5d22a768c9debcc6f3c3222611164c7f3a12e",
         "59": "5d6d1fd087565e8b6d712cb3f777e3bc05885c131b04154ae7d9875cd21ea349",
         "60": "5543c632765d52ac82b768ec21286c3c0177fb91692bc61ab13eef62b4281050",
-        "61": "2e6654ae9b3816e10b68ac25e570f4168bced45d52b2fa80f38e7b8bcc48d8e2"
+        "61": "2e6654ae9b3816e10b68ac25e570f4168bced45d52b2fa80f38e7b8bcc48d8e2",
+        "62": "03d60deaffd86415100903acf63ed6b80ef3c648c276b45d381edd976de063b9"
       },
       "readers": {
         "19": 19,
@@ -668,7 +672,8 @@
         "58": 58,
         "59": 59,
         "60": 60,
-        "61": 61
+        "61": 61,
+        "62": 61
       },
       "samples": {
         "v19.json": "bed3ba5d2510d2fcb6c72a8f0608f39ff45af13e01ff2db2963e4008afd6a5b8",
@@ -713,7 +718,8 @@
         "v58.json": "4e1853ef0af279462cae724f5b6c34eadd5925c2648637c0f4eaa68de4066ef0",
         "v59.json": "bb50737ffa2cd615099b7d625d405705465a68a63be0bfa5218cc4ac624d7c02",
         "v60.json": "b17f1da804e12789c829641757f73ad287103da1c8bd0f77bcfadd42ac12e9a2",
-        "v61.json": "28ada7978e81e1a012761ac30902173911218e14a3edcf59a5e6bfb1a02d9a25"
+        "v61.json": "28ada7978e81e1a012761ac30902173911218e14a3edcf59a5e6bfb1a02d9a25",
+        "v62.json": "bb8e18357af0743cb4115568fb03ac23e0e9feaa6e24fecf7477548797ecd293"
       }
     },
     "project": {
@@ -1060,19 +1066,22 @@
         "1": "998ad75a95858f7fdcd0e5e079741e41e2db9d2ad7ac5a64bdb872ee7d648ca9",
         "2": "86b27b369d8205f844fbc06de0f8d38abe597d69ada7c70e861a892a3c53e2e0",
         "3": "e9b3319eee0343826a4b8f8660fd38ce535cd40149ff33a1f56e31ab47001c5d",
-        "4": "2ebbf0acf4c37f67724fd0b9a462f70909d838f78a60887a6ea7aea9b065a8a3"
+        "4": "2ebbf0acf4c37f67724fd0b9a462f70909d838f78a60887a6ea7aea9b065a8a3",
+        "5": "e3a6c15f88e02dffc868fce7c7459c575c52417f605e935cf4a2a65134d38b6a"
       },
       "readers": {
         "1": 1,
         "2": 1,
         "3": 1,
-        "4": 1
+        "4": 1,
+        "5": 1
       },
       "samples": {
         "v1.json": "7e7c6b8ed2013eec729a73e45a596f60af3ba9953ed689d01bd328725b966e5b",
         "v2.json": "6fbbb36dea8790ad6c973debf5082088c52fb5e377b6202cccf7941b9eed2e53",
         "v3.json": "01d2af70c111bfdeab93f963ba9978013c2d4b9415480e66f7918686f20e6a25",
-        "v4.json": "e548eb5d094b65a93d8b6eb3680e451a572747736ad6f509d0befe660c3bbe8d"
+        "v4.json": "e548eb5d094b65a93d8b6eb3680e451a572747736ad6f509d0befe660c3bbe8d",
+        "v5.json": "f0b1c0f8211c958bcfe4085c891c15f6362dac826dd2a9c7ee9fe3aadbe68b7e"
       }
     },
     "preset-preferences": {
@@ -1754,14 +1763,17 @@
         }
       ],
       "versions": {
-        "2": "749c73d98e8d14dcb0ce66c40e42dc6728c99f05615c75c132cffe513a46f089"
+        "2": "749c73d98e8d14dcb0ce66c40e42dc6728c99f05615c75c132cffe513a46f089",
+        "3": "be306d36e30cd28d82fdd78c561d95d80f42afb9db19d36a27c6b20937ed4461"
       },
       "readers": {
-        "2": 1
+        "2": 1,
+        "3": 1
       },
       "samples": {
         "v1.json": "3c6304a7f1a7720c67b17ba076aeae066544a13611cfc60b1d78471abfd4caf9",
-        "v2.json": "c6d8749ee207c7b862723200cb885526cf1659ceadd94c27a98d7f4122ed39d3"
+        "v2.json": "c6d8749ee207c7b862723200cb885526cf1659ceadd94c27a98d7f4122ed39d3",
+        "v3.json": "047ce2062dfa834b3936d08f1eabc44fe6057c1d0c58b9e42ff1609e689707aa"
       }
     },
     "video-effect-library": {

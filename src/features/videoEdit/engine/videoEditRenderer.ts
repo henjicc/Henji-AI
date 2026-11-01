@@ -1,11 +1,13 @@
+import type { WebSourceProvenance, WebSourceCaptureRequest } from '@/platform/contracts/videoFrames'
 import { freezeWebText, unavailableWebText } from '@/core/videoEdit/webTextGeometry'
 import { resolveVideoEditTransitionSource } from '@/core/videoEdit/transitionCatalog'
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
 import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
-import { codeMediaInputKey, codeMediaInputComposition, codeMediaInputNextFrame, codeMediaInputSample, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
+import { codeMediaInputKey, codeMediaInputComposition, codeMediaInputNextFrame, codeMediaInputSample, codeMediaWebTimeGrid, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
 import { codeWebView } from '@/core/videoEdit/codeMaterial/webSource'
 import { codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
-import { VideoEditWebInputs, type VideoEditWebFrameCopy } from './videoEditWebInputs'
+import type { ContentTrustReference } from '@/core/contentTrust'
+import { VideoEditWebInputs, videoEditWebSourceKey, type VideoEditWebFrameCopy } from './videoEditWebInputs'
 import { codeFilterInputComposition } from '@/core/videoEdit/codeFilterInput'
 import type { AuthorGpuInputs } from './videoEditAuthorModule'
 import type { PreparedVideoEditCodeEffect, PreparedVideoEditEffect } from './videoEditCodeSources'
@@ -79,7 +81,7 @@ interface PlaybackStream {
   tail: Promise<unknown>
 }
 /** `plan`: the planned frames of a nested schedule (ascending) and the parent clip they belong to; undefined means every frame in [start, endFrame). */
-interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream>; plan?: { key: string; frames: readonly number[] }; cacheRevision: number }
+interface PlaybackSchedule { precision: VideoEditRenderPrecision; document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream>; plan?: { key: string; frames: readonly number[] }; cacheRevision: number }
 /** A ready pre-rendered window: its file (fetchable URL for the worker) and the frames it covers. */
 /**
  * 拖动播放头的取帧方式：`true` 精确拖动；`'fast'` 快速拖动（及暂停时远距离跳转），必须重新定位才能到精确画面时先给
@@ -130,11 +132,12 @@ function stillDecodeKey(still: string, time: number): string { return JSON.strin
 function videoEditPictureCovers(picture: { timestamp: number; duration: number } | undefined, time: number): boolean {
   return !!picture && picture.timestamp <= time + 1e-6 && time < picture.timestamp + picture.duration - 1e-7
 }
+export type VideoEditRenderPrecision = NonNullable<WebSourceCaptureRequest['precision']>
 export type VideoEditPresentedSource = 'prerendered' | 'live' | 'jump'
-export interface VideoEditRenderResult { presentedSource?: VideoEditPresentedSource; canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[];
+export interface VideoEditRenderResult { provenance?: WebSourceProvenance; presentedSource?: VideoEditPresentedSource; canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[];
   /** 这一帧用到的片子数据里会让画面缺内容的问题（含嵌套序列里的）：要呈现给用户，但不是效果失败，不挡试渲染与导出。 */
   sceneIssues?: string[]; approximate?: boolean; /** Not presented because a later request's picture reached the screen first. */ superseded?: boolean; completion: Promise<void> }
-export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
+export interface VideoEditRenderCacheWindow { provenance?: WebSourceProvenance; key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
 /**
  * How the walk of an input session opened ahead ended: it reached the clip's first picture; it failed (the decoder
  * budget had no room, a decoding failure); or it was stopped, by its own stop or by the clip's own read taking the
@@ -158,7 +161,7 @@ interface StillDecode { done: Promise<boolean>; controller: AbortController; urg
  * `signal`: abandons the video reads anywhere in the tree once a newer paused request replaced the frame
  * (`supersedePausedFrame`).
  */
-interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number; completions: Array<Promise<void>>; instances: Set<string>; approximate: WeakSet<VideoEditCodePicture>; signal?: AbortSignal; webDeadline?: number }
+interface NestedFrameContext { precision: VideoEditRenderPrecision; webCacheAdaptive?: boolean; webCacheWrite?: boolean; pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number; completions: Array<Promise<void>>; instances: Set<string>; approximate: WeakSet<VideoEditCodePicture>; placeholderReleases: Set<() => void>; ended?: boolean; signal?: AbortSignal; webDeadline?: number }
 /**
  * The render target of a code input session: one per session (each input renderer owns its targets), drawn again
  * every frame. A target per sample allocated and destroyed a 4K rgba16float texture (66MB) per frame and input.
@@ -294,6 +297,7 @@ interface VideoSource {
 }
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
 export interface VideoEditRendererOptions {
+  cacheWebOutput?: boolean
   previewWidth?: number
   surface?: OffscreenCanvas
   cacheBudgetBytes?: number
@@ -373,7 +377,7 @@ export class VideoEditRenderer {
   private readonly contentAudio = new VideoEditContentAudio(document => new VideoEditRenderer(document, { previewWidth: 1, cacheBudgetBytes: 1, frames: this.frames }))
   private presentationEpoch = 0
   /** Pre-rendered preview windows (forward playback of the top-level program only), as full-frame clips of their files. */
-  private renderCache: Array<{ key: string; startFrame: number; endFrame: number; clip: VideoEditClip; media: VideoEditMedia }> = []
+  private renderCache: Array<{ provenance?: WebSourceProvenance; key: string; startFrame: number; endFrame: number; clip: VideoEditClip; media: VideoEditMedia }> = []
   private renderCacheRevision = 0
   /** Resident key frames of the pre-rendered windows (program only): far jumps and fast scrubs show one first. */
   private jumpPreview?: VideoEditJumpPreview
@@ -385,7 +389,7 @@ export class VideoEditRenderer {
   /** A live top-level frame still being prepared after its request returned with a jump preview (see `render`). */
   private detachedLive?: Promise<void>
   private scrubLive?: AbortController
-  onPresentation?: (frame: number, source: VideoEditPresentedSource, exact: boolean) => void
+  onPresentation?: (frame: number, source: VideoEditPresentedSource, exact: boolean, provenance?: WebSourceProvenance) => void
   /** The paused exact top-level frame being prepared, which a newer paused request abandons (`supersedePausedFrame`). */
   private pausedLive?: { frame: number; abort: AbortController }
   private drawLock: Promise<void> = Promise.resolve()
@@ -394,17 +398,18 @@ export class VideoEditRenderer {
   private shownRequest = 0
   reservePresentation(): number { return ++this.presentationOrder }
   private shownFrameExact = false
-  private shownState?: { source: VideoEditPresentedSource; completion: Promise<void>; document: VideoEditComposition; epoch: number; cacheRevision: number; divisor: number }
+  private shownState?: { provenance: WebSourceProvenance; source: VideoEditPresentedSource; completion: Promise<void>; document: VideoEditComposition; epoch: number; cacheRevision: number; divisor: number }
   private prerenderTail: Promise<unknown> = Promise.resolve()
   private prerenderRequest = 0
   /** 已就绪的窗口供节目播放和定位使用；像素回读与嵌套序列仍走现场合成。 */
   setRenderCache(windows: ReadonlyArray<VideoEditRenderCacheWindow>): void {
     this.renderCache = windows.map(window => {
       // 文件可以复用，时间线上的读取器必须有独立身份，否则重复段会沿用上一段的源时钟。
-      const id = `render-cache:${window.key}:${window.startFrame}`
+      const key = JSON.stringify([window.key, window.url, window.provenance ?? 'live'])
+      const id = `render-cache:${window.key}:${window.startFrame}:${key}`
       const media: VideoEditMedia = { id, name: '预渲染', path: window.url, kind: 'video', width: window.width, height: window.height, durationSeconds: (window.endFrame - window.startFrame) / window.fps, hasAudio: false }
       const clip: VideoEditClip = { id, itemId: id, name: '预渲染', kind: 'video', track: Number.MAX_SAFE_INTEGER, start: window.startFrame, duration: window.endFrame - window.startFrame, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
-      return { key: window.key, startFrame: window.startFrame, endFrame: window.endFrame, clip, media }
+      return { provenance: window.provenance, key, startFrame: window.startFrame, endFrame: window.endFrame, clip, media }
     }).sort((a, b) => a.startFrame - b.startFrame)
     this.renderCacheRevision++
     if (this.previewWidth && !this.nestedOwner && !this.disposed) {
@@ -431,14 +436,14 @@ export class VideoEditRenderer {
     }, delay)
   }
   /** The ready window drawing this frame during forward playback of the program, if any. */
-  private cachedWindow(frame: number, exporting = false): { key: string; startFrame: number; endFrame: number; clip: VideoEditClip; media: VideoEditMedia } | undefined {
+  private cachedWindow(frame: number, exporting = false, precision: VideoEditRenderPrecision = 'exact'): VideoEditRenderer['renderCache'][number] | undefined {
     if ((!this.previewWidth && !exporting) || this.nestedOwner) return undefined
     let low = 0, high = this.renderCache.length - 1
     while (low <= high) {
       const middle = (low + high) >> 1, window = this.renderCache[middle]
       if (frame < window.startFrame) high = middle - 1
       else if (frame >= window.endFrame) low = middle + 1
-      else return window
+      else return precision === 'web-cache' || window.provenance !== 'web-cache' ? window : undefined
     }
     return undefined
   }
@@ -475,7 +480,15 @@ export class VideoEditRenderer {
   private webInputs?: VideoEditWebInputs
   private outputScale = 1
   private renderAtOutputResolution = true
+  /** 节目网页输入按屏幕上实际显示的档位光栅化（`videoEditWebDisplayTier`）；导出与离屏渲染没有预览宽度，不受它影响。 */
+  private webDisplayScale = 1
   private get webOwner(): VideoEditRenderer { return this.nestedOwner?.webOwner ?? this }
+  /** 回放分辨率与屏幕显示档位各自给出所需倍率，取较小者：二者都是相对序列尺寸，相乘会重复缩小。 */
+  private get webScale(): number { const owner = this.webOwner; return Math.min(1, owner.outputScale, owner.previewWidth ? owner.webDisplayScale : 1) }
+  setWebDisplayScale(scale: number): void {
+    if (!Number.isFinite(scale) || scale <= 0 || scale > 1) throw new Error('网页显示倍率需要在 0 到 1 之间。')
+    this.webDisplayScale = scale
+  }
   private lookaheadRenderers(): VideoEditRenderer[] {
     const renderers = new Set<VideoEditRenderer>([this])
     for (const renderer of renderers) for (const entry of [...renderer.nestedPictures.values(), ...renderer.codeInputs.values(), ...renderer.filterInputs.values()]) renderers.add(entry.renderer)
@@ -661,6 +674,7 @@ export class VideoEditRenderer {
   private sequencePath: string[]
   private readonly timing?: (stage: string, durationMs?: number) => void
   private readonly jumpPreviewLog?: VideoEditJumpPreviewLog
+  private readonly cacheWebOutput: boolean
   private readonly reuseCodeOutputs: boolean
   constructor(public document: VideoEditComposition, options: VideoEditRendererOptions = {}) {
     const { surface, cacheBudgetBytes = 8 * 1024 ** 3 } = options
@@ -670,6 +684,7 @@ export class VideoEditRenderer {
     this.sequencePath = options.sequencePath ?? [document.id]
     this.timing = options.timing
     this.jumpPreviewLog = options.jumpPreviewLog
+    this.cacheWebOutput = options.cacheWebOutput ?? false
     this.reuseCodeOutputs = options.reuseCodeOutputs ?? true
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
     if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
@@ -879,11 +894,11 @@ export class VideoEditRenderer {
    * (a new D3D11 decoder blocks the GPU main thread for tens of milliseconds while it creates picture buffers).
    * Built at the first frame of a play run, so that frame is the first scheduled picture (one positioning, one GOP).
    */
-  private buildPlayback(document: VideoEditComposition, frame: number, picture: VideoEditPictureFilter, plan?: NestedRender['playbackPlan']): void {
+  private buildPlayback(document: VideoEditComposition, frame: number, picture: VideoEditPictureFilter, plan?: NestedRender['playbackPlan'], precision: VideoEditRenderPrecision = 'exact'): void {
     const frames = plan?.frames().filter(value => value >= frame)
     const endFrame = frames ? (frames.at(-1) ?? frame) + 1 : frame + Math.ceil(document.fps * PLAYBACK_SCHEDULE_SECONDS)
     const groups = new Map<string, { media: VideoEditMedia; clips: VideoEditClip[] }>()
-    const cached = this.previewWidth && !this.nestedOwner ? this.renderCache : []
+    const cached = this.previewWidth && !this.nestedOwner ? this.renderCache.filter(window => precision === 'web-cache' || window.provenance !== 'web-cache') : []
     for (const clip of [...document.clips, ...cached.map(window => window.clip)]) {
       // 倒放片段的源时间逐帧后退，不进前向解码排程，走定位路径（GOP 缓存，4.13）。
       if (clip.kind !== 'video' || clip.reverse || !(picture.has(clip) || clip.id.startsWith('render-cache:')) || clip.start + clip.duration <= frame || clip.start >= endFrame) continue
@@ -910,7 +925,7 @@ export class VideoEditRenderer {
       const entries: PlaybackStream['entries'] = []; const timestamps: number[] = []
       const add = (clip: VideoEditClip, at: number): void => {
         // A pre-rendered window replaces every layer at its frames; its own clip is scheduled only there.
-        if (!clip.id.startsWith('render-cache:') && this.cachedWindow(at)) return
+        if (!clip.id.startsWith('render-cache:') && this.cachedWindow(at, false, precision)) return
         entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps)))
       }
       for (const clip of group.clips) {
@@ -940,7 +955,7 @@ export class VideoEditRenderer {
       }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
     }
-    this.playback = { document, endFrame, streams, byClip, cacheRevision: this.renderCacheRevision, ...(plan && frames ? { plan: { key: plan.key, frames } } : {}) }
+    this.playback = { precision, document, endFrame, streams, byClip, cacheRevision: this.renderCacheRevision, ...(plan && frames ? { plan: { key: plan.key, frames } } : {}) }
   }
   /** The frames this renderer will be asked for next while playing forward (the parent's plan when nested and retimed). */
   private upcomingFrames(frame: number, end: number): number[] {
@@ -958,11 +973,11 @@ export class VideoEditRenderer {
   }
   /** Briefly position the active decoder ahead of play, including the handoff after the scrub cache.
    * Expiry retires the entire armed schedule; a long pause and future runs hold no borrowed frames. */
-  async armPlayback(frame: number): Promise<void> {
+  async armPlayback(frame: number, precision: VideoEditRenderPrecision = 'exact'): Promise<void> {
     if (this.disposed || !this.previewWidth) return
-    if (this.playback && this.armedFrame === frame && this.playback.document === this.document) return
+    if (this.playback && this.armedFrame === frame && this.playback.document === this.document && this.playback.precision === precision) return
     if (this.playback) await this.disposePlayback()
-    this.buildPlayback(this.document, frame, videoEditPictureFilter(this.document))
+    this.buildPlayback(this.document, frame, videoEditPictureFilter(this.document), undefined, precision)
     this.armedFrame = frame; this.lastForwardFrame = frame - 1
     const playback = this.playback
     this.armExpiry = setTimeout(() => {
@@ -1094,7 +1109,25 @@ export class VideoEditRenderer {
    * clip does not run, so it first shows where the windows covering it end (also for a clip already under way inside the
    * window playing now).
    */
-  private upcomingCodeInputs(document: VideoEditComposition, frame: number, showing: ReadonlySet<string>): Array<{ clip: VideoEditClip; first: number; source: CodeMediaInput }> {
+  private upcomingCodeInputs(document: VideoEditComposition, references: ReturnType<VideoEditRenderer['upcomingReferences']>, showing: ReadonlySet<string>): Array<{ clip: VideoEditClip; first: number; source: CodeMediaInput }> {
+    const upcoming = references.flatMap(entry => entry.reference.kind === 'video' ? [{ ...entry, reference: entry.reference }] : [])
+    const inputs = new Map<string, { clip: VideoEditClip; first: number; source: CodeMediaInput }>()
+    let moving = 0
+    for (const { clip, reference, first } of upcoming) {
+      try {
+        const source = codeMediaInputComposition(document, clip, reference, first)
+        if (!source || showing.has(source.sessionKey) || inputs.has(source.sessionKey) || !source.still && moving >= CODE_INPUT_PREWARM_REFERENCES) continue
+        inputs.set(source.sessionKey, { clip, first, source })
+        if (!source.still) moving++
+      } catch { /* 非法引用由进入片段时的正式渲染报告。 */ }
+    }
+    return [...inputs.values()]
+  }
+  /**
+   * 正向播放中即将出现的代码输入引用：片段进场（含转场入画）或时间表下一段开始处第一幅现场绘制的帧，按出现先后排列。
+   * 只读剪辑与已登记的声明，不执行作者代码；预渲染窗口里的帧画文件，不算现场需求。
+   */
+  private upcomingReferences(document: VideoEditComposition, frame: number, precision: VideoEditRenderPrecision): Array<{ clip: VideoEditClip; reference: Extract<CodeImageReference, { kind: 'video' | 'web' }>; first: number }> {
     const picture = videoEditPictureFilter(document)
     const horizon = frame + Math.ceil(document.fps * CODE_INPUT_PREWARM_SECONDS)
     const entering = (clip: VideoEditClip): number => {
@@ -1106,18 +1139,18 @@ export class VideoEditRenderer {
       return first
     }
     const live = (at: number, end: number): number => {
-      for (let window = this.cachedWindow(at); window && at < end; window = this.cachedWindow(at)) at = window.endFrame
+      for (let window = this.cachedWindow(at, false, precision); window && at < end; window = this.cachedWindow(at, false, precision)) at = window.endFrame
       return at
     }
-    const upcoming = document.clips.flatMap(clip => {
+    return document.clips.flatMap(clip => {
       if (!clip.code || !picture.has(clip)) return []
-      const references = Object.values(videoEditCodeInputParameters(document, clip.code, instance => this.codeSources?.declarations(instance))).filter((reference): reference is Extract<CodeImageReference, { kind: 'video' }> => isCodeImageReference(reference) && reference.kind === 'video')
+      const references = Object.values(videoEditCodeInputParameters(document, clip.code, instance => this.codeSources?.declarations(instance))).filter((reference): reference is Extract<CodeImageReference, { kind: 'video' | 'web' }> => isCodeImageReference(reference) && (reference.kind === 'video' || reference.kind === 'web'))
       if (!references.length) return []
       const end = clip.start + clip.duration
       let first = entering(clip)
       // Under way already and drawn live now: its plain references are read by this frame; a timetabled one is upcoming
       // where its next span starts. Under way inside the window playing now: upcoming where the windows end.
-      const underway = first <= frame && !this.cachedWindow(frame)
+      const underway = first <= frame && !this.cachedWindow(frame, false, precision)
       if (first <= frame) first = frame + 1
       return references.flatMap(reference => {
         if (underway && !reference.spans) return []
@@ -1132,17 +1165,28 @@ export class VideoEditRenderer {
         return []
       })
     }).sort((a, b) => a.first - b.first)
-    const inputs = new Map<string, { clip: VideoEditClip; first: number; source: CodeMediaInput }>()
-    let moving = 0
-    for (const { clip, reference, first } of upcoming) {
-      try {
-        const source = codeMediaInputComposition(document, clip, reference, first)
-        if (!source || showing.has(source.sessionKey) || inputs.has(source.sessionKey) || !source.still && moving >= CODE_INPUT_PREWARM_REFERENCES) continue
-        inputs.set(source.sessionKey, { clip, first, source })
-        if (!source.still) moving++
-      } catch { /* 非法引用由进入片段时的正式渲染报告。 */ }
-    }
-    return [...inputs.values()]
+  }
+  /**
+   * 将要出现的网页是不是前一帧同源画面的接续（连续拆分、时间表同一段内、停住、向前小步跳）：前一帧现场绘制的同源输入
+   * 页面时刻向前推进一秒内就能到，就沿用那个页面，不另开。前一帧画在预渲染文件里时，那个页面并没有在推进。
+   */
+  private continuesWeb(document: VideoEditComposition, clip: VideoEditClip, reference: Extract<CodeImageReference, { kind: 'web' }>, first: number, precision: VideoEditRenderPrecision): boolean {
+    const sample = codeMediaInputSample(clip, reference, first, document.frameRate), target = sample?.seconds
+    if (target === undefined) return true
+    if (first < 1 || this.cachedWindow(first - 1, false, precision)) return false
+    // 同一片段时间表的同一段内（含高倍快放）一律是同一个页面连续推进。
+    if (sample?.span && first - 1 >= clip.start && codeMediaInputSample(clip, reference, first - 1, document.frameRate)?.span === sample.span) return true
+    const source = videoEditWebSourceKey(reference), picture = videoEditPictureFilter(document)
+    return document.clips.some(other => other.code && picture.has(other) && other.start <= first - 1 && first - 1 < other.start + other.duration
+      && Object.values(videoEditCodeInputParameters(document, other.code, instance => this.codeSources?.declarations(instance))).some(candidate => {
+        if (!isCodeImageReference(candidate) || candidate.kind !== 'web' || videoEditWebSourceKey(candidate) !== source) return false
+        const before = codeMediaInputSample(other, candidate, first - 1, document.frameRate)?.seconds
+        return before !== undefined && target >= before && target - before <= 1
+      }))
+  }
+  /** 剪辑与外来剪辑里网页的信任上下文：和外来代码一样先确认，确认之前不开页面。 */
+  private webTrust(document: VideoEditComposition, clip: VideoEditClip): ContentTrustReference[] {
+    return [...codeMaterialTrustContext(document, clip.code!), ...(document.foreign ? [document.foreign] : [])].filter((value, index, all) => all.findIndex(other => other.id === value.id) === index)
   }
   /**
    * Prepares each upcoming code video input so entering its clip neither opens nor seeks a decoder on the boundary
@@ -1434,7 +1478,7 @@ export class VideoEditRenderer {
     this.webOwner.webInputs?.checkBudget(context, available)
   }
   /** 每个滤镜前缀持有独立目标，递归取相邻帧时不能覆盖当前输入。 */
-  private async readFilterFrames(document: VideoEditComposition, clip: VideoEditClip, plan: PreparedVideoEditCodeEffect, input: VideoEditCodePicture, frame: number, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[], sourceDocument: VideoEditComposition, markApproximate: () => void): Promise<AuthorGpuInputs['frames']> {
+  private async readFilterFrames(document: VideoEditComposition, clip: VideoEditClip, plan: PreparedVideoEditCodeEffect, input: VideoEditCodePicture, frame: number, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[], sourceDocument: VideoEditComposition, markApproximate: () => void, markProvenance: (picture: VideoEditCodePicture) => void): Promise<AuthorGpuInputs['frames']> {
     const sessionKey = JSON.stringify([clip.id, plan.effect.id])
     let entry = this.filterInputs.get(sessionKey)
     if (!entry) {
@@ -1462,7 +1506,7 @@ export class VideoEditRenderer {
       const key = JSON.stringify([quality, input.textureFormat, available ? sample : 'blank'])
       let pending = shared.get(key)
       if (!pending) {
-        context.bytes += input.width * input.height * (input.textureFormat === 'rgba16float' ? 8 : 4)
+        if (!input.isPlaceholder) context.bytes += input.width * input.height * (input.textureFormat === 'rgba16float' ? 8 : 4)
         this.checkInputBudget(context)
         const targetKey = `nested:frame:filter:${key}`
         const keys = context.keys.get(session.ownerKey) ?? new Set<string>(); keys.add(targetKey); context.keys.set(session.ownerKey, keys)
@@ -1487,6 +1531,7 @@ export class VideoEditRenderer {
       }
       const picture = await pending
       if (context.approximate.has(picture)) markApproximate()
+      markProvenance(picture)
       frames.push({ offset, texture: picture.texture, available })
     }
     return frames
@@ -1513,7 +1558,8 @@ export class VideoEditRenderer {
     // A walk still under way stops after its current step; this frame's read continues the decoder from where it got.
     for (const key of showing) if (this.prewarmedInputs.delete(key)) this.codeInputs.get(key)?.prewarm?.abort()
     // Forward preview playback opens the inputs of clips about to start; a paused, scrubbed or exported frame keeps only its own.
-    const upcoming = sequential && this.previewWidth ? this.upcomingCodeInputs(document, frame, showing) : []
+    const references = sequential && this.previewWidth ? this.upcomingReferences(document, frame, context.precision) : []
+    const upcoming = this.upcomingCodeInputs(document, references, showing)
     const keep = new Set([...showing, ...upcoming.map(input => input.source.sessionKey), ...(this.nestedOwner ?? this).warmScopes])
     if (keep.size > 32) throw new Error('同时读取的视频画面超过32份，请减少输入。')
     // Inputs no longer showing leave the map at once; closing their decoder sessions (a native round trip each) runs
@@ -1525,7 +1571,7 @@ export class VideoEditRenderer {
     const pending: Array<[string, Promise<VideoEditCodePicture | undefined>]> = []
     for (const { clip, parameter, reference, source } of requests) {
       if (!current()) throw new DOMException('视频取帧已取消。', 'AbortError')
-      const sampleKey = JSON.stringify([quality, sequential, source.sampleKey, this.renderDivisor, Math.min(1, this.webOwner.outputScale)]), key = JSON.stringify([source.sessionKey, sampleKey])
+      const sampleKey = JSON.stringify([quality, sequential, source.sampleKey, this.renderDivisor, this.webScale]), key = JSON.stringify([source.sessionKey, sampleKey])
       let picture = shared.get(key)
       if (!picture) {
         context.bytes += source.document.width * source.document.height * 8
@@ -1541,7 +1587,7 @@ export class VideoEditRenderer {
         const keys = context.keys.get(session.ownerKey) ?? new Set<string>(); keys.add(targetKey); context.keys.set(session.ownerKey, keys)
         picture = session.tail.catch(() => undefined).then(async () => {
           if (!current()) throw new DOMException('视频取帧已取消。', 'AbortError')
-          if (session.lastKey === sampleKey && session.lastPicture && (scrubbing !== false || !session.lastApproximate) && (reference.kind === 'video' || session.document === document)) {
+          if (session.lastKey === sampleKey && session.lastPicture && (scrubbing !== false || !session.lastApproximate) && (context.precision === 'web-cache' || session.lastPicture.provenance !== 'web-cache') && (reference.kind === 'video' || session.document === document)) {
             recordVideoEditPreparation('codeInputFrameHit', 0)
             if (session.lastApproximate) context.approximate.add(session.lastPicture)
             return session.lastPicture
@@ -1575,15 +1621,20 @@ export class VideoEditRenderer {
       void picture.catch(() => undefined)
       pending.push([codeMediaInputKey(clip.id, parameter), picture])
     }
-    if (webRequests.length) {
+    // 顶层正向播放预开即将进场的网页并预取第一幅（硬剪点与冷页面首播），只用已获准的来源，不占本帧额度。
+    const enteringWebs = !this.nestedOwner && context.webDeadline !== undefined ? references.flatMap(entry => entry.reference.kind === 'web' && !this.continuesWeb(document, entry.clip, entry.reference, entry.first, context.precision) ? [{ ...entry, reference: entry.reference }] : []) : []
+    if (webRequests.length || enteringWebs.length) {
       const webs = this.webOwner.webInputs ??= new VideoEditWebInputs()
       const compositor = this.ensureCompositor()
       const copy: VideoEditWebFrameCopy = (borrowed, width, height, target) => compositor.copyWebFrame(borrowed, width, height, target)
+      for (const { clip, reference, first } of enteringWebs) {
+        const sample = codeMediaInputSample(clip, reference, first, document.frameRate)
+        if (sample) webs.preopen(reference, sample.seconds, context, copy, this.webTrust(document, clip), { precision: context.precision, cachePolicy: context.webCacheAdaptive ? 'adaptive' : undefined, cacheGrid: codeMediaWebTimeGrid(clip, reference, first, document.frameRate), outputScale: this.webScale, availableBytes: () => VIDEO_EDIT_INPUT_BUDGET_BYTES - context.bytes })
+      }
       for (const { clip, parameter, reference, seconds } of webRequests) {
         if (!current()) throw new DOMException('网页取帧已取消。', 'AbortError')
-        // 外来剪辑或外来代码里的网页和外来代码一样，先过信任确认，确认之前不开页面。
-        const trust = [...codeMaterialTrustContext(document, clip.code!), ...(document.foreign ? [document.foreign] : [])].filter((value, index, all) => all.findIndex(other => other.id === value.id) === index)
-        const outputScale = Math.min(1, this.webOwner.outputScale)
+        const trust = this.webTrust(document, clip)
+        const outputScale = this.webScale
         const view = codeWebView(reference)
         const ahead = sequential && context.webDeadline === undefined
           ? [1, 2].flatMap(offset => {
@@ -1594,11 +1645,23 @@ export class VideoEditRenderer {
           }) : []
         const text = clip.code ? this.codeSources?.webText(clip.code)?.[parameter] : undefined
         const picture = webs.picture(reference, seconds, context, copy, trust, {
+          precision: context.precision,
+          cachePolicy: context.webCacheAdaptive ? 'adaptive' : undefined,
+          cacheWrite: context.webCacheWrite,
+          cacheGrid: codeMediaWebTimeGrid(clip, reference, frame, document.frameRate),
           text,
           outputScale, deadline: context.webDeadline,
           availableBytes: () => VIDEO_EDIT_INPUT_BUDGET_BYTES - context.bytes,
           signal: context.signal, ahead, approximate: markApproximate,
-        }).then(picture => picture ?? compositor.blankWebPicture({ time: seconds, width: view.width, height: view.height, region: [...view.region], scale: view.scale * outputScale, duration: null, boxes: Object.fromEntries((reference.boxes ?? []).map(selector => [selector, null])), ...(text?.length ? { text: freezeWebText(unavailableWebText(text, 'pending-picture')) } : {}) }))
+        }).then(async picture => {
+          if (picture) return picture
+          const blank = await compositor.blankWebPicture({ time: seconds, width: view.width, height: view.height, region: [...view.region], scale: view.scale * outputScale, duration: null, boxes: Object.fromEntries((reference.boxes ?? []).map(selector => [selector, null])), ...(text?.length ? { text: freezeWebText(unavailableWebText(text, 'pending-picture')) } : {}) })
+          if (blank.releasePlaceholder) {
+            if (context.ended) blank.releasePlaceholder()
+            else context.placeholderReleases.add(blank.releasePlaceholder)
+          }
+          return blank
+        })
         void picture.catch(() => undefined)
         pending.push([codeMediaInputKey(clip.id, parameter), picture])
       }
@@ -1624,17 +1687,17 @@ export class VideoEditRenderer {
    * picture at its source time or the frame fails (`videoEditExportPictures.ts`); `singleFrameReads` counts the layers
    * a single-frame read decided because the sequential reader's picture was not exact.
    */
-  async render(frame: number, sequential = false, scrubbing: VideoEditScrubMode = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void, requireLive = false, requestOrder = this.reservePresentation(), observeElements = false): Promise<VideoEditRenderResult> {
+  async render(frame: number, sequential = false, scrubbing: VideoEditScrubMode = false, shouldPresent: () => boolean = () => true, deadline?: number, nestedRender?: NestedRender, quality: EffectQuality = 'interactive', capturePresentation?: (pixels: Promise<ImageBitmap>) => void, requireLive = false, requestOrder = this.reservePresentation(), observeElements = false, precision: VideoEditRenderPrecision = 'exact'): Promise<VideoEditRenderResult> {
     // A top-level frame is the foreground: background decode steps take their turns between such frames.
-    if (nestedRender || this.nestedOwner) return this.renderFrame(frame, sequential, scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation)
+    if (nestedRender || this.nestedOwner) return this.renderFrame(frame, sequential, scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation, undefined, requestOrder, false, precision)
     // 跳转先出的画面（`videoEditJumpPreview.ts`）只给快速拖动与远距离跳转；要回读像素的帧（历史、取色）照常合成。
     const cancellable = !sequential && !capturePresentation && deadline === undefined
     const cacheEligible = cancellable && !requireLive
     const fast = scrubbing === 'fast' && cacheEligible && !!this.jumpPreview
     clearTimeout(this.jumpFill); this.jumpFill = undefined
-    if (cacheEligible && scrubbing && this.hasPrerenderedFrame(frame)) {
+    if (cacheEligible && scrubbing && this.hasPrerenderedFrame(frame, precision)) {
       this.abandonPausedFrame(); this.scrubLive?.abort()
-      const shown = await this.presentPrerenderedFrame(frame, shouldPresent, false, requestOrder)
+      const shown = await this.presentPrerenderedFrame(frame, shouldPresent, false, requestOrder, precision)
       if (shown) return shown
     }
     // 暂停时的精确画面（跳转、点击、松手后）：更新的暂停请求可以放弃它（`supersedePausedFrame`），它就不再画上去，
@@ -1644,7 +1707,7 @@ export class VideoEditRenderer {
     const present = abandon ? (): boolean => !abandon.signal.aborted && shouldPresent() : shouldPresent
     if (this.detachedLive) {
       // 上一幅实时画面还在后台准备：快速拖动不等它，先画这一帧的常驻关键帧；其他请求等它收尾（渲染器同时只合成一帧）。
-      if (fast) { const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder); if (shown) return shown }
+      if (fast) { const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder, precision); if (shown) return shown }
       await this.detachedLive
     }
     // 等待后台合成期间也可能被新拖动取代；已取消的暂停请求不能进入现场输入准备。
@@ -1656,7 +1719,7 @@ export class VideoEditRenderer {
     // （那要等在途解码收尾）。跳转后节目按精确方式补这一帧，解码从头开始，不先解一遍近似画面；拖动中这样的实时画面画出来
     // 也早已过时，只会占着 Worker 线程（代码素材每帧 10–20ms）推迟后面的画面。
     if (fast && this.shownFrame !== undefined && Math.abs(frame - this.shownFrame) >= Math.round(this.document.fps * VIDEO_EDIT_JUMP_PREVIEW_LEAP_SECONDS)) {
-      const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder)
+      const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder, precision)
       if (shown) return shown
     }
     if (abandon && fast) this.scrubLive = abandon
@@ -1665,9 +1728,9 @@ export class VideoEditRenderer {
     // 交回结果，这一帧在后台继续准备（解码器随之追到指针附近），好了时屏幕上若仍是它的常驻关键帧就换成它。
     const current = (): boolean => this.shownRequest <= requestOrder
     // 先发起缓存读取，再准备现场画面；绘制锁内按请求顺序核验，现场提交后同请求缓存不能覆盖它。
-    if (cacheEligible && scrubbing === false && !(this.shownFrame === frame && this.shownFrameExact)) void this.presentPrerenderedFrame(frame, present, false, requestOrder)
-    const drawFrame = (): Promise<VideoEditRenderResult> => this.renderFrame(frame, sequential, scrubbing, () => present() && current(), deadline, undefined, quality, capturePresentation, abandon?.signal, requestOrder, observeElements)
-    const exportWindow = sequential && !this.previewWidth ? this.cachedWindow(frame, true) : undefined
+    if (cacheEligible && scrubbing === false && !(this.shownFrame === frame && this.shownFrameExact)) void this.presentPrerenderedFrame(frame, present, false, requestOrder, precision)
+    const drawFrame = (): Promise<VideoEditRenderResult> => this.renderFrame(frame, sequential, scrubbing, () => present() && current(), deadline, undefined, quality, capturePresentation, abandon?.signal, requestOrder, observeElements, precision)
+    const exportWindow = sequential && !this.previewWidth ? this.cachedWindow(frame, true, precision) : undefined
     const live = drawFrame().catch(async error => {
       if (!exportWindow || this.disposed || error instanceof DOMException && error.name === 'AbortError') throw error
       await this.rejectExportPreview(exportWindow, error)
@@ -1689,11 +1752,11 @@ export class VideoEditRenderer {
           this.scheduleJumpFill()
         }
       })
-    if (fast && this.jumpPreviewPicture(frame)) {
+    if (fast && this.jumpPreviewPicture(frame, precision)) {
       let timer: ReturnType<typeof setTimeout> | undefined
       const late = await Promise.race([live, new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), JUMP_PREVIEW_LIVE_BUDGET_MS) })]).finally(() => clearTimeout(timer))
       if (late) return late
-      const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder)
+      const shown = await this.presentJumpPreview(frame, shouldPresent, requestOrder, precision)
       if (shown) {
         const background: Promise<void> = live.then(() => undefined, error => { if (!this.disposed) logger.debug('快速拖动中后台准备的实时画面未完成', { event: 'video_edit.preview.detached_frame.failed', error, context: { frame } }) })
           .finally(() => { if (this.detachedLive === background) this.detachedLive = undefined })
@@ -1711,8 +1774,8 @@ export class VideoEditRenderer {
    * speed changes and nesting can map them apart); a misjudged step only costs one wait for the frame, or one read that
    * starts again from where its decoder stopped.
    */
-  supersedePausedFrame(frame: number, preferCache = false): void {
-    if (preferCache && this.hasPrerenderedFrame(frame)) { this.abandonPausedFrame(); this.scrubLive?.abort(); return }
+  supersedePausedFrame(frame: number, preferCache = false, precision: VideoEditRenderPrecision = 'exact'): void {
+    if (preferCache && this.hasPrerenderedFrame(frame, precision)) { this.abandonPausedFrame(); this.scrubLive?.abort(); return }
     const live = this.pausedLive
     if (!live) return
     const ahead = (frame - live.frame) / this.document.fps
@@ -1726,7 +1789,7 @@ export class VideoEditRenderer {
    * browser backend's reads; they finish first, and the frame then does not present.
    */
   abandonPausedFrame(): void { this.pausedLive?.abort.abort() }
-  hasPrerenderedFrame(frame: number): boolean { return !!this.jumpPreview && !!this.cachedWindow(frame) }
+  hasPrerenderedFrame(frame: number, precision: VideoEditRenderPrecision = 'exact'): boolean { return !!this.jumpPreview && !!this.cachedWindow(frame, false, precision) }
 
   /** 缩略预览共用 GPU，画到自己的低清画布，不能改动节目表面或播放头。 */
   async captureHoverFrame(document: VideoEditComposition, frame: number, allowRender: boolean, signal: AbortSignal): Promise<Uint8Array | undefined> {
@@ -1783,21 +1846,21 @@ export class VideoEditRenderer {
   /** Resolves once no top-level frame is being prepared in the background (callers changing the renderer wait for it). */
   settled(): Promise<void> { return this.detachedLive ?? Promise.resolve() }
   /** The resident key frame `presentJumpPreview` would draw for `frame`, if any. */
-  private jumpPreviewPicture(frame: number): { window: NonNullable<ReturnType<VideoEditRenderer['cachedWindow']>>; picture: VideoEditGpuFrame } | undefined {
-    const window = this.jumpPreview && this.cachedWindow(frame)
+  private jumpPreviewPicture(frame: number, precision: VideoEditRenderPrecision = 'exact'): { window: NonNullable<ReturnType<VideoEditRenderer['cachedWindow']>>; picture: VideoEditGpuFrame } | undefined {
+    const window = this.jumpPreview && this.cachedWindow(frame, false, precision)
     const picture = window && this.jumpPreview?.pick(window.key, window.startFrame, frame)
     return window && picture ? { window, picture } : undefined
   }
   /** Draws the resident key frame of the pre-rendered window at `frame` (approximate); undefined when there is none. */
-  private async presentJumpPreview(frame: number, shouldPresent: () => boolean, requestOrder: number): Promise<VideoEditRenderResult | undefined> {
-    const found = this.jumpPreviewPicture(frame)
+  private async presentJumpPreview(frame: number, shouldPresent: () => boolean, requestOrder: number, precision: VideoEditRenderPrecision): Promise<VideoEditRenderResult | undefined> {
+    const found = this.jumpPreviewPicture(frame, precision)
     if (!found || !this.jumpPreview) return undefined
     const document = this.document; const epoch = this.presentationEpoch
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && (this.shownRequest < requestOrder || this.shownRequest === requestOrder && this.shownState?.source === 'jump') && shouldPresent()
     const started = performance.now()
     const release = this.jumpPreview.lease()
     let drawn: { presented: boolean; completion: Promise<void> }
-    try { drawn = await this.exclusiveDraw(() => canPresent() ? this.ensureCompositor().draw(this.drawDocument(document), [found.window.clip], [found.picture], canPresent) : Promise.resolve({ presented: false, completion: Promise.resolve() }), frame, 'jump', false, requestOrder) } catch (error) {
+    try { drawn = await this.exclusiveDraw(() => canPresent() ? this.ensureCompositor().draw(this.drawDocument(document), [found.window.clip], [found.picture], canPresent) : Promise.resolve({ presented: false, completion: Promise.resolve() }), frame, 'jump', false, requestOrder, () => found.window.provenance ?? 'live') } catch (error) {
       release()
       if (canPresent()) throw error
       drawn = { presented: false, completion: Promise.resolve() }
@@ -1805,31 +1868,31 @@ export class VideoEditRenderer {
     void drawn.completion.then(release, release)
     recordVideoEditPreparation('jumpPreviewShown', performance.now() - started)
     if (this.foregroundFrames === 0) this.scheduleJumpFill()
-    return { canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented: drawn.presented, ...(!drawn.presented ? { superseded: true } : {}), renderCached: false, decodeMs: 0, gpuMs: performance.now() - started, approximate: true, presentedSource: 'jump', completion: drawn.completion }
+    return { canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented: drawn.presented, ...(!drawn.presented ? { superseded: true } : {}), renderCached: false, decodeMs: 0, gpuMs: performance.now() - started, provenance: found.window.provenance ?? 'live', approximate: true, presentedSource: 'jump', completion: drawn.completion }
   }
   /** 在途缓存读完并绘制后，只处理最新排队位置；前一次缓存上屏不会作废等待中的最新目标。 */
-  presentPrerenderedFrame(frame: number, shouldPresent: () => boolean, preserveExact = false, requestOrder = this.reservePresentation()): Promise<VideoEditRenderResult | undefined> {
+  presentPrerenderedFrame(frame: number, shouldPresent: () => boolean, preserveExact = false, requestOrder = this.reservePresentation(), precision: VideoEditRenderPrecision = 'exact'): Promise<VideoEditRenderResult | undefined> {
     const request = ++this.prerenderRequest
     const document = this.document, epoch = this.presentationEpoch, cacheRevision = this.renderCacheRevision
     const read = (): Promise<VideoEditRenderResult | undefined> => {
       const current = request === this.prerenderRequest
-      return this.readPrerenderedFrame(frame, () => current && this.document === document && this.presentationEpoch === epoch && this.renderCacheRevision === cacheRevision && shouldPresent(), preserveExact, requestOrder)
+      return this.readPrerenderedFrame(frame, () => current && this.document === document && this.presentationEpoch === epoch && this.renderCacheRevision === cacheRevision && shouldPresent(), preserveExact, requestOrder, precision)
     }
     const result = this.prerenderTail.then(read, read)
     this.prerenderTail = result
     return result
   }
   /** 更早的现场画面不作废当前读取；同请求的现场画面和更新请求上屏后缓存才失效。 */
-  private async readPrerenderedFrame(frame: number, shouldPresent: () => boolean, preserveExact: boolean, requestOrder: number): Promise<VideoEditRenderResult | undefined> {
+  private async readPrerenderedFrame(frame: number, shouldPresent: () => boolean, preserveExact: boolean, requestOrder: number, precision: VideoEditRenderPrecision): Promise<VideoEditRenderResult | undefined> {
     clearTimeout(this.jumpFill); this.jumpFill = undefined
     const started = performance.now()
     const document = this.document; const epoch = this.presentationEpoch
-    const window = this.cachedWindow(frame); const preview = this.jumpPreview; const cacheRevision = this.renderCacheRevision
+    const window = this.cachedWindow(frame, false, precision); const preview = this.jumpPreview; const cacheRevision = this.renderCacheRevision
     const wanted = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && this.renderCacheRevision === cacheRevision && (this.shownRequest < requestOrder || this.shownRequest === requestOrder && this.shownState?.source !== 'live') && shouldPresent()
     if (!window || !preview) return undefined
-    const outcome = (presented: boolean, completion = Promise.resolve()): VideoEditRenderResult => ({ canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented, ...(!presented ? { superseded: true } : {}), renderCached: true, presentedSource: 'prerendered', decodeMs: performance.now() - started, gpuMs: 0, completion })
+    const outcome = (presented: boolean, completion = Promise.resolve()): VideoEditRenderResult => ({ canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented, ...(!presented ? { superseded: true } : {}), provenance: window.provenance ?? 'live', renderCached: true, presentedSource: 'prerendered', decodeMs: performance.now() - started, gpuMs: 0, completion })
     const shown = this.shownState
-    if (preserveExact && this.shownFrame === frame && this.shownFrameExact && shown?.document === document && shown.epoch === epoch && shown.divisor === this.renderDivisor && shown.cacheRevision === cacheRevision) {
+    if (preserveExact && this.shownFrame === frame && this.shownFrameExact && shown?.document === document && shown.epoch === epoch && shown.divisor === this.renderDivisor && shown.cacheRevision === cacheRevision && (precision === 'web-cache' || shown.provenance !== 'web-cache')) {
       if (shown.source !== 'prerendered' || !wanted()) return undefined
       this.shownRequest = requestOrder
       return outcome(true, shown.completion)
@@ -1841,7 +1904,7 @@ export class VideoEditRenderer {
       if (!picture) return wanted() ? undefined : outcome(false)
       if (!wanted()) { picture.close(); return outcome(false) }
       let drawn: { presented: boolean; completion: Promise<void> } | undefined
-      try { drawn = await this.exclusiveDraw(() => wanted() ? this.ensureCompositor().draw(this.drawDocument(document), [window.clip], [picture], wanted) : Promise.resolve({ presented: false, completion: Promise.resolve() }), frame, 'prerendered', true, requestOrder) } catch { drawn = undefined }
+      try { drawn = await this.exclusiveDraw(() => wanted() ? this.ensureCompositor().draw(this.drawDocument(document), [window.clip], [picture], wanted) : Promise.resolve({ presented: false, completion: Promise.resolve() }), frame, 'prerendered', true, requestOrder, () => window.provenance ?? 'live') } catch { drawn = undefined }
       void (drawn?.completion ?? Promise.resolve()).then(() => picture.close(), () => picture.close())
       if (!drawn) return undefined
       if (drawn.presented) recordVideoEditPreparation('prerenderedExactShown', performance.now() - started)
@@ -1858,7 +1921,7 @@ export class VideoEditRenderer {
    * Top-level draws one at a time: a jump preview never interleaves with a live frame finishing in the background.
    * 上屏请求号在锁内登记，缓存读取可据此保留更早现场合成期间的上屏资格。
    */
-  private async exclusiveDraw<T extends { presented: boolean; completion: Promise<void> }>(draw: () => Promise<T>, frame: number, source: VideoEditPresentedSource, exact = true, requestOrder = this.reservePresentation()): Promise<T> {
+  private async exclusiveDraw<T extends { presented: boolean; completion: Promise<void> }>(draw: () => Promise<T>, frame: number, source: VideoEditPresentedSource, exact = true, requestOrder = this.reservePresentation(), provenance: () => WebSourceProvenance = () => 'live'): Promise<T> {
     const previous = this.drawLock
     let unlock!: () => void
     this.drawLock = new Promise<void>(resolve => { unlock = resolve })
@@ -1866,25 +1929,33 @@ export class VideoEditRenderer {
       await previous
       const state = { document: this.document, epoch: this.presentationEpoch, cacheRevision: this.renderCacheRevision, divisor: this.renderDivisor }
       const result = await draw()
-      if (result.presented) { this.shownRequest = requestOrder; this.shownFrame = frame; this.shownFrameExact = exact; this.shownState = { ...state, source, completion: result.completion }; this.onPresentation?.(frame, source, exact) }
+      if (result.presented) { this.shownRequest = requestOrder; this.shownFrame = frame; this.shownFrameExact = exact; this.shownState = { ...state, provenance: provenance(), source, completion: result.completion }; this.onPresentation?.(frame, source, exact, provenance()) }
       return result
     } finally { unlock() }
   }
-  private async renderFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, signal?: AbortSignal, requestOrder?: number, observeElements = false): Promise<VideoEditRenderResult> {
+  private async renderFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, signal?: AbortSignal, requestOrder?: number, observeElements = false, precision: VideoEditRenderPrecision = 'exact'): Promise<VideoEditRenderResult> {
     this.capturePresentation = capturePresentation
     if (this.disposed) throw new Error('预览已关闭。')
-    const nestedContext: NestedFrameContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0, completions: [], instances: new Set(), approximate: new WeakSet(), ...(signal ? { signal } : {}) }
+    const nestedContext: NestedFrameContext = nestedRender?.context ?? { precision, webCacheWrite: this.cacheWebOutput && precision === 'exact', webCacheAdaptive: !!this.previewWidth && !capturePresentation && quality !== 'final', pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0, completions: [], instances: new Set(), approximate: new WeakSet(), placeholderReleases: new Set(), ...(signal ? { signal } : {}) }
     try {
       return await this.renderPreparedFrame(frame, sequential, _scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation, nestedContext, requestOrder, observeElements)
     } finally {
       // 输入必须保护到根帧提交；取消与失败也结束本帧，子树共享的状态由根统一释放。
-      if (!nestedRender) this.webOwner.webInputs?.trim(nestedContext)
+      if (!nestedRender) {
+        this.webOwner.webInputs?.trim(nestedContext)
+        nestedContext.ended = true
+        for (const release of nestedContext.placeholderReleases) release()
+        nestedContext.placeholderReleases.clear()
+      }
     }
   }
   private async renderPreparedFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, nestedContext: NestedFrameContext, requestOrder?: number, observeElements = false): Promise<VideoEditRenderResult> {
     const document = this.document; const epoch = this.presentationEpoch
     // 滤镜前缀只限定可见合成层，音频、跟踪与显式媒体引用仍读取完整源文档。
     const sourceDocument = nestedRender?.sourceDocument ?? document
+    let provenance: WebSourceProvenance = 'live'
+    const markProvenance = (picture: VideoEditCodePicture): void => { if (picture.provenance === 'web-cache') provenance = 'web-cache' }
+    const precision = nestedContext.precision
     let approximatePictures = 0
     const markApproximate = (): void => { approximatePictures++ }
     if (!nestedRender && (sequential || _scrubbing !== false) && this.previewWidth && !capturePresentation && quality !== 'final') nestedContext.webDeadline = performance.now() + 1000 / document.fps
@@ -1904,7 +1975,7 @@ export class VideoEditRenderer {
         const media = this.clipMedia(document, clip)
         return !media || !(this.frameCache.get(media.path, videoEditPictureSeconds(clipSourceSeconds(clip, frame, document.fps))) instanceof VideoEditGpuFrame)
       })
-      if (this.playback && (this.playback.document !== document || !forward || missingPrefix)) { recordVideoEditPreparation(missingPrefix ? 'playbackDropPrefix' : !forward ? 'playbackDropJump' : 'playbackDropDocument', 0); await this.disposePlayback() }
+      if (this.playback && (this.playback.document !== document || this.playback.precision !== precision || !forward || missingPrefix)) { recordVideoEditPreparation(missingPrefix ? 'playbackDropPrefix' : !forward ? 'playbackDropJump' : 'playbackDropDocument', 0); await this.disposePlayback() }
       if (!this.playback) recordVideoEditPreparation('playbackBuild', 0)
       // A sequential preview render is always forward playback (reverse play, single steps and scrubbing render
       // non-sequentially), so its first frame already builds the schedules and takes its picture from them. Waiting for
@@ -1912,13 +1983,14 @@ export class VideoEditRenderer {
       // and then the schedule decoded the same GOP again on its own session (task 3.6 F1: 0.6–2.4s mid-file start-up
       // of long-GOP 4K material). A sequential frame before the previous one is not playback: it keeps the seek path
       // and its frame cache.
-      if (!this.playback && !(this.lastForwardFrame !== undefined && frame < this.lastForwardFrame)) this.buildPlayback(document, frame, picture, nestedRender?.playbackPlan)
+      if (!this.playback && !(this.lastForwardFrame !== undefined && frame < this.lastForwardFrame)) this.buildPlayback(document, frame, picture, nestedRender?.playbackPlan, precision)
       this.lastForwardFrame = forward ? Math.max(frame, this.lastForwardFrame!) : frame; this.armedFrame = undefined
       this.primeUpcomingStreams(frame)
     } else if (this.armedFrame !== frame || this.playback?.document !== document) { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
-    const cachedWindow = sequential && !nestedRender ? this.cachedWindow(frame, !this.previewWidth) : undefined
-    const nextExportWindow = sequential && !this.previewWidth && !nestedRender ? this.renderCache.find(window => window.startFrame > frame) : undefined
+    const cachedWindow = sequential && !nestedRender ? this.cachedWindow(frame, !this.previewWidth, precision) : undefined
+    const nextExportWindow = sequential && !this.previewWidth && !nestedRender ? this.renderCache.find(window => window.startFrame > frame && (precision === 'web-cache' || window.provenance !== 'web-cache')) : undefined
     // 下一窗口沿用剪辑首帧预取，提前打开原生会话；跨窗后继续消费同一个顺序读取器。
+    if (cachedWindow?.provenance === 'web-cache') provenance = 'web-cache'
     if (nextExportWindow) this.preroll(nextExportWindow.clip, document)
     const rawTransitions = cachedWindow ? [] : videoEditPictureTransitionsAt(document, frame)
     // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
@@ -1989,7 +2061,7 @@ export class VideoEditRenderer {
     const imagesReady = (async () => {
       const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media, false, readSignal)] as const)))
       const codeInputs = await this.prepareCodeInputs(sourceDocument, active, frame, sequential, quality, canPresent, nestedContext, path, markApproximate, _scrubbing)
-      for (const [key, picture] of codeInputs) inputs.set(key, picture)
+      for (const [key, picture] of codeInputs) { inputs.set(key, picture); markProvenance(picture) }
       const prepared = await this.compositor!.prepareImages(inputs, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
       // 上传边界会创建作者输入包装对象；精确性必须随原画面传递，不能拿包装对象查原画面的 WeakSet。
       for (const [key, picture] of codeInputs) if (nestedContext.approximate.has(picture) && prepared.get(key)) approximateCodeInputs.add(prepared.get(key)!)
@@ -2064,6 +2136,7 @@ export class VideoEditRenderer {
         } else cacheHits++
         const ready = await picture
         if (nestedContext.approximate.has(ready)) markApproximate()
+        markProvenance(ready)
         return ready
       }
       const media = this.clipMedia(document, clip)
@@ -2193,7 +2266,10 @@ export class VideoEditRenderer {
         // transparent there, as in the gap before a clip, instead of failing the whole frame.
         if (originalTime >= media.durationSeconds) throw new Error(`素材 ${media.name} 在此时间没有画面。`)
         blankPictures++
-        return this.compositor!.blank(media.width, media.height, originalTime, 1 / document.fps)
+        const blank = await this.compositor!.blank(media.width, media.height, originalTime, 1 / document.fps)
+        if (nestedContext.ended) blank.close()
+        else nestedContext.placeholderReleases.add(() => blank.close())
+        return blank
       }
       if (!(source.current instanceof VideoEditGpuFrame)) {
         const decoded = source.current
@@ -2259,8 +2335,8 @@ export class VideoEditRenderer {
       const effects = preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map<string, PreparedVideoEditEffect[]>()
       await this.disposeCodeInputs(new Set([...effects].flatMap(([id, chain]) => chain.flatMap(plan => !plan.builtin && plan.program.frames.length ? [JSON.stringify([id, plan.effect.id])] : []))), this.filterInputs)
       const draw = async (): Promise<{ presented: boolean; completion: Promise<void> }> => composite ? renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), effects, gpu, frame, canPresent, deadline, document, nestedTarget, onEffectError, quality,
-        (clip, plan, input) => this.readFilterFrames(document, clip, plan, input, frame, quality, canPresent, nestedContext, path, sourceDocument, markApproximate)) : gpu.draw(drawn, active, pictures, canPresent, deadline, await nestedTarget?.(pictures))
-      result = nestedRender ? await draw() : await this.exclusiveDraw(draw, frame, cachedWindow ? 'prerendered' : 'live', !approximatePictures, requestOrder)
+        (clip, plan, input) => this.readFilterFrames(document, clip, plan, input, frame, quality, canPresent, nestedContext, path, sourceDocument, markApproximate, markProvenance)) : gpu.draw(drawn, active, pictures, canPresent, deadline, await nestedTarget?.(pictures))
+      result = nestedRender ? await draw() : await this.exclusiveDraw(draw, frame, cachedWindow ? 'prerendered' : 'live', !approximatePictures, requestOrder, () => provenance)
     } catch (error) {
       if (canPresent()) throw error
       result = { presented: false, completion: Promise.resolve() }
@@ -2298,7 +2374,8 @@ export class VideoEditRenderer {
     // The frame (the top of the tree) completes after its code input pictures; their failure fails it.
     const frameCompletion = !nestedRender && nestedContext.completions.length ? Promise.all([completion, ...nestedContext.completions]).then(() => undefined) : completion
     // A top-level frame is approximate when any picture of its tree is, code video inputs included.
-    return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, presentedSource: cachedWindow ? 'prerendered' : 'live', decodeMs, gpuMs, effectErrors, ...(sceneIssues.length ? { sceneIssues } : {}), ...(approximatePictures ? { approximate: true } : {}), completion: frameCompletion }
+    if (nestedPicture) nestedPicture.provenance = provenance
+    return { provenance, canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, presentedSource: cachedWindow ? 'prerendered' : 'live', decodeMs, gpuMs, effectErrors, ...(sceneIssues.length ? { sceneIssues } : {}), ...(approximatePictures ? { approximate: true } : {}), completion: frameCompletion }
   }
   /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
   private readonly audioChains = new Map<string, AudioEffectChain>()

@@ -32,7 +32,9 @@ import { videoEditCornerPinMatrix } from '@/core/videoEdit/tracking'
 
 interface VideoGpuDevice extends GpuDevice {
   importExternalTexture(descriptor: { source: VideoFrame }): unknown
+  queue: GpuDevice['queue'] & { writeTexture(destination: unknown, data: Uint8Array, layout: unknown, size: unknown): void }
 }
+const blankTexturesByDevice = new WeakMap<GpuDevice, Map<string, { texture: GpuTexture; users: number }>>()
 export type VideoEditPicture = VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null
 interface LayerPipelines { video: GpuRenderPipeline; image: GpuRenderPipeline; codeImage: GpuRenderPipeline; cachedVideo: GpuRenderPipeline }
 export type VideoEditPresentationCapture = ((pixels: Promise<ImageBitmap>) => void) & { maxPixels?: number; gpu?: boolean }
@@ -174,7 +176,7 @@ export class VideoEditGpuCompositor {
   private readonly copies = new Set<Promise<void>>()
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
-  private blankTexture?: GpuTexture
+  private readonly blankReleases = new Set<() => void>()
   /** 帧混合管线，按输出平面格式；首次使用时编译。 */
   private readonly blendPipelines = new Map<string, Promise<GpuRenderPipeline>>()
   constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => VideoEditPresentationCapture | undefined, readyTiming?: (durationMs: number, stage?: string) => void, private readonly onPresentationWait?: () => void) {
@@ -383,7 +385,7 @@ export class VideoEditGpuCompositor {
       if (this.disposed) throw new Error('剪辑预览已关闭。')
       this.assertDevice()
     } catch (error) { native.release(); throw error }
-    const texture = target ?? this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x04 | 0x10 })
+    const texture = target ?? this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
     try {
       const encoder = this.device.createCommandEncoder()
       const resource = this.device.importExternalTexture({ source: native.frame })
@@ -392,6 +394,11 @@ export class VideoEditGpuCompositor {
       pass.setBindGroup(0, this.device.createBindGroup({ layout: this.copyRgba.getBindGroupLayout(0), entries: [{ binding: 0, resource }] }))
       pass.draw(3); pass.end()
       this.device.queue.submit([encoder.finish()])
+      if (native.meta.webRestore) {
+        const restore = native.meta.webRestore
+        if (width < 8 || height < 4 || restore.length !== 1024 || !restore.every(value => Number.isInteger(value) && value >= 0 && value <= 255)) throw new Error('网页快照原始像素无效')
+        this.device.queue.writeTexture({ texture }, Uint8Array.from(restore), { bytesPerRow: 256 }, [8, 4])
+      }
     } catch (error) {
       if (!target) texture.destroy()
       native.release()
@@ -400,25 +407,51 @@ export class VideoEditGpuCompositor {
     native.release(this.device)
     return { texture, owner: this.device }
   }
-  /**
-   * A transparent owned picture for a video layer without a picture at its source time. One shared 1×1 texture
-   * (WebGPU zero-initializes it); releasing the frame never destroys it.
-   */
+  /** 占位由设备按尺寸共享；作者可直接读取输入尺寸，不能把透明纹理的 1×1 暴露为内容尺寸。 */
+  private blankTexture(width: number, height: number): { texture: GpuTexture; release: () => void } {
+    const key = `${width}x${height}`
+    let pool = blankTexturesByDevice.get(this.device)
+    if (!pool) { pool = new Map(); blankTexturesByDevice.set(this.device, pool) }
+    let entry = pool.get(key)
+    if (!entry) {
+      entry = { texture: this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x04 }), users: 0 }
+      pool.set(key, entry)
+    }
+    entry.users++
+    const borrowed = entry
+    let released = false
+    const release = (): void => {
+      if (released) return
+      released = true
+      this.blankReleases.delete(release)
+      const completed = this.device.queue.onSubmittedWorkDone().catch(() => undefined).then(() => {
+        if (--borrowed.users === 0) { borrowed.texture.destroy(); pool!.delete(key) }
+      }).finally(() => this.copies.delete(completed))
+      this.copies.add(completed)
+    }
+    this.blankReleases.add(release)
+    return { texture: entry.texture, release }
+  }
+
   async blank(width: number, height: number, timestamp: number, duration: number): Promise<VideoEditGpuFrame> {
     await this.ready
     this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
-    this.blankTexture ??= this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x04 })
-    return new VideoEditGpuFrame({ timestamp, duration, displayWidth: Math.max(1, width), displayHeight: Math.max(1, height), rotation: 0, flip: false }, this.blankTexture, undefined, 4, () => {})
+    const w = Math.max(1, Math.ceil(width)), h = Math.max(1, Math.ceil(height))
+    const blank = this.blankTexture(w, h)
+    return new VideoEditGpuFrame({ timestamp, duration, displayWidth: w, displayHeight: h, rotation: 0, flip: false }, blank.texture, undefined, 0, blank.release)
   }
-  /** 来源第一幅尚未到达时，代码输入也使用同一张透明像素，仍满足图片参数的可绘制契约。 */
+  /** 同尺寸占位不占本帧必需输入预算，由设备池持有到最后一个合成器释放。 */
   async blankWebPicture(web: AuthorWebFrame): Promise<VideoEditWebPicture> {
     await this.ready
     this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
-    this.blankTexture ??= this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x04 })
     const size = codeWebPixelSize(web)
-    return new VideoEditWebPicture(this.blankTexture!, 1, 1, this.device, web, false, size)
+    const blank = this.blankTexture(size.width, size.height)
+    const picture = new VideoEditWebPicture(blank.texture, size.width, size.height, this.device, web, false)
+    picture.isPlaceholder = true
+    picture.releasePlaceholder = blank.release
+    return picture
   }
   /**
    * 帧混合（时间重映射补帧）：`a`、`b` 是同一素材相邻两帧，返回 a·(1−weight) + b·weight 的新帧（同尺寸、同格式，
@@ -798,7 +831,9 @@ export class VideoEditGpuCompositor {
     for (const value of this.textures.values()) value.texture.destroy()
     for (const value of this.uniforms.values()) value.destroy()
     for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }
-    this.pool.length = 0; this.blankTexture?.destroy(); this.blankTexture = undefined
+    this.pool.length = 0
+    for (const release of this.blankReleases) release()
+    await Promise.allSettled([...this.copies])
     this.precise?.texture.destroy(); this.precise = undefined
     this.motionTarget?.texture.destroy(); this.motionTarget = undefined
     this.textures.clear(); this.uniforms.clear(); if (!this.shared) this.manager.destroy()

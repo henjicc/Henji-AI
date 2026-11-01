@@ -1,8 +1,9 @@
 import type { ContentTrustReference } from '@/core/contentTrust'
+import type { WebTimeGrid } from '@/core/videoEdit/webTimeCache'
 import type { CodeWebReference } from '@/core/imaging/parameterTypes'
 import { codeWebPixelSize, codeWebView, type CodeWebView } from '@/core/videoEdit/codeMaterial/webSource'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import type { WebSourceInfo } from '@/platform/contracts/videoFrames'
+import type { WebSourceCaptureRequest, WebSourceInfo } from '@/platform/contracts/videoFrames'
 import type { AuthorWebFrame } from './videoEditAuthorModule'
 import { assertAuthorTrust } from './videoEditAuthorTrust'
 import { VideoEditCodePicture } from './videoEditCodePicture'
@@ -18,9 +19,14 @@ export type VideoEditWebFrameCopy = (frame: NativeVideoFrame, width: number, hei
 const WEB_SESSION_LIMIT = 4
 const WEB_SESSION_IDLE_MS = 60_000
 const WEB_SESSION_RECENT_MS = 2_000
+const WEB_PREOPEN_RETRY_MS = 3_000
 const aborted = (): DOMException => new DOMException('网页取帧已取消。', 'AbortError')
 
 export interface WebPictureOptions {
+  precision?: WebSourceCaptureRequest['precision']
+  cachePolicy?: WebSourceCaptureRequest['cachePolicy']
+  cacheWrite?: boolean
+  cacheGrid?: WebTimeGrid
   text?: readonly string[]
   outputScale?: number
   /** 播放与拖动预览共用一帧截止时间。 */
@@ -32,6 +38,7 @@ export interface WebPictureOptions {
 }
 interface WebRead {
   key: string
+  demand?: string
   abort: AbortController
   started: boolean
   preview: boolean
@@ -68,9 +75,26 @@ interface WebFrameState {
 }
 let channelOf: () => VideoEditNativeFrameReceiver | undefined = () => undefined
 export function installVideoEditWebChannel(provider: () => VideoEditNativeFrameReceiver | undefined): void { channelOf = provider }
+const WEB_DISPLAY_TIERS = [0.25, 0.5, 0.75, 1]
+/**
+ * 节目网页画面按屏幕上实际显示倍率选的离散档位（`ratio` 为显示物理像素相对序列尺寸）。档位变化会重排页面并换一套缓存，
+ * 所以只在越过相邻档位约一成时换档：放大时最多容忍约 5% 的欠采样，缩小时要比下一档再小约一成才降。
+ */
+export function videoEditWebDisplayTier(ratio: number, current?: number): number {
+  const tier = (value: number): number => WEB_DISPLAY_TIERS.find(candidate => candidate >= value) ?? 1
+  if (current === undefined) return tier(ratio)
+  const up = tier(ratio / 1.05), down = tier(ratio * 1.1)
+  return current < up ? up : current > down ? down : current
+}
 export function videoEditWebSourceKey(reference: CodeWebReference): string {
   const view = codeWebView(reference)
   return JSON.stringify([reference.path, view.width, view.height, view.region, view.scale])
+}
+
+/** 同一页面时刻的读取身份：精度、缓存网格与预览档（播放帧取预览档）不同的读不能互相顶替。 */
+function webReadKey(at: number, view: CodeWebView, reference: CodeWebReference, precision: NonNullable<WebSourceCaptureRequest['precision']>, cacheGrid: WebTimeGrid | undefined, preview: boolean, cachePolicy?: WebSourceCaptureRequest['cachePolicy'], textSelectors?: readonly string[]): string {
+  // 要文字几何的读还要区分预览档与所选文字，避免拿不带文字的画面顶替。
+  return JSON.stringify([at, view.scale, reference.boxes ?? [], precision, precision === 'web-cache' ? [cacheGrid, preview, cachePolicy] : null, ...(textSelectors ? [preview, textSelectors] : [])])
 }
 
 /** 取消立即结束等待，迟到的共享帧仍由接收端归还。 */
@@ -88,6 +112,7 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 export class VideoEditWebInputs {
   private readonly sessions = new Map<string, WebSession>()
   private readonly trusted = new Set<string>()
+  private readonly preopenFailures = new Map<string, number>()
   private nextTicket = 1
   private disposed = false
   private allocatedBytes = 0
@@ -182,7 +207,7 @@ export class VideoEditWebInputs {
       key = nearest?.key ?? JSON.stringify([base, this.nextSlot++])
       timesInFrame.set(time, key)
     }
-    const session = this.session(channel, key, base, time, reference.path, view)
+    const session = this.session(channel, key, base, time, reference.path, view, trust)
     session.time = time
     if (session.frame !== frame) {
       session.frame = frame
@@ -193,7 +218,8 @@ export class VideoEditWebInputs {
     }
     session.lastUsed = performance.now()
     const times = [time, ...(options.deadline === undefined ? options.ahead ?? [] : [])]
-    const readKey = (at: number): string => JSON.stringify([at, view.scale, textSelectors ? options.deadline !== undefined : false, reference.boxes ?? [], ...(textSelectors ? [textSelectors] : [])])
+    const precision = options.precision ?? 'exact'
+    const readKey = (at: number): string => webReadKey(at, view, reference, precision, options.cacheGrid, options.deadline !== undefined, options.cachePolicy, textSelectors)
     const keep = new Set(times.map(readKey))
     const kept = state.kept.get(session) ?? new Set<string>()
     state.kept.set(session, kept)
@@ -206,7 +232,9 @@ export class VideoEditWebInputs {
       read.abort.abort(); session.reads.delete(key)
       if (read.picture && read.picture !== session.last) session.retired.add(read.picture)
     }
-    const read = this.read(session, readKey(time), reference, view, time, copy, options.deadline !== undefined, state, textSelectors)
+    const read = this.read(session, readKey(time), reference, view, time, copy, options.deadline !== undefined, state, precision, options.cacheGrid, options.cachePolicy, options.cacheWrite, textSelectors)
+    // 精确导出已把可靠帧交给段发布器，不再为同一段登记另一份后台录制需求。
+    if (options.cacheGrid && (!options.cacheWrite || precision === 'web-cache')) this.demand(session, read, reference, view, time, options.cacheGrid, options.deadline !== undefined)
     const size = codeWebPixelSize(view)
     state.required.set(read, size.width * size.height * 4)
     const cancel = (): void => {
@@ -219,7 +247,7 @@ export class VideoEditWebInputs {
     try {
       this.checkBudget(frame, state.availableBytes())
       if (options.deadline === undefined) {
-        for (const at of times.slice(1)) this.read(session, readKey(at), reference, view, at, copy, false, state, textSelectors)
+        for (const at of times.slice(1)) this.read(session, readKey(at), reference, view, at, copy, false, state, precision, options.cacheGrid, options.cachePolicy, options.cacheWrite, textSelectors)
         const picture = await abortable(read.promise, options.signal)
         this.remember(session, picture)
         state.pinned.add(picture)
@@ -233,17 +261,61 @@ export class VideoEditWebInputs {
       if (picture) { state.pinned.add(picture); return this.withSelectors(picture, reference.boxes, textSelectors) }
       state.required.delete(read)
       options.approximate?.()
-      if (session.last) state.pinned.add(session.last)
+      const fallback = precision === 'web-cache' || session.last?.provenance !== 'web-cache' ? session.last : undefined
+      if (fallback) state.pinned.add(fallback)
       this.checkBudget(frame, state.availableBytes())
-      return session.last && this.withSelectors(session.last, reference.boxes, textSelectors)
+      return fallback && this.withSelectors(fallback, reference.boxes, textSelectors)
     } catch (error) { state.required.delete(read); cancel(); throw error }
     finally { options.signal?.removeEventListener('abort', cancel) }
   }
 
+  /**
+   * 硬剪点前预开即将出现的网页并预取它的第一幅：只开本会话已确认过的来源（后台不弹确认），不计入任何一帧的必需额度。
+   * 剪点那一帧按最近的页面时刻选中这个页面，同源跳转的另一段也得到自己的页面；读取键与播放帧相同，第一幅直接复用。
+   */
+  preopen(reference: CodeWebReference, time: number, frame: object, copy: VideoEditWebFrameCopy, trust: readonly ContentTrustReference[], options: Pick<WebPictureOptions, 'precision' | 'cachePolicy' | 'cacheGrid' | 'outputScale' | 'availableBytes'> = {}): void {
+    const channel = channelOf()
+    if (this.disposed || !channel || trust.length && !this.trusted.has(JSON.stringify(trust.map(value => value.id).sort()))) return
+    const view = codeWebView(reference)
+    view.scale *= Math.min(1, options.outputScale ?? 1)
+    const base = JSON.stringify([videoEditWebSourceKey(reference), trust.map(value => value.id).sort()])
+    const prepared = [...this.sessions.values()].find(session => session.base === base && Math.abs(session.time - time) < 1e-6)
+    // 已预开的页面在剪点前保持最近使用，不被空闲回收；页面总数到上限或刚打开失败时不再预开。
+    if (prepared) { prepared.lastUsed = performance.now(); return }
+    if (performance.now() - (this.preopenFailures.get(base) ?? -Infinity) < WEB_PREOPEN_RETRY_MS) return
+    if (this.sessions.size >= WEB_SESSION_LIMIT) {
+      // 页面满额时让最久没用、已空闲的页面让位；在用、在读或刚用过的页面都不动。
+      const now = performance.now()
+      const idle = [...this.sessions.values()].filter(session => now - session.lastUsed >= WEB_SESSION_RECENT_MS && ![...this.frames.values()].some(state => state.kept.has(session))
+        && ![...session.reads.values()].some(read => !read.picture && !read.abort.signal.aborted)).sort((left, right) => left.lastUsed - right.lastUsed)[0]
+      if (!idle) return
+      this.close(idle)
+    }
+    const state = this.beginFrame(frame)
+    if (options.availableBytes) state.availableBytes = options.availableBytes
+    const session = this.session(channel, JSON.stringify([base, this.nextSlot++]), base, time, reference.path, view, trust)
+    session.opening.catch(() => this.preopenFailures.set(base, performance.now()))
+    const precision = options.precision ?? 'exact'
+    const read = this.read(session, webReadKey(time, view, reference, precision, options.cacheGrid, true, options.cachePolicy), reference, view, time, copy, true, state, precision, options.cacheGrid, options.cachePolicy)
+    if (options.cacheGrid) this.demand(session, read, reference, view, time, options.cacheGrid, true)
+  }
+
+  private demand(session: WebSession, read: WebRead, reference: CodeWebReference, view: CodeWebView, time: number, cacheGrid: WebTimeGrid, latest: boolean): void {
+    const request = { time, scale: view.scale, latest, cacheGrid, ...(reference.boxes ? { boxes: reference.boxes } : {}) }
+    const demand = JSON.stringify(request)
+    if (read.demand === demand) return
+    read.demand = demand
+    void session.opening.then(info => {
+      if (!session.closed && !read.abort.signal.aborted) return session.channel.call('cacheWeb', { streamId: info.streamId, ...request })
+    }).catch(() => { if (read.demand === demand) read.demand = undefined })
+  }
+
   private withSelectors(picture: VideoEditWebPicture, selectors: readonly string[] = [], textSelectors?: readonly string[]): VideoEditWebPicture {
     if (selectors.every(selector => Object.hasOwn(picture.web.boxes, selector)) && (!textSelectors || textSelectors.every(selector => Object.hasOwn(picture.web.text ?? {}, selector)))) return picture
-    return new VideoEditWebPicture(picture.texture, picture.width, picture.height, picture.owner,
+    const selected = new VideoEditWebPicture(picture.texture, picture.width, picture.height, picture.owner,
       { ...picture.web, boxes: { ...Object.fromEntries(selectors.map(selector => [selector, null])), ...picture.web.boxes }, ...(textSelectors ? { text: freezeWebText({ ...unavailableWebText(textSelectors, 'previous-picture-coverage'), ...picture.web.text }) } : {}) }, picture.opaqueBackground, { width: picture.displayWidth, height: picture.displayHeight })
+    selected.provenance = picture.provenance
+    return selected
   }
 
   private remember(session: WebSession, picture: VideoEditWebPicture): void {
@@ -251,7 +323,7 @@ export class VideoEditWebInputs {
     session.last = picture
   }
 
-  private read(session: WebSession, key: string, reference: CodeWebReference, view: CodeWebView, time: number, copy: VideoEditWebFrameCopy, preview: boolean, state: WebFrameState, textSelectors?: string[]): WebRead {
+  private read(session: WebSession, key: string, reference: CodeWebReference, view: CodeWebView, time: number, copy: VideoEditWebFrameCopy, preview: boolean, state: WebFrameState, precision: NonNullable<WebSourceCaptureRequest['precision']>, cacheGrid?: WebTimeGrid, cachePolicy?: WebSourceCaptureRequest['cachePolicy'], cacheWrite?: boolean, textSelectors?: string[]): WebRead {
     const existing = session.reads.get(key)
     if (existing) {
       // 无文本的旧捕获可继续接管；文本读键分开，预览的覆盖状态不能作为精确结果。
@@ -275,7 +347,7 @@ export class VideoEditWebInputs {
         }
         controller.signal.addEventListener('abort', cancel, { once: true })
         try {
-          const result = await abortable(session.channel.call('captureWeb', { streamId: info.streamId, time, ticket, scale: view.scale, latest: read.preview, ...(reference.boxes ? { boxes: reference.boxes } : {}), ...(textSelectors ? { text: textSelectors } : {}) }), controller.signal)
+          const result = await abortable(session.channel.call('captureWeb', { streamId: info.streamId, time, ticket, scale: view.scale, latest: read.preview, precision, ...(cacheWrite ? { cacheWrite } : {}), ...(cachePolicy ? { cachePolicy } : {}), ...(cacheGrid ? { cacheGrid } : {}), ...(reference.boxes ? { boxes: reference.boxes } : {}), ...(textSelectors ? { text: textSelectors } : {}) }), controller.signal)
           if (result.dropped || generation !== session.generation) {
             if (!read.preview && !session.closed && !controller.signal.aborted) continue
             throw aborted()
@@ -319,6 +391,7 @@ export class VideoEditWebInputs {
             throw aborted()
           }
           const picture = new VideoEditWebPicture(copied.texture, result.pixelWidth, result.pixelHeight, copied.owner, { time, width: view.width, height: view.height, region: [...view.region], scale: view.scale, duration: result.duration, boxes: result.boxes ?? {}, ...(textSelectors ? { text: freezeWebText(result.text!.results), imageMapping: freezeWebText(webTextImageMapping(view.region, result.pixelWidth, result.pixelHeight)) } : {}) })
+          picture.provenance = result.provenance ?? 'live'
           read.picture = picture
           // 前视不能把未来帧当作当前播放的回退画面。
           if (preview) this.remember(session, picture)
@@ -348,10 +421,10 @@ export class VideoEditWebInputs {
     await assertAuthorTrust({ context: [...trust] }); this.trusted.add(key)
   }
 
-  private session(channel: VideoEditNativeFrameReceiver, key: string, base: string, time: number, path: string, view: CodeWebView): WebSession {
+  private session(channel: VideoEditNativeFrameReceiver, key: string, base: string, time: number, path: string, view: CodeWebView, trust: readonly ContentTrustReference[]): WebSession {
     const existing = this.sessions.get(key)
     if (existing) { this.sessions.delete(key); this.sessions.set(key, existing); return existing }
-    const opening = channel.call('openWeb', { path, ...view })
+    const opening = channel.call('openWeb', { path, ...view, trust: [...trust] })
     const session: WebSession = { key, base, time, path, channel, opening, previewTail: Promise.resolve(), reads: new Map(), retired: new Set(), pool: new Set(), generation: 0, lastUsed: performance.now(), waiting: new Map(), closed: false }
     session.unsubscribeContent = channel.subscribeWebContent(change => { if (change.path === path) this.invalidateSession(session, true) })
     void opening.then(info => {

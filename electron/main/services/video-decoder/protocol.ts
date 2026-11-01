@@ -353,6 +353,12 @@ export interface VideoDecoderAudioRead {
 export type VideoDecoderCommand =
   | { type: 'hello'; clientPid?: number; limits?: VideoDecoderLimitOverrides }
   | { type: 'ping' }
+  | { type: 'web_cache_lock' | 'web_cache_unlock' | 'web_cache_rollback'; key: string; lease: string }
+  | { type: 'web_cache_foreground'; active: boolean }
+  | { type: 'web_cache_submission' | 'web_cache_submission_release'; lease: string }
+  | { type: 'web_cache_commit'; key: string; lease: string; temporary: string; destination: string }
+  | { type: 'web_cache_prepare'; key: string; lease: string; destination: string }
+  | { type: 'web_cache_discard'; key: string; lease: string; destination: string }
   | { type: 'probe'; path: string }
   | { type: 'cancel'; targetId: string }
   | { type: 'shutdown' }
@@ -361,6 +367,7 @@ export type VideoDecoderCommand =
   | { type: 'stats' }
   | { type: 'close_client_handles'; handles: string[] }
   | ({ type: 'open_decoder' } & VideoDecoderOpenRequest)
+  | { type: 'set_decoder_segment'; streamId: string; path: string }
   | { type: 'frame_at'; streamId: string; time: number; ticket: string }
   | { type: 'schedule'; streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number } }
   | { type: 'cancel_schedule'; streamId: string; scheduleId: string }

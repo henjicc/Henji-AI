@@ -11,11 +11,15 @@ export type VideoFrameRequestTag = { kind: 'frame_at'; id: string } | { kind: 's
 
 /** 每帧随 VideoFrame 一起到达的元数据。 */
 export interface VideoFrameMeta {
+  /** 可靠网页快照的身份区在消费前还原为原始RGBA；每行256字节，共8×4像素。 */
+  webRestore?: number[]
   /** `connect()` 返回的通道标识，preload 据此把帧投递到对应端口。 */
   route: string
   streamId: string
   frameIndex: number
   timestampUs: number
+  /** 裁去编码补边后按原像素显示，避免纹理导入把可见区域拉伸至编码尺寸。 */
+  displaySize?: { width: number; height: number }
   /** 解码帧：源呈现时间（微秒，与 mediabunny `microsecondTimestamp` 同口径）与时长。 */
   ptsUs?: number
   durationUs?: number
@@ -90,7 +94,7 @@ export interface VideoFrameDecoderDetails {
   bitDepth: number
   chromaLog2: [number, number]
   hasAlpha: boolean
-  path: 'copy_nv12' | 'shader_semiplanar' | 'upload_nv12' | 'shader_planar' | 'cpu_fallback'
+  path: 'copy_nv12' | 'shader_semiplanar' | 'cuda_planar' | 'upload_nv12' | 'shader_planar' | 'cpu_fallback'
   intraOnly: boolean
 }
 
@@ -224,6 +228,8 @@ export interface WebSourceOpenRequest {
   height: number
   region: [number, number, number, number]
   scale: number
+  /** 原网页所在文档/代码的外来标记；省略仅允许实时开页，不登记后台补录。 */
+  trust?: import('../../core/contentTrust').ContentTrustReference[]
 }
 
 export interface WebSourceInfo {
@@ -251,12 +257,29 @@ export interface WebSourceCaptureRequest {
   scale?: number
   /** 播放、拖动只保留最后一个尚未执行的目标。 */
   latest?: boolean
+  /** 缺省精确；仅显式授权的上屏/导出消费可读网页缓存。 */
+  precision?: 'exact' | 'web-cache'
+  /** 节目上屏按页面实测择优；省略时由 precision 决定是否读取缓存。 */
+  cachePolicy?: 'adaptive'
+  /** 精确导出把已取得的可靠网格帧送入缓存，不额外执行网页。 */
+  cacheWrite?: boolean
+  cacheGrid?: import('../../core/videoEdit/webTimeCache').WebTimeGrid
+}
+
+/** 补录需求独立于画面读取；复用已有纹理也能更新相位和暂停后的高档需求。 */
+export interface WebSourceCacheRequest extends Omit<WebSourceCaptureRequest, 'ticket'> {
+  cacheGrid: import('../../core/videoEdit/webTimeCache').WebTimeGrid
 }
 
 /** 元素在视口里的矩形 [x, y, w, h]（CSS 像素）；找不到为 null。 */
 export type WebSourceBox = [number, number, number, number] | null
 
+/** 实际交付来源；缓存获准但回退实时页面时仍为 live。 */
+export type WebSourceProvenance = 'live' | 'web-cache'
+
 export interface WebSourceCaptureResult {
+  /** 旧回执缺省为实时网页；没有交付画面的 dropped 回执可省略。 */
+  provenance?: WebSourceProvenance
   text?: import('../../core/videoEdit/webTextGeometry').WebTextCapture
   /** 被更新目标或取消票据取代，不会送出画面。 */
   dropped?: boolean
@@ -295,6 +318,7 @@ export type VideoFramePortCall =
   | { method: 'closeAudio'; params: { audioId: string } }
   | { method: 'openWeb'; params: Omit<WebSourceOpenRequest, 'route'> }
   | { method: 'captureWeb'; params: WebSourceCaptureRequest }
+  | { method: 'cacheWeb'; params: WebSourceCacheRequest }
   | { method: 'cancelWeb'; params: { streamId: string; ticket: string } }
   | { method: 'closeWeb'; params: { streamId: string } }
 
@@ -313,6 +337,7 @@ export interface VideoFramePortCallResults {
   closeAudio: boolean
   openWeb: WebSourceInfo
   captureWeb: WebSourceCaptureResult
+  cacheWeb: void
   cancelWeb: boolean
   closeWeb: boolean
 }

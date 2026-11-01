@@ -23,6 +23,8 @@ pub mod codec;
 pub mod demux;
 pub mod plan;
 pub mod timing;
+#[cfg(windows)]
+mod workers;
 
 use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
@@ -109,6 +111,7 @@ pub enum SchedulePlan {
 
 #[derive(Debug)]
 pub enum SessionCommand {
+    Segment { request_id: String, path: String, cancel: CancelToken },
     FrameAt { request_id: String, time: f64, ticket: String, key_only: bool, cancel: CancelToken },
     Schedule { schedule_id: String, plan: SchedulePlan },
     Cancel { schedule_id: String },
@@ -260,8 +263,8 @@ mod imp {
     }
 
     /// 启动会话线程：打开文件并响应 `request_id`，之后处理命令直到停止。
-    pub fn spawn(request_id: String, platform: Arc<dyn VideoPlatform>, options: DecodeOptions, control: Arc<StreamControl>, commands: Receiver<SessionCommand>, budget: crate::budget::Budget) -> std::io::Result<std::thread::JoinHandle<Box<dyn StreamResources>>> {
-        std::thread::Builder::new().name(format!("decode-{}", options.stream_id)).spawn(move || -> Box<dyn StreamResources> {
+    pub fn spawn(request_id: String, platform: Arc<dyn VideoPlatform>, options: DecodeOptions, control: Arc<StreamControl>, commands: Receiver<SessionCommand>, budget: crate::budget::Budget) -> std::io::Result<crate::streams::StreamTask> {
+        let job = move || -> Box<dyn StreamResources> {
             let started = Instant::now();
             let device = platform.clone();
             match Session::open(platform, &options, control.clone(), commands, &budget) {
@@ -285,7 +288,11 @@ mod imp {
                     Box::new(NoResources)
                 }
             }
-        })
+        };
+        #[cfg(windows)]
+        { super::workers::spawn(job) }
+        #[cfg(not(windows))]
+        { std::thread::Builder::new().name("decode".into()).spawn(job).map(crate::streams::StreamTask::Dedicated) }
     }
 
     impl Session {
@@ -302,7 +309,7 @@ mod imp {
                 logging::warn("decode.budget.software_fallback", "硬件解码会话已达上限，本会话改用软解", json!({ "streamId": options.stream_id, "limits": budget.stats() }));
             }
             let hardware = if hardware_ticket.is_some() {
-                match platform.hardware_device() {
+                match platform.hardware_device(parameters.codec_id, parameters.format) {
                     Ok(device) => Some(device),
                     Err(reason) => {
                         logging::warn("decode.hardware_unavailable", &reason, json!({}));
@@ -313,7 +320,7 @@ mod imp {
                 None
             };
             let profiles = |name: &str| platform.has_decoder_profile(name);
-            let decoder = Decoder::open(DecoderSetup { parameters, all_frames_key: input.all_frames_key(), time_base: stream.time_base, has_alpha: has_alpha_tag, purpose: options.purpose, hardware, device_profiles: &profiles })?;
+            let decoder = Decoder::open(DecoderSetup { parameters, all_frames_key: input.all_frames_key(), time_base: stream.time_base, has_alpha: has_alpha_tag, purpose: options.purpose, hardware, device_profiles: &profiles, platform: platform.clone() })?;
             let time_base = input.time_base;
             let frame_rate = crate::probe::preferred_frame_rate(stream.avg_frame_rate, stream.r_frame_rate).unwrap_or(0.0);
             let start_ticks = (stream.start_time != ffmpeg_sys_next::AV_NOPTS_VALUE).then_some(stream.start_time);
@@ -335,7 +342,7 @@ mod imp {
                 drop(first);
                 let Primer { mut input, .. } = session_parts;
                 input.seek_start()?;
-                let decoder = Decoder::open(DecoderSetup { parameters: input.parameters(), all_frames_key: input.all_frames_key(), time_base: input.stream().time_base, has_alpha: has_alpha_tag, purpose: options.purpose, hardware: None, device_profiles: &profiles })?;
+                let decoder = Decoder::open(DecoderSetup { parameters: input.parameters(), all_frames_key: input.all_frames_key(), time_base: input.stream().time_base, has_alpha: has_alpha_tag, purpose: options.purpose, hardware: None, device_profiles: &profiles, platform: platform.clone() })?;
                 session_parts = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None, all_key: true };
                 first = session_parts.first_frame(&control)?;
             }
@@ -372,8 +379,9 @@ mod imp {
                 hardware_ticket = None;
             }
             // Video memory budget (3.1): the pool, this path's intermediates and the hardware surface pool.
-            let surface = hardware_active.then(|| if first.hardware_sw_format().and_then(format_info).is_some_and(|info| info.depth > 8) { SharedFormat::P010le } else { SharedFormat::Nv12 });
-            let memory_bytes = crate::budget::session_bytes(output, pool_dimensions, pool_size, path, surface);
+            let surface = (hardware_active && path != crate::convert::WritePath::CudaPlanar).then(|| if first.hardware_sw_format().and_then(format_info).is_some_and(|info| info.depth > 8) { SharedFormat::P010le } else { SharedFormat::Nv12 });
+            let hardware_surfaces = session_parts.decoder.hardware_surfaces().unwrap_or(crate::budget::HARDWARE_SURFACES);
+            let memory_bytes = crate::budget::session_bytes(output, pool_dimensions, pool_size, path, surface, hardware_surfaces);
             let vram = budget.reserve_vram(&options.stream_id, memory_bytes)?;
             let first_ms = opening.elapsed().as_secs_f64() * 1000.0;
             let frames = platform.create_frame_output(output, pool_dimensions, (width, height), pool_size).map_err(|message| ServiceError::new("GPU_FAILED", message))?;
@@ -386,6 +394,7 @@ mod imp {
                 "codec": codec_name,
                 "decoderName": session_parts.decoder.name,
                 "hardware": hardware_active,
+                "hardwareSurfaces": hardware_active.then_some(hardware_surfaces),
                 "hardwareRequested": session_parts.decoder.hardware_requested,
                 "pixelFormat": info.name,
                 "bitDepth": info.depth,
@@ -489,6 +498,15 @@ mod imp {
                     },
                 };
                 match command {
+                    SessionCommand::Segment { request_id, path, cancel } => {
+                        let started = Instant::now();
+                        let result = self.set_segment(&path, &cancel);
+                        match &result {
+                            Ok(_) => logging::emit("debug", "decode.segment.completed", "共享解码会话已切换段", json!({ "streamId": self.stream_id, "path": path, "elapsedMs": started.elapsed().as_secs_f64() * 1000.0 })),
+                            Err(error) => logging::warn("decode.segment.failed", &error.message, json!({ "streamId": self.stream_id, "path": path, "code": error.code })),
+                        }
+                        crate::respond(&request_id, result);
+                    }
                     SessionCommand::FrameAt { request_id, time, ticket, key_only, cancel } => {
                         let result = self.answer_frame_at(time, ticket, key_only, cancel);
                         crate::respond(&request_id, result);
@@ -508,10 +526,50 @@ mod imp {
         fn unanswered_frame_ats(&mut self) -> Vec<String> {
             std::iter::from_fn(|| self.commands.try_recv().ok())
                 .filter_map(|command| match command {
-                    SessionCommand::FrameAt { request_id, .. } => Some(request_id),
+                    SessionCommand::FrameAt { request_id, .. } | SessionCommand::Segment { request_id, .. } => Some(request_id),
                     _ => None,
                 })
                 .collect()
+        }
+
+        fn set_segment(&mut self, path: &str, cancel: &CancelToken) -> Result<Value, ServiceError> {
+            if cancel.is_cancelled() { return Err(superseded()); }
+            if self.stopped() { return Err(session_stopped()); }
+            if self._hardware.is_none() || self.input.parameters().codec_id != ffmpeg_sys_next::AVCodecID::AV_CODEC_ID_HEVC {
+                return Err(ServiceError::new("UNSUPPORTED_FORMAT", "共享段需要 HEVC 硬解会话"));
+            }
+            let mut next = Input::open(path, None, self.control.stop.clone())?;
+            if !self.input.compatible_segment(&next) {
+                return Err(ServiceError::new("FORMAT_CHANGED", "共享段的编码参数或时间基不一致"));
+            }
+            let first = next.read()?.ok_or_else(|| ServiceError::new("DECODE_FAILED", "共享段没有视频包"))?;
+            if !first.is_key() { return Err(ServiceError::new("DECODE_FAILED", "共享段必须从独立关键帧开始")); }
+            if cancel.is_cancelled() { return Err(superseded()); }
+            // 新段与旧段没有参考关系；只清解码状态，不销毁 AVCodecContext、硬件设备或共享纹理。
+            self.candidate = None;
+            self.lookahead = None;
+            self.pending_packet = None;
+            self.queued = None;
+            self.decoder.flush();
+            self.decoder.skip_nonref(false);
+            self.decoder.set_segment_keys(next.all_frames_key());
+            self.input = next;
+            self.tracker = RunTracker::default();
+            let timestamp = first.timestamp().unwrap_or(i64::MIN);
+            self.tracker.begin(timestamp);
+            self.tracker.flushed();
+            self.first_key_ts = Some(timestamp);
+            self.pending_packet = Some(first);
+            self.last_fed_dts = None;
+            self.draining = false;
+            self.drained = false;
+            self.fed_since_output = 0;
+            self.cut = None;
+            self.run_all_key = true;
+            self.skip_before = None;
+            self.run_skipped.clear();
+            self.force_seek = false;
+            Ok(json!({ "streamId": self.stream_id }))
         }
 
         fn position(&self) -> Position {
@@ -788,7 +846,7 @@ mod imp {
                         self.deferred = Some(command);
                         return true;
                     }
-                    Ok(SessionCommand::FrameAt { request_id, .. }) => {
+                    Ok(SessionCommand::FrameAt { request_id, .. } | SessionCommand::Segment { request_id, .. }) => {
                         crate::respond(&request_id, Err(ServiceError::new("BUSY", "该会话正在执行连续取帧计划")));
                     }
                     Err(TryRecvError::Empty) => return false,
@@ -1290,7 +1348,7 @@ mod imp {
                     let decoder = if recycle && reused.is_some() {
                         let mut decoder = reused.take().unwrap(); decoder.flush(); decoder
                     } else {
-                        Decoder::open(DecoderSetup { parameters, all_frames_key: input.all_frames_key(), time_base: input.stream().time_base, has_alpha: false, purpose: Purpose::Playback, hardware: Some(platform.hardware_device().unwrap()), device_profiles: &|name| platform.has_decoder_profile(name) }).unwrap()
+                        Decoder::open(DecoderSetup { parameters, all_frames_key: input.all_frames_key(), time_base: input.stream().time_base, has_alpha: false, purpose: Purpose::Playback, hardware: Some(platform.hardware_device(parameters.codec_id, parameters.format).unwrap()), device_profiles: &|name| platform.has_decoder_profile(name), platform: platform.clone() }).unwrap()
                     };
                     let mut primer = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None, all_key: true };
                     let picture = primer.first_frame(&control).unwrap();
@@ -1357,7 +1415,7 @@ mod imp {
             fn device_lost(&self) -> Option<String> {
                 None
             }
-            fn hardware_device(&self) -> Result<HardwareDevice, String> {
+            fn hardware_device(&self, _codec: ffmpeg_sys_next::AVCodecID, _format: i32) -> Result<HardwareDevice, String> {
                 Err("测试只用软解".into())
             }
             fn has_decoder_profile(&self, _: &str) -> bool {

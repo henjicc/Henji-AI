@@ -123,13 +123,16 @@ export const READER_TILE = 64
  * accepted frame (`full`: send every tile), copied back; the frame becomes the accepted one. `guard`: the
  * token square's size, never counted as a change.
  */
-export interface ReaderRequest { id: number; token: number | null; full: boolean; guard: number }
+export type ReaderPixelFormat = 'nv12' | 'yuv444p'
+/** 左上角 8×4 身份区校验后恢复同次复制的 RGBA 原像素；restore 按 256 字节行距排列。 */
+export interface ReaderSnapshotGuard { identity: string; width: number; height: number; restore: number[] }
+export interface ReaderRequest { id: number; token: number | null; full: boolean; guard: number; format?: ReaderPixelFormat; snapshot?: ReaderSnapshotGuard }
 /**
  * `token`: the capture token the frame shows (-1 none). `tiles`: indices (row-major, READER_TILE square)
  * of the tiles in `pixels`, one after another, each as NV12 (BT.601 limited range): READER_TILE rows of
  * READER_TILE luma bytes, then READER_TILE / 2 rows of READER_TILE interleaved U, V bytes; null when the
- * frame was not accepted (an earlier picture).
+ * frame was not accepted (an earlier picture). yuv444p 为 BT.709 limited，三个等大平面按 Y、U、V 排列。
  */
 export type ReaderResult =
-  | { id: number; ok: true; token: number; width: number; height: number; tiles: Uint32Array | null; pixels: Uint8Array | null }
+  | { id: number; ok: true; token: number; width: number; height: number; tiles: Uint32Array | null; pixels: Uint8Array | null; guardMatched?: boolean; timings?: { guardMs: number; pixelsMs: number } }
   | { id: number; ok: false; error: string }

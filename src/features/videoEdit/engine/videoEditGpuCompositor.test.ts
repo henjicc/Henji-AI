@@ -49,16 +49,45 @@ it('候选预览效果纳入宿主预算，字体重置与关闭先释放作者�
 })
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0, loss: undefined as ((reason: string) => void) | undefined }))
+it('精确网页快照在GPU拷贝后还原身份区，合成和编码读取同一幅原始画面', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  const writeTexture = vi.fn()
+  Object.assign(device.queue, { writeTexture })
+  const restore = Array.from({ length: 1024 }, (_, index) => index % 256)
+  const release = vi.fn()
+  try {
+    const result = await compositor.copyWebFrame({ frame: {} as VideoFrame, meta: { webRestore: restore }, release } as unknown as NativeVideoFrame, 100, 100)
+    expect(writeTexture).toHaveBeenCalledWith({ texture: result.texture }, Uint8Array.from(restore), { bytesPerRow: 256 }, [8, 4])
+    expect(device.queue.submit.mock.invocationCallOrder[0]).toBeLessThan(writeTexture.mock.invocationCallOrder[0])
+    expect(release).toHaveBeenCalledWith(device)
+    result.texture.destroy()
+  } finally { await compositor.dispose() }
+})
 it('网页首帧占位保持透明，图片输入继续提供作者可读取的网页元数据', async () => {
-  const { compositor } = copyFixture(async () => {})
+  const { compositor, device } = copyFixture(async () => {})
+  device.createTexture.mockImplementation((descriptor: unknown) => ({ descriptor, createView: () => ({ descriptor }), destroy: vi.fn() }))
   const web = { time: 3, width: 1920, height: 1080, region: [0, 0, 1920, 1080] as [number, number, number, number], scale: 1, duration: null, boxes: {} }
   try {
     const picture = await compositor.blankWebPicture(web)
     expect(picture.opaqueBackground).toBe(false)
-    expect([picture.width, picture.height]).toEqual([1, 1])
+    expect([picture.width, picture.height]).toEqual([1920, 1080])
+    expect(picture.isPlaceholder).toBe(true)
+    const shared = await compositor.blankWebPicture({ ...web, time: 4 })
+    expect(shared.texture).toBe(picture.texture)
+    expect((await compositor.blankWebPicture({ ...web, scale: .5 })).width).toBe(960)
     expect([picture.displayWidth, picture.displayHeight]).toEqual([1920, 1080])
     const inputs = await compositor.prepareImages(new Map([['site', picture]]), () => true)
     expect(inputs.get('site')!.web).toEqual(web)
+    picture.releasePlaceholder!()
+    await Promise.resolve()
+    expect(picture.texture.destroy).not.toHaveBeenCalled()
+    shared.releasePlaceholder!()
+    await vi.waitFor(() => expect(picture.texture.destroy).toHaveBeenCalledOnce())
+    for (let width = 100; width < 120; width++) {
+      const transient = await compositor.blankWebPicture({ ...web, region: [0, 0, width, 100] })
+      transient.releasePlaceholder!()
+      await vi.waitFor(() => expect(transient.texture.destroy).toHaveBeenCalledOnce())
+    }
   } finally { await compositor.dispose() }
 })
 it('导出捕获在画布纹理过期前复制到 GPU 位图，不映射 CPU 缓冲区', async () => {

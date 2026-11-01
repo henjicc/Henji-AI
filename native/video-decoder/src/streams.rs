@@ -218,9 +218,36 @@ pub fn counters_value(control: &StreamControl) -> Value {
     })
 }
 
+pub enum StreamTask {
+    Dedicated(JoinHandle<Box<dyn StreamResources>>),
+    #[cfg(windows)]
+    Resident {
+        receiver: std::sync::mpsc::Receiver<std::thread::Result<Box<dyn StreamResources>>>,
+        finished: Arc<AtomicBool>,
+    },
+}
+
+impl StreamTask {
+    fn is_finished(&self) -> bool {
+        match self {
+            Self::Dedicated(thread) => thread.is_finished(),
+            #[cfg(windows)]
+            Self::Resident { finished, .. } => finished.load(Ordering::Acquire),
+        }
+    }
+
+    fn join(self) -> std::thread::Result<Box<dyn StreamResources>> {
+        match self {
+            Self::Dedicated(thread) => thread.join(),
+            #[cfg(windows)]
+            Self::Resident { receiver, .. } => receiver.recv().unwrap_or_else(|error| Err(Box::new(error))),
+        }
+    }
+}
+
 struct Stream {
     control: Arc<StreamControl>,
-    thread: Option<JoinHandle<Box<dyn StreamResources>>>,
+    thread: Option<StreamTask>,
     /// 解码会话的命令通道（测试画面流为 None）。
     commands: Option<Sender<crate::decode::SessionCommand>>,
 }
@@ -368,7 +395,7 @@ impl StreamManager {
         let control = Arc::new(StreamControl::new(options.pool_size as usize));
         control.set_info(options.format, options.width, options.height);
         let crate::platform::TestStream { thread, handles, layout } = platform.start_test_stream(&options, control.clone()).map_err(|message| ServiceError::new("GPU_FAILED", message))?;
-        self.streams.insert(options.stream_id.clone(), Stream { control, thread: Some(thread), commands: None });
+        self.streams.insert(options.stream_id.clone(), Stream { control, thread: Some(StreamTask::Dedicated(thread)), commands: None });
         let setup_ms = started.elapsed().as_secs_f64() * 1000.0;
         logging::info(
             "stream.started",

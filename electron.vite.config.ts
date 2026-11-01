@@ -40,6 +40,20 @@ const RENDERER_UNWATCHED_ROOTS = new Set(['docs', 'dist', 'out', 'native', 'rele
 // 根 package.json 是 "type": "module"，但 sandbox:true 的 preload 只支持 CJS，
 // 所以 main/preload 显式输出 .cjs（不受根 package.json ESM 默认值影响，与
 // scripts/*.cjs 的既有做法一致）；renderer 复用现有 src/ 与 vite.config.ts 的别名配置。
+/**
+ * sandbox:true 的 preload 只能 require('electron')，不能加载打包拆出的共享文件：两个 preload 入口一旦共用模块，
+ * 应用 preload 整个加载失败、window.henjiNative 消失。这里让构建直接失败，而不是产出打不开的应用。
+ */
+function selfContainedPreloads(): Plugin {
+  return {
+    name: 'henji-self-contained-preloads',
+    generateBundle(_options, bundle) {
+      const shared = Object.values(bundle).filter(item => item.type === 'chunk' && !item.isEntry).map(item => item.fileName)
+      if (shared.length) this.error(`preload 入口共用了模块，拆出了 ${shared.join('、')}；沙箱 preload 无法加载，请让各入口自包含。`)
+    },
+  }
+}
+
 export default defineConfig({
   main: {
     build: {
@@ -74,7 +88,7 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [replayMainWorld()],
+    plugins: [replayMainWorld(), selfContainedPreloads()],
     build: {
       outDir: 'out/preload',
       rollupOptions: {

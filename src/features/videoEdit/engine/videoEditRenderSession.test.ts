@@ -592,10 +592,10 @@ it('中途上屏通知独立于最终帧回执，保留现场回读标志且不�
     let settled = false
     void result.then(() => { settled = true })
     const authorElements = { sequenceId: 'sequence', revision: 1, frame: 15, clips: [] }
-    for (const source of ['prerendered', 'live'] as const) worker.onmessage!({ data: { id: 0, phase: 'presented', frame: 15, presentedSource: source, ...(source === 'live' ? { authorElements } : {}) } } as MessageEvent)
+    for (const source of ['prerendered', 'live'] as const) worker.onmessage!({ data: { id: 0, phase: 'presented', frame: 15, presentedSource: source, ...(source === 'live' ? { authorElements, provenance: 'web-cache' } : {}) } } as MessageEvent)
     await Promise.resolve()
-    expect(session.onPresentation).toHaveBeenNthCalledWith(1, 15, 'prerendered', undefined)
-    expect(session.onPresentation).toHaveBeenNthCalledWith(2, 15, 'live', authorElements)
+    expect(session.onPresentation).toHaveBeenNthCalledWith(1, 15, 'prerendered', undefined, undefined)
+    expect(session.onPresentation).toHaveBeenNthCalledWith(2, 15, 'live', authorElements, 'web-cache')
     expect(settled).toBe(false)
     worker.onmessage!({ data: { id: request.id, presented: true, presentedSource: 'live' } } as MessageEvent)
     expect((await result).presentedSource).toBe('live')
@@ -696,6 +696,18 @@ it('独立任务固定 look 快照，离屏复用刷新；并发工程的显式�
     await second.replaceContent(pinned)
     expect(documents(secondWorker).at(-1)?.authorEffects?.presets?.[0].name).toBe('工程副本')
   } finally { await first.dispose(); await second.dispose() }
+})
+
+it('Transport 缺省精确，显式许可可传递且历史或像素回读不放行网页缓存', async () => {
+  const session = new VideoEditRenderSession(composition())
+  try {
+    await session.present(0)
+    await session.present(1, false, false, undefined, undefined, undefined, 'interactive', false, false, false, 'web-cache')
+    await session.present(2, false, false, undefined, undefined, { width: 1, height: 1 }, 'interactive', false, false, false, 'web-cache')
+    await session.present(3, false, false, undefined, undefined, undefined, 'interactive', true, false, false, 'web-cache')
+    const requests = workers[0].messages.map(({ message }) => message).filter((message): message is Extract<RenderRequest, { kind: 'render' }> => message.kind === 'render')
+    expect(requests.map(request => request.precision)).toEqual(['exact', 'web-cache', 'exact', 'exact'])
+  } finally { await session.dispose() }
 })
 
 it('暂停取消字体准备中的播放帧，准备完成后也不能提交旧画面', async () => {

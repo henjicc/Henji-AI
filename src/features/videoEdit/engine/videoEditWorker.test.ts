@@ -67,13 +67,13 @@ beforeEach(async () => {
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
-function render(pixels: ImageBitmap, completion: Promise<void> = Promise.resolve(), presented = true): void {
+function render(pixels: ImageBitmap, completion: Promise<void> = Promise.resolve(), presented = true, provenance: 'live' | 'web-cache' = 'live'): void {
   void completion.catch(() => {})
   state.render.mockImplementation(async (...args: unknown[]) => {
     const capture = args[7] as VideoEditPresentationCapture | undefined
     capture?.(Promise.resolve(pixels))
     // Simulates canvas expiry during the asynchronous GPU completion wait.
-    return { presented, renderCached: false, decodeMs: 0, completion, canvas: { transferToImageBitmap() { throw new Error('画布纹理已过期') } }, gpuMs: 0 }
+    return { provenance, presented, renderCached: false, decodeMs: 0, completion, canvas: { transferToImageBitmap() { throw new Error('画布纹理已过期') } }, gpuMs: 0 }
   })
 }
 const request = { kind: 'render', frame: 15, sequential: false } as const
@@ -266,11 +266,11 @@ it('缓存暂停请求在现场合成挂起时已完成，紧接着的同帧拖�
   const slow = await send({ kind: 'render', frame: 501, sequential: false, scrubbing: true })
   expect(slow).toMatchObject({ presented: true, presentedSource: 'prerendered' })
   expect(slow.approximate).toBeUndefined()
-  expect(state.jump).toHaveBeenCalledWith(500, expect.any(Function), false, expect.any(Number))
+  expect(state.jump).toHaveBeenCalledWith(500, expect.any(Function), false, expect.any(Number), undefined)
   expect(state.render).toHaveBeenCalledOnce()
   const paused = await send({ kind: 'render', frame: 502, sequential: false })
   expect(paused).toMatchObject({ presented: true, presentedSource: 'prerendered' })
-  expect(state.supersede).toHaveBeenLastCalledWith(502, true)
+  expect(state.supersede).toHaveBeenLastCalledWith(502, true, undefined)
   release()
   await vi.waitFor(() => expect(state.render).toHaveBeenCalledTimes(2))
   await send({ kind: 'render', frame: 503, sequential: false, scrubbing: true })
@@ -442,7 +442,7 @@ it('暂停画面请求一到就让渲染器放弃还在准备的暂停精确画�
   await send({ kind: 'render', frame: 22, sequential: false, deadline: performance.timeOrigin + performance.now() })
   await send({ kind: 'render', frame: 23, sequential: false, readRgb: { width: 4, height: 4 } })
   await send({ kind: 'render', frame: 24, sequential: false, history: true })
-  expect(state.supersede.mock.calls).toEqual([[20, true]])
+  expect(state.supersede.mock.calls).toEqual([[20, true, undefined]])
   expect(state.abandon).not.toHaveBeenCalled()
   // Closing the session abandons it unconditionally, before queueing behind its decoding. The close is answered before
   // the test ends: the next test's session opens on the same worker module.
@@ -556,4 +556,19 @@ it('字体请求在缓存读取期间到达时，不再启动会挡住它的过�
   await vi.waitFor(() => expect(messages.some(message => message.id === id && !message.phase)).toBe(true))
   expect(state.render).not.toHaveBeenCalled()
   expect(await send({ kind: 'render', frame: 11, sequential: false, scrubbing: true })).toMatchObject({ presented: true, presentedSource: 'prerendered' })
+})
+
+it('Worker 普通与快路回执保留实际来源，像素读取强制精确', async () => {
+  render(bitmap())
+  render(bitmap(), Promise.resolve(), true, 'web-cache')
+  expect(await send({ ...request, precision: 'web-cache' })).toMatchObject({ provenance: 'web-cache' })
+  expect(state.render.mock.lastCall?.[11]).toBe('web-cache')
+  render(bitmap())
+  await send({ ...request, precision: 'web-cache', readRgb: { width: 1, height: 1 } })
+  expect(state.render.mock.lastCall?.[11]).toBe('exact')
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: true, provenance: 'web-cache', completion: Promise.resolve() })
+  expect(await send({ ...request, scrubbing: true, precision: 'web-cache' })).toMatchObject({ provenance: 'web-cache' })
+  expect(state.jump.mock.lastCall?.[4]).toBe('web-cache')
 })

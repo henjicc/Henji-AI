@@ -1,8 +1,14 @@
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+import type { WebSourceProvenance } from '@/platform/contracts/videoFrames'
 import { VIDEO_EDIT_PRECISE_FORMAT, type VideoEditGpuColorFormat } from './videoEditGpuFrame'
 
 /** Texture belongs to the compositor's device, with premultiplied alpha. */
 export class VideoEditCodePicture {
+  /** 参与这幅画面的网页来源；与时间或尺寸上的 approximate 独立。 */
+  provenance: WebSourceProvenance = 'live'
+  /** 设备共享的透明占位不属于本帧必需输入分配。 */
+  isPlaceholder = false
+  releasePlaceholder?: () => void
   /** 本帧含作者图层的零 alpha 发光；仅渲染成功后发布，嵌套合成沿输入传递。 */
   carriesLight = false
   /** True for `rgba16float` surfaces: effects and transitions on high-precision material keep its precision. */

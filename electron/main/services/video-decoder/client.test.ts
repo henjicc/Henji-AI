@@ -103,6 +103,22 @@ interface LogEntry {
   meta?: MainLoggerMeta
 }
 
+it('网页缓存租约命令不隐式启动或重启原生服务', async () => {
+  const { service, children } = createHarness(standardHandler({ web_cache_lock: (message, child) => child.reply(message.id, { acquired: true }) }), { restart: { maxRestarts: 0 } })
+  await expectCode(service.webCacheLock('key', 'token'), 'SESSION_GONE')
+  expect(children).toHaveLength(0)
+  await service.ensureStarted()
+  expect(await service.webCacheLock('key', 'token')).toEqual({ acquired: true })
+  children[0].exit(1)
+  await waitFor(() => service.state === 'failed')
+  await expectCode(service.webCachePrepare('key', 'token', 'ready'), 'SESSION_GONE')
+  await expectCode(service.webCacheCommit('key', 'token', 'tmp', 'ready'), 'SESSION_GONE')
+  await expectCode(service.webCacheRollback('key', 'token'), 'SESSION_GONE')
+  await expectCode(service.webCacheUnlock('key', 'token'), 'SESSION_GONE')
+  expect(children).toHaveLength(1)
+  await service.shutdown()
+})
+
 function createHarness(handlers: Handler[] | Handler, options: Partial<VideoDecoderServiceOptions> = {}) {
   const logs: LogEntry[] = []
   const children: FakeChild[] = []
@@ -259,16 +275,17 @@ describe('VideoDecoderService', () => {
     expect(children[0].received.filter((message) => message.type === 'probe')).toHaveLength(1)
   })
 
-  it('放弃在途取帧时按它的请求 ID 让原生会话停下这次解码', async () => {
-    const { service, children } = createHarness(standardHandler({ frame_at: () => undefined }))
+  it.each(['frame_at', 'set_decoder_segment'] as const)('取消 %s 时按请求 ID 停下原生工作', async type => {
+    const { service, children } = createHarness(standardHandler({ [type]: () => undefined }))
     await service.ensureStarted()
     const controller = new AbortController()
-    const pending = service.frameAt('vf-1', 2, 't1', { signal: controller.signal })
-    await waitFor(() => children[0].received.some((message) => message.type === 'frame_at'))
+    const pending = type === 'frame_at' ? service.frameAt('vf-1', 2, 't1', { signal: controller.signal })
+      : service.setDecoderSegment('vf-1', 'segment.mp4', { signal: controller.signal })
+    await waitFor(() => children[0].received.some((message) => message.type === type))
     controller.abort()
     await expectCode(pending, 'CANCELLED')
     await waitFor(() => children[0].received.some((message) => message.type === 'cancel'))
-    expect(children[0].received.find((message) => message.type === 'cancel')?.targetId).toBe(children[0].received.find((message) => message.type === 'frame_at')?.id)
+    expect(children[0].received.find((message) => message.type === 'cancel')?.targetId).toBe(children[0].received.find((message) => message.type === type)?.id)
   })
 
   it('detects a crash, fails in-flight requests and restarts per policy', async () => {

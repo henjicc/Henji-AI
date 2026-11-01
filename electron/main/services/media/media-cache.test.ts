@@ -166,3 +166,20 @@ describe('media cache shutdown', () => {
     expect(owner.values.size).toBe(0)
   })
 })
+
+it('网页派生缓存与精确重渲染有独立文件，旧元数据和两份实际内容可读回', async () => {
+  const root = await temporary(), manager = new MediaCacheManager(host(root))
+  const render = new VideoRenderCacheService(manager.createCache('render', undefined, { extension: '.mp4' }), manager.createCache('render', undefined, { extension: '.json' }), () => manager.categoryDirectory('render'))
+  const entry = { projectId: 'p', sequenceId: 's', windowKey: 'same', profile: 'h264', startFrame: 0, endFrame: 30, width: 1920, height: 1080, fps: 30 }
+  const webTemporary = await render.begin('p', 'same', 'h264')
+  await fs.writeFile(webTemporary, 'cached web pixels')
+  const web = await render.commit(webTemporary, { ...entry, provenance: 'web-cache' })
+  const exactTemporary = await render.begin('p', 'same', 'h264')
+  await fs.writeFile(exactTemporary, 'exact live pixels')
+  const exact = await render.commit(exactTemporary, entry)
+  expect(exact.path).not.toBe(web.path)
+  expect(await fs.readFile(web.path, 'utf8')).toBe('cached web pixels')
+  expect(await fs.readFile(exact.path, 'utf8')).toBe('exact live pixels')
+  expect(await render.list('p')).toEqual(expect.arrayContaining([web, exact]))
+  expect(await render.remove({ projectId: 'p', windowKeys: ['same'] })).toBe(2)
+})

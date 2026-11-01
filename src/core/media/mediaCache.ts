@@ -61,9 +61,9 @@ export interface MediaCacheFileEntry { file: string; size: number; usedMs: numbe
  * 纯计算：先删超过保留天数未使用的文件，再按最久未用删到总量不超过上限的 80%。
  * `protect` 返回 true 的文件（正在写入、正在使用）跳过。
  */
-export function planMediaCacheEviction(entries: readonly MediaCacheFileEntry[], options: { nowMs: number; retentionDays: MediaCacheRetentionDays; budgetBytes: number; protect?: (entry: MediaCacheFileEntry) => boolean }): MediaCacheFileEntry[] {
+export function planMediaCacheEviction<T extends MediaCacheFileEntry>(entries: readonly T[], options: { nowMs: number; retentionDays: MediaCacheRetentionDays; budgetBytes: number; protect?: (entry: T) => boolean }): T[] {
   const removable = entries.filter(entry => !options.protect?.(entry))
-  const remove = new Set<MediaCacheFileEntry>()
+  const remove = new Set<T>()
   if (options.retentionDays > 0) {
     const cutoff = options.nowMs - options.retentionDays * 24 * 60 * 60 * 1000
     for (const entry of removable) if (entry.usedMs < cutoff) remove.add(entry)

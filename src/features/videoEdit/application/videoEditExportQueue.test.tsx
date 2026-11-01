@@ -29,7 +29,7 @@ import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegio
 import { videoEditExportMemory } from './videoEditExportMemory'
 import type { VideoEditExportCapabilities } from '@/core/videoEdit/exportEncoding'
 
-const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), webScale: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][], smartRegions: [] as VideoEditSmartRegionSegments[] }))
+const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, precisions: [] as Array<[string, string | undefined]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), webScale: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][], smartRegions: [] as VideoEditSmartRegionSegments[] }))
 // 此组覆盖没有 encoding 的既有直出设置；两段编码在独立契约与 FFmpeg 测试中验证。
 vi.mock('@/core/videoEdit/exportPresets', async importOriginal => {
   const actual = await importOriginal<typeof import('@/core/videoEdit/exportPresets')>()
@@ -50,7 +50,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   updateDocument(document: VideoEditComposition) { this.composition = document }
   async renderBitmap() { return { bitmap: { width: 640, height: 360, close() {} } } }
   setSmartRegions(segments: VideoEditSmartRegionSegments) { encoding.smartRegions.push(segments) } setTracks() {} setRenderCache() {} async dispose() {}
-  async render(frame: number) { encoding.rendered.push([this.composition.name, frame]); return { singleFrameReads: 0 } }
+  async render(frame: number, _sequential?: boolean, precision?: string) { encoding.rendered.push([this.composition.name, frame]); encoding.precisions.push([this.composition.id, precision]); return { singleFrameReads: 0 } }
   async mixAudio(_time: number, duration: number) { return new AudioBuffer({ numberOfChannels: this.composition.channels, sampleRate: this.composition.sampleRate, length: Math.round(duration * this.composition.sampleRate) }) }
 } }))
 const file = (name: string): string => path.resolve(path.sep, 'fixture', name)
@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.stubGlobal('AudioEncoder', { isConfigSupported: async (config: AudioEncoderConfig) => ({ config, supported: await canEncodeAudio(config) }) })
   vi.mocked(canEncodeVideo).mockReset().mockResolvedValue(true)
   vi.mocked(canEncodeAudio).mockReset().mockResolvedValue(true)
-  installHarnessNativeStorage(); encoding.rendered = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.audioOptions = []; encoding.pictures = []; encoding.rendererOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
+  installHarnessNativeStorage(); encoding.rendered = []; encoding.precisions = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.audioOptions = []; encoding.pictures = []; encoding.rendererOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
   encoding.webScale.mockClear()
   videoEditExportQueue.clearFinished(); videoEditExportPresetLibrary.replace([])
   const platform = getPlatform()
@@ -239,6 +239,18 @@ it('1080p 序列导出 4K 不提高网页声明倍率', async () => {
   expect(job.state).toBe('completed')
   expect(encoding.webScale).toHaveBeenCalledWith(1, true)
 })
+it('导出缺省按精确网页画面合成，开启网页缓存后整段按网页缓存精度渲染', async () => {
+  const owner = await project(), projectId = owner.document.id
+  const base = { ...videoEditSequenceExportSettings(getActiveVideoEditSequence(owner)), loudness: null, addToLibrary: false, captionMode: 'none' as const }
+  for (const [name, useWebCache, precision] of [['exact.mp4', undefined, 'exact'], ['web.mp4', true, 'web-cache']] as const) {
+    encoding.precisions = []
+    const [job] = await enqueueVideoEditExports([{ projectId, settings: { ...base, ...(useWebCache ? { useWebCache } : {}) }, path: file(name), range: { startFrame: 0, endFrame: 2 } }])
+    await videoEditExportQueue.wait(job.id)
+    expect(job.state).toBe('completed')
+    expect(encoding.precisions.length).toBeGreaterThan(0)
+    expect(encoding.precisions.every(([, value]) => value === precision)).toBe(true)
+  }
+})
 it('正式队列单项失败可重试；已发布文件的回执失败不重新编码或删除', async () => {
   const owner = await project(); const projectId = owner.document.id
   encoding.finalize.mockRejectedValueOnce(new Error('encode failed'))
@@ -365,12 +377,13 @@ it('助手从通用目录读取预设，跨序列/剪辑一次批量提交、查
     vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce(file('vertical.mp4')).mockResolvedValueOnce(file('horizontal.mp4'))
     const result = await app.requireResult('export_video_edit', { documentRef: { kind: 'video_edit.document', id: first.document.id }, exports: [
       { presetRef: { kind: 'video_edit.export_preset', id: 'builtin:douyin' }, range: { startFrame: 1, endFrame: 3 } },
-      { documentRef: { kind: 'video_edit.document', id: second.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${second.document.id}:${second.activeSequenceId}` }, settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, usePreviews: true, renderAtOutputResolution: false }, fit: 'fill' },
+      { documentRef: { kind: 'video_edit.document', id: second.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${second.document.id}:${second.activeSequenceId}` }, settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, usePreviews: true, useWebCache: true, renderAtOutputResolution: false }, fit: 'fill' },
     ] })
     expect(result.queue).toHaveLength(2)
     const jobs = videoEditExportQueue.list(); expect(jobs[1].settings.fit).toBe('fill'); expect(jobs[0].range).toEqual({ startFrame: 1, endFrame: 3 })
     expect(jobs.map(job => job.settings.usePreviews)).toEqual([false, true])
     expect(jobs.map(job => job.settings.renderAtOutputResolution)).toEqual([true, false])
+    expect(jobs.map(job => job.settings.useWebCache)).toEqual([false, true])
     // 助手/外部智能体导出不弹保存对话框（无人可点会一直等待），默认放进项目“导出”文件夹。
     expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
     for (const job of jobs) expect(job.path).toMatch(/导出[\\/][^\\/]+\.mp4$/)

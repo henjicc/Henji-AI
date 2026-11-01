@@ -22,6 +22,7 @@ import { installVideoEditWebChannel, VideoEditWebInputs } from './videoEditWebIn
 import type { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 
 const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, borrows: [] as Array<[string, number | undefined]>, closed: 0, web: [] as Array<import('./videoEditAuthorModule').AuthorFrameInfo['web']> }))
+const placeholders = vi.hoisted(() => ({ released: 0 }))
 const boundary = vi.hoisted(() => ({ drawHook: undefined as (() => void) | undefined, pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, snapshotBytes: 100, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[], targetKeys: [] as string[], offscreenCompletion: undefined as Promise<void> | undefined }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
@@ -75,7 +76,7 @@ vi.mock('./videoEditGpuCompositor', async () => {
   constructor(_canvas?: OffscreenCanvas, _shared?: MockCompositor, private readonly capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined) {}
   fork(canvas: OffscreenCanvas, capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined): MockCompositor { return new MockCompositor(canvas, this, capture) }
   async blank(width: number, height: number, timestamp: number, duration: number) {
-    return new VideoEditGpuFrame({ timestamp, duration, displayWidth: width, displayHeight: height, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 4, () => {})
+    return new VideoEditGpuFrame({ timestamp, duration, displayWidth: width, displayHeight: height, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 0, () => { placeholders.released++ })
   }
   async blankWebPicture(web: import('./videoEditAuthorModule').AuthorWebFrame) { return new VideoEditWebPicture({ createView: () => ({}), destroy: vi.fn() }, 1, 1, owner, web, false) }
   async copyWebFrame(frame: NativeVideoFrame, _width: number, _height: number, texture?: import('@/core/imageEdit/worker/webgpuRuntimeSupport').GpuTexture) { frame.release(); return { texture: texture ?? { createView: () => ({}), destroy: vi.fn() }, owner } }
@@ -462,10 +463,10 @@ it.each(['nested', 'input'] as const)('网页 %s 经结构编辑与剪点复用�
   let slow = false
   let contentChanged: ((change: { path: string; contentHash: string }) => void) | undefined
   const captures: Array<{ params: { ticket: string; time: number }; resolve: (value: unknown) => void }> = []
-  const call = vi.fn(async (method: string, params: { ticket: string; time: number }) => {
+  const call = vi.fn(async (method: string, params: { ticket: string; time: number; precision?: 'exact' | 'web-cache' }) => {
     if (method === 'openWeb') return { streamId: 'web', pixelWidth: 200, pixelHeight: 200, duration: 100, contentHash: 'hash', route: 'route' }
     if (method !== 'captureWeb') return true
-    const result = { boxes: null, duration: 100, contentHash: 'hash', pixelWidth: 200, pixelHeight: 200 }
+    const result = { provenance: params.precision === 'web-cache' ? 'web-cache' : 'live', boxes: null, duration: 100, contentHash: 'hash', pixelWidth: 200, pixelHeight: 200 }
     if (slow) return new Promise(resolve => captures.push({ params, resolve }))
     deliver?.({ meta: { request: { id: params.ticket } }, release: vi.fn() } as unknown as NativeVideoFrame)
     return result
@@ -473,7 +474,8 @@ it.each(['nested', 'input'] as const)('网页 %s 经结构编辑与剪点复用�
   installVideoEditWebChannel(() => ({ call, subscribe: (_id: string, handler: (frame: NativeVideoFrame) => void) => { deliver = handler; return () => {} }, subscribeWebContent: (handler: typeof contentChanged) => { contentChanged = handler; return () => {} } }) as unknown as VideoEditNativeFrameReceiver)
   const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
   try {
-    await renderer.render(15)
+    expect(await renderer.render(15, false, false, undefined, undefined, undefined, undefined, undefined, false, undefined, false, 'web-cache')).toMatchObject({ provenance: 'web-cache' })
+    expect(await renderer.render(15)).toMatchObject({ provenance: 'live' })
     const opened = call.mock.calls.filter(([method]) => method === 'openWeb').length
     await renderer.updateDocument({ ...document, revision: document.revision + 1 })
     const capturedBefore = call.mock.calls.filter(([method]) => method === 'captureWeb').length
@@ -533,6 +535,70 @@ it('根与下层代码输入在整数、连续比例与恢复完整时共用同�
       expect(call.mock.calls.slice(beforeFallback).filter(([method]) => method === 'captureWeb').map(([, params]) => params.scale)).toEqual([4 * Math.min(1, scale)])
     }
     expect(call.mock.calls.filter(([method]) => method === 'openWeb')).toHaveLength(1)
+    // 屏幕显示档位只作用于节目预览，与回放比例取较小者；导出渲染器没有预览宽度，不受影响。
+    renderer.setOutputScale(1 / 2); renderer.setWebDisplayScale(0.25)
+    const displayed = call.mock.calls.length
+    await renderer.render(17)
+    expect(call.mock.calls.slice(displayed).filter(([method]) => method === 'captureWeb').map(([, params]) => params.scale)).toEqual([1])
+    const exporter = new VideoEditRenderer(document); exporter.setWebDisplayScale(0.5)
+    const exported = call.mock.calls.length
+    try { await exporter.render(17) } finally { await exporter.dispose() }
+    expect(call.mock.calls.slice(exported).filter(([method]) => method === 'captureWeb').map(([, params]) => params.scale)).toEqual([4])
+  } finally { await renderer.dispose(); installVideoEditWebChannel(() => undefined) }
+})
+
+it.each([['跳到页面第 50 秒', 50, 2], ['连续拆分', 1, 1]] as const)('正向播放预开剪点后同源跳转的网页并预取首幅，剪点复用；连续拆分沿用原页面：%s', async (_case, firstSeconds, pages) => {
+  const document = codeInputFixture(), base = document.clips[1]
+  const web = { kind: 'web' as const, path: '/site', width: 100, height: 100, scale: 1 }
+  const code = { ...base.code!, parameters: { a: web } }
+  const jump = pages === 2
+  document.clips = [{ ...base, id: 'web-a', code, start: 0, duration: 30 }, { ...base, id: 'web-b', code: jump ? { ...code, parameters: { a: { ...web, time: firstSeconds } } } : code, start: 30, duration: 30, sourceInUs: jump ? 0 : 1_000_000 }]
+  const streams: Record<string, (frame: NativeVideoFrame) => void> = {}
+  let opened = 0
+  const call = vi.fn(async (method: string, params: { ticket: string; time: number; streamId: string }) => {
+    if (method === 'openWeb') return { streamId: `web-${++opened}`, pixelWidth: 100, pixelHeight: 100, duration: 100, contentHash: 'hash', route: 'route' }
+    if (method !== 'captureWeb') return true
+    streams[params.streamId]?.({ meta: { request: { id: params.ticket } }, release: vi.fn() } as unknown as NativeVideoFrame)
+    return { boxes: null, duration: 100, contentHash: 'hash', pixelWidth: 100, pixelHeight: 100 }
+  })
+  installVideoEditWebChannel(() => ({ call, subscribe: (id: string, handler: (frame: NativeVideoFrame) => void) => { streams[id] = handler; return () => {} }, subscribeWebContent: () => () => {} }) as unknown as VideoEditNativeFrameReceiver)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
+  const captured = (): number => call.mock.calls.filter(([method, params]) => method === 'captureWeb' && Math.abs(params.time - firstSeconds) < 1e-6).length
+  try {
+    for (const frame of [0, 1, 2]) expect(await renderer.render(frame, true)).toMatchObject({ presented: true })
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(opened).toBe(pages)
+    if (jump) await vi.waitFor(() => expect(captured()).toBe(1))
+    const before = captured()
+    expect(await renderer.render(30, true)).toMatchObject({ presented: true })
+    expect(opened).toBe(pages)
+    expect(captured()).toBe(jump ? before : before + 1)
+  } finally { await renderer.dispose(); installVideoEditWebChannel(() => undefined) }
+})
+
+it('时间表网页在同一段内播放不预开，下一段页面时刻跳转时提前一帧开好页面并在段首复用', async () => {
+  const document = codeInputFixture(), base = document.clips[1]
+  const web = { kind: 'web' as const, path: '/site', width: 100, height: 100, scale: 1, spans: [{ from: 0, to: 0.5, src: 0 }, { from: 0.5, to: 1, src: 20 }] }
+  document.clips = [{ ...base, id: 'web-spans', code: { ...base.code!, parameters: { a: web } }, start: 0, duration: 30 }]
+  const streams: Record<string, (frame: NativeVideoFrame) => void> = {}
+  let opened = 0
+  const call = vi.fn(async (method: string, params: { ticket: string; time: number; streamId: string }) => {
+    if (method === 'openWeb') return { streamId: `web-${++opened}`, pixelWidth: 100, pixelHeight: 100, duration: 100, contentHash: 'hash', route: 'route' }
+    if (method !== 'captureWeb') return true
+    streams[params.streamId]?.({ meta: { request: { id: params.ticket } }, release: vi.fn() } as unknown as NativeVideoFrame)
+    return { boxes: null, duration: 100, contentHash: 'hash', pixelWidth: 100, pixelHeight: 100 }
+  })
+  installVideoEditWebChannel(() => ({ call, subscribe: (id: string, handler: (frame: NativeVideoFrame) => void) => { streams[id] = handler; return () => {} }, subscribeWebContent: () => () => {} }) as unknown as VideoEditNativeFrameReceiver)
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920 })
+  try {
+    for (let frame = 0; frame < 15; frame++) expect(await renderer.render(frame, true)).toMatchObject({ presented: true })
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(opened).toBe(2)
+    const jumped = call.mock.calls.filter(([method, params]) => method === 'captureWeb' && Math.abs(params.time - 20) < 1e-6).length
+    expect(jumped).toBe(1)
+    expect(await renderer.render(15, true)).toMatchObject({ presented: true })
+    expect(opened).toBe(2)
+    expect(call.mock.calls.filter(([method, params]) => method === 'captureWeb' && Math.abs(params.time - 20) < 1e-6)).toHaveLength(jumped)
   } finally { await renderer.dispose(); installVideoEditWebChannel(() => undefined) }
 })
 
@@ -1928,6 +1994,7 @@ it('原生借用帧经同一复制入口进入自有显存：正向计划、剪�
   for (const entry of lent) { expect(entry.release, `帧 ${entry.ptsUs}`).toHaveBeenCalledOnce(); expect(entry.close).not.toHaveBeenCalled() }
 })
 it('源时间早于流的首个画面（MPEG 节目流从 0.533 秒开始）时该层透明、不记源时间，不让整帧失败；超出素材时长仍报错', async () => {
+  placeholders.released = 0
   const backend: VideoEditFrameBackend = {
     open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ async *frames() {}, frameAt: async () => null }), clipAudio: () => undefined, async *schedule() {} }) }),
     release: () => {},
@@ -1938,6 +2005,7 @@ it('源时间早于流的首个画面（MPEG 节目流从 0.533 秒开始）时�
   try {
     const result = await renderer.render(10)
     expect(result).toMatchObject({ presented: true, blankPictures: 1, sourceTimestamps: [] })
+    expect(placeholders.released).toBe(1)
     const preview = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
     try { expect(await preview.render(10)).toMatchObject({ presented: true, blankPictures: 1 }) } finally { await preview.dispose() }
     // A sequential reader started before the first picture yields that picture early; it waits for its own time.
@@ -2318,7 +2386,7 @@ it('预渲染窗口供正向播放和导出整帧读取，暂停仍现场合成'
   const renderer = new VideoEditRenderer(document, { previewWidth: 3840 })
   renderer.setRenderCache([{ key: 'w1', startFrame: 60, endFrame: 120, url: 'D:/cache/w1.mp4', width: 3840, height: 2160, fps: 60 }])
   try {
-    for (let frame = 58; frame <= 61; frame++) { boundary.draws = []; await (await renderer.render(frame, true)).completion; expect(boundary.draws.at(-1)?.ids).toEqual(frame < 60 ? ['clip', 'top'] : ['render-cache:w1:60']) }
+    for (let frame = 58; frame <= 61; frame++) { boundary.draws = []; await (await renderer.render(frame, true)).completion; expect(boundary.draws.at(-1)?.ids).toEqual(frame < 60 ? ['clip', 'top'] : [expect.stringMatching(/^render-cache:w1:60:/)]) }
     // Window frames come from the file at their offset; source layers schedule only the frames outside it.
     expect(us(boundary.draws.at(-1)!.timestamps)).toEqual(us([1 / 60]))
     expect(boundary.scheduled.find(value => value.path === 'D:/cache/w1.mp4')?.timestamps[0]).toBe(videoEditPictureSeconds(0))
@@ -2327,7 +2395,7 @@ it('预渲染窗口供正向播放和导出整帧读取，暂停仍现场合成'
     expect(boundary.draws.at(-1)?.ids).toEqual(['clip', 'top'])
     const exporter = new VideoEditRenderer(document); exporter.setRenderCache([{ key: 'w1', startFrame: 60, endFrame: 120, url: 'D:/cache/w1.mp4', width: 3840, height: 2160, fps: 60 }])
     boundary.draws = []; await (await exporter.render(61, true)).completion; await exporter.dispose()
-    expect(boundary.draws.at(-1)?.ids).toEqual(['render-cache:w1:60'])
+    expect(boundary.draws.at(-1)?.ids).toEqual([expect.stringMatching(/^render-cache:w1:60:/)])
   } finally { await renderer.dispose() }
 })
 it('剪到另一个已排程文件前半秒开始解码它的首帧，剪辑点那一帧不再现场打开定位', async () => {
@@ -2766,7 +2834,7 @@ it('暂停帧就是最后上屏的预渲染播放帧：只换成同一帧的实�
     drawn = boundary.draws.length
     const jumped = await renderer.render(40, false, false); await jumped.completion
     await new Promise(resolve => setTimeout(resolve, 20))
-    expect(topDraws(drawn)).toEqual([['render-cache:opening:0'], ['w2']])
+    expect(topDraws(drawn)).toEqual([[expect.stringMatching(/^render-cache:opening:0:/)], ['w2']])
     expect(readers.flatMap(reader => reader.reads).some(read => read.speculative && Math.abs(read.time - videoEditPictureSeconds(40 / 60)) < 1e-9)).toBe(true)
   } finally { await renderer.dispose() }
 })
@@ -2784,7 +2852,7 @@ it('ready 窗口内快慢拖动与反向逐帧都只读缓存，像素回读和�
       expect(result.approximate).toBeUndefined()
       expect(boundary.pictures[0]).toBeCloseTo(frame / document.fps, 6)
     }
-    expect(topDraws(0)).toEqual(Array.from({ length: 4 }, () => ['render-cache:cached:0']))
+    expect(topDraws(0)).toEqual(Array.from({ length: 4 }, () => [expect.stringMatching(/^render-cache:cached:0:/)]))
     gate.hold = true
     const old = renderer.render(25, false, true)
     await vi.waitFor(() => expect(gate.pending).toHaveLength(1))
@@ -2795,7 +2863,7 @@ it('ready 窗口内快慢拖动与反向逐帧都只读缓存，像素回读和�
     gate.hold = false
     while (gate.pending.length) gate.release()
     expect(await newest).toMatchObject({ presented: true, presentedSource: 'prerendered' })
-    expect(topDraws(0)).toEqual(Array.from({ length: 6 }, () => ['render-cache:cached:0']))
+    expect(topDraws(0)).toEqual(Array.from({ length: 6 }, () => [expect.stringMatching(/^render-cache:cached:0:/)]))
     const captured = vi.fn()
     expect((await renderer.render(18, false, true, undefined, undefined, undefined, 'interactive', captured)).presentedSource).toBe('live')
     expect(captured).toHaveBeenCalledOnce()
@@ -3083,7 +3151,21 @@ it('导出预取打开坏预览失败后，现场合成期间不重复打开该�
   } finally { await renderer.dispose() }
 })
 
-
+it('精确渲染过滤网页来源的预渲染、快速跳转与已有顺播排程，旧条目可复用', async () => {
+  const document = fixture(), { backend } = steppingReaders()
+  const renderer = new VideoEditRenderer(document, { previewWidth: 1920, frames: backend })
+  const window = { key: 'derived-web', startFrame: 0, endFrame: 60, url: 'henji-media://local/derived.mp4', width: 3840, height: 2160, fps: 60 }
+  try {
+    renderer.setRenderCache([{ ...window, provenance: 'web-cache' }])
+    expect(renderer.hasPrerenderedFrame(15)).toBe(false)
+    expect(await renderer.presentPrerenderedFrame(15, () => true)).toBeUndefined()
+    expect(await renderer.render(15, true, false, undefined, undefined, undefined, undefined, undefined, false, undefined, false, 'web-cache')).toMatchObject({ renderCached: true, provenance: 'web-cache' })
+    expect(await renderer.render(16, true)).toMatchObject({ renderCached: false, provenance: 'live' })
+    expect(await renderer.render(40, false, 'fast')).toMatchObject({ renderCached: false, provenance: 'live' })
+    renderer.setRenderCache([window])
+    expect(await renderer.render(17, true)).toMatchObject({ renderCached: true, provenance: 'live' })
+  } finally { await renderer.dispose() }
+})
 it('旧作者无文本声明时首帧开页取帧与慢编译并行', async () => {
   const document = codeInputFixture(), base = document.clips[1]
   document.clips = [{ ...base, code: { ...base.code!, parameters: { a: { kind: 'web', path: '/site', width: 100, height: 100 } } } }]

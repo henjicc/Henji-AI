@@ -1,3 +1,4 @@
+import type { VideoEditRenderPrecision } from '../engine/videoEditRenderer'
 import { videoEditRenderFingerprints, subscribeVideoEditRenderFingerprints } from './videoEditRenderFingerprints'
 import { videoEditCodeInputParameters } from '@/core/videoEdit/codeInputParameters'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
@@ -23,6 +24,7 @@ import { VideoEditCodeMetadataPending } from './videoEditCodeState'
 import { settleVideoEditCodeDeclarations, subscribeVideoEditCodeDeclarations, videoEditCodeDeclarationReader } from './videoEditCodeDeclarations'
 import { subscribeVideoEditWebContent, videoEditWebContentIdentity, watchVideoEditWebContent } from './videoEditWebContent'
 import type { RenderResponse } from '../engine/videoEditWorker'
+import { createWebCacheActivityReporter } from './videoEditWebCacheActivity'
 
 /**
  * 预渲染（PR“渲染入点到出点”与渲染条）：吃力的窗口在后台渲染成预览文件，节目正向播放时整帧取自文件。
@@ -31,6 +33,8 @@ import type { RenderResponse } from '../engine/videoEditWorker'
  * 拖动与松手先读已就绪预览；需要观察作者元素或导出时由节目渲染路径决定是否现场合成。
  */
 const logger = createLogger('features.videoEdit.renderCache')
+const reportWebCacheForeground = createWebCacheActivityReporter(active => getPlatform().videoFrames.webCacheForeground(active),
+  error => logger.warn('网页补录前台活动同步失败', { event: 'video_edit.web_cache.activity_failed', error }))
 /** 自动预渲染：编辑停下这么久、且没有播放、拖动或导出时才开始。 */
 const AUTO_RENDER_IDLE_MS = 3000
 const AUTO_RENDER_RETRY_MS = 30_000
@@ -77,7 +81,11 @@ export function setVideoEditRenderPreference(projectId: string, next: VideoEditR
 }
 
 type Entry = VideoRenderCacheStoredEntry
-/** 每个剪辑已完成的预览文件，按窗口指纹索引（同一窗口只留当前档案的一份）。 */
+/** 同一窗口的精确文件与用了网页缓存的文件各自成份：精确消费方只能读前者。缺来源的旧文件按实时网页计。 */
+function entryIdentity(entry: Pick<Entry, 'windowKey' | 'profile' | 'provenance'>): string {
+  return JSON.stringify([entry.windowKey, entry.profile, entry.provenance ?? 'live'])
+}
+/** 每个剪辑已完成的预览文件，按窗口指纹、编码档案与来源索引。 */
 interface ProjectCache { entries: Map<string, Entry> }
 const caches = new Map<string, Promise<ProjectCache>>()
 
@@ -107,7 +115,12 @@ function noteProgramInteraction(): void {
 function ensureAutoRender(): void {
   if (autoTimer) return
   noteProgramInteraction()
-  stopViewWatch = subscribeVideoEditView(noteProgramInteraction)
+  const stopInteraction = subscribeVideoEditView(noteProgramInteraction)
+  const background = watchProgramActivity(() => undefined, programInteractionAt, () => {
+    reportWebCacheForeground(background.idleFor() < RENDER_RESUME_IDLE_MS || listVideoEditInstances().some(instance => jobs.has(instance) || planning.has(instance)))
+  })
+  background.check()
+  stopViewWatch = () => { stopInteraction(); background.dispose(); reportWebCacheForeground(false) }
   autoTimer = setInterval(() => {
     noteProgramInteraction()
     const now = performance.now()
@@ -156,7 +169,7 @@ function cacheOf(projectId: string): Promise<ProjectCache> {
     pending = (async () => {
       await loadVideoEditRenderPerformance()
       const entries = new Map<string, Entry>()
-      for (const entry of await getPlatform().mediaCache.renderList(projectId)) entries.set(entry.windowKey, entry)
+      for (const entry of await getPlatform().mediaCache.renderList(projectId)) entries.set(entryIdentity(entry), entry)
       // 加载只读索引；历史文件交给统一媒体缓存回收，不让节目读缓存等待其他序列的指纹。
       return { entries }
     })()
@@ -165,11 +178,12 @@ function cacheOf(projectId: string): Promise<ProjectCache> {
   }
   return pending
 }
-/** A file counts only when it was rendered for this window with the current profile. */
-function readyEntry(cache: ProjectCache | undefined, window: VideoEditRenderWindow, profile: string): Entry | undefined {
+/** A file counts only when it was rendered for this window with the current profile; an exact consumer only takes one made without web cache pictures. */
+function readyEntry(cache: ProjectCache | undefined, window: VideoEditRenderWindow, profile: string, precision: VideoEditRenderPrecision): Entry | undefined {
   if (window.fingerprintPending) return undefined
-  const entry = cache?.entries.get(window.key)
-  return entry && entry.profile === profile && entry.endFrame - entry.startFrame === window.endFrame - window.startFrame ? entry : undefined
+  const entry = cache?.entries.get(entryIdentity({ windowKey: window.key, profile }))
+    ?? (precision === 'web-cache' ? cache?.entries.get(entryIdentity({ windowKey: window.key, profile, provenance: 'web-cache' })) : undefined)
+  return entry && entry.endFrame - entry.startFrame === window.endFrame - window.startFrame ? entry : undefined
 }
 
 let analysisRevision = 0
@@ -275,7 +289,7 @@ export async function prepareVideoEditRenderWindows(projectId: string, compositi
 }
 
 /** 节目当前序列已就绪的预渲染窗口（本地文件）；指纹不匹配的旧文件不会被播放。 */
-export function readyVideoEditRenderWindows(projectId: string, composition: VideoEditComposition): Array<{ key: string; startFrame: number; endFrame: number; path: string; width: number; height: number; fps: number }> {
+export function readyVideoEditRenderWindows(projectId: string, composition: VideoEditComposition): Array<{ key: string; startFrame: number; endFrame: number; path: string; width: number; height: number; fps: number; provenance?: VideoRenderCacheStoredEntry['provenance'] }> {
   const cache = loadedCache(projectId, true)
   const owner = listVideoEditInstances().find(value => value.document.id === projectId)
   return cache && owner ? readyWindows(cache, owner, composition) : []
@@ -285,8 +299,8 @@ function readyWindows(cache: ProjectCache, owner: VideoEditInstance, composition
   if (!cache || !windows) return []
   const { profile } = videoEditRenderProfile(composition)
   return windows.flatMap(window => {
-    const entry = readyEntry(cache, window, profile)
-    return entry ? [{ key: entry.windowKey, startFrame: window.startFrame, endFrame: window.endFrame, path: entry.path, width: entry.width, height: entry.height, fps: entry.fps }] : []
+    const entry = readyEntry(cache, window, profile, 'web-cache')
+    return entry ? [{ provenance: entry.provenance, key: entry.windowKey, startFrame: window.startFrame, endFrame: window.endFrame, path: entry.path, width: entry.width, height: entry.height, fps: entry.fps }] : []
   })
 }
 
@@ -354,7 +368,7 @@ export function readVideoEditRenderCache(projectId: string, sequenceId?: string)
   const { profile } = videoEditRenderProfile(composition)
   const windows = (currentWindows(instance, composition) ?? []).map(window => ({ startFrame: window.startFrame, endFrame: window.endFrame,
     ...(readVideoEditRenderPerformance(window.key) ? { performance: readVideoEditRenderPerformance(window.key) } : {}),
-    state: readyEntry(cache, window, profile) ? 'ready' as const : job?.sequenceId === composition.id && job.current === window.key ? 'rendering' as const : measuredState(window) }))
+    state: readyEntry(cache, window, profile, 'web-cache') ? 'ready' as const : job?.sequenceId === composition.id && job.current === window.key ? 'rendering' as const : measuredState(window) }))
   const frames = (state: VideoEditRenderWindowState): number => windows.filter(window => window.state === state).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0)
   return { windows, readyFrames: frames('ready'), needsRenderFrames: frames('dropped') + frames('predicted'), totalFrames: windows.at(-1)?.endFrame ?? 0, rendering: job && job.sequenceId === composition.id ? { done: job.done, total: job.total, auto: job.auto } : null }
 }
@@ -437,6 +451,7 @@ export interface VideoEditRenderCacheResult { renderedWindows: number; readyFram
  * needed 会在指纹就绪后剔除判定可实时播放的段，最终范围与就绪帧数以返回结果为准。
  */
 export async function renderVideoEditRenderCache(projectId: string, request: VideoEditRenderCacheRequest, signal?: AbortSignal, onStarted?: (plan: { pendingWindows: number; requestedFrames: number; readyFrames: number }) => void): Promise<VideoEditRenderCacheResult> {
+  const precision: VideoEditRenderPrecision = request.auto ? 'web-cache' : 'exact'
   const instance = requireVideoEditInstance(projectId)
   if (clearing.has(instance)) throw new Error('正在删除渲染文件，请稍后再渲染。')
   if (cancelling.has(instance)) throw new Error('正在取消渲染，请稍后再渲染。')
@@ -471,14 +486,14 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   let windows = all.filter(window => window.endFrame > range.startFrame && window.startFrame < range.endFrame && (request.scope === 'all' || measuredState(window) !== 'realtime'))
   const around = request.aroundFrame
   const encoding = videoEditRenderProfile(composition)
-  let pending = [...new Map(windows.filter(window => !readyEntry(cache, window, encoding.profile)).map(window => [window.key, window])).values()]
+  let pending = [...new Map(windows.filter(window => !readyEntry(cache, window, encoding.profile, precision)).map(window => [window.key, window])).values()]
     .sort((a, b) => around === undefined ? a.startFrame - b.startFrame : (a.endFrame <= around ? 1 : 0) - (b.endFrame <= around ? 1 : 0) || (a.endFrame <= around ? b.startFrame - a.startFrame : a.startFrame - b.startFrame))
   const job: Job = { sequenceId: composition.id, controller: new AbortController(), total: pending.length, done: 0, auto: request.auto === true }
   const abort = (): void => job.controller.abort(signal?.reason)
   signal?.addEventListener('abort', abort, { once: true })
   if (signal?.aborted) abort()
   jobs.set(instance, job); publishVideoEdit()
-  onStarted?.({ pendingWindows: pending.length, requestedFrames: windows.reduce((sum, window) => sum + window.endFrame - window.startFrame, 0), readyFrames: windows.filter(window => readyEntry(cache, window, encoding.profile)).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0) })
+  onStarted?.({ pendingWindows: pending.length, requestedFrames: windows.reduce((sum, window) => sum + window.endFrame - window.startFrame, 0), readyFrames: windows.filter(window => readyEntry(cache, window, encoding.profile, precision)).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0) })
   const platform = getPlatform()
   let session: VideoEditRenderSession | undefined
   /** 让出时释放、尚未关完的会话；重开前等它关闭，新旧会话不同时占用解码。 */
@@ -514,7 +529,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
       const refreshed = new Map((await abortable(settleVideoEditCodeDeclarations(() => videoEditRenderCacheWindows(instance, composition)), job.controller.signal)).map(window => [window.startFrame, window]))
       assertOwner()
       windows = windows.map(window => refreshed.get(window.startFrame)!)
-      pending = [...new Map(pending.map(window => refreshed.get(window.startFrame)!).filter(window => !readyEntry(cache, window, encoding.profile)).map(window => [window.key, window])).values()]
+      pending = [...new Map(pending.map(window => refreshed.get(window.startFrame)!).filter(window => !readyEntry(cache, window, encoding.profile, precision)).map(window => [window.key, window])).values()]
       job.total = pending.length
     }
     for (let window of pending) {
@@ -530,7 +545,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         if (request.scope !== 'all' && measuredState(window) === 'realtime') {
           windows = windows.filter(value => value.startFrame !== window.startFrame); job.total--; break
         }
-        if (readyEntry(cache, window, encoding.profile)) break
+        if (readyEntry(cache, window, encoding.profile, precision)) break
         await waitProgramIdle()
         if (closing) { await closing; closing = undefined }
         // 等会话关闭期间又有操作就重新等空闲；从这里到登记 attempt 都是同步的，中途起播不会漏掉。
@@ -593,6 +608,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
       const video = new CanvasSource(renderer.canvas, videoEditExportVideoOptions({ codec: encoding.codec, width: composition.width, height: composition.height, fps: composition.fps, videoBitrateMbps: encoding.bitrateMbps, bitrateMode: encoding.bitrateMode, encoderPreference: encoding.encoderPreference, keyframeInterval: encoding.keyframeInterval }))
       output.addVideoTrack(video, { frameRate: composition.fps })
       await output.start()
+      let provenance: VideoRenderCacheStoredEntry['provenance'] = 'live'
       for (let frame = window.startFrame; frame < window.endFrame; frame++) {
         // 每帧核对原实例；重开后的新实例不能让旧任务继续占用同一显卡。
         assertOwner()
@@ -600,14 +616,15 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         if (attempt) attempt.frame = frame
         const frameStarted = performance.now()
         // 让出时会话随即释放，不再等在途这一帧算完。
-        await abortable(renderer.render(frame, true), attemptSignal)
+        const rendered = await abortable(renderer.render(frame, true, precision), attemptSignal)
+        if (rendered.provenance === 'web-cache') provenance = 'web-cache'
         await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps, { keyFrame: true })
         if (job.auto) await rest((performance.now() - frameStarted) * AUTO_RENDER_REST_RATIO, attemptSignal)
       }
       await output.finalize()
       assertOwner()
-      const stored = await platform.mediaCache.renderCommit({ temporaryPath: path, entry: { projectId, sequenceId: composition.id, windowKey: window.key, profile: encoding.profile, startFrame: window.startFrame, endFrame: window.endFrame, width: composition.width, height: composition.height, fps: composition.fps } })
-      cache.entries.set(window.key, stored)
+      const stored = await platform.mediaCache.renderCommit({ temporaryPath: path, entry: { provenance, projectId, sequenceId: composition.id, windowKey: window.key, profile: encoding.profile, startFrame: window.startFrame, endFrame: window.endFrame, width: composition.width, height: composition.height, fps: composition.fps } })
+      cache.entries.set(entryIdentity(stored), stored)
     } catch (error) {
       await output.cancel().catch(() => undefined)
       await platform.mediaCache.renderDiscard(path).catch(() => undefined)
@@ -629,7 +646,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   }
   function result(cancelled: boolean): VideoEditRenderCacheResult {
     return { renderedWindows: job.done, cancelled, requestedFrames: windows.reduce((sum, window) => sum + window.endFrame - window.startFrame, 0),
-      readyFrames: windows.filter(window => readyEntry(cache, window, encoding.profile)).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0) }
+      readyFrames: windows.filter(window => readyEntry(cache, window, encoding.profile, precision)).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0) }
   }
 }
 
@@ -639,7 +656,7 @@ type ProgramActivity = 'playing' | 'scrubbing' | 'busy' | 'seek'
  * idleFor 是距最近一次操作的时长，interactionIdleFor 只算节目操作（播放、拖动、跳转，不含导出等忙碌），
  * 从 `interactedAt`（此前已知的最近一次节目操作）起算；从未有操作时为无穷大。
  */
-function watchProgramActivity(onActive: (reason: ProgramActivity) => void, interactedAt: number): { check: () => ProgramActivity | undefined; idleFor: () => number; interactionIdleFor: () => number; dispose: () => void } {
+function watchProgramActivity(onActive: (reason: ProgramActivity) => void, interactedAt: number, onSample?: () => void): { check: () => ProgramActivity | undefined; idleFor: () => number; interactionIdleFor: () => number; dispose: () => void } {
   const frames = new WeakMap<VideoEditInstance, number>()
   for (const instance of listVideoEditInstances()) frames.set(instance, instance.frame)
   let lastActiveAt = Number.NEGATIVE_INFINITY, lastInteractionAt = interactedAt
@@ -652,6 +669,7 @@ function watchProgramActivity(onActive: (reason: ProgramActivity) => void, inter
       if (instance.playing || instance.scrubbing || seek) interaction = true
     }
     if (reason) { lastActiveAt = performance.now(); if (interaction) lastInteractionAt = lastActiveAt; onActive(reason) }
+    onSample?.()
     return reason
   }
   const unsubscribe = subscribeVideoEditView(() => { check() })
@@ -706,7 +724,8 @@ export async function clearVideoEditRenderCache(projectId: string, range?: { sta
       const windows = await waitFingerprintWindows(instance, composition, contentVersion, range, controller.signal)
       const keys = [...new Set(windows.filter(window => !range || window.endFrame > range.startFrame && window.startFrame < range.endFrame).map(window => window.key))]
       if (keys.length) await getPlatform().mediaCache.renderRemove({ projectId, windowKeys: keys })
-      for (const key of keys) cache.entries.delete(key)
+      const removedKeys = new Set(keys)
+      for (const [identity, entry] of cache.entries) if (removedKeys.has(entry.windowKey)) cache.entries.delete(identity)
       loaded.set(projectId, cache)
       const auto = autoState.get(instance)
       if (auto) auto.changedAt = performance.now()

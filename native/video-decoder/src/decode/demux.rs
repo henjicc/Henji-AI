@@ -112,6 +112,21 @@ impl Input {
         unsafe { &*self.stream().codecpar }
     }
 
+    /// 发布器保证段独立；接入时仍核对解码配置，拒绝把不同变体送进同一会话。
+    pub fn compatible_segment(&self, other: &Self) -> bool {
+        let a = self.parameters();
+        let b = other.parameters();
+        let extra = |parameters: &ff::AVCodecParameters| {
+            if parameters.extradata_size <= 0 || parameters.extradata.is_null() { Vec::new() }
+            else { unsafe { std::slice::from_raw_parts(parameters.extradata, parameters.extradata_size as usize).to_vec() } }
+        };
+        self.time_base == other.time_base && a.codec_id == b.codec_id && a.format == b.format
+            && a.width == b.width && a.height == b.height && a.profile == b.profile
+            && a.color_space == b.color_space && a.color_range == b.color_range
+            && a.color_primaries == b.color_primaries && a.color_trc == b.color_trc
+            && a.chroma_location == b.chroma_location && extra(a) == extra(b)
+    }
+
     pub fn format_name(&self) -> Option<String> {
         crate::ffmpeg_info::c_text(unsafe { (*(*self.context.0).iformat).name })
     }

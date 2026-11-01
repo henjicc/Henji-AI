@@ -33,6 +33,15 @@ pub enum Command {
     },
     /// 心跳：主循环立即响应。主进程据此判断服务是否卡死（3.1）。
     Ping,
+    WebCacheLock { key: String, lease: String },
+    WebCacheForeground { active: bool },
+    WebCacheSubmission { lease: String },
+    WebCacheSubmissionRelease { lease: String },
+    WebCacheUnlock { key: String, lease: String },
+    WebCacheCommit { key: String, lease: String, temporary: String, destination: String },
+    WebCacheRollback { key: String, lease: String },
+    WebCachePrepare { key: String, lease: String, destination: String },
+    WebCacheDiscard { key: String, lease: String, destination: String },
     Probe { path: String },
     /// 取消在途的 `probe` 或 `frame_at`（按请求 ID）；目标已结束或不可取消时答复 `cancelled: false`。
     /// 被取消的 `frame_at` 答复 CANCELLED，会话停在已解到的位置。
@@ -53,6 +62,8 @@ pub enum Command {
         keyed_mutex: Option<bool>,
     },
     StopStream { stream_id: String },
+    /// 已验证的独立 HEVC444 段更换解封装输入，保留硬解会话与共享纹理池。
+    SetDecoderSegment { stream_id: String, path: String },
     /// 通知：客户端已释放该槽位的全部引用。不产生响应。
     ReleaseFrame { stream_id: String, slot: u32 },
     /// 服务资源统计（CPU、句柄、显存、流计数）。

@@ -17,11 +17,14 @@ if (reply.phase === 'bootstrap') {
     error => { report({ kind: 'conflict', t: 0, message: `页面存储恢复失败：${String(error)}` }); ipcRenderer.send('web-replay:bootstrapped') },
   )
 } else if (reply.phase === 'reader') {
-  try {
-    installReplayReader()
-  } catch (error) {
-    ipcRenderer.send('web-replay:reader-ready', { ok: false, error: `重演取帧运行时注入失败：${String(error)}` })
-  }
+  // preload 阶段文档的安全上下文尚未就绪，navigator.gpu 可能还不可见。
+  window.addEventListener('DOMContentLoaded', () => {
+    try {
+      installReplayReader()
+    } catch (error) {
+      ipcRenderer.send('web-replay:reader-ready', { ok: false, error: `重演取帧运行时注入失败：${String(error)}` })
+    }
+  }, { once: true })
 } else if (reply.phase === 'app') {
   const host: ReplayHost = {
     boot: reply.boot,

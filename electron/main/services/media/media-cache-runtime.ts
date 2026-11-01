@@ -5,6 +5,9 @@ import { getProgramDataDir, getProgramStoreDir, getUserDataLayout } from '../app
 import { createMainLogger } from '../logging'
 import { getSettingsStore } from '../settings/store'
 import { MediaCacheManager } from './media-cache'
+import { WebCacheSegments } from '../web-source/segments'
+import { WebCacheLocks } from '../web-source/locks'
+import { getVideoDecoderService } from '../video-decoder'
 
 const logger = createMainLogger('main.media_cache')
 
@@ -23,8 +26,10 @@ function legacyDirectories(): string[] {
 }
 
 let manager: MediaCacheManager | undefined
+let webSegments: WebCacheSegments | undefined
 export function getMediaCacheManager(): MediaCacheManager {
-  manager ??= new MediaCacheManager({
+  if (manager) return manager
+  manager = new MediaCacheManager({
     userRoot: () => { const layout = getUserDataLayout(); return { root: layout.root, locale: layout.locale } },
     settings: getSettingsStore(),
     legacyDirectories,
@@ -39,5 +44,11 @@ export function getMediaCacheManager(): MediaCacheManager {
     },
     logger,
   })
+  const owner = manager
+  webSegments = new WebCacheSegments(() => owner.categoryDirectory('render', 'web-time'), new WebCacheLocks(getVideoDecoderService()))
+  const families = webSegments
+  owner.registerFamilies('render', families.directory, () => families.list())
   return manager
 }
+
+export function getWebCacheSegments(): WebCacheSegments { getMediaCacheManager(); return webSegments! }

@@ -84,16 +84,18 @@ pub fn frame_bytes(format: SharedFormat, (width, height): (u32, u32)) -> u64 {
 
 /// 一个解码会话的显存估算：共享纹理池、该写入路径在显存里的中间资源、硬解表面池。
 /// STAGING 上传环在系统内存，不计入。
-pub fn session_bytes(output: SharedFormat, pool: (u32, u32), slots: u32, path: WritePath, hardware_surface: Option<SharedFormat>) -> u64 {
+pub fn session_bytes(output: SharedFormat, pool: (u32, u32), slots: u32, path: WritePath, hardware_surface: Option<SharedFormat>, hardware_surfaces: u64) -> u64 {
     let pixels = pool.0 as u64 * pool.1 as u64;
     let intermediate = match path {
         WritePath::CopyNv12 | WritePath::UploadNv12 => 0,
         // P010 中间纹理 + 着色器写入的 rgbaf16 私有纹理。
         WritePath::ShaderSemiPlanar => pixels * 3 + pixels * 8,
+        // CUDA 解码平面、同适配器互操作缓冲与 rgbaf16 转换目标。
+        WritePath::CudaPlanar => pool.0.next_multiple_of(512) as u64 * pool.1 as u64 * 3 * (hardware_surfaces + 1) + pixels * 8,
         // 显存上传缓冲（最多 4:4:4 + 透明 16 位）+ rgbaf16 私有纹理。
         WritePath::ShaderPlanar | WritePath::CpuFallback => pixels * 8 + pixels * 8,
     };
-    let surfaces = hardware_surface.map_or(0, |format| HARDWARE_SURFACES * frame_bytes(format, pool));
+    let surfaces = hardware_surface.map_or(0, |format| hardware_surfaces * frame_bytes(format, pool));
     slots as u64 * frame_bytes(output, pool) + intermediate + surfaces
 }
 
@@ -216,11 +218,11 @@ mod tests {
     fn estimates_follow_measured_session_sizes() {
         let mib = |bytes: u64| bytes >> 20;
         // H.264 4K 硬解播放会话：8 张 nv12 + 20 张解码表面（1.3 实测单路 0.4–0.6GiB）。
-        assert_eq!(mib(session_bytes(SharedFormat::Nv12, UHD, 8, WritePath::CopyNv12, Some(SharedFormat::Nv12))), 332);
+        assert_eq!(mib(session_bytes(SharedFormat::Nv12, UHD, 8, WritePath::CopyNv12, Some(SharedFormat::Nv12), HARDWARE_SURFACES)), 332);
         // ProRes 4K 软解播放会话：6 张 rgbaf16 + 上传缓冲 + 私有纹理（1.3 实测 0.45–0.8GiB）。
-        assert_eq!(mib(session_bytes(SharedFormat::Rgbaf16, UHD, 6, WritePath::ShaderPlanar, None)), 506);
+        assert_eq!(mib(session_bytes(SharedFormat::Rgbaf16, UHD, 6, WritePath::ShaderPlanar, None, HARDWARE_SURFACES)), 506);
         // HEVC Main10 4K 硬解播放会话：rgbaf16 池 + P010 中间纹理 + 私有纹理 + P010 解码表面。
-        assert_eq!(mib(session_bytes(SharedFormat::Rgbaf16, UHD, 6, WritePath::ShaderSemiPlanar, Some(SharedFormat::P010le))), 941);
+        assert_eq!(mib(session_bytes(SharedFormat::Rgbaf16, UHD, 6, WritePath::ShaderSemiPlanar, Some(SharedFormat::P010le), HARDWARE_SURFACES)), 941);
     }
 
     #[test]

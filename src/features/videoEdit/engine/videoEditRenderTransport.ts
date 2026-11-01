@@ -1,3 +1,5 @@
+import type { VideoEditRenderPrecision } from './videoEditRenderer'
+import type { WebSourceProvenance } from '@/platform/contracts/videoFrames'
 import { needsVideoEditTextPreflight, VideoEditTextPreflight } from './videoEditTextPreflight'
 import { serveFontChannel, type FontPort } from '@/core/imaging/vectorContent/shaping/fontChannel'
 import { captureTextFontSnapshot } from '@/platform/textFontSnapshot'
@@ -68,6 +70,7 @@ export interface VideoEditRenderHost {
 }
 
 export interface VideoEditRenderTransportOptions {
+  cacheWebOutput?: boolean
   previewWidth?: number
   preparing?: (active: boolean) => void
   surface?: OffscreenCanvas
@@ -84,7 +87,7 @@ export class VideoEditRenderTransport {
   private readonly moduleGraphs = new Map<number, AuthorModuleUrls>()
   private readonly worker = new Worker(new URL('./videoEditWorker.ts', import.meta.url), { type: 'module' })
   private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void; submitted?: () => void; timer?: ReturnType<typeof setTimeout> }>()
-  onPresentation?: (frame: number, source: import('./videoEditRenderer').VideoEditPresentedSource, authorElements?: RenderResponse['authorElements']) => void
+  onPresentation?: (frame: number, source: import('./videoEditRenderer').VideoEditPresentedSource, authorElements?: RenderResponse['authorElements'], provenance?: WebSourceProvenance) => void
   private readonly backgroundTimers = new Map<number, ReturnType<typeof setTimeout>>()
   onRefinement?: (result: RenderResponse, error?: Error) => void
   private nextId = 0
@@ -321,7 +324,7 @@ export class VideoEditRenderTransport {
         else this.onRefinement?.(value, failure)
         return
       }
-      if (value.phase === 'presented') { if (value.frame !== undefined && value.presentedSource) this.onPresentation?.(value.frame, value.presentedSource, value.authorElements); return }
+      if (value.phase === 'presented') { if (value.frame !== undefined && value.presentedSource) this.onPresentation?.(value.frame, value.presentedSource, value.authorElements, value.provenance); return }
       if (value.phase === 'submitted') { pending?.submitted?.(); return }
       this.pending.delete(value.id)
       if (!pending) { value.bitmap?.close(); value.history?.close(); return }
@@ -348,7 +351,7 @@ export class VideoEditRenderTransport {
     this.stopTextFonts = serveFontChannel(textFonts.port1 as unknown as FontPort, () => captureTextFontSnapshot(platform, this.fixedFontSnapshot), error => logger.warn('文字字体准备失败', { event: 'video_edit.text_fonts.prepare.failed', error }))
     this.worker.postMessage({ kind: 'textFonts.attach', port: textFonts.port2 } satisfies TextFontChannelAttach, [textFonts.port2])
     // Verify original media before dependent code/font preparation or opening a decoder channel.
-    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
+    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, cacheWebOutput: options.cacheWebOutput, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
     void this.ready.then(() => { this.readySettled = true }, () => undefined)
     this.stopFonts = subscribeFontLibrary(() => {
       if (this.fixedTextFonts || this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return
@@ -473,13 +476,15 @@ export class VideoEditRenderTransport {
   }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
+  /** 节目网页输入的屏幕显示档位，见 `videoEditWebDisplayTier`。 */
+  async setWebDisplayScale(scale: number): Promise<void> { await this.ready; await this.request({ kind: 'webDisplayScale', scale }) }
   async setOutputScale(scale: number, renderAtOutputResolution = true): Promise<void> {
     await this.ready; await this.request({ kind: 'outputScale', scale, renderAtOutputResolution })
     const size = videoEditRenderSize(this.document.width, this.document.height, renderAtOutputResolution ? videoEditOutputRenderDivisor(this.document.width, this.document.height, scale) : 1)
     this.canvas.width = size.width; this.canvas.height = size.height
   }
   /** Paused preview only: positions forward playback at this frame ahead of play, so pressing play starts at once. */
-  async armPlayback(frame: number): Promise<void> { await this.ready; await this.request({ kind: 'arm', frame }) }
+  async armPlayback(frame: number, precision: VideoEditRenderPrecision = 'exact'): Promise<void> { await this.ready; await this.request({ kind: 'arm', frame, precision }) }
   /**
    * Ends a play run: the Worker cancels at once every playback frame (one with a deadline) sent before this call and not
    * on screen yet (answered `skipped`), then releases the playback decoders in queue order. Send it before the request of
@@ -495,7 +500,7 @@ export class VideoEditRenderTransport {
   }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
-  async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false): Promise<RenderResponse> {
+  async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false, precision: VideoEditRenderPrecision = 'exact'): Promise<RenderResponse> {
     if (this.disposed) throw this.failure ?? new Error('剪辑渲染已关闭。')
     // 入口定一次是否预检，排队与预检用同一判断；不预检的帧也排在已登记的预检帧之后提交，内容切换时不乱序。旧接口工程从无登记帧，不会等待。
     const preflight = this.needsTextPreflight
@@ -519,7 +524,7 @@ export class VideoEditRenderTransport {
       if (previousSubmission) await previousSubmission
       // 等待期间内容在新旧文字接口之间切换时，入口的预检判断已不适用当前文档，按过期帧跳过，调用方会按最新内容重新请求。
       if (contentEpoch !== this.contentEpoch || preflight !== this.needsTextPreflight || deadline !== undefined && playbackEpoch !== this.playbackEpoch) return { id: 0, skipped: true, presented: false }
-      const rendering = this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(requireLive ? { requireLive: true } : {}), ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
+      const rendering = this.request({ kind: 'render', precision: readRgb || history ? 'exact' : precision, frame, sequential, scrubbing, deadline, quality, ...(requireLive ? { requireLive: true } : {}), ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
       submittedInOrder()
       const result = await rendering
       const at = result.presented ? this.host.maskUpdateTime(document.id, document.revision) : undefined
@@ -556,19 +561,19 @@ export class VideoEditRenderTransport {
       return signal.aborted ? undefined : result.hoverBytes
     } finally { signal.removeEventListener('abort', cancel) }
   }
-  async renderBitmap(frame: number, sequential = false, scrubbing = false, quality: EffectQuality = 'interactive'): Promise<RenderResponse & { bitmap: ImageBitmap }> {
-    const result = await this.present(frame, sequential, scrubbing, undefined, undefined, undefined, quality)
+  async renderBitmap(frame: number, sequential = false, scrubbing = false, quality: EffectQuality = 'interactive', precision: VideoEditRenderPrecision = 'exact'): Promise<RenderResponse & { bitmap: ImageBitmap }> {
+    const result = await this.present(frame, sequential, scrubbing, undefined, undefined, undefined, quality, false, false, false, precision)
     if (!result.bitmap) throw new Error('剪辑渲染没有返回画面。')
     return { ...result, bitmap: result.bitmap }
   }
   /** 导出逐帧取精确画面，画布尺寸跟随 Worker 实际输出。 */
-  async render(frame: number, sequential = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; singleFrameReads: number; renderCached: boolean }> {
-    const result = await this.renderBitmap(frame, sequential, false, 'final')
+  async render(frame: number, sequential = false, precision: VideoEditRenderPrecision = 'exact'): Promise<{ provenance: WebSourceProvenance; canvas: OffscreenCanvas; sourceTimestamps: number[]; singleFrameReads: number; renderCached: boolean }> {
+    const result = await this.renderBitmap(frame, sequential, false, 'final', precision)
     try {
       if (this.canvas.width !== result.bitmap.width || this.canvas.height !== result.bitmap.height) { this.canvas.width = result.bitmap.width; this.canvas.height = result.bitmap.height }
       this.canvas.getContext('2d')!.drawImage(result.bitmap, 0, 0)
     } finally { result.bitmap.close() }
-    return { canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0, renderCached: result.renderCached === true }
+    return { provenance: result.provenance ?? 'live', canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0, renderCached: result.renderCached === true }
   }
   /** `retainIdle`：拖动播放头的声音颗粒，保留最近用过的空闲声音来源，避免每个颗粒重开会话。 */
   async mixAudio(start: number, duration: number, retainIdle = false): Promise<AudioBuffer> {

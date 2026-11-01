@@ -29,9 +29,10 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   'video-effect-library': { 10: value => structuredClone(value),  9: value => structuredClone(value), 8: value => structuredClone(value), 7: value => structuredClone(value), 6: value => structuredClone(value), 5: value => structuredClone(value), 4: migrateVideoEditLibraryCatalog, 3: value => migrateAudioEqualizerModes(migrateAudioEffectLibraryV3(value)), 1: migrateEmbeddedVideoColorGradesV1, 2: value => { const library = structuredClone(value) as { presets: unknown[] }; return { ...library, presets: library.presets.map(migrateVideoEditStylePiece) } } },
   // 1 → 2：评分引用使用合并后的目录 ID，重复项保留最高评分与默认标记，最低可读版本提高到 2。
   'preset-preferences': { 1: migrateVideoEditPresetCatalogPreferences },
-  'export-presets': { 1: value => structuredClone(value), 2: value => structuredClone(value), 3: value => structuredClone(value) },
-  // 1 → 2：新增可选请求文件名与响度意图；兼容初版记忆中的重复目标码率，最低可读版本保持 1。
-  'export-memory': { 1: migrateVideoEditExportEntries },
+  // 4 → 5：导出设置新增可选 useWebCache，缺省不用网页缓存，最低可读版本保持 1。
+  'export-presets': { 1: value => structuredClone(value), 2: value => structuredClone(value), 3: value => structuredClone(value), 4: value => structuredClone(value) },
+  // 1 → 2：新增可选请求文件名与响度意图；兼容初版记忆中的重复目标码率，最低可读版本保持 1。2 → 3：导出设置新增可选 useWebCache，内容原样保留。
+  'export-memory': { 1: migrateVideoEditExportEntries, 2: value => structuredClone(value) },
   // 3 → 4：历史风格源码取消长度上限；1 → 2：音效文件夹数量不设上限，内容原样保留。
   'style-kits': { 3: value => value },
   'sound-library-folders': { 1: value => value },

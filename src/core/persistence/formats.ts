@@ -120,6 +120,7 @@ export const PERSISTENCE_EXCLUSIONS = [
   { id: 'session-state', readEntry: 'electron/main/services/documents/session-state.ts', reason: '明示可丢弃的撤销/视口缓存；文档仍能从权威文件完整打开。' },
   { id: 'working-copy-links', readEntry: 'electron/main/services/image-editor-v3/image-document/working-copy-links.ts / canvas-layers/canvas-layer-packages.ts', reason: '可由权威包与工作副本重建的同步投影，业务文档和未保存工作副本在 image-working-copy 中受保护。' },
   { id: 'video-edit-render-cache', readEntry: 'electron/main/services/video/render-cache.ts / src/features/videoEdit/application/videoEditRenderPerformance.ts', reason: '预览文件及按内容指纹保存的本机播放性能样本均可重建；版本变化直接失效并回收，不改变工程文件或用户设置。' },
+  { id: 'web-time-cache', readEntry: 'electron/main/services/web-source/publication.ts::readWebTimeSegment', reason: '网页时间段视频、几何和清单都是由原网页可重建的本机缓存，不写入工程，缓存契约变化直接失效。' },
   { id: 'derived-media', readEntry: 'electron/main/services/audio/ / audio-edit/speech-energy-service.ts / video/ / fonts/scanner.ts / local-inference/', reason: '波形、声音低谷、缩略帧、字体目录缓存、区域检测/跟踪缓存可从原媒体重算；不是独立用户内容，人工校对仍由作品文档保存。' },
   { id: 'standard-git-object-database', readEntry: 'electron/main/services/documents/code-git.ts', reason: '代码/.git 是 isomorphic-git 读写的标准 Git 对象、索引和引用格式；位置方案由 code-git-location 登记，素材归属 .definition 继续存定义 ID，旧源码备份保留原字节。' },
   { id: 'external-media-and-fonts', readEntry: '项目素材/生成结果/字体目录/代码/*.ts', reason: '图片、视频、音频、字体和作者源码的字节保持原样；来源格式属于外部编码协议，代码的API/语言版本由code-version固定。' },

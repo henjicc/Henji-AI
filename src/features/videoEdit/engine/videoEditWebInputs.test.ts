@@ -3,7 +3,7 @@ import type { CodeWebReference } from '@/core/imaging/parameterTypes'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { WebSourceCaptureRequest, WebSourceCaptureResult } from '@/platform/contracts/videoFrames'
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
-import { installVideoEditWebChannel, VideoEditWebInputs, type WebPictureOptions } from './videoEditWebInputs'
+import { installVideoEditWebChannel, VideoEditWebInputs, videoEditWebDisplayTier, type WebPictureOptions } from './videoEditWebInputs'
 import { WEB_TEXT_SAMPLER_VERSION } from '@/core/videoEdit/webTextGeometry'
 
 const reference: CodeWebReference = { kind: 'web', path: '/site', width: 100, height: 100, region: [0, 0, 100, 100], scale: 4 }
@@ -24,11 +24,11 @@ const copy = vi.fn(async (frame: NativeVideoFrame, _width: number, _height: numb
   const texture = { destroy: vi.fn() }; textures.push(texture)
   return { texture: texture as unknown as GpuTexture, owner: {} as GpuDevice }
 })
-function finish(index: number, width = 100, height = 100): ReturnType<typeof vi.fn> {
+function finish(index: number, width = 100, height = 100, provenance?: WebSourceCaptureResult['provenance']): ReturnType<typeof vi.fn> {
   const { params, resolve } = requests[index]
   const release = vi.fn()
   handlers.get(params.streamId)?.({ meta: { request: { id: params.ticket } }, release } as unknown as NativeVideoFrame)
-  resolve({ boxes: null, duration: 100, contentHash: 'hash', pixelWidth: width * params.scale!, pixelHeight: height * params.scale! })
+  resolve({ boxes: null, duration: 100, contentHash: 'hash', pixelWidth: width * params.scale!, pixelHeight: height * params.scale!, ...(provenance ? { provenance } : {}) })
   return release
 }
 function renderPicture(time: number, options: WebPictureOptions = {}, source = reference) {
@@ -42,6 +42,79 @@ beforeEach(() => {
 })
 afterEach(() => { inputs.dispose(); installVideoEditWebChannel(() => undefined); vi.restoreAllMocks(); vi.useRealTimers() })
 
+it('缓存许可传到实际取帧；同刻精确请求独立读取，来源按回执而非许可标记', async () => {
+  const cacheGrid = { rate: { numerator: 60, denominator: 1 }, phase: { numerator: '0', denominator: '1' } }
+  const cached = renderPicture(1, { precision: 'web-cache', cacheGrid, cachePolicy: 'adaptive' })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(requests[0].params).toMatchObject({ precision: 'web-cache', cacheGrid, cachePolicy: 'adaptive' })
+  finish(0, 100, 100, 'web-cache')
+  expect((await cached)?.provenance).toBe('web-cache')
+  const exact = renderPicture(1, { cacheGrid })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(requests[1].params.precision).toBe('exact')
+  finish(1)
+  expect((await exact)?.provenance).toBe('live')
+  const fallback = renderPicture(2, { precision: 'web-cache', cacheGrid })
+  await vi.advanceTimersByTimeAsync(0); finish(2, 100, 100, 'live')
+  expect((await fallback)?.provenance).toBe('live')
+})
+
+it('精确导出顺手写缓存时不另开同段补录，缓存导出缺段仍登记补录', async () => {
+  const cacheGrid = { rate: { numerator: 30, denominator: 1 }, phase: { numerator: '0', denominator: '1' } }
+  const exact = renderPicture(0, { cacheWrite: true, cacheGrid })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(requests[0].params).toMatchObject({ cacheWrite: true, precision: 'exact' })
+  expect(call.mock.calls.filter(([method]) => method === 'cacheWeb')).toHaveLength(0)
+  finish(0); await exact
+  const cached = renderPicture(1 / 30, { cacheWrite: true, cacheGrid, precision: 'web-cache' })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(call.mock.calls.filter(([method]) => method === 'cacheWeb')).toHaveLength(1)
+  finish(1); await cached
+})
+
+it('精确截止时间不沿用有损上一幅，获准的回退及补齐选择器保留来源', async () => {
+  const cached = renderPicture(1, { precision: 'web-cache' })
+  await vi.advanceTimersByTimeAsync(0); finish(0, 100, 100, 'web-cache'); await cached
+  const exact = renderPicture(2, { deadline: performance.now() + 16 })
+  await vi.advanceTimersByTimeAsync(16)
+  expect(await exact).toBeUndefined()
+  const preview = renderPicture(3, { precision: 'web-cache', deadline: performance.now() + 16 }, { ...reference, boxes: ['div'] })
+  await vi.advanceTimersByTimeAsync(16)
+  expect(await preview).toMatchObject({ provenance: 'web-cache', web: { time: 1, boxes: { div: null } } })
+})
+
+it('缓存相位和预览档变化不复用旧请求，exact与有损在途读取互不接管', async () => {
+  const grid = { rate: { numerator: 60, denominator: 1 }, phase: { numerator: '0', denominator: '1' } }
+  const frame = {}
+  const cached = inputs.picture(reference, 1, frame, copy, [], { precision: 'web-cache', cacheGrid: grid, deadline: performance.now() + 16 })
+  const exact = inputs.picture(reference, 1, frame, copy, [])
+  await vi.advanceTimersByTimeAsync(0)
+  expect(requests.map(request => request.params.precision)).toEqual(['exact', 'web-cache'])
+  finish(0); finish(1, 100, 100, 'web-cache')
+  expect((await exact)?.provenance).toBe('live'); expect((await cached)?.provenance).toBe('web-cache')
+  inputs.trim(frame)
+  const paused = renderPicture(1, { precision: 'web-cache', cacheGrid: grid })
+  await vi.advanceTimersByTimeAsync(0); finish(2, 100, 100, 'web-cache'); await paused
+  const shifted = { ...grid, phase: { numerator: '1', denominator: '120' } }
+  const otherGrid = renderPicture(1, { precision: 'web-cache', cacheGrid: shifted })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(requests[3].params.cacheGrid).toEqual(shifted)
+  finish(3, 100, 100, 'live'); await otherGrid
+  expect(requests).toHaveLength(4)
+})
+
+it('复用前视画面仍登记自身相位，预览转暂停更新补录档位而不重复捕获', async () => {
+  const grid = { rate: { numerator: 60, denominator: 1 }, phase: { numerator: '0', denominator: '1' } }
+  const first = renderPicture(0, { cacheGrid: grid, ahead: [1 / 120] })
+  await vi.advanceTimersByTimeAsync(0); finish(0); finish(1); await first
+  expect(call.mock.calls.filter(([method]) => method === 'cacheWeb')).toHaveLength(1)
+  const shifted = { ...grid, phase: { numerator: '1', denominator: '120' } }
+  await renderPicture(1 / 120, { cacheGrid: shifted, deadline: performance.now() + 16 })
+  await renderPicture(1 / 120, { cacheGrid: shifted })
+  const demands = call.mock.calls.filter(([method]) => method === 'cacheWeb').map(([, params]) => params)
+  expect(demands).toMatchObject([{ time: 0, cacheGrid: grid }, { time: 1 / 120, cacheGrid: shifted, latest: true }, { time: 1 / 120, cacheGrid: shifted, latest: false }])
+  expect(requests).toHaveLength(2)
+})
 it('文本与画面按票据和时间配对，响应与纹理可倒序到达；同刻不同覆盖不复用缺测值', async () => {
   const frame = {}
   const first = inputs.picture(reference, 1, frame, copy, [], { text: ['#a'] })
@@ -350,4 +423,15 @@ it.each([false, true])('重叠帧在提交前保护纹理免于回收与复用�
   finish(5); await vi.advanceTimersByTimeAsync(0)
   expect((await inputs.picture(reference, 6, {}, copy, []))?.web.time).toBe(6)
   expect(requests).toHaveLength(7)
+})
+
+it('屏幕显示档位离散且有迟滞：边界附近来回不换档，明显越过才升降', () => {
+  expect(videoEditWebDisplayTier(0.6, 1)).toBe(0.75)
+  expect(videoEditWebDisplayTier(0.74, 1)).toBe(1)
+  expect(videoEditWebDisplayTier(0.78, 0.75)).toBe(0.75)
+  expect(videoEditWebDisplayTier(0.8, 0.75)).toBe(1)
+  expect(videoEditWebDisplayTier(2, 0.25)).toBe(1)
+  expect(videoEditWebDisplayTier(0.1, 1)).toBe(0.25)
+  // 首次与强制档位结束后不带迟滞，直接落到够用的最低档。
+  expect(videoEditWebDisplayTier(0.48)).toBe(0.5)
 })

@@ -3,6 +3,7 @@
 //! 对外只经 `platform::VideoPlatform` / `FrameOutput` 接口暴露。
 
 mod convert;
+mod cuda;
 mod d3d11va;
 mod device;
 mod shared_texture;
@@ -70,7 +71,11 @@ impl VideoPlatform for WindowsPlatform {
         self.gpu.removed_reason()
     }
 
-    fn hardware_device(&self) -> Result<HardwareDevice, String> {
+    fn hardware_device(&self, codec: ff::AVCodecID, format: i32) -> Result<HardwareDevice, String> {
+        // 随包 FFmpeg 的 D3D11VA 不提供 HEVC RExt；444 通过同适配器的 NVDEC 输出。
+        if codec == ff::AVCodecID::AV_CODEC_ID_HEVC && format == ff::AVPixelFormat::AV_PIX_FMT_YUV444P as i32 {
+            return cuda::create_device(&self.gpu);
+        }
         let device = self.gpu.hw_device.get_or_init(|| d3d11va::create(&self.gpu)).as_ref().map_err(Clone::clone)?;
         Ok(HardwareDevice { device_type: ff::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA, reference: device.new_reference() })
     }

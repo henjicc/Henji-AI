@@ -80,13 +80,40 @@ fn gatherTiles(@builtin(global_invocation_id) id: vec3<u32>) {
   packed[base + (id.y * 2u) * ${T / 4}u + id.x] = top;
   packed[base + (id.y * 2u + 1u) * ${T / 4}u + id.x] = bottom;
   packed[base + ${(T * T) / 4}u + id.y * ${T / 4}u + id.x] = uv;
+}
+
+// BT.709 limited 保留每个像素的色度；以 sRGB 编码值计算，不再施加传递函数。
+@compute @workgroup_size(16, 16)
+fn gatherPlanar(@builtin(global_invocation_id) id: vec3<u32>) {
+  let k = id.z;
+  if (k >= params.count || id.x >= ${T / 4}u || id.y >= ${T}u) { return; }
+  let tile = tiles[k];
+  let x = (tile % params.tilesX) * ${T}u + id.x * 4u;
+  let y = (tile / params.tilesX) * ${T}u + id.y;
+  var yy = 0u;
+  var uu = 0u;
+  var vv = 0u;
+  for (var i = 0u; i < 4u; i++) {
+    let c = rgbAt(x + i, y);
+    let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let values = vec3<u32>(clamp(round(vec3<f32>(16.0 + 219.0 * l,
+      128.0 + 112.0 * (c.b - l) / 0.9278,
+      128.0 + 112.0 * (c.r - l) / 0.7874)), vec3<f32>(0.0), vec3<f32>(255.0)));
+    yy |= values.x << (8u * i);
+    uu |= values.y << (8u * i);
+    vv |= values.z << (8u * i);
+  }
+  let base = k * ${T * T * 3 / 4}u + id.y * ${T / 4}u + id.x;
+  packed[base] = yy;
+  packed[base + ${T * T / 4}u] = uu;
+  packed[base + ${T * T / 2}u] = vv;
 }`
 
 function tokenOf(b: number, g: number, r: number): number {
   return CAPTURE_TOKEN_COLORS.findIndex(color => Math.abs(color[0] - r) <= 40 && Math.abs(color[1] - g) <= 40 && Math.abs(color[2] - b) <= 40)
 }
 
-interface Gpu { device: GPUDevice; copy: GPUComputePipeline; diff: GPUComputePipeline; gather: GPUComputePipeline }
+interface Gpu { device: GPUDevice; copy: GPUComputePipeline; diff: GPUComputePipeline; gather: GPUComputePipeline; planar: GPUComputePipeline }
 
 export function installReplayReader(): void {
   let gpu: Gpu | null = null
@@ -109,7 +136,7 @@ export function installReplayReader(): void {
     const problems = (await module.getCompilationInfo()).messages.filter(message => message.type === 'error')
     if (problems.length) throw new Error(`取帧着色器编译失败：${problems.map(message => message.message).join('；')}`)
     const pipeline = (entryPoint: string): GPUComputePipeline => device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint } })
-    gpu = { device, copy: pipeline('copyFrame'), diff: pipeline('diffTiles'), gather: pipeline('gatherTiles') }
+    gpu = { device, copy: pipeline('copyFrame'), diff: pipeline('diffTiles'), gather: pipeline('gatherTiles'), planar: pipeline('gatherPlanar') }
   })()
   ready.then(() => ipcRenderer.send('web-replay:reader-ready', { ok: true }), error => ipcRenderer.send('web-replay:reader-ready', { ok: false, error: String(error) }))
 
@@ -117,38 +144,51 @@ export function installReplayReader(): void {
     if (frames && frames.width === width && frames.height === height) return frames
     frames?.cur.destroy()
     frames?.prev.destroy()
-    const make = (): GPUTexture => gpu!.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC })
+    const make = (): GPUTexture => gpu!.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST })
     frames = { cur: make(), prev: make(), width, height }
     return frames
   }
 
   const read = async (importedSharedTexture: Electron.SharedTextureImported, request: ReaderRequest): Promise<ReaderResult> => {
     await ready
-    const { device, copy, diff, gather } = gpu!
-    const video = importedSharedTexture.getVideoFrame() as VideoFrame
+    const { device, copy, diff } = gpu!
+    const planar = request.format === 'yuv444p'
+    const gather = planar ? gpu!.planar : gpu!.gather
+    const started = performance.now()
+    // 原生窗口的 DIP 换算可能让纹理多出边缘像素：按快照的输出尺寸取帧视图，不缩放像素。
+    // 隔离 preload 与应用 preload 分开打包、不能共用模块（沙箱 preload 不能加载拆出的共享文件），这里直接构造。
+    const original = importedSharedTexture.getVideoFrame() as VideoFrame
+    const video = request.snapshot ? new VideoFrame(original, { displayWidth: request.snapshot.width, displayHeight: request.snapshot.height }) : original
+    if (video !== original) original.close()
     let released = false
     const release = (): void => { if (!released) { released = true; video.close(); importedSharedTexture.release() } }
     try {
-      const width = video.visibleRect?.width ?? video.codedWidth
-      const height = video.visibleRect?.height ?? video.codedHeight
-      const resized = !frames || frames.width !== width || frames.height !== height
-      const { cur, prev } = frameTextures(width, height)
+      const sourceWidth = video.visibleRect?.width ?? video.codedWidth
+      const sourceHeight = video.visibleRect?.height ?? video.codedHeight
+      const snapshot = request.snapshot
+      const width = snapshot?.width ?? sourceWidth, height = snapshot?.height ?? sourceHeight
+      if (snapshot && (!/^[0-9a-f]{32}$/.test(snapshot.identity) || !Number.isSafeInteger(width) || !Number.isSafeInteger(height) ||
+        width < 8 || height < 4 || sourceWidth !== width || sourceHeight !== height || snapshot.restore.length !== 1024 ||
+        !snapshot.restore.every(value => Number.isInteger(value) && value >= 0 && value <= 255))) throw new Error('网页快照身份区或尺寸不匹配')
+      const resized = !frames || frames.width !== sourceWidth || frames.height !== sourceHeight
+      const { cur, prev } = frameTextures(sourceWidth, sourceHeight)
       const tilesX = Math.ceil(width / T), tileCount = tilesX * Math.ceil(height / T)
-      const full = request.full || resized
+      const full = !!snapshot || request.full || resized
       const params = buffer('params', 32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST)
       device.queue.writeBuffer(params, 0, new Uint32Array([width, height, tilesX, request.guard, 0, 0, 0, 0]))
       const flags = buffer('flags', tileCount * 4, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST)
       const flagsRead = buffer('flagsRead', tileCount * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ)
-      const tokenRead = buffer('tokenRead', 256, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ)
+      const guardBytes = snapshot ? 1024 : 256
+      const tokenRead = buffer('tokenRead', guardBytes, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ)
       device.pushErrorScope('validation')
       const encoder = device.createCommandEncoder()
       let pass = encoder.beginComputePass()
       pass.setPipeline(copy)
       pass.setBindGroup(0, device.createBindGroup({ layout: copy.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: params } }] }))
       pass.setBindGroup(1, device.createBindGroup({ layout: copy.getBindGroupLayout(1), entries: [{ binding: 0, resource: device.importExternalTexture({ source: video }) }, { binding: 1, resource: cur.createView() }] }))
-      pass.dispatchWorkgroups(Math.ceil(width / 16), Math.ceil(height / 16))
+      pass.dispatchWorkgroups(Math.ceil(sourceWidth / 16), Math.ceil(sourceHeight / 16))
       pass.end()
-      encoder.copyTextureToBuffer({ texture: cur }, { buffer: tokenRead, bytesPerRow: 256 }, [1, 1])
+      encoder.copyTextureToBuffer({ texture: cur }, { buffer: tokenRead, bytesPerRow: 256 }, snapshot ? [8, 4] : [1, 1])
       if (!full) {
         encoder.clearBuffer(flags, 0, flags.size)
         pass = encoder.beginComputePass()
@@ -162,12 +202,27 @@ export function installReplayReader(): void {
       device.queue.submit([encoder.finish()])
       const invalid = await device.popErrorScope()
       if (invalid) throw new Error(`WebGPU 取帧出错：${invalid.message}`)
-      await tokenRead.mapAsync(GPUMapMode.READ, 0, 256)
+      await tokenRead.mapAsync(GPUMapMode.READ, 0, guardBytes)
       // The shared texture is copied into `cur` once the queue got this far; give it back right away.
       release()
-      const px = [...new Uint8Array(tokenRead.getMappedRange(0, 4))]
+      const px = new Uint8Array(tokenRead.getMappedRange(0, guardBytes)).slice()
       tokenRead.unmap()
+      const guardMs = performance.now() - started
       const token = tokenOf(px[0], px[1], px[2])
+      const guardMatched = snapshot ? [...snapshot.identity].every((digit, i) => {
+        const offset = Math.floor(i / 8) * 256 + (i % 8) * 4, expected = parseInt(digit, 16) * 17
+        return [0, 1, 2].every(channel => Math.abs(px[offset + channel] - expected) <= 2) && px[offset + 3] >= 253
+      }) : undefined
+      if (guardMatched === false) return { id: request.id, ok: true, token, width, height, guardMatched, tiles: null, pixels: null, timings: { guardMs, pixelsMs: 0 } }
+      if (snapshot) {
+        // cur 按既有 reader 约定保存 BGRA 通道；恢复必须在转换及差异比较前完成。
+        const restore = Uint8Array.from(snapshot.restore)
+        for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) {
+          const i = y * 256 + x * 4, r = restore[i]
+          restore[i] = restore[i + 2]; restore[i + 2] = r
+        }
+        device.queue.writeTexture({ texture: cur }, restore, { bytesPerRow: 256 }, [8, 4])
+      }
       if (request.token !== null && token !== request.token) return { id: request.id, ok: true, token, width, height, tiles: null, pixels: null }
       let list: number[]
       if (full) list = Array.from({ length: tileCount }, (_, k) => k)
@@ -183,7 +238,8 @@ export function installReplayReader(): void {
       const tileList = buffer('tiles', tiles.byteLength, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST)
       device.queue.writeBuffer(tileList, 0, tiles)
       device.queue.writeBuffer(params, 16, new Uint32Array([tiles.length]))
-      const bytes = tiles.length * T * T * 3 / 2
+      const pixelsStarted = performance.now()
+      const bytes = tiles.length * T * T * (planar ? 3 : 1.5)
       const packed = buffer('packed', bytes, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC)
       const packedRead = buffer('packedRead', bytes, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ)
       device.pushErrorScope('validation')
@@ -192,7 +248,7 @@ export function installReplayReader(): void {
       gatherPass.setPipeline(gather)
       gatherPass.setBindGroup(0, device.createBindGroup({ layout: gather.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: params } }] }))
       gatherPass.setBindGroup(1, device.createBindGroup({ layout: gather.getBindGroupLayout(1), entries: [{ binding: 0, resource: cur.createView() }, { binding: 1, resource: { buffer: tileList, size: tiles.byteLength } }, { binding: 2, resource: { buffer: packed, size: bytes } }] }))
-      gatherPass.dispatchWorkgroups(1, Math.ceil(T / 2 / 16), tiles.length)
+      gatherPass.dispatchWorkgroups(1, Math.ceil(T / (planar ? 1 : 2) / 16), tiles.length)
       gatherPass.end()
       gathering.copyBufferToBuffer(packed, 0, packedRead, 0, bytes)
       device.queue.submit([gathering.finish()])
@@ -202,19 +258,24 @@ export function installReplayReader(): void {
       const pixels = new Uint8Array(packedRead.getMappedRange(0, bytes).slice(0))
       packedRead.unmap()
       // Accepted: this frame is what the next one is compared with.
-      frames = { cur: prev, prev: cur, width, height }
-      return { id: request.id, ok: true, token, width, height, tiles, pixels }
+      frames = { cur: prev, prev: cur, width: sourceWidth, height: sourceHeight }
+      return { id: request.id, ok: true, token, width, height, guardMatched, tiles, pixels, timings: { guardMs, pixelsMs: performance.now() - pixelsStarted } }
     } finally {
       release()
     }
   }
 
-  sharedTexture.setSharedTextureReceiver(async ({ importedSharedTexture }, request: ReaderRequest) => {
-    try {
-      ipcRenderer.send('web-replay:reader-result', await read(importedSharedTexture, request))
-    } catch (error) {
-      try { importedSharedTexture.release() } catch { /* released */ }
-      ipcRenderer.send('web-replay:reader-result', { id: request.id, ok: false, error: String(error) } satisfies ReaderResult)
-    }
+  let tail = Promise.resolve()
+  sharedTexture.setSharedTextureReceiver(({ importedSharedTexture }, request: ReaderRequest) => {
+    // 一个 reader 共用映射缓冲与上一帧；异步接收不能并发覆盖另一张尚未读完的纹理。
+    tail = tail.then(async () => {
+      try {
+        ipcRenderer.send('web-replay:reader-result', await read(importedSharedTexture, request))
+      } catch (error) {
+        try { importedSharedTexture.release() } catch { /* released */ }
+        ipcRenderer.send('web-replay:reader-result', { id: request.id, ok: false, error: String(error) } satisfies ReaderResult)
+      }
+    })
+    return tail
   })
 }

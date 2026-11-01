@@ -5,6 +5,7 @@
 //! 写入路径（1.3 设计第 3 条）：
 //! - `CopyNv12`：硬解 NV12 表面切片直接复制到共享 nv12；
 //! - `ShaderSemiPlanar`：硬解 NV12/P010 表面复制到中间纹理，计算着色器转 rgbaf16；
+//! - `CudaPlanar`：NVDEC 8 位444平面经 GPU 互操作缓冲交给同一平面转换着色器；
 //! - `UploadNv12`：软解 8 位 4:2:0 平面数据在 CPU 交错为 NV12，经 STAGING 上传；
 //! - `ShaderPlanar`：软解平面/半平面/打包数据整块写入 ByteAddressBuffer，通用计算着色器转 rgbaf16；
 //! - `CpuFallback`：着色器读不了的罕见格式（大端、位流、调色板、浮点）先在 CPU 用 swscale 转 16 位平面，
@@ -21,6 +22,7 @@ use crate::test_pattern::SharedFormat;
 pub enum WritePath {
     CopyNv12,
     ShaderSemiPlanar,
+    CudaPlanar,
     UploadNv12,
     ShaderPlanar,
     CpuFallback,
@@ -31,6 +33,7 @@ impl WritePath {
         match self {
             Self::CopyNv12 => "copy_nv12",
             Self::ShaderSemiPlanar => "shader_semiplanar",
+            Self::CudaPlanar => "cuda_planar",
             Self::UploadNv12 => "upload_nv12",
             Self::ShaderPlanar => "shader_planar",
             Self::CpuFallback => "cpu_fallback",
@@ -108,6 +111,12 @@ pub fn planar_shader_supports(format: ff::AVPixelFormat) -> bool {
 /// 选择写入路径。`hardware_sw_format` 为硬件帧的软件格式（软解帧为 None）。
 pub fn write_path(output: SharedFormat, frame_format: ff::AVPixelFormat, hardware_sw_format: Option<ff::AVPixelFormat>) -> Result<WritePath, String> {
     use ff::AVPixelFormat::*;
+    if frame_format == AV_PIX_FMT_CUDA {
+        return match (output, hardware_sw_format) {
+            (SharedFormat::Rgbaf16, Some(AV_PIX_FMT_YUV444P)) => Ok(WritePath::CudaPlanar),
+            _ => Err("CUDA 消费仅支持 8 位平面444输出 rgbaf16".into()),
+        };
+    }
     if let Some(sw) = hardware_sw_format {
         return match (output, sw) {
             (SharedFormat::Nv12, AV_PIX_FMT_NV12) => Ok(WritePath::CopyNv12),
@@ -299,6 +308,9 @@ mod tests {
         assert_eq!(write_path(Nv12, AV_PIX_FMT_D3D11, Some(AV_PIX_FMT_NV12)), Ok(WritePath::CopyNv12));
         assert_eq!(write_path(Rgbaf16, AV_PIX_FMT_D3D11, Some(AV_PIX_FMT_P010LE)), Ok(WritePath::ShaderSemiPlanar));
         assert_eq!(write_path(Rgbaf16, AV_PIX_FMT_D3D11, Some(AV_PIX_FMT_NV12)), Ok(WritePath::ShaderSemiPlanar));
+        assert_eq!(write_path(Rgbaf16, AV_PIX_FMT_CUDA, Some(AV_PIX_FMT_YUV444P)), Ok(WritePath::CudaPlanar));
+        assert!(write_path(Nv12, AV_PIX_FMT_CUDA, Some(AV_PIX_FMT_YUV444P)).is_err());
+        assert!(write_path(Rgbaf16, AV_PIX_FMT_CUDA, Some(AV_PIX_FMT_P010LE)).is_err());
         assert!(write_path(Nv12, AV_PIX_FMT_D3D11, Some(AV_PIX_FMT_P010LE)).is_err());
         assert_eq!(write_path(Nv12, AV_PIX_FMT_YUV420P, None), Ok(WritePath::UploadNv12));
         assert!(write_path(Nv12, AV_PIX_FMT_YUV422P, None).is_err());

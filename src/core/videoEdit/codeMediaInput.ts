@@ -2,7 +2,8 @@ import { CodeMaterialError, codeImageReference, type CodeParameterValues } from 
 import { codeVideoSpanAt, codeVideoSpanIndex } from './codeMaterial/videoSpans'
 import { type VideoEditComposition, type VideoEditClip } from './document'
 import type { CodeImageReference, CodeVideoSpan } from '../imaging/parameterTypes'
-import { videoEditSourceSeconds, type VideoEditRatio } from './time'
+import { videoEditFrameFraction, videoEditSourceSeconds, type VideoEditRatio } from './time'
+import { webTimeGridFromFraction, type WebTimeGrid } from './webTimeCache'
 import { RECORDING_CURSOR_EFFECT } from './recordingCursor'
 
 type CodeMediaInputClip = Pick<VideoEditClip, 'start' | 'sourceInUs' | 'sourceRemainder'>
@@ -56,6 +57,25 @@ export function codeMediaInputSample(clip: CodeMediaInputClip, reference: CodeIm
 }
 export function codeMediaInputSeconds(clip: CodeMediaInputClip, reference: CodeImageReference, frame: number, rate: VideoEditRatio): number | undefined {
   return codeMediaInputSample(clip, reference, frame, rate)?.seconds
+}
+
+/** 网页缓存与正式时间表采用同一采样，但相位推导全程保留分数，避免每帧产生浮点尾差变体。 */
+export function codeMediaWebTimeGrid(clip: CodeMediaInputClip, reference: CodeImageReference, frame: number, rate: VideoEditRatio): WebTimeGrid | undefined {
+  const sample = codeMediaInputSample(clip, reference, frame, rate)
+  if (!sample || sample.seconds < 0) return undefined
+  if (reference.time !== undefined) return webTimeGridFromFraction(rate, videoEditFrameFraction(reference.time))
+  const at = videoEditFrameFraction(frame - clip.start)
+  let denominator = 1_000_000n * BigInt(clip.sourceRemainder.denominator) * at.denominator * BigInt(rate.numerator)
+  let numerator = (BigInt(clip.sourceInUs) * BigInt(clip.sourceRemainder.denominator) + BigInt(clip.sourceRemainder.numerator)) * at.denominator * BigInt(rate.numerator)
+    + at.numerator * BigInt(rate.denominator) * 1_000_000n * BigInt(clip.sourceRemainder.denominator)
+  if (sample.span) {
+    const from = videoEditFrameFraction(sample.span.from), src = videoEditFrameFraction(sample.span.src), speed = videoEditFrameFraction(sample.span.rate ?? 1)
+    numerator = (numerator * from.denominator - from.numerator * denominator) * speed.numerator
+    denominator *= from.denominator * speed.denominator
+    numerator = numerator * src.denominator + src.numerator * denominator
+    denominator *= src.denominator
+  }
+  return webTimeGridFromFraction(rate, { numerator, denominator })
 }
 /** 这一帧这个参数是否参与（只有带时间表的视频参数会不参与）。 */
 export function codeMediaInputActive(clip: CodeMediaInputClip, reference: CodeImageReference, frame: number, rate: VideoEditRatio): boolean {

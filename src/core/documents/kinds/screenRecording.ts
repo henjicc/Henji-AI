@@ -10,9 +10,11 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 61, minReaderVersion: 61,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 62, minReaderVersion: 61,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 61 → 62：嵌入剪辑导出记录的设置新增可选 useWebCache，缺省不用网页缓存，最低可读版本保持 61。
+    61: content => structuredClone(content),
     // 60 → 61：接受作者接口 14 的 fill 图层画面来源；旧源码、接口与库锁定原样保留。
     60: content => structuredClone(content),
     // 57 → 58：嵌入剪辑新增可选元素效果覆盖、修改记录与作者接口 11（效果 key），已有内容原样保留；旧程序读不懂接口 11、会忽略效果覆盖（与剪辑 54 → 55 同理），最低可读版本提高到 58。
