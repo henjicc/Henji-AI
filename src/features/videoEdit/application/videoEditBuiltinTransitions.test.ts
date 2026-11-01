@@ -1,3 +1,4 @@
+import { BLACK_HEX } from '@/core/theme/colorTokens'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -7,6 +8,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { applyVideoEditTransitionToSelection, updateVideoEditTransitionParams } from './videoEditTransitions'
 import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, undoVideoEdit } from './videoEditService'
 import { endVideoEditEffectDrag, handleVideoEditEffectDragOver, VIDEO_EDIT_EFFECT_DRAG_TYPE, videoEditEffectDropClips, videoEditEffectDropTarget } from '../panels/videoEditEffectDrag'
+import { dropVideoEditGenerator } from './videoEditGenerators'
 
 // 任务 4.7 视频过渡与效果拖放落点：试渲染只替换像素边界；领域校验、事务、注册与读回都是正式实现。
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -132,4 +134,50 @@ it('拖效果经过时间线：高亮松手会加上效果的片段（落在所�
   expect(videoEditEffectDropTarget()).toBeNull(); expect(dataTransfer.dropEffect).toBe('none')
   handleVideoEditEffectDragOver(event, id, { sequence, selectedClipIds: [] }); endVideoEditEffectDrag()
   expect(videoEditEffectDropTarget()).toBeNull()
+})
+
+it('生成器拖到轨道空白处新建整幅黑底图形片段，生成器是它效果链的第一项，一步撤销；落在片段上仍按效果加到片段', async () => {
+  const { owner, id, sequenceId } = await project()
+  const before = getActiveVideoEditSequence(owner)
+  const frame = Math.max(...before.clips.map(clip => clip.start + clip.duration)) + 10
+  const clipId = await dropVideoEditGenerator(id, sequenceId, 'noise', { frame, track: 1 })
+  const sequence = getActiveVideoEditSequence(owner), clip = sequence.clips.find(value => value.id === clipId)!
+  expect(clip).toMatchObject({ kind: 'graphic', start: frame, name: '噪声' })
+  expect(clip.graphic!.objects[0].parameters).toMatchObject({ x: 0, y: 0, width: sequence.width, height: sequence.height, fill: [0, 0, 0, 1] })
+  expect(clip.effects?.map(effect => effect.builtin?.id)).toEqual(['noise'])
+  expect(owner.selection).toBe(clipId)
+  undoVideoEdit(id)
+  expect(getActiveVideoEditSequence(owner).clips.map(value => value.id)).toEqual(before.clips.map(value => value.id))
+  expect(owner.document.items.some(item => item.id === clip.itemId)).toBe(false)
+})
+
+it('助手用通用集合组合生成器：目录读参、创建整幅图形、放入片段、加生成器并改参，失败事务不留半项', async () => {
+  const { owner, id, sequenceId } = await project()
+  const app = createApplicationHarness()
+  const projectRef = { kind: 'video_edit.document', id }
+  const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${sequenceId}` }
+  const create = async (entityType: string, parent: { kind: string; id: string }, properties: Record<string, unknown>) => {
+    const baseline = await app.read(parent)
+    return app.call('change_application_entities', { summary: '创建生成背景', changes: [{ kind: 'create_items', entityType, parent, items: [{ properties }] }] }, baseline.revisions as Record<string, number>)
+  }
+  try {
+    const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:noise` }, ['video_edit.builtin_effect.params'])
+    expect(JSON.stringify(catalog.properties)).toContain('柏林')
+    expect(await create('video_edit.item', projectRef, { 'video_edit.item.kind': 'graphic', 'video_edit.item.graphic_kind': 'solid', 'video_edit.item.name': '生成背景' })).toMatchObject({ ok: true })
+    const item = owner.document.items.find(value => value.name === '生成背景')!
+    expect(await create('video_edit.clip', sequenceRef, { 'video_edit.clip.item_id': item.id, 'video_edit.clip.kind': 'graphic', 'video_edit.clip.name': item.name, 'video_edit.clip.start': 300, 'video_edit.clip.duration': 60, 'video_edit.clip.track': 1 })).toMatchObject({ ok: true })
+    const clip = getActiveVideoEditSequence(owner).clips.find(value => value.itemId === item.id)!
+    const clipRef = { kind: 'video_edit.clip', id: `${id}:${clip.id}` }
+    expect(await create('video_edit.effect', clipRef, { 'video_edit.effect.definition_id': 'effect:noise', 'video_edit.effect.parameters': { mode: 'simplex' } })).toMatchObject({ ok: true })
+    const effect = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects![0]
+    const effectRef = { kind: 'video_edit.effect', id: `${id}:${effect.id}` }
+    expect(await app.change(effectRef, { 'video_edit.effect.parameters': { mode: 'perlin', scale: 75, color_b: `${BLACK_HEX}00` } })).toMatchObject({ ok: true })
+    const actual = getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!
+    expect(actual.graphic!.objects[0].parameters).toMatchObject({ x: 0, y: 0, width: actual.graphic!.width, height: actual.graphic!.height })
+    expect(actual.effects![0].builtin).toMatchObject({ id: 'noise', params: { mode: 'perlin', scale: 75, color_b: `${BLACK_HEX}00` } })
+    expect(((await app.read(effectRef, ['video_edit.effect.parameters'])).properties as Record<string, unknown>)['video_edit.effect.parameters']).toMatchObject({ mode: 'perlin', scale: 75, color_b: `${BLACK_HEX}00` })
+    const before = structuredClone(actual.effects)
+    expect(await create('video_edit.effect', clipRef, { 'video_edit.effect.definition_id': 'effect:noise', 'video_edit.effect.parameters': { mode: 'missing' } })).toMatchObject({ ok: false })
+    expect(getActiveVideoEditSequence(owner).clips.find(value => value.id === clip.id)!.effects).toEqual(before)
+  } finally { await app.dispose() }
 })

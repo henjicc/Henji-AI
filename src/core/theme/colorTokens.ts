@@ -25,6 +25,13 @@ export const RECORDING_FRAME_SOLID_DEFAULT_HEX = '#1b1d22';
 export const BLACK_HEX = '#000000';
 /** 剪辑内置效果“渐变映射”中间调颜色的默认值（画面内容色，中灰）。 */
 export const MID_GRAY_HEX = '#808080';
+/** 生成器默认颜色里的深灰、浅灰（画面内容色，中性不染色）。 */
+export const DARK_GRAY_HEX = '#404040';
+export const LIGHT_GRAY_HEX = '#c0c0c0';
+/** 暗底大面积渐变的色带回归输入（设计第 3.5 节的径向背景）。 */
+export const VIDEO_EDIT_DARK_GRADIENT_TEST_COLORS = { from: '#16171a', to: '#0d0e10' } as const;
+/** 渐变像素回归的固定色标：三原色定位颜色点，透明黑看透明端。 */
+export const VIDEO_EDIT_GRADIENT_TEST_STOPS = { red: '#ff0000', green: '#00ff00', blue: '#0000ff', clear: '#00000000' } as const;
 /** 渐变映射三色像素回归的固定输入：深蓝、灰、暖白。 */
 export const VIDEO_EDIT_GRADIENT_MAP_TEST_COLORS = { dark: '#14213d', mid: MID_GRAY_HEX, light: '#fff3dc' } as const;
 /**

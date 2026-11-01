@@ -253,3 +253,8 @@ export default { name: '模拟参数', simulation: declaration,
   expect(lines(source)).toEqual([])
   expect(lines(source.replace('x += params.force;', 'const invalid: string = params.force;'))).toEqual([expect.stringContaining('number')])
 })
+
+it('画面来源 fill 不要求 draw，可接 effects 与 pose；与 draw 同时声明报错', () => {
+  expect(lines('export default { name:"背景", layers:(p,w,h)=>[{id:"bg", bounds:[0,0,w,h], fill:t=>({id:"gradient",params:{mode:"radial"}}), effects:t=>[{id:"blur",params:{amount:10}}], pose:t=>({opacity:.8})}] }')).toEqual([])
+  expect(lines('export default { name:"背景", layers:()=>[{id:"bg", fill:()=>({id:"gradient"}), draw(ctx){}}] }').length).toBeGreaterThan(0)
+})

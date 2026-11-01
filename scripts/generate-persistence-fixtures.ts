@@ -74,7 +74,7 @@ const source = `export default {
   motionBlur: { shutter: 180, maxSamples: 16 },
   params: ${JSON.stringify(Object.entries(parameters).map(([key, value]) => ({ key, ...value })))},
   layers() {
-    return [{ id: "golden-adjust", adjust: () => [{ id: "vignette", params: { amount: 20 } }] }, { id: "golden-motion", bounds: [0, 0, 100, 100], effects: () => [{ id: "glow", key: "goldenGlow", params: { strength: 20 } }], blurShape: "lens", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = "${BLACK_HEX}"; ctx.fillRect(0, 0, 100, 100) } }]
+    return [{ id: "golden-gradient", bounds: [0, 0, 1920, 1080], fill: () => ({ id: "gradient", params: { mode: "radial" } }) }, { id: "golden-adjust", adjust: () => [{ id: "vignette", params: { amount: 20 } }] }, { id: "golden-motion", bounds: [0, 0, 100, 100], effects: () => [{ id: "glow", key: "goldenGlow", params: { strength: 20 } }], blurShape: "lens", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = "${BLACK_HEX}"; ctx.fillRect(0, 0, 100, 100) } }]
   }
 }
 `

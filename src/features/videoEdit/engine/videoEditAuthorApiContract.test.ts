@@ -19,7 +19,7 @@ type Fn<T> = Extract<T, (...args: never[]) => unknown>
 type Args<T> = Parameters<Fn<T>>
 /** 宿主运行时按下标读取 bounds/clip，作者侧接受任意长度数组。 */
 type Relaxed<T> = Omit<T, 'bounds' | 'clip'> & { bounds?: readonly number[]; clip?: readonly number[] }
-type AuthorLayerKeys = keyof Author.AuthorStaticLayer | keyof Author.AuthorPosedLayer | keyof Author.AuthorAdjustmentLayer
+type AuthorLayerKeys = keyof Author.AuthorStaticLayer | keyof Author.AuthorPosedLayer | keyof Author.AuthorAdjustmentLayer | keyof Author.AuthorFillLayer
 type ModuleFields = 'name' | 'kind' | 'mode' | 'width' | 'height' | 'durationSeconds' | 'frames' | 'params' | 'types' | 'motionBlur'
 
 export type FrameInfo = [

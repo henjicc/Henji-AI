@@ -22,10 +22,10 @@ describe('内置效果登记', () => {
       expect(videoEditBuiltinEffectIssue({ id: definition.id, params: videoEditBuiltinDefaults(definition) })).toBeUndefined()
     }
   })
-  it('效果面板列出可用于片段的内置效果，带参数与分组', () => {
+  it('效果面板列出可用于片段的内置效果，带参数与分组（“生成”文件夹不分小组）', () => {
     const entries = videoEditEffectsRegistry().filter(entry => entry.builtinId)
     expect(new Set(entries.map(entry => entry.builtinId))).toEqual(new Set(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => definition.id)))
-    expect(entries.every(entry => VIDEO_EDIT_EFFECT_CATEGORIES.some(category => category.id === entry.category) && entry.id === `effect:${entry.builtinId}` && entry.group && entry.params)).toBe(true)
+    expect(entries.every(entry => VIDEO_EDIT_EFFECT_CATEGORIES.some(category => category.id === entry.category) && entry.id === `effect:${entry.builtinId}` && (entry.group || entry.category === 'generator') && entry.params)).toBe(true)
     expect(parseVideoEditBuiltinRefId('effect:blur')).toBe('blur'); expect(parseVideoEditBuiltinRefId('blur')).toBe('blur'); expect(parseVideoEditBuiltinRefId('effect:nope')).toBeUndefined()
   })
   it('严格校验越界、错类型与未知参数并列出可用范围；界面写入时夹进范围', () => {

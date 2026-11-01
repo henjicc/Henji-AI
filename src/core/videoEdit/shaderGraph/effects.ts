@@ -1,74 +1,36 @@
 /**
- * `shaders` 组件作为剪辑内置效果：每个生成器、滤镜组件一项，参数由组件属性自动换算。
+ * `shaders` 组件作为剪辑内置效果：每个滤镜组件一项，参数由组件属性自动换算（`componentParams.ts`）；
+ * 生成器按方式合并成封装效果（`generators.ts`），进“生成”文件夹。
  *
  * - 效果 ID 为 `shaders.<组件名>`；渲染时组成着色器图 `[@input, 组件]`（见 `shaderGraphEffectSpec`）。
- * - 数值、颜色、选项、开关直接对应；位置拆成 `<键>_x` / `<键>_y` 两个百分比（0 左/上，100 右/下）。
- * - 渐变色标、形状、文字等结构化属性不进效果参数，取组件默认值。
- * - 生成器多一个 `blend_mode`：生成的画面怎样叠在原画面上；效果“数量”仍是与原画面的混合比例。
+ * - “生成”文件夹的生成器只在内容 alpha 内生成：组件图层以片段画面的 alpha 为遮罩，再按混合模式叠上去。
  */
-import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinGroup, VideoEditBuiltinParam, VideoEditBuiltinParams } from '../builtinEffects'
-import { SHADER_BLEND_MODES, SHADER_COMPONENTS, SHADER_GRAPH_INPUT, shaderClockRateProps, shaderGraphStructureKey, type ShaderComponent, type ShaderComponentProp, type ShaderGraphSpec } from './spec'
-import { SHADER_COMPONENT_ZH, SHADER_LABEL_ZH, SHADER_OPTION_ZH } from './zh'
-import { BLACK_HEX } from '../../theme/colorTokens'
+import type { VideoEditBuiltinEffectDefinition, VideoEditBuiltinGroup, VideoEditBuiltinParams } from '../builtinEffects'
+import { SHADER_COMPONENTS, SHADER_GRAPH_INPUT, shaderComponent, shaderGraphStructureKey, type ShaderGraphCustomShader, type ShaderGraphSpec } from './spec'
+import { SHADER_COMPONENT_ZH } from './zh'
 import { FILM_LOOK_SHADER_GRAPH } from '../filmLook'
 import { RETRO_SCREEN_SHADER_GRAPH } from '../retroScreen'
+import { WRAPPED_GENERATOR_SHADER_GRAPHS, WRAPPED_GENERATOR_SOURCES } from '../generators'
+import { shaderComponentParams, shaderComponentProps } from './componentParams'
 
+export { shaderComponentParams, shaderComponentProps, shaderParamKey, shaderPositionKeys } from './componentParams'
 export const SHADER_EFFECT_PREFIX = 'shaders.'
 const GROUPS: Readonly<Record<string, VideoEditBuiltinGroup>> = {
-  Textures: 'shader_texture', Shapes: 'shader_shape', 'Shape Effects': 'shader_material', Blurs: 'shader_blur', Distortions: 'shader_distort', Adjustments: 'shader_adjust', Stylize: 'shader_stylize',
-}
-const BLEND_ZH: Readonly<Record<string, string>> = {
-  normal: '正常', multiply: '正片叠底', screen: '滤色', overlay: '叠加', softLight: '柔光', hardLight: '强光', linearDodge: '线性减淡（添加）', linearBurn: '线性加深', colorDodge: '颜色减淡', colorBurn: '颜色加深',
-  darken: '变暗', lighten: '变亮', difference: '差值', exclusion: '排除', hue: '色相', saturation: '饱和度', color: '颜色', luminosity: '明度',
-}
-
-function color(value: unknown): string {
-  if (typeof value !== 'string') return BLACK_HEX
-  const text = value.trim().toLowerCase()
-  if (/^#[0-9a-f]{6}([0-9a-f]{2})?$/.test(text)) return text
-  if (/^#[0-9a-f]{3}$/.test(text)) return `#${[...text.slice(1)].map(char => char + char).join('')}`
-  return text === 'transparent' ? `${BLACK_HEX}00` : BLACK_HEX
-}
-const label = (prop: ShaderComponentProp): string => SHADER_LABEL_ZH[prop.label] ?? prop.label
-/** 效果参数键沿用剪辑的下划线写法（组件的 colorA → color_a），读写实体与关键帧都用它。 */
-export const shaderParamKey = (key: string): string => key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
-/** 位置属性拆成的两个百分比参数键。 */
-export const shaderPositionKeys = (key: string): readonly [string, string] => [`${shaderParamKey(key)}_x`, `${shaderParamKey(key)}_y`]
-
-/** 组件属性 → 剪辑参数（效果与过渡共用）；`skip` 里的属性由宿主驱动（如转场进度），不做参数。 */
-export function shaderComponentParams(component: ShaderComponent, skip: readonly string[] = []): VideoEditBuiltinParam[] {
-  const result: VideoEditBuiltinParam[] = []
-  const clockRates = shaderClockRateProps(component)
-  for (const prop of component.props) {
-    if (skip.includes(prop.key)) continue
-    // 助手语义里写明代码素材里的属性名：效果参数用下划线键，代码图层用组件原名（两种写法代码里都认）。
-    const base = { key: shaderParamKey(prop.key), name: label(prop), tooltip: '', description: `${prop.description || prop.label}（代码图层属性 ${prop.key}）` }
-    if (prop.ui === 'range' && typeof prop.default === 'number' && Number.isFinite(prop.default)) {
-      const min = prop.min ?? Math.min(0, prop.default); const max = prop.max ?? Math.max(1, prop.default * 4)
-      result.push({ ...base, type: 'number', unit: 'value', min, max, step: prop.step ?? (max - min > 20 ? 1 : 0.01), default: prop.default, animatable: !clockRates.includes(prop.key) && !prop.compileTime, ...(clockRates.includes(prop.key) && prop.key !== component.speedProp ? { storedKeyframes: 'first' as const } : {}) })
-    } else if (prop.ui === 'color') result.push({ ...base, type: 'color', default: color(prop.default), alpha: true, animatable: true })
-    else if (prop.ui === 'select' && prop.options?.length) result.push({ ...base, type: 'enum', default: String(prop.default ?? prop.options[0].value), options: prop.options.map(option => ({ value: String(option.value), label: SHADER_OPTION_ZH[option.label] ?? option.label })) })
-    else if (prop.ui === 'checkbox') result.push({ ...base, type: 'boolean', default: prop.default === true })
-    else if (prop.ui === 'position' && prop.default && typeof prop.default === 'object') {
-      const point = prop.default as { x?: number; y?: number }
-      const [x, y] = shaderPositionKeys(prop.key)
-      result.push({ ...base, key: x, name: `${label(prop)}（水平）`, type: 'number', unit: 'percent', min: -100, max: 200, step: 0.1, default: Math.round((point.x ?? 0.5) * 1000) / 10, description: `${prop.description || prop.label}（水平位置百分比，0 左边缘，100 右边缘；代码图层写 ${prop.key}: {x, y}，取 0–1）`, animatable: true })
-      result.push({ ...base, key: y, name: `${label(prop)}（垂直）`, type: 'number', unit: 'percent', min: -100, max: 200, step: 0.1, default: Math.round((point.y ?? 0.5) * 1000) / 10, description: `${prop.description || prop.label}（垂直位置百分比，0 上边缘，100 下边缘；代码图层写 ${prop.key}: {x, y}，取 0–1）`, animatable: true })
-    }
-  }
-  if (component.role === 'generator') result.push({ key: 'blend_mode', name: '混合模式', type: 'enum', default: 'normal', tooltip: '生成的画面怎样叠在原画面上', description: '生成画面与片段原画面的混合模式：normal 直接覆盖（透明处露出原画面），screen 只提亮，multiply 只压暗，overlay 加强对比等。', options: SHADER_BLEND_MODES.map(value => ({ value, label: BLEND_ZH[value] ?? value })) })
-  return result
+  Textures: 'shader_texture', 'Shape Effects': 'shader_material', Blurs: 'shader_blur', Distortions: 'shader_distort', Adjustments: 'shader_adjust', Stylize: 'shader_stylize',
 }
 
 /**
  * 与剪辑内置效果同目的的组件不单独列为效果，剪辑里用对应的内置效果：
  * 黑白、反相、翻转；模糊（高斯、方向、缩放、镜头虚化）、锐度、调色（亮度对比度、曝光、饱和度、色相、自然饱和度、着色）、
- * 颗粒、暗角、像素化（并入马赛克）、投影。
+ * 颗粒、暗角、像素化（并入马赛克）、投影；八种渐变与色轮（并入“渐变”）。
  */
-const SAME_AS_BUILTIN = new Set(['Grayscale', 'Invert', 'Flip', 'Blur', 'LinearBlur', 'ZoomBlur', 'BokehBlur', 'Sharpness', 'BrightnessContrast', 'Exposure', 'Saturation', 'HueShift', 'Vibrance', 'Tint', 'FilmGrain', 'Vignette', 'Pixelate', 'DropShadow'])
-/** 可作为片段效果的组件：生成器与滤镜（转场另行登记，分组容器不单独成效果）。 */
+const SAME_AS_BUILTIN = new Set(['Grayscale', 'Invert', 'Flip', 'Blur', 'LinearBlur', 'ZoomBlur', 'BokehBlur', 'Sharpness', 'BrightnessContrast', 'Exposure', 'Saturation', 'HueShift', 'Vibrance', 'Tint', 'FilmGrain', 'Vignette', 'Pixelate', 'DropShadow',
+  'LinearGradient', 'RadialGradient', 'ConicGradient', 'DiamondGradient', 'MultiPointGradient', 'MeshGradient', 'FlowingGradient', 'ColorWheel'])
+/** 图形工具与代码都能画的图形（Shapes 分组整组不登记）、纯色、立体感重的流体团，都不作为效果登记。 */
+const RETIRED = new Set(['SolidColor', 'Blob'])
+/** 可作为片段效果的组件：滤镜与没有并入“生成”的生成器（转场另行登记，分组容器不单独成效果）。 */
 export const SHADER_GRAPH_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = SHADER_COMPONENTS
-  .filter(component => (component.role === 'generator' || component.role === 'filter') && GROUPS[component.category] && !SAME_AS_BUILTIN.has(component.name))
+  .filter(component => (component.role === 'generator' || component.role === 'filter') && GROUPS[component.category] && !SAME_AS_BUILTIN.has(component.name) && !RETIRED.has(component.name) && !WRAPPED_GENERATOR_SOURCES.has(component.name))
   .map(component => {
     const zh = SHADER_COMPONENT_ZH[component.name]
     return {
@@ -81,52 +43,56 @@ export const SHADER_GRAPH_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDef
   })
 const BY_ID = new Map(SHADER_GRAPH_EFFECT_DEFINITIONS.map(definition => [definition.id, definition]))
 /**
- * 封装效果：一个组件登记成有自己名字和一份说明的内置效果（定义随效果登记），渲染时把它的参数换算回组件属性。
- * 着色器不重写，所以只上片段，出口仍是着色器图的 8 位。一个名字合了几个组件时，`component` 按参数里的方式选。
+ * 封装效果：一个或几个组件登记成有自己名字和一份说明的内置效果（定义随效果登记），渲染时按参数选组件、换算回组件属性。
+ * 着色器不重写，所以只上片段，出口仍是着色器图的 8 位。`component` 随参数变化时（按“方式”分派），不同方式是不同的合成结构。
  */
 export interface ShaderGraphWrappedEffect {
   readonly id: string
   readonly component: string | ((values: Readonly<VideoEditBuiltinParams>) => string)
   readonly props: (values: Readonly<VideoEditBuiltinParams>) => Record<string, unknown>
-  /** 组件把透明处填成不透明（如显像管最后一步 opaque）时为真：宿主按原画透明度裁回，透明底片段不多出黑底。 */
   readonly keepsSourceAlpha?: (values: Readonly<VideoEditBuiltinParams>) => boolean
 }
-const WRAPPED: ReadonlyMap<string, ShaderGraphWrappedEffect> = new Map([FILM_LOOK_SHADER_GRAPH, RETRO_SCREEN_SHADER_GRAPH].map(wrapped => [wrapped.id, wrapped]))
-function wrappedComponent(wrapped: ShaderGraphWrappedEffect, values: Readonly<VideoEditBuiltinParams>): string { return typeof wrapped.component === 'string' ? wrapped.component : wrapped.component(values) }
-export function isShaderGraphEffect(id: string): boolean { return BY_ID.has(id) || WRAPPED.has(id) }
+const WRAPPED: ReadonlyMap<string, ShaderGraphWrappedEffect> = new Map([FILM_LOOK_SHADER_GRAPH, RETRO_SCREEN_SHADER_GRAPH, ...WRAPPED_GENERATOR_SHADER_GRAPHS].map(wrapped => [wrapped.id, wrapped]))
 export function shaderGraphEffectKeepsSourceAlpha(id: string, values: Readonly<VideoEditBuiltinParams>): boolean { return WRAPPED.get(id)?.keepsSourceAlpha?.(values) ?? false }
+export function isShaderGraphEffect(id: string): boolean { return BY_ID.has(id) || WRAPPED.has(id) }
 
-/** 剪辑参数 → 组件属性：位置合回 {x, y}（百分比转 0–1），选项值还原成组件原类型（效果与过渡共用）。 */
-export function shaderComponentProps(component: ShaderComponent, values: Readonly<VideoEditBuiltinParams>): Record<string, unknown> {
-  const props: Record<string, unknown> = {}
-  for (const prop of component.props) {
-    if (prop.ui === 'position') {
-      const [x, y] = shaderPositionKeys(prop.key)
-      if (typeof values[x] === 'number' || typeof values[y] === 'number') {
-        const point = (prop.default ?? {}) as { x?: number; y?: number }
-        props[prop.key] = { x: typeof values[x] === 'number' ? (values[x] as number) / 100 : point.x ?? 0.5, y: typeof values[y] === 'number' ? (values[y] as number) / 100 : point.y ?? 0.5 }
-      }
-    } else if (shaderParamKey(prop.key) in values) {
-      const value = values[shaderParamKey(prop.key)]
-      props[prop.key] = prop.ui === 'select' ? prop.options?.find(option => String(option.value) === value)?.value ?? value : value
-    }
-  }
-  if (component.role === 'generator' && typeof values.blend_mode === 'string') props.blendMode = values.blend_mode
-  return props
+/** 生成器遮罩引用的片段画面图层 id。 */
+const CONTENT_LAYER = 'content'
+const SHADER_GROUP = 'Group'
+/** 片段画面换成不透明的直通色（图层纹理是预乘的）：混合只看颜色，透明度由外层遮罩一次给出。 */
+const OPAQUE_CONTENT: ShaderGraphCustomShader = { name: 'OpaqueContent', kind: 'filter', wgsl: 'return vec4f(child.rgb / max(child.a, 0.0001), 1.0);' }
+function effectComponent(id: string, values: Readonly<VideoEditBuiltinParams>): string {
+  const wrapped = WRAPPED.get(id)
+  if (!wrapped) return id.slice(SHADER_EFFECT_PREFIX.length)
+  return typeof wrapped.component === 'string' ? wrapped.component : wrapped.component(values)
 }
+/** “生成”文件夹的封装生成器只在内容 alpha 内生成；留在“更多”里的组件效果保持原样（铺满画面）。 */
+const MASKED_GENERATORS: ReadonlySet<string> = new Set(WRAPPED_GENERATOR_SHADER_GRAPHS.map(graph => graph.id))
+
 /** 效果参数 → 组件属性。 */
 export function shaderGraphEffectProps(id: string, values: Readonly<VideoEditBuiltinParams>): Record<string, unknown> {
   const wrapped = WRAPPED.get(id)
-  if (wrapped) return wrapped.props(values)
-  const component = SHADER_COMPONENTS.find(value => `${SHADER_EFFECT_PREFIX}${value.name}` === id)
+  const component = shaderComponent(effectComponent(id, values))
   if (!component) throw new Error(`没有着色器效果 ${id}。`)
-  return shaderComponentProps(component, values)
+  const props = wrapped ? wrapped.props(values) : shaderComponentProps(component, values)
+  return props
 }
 
-/** 一项着色器效果对应的着色器图：先画片段画面，再叠生成器或套滤镜。组件图层 id 固定为 `fx`；封装效果按参数里的方式选组件。 */
-export function shaderGraphEffectSpec(id: string, params: Readonly<VideoEditBuiltinParams> = {}): ShaderGraphSpec {
-  const wrapped = WRAPPED.get(id)
-  return { layers: [{ type: SHADER_GRAPH_INPUT }, { type: wrapped ? wrappedComponent(wrapped, params) : id.slice(SHADER_EFFECT_PREFIX.length), id: 'fx' }] }
+/**
+ * 一项着色器效果对应的着色器图：先画片段画面，再套滤镜或叠生成器。组件图层 id 固定为 `fx`。
+ * “生成”文件夹的生成器叠在片段画面上（同 PS 剪贴蒙版）：先把片段画面换成不透明的直通色，生成器按混合模式叠上去，
+ * 整组再以片段画面的 alpha 为遮罩。只在内容范围里生成，透明处保持透明（拖到圆角卡片上就是卡片形状），
+ * 半透明边的透明度就是内容的透明度，生成器透明处露出内容本来的颜色。框架会把遮罩源图层也画出来，所以遮罩源放进不显示的分组。
+ * `values` 决定按方式分派的封装效果用哪个组件。
+ */
+export function shaderGraphEffectSpec(id: string, values: Readonly<VideoEditBuiltinParams> = {}): ShaderGraphSpec {
+  const type = effectComponent(id, values)
+  return MASKED_GENERATORS.has(id)
+    ? { layers: [
+      { type: SHADER_GROUP, id: 'content-source', props: { visible: false }, children: [{ type: SHADER_GRAPH_INPUT, id: CONTENT_LAYER }] },
+      { type: SHADER_GROUP, id: 'generated', props: { maskSource: CONTENT_LAYER, maskType: 'alpha' }, children: [{ type: SHADER_GRAPH_INPUT }, { type: OPAQUE_CONTENT.name }, { type, id: 'fx' }] },
+    ], shaders: [OPAQUE_CONTENT] }
+    : { layers: [{ type: SHADER_GRAPH_INPUT }, { type, id: 'fx' }] }
 }
 
 /**
@@ -135,9 +101,10 @@ export function shaderGraphEffectSpec(id: string, params: Readonly<VideoEditBuil
  */
 export function videoEditShaderGraphWarmSpecs(sequences: ReadonlyArray<{ clips: ReadonlyArray<{ effects?: ReadonlyArray<{ builtin?: { id: string; params?: Readonly<VideoEditBuiltinParams> } }> }>; transitions?: ReadonlyArray<{ kind: string; parameters?: Readonly<VideoEditBuiltinParams> }> }>, transitionSpec: (kind: string, parameters?: Readonly<VideoEditBuiltinParams>) => ShaderGraphSpec | undefined): ShaderGraphSpec[] {
   const specs = new Map<string, ShaderGraphSpec>()
+  const add = (spec: ShaderGraphSpec): void => { specs.set(shaderGraphStructureKey(spec), spec) }
   for (const sequence of sequences) {
-    for (const clip of sequence.clips) for (const effect of clip.effects ?? []) if (effect.builtin && isShaderGraphEffect(effect.builtin.id)) { const spec = shaderGraphEffectSpec(effect.builtin.id, effect.builtin.params); specs.set(shaderGraphStructureKey(spec), spec) }
-    for (const transition of sequence.transitions ?? []) { const spec = transitionSpec(transition.kind, transition.parameters); if (spec) specs.set(shaderGraphStructureKey(spec), spec) }
+    for (const clip of sequence.clips) for (const effect of clip.effects ?? []) if (effect.builtin && isShaderGraphEffect(effect.builtin.id)) add(shaderGraphEffectSpec(effect.builtin.id, effect.builtin.params))
+    for (const transition of sequence.transitions ?? []) { const spec = transitionSpec(transition.kind, transition.parameters); if (spec) add(spec) }
   }
   return [...specs.values()]
 }

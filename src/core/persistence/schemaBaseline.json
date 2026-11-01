@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 57,
-      "fingerprint": "7df27a2f12f8c8f9172b4b311cfeba01e719296853bdfef4343cfbb70435a099",
+      "version": 58,
+      "fingerprint": "51cac546fd7a5f09631dcc1b3021f9e30954b9a32da27d0667c353426da1d27e",
       "supportedFrom": 17,
-      "minReaderVersion": 57
+      "minReaderVersion": 58
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 60,
-      "fingerprint": "5543c632765d52ac82b768ec21286c3c0177fb91692bc61ab13eef62b4281050",
+      "version": 61,
+      "fingerprint": "2e6654ae9b3816e10b68ac25e570f4168bced45d52b2fa80f38e7b8bcc48d8e2",
       "supportedFrom": 19,
-      "minReaderVersion": 60
+      "minReaderVersion": 61
     },
     "project": {
       "version": 3,
@@ -174,16 +174,16 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 14,
-      "fingerprint": "e2710ce232b8ee4d82a947e13718761c33476aa71c8088f6567281fa2fa7a8dd",
+      "version": 15,
+      "fingerprint": "c34f5315e7eb774a21f141edafca55cc90f33d8cd708e11a62cf1cada8ac1812",
       "supportedFrom": 1,
-      "minReaderVersion": 14
+      "minReaderVersion": 15
     },
     "code-author-api": {
-      "version": 13,
-      "fingerprint": "864161cdc6e37c5dfb1aeb432819572fffa2efcd17081bec2c25472df51ea743",
+      "version": 14,
+      "fingerprint": "d76d5e3078ad7659cb45887a7154eab491d5ffcbf6563661346fe9bc01d35747",
       "supportedFrom": 4,
-      "minReaderVersion": 13
+      "minReaderVersion": 14
     },
     "code-component": {
       "version": 1,
@@ -192,10 +192,10 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 19,
-      "fingerprint": "692f93e30077cbcc5860d398bc462090b990bfcf3a25b3db1b23e0c87b4afd66",
+      "version": 20,
+      "fingerprint": "e7d3add526c1f12c4d300abe95f6c455e9e6b02f5b882c5e0e5a3e0523636b43",
       "supportedFrom": 6,
-      "minReaderVersion": 19
+      "minReaderVersion": 20
     },
     "settings": {
       "version": 16,
@@ -240,10 +240,10 @@
       "minReaderVersion": 2
     },
     "video-preset-package": {
-      "version": 17,
-      "fingerprint": "72f067843b144a8437da75aead9bfce5e7afa00a72349daad2c8ba2373bc3bb7",
+      "version": 18,
+      "fingerprint": "1efd6d1ded6d7e77e891fbc7912a9ff7b671d7fe8c85b006855c7b91e5028305",
       "supportedFrom": 5,
-      "minReaderVersion": 17
+      "minReaderVersion": 18
     },
     "voice-library": {
       "version": 1,
@@ -324,22 +324,22 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 13,
-      "fingerprint": "018873b981557cbd955fc56e065776998adfc01c318ca69091800ce24c04b8f1",
+      "version": 14,
+      "fingerprint": "30bb075908fb4c9272b167d4dcc393b57d52f148d74d9487d7d563533eb5ae12",
       "supportedFrom": 1,
-      "minReaderVersion": 13
+      "minReaderVersion": 14
     },
     "video-template-library": {
-      "version": 10,
-      "fingerprint": "bb8d1204e056620c26545e3df04a6087625f3a19b91dbafa8d2ccfc7b587b357",
+      "version": 11,
+      "fingerprint": "f81db068e7c2b6b0761618bae96585684b863efd95228781c41b310b5c94fbdf",
       "supportedFrom": 1,
-      "minReaderVersion": 10
+      "minReaderVersion": 11
     },
     "video-style-package": {
-      "version": 16,
-      "fingerprint": "edf7cc31d0b755ab474c7b51d1446388faea7890084b19dc475380d485d5863c",
+      "version": 17,
+      "fingerprint": "ef8f4aaea18b8a2acd791bc02d6df2597c964f0c46333208039b259df1e440e6",
       "supportedFrom": 1,
-      "minReaderVersion": 16
+      "minReaderVersion": 17
     },
     "workspace-layouts": {
       "version": 1,
@@ -396,10 +396,10 @@
       "minReaderVersion": 1
     },
     "video-effect-library": {
-      "version": 10,
-      "fingerprint": "ac32f82b955535f73b0c02bb939d6584db0c78185f22b1741b97765cb900ca87",
+      "version": 11,
+      "fingerprint": "5d86d45e21fa5cfffb7a749d243a1ea0e85c0688b085857f73eb09524e4b7fa1",
       "supportedFrom": 1,
-      "minReaderVersion": 8
+      "minReaderVersion": 11
     }
   },
   "devBreaks": [],

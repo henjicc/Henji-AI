@@ -21,6 +21,7 @@ import { authorFrameExposure, authorLayerBlur, authorLayerSamples, authorPoseMat
 import { authorCanvasContent, type AuthorCanvasBox } from './videoEditAuthorCanvasBounds'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
+import { isAuthorAnalyticLayer } from './videoEditAuthorFill'
 import { authorFramePosition, isAuthorAdjustment } from './videoEditAuthorModule'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
@@ -589,7 +590,7 @@ export class VideoEditAuthorRuntime {
           const textureLimit = (this.device as GpuDevice & { limits?: Record<string, number> }).limits?.maxTextureDimension2D ?? 8192
           const limit = Math.min(textureLimit / Math.max(bounds.width, bounds.height), Math.sqrt(16e6 / Math.max(1, bounds.width * bounds.height)))
           const slot = `layer:${index}:${id}`
-          let fullResolution = authorRasterScale(need, limit, this.liveLayers.has(slot))
+          let fullResolution = authorRasterScale(need, limit, this.liveLayers.has(slot) || isAuthorAnalyticLayer(layer))
           while (Math.ceil(Math.max(bounds.width, bounds.height) * fullResolution) + 2 * padding(fullResolution) > textureLimit) {
             fullResolution /= 2
             if (!(fullResolution > 0) || !Number.isFinite(padding(fullResolution))) throw new Error('图层效果外扩超出设备纹理尺寸。')

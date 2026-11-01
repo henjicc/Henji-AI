@@ -31,7 +31,7 @@ async function compositionKey(spec: ShaderGraphSpec, props: LayerProps): Promise
   const parts: unknown[] = []
   const visit = async (layers: readonly ShaderGraphLayer[], prefix: string): Promise<void> => {
     for (const [index, layer] of layers.entries()) {
-      const id = shaderGraphLayerId(layer, index, prefix), values = props.get(id) ?? {}
+      const id = shaderGraphLayerId(layer, index, prefix), values = props.get(id) ?? layer.props ?? {}
       const component = shaderComponent(layer.type), clockRates = component ? shaderClockRateProps(component) : []
       for (const [key, config] of Object.entries(await structuralProps(layer.type) ?? {})) {
         const value = key in values ? values[key] : config.default
@@ -46,11 +46,11 @@ async function compositionKey(spec: ShaderGraphSpec, props: LayerProps): Promise
   return `${shaderGraphStructureKey(spec)}|${JSON.stringify(parts)}`
 }
 
-/** 新会话直接按本帧属性建合成，第一帧就是要的结构。 */
+/** 新会话直接按本帧属性建合成，第一帧就是要的结构；本帧没下发属性的图层（遮罩、隐藏的分组）沿用图里写的属性。 */
 function withLayerProps(spec: ShaderGraphSpec, props: LayerProps): ShaderGraphSpec {
   const map = (layers: readonly ShaderGraphLayer[], prefix: string): ShaderGraphLayer[] => layers.map((layer, index) => {
     const id = shaderGraphLayerId(layer, index, prefix)
-    return { ...layer, props: { ...(props.get(id) ?? {}) }, ...(layer.children ? { children: map(layer.children, `${id}.`) } : {}) }
+    return { ...layer, props: { ...(props.get(id) ?? layer.props ?? {}) }, ...(layer.children ? { children: map(layer.children, `${id}.`) } : {}) }
   })
   return { ...spec, layers: map(spec.layers, 'layer') }
 }

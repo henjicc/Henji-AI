@@ -5,11 +5,12 @@ import { SHADER_COMPONENTS, type ShaderGraphSpec } from '../../../../core/videoE
 import { ShaderGraphError, ShaderGraphSession } from './shaderGraphSession'
 import { ShaderGraphCache } from './shaderGraphCache'
 import { initShaderGraphTestGpu } from './shaderGraphGpu.testing'
-import { SHADER_GRAPH_EFFECT_DEFINITIONS, shaderGraphEffectProps, shaderGraphEffectSpec, videoEditShaderGraphWarmSpecs } from '../../../../core/videoEdit/shaderGraph/effects'
+import { SHADER_GRAPH_EFFECT_DEFINITIONS, isShaderGraphEffect, shaderGraphEffectProps, shaderGraphEffectSpec, videoEditShaderGraphWarmSpecs } from '../../../../core/videoEdit/shaderGraph/effects'
+import { GENERATOR_EFFECT_DEFINITIONS } from '../../../../core/videoEdit/generators'
 import { SHADER_GRAPH_TRANSITION_KINDS, shaderGraphTransitionProps, shaderGraphTransitionSpec } from '../../../../core/videoEdit/shaderGraph/transitions'
 import { resolveVideoEditTransitionParams } from '../../../../core/videoEdit/transitionParams'
 import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '../../../../core/videoEdit/builtinEffects'
-import { THEME_SEED_ACCENT_HEX } from '../../../../core/theme/colorTokens'
+import { THEME_SEED_ACCENT_HEX, WHITE_HEX } from '../../../../core/theme/colorTokens'
 import { VideoEditCodeGpu } from '../videoEditCodeGpu'
 
 type Raw = { createTexture(d: unknown): GpuTexture & { width: number; height: number }; createBuffer(d: unknown): { mapAsync(m: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void; destroy(): void }; createCommandEncoder(): { copyTextureToBuffer(a: unknown, b: unknown, c: unknown): void; finish(): unknown }; queue: { submit(c: unknown[]): void; writeTexture(a: unknown, b: ArrayBufferView, c: unknown, d: unknown): void } }
@@ -82,6 +83,19 @@ describe('shader graph session', () => {
     expect(at(pixels, 10, 40)).toEqual([0, 0, 0, 0])
     session.dispose(); input.destroy()
   })
+  it('宿主画面同时用作画面与遮罩（或出现在几个图层里）时每一处都拿到这一帧的画面', async () => {
+    const input = texture()
+    fill(input, x => x < 20 ? [0, 0, 0, 0] : [200, 120, 60, 255])
+    // 框架合成遮罩时会再建一次宿主图层；生成器以内容 alpha 为遮罩、正片叠底叠在画面上：画面要在，透明处保持透明。
+    const masked = await ShaderGraphSession.create(device, { layers: [{ type: '@input', id: 'content' }, { type: 'PerlinNoise', id: 'fx', props: { blendMode: 'multiply', colorA: WHITE_HEX, colorB: WHITE_HEX, maskSource: 'content', maskType: 'alpha' } }] })
+    const pixels = await frame(masked, 1, input)
+    expect(at(pixels, 60, 20)).toEqual([200, 120, 60, 255])
+    expect(at(pixels, 5, 20)).toEqual([0, 0, 0, 0])
+    masked.dispose()
+    const twice = await ShaderGraphSession.create(device, { layers: [{ type: '@input' }, { type: '@input', props: { opacity: 0.5 } }] })
+    expect(at(await frame(twice, 1, input), 60, 20)).toEqual([200, 120, 60, 255])
+    twice.dispose(); input.destroy()
+  })
   it('runs author WGSL filters and reports author line numbers', async () => {
     const input = texture()
     fill(input, x => x < W / 2 ? [255, 255, 255, 255] : [0, 0, 255, 255])
@@ -125,6 +139,32 @@ describe('shader graph effects', () => {
     cache.dispose(); input.destroy()
     expect(failures).toEqual([])
   }, 600_000)
+  it('生成文件夹的封装生成器：每种方式按默认参数出画面，只在内容 alpha 内生成，透明处保持透明', async () => {
+    const cache = new ShaderGraphCache(device)
+    const input = texture()
+    // 左半透明、右半不透明的黑（同拖到轨道空白处新建的图形片段），中间一列半透明：生成器只能落在右半，半透明边沿用内容透明度。
+    fill(input, x => x < W / 2 ? [0, 0, 0, 0] : x === W / 2 ? [0, 0, 0, 128] : [0, 0, 0, 255])
+    const source = await read(input)
+    const failures: string[] = []
+    for (const definition of GENERATOR_EFFECT_DEFINITIONS.filter(value => isShaderGraphEffect(value.id))) {
+      const mode = definition.params.find(param => param.key === 'mode')
+      for (const value of mode?.type === 'enum' ? mode.options.map(option => option.value) : [undefined]) {
+        const params = resolveVideoEditBuiltinParams({ id: definition.id, params: value ? { mode: value } : {} })
+        const output = texture()
+        try {
+          await cache.render(shaderGraphEffectSpec(definition.id, params), { timeSeconds: 0.5, width: W, height: H, input, output, outputFormat: 'rgba8unorm', props: new Map([['fx', shaderGraphEffectProps(definition.id, params)]]) })
+          const pixels = await read(output)
+          const leaked = [[3, 3], [W / 2 - 3, H / 2], [10, H - 4]].some(([x, y]) => at(pixels, x, y)[3] !== 0) || [3, H / 2, H - 4].some(y => Math.abs(at(pixels, W / 2, y)[3] - 128) > 1)
+          let changed = 0
+          for (let y = 0; y < H; y++) for (let x = W / 2 + 1; x < W; x++) if (at(pixels, x, y).some((channel, index) => Math.abs(channel - at(source, x, y)[index]) > 8)) changed++
+          if (leaked || changed < W * H / 100) failures.push(`${definition.id}${value ? `:${value}` : ''} leaked=${leaked} changed=${changed}`)
+        } catch (error) { failures.push(`${definition.id}${value ? `:${value}` : ''}: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`) }
+        output.destroy()
+      }
+    }
+    cache.dispose(); input.destroy()
+    expect(failures).toEqual([])
+  }, 600_000)
   it('framework transitions show the outgoing picture at progress 0 and the incoming picture at progress 1', async () => {
     const cache = new ShaderGraphCache(device)
     const a = texture(); const b = texture()
@@ -160,8 +200,8 @@ describe('shader graph effects', () => {
     const clips = [
       { id: 'film_look', params: { stock: 'vivid100' } },
       { id: 'film_look', params: { stock: 'mono400', halation: 0 } },
-      { id: 'shaders.Aurora', params: { blend_mode: 'normal' } },
-      { id: 'shaders.Aurora', params: { blend_mode: 'screen' } },
+      { id: 'light_background', params: { mode: 'aurora', blend_mode: 'normal' } },
+      { id: 'light_background', params: { mode: 'aurora', blend_mode: 'screen' } },
     ]
     const fxProps = (clip: typeof clips[number]): Record<string, unknown> => shaderGraphEffectProps(clip.id, resolveVideoEditBuiltinParams({ id: clip.id, params: clip.params }))
     const render = async (target: { render(request: Parameters<ShaderGraphSession['render']>[0]): Promise<void> }, clip: typeof clips[number]): Promise<Uint8Array> => {
@@ -173,17 +213,22 @@ describe('shader graph effects', () => {
     const created: ShaderGraphSession[] = []
     const spy = vi.spyOn(ShaderGraphSession, 'create').mockImplementation(async (d, spec) => { const session = await create(d, spec); created.push(session); return session })
     try {
+      // 宿主画面图层在建会话的第一帧建好（生成器的内容遮罩另建一次），之后不再重建。
+      let built: number[] = []
       for (let frame = 0; frame < 3; frame++) for (const clip of clips) {
         // 每帧换一张输入：会话若用到别的设置留下的合成或上一帧的画面，都能比出来。
         fill(input, (x, y) => [(x * 3 + frame * 50) % 256, (y * 5 + frame * 90) % 256, 128, 255])
-        const spec = shaderGraphEffectSpec(clip.id)
-        const fresh = await create(device, { ...spec, layers: spec.layers.map(layer => layer.id === 'fx' ? { ...layer, props: fxProps(clip) } : layer) })
+        const spec = shaderGraphEffectSpec(clip.id, resolveVideoEditBuiltinParams({ id: clip.id, params: clip.params }))
+        const withFx = (layers: ShaderGraphSpec['layers']): ShaderGraphSpec['layers'] => layers.map(layer => layer.id === 'fx' ? { ...layer, props: fxProps(clip) } : layer.children ? { ...layer, children: withFx(layer.children) } : layer)
+        const fresh = await create(device, { ...spec, layers: withFx(spec.layers) })
         const expected = await render(fresh, clip)
         fresh.dispose()
         expect(await render({ render: request => cache.render(spec, request) }, clip), `${clip.id} ${JSON.stringify(clip.params)} @${frame}`).toEqual(expected)
+        if (frame === 0 && clip === clips.at(-1)) built = created.map(session => session.hostBuilds)
       }
       expect(created).toHaveLength(clips.length)
-      expect(created.map(session => session.hostBuilds)).toEqual(clips.map(() => 1))
+      expect(built.every(count => count > 0)).toBe(true)
+      expect(created.map(session => session.hostBuilds)).toEqual(built)
     } finally { spy.mockRestore(); cache.dispose(); input.destroy() }
   }, 180_000)
   it('时钟快慢不同的同种组件片段交替播放：跳到某一帧与顺序播放到这一帧逐位一致', async () => {
@@ -193,12 +238,13 @@ describe('shader graph effects', () => {
     const clips = [
       { id: 'shaders.StudioBackground', params: { ambient_speed: 2 }, offset: 0 },
       { id: 'shaders.StudioBackground', params: { ambient_speed: 5 }, offset: 0.25 },
-      { id: 'shaders.Aurora', params: { speed: 1 }, offset: 0.5 },
-      { id: 'shaders.Aurora', params: { speed: 3 }, offset: 0.75 },
+      { id: 'light_background', params: { mode: 'aurora', speed: 1 }, offset: 0.5 },
+      { id: 'light_background', params: { mode: 'aurora', speed: 3 }, offset: 0.75 },
     ]
     const render = async (cache: ShaderGraphCache, clip: typeof clips[number], timeSeconds: number): Promise<Uint8Array> => {
       const output = texture()
-      await cache.render(shaderGraphEffectSpec(clip.id), { timeSeconds, width: W, height: H, input, output, outputFormat: 'rgba8unorm', props: new Map([['fx', shaderGraphEffectProps(clip.id, resolveVideoEditBuiltinParams({ id: clip.id, params: clip.params }))]]) })
+      const values = resolveVideoEditBuiltinParams({ id: clip.id, params: clip.params })
+      await cache.render(shaderGraphEffectSpec(clip.id, values), { timeSeconds, width: W, height: H, input, output, outputFormat: 'rgba8unorm', props: new Map([['fx', shaderGraphEffectProps(clip.id, values)]]) })
       const pixels = await read(output); output.destroy(); return pixels
     }
     const sequential = new ShaderGraphCache(device), played: Uint8Array[] = []

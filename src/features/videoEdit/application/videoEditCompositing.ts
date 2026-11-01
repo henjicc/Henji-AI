@@ -128,6 +128,10 @@ function editBuiltin(target: VideoEditCompositeTarget, change: (clip: VideoEditC
 export function addVideoEditBuiltinEffect(target: VideoEditCompositeTarget, builtinId: string, params?: Readonly<Record<string, unknown>>): string {
   return applyVideoEditBuiltinEffect(target.projectId, target.sequenceId, [target.clipId], builtinId, params)[0]
 }
+/** 效果模板落到一个片段上：每项新身份，模板里的关键帧截到片段时长内（添加效果与拖入生成器共用）。 */
+export function instantiateVideoEditEffects(templates: readonly Omit<VideoEditEffect, 'id'>[], clipDuration: number): VideoEditEffect[] {
+  return templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditBuiltinCurves(template.builtin, 0, clipDuration) } } : {}) }))
+}
 /**
  * 把同一个内置效果加到多个片段（PR：选中多个片段后双击效果），整体一步撤销。画面效果跳过声音片段、音频效果只加声音片段，
  * 锁定轨道上的片段跳过；一个都加不上时报错并说明原因。返回新效果 ID（与加上的片段一一对应）。
@@ -152,7 +156,7 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     if (!targets.size) throw new Error(noEffectTargetMessage(media, needsSource))
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
-      const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditBuiltinCurves(template.builtin, 0, clip.duration) } } : {}) }))
+      const effects = instantiateVideoEditEffects(templates, clip.duration)
       created.push(...effects.map(effect => effect.id))
       return { ...clip, effects: [...(clip.effects ?? []), ...effects] }
     })

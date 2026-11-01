@@ -50,10 +50,16 @@ export interface VideoEditEffectsRegistryEntry {
  * 内置效果：来自 `VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS`（参数、范围、语义说明与 GPU 实现都在那里登记），
  * 拖到片段上或选中片段后双击即加到片段效果链。
  */
-export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map((definition): VideoEditEffectsRegistryEntry => ({
-  space: definition.space, id: videoEditBuiltinRefId(definition.id), name: definition.name, category: definition.media === 'audio' ? 'audio_effect' : definition.category === 'more' ? 'more' : definition.stage === 'generator' ? 'generator' : 'video_effect', kind: 'effect', media: definition.media ?? 'video',
-  description: definition.description, tooltip: definition.tooltip ?? definition.description, builtinId: definition.id, templateRef: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], aliases: [definition.id, definition.id.replaceAll('_', ' '), ...(definition.aliases ?? [])], ...(definition.cover ? { cover: definition.cover } : {}),
-}))
+export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map((definition): VideoEditEffectsRegistryEntry => {
+  const category = definition.media === 'audio' ? 'audio_effect' : definition.category === 'more' ? 'more' : definition.stage === 'generator' ? 'generator' : 'video_effect'
+  return {
+    space: definition.space, id: videoEditBuiltinRefId(definition.id), name: definition.name, category, kind: 'effect', media: definition.media ?? 'video',
+    description: definition.description, tooltip: definition.tooltip ?? definition.description, builtinId: definition.id, templateRef: definition.id, params: definition.params,
+    // “生成”文件夹只有一组，不显示小组标题。
+    ...(category === 'generator' ? {} : { group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group] }),
+    aliases: [definition.id, definition.id.replaceAll('_', ' '), ...(definition.aliases ?? [])], ...(definition.cover ? { cover: definition.cover } : {}),
+  }
+})
 /** 智能文件夹（4.7d）：内置效果 + 作用区域的一键预设，加到视频、图片片段上后在效果控件里微调。 */
 export const VIDEO_EDIT_SMART_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_SMART_PRESETS.map(preset => ({
   id: videoEditSmartPresetRef(preset.id), name: preset.name, category: 'smart', kind: 'effect', media: 'video', description: preset.description, tooltip: preset.description, templateRef: videoEditSmartPresetRef(preset.id), aliases: [preset.id, preset.id.replaceAll('_', ' ')],

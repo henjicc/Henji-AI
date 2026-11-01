@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_DARK_GRADIENT_TEST_COLORS } from '@/core/theme/colorTokens'
 import { build } from 'esbuild-wasm'
 import fs from 'node:fs'
 import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
@@ -29,7 +30,7 @@ import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { readVideoEditPreciseRow, videoEditHalfToFloat } from './videoEditGpuShaders'
 import { float32ToFloat16 } from '../../imageEdit/v3/gpu/imageEditorGpuTileAtlasV3'
-import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
+import { CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION, CODE_AUTHOR_FILL_MIN_API_VERSION, CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 
 let gpu: Gpu, device: GpuDevice
 const W = 64, H = 4
@@ -539,6 +540,57 @@ it('真实作者打包/加载/调整层的暗角、颗粒和整体调色与片�
     }
     expect(await device.popErrorScope()).toBeNull()
   } finally { builtin.dispose(); await host.dispose(); vi.unstubAllGlobals() }
+}, 60000)
+
+it('作者 fill 的渐变铺满 bounds，与片段上同参数的渐变逐像素一致，整帧升到高精度，取帧观察读回渐变', async () => {
+  const width = 640, height = 360
+  // 栅格桥：fill 画的是铺满 bounds 的不透明矩形，纹理四周是效果外扩；生成器按坐标解析算出，按 1 倍栅格不放大。
+  const rastered: number[] = []
+  const raster = (w: number, h: number): Uint8Array => {
+    rastered.push(w)
+    const data = new Uint8Array(w * h * 4), padX = (w - width) / 2, padY = (h - height) / 2
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x >= padX && x < w - padX && y >= padY && y < h - padY) data.set([255, 255, 255, 255], (y * w + x) * 4)
+    return data
+  }
+  const d = historyRasterDevice(raster), host = new VideoEditCodeGpu(d)
+  const builtin = new VideoEditBuiltinEffectsGpu(d, d.createSampler({ minFilter: 'linear', magFilter: 'linear' }), host.effectAllocator)
+  const read = async (texture: GpuTexture): Promise<Float32Array> => {
+    const bpp = texture.format === 'rgba16float' ? 8 : 4, bytesPerRow = Math.ceil(width * bpp / 256) * 256
+    const buffer = gpu.gpu.createBuffer({ size: bytesPerRow * height, usage: 0x01 | 0x08 }), encoder = gpu.gpu.createCommandEncoder()
+    encoder.copyTextureToBuffer({ texture: texture as never }, { buffer, bytesPerRow }, [width, height])
+    gpu.gpu.queue.submit([encoder.finish()]); await buffer.mapAsync(0x01)
+    const mapped = new Uint8Array(buffer.getMappedRange()), pixels = new Float32Array(width * height * 4)
+    for (let y = 0; y < height; y++) for (let x = 0; x < width * 4; x++) pixels[y * width * 4 + x] = bpp === 8 ? videoEditHalfToFloat(new Uint16Array(mapped.buffer, y * bytesPerRow, width * 4)[x]) : mapped[y * bytesPerRow + x] / 255
+    buffer.unmap(); buffer.destroy(); return pixels
+  }
+  const params = { mode: 'radial', start_color: VIDEO_EDIT_DARK_GRADIENT_TEST_COLORS.from, end_color: VIDEO_EDIT_DARK_GRADIENT_TEST_COLORS.to, start_x: 50, start_y: 40, end_x: 50, end_y: 110 }
+  device.pushErrorScope('validation')
+  const bundle = await bundleAuthorFiles({ apiVersion: CODE_AUTHOR_FILL_MIN_API_VERSION, entry: 'main.ts', files: {
+    'main.ts': `import { gradient } from './effects.ts'; export default { name:'渐变背景', createSimulation(){let x=0;return {step(p,info){x+=info.dt},snapshot:()=>x,restore:s=>{x=Number(s)},read:()=>x,dispose(){}}}, layers:(p,w,h,a,info)=>[{id:'bg',bounds:[0,0,w,h],fill:t=>gradient({...${JSON.stringify(params)},start_x:50+Number(info.simulation.at(t))*20})}] }`,
+    'effects.ts': generatedFactories,
+  } }, build)
+  const loaded = await import(/* @vite-ignore */ 'data:text/javascript;base64,' + Buffer.from(bundle.code).toString('base64')) as { default: AuthorModule }
+  const runtime = new VideoEditAuthorRuntime(d, deterministicAuthorModule(loaded.default, CODE_AUTHOR_FILL_MIN_API_VERSION), bundle.locations, true, CODE_AUTHOR_FILL_MIN_API_VERSION, undefined, host.effectAllocator)
+  try {
+    const source = await host.target('fill-source', width, height)
+    gpu.gpu.queue.writeTexture({ texture: source.texture as never }, new Uint8Array(width * height * 4).fill(255), { bytesPerRow: width * 4 }, [width, height])
+    const expected = await host.target('fill-expected', width, height, 'rgba16float')
+    await builtin.render({ id: 'gradient', params }, { texture: source.texture, width, height, format: 'rgba16float' }, expected.texture, 0, 1, [], 'final', { width, height })
+    const eight = await host.target('fill-eight', width, height), precise = await host.target('fill-precise', width, height, 'rgba16float')
+    await runtime.render(eight.texture, width, height, {}, {}, { time: 0, frameDuration: 1 / 30, clip: { time: 0, duration: 2 } }, undefined, undefined, false, { width, height }, {}, 'final', () => {}, () => precise.texture)
+    expect(runtime.outputTexture!.format).toBe('rgba16float')
+    expect(Math.max(...rastered)).toBeLessThan(width * 2)
+    const [actual, wanted] = [await read(runtime.outputTexture!), await read(expected.texture)]
+    let maxError = 0
+    for (let i = 0; i < actual.length; i++) maxError = Math.max(maxError, Math.abs(actual[i] - wanted[i]))
+    expect(maxError).toBeLessThanOrEqual(1 / 255)
+    expect(runtime.observeElements().find(element => element.id === 'bg')).toMatchObject({ effects: [{ id: 'gradient' }] })
+    await runtime.render(eight.texture, width, height, {}, {}, { time: 1, frameDuration: 1 / 30, clip: { time: 1, duration: 2 } }, undefined, undefined, false, { width, height }, {}, 'final', () => {}, () => precise.texture)
+    expect(await read(runtime.outputTexture!)).not.toEqual(actual)
+    await runtime.render(eight.texture, width, height, {}, {}, { time: 0, frameDuration: 1 / 30, clip: { time: 0, duration: 2 } }, undefined, undefined, false, { width, height }, {}, 'final', () => {}, () => precise.texture)
+    expect(await read(runtime.outputTexture!)).toEqual(actual)
+    expect(await device.popErrorScope()).toBeNull()
+  } finally { await runtime.dispose(); builtin.dispose(); await host.dispose(); vi.unstubAllGlobals() }
 }, 60000)
 
 it('调整层效果链中产光的完整输出进入后续调色，与片段串行链的透明边缘一致', async () => {

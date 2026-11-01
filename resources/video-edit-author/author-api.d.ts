@@ -183,6 +183,7 @@ export interface AuthorPose {
 
 interface AuthorLayerBase {
   adjust?: never
+  fill?: never
   effects?: (time: number) => readonly EffectDescriptor[]
   /** 稳定字符串，用于点选、元素覆盖与标注定位。 */
   id?: string
@@ -225,7 +226,17 @@ export interface AuthorAdjustmentLayer {
   fill?: never
   effects?: never
 }
-export type AuthorLayer = AuthorStaticLayer | AuthorPosedLayer | AuthorAdjustmentLayer
+/**
+ * 画面来源用原生生成器（作者接口 v14）：宿主在 bounds 里用 GPU 画 fill(t) 返回的生成器（目前只有 gradient()），不写 draw。
+ * 暗底大面积渐变用它，不出色带；可再接 effects、pose、clip，bounds 不写时铺满画布。
+ */
+export interface AuthorFillLayer extends Omit<AuthorLayerBase, 'fill' | 'cacheKey' | 'draw'> {
+  bounds?: AuthorRect
+  fill(time: number): EffectDescriptor
+  pose?(time: number): AuthorPose | null
+  draw?: never
+}
+export type AuthorLayer = AuthorFillLayer | AuthorStaticLayer | AuthorPosedLayer | AuthorAdjustmentLayer
 
 /** params 数组的一项；字段由宿主在加载时校验，这里只约束 key 与 type。 */
 export interface AuthorParamDeclaration {

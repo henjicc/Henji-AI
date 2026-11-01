@@ -2,6 +2,7 @@ import { withTextFontSession, importWithTextFontSession, resolvedTextFontSession
 import type { TextFontAccess } from '@/core/imaging/vectorContent/shaping/fontSession'
 import { CODE_AUTHOR_API_MIN_VERSION, CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { authorLayerId } from './videoEditAuthorElements'
+import { authorFillLayer } from './videoEditAuthorFill'
 import type { AuthorLayer, AuthorModule, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
 import { TEXT_LAYOUT_OBSERVER, type TextLayoutObserverGlobal } from '../../../core/videoEdit/textDrawObservation'
 
@@ -76,8 +77,9 @@ function authorAsync<T>(fonts: TextFontAccess | undefined, key: string, time: nu
   return serialized(() => importWithTextFontSession(prepared, async () => runAuthorDeterministic(key, time, call)))
 }
 
-function deterministicLayer(layer: AuthorLayer, index: number, apiVersion: number, fonts?: TextFontAccess): AuthorLayer {
-  if (!layer || typeof layer !== 'object') return layer
+function deterministicLayer(source: AuthorLayer, index: number, apiVersion: number, width: number, height: number, fonts?: TextFontAccess): AuthorLayer {
+  if (!source || typeof source !== 'object') return source
+  const layer = authorFillLayer(source, apiVersion, width, height)
   const key = authorLayerId(layer, index), draw = layer.draw, pose = layer.pose, effects = layer.effects
   const adjust = apiVersion >= CODE_AUTHOR_ADJUSTMENT_MIN_API_VERSION ? layer.adjust : undefined
   return {
@@ -118,7 +120,7 @@ export function deterministicAuthorModule(effect: AuthorModule, apiVersion = COD
     ...(typeof draw === 'function' ? { draw: (...args: Parameters<typeof draw>) => authorCall(fonts, 'draw', args[1], () => draw.apply(effect, args)) } : {}),
     ...(typeof layers === 'function' ? { layers: (...args: Parameters<typeof layers>) => {
       const list = authorCall(fonts, 'layers', args[4]?.time, () => layers.apply(effect, args))
-      return Array.isArray(list) ? list.map((layer, index) => deterministicLayer(layer, index, apiVersion, resolvedTextFontSession(fonts))) : list
+      return Array.isArray(list) ? list.map((layer, index) => deterministicLayer(layer, index, apiVersion, args[1], args[2], resolvedTextFontSession(fonts))) : list
     } } : {}),
     ...(typeof createWebGL === 'function' ? { createWebGL: (gl: WebGL2RenderingContext) => deterministicWebGL(authorCall(fonts, 'create', 0, () => createWebGL.call(effect, gl)), fonts) } : {}),
     ...(typeof createWebGPU === 'function' ? { createWebGPU: async (device: Parameters<typeof createWebGPU>[0]) => deterministicWebGPU(await authorAsync(fonts, 'create', 0, () => createWebGPU.call(effect, device)), fonts) } : {}),

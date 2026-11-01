@@ -726,6 +726,59 @@ export interface DisplaceParams {
   /** 随机种子；换一个数，起伏的花样就换一种，大小和数量不变。；默认 0；硬范围 0–9999；单位 value；分组 噪声；显隐 {"param":"source","in":["noise"]}；可动画 false */
   readonly seed?: number
 }
+
+export interface GradientParams {
+  /** 方式；渐变的形状。线性（默认）从起点到终点；径向从起点向外一圈圈；角向绕起点转一圈；菱形向外成菱形；多点让四个颜色点按远近融合，像网格渐变。；默认 "linear"；可动画 true */
+  readonly mode?: "linear" | "radial" | "conic" | "diamond" | "points"
+  /** 起点颜色；起点一端的颜色，可以带透明度。黑色（默认）到白色的终点。；默认 "#000000"；显隐 {"param":"mode","in":["linear","radial","conic","diamond"]}；可动画 true */
+  readonly start_color?: string
+  /** 终点颜色；终点一端的颜色，可以带透明度。白色（默认）；两端同色就是纯色。；默认 "#ffffff"；显隐 {"param":"mode","in":["linear","radial","conic","diamond"]}；可动画 true */
+  readonly end_color?: string
+  /** 起点（水平）；起点离左边多远，按内容宽度的百分比。50（默认）居中；径向和角向渐变以它为中心。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；分组 位置；显隐 {"param":"mode","in":["linear","radial","conic","diamond"]}；可动画 true */
+  readonly start_x?: number
+  /** 起点（垂直）；起点离上边多远，按内容高度的百分比。0（默认）上边缘，配合终点 100 就是从上到下。；默认 0；常用 0–100；硬范围 -100–200；单位 percent；分组 位置；显隐 {"param":"mode","in":["linear","radial","conic","diamond"]}；可动画 true */
+  readonly start_y?: number
+  /** 终点（水平）；终点离左边多远，按内容宽度的百分比。50（默认）居中。径向渐变里起点到终点的距离就是半径。；默认 50；常用 0–100；硬范围 -100–200；单位 percent；分组 位置；显隐 {"param":"mode","in":["linear","radial","diamond"]}；可动画 true */
+  readonly end_x?: number
+  /** 终点（垂直）；终点离上边多远，按内容高度的百分比。100（默认）下边缘。；默认 100；常用 0–100；硬范围 -100–200；单位 percent；分组 位置；显隐 {"param":"mode","in":["linear","radial","diamond"]}；可动画 true */
+  readonly end_y?: number
+  /** 起始角度；角向渐变从哪个方向开始，顺时针转一圈回到这里。0°（默认）从起点正右方开始；90° 从正下方开始。；默认 0；硬范围 -180–180；单位 degrees；分组 位置；显隐 {"param":"mode","in":["conic"]}；可动画 true */
+  readonly angle?: number
+  /** 颜色；这个颜色点的颜色。默认放在左上角，四个点从黑、深灰、浅灰到白。；默认 "#000000"；分组 点 1；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p1_color?: string
+  /** 水平位置；颜色点离左边多远，按内容宽度的百分比。0 左边缘，100 右边缘；可以放到框外，只留一点颜色渗进来。；默认 0；常用 0–100；硬范围 -100–200；单位 percent；分组 点 1；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p1_x?: number
+  /** 垂直位置；颜色点离上边多远，按内容高度的百分比。0 上边缘，100 下边缘。；默认 0；常用 0–100；硬范围 -100–200；单位 percent；分组 点 1；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p1_y?: number
+  /** 颜色；这个颜色点的颜色。默认放在右上角，四个点从黑、深灰、浅灰到白。；默认 "#404040"；分组 点 2；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p2_color?: string
+  /** 水平位置；颜色点离左边多远，按内容宽度的百分比。0 左边缘，100 右边缘；可以放到框外，只留一点颜色渗进来。；默认 100；常用 0–100；硬范围 -100–200；单位 percent；分组 点 2；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p2_x?: number
+  /** 垂直位置；颜色点离上边多远，按内容高度的百分比。0 上边缘，100 下边缘。；默认 0；常用 0–100；硬范围 -100–200；单位 percent；分组 点 2；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p2_y?: number
+  /** 颜色；这个颜色点的颜色。默认放在左下角，四个点从黑、深灰、浅灰到白。；默认 "#c0c0c0"；分组 点 3；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p3_color?: string
+  /** 水平位置；颜色点离左边多远，按内容宽度的百分比。0 左边缘，100 右边缘；可以放到框外，只留一点颜色渗进来。；默认 0；常用 0–100；硬范围 -100–200；单位 percent；分组 点 3；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p3_x?: number
+  /** 垂直位置；颜色点离上边多远，按内容高度的百分比。0 上边缘，100 下边缘。；默认 100；常用 0–100；硬范围 -100–200；单位 percent；分组 点 3；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p3_y?: number
+  /** 颜色；这个颜色点的颜色。默认放在右下角，四个点从黑、深灰、浅灰到白。；默认 "#ffffff"；分组 点 4；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p4_color?: string
+  /** 水平位置；颜色点离左边多远，按内容宽度的百分比。0 左边缘，100 右边缘；可以放到框外，只留一点颜色渗进来。；默认 100；常用 0–100；硬范围 -100–200；单位 percent；分组 点 4；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p4_x?: number
+  /** 垂直位置；颜色点离上边多远，按内容高度的百分比。0 上边缘，100 下边缘。；默认 100；常用 0–100；硬范围 -100–200；单位 percent；分组 点 4；显隐 {"param":"mode","in":["points"]}；可动画 true */
+  readonly p4_y?: number
+  /** 中点；两种颜色各占一半的位置。50%（默认）居中；调到 20%，终点颜色占得多；80% 起点颜色占得多。；默认 50；硬范围 1–99；单位 percent；分组 颜色；显隐 {"param":"mode","in":["linear","radial","conic","diamond"]}；可动画 true */
+  readonly midpoint?: number
+  /** 插值；颜色之间怎么过渡。感知（默认）过渡均匀，两种彩色之间不发灰；标准与网页 CSS 渐变一致。；默认 "perceptual"；分组 颜色；可动画 true */
+  readonly interpolation?: "perceptual" | "srgb"
+  /** 重复；走到终点之后怎样。不重复（默认）停在终点颜色；重复从头再来；往返来回过渡。角向渐变选往返，转一圈首尾无缝接上。；默认 "none"；分组 颜色；显隐 {"param":"mode","in":["linear","radial","conic","diamond"]}；可动画 true */
+  readonly repeat?: "none" | "repeat" | "mirror"
+  /** 漂移；多点方式下颜色点缓慢游动，做流动的背景。0（默认）静止；15 轻轻浮动；100 每个点在约 3% 画面高度里来回游。；默认 0；硬范围 0–100；单位 percent；分组 颜色；显隐 {"param":"mode","in":["points"]}；可动画 false */
+  readonly drift?: number
+  /** 混合模式；渐变怎样叠在内容上。正常（默认）在内容范围内直接换成渐变，渐变透明处内容也透明；正片叠底只压暗，滤色只提亮，叠加、柔光加强明暗。透明的渐变颜色在后几种方式里是减弱作用。；默认 "normal"；分组 输出；可动画 true */
+  readonly blend_mode?: "normal" | "multiply" | "screen" | "overlay" | "soft_light"
+}
 export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'blur'; readonly key?: string; readonly params?: BlurParams }
   | { readonly id: 'sharpen'; readonly key?: string; readonly params?: SharpenParams }
@@ -757,6 +810,7 @@ export type BuiltinLayerEffectDescriptor =
   | { readonly id: 'wave'; readonly key?: string; readonly params?: WaveParams }
   | { readonly id: 'corner_pin'; readonly key?: string; readonly params?: CornerPinParams }
   | { readonly id: 'displace'; readonly key?: string; readonly params?: DisplaceParams }
+  | { readonly id: 'gradient'; readonly key?: string; readonly params?: GradientParams }
 export interface LookDescriptor { readonly id: 'look'; readonly key?: string; readonly params: { readonly name: string; readonly knobs?: Readonly<Record<string, number>> } }
 /** 旧版 henji-effects（1.0.0）的 blur() 产出并进“模糊”前的 ID，宿主按同一换算转成 blur；新代码直接写 blur。 */
 export interface RetiredBlurDescriptor { readonly id: 'gaussian_blur' | 'directional_blur' | 'zoom_blur' | 'lens_blur'; readonly key?: string; readonly params?: object }
@@ -792,4 +846,5 @@ export declare function twirl(params?: TwirlParams, options?: EffectOptions): { 
 export declare function wave(params?: WaveParams, options?: EffectOptions): { readonly id: 'wave'; readonly key?: string; readonly params: WaveParams }
 export declare function cornerPin(params?: CornerPinParams, options?: EffectOptions): { readonly id: 'corner_pin'; readonly key?: string; readonly params: CornerPinParams }
 export declare function displace(params?: DisplaceParams, options?: EffectOptions): { readonly id: 'displace'; readonly key?: string; readonly params: DisplaceParams }
+export declare function gradient(params?: GradientParams, options?: EffectOptions): { readonly id: 'gradient'; readonly key?: string; readonly params: GradientParams }
 export declare function look(name: string, knobs?: Readonly<Record<string, number>>, options?: EffectOptions): LookDescriptor

@@ -1,7 +1,7 @@
 import { COLOR_MATH_WGSL, EFFECT_SHADER_MATH_WGSL } from './effectShaderMath'
 import { linearSrgbToOklab, oklabToLinearSrgb, srgbToLinear, linearToSrgb } from '@/core/imaging/adjustments/colorScience'
 
-import { videoEditHalfToFloat } from './videoEditGpuShaders'
+import { videoEditHalfToFloat, VIDEO_EDIT_PRESENT_SHADER } from './videoEditGpuShaders'
 import { blurAmountForSigma, blurBleed, blurLensRadius, blurRangeLevelSigma } from '@/core/videoEdit/blur'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { authorEffectBleed } from '@/core/videoEdit/authorEffects'
@@ -22,9 +22,11 @@ import { VideoEditBuiltinEffectsGpu, type BuiltinEncodingBatch, type VideoEditBu
 import { planAuthorDefocus, planVideoEditBuiltinEffect } from './videoEditBuiltinEffectPasses'
 import { authorLayerBlur } from './videoEditAuthorLayers'
 import type { RecordingCursorDraw } from './videoEditRecordingCursorPlan'
-import { RECORDING_FRAME_SOLID_DEFAULT_HEX, VIDEO_EDIT_GRADIENT_MAP_TEST_COLORS, WHITE_HEX } from '@/core/theme/colorTokens'
+import { BLACK_HEX, RECORDING_FRAME_SOLID_DEFAULT_HEX, VIDEO_EDIT_DARK_GRADIENT_TEST_COLORS, VIDEO_EDIT_GRADIENT_MAP_TEST_COLORS, VIDEO_EDIT_GRADIENT_TEST_STOPS, WHITE_HEX } from '@/core/theme/colorTokens'
+import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
+import { detectVideoEditBanding } from '@/core/videoEdit/bandingReview'
 import { VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES, VIDEO_EDIT_BUILTIN_EFFECT_SHADER } from './videoEditBuiltinEffectShaders'
-import { gradientMap, invert, posterize } from '@/features/videoEdit/authorLibraries/effects'
+import { gradient, gradientMap, invert, posterize } from '@/features/videoEdit/authorLibraries/effects'
 
 // 任务 4.7b 真实设备专项：内置效果的正式 WGSL 与工序在 Dawn 上编译并逐像素核对关键结果。npm run test:gpu 无条件执行。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -1199,6 +1201,98 @@ describe('颜色效果（真实设备）', () => {
       // 白字 → 暖白 → 两级后全亮 → 反相成黑，透明度不变。
       expect(pixel(pixels, 32, 18)).toEqual([0, 0, 0, 255])
       expect(pixel(pixels, 20, 18)[3]).toBe(64)
+    } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
+  }, 30_000)
+})
+
+describe('渐变生成器（真实设备）', () => {
+  /** 透明底上的不透明白色方块（预乘），四周一像素半透明边。 */
+  function card(): GpuTexture {
+    const texture = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST | TEXTURE_COPY_SRC })
+    const data = new Uint8Array(W * H * 4)
+    for (let y = 8; y < 28; y++) for (let x = 16; x < 48; x++) { const edge = x === 16 || x === 47 || y === 8 || y === 27; const a = edge ? 128 : 255; data.set([a, a, a, a], (y * W + x) * 4) }
+    device.queue.writeTexture({ texture }, data, { bytesPerRow: W * 4 }, [W, H])
+    return texture as unknown as GpuTexture
+  }
+  async function render(params: Record<string, unknown>, source = input(), frame = 0): Promise<Uint8Array> {
+    const target = output()
+    await effects.render({ id: 'gradient', params: params as never }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, frame, 1, [], 'interactive', undefined, 1 / 30)
+    const pixels = await read(target); target.destroy(); source.destroy(); return pixels
+  }
+  it('默认从上到下黑到白，左右一致；中点 20% 时一半处已偏向终点颜色；重复与往返在终点后继续', async () => {
+    const linear = await render({})
+    expect(pixel(linear, 10, 0)[0]).toBeLessThan(10); expect(pixel(linear, 10, H - 1)[0]).toBeGreaterThan(245)
+    expect(pixel(linear, 3, 18)).toEqual(pixel(linear, 60, 18))
+    for (let y = 1; y < H; y++) expect(pixel(linear, 30, y)[0]).toBeGreaterThanOrEqual(pixel(linear, 30, y - 1)[0])
+    expect(pixel(await render({ midpoint: 20 }), 30, 7)[0]).toBeGreaterThan(pixel(linear, 30, 7)[0] + 40)
+    const repeat = await render({ end_y: 50, repeat: 'repeat' }), mirror = await render({ end_y: 50, repeat: 'mirror' })
+    expect(pixel(repeat, 30, 20)[0]).toBeLessThan(40); expect(pixel(mirror, 30, 30)[0]).toBeLessThan(pixel(mirror, 30, 19)[0])
+  }, 30_000)
+  it('径向按像素距离成正圆；角向绕起点一圈，往返时首尾无缝；菱形顶点落在终点', async () => {
+    const radial = await render({ mode: 'radial', start_x: 50, start_y: 50, end_x: 50, end_y: 100 })
+    // 64×36 画面里离中心水平 9 像素与垂直 9 像素的点同色。
+    expect(Math.abs(pixel(radial, 41, 18)[0] - pixel(radial, 32, 27)[0])).toBeLessThanOrEqual(2)
+    const conic = await render({ mode: 'conic', start_x: 50, start_y: 50, repeat: 'mirror' })
+    expect(Math.abs(pixel(conic, 40, 17)[0] - pixel(conic, 40, 19)[0])).toBeLessThanOrEqual(12)
+    expect(pixel(conic, 20, 18)[0]).toBeGreaterThan(240)
+    const diamond = await render({ mode: 'diamond', start_x: 50, start_y: 50, end_x: 75, end_y: 50 })
+    expect(pixel(diamond, 48, 18)[0]).toBeGreaterThan(240); expect(Math.abs(pixel(diamond, 40, 18)[0] - pixel(diamond, 32, 26)[0])).toBeLessThanOrEqual(3)
+  }, 30_000)
+  it('多点：颜色点处就是它的颜色，漂移按片段时钟游动、静止时与时间无关', async () => {
+    const points = { mode: 'points', p1_color: VIDEO_EDIT_GRADIENT_TEST_STOPS.red, p2_color: VIDEO_EDIT_GRADIENT_TEST_STOPS.green, p3_color: VIDEO_EDIT_GRADIENT_TEST_STOPS.blue, p4_color: WHITE_HEX, p1_x: 0, p1_y: 0, p2_x: 100, p2_y: 0, p3_x: 0, p3_y: 100, p4_x: 100, p4_y: 100 }
+    const still = await render(points)
+    expect(pixel(still, 0, 0)[0]).toBeGreaterThan(240); expect(pixel(still, 0, 0)[1]).toBeLessThan(20)
+    expect(await render(points, input(), 210)).toEqual(still)
+    const a = await render({ ...points, drift: 100 }, input(), 30), b = await render({ ...points, drift: 100 }, input(), 180)
+    expect(a).not.toEqual(b)
+    expect(await render({ ...points, drift: 100 }, input(), 180)).toEqual(b)
+  }, 30_000)
+  it('只在内容 alpha 内生成：卡片外透明，半透明边沿用内容透明度；透明的渐变颜色在正常模式里让内容也透明，正片叠底里不改透明度', async () => {
+    const shaped = await render({}, card())
+    expect(pixel(shaped, 2, 2)).toEqual([0, 0, 0, 0])
+    expect(pixel(shaped, 16, 18)[3]).toBe(128); expect(pixel(shaped, 30, 18)[3]).toBe(255)
+    const fade = await render({ start_color: VIDEO_EDIT_GRADIENT_TEST_STOPS.clear, end_color: BLACK_HEX }, card())
+    expect(pixel(fade, 30, 9)[3]).toBeLessThan(pixel(fade, 30, 26)[3])
+    const multiply = await render({ start_color: VIDEO_EDIT_GRADIENT_TEST_STOPS.clear, blend_mode: 'multiply' }, card())
+    expect(pixel(multiply, 30, 9)[3]).toBe(255)
+  }, 30_000)
+  it('暗底大面积径向渐变在 16 位里算、末道抖动后 8 位不出色带；直接写进 8 位会出色带', async () => {
+    const width = 1920, height = 1080
+    const { from, to } = VIDEO_EDIT_DARK_GRADIENT_TEST_COLORS
+    const params = { mode: 'radial', start_color: from, end_color: to, start_x: 50, start_y: 40, end_x: 50, end_y: 110 }
+    expect(videoEditEffectNeedsFloat({ id: 'gradient', params }, { width, height, renderScale: 1, referenceSize: { width, height } })).toBe(true)
+    const source = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: TEXTURE_BINDING | TEXTURE_COPY_DST })
+    device.queue.writeTexture({ texture: source }, new Uint8Array(width * height * 4).fill(255), { bytesPerRow: width * 4 }, [width, height])
+    const precise = device.createTexture({ size: [width, height], format: 'rgba16float', usage: TEXTURE_BINDING | RENDER_ATTACHMENT | TEXTURE_COPY_SRC })
+    const eight = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: RENDER_ATTACHMENT | TEXTURE_COPY_SRC })
+    const presented = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: RENDER_ATTACHMENT | TEXTURE_COPY_SRC })
+    try {
+      await effects.render({ id: 'gradient', params: params as never }, { texture: source as unknown as GpuTexture, width, height, format: 'rgba16float' }, precise as unknown as GpuTexture, 0)
+      await effects.render({ id: 'gradient', params: params as never }, { texture: source as unknown as GpuTexture, width, height, format: 'rgba8unorm' }, eight as unknown as GpuTexture, 0)
+      const module = device.createShaderModule({ code: VIDEO_EDIT_PRESENT_SHADER })
+      const pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
+      const encoder = device.createCommandEncoder()
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: presented.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }] })
+      pass.setPipeline(pipeline); pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: precise.createView() }] }))
+      pass.draw(3); pass.end(); device.queue.submit([encoder.finish()])
+      const dithered = await read(presented as unknown as GpuTexture, width, height), banded = await read(eight as unknown as GpuTexture, width, height)
+      expect(detectVideoEditBanding(new Uint8ClampedArray(dithered.buffer), width, height)).toEqual([])
+      expect(detectVideoEditBanding(new Uint8ClampedArray(banded.buffer), width, height).length).toBeGreaterThan(0)
+    } finally { source.destroy(); precise.destroy(); eight.destroy(); presented.destroy() }
+  }, 60_000)
+  it('作者工厂 gradient 在图层上按内容框铺开：起止点落在未外扩的 bounds 上', async () => {
+    const d = device as unknown as GpuDevice, chain = new VideoEditAuthorEffects(d, allocator()), author = new VideoEditAuthorGpu(d)
+    const source = card(), target = output()
+    // 方块内容是 x 16..47、y 8..27；内容原点在 (16, 8)。
+    const context = { referenceSize: { width: W, height: H }, contentBounds: { x: 0, y: 0, width: 32, height: 20 }, rasterScale: 1, rasterOrigin: [16, 8] as const, quality: 'interactive' as const }
+    try {
+      await author.begin(target); chain.begin(author.commandEncoder())
+      const result = await chain.encode('gradient', source, W, H, resolveAuthorEffects([gradient({ mode: 'linear', start_x: 0, start_y: 50, end_x: 100, end_y: 50 })]), context, {}, 'constant', { radius: 0, lens: false }, texture => author.mipmaps(texture, W, H), 0)
+      author.draw(target, W, H, { texture: result.picture, x: 0, y: 0, width: W, height: H }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
+      author.finish(); chain.commit()
+      const pixels = await read(target)
+      expect(pixel(pixels, 17, 18)[0]).toBeLessThan(16); expect(pixel(pixels, 46, 18)[0]).toBeGreaterThan(236)
+      expect(pixel(pixels, 2, 2)).toEqual([0, 0, 0, 0])
     } finally { chain.dispose(); await author.dispose(); source.destroy(); target.destroy() }
   }, 30_000)
 })

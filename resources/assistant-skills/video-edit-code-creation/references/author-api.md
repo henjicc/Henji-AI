@@ -218,6 +218,10 @@ export default {
 }
 ```
 
+## 画面来源 fill（作者接口 v14）
+
+`{ id: 'bg', bounds?, fill: t => gradient({…}), effects?, pose?, clip? }`：不写 draw，宿主在 bounds 里用 GPU 画原生生成器（目前只有渐变 gradient），bounds 不写时铺满画布。暗底上的大面积渐变用它，在高精度里算、不出色带；Canvas2D 的 createLinearGradient 是 8 位栅格，暗部会出色带。gradient 工厂随下一版 henji-effects 提供，在那之前写效果描述对象 `{ id: 'gradient', params: {…} }`。
+
 ## 调整层
 
 `{ id: 'grade', adjust: t => [效果描述…], clip?, pose?: t => ({ opacity }) }`：给本模块里在它之前（下层）合成好的全部图层整体加效果，按作者画幅换算；与 draw、fill、effects 互斥。pose 只用 opacity（与原画混合），clip 限定作用范围。暗角、颗粒这类整幅效果只能放在 adjust 或片段效果链里，放进普通图层的 effects 会报错。取帧观察里它是 kind 为 adjust 的元素，没有画面选框，按 id 或源码定位。grain、vignette 工厂随下一版 henji-effects 提供，在那之前直接写效果描述对象。

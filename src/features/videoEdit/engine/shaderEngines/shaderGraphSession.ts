@@ -122,7 +122,8 @@ export interface ShaderGraphRenderRequest {
 export class ShaderGraphSession {
   readonly key: string
   private renderer?: Renderer
-  private readonly hostTextures = new Map<string, HostTexture>()
+  /** 每个宿主画面图层各有一张纹理（同一种画面可以出现在几个图层里，如生成器的内容遮罩与混合底图），按图层实例登记。 */
+  private readonly hostTextures = new Map<object, { type: string; texture: HostTexture }>()
   private readonly lastProps = new Map<string, Record<string, unknown>>()
   private readonly nodes = new Map<string, { definition: Definition; layer: ShaderGraphLayer }>()
   private target?: Texture
@@ -179,15 +180,16 @@ export class ShaderGraphSession {
       this.builds++
       const make = (width: number, height: number) => params.createMediaTexture({ width: Math.max(1, width), height: Math.max(1, height), format: 'rgba16float', label: type })
       let current = make(this.size.width, this.size.height)
-      this.hostTextures.set(type, { get texture() { return current.texture }, get width() { return current.width }, get height() { return current.height }, unwrap: () => current.unwrap(), destroy: () => current.destroy() })
+      const instance = {}
+      this.hostTextures.set(instance, { type, texture: { get texture() { return current.texture }, get width() { return current.width }, get height() { return current.height }, unwrap: () => current.unwrap(), destroy: () => current.destroy() } })
       const kit = params.registerMediaTexture(() => current.texture)
-      params.onCleanup(() => { current.destroy(); if (this.hostTextures.get(type)?.texture === current.texture) this.hostTextures.delete(type) })
-      this.resizeHost.set(type, (width, height) => { if (current.width === width && current.height === height) return; const previous = current; current = make(width, height); previous.destroy() })
+      params.onCleanup(() => { current.destroy(); this.hostTextures.delete(instance); this.resizeHost.delete(instance) })
+      this.resizeHost.set(instance, (width, height) => { if (current.width === width && current.height === height) return; const previous = current; current = make(width, height); previous.destroy() })
       return kit.sample(params.uvContext ?? params.ctx.uv)
     }
     return { name: type, props: {}, fragment }
   }
-  private readonly resizeHost = new Map<string, (width: number, height: number) => void>()
+  private readonly resizeHost = new Map<object, (width: number, height: number) => void>()
 
   private async initialize(): Promise<void> {
     const definitions = await this.definitions()
@@ -339,7 +341,7 @@ export class ShaderGraphSession {
       const needsHost = this.hostTextures.size === 0 && [...this.nodes.values()].some(node => node.layer.type === SHADER_GRAPH_INPUT || node.layer.type === SHADER_GRAPH_SECOND)
       if (needsHost) await this.draw(renderer, 0)
       const encoder = this.device.createCommandEncoder() as unknown as Encoder
-      for (const [type, texture] of this.hostTextures) {
+      for (const { type, texture } of this.hostTextures.values()) {
         const source = type === SHADER_GRAPH_SECOND ? request.second : request.input
         if (!source) throw new ShaderGraphError(type === SHADER_GRAPH_SECOND ? '这张着色器图需要第二段画面（转场后段）。' : '这张着色器图需要输入画面，只能用作滤镜或转场。')
         this.copy(encoder, 'upload', source, texture.unwrap(), 'rgba16float')
