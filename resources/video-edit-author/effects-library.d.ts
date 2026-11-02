@@ -58,6 +58,8 @@ export interface ColorGradeParams {
   readonly blacks?: number
   /** 饱和度；均匀改变所有颜色的彩度（OkLCh，色相不变）；-100 黑白，0 不变，+100 彩度翻倍。；默认 0；硬范围 -100–100；单位 strength；可动画 true */
   readonly saturation?: number
+  /** 色相旋转；把所有颜色沿色环整体转动（OkLCh，明度与彩度不变）；0 不变，±180 转到补色。；默认 0；硬范围 -180–180；单位 degrees；可动画 true */
+  readonly hue_shift?: number
   /** 自然饱和度；优先提升低饱和颜色并保护肤色，比饱和度更自然；负值优先降低低饱和颜色。常用 +10–30。；默认 0；硬范围 -100–100；单位 strength；可动画 true */
   readonly vibrance?: number
   /** 曲线高光；参数曲线：亮度 75–100% 区间整体提亮或压暗，端点不动。；默认 0；硬范围 -100–100；单位 strength；可动画 true */

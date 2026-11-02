@@ -12,6 +12,7 @@ export const COLOR_GRADE_BASIC_PARAMS: readonly ImagingParam[] = [
   signed('highlights', '高光', '调整亮部（中灰以上）；负值恢复高光细节，正值提亮。常用 ±40。'), signed('shadows', '阴影', '调整暗部（中灰以下）；正值提亮暗部细节，负值压暗。常用 ±40。'),
   signed('whites', '白色', '调整最亮端（白点）；高光溢出时用负值压回，画面发灰时用正值拉开。'), signed('blacks', '黑色', '调整最暗端（黑点）；正值抬起黑色，负值加深黑色。'),
   signed('saturation', '饱和度', '均匀改变所有颜色的彩度（OkLCh，色相不变）；-100 黑白，0 不变，+100 彩度翻倍。'),
+  { key: 'hue_shift', name: '色相旋转', type: 'number', unit: 'degrees', min: -180, max: 180, step: 1, default: 0, tooltip: '把所有颜色沿色环整体转动（OkLCh，明度与彩度不变）；0 不变，±180 转到补色。', description: '把所有颜色沿色环整体转动（OkLCh，明度与彩度不变）；0 不变，±180 转到补色。' },
   signed('vibrance', '自然饱和度', '优先提升低饱和颜色并保护肤色，比饱和度更自然；负值优先降低低饱和颜色。常用 +10–30。'),
 ]
 export const COLOR_GRADE_TONE_PARAMS: readonly ImagingParam[] = [

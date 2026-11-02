@@ -106,3 +106,13 @@ describe('unified color grade', () => {
     }
   })
 })
+
+it('整体转色相只转 OkLCh 色相，明度与彩度不变', () => {
+  for (const patch of PATCHES.filter((_, i) => i % 7 === 0)) {
+    const [l0, c0, h0] = lch(patch), [l1, c1, h1] = lch(grade(patch, { hue_shift: 90 }))
+    expect(Math.abs(l1 - l0)).toBeLessThan(2e-3)
+    // 高彩度颜色转 90° 会出 sRGB 色域，裁切后色相跟着偏；只核对转完仍在色域内的中低彩度。
+    if (c0 > .02 && c0 < .06) { expect(Math.abs(c1 - c0)).toBeLessThan(.01); expect(Math.abs(((h1 - h0) * 180 / Math.PI + 540) % 360 - 180 - 90)).toBeLessThan(2) }
+    grade(patch, { hue_shift: 180 }).forEach((x, c) => expect(Number.isFinite(x), `${c}`).toBe(true))
+  }
+})

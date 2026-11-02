@@ -75,7 +75,9 @@ fn cgStageA(rgb: vec3f) -> vec3f {
    chromaScale *= max(0.0, 1.0 + color.z * (1.0 - smoothstep(0.0, 0.25, c)) * skin);
   }
  }
- lin = cgFromOklab(vec3f(lightness, lab.yz * chromaScale));
+ var ab = lab.yz * chromaScale;
+ if (flags.z > 0.5) { let turn = cgP(${SLOT.hue}); ab = vec2f(ab.x * turn.x - ab.y * turn.y, ab.x * turn.y + ab.y * turn.x); }
+ lin = cgFromOklab(vec3f(lightness, ab));
  return cgEnc(lin);
 }
 fn cgStageB(rgb: vec3f) -> vec3f {

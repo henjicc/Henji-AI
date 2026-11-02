@@ -15,7 +15,7 @@ import { DISPLAY_HUE_ANCHORS, linearSrgbToOklab, linearToSrgb, MIDDLE_GRAY, okla
 export const COLOR_GRADE_TABLE_WIDTH = 256
 export const COLOR_GRADE_TABLE_ROWS = 1 + COLOR_GRADE_CURVE_CHANNELS.length + COLOR_GRADE_HUE_CURVES.length
 /** Parameter slots (vec4) on row 0. Keep in sync with the WGSL reader. */
-export const SLOT = { flags: 0, matrix: 1, tone: 4, tone2: 5, color: 6, wheel: 7, wheels: 8, mixer: 12, curveFlags: 22 } as const
+export const SLOT = { flags: 0, matrix: 1, tone: 4, tone2: 5, color: 6, wheel: 7, wheels: 8, mixer: 12, curveFlags: 22, hue: 25 } as const
 export const PERCEPTUAL_MIDDLE_GRAY = linearToSrgb(MIDDLE_GRAY)
 
 export interface ColorGradeTable { data: Float32Array; width: number; height: number; stageA: boolean; stageB: boolean; key: string }
@@ -50,12 +50,14 @@ export function buildColorGradeTable(params: Params, options: { key?: boolean } 
   const saturation = num(params, 'saturation') / 100; const vibrance = num(params, 'vibrance') / 100
   const matrixActive = kelvin !== 6500 || tint !== 0 || exposure !== 0
   const toneActive = contrast !== 0 || tone.some(Boolean)
-  const colorActive = saturation !== 0 || vibrance !== 0
+  const hueShift = num(params, 'hue_shift')
+  const colorActive = saturation !== 0 || vibrance !== 0 || hueShift !== 0
   const stageA = matrixActive || toneActive || colorActive
   for (let row = 0; row < 3; row++) slot(SLOT.matrix + row, [wb[row * 3] * gain, wb[row * 3 + 1] * gain, wb[row * 3 + 2] * gain, 0])
   slot(SLOT.tone, [contrast >= 0 ? 1 + contrast * 2 : 1 + contrast, tone[0], tone[1], tone[2]])
   slot(SLOT.tone2, [tone[3], tone[4], tone[5], tone[6]])
   slot(SLOT.color, [tone[7], saturation, vibrance, num(params, 'faded_film') / 100])
+  slot(SLOT.hue, [Math.cos(hueShift * Math.PI / 180), Math.sin(hueShift * Math.PI / 180), 0, 0])
 
   const primary = params.wheel_mode === 'primary'
   let wheelsActive = false
@@ -173,7 +175,9 @@ export function gradeStageA(rgb: Vec3, table: Float32Array): Vec3 {
       chromaScale *= Math.max(0, 1 + color[2] * (1 - smooth(0, .25, c)) * skin)
     }
   }
-  lin = oklabToLinearSrgb([lightness, lab[1] * chromaScale, lab[2] * chromaScale])
+  // 整体转色相：在 OkLab 的 a、b 平面里旋转，明度与彩度不变。
+  const turn = p(table, SLOT.hue); const a = lab[1] * chromaScale; const b = lab[2] * chromaScale
+  lin = oklabToLinearSrgb([lightness, flags[2] ? a * turn[0] - b * turn[1] : a, flags[2] ? a * turn[1] + b * turn[0] : b])
   return encode(lin)
 }
 

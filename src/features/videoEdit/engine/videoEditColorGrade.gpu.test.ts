@@ -74,7 +74,7 @@ describe('ColorGrade 正式 GPU 像素', () => {
     near(await run({ shadow_luminance: 40 }, [0, 0, 0, 1]), [.1, .1, .1, 1])
   })
   it('统一调色 WGSL 与 CPU 真值逐像素一致（含 Look LUT 拆分前后两半之外的全部逐像素段）', async () => {
-    const params = { ...colorGradeDefaults(), temperature_kelvin: 5200, tint: 12, exposure: .3, contrast: 35, highlights: -25, shadows: 20, whites: 10, blacks: -8, tone_lights: 15, tone_shadows: -10, saturation: 15, vibrance: 25, faded_film: 12,
+    const params = { ...colorGradeDefaults(), temperature_kelvin: 5200, tint: 12, exposure: .3, contrast: 35, highlights: -25, shadows: 20, whites: 10, blacks: -8, tone_lights: 15, tone_shadows: -10, saturation: 15, hue_shift: 35, vibrance: 25, faded_film: 12,
       mixer_orange_saturation: -30, mixer_blue_hue: 40, mixer_green_luminance: 30, curve_master_points: encodeColorGradeCurve([{ x: 0, y: 0 }, { x: 40, y: 50 }, { x: 100, y: 100 }]), curve_hue_sat_points: encodeColorGradeCurve([{ x: 0, y: 50 }, { x: 33, y: 80 }, { x: 100, y: 50 }]),
       shadow_hue: 220, shadow_strength: 20, highlight_hue: 40, highlight_strength: 15, global_luminance: 5, grade_balance: 20, grade_blending: 70 }
     const pixels = Array.from({ length: 64 }, (_, i) => [((i * 37) % 64) / 63, ((i * 11) % 64) / 63, ((i * 23) % 64) / 63, 1]).flat()
