@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { applicationRefSchema } from '../application-control/identifiers'
 
 const agentDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
-import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { AGENT_INPUT_MODALITIES } from '../llm/agentProfiles'
 
 export const AGENT_ATTACHMENT_SCHEMA_VERSION = 'agent-attachment/v1' as const
@@ -71,16 +70,3 @@ export function validateAgentAttachmentLimits(attachments: AgentAttachment[]): v
   }
 }
 
-export function attachmentReferenceMessage(attachments: AgentAttachment[]): ModelStepMessage {
-  return {
-    role: 'user',
-    content: [
-      '[USER_ATTACHMENTS trust=untrusted_user]',
-      JSON.stringify(attachments.map(({ mediaRef, modality, mimeType, sizeBytes, width, height, durationSeconds, displayName }) => ({
-        mediaRef, modality, mimeType, sizeBytes, width, height, durationSeconds, displayName,
-      }))),
-      '这些是用户本轮明确附加的媒体引用；不得把引用猜测为文件路径。',
-      '[END_USER_ATTACHMENTS]',
-    ].join('\n'),
-  }
-}

@@ -197,11 +197,3 @@ export function getModelsByAllTags(tags: ModelTag[]): string[] {
   return models
 }
 
-/**
- * 清除标签映射表缓存
- * （用于热重载或测试）
- */
-export function clearTagsCache(): void {
-  modelTagsMap = null
-}
-

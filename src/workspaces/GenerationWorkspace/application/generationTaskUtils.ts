@@ -7,21 +7,6 @@ export function asGeneratorOptions(value: DynamicValue): GeneratorOptions {
   return isRecord(value) ? (value as GeneratorOptions) : {}
 }
 
-export function classifyMediaSourceKind(source: string): string {
-  const trimmed = source.trim()
-  if (!trimmed) return 'empty'
-  if (trimmed.startsWith('data:')) return 'data-url'
-  if (trimmed.startsWith('blob:')) return 'blob-url'
-  if (trimmed.startsWith('asset://localhost/')) return 'asset-url'
-  if (trimmed.startsWith('tauri://localhost/')) return 'legacy-tauri-url'
-  if (trimmed.startsWith('http://asset.localhost/') || trimmed.startsWith('https://asset.localhost/')) return 'asset-http-url'
-  if (trimmed.startsWith('http://tauri.localhost/') || trimmed.startsWith('https://tauri.localhost/')) return 'legacy-tauri-http-url'
-  if (trimmed.startsWith('file://')) return 'file-url'
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return 'remote-url'
-  if (/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(trimmed)) return 'local-path'
-  return 'other'
-}
-
 export function isFileValue(value: DynamicValue): value is File {
   return typeof File !== 'undefined' && value instanceof File
 }

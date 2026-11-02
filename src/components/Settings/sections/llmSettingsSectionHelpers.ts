@@ -1,5 +1,4 @@
 import {
-  DEFAULT_PPIO_PROVIDER_ID,
   createDefaultProviderReasoning,
 } from '@/core/llm/defaults'
 import type {
@@ -7,7 +6,6 @@ import type {
   LlmModelConfig,
   LlmProviderConfig,
   LlmReasoningConfig,
-  LlmReasoningEffort,
 } from '@henjicc/ai-sdk'
 import { createModelFromInput } from '@/services/llm/llmDiscoveryService'
 
@@ -15,21 +13,6 @@ import { createModelFromInput } from '@/services/llm/llmDiscoveryService'
 export const providerProtocolOptions: Array<{ value: LlmApiProtocol; label: string }> = [
   { value: 'openai-compatible', label: 'OpenAI Chat Completions' },
   { value: 'openai-responses', label: 'OpenAI Responses' },
-]
-
-export const reasoningEffortOptions: Array<{ value: LlmReasoningEffort; label: string }> = [
-  { value: 'low', label: '低' },
-  { value: 'medium', label: '中' },
-  { value: 'high', label: '高' },
-  { value: 'xhigh', label: '极高' },
-  { value: 'max', label: '最高' },
-]
-
-export type ReasoningModeValue = 'off' | LlmReasoningEffort
-
-export const reasoningModeOptions: Array<{ value: ReasoningModeValue; label: string }> = [
-  { value: 'off', label: '关闭' },
-  ...reasoningEffortOptions,
 ]
 
 export function createDefaultProvider(): LlmProviderConfig {
@@ -52,16 +35,6 @@ export function createEmptyModel(provider: LlmProviderConfig): LlmModelConfig {
 
 export function resolveProviderReasoning(provider: LlmProviderConfig): LlmReasoningConfig {
   return provider.reasoning ?? createDefaultProviderReasoning(provider.adapter)
-}
-
-export function getReasoningModeLabel(value: ReasoningModeValue): string {
-  if (value === 'off') return '关闭'
-  return reasoningEffortOptions.find(option => option.value === value)?.label ?? '高'
-}
-
-export function resolveReasoningMode(provider: LlmProviderConfig): ReasoningModeValue {
-  const reasoning = resolveProviderReasoning(provider)
-  return reasoning.enabled ? reasoning.effort : 'off'
 }
 
 function toProviderSlug(name: string): string {
@@ -94,7 +67,3 @@ export function resolveApiPreview(provider: LlmProviderConfig): string {
     : `${normalized}/v1/chat/completions`
 }
 
-export function getApiKeyHint(provider: LlmProviderConfig): string | undefined {
-  if (provider.providerId !== DEFAULT_PPIO_PROVIDER_ID) return undefined
-  return '留空时会自动复用主生成设置里已配置的派欧云 API Key，单独填写后优先使用这里的值。'
-}

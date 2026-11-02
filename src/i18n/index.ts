@@ -20,12 +20,3 @@ export function getCurrentLanguage(): string {
   return i18n.language
 }
 
-/**
- * 支持的语言列表
- */
-export const supportedLanguages = [
-  { code: 'zh-CN', name: '中文' },
-  { code: 'en-US', name: 'English' },
-] as const
-
-export type SupportedLanguage = typeof supportedLanguages[number]['code']

@@ -1,6 +1,4 @@
 export {
-  type ImageMarkV3RasterExportSpec as ImageMarkRasterExportSpec,
-  type ImageMarkV3RasterExportFailureReason as ImageMarkRasterExportFailureReason,
   imageMarkV3RasterExportExtension as imageMarkRasterExportExtension,
   listImageMarkV3RasterExportFormats as listImageMarkRasterExportFormats,
   isImageMarkV3RasterExportAbort as isImageMarkRasterExportAbort,

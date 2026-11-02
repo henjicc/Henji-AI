@@ -117,10 +117,6 @@ export function getEdgesBySource(edges: CanvasEdge[]): Map<string, CanvasEdge[]>
   return map;
 }
 
-export function getOutgoingEdges(edges: CanvasEdge[], nodeId: string): CanvasEdge[] {
-  return getEdgesBySource(edges).get(nodeId) ?? EMPTY_EDGES;
-}
-
 export function wouldCreateCanvasCycle(
   sourceNodeId: string,
   targetNodeId: string,

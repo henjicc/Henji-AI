@@ -91,10 +91,6 @@ async function downloadMedia(
   throw new Error('Unreachable media download state')
 }
 
-export async function saveMediaFromUrl(url: string): Promise<string | undefined> {
-  return (await saveMediaFromUrlTracked(url))?.filePath
-}
-
 export interface SavedMediaFile {
   filePath: string
   /** true 表示本次调用取得了一个可释放租约；文件也可能由同进程的更早调用创建。 */

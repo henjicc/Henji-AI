@@ -1,7 +1,5 @@
 export const NODE_CONTROL_MODEL_CHIP_CLASS = '!w-full !min-w-0 !max-w-[260px] !justify-start';
 
-export const NODE_CONTROL_PARAMS_CHIP_CLASS = '!max-w-[120px] !justify-start';
-
 export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
 
 export const NODE_PORT_BASE_CLASS =

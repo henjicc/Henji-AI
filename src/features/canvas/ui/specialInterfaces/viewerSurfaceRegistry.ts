@@ -2,7 +2,6 @@ import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 
 import type { ImageViewerModalProps } from '@/components/mediaViewer/ImageViewerModal';
 import {
-  CANVAS_IMAGE_VIEWER_MODES,
   resolveCanvasImageViewerMode,
   type CanvasImageViewerMode,
 } from '@/features/canvas/domain/canvasNodes';
@@ -52,6 +51,3 @@ export function getCanvasViewerSurfaceDefinition(mode: unknown): CanvasViewerSur
   return VIEWER_SURFACE_REGISTRY[resolveCanvasImageViewerMode(mode)];
 }
 
-export function listCanvasViewerSurfaceDefinitions(): readonly CanvasViewerSurfaceDefinition[] {
-  return CANVAS_IMAGE_VIEWER_MODES.map((mode) => VIEWER_SURFACE_REGISTRY[mode]);
-}

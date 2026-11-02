@@ -42,10 +42,3 @@ export function rasterizeText(clip: TextContent, frame: { width: number; height:
   return { canvas, x, y, width, height }
 }
 
-export function paintMeasuredText(context:OffscreenCanvasRenderingContext2D,layout:import('@/core/imaging/vectorContent/codeTextLayout').CodeTextLayout,box:{x:number;y:number;width:number},lineHeight:number,align:'left'|'center'|'right',customSpacing:boolean,strokeWidth=0):void {
-  context.font=layout.font;context.textBaseline='alphabetic';context.textAlign='left';
-  const offset=(row:number)=>align==='center'?(box.width-(layout.lineWidths?.[row]??layout.width))/2:align==='right'?box.width-(layout.lineWidths?.[row]??layout.width):0;
-  const paint=(text:string,x:number,y:number)=>{if(strokeWidth)paintNativeText(context,text,x,y,'stroke');paintNativeText(context,text,x,y)};
-  if(customSpacing)for(const glyph of layout.glyphs)paint(glyph.text,box.x+glyph.x+offset(Math.round(glyph.y/lineHeight)),box.y+glyph.y+(layout.baselineOffset??lineHeight/2));
-  else layout.lines.forEach((line,row)=>paint(line,box.x+offset(row),box.y+row*lineHeight+(layout.baselineOffset??lineHeight/2)));
-}

@@ -22,28 +22,3 @@ export function fileToBase64(file: File): Promise<string> {
   })
 }
 
-/**
- * 将 Base64 转换为 Blob
- */
-export function base64ToBlob(base64: string, mimeType: string = 'image/png'): Blob {
-  // 移除 data URL 前缀（如果有）
-  const base64Data = base64.includes(',') ? base64.split(',')[1] : base64
-
-  // 解码 Base64
-  const byteCharacters = atob(base64Data)
-  const byteNumbers = new Array(byteCharacters.length)
-
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i)
-  }
-
-  const byteArray = new Uint8Array(byteNumbers)
-  return new Blob([byteArray], { type: mimeType })
-}
-
-/**
- * 将 Blob 转换为 File
- */
-export function blobToFile(blob: Blob, filename: string): File {
-  return new File([blob], filename, { type: blob.type })
-}

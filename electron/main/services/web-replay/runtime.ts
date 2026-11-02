@@ -376,8 +376,6 @@ export async function backupAudioDirectory(recordingId: string): Promise<string>
 /** The page stops its sound after the recording ended elsewhere; the picture may still be saving. */
 export async function mixWebRecordingAudio(recordingId: string): Promise<boolean> { return mixWebRecordingBackupAudio(await resolveWebRecordingDirectory(recordingId), 60_000) }
 
-export async function getWebRecording(recordingId: string): Promise<WebRecordingManifest> { return new WebRecordingStore(await resolveWebRecordingDirectory(recordingId)).readManifest() }
-
 export function takeInfo(take: WebReplayTakeSummary): WebRecordingTakeInfo {
   return { name: take.name, directory: take.directory, video: take.videoPath, frames: take.frames, durationMs: Math.round(take.durationUs / 1000), fps: take.fps, pointer: take.pointer, createdAt: take.createdAt, conflicts: take.conflicts }
 }

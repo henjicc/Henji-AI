@@ -54,27 +54,3 @@ export function scaleTransformCoordinates(
   };
 }
 
-/** Convert a frame-space registration matrix into Photoshop's constrained
- * scale/rotate-around-center plus document-space translation parameters. */
-export function registrationPlacement(
-  transform: SimilarityTransform,
-  frame: { width: number; height: number },
-  region: { width: number; height: number },
-) {
-  const { a, b, c, d } = transformComponents(transform);
-  const scaleX = Math.hypot(a, b);
-  const scaleY = Math.hypot(c, d);
-  const angle = (Math.atan2(b, a) * 180) / Math.PI;
-  // Registration coordinates address pixel centers from 0 to size - 1.
-  const centerX = (frame.width - 1) / 2;
-  const centerY = (frame.height - 1) / 2;
-  const mappedCenterX = a * centerX + c * centerY + transform.tx;
-  const mappedCenterY = b * centerX + d * centerY + transform.ty;
-  return {
-    scaleX,
-    scaleY,
-    angle,
-    offsetX: ((mappedCenterX - centerX) * region.width) / frame.width,
-    offsetY: ((mappedCenterY - centerY) * region.height) / frame.height,
-  };
-}

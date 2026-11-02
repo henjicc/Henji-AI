@@ -56,4 +56,3 @@ export function createVideoEditMixWriter(projectId: string) {
     }))),
   }
 }
-export type VideoEditMixWriter = ReturnType<typeof createVideoEditMixWriter>

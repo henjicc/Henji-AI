@@ -18,7 +18,6 @@ export const STYLE_GUIDE_SECTIONS = [
   { title: '正反例', hint: '做：2–4 条典型的好做法。不做：2–4 条最容易犯、最伤风格的做法。' },
   { title: '样片与代码', hint: '样片按标准分镜演示本风格；写明哪些函数可以照搬（缓动、排版、组件绘制），哪些只是样片内容。' },
 ] as const
-export type StyleGuideSectionTitle = typeof STYLE_GUIDE_SECTIONS[number]['title']
 export const STYLE_GUIDE_MAX_LENGTH = 64 * 1024
 /** 原地生成图片或视频时并入提示词的可选自定义栏目（旧说明书迁移后保留）。 */
 export const STYLE_GUIDE_GENERATION_SECTION = '画面生成提示'

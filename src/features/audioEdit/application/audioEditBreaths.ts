@@ -1,5 +1,4 @@
 import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
-import { describeAudioEditBreaths, type AudioEditBreathView } from '@/core/audioEdit/breaths'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { getPlatform } from '@/platform/runtime'
 
@@ -22,6 +21,3 @@ export function loadAudioEditBreaths(document: AudioEditProjectDocument): Promis
   return pending
 }
 
-export async function loadAudioEditBreathViews(document: AudioEditProjectDocument): Promise<AudioEditBreathView[]> {
-  return describeAudioEditBreaths(document, await loadAudioEditBreaths(document))
-}

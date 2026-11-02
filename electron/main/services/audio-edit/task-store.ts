@@ -130,15 +130,6 @@ export function updateAudioEditTask(requestId: string, update: {
   )
 }
 
-export function findActiveAudioEditTask(projectId: string, kind: string, inputDigest: string): { requestId: string; state: string } | null {
-  const row = getDb().prepare(`
-    SELECT request_id,state FROM audio_edit_tasks
-    WHERE document_id = ? AND kind = ? AND input_digest = ? AND state IN ('queued','running')
-    ORDER BY updated_at DESC LIMIT 1
-  `).get(projectId, kind, inputDigest) as { request_id: string; state: string } | undefined
-  return row ? { requestId: row.request_id, state: row.state } : null
-}
-
 export interface AudioEditStoredTask { request_id: string; state: AudioEditTaskState; provider_task_id: string | null; input_digest: string; result_json: string | null; error_message?: string | null }
 export function getAudioEditStoredTask(requestId: string): (AudioEditStoredTask & { document_id: string }) | undefined {
   const row = getDb().prepare('SELECT request_id,document_id,state,provider_task_id,input_digest,result_json FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as (AudioEditStoredTask & { document_id: string }) | undefined

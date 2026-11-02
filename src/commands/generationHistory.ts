@@ -19,16 +19,8 @@ export async function getGenerationHistory(id: string): Promise<GenerationHistor
   return await getPlatform().generationHistory.get(id)
 }
 
-export async function countGenerationHistory(): Promise<number> {
-  return await getPlatform().generationHistory.count()
-}
-
 export async function insertGenerationHistory(record: GenerationHistoryInsertDto): Promise<void> {
   await getPlatform().generationHistory.insert(record)
-}
-
-export async function insertGenerationHistoryRecords(records: GenerationHistoryInsertDto[]): Promise<void> {
-  await getPlatform().generationHistory.insertMany(records)
 }
 
 export async function updateGenerationHistory(id: string, updates: GenerationHistoryUpdateDto): Promise<void> {

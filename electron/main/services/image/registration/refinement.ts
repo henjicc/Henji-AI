@@ -40,15 +40,6 @@ interface CenteredParameters {
   dy: number;
 }
 
-const POST_APPLY_TRANSLATION_REFINEMENT: RegistrationRefinementSchedule = {
-  translationSteps: [0.5, 0.25, 0.125, 0.0625, 0.03125],
-  angleStepsDegrees: [0, 0, 0, 0, 0],
-  scaleSteps: [0, 0, 0, 0, 0],
-  scoreStrides: [2, 2, 1, 1, 1],
-  maxPassesPerLevel: 3,
-  translationOnlyFromLevel: 0,
-};
-
 function toStructuralImage(frame: RegistrationFrame): StructuralImage {
   const count = frame.width * frame.height;
   const gray = normalizedLuminance(frame);
@@ -291,37 +282,6 @@ function refineStructuralTransform(
     iterations,
     converged,
   };
-}
-
-export function refineSimilarityTransform(
-  referenceFrame: RegistrationFrame,
-  movingFrame: RegistrationFrame,
-  initial: SimilarityTransform,
-  allowAnisotropic = false,
-  schedule: RegistrationRefinementSchedule = PRECISE_REFINEMENT,
-): SimilarityRefinementResult {
-  return refineStructuralTransform(
-    toStructuralImage(referenceFrame),
-    toStructuralImage(movingFrame),
-    initial,
-    allowAnisotropic,
-    schedule,
-  );
-}
-
-/** Measure only the residual X/Y translation after Photoshop has applied the
- * main transform. Scale and rotation are deliberately excluded. */
-export function refineResidualTranslation(
-  referenceFrame: RegistrationFrame,
-  movingFrame: RegistrationFrame,
-): SimilarityRefinementResult {
-  return refineStructuralTransform(
-    toStructuralImage(referenceFrame),
-    toStructuralImage(movingFrame),
-    { a: 1, b: 0, tx: 0, ty: 0 },
-    false,
-    POST_APPLY_TRANSLATION_REFINEMENT,
-  );
 }
 
 /** Evaluate the constrained similarity and anisotropic refinements against the

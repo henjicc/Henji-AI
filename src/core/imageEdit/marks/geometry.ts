@@ -31,17 +31,6 @@ export function composeOrientation(orientation: MarkOrientation, op: Orientation
   }
 }
 
-export function orientedSizeAfterOp(
-  width: number,
-  height: number,
-  op: OrientationOp
-): { width: number; height: number } {
-  if (op === 'rotate-cw' || op === 'rotate-ccw') {
-    return { width: height, height: width };
-  }
-  return { width, height };
-}
-
 export function orientedSize(
   width: number,
   height: number,

@@ -100,13 +100,6 @@ export interface LocalModelEnsureResult {
   files: LocalModelFileLocation[]
 }
 
-/** 失败原因（错误对象的 name 为 `LocalModelError`，message 以 `<code>:` 开头）。 */
-export function readLocalModelFailureCode(error: unknown): LocalModelFailureCode | null {
-  if (!(error instanceof Error)) return null
-  const match = /^(network|checksum|disk|cancelled|unavailable):/.exec(error.message)
-  return match ? match[1] as LocalModelFailureCode : null
-}
-
 export const LOCAL_MODELS_IPC_CHANNELS = {
   getState: 'localModels:getState',
   ensure: 'localModels:ensure',

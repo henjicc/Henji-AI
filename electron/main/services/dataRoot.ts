@@ -11,13 +11,6 @@ export interface UserDataRootSettings {
   persistedDefault: string | null
 }
 
-/**
- * 同步读取用户自定义数据根目录（设置表，与渲染层设置接口共用同一行）。
- */
-export function getCustomDataRoot(): string | null {
-  return readUserDataRootSettings().customRoot
-}
-
 /** 供唯一路径模块 `appPaths.ts` 一次读取用户目录相关设置，不走 IPC；这两项是位置换算的基准，原样读取。 */
 export function readUserDataRootSettings(): UserDataRootSettings {
   const values = readRawSettings([CUSTOM_DATA_DIRECTORY_KEY, USER_DATA_ROOT_KEY])

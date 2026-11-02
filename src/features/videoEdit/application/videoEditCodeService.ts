@@ -8,7 +8,7 @@ import { importAssetCodeComponents, discardProjectCodeComponents, discardVideoEd
 import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoEdit/codeAsset'
 import { validateCodeElementOverridesWithoutObservation } from '@/core/videoEdit/authorEffects'
 import { prepareProjectCodePublication, prepareCodeVersionPublication } from './videoEditCodeStorage'
-import { addressCodeMaterialFiles, loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
+import { loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition, codeVersionCompilation, codeVersionInheritance } from '@/core/videoEdit/codeMaterialVersions'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
@@ -76,15 +76,6 @@ function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataRead
     return endpoints && clip.duration > 1 ? [{ document: composition, frame: 0 }, { document: composition, frame: clip.duration - 1 }] : [{ document: composition, frame: 0 }]
   })
   return frames
-}
-/** Exercise examples through the same timeline path without publishing a project. */
-export async function trialVideoEditAuthorSource(source: Parameters<typeof addressCodeMaterialFiles>[0], program: CodeMaterialProgram, signal: AbortSignal): Promise<void> {
-  const { codeSources: _texts, ...manifest } = await addressCodeMaterialFiles(source)
-  const versionId = crypto.randomUUID()
-  const definition: CodeMaterialDefinition = { id: crypto.randomUUID(), name: program.name, defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: program.apiVersion, languageVersion: program.languageVersion, ...(program.bundle.libraries ? { libraries: program.bundle.libraries } : {}) }] }
-  const samples = candidateFrames([candidate(definition, program, {})], () => program, [], true)
-  if (samples.length > 1) samples.splice(1, 0, { ...samples[0], frame: Math.floor(samples.at(-1)!.frame / 2) })
-  await trialVideoEditCodeFrames(samples, signal)
 }
 /** Creation is an algorithmic collection operation: raw source is checked,
  * executed in the render worker, trial-rendered, then becomes one atomic domain edit.

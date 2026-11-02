@@ -96,11 +96,6 @@ export function UiOverlayLayerProvider({ id, children }: { id: string; children?
   )
 }
 
-/** 当前所在的浮层（无则为 null）。 */
-export function useUiOverlayParent(): string | null {
-  return useContext(UiOverlayParentContext)
-}
-
 function isAncestorOverlay(ancestorId: string, overlayId: string): boolean {
   let current = overlayParents.get(overlayId) ?? null
   const visited = new Set<string>()

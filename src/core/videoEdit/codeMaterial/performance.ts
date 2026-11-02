@@ -52,7 +52,6 @@ export function codeLayerTotals(frames: readonly Pick<CodeFramePerformance, 'lay
   for (const value of reported) for (const key of Object.keys(total) as Array<keyof CodeLayerStatistics>) total[key] += value[key]
   return total
 }
-export function codePerformanceExceeded(value: CodeFramePerformance): boolean { return value.cpuMs + value.gpuMs > value.budgetMs }
 export function codePerformanceMessage(value: CodeFramePerformance): string {
   const h = value.heaviest; const at = h ? `；最重结构 ${h.kind}（${h.sourceSpan.file ?? 'main.ts'}:${h.sourceSpan.startLine}:${h.sourceSpan.startColumn}，CPU ${h.cpuMs.toFixed(2)}ms）` : ''
   const distribution = value.structures?.map(item => `${item.kind} ${item.sourceSpan.file}:${item.sourceSpan.startLine}:${item.sourceSpan.startColumn} CPU ${item.cpuMs.toFixed(2)}ms/${(item.cpuShare * 100).toFixed(1)}%，绘制 ${item.gpuMs.toFixed(2)}ms/${(item.gpuShare * 100).toFixed(1)}%`).join('；')

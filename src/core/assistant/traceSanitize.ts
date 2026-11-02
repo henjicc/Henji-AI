@@ -11,14 +11,6 @@ const TRACE_BASE64_TAIL = 48
 const TRACE_DATA_HEAD = 96
 const TRACE_DATA_TAIL = 32
 
-export interface TraceSanitizeResult<T> {
-  value: T
-  originalBytes: number
-  storedBytes: number
-  truncated: boolean
-  sections: string[]
-}
-
 export function sanitizeAgentTraceValue(value: unknown, depth = 0): unknown {
   if (depth > 20) return '[depth-limited]'
   if (Array.isArray(value)) return value.map((item) => sanitizeAgentTraceValue(item, depth + 1))
@@ -85,41 +77,6 @@ export function sanitizeAgentTraceDetail(detail: AgentTraceDetail): AgentTraceDe
   const actualBytes = serializedBytes(next)
   if (actualBytes !== next.capture.storedBytes) next.capture.storedBytes = actualBytes
   return next
-}
-
-export function fitAgentTraceDetail<T extends Record<string, unknown>>(
-  value: T,
-  maxBytes: number,
-  sectionOrder: string[],
-  protectedSections: string[] = []
-): TraceSanitizeResult<T> {
-  const originalBytes = serializedBytes(value)
-  const sanitized = sanitizeAgentTraceValue(value) as T
-  const sanitizedBytes = serializedBytes(sanitized)
-  if (sanitizedBytes <= maxBytes) {
-    return { value: sanitized, originalBytes, storedBytes: sanitizedBytes, truncated: false, sections: [] }
-  }
-
-  const next: Record<string, unknown> = { ...sanitized }
-  const sections: string[] = []
-  for (const section of sectionOrder) {
-    if (serializedBytes(next) <= maxBytes) break
-    if (!(section in next)) continue
-    next[section] = '[trace-section-truncated]'
-    sections.push(section)
-  }
-
-  if (serializedBytes(next) > maxBytes) {
-    for (const key of Object.keys(next)) {
-      if (serializedBytes(next) <= maxBytes) break
-      if (sections.includes(key) || protectedSections.includes(key)) continue
-      next[key] = '[trace-section-truncated]'
-      sections.push(key)
-    }
-  }
-
-  const storedBytes = serializedBytes(next)
-  return { value: next as T, originalBytes, storedBytes, truncated: true, sections }
 }
 
 export function serializedBytes(value: unknown): number {

@@ -11,11 +11,6 @@ import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 
 const logger = createLogger('features.videoEdit.styles')
 
-export function requireProjectStyle(document: Pick<VideoEditDocument, 'styles'>, id: string): VideoEditStyle {
-  const style = document.styles?.find(value => value.id === id)
-  if (!style) throw new Error(`NOT_FOUND：工程里没有这个风格副本（${id}），请重新列出 video_edit.project_style。`)
-  return style
-}
 /** 库里同一风格的版本更高时返回库版本，用于提示“风格库已更新到 vN，本工程用的是 vM”。 */
 export function newerLibraryStyleVersion(style: Pick<VideoEditStyle, 'id' | 'version'>): number | null {
   const library = videoEditStyleLibrary.findStyle(style.id)

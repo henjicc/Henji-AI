@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { CaptureSession } from './captureSession'
 import { captureFixture } from './captureTestFixture'
 import { audioCaptureFileName } from '@/core/audioCapture/fileName'
-import { captureTimecode, CaptureWaveform } from './captureLiveModel'
+import { captureTimecode } from './captureLiveModel'
 
 function fixture() {
   const platform = captureFixture(), imported = vi.fn(async () => 'draft')
@@ -56,16 +56,10 @@ describe('录音会话', () => {
     await session.recover(); expect(imported).toHaveBeenCalledTimes(2)
   })
 })
-it('本地日期命名、毫秒时间码与有界实时波形', () => {
+it('本地日期命名与毫秒时间码', () => {
   expect(audioCaptureFileName(new Date(2026, 9, 23, 1, 2, 3))).toBe('录音 2026-10-23 010203.wav')
   expect(audioCaptureFileName(new Date(2026, 9, 23, 1, 2, 3), 1)).toBe('录音 2026-10-23 010203 (1).wav')
   expect(captureTimecode(3661.123)).toBe('01:01:01.123')
-  const waveform = new CaptureWaveform()
-  const pcm = new Float32Array(24000).fill(.5)
-  waveform.push({ event: 'samples', sessionId: 's', sequence: 0, firstFrame: 0, frames: pcm.length, channels: 1, sampleRate: 1000, monoUs: 0, nativeMonoUs: 0, uncertaintyUs: 0, format: 'float32le', pcm: new Uint8Array(pcm.buffer) })
-  const result = waveform.snapshot()
-  expect(result.pyramid.levels[0].peak[0]).toHaveLength(1000)
-  expect(result.pyramid.levels[0].peak[0][999]).toBe(32768)
 })
 
 

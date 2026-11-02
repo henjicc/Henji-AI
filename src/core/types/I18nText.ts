@@ -157,11 +157,6 @@ function isI18nKeyText(text: Exclude<I18nText, string>): text is I18nKeyText {
 }
 
 /**
- * 翻译 I18nText 的函数类型
- */
-export type TranslateI18nText = (text: I18nText) => string
-
-/**
  * 获取国际化文本的实际值
  *
  * @param text - 国际化文本
@@ -235,9 +230,3 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
   return typeof firstValue === 'string' ? firstValue : ''
 }
 
-/**
- * 判断是否为 I18nText 对象
- */
-export function isI18nTextObject(text: I18nText): text is Exclude<I18nText, string> {
-  return typeof text === 'object' && text !== null
-}

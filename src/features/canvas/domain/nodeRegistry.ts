@@ -88,32 +88,6 @@ export function nodeHasTargetHandle(type: CanvasNodeType): boolean {
   return getNodeDefinition(type).connectivity.targetHandle;
 }
 
-export function getConnectMenuNodeTypes(
-  handleType: 'source' | 'target',
-  fromNodeType?: CanvasNodeType
-): CanvasNodeType[] {
-  const fromSource = handleType === 'source';
-  const fromDefinition = fromNodeType ? canvasNodeDefinitions[fromNodeType] : undefined;
-
-  return Object.values(canvasNodeDefinitions)
-    .filter((definition) => (fromSource
-      ? definition.connectivity.connectMenu.fromSource
-      : definition.connectivity.connectMenu.fromTarget))
-    .filter((definition) => (fromSource
-      ? definition.connectivity.targetHandle
-      : definition.connectivity.sourceHandle))
-    .filter((definition) => {
-      if (!fromDefinition) {
-        return true;
-      }
-      // 按端口媒体类型过滤：从输出端口拖出 → 候选节点需接受该媒体；反之亦然
-      return fromSource
-        ? arePortsCompatible(fromDefinition.ports, definition.ports)
-        : arePortsCompatible(definition.ports, fromDefinition.ports);
-    })
-    .map((definition) => definition.type);
-}
-
 /** 连接是否类型兼容（上游 emits ∈ 下游 accepts） */
 export function isConnectionCompatible(
   sourceType: CanvasNodeType,

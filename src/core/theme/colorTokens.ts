@@ -152,23 +152,6 @@ export const CAMERA_STAGE_COLOR_HEX = {
   selectionOutline: '#4a90e8',
 } as const;
 
-// 3D 镜头参考时间轴（第三阶段）配色：播放头 / 关键帧菱形 / 轨道分隔 / 曲线图分量色
-export const CAMERA_STAGE_TIMELINE_HEX = {
-  playhead: '#e8734a',
-  keyframe: '#c9ccd2',
-  keyframeSelected: '#4a90e8',
-  keyframeEased: '#e8c84a',
-  laneBorder: '#2a2a30',
-  laneActive: '#202027',
-  // 曲线图分量色（对齐 AE：X 红 / Y 绿 / Z 蓝，其余走强调色）
-  axisX: '#e0555f',
-  axisY: '#5fbf6a',
-  axisZ: '#5a8fe0',
-  curveOther: '#c9a0e8',
-  curveGrid: '#26262c',
-  curveHandle: '#e8c84a',
-} as const;
-
 export const CAMERA_STAGE_MOTION_PATH_HEX = {
   path: '#e8c84a',
   tangent: '#8f97a3',
@@ -189,11 +172,8 @@ export const CAMERA_STAGE_OBJECT_PALETTE_HEX = [
   '#9aa3ad',
 ] as const;
 
-/** 马赛克标注在源图像素尚未就绪时的占位填充（中性灰 60%），画进 Konva 画布，不随主题。 */
-export const ANNOTATION_MOSAIC_PLACEHOLDER_FILL = 'rgba(127, 127, 127, 0.6)';
 export const ANNOTATION_DEFAULT_STROKE_HEX = '#ff4d4f';
 export const ANNOTATION_DEFAULT_TEXT_HEX = '#ffffff';
-export const ANNOTATION_TRANSFORMER_HEX = '#3b82f6';
 
 export const IMAGE_EDITOR_PRESET_COLORS = [
   '#ff0000',
@@ -388,20 +368,6 @@ export const VIDEO_EDIT_LABEL_COLOR_HEX = {
   violet: '#A990DD', iris: '#9095F2', caribbean: '#1DC09F', lavender: '#E384E3', cerulean: '#1EA7DC', forest: '#5BA33F', rose: '#E86C8F', mango: '#EDA530',
   purple: '#9440DB', blue: '#4253D9', teal: '#2D8C8C', magenta: '#C1269A', tan: '#C2A07B', green: '#2B9D3C', brown: '#8C5A32', yellow: '#E6D84A',
 } as const;
-
-/** t68: 可移植的画面风格内容色，不随应用主题变化。 */
-const stylePaletteColor = (r: number, g: number, b: number): [number, number, number, number] => [r / 255, g / 255, b / 255, 1]
-/** Content palettes, independent of the application's UI theme. */
-export const VIDEO_EDIT_STYLE_PALETTES = [
-  [stylePaletteColor(11, 13, 18), stylePaletteColor(24, 28, 35), stylePaletteColor(242, 244, 247), stylePaletteColor(159, 169, 182), stylePaletteColor(163, 192, 220), stylePaletteColor(204, 184, 147)],
-  [stylePaletteColor(12, 21, 33), stylePaletteColor(22, 36, 52), stylePaletteColor(233, 243, 250), stylePaletteColor(139, 165, 184), stylePaletteColor(83, 210, 224), stylePaletteColor(156, 180, 245)],
-  [stylePaletteColor(245, 243, 238), stylePaletteColor(233, 230, 222), stylePaletteColor(34, 43, 49), stylePaletteColor(92, 105, 115), stylePaletteColor(35, 113, 146), stylePaletteColor(169, 108, 45)],
-  [stylePaletteColor(39, 31, 55), stylePaletteColor(59, 43, 74), stylePaletteColor(255, 246, 229), stylePaletteColor(195, 179, 205), stylePaletteColor(255, 208, 64), stylePaletteColor(255, 121, 145)],
-  [stylePaletteColor(73, 24, 26), stylePaletteColor(101, 33, 32), stylePaletteColor(255, 246, 226), stylePaletteColor(233, 179, 163), stylePaletteColor(255, 192, 69), stylePaletteColor(255, 115, 58)],
-  [stylePaletteColor(237, 226, 207), stylePaletteColor(225, 212, 189), stylePaletteColor(57, 53, 43), stylePaletteColor(115, 107, 89), stylePaletteColor(113, 104, 68), stylePaletteColor(154, 96, 73)],
-]
-
-export const VIDEO_EDIT_STYLE_STATUS_COLORS = { positive: stylePaletteColor(46, 137, 108), negative: stylePaletteColor(197, 68, 73) }
 
 /** 内置效果预览素材的固定内容色，不随界面主题变化。 */
 export const VIDEO_EDIT_EFFECT_PREVIEW_COLORS = {

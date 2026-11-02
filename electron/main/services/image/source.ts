@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { extensionFromMime, mimeFromExtension, normalizeExtension } from './path-utils'
+import { extensionFromMime, normalizeExtension } from './path-utils'
 import { IMAGE_EDITOR_V3_MEDIA_HOST, resolveImageEditorV3ResourceMediaUrl } from '../image-editor-v3/resource-media-url'
 import type { ImageBytes } from './types'
 
@@ -77,6 +77,3 @@ async function readLocal(localPath: string): Promise<ImageBytes> {
   }
 }
 
-export function toDataUrl(bytes: Buffer, extension: string): string {
-  return `data:${mimeFromExtension(extension)};base64,${bytes.toString('base64')}`
-}

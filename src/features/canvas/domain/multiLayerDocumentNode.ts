@@ -13,16 +13,6 @@ import {
   type LayerStackDocumentV1,
 } from './layerStack'
 
-export const MULTI_LAYER_DOCUMENT_NODE_STATES = [
-  'generation-placeholder',
-  'legacy-v1-pending-migration',
-  'editable-v3',
-  'degraded',
-] as const
-
-export type MultiLayerDocumentNodeStateKind =
-  (typeof MULTI_LAYER_DOCUMENT_NODE_STATES)[number]
-
 export type MultiLayerDocumentNodeDegradedReason =
   | 'document-unavailable'
   | 'legacy-resources-unavailable'

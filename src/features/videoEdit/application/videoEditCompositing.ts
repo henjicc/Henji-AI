@@ -121,13 +121,6 @@ function editBuiltin(target: VideoEditCompositeTarget, change: (clip: VideoEditC
     updateVideoEditParameterGesture(gesture, update)
   } else editVideoProject(target.projectId, update)
 }
-/**
- * 把内置效果加到片段效果链末尾（效果面板拖到片段上、双击、助手共用；一步撤销）。内置效果是确定的 GPU 实现，
- * 不需要像代码滤镜那样先试渲染检查。返回新效果的 ID。
- */
-export function addVideoEditBuiltinEffect(target: VideoEditCompositeTarget, builtinId: string, params?: Readonly<Record<string, unknown>>): string {
-  return applyVideoEditBuiltinEffect(target.projectId, target.sequenceId, [target.clipId], builtinId, params)[0]
-}
 /** 效果模板落到一个片段上：每项新身份，模板里的关键帧截到片段时长内（添加效果与拖入生成器共用）。 */
 export function instantiateVideoEditEffects(templates: readonly Omit<VideoEditEffect, 'id'>[], clipDuration: number): VideoEditEffect[] {
   return templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditBuiltinCurves(template.builtin, 0, clipDuration) } } : {}) }))

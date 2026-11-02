@@ -54,17 +54,6 @@ export function isApplicationSurfaceActive(surface: ApplicationSurfaceDefinition
   return navigation.activeWorkspace === surface.workspace
 }
 
-export function describeApplicationSurface(surfaceId: string): {
-  definition: ApplicationSurfaceDefinition
-  available: boolean
-  active: boolean
-  reasons: string[]
-} {
-  const definition = getApplicationSurface(surfaceId)
-  if (!definition) throw new Error('NOT_FOUND')
-  return { definition, available: true, active: isApplicationSurfaceActive(definition), reasons: [] }
-}
-
 export function openApplicationSurface(
   surfaceId: string,
   correlation: SurfaceNavigationCorrelation = {}

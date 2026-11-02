@@ -1192,13 +1192,6 @@ export async function openVideoEditProjectFolder(folderPath: string): Promise<Vi
   return await openVideoEditProject(project)
 }
 
-/** 剪辑所在的项目（剪辑始终在项目里）。 */
-export async function videoEditProjectOf(id: string): Promise<ProjectSummary> {
-  const container = requireVideoEditInstance(id).session.documentMeta.container
-  if (container.kind !== 'project') throw new Error('剪辑不在任何项目里。')
-  return await documentOperations().findProject(container.projectId)
-}
-
 /**
  * 离开剪辑（返回项目列表）：等导出结束，草稿项目走通用的项目离开流程
  * （空项目直接移到回收站；有内容询问“保存 / 不保存 / 取消”，保存时起名、可另选位置），

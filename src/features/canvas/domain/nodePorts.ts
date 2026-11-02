@@ -93,12 +93,6 @@ export interface InputInjectionRule {
   maxCount?: number;
 }
 
-export const DEFAULT_INPUT_INJECTION_RULES: InputInjectionRule[] = [
-  { accepts: 'image', paramKeys: { list: 'images', pathList: 'uploadedFilePaths' } },
-  { accepts: 'video', paramKeys: { list: 'videos', pathList: 'uploadedVideoFilePaths' } },
-  { accepts: 'audio', paramKeys: { list: 'audios', pathList: 'uploadedAudioFilePaths' } },
-];
-
 export function arePortsCompatible(
   sourcePorts: NodePorts | undefined,
   targetPorts: NodePorts | undefined,

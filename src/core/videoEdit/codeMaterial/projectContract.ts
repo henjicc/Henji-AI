@@ -10,7 +10,6 @@ export const codeProjectPathSchema = z.string().min(1).refine(value =>
   && value.split('/').every(part => part && part !== '.' && part !== '..' && part.toLowerCase() !== '.git')
   && !/^(?:legacy|素材|组件)(?:\/|$)/i.test(value),
 'path 必须是工程内相对源码、JSON、着色器、md 或 txt 路径；不能进入 .git、legacy、素材、组件。')
-export const codeProjectReadSchema = z.object({ target: documentTargetSchema }).strict()
 export const codeProjectChangeSchema = z.object({
   target: documentTargetSchema, message: z.string().trim().min(1).max(2000),
   changes: z.array(z.object({ path: codeProjectPathSchema, source: codeSourceTextSchema.nullable(), expectedHash: z.string().regex(/^[a-f0-9]{64}$/).nullable() }).strict()).min(1),

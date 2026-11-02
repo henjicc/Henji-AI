@@ -3,7 +3,6 @@ import { testCodeMetadata } from './sourceTestFixtures'
 import { CodeMaterialError } from './contract'
 import { validateCodeMaterialParameters, validateCodeMaterialParameterValue } from './parameters'
 import { codeParameterMetadata, parseCodeMaterialTypes } from './parameterTypes'
-import { easeCodeParameter, sampleCodeCurve, sampleCodeGradient } from './parameterSampling'
 import { codeMaterialInstanceSchema } from '../codeMaterialPersistence'
 import { codeMaterialKeyframeSchema, evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '../codeMaterialAnimation'
 import { GOLDEN_SCENE_DECLARATION } from '../scene/sceneTestFixtures'
@@ -85,14 +84,6 @@ describe('v3 参数声明与实例契约', () => {
 })
 
 describe('参数采样、动画及持久化', () => {
-  it('渐变、曲线与缓动参数采样', () => {
-    expect(sampleCodeGradient(ramp, -.1)).toEqual([0, 0, 0, 0]); expect(sampleCodeGradient(ramp, 2)).toEqual([1, .5, .2, 1])
-    expect(sampleCodeGradient(ramp, .5)).toEqual([.5, .25, .1, .5])
-    expect(sampleCodeGradient([{ at: .5, color: [1, 0, 0, 1] }, { at: .5, color: [0, 0, 1, 1] }], .5)).toEqual([0, 0, 1, 1])
-    expect(sampleCodeCurve(curve, .75)).toBe(.625); expect(sampleCodeCurve(curve, -1)).toBe(0); expect(sampleCodeCurve(curve, 2)).toBe(1)
-    expect(easeCodeParameter('quadIn', .5)).toBe(.25); expect(easeCodeParameter([1 / 3, 0, 2 / 3, 1], .5)).toBeCloseTo(.5, 6)
-    expect(() => sampleCodeCurve([{ x: 0, y: 0 }, { x: 0, y: 1 }], .5)).toThrow('首尾')
-  })
   it('分量插值：点/区间/grade/角度/结构；离散字段hold，源时间和ease共享原时钟', () => {
     const types = { component: { title: '组件', layout: 'stack', fields: { point: basic.point, grade: basic.grade, color: basic.color, range: basic.range, angle: basic.angle, label: basic.text, seed: basic.seed } } }
     const program = testCodeMetadata(declaration({ p: { ...basic.point, animatable: true }, r: { ...basic.range, animatable: true }, a: { ...basic.angle, animatable: true }, g: { ...basic.grade, animatable: true }, light: { type: 'component', title: '组件', default: {}, animatable: true } }, 'return [];', types))

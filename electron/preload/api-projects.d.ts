@@ -1,13 +1,9 @@
 import type {
   CameraStageRenderEvent,
-  CameraStageRenderOutputKind,
   CameraStageRenderRequest,
   CameraStageRenderWorkerJob,
-  CameraStageRenderResolutionPreset,
-  CameraStageRenderResult,
   CameraStageRenderTaskScope,
   CameraStageRenderTaskSnapshot,
-  CameraStageRenderTaskStatus,
 } from '../../src/platform/contracts/cameraStageRender'
 
 export interface HenjiWindowStatePayload {
@@ -101,13 +97,9 @@ export interface HenjiCanvasTestFixtureCreateRequest {
   replace?: boolean
 }
 
-export type HenjiCameraStageRenderResolutionPreset = CameraStageRenderResolutionPreset
-export type HenjiCameraStageRenderOutputKind = CameraStageRenderOutputKind
 export type HenjiCameraStageRenderRequest = CameraStageRenderRequest
 export type HenjiCameraStageRenderWorkerJob = CameraStageRenderWorkerJob
-export type HenjiCameraStageRenderResult = CameraStageRenderResult
 export type HenjiCameraStageRenderEvent = CameraStageRenderEvent
-export type HenjiCameraStageRenderTaskStatus = CameraStageRenderTaskStatus
 export type HenjiCameraStageRenderTaskScope = CameraStageRenderTaskScope
 export type HenjiCameraStageRenderTaskSnapshot = CameraStageRenderTaskSnapshot
 

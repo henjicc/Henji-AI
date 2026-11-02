@@ -21,5 +21,3 @@ export function setVideoEditSafeMarginsVisible(next: boolean): void {
   publishVideoEdit()
 }
 
-/** 仅测试：清掉内存里的偏好，下次从本机存储重新读取。 */
-export function resetVideoEditSafeMarginsCache(): void { visible = undefined }

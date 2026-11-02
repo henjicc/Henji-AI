@@ -68,11 +68,6 @@ export interface ValueCodec<T> {
   encode(value: T): JsonValue
 }
 
-export const stringCodec: ValueCodec<string> = {
-  value: { kind: 'string', maxLength: 500 },
-  parse: (raw) => z.string().parse(raw),
-  encode: (value) => value,
-}
 /** 各实体的 `name` 字段专用：最短 1 位、最长受调用方传入的上限约束（通常是 `CAMERA_STAGE_NAME_MAX_LENGTH`）。 */
 export function nameCodec(maxLength: number): ValueCodec<string> {
   return { value: { kind: 'string', minLength: 1, maxLength }, parse: (raw) => z.string().parse(raw), encode: (value) => value }
@@ -110,9 +105,6 @@ export function numberCodec(hardRange?: { min?: number; max?: number }, softRang
     parse: (raw) => z.number().parse(raw),
     encode: (value) => value,
   }
-}
-export function integerCodec(hardRange?: { min?: number; max?: number }): ValueCodec<number> {
-  return { value: { kind: 'integer', ...(hardRange ? { hardRange } : {}) }, parse: (raw) => z.number().parse(raw), encode: (value) => value }
 }
 export function enumCodec<T extends string>(values: readonly T[], labels: Record<T, string>): ValueCodec<T> {
   return {

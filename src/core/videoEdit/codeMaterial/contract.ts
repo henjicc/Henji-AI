@@ -15,7 +15,6 @@ export type CodePaint = CodeColor | CodeGradient
 export type CodeMatrix = [number, number, number, number, number, number]
 export interface CodeTextLayout { width: number; height: number; lines: string[]; lineWidths?: number[]; baselineOffset?: number; fontSize: number; font: string; fontGeneration?: number; missingFont?: string; glyphs: { text: string; x: number; y: number; width: number }[] }
 export interface CodeTextMeasureRequest { text: string; fontFamily: string; fontWeight: number; fontStyle: string; fontSize: number; letterSpacing: number; lineHeight: number; maxWidth: number; wrap: boolean; maxLines: number }
-export type CodeTextMeasurer = (request: CodeTextMeasureRequest) => CodeTextLayout
 export interface CodeDrawMetadata {
   /** Host-only evaluated correction; never accepted by the author language. */
   elementTransform?: CodeMatrix; authorAnchor?: boolean; authorElementId?: string

@@ -43,21 +43,6 @@ export function parseRatio(value: string): { width: number; height: number } | n
   return { width, height }
 }
 
-export function getRatioBoxSize(ratio: { width: number; height: number }): { width: number; height: number } {
-  const max = 28
-  const scale = Math.min(max / ratio.width, max / ratio.height)
-  return {
-    width: Math.max(8, Math.round(ratio.width * scale)),
-    height: Math.max(8, Math.round(ratio.height * scale)),
-  }
-}
-
-export function getResolutionGridColumns(optionCount: number): string {
-  if (optionCount <= 2) return 'grid-cols-2'
-  if (optionCount <= 3) return 'grid-cols-3'
-  return 'grid-cols-4'
-}
-
 function parseDimensionText(text: string): { width: number; height: number } | null {
   const match = text.trim().match(/^(\d+)\s*[x*]\s*(\d+)$/i)
   if (!match) {

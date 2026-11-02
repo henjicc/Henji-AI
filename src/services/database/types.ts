@@ -6,18 +6,14 @@
  */
 
 import type {
-  GenerationHistoryMediaType,
   GenerationHistoryQuery,
   GenerationHistoryRecordDto,
-  GenerationHistoryStatus,
   PresetQuery,
   PresetRecordDto,
   SettingValueType,
 } from '@/core/localRecords/types'
 
 // ==================== 历史记录类型 ====================
-
-export type HistoryStatus = GenerationHistoryStatus
 
 export interface HistoryRecord extends Omit<GenerationHistoryRecordDto, 'params'> {
   params: DynamicValueMap
@@ -54,7 +50,6 @@ export interface CustomModelRecord {
 
 export type HistoryQueryOptions = GenerationHistoryQuery
 export type PresetQueryOptions = PresetQuery
-export type HistoryMediaType = GenerationHistoryMediaType
 
 // ==================== 数据库服务接口 ====================
 

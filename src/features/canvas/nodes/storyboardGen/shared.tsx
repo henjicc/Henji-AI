@@ -1,20 +1,8 @@
 import { Minus, Plus } from 'lucide-react'
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
-import { AUTO_REQUEST_ASPECT_RATIO } from '@/features/canvas/domain/canvasNodes'
-import { parseAspectRatio } from '@/features/canvas/application/imageData'
 import { useTranslation } from 'react-i18next'
 import { UiIconButton } from '@/components/ui'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
-
-export interface AspectRatioChoice {
-  value: string
-  label: string
-}
-
-export const AUTO_ASPECT_RATIO_OPTION: AspectRatioChoice = {
-  value: AUTO_REQUEST_ASPECT_RATIO,
-  label: '自动',
-}
 
 const IMAGE_REFERENCE_MARKER_REGEX = /@(?:图片|图)(\d+)/g
 
@@ -154,45 +142,6 @@ export function buildFrameDescriptionDrafts(
     drafts[frame.id] = frame.description
   }
   return drafts
-}
-
-export function areFrameDescriptionDraftsEqual(
-  left: Record<string, string>,
-  right: Record<string, string>
-): boolean {
-  const leftEntries = Object.entries(left)
-  const rightEntries = Object.entries(right)
-  if (leftEntries.length !== rightEntries.length) {
-    return false
-  }
-
-  for (const [key, value] of leftEntries) {
-    if (right[key] !== value) {
-      return false
-    }
-  }
-
-  return true
-}
-
-export function pickClosestAspectRatio(
-  targetRatio: number,
-  supportedAspectRatios: string[]
-): string {
-  const supported = supportedAspectRatios.length > 0 ? supportedAspectRatios : ['1:1']
-  let bestValue = supported[0]
-  let bestDistance = Number.POSITIVE_INFINITY
-
-  for (const aspectRatio of supported) {
-    const ratio = parseAspectRatio(aspectRatio)
-    const distance = Math.abs(Math.log(ratio / targetRatio))
-    if (distance < bestDistance) {
-      bestDistance = distance
-      bestValue = aspectRatio
-    }
-  }
-
-  return bestValue
 }
 
 export function generateFrameId(): string {

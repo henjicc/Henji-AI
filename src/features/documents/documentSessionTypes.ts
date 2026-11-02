@@ -128,11 +128,6 @@ export type DocumentLeaveChoice = 'save' | 'discard' | 'cancel'
  */
 export type DocumentLeaveOutcome = 'closed' | 'saved' | 'discarded' | 'cancelled'
 
-export interface DocumentLeavePromptInfo {
-  subject: 'document' | 'project'
-  name: string
-}
-
 export interface DocumentSaveNamePromptInfo {
   subject: NameCheckSubject
   /** 预填的名称（草稿的自动名）。 */
@@ -143,10 +138,6 @@ export interface DocumentSaveNamePromptInfo {
   check(name: string, folder: string | null): Promise<NameCheckResult>
   /** 真正保存（起名并转正）；失败时抛错，对话框显示原因并保持打开。 */
   submit(name: string, folder: string | null): Promise<void>
-}
-
-export interface DocumentConflictPromptInfo {
-  name: string
 }
 
 /** 会话需要用户决定时的提示接口；正式运行由 DocumentSessionDialogs 渲染，测试换成替身。 */

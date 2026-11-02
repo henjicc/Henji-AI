@@ -59,7 +59,3 @@ export interface ToastNotification {
   type: 'success' | 'error'
 }
 
-export interface ProgressStatusLike {
-  progress?: number
-  message?: string
-}

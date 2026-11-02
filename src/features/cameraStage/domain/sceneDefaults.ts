@@ -27,8 +27,6 @@ export const PRIMITIVE_KIND_LABELS: Record<StagePrimitiveKind, string> = {
   torus: '环状体',
 }
 
-export const PRIMITIVE_KINDS: StagePrimitiveKind[] = ['box', 'sphere', 'cylinder', 'cone', 'pyramid', 'torus']
-
 /** 摄像机画幅比例预设表：ratio 为 null 表示"自定义"，由用户手动输入宽高再算 */
 export const CAMERA_ASPECT_RATIO_PRESETS: Array<{
   value: StageCameraAspectRatioPreset

@@ -1,7 +1,6 @@
 import type {
   ImageEditWorkerCapabilities,
   ImageEditWorkerInitializationFailure,
-  ImageEditWorkerSource,
 } from './protocol'
 
 const BUFFER_COPY_DST = 0x08
@@ -94,21 +93,6 @@ export function getWebGpuContext(canvas: OffscreenCanvas): GpuCanvasContext {
   ).getContext('webgpu')
   if (!context) throw new Error('OffscreenCanvas WebGPU context 不可用')
   return context
-}
-
-export async function decodeSource(
-  source: ImageEditWorkerSource
-): Promise<ImageBitmap> {
-  try {
-    const blob = source.kind === 'blob'
-      ? source.blob
-      : await fetchSourceBlob(source.url)
-    return await createImageBitmap(blob)
-  } catch (error) {
-    throw new Error(
-      `图片解码失败：${error instanceof Error ? error.message : String(error)}`
-    )
-  }
 }
 
 export function createViewportBuffer(
@@ -226,22 +210,3 @@ export function assertNotCancelled(isCancelled: () => boolean): void {
   }
 }
 
-/**
- * fetch 对 `file://` 与 `D:\...` 裸路径一律只抛 "Failed to fetch"，不带任何定位信息。
- * 这里提前识别并把修复方式写进错误里，避免下次又要从零排查。
- */
-function assertFetchableUrl(url: string): void {
-  const unsupported = /^file:\/\//i.test(url) || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(url)
-  if (!unsupported) return
-  throw new Error(
-    `图片解码失败：Worker 无法 fetch 本地路径或 file:// URL（${url.slice(0, 60)}）。`
-      + '调用方需先用 toFetchableMediaUrl() 转成 henji-media:// 再传入 Worker。'
-  )
-}
-
-async function fetchSourceBlob(url: string): Promise<Blob> {
-  assertFetchableUrl(url)
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`图片请求失败（${response.status}）`)
-  return await response.blob()
-}

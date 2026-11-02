@@ -86,10 +86,6 @@ export function openAssistant(goal?: string, options?: AssistantGoalOptions): vo
   if (goal?.trim()) state.setPendingGoal(goal.trim(), options)
 }
 
-export function closeAssistant(): void {
-  useAssistantUiStore.getState().setOpen(false)
-}
-
 export function toggleAssistant(): void {
   useAssistantUiStore.getState().toggleOpen()
 }

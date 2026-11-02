@@ -41,66 +41,6 @@ function drawPosterDataUrl(video: HTMLVideoElement): string | null {
   return canvas.toDataURL('image/jpeg', 0.85);
 }
 
-const ASPECT_RATIO_PROBE_TIMEOUT_MS = 5_000;
-
-/**
- * 只读取视频元数据（宽高），不等待帧抓取，用于上传时尽快拿到宽高比让节点立即重新适配。
- * 比 captureVideoPoster 快得多：不需要 seek 到具体帧再绘制 canvas。
- * 有主进程可用时优先走 ffprobe（无需加载整段视频），失败（如 blob: URL 主进程无法解析）时回退 HTML5 探测。
- */
-export async function detectVideoAspectRatioFromSource(videoSource: string): Promise<string> {
-  if (window.henjiNative) {
-    try {
-      const info = await window.henjiNative.video.readVideoInfo(videoSource);
-      return reduceAspectRatio(info.width, info.height);
-    } catch {
-      // 主进程无法解析该来源（如尚未落盘的 blob: URL），走下面的渲染层后备逻辑
-    }
-  }
-  return detectVideoAspectRatioFallback(videoSource);
-}
-
-function detectVideoAspectRatioFallback(videoSource: string): Promise<string> {
-  const displayUrl = resolveImageDisplayUrl(videoSource);
-
-  return new Promise<string>((resolve, reject) => {
-    const video = document.createElement('video');
-    video.muted = true;
-    video.preload = 'metadata';
-
-    let settled = false;
-    const cleanup = () => {
-      window.clearTimeout(timeoutId);
-      video.removeAttribute('src');
-      video.load();
-    };
-
-    const timeoutId = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new Error('视频宽高探测超时'));
-    }, ASPECT_RATIO_PROBE_TIMEOUT_MS);
-
-    video.onloadedmetadata = () => {
-      if (settled) return;
-      settled = true;
-      const ratio = video.videoWidth && video.videoHeight
-        ? reduceAspectRatio(video.videoWidth, video.videoHeight)
-        : '16:9';
-      cleanup();
-      resolve(ratio);
-    };
-    video.onerror = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new Error('视频宽高探测失败'));
-    };
-    video.src = displayUrl;
-  });
-}
-
 /**
  * 抓取视频首帧作为 poster 并落盘，同时返回宽高比与时长。
  * 有主进程可用时优先并行调用 ffprobe（宽高/时长）+ ffmpeg（首帧截图），失败时回退渲染层 HTML5 Video。

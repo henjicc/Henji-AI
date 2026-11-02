@@ -1,22 +1,11 @@
 import { findCanvasProjectInstance, getCanvasProjectInstance } from './canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
-import { canvasFromDocumentContent, canvasToDocumentContent, canvasHistoryFromSessionState, DEFAULT_CANVAS_VIEWPORT, type Project, type ProjectSummary } from './canvasDocumentContent'
+import { canvasFromDocumentContent, canvasToDocumentContent, canvasHistoryFromSessionState, DEFAULT_CANVAS_VIEWPORT, type Project } from './canvasDocumentContent'
 import { canvasDocumentCommands } from './canvasDocumentEnvironment'
-import { listCanvasDocumentSummaries } from './canvasProjectService'
 
 import { extractCanvasNodeData, parseTrustedMediaNodeData } from '../domain/nodeControlRegistry'
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
-
-function projectSummary(project: ProjectSummary): Record<string, unknown> {
-  return {
-    id: project.id,
-    name: project.name,
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-    nodeCount: project.nodeCount,
-  }
-}
 
 function safeNodeData(node: CanvasNode, overview: boolean): Record<string, unknown> {
   let parsed: Record<string, unknown> = {}
@@ -63,10 +52,6 @@ function edgeSummary(edge: CanvasEdge): Record<string, unknown> {
     sourceHandle: edge.sourceHandle ?? 'source',
     targetHandle: edge.targetHandle ?? 'target',
   }
-}
-
-export async function listCanvasProjectSummaries(): Promise<Record<string, unknown>[]> {
-  return (await listCanvasDocumentSummaries()).map(projectSummary)
 }
 
 export async function readCanvasProjectSnapshot(projectId: string): Promise<Project> {

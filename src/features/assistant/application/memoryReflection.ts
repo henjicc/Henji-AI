@@ -136,8 +136,6 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
   async compensate(_step: Step, result: ApplicationCompletedStepResult) { return result.undoToken ? (await this.undo(result.undoToken)).evidence : [] }
 }
 
-export { rootRef as MEMORY_ROOT_REF }
-
 const rootFields: ApplicationFieldDefinition<MemorySnapshot, MemorySnapshot>[] = (['enabled', 'autoOrganize', 'history'] as const).map(key => {
   const writable = key !== 'history', id = `${rootRef.kind}.${key === 'autoOrganize' ? 'auto_organize' : key}`
   return { propertyId: id, storeActions: [], descriptor: { id, entityType: rootRef.kind, version: 1, title: { enabled: '使用与更新记忆', autoOrganize: '自动整理', history: '修改历史' }[key],

@@ -12,7 +12,6 @@ import { MUSIC_TIMBRE_DIMS, type MusicAnalysis } from './musicAnalysis'
  */
 
 export type MusicRemixGranularity = 'beat' | 'bar' | 'phrase'
-export const MUSIC_REMIX_GRANULARITIES: readonly MusicRemixGranularity[] = ['beat', 'bar', 'phrase']
 
 export interface MusicRemixRequest {
   analysis: MusicAnalysis

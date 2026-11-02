@@ -42,7 +42,6 @@ export interface ShaderComponent {
   props: readonly ShaderComponentProp[]
 }
 
-export const SHADER_COMPONENTS_VERSION: string = catalog.version
 const ALL = catalog.components as readonly ShaderComponent[]
 /** 剪辑可用的组件（排除跟随鼠标、依赖网页或上一帧状态的组件）。 */
 export const SHADER_COMPONENTS: readonly ShaderComponent[] = ALL.filter(value => !value.excluded && !value.usesPointer)

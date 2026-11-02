@@ -142,10 +142,6 @@ export function resolveSettingsSurfaceId(
   return (bySection ?? byTab)?.id ?? null
 }
 
-export function resolveSurfaceForRefKind(refKind: string): ApplicationSurfaceDefinition | null {
-  return APPLICATION_SURFACE_DEFINITIONS.find((surface) => surface.acceptedRefKinds.includes(refKind)) ?? null
-}
-
 export function decideSurfacePresentation(input: {
   surfaceId: string
   hasStableTarget: boolean

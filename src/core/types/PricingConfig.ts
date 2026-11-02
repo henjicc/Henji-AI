@@ -15,9 +15,6 @@ import type { RuntimePricingMediaContextRequirement } from '@henjicc/ai-sdk'
  */
 export type Currency = '¥' | '$' | '€' | '£' | '魔粒'
 
-/** 非货币计价单位，不参与汇率换算 */
-export const NON_MONETARY_CURRENCIES: readonly Currency[] = ['魔粒']
-
 export function isNonMonetaryCurrency(currency?: string): boolean {
   return currency === '魔粒'
 }

@@ -2,29 +2,19 @@ import type { Node } from '@xyflow/react';
 
 import {
   CANVAS_NODE_TYPES,
-  VALUE_SOURCE_NODE_TYPES,
-  type CanvasNodeType,
 } from './canvasNodeConstants';
 import type {
   AssetGroupNodeData,
   AudioMediaNodeData,
   CameraStageNodeData,
-  ElementEditGenerationNodeData,
   ExportImageNodeData,
   GroupNodeData,
   ImageEditNodeData,
-  LayerSeparationGenerationNodeData,
   LayerStackResultNodeData,
-  MultiAngleGenerationNodeData,
-  PanoramaGenerationNodeData,
-  PanoramaViewerNodeData,
   StoryboardGenNodeData,
   StoryboardSplitNodeData,
   TextAnnotationNodeData,
-  TextProcessingNodeData,
-  UniversalUploadNodeData,
   UploadImageNodeData,
-  UpscaleGenerationNodeData,
   VideoMediaNodeData,
 } from './canvasNodeData';
 import type { CanvasNode } from './canvasNodes';
@@ -42,36 +32,6 @@ export function isImageEditNode(
   return node?.type === CANVAS_NODE_TYPES.imageEdit;
 }
 
-export function isPanoramaGenerationNode(
-  node: CanvasNode | null | undefined
-): node is Node<PanoramaGenerationNodeData, typeof CANVAS_NODE_TYPES.panoramaGen> {
-  return node?.type === CANVAS_NODE_TYPES.panoramaGen;
-}
-
-export function isPanoramaViewerNode(
-  node: CanvasNode | null | undefined
-): node is Node<PanoramaViewerNodeData, typeof CANVAS_NODE_TYPES.panoramaViewer> {
-  return node?.type === CANVAS_NODE_TYPES.panoramaViewer;
-}
-
-export function isUpscaleGenerationNode(
-  node: CanvasNode | null | undefined
-): node is Node<UpscaleGenerationNodeData, typeof CANVAS_NODE_TYPES.upscaleGen> {
-  return node?.type === CANVAS_NODE_TYPES.upscaleGen;
-}
-
-export function isElementEditGenerationNode(
-  node: CanvasNode | null | undefined
-): node is Node<ElementEditGenerationNodeData, typeof CANVAS_NODE_TYPES.elementEditGen> {
-  return node?.type === CANVAS_NODE_TYPES.elementEditGen;
-}
-
-export function isLayerSeparationGenerationNode(
-  node: CanvasNode | null | undefined
-): node is Node<LayerSeparationGenerationNodeData, typeof CANVAS_NODE_TYPES.layerSeparationGen> {
-  return node?.type === CANVAS_NODE_TYPES.layerSeparationGen;
-}
-
 export function isLayerStackResultNode(
   node: CanvasNode | null | undefined
 ): node is Node<LayerStackResultNodeData, typeof CANVAS_NODE_TYPES.layerStackResult> {
@@ -82,12 +42,6 @@ export function isEditableLayerStackResultNode(
   node: CanvasNode | null | undefined
 ): node is Node<LayerStackResultNodeData, typeof CANVAS_NODE_TYPES.layerStackResult> {
   return isLayerStackResultNode(node) && isEditableMultiLayerDocumentNode(node.data);
-}
-
-export function isMultiAngleGenerationNode(
-  node: CanvasNode | null | undefined
-): node is Node<MultiAngleGenerationNodeData, typeof CANVAS_NODE_TYPES.multiAngleGen> {
-  return node?.type === CANVAS_NODE_TYPES.multiAngleGen;
 }
 
 export function isExportImageNode(
@@ -112,18 +66,6 @@ export function isTextAnnotationNode(
   node: CanvasNode | null | undefined
 ): node is Node<TextAnnotationNodeData, typeof CANVAS_NODE_TYPES.textAnnotation> {
   return node?.type === CANVAS_NODE_TYPES.textAnnotation;
-}
-
-export function isUniversalUploadNode(
-  node: CanvasNode | null | undefined
-): node is Node<UniversalUploadNodeData, typeof CANVAS_NODE_TYPES.universalUpload> {
-  return node?.type === CANVAS_NODE_TYPES.universalUpload;
-}
-
-export function isTextProcessingNode(
-  node: CanvasNode | null | undefined
-): node is Node<TextProcessingNodeData, typeof CANVAS_NODE_TYPES.textProcessing> {
-  return node?.type === CANVAS_NODE_TYPES.textProcessing;
 }
 
 export function isStoryboardSplitNode(
@@ -156,26 +98,3 @@ export function isCameraStageNode(
   return node?.type === CANVAS_NODE_TYPES.cameraStage;
 }
 
-export function isValueSourceNodeType(type: CanvasNodeType | string | undefined | null): boolean {
-  return (VALUE_SOURCE_NODE_TYPES as readonly string[]).includes(type as string);
-}
-
-export function nodeHasImage(node: CanvasNode | null | undefined): boolean {
-  if (!node) {
-    return false;
-  }
-
-  if (isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node)) {
-    return Boolean(node.data.imageUrl);
-  }
-
-  if (isStoryboardSplitNode(node)) {
-    return node.data.frames.some((frame) => Boolean(frame.imageUrl));
-  }
-
-  if (isStoryboardGenNode(node)) {
-    return Boolean(node.data.imageUrl);
-  }
-
-  return false;
-}

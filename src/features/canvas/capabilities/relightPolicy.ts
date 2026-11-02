@@ -327,10 +327,3 @@ export function prepareRelightGenerationInput(
   }
 }
 
-export function summarizeRelightSettings(settingsValue: unknown): string {
-  const settings = normalizeRelightSettings(settingsValue)
-  if (settings.lightingMode === 'smart') {
-    return `智能 · ${settings.smart.preset}${settings.smart.lightingReferenceImages.length ? ' · 参考光感' : ''}`
-  }
-  return `手动 · ${settings.manual.keyDirection} · 亮度 ${settings.manual.brightness > 0 ? '+' : ''}${settings.manual.brightness} · ${settings.manual.colorPreset}`
-}

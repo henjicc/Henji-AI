@@ -1,6 +1,5 @@
 import type { CanvasGenerationOutputBatchContractV1 } from '../domain/generationOutputs'
 
-export const MULTI_ANGLE_CONTRACT_VERSION = 1 as const
 export const MULTI_ANGLE_BATCH_VERSION = 1 as const
 export const MULTI_ANGLE_CONCURRENCY = 2 as const
 export const MULTI_ANGLE_DEFAULT_VIEW_COUNT = 1 as const

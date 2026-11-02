@@ -1,10 +1,8 @@
 import { createLogger } from '@/core/logging';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useProjectStore } from '@/stores/projectStore';
 import {
   isCanvasSpecialEditorKey,
   useCanvasSpecialEditorController,
-  type CanvasSpecialEditorCancelResult,
   type CanvasSpecialEditorKey,
 } from './specialEditorController';
 import { CanvasApplicationError, requireCurrentCanvasProject } from './canvasApplicationService';
@@ -76,16 +74,3 @@ export async function commitCanvasSpecialEditor(sessionId: string): Promise<void
   }
 }
 
-export function cancelCanvasSpecialEditor(): CanvasSpecialEditorCancelResult {
-  return useCanvasSpecialEditorController.getState().requestCancel();
-}
-
-export function closeCanvasSpecialEditorForInvalidContext(): void {
-  const session = useCanvasSpecialEditorController.getState().session;
-  if (!session) return;
-  const currentProjectId = useProjectStore.getState().currentProjectId;
-  const nodeExists = useCanvasStore.getState().nodes.some((node) => node.id === session.nodeId);
-  if (currentProjectId !== session.projectId || !nodeExists) {
-    useCanvasSpecialEditorController.getState().discard();
-  }
-}

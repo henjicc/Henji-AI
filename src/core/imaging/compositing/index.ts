@@ -12,16 +12,6 @@ export function blendChannel(backdrop: number, source: number, mode: Compositing
   return source;
 }
 
-/** Pre-multiplied source-over or source-atop (clipping preserves base coverage). */
-export function compositePixel(
-  backdrop: ArrayLike<number>, source: ArrayLike<number>, mode: CompositingBlendMode, clipping = false,
-): readonly [number, number, number, number] {
-  const ba = backdrop[3], sa = source[3];
-  const alpha = clipping ? ba : sa + ba * (1 - sa);
-  const rgb = [0, 1, 2].map(channel => compositeChannel(backdrop[channel], source[channel], ba, sa, mode, clipping));
-  return [rgb[0], rgb[1], rgb[2], alpha];
-}
-
 /** Allocation-free channel kernel for tiled/streamed hosts. */
 export function compositeChannel(backdrop: number, source: number, ba: number, sa: number,
   mode: CompositingBlendMode, clipping: boolean): number {

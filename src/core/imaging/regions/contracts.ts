@@ -42,4 +42,3 @@ export interface RegionSnapshot {
   inverted: boolean;
   tiles: ReadonlyMap<string, Coverage>;
 }
-export type RegionEditTarget = { kind: 'pixels'; layerId: string } | { kind: 'mask'; layerId: string; maskId: string };

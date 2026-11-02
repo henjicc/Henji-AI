@@ -1,11 +1,9 @@
 import type {
-  RegistrationFrame,
   RegistrationOptions,
   SimilarityTransform,
 } from "./types";
 import {
   bilinearSample,
-  frameToGray,
   type GrayImage,
   type PointMatch,
 } from "./features";
@@ -73,27 +71,6 @@ export function robustStructuralScore(
     score: Math.max(0, Math.min(1, 1 - robustResidual / 0.24)),
     changedFraction: changed,
   };
-}
-
-/** Score a known transform on a caller-supplied validity mask. This is used
- * to compare ordinary and change-aware registration candidates against the
- * exact same unchanged pixels. */
-export function evaluateRegistrationStructuralScore(
-  referenceFrame: RegistrationFrame,
-  movingFrame: RegistrationFrame,
-  transform: SimilarityTransform,
-): { score: number; changedFraction: number } {
-  if (
-    referenceFrame.width !== movingFrame.width ||
-    referenceFrame.height !== movingFrame.height
-  ) {
-    return { score: 0, changedFraction: 1 };
-  }
-  return robustStructuralScore(
-    frameToGray(referenceFrame),
-    frameToGray(movingFrame),
-    transform,
-  );
 }
 
 export interface LocalAnchorEvidence {

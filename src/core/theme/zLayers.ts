@@ -28,4 +28,3 @@ export const Z_LAYERS = {
   titlebar: 100,
 } as const;
 
-export type ZLayerName = keyof typeof Z_LAYERS;

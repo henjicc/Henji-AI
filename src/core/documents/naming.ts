@@ -1,4 +1,4 @@
-import type { EntryNameInvalidReason, FolderLocale } from './types'
+import type { EntryNameInvalidReason } from './types'
 
 /*
  * 项目与文档的名称规则（实施方案 2.8 同名检测，重要记录 015）。
@@ -55,11 +55,6 @@ export function sameEntryName(left: string, right: string): boolean {
   return entryNameKey(left) === entryNameKey(right)
 }
 
-/** 文件名：名称 + 扩展名（扩展名含点）。 */
-export function documentFileName(name: string, extension: string): string {
-  return `${name}${extension}`
-}
-
 /** 文件名的扩展名与给定扩展名一致（不分大小写）时返回名称部分，否则 null。 */
 export function documentNameFromFileName(fileName: string, extension: string): string | null {
   if (fileName.length <= extension.length) return null
@@ -90,5 +85,3 @@ export function keepBothEntryName(name: string, isTaken: (name: string) => boole
   throw new Error('同名文件过多，请先整理文件夹。')
 }
 
-/** 按语言取自动名前缀等成对名称。 */
-export type LocalizedNames = Readonly<Record<FolderLocale, string>>

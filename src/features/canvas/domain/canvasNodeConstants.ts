@@ -33,18 +33,9 @@ export const CANVAS_NODE_TYPES = {
   cameraStage: 'cameraStageNode',
 } as const;
 
-/** 数值/源节点类型集合（单一类型化输出，喂下游参数端口） */
-export const VALUE_SOURCE_NODE_TYPES = [
-  'intSourceNode',
-  'floatSourceNode',
-  'stringSourceNode',
-  'booleanSourceNode',
-] as const;
-
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[keyof typeof CANVAS_NODE_TYPES];
 
 export const DEFAULT_ASPECT_RATIO = '1:1';
-export const AUTO_REQUEST_ASPECT_RATIO = 'auto';
 export const DEFAULT_NODE_WIDTH = 220;
 export const EXPORT_RESULT_NODE_DEFAULT_WIDTH = 384;
 export const EXPORT_RESULT_NODE_LAYOUT_HEIGHT = 288;
@@ -67,13 +58,5 @@ export const MODEL_SELECTOR_EXPANDED_MAX_WIDTH = 520;
 export const MODEL_SELECTOR_EXPANDED_MAX_HEIGHT = 640;
 
 export const IMAGE_SIZES = ['0.5K', '1K', '2K', '4K'] as const;
-export const IMAGE_ASPECT_RATIOS = [
-  '1:1',
-  '16:9',
-  '9:16',
-  '4:3',
-  '3:4',
-  '21:9',
-] as const;
 
 export type ImageSize = (typeof IMAGE_SIZES)[number];

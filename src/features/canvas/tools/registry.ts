@@ -36,6 +36,3 @@ export function getNodeToolPlugins(node: CanvasNode): CanvasToolPlugin[] {
   return [...toolRegistry.values()].filter((plugin) => plugin.supportsNode(node));
 }
 
-export function getRegisteredToolPlugins(): CanvasToolPlugin[] {
-  return [...toolRegistry.values()];
-}

@@ -102,44 +102,6 @@ async function generateVideoThumbnailFallback(
 }
 
 /**
- * 提取视频元数据
- * @param videoFile 视频文件
- * @returns 视频元数据
- */
-export async function getVideoMetadata(videoFile: File): Promise<VideoMetadata> {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video')
-    video.preload = 'metadata'
-    video.muted = true
-
-    const objectUrl = URL.createObjectURL(videoFile)
-    video.src = objectUrl
-
-    video.addEventListener('loadedmetadata', () => {
-      const metadata: VideoMetadata = {
-        duration: video.duration,
-        width: video.videoWidth,
-        height: video.videoHeight,
-        aspectRatio: video.videoWidth / video.videoHeight,
-        fileSize: videoFile.size
-      }
-
-      // 清理资源
-      URL.revokeObjectURL(objectUrl)
-      video.remove()
-
-      resolve(metadata)
-    })
-
-    video.addEventListener('error', (e) => {
-      URL.revokeObjectURL(objectUrl)
-      video.remove()
-      reject(new Error(`无法读取视频元数据: ${e}`))
-    })
-  })
-}
-
-/**
  * 视频校验约束（按模型 inputLimits.videoConstraints 驱动，所有字段均为可选——
  * 不声明即不校验，不套用任何隐含默认值）
  */
@@ -214,21 +176,3 @@ export function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-/**
- * 检查文件是否为支持的视频格式
- * @param file 文件对象
- * @returns 是否为支持的格式
- */
-export function isSupportedVideoFormat(file: File): boolean {
-  const supportedTypes = ['video/mp4', 'video/quicktime']  // mp4 和 mov
-  const supportedExtensions = ['.mp4', '.mov']
-
-  // 检查 MIME 类型
-  if (supportedTypes.includes(file.type)) {
-    return true
-  }
-
-  // 检查文件扩展名（作为后备）
-  const fileName = file.name.toLowerCase()
-  return supportedExtensions.some(ext => fileName.endsWith(ext))
-}

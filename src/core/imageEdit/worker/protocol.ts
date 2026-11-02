@@ -1,7 +1,3 @@
-export type ImageEditWorkerSource =
-  | { kind: 'url'; url: string }
-  | { kind: 'blob'; blob: Blob }
-
 export type ImageEditExportFormat = 'image/png' | 'image/jpeg' | 'image/webp'
 
 /**

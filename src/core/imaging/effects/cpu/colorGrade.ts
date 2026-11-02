@@ -1,6 +1,6 @@
 import type { CubeLut } from '../../lut/cube'
 import { colorGradeLinear, colorGradeSrgb } from '../../adjustments/colorGrade'
-import { planColorGrade, type AdjustmentPass, type AdjustmentPlan } from '../../adjustments/plan'
+import { type AdjustmentPass, type AdjustmentPlan } from '../../adjustments/plan'
 import { gradeStageA, gradeStageB } from '../../adjustments/unifiedGrade'
 
 type Rgb = [number, number, number]
@@ -112,7 +112,4 @@ export function executeColorGradeCpuPlan(plan: AdjustmentPlan, input: Adjustment
     outputs.set(pass.target, { width, height, data, ...(coordinates ? { fullWidth, fullHeight, origin } : {}) })
   }
   return outputs.get('output')!
-}
-export function applyColorGradeCpu(input: AdjustmentPixels, params: Readonly<Record<string, unknown>>, luts?: ReadonlyMap<string, CubeLut>, coordinates?: AdjustmentCoordinates): AdjustmentPixels {
-  return executeColorGradeCpuPlan(planColorGrade(params, input.width, input.height, coordinates?.size), input, luts, coordinates)
 }

@@ -15,7 +15,6 @@ import type { LocalModelRunner, LocalTensorInput, LocalTensorOutput } from '../a
 
 export const ETAM_IMAGE_SIZE = 512
 export const ETAM_LOW_RES = 128
-const FEATURE_SIZE = 256 * 32 * 32
 const NUM_MASKMEM = 7
 const MAX_OBJ_PTRS = 16
 /** 记忆库里最多带几个条件帧（官方默认全部；提示很多时只取时间上最近的几个，控制记忆注意力的开销）。 */
@@ -37,8 +36,6 @@ export interface EtamFrameResult {
   score: number
   pointer: Float32Array
 }
-/** 记忆库里一帧：记忆特征与目标指针。 */
-export interface EtamMemory { memory: Float32Array; pointer: Float32Array }
 
 /** 模型坐标系的提示：点（像素，0–512）与标签（1 正、0 负、2 框左上、3 框右下）。 */
 export interface EtamPrompt { coords: Array<[number, number]>; labels: number[]; candidate?: number }
@@ -211,4 +208,3 @@ export class EfficientTamSession extends EfficientTamImageSession {
 /** 解码器内部 4 个掩码（单掩码 + 3 个多掩码候选）的张量名：载入时补成图输出（不改模型文件），用来给用户挑候选。 */
 export const ETAM_CANDIDATES_OUTPUT = '/Reshape_7_output_0'
 
-export { FEATURE_SIZE as ETAM_FEATURE_SIZE }

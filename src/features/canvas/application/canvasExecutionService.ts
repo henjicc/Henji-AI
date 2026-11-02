@@ -122,7 +122,6 @@ function getExecutor(nodeId: string, projectId = useProjectStore.getState().curr
     ?? executors.get(activeNodeKey(projectId, nodeId))
     ?? (projectId ? getCanvasDomainExecutor(projectId, nodeId) : undefined)
 }
-function hasExecutor(nodeId: string): boolean { return getExecutor(nodeId) !== undefined }
 
 function getDependencyMode(nodeId: string, projectId = useProjectStore.getState().currentProjectId): CanvasDependencyMode {
   const executor = getExecutor(nodeId, projectId)
@@ -541,9 +540,6 @@ export function runCanvasNode(rootNodeId: string, assertCurrent?: (store?: typeo
 export function isCanvasNodeRunActive(projectId: string, nodeId: string): boolean {
   return activeNodeRuns.has(activeNodeKey(projectId, nodeId))
 }
-
-/** 新节点完成 React 挂载前，调用方可等待正式执行器就绪。 */
-export function isCanvasNodeExecutorReady(nodeId: string): boolean { return hasExecutor(nodeId) }
 
 export function resetCanvasExecutionServiceForTests(): void {
   executors.clear()

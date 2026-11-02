@@ -1,4 +1,4 @@
-import type { Edge, Node, XYPosition } from '@xyflow/react';
+import type { Edge, Node } from '@xyflow/react';
 
 import type { CanvasNodeType } from './canvasNodeConstants';
 import type {
@@ -16,7 +16,6 @@ import type {
   MultiAngleGenerationNodeData,
   PanoramaGenerationNodeData,
   PanoramaViewerNodeData,
-  StoryboardFrameItem,
   StoryboardGenNodeData,
   StoryboardSplitNodeData,
   TextAnnotationNodeData,
@@ -84,19 +83,6 @@ export interface CanvasConnectionInput {
   sourceHandle: string;
   targetHandle: string;
   data?: CanvasEdgeData;
-}
-
-export interface NodeCreationDto {
-  type: CanvasNodeType;
-  position: XYPosition;
-  data?: Partial<CanvasNodeData>;
-}
-
-export interface StoryboardNodeCreationDto {
-  position: XYPosition;
-  rows: number;
-  cols: number;
-  frames: StoryboardFrameItem[];
 }
 
 export const NODE_TOOL_TYPES = {

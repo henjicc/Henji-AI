@@ -2,7 +2,7 @@ import { registerWorkspaceLayout } from '@/services/workspaceLayouts/workspaceLa
 import { parseWorkspaceDockLayout } from '@/core/workspaceLayouts/validation'
 import { Orientation, positionToDirection, type DockviewApi, type DockviewGroupPanel, type IDockviewPanel, type SerializedDockview } from 'dockview-react'
 import { createLogger } from '@/core/logging'
-import { toggleDockGroupMaximized, type DockDropZone } from '@/components/dockviewDocking'
+import { type DockDropZone } from '@/components/dockviewDocking'
 import { workspacePanelConstraints } from '@/core/workspaceLayouts/validation'
 
 const logger = createLogger('features.videoEdit.layout')
@@ -210,10 +210,3 @@ export function addVideoEditPanelAt(api: DockviewApi, id: VideoEditPanelId, zone
   return api.addPanel({ ...base, position: { referenceGroup: zone.group, direction: positionToDirection(zone.position) } })
 }
 
-/**
- * 最大化／还原面板组（PR 的 `` ` `` 键）：最大化指针下的面板组，指针不在面板组上时用当前活动组；
- * 已最大化时还原。供快捷键命令调用，返回是否有变化。
- */
-export function toggleVideoEditGroupMaximized(api: DockviewApi, point?: { clientX: number; clientY: number }): boolean {
-  return toggleDockGroupMaximized(api, point)
-}

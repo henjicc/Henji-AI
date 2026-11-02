@@ -64,4 +64,3 @@ fn toSrgb(c: vec3f) -> vec3f { let x = ${extendedRange ? 'abs(c)' : 'max(c, vec3
 
 `
 }
-export const ADJUSTMENT_PASSES_WGSL = adjustmentPassesWgsl()

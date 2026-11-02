@@ -122,10 +122,6 @@ function migrateFromV2(
   };
 }
 
-export function hasDiffusionEffect(params: DiffusionOperationParams): boolean {
-  return params.strength > 0;
-}
-
 /**
  * v1 → v2 迁移。
  *

@@ -61,9 +61,6 @@ export class SpectralTileStore implements SpectralTileSet {
   }
 }
 
-/** 某层第 c 列拥有的源采样帧区间起点。 */
-export const spectralColumnFrame = (level: number, column: number): number => spectralOrigin(level) + column * spectralHop(level)
-
 export interface SpectralView { startFrame: number; endFrame: number; width: number }
 export interface SpectralDraw {
   level: number; tile: AudioEditSpectralTile

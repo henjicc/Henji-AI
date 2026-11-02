@@ -36,9 +36,6 @@ export const SPECTRAL_TILE_COLUMNS = 1024
 export function spectralLowBins(sampleRate: number): number {
   return Math.floor(SPECTRAL_LOW_BAND_MAX_HZ * SPECTRAL_LONG_WINDOW / sampleRate) + 1
 }
-export function spectralBinsPerColumn(sampleRate: number): number {
-  return spectralLowBins(sampleRate) + SPECTRAL_HIGH_BINS
-}
 export function spectralHop(level: number): number {
   return SPECTRAL_BASE_HOP * 2 ** level
 }

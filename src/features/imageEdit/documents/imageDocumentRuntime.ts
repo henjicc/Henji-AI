@@ -4,8 +4,8 @@ import { isEmptyImageDocumentContent, type ImageDocumentContent } from '@/core/d
 import { createLogger } from '@/core/logging'
 import { dialogDocumentSessionPrompter } from '@/features/documents/documentPromptStore'
 import type { DocumentSession } from '@/features/documents/documentSession'
-import { getDocumentSessionRegistry, parentFolderOf, type DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
-import type { DocumentLeaveOutcome, DocumentSessionPrompter } from '@/features/documents/documentSessionTypes'
+import { getDocumentSessionRegistry, parentFolderOf } from '@/features/documents/documentSessionRegistry'
+import type { DocumentLeaveOutcome } from '@/features/documents/documentSessionTypes'
 import {
   discardImageEditDocumentInstanceV3,
   findImageEditDocumentInstanceV3,
@@ -62,34 +62,6 @@ async function discardInstanceWhenReleased(id: string): Promise<void> {
 }
 
 const handles = new Map<string, Handle>()
-const listeners = new Set<() => void>()
-let registryProvider: () => DocumentSessionRegistry = getDocumentSessionRegistry
-let prompterProvider: () => DocumentSessionPrompter = () => dialogDocumentSessionPrompter
-
-function emit(): void {
-  for (const listener of [...listeners]) listener()
-}
-
-/** 测试注入会话登记表与提示替身。 */
-export function configureImageDocumentRuntimeForTests(options: {
-  registry?: () => DocumentSessionRegistry
-  prompter?: () => DocumentSessionPrompter
-}): () => void {
-  const previous = { registryProvider, prompterProvider }
-  if (options.registry) registryProvider = options.registry
-  if (options.prompter) prompterProvider = options.prompter
-  return () => {
-    registryProvider = previous.registryProvider
-    prompterProvider = previous.prompterProvider
-    handles.clear()
-  }
-}
-
-export function subscribeOpenImageDocuments(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => { listeners.delete(listener) }
-}
-
 export function findOpenImageDocument(id: string): OpenImageDocument | undefined {
   return handles.get(id)
 }
@@ -157,7 +129,6 @@ function bind(session: DocumentSession, persistence: ImageDocumentPersistence): 
     if (handle?.session === session) {
       handle.detachSession()
       handles.delete(id)
-      emit()
     }
   })
   let shown = false
@@ -206,7 +177,6 @@ function adopt(session: DocumentSession, persistence: ImageDocumentPersistence):
   if (persistence.imported) discardImageEditDocumentInstanceV3(session.id)
   const handle = bind(session, persistence)
   handles.set(session.id, handle)
-  emit()
   return handle
 }
 
@@ -219,7 +189,7 @@ export interface OpenImageDocumentOptions {
 export async function openImageDocument(target: DocumentTarget, options: OpenImageDocumentOptions = {}): Promise<OpenImageDocument> {
   const existing = handles.get(target.id)
   if (existing && !existing.session.isEnded) return existing
-  const registry = registryProvider()
+  const registry = getDocumentSessionRegistry()
   const opened = registry.get(target.id)
   if (opened && !opened.isEnded) throw new Error('这份图片文档已经在别处打开。')
   const persistence = new ImageDocumentPersistence(options.chooseRecovery ? { chooseRecovery: options.chooseRecovery } : {})
@@ -234,7 +204,7 @@ export async function createImageDocument(
   container: DocumentContainerRef = { kind: 'user' },
 ): Promise<OpenImageDocument> {
   const persistence = new ImageDocumentPersistence({ pendingCreate: prepared })
-  const session = await registryProvider().create({ kind: 'image_document', container }, { persistence })
+  const session = await getDocumentSessionRegistry().create({ kind: 'image_document', container }, { persistence })
   logger.info('图片文档草稿已新建', { event: 'image_document.create.completed', context: { documentId: session.id, blank: prepared.emptyUntilRevision !== null } })
   return adopt(session, persistence)
 }
@@ -243,14 +213,14 @@ export async function createImageDocument(
 export async function leaveImageDocument(id: string): Promise<DocumentLeaveOutcome> {
   const handle = handles.get(id)
   if (!handle) return 'closed'
-  const outcome = await registryProvider().leave(id)
+  const outcome = await getDocumentSessionRegistry().leave(id)
   if (outcome !== 'cancelled') handle.setShown(false)
   return outcome
 }
 
 /** 编辑器里的“保存”：草稿先起名（可更改位置），再写回。返回 false 表示取消起名。 */
 export async function saveImageDocument(id: string): Promise<boolean> {
-  return await registryProvider().save(id)
+  return await getDocumentSessionRegistry().save(id)
 }
 
 /**
@@ -267,7 +237,7 @@ export async function saveImageDocumentAs(id: string): Promise<OpenImageDocument
   await handle.session.commit('save')
   let copy: DocumentMeta | null = null
   const sourceFolder = parentFolderOf(meta.path)
-  const saved = await prompterProvider().askSaveName({
+  const saved = await dialogDocumentSessionPrompter.askSaveName({
     subject: { type: 'document', kind: 'image_document' },
     initialName: meta.name,
     defaultFolder: sourceFolder,
@@ -324,7 +294,3 @@ export async function ensureImageDocumentOpenInBackground(documentId: string): P
   await openImageDocument({ id: document.id, path: document.path })
 }
 
-/** 内容是否为空（新建空白图片后没有编辑）。 */
-export function isOpenImageDocumentEmpty(id: string): boolean {
-  return handles.get(id)?.session.isEmpty() ?? false
-}
