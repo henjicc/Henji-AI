@@ -78,22 +78,22 @@
       "minReaderVersion": 1
     },
     "image-package": {
-      "version": 13,
-      "fingerprint": "2e4b45ea9a641983e4196b3ba58f7e56c80b7a00bb93078b110af42902d3d1d8",
+      "version": 14,
+      "fingerprint": "163d7abd39fa95f56cc71ff8b27bad76c1163ff300b6a3d07d17d8a7ce5c7ec2",
       "supportedFrom": 12,
-      "minReaderVersion": 13
+      "minReaderVersion": 14
     },
     "image-working-copy": {
-      "version": 15,
-      "fingerprint": "e23c2500dc1930f2071b863205832a8e3a83c8c290a7e05735b7674dea0c1a01",
+      "version": 16,
+      "fingerprint": "13a496d879b563d8f8c99ab9688159f29edd487dfbe54a11beb98806cddd3644",
       "supportedFrom": 14,
-      "minReaderVersion": 15
+      "minReaderVersion": 16
     },
     "canvas-layer-package": {
-      "version": 13,
-      "fingerprint": "5becf6c4e5f268553322f8ded17b13813c1afa1fd878d914b8c953fe782b7046",
+      "version": 14,
+      "fingerprint": "3d9b43a157b7300e9cb02b7180b188cf9a494263984c86a7a0870a9f10d4e579",
       "supportedFrom": 12,
-      "minReaderVersion": 13
+      "minReaderVersion": 14
     },
     "keystore": {
       "version": 1,

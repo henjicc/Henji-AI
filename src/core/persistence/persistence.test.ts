@@ -607,6 +607,8 @@ describe('所有登记格式的黄金样本', () => {
           const grade = image.layers.find(layer => layer.id === 'golden-shared-grade') as { params: Record<string, unknown> }
           expect(grade.params).toMatchObject({ exposure: .25, shadow_hue: 230, shadow_strength: 12 })
           expect(Object.keys(grade.params).filter(key => key === 'temperature' || key.startsWith('creative_'))).toEqual([])
+          // 工作副本 v16 / 图片包 v14：色相旋转随调整层保存；旧样本没有该参数，按 0 不改变画面。
+          expect(grade.params.hue_shift ?? 0).toBe(version >= (format.id === 'image-package' ? 14 : 16) ? 30 : 0)
         }
       })
     }

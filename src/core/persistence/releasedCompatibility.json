@@ -217,7 +217,8 @@
       "samples": {
         "v1.json": "c08a504d69b6de348ac666cd1eea1b80ad5084e00a4abff3c9ce075f7b2a5c5e",
         "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458",
-        "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd"
+        "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd",
+        "v14.henjiimg": "8102fa104990a08296c4f4cf0897e73e0d0105caff25135f2c75d54364e2daa1"
       }
     },
     "image-package": {
@@ -232,17 +233,21 @@
       ],
       "versions": {
         "12": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
-        "13": "2e4b45ea9a641983e4196b3ba58f7e56c80b7a00bb93078b110af42902d3d1d8"
+        "13": "2e4b45ea9a641983e4196b3ba58f7e56c80b7a00bb93078b110af42902d3d1d8",
+        "14": "163d7abd39fa95f56cc71ff8b27bad76c1163ff300b6a3d07d17d8a7ce5c7ec2"
       },
       "readers": {
         "12": 12,
-        "13": 13
+        "13": 13,
+        "14": 14
       },
       "samples": {
         "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458",
         "v12.json": "e021560e94de3551e311976211fad24a6587fa14be57784dfa50014a68d9a87e",
         "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd",
-        "v13.json": "2fc27bfb9a3b619f6bb1c1fa1be8091cbed863e425d15a0ef6123962f62efbe8"
+        "v13.json": "2fc27bfb9a3b619f6bb1c1fa1be8091cbed863e425d15a0ef6123962f62efbe8",
+        "v14.henjiimg": "8102fa104990a08296c4f4cf0897e73e0d0105caff25135f2c75d54364e2daa1",
+        "v14.json": "6753754927cc3f5347a28a598081ba491f3f6c8ce94d53609ecc83174cda8969"
       }
     },
     "image-working-copy": {
@@ -254,15 +259,18 @@
       ],
       "versions": {
         "14": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
-        "15": "e23c2500dc1930f2071b863205832a8e3a83c8c290a7e05735b7674dea0c1a01"
+        "15": "e23c2500dc1930f2071b863205832a8e3a83c8c290a7e05735b7674dea0c1a01",
+        "16": "13a496d879b563d8f8c99ab9688159f29edd487dfbe54a11beb98806cddd3644"
       },
       "readers": {
         "14": 14,
-        "15": 15
+        "15": 15,
+        "16": 16
       },
       "samples": {
         "v14.json": "6a33ab70b4b88d55a35806d06f2a54cee62c8c025f924c00d4dad775d3706652",
-        "v15.json": "b8c38c751155c1d48c0fa5a2ff705bcf2c39b63fded0fb1bebd94abe5d62e8d2"
+        "v15.json": "b8c38c751155c1d48c0fa5a2ff705bcf2c39b63fded0fb1bebd94abe5d62e8d2",
+        "v16.json": "12f32c00fd26a21b58067cb0c88c9c76adaa0abdbf3b5ca1941792f05708d398"
       }
     },
     "canvas-layer-package": {
@@ -277,17 +285,21 @@
       ],
       "versions": {
         "12": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
-        "13": "5becf6c4e5f268553322f8ded17b13813c1afa1fd878d914b8c953fe782b7046"
+        "13": "5becf6c4e5f268553322f8ded17b13813c1afa1fd878d914b8c953fe782b7046",
+        "14": "3d9b43a157b7300e9cb02b7180b188cf9a494263984c86a7a0870a9f10d4e579"
       },
       "readers": {
         "12": 12,
-        "13": 13
+        "13": 13,
+        "14": 14
       },
       "samples": {
         "v12.henjilayer": "163f530ee8758c95ff0ef6bcc03d77dc52d9ef10d5f74c11ebd3778ab48580ea",
         "v12.json": "053f60257e389cb251659f0ed6f51d0f198eea61c28f77d4bfdfda275b924ab9",
         "v13.henjilayer": "d0aacb61e633da9e6aade40f12d01f16c298d15f63c84b054d798c97e02b78b0",
-        "v13.json": "55d90a53a2c67614b841dfb018255047a0569e20bfb5f20a2b0495e32cdab622"
+        "v13.json": "55d90a53a2c67614b841dfb018255047a0569e20bfb5f20a2b0495e32cdab622",
+        "v14.henjilayer": "6f62b9adfd69938bda8bd3858435832eca3bf3e636d78818918a4c0388ea24d7",
+        "v14.json": "dcb7a17d7ba8533fcf67be9c588eb7456e21d2746ad65f9bf4e38dd688544c1b"
       }
     },
     "keystore": {
@@ -593,7 +605,8 @@
       "samples": {
         "v1.json": "7f5ffe1c148181b45986ede0965a8c395dda6421d1c82ad0dc94f1f87e044472",
         "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458",
-        "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd"
+        "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd",
+        "v14.henjiimg": "8102fa104990a08296c4f4cf0897e73e0d0105caff25135f2c75d54364e2daa1"
       }
     },
     "document.screen_recording": {

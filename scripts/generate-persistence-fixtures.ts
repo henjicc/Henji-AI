@@ -250,7 +250,7 @@ image.layers[0].filters = [{ id: 'golden-local-grade', operationType: 'adjustmen
   params: { stops: .4 }, enabled: true, opacity: .8, blendMode: 'normal', mask: null }]
 image.layers.push(createImageEditAdjustmentLayerV3('golden-shared-grade', '共享调整', 'color_grade', {
   exposure: .25, curve_red_points: [{ x: 0, y: 0 }, { x: 50, y: 60 }, { x: 100, y: 100 }], shadow_hue: 230, shadow_strength: 12, hsl_saturation: -15,
-  temperature_kelvin: 7200, tint: -3, tone_shadows: 10, mixer_blue_luminance: -15, grade_balance: 10, global_luminance: 4,
+  temperature_kelvin: 7200, tint: -3, tone_shadows: 10, mixer_blue_luminance: -15, grade_balance: 10, global_luminance: 4, hue_shift: 30,
 }))
 image.layers.push(createImageEditEffectLayerV3('golden-shared-gaussian', '高斯模糊', 'gaussian_blur', { sigma_fraction_height: .009, axis: 'horizontal', edge_mode: 'transparent' }))
 const annotation = createImageEditPathLayerV3('golden-quick-marks', '快速标记')

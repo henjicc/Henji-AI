@@ -162,9 +162,14 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 17 → 18：接受作者接口 14 的 fill 图层画面来源；保留历史源码、接口与库锁定。
   // 18 → 19：支持空间属性、右边界关键帧或作者接口 15；保留历史内容、源码及固定接口。
   'video-preset-package': { 18: value => ({ ...structuredClone(value) as object, version: 19, minReaderVersion: 19 }), 17: value => ({ ...structuredClone(value) as object, version: 18, minReaderVersion: 18 }),  16: value => ({ ...structuredClone(value) as object, version: 17, minReaderVersion: 17 }), 15: value => ({ ...structuredClone(value) as object, version: 16, minReaderVersion: 16 }), 14: value => ({ ...structuredClone(value) as object, version: 15, minReaderVersion: 15 }), 13: value => ({ ...structuredClone(value) as object, version: 14, minReaderVersion: 14 }), 12: value => ({ ...structuredClone(value) as object, version: 13, minReaderVersion: 13 }), 11: value => migrateAudioEqualizerModes(migrateAudioPresetPackageV11(value)), 10: value => { const pack = structuredClone(value) as { items: { category: string; preset: unknown }[] }; return { ...pack, version: 11, items: pack.items.map(item => item.category === 'effect' ? { ...item, preset: migrateVideoEditStylePiece(item.preset) } : item) } }, 9: value => ({ ...value as object, version: 10 }), 8: value => ({ ...value as object, version: 9 }), 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }), 6: value => ({ ...value as object, version: 7 }), 7: value => ({ ...value as object, version: 8 }) },
-  'image-working-copy': { 14: value => migrateImageWorkingCopyColorGrades(value, 15) },
-  'image-package': { 12: value => ({ ...value as object, packageVersion: 13, document: migrateImageWorkingCopyColorGrades((value as { document?: unknown }).document, 15) }) },
-  'canvas-layer-package': { 12: value => ({ ...value as object, version: 13 }) },
+  // 工作副本 15 → 16、图片包 13 → 14、画布图层包 13 → 14：全能调色新增可选参数 hue_shift（色相旋转），
+  // 缺省 0 不改变画面；旧内容没有该参数，只更新版本戳，其余原样保留。
+  'image-working-copy': { 14: value => migrateImageWorkingCopyColorGrades(value, 15), 15: value => ({ ...structuredClone(value) as object, formatVersion: 16 }) },
+  'image-package': {
+    12: value => ({ ...value as object, packageVersion: 13, document: migrateImageWorkingCopyColorGrades((value as { document?: unknown }).document, 15) }),
+    13: value => { const pack = structuredClone(value) as { document?: unknown }; return { ...pack, packageVersion: 14, ...(pack.document && typeof pack.document === 'object' ? { document: { ...pack.document, formatVersion: 16 } } : {}) } },
+  },
+  'canvas-layer-package': { 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }) },
   // 片段速度曲线、补帧与变调（2026-10-22）：字幕回填记录里的声音片段只新增可选字段。
   // 跟踪与防抖（2026-10-22）、音频重构 remix（2026-10-22）：同上，只新增可选字段。
   // 原生模板实例标记（2026-10-22）：字幕回填记录里的声音片段只新增可选的 templateId。
