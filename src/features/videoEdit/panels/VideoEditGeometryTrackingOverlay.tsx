@@ -4,7 +4,8 @@ import { VIDEO_EDIT_TRACK_METHOD_LABELS, videoEditCornerPinMatrix, invertVideoEd
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { correctVideoEditTracker, editVideoEditTracker, readVideoEditTrackingGeometry, readVideoEditTrackingPlacement } from '../application/videoEditTrackingEdits'
 import { getVideoEditTrackingEditing, setVideoEditTrackingEditing, subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision, type VideoEditTrackingEditing } from '../application/videoEditTrackingEditing'
-import { getActiveVideoEditSequence, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { getActiveVideoEditSequence, subscribeVideoEditDomain, videoEditDomainRevision, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { subscribeVideoEditTracking, videoEditTrackingRevision } from '../application/videoEditTracking'
 import { videoEditClipSourceTimeUs, videoEditClipTrackingQuad } from '../engine/videoEditTrackResults'
 
@@ -14,7 +15,7 @@ interface Drag { index:number; start:Point; points:Point[]; window?:'feature'|'s
 /** Point handles and AE feature/search boxes; planar corners share the same correction transaction. */
 export function VideoEditGeometryTrackingOverlay({instance,onError}:{instance:VideoEditInstance;onError:(error:unknown)=>void}):React.ReactElement|null {
   useSyncExternalStore(subscribeVideoEditDomain,videoEditDomainRevision)
-  useSyncExternalStore(subscribeVideoEditView,videoEditViewRevision)
+  useVideoEditViewSelector(() => [videoEditRevision(), getVideoEditTrackingEditing()?.projectId === instance.document.id ? instance.frame : null, instance.playing], sameVideoEditViewFields)
   useSyncExternalStore(subscribeVideoEditTrackingEditing,videoEditTrackingEditingRevision)
   const revision=useSyncExternalStore(subscribeVideoEditTracking,videoEditTrackingRevision)
   const editing=getVideoEditTrackingEditing();const sequence=getActiveVideoEditSequence(instance)

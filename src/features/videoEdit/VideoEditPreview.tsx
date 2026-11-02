@@ -32,7 +32,8 @@ import { videoEditParameterUpdate, videoEditParameterAffectsAudio } from './engi
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { isDomNode } from '@/utils/crossRealmDom'
-import { activeVideoEditInstance, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from './application/useVideoEditViewSelector'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
@@ -53,7 +54,7 @@ import { videoMotionComposition, videoMotionState, recordVideoMotionPresentation
 import { VideoEditInOutDuration, VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
 import { useMonitorZoom } from './panels/useMonitorZoom'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
-import { captureVideoEditCommandContext, executeVideoEditCommand } from './application/videoEditCommands'
+import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
 import { VideoEditMonitorButton, VideoEditMonitorButtonEditor, useVideoEditMonitorButtonIds, type VideoEditMonitorButtonSpec } from './panels/VideoEditMonitorButtons'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
@@ -74,6 +75,11 @@ import { recordVideoEditPlaybackFrame } from './application/videoEditPlaybackSta
 import { videoEditRenderCacheBusy, readyVideoEditRenderWindows, recordVideoEditProgramRender } from './application/videoEditRenderCache'
 
 const logger = createLogger('features.videoEdit.preview')
+/** 空电平复用同一引用，暂停时的视图通知不会触发整块节目面板重绘。 */
+const EMPTY_AUDIO_LEVELS: VideoEditAudioLevel[] = []
+/** 电平表每 50 ms 读一次；读数没变（暂停时一直是零）就沿用原数组，节目面板不跟着重绘。 */
+const nextAudioLevels = (previous: VideoEditAudioLevel[], next: VideoEditAudioLevel[]): VideoEditAudioLevel[] =>
+  previous.length === next.length && previous.every((level, index) => level.peak === next[index].peak && level.rms === next[index].rms) ? previous : next
 /** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 默认按钮 ~360 + 显示比例 ~70 + 回放分辨率 ~56 + 更多 28 + 间距 */
 const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 656
 /** 收进“更多”时的常用显示比例（完整等级在显示比例下拉里）。 */
@@ -147,7 +153,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   const [multicamView, setMulticamView] = useState(false)
   const multicam = videoEditProgramMulticam(instance)
   const [canvasSend, setCanvasSend] = useState<VideoEditCanvasSendRequest | null>(null)
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  // 帧号由时间码和叠层各自订阅；控制条只在编辑点可用性或播放头下的多机位片段变化时更新。
+  useVideoEditViewSelector(() => {
+    if (!listVideoEditInstances().includes(instance)) return [videoEditRevision()]
+    const context = captureVideoEditCommandContext(instance.document.id, 'program', { includeClipboard: false })
+    return [videoEditRevision(), instance.playing, instance.activeSequenceId ? videoEditProgramMulticam(instance)?.clip : undefined,
+      videoEditCommandState(context, 'go_prev_edit').enabled, videoEditCommandState(context, 'go_next_edit').enabled]
+  }, sameVideoEditViewFields)
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const programToolbarRef = useRef<HTMLDivElement>(null)
@@ -161,7 +173,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     observer.observe(toolbar)
     return () => observer.disconnect()
   }, [])
-  const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
+  const [levels, setLevels] = useState<VideoEditAudioLevel[]>(EMPTY_AUDIO_LEVELS)
   // 节目画面不再分“选择 / 移动画面”模式（重要记录 019）：命令带选着选择工具时，直接拖画面移动选中的片段。
   const selecting = instance.tool === 'select'
   const picture = useVideoEditPictureGesture(instance, visible && selecting, onError)
@@ -220,7 +232,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   // Worker 按新尺寸原地调整画布，切过去立刻出第一帧。以前按序列重建，每次切序列节目画面要空白约 1.5 秒。
   useEffect(() => {
     const recovering = recoveryPending.current; recoveryPending.current = false
-    if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
+    if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels(EMPTY_AUDIO_LEVELS); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
     setRenderFailure(null); setEffectFailure(null); setTrustFailure(undefined); setPictureReady(false)
     let pictureShown = false
@@ -253,7 +265,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (next === appliedDocument) return
       const parameters = next && videoEditParameterUpdate(appliedDocument, next)
       if (!parameters || videoEditParameterAffectsAudio(appliedDocument, parameters)) {
-        if (next !== appliedDocument) { stopAudio(); scrubber.stop(); setLevels([]) }
+        if (next !== appliedDocument) { stopAudio(); scrubber.stop(); setLevels(EMPTY_AUDIO_LEVELS) }
         renderer.invalidateDocument(next?.revision ?? instance.document.revision)
       }
     })
@@ -282,7 +294,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       // A different frame (including a played frame) invalidates the Worker playback plan.
       // Returning to that old paused position must not reuse the main thread's stale armed marker.
       if (instance.playing || instance.frame !== armedFrame) armedFrame = -1
-      if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
+      if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels(EMPTY_AUDIO_LEVELS) }
       observedAudioFrame = instance.frame
       if (instance.playing || releasedScrub || moved && !instance.scrubbing) scrubber.stop()
       // 状态都已更新、停止已发出后再推进调度（仍在这次改动的同一个任务里发出画面请求）。
@@ -398,7 +410,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     }
     const unsubscribeScrub = subscribeVideoEditScrub(instance.document.id, intent => { if (intent.scope === 'program') scrubAudio(intent) })
     const stopAudio = (): void => audioScheduler.stop()
-    const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(meter.read()) }, 50)
+    const meterTimer = setInterval(() => { if (!stopped && meter) { const read = meter.read(); setLevels(previous => nextAudioLevels(previous, read)) } }, 50)
     let lastPresentation = -Infinity
     let firstPresentationAt = Infinity
     let presentedSequenceId = ''
@@ -625,7 +637,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           }
           if ((!parameterUpdate && !liveProjection) || parameterUpdate && videoEditParameterAffectsAudio(appliedDocument, parameterUpdate)) { stopAudio(); wasPlaying = false }
           if (parameterUpdate) renderer.invalidateDocument(document.revision)
-          if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { await finishVideoEditAudioFade(); meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
+          if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { await finishVideoEditAudioFade(); meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels(EMPTY_AUDIO_LEVELS) }
           // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
           if (parameterUpdate) lastParameterUpdate = parameterTick
           // 内容或位置改变必须立即撤下旧映射，不能等下一次 250ms 缓存轮询才更新。
@@ -1070,7 +1082,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
 }
 
 export function VideoEditPreview(props: Parameters<typeof VideoEditPreviewContent>[0]): React.ReactElement {
-  // 序列从无到有、或被全部删除时要在“预热 + 空状态”和真实节目画面之间切换，外层也要随视图更新。
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  // 外层只负责序列有无与切换，避免播放头更新从父层重复带动整个节目面板。
+  useVideoEditViewSelector(() => props.instance.activeSequenceId)
   return props.instance.activeSequenceId ? <VideoEditPreviewContent {...props} /> : <><UiEmpty className="h-full" title="没有序列" />{props.visible !== false && <VideoEditProgramPrewarm />}</>
 }

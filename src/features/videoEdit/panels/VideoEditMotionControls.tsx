@@ -1,7 +1,8 @@
 import { useRef, useState, useSyncExternalStore } from 'react'
 import { PanelTrigger } from '@/components/ui'
 import { CreativeIntentOverlay, SuperKeyframeRecordingControls } from '@/features/creativeIntent'
-import { type VideoEditInstance, getActiveVideoEditSequence } from '../application/videoEditService'
+import { type VideoEditInstance, getActiveVideoEditSequence, videoEditRevision } from '../application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { videoEditClipPictureSize, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 import { mergeMotionClipCurves, motionClipPose } from '@/core/videoEdit/motionDraft'
 import { subscribeVideoMotion, videoMotionRevision, videoMotionState, reopenVideoMotion } from '../application/videoEditMotionDraft'
@@ -34,6 +35,7 @@ export function VideoEditMotionControls({ owner, onError }: { owner: VideoEditIn
 }
 export function VideoEditMotionOverlay({ owner }: { owner: VideoEditInstance }): React.ReactElement | null {
   useSyncExternalStore(subscribeVideoMotion, videoMotionRevision)
+  useVideoEditViewSelector(() => [videoEditRevision(), videoMotionState(owner)?.status === 'reviewing' ? owner.frame : null], sameVideoEditViewFields)
   const state = videoMotionState(owner); if (!state) return null
   const document = getActiveVideoEditSequence(owner)
   const target = document.clips.find(c => `${owner.document.id}:${c.id}` === (state.activeTargetId ?? state.draft.targets[0].ref.id)); if (!target) return null

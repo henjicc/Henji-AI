@@ -19,6 +19,9 @@ import { registerVideoEditSourcePresenter, updateVideoEditSource } from './appli
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 import { startVideoMotion, setVideoMotionOptions, setVideoMotionPointer, videoMotionState, videoMotionComposition } from './application/videoEditMotionDraft'
+import * as captionTargets from './panels/videoEditCaptionTextTargets'
+import { useSettingsStore } from '@/stores/settingsStore'
+import * as monitorButtons from './panels/VideoEditMonitorButtons'
 const stopNotification = vi.hoisted(() => vi.fn())
 const pixel = vi.hoisted(() => ({ refinement: undefined as ((result: RenderResponse, error?: Error) => void) | undefined, presentation: undefined as ((frame: number, source: VideoEditPresentedSource, authorElements?: CodeAuthorFrameObservation, provenance?: 'live' | 'web-cache') => void) | undefined, preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; precision?: string; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean; presentedSource?: VideoEditPresentedSource; effectErrors?: string[]; skipped?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn(), webScale: vi.fn(async (_scale: number) => undefined) }))
 const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
@@ -69,6 +72,31 @@ it('暂停时即使画面未变化或上一帧仍在解码，也立即通知 Wor
   act(() => setVideoEditView(owner.document.id, { playing: false }))
   expect(stopNotification).toHaveBeenCalledWith(owner.frame)
   view.unmount()
+})
+it('节目父层不随连续拖动重复排版文字，时间码与编辑点按钮仍按帧更新', async () => {
+  useSettingsStore.getState().setVideoEditMonitorButtons('program', ['go_next_edit'])
+  try {
+    const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
+    const duration = getActiveVideoEditSequence(owner).clips[0].duration
+    const layout = vi.spyOn(captionTargets, 'videoEditCaptionTextTargets')
+    const controls = vi.spyOn(monitorButtons, 'useVideoEditMonitorButtonIds')
+    const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+    await act(async () => {})
+    act(() => setVideoEditView(owner.document.id, { frame: 1, scrubbing: true }))
+    const layouts = layout.mock.calls.length
+    const controlRenders = controls.mock.calls.length
+    for (let frame = 2; frame <= 30; frame++) act(() => setVideoEditView(owner.document.id, { frame, scrubbing: true }))
+    expect(layout.mock.calls.length).toBe(layouts)
+    expect(controls.mock.calls.length).toBe(controlRenders)
+    expect(view.getByRole('spinbutton', { name: '节目时间码' }).getAttribute('aria-valuenow')).toBe('30')
+    act(() => setVideoEditView(owner.document.id, { frame: duration }))
+    expect(view.getByRole('button', { name: '转到下一个编辑点' }).getAttribute('aria-disabled')).toBe('true')
+    act(() => setVideoEditView(owner.document.id, { frame: 0 }))
+    expect(view.getByRole('button', { name: '转到下一个编辑点' }).getAttribute('aria-disabled')).not.toBe('true')
+    act(() => setVideoEditView(owner.document.id, { scrubbing: false }))
+    expect(layout.mock.calls.length).toBeGreaterThan(layouts)
+    view.unmount()
+  } finally { useSettingsStore.getState().setVideoEditMonitorButtons('program', null) }
 })
 it('讲解回执像素用于真实节目呈现；后续普通帧不能显示旧图，关闭释放位图', async () => {
   const draw = vi.fn()

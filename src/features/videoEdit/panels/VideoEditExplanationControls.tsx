@@ -6,16 +6,17 @@ import type { TranscriptEntry } from '@/core/creativeIntent/schema'
 import type { DeicticMention, ExplanationBinding } from '@/core/creativeIntent/deixis'
 import { ExplanationPanel, explanationDuration, useExplanationTranscript, useExplanationHasRecorded } from '@/features/creativeIntent'
 import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
-import { subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { subscribeVideoEditDomain, videoEditDomainRevision, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { startVideoExplanation, stopVideoExplanation, pauseVideoExplanation, resumeVideoExplanation, preflightVideoExplanation, transcribeVideoExplanation, subscribeVideoExplanation, videoExplanationRevision, videoExplanationState, eraseVideoExplanation, cancelVideoExplanationTranscription, readVideoExplanationPage, clearTemporaryVideoExplanationAudio, retryVideoExplanationSave, readVideoExplanationReview, correctVideoExplanationBinding, pickVideoExplanationBinding, generateVideoExplanationCandidates, prepareVideoExplanationGeneration } from '../application/videoEditExplanation'
 
 export function VideoEditExplanationControls({ owner, onError }: { owner: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement {
   const { t } = useTranslation('common')
   useSyncExternalStore(subscribeVideoExplanation, videoExplanationRevision)
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const state = videoExplanationState(owner), session = state?.collector.session, id = owner.document.id
   const [open, setOpen] = useState(false), [deleting, setDeleting] = useState(false), [failed, setFailed] = useState(false)
+  useVideoEditViewSelector(() => [videoEditRevision(), owner.playing, open && !owner.playing ? owner.frame : null], sameVideoEditViewFields)
   const hasRecorded = useExplanationHasRecorded(!!owner.document.creativeIntents?.sessions.length || session?.state === 'recording')
   const picking = useRef<AbortController>()
   const retryWork = useRef<() => Promise<void>>()

@@ -9,12 +9,13 @@ import { UI_TEXT_NUMERIC_CLASS } from '@/components/ui/styleTokens'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditClipSpeedReadout } from '@/core/videoEdit/clipSpeedDisplay'
 import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
-import { getActiveVideoEditSequence, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { getActiveVideoEditSequence, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { CodeParameterPanel } from './CodeParameterPanel'
 import { VideoEditGraphicPanel } from './VideoEditGraphicPanel'
 import { VideoEditEffectChainPanel } from './VideoEditEffectChainPanel'
 import { VideoEditTransitionPanel } from './VideoEditTransitionPanel'
-import { selectedVideoEditTransitionId } from '../application/videoEditTransitions'
+import { selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
 import { VideoEditClipPropertySections } from './VideoEditClipPropertySections'
 import { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
 import { VideoEditTextStylePanel } from './VideoEditTextStylePanel'
@@ -51,8 +52,9 @@ function ClipNameHeader({ clip, speed, onRename }: { clip: VideoEditClip; speed:
  * 重置在名称的右键菜单。添加、复制效果在右下角底栏。批注在批注面板里看，这里不重复。
  */
 function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useVideoEditViewSelector(() => [videoEditRevision(), instance.selection ? instance.frame : null], sameVideoEditViewFields)
   useSyncExternalStore(subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision)
+  useSyncExternalStore(subscribeVideoEditTransitionSelection, videoEditTransitionSelectionVersion)
   const errorHandler = useRef(onError); errorHandler.current = onError
   const reportError = useCallback((reason: unknown): void => errorHandler.current(reason), [])
   const menu = useContextMenu()

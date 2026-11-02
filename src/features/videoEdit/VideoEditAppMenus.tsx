@@ -2,7 +2,8 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { contributeAppMenus, type AppMenuCommand, type AppMenuEditRole } from '@/core/appMenu/appMenu'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_RENDER_COMMANDS, videoEditCommandShortcut, videoEditPanelCommandScope, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { activeVideoEditInstance, subscribeVideoEdit, subscribeVideoEditView, videoEditRevision, videoEditViewRevision } from './application/videoEditService'
+import { activeVideoEditInstance, subscribeVideoEdit, videoEditRevision } from './application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from './application/useVideoEditViewSelector'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
 import { subscribeVideoEditAnnotationSelection, videoEditAnnotationSelectionRevision } from './application/videoEditAnnotations'
 
@@ -26,7 +27,10 @@ const dangerous = new Set<VideoEditCommandId>(['delete', 'annotations_clear_hand
 export function VideoEditAppMenus(): null {
   const withdraw = useRef<() => void>()
   const revision = useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
-  const viewRevision = useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  const view = useVideoEditViewSelector(() => {
+    const owner = activeVideoEditInstance()
+    return [owner?.document.id, owner?.activePanel, owner?.playing, Boolean(owner?.scrubbing), owner?.playing || owner?.scrubbing ? null : owner?.frame]
+  }, sameVideoEditViewFields)
   const annotationRevision = useSyncExternalStore(subscribeVideoEditAnnotationSelection, videoEditAnnotationSelectionRevision)
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   useEffect(() => () => { withdraw.current?.(); withdraw.current = undefined }, [])
@@ -60,6 +64,6 @@ export function VideoEditAppMenus(): null {
       withdraw.current = contributeAppMenus('videoEdit', groups.map(group => ({ menu: group.menu, label: group.label, order: 100, items: group.ids.map(id => item(id, group.scope)) })))
     }, withdraw.current ? 150 : 0)
     return () => clearTimeout(timer)
-  }, [revision, viewRevision, annotationRevision, shortcuts])
+  }, [revision, view, annotationRevision, shortcuts])
   return null
 }

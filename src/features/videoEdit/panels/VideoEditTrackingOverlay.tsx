@@ -3,7 +3,8 @@ import { UiButton, UiLoading, UiOptionButton } from '@/components/ui'
 import { videoEditClipPictureSize, videoEditClipToFrame, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
 import { VIDEO_EDIT_TRACK_METHOD_LABELS, type VideoEditTrackBox, type VideoEditTrackPrompt } from '@/core/videoEdit/tracking'
 import { createLogger } from '@/core/logging'
-import { getActiveVideoEditSequence, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { getActiveVideoEditSequence, subscribeVideoEditDomain, videoEditDomainRevision, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { correctVideoEditTracker, editVideoEditTracker, readVideoEditTrackingBox, readVideoEditTrackingPlacement } from '../application/videoEditTrackingEdits'
 import { getVideoEditTrackingEditing, setVideoEditTrackingEditing, subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision, type VideoEditTrackingEditing } from '../application/videoEditTrackingEditing'
 import { subscribeVideoEditTracking, videoEditTrackingRevision, videoEditTrackingCandidates } from '../application/videoEditTracking'
@@ -22,7 +23,7 @@ export function VideoEditTrackingOverlay({ instance, onError }: { instance: Vide
 function VideoEditSubjectTrackingOverlay({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement | null {
   const theme = useThemeTokens()
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useVideoEditViewSelector(() => [videoEditRevision(), getVideoEditTrackingEditing()?.projectId === instance.document.id ? instance.frame : null, instance.playing], sameVideoEditViewFields)
   useSyncExternalStore(subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision)
   const trackRevision = useSyncExternalStore(subscribeVideoEditTracking, videoEditTrackingRevision)
   const editing = getVideoEditTrackingEditing()

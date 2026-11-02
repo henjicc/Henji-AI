@@ -17,7 +17,8 @@ import { evaluateVideoEditTransitionParams, videoEditTransitionParamDefinitions 
 import { isRemovedVideoEditTransition } from '@/core/videoEdit/transitionCatalog'
 import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
 import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
-import { subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { timelineTimecode } from '../timeline/timelineGeometry'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
 
@@ -33,7 +34,7 @@ const ALIGNMENTS: Array<{ value: VideoEditTransitionAlignment; label: string }> 
 ]
 export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({ instance, sequence, onError }: Props): React.ReactElement | null {
   useSyncExternalStore(subscribeVideoEditTransitionSelection, videoEditTransitionSelectionVersion)
-  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  useVideoEditViewSelector(() => [videoEditRevision(), selectedVideoEditTransitionId(instance) ? instance.frame : null], sameVideoEditViewFields)
   const projectId = instance.document.id
   const transitionId = selectedVideoEditTransitionId(instance)
   const transition = sequence.transitions?.find(value => value.id === transitionId)

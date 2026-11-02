@@ -4,7 +4,8 @@ import { UiButton, UiIconButton, UiInput } from '@/components/ui'
 import { VIDEO_EDIT_ANNOTATION_COLORS } from '@/core/theme/colorTokens'
 import { VIDEO_EDIT_ANNOTATION_STATUS_LABELS, videoEditAnnotationAt, videoEditAnnotationColor, videoEditAnnotationStyle, videoEditAnnotationWeight, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
 import { createVideoEditAnnotation, deleteVideoEditAnnotation, jumpToVideoEditAnnotation, selectedVideoEditAnnotation, selectVideoEditAnnotation, subscribeVideoEditAnnotationBrush, subscribeVideoEditAnnotationSelection, updateVideoEditAnnotation, videoEditAnnotationSelectionRevision, videoEditAnnotationBrush, videoEditAnnotationBrushRevision, type VideoEditAnnotationShape } from './application/videoEditAnnotations'
-import { getActiveVideoEditSequence, setVideoEditView, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { getActiveVideoEditSequence, setVideoEditView, videoEditProgramCommandIdentity, videoEditRevision, type VideoEditInstance } from './application/videoEditService'
+import { sameVideoEditViewFields, useVideoEditViewSelector } from './application/useVideoEditViewSelector'
 import { codeElementAnnotationTarget, resolveVideoEditElementAnnotation, selectVideoEditCodeElement } from './application/videoEditCodeElements'
 
 type Point = { x: number; y: number }
@@ -106,6 +107,7 @@ function labelPosition(target: VideoEditAnnotationTarget): Point {
  * 形状与颜色在命令带的批注参数条里选（重要记录 019）；选中一条时在参数条换颜色也改它。状态看编号徽标，形状只用所选颜色。
  */
 export function VideoEditAnnotationOverlay({ instance, active, onError }: { instance: VideoEditInstance; active: boolean; onError: (error: unknown) => void }): React.ReactElement {
+  useVideoEditViewSelector(() => [videoEditRevision(), active || instance.document.sequences.find(sequence => sequence.id === instance.activeSequenceId)?.annotations.length ? instance.frame : null], sameVideoEditViewFields)
   useSyncExternalStore(subscribeVideoEditAnnotationBrush, videoEditAnnotationBrushRevision)
   useSyncExternalStore(subscribeVideoEditAnnotationSelection, videoEditAnnotationSelectionRevision)
   const brush = videoEditAnnotationBrush(instance.document.id)

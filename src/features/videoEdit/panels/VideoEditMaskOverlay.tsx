@@ -8,6 +8,7 @@ import { createLogger } from '@/core/logging'
 import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
 import { updateVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 import { getVideoEditMaskEditing, setVideoEditMaskEditing, subscribeVideoEditMaskEditing, videoEditMaskEditingRevision } from '../application/videoEditMaskEditing'
+import { useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 
 const logger = createLogger('features.videoEdit.mask')
 const HANDLE = 5
@@ -21,6 +22,7 @@ interface Transform { gesture: VideoEditGesture; shapeId: string }
 
 /** 路径共用钢笔编辑；指针更新按显示帧合并，松手刷新最后值，变换与助手共用文档撤销。 */
 export function VideoEditMaskOverlay({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement | null {
+  useVideoEditViewSelector(() => getVideoEditMaskEditing()?.projectId === instance.document.id ? instance.frame : null)
   useSyncExternalStore(subscribeVideoEditMaskEditing, videoEditMaskEditingRevision)
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)

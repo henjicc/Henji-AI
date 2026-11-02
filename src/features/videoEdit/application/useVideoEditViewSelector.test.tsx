@@ -6,7 +6,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { closeAllVideoEdits, createVideoEditTestProject } from './videoEditDocumentTestKit'
 import { appendVideoEditClip, getActiveVideoEditSequence, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from './videoEditService'
-import { createVideoEditCaption } from './videoEditTimedContent'
+import { createVideoEditCaption, createVideoEditMarker } from './videoEditTimedContent'
 import { VideoEditToolbar } from '../VideoEditApp'
 import { VideoEditTimelineInOut } from '../timeline/VideoEditTimelineInOut'
 import { VideoEditRenderBar } from '../timeline/VideoEditRenderBar'
@@ -14,6 +14,8 @@ import { VideoEditInOutDuration } from '../timeline/VideoEditTimelineTransport'
 import { VideoEditTextOverlay } from '../panels/VideoEditTextOverlay'
 import { VideoEditCodeElementOverlay } from '../VideoEditCodeElementOverlay'
 import * as captionTargets from '../panels/videoEditCaptionTextTargets'
+import { VideoEditAppMenus } from '../VideoEditAppMenus'
+import { findAppMenuCommand } from '@/core/appMenu/appMenu'
 
 vi.mock('react-virtuoso', () => ({ Virtuoso: () => <div /> }))
 beforeEach(() => {
@@ -31,6 +33,28 @@ function counted(commits: Record<string, number>, id: string, children: ReactNod
   commits[id] = 0
   return <Profiler id={id} onRender={() => { commits[id]++ }}>{children}</Profiler>
 }
+
+it('菜单在连续拖动中不逐帧重绘，松手后按最终帧更新标记导航', async () => {
+  vi.useFakeTimers()
+  try {
+    const owner = await createVideoEditTestProject(); appendVideoEditClip(owner.document.id)
+    createVideoEditMarker(owner.document.id, owner.activeSequenceId, { frame: 10, name: '标记' })
+    const commits: Record<string, number> = {}
+    const view = render(counted(commits, 'menus', <VideoEditAppMenus />))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    expect(findAppMenuCommand('videoEdit.next_marker')?.disabledReason).toBeUndefined()
+    scrub(owner, 1, 1)
+    const before = commits.menus
+    scrub(owner, 2, 30)
+    expect(commits.menus).toBe(before)
+    release(owner)
+    await act(async () => { await vi.advanceTimersByTimeAsync(150) })
+    expect(commits.menus).toBeGreaterThan(before)
+    expect(findAppMenuCommand('videoEdit.next_marker')?.disabledReason).toBeDefined()
+    expect(findAppMenuCommand('videoEdit.prev_marker')?.disabledReason).toBeUndefined()
+    view.unmount()
+  } finally { vi.useRealTimers() }
+})
 
 it('拖动播放头 30 帧，命令带不重绘；换工具与选择时立即更新', async () => {
   const owner = await createVideoEditTestProject(); appendVideoEditClip(owner.document.id)
