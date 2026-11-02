@@ -21,7 +21,7 @@ function half(value: number): number {
 
 interface LayoutDevice { createBindGroupLayout(descriptor: unknown): unknown; createPipelineLayout(descriptor: unknown): unknown }
 /** 中间纹理由宿主分配（计入宿主的显存预算），按尺寸与格式复用。 */
-export interface VideoEditBuiltinScratchAllocator { allocate(width: number, height: number, format: string, mipLevelCount?: number, storage?: boolean): GpuTexture; release(texture: GpuTexture): void }
+export interface VideoEditBuiltinScratchAllocator { allocate(width: number, height: number, format: string, mipLevelCount?: number, storage?: boolean, clear?: boolean): GpuTexture; release(texture: GpuTexture): void }
 export interface BuiltinEncodingBatch { encoder: ReturnType<GpuDevice['createCommandEncoder']>; uniformIndex: number; taken: Set<Scratch>; created?: Set<Scratch>; mixIndex?: number }
 interface Scratch { texture: GpuTexture; width: number; height: number; format: string; used: boolean; idleFrames: number }
 

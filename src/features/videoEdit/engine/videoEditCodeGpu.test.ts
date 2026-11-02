@@ -10,6 +10,19 @@ import { VideoEditAuthorPrograms } from './videoEditAuthorPrograms'
 import type { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
 
+it('空间预算回收闲置池的物理纹理，不清空仍可保留的在用材料', async () => {
+  const { device } = gpu(), runtime = new VideoEditCodeGpu(device), bytes = 64 * 64 * 4
+  const active = runtime.effectAllocator.allocate(64, 64, 'rgba8unorm'), idle = runtime.effectAllocator.allocate(64, 64, 'rgba8unorm')
+  const destroy = vi.spyOn(idle, 'destroy')
+  try {
+    runtime.effectAllocator.release(idle)
+    expect(runtime.residentTextureBytes()).toBe(bytes * 2)
+    runtime.trimIdleTextures(bytes)
+    expect(destroy).toHaveBeenCalledOnce()
+    expect(runtime.residentTextureBytes()).toBe(bytes)
+  } finally { runtime.effectAllocator.release(active); await runtime.dispose() }
+})
+
 it('空间目标保留元素覆写、运动模糊与缩放，精度升级仍可由计算着色器写入，租约等待消费完成', async () => {
   const { device } = gpu(), textures = vi.spyOn(device, 'createTexture')
   const runtime = new VideoEditCodeGpu(device)

@@ -4,6 +4,8 @@ import { VIDEO_EDIT_PRECISE_FORMAT, type VideoEditGpuColorFormat } from './video
 
 /** Texture belongs to the compositor's device, with premultiplied alpha. */
 export class VideoEditCodePicture {
+  /** 由内容求值方在成功出图后发布；纹理地址本身不能证明内容未被覆写。 */
+  contentKey?: string
   /** 参与这幅画面的网页来源；与时间或尺寸上的 approximate 独立。 */
   provenance: WebSourceProvenance = 'live'
   /** 设备共享的透明占位不属于本帧必需输入分配。 */

@@ -40,7 +40,8 @@ import type { CodeMotionClock } from '@/core/videoEdit/codeMaterial/motionSampli
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 import { videoEditClipMedia, videoEditPictureTransitionsAt, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
-import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
+import type { VideoEditCodeGpu } from './videoEditCodeGpu'
+import { VideoEditCodePicture } from './videoEditCodePicture'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { codeMaterialImageParameterKeys } from '@/core/videoEdit/codeMaterialResources'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
@@ -742,6 +743,7 @@ export class VideoEditCodeSources implements SpatialCodeSources {
             if (contentKey) this.lastOutputs.set(plan.key, { key: contentKey, picture })
           }
           resident.delete(plan.key); resident.set(plan.key, picture)
+          if (picture instanceof VideoEditCodePicture) picture.contentKey = contentKey
           result.pictures.set(plan.clip.id, picture)
         }
       })

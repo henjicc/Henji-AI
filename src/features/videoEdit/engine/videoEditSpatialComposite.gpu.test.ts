@@ -4,7 +4,7 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
 import { evaluateSpatialFrame } from '@/core/videoEdit/spatialEvaluation'
 import { invertVideoEditTrackMatrix, videoEditTrackProject } from '@/core/videoEdit/tracking'
-import { VideoEditSpatialGpu } from './videoEditSpatialComposite'
+import { VideoEditSpatialGpu, createVideoEditSpatialHost } from './videoEditSpatialComposite'
 import { preparedSpatialBrand, type SpatialPictureLease, type SpatialTargetSpec } from './videoEditSpatialContracts'
 import type { SpatialCodeSources, SpatialFrameRequest } from './videoEditSpatialContracts'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
@@ -18,12 +18,13 @@ import { videoEditHalfToFloat } from './videoEditGpuShaders'
 it('真实 GPU 透视卡片保持 UV 插值与预乘覆盖率，提交后的借用独立于工作目标', async () => {
   const gpu = await init(), device = gpu.gpu, size = 128
   const allocated = new Set<unknown>()
+  const resident = new Map<unknown, number>()
   const host = new VideoEditSpatialGpu(device as unknown as GpuDevice, {
     allocate(spec, mipLevelCount, sampleCount) {
       const texture = device.createTexture({ size: [spec.width, spec.height], format: spec.format, usage: spec.usage, mipLevelCount, sampleCount })
-      allocated.add(texture); return texture
+      allocated.add(texture); resident.set(texture, spec.width * spec.height * 4 * sampleCount * (mipLevelCount > 1 ? 4 / 3 : 1)); return texture
     },
-    release(texture) { expect(allocated.delete(texture)).toBe(true); texture.destroy() },
+    release(texture) { expect(allocated.delete(texture)).toBe(true); resident.delete(texture); texture.destroy() },
   })
   const source = device.createTexture({ size: [size, size], format: 'rgba8unorm', usage: 2 | 4 })
   const readback = device.createBuffer({ size: size * size * 4, usage: 1 | 8 })
@@ -43,7 +44,13 @@ it('真实 GPU 透视卡片保持 UV 插值与预乘覆盖率，提交后的借�
     const inverse = invertVideoEditTrackMatrix([m[0], m[4], m[12], m[1], m[5], m[13], m[3], m[7], m[15]])
     const target = host.target(spec, true)
     try {
-      const submitted = await host.draw(target, [{ itemId: 'card', sourceKey: 'card', clipId: 'card', kind: 'card', picture: consumed, geometry: card, opacity: 1, groupId: 'group', ordinal: 0, projection: 'material' }])
+      const request: SpatialFrameRequest = { composition, sequenceFrame: 10, output: frame.output, quality: 'final', sessionKind: 'observe', sources: [], requestId: 'batch', signal: new AbortController().signal, assertCurrent() {} }
+      host.reserveWorkingSet(planSpatialExposure(request), request.signal)
+      const item = { itemId: 'card', sourceKey: 'card', clipId: 'card', kind: 'card' as const, picture: consumed, geometry: card, opacity: 1, groupId: 'group', ordinal: 0, projection: 'material' as const }
+      const first = await host.draw(target, [item], .25, true)
+      const submitted = await host.draw(target, [item], .75, true)
+      expect(first.completion).toBe(submitted.completion)
+      host.releaseWorkingSet()
       await consumed.release(submitted.completion); consumed = undefined
       output = host.picture(target, false)
     } finally { await host.releaseTarget(target) }
@@ -63,7 +70,40 @@ it('真实 GPU 透视卡片保持 UV 插值与预乘覆盖率，提交后的借�
     }
     expect(count).toBeGreaterThan(500)
     expect(result[3]).toBe(0)
+    const reference = Uint8Array.from(result.slice((64 * size + 64) * 4, (64 * size + 64) * 4 + 4))
     readback.unmap()
+    const request: SpatialFrameRequest = { composition, sequenceFrame: 10, output: frame.output, quality: 'final', sessionKind: 'observe', sources: [], requestId: 'groups', signal: new AbortController().signal, assertCurrent() {} }
+    const plan = planSpatialExposure(request), unexpected = (): never => { throw new Error('组目标测试不应请求素材。') }
+    const composite = createVideoEditSpatialHost(request, host, {
+      prepareCardMaterial: unexpected, compositeFrame: unexpected, compositeTransition: unexpected, generatorTargetCapacity: () => Infinity,
+      async reserveWorkingSet(plan, signal) { host.reserveWorkingSet(plan, signal) }, async releaseWorkingSet() { host.releaseWorkingSet() },
+    })
+    const pictures: SpatialPictureLease[] = [], discarded: Promise<void>[] = [], groupCount = 12
+    await composite.reserveWorkingSet(plan, request.signal)
+    try {
+      for (let index = 0; index < groupCount; index++) {
+        const id = `group-${index}`, group = { id, mode: 'single' as const, clipIds: ['card'], itemIds: ['card'], orderBySample: [['card']] }
+        for (let sample = 0; sample < 2; sample++) {
+          const picture = await composite.compositeGroup(group, plan.samples[0], [{ itemId: 'card', sourceKey: 'card', clipId: 'card', kind: 'card', picture: output!, geometry: card, opacity: (index + 1) / groupCount, groupId: id, ordinal: 0, projection: 'screen' }])
+          if (sample === 0) discarded.push(picture.release(picture.completion))
+          else pictures.push(picture)
+        }
+      }
+      // 串行样本和多组只保留解析图，覆盖率附件必须落在既有工作集预算内。
+      expect([...resident.values()].reduce((sum, bytes) => sum + bytes, 0)).toBeLessThanOrEqual((8 + groupCount) * size * size * 8)
+      host.flush()
+      for (let index = 0; index < pictures.length; index++) {
+        const encoder = device.createCommandEncoder()
+        encoder.copyTextureToBuffer({ texture: pictures[index].texture as typeof source }, { buffer: readback, bytesPerRow: size * 4 }, [size, size])
+        device.queue.submit([encoder.finish()]); await readback.mapAsync(1)
+        const pixel = new Uint8Array(readback.getMappedRange()).slice((64 * size + 64) * 4, (64 * size + 64) * 4 + 4)
+        for (let channel = 0; channel < 4; channel++) expect(Math.abs(pixel[channel] - reference[channel] * (index + 1) / groupCount)).toBeLessThanOrEqual(1)
+        readback.unmap()
+      }
+    } finally {
+      await composite.releaseWorkingSet()
+      await Promise.all([...discarded, ...pictures.map(picture => picture.release(device.queue.onSubmittedWorkDone()))])
+    }
   } finally {
     await consumed?.release(Promise.resolve()); await output?.release(device.queue.onSubmittedWorkDone())
     await host.dispose(); source.destroy(); readback.destroy(); gpu.dispose()
@@ -175,6 +215,7 @@ it.each(['image', 'code'] as const)('真实合成树从 %s 的扩展参考平面
     if (kind === 'code') request.sources = [{ clipId: 'card', kind: 'card', spaceDependency: true }]
     await compositor.prepare()
     const picture = new VideoEditCodePicture(source, size, size, device as unknown as GpuDevice)
+    if (kind === 'image') picture.contentKey = 'red'
     result = await renderVideoEditSpatialCompositeScene({ request, plan: planSpatialExposure(request), sources, drawn: composition, active: composition.clips,
       nodes: buildVideoEditCompositePlan(composition.clips), pictures: new Map([['card', picture]]), effects: new Map(), compositor })
     const encoder = device.createCommandEncoder()
@@ -190,6 +231,47 @@ it.each(['image', 'code'] as const)('真实合成树从 %s 的扩展参考平面
     expect(visible).toBeGreaterThan(100)
     expect(rgba[(64 * size + 120) * 4 + 3]).toBe(0x3800)
     buffer.unmap()
+    if (kind === 'image') {
+      const spatial = await compositor.spatial()
+      const render = () => renderVideoEditSpatialCompositeScene({ request, plan: planSpatialExposure(request), sources, drawn: composition, active: composition.clips,
+        nodes: buildVideoEditCompositePlan(composition.clips), pictures: new Map([['card', picture]]), effects: new Map(), compositor })
+      await result.release(device.queue.onSubmittedWorkDone()); result = undefined
+      const before = spatial.materialDiagnostics()
+      request.sequenceFrame++
+      result = await render()
+      expect(spatial.materialDiagnostics().hits).toBeGreaterThan(before.hits)
+      await result.release(device.queue.onSubmittedWorkDone()); result = undefined
+      // 同一物理纹理覆写后必须按内容身份重做材料，不能把纹理地址当内容键。
+      for (let index = 0; index < pixels.length; index += 4) pixels.set([0, 0, 255, 255], index)
+      device.queue.writeTexture({ texture: source }, pixels, { bytesPerRow: size * 4 }, [size, size])
+      picture.contentKey = 'blue'
+      result = await render()
+      expect(spatial.materialDiagnostics().entries).toBe(before.entries)
+      const encoder = device.createCommandEncoder()
+      encoder.copyTextureToBuffer({ texture: result.texture as typeof source }, { buffer, bytesPerRow: size * 8 }, [size, size])
+      device.queue.submit([encoder.finish()]); await buffer.mapAsync(1)
+      const changed = new Uint16Array(buffer.getMappedRange()), at = (64 * size + 120) * 4
+      expect([...changed.slice(at, at + 4)]).toEqual([0, 0, 0x3800, 0x3800])
+      buffer.unmap()
+      composition.spatialCamera = { defocus: 8, focus: { kind: 'distance', distance: 1 } }
+      expect(planSpatialExposure(request).materials[0].defocus.bypass).toBe(false)
+      const renderedPixels = async (): Promise<Uint8Array> => {
+        await result?.release(device.queue.onSubmittedWorkDone()); result = await render()
+        const encoder = device.createCommandEncoder()
+        encoder.copyTextureToBuffer({ texture: result.texture as typeof source }, { buffer, bytesPerRow: size * 8 }, [size, size])
+        device.queue.submit([encoder.finish()]); await buffer.mapAsync(1)
+        const pixels = Uint8Array.from(new Uint8Array(buffer.getMappedRange())); buffer.unmap(); return pixels
+      }
+      picture.contentKey = undefined
+      const uncached = await renderedPixels()
+      picture.contentKey = 'blue-focused'
+      const cached = await renderedPixels(), hits = spatial.materialDiagnostics().hits
+      request.sequenceFrame++
+      const reused = await renderedPixels()
+      expect(spatial.materialDiagnostics().hits).toBeGreaterThan(hits)
+      expect(cached.every((value, index) => value === uncached[index])).toBe(true)
+      expect(reused.every((value, index) => value === uncached[index])).toBe(true)
+    }
   } finally {
     await result?.release(device.queue.onSubmittedWorkDone()); await compositor.dispose()
     source.destroy(); buffer.destroy(); gpu.dispose()

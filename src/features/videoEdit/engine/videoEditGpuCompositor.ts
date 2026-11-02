@@ -524,8 +524,10 @@ export class VideoEditGpuCompositor {
       this.assertDevice()
       const multisampled = new Map<GpuTexture, number>()
       this.spatialRuntime ??= new VideoEditSpatialGpu(this.device, {
-        allocate: (spec, mipLevelCount, sampleCount) => {
-          if (sampleCount === 1) return runtime.effectAllocator.allocate(spec.width, spec.height, spec.format, mipLevelCount)
+        residentBytes: () => runtime.residentTextureBytes() + this.spatialMultisampleBytes,
+        trimIdle: budget => runtime.trimIdleTextures(Math.max(0, budget - this.spatialMultisampleBytes)),
+        allocate: (spec, mipLevelCount, sampleCount, clear = true) => {
+          if (sampleCount === 1) return runtime.effectAllocator.allocate(spec.width, spec.height, spec.format, mipLevelCount, false, clear)
           const texture = this.device.createTexture({ size: [spec.width, spec.height], format: spec.format, usage: spec.usage, sampleCount })
           const bytes = spec.width * spec.height * (spec.format === 'rgba16float' ? 8 : 4) * sampleCount
           multisampled.set(texture, bytes); this.spatialMultisampleBytes += bytes

@@ -21,6 +21,7 @@ import type { PreparedVideoEditCodeEffect } from './videoEditCodeSources'
 import type { SpatialCodeSources, SpatialExposurePlan, SpatialFrameRequest, SpatialMaterialPlan, SpatialPictureLease, SpatialTargetSpec } from './videoEditSpatialContracts'
 import { videoEditClipPictureSize, videoEditPictureTransitionsAt } from '@/core/videoEdit/clipGeometry'
 import type { BuiltinEncodingBatch } from './videoEditBuiltinEffectsGpu'
+import { documentFontRevision } from '@/platform/fontFaces'
 
 export type VideoEditFilterFrameReader = (clip: VideoEditClip, plan: PreparedVideoEditCodeEffect, input: VideoEditCodePicture) => Promise<AuthorGpuInputs['frames']>
 
@@ -74,6 +75,13 @@ export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditComposite
 /** Render-only full-canvas layer; original persisted geometry and clocks stay unchanged. */
 function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditTrackedClip & VideoEditMotionSampledClip = { ...clip, x: 0, y: 0, anchorX: 0.5, anchorY: 0.5, scale: 1, rotation: 0, opacity: 1 }; delete result.scaleAspect; delete result.trackingQuad; delete result.motionSamples; return result }
 
+function materialBuiltinPlan(builtin: NonNullable<PreparedVideoEditEffect['builtin']>, clip: VideoEditClip, frame: number, size: { width: number; height: number }, fps: number, quality: EffectQuality, viewport: VideoEditMaterialViewport): ReturnType<typeof planVideoEditBuiltinEffect> {
+  const renderScale = size.height / viewport.bounds.height
+  const logical = viewport.referenceSize, bounds = viewport.bounds
+  return planVideoEditBuiltinEffect(builtin, { ...size, frame: frame - clip.start, renderScale, quality, frameDuration: 1 / fps, referenceSize: logical,
+    layer: { referenceSize: logical, contentBounds: { x: 0, y: 0, width: logical.width, height: logical.height }, rasterScale: renderScale, rasterOrigin: [-bounds.x * renderScale, -bounds.y * renderScale], quality } })
+}
+
 /**
  * `document` carries the size the frame is drawn at; `logical` is the sequence's own size. They differ only at a reduced
  * playback resolution (task 4.9): code filters then still read the sequence size (a `1/width` offset stays the same
@@ -122,9 +130,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     const spatialBuiltin = async (builtin: NonNullable<PreparedVideoEditEffect['builtin']>, target: string, input: VideoEditCodePicture, subject?: VideoEditCodePicture): Promise<VideoEditCodePicture> => {
       if (!compositor.spatial) throw new Error('空间材料效果缺少共享合成器。')
       const filtered = await runtime.target(target, input.width, input.height, VIDEO_EDIT_PRECISE_FORMAT)
-      const bounds = materialViewport!.bounds
-      const operation = planVideoEditBuiltinEffect(builtin, { width: input.width, height: input.height, frame: frame - clip.start, renderScale, quality, frameDuration: 1 / document.fps, referenceSize: logical,
-        layer: { referenceSize: logical, contentBounds: { x: 0, y: 0, width: logical.width, height: logical.height }, rasterScale: renderScale, rasterOrigin: [-bounds.x * renderScale, -bounds.y * renderScale], quality } })
+      const operation = materialBuiltinPlan(builtin, clip, frame, input, document.fps, quality, materialViewport!)
       await (await compositor.spatial()).encodeBuiltin(operation, input.texture, filtered.texture, filtered.textureFormat, document.colorLuts ?? [], subject)
       return filtered
     }
@@ -272,6 +278,7 @@ export async function renderVideoEditSpatialCompositeScene(options: {
     generatorTargetCapacity: (...args) => sources.generatorTargetCapacity(...args),
     releaseSpatialFrame: (...args) => sources.releaseSpatialFrame(...args),
     async renderSpatialSample(sample) {
+      spatial.flush()
       const material = sample.materialPlan
       const original = active.find(clip => clip.id === material.clipId)!
       const size = videoEditClipPictureSize(request.composition, original)
@@ -300,7 +307,19 @@ export async function renderVideoEditSpatialCompositeScene(options: {
     async releaseWorkingSet() { spatial.releaseWorkingSet() },
     async prepareCardMaterial(_request, material) {
       if (!pictures.has(material.clipId)) throw new Error(`空间卡片 ${material.clipId} 缺少中心画面。`)
-      return materialPicture(material, pictures.get(material.clipId)!)
+      const input = pictures.get(material.clipId)!
+      const clip = active.find(value => value.id === material.clipId)!
+      const plans = effects.get(clip.id) ?? []
+      const inputKey = input instanceof VideoEditCodePicture ? input.contentKey === undefined ? undefined : ['code', input.contentKey, input.width, input.height, input.displayWidth, input.displayHeight, input.textureFormat, input.carriesLight]
+        : input === null && clip.kind === 'text' ? ['text', documentFontRevision()]
+        : typeof ImageBitmap !== 'undefined' && input instanceof ImageBitmap ? ['bitmap', spatial.identity(input), input.width, input.height] : undefined
+      // 作者效果和动态蒙版尚无材料内容契约；只缓存可由实际 GPU 计划证明相同的像素。
+      const cacheable = inputKey !== undefined && plans.every(plan => plan.builtin && !plan.mask && !plan.subject && !isShaderGraphEffect(plan.builtin.id))
+      const key = cacheable ? JSON.stringify(['material', request.composition.id, inputKey,
+        { ...clip, curves: undefined, spatial: undefined, depth: undefined, rotationX: undefined, rotationY: undefined, anchorDepth: undefined, motionSamples: undefined, opacity: 1 },
+        material.referenceSize, material.logicalBounds, material.rasterScale, material.target, request.output, request.quality, drawn.colorLuts,
+        plans.map(plan => materialBuiltinPlan(plan.builtin!, clip, request.sequenceFrame, material.target, drawn.fps, request.quality, { referenceSize: material.referenceSize, bounds: material.logicalBounds }))]) : undefined
+      return spatial.material(key, material, () => materialPicture(material, input), JSON.stringify([request.composition.id, material.clipId]))
     },
     async compositeTransition(items, sample) {
       const id = items[0].itemId.slice('transition:'.length)
@@ -317,6 +336,7 @@ export async function renderVideoEditSpatialCompositeScene(options: {
         const shown = window.empty === 'left' ? window.right : window.left
         const first = compositor.spatialPicture(endpoints[items.findIndex(item => item.clipId === shown.id)])
         const second = window.side || window.empty ? first : compositor.spatialPicture(endpoints[items.findIndex(item => item.clipId === window.right.id)])
+        spatial.flush()
         const transition = videoEditTransitionRender(window, sample.sequenceFrame), key = `composite:transition:${id}`
         const picture = transition.kind === 'mix'
           ? await runtime.mix(key, window.empty === 'left' ? 'transparent' : first, window.empty === 'right' ? 'transparent' : second, transition.amount, transition.through)
@@ -327,9 +347,10 @@ export async function renderVideoEditSpatialCompositeScene(options: {
         const consumed = await spatial.consume(borrowed, outputSpec(`spatial:transition:${id}:owned`))
         completion = consumed.completion
         return consumed
-      } finally { await Promise.all(endpoints.map(endpoint => endpoint.release(completion))) }
+      } finally { spatial.flush(); await Promise.all(endpoints.map(endpoint => endpoint.release(completion))) }
     },
     async compositeFrame(_request, groups) {
+      spatial.flush()
       const replacements: VideoEditCompositeReplacements = {
         pictures: new Map(groups.map(group => {
           const planned = plan.groups.find(value => value.id === group.groupId)!

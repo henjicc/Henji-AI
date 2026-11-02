@@ -6,6 +6,7 @@ import { recordVideoEditPreparation, videoEditGpuTimer } from './videoEditPrepar
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { codeLayerTotals, codeStructureCosts } from '@/core/videoEdit/codeMaterial/performance'
 import { VideoEditCodePicture } from './videoEditCodePicture'
+import { VIDEO_EDIT_CODE_RESIDENT_BUDGET_BYTES as MAX_RESIDENT_BYTES } from './videoEditGpuBudget'
 export { VideoEditCodePicture } from './videoEditCodePicture'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { paintNativeText } from '@/services/vectorContent/textRaster'
@@ -66,7 +67,6 @@ function observeDeviceErrors(device: DeviceErrorSource): DeviceErrors {
 }
 
 // 只用于缓存淘汰与前视控制；正在绘制的必需资源按真实字节记账，不以固定预算拒绝。
-const MAX_RESIDENT_BYTES = 512 * 1024 ** 2
 interface Glyph { texture: GpuTexture; width: number; height: number; bytes: number; x?: number; y?: number }
 const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
 const shapeShader = `
@@ -717,10 +717,10 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
    * 取回时先清成透明，与新建纹理的初始内容一致（有的效果只写支持区域）。
    */
   readonly effectAllocator: import('./videoEditBuiltinEffectsGpu').VideoEditBuiltinScratchAllocator = {
-    allocate: (width, height, format, mipLevelCount = 1, storage = false) => {
+    allocate: (width, height, format, mipLevelCount = 1, storage = false, clear = true) => {
       const key = `${width}x${height}:${format}:${mipLevelCount}:${storage}`
       const pooled = this.scratchPool.get(key)?.pop()
-      if (pooled) { const bytes = this.textureBytes.get(pooled.texture) ?? 0; this.scratchIdleBytes -= bytes; this.bytes += bytes; this.clearScratch(pooled.texture, mipLevelCount); return pooled.texture }
+      if (pooled) { const bytes = this.textureBytes.get(pooled.texture) ?? 0; this.scratchIdleBytes -= bytes; this.bytes += bytes; if (clear) this.clearScratch(pooled.texture, mipLevelCount); return pooled.texture }
       const texture = this.texture(width, height, format, mipLevelCount, storage)
       this.scratchKeys.set(texture, key)
       return texture
@@ -747,11 +747,11 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     }
     this.device.queue.submit([encoder.finish()])
   }
-  /** `before`：销毁在这一代之前归还的（释放全部时传最大整数）；Infinity 表示按最早归还的顺序销毁到闲置上限的一半。 */
-  private evictScratch(before: number): void {
+  /** 代际回收保留热纹理；预算回收按最早归还顺序物理释放，避免只在计账分类间搬字节。 */
+  private evictScratch(before: number, maximumIdleBytes = MAX_RESIDENT_BYTES / 8): void {
     const entries = [...this.scratchPool].flatMap(([key, list]) => list.map(entry => ({ key, entry }))).sort((a, b) => a.entry.generation - b.entry.generation)
     for (const { key, entry } of entries) {
-      if (before === Infinity ? this.scratchIdleBytes <= MAX_RESIDENT_BYTES / 8 : entry.generation >= before) break
+      if (before === Infinity ? this.scratchIdleBytes <= maximumIdleBytes : entry.generation >= before) break
       const list = this.scratchPool.get(key)!
       list.splice(list.indexOf(entry), 1); if (!list.length) this.scratchPool.delete(key)
       const bytes = this.textureBytes.get(entry.texture) ?? 0
@@ -879,6 +879,12 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.surfaces.delete(key); this.releaseAlternates(key); this.surfaceFrames.delete(key)
   }
 
+  /** 归还池内的纹理仍占显存，预算不能只读在用字节。 */
+  residentTextureBytes(): number { return this.diagnostics().residentBytes + this.scratchIdleBytes }
+  trimIdleTextures(budgetBytes: number): void {
+    const maximum = Math.max(0, budgetBytes - this.diagnostics().residentBytes)
+    if (this.scratchIdleBytes > maximum) this.evictScratch(Infinity, maximum)
+  }
   diagnostics(): { residentBytes: number; surfaces: number; glyphs: number; pipelines: number; pipelineCompiles: number; textureAllocations: number; externalCopies: number; generatorFrames: number; filterFrames: number; mixFrames: number; builtinFrames: number } {
     return { ...this.counts, pipelineCompiles: this.counts.pipelineCompiles, externalCopies: this.counts.externalCopies, residentBytes: this.bytes + (this.authorPrograms?.canvasBytes ?? 0) + (this.authorPrograms?.threeBytes ?? 0), surfaces: this.surfaces.size, glyphs: this.glyphs.size, pipelines: this.disposed ? 0 : 2 + Number(!!this.image) + this.mixPipelines.size }
   }
