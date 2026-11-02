@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import path from 'node:path'
 import { AudioWaveformAggregator, AudioWaveformPyramidBuilder } from './waveform-worker'
 import { AudioWaveformWorker } from './worker-client'
-import { aggregateWaveformLevel, decodeWaveformPyramid, encodeWaveformPyramid, waveformPyramidLevelPlan, WAVEFORM_PYRAMID_QUANT } from '../../../../src/core/media/waveformPyramid'
+import { aggregateWaveformLevel, aggregateWaveformLevelRange, aggregateWaveformSampleRange, decodeWaveformPyramid, encodeWaveformPyramid, waveformPyramidLevelPlan, WAVEFORM_PYRAMID_QUANT, WAVEFORM_PYRAMID_RANGE_QUANT } from '../../../../src/core/media/waveformPyramid'
 import type { AudioWaveformPyramidOptions } from './types'
 
 function pcm(values: number[]): Uint8Array {
@@ -55,13 +55,21 @@ describe('AudioWaveformPyramidBuilder (multi-resolution peaks)', () => {
     expect(pyramid.levels.map(level => [level.samplesPerBucket, level.bucketCount])).toEqual(waveformPyramidLevelPlan(frames, 4, 4, 8).map(level => [level.samplesPerBucket, level.bucketCount]))
     expect(pyramid.channelCount).toBe(3); expect(pyramid.mixChannel).toBe(true)
     const mix = left.map((value, frame) => (value + right[frame]) / 2)
-    const sources = [left, right, mix]
+    const sources = [left, right, mix].map(values => Float32Array.from(values))
     const unit = pyramid.amplitudeScale / WAVEFORM_PYRAMID_QUANT
+    const rangeUnit = pyramid.amplitudeScale / WAVEFORM_PYRAMID_RANGE_QUANT
+    const low = new Float32Array(1), high = new Float32Array(1)
+    const rawLow = new Float32Array(1), rawHigh = new Float32Array(1)
     for (const level of pyramid.levels) {
       for (let channel = 0; channel < 3; channel++) {
         for (let bucket = 0; bucket < level.bucketCount; bucket++) {
           const slice = sources[channel].slice(bucket * level.samplesPerBucket, (bucket + 1) * level.samplesPerBucket)
-          expect(level.peak[channel][bucket] * unit).toBeCloseTo(Math.max(...slice.map(Math.abs)), 4)
+          const first = bucket * level.samplesPerBucket, end = Math.min(frames, first + level.samplesPerBucket)
+          aggregateWaveformLevelRange(level, channel, pyramid.amplitudeScale, first, end, 1, low, high)
+          // 原始接口包含连线右端点；这里只比较桶实际保存的首末采样，避免把下一桶首帧算进来。
+          aggregateWaveformSampleRange(sources[channel], 0, first, end - 1, 1, rawLow, rawHigh)
+          expect(Math.abs(low[0] - rawLow[0])).toBeLessThanOrEqual(rangeUnit / 2 + 1e-7)
+          expect(Math.abs(high[0] - rawHigh[0])).toBeLessThanOrEqual(rangeUnit / 2 + 1e-7)
           expect(level.rms[channel][bucket] * unit).toBeCloseTo(Math.sqrt(slice.reduce((sum, value) => sum + value * value, 0) / slice.length), 4)
         }
       }
@@ -77,8 +85,9 @@ describe('AudioWaveformPyramidBuilder (multi-resolution peaks)', () => {
     const { pyramid } = builder.finish()
     const level = pyramid.levels[0]
     expect(pyramid.amplitudeScale).toBe(1)
-    expect([...level.peak[0]].slice(0, 4).every(value => value === Math.round(0.5 * WAVEFORM_PYRAMID_QUANT))).toBe(true)
-    expect([...level.peak[0]].slice(4).every(value => value === 0)).toBe(true)
+    expect([...level.min[0]].slice(0, 4).every(value => value === Math.round(0.5 * WAVEFORM_PYRAMID_RANGE_QUANT))).toBe(true)
+    expect([...level.max[0]]).toEqual([...level.min[0]])
+    expect([...level.max[0]].slice(4).every(value => value === 0)).toBe(true)
     const decoded = decodeWaveformPyramid(encodeWaveformPyramid(pyramid))
     expect(decoded).toMatchObject({ sampleRate: 48000, frameCount: 64, channelCount: 1, nativeChannels: 1, mixChannel: false })
     expect([...decoded.levels[0].rms[0]]).toEqual([...level.rms[0]])
@@ -95,7 +104,24 @@ describe('AudioWaveformPyramidBuilder (multi-resolution peaks)', () => {
     builder.push(pcm([0, 3, 0, 1.5, 0, 0, 0, 0]))
     const { pyramid } = builder.finish()
     expect(pyramid.amplitudeScale).toBe(3); expect(pyramid.peakMax).toBe(3)
-    expect(pyramid.levels[0].peak[0][0] * pyramid.amplitudeScale / WAVEFORM_PYRAMID_QUANT).toBeCloseTo(3, 6)
+    expect(pyramid.levels[0].max[0][0] * pyramid.amplitudeScale / WAVEFORM_PYRAMID_RANGE_QUANT).toBeCloseTo(3, 6)
+  })
+  it('preserves single-polarity ranges and merges a short final bucket by sample energy, including missing silence', () => {
+    for (const supplied of [9, 11]) {
+      const builder = new AudioWaveformPyramidBuilder(pyramidOptions({ expectedFrames: 11, topBuckets: 1 }))
+      const bytes = pcm(Array.from({ length: supplied }, (_, frame) => [frame < 8 ? 0.25 : 0.75, -0.5]).flat())
+      for (let offset = 0; offset < bytes.length; offset += 7) builder.push(bytes.subarray(offset, offset + 7))
+      const { pyramid } = builder.finish()
+      const base = pyramid.levels[0], top = pyramid.levels.at(-1)!
+      const unit = pyramid.amplitudeScale / WAVEFORM_PYRAMID_RANGE_QUANT
+      expect(base.min[0][0] * unit).toBeCloseTo(0.25, 4)
+      expect(base.max[1][0] * unit).toBeCloseTo(-0.5, 4)
+      expect(base.min[0][2] * unit).toBeCloseTo(supplied === 11 ? 0.75 : 0, 4)
+      expect(base.max[1][2] * unit).toBeCloseTo(supplied === 11 ? -0.5 : 0, 4)
+      const expectedEnergy = (8 * 0.25 ** 2 + (supplied - 8) * 0.75 ** 2) / 11
+      expect(top.rms[0][0] * pyramid.amplitudeScale / WAVEFORM_PYRAMID_QUANT).toBeCloseTo(Math.sqrt(expectedEnergy), 4)
+      expect(top.rms[1][0] * pyramid.amplitudeScale / WAVEFORM_PYRAMID_QUANT).toBeCloseTo(Math.sqrt(supplied * 0.5 ** 2 / 11), 4)
+    }
   })
 })
 
@@ -118,7 +144,8 @@ describe('real source Node Worker', () => {
       await worker.start(pyramidOptions({ channels: 1, mix: false, nativeChannels: 1, expectedFrames: 64 }))
       await worker.push(pcm(Array(64).fill(0.25)))
       const { pyramid, channels } = await worker.finishPyramid()
-      expect(pyramid.levels[0].peak[0]).toBeInstanceOf(Uint16Array)
+      expect(pyramid.levels[0].min[0]).toBeInstanceOf(Int16Array)
+      expect(pyramid.levels[0].max[0][0]).toBe(Math.round(0.25 * WAVEFORM_PYRAMID_RANGE_QUANT))
       expect(pyramid.peakMax).toBe(0.25)
       expect(channels[0].sampleCounts.reduce((sum, value) => sum + value, 0)).toBe(64)
     } finally { await worker.dispose() }

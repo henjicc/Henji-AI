@@ -8,9 +8,11 @@ import { createAudioWaveformService } from './ops'
 import { AudioWaveformWorker } from './worker-client'
 import { createContentDiskCache } from '../media/content-disk-cache'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
-import { aggregateWaveformLevel, selectWaveformLevel, WAVEFORM_PYRAMID_QUANT } from '../../../../src/core/media/waveformPyramid'
+import { aggregateWaveformLevel, selectWaveformLevel, WAVEFORM_PYRAMID_QUANT, WAVEFORM_PYRAMID_RANGE_QUANT } from '../../../../src/core/media/waveformPyramid'
 import type { AudioWaveformPyramid, AudioWaveformPyramidResult } from '../../../../src/platform/contracts/audioWaveform'
 
+// 缓存通过依赖注入验证，避免纯 Node 测试启动 Electron 宿主单例。
+vi.mock('../media/media-cache-runtime', () => ({ getMediaCacheManager: () => ({ createCache: () => null }) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), error: vi.fn() }) }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (source: string) => source }))
 vi.mock('../image/source', () => ({ normalizeLocalSource: (source: string) => source }))
@@ -59,12 +61,14 @@ describe.skipIf(process.env.HENJI_AUDIO_WAVEFORM_NATIVE !== '1')('real ffmpeg wh
     const stereo = pyramid(await first.extractPyramid({ source, channels: 2 }))
     expect(stereo).toMatchObject({ sampleRate: rate, frameCount: rate, channelCount: 2 })
     const unit = stereo.amplitudeScale / WAVEFORM_PYRAMID_QUANT
+    const rangeUnit = stereo.amplitudeScale / WAVEFORM_PYRAMID_RANGE_QUANT
     const level = stereo.levels[0]
     for (const bucket of [0, 7, 100, level.bucketCount - 1]) {
       const slice = left.slice(bucket * 128, (bucket + 1) * 128)
-      expect(level.peak[0][bucket] * unit).toBeCloseTo(Math.max(...slice.map(Math.abs)), 4)
+      expect(level.min[0][bucket] * rangeUnit).toBeCloseTo(Math.min(...slice), 4)
+      expect(level.max[0][bucket] * rangeUnit).toBeCloseTo(Math.max(...slice), 4)
     }
-    expect(level.peak[0][Math.floor(1000 / 128)] * unit).toBeCloseTo(0.9, 4)
+    expect(level.max[0][Math.floor(1000 / 128)] * rangeUnit).toBeCloseTo(0.9, 4)
     expect(level.rms[1][3] * unit).toBeCloseTo(0.25, 4)
     await first.dispose()
     expect(workers.count).toBe(1)

@@ -31,7 +31,7 @@ function data(frameCount = 48000): WaveformData {
   const buckets = Math.ceil(frameCount / 128)
   return {
     key: 'k', ref: { source: 'a.wav', channels: 2 }, gain: 2,
-    pyramid: { version: 'v', sampleRate: 48000, frameCount, startSeconds: 0, endSeconds: frameCount / 48000, amplitudeScale: 1, peakMax: 0.5, channelCount: 2, levels: [{ samplesPerBucket: 128, bucketCount: buckets, peak: [new Uint16Array(buckets).fill(30000), new Uint16Array(buckets).fill(20000)], rms: [new Uint16Array(buckets).fill(9000), new Uint16Array(buckets).fill(6000)] }] },
+    pyramid: { version: 'v', sampleRate: 48000, frameCount, startSeconds: 0, endSeconds: frameCount / 48000, amplitudeScale: 1, peakMax: 0.5, channelCount: 2, levels: [{ samplesPerBucket: 128, bucketCount: buckets, min: [new Int16Array(buckets).fill(-15000), new Int16Array(buckets).fill(-10000)], max: [new Int16Array(buckets).fill(15000), new Int16Array(buckets).fill(10000)], rms: [new Uint16Array(buckets).fill(9000), new Uint16Array(buckets).fill(6000)] }] },
   }
 }
 

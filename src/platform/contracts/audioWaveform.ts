@@ -50,8 +50,10 @@ export interface AudioWaveformPyramidRequest {
 export interface AudioWaveformPyramidLevelDto {
   samplesPerBucket: number
   bucketCount: number
-  /** Per selected channel, 16-bit fixed point: linear = value × amplitudeScale / 65535. */
-  peak: Uint16Array[]
+  /** 每个选中声道的有符号上下沿：线性幅度 = 值 × amplitudeScale / 32767。 */
+  min: Int16Array[]
+  max: Int16Array[]
+  /** 线性 RMS = 值 × amplitudeScale / 65535。 */
   rms: Uint16Array[]
 }
 

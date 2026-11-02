@@ -1,4 +1,4 @@
-import { aggregateWaveformLevel, aggregateWaveformSampleRange, aggregateWaveformSamples, selectWaveformLevel } from '@/core/media/waveformPyramid'
+import { aggregateWaveformLevel, aggregateWaveformLevelRange, aggregateWaveformSampleRange, aggregateWaveformSamples, selectWaveformLevel } from '@/core/media/waveformPyramid'
 import type { WaveformData, WaveformDetailWindow } from '@/services/waveform/waveformDataService'
 
 /**
@@ -33,8 +33,8 @@ export interface WaveformDrawOptions {
   /** 振幅倍数，覆盖数据自带的显示增益；音频编辑按真实电平（1 = 0 dBFS 顶到行高）再乘纵向缩放。超出行高的部分被裁掉。 */
   gain?: number
   /**
-   * 层次：`layered`（默认）峰值层半透明 + 响度层实色；`single` 只画一层实色包络，回读到原始采样后按带符号的
-   * 最低、最高值画，放大到每列只有一两个采样时画采样曲线（参照 Audition 的波形编辑器）。
+   * 层次：`layered`（默认）峰值层半透明 + 响度层实色；`single` 只画一层实色、按带符号的最低、最高值画的包络，
+   * 放大到每列只有一两个采样时画采样曲线（参照 Audition 的波形编辑器）。
    */
   layers?: 'layered' | 'single'
 }
@@ -173,9 +173,11 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
       drawPoints(ctx, options, detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gain, top, laneHeight, mid, amplitude, segments, sampleSpacingCss)
       return
     }
-    // single 档用带符号的范围（peak 存最高、rms 存最低）；layered 档仍是对称峰值 + 响度。
-    const signed = single && mode === 'samples'
-    if (signed) aggregateWaveformSampleRange(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gridStart, gridEnd, gridColumns, rms, peak)
+    // single 档在任何缩放下都画带符号的范围（peak 存最高、rms 存最低）：摘要与原始采样用同一画法，回读到采样时形状不跳；
+    // layered 档仍是对称峰值 + 响度。
+    const signed = single
+    if (signed && mode === 'samples') aggregateWaveformSampleRange(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gridStart, gridEnd, gridColumns, rms, peak)
+    else if (signed) aggregateWaveformLevelRange(level, channel, pyramid.amplitudeScale, gridStart, gridEnd, gridColumns, rms, peak)
     else if (mode === 'samples') aggregateWaveformSamples(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gridStart, gridEnd, gridColumns, peak, rms)
     else aggregateWaveformLevel(level, channel, pyramid.amplitudeScale, gridStart, gridEnd, gridColumns, peak, rms)
     for (const [kind, parts] of groups(segments)) {

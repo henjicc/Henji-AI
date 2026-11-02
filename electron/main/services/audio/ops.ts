@@ -453,7 +453,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
       version, sampleRate: data.sampleRate, frameCount: data.frameCount, startSeconds: data.startSeconds, endSeconds: data.endSeconds,
       amplitudeScale: data.amplitudeScale, peakMax: waveformPyramidPeakMax(data, channels), channelCount: channels.length,
       // Copies: the transfer must not carry the whole cache buffer, nor share it with the renderer.
-      levels: levels.map(level => ({ samplesPerBucket: level.samplesPerBucket, bucketCount: level.bucketCount, peak: channels.map(channel => level.peak[channel].slice()), rms: channels.map(channel => level.rms[channel].slice()) })),
+      levels: levels.map(level => ({ samplesPerBucket: level.samplesPerBucket, bucketCount: level.bucketCount, min: channels.map(channel => level.min[channel].slice()), max: channels.map(channel => level.max[channel].slice()), rms: channels.map(channel => level.rms[channel].slice()) })),
     }
   }
 

@@ -863,7 +863,7 @@ it('声道映射片段按每个片段声道各画一条波形并按声音流与�
   const requests: Array<{ audioStream?: number; audioChannel?: number; channels: number }> = []
   vi.spyOn(getPlatform().audioEdit, 'extractWaveformPyramid').mockImplementation(async request => {
     requests.push({ audioStream: request.audioStream ?? 0, audioChannel: request.audioChannel, channels: request.channels })
-    return { version: `v${request.audioStream ?? 0}`, sampleRate: 48000, frameCount: 48000 * 30, startSeconds: 0, endSeconds: 30, amplitudeScale: 1, peakMax: .5, channelCount: 1, levels: [{ samplesPerBucket: 128, bucketCount: 11250, peak: [new Uint16Array(11250).fill(32768)], rms: [new Uint16Array(11250).fill(19660)] }] }
+    return { version: `v${request.audioStream ?? 0}`, sampleRate: 48000, frameCount: 48000 * 30, startSeconds: 0, endSeconds: 30, amplitudeScale: 1, peakMax: .5, channelCount: 1, levels: [{ samplesPerBucket: 128, bucketCount: 11250, min: [new Int16Array(11250).fill(-16384)], max: [new Int16Array(11250).fill(16384)], rms: [new Uint16Array(11250).fill(19660)] }] }
   })
   const { sound } = await linkedPair()
   editVideoProject(owner.document.id, document => { document = structuredClone(document);

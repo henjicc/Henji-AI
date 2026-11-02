@@ -10,6 +10,8 @@ import type { AudioWaveformChannel, AudioWaveformPyramidOutput, AudioWaveformPyr
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn() }))
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }))
+// 缓存通过依赖注入验证，避免纯 Node 测试启动 Electron 宿主单例。
+vi.mock('../media/media-cache-runtime', () => ({ getMediaCacheManager: () => ({ createCache: () => null }) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), error: vi.fn() }) }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (source: string) => source }))
 vi.mock('../image/source', () => ({ normalizeLocalSource: (source: string) => source }))
@@ -67,7 +69,7 @@ describe('whole-source multi-resolution waveform (task 2.3)', () => {
     const result = pyramid(await stereo)
     expect(result).toMatchObject({ sampleRate: 48000, frameCount: 480, channelCount: 2 })
     expect(result.peakMax).toBeCloseTo(0.5, 4)
-    expect(result.levels[0].peak).toHaveLength(2); expect(result.levels[0].peak[0]).toBeInstanceOf(Uint16Array)
+    expect(result.levels[0].min).toHaveLength(2); expect(result.levels[0].min[0]).toBeInstanceOf(Int16Array)
     const mono = pyramid(await analyzer.extractPyramid({ source, channels: 1 }))
     const right = pyramid(await analyzer.extractPyramid({ source, channels: 1, audioChannel: 1 }))
     expect(mono.peakMax).toBeCloseTo(0.125, 4); expect(right.peakMax).toBeCloseTo(0.25, 4)
@@ -117,7 +119,8 @@ describe('whole-source multi-resolution waveform (task 2.3)', () => {
     finish(0, Array(480).fill(0.5))
     await pending; await first.dispose()
     const [file] = (await fs.readdir(directory)).filter(name => name.endsWith('.hwpk'))
-    await fs.writeFile(path.join(directory, file), Buffer.from('HWPK broken'))
+    const stale = await fs.readFile(path.join(directory, file)); stale.writeUInt16LE(1, 4)
+    await fs.writeFile(path.join(directory, file), stale)
     const second = cachedService(directory)
     const again = second.extractPyramid({ source, channels: 1 })
     await vi.waitFor(() => expect(children).toHaveLength(2))

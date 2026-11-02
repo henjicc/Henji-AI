@@ -9,6 +9,8 @@ import { createAudioWaveformService, audioWaveformSampleIndex } from './ops'
 import { AudioWaveformWorker } from './worker-client'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 
+// 缓存通过依赖注入验证，避免纯 Node 测试启动 Electron 宿主单例。
+vi.mock('../media/media-cache-runtime', () => ({ getMediaCacheManager: () => ({ createCache: () => null }) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), error: vi.fn() }) }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (source: string) => source }))
 vi.mock('../image/source', () => ({ normalizeLocalSource: (source: string) => source }))

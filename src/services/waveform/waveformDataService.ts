@@ -102,7 +102,7 @@ export function waveformKey(ref: WaveformSourceRef, scope: WaveformScope): strin
 }
 
 function byteSize(pyramid: AudioWaveformPyramid): number {
-  return pyramid.levels.reduce((sum, level) => sum + level.bucketCount * pyramid.channelCount * 4, 512)
+  return pyramid.levels.reduce((sum, level) => sum + level.bucketCount * pyramid.channelCount * 6, 512)
 }
 function toData(entry: Entry, pyramid: AudioWaveformPyramid): WaveformData {
   return { key: entry.key, ref: entry.ref, pyramid, gain: 1 / Math.max(pyramid.peakMax, DISPLAY_FLOOR) }

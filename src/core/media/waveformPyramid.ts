@@ -1,15 +1,15 @@
 /**
- * 多级精度波形峰值（任务 2.3，重要记录 005）的数据格式与读取算法。
+ * 多级精度波形范围的数据格式与读取算法。
  *
  * 思路取自 BBC audiowaveform / waveform-data.js 的多分辨率峰值（每级“每桶采样数”固定、逐级按整数倍合并），
- * 扩展为“峰值 + 响度（RMS）”两层、16 位定点、单文件多级。生成在主进程 Worker（waveform-worker.ts，
+ * 扩展为“有符号最小/最大值 + 响度（RMS）”、16 位定点、单文件多级。生成在主进程 Worker（waveform-worker.ts，
  * 唯一的 PCM 聚合实现），本文件只放主进程与渲染层共用的纯计算：常量、二进制编解码、按区间聚合、取级。
  *
  * 注意：主进程经相对路径导入本文件，这里不得使用 `@/` 别名，也不得依赖 DOM 或 Node 专有 API。
  */
 
 /** 文件格式版本；变更布局或算法时递增，旧缓存自动失效。 */
-export const WAVEFORM_PYRAMID_FORMAT_VERSION = 1
+export const WAVEFORM_PYRAMID_FORMAT_VERSION = 2
 /** 第 0 级每桶采样数：48kHz 约 375 桶/秒、44.1kHz 约 345 桶/秒。 */
 export const WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET = 128
 /** 相邻两级的倍数（128 → 1024 → 8192 → 65536 …）。 */
@@ -18,8 +18,10 @@ export const WAVEFORM_PYRAMID_LEVEL_FACTOR = 8
 export const WAVEFORM_PYRAMID_TOP_BUCKETS = 512
 /** 精细档原始采样回读一次最多的采样帧数（48kHz 约 5.5 秒）。 */
 export const WAVEFORM_DETAIL_MAX_FRAMES = 1 << 18
-/** 定点满量程。 */
+/** RMS 的无符号定点满量程。 */
 export const WAVEFORM_PYRAMID_QUANT = 65535
+/** min/max 的有符号定点满量程，正负使用同一比例。 */
+export const WAVEFORM_PYRAMID_RANGE_QUANT = 32767
 
 const MAGIC = [0x48, 0x57, 0x50, 0x4b] // "HWPK"
 const HEADER_BYTES = 64
@@ -29,8 +31,10 @@ const LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1
 export interface WaveformPyramidLevel {
   samplesPerBucket: number
   bucketCount: number
-  /** 每声道一份，定点值；线性幅度 = 值 × amplitudeScale / 65535。 */
-  peak: Uint16Array[]
+  /** 每声道一份；线性幅度 = 值 × amplitudeScale / 32767。 */
+  min: Int16Array[]
+  max: Int16Array[]
+  /** 线性 RMS = 值 × amplitudeScale / 65535。 */
   rms: Uint16Array[]
 }
 
@@ -71,7 +75,7 @@ export function waveformPyramidLevelPlan(frameCount: number, base = WAVEFORM_PYR
 
 export function encodeWaveformPyramid(data: WaveformPyramidData): Uint8Array {
   if (!LITTLE_ENDIAN) throw new Error('波形缓存仅支持小端平台。')
-  const dataBytes = data.levels.reduce((sum, level) => sum + level.bucketCount * data.channelCount * 4, 0)
+  const dataBytes = data.levels.reduce((sum, level) => sum + level.bucketCount * data.channelCount * 6, 0)
   const offset = HEADER_BYTES + data.levels.length * LEVEL_ENTRY_BYTES
   const bytes = new Uint8Array(offset + dataBytes)
   const view = new DataView(bytes.buffer)
@@ -95,9 +99,9 @@ export function encodeWaveformPyramid(data: WaveformPyramidData): Uint8Array {
     cursor += LEVEL_ENTRY_BYTES
   }
   for (const level of data.levels) {
+    validateWaveformLevel(level, data.channelCount)
     for (let channel = 0; channel < data.channelCount; channel++) {
-      for (const values of [level.peak[channel], level.rms[channel]]) {
-        if (values.length !== level.bucketCount) throw new Error('波形级长度不一致。')
+      for (const values of [level.min[channel], level.max[channel], level.rms[channel]]) {
         bytes.set(new Uint8Array(values.buffer, values.byteOffset, values.byteLength), cursor)
         cursor += values.byteLength
       }
@@ -125,7 +129,9 @@ export function decodeWaveformPyramid(input: Uint8Array): WaveformPyramidData {
     nativeChannels: view.getUint16(48, true), mixChannel: (view.getUint16(50, true) & 1) === 1,
   }
   if (!sampleRate || sampleRate > 768_000 || !channelCount || channelCount > 65 || !levelCount || levelCount > 16 || !Number.isSafeInteger(frameCount) || frameCount < 1
-    || !Number.isFinite(data.startSeconds) || !Number.isFinite(data.endSeconds) || !(data.amplitudeScale >= 1) || !(data.peakMax >= 0)) throw new Error('波形缓存头无效。')
+    || !Number.isFinite(data.startSeconds) || !Number.isFinite(data.endSeconds)
+    || !Number.isFinite(data.amplitudeScale) || !(data.amplitudeScale >= 1)
+    || !Number.isFinite(data.peakMax) || !(data.peakMax >= 0) || data.peakMax > data.amplitudeScale) throw new Error('波形缓存头无效。')
   let cursor = HEADER_BYTES
   const table: Array<{ samplesPerBucket: number; bucketCount: number }> = []
   for (let index = 0; index < levelCount; index++) {
@@ -134,21 +140,26 @@ export function decodeWaveformPyramid(input: Uint8Array): WaveformPyramidData {
     if (!samplesPerBucket || bucketCount !== Math.ceil(frameCount / samplesPerBucket)) throw new Error('波形缓存级表无效。')
     table.push({ samplesPerBucket, bucketCount }); cursor += LEVEL_ENTRY_BYTES
   }
-  const expected = cursor + table.reduce((sum, level) => sum + level.bucketCount * channelCount * 4, 0)
+  const expected = cursor + table.reduce((sum, level) => sum + level.bucketCount * channelCount * 6, 0)
   if (expected !== bytes.byteLength) throw new Error('波形缓存长度不符。')
   const levels = table.map((level) => {
-    const peak: Uint16Array[] = []; const rms: Uint16Array[] = []
+    const min: Int16Array[] = []; const max: Int16Array[] = []; const rms: Uint16Array[] = []
     for (let channel = 0; channel < channelCount; channel++) {
-      peak.push(new Uint16Array(bytes.buffer, bytes.byteOffset + cursor, level.bucketCount)); cursor += level.bucketCount * 2
+      min.push(new Int16Array(bytes.buffer, bytes.byteOffset + cursor, level.bucketCount)); cursor += level.bucketCount * 2
+      max.push(new Int16Array(bytes.buffer, bytes.byteOffset + cursor, level.bucketCount)); cursor += level.bucketCount * 2
       rms.push(new Uint16Array(bytes.buffer, bytes.byteOffset + cursor, level.bucketCount)); cursor += level.bucketCount * 2
     }
-    return { ...level, peak, rms }
+    return { ...level, min, max, rms }
   })
   return { ...data, levels }
 }
 
 export function waveformPyramidByteSize(data: WaveformPyramidData): number {
-  return HEADER_BYTES + data.levels.reduce((sum, level) => sum + LEVEL_ENTRY_BYTES + level.bucketCount * data.channelCount * 4, 0)
+  return HEADER_BYTES + data.levels.reduce((sum, level) => sum + LEVEL_ENTRY_BYTES + level.bucketCount * data.channelCount * 6, 0)
+}
+
+function validateWaveformLevel(level: WaveformPyramidLevel, channelCount: number): void {
+  if ([level.min, level.max, level.rms].some(channels => channels.length !== channelCount || channels.some(values => values.length !== level.bucketCount))) throw new Error('波形级长度不一致。')
 }
 
 /** 每列至少一桶的最粗一级；列比第 0 级还细时返回第 0 级（调用方决定是否改用原始采样）。 */
@@ -163,8 +174,9 @@ export function selectWaveformLevel(levels: readonly WaveformPyramidLevel[], fra
  * 输出线性幅度（未归一化）。列比桶细时取所在的那一桶，区间外为 0。
  */
 export function aggregateWaveformLevel(level: WaveformPyramidLevel, channel: number, amplitudeScale: number, startFrame: number, endFrame: number, count: number, outPeak: Float32Array, outRms: Float32Array): void {
-  const peaks = level.peak[channel]; const rmsValues = level.rms[channel]
+  const minima = level.min[channel]; const maxima = level.max[channel]; const rmsValues = level.rms[channel]
   const scale = amplitudeScale / WAVEFORM_PYRAMID_QUANT
+  const rangeScale = amplitudeScale / WAVEFORM_PYRAMID_RANGE_QUANT
   const width = (endFrame - startFrame) / count
   const spb = level.samplesPerBucket
   for (let column = 0; column < count; column++) {
@@ -177,14 +189,39 @@ export function aggregateWaveformLevel(level: WaveformPyramidLevel, channel: num
     if (last > level.bucketCount) last = level.bucketCount
     let peak = 0; let squares = 0
     for (let bucket = first; bucket < last; bucket++) {
-      const value = peaks[bucket]
+      const value = Math.max(Math.abs(minima[bucket]), Math.abs(maxima[bucket]))
       if (value > peak) peak = value
       const rms = rmsValues[bucket]
       squares += rms * rms
     }
     const buckets = last - first
-    outPeak[column] = buckets > 0 ? peak * scale : 0
+    outPeak[column] = buckets > 0 ? peak * rangeScale : 0
     outRms[column] = buckets > 0 ? Math.sqrt(squares / buckets) * scale : 0
+  }
+}
+
+/**
+ * 把 [startFrame, endFrame) 等分成 count 列，合并所有相交桶的带符号范围。
+ * 单极性声音保留其正负偏置，不把零强行纳入；范围外按最近的桶延伸，与原始范围接口的边缘策略一致。
+ * 桶内位置及端点采样已被摘要丢弃，因此非整桶裁切和连线端点插值仍须读取原始采样。
+ */
+export function aggregateWaveformLevelRange(level: WaveformPyramidLevel, channel: number, amplitudeScale: number, startFrame: number, endFrame: number, count: number, outMin: Float32Array, outMax: Float32Array): void {
+  const minima = level.min[channel], maxima = level.max[channel]
+  const scale = amplitudeScale / WAVEFORM_PYRAMID_RANGE_QUANT
+  const width = (endFrame - startFrame) / count
+  for (let column = 0; column < count; column++) {
+    if (level.bucketCount === 0) { outMin[column] = 0; outMax[column] = 0; continue }
+    const from = startFrame + column * width
+    const to = from + width
+    const first = Math.max(0, Math.min(level.bucketCount - 1, Math.floor(from / level.samplesPerBucket)))
+    const last = Math.max(first + 1, Math.min(level.bucketCount, Math.ceil(to / level.samplesPerBucket)))
+    let low = minima[first], high = maxima[first]
+    for (let bucket = first + 1; bucket < last; bucket++) {
+      if (minima[bucket] < low) low = minima[bucket]
+      if (maxima[bucket] > high) high = maxima[bucket]
+    }
+    outMin[column] = low * scale
+    outMax[column] = high * scale
   }
 }
 
@@ -245,6 +282,6 @@ export function aggregateWaveformSampleRange(samples: Float32Array, firstFrame: 
 export function waveformPyramidPeakMax(data: WaveformPyramidData, channels: readonly number[]): number {
   const top = data.levels.at(-1)!
   let peak = 0
-  for (const channel of channels) for (const value of top.peak[channel]) if (value > peak) peak = value
-  return peak * data.amplitudeScale / WAVEFORM_PYRAMID_QUANT
+  for (const channel of channels) for (let bucket = 0; bucket < top.bucketCount; bucket++) peak = Math.max(peak, Math.abs(top.min[channel][bucket]), Math.abs(top.max[channel][bucket]))
+  return peak * data.amplitudeScale / WAVEFORM_PYRAMID_RANGE_QUANT
 }

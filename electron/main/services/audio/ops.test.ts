@@ -9,6 +9,8 @@ import type { AudioWaveformChannel, AudioWaveformPyramidOutput, AudioWaveformWor
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn() }))
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }))
+// 缓存通过依赖注入验证，避免纯 Node 测试启动 Electron 宿主单例。
+vi.mock('../media/media-cache-runtime', () => ({ getMediaCacheManager: () => ({ createCache: () => null }) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), error: vi.fn() }) }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (source: string) => source }))
 vi.mock('../image/source', () => ({ normalizeLocalSource: (source: string) => source }))

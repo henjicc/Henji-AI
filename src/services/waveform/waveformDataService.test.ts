@@ -5,7 +5,7 @@ import type { AudioWaveformPyramid, AudioWaveformPyramidRequest, AudioWaveformPy
 import { acquireWaveform, acquireWaveformDetail, planWaveformDetailWindow, readWaveformDetail, readWaveformState, resetWaveformDataForTests, retryWaveform, waveformDetailKey, WAVEFORM_OVERVIEW_MAX_BUCKETS } from './waveformDataService'
 
 function pyramid(version = 'v1', peakMax = 0.5): AudioWaveformPyramid {
-  return { version, sampleRate: 48000, frameCount: 48000, startSeconds: 0, endSeconds: 1, amplitudeScale: 1, peakMax, channelCount: 1, levels: [{ samplesPerBucket: 128, bucketCount: 375, peak: [new Uint16Array(375)], rms: [new Uint16Array(375)] }] }
+  return { version, sampleRate: 48000, frameCount: 48000, startSeconds: 0, endSeconds: 1, amplitudeScale: 1, peakMax, channelCount: 1, levels: [{ samplesPerBucket: 128, bucketCount: 375, min: [new Int16Array(375)], max: [new Int16Array(375)], rms: [new Uint16Array(375)] }] }
 }
 interface Call { request: AudioWaveformPyramidRequest; signal: AbortSignal; resolve: (value: AudioWaveformPyramidResult) => void; reject: (error: unknown) => void }
 let calls: Call[]
