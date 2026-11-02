@@ -168,6 +168,13 @@ it('慢拖时音头只响一次、和原声一样陡：延长的是音头之后�
   for (let k = Math.ceil(20 * RATE / period) * period; k < (20 + speed * until / 1000) * RATE; k += period) traversed++
   expect(traversed).toBeGreaterThan(8)
   expect(Math.abs(attacks.length - traversed)).toBeLessThanOrEqual(1)
+  // 音头在指针走到它时才响：不提前（否则指针真走到时听不到，声音与波形错位），也不明显落后
+  const firstClick = Math.ceil(20 * RATE / period) * period
+  attacks.forEach((i, n) => {
+    const pointer = 20 + speed * i / RATE, click = (firstClick + n * period) / RATE
+    expect(pointer).toBeGreaterThan(click - 0.008)
+    expect(pointer).toBeLessThan(click + 0.03)
+  })
   // 声音一直不断
   for (let ms = 30; ms < until; ms += 5) expect(Math.max(...h.left.slice(h.index(ms), h.index(ms + 5)).map(Math.abs))).toBeGreaterThan(0.01)
 })

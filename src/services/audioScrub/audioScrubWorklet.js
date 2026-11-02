@@ -38,6 +38,12 @@ const REPEAT_MATCH = 0.008
 const REPEAT_CROSSFADE = 0.005
 const REPEAT_LIMIT = 0.15
 /**
+ * 指针还没走到的音头不提前放：当前段再放 ATTACK_GATE（秒，够下一次往回接与交叉淡化）就会进入音头时先往回接，
+ * 指针离音头不到 ATTACK_EARLY（接近原速时放宽到领先上限）才放过去。否则提前放过的音头不再重放，指针真走到时反而听不到，声音与波形错位。
+ */
+const ATTACK_GATE = 0.02
+const ATTACK_EARLY = 0.005
+/**
  * 音头：从某一跳（ONSET_HOP 秒）起 ONSET_SPAN 跳长的窗口能量比它之前同样长的窗口高 ONSET_RATIO 倍（6dB）以上，且不是底噪；
  * 起音后 ONSET_HOLD 秒内的峰也算音头，不重放。
  */
@@ -385,6 +391,10 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
         // 停下的位置记在淡出结束处：接着放时不重放淡出的那几毫秒。
         if (!moving) { this.edge = x + FADE_OUT * this.sourceRate; this.end(); return }
         const behind = (BEHIND + (BEHIND_NEAR_UNIT - BEHIND) * near) * this.sourceRate
+        // 接近原速及更快时声音本来就跟得上，音头前放宽到与领先上限相同，不为避让音头多出接缝。
+        const early = (ATTACK_EARLY + (AHEAD_NEAR_UNIT - ATTACK_EARLY) * clamp((speed - 0.5) / 0.5, 0, 1)) * this.sourceRate
+        const gate = this.attackStart(Math.max(x, pointer + early), x + ATTACK_GATE * this.sourceRate)
+        if (gate !== undefined) { this.repeat(current, x, pointer, gate); return }
         if (x - pointer > ahead) { this.repeat(current, x, pointer); return }
         if (pointer - x > behind && current.played >= MIN_SEGMENT * sampleRate) this.begin(this.match(x, pointer), undefined, CROSSFADE)
         return
@@ -411,18 +421,21 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
 
   /**
    * 声音领先指针（慢拖）：往回接一小段，接缝按波形对齐。接上的位置不早于刚响过的音头的结束处，音头不重放；
-   * 离可延长的稳定部分太近（刚过音头）就先接着放。
+   * 离可延长的稳定部分太近（刚过音头）就先接着放。before：前方指针还没走到的音头起点，接上的一段要在它之前留够下一次往回接的余量，
+   * 留不出来就从更早处接（宁可略落后指针，也不提前放音头）。
    */
-  repeat(current, x, pointer) {
-    if (current.played < REPEAT_GAP * sampleRate) return
+  repeat(current, x, pointer, before) {
     const rate = this.sourceRate, seek = REPEAT_SEEK * rate
-    const far = x - pointer > REPEAT_LIMIT * rate
+    // 两次往回接之间至少放 REPEAT_GAP；只有再不接就要（在交叉淡化期间）放进还没走到的音头时才提前接。
+    if (current.played < REPEAT_GAP * sampleRate && (before === undefined || x + (REPEAT_CROSSFADE + ATTACK_EARLY) * rate < before)) return
+    const far = before === undefined && x - pointer > REPEAT_LIMIT * rate
     const target = far ? pointer : Math.max(pointer, x - REPEAT * rate)
     let low = target - seek
-    const high = Math.min(target + seek, x - REPEAT_MIN * rate)
+    let high = Math.min(target + seek, x - REPEAT_MIN * rate)
+    if (before !== undefined) high = Math.min(high, before - (REPEAT_GAP + REPEAT_CROSSFADE) * rate)
     // 当前段淡出期间还会再响 REPEAT_CROSSFADE：这段里开始的音头也算已经响过。
     if (!far) { const attack = this.attackEnd(low, x + REPEAT_CROSSFADE * rate); if (attack !== undefined) low = Math.max(low, attack) }
-    if (high < low) return
+    if (high < low) { if (before === undefined) return; low = high - seek }
     this.begin(this.match(x, clamp(target, low, high), low, high, REPEAT_MATCH), undefined, REPEAT_CROSSFADE)
   }
 
@@ -432,6 +445,20 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
    * 还没送来的声音按静音算（不判音头）。
    */
   attackEnd(low, high) {
+    let found
+    this.attacks(low, high, (start, end) => { if (start < high && end > low) found = end })
+    return found
+  }
+
+  /** [low, high] 源帧范围内最早开始的音头起点（源帧）；没有返回 undefined。还没送来的声音按静音算。 */
+  attackStart(low, high) {
+    let found
+    this.attacks(low, high, start => { if (found === undefined && start >= low && start <= high) found = start })
+    return found
+  }
+
+  /** 逐个报出 [low, high] 附近的音头：visit(起点, 结束处)，结束处含 ONSET_HOLD（源帧）。 */
+  attacks(low, high, visit) {
     const hop = Math.max(1, Math.round(ONSET_HOP * this.sourceRate)), hold = ONSET_HOLD * this.sourceRate
     const first = Math.floor((low - hold) / hop) - ONSET_SPAN, last = Math.floor(high / hop) + ONSET_SPAN
     const origin = first - ONSET_SPAN, count = last - first + 2 * ONSET_SPAN
@@ -442,7 +469,7 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
       for (const end = k + hop; k < end; k++) sum += samples[k] * samples[k]
       energies[index] = sum
     }
-    let found, best = 0, attack = -1
+    let best = 0, attack = -1
     for (let hopIndex = first; hopIndex <= last + 1; hopIndex++) {
       let ratio = 0
       if (hopIndex <= last) {
@@ -451,10 +478,9 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
         if (now > ONSET_FLOOR * ONSET_SPAN * hop) ratio = now / (before + 1e-12)
       }
       if (ratio > ONSET_RATIO) { if (ratio > best) { best = ratio; attack = hopIndex } continue }
-      if (attack >= 0 && attack * hop < high && (attack + 1) * hop + hold > low) found = (attack + 1) * hop + hold
+      if (attack >= 0) visit(attack * hop, (attack + 1) * hop + hold)
       best = 0; attack = -1
     }
-    return found
   }
 
   /**
