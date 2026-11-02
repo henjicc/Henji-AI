@@ -22,7 +22,7 @@ import { ensureVideoEditProxyState, getVideoEditProxyPreference, readVideoEditPr
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
 import { videoEditClipMedia, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditClipSpeedData } from './videoEditClipSpeed'
-import { videoEditComposition } from '@/core/videoEdit/document'
+import { VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditTranscriptWords, resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEditTransitionClipIds, VIDEO_EDIT_TRANSITION_PRESETS, VIDEO_EDIT_TRANSITION_REF_PREFIX } from '@/core/videoEdit/transitions'
@@ -121,6 +121,10 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     data.motionBlur ??= false
     data.frameBlend ??= false
     data.multicam ??= null
+    const spaceRender = (found as typeof found & { spaceRender?: import('@/core/videoEdit/document').VideoEditSpaceRender }).spaceRender
+    delete data.spaceRender
+    data.finalRenderer = spaceRender?.finalRenderer ?? 'realtime'
+    data.pathTraceSamples = spaceRender?.pathTraceSamples ?? VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES
     const transcript = !propertyIds?.length || propertyIds.includes('video_edit.sequence.transcript')
     const silences = !propertyIds?.length || propertyIds.includes('video_edit.sequence.text_silences')
     if (transcript || silences) {

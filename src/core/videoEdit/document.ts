@@ -161,8 +161,24 @@ export const videoEditProjectTemplateSchema = z.object({
 export type VideoEditProjectTemplate = z.infer<typeof videoEditProjectTemplateSchema>
 export type VideoEditNativeTemplateContent = z.infer<typeof videoEditNativeTemplateContentSchema>
 export type VideoEditNativeTemplateClip = z.infer<typeof videoEditNativeTemplateClipSchema>
+/** 三维的成片渲染：导出、选帧、封面与预渲染按它出画；节目监视器看片的显示方式是本机查看状态，不在这里。 */
+export const videoEditSpaceRenderSchema = z.object({
+  finalRenderer: z.enum(['realtime', 'pathTrace']).optional().describe('成片的三维渲染器：realtime 实时（与节目监视器“实时”同一画面，快，默认）；pathTrace 路径追踪（全局光照、真实反射折射与景深，1080p 每帧约数秒到数十秒；不做运动模糊）。'),
+  pathTraceSamples: z.number().int().min(16).max(4096).optional().describe('路径追踪每像素采样数，省略为 256；越多噪点越少、越慢，大致与采样数成正比。'),
+}).strict()
+export type VideoEditSpaceRender = z.infer<typeof videoEditSpaceRenderSchema>
+export const VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES = 256
+/** 只存与默认不同的项，全是默认时整项省略（旧作品与没改过的作品写出的内容不变）。 */
+export function storedVideoEditSpaceRender(value: VideoEditSpaceRender): VideoEditSpaceRender | undefined {
+  const stored: VideoEditSpaceRender = {
+    ...value.finalRenderer && value.finalRenderer !== 'realtime' ? { finalRenderer: value.finalRenderer } : {},
+    ...value.pathTraceSamples !== undefined && value.pathTraceSamples !== VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES ? { pathTraceSamples: value.pathTraceSamples } : {},
+  }
+  return Object.keys(stored).length ? stored : undefined
+}
 export const videoEditSequenceSchema = z.object({
   spatialCamera: spatialCameraSchema.optional(),
+  spaceRender: videoEditSpaceRenderSchema.optional(),
   /** 序列按哪份工程风格副本创作（`styles` 中的 id）；绑定不改时间线上的任何东西。 */
   styleId: videoEditStyleIdSchema.optional(),
   multicam: videoEditMulticamSchema.optional(),

@@ -125,6 +125,8 @@ export const VIDEO_EDIT_COMMANDS = [
   // 时间线统一开关（重要记录 019）：作用于整条序列，写进序列、可撤销；预览与导出一致。
   command('toggle_motion_blur', '运动模糊', ['timeline']),
   command('toggle_frame_blend', '帧混合', ['timeline']),
+  // 成片的三维渲染器：勾上时导出、选帧、封面用路径追踪，看片仍按节目监视器的显示方式。
+  command('toggle_path_trace_final', '三维成片用路径追踪', ['timeline']),
   command('cut', '剪切片段', editScopes, key('KeyX', true)),
   command('copy', '复制片段', editScopes, key('KeyC', true)),
   command('paste', '粘贴片段', editScopes, key('KeyV', true)),

@@ -199,3 +199,26 @@ interface VideoEditSequenceRender3d {
 - three-gpu-pathtracer WebGPUPathTracer（v0.0.26 起）：https://discourse.threejs.org/t/three-gpu-pathtracer-a-modular-shader-based-path-tracing-extension-for-three-js/36903/56
 - WebGPU 尚无硬件光追（Khronos GDC 2026）：https://www.khronos.org/assets/uploads/developers/presentations/3D_on_the_Web_2026_-_GDC_2026_WebGL%2BWebGPU_Update.pdf
 - Blender 命令行渲染：https://docs.blender.org/manual/es/3.6/advanced/command_line/render.html
+
+## 第 4 段可行性（11-03，prototype/pt.ts，evidence/pt/）
+
+- three-gpu-pathtracer 0.0.27 + three-mesh-bvh 0.9.17 在 three 0.186.1 上可用（只有 Source 改名的警告）。1080p 本机：首帧约 3.8 s（编译着色器），64 spp 约 8 s，256 spp 约 21 s（约 20 spp/s）。玻璃折射、金属、清漆、地面反射正确。
+- 环境光必须是 CPU 上有数据的等距柱状图，且要线性过滤（DataTexture 默认最近邻，three 当作不可过滤、不声明采样器，WGSL 报 `*_sampler` 未定义）；PMREM 不行，立方体贴图转换走 WebGL 的 readRenderTargetPixels 也不行。做法：GPU 上把立方体环境展开成等距柱状图再异步读回，转半精度。
+- 只在 GPU 上的卡片画面（ExternalTexture）能进图集，但上下颠倒、未做 sRGB 解码：接入时先把卡片画进普通渲染目标（解码 gamma 2.4 到线性），再作为自发光贴图。
+- 接入真实渲染链路（harness `--display render --quality final`，正式样片第 150 帧，evidence/trace/）：1080p 256 spp 约 8 s（含编译）。卡片颜色与实时逐点对上（42→43、216→216、橙条完全相同），位置、景深强度一致。
+  踩过的坑：卡片发光被中性色调映射压暗（追踪里没有卡片遮罩）→ 解码时先做中性色调映射的逆；半透明穿透后的背景要设成透明（TRANSMISSIVE_BACKGROUND_TRANSPARENT）；贴图图集改半精度。
+
+## 复杂测试样片（11-03，harness/complex-scene.ts，evidence/complex*/）
+
+反射地面、带 2048 阴影的平行光、两盏运动彩色点光、程序化环境图、金属/清漆/透明物体、2 万个确定性运动的发光粒子，加正式样片的 6 张卡片。
+1080p 逐帧等显卡完成（不是流水线播放）的三维段帧时间 p50 / p95：
+
+| 效果 | p50 | p95 |
+|---|---|---|
+| 都不开 | 12.0–12.5 | 15–20 |
+| 只开运动模糊 | 18 | 21 |
+| 只开景深 | 15.6–21.5 | 37–45 |
+| 都开 | 22.5–25.5 | 42–52 |
+
+瓶颈是景深的尖峰：这条样片持续拉焦，标题、副标题卡片（栅格约 3400×1900）每帧重新整张虚化。下一步可做：卡片虚化按屏幕所需尺寸降采样后再虚化、虚化半径分档复用。
+统一渲染器打开了阴影（PCF 软阴影），作者灯光的 castShadow 生效。

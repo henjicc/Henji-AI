@@ -384,7 +384,11 @@ const threeSpaceMaterials = new WeakMap<object, Map<string, Map<string, ThreeSpa
  * 统一三维渲染器的接入：每个空间组的卡片与作者 three 场景交给同一个 three 场景一次绘制，景深与运动模糊整幅后处理；
  * 各组结果按原来的方式换回二维合成树（调整层、转场、非空间片段照旧）。组里含空间转场时仍走曝光合成。
  */
-export async function renderVideoEditThreeSpaceScene(options: Parameters<typeof renderVideoEditSpatialCompositeScene>[0] & { display?: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay }): Promise<SpatialPictureLease> {
+export async function renderVideoEditThreeSpaceScene(options: Parameters<typeof renderVideoEditSpatialCompositeScene>[0] & { display?: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay
+  /** 显示方式为“渲染”时的路径追踪安排（各空间组按组号再细分）。 */
+  trace?: Omit<import('./videoEditThreeSpace').ThreeSpaceTrace, 'group'>
+  /** 路径追踪这一帧还没收敛：画面先交出去，宿主稍后再要一次同一帧。 */
+  onRefining?: () => void }): Promise<SpatialPictureLease> {
   const { request, plan, sources, drawn, active, nodes, pictures, effects, compositor } = options
   if (plan.groups.some(group => group.itemIds.some(id => id.startsWith('transition:'))) || !sources.stageSpatialScenes) return renderVideoEditSpatialCompositeScene(options)
   const [{ evaluateVideoEditClip }, { videoEditFadeOpacity }, { spatialClipMatrix, includeSpatialWorldBounds }, math] = await Promise.all([import('@/core/videoEdit/keyframes'), import('@/core/videoEdit/fades'),
@@ -508,8 +512,9 @@ export async function renderVideoEditThreeSpaceScene(options: Parameters<typeof 
       }
       const groupScenes = scenes.filter(scene => group.clipIds.includes(scene.clipId)).map(scene => ({ ...scene, opacity: opacityOf(scene.clipId), ...previous.has(scene.clipId) ? { previous: previous.get(scene.clipId)! } : {} }))
       const picture = await capture(outputSpec(`three:group:${group.id}`), async target => {
-        await space.render({ frame: center, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects,
-          target: { texture: target.texture, width: target.width, height: target.height }, assertCurrent: () => { current() } })
+        const { refining } = await space.render({ frame: center, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects,
+          target: { texture: target.texture, width: target.width, height: target.height }, ...(options.trace ? { trace: { ...options.trace, group: group.id } } : {}), assertCurrent: () => { current() } })
+        if (refining) options.onRefining?.()
         return { completion: spatial.completion() }
       }, cards.some(card => card.light) || groupScenes.length > 0)
       groupPictures.push({ groupId: group.id, picture })

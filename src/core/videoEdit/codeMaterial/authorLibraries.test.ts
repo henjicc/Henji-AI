@@ -55,3 +55,18 @@ it('效果库只在兼容接口自动锁定，显式不存在的发行不换版�
   expect(resolveAuthorLibraryModule('henji-effects', { 'henji-effects': '9.0.0' })).toBeUndefined()
   expect(authorLibraryImportTable({ 'henji-effects': '1.0.0' }, 7).modules['henji-effects']).toContain('/henji-effects/1.0.0/index.mjs')
 })
+
+it('带库依赖的库只在依赖版本一致时提供，记录了别的依赖版本时给出原因', async () => {
+  const { authorLibraryDependencyError } = await import('./authorLibraries')
+  expect(latestAuthorLibraryVersions(15)['three-gpu-pathtracer']).toBe('0.0.27')
+  expect(latestAuthorLibraryVersions(14)['three-gpu-pathtracer']).toBeUndefined()
+  expect(authorLibraryDependencyError('three-gpu-pathtracer', '0.0.27', { three: '0.186.1', 'three-mesh-bvh': '0.9.17' })).toBeUndefined()
+  const three = AUTHOR_LIBRARIES.three as Record<string, AuthorLibraryRelease>
+  three['0.200.0'] = three['0.186.1']
+  try {
+    // three 出了新版而路径追踪器还钉在旧版：新代码选 three 新版时不提供它，避免两份 three。
+    expect(latestAuthorLibraryVersions(15).three).toBe('0.200.0')
+    expect(latestAuthorLibraryVersions(15)['three-gpu-pathtracer']).toBeUndefined()
+    expect(authorLibraryDependencyError('three-gpu-pathtracer', '0.0.27', { three: '0.200.0' })).toContain('three@0.186.1')
+  } finally { delete three['0.200.0'] }
+})

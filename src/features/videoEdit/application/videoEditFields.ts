@@ -13,7 +13,7 @@ import { mediaContentQueryProgressSchema } from '@/core/media/contentIndex'
 import { videoEditContentAnchorInputSchema } from '@/core/videoEdit/contentAnchors'
 import { type ApplicationFieldDefinition, type JsonValue, type ApplicationSchemaRef } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
-import { videoEditAnnotationSchema, videoEditClipSchema, videoEditSequenceSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, videoEditMediaSchema } from '@/core/videoEdit/document'
+import { videoEditAnnotationSchema, videoEditClipSchema, videoEditSequenceSchema, videoEditSpaceRenderSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, videoEditMediaSchema } from '@/core/videoEdit/document'
 import { videoEditAnnotationMessageSchema } from '@/core/videoEdit/annotations'
 import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from '@/core/videoEdit/codeMaterialPersistence'
 import { codeMaterialCurvesSchema } from '@/core/videoEdit/codeMaterialAnimation'
@@ -53,7 +53,7 @@ const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   // 速度（4.13）以 speed_percent 百分比公开（见下），不公开内部有理数。
   'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => !['id', 'sourceRemainder', 'speed', 'curves', 'spatial'].includes(key))),
   'video_edit.annotation': Object.fromEntries(Object.entries(videoEditAnnotationSchema.shape).filter(([key]) => key !== 'id' && key !== 'sourceRemainder')),
-  'video_edit.sequence': Object.fromEntries(Object.entries(videoEditSequenceSchema.shape).filter(([key]) => !['id', 'clips', 'annotations', 'tracks', 'markers', 'captions', 'textTranscription'].includes(key))),
+  'video_edit.sequence': Object.fromEntries(Object.entries(videoEditSequenceSchema.shape).filter(([key]) => !['id', 'clips', 'annotations', 'tracks', 'markers', 'captions', 'textTranscription', 'spaceRender'].includes(key))),
   'video_edit.marker': { ...Object.fromEntries(Object.entries(videoEditMarkerSchema.shape).filter(([key]) => key !== 'id')), clipId: z.string().max(100) },
   'video_edit.caption': { ...Object.fromEntries(Object.entries(videoEditCaptionSchema.shape).filter(([key]) => key !== 'id')), clipId: z.string().max(100) },
   'video_edit.bin': Object.fromEntries(Object.entries(videoEditBinSchema.shape).filter(([key]) => !['id', 'sourceFolderPath'].includes(key))),
@@ -88,6 +88,9 @@ schemas['video_edit.clip'].enabled = z.boolean()
 schemas['video_edit.sequence'].frameBlend = videoEditSequenceSchema.shape.frameBlend.unwrap()
 schemas['video_edit.sequence'].captionTrackLocked = videoEditSequenceSchema.shape.captionTrackLocked.unwrap()
 schemas['video_edit.sequence'].multicam = videoEditSequenceSchema.shape.multicam.unwrap().nullable()
+// 三维成片渲染按两个标量属性公开（存储时合在 spaceRender 里、只存非默认值），通用改写只动其中一项。
+schemas['video_edit.sequence'].finalRenderer = videoEditSpaceRenderSchema.shape.finalRenderer.unwrap()
+schemas['video_edit.sequence'].pathTraceSamples = videoEditSpaceRenderSchema.shape.pathTraceSamples.unwrap()
 schemas['video_edit.clip'].effectsEnabled = videoEditClipSchema.shape.effectsEnabled.unwrap()
 schemas['video_edit.clip'].disabledIntrinsicSections = videoEditClipSchema.shape.disabledIntrinsicSections.unwrap()
 schemas['video_edit.clip'].codeParameters = codeMaterialInstanceSchema.shape.parameters
@@ -189,6 +192,8 @@ labels.textStyle = '文字样式'
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', translation: '第二语言字幕', style: '字幕样式' })
 labels.multicamCameraId = '机位'
 labels.multicam = '多机位源（机位与说话人、主音频）'
+labels.finalRenderer = '三维成片渲染器'
+labels.pathTraceSamples = '路径追踪采样数'
 labels.codeImageGeneration = '图片生成来源'
 labels.audioAnalysis = '音频分析'
 labels.audioLinkNotices = '音频链接更新提示'
@@ -274,7 +279,7 @@ const descriptions: Record<string, string> = {
   'video_edit.media.proxy_state': '代理状态，只读：none无代理、generating后台创建中、ready已有；progress为0–1，error为失败原因。代理创建使用generate_video_edit_proxy，切换使用video_edit.document.proxy_preference。',
   'video_edit.document.render_cache': '当前序列的渲染条，只读：按剪辑点分段，长段最多五秒，ready 已渲染（节目完整分辨率流畅播放）、rendering 正在渲染、dropped 实测正向播放跳帧超过5%（红）、predicted 帧指纹尚未就绪，或尚无足够样本但预计吃力（黄；不能复用旧预览）、realtime 实测流畅或预计轻量；performance 为最近最多600个应呈现帧的样本数、其中被跳过的帧数与实时合成耗时p90毫秒；rendering 为已排队或进行中的预渲染进度（指纹未就绪时先排队，只等所需窗口），auto 为空闲时自动渲染（发起新的渲染会直接接替它）。ready 也包括自动预渲染用网页缓存画面做出的预览；渲染使用 render_video_edit_preview，它只认并只产出不含网页缓存画面的精确预览，这类段落会另渲染精确版；停止并保留已完成预览使用 cancel_video_edit_preview；删除整条序列或指定帧范围相交的预览文件使用 clear_video_edit_preview（可重新生成的缓存，不改素材或剪辑内容）；修改内容后仅受影响段落的预览与实测失效。',
   'video_edit.document.render_preference': '预渲染偏好。autoRender=true（默认）时，打开节目监视器后、编辑停下 3 秒且没有播放、拖动或导出时，自动在后台从播放头附近开始渲染渲染条上可能卡顿的段落；播放、拖动、导出时暂停让出显卡，再次编辑会取消并等停下后重来。false 只在手动渲染或 render_video_edit_preview 时渲染。本机按剪辑记住，不改内容，可事务撤销。',
-  'video_edit.document.space_display': '节目监视器里三维空间的显示方式（只影响看片，不改剪辑内容，不进剪辑历史；导出、选帧、封面始终按完整效果）。mode：auto 自动（默认；播放跟不上时逐级简化为 solid、wireframe，暂停时回到 realtime）、realtime 实时（灯光、阴影、景深、运动模糊全开）、solid 实体（三维物体灰色明暗，不做景深与运动模糊）、wireframe 线框（三维物体只画结构线）。卡片画面在各方式下都照常显示。按剪辑记住。',
+  'video_edit.document.space_display': '节目监视器里三维空间的显示方式（只影响看片，不改剪辑内容，不进剪辑历史；导出、选帧、封面始终按完整效果）。mode：auto 自动（默认；播放跟不上时逐级简化为 solid、wireframe，暂停时回到 realtime）、realtime 实时（灯光、阴影、景深、运动模糊全开）、solid 实体（三维物体灰色明暗，不做景深与运动模糊）、wireframe 线框（三维物体只画结构线）、render 渲染（路径追踪的全局光照、真实反射折射与景深，停住后逐步收敛，播放很慢，不做运动模糊；看最终质感时用）。卡片画面在各方式下都照常显示。按剪辑记住。',
   'video_edit.document.playback_resolution': '节目监视器的回放分辨率（只影响看片时的流畅度与清晰度，不改剪辑内容，不进剪辑历史）。resolution：full 完整、half 1/2、quarter 1/4、eighth 1/8（按序列宽高各缩小到该比例渲染，素材多、效果重、播放卡顿时调低）。fullWhenPaused：true 暂停时自动回到完整分辨率（默认，便于看清细节），false 暂停时也用所选分辨率。导出、选帧加入资产库、设为项目封面始终按完整分辨率，与此无关。按剪辑记住。',
   'video_edit.clip.effect_ids': '效果执行顺序（从上到下依次处理画面；声音片段上是音频效果，依次处理声音）。',
   'video_edit.transition.left_clip_id': '过渡左侧（前一段）的片段 ID，创建后不可改。两个片段在同一轨道首尾相接时两端都写；只写 left_clip_id 是挂在该片段出点的单侧过渡（后面是空白，淡出）。视频过渡挂画面片段，音频过渡挂声音片段。',
@@ -327,6 +332,8 @@ labels.remix = '音频重构'
 labels.musicStructure = '音乐结构'
 descriptions['video_edit.clip.frame_hold'] = '是否为帧定格；定格引用源入点处的同一帧，可调整持续时间、修剪和移动。用 add_video_edit_frame_hold 在播放头切出定格，整个操作可撤销。'
 Object.assign(labels, { contentAnchor: '关联内容' })
+descriptions['video_edit.sequence.final_renderer'] = '三维成片渲染器：导出、选帧、设为封面与预渲染按它出画，节目监视器看片另用 video_edit.document.space_display。realtime 实时（默认，与看片“实时”同一画面）；pathTrace 路径追踪（全局光照、真实反射折射与景深；1080p 每帧约数秒到数十秒，导出与预渲染慢很多；不做运动模糊）。'
+descriptions['video_edit.sequence.path_trace_samples'] = '路径追踪每像素采样数 16–4096，默认 256；越多噪点越少、越慢，大致与采样数成正比。只在 final_renderer 为 pathTrace 时起作用。'
 descriptions['video_edit.sequence.motion_blur'] = '整条序列的运动模糊总开关（新建序列默认开）：开着时有位置、缩放、旋转、锚点动画的片段，以及代码素材里声明了 motionBlur 的会动图层沿运动方向模糊；关掉则全部不模糊。单个片段用 video_edit.clip.motion_blur 关掉。'
 descriptions['video_edit.clip.motion_blur'] = '这个片段自身动画（位置、缩放、旋转、锚点关键帧）的运动模糊：true 跟随序列总开关（默认），false 只关掉这个片段。序列总开关 video_edit.sequence.motion_blur 关掉时一律不模糊。代码素材里单个图层的模糊在源码图层的 motionBlur 里控制。界面不提供这一项，由助手按画面需要调整。'
 descriptions['video_edit.clip.enabled'] = '片段是否启用（PR 剪辑 > 启用，Shift+E）：true 为启用（默认）；false 时片段留在时间线上、位置不变，但不参与节目画面、导出与混音，审片、源映射与封面也跳过它。一侧停用的视频过渡照常进行、停用那一侧按透明画；两侧都停用的过渡不出现。轨道隐藏、静音、独奏仍按轨道各自生效。锁定轨道上的片段不能改。'

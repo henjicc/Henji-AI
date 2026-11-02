@@ -1,6 +1,6 @@
 import type * as Three from 'three'
 import type { GpuDevice, GpuTexture, GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { resolveAuthorLibraryModule, type AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { authorLibraryDependencyError, resolveAuthorLibraryModule, type AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import { VideoEditAuthorThreeClock } from './videoEditAuthorThreeClock'
 import { runVideoEditGpuSection } from './videoEditGpuRootQueue'
 import { videoEditThreeTargetBytes } from './videoEditGpuBudget'
@@ -30,6 +30,15 @@ export async function loadAuthorThreeLibrary(libraries?: AuthorLibraryVersions):
   const resolved = resolveAuthorLibraryModule('three/webgpu', libraries)
   if (!resolved || resolved.version !== '0.186.1') throw new Error('受管 three 需要已验证的 three 0.186.1。')
   return importLibrary(resolved.url)
+}
+
+/** 建在 three 上的内置库（如路径追踪器）：它钉住的 three 必须就是受管场景用的这一份，否则类与材质互不认识。 */
+export async function loadAuthorThreeDependent<T>(specifier: string, libraries?: AuthorLibraryVersions): Promise<T> {
+  const resolved = resolveAuthorLibraryModule(specifier, libraries)
+  if (!resolved) throw new Error(`没有内置库入口 ${specifier}。`)
+  const error = authorLibraryDependencyError(resolved.library, resolved.version, { three: '0.186.1', ...libraries })
+  if (error) throw new Error(error)
+  return importLibrary(resolved.url) as Promise<T>
 }
 
 /** 作者版 three 的其他入口（three/tsl、three/addons/…），与场景同一份库实例。 */

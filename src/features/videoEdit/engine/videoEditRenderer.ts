@@ -2,6 +2,8 @@ import type { WebSourceProvenance, WebSourceCaptureRequest } from '@/platform/co
 import { freezeWebText, unavailableWebText } from '@/core/videoEdit/webTextGeometry'
 import { resolveVideoEditTransitionSource } from '@/core/videoEdit/transitionCatalog'
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
+import { VIDEO_EDIT_SPACE_RENDER_DISPLAYS, videoEditFinalSpaceDisplay } from '@/core/videoEdit/spaceDisplay'
+import { VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES } from '@/core/videoEdit/document'
 import type { VideoEditContentTarget, VideoEditLookaheadScope } from './videoEditDecodeLookahead'
 import { codeMediaInputKey, codeMediaInputComposition, codeMediaInputNextFrame, codeMediaInputSample, codeMediaWebTimeGrid, type CodeMediaInput } from '@/core/videoEdit/codeMediaInput'
 import { codeWebView } from '@/core/videoEdit/codeMaterial/webSource'
@@ -494,8 +496,13 @@ export class VideoEditRenderer {
   /** 三维显示方式（节目监视器按播放情况选好的具体档位）；嵌套序列随外层，导出用的渲染器始终是实时。 */
   private spaceDisplayValue: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay = 'realtime'
   private get spaceDisplay(): import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay { return this.nestedOwner?.spaceDisplay ?? this.spaceDisplayValue }
+  /** 成片（导出、选帧、封面）的三维渲染按导出的那条序列的设置，嵌套序列跟随它。 */
+  private get finalSpaceRender(): import('@/core/videoEdit/document').VideoEditSpaceRender | undefined { return this.nestedOwner ? this.nestedOwner.finalSpaceRender : this.document.spaceRender }
+  private spaceDisplayFor(quality: EffectQuality): import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay {
+    return quality === 'final' ? videoEditFinalSpaceDisplay({ spaceRender: this.finalSpaceRender }) : this.spaceDisplay
+  }
   setSpaceDisplay(display: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay): void {
-    if (!['realtime', 'solid', 'wireframe'].includes(display)) throw new Error(`未知的三维显示方式：${display}`)
+    if (!VIDEO_EDIT_SPACE_RENDER_DISPLAYS.includes(display)) throw new Error(`未知的三维显示方式：${display}`)
     this.spaceDisplayValue = display
   }
   private lookaheadRenderers(): VideoEditRenderer[] {
@@ -1942,7 +1949,7 @@ export class VideoEditRenderer {
    * Top-level draws one at a time: a jump preview never interleaves with a live frame finishing in the background.
    * 上屏请求号在锁内登记，缓存读取可据此保留更早现场合成期间的上屏资格。
    */
-  private async exclusiveDraw<T extends { presented: boolean; completion: Promise<void> }>(draw: () => Promise<T>, frame: number, source: VideoEditPresentedSource, exact = true, requestOrder = this.reservePresentation(), provenance: () => WebSourceProvenance = () => 'live'): Promise<T> {
+  private async exclusiveDraw<T extends { presented: boolean; completion: Promise<void> }>(draw: () => Promise<T>, frame: number, source: VideoEditPresentedSource, exactness: boolean | (() => boolean) = true, requestOrder = this.reservePresentation(), provenance: () => WebSourceProvenance = () => 'live'): Promise<T> {
     const previous = this.drawLock
     let unlock!: () => void
     this.drawLock = new Promise<void>(resolve => { unlock = resolve })
@@ -1950,6 +1957,8 @@ export class VideoEditRenderer {
       await previous
       const state = { document: this.document, epoch: this.presentationEpoch, cacheRevision: this.renderCacheRevision, divisor: this.renderDivisor }
       const result = await draw()
+      // 画的过程中才知道是否精确（例如路径追踪还没收敛），所以画完再取。
+      const exact = typeof exactness === 'function' ? exactness() : exactness
       if (result.presented) { this.shownRequest = requestOrder; this.shownFrame = frame; this.shownFrameExact = exact; this.shownState = { ...state, provenance: provenance(), source, completion: result.completion }; this.onPresentation?.(frame, source, exact, provenance()) }
       return result
     } finally { unlock() }
@@ -2402,7 +2411,11 @@ export class VideoEditRenderer {
             return { assets, images, info }
           } })
           const { renderVideoEditThreeSpaceScene } = await import('./videoEditCompositeScene')
-          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplay, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
+          // 预览的路径追踪每次追踪 150 ms，按剪辑版本、帧与输出尺寸累积（这一帧的其他输入还是粗略画面时不累积，等它们精确后从头算），
+          // 没收敛的画面算作粗略画面，节目监视器停住时会再要精确画面；成片一次追踪到目标采样数。
+          const samples = this.finalSpaceRender?.pathTraceSamples ?? VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES
+          const trace = quality === 'final' ? { samples } : { samples, budgetMs: 150, ...(approximatePictures ? {} : { key: `${document.id}:${document.revision}:${frame}:${precision}` }) }
+          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplayFor(quality), trace, onRefining: markApproximate, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
           let completion = lease.completion
           try {
             const input = gpu.spatialPicture(lease)
@@ -2415,7 +2428,7 @@ export class VideoEditRenderer {
         return composite ? renderVideoEditCompositeScene(drawn, composite, pictureMap, effects, gpu, frame, canPresent, deadline, document, nestedTarget, onEffectError, quality, readFilterFrames)
           : gpu.draw(drawn, active, pictures, canPresent, deadline, await nestedTarget?.(pictures))
       }
-      result = nestedRender ? await draw() : await this.exclusiveDraw(draw, frame, cachedWindow ? 'prerendered' : 'live', !approximatePictures, requestOrder, () => provenance)
+      result = nestedRender ? await draw() : await this.exclusiveDraw(draw, frame, cachedWindow ? 'prerendered' : 'live', () => !approximatePictures, requestOrder, () => provenance)
     } catch (error) {
       if (canPresent()) throw error
       result = { presented: false, completion: Promise.resolve() }

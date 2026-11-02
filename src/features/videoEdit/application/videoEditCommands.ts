@@ -4,7 +4,7 @@ import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { placeVideoEditItems } from '@/core/videoEdit/projectItems'
-import { setVideoEditClipEnabled, videoEditClipEnabled, videoEditDuration, type VideoEditSequence } from '@/core/videoEdit/document'
+import { setVideoEditClipEnabled, storedVideoEditSpaceRender, videoEditClipEnabled, videoEditDuration, type VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
@@ -221,6 +221,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
     if (id === 'toggle_motion_blur') return { enabled: true, checked: Boolean(sequence.motionBlur) }
     if (id === 'toggle_frame_blend') return { enabled: true, checked: Boolean(sequence.frameBlend) }
+    if (id === 'toggle_path_trace_final') return { enabled: true, checked: sequence.spaceRender?.finalRenderer === 'pathTrace' }
     if (id === 'export') return { enabled: sequence.clips.length > 0, reason: '序列没有可导出的片段。' }
     if (id === 'deselect_all') return { enabled: true }
     if (PROJECT_PANEL_COMMANDS.has(id)) return { enabled: false, reason: '请在素材面板中使用。' }
@@ -360,6 +361,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
       editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ids.has(clip.id) ? setVideoEditClipEnabled(clip, enabled) : clip) })); return
     }
     case 'toggle_frame_blend': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, frameBlend: sequence.frameBlend ? undefined : true })); return
+    case 'toggle_path_trace_final': editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, spaceRender: storedVideoEditSpaceRender({ ...sequence.spaceRender, finalRenderer: sequence.spaceRender?.finalRenderer === 'pathTrace' ? 'realtime' : 'pathTrace' }) })); return
     // 面板组最大化属于布局，由剪辑页拿着停靠区执行；素材视图属于素材面板。命令层无事可做。
     case 'project_list_view': case 'project_icon_view': case 'project_toggle_view': return
     case 'go_prev_edit': case 'go_next_edit': case 'go_prev_edit_any': case 'go_next_edit_any': case 'go_start': case 'go_end': case 'go_in': case 'go_out': case 'next_marker': case 'prev_marker':

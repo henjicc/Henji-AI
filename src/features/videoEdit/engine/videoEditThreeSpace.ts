@@ -5,6 +5,7 @@ import type { SpatialCardGeometry, SpatialFrame } from '@/core/videoEdit/spatial
 import type { VideoEditSpaceRenderDisplay } from '@/core/videoEdit/spaceDisplay'
 import { loadAuthorThreeLibrary, loadAuthorThreeModule, type AuthorThreeLibrary } from './videoEditAuthorThreeWebGpu'
 import { VideoEditAuthorThreeClock } from './videoEditAuthorThreeClock'
+import type { VideoEditThreeSpacePathTrace } from './videoEditThreeSpacePathTrace'
 import { runVideoEditGpuSection } from './videoEditGpuRootQueue'
 
 /**
@@ -22,6 +23,7 @@ import { runVideoEditGpuSection } from './videoEditGpuRootQueue'
  * - 作者场景的着色器时钟：一组只有一个作者场景时用它的源时间（与单独渲染一致），多个时共用第一个的源时间。
  * - 显示方式：实体、线框只在本次渲染期间把作者的网格换成统一的灰色明暗或线框材质、不做后处理，结束后还原；
  *   粒子、精灵等靠节点算顶点位置的物体保持原材质（换掉会塌成一点）；卡片照常显示画面。
+ * - 渲染（路径追踪）见 videoEditThreeSpacePathTrace：同一场景按帧累积采样，没收敛时告诉宿主再要一次同一帧。
  */
 
 export interface ThreeSpaceCard {
@@ -68,8 +70,23 @@ export interface ThreeSpaceFrame {
   scenes: readonly ThreeSpaceScene[]
   effects: ThreeSpaceEffects
   target: { texture: GpuTexture; width: number; height: number }
+  /** 显示方式为“渲染”时的路径追踪安排；缺省按 TRACE_SAMPLES 一次追踪到底。 */
+  trace?: ThreeSpaceTrace
   assertCurrent(): void
 }
+export interface ThreeSpaceTrace {
+  /** 一帧里的哪个空间组：每组各用一个追踪器，同一帧的几组才能各自接着累积。 */
+  group: string
+  /** 画面身份（剪辑、版本与帧，只在这一帧的输入都精确时给出）：相同时接着累积采样；缺省每次从头追踪。 */
+  key?: string
+  /** 每像素目标采样数。 */
+  samples: number
+  /** 本次调用最多追踪多久（毫秒）；缺省追踪到目标采样数为止。 */
+  budgetMs?: number
+}
+const TRACE_SAMPLES = 256
+/** 一帧里同时累积的空间组上限：每个追踪器都占着全分辨率的累积目标与加速结构。 */
+const TRACE_GROUPS = 8
 
 /** 作者版 three 的 TSL 节点。类型声明跟着应用自带的 three 版本，这里只描述用到的部分。 */
 interface TslNode {
@@ -128,7 +145,7 @@ export class VideoEditThreeSpace {
    * 按后处理组合缓存的管线：实时与实体、线框来回切时不重建（否则换档那一下的卡顿又会触发下一次换档）。
    * 释放时一并释放各自的节点：RenderPipeline.dispose 只释放全屏四边形的材质，场景与景深节点的渲染目标要单独释放。
    */
-  private readonly pipelines = new Map<string, { pipeline: RenderPipeline; nodes: Array<{ dispose(): void }> }>()
+  private readonly pipelines = new Map<string, { pipeline: RenderPipeline; nodes: Array<{ dispose(): void }>; primed: boolean }>()
   private renders = 0
   private overrides?: Record<'solid' | 'wireframe', Three.Material>
   private readonly focus: TslUniform<number>
@@ -141,9 +158,12 @@ export class VideoEditThreeSpace {
   private readonly velocity: TslNode
   private failure?: Error
   private closed = false
+  /** 各空间组的追踪器；切到其他显示方式时全部释放（它们的累积目标与加速结构很占显存）。 */
+  private readonly pathTraces = new Map<string, Promise<VideoEditThreeSpacePathTrace>>()
 
   private constructor(private readonly library: Library, private readonly tsl: Tsl, private readonly post: PostNodes,
-    private readonly renderer: InstanceType<AuthorThreeLibrary['WebGPURenderer']>, private readonly clock: VideoEditAuthorThreeClock) {
+    private readonly renderer: InstanceType<AuthorThreeLibrary['WebGPURenderer']>, private readonly clock: VideoEditAuthorThreeClock,
+    private readonly libraries?: AuthorLibraryVersions) {
     this.scene = new library.Scene()
     this.camera = new library.PerspectiveCamera()
     this.camera.matrixAutoUpdate = false
@@ -188,12 +208,17 @@ export class VideoEditThreeSpace {
       try { await renderer.init() } finally { errors.onuncapturederror = previous }
     })
     renderer.setClearColor(0, 0)
+    // 作者灯光的 castShadow 要生效得先打开阴影；没有投影灯时不花额外的时间。
+    const shadows = (renderer as unknown as { shadowMap: { enabled: boolean; type: number } }).shadowMap
+    shadows.enabled = true
+    shadows.type = library.PCFSoftShadowMap
     renderer.toneMapping = library.NoToneMapping
     renderer.outputColorSpace = library.LinearSRGBColorSpace
-    return new VideoEditThreeSpace(library, tsl, { dof: dofModule.dof, motionBlur: blurModule.motionBlur }, renderer, new VideoEditAuthorThreeClock(renderer, library.REVISION))
+    return new VideoEditThreeSpace(library, tsl, { dof: dofModule.dof, motionBlur: blurModule.motionBlur }, renderer, new VideoEditAuthorThreeClock(renderer, library.REVISION), libraries)
   }
 
-  async render(input: ThreeSpaceFrame): Promise<void> {
+  /** 返回路径追踪是否还没收敛（其他显示方式恒为 false）。 */
+  async render(input: ThreeSpaceFrame): Promise<{ refining: boolean }> {
     if (this.closed || this.failure) throw this.failure ?? new Error('统一三维渲染器已关闭。')
     input.assertCurrent()
     this.renders++
@@ -202,7 +227,9 @@ export class VideoEditThreeSpace {
     this.syncCamera(input.frame, input.shutterOpen)
     this.syncCards(input)
     this.syncScenes(input.scenes)
-    const pipeline = this.ensurePipeline(input.effects)
+    if (input.effects.display === 'render') return { refining: await this.trace(input) }
+    if (this.pathTraces.size) await this.disposePathTraces()
+    const entry = this.ensurePipeline(input.effects), pipeline = entry.pipeline
     this.focus.value = input.effects.focusDistance
     this.cocScale.value = input.effects.cocScale
     this.cocMax.value = Math.max(1, input.effects.cocMax)
@@ -210,6 +237,15 @@ export class VideoEditThreeSpace {
     const target = this.target!, output = this.output!
     const restore = input.effects.display === 'realtime' ? this.applySceneOpacity(input.scenes) : this.applyDisplay(input.scenes, input.effects.display)
     try {
+      if (!entry.primed) {
+        // three 在第一次绘制时才搭节点图，那一帧里场景通道还没登记逐帧更新、什么也不画，同一帧号内也不会再更新：
+        // 新建的管线先在单独一帧里空画一次，正式这一帧才有内容（否则导出、选帧的第一帧是空的）。
+        await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, () => {
+          this.renderer.setRenderTarget(target); this.renderer.setOutputRenderTarget(target)
+          try { pipeline.render() } finally { this.renderer.setOutputRenderTarget(null); this.renderer.setRenderTarget(null) }
+        })
+        entry.primed = true
+      }
       await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, async () => {
         // 后处理的最后一步画到“输出渲染目标”，中间各步画到“当前渲染目标”：两个都指向本帧目标，否则最后一步会落到看不见的画布上。
         this.renderer.setRenderTarget(target)
@@ -221,6 +257,57 @@ export class VideoEditThreeSpace {
         this.renderer.setRenderTarget(null)
       })
     } finally { restore() }
+    return { refining: false }
+  }
+
+  private tracer(group: string): Promise<VideoEditThreeSpacePathTrace> {
+    let tracer = this.pathTraces.get(group)
+    if (tracer) { this.pathTraces.delete(group); this.pathTraces.set(group, tracer); return tracer }
+    tracer = import('./videoEditThreeSpacePathTrace').then(module => module.VideoEditThreeSpacePathTrace.create(
+      this.library as unknown as Parameters<typeof module.VideoEditThreeSpacePathTrace.create>[0], this.tsl as unknown as Parameters<typeof module.VideoEditThreeSpacePathTrace.create>[1],
+      this.renderer as unknown as Parameters<typeof module.VideoEditThreeSpacePathTrace.create>[2], this.libraries))
+    // 创建失败不留在表里，下次重新尝试。
+    tracer.catch(() => { if (this.pathTraces.get(group) === tracer) this.pathTraces.delete(group) })
+    this.pathTraces.set(group, tracer)
+    while (this.pathTraces.size > TRACE_GROUPS) {
+      const [oldest, entry] = this.pathTraces.entries().next().value!
+      this.pathTraces.delete(oldest)
+      void entry.then(value => value.dispose(), () => undefined)
+    }
+    return tracer
+  }
+
+  private async disposePathTraces(): Promise<void> {
+    const tracers = [...this.pathTraces.values()]
+    this.pathTraces.clear()
+    await Promise.all(tracers.map(tracer => tracer.then(value => value.dispose(), () => undefined)))
+  }
+
+  private async trace(input: ThreeSpaceFrame): Promise<boolean> {
+    const plan = input.trace ?? { group: '', samples: TRACE_SAMPLES }
+    const tracer = await this.tracer(plan.group)
+    input.assertCurrent()
+    const target = this.target!, output = this.output!, camera = this.camera, effects = input.effects
+    // 光圈直径：实时景深的弥散半径 K·|z − S| / z（输出像素）对应薄透镜在对焦平面上的弥散直径 A·|z − S| / z，
+    // 一个世界单位在对焦平面上占 宽 /(2·S·tan(水平视场 / 2)) 像素，所以 A = 4·K·S·tan(水平视场 / 2) / 宽。
+    const halfWidth = Math.tan(camera.fov * Math.PI / 360) * camera.aspect
+    const aperture = effects.depthOfField ? 4 * effects.cocScale * effects.focusDistance * halfWidth / input.target.width : 0
+    const cards = input.cards.flatMap(card => {
+      const entry = this.cards.get(card.clipId)
+      return entry?.external && entry.mesh.visible ? [{ mesh: entry.mesh, texture: entry.external, width: card.width, height: card.height, opacity: card.opacity, light: card.light }] : []
+    })
+    const restore = this.applySceneOpacity(input.scenes)
+    let refining = false
+    try {
+      await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, async () => {
+        refining = await tracer.render({ ...(plan.key === undefined ? {} : { key: plan.key }), scene: this.scene, camera, cards, aperture, focusDistance: effects.focusDistance,
+          samples: plan.samples, ...(plan.budgetMs === undefined ? {} : { budgetMs: plan.budgetMs }), target, assertCurrent: input.assertCurrent })
+        input.assertCurrent()
+        this.renderer.copyTextureToTexture(target.texture, output.external)
+        this.renderer.setRenderTarget(null)
+      })
+    } finally { restore() }
+    return refining
   }
 
   private ensureTargets(target: ThreeSpaceFrame['target']): void {
@@ -399,11 +486,11 @@ export class VideoEditThreeSpace {
     }
   }
 
-  private ensurePipeline(effects: ThreeSpaceEffects): RenderPipeline {
+  private ensurePipeline(effects: ThreeSpaceEffects): { pipeline: RenderPipeline; primed: boolean } {
     if (effects.display !== 'realtime') effects = { ...effects, motionBlur: false, depthOfField: false }
     const key = JSON.stringify([effects.motionBlur, effects.depthOfField])
     const cached = this.pipelines.get(key)
-    if (cached) return cached.pipeline
+    if (cached) return cached
     // 同一份作品只会用到实时与一种简化组合；超过两套说明作品设置变了，旧的不再需要。
     if (this.pipelines.size >= 2) this.disposePipelines()
     const nodes: Array<{ dispose(): void }> = []
@@ -437,8 +524,9 @@ export class VideoEditThreeSpace {
     const pipeline = new library.RenderPipeline(this.renderer)
     pipeline.outputNode = tsl.vec4(tsl.select(covered, encoded.mul(alpha), encoded), alpha)
     pipeline.outputColorTransform = false
-    this.pipelines.set(key, { pipeline, nodes })
-    return pipeline
+    const entry = { pipeline, nodes, primed: false }
+    this.pipelines.set(key, entry)
+    return entry
   }
 
   private disposePipelines(): void {
@@ -475,6 +563,7 @@ export class VideoEditThreeSpace {
     for (const [clipId, entry] of this.cards) this.dropCard(clipId, entry)
     this.quad.dispose()
     this.disposePipelines()
+    await this.disposePathTraces()
     if (this.overrides) for (const material of Object.values(this.overrides)) { (material as unknown as { matcap?: Three.Texture }).matcap?.dispose(); material.dispose() }
     this.target?.dispose()
     this.output?.external.dispose()

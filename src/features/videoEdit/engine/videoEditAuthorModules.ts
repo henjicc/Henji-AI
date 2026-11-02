@@ -3,7 +3,7 @@ import { parse } from 'es-module-lexer/js'
 import type { CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'
-import { AUTHOR_LIBRARIES, authorLibraryVersion, authorLibraryCompatibilityError, authorLibraryImportTable, describeAuthorLibraries, resolveAuthorLibraryModule, type AuthorLibraryVersions, type ResolvedAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { AUTHOR_LIBRARIES, authorLibraryVersion, authorLibraryCompatibilityError, authorLibraryDependencyError, authorLibraryImportTable, describeAuthorLibraries, resolveAuthorLibraryModule, type AuthorLibraryVersions, type ResolvedAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import { CODE_AUTHOR_LIBRARIES_MIN_API_VERSION } from '@/core/videoEdit/codeMaterialPersistence'
 import { CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 
@@ -26,7 +26,7 @@ const librariesAvailable = (apiVersion?: number): boolean => (apiVersion ?? 4) >
 export function resolveAuthorBuiltInImport(specifier: string, importer: string | undefined, files: Pick<CodeMaterialFiles, 'apiVersion' | 'libraries'>): { library: ResolvedAuthorLibraryModule } | { error: string } {
   const library = resolveAuthorLibraryModule(specifier, files.libraries)
   if (!library) return { error: missingAuthorModuleMessage(specifier, importer, files.libraries) }
-  const error = authorLibraryCompatibilityError(library.library, library.version, files.apiVersion)
+  const error = authorLibraryCompatibilityError(library.library, library.version, files.apiVersion) ?? authorLibraryDependencyError(library.library, library.version, files.libraries)
   return error ? { error } : { library }
 }
 
@@ -47,7 +47,7 @@ export function authorLibraryRuntimeResolver(importer: string, files: Pick<CodeM
   // 作者接口不支持内置库时，内置库名给出版本原因，其余裸名照常报找不到。
   const locked = Object.keys(AUTHOR_LIBRARIES).flatMap(library => {
     const version = authorLibraryVersion(library, files.libraries)
-    const error = version && authorLibraryCompatibilityError(library, version, files.apiVersion)
+    const error = version && (authorLibraryCompatibilityError(library, version, files.apiVersion) ?? authorLibraryDependencyError(library, version, files.libraries))
     return error ? [[library, error]] : []
   })
   const fail = (head: string, tail: string): string => `return 'data:text/javascript,'+encodeURIComponent('throw new Error('+JSON.stringify(${JSON.stringify(head)}+s+${JSON.stringify(tail)})+')');`

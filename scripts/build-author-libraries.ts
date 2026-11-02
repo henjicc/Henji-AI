@@ -4,7 +4,7 @@
  *
  * 库名、版本、入口、类型与许可只登记在 src/core/videoEdit/codeMaterial/authorLibraries.ts；本脚本只决定从
  * npm 别名包 `henji-author-<库名>-<版本>` 拷哪些文件。自家库只核验、复制冻结目录，绝不重新编译最新源码。
- * 第三方库内部的裸名按同一份登记改成相对路径，再压缩。
+ * 第三方库内部的裸名按同一份登记改成相对路径，再压缩；导入登记为库依赖的其他内置库时，改成指向那一版目录的相对路径。
  * 渲染 Worker 里没有 import map，产物残留任何裸名或 http(s) 导入都无法加载，所以发现即失败。
  * 随库的第三方组件只登记在 scripts/third-party-licenses/author-libs/components.json，许可全文写进各版本的 NOTICE.txt。
  * 作者类型检查用的声明打成同目录的 types.json，由源码检查 Worker 按需读取。
@@ -34,6 +34,8 @@ interface LibraryPlan {
   files: Record<string, string>
   /** 来源包内目录 → 白名单子目录；整个依赖闭包都合格的文件才收入，否则排除并列出原因。 */
   directories?: Record<string, string[]>
+  /** 版本目录内路径 → 本脚本生成的入口源码（上游入口带着不随包的部分时，另写一个只导出随包部分的入口）。 */
+  entries?: Record<string, string>
 }
 
 const PLANS: Record<string, LibraryPlan> = {
@@ -56,6 +58,31 @@ const PLANS: Record<string, LibraryPlan> = {
   },
   'opentype.js@2.0.0': {
     files: { 'opentype.mjs': 'dist/opentype.mjs' },
+  },
+  // workers/ 要自己起 Worker 加载脚本，渲染 Worker 里用不上。
+  'three-mesh-bvh@0.9.17': {
+    files: { 'src/index.js': 'src/index.js', 'src/webgpu/index.js': 'src/webgpu/index.js' },
+    directories: { 'src/': ['core', 'debug', 'math', 'objects', 'utils', 'webgl', 'webgpu'] },
+  },
+  'three-gpu-pathtracer@0.0.27': {
+    files: {},
+    directories: { 'src/': ['core', 'materials', 'objects', 'shader', 'textures', 'uniforms', 'utils', 'webgpu'] },
+    // 上游 webgpu 入口还导出 OIDN 降噪与 FSR 超分，它们要从网络加载模型与 wasm；这里只导出路径追踪器与它的相机、灯光，并保留相机扩展的副作用导入。
+    entries: {
+      'webgpu.js': [
+        "export * from './src/webgpu/WebGPUPathTracer.js';",
+        "export * from './src/webgpu/BlurredEnvMapGenerator.js';",
+        "export * from './src/webgpu/constants.js';",
+        "export * from './src/webgpu/materials/RenderToScreenMaterial.js';",
+        "export * from './src/objects/PhysicalCamera.js';",
+        "export * from './src/objects/EquirectCamera.js';",
+        "export * from './src/objects/PhysicalSpotLight.js';",
+        "export * from './src/objects/ShapedAreaLight.js';",
+        "import './src/webgpu/shims/EquirectCameraShim.js';",
+        "import './src/webgpu/shims/PhysicalCameraShim.js';",
+        "import './src/webgpu/shims/ArrayCameraShim.js';",
+      ].join('\n'),
+    },
   },
 }
 
@@ -92,10 +119,14 @@ function listFiles(directory: string, pattern: RegExp, skip: (relative: string) 
   })
 }
 
+/** 生成入口在来源路径上的记号：不对应来源包里的文件。 */
+const GENERATED = 'generated:'
+
 /** 来源包内路径 → 版本目录内路径。白名单目录里的文件保持原相对位置。 */
 function collectCandidates(plan: LibraryPlan, source: string, vendored: readonly string[]): Map<string, string> {
   const candidates = new Map<string, string>()
   for (const [target, from] of Object.entries(plan.files)) candidates.set(from, target)
+  for (const target of Object.keys(plan.entries ?? {})) candidates.set(`${GENERATED}${target}`, target)
   for (const [base, names] of Object.entries(plan.directories ?? {})) {
     for (const name of names) {
       for (const file of listFiles(path.join(source, base, name), /\.m?js$/)) {
@@ -118,9 +149,14 @@ function moduleImports(code: string): ModuleImport[] {
   })
 }
 
+/** 已生成的各版本产物：版本目录前缀 `库名/版本/` → 目录内路径。库依赖据此确认被导入的文件确实随包。 */
+const builtOutputs = new Map<string, Set<string>>()
+const releasePrefix = (library: string, version: string): string => `${library}/${version}/`
+
 /** 把库内导入改成版本目录内的相对路径；不能改写的说明符返回原因。 */
 function linkModule(library: string, version: string, from: string, target: string, code: string, candidates: Map<string, string>): { code: string; dependencies: string[] } | { reason: string } {
   const dependencies: string[] = []
+  const pinned = { ...AUTHOR_LIBRARIES[library][version].dependencies, [library]: version }
   let output = code
   for (const request of moduleImports(code).reverse()) {
     let dependency: string | undefined
@@ -128,7 +164,13 @@ function linkModule(library: string, version: string, from: string, target: stri
     if (request.specifier.startsWith('.')) {
       dependency = path.posix.normalize(path.posix.join(path.posix.dirname(from), request.specifier))
     } else {
-      const resolved = resolveAuthorLibraryModule(request.specifier, { [library]: version })
+      const resolved = resolveAuthorLibraryModule(request.specifier, pinned)
+      if (resolved && resolved.library !== library && Object.hasOwn(pinned, resolved.library)) {
+        if (!builtOutputs.get(releasePrefix(resolved.library, resolved.version))?.has(resolved.path)) return { reason: `导入的 ${request.specifier} 不在 ${resolved.library}@${resolved.version} 的产物里` }
+        const relative = path.posix.relative(path.posix.dirname(releasePrefix(library, version) + target), releasePrefix(resolved.library, resolved.version) + resolved.path)
+        output = output.slice(0, request.start) + (request.dynamic ? JSON.stringify(relative) : relative) + output.slice(request.end)
+        continue
+      }
       if (!resolved || resolved.library !== library) return { reason: `导入未登记的模块 ${request.specifier}` }
       dependency = [...candidates].find(([, mapped]) => mapped === resolved.path)?.[0]
       if (!dependency) return { reason: `导入未生成的模块 ${request.specifier}` }
@@ -166,6 +208,11 @@ function typePackage(library: string, version: string, release: AuthorLibraryRel
     if (manifest.name !== types.mount) throw new Error(`${name} 实际是 ${manifest.name}，与登记的 ${types.mount} 不一致`)
     if (manifest.license !== types.license) throw new Error(`${name} 包内许可为 ${manifest.license}，与登记的 ${types.license} 不一致`)
     files['package.json'] = fs.readFileSync(manifestFile, 'utf8')
+    files.LICENSE = fs.readFileSync(path.join(directory, 'LICENSE'), 'utf8')
+    for (const file of listFiles(directory, /\.d\.ts$/, relative => relative === 'node_modules')) files[posix(path.relative(directory, file))] = fs.readFileSync(file, 'utf8')
+  } else if (types.source === 'bundled') {
+    const directory = packageDirectory(authorLibraryPackageName(library, version))
+    files['package.json'] = fs.readFileSync(path.join(directory, 'package.json'), 'utf8')
     files.LICENSE = fs.readFileSync(path.join(directory, 'LICENSE'), 'utf8')
     for (const file of listFiles(directory, /\.d\.ts$/, relative => relative === 'node_modules')) files[posix(path.relative(directory, file))] = fs.readFileSync(file, 'utf8')
   } else if (types.source === 'file') {
@@ -224,8 +271,10 @@ async function buildRelease(library: string, version: string, destination: strin
   const excluded = new Map<string, string>()
   for (const [from, target] of candidates) {
     const file = path.join(source, from)
-    if (!fs.existsSync(file)) { excluded.set(from, '来源文件不存在'); continue }
-    const result = linkModule(library, version, from, target, fs.readFileSync(file, 'utf8'), candidates)
+    const generated = from.startsWith(GENERATED) ? plan.entries?.[target] : undefined
+    if (generated === undefined && !fs.existsSync(file)) { excluded.set(from, '来源文件不存在'); continue }
+    // 生成入口里的相对路径按版本目录写，当作位于来源包同一位置的文件解析。
+    const result = linkModule(library, version, generated === undefined ? from : target, target, generated ?? fs.readFileSync(file, 'utf8'), candidates)
     if ('reason' in result) excluded.set(from, result.reason)
     else linked.set(from, result)
   }
@@ -237,7 +286,7 @@ async function buildRelease(library: string, version: string, destination: strin
       if (missing) { linked.delete(from); excluded.set(from, `依赖 ${missing} 未收入（${excluded.get(missing) ?? '未知原因'}）`); changed = true }
     }
   }
-  for (const from of Object.values(plan.files)) {
+  for (const from of [...Object.values(plan.files), ...Object.keys(plan.entries ?? {}).map(target => `${GENERATED}${target}`)]) {
     if (!linked.has(from)) throw new Error(`${key} 的必需文件 ${from} 无法生成：${excluded.get(from)}`)
   }
   // 只因被引用才收入的随库文件，没有引用者时去掉。
@@ -252,8 +301,13 @@ async function buildRelease(library: string, version: string, destination: strin
       ? module.code
       : (await esbuild.transform(module.code, { loader: 'js', format: 'esm', target: 'esnext', minify: true, legalComments: 'inline', charset: 'utf8' })).code
     for (const request of moduleImports(code)) {
-      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(target), request.specifier))
-      if (!request.specifier.startsWith('.') || !outputs.has(resolved)) throw new Error(`${key} 产物 ${target} 残留无法加载的导入 ${request.specifier}`)
+      // 按 author-lib 根目录解析：库依赖指向兄弟版本目录。
+      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(releasePrefix(library, version) + target), request.specifier))
+      const own = releasePrefix(library, version)
+      const loadable = request.specifier.startsWith('.') && (resolved.startsWith(own)
+        ? outputs.has(resolved.slice(own.length))
+        : [...builtOutputs].some(([prefix, files]) => resolved.startsWith(prefix) && files.has(resolved.slice(prefix.length))))
+      if (!loadable) throw new Error(`${key} 产物 ${target} 残留无法加载的导入 ${request.specifier}`)
     }
     const file = path.join(destination, target)
     fs.mkdirSync(path.dirname(file), { recursive: true })
@@ -263,6 +317,7 @@ async function buildRelease(library: string, version: string, destination: strin
   for (const target of Object.values(release.modules)) {
     if (!outputs.has(target)) throw new Error(`${key} 登记的入口 ${target} 未生成`)
   }
+  builtOutputs.set(releasePrefix(library, version), outputs)
   const written = [...outputs].sort()
   fs.copyFileSync(path.join(source, 'LICENSE'), path.join(destination, 'LICENSE'))
   written.push('LICENSE')

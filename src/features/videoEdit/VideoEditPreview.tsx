@@ -71,7 +71,7 @@ import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_PLAYBACK_RESOLUTIONS, VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS, videoEditPreviewDivisor, type VideoEditPlaybackResolution, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { effectiveVideoEditSpaceDisplay, getVideoEditSpaceDisplay, noteVideoEditSpacePlayback, setVideoEditSpaceDisplay, videoEditSpaceDisplaySimplified } from './application/videoEditSpaceDisplay'
-import { VIDEO_EDIT_SPACE_DISPLAYS, VIDEO_EDIT_SPACE_DISPLAY_LABELS, videoEditCompositionHasSpace, videoEditFrameHasSpace } from '@/core/videoEdit/spaceDisplay'
+import { VIDEO_EDIT_SPACE_DISPLAYS, VIDEO_EDIT_SPACE_DISPLAY_LABELS, videoEditCompositionHasSpace, videoEditFinalSpaceDisplay, videoEditFrameHasSpace } from '@/core/videoEdit/spaceDisplay'
 import { flushVideoEditRenderPerformance } from './application/videoEditRenderPerformance'
 import { recordVideoEditPlaybackFrame } from './application/videoEditPlaybackStats'
 import { videoEditRenderCacheBusy, readyVideoEditRenderWindows, recordVideoEditProgramRender } from './application/videoEditRenderCache'
@@ -103,6 +103,7 @@ const SPACE_DISPLAY_TIPS: Record<import('@/core/videoEdit/spaceDisplay').VideoEd
   realtime: '实时：灯光、阴影、景深、运动模糊全开',
   solid: '实体：三维物体只显示灰色明暗，不做景深与运动模糊，大场景更流畅',
   wireframe: '线框：三维物体只画结构线，适合摆机位、看节奏',
+  render: '渲染：路径追踪的真实光影，停住后逐渐变清晰；播放很慢，不做运动模糊',
 }
 
 /**
@@ -536,9 +537,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
       captureFull++
       try {
-        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.provenance === 'web-cache' || surface.dataset.webTier !== '1' || surface.dataset.renderDivisor !== '1' || (surface.dataset.spaceDisplay ?? 'realtime') !== 'realtime' || surface.width !== request.document.width || surface.height !== request.document.height) {
+        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.provenance === 'web-cache' || surface.dataset.webTier !== '1' || surface.dataset.renderDivisor !== '1' || (surface.dataset.spaceDisplay ?? 'realtime') !== (picture && videoEditCompositionHasSpace(picture) ? videoEditFinalSpaceDisplay(picture) : 'realtime') || surface.width !== request.document.width || surface.height !== request.document.height) {
           current()
-          if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
+          // 路径追踪要累积到目标采样数才算精确画面，1080p 也要十几秒。
+          if (performance.now() - start > (picture && videoEditFinalSpaceDisplay(picture) === 'render' ? 300000 : 10000)) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
           await new Promise(resolve => setTimeout(resolve, 5))
         }
         current()
@@ -673,7 +675,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           appliedDivisor = divisor; lastRequested = -1
         }
         // 三维显示方式：选帧、设封面期间与没有三维内容时始终是实时。
-        const spaceDisplay = captureFull > 0 || !videoEditCompositionHasSpace(document) ? 'realtime' : effectiveVideoEditSpaceDisplay(instance.document.id, current.playing)
+        // 选帧与封面按成片的三维渲染（序列设置），与导出同一画面。
+        const spaceDisplay = !videoEditCompositionHasSpace(document) ? 'realtime' : captureFull > 0 ? videoEditFinalSpaceDisplay(document) : effectiveVideoEditSpaceDisplay(instance.document.id, current.playing)
         if (spaceDisplay !== appliedSpaceDisplay) {
           await renderer.setSpaceDisplay(spaceDisplay)
           if (stopped) return

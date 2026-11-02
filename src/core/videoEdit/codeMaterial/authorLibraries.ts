@@ -22,10 +22,15 @@ export interface AuthorLibraryRelease {
   /** 说明符前缀 → 版本目录内的目录；前缀之后的子路径原样拼接。 */
   directories?: Readonly<Record<string, string>>
   /**
-   * 作者类型检查用的声明，构建时打成版本目录里的 `types.json`，检查时挂到内存里的 `/node_modules/<mount>/`。
-   * `package`：npm 别名类型包；`file`：上游无对应声明时的仓库声明；`frozen`：随不可变版本保存的权威类型生成结果。
+   * 库内导入的其他内置库（库名 → 版本）：构建时改成指向那一版目录的相对路径，运行时与作者自己导入的同一版共用一份实例。
+   * 作者代码记录的这些库必须是同一版，否则会出现两份 three，类与材质互不认识。
    */
-  types: { mount: string; license: AuthorLibraryLicense; source: 'package' | 'frozen' } | { mount: string; license: AuthorLibraryLicense; source: 'file'; file: string }
+  dependencies?: Readonly<Record<string, string>>
+  /**
+   * 作者类型检查用的声明，构建时打成版本目录里的 `types.json`，检查时挂到内存里的 `/node_modules/<mount>/`。
+   * `package`：npm 别名类型包；`bundled`：库自带的声明；`file`：上游无对应声明时的仓库声明；`frozen`：随不可变版本保存的权威类型生成结果。
+   */
+  types: { mount: string; license: AuthorLibraryLicense; source: 'package' | 'bundled' | 'frozen' } | { mount: string; license: AuthorLibraryLicense; source: 'file'; file: string }
 }
 
 
@@ -66,6 +71,23 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
       types: { mount: '@types/three', license: 'MIT', source: 'package' },
     },
   },
+  // 网格加速结构与路径追踪：只收 WebGPU 路径追踪器需要的部分，降噪与超分依赖网络加载的模型，暂不随包。
+  'three-mesh-bvh': {
+    '0.9.17': {
+      license: 'MIT', minApiVersion: 15,
+      modules: { 'three-mesh-bvh': 'src/index.js', 'three-mesh-bvh/webgpu': 'src/webgpu/index.js' },
+      dependencies: { three: '0.186.1' },
+      types: { mount: 'three-mesh-bvh', license: 'MIT', source: 'bundled' },
+    },
+  },
+  'three-gpu-pathtracer': {
+    '0.0.27': {
+      license: 'MIT', minApiVersion: 15,
+      modules: { 'three-gpu-pathtracer/webgpu': 'webgpu.js' },
+      dependencies: { three: '0.186.1', 'three-mesh-bvh': '0.9.17' },
+      types: { mount: 'three-gpu-pathtracer', license: 'MIT', source: 'bundled' },
+    },
+  },
   'opentype.js': {
     // @types/opentype.js 只到 1.3.x：2.0 去掉了默认导出，load/loadSync 只剩弃用提示，所以用手写的 2.0 声明。
     '2.0.0': { license: 'MIT', minApiVersion: 5, modules: { 'opentype.js': 'opentype.mjs' }, types: { mount: 'opentype.js', license: 'MIT', source: 'file', file: 'resources/video-edit-author/libraries/opentype.js-2.0.0.d.ts' } },
@@ -101,13 +123,38 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
 /** 库名 → 版本。 */
 export type AuthorLibraryVersions = Readonly<Record<string, string>>
 
-/** 只用于新版本编译；读取无 libraries 的历史版本仍走第一套。 */
+/**
+ * 只用于新版本编译；读取无 libraries 的历史版本仍走第一套。
+ * 先给不依赖其他库的库选兼容的最新版，再反复给依赖都已选定的库选“依赖与已选版本一致”的最新版，直到不再变化；
+ * 没有一致版本的库不提供（作者导入时报找不到，而不是加载出第二份 three）。
+ */
 export function latestAuthorLibraryVersions(apiVersion: number): AuthorLibraryVersions {
-  return Object.fromEntries(Object.entries(AUTHOR_LIBRARIES).flatMap(([name, releases]) => {
-    const versions = Object.keys(releases).filter(version => releases[version].minApiVersion <= apiVersion)
-      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
-    return versions.length ? [[name, versions.at(-1)!]] : []
-  }))
+  const compatible = (name: string): string[] => Object.keys(AUTHOR_LIBRARIES[name]).filter(version => AUTHOR_LIBRARIES[name][version].minApiVersion <= apiVersion)
+    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+  const chosen: Record<string, string> = {}
+  for (const name of Object.keys(AUTHOR_LIBRARIES)) {
+    const latest = compatible(name).filter(version => !AUTHOR_LIBRARIES[name][version].dependencies).at(-1)
+    if (latest && compatible(name).every(version => !AUTHOR_LIBRARIES[name][version].dependencies)) chosen[name] = latest
+  }
+  for (let changed = true; changed;) {
+    changed = false
+    for (const name of Object.keys(AUTHOR_LIBRARIES)) {
+      if (Object.hasOwn(chosen, name)) continue
+      const consistent = compatible(name).filter(version => Object.entries(AUTHOR_LIBRARIES[name][version].dependencies ?? {})
+        .every(([dependency, pinned]) => chosen[dependency] === pinned))
+      if (consistent.length) { chosen[name] = consistent.at(-1)!; changed = true }
+    }
+  }
+  return chosen
+}
+
+/** 作者代码记录的版本与某个库的库依赖不一致时的说明；一致返回 undefined。 */
+export function authorLibraryDependencyError(library: string, version: string, versions?: AuthorLibraryVersions): string | undefined {
+  for (const [dependency, pinned] of Object.entries(AUTHOR_LIBRARIES[library]?.[version]?.dependencies ?? {})) {
+    const used = authorLibraryVersion(dependency, versions)
+    if (used !== pinned) return `内置库 ${library}@${version} 需要 ${dependency}@${pinned}，这一版代码记录的是 ${dependency}@${used}。请把源码另存为新版本，让内置库版本重新对齐。`
+  }
+  return undefined
 }
 
 /** 未知版本由模块解析报错；已知版本的最低接口要求在所有导入路径共用。 */
@@ -177,7 +224,7 @@ export function authorLibraryImportTable(versions?: AuthorLibraryVersions, apiVe
   for (const library of Object.keys(AUTHOR_LIBRARIES)) {
     const version = authorLibraryVersion(library, versions)
     const release = version ? AUTHOR_LIBRARIES[library][version] : undefined
-    if (!version || !release || authorLibraryCompatibilityError(library, version, apiVersion)) continue
+    if (!version || !release || authorLibraryCompatibilityError(library, version, apiVersion) || authorLibraryDependencyError(library, version, versions)) continue
     for (const [specifier, path] of Object.entries(release.modules)) modules[specifier] = authorLibraryUrl(library, version, path)
     for (const [prefix, directory] of Object.entries(release.directories ?? {})) directories.push([prefix, authorLibraryUrl(library, version, directory)])
   }

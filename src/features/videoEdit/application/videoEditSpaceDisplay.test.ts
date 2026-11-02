@@ -36,5 +36,5 @@ it('选了固定方式就始终用它，不自动换档；换方式时自动状�
   expect(effectiveVideoEditSpaceDisplay(id, false)).toBe('solid')
   setVideoEditSpaceDisplay(id, { mode: 'auto' })
   expect(effectiveVideoEditSpaceDisplay(id, true)).toBe('realtime')
-  expect(() => setVideoEditSpaceDisplay(id, { mode: 'render' as never })).toThrow()
+  expect(() => setVideoEditSpaceDisplay(id, { mode: 'raytrace' as never })).toThrow()
 })
