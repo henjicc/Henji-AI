@@ -9,7 +9,8 @@
  *   往回接时不越过刚响过的音头（能量突增处）：辅音、敲击只响一次、和原声一样干脆，延长的只是音头之后的稳定部分。
  * - 向前快拖：声音落后指针超过 BEHIND 就跳到指针处，3ms 交叉淡化，接缝在 ±SEEK 内按波形对齐（一段段跟着指针的原速片段）。
  *   按原速拖动时就是连续播放，输出与原声逐样本相同。
- * - 向后拖：一块块原速声音沿指针往回铺（每块 CHUNK 长、正着放），已经放过的地方不再重放。
+ * - 向后拖：与向前拖互为镜像，倒着按原速连续放（与 PR 相同）：慢拖时声音跑到指针前面（更早处）就往后接一小段，
+ *   快拖时落后指针就跳到指针处，接缝同样按（倒放方向的）波形相似度对齐。倒放没有“音头只响一次”的避让。
  * - 停住即收声；单步播放一小段原速声音。
  * - 轨迹：主线程逐次送来指针位置与事件时刻。按最近几次位置变化做最小二乘求速度与位置，超过预期间隔没有新位置就视为停住。
  * - 声音由主线程按固定长度的块提前送来；将要读到缺块的位置时先淡出为静音，块到了再淡入。
@@ -52,8 +53,6 @@ const ONSET_SPAN = 5
 const ONSET_RATIO = 4
 const ONSET_FLOOR = 1e-6
 const ONSET_HOLD = 0.01
-/** 向后拖时每块的长度（秒）。 */
-const CHUNK = 0.05
 /** 淡入、淡出、接缝交叉淡化时长（秒）与接缝对齐的搜索范围。 */
 const FADE_IN = 0.002
 const FADE_OUT = 0.003
@@ -131,10 +130,11 @@ function similarity(reference, window, offset, length, stride) {
   return energy > 1e-12 && referenceEnergy > 1e-12 ? product / Math.sqrt(energy * referenceEnergy) : 0
 }
 
-/** 一段原速播放的声音：从源位置 start 起每个输出帧前进固定比例（同采样率时正好一帧）。 */
+/** 一段原速播放的声音：从源位置 start 起每个输出帧沿 step（1 正放、-1 倒放）走固定比例（同采样率时正好一帧）。 */
 class Segment {
-  constructor(start, end) {
+  constructor(start, end, step = 1) {
     this.start = start
+    this.step = step
     this.played = 0
     /** 淡入淡出进度（0..1），包络取升余弦形状：一进一出相加恒为 1。 */
     this.fade = 0
@@ -142,7 +142,7 @@ class Segment {
     this.fadeStep = 1
     this.avail = 1
     this.availTarget = 1
-    /** 放到这个源位置前淡出（单步、倒拖的块）；向前拖的段为 undefined。 */
+    /** 放到这个源位置前淡出（单步）；拖动的段为 undefined。 */
     this.end = end
     this.release = FADE_OUT
   }
@@ -160,10 +160,10 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
     this.blocks = new Map()
     this.missed = new Set()
     this.segments = []
-    /** 正在主播的那一段（拖动段、倒拖块或单步段）。 */
+    /** 正在主播的那一段（拖动段或单步段）。 */
     this.current = null
     this.mode = 'idle'
-    /** 拖动方向与已经放过的边界（向前拖：放到哪里了；向后拖：最早一块从哪里开始）。 */
+    /** 拖动方向与上次停下时放到的位置（接着拖时从那里接，已响过的不重放）。 */
     this.direction = 0
     this.edge = undefined
     this.plan = { velocity: 0, position: 0, weight: 0 }
@@ -186,6 +186,7 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
     this.reportedAt = -Infinity
     this.frame = [0, 0]
     this.reference = new Float64Array(0)
+    this.flipped = new Float64Array(0)
     this.energies = new Float64Array(0)
     this.scratch = new Float64Array(0)
     this.port.onmessage = (event) => this.receive(event.data)
@@ -349,16 +350,16 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
   }
 
   /** 一段此刻的源位置。 */
-  where(segment) { return segment.start + segment.played * this.base }
+  where(segment) { return segment.start + segment.step * segment.played * this.base }
 
   /** 同采样率时段起点取整到采样帧：原速片段逐样本复制，不插值。 */
   align(position) { return this.base === 1 ? Math.round(position) : position }
 
   /** 起一段（或一块）并让当前段在同一时刻、用同样时长淡出（交叉淡化，两段相加恒为 1）。 */
-  begin(start, end, fade) {
+  begin(start, end, fade, step = 1) {
     const previous = this.current
     if (previous && previous.fadeTarget > 0) previous.fadeTo(0, fade)
-    const segment = new Segment(start, end)
+    const segment = new Segment(start, end, step)
     segment.fadeTo(1, fade)
     this.segments.push(segment); this.current = segment
     return segment
@@ -406,17 +407,32 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
       this.begin(this.align(resume ? edge : pointer), undefined, FADE_IN)
       return
     }
-    // 向后拖：块按原速正着放，一块接一块沿指针往回铺；指针走到下一块中点才铺（已放过的不重放），跳得太远就以指针为中心。
-    const chunk = CHUNK * this.sourceRate
-    if (!moving) { this.end(); return }
-    if (current && current.end !== undefined && this.where(current) < current.end - (CROSSFADE * sampleRate + 1) * base) return
-    const edge = this.edge ?? pointer + chunk / 2
-    if (pointer > edge - chunk / 2) { if (current) this.end(); return }
-    const start = pointer < edge - 1.5 * chunk ? pointer - chunk / 2 : edge - chunk
-    // 上一块还在响时两块交叉淡化，起点同样按波形对齐（只在 ±SEEK 内挪，块与块之间不留缝也不重放）。
-    const from = current ? this.match(this.where(current), Math.max(0, start)) : this.align(Math.max(0, start))
-    this.begin(from, from + chunk, current ? CROSSFADE : FADE_IN)
-    this.edge = from
+    // 向后拖：向前拖的镜像，倒着按原速放。
+    const back = -speed
+    const nearBack = clamp((back - 0.5) / 0.5, 0, 1) * clamp((2 - back) / 0.5, 0, 1)
+    const aheadBack = (AHEAD + (AHEAD_NEAR_UNIT - AHEAD) * nearBack) * this.sourceRate
+    if (current) {
+      const x = this.where(current)
+      if (!moving) { this.edge = x - FADE_OUT * this.sourceRate; this.end(); return }
+      const behind = (BEHIND + (BEHIND_NEAR_UNIT - BEHIND) * nearBack) * this.sourceRate
+      if (pointer - x > aheadBack) { this.repeatBack(current, x, pointer); return }
+      if (x - pointer > behind && current.played >= MIN_SEGMENT * sampleRate) this.begin(this.match(x, pointer, undefined, undefined, CROSSFADE, -1), undefined, CROSSFADE, -1)
+      return
+    }
+    if (!moving) return
+    const edge = this.edge
+    const resume = edge !== undefined && pointer <= edge + Math.max(aheadBack, REPEAT_LIMIT * this.sourceRate) && edge - pointer <= BEHIND * this.sourceRate
+    this.begin(this.align(resume ? edge : pointer), undefined, FADE_IN, -1)
+  }
+
+  /** 倒拖时声音跑到指针前面（更早处）：往后（更晚处）接一小段，接缝按倒放方向的波形对齐。 */
+  repeatBack(current, x, pointer) {
+    const rate = this.sourceRate, seek = REPEAT_SEEK * rate
+    if (current.played < REPEAT_GAP * sampleRate) return
+    const target = pointer - x > REPEAT_LIMIT * rate ? pointer : Math.min(pointer, x + REPEAT * rate)
+    const low = Math.max(target - seek, x + REPEAT_MIN * rate), high = target + seek
+    if (high < low) return
+    this.begin(this.match(x, clamp(target, low, high), low, high, REPEAT_MATCH, -1), undefined, REPEAT_CROSSFADE, -1)
   }
 
   /**
@@ -487,29 +503,40 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
    * 接到 target 附近：在 [low, high]（默认 ±SEEK）内找与“当前段接下来要放的那几毫秒”最相似的起点（归一化互相关），
    * 接缝两侧波形对齐，交叉淡化不出咔哒；搜索范围的声音还没送来时直接用 target。所有声道用同一个起点。
    */
-  match(natural, target, low = target - SEEK * this.sourceRate, high = target + SEEK * this.sourceRate, seconds = CROSSFADE) {
+  match(natural, target, low = target - SEEK * this.sourceRate, high = target + SEEK * this.sourceRate, seconds = CROSSFADE, step = 1) {
     const length = Math.max(8, Math.round(seconds * this.sourceRate))
     const center = Math.round(target), from = Math.round(natural)
     const first = Math.min(center, Math.ceil(low)), last = Math.max(center, Math.floor(high))
-    if (!this.covered(Math.min(from, first - 1), Math.max(from, last + 1) + length, false)) return this.align(target)
+    // 倒放时“接下来要放的”是起点往前的那几毫秒：参考与候选都按倒放顺序取。
+    const reversed = step < 0, reach = reversed ? -length : length
+    if (!this.covered(Math.min(from, first - 1, from + reach, first - 1 + reach), Math.max(from, last + 1, from + reach, last + 1 + reach), false)) return this.align(target)
     const reference = this.reference.length >= length ? this.reference : (this.reference = new Float64Array(length))
-    reference.set(this.monoRange(from, length).subarray(0, length))
+    if (reversed) { const ahead = this.monoRange(from - length + 1, length); for (let index = 0; index < length; index++) reference[index] = ahead[length - 1 - index] }
+    else reference.set(this.monoRange(from, length).subarray(0, length))
     let referenceEnergy = 0
     for (let index = 0; index < length; index++) referenceEnergy += reference[index] * reference[index]
     if (referenceEnergy < 1e-12) return this.align(target)
-    const window = this.monoRange(first, last - first + length)
+    const span = last - first + length
+    let window = this.monoRange(reversed ? first - length + 1 : first, span)
+    if (reversed) {
+      const flipped = this.flipped.length >= span ? this.flipped : (this.flipped = new Float64Array(span))
+      for (let index = 0; index < span; index++) flipped[index] = window[span - 1 - index]
+      window = flipped
+    }
+    // 候选起点在窗口里的偏移：倒放时窗口已翻转，起点越晚越靠前。
+    const offset = (start) => reversed ? last - start : start - first
     // 范围大时先隔 COARSE 个起点、隔一个样本粗找，再在最好的那个附近逐样本细找（只差几个样本，对齐效果相同，计算量约为六分之一）。
     const coarse = last - first > 8 * COARSE ? COARSE : 1
     let best = center, bestScore = -Infinity
     for (let start = first; start <= last; start += coarse) {
-      const score = similarity(reference, window, start - first, length, coarse > 1 ? 2 : 1)
+      const score = similarity(reference, window, offset(start), length, coarse > 1 ? 2 : 1)
       if (score > bestScore) { bestScore = score; best = start }
     }
     if (coarse > 1) {
       const around = best
       bestScore = -Infinity
       for (let start = Math.max(first, around - coarse + 1); start <= Math.min(last, around + coarse - 1); start++) {
-        const score = similarity(reference, window, start - first, length, 1)
+        const score = similarity(reference, window, offset(start), length, 1)
         if (score > bestScore) { bestScore = score; best = start }
       }
     }
@@ -604,8 +631,8 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
     const reach = base === 1 ? 1 : ZEROS / Math.min(1, 1 / base) + 2
     // 每段这一量子要读的范围（加上淡出所需的提前量）都在才发声，否则先淡出。
     for (const segment of this.segments) {
-      const from = this.where(segment)
-      segment.availTarget = this.covered(from - reach, from + (frames + MISSING_FADE * sampleRate) * base + reach) ? 1 : 0
+      const from = this.where(segment), to = from + segment.step * (frames + MISSING_FADE * sampleRate) * base
+      segment.availTarget = this.covered(Math.min(from, to) - reach, Math.max(from, to) + reach) ? 1 : 0
     }
     const availStep = 1 / (MISSING_FADE * sampleRate)
     const frame = this.frame
@@ -614,7 +641,7 @@ class HenjiAudioScrubProcessor extends AudioWorkletProcessor {
         if (segment.fade !== segment.fadeTarget) segment.fade = segment.fade < segment.fadeTarget ? Math.min(segment.fadeTarget, segment.fade + segment.fadeStep) : Math.max(segment.fadeTarget, segment.fade - segment.fadeStep)
         if (segment.avail !== segment.availTarget) segment.avail = segment.avail < segment.availTarget ? Math.min(1, segment.avail + availStep) : Math.max(0, segment.avail - availStep)
         const x = this.where(segment)
-        // 有终点的段（单步、倒拖块）在终点前淡出。
+        // 有终点的段（单步）在终点前淡出。
         if (segment.end !== undefined && segment.fadeTarget > 0 && x >= segment.end - segment.release * this.sourceRate) segment.fadeTo(0, segment.release)
         segment.played++
         const fade = segment.fade, avail = segment.avail

@@ -83,7 +83,7 @@ function pitch(signal: number[], start: number, size = 1200): number {
   return RATE / (best + 0.5 * (a - c) / (a - 2 * b + c))
 }
 
-it.each([0, 60, 30])('跟着指针走（帧取整 %i）：原速片段，向前接着放、向后一块块往回铺，停住后很快静音', fps => {
+it.each([0, 60, 30])('跟着指针走（帧取整 %i）：原速片段，向前接着放、向后倒着接着放，停住后很快静音', fps => {
   const h = harness()
   h.run(1700, [{ at: 0, type: 'rest', position: 20 * RATE }, ...drag(0, 700, 20, 1, fps), ...drag(700, 1300, 20.7, -0.5, fps)])
   // 1x 段：连续原速播放，紧跟指针
@@ -92,17 +92,14 @@ it.each([0, 60, 30])('跟着指针走（帧取整 %i）：原速片段，向前�
     expect(h.speed(ms, 2)).toBeCloseTo(1, 2)
     expect(Math.abs(h.position(ms) - (20 + ms / 1000))).toBeLessThan(0.02 + (fps ? 0.5 / fps : 0))
   }
-  // 倒拖 0.5x：发声时都是正着的原速片段，位置跟着指针往回走，每块从上一块之前开始（不重放）
-  const starts: number[] = []
-  let lastStart = -Infinity
-  for (let ms = 760; ms < 1290; ms += 1) {
-    if (h.gain(ms) !== 1 || h.gain(ms - 1) !== 1 || h.gain(ms + 1) !== 1) continue
-    expect(h.speed(ms, 1)).toBeCloseTo(1, 2)
+  // 倒拖 0.5x：倒着按原速连续放，位置跟着指针往回走，平均速度等于拖动速度
+  for (let ms = 800 + (fps ? 1000 / fps / 0.5 : 0); ms < 1290; ms += 1) expect(h.gain(ms)).toBeGreaterThan(0.99)
+  let reversed = 0, counted = 0
+  for (let ms = 800; ms < 1290; ms += 5) {
     expect(Math.abs(h.position(ms) - (20.7 - 0.5 * (ms - 700) / 1000))).toBeLessThan(0.08)
-    if (h.gain(ms - 4) < 1 && ms - lastStart > 10) { starts.push(h.position(ms)); lastStart = ms }
+    counted++; if (h.speed(ms, 1) < -0.99) reversed++
   }
-  expect(starts.length).toBeGreaterThan(3)
-  for (let index = 1; index < starts.length; index++) expect(starts[index]).toBeLessThan(starts[index - 1])
+  expect(reversed / counted).toBeGreaterThan(0.8)
   // 指针在 1300ms 停住：约 60ms 内静音（按帧取整时要等过下一帧该到的时间）
   expect(h.gain(1300 + 60 + (fps ? 1.9 * 1000 / (fps * 0.5) : 0))).toBe(0)
   // 起、停、换向、拼接都没有包络突变（最陡也慢于 1ms 满幅），同时发声最多两段
@@ -133,6 +130,24 @@ it.each([[0.2, 0], [0.5, 0], [0.3, 60], [0.12, 30]])('慢拖 %sx（帧取整 %i�
   expect(Math.max(...h.concurrent)).toBeLessThanOrEqual(2)
   expect(h.maxStep()).toBeLessThan(1 / 48)
   // 停手：没有新位置后按“下一个位置该到的时间”判停，随后很快静音（按帧取整时帧间隔长，要多等）
+  expect(h.gain(until + (fps ? 750 : 120))).toBe(0)
+})
+
+it.each([[0.2, 0], [0.5, 0], [0.12, 30]])('慢速倒拖 %sx（帧取整 %i）：倒着连续放、紧贴指针，平均速度等于拖动速度', (speed, fps) => {
+  const h = harness()
+  const until = 1500
+  h.run(until + 800, [{ at: 0, type: 'rest', position: 20 * RATE }, ...drag(0, until, 20, -speed, fps)])
+  const first = fps ? 500 / fps / speed : 0
+  for (let ms = first + 60; ms < until; ms += 1) expect(h.gain(ms)).toBeGreaterThan(0.99)
+  const frame = fps ? 1 / fps : 0
+  for (let ms = first + 100; ms < until; ms += 5) {
+    const lead = (20 - speed * ms / 1000) - h.position(ms)
+    expect(lead).toBeLessThan(0.05 + frame)
+    expect(lead).toBeGreaterThan(-0.01 - frame)
+  }
+  expect((h.position(until - 50) - h.position(first + 150)) / ((until - 200 - first) / 1000)).toBeCloseTo(-speed, 1)
+  expect(Math.max(...h.concurrent)).toBeLessThanOrEqual(2)
+  expect(h.maxStep()).toBeLessThan(1 / 48)
   expect(h.gain(until + (fps ? 750 : 120))).toBe(0)
 })
 
