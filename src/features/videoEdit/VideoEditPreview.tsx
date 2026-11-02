@@ -291,6 +291,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       wakeForView()
     })
     let audioRenderer: VideoEditRenderSession | undefined
+    /** 已看过是否有声音的序列快照：没有声音的序列不必每一步都重新筛片段。 */
+    let audioCheckedDocument: VideoEditComposition | undefined
     // No available proxy means the session already plays the originals: both read as 'original', so starting paused does not rebuild.
     const proxyState = (signature: string): string => signature === '[]' ? 'original' : signature
     let appliedProxy = proxyState(videoEditProxySignature(instance.document.id))
@@ -831,6 +833,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           // 已交出调度的一步只收尾自己这一帧：唤醒调度按新状态推进，预热与下一帧都由那一步决定。
           if (turn.released) { wake(0); return }
         }
+        // 混音会话（单独的 Worker）冷启动约半秒：载入 Worker 脚本、接上原生通道。第一幅暂停画面出来就在后台建好（不等它），
+        // 打开工程后第一次起播的首段预混与拖动出声都不必等它。
+        if (!audioRenderer && !playing && pausedPicture && audioCheckedDocument !== document) { audioCheckedDocument = document; if (audibleVideoEditClips(document).length) audioRenderer = new VideoEditRenderSession(document) }
         // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
         // 按住拖动播放头期间不预热：预热要打开连续解码并预混首段声音（复杂工程约 0.6 秒），循环等它完成期间不再请求新画面，
         // 拖动方向反转、指针短暂停住时就出现半秒以上的停顿；松手后的现场画面完成，再准备播放。

@@ -113,8 +113,9 @@ function createVideoEditPlayStartScene() {
       assert.ok(evidence.summary['drag-0-0'] <= 249.7 * 1.05, `拖完立即播放中位数 ${evidence.summary['drag-0-0'].toFixed(1)}ms 超过基线 +5%`)
       for (const run of evidence.runs) {
         assert.ok(run.firstSecondUpdates >= 58, `起播第一秒只有 ${run.firstSecondUpdates} 次画面更新`)
-        // 暂停停稳后起播已预热（解码定位、声音设备与第一块混音），按下到画面开始走不再等解码。
-        assert.ok(run.pressToMoveMs < 150, `按下播放 ${run.pressToMoveMs.toFixed(0)}ms 后画面才开始走`)
+        // 暂停停稳后起播已预热（解码定位、声音设备与第一块混音），按下到播放时钟起步不再等解码。
+        // 画面跟随实际听到的声音，时钟起步后还要加上声卡输出延迟（本机约 60ms），那段不归软件准备，所以判时钟起步。
+        assert.ok(run.pressToClockMs < 150, `按下播放 ${run.pressToClockMs.toFixed(0)}ms 后播放时钟才起步（画面开走 ${run.pressToMoveMs.toFixed(0)}ms）`)
       }
       // 刚松手就按：预热已在松手（或拖动停住）时开始解码，只等从关键帧解到播放头剩下的部分。改前三种情况都要 380–450ms。
       for (const run of evidence.afterDrag) {
