@@ -1,86 +1,101 @@
-const NODE = (i, t, c, w) => {
-  const nx = 96 + random(i * 5 + 1) * (w - 192);
-  const ny = 540 + (random(i * 5 + 2) - 0.5) * 640;
+// 复杂到简单片头：上百条连线与节点收束成一条横线，再逐字出标题。作为代码素材播放性能的固定负载。
+// 发光用图层上的 GPU glow，背景不变就沿用；连线、节点和逐字入场由 Canvas 每帧画。
+import { glow } from 'henji-effects';
+
+const hash = n => { const x = Math.sin(n * 127.1 + 20261.015) * 43758.5453; return x - Math.floor(x) };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const progress = (t, start, duration) => clamp((t - start) / duration, 0, 1);
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t) };
+const cubicInOut = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const rgba = (hex, a) => { const n = parseInt(hex.slice(1, 7), 16); return `rgba(${n >> 16 & 255}, ${n >> 8 & 255}, ${n & 255}, ${a})` };
+
+function node(i, t, c, w) {
+  const nx = 96 + hash(i * 5 + 1) * (w - 192);
+  const ny = 540 + (hash(i * 5 + 2) - 0.5) * 640;
   const amp = 36 * (1 - c) * (1 - c);
-  const x = lerp(nx, w / 2 + (nx - w / 2) * 0.955, c) + sin(i * 2.399 + t * 1.15) * amp;
-  const y = lerp(ny, 540, c) + sin(i * 1.717 - t * 1.63) * amp * 1.45;
-  return [x, y];
-};
+  return [lerp(nx, w / 2 + (nx - w / 2) * 0.955, c) + Math.sin(i * 2.399 + t * 1.15) * amp, lerp(ny, 540, c) + Math.sin(i * 1.717 - t * 1.63) * amp * 1.45];
+}
 
-const STRAND = (i, j, t, c, w, tint) => {
-  const a = NODE(i, t, c, w);
-  const b = NODE(j, t, c, w);
-  const d = random(i * 9 + 4);
-  return line({id: "strand", x1: a[0], y1: a[1], x2: b[0], y2: b[1], width: 0.6 + d * 1.2, lineCap: "round", trimEnd: progress(t, 0.45 + i * 0.0016, 0.62), color: [tint.r, tint.g, tint.b, 0.1 + 0.34 * d]});
-};
+function strand(ctx, i, j, t, c, w, tint) {
+  const trim = progress(t, 0.45 + i * 0.0016, 0.62);
+  if (trim <= 0) return;
+  const a = node(i, t, c, w), b = node(j, t, c, w), d = hash(i * 9 + 4);
+  ctx.strokeStyle = rgba(tint, 0.1 + 0.34 * d); ctx.lineWidth = 0.6 + d * 1.2;
+  ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(lerp(a[0], b[0], trim), lerp(a[1], b[1], trim)); ctx.stroke();
+}
 
-const DOT = (i, t, c, w, tint) => {
-  const a = NODE(i, t, c, w);
-  const d = random(i * 5 + 3);
+function dot(ctx, i, t, c, w, tint) {
   const grow = progress(t, 0.12 + i * 0.0022, 0.55);
+  if (grow <= 0) return;
+  const a = node(i, t, c, w), d = hash(i * 5 + 3);
   const s = (1.6 + d * d * 5.2) * (1 - 0.45 * c) * (0.5 + 0.5 * grow);
-  return ellipse({id: "dot", x: a[0] - s / 2, y: a[1] - s / 2, width: s, height: s, fill: [tint.r, tint.g, tint.b, (0.2 + d * 0.7) * grow]});
-};
+  ctx.fillStyle = rgba(tint, (0.2 + d * 0.7) * grow);
+  ctx.beginPath(); ctx.ellipse(a[0], a[1], s / 2, s / 2, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+// 逐字入场：每个字按自己的延迟上移、淡入；整行的发光交给图层上的 GPU glow。
+function animatedText(ctx, text, y, size, weight, spacing, color, t, start, step, rise) {
+  ctx.font = `${weight} ${size}px "Noto Sans SC", sans-serif`; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
+  const chars = [...text], widths = chars.map(ch => ctx.measureText(ch).width);
+  const total = widths.reduce((sum, value) => sum + value, 0) + spacing * Math.max(0, chars.length - 1);
+  let cursor = 960 - total / 2;
+  chars.forEach((ch, i) => {
+    const local = progress(t, start + i * step, 0.5);
+    if (local > 0) { ctx.globalAlpha = local; ctx.fillText(ch, cursor, y + rise * (1 - expoOut(progress(t, start + i * step, 0.85)))) }
+    cursor += widths[i] + spacing;
+  });
+  ctx.globalAlpha = 1;
+}
 
 export default {
-  apiVersion: 1, languageVersion: 3,
-  name: "复杂到简单_片头", kind: "generator", mode: "dynamic",
-  width: 1920, height: 1080, durationSeconds: 6, seed: 20261015,
-  parameters: {
-    title: {type: "text", title: "主标题", maxLength: 24, default: "把复杂的事做简单"},
-    subtitle: {type: "text", title: "副标题", maxLength: 16, default: "痕迹 AI"},
-    count: {type: "number", title: "节点数（复杂度）", min: 40, max: 300, step: 1, default: 180},
-    collapseAt: {type: "number", title: "收束起点（秒）", min: 0.4, max: 2.4, step: 0.05, default: 1.4},
-    ink: {type: "color", title: "文字色", default: [0.94, 0.965, 0.98, 1]},
-    accent: {type: "color", title: "强调色", default: [0.42, 0.8, 1, 1]}
-  },
-  render(ctx) {
-    const t = ctx.time;
-    const w = ctx.width;
-    const c = cubicInOut(clamp((t - ctx.params.collapseAt) / 1.55, 0, 1));
-    const gone = smoothstep(0.68, 1, c);
-    const lineP = expoOut(progress(t, 2.9, 0.95));
-    const half = 442 * lineP;
-    const sweep = progress(t, 4.5, 1.05);
-    const t0 = 3;
-    const s0 = 4.35;
+  name: '复杂到简单_片头', kind: 'generator', mode: 'dynamic', width: 1920, height: 1080, durationSeconds: 6,
+  params: [
+    { key: 'title', type: 'text', title: '主标题', default: '把复杂的事做简单' },
+    { key: 'subtitle', type: 'text', title: '副标题', default: '痕迹 AI' },
+    { key: 'count', type: 'number', title: '节点数（复杂度）', min: 40, max: 300, step: 1, default: 180 },
+    { key: 'collapseAt', type: 'number', title: '收束起点（秒）', min: 0.4, max: 2.4, step: 0.05, default: 1.4 },
+    { key: 'ink', type: 'color', title: '文字色', default: '#f0f6fa' },
+    { key: 'accent', type: 'color', title: '强调色', default: '#6bccff' },
+  ],
+  layers(params, w, h, assets, info) {
+    const accent = params.accent, ink = params.ink;
+    const collapse = t => cubicInOut(clamp((t - params.collapseAt) / 1.55, 0, 1));
+    const lineP = t => expoOut(progress(t, 2.9, 0.95));
     return [
-      rect({id: "sky", x: 0, y: 0, width: w, height: ctx.height,
-        fill: linearGradient({x1: 0, y1: 0, x2: 0, y2: ctx.height, stops: [[0, [0.043, 0.059, 0.086, 1]], [0.58, [0.022, 0.033, 0.052, 1]], [1, [0.011, 0.016, 0.028, 1]]]})}),
-      rect({id: "ambient", x: 0, y: 0, width: w, height: ctx.height,
-        fill: radialGradient({cx: w / 2, cy: 528, r: 1020, stops: [[0, [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 0.03 + 0.07 * lineP + 0.01 * sin(t * 1.6)]], [0.5, [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 0.011 + 0.026 * lineP]], [1, [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 0]]]})}),
-      group({id: "tangle", opacity: 1 - gone}, [
-        repeat(ctx.params.count, i => STRAND(i, i + 1, t, c, w, ctx.params.accent)),
-        repeat(140, i => STRAND(i * 2, i * 2 + 13, t, c, w, ctx.params.accent)),
-        repeat(ctx.params.count, i => DOT(i, t, c, w, ctx.params.accent))
-      ]),
-      line({id: "ghost", x1: 58, y1: 540, x2: w - 58, y2: 540, width: 1.2, lineCap: "round",
-        color: [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 0.24 * c]}),
-      line({id: "rule", x1: w / 2 - half, y1: 540, x2: w / 2 + half, y2: 540, width: 2.4, lineCap: "round",
-        color: [ctx.params.ink.r, ctx.params.ink.g, ctx.params.ink.b, 0.92 * lineP],
-        glow: {radius: 18, intensity: 1.5, color: [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 1]}}),
-      line({id: "sweep", x1: w / 2 - 442 + 884 * sweep - 56, y1: 540, x2: w / 2 - 442 + 884 * sweep + 56, y2: 540,
-        width: 3, lineCap: "round", color: [1, 1, 1, 0.5 * sin(PI * sweep) * lineP],
-        glow: {radius: 14, intensity: 1.2, color: [1, 1, 1, 1]}}),
-      text({id: "title", x: w / 2, y: 452, text: ctx.params.title, fontSize: 104, fontWeight: 700,
-        fontFamily: "Noto Sans S Chinese", align: "center", baseline: "middle",
-        letterSpacing: mix(16, 6, expoOut(progress(t, t0, 1.15))),
-        color: [ctx.params.ink.r, ctx.params.ink.g, ctx.params.ink.b, 1],
-        glow: {radius: 12, intensity: 0.5, color: [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 1]},
-        perChar: (i, n) => ({
-          y: tween(t, t0 + stagger(i, 0.055), 0.85, 88, 0, "expoOut"),
-          opacity: progress(t, t0 + stagger(i, 0.055), 0.5),
-          blur: 16 * (1 - progress(t, t0 + stagger(i, 0.055), 0.5))
-        })}),
-      text({id: "subtitle", x: w / 2, y: 632, text: ctx.params.subtitle, fontSize: 38, fontWeight: 400,
-        fontFamily: "Noto Sans S Chinese", align: "center", baseline: "middle",
-        letterSpacing: mix(30, 12, expoOut(progress(t, s0, 1.05))),
-        color: [0.64, 0.74, 0.82, 1],
-        perChar: (i, n) => ({
-          y: tween(t, s0 + stagger(i, 0.07), 0.75, -96, 0, "expoOut"),
-          opacity: 0.95 * progress(t, s0 + stagger(i, 0.07), 0.55),
-          blur: 12 * (1 - progress(t, s0 + stagger(i, 0.07), 0.55))
-        })})
+      { id: 'sky', cacheKey: 'sky', draw(ctx) {
+        const sky = ctx.createLinearGradient(0, 0, 0, h);
+        sky.addColorStop(0, 'rgb(11, 15, 22)'); sky.addColorStop(0.58, 'rgb(6, 8, 13)'); sky.addColorStop(1, 'rgb(3, 4, 7)');
+        ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+      } },
+      // 环境光的亮度按 1/100 档取整：只在肉眼可见的变化时重画、重新上传整幅渐变。
+      { id: 'ambient', cacheKey: Math.round((0.03 + 0.07 * lineP(info.time) + 0.01 * Math.sin(info.time * 1.6)) * 100), draw(ctx, t) {
+        const ambient = ctx.createRadialGradient(w / 2, 528, 0, w / 2, 528, 1020), p = lineP(t);
+        ambient.addColorStop(0, rgba(accent, Math.round((0.03 + 0.07 * p + 0.01 * Math.sin(t * 1.6)) * 100) / 100));
+        ambient.addColorStop(0.5, rgba(accent, 0.011 + 0.026 * p)); ambient.addColorStop(1, rgba(accent, 0));
+        ctx.fillStyle = ambient; ctx.fillRect(0, 0, w, h);
+      } },
+      { id: 'tangle', draw(ctx, t) {
+        const c = collapse(t), gone = smoothstep(0.68, 1, c);
+        if (gone >= 1) return;
+        ctx.globalAlpha = 1 - gone; ctx.lineCap = 'round';
+        for (let i = 0; i < params.count; i++) strand(ctx, i, i + 1, t, c, w, accent);
+        for (let i = 0; i < 140; i++) strand(ctx, i * 2, i * 2 + 13, t, c, w, accent);
+        for (let i = 0; i < params.count; i++) dot(ctx, i, t, c, w, accent);
+      } },
+      { id: 'ghost', draw(ctx, t) {
+        ctx.lineCap = 'round'; ctx.strokeStyle = rgba(accent, 0.24 * collapse(t)); ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(58, 540); ctx.lineTo(w - 58, 540); ctx.stroke();
+      } },
+      { id: 'rule', bounds: [w / 2 - 460, 520, w / 2 + 460, 560], cacheKey: 'rule', motionBlur: false, effects: () => [glow({ radius: 18, strength: 60 })],
+        pose: t => lineP(t) <= 0 ? null : { x: w / 2 * (1 - lineP(t)), scaleX: lineP(t), opacity: 0.92 },
+        draw(ctx) { ctx.lineCap = 'round'; ctx.strokeStyle = ink; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(w / 2 - 442, 540); ctx.lineTo(w / 2 + 442, 540); ctx.stroke() } },
+      { id: 'sweep', bounds: [w / 2 - 520, 520, w / 2 - 380, 560], cacheKey: 'sweep', motionBlur: false, effects: () => [glow({ radius: 14, strength: 50 })],
+        pose: t => { const s = progress(t, 4.5, 1.05); return s <= 0 || s >= 1 ? null : { x: 884 * s, opacity: 0.5 * Math.sin(Math.PI * s) * lineP(t) } },
+        draw(ctx) { ctx.lineCap = 'round'; ctx.strokeStyle = 'white'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(w / 2 - 498, 540); ctx.lineTo(w / 2 - 386, 540); ctx.stroke() } },
+      { id: 'title', bounds: [180, 330, 1740, 580], effects: () => [glow({ radius: 12, strength: 30 })], draw(ctx, t) { animatedText(ctx, params.title, 452, 104, 700, lerp(16, 6, expoOut(progress(t, 3, 1.15))), ink, t, 3, 0.055, 88) } },
+      { id: 'subtitle', bounds: [560, 500, 1360, 780], draw(ctx, t) { animatedText(ctx, params.subtitle, 632, 38, 400, lerp(30, 12, expoOut(progress(t, 4.35, 1.05))), 'rgba(163, 189, 209, 0.95)', t, 4.35, 0.07, -96) } },
     ];
-  }
+  },
 };

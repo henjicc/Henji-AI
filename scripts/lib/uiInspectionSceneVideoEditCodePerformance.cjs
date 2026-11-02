@@ -72,10 +72,6 @@ function createVideoEditCodePerformanceScene() {
         await change(documentRef, { kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.playback_resolution': { resolution: 'full', fullWhenPaused: true } } })
         const canvas = page.locator('canvas[aria-label="剪辑画面"]')
         await canvas.evaluate(canvas => window.__videoLayoutWatchCanvas(canvas))
-        if (after || rounds > 2) {
-          await page.waitForFunction(sequenceId => window.__videoLayoutEvidence.events.some(event => event.event === 'video_edit.content.warm.completed' && event.context.sequenceId === sequenceId), project.sequences[0].id, { timeout: 60000 })
-          evidence.prewarm = (await workerSnapshot(page)).events.filter(event => event.event?.startsWith('video_edit.content.warm.'))
-        }
         if (tracing) await app.evaluate(({ contentTracing }, cpuProfile) => contentTracing.startRecording({ included_categories: ['blink.user_timing', 'devtools.timeline', 'v8', 'disabled-by-default-v8.gc', 'toplevel', 'gpu', 'viz', ...(cpuProfile ? ['disabled-by-default-v8.cpu_profiler'] : [])], recording_mode: 'record-as-much-as-possible' }), process.env.HENJI_CODE_PERF_CPU_TRACE === '1')
         for (let round = 0; round < rounds; round++) {
           await playback(0, false); await presented(page, 0)
@@ -97,7 +93,7 @@ function createVideoEditCodePerformanceScene() {
           const presentedCount = new Set([0, ...unique.map(frame => frame.frame)]).size
           const samples = frames.flatMap(frame => frame.codePerformance)
           assert.ok(samples.length > 0, '必须捕获正式节目 Worker 的逐帧成本，零样本不能报通过')
-          assert.ok(frames.every(frame => frame.codePerformance.every(sample => sample.frame === frame.frame)), '两帧流水统计必须属于本次请求')
+          assert.ok(frames.every(frame => frame.codePerformance.every(sample => sample.frame === frame.frame)), `两帧流水统计必须属于本次请求：${JSON.stringify(frames.filter(frame => frame.codePerformance.some(sample => sample.frame !== frame.frame)).slice(0, 8).map(frame => [frame.frame, frame.presented, frame.codePerformance.map(sample => sample.frame)]))}`)
           evidence.runs.push({ round, load: { gpuBefore, gpuAfter: gpuLoad(), cpuMean: cpuLoad.reduce((a, b) => a + b, 0) / cpuLoad.length, cpuMax: Math.max(...cpuLoad), freeMemory: os.freemem(), metricsBefore, metricsAfter: await app.evaluate(({ app }) => app.getAppMetrics()) }, samples: frames, presented: presentedCount, dropped: 180 - presentedCount, droppedRatio: (180 - presentedCount) / 180,
             cpuMs: statistics(samples.map(sample => sample.cpuMs)), drawMs: statistics(samples.map(sample => sample.gpuMs)), evaluateDrawMs: statistics(samples.map(sample => sample.cpuMs + sample.gpuMs)), presentationMs: statistics(frames.map(frame => frame.gpuMs)), requestMs: statistics(frames.map(frame => frame.elapsedMs)) })
           save()
