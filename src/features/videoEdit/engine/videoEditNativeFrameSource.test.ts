@@ -952,6 +952,40 @@ describe('原生定位器', () => {
     expect(channel.released).toContain(3_000_000)
     await seeker.dispose()
   })
+
+  it('拖动中同一文件的两个图层各用一个定位会话并留存解出的帧；倒拖在图层自己的会话上预解上一个 GOP，换方向时作废', async () => {
+    const channel = new FakeChannel()
+    const prefetches: Array<Record<string, unknown>> = []
+    channel.answers.frameAt = params => {
+      if (params.prefetch) { prefetches.push(params); return new Promise(() => {}) }
+      const time = params.time as number
+      channel.frame(params.streamId as string, { kind: 'frame_at', id: params.ticket as string }, Math.round(time * 1e6))
+      return { ticket: params.ticket, found: true, seeked: false, decodeMs: 1, keySeconds: Math.floor(time / 2) * 2 }
+    }
+    const cache = new VideoEditFrameCache(1024 ** 3)
+    const frames = backend(channel)
+    const seeker = frames.seeker(media(), cache, snapshot)
+    const read = async (time: number, reader: string, direction = -1): Promise<void> => (await seeker.sample(time, 0, true, false, undefined, { reader, direction })).sample?.close()
+    await read(5.5, 'base'); await read(6.5, 'overlay')
+    const reads = channel.calls.filter(call => call.method === 'frameAt' && !call.params.prefetch).map(call => call.params)
+    expect(reads.map(params => params.retain)).toEqual([true, true])
+    expect(reads[0].streamId).not.toBe(reads[1].streamId)
+    expect(frames.openSessions).toBe(2)
+    await flush(20)
+    // 倒拖：各自预解当前段之前的 GOP。
+    expect(prefetches.map(params => [params.streamId, params.time])).toEqual([[reads[0].streamId, 4 - 1e-4], [reads[1].streamId, 6 - 1e-4]])
+    // 预解在途时前台读取不打断它（服务在途中直接答复留存命中），也不重复发。
+    await read(5.45, 'base'); await flush(20)
+    const cancelled = (): unknown[] => channel.calls.filter(call => call.method === 'cancelFrameAt').map(call => call.params.ticket)
+    expect(cancelled()).toEqual([])
+    expect(prefetches).toHaveLength(2)
+    // 换成正拖：倒拖的预解作废（正拖各图层顺序续解，不预解）。
+    await read(5.5, 'base', 1); await flush(20)
+    expect(cancelled()).toEqual([prefetches[0].ticket])
+    expect(prefetches).toHaveLength(2)
+    await seeker.dispose(); await frames.settled()
+    expect(frames.openSessions).toBe(0)
+  })
 })
 
 describe('原生声音', () => {

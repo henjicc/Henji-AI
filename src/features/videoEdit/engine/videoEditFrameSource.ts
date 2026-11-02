@@ -129,6 +129,12 @@ export interface VideoEditFrameSource {
   decodable?(): Promise<boolean>
 }
 
+/**
+ * 拖动中一个图层的单帧读取：`reader` 是图层（片段）标识，同一文件同时被几个图层拖动读取时各用自己的解码位置；
+ * `direction` 是这个图层源时间的移动方向（-1、0、1）。
+ */
+export interface VideoEditScrubRead { reader: string; direction: number }
+
 /** Exact-frame seeking of one file with decoded pictures kept in the shared bounded cache. */
 export interface VideoEditFrameSeeker {
   /**
@@ -136,8 +142,9 @@ export interface VideoEditFrameSeeker {
    * frame, or a decoded picture the renderer still normalizes. `approximate`: a fast scrub accepts the key frame of the
    * target's GOP when reaching the exact picture needs a new seek; the result then says `approximate`. `signal`
    * abandons the read as `VideoEditFrameReadOptions.signal` does (a backend that cannot stop may still answer).
+   * `scrub`: a single-frame read of a scrub (see `VideoEditScrubRead`); a backend without decoded-frame retention ignores it.
    */
-  sample(time: number, direction: number, singleFrame?: boolean, approximate?: boolean, signal?: AbortSignal): Promise<{ sample?: VideoEditDecodedPicture | VideoEditGpuFrame; hit: boolean; approximate?: boolean }>
+  sample(time: number, direction: number, singleFrame?: boolean, approximate?: boolean, signal?: AbortSignal, scrub?: VideoEditScrubRead): Promise<{ sample?: VideoEditDecodedPicture | VideoEditGpuFrame; hit: boolean; approximate?: boolean }>
   dispose(): Promise<void>
 }
 

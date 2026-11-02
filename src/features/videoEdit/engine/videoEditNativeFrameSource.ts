@@ -1,7 +1,7 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoFrameDecoderInfo, VideoFrameNativeStats, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
-import { VIDEO_EDIT_NATIVE_SOUND_READY, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
+import { VIDEO_EDIT_NATIVE_SOUND_READY, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditScrubRead, type VideoEditSnapshot } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, openVideoEditNativePcm, type VideoEditPcmSession } from './videoEditNativeAudio'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
@@ -70,6 +70,11 @@ export const VIDEO_EDIT_NATIVE_NEXT_SEGMENT_LEAD = 60
 const SEGMENT_FORWARD_SECONDS = 1
 /** 短于这么多项的段不单独起：变速快段、频繁切换处每段只有几帧，提前定位省下的抵不过两个解码器同时解。 */
 const MIN_SEGMENT_ITEMS = 30
+/**
+ * 拖动中这么久（毫秒）没读的图层算停了：它的定位会话让给别的图层，自己开的会话关掉。拖动之间停顿几秒很常见，
+ * 重开一个 4K 会话要一两百毫秒，所以不能太短。
+ */
+const SCRUB_READER_IDLE_MS = 10_000
 
 /** 播放计划按需要重新定位的剪辑点切成的段，返回每段的起始下标（首项为 0）；同一段在一个解码器上顺序续解。 */
 export function videoEditNativeScheduleSegments(times: readonly number[]): number[] {
@@ -169,9 +174,10 @@ export class VideoEditNativeDecoderSession {
    * The picture showing at `time`, or null when the file has none there. `background`: a read ahead of need, timed as
    * `nativeFrameAtBackground` so a frame's stages tell its own reads from the background steps running beside it.
    * Aborting `signal` stops the native decode where it got to (the session keeps that position) and rejects with an
-   * `AbortError`; a frame already on its way goes straight back.
+   * `AbortError`; a frame already on its way goes straight back. `retain`: a scrub read, the decoded pictures stay in the
+   * service for later reads (`decode/retain.rs`) and the picture carries its run's key frame time (`keySeconds`).
    */
-  async frameAt(time: number, keyOnly = false, background = false, signal?: AbortSignal): Promise<VideoEditNativePicture | null> {
+  async frameAt(time: number, keyOnly = false, background = false, signal?: AbortSignal, retain = false): Promise<VideoEditNativePicture | null> {
     if (this.closing || this.ended) throw this.ended ?? closedFailure()
     if (signal?.aborted) throw readAbandoned()
     const ticket = `t${++this.next}`
@@ -192,7 +198,7 @@ export class VideoEditNativeDecoderSession {
     let taken = false
     const started = performance.now()
     try {
-      const result = await Promise.race([this.channel.call('frameAt', { streamId: this.info.streamId, time, ticket, ...(keyOnly ? { keyOnly } : {}) }).catch(error => { throw decodeFailure(this.name, error) }), abandoned])
+      const result = await Promise.race([this.channel.call('frameAt', { streamId: this.info.streamId, time, ticket, ...(keyOnly ? { keyOnly } : {}), ...(retain ? { retain } : {}) }).catch(error => { throw decodeFailure(this.name, error) }), abandoned])
       if (!result.found) return null
       let timer: ReturnType<typeof setTimeout> | undefined
       const frame = await Promise.race([arrived, abandoned, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(decodeFailure(this.name, new Error('原生帧未送达'))), FRAME_ARRIVAL_TIMEOUT_MS) })]).finally(() => clearTimeout(timer))
@@ -207,6 +213,8 @@ export class VideoEditNativeDecoderSession {
       }
       const picture = this.picture(frame)
       if (result.approximate) picture.approximate = true
+      if (result.keySeconds !== undefined) picture.keySeconds = result.keySeconds
+      if (result.retained) recordVideoEditPreparation('nativeFrameAtRetained', 0)
       return picture
     } finally {
       signal?.removeEventListener('abort', abandon)
@@ -214,6 +222,31 @@ export class VideoEditNativeDecoderSession {
       // A frame that arrived (or arrives) for an abandoned read goes straight back.
       if (!taken) void arrived.then(frame => frame.release(), () => undefined)
     }
+  }
+
+  /**
+   * 倒拖预解：服务把 `time` 所在 GOP 从关键帧到 `time` 都解出留在服务里，不交帧（`decode/retain.rs`）。返回这一段是否已全部
+   * 留存及它的关键帧时间；留存满了时停在已解到的位置，下次接着解。中止 `signal` 时服务同样停在原处，以 `AbortError` 结束。
+   */
+  async prefetch(time: number, signal: AbortSignal): Promise<{ retained: boolean; keySeconds?: number }> {
+    if (this.closing || this.ended) throw this.ended ?? closedFailure()
+    if (signal.aborted) throw readAbandoned()
+    const ticket = `p${++this.next}`
+    let abandon = (): void => {}
+    const abandoned = new Promise<never>((_, reject) => {
+      abandon = () => {
+        void this.channel.call('cancelFrameAt', { streamId: this.info.streamId, ticket }).catch(() => undefined)
+        reject(readAbandoned())
+      }
+    })
+    void abandoned.catch(() => undefined)
+    signal.addEventListener('abort', abandon, { once: true })
+    const started = performance.now()
+    try {
+      const result = await Promise.race([this.channel.call('frameAt', { streamId: this.info.streamId, time, ticket, retain: true, prefetch: true }).catch(error => { throw decodeFailure(this.name, error) }), abandoned])
+      recordVideoEditPreparation(result.retained ? 'nativePrefetch' : result.full ? 'nativePrefetchFull' : 'nativePrefetchStopped', performance.now() - started)
+      return { retained: result.retained === true, ...(result.keySeconds !== undefined ? { keySeconds: result.keySeconds } : {}) }
+    } finally { signal.removeEventListener('abort', abandon) }
   }
 
   /**
@@ -416,6 +449,9 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
 
   /** The shared single-frame session (also used by the seeker); opened on first use. */
   seek(): Promise<VideoEditNativeDecoderSession> { return this.session('seek') }
+
+  /** 拖动中另一个图层自己的定位会话（`VideoEditNativeSeeker` 管理，随图层停读或定位器释放关闭）。 */
+  openScrubSession(): Promise<VideoEditNativeDecoderSession> { return this.owner.openSession(this.media, this.path, 'seek') }
 
   /**
    * Drops this file's shared sessions after a failure (task 3.1): reads waiting on them fail as retryable, and the
@@ -903,6 +939,19 @@ interface SeekWaiter { time: number; resolve: (frame: VideoEditGpuFrame | undefi
 interface SeekWindow { start: number; speculative: boolean; waiters: Set<SeekWaiter>; abort: AbortController; done: Promise<void>; unclaimed?: () => void }
 
 /**
+ * 拖动读取的一个图层。第一个读的图层用文件的共享定位会话与队列；同时在读的其他图层各开一个会话与队列，各自顺序续解，
+ * 不在两个源时间之间来回定位（同一文件的两层相差一秒时，共用一个解码器让正拖六成读取都要回到关键帧）。名额不足时共用。
+ * `key`：最近一次原生读取所在段的关键帧时间；`prefetch`：在途的预解（`scrubAhead`），`prefetched` 是已解完的预解目标。
+ */
+interface ScrubReader {
+  /** 读取时现取会话：共享会话可能已被回收或重置（下次读取由文件源重开），自己开的会话结束后读取者随之丢弃。 */
+  session(): Promise<VideoEditNativeDecoderSession>
+  /** 图层自己开的会话（名额不足时没有，用共享会话）；停读或定位器释放时关闭。 */
+  own?: Promise<VideoEditNativeDecoderSession>
+  lane: NativeSeekLane; lastRead: number; key?: number; prefetched?: number; prefetch?: { abort: AbortController }
+}
+
+/**
  * Exact-frame seeking on the native backend with decoded pictures kept in the renderer's shared frame cache.
  * Intra-frame material (ProRes, DNxHR, CineForm) reads the requested picture directly. Long-GOP material decodes
  * one-second windows into the cache, so stepping and reverse scrubbing reuse decoded pictures the way the browser
@@ -919,6 +968,9 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
    */
   private failed?: { error: Error; until: number }
   private direction = 0
+  private readonly readers = new Map<string, ScrubReader>()
+  /** 停拖后关掉图层自己开的会话（`SCRUB_READER_IDLE_MS` 后检查一次）。 */
+  private readerSweep?: ReturnType<typeof setTimeout>
 
   constructor(private readonly backend: VideoEditNativeFrames, private readonly media: VideoEditMedia, private readonly cache: VideoEditFrameCache, private readonly snapshot: VideoEditSnapshot) {}
 
@@ -936,13 +988,13 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
    * that position), a window read leaves its window, and a window nobody waits for any more is left unclaimed (see
    * `SeekWindow`).
    */
-  sample(time: number, direction: number, singleFrame = false, approximate = false, signal?: AbortSignal): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
+  sample(time: number, direction: number, singleFrame = false, approximate = false, signal?: AbortSignal, scrub?: VideoEditScrubRead): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
     if (this.disposed) return Promise.reject(closedFailure())
     if (signal?.aborted) return Promise.reject(readAbandoned())
-    return this.backend.managesIdleSessions ? this.source().use(() => this.sampleActive(time, direction, singleFrame, approximate, signal)) : this.sampleActive(time, direction, singleFrame, approximate, signal)
+    return this.backend.managesIdleSessions ? this.source().use(() => this.sampleActive(time, direction, singleFrame, approximate, signal, scrub)) : this.sampleActive(time, direction, singleFrame, approximate, signal, scrub)
   }
 
-  private async sampleActive(time: number, direction: number, singleFrame: boolean, approximate: boolean, signal?: AbortSignal): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
+  private async sampleActive(time: number, direction: number, singleFrame: boolean, approximate: boolean, signal?: AbortSignal, scrub?: VideoEditScrubRead): Promise<{ sample?: VideoEditGpuFrame; hit: boolean; approximate?: boolean }> {
     if (this.disposed) throw closedFailure()
     if (this.failure) throw this.failure
     if (signal?.aborted) throw readAbandoned()
@@ -952,7 +1004,7 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     this.direction = Math.sign(direction)
     if (direction === 0 || changed) this.cancelSpeculative()
     const cached = this.cached(time)
-    if (cached) { recordVideoEditPreparation('scrubCacheHit', 0); if (direction !== 0) this.prefetch(source, time, direction); return { sample: cached, hit: true } }
+    if (cached) { recordVideoEditPreparation('scrubCacheHit', 0); if (direction !== 0) this.prefetch(source, time, direction); if (scrub) this.scrubAhead(scrub, time); return { sample: cached, hit: true } }
     const session = await source.seek()
     if (this.disposed) throw closedFailure()
     if (signal?.aborted) throw readAbandoned()
@@ -962,16 +1014,26 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     const rejoin = !approximate && !!unclaimed?.unclaimed && !unclaimed.abort.signal.aborted
     if ((session.intraOnly || singleFrame) && !rejoin) {
       // A first still needs only one picture. Decode the GOP natively without importing/copying its preceding frames.
-      // Continuous scrubbing keeps the existing window cache and speculative neighbour decoding.
+      // Continuous scrubbing keeps the existing window cache and speculative neighbour decoding. A scrub read of a
+      // long-GOP layer runs on its reader's session and keeps the decoded pictures in the service (`ScrubReader`).
+      const reader = scrub && !session.intraOnly ? this.reader(source, scrub.reader) : undefined
+      const readSession = reader ? await reader.session() : session
+      if (this.disposed) throw closedFailure()
+      const lane = reader?.lane ?? source.lane
       const queued = performance.now()
-      const picture = await source.lane.run(async () => {
+      const picture = await lane.run(async () => {
         recordVideoEditPreparation('scrubLaneWait', performance.now() - queued)
         const started = performance.now()
-        const value = await session.frameAt(time, approximate && !session.intraOnly, false, signal)
+        const value = await readSession.frameAt(time, approximate && !session.intraOnly, false, signal, !!reader)
         recordVideoEditPreparation(value?.approximate ? 'scrubKeyFrame' : 'scrubExactFrame', performance.now() - started)
         return value
+      }).catch(error => {
+        // 自己开的会话出了服务故障（未送达、卡住）：丢掉读取者，路由重试时重开，不再落回这个会话。
+        if (reader?.own && scrub && !isAbandoned(error) && videoEditNativeFailureKind(error) === 'service') this.dropReader(scrub.reader, reader)
+        throw error
       })
       if (this.disposed) { picture?.close(); throw closedFailure() }
+      if (reader && scrub) { reader.lastRead = performance.now(); if (picture?.keySeconds !== undefined) reader.key = picture.keySeconds; this.scrubAhead(scrub, time) }
       if (!picture) return { hit: false }
       const keyFrame = picture.approximate
       const copy = await this.normalize(picture)
@@ -1022,6 +1084,84 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
 
   private cancelSpeculative(): void {
     for (const window of this.windows.values()) if (window.speculative && !window.waiters.size) window.abort.abort()
+  }
+
+  /** 图层 `id` 的拖动读取者（见 `ScrubReader`）；顺带关掉已经停读的其他图层自己开的会话。 */
+  private reader(source: VideoEditNativeFileSource, id: string): ScrubReader {
+    this.sweepReaders(id)
+    let reader = this.readers.get(id)
+    if (reader) return reader
+    const shared = (): Promise<VideoEditNativeDecoderSession> => source.seek()
+    if (![...this.readers.values()].some(other => !other.own)) reader = { session: shared, lane: source.lane, lastRead: performance.now() }
+    else {
+      const created: ScrubReader = { session: shared, lane: new NativeSeekLane(), lastRead: performance.now() }
+      const own = source.openScrubSession()
+      created.own = own
+      // 名额不足时这次读取也落到共享会话，不让这一帧失败。
+      created.session = () => own.catch(error => videoEditNativeFailureKind(error) === 'budget' ? shared() : Promise.reject(error))
+      void own.then(session => session.whenEnded(() => this.dropReader(id, created)), error => {
+        if (videoEditNativeFailureKind(error) !== 'budget') { this.dropReader(id, created); return }
+        // 名额不足：与第一个图层共用文件的定位会话（与原先相同）。
+        if (created.own === own) { created.own = undefined; created.session = shared; created.lane = source.lane }
+      })
+      reader = created
+    }
+    this.readers.set(id, reader)
+    this.armReaderSweep()
+    return reader
+  }
+
+  private dropReader(id: string, reader: ScrubReader): void {
+    if (this.readers.get(id) === reader) this.readers.delete(id)
+    this.closeReader(reader)
+  }
+
+  private closeReader(reader: ScrubReader): void {
+    reader.prefetch?.abort.abort(); reader.prefetch = undefined
+    const own = reader.own
+    reader.own = undefined
+    if (own) this.backend.track(own.then(session => session.close(), () => undefined))
+  }
+
+  /** 关掉停读超过 `SCRUB_READER_IDLE_MS` 的其他图层的读取者（`keep` 除外）。 */
+  private sweepReaders(keep?: string): void {
+    const now = performance.now()
+    for (const [key, other] of this.readers) if (key !== keep && now - other.lastRead > SCRUB_READER_IDLE_MS) this.dropReader(key, other)
+  }
+
+  private armReaderSweep(): void {
+    if (this.readerSweep !== undefined || this.disposed) return
+    this.readerSweep = setTimeout(() => {
+      this.readerSweep = undefined
+      this.sweepReaders()
+      if ([...this.readers.values()].some(reader => reader.own)) this.armReaderSweep()
+    }, SCRUB_READER_IDLE_MS)
+  }
+
+  /**
+   * 倒拖时让图层的解码器走在读取前面：预解当前段之前的整个 GOP，解出的帧留在服务里，拖到那里时直接交出，不在 GOP 边界停下
+   * 重解（正拖时各图层顺序续解，不需要）。预解不排在图层队列里：服务在预解途中直接答复落在留存帧里的读取，遇到要解码的读取
+   * 就停下先办它（解码器停在原处），读完再接着发。
+   */
+  private scrubAhead(scrub: VideoEditScrubRead, time: number): void {
+    const reader = this.readers.get(scrub.reader)
+    if (!reader || this.disposed) return
+    reader.lastRead = performance.now()
+    if (reader.prefetch && scrub.direction >= 0) { reader.prefetch.abort.abort(); reader.prefetch = undefined }
+    if (scrub.direction >= 0 || reader.prefetch) return
+    // 读取经渲染层缓存越过了上次原生读取的那一段时，先预解读取所在的这一段，由结果得知它的关键帧再往前预解。
+    const from = reader.key !== undefined && reader.key <= time ? reader.key : time
+    // 关键帧之前一点：服务定位到上一个关键帧，解到这一段第一帧之前。
+    const target = from - 1e-4
+    if (target <= 0 || reader.prefetched === target) return
+    const prefetch = { abort: new AbortController() }
+    reader.prefetch = prefetch
+    void reader.session().then(session => session.prefetch(target, prefetch.abort.signal))
+      .then(result => {
+        if (result.retained) reader.prefetched = target
+        if (from !== reader.key && result.keySeconds !== undefined) reader.key = result.keySeconds
+      }, () => undefined)
+      .finally(() => { if (reader.prefetch === prefetch) reader.prefetch = undefined })
   }
 
   /**
@@ -1121,6 +1261,9 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    clearTimeout(this.readerSweep); this.readerSweep = undefined
+    for (const reader of this.readers.values()) this.closeReader(reader)
+    this.readers.clear()
     for (const window of this.windows.values()) { window.abort.abort(); for (const waiter of window.waiters) waiter.reject(closedFailure()); window.waiters.clear() }
     await Promise.allSettled([...this.windows.values()].map(window => window.done))
     this.windows.clear()

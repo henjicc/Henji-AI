@@ -90,12 +90,18 @@ pub enum Command {
     /// 按时间取单帧：命中时先发 `frame` 事件再响应。`keyOnly`：允许近似画面（快速拖动、远距离跳转先出的画面）——
     /// 必须重新定位时只解目标所在关键帧，同一 GOP 内向前续解时只解一小段时间，没到目标就交出已解到的最后一帧；
     /// 近似时响应带 `approximate`。随后同一时间的精确请求从已解到的位置继续向前解，不再重新定位。
+    /// `retain`：拖动读取，解出的帧留在服务显存供之后的取帧直接交出（`decode/retain.rs`）；`prefetch`：只解码并留存到
+    /// 该时间、不交帧（倒拖预解上一个 GOP），留存满了就停在已解到的位置。
     FrameAt {
         stream_id: String,
         time: f64,
         ticket: String,
         #[serde(default)]
         key_only: bool,
+        #[serde(default)]
+        retain: bool,
+        #[serde(default)]
+        prefetch: bool,
     },
     /// 连续计划取帧：`times`（每项恰好一帧或缺帧）或 `range`（区间内每一帧）。
     Schedule {
@@ -286,9 +292,11 @@ mod tests {
             Command::OpenDecoder { stream_id: "vf-1".into(), path: "D:\\素材\\a.mov".into(), stream_index: None, purpose: Some(DecodePurpose::Seek), pool_size: None, hardware: Some(HardwareMode::Off), format: Some(SharedFormat::Rgbaf16), transfer: None }
         );
         let frame_at = parse_request(br#"{"id":"10","type":"frame_at","streamId":"vf-1","time":1.5,"ticket":"t1"}"#).unwrap();
-        assert_eq!(frame_at.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t1".into(), key_only: false });
+        assert_eq!(frame_at.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t1".into(), key_only: false, retain: false, prefetch: false });
         let key_only = parse_request(br#"{"id":"14","type":"frame_at","streamId":"vf-1","time":1.5,"ticket":"t2","keyOnly":true}"#).unwrap();
-        assert_eq!(key_only.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t2".into(), key_only: true });
+        assert_eq!(key_only.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t2".into(), key_only: true, retain: false, prefetch: false });
+        let prefetch = parse_request(br#"{"id":"15","type":"frame_at","streamId":"vf-1","time":1.5,"ticket":"t3","retain":true,"prefetch":true}"#).unwrap();
+        assert_eq!(prefetch.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t3".into(), key_only: false, retain: true, prefetch: true });
         let schedule = parse_request(br#"{"id":"11","type":"schedule","streamId":"vf-1","scheduleId":"s1","times":[0,0.0166]}"#).unwrap();
         assert_eq!(schedule.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s1".into(), times: Some(vec![0.0, 0.0166]), range: None });
         let range = parse_request(br#"{"id":"12","type":"schedule","streamId":"vf-1","scheduleId":"s2","range":{"from":2}}"#).unwrap();

@@ -28,6 +28,8 @@ pub const MIN_VRAM_BYTES: u64 = 3 * GIB / 2;
 pub const MAX_VRAM_BYTES: u64 = 8 * GIB;
 pub const DEFAULT_HARDWARE_SESSIONS: usize = 16;
 pub const DEFAULT_DECODER_SESSIONS: usize = 32;
+/// 拖动留存帧追加显存时给前台保留的会话数：正在拖的文件旁边还要能预打开下一个镜头、起播，留出三个最大会话。
+const FOREGROUND_SESSIONS_KEPT: u64 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Limits {
@@ -192,6 +194,19 @@ impl Budget {
         Ok(VramTicket { usage: self.usage.clone(), stream_id: stream_id.to_string() })
     }
 
+    /// 给已登记的会话追加至多 `bytes` 的显存（拖动留存帧），返回实际追加的字节数：总预算里始终给前台留出
+    /// `FOREGROUND_SESSIONS_KEPT` 个最大会话的余量，留存帧不挤掉正要打开的会话。追加部分随会话一起归还。
+    pub fn extend_vram(&self, stream_id: &str, bytes: u64) -> u64 {
+        let mut usage = self.usage.lock().unwrap();
+        let reserved: u64 = usage.reserved.values().sum();
+        let keep = usage.largest_session.max(usage.limits.vram_bytes / 8) * FOREGROUND_SESSIONS_KEPT;
+        let granted = bytes.min(usage.limits.vram_bytes.saturating_sub(reserved).saturating_sub(keep));
+        let Some(entry) = usage.reserved.get_mut(stream_id) else { return 0 };
+        *entry += granted;
+        usage.peak_reserved = usage.peak_reserved.max(reserved + granted);
+        granted
+    }
+
     pub fn stats(&self) -> Value {
         let usage = self.usage.lock().unwrap();
         json!({
@@ -241,6 +256,23 @@ mod tests {
         assert_eq!(budget.stats()["vramReservedBytes"], 0);
         assert_eq!(budget.stats()["largestSessionBytes"], 600);
         assert_eq!(budget.stats()["foregroundReserveBytes"], 600);
+    }
+
+    #[test]
+    fn retained_frames_extend_a_session_but_leave_room_for_the_foreground() {
+        let budget = Budget::default();
+        budget.set_limits(Limits { vram_bytes: 8000, hardware_sessions: 4, decoder_sessions: 4 });
+        let session = budget.reserve_vram("a", 1000).unwrap();
+        // 保留 3 × 最大会话（1000）：8000 − 1000 − 3000 = 4000 可追加。
+        assert_eq!(budget.extend_vram("a", 10_000), 4000);
+        assert_eq!(budget.extend_vram("a", 10), 0, "余量已到前台保留线");
+        assert_eq!(budget.stats()["vramReservedBytes"], 5000);
+        assert_eq!(budget.stats()["foregroundReserveBytes"], 1000, "追加部分不算会话大小");
+        let foreground = budget.reserve_vram("b", 3000).expect("前台仍能打开会话");
+        assert_eq!(budget.extend_vram("missing", 10), 0);
+        drop(session);
+        assert_eq!(budget.stats()["vramReservedBytes"], 3000, "追加部分随会话归还");
+        drop(foreground);
     }
 
     #[test]

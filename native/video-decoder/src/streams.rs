@@ -126,6 +126,8 @@ pub struct StreamCounters {
     pub discarded: AtomicU64,
     pub missing: AtomicU64,
     pub seeks: AtomicU64,
+    /// 从拖动留存帧直接交出的帧（不解码）。
+    pub retained_hits: AtomicU64,
     /// 播放计划中的剪辑点/跳转（开新段、不 flush）。
     pub cuts: AtomicU64,
     /// 其中预先接续的剪辑点（3.6）：上一段所需的包送完后立即送入下一段，解码器流水不排空、不丢弃预解的帧。
@@ -201,6 +203,7 @@ pub fn counters_value(control: &StreamControl) -> Value {
         "discarded": load(&counters.discarded),
         "missing": load(&counters.missing),
         "seeks": load(&counters.seeks),
+        "retainedHits": load(&counters.retained_hits),
         "cuts": load(&counters.cuts),
         "prefedCuts": load(&counters.prefed_cuts),
         "flushes": load(&counters.flushes),

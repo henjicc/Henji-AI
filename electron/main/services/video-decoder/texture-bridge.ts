@@ -256,8 +256,8 @@ export function parseVideoFrameDecoderRequest(input: unknown): VideoFrameDecoder
 export function parseVideoFrameAtRequest(input: unknown): VideoFrameAtRequest {
   const record = parseRecord(input, '取帧请求')
   if (typeof record.time !== 'number' || !Number.isFinite(record.time)) throw new Error('取帧参数 time 无效')
-  if (record.keyOnly !== undefined && typeof record.keyOnly !== 'boolean') throw new Error('取帧参数 keyOnly 无效')
-  return { streamId: parseId(record, 'streamId'), time: record.time, ticket: parseId(record, 'ticket'), ...(record.keyOnly ? { keyOnly: true } : {}) }
+  for (const flag of ['keyOnly', 'retain', 'prefetch'] as const) if (record[flag] !== undefined && typeof record[flag] !== 'boolean') throw new Error(`取帧参数 ${flag} 无效`)
+  return { streamId: parseId(record, 'streamId'), time: record.time, ticket: parseId(record, 'ticket'), ...(record.keyOnly ? { keyOnly: true } : {}), ...(record.retain ? { retain: true } : {}), ...(record.prefetch ? { prefetch: true } : {}) }
 }
 
 export function parseVideoFrameScheduleRequest(input: unknown): VideoFrameScheduleRequest {
@@ -383,7 +383,7 @@ export class VideoFrameBridge {
       })
     }
     try {
-      const result = await this.options.service.frameAt(request.streamId, request.time, request.ticket, { signal: controller.signal }, request.keyOnly === true)
+      const result = await this.options.service.frameAt(request.streamId, request.time, request.ticket, { signal: controller.signal }, { keyOnly: request.keyOnly === true, retain: request.retain === true, prefetch: request.prefetch === true })
       if (result.found && received) { const error = await received; if (error) throw error }
       return result
     } finally {

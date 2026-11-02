@@ -428,10 +428,12 @@ describe('VideoFrameBridge decoder sessions', () => {
     await expect(bridge.frameAt(8, { streamId: 'vf-1', time: 1, ticket: 't1' })).rejects.toThrow('不属于当前窗口')
     await expect(bridge.frameAt(7, { streamId: 'vf-2', time: 1, ticket: 't1' })).rejects.toThrow()
     await expect(bridge.frameAt(7, { streamId: 'vf-1', time: 1, ticket: 't1' })).resolves.toMatchObject({ ticket: 't1', found: true, ptsUs: 1_000_000 })
-    expect(native.service.frameAt).toHaveBeenCalledWith('vf-1', 1, 't1', { signal: expect.any(AbortSignal) }, false)
-    // 快速拖动的关键帧近似取帧原样转给解码服务。
+    expect(native.service.frameAt).toHaveBeenCalledWith('vf-1', 1, 't1', { signal: expect.any(AbortSignal) }, { keyOnly: false, retain: false, prefetch: false })
+    // 快速拖动的关键帧近似取帧与拖动留存、预解原样转给解码服务。
     await bridge.frameAt(7, { streamId: 'vf-1', time: 2, ticket: 't3', keyOnly: true })
-    expect(native.service.frameAt).toHaveBeenLastCalledWith('vf-1', 2, 't3', { signal: expect.any(AbortSignal) }, true)
+    expect(native.service.frameAt).toHaveBeenLastCalledWith('vf-1', 2, 't3', { signal: expect.any(AbortSignal) }, { keyOnly: true, retain: false, prefetch: false })
+    await bridge.frameAt(7, { streamId: 'vf-1', time: 2, ticket: 't4', retain: true, prefetch: true })
+    expect(native.service.frameAt).toHaveBeenLastCalledWith('vf-1', 2, 't4', { signal: expect.any(AbortSignal) }, { keyOnly: false, retain: true, prefetch: true })
     await expect(bridge.schedule(8, { streamId: 'vf-1', scheduleId: 's1', times: [0] })).rejects.toThrow()
     await expect(bridge.schedule(7, { streamId: 'vf-1', scheduleId: 's1', times: [0, 0.5] })).resolves.toEqual({ scheduleId: 's1', count: 2 })
     expect(native.service.schedule).toHaveBeenCalledWith({ streamId: 'vf-1', scheduleId: 's1', times: [0, 0.5] })

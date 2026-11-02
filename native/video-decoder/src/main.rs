@@ -316,10 +316,11 @@ fn main() {
                     respond(&request.id, Err(error));
                 }
             }
-            Command::FrameAt { stream_id, time, ticket, key_only } => {
+            Command::FrameAt { stream_id, time, ticket, key_only, retain, prefetch } => {
                 // 被新请求取代时客户端按请求 ID 取消；会话处理完（或派发失败丢下命令）时自动出表。
                 let cancel = CancelToken::register(&service.cancels, &request.id);
-                if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::FrameAt { request_id: request.id.clone(), time, ticket, key_only, cancel }) {
+                let mode = if prefetch { decode::RetainMode::Prefetch } else if retain { decode::RetainMode::Retain } else { decode::RetainMode::None };
+                if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::FrameAt { request_id: request.id.clone(), time, ticket, key_only, retain: mode, cancel }) {
                     respond(&request.id, Err(error));
                 }
             }

@@ -2265,7 +2265,9 @@ export class VideoEditRenderer {
         const direction = jump > 1 ? 0 : Math.sign(time - source.previousTime)
         // 跳转只需要目标画面；整窗会把无用的中间帧逐幅交接、导入并复制。只有暂停逐帧步进才值得提前存下一窗。
         // 单帧命中缓存时也不给预取方向，避免一次点击在后台启动整窗解码。
-        const result = await seeker.sample(time, singleFrameSeek ? 0 : direction, singleFrameSeek, _scrubbing === 'fast', readSignal)
+        // 拖动的单帧读取按图层区分：同一文件的几层各自续解，倒拖时解出的帧留在解码服务里供后面几步直接取用。
+        const scrubRead = singleFrameSeek && _scrubbing !== false ? { reader: clip.id, direction } : undefined
+        const result = await seeker.sample(time, singleFrameSeek ? 0 : direction, singleFrameSeek, _scrubbing === 'fast', readSignal, scrubRead)
         if (result.hit) cacheHits++
         if (result.approximate) approximatePictures++
         source.current?.close(); source.current = result.sample

@@ -91,7 +91,7 @@ impl VideoPlatform for WindowsPlatform {
     fn create_frame_output(&self, format: SharedFormat, pool: (u32, u32), visible: (u32, u32), count: u32) -> Result<Box<dyn FrameOutput>, String> {
         let client = self.client()?;
         let slots = shared_texture::create_pool(&self.gpu.device, &client, format, pool.0, pool.1, count, true)?;
-        Ok(Box::new(WindowsFrameOutput { converter: Converter::new(self.gpu.clone(), pool, visible), pool: PoolResources { gpu: self.gpu.clone(), client, slots }, queries: std::array::from_fn(|_| None), marks: std::collections::VecDeque::new() }))
+        Ok(Box::new(WindowsFrameOutput { converter: Converter::new(self.gpu.clone(), pool, visible), pool: PoolResources { gpu: self.gpu.clone(), client, slots }, format, retained: Vec::new(), queries: std::array::from_fn(|_| None), marks: std::collections::VecDeque::new() }))
     }
 
     fn start_test_stream(&self, options: &TestStreamOptions, control: Arc<StreamControl>) -> Result<TestStream, String> {
@@ -122,6 +122,9 @@ impl StreamResources for PoolResources {
 struct WindowsFrameOutput {
     converter: Converter,
     pool: PoolResources,
+    format: SharedFormat,
+    /// 拖动留存帧的私有纹理（与槽位同格式同尺寸，不共享给客户端）；随会话释放。
+    retained: Vec<SharedSlot>,
     /// `settle` / `pace` 用的事件查询（首次需要时创建）：下标 0 给 `settle`，其余给 `pace` 轮流使用。
     queries: [Option<ID3D11Query>; 1 + PACE_LAG + 1],
     /// `pace` 已标记、尚未等过的查询下标（最老的在前）；`settle` 等完全部工作后清空。
@@ -220,10 +223,31 @@ impl FrameOutput for WindowsFrameOutput {
         self.converter.fallback_used
     }
 
+    unsafe fn retain(&mut self, frame: *const ff::AVFrame, handle: Option<u32>, path: WritePath, color: &ColorInfo, premultiplied: bool) -> Result<u32, String> {
+        if let Some(handle) = handle {
+            let target = self.retained.get(handle as usize).ok_or_else(|| format!("留存纹理 {handle} 不存在"))?;
+            unsafe { self.converter.write(frame, target, path, color, premultiplied) }?;
+            return Ok(handle);
+        }
+        // 新纹理写入成功才收进来：失败的不留在列表里占显存。
+        let texture = shared_texture::create_private(&self.pool.gpu.device, self.format, self.converter.pool.0, self.converter.pool.1)?;
+        let target = SharedSlot { texture, keyed_mutex: None, remote_handle: 0 };
+        unsafe { self.converter.write(frame, &target, path, color, premultiplied) }?;
+        self.retained.push(target);
+        Ok((self.retained.len() - 1) as u32)
+    }
+
+    fn write_retained(&mut self, handle: u32, slot: u32) -> Result<WriteStats, String> {
+        let source = self.retained.get(handle as usize).ok_or_else(|| format!("留存纹理 {handle} 不存在"))?;
+        let target = self.pool.slots.get(slot as usize).ok_or_else(|| format!("槽位 {slot} 不存在"))?;
+        self.converter.copy_texture(&source.texture, target)
+    }
+
     fn into_resources(self: Box<Self>) -> Box<dyn StreamResources> {
-        let WindowsFrameOutput { converter, pool, queries, .. } = *self;
+        let WindowsFrameOutput { converter, pool, queries, retained, .. } = *self;
         drop(queries);
         drop(converter);
+        drop(retained);
         Box::new(pool)
     }
 }

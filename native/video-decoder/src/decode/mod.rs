@@ -22,11 +22,13 @@
 pub mod codec;
 pub mod demux;
 pub mod plan;
+pub mod retain;
 pub mod timing;
 #[cfg(windows)]
 mod workers;
 
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::Arc;
@@ -40,6 +42,7 @@ use crate::test_pattern::SharedFormat;
 use codec::{Decoder, DecoderSetup, Frame, Purpose, Received};
 use demux::{Input, Packet};
 use plan::{handoff_wait, seek_decision, Claim, Decision, HandoffWait, Position, RunTracker, FORWARD_SEEK_SECONDS, NEAR_KEY_SECONDS};
+use retain::{Admit, Retained, RetainedFrames};
 
 /// 计划里向前跳过超过这么久（秒）也算剪辑点（预先接续直接定位过去，不解中间的帧）。
 const CUT_FORWARD_SECONDS: f64 = 0.25;
@@ -66,6 +69,14 @@ const SKIP_NONREF_MARGIN_SECONDS: f64 = 0.1;
 const KEY_ONLY_FORWARD_FRAMES: u32 = 2;
 /// 交出前等显卡完成的上限（3.8）：超时照常交出。
 const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
+/// 一个会话拖动留存帧的上限（字节与帧数取小）：4K NV12 约 165 帧，盖住一个 2 秒 GOP 加上倒拖时预解的上一个 GOP 的大半；
+/// 实际还受解码显存预算限制（`Budget::extend_vram` 给前台留余量）。
+const RETAIN_MAX_BYTES: u64 = 2 << 30;
+const RETAIN_MAX_FRAMES: u64 = 300;
+/// 读取位置没走过的一侧这么远（秒）以内的留存帧不让位（`RetainedFrames::far`）：盖住当前段与预解的上一段，长 GOP 录屏也够。
+const RETAIN_KEEP_SECONDS: f64 = 10.0;
+/// 预算没有余量时，隔这么久才再试着登记留存显存。
+const RETAIN_RETRY: Duration = Duration::from_secs(2);
 /// 送入这么多包仍无输出视为解码器卡死。
 const STALL_PACKETS: u32 = 600;
 pub const MAX_SCHEDULE_TIMES: usize = 200_000;
@@ -109,10 +120,20 @@ pub enum SchedulePlan {
     Range { from: f64, to: Option<f64> },
 }
 
+/// 单帧取帧是否留存解出的帧（`retain.rs`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetainMode {
+    None,
+    /// 拖动读取：交出目标，途中解出的帧都留下。
+    Retain,
+    /// 只解码并留存到目标、不交帧（倒拖预解）；留存满了就停在已解到的位置。
+    Prefetch,
+}
+
 #[derive(Debug)]
 pub enum SessionCommand {
     Segment { request_id: String, path: String, cancel: CancelToken },
-    FrameAt { request_id: String, time: f64, ticket: String, key_only: bool, cancel: CancelToken },
+    FrameAt { request_id: String, time: f64, ticket: String, key_only: bool, retain: RetainMode, cancel: CancelToken },
     Schedule { schedule_id: String, plan: SchedulePlan },
     Cancel { schedule_id: String },
 }
@@ -256,6 +277,22 @@ mod imp {
         force_seek: bool,
         /// 正在处理的单帧取帧的取消标志（只在 `frame_at` 期间有值）。
         cancel: Option<CancelToken>,
+        budget: crate::budget::Budget,
+        /// 共享纹理池尺寸（留存纹理同尺寸）。
+        pool: (u32, u32),
+        /// 拖动留存帧（`retain.rs`）；容量在第一次拖动读取时按预算登记。
+        retained: RetainedFrames,
+        /// 按预算登记到的留存帧数（登记一次，随会话归还）。
+        retain_granted: usize,
+        /// 上次登记留存显存的时刻（没登记到时据此隔一段再试）。
+        retain_attempted: Option<Instant>,
+        /// 正在处理的取帧要求留存解出的帧。
+        retaining: bool,
+        /// 本次取帧里有帧因留存已满没能留下（预解据此停下）。
+        retain_full: bool,
+        retain_failed_logged: bool,
+        /// 见过的关键包：解码时间 → 呈现时间（`target_key`）。
+        key_pts: BTreeMap<i64, i64>,
     }
 
     fn frame_ts(frame: &Frame) -> i64 {
@@ -471,6 +508,15 @@ mod imp {
                 run_skipped: Vec::new(),
                 force_seek: false,
                 cancel: None,
+                budget: budget.clone(),
+                pool: pool_dimensions,
+                retained: RetainedFrames::default(),
+                retain_granted: 0,
+                retain_attempted: None,
+                retaining: false,
+                retain_full: false,
+                retain_failed_logged: false,
+                key_pts: BTreeMap::new(),
             };
             Ok((session, response))
         }
@@ -507,15 +553,18 @@ mod imp {
                         }
                         crate::respond(&request_id, result);
                     }
-                    SessionCommand::FrameAt { request_id, time, ticket, key_only, cancel } => {
-                        let result = self.answer_frame_at(time, ticket, key_only, cancel);
+                    SessionCommand::FrameAt { request_id, time, ticket, key_only, retain, cancel } => {
+                        let result = self.answer_frame_at(time, ticket, key_only, retain, cancel);
                         crate::respond(&request_id, result);
                     }
                     SessionCommand::Schedule { schedule_id, plan } => self.run_schedule(schedule_id, plan),
                     SessionCommand::Cancel { .. } => {}
                 }
             }
-            // 停止时队列里还没处理的单帧取帧逐个答复，客户端不必等到超时。
+            // 停止时队列里还没处理的单帧取帧逐个答复，客户端不必等到超时（含预解途中暂存、还没轮到的那一条）。
+            if let Some(SessionCommand::FrameAt { request_id, .. } | SessionCommand::Segment { request_id, .. }) = self.deferred.take() {
+                crate::respond(&request_id, Err(session_stopped()));
+            }
             for request_id in self.unanswered_frame_ats() {
                 crate::respond(&request_id, Err(session_stopped()));
             }
@@ -553,6 +602,9 @@ mod imp {
             self.decoder.flush();
             self.decoder.skip_nonref(false);
             self.decoder.set_segment_keys(next.all_frames_key());
+            // 留存帧与见过的关键包属于上一个文件。
+            self.retained.clear();
+            self.key_pts.clear();
             self.input = next;
             self.tracker = RunTracker::default();
             let timestamp = first.timestamp().unwrap_or(i64::MIN);
@@ -606,6 +658,9 @@ mod imp {
                     continue;
                 };
                 let key_ts = packet.timestamp().unwrap_or(i64::MIN);
+                if let (Some(dts), Some(pts)) = (packet.dts(), packet.pts()) {
+                    self.key_pts.insert(dts, pts);
+                }
                 // 落点不晚于目标、已是文件第一个关键帧（目标早于首帧），或已回到开头，就用它。
                 if key_ts <= ticks || attempt == 4 || self.first_key_ts.is_some_and(|first| key_ts <= first) {
                     return Ok(Some(packet));
@@ -630,6 +685,7 @@ mod imp {
             self.run_all_key = true;
             self.run_skipped.clear();
             self.force_seek = false;
+            self.retained.break_chain();
             let key = self.seek_to_key(ticks)?;
             let counters = &self.control.counters;
             counters.seeks.fetch_add(1, Ordering::Relaxed);
@@ -673,9 +729,18 @@ mod imp {
                     return Ok(None);
                 }
                 let limit = self.prefeed_limit();
-                let feed = Feed { pending: &mut self.pending_packet, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut self.fed_since_output, decode_errors: &mut self.decode_error_count, all_key: &mut self.run_all_key, skip_before: self.skip_before, skipped: &mut self.run_skipped };
+                let feed = Feed { pending: &mut self.pending_packet, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut self.fed_since_output, decode_errors: &mut self.decode_error_count, all_key: &mut self.run_all_key, skip_before: self.skip_before, skipped: &mut self.run_skipped, keys: &mut self.key_pts };
+                // 不留存时解出的帧不进留存，之后留下的帧不能与之前的留存帧相连（中间的帧没留下）。
+                if !self.retaining {
+                    self.retained.break_chain();
+                }
                 match next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, feed, &self.control, limit)? {
-                    Fetched::Frame(frame) => return Ok(Some(frame)),
+                    Fetched::Frame(frame) => {
+                        if self.retaining {
+                            self.retain_frame(&frame);
+                        }
+                        return Ok(Some(frame));
+                    }
                     Fetched::End => return Ok(None),
                     Fetched::Queued(frame) => match self.queued.as_mut() {
                         Some(queued) => {
@@ -786,9 +851,26 @@ mod imp {
             candidate <= ticks && self.lookahead.as_ref().map(frame_ts).is_some_and(|next| ticks < next)
         }
 
+        /// 呈现时间 `pts` 的帧所在 GOP 的关键帧呈现时间（按见过的关键包）。长续解跨过多个关键帧时，段的起点不是它的 GOP。
+        fn gop_key(&self, pts: i64) -> Option<i64> {
+            let active = self.tracker.active_key_pts().filter(|&key| key <= pts);
+            self.key_pts.values().copied().filter(|&key| key <= pts).max().max(active)
+        }
+
+        /// `ticks` 所在 GOP 的关键帧（容器索引的解码时间刻度）。带 B 帧时关键帧的解码时间比呈现时间早几帧：目标落在下一个
+        /// 关键帧之前那几帧时，索引按解码时间给出的是下一个关键帧，续解判断就误以为要跳过整段 GOP 重新定位（倒拖跨进上一个
+        /// GOP 时，预解已解到半途也要从头重解）。见过这个关键包、知道它的呈现时间晚于目标时，改用它前面的关键帧。
+        fn target_key(&self, ticks: i64) -> Option<i64> {
+            let key = self.input.key_before(ticks)?;
+            match self.key_pts.get(&key) {
+                Some(&pts) if pts > ticks => self.input.key_before(key.saturating_sub(1)).or(Some(key)),
+                _ => Some(key),
+            }
+        }
+
         /// 取 `ticks` 是否必须重新定位（向后、或跳到别的 GOP）；同一 GOP 内向前时续解即可，近似取帧也照常续解到精确帧。
         fn needs_seek(&self, ticks: i64) -> bool {
-            let key = self.input.key_before(ticks);
+            let key = self.target_key(ticks);
             seek_decision(ticks, &self.position(), key, self.forward_limit, self.near_key) == Decision::Seek
         }
 
@@ -823,7 +905,7 @@ mod imp {
                 self.advance_to(ticks)?;
                 return Ok(true);
             }
-            let key = self.input.key_before(ticks);
+            let key = self.target_key(ticks);
             let decision = seek_decision(ticks, &self.position(), key, self.forward_limit, self.near_key);
             let seeked = decision == Decision::Seek;
             if seeked {
@@ -957,12 +1039,13 @@ mod imp {
 
         /// 单帧取帧的答复。`cancel` 在处理期间挂在会话上：出队时已取消就不解码，解码途中与等槽位时取消就停下。
         /// 会话同时停止（关闭流、服务关闭）时答复会话已停止，不算被新请求取代。
-        fn answer_frame_at(&mut self, time: f64, ticket: String, key_only: bool, cancel: CancelToken) -> Result<Value, ServiceError> {
+        fn answer_frame_at(&mut self, time: f64, ticket: String, key_only: bool, retain: RetainMode, cancel: CancelToken) -> Result<Value, ServiceError> {
             let started = Instant::now();
             self.cancel = Some(cancel);
-            let result = if self.cancelled() { Err(superseded()) } else { self.frame_at_result(time, ticket, key_only, started) };
+            let result = if self.cancelled() { Err(superseded()) } else { self.frame_at_result(time, ticket, key_only, retain, started) };
             let cancelled = self.cancelled();
             self.cancel = None;
+            self.retaining = false;
             match result {
                 Err(error) if error.code == "CANCELLED" && self.stopped() => Err(session_stopped()),
                 Err(error) if error.code == "CANCELLED" && cancelled => {
@@ -973,11 +1056,35 @@ mod imp {
             }
         }
 
-        fn frame_at_result(&mut self, time: f64, ticket: String, key_only: bool, started: Instant) -> Result<Value, ServiceError> {
+        fn frame_at_result(&mut self, time: f64, ticket: String, key_only: bool, retain: RetainMode, started: Instant) -> Result<Value, ServiceError> {
             if !time.is_finite() {
                 return Err(ServiceError::new("INVALID_REQUEST", "时间无效"));
             }
-            let (seeked, approximate) = self.locate_frame(seconds_to_ticks(time, self.time_base), key_only).inspect_err(|error| {
+            let ticks = seconds_to_ticks(time, self.time_base);
+            if retain != RetainMode::Prefetch {
+                self.retained.focus(ticks);
+            }
+            if let Some(entry) = self.retained.find(ticks).filter(|_| retain != RetainMode::Prefetch) {
+                if let Some(value) = self.answer_retained(entry, &ticket, started)? {
+                    return Ok(value);
+                }
+            }
+            self.retaining = retain != RetainMode::None && self.ensure_retention();
+            self.retain_full = false;
+            if retain == RetainMode::Prefetch {
+                let mut value = json!({ "ticket": ticket, "found": false, "seeked": false, "retained": false, "decodeMs": 0.0 });
+                // 没有留存容量时不解：解了也留不下。
+                if self.retaining {
+                    let (seeked, key) = self.prefetch_to(ticks)?;
+                    value["seeked"] = json!(seeked);
+                    value["retained"] = json!(self.retained_span_key(ticks).is_some());
+                    value["full"] = json!(self.retain_full);
+                    value["keySeconds"] = json!(pts_to_seconds(key, self.time_base));
+                }
+                value["decodeMs"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+                return Ok(value);
+            }
+            let (seeked, approximate) = self.locate_frame(ticks, key_only).inspect_err(|error| {
                 if error.code == "DECODE_FAILED" {
                     crate::platform::exit_if_device_lost(self.platform.as_ref(), "frame_at");
                 }
@@ -998,15 +1105,226 @@ mod imp {
             if approximate {
                 value["approximate"] = json!(true);
             }
+            if retain == RetainMode::Retain {
+                if let Some(key) = self.candidate.as_ref().map(frame_ts).and_then(|pts| self.gop_key(pts)) {
+                    value["keySeconds"] = json!(pts_to_seconds(key, self.time_base));
+                }
+            }
             value["decodeMs"] = json!(started.elapsed().as_secs_f64() * 1000.0);
             Ok(value)
+        }
+
+        /// 第一次拖动读取时按预算登记留存显存（没登记到时隔 `RETAIN_RETRY` 再试）。帧内编码每帧独立解码，不留存。
+        fn ensure_retention(&mut self) -> bool {
+            if self.retained.capacity() > 0 {
+                return true;
+            }
+            if self.decoder.all_frames_key || self.retain_attempted.is_some_and(|at| at.elapsed() < RETAIN_RETRY) {
+                return false;
+            }
+            self.retain_attempted = Some(Instant::now());
+            // 已登记过（写入失败后暂停留存）就按原登记恢复，不再追加预算。
+            let capacity = if self.retain_granted > 0 { self.retain_granted } else {
+                let each = crate::budget::frame_bytes(self.output, self.pool).max(1);
+                let granted = self.budget.extend_vram(&self.stream_id, RETAIN_MAX_BYTES.min(RETAIN_MAX_FRAMES * each));
+                self.retain_granted = (granted / each) as usize;
+                self.retain_granted
+            };
+            self.retained.set_capacity(capacity, seconds_to_duration_ticks(RETAIN_KEEP_SECONDS, self.time_base));
+            logging::emit("debug", "decode.retain.capacity", "拖动留存帧已登记显存", json!({ "streamId": self.stream_id, "frames": capacity }));
+            capacity > 0
+        }
+
+        /// 留下刚解出的一帧（`retain.rs`）。尺寸变了、写入失败都只是不留，取帧照常。
+        fn retain_frame(&mut self, frame: &Frame) {
+            let pts = frame_ts(frame);
+            // 这一段里送解码器时跳过的非参考帧不会出现：跨过它们相连会让前一幅盖住它们的时间。
+            if self.retained.previous().is_some_and(|previous| self.run_skipped.iter().any(|&skipped| skipped > previous && skipped < pts)) {
+                self.retained.break_chain();
+            }
+            if frame.size() != self.visible {
+                self.retained.break_chain();
+                return;
+            }
+            let handle = match self.retained.admit(pts) {
+                Admit::Known => {
+                    if let Some(key) = self.gop_key(pts) {
+                        self.retained.set_key(pts, key);
+                    }
+                    self.retained.link(pts);
+                    return;
+                }
+                Admit::Full => {
+                    self.retain_full = true;
+                    return;
+                }
+                Admit::Free => None,
+                Admit::Replace(handle) => Some(handle),
+            };
+            let result = write_path(self.output, frame.format(), frame.hardware_sw_format()).and_then(|path| unsafe { self.frames.retain(frame.0, handle, path, &self.color, frame.premultiplied()) });
+            match result {
+                Ok(handle) => self.retained.insert(Retained { pts, next: None, duration: frame.duration(), key: self.gop_key(pts).unwrap_or(pts), handle }),
+                Err(message) => {
+                    if let Some(handle) = handle {
+                        self.retained.forget(handle);
+                    }
+                    self.retained.break_chain();
+                    // 写不进留存纹理（显存不足等）：这一阵不再留存，隔 `RETAIN_RETRY` 再试，不每帧白建纹理、白解预解。
+                    self.retained.set_capacity(0, 0);
+                    self.retain_attempted = Some(Instant::now());
+                    self.retaining = false;
+                    if !self.retain_failed_logged {
+                        self.retain_failed_logged = true;
+                        logging::warn("decode.retain.failed", &message, json!({ "streamId": self.stream_id }));
+                    }
+                }
+            }
+        }
+
+        /// 单帧取帧命中留存帧时的答复（`deliver_retained` 失败时为 None）。
+        fn answer_retained(&mut self, entry: Retained, ticket: &str, started: Instant) -> Result<Option<Value>, ServiceError> {
+            let Some(mut value) = self.deliver_retained(entry, ticket)? else { return Ok(None) };
+            value["ticket"] = json!(ticket);
+            value["found"] = json!(true);
+            value["seeked"] = json!(false);
+            value["retained"] = json!(true);
+            value["keySeconds"] = json!(pts_to_seconds(entry.key, self.time_base));
+            value["decodeMs"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+            Ok(Some(value))
+        }
+
+        /// 预解途中先答复排队的留存命中（拖动时前台读取大多落在留存帧里，不必为它们停下解码）；遇到别的命令就留给主循环，
+        /// 预解到此为止。返回预解是否应停下。
+        fn serve_retained_between(&mut self) -> bool {
+            loop {
+                let command = match self.commands.try_recv() {
+                    Ok(command) => command,
+                    // 命令通道断开时会话随即停止（解码途中检查 `stopped`）。
+                    Err(TryRecvError::Empty | TryRecvError::Disconnected) => return false,
+                };
+                let command = match command {
+                    // 取消计划：单帧取帧期间没有计划在跑，与主循环一样不必理会。
+                    SessionCommand::Cancel { .. } => continue,
+                    command => command,
+                };
+                let SessionCommand::FrameAt { request_id, time, ticket, key_only, retain, cancel } = command else {
+                    self.deferred = Some(command);
+                    return true;
+                };
+                let entry = (retain != RetainMode::Prefetch && time.is_finite()).then(|| seconds_to_ticks(time, self.time_base)).and_then(|ticks| self.retained.find(ticks).map(|entry| (ticks, entry)));
+                let Some((ticks, entry)) = entry else {
+                    self.deferred = Some(SessionCommand::FrameAt { request_id, time, ticket, key_only, retain, cancel });
+                    return true;
+                };
+                if cancel.is_cancelled() {
+                    self.control.counters.cancelled.fetch_add(1, Ordering::Relaxed);
+                    crate::respond(&request_id, Err(superseded()));
+                    continue;
+                }
+                self.retained.focus(ticks);
+                // 交出时等槽位要看的是这次取帧自己的取消标志。
+                let prefetch = self.cancel.replace(cancel);
+                let answer = self.answer_retained(entry, &ticket, Instant::now());
+                let own = std::mem::replace(&mut self.cancel, prefetch);
+                match answer {
+                    Ok(Some(value)) => crate::respond(&request_id, Ok(value)),
+                    Err(error) => crate::respond(&request_id, Err(error)),
+                    Ok(None) => {
+                        // 留存帧复制失败：照常解码。
+                        let cancel = own.expect("上面刚放入");
+                        self.deferred = Some(SessionCommand::FrameAt { request_id, time, ticket, key_only, retain, cancel });
+                        return true;
+                    }
+                }
+            }
+        }
+
+        /// 交出留存帧 `entry`（不动解码器位置）。复制失败时丢掉它并返回 None，由调用方照常解码。
+        fn deliver_retained(&mut self, entry: Retained, ticket: &str) -> Result<Option<Value>, ServiceError> {
+            let slot = match self.wait_slot(Some(Instant::now() + FRAME_AT_SLOT_TIMEOUT), false) {
+                Ok(slot) => slot,
+                Err(Abort::Failed(error)) => return Err(error),
+                Err(Abort::Cancelled) => return Err(superseded()),
+                Err(Abort::Stopped) => return Err(session_stopped()),
+            };
+            if let Err(message) = self.frames.write_retained(entry.handle, slot) {
+                self.control.slots.release(slot);
+                crate::platform::exit_if_device_lost(self.platform.as_ref(), "write_retained");
+                self.retained.forget(entry.handle);
+                logging::warn("decode.retain.deliver_failed", &message, json!({ "streamId": self.stream_id }));
+                return Ok(None);
+            }
+            let counters = &self.control.counters;
+            counters.produced.fetch_add(1, Ordering::Relaxed);
+            counters.retained_hits.fetch_add(1, Ordering::Relaxed);
+            let pts_us = pts_to_us(entry.pts, self.time_base);
+            let duration_us = if entry.duration > 0 { duration_to_us(entry.pts, entry.duration, self.time_base) } else if self.frame_rate > 0.0 { (1e6 / self.frame_rate).round() as i64 } else { 0 };
+            let frame_index = self.delivered;
+            self.delivered += 1;
+            crate::send(&json!({
+                "event": "frame",
+                "streamId": self.stream_id,
+                "slot": slot,
+                "frameIndex": frame_index,
+                "timestampUs": pts_us,
+                "ptsUs": pts_us,
+                "durationUs": duration_us,
+                "request": RequestTag::FrameAt(ticket.to_string()).value(),
+            }));
+            Ok(Some(json!({ "ptsUs": pts_us, "timestampSeconds": pts_to_seconds(entry.pts, self.time_base), "durationSeconds": duration_us as f64 / 1e6 })))
+        }
+
+        /// 倒拖预解：把 `ticks` 所在 GOP 从关键帧到 `ticks` 的帧都解出留下。解码器正停在这一段里、且段首到停下处都已留下时
+        /// 接着解，否则定位到关键帧重解（已留下的帧不再复制）。留存满了（新帧比所有留存帧都远）就停在已解到的位置，下次预解
+        /// 从这里接着解。排队的留存命中在途中直接答复；其他命令到来时停下交给主循环，解码器同样停在原处。
+        /// 返回（是否定位过，段首关键帧时间）。
+        fn prefetch_to(&mut self, ticks: i64) -> Result<(bool, i64), ServiceError> {
+            if let Some(key) = self.retained_span_key(ticks) {
+                return Ok((false, key));
+            }
+            // 上次因留存已满停下时没留下的那一幅还在候选或前瞻位置：先补上它，前后才能相连。
+            let held = [self.candidate.take(), self.lookahead.take()];
+            for frame in held.iter().flatten() {
+                if self.retained.rejected() == Some(frame_ts(frame)) {
+                    self.retain_frame(frame);
+                }
+            }
+            let [candidate, lookahead] = held;
+            self.candidate = candidate;
+            self.lookahead = lookahead;
+            // 接着解：当前段从关键帧到最近留下的一幅都已相连留下、解码器停在目标之前且不太远（一路解过去，中间跨过关键帧也
+            // 连着留）。停下时没留下的那一幅已在上面补过，补不上（仍满）时这次不解。
+            let resumable = !self.drained && self.tracker.active_key_pts().zip(self.candidate.as_ref().map(frame_ts)).is_some_and(|(key, position)| {
+                key <= ticks && position <= ticks && ticks - key <= 2 * self.forward_limit && self.retained.previous().is_some_and(|last| last <= position && self.retained.covers_from_key(key, self.near_key, last))
+            });
+            let seeked = (self.force_seek || self.queued.is_some() || !resumable) && !self.retain_full;
+            if seeked {
+                self.start_run(ticks, true)?;
+            }
+            let key = self.tracker.active_key_pts().unwrap_or(ticks);
+            while !self.retain_full && !self.retained.covers_from_key(key, self.near_key, ticks) {
+                if self.serve_retained_between() || self.advance_within(ticks, Some(1))? {
+                    break;
+                }
+                // 硬解提交是异步的：不等显卡就会一口气压下十几帧，途中答复的留存帧复制排在它们后面，前台读取要多等几十毫秒。
+                // 每帧等上一帧的显卡工作完成，显卡上只压一两帧的预解。
+                let _ = self.frames.pace(SETTLE_TIMEOUT);
+            }
+            Ok((seeked, key))
+        }
+
+        /// `ticks` 处的留存帧所在段从关键帧到它都已留下时，返回那一段的关键帧时间。
+        fn retained_span_key(&self, ticks: i64) -> Option<i64> {
+            let key = self.retained.find(ticks)?.key;
+            self.retained.covers_from_key(key, self.near_key, ticks).then_some(key)
         }
 
         /// 按需定位并推进到 `ticks`，候选帧即答复的画面。返回（是否定位过，是否近似）。
         fn locate_frame(&mut self, ticks: i64, key_only: bool) -> Result<(bool, bool), ServiceError> {
             // 走向目标的途中跳过离目标足够远的非参考帧（`skip_before`）；目标附近照常全解，精确画面不变。
             let margin = seconds_to_duration_ticks(SKIP_NONREF_MARGIN_SECONDS.max(if self.frame_rate > 0.0 { 3.0 / self.frame_rate } else { 0.0 }), self.time_base);
-            self.skip_before = Some(ticks.saturating_sub(margin));
+            // 留存时不跳：被跳过的帧留不下，倒拖正需要它们。
+            self.skip_before = (!self.retaining).then(|| ticks.saturating_sub(margin));
             // 近似取帧（快速拖动、远距离跳转先出的画面）：已解出的候选帧就是目标时照常给精确帧；必须重新定位时只解目标所在
             // 关键帧；同一 GOP 内向前续解最多再解 `KEY_ONLY_FORWARD_FRAMES` 帧，没到目标就交出已解到的最后一帧（不晚于目标）。
             // 会话停在已解到的位置，同一时间随后的精确请求按“续解”从这里接着向前解。
@@ -1189,11 +1507,13 @@ mod imp {
         skip_before: Option<i64>,
         /// 按 `skip_before` 标记跳过的包的呈现时间（见 `Session::run_skipped`）。
         skipped: &'a mut Vec<i64>,
+        /// 送入的关键包：解码时间 → 呈现时间（见 `Session::target_key`）。
+        keys: &'a mut BTreeMap<i64, i64>,
     }
 
     /// 送包取帧的公共实现（打开时取第一帧与会话共用）。`limit`：只送时间不晚于它的包（预先接续，3.6）。
     fn next_frame(decoder: &mut Decoder, input: &mut Input, tracker: &mut RunTracker, feed: Feed<'_>, control: &StreamControl, limit: Option<i64>) -> Result<Fetched, ServiceError> {
-        let Feed { pending, last_fed_dts, draining, drained, fed_since_output, decode_errors, all_key, skip_before, skipped } = feed;
+        let Feed { pending, last_fed_dts, draining, drained, fed_since_output, decode_errors, all_key, skip_before, skipped, keys } = feed;
         let counters = &control.counters;
         loop {
             if control.stop.load(Ordering::Relaxed) {
@@ -1249,6 +1569,8 @@ mod imp {
                     };
                     if !packet.is_key() {
                         *all_key = false;
+                    } else if let (Some(dts), Some(pts)) = (packet.dts(), packet.pts()) {
+                        keys.insert(dts, pts);
                     }
                     let skip_pts = skip_before.and_then(|limit| packet.pts().filter(|&pts| pts < limit));
                     if let Some(pts) = skip_pts {
@@ -1313,7 +1635,7 @@ mod imp {
             self.tracker.begin(key.timestamp().unwrap_or(i64::MIN));
             self.pending = Some(key);
             let (mut fed, mut errors) = (0u32, 0u64);
-            let feed = Feed { pending: &mut self.pending, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut fed, decode_errors: &mut errors, all_key: &mut self.all_key, skip_before: None, skipped: &mut Vec::new() };
+            let feed = Feed { pending: &mut self.pending, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut fed, decode_errors: &mut errors, all_key: &mut self.all_key, skip_before: None, skipped: &mut Vec::new(), keys: &mut BTreeMap::new() };
             match next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, feed, control, None)? {
                 Fetched::Frame(frame) | Fetched::Queued(frame) => Ok(frame),
                 Fetched::End | Fetched::Limit => Err(ServiceError::new("DECODE_FAILED", "无法解出第一帧画面")),
@@ -1372,11 +1694,20 @@ mod imp {
         use crate::convert::WritePath;
         use crate::platform::{HardwareDevice, TestStream, WriteStats};
 
-        /// 软解会话不需要显卡：写入槽位什么也不做。
-        struct NoOutput(u32);
+        /// 软解会话不需要显卡：写入槽位与留存纹理什么也不做（第二项是已建的留存纹理数）。
+        struct NoOutput(u32, u32);
         impl FrameOutput for NoOutput {
             fn remote_handles(&self) -> Vec<u64> {
                 vec![0; self.0 as usize]
+            }
+            unsafe fn retain(&mut self, _: *const ffmpeg_sys_next::AVFrame, handle: Option<u32>, _: WritePath, _: &ColorInfo, _: bool) -> Result<u32, String> {
+                Ok(handle.unwrap_or_else(|| {
+                    self.1 += 1;
+                    self.1 - 1
+                }))
+            }
+            fn write_retained(&mut self, _: u32, _: u32) -> Result<WriteStats, String> {
+                Ok(WriteStats::default())
             }
             unsafe fn write(&mut self, _: *const ffmpeg_sys_next::AVFrame, _: u32, _: WritePath, _: &ColorInfo, _: bool) -> Result<WriteStats, String> {
                 Ok(WriteStats::default())
@@ -1422,7 +1753,7 @@ mod imp {
                 false
             }
             fn create_frame_output(&self, _: SharedFormat, _: (u32, u32), _: (u32, u32), count: u32) -> Result<Box<dyn FrameOutput>, String> {
-                Ok(Box::new(NoOutput(count)))
+                Ok(Box::new(NoOutput(count, 0)))
             }
             fn start_test_stream(&self, _: &crate::streams::TestStreamOptions, _: Arc<StreamControl>) -> Result<TestStream, String> {
                 Err("测试不用合成画面".into())
@@ -1556,6 +1887,77 @@ mod imp {
             let _ = std::fs::remove_file(path);
         }
 
+        /// 带 B 帧时下一个关键帧的解码时间早于目标：见过那个关键包后，GOP 末尾的目标从当前位置续解，不再回到关键帧重解。
+        #[test]
+        fn a_target_just_before_a_seen_key_frame_continues_the_gop() {
+            let Some(path) = generate("near-key") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let mut session = open(&path);
+            exact(&mut session, 2.5);
+            exact(&mut session, 1.0);
+            let seeks = session.control.counters.seeks.load(Ordering::Relaxed);
+            let last = 2.0 - 0.5 / 30.0;
+            assert_eq!(exact(&mut session, last), exact(&mut open(&path), last));
+            assert_eq!(session.control.counters.seeks.load(Ordering::Relaxed), seeks, "续解到 GOP 末尾");
+            let _ = std::fs::remove_file(path);
+        }
+
+        /// 拖动留存：倒拖经留存帧交出的画面与从关键帧重新解出的精确画面是同一幅，命中时不再解码；倒拖预解上一个 GOP 后，
+        /// 拖进那个 GOP 同样直接交出。
+        #[test]
+        fn retained_reverse_reads_match_exact_frames_without_decoding() {
+            let Some(path) = generate("retain") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let table = CancelMap::default();
+            let mut session = open(&path);
+            let control = session.control.clone();
+            let read = |session: &mut Session, seconds: f64, mode: RetainMode| {
+                let value = session.answer_frame_at(seconds, "r".into(), false, mode, CancelToken::register(&table, "r")).expect("取帧");
+                for slot in 0..3 {
+                    control.slots.release(slot);
+                }
+                value
+            };
+            let exact_us = |seconds: f64| {
+                let mut fresh = open(&path);
+                let ticks = exact(&mut fresh, seconds);
+                pts_to_us(ticks, fresh.time_base)
+            };
+            let first = read(&mut session, 3.9, RetainMode::Retain);
+            assert_eq!(first["keySeconds"], json!(2.0), "第二个 GOP 从 2 秒开始");
+            let decoded = session.control.counters.decoded.load(Ordering::Relaxed);
+            for step in 1..=50 {
+                let seconds = 3.9 - step as f64 / 30.0 + 0.004;
+                let value = read(&mut session, seconds, RetainMode::Retain);
+                assert_eq!(value["retained"], json!(true), "倒拖第 {step} 步命中留存");
+                assert_eq!(value["ptsUs"], json!(exact_us(seconds)), "倒拖第 {step} 步是精确画面");
+            }
+            assert_eq!(session.control.counters.decoded.load(Ordering::Relaxed), decoded, "命中留存不解码");
+            // 留存已满且没有走过的帧可让位：预解解出第一帧就停下；有了空位后接着解，不重新定位。
+            let far = seconds_to_duration_ticks(RETAIN_KEEP_SECONDS, session.time_base);
+            session.retained.focus(seconds_to_ticks(3.99, session.time_base));
+            session.retained.focus(seconds_to_ticks(3.98, session.time_base));
+            session.retained.set_capacity(session.retained.len(), far);
+            let paused = read(&mut session, 2.0 - 1e-4, RetainMode::Prefetch);
+            assert_eq!((paused["full"].clone(), paused["retained"].clone(), paused["seeked"].clone()), (json!(true), json!(false), json!(true)));
+            session.retained.set_capacity(300, far);
+            let resumed = read(&mut session, 2.0 - 1e-4, RetainMode::Prefetch);
+            assert_eq!(resumed["seeked"], json!(false), "从停下处接着解");
+            let prefetched = read(&mut session, 2.0 - 1e-4, RetainMode::Prefetch);
+            assert_eq!((prefetched["found"].clone(), prefetched["retained"].clone()), (json!(false), json!(true)), "预解不交帧，目标已留存");
+            for seconds in [1.95, 1.5, 1.01] {
+                let value = read(&mut session, seconds, RetainMode::Retain);
+                assert_eq!(value["retained"], json!(true));
+                assert_eq!(value["ptsUs"], json!(exact_us(seconds)));
+                assert_eq!(value["keySeconds"], json!(0.0));
+            }
+            let _ = std::fs::remove_file(path);
+        }
+
         /// 出队时已取消的取帧不解码；等空闲槽位时被取消立即答复，不等到槽位超时；二者都计入取消计数。会话同时停止
         /// （关闭流、服务关闭）时答复“会话已停止”，不计入。
         #[test]
@@ -1575,7 +1977,7 @@ mod imp {
             let mut session = open(&path);
             let counters = session.control.clone();
             let decoded = counters.counters.decoded.load(Ordering::Relaxed);
-            assert_eq!(session.answer_frame_at(1.0, "t1".into(), false, token(true)).unwrap_err(), superseded());
+            assert_eq!(session.answer_frame_at(1.0, "t1".into(), false, RetainMode::None, token(true)).unwrap_err(), superseded());
             assert_eq!(counters.counters.decoded.load(Ordering::Relaxed), decoded, "出队时已取消：不解码");
             // 目标已解出、只差交出，而槽位全被占着：等待中被取消。
             exact(&mut session, 1.0);
@@ -1588,12 +1990,12 @@ mod imp {
                 })
             };
             let waiting = Instant::now();
-            assert_eq!(session.answer_frame_at(1.0, "t2".into(), false, token(false)).unwrap_err(), superseded());
+            assert_eq!(session.answer_frame_at(1.0, "t2".into(), false, RetainMode::None, token(false)).unwrap_err(), superseded());
             assert!(canceller.join().unwrap(), "取消时取帧仍在等槽位");
             assert!(waiting.elapsed() < FRAME_AT_SLOT_TIMEOUT, "取消后不再等槽位");
             assert_eq!(counters.counters.cancelled.load(Ordering::Relaxed), 2);
             counters.stop.store(true, Ordering::Relaxed);
-            assert_eq!(session.answer_frame_at(1.0, "t3".into(), false, token(true)).unwrap_err(), session_stopped());
+            assert_eq!(session.answer_frame_at(1.0, "t3".into(), false, RetainMode::None, token(true)).unwrap_err(), session_stopped());
             assert_eq!(counters.counters.cancelled.load(Ordering::Relaxed), 2, "会话停止不算被取代");
             assert!(table.lock().unwrap().is_empty());
             let _ = std::fs::remove_file(path);
@@ -1609,7 +2011,7 @@ mod imp {
             let (commands, mut session) = open_with_commands(&path);
             let table = CancelMap::default();
             for id in ["q1", "q2"] {
-                commands.send(SessionCommand::FrameAt { request_id: id.into(), time: 1.0, ticket: id.into(), key_only: false, cancel: CancelToken::register(&table, id) }).unwrap();
+                commands.send(SessionCommand::FrameAt { request_id: id.into(), time: 1.0, ticket: id.into(), key_only: false, retain: RetainMode::None, cancel: CancelToken::register(&table, id) }).unwrap();
             }
             commands.send(SessionCommand::Cancel { schedule_id: "s".into() }).unwrap();
             session.control.stop.store(true, Ordering::Relaxed);

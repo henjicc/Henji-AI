@@ -300,7 +300,7 @@ struct SemiTexture {
 pub struct Converter {
     gpu: Arc<GpuDevice>,
     /// 池纹理尺寸（nv12 为偶数）。
-    pool: (u32, u32),
+    pub pool: (u32, u32),
     /// 实际画面尺寸。
     visible: (u32, u32),
     constants: Option<ID3D11Buffer>,
@@ -597,6 +597,16 @@ impl Converter {
                 Ok(stats)
             }
         }
+    }
+
+    /// 把同格式同尺寸的纹理整张复制到槽位（拖动留存帧交出）。
+    pub fn copy_texture(&self, source: &ID3D11Texture2D, slot: &SharedSlot) -> Result<WriteStats, String> {
+        let started = Instant::now();
+        acquire(slot)?;
+        let context = self.gpu.lock();
+        unsafe { context.CopyResource(&slot.texture, source) };
+        release(slot, &context)?;
+        Ok(WriteStats { upload_us: 0, submit_us: started.elapsed().as_micros() as u64, map_us: 0 })
     }
 
     unsafe fn cuda_planar(&mut self, frame: *const ff::AVFrame, slot: &SharedSlot, color: &ColorInfo, premultiplied: bool) -> Result<WriteStats, String> {

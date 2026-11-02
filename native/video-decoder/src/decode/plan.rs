@@ -87,6 +87,11 @@ impl RunTracker {
         self.runs.iter().any(|run| run.id == self.active).then_some(self.active)
     }
 
+    /// 正在交付的段的关键帧时间。
+    pub fn active_key_pts(&self) -> Option<i64> {
+        self.runs.iter().find(|run| run.id == self.active).map(|run| run.key_pts)
+    }
+
     #[cfg(test)]
     pub fn current_key_pts(&self) -> Option<i64> {
         self.runs.back().map(|run| run.key_pts)

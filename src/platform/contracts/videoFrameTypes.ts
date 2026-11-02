@@ -121,6 +121,10 @@ export interface VideoFrameAtRequest {
   ticket: string
   /** 快速拖动时的近似取帧：必须重新定位时只解目标所在关键帧（结果带 `approximate`），同一 GOP 内向前照常给精确帧。 */
   keyOnly?: boolean
+  /** 拖动读取：途中解出的帧留在解码服务显存，之后落在其中的取帧直接交出、不再重解（结果带 `keySeconds`）。 */
+  retain?: boolean
+  /** 只解码并留存到该时间、不交帧（倒拖预解上一个 GOP）；留存满了就停在已解到的位置。结果 `found` 恒为 false。 */
+  prefetch?: boolean
 }
 
 export interface VideoFrameAtResult {
@@ -134,6 +138,12 @@ export interface VideoFrameAtResult {
   decodeMs: number
   /** 只解了目标所在关键帧的近似画面（`keyOnly` 请求且需要重新定位时）。 */
   approximate?: boolean
+  /** 画面来自留存帧（交出时没有解码）；预解请求时表示目标已留存。 */
+  retained?: boolean
+  /** `retain` 读取：交出画面所在段的关键帧时间（秒），倒拖据此预解上一个 GOP。 */
+  keySeconds?: number
+  /** 预解因留存已满停在半途（之后再预解接着解）。 */
+  full?: boolean
 }
 
 /** 连续计划：`times` 每项恰好对应一帧或一个缺帧事件；`range` 交付区间 [from, to) 内每一帧。 */

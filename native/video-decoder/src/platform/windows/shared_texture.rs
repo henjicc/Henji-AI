@@ -131,6 +131,11 @@ pub fn create_pool(device: &ID3D11Device, client: &ClientProcess, format: Shared
     Ok(slots)
 }
 
+/// 本服务私有的显存纹理（不共享给客户端），格式与绑定同共享槽位：作为 `Converter::write` 的目标与槽位的复制来源。
+pub fn create_private(device: &ID3D11Device, format: SharedFormat, width: u32, height: u32) -> Result<ID3D11Texture2D, String> {
+    create_texture(device, format, width, height, D3D11_USAGE_DEFAULT, shader_bind(format), 0, 0)
+}
+
 /// 远程关闭池中全部句柄；纹理本身随 COM 引用释放（Chromium 仍持有的导入在其释放后才真正销毁）。
 pub fn release_pool(client: &ClientProcess, slots: &[SharedSlot]) -> Vec<String> {
     slots.iter().filter_map(|slot| client.close_remote(slot.remote_handle).err()).collect()

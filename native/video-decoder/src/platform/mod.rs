@@ -51,6 +51,20 @@ pub trait FrameOutput: Send {
     /// 是否用过罕见像素格式的 CPU 转换回落。
     fn cpu_fallback_used(&self) -> bool;
 
+    /// 把一帧写进本服务私有的留存纹理（拖动留存帧，`decode/retain.rs`）：`handle` 为 None 时新建一张，否则覆盖它；
+    /// 返回纹理号。不支持的平台返回错误，会话就不留存。
+    ///
+    /// # Safety
+    /// 同 `write`。
+    unsafe fn retain(&mut self, _frame: *const ff::AVFrame, _handle: Option<u32>, _path: WritePath, _color: &ColorInfo, _premultiplied: bool) -> Result<u32, String> {
+        Err("本平台不留存解码帧".into())
+    }
+
+    /// 把留存纹理 `handle` 复制到槽位 `slot`。写完返回时客户端即可导入。
+    fn write_retained(&mut self, _handle: u32, _slot: u32) -> Result<WriteStats, String> {
+        Err("本平台不留存解码帧".into())
+    }
+
     /// 会话结束：释放转换资源，交回纹理池（`stop_stream` 时关闭客户端句柄）。
     fn into_resources(self: Box<Self>) -> Box<dyn StreamResources>;
 }

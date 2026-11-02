@@ -27,7 +27,9 @@ function createVideoEditScrubScene() {
       const project = require('./uiInspectionSceneVideoEditProbe.cjs').videoEditFixtureProject(fixture)
       const file = path.join(root, 'scrub.hjvid'); fs.writeFileSync(file, JSON.stringify(project))
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-      await observeWorkers(page)
+      // 诊断运行（HENJI_VIDEO_EDIT_SCRUB_DIAGNOSTICS=1）按轮记录 Worker 准备阶段的增量，定位每一轮的时间花在哪里。
+      const diagnostics = process.env.HENJI_VIDEO_EDIT_SCRUB_DIAGNOSTICS === '1'
+      await observeWorkers(page, false, diagnostics)
       await button(page, '剪辑').click(); const openedAt = performance.now(); await openVideoEditFile(page, file)
       const canvas = page.getByLabel('剪辑画面', { exact: true })
       try {
@@ -115,6 +117,13 @@ function createVideoEditScrubScene() {
           const gapMs = target.at - (index ? data.targets[index - 1].at : data.start)
           return gapMs > 25 ? [{ atMs: target.at - data.start, gapMs }] : []
         })
+        if (diagnostics) {
+          const completed = (await workerSnapshot(page)).events.filter(event => event.kind === 'render.completed' && event.preparationStages)
+          const before = [...completed].reverse().find(event => event.at < data.start)?.preparationStages ?? {}
+          const after = [...completed].reverse().find(event => event.at <= data.frames.at(-1).at)?.preparationStages ?? {}
+          result.preparation = Object.fromEntries(Object.entries(after).map(([key, value]) => [key, { ms: value.ms - (before[key]?.ms ?? 0), count: value.count - (before[key]?.count ?? 0) }]).filter(([, value]) => value.count > 0))
+          console.log('[scrub-diagnostics]', name, JSON.stringify(result.preparation))
+        }
         evidence.cases.push(result)
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       }

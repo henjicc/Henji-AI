@@ -25,6 +25,8 @@ export function videoEditNativeRotation(degrees: number | null | undefined): Vid
 export class VideoEditNativePicture {
   /** 快速拖动时只解了目标所在关键帧的近似画面。 */
   approximate = false
+  /** 拖动留存读取：画面所在段的关键帧时间（秒），倒拖据此预解上一个 GOP。 */
+  keySeconds?: number
   readonly timestamp: number
   readonly duration: number
   readonly codedWidth: number
