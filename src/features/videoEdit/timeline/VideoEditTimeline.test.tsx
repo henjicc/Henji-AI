@@ -13,6 +13,7 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { rememberVideoEditCodeMetadata, readVideoEditCodeMetadata } from '../application/videoEditCodeState'
+import { subscribeVideoEditScrub, type VideoEditScrubIntent } from '../engine/videoEditAudioScrub'
 import { appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { executeVideoEditTimelineEdit } from '../application/videoEditTimeline'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
@@ -547,6 +548,22 @@ it('空白点击与静止片段点击不编辑或定位，标尺实际定位更�
   fireEvent.pointerDown(ruler, event(header + 40, 14)); fireEvent.pointerMove(host, event(header + 60, 14))
   expect(owner.scrubbing).toBe(true)
   fireEvent.pointerUp(host, event(header + 60, 14)); expect(owner.scrubbing).toBe(false)
+})
+
+it('拖动标尺时画面按帧定位，擦洗声音拿到指针的连续位置（不取整）与事件时刻', () => {
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const ruler = view.getByRole('slider', { name: '剪辑时间定位' })
+  const intents: VideoEditScrubIntent[] = []; const off = subscribeVideoEditScrub(owner.document.id, intent => intents.push(intent))
+  fireEvent.pointerDown(ruler, event(header + 40, 14))
+  expect(intents).toEqual([])
+  // 这里每帧 2 像素：指针在 30.5 帧处，画面落在第 31 帧，声音按 30.5 帧
+  fireEvent.pointerMove(host, event(header + 61, 14))
+  expect(owner.frame).toBe(31)
+  expect(intents.at(-1)).toMatchObject({ scope: 'program', kind: 'drag', seconds: 30.5 / 30, quantum: 0, at: expect.any(Number) })
+  // 不到一帧的移动画面不动，声音照样拿到新位置
+  fireEvent.pointerMove(host, event(header + 61.6, 14))
+  expect(owner.frame).toBe(31); expect(intents.at(-1)!.seconds).toBeCloseTo(30.8 / 30, 9)
+  fireEvent.pointerUp(host, event(header + 61.6, 14)); off()
+  expect(owner.scrubbing).toBe(false)
 })
 
 it('拖动播放头中内容被改动或缩放变化，手势失效后 scrubbing 仍回到 false，节目覆盖层恢复', () => {

@@ -93,7 +93,8 @@ export class VideoEditSourceSoundPlayer {
    * 原生与媒体元素源的擦洗均复用正式源混音，音量及电平保持一致；声音由共用擦洗引擎播放（拖动时原速片段跟着指针走，单步一小段原速）。
    * 单步命令经 requestVideoEditScrub 派发，派发期间到达的请求按单步播放。
    */
-  scrub(seconds: number, volume: number, isCurrent: () => boolean, onError: (error: unknown) => void): void {
+  /** quantum：拖动位置按多长取整（秒），默认一帧；连续位置（进度条）传 0。 */
+  scrub(seconds: number, volume: number, isCurrent: () => boolean, onError: (error: unknown) => void, quantum?: number): void {
     if (this.disposed) return
     this.scheduler.stop()
     const step = dispatchingVideoEditScrubKind() === 'step'
@@ -105,7 +106,7 @@ export class VideoEditSourceSoundPlayer {
       this.scrubber.attach({ context: this.context, destination: this.gain })
       this.scrubber.setSource(this.scrubSource ??= videoEditScrubSource(SOURCE_SOUND_RATE, this.media.durationSeconds, (from, duration) => this.renderSession().mixAudio(from, duration)))
       if (step) this.scrubber.step(seconds, Math.max(AUDIO_SCRUB_STEP_SECONDS, 1 / fps))
-      else this.scrubber.move(seconds, { quantum: 1 / fps, at })
+      else this.scrubber.move(seconds, { quantum: quantum ?? 1 / fps, at })
     }
     if (this.context?.state === 'running' && this.gain) { this.gain.gain.value = Math.min(1, Math.max(0, volume)); apply(); return }
     // 第一次（或设备挂起后）先唤醒音频时钟；期间的请求按原顺序、原时刻补上。

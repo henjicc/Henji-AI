@@ -110,22 +110,66 @@ it.each([0, 60, 30])('跟着指针走（帧取整 %i）：原速片段，向前�
   expect(Math.max(...h.concurrent)).toBeLessThanOrEqual(2)
 })
 
-it('慢拖是一段段干脆的原速声音：不重复、不叠在一起，指针追上停下的位置再接着放', () => {
+it.each([[0.2, 0], [0.5, 0], [0.3, 60], [0.12, 30]])('慢拖 %sx（帧取整 %i）：声音连续不断、紧贴指针，平均速度等于拖动速度，停住即收声', (speed, fps) => {
   const h = harness()
-  h.run(1300, [{ at: 0, type: 'rest', position: 20 * RATE }, ...drag(0, 1200, 20, 0.3)])
-  const heard: number[] = []
-  for (let i = h.index(20); i < h.index(1150); i++) if (h.left[i] === 1) heard.push(h.right[i] / h.left[i] * 100)
-  // 听到的位置单调前进（没有回放），总共听到的源时长不超过指针走过的距离
-  for (let index = 1; index < heard.length; index++) expect(heard[index]).toBeGreaterThan(heard[index - 1])
-  expect(heard.at(-1)! - 20).toBeLessThan(0.3 * 1.15 + 0.1)
-  // 片段之间有静音（不是一直响），每段至少几十毫秒
-  let pieces = 0
-  for (let i = h.index(20); i < h.index(1150); i++) if (h.left[i - 1] === 0 && h.left[i] > 0) pieces++
-  expect(pieces).toBeGreaterThan(2)
-  // 两段同时发声只在几毫秒的交叉淡化里
-  let overlap = 0, longest = 0
-  for (const count of h.concurrent) { overlap = count >= 2 ? overlap + 1 : 0; longest = Math.max(longest, overlap) }
-  expect(longest * 128 / RATE).toBeLessThanOrEqual(0.006)
+  const until = 1500
+  h.run(until + 800, [{ at: 0, type: 'rest', position: 20 * RATE }, ...drag(0, until, 20, speed, fps)])
+  // 按帧取整时指针走过半帧，位置才第一次变化
+  const first = fps ? 500 / fps / speed : 0
+  // 起步后一直在响（探针左声道是音量包络：交叉淡化的两段相加恒为 1），中间没有停顿
+  for (let ms = first + 60; ms < until; ms += 1) expect(h.gain(ms)).toBeGreaterThan(0.99)
+  // 听到的位置贴着指针：领先不超过几十毫秒，也不落后（按帧取整时多差一帧）
+  const frame = fps ? 1 / fps : 0
+  for (let ms = first + 100; ms < until; ms += 5) {
+    const lead = h.position(ms) - (20 + speed * ms / 1000)
+    expect(lead).toBeLessThan(0.05 + frame)
+    expect(lead).toBeGreaterThan(-0.01 - frame)
+  }
+  expect((h.position(until - 50) - h.position(first + 150)) / ((until - 200 - first) / 1000)).toBeCloseTo(speed, 1)
+  // 往回接的都是一小段（不会听出重复的字），同时发声最多两段
+  let repeat = 0
+  for (let ms = first + 60; ms < until; ms += 1) repeat = Math.max(repeat, h.position(ms - 1) - h.position(ms))
+  expect(repeat).toBeLessThan(0.03)
+  expect(Math.max(...h.concurrent)).toBeLessThanOrEqual(2)
+  expect(h.maxStep()).toBeLessThan(1 / 48)
+  // 停手：没有新位置后按“下一个位置该到的时间”判停，随后很快静音（按帧取整时帧间隔长，要多等）
+  expect(h.gain(until + (fps ? 750 : 120))).toBe(0)
+})
+
+it('指针给连续位置但一像素一个事件（时间线缩小）：0.1x 慢拖也连续，松手后按事件间隔很快收声', () => {
+  const h = harness()
+  // 每秒 120 像素对应 1 秒：0.1x 时约 83ms 才移动一像素、来一个事件，位置不取整
+  const ops = []
+  let last = -1
+  for (let t = 0; t < 2000; t += 1000 / 60) {
+    const pixel = Math.floor((20 + 0.1 * t / 1000) * 120)
+    if (pixel !== last) { ops.push({ at: t, type: 'move', position: pixel / 120 * RATE, quantum: 0 }); last = pixel }
+  }
+  h.run(2600, [{ at: 0, type: 'rest', position: 20 * RATE }, ...ops])
+  for (let ms = 120; ms < 2000; ms += 1) expect(h.gain(ms)).toBeGreaterThan(0.99)
+  for (let ms = 200; ms < 2000; ms += 5) expect(Math.abs(h.position(ms) - (20 + 0.1 * ms / 1000))).toBeLessThan(0.05)
+  // 最后一个事件在约 1917ms：按事件间隔（约 83ms）判停，不再为按帧取整多等
+  expect(h.gain(2150)).toBe(0)
+})
+
+it('慢拖时音头只响一次、和原声一样陡：延长的是音头之后的稳定部分', () => {
+  const h = harness({ kind: 'clicks' })
+  const speed = 0.25, until = 1500
+  h.run(until + 200, [{ at: 0, type: 'rest', position: 20 * RATE }, ...drag(0, until, 20, speed)])
+  // 音头：1ms 内从 0.2 以下升到 0.5 以上（原声约 0.1ms 升到峰值）；往回接的只是音头 10ms 之后的尾巴（不到 0.45）
+  const period = Math.round(RATE * 0.037)
+  const attacks: number[] = []
+  for (let i = h.index(5); i < h.index(until); i++) {
+    let before = 0
+    for (let k = i - 48; k < i - 8; k++) before = Math.max(before, Math.abs(h.left[k]))
+    if (Math.abs(h.left[i]) >= 0.5 && before < 0.2) { attacks.push(i); i += 48 }
+  }
+  let traversed = 0
+  for (let k = Math.ceil(20 * RATE / period) * period; k < (20 + speed * until / 1000) * RATE; k += period) traversed++
+  expect(traversed).toBeGreaterThan(8)
+  expect(Math.abs(attacks.length - traversed)).toBeLessThanOrEqual(1)
+  // 声音一直不断
+  for (let ms = 30; ms < until; ms += 5) expect(Math.max(...h.left.slice(h.index(ms), h.index(ms + 5)).map(Math.abs))).toBeGreaterThan(0.01)
 })
 
 it('左右声道同一位置、同一接缝、同一包络：左右相同的声源输出左右逐样本相同', () => {
@@ -237,4 +281,11 @@ it('换来源（key 变化）丢掉旧块；旧来源迟到的块不被收下', 
   h.run(300, [{ at: 0, type: 'rest', position: 20 * RATE }, ...drag(0, 300, 20, 1)])
   expect(h.left.every(value => value === 0)).toBe(true)
   expect(h.posted.some(message => message.type === 'miss' && message.index === 80)).toBe(true)
+})
+
+it('上一手势结束很久后再拖一下就停住：按新手势收声，不拖尾', () => {
+  const h = harness()
+  h.run(5000, [{ at: 0, type: 'rest', position: 20 * RATE }, ...drag(0, 300, 20, 1), { at: 300, type: 'stop' }, { at: 4000, type: 'move', position: 20.3 * RATE, quantum: 0 }])
+  // 只动了一下就停住：与首次起步一样很快收声（上一手势至今的数秒不算“原位停留”）
+  expect(h.gain(4000 + 250)).toBe(0)
 })

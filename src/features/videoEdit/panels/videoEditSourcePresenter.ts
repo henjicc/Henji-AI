@@ -50,7 +50,7 @@ const NATIVE_SOUND_CLOCK_MS = 50
 /** Native forward playback and cached reverse frames share one source owner. */
 export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: (itemId: string) => VideoEditMedia,
   observe: (itemId: string, observation: VideoEditSourceObservation) => void, observeLevel?: (levels: VideoEditAudioLevel[]) => void,
-  resolveAudioLayout?: (itemId: string) => VideoEditAudioMapping[] | undefined, proxyProjectId?: string): { present: VideoEditSourcePresenter; scrub: (seconds: number, volume: number) => void; release: () => Promise<void>; dispose: () => Promise<void> } {
+  resolveAudioLayout?: (itemId: string) => VideoEditAudioMapping[] | undefined, proxyProjectId?: string): { present: VideoEditSourcePresenter; scrub: (seconds: number, volume: number, quantum?: number) => void; release: () => Promise<void>; dispose: () => Promise<void> } {
   let element: HTMLVideoElement | HTMLAudioElement | HTMLImageElement | undefined
   let currentItem = ''
   let currentPath = ''
@@ -440,7 +440,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     } catch (error) { if (pending === operation) release(); throw error }
     finally { signal.removeEventListener('abort', abort); if (pending === operation) pending = undefined }
   }
-  const scrub = (seconds: number, volume: number): void => {
+  const scrub = (seconds: number, volume: number, quantum?: number): void => {
     if (disposed || !currentItem) return
     const media = resolveMedia(currentItem)
     if (media.kind === 'image' || media.hasAudio === false && media.kind !== 'audio') return
@@ -450,7 +450,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     const fps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : 30
     sound.scrub(seconds, volume, () => !disposed && currentItem === item && scrubTime !== undefined && Math.floor(scrubTime * fps + 1e-6) === Math.floor(seconds * fps + 1e-6), error => {
       observe(item, { timeUs: Math.round(seconds * 1e6), presentedTimeUs, playing: false, volume, error: error instanceof Error ? error.message : String(error) })
-    })
+    }, quantum)
     clearInterval(scrubMeterTimer)
     scrubMeterTimer = setInterval(() => observeLevel?.(sound.levels()), 40)
   }

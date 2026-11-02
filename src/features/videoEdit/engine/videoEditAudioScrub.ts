@@ -1,6 +1,6 @@
 import { AUDIO_SCRUB_STEP_SECONDS, AudioScrubEngine, type AudioScrubOutput, type AudioScrubSource } from '@/services/audioScrub/audioScrubEngine'
 
-/** 擦洗声音的两种手势：拖动播放头（原速片段跟着指针走）与单步（方向键、逐帧，播放一小段原速声音）。 */
+/** 擦洗声音的两种手势：拖动播放头（声音跟着指针的连续位置走）与单步（方向键、逐帧，播放一小段原速声音）。 */
 export type VideoEditScrubKind = 'drag' | 'step'
 
 interface ScrubRequest {
@@ -13,6 +13,10 @@ interface ScrubRequest {
   onError(error: unknown): void
   /** 手势；不传时按 requestVideoEditScrub 正在派发的意图判断（单步命令经它派发），否则按拖动。 */
   mode?: VideoEditScrubKind
+  /** 拖动位置按多长取整（秒），默认一帧；指针给出的连续位置传 0。 */
+  quantum?: number
+  /** 指针事件发生的时刻（performance.now 毫秒），默认现在。 */
+  at?: number
 }
 
 /** 混音的采样率与输出设备不同（换了不同采样率的序列）：换一份来源重取，不算失败。 */
@@ -53,11 +57,11 @@ export class VideoEditAudioScrubber {
     // 新手势开始时核对上一份声音是否仍然有效（文档、序列没变）；无效就换来源。
     if (!this.prepared && this.owner && this.owner !== request && !this.owner.isCurrent()) this.owner = undefined
     this.latest = request
-    const at = performance.now()
+    const at = request.at ?? performance.now()
     const apply = (): void => {
       if (!this.ensureSource(request)) return
       if (mode === 'step') this.engine.step(request.seconds, Math.max(AUDIO_SCRUB_STEP_SECONDS, 1 / request.fps))
-      else this.engine.move(request.seconds, { quantum: 1 / request.fps, at })
+      else this.engine.move(request.seconds, { quantum: request.quantum ?? 1 / request.fps, at })
     }
     this.prepare(request)
     // 上一手势已有输出就立刻发声，设备恢复在后台核对；第一次要等输出就绪。
@@ -118,8 +122,11 @@ export class VideoEditAudioScrubber {
   }
 }
 
-/** 仅传递当前宿主的交互反馈，不进入文档、撤销栈或助手业务状态。 */
-export interface VideoEditScrubIntent { scope: 'program' | 'source'; seconds: number; kind?: VideoEditScrubKind }
+/**
+ * 仅传递当前宿主的交互反馈，不进入文档、撤销栈或助手业务状态。拖动时 seconds 是指针的连续位置（不按帧取整，
+ * 画面另按帧定位），quantum 是这个位置的取整长度（秒，默认一帧，连续位置为 0），at 是指针事件时刻（performance.now 毫秒）。
+ */
+export interface VideoEditScrubIntent { scope: 'program' | 'source'; seconds: number; kind?: VideoEditScrubKind; quantum?: number; at?: number }
 const listeners = new Map<string, Set<(intent: VideoEditScrubIntent) => void>>()
 let dispatching: VideoEditScrubIntent | undefined
 export function requestVideoEditScrub(projectId: string, intent: VideoEditScrubIntent): void {

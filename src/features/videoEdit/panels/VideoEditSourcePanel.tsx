@@ -81,8 +81,9 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
     onError(error)
   }) }
   const command = (id: VideoEditCommandId): void => { void executeVideoEditCommand(captureVideoEditCommandContext(projectId, 'source'), id).catch(onError) }
-  const seek = (seconds: number, audition = scrubPointer.current?.moved === true): void => {
-    if (audition) presenterRef.current?.scrub(seconds, state.volume)
+  /** quantum：位置按多长取整（秒），默认一帧。 */
+  const seek = (seconds: number, audition = scrubPointer.current?.moved === true, quantum?: number): void => {
+    if (audition) presenterRef.current?.scrub(seconds, state.volume, quantum)
     run({ timeUs: Math.round(seconds * 1e6), playing: false })
   }
   const availability = captureVideoEditCommandContext(projectId, 'source', { includeClipboard: false })
@@ -177,11 +178,11 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
         {media?.kind !== 'image' && <VideoEditTimecodeReadout label="源时间码" className="px-1 text-xs"
           frame={sourceFrame(media?.kind === 'video' || previewed ? state.presentedTimeUs : state.timeUs)} fps={sourceFps}
           maxFrame={sourceFrame(sourceDurationUs)}
-          onSeek={(frame, scrubbing) => seek(frame / sourceFps, scrubbing)}
+          onSeek={(frame, scrubbing) => seek(frame / sourceFps, scrubbing, 1 / sourceFps)}
           onSeekSeconds={seconds => run({ timeUs: Math.round(seconds * 1e6), playing: false })} />}
       </div>
       {(media?.kind === 'video' || previewed) && <div className="relative pb-1.5" data-video-edit-source-progress>
-        <UiRangeInput aria-label="源素材进度" min={0} max={sourceDurationUs} step={1} value={state.timeUs} onChange={event => seek(Number(event.target.value) / 1e6)} />
+        <UiRangeInput aria-label="源素材进度" min={0} max={sourceDurationUs} step={1} value={state.timeUs} onChange={event => seek(Number(event.target.value) / 1e6, undefined, 0)} />
         {!previewed && <VideoEditSourceInOut inUs={state.inUs} outUs={state.outUs} durationUs={sourceDurationUs} playheadUs={state.timeUs} onChange={run} />}
       </div>}
       {hasWave && waveform.data && <div className="pointer-events-none flex w-full flex-col gap-0.5" data-video-edit-source-waveform>

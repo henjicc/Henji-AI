@@ -38,7 +38,7 @@ import { subscribeVideoEditTracking, videoEditTrackResults } from './application
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { finishVideoEditAudioFade, VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
-import { subscribeVideoEditScrub, VideoEditAudioScrubber } from './engine/videoEditAudioScrub'
+import { subscribeVideoEditScrub, VideoEditAudioScrubber, type VideoEditScrubIntent } from './engine/videoEditAudioScrub'
 import { alignVideoEditClockToDisplay, followVideoEditAudioClock, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditAudioClockOrigin, videoEditLiveFrame, videoEditPlaybackTarget } from './engine/videoEditDisplayClock'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
@@ -285,8 +285,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
       observedAudioFrame = instance.frame
       if (instance.playing || releasedScrub || moved && !instance.scrubbing) scrubber.stop()
-      // 拖动出声跟着指针走：播放头一动就把新位置交给擦洗引擎，不等画面呈现。
-      if (moved && instance.scrubbing && !instance.playing) { const document = videoMotionComposition(instance); if (document) scrubAudio(instance.frame / document.fps, 'drag') }
       // 状态都已更新、停止已发出后再推进调度（仍在这次改动的同一个任务里发出画面请求）。
       wakeForView()
     })
@@ -379,11 +377,12 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const requestedWebTiers = new WeakMap<object, number>()
     const audioScheduler = new VideoEditAudioScheduler()
     const scrubber = new VideoEditAudioScrubber()
-    const scrubAudio = (seconds: number, mode: 'drag' | 'step'): void => {
+    /** 拖动出声跟着指针走：拖动方把指针的连续位置经擦洗意图直接送来，不等播放头按帧变化、不等画面呈现。 */
+    const scrubAudio = (intent: VideoEditScrubIntent): void => {
       const document = videoMotionComposition(instance)
       if (!document || instance.playing || !audibleVideoEditClips(document).length) return
       scrubber.request({
-        seconds, fps: document.fps, endTime: videoEditDuration(document) / document.fps, mode,
+        seconds: intent.seconds, fps: document.fps, endTime: videoEditDuration(document) / document.fps, mode: intent.kind ?? 'step', quantum: intent.quantum, at: intent.at,
         prepare: async () => {
           audio ??= new AudioContext({ sampleRate: document.sampleRate })
           const context = audio
@@ -397,7 +396,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         onError,
       })
     }
-    const unsubscribeScrub = subscribeVideoEditScrub(instance.document.id, intent => { if (intent.scope === 'program') scrubAudio(intent.seconds, intent.kind ?? 'step') })
+    const unsubscribeScrub = subscribeVideoEditScrub(instance.document.id, intent => { if (intent.scope === 'program') scrubAudio(intent) })
     const stopAudio = (): void => audioScheduler.stop()
     const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(meter.read()) }, 50)
     let lastPresentation = -Infinity

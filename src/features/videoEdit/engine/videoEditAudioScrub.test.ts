@@ -49,6 +49,9 @@ it('拖动请求转给共用擦洗引擎：等输出就绪后按原时刻送出�
   h.scrubber.stop()
   h.request(2)
   expect(h.engine.calls.at(-1)).toEqual(['move', 2, expect.anything()])
+  // 指针给出的连续位置：取整长度与事件时刻按宿主给的
+  h.request(2.01, { quantum: 0.004, at: 990 })
+  expect(h.engine.calls.at(-1)).toEqual(['move', 2.01, { quantum: 0.004, at: 990 }])
 })
 
 it('经 requestVideoEditScrub 派发的单步按单步播放一小段原速声音（至少一帧）', async () => {

@@ -25,6 +25,7 @@ const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
 // 网页显示档位只在合成里有网页时生效；这里的片段替身没有真实网页代码素材，按“有网页”处理。
 vi.mock('./application/videoEditWebContent', async importOriginal => ({ ...await importOriginal<typeof import('./application/videoEditWebContent')>(), videoEditCompositionHasWeb: () => true }))
 vi.mock('./engine/videoEditAudioScrub', async importOriginal => ({ ...await importOriginal<typeof import('./engine/videoEditAudioScrub')>(), VideoEditAudioScrubber: class { request = scrub.request; stop = scrub.stop } }))
+import { requestVideoEditScrub } from './engine/videoEditAudioScrub'
 vi.mock('./application/videoEditProjectCover', () => ({ registerVideoEditProgramCoverCapture: vi.fn(), saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   terminalError?: Error
@@ -450,7 +451,7 @@ async function audioPreviewFixture() {
   appendVideoEditMedia(owner.document.id, { id: 'audio-actual', name: '音画', path: 'D:/audio.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true }); appendVideoEditClip(owner.document.id, 'audio-actual')
   setVideoEditView(owner.document.id, { frame: 0, playing: true }); return owner
 }
-it('单击节目定位不发声；拖动时播放头一动就把位置交给擦洗声音，不等画面呈现', async () => {
+it('单击节目定位不发声；拖动时指针的连续位置一到就交给擦洗声音，不等画面呈现', async () => {
   installAudioGraph(); const owner = await audioPreviewFixture(); setVideoEditView(owner.document.id, { playing: false })
   scrub.request.mockClear()
   const onError = vi.fn(); render(<VideoEditPreview instance={owner} onError={onError} />)
@@ -458,9 +459,12 @@ it('单击节目定位不发声；拖动时播放头一动就把位置交给擦�
   await act(async () => { setVideoEditView(owner.document.id, { frame: 5 }); await vi.advanceTimersByTimeAsync(5) })
   expect(scrub.request).not.toHaveBeenCalled()
   await act(async () => { setVideoEditView(owner.document.id, { frame: 6, scrubbing: true }); await vi.advanceTimersByTimeAsync(5) })
-  // 第 6 帧的画面还没回来，声音已经按指针位置交给擦洗引擎（声音跟着指针走，像 Premiere 一样）。
+  // 播放头按帧变化本身不出声：拖动方另把指针的连续位置经擦洗意图送来，两路不会互相打架。
+  expect(scrub.request).not.toHaveBeenCalled()
   const fps = videoMotionComposition(owner)!.fps
-  expect(scrub.request).toHaveBeenLastCalledWith(expect.objectContaining({ seconds: 6 / fps, fps, mode: 'drag' }))
+  await act(async () => { requestVideoEditScrub(owner.document.id, { scope: 'program', kind: 'drag', seconds: 5.7 / fps, quantum: 0.004, at: 123 }); await vi.advanceTimersByTimeAsync(5) })
+  // 第 6 帧的画面还没回来，声音已经按指针位置交给擦洗引擎（声音跟着指针走，像 Premiere 一样）。
+  expect(scrub.request).toHaveBeenLastCalledWith(expect.objectContaining({ seconds: 5.7 / fps, fps, mode: 'drag', quantum: 0.004, at: 123 }))
   expect(onError).not.toHaveBeenCalled()
 })
 it('音频启动等待后隐藏，晚到resume不新建退役节点', async () => {

@@ -6,6 +6,7 @@ import { videoEditDuration } from '@/core/videoEdit/document'
 import { getActiveVideoEditSequence, setVideoEditView, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { sameVideoEditViewFields, useVideoEditViewSelector } from '../application/useVideoEditViewSelector'
 import { TIMELINE_HEADER_WIDTH, timelineTimecode } from './timelineGeometry'
+import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 
 /** 时间码的显示方式（Premiere：Ctrl+点击时间码在“时间码 / 帧号”之间切换），节目监视器与时间线共用，本机记住。 */
 type TimecodeDisplay = 'timecode' | 'frames'
@@ -96,7 +97,11 @@ export function VideoEditTimecode({ instance, label, className = '' }: { instanc
   useVideoEditViewSelector(() => [videoEditRevision(), instance.frame], sameVideoEditViewFields)
   const sequence = getActiveVideoEditSequence(instance)
   return <VideoEditTimecodeReadout label={label} frame={instance.frame} fps={sequence.fps} maxFrame={Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)} className={className}
-    onSeek={(frame, scrubbing) => setVideoEditView(instance.document.id, { frame, playing: false, scrubbing })} />
+    onSeek={(frame, scrubbing) => {
+      setVideoEditView(instance.document.id, { frame, playing: false, scrubbing })
+      // 读数拖动每像素一帧，位置本来就是整帧
+      if (scrubbing) requestVideoEditScrub(instance.document.id, { scope: 'program', kind: 'drag', seconds: frame / sequence.fps })
+    }} />
 }
 
 /**

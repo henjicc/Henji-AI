@@ -12,6 +12,7 @@ import { addVideoEditTextClipAt, beginVideoEditTimelineDrag, finishVideoEditTime
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { focusVideoEditPanel, listVideoEditInstances, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { videoEditTimelineViewport } from '../application/videoEditTimelineViewport'
+import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { isTimelineTrimTool, timelineTrimEdge, timelineTrimNeedsEdge, timelineTrimRequest, timelineTrimSnapExclusions, type TimelineTrimTool } from './timelineTrimGesture'
 import { elementOfEventTarget, isEventInsideCurrentTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
@@ -145,7 +146,13 @@ export function useTimelinePointer(options: Options) {
     const edges = moved.flatMap(clip => mode === 'in' ? [clip.start] : mode === 'out' ? [clip.start + clip.duration] : [clip.start, clip.start + clip.duration])
     reportTimelineSnap(sequence.id, timelineSnapPoints(sequence, { playhead: instance.frame, excludeClipIds: new Set(moved.map(clip => clip.id)) }), edges)
   }
-  const applyPointer = (gesture: PointerGesture): void => {
+  /** 指针事件时刻换算到本窗口的 performance.now：时间线弹出到独立窗口时，事件时刻以那个窗口的时间原点计。 */
+  const pointerEventTime = (event: React.PointerEvent): number => {
+    const owner = ownerWindowOf(event.currentTarget as Element)
+    return owner.performance.timeOrigin + event.timeStamp - performance.timeOrigin
+  }
+  /** time：指针事件时刻（performance.now 毫秒）；边缘滚动等没有指针事件时按现在算。 */
+  const applyPointer = (gesture: PointerGesture, time = performance.now()): void => {
     if (!valid(gesture)) { cancel(); return }
     const { instance, sequence, pixels } = current.current; const layout = current.current.layout.current
     const at = point(gesture.client)
@@ -217,10 +224,14 @@ export function useTimelinePointer(options: Options) {
       gesture.next = Math.max(24, Math.min(160, Math.round(gesture.height + gesture.client.y - gesture.origin.y)))
       setResized({ trackId: gesture.trackId, height: gesture.next })
     } else if (gesture.kind === 'seek') {
-      const raw = Math.max(0, Math.min(Math.floor(videoEditFps(sequence.frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS), Math.round(at.x / pixels)))
+      const fps = videoEditFps(sequence.frameRate)
+      const exact = Math.max(0, Math.min(Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS), at.x / pixels))
+      const raw = Math.round(exact)
       const frame = snapTimelineFrame(sequence.id, gesture.snap ? timelineSnapPoints(sequence, { extra: [instance.inFrame, instance.outFrame].filter((value): value is number => value !== null) }) : [], raw, TIMELINE_SNAP_PIXELS / pixels)
       gesture.moved ||= Math.abs(at.x - gesture.origin.x) >= 3
       setVideoEditView(instance.document.id, { playing: false, frame, scrubbing: gesture.moved })
+      // 画面按帧定位，声音跟着指针的连续位置（不取整；吸附到点上时按吸附的帧）：慢拖时不必等指针走满一帧才出声、才判断还在动。
+      if (gesture.moved) requestVideoEditScrub(instance.document.id, { scope: 'program', kind: 'drag', seconds: (frame === raw ? exact : frame) / fps, quantum: 0, at: time })
     } else if (gesture.kind === 'hand' && viewport.current) {
       viewport.current.scrollLeft = gesture.left + gesture.origin.x - gesture.client.x
       if (gesture.region) current.current.scrollRegion(gesture.region, gesture.last - gesture.client.y)
@@ -366,13 +377,13 @@ export function useTimelinePointer(options: Options) {
     gesture.client = { x: event.clientX, y: event.clientY }
     if (gesture.kind === 'seek') gesture.snap = event.shiftKey
     if (gesture.kind === 'clip') gesture.variant = clipDragVariant(event)
-    applyPointer(gesture); animateEdge()
+    applyPointer(gesture, pointerEventTime(event)); animateEdge()
   }
   const up = async (event: React.PointerEvent): Promise<void> => {
     const gesture = pointer.current
     if (!gesture || gesture.pointerId !== event.pointerId) return
     gesture.client = { x: event.clientX, y: event.clientY }
-    applyPointer(gesture)
+    applyPointer(gesture, pointerEventTime(event))
     const previous = detach(); clear()
     if (!previous) return
     if (!valid(previous)) { if (previous.kind === 'clip' || previous.kind === 'trim') finishVideoEditTimelineDrag(previous.handle); if (previous.kind === 'transition' || previous.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false); return }
