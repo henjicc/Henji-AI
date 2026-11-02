@@ -57,6 +57,7 @@ export class VideoEditGpuCompositor {
   private codeImage!: GpuRenderPipeline
   private codeRuntime?: VideoEditCodeGpu
   private spatialRuntime?: import('./videoEditSpatialComposite').VideoEditSpatialGpu
+  private threeSpaceRuntime?: Promise<import('./videoEditThreeSpace').VideoEditThreeSpace>
   private spatialMultisampleBytes = 0
   private spatialPeakBytes = 0
   private readonly authorRuntimes = new Map<string, VideoEditAuthorRuntime>()
@@ -543,6 +544,18 @@ export class VideoEditGpuCompositor {
     }
     return this.spatialRuntime
   }
+  /** 统一三维渲染器（与合成器共用 GPUDevice），第一次用到三维时创建。 */
+  threeSpace(): Promise<import('./videoEditThreeSpace').VideoEditThreeSpace> {
+    this.assertDevice()
+    const pending = this.threeSpaceRuntime ??= import('./videoEditThreeSpace').then(({ VideoEditThreeSpace }) => VideoEditThreeSpace.create(this.device))
+    pending.catch(() => { if (this.threeSpaceRuntime === pending) this.threeSpaceRuntime = undefined })
+    return pending
+  }
+  private async disposeThreeSpace(): Promise<void> {
+    const pending = this.threeSpaceRuntime
+    this.threeSpaceRuntime = undefined
+    await (await pending?.catch(() => undefined))?.dispose()
+  }
   spatialPicture(lease: Pick<import('./videoEditSpatialContracts').SpatialPictureLease, 'texture' | 'width' | 'height' | 'format' | 'carriesLight'>): VideoEditCodePicture {
     const picture = new VideoEditCodePicture(lease.texture, lease.width, lease.height, this.device, lease.format)
     picture.carriesLight = lease.carriesLight
@@ -879,6 +892,7 @@ export class VideoEditGpuCompositor {
     await Promise.allSettled([...this.offscreen.values(), this.presentReady, ...this.downscale.values()])
     await Promise.allSettled([...this.uploads, ...this.copies])
     try { await this.disposeAuthorRuntimes() } catch (error) { failures.push(error) }
+    try { await this.disposeThreeSpace() } catch (error) { failures.push(error) }
     try { await this.spatialRuntime?.dispose() } catch (error) { failures.push(error) }
     try { await this.codeRuntime?.dispose() } catch (error) { failures.push(error) }
     for (const assets of this.authorAssets.values()) for (const image of Object.values(assets)) image.close()
@@ -900,6 +914,7 @@ export class VideoEditGpuCompositor {
   async invalidateFontResources(): Promise<void> {
     await Promise.allSettled([...this.uploads, ...this.copies])
     await this.disposeAuthorRuntimes()
+    await this.disposeThreeSpace()
     await this.spatialRuntime?.dispose(); this.spatialRuntime = undefined
     await this.codeRuntime?.dispose(); this.codeRuntime = undefined
     for (const [id, value] of this.textures) if (id.startsWith('text:')) {

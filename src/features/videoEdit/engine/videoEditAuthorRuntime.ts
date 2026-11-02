@@ -214,6 +214,21 @@ export class VideoEditAuthorRuntime {
     this.renders = result.catch(() => undefined)
     return result
   }
+  /**
+   * 按本帧更新 three 场景并交出根节点，由统一三维渲染器挂进同一场景绘制（不经作者自带的渲染桥）。
+   * 根节点是活对象：调用方须在同一实例的下一次更新之前用完。
+   */
+  stageThree(width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo): Promise<{ root: import('three').Group; worldBounds: import('@/core/videoEdit/spatialTypes').SpatialBounds | null; time: number }> {
+    const result = this.renders.then(async () => {
+      if (this.closed) throw new Error('代码效果会话已关闭。')
+      if (!this.effect.createThree || !info.space) throw new Error('三维场景需要 createThree 与空间上下文。')
+      this.three ??= await VideoEditAuthorThree.create(this.device, this.effect.createThree, width, height, this.libraries)
+      const worldBounds = this.three.update(authorParameterValues(this.parameterMetadata, params), assets, { ...info, space: info.space })
+      return { root: this.three.root, worldBounds, time: info.time }
+    })
+    this.renders = result.catch(() => undefined)
+    return result
+  }
   /** One frame at a time per instance: a warm-up ahead of the playhead and a visible frame never share surfaces. */
   /**
    * `motionBlur`：序列的运动模糊总开关，管带位姿图层的快门取样。返回 Canvas 图层这一帧的沿用与上传统计（原生 GPU 入口没有）。

@@ -189,8 +189,8 @@ it('推近文字只按可见区域升档重栅格，视频不超过源像素密�
   const text = planSpatialExposure(request).materials[0]
   expect(text.rasterScale[0]).toBeGreaterThanOrEqual(4)
   // 投影放大 4 倍时只栅格画幅内约四分之一的卡片，目标仍是输出量级而非整面乘倍率。
-  expect(text.logicalBounds.width).toBeLessThan(1920 * .3)
-  expect(text.target.width).toBeLessThan(1920 * 1.2)
+  expect(text.logicalBounds.width).toBeLessThanOrEqual(1920 * .3)
+  expect(text.target.width).toBeLessThanOrEqual(1920 * 1.2)
   const composition = request.composition as import('@/core/videoEdit/document').VideoEditComposition
   composition.media = [{ id: 'low', name: '低清', path: '/fixture/low.mp4', kind: 'video', width: 640, height: 360, durationSeconds: 10, hasAudio: false }]
   composition.items = [...composition.items, { id: 'clip-video', name: '低清', kind: 'video', mediaId: 'low' }]

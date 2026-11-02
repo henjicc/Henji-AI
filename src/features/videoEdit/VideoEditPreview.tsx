@@ -70,6 +70,8 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_PLAYBACK_RESOLUTIONS, VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS, videoEditPreviewDivisor, type VideoEditPlaybackResolution, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
+import { effectiveVideoEditSpaceDisplay, getVideoEditSpaceDisplay, noteVideoEditSpacePlayback, setVideoEditSpaceDisplay, videoEditSpaceDisplaySimplified } from './application/videoEditSpaceDisplay'
+import { VIDEO_EDIT_SPACE_DISPLAYS, VIDEO_EDIT_SPACE_DISPLAY_LABELS, videoEditCompositionHasSpace, videoEditFrameHasSpace } from '@/core/videoEdit/spaceDisplay'
 import { flushVideoEditRenderPerformance } from './application/videoEditRenderPerformance'
 import { recordVideoEditPlaybackFrame } from './application/videoEditPlaybackStats'
 import { videoEditRenderCacheBusy, readyVideoEditRenderWindows, recordVideoEditProgramRender } from './application/videoEditRenderCache'
@@ -96,6 +98,12 @@ const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>>
 /** 回放分辨率（PR“回放分辨率”）：控制条上的下拉与“更多”里的同一组选项。 */
 const PLAYBACK_RESOLUTION_OPTIONS = VIDEO_EDIT_PLAYBACK_RESOLUTIONS.map(value => ({ value, label: VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS[value] }))
 const PLAYBACK_RESOLUTION_TIP = '回放分辨率：播放卡顿时调低，画面变粗但更流畅；暂停时默认回到完整。导出、选帧和封面始终是完整分辨率。'
+const SPACE_DISPLAY_TIPS: Record<import('@/core/videoEdit/spaceDisplay').VideoEditSpaceDisplay, string> = {
+  auto: '自动：播放跟不上时逐级简化为实体、线框，暂停时回到实时',
+  realtime: '实时：灯光、阴影、景深、运动模糊全开',
+  solid: '实体：三维物体只显示灰色明暗，不做景深与运动模糊，大场景更流畅',
+  wireframe: '线框：三维物体只画结构线，适合摆机位、看节奏',
+}
 
 /**
  * 拖到节目监视器上的落点区（对齐 Premiere）：上 1/5 放在顶层、下 1/5 添加到末尾，中间一行左 1/4 插入、右 1/4 替换、其余覆盖（默认的大区）。
@@ -377,6 +385,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let firstBlock: { document: VideoEditComposition; from: number; duration: number; buffer: Promise<AudioBuffer>; ready: boolean } | undefined
     // 回放分辨率（4.9）：播放用所选分辨率，暂停默认回到完整；选帧、设封面期间强制完整。
     let appliedDivisor: VideoEditRenderDivisor = 1
+    let appliedSpaceDisplay: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay = 'realtime'
     let captureFull = 0
     // 节目上屏的播放、拖动与暂停可用网页缓存；选帧、封面与讲解录制收录的是精确画面。起播预热与每帧请求共用这一个值。
     let appliedPrecision: VideoEditRenderPrecision = 'web-cache'
@@ -508,7 +517,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.approximate = String(!!result.approximate)
       surface.dataset.presentedFrame = String(target)
-      surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor); surface.dataset.webTier = videoEditCompositionHasWeb(composition) ? String(requestedWebTiers.get(result) ?? appliedWebTier) : '1'
+      surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor); surface.dataset.spaceDisplay = appliedSpaceDisplay; surface.dataset.webTier = videoEditCompositionHasWeb(composition) ? String(requestedWebTiers.get(result) ?? appliedWebTier) : '1'
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
       if (failedDocument === undefined) { setRenderFailure(null); setTrustFailure(undefined); failedRetryMs = 2000 }
@@ -527,7 +536,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
       captureFull++
       try {
-        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.provenance === 'web-cache' || surface.dataset.webTier !== '1' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
+        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.provenance === 'web-cache' || surface.dataset.webTier !== '1' || surface.dataset.renderDivisor !== '1' || (surface.dataset.spaceDisplay ?? 'realtime') !== 'realtime' || surface.width !== request.document.width || surface.height !== request.document.height) {
           current()
           if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
           await new Promise(resolve => setTimeout(resolve, 5))
@@ -663,6 +672,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (stopped) return
           appliedDivisor = divisor; lastRequested = -1
         }
+        // 三维显示方式：选帧、设封面期间与没有三维内容时始终是实时。
+        const spaceDisplay = captureFull > 0 || !videoEditCompositionHasSpace(document) ? 'realtime' : effectiveVideoEditSpaceDisplay(instance.document.id, current.playing)
+        if (spaceDisplay !== appliedSpaceDisplay) {
+          await renderer.setSpaceDisplay(spaceDisplay)
+          if (stopped) return
+          appliedSpaceDisplay = spaceDisplay; lastRequested = -1
+        }
         appliedPrecision = captureFull > 0 || historyEnabled ? 'exact' : 'web-cache'
         if (displayPixels) displayTier = videoEditWebDisplayTier(Math.min(displayPixels.width / document.width, displayPixels.height / document.height), displayTier)
         const webTier = captureFull > 0 || historyEnabled ? 1 : displayTier ?? 1
@@ -780,6 +796,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           // 在途画面到了预算就先不发（背压，不是错误）：已发出的帧提交或回执时会唤醒调度，按那时的最新目标再请求。
           if (framesInFlight >= PROGRAM_FRAMES_IN_FLIGHT || pipelined && unsubmitted >= PROGRAM_UNSUBMITTED_FRAMES) return
           if (playing && direction === 1 && !liveRecording && target > Math.max(next, startFrame)) { droppedFrames += target - Math.max(next, startFrame); surface.dataset.droppedFrames = String(droppedFrames) }
+          // 三维预览自动简化按这次推进的目标帧与其中掉的帧判断跟不跟得上。
+          if (playing && direction === 1 && !liveRecording && videoEditFrameHasSpace(document, target)) noteVideoEditSpacePlayback(instance.document.id, Math.max(1, target - Math.max(next, startFrame) + 1), Math.max(0, target - Math.max(next, startFrame)))
           // 快速拖动（相邻两次请求相差至少 VIDEO_EDIT_FAST_SCRUB_FRAMES 帧）与暂停时远距离跳转：要重新定位才到得了的视频先给
           // 解码器最近的一幅，画面跟手，停住或松手后补精确帧；慢速向前拖动与近距离向前步进直接出精确帧，逐帧找点不受影响。
           const fastScrub = scrubbing && lastRequested >= 0 && Math.abs(target - lastRequested) >= VIDEO_EDIT_FAST_SCRUB_FRAMES
@@ -832,7 +850,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
               if (result.presented === true && pipelined && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(current.document.id) === command && latest && videoEditParameterUpdate(document, latest)) { lastFrame = Math.max(lastFrame, target); pausedPicture = false }
               wake(0); return
             }
-            recordVideoEditProgramRender(instance.document.id, document, target, result, playing && direction === 1 && !scrubbing && !liveRecording)
+            // 简化后的耗时不代表实时效果，不记进渲染条实测（否则卡顿的三维段被标成流畅，自动预渲染会跳过它）。
+            recordVideoEditProgramRender(instance.document.id, document, target, result, playing && direction === 1 && !scrubbing && !liveRecording && appliedSpaceDisplay === 'realtime')
             if (result.presented === false) { if (!liveRecording) lastFrame = -1; lastRequested = -1; wake(0); return }
             if (!recordPresentation(target, result, requestedAt, scrubbing, document)) { wake(0); return }
             if (playing) playbackShown = target
@@ -935,6 +954,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   const projectId = instance.document.id
   const playbackResolution = getVideoEditPlaybackResolution(projectId)
   const changePlaybackResolution = (value: Partial<typeof playbackResolution>): void => { try { setVideoEditPlaybackResolution(projectId, value) } catch (error) { onError(error) } }
+  const activeSequence = instance.document.sequences.find(sequence => sequence.id === instance.activeSequenceId)
+  const hasSpace = !!activeSequence && videoEditCompositionHasSpace(activeSequence)
+  const spaceDisplay = getVideoEditSpaceDisplay(projectId).mode
+  const spaceSimplified = !!activeSequence && videoEditFrameHasSpace(activeSequence, instance.frame) && videoEditSpaceDisplaySimplified(projectId, instance.playing)
+  const changeSpaceDisplay = (mode: typeof spaceDisplay): void => { try { setVideoEditSpaceDisplay(projectId, { mode }) } catch (error) { onError(error) } }
   const runCommand = (id: VideoEditCommandId): void => { void executeVideoEditCommand(captureVideoEditCommandContext(projectId, 'program'), id).catch(onError) }
   // 提升／提取的可用判定要试算一次编辑：只在序列、入出点或目标轨道变化时算，不随播放每帧重算。
   const targetTracks = instance.targetTrackIds.join(',')
@@ -1011,6 +1035,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         {/* 节目底是不随主题的媒体黑：放在玻璃浮层里，浅色主题下文字也看得清 */}
         <div className="ui-glass rounded-xl px-4"><UiLoading size="sm" message="正在准备画面…" /></div>
       </div>}
+      {spaceSimplified && !preparing && !collecting && <Tooltip content="播放跟不上，三维暂时按实体或线框显示；暂停后恢复。可在“更多”里固定三维显示方式。"><div className="absolute left-2 top-2 rounded-lg bg-media-scrim px-2 py-1 text-xs text-on-media" data-video-edit-space-simplified>预览已简化</div></Tooltip>}
       {(preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
@@ -1062,6 +1087,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         </div>}
         {hiddenIds.includes('resolution') && <div className="flex flex-col gap-1" role="group" aria-label="回放分辨率">
           {PLAYBACK_RESOLUTION_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={playbackResolution.resolution === option.value} tooltip={PLAYBACK_RESOLUTION_TIP} onClick={() => changePlaybackResolution({ resolution: option.value })}>回放 {option.label}</UiOptionButton>)}
+        </div>}
+        {hasSpace && <div className="flex flex-col gap-1" role="group" aria-label="三维显示">
+          {VIDEO_EDIT_SPACE_DISPLAYS.map(mode => <UiOptionButton key={mode} variant="menu" size="sm" active={spaceDisplay === mode} tooltip={SPACE_DISPLAY_TIPS[mode]} onClick={() => changeSpaceDisplay(mode)}>三维 {VIDEO_EDIT_SPACE_DISPLAY_LABELS[mode]}</UiOptionButton>)}
         </div>}
         <UiOptionButton variant="menu" size="sm" active={multicamView} onClick={() => setMulticamView(value => !value)}>多机位视图（1–9 切换）</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" disabled={!multicam || instance.playing} onClick={() => { if (multicam) void autoSwitchVideoEditMulticam({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: multicam.clip.id }).catch(onError) }}>建议机位切换</UiOptionButton>

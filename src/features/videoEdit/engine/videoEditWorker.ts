@@ -52,6 +52,7 @@ export type RenderRequest = { id: number } & (
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
   | { kind: 'scale'; divisor: number }
   | { kind: 'webDisplayScale'; scale: number }
+  | { kind: 'spaceDisplay'; display: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay }
   | { kind: 'outputScale'; scale: number; renderAtOutputResolution: boolean }
   | { kind: 'arm'; frame: number; precision?: VideoEditRenderPrecision }
   | { kind: 'prepareGpu' }
@@ -511,6 +512,9 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
       } else if (request.kind === 'webDisplayScale') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         renderer.setWebDisplayScale(request.scale); self.postMessage({ id: request.id } satisfies RenderResponse)
+      } else if (request.kind === 'spaceDisplay') {
+        if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        renderer.setSpaceDisplay(request.display); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'outputScale') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         renderer.setOutputScale(request.scale, request.renderAtOutputResolution); self.postMessage({ id: request.id } satisfies RenderResponse)

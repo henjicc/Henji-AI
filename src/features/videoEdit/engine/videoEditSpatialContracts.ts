@@ -101,6 +101,8 @@ export interface SpatialCodeSources {
   renderSpatialSample(request: SpatialSampleRequest): Promise<SpatialPictureLease>;
   generatorTargetCapacity(width: number, height: number, format: VideoEditGpuColorFormat): number;
   releaseSpatialFrame(prepared: PreparedSpatialFrame): Promise<void>;
+  /** 统一三维渲染器用：把各世界场景更新到中心帧或快门开始那一刻并交出根节点（three 活对象，须在释放空间帧前读完）。 */
+  stageSpatialScenes?(prepared: PreparedSpatialFrame, moment?: 'center' | 'open'): Promise<readonly { clipId: string; root: import('three').Group; worldBounds: SpatialBounds | null; time: number }[]>;
 }
 export interface SpatialDrawItem {
   itemId: string; sourceKey: string; clipId: string;

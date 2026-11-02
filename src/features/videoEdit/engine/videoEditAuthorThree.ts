@@ -3,7 +3,7 @@ import type { SpatialBounds, SpatialFrame, SpatialMat4, SpatialVec3 } from '@/co
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { AuthorAssets, AuthorFrameInfo, AuthorParameters } from './videoEditAuthorModule'
-import { loadAuthorThreeLibrary, VideoEditAuthorThreeWebGpu, type AuthorThreeBackend } from './videoEditAuthorThreeWebGpu'
+import { loadAuthorThreeLibrary, VideoEditAuthorThreeWebGpu, type AuthorThreeBackend, type AuthorThreeLibrary } from './videoEditAuthorThreeWebGpu'
 
 export interface AuthorSpaceInfo {
   readonly camera: SpatialFrame['camera']
@@ -56,14 +56,18 @@ export function assertThreeMaterials(scene: Three.Scene): void {
 type ThreeResource = { dispose(): void }
 const resourceOwners = new WeakMap<ThreeResource, number>()
 
-/** 更新、渲染与提交由作者实例队列串行；初始化与 compileAsync 预热另外独占设备根队列。 */
+/**
+ * 更新、渲染与提交由作者实例队列串行；初始化与 compileAsync 预热另外独占设备根队列。
+ * 场景可以只被更新、由宿主的统一三维渲染器挂进同一场景绘制；自带的渲染桥只在单独渲染成一层时才创建。
+ */
 export class VideoEditAuthorThree {
   private compiled = false
   private closed = false
   private bounds: SpatialBounds | null = null
   private resources = new Set<ThreeResource>()
-  private constructor(private readonly bridge: VideoEditAuthorThreeWebGpu, private readonly author: AuthorThreeScene,
-    private readonly host: AuthorThreeHost, private readonly root: Three.Group, private readonly scene: Three.Scene) {}
+  private bridge?: VideoEditAuthorThreeWebGpu
+  private constructor(private readonly library: AuthorThreeLibrary, private readonly device: GpuDevice, private readonly backend: AuthorThreeBackend,
+    private readonly author: AuthorThreeScene, private readonly host: AuthorThreeHost, private readonly sceneRoot: Three.Group, private readonly scene: Three.Scene) {}
   static async create(device: GpuDevice, factory: (host: AuthorThreeHost) => AuthorThreeScene | Promise<AuthorThreeScene>,
     width: number, height: number, libraries?: AuthorLibraryVersions, backend?: AuthorThreeBackend): Promise<VideoEditAuthorThree> {
     const library = await loadAuthorThreeLibrary(libraries)
@@ -74,19 +78,19 @@ export class VideoEditAuthorThree {
       await author?.dispose?.()
       throw new Error('createThree 必须返回同一作者库的 Scene 和 update。')
     }
-    let bridge: VideoEditAuthorThreeWebGpu | undefined
     try {
       assertThreeMaterials(author.scene)
-      bridge = await VideoEditAuthorThreeWebGpu.create(library, device, backend)
       const root = new library.Group()
       root.matrixAutoUpdate = false; root.add(author.scene)
-      const managed = new VideoEditAuthorThree(bridge, author, host, root, author.scene)
+      const managed = new VideoEditAuthorThree(library, device, backend ?? 'webgpu', author, host, root, author.scene)
       managed.retainResources()
       return managed
-    } catch (error) { await bridge?.dispose(); await author.dispose?.(); throw error }
+    } catch (error) { await author.dispose?.(); throw error }
   }
   get worldBounds(): SpatialBounds | null { return this.bounds }
-  get allocationBytes(): number { return this.bridge.allocationBytes }
+  get allocationBytes(): number { return this.bridge?.allocationBytes ?? 0 }
+  /** 已按本帧求值放好位置的场景根节点（世界坐标），供统一三维渲染器挂进同一场景。 */
+  get root(): Three.Group { return this.sceneRoot }
   private retainResources(): void {
     const next = new Set<ThreeResource>(), pending: unknown[] = [this.author.scene.background, this.author.scene.environment], seen = new WeakSet<object>()
     this.author.scene.traverse(object => {
@@ -112,21 +116,21 @@ export class VideoEditAuthorThree {
     else { resourceOwners.delete(resource); resource.dispose() }
   }
   private synchronize(space: AuthorSpaceInfo): void {
-    const { camera } = this.host, library = this.bridge.library
+    const { camera } = this.host, library = this.library
     camera.matrixAutoUpdate = false
     camera.matrixWorldAutoUpdate = false
-    camera.coordinateSystem = this.bridge.backend === 'webgpu' ? library.WebGPUCoordinateSystem : library.WebGLCoordinateSystem
+    camera.coordinateSystem = this.backend === 'webgpu' ? library.WebGPUCoordinateSystem : library.WebGLCoordinateSystem
     camera.matrixWorldInverse.fromArray(space.camera.view)
     camera.matrixWorld.copy(camera.matrixWorldInverse).invert()
     camera.matrix.copy(camera.matrixWorld)
     camera.matrix.decompose(camera.position, camera.quaternion, camera.scale)
     camera.up.fromArray(space.camera.up)
-    camera.projectionMatrix.fromArray(this.bridge.backend === 'webgpu' ? space.camera.projectionWebGpu : space.camera.projectionWebGl)
+    camera.projectionMatrix.fromArray(this.backend === 'webgpu' ? space.camera.projectionWebGpu : space.camera.projectionWebGl)
     camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert()
     camera.near = space.camera.near; camera.far = space.camera.far
     camera.fov = space.camera.fovYRadians * 180 / Math.PI
     camera.aspect = space.output.displayWidth / space.output.displayHeight
-    this.root.matrix.fromArray(space.root)
+    this.sceneRoot.matrix.fromArray(space.root)
   }
   update(params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo & { space: AuthorSpaceInfo }): SpatialBounds | null {
     if (this.closed) throw new Error('three 场景已释放。')
@@ -135,14 +139,15 @@ export class VideoEditAuthorThree {
     assertThreeMaterials(this.author.scene)
     this.retainResources()
     this.synchronize(info.space)
-    this.root.updateMatrixWorld(true)
-    const bounds = new this.bridge.library.Box3().setFromObject(this.root)
+    this.sceneRoot.updateMatrixWorld(true)
+    const bounds = new this.library.Box3().setFromObject(this.sceneRoot)
     this.bounds = bounds.isEmpty() ? null : { min: bounds.min.toArray() as [number, number, number], max: bounds.max.toArray() as [number, number, number] }
     return this.bounds
   }
   async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets,
     info: AuthorFrameInfo & { space: AuthorSpaceInfo }, assertCurrent: () => void): Promise<void> {
     this.update(params, assets, info)
+    this.bridge ??= await VideoEditAuthorThreeWebGpu.create(this.library, this.device, this.backend)
     await this.bridge.render(this.scene, this.host.camera, target, width, height, info.time, assertCurrent, !this.compiled)
     this.compiled = true
   }
@@ -151,12 +156,12 @@ export class VideoEditAuthorThree {
     this.closed = true
     const failures: unknown[] = []
     try { await this.author.dispose?.() } catch (error) { failures.push(error) }
-    this.root.remove(this.author.scene)
+    this.sceneRoot.remove(this.author.scene)
     for (const resource of this.resources) {
       try { this.releaseResource(resource) } catch (error) { failures.push(error) }
     }
     this.resources.clear()
-    try { await this.bridge.dispose() } catch (error) { failures.push(error) }
+    try { await this.bridge?.dispose() } catch (error) { failures.push(error) }
     if (failures.length) throw new AggregateError(failures, 'three 场景资源释放失败。')
   }
 }

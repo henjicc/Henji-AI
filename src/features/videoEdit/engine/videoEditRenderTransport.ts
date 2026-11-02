@@ -487,6 +487,7 @@ export class VideoEditRenderTransport {
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** 节目网页输入的屏幕显示档位，见 `videoEditWebDisplayTier`。 */
   async setWebDisplayScale(scale: number): Promise<void> { await this.ready; await this.request({ kind: 'webDisplayScale', scale }) }
+  async setSpaceDisplay(display: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay): Promise<void> { await this.ready; await this.request({ kind: 'spaceDisplay', display }) }
   async setOutputScale(scale: number, renderAtOutputResolution = true): Promise<void> {
     await this.ready; await this.request({ kind: 'outputScale', scale, renderAtOutputResolution })
     const size = videoEditRenderSize(this.document.width, this.document.height, renderAtOutputResolution ? videoEditOutputRenderDivisor(this.document.width, this.document.height, scale) : 1)

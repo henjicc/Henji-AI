@@ -68,7 +68,7 @@ const logger = createLogger('features.videoEdit.codeSources')
 const SUBJECT_MATTE: NonNullable<VideoEditEffect['mask']> = { regionId: 'person', feather: 0, expand: 0 }
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'authorSpatialGenerator' | 'inspectAuthorScene' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'authorSpatialGenerator' | 'inspectAuthorScene' | 'stageAuthorScene' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'bundle' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CodeOutputFrame { sourceTime: ReturnType<typeof videoEditClipSourceTimeAt>; info: AuthorFrameInfo; overrides: Parameters<VideoEditCodeGpu['authorGenerator']>[7]; environment: ReturnType<typeof authorEffectEnvironmentForClip> }
@@ -273,6 +273,33 @@ export class VideoEditCodeSources implements SpatialCodeSources {
         const worldBounds = await this.runtime.inspectAuthorScene(value.clipId, plan.program!, plan.context, plan.author, inputs.assets, info)
         this.spatialState(prepared)
         result.push({ clipId: value.clipId, sampleIndex: sample.index, sequenceFrame: sample.sequenceFrame, worldBounds })
+      }
+      return result
+    })
+    this.gpuWork = work.then(() => undefined, () => undefined)
+    return work
+  }
+  /**
+   * 统一三维渲染器用：把每个世界场景更新到中心帧（或快门开始那一刻），交出场景根节点、包围框与作者源时间。
+   * 根节点是活对象，须在本空间帧释放前、下一次更新之前读完。
+   */
+  stageSpatialScenes(prepared: PreparedSpatialFrame, moment: 'center' | 'open' = 'center'): Promise<readonly { clipId: string; root: import('three').Group; worldBounds: SpatialSceneSample['worldBounds']; time: number }[]> {
+    const work = this.gpuWork.then(async () => {
+      const state = this.spatialState(prepared), result: Array<{ clipId: string; root: import('three').Group; worldBounds: SpatialSceneSample['worldBounds']; time: number }> = []
+      const { plan: exposure, frame: request } = state.request
+      const open = exposure.samples.reduce<typeof exposure.samples[number] | undefined>((first, sample) => !first || sample.sequenceFrame < first.sequenceFrame ? sample : first, undefined)
+      for (const source of request.sources) {
+        if (source.kind !== 'worldScene') continue
+        const sample = moment === 'open' ? open : exposure.samples[0]
+        const value = sample?.clips.find(clip => clip.clipId === source.clipId)
+        if (!sample || !value) continue
+        const { plan, inputs, info } = moment === 'open' && value.motionBlur
+          ? await this.spatialValues(prepared, source.clipId, value.sequenceFrame, value.sourceTime, value.centerSourceTime, sample.frame)
+          : await this.spatialValues(prepared, source.clipId, request.sequenceFrame, value.centerSourceTime, value.centerSourceTime, exposure.centerFrame)
+        if (!this.runtime?.stageAuthorScene) throw new Error('当前 GPU 会话不支持统一三维场景。')
+        const staged = await this.runtime.stageAuthorScene(source.clipId, plan.program!, plan.context, plan.author, inputs.assets, info)
+        this.spatialState(prepared)
+        result.push({ clipId: source.clipId, ...staged })
       }
       return result
     })

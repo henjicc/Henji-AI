@@ -32,6 +32,13 @@ export async function loadAuthorThreeLibrary(libraries?: AuthorLibraryVersions):
   return importLibrary(resolved.url)
 }
 
+/** 作者版 three 的其他入口（three/tsl、three/addons/…），与场景同一份库实例。 */
+export async function loadAuthorThreeModule<T>(specifier: string, libraries?: AuthorLibraryVersions): Promise<T> {
+  const resolved = resolveAuthorLibraryModule(specifier, libraries)
+  if (!resolved || resolved.version !== '0.186.1') throw new Error(`受管 three 缺少已验证的入口 ${specifier}。`)
+  return importLibrary(resolved.url) as Promise<T>
+}
+
 export type AuthorThreeBackend = 'webgpu' | 'webgl'
 /** 公开 ExternalTexture 只借用宿主纹理；RenderTarget 的深度与 MSAA 归 three。 */
 export class VideoEditAuthorThreeWebGpu {

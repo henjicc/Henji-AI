@@ -491,6 +491,13 @@ export class VideoEditRenderer {
     if (!Number.isFinite(scale) || scale <= 0 || scale > 1) throw new Error('网页显示倍率需要在 0 到 1 之间。')
     this.webDisplayScale = scale
   }
+  /** 三维显示方式（节目监视器按播放情况选好的具体档位）；嵌套序列随外层，导出用的渲染器始终是实时。 */
+  private spaceDisplayValue: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay = 'realtime'
+  private get spaceDisplay(): import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay { return this.nestedOwner?.spaceDisplay ?? this.spaceDisplayValue }
+  setSpaceDisplay(display: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay): void {
+    if (!['realtime', 'solid', 'wireframe'].includes(display)) throw new Error(`未知的三维显示方式：${display}`)
+    this.spaceDisplayValue = display
+  }
   private lookaheadRenderers(): VideoEditRenderer[] {
     const renderers = new Set<VideoEditRenderer>([this])
     for (const renderer of renderers) for (const entry of [...renderer.nestedPictures.values(), ...renderer.codeInputs.values(), ...renderer.filterInputs.values()]) renderers.add(entry.renderer)
@@ -2394,8 +2401,8 @@ export class VideoEditRenderer {
             }
             return { assets, images, info }
           } })
-          const { renderVideoEditSpatialCompositeScene } = await import('./videoEditCompositeScene')
-          const lease = await renderVideoEditSpatialCompositeScene({ ...spatial, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
+          const { renderVideoEditThreeSpaceScene } = await import('./videoEditCompositeScene')
+          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplay, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
           let completion = lease.completion
           try {
             const input = gpu.spatialPicture(lease)

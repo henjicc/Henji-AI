@@ -22,10 +22,10 @@ import { installVideoEditWebChannel, VideoEditWebInputs } from './videoEditWebIn
 import type { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 
 const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, borrows: [] as Array<[string, number | undefined]>, closed: 0, web: [] as Array<import('./videoEditAuthorModule').AuthorFrameInfo['web']> }))
-const spatialBoundary = vi.hoisted(() => ({ frames: [] as Array<Parameters<typeof import('./videoEditCompositeScene').renderVideoEditSpatialCompositeScene>[0]>, releases: 0 }))
+const spatialBoundary = vi.hoisted(() => ({ frames: [] as Array<Parameters<typeof import('./videoEditCompositeScene').renderVideoEditThreeSpaceScene>[0]>, releases: 0 }))
 vi.mock('./videoEditCompositeScene', async importOriginal => {
   const actual = await importOriginal<typeof import('./videoEditCompositeScene')>()
-  return { ...actual, renderVideoEditSpatialCompositeScene: async (options: Parameters<typeof actual.renderVideoEditSpatialCompositeScene>[0]) => {
+  return { ...actual, renderVideoEditThreeSpaceScene: async (options: Parameters<typeof actual.renderVideoEditThreeSpaceScene>[0]) => {
     spatialBoundary.frames.push(options)
     return { texture: { createView() {}, destroy() {} }, width: options.drawn.width, height: options.drawn.height, format: 'rgba16float', owner: 'composite-host', highPrecision: true, carriesLight: false,
       completion: Promise.resolve(), async release(afterUse: Promise<void>) { await afterUse; spatialBoundary.releases++ } }

@@ -364,3 +364,166 @@ export async function renderVideoEditSpatialCompositeScene(options: {
   })
   return renderSpatialExposure(request, plan, materialSources, host, options.compositionAt)
 }
+
+/** 弥散圆系数 K：视深 z 处半径 = K·|z − S| / z（输出像素），与空间求值 opticalCocRadius 同一公式。 */
+function threeSpaceCocScale(camera: import('@/core/videoEdit/spatialTypes').SpatialCameraFrame, output: import('@/core/videoEdit/spatialTypes').SpatialOutput): number {
+  const f = camera.focalLengthMm, sf = camera.focusDistance * 1000
+  if (camera.defocus === 0 || !(sf > f && camera.fStop > 0)) return 0
+  return f * f / (camera.fStop * (sf - f)) * .5 / camera.sensorWidthMm * output.width * camera.defocus
+}
+
+/**
+ * 每份作品的卡片材料：键相同就沿用上一帧的纹理（内容、放置、效果都没变），不再重画；
+ * 卡片按自身视深整张虚化（与曝光合成同一景深计算），虚化结果另按景深参数缓存，拉焦时只重做虚化。
+ */
+interface ThreeSpaceMaterial { key: string; lease: SpatialPictureLease; defocusKey?: string; defocused?: SpatialPictureLease }
+// 按空间 GPU 实例分开：换了设备（重建渲染器、设备丢失后重建）的旧纹理不能跨设备使用。
+const threeSpaceMaterials = new WeakMap<object, Map<string, Map<string, ThreeSpaceMaterial>>>()
+
+/**
+ * 统一三维渲染器的接入：每个空间组的卡片与作者 three 场景交给同一个 three 场景一次绘制，景深与运动模糊整幅后处理；
+ * 各组结果按原来的方式换回二维合成树（调整层、转场、非空间片段照旧）。组里含空间转场时仍走曝光合成。
+ */
+export async function renderVideoEditThreeSpaceScene(options: Parameters<typeof renderVideoEditSpatialCompositeScene>[0] & { display?: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay }): Promise<SpatialPictureLease> {
+  const { request, plan, sources, drawn, active, nodes, pictures, effects, compositor } = options
+  if (plan.groups.some(group => group.itemIds.some(id => id.startsWith('transition:'))) || !sources.stageSpatialScenes) return renderVideoEditSpatialCompositeScene(options)
+  const [{ evaluateVideoEditClip }, { videoEditFadeOpacity }, { spatialClipMatrix, includeSpatialWorldBounds }, math] = await Promise.all([import('@/core/videoEdit/keyframes'), import('@/core/videoEdit/fades'),
+    import('@/core/videoEdit/spatialEvaluation'), import('@/core/videoEdit/spatialMatrices')])
+  // 材料面只覆盖片段的逻辑边界：先映射回参考平面、抵掉二维放置，再乘卡片几何（与曝光合成同一换算）。
+  const materialToCard = (material: SpatialMaterialPlan, clip: VideoEditClip) => {
+    const base = evaluateVideoEditClip(options.compositionAt?.(request.sequenceFrame).clips.find(value => value.id === clip.id) ?? clip, request.sequenceFrame)
+    return math.spatialMultiply(math.spatialInverse(spatialClipMatrix(request.composition, { ...base, spatial: { enabled: false } }, request.output)),
+      math.spatialTranslation(-request.output.displayWidth / request.output.displayHeight / 2, .5, 0),
+      math.spatialScale(1 / request.output.displayHeight, -1 / request.output.displayHeight, 1), material.uvToReference)
+  }
+  const spatial = await compositor.spatial(), space = await compositor.threeSpace()
+  const current = (): boolean => { request.signal.throwIfAborted(); request.assertCurrent(); return true }
+  const outputSpec = (key: string): SpatialTargetSpec => ({ key, width: request.output.width, height: request.output.height, format: 'rgba16float', usage: 1 | 2 | 4 | 16 })
+  const capture = async (spec: SpatialTargetSpec, action: (picture: VideoEditCodePicture) => Promise<{ completion: Promise<void> }>, carriesLight = false): Promise<SpatialPictureLease> => {
+    const target = spatial.target(spec)
+    try {
+      const picture = compositor.spatialPicture({ texture: target.texture, width: spec.width, height: spec.height, format: spec.format, carriesLight })
+      const result = await action(picture)
+      target.completion = result.completion
+      return spatial.picture(target, carriesLight || picture.carriesLight)
+    } finally {
+      target.completion = spatial.completion()
+      await spatial.releaseTarget(target)
+    }
+  }
+  const caches = threeSpaceMaterials.get(spatial) ?? new Map<string, Map<string, ThreeSpaceMaterial>>()
+  threeSpaceMaterials.set(spatial, caches)
+  const cache = caches.get(request.composition.id) ?? new Map<string, ThreeSpaceMaterial>()
+  caches.set(request.composition.id, cache)
+  const used = new Set<string>()
+  const cardMaterial = async (material: SpatialMaterialPlan): Promise<SpatialPictureLease> => {
+    current()
+    const input = pictures.get(material.clipId)
+    const original = active.find(clip => clip.id === material.clipId)
+    if (input === undefined || !original) throw new Error(`空间卡片 ${material.clipId} 缺少中心画面。`)
+    const plans = effects.get(original.id) ?? []
+    const inputKey = input instanceof VideoEditCodePicture ? input.contentKey === undefined ? undefined : ['code', input.contentKey, input.width, input.height, input.displayWidth, input.displayHeight, input.textureFormat, input.carriesLight]
+      : input === null && original.kind === 'text' ? ['text', documentFontRevision()]
+      : typeof ImageBitmap !== 'undefined' && input instanceof ImageBitmap ? ['bitmap', spatial.identity(input), input.width, input.height] : undefined
+    const cacheable = inputKey !== undefined && plans.every(value => value.builtin && !value.mask && !value.subject && !isShaderGraphEffect(value.builtin.id))
+    const key = cacheable ? JSON.stringify([inputKey, { ...original, curves: undefined, spatial: undefined, depth: undefined, rotationX: undefined, rotationY: undefined, anchorDepth: undefined, motionSamples: undefined, opacity: 1 },
+      material.referenceSize, material.logicalBounds, material.rasterScale, material.target.width, material.target.height, request.output, request.quality, drawn.colorLuts,
+      plans.map(value => materialBuiltinPlan(value.builtin!, original, request.sequenceFrame, material.target, drawn.fps, request.quality, { referenceSize: material.referenceSize, bounds: material.logicalBounds }))]) : undefined
+    used.add(material.clipId)
+    const held = cache.get(material.clipId)
+    if (key !== undefined && held?.key === key) return defocused(material, held)
+    const clip = { ...original, opacity: 1 } as VideoEditClip & VideoEditMotionSampledClip
+    delete clip.motionSamples
+    const local = { ...drawn, width: material.target.width, height: material.target.height }
+    const node: VideoEditCompositeNode = { kind: 'clip', clip, fromTrack: clip.track, toTrack: clip.track + 1 }
+    const carriesLight = input instanceof Object && 'carriesLight' in input && input.carriesLight === true
+    const lease = await capture({ ...material.target, key: `three:card:${material.clipId}`, usage: 1 | 2 | 4 | 16 }, target => renderVideoEditCompositeScene(local, [node], new Map([[clip.id, input]]), effects, compositor, request.sequenceFrame, current, undefined,
+      material.referenceSize, target, options.onEffectError, request.quality, options.readFilterFrames, undefined,
+      { referenceSize: material.referenceSize, bounds: material.logicalBounds,
+        rasterTier: 2 ** Math.max(0, Math.round(Math.log2(material.rasterScale[1] / (request.output.height / request.output.displayHeight)))) }), carriesLight)
+    if (held) { void held.lease.release(lease.completion).catch(() => undefined); void held.defocused?.release(lease.completion).catch(() => undefined) }
+    if (key === undefined) { cache.delete(material.clipId); transient.push(lease); return defocused(material, { key: '', lease }, true) }
+    const entry: ThreeSpaceMaterial = { key, lease }
+    cache.set(material.clipId, entry)
+    return defocused(material, entry)
+  }
+  const defocused = async (material: SpatialMaterialPlan, entry: ThreeSpaceMaterial, once = false): Promise<SpatialPictureLease> => {
+    // 实体、线框预览不做景深，卡片也不虚化。
+    if (material.defocus.bypass || (options.display ?? 'realtime') !== 'realtime') return entry.lease
+    const defocusKey = JSON.stringify(material.defocus)
+    if (entry.defocusKey === defocusKey && entry.defocused) return entry.defocused
+    const result = await spatial.defocus(entry.lease, material)
+    if (once) { transient.push(result); return result }
+    void entry.defocused?.release(result.completion).catch(() => undefined)
+    entry.defocusKey = defocusKey; entry.defocused = result
+    return result
+  }
+  const transient: SpatialPictureLease[] = []
+  const prepared = await sources.prepareSpatialFrame({ frame: request, plan })
+  const groupPictures: Array<{ groupId: string; picture: SpatialPictureLease }> = []
+  try {
+    const opened = plan.samples.length > 1 ? plan.samples.reduce((first, sample) => sample.sequenceFrame < first.sequenceFrame ? sample : first).frame : undefined
+    // 作者场景先更新到快门开始那一刻记下各物体的世界矩阵（运动模糊的速度由它求），再更新到中心帧绘制。
+    const previous = new Map<string, Map<import('three').Object3D, import('three').Matrix4>>()
+    // 实体、线框不做运动模糊，不必多算一遍快门开始时刻的场景。
+    if (opened && drawn.motionBlur === true && (options.display ?? 'realtime') === 'realtime') for (const staged of await sources.stageSpatialScenes(prepared, 'open')) {
+      const matrices = new Map<import('three').Object3D, import('three').Matrix4>()
+      staged.root.traverse(object => { matrices.set(object, object.matrixWorld.clone()) })
+      previous.set(staged.clipId, matrices)
+    }
+    const scenes = await sources.stageSpatialScenes(prepared)
+    current()
+    // 作者物体的包围框扩展远近裁剪面（与曝光合成同一规则），不被按卡片推算的远近面裁掉。
+    const bounds = scenes.flatMap(scene => scene.worldBounds ? [scene.worldBounds] : [])
+    const center = includeSpatialWorldBounds(plan.centerFrame, bounds)
+    const placements = new Map<string, import('@/core/videoEdit/spatialTypes').SpatialMat4>()
+    for (const material of plan.materials) {
+      const clip = active.find(value => value.id === material.clipId)
+      if (clip && material.kind !== 'worldScene') placements.set(material.clipId, materialToCard(material, clip))
+    }
+    const place = (card: import('@/core/videoEdit/spatialTypes').SpatialCardGeometry) => placements.has(card.clipId) ? { ...card, uvToWorld: math.spatialMultiply(card.uvToWorld, placements.get(card.clipId)!) } : card
+    const open = opened ? { ...opened, cards: opened.cards.map(place) } : undefined
+    // 透明度按原始片段求值：active 里的片段已经乘过一次淡化。
+    const opacityOf = (clipId: string): number => {
+      const source = request.composition.clips.find(clip => clip.id === clipId)
+      return source ? evaluateVideoEditClip(source, request.sequenceFrame).opacity * videoEditFadeOpacity(source, request.sequenceFrame) : 1
+    }
+    const cocScale = threeSpaceCocScale(center.camera, request.output)
+    const sceneCoc = bounds.flatMap(box => [0, 1, 2, 3, 4, 5, 6, 7].map(index => {
+      const depth = -math.spatialTransform(center.camera.view, [index & 1 ? box.max[0] : box.min[0], index & 2 ? box.max[1] : box.min[1], index & 4 ? box.max[2] : box.min[2]])[2]
+      return depth > 0 ? cocScale * Math.abs(depth - center.camera.focusDistance) / depth : 0
+    }))
+    const camera = request.composition.spatialCamera
+    const postEffects = { display: options.display ?? 'realtime', motionBlur: drawn.motionBlur === true, depthOfField: Boolean(camera?.defocus || camera?.curves?.defocus?.length),
+      focusDistance: center.camera.focusDistance, cocScale, cocMax: Math.max(0, ...center.cards.map(card => card.cocRangePx[1]), ...sceneCoc),
+      shutterScale: plan.samples.length > 1 ? plan.samples.length / (plan.samples.length - 1) : 1 }
+    for (const group of plan.groups) {
+      const cards: import('./videoEditThreeSpace').ThreeSpaceCard[] = []
+      for (const clipId of group.clipIds) {
+        const material = plan.materials.find(value => value.clipId === clipId)
+        const geometry = center.cards.find(card => card.clipId === clipId)
+        if (!material || material.kind === 'worldScene' || !geometry || !active.some(value => value.id === clipId)) continue
+        const lease = await cardMaterial(material)
+        cards.push({ clipId, texture: lease.texture, width: lease.width, height: lease.height, geometry: place(geometry), opacity: opacityOf(clipId), light: lease.carriesLight })
+      }
+      const groupScenes = scenes.filter(scene => group.clipIds.includes(scene.clipId)).map(scene => ({ ...scene, opacity: opacityOf(scene.clipId), ...previous.has(scene.clipId) ? { previous: previous.get(scene.clipId)! } : {} }))
+      const picture = await capture(outputSpec(`three:group:${group.id}`), async target => {
+        await space.render({ frame: center, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects,
+          target: { texture: target.texture, width: target.width, height: target.height }, assertCurrent: () => { current() } })
+        return { completion: spatial.completion() }
+      }, cards.some(card => card.light) || groupScenes.length > 0)
+      groupPictures.push({ groupId: group.id, picture })
+    }
+    const replacements: VideoEditCompositeReplacements = {
+      pictures: new Map(groupPictures.map(group => [plan.groups.find(value => value.id === group.groupId)!.itemIds[0], compositor.spatialPicture(group.picture)])),
+      replaced: new Set(plan.groups.flatMap(group => group.itemIds)),
+    }
+    return await capture(outputSpec('spatial:frame'), target => renderVideoEditCompositeScene(drawn, nodes, pictures, effects, compositor, request.sequenceFrame, current, undefined,
+      request.composition, target, options.onEffectError, request.quality, options.readFilterFrames, replacements), groupPictures.some(group => group.picture.carriesLight))
+  } finally {
+    const settled = spatial.completion()
+    await Promise.allSettled([...groupPictures.map(group => group.picture.release(settled)), ...transient.map(lease => lease.release(settled))])
+    for (const [clipId, held] of cache) if (!used.has(clipId)) { cache.delete(clipId); void held.lease.release(settled).catch(() => undefined); void held.defocused?.release(settled).catch(() => undefined) }
+    await sources.releaseSpatialFrame(prepared)
+  }
+}

@@ -41,7 +41,8 @@ it('受管相机复核作者改动，根变换仅应用一次，共享材质在�
     expect(camera.projectionMatrix.elements).toEqual(projection)
     await first.dispose(); expect(releaseGeometry).not.toHaveBeenCalled(); expect(releaseMaterial).not.toHaveBeenCalled()
     await second.dispose(); expect(releaseGeometry).toHaveBeenCalledOnce(); expect(releaseMaterial).toHaveBeenCalledOnce()
-    expect(disposed).toHaveBeenCalledTimes(2)
+    // 只更新、交给统一三维渲染器的场景不创建自带渲染桥。
+    expect(created).not.toHaveBeenCalled(); expect(disposed).not.toHaveBeenCalled()
   } finally { await first.dispose(); await second.dispose(); loaded.mockRestore(); created.mockRestore() }
 })
 

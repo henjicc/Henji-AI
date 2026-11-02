@@ -177,6 +177,16 @@ function materialRaster(cards: readonly SpatialCardGeometry[], frames: readonly 
   const crop = { x: left - padding[0], y: top - padding[1], width: right - left + 2 * padding[0], height: bottom - top + 2 * padding[1] }
   return { crop, need, limit }
 }
+/**
+ * 材料面边界按台阶变化：景深留边按约 19% 一档向上取整，可见裁切向外对齐到整面的八分之一网格。
+ * 拉焦、推近时材料面尺寸只在跨台阶时才变，跨帧缓存才命中；多出的只是透明边。
+ */
+function steppedRadius(value: number): number { return value > 0 ? 2 ** (Math.ceil(Math.log2(value) * 4) / 4) : 0 }
+function snapCrop(crop: SpatialRect, full: SpatialRect): SpatialRect {
+  const gridX = full.width / 8, gridY = full.height / 8
+  const x = full.x + Math.floor((crop.x - full.x) / gridX) * gridX, y = full.y + Math.floor((crop.y - full.y) / gridY) * gridY
+  return { x, y, width: full.x + Math.ceil((crop.x + crop.width - full.x) / gridX) * gridX - x, height: full.y + Math.ceil((crop.y + crop.height - full.y) / gridY) * gridY - y }
+}
 function intersectRect(a: SpatialRect, b: SpatialRect): SpatialRect | undefined {
   const x = Math.max(a.x, b.x), y = Math.max(a.y, b.y)
   const width = Math.min(a.x + a.width, b.x + b.width) - x, height = Math.min(a.y + a.height, b.y + b.height) - y
@@ -279,14 +289,14 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
     const right = allReference ? Math.max(output.displayWidth, ...xs) : Math.max(...xs), bottom = allReference ? Math.max(output.displayHeight, ...ys) : Math.max(...ys)
     const radius = card.cocRadiusPx
     const localRadius = kind === 'worldScene' ? [radius * output.displayWidth / output.width, radius * output.displayHeight / output.height] : referenceDefocusRadius(card, matrix, request)
-    const focusPadding = spatialDefocusStrength(radius) === 0 ? [0, 0] : localRadius.map((value, axis) => value + 2 * (axis ? output.displayHeight / output.height : output.displayWidth / output.width))
+    const focusPadding = spatialDefocusStrength(radius) === 0 ? [0, 0] : localRadius.map((value, axis) => steppedRadius(value) + 2 * (axis ? output.displayHeight / output.height : output.displayWidth / output.width))
     const full = kind === 'worldScene' ? reference.contentBounds : { x: left - bleed - focusPadding[0], y: top - bleed - focusPadding[1], width: right - left + 2 * (bleed + focusPadding[0]), height: bottom - top + 2 * (bleed + focusPadding[1]) }
     // 作者代码效果可能读取整幅参考平面，世界场景已按屏幕投影；两者都保持整面一倍栅格。
     // 图形按准备时的二维档位栅格，推近只采样已有像素，与视频图片同样受源密度限制。
     const raster = allReference ? undefined : materialRaster(exposureFrames.map(frame => frame.cards.find(value => value.clipId === card.clipId) ?? card), exposureFrames, matrix, request,
       videoEditClipPictureSize(composition, source), ['video', 'image', 'sequence', 'graphic'].includes(source.kind), full, [bleed + focusPadding[0], bleed + focusPadding[1]])
     // 曝光内全程不可见的卡片仍保留一个参考像素，层序与回收路径不变。
-    const bounds = !raster ? full : raster.crop && intersectRect(raster.crop, full) || { x: full.x, y: full.y, width: 1, height: 1 }
+    const bounds = !raster ? full : raster.crop && intersectRect(snapCrop(raster.crop, full), full) || { x: full.x, y: full.y, width: 1, height: 1 }
     // 材料面纹素格对齐输出像素格：恒等投影时第二次取样正落在纹素中心，接近零的空间量收敛到二维画面。
     const scaleX = output.width / output.displayWidth, scaleY = output.height / output.displayHeight
     const gridX = Math.floor(bounds.x * scaleX) / scaleX, gridY = Math.floor(bounds.y * scaleY) / scaleY

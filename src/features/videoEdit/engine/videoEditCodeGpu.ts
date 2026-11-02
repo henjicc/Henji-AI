@@ -153,6 +153,13 @@ export class VideoEditCodeGpu {
       return runtime.inspectThree(size.width, size.height, parameters, assets, info)
     })
   }
+  async stageAuthorScene(instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo): ReturnType<import('./videoEditAuthorRuntime').VideoEditAuthorRuntime['stageThree']> {
+    return this.trackAuthor(async () => {
+      await this.ready; this.assertLive()
+      const runtime = await this.authors().instance(instanceKey, program)
+      return runtime.stageThree(size.width, size.height, parameters, assets, info)
+    })
+  }
   /** 空间 lease 使用独立目标；完成后由 lease 显式回收，不能与普通帧淘汰互相覆盖。 */
   async authorSpatialGenerator(instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number },
     target: import('./videoEditSpatialContracts').SpatialTargetSpec, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets,
