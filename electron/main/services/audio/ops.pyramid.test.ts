@@ -155,7 +155,7 @@ describe('whole-source multi-resolution waveform (task 2.3)', () => {
     const result = await detail
     expect(result.channels[0].samples).toBeInstanceOf(Float32Array)
     expect([...result.channels[0].samples!.slice(0, 3)]).toEqual([0.5, -0.5, 0.5])
-    await expect(analyzer.extractRange({ ...request, startUs: 0, endUs: 10_000_000 })).rejects.toThrow('精细波形范围过长')
+    await expect(analyzer.extractRange({ ...request, startUs: 0, endUs: 30_000_000 })).rejects.toThrow('精细波形范围过长')
     await analyzer.dispose()
   })
 })

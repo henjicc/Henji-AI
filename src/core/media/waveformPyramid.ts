@@ -16,8 +16,11 @@ export const WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET = 128
 export const WAVEFORM_PYRAMID_LEVEL_FACTOR = 8
 /** 顶级桶数不超过它时停止加级。 */
 export const WAVEFORM_PYRAMID_TOP_BUCKETS = 512
-/** 精细档原始采样回读一次最多的采样帧数（48kHz 约 5.5 秒）。 */
-export const WAVEFORM_DETAIL_MAX_FRAMES = 1 << 18
+/**
+ * 精细档原始采样回读一次最多的采样帧数（48kHz 约 22 秒）。要够长：放大到最细一级摘要的一格比屏幕一列还宽之前，
+ * 原始采样就得已经读回，否则读回之前那一下波形是一块块的。
+ */
+export const WAVEFORM_DETAIL_MAX_FRAMES = 1 << 20
 /** RMS 的无符号定点满量程。 */
 export const WAVEFORM_PYRAMID_QUANT = 65535
 /** min/max 的有符号定点满量程，正负使用同一比例。 */

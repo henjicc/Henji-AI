@@ -80,7 +80,7 @@ describe('renderer waveform data service', () => {
   })
   it('plans aligned detail windows around the view and reads signed samples sample-accurately', async () => {
     expect(planWaveformDetailWindow(48000 * 60, 100_000, 101_000)).toEqual({ start: 90112, end: 110592 })
-    expect(planWaveformDetailWindow(48000 * 60, 0, 300_000)).toBeUndefined()
+    expect(planWaveformDetailWindow(48000 * 60, 0, 1_100_000)).toBeUndefined()
     const window = planWaveformDetailWindow(48000, 47_900, 48_000)!
     expect(window.end).toBe(48000)
     const ref = { source: 'D:/c.wav', channels: 1 as const }

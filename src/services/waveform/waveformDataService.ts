@@ -39,7 +39,8 @@ const BUDGET_BYTES = 128 * 1024 * 1024
 const MAX_IN_FLIGHT = 4
 const REVALIDATE_MS = 10_000
 const DETAIL_ALIGN = 4096
-const DETAIL_ENTRIES = 12
+/** 每段最长约 8 MB（双声道 float32），留几段供来回平移。 */
+const DETAIL_ENTRIES = 6
 /** 精细层回读失败后的退避重试间隔（毫秒）；用完仍失败就停在多级峰值显示，平移到新窗口会重新开始。 */
 const DETAIL_RETRY_DELAYS_MS = [500, 1500, 4000]
 
