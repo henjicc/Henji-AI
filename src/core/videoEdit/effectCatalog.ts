@@ -39,7 +39,9 @@ export function orderVideoEditEffects(definitions: ReadonlyMap<string, VideoEdit
     if (seen.has(id)) throw new Error(`效果目录重复 ID：${id}。`)
     const definition = definitions.get(id)
     if (!definition) throw new Error(`效果目录的 ${id} 尚未登记。`)
-    seen.add(id); ordered.push({ ...definition, group, ...(MORE_GROUPS.has(group) ? { category: 'more' as const } : {}) })
+    // 目录没改分组与分类的条目保持原对象：按 ID 取到的登记与模块导出的定义是同一个。
+    const more = MORE_GROUPS.has(group)
+    seen.add(id); ordered.push(definition.group === group && (!more || definition.category === 'more') ? definition : { ...definition, group, ...(more ? { category: 'more' as const } : {}) })
   }
   const missing = [...definitions.keys()].filter(id => !seen.has(id))
   if (missing.length) throw new Error(`效果目录缺少：${missing.join('、')}。`)
