@@ -123,3 +123,14 @@ video-edit-primitives | 待分析 | 失败待截图分类；.ui-tour/ticket26/vi
 video-edit-annotation-relative | 通过 | 正式隔离 Electron 场景通过；.ui-tour/ticket26/video-edit-annotation-relative/index.md；0 browser errors, 0 log errors | c15c0947a
 video-edit-code-performance | 待分析 | 失败待截图分类；.ui-tour/ticket26/video-edit-code-performance/index.md；0 browser errors, 1 log errors | —
 video-edit-observation-review | 待分析 | 失败待截图分类；.ui-tour/ticket26/video-edit-observation-review/index.md；0 browser errors, 0 log errors | —
+
+## Claude 接手续（2026-11-02）
+video-edit-composite-contract | 已修通 | 探针在主线程装放行信任入口；像素预期按现行混合/转场语义更新 | 624832544
+video-edit-web-source | 已修通 | 等实时来源精确画面；先取一幅定住网页栅格档并核对同档 | 6e9a8fbc0
+video-edit-code-contract | 已修通 | 同上探针信任入口 | 624832544
+video-edit-observation-review | 已修通 | 导出完成弹窗、运动模糊总开关、关闭前接管 | 6e9a8fbc0
+video-edit-engine-probe | 已修通 | 保存失败文案与落盘核对；修产品：缺失源文件提示、原始文件系统错误不再露给用户 | 6e9a8fbc0 ec525ea81
+video-edit-export-native | 已修通 | 透明叠加轨、取消/失败任务认领、故障代理只对导出通道注入；修产品：logger.error 元信息被记成错误（约 60 处） | 6e9a8fbc0 005fc83f8
+video-edit-code-project / video-edit-code-controls | 依赖 | 复用 video-edit-project-source 产出的媒体，等它修通后再跑 | —
+video-edit-native-faults | 排查中 | 解码服务缺失后新开工程仍选原生解码（nativeAvailable=true），子代理复现中 | —
+video-edit-filmstrip | 待单独重跑 | 1 秒附近丢 62–70 帧；本次与 Codex 的 Electron 同时在跑，性能结论无效 | —
