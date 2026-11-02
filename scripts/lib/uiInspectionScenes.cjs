@@ -28,7 +28,7 @@ const { createImageEditFilterScopesScene, createImageEditFilterFailureScene } = 
 const { createImageEditSmartContentScene } = require('./uiInspectionSceneImageEditSmartContent.cjs')
 const { diffBuffers } = require('./canvasVisualDiff.cjs')
 const { createVideoEditProbeScene } = require('./uiInspectionSceneVideoEditProbe.cjs')
-const { createVideoEditScrubScene } = require('./uiInspectionSceneVideoEditScrub.cjs')
+const { createVideoEditScrubScene, createVideoEditScrubAccelerationScene } = require('./uiInspectionSceneVideoEditScrub.cjs')
 const { createVideoEditPlayStartScene } = require('./uiInspectionSceneVideoEditPlayStart.cjs')
 const { createVideoEditFilmstripScene } = require('./uiInspectionSceneVideoEditFilmstrip.cjs')
 const { createVideoEditTimelineScene } = require('./uiInspectionSceneVideoEditTimeline.cjs')
@@ -165,6 +165,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createSuperKeyframePanelScenes(context),
     createVideoEditProbeScene(),
     createVideoEditScrubScene(),
+    createVideoEditScrubAccelerationScene(),
     createVideoEditFirstFrameScene(),
     createRecordingCursorScene(),
     createVideoEditTrackingScene(),

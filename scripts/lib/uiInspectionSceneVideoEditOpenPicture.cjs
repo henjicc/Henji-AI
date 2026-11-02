@@ -251,7 +251,7 @@ function createVideoEditOpenPictureScene() {
             await page.getByRole('button', { name: '生成', exact: true }).click()
             await page.reload({ waitUntil: 'domcontentloaded' })
             await page.getByRole('button', { name: '生成', exact: true }).waitFor({ state: 'visible' })
-            await observeWorkers(page)
+            await observeWorkers(page, false, true)
             await page.getByRole('button', { name: '剪辑', exact: true }).click()
           }
           const after = new Date().toISOString()
@@ -304,7 +304,7 @@ function createVideoEditOpenPictureScene() {
           await page.getByRole('button', { name: '生成', exact: true }).click()
           await page.reload({ waitUntil: 'domcontentloaded' })
           await page.getByRole('button', { name: '生成', exact: true }).waitFor({ state: 'visible' })
-          await observeWorkers(page)
+          await observeWorkers(page, false, true)
           await page.getByRole('button', { name: '剪辑', exact: true }).click()
         }
         const startedAt = performance.now()
@@ -328,7 +328,7 @@ function createVideoEditOpenPictureScene() {
           await page.getByRole('button', { name: '生成', exact: true }).click()
           await page.reload({ waitUntil: 'domcontentloaded' })
           await page.getByRole('button', { name: '生成', exact: true }).waitFor({ state: 'visible' })
-          await observeWorkers(page)
+          await observeWorkers(page, false, true)
           await page.getByRole('button', { name: '剪辑', exact: true }).click()
         } else {
           // 再次：重新播种为没有序列的同一项目

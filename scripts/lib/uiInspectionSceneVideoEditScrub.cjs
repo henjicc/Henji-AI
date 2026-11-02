@@ -179,4 +179,114 @@ function createVideoEditScrubScene() {
     },
   }
 }
-module.exports = { createVideoEditScrubScene }
+function summarizeScrubAccelerationRound({ round, startAt, endAt, frames, events }) {
+  const during = frames.filter(frame => frame.at >= startAt && frame.at <= endAt)
+  const requestFrames = frames.filter(frame => frame.requestedAt >= startAt && frame.requestedAt <= endAt)
+  const requests = events.filter(event => event.kind === 'render' && event.at >= startAt && event.at <= endAt)
+  const completions = events.filter(event => event.kind === 'render.completed' && event.requestedAt >= startAt && event.requestedAt <= endAt)
+  const completed = new Set(completions.map(event => event.id))
+  const times = [startAt, ...during.map(frame => frame.at), endAt]
+  // 首次远跳包含冷启动与按下开销；停更门槛衡量首个精确帧后的持续更新。
+  const exactTimes = [...during.filter(frame => !frame.approximate).map(frame => frame.at), endAt]
+  return { round, startAt, endAt, frames: during, requestFrames, events: [...requests, ...completions], unanswered: requests.filter(event => !completed.has(event.id)).length,
+    gaps: times.slice(1).map((at, index) => at - times[index]), maxExactGapMs: Math.max(0, ...exactTimes.slice(1).map((at, index) => at - exactTimes[index])) }
+}
+
+function validateScrubAccelerationCase(result) {
+  for (const round of result.rounds) {
+    assert.equal(round.unanswered, 0, `${result.name} 第 ${round.round} 轮仍有拖动请求没有完成`)
+    assert.ok(round.frames.some(frame => !frame.approximate), `${result.name} 第 ${round.round} 轮必须实际呈现精确帧`)
+    assert.ok(round.maxExactGapMs < 500, `${result.name} 第 ${round.round} 轮精确画面停更 ${round.maxExactGapMs.toFixed(1)}ms`)
+  }
+  if (result.name.startsWith('accelDecel')) {
+    assert.ok(result.exactRenderMs.p90 <= 50, `${result.name} 精确画面请求到呈现 p90 为 ${result.exactRenderMs.p90.toFixed(1)}ms，超过 50ms`)
+    assert.ok(result.exactRequestRenderMs.p90 <= 50, `${result.name} 含拖动结束后呈现的精确请求 p90 为 ${result.exactRequestRenderMs.p90.toFixed(1)}ms，超过 50ms`)
+    assert.ok(result.workerMs.p90 <= 50, `${result.name} 含拖动结束后回执的精确请求 p90 为 ${result.workerMs.p90.toFixed(1)}ms，超过 50ms`)
+  }
+}
+
+function createVideoEditScrubAccelerationScene() {
+  return { id: 'video-edit-acceleration', surface: '剪辑', name: '剪辑-加减速拖动精确帧分段计时', writesUserData: true,
+    setup: async (page, app, { capture }) => {
+      const { seedVideoEditProject, openVideoEditProjectCard, leaveVideoEditProject, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
+      const { assignIsolatedMcpPort, authorizeMcpConnection, connectMcpClient, callTool, operationEnvelope, disableMcp } = require('./uiInspectionMcpClient.cjs')
+      const { benchProject, ensureBenchRecording } = require('../../tests/fixtures/bench/video-edit/fixture.cjs')
+      const root = path.resolve('.ui-tour/cache/video-edit-scrub-acceleration'); fs.mkdirSync(root, { recursive: true })
+      const evidence = { cases: [], mode: process.env.HENJI_BUNDLE_MODE || 'production', prerender: process.env.HENJI_SCRUB_PRERENDER !== '0' }
+      const save = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
+      const stats = values => ({ n: values.length, p50: quantile(values, .5), p90: quantile(values, .9), max: Math.max(0, ...values) })
+      await app.evaluate(({ BrowserWindow }) => { for (const window of BrowserWindow.getAllWindows()) window.webContents.setBackgroundThrottling(false) })
+      await assignIsolatedMcpPort(page)
+      await observeWorkers(page, true)
+      const seeded = await seedVideoEditProject(page, benchProject(ensureBenchRecording()), { projectName: '加减速拖动' })
+      await openVideoEditProjectCard(page, seeded.projectId)
+      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0')
+      await page.waitForTimeout(5000)
+      if (evidence.prerender) {
+        const identity = await authorizeMcpConnection(page, { name: '加减速拖动验收' })
+        const client = await connectMcpClient(identity.config)
+        try {
+          const documentRef = { kind: 'video_edit.document', id: seeded.documentId }
+          await callTool(client, 'render_video_edit_preview', operationEnvelope([await callTool(client, 'read_application_entity', { ref: documentRef })], { documentRef, scope: 'all' }))
+          let cache
+          for (let i = 0; i < 120; i++) {
+            cache = (await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.render_cache'] })).data.properties['video_edit.document.render_cache']
+            if (cache.windows.length && cache.windows.every(window => window.state === 'ready')) break
+            await page.waitForTimeout(1000)
+          }
+          assert.ok(cache.windows.length && cache.windows.every(window => window.state === 'ready'), '预渲染必须完成才开始测量')
+          evidence.cache = cache
+        } finally { await client.close(); await disableMcp(page) }
+        await takeOverVideoEdit(page)
+        await page.waitForTimeout(3000)
+      }
+      await page.evaluate(() => {
+        const canvas = document.querySelector('canvas[aria-label="剪辑画面"]')
+        window.__accelerationFrames = []
+        window.__accelerationObserver = new MutationObserver(() => window.__accelerationFrames.push({ at: performance.now(), frame: Number(canvas.dataset.presentedFrame), requestedAt: Number(canvas.dataset.requestedAt), renderMs: Number(canvas.dataset.renderMs), approximate: canvas.dataset.approximate === 'true', decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs) }))
+        window.__accelerationObserver.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] })
+      })
+      const ruler = await page.getByRole('slider', { name: '剪辑时间定位', exact: true }).boundingBox()
+      const y = ruler.y + ruler.height / 2
+      const ease = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
+      try {
+        for (const [name, curve] of [['linear', t => t], ['accelDecel', ease], ['linear2', t => t], ['accelDecel2', ease]]) {
+          const rounds = []
+          for (let round = 0; round < 4; round++) {
+            await page.evaluate(() => { window.__accelerationFrames = [] })
+            const startAt = await page.evaluate(() => performance.now())
+            // 反向轮次覆盖一次向右跳转后缓动后退的状态切换。
+            await page.mouse.move(ruler.x + ruler.width * .04, y); await page.mouse.down()
+            for (let i = 1; i <= 90; i++) {
+              const p = round % 2 ? 1 - curve(i / 90) : curve(i / 90)
+              await page.mouse.move(ruler.x + ruler.width * (.04 + .38 * p), y); await page.waitForTimeout(16)
+            }
+            const endAt = await page.evaluate(() => performance.now())
+            await page.mouse.up(); await page.waitForTimeout(1200)
+            await page.waitForFunction(() => {
+              const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'), ruler = document.querySelector('[aria-label="剪辑时间定位"]')
+              return canvas?.dataset.presentedFrame === ruler?.getAttribute('aria-valuenow') && canvas?.dataset.scrubbing === 'false' && canvas?.dataset.approximate === 'false'
+            }, null, { timeout: 90000 })
+            const frames = await page.evaluate(() => window.__accelerationFrames)
+            const snapshot = await workerSnapshot(page)
+            const program = new Set(snapshot.workers.filter(worker => worker.direct && !worker.terminated).map(worker => worker.id))
+            const events = snapshot.events.filter(event => program.has(event.worker))
+            rounds.push(summarizeScrubAccelerationRound({ round, startAt, endAt, frames, events }))
+          }
+          const frames = rounds.flatMap(round => round.frames), renders = rounds.flatMap(round => round.events.filter(event => event.kind === 'render.completed' && event.presented && !event.approximate))
+          const requestFrames = rounds.flatMap(round => round.requestFrames)
+          const stages = Object.fromEntries(['delivery', 'queue', 'prerenderQueue', 'prerenderDecode', 'prerenderSnapshot', 'prerenderDraw', 'presentComplete'].map(key => [key, stats(renders.flatMap(event => Number.isFinite(event.renderStages?.[key]) ? [event.renderStages[key]] : []))]))
+          const requestPreparation = requestFrames.filter(frame => !frame.approximate).flatMap(frame => {
+            const matching = renders.filter(event => event.frame === frame.frame && event.at <= frame.at && event.requestedAt >= frame.requestedAt).sort((a, b) => a.requestedAt - b.requestedAt)[0]
+            return matching ? [matching.requestedAt - frame.requestedAt] : []
+          })
+          const result = { name, renderMs: stats(frames.map(entry => entry.renderMs)), exactRenderMs: stats(frames.filter(entry => !entry.approximate).map(entry => entry.renderMs)), exactRequestRenderMs: stats(requestFrames.filter(entry => !entry.approximate).map(entry => entry.renderMs)), gaps: stats(rounds.flatMap(round => round.gaps)), requestPreparationMs: stats(requestPreparation), workerMs: stats(renders.map(entry => entry.elapsedMs)), decodeMs: stats(renders.map(entry => entry.decodeMs ?? 0)), gpuMs: stats(renders.map(entry => entry.gpuMs ?? 0)), stages, rounds }
+          evidence.cases.push(result); save()
+          console.log('[scrub-acceleration]', JSON.stringify({ ...result, rounds: undefined }))
+        }
+        await capture('scrub-acceleration')
+        for (const result of evidence.cases) validateScrubAccelerationCase(result)
+      } finally { await page.evaluate(() => window.__accelerationObserver.disconnect()); save(); await leaveVideoEditProject(page) }
+    } }
+}
+module.exports = { createVideoEditScrubScene, createVideoEditScrubAccelerationScene, summarizeScrubAccelerationRound, validateScrubAccelerationCase }

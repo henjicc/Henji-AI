@@ -51,9 +51,9 @@ async function send(request: Omit<Extract<RenderRequest, { kind: 'render' }>, 'i
   await vi.waitFor(() => expect(messages.some(message => message.id === id && !message.phase)).toBe(true))
   return messages.find(message => message.id === id && !message.phase)!
 }
-async function init(direct = false): Promise<void> {
+async function init(direct = false, diagnostics = false): Promise<void> {
   const id = ++nextId
-  worker.onmessage({ data: { kind: 'init', id, document: composition, ...(direct ? { surface: {} as OffscreenCanvas } : {}) } })
+  worker.onmessage({ data: { kind: 'init', id, document: composition, diagnostics, ...(direct ? { surface: {} as OffscreenCanvas } : {}) } })
   await vi.waitFor(() => expect(messages.some(message => message.id === id)).toBe(true))
 }
 beforeEach(async () => {
@@ -77,6 +77,21 @@ function render(pixels: ImageBitmap, completion: Promise<void> = Promise.resolve
   })
 }
 const request = { kind: 'render', frame: 15, sequential: false } as const
+
+it('缓存和队列路径只在诊断时返回准备快照与投递指标', async () => {
+  for (const diagnostics of [false, true]) {
+    await init(true, diagnostics)
+    state.hasJump = true
+    state.jump.mockResolvedValue({ presented: true, completion: Promise.resolve(), decodeMs: 0, gpuMs: 0 })
+    render(bitmap())
+    for (const sequential of [false, true]) {
+      const result = await send({ ...request, sequential, sentAt: performance.timeOrigin + performance.now() - 10 })
+      expect(result.preparationStages !== undefined).toBe(diagnostics)
+      expect(result.renderStages?.['lag.delivery'] !== undefined).toBe(diagnostics)
+      expect(result.renderStages?.delivery).toBeUndefined()
+    }
+  }
+})
 
 it('前台帧到达立即取消后台合成，迟到字节不交回卡片', async () => {
   let finish!: () => void

@@ -55,8 +55,8 @@ function layoutSignature(layout) {
 }
 
 /** Observes native Workers without substituting decoding, rendering, timers or messages. */
-async function observeWorkers(page, traceFrames = false) {
-  await page.evaluate(traceFrames => {
+async function observeWorkers(page, traceFrames = false, diagnostics = traceFrames) {
+  await page.evaluate(({ traceFrames, diagnostics }) => {
     const NativeWorker = window.Worker
     const evidence = { workers: [], events: [], peakLive: 0, frames: [], sequence: 0 }
     window.__videoLayoutEvidence = evidence
@@ -94,16 +94,17 @@ async function observeWorkers(page, traceFrames = false) {
           if (traceFrames && request.kind === 'render') performance.mark(`henji.main.received:${request.frame}`)
           if (request.kind === 'init') record.initialized = true
           if (request.kind === 'dispose') record.disposedAt = receivedAt
-          evidence.events.push({ worker: record.id, kind: `${request.kind}.completed`, frame: request.frame, at: receivedAt, elapsedMs: receivedAt - request.at, error: event.data.error,
+          evidence.events.push({ worker: record.id, id: event.data.id, requestedAt: request.at, kind: `${request.kind}.completed`, frame: request.frame, at: receivedAt, elapsedMs: receivedAt - request.at, error: event.data.error, approximate: event.data.approximate, skipped: event.data.skipped,
             presented: event.data.presented, decodeMs: event.data.decodeMs, gpuMs: event.data.gpuMs, cacheHits: event.data.cacheHits, codeResources: event.data.codeResources, codePerformance: event.data.codePerformance, preparationStages: event.data.preparationStages, renderCached: event.data.renderCached, renderElapsedMs: event.data.renderElapsedMs, renderStages: event.data.renderStages })
         })
       }
       postMessage(message, transfer) {
         const record = this.__videoLayoutRecord
         if (record && message && typeof message === 'object') {
-          const request = { kind: message.kind, frame: message.frame, at: performance.now() }
-          if (traceFrames && message.kind === 'init') message = { ...message, traceFrames: true }
+          const request = { id: message.id, kind: message.kind, frame: message.frame, at: performance.now() }
+          if (message.kind === 'init' && (traceFrames || diagnostics)) message = { ...message, traceFrames, diagnostics }
           if (traceFrames && message.kind === 'render') performance.mark(`henji.main.request:${message.frame}`)
+          if (traceFrames && message.kind === 'render') message = { ...message, sentAt: performance.timeOrigin + request.at }
           record.pending.set(message.id, request)
           evidence.events.push({ worker: record.id, ...request })
           if (message.kind === 'init') { record.sequenceId = message.document.id; record.direct = !!message.surface; record.renderSize = { width: message.document.width, height: message.document.height, fps: message.document.fps, previewWidth: message.previewWidth } }
@@ -117,7 +118,7 @@ async function observeWorkers(page, traceFrames = false) {
         return super.terminate()
       }
     }
-  }, traceFrames)
+  }, { traceFrames, diagnostics })
 }
 async function workerSnapshot(page) {
   return page.evaluate(() => {

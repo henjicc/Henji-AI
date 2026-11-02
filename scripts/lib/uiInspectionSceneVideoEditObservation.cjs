@@ -49,7 +49,7 @@ function createVideoEditObservationScene() {
       const evidence = { completed: false, observations: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       try {
-        await observeWorkers(page)
+        await observeWorkers(page, false, true)
         await showVideoEditProjects(page)
         const seeded = await seedVideoEditProject(page, fixture)
         await page.evaluate(async ({ source, sound, projectId, id }) => {

@@ -50,7 +50,7 @@ function createVideoEditCodePerformanceScene() {
       try {
         assert.ok(await app.evaluate(() => Boolean(process.env.HENJI_ISOLATED_APP_DATA)), '性能场景只允许隔离资料目录')
         evidence.runtime = await app.evaluate(async ({ app }) => ({ electron: process.versions.electron, chrome: process.versions.chrome, gpu: await app.getGPUInfo('basic') }))
-        await observeWorkers(page, tracing)
+        await observeWorkers(page, tracing, true)
         const opened = await openVideoEditFile(page, file)
         const documentRef = { kind: 'video_edit.document', id: opened.documentId }
         const sequenceRef = { kind: 'video_edit.sequence', id: `${opened.documentId}:${project.sequences[0].id}` }

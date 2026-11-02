@@ -136,7 +136,7 @@ function videoEditPictureCovers(picture: { timestamp: number; duration: number }
 }
 export type VideoEditRenderPrecision = NonNullable<WebSourceCaptureRequest['precision']>
 export type VideoEditPresentedSource = 'prerendered' | 'live' | 'jump'
-export interface VideoEditRenderResult { provenance?: WebSourceProvenance; presentedSource?: VideoEditPresentedSource; canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[];
+export interface VideoEditRenderResult { provenance?: WebSourceProvenance; presentedSource?: VideoEditPresentedSource; renderStages?: Record<string, number>; canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[];
   /** 这一帧用到的片子数据里会让画面缺内容的问题（含嵌套序列里的）：要呈现给用户，但不是效果失败，不挡试渲染与导出。 */
   sceneIssues?: string[]; approximate?: boolean; /** Not presented because a later request's picture reached the screen first. */ superseded?: boolean; completion: Promise<void> }
 export interface VideoEditRenderCacheWindow { provenance?: WebSourceProvenance; key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
@@ -1874,11 +1874,14 @@ export class VideoEditRenderer {
   }
   /** 在途缓存读完并绘制后，只处理最新排队位置；前一次缓存上屏不会作废等待中的最新目标。 */
   presentPrerenderedFrame(frame: number, shouldPresent: () => boolean, preserveExact = false, requestOrder = this.reservePresentation(), precision: VideoEditRenderPrecision = 'exact'): Promise<VideoEditRenderResult | undefined> {
+    const queuedAt = performance.now()
     const request = ++this.prerenderRequest
     const document = this.document, epoch = this.presentationEpoch, cacheRevision = this.renderCacheRevision
     const read = (): Promise<VideoEditRenderResult | undefined> => {
+      const queueMs = performance.now() - queuedAt
       const current = request === this.prerenderRequest
       return this.readPrerenderedFrame(frame, () => current && this.document === document && this.presentationEpoch === epoch && this.renderCacheRevision === cacheRevision && shouldPresent(), preserveExact, requestOrder, precision)
+        .then(result => result ? { ...result, renderStages: { ...result.renderStages, prerenderQueue: queueMs } } : result)
     }
     const result = this.prerenderTail.then(read, read)
     this.prerenderTail = result
@@ -1890,9 +1893,10 @@ export class VideoEditRenderer {
     const started = performance.now()
     const document = this.document; const epoch = this.presentationEpoch
     const window = this.cachedWindow(frame, false, precision); const preview = this.jumpPreview; const cacheRevision = this.renderCacheRevision
+    const renderStages: Record<string, number> = {}
     const wanted = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && this.renderCacheRevision === cacheRevision && (this.shownRequest < requestOrder || this.shownRequest === requestOrder && this.shownState?.source !== 'live') && shouldPresent()
     if (!window || !preview) return undefined
-    const outcome = (presented: boolean, completion = Promise.resolve()): VideoEditRenderResult => ({ canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented, ...(!presented ? { superseded: true } : {}), provenance: window.provenance ?? 'live', renderCached: true, presentedSource: 'prerendered', decodeMs: performance.now() - started, gpuMs: 0, completion })
+    const outcome = (presented: boolean, completion = Promise.resolve()): VideoEditRenderResult => ({ canvas: this.canvas, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: 1, cacheBytes: this.frameCache.bytes, presented, ...(!presented ? { superseded: true } : {}), provenance: window.provenance ?? 'live', renderCached: true, presentedSource: 'prerendered', decodeMs: performance.now() - started, gpuMs: 0, completion, renderStages })
     const shown = this.shownState
     if (preserveExact && this.shownFrame === frame && this.shownFrameExact && shown?.document === document && shown.epoch === epoch && shown.divisor === this.renderDivisor && shown.cacheRevision === cacheRevision && (precision === 'web-cache' || shown.provenance !== 'web-cache')) {
       if (shown.source !== 'prerendered' || !wanted()) return undefined
@@ -1902,11 +1906,19 @@ export class VideoEditRenderer {
     if (!wanted()) return outcome(false)
     this.foregroundFrames++; this.frameTurnsGranted = false; this.backgroundIdle = false; clearTimeout(this.idleTurns)
     try {
-      const picture = await preview.exactPicture(window.key, window.media, videoEditPictureSeconds(clipSourceSeconds(window.clip, frame, document.fps)), sample => this.ensureCompositor().snapshot(sample, true), wanted)
+      const decodingAt = performance.now()
+      const picture = await preview.exactPicture(window.key, window.media, videoEditPictureSeconds(clipSourceSeconds(window.clip, frame, document.fps)), async sample => {
+        const copyingAt = performance.now()
+        try { return await this.ensureCompositor().snapshot(sample, true) }
+        finally { renderStages.prerenderSnapshot = performance.now() - copyingAt }
+      }, wanted)
+      renderStages.prerenderDecode = Math.max(0, performance.now() - decodingAt - (renderStages.prerenderSnapshot ?? 0))
       if (!picture) return wanted() ? undefined : outcome(false)
       if (!wanted()) { picture.close(); return outcome(false) }
       let drawn: { presented: boolean; completion: Promise<void> } | undefined
+      const drawingAt = performance.now()
       try { drawn = await this.exclusiveDraw(() => wanted() ? this.ensureCompositor().draw(this.drawDocument(document), [window.clip], [picture], wanted) : Promise.resolve({ presented: false, completion: Promise.resolve() }), frame, 'prerendered', true, requestOrder, () => window.provenance ?? 'live') } catch { drawn = undefined }
+      renderStages.prerenderDraw = performance.now() - drawingAt
       void (drawn?.completion ?? Promise.resolve()).then(() => picture.close(), () => picture.close())
       if (!drawn) return undefined
       if (drawn.presented) recordVideoEditPreparation('prerenderedExactShown', performance.now() - started)

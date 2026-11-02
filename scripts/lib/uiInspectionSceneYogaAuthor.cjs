@@ -55,7 +55,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
     evidence.project = created; save()
     // The idle scheduler may start as soon as the program opens: apply the preference before opening the project.
     if (spec.renderPreference) await page.evaluate(({ id, value }) => localStorage.setItem(`videoEdit.renderPreference.${id}`, JSON.stringify(value)), { id: created.documentId, value: spec.renderPreference })
-    if (spec.playFullTimeline || spec.playbackRanges) await observeWorkers(page)
+    if (spec.playFullTimeline || spec.playbackRanges) await observeWorkers(page, false, true)
     try { await openVideoEditProjectCard(page, created.projectId) } catch (error) {
       await capture('yoga-open-failed')
       evidence.openText = await page.locator('body').innerText()
