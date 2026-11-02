@@ -226,9 +226,9 @@ it('普通绘制低倍率时取帧标记仍覆盖输出像素，不会等待到�
   await captured
 })
 
-it('清理完成后才切换普通绘制并告警，当帧继续取图', async () => {
-  let finishCleanup!: (value: boolean) => void
-  const cleanup = new Promise<boolean>(resolve => { finishCleanup = resolve })
+it.each([true, false])('清理完成后才切换普通绘制并告警，自动舞台 %s 决定是否重新定位', async automatic => {
+  let finishCleanup!: (value: { automatic: boolean; pageChanged: boolean }) => void
+  const cleanup = new Promise<{ automatic: boolean; pageChanged: boolean }>(resolve => { finishCleanup = resolve })
   boundary.contents.executeJavaScriptInIsolatedWorld
     .mockRejectedValueOnce(new Error('快照失败'))
     .mockReturnValueOnce(cleanup)
@@ -236,12 +236,114 @@ it('清理完成后才切换普通绘制并告警，当帧继续取图', async (
   await vi.advanceTimersByTimeAsync(0)
   expect(boundary.fallback).not.toHaveBeenCalled()
   expect(page.capturePath.captureMode).toBe('html-in-canvas')
-  finishCleanup(false)
+  finishCleanup({ automatic, pageChanged: false })
   await captured
   expect(page.capturePath.captureMode).toBe('compositor')
   expect(boundary.fallback).toHaveBeenCalledOnce()
   expect(boundary.fallback).toHaveBeenCalledWith('快照失败')
+  expect(boundary.contents.executeJavaScript.mock.calls.filter(([code]) => code.includes('page.seek(1)'))).toHaveLength(automatic ? 2 : 1)
   expect(boundary.release).toHaveBeenCalledOnce()
+})
+
+it.each([false, true])('自动舞台 seek 异常当帧退回并重新定位，损坏 DOM %s 决定是否重载', async reloadRequired => {
+  page.capturePath.automatic = true
+  const loads = boundary.contents.loadURL.mock.calls.length
+  boundary.contents.executeJavaScript.mockRejectedValueOnce(new Error('NotFoundError'))
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockResolvedValueOnce({ automatic: true, pageChanged: false, reloadRequired })
+  expect((await page.capture(1, 'failed-seek', undefined)).dropped).not.toBe(true)
+  expect(page.capturePath.captureMode).toBe('compositor')
+  expect(boundary.contents.executeJavaScript.mock.calls.filter(([code]) => code.includes('page.seek(1)'))).toHaveLength(2)
+  expect(boundary.contents.loadURL.mock.calls.length - loads).toBe(reloadRequired ? 1 : 0)
+  expect(boundary.fallback).toHaveBeenCalledOnce()
+  expect(boundary.fallback).toHaveBeenCalledWith('NotFoundError')
+  await page.capture(2, 'next', undefined)
+  expect(boundary.fallback).toHaveBeenCalledOnce()
+})
+
+it('损坏 DOM 的恢复重载失败后保留重试状态，不在错误页面继续 seek', async () => {
+  page.capturePath.automatic = true
+  boundary.contents.executeJavaScript.mockRejectedValueOnce(new Error('NotFoundError'))
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockResolvedValueOnce({ automatic: true, reloadRequired: true })
+  boundary.contents.loadURL.mockRejectedValueOnce(new Error('恢复加载失败'))
+  await expect(page.capture(1, 'failed-reload', undefined)).rejects.toThrow('恢复加载失败')
+  expect(boundary.fallback).toHaveBeenCalledOnce()
+  expect(boundary.fallback).toHaveBeenCalledWith('NotFoundError')
+  await expect(page.capture(2, 'throttled', undefined)).rejects.toThrow('恢复加载失败')
+  expect(boundary.contents.executeJavaScript.mock.calls.some(([code]) => code.includes('page.seek(2)'))).toBe(false)
+  await vi.advanceTimersByTimeAsync(2000)
+  expect((await page.capture(2, 'recovered', undefined)).dropped).not.toBe(true)
+  expect(page.capturePath.captureMode).toBe('compositor')
+  expect(boundary.fallback).toHaveBeenCalledOnce()
+})
+
+it.each(['seek', 'paint'])('录制页自动舞台 %s 失败后在原 DOM 重定位，再以身份快照继续同帧与后续帧', async failure => {
+  page.close()
+  page = new WebSourcePage('recording', { id: 1, mainFrame: {} as WebFrameMain, isDestroyed: () => false, send: vi.fn(), onGone: () => () => undefined },
+    'route', { root: 'site' }, { width: 100, height: 100, region: [0, 0, 100, 100], scale: 1 }, 'hash', vi.fn(), boundary.fallback, new WebCacheSubmissions({ info: vi.fn() }))
+  await page.open()
+  page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null, automatic: true }
+  const seeks: string[] = []
+  boundary.contents.executeJavaScript.mockImplementation(async code => {
+    if (code.includes('page.seek(')) {
+      seeks.push(page.capturePath.captureMode)
+      if (failure === 'seek' && seeks.length === 1) throw new Error('NotFoundError')
+    }
+    return {}
+  })
+  let paints = 0
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+    if (code.includes('state?.dispose()')) return { automatic: true }
+    if (code.includes('requestAdapter')) return { captureMode: 'html-in-canvas', fallbackReason: null, automatic: true }
+    if (code.includes('const paint =')) {
+      if (failure === 'paint' && paints++ === 0) throw new Error('NotFoundError')
+      const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
+      paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
+      return { boxes: {}, restore: Array(1024).fill(0) }
+    }
+    return true
+  })
+  const readSnapshot = vi.fn(async (texture: { release(): void }, guard: { identity: string; restore: number[] }) => {
+    expect(guard.identity).toHaveLength(32)
+    expect(guard.restore).toHaveLength(1024)
+    texture.release()
+    return { width: 100, height: 100, format: 'yuv444p' as const, changed: true, dirty: { x: 0, y: 0, width: 100, height: 100 }, bitmap: () => Buffer.alloc(30000), previewJpeg: () => '' }
+  })
+  const first = page.captureReliable(1, 'retry-frame', { readSnapshot })
+  await vi.advanceTimersByTimeAsync(200)
+  expect((await first).isCurrent()).toBe(true)
+  const next = page.captureReliable(2, 'next-frame', { readSnapshot })
+  await vi.advanceTimersByTimeAsync(200)
+  const frame = await next
+  expect(await frame.validate()).toBe(true)
+  expect(seeks).toEqual(['html-in-canvas', 'compositor', 'compositor'])
+  expect(readSnapshot).toHaveBeenCalledTimes(2)
+  expect(boundary.fallback).toHaveBeenCalledOnce()
+  expect(boundary.fallback).toHaveBeenCalledWith('NotFoundError')
+})
+
+it('舞台恢复重载沿用任务取消信号，不等待加载超时或继续 seek', async () => {
+  page.close()
+  page = new WebSourcePage('recording', { id: 1, mainFrame: {} as WebFrameMain, isDestroyed: () => false, send: vi.fn(), onGone: () => () => undefined },
+    'route', { root: 'site' }, { width: 100, height: 100, region: [0, 0, 100, 100], scale: 1 }, 'hash', vi.fn(), boundary.fallback, new WebCacheSubmissions({ info: vi.fn() }))
+  await page.open()
+  page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null, automatic: true }
+  boundary.contents.executeJavaScript.mockRejectedValueOnce(new Error('NotFoundError'))
+  boundary.contents.executeJavaScriptInIsolatedWorld.mockResolvedValueOnce({ automatic: true, reloadRequired: true })
+  boundary.contents.loadURL.mockReturnValueOnce(new Promise(() => undefined))
+  const controller = new AbortController()
+  const captured = expect(page.captureReliable(1, 'cancel-reload', { readSnapshot: vi.fn() }, undefined, controller.signal)).rejects.toThrow('取消恢复')
+  await vi.advanceTimersByTimeAsync(0)
+  controller.abort(new Error('取消恢复'))
+  await captured
+  await vi.advanceTimersByTimeAsync(0)
+  expect(boundary.fallback).toHaveBeenCalledOnce()
+  expect(boundary.fallback).toHaveBeenCalledWith('NotFoundError')
+  expect(boundary.contents.executeJavaScript.mock.calls.filter(([code]) => code.includes('page.seek(1)'))).toHaveLength(1)
+  const loads = boundary.contents.loadURL.mock.calls.length
+  const retry = expect(page.captureReliable(2, 'after-cancel', { readSnapshot: vi.fn() })).rejects.toThrow('html-in-canvas')
+  await vi.advanceTimersByTimeAsync(0)
+  await retry
+  expect(boundary.contents.loadURL).toHaveBeenCalledTimes(loads + 1)
 })
 
 it('清理失败保留 cause、不告警，下一次取帧重新载入', async () => {

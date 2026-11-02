@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>普通网页自动舞台验收</title>
+<style>
+  html { background: #e7eef6; font-family: sans-serif; }
+  body { margin: 18px; display: flex; flex-direction: column; gap: 16px; background: #f6e8cd; }
+  body > header { padding: 14px; background: #24445b; color: white; }
+  #scroll { height: 220px; overflow: auto; background: white; border: 2px solid #24445b; }
+  .row { padding: 18px; border-bottom: 1px solid #8aabc1; }
+  #animated { width: 160px; padding: 12px; background: #d94d58; color: white; animation: slide 4s linear both; }
+  @keyframes slide { from { transform: translateX(0) } to { transform: translateX(420px) } }
+  #modal { position: fixed; right: 24px; bottom: 24px; padding: 24px; background: #24445b; color: white; border: 3px solid #d94d58; }
+</style>
+<body>
+<header>普通页面：默认流、body margin、flex 与直接子选择器</header>
+<div id="scroll"></div><div id="animated">CSS 动画</div>
+<input id="field" value="节点状态保留"><button id="action">事件监听</button><output id="clicks">0</output>
+<script>
+  const scrollBox = document.querySelector('#scroll')
+  for (let i = 0; i < 12; i++) { const row = document.createElement('div'); row.className = 'row'; row.textContent = '滚动内容 ' + i; scrollBox.appendChild(row) }
+  const button = document.querySelector('#action'), field = document.querySelector('#field')
+  let clicks = 0
+  button.addEventListener('click', () => document.querySelector('#clicks').textContent = String(++clicks))
+  window.fixture = { button, field, scrollBox }
+  window.henjiWeb = { duration: 4, ready: document.fonts.ready, seek(t) {
+    for (const animation of document.querySelector('#animated').getAnimations()) { animation.pause(); animation.currentTime = t * 1000 }
+    scrollBox.scrollTop = t * 96
+    let modal = document.querySelector('#modal')
+    if (t >= 1) { if (!modal) { modal = document.createElement('aside'); modal.id = 'modal'; document.body.appendChild(modal) } modal.textContent = '动态 fixed 弹层 ' + t.toFixed(2) }
+    else modal?.remove()
+  } }
+</script>
+</body></html>

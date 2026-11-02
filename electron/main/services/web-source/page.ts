@@ -9,7 +9,7 @@ import type { TakenFrame } from '../web-replay/player/frameSource'
 import { waitWebCacheTask, type WebCacheSubmissions } from './submissions'
 import { unavailableWebText, WEB_TEXT_SAMPLER_VERSION, type WebTextCapture } from '../../../../src/core/videoEdit/webTextGeometry'
 import { WebTextCaptureError, TEXT_GEOMETRY_PREPARE_SCRIPT, textGeometryPaintSetup, validateWebTextResults } from './textGeometry'
-import { serveWebSourceFile, WEB_SOURCE_ENTRY_URL, WEB_SOURCE_ORIGIN, type WebSourceFolder } from './site'
+import { WEB_SOURCE_ENTRY_URL, WEB_SOURCE_ORIGIN, type WebSourceFolder } from './site'
 
 const LOAD_TIMEOUT_MS = 30_000
 /** 页面出现 `window.henjiWeb` 并就绪（资源、字体）的时限。 */
@@ -49,11 +49,21 @@ const READY_SCRIPT = `(async () => {
 })()`
 
 /** 隔离世界保存资源与还原操作，准备失败和运行中降级都恢复普通页面绘制。 */
-function snapshotPrepareScript(view: CodeWebView): string {
+function snapshotPrepareScript(view: CodeWebView, frameToken?: string): string {
   const size = codeWebPixelSize(view)
   return `(async () => {
-    const stage = document.querySelector('[data-henji-stage]')
-    if (!stage) return { captureMode: 'compositor', fallbackReason: 'missing-stage' }
+    let stage = document.querySelector('[data-henji-stage]')
+    const checkTopLayer = () => {
+      if (document.fullscreenElement || document.querySelector(':modal, :popover-open')) throw new Error('网页顶层元素需要普通绘制')
+    }
+    try { checkTopLayer() } catch (error) { return { captureMode: 'compositor', fallbackReason: String(error) } }
+    // 文档滚动依赖 body 的流内高度；不能用固定快照容器改变它的滚动范围。
+    if (!stage && (window.scrollX || window.scrollY || document.documentElement.scrollHeight > window.innerHeight || document.documentElement.scrollWidth > window.innerWidth ||
+        bodyScrollable())) return { captureMode: 'compositor', fallbackReason: 'automatic-stage-document-scroll' }
+    function bodyScrollable() {
+      const body = document.body, style = getComputedStyle(body)
+      return /auto|scroll/.test(style.overflowY) && body.scrollHeight > body.clientHeight || /auto|scroll/.test(style.overflowX) && body.scrollWidth > body.clientWidth
+    }
     if (typeof HTMLCanvasElement.prototype.requestPaint !== 'function' || !navigator.gpu ||
         typeof GPUQueue === 'undefined' || typeof Element.prototype.moveBefore !== 'function')
       return { captureMode: 'compositor', fallbackReason: 'missing-html-in-canvas' }
@@ -61,14 +71,26 @@ function snapshotPrepareScript(view: CodeWebView): string {
     const draw = GPUQueue.prototype.drawElementImageToTexture
     if (typeof copy !== 'function') return { captureMode: 'compositor', fallbackReason: typeof draw === 'function' ? 'unsupported-draw-element-dictionary' : 'missing-element-image-to-texture' }
     const container = document.createElement('canvas'), output = document.createElement('canvas')
-    const isolation = stage.style.getPropertyValue('isolation'), priority = stage.style.getPropertyPriority('isolation')
+    ${frameToken ? `container.setAttribute('data-henji-frame-active', ${JSON.stringify(frameToken)})` : ''}
+    let isolation, priority, automatic
+    const body = document.body
     let device, disposed = false, pageChanged = false
     const state = { dispose() {
       disposed = true
       state.cancel?.()
+      automatic?.observer.disconnect()
+      // innerHTML 会把宿主标签重新解析，嵌套 body 的属性也可能合并进真 body；只能从源页面恢复。
+      state.reloadRequired = !!automatic && !stage.isConnected && (!container.hasAttribute('data-henji-body-replaced') || !!document.querySelector('henji-web-stage, canvas[layoutsubtree], canvas[content="drawable"]'))
       const parent = container.parentNode
       if (parent) while (container.firstChild) parent.moveBefore(container.firstChild, container)
-      if (isolation) stage.style.setProperty('isolation', isolation, priority); else stage.style.removeProperty('isolation')
+      if (stage) {
+        if (isolation) stage.style.setProperty('isolation', isolation, priority); else stage.style.removeProperty('isolation')
+      }
+      if (automatic && stage.isConnected && document.body === body) {
+        // 页面主动删除的分支属于页面的新状态，不能在降级时重新挂回。
+        while (automatic.content.firstChild) body.moveBefore(automatic.content.firstChild, stage.parentNode === body ? stage : null)
+        stage.remove()
+      }
       output.remove(); container.remove(); device?.destroy()
       delete window.__henjiWebSourceSnapshot
       return pageChanged
@@ -88,16 +110,83 @@ function snapshotPrepareScript(view: CodeWebView): string {
       container.width = ${view.width}; container.height = ${view.height}
       container.style.cssText = 'all:unset!important;display:block!important;position:absolute!important;left:0!important;top:0!important;width:${view.width}px!important;height:${view.height}px!important;pointer-events:none!important'
       if (!container.getContext('2d')) throw new Error('舞台画布的 2D 上下文不可用')
+      if (!stage) {
+        stage = document.createElement('henji-web-stage')
+        stage.style.cssText = 'all:unset!important;display:block!important;position:absolute!important;left:0!important;top:0!important;width:${view.width}px!important;height:${view.height}px!important;overflow:hidden!important'
+        // body 的 margin、flex/grid 与直接子选择器由内容层承接；舞台本身始终是视口盒。
+        // body 的 onresize/onscroll 等属性实际控制 window 处理器，不能在内容层上再次设置。
+        const content = document.createElement('body')
+        const visualKeys = ['color', 'background-color', 'font-family', 'font-size', 'font-weight', 'line-height', 'visibility', 'display']
+        const layout = [...body.querySelectorAll('*')].filter(element => !element.getAnimations().some(animation => animation.playState === 'running')).map(element => {
+          const style = getComputedStyle(element)
+          return { element, rect: element.getBoundingClientRect(), visual: visualKeys.map(key => style.getPropertyValue(key)) }
+        })
+        const syncBackground = () => {
+          const bodyStyle = getComputedStyle(body), rootStyle = getComputedStyle(document.documentElement)
+          const propagated = rootStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && rootStyle.backgroundImage === 'none'
+          const background = propagated ? bodyStyle : rootStyle
+          // 根背景以根盒而非视口定位，系统暗色画布也不能用固定白底模拟。
+          if (background.backgroundImage !== 'none' || background.backgroundColor === 'rgba(0, 0, 0, 0)' && /dark/.test(rootStyle.colorScheme + ' ' + bodyStyle.colorScheme))
+            throw new Error('网页画布背景需要普通绘制')
+          for (const key of ['background-color', 'background-image', 'background-position', 'background-size', 'background-repeat', 'background-origin', 'background-clip', 'background-attachment'])
+            stage.style.setProperty(key, background.getPropertyValue(key), 'important')
+          if (background.backgroundColor === 'rgba(0, 0, 0, 0)') stage.style.setProperty('background-color', 'white', 'important')
+          // body 背景传播到视口时只画一次，避免带 margin 的内容层重复铺图。
+          if (propagated) content.style.setProperty('background', 'transparent', 'important')
+        }
+        syncBackground()
+        body.appendChild(stage); stage.appendChild(content); pageChanged = true
+        const moveContents = () => {
+          if (!stage.isConnected || content.parentNode !== stage || document.body !== body) throw new Error('网页自动舞台已被替换或移除')
+          const anchor = content.firstChild
+          let before = true
+          for (const node of [...body.childNodes]) {
+            if (node === stage || node === container) { before = false; continue }
+            content.moveBefore(node, before ? anchor : null)
+          }
+          for (const attribute of [...content.attributes]) if (!body.hasAttribute(attribute.name)) content.removeAttribute(attribute.name)
+          for (const attribute of body.attributes) if (!/^on/i.test(attribute.name) && content.getAttribute(attribute.name) !== attribute.value) content.setAttribute(attribute.name, attribute.value)
+          // 相对字号、字重和行高只按原 body 计算一次，不能在嵌套内容层再次继承放大。
+          const bodyStyle = getComputedStyle(body)
+          for (const key of ['font-size', 'font-weight', 'line-height']) content.style.setProperty(key, bodyStyle.getPropertyValue(key), 'important')
+          syncBackground()
+          const rect = content.getBoundingClientRect()
+          if (rect.top + Math.max(rect.height, content.scrollHeight) + parseFloat(bodyStyle.marginBottom) > ${view.height} ||
+              rect.left + Math.max(rect.width, content.scrollWidth) + parseFloat(bodyStyle.marginRight) > ${view.width})
+            throw new Error('网页自动舞台需要文档滚动')
+        }
+        const observer = new MutationObserver(() => {
+          try { moveContents() } catch (error) { state.lostReason = String(error); state.cancel?.(error) }
+        })
+        automatic = { content, observer, validateLayout() {
+          for (const { element, rect, visual } of layout) {
+            const moved = element.getBoundingClientRect()
+            if (['x', 'y', 'width', 'height'].some(key => Math.abs(moved[key] - rect[key]) >= 1 / 64) ||
+                visualKeys.some((key, index) => getComputedStyle(element).getPropertyValue(key) !== visual[index]))
+              throw new Error('网页自动舞台无法保持原排版：' + element.localName)
+          }
+        } }
+        moveContents()
+        observer.observe(body, { childList: true, attributes: true })
+        state.sync = moveContents
+        container.style.setProperty('position', 'fixed', 'important')
+      }
+      isolation = stage.style.getPropertyValue('isolation'); priority = stage.style.getPropertyPriority('isolation')
       stage.before(container); pageChanged = true; container.moveBefore(stage, null)
       stage.style.setProperty('isolation', 'isolate', 'important')
+      automatic?.validateLayout()
       output.width = ${size.width}; output.height = ${size.height}
       output.style.cssText = 'all:initial!important;display:block!important;position:fixed!important;left:${view.region[0]}px!important;top:${view.region[1]}px!important;width:${view.region[2]}px!important;height:${view.region[3]}px!important;pointer-events:none!important;z-index:2147483647!important'
       document.documentElement.appendChild(output)
       const context = output.getContext('webgpu')
       if (!context) throw new Error('输出画布的 WebGPU 上下文不可用')
       context.configure({ device, format: 'rgba8unorm', alphaMode: 'opaque', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC })
-      Object.assign(state, { stage, container, output, context, device, copy })
-      return { captureMode: 'html-in-canvas', fallbackReason: null, pageChanged }
+      Object.assign(state, { stage, container, output, context, device, copy, checkFrame(end = false) {
+        checkTopLayer()
+        if (end) container.removeAttribute('data-henji-frame-active')
+        if (container.hasAttribute('data-henji-script-error')) throw new Error(container.getAttribute('data-henji-script-error'))
+      } })
+      return { captureMode: 'html-in-canvas', fallbackReason: null, pageChanged, automatic: !!automatic }
     } catch (error) {
       state.dispose()
       return { captureMode: 'compositor', fallbackReason: String(error), pageChanged }
@@ -126,12 +215,14 @@ function snapshotPaintScript(view: CodeWebView, selectors: readonly string[] | u
     if (!state) { reject(new Error('网页快照尚未准备')); return }
     if (state.lostReason) { reject(new Error(state.lostReason)); return }
     const { stage, container, context, device, copy } = state
+    try { state.checkFrame(); state.sync?.() } catch (error) { reject(error); return }
     if (stage.parentNode !== container) { reject(new Error('网页舞台已被替换或移除')); return }
     ${textSelectors?.length ? textGeometryPaintSetup(textSelectors, view.region, traceText) : ''}
     const clean = () => { clearTimeout(timer); container.removeEventListener('paint', paint); delete state.cancel }
     const paint = () => {
       clean()
       try {
+        state.checkFrame(true)
         if (state.lostReason) throw new Error(state.lostReason)
         if (stage.parentNode !== container) throw new Error('网页舞台已被替换或移除')
         ${textSelectors?.length ? "let text, textError; try { const reasons=textSyncReasons(); text = reasons.length ? unavailableText('unsynchronized',reasons) : sampleText() } catch (error) { textError = { code:'sampling-failed', message:error.message } }" : ''}
@@ -152,6 +243,7 @@ function snapshotPaintScript(view: CodeWebView, selectors: readonly string[] | u
         device.popErrorScope().then(async error => {
           ${identity ? 'try {' : ''}
           if (error) throw new Error(error.message)
+          state.checkFrame()
           if (state.lostReason) throw new Error(state.lostReason)
           ${identity ? `await saved.mapAsync(GPUMapMode.READ)
           const restore = Array.from(new Uint8Array(saved.getMappedRange()))
@@ -169,14 +261,62 @@ function snapshotPaintScript(view: CodeWebView, selectors: readonly string[] | u
   })`
 }
 
-const SNAPSHOT_DISPOSE_SCRIPT = 'window.__henjiWebSourceSnapshot?.dispose()'
+const SNAPSHOT_DISPOSE_SCRIPT = '(() => { const state = window.__henjiWebSourceSnapshot; return { automatic: !!state?.sync, pageChanged: state?.dispose(), reloadRequired: state?.reloadRequired } })()'
 
-interface CapturePath { captureMode: 'compositor' | 'html-in-canvas'; fallbackReason: string | null }
+// error/unhandledrejection 不跨隔离世界派发；通过共享 DOM 把页面脚本失败带到快照验证点。
+const SNAPSHOT_ERRORS_SCRIPT = `(() => {
+  window.__henjiWebSourceStopErrors?.()
+  const current = () => document.querySelector('henji-web-stage')?.closest('canvas[layoutsubtree]')
+  const body = document.body
+  const patches = [], related = new WeakMap()
+  const patch = (prototype, key, wrap) => {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, key)
+    const value = wrap(descriptor.value)
+    Object.defineProperty(prototype, key, { ...descriptor, value })
+    patches.push(() => { if (prototype[key] === value) Object.defineProperty(prototype, key, descriptor) })
+  }
+  // 完整替换正文与替换宿主首节点的 MutationRecord 相同，只记录明确的整体替换意图，不转发 DOM 操作。
+  patch(Element.prototype, 'replaceChildren', replace => function(...nodes) {
+    const container = current()
+    const result = replace.apply(this, nodes)
+    if (this === body) container?.setAttribute('data-henji-body-replaced', '')
+    return result
+  })
+  // 只关联因搬走 body 直接子节点而失败的原生操作，不把网络或第三方脚本错误当成舞台错误。
+  for (const key of ['removeChild', 'insertBefore', 'replaceChild']) patch(Node.prototype, key, original => function(...nodes) {
+    const child = nodes[key === 'removeChild' ? 0 : 1]
+    const container = current()
+    const moved = !!container && this === body && child?.parentNode === container.querySelector('henji-web-stage > body')
+    try { return original.apply(this, nodes) } catch (error) {
+      if (moved && container.hasAttribute('data-henji-frame-active')) related.set(error, container.getAttribute('data-henji-frame-active'))
+      throw error
+    }
+  })
+  const onError = event => {
+    const container = current()
+    const error = event.type === 'unhandledrejection' ? event.reason : event.error
+    if (container?.hasAttribute('data-henji-frame-active') && error && related.get(error) === container.getAttribute('data-henji-frame-active'))
+      container.setAttribute('data-henji-script-error', String(error))
+  }
+  window.addEventListener('error', onError)
+  window.addEventListener('unhandledrejection', onError)
+  window.__henjiWebSourceStopErrors = () => {
+    window.removeEventListener('error', onError)
+    window.removeEventListener('unhandledrejection', onError)
+    for (const restore of patches.reverse()) restore()
+    delete window.__henjiWebSourceStopErrors
+  }
+})()`
+
+interface CapturePath { captureMode: 'compositor' | 'html-in-canvas'; fallbackReason: string | null; automatic?: boolean }
 interface SnapshotPreparation extends CapturePath { pageChanged?: boolean }
 
 /** 页面世界：摆到第 t 秒；页面实现了 boxes 时顺带读元素矩形，没实现时为 undefined（由宿主在隔离世界里量）。 */
 function seekScript(time: number): string {
   return `(async () => {
+    const container = document.querySelector('henji-web-stage')?.parentNode
+    container?.removeAttribute('data-henji-script-error')
+    container?.setAttribute('data-henji-frame-active', ${JSON.stringify(crypto.randomUUID())})
     const page = window.henjiWeb
     await page.seek(${JSON.stringify(time)})
   })()`
@@ -290,6 +430,8 @@ export class WebSourcePage {
   private snapshotWarned = false
   private snapshotMark?: number
   capturePath: CapturePath = { captureMode: 'compositor', fallbackReason: null }
+  /** 搬迁影响脚本时，可靠帧只在 seek 完成后临时搬迁，仍使用同幅身份校验。 */
+  private snapshotAfterSeek = false
   duration: number | null = null
 
   constructor(
@@ -363,11 +505,14 @@ export class WebSourcePage {
   }
 
   private submitPage<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-    return this.recording ? this.recording.run(work, signal ? AbortSignal.any([signal, this.pageLifetime.signal]) : this.pageLifetime.signal) : work()
+    const active = signal ? AbortSignal.any([signal, this.pageLifetime.signal]) : this.pageLifetime.signal
+    const run = (): Promise<T> => { active.throwIfAborted(); return waitWebCacheTask(work(), active) }
+    return this.recording ? this.recording.run(run, active) : run()
   }
 
   /** 载入（或重新载入）网页并等它就绪；页面进程退出过或调试会话断了，先回到空白页重新接上视口设置。 */
   private async load(signal?: AbortSignal): Promise<void> {
+    this.rendererLifetime.abort()
     const contents = this.window!.webContents
     if (this.stale === 'gone' || !contents.debugger.isAttached()) {
       // 视口设置要等页面有渲染进程才能下发。
@@ -387,8 +532,8 @@ export class WebSourcePage {
     try {
       const prepared: SnapshotPreparation = this.snapshotFailure
         ? { captureMode: 'compositor' as const, fallbackReason: this.snapshotFailure }
-        : await this.submitPage(() => withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: snapshotPrepareScript(this.view) }], false) as Promise<SnapshotPreparation>, READY_TIMEOUT_MS, '网页快照准备超时'), signal)
-      this.capturePath = { captureMode: prepared.captureMode, fallbackReason: prepared.fallbackReason }
+        : await this.prepareSnapshot(signal)
+      this.capturePath = { captureMode: prepared.captureMode, fallbackReason: prepared.fallbackReason, automatic: prepared.automatic }
       pageChanged = prepared.pageChanged === true
       if (this.capturePath.captureMode === 'html-in-canvas') {
         this.snapshotWarned = false
@@ -398,9 +543,9 @@ export class WebSourcePage {
         initial.texture.release()
       }
     } catch (error) {
-      if (this.recording) throw error
+      signal?.throwIfAborted()
       if (this.closed || this.window!.isDestroyed() || contents.isDestroyed() || this.stale === 'gone') throw error
-      await this.disableSnapshot(error)
+      await this.disableSnapshot(error, signal)
       pageChanged = false
     }
     if (pageChanged) await this.drainPaints()
@@ -409,6 +554,24 @@ export class WebSourcePage {
     this.rendererLifetime = new AbortController()
     // 快照只在复制时更新输出；保持接收，避免恢复绘制额外重发上一幅画面。
     if (this.capturePath.captureMode !== 'html-in-canvas') contents.stopPainting()
+  }
+
+  private async prepareSnapshot(signal?: AbortSignal, frameToken?: string): Promise<SnapshotPreparation> {
+    const contents = this.window!.webContents
+    if (frameToken) await this.submitPage(() => withTimeout(contents.executeJavaScript(SNAPSHOT_ERRORS_SCRIPT, false), SEEK_TIMEOUT_MS, '网页脚本错误监听准备超时'), signal)
+    const prepared = await this.submitPage(() => withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: snapshotPrepareScript(this.view, frameToken) }], false) as Promise<SnapshotPreparation>, READY_TIMEOUT_MS, '网页快照准备超时'), signal)
+    this.capturePath = prepared
+    if (prepared.automatic && !frameToken) await this.submitPage(() => withTimeout(contents.executeJavaScript(SNAPSHOT_ERRORS_SCRIPT, false), SEEK_TIMEOUT_MS, '网页脚本错误监听准备超时'), signal)
+    if (frameToken && !prepared.automatic) await this.submitPage(() => withTimeout(contents.executeJavaScript('window.__henjiWebSourceStopErrors?.()', false), PAINT_TIMEOUT_MS, '网页脚本错误监听清理超时'), signal)
+    return prepared
+  }
+
+  private async prepareAfterSeek(job: CaptureJob): Promise<void> {
+    // 延后的 rAF 也必须在原 DOM 中完成；否则重新搬迁仍会打断这一帧的脚本。
+    await this.submit(job, () => withTimeout(this.window!.webContents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: settleScript(undefined) }], false), SEEK_TIMEOUT_MS, '网页没有画出新画面'))
+    await this.prepareSnapshot(job.signal, crypto.randomUUID())
+    if (this.capturePath.captureMode !== 'html-in-canvas') throw new Error('网页缓存要求 html-in-canvas 快照：' + this.capturePath.fallbackReason)
+    await this.drainPaints()
   }
 
   private async configureViewport(): Promise<void> {
@@ -474,6 +637,7 @@ export class WebSourcePage {
       if (this.closed) return
       this.contentHash = contentHash
       this.snapshotFailure = undefined
+      this.snapshotAfterSeek = false
       await this.loadRecording()
     })
     this.tail = run
@@ -584,14 +748,16 @@ export class WebSourcePage {
       job.signal!.throwIfAborted()
       if (this.closed || job.cancelled) throw new Error('网页录制已取消')
       if (this.stale) await this.loadRecording(job.signal)
-      if (this.capturePath.captureMode !== 'html-in-canvas') throw new Error('网页缓存要求 html-in-canvas 快照')
+      if (this.capturePath.captureMode !== 'html-in-canvas' && !this.snapshotAfterSeek) throw new Error('网页缓存要求 html-in-canvas 快照')
       if (this.pixelWidth < 8 || this.pixelHeight < 4) throw new Error('网页画面容纳不了快照身份区')
       if (!Number.isFinite(time) || time < 0 || this.recording && this.lastSeekTime !== undefined && time <= this.lastSeekTime) throw new Error('网页录制只能向前推进，缺帧须重建本段')
       job.started = true
-      const lifetime = this.rendererLifetime.signal, contentHash = this.contentHash
+      let lifetime = this.rendererLifetime.signal
+      const contentHash = this.contentHash
       const identity = crypto.createHash('sha256').update(JSON.stringify([crypto.randomUUID(), this.streamId, contentHash, time, ticket])).digest('hex').slice(0, 32)
       const isCurrent = (): boolean => !this.closed && !job.cancelled && !job.signal!.aborted && !lifetime.aborted && this.contentHash === contentHash && this.capturePath.captureMode === 'html-in-canvas'
       const captured = await this.captureNow(time, selectors, job, Promise.resolve(), () => undefined, scale, undefined, ticket, identity)
+      lifetime = this.rendererLifetime.signal
       if (!captured) throw new Error('网页录制已取消')
       if (captured.unsettled || !isCurrent()) { captured.texture.release(); throw new Error('网页快照已失效') }
       return finish({ captured, identity, contentHash, lifetime, job, isCurrent, time })
@@ -611,6 +777,28 @@ export class WebSourcePage {
     }, job.signal) : work()
   }
 
+  private async seekAndMeasure(time: number, selectors: readonly string[] | undefined, job: CaptureJob): Promise<{ boxes?: unknown } | undefined> {
+    const contents = this.window!.webContents
+    try {
+      const from = this.lastSeekTime
+      await this.submit(job, () => {
+        if (!contents.isPainting()) contents.startPainting()
+        return this.pageScript(seekScript(time), `网页 seek(${time}) 超过 ${SEEK_TIMEOUT_MS / 1000} 秒没有完成（上次完成 ${from ?? '未取帧'}，${from === undefined ? '首次定位' : time < from ? '向后跳转' : '向前推进'}）`)
+      })
+      this.lastSeekTime = time
+      if (job.cancelled || this.closed) return undefined
+      return selectors ? await this.submit(job, () => this.pageScript(boxesScript(selectors), `网页 boxes(${time}) 超过 ${SEEK_TIMEOUT_MS / 1000} 秒没有完成`)) as { boxes?: unknown } : {}
+    } catch (error) {
+      // 超时的 seek 可能还在改页面：结束页面进程，走进程退出后的重建，不让它迟到的结果混进别的时刻。
+      if (error instanceof Error && /^网页 (seek|boxes)\(/.test(error.message) && !contents.isDestroyed()) {
+        this.stale = 'gone'
+        this.rendererLifetime.abort()
+        contents.forcefullyCrashRenderer()
+      }
+      throw error
+    }
+  }
+
   private async captureNow(time: number, selectors: readonly string[] | undefined, job: CaptureJob, previousPaint: Promise<unknown>, advance: () => void, scale?: number, textSelectors?: readonly string[], ticket = '', identity?: string): Promise<PreparedCapture | undefined> {
     if (this.closed) throw new Error('网页来源已关闭')
     if (this.stale) {
@@ -622,31 +810,27 @@ export class WebSourcePage {
     if (job.cancelled || this.closed) return undefined
     const contents = this.window!.webContents
     try {
-      let seeked: { boxes?: unknown }
-      try {
-        const from = this.lastSeekTime
-        await this.submit(job, () => {
-          if (!contents.isPainting()) contents.startPainting()
-          return this.pageScript(seekScript(time), `网页 seek(${time}) 超过 ${SEEK_TIMEOUT_MS / 1000} 秒没有完成（上次完成 ${from ?? '未取帧'}，${from === undefined ? '首次定位' : time < from ? '向后跳转' : '向前推进'}）`)
-        })
-        this.lastSeekTime = time
-        if (job.cancelled || this.closed) return undefined
-        seeked = selectors ? await this.submit(job, () => this.pageScript(boxesScript(selectors), `网页 boxes(${time}) 超过 ${SEEK_TIMEOUT_MS / 1000} 秒没有完成`)) as { boxes?: unknown } : {}
-      } catch (error) {
-        // 超时的 seek 可能还在改页面：结束页面进程，走进程退出后的重建，不让它迟到的结果混进别的时刻。
-        if (error instanceof Error && /^网页 (seek|boxes)\(/.test(error.message) && !contents.isDestroyed()) {
-          this.stale = 'gone'
-          this.rendererLifetime.abort()
-          contents.forcefullyCrashRenderer()
-        }
-        throw error
+      if (identity && this.snapshotAfterSeek && this.capturePath.captureMode === 'html-in-canvas') await this.disableSnapshot('网页脚本使用原始正文结构', job.signal)
+      let seeked: { boxes?: unknown } | undefined
+      try { seeked = await this.seekAndMeasure(time, selectors, job) }
+      catch (error) {
+        if (!this.capturePath.automatic || this.stale || job.cancelled) throw error
+        // 前帧仍在领取时不能拆它的舞台；恢复后重做同一时刻，修复 body 子节点操作的失败。
+        await previousPaint.catch(() => undefined)
+        if (identity) this.snapshotAfterSeek = true
+        await this.disableSnapshot(error, job.signal)
+        seeked = await this.seekAndMeasure(time, selectors, job)
       }
+      if (!seeked) return undefined
       await previousPaint.catch(() => undefined)
       if (job.cancelled || this.closed) return undefined
       if (this.stale) throw new Error('网页取帧链路已失效，下一次取帧时重新载入')
+      if (identity && this.snapshotAfterSeek) {
+        await this.prepareAfterSeek(job)
+      }
       const textIdentity = { ticket, time, contentHash: this.contentHash }
       const wantsText = !!textSelectors?.length
-      const measure = selectors && seeked.boxes === undefined ? selectors : undefined
+      let measure = selectors && seeked.boxes === undefined ? selectors : undefined
       if (this.capturePath.captureMode === 'html-in-canvas') {
         let snapshot: { measured: unknown; restore?: number[]; texture: OffscreenSharedTexture } | undefined
         let advanced = false
@@ -664,7 +848,6 @@ export class WebSourcePage {
           if (job.cancelled || this.closed) return undefined
           snapshot = await this.submit(job, () => this.takeSnapshot(measure, () => { advanced = true; advance() }, wantsText ? textSelectors : undefined, identity))
         } catch (error) {
-          if (identity) throw error
           if (this.closed || this.window!.isDestroyed() || contents.isDestroyed() || this.stale === 'gone') throw error
           // 下一次 seek 已开始时不能在同一个 DOM 上重画上一刻。收口为重载回退，阻止迟到脚本污染下一幅。
           if (advanced) {
@@ -673,7 +856,18 @@ export class WebSourcePage {
             this.onSnapshotFallback(this.snapshotFailure)
             throw error
           }
-          await this.disableSnapshot(error)
+          if (identity && this.snapshotAfterSeek) throw error
+          if (identity) this.snapshotAfterSeek = true
+          if (await this.disableSnapshot(error, job.signal)) {
+            // 恢复流内布局后再定位，才能兑现自动舞台内被裁掉的文档滚动请求。
+            seeked = await this.seekAndMeasure(time, selectors, job)
+            if (!seeked) return undefined
+            measure = selectors && seeked.boxes === undefined ? selectors : undefined
+          }
+          if (identity) {
+            await this.prepareAfterSeek(job)
+            snapshot = await this.submit(job, () => this.takeSnapshot(measure, undefined, undefined, identity))
+          }
         }
         if (snapshot) {
           if (wantsText) {
@@ -711,24 +905,32 @@ export class WebSourcePage {
     }), SEEK_TIMEOUT_MS, timeout)
   }
 
-  private async disableSnapshot(error: unknown): Promise<void> {
+  private async disableSnapshot(error: unknown, signal?: AbortSignal): Promise<boolean> {
     if (this.closed || !this.window || this.window.isDestroyed() || this.stale === 'gone') throw error
     const contents = this.window.webContents
     if (contents.isDestroyed()) throw error
     const reason = error instanceof Error ? error.message : String(error)
-    let pageChanged: unknown
+    let disposed: { pageChanged?: boolean; automatic?: boolean; reloadRequired?: boolean } | undefined
     try {
-      pageChanged = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: SNAPSHOT_DISPOSE_SCRIPT }], false), PAINT_TIMEOUT_MS, '网页快照清理超时')
+      if (this.capturePath.automatic) await withTimeout(contents.executeJavaScript('window.__henjiWebSourceStopErrors?.()', false), PAINT_TIMEOUT_MS, '网页脚本错误监听清理超时')
+      disposed = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: SNAPSHOT_DISPOSE_SCRIPT }], false) as Promise<typeof disposed>, PAINT_TIMEOUT_MS, '网页快照清理超时')
     } catch (cleanupError) {
       // 清理未完成时必须重新载入，避免隐藏的舞台或迟到的快照混进普通取帧。
       this.stale ??= 'reload'
       throw new Error(reason, { cause: cleanupError })
     }
-    if (pageChanged) await this.drainPaints()
+    if (disposed?.pageChanged) await this.drainPaints()
     else this.releasePaints()
     if (this.closed || this.window.isDestroyed() || contents.isDestroyed() || this.stale) throw error
     this.capturePath = { captureMode: 'compositor', fallbackReason: reason }
     if (!this.snapshotWarned) { this.snapshotWarned = true; this.onSnapshotFallback(reason) }
+    if (disposed?.reloadRequired) {
+      this.snapshotFailure = reason
+      await this.loadRecording(signal)
+      // load 在普通绘制准备结束后停止绘制，而当前帧仍要完成重定位与标记。
+      contents.startPainting()
+    }
+    return disposed?.automatic === true
   }
 
   private async takeSnapshot(selectors: readonly string[] | undefined, submitted?: () => void, textSelectors?: readonly string[], identity?: string): Promise<{ measured: unknown; restore?: number[]; texture: OffscreenSharedTexture }> {

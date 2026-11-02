@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- CJS 巡检入口由 Node 直接加载。 */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const net = require('node:net')
@@ -7,7 +8,7 @@ const { execFileSync } = require('node:child_process')
 const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { openVideoEditFixture, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 
 /**
  * 网页画面（代码图片参数 kind:'web'）在真实 Electron 里的闭环：验收页（tests/fixtures/web-source）放进项目的
@@ -30,7 +31,7 @@ const SOURCE = `export default {
     const box = web && web.boxes['#send']
     if (!box) return
     const sx = width / web.region[2], sy = height / web.region[3]
-    ctx.strokeStyle = '#ff00ff'; ctx.lineWidth = 8
+    ctx.strokeStyle = 'magenta'; ctx.lineWidth = 8
     ctx.strokeRect((box[0] - web.region[0]) * sx - 12, (box[1] - web.region[1]) * sy - 12, box[2] * sx + 24, box[3] * sy + 24)
   }
 }
@@ -118,23 +119,33 @@ function createVideoEditWebSourceScene() {
 
         const playback = frame => change([{ kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.program_playback': { frame, playing: false, playbackDirection: 1 } } }])
         const canvas = page.locator('canvas[aria-label="剪辑画面"]')
-        const shoot = async (frame, name) => {
+        const shoot = async (frame, name, exact = false) => {
           const started = Date.now()
           await playback(frame)
           // 网页取帧不阻塞：精确画面没到时先用上一幅顶上并标为近似，网页缓存的画面停稳后也会按实时来源重画；按实时精确那一次取图。
           await page.waitForFunction(value => { const surface = document.querySelector('canvas[aria-label="剪辑画面"]'); return surface?.dataset.presentedFrame === String(value) && surface.dataset.approximate !== 'true' && surface.dataset.provenance !== 'web-cache' }, frame, { timeout: 120000 })
-          const png = await canvas.evaluate(element => element.toDataURL('image/png'))
           const file = path.join(ROOT, `${name}.png`)
-          fs.writeFileSync(file, Buffer.from(png.split(',')[1], 'base64'))
+          if (exact) {
+            // 像素对照使用正式精确观察，避免把自适应预览的不同栅格档当成网页变化。
+            const observed = await callTool(client, 'observe_video_edit_frame', { documentRef, target: { kind: 'program', sequenceRef, frame }, maxWidth: WIDTH })
+            assert.equal(observed.data?.verification?.verified, true, JSON.stringify(observed))
+            const media = await readAllMedia(client, observed.data.resultRef, { chunkBytes: 65536 })
+            fs.writeFileSync(file, media.bytes)
+          } else {
+            const png = await canvas.evaluate(element => element.toDataURL('image/png'))
+            fs.writeFileSync(file, Buffer.from(png.split(',')[1], 'base64'))
+          }
+          const image = await sharp(file).metadata()
+          if (exact) { assert.equal(image.width, WIDTH); assert.equal(image.height, HEIGHT) }
           const webTier = await canvas.evaluate(element => element.dataset.webTier)
-          return { frame, file, webTier, elapsedMs: Date.now() - started }
+          return { frame, file, webTier, exact, elapsedMs: Date.now() - started }
         }
         // 前后跳：每一帧的条码都应是这一刻；同一帧两次取到的画面逐像素相同。
         const order = [90, 30, 150, 60, 30, 120, 90, 0, 179]
         // 监视器按显示尺寸选网页栅格档：首幅画面上屏前还是初始档，先取一幅让档位定下来，前后两次取帧才是同一档。
         await shoot(0, 'preview-warmup')
         for (const [index, frame] of order.entries()) {
-          const shot = await shoot(frame, `preview-${index}-${frame}`)
+          const shot = await shoot(frame, `preview-${index}-${frame}`, true)
           shot.timeCode = await readTimeCode(shot.file)
           shot.expected = Math.round(frame / FPS * 1000)
           shot.box = await magentaBounds(shot.file)
@@ -149,7 +160,6 @@ function createVideoEditWebSourceScene() {
         await capture('web-source-preview')
         const twice = frame => evidence.preview.filter(shot => shot.frame === frame).map(shot => shot.file)
         // Chromium 给带 CSS 动画的元素栅格时与之前的状态有关：柔和阴影边缘可能差 1/255，其余逐像素相同。按内部一致性标准的最大差判定。
-        for (const frame of [90, 30]) assert.equal(new Set(evidence.preview.filter(shot => shot.frame === frame).map(shot => shot.webTier)).size, 1, `第 ${frame} 帧两次取帧的网页栅格档不同`)
         evidence.repeat = { 90: await difference(...twice(90)), 30: await difference(...twice(30)) }
         store()
         assert.ok(evidence.repeat[90].maximumDelta <= 2 && evidence.repeat[30].maximumDelta <= 2, `同一时刻两次取帧超出内部一致性标准：${JSON.stringify(evidence.repeat)}`)
@@ -229,13 +239,17 @@ function createVideoEditWebSourceScene() {
         const failSnapshot = async (code, frame, name, reason) => {
           const since = new Date().toISOString()
           const injected = await app.evaluate(async ({ webContents }, script) => {
-            let count = 0
+            const candidates = []
             for (const contents of webContents.getAllWebContents()) {
               if (contents.isOffscreen() && contents.getURL().startsWith('https://web-source.henji.invalid')) {
-                if (await contents.executeJavaScriptInIsolatedWorld(1001, [{ code: script }], false)) count++
+                const area = await contents.executeJavaScriptInIsolatedWorld(1001, [{ code: 'window.__henjiWebSourceSnapshot?.output.width * window.__henjiWebSourceSnapshot?.output.height' }], false)
+                if (Number.isFinite(area) && area > 0) candidates.push({ contents, area })
               }
             }
-            return count
+            // 预览采用最小栅格，精确观察与导出另有页面；故障只注入即将取帧的预览，避免拆坏仍在准备的其他消费者。
+            candidates.sort((left, right) => left.area - right.area)
+            const target = candidates[0]?.contents
+            return target && await target.executeJavaScriptInIsolatedWorld(1001, [{ code: script }], false) ? 1 : 0
           }, `(() => { const state = window.__henjiWebSourceSnapshot; if (!state) return false; ${code}; return true })()`)
           assert.ok(injected > 0, '没有找到启用快照的验收页面')
           const shot = await shoot(frame, name)
@@ -269,21 +283,37 @@ function createVideoEditWebSourceScene() {
         await reloadSnapshot()
         await failSnapshot('state.device.destroy()', 97, 'snapshot-device-lost', '显卡设备丢失')
 
-        // 相同页面仅去掉舞台标记，核对重载回普通绘制后的画面，并从正式取帧日志比较两条链路。
-        fs.writeFileSync(entry, fs.readFileSync(entry, 'utf8').replaceAll('data-henji-stage', 'data-compositor-stage'))
-        let fallbackReady = false
-        for (let attempt = 0; attempt < 40; attempt++) {
-          fallbackReady = (await webEventDetails()).some(event => event.event === 'web_source.page.reloaded' && event.context?.captureMode === 'compositor')
-          if (fallbackReady) break
-          await page.waitForTimeout(250)
-        }
-        assert.ok(fallbackReady, '去掉舞台标记后没有重载到普通页面绘制')
+        // 设备丢失已使当前页面降级，在同一来源上核对普通绘制，再通过文件重载启用自动舞台。
         evidence.compositor = []
         for (const frame of [90, 30, 150, 60, 120]) {
           const shot = await shoot(frame, `compositor-${frame}`)
           shot.timeCode = await readTimeCode(shot.file)
           evidence.compositor.push(shot); store()
           assert.equal(shot.timeCode, Math.round(frame / FPS * 1000), `普通绘制第 ${frame} 帧不是这一刻：${shot.timeCode}ms`)
+        }
+
+        // 去掉舞台标记后仍走快照；自动舞台的失败恢复由独立真机探针覆盖。
+        fs.writeFileSync(entry, fs.readFileSync(entry, 'utf8').replaceAll('data-henji-stage', 'data-compositor-stage'))
+        let automaticReady = false
+        for (let attempt = 0; attempt < 40; attempt++) {
+          automaticReady = await app.evaluate(async ({ webContents }) => {
+            for (const contents of webContents.getAllWebContents()) if (contents.isOffscreen() && contents.getURL().startsWith('https://web-source.henji.invalid') &&
+              await contents.executeJavaScriptInIsolatedWorld(1001, [{ code: '!!window.__henjiWebSourceSnapshot?.sync' }], false)) return true
+            return false
+          })
+          if (automaticReady) break
+          await page.waitForTimeout(250)
+        }
+        assert.ok(automaticReady, '去掉舞台标记后没有启用自动舞台')
+        evidence.automatic = []
+        for (const frame of [90, 30, 150, 60, 120]) {
+          const shot = await shoot(frame, `automatic-${frame}`, true)
+          shot.timeCode = await readTimeCode(shot.file)
+          const original = evidence.preview.find(value => value.frame === frame)
+          shot.difference = await difference(original.file, shot.file)
+          evidence.automatic.push(shot); store()
+          assert.equal(shot.timeCode, Math.round(frame / FPS * 1000), '自动舞台时间条码错误')
+          assert.ok(shot.difference.maximumDelta <= 1, JSON.stringify(shot.difference))
         }
         evidence.completed = true; store()
       } finally {
