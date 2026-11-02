@@ -56,6 +56,31 @@ const FILE_FAILURE_HOLD_MS = 2000
 const EXCLUSIVE_RETRY_MS = 2000
 /** Seek windows of long-GOP material: decoded once into the shared frame cache, like the browser's GOP ranges. */
 export const VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS = 1
+/**
+ * 播放计划在剪辑点前这么多项（时间线帧）就让下一段在文件的另一个播放会话上开始定位。H.264/HEVC 的剪辑点要清空解码器、
+ * 从关键帧解到入点（4K 每帧约 4.6ms，GOP 中段约 0.3 秒，长 GOP 末尾可过半秒）；同一个解码器要等剪辑点之前的帧都交完才
+ * 轮到它，播放池那几帧余量盖不住。60 帧在 60fps 时间线上约 1 秒。
+ */
+export const VIDEO_EDIT_NATIVE_NEXT_SEGMENT_LEAD = 60
+/**
+ * 向前跳过超过这么久（秒）才另起一段。原生服务只在目标的关键帧位于已送入的包之后时定位（`plan.rs` 的
+ * `seek_decision`），这里不知道关键帧在哪：跳得近时服务多半续解，或只定位到很近的关键帧，单独起段反而让两个解码器
+ * 都解；跳过一秒以上才值得另一个解码器提前去定位。向后跳服务总要定位，一律起段。
+ */
+const SEGMENT_FORWARD_SECONDS = 1
+/** 短于这么多项的段不单独起：变速快段、频繁切换处每段只有几帧，提前定位省下的抵不过两个解码器同时解。 */
+const MIN_SEGMENT_ITEMS = 30
+
+/** 播放计划按需要重新定位的剪辑点切成的段，返回每段的起始下标（首项为 0）；同一段在一个解码器上顺序续解。 */
+export function videoEditNativeScheduleSegments(times: readonly number[]): number[] {
+  const cuts: number[] = []
+  for (let index = 1; index < times.length; index++) {
+    const from = times[index - 1], to = times[index]
+    if (Number.isFinite(from) && Number.isFinite(to) && (to < from || to - from > SEGMENT_FORWARD_SECONDS)) cuts.push(index)
+  }
+  // 太短的段并回前一段（剪辑点照常由服务现场定位）。
+  return [0, ...cuts.filter((cut, index) => (cuts[index + 1] ?? times.length) - cut >= MIN_SEGMENT_ITEMS)]
+}
 
 type Plan = { times: readonly number[] } | { range: { from: number; to?: number } }
 interface Consumer { frames: Map<number, NativeVideoFrame>; missing: Set<number>; highest: number; done?: { reason: string; delivered?: number; at: number }; wake?: () => void }
@@ -309,6 +334,8 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   readonly codec = undefined
   readonly lane = new NativeSeekLane()
   private playback?: Promise<VideoEditNativeDecoderSession>
+  /** 播放计划的奇数段在这个会话上提前定位（与 `playback` 交替）；跟 `playback` 一起保留与回收，不在每个剪辑点开关解码器。 */
+  private alternate?: Promise<VideoEditNativeDecoderSession>
   private seekSession?: Promise<VideoEditNativeDecoderSession>
   private readonly opening = new Set<Promise<VideoEditNativeDecoderSession>>()
   private closed = false
@@ -321,9 +348,10 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   private warmed = new Set<'playback' | 'seek'>()
 
   get idle(): boolean { return this.active === 0 && !this.warming && this.opening.size === 0 }
-  get hasSessions(): boolean { return !!this.playback || !!this.seekSession }
-  get hasIdleSessions(): boolean { return !this.warming && (!!this.playback && !this.opening.has(this.playback) && !this.activePlayback || !!this.seekSession && !this.opening.has(this.seekSession) && !this.activeSeek) }
+  get hasSessions(): boolean { return !!this.playback || !!this.alternate || !!this.seekSession }
+  get hasIdleSessions(): boolean { return !this.warming && ([this.playback, this.alternate].some(pending => !!pending && !this.opening.has(pending)) && !this.activePlayback || !!this.seekSession && !this.opening.has(this.seekSession) && !this.activeSeek) }
   hasSession(purpose: 'playback' | 'seek'): boolean { return !!(purpose === 'playback' ? this.playback : this.seekSession) }
+  private get hasAlternate(): boolean { return !!this.alternate }
 
   cancelWarm(): void { this.warming?.abort.abort() }
   async settleWarm(): Promise<void> { await this.warming?.done.catch(() => undefined) }
@@ -367,14 +395,16 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
 
   constructor(private readonly owner: VideoEditNativeFrames, readonly media: VideoEditMedia, private readonly path: string) {}
 
-  private session(purpose: 'playback' | 'seek'): Promise<VideoEditNativeDecoderSession> {
+  /** `alternate` 按提前打开的方式开（`openSession` 的 speculative）：名额不足直接失败，不挤掉别的会话。 */
+  private session(use: 'playback' | 'seek' | 'alternate'): Promise<VideoEditNativeDecoderSession> {
     if (this.closed) return Promise.reject(closedFailure())
-    const field = purpose === 'playback' ? 'playback' : 'seekSession'
+    const field = use === 'seek' ? 'seekSession' : use
+    const purpose = use === 'seek' ? 'seek' : 'playback'
     let pending = this[field]
-    if (pending && this.active && this.warmed.delete(purpose)) this.owner.log('debug', '命中提前定位的解码会话', 'video_edit.decode.preopen.hit', { mediaId: this.media.id, purpose, durationMs: 0 })
+    if (pending && this.active && use !== 'alternate' && this.warmed.delete(purpose)) this.owner.log('debug', '命中提前定位的解码会话', 'video_edit.decode.preopen.hit', { mediaId: this.media.id, purpose, durationMs: 0 })
     if (!pending) {
-      if (this.active) this.owner.log('debug', '关键路径打开解码会话', 'video_edit.decode.preopen.miss', { mediaId: this.media.id, mediaName: this.media.name, purpose })
-      const opening = this.owner.openSession(this.media, this.path, purpose, !!this.warming && !this.active)
+      if (this.active && use !== 'alternate') this.owner.log('debug', '关键路径打开解码会话', 'video_edit.decode.preopen.miss', { mediaId: this.media.id, mediaName: this.media.name, purpose })
+      const opening = this.owner.openSession(this.media, this.path, purpose, use === 'alternate' || !!this.warming && !this.active)
       this.opening.add(opening)
       // A failed open is not kept (a restored file is read again), nor is a session whose stream ended: the next
       // read opens a new one on the restarted service (task 3.1).
@@ -392,8 +422,8 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
    * next read opens new sessions. A session that timed out may still be alive natively; closing it stops it.
    */
   reset(): void {
-    const sessions = [this.playback, this.seekSession]
-    this.playback = undefined; this.seekSession = undefined
+    const sessions = [this.playback, this.alternate, this.seekSession]
+    this.playback = undefined; this.alternate = undefined; this.seekSession = undefined
     this.warmed.clear()
     this.lane.cancelSpeculative()
     for (const pending of sessions) void pending?.then(session => session.close('service'), () => undefined)
@@ -403,6 +433,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     const sessions: Array<Promise<VideoEditNativeDecoderSession> | undefined> = []
     // 同文件正在播放时仍可让出闲置定位会话，反之亦然；不能把整个文件都当成忙碌。
     if (!keep.has('playback') && !this.activePlayback && (!this.playback || !this.opening.has(this.playback))) { sessions.push(this.playback); this.playback = undefined; this.warmed.delete('playback') }
+    if (!keep.has('playback') && !this.activePlayback && (!this.alternate || !this.opening.has(this.alternate))) { sessions.push(this.alternate); this.alternate = undefined }
     if (!keep.has('seek') && !this.activeSeek && (!this.seekSession || !this.opening.has(this.seekSession))) { sessions.push(this.seekSession); this.seekSession = undefined; this.warmed.delete('seek'); this.lane.cancelSpeculative() }
     await Promise.allSettled(sessions.map(async pending => (await pending)?.close()))
   }
@@ -533,10 +564,88 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
         })
         if (own) this.owner.log('debug', '同一素材同时播放，第二个计划使用独立会话', 'video_edit.decode.schedule.concurrent', { mediaId: this.media.id })
       }
-      if (!signal?.aborted) yield* (own ?? await this.session('playback')).run({ times: timestamps }, signal)
+      if (!signal?.aborted) yield* own ? own.run({ times: timestamps }, signal) : this.segmented(timestamps, signal)
     } finally {
       this.active--; this.activePlayback--; this.lastUsed = performance.now()
       if (own) this.owner.track(own.close())
+    }
+  }
+
+  /**
+   * 播放计划按剪辑点分段，相邻两段交替用文件的两个播放会话：一段还剩 `VIDEO_EDIT_NATIVE_NEXT_SEGMENT_LEAD` 项时，下一段
+   * 已在另一个会话上定位并解出开头几帧，剪辑点直接接上。一个会话一次只跑一个计划，所以再下一段要等这一段交完才开始。
+   * 另一个会话只在原生预算有余量时按提前打开的方式开；开不成，这个计划余下的段都接在同一会话上（剪辑点照常现场定位）。
+   * 全帧内素材不分段：服务在计划内自己预先接续下一段（`decode/mod.rs` 3.6）。
+   */
+  private async *segmented(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
+    const shared = await this.session('playback')
+    const starts = shared.intraOnly ? [0] : videoEditNativeScheduleSegments(timestamps)
+    if (starts.length === 1) { yield* shared.run({ times: timestamps }, signal); return }
+    const stop = new AbortController()
+    const plan = eitherSignal(stop.signal, signal)
+    interface Segment { iterator: AsyncGenerator<VideoEditNativePicture | null, void, unknown>; first: Promise<IteratorResult<VideoEditNativePicture | null, void>> }
+    /** 各段实际所在的会话（拿到会话后才知道）。 */
+    const uses = new Map<number, 'playback' | 'alternate'>()
+    /** 另一个会话开不成后，这个计划不再尝试。 */
+    let single = false
+    /** 段 `index` 的计划：拿到会话就发出，第一项随即开始等（帧到之前先在会话里排着）。计划已取消就不再发出。 */
+    const run = (use: 'playback' | 'alternate', index: number): Promise<Segment> => this.session(use).then(session => {
+      if (plan.aborted) throw readAbandoned()
+      uses.set(index, use)
+      const iterator = session.run({ times: timestamps.slice(starts[index], starts[index + 1] ?? timestamps.length) }, plan)
+      const first = iterator.next(); void first.catch(() => undefined)
+      return { iterator, first }
+    })
+    /** 奇数段在另一个会话上；名额不足时得到 undefined，并且这个计划余下的段都留在共享会话上。 */
+    const alternate = async (index: number): Promise<Segment | undefined> => {
+      try {
+        if (!this.hasAlternate && !await this.owner.canPreopen()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
+        return await run('alternate', index)
+      } catch (error) {
+        if (videoEditNativeFailureKind(error) !== 'budget') throw error
+        single = true
+        this.owner.log('info', '解码会话名额不足，剪辑点改在同一播放会话上现场定位', 'video_edit.decode.schedule.cut_shared', { mediaId: this.media.id, sessions: this.owner.openSessions })
+        return undefined
+      }
+    }
+    const started = new Map<number, Promise<Segment | undefined>>()
+    /**
+     * 段 `index` 进入提前量就开始，前提是它的会话空着：再前一段已交完（调用时总是如此），前一段确知在另一个会话上。
+     * 前一段的会话还没拿到时不猜，下一项再看。
+     */
+    const ahead = (index: number, item: number): void => {
+      if (single || index >= starts.length || started.has(index) || starts[index] - item > VIDEO_EDIT_NATIVE_NEXT_SEGMENT_LEAD) return
+      const previous = uses.get(index - 1)
+      if (!previous || previous === (index % 2 ? 'alternate' : 'playback')) return
+      const pending = index % 2 ? alternate(index) : run('playback', index)
+      void pending.catch(() => undefined)
+      started.set(index, pending)
+    }
+    try {
+      for (let index = 0; index < starts.length; index++) {
+        const end = starts[index + 1] ?? timestamps.length
+        // 没提前开（或另一个会话开不成）的段接在共享会话上：上一段已经交完。
+        const segment = await started.get(index) ?? await run('playback', index)
+        started.delete(index)
+        let pending: Promise<IteratorResult<VideoEditNativePicture | null, void>> | undefined = segment.first
+        try {
+          for (let item = starts[index]; item < end; item++) {
+            ahead(index + 1, item)
+            const result = await (pending ?? segment.iterator.next()); pending = undefined
+            if (signal?.aborted) return
+            if (result.done) { for (; item < end; item++) yield null; break }
+            yield result.value
+          }
+        } finally { await segment.iterator.return() }
+      }
+    } finally {
+      stop.abort()
+      // 还在打开会话的段不等：打开后见计划已取消就不发出；已发出的计划随取消立即结束。
+      for (const pending of started.values()) this.owner.track(pending.then(async segment => {
+        if (!segment) return
+        ;(await segment.first.catch(() => undefined))?.value?.close()
+        await segment.iterator.return()
+      }, () => undefined))
     }
   }
 
@@ -552,7 +661,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     this.closed = true
     this.cancelWarm()
     this.lane.cancelSpeculative()
-    await Promise.allSettled([this.playback, this.seekSession].map(async pending => (await pending)?.close()))
+    await Promise.allSettled([this.playback, this.alternate, this.seekSession].map(async pending => (await pending)?.close()))
   }
 }
 

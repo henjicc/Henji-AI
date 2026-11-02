@@ -8,7 +8,7 @@ import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoFrameDecoderInfo, VideoFrameRequestTag, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
-import { VideoEditNativeFrames, type VideoEditNativeChannel } from './videoEditNativeFrameSource'
+import { VideoEditNativeFrames, videoEditNativeScheduleSegments, type VideoEditNativeChannel } from './videoEditNativeFrameSource'
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { VideoEditNativeCallError } from './videoEditNativeFailure'
@@ -239,7 +239,7 @@ describe('前瞻与原生预算', () => {
     const channel = new FakeChannel(), { frames, setLimit } = managed(channel)
     const opened = frames.open(media()), source = await opened.ready
     await source.clipFrames()!.frameAt(0)
-    const playback = source.schedule([0, 1])
+    const playback = source.schedule([0, 1 / 60])
     const first = playback.next(); await flush()
     const params = channel.last('schedule') as { streamId: string; scheduleId: string }
     channel.frame(params.streamId, { kind: 'schedule', id: params.scheduleId, index: 0 }, 0)
@@ -315,6 +315,84 @@ describe('原生帧源：连续计划', () => {
     for (const picture of pictures) picture?.close()
     await flush()
     expect(channel.released.sort((a, b) => a - b)).toEqual([0, 99, 33_333, 50_000])
+  })
+
+  /** 原生服务的预算答复：上限 `limit` 个会话，每个 1000 字节。 */
+  const budget = (channel: FakeChannel, frames: VideoEditNativeFrames, limit: number): void => {
+    channel.answers.stats = () => ({ native: { streams: Array.from({ length: frames.openSessions }, () => ({ kind: 'decoder' })), budget: { vramLimitBytes: limit * 1000, vramReservedBytes: frames.openSessions * 1000, largestSessionBytes: 1000, hardwareSessionLimit: limit, hardwareSessions: frames.openSessions, decoderSessionLimit: limit } } })
+  }
+  /** 从 `from` 秒起连续 `count` 帧（60fps）。 */
+  const run = (from: number, count: number): number[] => Array.from({ length: count }, (_, index) => from + index / 60)
+  type Plan = { streamId: string; scheduleId: string; times: number[] }
+  const plans = (channel: FakeChannel): Plan[] => channel.calls.filter(call => call.method === 'schedule').map(call => call.params as Plan)
+  const deliver = (channel: FakeChannel, plan: Plan): void => {
+    plan.times.forEach((time, index) => channel.frame(plan.streamId, { kind: 'schedule', id: plan.scheduleId, index }, Math.round(time * 1e6)))
+    channel.event({ type: 'schedule_done', streamId: plan.streamId, scheduleId: plan.scheduleId, reason: 'completed', message: null, delivered: plan.times.length })
+  }
+
+  it('剪辑点之后的一段在另一个播放会话上提前定位，两个会话交替使用、不在每个剪辑点重开', async () => {
+    const channel = new FakeChannel(), frames = backend(channel); budget(channel, frames, 10)
+    const source = await frames.open(media()).ready
+    // 三段各 40 帧：0 秒起 → 跳到 7 秒 → 退回 2 秒。
+    const segments = [run(0, 40), run(7, 40), run(2, 40)]
+    const schedule = source.schedule(segments.flat())
+    const first = schedule.next(); await flush(40)
+    // 第一段还没交出一帧，第二段已在第二个会话上发出计划。
+    expect(plans(channel).map(plan => plan.times)).toEqual(segments.slice(0, 2))
+    const [a, b] = plans(channel)
+    expect(a.streamId).not.toBe(b.streamId)
+    deliver(channel, b); deliver(channel, a)
+    const pictures = [(await first).value]
+    for (let index = 1; index < 41; index++) pictures.push((await schedule.next()).value)
+    await flush(40)
+    // 第一段交完，它的会话接着为第三段定位。
+    const c = plans(channel)[2]
+    expect(c).toMatchObject({ streamId: a.streamId, times: segments[2] })
+    deliver(channel, c)
+    for (let index = 41; index < 120; index++) pictures.push((await schedule.next()).value)
+    expect((await schedule.next()).done).toBe(true)
+    expect(pictures.map(picture => picture instanceof VideoEditNativePicture ? Math.round(picture.timestamp * 60) : picture)).toEqual(segments.flat().map(time => Math.round(time * 60)))
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(2)
+    expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(0)
+    for (const picture of pictures) picture?.close()
+  })
+
+  it('另一个播放会话没有预算余量时不挤占别的会话：整个计划的剪辑点都接在同一会话上，只尝试一次', async () => {
+    const channel = new FakeChannel(), log = vi.fn()
+    const frames = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', log }); budget(channel, frames, 2)
+    const source = await frames.open(media()).ready
+    const segments = [run(0, 40), run(7, 40), run(2, 40), run(12, 40)]
+    const schedule = source.schedule(segments.flat())
+    const pictures = []
+    for (let index = 0; index < segments.length; index++) {
+      const next = schedule.next()
+      await flush(40)
+      expect(plans(channel).map(plan => plan.times)).toEqual(segments.slice(0, index + 1))
+      deliver(channel, plans(channel)[index])
+      pictures.push((await next).value)
+      for (let item = 1; item < 40; item++) pictures.push((await schedule.next()).value)
+    }
+    expect(pictures.filter(picture => picture instanceof VideoEditNativePicture)).toHaveLength(160)
+    expect(new Set(plans(channel).map(plan => plan.streamId)).size).toBe(1)
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
+    expect(channel.calls.filter(call => call.method === 'cancelSchedule')).toHaveLength(0)
+    expect(log.mock.calls.filter(call => call[2] === 'video_edit.decode.schedule.cut_shared')).toHaveLength(1)
+    for (const picture of pictures) picture?.close()
+  })
+
+  it('分段只在需要重新定位处：向后跳或向前跳过一秒以上，太短的段并回前一段；全帧内素材整段交给服务', async () => {
+    expect(videoEditNativeScheduleSegments([...run(0, 40), ...run(1.5, 40)])).toEqual([0])
+    expect(videoEditNativeScheduleSegments([...run(5, 40), ...run(0, 40), ...run(9, 40)])).toEqual([0, 40, 80])
+    // 高倍速快段：每帧向前 2 秒，每段只有一帧，不分段。
+    expect(videoEditNativeScheduleSegments(Array.from({ length: 60 }, (_, index) => index * 2))).toEqual([0])
+    expect(videoEditNativeScheduleSegments([...run(0, 40), ...run(7, 10), ...run(14, 40)])).toEqual([0, 50])
+    const channel = new FakeChannel(); channel.intraOnly = true
+    const frames = backend(channel); budget(channel, frames, 10)
+    const source = await frames.open(media()).ready
+    const schedule = source.schedule([...run(0, 40), ...run(7, 40)])
+    void schedule.next(); await flush(40)
+    expect(plans(channel)).toHaveLength(1)
+    expect(plans(channel)[0].times).toHaveLength(80)
   })
 
   it('提前结束（时间线切换、停止播放）取消原生计划并交回已到达未取走的帧；同一文件的播放会话复用', async () => {
