@@ -249,9 +249,12 @@ export interface ReliableWebSourceFrame {
   isCurrent: () => boolean
   validate: () => Promise<boolean>
 }
+/** 精确导出的一幅：画面已交给导出；`reliable` 是后台读回的同幅可靠帧，只供缓存段使用，没有表示这一幅不进缓存。 */
+export interface WebSourceExportCapture { boxes: Record<string, WebSourceBox> | null; reliable?: Promise<ReliableWebSourceFrame> }
 interface CaptureJob { cancelled: boolean; started: boolean; latest: boolean; controller?: AbortController; signal?: AbortSignal }
 
 interface PreparedCapture { boxes: Record<string, WebSourceBox> | null; text?: WebTextCapture; unsettled: boolean; texture: OffscreenSharedTexture; restore?: number[] }
+interface ReliableSnapshot { captured: PreparedCapture; identity: string; contentHash: string; lifetime: AbortSignal; job: CaptureJob; isCurrent: () => boolean; time: number }
 
 type UpdateRect = { x: number; y: number; width: number; height: number } | null | undefined
 function updateRect(texture: OffscreenSharedTexture): UpdateRect {
@@ -525,8 +528,55 @@ export class WebSourcePage {
   }
 
   /** 录制沿相同 seek/快照实现，守护区读回成功才交给编码；失败后从新页面向前重演。 */
-  captureReliable(time: number, ticket: string, reader: Pick<GpuFrameCapture<'yuv444p'>, 'readSnapshot'>, selectors?: readonly string[], signal?: AbortSignal, deliver?: { scale?: number }): Promise<ReliableWebSourceFrame> {
-    if (!this.recording && !deliver) return Promise.reject(new Error('可靠快照需要录制页面或精确导出'))
+  captureReliable(time: number, ticket: string, reader: Pick<GpuFrameCapture<'yuv444p'>, 'readSnapshot'>, selectors?: readonly string[], signal?: AbortSignal): Promise<ReliableWebSourceFrame> {
+    if (!this.recording) return Promise.reject(new Error('可靠快照需要录制页面'))
+    return this.reliableSnapshot(time, ticket, selectors, signal, undefined, async snapshot => {
+      const { captured, job } = snapshot
+      let transferred = false
+      const frame = await this.submit(job, () => {
+        transferred = true
+        return reader.readSnapshot(captured.texture, { identity: snapshot.identity, width: this.pixelWidth, height: this.pixelHeight, restore: captured.restore! })
+      }).finally(() => { if (!transferred) captured.texture.release() })
+      return this.reliableFrame(snapshot, frame)
+    })
+  }
+
+  /**
+   * 精确导出顺手写缓存：带身份区的快照立即连同身份区原像素交给导出，导出不等缓存。
+   * `readBack` 在交付后决定这一幅是否读回；读回与身份核对在后台进行，失败只让 `reliable` 拒绝，不影响已交付的画面，也不让页面重载。
+   */
+  captureExport(time: number, ticket: string, reader: Pick<GpuFrameCapture<'yuv444p'>, 'readSnapshot'>, selectors: readonly string[] | undefined, signal: AbortSignal | undefined, scale: number | undefined,
+    readBack: () => boolean): Promise<WebSourceExportCapture> {
+    if (this.recording) return Promise.reject(new Error('录制页面不交付导出画面'))
+    return this.reliableSnapshot(time, ticket, selectors, signal, scale, async snapshot => {
+      const { captured } = snapshot
+      // 导出与读回各持一份引用，两边都结束才把纹理还给浏览器。
+      let holders = 2
+      const release = (): void => { if (--holders === 0) captured.texture.release() }
+      try { await this.deliver({ ...captured.texture, release }, time, ticket, captured.restore) }
+      catch (error) { release(); throw error }
+      if (!snapshot.isCurrent() || !readBack()) { release(); return { boxes: captured.boxes } }
+      const reliable = reader.readSnapshot({ ...captured.texture, release }, { identity: snapshot.identity, width: this.pixelWidth, height: this.pixelHeight, restore: captured.restore! })
+        .then(frame => this.reliableFrame(snapshot, frame))
+      // 调用方已因取消不再等待时，没人接这份结果。
+      void reliable.catch(() => undefined)
+      return { boxes: captured.boxes, reliable }
+    })
+  }
+
+  private reliableFrame(snapshot: ReliableSnapshot, frame: TakenFrame<'yuv444p'> | null): ReliableWebSourceFrame {
+    const { captured, identity, contentHash, lifetime, job, isCurrent, time } = snapshot
+    if (!frame || !isCurrent()) throw new Error('网页快照身份校验失败或已失效')
+    const validate = async (): Promise<boolean> => {
+      if (!isCurrent()) return false
+      const valid = await this.submit(job, () => withTimeout(this.window!.webContents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: '!!window.__henjiWebSourceSnapshot && !window.__henjiWebSourceSnapshot.lostReason' }], false), PAINT_TIMEOUT_MS, '网页快照代次检查超时'))
+      return valid === true && isCurrent()
+    }
+    return { frame, identity, time, contentHash, epoch: lifetime, boxes: captured.boxes, isCurrent, validate }
+  }
+
+  /** 带身份区的快照；`finish` 仍在页面取帧链里执行，它失败与快照失败一样让页面下次重载。 */
+  private reliableSnapshot<T>(time: number, ticket: string, selectors: readonly string[] | undefined, signal: AbortSignal | undefined, scale: number | undefined, finish: (snapshot: ReliableSnapshot) => Promise<T>): Promise<T> {
     const controller = new AbortController()
     const job: CaptureJob = { cancelled: false, started: false, latest: false, controller, signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal }
     this.jobs.set(ticket, job)
@@ -541,30 +591,10 @@ export class WebSourcePage {
       const lifetime = this.rendererLifetime.signal, contentHash = this.contentHash
       const identity = crypto.createHash('sha256').update(JSON.stringify([crypto.randomUUID(), this.streamId, contentHash, time, ticket])).digest('hex').slice(0, 32)
       const isCurrent = (): boolean => !this.closed && !job.cancelled && !job.signal!.aborted && !lifetime.aborted && this.contentHash === contentHash && this.capturePath.captureMode === 'html-in-canvas'
-      const captured = await this.captureNow(time, selectors, job, Promise.resolve(), () => undefined, deliver?.scale, undefined, ticket, identity)
+      const captured = await this.captureNow(time, selectors, job, Promise.resolve(), () => undefined, scale, undefined, ticket, identity)
       if (!captured) throw new Error('网页录制已取消')
       if (captured.unsettled || !isCurrent()) { captured.texture.release(); throw new Error('网页快照已失效') }
-      let transferred = false
-      const frame = await this.submit(job, async () => {
-        transferred = true
-        if (!deliver) return reader.readSnapshot(captured.texture, { identity, width: this.pixelWidth, height: this.pixelHeight, restore: captured.restore! })
-        // 读回器验证身份后，原共享纹理仍交给导出；直到两位消费者都结束才归还浏览器。
-        let forwarded = false
-        try {
-          const reliable = await reader.readSnapshot({ ...captured.texture, release: () => undefined }, { identity, width: this.pixelWidth, height: this.pixelHeight, restore: captured.restore! })
-          if (!reliable || !isCurrent()) throw new Error('网页精确导出快照已失效')
-          forwarded = true
-          await this.deliver(captured.texture, time, ticket, captured.restore)
-          return reliable
-        } finally { if (!forwarded) captured.texture.release() }
-      }).finally(() => { if (!transferred) captured.texture.release() })
-      if (!frame || !isCurrent()) throw new Error('网页快照身份校验失败或已失效')
-      const validate = async (): Promise<boolean> => {
-        if (!isCurrent()) return false
-        const valid = await this.submit(job, () => withTimeout(this.window!.webContents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: '!!window.__henjiWebSourceSnapshot && !window.__henjiWebSourceSnapshot.lostReason' }], false), PAINT_TIMEOUT_MS, '网页快照代次检查超时'))
-        return valid === true && isCurrent()
-      }
-      return { frame, identity, time, contentHash, epoch: lifetime, boxes: captured.boxes, isCurrent, validate }
+      return finish({ captured, identity, contentHash, lifetime, job, isCurrent, time })
     }).catch(error => {
       if (job.started || !job.signal!.aborted) { this.rendererLifetime.abort(); this.stale ??= 'reload' }
       throw error

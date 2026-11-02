@@ -111,8 +111,8 @@ export class GpuFrameCapture<Format extends ReaderPixelFormat = 'nv12'> implemen
     this.lastTimings = result.timings
     if (result.guardMatched !== true || !result.tiles) { this.stale++; return null }
     const frame = this.accept(result), pixels = frame.bitmap()
-    // 编码可能排队到下一次读回之后，帧身份与其像素必须共同持有。
-    return { ...frame, bitmap: () => Buffer.from(pixels), previewJpeg: () => yuvPreviewJpeg(pixels, frame.width, frame.height, this.format === 'yuv444p') }
+    // 编码可能排队到下一次读回之后，帧身份与其像素必须共同持有；这份副本只读，交出时不再复制（8K 平面444每幅约 100MB，主线程多复制一次就拖住导出的取帧）。
+    return { ...frame, bitmap: () => pixels, previewJpeg: () => yuvPreviewJpeg(pixels, frame.width, frame.height, this.format === 'yuv444p') }
   }
 
   attach(contents: WebContents): void {

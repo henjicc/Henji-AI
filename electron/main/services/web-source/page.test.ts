@@ -342,7 +342,7 @@ it('取消正在读回的可靠快照，迟到结果不能取得发布资格', a
   expect(boundary.release).toHaveBeenCalledOnce()
 })
 
-it('精确导出只seek一次，身份验证后同一纹理附原始像素交付，引用由消费端释放', async () => {
+it('精确导出只seek一次，先交付附原始像素的同一纹理再后台读回，两位消费者都结束才归还', async () => {
   const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
   const restore = Array.from({ length: 1024 }, (_, index) => index % 256)
   boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
@@ -355,16 +355,21 @@ it('精确导出只seek一次，身份验证后同一纹理附原始像素交付
   const readSnapshot = vi.fn(async (texture: { release(): void; textureInfo: { codedSize: { width: number; height: number }; visibleRect: { x: number; y: number; width: number; height: number } } }) => {
     expect(texture.textureInfo.codedSize).toEqual({ width: 101, height: 101 })
     expect(texture.textureInfo.visibleRect).toEqual({ x: 0, y: 0, width: 100, height: 100 })
+    expect(sharedTexture.sendSharedTexture).toHaveBeenCalledOnce()
     texture.release()
-    expect(boundary.release).not.toHaveBeenCalled()
     return { width: 100, height: 100, format: 'yuv444p' as const, changed: true, dirty: { x: 0, y: 0, width: 100, height: 100 }, bitmap: () => Buffer.alloc(30000), previewJpeg: () => '' }
   })
-  const result = await page.captureReliable(0, 'export', { readSnapshot }, undefined, undefined, {})
-  expect(result.isCurrent()).toBe(true)
+  const exported = await page.captureExport(0, 'export', { readSnapshot }, undefined, undefined, undefined, () => true)
+  expect((await exported.reliable)!.isCurrent()).toBe(true)
   expect(boundary.contents.executeJavaScript.mock.calls.filter(([code]) => code.includes('page.seek(0)'))).toHaveLength(1)
-  expect(sharedTexture.sendSharedTexture).toHaveBeenCalledOnce()
   expect(vi.mocked(sharedTexture.sendSharedTexture).mock.calls[0][1]).toMatchObject({ webRestore: restore, displaySize: { width: 100, height: 100 }, request: { id: 'export' } })
   expect(boundary.release).toHaveBeenCalledOnce()
+  // 缓存不要这一幅：只交付，不读回。
+  const skipped = await page.captureExport(1, 'export-only', { readSnapshot }, undefined, undefined, undefined, () => false)
+  expect(skipped.reliable).toBeUndefined()
+  expect(readSnapshot).toHaveBeenCalledOnce()
+  expect(sharedTexture.sendSharedTexture).toHaveBeenCalledTimes(2)
+  expect(boundary.release).toHaveBeenCalledTimes(2)
 })
 
 it('快照提交后抢占阻止读回，恢复不重复seek；暂停时取消归还尚未交出的纹理', async () => {

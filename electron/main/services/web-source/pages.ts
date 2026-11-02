@@ -255,12 +255,17 @@ export class WebSourcePages {
     this.cacheDemands.delete(streamId)
     this.readTiming.close(streamId)
     this.reader?.close(streamId)
-    this.exportWriter?.close(streamId)
-    this.registrations?.remove(streamId)
     this.lastFailure.delete(streamId)
     this.unsettled.delete(streamId)
-    page.close()
-    this.content.release(page.folder.root)
+    // 精确导出顺手写的缓存段可能还在编码：发布要复核页面与登记，等它们收尾后再关页面。页面已不在表里，不会再取帧。
+    const finish = (): void => {
+      this.registrations?.remove(streamId)
+      page.close()
+      this.content.release(page.folder.root)
+    }
+    const draining = this.exportWriter?.close(streamId)
+    if (draining) void draining.finally(finish)
+    else finish()
     this.logger.info('网页来源已关闭', { event: 'web_source.page.closed', context: { streamId, reason } })
     return true
   }
