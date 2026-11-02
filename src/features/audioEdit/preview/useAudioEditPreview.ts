@@ -21,6 +21,14 @@ const BUFFER_SECONDS = 3
 const EFFECT_CHUNK_SECONDS = 0.1
 const EFFECT_BUFFER_SECONDS = 0.35
 const EFFECT_LOW_WATER_SECONDS = 0.22
+const LOW_WATER_SECONDS = 1.5
+/**
+ * 工作线程低于多少帧要数据。必须低于渲染层补到的目标（BUFFER / EFFECT_BUFFER），否则渲染层补满后不再送块，
+ * 工作线程的要数据请求得不到回应，要等放空了才再补，播放每隔一个缓冲长度断一下。
+ */
+function lowWaterFrames(sampleRate: number, realtime: boolean): number {
+  return Math.round(sampleRate * (realtime ? EFFECT_LOW_WATER_SECONDS : LOW_WATER_SECONDS))
+}
 const logger = createLogger('features.audioEdit.preview')
 
 interface WorkletMessage {
@@ -250,6 +258,8 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
         outputRef.current = output
         contextRef.current = context
         nodeRef.current = node
+        // 工作线程建好时效果可能早已加载：按当前有无实时效果设门槛（之后的变化由下面的配置副作用送达）。
+        node.port.postMessage({ type: 'config', lowWaterFrames: lowWaterFrames(sampleRate, effectsRef.current.length > 0) })
         // 擦洗声音与播放经同一个输出（自动音量、监听音量）。
         scrubRef.current!.attach({ context, destination: output.input })
         node.port.onmessage = (event: MessageEvent<WorkletMessage>) => {
@@ -262,7 +272,11 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
               playingRef.current = false
               node.port.postMessage({ type: 'playing', value: false })
               useAudioEditPlaybackStore.setState({ playing: false, preparing: false })
-            } else if (playingRef.current) useAudioEditPlaybackStore.getState().setPreparing(true)
+            } else if (playingRef.current) {
+              // 播放中缓冲见底：输出淡出再淡入，听起来是断续的咔嗒声。
+              logger.warn('audio_edit.preview.starved', { projectId, effects: effectsRef.current.length, sourceFrame: nextSourceFrameRef.current })
+              useAudioEditPlaybackStore.getState().setPreparing(true)
+            }
           }
           if (message.type === 'need-data' || message.type === 'starved') void fillBufferRef.current()
         }
@@ -303,7 +317,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   // 有无实时效果决定工作线程多早要数据；效果结构变了，丢掉已按旧效果处理好的排队声音，从当前位置重新处理。
   const realtime = effects.length > 0
   useEffect(() => {
-    nodeRef.current?.port.postMessage({ type: 'config', lowWaterFrames: Math.round((sampleRate ?? 48000) * (realtime ? EFFECT_LOW_WATER_SECONDS : 1.5)) })
+    if (sampleRate) nodeRef.current?.port.postMessage({ type: 'config', lowWaterFrames: lowWaterFrames(sampleRate, realtime) })
   }, [realtime, sampleRate])
   const appliedStructure = useRef(effectStructure)
   useEffect(() => {

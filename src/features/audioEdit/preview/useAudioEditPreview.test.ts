@@ -295,3 +295,13 @@ it('设备恢复途中换模式，旧播放回调只能填充当前模式的数�
   expect(prepare.mock.calls.every(([request]) => request.mode === 'source' && request.processing === undefined)).toBe(true)
   hook.unmount()
 })
+
+it('打开时已有实时效果：工作线程一建好就按实时效果的门槛要数据，不等效果变化', async () => {
+  const fixture = { ...project(), effectChain: [{ id: 'e', kind: 'builtin' as const, name: '参数均衡', enabled: true, amount: 1, builtin: { id: 'equalizer', params: {} } }] }
+  const hook = renderHook(() => useAudioEditPreview(fixture))
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().ready).toBe(true))
+  // 门槛要低于渲染层补到的目标（实时效果只提前 0.35 秒），否则补满后不再送块，放空才补，播放断续
+  const config = node.port.postMessage.mock.calls.filter(([message]) => message.type === 'config').at(-1)?.[0]
+  expect(config?.lowWaterFrames).toBeLessThan(48000 * 0.35)
+  hook.unmount()
+})
