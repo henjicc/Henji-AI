@@ -125,6 +125,9 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     delete data.spaceRender
     data.finalRenderer = spaceRender?.finalRenderer ?? 'realtime'
     data.pathTraceSamples = spaceRender?.pathTraceSamples ?? VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES
+    data.spaceBloom = spaceRender?.bloom ?? 0
+    data.spaceAmbientOcclusion = spaceRender?.ambientOcclusion ?? 0
+    data.spaceReflections = spaceRender?.reflections ?? 0
     const transcript = !propertyIds?.length || propertyIds.includes('video_edit.sequence.transcript')
     const silences = !propertyIds?.length || propertyIds.includes('video_edit.sequence.text_silences')
     if (transcript || silences) {

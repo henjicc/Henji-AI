@@ -2415,7 +2415,7 @@ export class VideoEditRenderer {
           // 没收敛的画面算作粗略画面，节目监视器停住时会再要精确画面；成片一次追踪到目标采样数。
           const samples = this.finalSpaceRender?.pathTraceSamples ?? VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES
           const trace = quality === 'final' ? { samples } : { samples, budgetMs: 150, ...(approximatePictures ? {} : { key: `${document.id}:${document.revision}:${frame}:${precision}` }) }
-          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplayFor(quality), trace, onRefining: markApproximate, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
+          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplayFor(quality), trace, onRefining: markApproximate, spaceRender: this.finalSpaceRender, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
           let completion = lease.completion
           try {
             const input = gpu.spatialPicture(lease)

@@ -8,7 +8,7 @@ import { validateCodeElementOverridesWithoutObservation } from './authorEffects'
 import { codeMaterialMediaIds } from './codeMaterialResources'
 import { codeMaterialSize } from './codeMaterialTiming'
 
-export type VideoEditSequenceSettings = Partial<Pick<VideoEditSequence, 'name' | 'width' | 'height' | 'frameRate' | 'pixelAspectRatio' | 'sampleRate' | 'channels' | 'motionBlur'>> & { binId?: string | null }
+export type VideoEditSequenceSettings = Partial<Pick<VideoEditSequence, 'name' | 'width' | 'height' | 'frameRate' | 'pixelAspectRatio' | 'sampleRate' | 'channels' | 'motionBlur' | 'spaceRender'>> & { binId?: string | null }
 export class VideoEditSequenceFrameRateRequired extends Error {
   constructor(readonly settings: VideoEditSequenceSettings) { super('此素材的帧率不固定或未能可靠检测，请在序列设置中选择剪辑帧率。'); this.name = 'VideoEditSequenceFrameRateRequired' }
 }

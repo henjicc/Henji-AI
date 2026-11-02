@@ -220,7 +220,7 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
       const sources = node.kind === 'clip' ? [node.clip] : videoEditTransitionPictureClips(node.window)
       if (!sources.every(clip => spatialClipEnabled(clip) || worldScenes.has(clip.id))) {
         flush()
-        // 混合转场各自完成空间曝光，再由原转场合成；二维一侧仍隔断深度排序。
+        // 混合转场两端的空间片段各成一组，再由原转场合成；二维一侧仍隔断深度排序。
         if (node.kind === 'transition') for (const clip of sources) if (spatialClipEnabled(clip) || worldScenes.has(clip.id)) {
           runs.push({ id: `${parent}:${clip.id}`, items: [{ id: clip.id, clips: [clip.id], node: { kind: 'clip', clip, fromTrack: clip.track, toTrack: clip.track + 1 } }] })
         }

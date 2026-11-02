@@ -22,7 +22,7 @@ import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/appl
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { rebindVideoEditProjectTextIdentities } from '@/core/videoEdit/textTranscript'
 import { inspectVideoEditMediaContent } from '../videoEditMediaContent'
-import { createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDuration, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
+import { createVideoEditSequence, changeVideoEditSequenceSettings, storedVideoEditSpaceRender, videoEditComposition, videoEditDuration, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
@@ -584,9 +584,10 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {
   editVideoProject(projectId, document => { const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
 }
-export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null; motionBlur?: boolean }): void {
-  const { name, binId, motionBlur, ...timing } = settings
-  editVideoSequence(projectId, sequenceId, sequence => ({ ...changeVideoEditSequenceSettings(sequence, timing), ...(name !== undefined ? { name } : {}), ...(motionBlur !== undefined ? { motionBlur } : {}), ...(binId !== undefined ? { binId: binId || undefined } : {}) }))
+export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null; motionBlur?: boolean; spaceRender?: import('@/core/videoEdit/document').VideoEditSpaceRender }): void {
+  const { name, binId, motionBlur, spaceRender, ...timing } = settings
+  editVideoSequence(projectId, sequenceId, sequence => ({ ...changeVideoEditSequenceSettings(sequence, timing), ...(name !== undefined ? { name } : {}), ...(motionBlur !== undefined ? { motionBlur } : {}), ...(binId !== undefined ? { binId: binId || undefined } : {}),
+    ...(spaceRender !== undefined ? { spaceRender: storedVideoEditSpaceRender(spaceRender) } : {}) }))
 }
 export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, spatial: import('./videoEditSpatialPropagation').VideoEditSpatialEditOptions): Promise<VideoEditDocument>
 export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, preserveProgramAnchors?: readonly string[], preserveCaptions?: boolean): VideoEditDocument

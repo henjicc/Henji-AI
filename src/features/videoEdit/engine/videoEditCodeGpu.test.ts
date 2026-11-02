@@ -6,9 +6,6 @@ import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import * as glyphMetrics from '../videoEditGlyphMetrics'
 import * as fonts from '@/platform/fonts'
-import { VideoEditAuthorPrograms } from './videoEditAuthorPrograms'
-import type { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
-import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
 
 it('空间预算回收闲置池的物理纹理，不清空仍可保留的在用材料', async () => {
   const { device } = gpu(), runtime = new VideoEditCodeGpu(device), bytes = 64 * 64 * 4
@@ -23,31 +20,6 @@ it('空间预算回收闲置池的物理纹理，不清空仍可保留的在用�
   } finally { runtime.effectAllocator.release(active); await runtime.dispose() }
 })
 
-it('空间目标保留元素覆写、运动模糊与缩放，精度升级仍可由计算着色器写入，租约等待消费完成', async () => {
-  const { device } = gpu(), textures = vi.spyOn(device, 'createTexture')
-  const runtime = new VideoEditCodeGpu(device)
-  const render = vi.fn(async (...args: Parameters<VideoEditAuthorRuntime['render']>) => { args[13]?.(); return undefined })
-  const instance = vi.spyOn(VideoEditAuthorPrograms.prototype, 'instance').mockResolvedValue({ render, carriesLight: false } as unknown as VideoEditAuthorRuntime)
-  const program = testAuthorProgram(testAuthorBundle('export default {name:"计算卡片",draw(){}}'))
-  const overrides = { title: { hidden: true, opacity: .25 } }, environment = { boundStyle: { id: 'style' } }
-  try {
-    const lease = await runtime.authorSpatialGenerator('card', program, { width: 200, height: 100 },
-      { key: 'card', width: 100, height: 50, format: 'rgba8unorm', usage: 23 }, {}, {},
-      { time: 1, frameDuration: 1 / 30, clip: { time: 1, duration: 2 } }, {}, 'interactive', () => {}, overrides, false, environment)
-    expect(render.mock.calls[0][5]).toMatchObject({ renderScale: .5 })
-    expect(render.mock.calls[0][6]).toBe(overrides)
-    expect(render.mock.calls[0][8]).toBe(false)
-    expect(render.mock.calls[0][10]).toBe(environment)
-    expect(lease.format).toBe('rgba16float')
-    for (const [descriptor] of textures.mock.calls) expect((descriptor as { usage: number }).usage & 8).toBe(8)
-    const bytes = runtime.diagnostics().residentBytes
-    let done!: () => void
-    const release = lease.release(new Promise<void>(resolve => { done = resolve }))
-    await Promise.resolve(); expect(runtime.diagnostics().residentBytes).toBe(bytes)
-    done(); await release; await lease.release(Promise.resolve())
-    expect(runtime.diagnostics().residentBytes).toBe(0)
-  } finally { instance.mockRestore(); await runtime.dispose() }
-})
 
 function textDraw(text: string): VideoEditGraphicDraw {
   return { command: { kind: 'text', x: 0, y: 0, text, fontSize: 32, color: [1,1,1,1], fontFamily: 'sans-serif', align: 'left' }, rotation: 0, pivotX: 0, pivotY: 0 }

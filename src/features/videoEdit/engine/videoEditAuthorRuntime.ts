@@ -204,16 +204,6 @@ export class VideoEditAuthorRuntime {
     })
   }
   private renders: Promise<unknown> = Promise.resolve()
-  inspectThree(width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo): Promise<import('@/core/videoEdit/spatialTypes').SpatialBounds | null> {
-    const result = this.renders.then(async () => {
-      if (this.closed) throw new Error('代码效果会话已关闭。')
-      if (!this.effect.createThree || !info.space) throw new Error('场景边界检查需要 createThree 与空间上下文。')
-      this.three ??= await VideoEditAuthorThree.create(this.device, this.effect.createThree, width, height, this.libraries)
-      return this.three.update(authorParameterValues(this.parameterMetadata, params), assets, { ...info, space: info.space })
-    })
-    this.renders = result.catch(() => undefined)
-    return result
-  }
   /**
    * 按本帧更新 three 场景并交出根节点，由统一三维渲染器挂进同一场景绘制（不经作者自带的渲染桥）。
    * 根节点是活对象：调用方须在同一实例的下一次更新之前用完。

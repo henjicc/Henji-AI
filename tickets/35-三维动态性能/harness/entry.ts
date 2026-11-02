@@ -164,41 +164,41 @@ let spatialGpu: VideoEditSpatialGpu | undefined
 wrap(VideoEditSpatialGpu.prototype, 'consume', 'mip')
 wrap(VideoEditSpatialGpu.prototype, 'defocus', 'dof')
 wrap(VideoEditSpatialGpu.prototype, 'encodeBuiltin', 'cardEffects')
-wrap(VideoEditSpatialGpu.prototype, 'material', 'cardMaterial')
-wrap(VideoEditSpatialGpu.prototype, 'draw', (_self, args) => {
-  const items = args[1] as Array<{ itemId: string; projection: string }>
-  if (!args[3]) return 'projection'
-  return items[0]?.itemId === 'exposure' ? 'accumulate' : 'projection+accumulate'
-})
 wrap(VideoEditAuthorThree.prototype, 'render', 'three')
 wrap(VideoEditThreeSpace.prototype, 'render', 'threeSpace')
-wrap(VideoEditSpatialGpu.prototype, 'flush', () => current() === 'other' ? 'accumulateFlush' : current())
 wrap(VideoEditCodeSources.prototype, 'prepare', 'codePrepare')
 wrap(VideoEditCodeSources.prototype, 'prepareSpatialFrame', 'scenePrepare')
-wrap(VideoEditCodeSources.prototype, 'inspectSpatialSceneSamples', 'sceneInspect')
-wrap(VideoEditCodeSources.prototype, 'renderSpatialSample', 'three')
 wrap(VideoEditGpuCompositor.prototype, 'draw', (_self, args) => {
   if (current() !== 'other' && current() !== 'final') return current() === 'cardMaterial' ? 'cardMaterial2d' : current()
   const clips = args[1] as Array<{ kind: string }>
   return args[6] ? clips[0]?.kind === 'code' ? 'sceneToMaterial' : 'cardMaterial2d' : 'final'
 })
-{
-  const reserve = VideoEditSpatialGpu.prototype.reserveWorkingSet
-  VideoEditSpatialGpu.prototype.reserveWorkingSet = function (this: VideoEditSpatialGpu, value, signal) {
-    spatialGpu = this
-    plan = { samples: value.samples.length, groups: value.groups.map(group => group.mode), materials: value.materials.map(material => ({ clipId: material.clipId, kind: material.kind, width: material.target.width, height: material.target.height, dof: !material.defocus.bypass })) }
-    return reserve.call(this, value, signal)
-  }
-}
 
-interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: boolean; from: number; to: number; quality: 'interactive' | 'final'; shots?: number[]; display?: 'realtime' | 'solid' | 'wireframe' | 'render'; noWarmup?: boolean; pathTrace?: boolean }
+interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: boolean; from: number; to: number; quality: 'interactive' | 'final'; shots?: number[]; display?: 'realtime' | 'solid' | 'wireframe' | 'render'; noWarmup?: boolean; pathTrace?: boolean; transition?: boolean | 'single'; effects?: { bloom?: number; ambientOcclusion?: number; reflections?: number } }
 async function attribute(project: unknown, sceneSource: string, hash: string, media: Record<string, string>, config: Config) {
   const raw = structuredClone(project) as { media: Array<{ id: string; path: string }>; codeMaterials: Array<{ versions: Array<{ files: Array<{ location: string; hash: string }> }> }>; sequences: Array<{ motionBlur?: boolean; spatialCamera?: { curves?: Record<string, unknown>; defocus?: number } }> }
   const location = rememberTransientCodeSource(hash, sceneSource)
   for (const material of raw.codeMaterials) for (const version of material.versions) for (const file of version.files) file.location = location
   const sequence = raw.sequences[0]
   sequence.motionBlur = config.motionBlur
-  if (config.pathTrace) (sequence as { spaceRender?: unknown }).spaceRender = { finalRenderer: 'pathTrace' }
+  // --transition：把一张空间卡片在第 150 帧切成两段，中间 30 帧交叉溶解，右段下移一点以便看出转场。
+  if (config.transition) {
+    const clips = (sequence as unknown as { clips: Array<Record<string, unknown> & { id: string; start: number; duration: number; y: number }> }).clips
+    const left = clips.find(clip => clip.id === 'panel-b')!, cut = 150
+    const right = { ...structuredClone(left), id: 'panel-b2', start: cut, duration: left.start + left.duration - cut, y: left.y + .08 }
+    // 'single'：只在右段入点淡入（单侧转场），左段提前 30 帧结束、中间留空。
+    left.duration = cut - left.start - (config.transition === 'single' ? 30 : 0)
+    // 关键帧时间相对片段：左段只留切点之前的，右段整体前移并只留自身范围内的。
+    const retime = (curves: unknown, shift: number, duration: number): unknown => curves && typeof curves === 'object' ? Object.fromEntries(Object.entries(curves as Record<string, unknown>).map(([key, points]) =>
+      [key, Array.isArray(points) ? points.map(point => ({ ...point, time: point.time - shift })).filter(point => point.time >= 0 && point.time <= duration) : points])) : curves
+    left.curves = retime(left.curves, 0, left.duration)
+    right.curves = retime(right.curves, cut - left.start, right.duration)
+    clips.push(right)
+    ;(sequence as { transitions?: unknown[] }).transitions = [config.transition === 'single'
+      ? { id: 'tx', kind: 'cross_dissolve', rightClipId: 'panel-b2', durationFrames: 30 }
+      : { id: 'tx', kind: 'cross_dissolve', leftClipId: 'panel-b', rightClipId: 'panel-b2', durationFrames: 30 }]
+  }
+  if (config.pathTrace || config.effects) (sequence as { spaceRender?: unknown }).spaceRender = { ...(config.pathTrace ? { finalRenderer: 'pathTrace' } : {}), ...config.effects }
   if (!config.dof && sequence.spatialCamera) { delete sequence.spatialCamera.curves?.defocus; sequence.spatialCamera.defocus = 0 }
   const parsed = parseVideoEditDocument(raw)
   // 页面内用 data URL 读取图片；格式校验要求绝对路径，校验后再替换（解析结果已冻结，复制出新对象）。
@@ -214,7 +214,7 @@ async function attribute(project: unknown, sceneSource: string, hash: string, me
   try {
     const one = async (index: number) => {
       frame = {}; extra = {}; plan = undefined; stack.length = 0; lastSwitch = performance.now()
-      const cache = spatialGpu?.materialDiagnostics()
+      const cache = undefined as undefined | { hits: number; misses: number; evictions: number; entries: number; bytes: number }
       const started = performance.now()
       enter('other')
       const result = await renderer.render(index, true, false, () => true, undefined, undefined, config.quality, undefined, true)
@@ -223,7 +223,7 @@ async function attribute(project: unknown, sceneSource: string, hash: string, me
       exit('other')
       const elapsedMs = performance.now() - started
       const gpu = await collectTimestamps()
-      const after = spatialGpu?.materialDiagnostics()
+      const after = cache
       if (!result.presented || result.effectErrors?.length) throw Error(JSON.stringify({ index, result }))
       if (config.shots?.includes(index)) {
         const blob = await canvas.convertToBlob({ type: 'image/png' })

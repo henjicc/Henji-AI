@@ -165,6 +165,9 @@ export type VideoEditNativeTemplateClip = z.infer<typeof videoEditNativeTemplate
 export const videoEditSpaceRenderSchema = z.object({
   finalRenderer: z.enum(['realtime', 'pathTrace']).optional().describe('成片的三维渲染器：realtime 实时（与节目监视器“实时”同一画面，快，默认）；pathTrace 路径追踪（全局光照、真实反射折射与景深，1080p 每帧约数秒到数十秒；不做运动模糊）。'),
   pathTraceSamples: z.number().int().min(16).max(4096).optional().describe('路径追踪每像素采样数，省略为 256；越多噪点越少、越慢，大致与采样数成正比。'),
+  bloom: z.number().min(0).max(3).optional().describe('泛光强度 0–3，省略为 0（不开）：亮处向四周发光，发光粒子、灯、高光更有光感。'),
+  ambientOcclusion: z.number().min(0).max(1).optional().describe('环境光遮蔽强度 0–1，省略为 0：物体相接、凹处变暗，体积更实。只作用于三维物体，卡片画面不变。'),
+  reflections: z.number().min(0).max(1).optional().describe('屏幕空间反射强度 0–1，省略为 0：光滑、金属表面反射画面里看得到的东西。只作用于三维物体。'),
 }).strict()
 export type VideoEditSpaceRender = z.infer<typeof videoEditSpaceRenderSchema>
 export const VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES = 256
@@ -173,6 +176,9 @@ export function storedVideoEditSpaceRender(value: VideoEditSpaceRender): VideoEd
   const stored: VideoEditSpaceRender = {
     ...value.finalRenderer && value.finalRenderer !== 'realtime' ? { finalRenderer: value.finalRenderer } : {},
     ...value.pathTraceSamples !== undefined && value.pathTraceSamples !== VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES ? { pathTraceSamples: value.pathTraceSamples } : {},
+    ...value.bloom ? { bloom: value.bloom } : {},
+    ...value.ambientOcclusion ? { ambientOcclusion: value.ambientOcclusion } : {},
+    ...value.reflections ? { reflections: value.reflections } : {},
   }
   return Object.keys(stored).length ? stored : undefined
 }

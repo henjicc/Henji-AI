@@ -1,7 +1,7 @@
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { GpuTexture as GPUTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
-import type { SpatialBounds, SpatialCardGeometry, SpatialFrame, SpatialMat4, SpatialOutput, SpatialRect, SpatialVec2 } from '@/core/videoEdit/spatialTypes'
+import type { SpatialBounds, SpatialFrame, SpatialMat4, SpatialOutput, SpatialRect, SpatialVec2 } from '@/core/videoEdit/spatialTypes'
 import type { VideoEditGpuColorFormat } from './videoEditGpuFrame'
 
 // 宿主以结构类型借用原生纹理，避免 WebGPU 全局声明改变既有 Canvas 重载。
@@ -72,14 +72,6 @@ export interface SpatialSceneSample {
   clipId: string; sampleIndex: number; sequenceFrame: number;
   worldBounds: SpatialBounds | null; // null 是空场景
 }
-export interface SpatialSampleRequest {
-  prepared: PreparedSpatialFrame;
-  clipId: string; sampleIndex: number; sequenceFrame: number;
-  sourceTime: number; centerSourceTime: number;
-  spatialFrame: SpatialFrame;
-  target: SpatialTargetSpec;
-  materialPlan: SpatialMaterialPlan;
-}
 export interface SpatialPictureLease {
   readonly texture: GPUTexture;
   readonly owner: 'code-sources' | 'composite-host';
@@ -95,62 +87,7 @@ export interface SpatialCodeSources {
     composition: Readonly<VideoEditComposition>, signal: AbortSignal
   ): Promise<readonly SpatialSourceDescriptor[]>;
   prepareSpatialFrame(request: SpatialPrepareRequest): Promise<PreparedSpatialFrame>;
-  inspectSpatialSceneSamples(
-    prepared: PreparedSpatialFrame
-  ): Promise<readonly SpatialSceneSample[]>;
-  renderSpatialSample(request: SpatialSampleRequest): Promise<SpatialPictureLease>;
-  generatorTargetCapacity(width: number, height: number, format: VideoEditGpuColorFormat): number;
   releaseSpatialFrame(prepared: PreparedSpatialFrame): Promise<void>;
   /** 统一三维渲染器用：把各世界场景更新到中心帧或快门开始那一刻并交出根节点（three 活对象，须在释放空间帧前读完）。 */
-  stageSpatialScenes?(prepared: PreparedSpatialFrame, moment?: 'center' | 'open'): Promise<readonly { clipId: string; root: import('three').Group; worldBounds: SpatialBounds | null; time: number }[]>;
+  stageSpatialScenes(prepared: PreparedSpatialFrame, moment?: 'center' | 'open'): Promise<readonly { clipId: string; root: import('three').Group; worldBounds: SpatialBounds | null; time: number }[]>;
 }
-export interface SpatialDrawItem {
-  itemId: string; sourceKey: string; clipId: string;
-  kind: SpatialContentKind | 'transition';
-  picture: SpatialPictureLease; geometry: SpatialCardGeometry;
-  opacity: number; groupId: string; ordinal: number;
-  projection: 'material' | 'screen';
-}
-export const spatialAccumulatorBrand: unique symbol = Symbol('spatialAccumulator');
-export interface SpatialAccumulator {
-  readonly [spatialAccumulatorBrand]: true;
-}
-export interface SpatialSubmission { readonly completion: Promise<void> }
-export interface SpatialCompositeHost {
-  generatorTargetCapacity(width: number, height: number, format: VideoEditGpuColorFormat): number;
-  reserveWorkingSet(plan: SpatialExposurePlan, signal: AbortSignal): Promise<void>;
-  prepareCardMaterial(
-    request: SpatialFrameRequest, materialPlan: SpatialMaterialPlan
-  ): Promise<SpatialPictureLease>;
-  consumePicture(
-    picture: SpatialPictureLease, target: SpatialTargetSpec
-  ): Promise<SpatialPictureLease>;
-  applyCenterDefocus(
-    picture: SpatialPictureLease, materialPlan: SpatialMaterialPlan,
-    sampleSupportBoundsPx: SpatialRect
-  ): Promise<SpatialPictureLease>;
-  beginAccumulation(target: SpatialTargetSpec): Promise<SpatialAccumulator>;
-  accumulateLayerSample(
-    accumulator: SpatialAccumulator, item: SpatialDrawItem, weight: number
-  ): Promise<SpatialSubmission>;
-  finishLayer(accumulator: SpatialAccumulator): Promise<SpatialPictureLease>;
-  compositeGroup(
-    group: SpatialGroupPlan, sample: SpatialSample,
-    orderedItems: readonly SpatialDrawItem[]
-  ): Promise<SpatialPictureLease>;
-  accumulate(
-    accumulator: SpatialAccumulator, groupPicture: SpatialPictureLease, weight: number
-  ): Promise<SpatialSubmission>;
-  finish(accumulator: SpatialAccumulator): Promise<SpatialPictureLease>;
-  compositeFrame(
-    request: SpatialFrameRequest,
-    groups: readonly { groupId: string; picture: SpatialPictureLease }[]
-  ): Promise<SpatialPictureLease>;
-  releaseAccumulation(accumulator: SpatialAccumulator): Promise<void>;
-  releaseWorkingSet(): Promise<void>;
-}
-export type SpatialExposurePicture = SpatialPictureLease;
-export type PlanSpatialExposure = (request: SpatialFrameRequest, sceneSamples?: readonly SpatialSceneSample[]) => SpatialExposurePlan;
-export type RenderSpatialExposure = (
-  request: SpatialFrameRequest, plan: SpatialExposurePlan, sources: SpatialCodeSources, host: SpatialCompositeHost
-) => Promise<SpatialExposurePicture>;

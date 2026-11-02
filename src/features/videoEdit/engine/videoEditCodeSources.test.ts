@@ -26,70 +26,7 @@ import { videoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
 import { GOLDEN_SCENE_DECLARATION, goldenScene } from '@/core/videoEdit/scene/sceneTestFixtures'
 import { installAuthorTrustGate, assertAuthorTrust } from './videoEditAuthorTrust'
 import { createContentTrustTestSession } from '../../../../electron/main/services/content-trust/test-support'
-import type { SpatialFrame } from '@/core/videoEdit/spatialTypes'
-import type { SpatialPrepareRequest, SpatialSampleRequest, SpatialPictureLease } from './videoEditSpatialContracts'
-import { spatialIdentityMatrix } from '@/core/videoEdit/spatialMatrices'
 
-it('空间卡片只取中心材料面，three 按源子时刻取样；材料面等待全部借用完成后释放', async () => {
-  const document = fixture(source('dynamic')), clip = document.clips[0]
-  document.motionBlur = false
-  clip.elementOverrides = { box: { hidden: true, opacity: .25 } }
-  const boundary = boundaries(document), runtime = await boundary.acquire()
-  const released = vi.fn(), renders: Array<{ time: number; sample: number | undefined }> = []
-  const spatialRender = vi.fn(async (...args: Parameters<VideoEditCodeGpu['authorSpatialGenerator']>): Promise<SpatialPictureLease> => {
-    const info = args[6]
-    renders.push({ time: info.time, sample: info.space?.sampleTime })
-    return { texture: { createView() {}, destroy() {} }, owner: 'code-sources', width: 100, height: 100, format: 'rgba8unorm', highPrecision: false, carriesLight: false, completion: Promise.resolve(), release: async afterUse => { await afterUse; released() } }
-  })
-  Object.assign(runtime, { authorSpatialGenerator: spatialRender })
-  const identity = spatialIdentityMatrix()
-  const frame = { sequenceFrame: 30, sequenceTime: 1, output: { width: 100, height: 100, displayWidth: 100, displayHeight: 100 }, cards: [], flatIdentity: false, facts: [],
-    camera: { position: [0, 0, 2], target: [0, 0, 0], up: [0, 1, 0], focalLengthMm: 80, sensorWidthMm: 36, focusDistance: 2, fStop: 4, defocus: 0, near: .01, far: 100, fovYRadians: .5,
-      view: identity, projectionWebGpu: identity, projectionWebGl: identity, canonicalIdentity: false, resolvedAim: [0, 0, 0], resolvedFocus: [0, 0, 0], targetActive: true } } satisfies SpatialFrame
-  const material: SpatialSampleRequest['materialPlan'] = { clipId: clip.id, kind: 'card', contentTime: 'center', centerFrame: 30, centerSourceTime: 37, referenceSize: { width: 100, height: 100 }, logicalBounds: { x: 0, y: 0, width: 100, height: 100 }, uvToReference: identity,
-    rasterScale: [1, 1], supportBoundsPx: { x: 0, y: 0, width: 100, height: 100 }, defocus: { centerCocRadiusPx: 0, materialRadiusPx: [0, 0], workBoundsPx: { x: 0, y: 0, width: 100, height: 100 }, downsample: 1, bypass: true, stage: 'center-material' }, target: { key: 'material', width: 100, height: 100, format: 'rgba8unorm', usage: 23 }, highPrecision: false, carriesLight: false }
-  const prepare: SpatialPrepareRequest = { frame: { composition: document, sequenceFrame: 30, output: frame.output, quality: 'interactive', sessionKind: 'preview', sources: [{ clipId: clip.id, kind: 'card', spaceDependency: true }], requestId: 'frame', signal: new AbortController().signal, assertCurrent() {} },
-    plan: { centerFrame: frame, samples: [12, 13].map((time, index) => ({ index, sequenceFrame: time, weight: .5, frame: { ...frame, sequenceTime: time }, clips: [{ clipId: clip.id, sequenceFrame: time, sourceTime: time, centerSourceTime: 37, motionBlur: true }] })), shotRange: [0, 60], groups: [], materials: [material], workingSetBytes: 40000 } }
-  const preparation = vi.fn(async () => {})
-  boundary.sources.setSpatialAuthorHooks({ prepare: preparation, inputs: async () => ({ assets: {}, images: {}, info: { web: {} } }) })
-  try {
-    const prepared = await boundary.sources.prepareSpatialFrame(prepare)
-    const sample = (index: number): SpatialSampleRequest => ({ prepared, clipId: clip.id, sampleIndex: index, sequenceFrame: 12 + index, sourceTime: 12 + index, centerSourceTime: 37, spatialFrame: { ...frame, sequenceTime: 12 + index }, target: material.target, materialPlan: material })
-    const first = await boundary.sources.renderSpatialSample(sample(0)), second = await boundary.sources.renderSpatialSample(sample(1))
-    expect(renders).toEqual([{ time: 37, sample: 1 }])
-    expect(spatialRender.mock.calls[0][10]).toEqual({ box: { hidden: true, opacity: .25 } })
-    expect(spatialRender.mock.calls[0][11]).toBe(false)
-    expect(first.texture).toBe(second.texture)
-    let complete!: () => void
-    const using = first.release(new Promise<void>(resolve => { complete = resolve }))
-    await second.release(Promise.resolve())
-    const releasing = boundary.sources.releaseSpatialFrame(prepared)
-    await Promise.resolve(); expect(released).not.toHaveBeenCalled()
-    complete(); await using; await releasing
-    expect(released).toHaveBeenCalledTimes(1)
-    prepare.frame.sources = [{ clipId: clip.id, kind: 'worldScene', spaceDependency: true }]
-    const inspected = vi.fn(async () => ({ min: [-1, -1, -1], max: [1, 1, 1] }))
-    Object.assign(runtime, { inspectAuthorScene: inspected })
-    const world = await boundary.sources.prepareSpatialFrame(prepare)
-    expect(preparation).toHaveBeenLastCalledWith(clip, [37, 12, 13], prepare.frame.signal)
-    const observations = await boundary.sources.inspectSpatialSceneSamples(world)
-    expect(observations.map(value => [value.sampleIndex, value.sequenceFrame])).toEqual([[-1, 30], [0, 12], [1, 13]])
-    expect(inspected.mock.calls).toHaveLength(3)
-    for (let index = 0; index < 2; index++) await boundary.sources.renderSpatialSample({ ...sample(index), prepared: world })
-    expect(renders.slice(1)).toEqual([{ time: 12, sample: 12 }, { time: 13, sample: 13 }])
-    expect(preparation.mock.calls).toHaveLength(2)
-    // 入侧位于剪切点前，但仍在正式转场手柄内，空间路径必须沿同一源时钟取样。
-    clip.start = 20; clip.sourceInUs = 1_000_000
-    document.clips.push({ ...clip, id: 'outgoing', start: 0, duration: 20 })
-    document.transitions = [{ id: 'handle', kind: 'cross_dissolve', leftClipId: 'outgoing', rightClipId: clip.id, durationFrames: 10 }]
-    const handled = await boundary.sources.renderSpatialSample({ ...sample(0), prepared: world, sequenceFrame: 19, sourceTime: 1 - 1 / document.fps, centerSourceTime: 1 })
-    await handled.release(Promise.resolve())
-    expect(renders.at(-1)!.time).toBeCloseTo(1 - 1 / document.fps)
-    boundary.sources.cancel()
-    await expect(boundary.sources.renderSpatialSample({ ...sample(0), prepared: world })).rejects.toMatchObject({ name: 'AbortError' })
-    await boundary.sources.releaseSpatialFrame(world)
-  } finally { await boundary.sources.dispose() }
-})
 
 const logWarn = vi.hoisted(() => vi.fn())
 const maskFailure = vi.hoisted(() => ({ fail: false }))

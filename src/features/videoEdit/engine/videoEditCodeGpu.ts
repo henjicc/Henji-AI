@@ -146,57 +146,11 @@ export class VideoEditCodeGpu {
   async authorFrameKey(...args: Parameters<VideoEditAuthorPrograms['frameKey']>): ReturnType<VideoEditAuthorPrograms['frameKey']> {
     return this.trackAuthor(async () => { await this.ready; this.assertLive(); return this.authors().frameKey(...args) })
   }
-  async inspectAuthorScene(instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo): Promise<import('@/core/videoEdit/spatialTypes').SpatialBounds | null> {
-    return this.trackAuthor(async () => {
-      await this.ready; this.assertLive()
-      const runtime = await this.authors().instance(instanceKey, program)
-      return runtime.inspectThree(size.width, size.height, parameters, assets, info)
-    })
-  }
   async stageAuthorScene(instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo): ReturnType<import('./videoEditAuthorRuntime').VideoEditAuthorRuntime['stageThree']> {
     return this.trackAuthor(async () => {
       await this.ready; this.assertLive()
       const runtime = await this.authors().instance(instanceKey, program)
       return runtime.stageThree(size.width, size.height, parameters, assets, info)
-    })
-  }
-  /** 空间 lease 使用独立目标；完成后由 lease 显式回收，不能与普通帧淘汰互相覆盖。 */
-  async authorSpatialGenerator(instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number },
-    target: import('./videoEditSpatialContracts').SpatialTargetSpec, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets,
-    info: AuthorFrameInfo, images: AuthorGpuInputs['images'], quality: EffectQuality, assertCurrent: () => void,
-    overrides?: AuthorElementOverrides, motionBlur = true, environment: AuthorEffectEnvironment = this.effectEnvironment): Promise<import('./videoEditSpatialContracts').SpatialPictureLease> {
-    return this.trackAuthor(async () => {
-      await this.ready; this.assertLive(); assertCurrent()
-      const runtime = await this.authors().instance(instanceKey, program)
-      let texture = this.texture(target.width, target.height, target.format, 1, true, target.usage)
-      const textures = [texture]
-      let format = target.format
-      let release: Promise<void> | undefined
-      try {
-        const frameInfo = target.height === size.height ? info : { ...info, renderScale: target.height / size.height }
-        for (const image of Object.values(images)) this.assertInput(image.texture)
-        await runtime.render(texture, size.width, size.height, parameters, assets, frameInfo, overrides, { frames: [], images }, motionBlur,
-          { width: target.width, height: target.height }, environment, quality, assertCurrent, () => {
-            format = VIDEO_EDIT_PRECISE_FORMAT
-            texture = this.texture(target.width, target.height, format, 1, true, target.usage)
-            textures.push(texture)
-            return texture
-          })
-        assertCurrent()
-        const completion = this.device.queue.onSubmittedWorkDone()
-        return { texture: runtime.outputTexture ?? texture, owner: 'code-sources', width: target.width, height: target.height,
-          format, highPrecision: format === VIDEO_EDIT_PRECISE_FORMAT, carriesLight: runtime.carriesLight,
-          worldBounds: runtime.worldBounds, completion,
-          release: afterUse => release ??= Promise.allSettled([completion, afterUse]).then(results => {
-            for (const owned of textures) this.effectAllocator.release(owned)
-            const failed = results.find(result => result.status === 'rejected')
-            if (failed?.status === 'rejected') throw failed.reason
-          }) }
-      } catch (error) {
-        await this.device.queue.onSubmittedWorkDone().catch(() => undefined)
-        for (const owned of textures) this.effectAllocator.release(owned)
-        throw error
-      }
     })
   }
   async authorTextIdentity(...args: Parameters<VideoEditAuthorPrograms['textIdentity']>): ReturnType<VideoEditAuthorPrograms['textIdentity']> {
@@ -719,7 +673,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     await Promise.all(kinds.map(kind => runtime.prepare(kind, 'rgba8unorm')))
   }
   /**
-   * 效果、空间材料与曝光的临时纹理按尺寸/格式/层级复用。D3D12 下每建一张大纹理都要在 GPU 进程里分配资源并懒清零，
+   * 效果与空间材料的临时纹理按尺寸/格式/层级复用。D3D12 下每建一张大纹理都要在 GPU 进程里分配资源并懒清零，
    * 空间帧每帧几十张时 GPU 进程主线程被建纹理占满，显卡本身却闲着。归还的纹理留到两次 releaseUnused 之后才销毁；
    * 取回时先清成透明，与新建纹理的初始内容一致（有的效果只写支持区域）。
    */

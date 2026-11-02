@@ -8,8 +8,10 @@ import {
   videoEditSequenceRatioLabel, videoEditSequenceRatioValue, videoEditSequenceSizeForPixels,
   videoEditSequenceTierSize, type VideoEditSequencePreset,
 } from '@/core/videoEdit/sequencePresets'
-import { Dropdown, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiModal, UiPanel, UiSelect, UiSwitch } from '@/components/ui'
-import type { VideoEditBin } from '@/core/videoEdit/document'
+import NumberInput from '@/components/ui/NumberInput'
+import { Dropdown, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiModal, UiPanel, UiSegmented, UiSelect, UiSwitch } from '@/components/ui'
+import { VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, type VideoEditBin, type VideoEditSequence, type VideoEditSpaceRender } from '@/core/videoEdit/document'
+import { videoEditCompositionHasSpace } from '@/core/videoEdit/spaceDisplay'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from '@/core/videoEdit/time'
 import type { VideoEditSequenceSettings } from '../application/videoEditProjectItems'
 
@@ -33,7 +35,11 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
   const [values, updateValues] = useState(() => ({ name: initial.name ?? '新序列', binId: initial.binId ?? '', width: String(initial.width ?? defaults.width), height: String(initial.height ?? defaults.height),
     frameRate: requireFrameRate ? { numerator: 60, denominator: 1 } : initial.frameRate ?? defaults.frameRate, pixelAspectRatio: initial.pixelAspectRatio ?? defaults.pixelAspectRatio, sampleRate: initial.sampleRate ?? defaults.sampleRate, channels: initial.channels ?? defaults.channels,
     // 运动模糊总开关不进“默认值”：新建序列一律先开着
-    motionBlur: initial.motionBlur ?? true }))
+    motionBlur: initial.motionBlur ?? true, spaceRender: initial.spaceRender ?? {} as VideoEditSpaceRender }))
+  // 三维设置只给已经有三维内容的序列看：新建序列和纯二维序列不出现这一组。
+  const hasSpace = mode === 'edit' && 'clips' in initial && videoEditCompositionHasSpace(initial as VideoEditSequence)
+  const space = values.spaceRender
+  const setSpace = (change: Partial<VideoEditSpaceRender>): void => setValues({ ...values, spaceRender: { ...space, ...change } })
   const size = { width: Number(values.width), height: Number(values.height) }
   const [preset, setPreset] = useState(() => inferVideoEditSequencePreset(size))
   const [locked, setLocked] = useState(true)
@@ -54,7 +60,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
   }
   const specification = (): ReturnType<typeof videoEditSequenceDefaultsSchema.parse> => {
     if (sizeError) throw new Error(sizeError)
-    const { name: _name, binId: _binId, motionBlur: _motionBlur, ...settings } = values
+    const { name: _name, binId: _binId, motionBlur: _motionBlur, spaceRender: _spaceRender, ...settings } = values
     return videoEditSequenceDefaultsSchema.parse({ ...settings, ...size })
   }
   const saveAsDefaults = (): void => {
@@ -64,7 +70,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
   const submit = async (): Promise<void> => {
     if (!values.name.trim()) { setError('请输入序列名称。'); return }
     setBusy(true); setError('')
-    try { const settings = specification(); await onSubmit({ ...settings, name: values.name.trim(), binId: values.binId || null, motionBlur: values.motionBlur }); onClose() }
+    try { const settings = specification(); await onSubmit({ ...settings, name: values.name.trim(), binId: values.binId || null, motionBlur: values.motionBlur, ...(hasSpace ? { spaceRender: values.spaceRender } : {}) }); onClose() }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { setBusy(false) }
   }
@@ -144,6 +150,23 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
           })} onSelect={value => { const [numerator, denominator] = value.split('/').map(Number); setValues({ ...values, frameRate: { numerator, denominator } }) }} /></UiFormRow>
           <UiFormRow label="运动模糊" inline info="整条序列的总开关：在动的片段与图层沿运动方向模糊。关掉后整条序列都不模糊。"><UiSwitch aria-label="运动模糊" disabled={busy} checked={values.motionBlur} onCheckedChange={checked => setValues({ ...values, motionBlur: checked })} /></UiFormRow>
         </UiGroup>
+      {hasSpace && <UiGroup title="三维" divided>
+        <UiFormRow label="成片渲染" inline info="导出、选帧和封面用哪种渲染。路径追踪有真实的光影、反射和景深，1080p 每帧要几秒到几十秒，不做运动模糊；节目监视器看片另在“更多 → 三维”里切换。">
+          <UiSegmented ariaLabel="成片渲染" disabled={busy} value={space.finalRenderer ?? 'realtime'} options={[{ value: 'realtime', label: '实时' }, { value: 'pathTrace', label: '路径追踪' }]} onChange={finalRenderer => setSpace({ finalRenderer })} />
+        </UiFormRow>
+        {space.finalRenderer === 'pathTrace' && <UiFormRow label="采样数" inline info="每像素采样数。越多噪点越少，渲染时间大致与它成正比。">
+          <NumberInput ariaLabel="路径追踪采样数" disabled={busy} value={space.pathTraceSamples ?? VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES} min={16} max={4096} step={16} widthClassName="w-full" onChange={pathTraceSamples => setSpace({ pathTraceSamples })} />
+        </UiFormRow>}
+        <UiFormRow label="泛光" inline info="亮处向四周发光：发光粒子、灯和高光更有光感。0 为不开。">
+          <NumberInput ariaLabel="泛光强度" disabled={busy} value={space.bloom ?? 0} min={0} max={3} step={.05} precision={2} widthClassName="w-full" onChange={bloom => setSpace({ bloom })} />
+        </UiFormRow>
+        <UiFormRow label="环境光遮蔽" inline info="物体相接处和凹处变暗，体积更实。只作用于三维物体，卡片画面不变。0 为不开。">
+          <NumberInput ariaLabel="环境光遮蔽强度" disabled={busy} value={space.ambientOcclusion ?? 0} min={0} max={1} step={.05} precision={2} widthClassName="w-full" onChange={ambientOcclusion => setSpace({ ambientOcclusion })} />
+        </UiFormRow>
+        <UiFormRow label="屏幕反射" inline info="光滑、金属表面反射画面里看得到的东西。只作用于三维物体。0 为不开。">
+          <NumberInput ariaLabel="屏幕反射强度" disabled={busy} value={space.reflections ?? 0} min={0} max={1} step={.05} precision={2} widthClassName="w-full" onChange={reflections => setSpace({ reflections })} />
+        </UiFormRow>
+      </UiGroup>}
       <div>
         <UiButton aria-expanded={advanced} disabled={busy} onClick={() => setAdvanced(value => !value)}>{advanced ? <ChevronDown /> : <ChevronRight />}更多设置</UiButton>
         {advanced && <UiGroup className="mt-3">

@@ -58,8 +58,6 @@ export class VideoEditGpuCompositor {
   private codeRuntime?: VideoEditCodeGpu
   private spatialRuntime?: import('./videoEditSpatialComposite').VideoEditSpatialGpu
   private threeSpaceRuntime?: Promise<import('./videoEditThreeSpace').VideoEditThreeSpace>
-  private spatialMultisampleBytes = 0
-  private spatialPeakBytes = 0
   private readonly authorRuntimes = new Map<string, VideoEditAuthorRuntime>()
   private bitmapBridge?: VideoEditGpuBitmapBridge
   private readonly inputBitmaps = new Set<ImageBitmap>()
@@ -523,23 +521,10 @@ export class VideoEditGpuCompositor {
     if (!this.spatialRuntime) {
       const { VideoEditSpatialGpu } = await import('./videoEditSpatialComposite')
       this.assertDevice()
-      const multisampled = new Map<GpuTexture, number>()
       this.spatialRuntime ??= new VideoEditSpatialGpu(this.device, {
-        residentBytes: () => runtime.residentTextureBytes() + this.spatialMultisampleBytes,
-        trimIdle: budget => runtime.trimIdleTextures(Math.max(0, budget - this.spatialMultisampleBytes)),
-        allocate: (spec, mipLevelCount, sampleCount, clear = true) => {
-          if (sampleCount === 1) return runtime.effectAllocator.allocate(spec.width, spec.height, spec.format, mipLevelCount, false, clear)
-          const texture = this.device.createTexture({ size: [spec.width, spec.height], format: spec.format, usage: spec.usage, sampleCount })
-          const bytes = spec.width * spec.height * (spec.format === 'rgba16float' ? 8 : 4) * sampleCount
-          multisampled.set(texture, bytes); this.spatialMultisampleBytes += bytes
-          this.spatialPeakBytes = Math.max(this.spatialPeakBytes, this.spatialMultisampleBytes)
-          return texture
-        },
-        release: texture => {
-          const bytes = multisampled.get(texture)
-          if (bytes === undefined) runtime.effectAllocator.release(texture)
-          else { multisampled.delete(texture); this.spatialMultisampleBytes -= bytes; texture.destroy() }
-        },
+        trimIdle: budget => runtime.trimIdleTextures(budget),
+        allocate: (spec, mipLevelCount, clear = true) => runtime.effectAllocator.allocate(spec.width, spec.height, spec.format, mipLevelCount, false, clear),
+        release: texture => runtime.effectAllocator.release(texture),
       })
     }
     return this.spatialRuntime
@@ -561,7 +546,6 @@ export class VideoEditGpuCompositor {
     picture.carriesLight = lease.carriesLight
     return picture
   }
-  spatialDiagnostics() { return { multisampleBytes: this.spatialMultisampleBytes, peakMultisampleBytes: this.spatialPeakBytes } }
   codePerformance(): import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.codeRuntime?.framePerformance() ?? [] }
   captureCodePerformance(): () => import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.codeRuntime?.captureFramePerformance() ?? (() => []) }
   codeDiagnostics(): ReturnType<VideoEditCodeGpu['diagnostics']> | undefined { return this.codeRuntime?.diagnostics() }

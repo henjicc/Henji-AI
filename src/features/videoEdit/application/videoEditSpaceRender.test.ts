@@ -24,4 +24,8 @@ it('三维成片渲染按两个标量属性单项改写，写后读回核对通�
   expect(owner.document.sequences[0].spaceRender).toBeUndefined()
   undoVideoEdit(owner.document.id)
   expect(owner.document.sequences[0].spaceRender).toEqual({ finalRenderer: 'pathTrace', pathTraceSamples: 512 })
+  // 三维效果强度同样单项写入，0 不存。
+  expect(await write({ 'video_edit.sequence.space_bloom': 1.2 })).toMatchObject({ ok: true })
+  expect(await write({ 'video_edit.sequence.space_ambient_occlusion': .5, 'video_edit.sequence.space_reflections': 0 })).toMatchObject({ ok: true })
+  expect(owner.document.sequences[0].spaceRender).toEqual({ finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: 1.2, ambientOcclusion: .5 })
 })

@@ -57,10 +57,9 @@ import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrid
 import { videoEditTextResolution } from './videoEditTextSurface'
 import { videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
 import { authorSpaceInfo } from './videoEditAuthorThree'
-import { preparedSpatialBrand, type PreparedSpatialFrame, type SpatialCodeSources, type SpatialPrepareRequest, type SpatialSampleRequest, type SpatialPictureLease, type SpatialSceneSample, type SpatialSourceDescriptor } from './videoEditSpatialContracts'
+import { preparedSpatialBrand, type PreparedSpatialFrame, type SpatialCodeSources, type SpatialPrepareRequest, type SpatialPictureLease, type SpatialSceneSample, type SpatialSourceDescriptor } from './videoEditSpatialContracts'
 import type { AuthorEffectMetadata } from './videoEditAuthorParameters'
 import type { VideoEditGpuColorFormat } from './videoEditGpuFrame'
-import { authorSpatialFingerprint } from './videoEditAuthorFingerprint'
 import { WEB_TEXT_AUTHOR_API_VERSION, type WebTextDeclaration } from '@/core/videoEdit/webTextGeometry'
 
 const logger = createLogger('features.videoEdit.codeSources')
@@ -68,7 +67,7 @@ const logger = createLogger('features.videoEdit.codeSources')
 const SUBJECT_MATTE: NonNullable<VideoEditEffect['mask']> = { regionId: 'person', feather: 0, expand: 0 }
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'authorSpatialGenerator' | 'inspectAuthorScene' | 'stageAuthorScene' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'stageAuthorScene' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'bundle' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CodeOutputFrame { sourceTime: ReturnType<typeof videoEditClipSourceTimeAt>; info: AuthorFrameInfo; overrides: Parameters<VideoEditCodeGpu['authorGenerator']>[7]; environment: ReturnType<typeof authorEffectEnvironmentForClip> }
@@ -257,28 +256,6 @@ export class VideoEditCodeSources implements SpatialCodeSources {
       ...(descriptor.spaceDependency ? { space: await authorSpaceInfo(center ? request.plan.centerFrame : frame, clipId, time, centerSourceTime, request.plan.centerFrame.sequenceTime) } : {}) }
     return { state, plan, inputs, info, descriptor, overrides }
   }
-  async inspectSpatialSceneSamples(prepared: PreparedSpatialFrame): Promise<readonly SpatialSceneSample[]> {
-    const work = this.gpuWork.then(async () => {
-      const state = this.spatialState(prepared), result: SpatialSceneSample[] = []
-      const { plan: exposure, frame: request } = state.request
-      const center = { index: -1, sequenceFrame: request.sequenceFrame, frame: exposure.centerFrame,
-        clips: exposure.samples[0].clips.map(value => ({ ...value, sequenceFrame: request.sequenceFrame, sourceTime: value.centerSourceTime })) }
-      for (const sample of [center, ...exposure.samples]) for (const value of sample.clips) {
-        if (state.request.frame.sources.find(source => source.clipId === value.clipId)?.kind !== 'worldScene') continue
-        const { plan, inputs, info } = await this.spatialValues(prepared, value.clipId,
-          value.motionBlur ? value.sequenceFrame : state.request.frame.sequenceFrame,
-          value.motionBlur ? value.sourceTime : value.centerSourceTime, value.centerSourceTime,
-          value.motionBlur ? sample.frame : state.request.plan.centerFrame)
-        if (!this.runtime?.inspectAuthorScene) throw new Error('当前 GPU 会话不支持 three 场景检查。')
-        const worldBounds = await this.runtime.inspectAuthorScene(value.clipId, plan.program!, plan.context, plan.author, inputs.assets, info)
-        this.spatialState(prepared)
-        result.push({ clipId: value.clipId, sampleIndex: sample.index, sequenceFrame: sample.sequenceFrame, worldBounds })
-      }
-      return result
-    })
-    this.gpuWork = work.then(() => undefined, () => undefined)
-    return work
-  }
   /**
    * 统一三维渲染器用：把每个世界场景更新到中心帧（或快门开始那一刻），交出场景根节点、包围框与作者源时间。
    * 根节点是活对象，须在本空间帧释放前、下一次更新之前读完。
@@ -305,36 +282,6 @@ export class VideoEditCodeSources implements SpatialCodeSources {
     })
     this.gpuWork = work.then(() => undefined, () => undefined)
     return work
-  }
-  renderSpatialSample(request: SpatialSampleRequest): Promise<SpatialPictureLease> {
-    const work = this.gpuWork.then(async () => {
-      const { state, plan, inputs, info, descriptor, overrides } = await this.spatialValues(request.prepared, request.clipId, request.sequenceFrame, request.sourceTime, request.centerSourceTime, request.spatialFrame)
-      // 材料面只生成中心帧；租约的借用独立计数，A 释放一个样本不会回收整个材料面。
-      const centerKey = descriptor.kind === 'card' ? JSON.stringify([request.clipId, request.target.width, request.target.height, request.target.format]) : undefined
-      let picture = centerKey ? state.centers.get(centerKey) : undefined
-      const contentKey = JSON.stringify([request.target.key, plan.program!.bundle, plan.author, overrides, info.time, request.target.width, request.target.height, request.target.format,
-        state.request.frame.quality, ...authorSpatialFingerprint({ space: descriptor.spaceDependency }, info)])
-      if (!picture) {
-        if (!this.runtime?.authorSpatialGenerator) throw new Error('当前 GPU 会话不支持空间代码绘制。')
-        picture = await this.runtime.authorSpatialGenerator(request.clipId, plan.program!, plan.context, { ...request.target, key: contentKey }, plan.author, inputs.assets,
-          info, inputs.images, state.request.frame.quality, () => { this.spatialState(request.prepared) }, overrides,
-          this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip))
-        state.leases.add(picture)
-        this.spatialState(request.prepared)
-        if (centerKey) state.centers.set(centerKey, picture)
-      }
-      if (!centerKey) return picture
-      const held = picture
-      let released: Promise<void> | undefined
-      const borrowed: SpatialPictureLease = { ...held, release: afterUse => released ??= Promise.all([held.completion, afterUse]).then(() => undefined) }
-      state.borrows.add(borrowed)
-      return borrowed
-    })
-    this.gpuWork = work.then(() => undefined, () => undefined)
-    return work
-  }
-  generatorTargetCapacity(width: number, height: number, format: VideoEditGpuColorFormat): number {
-    return this.runtime?.generatorTargetCapacity?.(width, height, format) ?? Infinity
   }
   private protectSpatialInstances(): void {
     this.runtime?.protectAuthorInstances?.(new Set([...this.spatialFrames.values()].flatMap(state => [...state.evaluate.keys()])))

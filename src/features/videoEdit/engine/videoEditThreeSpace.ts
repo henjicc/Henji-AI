@@ -61,6 +61,10 @@ export interface ThreeSpaceEffects {
    * 预览与导出的样本数不同时拖影长度也一致。
    */
   shutterScale: number
+  /** 泛光、环境光遮蔽、屏幕空间反射的强度（序列三维效果设置，0 为不开）；只作用于实时显示与成片的实时渲染。 */
+  bloom: number
+  ambientOcclusion: number
+  reflections: number
 }
 export interface ThreeSpaceFrame {
   frame: SpatialFrame
@@ -70,6 +74,8 @@ export interface ThreeSpaceFrame {
   scenes: readonly ThreeSpaceScene[]
   effects: ThreeSpaceEffects
   target: { texture: GpuTexture; width: number; height: number }
+  /** 组画面是否带发光（有作者场景或发光卡片时为是）：宿主按它选择解码约定，输出编码与之一致。 */
+  light: boolean
   /** 显示方式为“渲染”时的路径追踪安排；缺省按 TRACE_SAMPLES 一次追踪到底。 */
   trace?: ThreeSpaceTrace
   assertCurrent(): void
@@ -93,21 +99,24 @@ interface TslNode {
   mul(value: TslInput): TslNode; div(value: TslInput): TslNode; add(value: TslInput): TslNode; sub(value: TslInput): TslNode
   greaterThan(value: TslInput): TslNode; negate(): TslNode; abs(): TslNode
   readonly r: TslNode; readonly g: TslNode; readonly b: TslNode; readonly rgb: TslNode; readonly a: TslNode; readonly xy: TslNode; readonly w: TslNode
+  sample(coord: TslNode): TslNode
 }
-type TslInput = TslNode | number | Three.Matrix4 | Three.Texture
+type TslInput = TslNode | number | Three.Matrix4 | Three.Texture | Three.Camera
 type TslFn = (...args: TslInput[]) => TslNode
 interface TslUniform<T> extends TslNode { value: T; onObjectUpdate(update: (frame: { object: Three.Object3D }) => T): TslUniform<T> }
-interface TslPass extends TslNode { setMRT(mrt: TslNode): void; getTextureNode(name: string): TslNode; getViewZNode(): TslNode; dispose(): void }
+interface TslPass extends TslNode { setMRT(mrt: TslNode): void; getTexture(name: string): Three.Texture; getTextureNode(name: string): TslNode; getViewZNode(): TslNode; dispose(): void }
 interface Tsl {
   uniform: { (value: number): TslUniform<number>; (value: Three.Matrix4): TslUniform<Three.Matrix4> }
   texture(value: Three.Texture): TslUniform<Three.Texture>
   select: TslFn; vec2: TslFn; vec3: TslFn; vec4: TslFn; pow: TslFn; max: TslFn; clamp: TslFn; mix: TslFn; convertToTexture: TslFn
   sin: TslFn; asin: TslFn; sign: TslFn; float: TslFn; neutralToneMapping: TslFn
+  packNormalToRGB: TslFn; unpackRGBToNormal: TslFn; sample(fn: (coord: TslNode) => TslNode): TslNode
+  normalView: TslNode; metalness: TslNode; roughness: TslNode
   mrt(outputs: Record<string, TslNode>): TslNode
   pass(scene: Three.Scene, camera: Three.Camera, options?: Record<string, unknown>): TslPass
   output: TslNode; positionLocal: TslNode; modelViewMatrix: TslNode; cameraProjectionMatrix: TslNode
 }
-interface PostNodes { dof: TslFn; motionBlur: TslFn }
+interface PostNodes { dof: TslFn; motionBlur: TslFn; bloom: TslFn; ao: TslFn; ssr: TslFn }
 interface NodeMaterial extends Three.Material { colorNode: TslNode | null; mrtNode: TslNode | null; maskNode: TslNode | null }
 interface RenderPipeline { outputNode: TslNode; outputColorTransform: boolean; render(): void; dispose(): void }
 type Library = AuthorThreeLibrary & {
@@ -155,6 +164,11 @@ export class VideoEditThreeSpace {
   private readonly far: TslUniform<number>
   private readonly previousViewProjection: TslUniform<Three.Matrix4>
   private readonly shutterScale: TslUniform<number>
+  private readonly bloom: TslUniform<number>
+  private readonly ambientOcclusion: TslUniform<number>
+  private readonly reflections: TslUniform<number>
+  /** 这一组画面是否带发光（宿主按预乘逐通道解码）；决定输出的编码约定。 */
+  private readonly lightOutput: TslUniform<number>
   private readonly velocity: TslNode
   private failure?: Error
   private closed = false
@@ -182,6 +196,10 @@ export class VideoEditThreeSpace {
     this.far = tsl.uniform(1)
     this.previousViewProjection = tsl.uniform(new library.Matrix4())
     this.shutterScale = tsl.uniform(1)
+    this.bloom = tsl.uniform(0)
+    this.ambientOcclusion = tsl.uniform(0)
+    this.reflections = tsl.uniform(0)
+    this.lightOutput = tsl.uniform(0)
     // 速度：本帧与快门开始时的裁剪坐标差（与 three 的 VelocityNode 同一定义），所有物体共用；任一时刻在相机平面后方时记为静止，不爆出长拖影。
     // 只按物体的世界矩阵：实例矩阵、骨骼与形变在快门内的位移不计。
     const previousModel = tsl.uniform(new library.Matrix4()).onObjectUpdate(({ object }) => this.previousWorld.get(object) ?? object.matrixWorld)
@@ -194,11 +212,14 @@ export class VideoEditThreeSpace {
   }
 
   static async create(device: GpuDevice, libraries?: AuthorLibraryVersions): Promise<VideoEditThreeSpace> {
-    const [library, tsl, dofModule, blurModule] = await Promise.all([
+    const [library, tsl, dofModule, blurModule, bloomModule, aoModule, ssrModule] = await Promise.all([
       loadAuthorThreeLibrary(libraries) as Promise<Library>,
       loadAuthorThreeModule<Tsl>('three/tsl', libraries),
       loadAuthorThreeModule<{ dof: TslFn }>('three/addons/tsl/display/DepthOfFieldNode.js', libraries),
       loadAuthorThreeModule<{ motionBlur: TslFn }>('three/addons/tsl/display/MotionBlur.js', libraries),
+      loadAuthorThreeModule<{ bloom: TslFn }>('three/addons/tsl/display/BloomNode.js', libraries),
+      loadAuthorThreeModule<{ ao: TslFn }>('three/addons/tsl/display/GTAONode.js', libraries),
+      loadAuthorThreeModule<{ ssr: TslFn }>('three/addons/tsl/display/SSRNode.js', libraries),
     ])
     const renderer = new library.WebGPURenderer({ canvas: new OffscreenCanvas(1, 1), alpha: true, antialias: false, device })
     await runVideoEditGpuSection(device, async () => {
@@ -214,7 +235,7 @@ export class VideoEditThreeSpace {
     shadows.type = library.PCFSoftShadowMap
     renderer.toneMapping = library.NoToneMapping
     renderer.outputColorSpace = library.LinearSRGBColorSpace
-    return new VideoEditThreeSpace(library, tsl, { dof: dofModule.dof, motionBlur: blurModule.motionBlur }, renderer, new VideoEditAuthorThreeClock(renderer, library.REVISION), libraries)
+    return new VideoEditThreeSpace(library, tsl, { dof: dofModule.dof, motionBlur: blurModule.motionBlur, bloom: bloomModule.bloom, ao: aoModule.ao, ssr: ssrModule.ssr }, renderer, new VideoEditAuthorThreeClock(renderer, library.REVISION), libraries)
   }
 
   /** 返回路径追踪是否还没收敛（其他显示方式恒为 false）。 */
@@ -234,6 +255,10 @@ export class VideoEditThreeSpace {
     this.cocScale.value = input.effects.cocScale
     this.cocMax.value = Math.max(1, input.effects.cocMax)
     this.shutterScale.value = input.effects.shutterScale
+    this.bloom.value = input.effects.bloom
+    this.ambientOcclusion.value = input.effects.ambientOcclusion
+    this.reflections.value = input.effects.reflections
+    this.lightOutput.value = input.light ? 1 : 0
     const target = this.target!, output = this.output!
     const restore = input.effects.display === 'realtime' ? this.applySceneOpacity(input.scenes) : this.applyDisplay(input.scenes, input.effects.display)
     try {
@@ -301,7 +326,7 @@ export class VideoEditThreeSpace {
     try {
       await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, async () => {
         refining = await tracer.render({ ...(plan.key === undefined ? {} : { key: plan.key }), scene: this.scene, camera, cards, aperture, focusDistance: effects.focusDistance,
-          samples: plan.samples, ...(plan.budgetMs === undefined ? {} : { budgetMs: plan.budgetMs }), target, assertCurrent: input.assertCurrent })
+          samples: plan.samples, ...(plan.budgetMs === undefined ? {} : { budgetMs: plan.budgetMs }), target, light: input.light, assertCurrent: input.assertCurrent })
         input.assertCurrent()
         this.renderer.copyTextureToTexture(target.texture, output.external)
         this.renderer.setRenderTarget(null)
@@ -487,8 +512,9 @@ export class VideoEditThreeSpace {
   }
 
   private ensurePipeline(effects: ThreeSpaceEffects): { pipeline: RenderPipeline; primed: boolean } {
-    if (effects.display !== 'realtime') effects = { ...effects, motionBlur: false, depthOfField: false }
-    const key = JSON.stringify([effects.motionBlur, effects.depthOfField])
+    if (effects.display !== 'realtime') effects = { ...effects, motionBlur: false, depthOfField: false, bloom: 0, ambientOcclusion: 0, reflections: 0 }
+    // 强度是每帧更新的均匀量，管线只按开关组合缓存。
+    const key = JSON.stringify([effects.motionBlur, effects.depthOfField, effects.bloom > 0, effects.ambientOcclusion > 0, effects.reflections > 0])
     const cached = this.pipelines.get(key)
     if (cached) return cached
     // 同一份作品只会用到实时与一种简化组合；超过两套说明作品设置变了，旧的不再需要。
@@ -498,9 +524,40 @@ export class VideoEditThreeSpace {
     const scenePass = tsl.pass(this.scene, this.camera, { samples: 4 })
     nodes.push(scenePass)
     // 只声明后处理会读的输出：three 只给被读取的输出建纹理，声明了却没读会让绘制管线校验失败。
+    const surfaces = effects.ambientOcclusion > 0 || effects.reflections > 0
     scenePass.setMRT(tsl.mrt({ output: tsl.output, card: tsl.float(0), ...effects.motionBlur ? { velocity: this.velocity } : {} }))
+    // 卡片标记用 8 位就够（多目标输出每样本字节数有上限）。
+    scenePass.getTexture('card').type = library.UnsignedByteType
     const card = scenePass.getTextureNode('card').r
     let color = scenePass.getTextureNode('output')
+    // 环境光遮蔽与反射只加在作者物体上：卡片是已经画好的画面，不该被压暗或叠上反射。
+    const objects = tsl.float(1).sub(card)
+    if (surfaces) {
+      // 遮蔽与反射要读不带多重采样的深度与法线：另画一遍只出法线（与金属度粗糙度）的预通道，主通道照旧多重采样抗锯齿。
+      const prePass = tsl.pass(this.scene, this.camera) as TslPass & { transparent: boolean }
+      // 只画不透明物体：发光粒子、光晕这类透明面若写进法线，会被当成实体压出一块黑影。
+      prePass.transparent = false
+      nodes.push(prePass)
+      prePass.setMRT(tsl.mrt({ output: tsl.packNormalToRGB(tsl.normalView), ...effects.reflections > 0 ? { metalrough: tsl.vec2(tsl.metalness, tsl.roughness) } : {} }))
+      prePass.getTexture('output').type = library.UnsignedByteType
+      if (effects.reflections > 0) prePass.getTexture('metalrough').type = library.UnsignedByteType
+      const depth = prePass.getTextureNode('depth'), normalTexture = prePass.getTextureNode('output')
+      const normal = tsl.sample(coord => tsl.unpackRGBToNormal(normalTexture.sample(coord)))
+      if (effects.ambientOcclusion > 0) {
+        const occlusion = this.post.ao(depth, normal, this.camera) as TslNode & { resolutionScale: number; getTextureNode(): TslNode }
+        // 半分辨率算遮蔽：软阴影本身就低频，省一半以上的时间。
+        occlusion.resolutionScale = .5
+        nodes.push(occlusion as unknown as { dispose(): void })
+        color = tsl.vec4(color.rgb.mul(tsl.mix(tsl.float(1), occlusion.getTextureNode().r, this.ambientOcclusion.mul(objects))), color.a)
+      }
+      if (effects.reflections > 0) {
+        const metalrough = prePass.getTextureNode('metalrough')
+        const reflected = this.post.ssr(scenePass.getTextureNode('output'), depth, normal, { metalnessNode: metalrough.r, roughnessNode: metalrough.g, camera: this.camera } as unknown as TslNode) as TslNode & { resolutionScale: number }
+        reflected.resolutionScale = .5
+        nodes.push(reflected as unknown as { dispose(): void })
+        color = tsl.vec4(color.rgb.add(reflected.rgb.mul(reflected.a).mul(this.reflections).mul(objects)), color.a)
+      }
+    }
     if (effects.depthOfField) {
       const viewZ = this.opticalViewZ(scenePass.getViewZNode(), card)
       // 景深节点把弥散半径存在 alpha 里、输出 alpha 恒为 1：预乘颜色与覆盖率各做一遍同样的景深再合起来，透明处才不变黑。
@@ -515,14 +572,23 @@ export class VideoEditThreeSpace {
       nodes.push(source as unknown as { dispose(): void })
       color = this.post.motionBlur(source, scenePass.getTextureNode('velocity').xy.mul(tsl.vec2(this.shutterScale, this.shutterScale.negate())))
     }
-    // 输出回宿主工作空间：作者物体做中性色调映射，卡片不做；线性 → 2.4 伽马编码，保持预乘。透明度为 0 的发光按预乘逐通道编码。
+    if (effects.bloom > 0) {
+      // 泛光在景深与运动模糊之后：模糊掉的高光一样发光；亮度超过阈值的部分才扩散，暗处不变。辉光落在透明处时是透明度为 0 的发光。
+      const glow = this.post.bloom(color, this.bloom, .45, .75)
+      nodes.push(glow as unknown as { dispose(): void })
+      color = tsl.vec4(color.rgb.add(glow.rgb), color.a)
+    }
+    // 输出回宿主工作空间：作者物体做中性色调映射，卡片不做；线性 → 2.4 伽马编码。编码约定跟随组画面是否“带发光”（宿主按它解码）：
+    // 带发光的画面宿主按预乘逐通道解码，就按预乘逐通道映射与编码（半透明的光晕、辉光处若先解预乘再编码，解码后会变暗一圈）；
+    // 不带发光的按“解预乘 → 编码 → 乘回透明度”。不透明与全透明像素两种约定结果相同。
     const alpha = tsl.clamp(color.a, 0, 1)
     const covered = color.a.greaterThan(1e-5)
     const straight = tsl.select(covered, color.rgb.div(color.a), color.rgb)
     const mapped = tsl.mix(tsl.neutralToneMapping(straight, 1), straight, card)
     const encoded = tsl.pow(tsl.max(mapped, tsl.vec3(0)), tsl.vec3(1 / 2.4))
+    const lightEncoded = tsl.pow(tsl.max(tsl.mix(tsl.neutralToneMapping(color.rgb, 1), color.rgb, card), tsl.vec3(0)), tsl.vec3(1 / 2.4))
     const pipeline = new library.RenderPipeline(this.renderer)
-    pipeline.outputNode = tsl.vec4(tsl.select(covered, encoded.mul(alpha), encoded), alpha)
+    pipeline.outputNode = tsl.vec4(tsl.select(this.lightOutput.greaterThan(.5), lightEncoded, tsl.select(covered, encoded.mul(alpha), encoded)), alpha)
     pipeline.outputColorTransform = false
     const entry = { pipeline, nodes, primed: false }
     this.pipelines.set(key, entry)

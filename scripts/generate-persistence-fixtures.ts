@@ -109,7 +109,7 @@ const spatialCurves = videoEditClipCurvesSchema.parse({
   anchorDepth: [{ time: 0, value: .1, interpolation: 'hold' }, { time: 60, value: .2, interpolation: 'hold' }],
 })
 Object.assign(clip, { spatial: { enabled: true }, depth: -.5, rotationX: 0, rotationY: 0, anchorDepth: .1, curves: { ...clip.curves, ...spatialCurves } })
-sequence.spaceRender = { finalRenderer: 'pathTrace', pathTraceSamples: 512 }
+sequence.spaceRender = { finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: .8, ambientOcclusion: .6, reflections: .4 }
 sequence.spatialCamera = { offsetX: .1, perspective: .25, defocus: 1,
   framing: { target: { kind: 'clip', clipId: clip.id }, heightFraction: .6 }, aim: { kind: 'clip', clipId: clip.id }, focus: { kind: 'point', point: [0, 0, -.5] },
   curves: { offsetY: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 60, value: .1, interpolation: 'linear' }],

@@ -145,6 +145,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 61 → 62：序列 spaceRender 新增可选 bloom、ambientOcclusion、reflections（三维泛光、环境光遮蔽、屏幕反射强度），缺省即不开；旧程序忽略它们只是不出这些效果，最低可读版本保持 60。
+    61: content => structuredClone(content),
     // 60 → 61：序列新增可选 spaceRender（三维成片渲染器与路径追踪采样数），缺省即实时渲染；旧程序忽略它只是按实时渲染成片，最低可读版本保持 60。
     60: content => structuredClone(content),
     // 59 → 60：空间片段、相机与绑定轨迹，以及作者接口 15（createThree 与 space:true 空间入口）；片段关键帧允许右边界控制点，旧内容不补默认值。旧程序读不懂作者接口 15，最低可读版本提高到 60。

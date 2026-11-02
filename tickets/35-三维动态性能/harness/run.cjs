@@ -21,12 +21,12 @@ const formal = 'D:/VibeCode/Henji-AI/tickets/16-三维空间/evidence-A/formal'
     const page = session.page
     page.on('pageerror', e => evidence.errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') evidence.errors.push(m.text()) })
     await page.goto(pathToFileURL(path.join(compiled, 'index.html')).href)
-    await page.waitForFunction(() => typeof window.attribute === 'function', null, { timeout: 120000 })
+    await page.waitForFunction(() => typeof window.attribute === 'function', null, { timeout: 120000 }).catch(error => { console.error('页面没有就绪：', evidence.errors.slice(0, 5).join(' | ')); throw error })
     if (arg('--debug')) await page.evaluate(value => { globalThis.__t35Debug = value }, arg('--debug'))
     const from = Number(arg('--from') ?? 0), to = Number(arg('--to') ?? 240), only = arg('--only')
     const quick = process.argv.includes('--quick')
     for (const scale of only === '4k' ? [2] : only === '1080' ? [1] : [1, 2]) for (const motionBlur of quick ? [true] : [true, false]) for (const dof of quick ? [true] : [true, false]) for (const timestamps of quick ? [false] : [true, false]) {
-      const config = { scale, motionBlur, dof, timestamps, from, to, quality: arg('--quality') ?? 'interactive', shots: [100, 150, 170, from], ...(arg('--display') ? { display: arg('--display') } : {}), ...(process.argv.includes('--no-warmup') ? { noWarmup: true } : {}), ...(process.argv.includes('--path-trace') ? { pathTrace: true } : {}) }
+      const config = { scale, motionBlur, dof, timestamps, from, to, quality: arg('--quality') ?? 'interactive', shots: process.argv.includes('--all-shots') ? Array.from({ length: to - from }, (_, i) => from + i) : arg('--shots') ? arg('--shots').split(',').map(Number) : [100, 150, 170, from], ...(arg('--display') ? { display: arg('--display') } : {}), ...(process.argv.includes('--no-warmup') ? { noWarmup: true } : {}), ...(process.argv.includes('--path-trace') ? { pathTrace: true } : {}), ...(process.argv.includes('--transition') ? { transition: arg('--transition') === 'single' ? 'single' : true } : {}), ...(arg('--effects') ? { effects: JSON.parse(arg('--effects')) } : {}) }
       console.log('START', JSON.stringify(config))
       const profiling = process.argv.includes('--profile') ? await page.context().newCDPSession(page) : undefined
       if (profiling) { await profiling.send('Profiler.enable'); await profiling.send('Profiler.setSamplingInterval', { interval: 200 }); await profiling.send('Profiler.start') }

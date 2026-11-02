@@ -70,6 +70,8 @@ export interface PathTraceFrame {
   samples: number
   /** 本次调用最多追踪多久（毫秒）；缺省追踪到目标采样数为止。 */
   budgetMs?: number
+  /** 组画面是否带发光：决定输出的编码约定（与实时渲染相同）。 */
+  light: boolean
   /** 追踪结果的去处：线性预乘、半精度，与实时渲染的中间目标相同。 */
   target: Three.RenderTarget
   assertCurrent(): void
@@ -94,6 +96,7 @@ export class VideoEditThreeSpacePathTrace {
   private readonly decodeLight: TslNode & { value: number }
   private readonly encode: QuadMesh
   private readonly encodeSource: TslNode & { value: Three.Texture }
+  private readonly encodeLight: TslNode & { value: number }
   private readonly camera: InstanceType<PathTraceModule['PhysicalCamera']>
 
   private constructor(private readonly library: Library, private readonly tsl: Tsl, private readonly renderer: Renderer, private readonly tracer: Tracer, module: PathTraceModule) {
@@ -119,10 +122,13 @@ export class VideoEditThreeSpacePathTrace {
     const texel = tsl.textureLoad(this.encodeSource, tsl.ivec2(tsl.screenCoordinate.xy))
     const alpha = tsl.clamp(texel.a, 0, 1)
     const covered = texel.a.greaterThan(1e-5)
+    // 编码约定与实时渲染相同：组画面带发光时按预乘逐通道，否则解预乘编码再乘回透明度。
     const mapped = tsl.neutralToneMapping(tsl.select(covered, texel.rgb.div(texel.a), texel.rgb), 1)
     const encoded = tsl.pow(tsl.max(mapped, tsl.vec3(0)), tsl.vec3(1 / 2.4))
+    const lightEncoded = tsl.pow(tsl.max(tsl.neutralToneMapping(texel.rgb, 1), tsl.vec3(0)), tsl.vec3(1 / 2.4))
+    this.encodeLight = tsl.uniform(0) as TslNode & { value: number }
     const encodeMaterial = new library.MeshBasicNodeMaterial({ blending: library.NoBlending, toneMapped: false, depthTest: false, depthWrite: false })
-    encodeMaterial.colorNode = tsl.vec4(tsl.select(covered, encoded.mul(alpha), encoded), alpha)
+    encodeMaterial.colorNode = tsl.vec4(tsl.select(this.encodeLight.greaterThan(.5), lightEncoded, tsl.select(covered, encoded.mul(alpha), encoded)), alpha)
     this.encode = new library.QuadMesh(encodeMaterial)
   }
 
@@ -180,6 +186,7 @@ export class VideoEditThreeSpacePathTrace {
       const result = tracer.target
       if (!result) throw new Error('路径追踪没有输出画面。')
       this.encodeSource.value = result
+      this.encodeLight.value = frame.light ? 1 : 0
       this.encode.render(renderer)
       return this.samples < frame.samples
     } catch (error) {
