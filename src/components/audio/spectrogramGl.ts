@@ -1,4 +1,4 @@
-import { SPECTRAL_CROSSOVER_END_HZ, SPECTRAL_CROSSOVER_START_HZ, SPECTRAL_TILE_COLUMNS, spectralHop, spectralOrigin, type AudioEditSpectralTile } from '@/core/audioEdit/spectralPyramid'
+import { SPECTRAL_CROSSOVER_END_HZ, SPECTRAL_CROSSOVER_START_HZ, SPECTRAL_TILE_COLUMNS, spectralHighBins, spectralHop, spectralLowBins, spectralOrigin, type AudioEditSpectralTile } from '@/core/audioEdit/spectralPyramid'
 import { SPECTROGRAM_MIN_LOG_HZ } from '@/core/audio/spectrogram'
 import { planSpectralDraws, spectralBands, SPECTRAL_BIN_SAMPLES, SPECTRAL_PEAK_WEIGHT, SPECTRAL_TIME_SAMPLES, type SpectralRasterRequest, type SpectralTileSet } from '@/core/audio/spectralTiles'
 
@@ -157,7 +157,8 @@ export function createSpectrogramGl(gl: WebGL2RenderingContext, lut: Uint8Clampe
     return {
       draw(tiles, request, bottom) {
         frame++
-        const bins = tiles.lowBins + tiles.highBins
+        // 基础层是最大布局；细层使用同一槽的左侧，频段坐标夹在实际 bins 内。
+        const bins = spectralLowBins(tiles.sampleRate) + spectralHighBins()
         if (bins <= 0) return
         if (bins !== width) allocate(bins)
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D_ARRAY, spectrum)
@@ -165,15 +166,15 @@ export function createSpectrogramGl(gl: WebGL2RenderingContext, lut: Uint8Clampe
         gl.enable(gl.SCISSOR_TEST)
         gl.scissor(0, bottom, request.width, request.height)
         gl.clear(gl.COLOR_BUFFER_BIT)
-        const { low, high } = spectralBands(tiles.sampleRate, tiles.lowBins, tiles.highBins)
         gl.uniform4f(uniform('frequency'), request.minHz, request.maxHz, request.scale === 'log' ? 1 : 0, 0)
-        gl.uniform4f(uniform('bands'), low.first, low.binHz, high.first, high.binHz)
-        gl.uniform2i(uniform('binCounts'), low.bins, high.bins)
         gl.uniform3f(uniform('viewportSize'), request.width, request.height, bottom)
         gl.uniform1f(uniform('boost'), Math.round(request.boost ?? 0))
         const channel = Math.min(Math.max(0, request.channel), Math.max(0, tiles.channels - 1))
         const span = request.endFrame - request.startFrame
         for (const draw of planSpectralDraws(tiles, request)) {
+          const { low, high } = spectralBands(draw.tile)
+          gl.uniform4f(uniform('bands'), low.first, low.binHz, high.first, high.binHz)
+          gl.uniform2i(uniform('binCounts'), low.bins, high.bins)
           const current = slotOf(draw.tile, channel)
           const previous = draw.previous ? slotOf(draw.previous, channel) : -1
           const next = draw.next ? slotOf(draw.next, channel) : -1

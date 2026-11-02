@@ -1,6 +1,6 @@
 import {
-  SPECTRAL_CROSSOVER_END_HZ, SPECTRAL_CROSSOVER_START_HZ, SPECTRAL_LONG_WINDOW, SPECTRAL_MAX_LEVEL, SPECTRAL_MIN_LEVEL, SPECTRAL_SHORT_WINDOW,
-  SPECTRAL_TILE_COLUMNS, spectralHop, spectralLevelForFramesPerPixel, spectralOrigin, type AudioEditSpectralTile,
+  SPECTRAL_CROSSOVER_END_HZ, SPECTRAL_CROSSOVER_START_HZ, SPECTRAL_MAX_LEVEL, SPECTRAL_MIN_LEVEL,
+  SPECTRAL_TILE_COLUMNS, spectralHop, spectralLevelForFramesPerPixel, spectralOrigin, spectralResolution, type AudioEditSpectralTile,
 } from '@/core/audioEdit/spectralPyramid'
 import { spectrogramHzAt, type SpectrogramScale } from './spectrogram'
 
@@ -18,7 +18,7 @@ export const SPECTRAL_BIN_SAMPLES = 8
 export const SPECTRAL_FINER_FALLBACK = 2
 
 export interface SpectralTileSet {
-  sampleRate: number; channels: number; durationFrames: number; lowBins: number; highBins: number
+  sampleRate: number; channels: number; durationFrames: number
   /** 有块加入或替换就递增，绘制方据此判断是否需要重画。 */
   version: number
   get(level: number, tile: number): AudioEditSpectralTile | undefined
@@ -29,7 +29,7 @@ const tileBytes = (tile: AudioEditSpectralTile): number => tile.values.byteLengt
 
 /** 按字节淘汰最久未用的块；正在需要的块（pin）不淘汰。 */
 export class SpectralTileStore implements SpectralTileSet {
-  sampleRate = 0; channels = 0; durationFrames = 0; lowBins = 0; highBins = 0; version = 0
+  sampleRate = 0; channels = 0; durationFrames = 0; version = 0
   private readonly entries = new Map<string, AudioEditSpectralTile>()
   private pinned = new Set<string>()
   private bytes = 0
@@ -41,7 +41,7 @@ export class SpectralTileStore implements SpectralTileSet {
     const key = spectralTileKey(tile.level, tile.tile)
     const previous = this.entries.get(key)
     if (previous) { this.entries.delete(key); this.bytes -= tileBytes(previous) }
-    if (!this.version) Object.assign(this, { sampleRate: tile.sampleRate, channels: tile.channels, durationFrames: tile.durationFrames, lowBins: tile.lowBins, highBins: tile.highBins })
+    if (!this.version) Object.assign(this, { sampleRate: tile.sampleRate, channels: tile.channels, durationFrames: tile.durationFrames })
     this.entries.set(key, tile); this.bytes += tileBytes(tile); this.version++
     for (const [oldest, value] of this.entries) {
       if (this.bytes <= this.maxBytes) break
@@ -73,8 +73,8 @@ export interface SpectralDraw {
 }
 
 /** 长窗不超过可见时长的 5% 时低频全用长窗，超过 20% 时全用短窗，中间平滑过渡。 */
-export function spectralLowBandWeight(view: SpectralView): number {
-  return 1 - smoothStep(0.05, 0.2, SPECTRAL_LONG_WINDOW / Math.max(1, view.endFrame - view.startFrame))
+export function spectralLowBandWeight(view: SpectralView, level = 0): number {
+  return 1 - smoothStep(0.05, 0.2, spectralResolution(level).lowWindow / Math.max(1, view.endFrame - view.startFrame))
 }
 
 export function spectralDesiredLevel(view: SpectralView): number {
@@ -100,9 +100,10 @@ export function planSpectralDraws(tiles: SpectralTileSet, view: SpectralView): S
   const visibleStart = Math.max(0, view.startFrame), visibleEnd = Math.min(tiles.durationFrames, view.endFrame)
   if (!(visibleEnd > visibleStart)) return []
   let uncovered: Array<[number, number]> = [[Math.max(0, Math.floor(toX(visibleStart))), Math.min(view.width, Math.ceil(toX(visibleEnd)))]]
-  const draws: SpectralDraw[] = [], lowWeight = spectralLowBandWeight(view)
+  const draws: SpectralDraw[] = []
   for (const level of spectralLevelPriority(spectralDesiredLevel(view))) {
     if (!uncovered.length) break
+    const lowWeight = spectralLowBandWeight(view, level)
     const hop = spectralHop(level), origin = spectralOrigin(level), tileSpan = hop * SPECTRAL_TILE_COLUMNS
     const first = Math.max(0, Math.floor((visibleStart - origin) / tileSpan)), last = Math.floor((visibleEnd - 1 - origin) / tileSpan)
     for (let index = first; index <= last; index++) {
@@ -135,8 +136,9 @@ export const smoothStep = (edge0: number, edge1: number, x: number): number => {
 }
 
 interface Band { first: number; bins: number; binHz: number }
-export function spectralBands(sampleRate: number, lowBins: number, highBins: number): { low: Band; high: Band } {
-  return { low: { first: 0, bins: lowBins, binHz: sampleRate / SPECTRAL_LONG_WINDOW }, high: { first: lowBins, bins: highBins, binHz: sampleRate / SPECTRAL_SHORT_WINDOW } }
+export function spectralBands(tile: Pick<AudioEditSpectralTile, 'sampleRate' | 'level' | 'lowBins' | 'highBins'>): { low: Band; high: Band } {
+  const { lowFft, highFft } = spectralResolution(tile.level)
+  return { low: { first: 0, bins: tile.lowBins, binHz: tile.sampleRate / lowFft }, high: { first: tile.lowBins, bins: tile.highBins, binHz: tile.sampleRate / highFft } }
 }
 
 /** 读某块某声道的一个（列, 频点）的 R/G；列号是全局列号，超出已有列时夹到边界。 */
@@ -179,7 +181,7 @@ export function sampleSpectralPixel(draw: SpectralDraw, channel: number, pixel: 
   const count = u1 - u0 <= 1 ? 1 : Math.min(SPECTRAL_TIME_SAMPLES, Math.ceil(u1 - u0))
   // 列 c 的中心在列坐标 c + 0.5；插值坐标以列中心为整数，所以减 0.5。
   const times = Array.from({ length: count }, (_, i) => (count === 1 ? (u0 + u1) / 2 : u0 + (i + 0.5) * (u1 - u0) / count) - 0.5)
-  const { low, high } = spectralBands(draw.tile.sampleRate, draw.tile.lowBins, draw.tile.highBins)
+  const { low, high } = spectralBands(draw.tile)
   const mix = 1 - (1 - smoothStep(SPECTRAL_CROSSOVER_START_HZ, SPECTRAL_CROSSOVER_END_HZ, pixel.centerHz)) * draw.lowWeight
   const value = (band: Band): number => {
     const sample = bandSample(draw, channel, times, band, pixel.lowHz, pixel.highHz, pixel.centerHz)

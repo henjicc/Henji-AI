@@ -1,6 +1,6 @@
 import { createSpectrogramGl } from '../../src/components/audio/spectrogramGl'
 import { rasterizeSpectralTiles, SpectralTileStore, type SpectralRasterRequest } from '../../src/core/audio/spectralTiles'
-import { SPECTRAL_HIGH_BINS, SPECTRAL_TILE_COLUMNS, spectralLowBins, type AudioEditSpectralTile } from '../../src/core/audioEdit/spectralPyramid'
+import { SPECTRAL_TILE_COLUMNS, spectralHighBins, spectralLowBins, type AudioEditSpectralTile } from '../../src/core/audioEdit/spectralPyramid'
 
 /** 仅由 Reality 在真实 Electron 内执行，比较实际 GLSL 输出与 CPU 回退（同一批块、同一绘制规划）。 */
 export function verifySpectrogramGpuParity(): { cases: number; maxError: number } {
@@ -11,20 +11,21 @@ export function verifySpectrogramGpuParity(): { cases: number; maxError: number 
   const lut = new Uint8ClampedArray(1024)
   for (let v = 0; v < 256; v++) { lut.fill(v, v * 4, v * 4 + 3); lut[v * 4 + 3] = 255 }
   const renderer = createSpectrogramGl(gl, lut)
-  const sampleRate = 48000, lowBins = spectralLowBins(sampleRate), bins = lowBins + SPECTRAL_HIGH_BINS
+  const sampleRate = 48000
   const tile = (level: number, index: number, columnCount = SPECTRAL_TILE_COLUMNS): AudioEditSpectralTile => {
+    const lowBins = spectralLowBins(sampleRate, level), highBins = spectralHighBins(level), bins = lowBins + highBins
     const values = new Uint8Array(2 * columnCount * bins * 2)
     for (let c = 0; c < 2; c++) for (let t = 0; t < columnCount; t++) for (let b = 0; b < bins; b++) {
       const at = ((c * columnCount + t) * bins + b) * 2, column = index * SPECTRAL_TILE_COLUMNS + t
       values[at] = 60 + (column * 37 + b * 19 + c * 83 + level * 11) % 190
       values[at + 1] = Math.max(0, values[at] - (column + b) % 23)
     }
-    return { mode: 'source', revision: 0, level, tile: index, sampleRate, channels: 2, durationFrames: sampleRate * 120, lowBins, highBins: SPECTRAL_HIGH_BINS,
+    return { mode: 'source', revision: 0, level, tile: index, sampleRate, channels: 2, durationFrames: sampleRate * 120, lowBins, highBins,
       columnStart: index * SPECTRAL_TILE_COLUMNS, columnCount, complete: columnCount === SPECTRAL_TILE_COLUMNS, values }
   }
   const store = new SpectralTileStore()
-  // 目标层 0 只有两块（第二块不完整），其余区间由层 4 垫底；另有更细的层 -1 一块。
-  for (const value of [tile(4, 0), tile(0, 0), tile(0, 1, 600), tile(-1, 3)]) store.set(value)
+  // 目标层 0 只有两块（第二块不完整），其余区间由层 4 垫底；另有窗更短、频点更少的层 -3 一块，与基础布局同帧上传。
+  for (const value of [tile(4, 0), tile(0, 0), tile(0, 1, 600), tile(-3, 1)]) store.set(value)
   let cases = 0, maxError = 0
   try {
     for (const channel of [0, 1]) for (const scale of ['linear', 'log'] as const) for (const [startFrame, endFrame, minHz, maxHz] of [

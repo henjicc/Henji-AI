@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SPECTRAL_HIGH_BINS, SPECTRAL_TILE_COLUMNS, spectralLowBins, type AudioEditSpectralProgress, type AudioEditSpectralTile, type AudioEditSpectralTileRequest } from '@/core/audioEdit/spectralPyramid'
+import { SPECTRAL_TILE_COLUMNS, spectralHighBins, spectralLowBins, type AudioEditSpectralProgress, type AudioEditSpectralTile, type AudioEditSpectralTileRequest } from '@/core/audioEdit/spectralPyramid'
 import { SpectralTileStore } from '@/core/audio/spectralTiles'
 import { StrictMode, createElement, type ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
@@ -10,8 +10,9 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn(), info: v
 
 const SR = 48000, DURATION = SR * 600
 function tileFor(request: AudioEditSpectralTileRequest, overrides: Partial<AudioEditSpectralTile> = {}): AudioEditSpectralTile {
-  return { mode: request.mode, revision: 0, level: request.level, tile: request.tile, sampleRate: SR, channels: 1, durationFrames: DURATION, lowBins: spectralLowBins(SR), highBins: SPECTRAL_HIGH_BINS,
-    columnStart: request.tile * SPECTRAL_TILE_COLUMNS, columnCount: 4, complete: true, values: new Uint8Array(4 * (spectralLowBins(SR) + SPECTRAL_HIGH_BINS) * 2), ...overrides }
+  const lowBins = spectralLowBins(SR, request.level), highBins = spectralHighBins(request.level)
+  return { mode: request.mode, revision: 0, level: request.level, tile: request.tile, sampleRate: SR, channels: 1, durationFrames: DURATION, lowBins, highBins,
+    columnStart: request.tile * SPECTRAL_TILE_COLUMNS, columnCount: 4, complete: true, values: new Uint8Array(4 * (lowBins + highBins) * 2), ...overrides }
 }
 function fakeClient() {
   const pending: Array<{ request: AudioEditSpectralTileRequest; resolve: (tile: AudioEditSpectralTile) => void; reject: (error: Error) => void }> = []

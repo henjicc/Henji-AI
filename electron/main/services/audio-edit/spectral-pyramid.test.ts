@@ -2,7 +2,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { spectralColumnCount } from '../../../../src/core/audioEdit/spectralPyramid'
+import { spectralColumnCount, spectralHighBins, spectralLowBins } from '../../../../src/core/audioEdit/spectralPyramid'
+import { audioRenderKey } from './render-cache'
 const state = vi.hoisted(() => ({ directory: '', digest: 'one', edited: 'repair.wav', calls: vi.fn(), info: vi.fn(), error: vi.fn(), hold: false, holdBuild: false, failBuild: false, active: new Set<string>(), releaseBuild: undefined as (() => void) | undefined, release: undefined as (() => void) | undefined }))
 vi.mock('./render', () => ({ prepareAudioEditRenderSource: async () => state.edited }))
 vi.mock('./project-store', () => ({ requireAudioEditProject: async (id: string) => ({ id, revision: 7, source: { sourcePath: 'source', sampleRate: 48000, channels: 2, durationFrames: 9000 } }) }))
@@ -31,8 +32,9 @@ vi.mock('./spectral-worker-client', () => ({ spectralWorker: { request: async (c
   })
   signal?.throwIfAborted()
   const count = Math.min(1024, spectralColumnCount(command.level, 9000) - command.column_start)
-  await fs.writeFile(command.output_path, new Uint8Array(count * 4920).fill(71))
-  return { sampleRate: 48000, channels: 2, durationFrames: 9000, lowBins: 205, highBins: 1025, columnCount: count }
+  const lowBins = spectralLowBins(48000, command.level), highBins = spectralHighBins(command.level)
+  await fs.writeFile(command.output_path, new Uint8Array(count * 2 * (lowBins + highBins) * 2).fill(71))
+  return { sampleRate: 48000, channels: 2, durationFrames: 9000, lowBins, highBins, columnCount: count }
 } } }))
 import { getAudioEditSpectralTile, cancelAudioEditSpectralTile, subscribeAudioEditSpectralProgress } from './spectral-pyramid'
 const request = { projectId: 'p', mode: 'source' as const, level: 0, tile: 0, requestId: 'one' }
@@ -67,6 +69,20 @@ it('identity、mode、edited 渲染键隔离缓存，返回实际作品版本', 
   expect(await getAudioEditSpectralTile({ ...request, mode: 'edited' })).toMatchObject({ revision: 7 })
   state.edited = 'other.wav'; await getAudioEditSpectralTile({ ...request, mode: 'edited' })
   expect(state.calls.mock.calls.filter(call => call[0].type === 'spectral_tile')).toHaveLength(4)
+})
+it('负层忽略固定窗旧块，按实际频点返回，整文件缓存仍可复用', async () => {
+  const key = audioRenderKey(['spectral-pyramid-v1', { digest: state.digest }, undefined, 48000, 2, 9000, 'source', undefined])
+  const oldFile = path.join(state.directory, `${audioRenderKey([key, -5, 0])}.rg`)
+  await fs.writeFile(oldFile, new Uint8Array(128).fill(99))
+  const fine = await getAudioEditSpectralTile({ ...request, level: -5 })
+  expect([fine.lowBins, fine.highBins]).toEqual([spectralLowBins(48000, -5), spectralHighBins(-5)])
+  expect(fine.values.length).toBe(fine.columnCount * fine.channels * (fine.lowBins + fine.highBins) * 2)
+  expect(fine.values[0]).toBe(71)
+  await getAudioEditSpectralTile({ ...request, level: -5 })
+  await getAudioEditSpectralTile({ ...request, level: -3 })
+  expect(state.calls.mock.calls.filter(call => call[0].type === 'spectral_tile')).toHaveLength(2)
+  expect(state.calls.mock.calls.filter(call => call[0].type === 'spectral_build')).toHaveLength(1)
+  expect((await fs.readFile(oldFile))[0]).toBe(99)
 })
 it('取消单个共享读者不影响其他读者，最后一个取消会通知 worker', async () => {
   state.hold = true

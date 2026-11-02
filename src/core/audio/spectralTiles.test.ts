@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
-import { SPECTRAL_HIGH_BINS, SPECTRAL_TILE_COLUMNS, spectralHop, spectralLowBins, spectralOrigin, type AudioEditSpectralTile } from '@/core/audioEdit/spectralPyramid'
+import { SPECTRAL_TILE_COLUMNS, spectralHighBins, spectralHop, spectralLowBins, spectralOrigin, spectralResolution, type AudioEditSpectralTile } from '@/core/audioEdit/spectralPyramid'
 import { buildSpectrogramLut } from './spectrogram'
 import { planSpectralDraws, rasterizeSpectralTiles, sampleSpectralPixel, spectralLowBandWeight, SpectralTileStore, type SpectralDraw } from './spectralTiles'
 
-const SR = 48000, LOW = spectralLowBins(SR), BINS = LOW + SPECTRAL_HIGH_BINS
+const SR = 48000, LOW = spectralLowBins(SR)
 const lut = buildSpectrogramLut([BLACK_HEX, WHITE_HEX])
 
 function tile(level: number, index: number, fill: (column: number, bin: number) => number = () => 0, options: { columnCount?: number; complete?: boolean; duration?: number } = {}): AudioEditSpectralTile {
   const columnCount = options.columnCount ?? SPECTRAL_TILE_COLUMNS, columnStart = index * SPECTRAL_TILE_COLUMNS
-  const values = new Uint8Array(columnCount * BINS * 2)
-  for (let c = 0; c < columnCount; c++) for (let b = 0; b < BINS; b++) values[(c * BINS + b) * 2] = values[(c * BINS + b) * 2 + 1] = fill(columnStart + c, b)
-  return { mode: 'source', revision: 0, level, tile: index, sampleRate: SR, channels: 1, durationFrames: options.duration ?? 48000 * 600, lowBins: LOW, highBins: SPECTRAL_HIGH_BINS, columnStart, columnCount, complete: options.complete ?? true, values }
+  const lowBins = spectralLowBins(SR, level), highBins = spectralHighBins(level), bins = lowBins + highBins
+  const values = new Uint8Array(columnCount * bins * 2)
+  for (let c = 0; c < columnCount; c++) for (let b = 0; b < bins; b++) values[(c * bins + b) * 2] = values[(c * bins + b) * 2 + 1] = fill(columnStart + c, b)
+  return { mode: 'source', revision: 0, level, tile: index, sampleRate: SR, channels: 1, durationFrames: options.duration ?? 48000 * 600, lowBins, highBins, columnStart, columnCount, complete: options.complete ?? true, values }
 }
 function storeOf(...tiles: AudioEditSpectralTile[]): SpectralTileStore {
   const store = new SpectralTileStore()
@@ -46,6 +47,18 @@ describe('频谱金字塔绘制规划', () => {
 describe('频谱金字塔像素取值', () => {
   const highBin = 100, highHz = highBin * SR / 2048
   const lowBin = 50, lowHz = lowBin * SR / 8192
+
+  it('逐层频率网格映射到同一 Hz', () => {
+    const hz = 6000
+    for (let level = 0; level >= -5; level--) {
+      const lowBins = spectralLowBins(SR, level), bin = hz * spectralResolution(level).highFft / SR
+      const source = tile(level, 0, (_column, b) => b === lowBins + bin ? 200 : 0, { columnCount: 2 })
+      expect(sampleSpectralPixel(draw(source), 0, pixelAt(centerOf(level, 1), 1, hz))).toBeCloseTo(200, 4)
+      expect(sampleSpectralPixel(draw(source), 0, pixelAt(centerOf(level, 1), 1, 12000))).toBeLessThan(1)
+      const flat = tile(level, 0, () => 180, { columnCount: 2 })
+      expect(sampleSpectralPixel(draw(flat), 0, pixelAt(centerOf(level, 1), 1, 300))).toBeCloseTo(180, 4)
+    }
+  })
 
   it('列按契约的时间归属落位：亮列只出现在它自己的中心', () => {
     const source = tile(0, 0, (column, bin) => column === 10 && bin === LOW + highBin ? 255 : 0)

@@ -76,19 +76,19 @@ fn aggregation_matches_definition_including_short_tail() {
 fn impulse_column_ownership_matches_origin() {
     let mut data = vec![0.0; 32768];
     let position = 12 * 512;
-    for i in position - 120..position + 120 {
-        data[i] = (TAU * 1500.0 * i as f32 / 48000.0).sin();
-    }
+    data[position] = 1.0;
     let audio = Samples {
         data,
         start: 0,
         channels: 1,
     };
     for level in [-5, 0, 1, 2] {
+        let layout = resolution(level);
+        let low = layout.low_bins(48000);
         let total = column_count(level, 32768);
         let rows = fft::columns(
             &audio,
-            205,
+            low,
             0,
             total as usize,
             level,
@@ -99,7 +99,10 @@ fn impulse_column_ownership_matches_origin() {
         let strongest = rows
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.bins[205 + 64].peak.total_cmp(&b.bins[205 + 64].peak))
+            .max_by(|(_, a), (_, b)| {
+                let bin = low + 1500 * layout.high_fft / 48000;
+                a.bins[bin].peak.total_cmp(&b.bins[bin].peak)
+            })
             .unwrap()
             .0;
         let hop = 512.0 * 2_f64.powi(level);
@@ -144,6 +147,94 @@ fn long_window_resolves_two_tones_ten_hz_apart() {
 }
 
 #[test]
+fn finest_layer_separates_impulses_six_ms_apart_at_every_hop_offset() {
+    for rate in [44100_u32, 48000, 96000] {
+        let spacing = (rate as f64 * 0.006).round() as usize;
+        for offset in 0..16 {
+            let first = 2048 + offset;
+            let second = first + spacing;
+            let mut data = vec![0.0; 4096];
+            data[first] = 1.0;
+            data[second] = 1.0;
+            let audio = Samples {
+                data,
+                start: 0,
+                channels: 1,
+            };
+            let rows = fft::columns(&audio, 0, 110, 80, -5, 8, &AtomicBool::new(false)).unwrap();
+            let energy: Vec<f64> = rows
+                .iter()
+                .map(|c| c.bins.iter().map(|b| b.peak as f64).sum())
+                .collect();
+            let a = (first + 8) / 16 - 110;
+            let b = (second + 8) / 16 - 110;
+            let peak = energy[a].min(energy[b]);
+            let valley = energy[a + 1..b]
+                .iter()
+                .copied()
+                .fold(f64::INFINITY, f64::min);
+            let dip = 10.0 * (peak / valley.max(1e-20)).log10();
+            assert!(dip >= 3.0, "{rate} Hz, offset {offset}: valley {dip} dB");
+            // 能量不外溢出半个 256 点窗（8 个 hop）以外。
+            assert!(energy[a - 9] < peak * 0.25 && energy[b + 9] < peak * 0.25);
+        }
+    }
+}
+
+#[test]
+fn adjacent_layers_preserve_resolved_tone_amplitude_with_padding() {
+    for rate in [44100_u32, 48000, 96000] {
+        // 包含非整数频点；频率至少有两个周期落入最短窗，避免把周期不足当作增益错误。
+        for frequency in [0.05, 0.0973, 0.1737, 0.3111, 0.45] {
+            for phase in [0.0_f64, 0.7, 1.9] {
+                let audio = Samples {
+                    data: (0..16384)
+                        .map(|i| {
+                            (std::f64::consts::TAU * frequency * i as f64 + phase).sin() as f32
+                                * 0.3
+                        })
+                        .collect(),
+                    start: 0,
+                    channels: 1,
+                };
+                let mut previous: Option<f64> = None;
+                for level in (-5..=0).rev() {
+                    let layout = resolution(level);
+                    let low = layout.low_bins(rate);
+                    let hop = if level < 0 { 512 >> -level } else { 512 };
+                    let row = fft::columns(
+                        &audio,
+                        low,
+                        8192 / hop,
+                        1,
+                        level,
+                        32,
+                        &AtomicBool::new(false),
+                    )
+                    .unwrap()
+                    .remove(0);
+                    let at = frequency * layout.high_fft as f64;
+                    let bin = at.floor() as usize;
+                    let fraction = at - bin as f64;
+                    let db = |k: usize| {
+                        fft::quantize(row.bins[low + k].peak as f64) as f64 / 255.0 * 120.0 - 120.0
+                    };
+                    let value = db(bin) * (1.0 - fraction) + db(bin + 1) * fraction;
+                    assert!(
+                        (value - 20.0 * 0.3_f64.log10()).abs() <= 2.0,
+                        "幅度标定: {value}"
+                    );
+                    if let Some(prior) = previous {
+                        assert!((value - prior).abs() <= 1.0, "rate {rate}, frequency {frequency}, phase {phase}, level {level}: {prior} -> {value}");
+                    }
+                    previous = Some(value);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn tiles_match_larger_range_at_block_boundaries() {
     let dir = tempfile::tempdir().unwrap();
     let input = dir.path().join("input.wav");
@@ -166,7 +257,8 @@ fn tiles_match_larger_range_at_block_boundaries() {
         };
         let all = run(0, 64, &format!("all{level}"));
         let part = run(16, 32, &format!("part{level}"));
-        let row_bytes = (205 + 1025) * 2;
+        let layout = resolution(level);
+        let row_bytes = (layout.low_bins(48000) + layout.high_bins()) * 2;
         let all_count = column_count(level, 70000).min(64) as usize;
         let part_count = column_count(level, 70000).saturating_sub(16).min(32) as usize;
         for channel in 0..2 {
@@ -278,7 +370,7 @@ fn full_1024_column_tile_matches_whole_context() {
     };
     let rows = fft::columns(
         &samples,
-        205,
+        resolution(-5).low_bins(48000),
         0,
         2048,
         -5,
@@ -300,9 +392,10 @@ fn full_1024_column_tile_matches_whole_context() {
     .unwrap();
     let actual = fs::read(output).unwrap();
     let mut expected = Vec::new();
+    let row_bytes = (resolution(-5).low_bins(48000) + resolution(-5).high_bins()) * 2;
     for channel in 0..2 {
         for row in &rows[1024..2048] {
-            expected.extend_from_slice(&bytes(row)[channel * 2460..(channel + 1) * 2460]);
+            expected.extend_from_slice(&bytes(row)[channel * row_bytes..(channel + 1) * row_bytes]);
         }
     }
     assert_eq!(actual, expected);

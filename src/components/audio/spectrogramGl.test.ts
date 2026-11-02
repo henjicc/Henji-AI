@@ -2,12 +2,15 @@ import { expect, it, vi } from 'vitest'
 import { createSpectrogramGl, SPECTRAL_GPU_SLOTS } from './spectrogramGl'
 import { buildSpectrogramLut } from '@/core/audio/spectrogram'
 import { SpectralTileStore } from '@/core/audio/spectralTiles'
-import { SPECTRAL_HIGH_BINS, SPECTRAL_TILE_COLUMNS, spectralLowBins, type AudioEditSpectralTile } from '@/core/audioEdit/spectralPyramid'
+import { SPECTRAL_TILE_COLUMNS, spectralHighBins, spectralLowBins, type AudioEditSpectralTile } from '@/core/audioEdit/spectralPyramid'
 import { SPECTROGRAM_COLORMAP_HEX } from '@/core/theme/colorTokens'
 
-const SR = 48000, LOW = spectralLowBins(SR), BINS = LOW + SPECTRAL_HIGH_BINS
-const tile = (level: number, index: number): AudioEditSpectralTile => ({ mode: 'source', revision: 0, level, tile: index, sampleRate: SR, channels: 2, durationFrames: SR * 600,
-  lowBins: LOW, highBins: SPECTRAL_HIGH_BINS, columnStart: index * SPECTRAL_TILE_COLUMNS, columnCount: SPECTRAL_TILE_COLUMNS, complete: true, values: new Uint8Array(2 * SPECTRAL_TILE_COLUMNS * BINS * 2) })
+const SR = 48000
+const tile = (level: number, index: number): AudioEditSpectralTile => {
+  const lowBins = spectralLowBins(SR, level), highBins = spectralHighBins(level)
+  return { mode: 'source', revision: 0, level, tile: index, sampleRate: SR, channels: 2, durationFrames: SR * 600,
+    lowBins, highBins, columnStart: index * SPECTRAL_TILE_COLUMNS, columnCount: SPECTRAL_TILE_COLUMNS, complete: true, values: new Uint8Array(2 * SPECTRAL_TILE_COLUMNS * (lowBins + highBins) * 2) }
+}
 
 it('连续平移缩放只改 uniform 与剪裁，块只在第一次用到或被替换时上传', () => {
   const calls = new Map<string, ReturnType<typeof vi.fn>>()
@@ -17,7 +20,8 @@ it('连续平移缩放只改 uniform 与剪裁，块只在第一次用到或被�
     if (!calls.has(name)) calls.set(name, vi.fn((..._args: unknown[]): unknown => {
       if (name === 'getError') return 'NO_ERROR'
       if (name === 'getShaderParameter' || name === 'getProgramParameter') return true
-      if (name.startsWith('create') || name === 'getUniformLocation') return {}
+      if (name === 'getUniformLocation') return _args[1]
+      if (name.startsWith('create')) return {}
       return undefined
     }))
     return calls.get(name)
@@ -39,6 +43,16 @@ it('连续平移缩放只改 uniform 与剪裁，块只在第一次用到或被�
   store.set({ ...tile(0, 0) })
   renderer.draw(store, { channel: 0, startFrame: 0, endFrame: 2000 * 512, width: 2000, height: 300, minHz: 20, maxHz: 24000, scale: 'log' }, 0)
   expect(calls.get('texSubImage3D')!.mock.calls.length).toBe(uploads + 1)
+  const mixed = new SpectralTileStore()
+  mixed.set(tile(-5, 0)); mixed.set(tile(0, 0))
+  renderer.draw(mixed, { channel: 0, startFrame: 0, endFrame: 20000, width: 2000, height: 300, minHz: 20, maxHz: 24000, scale: 'log' }, 0)
+  // 同帧先画粗层回退再覆盖细层，纹理不重分配，uniform 与上传宽度逐块切换。
+  expect(calls.get('texStorage3D')).toHaveBeenCalledOnce()
+  expect(calls.get('uniform4f')!.mock.calls.filter(call => call[0] === 'bands').slice(-2)).toEqual([
+    ['bands', 0, SR / 8192, spectralLowBins(SR), SR / 2048],
+    ['bands', 0, SR / 4096, spectralLowBins(SR, -5), SR / 1024],
+  ])
+  expect(calls.get('texSubImage3D')!.mock.calls.at(-1)![5]).toBe(spectralLowBins(SR, -5) + spectralHighBins(-5))
   renderer.dispose()
   expect(calls.get('deleteTexture')).toHaveBeenCalledTimes(2)
 })

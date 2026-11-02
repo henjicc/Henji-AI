@@ -18,7 +18,7 @@ it('每次换视图当场绘制（与叠加层同帧），空数据清屏，尺�
   const flush = (): void => { const pending = [...queue.values()]; queue.clear(); act(() => pending.forEach(callback => callback(0))) }
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 400, height: 200 } as DOMRect)
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({} as WebGL2RenderingContext)
-  const tiles = { sampleRate: 48000, channels: 2, durationFrames: 48000, lowBins: 205, highBins: 1025, version: 1, get: () => undefined }
+  const tiles = { sampleRate: 48000, channels: 2, durationFrames: 48000, version: 1, get: () => undefined }
   const props = { tiles, startFrame: 0, endFrame: 512, minHz: 20, maxHz: 24000 }
   const view = render(<SpectrogramView {...props} />)
   view.rerender(<SpectrogramView {...props} startFrame={1} />)

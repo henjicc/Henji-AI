@@ -53,8 +53,36 @@ fn check(cancelled: &AtomicBool) -> Result<()> {
         Ok(())
     }
 }
-fn low_bins(rate: u32) -> usize {
-    (1200_u64 * 8192 / rate as u64 + 1) as usize
+#[derive(Clone, Copy)]
+pub struct Resolution {
+    low_window: usize,
+    high_window: usize,
+    low_fft: usize,
+    high_fft: usize,
+}
+/// 与 TS spectralResolution 同源语义：有效分析窗与补零 FFT 网格分别指定。
+pub fn resolution(level: i32) -> Resolution {
+    let (low_window, high_window, low_fft, high_fft) = match level {
+        -1 => (6144, 1536, 8192, 2048),
+        -2 => (3072, 768, 4096, 1024),
+        // 再细的层仍用 256 点：更短的窗只换来看不出的时间细节，却让谐波整体糊成竖纹。
+        ..=-3 => (1024, 256, 4096, 1024),
+        _ => (8192, 2048, 8192, 2048),
+    };
+    Resolution {
+        low_window,
+        high_window,
+        low_fft,
+        high_fft,
+    }
+}
+impl Resolution {
+    fn low_bins(self, rate: u32) -> usize {
+        (1200_u64 * self.low_fft as u64 / rate as u64 + 1) as usize
+    }
+    fn high_bins(self) -> usize {
+        self.high_fft / 2 + 1
+    }
 }
 
 /// 即时块采用原始 RG 平面，不经 JSON 传输采样值；主进程负责原子缓存发布。
@@ -69,7 +97,9 @@ pub fn tile(req: TileRequest, cancelled: &AtomicBool) -> Result<Value> {
     let count = total
         .saturating_sub(req.column_start)
         .min(req.column_count as u64) as usize;
-    let low = low_bins(input.spec.sample_rate);
+    let layout = resolution(req.level);
+    let low = layout.low_bins(input.spec.sample_rate);
+    let high = layout.high_bins();
     let channels = input.spec.channels as usize;
     let group = 1_u64 << req.level.max(0);
     let hop = if req.level < 0 {
@@ -82,10 +112,11 @@ pub fn tile(req: TileRequest, cancelled: &AtomicBool) -> Result<Value> {
         .checked_mul(group)
         .and_then(|v| v.checked_mul(hop))
         .ok_or("列范围溢出")?;
-    let start = first.saturating_sub(4096).min(input.frames);
+    let context = layout.low_window.max(layout.high_window) as u64 / 2;
+    let start = first.saturating_sub(context).min(input.frames);
     let end = first
         .saturating_add(count as u64 * group * hop)
-        .saturating_add(4096)
+        .saturating_add(context)
         .min(input.frames);
     let frames = input.frames;
     let sample_rate = input.spec.sample_rate;
@@ -109,7 +140,7 @@ pub fn tile(req: TileRequest, cancelled: &AtomicBool) -> Result<Value> {
     )?;
     let fft_ms = began.elapsed().as_secs_f64() * 1000.0 - read_ms;
     let mut temp = crate::dsp::audio::temporary(&req.output_path)?;
-    let bins = low + 1025;
+    let bins = low + high;
     let mut bytes = vec![0; channels * count * bins * 2];
     bytes
         .par_chunks_mut(bins * 2)
@@ -132,7 +163,7 @@ pub fn tile(req: TileRequest, cancelled: &AtomicBool) -> Result<Value> {
     temp.persist_noclobber(&req.output_path)?;
     Ok(
         json!({ "columnCount":count, "sampleRate":sample_rate, "channels":channels,
-        "durationFrames":frames,"lowBins":low,"highBins":1025,"readMs":read_ms,"fftMs":fft_ms,"encodeMs":encode_ms,"elapsedMs":began.elapsed().as_secs_f64()*1000.0 }),
+        "durationFrames":frames,"lowBins":low,"highBins":high,"readMs":read_ms,"fftMs":fft_ms,"encodeMs":encode_ms,"elapsedMs":began.elapsed().as_secs_f64()*1000.0 }),
     )
 }
 
@@ -173,7 +204,7 @@ impl Store {
             sample_rate: input.spec.sample_rate,
             channels,
             frames: input.frames,
-            low: low_bins(input.spec.sample_rate),
+            low: resolution(0).low_bins(input.spec.sample_rate),
         })
     }
     fn push(&mut self, mut level: usize, mut columns: Vec<Column>) -> Result<()> {
@@ -227,7 +258,10 @@ impl Store {
         loop {
             match temporary.persist(&target) {
                 Ok(_) => break,
-                Err(error) if error.error.kind() == std::io::ErrorKind::PermissionDenied && attempt < 100 => {
+                Err(error)
+                    if error.error.kind() == std::io::ErrorKind::PermissionDenied
+                        && attempt < 100 =>
+                {
                     temporary = error.file;
                     attempt += 1;
                     std::thread::sleep(std::time::Duration::from_millis(5));

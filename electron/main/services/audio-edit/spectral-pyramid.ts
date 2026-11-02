@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { audioEditSpectralTileRequestSchema, spectralColumnCount, spectralLowBins, SPECTRAL_HIGH_BINS, SPECTRAL_PERSISTED_MIN_LEVEL, SPECTRAL_TILE_COLUMNS, type AudioEditSpectralTile, type AudioEditSpectralTileRequest, type AudioEditSpectralProgress } from '../../../../src/core/audioEdit/spectralPyramid'
+import { audioEditSpectralTileRequestSchema, spectralColumnCount, spectralLowBins, spectralHighBins, spectralResolution, SPECTRAL_PERSISTED_MIN_LEVEL, SPECTRAL_TILE_COLUMNS, type AudioEditSpectralTile, type AudioEditSpectralTileRequest, type AudioEditSpectralProgress } from '../../../../src/core/audioEdit/spectralPyramid'
 import { createMainLogger } from '../logging'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { requireAudioEditProject } from './project-store'
@@ -155,7 +155,7 @@ export async function getAudioEditSpectralTile(raw: AudioEditSpectralTileRequest
     const key = audioRenderKey(['spectral-pyramid-v1', identity, project.source.audioStreamIndex, project.source.sampleRate,
       project.source.channels, project.source.durationFrames, request.mode, request.mode === 'edited' ? path.basename(input) : undefined])
     const metadata: SpectralMetadata = { sampleRate: project.source.sampleRate, channels: project.source.channels,
-      durationFrames: project.source.durationFrames, lowBins: spectralLowBins(project.source.sampleRate), highBins: SPECTRAL_HIGH_BINS }
+      durationFrames: project.source.durationFrames, lowBins: spectralLowBins(project.source.sampleRate, request.level), highBins: spectralHighBins(request.level) }
     const directory = await wait(startBackground(cache, key, input, request, revision), signal)
     const base = { ...metadata, mode: request.mode, revision, level: request.level, tile: request.tile }
     if (request.level >= SPECTRAL_PERSISTED_MIN_LEVEL) {
@@ -165,7 +165,9 @@ export async function getAudioEditSpectralTile(raw: AudioEditSpectralTileRequest
     const columnStart = request.tile * SPECTRAL_TILE_COLUMNS
     const columnCount = Math.min(SPECTRAL_TILE_COLUMNS, Math.max(0, spectralColumnCount(request.level, metadata.durationFrames) - columnStart))
     if (!columnCount) return { ...base, columnStart, columnCount, values: new Uint8Array(), complete: true }
-    const file = await immediateFile(cache, audioRenderKey([key, request.level, request.tile]), input, request, metadata, signal)
+    // 负层分析窗会随缩放变化，旧的固定窗块不得命中；整文件缓存与非负层保持原键。
+    const tileKey = request.level < 0 ? [key, request.level, request.tile, 'adaptive-hann-v1', spectralResolution(request.level)] : [key, request.level, request.tile]
+    const file = await immediateFile(cache, audioRenderKey(tileKey), input, request, metadata, signal)
     const bytes = await wait(fs.readFile(file), signal)
     void touchSpectralTile(file)
     scheduleTileTrim(cache)

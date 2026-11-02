@@ -3,9 +3,8 @@ import { z } from 'zod'
 /**
  * 频谱金字塔：渲染层与主进程、音频处理程序共用的唯一契约。
  *
- * 每列同时含两段频率（多分辨率，参照 iZotope RX）：
- * - 低频段：8192 点 Hann 窗，只保留 0 .. lowBins-1 频点（约 1.2 kHz 以下），频率真分辨率约 6 Hz；
- * - 高频段：2048 点 Hann 窗，0 .. 1024 全部频点，时间分辨率约 43 ms。
+ * level >= 0 每列含 8192 点低频 Hann 窗（约 1.2 kHz 以下）和 2048 点全频 Hann 窗。
+ * 负层按 spectralResolution 缩短有效窗；FFT 可补零插值，频点间隔按 FFT 长度计算。
  * 两段都按窗相干增益校正为单边幅度 dBFS，量化 u8 = round(clamp((dB + 120) / 120, 0, 1) * 255)，与旧 HJSP 相同。
  * 两窗中心对齐在同一采样帧；文件外采样按 0 处理，块边界以整个文件为上下文，不得当作文件边界补零。
  *
@@ -33,8 +32,20 @@ export const SPECTRAL_MAX_LEVEL = 15
 export const SPECTRAL_PERSISTED_MIN_LEVEL = 3
 export const SPECTRAL_TILE_COLUMNS = 1024
 
-export function spectralLowBins(sampleRate: number): number {
-  return Math.floor(SPECTRAL_LOW_BAND_MAX_HZ * SPECTRAL_LONG_WINDOW / sampleRate) + 1
+export interface SpectralResolution { lowWindow: number; highWindow: number; lowFft: number; highFft: number }
+/** 有效 Hann 窗与补零后的 FFT 网格分开定义；与原生 pyramid::resolution 对齐。 */
+export function spectralResolution(level: number): SpectralResolution {
+  if (level >= 0) return { lowWindow: SPECTRAL_LONG_WINDOW, highWindow: SPECTRAL_SHORT_WINDOW, lowFft: SPECTRAL_LONG_WINDOW, highFft: SPECTRAL_SHORT_WINDOW }
+  if (level === -1) return { lowWindow: 6144, highWindow: 1536, lowFft: 8192, highFft: 2048 }
+  if (level === -2) return { lowWindow: 3072, highWindow: 768, lowFft: 4096, highFft: 1024 }
+  // 再细的层仍用 256 点（48 kHz 约 5 ms）：更短的窗只换来看不出的时间细节，却让谐波整体糊成竖纹。
+  return { lowWindow: 1024, highWindow: 256, lowFft: 4096, highFft: 1024 }
+}
+export function spectralLowBins(sampleRate: number, level = 0): number {
+  return Math.floor(SPECTRAL_LOW_BAND_MAX_HZ * spectralResolution(level).lowFft / sampleRate) + 1
+}
+export function spectralHighBins(level = 0): number {
+  return spectralResolution(level).highFft / 2 + 1
 }
 export function spectralHop(level: number): number {
   return SPECTRAL_BASE_HOP * 2 ** level
@@ -86,7 +97,7 @@ export interface AudioEditSpectralTile {
   /** 落盘层在后台整文件计算完成前可能只返回已算好的前若干列（可能为 0），此时为 false，进度事件到来后再取。 */
   complete: boolean
   /**
-   * 布局：[channel][column][bin][R, G]，bin 先低频段 lowBins 个（8192 窗），再高频段 highBins 个（2048 窗），
+   * 布局：[channel][column][bin][R, G]，bin 先低频段 lowBins 个，再全频段 highBins 个；窗与 FFT 长度由 level 确定，
    * 每段内频率升序。长度 = channels * columnCount * (lowBins + highBins) * 2。
    */
   values: Uint8Array

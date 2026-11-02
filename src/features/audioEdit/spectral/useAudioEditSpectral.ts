@@ -222,7 +222,7 @@ export function useAudioEditSpectral(client: SpectralTileClient, projectId: stri
   if (current && current.version > 0) shown.current = { store: current, projectId, mode, sourceKey }
   const displayVersion = display?.version ?? 0
   const tiles = useMemo<SpectralTileSet | undefined>(() => display && displayVersion > 0 ? {
-    sampleRate: display.sampleRate, channels: display.channels, durationFrames: display.durationFrames, lowBins: display.lowBins, highBins: display.highBins,
+    sampleRate: display.sampleRate, channels: display.channels, durationFrames: display.durationFrames,
     version: displayVersion, get: (level, tile) => display.get(level, tile),
   } : undefined, [display, displayVersion, version]) // eslint-disable-line react-hooks/exhaustive-deps -- version 驱动快照刷新
 
