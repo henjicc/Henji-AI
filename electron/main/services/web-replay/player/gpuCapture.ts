@@ -115,6 +115,11 @@ export class GpuFrameCapture<Format extends ReaderPixelFormat = 'nv12'> implemen
     return { ...frame, bitmap: () => pixels, previewJpeg: () => yuvPreviewJpeg(pixels, frame.width, frame.height, this.format === 'yuv444p') }
   }
 
+  /** 只读身份区；调用方继续持有原纹理，供对号后交付或编码。 */
+  async identifySnapshot(texture: OffscreenSharedTexture): Promise<string | undefined> {
+    return (await this.read({ ...texture, release: () => undefined }, null, undefined, true)).identity
+  }
+
   attach(contents: WebContents): void {
     contents.on('paint', event => {
       const texture = event.texture
@@ -138,21 +143,21 @@ export class GpuFrameCapture<Format extends ReaderPixelFormat = 'nv12'> implemen
   }
 
   /** Has the reader check one texture for `token` (null: any) and copy back the tiles that changed. */
-  private async read(texture: OffscreenSharedTexture, token: number | null, snapshot?: ReaderSnapshotGuard): Promise<Extract<ReaderResult, { ok: true }>> {
+  private async read(texture: OffscreenSharedTexture, token: number | null, snapshot?: ReaderSnapshotGuard, identityOnly = false): Promise<Extract<ReaderResult, { ok: true }>> {
     let imported: SharedTextureImported
     try {
       imported = sharedTexture.importSharedTexture({ textureInfo: texture.textureInfo as unknown as Parameters<typeof sharedTexture.importSharedTexture>[0]['textureInfo'], allReferencesReleased: () => texture.release() })
     } catch (error) { texture.release(); throw error }
-    try { return await this.readShared(imported, token, snapshot) } finally { imported.release() }
+    try { return await this.readShared(imported, token, snapshot, identityOnly) } finally { imported.release() }
   }
 
-  private async readShared(importedSharedTexture: SharedTextureImported, token: number | null, snapshot?: ReaderSnapshotGuard): Promise<Extract<ReaderResult, { ok: true }>> {
+  private async readShared(importedSharedTexture: SharedTextureImported, token: number | null, snapshot?: ReaderSnapshotGuard, identityOnly = false): Promise<Extract<ReaderResult, { ok: true }>> {
     const reader = this.reader
     if (!reader || reader.isDestroyed()) throw new GpuCaptureError('重演取帧窗口已关闭')
     const id = this.nextId++
     const answer = new Promise<ReaderResult>(resolve => { this.pending.set(id, resolve) })
     try {
-      const request: ReaderRequest = { id, token, full: !!snapshot || !this.picture, guard: this.side, format: this.format, snapshot }
+      const request: ReaderRequest = { id, token, full: !!snapshot || !this.picture, guard: this.side, format: this.format, snapshot, ...(identityOnly ? { identityOnly } : {}) }
       await sharedTexture.sendSharedTexture({ frame: reader.webContents.mainFrame, importedSharedTexture }, request)
       const result = await withTimeout(answer, READ_TIMEOUT_MS, '重演取帧窗口没有回应')
       if (!result.ok) throw new GpuCaptureError(`重演取帧失败：${result.error}`)

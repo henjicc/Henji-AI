@@ -217,7 +217,7 @@ export class VideoEditWebInputs {
       }
     }
     session.lastUsed = performance.now()
-    const times = [time, ...(options.deadline === undefined ? options.ahead ?? [] : [])]
+    const times = [time, ...options.ahead ?? []]
     const precision = options.precision ?? 'exact'
     const readKey = (at: number): string => webReadKey(at, view, reference, precision, options.cacheGrid, options.deadline !== undefined, options.cachePolicy, textSelectors)
     const keep = new Set(times.map(readKey))
@@ -246,8 +246,9 @@ export class VideoEditWebInputs {
     options.signal?.addEventListener('abort', cancel, { once: true })
     try {
       this.checkBudget(frame, state.availableBytes())
+      // 前视与当前帧共用读键，但不更新最近显示画面，也不以 latest 语义取消当前目标。
+      for (const at of times.slice(1)) this.read(session, readKey(at), reference, view, at, copy, false, state, precision, options.cacheGrid, options.cachePolicy, options.cacheWrite, textSelectors)
       if (options.deadline === undefined) {
-        for (const at of times.slice(1)) this.read(session, readKey(at), reference, view, at, copy, false, state, precision, options.cacheGrid, options.cachePolicy, options.cacheWrite, textSelectors)
         const picture = await abortable(read.promise, options.signal)
         this.remember(session, picture)
         state.pinned.add(picture)
@@ -258,7 +259,7 @@ export class VideoEditWebInputs {
         read.promise,
         new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), Math.max(0, options.deadline! - performance.now())) }),
       ]).finally(() => clearTimeout(timer)), options.signal)
-      if (picture) { state.pinned.add(picture); return this.withSelectors(picture, reference.boxes, textSelectors) }
+      if (picture) { this.remember(session, picture); state.pinned.add(picture); return this.withSelectors(picture, reference.boxes, textSelectors) }
       state.required.delete(read)
       options.approximate?.()
       const fallback = precision === 'web-cache' || session.last?.provenance !== 'web-cache' ? session.last : undefined

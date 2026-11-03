@@ -208,6 +208,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditCodeProjectScene(),
     createVideoEditCodeProjectScene({ controls: true }),
     createVideoEditWebSourceScene(),
+    require('./uiInspectionSceneVideoEditWebPipeline.cjs').createVideoEditWebPipelineScene(),
     createVideoFramesScene(),
     createVideoEditMediaProbeScene(),
     createVideoEditNativeAudioScene(),

@@ -9,6 +9,7 @@ import type { WebSourcePage, ReliableWebSourceFrame } from './page'
 import { publishWebTimeSegment, type WebCacheVariant } from './publication'
 import type { WebCacheRegistration, WebCacheRegistrations } from './registration'
 import { WebCacheSubmissions, waitWebCacheTask } from './submissions'
+import { WebSnapshotMiss } from './snapshotFrames'
 
 type Environment = NonNullable<Awaited<ReturnType<WebCacheRegistration['environment']>>>
 
@@ -56,6 +57,8 @@ class SegmentFeed {
 interface Segment { key: string; range: WebTimeSegment; next: number; selectors: string[]; feed: SegmentFeed; controller: AbortController; done: Promise<void> }
 interface Session {
   page: WebSourcePage; registration: WebCacheRegistration; environment: Environment; reader: GpuFrameCapture<'yuv444p'>; tail: Promise<void>
+  finishing: Promise<void>
+  inFlight: Set<Promise<unknown>>
   /** 正在接收导出帧的段。 */
   segment?: Segment
   /** 尚未结束的段，含已收齐帧、仍在编码或发布的上一段。 */
@@ -113,12 +116,15 @@ export class WebCacheExportWriter {
       const frame = webTimeFrameAt(request.cacheGrid, request.time)!
       const cancelled = (): void => {
         const segment = session.segment
-        if (segment && frame >= segment.next && frame < segment.range.firstFrame + segment.range.frameCount) this.abandon(session, segment, signal.reason)
+        if (segment && frame >= segment.range.firstFrame && frame < segment.range.firstFrame + segment.range.frameCount) this.abandon(session, segment, signal.reason)
       }
       signal.addEventListener('abort', cancelled, { once: true })
       cleanup = () => signal.removeEventListener('abort', cancelled)
-      const work = session.tail.then(() => { signal.throwIfAborted(); return this.captureNow(session, request, signal) })
-      session.tail = work.then(() => undefined, () => undefined)
+      const previous = session.tail
+      let advance!: () => void
+      session.tail = new Promise<void>(resolve => { advance = resolve })
+      const work = previous.then(() => { signal.throwIfAborted(); return this.captureNow(session, request, signal, advance) }).finally(() => { advance(); session.inFlight.delete(work) })
+      session.inFlight.add(work)
       const result = await waitWebCacheTask(work, signal)
       return signal.aborted ? dropped() : result
     } catch (error) { if (signal.aborted) return dropped(); throw error }
@@ -151,7 +157,7 @@ export class WebCacheExportWriter {
     if (!environment || !registration.current || this.disposed) { environment?.close(); return undefined }
     const reader = new GpuFrameCapture(0, 'yuv444p')
     try { await reader.open() } catch (error) { environment.close(); await reader.dispose(); throw error }
-    const session: Session = { page, registration, environment, reader, tail: Promise.resolve(), writing: new Set(), readings: 0, warm: false, backlog: 0, skip: 0, penalty: 1, closed: false, stop: () => undefined }
+    const session: Session = { page, registration, environment, reader, tail: Promise.resolve(), finishing: Promise.resolve(), inFlight: new Set(), writing: new Set(), readings: 0, warm: false, backlog: 0, skip: 0, penalty: 1, closed: false, stop: () => undefined }
     const stop = (): void => { void this.close(page.streamId) }
     registration.signal.addEventListener('abort', stop, { once: true })
     session.stop = () => registration.signal.removeEventListener('abort', stop)
@@ -159,7 +165,7 @@ export class WebCacheExportWriter {
     return session
   }
 
-  private async captureNow(session: Session, request: WebSourceCaptureRequest, signal: AbortSignal): Promise<WebSourceCaptureResult | undefined> {
+  private async captureNow(session: Session, request: WebSourceCaptureRequest, signal: AbortSignal, advance: () => void): Promise<WebSourceCaptureResult | undefined> {
     if (session.closed || !session.registration.current) return undefined
     const { page, registration, environment } = session, grid = request.cacheGrid!
     const frame = webTimeFrameAt(grid, request.time)!, index = Math.floor(frame / webTimeSegment(grid, 0, null)!.frameCount)
@@ -182,36 +188,49 @@ export class WebCacheExportWriter {
     const current = segment, bytes = size.width * size.height * 3
     // 画面交付之后才判断这一幅能否进缓存：读回或积压已满，说明跟不上导出，放弃写缓存而不是等它。
     const admit = (): boolean => {
-      if (session.closed || session.segment !== current || signal.aborted) return false
+      if (session.closed || current.controller.signal.aborted || !session.writing.has(current) || signal.aborted) return false
       if (session.readings < MAX_READBACKS && session.backlog + bytes <= Math.max(EXPORT_CACHE_BACKLOG_BYTES, bytes * 2)) return true
       // 首幅读回编译管线约半秒，这时排满只放弃本段，不退避后面的段。
       if (!session.warm) this.abandon(session, current, new Error('网页缓存读回尚在预热'))
       else this.fallBehind(session, current, bytes)
       return false
     }
-    const captured = await page.captureExport(webTimeAtFrame(grid, frame), request.ticket, session.reader, selectors, AbortSignal.any([signal, registration.signal]), request.scale, admit)
+    const pending = page.captureExport(webTimeAtFrame(grid, frame), request.ticket, session.reader, selectors, AbortSignal.any([signal, registration.signal]), request.scale, admit)
     current.next++
-    // 交付后快照已失效等原因没读回：段里留了缺口，不能让发布器空等下去。
-    if (!captured.reliable && session.segment === current) this.abandon(session, current, new Error('精确导出网页画面没有进入缓存'))
-    if (captured.reliable) {
-      session.backlog += bytes; session.readings++
-      const { reliable } = captured
-      void reliable.then(() => { session.warm = true }, () => undefined).finally(() => { session.readings-- })
-      // 两幅的读回可能乱序完成，按导出顺序串起来入队。
-      const reading = (session.reading ?? Promise.resolve()).then(() => reliable).then(
-        frame => current.feed.push(frame, () => { session.backlog -= bytes }),
-        // 读回失败或身份不符：画面已经交付，只作废本段并退避，链路一直坏时不必每段都全量读回再失败。
-        error => {
-          session.backlog -= bytes
-          if (session.closed) { this.abandon(session, current, error); return }
-          const skip = this.backOff(session, current, error)
-          this.options.logger.warn('精确导出的网页画面读回失败，放弃本段并跳过后面几段', { event: 'web_source.export_cache.read_failed', error, context: { streamId: page.streamId, segment: current.range.index, skipSegments: skip } })
-        })
-      session.reading = reading
-      void reading.finally(() => { if (session.reading === reading) session.reading = undefined })
-    }
     if (current.next === range.firstFrame + range.frameCount && session.segment === current) session.segment = undefined
-    return { provenance: 'live', boxes: captured.boxes, duration: page.duration, contentHash: page.contentHash, pixelWidth: size.width, pixelHeight: size.height }
+    const previous = session.finishing
+    let finish!: () => void
+    session.finishing = new Promise<void>(resolve => { finish = resolve })
+    advance()
+    try {
+      const captured = await pending
+      // 纹理按身份领取可乱序完成，段发布仍按预留的网页帧序进入唯一编码队列。
+      await previous
+      // 交付后快照已失效等原因没读回：段里留了缺口，不能让发布器空等下去。
+      if (!captured.reliable) this.abandon(session, current, new Error('精确导出网页画面没有进入缓存'))
+      if (captured.reliable) {
+        session.backlog += bytes; session.readings++
+        const { reliable } = captured
+        void reliable.then(() => { session.warm = true }, () => undefined).finally(() => { session.readings-- })
+        // 两幅的读回可能乱序完成，按导出顺序串起来入队。
+        const reading = (session.reading ?? Promise.resolve()).then(() => reliable).then(
+          frame => current.feed.push(frame, () => { session.backlog -= bytes }),
+          // 读回失败或身份不符：画面已经交付，只作废本段并退避，链路一直坏时不必每段都全量读回再失败。
+          error => {
+            session.backlog -= bytes
+            if (session.closed) { this.abandon(session, current, error); return }
+            const skip = this.backOff(session, current, error)
+            this.options.logger.warn('精确导出的网页画面读回失败，放弃本段并跳过后面几段', { event: 'web_source.export_cache.read_failed', error, context: { streamId: page.streamId, segment: current.range.index, skipSegments: skip } })
+          })
+        session.reading = reading
+        void reading.finally(() => { if (session.reading === reading) session.reading = undefined })
+      }
+      return { provenance: 'live', boxes: captured.boxes, duration: page.duration, contentHash: page.contentHash, pixelWidth: size.width, pixelHeight: size.height }
+    } catch (error) {
+      this.abandon(session, current, error)
+      if (error instanceof WebSnapshotMiss) return undefined
+      throw error
+    } finally { await previous; finish() }
   }
 
   private begin(session: Session, key: string, range: WebTimeSegment, variant: WebCacheVariant, selectors: string[]): Segment {
@@ -277,6 +296,7 @@ export class WebCacheExportWriter {
       if (!session || session.closed) return
       session.closed = true
       await session.tail
+      await Promise.allSettled([...session.inFlight])
       if (session.segment) this.abandon(session, session.segment, new Error('精确导出网页来源已关闭'))
       const timer = setTimeout(() => { for (const segment of session.writing) segment.controller.abort(new Error('网页缓存段收尾超时')) }, DRAIN_TIMEOUT_MS)
       try { await Promise.all([...session.writing].map(segment => segment.done)) } finally { clearTimeout(timer) }

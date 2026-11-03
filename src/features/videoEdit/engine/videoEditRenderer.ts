@@ -1661,7 +1661,7 @@ export class VideoEditRenderer {
         const trust = this.webTrust(document, clip)
         const outputScale = this.webScale
         const view = codeWebView(reference)
-        const ahead = sequential && context.webDeadline === undefined
+        const ahead = sequential
           ? [1, 2].flatMap(offset => {
             const at = frame + offset
             if (at >= clip.start + clip.duration) return []

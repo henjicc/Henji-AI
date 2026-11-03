@@ -120,6 +120,7 @@ export function installReplayReader(): void {
   /** The current frame and the last accepted one; they swap when a frame is accepted. */
   let frames: { cur: GPUTexture; prev: GPUTexture; width: number; height: number } | null = null
   const buffers = new Map<string, GPUBuffer>()
+  let identityTexture: GPUTexture | undefined
   const buffer = (key: string, size: number, usage: number): GPUBuffer => {
     const existing = buffers.get(key)
     if (existing && existing.size >= size) return existing
@@ -166,6 +167,31 @@ export function installReplayReader(): void {
       const sourceWidth = video.visibleRect?.width ?? video.codedWidth
       const sourceHeight = video.visibleRect?.height ?? video.codedHeight
       const snapshot = request.snapshot
+      if (request.identityOnly) {
+        // 逐帧匹配只需 32 个像素，不能为 4K 页面复制整幅或干扰编码器的前后帧纹理。
+        identityTexture ??= device.createTexture({ size: [8, 4], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC })
+        const params = buffer('identityParams', 32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST)
+        const pixels = buffer('identityRead', 1024, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ)
+        device.queue.writeBuffer(params, 0, new Uint32Array([8, 4, 1, 0, 0, 0, 0, 0]))
+        const encoder = device.createCommandEncoder(), pass = encoder.beginComputePass()
+        pass.setPipeline(copy)
+        pass.setBindGroup(0, device.createBindGroup({ layout: copy.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: params } }] }))
+        pass.setBindGroup(1, device.createBindGroup({ layout: copy.getBindGroupLayout(1), entries: [{ binding: 0, resource: device.importExternalTexture({ source: video }) }, { binding: 1, resource: identityTexture.createView() }] }))
+        pass.dispatchWorkgroups(1); pass.end()
+        encoder.copyTextureToBuffer({ texture: identityTexture }, { buffer: pixels, bytesPerRow: 256 }, [8, 4])
+        device.queue.submit([encoder.finish()])
+        await pixels.mapAsync(GPUMapMode.READ)
+        try {
+          const data = new Uint8Array(pixels.getMappedRange())
+          let identity = ''
+          for (let i = 0; i < 32; i++) {
+            const offset = Math.floor(i / 8) * 256 + i % 8 * 4, digit = Math.round(data[offset] / 17), expected = digit * 17
+            if (data[offset + 3] < 253 || [0, 1, 2].some(channel => Math.abs(data[offset + channel] - expected) > 2)) { identity = ''; break }
+            identity += digit.toString(16)
+          }
+          return { id: request.id, ok: true, token: -1, width: sourceWidth, height: sourceHeight, tiles: null, pixels: null, identity: identity || undefined }
+        } finally { pixels.unmap() }
+      }
       const width = snapshot?.width ?? sourceWidth, height = snapshot?.height ?? sourceHeight
       if (snapshot && (!/^[0-9a-f]{32}$/.test(snapshot.identity) || !Number.isSafeInteger(width) || !Number.isSafeInteger(height) ||
         width < 8 || height < 4 || sourceWidth !== width || sourceHeight !== height || snapshot.restore.length !== 1024 ||

@@ -2,6 +2,7 @@ import { sharedTexture, type WebFrameMain } from 'electron'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { WebSourcePage } from './page'
 import { WebCacheSubmissions } from './submissions'
+import { WebSnapshotFrames } from './snapshotFrames'
 vi.mock('./session', () => ({ webSourceSession: () => ({ partition: 'test', observe: async () => undefined, release: () => undefined }) }))
 import { WEB_TEXT_SAMPLER_VERSION } from '../../../../src/core/videoEdit/webTextGeometry'
 
@@ -12,11 +13,26 @@ const boundary = vi.hoisted(() => {
     loadURL: vi.fn(async () => undefined),
     debugger: { isAttached: () => true, sendCommand: vi.fn(async () => undefined) },
     executeJavaScript: vi.fn(async (_code: string) => ({})),
-    executeJavaScriptInIsolatedWorld: vi.fn(async (_world: number, _scripts: Array<{ code: string }>): Promise<unknown> => null),
+    // 快照身份区原像素由单独一次脚本领取；用例只模拟快照脚本，把它返回的 restore 当作这次领取的结果。
+    executeJavaScriptInIsolatedWorld: async (world: number, scripts: Array<{ code: string }>): Promise<unknown> => {
+      if (scripts[0].code.includes('原始像素已失效')) return state.restore
+      const result = await isolated(world, scripts)
+      if (result && typeof result === 'object' && Array.isArray((result as { restore?: unknown }).restore)) state.restore = (result as { restore: number[] }).restore
+      return result
+    },
     forcefullyCrashRenderer: vi.fn(),
   }
-  return { contents, fallback: vi.fn(), release: vi.fn(), resize: vi.fn(), create: vi.fn(), destroy: vi.fn() }
+  const isolated = vi.fn(async (_world: number, _scripts: Array<{ code: string }>): Promise<unknown> => null)
+  const state = { restore: Array<number>(1024).fill(0) }
+  return { contents, isolated, identities: [] as string[], fallback: vi.fn(), release: vi.fn(), resize: vi.fn(), create: vi.fn(), destroy: vi.fn() }
 })
+
+vi.mock('../web-replay/player/gpuCapture', () => ({ GpuFrameCapture: class {
+  async open(): Promise<void> {}
+  async dispose(): Promise<void> {}
+  async identifySnapshot(): Promise<string | undefined> { return boundary.identities.shift() }
+} }))
+vi.mock('../logging/main-logger', () => ({ createMainLogger: () => ({ debug: vi.fn() }) }))
 
 vi.mock('./site', () => ({ WEB_SOURCE_ENTRY_URL: 'https://web-source.henji.invalid/', WEB_SOURCE_ORIGIN: 'https://web-source.henji.invalid', serveWebSourceFile: vi.fn() }))
 vi.mock('electron', () => ({
@@ -35,13 +51,26 @@ let page: WebSourcePage
 beforeEach(async () => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  boundary.identities.length = 0
+  const expectFrame = WebSnapshotFrames.prototype.expect
+  vi.spyOn(WebSnapshotFrames.prototype, 'expect').mockImplementation(function (this: WebSnapshotFrames, identity, signal) {
+    boundary.identities.push(identity)
+    const expected = expectFrame.call(this, identity, signal)
+    void expected.frame.catch(() => undefined).finally(() => {
+      const index = boundary.identities.indexOf(identity)
+      if (index !== -1) boundary.identities.splice(index, 1)
+    })
+    return expected
+  })
   boundary.contents.executeJavaScript.mockImplementation(async () => ({}))
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+  boundary.isolated.mockImplementation(async (_world, [{ code }]) => {
     if (code.includes('requestAdapter')) return { captureMode: 'compositor', fallbackReason: 'missing-stage' }
     if (code.includes('__henjiWebSourceMark')) {
       const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)?.[1]
       paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 }, metadata: { captureUpdateRect: { x: 0, y: 0, width: 1, height: 1 } } } } })
     }
+    // 带身份的快照脚本只回元素矩形，原像素另行领取。
+    if (code.includes('const paint =')) return { boxes: null }
     return null
   })
   page = new WebSourcePage('stream', { id: 1, mainFrame: {} as WebFrameMain, isDestroyed: () => false, send: vi.fn(), onGone: () => () => undefined },
@@ -49,10 +78,10 @@ beforeEach(async () => {
   await page.open()
   page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
 })
-afterEach(() => { page.close(); vi.useRealTimers() })
+afterEach(() => { page.close(); vi.restoreAllMocks(); vi.useRealTimers() })
 
 function snapshotText(result: unknown): void {
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+  boundary.isolated.mockImplementation(async (_world, [{ code }]) => {
     if (code.includes('const paint =')) {
       const paint = boundary.contents.on.mock.calls.find(([event]) => event === 'paint')![1]
       paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
@@ -67,16 +96,16 @@ it('主进程交付同幅文本身份和同步原因，空声明保持原快照�
   const captured = await page.capture(2, 'text', undefined, { text: ['#title'] })
   expect(captured.text).toMatchObject({ ticket: 'text', time: 2, contentHash: 'hash', results: { '#title': { details: ['font-error'] } } })
   expect(page.capturePath.captureMode).toBe('html-in-canvas')
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockClear()
+  boundary.isolated.mockClear()
   await page.capture(3, 'plain', undefined, { text: [] })
-  expect(boundary.contents.executeJavaScriptInIsolatedWorld).toHaveBeenCalledOnce()
-  expect(boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls[0][1][0].code).not.toContain('textSelectors')
+  expect(boundary.isolated).toHaveBeenCalledOnce()
+  expect(boundary.isolated.mock.calls[0][1][0].code).not.toContain('textSelectors')
 })
 
 it.each(['timeout', 'prepare', 'sample'] as const)('文本 %s 失败只拒绝当次，保留快照路径供无声明帧与重试使用', async failure => {
   if (failure === 'sample') snapshotText({ boxes: {}, textError: { code: 'sampling-failed', message: 'bad selector' } })
-  else if (failure === 'timeout') boundary.contents.executeJavaScriptInIsolatedWorld.mockReturnValueOnce(new Promise(() => undefined))
-  else boundary.contents.executeJavaScriptInIsolatedWorld.mockRejectedValueOnce(new Error('任意脚本错误，没有分类前缀'))
+  else if (failure === 'timeout') boundary.isolated.mockReturnValueOnce(new Promise(() => undefined))
+  else boundary.isolated.mockRejectedValueOnce(new Error('任意脚本错误，没有分类前缀'))
   const rejected = expect(page.capture(1, 'failed-text', undefined, { text: ['#title'] })).rejects.toMatchObject({
     name: 'WebTextCaptureError', code: failure === 'timeout' ? 'font-timeout' : failure === 'prepare' ? 'prepare-failed' : 'sampling-failed',
   })
@@ -94,7 +123,7 @@ it('compositor 继续交付画面但明确没有精确文本，不把独立测�
   page.capturePath = { captureMode: 'compositor', fallbackReason: 'missing-stage' }
   const captured = await page.capture(2, 'compositor-text', undefined, { text: ['#title'] })
   expect(captured.text?.results).toEqual({ '#title': { status: 'unavailable', reason: 'capture-path' } })
-  expect(boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.every(([, scripts]) => !scripts[0].code.includes('textSelectors'))).toBe(true)
+  expect(boundary.isolated.mock.calls.every(([, scripts]) => !scripts[0].code.includes('textSelectors'))).toBe(true)
 })
 
 it('丢弃排队的旧目标与取消票据，seek 返回后不再为取消任务画快照', async () => {
@@ -131,17 +160,17 @@ it('前一幅传输未结束就取下一幅，元数据按票据对号，换倍�
   sent(); await first
 })
 
-it('快照提交后立即推进下一次 seek，但上一幅未到时不覆盖输出画布', async () => {
+it('快照提交后不等上一幅返回就提交下一幅，收到画面后按身份交付', async () => {
   const paint = boundary.contents.on.mock.calls.find(([event]) => event === 'paint')![1]
-  const before = boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.length
+  const before = boundary.isolated.mock.calls.length
   const first = page.capture(1, 'first', undefined)
   const second = page.capture(2, 'second', undefined)
   await vi.advanceTimersByTimeAsync(0)
   expect(boundary.contents.executeJavaScript.mock.calls.some(([code]) => code.includes('page.seek(2)'))).toBe(true)
-  expect(boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.length - before).toBe(1)
+  expect(boundary.isolated.mock.calls.length - before).toBe(2)
   const sendPaint = (): void => paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 }, metadata: { captureUpdateRect: { x: 0, y: 0, width: 100, height: 100 } } } } })
   sendPaint(); await first; await vi.advanceTimersByTimeAsync(0)
-  expect(boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.length - before).toBe(2)
+  expect(boundary.isolated.mock.calls.length - before).toBe(2)
   sendPaint(); await second
   expect(boundary.release).toHaveBeenCalledTimes(2)
 })
@@ -151,7 +180,7 @@ it('流水线送回超时使已推进的后帧一起失效，恢复走普通绘�
     if (code.includes('page.seek(2)')) return new Promise(() => undefined)
     return {}
   })
-  const first = expect(page.capture(1, 'first', undefined)).rejects.toThrow('完整快照')
+  const first = expect(page.capture(1, 'first', undefined)).rejects.toThrow('匹配快照')
   const second = expect(page.capture(2, 'second', undefined)).rejects.toThrow('链路已失效')
   await vi.advanceTimersByTimeAsync(3000)
   await first; await second
@@ -172,14 +201,14 @@ it('尚未开始的取消任务继续传递绘制屏障，不越过在途快照'
   await vi.advanceTimersByTimeAsync(0)
   expect(completed).toBe(false)
   expect(boundary.contents.loadURL).toHaveBeenCalledTimes(1)
-  expect(boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.filter(([, scripts]) => scripts[0].code.includes('const paint ='))).toHaveLength(1)
+  expect(boundary.isolated.mock.calls.filter(([, scripts]) => scripts[0].code.includes('const paint ='))).toHaveLength(2)
     paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
     await first; await cancelled; await vi.advanceTimersByTimeAsync(0)
     paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
   await next
 })
 
-it('取消队列空洞后重载等待已提交的快照领取，精确任务不被 latest 覆盖', async () => {
+it('重载取消全部在途快照，迟到纹理不会进入新内容代次', async () => {
   const paint = boundary.contents.on.mock.calls.find(([event]) => event === 'paint')![1]
   const first = page.capture(1, 'first', undefined)
   const exact = page.capture(2, 'exact', undefined)
@@ -188,9 +217,10 @@ it('取消队列空洞后重载等待已提交的快照领取，精确任务不�
   page.cancel('exact'); page.cancel('latest')
   const reload = page.reload('updated')
   await vi.advanceTimersByTimeAsync(0)
-  expect(boundary.contents.loadURL).toHaveBeenCalledTimes(1)
+  expect(boundary.contents.loadURL).toHaveBeenCalledTimes(2)
   paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
-  await Promise.all([first, exact, latest, reload])
+  await reload
+  for (const result of await Promise.all([first, exact, latest])) expect(result.dropped).toBe(true)
   expect(boundary.contents.loadURL).toHaveBeenCalledTimes(2)
 })
 
@@ -213,8 +243,8 @@ it('精确排队任务不被 latest 预览取消，调整倍率期间取消不�
 
 it('普通绘制低倍率时取帧标记仍覆盖输出像素，不会等待到超时', async () => {
   page.capturePath = { captureMode: 'compositor', fallbackReason: null }
-  const execute = boundary.contents.executeJavaScriptInIsolatedWorld.getMockImplementation()!
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (world, scripts) => {
+  const execute = boundary.isolated.getMockImplementation()!
+  boundary.isolated.mockImplementation(async (world, scripts) => {
     if (scripts[0].code.includes('__henjiWebSourceMark')) {
       const side = Number(/width:(\d+)px/.exec(scripts[0].code)?.[1])
       if (side * .125 < 1) return null
@@ -229,7 +259,7 @@ it('普通绘制低倍率时取帧标记仍覆盖输出像素，不会等待到�
 it.each([true, false])('清理完成后才切换普通绘制并告警，自动舞台 %s 决定是否重新定位', async automatic => {
   let finishCleanup!: (value: { automatic: boolean; pageChanged: boolean }) => void
   const cleanup = new Promise<{ automatic: boolean; pageChanged: boolean }>(resolve => { finishCleanup = resolve })
-  boundary.contents.executeJavaScriptInIsolatedWorld
+  boundary.isolated
     .mockRejectedValueOnce(new Error('快照失败'))
     .mockReturnValueOnce(cleanup)
   const captured = page.capture(1, 'ticket', undefined)
@@ -249,7 +279,7 @@ it.each([false, true])('自动舞台 seek 异常当帧退回并重新定位，�
   page.capturePath.automatic = true
   const loads = boundary.contents.loadURL.mock.calls.length
   boundary.contents.executeJavaScript.mockRejectedValueOnce(new Error('NotFoundError'))
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockResolvedValueOnce({ automatic: true, pageChanged: false, reloadRequired })
+  boundary.isolated.mockResolvedValueOnce({ automatic: true, pageChanged: false, reloadRequired })
   expect((await page.capture(1, 'failed-seek', undefined)).dropped).not.toBe(true)
   expect(page.capturePath.captureMode).toBe('compositor')
   expect(boundary.contents.executeJavaScript.mock.calls.filter(([code]) => code.includes('page.seek(1)'))).toHaveLength(2)
@@ -263,7 +293,7 @@ it.each([false, true])('自动舞台 seek 异常当帧退回并重新定位，�
 it('损坏 DOM 的恢复重载失败后保留重试状态，不在错误页面继续 seek', async () => {
   page.capturePath.automatic = true
   boundary.contents.executeJavaScript.mockRejectedValueOnce(new Error('NotFoundError'))
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockResolvedValueOnce({ automatic: true, reloadRequired: true })
+  boundary.isolated.mockResolvedValueOnce({ automatic: true, reloadRequired: true })
   boundary.contents.loadURL.mockRejectedValueOnce(new Error('恢复加载失败'))
   await expect(page.capture(1, 'failed-reload', undefined)).rejects.toThrow('恢复加载失败')
   expect(boundary.fallback).toHaveBeenCalledOnce()
@@ -291,7 +321,7 @@ it.each(['seek', 'paint'])('录制页自动舞台 %s 失败后在原 DOM 重定�
     return {}
   })
   let paints = 0
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+  boundary.isolated.mockImplementation(async (_world, [{ code }]) => {
     if (code.includes('state?.dispose()')) return { automatic: true }
     if (code.includes('requestAdapter')) return { captureMode: 'html-in-canvas', fallbackReason: null, automatic: true }
     if (code.includes('const paint =')) {
@@ -328,7 +358,7 @@ it('舞台恢复重载沿用任务取消信号，不等待加载超时或继续 
   await page.open()
   page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null, automatic: true }
   boundary.contents.executeJavaScript.mockRejectedValueOnce(new Error('NotFoundError'))
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockResolvedValueOnce({ automatic: true, reloadRequired: true })
+  boundary.isolated.mockResolvedValueOnce({ automatic: true, reloadRequired: true })
   boundary.contents.loadURL.mockReturnValueOnce(new Promise(() => undefined))
   const controller = new AbortController()
   const captured = expect(page.captureReliable(1, 'cancel-reload', { readSnapshot: vi.fn() }, undefined, controller.signal)).rejects.toThrow('取消恢复')
@@ -348,7 +378,7 @@ it('舞台恢复重载沿用任务取消信号，不等待加载超时或继续 
 
 it('清理失败保留 cause、不告警，下一次取帧重新载入', async () => {
   const cleanupError = new Error('清理失败')
-  boundary.contents.executeJavaScriptInIsolatedWorld
+  boundary.isolated
     .mockRejectedValueOnce(new Error('快照失败'))
     .mockRejectedValueOnce(cleanupError)
   await expect(page.capture(1, 'failed', undefined)).rejects.toMatchObject({ message: '快照失败', cause: cleanupError })
@@ -359,13 +389,13 @@ it('清理失败保留 cause、不告警，下一次取帧重新载入', async (
 })
 
 it('宿主等待快照脚本超时结束页面进程，不尝试清理或降级，下次取帧重新载入', async () => {
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockReturnValueOnce(new Promise(() => undefined))
-  const calls = boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.length
+  boundary.isolated.mockReturnValueOnce(new Promise(() => undefined))
+  const calls = boundary.isolated.mock.calls.length
   const captured = expect(page.capture(1, 'timeout', undefined)).rejects.toThrow('网页没有响应快照取帧')
   await vi.advanceTimersByTimeAsync(30_000)
   await captured
   expect(boundary.contents.forcefullyCrashRenderer).toHaveBeenCalledOnce()
-  expect(boundary.contents.executeJavaScriptInIsolatedWorld).toHaveBeenCalledTimes(calls + 1)
+  expect(boundary.isolated).toHaveBeenCalledTimes(calls + 1)
   expect(boundary.fallback).not.toHaveBeenCalled()
   const loads = boundary.contents.loadURL.mock.calls.length
   await page.capture(2, 'recovered', undefined)
@@ -402,7 +432,7 @@ it('可靠快照只允许快照路径，身份不符作废并拒绝倒退；关�
   await page.reload('hash')
   page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
   const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+  boundary.isolated.mockImplementation(async (_world, [{ code }]) => {
     if (code.includes('const paint =')) {
       paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
       return { boxes: null, restore: Array(1024).fill(0) }
@@ -427,7 +457,7 @@ it('取消正在读回的可靠快照，迟到结果不能取得发布资格', a
   await page.open()
   page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
   const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async () => {
+  boundary.isolated.mockImplementation(async () => {
     paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
     return { boxes: null, restore: Array(1024).fill(0) }
   })
@@ -447,7 +477,7 @@ it('取消正在读回的可靠快照，迟到结果不能取得发布资格', a
 it('精确导出只seek一次，先交付附原始像素的同一纹理再后台读回，两位消费者都结束才归还', async () => {
   const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
   const restore = Array.from({ length: 1024 }, (_, index) => index % 256)
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async (_world, [{ code }]) => {
+  boundary.isolated.mockImplementation(async (_world, [{ code }]) => {
     if (code.includes('const paint =')) {
       paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 101, height: 101 } } } })
       return { boxes: null, restore }
@@ -483,7 +513,7 @@ it('快照提交后抢占阻止读回，恢复不重复seek；暂停时取消归
   page.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
   const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)![1]
   let hold!: ReturnType<WebCacheSubmissions['hold']>
-  boundary.contents.executeJavaScriptInIsolatedWorld.mockImplementation(async () => {
+  boundary.isolated.mockImplementation(async () => {
     paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 } } } })
     hold = submissions.hold('playing')
     return { boxes: null, restore: Array(1024).fill(0) }
@@ -534,11 +564,11 @@ it('开页在实际提交点等待抢占，任务取消无需恢复且不进入�
     readyHold = submissions.hold('dragging')
     return {}
   })
-  const prepareCalls = boundary.contents.executeJavaScriptInIsolatedWorld.mock.calls.length
+  const prepareCalls = boundary.isolated.mock.calls.length
   const next = new AbortController()
   const opened = expect(page.open(next.signal)).rejects.toThrow('取消准备')
   await vi.advanceTimersByTimeAsync(0); await readyHold.drained
-  expect(boundary.contents.executeJavaScriptInIsolatedWorld).toHaveBeenCalledTimes(prepareCalls)
+  expect(boundary.isolated).toHaveBeenCalledTimes(prepareCalls)
   next.abort(new Error('取消准备'))
   await opened
   expect(boundary.fallback).not.toHaveBeenCalled()

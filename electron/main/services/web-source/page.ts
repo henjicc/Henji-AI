@@ -4,12 +4,14 @@ import { codeWebPixelSize, type CodeWebView } from '../../../../src/core/videoEd
 import type { VideoFrameMeta, WebSourceBox, WebSourceCaptureRequest } from '../../../../src/platform/contracts/videoFrameTypes'
 import type { VideoFrameTarget } from '../video-decoder'
 import { webSourceSession } from './session'
-import type { GpuFrameCapture } from '../web-replay/player/gpuCapture'
+import { GpuFrameCapture } from '../web-replay/player/gpuCapture'
 import type { TakenFrame } from '../web-replay/player/frameSource'
 import { waitWebCacheTask, type WebCacheSubmissions } from './submissions'
 import { unavailableWebText, WEB_TEXT_SAMPLER_VERSION, type WebTextCapture } from '../../../../src/core/videoEdit/webTextGeometry'
 import { WebTextCaptureError, TEXT_GEOMETRY_PREPARE_SCRIPT, textGeometryPaintSetup, validateWebTextResults } from './textGeometry'
 import { WEB_SOURCE_ENTRY_URL, WEB_SOURCE_ORIGIN, type WebSourceFolder } from './site'
+import { WebSnapshotFrames, WebSnapshotMiss } from './snapshotFrames'
+import { createMainLogger } from '../logging/main-logger'
 
 const LOAD_TIMEOUT_MS = 30_000
 /** 页面出现 `window.henjiWeb` 并就绪（资源、字体）的时限。 */
@@ -239,19 +241,18 @@ function snapshotPaintScript(view: CodeWebView, selectors: readonly string[] | u
           pixels.fill(parseInt(digit, 16) * 17, i * 4, i * 4 + 3); pixels[i * 4 + 3] = 255
         }
         device.queue.writeTexture({ texture }, pixels, { bytesPerRow: 32 }, [8, 4])` : ''}
+        // 身份区原像素要等显卡做完这一幅才读得到；不让它挡住下一次 seek，宿主随后单独领取。
+        ${identity ? `const restoring = saved.mapAsync(GPUMapMode.READ).then(() => Array.from(new Uint8Array(saved.getMappedRange()))).finally(() => saved.destroy())
+        restoring.catch(() => undefined)
+        ;(state.restores ??= new Map()).set(${JSON.stringify(identity)}, restoring)` : ''}
         const boxes = (() => { ${measureBoxesScript(selectors)} })()
-        device.popErrorScope().then(async error => {
-          ${identity ? 'try {' : ''}
+        device.popErrorScope().then(error => {
           if (error) throw new Error(error.message)
           state.checkFrame()
           if (state.lostReason) throw new Error(state.lostReason)
-          ${identity ? `await saved.mapAsync(GPUMapMode.READ)
-          const restore = Array.from(new Uint8Array(saved.getMappedRange()))
-          saved.unmap()` : ''}
           // 文字位置在提交画面之前采样；画面提交后再核对一次同步状态，期间页面变了就标为未同步。
-          resolve(${textSelectors?.length ? `{ boxes, textError, text: (() => { const reasons=textSyncReasons(); return reasons.length ? unavailableText('unsynchronized',reasons) : text })()${identity ? ', restore' : ''} }` : identity ? '{ boxes, restore }' : 'boxes'})
-          ${identity ? '} finally { saved.destroy() }' : ''}
-        }).catch(reject)
+          resolve(${textSelectors?.length ? "{ boxes, textError, text: (() => { const reasons=textSyncReasons(); return reasons.length ? unavailableText('unsynchronized',reasons) : text })() }" : identity ? '{ boxes }' : 'boxes'})
+        }).catch(error => { ${identity ? `state.restores?.delete(${JSON.stringify(identity)}); ` : ''}reject(error) })
       } catch (error) { reject(error) }
     }
     const timer = setTimeout(() => { clean(); reject(new Error('网页快照 paint 超时')) }, ${PAINT_TIMEOUT_MS})
@@ -259,6 +260,16 @@ function snapshotPaintScript(view: CodeWebView, selectors: readonly string[] | u
     container.addEventListener('paint', paint, { once: true })
     try { container.requestPaint() } catch (error) { clean(); reject(error) }
   })`
+}
+
+/** 领取快照身份区下面的原像素（RGBA，256 字节行距）；每幅恰好领取一次。 */
+function snapshotRestoreScript(identity: string): string {
+  return `(async () => {
+    const restores = window.__henjiWebSourceSnapshot?.restores, pending = restores?.get(${JSON.stringify(identity)})
+    if (!pending) throw new Error('网页快照原始像素已失效')
+    restores.delete(${JSON.stringify(identity)})
+    return await pending
+  })()`
 }
 
 const SNAPSHOT_DISPOSE_SCRIPT = '(() => { const state = window.__henjiWebSourceSnapshot; return { automatic: !!state?.sync, pageChanged: state?.dispose(), reloadRequired: state?.reloadRequired } })()'
@@ -307,6 +318,62 @@ const SNAPSHOT_ERRORS_SCRIPT = `(() => {
     delete window.__henjiWebSourceStopErrors
   }
 })()`
+
+const IDENTITY_READER_IDLE_MS = 2_000
+
+/**
+ * 流水线里同时有几幅快照在传输，到达主进程的纹理只能按画面左上角的身份区对号。身份区只读 32 个像素，全部网页来源共用一个读回窗口，
+ * 不为每个页面多开一个显卡进程；还没打开好时照常串行取帧，打不开（这台机器的读回窗口不能用 WebGPU）就一直串行。
+ * 最后一个网页来源关掉后稍等再关窗口：隐藏窗口也算窗口，久留会让关掉主窗口后应用迟迟不退出；稍等是为了淘汰一页再开一页时不重开。
+ */
+class SnapshotIdentityReader {
+  private reader?: GpuFrameCapture
+  private opening?: Promise<void>
+  private users = 0
+  private idle?: ReturnType<typeof setTimeout>
+  private unavailable = false
+  private readonly logger = createMainLogger('main.web_source')
+
+  acquire(): void {
+    this.users++
+    clearTimeout(this.idle); this.idle = undefined
+    if (this.reader || this.unavailable) return
+    const reader = new GpuFrameCapture(0)
+    this.reader = reader
+    this.opening = reader.open().catch(error => {
+      void reader.dispose()
+      // 没人用而中途关掉的不算打不开。
+      if (this.reader !== reader) return
+      this.reader = undefined; this.opening = undefined; this.unavailable = true
+      this.logger.warn('网页快照身份读回不可用，网页取帧不做流水线', { event: 'web_source.snapshot.identity_unavailable', error })
+    })
+    const opening = this.opening
+    void opening.then(() => { if (this.opening === opening) this.opening = undefined })
+  }
+
+  /** 已打开的读回窗口；还在打开或打不开时为空。 */
+  ready(): GpuFrameCapture | undefined { return this.opening ? undefined : this.reader }
+
+  /** 打开后读回失败（窗口崩溃、显卡设备丢失）：本次运行不再流水线，避免每幅都先失败一次。 */
+  fail(reader: GpuFrameCapture, error: unknown): void {
+    if (this.reader !== reader) return
+    this.reader = undefined; this.unavailable = true
+    void reader.dispose()
+    this.logger.warn('网页快照身份读回失败，网页取帧改回串行', { event: 'web_source.snapshot.identity_failed', error })
+  }
+
+  release(): void {
+    if (--this.users > 0) return
+    this.idle = setTimeout(() => {
+      this.idle = undefined
+      if (this.users > 0 || !this.reader) return
+      const reader = this.reader
+      this.reader = undefined; this.opening = undefined
+      void reader.dispose()
+    }, IDENTITY_READER_IDLE_MS)
+  }
+}
+const snapshotIdentity = new SnapshotIdentityReader()
 
 interface CapturePath { captureMode: 'compositor' | 'html-in-canvas'; fallbackReason: string | null; automatic?: boolean }
 interface SnapshotPreparation extends CapturePath { pageChanged?: boolean }
@@ -402,7 +469,7 @@ function updateRect(texture: OffscreenSharedTexture): UpdateRect {
 }
 
 /**
- * 一个网页来源的离屏页面：沙箱、隔离、不挂任何 preload，页面拿不到痕迹的接口。宿主只经 `window.henjiWeb` 控制时间，取帧串行；
+ * 一个网页来源的离屏页面：沙箱、隔离、不挂任何 preload，页面拿不到痕迹的接口。宿主只经 `window.henjiWeb` 串行推进时间，快照传输并行；
  * 页面进程退出、seek 或快照脚本超时（结束页面进程，免得迟到的脚本继续改页面）或重新载入失败后，下一次取帧先重新载入页面。
  */
 export class WebSourcePage {
@@ -413,8 +480,14 @@ export class WebSourcePage {
   private untextured = 0
   private wake?: () => void
   private tail: Promise<unknown> = Promise.resolve()
-  /** 下一次 seek 可重叠传输，下一次快照必须等当前不可变纹理已领取。 */
+  /** 重新载入与调整输出尺寸必须等全部在途快照领取。 */
   private paintTail: Promise<unknown> = Promise.resolve()
+  private identityHeld = false
+  /** 存在时快照按画面身份对号，后一幅不必等前一幅送到；不存在时快照串行。 */
+  private snapshotFrames?: WebSnapshotFrames
+  /** 对号器中途撤掉时它等的纹理可能还在路上；改回串行前先接完，免得被当成下一幅。 */
+  private drainBeforeSerial = false
+  private readonly logger = createMainLogger('main.web_source')
   private readonly jobs = new Map<string, CaptureJob>()
   private deviceScale: number
   private lastSeekTime?: number
@@ -456,6 +529,7 @@ export class WebSourcePage {
 
   /** 打开页面；之后的重新载入与取帧排在它后面。 */
   open(signal?: AbortSignal): Promise<void> {
+    if (!this.identityHeld && !this.closed) { this.identityHeld = true; snapshotIdentity.acquire() }
     const run = this.openNow(signal)
     this.tail = run
     return run
@@ -493,8 +567,14 @@ export class WebSourcePage {
       if (!texture) { this.untextured++; return }
       const size = texture.textureInfo.codedSize
       if (this.closed || this.window !== window || !size.width || !size.height) { texture.release(); return }
-      this.paints.push({ seq: ++this.seq, texture })
       this.lastPaintAt = Date.now()
+      if (this.snapshotFrames && this.capturePath.captureMode === 'html-in-canvas') {
+        if (this.coversOutput(texture)) this.snapshotFrames.accept(texture)
+        else texture.release()
+        this.wake?.()
+        return
+      }
+      this.paints.push({ seq: ++this.seq, texture })
       // 脚本还未返回时输出也可能已到达；第一幅完整快照必须保留到领取，后续局部画面不能把它挤走。
       const mark = this.snapshotMark
       const snapshot = mark === undefined ? undefined : this.paints.find(paint => paint.seq > mark && this.coversOutput(paint.texture))
@@ -513,6 +593,7 @@ export class WebSourcePage {
   /** 载入（或重新载入）网页并等它就绪；页面进程退出过或调试会话断了，先回到空白页重新接上视口设置。 */
   private async load(signal?: AbortSignal): Promise<void> {
     this.rendererLifetime.abort()
+    this.snapshotFrames?.close(); this.snapshotFrames = undefined
     const contents = this.window!.webContents
     if (this.stale === 'gone' || !contents.debugger.isAttached()) {
       // 视口设置要等页面有渲染进程才能下发。
@@ -651,7 +732,8 @@ export class WebSourcePage {
   capture(time: number, ticket: string, selectors: readonly string[] | undefined, options: Pick<WebSourceCaptureRequest, 'scale' | 'latest' | 'text'> = {}): Promise<WebSourcePageCapture> {
     if (this.recording) return Promise.reject(new Error('录制页面必须使用可靠快照入口'))
     if (options.latest) for (const job of this.jobs.values()) if (!job.started && job.latest) job.cancelled = true
-    const job: CaptureJob = { cancelled: false, started: false, latest: options.latest === true }
+    // 取消只中止这一幅的快照等待；不给 job.signal，载入与降级重载属于页面，不能因单幅取消中途停下、和下一次载入叠在一起。
+    const job: CaptureJob = { cancelled: false, started: false, latest: options.latest === true, controller: new AbortController() }
     this.jobs.set(ticket, job)
     const previous = this.tail, previousPaint = this.paintTail
     let advance!: () => void
@@ -666,19 +748,25 @@ export class WebSourcePage {
       }
       const captured = await this.captureNow(time, selectors, job, previousPaint, advance, options.scale, options.text, ticket)
       return captured && { ...captured, pixelWidth: this.pixelWidth, pixelHeight: this.pixelHeight, duration: this.duration }
+    }).catch(error => {
+      if (job.cancelled || this.closed) return undefined
+      if (!(error instanceof WebSnapshotMiss)) throw error
+      this.logger.debug('网页快照缺失，等待消费者补取', { event: 'web_source.snapshot.missed', context: { streamId: this.streamId, ticket, time, ...this.snapshotFrames?.metrics } })
+      return undefined
     }).finally(async () => {
       // 取消、载入失败等提前退出也必须传递绘制屏障，不能让后帧越过尚未领取的快照。
-      await previousPaint.catch(() => undefined)
+      if (!this.snapshotFrames) await previousPaint.catch(() => undefined)
       advance()
     })
-    this.paintTail = prepared
+    // 只传递完成时机；不保留结果，否则每幅的纹理描述与身份区原像素会沿链一直被引用。
+    this.paintTail = Promise.allSettled([previousPaint, prepared]).then(() => undefined)
     return prepared.then(async captured => {
       const dimensions = { pixelWidth: this.pixelWidth, pixelHeight: this.pixelHeight }
       if (!captured || job.cancelled || this.closed) {
         captured?.texture.release()
         return { boxes: null, duration: this.duration, unsettled: false, dropped: true, ...dimensions }
       }
-      await this.deliver(captured.texture, time, ticket)
+      await this.deliver(captured.texture, time, ticket, captured.restore)
       return { boxes: captured.boxes, ...(captured.text ? { text: captured.text } : {}), duration: captured.duration, unsettled: captured.unsettled, pixelWidth: captured.pixelWidth, pixelHeight: captured.pixelHeight }
     }).finally(() => { this.jobs.delete(ticket) })
   }
@@ -744,9 +832,13 @@ export class WebSourcePage {
     const controller = new AbortController()
     const job: CaptureJob = { cancelled: false, started: false, latest: false, controller, signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal }
     this.jobs.set(ticket, job)
-    const run = Promise.allSettled([this.tail, this.paintTail]).then(async () => {
+    const previous = this.tail, previousPaint = this.paintTail
+    let advance = (): void => undefined
+    if (!this.recording) this.tail = new Promise<void>(resolve => { advance = resolve })
+    const run = previous.catch(() => undefined).then(async () => {
       job.signal!.throwIfAborted()
       if (this.closed || job.cancelled) throw new Error('网页录制已取消')
+      if (this.recording || this.stale || scale !== undefined && scale !== this.view.scale || this.snapshotAfterSeek) await previousPaint.catch(() => undefined)
       if (this.stale) await this.loadRecording(job.signal)
       if (this.capturePath.captureMode !== 'html-in-canvas' && !this.snapshotAfterSeek) throw new Error('网页缓存要求 html-in-canvas 快照')
       if (this.pixelWidth < 8 || this.pixelHeight < 4) throw new Error('网页画面容纳不了快照身份区')
@@ -756,17 +848,22 @@ export class WebSourcePage {
       const contentHash = this.contentHash
       const identity = crypto.createHash('sha256').update(JSON.stringify([crypto.randomUUID(), this.streamId, contentHash, time, ticket])).digest('hex').slice(0, 32)
       const isCurrent = (): boolean => !this.closed && !job.cancelled && !job.signal!.aborted && !lifetime.aborted && this.contentHash === contentHash && this.capturePath.captureMode === 'html-in-canvas'
-      const captured = await this.captureNow(time, selectors, job, Promise.resolve(), () => undefined, scale, undefined, ticket, identity)
+      const captured = await this.captureNow(time, selectors, job, previousPaint, advance, scale, undefined, ticket, identity)
       lifetime = this.rendererLifetime.signal
       if (!captured) throw new Error('网页录制已取消')
       if (captured.unsettled || !isCurrent()) { captured.texture.release(); throw new Error('网页快照已失效') }
       return finish({ captured, identity, contentHash, lifetime, job, isCurrent, time })
     }).catch(error => {
+      if (error instanceof WebSnapshotMiss) throw error
       if (job.started || !job.signal!.aborted) { this.rendererLifetime.abort(); this.stale ??= 'reload' }
       throw error
-    }).finally(() => { this.jobs.delete(ticket) })
-    this.tail = run
-    this.paintTail = run
+    }).finally(async () => {
+      this.jobs.delete(ticket)
+      if (!this.snapshotFrames) await previousPaint.catch(() => undefined)
+      advance()
+    })
+    if (this.recording) this.tail = run
+    this.paintTail = Promise.allSettled([previousPaint, run]).then(() => undefined)
     return waitWebCacheTask(run, job.signal!)
   }
 
@@ -822,7 +919,8 @@ export class WebSourcePage {
         seeked = await this.seekAndMeasure(time, selectors, job)
       }
       if (!seeked) return undefined
-      await previousPaint.catch(() => undefined)
+      // 快照只改隐藏舞台，是否等前一幅由 takeSnapshot 按能否对号决定；普通绘制必须等上一幅结束才动页面。
+      if (this.capturePath.captureMode !== 'html-in-canvas') await previousPaint.catch(() => undefined)
       if (job.cancelled || this.closed) return undefined
       if (this.stale) throw new Error('网页取帧链路已失效，下一次取帧时重新载入')
       if (identity && this.snapshotAfterSeek) {
@@ -846,8 +944,10 @@ export class WebSourcePage {
         }
         try {
           if (job.cancelled || this.closed) return undefined
-          snapshot = await this.submit(job, () => this.takeSnapshot(measure, () => { advanced = true; advance() }, wantsText ? textSelectors : undefined, identity))
+          snapshot = await this.submit(job, () => this.takeSnapshot(measure, () => { advanced = true; advance() }, wantsText ? textSelectors : undefined, identity, job.signal ?? job.controller?.signal, previousPaint))
         } catch (error) {
+          if (job.cancelled) return undefined
+          if (error instanceof WebSnapshotMiss) throw error
           if (this.closed || this.window!.isDestroyed() || contents.isDestroyed() || this.stale === 'gone') throw error
           // 下一次 seek 已开始时不能在同一个 DOM 上重画上一刻。收口为重载回退，阻止迟到脚本污染下一幅。
           if (advanced) {
@@ -858,6 +958,8 @@ export class WebSourcePage {
           }
           if (identity && this.snapshotAfterSeek) throw error
           if (identity) this.snapshotAfterSeek = true
+          // 前几幅可能仍按身份等待纹理；拆舞台会让它们全部失效，先等它们领走。
+          await previousPaint.catch(() => undefined)
           if (await this.disableSnapshot(error, job.signal)) {
             // 恢复流内布局后再定位，才能兑现自动舞台内被裁掉的文档滚动请求。
             seeked = await this.seekAndMeasure(time, selectors, job)
@@ -866,7 +968,7 @@ export class WebSourcePage {
           }
           if (identity) {
             await this.prepareAfterSeek(job)
-            snapshot = await this.submit(job, () => this.takeSnapshot(measure, undefined, undefined, identity))
+            snapshot = await this.submit(job, () => this.takeSnapshot(measure, undefined, undefined, identity, job.signal ?? job.controller?.signal, previousPaint))
           }
         }
         if (snapshot) {
@@ -889,9 +991,9 @@ export class WebSourcePage {
       return { texture, boxes: selectors ? webSourceBoxes(seeked.boxes ?? measured, selectors) : null, ...(wantsText ? { text: { ...textIdentity, samplerVersion: WEB_TEXT_SAMPLER_VERSION, results: unavailableWebText(textSelectors!, 'capture-path'), sampleMs: 0, serializationMs: 0, bytes: 0 } } : {}), unsettled }
     } finally {
       // 下一次 seek 尚未领取绘制锁，不能释放上一幅仍在等待的纹理。
-      await previousPaint.catch(() => undefined)
+      if (!this.snapshotFrames) await previousPaint.catch(() => undefined)
       if (!this.closed && !contents.isDestroyed() && this.capturePath.captureMode !== 'html-in-canvas') contents.stopPainting()
-      this.releasePaints()
+      if (!this.snapshotFrames || this.capturePath.captureMode !== 'html-in-canvas') this.releasePaints()
     }
   }
 
@@ -910,6 +1012,7 @@ export class WebSourcePage {
     const contents = this.window.webContents
     if (contents.isDestroyed()) throw error
     const reason = error instanceof Error ? error.message : String(error)
+    this.snapshotFrames?.close(); this.snapshotFrames = undefined
     let disposed: { pageChanged?: boolean; automatic?: boolean; reloadRequired?: boolean } | undefined
     try {
       if (this.capturePath.automatic) await withTimeout(contents.executeJavaScript('window.__henjiWebSourceStopErrors?.()', false), PAINT_TIMEOUT_MS, '网页脚本错误监听清理超时')
@@ -933,21 +1036,52 @@ export class WebSourcePage {
     return disposed?.automatic === true
   }
 
-  private async takeSnapshot(selectors: readonly string[] | undefined, submitted?: () => void, textSelectors?: readonly string[], identity?: string): Promise<{ measured: unknown; restore?: number[]; texture: OffscreenSharedTexture }> {
-    const mark = this.seq
-    this.snapshotMark = mark
+  /**
+   * 画一幅快照并领取它的纹理。能按身份对号时不等 `previousPaint`（前几幅可以仍在传输）；不能时先等前一幅领走，
+   * 再取标记之后第一幅完整画面。两种方式切换前也先等前一幅，免得仍按旧方式等待的那幅被新方式截走。
+   */
+  private async takeSnapshot(selectors: readonly string[] | undefined, submitted?: () => void, textSelectors?: readonly string[], identity?: string, signal?: AbortSignal, previousPaint: Promise<unknown> = Promise.resolve()): Promise<{ measured: unknown; restore?: number[]; texture: OffscreenSharedTexture }> {
     const contents = this.window!.webContents
+    let expected: ReturnType<WebSnapshotFrames['expect']> | undefined
+    let taken = false
+    let mark = this.seq
     try {
+      const fits = this.pixelWidth >= 8 && this.pixelHeight >= 4
+      if (this.snapshotFrames && !fits) { await previousPaint.catch(() => undefined); this.snapshotFrames.close(); this.snapshotFrames = undefined; this.drainBeforeSerial = true }
+      const reader = snapshotIdentity.ready()
+      if (reader && !this.snapshotFrames && fits) {
+        await previousPaint.catch(() => undefined)
+        if (this.closed) throw new Error('网页来源已关闭')
+        const frames: WebSnapshotFrames = new WebSnapshotFrames(texture => reader.identifySnapshot(texture), error => {
+          if (this.snapshotFrames === frames) { this.snapshotFrames = undefined; this.drainBeforeSerial = true }
+          snapshotIdentity.fail(reader, error)
+        })
+        this.snapshotFrames ??= frames
+      }
+      if (this.snapshotFrames) {
+        identity ??= crypto.randomBytes(16).toString('hex')
+        expected = this.snapshotFrames.expect(identity, signal)
+      } else {
+        await previousPaint.catch(() => undefined)
+        if (this.drainBeforeSerial) { this.drainBeforeSerial = false; await this.drainPaints() }
+        mark = this.seq
+        this.snapshotMark = mark
+      }
       const measured: unknown = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: snapshotPaintScript(this.view, selectors, textSelectors, process.env.HENJI_WEB_TEXT_TRACE === '1', identity) }], false), SEEK_TIMEOUT_MS, '网页没有响应快照取帧')
       submitted?.()
-      const captured = identity ? measured as { boxes: unknown; restore: number[] } : undefined
-      const texture = await this.snapshotPaint(mark)
+      expected?.start()
+      const restoring = identity ? withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: snapshotRestoreScript(identity) }], false) as Promise<number[]>, PAINT_TIMEOUT_MS, '网页快照原始像素没有返回') : undefined
+      void restoring?.catch(() => undefined)
+      const texture = await (expected?.frame ?? this.snapshotPaint(mark))
+      taken = true
+      let restore: number[] | undefined
+      try { restore = await restoring } catch (error) { texture.release(); throw error }
       const { width, height } = texture.textureInfo.codedSize
       if (width < this.pixelWidth || height < this.pixelHeight) { texture.release(); throw new Error('网页快照纹理没有覆盖完整输出') }
       // 原生窗口的 DIP 换算可能让纹理分配多出边缘像素；只交付输出画布的有效区域，不缩放像素。
       const visibleRect = { x: 0, y: 0, width: this.pixelWidth, height: this.pixelHeight }
-      // 带文字采样时 measured 整体交给调用方解析（里面也带着身份区原像素）。
-      return { measured: captured && !textSelectors?.length ? captured.boxes : measured, restore: captured?.restore,
+      // 带文字采样时 measured 整体交给调用方解析。
+      return { measured: identity && !textSelectors?.length ? (measured as { boxes: unknown }).boxes : measured, restore,
         texture: { ...texture, textureInfo: { ...texture.textureInfo, visibleRect }, release: () => texture.release() } }
     } catch (error) {
       // 页面主线程卡住时清理脚本也无法执行，结束页面进程后由下一次取帧重新载入。
@@ -958,7 +1092,10 @@ export class WebSourcePage {
       }
       throw error
     } finally {
-      this.snapshotMark = undefined
+      expected?.cancel()
+      // 脚本失败前纹理可能已对上号送到：没人领取也要还给浏览器的小纹理池。
+      if (expected && !taken) void expected.frame.then(texture => texture.release(), () => undefined)
+      if (!expected) this.snapshotMark = undefined
     }
   }
 
@@ -1067,6 +1204,8 @@ export class WebSourcePage {
     this.closed = true
     this.pageLifetime.abort(new Error('网页来源已关闭'))
     this.rendererLifetime.abort()
+    this.snapshotFrames?.close(); this.snapshotFrames = undefined
+    if (this.identityHeld) { this.identityHeld = false; snapshotIdentity.release() }
     for (const job of this.jobs.values()) { job.cancelled = true; job.controller?.abort(new Error('网页来源已关闭')) }
     this.wake?.()
     this.releasePaints()
