@@ -3,7 +3,7 @@
 import * as THREE from 'three/webgpu'
 import { abs, attribute, texture, dot, exp, float, mix, normalize, normalView, positionView, pow, sin, smoothstep, step, time, uv, vec3 } from 'three/tsl'
 
-const RIBBONS = 340, SEGMENTS = 220
+const RIBBONS = 420, SEGMENTS = 220
 
 function studio(): THREE.DataTexture {
   const width = 1024, height = 512, data = new Float32Array(width * height * 4)
@@ -38,19 +38,43 @@ function random(seed: number): () => number {
   return () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 4294967296 }
 }
 
-function ribbons(): THREE.BufferGeometry {
+// 标题画在贴图里；顺便找出字的下沿（逐列最低的笔画），丝带从这些点长出来，并放在字后面一点，字始终压在光上。
+const LABEL = new THREE.Vector3(0, .415, -1.88), LABEL_WIDTH = .5, LABEL_HEIGHT = .125
+function title(): { glyphs: THREE.DataTexture; starts: THREE.Vector3[] } {
+  const canvas = new OffscreenCanvas(1024, 256), context = canvas.getContext('2d')!
+  context.fillStyle = '#fff'; context.textAlign = 'center'; context.textBaseline = 'middle'
+  context.font = '500 250px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'
+  context.fillText('痕　迹', 512, 128)
+  const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height), starts: THREE.Vector3[] = []
+  // 每列只取最低的一笔（字的外下沿）：字内部的横笔也长丝带的话，丝带会往下压住下面的笔画。
+  for (let x = 0; x < width; x += 2) for (let y = height - 1; y > 0; y--) {
+    if (data[(y * width + x) * 4 + 3] > 128) {
+      starts.push(new THREE.Vector3(LABEL.x + (x / width - .5) * LABEL_WIDTH, LABEL.y + (.5 - y / height) * LABEL_HEIGHT, LABEL.z - .012))
+      break
+    }
+  }
+  // 用读出的像素直接建贴图（读过像素的画布再交给 three 上传会是空的）；贴图原点在左下，逐行翻转。
+  const flipped = new Uint8Array(data.length), row = width * 4
+  for (let y = 0; y < height; y++) flipped.set(data.subarray(y * row, (y + 1) * row), (height - 1 - y) * row)
+  const glyphs = new THREE.DataTexture(flipped, width, height, THREE.RGBAFormat)
+  glyphs.magFilter = glyphs.minFilter = THREE.LinearFilter
+  glyphs.needsUpdate = true
+  return { glyphs, starts }
+}
+
+function ribbons(starts: THREE.Vector3[]): THREE.BufferGeometry {
   const next = random(7)
   const positions: number[] = [], uvs: number[] = [], seeds: number[] = [], indices: number[] = []
   const point = new THREE.Vector3(), ahead = new THREE.Vector3(), tangent = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3(0, 0, 1)
   for (let r = 0; r < RIBBONS; r++) {
-    // 展开系数：中间的几乎直落，两边的甩得最开；偏中间的更多，束子才密。
-    const lane = (next() * 2 - 1), spread = Math.sign(lane) * Math.pow(Math.abs(lane), .8)
-    const seed = next(), width = .004 + next() * .008, twist = (next() - .5) * 2.4, depth = (next() - .5) * .12
+    const start = starts[Math.floor(next() * starts.length)]
+    // 展开方向跟着起点在标题里的左右位置走：左边的笔画往左甩，右边的往右甩，中间的几乎直落。
+    const lane = start.x / (LABEL_WIDTH / 2) + (next() - .5) * .25, spread = Math.sign(lane) * Math.pow(Math.min(1.2, Math.abs(lane)), .8)
+    const seed = next(), width = .003 + next() * .007, twist = (next() - .5) * 2.4, depth = (next() - .5) * .12
     const path = (s: number, out: THREE.Vector3) => out.set(
-      // 顶端按位置均匀铺满标题的宽度（光从字的整条下沿涌出），往下再甩开。
-      lane * .2 + spread * 2.3 * Math.pow(s, 2.2) + Math.sin(s * 3 + seed * 6) * .01 * s,
-      .33 - s * 1.35 + Math.pow(s, 2) * .2,
-      -1.9 + depth + 1.5 * Math.pow(s, 1.6))
+      start.x + spread * 2.3 * Math.pow(s, 2.2) + Math.sin(s * 3 + seed * 6) * .01 * s,
+      start.y - s * 1.42 + Math.pow(s, 2) * .2,
+      start.z + depth * s + 1.5 * Math.pow(s, 1.6))
     const base = positions.length / 3
     for (let i = 0; i <= SEGMENTS; i++) {
       const s = i / SEGMENTS
@@ -58,9 +82,8 @@ function ribbons(): THREE.BufferGeometry {
       tangent.subVectors(ahead, point).normalize()
       // 带子宽度方向：先取与路径和朝向都垂直的方向，再沿路径扭一点，反光才一段段变化。
       side.crossVectors(tangent, up).normalize().applyAxisAngle(tangent, twist * s + seed)
-      // 顶端收细，末端早已出画。
-      // 不能细到不足一个像素：侧对镜头时会闪成虚线。
-      const w = width * (.7 + s)
+      // 起点和笔画差不多粗；不能细到不足一个像素，侧对镜头时会闪成虚线。
+      const w = width * (.6 + s * 1.1)
       positions.push(point.x - side.x * w, point.y - side.y * w, point.z - side.z * w, point.x + side.x * w, point.y + side.y * w, point.z + side.z * w)
       uvs.push(0, s, 1, s); seeds.push(seed, seed)
       if (i < SEGMENTS) { const a = base + i * 2; indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2) }
@@ -102,27 +125,19 @@ export default {
     const facing = smoothstep(.04, .3, abs(dot(normalView, normalize(positionView).negate())))
     material.colorNode = mix(vec3(1, .86, .62), vec3(.85, .9, 1), seed).mul(facing)
     material.emissiveNode = vec3(1, .8, .55).mul(source.add(flow.mul(shimmer.mul(.6).add(.4))).add(front)).mul(facing)
-    const bundle = new THREE.Mesh(ribbons(), material)
+    // 标题是场景里的发光体：字先烧亮，光再从每一笔的下沿长出来；字和光同一套泛光，连成一体。
+    const { glyphs, starts } = title()
+    const bundle = new THREE.Mesh(ribbons(starts), material)
     scene.add(bundle)
-    // 标题是场景里的发光体（不是时间线上的文字卡片）：卡片是画好的平面画面、自己不发光，淡入时只是一层灰字，
-    // 和丝带的光连不到一起。这里把字画进贴图、按高动态亮度自发光，和丝带同一套泛光；字先烧亮，光再从它底下涌出。
-    const canvas = new OffscreenCanvas(1024, 256), context = canvas.getContext('2d')!
-    context.fillStyle = '#fff'; context.textAlign = 'center'; context.textBaseline = 'middle'
-    context.font = '500 250px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'
-    context.fillText('痕　迹', 512, 140)
-    const glyphs = new THREE.CanvasTexture(canvas as unknown as HTMLCanvasElement)
-    glyphs.colorSpace = THREE.SRGBColorSpace
     const ignite = smoothstep(0, 1.1, time)
-    const title = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
-    const glyph = texture(glyphs).r
+    const label = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
     // 亮度只略高于泛光阈值：字芯清楚可读，四周再带一圈光晕。
-    title.colorNode = vec3(1, .92, .8).mul(ignite.mul(ignite).mul(2.2))
+    label.colorNode = vec3(1, .92, .8).mul(ignite.mul(ignite).mul(2.2))
     // 只有笔画处不透明：整块平面不透明会在宿主合成时盖住背景，成一个暗框。
-    title.opacityNode = glyph
-    const label = new THREE.Mesh(new THREE.PlaneGeometry(.5, .125), title)
-    // 字的下沿正好落在丝带顶端。
-    label.position.set(0, .33 + .085, -1.88)
-    scene.add(label)
+    label.opacityNode = texture(glyphs).r
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(LABEL_WIDTH, LABEL_HEIGHT), label)
+    plate.position.copy(LABEL)
+    scene.add(plate)
     return { scene, update(_parameters: unknown, _assets: unknown, info: { time: number }) {
       void info
     } }
