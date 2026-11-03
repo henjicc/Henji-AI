@@ -375,6 +375,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     /** 已交给渲染器的预渲染窗口（按内容指纹）；节目播放时整帧取自预览文件。 */
     let appliedRenderCache: ReturnType<typeof readyVideoEditRenderWindows> = []
     let renderCacheCheckedAt = -Infinity
+    let appliedRenderCacheApplies = true
     // 起播预热时提前混好的第一块声音：起播时钟不必再留 100ms 等混音。
     let displayPeriod: number | undefined
     /** A refresh timestamp of this play run and the smoothed audio-clock origin the picture follows. */
@@ -663,9 +664,16 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           stopAudio(); wasPlaying = false; await renderer.updateDocument(document, useOriginal); appliedProxy = proxySignature; lastFrame = -1; lastRequested = -1
           if (stopped) return
         }
+        // 三维显示方式：选帧、设封面期间与没有三维内容时始终是实时。
+        // 选帧与封面按成片的三维渲染（序列设置），与导出同一画面。
+        const spaceDisplay = !videoEditCompositionHasSpace(document) ? 'realtime' : captureFull > 0 ? videoEditFinalSpaceDisplay(document) : effectiveVideoEditSpaceDisplay(instance.document.id, current.playing)
+        // 预渲染画面是成片的样子：选了别的三维显示方式（线框、实体、停住时的渲染）就不用它，播放、拖动与停住都按所选方式出画。
+        // 自动方式下预渲染比实时更流畅，照常用。
+        const renderCacheApplies = spaceDisplay === (videoEditCompositionHasSpace(document) ? videoEditFinalSpaceDisplay(document) : 'realtime') || getVideoEditSpaceDisplay(instance.document.id).mode === 'auto'
+        if (renderCacheApplies !== appliedRenderCacheApplies) { appliedRenderCacheApplies = renderCacheApplies; renderCacheCheckedAt = -Infinity }
         if (performance.now() - renderCacheCheckedAt > 250) {
           renderCacheCheckedAt = performance.now()
-          const ready = readyVideoEditRenderWindows(instance.document.id, document)
+          const ready = renderCacheApplies ? readyVideoEditRenderWindows(instance.document.id, document) : []
           if (JSON.stringify(ready) !== JSON.stringify(appliedRenderCache)) { appliedRenderCache = ready; renderer.setRenderCache(ready) }
         }
         const divisor = captureFull > 0 ? 1 : videoEditPreviewDivisor(getVideoEditPlaybackResolution(instance.document.id), current.playing)
@@ -674,9 +682,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (stopped) return
           appliedDivisor = divisor; lastRequested = -1
         }
-        // 三维显示方式：选帧、设封面期间与没有三维内容时始终是实时。
-        // 选帧与封面按成片的三维渲染（序列设置），与导出同一画面。
-        const spaceDisplay = !videoEditCompositionHasSpace(document) ? 'realtime' : captureFull > 0 ? videoEditFinalSpaceDisplay(document) : effectiveVideoEditSpaceDisplay(instance.document.id, current.playing)
         if (spaceDisplay !== appliedSpaceDisplay) {
           await renderer.setSpaceDisplay(spaceDisplay)
           if (stopped) return
