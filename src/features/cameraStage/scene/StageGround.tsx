@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Grid } from '@react-three/drei'
+import { useThree } from '@react-three/fiber'
 import type { MeshStandardMaterial, WebGLProgramParametersWithUniforms } from 'three'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import { STAGE_STYLE_HIDDEN_KEY } from '../render/stageStyleTags'
@@ -28,6 +29,7 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) => {
+  const invalidate = useThree((state) => state.invalidate)
   const checkerShaderRef = useRef<CheckerShader | null>(null)
   const checkerMaterialRef = useRef<MeshStandardMaterial>(null)
 
@@ -87,7 +89,9 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
     checkerShader.uniforms.uCheckerScale.value = checkerScale
     checkerShader.uniforms.uCheckerDark.value = checkerDark
     checkerShader.uniforms.uCheckerLight.value = checkerLight
-  }, [checkerDark, checkerLight, checkerScale])
+    // 画面按需出帧：直接改着色器参数不经过场景状态，要自己请求一帧。
+    invalidate()
+  }, [checkerDark, checkerLight, checkerScale, invalidate])
 
   useEffect(() => {
     if (settings.pattern !== 'checker') {

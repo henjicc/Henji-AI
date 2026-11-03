@@ -32,14 +32,15 @@ export function useRenderCameraId(): string | null {
   const [runtimeCameraId, setRuntimeCameraId] = useState(() => resolveAt(readCameraStagePlaybackRuntime().time))
 
   useEffect(() => {
-    if (!playing) return undefined
+    // 暂停时跟着播放头同步：开始播放的第一次提交用的就是起点机位，不先按上次播放终点的机位画一帧。
+    if (!playing) { setRuntimeCameraId((current) => current === pausedCameraId ? current : pausedCameraId); return undefined }
     const sync = (time: number): void => {
       const next = resolveAt(time)
       setRuntimeCameraId((current) => current === next ? current : next)
     }
     sync(readCameraStagePlaybackRuntime().time)
     return subscribeCameraStagePlaybackRuntime((runtime) => sync(runtime.time))
-  }, [playing, resolveAt])
+  }, [playing, resolveAt, pausedCameraId])
 
   return playing ? runtimeCameraId : pausedCameraId
 }

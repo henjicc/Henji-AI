@@ -35,6 +35,9 @@ describe('StagePlaybackDriver', () => {
     expect(framePriority).toBe(-2)
     expect(frameCallback).not.toBeNull()
 
+    // 起播那一帧不推进：按需渲染下距上次出帧的间隔可能很长，第一张画面就是起点。
+    act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
+    expect(readCameraStagePlaybackRuntime().time).toBeCloseTo(29 / 30)
     act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
     expect(readCameraStagePlaybackRuntime().time).toBeCloseTo(1 / 15)
     expect(useCameraStageStore.getState().playback.currentTime).toBeCloseTo(1 / 15)
@@ -69,6 +72,7 @@ describe('StagePlaybackDriver', () => {
     }))
     useCameraStageStore.getState().play()
     act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
+    act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
 
     expect(readCameraStagePlaybackRuntime()).toMatchObject({ playing: true, time: 0.1 })
     view.unmount()
@@ -81,6 +85,7 @@ describe('StagePlaybackDriver', () => {
       animation: { ...state.animation, duration: 1 },
     }))
     useCameraStageStore.getState().play()
+    act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
     act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
 
     expect(readCameraStagePlaybackRuntime()).toMatchObject({ playing: true, time: 0.1 })

@@ -26,6 +26,7 @@ const StagePlaybackDriver: React.FC = () => {
   const currentProjectId = useCameraStageStore((state) => state.currentProjectId)
   const driverRef = useRef<symbol | null>(null)
   const pushElapsedRef = useRef(0)
+  const playedLastFrameRef = useRef(false)
 
   useEffect(() => {
     const playback = useCameraStageStore.getState().playback
@@ -53,6 +54,7 @@ const StagePlaybackDriver: React.FC = () => {
     const runtime = readCameraStagePlaybackRuntime()
 
     if (!playing) {
+      playedLastFrameRef.current = false
       pushElapsedRef.current = 0
       if (runtime.playing || runtime.time !== currentTime) {
         seekCameraStagePlaybackRuntime(currentTime, false)
@@ -63,10 +65,13 @@ const StagePlaybackDriver: React.FC = () => {
     if (!runtime.playing) {
       seekCameraStagePlaybackRuntime(currentTime, true)
     }
+    // 从静止进入播放的这一帧：按需渲染下距上次出帧可能已过很久，这段等待不算播放时间，否则第一张画面直接跳到起点之后。
+    const starting = !playedLastFrameRef.current
+    playedLastFrameRef.current = true
 
     const preview = cameraMotionPreview(state)
     const animation = preview?.animation ?? state.animation
-    const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
+    const delta = starting ? 0 : Math.min(rawDelta, MAX_FRAME_DELTA)
     const advanced = advanceCameraStagePlaybackRuntime({ driver, delta, duration: animation.duration, loop })
     if (!advanced.accepted) return
 
