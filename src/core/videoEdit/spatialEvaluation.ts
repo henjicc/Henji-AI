@@ -247,7 +247,7 @@ export function evaluateSpatialFrame(composition: Readonly<VideoEditComposition>
     a.ambiguousDepth = b.ambiguousDepth = true
     facts.push({ code: 'ambiguous-depth', clipIds: [a.clipId, b.clipId], sequenceFrame, message: '投影与视深范围重叠，单层中心排序不能证明逐像素遮挡。', values: {} })
   }
-  facts.push(...spatialElementFacts(document, sequenceFrame, evaluated.filter(active), spatialClipEnabled))
+  facts.push(...spatialElementFacts(document, sequenceFrame, evaluated.filter(active), spatialClipEnabled, cards))
   const flatIdentity = canonicalIdentity && evaluated.every(clip => !spatialClipEnabled(clip) || !active(clip) || SPATIAL_KEYS.every(key => (clip[key] ?? 0) === 0))
   return { sequenceFrame, sequenceTime: sequenceFrame / document.fps, output, camera: cameraFrame, cards, flatIdentity, facts }
 }

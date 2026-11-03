@@ -680,9 +680,15 @@ export class VideoEditRenderer {
   }
   codePerformance(): import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.compositor?.codePerformance() ?? [] }
   captureCodePerformance(): () => import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.compositor?.captureCodePerformance() ?? (() => []) }
-  observeAuthorElements(frame: number): import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation {
-    return this.codeSources?.observeElements(frame) ?? { sequenceId: this.document.id, revision: this.document.revision, frame, clips: [] }
+  /** `withSpace`：只有助手观察画面才附带三维读回，后台元素同步不带。 */
+  observeAuthorElements(frame: number, withSpace = false): import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation {
+    const observed = this.codeSources?.observeElements(frame) ?? { sequenceId: this.document.id, revision: this.document.revision, frame, clips: [] }
+    const seen = this.spaceSeen
+    // 修订号整个项目共用，离屏渲染器又会在序列之间复用：按序列、修订与帧三样都对上才算这一帧。
+    return withSpace && seen?.sequenceId === this.document.id && seen.frame === frame && seen.revision === this.document.revision ? { ...observed, space: seen.value } : observed
   }
+  /** 最近一次画三维的那一帧里实际画了什么（同一次渲染记下，观察画面时随作者元素一并返回）。 */
+  private spaceSeen?: { sequenceId: string; frame: number; revision: number; value: import('@/core/videoEdit/spatialObservation').SpatialFrameObservation }
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads, codeInputSessions: this.codeInputs.size, codeInputsPrewarmed: this.prewarmedInputs.size, nestedRenderers: this.nestedPictures.size } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
   private readonly previewWidth?: number
@@ -825,6 +831,7 @@ export class VideoEditRenderer {
   }
   /** Clear mutable per-request state, retaining only content-keyed preparation. */
   async replaceContent(document: VideoEditComposition): Promise<void> {
+    this.spaceSeen = undefined
     this.cancelPresentation(); await this.disposePlayback()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     this.sources.clear(); this.frameCache.clear(); this.stills?.clear(); this.contentAudio.clear()
@@ -2440,7 +2447,8 @@ export class VideoEditRenderer {
           // 没收敛的画面算作粗略画面，节目监视器停住时会再要精确画面；成片一次追踪到目标采样数。
           const samples = this.finalSpaceRender?.pathTraceSamples ?? VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES
           const trace = quality === 'final' ? { samples } : { samples, budgetMs: 150, ...(approximatePictures ? {} : { key: `${document.id}:${document.revision}:${frame}:${precision}` }) }
-          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplayFor(quality), trace, onRefining: progress => { markApproximate(); spaceProgress = Math.min(spaceProgress ?? 1, progress) }, spaceRender: this.finalSpaceRender, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
+          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplayFor(quality), trace, onRefining: progress => { markApproximate(); spaceProgress = Math.min(spaceProgress ?? 1, progress) }, spaceRender: this.finalSpaceRender, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError,
+            ...(observeElements ? { observeSpace: (value: import('@/core/videoEdit/spatialObservation').SpatialFrameObservation) => { this.spaceSeen = { sequenceId: document.id, frame, revision: document.revision, value } } } : {}) })
           let completion = lease.completion
           try {
             const input = gpu.spatialPicture(lease)

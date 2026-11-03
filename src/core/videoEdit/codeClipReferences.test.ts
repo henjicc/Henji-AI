@@ -35,9 +35,18 @@ it('三维引用事实：隔着二维片段引用报 cross-group，同组不报�
   const lit = { ...title, spatial }, flat = { ...base, id: 'plain', kind: 'text', name: '二维', track: 2, start: 0, duration: 100 } as VideoEditClip
   const author = { ...code('ribbon', 0, 100), track: 3, spatial }
   const enabled = (clip: VideoEditClip): boolean => clip.spatial?.enabled === true
-  expect(spatialElementFacts(sequence, 0, [lit, author], enabled)).toEqual([])
-  expect(spatialElementFacts(sequence, 0, [lit, flat, author], enabled).map(fact => [fact.code, fact.clipIds])).toEqual([['cross-group', ['ribbon', 'title']]])
-  const a = { ...author, id: 'a', code: { ...author.code!, parameters: { light: { kind: 'clip', clipId: 'b' } } } } as VideoEditClip
-  const b = { ...author, id: 'b', track: 4, code: { ...author.code!, parameters: { light: { kind: 'clip', clipId: 'a' } } } } as VideoEditClip
-  expect(spatialElementFacts(sequence, 0, [a, b], enabled).map(fact => fact.code)).toEqual(['element-cycle'])
+  expect(spatialElementFacts({ ...sequence, clips: [lit, author] }, 0, [lit, author], enabled)).toEqual([])
+  expect(spatialElementFacts({ ...sequence, clips: [lit, flat, author] }, 0, [lit, flat, author], enabled).map(fact => [fact.code, fact.clipIds])).toEqual([['cross-group', ['ribbon', 'title']]])
+  const a = { ...author, id: 'a', track: 1, code: { ...author.code!, parameters: { light: { kind: 'clip', clipId: 'b' } } } } as VideoEditClip
+  const b = { ...author, id: 'b', track: 1, code: { ...author.code!, parameters: { light: { kind: 'clip', clipId: 'a' } } } } as VideoEditClip
+  expect(spatialElementFacts({ ...sequence, clips: [a, b] }, 0, [a, b], enabled).map(fact => fact.code)).toEqual(['element-cycle'])
+  // 引用的片段这一帧不在画面里：作者拿到空画面，要说出来。
+  expect(spatialElementFacts({ ...sequence, clips: [{ ...lit, start: 200 }, author] }, 0, [author], enabled).map(fact => [fact.code, fact.values.exists])).toEqual([['reference-inactive', true]])
+  // 受光片段、没有灯与环境、缺省布光关掉：受光内容是黑的；有一盏灯就不报。
+  const solid = { ...lit, spaceLit: true } as VideoEditClip, light = { ...base, id: 'lamp', kind: 'light', track: lit.track, start: 0, duration: 100, spatial } as VideoEditClip
+  const dark = { ...sequence, clips: [solid], spaceRender: { defaultLighting: 'off' as const } }
+  expect(spatialElementFacts(dark, 0, [solid], enabled).map(fact => fact.code)).toEqual(['unlit'])
+  expect(spatialElementFacts({ ...dark, clips: [solid, light] }, 0, [solid, light], enabled)).toEqual([])
+  // 缺省布光自动：序列里有灯（后面才亮）就不套缺省布光，这一帧没灯同样是黑的。
+  expect(spatialElementFacts({ ...sequence, clips: [solid, { ...light, start: 200 }] }, 0, [solid], enabled).map(fact => fact.code)).toEqual(['unlit'])
 })

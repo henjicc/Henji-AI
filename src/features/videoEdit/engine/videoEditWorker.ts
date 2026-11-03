@@ -442,7 +442,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         // 命中渲染缓存等没有跑代码的帧不会清空上一帧的记录，只报这一帧自己的。
         const readCodePerformance = renderer.captureCodePerformance()
         // 跳转先出的近似画面（预渲染的常驻关键帧）没有跑这一帧的代码：作者元素等随后的精确帧再读。
-        const authorElements = request.observeElements && result.presented && result.presentedSource === 'live' && !result.approximate ? renderer.observeAuthorElements(request.frame) : undefined
+        const authorElements = request.observeElements && result.presented && result.presentedSource === 'live' && !result.approximate ? renderer.observeAuthorElements(request.frame, true) : undefined
         traceVideoEditFrame('worker.render', request.frame, renderStarted)
         const finish = async (): Promise<void> => {
           const owned = new Set<ImageBitmap>()

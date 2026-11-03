@@ -35,6 +35,7 @@ export interface VideoEditFrameObservationOptions extends VideoEditAnnotationObs
 }
 export interface VideoEditFrameObservation {
   effects?: AuthorFrameEffects[]
+  space?: import('@/core/videoEdit/spatialObservation').SpatialFrameObservation
   performance?: CodeFramePerformance[]
   asset?: AssetRecord
   image: { filePath: string; displayUrl: string; displayName: string }
@@ -160,7 +161,8 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   prepareVideoEditAnnotationObservation(composition.annotations, frame, dynamicCrop
     ? { ...annotations, cropAnnotationId: undefined, annotationIds: [...(annotations.annotationIds ?? []), annotations.cropAnnotationId!] }
     : annotations)
-  const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true, undefined, measurements, value => { assertCurrent(); effects.push(authorFrameEffects(value)); if (target.kind === 'program') installVideoEditCodeElements(owner, value) })
+  let space: VideoEditFrameObservation['space']
+  const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true, undefined, measurements, value => { assertCurrent(); effects.push(authorFrameEffects(value)); space = value.space; if (target.kind === 'program') installVideoEditCodeElements(owner, value) })
   if (!bitmap) throw new Error('指定画面没有渲染结果，请重试。')
   let bytes: Uint8Array; let width: number; let height: number; const sourceWidth = bitmap.width; const sourceHeight = bitmap.height
   try {
@@ -196,7 +198,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const published = await publishObservationImage(bytes, width, height, `${document.name} · ${composition.name} · ${label} 观察`, signal, assertCurrent, annotations.saveToAssets)
   await verifyReviewSources()
   logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, imageRef: published.resultRef, reused: published.reused, width, height, durationMs: Math.round(performance.now() - started) } })
-  return { effects, ...(measurements.length ? { performance: measurements } : {}), ...published, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
+  return { effects, ...(space && target.kind === 'program' ? { space } : {}), ...(measurements.length ? { performance: measurements } : {}), ...published, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
 }
 
 const imageWrites = new Map<string, Promise<boolean>>()

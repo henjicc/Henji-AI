@@ -118,7 +118,15 @@ function filmThickness(library: Library, frequency: number): Three.DataTexture {
   return texture
 }
 
+/** 标准材质的预设名（三维读回按它报告作者物体的材质）。 */
+const presets = new WeakMap<Three.Material, SpaceMaterialPreset>()
+export function spaceMaterialPresetOf(material: Three.Material): SpaceMaterialPreset | undefined { return presets.get(material) }
 export function createSpaceMaterial(library: Library, tsl: Tsl, preset: SpaceMaterialPreset, params: SpaceMaterialParams = {}): Three.Material {
+  const material = buildSpaceMaterial(library, tsl, preset, params)
+  presets.set(material, preset)
+  return material
+}
+function buildSpaceMaterial(library: Library, tsl: Tsl, preset: SpaceMaterialPreset, params: SpaceMaterialParams): Three.Material {
   if (!SPACE_MATERIAL_PRESETS.includes(preset)) throw new Error(`没有材质预设「${String(preset)}」，可用：${SPACE_MATERIAL_PRESETS.join('、')}。`)
   if (params === null || typeof params !== 'object') throw new Error('材质参数要是对象。')
   switch (preset) {

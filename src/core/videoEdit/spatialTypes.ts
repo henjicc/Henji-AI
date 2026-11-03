@@ -90,7 +90,8 @@ export interface SpatialCardGeometry {
 }
 export interface SpatialFact {
   code: 'missing-target' | 'invalid-optics' | 'singular-aim'
-    | 'clipped' | 'ambiguous-depth' | 'projection-residual' | 'unknown-scene' | 'cross-group' | 'element-cycle';
+    | 'clipped' | 'ambiguous-depth' | 'projection-residual' | 'unknown-scene' | 'cross-group' | 'element-cycle'
+    | 'reference-inactive' | 'cross-group-order' | 'unlit';
   clipIds: readonly string[];
   sequenceFrame: number;
   message: string;

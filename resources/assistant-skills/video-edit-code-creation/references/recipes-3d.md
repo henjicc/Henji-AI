@@ -18,7 +18,8 @@
 - 灯光：用素材项 `kind:"light"` 放一条灯光片段（`light_kind` spot / directional / point / area、`light_intensity` 1 为常用主光且可关键帧、`light_cast_shadow`、`light_softness`、`light_angle`），位置是片段 x/y 与 `depth`，朝向是 `rotation_x` / `rotation_y`（缺省朝画面里）；它照亮整条序列受光的三维内容。要投影的片段开 `space_cast_shadow`，承接阴影的开 `space_receive_shadow`。三点布光 = 主光（左前上、投影）+ 辅光（右前、亮度 0.3–0.5、不投影）+ 轮廓光（身后上方朝镜头、亮度 1–2）。
 - 没有任何灯与环境光时，受光内容会自动套“缺省布光”（摄影棚中性环境 + 一盏主光，序列 `space_default_lighting` 可关）；要精确控制就自己放灯或设 `space_environment`。
 - 质感：序列 `space_tone_mapping`（agx 高光柔和）、`space_exposure`、`space_environment` 与强度、旋转、`space_bloom` 与 `space_bloom_threshold` / `space_bloom_radius`。实时与“渲染”（路径追踪）读同一份属性；实心玻璃、互反射以“渲染”为准，成片用序列 `final_renderer:"pathTrace"`。
-- 核对：`verify_video_edit_space` 的 facts 里 `cross-group`（引用片段隔着二维层）与 `element-cycle`（代码片段互相引用）要处理；改完用 `observe_video_edit_frame` 看图。
+- 核对：`verify_video_edit_space` 的 facts 要处理：`cross-group`（引用片段隔着二维层）、`element-cycle`（代码片段互相引用）、`reference-inactive`（引用的片段这一帧不在画面里，作者拿到空画面）、`cross-group-order`（三维里靠前的卡片在层序更低的组，会被盖住）、`unlit`（受光内容没有任何光）。
+- 改完用 `observe_video_edit_frame` 看图；单张序列帧会一并返回 `space`：每组片段的形态与材质、作者物体（类型、材质、包围盒）、灯光（含缺省布光）、环境与 facts（缺省布光、实时玻璃近似等）。作者场景里物体没出现、材质不对、灯没生效，先读它再改代码。
 
 景深是层中心近似；透明媒体、文字空白、蒙版与未知作者场景不能凭几何断言像素可见。强度或构图不可行时按事实调整输入，不降低误差门槛。二维错峰、示范动作、防抖和跟踪只处理二维动作，空间键原样保留。
 

@@ -1,3 +1,4 @@
+import { createLogger } from '@/core/logging'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import { SPACE_ONLY_FIELDS, spaceClipIsSolid } from '@/core/videoEdit/spatialSchema'
 import type { VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
@@ -26,6 +27,8 @@ import type { SpatialCodeSources, SpatialExposurePlan, SpatialFrameRequest, Spat
 import { videoEditPictureTransitionsAt } from '@/core/videoEdit/clipGeometry'
 import type { BuiltinEncodingBatch } from './videoEditBuiltinEffectsGpu'
 import { documentFontRevision } from '@/platform/fontFaces'
+
+const logger = createLogger('features.videoEdit.compositeScene')
 
 export type VideoEditFilterFrameReader = (clip: VideoEditClip, plan: PreparedVideoEditCodeEffect, input: VideoEditCodePicture) => Promise<AuthorGpuInputs['frames']>
 
@@ -286,7 +289,9 @@ export async function renderVideoEditThreeSpaceScene(options: {
   /** 画面还在收敛（路径追踪没到目标）；`progress` 是这一组的追踪进度（0–1）。 */
   onRefining?: (progress: number) => void
   /** 导出的那条序列的三维渲染设置（嵌套序列跟随它）：泛光、遮蔽、反射强度从这里取。 */
-  spaceRender?: import('@/core/videoEdit/document').VideoEditSpaceRender }): Promise<SpatialPictureLease> {
+  spaceRender?: import('@/core/videoEdit/document').VideoEditSpaceRender
+  /** 记下这一帧三维里实际画了什么（助手观察画面时一并返回）。 */
+  observeSpace?: (value: import('@/core/videoEdit/spatialObservation').SpatialFrameObservation) => void }): Promise<SpatialPictureLease> {
   const { request, plan, sources, drawn, active, nodes, pictures, effects, compositor } = options
   const [{ evaluateVideoEditClip, videoEditKeyframeValues }, { videoEditFadeOpacity }, { spatialClipMatrix, includeSpatialWorldBounds }, math] = await Promise.all([import('@/core/videoEdit/keyframes'), import('@/core/videoEdit/fades'),
     import('@/core/videoEdit/spatialEvaluation'), import('@/core/videoEdit/spatialMatrices')])
@@ -483,6 +488,9 @@ export async function renderVideoEditThreeSpaceScene(options: {
       })
       return found
     }))
+    // 读回只是给助手的附带信息：读不出来不该让这一帧渲染失败。
+    if (options.observeSpace) try { options.observeSpace(await observeSpaceFrame({ plan, scenes, solidOf, active, transmits, lights, defaultLighting, display: postEffects.display,
+      environment: postEffects.environment })) } catch (error) { logger.warn('三维读回失败，这一帧不返回场景读回', { event: 'video_edit.space.observe.failed', error }) }
     const deferred = new Map<string, (below: VideoEditCodePicture | undefined) => Promise<VideoEditCodePicture>>()
     const renderWhole = async (group: (typeof plan.groups)[number], below?: VideoEditCodePicture): Promise<SpatialPictureLease> => {
       const windows = group.itemIds.flatMap(id => id.startsWith('transition:') ? transitionWindows.filter(window => window.transition.id === id.slice('transition:'.length)) : [])
@@ -543,5 +551,65 @@ export async function renderVideoEditThreeSpaceScene(options: {
     await Promise.allSettled([...groupPictures.map(group => group.picture.release(settled)), ...transient.map(lease => lease.release(settled))])
     for (const [clipId, held] of cache) if (!used.has(clipId)) { cache.delete(clipId); void held.lease.release(settled).catch(() => undefined); void held.defocused?.release(settled).catch(() => undefined) }
     try { await sources.releaseSpatialFrame(prepared) } finally { spatial.endFrame() }
+  }
+}
+
+/** 一帧三维读回：时间线片段的形态与材质、作者物体（按类型与材质合并）、灯光，以及会影响判断的近似与自动行为。 */
+async function observeSpaceFrame(input: {
+  plan: SpatialExposurePlan; scenes: ReadonlyArray<{ clipId: string; root: import('three').Object3D }>
+  solidOf: (clipId: string) => import('./videoEditThreeSpaceSolid').SolidSurface | undefined; active: readonly VideoEditClip[]
+  transmits: (group: SpatialExposurePlan['groups'][number]) => boolean; lights: readonly import('@/core/videoEdit/spatialLights').SpatialLight[]
+  defaultLighting: boolean; display: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay; environment: string
+}): Promise<import('@/core/videoEdit/spatialObservation').SpatialFrameObservation> {
+  const { spaceMaterialPresetOf, isSpaceGlassMaterial } = await import('./videoEditSpaceMaterials')
+  const facts: string[] = []
+  let glass = false
+  const groups = input.plan.groups.map(group => {
+    const clips = group.clipIds.flatMap(clipId => {
+      const material = input.plan.materials.find(value => value.clipId === clipId)
+      if (!material || material.kind === 'worldScene' || !input.active.some(clip => clip.id === clipId)) return []
+      const surface = input.solidOf(clipId)
+      if (surface?.material.preset === 'glass') glass = true
+      return [{ clipId, form: surface ? 'solid' as const : 'card' as const, material: surface?.material.preset ?? 'picture', lit: surface?.lit ?? false, thickness: surface?.thickness ?? 0 }]
+    })
+    const objects = new Map<string, { clipId: string; type: string; material: string; count: number; bounds: { min: [number, number, number]; max: [number, number, number] } | null }>()
+    for (const scene of input.scenes) {
+      if (!group.clipIds.includes(scene.clipId)) continue
+      scene.root.traverseVisible(object => {
+        const drawable = object as import('three').Mesh & { isInstancedMesh?: boolean; count?: number; boundingBox?: import('three').Box3 | null; computeBoundingBox?: () => void }
+        const instances = drawable.isInstancedMesh ? drawable.count ?? 0 : 1
+        if (!drawable.geometry || instances <= 0) return
+        const materials = Array.isArray(drawable.material) ? drawable.material : drawable.material ? [drawable.material] : []
+        const material = materials.map(value => {
+          if (isSpaceGlassMaterial(value)) glass = true
+          return spaceMaterialPresetOf(value) ?? value.type
+        }).join('+') || 'none'
+        const key = `${scene.clipId}\u0000${object.type}\u0000${material}`
+        const entry = objects.get(key) ?? { clipId: scene.clipId, type: object.type, material, count: 0, bounds: null }
+        entry.count += instances
+        // 作者可能逐帧改顶点或实例矩阵：每次读回都重算（只在观察画面时执行）。
+        if (drawable.isInstancedMesh) drawable.computeBoundingBox?.(); else drawable.geometry.computeBoundingBox()
+        const local = drawable.isInstancedMesh ? drawable.boundingBox : drawable.geometry.boundingBox
+        if (local && [local.min.x, local.min.y, local.min.z, local.max.x, local.max.y, local.max.z].every(Number.isFinite) && local.min.x <= local.max.x) {
+          const m = drawable.matrixWorld.elements
+          for (let corner = 0; corner < 8; corner++) {
+            const x = corner & 1 ? local.max.x : local.min.x, y = corner & 2 ? local.max.y : local.min.y, z = corner & 4 ? local.max.z : local.min.z
+            const point: [number, number, number] = [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]]
+            entry.bounds ??= { min: [...point], max: [...point] }
+            for (let axis = 0; axis < 3; axis++) { entry.bounds.min[axis] = Math.min(entry.bounds.min[axis], point[axis]); entry.bounds.max[axis] = Math.max(entry.bounds.max[axis], point[axis]) }
+          }
+        }
+        objects.set(key, entry)
+      })
+    }
+    return { groupId: group.id, clips, objects: [...objects.values()], seesBelow: input.transmits(group) }
+  })
+  if (input.defaultLighting) facts.push('没有灯光片段、环境光与作者布光，这一帧用了缺省布光（摄影棚环境与一盏左前上方主光）。')
+  if (glass && input.display === 'realtime') facts.push('实心玻璃按实时近似：看不到画面外的内容与凹形体内部，成片要精确折射请把成片渲染器设为路径追踪。')
+  if (input.display === 'render') facts.push('路径追踪不做运动模糊，环境遮蔽与屏幕空间反射由全局光照代替。')
+  if (input.display === 'solid' || input.display === 'wireframe') facts.push('三维显示为实体或线框预览，材质、灯光与后期不代表成片。')
+  return {
+    display: input.display, groups, environment: input.environment, facts,
+    lights: input.lights.map(light => ({ source: light.clipId === 'default-key' ? 'default' as const : 'clip' as const, ...(light.clipId === 'default-key' ? {} : { clipId: light.clipId }), kind: light.kind, intensity: light.intensity, castShadow: light.castShadow })),
   }
 }

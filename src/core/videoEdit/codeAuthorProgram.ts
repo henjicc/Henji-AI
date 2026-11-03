@@ -36,6 +36,8 @@ export interface CodeAuthorFrameObservation {
   revision: number
   frame: number
   clips: Array<{ clipId: string; versionId: string; width: number; height: number; edits?: import('./codeEdits').CodeEdits; elements: AuthorElementObservation[] }>
+  /** 这一帧三维里实际画了什么（序列有三维组时才有）。 */
+  space?: import('./spatialObservation').SpatialFrameObservation
 }
 /** 录制到的几何事实；不是对最终像素或卡片语义的推断。坐标在作者图层内。 */
 export interface AuthorCanvasReviewObservation {
