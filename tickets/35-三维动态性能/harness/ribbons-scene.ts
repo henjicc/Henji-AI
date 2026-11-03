@@ -1,7 +1,7 @@
 // ticket 35 质感样片「光带」：一束彩虹光泽的金属丝带从顶部标题下方涌出，向两边展开、朝镜头铺开，光沿丝带往下流。
 // 丝带是一张合并的网格（每条一段扁平带子），彩虹来自薄膜干涉（iridescence）对彩色摄影棚环境的反射。世界单位 = 显示高度。
 import * as THREE from 'three/webgpu'
-import { attribute, float, mix, pow, sin, smoothstep, time, uv, vec3 } from 'three/tsl'
+import { abs, attribute, dot, exp, float, mix, normalize, normalView, positionView, pow, sin, smoothstep, step, time, uv, vec3 } from 'three/tsl'
 
 const RIBBONS = 340, SEGMENTS = 220
 
@@ -45,9 +45,10 @@ function ribbons(): THREE.BufferGeometry {
   for (let r = 0; r < RIBBONS; r++) {
     // 展开系数：中间的几乎直落，两边的甩得最开；偏中间的更多，束子才密。
     const lane = (next() * 2 - 1), spread = Math.sign(lane) * Math.pow(Math.abs(lane), .8)
-    const seed = next(), width = .0025 + next() * .0075, twist = (next() - .5) * 2.4, depth = (next() - .5) * .12
+    const seed = next(), width = .004 + next() * .008, twist = (next() - .5) * 2.4, depth = (next() - .5) * .12
     const path = (s: number, out: THREE.Vector3) => out.set(
-      spread * (.06 + 2.4 * Math.pow(s, 2.2)) + Math.sin(s * 3 + seed * 6) * .01,
+      // 顶端按位置均匀铺满标题的宽度（光从字的整条下沿涌出），往下再甩开。
+      lane * .2 + spread * 2.3 * Math.pow(s, 2.2) + Math.sin(s * 3 + seed * 6) * .01 * s,
       .33 - s * 1.35 + Math.pow(s, 2) * .2,
       -1.9 + depth + 1.5 * Math.pow(s, 1.6))
     const base = positions.length / 3
@@ -58,7 +59,8 @@ function ribbons(): THREE.BufferGeometry {
       // 带子宽度方向：先取与路径和朝向都垂直的方向，再沿路径扭一点，反光才一段段变化。
       side.crossVectors(tangent, up).normalize().applyAxisAngle(tangent, twist * s + seed)
       // 顶端收细，末端早已出画。
-      const w = width * (.3 + s * 1.2)
+      // 不能细到不足一个像素：侧对镜头时会闪成虚线。
+      const w = width * (.7 + s)
       positions.push(point.x - side.x * w, point.y - side.y * w, point.z - side.z * w, point.x + side.x * w, point.y + side.y * w, point.z + side.z * w)
       uvs.push(0, s, 1, s); seeds.push(seed, seed)
       if (i < SEGMENTS) { const a = base + i * 2; indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2) }
@@ -82,8 +84,6 @@ export default {
       color: 0xffffff, metalness: 1, roughness: .16, iridescence: 1, iridescenceIOR: 1.6, iridescenceThicknessRange: [150, 900],
       envMap: studio(), envMapIntensity: 1, side: THREE.DoubleSide,
     })
-    // 每条带子底色略有冷暖差别。
-    material.colorNode = mix(vec3(1, .86, .62), vec3(.85, .9, 1), seed)
     // 薄膜厚度沿带子变化：同一条带子上颜色一段段变，像全息膜。
     material.iridescenceThicknessNode = mix(float(180), float(950), sin(along.mul(9).add(seed.mul(25))).mul(.5).add(.5))
     // 自发光：越靠近顶部的光源越亮；一段段亮光沿带子往下流（每条带子相位不同）。
@@ -91,13 +91,20 @@ export default {
     // 两头渐隐的光斑（正弦尖峰），不留硬切的末端。
     const flow = pow(sin(along.mul(3.4).sub(time.mul(.9)).add(seed.mul(40))).mul(.5).add(.5), 18).mul(smoothstep(0, .15, along)).mul(.9)
     const shimmer = sin(along.mul(40).add(seed.mul(30)).sub(time.mul(2))).mul(.5).add(.5)
-    material.emissiveNode = vec3(1, .8, .55).mul(source.add(flow.mul(shimmer.mul(.6).add(.4))))
+    // 开场光从字底下涌出：光头沿带子往下推进，光头处最亮；推进到画外之后只剩顺着带子往下流的光。
+    // 每条带子的光头错开一点，不齐成一条线。
+    const head = smoothstep(.15, 2.8, time.sub(seed.mul(.5))).mul(1.25)
+    material.opacityNode = step(along, head)
+    material.alphaTest = .5
+    const front = exp(along.sub(head).div(.035).pow(2).negate()).mul(3)
+    // 带子侧对镜头时变得很窄、在像素间闪烁，按朝向淡掉。
+    const facing = smoothstep(.04, .3, abs(dot(normalView, normalize(positionView).negate())))
+    material.colorNode = mix(vec3(1, .86, .62), vec3(.85, .9, 1), seed).mul(facing)
+    material.emissiveNode = vec3(1, .8, .55).mul(source.add(flow.mul(shimmer.mul(.6).add(.4))).add(front)).mul(facing)
     const bundle = new THREE.Mesh(ribbons(), material)
     scene.add(bundle)
     return { scene, update(_parameters: unknown, _assets: unknown, info: { time: number }) {
-      const t = info.time
-      bundle.rotation.y = Math.sin(t * .25) * .06
-      bundle.position.z = Math.sin(t * .2) * .03
+      void info
     } }
   },
 }
