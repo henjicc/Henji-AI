@@ -4,11 +4,17 @@ import type { SpatialCamera, SpatialCameraNumericKey, SpatialClipFields } from '
 
 const finite = z.number().finite()
 export const SPATIAL_KEYS = ['depth', 'rotationX', 'rotationY', 'anchorDepth'] as const
+/** 只影响三维里怎么呈现、不影响几何与二维画面的片段字段。 */
+export const SPACE_SURFACE_KEYS = ['spaceEmission'] as const
+export const SPACE_EMISSION_MAX = 10
+/** 卡片画面的缓存键里要去掉的字段：它们不改变二维画面，动画时不该让卡片画面每帧重画。 */
+export const SPACE_ONLY_FIELDS = Object.fromEntries(SPACE_SURFACE_KEYS.map(key => [key, undefined])) as Record<typeof SPACE_SURFACE_KEYS[number], undefined>
 export const SPATIAL_DEFAULT_FSTOP = 5.6
 export const SPATIAL_SENSOR_WIDTH_MM = 36
 export const SPATIAL_FOCAL_LENGTH_MM = 80
 export const spatialClipFields = {
   depth: finite.optional(), rotationX: finite.optional(), rotationY: finite.optional(), anchorDepth: finite.optional(),
+  spaceEmission: finite.min(0).max(SPACE_EMISSION_MAX).optional(),
   spatial: z.object({ enabled: z.boolean() }).strict().optional(),
 } satisfies Record<keyof SpatialClipFields, z.ZodType>
 export const spatialClipSchema = z.object(spatialClipFields).strict()

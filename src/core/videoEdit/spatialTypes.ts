@@ -4,6 +4,8 @@ import type { EffectQuality } from '../imaging/effects/descriptor'
 
 export interface SpatialClipFields {
   depth?: number; rotationX?: number; rotationY?: number; anchorDepth?: number;
+  /** 发光强度：画面自身发出的光（线性倍数），0 为不发光。 */
+  spaceEmission?: number;
   spatial?: { enabled: boolean };
 }
 

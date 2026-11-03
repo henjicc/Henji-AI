@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { SPATIAL_KEYS } from './spatialSchema'
+import { SPACE_EMISSION_MAX, SPACE_SURFACE_KEYS, SPATIAL_KEYS } from './spatialSchema'
 import { videoEditKeyframesSchema, type VideoEditKeyframe, type VideoEditKeyframes } from './keyframeSchema'
 export { videoEditKeyframeSchema, videoEditKeyframesSchema, type VideoEditKeyframe, type VideoEditKeyframes } from './keyframeSchema'
 import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe, VIDEO_EDIT_DEFAULT_BEZIER } from './keyframeInterpolation'
@@ -9,13 +9,14 @@ import type { VideoEditEffect } from './compositing'
 
 export const videoEditClipAnimatedValueSchemas = {
   depth: z.number().finite(), rotationX: z.number().finite(), rotationY: z.number().finite(), anchorDepth: z.number().finite(),
+  spaceEmission: z.number().finite().min(0).max(SPACE_EMISSION_MAX),
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(.01).max(4), rotation: z.number().min(-360).max(360),
   anchorX: z.number().min(0).max(1), anchorY: z.number().min(0).max(1),
   opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2),
 }
 export function videoEditKeyframeValues(point: VideoEditKeyframe): VideoEditKeyframe['value'][] { return [point.value, ...(point.easeValues ?? [])] }
-export const VIDEO_EDIT_ANIMATABLE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume', ...SPATIAL_KEYS] as const
+export const VIDEO_EDIT_ANIMATABLE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume', ...SPATIAL_KEYS, ...SPACE_SURFACE_KEYS] as const
 export type VideoEditAnimatableKey = typeof VIDEO_EDIT_ANIMATABLE_KEYS[number]
 export const videoEditCurvesSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), videoEditKeyframesSchema)
 export const videoEditClipCurvesSchema = z.partialRecord(z.enum(VIDEO_EDIT_ANIMATABLE_KEYS), videoEditKeyframesSchema)
@@ -67,7 +68,7 @@ export function writeVideoEditClipKeyframes(clip: VideoEditClip, key: VideoEditA
 export function videoEditClipValue(clip: VideoEditClip, key: VideoEditAnimatableKey, timelineFrame: number): number {
   const section = key === 'volume' ? 'audio' : key === 'opacity' ? 'opacity' : 'motion'
   if (clip.disabledIntrinsicSections?.includes(section)) return key === 'scale' || key === 'opacity' ? 1 : key === 'volume' ? (clip.kind === 'adjustment' ? 0 : 1) : key === 'anchorX' || key === 'anchorY' ? 0.5 : 0
-  const spatial = (SPATIAL_KEYS as readonly string[]).includes(key)
+  const spatial = ([...SPATIAL_KEYS, ...SPACE_SURFACE_KEYS] as readonly string[]).includes(key)
   if (spatial && clip.spatial?.enabled !== true) return 0
   return clampVideoEditAnimationValue(evaluateVideoEditKeyframes(clip.curves?.[key], timelineFrame - clip.start, clip[key] ?? (spatial ? 0 : 0.5)), videoEditClipAnimatedValueSchemas[key]) as number
 }
@@ -91,7 +92,7 @@ export function evaluateVideoEditBuiltinParameters(builtin: { id: string; params
 export function evaluateVideoEditClip(clip: VideoEditClip, timelineFrame: number): VideoEditClip {
   const values: Partial<Record<VideoEditAnimatableKey, number>> = {}
   for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) {
-    if ((SPATIAL_KEYS as readonly string[]).includes(key) && clip[key] === undefined && !clip.curves?.[key]?.length) continue
+    if (([...SPATIAL_KEYS, ...SPACE_SURFACE_KEYS] as readonly string[]).includes(key) && clip[key] === undefined && !clip.curves?.[key]?.length) continue
     if (!clip.disabledIntrinsicSections?.includes(key === 'volume' ? 'audio' : key === 'opacity' ? 'opacity' : 'motion') && !clip.curves?.[key]?.length) continue
     const value = videoEditClipValue(clip, key, timelineFrame)
     const followed = !clip.disabledIntrinsicSections?.includes('motion') && clip.follow

@@ -27,7 +27,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 9 → 10：风格件代码快照接受作者接口 13（累积模拟），旧程序不能执行，最低可读版本提高到 10。
   // 10 → 11：接受作者接口 14 的 fill 图层画面来源；保留历史源码、接口与库锁定。
   // 4 → 5：空间曲线进入动作候选与参照快照；旧数据保持二维语义，不添加空间字段。
-  'creative-intent-candidate': { 4: value => ({ ...structuredClone(value) as object, version: 5 }) },
+  // 5 → 6：片段关键帧新增发光强度 spaceEmission；旧内容没有 spaceEmission，缺省 0 不改变画面，只更新版本戳。
+  'creative-intent-candidate': { 5: value => ({ ...structuredClone(value) as object, version: 6 }), 4: value => ({ ...structuredClone(value) as object, version: 5 }) },
   // 11 → 12：支持空间属性、右边界关键帧或作者接口 15；保留历史内容、源码及固定接口。
   'video-effect-library': { 11: value => structuredClone(value), 10: value => structuredClone(value),  9: value => structuredClone(value), 8: value => structuredClone(value), 7: value => structuredClone(value), 6: value => structuredClone(value), 5: value => structuredClone(value), 4: migrateVideoEditLibraryCatalog, 3: value => migrateAudioEqualizerModes(migrateAudioEffectLibraryV3(value)), 1: migrateEmbeddedVideoColorGradesV1, 2: value => { const library = structuredClone(value) as { presets: unknown[] }; return { ...library, presets: library.presets.map(migrateVideoEditStylePiece) } } },
   // 1 → 2：评分引用使用合并后的目录 ID，重复项保留最高评分与默认标记，最低可读版本提高到 2。
@@ -119,12 +120,14 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 9 → 10：模板代码可用作者接口 13（累积模拟），旧程序不能执行，最低可读版本提高到 10。
   // 10 → 11：接受作者接口 14 的 fill 图层画面来源；保留历史源码、接口与库锁定。
   // 11 → 12：支持空间属性、右边界关键帧或作者接口 15；保留历史内容、源码及固定接口。
-  'video-template-library': { 11: value => structuredClone(value), 10: value => structuredClone(value),  9: value => structuredClone(value), 8: value => structuredClone(value), 7: value => structuredClone(value), 6: migrateTemplateAuthor, 5: value => structuredClone(value), 4: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => structuredClone(value) },
+  // 12 → 13：原生模板片段新增发光强度 spaceEmission 及其关键帧；旧内容没有 spaceEmission，缺省 0 不改变画面，只更新版本戳。
+  'video-template-library': { 12: value => structuredClone(value), 11: value => structuredClone(value), 10: value => structuredClone(value),  9: value => structuredClone(value), 8: value => structuredClone(value), 7: value => structuredClone(value), 6: migrateTemplateAuthor, 5: value => structuredClone(value), 4: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => structuredClone(value) },
   // 6 → 7：本机标题模板里的代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 7 → 8：代码参数值新增片子数据引用 {kind:'scene'}（标题模板不携带片子数据，实际不会出现），旧内容原样有效。
   // 8 → 9：代码图片参数新增网页画面引用 {kind:'web'}，旧内容原样有效。
   // 9 → 10：支持空间属性、右边界关键帧或作者接口 15；保留历史内容、源码及固定接口。
-  'title-templates': { 9: value => structuredClone(value), 6: value => value, 7: value => value, 8: value => value },
+  // 10 → 11：片段新增发光强度 spaceEmission 及其关键帧；旧内容没有 spaceEmission，缺省 0 不改变画面，只更新版本戳。
+  'title-templates': { 10: value => structuredClone(value), 9: value => structuredClone(value), 6: value => value, 7: value => value, 8: value => value },
   // 4 → 5：成员模板里的代码视频参数新增可选取帧时间表 spans，旧内容原样有效。
   // 5 → 6：成员原生模板的片段新增可选 enabled:false；代码参数值新增片子数据引用 {kind:'scene'}（风格包不携带片子数据，实际不会出现）。
   // 旧内容原样有效；旧程序会把停用的模板片段当成启用，最低可读版本提高到 6。
@@ -139,7 +142,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 15 → 16：风格件代码快照接受作者接口 13（累积模拟），最低可读版本提高到 16。
   // 16 → 17：接受作者接口 14 的 fill 图层画面来源；保留历史源码、接口与库锁定。
   // 17 → 18：支持空间属性、右边界关键帧或作者接口 15；保留历史内容、源码及固定接口。
-  'video-style-package': { 17: value => structuredClone(value), 16: value => structuredClone(value),  15: value => structuredClone(value), 14: value => structuredClone(value), 13: value => structuredClone(value), 12: migrateStylePackageAuthor, 11: value => structuredClone(value), 10: value => migrateAudioEqualizerModes(migrateAudioMergedEffects(value)), 9: value => structuredClone(value), 8: value => structuredClone(value), 7: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => value, 4: value => value, 5: value => value, 6: value => structuredClone(value) },
+  // 18 → 19：成员模板的片段新增发光强度 spaceEmission 及其关键帧；旧内容没有 spaceEmission，缺省 0 不改变画面，只更新版本戳。
+  'video-style-package': { 18: value => structuredClone(value), 17: value => structuredClone(value), 16: value => structuredClone(value),  15: value => structuredClone(value), 14: value => structuredClone(value), 13: value => structuredClone(value), 12: migrateStylePackageAuthor, 11: value => structuredClone(value), 10: value => migrateAudioEqualizerModes(migrateAudioMergedEffects(value)), 9: value => structuredClone(value), 8: value => structuredClone(value), 7: value => structuredClone(value), 1: value => value, 2: value => value, 3: value => value, 4: value => value, 5: value => value, 6: value => structuredClone(value) },
   'recording-setup': { 1: value => value, 2: value => { const { microphoneId: _legacyDevice, ...rest } = value as Record<string, unknown>; return rest }, 3: value => value, 4: value => value },
   'screen-capture': { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },
@@ -161,7 +165,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 16 → 17：风格件代码快照接受作者接口 13（累积模拟），最低可读版本提高到 17。
   // 17 → 18：接受作者接口 14 的 fill 图层画面来源；保留历史源码、接口与库锁定。
   // 18 → 19：支持空间属性、右边界关键帧或作者接口 15；保留历史内容、源码及固定接口。
-  'video-preset-package': { 18: value => ({ ...structuredClone(value) as object, version: 19, minReaderVersion: 19 }), 17: value => ({ ...structuredClone(value) as object, version: 18, minReaderVersion: 18 }),  16: value => ({ ...structuredClone(value) as object, version: 17, minReaderVersion: 17 }), 15: value => ({ ...structuredClone(value) as object, version: 16, minReaderVersion: 16 }), 14: value => ({ ...structuredClone(value) as object, version: 15, minReaderVersion: 15 }), 13: value => ({ ...structuredClone(value) as object, version: 14, minReaderVersion: 14 }), 12: value => ({ ...structuredClone(value) as object, version: 13, minReaderVersion: 13 }), 11: value => migrateAudioEqualizerModes(migrateAudioPresetPackageV11(value)), 10: value => { const pack = structuredClone(value) as { items: { category: string; preset: unknown }[] }; return { ...pack, version: 11, items: pack.items.map(item => item.category === 'effect' ? { ...item, preset: migrateVideoEditStylePiece(item.preset) } : item) } }, 9: value => ({ ...value as object, version: 10 }), 8: value => ({ ...value as object, version: 9 }), 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }), 6: value => ({ ...value as object, version: 7 }), 7: value => ({ ...value as object, version: 8 }) },
+  // 19 → 20：标题条目的片段新增发光强度 spaceEmission 及其关键帧；旧内容没有 spaceEmission，缺省 0 不改变画面，只更新版本戳。
+  'video-preset-package': { 19: value => ({ ...structuredClone(value) as object, version: 20, minReaderVersion: 20 }), 18: value => ({ ...structuredClone(value) as object, version: 19, minReaderVersion: 19 }), 17: value => ({ ...structuredClone(value) as object, version: 18, minReaderVersion: 18 }),  16: value => ({ ...structuredClone(value) as object, version: 17, minReaderVersion: 17 }), 15: value => ({ ...structuredClone(value) as object, version: 16, minReaderVersion: 16 }), 14: value => ({ ...structuredClone(value) as object, version: 15, minReaderVersion: 15 }), 13: value => ({ ...structuredClone(value) as object, version: 14, minReaderVersion: 14 }), 12: value => ({ ...structuredClone(value) as object, version: 13, minReaderVersion: 13 }), 11: value => migrateAudioEqualizerModes(migrateAudioPresetPackageV11(value)), 10: value => { const pack = structuredClone(value) as { items: { category: string; preset: unknown }[] }; return { ...pack, version: 11, items: pack.items.map(item => item.category === 'effect' ? { ...item, preset: migrateVideoEditStylePiece(item.preset) } : item) } }, 9: value => ({ ...value as object, version: 10 }), 8: value => ({ ...value as object, version: 9 }), 5: value => ({ ...migrateEmbeddedVideoColorGradesV1(value) as object, version: 6 }), 6: value => ({ ...value as object, version: 7 }), 7: value => ({ ...value as object, version: 8 }) },
   // 工作副本 15 → 16、图片包 13 → 14、画布图层包 13 → 14：全能调色新增可选参数 hue_shift（色相旋转），
   // 缺省 0 不改变画面；旧内容没有该参数，只更新版本戳，其余原样保留。
   'image-working-copy': { 14: value => migrateImageWorkingCopyColorGrades(value, 15), 15: value => ({ ...structuredClone(value) as object, formatVersion: 16 }) },
@@ -180,7 +185,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 23 → 24：删除旧程序依赖的 linkedCaptionId；防止回填恢复动态链接语义，最低可读版本提高到 24。
   // 25 → 26：声音片段只新增可选的元素效果覆盖与代码修改记录 edits；旧记录原样有效。
   // 26 → 27：支持空间属性、右边界关键帧或作者接口 15；保留历史内容、源码及固定接口。
-  'subtitle-manifest': { 26: value => ({ ...structuredClone(value) as object, version: 27 }), 25: value => ({ ...structuredClone(value) as object, version: 26 }), 24: value => ({ ...migrateAudioEqualizerModes(migrateAudioMergedEffects(value)) as object, version: 25 }), 23: value => ({ ...migrateVideoEditCaptionCollection(value) as object, version: 24 }), 22: value => ({ ...value as object, version: 23 }), 21: value => ({ ...value as object, version: 22 }), 20: value => ({ ...value as object, version: 21 }), 19: value => ({ ...value as object, version: 20 }), 18: value => ({ ...value as object, version: 19 }), 17: value => ({ ...value as object, version: 18 }), 16: value => ({ ...value as object, version: 17 }), 15: value => ({ ...value as object, version: 16 }), 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
+  // 27 → 28：声音片段新增发光强度 spaceEmission 及其关键帧；旧内容没有 spaceEmission，缺省 0 不改变画面，只更新版本戳。
+  'subtitle-manifest': { 27: value => ({ ...structuredClone(value) as object, version: 28 }), 26: value => ({ ...structuredClone(value) as object, version: 27 }), 25: value => ({ ...structuredClone(value) as object, version: 26 }), 24: value => ({ ...migrateAudioEqualizerModes(migrateAudioMergedEffects(value)) as object, version: 25 }), 23: value => ({ ...migrateVideoEditCaptionCollection(value) as object, version: 24 }), 22: value => ({ ...value as object, version: 23 }), 21: value => ({ ...value as object, version: 22 }), 20: value => ({ ...value as object, version: 21 }), 19: value => ({ ...value as object, version: 20 }), 18: value => ({ ...value as object, version: 19 }), 17: value => ({ ...value as object, version: 18 }), 16: value => ({ ...value as object, version: 17 }), 15: value => ({ ...value as object, version: 16 }), 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
 }
 /** Image layers (any depth, including smart-object documents): every `color_grade` adjustment layer's params. */
 function migrateImageColorGradeLayers(value: unknown): unknown {

@@ -112,3 +112,17 @@ it('推近升档超出工作集预算时逐项降档并报告请求与实际档�
   expect(plan.rasterLimits?.length).toBeGreaterThan(0)
   for (const limit of plan.rasterLimits!) expect(limit.tier).toBeLessThan(limit.wantedTier)
 })
+it('几何是平的但片段发光时渲染走三维，空间帧的几何恒等判据不受发光影响（压平、展开要用它）', async () => {
+  const request = fixture()
+  request.sources = []
+  const composition = request.composition as import('@/core/videoEdit/document').VideoEditComposition
+  composition.spatialCamera = undefined
+  composition.clips = [{ ...composition.clips[0], depth: 0, rotationX: 0, rotationY: 0 }]
+  const flat = planSpatialExposure(request)
+  expect(flat.centerFrame.flatIdentity).toBe(true)
+  composition.clips[0].spaceEmission = 1.5
+  const glowing = planSpatialExposure(request)
+  expect(glowing.centerFrame.flatIdentity).toBe(false)
+  const { evaluateSpatialFrame } = await import('@/core/videoEdit/spatialEvaluation')
+  expect(evaluateSpatialFrame(composition, request.sequenceFrame, request.output, request.quality).flatIdentity).toBe(true)
+})

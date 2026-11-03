@@ -1,4 +1,5 @@
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
+import { SPACE_ONLY_FIELDS } from '@/core/videoEdit/spatialSchema'
 import type { VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
@@ -264,7 +265,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
   /** 导出的那条序列的三维渲染设置（嵌套序列跟随它）：泛光、遮蔽、反射强度从这里取。 */
   spaceRender?: import('@/core/videoEdit/document').VideoEditSpaceRender }): Promise<SpatialPictureLease> {
   const { request, plan, sources, drawn, active, nodes, pictures, effects, compositor } = options
-  const [{ evaluateVideoEditClip }, { videoEditFadeOpacity }, { spatialClipMatrix, includeSpatialWorldBounds }, math] = await Promise.all([import('@/core/videoEdit/keyframes'), import('@/core/videoEdit/fades'),
+  const [{ evaluateVideoEditClip, videoEditKeyframeValues }, { videoEditFadeOpacity }, { spatialClipMatrix, includeSpatialWorldBounds }, math] = await Promise.all([import('@/core/videoEdit/keyframes'), import('@/core/videoEdit/fades'),
     import('@/core/videoEdit/spatialEvaluation'), import('@/core/videoEdit/spatialMatrices')])
   // 材料面只覆盖片段的逻辑边界：先映射回参考平面、抵掉二维放置，再乘卡片几何。
   const materialToCard = (material: SpatialMaterialPlan, clip: VideoEditClip) => {
@@ -303,7 +304,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
       : input === null && original.kind === 'text' ? ['text', documentFontRevision()]
       : typeof ImageBitmap !== 'undefined' && input instanceof ImageBitmap ? ['bitmap', spatial.identity(input), input.width, input.height] : undefined
     const cacheable = inputKey !== undefined && plans.every(value => value.builtin && !value.mask && !value.subject && !isShaderGraphEffect(value.builtin.id))
-    const key = cacheable ? JSON.stringify([inputKey, { ...original, curves: undefined, spatial: undefined, depth: undefined, rotationX: undefined, rotationY: undefined, anchorDepth: undefined, motionSamples: undefined, opacity: 1 },
+    const key = cacheable ? JSON.stringify([inputKey, { ...original, curves: undefined, spatial: undefined, depth: undefined, rotationX: undefined, rotationY: undefined, anchorDepth: undefined, ...SPACE_ONLY_FIELDS, motionSamples: undefined, opacity: 1 },
       material.referenceSize, material.logicalBounds, material.rasterScale, material.target.width, material.target.height, request.output, request.quality, drawn.colorLuts,
       plans.map(value => materialBuiltinPlan(value.builtin!, original, request.sequenceFrame, material.target, drawn.fps, request.quality, { referenceSize: material.referenceSize, bounds: material.logicalBounds }))]) : undefined
     used.add(material.clipId)
@@ -365,6 +366,15 @@ export async function renderVideoEditThreeSpaceScene(options: {
       const source = request.composition.clips.find(clip => clip.id === clipId)
       return source ? evaluateVideoEditClip(source, request.sequenceFrame).opacity * videoEditFadeOpacity(source, request.sequenceFrame) : 1
     }
+    const emissionOf = (clipId: string): number => {
+      const source = request.composition.clips.find(clip => clip.id === clipId)
+      return source ? evaluateVideoEditClip(source, request.sequenceFrame).spaceEmission ?? 0 : 0
+    }
+    // 片段整段上有没有发光（含关键帧）：组画面的编码约定与管线拓扑要整段一致，不随某一帧发光为 0 而变。
+    const emits = (source: VideoEditClip): boolean => source.spatial?.enabled === true
+      && ((source.spaceEmission ?? 0) > 0 || !!source.curves?.spaceEmission?.some(point => videoEditKeyframeValues(point).some(value => typeof value === 'number' && value > 0)))
+    const emitting = new Set(request.composition.clips.filter(emits).map(clip => clip.id))
+    const emitsLight = (clipId: string): boolean => emitting.has(clipId)
     const cocScale = threeSpaceCocScale(center.camera, request.output)
     const sceneCoc = bounds.flatMap(box => [0, 1, 2, 3, 4, 5, 6, 7].map(index => {
       const depth = -math.spatialTransform(center.camera.view, [index & 1 ? box.max[0] : box.min[0], index & 2 ? box.max[1] : box.min[1], index & 4 ? box.max[2] : box.min[2]])[2]
@@ -374,14 +384,15 @@ export async function renderVideoEditThreeSpaceScene(options: {
     const postEffects = { display: options.display ?? 'realtime', motionBlur: drawn.motionBlur === true, depthOfField: Boolean(camera?.defocus || camera?.curves?.defocus?.length),
       focusDistance: center.camera.focusDistance, cocScale, cocMax: Math.max(0, ...center.cards.map(card => card.cocRangePx[1]), ...sceneCoc),
       shutterScale: plan.samples.length > 1 ? plan.samples.length / (plan.samples.length - 1) : 1,
-      bloom: options.spaceRender?.bloom ?? 0, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0 }
+      bloom: options.spaceRender?.bloom ?? 0, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0,
+      emission: emitting.size > 0 }
     /**
      * 组画面是否“带发光”（宿主据此选解码约定）：有作者场景、发光卡片，或实时显示开了泛光（辉光会溢到透明处）。
      * 按整组算一次：转场两端各画一次时编码约定必须相同，混合后才能按同一约定解码。
      */
     const groupLight = (group: (typeof plan.groups)[number]): boolean => scenes.some(scene => group.clipIds.includes(scene.clipId))
       // 卡片材料是否带发光跟着它的中心画面（材料面由这张画面画出），转场两端还没画时也能先定下来。
-      || group.clipIds.some(clipId => (pictures.get(clipId) as { carriesLight?: boolean } | null | undefined)?.carriesLight === true) || (postEffects.display === 'realtime' && postEffects.bloom > 0)
+      || group.clipIds.some(clipId => (pictures.get(clipId) as { carriesLight?: boolean } | null | undefined)?.carriesLight === true || emitsLight(clipId)) || (postEffects.display === 'realtime' && postEffects.bloom > 0)
     // 一组画面：去掉 excluded 里的片段后整组在同一三维场景里画一次。
     const renderGroup = async (group: (typeof plan.groups)[number], excluded: ReadonlySet<string>, variant: string, groupCarriesLight?: boolean): Promise<SpatialPictureLease> => {
       const cards: import('./videoEditThreeSpace').ThreeSpaceCard[] = []
@@ -391,11 +402,11 @@ export async function renderVideoEditThreeSpaceScene(options: {
         const geometry = center.cards.find(card => card.clipId === clipId)
         if (!material || material.kind === 'worldScene' || !geometry || !active.some(value => value.id === clipId)) continue
         const lease = await cardMaterial(material)
-        cards.push({ clipId, texture: lease.texture, width: lease.width, height: lease.height, geometry: place(geometry), opacity: opacityOf(clipId), light: lease.carriesLight })
+        cards.push({ clipId, texture: lease.texture, width: lease.width, height: lease.height, geometry: place(geometry), opacity: opacityOf(clipId), light: lease.carriesLight, emission: emissionOf(clipId) })
       }
       const groupScenes = scenes.filter(scene => group.clipIds.includes(scene.clipId) && !excluded.has(scene.clipId))
         .map(scene => ({ ...scene, opacity: opacityOf(scene.clipId), ...previous.has(scene.clipId) ? { previous: previous.get(scene.clipId)! } : {} }))
-      const light = groupCarriesLight ?? (cards.some(card => card.light) || groupScenes.length > 0 || (postEffects.display === 'realtime' && postEffects.bloom > 0))
+      const light = groupCarriesLight ?? (cards.some(card => card.light || emitsLight(card.clipId)) || groupScenes.length > 0 || (postEffects.display === 'realtime' && postEffects.bloom > 0))
       return capture(outputSpec(`three:group:${group.id}${variant}`), async target => {
         const { refining } = await space.render({ frame: center, light, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects,
           target: { texture: target.texture, width: target.width, height: target.height }, ...(options.trace ? { trace: { ...options.trace, group: `${group.id}${variant}` } } : {}), assertCurrent: () => { current() } })

@@ -107,8 +107,9 @@ const spatialCurves = videoEditClipCurvesSchema.parse({
   rotationX: [{ time: 0, value: 0, interpolation: 'ease' }, { time: 60, value: 30, interpolation: 'linear' }],
   rotationY: [{ time: 0, value: 0, interpolation: 'bezier', bezier: [.2, .1, .8, .9] }, { time: 60, value: 450, interpolation: 'linear' }],
   anchorDepth: [{ time: 0, value: .1, interpolation: 'hold' }, { time: 60, value: .2, interpolation: 'hold' }],
+  spaceEmission: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 60, value: 3, interpolation: 'ease' }],
 })
-Object.assign(clip, { spatial: { enabled: true }, depth: -.5, rotationX: 0, rotationY: 0, anchorDepth: .1, curves: { ...clip.curves, ...spatialCurves } })
+Object.assign(clip, { spatial: { enabled: true }, depth: -.5, rotationX: 0, rotationY: 0, anchorDepth: .1, spaceEmission: 1.5, curves: { ...clip.curves, ...spatialCurves } })
 sequence.spaceRender = { finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: .8, ambientOcclusion: .6, reflections: .4 }
 sequence.spatialCamera = { offsetX: .1, perspective: .25, defocus: 1,
   framing: { target: { kind: 'clip', clipId: clip.id }, heightFraction: .6 }, aim: { kind: 'clip', clipId: clip.id }, focus: { kind: 'point', point: [0, 0, -.5] },
@@ -194,7 +195,7 @@ document.styles = [{ ...goldenStyle, sample: { ...goldenStyle.sample, apiVersion
 sequence.styleId = goldenStyle.id
 const nativeGraphic = titleGraphic('lower_third', { text: '姓名', subtitle: '职务' }, 1920, 1080, 119 / 30)
 const nativeClipContent = videoEditNativeTemplateClipSchema.parse({ name: '人名条', kind: 'graphic', graphic: nativeGraphic, track: 0, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '',
-  spatial: { enabled: true }, depth: -.3, rotationX: 12, rotationY: 30, anchorDepth: .1,
+  spatial: { enabled: true }, depth: -.3, rotationX: 12, rotationY: 30, anchorDepth: .1, spaceEmission: 1.5,
   curves: rescaleVideoEditCurves(sliceVideoEditCurves(spatialCurves, 10, 50), time => time * 2, 120) })
 document.templates = [
   { id: 'golden-code-template', name: '代码标题模板', description: '换文字就能复用的标题。', version: 1, contentHash: 'b'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, origin: { id: 'golden-library-template', version: 3 }, body: { kind: 'code', definitionId: 'code-definition' } },
@@ -423,10 +424,11 @@ export function getImageLayoutFixtureResources(): readonly unknown[] {
 /**
  * 音频案例早于空间字段与作者接口 10：剪辑 54、录制 57 给黄金片段补空间属性与序列相机；风格包 13 的原生模板换成带空间属性的同一人名条；
  * 预设包 14 补一件带作者接口 10 代码快照的风格件（标题条目只出现在旧文件里，写不出空间片段）。
+ * 剪辑 63、录制 66 起黄金片段另带发光强度与其关键帧，风格包与模板库的人名条同样带上。
  */
 function withSpatialVideo(value: unknown): unknown {
   const video = value as VideoEditDocument
-  const fields = { spatial: clip.spatial, depth: clip.depth, rotationX: clip.rotationX, rotationY: clip.rotationY, anchorDepth: clip.anchorDepth }
+  const fields = { spatial: clip.spatial, depth: clip.depth, rotationX: clip.rotationX, rotationY: clip.rotationY, anchorDepth: clip.anchorDepth, spaceEmission: clip.spaceEmission }
   return { ...video, sequences: video.sequences.map(entry => entry.id !== sequence.id ? entry : { ...entry, spatialCamera: structuredClone(sequence.spatialCamera), spaceRender: structuredClone(sequence.spaceRender),
     clips: entry.clips.map(item => item.id !== clip.id ? item : { ...item, ...structuredClone(fields), curves: { ...item.curves, ...structuredClone(spatialCurves) } }) }) }
 }

@@ -55,7 +55,7 @@ interface PathTraceModule {
   PhysicalCamera: new (fov: number, aspect: number, near: number, far: number) => Three.PerspectiveCamera & { focusDistance: number; bokehSize: number; apertureBlades: number }
 }
 
-export interface PathTraceCard { mesh: Three.Mesh; texture: Three.Texture; width: number; height: number; opacity: number; light: boolean }
+export interface PathTraceCard { mesh: Three.Mesh; texture: Three.Texture; width: number; height: number; opacity: number; light: boolean; emission: number }
 export interface PathTraceFrame {
   /**
    * 画面身份：相同时接着累积；缺省时每次从头追踪。宿主只在这一帧的输入都是精确画面时给出，
@@ -235,6 +235,8 @@ export class VideoEditThreeSpacePathTrace {
       renderer.setRenderTarget(entry.target)
       this.decode.render(renderer)
       entry.material.opacity = card.opacity
+      // 卡片在追踪里本就是发光面（亮度 1 时颜色与画面一致）；发光强度在此之上加亮，照亮周围、出现在反射与折射里。
+      entry.material.emissiveIntensity = 1 + card.emission
       const original = card.mesh.material
       card.mesh.material = entry.material
       restores.push(() => { card.mesh.material = original })

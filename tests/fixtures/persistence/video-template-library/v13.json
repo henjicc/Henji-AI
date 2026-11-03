@@ -1,0 +1,525 @@
+{
+  "version": 13,
+  "minReaderVersion": 13,
+  "content": {
+    "id": "golden-library-template",
+    "name": "黄金模板",
+    "description": "空间人名条。",
+    "version": 3,
+    "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "updatedAt": "2026-10-09T00:00:00.000Z",
+    "style": {
+      "id": "golden-style",
+      "version": 2
+    },
+    "foreign": {
+      "id": "golden-import",
+      "sourceType": "project",
+      "sourceName": "分享工程"
+    },
+    "body": {
+      "kind": "native",
+      "content": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "clips": [
+          {
+            "name": "人名条",
+            "kind": "graphic",
+            "track": 0,
+            "start": 0,
+            "duration": 120,
+            "sourceInUs": 0,
+            "sourceRemainder": {
+              "numerator": 0,
+              "denominator": 1
+            },
+            "x": 0,
+            "y": 0,
+            "scale": 1,
+            "rotation": 0,
+            "depth": -0.3,
+            "rotationX": 12,
+            "rotationY": 30,
+            "anchorDepth": 0.1,
+            "spaceEmission": 1.5,
+            "spatial": {
+              "enabled": true
+            },
+            "opacity": 1,
+            "volume": 1,
+            "text": "",
+            "graphic": {
+              "width": 1920,
+              "height": 1080,
+              "objects": [
+                {
+                  "id": "72856559-66fa-4b13-a104-fce250761815",
+                  "name": "矩形",
+                  "kind": "rect",
+                  "parameters": {
+                    "x": 153.6,
+                    "y": 810,
+                    "rotation": 0,
+                    "opacity": 1,
+                    "width": 960,
+                    "height": 162,
+                    "fill": [
+                      0,
+                      0.49411764705882355,
+                      1,
+                      1
+                    ],
+                    "radius": 10.8
+                  },
+                  "curves": {
+                    "opacity": [
+                      {
+                        "id": "d06c8b39-6dc9-49ac-bc83-5417859404d9",
+                        "sourceInUs": 0,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 0,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "3dc0eac9-3613-481f-96f1-6790bd8e7ebe",
+                        "sourceInUs": 600000,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 1,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "0fbfde2c-8782-4962-9e0e-ed75a54d774b",
+                        "sourceInUs": 3366667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 1,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "ea9fc100-c1ee-497c-9b29-52cae0b85d77",
+                        "sourceInUs": 3966667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 0,
+                        "interpolation": "ease"
+                      }
+                    ],
+                    "x": [
+                      {
+                        "id": "fdbde339-68e2-45e1-a69e-00a9c41a54ff",
+                        "sourceInUs": 0,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": -230.4,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "a213d8af-aaa7-490e-aab6-2e3455b601c4",
+                        "sourceInUs": 600000,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 153.6,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "762b3f45-5e85-4705-ab2a-075715fd7e61",
+                        "sourceInUs": 3366667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 153.6,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "6f76913e-d4aa-426a-8850-68faff25b527",
+                        "sourceInUs": 3966667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 537.6,
+                        "interpolation": "ease"
+                      }
+                    ]
+                  },
+                  "visible": true
+                },
+                {
+                  "id": "d6e2b8de-0bf6-4bdc-9d7b-8cbe5ad4b4fb",
+                  "name": "文字",
+                  "kind": "text",
+                  "parameters": {
+                    "x": 192,
+                    "y": 858.6,
+                    "rotation": 0,
+                    "opacity": 1,
+                    "scale": 1,
+                    "anchorX": 0,
+                    "anchorY": 0,
+                    "text": "姓名"
+                  },
+                  "curves": {
+                    "opacity": [
+                      {
+                        "id": "aa2faec6-329d-4f91-9c2f-e27025f5c866",
+                        "sourceInUs": 0,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 0,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "7b26ec4a-52d7-4b04-83a3-94d9c8c37dbf",
+                        "sourceInUs": 600000,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 1,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "3523a4db-75fd-412c-becc-3ac9e144d6c8",
+                        "sourceInUs": 3366667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 1,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "5be53019-355a-40c4-b208-92eaab4d139a",
+                        "sourceInUs": 3966667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 0,
+                        "interpolation": "ease"
+                      }
+                    ],
+                    "x": [
+                      {
+                        "id": "ba6250f3-aec9-4a97-b73e-cb95112c47c6",
+                        "sourceInUs": 0,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": -192,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "bfc7591c-4bf1-4669-b41e-7151d5767909",
+                        "sourceInUs": 600000,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 192,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "6a694c9d-2a28-430d-b78c-7bc538c547ab",
+                        "sourceInUs": 3366667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 192,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "07b8986b-ca24-4a6c-87c6-a206da5ac79c",
+                        "sourceInUs": 3966667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 576,
+                        "interpolation": "ease"
+                      }
+                    ]
+                  },
+                  "textStyle": {
+                    "fontFamily": "sans-serif",
+                    "fontWeight": 400,
+                    "fontStyle": "normal",
+                    "fontSize": 60,
+                    "fauxBold": false,
+                    "fauxItalic": false,
+                    "allCaps": false,
+                    "smallCaps": false,
+                    "superscript": false,
+                    "subscript": false,
+                    "underline": false,
+                    "align": "left",
+                    "verticalAlign": "middle",
+                    "tracking": 0,
+                    "kerning": "auto",
+                    "leading": 0,
+                    "baselineShift": 0,
+                    "tsume": 0,
+                    "fill": {
+                      "enabled": true,
+                      "color": "#ffffff"
+                    },
+                    "strokes": [],
+                    "background": {
+                      "enabled": false,
+                      "color": "#000000",
+                      "opacity": 0.7,
+                      "padding": 12,
+                      "radius": 0
+                    },
+                    "shadows": [],
+                    "boxWidth": 0,
+                    "boxHeight": 0
+                  },
+                  "visible": true
+                },
+                {
+                  "id": "0b53a6a6-3d4d-4f03-87c9-bdcb3ca9ffe2",
+                  "name": "文字",
+                  "kind": "text",
+                  "parameters": {
+                    "x": 192,
+                    "y": 926.64,
+                    "rotation": 0,
+                    "opacity": 1,
+                    "scale": 1,
+                    "anchorX": 0,
+                    "anchorY": 0,
+                    "text": "职务"
+                  },
+                  "curves": {
+                    "opacity": [
+                      {
+                        "id": "76b3b2f2-fc83-47aa-871c-c4144cbe907f",
+                        "sourceInUs": 0,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 0,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "8493e46d-eb02-4d9f-8c7a-f4a53be7b812",
+                        "sourceInUs": 600000,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 1,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "edc55c93-0ed8-421e-8f04-198191b83356",
+                        "sourceInUs": 3366667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 1,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "e6b87ec4-ce6d-43fc-869d-1033cf7ed662",
+                        "sourceInUs": 3966667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 0,
+                        "interpolation": "ease"
+                      }
+                    ],
+                    "x": [
+                      {
+                        "id": "618b0daf-0f95-4ae7-b8aa-a94eca1e142d",
+                        "sourceInUs": 0,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": -192,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "5ec2ef74-25ca-4dcd-aaef-ed70bc03de58",
+                        "sourceInUs": 600000,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 192,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "4a96810d-d72d-44fe-af39-8b1844f2eae7",
+                        "sourceInUs": 3366667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 192,
+                        "interpolation": "ease"
+                      },
+                      {
+                        "id": "9c9a2969-ea1e-47cc-b42b-ff8b531fa80d",
+                        "sourceInUs": 3966667,
+                        "sourceRemainder": {
+                          "numerator": 0,
+                          "denominator": 1
+                        },
+                        "value": 576,
+                        "interpolation": "ease"
+                      }
+                    ]
+                  },
+                  "textStyle": {
+                    "fontFamily": "sans-serif",
+                    "fontWeight": 400,
+                    "fontStyle": "normal",
+                    "fontSize": 38.4,
+                    "fauxBold": false,
+                    "fauxItalic": false,
+                    "allCaps": false,
+                    "smallCaps": false,
+                    "superscript": false,
+                    "subscript": false,
+                    "underline": false,
+                    "align": "left",
+                    "verticalAlign": "middle",
+                    "tracking": 0,
+                    "kerning": "auto",
+                    "leading": 0,
+                    "baselineShift": 0,
+                    "tsume": 0,
+                    "fill": {
+                      "enabled": true,
+                      "color": "#ffffff"
+                    },
+                    "strokes": [],
+                    "background": {
+                      "enabled": false,
+                      "color": "#000000",
+                      "opacity": 0.7,
+                      "padding": 7.68,
+                      "radius": 0
+                    },
+                    "shadows": [],
+                    "boxWidth": 0,
+                    "boxHeight": 0
+                  },
+                  "visible": true
+                }
+              ]
+            },
+            "curves": {
+              "depth": [
+                {
+                  "value": -0.33333333333333337,
+                  "interpolation": "linear",
+                  "time": 0
+                },
+                {
+                  "value": 0.4833333333333333,
+                  "interpolation": "linear",
+                  "time": 98
+                }
+              ],
+              "rotationX": [
+                {
+                  "value": 2.2222222222222223,
+                  "interpolation": "ease",
+                  "time": 0,
+                  "easeRange": [
+                    0.16666666666666666,
+                    0.9833333333333333
+                  ]
+                },
+                {
+                  "value": 29.97527777777778,
+                  "interpolation": "ease",
+                  "time": 98
+                }
+              ],
+              "rotationY": [
+                {
+                  "value": 62.01865060440294,
+                  "interpolation": "bezier",
+                  "bezier": [
+                    0.2,
+                    0.1,
+                    0.8,
+                    0.9
+                  ],
+                  "time": 0,
+                  "easeValues": [
+                    0,
+                    450
+                  ],
+                  "easeRange": [
+                    0.16666666666666666,
+                    0.9833333333333333
+                  ]
+                },
+                {
+                  "value": 445.78756401820374,
+                  "interpolation": "bezier",
+                  "time": 98
+                }
+              ],
+              "anchorDepth": [
+                {
+                  "value": 0.1,
+                  "interpolation": "hold",
+                  "time": 0
+                },
+                {
+                  "value": 0.1,
+                  "interpolation": "hold",
+                  "time": 98
+                }
+              ],
+              "spaceEmission": [
+                {
+                  "value": 0.5,
+                  "interpolation": "linear",
+                  "time": 0
+                },
+                {
+                  "value": 2.9499999999999997,
+                  "interpolation": "linear",
+                  "time": 98
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

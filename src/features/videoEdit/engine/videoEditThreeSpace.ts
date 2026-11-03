@@ -36,6 +36,8 @@ export interface ThreeSpaceCard {
   opacity: number
   /** 画面带透明度为 0 的发光（预乘下 rgb 可大于 alpha），不能按覆盖率丢弃或解预乘。 */
   light: boolean
+  /** 发光强度（片段的 spaceEmission 本帧值）：画面自身发出的光，线性倍数，0 为不发光。 */
+  emission: number
 }
 export interface ThreeSpaceScene {
   clipId: string
@@ -66,6 +68,8 @@ export interface ThreeSpaceEffects {
   bloom: number
   ambientOcclusion: number
   reflections: number
+  /** 序列里有片段发光（整段任意时刻）：管线多一个发光附件，发光不依赖序列泛光开关也会扩成光晕。 */
+  emission: boolean
 }
 export interface ThreeSpaceFrame {
   frame: SpatialFrame
@@ -136,6 +140,9 @@ interface CardEntry {
   external?: Three.Texture
   map: TslUniform<Three.Texture>
   opacity: TslUniform<number>
+  emission: TslUniform<number>
+  /** 两份多目标输出：管线有发光附件时卡片要写它，没有时不能写（未声明的输出会让管线校验失败）。 */
+  outputs: { plain: TslNode; emission: TslNode }
   /** 最后一次用到它的渲染序号：一帧有多个空间组时其他组的卡片只隐藏，久不用才释放。 */
   used: number
 }
@@ -158,7 +165,7 @@ export class VideoEditThreeSpace {
    * 按后处理组合缓存的管线：实时与实体、线框来回切时不重建（否则换档那一下的卡顿又会触发下一次换档）。
    * 释放时一并释放各自的节点：RenderPipeline.dispose 只释放全屏四边形的材质，场景与景深节点的渲染目标要单独释放。
    */
-  private readonly pipelines = new Map<string, { pipeline: RenderPipeline; nodes: Array<{ dispose(): void }>; primed: boolean }>()
+  private readonly pipelines = new Map<string, { pipeline: RenderPipeline; nodes: Array<{ dispose(): void }>; primed: boolean; emission: boolean }>()
   private renders = 0
   private overrides?: Record<'solid' | 'wireframe', Three.Material>
   private readonly focus: TslUniform<number>
@@ -257,6 +264,11 @@ export class VideoEditThreeSpace {
     if (input.effects.display === 'render') return { refining: await this.trace(input) }
     if (this.pathTraces.size) await this.disposePathTraces()
     const entry = this.ensurePipeline(input.effects), pipeline = entry.pipeline
+    for (const card of this.cards.values()) {
+      if (!card.mesh.visible) continue
+      const outputs = entry.emission ? card.outputs.emission : card.outputs.plain
+      if (card.material.mrtNode !== outputs) { card.material.mrtNode = outputs; card.material.needsUpdate = true }
+    }
     this.focus.value = input.effects.focusDistance
     this.cocScale.value = input.effects.cocScale
     this.cocMax.value = Math.max(1, input.effects.cocMax)
@@ -326,7 +338,7 @@ export class VideoEditThreeSpace {
     const aperture = effects.depthOfField ? 4 * effects.cocScale * effects.focusDistance * halfWidth / input.target.width : 0
     const cards = input.cards.flatMap(card => {
       const entry = this.cards.get(card.clipId)
-      return entry?.external && entry.mesh.visible ? [{ mesh: entry.mesh, texture: entry.external, width: card.width, height: card.height, opacity: card.opacity, light: card.light }] : []
+      return entry?.external && entry.mesh.visible ? [{ mesh: entry.mesh, texture: entry.external, width: card.width, height: card.height, opacity: card.opacity, light: card.light, emission: card.emission }] : []
     })
     const restore = this.applySceneOpacity(input.scenes)
     let refining = false
@@ -403,6 +415,7 @@ export class VideoEditThreeSpace {
       }
       entry.used = this.renders
       entry.opacity.value = card.opacity
+      entry.emission.value = card.emission
       entry.mesh.matrix.copy(this.cardMatrix(card.geometry))
       entry.mesh.matrixWorld.copy(entry.mesh.matrix)
       this.previousWorld.set(entry.mesh, this.cardMatrix(opened.get(card.clipId) ?? card.geometry))
@@ -430,19 +443,29 @@ export class VideoEditThreeSpace {
     // 宿主纹理预乘且按 2.4 伽马编码：解预乘、解码到线性，再按预乘输出（混合 ONE / ONE_MINUS_SRC_ALPHA）。
     // 发光画面的 rgb 可大于 alpha（透明处也发光），按预乘逐通道解码，不解预乘也不丢弃。
     const alpha = map.a.mul(opacity)
-    material.colorNode = light
-      ? tsl.vec4(tsl.pow(tsl.max(map.rgb, tsl.vec3(0)), tsl.vec3(2.4)).mul(opacity), alpha)
-      : tsl.vec4(tsl.pow(tsl.max(tsl.select(map.a.greaterThan(0), map.rgb.div(map.a), tsl.vec3(0)), tsl.vec3(0)), tsl.vec3(2.4)).mul(alpha), alpha)
+    const emission = tsl.uniform(0)
+    const base = light
+      ? tsl.pow(tsl.max(map.rgb, tsl.vec3(0)), tsl.vec3(2.4)).mul(opacity)
+      : tsl.pow(tsl.max(tsl.select(map.a.greaterThan(0), map.rgb.div(map.a), tsl.vec3(0)), tsl.vec3(0)), tsl.vec3(2.4)).mul(alpha)
+    // 发光：画面原样不动（平面卡片不做色调映射），另加一层“额外光” = 画面线性色 × 发光强度，经色调映射后叠上去；
+    // 发光强度 0 时与不发光逐像素相同，随强度连续变亮。额外光同时写进发光附件，单独扩成光晕。
+    const extra = base.mul(emission)
+    // 按直通色做色调映射再乘回覆盖率，半透明边缘随覆盖率线性变化；透明处带发光的画面按预乘逐通道（同上面的解码约定）。
+    const mapped = light ? tsl.neutralToneMapping(extra, 1) : tsl.neutralToneMapping(extra.div(tsl.max(alpha, 1e-4)), 1).mul(alpha)
+    material.colorNode = tsl.vec4(base.add(mapped), alpha)
     // 发光画面整块覆盖四边形：只在真有覆盖或发光的片元写深度、后处理属性与速度，背后的作者物体照常景深与色调映射。
     if (light) material.maskNode = map.a.add(map.rgb.r).add(map.rgb.g).add(map.rgb.b).greaterThan(1 / 512)
     // 平面卡片：跳过色调映射（r）与整幅景深、FXAA、遮蔽、反射（g）；按覆盖率混合（a），发光处整片算卡片。
-    material.mrtNode = tsl.mrt({ attr: tsl.vec4(1, 1, 0, light ? 1 : alpha) })
+    // 有没有发光附件随管线而定（序列里有片段发光时才有），两份多目标输出按当前管线切换（attachMrt）。
+    const attr = tsl.vec4(1, 1, 0, light ? 1 : alpha)
+    const outputs = { plain: tsl.mrt({ attr }), emission: tsl.mrt({ attr, emission: tsl.vec4(extra, alpha) }) }
+    material.mrtNode = outputs.plain
     const mesh = new library.Mesh(this.quad, material)
     mesh.matrixAutoUpdate = false
     mesh.frustumCulled = false
     mesh.name = `card:${clipId}`
     this.scene.add(mesh)
-    const entry: CardEntry = { mesh, material, light, map, opacity, used: this.renders }
+    const entry: CardEntry = { mesh, material, light, map, opacity, emission, outputs, used: this.renders }
     this.cards.set(clipId, entry)
     return entry
   }
@@ -519,10 +542,10 @@ export class VideoEditThreeSpace {
     }
   }
 
-  private ensurePipeline(effects: ThreeSpaceEffects): { pipeline: RenderPipeline; primed: boolean } {
-    if (effects.display !== 'realtime') effects = { ...effects, motionBlur: false, depthOfField: false, bloom: 0, ambientOcclusion: 0, reflections: 0 }
+  private ensurePipeline(effects: ThreeSpaceEffects): { pipeline: RenderPipeline; primed: boolean; emission: boolean } {
+    if (effects.display !== 'realtime') effects = { ...effects, motionBlur: false, depthOfField: false, bloom: 0, ambientOcclusion: 0, reflections: 0, emission: false }
     // 强度是每帧更新的均匀量，管线只按开关组合缓存。
-    const key = JSON.stringify([effects.motionBlur, effects.depthOfField, effects.bloom > 0, effects.ambientOcclusion > 0, effects.reflections > 0])
+    const key = JSON.stringify([effects.motionBlur, effects.depthOfField, effects.bloom > 0, effects.ambientOcclusion > 0, effects.reflections > 0, effects.emission])
     const cached = this.pipelines.get(key)
     if (cached) { this.pipelines.delete(key); this.pipelines.set(key, cached); return cached }
     // 按最近使用只淘汰最久没用的那套，不整表释放：换显示方式时仍在用的那套不必重建、重新编译着色器。
@@ -541,10 +564,19 @@ export class VideoEditThreeSpace {
     // three 的多目标输出里 output 以外的附件缺省不混合（最后写入者赢），半透明文字边缘会让后面的作者物体整像素被当成卡片；
     // attr 改为按覆盖率普通混合：rgb 累积卡片的覆盖率，a 累积总覆盖率（普通混合的 alpha 正是叠加后的覆盖率），
     // 两者相除才是“这个像素的颜色里卡片占多少”——半透明卡片叠在空白处时仍完全按卡片处理，叠在物体上时按比例。作者物体写 0。
-    const attributes = tsl.mrt({ output: tsl.output, attr: tsl.vec4(0, 0, 0, tsl.output.a), ...effects.motionBlur ? { velocity: this.velocity } : {} }) as TslNode & { setBlendMode(name: string, mode: unknown): void; setClearColor(name: string, color: number, alpha: number): void }
+    const attributes = tsl.mrt({ output: tsl.output, attr: tsl.vec4(0, 0, 0, tsl.output.a), ...effects.motionBlur ? { velocity: this.velocity } : {},
+      // 发光附件：卡片写“额外光”（预乘），作者物体写 0 与自身覆盖率，挡在发光字前面的物体会遮住它的光晕。
+      ...effects.emission ? { emission: tsl.vec4(0, 0, 0, tsl.output.a) } : {} }) as TslNode & { setBlendMode(name: string, mode: unknown): void; setClearColor(name: string, color: number, alpha: number): void }
     attributes.setBlendMode('attr', new library.BlendMode(library.NormalBlending))
     // 清成全透明：总覆盖率从 0 开始累积（缺省清屏透明度是 1）。
     attributes.setClearColor('attr', 0, 0)
+    if (effects.emission) {
+      const over = new library.BlendMode(library.NormalBlending) as { premultiplyAlpha: boolean; premultipliedAlpha?: boolean }
+      // 预乘叠加；three 的混合换算读的是 premultipliedAlpha，BlendMode 自己的字段叫 premultiplyAlpha，两个都设上。
+      over.premultiplyAlpha = over.premultipliedAlpha = true
+      attributes.setBlendMode('emission', over)
+      attributes.setClearColor('emission', 0, 0)
+    }
     scenePass.setMRT(attributes)
     // 8 位就够（多目标输出每样本字节数有上限，rgba8 也按 8 字节计）。
     scenePass.getTexture('attr').type = library.UnsignedByteType
@@ -600,6 +632,12 @@ export class VideoEditThreeSpace {
       nodes.push(glow as unknown as { dispose(): void })
       color = tsl.vec4(color.rgb.add(glow.rgb), color.a)
     }
+    if (effects.emission) {
+      // 片段发光自带光晕，不依赖序列泛光：发光附件只含“额外光”，阈值 0（发光的部分全部是光），强度由发光强度本身决定。
+      const glow = this.post.bloom(scenePass.getTextureNode('emission'), .5, .3, 0)
+      nodes.push(glow as unknown as { dispose(): void })
+      color = tsl.vec4(color.rgb.add(glow.rgb), color.a)
+    }
     // 输出回宿主工作空间：作者物体做中性色调映射，卡片不做；线性 → 2.4 伽马编码。编码约定跟随组画面是否“带发光”（宿主按它解码）：
     // 带发光的画面宿主按预乘逐通道解码，就按预乘逐通道映射与编码（半透明的光晕、辉光处若先解预乘再编码，解码后会变暗一圈）；
     // 不带发光的按“解预乘 → 编码 → 乘回透明度”。不透明与全透明像素两种约定结果相同。
@@ -617,7 +655,7 @@ export class VideoEditThreeSpace {
     // 卡片是已经画好、抗过锯齿的画面，不再处理，免得文字被抹软。
     pipeline.outputNode = tsl.mix(this.post.fxaa(output), output, still)
     pipeline.outputColorTransform = false
-    const entry = { pipeline, nodes, primed: false }
+    const entry = { pipeline, nodes, primed: false, emission: effects.emission }
     this.pipelines.set(key, entry)
     return entry
   }

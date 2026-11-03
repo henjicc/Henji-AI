@@ -174,7 +174,7 @@ wrap(VideoEditGpuCompositor.prototype, 'draw', (_self, args) => {
   return args[6] ? clips[0]?.kind === 'code' ? 'sceneToMaterial' : 'cardMaterial2d' : 'final'
 })
 
-interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: boolean; from: number; to: number; quality: 'interactive' | 'final'; shots?: number[]; display?: 'realtime' | 'solid' | 'wireframe' | 'render'; noWarmup?: boolean; pathTrace?: boolean; transition?: boolean | 'single'; effects?: { bloom?: number; ambientOcclusion?: number; reflections?: number } }
+interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: boolean; from: number; to: number; quality: 'interactive' | 'final'; shots?: number[]; display?: 'realtime' | 'solid' | 'wireframe' | 'render'; noWarmup?: boolean; pathTrace?: boolean; transition?: boolean | 'single'; effects?: { bloom?: number; ambientOcclusion?: number; reflections?: number }; emission?: Record<string, number> }
 async function attribute(project: unknown, sceneSource: string, hash: string, media: Record<string, string>, config: Config) {
   const raw = structuredClone(project) as { media: Array<{ id: string; path: string }>; codeMaterials: Array<{ versions: Array<{ files: Array<{ location: string; hash: string }> }> }>; sequences: Array<{ motionBlur?: boolean; spatialCamera?: { curves?: Record<string, unknown>; defocus?: number } }> }
   const location = rememberTransientCodeSource(hash, sceneSource)
@@ -198,6 +198,8 @@ async function attribute(project: unknown, sceneSource: string, hash: string, me
       ? { id: 'tx', kind: 'cross_dissolve', rightClipId: 'panel-b2', durationFrames: 30 }
       : { id: 'tx', kind: 'cross_dissolve', leftClipId: 'panel-b', rightClipId: 'panel-b2', durationFrames: 30 }]
   }
+  // --emission：给指定片段设发光强度（片段 ID=强度）。
+  for (const [clipId, value] of Object.entries(config.emission ?? {})) { const clip = (sequence as unknown as { clips: Array<{ id: string; spaceEmission?: number }> }).clips.find(item => item.id === clipId); if (clip) clip.spaceEmission = value }
   if (config.pathTrace || config.effects) (sequence as { spaceRender?: unknown }).spaceRender = { ...(config.pathTrace ? { finalRenderer: 'pathTrace' } : {}), ...config.effects }
   if (!config.dof && sequence.spatialCamera) { delete sequence.spatialCamera.curves?.defocus; sequence.spatialCamera.defocus = 0 }
   const parsed = parseVideoEditDocument(raw)

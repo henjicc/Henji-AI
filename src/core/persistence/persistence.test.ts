@@ -555,6 +555,8 @@ describe('所有登记格式的黄金样本', () => {
           expect(clip.effects?.[0].builtin?.params).not.toHaveProperty('temperature')
           if (version >= 18) expect(clip.effects?.[0].builtin?.curves?.temperature_kelvin?.map(point => point.value)).toEqual([5600, 6200])
           expect(clip.curves?.opacity?.[1].value).toBe(1)
+          // v63：片段发光强度与其关键帧原样读回；旧样本没有该字段，按 0 不发光。
+          expect([clip.spaceEmission ?? 0, clip.curves?.spaceEmission?.map(point => point.value) ?? []]).toEqual(version >= 63 ? [1.5, [0, 3]] : [0, []])
           // v21：音频重构子片段的参数与原始源范围随片段保存；旧样本没有该字段。
           const sound = document.sequences[0].clips.find(value => value.id === 'golden-sound-clip')
           expect(sound?.gainDb ?? 0).toBe(version >= 23 ? 19 : 0)
