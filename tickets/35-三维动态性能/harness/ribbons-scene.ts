@@ -94,7 +94,8 @@ export default {
     // 开场光从字底下涌出：光头沿带子往下推进，光头处最亮；推进到画外之后只剩顺着带子往下流的光。
     // 每条带子的光头错开一点，不齐成一条线。
     const head = smoothstep(.8, 3.4, time.sub(seed.mul(.5))).mul(1.25)
-    material.opacityNode = step(along, head)
+    // 光头还没出发时（head = 0）顶端那一排也不显示。
+    material.opacityNode = step(along.add(.002), head)
     material.alphaTest = .5
     const front = exp(along.sub(head).div(.035).pow(2).negate()).mul(1.8)
     // 带子侧对镜头时变得很窄、在像素间闪烁，按朝向淡掉。
