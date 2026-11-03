@@ -9,7 +9,7 @@ const logger = createLogger('features.videoEdit.layout')
 export const VIDEO_EDIT_LAYOUT_STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 /**
  * 面板与它们的最小尺寸（重要记录 020）：右侧检查器一组标签取同一档，切标签时组宽不跳；
- * 默认布局在 960×640 窗口里同时放得下这些最小值（素材 220 + 时间线 400 + 检查器 320 = 940 宽，节目 + 时间线 = 400 高）。
+ * 默认布局在 960×640 窗口里同时放得下这些最小值（素材 220 + 时间线 380 + 音频仪表 40 + 检查器 320 = 960 宽，节目 + 时间线 = 400 高）。
  * 检查器 320：效果控件最宽的一行（缩放：数值 ⛓ 数值 + 单位道）连同名称后的关键帧导航放得下，名称列不被数值盖住；
  * 素材 220：底栏的项目计数（“17 项”）与右侧五个工具按钮同排放得下；“· 已选 N”放不下时先让出。
  * 数值由 ui:tour 的尺寸扫描（scripts/ui-review/layout-sweep.json）核对：拖到这里内容不裁切、不遮挡。
@@ -20,7 +20,7 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'project', title: '素材', minimumWidth: 220, minimumHeight: 180 },
   { id: 'program', title: '节目画面', minimumWidth: 320, minimumHeight: 200 },
   { id: 'effects', title: '效果控件', ...INSPECTOR_MIN },
-  { id: 'timeline', title: '时间线', minimumWidth: 400, minimumHeight: 200 },
+  { id: 'timeline', title: '时间线', minimumWidth: 380, minimumHeight: 200 },
   { id: 'source', title: '源监视器', minimumWidth: 280, minimumHeight: 200 },
   { id: 'annotations', title: '批注', ...INSPECTOR_MIN },
   { id: 'content', title: '字幕与标记', ...INSPECTOR_MIN },
@@ -37,6 +37,8 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'scenes', title: '片子数据', ...INSPECTOR_MIN },
   // 音轨混合器（参照 Audition / PR）：每条音频轨道的效果、声像、静音独奏、推子，最右边主轨。音频编辑的“多轨”打开的就是这个布局。
   { id: 'audio_mixer', title: '音轨混合器', minimumWidth: 360, minimumHeight: 260 },
+  // 音频仪表（参照 PR）：正在出声的监视器的电平，默认在时间线右侧一窄条。
+  { id: 'audio_meters', title: '音频仪表', minimumWidth: 40, minimumHeight: 160 },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
 const INSPECTOR_PANELS: readonly string[] = ['effects', 'title_templates', 'effects_library', 'presets', 'style_kits', 'annotations', 'content', 'tracking', 'color_grade', 'code_project', 'scenes']
@@ -56,7 +58,10 @@ export function defaultVideoEditLayout(): SerializedDockview {
         { type: 'leaf', size: 240, data: { id: 'project-group', views: ['project'], activeView: 'project' } },
         { type: 'branch', size: 880, data: [
           { type: 'leaf', size: 540, data: { id: 'program-group', views: ['program'], activeView: 'program' } },
-          { type: 'leaf', size: 320, data: { id: 'timeline-group', views: ['timeline'], activeView: 'timeline' } },
+          { type: 'branch', size: 320, data: [
+            { type: 'leaf', size: 784, data: { id: 'timeline-group', views: ['timeline'], activeView: 'timeline' } },
+            { type: 'leaf', size: 96, data: { id: 'meters-group', views: ['audio_meters'], activeView: 'audio_meters' } },
+          ] },
         ] },
         { type: 'leaf', size: 320, data: { id: 'effects-group', views: ['effects', 'presets', 'effects_library', 'title_templates', 'style_kits'], activeView: 'effects' } },
       ] },

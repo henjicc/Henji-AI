@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Dropdown } from '@/components/ui'
 
 /**
@@ -38,28 +39,37 @@ export function useMonitorZoom({ width, height, label }: { width: number; height
   const containerRef = useCallback((container: HTMLDivElement | null): void => {
     detach.current?.(); detach.current = null
     if (!container) return
-    const wheel = (event: WheelEvent): void => {
-      if (event.deltaY === 0 || event.ctrlKey) return
+    // 一帧里的多次滚轮合成一次缩放：每次滚轮都改状态会让整块监视器连续重绘；缩放和滚动位置的修正放在同一帧里同步做完，
+    // 不留“已经变大、还没滚回鼠标下”的中间帧（那一帧画面会跳一下）。
+    let pending: { deltaY: number; clientX: number; clientY: number } | undefined
+    let frame = 0
+    const apply = (): void => {
+      frame = 0
+      const step = pending; pending = undefined
       const box = container.querySelector<HTMLElement>('[data-monitor-zoom-box]')
-      if (!box) return
-      event.preventDefault()
+      if (!step || !box) return
       const boxRect = box.getBoundingClientRect()
       const shown = displayRef.current
       const current = shown === 'fit' ? boxRect.width / Math.max(1, width) : shown
-      const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, current * Math.pow(1.0015, -event.deltaY)))
+      const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, current * Math.pow(1.0015, -step.deltaY)))
       if (Math.abs(next - current) < 1e-4) return
       // 以鼠标所在点为中心缩放：缩放后把同一画面点移回鼠标下
-      const pointX = (event.clientX - boxRect.left) / current; const pointY = (event.clientY - boxRect.top) / current
-      setDisplay(next)
-      requestAnimationFrame(() => {
-        const after = container.querySelector<HTMLElement>('[data-monitor-zoom-box]')?.getBoundingClientRect()
-        if (!after) return
-        container.scrollLeft += after.left + pointX * next - event.clientX
-        container.scrollTop += after.top + pointY * next - event.clientY
-      })
+      const pointX = (step.clientX - boxRect.left) / current; const pointY = (step.clientY - boxRect.top) / current
+      flushSync(() => setDisplay(next))
+      displayRef.current = next
+      const after = box.getBoundingClientRect()
+      container.scrollLeft += after.left + pointX * next - step.clientX
+      container.scrollTop += after.top + pointY * next - step.clientY
+    }
+    const wheel = (event: WheelEvent): void => {
+      if (event.deltaY === 0 || event.ctrlKey) return
+      if (!container.querySelector('[data-monitor-zoom-box]')) return
+      event.preventDefault()
+      pending = { deltaY: (pending?.deltaY ?? 0) + event.deltaY, clientX: event.clientX, clientY: event.clientY }
+      frame ||= requestAnimationFrame(apply)
     }
     container.addEventListener('wheel', wheel, { passive: false })
-    detach.current = () => container.removeEventListener('wheel', wheel)
+    detach.current = () => { container.removeEventListener('wheel', wheel); cancelAnimationFrame(frame) }
   }, [width])
   useEffect(() => () => { detach.current?.() }, [])
 

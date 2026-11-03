@@ -3,6 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDockview, type DockviewApi } from 'dockview-react'
 import { defaultVideoEditLayout, dockVideoEditGroup, dockVideoEditPanel, parseVideoEditLayout, resetVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_LAYOUT_STORAGE_KEY } from './videoEditDockLayout'
 
+// 默认布局的面板与分组数：重置、打开检查器标签后都应回到它（不新增分组）。
+type GridNode = { type: 'leaf' } | { type: 'branch'; data: GridNode[] }
+const leaves = (node: GridNode): number => node.type === 'leaf' ? 1 : node.data.reduce((sum, child) => sum + leaves(child), 0)
+const DEFAULT_PANELS = Object.keys(defaultVideoEditLayout().panels).length
+const DEFAULT_GROUPS = leaves(defaultVideoEditLayout().grid.root as unknown as GridNode)
+
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 let api: DockviewApi
 let host: HTMLDivElement
@@ -47,8 +53,8 @@ describe('剪辑面板布局', () => {
     expect(api.getPanel('timeline')).toBe(timeline)
     expect(created.program).toBe(1)
     expect(disposed.program).toBeUndefined()
-    expect(api.totalPanels).toBe(8)
-    expect(api.groups).toHaveLength(4)
+    expect(api.totalPanels).toBe(DEFAULT_PANELS)
+    expect(api.groups).toHaveLength(DEFAULT_GROUPS)
     expect(api.getPanel('style_kits')!.group).toBe(api.getPanel('effects')!.group)
   })
 
@@ -73,7 +79,7 @@ describe('剪辑面板布局', () => {
     const effects = api.getPanel('effects')!
     const assertGrouped = (): void => {
       expect(api.getPanel(id)!.group).toBe(effects.group)
-      expect(api.groups).toHaveLength(4)
+      expect(api.groups).toHaveLength(DEFAULT_GROUPS)
     }
     showVideoEditPanel(api, id); assertGrouped()
     api.getPanel(id)!.api.close()
@@ -95,7 +101,7 @@ describe('剪辑面板布局', () => {
     dockVideoEditPanel(api, style)
     expect(style.group).toBe(group)
     expect(showVideoEditPanel(api, 'effects').group).toBe(group)
-    expect(api.groups).toHaveLength(4)
+    expect(api.groups).toHaveLength(DEFAULT_GROUPS)
   })
 
   it('浮动的时间线贴回时回到节目画面下方，不变成右侧窄竖列（5.8）', () => {
@@ -160,8 +166,8 @@ describe('剪辑面板布局', () => {
     localStorage.setItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY, '{broken')
     expect(() => parseVideoEditLayout(localStorage.getItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY)!)).toThrow()
     resetVideoEditLayout(api)
-    expect(api.totalPanels).toBe(8)
-    expect(api.groups).toHaveLength(4)
+    expect(api.totalPanels).toBe(DEFAULT_PANELS)
+    expect(api.groups).toHaveLength(DEFAULT_GROUPS)
     expect(created.program).toBe(1)
   })
 })

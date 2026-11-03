@@ -17,7 +17,7 @@ import { VideoEditMulticamView } from './panels/VideoEditMulticamView'
 import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { autoSwitchVideoEditMulticam, switchVideoEditMulticam, videoEditProgramMulticam } from './application/videoEditMulticam'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from './application/videoEditProxy'
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MoreHorizontal, Pause, PenLine, Play, Rewind, RotateCcw, Scan, SkipBack, SkipForward, Square, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
@@ -41,7 +41,7 @@ import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/vi
 import { finishVideoEditAudioFade, VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { subscribeVideoEditScrub, VideoEditAudioScrubber, type VideoEditScrubIntent } from './engine/videoEditAudioScrub'
 import { alignVideoEditClockToDisplay, followVideoEditAudioClock, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditAudioClockOrigin, videoEditLiveFrame, videoEditPlaybackTarget } from './engine/videoEditDisplayClock'
-import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
+import { setVideoEditPlaybackLevels } from './application/videoEditPlaybackLevels'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
 import { VideoEditMaskOverlay } from './panels/VideoEditMaskOverlay'
 import { VideoEditTextOverlay } from './panels/VideoEditTextOverlay'
@@ -112,7 +112,7 @@ function createSpaceProgressStore(): SpaceProgressStore {
 function SpaceProgressBadge({ store }: { store: SpaceProgressStore }): JSX.Element | null {
   const value = useSyncExternalStore(store.subscribe, store.get)
   if (value === null) return null
-  return <Tooltip content="渲染：停住后用路径追踪逐渐算出真实光影，算完后提示消失；拖动或播放时显示实时画面"><div className="absolute left-2 top-2 rounded-lg bg-media-scrim px-2 py-1 text-xs text-on-media" data-video-edit-space-progress>渲染中 {value}%</div></Tooltip>
+  return <Tooltip asChild content="渲染：停住后用路径追踪逐渐算出真实光影，算完后提示消失；拖动或播放时显示实时画面"><div className="absolute left-2 top-2 whitespace-nowrap rounded-lg bg-media-scrim px-2 py-1 text-xs tabular-nums text-on-media" data-video-edit-space-progress>渲染中 {value}%</div></Tooltip>
 }
 
 const SPACE_DISPLAY_TIPS: Record<import('@/core/videoEdit/spaceDisplay').VideoEditSpaceDisplay, string> = {
@@ -199,7 +199,12 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     observer.observe(toolbar)
     return () => observer.disconnect()
   }, [])
-  const [levels, setLevels] = useState<VideoEditAudioLevel[]>(EMPTY_AUDIO_LEVELS)
+  // 电平交给音频仪表面板（独立停靠面板）：节目面板自己不画电平，也不因电平变化重绘。
+  const levelsRef = useRef<VideoEditAudioLevel[]>(EMPTY_AUDIO_LEVELS)
+  const setLevels = useCallback((next: VideoEditAudioLevel[] | ((previous: VideoEditAudioLevel[]) => VideoEditAudioLevel[])): void => {
+    levelsRef.current = typeof next === 'function' ? next(levelsRef.current) : next
+    setVideoEditPlaybackLevels(instance.document.id, 'program', levelsRef.current)
+  }, [instance.document.id])
   // 节目画面不再分“选择 / 移动画面”模式（重要记录 019）：命令带选着选择工具时，直接拖画面移动选中的片段。
   const selecting = instance.tool === 'select'
   const picture = useVideoEditPictureGesture(instance, visible && selecting, onError)
@@ -960,7 +965,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     }
     void initialize().catch(error => { if (!stopped) { setTrustFailure(readContentTrustFailure(error)); setRenderFailure(error instanceof Error ? error.message : String(error)); onError(error) } })
     return () => { clearTimeout(recoveryTimer); stop() }
-  }, [instance, onError, retry, visible, spaceProgress])
+  }, [instance, onError, retry, visible, spaceProgress, setLevels])
   const busy = collecting || preparing
   /** 选帧、设封面、编辑当前帧：先原地暂停，等播放头落在实际上屏的那一帧（见 `settlePause`），再按那一帧取图。 */
   const pauseForFrame = async (): Promise<void> => { setVideoEditView(instance.document.id, { playing: false }); await pauseSettled.current() }
@@ -1022,8 +1027,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     event.preventDefault(); event.stopPropagation()
     try { switchVideoEditMulticam({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: target.clip.id }, camera.id, instance.playing ? instance.frame : undefined) } catch (error) { onError(error) }
   }}>
-    <div className="flex min-h-0 flex-1">
-    <div ref={zoom.containerRef} {...zoom.containerProps} className={`relative flex min-h-0 flex-1 bg-media py-3 pl-3 pr-6 ${zoom.containerClass}`}
+    <div className="relative flex min-h-0 flex-1">
+    <div ref={zoom.containerRef} {...zoom.containerProps} className={`relative flex min-h-0 flex-1 bg-media p-3 ${zoom.containerClass}`}
       onDragOver={event => {
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
         const mode = programDropZoneAt(event)
@@ -1060,13 +1065,24 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         <VideoEditCodeElementOverlay instance={instance} enabled={visible} onError={onError} /></>}
         <VideoEditSafeMarginsOverlay />
       </div>
-      <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
+      {dropZone && <div className="pointer-events-none absolute grid grid-cols-4 grid-rows-5 bg-media-scrim" style={dropZone.frame} aria-hidden>
+        {PROGRAM_DROP_ZONES.map(zone => {
+          const disabled = zone.mode === 'replace' && !dropZone.replaceable; const active = dropZone.mode === zone.mode && !disabled
+          // ui-surface-allow: S4 节目画面上的拖放热区是空间叠层，各格已有边界，不是纵向记录列表；u6。
+          return <div key={zone.mode} className={`flex min-h-0 min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden border px-2 text-center text-on-media transition-colors duration-120 ${zone.cell} ${active ? 'border-accent bg-accent/30' : 'border-media-line'} ${disabled ? 'opacity-50' : ''}`}>
+            <span className="truncate text-13 font-semibold">{zone.label}</span>
+            <span className="max-w-full truncate text-2xs">{disabled ? '播放头下没有片段' : zone.hint}</span>
+          </div>
+        })}
+      </div>}
+    </div>
+    {/* 状态叠层放在滚动区外：画面放大滚动时它们留在画面区角上，不跟着内容走 */}
       {!pictureReady && !renderFailure && <div className="pointer-events-none absolute inset-0 flex items-center justify-center" data-video-edit-program-preparing>
         {/* 节目底是不随主题的媒体黑：放在玻璃浮层里，浅色主题下文字也看得清 */}
         <div className="ui-glass rounded-xl px-4"><UiLoading size="sm" message="正在准备画面…" /></div>
       </div>}
       {!spaceSimplified && !preparing && !collecting && <SpaceProgressBadge store={spaceProgress} />}
-      {spaceSimplified && !preparing && !collecting && <Tooltip content="播放跟不上，三维暂时按实体或线框显示；暂停后恢复。可在“更多”里固定三维显示方式。"><div className="absolute left-2 top-2 rounded-lg bg-media-scrim px-2 py-1 text-xs text-on-media" data-video-edit-space-simplified>预览已简化</div></Tooltip>}
+      {spaceSimplified && !preparing && !collecting && <Tooltip asChild content="播放跟不上，三维暂时按实体或线框显示；暂停后恢复。可在“更多”里固定三维显示方式。"><div className="absolute left-2 top-2 whitespace-nowrap rounded-lg bg-media-scrim px-2 py-1 text-xs text-on-media" data-video-edit-space-simplified>预览已简化</div></Tooltip>}
       {(preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
@@ -1080,17 +1096,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           }}>运行</UiButton>}
         </UiPanel>
       </div>}
-      {dropZone && <div className="pointer-events-none absolute grid grid-cols-4 grid-rows-5 bg-media-scrim" style={dropZone.frame} aria-hidden>
-        {PROGRAM_DROP_ZONES.map(zone => {
-          const disabled = zone.mode === 'replace' && !dropZone.replaceable; const active = dropZone.mode === zone.mode && !disabled
-          // ui-surface-allow: S4 节目画面上的拖放热区是空间叠层，各格已有边界，不是纵向记录列表；u6。
-          return <div key={zone.mode} className={`flex min-h-0 min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden border px-2 text-center text-on-media transition-colors duration-120 ${zone.cell} ${active ? 'border-accent bg-accent/30' : 'border-media-line'} ${disabled ? 'opacity-50' : ''}`}>
-            <span className="truncate text-13 font-semibold">{zone.label}</span>
-            <span className="max-w-full truncate text-2xs">{disabled ? '播放头下没有片段' : zone.hint}</span>
-          </div>
-        })}
-      </div>}
-    </div>
     </div>
     {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线左上角有同一读数），
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}

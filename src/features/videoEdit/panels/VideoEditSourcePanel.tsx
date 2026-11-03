@@ -1,7 +1,7 @@
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from '../application/videoEditProxy'
 import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { useTranslation } from 'react-i18next'
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { PanelTrigger, UiEmpty, UiError, UiIconButton, UiOptionButton, UiOverflowRow, UiRangeInput } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -23,7 +23,7 @@ import { timelineTimecode } from '../timeline/timelineGeometry'
 import { videoEditItemAudioLayout } from '@/core/videoEdit/audioChannels'
 import { writeVideoEditSourceDrag } from '../application/videoEditSourceRange'
 import type { VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
-import { VideoEditLevelMeter } from './VideoEditLevelMeter'
+import { setVideoEditPlaybackLevels } from '../application/videoEditPlaybackLevels'
 import { WaveformView } from '@/components/waveform/WaveformView'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { timelineCommandPresentation } from '../timeline/timelineCommandPresentation'
@@ -59,7 +59,8 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   const previewed = !media && !!item && isVideoEditSourcePreviewItem(instance.document, item.id)
   const activeSequence = getActiveVideoEditSequence(instance)
   const timing = state.itemId && (media || previewed) ? videoEditSourceTiming(projectId, state.itemId, activeSequence.fps) : undefined
-  const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
+  // 电平交给音频仪表面板（独立停靠面板），源监视器自己不画。
+  const setLevels = useCallback((levels: VideoEditAudioLevel[]): void => setVideoEditPlaybackLevels(projectId, 'source', levels), [projectId])
   const pictured = !!media && media.kind !== 'audio' || previewed
   // 显示比例与节目监视器同一套（滚轮无极缩放、中键平移、下拉等级）；换素材回到“适合”
   const zoom = useMonitorZoom({ width: media?.width || (previewed ? activeSequence.width : 1920), height: media?.height || (previewed ? activeSequence.height : 1080), label: '源显示比例' })
@@ -112,10 +113,8 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
     const unsubscribeScrub = subscribeVideoEditScrub(projectId, intent => { if (intent.scope === 'source') presenter.scrub(intent.seconds, readVideoEditSource(projectId).volume) })
     const unregister = registerVideoEditSourcePresenter(projectId, present, release)
     return () => { unsubscribeScrub(); presenterRef.current = null; void presenter.dispose(); void preview.dispose(); unregister() }
-  }, [projectId, visible])
+  }, [projectId, visible, setLevels])
   useEffect(() => { if (state.status === 'closed') presenterRef.current?.release() }, [state.status, state.itemId])
-  const meterLevels = levels.length ? levels : [{ peak: 0, rms: 0 }, { peak: 0, rms: 0 }]
-  const sounding = media?.kind === 'audio' || media?.hasAudio === true
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const buttonIds = useVideoEditMonitorButtonIds('source')
   const dragComponents = media?.kind === 'audio' ? ['audio'] as const : media?.hasAudio ? ['video', 'audio', 'linked'] as const : ['video'] as const
@@ -166,9 +165,8 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
     <div className={`relative min-h-0 flex-1 ${state.itemId && media?.kind !== 'audio' ? 'bg-media' : ''}`}><div ref={pictured ? zoom.containerRef : undefined} {...(pictured ? zoom.containerProps : {})} className={`absolute bottom-3 left-3 right-6 top-3 flex ${zoom.containerClass}`}>
         <div className={`relative ${zoom.boxClass}`} style={zoom.boxStyle} data-monitor-zoom-box><div ref={host} className="absolute inset-0" data-video-edit-source-host data-video-edit-source-display={zoom.display === 'fit' ? 'fit' : 'zoom'} /></div>
       </div>
-      {media?.kind === 'audio' && <div className="relative flex h-full items-center px-3 pr-6"><AudioPlayer src={resolveImageDisplayUrl(media.path)} filePath={media.path} compact surface="plain" active={visible} controlledPlayback={{ currentTime: state.timeUs / 1e6, duration: media.durationSeconds, playing: state.playing, volume: state.volume, disabled: state.status !== 'ready', onTogglePlay: () => command('play_pause'), onSeek: seconds => seek(seconds), onVolume: volume => run({ volume }) }} /></div>}
+      {media?.kind === 'audio' && <div className="relative flex h-full items-center px-3"><AudioPlayer src={resolveImageDisplayUrl(media.path)} filePath={media.path} compact surface="plain" active={visible} controlledPlayback={{ currentTime: state.timeUs / 1e6, duration: media.durationSeconds, playing: state.playing, volume: state.volume, disabled: state.status !== 'ready', onTogglePlay: () => command('play_pause'), onSeek: seconds => seek(seconds), onVolume: volume => run({ volume }) }} /></div>}
       {!state.itemId && <UiEmpty size="sm" className="h-full" title="选择源素材" description="在素材面板中双击素材，在这里预览。" />}
-      {state.itemId && sounding && <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={meterLevels} title="源播放电平" />}
       {state.itemId && (state.status === 'loading' || state.playing && state.playbackDirection === -1) && <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-media-scrim px-2 py-1 text-xs text-on-media">{state.status === 'loading' ? '正在打开源素材…' : '正在反向静音浏览'}</span>}
     </div>
     {state.itemId && <div className="flex shrink-0 flex-col gap-1 px-3 py-2">
