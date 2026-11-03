@@ -1055,6 +1055,13 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   white-space: nowrap;
 }
 
+/* 当前标签最多占满整条标签栏，单枚就放不下时在标签内截断（悬停看全名），不被整枚判为“部分可见”收进「+N」。
+   不参与收缩：同组标签多时照旧由标签栏滚动，空间不够不会全挤到当前标签上把它压成 0 宽。 */
+.dockview-host .dv-tabs-container > .dv-tab.dv-active-tab {
+  max-width: 100%;
+  overflow: hidden;
+}
+
 /* 部分可见标签交给 dockview 原生溢出菜单；菜单里的副本仍正常显示。 */
 .dockview-host .dv-tabs-container > .dv-tab[data-dock-tab-clipped] {
   visibility: hidden;

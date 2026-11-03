@@ -169,8 +169,8 @@
     {
       "file": "src/features/canvas/ui/nodeControlStyles.ts",
       "category": "arbitraryValue",
-      "values": ["max-w-[260px]", "max-w-[120px]"],
-      "reason": "节点控件芯片的宽度上限：模型芯片 260、参数芯片 120 后截断，芯片不撑开节点"
+      "values": ["max-w-[260px]"],
+      "reason": "节点控件芯片的宽度上限：模型芯片 260 后截断，芯片不撑开节点"
     },
     {
       "file": "src/features/canvas/ui/NodeHeader.tsx",

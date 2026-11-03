@@ -519,8 +519,9 @@ export function UiFormRow({
  * 行末的单位挂进道里（`hanging`，默认）；成对数值中间的那个单位照常占位（`hanging={false}`），两个读数之间也就留出同样的距离。
  */
 export function UiPropertyUnit({ children, hanging = true }: { children?: ReactNode; hanging?: boolean }): JSX.Element {
-  // 放不进 16px 的单位（中文“画面高度”、三个字母以上）照常占位，读数跟着左移，不挂进道里被截断。
-  const long = typeof children === 'string' && (children.length > 2 || [...children].some(char => char.charCodeAt(0) >= 0x3000));
+  // 放不进 16px 的单位（中文两字以上如“半音”“画面高度”、三个字母以上）照常占位，读数跟着左移，不挂进道里被截断；
+  // 单个汉字（“档”“倍”）与两个字母一样放得下，照样挂进道里，读数右缘才和同列其他行对齐。
+  const long = typeof children === 'string' && (children.length > 2 || children.length > 1 && [...children].some(char => char.charCodeAt(0) >= 0x3000));
   if (long) return <span className="shrink-0 whitespace-nowrap pl-1 text-2xs text-text3">{children}</span>;
   return <span aria-hidden={children ? undefined : true} className={`w-4 shrink-0 whitespace-nowrap pl-1 text-2xs text-text3 ${hanging ? '-mr-4' : ''}`}>{children}</span>;
 }
