@@ -34,6 +34,9 @@ import type { FontPayload } from '@/platform/fonts'
 import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
 
 installVideoEditWorkerErrorReporting(self)
+// 开发版：Vite 要求整页刷新时也会在 Worker 里调用 location.reload，而 Worker 的 location 没有这个方法，抛出的未捕获异常会中止渲染会话。
+// 页面随即整页刷新、Worker 跟着被换掉，这里什么都不用做。
+if (import.meta.env.DEV && typeof (self.location as { reload?: unknown }).reload !== 'function') Object.defineProperty(Object.getPrototypeOf(self.location), 'reload', { configurable: true, value: () => {} })
 
 /**
  * Decoding settings of one render session. `localPaths` maps each media item's fetchable URL (its path in the worker)
