@@ -46,11 +46,11 @@ function slab(): THREE.BufferGeometry {
   return geometry
 }
 
-// 中心亮、向外柔和衰减的圆斑（发光与透明度共用），辉光不出硬边。
+// 中心亮、向外柔和衰减、到圆周正好为 0 的圆斑：辉光不出硬边。
 function radial(): THREE.DataTexture {
   const size = 128, data = new Uint8Array(size * size * 4)
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const dx = (x + .5) / size * 2 - 1, dy = (y + .5) / size * 2 - 1, value = Math.round(255 * Math.exp(-(dx * dx + dy * dy) * 4.5)), i = (y * size + x) * 4
+    const dx = (x + .5) / size * 2 - 1, dy = (y + .5) / size * 2 - 1, value = Math.round(255 * Math.max(0, 1 - (dx * dx + dy * dy)) ** 3), i = (y * size + x) * 4
     data[i] = data[i + 1] = data[i + 2] = value; data[i + 3] = 255
   }
   const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat)
@@ -61,9 +61,9 @@ function radial(): THREE.DataTexture {
 
 // 三块板：上面一块深蓝、中间一块近白、下面一块浅蓝；越往上吸收越强（颜色越深）。
 const SLABS: Array<{ color: number; attenuation: number; distance: number; roughness: number }> = [
-  { color: 0x3a5cff, attenuation: 0x1a36d8, distance: .03, roughness: .5 },
-  { color: 0xeef3ff, attenuation: 0xd0dcff, distance: .25, roughness: .6 },
-  { color: 0xa8c6ff, attenuation: 0x6a96ff, distance: .08, roughness: .55 },
+  { color: 0x5a7cff, attenuation: 0x2a4cff, distance: .09, roughness: .28 },
+  { color: 0xf4f8ff, attenuation: 0xe0e8ff, distance: .6, roughness: .32 },
+  { color: 0xb8d2ff, attenuation: 0x7aa4ff, distance: .25, roughness: .3 },
 ]
 
 export default {
@@ -86,10 +86,10 @@ export default {
       stack.add(mesh)
       return mesh
     })
-    // 板子下面的蓝色发光面：透过三层磨砂玻璃成为柔和的辉光，也从下方照亮板子的边。
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(SIZE * 1.3, SIZE * 1.3), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(.22, .42, 1), emissiveIntensity: 2.2, emissiveMap: radial(), transparent: true, alphaMap: radial(), depthWrite: false }))
+    // 板子下面的蓝色发光圆盘（不透明黑底、只有发光，黑背景上看不见盘面本身）：透过磨砂玻璃成为柔和辉光，也从下方照亮板子的边。
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(SIZE * .75, 96), new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 1, emissive: new THREE.Color(.3, .5, 1), emissiveIntensity: 5, emissiveMap: radial() }))
     glow.rotation.x = -Math.PI / 2
-    glow.position.y = -GAP - .07
+    glow.position.y = -GAP - .09
     stack.add(glow)
     return { scene, update(_parameters: unknown, _assets: unknown, info: { time: number }) {
       const t = info.time
