@@ -128,6 +128,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   },
   failure(error) {
     if (error instanceof VideoEditSpatialFailure) return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message, recoverable: true, details: { spatial: error.facts, execution: { notExecuted: true } } } }
+    // 显卡设备丢失或渲染 Worker 退出：预览会话会自动重建（30 秒内两次），下一次调用照常出画，所以对助手是可重试的。
+    if (error instanceof Error && (error.name === 'VideoEditGpuDeviceLostError' || error.name === 'VideoEditRenderWorkerError')) return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: `${error.message.replace(/，?请重新加载预览。?$/, '')}，画面处理正在自动重建，稍后重试这一步。`, recoverable: true } }
     if (error instanceof Error && error.name === 'VideoEditCodeCompileTimeoutError') return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message, recoverable: true } }
     if (error instanceof VideoEditOperationFailure) {
       // 纯规划阶段的拒绝；已提交生成或保存失败不在此名单，不能抹掉执行事实。

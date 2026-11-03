@@ -2,6 +2,7 @@ import type { EffectQuality } from '../imaging/effects/descriptor'
 import type { VideoEditClip, VideoEditComposition } from './document'
 import { videoEditClipPictureSize, videoEditPictureFilter, videoEditPictureTransitionsAt } from './clipGeometry'
 import { videoEditTransitionPictureClips } from './transitions'
+import { spatialElementFacts } from './spatialElementFacts'
 import { evaluateVideoEditClip, evaluateVideoEditKeyframes } from './keyframes'
 import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from './tracking'
 import { SPATIAL_KEYS, SPATIAL_CAMERA_NUMERIC_KEYS, SPATIAL_DEFAULT_FSTOP, SPATIAL_FOCAL_LENGTH_MM, SPATIAL_SENSOR_WIDTH_MM } from './spatialSchema'
@@ -245,6 +246,7 @@ export function evaluateSpatialFrame(composition: Readonly<VideoEditComposition>
     a.ambiguousDepth = b.ambiguousDepth = true
     facts.push({ code: 'ambiguous-depth', clipIds: [a.clipId, b.clipId], sequenceFrame, message: '投影与视深范围重叠，单层中心排序不能证明逐像素遮挡。', values: {} })
   }
+  facts.push(...spatialElementFacts(document, sequenceFrame, evaluated.filter(active), spatialClipEnabled))
   const flatIdentity = canonicalIdentity && evaluated.every(clip => !spatialClipEnabled(clip) || !active(clip) || SPATIAL_KEYS.every(key => (clip[key] ?? 0) === 0))
   return { sequenceFrame, sequenceTime: sequenceFrame / document.fps, output, camera: cameraFrame, cards, flatIdentity, facts }
 }

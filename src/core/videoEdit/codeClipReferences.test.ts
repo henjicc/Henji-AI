@@ -27,3 +27,17 @@ it('删除被引用的片段后，引用它的代码参数置空，不留下引�
   const next = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'delete', clipIds: ['title'], linked: false })
   expect(next.clips.find(clip => clip.id === 'ribbon')!.code!.parameters).toEqual({ light: null, amount: .5 })
 })
+
+it('三维引用事实：隔着二维片段引用报 cross-group，同组不报；互相引用成环报一次 element-cycle', async () => {
+  const { spatialElementFacts } = await import('./spatialElementFacts')
+  const sequence = createVideoEditSequence('主')
+  const spatial = { enabled: true } as VideoEditClip['spatial']
+  const lit = { ...title, spatial }, flat = { ...base, id: 'plain', kind: 'text', name: '二维', track: 2, start: 0, duration: 100 } as VideoEditClip
+  const author = { ...code('ribbon', 0, 100), track: 3, spatial }
+  const enabled = (clip: VideoEditClip): boolean => clip.spatial?.enabled === true
+  expect(spatialElementFacts(sequence, 0, [lit, author], enabled)).toEqual([])
+  expect(spatialElementFacts(sequence, 0, [lit, flat, author], enabled).map(fact => [fact.code, fact.clipIds])).toEqual([['cross-group', ['ribbon', 'title']]])
+  const a = { ...author, id: 'a', code: { ...author.code!, parameters: { light: { kind: 'clip', clipId: 'b' } } } } as VideoEditClip
+  const b = { ...author, id: 'b', track: 4, code: { ...author.code!, parameters: { light: { kind: 'clip', clipId: 'a' } } } } as VideoEditClip
+  expect(spatialElementFacts(sequence, 0, [a, b], enabled).map(fact => fact.code)).toEqual(['element-cycle'])
+})

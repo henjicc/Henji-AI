@@ -13,6 +13,8 @@ function loadFixture(){const name=path.join(here,sample.fixture),result=require(
  const session=await launchElectronApp({mainEntry:path.join(root,'out/main/index.cjs'),appPath:root,cwd:root,isolateUserData:true,useElectronApi:true,skipOnboarding:true,extraArgs:['--background','--enable-unsafe-webgpu']});let client
  try{
  const page=session.page;page.on('pageerror',e=>console.error(e.stack));page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')console.error('[c]',m.text().slice(0,600))})
+ // T35_DEVICE_LOSS=帧：取到那一帧后让渲染 Worker 的显卡设备丢失，再取同一帧，验证三维渲染器随会话重建。
+ const devices=[];if(process.env.T35_DEVICE_LOSS)page.on('worker',worker=>{devices.push(worker);worker.evaluate(()=>{const original=GPUAdapter.prototype.requestDevice;self.__lossDevices=[];GPUAdapter.prototype.requestDevice=async function(...args){const device=await original.apply(this,args);self.__lossDevices.push(device);return device}}).catch(()=>{})})
  await waitForApp(page);await assignIsolatedMcpPort(page);const seeded=await seedVideoEditProject(page,fixture)
  const identity=await authorizeMcpConnection(page,{name:'ticket 35 小短片'});client=await connectMcpClient(identity.config,'ticket35 film')
  const documentRef={kind:'video_edit.document',id:seeded.documentId},sequenceRef={kind:'video_edit.sequence',id:`${seeded.documentId}:main`}
@@ -26,8 +28,21 @@ function loadFixture(){const name=path.join(here,sample.fixture),result=require(
  const placedClip=readVideoEditFile(seeded.file).sequences[0].clips.find(clip=>clip.kind==='code')
  if(sample.bind&&placedClip)await change('绑定引用的片段',[{kind:'set_properties',entityType:'video_edit.clip',target:{kind:'video_edit.clip',id:`${seeded.documentId}:${placedClip.id}`},properties:{'video_edit.clip.code_parameters':Object.fromEntries(Object.entries(sample.bind).map(([key,clipId])=>[key,{kind:'clip',clipId}]))}}])
  await change('三维效果',[{kind:'set_properties',entityType:sequenceRef.kind,target:sequenceRef,properties:{'video_edit.sequence.space_bloom':sample.effects.bloom,'video_edit.sequence.space_ambient_occlusion':sample.effects.ambientOcclusion,'video_edit.sequence.space_reflections':sample.effects.reflections,...(sample.effects.toneMapping?{'video_edit.sequence.space_tone_mapping':sample.effects.toneMapping}:{}),...(sample.effects.environment?{'video_edit.sequence.space_environment':sample.effects.environment}:{}),...(process.env.T35_FINAL?{'video_edit.sequence.final_renderer':process.env.T35_FINAL}:{})}}])
- const frames=process.env.T35_FRAMES?process.env.T35_FRAMES.split(',').map(Number):Array.from({length:300},(_,i)=>i)
+ // T35_EXPORT=起,止 导出这段成片（960×540），记录耗时与状态，解出每帧 PNG（e###.png）；导出走成片渲染器（T35_FINAL）。
+ if(process.env.T35_EXPORT){const [startFrame,endFrame]=process.env.T35_EXPORT.split(',').map(Number),{ffmpegPath}=require(path.join(root,'scripts/lib/mediaBinaries.cjs')),{execFileSync}=require('node:child_process')
+  const baseline=await invoke('read_application_entity',{ref:documentRef}),began=Date.now()
+  const exported=await invoke('export_video_edit',operationEnvelope([baseline],{documentRef,range:{startFrame,endFrame},settings:{format:'mp4',width:960,height:540,fps:30,videoBitrateMbps:20,audioBitrateKbps:192,fit:'fit',loudness:null,encoderPreference:'software',audioEnabled:false,addToLibrary:false}}))
+  const jobId=(exported.data??exported.result?.data)?.queue?.[0]?.id;assert.ok(jobId,JSON.stringify(exported));let job,last=-1
+  for(;;){const progress=await invoke('query_video_edit_export',{documentRef,taskId:jobId,detail:'full'});job=progress.data.queue.find(value=>value.id===jobId);if(job&&['completed','failed','cancelled','interrupted'].includes(job.state))break;const pct=Math.round((job?.progress??0)*100);if(pct!==last){last=pct;console.log(`export ${pct}% ${((Date.now()-began)/1000).toFixed(0)}s`)}if(Date.now()-began>3600e3)throw new Error('导出超时');await new Promise(r=>setTimeout(r,2000))}
+  console.log('export',JSON.stringify({state:job.state,error:job.error,notice:job.notice,seconds:(Date.now()-began)/1000,path:job.path}))
+  assert.equal(job.state,'completed');execFileSync(ffmpegPath,['-v','error','-y','-i',job.path,path.join(out,'e%03d.png')],{windowsHide:true});fs.copyFileSync(job.path,path.join(out,'export.mp4'))}
+ const frames=process.env.T35_FRAMES===''?[]:process.env.T35_FRAMES?process.env.T35_FRAMES.split(',').map(Number):Array.from({length:300},(_,i)=>i)
  for(const frame of frames){const result=await invoke('observe_video_edit_frame',{documentRef,target:{kind:'program',sequenceRef,frame},maxWidth:1920,saveToAssets:true});const data=result.data;assert.ok(data.verification.verified,JSON.stringify(data));const media=await readAllMedia(client,data.resultRef,{chunkBytes:262144});fs.writeFileSync(path.join(out,`f${String(frame).padStart(3,'0')}.png`),media.bytes);console.log(frame)}
+ if(process.env.T35_DEVICE_LOSS){const frame=Number(process.env.T35_DEVICE_LOSS),shot=async (name,at=frame)=>{const result=await invoke('observe_video_edit_frame',{documentRef,target:{kind:'program',sequenceRef,frame:at},maxWidth:960,saveToAssets:true});const media=await readAllMedia(client,result.data.resultRef,{chunkBytes:262144});fs.writeFileSync(path.join(out,name),media.bytes);return result.data.verification}
+  console.log('before',JSON.stringify(await shot('loss-before.png')))
+  let lost=0;for(const worker of devices)lost+=await worker.evaluate(()=>{const list=self.__lossDevices??[];for(const device of list)device.destroy();return list.length}).catch(()=>0)
+  console.log('destroyed devices',lost)
+  for(let attempt=0;attempt<6;attempt++){try{const v=await shot(`loss-after-${attempt}.png`,frame+17+attempt);console.log('after',attempt,JSON.stringify(v));if(v.verified)break}catch(error){console.log('after',attempt,'error',String(error).slice(0,300))}await new Promise(r=>setTimeout(r,3000))}}
  if(process.env.T35_PROJECT){let projectRoot=path.dirname(seeded.file);while(!fs.existsSync(path.join(projectRoot,'.henji','project.json'))&&path.dirname(projectRoot)!==projectRoot)projectRoot=path.dirname(projectRoot);fs.rmSync(process.env.T35_PROJECT,{recursive:true,force:true});fs.cpSync(projectRoot,process.env.T35_PROJECT,{recursive:true})}
  }finally{await client?.close().catch(()=>{});await disableMcp(session.page).catch(()=>{});await session.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})

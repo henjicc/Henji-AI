@@ -74,7 +74,7 @@ export interface SpatialCardGeometry {
 }
 export interface SpatialFact {
   code: 'missing-target' | 'invalid-optics' | 'singular-aim'
-    | 'clipped' | 'ambiguous-depth' | 'projection-residual' | 'unknown-scene';
+    | 'clipped' | 'ambiguous-depth' | 'projection-residual' | 'unknown-scene' | 'cross-group' | 'element-cycle';
   clipIds: readonly string[];
   sequenceFrame: number;
   message: string;
