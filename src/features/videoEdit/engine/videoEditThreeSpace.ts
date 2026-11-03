@@ -116,7 +116,7 @@ interface Tsl {
   pass(scene: Three.Scene, camera: Three.Camera, options?: Record<string, unknown>): TslPass
   output: TslNode; positionLocal: TslNode; modelViewMatrix: TslNode; cameraProjectionMatrix: TslNode
 }
-interface PostNodes { dof: TslFn; motionBlur: TslFn; bloom: TslFn; ao: TslFn; ssr: TslFn }
+interface PostNodes { dof: TslFn; motionBlur: TslFn; bloom: TslFn; ao: TslFn; ssr: TslFn; fxaa: TslFn }
 interface NodeMaterial extends Three.Material { colorNode: TslNode | null; mrtNode: TslNode | null; maskNode: TslNode | null }
 interface RenderPipeline { outputNode: TslNode; outputColorTransform: boolean; render(): void; dispose(): void }
 type Library = AuthorThreeLibrary & {
@@ -212,7 +212,7 @@ export class VideoEditThreeSpace {
   }
 
   static async create(device: GpuDevice, libraries?: AuthorLibraryVersions): Promise<VideoEditThreeSpace> {
-    const [library, tsl, dofModule, blurModule, bloomModule, aoModule, ssrModule] = await Promise.all([
+    const [library, tsl, dofModule, blurModule, bloomModule, aoModule, ssrModule, fxaaModule] = await Promise.all([
       loadAuthorThreeLibrary(libraries) as Promise<Library>,
       loadAuthorThreeModule<Tsl>('three/tsl', libraries),
       loadAuthorThreeModule<{ dof: TslFn }>('three/addons/tsl/display/DepthOfFieldNode.js', libraries),
@@ -220,6 +220,7 @@ export class VideoEditThreeSpace {
       loadAuthorThreeModule<{ bloom: TslFn }>('three/addons/tsl/display/BloomNode.js', libraries),
       loadAuthorThreeModule<{ ao: TslFn }>('three/addons/tsl/display/GTAONode.js', libraries),
       loadAuthorThreeModule<{ ssr: TslFn }>('three/addons/tsl/display/SSRNode.js', libraries),
+      loadAuthorThreeModule<{ fxaa: TslFn }>('three/addons/tsl/display/FXAANode.js', libraries),
     ])
     const renderer = new library.WebGPURenderer({ canvas: new OffscreenCanvas(1, 1), alpha: true, antialias: false, device })
     await runVideoEditGpuSection(device, async () => {
@@ -235,7 +236,7 @@ export class VideoEditThreeSpace {
     shadows.type = library.PCFSoftShadowMap
     renderer.toneMapping = library.NoToneMapping
     renderer.outputColorSpace = library.LinearSRGBColorSpace
-    return new VideoEditThreeSpace(library, tsl, { dof: dofModule.dof, motionBlur: blurModule.motionBlur, bloom: bloomModule.bloom, ao: aoModule.ao, ssr: ssrModule.ssr }, renderer, new VideoEditAuthorThreeClock(renderer, library.REVISION), libraries)
+    return new VideoEditThreeSpace(library, tsl, { dof: dofModule.dof, motionBlur: blurModule.motionBlur, bloom: bloomModule.bloom, ao: aoModule.ao, ssr: ssrModule.ssr, fxaa: fxaaModule.fxaa }, renderer, new VideoEditAuthorThreeClock(renderer, library.REVISION), libraries)
   }
 
   /** 返回路径追踪是否还没收敛（其他显示方式恒为 false）。 */
@@ -588,7 +589,12 @@ export class VideoEditThreeSpace {
     const encoded = tsl.pow(tsl.max(mapped, tsl.vec3(0)), tsl.vec3(1 / 2.4))
     const lightEncoded = tsl.pow(tsl.max(tsl.mix(tsl.neutralToneMapping(color.rgb, 1), color.rgb, card), tsl.vec3(0)), tsl.vec3(1 / 2.4))
     const pipeline = new library.RenderPipeline(this.renderer)
-    pipeline.outputNode = tsl.vec4(tsl.select(this.lightOutput.greaterThan(.5), lightEncoded, tsl.select(covered, encoded.mul(alpha), encoded)), alpha)
+    const output = tsl.convertToTexture(tsl.vec4(tsl.select(this.lightOutput.greaterThan(.5), lightEncoded, tsl.select(covered, encoded.mul(alpha), encoded)), alpha))
+    nodes.push(output as unknown as { dispose(): void })
+    // 多重采样只抹平几何轮廓，而且是在色调映射前按线性亮度平均：强高光贴着暗处时平均完仍过亮、边缘照样硬；
+    // 细高光这类着色锯齿它也管不到。所以在编码后的画面上再做一遍 FXAA（SMAA 要在 Worker 里加载图片，用不了）。
+    // 卡片是已经画好、抗过锯齿的画面，不再处理，免得文字被抹软。
+    pipeline.outputNode = tsl.mix(this.post.fxaa(output), output, card)
     pipeline.outputColorTransform = false
     const entry = { pipeline, nodes, primed: false }
     this.pipelines.set(key, entry)
