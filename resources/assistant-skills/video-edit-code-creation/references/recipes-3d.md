@@ -10,6 +10,16 @@
 4. 精确调整走通用属性：片段 spatial_enabled、depth、rotation_x/y、anchor_depth 及各自 keyframes；序列 spatial_camera 保存 framing.target、heightFraction、perspective、aim、focus、defocus。clip 目标使用完整 targetRef；相机曲线用序列帧，目标切换用 hold。
 5. 调 `verify_video_edit_space` 读同帧几何、焦点、裁剪、遮挡与误差，沿 nextCursor 读完。再 `observe_video_edit_frame`，用 `read_application_media(mode="image")` 看图；结构证据不能代替视觉通过。
 
+## 片段的三维表面、灯光与成片质感
+
+能用属性做的不写代码：
+- 发光：`space_emission`（1–2 常用，可关键帧），自带光晕、照亮周围物体；不必再开序列泛光。
+- 立体字与实体：`space_thickness`（文字 0.02–0.06，可关键帧）+ `space_bevel`（0.1–0.3）沿片段轮廓挤出；`space_material` 选 `{preset:"metal",roughness}`、`matte`、`thin-film`（以画面为底色），或 `acrylic` / `glass`（按轮廓成形、透出身后与下方画面）；画面材质要被照亮时开 `space_lit`。轮廓含片段的投影与外发光，想要干净的挤出体先关这些效果。
+- 灯光：用素材项 `kind:"light"` 放一条灯光片段（`light_kind` spot / directional / point / area、`light_intensity` 1 为常用主光且可关键帧、`light_cast_shadow`、`light_softness`、`light_angle`），位置是片段 x/y 与 `depth`，朝向是 `rotation_x` / `rotation_y`（缺省朝画面里）；它照亮整条序列受光的三维内容。要投影的片段开 `space_cast_shadow`，承接阴影的开 `space_receive_shadow`。三点布光 = 主光（左前上、投影）+ 辅光（右前、亮度 0.3–0.5、不投影）+ 轮廓光（身后上方朝镜头、亮度 1–2）。
+- 没有任何灯与环境光时，受光内容会自动套“缺省布光”（摄影棚中性环境 + 一盏主光，序列 `space_default_lighting` 可关）；要精确控制就自己放灯或设 `space_environment`。
+- 质感：序列 `space_tone_mapping`（agx 高光柔和）、`space_exposure`、`space_environment` 与强度、旋转、`space_bloom` 与 `space_bloom_threshold` / `space_bloom_radius`。实时与“渲染”（路径追踪）读同一份属性；实心玻璃、互反射以“渲染”为准，成片用序列 `final_renderer:"pathTrace"`。
+- 核对：`verify_video_edit_space` 的 facts 里 `cross-group`（引用片段隔着二维层）与 `element-cycle`（代码片段互相引用）要处理；改完用 `observe_video_edit_frame` 看图。
+
 景深是层中心近似；透明媒体、文字空白、蒙版与未知作者场景不能凭几何断言像素可见。强度或构图不可行时按事实调整输入，不降低误差门槛。二维错峰、示范动作、防抖和跟踪只处理二维动作，空间键原样保留。
 
 ## 真实几何与灯光（作者 API 15 起）
