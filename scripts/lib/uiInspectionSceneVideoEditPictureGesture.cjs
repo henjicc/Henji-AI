@@ -5,7 +5,7 @@ const { isDeepStrictEqual } = require('node:util')
 const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))] ?? 0
@@ -157,11 +157,14 @@ function createVideoEditPictureGestureScene() {
           const baseline = await read(projectRef, ['video_edit.document.program_playback'])
           const result = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '原4K画面移动验收', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'video_edit.document.program_playback': { frame: value, playing: false, playbackDirection: 1 } } }] }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
+          // 外部 Agent 写入后编辑区暂停人工操作；随后要在画面上拖动，像真人一样先接管。
+          await takeOverVideoEdit(page)
           await presented(page, value)
         }
         await frame(1); await frame(0)
         const focus = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: clipRef }))
         assert.equal(focus.executionState, 'completed', JSON.stringify(focus))
+        await takeOverVideoEdit(page)
         const selection = await read(projectRef, ['video_edit.document.selection', 'video_edit.document.timeline_view'])
         assert.equal(selection.data.properties['video_edit.document.selection'], target.id)
         assert.deepEqual(selection.data.properties['video_edit.document.timeline_view'].selectedClipIds, [target.id])

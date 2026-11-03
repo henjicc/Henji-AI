@@ -6,7 +6,7 @@ const { startGpuSampler } = require('./uiInspectionGpuSampler.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { openVideoEditFile, readVideoEditFile, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile, readVideoEditFile, videoEditDockTab, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
@@ -156,6 +156,8 @@ function createVideoEditPerformanceScene() {
       const playback = async (frame, playing) => {
         const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
         await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '性能定位', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
       }
       const create = async (entityType, parent, items) => { const read = await callTool(client, 'read_application_entity', { ref: parent }); const result = await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: `创建${entityType}`, changes: [{ kind: 'create_items', entityType, parent, items: items.map(properties => ({ properties })) }] })); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result }
       const readProject = () => readVideoEditFile(file)

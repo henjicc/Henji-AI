@@ -3,10 +3,10 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { createServer } = require('node:http')
 const sharp = require('sharp')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
-const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
+const { liveProjectWorkers, observeWorkers, workerSnapshot, waitProjectReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { codeVersionSource, leaveVideoEditProject, openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
+const { codeVersionSource, leaveVideoEditProject, openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -62,7 +62,7 @@ function createVideoEditAgentLoopScene() {
         projectRef.id = PROJECT_ID; sequenceRef.id = `${PROJECT_ID}:main`
         await observeWorkers(page); observed = true
         await openVideoEditProjectCard(page, seeded.projectId); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '智能体剪辑回环' }); client = await connectMcpClient(identity.config, 'Henji agent loop Reality')
+        await assignIsolatedMcpPort(page); const identity = await authorizeMcpConnection(page, { name: '智能体剪辑回环' }); client = await connectMcpClient(identity.config, 'Henji agent loop Reality')
 
         phase('mcp-discover')
         const tools = (await client.listTools()).tools.map(tool => tool.name)
@@ -120,6 +120,8 @@ function createVideoEditAgentLoopScene() {
         phase('permission')
         // A read-only connection may observe but never write; the refusal must leave the saved project untouched.
         phase('manual-undo-save')
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
         await button(page, '撤销').click()
         const undone = await (async () => { for (let attempt = 0; attempt < 100; attempt++) { const value = readProject(file).sequences[0].clips.find(c => c.id === clip.id); if (value.code.parameters.red === 0.2) return value; await page.waitForTimeout(100) } throw new Error('手动撤销没有恢复 MCP 调参并静默保存') })()
         const third = await observe({ kind: 'program', sequenceRef, frame: 60 })
@@ -143,15 +145,17 @@ function createVideoEditAgentLoopScene() {
           else if (!issued('pi_change')) delta = call('pi_change', 'change_application_entities', { operationId: require('node:crypto').randomUUID(), summary: 'Pi把红色调到0.5', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: clipRef, properties: { 'video_edit.clip.code_parameters': { red: 0.5 } } }] })
           else if (!issued('pi_observe')) delta = call('pi_observe', 'observe_video_edit_frame', { documentRef: projectRef, target: { kind: 'program', sequenceRef, frame: 60 }, maxWidth: 640 })
           else if (!issued('pi_media')) {
-            const assetId = /"resultRef":\{"kind":"asset","id":"([^"]+)"/.exec(toolText('pi_observe'))?.[1]
-            delta = assetId ? call('pi_media', 'read_application_media', { ref: { kind: 'asset', id: assetId } }) : { content: '没有拿到观察资产。' }
+            // 没要求收进素材库时取帧返回临时观察图引用，同样经 read_application_media 读回。
+            const observed = /"resultRef":\{"kind":"(asset|observation\.image)","id":"([^"]+)"/.exec(toolText('pi_observe'))
+            delta = observed ? call('pi_media', 'read_application_media', { ref: { kind: observed[1], id: observed[2] } }) : { content: '没有拿到观察图。' }
           } else delta = { content: '已把原创色块红色调到0.5，并取第60帧核对画面。' }
           for (const item of [{ delta, finish_reason: null }, { delta: {}, finish_reason: delta.tool_calls ? 'tool_calls' : 'stop' }]) response.write(`data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', created: 1, model: 'fixture-image', choices: [{ index: 0, ...item }] })}\n\n`)
           response.end('data: [DONE]\n\n')
         })
         await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
         await page.evaluate(async baseUrl => {
-          const baselineConfig = await window.henjiNative.llm.readConfig() ?? { providers: [], models: [], promptProfiles: [], agentProfiles: [] }
+          // 全新资料还没有模型配置：空配置也要带齐配置结构的必填字段，否则供应商事务按结构校验拒绝。
+          const baselineConfig = await window.henjiNative.llm.readConfig() ?? { providers: [], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [], tools: [], policy: { allowedTools: [], requireHumanConfirmation: false }, memory: {} }
           const provider = { providerId: 'pi-video-edit', displayName: '剪辑验收', adapter: 'openai-compatible', baseUrl, enabled: true, setup: { kind: 'custom' } }
           const model = { providerId: provider.providerId, modelId: 'fixture-image', displayName: '剪辑验收视觉模型', adapter: provider.adapter, baseUrl, enabled: true,
             capabilities: { text: true, image: true, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false, jsonOutput: false, structuredOutputMode: 'none', reasoning: false, sampling: true, contextWindow: 65536, maxOutputTokens: 1024, usage: true } }
@@ -161,12 +165,17 @@ function createVideoEditAgentLoopScene() {
           config.selectedAgentProfileId = 'pi-video-edit-profile'
           await window.henjiNative.llm.writeConfig(config)
         }, `http://127.0.0.1:${server.address().port}/v1`)
-        await page.keyboard.press('Control+Shift+A')
+        await takeOverVideoEdit(page)
+        // 助手侧栏从标题栏“窗口”菜单开关（剪辑里 Ctrl+Shift+A 是取消全选）。
+        const toggleAssistant = async () => { await page.getByRole('menubar', { name: '菜单栏' }).getByRole('menuitem', { name: '窗口', exact: true }).click(); await page.getByRole('menu', { name: '窗口' }).getByRole('menuitemcheckbox', { name: '智能助手', exact: true }).click() }
+        await toggleAssistant()
         const panel = page.getByRole('complementary', { name: '智能助手' }); await panel.waitFor()
         if ((await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())).messages.length) await page.getByRole('button', { name: '新建对话', exact: true }).click()
         at = performance.now()
         await page.getByRole('textbox', { name: '向智能助手描述任务' }).fill('把原创色块的红色调到0.5，再取第60帧检查画面')
         await page.getByRole('button', { name: '发送', exact: true }).click()
+        // 本地替身模型报不出价格，付费策略按“费用无法预估”问一次；这是本机替身，不产生真实费用，按用户身份允许本次。
+        await page.getByRole('button', { name: '允许本次', exact: true }).click()
         await panel.getByText('已把原创色块红色调到0.5，并取第60帧核对画面。', { exact: true }).waitFor({ timeout: 120000 })
         evidence.timings.piLoopMs = performance.now() - at
         evidence.pi.toolResults = requests.at(-1).messages.filter(message => message.role === 'tool').map(message => ({ id: message.tool_call_id, content: (typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).slice(0, 1500) })); store()
@@ -181,19 +190,21 @@ function createVideoEditAgentLoopScene() {
         const piSaved = readProject(file).sequences[0].clips.find(value => value.id === clip.id)
         assert.equal(piSaved.code.parameters.red, 0.5, 'Pi修改应经同一工程静默保存')
         await shot('agent-loop-pi-answer')
-        await page.keyboard.press('Control+Shift+A')
+        // 内置助手写入同样暂停人工操作，撤销前先接管。
+        await takeOverVideoEdit(page)
+        await toggleAssistant()
         await button(page, '撤销').click()
         for (let attempt = 0; attempt < 100 && readProject(file).sequences[0].clips.find(value => value.id === clip.id).code.parameters.red !== 0.2; attempt++) await page.waitForTimeout(100)
         assert.equal(readProject(file).sequences[0].clips.find(value => value.id === clip.id).code.parameters.red, 0.2, '手动撤销应撤回Pi修改')
         evidence.phases.push('真实Pi(本地受控视觉模型)以剪辑首轮工具读取→调参→观察→读取图像→结论；手动撤销撤回Pi修改')
 
         phase('reopen')
-        await leaveVideoEditProject(page, null); await waitReleased(page)
+        await leaveVideoEditProject(page, null); await waitProjectReleased(page)
         await openVideoEditProjectCard(page, seeded.projectId); await presented(page, 0)
         const reopened = readProject(file); assert.equal(codeVersionSource(reopened.codeMaterials[0].versions[0]), SOURCE)
         const after = await observe({ kind: 'program', sequenceRef, frame: 60 }); assert.ok(near(after.pixel.rgb, [51, 77, 204]))
-        await button(page, '关闭项目').click(); await waitReleased(page)
-        evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
+        await button(page, '关闭项目').click(); await waitProjectReleased(page)
+        evidence.resources = await workerSnapshot(page); assert.equal(liveProjectWorkers(evidence.resources), 0)
         evidence.phases.push('保存重开后源码与观察画面一致，Worker归零')
         evidence.completed = true; store()
       } catch (error) { evidence.failed = { phase: evidence.currentPhase, message: String(error.message ?? error), stack: error.stack }; store(); await shot('agent-loop-failed').catch(() => {}); throw error }
@@ -201,7 +212,7 @@ function createVideoEditAgentLoopScene() {
         server?.close()
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
-        if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
+        if (observed) { await waitProjectReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(() => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker }).catch(() => {}); store()
       }
     },

@@ -7,7 +7,7 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { clickOutsideFloatingAssets, observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const normalized = value => value.replaceAll('/', '\\').toLowerCase()
 
@@ -45,6 +45,8 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         await presented(page, 90)
         evidence.program = await png(page, path.join(root, 'program-before-capture.png')); evidence.trackBanks = await trackBanks(page)
         const before = await workerSnapshot(page); await dialogs(app, [file], selectedPath)
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
         const captureAt = performance.now(); await button(page, '更多节目操作').click(); await button(page, '选帧加入资产库').click()
         await page.locator('[data-asset-floating-panel]').waitFor({ state: 'visible', timeout: 30000 })
         await page.locator('[data-asset-card]').filter({ hasText: `${fixture.name} · 帧 90` }).waitFor({ state: 'visible', timeout: 30000 })
@@ -62,6 +64,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         // Calling the same public service must reuse the published PNG and existing native asset row.
         const readFrame = await callTool(client, 'read_application_entity', { ref: projectRef })
         const frameResult = await callTool(client, 'collect_video_edit_output', operationEnvelope([readFrame], { documentRef: projectRef, kind: 'frame', frame: 90 }))
+        await takeOverVideoEdit(page)
         assert.equal(frameResult.executionState, 'completed', JSON.stringify(frameResult)); assert.equal(frameResult.verificationState, 'verified', JSON.stringify(frameResult)); assert.equal(frameResult.result.data.resultRef.id, selected.id)
         evidence.publicFrame = frameResult; await clickOutsideFloatingAssets(page); await page.locator('[data-asset-floating-panel]').waitFor({ state: 'hidden' })
         await dialogs(app, [file], exportPath); const exportAt = performance.now(); await confirmVideoEditExport(page)
@@ -105,6 +108,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
           assert.equal(normalized(fixedPath), normalized(asset.filePath))
           evidence.canvas.push({ assetId: asset.id, nodeId: node.id, nodeType: node.type, originalPath: asset.filePath, persisted: true })
         }
+        await takeOverVideoEdit(page)
         await shot('outputs-movie-collected-original-4k60'); await button(page, '关闭项目').click(); await waitReleased(page)
         for (const original of originals) { const now = fs.statSync(original.file); assert.equal(now.size, original.size); assert.equal(now.mtimeMs, original.mtimeMs) }
         evidence.originalsUnchanged = true; evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0); evidence.completed = true; store()

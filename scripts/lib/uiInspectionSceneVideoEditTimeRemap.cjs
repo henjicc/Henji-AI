@@ -3,8 +3,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { observeWorkers, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 /** 4K59.94 相机原片（含 48kHz 声音）；可用 HENJI_TIME_REMAP_SOURCE 换成其他 4K60 素材。 */
@@ -64,13 +64,15 @@ function createVideoEditTimeRemapScene() {
       const playback = async (frame, playing) => {
         const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
         await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '播放控制', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
       }
       try {
         evidence.runtime = await app.evaluate(async ({ app }) => ({ versions: { electron: process.versions.electron, chrome: process.versions.chrome }, gpu: await app.getGPUInfo('basic') }))
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '时间重映射' }); client = await connectMcpClient(identity.config, 'Henji time remap Reality')
+        await assignIsolatedMcpPort(page); const identity = await authorizeMcpConnection(page, { name: '时间重映射' }); client = await connectMcpClient(identity.config, 'Henji time remap Reality')
         // 片段先拉到 12 秒原速，再在 3 秒处做 30% 慢放（保持 1.5 秒）、在 9 秒处加速到 200%。
         let read = await callTool(client, 'read_application_entity', { ref: clipRef })
         const widened = await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '拉长片段', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: clipRef, properties: { 'video_edit.clip.duration': 720 } }, { kind: 'set_properties', entityType: 'video_edit.clip', target: { kind: 'video_edit.clip', id: `${PROJECT_ID}:ramp-audio` }, properties: { 'video_edit.clip.duration': 720 } }] }))
@@ -85,6 +87,8 @@ function createVideoEditTimeRemapScene() {
         assert.deepEqual(audio.timeRemap, clip.timeRemap)
         evidence.clip = { duration: clip.duration, timeRemap: clip.timeRemap, frameInterpolation: clip.frameInterpolation }
         // 选中片段，效果控件显示“时间重映射”分组（曲线、预设、补帧、变调）。
+        // 变速是外部 Agent 写的，选片段前先接管。
+        await takeOverVideoEdit(page)
         await page.getByText('相机原片 [曲线]', { exact: true }).first().click()
         await page.locator('[data-video-edit-time-remap-panel]').waitFor({ state: 'visible', timeout: 30000 })
         await capture('time-remap-panel')

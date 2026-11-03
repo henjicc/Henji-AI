@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { openVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 音频重构（PR“重新混合”）在真实 Electron 里的正式链路：
@@ -131,6 +131,8 @@ function createVideoEditMusicRemixScene() {
           }
         }
         // 界面入口：右键音频片段出现“重构到时长…”，打开弹窗后取消。
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
         const clip = page.locator('[data-video-edit-clip]').first()
         if (await clip.count()) {
           await clip.click({ button: 'right' })

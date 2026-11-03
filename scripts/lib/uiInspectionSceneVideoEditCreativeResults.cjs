@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检采用 CommonJS 场景工厂。 */
-const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
+const { confirmVideoEditExport, finishVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { liveProjectWorkers, observeWorkers, workerSnapshot, waitProjectReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { createPlaybackFixture, seedCameraStageDocument } = require('./uiInspectionCameraStagePlayback.cjs')
 const { createAudioEditDocument, removeAudioEditDocument } = require('./audioEditDocumentFixture.cjs')
-const { leaveVideoEditProject, openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
+const { leaveVideoEditProject, openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const normalized = value => value.replaceAll('/', '\\').toLowerCase()
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -62,6 +62,8 @@ function createVideoEditCreativeResultsScene(context) {
       const playhead = async frame => {
         const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
         await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '定位回填播放头', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing: false, playbackDirection: 1 } } }] }))
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
       }
       const openEdit = async () => { await button(page, '剪辑').first().click(); await button(page, '关闭项目').or(button(page, '新建项目')).first().waitFor({ state: 'visible', timeout: 30000 }) }
       try {
@@ -122,7 +124,7 @@ function createVideoEditCreativeResultsScene(context) {
         await openEdit(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
         await openVideoEditProjectCard(page, editProject.projectId); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '创作结果回填验收' }); client = await connectMcpClient(identity.config, 'Henji creative results Reality')
+        await assignIsolatedMcpPort(page); const identity = await authorizeMcpConnection(page, { name: '创作结果回填验收' }); client = await connectMcpClient(identity.config, 'Henji creative results Reality')
         evidence.trackBanks = await trackBanks(page)
 
         phase('generation-page-add')
@@ -149,6 +151,7 @@ function createVideoEditCreativeResultsScene(context) {
         at = performance.now()
         const replaced = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([read], { documentRef: projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${generated.clip.id}` } }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: generated.clip.creativeSource.recordId === 'creative-generation-a' ? 'creative-generation-b' : 'creative-generation-a' }, outputIndex: 0 } }))
         evidence.timings.mcpReplaceMs = performance.now() - at
+        await takeOverVideoEdit(page)
         assert.equal(replaced.executionState, 'completed', JSON.stringify(replaced)); assert.equal(replaced.verificationState, 'verified', JSON.stringify(replaced))
         const afterReplace = readProject(file).sequences[0].clips.find(clip => clip.id === generated.clip.id)
         assert.equal(afterReplace.start, generated.clip.start); assert.equal(afterReplace.duration, generated.clip.duration); assert.notEqual(afterReplace.creativeSource.recordId, generated.clip.creativeSource.recordId)
@@ -204,10 +207,11 @@ function createVideoEditCreativeResultsScene(context) {
         assert.equal(normalized(path.dirname(wavPath)), normalized(path.join(editProject.projectPath, '生成结果')), `剪后声音应写进项目“生成结果”：${wavPath}`)
         const voiceProbe = mediaProbe(ffprobePath, wavPath); const voiceStream = voiceProbe.streams.find(stream => stream.codec_type === 'audio')
         assert.equal(Number(voiceStream.sample_rate), 48000); assert.ok(Math.abs(Number(voiceProbe.format.duration) - 4) < 0.02, `剪后时长应为4秒：${voiceProbe.format.duration}`)
-        assert.ok(fs.existsSync(wavPath.replace(/\.wav$/, '.srt')))
+        // 剪后声音的字幕随结果直接进序列字幕（下面核对），不再旁写 .srt 文件。
         assert.equal(voiced.clip.start, 60); assert.equal(voiced.clip.duration, 240)
         const caption = voiced.document.sequences[0].captions.find(value => value.clipId === voiced.clip.id)
-        assert.ok(caption, '口播字幕应与音频同事务进入序列'); assert.equal(caption.start, 90); assert.equal(caption.text, '保留字幕')
+        // 剪后第 0.5 秒起音（序列第 90 帧），成片字幕提前 0.1 秒（6 帧）出现。
+        assert.ok(caption, '口播字幕应与音频同事务进入序列'); assert.equal(caption.start, 84); assert.equal(caption.text, '保留字幕')
         evidence.voice = { clip: voiced.clip, caption, probe: voiceProbe.format }; evidence.phases.push('口播剪后WAV/SRT：采样帧→序列帧，字幕按剪后时钟落位')
 
         phase('camera-stage')
@@ -230,22 +234,28 @@ function createVideoEditCreativeResultsScene(context) {
         // Same canvas completion through the public canvas-node source, replacing the 3D clip in place.
         const nodeRead = await callTool(client, 'read_application_entity', { ref: projectRef })
         const canvasReplace = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([nodeRead], { documentRef: projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${staged.clip.id}` } }, result: { type: 'document', documentRef: { kind: 'documents.document', id: canvasId }, nodeRef: { kind: 'canvas.node', id: `${canvasId}:${resultNodeId}` } } }))
+        await takeOverVideoEdit(page)
         assert.equal(canvasReplace.verificationState, 'verified', JSON.stringify(canvasReplace))
         assert.deepEqual(readProject(file).sequences[0].clips.find(clip => clip.id === staged.clip.id).creativeSource.part, resultNodeId)
         evidence.phases.push('三维正式完成结果经画布节点工具条进入播放头；同一完成节点经MCP画布来源替换')
 
         phase('reopen-export')
         await openEdit(); const persisted = readProject(file)
-        await leaveVideoEditProject(page, null); await waitReleased(page)
+        await leaveVideoEditProject(page, null); await waitProjectReleased(page)
         await openVideoEditProjectCard(page, editProject.projectId); await presented(page, 0)
         const reopened = readProject(file); assert.deepEqual(reopened.sequences[0].clips, persisted.sequences[0].clips)
         await playhead(300); await presented(page, 300)
         const reopenedFrame = await png(page, path.join(root, 'program-300-reopened.png'))
         evidence.reopenDifference = await pixelDifference(afterImage.file, reopenedFrame.file); assert.ok(evidence.reopenDifference.equal)
-        const exportPath = path.join(root, `creative-${Date.now()}.mp4`); await dialogs(app, [], exportPath); at = performance.now(); await confirmVideoEditExport(page)
-        let task
-        for (let attempt = 0; attempt < 6000; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
-        assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))
+        const exportPath = path.join(root, `creative-${Date.now()}.mp4`); await dialogs(app, [], exportPath); at = performance.now()
+        // 导出状态按队列逐项返回：记下提交前已有的项，等本次界面提交的那一项结束。
+        const exportsBefore = new Set((await callTool(client, 'query_video_edit_export', { documentRef: projectRef })).data.queue.map(job => job.id))
+        await confirmVideoEditExport(page)
+        let task; let job
+        for (let attempt = 0; attempt < 6000; attempt++) { task = await callTool(client, 'query_video_edit_export', { documentRef: projectRef }); job = task.data.queue.find(value => !exportsBefore.has(value.id)); if (['completed', 'failed', 'cancelled'].includes(job?.state)) break; await page.waitForTimeout(50) }
+        assert.equal(job?.state, 'completed', JSON.stringify(task))
+        // 界面提交的导出结束后弹出“导出完成”，按完成收起，否则挡住命令带。
+        await finishVideoEditExport(page)
         const metadata = mediaProbe(ffprobePath, exportPath); const exportedVideo = metadata.streams.find(stream => stream.codec_type === 'video'); const exportedAudio = metadata.streams.find(stream => stream.codec_type === 'audio')
         assert.equal(exportedVideo.width, 3840); assert.equal(exportedVideo.height, 2160); assert.equal(exportedVideo.avg_frame_rate, '60/1'); const timelineEnd = Math.max(...reopened.sequences[0].clips.map(clip => clip.start + clip.duration)); assert.equal(Number(exportedVideo.nb_frames), timelineEnd)
         assert.equal(Number(exportedAudio.sample_rate), 48000); assert.equal(exportedAudio.channels, 2)
@@ -254,16 +264,16 @@ function createVideoEditCreativeResultsScene(context) {
         assert.ok(evidence.export.frame300.psnr === null || evidence.export.frame300.psnr >= 30, JSON.stringify(evidence.export.frame300))
         evidence.phases.push('保存重开片段与画面一致；4K60整条时间线/48k双声道成片含全部回填结果'); await shot('creative-results-reopened-4k60')
 
-        await button(page, '关闭项目').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitProjectReleased(page)
         const now = fs.statSync(ORIGINAL); assert.equal(now.size, original.size); assert.equal(now.mtimeMs, original.mtimeMs)
-        evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
+        evidence.resources = await workerSnapshot(page); assert.equal(liveProjectWorkers(evidence.resources), 0)
         evidence.originalUnchanged = true; evidence.completed = true; store()
       } catch (error) { evidence.failed = { phase: evidence.currentPhase, message: String(error.message ?? error), stack: error.stack }; store(); await shot('creative-results-failed').catch(() => {}); throw error }
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         await removeAudioEditDocument(page, audioProjectId)
         if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
-        if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
+        if (observed) { await waitProjectReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(() => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker }).catch(() => {}); store()
       }
     },

@@ -6,7 +6,7 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks, quantile } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, closeVideoEditDockPanel, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, closeVideoEditDockPanel, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 // 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
@@ -59,16 +59,18 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
         const ref = (kind, projectId, id) => ({ kind, id: id ? `${projectId}:${id}` : projectId })
         const projectRef = ref('video_edit.document', mixed.id); const sequenceRef = ref('video_edit.sequence', mixed.id, sequence.id)
+        // 外部 Agent 写入后编辑区暂停人工操作；本场景写完紧接着在界面上动手，所以像真人一样先接管。
         const change = async changes => {
           const owners = [...new Map(changes.flatMap(change => [change.target ?? change.parent, ...(change.targets ?? [])]).map(owner => [`${owner.kind}:${owner.id}`, owner])).values()]
           const baselines = []
           for (const owner of owners) baselines.push(await read(owner))
           const result = await callTool(client, 'change_application_entities', operationEnvelope(baselines, { summary: '真实原生图形与效果编辑', changes }))
-          assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result
+          assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
+          await takeOverVideoEdit(page); return result
         }
         const set = (target, properties) => change([{ kind: 'set_properties', entityType: target.kind, target, properties }])
         const create = (entityType, parent, properties) => change([{ kind: 'create_items', entityType, parent, items: properties.map(properties => ({ properties })) }])
-        const focus = async target => { const result = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: target })); assert.equal(result.executionState, 'completed', JSON.stringify(result)) }
+        const focus = async target => { const result = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: target })); assert.equal(result.executionState, 'completed', JSON.stringify(result)); await takeOverVideoEdit(page) }
         // 画面已显示到最新保存的版本：编辑不再先试渲染，保存可能晚于读取，故两边都反复读取直到一致。
         // 画面已显示到不早于已保存的版本，且 0.5 秒内不再变化。已保存文件的版本号与内存版本号是两套计数
         // （重新打开后内存从 0 计、保存回声也会让内存多一版），所以按打开时的差值对齐、只要求不落后。

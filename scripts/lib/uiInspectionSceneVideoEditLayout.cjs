@@ -130,6 +130,16 @@ async function workerSnapshot(page) {
 async function waitReleased(page) {
   await page.waitForFunction(() => window.__videoLayoutEvidence.workers.every(worker => worker.terminated), null, { timeout: 10000 })
 }
+/**
+ * 关闭项目后留在剪辑项目页时，工程用过的渲染 Worker 都要结束。两类按设计晚走或不走：项目页备着的 32×32 空闲节目会话
+ * 等下次打开接管，从没装过本工程内容，不算本工程的资源；试渲染与作者检查的常驻离屏会话空闲 60 秒才回收，
+ * 所以等到它们的空闲期过去，真正泄漏的 Worker 仍会超时。
+ */
+/** 本工程还活着的渲染 Worker 数：项目页备着的 32×32 空闲节目会话不算。 */
+const liveProjectWorkers = resources => resources.workers.filter(worker => !worker.terminated && !(worker.direct && worker.renderSize?.width === 32 && worker.renderSize?.height === 32)).length
+async function waitProjectReleased(page) {
+  await page.waitForFunction(() => window.__videoLayoutEvidence.workers.every(worker => worker.terminated || (worker.direct && worker.renderSize?.width === 32 && worker.renderSize?.height === 32)), null, { timeout: 75000 })
+}
 
 function createVideoEditLayoutScene() {
   return {
@@ -336,4 +346,4 @@ async function clickOutsideFloatingAssets(page) {
 }
 
 module.exports = {
-  clickOutsideFloatingAssets, createVideoEditLayoutScene, observeWorkers, workerSnapshot, waitReleased }
+  clickOutsideFloatingAssets, createVideoEditLayoutScene, observeWorkers, workerSnapshot, liveProjectWorkers, waitProjectReleased, waitReleased }

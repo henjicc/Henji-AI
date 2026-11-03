@@ -9,7 +9,7 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { observeNativeWaveforms, nativeWaveformSnapshot, waitNativeWaveformsReleased, restoreNativeWaveformObservers } = require('./uiInspectionSceneVideoEditMonitorResources.cjs')
-const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, seedVideoEditProject, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
+const { chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, seedVideoEditProject, showVideoEditDockPanel, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const panel = (page, id) => page.locator(`[data-video-edit-panel="${id}"]`).first()
@@ -192,11 +192,13 @@ function createVideoEditMonitorScene() {
         client = await connectMcpClient(identity.config, 'Henji monitor Reality')
         const projectRef = { kind: 'video_edit.document', id: project.id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${project.id}:${sequence.id}` }; const sourceRef = { kind: 'video_edit.source', id: `${project.id}:source` }
         const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
+        // 外部 Agent 写入后编辑区暂停人工操作；本场景随后都在界面上动手，所以每次写完都像真人一样先接管。
         const change = async (ref, properties) => {
           const result = await callTool(client, 'change_application_entities', operationEnvelope([await read(ref, Object.keys(properties))], { summary: '监视器正式音画与字幕编辑', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] }))
-          assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result
+          assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
+          await takeOverVideoEdit(page); return result
         }
-        const focus = async ref => { const result = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref })); assert.equal(result.executionState, 'completed', JSON.stringify(result)); return result }
+        const focus = async ref => { const result = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref })); assert.equal(result.executionState, 'completed', JSON.stringify(result)); await takeOverVideoEdit(page); return result }
         const frame = async value => { await change(projectRef, { 'video_edit.document.program_playback': { frame: value, playing: false, playbackDirection: 1 } }); await presented(page, value) }
         const play = async ref => change(ref, { 'video_edit.document.program_playback': { frame: 0, playing: true, playbackDirection: 1 } })
         const sourceRead = async () => (await read(sourceRef, ['video_edit.source.time_us', 'video_edit.source.presented_time_us', 'video_edit.source.in_us', 'video_edit.source.out_us', 'video_edit.source.playing', 'video_edit.source.status'])).data.properties
@@ -396,7 +398,7 @@ function createVideoEditMonitorScene() {
         const srtInput = path.join(root, 'input.srt'); const vttInput = path.join(root, 'input.vtt')
         fs.writeFileSync(srtInput, '1\n00:00:00,500 --> 00:00:01,500\n字幕导入 · 中文\n')
         fs.writeFileSync(vttInput, 'WEBVTT\n\n00:00:02.000 --> 00:00:02.500\nWebVTT 精确边界\n')
-        await button(page, '面板').click(); await button(page, '字幕与标记').click()
+        await showVideoEditDockPanel(page, '字幕与标记')
         const content = panel(page, 'content'); await content.waitFor({ state: 'visible' })
         const importCaption = async input => { await dialogs(app, [input], file); await button(content, '导入或导出字幕').click(); await page.getByRole('menuitem', { name: '导入字幕…', exact: true }).click(); await content.getByLabel('节目偏移（帧）', { exact: true }).fill('0'); await button(content, '选择字幕文件').click() }
         await importCaption(srtInput); document = await saved(page, file, value => value.sequences[0].captions.length === 1)

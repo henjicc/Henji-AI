@@ -6,7 +6,7 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { clickOutsideFloatingAssets, observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, codeVersionSource, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, codeVersionSource, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
 
 const source = authorSources.ASSET_SOURCE
@@ -48,10 +48,12 @@ function createVideoEditCodeAssetsScene() {
         const open = async file => { await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0) }
         await open(originFile)
         const identity = await authorizeMcpConnection(page, { name: '代码资产真实工程验收' }); client = await connectMcpClient(identity.config, 'Henji editable code assets Reality')
+        // 外部 Agent 写入后编辑区暂停人工操作；本场景写完紧接着在界面上动手，所以像真人一样先接管。
+        const agent = async call => { const result = checked(await call); await takeOverVideoEdit(page); return result }
         const change = async changes => {
           const refs = [...new Map(changes.map(change => { const ref = change.target ?? change.parent; return [`${ref.kind}:${ref.id}`, ref] })).values()]; const baselines = []
           for (const ref of refs) baselines.push(await callTool(client, 'read_application_entity', { ref }))
-          return checked(await callTool(client, 'change_application_entities', operationEnvelope(baselines, { summary: '验证可编辑代码资产原工程', changes })))
+          return await agent(callTool(client, 'change_application_entities', operationEnvelope(baselines, { summary: '验证可编辑代码资产原工程', changes })))
         }
         const project = id => ({ kind: 'video_edit.document', id })
         const seq = id => ({ kind: 'video_edit.sequence', id: `${id}:${fixture.sequences[0].id}` })
@@ -78,7 +80,7 @@ function createVideoEditCodeAssetsScene() {
         const afterCollect = await workerSnapshot(page); assert.equal(afterCollect.workers.length, beforeCollect.workers.length); evidence.collectResources = { before: beforeCollect, after: afterCollect }; evidence.asset = asset; evidence.manifest = manifest
         const baseline = await callTool(client, 'read_application_entity', { ref: project(fixture.id) })
         const sourceRef = { kind: 'video_edit.clip', id: `${fixture.id}:${sourceClip.id}` }; const sourceRead = await callTool(client, 'read_application_entity', { ref: sourceRef })
-        const repeated = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([baseline, sourceRead], { documentRef: project(fixture.id), targetRef: sourceRef })))
+        const repeated = await agent(callTool(client, 'collect_video_edit_code_asset', operationEnvelope([baseline, sourceRead], { documentRef: project(fixture.id), targetRef: sourceRef })))
         assert.equal(repeated.result.data.resultRef.id, asset.id); evidence.publicCollect = repeated
         await shot('code-asset-collected-original-source'); await clickOutsideFloatingAssets(page); await button(page, '关闭项目').click(); await waitReleased(page)
         await open(targetFile); await button(page, '资产库').click(); const card = page.locator(`[data-asset-id="${asset.id}"]`); await card.waitFor({ state: 'visible' })
@@ -114,12 +116,12 @@ function createVideoEditCodeAssetsScene() {
         document = await saved(page, targetFile, value => value.codeMaterials.length === 2); const filter = document.codeMaterials.find(definition => codeVersionSource(definition.versions[0]) === filterSource)
         await dialogs(app, [targetFile], filterPath); const filterRead = await callTool(client, 'read_application_entity', { ref: project(target.id) })
         const definitionRef = { kind: 'video_edit.code_material', id: `${target.id}:${filter.id}` }; const definitionRead = await callTool(client, 'read_application_entity', { ref: definitionRef })
-        const filterCollection = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([filterRead, definitionRead], { documentRef: project(target.id), targetRef: definitionRef })))
+        const filterCollection = await agent(callTool(client, 'collect_video_edit_code_asset', operationEnvelope([filterRead, definitionRead], { documentRef: project(target.id), targetRef: definitionRef })))
         const filterAssetRef = filterCollection.result.data.resultRef; const clipCount = document.items.length; const mediaCount = document.media.length
         const otherClip = document.sequences[0].clips.find(clip => clip.kind === 'video'); assert.ok(otherClip)
         await page.locator(`[data-video-edit-clip="${otherClip.id}"]`).getByRole('button').nth(1).click()
         const importRead = await callTool(client, 'read_application_entity', { ref: project(target.id) })
-        evidence.publicFilter = checked(await callTool(client, 'import_video_edit_asset', operationEnvelope([importRead], { documentRef: project(target.id), assetRef: filterAssetRef, clipRef })))
+        evidence.publicFilter = await agent(callTool(client, 'import_video_edit_asset', operationEnvelope([importRead], { documentRef: project(target.id), assetRef: filterAssetRef, clipRef })))
         document = await saved(page, targetFile, value => value.sequences[0].clips.find(clip => clip.id === importedClip.id).effects?.length === 1); assert.equal(document.items.length, clipCount); assert.equal(document.media.length, mediaCount); assert.equal(document.sequences[0].clips.find(clip => clip.id === otherClip.id).effects?.length ?? 0, 0)
         await page.waitForFunction(revision => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedRevision === String(revision), document.revision)
         const finalPreview = await png(page, path.join(root, 'final-preview-179.png')); await dialogs(app, [targetFile], output); const exportAt = performance.now(); await confirmVideoEditExport(page)

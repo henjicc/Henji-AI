@@ -6,22 +6,26 @@ const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 const { stubIpc, restoreIpcStubs } = require('./uiReviewIpcStub.cjs')
 const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, showVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 
 async function assertFormColumns(host) {
   const issues = await host.evaluate(element => {
-    const rows = [...element.querySelectorAll('[data-ui-form-row="panel"]')].filter(row => row.getBoundingClientRect().height > 0)
+    // 停靠面板（效果控件、全能调色）用属性行：名称在网格第三列，控件格带右内边距；其余面板用标签列表单行。
+    const visible = kind => [...element.querySelectorAll(`[data-ui-form-row="${kind}"]`)].filter(row => row.getBoundingClientRect().height > 0)
+    const panelRows = visible('panel'), rows = panelRows.length ? panelRows : visible('property')
+    const labelOf = row => row.dataset.uiFormRow === 'property' ? row.querySelector('[id$="-label"]') : row.firstElementChild
     const issues = []
-    const firstLeft = rows[0]?.firstElementChild.getBoundingClientRect().left
+    const firstLeft = rows[0] && labelOf(rows[0]).getBoundingClientRect().left
     for (const row of rows) {
-      const label = row.firstElementChild, control = row.querySelector('[data-ui-form-control]')
+      const label = labelOf(row), control = row.querySelector('[data-ui-form-control]')
       const labelRect = label.getBoundingClientRect(), controlRect = control.getBoundingClientRect()
       if (Math.abs(labelRect.left - firstLeft) > 1) issues.push(`标签左缘不齐：${label.textContent}`)
       if (label.scrollWidth > label.clientWidth + 1) issues.push(`标签溢出：${label.textContent}`)
       // 滑杆 + 数值等复合控件按整体边界判定，不把第一个子控件当作整列。
       const fields = [...control.querySelectorAll('[data-dropdown-button], [data-ui-field-control], [role="radiogroup"], input[type="range"], [role="switch"]')]
       if (fields.length) fields.push(...control.querySelectorAll('button'))
-      if (fields.length && Math.abs(Math.max(...fields.map(field => field.getBoundingClientRect().right)) - controlRect.right) > 1) issues.push(`控件右缘不齐：${label.textContent}`)
+      const contentRight = controlRect.right - parseFloat(getComputedStyle(control).paddingRight)
+      if (fields.length && Math.abs(Math.max(...fields.map(field => field.getBoundingClientRect().right)) - contentRight) > 1) issues.push(`控件右缘不齐：${label.textContent}`)
       if (control.scrollWidth > control.clientWidth + 1) issues.push(`控件溢出：${label.textContent}`)
     }
     // 成对网格首列标签和第二列/通栏数值框，与单行的面板左右边缘对齐。
@@ -129,19 +133,21 @@ function createSurfaceGrammarScenes(context) {
           }, { source, projectId: seeded.projectId, id: seeded.documentId })
           await openVideoEditProjectCard(page, seeded.projectId)
           await page.locator('[data-video-edit-clip="motion-clip"] [aria-label^="选择片段"]').click()
-          await page.getByRole('button', { name: '批注', exact: true }).click()
+          // 批注、全能调色不在默认布局里，面板只从标题栏“窗口”菜单打开。
+          await showVideoEditDockPanel(page, '批注')
           await page.getByLabel('批注面板', { exact: true }).waitFor()
-          await context.settlePage(page, 300); await assertFormColumns(page.getByLabel('批注面板', { exact: true })); await capture('annotation-rows')
-          await page.getByRole('button', { name: '面板', exact: true }).click()
-          await page.getByRole('button', { name: '全能调色', exact: true }).click()
+          // 批注面板是展开即选中的列表，没有标签与控件两列，只留截图；列对齐在调色面板上核对。
+          await context.settlePage(page, 300); await capture('annotation-rows')
+          await showVideoEditDockPanel(page, '全能调色')
           const grade = page.locator('div[aria-label="全能调色"]').last()
-          await grade.getByRole('button', { name: '基本', exact: true }).click()
-          await grade.getByRole('button', { name: '曲线', exact: true }).click()
+          // 区块头是“展开／收起+名称”开关，“基本”默认展开：只展开还收着的。
+          const expand = async title => { const toggle = grade.getByRole('button', { name: `展开${title}`, exact: true }); if (await toggle.isVisible()) await toggle.click() }
+          await expand('基本'); await expand('曲线')
           await grade.getByRole('radiogroup', { name: '曲线通道', exact: true }).scrollIntoViewIfNeeded()
           await context.settlePage(page, 500)
           await assertFormColumns(grade)
           // Scopes read the production frame after the grade; the canvas only appears once statistics arrived.
-          await grade.getByRole('button', { name: '示波器', exact: true }).click()
+          await expand('示波器')
           await grade.locator('canvas[aria-label="直方图"]').waitFor({ timeout: 15000 })
           await context.settlePage(page, 300); await capture('color-scopes')
         } finally { await restore() }

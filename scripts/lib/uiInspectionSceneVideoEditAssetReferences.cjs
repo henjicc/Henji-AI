@@ -5,7 +5,7 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
@@ -90,6 +90,8 @@ function createVideoEditAssetReferencesScene() {
         const baseline = await callTool(client, 'read_application_entity', { ref: projectRef })
         const result = await callTool(client, 'import_video_edit_asset', operationEnvelope([baseline], { documentRef: projectRef, assetRef: { kind: 'asset', id: asset.id } }))
         assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
         document = await saved(page, file, value => value.media.length === 1 && value.items.length === 1)
         assert.equal(document.sequences[0].clips.length, 1); assert.equal(document.media[0].sourceRevision, media.sourceRevision)
         evidence.publicImport = { executionState: result.executionState, verificationState: result.verificationState, mediaId: media.id, duplicateMedia: 0, duplicateItems: 0 }

@@ -3,10 +3,10 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented, seekSourceSeconds } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const matrix = require('./videoEditFormatMatrix.cjs')
-const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 专业格式矩阵（任务 3.2）在真实 Electron 中逐格验收。样本由 scripts/lib/videoEditFormatMatrix.cjs 生成（帧号条码、BT.709
@@ -167,13 +167,15 @@ function createVideoEditFormatMatrixScene() {
         if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
-        const identity = await authorizeMcpConnection(page, { name: '格式矩阵验收' })
+        await assignIsolatedMcpPort(page); const identity = await authorizeMcpConnection(page, { name: '格式矩阵验收' })
         client = await connectMcpClient(identity.config, 'Henji format matrix Reality')
         const projectRef = id => ({ kind: 'video_edit.document', id })
         const playbackOf = async (id, value) => {
           const read = await callTool(client, 'read_application_entity', { ref: projectRef(id), propertyIds: ['video_edit.document.program_playback'] })
           const result = await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '格式矩阵播放控制', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef(id), properties: { 'video_edit.document.program_playback': value } }] }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result))
+          // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+          await takeOverVideoEdit(page)
         }
         const alerts = async () => (await page.getByRole('alert').allTextContents()).map(text => text.trim()).filter(Boolean)
         const programPrompt = () => page.evaluate(() => (document.body.innerText.match(/节目画面无法显示[^\n]*\n?[^\n]*/) || [''])[0])

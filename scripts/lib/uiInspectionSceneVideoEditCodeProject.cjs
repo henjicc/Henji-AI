@@ -7,18 +7,10 @@ const { execFileSync } = require('node:child_process')
 const { createHash } = require('node:crypto')
 const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { observeWorkers, workerSnapshot, waitProjectReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, codeVersionSource, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
-/**
- * 关闭项目后工程用过的渲染 Worker 都要结束。两类按设计晚走或不走：留在剪辑项目页时备着的 32×32 空闲节目会话
- * 等下次打开接管，从没装过本工程内容，不算本工程的资源；试渲染与作者检查的常驻离屏会话空闲 60 秒才回收，
- * 所以等到它们的空闲期过去，真正泄漏的 Worker 仍会超时。
- */
-async function waitProjectReleased(page) {
-  await page.waitForFunction(() => window.__videoLayoutEvidence.workers.every(worker => worker.terminated || (worker.direct && worker.renderSize?.width === 32 && worker.renderSize?.height === 32)), null, { timeout: 75000 })
-}
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
     dialog.showOpenDialog = async (...args) => ({ canceled: false, filePaths: args.at(-1)?.properties?.includes('openDirectory') ? [values.outputDirectory] : values.openPaths })

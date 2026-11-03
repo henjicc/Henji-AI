@@ -5,7 +5,7 @@ const crypto = require('node:crypto')
 const { execFileSync } = require('node:child_process')
 const { ffprobePath } = require('./mediaBinaries.cjs')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
-const { openVideoEditProjectCard, leaveVideoEditProject, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditProjectCard, leaveVideoEditProject, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 const { compareFrames, internalComparisonPasses, prComparisonPasses } = require('./uiInspectionSceneAuthorTimeline.cjs')
 const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
@@ -146,6 +146,8 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         kind: 'set_properties', entityType: documentRef.kind, target: documentRef,
         properties: { 'video_edit.document.timeline_view': { ...view, zoom: 2, selectedClipIds: [original.id] } },
       }] }))
+      // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+      await takeOverVideoEdit(page)
       await page.locator(`[data-video-edit-clip="${original.id}"]`).click({ button: 'right' })
       await page.getByText('添加帧定格', { exact: true }).click()
       const saveCurrent = async () => {

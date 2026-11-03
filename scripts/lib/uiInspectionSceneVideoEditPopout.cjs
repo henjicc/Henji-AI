@@ -1,10 +1,10 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, videoEditDockTab, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -71,6 +71,8 @@ function createVideoEditPopoutScene() {
       const playback = async (frame, playing) => {
         const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
         await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '节目播放控制', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
       }
       try {
         const displays = await app.evaluate(({ screen }) => ({ all: screen.getAllDisplays().map(display => ({ id: display.id, bounds: display.bounds, scaleFactor: display.scaleFactor })), primary: screen.getPrimaryDisplay().id }))
@@ -96,7 +98,7 @@ function createVideoEditPopoutScene() {
         await observeWorkers(page); observed = true
         await button(page, '剪辑').first().click()
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
-        const identity = await authorizeMcpConnection(page, { name: '独立浮窗验收' }); client = await connectMcpClient(identity.config, 'Henji popout Reality')
+        await assignIsolatedMcpPort(page); const identity = await authorizeMcpConnection(page, { name: '独立浮窗验收' }); client = await connectMcpClient(identity.config, 'Henji popout Reality')
         await playback(0, false); await presented(page, 0)
 
         phase('effects-popout')
@@ -382,7 +384,8 @@ function createVideoEditDockGesturesScene() {
         assert.equal(await videoEditDockTab(page, '时间线').count(), 0, '关闭独立窗口即关闭其中的面板')
         evidence.phases.push('拖到停靠区域外松开浮出；关闭独立窗口即关闭面板')
 
-        await page.getByRole('button', { name: '面板', exact: true }).click(); await button(page, '重置布局').click()
+        // 重置布局在任一停靠组的面板菜单里（命令带上已没有面板按钮）。
+        await page.getByRole('button', { name: '面板菜单', exact: true }).first().click(); await page.getByRole('menuitem', { name: '重置布局', exact: true }).click()
         await button(page, '关闭项目').click()
         evidence.completed = true; store()
       } catch (error) { evidence.failed = { phase: evidence.currentPhase, message: String(error.message ?? error), stack: error.stack }; store(); await shot('dock-gestures-failed').catch(() => {}); throw error }

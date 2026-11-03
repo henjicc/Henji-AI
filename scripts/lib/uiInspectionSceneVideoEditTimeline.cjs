@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const clipNode = (page, id) => page.locator('[data-video-edit-clip="' + id + '"]')
@@ -54,10 +54,12 @@ function createVideoEditTimelineScene() {
         client = await connectMcpClient(identity.config, 'Henji timeline Reality')
         const projectRef = { kind: 'video_edit.document', id: project.id }
         const read = async (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, propertyIds })
+        // 外部 Agent 写入后编辑区暂停人工操作；本场景写完紧接着用键盘和指针剪辑，所以像真人一样先接管。
         const change = async (ref, properties) => {
           const baseline = await read(ref, Object.keys(properties))
           const result = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '真实混剪命令验收', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] }))
-          assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result
+          assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
+          await takeOverVideoEdit(page); return result
         }
         const view = async () => (await read(projectRef, ['video_edit.document.timeline_view'])).data.properties['video_edit.document.timeline_view']
         const frame = async value => { await change(projectRef, { 'video_edit.document.program_playback': { frame: value, playing: false, playbackDirection: 1 } }); await presented(page, value) }

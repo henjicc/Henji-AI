@@ -4,7 +4,7 @@ const path = require('node:path')
 const fs = require('node:fs')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
-const { seedVideoEditProject, openVideoEditProjectCard } = require('./uiInspectionVideoEditDocuments.cjs')
+const { seedVideoEditProject, openVideoEditProjectCard, showVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
 const { disableMcp } = require('./uiInspectionMcpClient.cjs')
 const { stubIpc, restoreIpcStubs } = require('./uiReviewIpcStub.cjs')
 
@@ -12,9 +12,9 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 async function panel(page, id, title) {
   const origin = await page.locator('.dockview-host').boundingBox()
   const tab = page.locator(`.dv-tabs-container [data-dock-tab="${id}"]`)
-  if (!await tab.count()) {
-    await button(page, '面板').click(); await button(page, title).click()
-  } else if (await tab.isVisible()) await tab.click()
+  // 没打开的面板从标题栏“窗口”菜单打开；已打开但收在溢出里的走本组溢出列表，本场景要核对的正是这条路。
+  if (!await tab.count()) await showVideoEditDockPanel(page, title)
+  else if (await tab.isVisible()) await tab.click()
   else {
     await page.locator('.dv-groupview').filter({ has: tab }).locator('.dv-tabs-overflow-dropdown-root').click()
     await page.locator(`.dv-tabs-overflow-container [data-dock-tab="${id}"]`).click()
@@ -35,13 +35,17 @@ async function panel(page, id, title) {
 }
 async function formColumns(host) {
   const issues = await host.evaluate(root => {
-    const rows = [...root.querySelectorAll('[data-ui-form-row="panel"]')].filter(row => row.getBoundingClientRect().width)
-    const first = rows[0]?.querySelector('[data-ui-form-control]').getBoundingClientRect()
+    // 停靠面板（效果控件、全能调色）用属性行：控件格在网格第四列（通栏控件跨两列不参与比对），数值按右对齐读数显示、不填满。
+    const visible = kind => [...root.querySelectorAll(`[data-ui-form-row="${kind}"]`)].filter(row => row.getBoundingClientRect().width)
+    const panelRows = visible('panel'), property = !panelRows.length
+    const rows = property ? visible('property').filter(row => !row.querySelector('[data-ui-form-control]').classList.contains('col-span-2')) : panelRows
+    if (!rows.length) return ['没有实际表单行，不能证明列对齐']
+    const first = rows[0].querySelector('[data-ui-form-control]').getBoundingClientRect()
     return rows.flatMap(row => {
       const control = row.querySelector('[data-ui-form-control]')
       const rect = control.getBoundingClientRect()
       const issues = Math.abs(rect.left - first.left) > 1 || Math.abs(rect.right - first.right) > 1 ? [row.textContent] : []
-      const number = control.querySelector('[data-param-control="number"] [data-ui-field-control]')
+      const number = property ? null : control.querySelector('[data-param-control="number"] [data-ui-field-control]')
       if (number) {
         const numeric = number.parentElement.parentElement
         const bounds = numeric.getBoundingClientRect()
@@ -79,7 +83,7 @@ function createU8bUiScenes(context) {
       await openVideoEditProjectCard(page, seeded.projectId)
       const shot = async suffix => { await context.settlePage(page, 500); await capture(suffix) }
       await page.locator('[data-video-edit-clip="motion-clip"] [aria-label^="选择片段"]').click()
-      await button(page, '批注').click(); await page.getByLabel('批注面板', { exact: true }).waitFor(); await shot('annotation-tabs')
+      await panel(page, 'annotations', '批注'); await page.getByLabel('批注面板', { exact: true }).waitFor(); await shot('annotation-tabs')
       const truncated = await page.locator('.dv-tabs-container .dv-active-tab').evaluateAll(tabs => tabs.filter(tab => tab.hasAttribute('data-dock-tab-clipped')).map(tab => tab.textContent))
       assert.deepEqual(truncated, [], '当前标签必须完整可见')
       await page.locator('.dv-groupview').filter({ has: page.locator('[data-dock-tab="annotations"]') }).locator('.dv-tabs-overflow-dropdown-root').click()

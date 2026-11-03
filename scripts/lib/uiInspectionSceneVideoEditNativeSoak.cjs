@@ -5,7 +5,7 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { videoEditResourceCycle, memoryInfraSnapshot } = require('./uiInspectionSceneVideoEditPerformance.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 原生解码长时资源曲线（3.1）：4K60 专业格式素材（默认 ProRes 422 HQ，走原生解码）在节目监视器持续播放，总时长
@@ -101,6 +101,8 @@ function createVideoEditNativeSoakScene() {
       const playback = async (frame, playing) => {
         const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.document.program_playback'] })
         await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '长时播放', changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: projectRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
       }
       try {
         evidence.runtime = await app.evaluate(async ({ app }) => ({ electron: process.versions.electron, chrome: process.versions.chrome, gpu: (await app.getGPUInfo('basic')).gpuDevice }))

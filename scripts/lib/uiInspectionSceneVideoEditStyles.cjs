@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { openVideoEditFile, readVideoEditFile, showVideoEditDockPanel } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile, readVideoEditFile, showVideoEditDockPanel, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 const { assignIsolatedMcpPort, authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { prepareStylePackage } = require('./uiInspectionStylePackage.cjs')
 
@@ -140,6 +140,8 @@ function createVideoEditStylesScene() {
         const nameCard = page.locator(`[data-video-edit-template="library:${nameTemplate.id}"]`)
         const timeline = page.locator('[data-video-edit-panel="timeline"]')
         const box = await timeline.boundingBox()
+        // 外部 Agent 写入后编辑区暂停人工操作；随后要在界面上动手，像真人一样先接管。
+        await takeOverVideoEdit(page)
         await nameCard.dragTo(timeline, { targetPosition: { x: Math.round(box.width * 0.55), y: Math.round(box.height * 0.45) } })
         project = await savedProject(value => value.templates?.length === 2 && value.sequences[0].clips.length === 2)
         const nameClip = project.sequences[0].clips.find(clip => clip.code.definitionId === project.templates[1].body.definitionId)
