@@ -63,12 +63,12 @@ const StagePlaybackDriver: React.FC = () => {
     }
 
     const preview = cameraMotionPreview(state)
-    const { tracks, duration } = preview?.animation ?? state.animation
+    const animation = preview?.animation ?? state.animation
     const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
-    const advanced = advanceCameraStagePlaybackRuntime({ driver, delta, duration, loop })
+    const advanced = advanceCameraStagePlaybackRuntime({ driver, delta, duration: animation.duration, loop })
     if (!advanced.accepted) return
 
-    applyAnimationToPlaybackAppliers(preview?.objects ?? state.objects, tracks, advanced.time)
+    applyAnimationToPlaybackAppliers(preview?.objects ?? state.objects, animation, advanced.time)
 
     // 以累计帧间隔节流，循环回绕不会再因时间差为负而停止更新 UI。
     pushElapsedRef.current += delta

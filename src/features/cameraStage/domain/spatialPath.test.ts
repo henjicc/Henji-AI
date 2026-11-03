@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  compileSpatialPathSamples,
   createCameraPresetPath,
   cubicSpatialPoint,
   defaultSpatialPath,
   markSpatialPathCustom,
+  sampleSpatialMotion,
 } from './spatialPath'
 
 describe('分段空间路径', () => {
@@ -48,20 +48,27 @@ describe('分段空间路径', () => {
     expect(dolly.path.knots).toEqual([])
   })
 
-  it('按弧长采样后匀速点距保持稳定，手动编辑会转为自定义来源', () => {
+  it('按弧长采样后匀速点距保持稳定且落在圆上，手动编辑会转为自定义来源', () => {
     const from = { x: 0, y: 2, z: 5 }
     const generated = createCameraPresetPath(
       { kind: 'orbit', degrees: 180, direction: 'cw' },
       from,
       { x: 0, y: 0, z: 0 },
     )
-    const samples = compileSpatialPathSamples(from, generated.endPosition, generated.path, 0, 2, 'linear')
+    const motion = {
+      objectId: 'camera',
+      segments: [{ startTime: 0, endTime: 2, from, to: generated.endPosition, path: generated.path, easing: 'linear' as const }],
+    }
+    const samples = Array.from({ length: 121 }, (_, index) => sampleSpatialMotion(motion, index / 60)!)
     const distances = samples.slice(1).map((sample, index) => Math.hypot(
-      sample.position.x - samples[index].position.x,
-      sample.position.y - samples[index].position.y,
-      sample.position.z - samples[index].position.z,
+      sample.x - samples[index].x,
+      sample.y - samples[index].y,
+      sample.z - samples[index].z,
     ))
-    expect(Math.max(...distances) - Math.min(...distances)).toBeLessThan(0.02)
+    // 运行时按弧长取点，不再是折线烤点：逐帧点距（即速度）几乎恒定，没有分段台阶。
+    expect((Math.max(...distances) - Math.min(...distances)) / Math.max(...distances)).toBeLessThan(0.005)
+    for (const sample of samples) expect(Math.hypot(sample.x, sample.z)).toBeCloseTo(5, 2)
+    expect(sampleSpatialMotion(motion, 2.01)).toBeUndefined()
     expect(markSpatialPathCustom(generated.path).source).toEqual({
       kind: 'custom',
       originPreset: { kind: 'orbit', degrees: 180, direction: 'cw' },

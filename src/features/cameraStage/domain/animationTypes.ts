@@ -6,8 +6,9 @@
  * 「本关键帧到下一关键帧」这段区间的缓动（速度曲线），语义对齐 AE 的分段缓动。
  */
 
-import type { StageVec3 } from './sceneTypes'
+import type { StageCameraLookAt, StageVec3 } from './sceneTypes'
 import type { StageCharacterMotion } from './characterMotion'
+import type { StageSpatialPath } from './stateKeyframeTypes'
 
 /** 关键帧可承载三类值：标量（数值）、Vec3（逐分量）、颜色（hex 字符串） */
 export type StageKeyframeValue = number | StageVec3 | string
@@ -77,15 +78,46 @@ export function resolveCharacterMotionAtTime(
   return resolved
 }
 
+/** 空间路径上的一段过渡；位置在运行时按弧长取点，不预先烤成折线。 */
+export interface StageSpatialMotionSegment {
+  startTime: number
+  endTime: number
+  from: StageVec3
+  to: StageVec3
+  path: StageSpatialPath
+  /** 段两端都是停靠点时按该缓动走完弧长；处在平滑衔接链里时只决定链两端的出入速度。 */
+  easing: StageEasingPreset
+}
+
+/** 同一对象首尾相接、在衔接点平滑通过的一串空间路径段；链内速度连续。 */
+export interface StageSpatialMotion {
+  objectId: string
+  segments: StageSpatialMotionSegment[]
+}
+
+/**
+ * 摄像机在一段状态关键帧区间内的朝向来源。
+ * aim：两端注视同一目标，逐帧由采样位置与注视点求朝向；
+ * authored：两端朝向由作者分别指定（手动注视点不同），沿用旋转轨道插值。
+ */
+export type StageCameraOrientationEntry =
+  | { objectId: string; startTime: number; endTime: number; mode: 'aim'; lookAt: StageCameraLookAt }
+  | { objectId: string; startTime: number; endTime: number; mode: 'authored' }
+
 /** 场景级动画状态：轨道集合 + 时长 + 帧率 */
 export interface StageSceneAnimation {
   tracks: StageTrack[]
   motionSchedule: StageCharacterMotionScheduleEntry[]
+  spatialMotions: StageSpatialMotion[]
+  cameraOrientations: StageCameraOrientationEntry[]
   /** 秒 */
   duration: number
   /** 仅显示/导出用 */
   fps: number
 }
+
+/** 单帧求值需要的编译产物；播放、scrub 与离屏导出共用。 */
+export type StageAnimationSampleSource = Pick<StageSceneAnimation, 'tracks' | 'spatialMotions' | 'cameraOrientations'>
 
 /** 播放界面态（不进撤销历史） */
 export interface StagePlaybackState {
@@ -99,7 +131,7 @@ export const CAMERA_STAGE_DEFAULT_DURATION = 5
 export const CAMERA_STAGE_DEFAULT_FPS = 30
 
 export function createDefaultAnimation(): StageSceneAnimation {
-  return { tracks: [], motionSchedule: [], duration: CAMERA_STAGE_DEFAULT_DURATION, fps: CAMERA_STAGE_DEFAULT_FPS }
+  return { tracks: [], motionSchedule: [], spatialMotions: [], cameraOrientations: [], duration: CAMERA_STAGE_DEFAULT_DURATION, fps: CAMERA_STAGE_DEFAULT_FPS }
 }
 
 export function createDefaultPlayback(): StagePlaybackState {

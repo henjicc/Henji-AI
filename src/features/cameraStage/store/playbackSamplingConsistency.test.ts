@@ -35,7 +35,7 @@ describe('播放与离屏导出共用轨道采样结果', () => {
       track(camera.id, 'transform.rotation.y', 45),
       track(camera.id, 'fov', 72),
     ]
-    const frame = sampleAnimationFrame(objects, tracks, 0)
+    const frame = sampleAnimationFrame(objects, { tracks, spatialMotions: [], cameraOrientations: [] }, 0)
     const applied = new Map<string, unknown>()
     const unregister: Array<() => void> = []
 
@@ -49,7 +49,7 @@ describe('播放与离屏导出共用轨道采样结果', () => {
       }
     }
 
-    applyAnimationToPlaybackAppliers(objects, tracks, 0)
+    applyAnimationToPlaybackAppliers(objects, { tracks, spatialMotions: [], cameraOrientations: [] }, 0)
     unregister.forEach((dispose) => dispose())
 
     for (const object of frame.objects) {
@@ -62,7 +62,7 @@ describe('播放与离屏导出共用轨道采样结果', () => {
 
   /*
    * 播放时的朝向同样从注视点反解，否则"环绕运镜"只有位置在动、镜头始终朝正前方。
-   * 作者显式打了旋转关键帧的情况另有分支（hasAuthoredRotation）不受影响。
+   * 作者手动转过镜头（两端注视点不同）的区间另由编译产物的 authored 区间表达。
    */
   it('手动注视模式在播放时也从注视点反解朝向，并保留 roll', () => {
     const camera = createCameraObject('摄像机', pickDefaultColor(0)) as StageCameraObject
@@ -75,7 +75,7 @@ describe('播放与离屏导出共用轨道采样结果', () => {
 
     applyAnimationToPlaybackAppliers(
       [camera],
-      [track(camera.id, 'transform.position.x', 2)],
+      { tracks: [track(camera.id, 'transform.position.x', 2)], spatialMotions: [], cameraOrientations: [] },
       0,
     )
     dispose()

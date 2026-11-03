@@ -9,8 +9,9 @@
  * （速度预设映射缓动、错峰延迟钳制起止时间、停留段补同值守护点防止跨卡插值污染）。
  *
  * 扩展点（1.3/1.4 在本文件基础上扩展，不改变整体结构）：
- * - 摄像机运镜预设在写入状态关键帧时物化为 StageSpatialPath，本编译器只消费可见路径
- *   （几何实现在 stateKeyframeCameraMovePresets.ts）。
+ * - 摄像机运镜预设在写入状态关键帧时物化为 StageSpatialPath；本编译器只登记路径段并串成
+ *   平滑衔接链（spatialMotions），段内位置由采样内核按弧长在运行时取点。
+ * - 摄像机两端注视同一目标的区间登记为 aim（cameraOrientations），朝向逐帧求解。
  * - 角色自动走跑：见 compileObjectTransition 内 TODO(1.4)。
  */
 
@@ -18,8 +19,12 @@ import { listAnimatableGroups } from './animatableProps'
 import { getObjectLookAtPoint } from './cameraUtils'
 import {
   CAMERA_STAGE_DEFAULT_FPS,
+  KEYFRAME_TIME_EPSILON,
   type StageAnimatableValueType,
+  type StageCameraOrientationEntry,
   type StageEasingPreset,
+  type StageSpatialMotion,
+  type StageSpatialMotionSegment,
   type StageKeyframe,
   type StageKeyframeValue,
   type StageCharacterMotionScheduleEntry,
@@ -27,10 +32,9 @@ import {
   type StageTrack,
 } from './animationTypes'
 import { upsertKeyframe } from './keyframeEngine'
-import type { StageObject, StageVec3 } from './sceneTypes'
+import type { StageCameraLookAt, StageObject, StageVec3 } from './sceneTypes'
 import { rotationFromPositionAndTarget } from './cameraUtils'
 import { inferCharacterTransition } from './characterTransitionInference'
-import { compileSpatialPathSamples } from './spatialPath'
 import type { StageStateKeyframe, StageStateKeyframeObjectState, StageSpatialPath, StageSpeedPreset } from './stateKeyframeTypes'
 
 /** scalar 属性差异容差：|a-b| 不超过该值视为未变化 */
@@ -185,6 +189,17 @@ function compileTransitionPoints(
   ]
 }
 
+/** 一段空间路径过渡及其所在的状态关键帧区间序号，用于串成平滑衔接链。 */
+interface IndexedSpatialSegment {
+  intervalIndex: number
+  segment: StageSpatialMotionSegment
+}
+
+/**
+ * 空间路径段只在轨道上写起止端点：段内位置由采样内核按弧长在运行时取点。
+ * 端点保证停留段、错峰延迟之外的时间仍取到正确机位；continuity 固定为 stop，
+ * 免得相邻直插段的通用 Hermite 把路径端点当成平滑点去推切线。
+ */
 function compileSpatialPositionGroup(
   trackMap: TrackMap,
   objectId: string,
@@ -195,23 +210,55 @@ function compileSpatialPositionGroup(
   segEnd: number,
   easing: StageEasingPreset,
   holdGuard: HoldGuard,
-): void {
-  const samples = compileSpatialPathSamples(fromPosition, toPosition, path, segStart, segEnd, easing)
+): StageSpatialMotionSegment {
   for (const axis of ['x', 'y', 'z'] as const) {
     const propertyPath = `transform.position.${axis}`
-    for (const sample of samples) {
-      writeKeyframe(trackMap, objectId, propertyPath, {
-        time: sample.time,
-        value: sample.position[axis],
-        easing: 'linear',
-        // 空间切线已完整定义几何形状，禁止通用 continuity Hermite 再次改写采样曲线。
-        continuity: 'stop',
-      })
-    }
+    writeKeyframe(trackMap, objectId, propertyPath, { time: segStart, value: fromPosition[axis], easing, continuity: 'stop' })
+    writeKeyframe(trackMap, objectId, propertyPath, { time: segEnd, value: toPosition[axis], easing: 'linear', continuity: 'stop' })
     if (holdGuard.enabled) {
       writeKeyframe(trackMap, objectId, propertyPath, { time: holdGuard.time, value: toPosition[axis], easing: 'linear' })
     }
   }
+  return { startTime: segStart, endTime: segEnd, from: { ...fromPosition }, to: { ...toPosition }, path, easing }
+}
+
+/**
+ * 把同一对象的空间路径段串成链：相邻区间首尾相接（没有错峰停顿）、衔接卡为“平滑通过”、
+ * 两侧都不是硬切时并入同一条链，链内衔接点速度连续；其余各自成链，两端按速度预设停靠。
+ */
+function chainSpatialSegments(
+  segmentsByObject: Map<string, IndexedSpatialSegment[]>,
+  stateKeyframes: StageStateKeyframe[],
+): StageSpatialMotion[] {
+  const motions: StageSpatialMotion[] = []
+  for (const [objectId, indexed] of segmentsByObject) {
+    let current: StageSpatialMotion | null = null
+    let previous: IndexedSpatialSegment | null = null
+    for (const item of indexed) {
+      const joins = previous !== null
+        && item.intervalIndex === previous.intervalIndex + 1
+        && stateKeyframes[item.intervalIndex].continuity === 'smooth'
+        && Math.abs(item.segment.startTime - previous.segment.endTime) <= KEYFRAME_TIME_EPSILON
+        && item.segment.easing !== 'hold'
+        && previous.segment.easing !== 'hold'
+      if (joins && current) {
+        current.segments.push(item.segment)
+      } else {
+        current = { objectId, segments: [item.segment] }
+        motions.push(current)
+      }
+      previous = item
+    }
+  }
+  return motions
+}
+
+/** 两端注视点是否为同一目标：同一对象，或同一手动注视点。 */
+function isSameLookAtTarget(a: StageCameraLookAt, b: StageCameraLookAt): boolean {
+  if (a.mode === 'object' || b.mode === 'object') {
+    return a.mode === 'object' && b.mode === 'object' && a.objectId === b.objectId
+  }
+  return Math.hypot(a.target.x - b.target.x, a.target.y - b.target.y, a.target.z - b.target.z) <= 1e-6
 }
 
 type TrackMap = Map<string, StageKeyframe[]>
@@ -225,8 +272,14 @@ function trackKey(objectId: string, propertyPath: string): string {
 /** 写入一个关键帧点，同轨道同时间（±KEYFRAME_TIME_EPSILON）只保留后写入的点（复用 upsertKeyframe） */
 function writeKeyframe(trackMap: TrackMap, objectId: string, propertyPath: string, keyframe: StageKeyframe): void {
   const key = trackKey(objectId, propertyPath)
-  const existing = trackMap.get(key) ?? []
-  trackMap.set(key, upsertKeyframe(existing, keyframe))
+  const merged = upsertKeyframe(trackMap.get(key) ?? [], keyframe)
+  // 显式给出的 continuity 必须生效：空间路径端点与相邻直插段同点时，要强制停靠，
+  // 否则直插段的 Hermite 会拿路径另一端当邻点去推切线。
+  if (keyframe.continuity !== undefined) {
+    const index = merged.findIndex((item) => Math.abs(item.time - keyframe.time) <= KEYFRAME_TIME_EPSILON)
+    if (index >= 0) merged[index] = { ...merged[index], continuity: keyframe.continuity }
+  }
+  trackMap.set(key, merged)
 }
 
 interface HoldGuard {
@@ -243,7 +296,8 @@ interface HoldGuard {
  * 1.4 需要在这里（或旁路结构）补上 object.type === 'character' 时的动作推断与写入。
  */
 function compileObjectTransition(
-  trackMap: TrackMap,
+  output: CompileOutput,
+  interval: { index: number; start: number; end: number },
   object: StageObject,
   fromState: StageStateKeyframeObjectState,
   toState: StageStateKeyframeObjectState,
@@ -251,19 +305,33 @@ function compileObjectTransition(
   segEnd: number,
   easing: StageEasingPreset,
   holdGuard: HoldGuard,
-  motionSchedule?: StageCharacterMotionScheduleEntry[],
   motionOverride?: import('./characterMotion').StageCharacterMotion,
   spatialPath?: StageSpatialPath,
   /** 场景全部对象，用于把 object 模式的注视点解析成目标物体的实时位置。 */
   sceneObjects: StageObject[] = [],
 ): void {
+  const { trackMap, motionSchedule } = output
   const fromObject = mergeStateIntoObject(object, fromState, sceneObjects)
   const toObject = mergeStateIntoObject(object, toState, sceneObjects)
   const characterInference = object.type === 'character'
     ? inferCharacterTransition(fromState, toState, segEnd - segStart, motionOverride)
     : null
 
-  if (characterInference?.motion && motionSchedule) {
+  /*
+   * 两端注视同一目标时，朝向是“位置 + 注视点”的函数，不是两个欧拉角之间的插值：
+   * 环绕超过 180° 时按最短路径换算的欧拉角会让镜头中段背对主体，而且播放（插值轨道）
+   * 与导出（实时注视）会算出两种画面。这类区间登记为 aim，由采样内核逐帧求朝向。
+   * 注视点不同（作者手动转过镜头）才保留欧拉角插值；roll 不在注视点里，始终走轨道。
+   */
+  const aimsAtSameTarget = object.type === 'camera'
+    && isSameLookAtTarget(fromState.lookAt ?? object.lookAt, toState.lookAt ?? object.lookAt)
+  if (object.type === 'camera') {
+    output.cameraOrientations.push(aimsAtSameTarget
+      ? { objectId: object.id, startTime: interval.start, endTime: interval.end, mode: 'aim', lookAt: structuredClone(fromState.lookAt ?? object.lookAt) }
+      : { objectId: object.id, startTime: interval.start, endTime: interval.end, mode: 'authored' })
+  }
+
+  if (characterInference?.motion) {
     motionSchedule.push({
       objectId: object.id,
       startTime: segStart,
@@ -291,7 +359,7 @@ function compileObjectTransition(
 
   for (const group of listAnimatableGroups(object)) {
     if (group.groupPath === 'transform.position' && spatialPath) {
-      compileSpatialPositionGroup(
+      const segment = compileSpatialPositionGroup(
         trackMap,
         object.id,
         fromState.transform.position,
@@ -302,19 +370,35 @@ function compileObjectTransition(
         easing,
         holdGuard,
       )
+      const indexed = output.spatialSegments.get(object.id) ?? []
+      indexed.push({ intervalIndex: interval.index, segment })
+      output.spatialSegments.set(object.id, indexed)
       continue
     }
     for (const descriptor of group.children) {
       if (characterInference?.motion && descriptor.path === 'transform.rotation.y') continue
-      const fromValue = descriptor.getValue(fromObject)
+      const isCameraAngle = object.type === 'camera' && descriptor.path.startsWith('transform.rotation.')
+      const isAimedAngle = isCameraAngle && descriptor.path !== 'transform.rotation.z'
+      // 整条序列都在注视同一目标时，俯仰/水平角完全由内核求解，不需要轨道。
+      if (isAimedAngle && !output.authoredRotationCameraIds.has(object.id)) continue
+      const rawFromValue = descriptor.getValue(fromObject)
+      // 连续几段手动转镜头时，起点角度接在上一段终点的同一圈上，避免跨 ±180° 后绕远路。
+      const previousAngle = isCameraAngle ? trackMap.get(trackKey(object.id, descriptor.path))?.at(-1)?.value : undefined
+      const fromValue = typeof previousAngle === 'number' && typeof rawFromValue === 'number'
+        ? unwrapNearestAngle(previousAngle, rawFromValue)
+        : rawFromValue
       const rawToValue = descriptor.getValue(toObject)
-      const toValue = object.type === 'camera'
-        && descriptor.path.startsWith('transform.rotation.')
+      const toValue = isCameraAngle
         && typeof fromValue === 'number'
         && typeof rawToValue === 'number'
         ? unwrapNearestAngle(fromValue, rawToValue)
         : rawToValue
-      if (!hasPropertyChanged(descriptor.valueType, fromValue, toValue)) continue
+      /*
+       * 摄像机只要有一段手动转镜头，俯仰/水平角就逐段写满两端关键帧：手动区间完全靠轨道取朝向，
+       * 若注视区间或角度未变的区间留空，手动区间会从更早的关键帧开始插值或夹取，出现跳变。
+       * 注视区间里的这些值只用来保持轨道连续，采样时由内核按注视点覆盖。
+       */
+      if (!isAimedAngle && !hasPropertyChanged(descriptor.valueType, fromValue, toValue)) continue
 
       const points = compileTransitionPoints(fromValue, toValue, segStart, segEnd, easing)
       for (const point of points) {
@@ -325,6 +409,15 @@ function compileObjectTransition(
       }
     }
   }
+}
+
+interface CompileOutput {
+  /** 至少有一段两端注视点不同（作者手动转过镜头）的摄像机。 */
+  authoredRotationCameraIds: ReadonlySet<string>
+  trackMap: TrackMap
+  motionSchedule: StageCharacterMotionScheduleEntry[]
+  spatialSegments: Map<string, IndexedSpatialSegment[]>
+  cameraOrientations: StageCameraOrientationEntry[]
 }
 
 function finalizeTracks(trackMap: TrackMap, stateKeyframes: StageStateKeyframe[]): StageTrack[] {
@@ -343,6 +436,22 @@ function finalizeTracks(trackMap: TrackMap, stateKeyframes: StageStateKeyframe[]
   return tracks
 }
 
+function collectAuthoredRotationCameraIds(stateKeyframes: StageStateKeyframe[], objects: StageObject[]): Set<string> {
+  const ids = new Set<string>()
+  for (const object of objects) {
+    if (object.type !== 'camera') continue
+    for (let i = 0; i < stateKeyframes.length - 1; i += 1) {
+      const fromState = stateKeyframes[i].objectStates[object.id]
+      const toState = stateKeyframes[i + 1].objectStates[object.id]
+      if (fromState && toState && !isSameLookAtTarget(fromState.lookAt ?? object.lookAt, toState.lookAt ?? object.lookAt)) {
+        ids.add(object.id)
+        break
+      }
+    }
+  }
+  return ids
+}
+
 /**
  * 把状态关键帧序列编译成场景动画（纯函数，无副作用）。
  *
@@ -351,13 +460,18 @@ function finalizeTracks(trackMap: TrackMap, stateKeyframes: StageStateKeyframe[]
  */
 export function compileStateKeyframesToAnimation(stateKeyframes: StageStateKeyframe[], objects: StageObject[]): StageSceneAnimation {
   if (stateKeyframes.length === 0) {
-    return { tracks: [], motionSchedule: [], duration: 0, fps: CAMERA_STAGE_DEFAULT_FPS }
+    return { tracks: [], motionSchedule: [], spatialMotions: [], cameraOrientations: [], duration: 0, fps: CAMERA_STAGE_DEFAULT_FPS }
   }
 
   const timeline = buildStateKeyframeTimeline(stateKeyframes)
   const duration = timeline[timeline.length - 1].transitionEnd
-  const trackMap: TrackMap = new Map()
-  const motionSchedule: StageCharacterMotionScheduleEntry[] = []
+  const output: CompileOutput = {
+    authoredRotationCameraIds: collectAuthoredRotationCameraIds(stateKeyframes, objects),
+    trackMap: new Map(),
+    motionSchedule: [],
+    spatialSegments: new Map(),
+    cameraOrientations: [],
+  }
 
   for (let i = 0; i < stateKeyframes.length - 1; i += 1) {
     const fromStateKeyframe = stateKeyframes[i]
@@ -376,7 +490,8 @@ export function compileStateKeyframesToAnimation(stateKeyframes: StageStateKeyfr
         : resolveSpeedPresetEasing(detail?.speedPreset)
       const [segStart, segEnd] = applyTransitionDelay(seg.transitionStart, seg.transitionEnd, detail?.delay ?? 0)
       compileObjectTransition(
-        trackMap,
+        output,
+        { index: i, start: seg.transitionStart, end: seg.transitionEnd },
         object,
         fromState,
         toState,
@@ -384,7 +499,6 @@ export function compileStateKeyframesToAnimation(stateKeyframes: StageStateKeyfr
         segEnd,
         easing,
         holdGuard,
-        motionSchedule,
         detail?.motionOverride,
         detail?.spatialPath,
         objects,
@@ -392,5 +506,12 @@ export function compileStateKeyframesToAnimation(stateKeyframes: StageStateKeyfr
     }
   }
 
-  return { tracks: finalizeTracks(trackMap, stateKeyframes), motionSchedule, duration, fps: CAMERA_STAGE_DEFAULT_FPS }
+  return {
+    tracks: finalizeTracks(output.trackMap, stateKeyframes),
+    motionSchedule: output.motionSchedule,
+    spatialMotions: chainSpatialSegments(output.spatialSegments, stateKeyframes),
+    cameraOrientations: output.cameraOrientations,
+    duration,
+    fps: CAMERA_STAGE_DEFAULT_FPS,
+  }
 }

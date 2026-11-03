@@ -2,7 +2,7 @@ import React, { useMemo } from 'react'
 import { Line } from '@react-three/drei'
 import { CAMERA_STAGE_MOTION_PATH_HEX } from '@/core/theme/colorTokens'
 import { easeProgress } from '../domain/keyframeEngine'
-import { createSpatialPathSampler, markSpatialPathCustom } from '../domain/spatialPath'
+import { createSpatialPathSampler, markSpatialPathCustom, sampleSpatialMotion } from '../domain/spatialPath'
 import type { StageVec3 } from '../domain/sceneTypes'
 import type { StageStateKeyframe, StageSpatialPath } from '../domain/stateKeyframeTypes'
 import type { StageSpeedPreset } from '../domain/stateKeyframeTypes'
@@ -46,6 +46,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
   const selectControl = useCameraStageToolStore((state) => state.selectControl)
   const setStateKeyframeSpatialPath = useCameraStageStore((state) => state.setStateKeyframeSpatialPath)
   const setStateKeyframePathAnchor = useCameraStageStore((state) => state.setStateKeyframePathAnchor)
+  const spatialMotions = useCameraStageStore((state) => state.animation.spatialMotions)
   const segments = useMemo<PathSegment[]>(() => {
     const result: PathSegment[] = []
     for (let index = 0; index < stateKeyframes.length - 1; index += 1) {
@@ -90,8 +91,17 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
             samplePath?.(index / SAMPLE_COUNT) ?? segment.from
           ))
           : [segment.from, segment.to]
+        // 时间点取自编译产物的同一条采样链：平滑通过的衔接段速度与播放一致，不按单段缓动估算。
+        const motion = segment.path
+          ? spatialMotions.find((item) => item.objectId === objectId && item.segments.some((part) => part.path === segment.path))
+          : undefined
+        const motionSegment = motion?.segments.find((part) => part.path === segment.path)
         const timeDots = selected
           ? Array.from({ length: TIME_DOT_COUNT + 1 }, (_, index) => {
+            if (motion && motionSegment) {
+              const time = motionSegment.startTime + (motionSegment.endTime - motionSegment.startTime) * index / TIME_DOT_COUNT
+              return sampleSpatialMotion(motion, time) ?? motionSegment.from
+            }
             const progress = easeProgress(
               SPEED_EASING[segment.stateKeyframe.transition.perObject[objectId]?.speedPreset ?? 'easeInOut'],
               index / TIME_DOT_COUNT,

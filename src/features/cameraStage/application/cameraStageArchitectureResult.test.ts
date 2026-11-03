@@ -14,7 +14,7 @@ describe('Camera Stage 单一状态关键帧架构结果', () => {
     useCameraStageStore.getState().loadSnapshot({
       objects,
       activeCameraId: camera.id,
-      animation: { tracks: [], motionSchedule: [], duration: 0, fps: 30 },
+      animation: { tracks: [], motionSchedule: [], spatialMotions: [], cameraOrientations: [], duration: 0, fps: 30 },
       sceneSettings: createDefaultSceneSettings(),
       stateKeyframes: [first, second],
     }, { id: 'project-1', name: '架构结果测试' })

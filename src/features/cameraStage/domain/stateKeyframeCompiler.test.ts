@@ -3,7 +3,7 @@ import { getAnimatablePropByPath } from './animatableProps'
 import type { StageTrack } from './animationTypes'
 import { sampleTrack } from './keyframeEngine'
 import { createCameraObject, createCharacterObject, createPrimitiveObject, pickDefaultColor } from './sceneDefaults'
-import { createCameraPresetPath, cubicSpatialPoint } from './spatialPath'
+import { createCameraPresetPath, cubicSpatialPoint, sampleSpatialMotion } from './spatialPath'
 import { buildStateKeyframeTimeline, compileStateKeyframesToAnimation } from './stateKeyframeCompiler'
 import { createStateKeyframe, type StageSpatialPath } from './stateKeyframeTypes'
 
@@ -16,7 +16,7 @@ describe('compileStateKeyframesToAnimation', () => {
       { holdStart: 3, transitionStart: 3, transitionEnd: 3 },
     ])
   })
-  it('空间贝塞尔路径同步编译 XYZ，且曲线形状独立于速度时间轴', () => {
+  it('空间贝塞尔路径登记为运行时采样段，轨道只留端点，曲线形状独立于速度时间轴', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
     const stateKeyframeA = createStateKeyframe([box], '卡1', null, 0)
     const stateKeyframeB = createStateKeyframe([box], '卡2', null, 2)
@@ -36,17 +36,19 @@ describe('compileStateKeyframesToAnimation', () => {
     const x = animation.tracks.find((track) => track.propertyPath === 'transform.position.x')
     const y = animation.tracks.find((track) => track.propertyPath === 'transform.position.y')
     const z = animation.tracks.find((track) => track.propertyPath === 'transform.position.z')
-    expect(x?.keyframes).toHaveLength(49)
-    expect(y?.keyframes).toHaveLength(49)
-    expect(z?.keyframes).toHaveLength(49)
+    const fromPosition = stateKeyframeA.objectStates[box.id].transform.position
+    expect(x?.keyframes.map((keyframe) => keyframe.value)).toEqual([fromPosition.x, 6])
+    expect(y?.keyframes.map((keyframe) => keyframe.value)).toEqual([fromPosition.y, 0])
+    expect(z?.keyframes).toHaveLength(2)
     const midpoint = cubicSpatialPoint(
       stateKeyframeA.objectStates[box.id].transform.position,
       stateKeyframeB.objectStates[box.id].transform.position,
       stateKeyframeA.transition.perObject[box.id].spatialPath as StageSpatialPath,
       0.5,
     )
-    expect(sampleTrack(x as StageTrack, 1, 'scalar')).toBeCloseTo(midpoint.x, 5)
-    expect(sampleTrack(y as StageTrack, 1, 'scalar')).toBeCloseTo(midpoint.y, 5)
+    const sampled = sampleSpatialMotion(animation.spatialMotions[0], 1)!
+    expect(sampled.x).toBeCloseTo(midpoint.x, 5)
+    expect(sampled.y).toBeCloseTo(midpoint.y, 5)
   })
 
   it('角色位移生成转身轨道与可覆盖的动作时间表', () => {
@@ -325,12 +327,8 @@ describe('compileStateKeyframesToAnimation', () => {
       stateKeyframeB.objectStates[camera.id].transform.position = generated.endPosition
 
       const animation = compileStateKeyframesToAnimation([stateKeyframeA, stateKeyframeB], [camera])
-      const trackX = animation.tracks.find((item) => item.objectId === camera.id && item.propertyPath === 'transform.position.x')
-      const trackY = animation.tracks.find((item) => item.objectId === camera.id && item.propertyPath === 'transform.position.y')
-      const trackZ = animation.tracks.find((item) => item.objectId === camera.id && item.propertyPath === 'transform.position.z')
-      expect(trackX).toBeDefined()
-      expect(trackY).toBeDefined()
-      expect(trackZ).toBeDefined()
+      expect(animation.spatialMotions).toHaveLength(1)
+      const positionAt = (time: number) => sampleSpatialMotion(animation.spatialMotions[0], time)!
 
       const startDistance = Math.hypot(
         startPosition.x - target.x,
@@ -338,17 +336,13 @@ describe('compileStateKeyframesToAnimation', () => {
         startPosition.z - target.z,
       )
       for (const time of [1, 2, 3]) {
-        const x = sampleTrack(trackX as StageTrack, time, 'scalar') as number
-        const y = sampleTrack(trackY as StageTrack, time, 'scalar') as number
-        const z = sampleTrack(trackZ as StageTrack, time, 'scalar') as number
-        const dist = Math.hypot(x - target.x, y - target.y, z - target.z)
-        // 相邻关键帧之间是线性插值弦近似圆弧，容差覆盖 15° 分段的弦-弧误差（远小于半径量级）
-        expect(Math.abs(dist - startDistance)).toBeLessThan(0.15)
+        const { x, y, z } = positionAt(time)
+        // 路径在运行时按弧长取点，点就在三次贝塞尔近似圆弧上（每段 ≤ 90° 时径向误差约万分之三）
+        expect(Math.abs(Math.hypot(x - target.x, y - target.y, z - target.z) - startDistance)).toBeLessThan(0.01)
       }
 
       // 终点应落在环绕几何的 180° 落点（z ≈ -5），而不是 B 卡快照里未改动的原始机位（z ≈ 5）
-      const endZ = sampleTrack(trackZ as StageTrack, 4, 'scalar') as number
-      expect(endZ).toBeCloseTo(-5, 1)
+      expect(positionAt(4).z).toBeCloseTo(-5, 1)
     })
 
     it('摄像机空间路径不会误伤 fov 变化：fov 仍走两点直插', () => {
