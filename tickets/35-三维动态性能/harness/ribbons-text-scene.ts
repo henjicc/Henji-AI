@@ -106,6 +106,8 @@ export default {
     // 标题是时间线上的文字片段（图片参数引用它）：光从它每一笔的下沿长出来，改字、换字体、挪位置，丝带起点跟着变。
     const bundle = new THREE.Mesh(new THREE.BufferGeometry(), material)
     bundle.frustumCulled = false
+    // 标题还没显出来（淡入前）时没有外沿点：先不画，免得着色器按缺属性的空几何编译并缓存下来。
+    bundle.visible = false
     scene.add(bundle)
     let signature = ''
     return { scene, update(_parameters: unknown, _assets: unknown, info: { elements?: Record<string, { edge(side: 'bottom', spacing?: number): Array<{ x: number; y: number; z: number }> } | null> }) {
@@ -117,6 +119,8 @@ export default {
       signature = key
       bundle.geometry.dispose()
       bundle.geometry = next.length ? ribbons(next) : new THREE.BufferGeometry()
+      bundle.visible = next.length > 0
+      material.needsUpdate = true
     } }
   },
 }

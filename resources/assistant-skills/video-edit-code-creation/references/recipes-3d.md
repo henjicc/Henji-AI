@@ -33,7 +33,7 @@ export default {
 }
 ```
 
-从时间线元素派生内容（作者 API 16）：先用属性和元素引用，不要把文字、标志复制进代码写死。图片参数声明 `{ key: "title", type: "image" }`，绑定 `{kind:"clip",clipId}` 引用同序列里的片段；`update` 里 `assets.title` 是它此刻的画面，`info.elements.title` 是它在作者根空间里的位置与形状：`edge("bottom")` 取外沿点（光带从字下沿长出）、`sample(n)` 在不透明处撒点（粒子从标志飞散）、`at(u,v)`。片段此刻不在画面上时两者都为空，按缺省分支处理；形状变了（改字）就重建派生几何。发光的标题用片段属性 `space_emission`（1–2），不要在代码里自己画发光字。
+从时间线元素派生内容（作者 API 16）：先用属性和元素引用，不要把文字、标志复制进代码写死。图片参数声明 `{ key: "title", type: "image" }`，绑定 `{kind:"clip",clipId}` 引用同序列里的片段；`update` 里 `assets.title` 是它此刻的画面，`info.elements.title` 是它在作者根空间里的位置与形状：`edge("bottom")` 取外沿点（光带从字下沿长出）、`sample(n)` 在不透明处撒点（粒子从标志飞散）、`at(u,v)`。片段此刻不在画面上时两者都为空，按缺省分支处理；形状变了（改字）就重建派生几何；还没有点时（标题淡入前）把网格设为不可见，不要挂一个没有属性的空几何去渲染（着色器会按缺属性编译），换几何后设 `material.needsUpdate = true`。发光的标题用片段属性 `space_emission`（1–2），不要在代码里自己画发光字。
 
 update 的 info.time 是源时间；模拟用 `info.simulation.at(info.time)`，不能累加 delta。需要空间上下文的其他入口显式声明 `space: true`，只在中心时刻生成卡片材料；createThree 自动依赖空间，按宿主子时刻渲染。不要把序列时间当源时间。
 
