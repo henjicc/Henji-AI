@@ -12,7 +12,7 @@ import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/nami
 import type { DocumentSummary, NameCheckResult, ProjectSummary } from '@/core/documents/types'
 import { documentKindRegistry, readableDocumentExtensions } from '@/core/documents/kinds'
 import { openDialog } from '@/platform/desktopApi'
-import { documentKindPresentation } from '@/features/documents/documentKindPresentation'
+import { documentKindPresentation } from '@/features/documents'
 import { toError } from '@/features/documents/documentErrors'
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
 import { exportProjectPackageInteractive, importPackageInteractive, packageFileName } from '@/features/documents/documentPackageActions'
