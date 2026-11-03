@@ -112,7 +112,7 @@ function createSpaceProgressStore(): SpaceProgressStore {
 function SpaceProgressBadge({ store }: { store: SpaceProgressStore }): JSX.Element | null {
   const value = useSyncExternalStore(store.subscribe, store.get)
   if (value === null) return null
-  return <Tooltip asChild content="渲染：停住后用路径追踪逐渐算出真实光影，算完后提示消失；拖动或播放时显示实时画面"><div className="absolute left-2 top-2 whitespace-nowrap rounded-lg bg-media-scrim px-2 py-1 text-xs tabular-nums text-on-media" data-video-edit-space-progress>渲染中 {value}%</div></Tooltip>
+  return <Tooltip asChild content="渲染：停稳约 1 秒后用路径追踪逐渐算出真实光影，算完后提示消失；拖动或播放时显示实时画面"><div className="absolute left-2 top-2 whitespace-nowrap rounded-lg bg-media-scrim px-2 py-1 text-xs tabular-nums text-on-media" data-video-edit-space-progress>渲染中 {value}%</div></Tooltip>
 }
 
 const SPACE_DISPLAY_TIPS: Record<import('@/core/videoEdit/spaceDisplay').VideoEditSpaceDisplay, string> = {
@@ -120,7 +120,7 @@ const SPACE_DISPLAY_TIPS: Record<import('@/core/videoEdit/spaceDisplay').VideoEd
   realtime: '实时：灯光、阴影、景深、运动模糊全开',
   solid: '实体：三维物体只显示灰色明暗，不做景深与运动模糊，大场景更流畅',
   wireframe: '线框：三维物体只画结构线，适合摆机位、看节奏',
-  render: '渲染：停住后用路径追踪逐渐算出真实光影；播放时按实时显示，不做运动模糊',
+  render: '渲染：停稳约 1 秒后用路径追踪逐渐算出真实光影；播放、拖动时按实时显示，不做运动模糊',
 }
 
 /**
@@ -148,6 +148,11 @@ const DISPLAY_PERIOD_REFRESH_MS = 5000
 const VIDEO_EDIT_FAST_SCRUB_FRAMES = 4
 /** 近似画面在指针停住这么久后补成精确帧。 */
 const VIDEO_EDIT_EXACT_AFTER_REST_MS = 90
+/**
+ * 三维“渲染”显示方式：拖动或换帧后停稳这么久才开始路径追踪。追踪一批要占住显卡几百毫秒，松手就追踪时，
+ * 慢慢拖、停一下再往回拖会被正在追踪的那一批卡住。
+ */
+const SPACE_RENDER_SETTLE_MS = 1000
 /**
  * 暂停时跳转（点击标尺、按时间码、入出点、助手定位）超过这么多帧：先出近似画面（代码层照常精确，长 GOP 视频先给
  * 解码器最近的一幅），紧接着补精确帧。4K 长 GOP 录屏精确定位要解几十到上百帧（每帧约 4.6ms，最深约半秒），只解关键帧约
@@ -450,6 +455,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let firstPresentationAt = Infinity
     let presentedSequenceId = ''
     let lastInteractionAt = -Infinity
+    // 节目画面最近一次在动（拖动中或换了帧）的时刻与那一帧：渲染显示方式据此等停稳。
+    let spaceMovedAt = -Infinity, spaceMovedFrame = -1
     const interaction = (): void => { lastInteractionAt = performance.now() }
     const idleEvents = ['pointerdown', 'pointermove', 'wheel', 'keydown'] as const
     for (const event of idleEvents) window.addEventListener(event, interaction, { passive: true, capture: true })
@@ -693,7 +700,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         }
         // 三维显示方式：选帧、设封面期间与没有三维内容时始终是实时。
         // 选帧与封面按成片的三维渲染（序列设置），与导出同一画面。
-        const spaceDisplay = !videoEditCompositionHasSpace(document) ? 'realtime' : captureFull > 0 ? videoEditFinalSpaceDisplay(document) : effectiveVideoEditSpaceDisplay(instance.document.id, current.playing)
+        if (current.scrubbing || current.frame !== spaceMovedFrame) { spaceMovedAt = performance.now(); spaceMovedFrame = current.frame }
+        const spaceSettling = !current.playing && performance.now() - spaceMovedAt < SPACE_RENDER_SETTLE_MS
+        const spaceDisplay = !videoEditCompositionHasSpace(document) ? 'realtime' : captureFull > 0 ? videoEditFinalSpaceDisplay(document) : effectiveVideoEditSpaceDisplay(instance.document.id, current.playing, current.playing || spaceSettling)
+        // 渲染显示方式还在等停稳：到点再看一次，停稳了就换成路径追踪。
+        if (spaceSettling && captureFull === 0 && getVideoEditSpaceDisplay(instance.document.id).mode === 'render') wake(Math.max(1, spaceMovedAt + SPACE_RENDER_SETTLE_MS - performance.now()))
         // 预渲染画面是成片的样子：选了别的三维显示方式（线框、实体、停住时的渲染）就不用它，播放、拖动与停住都按所选方式出画。
         // 自动方式下预渲染比实时更流畅，照常用。
         const renderCacheApplies = spaceDisplay === (videoEditCompositionHasSpace(document) ? videoEditFinalSpaceDisplay(document) : 'realtime') || getVideoEditSpaceDisplay(instance.document.id).mode === 'auto'

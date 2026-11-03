@@ -58,11 +58,11 @@ export function setVideoEditSpaceDisplay(projectId: string, value: Partial<Video
 
 /**
  * 节目监视器此刻用哪种显示方式渲染：选了固定方式就用它；自动在播放时按跟不跟得上逐级简化，暂停时回到实时。
- * 渲染（路径追踪）一帧要几秒，播放时按实时显示，停住才追踪。
+ * 渲染（路径追踪）一帧要几秒，追踪期间显卡被占住：播放、拖动以及停下后还没停稳（`moving`）时按实时显示，停稳才追踪。
  */
-export function effectiveVideoEditSpaceDisplay(projectId: string, playing: boolean): VideoEditSpaceRenderDisplay {
+export function effectiveVideoEditSpaceDisplay(projectId: string, playing: boolean, moving = playing): VideoEditSpaceRenderDisplay {
   const { mode } = getVideoEditSpaceDisplay(projectId)
-  if (mode === 'render' && playing) return 'realtime'
+  if (mode === 'render' && (playing || moving)) return 'realtime'
   if (mode !== 'auto') return mode
   if (!playing) { auto.delete(projectId); return 'realtime' }
   return VIDEO_EDIT_SPACE_DISPLAY_STEPS[auto.get(projectId)?.level ?? 0]

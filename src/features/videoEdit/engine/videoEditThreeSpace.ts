@@ -107,6 +107,8 @@ export interface ThreeSpaceTrace {
 const TRACE_SAMPLES = 256
 /** 一帧里同时累积的空间组上限：每个追踪器都占着全分辨率的累积目标与加速结构。 */
 const TRACE_GROUPS = 8
+/** 追踪器闲置多久后释放（毫秒）。 */
+const TRACE_IDLE_RELEASE_MS = 30_000
 /** 后处理管线按最近使用保留的套数：每套都占着全分辨率的多重采样目标（4K 下近 1GB），同一份作品只用到实时与一种简化组合。 */
 const PIPELINE_SETS = 2
 
@@ -218,6 +220,7 @@ export class VideoEditThreeSpace {
 
   /** 看片时已先交过实时画面、下一次要开始追踪的画面（每组一项）。 */
   private readonly traceRequested = new Set<string>()
+  private lastTraceAt = -Infinity
   private readonly pathTraces = new Map<string, Promise<VideoEditThreeSpacePathTrace>>()
   private get device(): GpuDevice { return (this.renderer as unknown as { backend: { device: GpuDevice } }).backend.device }
 
@@ -298,6 +301,7 @@ export class VideoEditThreeSpace {
     this.syncCards(input)
     this.syncScenes(input.scenes, input.effects)
     if (input.effects.display === 'render') {
+      this.lastTraceAt = performance.now()
       // 看片（有时间预算）换到新画面：追踪一批要上秒，先交实时画面，节目监视器随后再要这一帧时才开始追踪。
       const plan = input.trace, pending = plan?.key === undefined ? undefined : JSON.stringify([plan.group, plan.key])
       if (plan?.budgetMs !== undefined && pending !== undefined && !this.traceRequested.has(pending) && !(await this.tracer(plan.group)).accumulating(plan.key, input.target.width, input.target.height)) {
@@ -313,7 +317,8 @@ export class VideoEditThreeSpace {
       await this.raster(input, { ...input.effects, display: 'realtime' })
       return { refining: true, progress: 0 }
     }
-    if (this.pathTraces.size) await this.disposePathTraces()
+    // 渲染显示方式下拖动、播放时交实时画面，停稳又接着追踪：追踪器（加速结构、贴图图集、降噪网络）留着复用，闲置一阵才释放显存。
+    if (this.pathTraces.size && performance.now() - this.lastTraceAt > TRACE_IDLE_RELEASE_MS) await this.disposePathTraces()
     const display = input.effects.display
     await this.raster(input, { ...input.effects, display })
     return { refining: false }
