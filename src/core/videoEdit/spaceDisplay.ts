@@ -6,7 +6,7 @@ import type { VideoEditComposition } from './document'
  * - realtime 实时：材质、灯光、阴影、景深、运动模糊等全开；
  * - solid 实体：作者物体统一灰色明暗、不做后处理，卡片照常显示画面；
  * - wireframe 线框：作者物体只画结构线；
- * - render 渲染：路径追踪（全局光照、真实反射折射与景深），暂停时逐步收敛；不做运动模糊；
+ * - render 渲染：路径追踪（全局光照、真实反射折射与景深），暂停时逐步收敛、播放时按实时显示；不做运动模糊；
  * - auto 自动：播放跟不上时逐级简化（实时 → 实体 → 线框），暂停时回到实时。
  */
 export const VIDEO_EDIT_SPACE_DISPLAYS = ['auto', 'realtime', 'solid', 'wireframe', 'render'] as const

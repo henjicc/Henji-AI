@@ -103,7 +103,7 @@ const SPACE_DISPLAY_TIPS: Record<import('@/core/videoEdit/spaceDisplay').VideoEd
   realtime: '实时：灯光、阴影、景深、运动模糊全开',
   solid: '实体：三维物体只显示灰色明暗，不做景深与运动模糊，大场景更流畅',
   wireframe: '线框：三维物体只画结构线，适合摆机位、看节奏',
-  render: '渲染：路径追踪的真实光影，停住后逐渐变清晰；播放很慢，不做运动模糊',
+  render: '渲染：停住后用路径追踪逐渐算出真实光影；播放时按实时显示，不做运动模糊',
 }
 
 /**

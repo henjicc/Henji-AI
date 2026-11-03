@@ -175,7 +175,7 @@ wrap(VideoEditGpuCompositor.prototype, 'draw', (_self, args) => {
   return args[6] ? clips[0]?.kind === 'code' ? 'sceneToMaterial' : 'cardMaterial2d' : 'final'
 })
 
-interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: boolean; from: number; to: number; quality: 'interactive' | 'final'; shots?: number[]; display?: 'realtime' | 'solid' | 'wireframe' | 'render'; noWarmup?: boolean; pathTrace?: boolean; transition?: boolean | 'single'; effects?: { bloom?: number; ambientOcclusion?: number; reflections?: number }; emission?: Record<string, number>; bind?: Record<string, string> }
+interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: boolean; from: number; to: number; quality: 'interactive' | 'final'; shots?: number[]; display?: 'realtime' | 'solid' | 'wireframe' | 'render'; noWarmup?: boolean; pathTrace?: boolean; transition?: boolean | 'single'; effects?: { bloom?: number; ambientOcclusion?: number; reflections?: number }; emission?: Record<string, number>; bind?: Record<string, string>; refine?: number }
 async function attribute(project: unknown, sceneSource: string, hash: string, media: Record<string, string>, config: Config) {
   const raw = structuredClone(project) as { media: Array<{ id: string; path: string }>; codeMaterials: Array<{ versions: Array<{ files: Array<{ location: string; hash: string }> }> }>; sequences: Array<{ motionBlur?: boolean; spatialCamera?: { curves?: Record<string, unknown>; defocus?: number } }> }
   const location = rememberTransientCodeSource(hash, sceneSource)
@@ -222,9 +222,14 @@ async function attribute(project: unknown, sceneSource: string, hash: string, me
       const cache = undefined as undefined | { hits: number; misses: number; evictions: number; entries: number; bytes: number }
       const started = performance.now()
       enter('other')
-      const result = await renderer.render(index, true, false, () => true, undefined, undefined, config.quality, undefined, true)
+      let result = await renderer.render(index, true, false, () => true, undefined, undefined, config.quality, undefined, true)
       const submittedMs = performance.now() - started
       await result.completion
+      // --refine N：像节目监视器停住时那样，画面还在收敛（approximate）就再要同一帧，最多 N 次。
+      for (let pass = 0; pass < (config.refine ?? 0) && (result as { approximate?: boolean }).approximate; pass++) {
+        result = await renderer.render(index, true, false, () => true, undefined, undefined, config.quality, undefined, true)
+        await result.completion
+      }
       exit('other')
       const elapsedMs = performance.now() - started
       const gpu = await collectTimestamps()

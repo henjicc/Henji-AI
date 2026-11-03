@@ -184,6 +184,8 @@ export class VideoEditThreeSpace {
   private failure?: Error
   private closed = false
   /** 各空间组的追踪器；切到其他显示方式时全部释放（它们的累积目标与加速结构很占显存）。 */
+  /** 看片时已先交过实时画面、下一次要开始追踪的画面（每组一项）。 */
+  private readonly traceRequested = new Set<string>()
   private readonly pathTraces = new Map<string, Promise<VideoEditThreeSpacePathTrace>>()
   private get device(): GpuDevice { return (this.renderer as unknown as { backend: { device: GpuDevice } }).backend.device }
 
@@ -261,24 +263,45 @@ export class VideoEditThreeSpace {
     this.syncCamera(input.frame, input.shutterOpen)
     this.syncCards(input)
     this.syncScenes(input.scenes)
-    if (input.effects.display === 'render') return { refining: await this.trace(input) }
+    if (input.effects.display === 'render') {
+      // 看片（有时间预算）换到新画面：追踪一批要上秒，先交实时画面，节目监视器随后再要这一帧时才开始追踪。
+      const plan = input.trace, pending = plan?.key === undefined ? undefined : JSON.stringify([plan.group, plan.key])
+      if (plan?.budgetMs !== undefined && pending !== undefined && !this.traceRequested.has(pending) && !(await this.tracer(plan.group)).accumulating(plan.key, input.target.width, input.target.height)) {
+        this.traceRequested.add(pending)
+        while (this.traceRequested.size > TRACE_GROUPS) this.traceRequested.delete(this.traceRequested.values().next().value!)
+        await this.raster(input, { ...input.effects, display: 'realtime' })
+        return { refining: true }
+      }
+      if (pending !== undefined) this.traceRequested.delete(pending)
+      const traced = await this.trace(input)
+      // 追踪器按块推进，第一遍没铺满整幅之前，没追到的地方是黑的：这时先交实时画面，继续追踪。
+      if (traced.covered) return { refining: traced.refining }
+      await this.raster(input, { ...input.effects, display: 'realtime' })
+      return { refining: true }
+    }
     if (this.pathTraces.size) await this.disposePathTraces()
-    const entry = this.ensurePipeline(input.effects), pipeline = entry.pipeline
+    const display = input.effects.display
+    await this.raster(input, { ...input.effects, display })
+    return { refining: false }
+  }
+
+  private async raster(input: ThreeSpaceFrame, effects: ThreeSpaceFrame['effects'] & { display: 'realtime' | 'solid' | 'wireframe' }): Promise<void> {
+    const entry = this.ensurePipeline(effects), pipeline = entry.pipeline
     for (const card of this.cards.values()) {
       if (!card.mesh.visible) continue
       const outputs = entry.emission ? card.outputs.emission : card.outputs.plain
       if (card.material.mrtNode !== outputs) { card.material.mrtNode = outputs; card.material.needsUpdate = true }
     }
-    this.focus.value = input.effects.focusDistance
-    this.cocScale.value = input.effects.cocScale
-    this.cocMax.value = Math.max(1, input.effects.cocMax)
-    this.shutterScale.value = input.effects.shutterScale
-    this.bloom.value = input.effects.bloom
-    this.ambientOcclusion.value = input.effects.ambientOcclusion
-    this.reflections.value = input.effects.reflections
+    this.focus.value = effects.focusDistance
+    this.cocScale.value = effects.cocScale
+    this.cocMax.value = Math.max(1, effects.cocMax)
+    this.shutterScale.value = effects.shutterScale
+    this.bloom.value = effects.bloom
+    this.ambientOcclusion.value = effects.ambientOcclusion
+    this.reflections.value = effects.reflections
     this.lightOutput.value = input.light ? 1 : 0
     const target = this.target!, output = this.output!
-    const restore = input.effects.display === 'realtime' ? this.applySceneOpacity(input.scenes) : this.applyDisplay(input.scenes, input.effects.display)
+    const restore = effects.display === 'realtime' ? this.applySceneOpacity(input.scenes) : this.applyDisplay(input.scenes, effects.display)
     try {
       if (!entry.primed) {
         // three 在第一次绘制时才搭节点图，那一帧里场景通道还没登记逐帧更新、什么也不画，同一帧号内也不会再更新：
@@ -301,7 +324,6 @@ export class VideoEditThreeSpace {
         } finally { this.renderer.setOutputRenderTarget(null); this.renderer.setRenderTarget(null) }
       }))
     } finally { restore() }
-    return { refining: false }
   }
 
   private tracer(group: string): Promise<VideoEditThreeSpacePathTrace> {
@@ -327,7 +349,7 @@ export class VideoEditThreeSpace {
     await Promise.all(tracers.map(tracer => tracer.then(value => value.dispose(), () => undefined)))
   }
 
-  private async trace(input: ThreeSpaceFrame): Promise<boolean> {
+  private async trace(input: ThreeSpaceFrame): Promise<{ refining: boolean; covered: boolean }> {
     const plan = input.trace ?? { group: '', samples: TRACE_SAMPLES }
     const tracer = await this.tracer(plan.group)
     input.assertCurrent()
@@ -351,7 +373,7 @@ export class VideoEditThreeSpace {
         finally { this.renderer.setRenderTarget(null) }
       })
     } finally { restore() }
-    return refining
+    return { refining, covered: tracer.covered }
   }
 
   private ensureTargets(target: ThreeSpaceFrame['target']): void {

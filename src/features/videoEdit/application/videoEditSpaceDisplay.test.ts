@@ -37,4 +37,8 @@ it('选了固定方式就始终用它，不自动换档；换方式时自动状�
   setVideoEditSpaceDisplay(id, { mode: 'auto' })
   expect(effectiveVideoEditSpaceDisplay(id, true)).toBe('realtime')
   expect(() => setVideoEditSpaceDisplay(id, { mode: 'raytrace' as never })).toThrow()
+  // 路径追踪一帧要几秒：播放时按实时，停住才追踪。
+  setVideoEditSpaceDisplay(id, { mode: 'render' })
+  expect(effectiveVideoEditSpaceDisplay(id, true)).toBe('realtime')
+  expect(effectiveVideoEditSpaceDisplay(id, false)).toBe('render')
 })

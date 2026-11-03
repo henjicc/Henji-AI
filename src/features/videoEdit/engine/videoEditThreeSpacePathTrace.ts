@@ -4,6 +4,9 @@ import type { ManagedThreeRenderer } from './videoEditAuthorThreeWebGpu'
 import { loadAuthorThreeDependent } from './videoEditAuthorThreeWebGpu'
 import { guardVideoEditGpu } from './videoEditGpuErrorScope'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('features.videoEdit.space')
 
 /**
  * 统一三维渲染器的路径追踪（three-gpu-pathtracer）：与实时渲染同一个 three 场景，按帧累积采样。
@@ -81,7 +84,7 @@ export interface PathTraceFrame {
 
 /** 展开环境图的分辨率：环境光按亮度做重要性采样，用不着更细。 */
 const ENVIRONMENT_WIDTH = 1024
-/** 每读回一次采样数之间提交的采样批数。 */
+/** 每读回一次采样数之间提交的采样批数；有时间预算（看片）时每批只提交一次，一批就要几百毫秒，提交多了会占住显卡、拖慢界面。 */
 const SAMPLE_BATCH = 4
 
 export class VideoEditThreeSpacePathTrace {
@@ -90,6 +93,7 @@ export class VideoEditThreeSpacePathTrace {
   private height = 0
   /** 当前累积里最少的那个像素已有的采样数。 */
   private samples = 0
+  private notedNodeEffects = false
   private readonly cardTargets = new Map<Three.Mesh, { target: Three.RenderTarget; material: Three.MeshPhysicalMaterial }>()
   /** 展开过的环境图，按来源贴图；只留最近几张（换环境的作品很少）。 */
   private readonly environments = new Map<Three.Texture, { version: number; key?: string; texture: Three.DataTexture }>()
@@ -157,6 +161,12 @@ export class VideoEditThreeSpacePathTrace {
   }
 
   /** 追踪一批采样写进 frame.target；返回是否还没到目标采样数。 */
+  /** 当前画面每个像素都至少追踪过一次（采样数取全幅最少处）；之前输出里没追到的块是黑的。 */
+  get covered(): boolean { return this.samples >= 1 }
+
+  /** 这一画面（同一 key 与尺寸）是否已在累积：看片换到新画面时，先交实时画面，下一次再开始追踪。 */
+  accumulating(key: string | undefined, width: number, height: number): boolean { return key !== undefined && key === this.key && width === this.width && height === this.height }
+
   async render(frame: PathTraceFrame): Promise<boolean> {
     const { renderer, tracer } = this
     const { width, height } = frame.target
@@ -171,15 +181,16 @@ export class VideoEditThreeSpacePathTrace {
         this.syncCamera(frame)
         tracer.setSize(width, height)
         tracer.setScene(frame.scene, this.camera)
+        this.noteNodeEffects(frame.scene)
         this.key = frame.key; this.width = width; this.height = height
         this.samples = 0
       }
       tracer.maxSamples = frame.samples
       // 追踪器每次采样后把结果画到当前渲染目标：指向本帧目标，随后再被编码结果覆盖。
       renderer.setRenderTarget(frame.target)
-      const started = performance.now()
+      const started = performance.now(), batch = frame.budgetMs === undefined ? SAMPLE_BATCH : 1
       while (this.samples < frame.samples) {
-        await guardVideoEditGpu(device, '路径追踪', () => { for (let i = 0; i < SAMPLE_BATCH; i++) tracer.renderSample() })
+        await guardVideoEditGpu(device, '路径追踪', () => { for (let i = 0; i < batch; i++) tracer.renderSample() })
         // 读回采样数要等显卡做完这一批：排队的显卡工作每次只有一小批（不会一下排进几秒的计算触发显卡超时），也能及时取消。
         // 波前追踪每次只推进一次弹射，采样数只能按追踪器自己的统计。
         this.samples = (await tracer.getSampleCountsAsync()).min
@@ -199,6 +210,25 @@ export class VideoEditThreeSpacePathTrace {
     } finally {
       renderer.setRenderTarget(previous)
       for (const restore of restores.reverse()) restore()
+    }
+  }
+
+  /**
+   * 追踪器只读材质的经典参数（颜色、发光强度、透射等），作者用着色节点写的颜色、发光、透明度在这里不起作用。
+   * 记一次日志，便于排查“渲染模式下物体变黑、效果不见了”。
+   */
+  private noteNodeEffects(scene: Three.Scene): void {
+    const materials = new Set<string>()
+    scene.traverse(object => {
+      const material = (object as Partial<Three.Mesh>).material
+      for (const value of Array.isArray(material) ? material : material ? [material] : []) {
+        const nodes = Object.keys(value).filter(key => key.endsWith('Node') && key !== 'mrtNode' && (value as unknown as Record<string, unknown>)[key] != null)
+        if (nodes.length) materials.add(`${value.type}:${nodes.join(',')}`)
+      }
+    })
+    if (materials.size && !this.notedNodeEffects) {
+      this.notedNodeEffects = true
+      logger.warn('路径追踪不执行作者的着色节点，这些材质按经典参数近似', { event: 'video_edit.space.path_trace_node_effects', context: { materials: [...materials].slice(0, 8) } })
     }
   }
 
