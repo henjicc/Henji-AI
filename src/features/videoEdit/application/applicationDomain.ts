@@ -1,3 +1,4 @@
+import { henjiExtension } from '@/core/fileExtensions'
 import { arrangeVideoEditDepthCapability, transitionVideoEditSpaceCapability, verifyVideoEditSpaceCapability } from '@/core/application-control/domains/videoEdit/videoEditSpatialCapabilities'
 import { executeVideoEditSpatialLayout, verifyVideoEditSpace, VideoEditSpatialFailure } from './videoEditSpatial'
 import { VideoEditCodeElementMutationExecutor } from './videoEditCodeElementReflection'
@@ -323,7 +324,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           target = { kind: 'clip', sequenceId: sequence.id, clipId: clip.id, ...(input.targetRef.kind === 'video_edit.effect' ? { effectId: ref.childId } : {}) }
         }
         // 能力调用不弹保存对话框：先写进项目“导出”文件夹再收录。
-        const path = async (): Promise<string> => uniqueVideoEditOutputPath(await videoEditProjectOutputDirectory(ref.projectId), '可编辑代码素材', 'henji-code')
+        const path = async (): Promise<string> => uniqueVideoEditOutputPath(await videoEditProjectOutputDirectory(ref.projectId), '可编辑代码素材', henjiExtension('code_effect').slice(1))
         const collected = await collectVideoEditCodeAsset(ref.projectId, target, { ...(input.libraryRef ? { libraryId: input.libraryRef.id } : {}), path }, context.signal)
         if (!collected) throw new Error('用户取消代码素材保存，没有收录资产。')
         const resultRef = { kind: 'asset' as const, id: collected.asset.id }

@@ -44,7 +44,7 @@ export const HENJI_FILE_TYPES = {
   preset_package: { extension: '.hjpre', legacyExtensions: ['.henjipreset'], category: 'library', label: '剪辑预设', status: 'active' },
   canvas_layer_package: { extension: '.hjlyr', legacyExtensions: ['.henjilayer'], category: 'library', label: '图层包', status: 'active' },
   template_package: { extension: '.hjtpl', legacyExtensions: [], category: 'library', label: '模板', status: 'reserved' },
-  code_effect: { extension: '.hjfx', legacyExtensions: [], category: 'library', label: '代码效果', status: 'reserved' },
+  code_effect: { extension: '.hjfx', legacyExtensions: ['.henji-code'], category: 'library', label: '可编辑代码素材', status: 'active' },
 } as const satisfies Record<string, HenjiFileType>
 
 export type HenjiFileTypeId = keyof typeof HENJI_FILE_TYPES

@@ -1,3 +1,4 @@
+import { HENJI_FILE_TYPES, henjiExtension } from '@/core/fileExtensions'
 import { addMediaReferenceToLibrary } from '@/features/assets'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { backupPersistenceSnapshot } from '@/core/persistence/backup'
@@ -98,7 +99,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     const closure = await snapshotCodeSourceClosure(source, documentCodeSourceResolver(baseline))
     const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: closure.files, ...(closure.imports ? { imports: closure.imports } : {}), ...(source.libraries ? { libraries: { ...source.libraries } } : {}) }, codeSources: closure.codeSources, parameters, ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
     const bytes = encodeCodeAsset(manifest); const platform = getPlatform()
-    const path = typeof options.path === 'function' ? await options.path() : options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
+    const path = typeof options.path === 'function' ? await options.path() : options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}${henjiExtension('code_effect')}`, filters: [{ name: HENJI_FILE_TYPES.code_effect.label, extensions: [henjiExtension('code_effect').slice(1)] }] })
     assertOwner(owner, contentVersion, signal)
     if (!path) return null
     if (await platform.system.fs.exists(path)) throw new Error('请选择新文件名保存代码素材，避免覆盖原文件。')

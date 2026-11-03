@@ -1922,7 +1922,8 @@
       "reveal": "Couldn't show in folder: {{message}}",
       "forget": "Couldn't remove from the list: {{message}}",
       "exportPackage": "Couldn't export: {{message}}",
-      "importPackage": "Couldn't import: {{message}}"
+      "importPackage": "Couldn't import: {{message}}",
+      "openFile": "Could not open this file: {{message}}"
     }
   },
   "videoEditProject": {

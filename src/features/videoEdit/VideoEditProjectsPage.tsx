@@ -3,13 +3,16 @@ import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, ListX, PackageCheck, PackageOpen } from 'lucide-react'
+import { FileInput, FolderOpen, ListX, PackageCheck, PackageOpen } from 'lucide-react'
 import type { ProjectCardGridExtraAction, ProjectCardGridItem } from '@/components/ProjectCardGrid'
 import { ProjectLibraryPage, type ProjectLibraryLabels } from '@/components/ProjectLibraryPage'
 import { UI_TEXT_META_CLASS } from '@/components/ui'
 import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/naming'
-import type { NameCheckResult, ProjectSummary } from '@/core/documents/types'
+import type { DocumentSummary, NameCheckResult, ProjectSummary } from '@/core/documents/types'
+import { documentKindRegistry, readableDocumentExtensions } from '@/core/documents/kinds'
+import { openDialog } from '@/platform/desktopApi'
+import { documentKindPresentation } from '@/features/documents/documentKindPresentation'
 import { toError } from '@/features/documents/documentErrors'
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
 import { exportProjectPackageInteractive, importPackageInteractive, packageFileName } from '@/features/documents/documentPackageActions'
@@ -33,6 +36,8 @@ interface VideoEditProjectsPageProps {
   busy?: boolean
   onCreate: () => void
   onOpenFolder: () => void
+  /** 打开别处的剪辑文件（.hjvid，含旧后缀）：所在项目登记为外部位置后打开这份剪辑。 */
+  onOpenFile: (document: DocumentSummary) => void
   onOpen: (project: ProjectSummary) => void
   /** 测试替换；正式运行用应用唯一的服务与会话登记表。 */
   operations?: DocumentOperations
@@ -79,7 +84,7 @@ function useProjectCovers(items: readonly ProjectCardItem[], readCover: (docId: 
   }), [items, covers])
 }
 
-export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, onOpen, operations: providedOperations, registry, readCover = getDocumentCover, ensureCover = ensureMainVideoEditCover }: VideoEditProjectsPageProps): JSX.Element {
+export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, onOpenFile, onOpen, operations: providedOperations, registry, readCover = getDocumentCover, ensureCover = ensureMainVideoEditCover }: VideoEditProjectsPageProps): JSX.Element {
   const { t } = useTranslation('ui')
   const operations = providedOperations ?? getDocumentOperations()
   const library = useProjectLibrary({ operations })
@@ -159,6 +164,16 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       },
     }]
   }, [t, run, operations])
+
+  const openFile = useCallback((): void => {
+    void run('openFile', async () => {
+      const extensions = readableDocumentExtensions(documentKindRegistry.require('video_edit')).map(extension => extension.slice(1))
+      const selected = await openDialog({ multiple: false, filters: [{ name: t(documentKindPresentation('video_edit').nameKey), extensions }] })
+      const filePath = typeof selected === 'string' ? selected : Array.isArray(selected) ? selected[0] : null
+      if (!filePath) return
+      onOpenFile(await operations.registerExternalDocument(filePath))
+    })
+  }, [run, operations, onOpenFile, t])
 
   const importPackage = useCallback((): void => {
     void run('importPackage', async () => {
@@ -257,6 +272,7 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       labels={labels}
       create={{ kind: 'direct', onCreate }}
       secondaryAction={[
+        { label: t('documentLibrary.openFile'), icon: FileInput, onClick: openFile },
         { label: t('projectLibrary.openFolder'), icon: FolderOpen, onClick: onOpenFolder },
         { label: t('documentLibrary.importPackage'), icon: PackageOpen, onClick: importPackage },
       ]}

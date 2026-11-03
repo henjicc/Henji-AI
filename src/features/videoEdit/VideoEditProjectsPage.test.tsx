@@ -16,7 +16,7 @@ afterEach(cleanup)
 function setup() {
   const kit = createTestRegistry()
   const operations = new DocumentOperations({ commands: kit.commands, registry: kit.registry })
-  const actions = { onCreate: vi.fn(), onOpenFolder: vi.fn(), onOpen: vi.fn() }
+  const actions = { onCreate: vi.fn(), onOpenFolder: vi.fn(), onOpenFile: vi.fn(), onOpen: vi.fn() }
   const view = (): ReturnType<typeof render> => render(<VideoEditProjectsPage operations={operations} registry={kit.registry} {...actions} />)
   return { kit, operations, actions, view }
 }

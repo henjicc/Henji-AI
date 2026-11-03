@@ -28,7 +28,7 @@ function createVideoEditCodeAssetsScene() {
       const originFile = path.join(root, 'source.henji-video'); fs.writeFileSync(originFile, JSON.stringify(fixture))
       const target = structuredClone(fixture); target.id = 'code-asset-target-project'; target.name = '代码资产目标工程'; target.media = target.media.filter(media => media.kind !== 'image'); target.items = target.items.filter(item => item.kind !== 'image')
       const targetFile = path.join(root, 'target.henji-video'); fs.writeFileSync(targetFile, JSON.stringify(target))
-      const codePath = path.join(root, `editable-${Date.now()}.henji-code`); const filterPath = path.join(root, `filter-${Date.now()}.henji-code`); const output = path.join(root, `mixed-${Date.now()}.mp4`)
+      const codePath = path.join(root, `editable-${Date.now()}.hjfx`); const filterPath = path.join(root, `filter-${Date.now()}.henji-code`); const output = path.join(root, `mixed-${Date.now()}.mp4`)
       const originals = fixture.media.map(media => ({ file: media.path, size: fs.statSync(media.path).size, mtimeMs: fs.statSync(media.path).mtimeMs }))
       const evidence = { completed: false, phases: [], captures: [], originals, program: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))

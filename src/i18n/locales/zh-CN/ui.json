@@ -1922,7 +1922,8 @@
       "reveal": "没能在文件夹中显示：{{message}}",
       "forget": "没能从列表移除：{{message}}",
       "exportPackage": "没能导出：{{message}}",
-      "importPackage": "没能导入：{{message}}"
+      "importPackage": "没能导入：{{message}}",
+      "openFile": "没能打开这个文件：{{message}}"
     }
   },
   "videoEditProject": {

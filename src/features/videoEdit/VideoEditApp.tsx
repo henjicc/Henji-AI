@@ -17,7 +17,7 @@ import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, 
 import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { DockviewApi } from 'dockview-react'
-import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, findActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditProject, openVideoEditProjectFolder, subscribeVideoEdit, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, findActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditDocument, openVideoEditProject, openVideoEditProjectFolder, subscribeVideoEdit, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { cancelVideoEditExport, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
@@ -205,6 +205,7 @@ export default function VideoEditApp(): React.ReactElement {
       <VideoEditProjectsPage
         onCreate={() => run(createVideoEditProject)}
         onOpenFolder={() => run(chooseProjectFolder)}
+        onOpenFile={document => { setOpening(document.name); run(() => openVideoEditDocument({ id: document.id, path: document.path }).finally(() => setOpening(null))) }}
         onOpen={project => { setOpening(project.name); run(() => openVideoEditProject(project).finally(() => setOpening(null))) }}
       />
       {opening && <VideoEditOpeningOverlay name={opening} />}
