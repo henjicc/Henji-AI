@@ -26,6 +26,11 @@ export function createVideoEditAdjustmentItem(projectId: string, input: { name?:
   const item = videoEditItemSchema.parse({ id: crypto.randomUUID(), kind: 'adjustment', name: input.name ?? '调整图层', ...(input.binId ? { binId: input.binId } : {}) })
   editVideoProject(projectId, document => ({ ...document, items: [...document.items, item] })); return item.id
 }
+/** 灯光素材项：放进序列就是一盏灯（缺省聚光、亮度 1），照亮序列里受光的三维内容。 */
+export function createVideoEditLightItem(projectId: string, input: { name?: string; binId?: string } = {}): string {
+  const item = videoEditItemSchema.parse({ id: crypto.randomUUID(), kind: 'light', name: input.name ?? '灯光', ...(input.binId ? { binId: input.binId } : {}) })
+  editVideoProject(projectId, document => ({ ...document, items: [...document.items, item] })); return item.id
+}
 export function createVideoEditBin(projectId: string, name: string, parentId?: string): string {
   const bin = videoEditBinSchema.parse({ id: crypto.randomUUID(), name, ...(parentId ? { parentId } : {}) })
   editVideoProject(projectId, document => ({ ...document, bins: [...document.bins, bin] })); return bin.id

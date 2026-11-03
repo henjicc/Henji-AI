@@ -83,7 +83,7 @@ function stepFor(composition: VideoEditComposition, clip: VideoEditClip): VideoE
 function candidateClips(composition: VideoEditComposition, medium: VideoEditSourceMapMedium): VideoEditClip[] {
   if (medium === 'audio') return audibleVideoEditClips(composition)
   const picture = videoEditPictureFilter(composition)
-  return composition.clips.filter(clip => clip.kind !== 'audio' && picture.has(clip))
+  return composition.clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'light' && picture.has(clip))
 }
 function leafEntry(composition: VideoEditComposition, clip: VideoEditClip, medium: VideoEditSourceMapMedium,
   path: readonly VideoEditSourceMapStep[], timeline: VideoEditSourceMapRange, rootFps: number): VideoEditSourceMapEntry | undefined {

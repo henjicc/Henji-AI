@@ -135,6 +135,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     data.spaceEnvironment = spaceRender?.environment ?? 'none'
     data.spaceEnvironmentIntensity = spaceRender?.environmentIntensity ?? 1
     data.spaceEnvironmentRotation = spaceRender?.environmentRotation ?? 0
+    data.spaceDefaultLighting = spaceRender?.defaultLighting ?? 'auto'
     const transcript = !propertyIds?.length || propertyIds.includes('video_edit.sequence.transcript')
     const silences = !propertyIds?.length || propertyIds.includes('video_edit.sequence.text_silences')
     if (transcript || silences) {
@@ -187,7 +188,9 @@ class VideoEditProvider implements ApplicationEntityProvider {
       const field = VIDEO_EDIT_FIELDS[this.entityType].find(item => item.propertyId === propertyId)
       if (!field) throw new Error(`未知属性 ${propertyId}，可用属性：${VIDEO_EDIT_FIELDS[this.entityType].map(item => item.propertyId).join('、')}`)
       const absent = ['video_edit.clip.code_parameters', 'video_edit.clip.code_curves', 'video_edit.clip.code_version_id', 'video_edit.clip.element_overrides', 'video_edit.item.code_parameters', 'video_edit.item.code_curves'].includes(propertyId) && !data.code
-      const wrongKind = propertyId === 'video_edit.graphic_object.text_style' && data.kind !== 'text' || propertyId === 'video_edit.clip.text_style' && data.kind !== 'text' || propertyId === 'video_edit.clip.graphic_object_ids' && data.kind !== 'graphic' || propertyId === 'video_edit.clip.adjustment_from_track' && data.kind !== 'adjustment'
+      const lightField = /^video_edit\.clip\.light_/.test(propertyId)
+      const pictureOnly = /^video_edit\.clip\.(space_|effects|text$|text_style|color_grade|tracking|stabilization|speed|time_remap|code_)/.test(propertyId)
+      const wrongKind = lightField && data.kind !== 'light' || pictureOnly && data.kind === 'light' || propertyId === 'video_edit.graphic_object.text_style' && data.kind !== 'text' || propertyId === 'video_edit.clip.text_style' && data.kind !== 'text' || propertyId === 'video_edit.clip.graphic_object_ids' && data.kind !== 'graphic' || propertyId === 'video_edit.clip.adjustment_from_track' && data.kind !== 'adjustment'
       const { projectId, childId } = splitVideoEditRef(ref); const document = requireVideoEditInstance(projectId).document
       const binding = data.code && typeof data.code === 'object' && !Array.isArray(data.code) ? data.code : undefined
       const overrideUnsupported = propertyId.endsWith('.element_overrides') && document.codeMaterials?.find(definition => definition.id === binding?.definitionId)?.versions.find(version => version.id === binding?.versionId)?.languageVersion !== 4

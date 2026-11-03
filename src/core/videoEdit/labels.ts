@@ -14,8 +14,8 @@ export const VIDEO_EDIT_LABEL_NAMES: Record<VideoEditLabel, string> = {
   violet: '紫罗兰色', iris: '鸢尾花色', caribbean: '加勒比海蓝色', lavender: '淡紫色', cerulean: '天蓝色', forest: '森林绿色', rose: '玫瑰红色', mango: '芒果黄色',
   purple: '紫色', blue: '蓝色', teal: '深青色', magenta: '洋红色', tan: '棕黄色', green: '绿色', brown: '棕色', yellow: '黄色',
 }
-export type VideoEditLabelKind = 'bin' | 'sequence' | 'video' | 'audio' | 'image' | 'text' | 'code' | 'graphic' | 'adjustment' | 'caption'
-const DEFAULTS: Record<VideoEditLabelKind, VideoEditLabel> = { bin: 'mango', sequence: 'forest', video: 'iris', audio: 'caribbean', image: 'lavender', text: 'rose', graphic: 'magenta', code: 'cerulean', adjustment: 'violet', caption: 'mango' }
+export type VideoEditLabelKind = 'bin' | 'sequence' | 'video' | 'audio' | 'image' | 'text' | 'code' | 'graphic' | 'adjustment' | 'caption' | 'light'
+const DEFAULTS: Record<VideoEditLabelKind, VideoEditLabel> = { bin: 'mango', sequence: 'forest', video: 'iris', audio: 'caribbean', image: 'lavender', text: 'rose', graphic: 'magenta', code: 'cerulean', adjustment: 'violet', caption: 'mango', light: 'yellow' }
 /** 一项实际显示的标签：自己设置的，否则按类型默认。 */
 export function videoEditLabelOf(kind: VideoEditLabelKind, label?: VideoEditLabel): VideoEditLabel {
   return label ?? DEFAULTS[kind]

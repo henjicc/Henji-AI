@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { SPACE_EMISSION_MAX, SPACE_SURFACE_KEYS, SPACE_THICKNESS_MAX, SPATIAL_KEYS } from './spatialSchema'
+import { SPACE_EMISSION_MAX, SPACE_LIGHT_INTENSITY_MAX, SPACE_SURFACE_KEYS, SPACE_THICKNESS_MAX, SPATIAL_KEYS } from './spatialSchema'
 import { videoEditKeyframesSchema, type VideoEditKeyframe, type VideoEditKeyframes } from './keyframeSchema'
 export { videoEditKeyframeSchema, videoEditKeyframesSchema, type VideoEditKeyframe, type VideoEditKeyframes } from './keyframeSchema'
 import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe, VIDEO_EDIT_DEFAULT_BEZIER } from './keyframeInterpolation'
@@ -11,13 +11,14 @@ export const videoEditClipAnimatedValueSchemas = {
   depth: z.number().finite(), rotationX: z.number().finite(), rotationY: z.number().finite(), anchorDepth: z.number().finite(),
   spaceEmission: z.number().finite().min(0).max(SPACE_EMISSION_MAX),
   spaceThickness: z.number().finite().min(0).max(SPACE_THICKNESS_MAX),
+  lightIntensity: z.number().finite().min(0).max(SPACE_LIGHT_INTENSITY_MAX),
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(.01).max(4), rotation: z.number().min(-360).max(360),
   anchorX: z.number().min(0).max(1), anchorY: z.number().min(0).max(1),
   opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2),
 }
 export function videoEditKeyframeValues(point: VideoEditKeyframe): VideoEditKeyframe['value'][] { return [point.value, ...(point.easeValues ?? [])] }
-export const VIDEO_EDIT_ANIMATABLE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume', ...SPATIAL_KEYS, ...SPACE_SURFACE_KEYS] as const
+export const VIDEO_EDIT_ANIMATABLE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume', ...SPATIAL_KEYS, ...SPACE_SURFACE_KEYS, 'lightIntensity'] as const
 export type VideoEditAnimatableKey = typeof VIDEO_EDIT_ANIMATABLE_KEYS[number]
 export const videoEditCurvesSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), videoEditKeyframesSchema)
 export const videoEditClipCurvesSchema = z.partialRecord(z.enum(VIDEO_EDIT_ANIMATABLE_KEYS), videoEditKeyframesSchema)

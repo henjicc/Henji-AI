@@ -15,6 +15,13 @@ export interface SpatialClipFields {
   spaceBevel?: number;
   spaceCastShadow?: boolean;
   spaceReceiveShadow?: boolean;
+  /** 灯光片段：种类、颜色、亮度（可关键帧）、是否投影、阴影软硬（0–1）、聚光张角（度）。 */
+  lightKind?: import('./spatialSchema').SpaceLightKind;
+  lightColor?: string;
+  lightIntensity?: number;
+  lightCastShadow?: boolean;
+  lightSoftness?: number;
+  lightAngle?: number;
   spatial?: { enabled: boolean };
 }
 

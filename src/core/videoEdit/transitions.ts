@@ -134,9 +134,9 @@ export function describeVideoEditTransitionKind(kind: VideoEditTransitionKind): 
   const preset = videoEditTransitionPreset(kind)
   return { name: preset.name, group: preset.medium === 'audio' ? '音频过渡' : '视频过渡', description: `${preset.description}创建或修改 video_edit.transition 时 kind 写 ${kind}。`, params: describeVideoEditTransitionParams(kind) }
 }
-/** 片段能不能挂这种媒介的过渡：画面过渡挂画面片段（调整图层除外），音频过渡挂声音片段。 */
+/** 片段能不能挂这种媒介的过渡：画面过渡挂画面片段（调整图层与灯光除外，它们没有画面），音频过渡挂声音片段。 */
 export function videoEditTransitionAccepts(medium: VideoEditTransitionMedium, clip: Pick<VideoEditClip, 'kind'>): boolean {
-  return medium === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' && clip.kind !== 'adjustment'
+  return medium === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' && clip.kind !== 'adjustment' && clip.kind !== 'light'
 }
 /** 过渡在切点之前的帧数（由对齐方式决定）。 */
 export function videoEditTransitionFramesBeforeCut(transition: Pick<VideoEditTransition, 'durationFrames' | 'alignment' | 'framesBeforeCut'>): number {

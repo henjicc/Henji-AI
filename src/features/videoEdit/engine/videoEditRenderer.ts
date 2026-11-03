@@ -2028,7 +2028,7 @@ export class VideoEditRenderer {
     if (nextExportWindow) this.preroll(nextExportWindow.clip, document)
     const rawTransitions = cachedWindow ? [] : videoEditPictureTransitionsAt(document, frame)
     // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
-    const candidates = new Map(cachedWindow ? [[cachedWindow.clip.id, cachedWindow.clip]] : activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio').map(clip => [clip.id, clip]))
+    const candidates = new Map(cachedWindow ? [[cachedWindow.clip.id, cachedWindow.clip]] : activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio' && clip.kind !== 'light').map(clip => [clip.id, clip]))
     // A predecessor render needs the owner's source handle, not the outgoing /
     // incoming transition mix (which belongs after the complete effect chain).
     const filterHandles = nestedRender?.filterHandles

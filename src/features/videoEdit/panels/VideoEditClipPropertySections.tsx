@@ -14,6 +14,7 @@ import { VIDEO_EDIT_PROPERTY_VIEWS, type VideoEditPropertyFrame, type VideoEditP
 import { VideoEditKeyframeNavigator, VideoEditKeyframeStopwatch, type VideoEditKeyframeControlProps } from './VideoEditKeyframeControls'
 import { layoutVideoEditText } from '@/core/videoEdit/text'
 import { videoEditClipScaleAspect, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
+import { VideoEditClipSpaceSection } from './VideoEditClipSpaceSection'
 
 type Gesture = ReturnType<typeof useVideoEditClipPropertyGesture>
 type Frame = VideoEditPropertyFrame & { playhead: number }
@@ -146,7 +147,8 @@ export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: 
     {motion && <EffectSection id="motion" title="运动" {...switchProps(clip, gesture, 'motion')} info="画面的位置、大小与旋转。也可以在节目监视器里直接拖动画面。" actions={<MotionReset clip={clip} gesture={gesture} />}>
       {MOTION_ROWS.map(row => <PropertyRow key={row.label} row={row} clip={clip} frame={frame} gesture={gesture} />)}
     </EffectSection>}
-    {picture && clip.kind !== 'text' && <EffectSection id="opacity" title="不透明度" {...switchProps(clip, gesture, 'opacity')} info="片段与下方画面叠加时的透明程度。">
+    <VideoEditClipSpaceSection clip={clip} playhead={frame.playhead} gesture={gesture} />
+    {picture && clip.kind !== 'text' && <EffectSection id="opacity" title="不透明度" {...switchProps(clip, gesture, 'opacity')} info={clip.kind === 'light' ? '乘到灯光亮度上，淡入淡出就是开灯、关灯。' : '片段与下方画面叠加时的透明程度。'}>
       <PropertyRow row={ROWS.opacity} clip={clip} frame={frame} gesture={gesture} />
     </EffectSection>}
     {sound && <EffectSection id="audio" title="音频" {...switchProps(clip, gesture, 'audio')} info="片段的音量。">

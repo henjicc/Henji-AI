@@ -9,6 +9,12 @@ export const SPACE_SURFACE_KEYS = ['spaceEmission', 'spaceThickness'] as const
 /** 同上但不做关键帧的三维呈现字段（受光、材质、倒角、阴影）。 */
 export const SPACE_SURFACE_SETTINGS = ['spaceLit', 'spaceMaterial', 'spaceBevel', 'spaceCastShadow', 'spaceReceiveShadow'] as const
 export const SPACE_EMISSION_MAX = 10
+/** 灯光片段（kind 'light'）：平行光、聚光、点光、面光。 */
+export const SPACE_LIGHT_KINDS = ['directional', 'spot', 'point', 'area'] as const
+export type SpaceLightKind = typeof SPACE_LIGHT_KINDS[number]
+export const SPACE_LIGHT_INTENSITY_MAX = 50
+/** 灯光片段的字段（不做关键帧的部分）；亮度 lightIntensity 可做关键帧。 */
+export const SPACE_LIGHT_SETTINGS = ['lightKind', 'lightColor', 'lightCastShadow', 'lightSoftness', 'lightAngle'] as const
 export const SPACE_THICKNESS_MAX = 1
 /** 卡片画面的缓存键里要去掉的字段：它们不改变二维画面，动画时不该让卡片画面每帧重画。 */
 export const SPACE_ONLY_FIELDS = Object.fromEntries([...SPACE_SURFACE_KEYS, ...SPACE_SURFACE_SETTINGS].map(key => [key, undefined])) as Record<typeof SPACE_SURFACE_KEYS[number] | typeof SPACE_SURFACE_SETTINGS[number], undefined>
@@ -39,6 +45,12 @@ export const spatialClipFields = {
   spaceBevel: finite.min(0).max(.5).optional(),
   spaceCastShadow: z.boolean().optional(),
   spaceReceiveShadow: z.boolean().optional(),
+  lightKind: z.enum(SPACE_LIGHT_KINDS).optional(),
+  lightColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  lightIntensity: finite.min(0).max(SPACE_LIGHT_INTENSITY_MAX).optional(),
+  lightCastShadow: z.boolean().optional(),
+  lightSoftness: finite.min(0).max(1).optional(),
+  lightAngle: finite.min(1).max(170).optional(),
   spatial: z.object({ enabled: z.boolean() }).strict().optional(),
 } satisfies Record<keyof SpatialClipFields, z.ZodType>
 export const spatialClipSchema = z.object(spatialClipFields).strict()

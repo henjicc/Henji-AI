@@ -113,7 +113,7 @@ const spatialCurves = videoEditClipCurvesSchema.parse({
   spaceThickness: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 60, value: .05, interpolation: 'ease' }],
 })
 Object.assign(clip, { spatial: { enabled: true }, depth: -.5, rotationX: 0, rotationY: 0, anchorDepth: .1, spaceEmission: 1.5, spaceThickness: .04, spaceLit: true, spaceMaterial: { preset: 'metal', roughness: .3 }, spaceBevel: .2, spaceCastShadow: true, spaceReceiveShadow: true, curves: { ...clip.curves, ...spatialCurves } })
-sequence.spaceRender = { finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: .8, ambientOcclusion: .6, reflections: .4, exposure: .5, toneMapping: 'agx', environment: 'studioWarm', environmentIntensity: 1.5, environmentRotation: 45, bloomThreshold: .5, bloomRadius: .7 }
+sequence.spaceRender = { finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: .8, ambientOcclusion: .6, reflections: .4, exposure: .5, toneMapping: 'agx', environment: 'studioWarm', environmentIntensity: 1.5, environmentRotation: 45, bloomThreshold: .5, bloomRadius: .7, defaultLighting: 'off' }
 sequence.spatialCamera = { offsetX: .1, perspective: .25, defocus: 1,
   framing: { target: { kind: 'clip', clipId: clip.id }, heightFraction: .6 }, aim: { kind: 'clip', clipId: clip.id }, focus: { kind: 'point', point: [0, 0, -.5] },
   curves: { offsetY: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 60, value: .1, interpolation: 'linear' }],
@@ -210,6 +210,11 @@ document.items.push({ id: 'golden-native-item', name: '人名条', kind: 'graphi
 const nativeClip = makeVideoEditItemClip(document, 'golden-native-item', sequence.id, { frame: 300, duration: 120 })
 nativeClip.id = 'golden-native-instance'; nativeClip.templateId = 'golden-native-template'; nativeClip.graphic = nativeGraphic
 sequence.clips.push(nativeClip)
+// 剪辑 70 起黄金样本带一盏灯光片段（聚光、投影、亮度关键帧）。
+document.items.push({ id: 'golden-light-item', name: '主光', kind: 'light' })
+const lightClip = makeVideoEditItemClip(document, 'golden-light-item', sequence.id, { frame: 0, duration: 120 })
+Object.assign(lightClip, { id: 'golden-light', track: Math.max(...sequence.tracks.filter(track => track.kind === 'video').map(track => track.index)), lightKind: 'spot', lightColor: '#ffe8c0', lightIntensity: 1.5, lightCastShadow: true, lightSoftness: .4, lightAngle: 60, depth: 1, rotationX: -30, curves: { lightIntensity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 30, value: 1.5, interpolation: 'hold' }] } })
+sequence.clips.push(lightClip)
 // 2026-10-22 之前的说明书风格与标题模板只出现在旧格式样本里，读取原样本作为这些冻结格式的当前内容。
 const legacyFixture = (id: string, version: number): unknown => (JSON.parse(fs.readFileSync(path.join('tests/fixtures/persistence', id, `v${version}.json`), 'utf8')) as { content: unknown }).content
 const legacyKits = legacyFixture('style-kits', 3) as unknown[]
@@ -431,9 +436,15 @@ export function getImageLayoutFixtureResources(): readonly unknown[] {
  * 预设包 14 补一件带作者接口 10 代码快照的风格件（标题条目只出现在旧文件里，写不出空间片段）。
  * 剪辑 63、录制 66 起黄金片段另带发光强度与其关键帧，风格包与模板库的人名条同样带上；剪辑 69、录制 72 起再带三维表面（厚度及其关键帧、受光、材质、倒角、阴影）。
  * 剪辑 64、录制 67 起黄金片段的代码图片参数 partner 引用同一序列里的录屏片段。
+ * 剪辑 70、录制 73 起黄金序列另带一盏灯光片段（聚光、投影、亮度关键帧）与它的灯光素材项。
  */
+function withGoldenLight(video: VideoEditDocument): VideoEditDocument {
+  if (video.items.some(item => item.id === 'golden-light-item')) return video
+  return { ...video, items: [...video.items, structuredClone(document.items.find(item => item.id === 'golden-light-item')!)],
+    sequences: video.sequences.map(entry => entry.id !== sequence.id ? entry : { ...entry, clips: [...entry.clips, structuredClone(lightClip)] }) }
+}
 function withSpatialVideo(value: unknown): unknown {
-  const video = value as VideoEditDocument
+  const video = withGoldenLight(value as VideoEditDocument)
   const fields = { spatial: clip.spatial, depth: clip.depth, rotationX: clip.rotationX, rotationY: clip.rotationY, anchorDepth: clip.anchorDepth, spaceEmission: clip.spaceEmission, spaceThickness: clip.spaceThickness, spaceLit: clip.spaceLit, spaceMaterial: clip.spaceMaterial, spaceBevel: clip.spaceBevel, spaceCastShadow: clip.spaceCastShadow, spaceReceiveShadow: clip.spaceReceiveShadow }
   return { ...video, sequences: video.sequences.map(entry => entry.id !== sequence.id ? entry : { ...entry, spatialCamera: structuredClone(sequence.spatialCamera), spaceRender: structuredClone(sequence.spaceRender),
     clips: entry.clips.map(item => item.id !== clip.id ? item : { ...item, ...structuredClone(fields), curves: { ...item.curves, ...structuredClone(spatialCurves) },

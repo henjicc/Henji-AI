@@ -25,7 +25,7 @@ import { acceptsVideoEditDrop, dropVideoEditInput, endVideoEditItemDrag, readVid
 import { appendVideoEditSequence, deleteVideoEditSequence, focusVideoEditPanel, setVideoEditProjectView, switchVideoEditSequence, updateVideoEditSequenceSettings, type VideoEditInstance } from '../application/videoEditService'
 import { focusVideoEditPanelElement } from '../layout/videoEditPanelFocus'
 import { chooseVideoEditMedia, relinkVideoEditMedia } from '../application/videoEditMedia'
-import { appendVideoEditItems, createVideoEditAdjustmentItem, createVideoEditBin, createVideoEditGraphicItem, createVideoEditSequenceFromItem, deleteVideoEditBins, deleteVideoEditItems, setVideoEditLabels, updateVideoEditBin, updateVideoEditItems, type VideoEditGraphicItemInput } from '../application/videoEditProjectItems'
+import { appendVideoEditItems, createVideoEditAdjustmentItem, createVideoEditBin, createVideoEditLightItem, createVideoEditGraphicItem, createVideoEditSequenceFromItem, deleteVideoEditBins, deleteVideoEditItems, setVideoEditLabels, updateVideoEditBin, updateVideoEditItems, type VideoEditGraphicItemInput } from '../application/videoEditProjectItems'
 import { updateVideoEditSource } from '../application/videoEditSource'
 import { activateVideoEditProjectItem } from '../application/videoEditItemActivation'
 import { isVideoEditSourcePreviewItem } from '../application/videoEditSourcePreview'
@@ -171,12 +171,14 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   }
   const createGraphic = (kind: VideoEditGraphicItemInput['kind']): void => run(() => selectCreatedItem(createVideoEditGraphicItem(projectId, { kind, binId: binId || undefined })))
   const createAdjustment = (): void => run(() => selectCreatedItem(createVideoEditAdjustmentItem(projectId, { binId: binId || undefined })))
+  const createLight = (): void => run(() => selectCreatedItem(createVideoEditLightItem(projectId, { binId: binId || undefined })))
   const graphicMenu = (): MenuItem[] => [
     { id: 'solid', label: '新建纯色', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => createGraphic('solid') },
     { id: 'rect', label: '新建矩形', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => createGraphic('rect') },
     { id: 'ellipse', label: '新建椭圆', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => createGraphic('ellipse') },
     { id: 'text', label: '新建原生文字', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => createGraphic('text') },
     { id: 'adjustment', label: '新建调整图层', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: createAdjustment },
+    { id: 'light', label: '新建灯光', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: createLight },
   ]
   const createFromItem = (id: string): void => {
     run(() => {

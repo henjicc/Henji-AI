@@ -10,9 +10,11 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 72, minReaderVersion: 72,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 73, minReaderVersion: 73,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 72 → 73：嵌入剪辑的新增灯光片段与灯光素材项（kind light，字段 lightKind、lightColor、lightIntensity 可关键帧、lightCastShadow、lightSoftness、lightAngle），序列 spaceRender 新增 defaultLighting；旧内容没有灯光，画面不变；片段与素材项的 kind、关键帧键是封闭枚举，旧程序读到 light 或 curves.lightIntensity 会拒读，最低可读版本随版本提高。
+    72: content => structuredClone(content),
     // 71 → 72：嵌入剪辑的片段新增三维表面：厚度 spaceThickness（可关键帧）、受光 spaceLit、材质 spaceMaterial、倒角 spaceBevel、投影 spaceCastShadow / spaceReceiveShadow；旧内容没有这些字段，缺省为平面画面，画面不变；关键帧键是封闭枚举，旧程序读到 curves.spaceThickness 会拒读，最低可读版本随版本提高。
     71: content => structuredClone(content),
     // 70 → 71：嵌入剪辑的代码版本可用作者接口 17（三维作者的 host.time、host.space 标准材质与环境、元素轮廓 outline），序列 spaceRender 新增可选泛光阈值与范围；旧源码与固定接口原样保留。旧程序无法执行，最低可读版本提高到 71。

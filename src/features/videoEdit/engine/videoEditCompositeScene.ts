@@ -17,6 +17,8 @@ import { planVideoEditBuiltinEffect } from './videoEditBuiltinEffectPasses'
 import { isShaderGraphEffect } from '@/core/videoEdit/shaderGraph/effects'
 import { VIDEO_EDIT_PRECISE_FORMAT, videoEditPictureHighPrecision } from './videoEditGpuFrame'
 import { isSpaceGlassMaterial } from './videoEditSpaceMaterials'
+import { videoEditPictureFilter } from '@/core/videoEdit/clipGeometry'
+import { VIDEO_EDIT_SPACE_LIGHT_DEFAULT_HEX } from '@/core/theme/colorTokens'
 import type { VideoEditTrackedClip } from './videoEditTrackResults'
 import type { AuthorGpuInputs } from './videoEditAuthorModule'
 import type { PreparedVideoEditCodeEffect } from './videoEditCodeSources'
@@ -414,12 +416,23 @@ export async function renderVideoEditThreeSpaceScene(options: {
       return depth > 0 ? cocScale * Math.abs(depth - center.camera.focusDistance) / depth : 0
     }))
     const camera = request.composition.spatialCamera
+    // 时间线灯光（照亮整条序列的三维内容）；没有任何灯与环境、作者场景也没布光，而有受光的片段时，用缺省布光（摄影棚中性环境 + 左前上方一盏主光），
+    // 否则受光的字是黑的。序列三维设置 defaultLighting 为 off 时不加。
+    const { spatialLightsAt } = await import('@/core/videoEdit/spatialLights')
+    let lights = spatialLightsAt(request.composition, request.sequenceFrame, request.output, opacityOf)
+    const authorLit = scenes.some(scene => { let found = false; scene.root.traverse(object => { if ((object as { isLight?: boolean }).isLight || (object as { environment?: unknown }).environment) found = true }); return found })
+    const litClips = plan.groups.some(group => group.clipIds.some(clipId => solidOf(clipId)?.lit))
+    // 按整条序列有没有灯判断（不是这一帧）：灯从后面才开始时，前面的帧不该先套上缺省布光、到切点再跳变。
+    const lightTracks = videoEditPictureFilter(request.composition)
+    const sequenceLit = request.composition.clips.some(clip => clip.kind === 'light' && clip.enabled !== false && lightTracks.has(clip))
+    const defaultLighting = options.spaceRender?.defaultLighting !== 'off' && litClips && !sequenceLit && (options.spaceRender?.environment ?? 'none') === 'none' && !authorLit
+    if (defaultLighting) lights = [{ clipId: 'default-key', kind: 'directional', color: VIDEO_EDIT_SPACE_LIGHT_DEFAULT_HEX, intensity: 1, castShadow: true, softness: .5, angle: 50, position: [-1.2, 1.6, 2], direction: [.45, -.55, -.7], size: 1 }]
     const postEffects = { display: options.display ?? 'realtime', motionBlur: drawn.motionBlur === true, depthOfField: Boolean(camera?.defocus || camera?.curves?.defocus?.length),
       focusDistance: center.camera.focusDistance, cocScale, cocMax: Math.max(0, ...center.cards.map(card => card.cocRangePx[1]), ...sceneCoc),
       shutterScale: plan.samples.length > 1 ? plan.samples.length / (plan.samples.length - 1) : 1,
       bloom: options.spaceRender?.bloom ?? 0, bloomThreshold: options.spaceRender?.bloomThreshold ?? .75, bloomRadius: options.spaceRender?.bloomRadius ?? .45, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0,
       exposure: options.spaceRender?.exposure ?? 0, toneMapping: options.spaceRender?.toneMapping ?? 'neutral',
-      environment: options.spaceRender?.environment ?? 'none', environmentIntensity: options.spaceRender?.environmentIntensity ?? 1, environmentRotation: options.spaceRender?.environmentRotation ?? 0,
+      environment: defaultLighting ? 'studioNeutral' as const : options.spaceRender?.environment ?? 'none', environmentIntensity: options.spaceRender?.environmentIntensity ?? 1, environmentRotation: options.spaceRender?.environmentRotation ?? 0,
       emission: emitting.size > 0 }
     /**
      * 组画面是否“带发光”（宿主据此选解码约定）：有作者场景、发光卡片，或实时显示开了泛光（辉光会溢到透明处）。
@@ -444,7 +457,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
         .map(scene => ({ ...scene, opacity: opacityOf(scene.clipId), ...previous.has(scene.clipId) ? { previous: previous.get(scene.clipId)! } : {} }))
       const light = groupCarriesLight ?? (cards.some(card => card.light || emitsLight(card.clipId)) || groupScenes.length > 0 || (postEffects.display === 'realtime' && postEffects.bloom > 0))
       return capture(outputSpec(`three:group:${group.id}${variant}`), async target => {
-        const { refining, progress } = await space.render({ frame: center, light, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects, exact: request.quality === 'final' || request.sessionKind !== 'preview',
+        const { refining, progress } = await space.render({ frame: center, light, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects, exact: request.quality === 'final' || request.sessionKind !== 'preview', lights,
           ...(below ? { below: { texture: below.texture, width: below.width, height: below.height, light: below.carriesLight } } : {}),
           target: { texture: target.texture, width: target.width, height: target.height }, ...(options.trace ? { trace: { ...options.trace, group: `${group.id}${variant}` } } : {}), assertCurrent: () => { current() } })
         if (refining) options.onRefining?.(progress ?? 0)

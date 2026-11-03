@@ -69,7 +69,7 @@ export const videoEditMediaSchema = z.object({
 }).strict()
 export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional(), label: videoEditLabelSchema.optional(), sourceFolderPath: z.string().min(1).optional() }).strict()
 export const videoEditItemSourceRangeSchema = z.object({ inUs: z.number().int().nonnegative(), outUs: z.number().int().positive() }).strict().refine(value => value.outUs > value.inUs, '子剪辑出点须晚于入点。')
-export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), sequenceId: identifier.optional(), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), elementOverrides: codeElementOverridesSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional(), sourceRange: videoEditItemSourceRangeSchema.optional() }).strict()
+export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence', 'light']), sequenceId: identifier.optional(), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), elementOverrides: codeElementOverridesSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional(), sourceRange: videoEditItemSourceRangeSchema.optional() }).strict()
 /** 轨道混音（参照 Audition / PR 的音轨混合器）：音量（dB）、声像（-100 左 ~ 100 右）与轨道效果（只放音频内置效果，最多 16 个），作用在这条轨道混好的声音上。 */
 export const VIDEO_EDIT_MAX_BUS_EFFECTS = 16
 const videoEditBusVolumeSchema = z.number().finite().min(-60).max(12)
@@ -103,7 +103,7 @@ const videoEditClipStateSchema = z.object({
   snapToBeat: z.boolean().optional().describe('超级关键帧整理时吸附到序列节拍标记，钉点优先。'),
   /** 原生模板实例：同一模板的文字图形片段联动；分离后去掉。代码模板靠代码定义联动，不写这一项。 */
   templateId: identifier.optional(),
-  id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
+  id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence', 'light']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
   elementOverrides: codeElementOverridesSchema.optional(),
   edits: codeEditsSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).optional(), adjustment: videoEditAdjustmentSchema.optional(),
@@ -181,6 +181,7 @@ export const videoEditSpaceRenderSchema = z.object({
   environment: z.enum(VIDEO_EDIT_SPACE_ENVIRONMENTS).optional().describe('三维环境光（照亮物体、出现在反射与玻璃里，不当背景显示），省略为 none：none 无；studioNeutral 摄影棚中性（顶上柔光 + 两侧条灯）；studioWarm 摄影棚偏暖；studioCool 摄影棚偏冷；rim 黑棚轮廓光（只有身后两侧强条灯勾边）；sky 天光（蓝天、柔和太阳）。作者场景自己设了环境时以作者为准。'),
   environmentIntensity: z.number().min(0).max(4).optional().describe('三维环境光强度 0–4，省略为 1。'),
   environmentRotation: z.number().min(-180).max(180).optional().describe('三维环境光水平旋转角度 −180–180°，省略为 0：转动灯位，换高光与反射落在哪里。'),
+  defaultLighting: z.enum(['auto', 'off']).optional().describe('缺省布光，省略为 auto：序列里有受光的片段、却没有灯光片段与环境光、作者场景也没布光时，自动加摄影棚中性环境与一盏主光；加入第一盏灯或设了环境光后自动不加。off 关闭。'),
   toneMapping: z.enum(VIDEO_EDIT_SPACE_TONE_MAPPINGS).optional().describe('三维色调映射，省略为 neutral：neutral 中性（颜色最接近原样）；agx 胶片（高光柔和地过渡到白，像 Blender 默认）；aces 电影（对比更强、暗部更深）。只作用于三维物体。'),
 }).strict()
 export type VideoEditSpaceRender = z.infer<typeof videoEditSpaceRenderSchema>
@@ -202,6 +203,7 @@ export function storedVideoEditSpaceRender(value: VideoEditSpaceRender): VideoEd
     ...value.environment && value.environment !== 'none' ? { environment: value.environment } : {},
     ...value.environmentIntensity !== undefined && value.environmentIntensity !== 1 ? { environmentIntensity: value.environmentIntensity } : {},
     ...value.environmentRotation ? { environmentRotation: value.environmentRotation } : {},
+    ...value.defaultLighting === 'off' ? { defaultLighting: 'off' as const } : {},
   }
   return Object.keys(stored).length ? stored : undefined
 }
@@ -294,8 +296,8 @@ export const videoEditDocumentSchema = z.object({
     if (item.binId && !binsById.has(item.binId)) issue('素材项的素材箱不存在。')
     const media = mediaById.get(item.mediaId!)
     if (item.sourceRange && (!media || !['video', 'audio'].includes(item.kind) || item.sourceRange.outUs > Math.round(media.durationSeconds * 1e6))) issue('子剪辑源范围超出原音视频素材。')
-    if (!['text', 'code', 'graphic', 'adjustment', 'sequence'].includes(item.kind) && (!media || item.kind !== media.kind)) issue(`素材项 ${item.name} 的素材引用无效。`)
-    if (['text', 'graphic', 'adjustment'].includes(item.kind) && item.mediaId) issue('文字、图形及调整图层不能引用媒体文件。')
+    if (!['text', 'code', 'graphic', 'adjustment', 'sequence', 'light'].includes(item.kind) && (!media || item.kind !== media.kind)) issue(`素材项 ${item.name} 的素材引用无效。`)
+    if (['text', 'graphic', 'adjustment', 'light'].includes(item.kind) && item.mediaId) issue('文字、图形、调整图层及灯光不能引用媒体文件。')
     if (item.kind === 'graphic' ? !item.graphic : Boolean(item.graphic)) issue('只有图形素材项可以且必须保存结构化图形。')
     if (item.kind === 'code') {
       if (item.mediaId || !item.code) issue('代码素材项必须引用固定源码实例，不能引用预渲染媒体。')
@@ -339,6 +341,10 @@ export const videoEditDocumentSchema = z.object({
       if (nested && !videoEditClipWithinSource(clip, fps, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, Math.max(1, videoEditClipSpeedValue(clip)) / fps)) issue(`片段 ${clip.name} 超出嵌套序列的 24 小时源时钟。`)
       const track = tracksByIndex.get(clip.track)
       const extractedAudio = item?.kind === 'video' && clip.kind === 'audio' && clip.sourceComponent === 'audio'
+      // 灯光片段：没有画面，必须开空间（位置与朝向就是空间属性）；灯光字段只属于灯光片段。
+      if (clip.kind === 'light' && clip.spatial?.enabled !== true) issue(`灯光片段“${clip.name}”必须开启空间。`)
+      if (clip.kind !== 'light' && (['lightKind', 'lightColor', 'lightIntensity', 'lightCastShadow', 'lightSoftness', 'lightAngle'] as const).some(key => clip[key] !== undefined || clip.curves?.lightIntensity?.length)) issue(`只有灯光片段可以带灯光属性（${clip.name}）。`)
+      if (clip.kind === 'light' && (clip.effects?.length || clip.graphic || clip.code)) issue(`灯光片段“${clip.name}”不能带效果、图形或代码。`)
       if (clip.audioRole && clip.kind !== 'sequence' && (!media || media.hasAudio === false || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video'))) issue('只有带声音的音视频片段可以标注声音类型。')
       if (!item || (item.kind !== clip.kind && !extractedAudio)) issue(`片段 ${clip.name} 的素材项引用无效。`)
       if (clip.sourceComponent && !(item?.kind === 'video' && ((clip.kind === 'video' && clip.sourceComponent === 'video') || extractedAudio))) issue('只有视频素材可以拆开引用画面或声音。')

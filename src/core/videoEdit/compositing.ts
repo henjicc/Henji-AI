@@ -60,7 +60,7 @@ export function orderVideoEditEffects(effects: VideoEditEffect[], ids: string[])
 /** 效果处理画面还是声音：代码滤镜与画面内置效果为 video，音频内置效果（4.7c）为 audio。 */
 export function videoEditEffectMedia(effect: Pick<VideoEditEffect, 'builtin'>): VideoEditBuiltinMedia { return effect.builtin ? videoEditBuiltinEffectMedia(effect.builtin.id) : 'video' }
 /** 片段能不能挂这种效果：音频效果只挂声音片段，画面效果只挂画面片段（与过渡的媒介规则一致）。 */
-export function videoEditEffectAccepts(media: VideoEditBuiltinMedia, clip: Pick<VideoEditClip, 'kind'>): boolean { return media === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' }
+export function videoEditEffectAccepts(media: VideoEditBuiltinMedia, clip: Pick<VideoEditClip, 'kind'>): boolean { return media === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' && clip.kind !== 'light' }
 /** Disabled effects remain editable/persisted, but consume no render resources. 只返回画面效果（音频效果由混音处理）；已移除的内置效果保留在片段上但不渲染。 */
 export function activeVideoEditEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'opacity' | 'effectsEnabled' | 'disabledIntrinsicSections'>): VideoEditEffect[] {
   if (clip.effectsEnabled === false) return []
@@ -101,7 +101,8 @@ export function validateVideoEditAdjustmentRanges(sequence: Pick<VideoEditSequen
 export function buildVideoEditCompositePlan(clips: readonly VideoEditClip[], transitions: readonly VideoEditTransitionWindow[] = []): VideoEditCompositeNode[] {
   const nodes: VideoEditCompositeNode[] = []
   const endpoints = new Set(transitions.flatMap(window => [window.left.id, window.right.id]))
-  const tracks = [...new Set([...clips.filter(clip => clip.kind !== 'audio').map(clip => clip.track), ...transitions.map(window => window.left.track)])].sort((a, b) => a - b)
+  // 灯光片段不出画面：不进合成树、不隔断三维分组（照亮的是整条序列的三维内容）。
+  const tracks = [...new Set([...clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'light').map(clip => clip.track), ...transitions.map(window => window.left.track)])].sort((a, b) => a - b)
   for (const track of tracks) {
     // Same-track nested bands must process inner ranges before outer ranges.
     const adjustments = clips.filter(clip => clip.track === track && clip.kind === 'adjustment').sort((a, b) => b.adjustment!.fromTrack - a.adjustment!.fromTrack)
@@ -113,7 +114,7 @@ export function buildVideoEditCompositePlan(clips: readonly VideoEditClip[], tra
       for (let index = nodes.length - 1; index >= 0; index--) if (children.includes(nodes[index])) nodes.splice(index, 1)
       nodes.push({ kind: 'adjustment', clip, fromTrack, toTrack: track, children })
     }
-    nodes.push(...clips.filter(clip => clip.track === track && clip.kind !== 'audio' && clip.kind !== 'adjustment' && !endpoints.has(clip.id)).map(clip => ({ kind: 'clip' as const, clip, fromTrack: track, toTrack: track + 1 })))
+    nodes.push(...clips.filter(clip => clip.track === track && clip.kind !== 'audio' && clip.kind !== 'adjustment' && clip.kind !== 'light' && !endpoints.has(clip.id)).map(clip => ({ kind: 'clip' as const, clip, fromTrack: track, toTrack: track + 1 })))
     nodes.push(...transitions.filter(window => window.left.track === track).map(window => ({ kind: 'transition' as const, window, fromTrack: track, toTrack: track + 1 })))
   }
   return nodes

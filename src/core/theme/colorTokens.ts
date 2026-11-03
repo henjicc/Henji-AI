@@ -393,3 +393,6 @@ export const VIDEO_EDIT_GLOW_TEST_COLORS = { inner: '#ff8040', outer: '#4080ff' 
 
 /** 剪辑内置效果“漏光”的默认颜色（画面内容色）：最亮处暖白、边缘橙。 */
 export const VIDEO_EDIT_LIGHT_LEAK_DEFAULT_HEX = { hot: '#ffe8c8', edge: '#ff8a4a' } as const;
+
+/** 三维灯光片段的缺省灯色（画面内容色，不是界面色）：白光。 */
+export const VIDEO_EDIT_SPACE_LIGHT_DEFAULT_HEX = '#ffffff';

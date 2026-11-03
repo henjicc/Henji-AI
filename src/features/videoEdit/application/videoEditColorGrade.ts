@@ -94,7 +94,7 @@ export async function observeVideoEditColor(target: Omit<VideoEditCompositeTarge
   const composition = videoEditComposition(snapshot, sequence.id)
   const stage = options.stage ?? (target.clipId ? 'after_grade' : 'program')
   const clip = target.clipId ? sequence.clips.find(value => value.id === target.clipId) : undefined
-  if (stage !== 'program' && (!clip || clip.kind === 'audio' || clip.kind === 'adjustment')) throw new Error('调色前后读数需要一个带画面的片段；整个画面请用 program。')
+  if (stage !== 'program' && (!clip || clip.kind === 'audio' || clip.kind === 'adjustment' || clip.kind === 'light')) throw new Error('调色前后读数需要一个带画面的片段；整个画面请用 program。')
   const at = options.frame ?? (clip && (owner.frame < clip.start || owner.frame >= clip.start + clip.duration) ? clip.start + Math.floor(clip.duration / 2) : owner.frame)
   if (clip && (at < clip.start || at >= clip.start + clip.duration)) throw new Error('读取帧必须在目标片段的时间范围内。')
   let document: VideoEditComposition = composition
@@ -120,7 +120,7 @@ export async function analyzeVideoEditColorGrade(target: VideoEditCompositeTarge
   const started = performance.now(); const owner = requireVideoEditInstance(target.projectId); const snapshot = owner.document; const contentVersion = owner.contentVersion
   const documentVersion = videoEditObservationVersion(owner, snapshot.revision)
   const sequence = snapshot.sequences.find(value => value.id === target.sequenceId); const clip = sequence?.clips.find(value => value.id === target.clipId)
-  if (!sequence || !clip || clip.kind === 'audio' || clip.kind === 'adjustment') throw new Error('请选择带画面的片段，调整图层和声音片段不能自动校色。')
+  if (!sequence || !clip || clip.kind === 'audio' || clip.kind === 'adjustment' || clip.kind === 'light') throw new Error('请选择带画面的片段，调整图层和声音片段不能自动校色。')
   const at = frame ?? (owner.frame >= clip.start && owner.frame < clip.start + clip.duration ? owner.frame : clip.start + Math.floor(clip.duration / 2))
   if (!Number.isSafeInteger(at) || at < clip.start || at >= clip.start + clip.duration) throw new Error('分析帧必须在目标片段的时间范围内。')
   const composition = videoEditComposition(snapshot, sequence.id)

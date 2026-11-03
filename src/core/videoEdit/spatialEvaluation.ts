@@ -24,7 +24,8 @@ function fail(code: SpatialFact['code'], frame: number, message: string, clipIds
   throw new SpatialEvaluationError([{ code, clipIds, sequenceFrame: frame, message, values }])
 }
 export function spatialClipEnabled(clip: SpatialClip): boolean {
-  return clip.spatial?.enabled === true && !clip.disabledIntrinsicSections?.includes('motion') && clip.kind !== 'audio' && clip.kind !== 'adjustment'
+  // 灯光片段没有画面，不是卡片（它的位置与朝向由 spatialLightsAt 单独求）。
+  return clip.spatial?.enabled === true && !clip.disabledIntrinsicSections?.includes('motion') && clip.kind !== 'audio' && clip.kind !== 'adjustment' && clip.kind !== 'light'
 }
 function holdValue<T>(points: SpatialHold<T> | undefined, time: number, fallback: T): T {
   let value = fallback

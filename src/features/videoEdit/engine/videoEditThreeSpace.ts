@@ -106,6 +106,8 @@ export interface ThreeSpaceFrame {
   below?: { texture: GpuTexture; width: number; height: number; light: boolean }
   /** 成片（导出、选帧）：实体卡片的轮廓要等读回完成再画；看片时先按平面画、读回后再精确。 */
   exact?: boolean
+  /** 时间线灯光片段（含缺省布光的主光）：照亮本组受光的三维内容，路径追踪读同一批灯。 */
+  lights?: readonly import('@/core/videoEdit/spatialLights').SpatialLight[]
   assertCurrent(): void
 }
 export interface ThreeSpaceTrace {
@@ -254,6 +256,9 @@ export class VideoEditThreeSpace {
    * 尺寸与朝向取卡片本身，朝场景物体那一侧发光。只照亮作者物体（卡片自己不受光）；路径追踪里卡片本身就是发光面，这些灯关掉。
    */
   private areaLights?: Promise<AreaLightSlot[]>
+  /** 灯光片段对应的 three 灯（按片段，种类变了就换一盏）。灯数变化会让受光材质重编译一次，灯光片段通常不频繁增减。 */
+  private readonly timelineLights = new Map<string, { kind: string; light: Three.Light; target?: Three.Object3D }>()
+  private ltcReady?: Promise<void>
   /** 实心玻璃的背面通道：玻璃网格单独画一遍背面，记下视空间法线与视深，正面折射时读它求出穿过的距离与出射法线。 */
   private glassBack?: { target: Three.RenderTarget; camera: Three.PerspectiveCamera; material: Three.Material; shared: SpaceGlassShared }
 
@@ -353,6 +358,7 @@ export class VideoEditThreeSpace {
     this.syncCamera(input.frame, input.shutterOpen)
     const approximate = await this.syncCards(input)
     this.syncScenes(input.scenes, input.effects)
+    await this.syncTimelineLights(input.lights ?? [])
     if (input.effects.display === 'render') {
       this.lastTraceAt = performance.now()
       // 看片（有时间预算）换到新画面：追踪一批要上秒，先交实时画面，节目监视器随后再要这一帧时才开始追踪。
@@ -511,6 +517,68 @@ export class VideoEditThreeSpace {
   }
 
   /** 把路径追踪的结果（同尺寸、线性编码后的预乘画面）相加画到卡片那一层上的全屏四边形。 */
+  /** 面光源要先装好 LTC 查找表（灯光片段的面光与发光卡片的面光源槽共用）。 */
+  private ensureLtc(): Promise<void> {
+    return this.ltcReady ??= loadAuthorThreeModule<{ RectAreaLightTexturesLib: { init(): unknown } }>('three/addons/lights/RectAreaLightTexturesLib.js', this.libraries)
+      .then(({ RectAreaLightTexturesLib }) => { (this.library as unknown as { RectAreaLightNode: { setLTC(value: unknown): void } }).RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init()) })
+      .catch(error => { this.ltcReady = undefined; throw error })
+  }
+
+  /**
+   * 时间线灯光：亮度按灯种换成 three 的单位（平行光 ×3、聚光与点光 ×20 并按距离平方衰减、面光 ×5），亮度 1 是“一盏常用的主光”；
+   * 阴影软硬换成阴影贴图的模糊半径，聚光的边缘软硬随它。
+   */
+  private async syncTimelineLights(lights: readonly import('@/core/videoEdit/spatialLights').SpatialLight[]): Promise<void> {
+    const { library } = this
+    const next = new Set(lights.map(light => light.clipId))
+    for (const [clipId, entry] of this.timelineLights) if (!next.has(clipId)) { this.scene.remove(entry.light); if (entry.target) this.scene.remove(entry.target); entry.light.dispose(); this.timelineLights.delete(clipId) }
+    for (const value of lights) {
+      let entry = this.timelineLights.get(value.clipId)
+      if (entry && entry.kind !== value.kind) { this.scene.remove(entry.light); if (entry.target) this.scene.remove(entry.target); entry.light.dispose(); this.timelineLights.delete(value.clipId); entry = undefined }
+      if (!entry) {
+        if (value.kind === 'area') await this.ensureLtc()
+        const target = value.kind === 'directional' || value.kind === 'spot' ? new library.Object3D() : undefined
+        const light: Three.Light = value.kind === 'directional' ? new library.DirectionalLight() : value.kind === 'spot' ? new library.SpotLight() : value.kind === 'point' ? new library.PointLight() : new library.RectAreaLight()
+        light.name = `timeline-light:${value.clipId}`
+        if (target) { (light as Three.DirectionalLight).target = target; this.scene.add(target) }
+        this.scene.add(light)
+        entry = { kind: value.kind, light, ...(target ? { target } : {}) }
+        this.timelineLights.set(value.clipId, entry)
+      }
+      const light = entry.light
+      light.color.set(value.color)
+      // 平行光只看朝向：放在场景中心的反方向远处，阴影相机才罩得住整幅场景。
+      const direction = new library.Vector3(...value.direction).normalize()
+      if (value.kind === 'directional') light.position.copy(direction.clone().multiplyScalar(-6)); else light.position.set(...value.position)
+      const aim = value.kind === 'directional' ? new library.Vector3(0, 0, 0) : new library.Vector3(...value.position).add(direction)
+      if (entry.target) { entry.target.position.copy(aim); entry.target.updateMatrixWorld() }
+      if (value.kind === 'directional') light.intensity = value.intensity * 3
+      if (value.kind === 'spot') {
+        const spot = light as Three.SpotLight
+        spot.intensity = value.intensity * 20; spot.decay = 2; spot.distance = 0
+        spot.angle = value.angle / 2 * Math.PI / 180; spot.penumbra = Math.min(1, .1 + value.softness * .9)
+      }
+      if (value.kind === 'point') { const point = light as Three.PointLight; point.intensity = value.intensity * 20; point.decay = 2; point.distance = 0 }
+      if (value.kind === 'area') {
+        const area = light as Three.RectAreaLight
+        area.intensity = value.intensity * 5; area.width = area.height = Math.max(.01, value.size)
+        area.lookAt(aim)
+      }
+      light.castShadow = value.castShadow && value.kind !== 'area'
+      const shadow = (light as Three.DirectionalLight).shadow
+      if (shadow && light.castShadow) {
+        shadow.mapSize.set(2048, 2048)
+        shadow.radius = 1 + value.softness * 6
+        shadow.bias = -.0005
+        if (value.kind === 'directional') {
+          const camera = shadow.camera as Three.OrthographicCamera
+          camera.left = camera.bottom = -2; camera.right = camera.top = 2; camera.near = .01; camera.far = 20; camera.updateProjectionMatrix()
+        }
+      }
+      light.updateMatrixWorld()
+    }
+  }
+
   /** 实体卡片在卡片那一层里同作者物体一样只写深度：把它们包成场景的样子交给 applyDepthOnly。 */
   private solidScenes(): ThreeSpaceScene[] {
     return [...this.cards.entries()].filter(([, entry]) => entry.mesh.visible && this.solid.isSolid(entry.mesh) && !this.solid.isFlatSolid(entry.mesh))
@@ -520,8 +588,7 @@ export class VideoEditThreeSpace {
   private async syncAreaLights(input: ThreeSpaceFrame, enabled: boolean): Promise<void> {
     const { library, tsl } = this
     this.areaLights ??= (async () => {
-      const { RectAreaLightTexturesLib } = await loadAuthorThreeModule<{ RectAreaLightTexturesLib: { init(): unknown } }>('three/addons/lights/RectAreaLightTexturesLib.js', this.libraries)
-      ;(library as unknown as { RectAreaLightNode: { setLTC(value: unknown): void } }).RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init())
+      await this.ensureLtc()
       return Array.from({ length: AREA_LIGHT_SLOTS }, (_, index): AreaLightSlot => {
         const target = new library.RenderTarget(1, 1, { type: library.HalfFloatType, depthBuffer: false })
         const source = tsl.texture(new library.Texture()), glow = tsl.uniform(0), strength = tsl.uniform(0)
@@ -542,6 +609,8 @@ export class VideoEditThreeSpace {
         return { light, target, source, glow, strength, material, quad: new library.QuadMesh(material) }
       })
     })()
+    // 加载失败（LTC 表取不到）时清掉缓存，下一帧重试，不让每帧都卡在同一个失败上。
+    this.areaLights.catch(() => { this.areaLights = undefined })
     const slots = await this.areaLights
     const ranked = enabled ? input.cards.filter(card => card.emission > 0 && card.opacity > 0 && !card.geometry.behindCamera && this.cards.get(card.clipId)?.external)
       .map(card => ({ card, score: card.emission * card.geometry.screenBounds.width * card.geometry.screenBounds.height }))
@@ -1171,6 +1240,8 @@ export class VideoEditThreeSpace {
     for (const [clipId, entry] of this.cards) this.dropCard(clipId, entry)
     this.solid.dispose()
     for (const slot of this.areaLights ? await this.areaLights.catch(() => []) : []) { this.scene.remove(slot.light); slot.target.dispose(); slot.light.dispose(); slot.material.dispose() }
+    for (const entry of this.timelineLights.values()) entry.light.dispose()
+    this.timelineLights.clear()
     if (this.glassBack) { this.glassBack.target.dispose(); this.glassBack.material.dispose(); this.glassBack.shared.on.value = 0 }
     if (this.belowEntry) { (this.belowEntry.mesh.material as Three.Material).dispose(); (this.belowEntry.backplate.material as Three.Material).dispose(); this.belowEntry.external?.dispose() }
     this.quad.dispose()

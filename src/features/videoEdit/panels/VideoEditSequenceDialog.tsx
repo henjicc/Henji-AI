@@ -190,6 +190,9 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
           <UiFormRow label="环境光旋转" inline info="转动灯位，换高光与反射落在物体哪里。">
             <NumberInput ariaLabel="三维环境光旋转" disabled={busy} value={space.environmentRotation ?? 0} min={-180} max={180} step={5} precision={0} widthClassName="w-full" onChange={environmentRotation => setSpace({ environmentRotation })} />
           </UiFormRow>
+        <UiFormRow label="缺省布光" inline info="有受光的片段、却没有灯光片段与环境光时，自动加摄影棚环境与一盏主光；加入第一盏灯或设了环境光后自动不加。">
+          <UiSwitch aria-label="缺省布光" disabled={busy} checked={space.defaultLighting !== 'off'} onCheckedChange={checked => setSpace({ defaultLighting: checked ? undefined : 'off' })} />
+        </UiFormRow>
         </>}
       </UiGroup>}
       <div>

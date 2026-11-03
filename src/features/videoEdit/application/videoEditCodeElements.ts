@@ -89,7 +89,7 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
 export function videoEditProgramClipAt(instance: VideoEditInstance, point: { x: number; y: number }): { clip: VideoEditClip; picture: { width: number; height: number }; entry?: VideoEditCodeElementFrame } | undefined {
   const sequence = getActiveVideoEditSequence(instance); const picture = videoEditPictureFilter(sequence)
   const elements = videoEditCodeElementFrames(instance)
-  const clips = sequence.clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'adjustment' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && picture.has(clip)).sort((a, b) => b.track - a.track)
+  const clips = sequence.clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'adjustment' && clip.kind !== 'light' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && picture.has(clip)).sort((a, b) => b.track - a.track)
   for (const raw of clips) {
     const evaluated = evaluateVideoEditClip(raw, instance.frame); const clip = { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(raw, instance.frame) }; if (clip.opacity <= 0) continue
     const entry = elements.get(clip.id)
