@@ -95,7 +95,8 @@ export class VideoEditAuthorThree {
     const next = new Set<ThreeResource>(), pending: unknown[] = [this.author.scene.background, this.author.scene.environment], seen = new WeakSet<object>()
     this.author.scene.traverse(object => {
       const mesh = object as Three.Mesh
-      if (mesh.geometry) next.add(mesh.geometry)
+      // Sprite 的几何体是 three 模块里所有 Sprite 共用的一份，不属于任何作者场景：释放掉它，之后的场景再画就会用到已销毁的缓冲区。
+      if (mesh.geometry && !(object as Three.Sprite).isSprite) next.add(mesh.geometry)
       if (mesh.material) pending.push(...Array.isArray(mesh.material) ? mesh.material : [mesh.material])
     })
     while (pending.length) {

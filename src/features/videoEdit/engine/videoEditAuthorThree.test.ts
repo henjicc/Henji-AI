@@ -11,17 +11,18 @@ import { fingerprintAuthorFrameKey } from './videoEditAuthorFingerprint'
 import type { SpatialFrame } from '@/core/videoEdit/spatialTypes'
 import { spatialIdentityMatrix, spatialProjection, spatialView } from '@/core/videoEdit/spatialMatrices'
 
-it('受管相机复核作者改动，根变换仅应用一次，共享材质在最后一个实例释放', async () => {
+it('受管相机复核作者改动，根变换仅应用一次，共享材质在最后一个实例释放，Sprite 共用几何体不释放', async () => {
   const library = Three as bridgeModule.AuthorThreeLibrary
   const loaded = vi.spyOn(bridgeModule, 'loadAuthorThreeLibrary').mockResolvedValue(library)
   const disposed = vi.fn(async () => {})
   const created = vi.spyOn(bridgeModule.VideoEditAuthorThreeWebGpu, 'create').mockResolvedValue({ library, backend: 'webgpu', dispose: disposed } as unknown as bridgeModule.VideoEditAuthorThreeWebGpu)
   const geometry = new Three.BoxGeometry(1, 1, 1), material = new Three.MeshBasicMaterial()
   const releaseGeometry = vi.spyOn(geometry, 'dispose'), releaseMaterial = vi.spyOn(material, 'dispose')
+  const sprite = new Three.Sprite(), releaseSprite = vi.spyOn(sprite.geometry, 'dispose')
   let camera!: Three.PerspectiveCamera
   const factory = (host: import('./videoEditAuthorThree').AuthorThreeHost) => {
     camera = host.camera
-    const scene = new Three.Scene(); scene.add(new Three.Mesh(geometry, material))
+    const scene = new Three.Scene(); scene.add(new Three.Mesh(geometry, material), new Three.Sprite())
     return { scene, update() { host.camera.position.set(90, 90, 90); host.camera.projectionMatrix.identity() } }
   }
   const first = await VideoEditAuthorThree.create({} as GpuDevice, factory, 100, 100)
@@ -41,6 +42,8 @@ it('受管相机复核作者改动，根变换仅应用一次，共享材质在�
     expect(camera.projectionMatrix.elements).toEqual(projection)
     await first.dispose(); expect(releaseGeometry).not.toHaveBeenCalled(); expect(releaseMaterial).not.toHaveBeenCalled()
     await second.dispose(); expect(releaseGeometry).toHaveBeenCalledOnce(); expect(releaseMaterial).toHaveBeenCalledOnce()
+    // three 的所有 Sprite 共用模块里同一份几何体，作者场景释放后其他场景仍在用。
+    expect(releaseSprite).not.toHaveBeenCalled()
     // 只更新、交给统一三维渲染器的场景不创建自带渲染桥。
     expect(created).not.toHaveBeenCalled(); expect(disposed).not.toHaveBeenCalled()
   } finally { await first.dispose(); await second.dispose(); loaded.mockRestore(); created.mockRestore() }
