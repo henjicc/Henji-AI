@@ -245,10 +245,6 @@ interface StoredExportJob extends Omit<VideoEditExportJobRecord, 'invocationIds'
 
 const exportJobs = new Map<string, StoredExportJob>()
 
-function exportRecord(job: StoredExportJob): VideoEditExportJobRecord {
-  const { restorable: _restorable, created: _created, ...record } = job
-  return wire(record)
-}
 
 /** 模拟渲染层整页重载：主进程登记仍在，新页面经 restore 接管。不模拟离开时的状态改写与文件清理。 */
 const videoEditExportStorage: Omit<VideoEditExportPlatform, 'capabilities' | 'prepareCompression' | 'compress' | 'compressionProgress' | 'cancelCompression'> = {
