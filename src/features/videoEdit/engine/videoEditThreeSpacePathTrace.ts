@@ -2,6 +2,8 @@ import type * as Three from 'three'
 import type { AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { ManagedThreeRenderer } from './videoEditAuthorThreeWebGpu'
 import { loadAuthorThreeDependent } from './videoEditAuthorThreeWebGpu'
+import { guardVideoEditGpu } from './videoEditGpuErrorScope'
+import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 
 /**
  * 统一三维渲染器的路径追踪（three-gpu-pathtracer）：与实时渲染同一个 three 场景，按帧累积采样。
@@ -159,6 +161,7 @@ export class VideoEditThreeSpacePathTrace {
     const { renderer, tracer } = this
     const { width, height } = frame.target
     const previous = renderer.getRenderTarget()
+    const device = (renderer as unknown as { backend: { device: GpuDevice } }).backend.device
     const restores: Array<() => void> = []
     try {
       this.applyCards(frame.cards, restores)
@@ -176,7 +179,7 @@ export class VideoEditThreeSpacePathTrace {
       renderer.setRenderTarget(frame.target)
       const started = performance.now()
       while (this.samples < frame.samples) {
-        for (let i = 0; i < SAMPLE_BATCH; i++) tracer.renderSample()
+        await guardVideoEditGpu(device, '路径追踪', () => { for (let i = 0; i < SAMPLE_BATCH; i++) tracer.renderSample() })
         // 读回采样数要等显卡做完这一批：排队的显卡工作每次只有一小批（不会一下排进几秒的计算触发显卡超时），也能及时取消。
         // 波前追踪每次只推进一次弹射，采样数只能按追踪器自己的统计。
         this.samples = (await tracer.getSampleCountsAsync()).min
@@ -187,7 +190,7 @@ export class VideoEditThreeSpacePathTrace {
       if (!result) throw new Error('路径追踪没有输出画面。')
       this.encodeSource.value = result
       this.encodeLight.value = frame.light ? 1 : 0
-      this.encode.render(renderer)
+      await guardVideoEditGpu(device, '路径追踪', () => this.encode.render(renderer))
       return this.samples < frame.samples
     } catch (error) {
       // 半途失败的累积不再可信：下次从头开始。

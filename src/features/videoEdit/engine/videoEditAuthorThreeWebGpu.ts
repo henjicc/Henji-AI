@@ -3,6 +3,7 @@ import type { GpuDevice, GpuTexture, GpuRenderPipeline } from '@/core/imageEdit/
 import { authorLibraryDependencyError, resolveAuthorLibraryModule, type AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import { VideoEditAuthorThreeClock } from './videoEditAuthorThreeClock'
 import { runVideoEditGpuSection } from './videoEditGpuRootQueue'
+import { guardVideoEditGpu } from './videoEditGpuErrorScope'
 import { videoEditThreeTargetBytes } from './videoEditGpuBudget'
 
 export interface ManagedThreeRenderer {
@@ -121,12 +122,15 @@ export class VideoEditAuthorThreeWebGpu {
       // compileAsync 在等待异步管线时保持 three 的错误作用域，必须独占设备根队列。
       if (compile) await (this.backend === 'webgpu' ? runVideoEditGpuSection(this.device, () => this.renderer.compileAsync(scene, camera)) : this.renderer.compileAsync(scene, camera))
       assertCurrent()
-      this.renderer.render(scene, camera)
-      assertCurrent()
-      if (this.backend === 'webgpu') this.renderer.copyTextureToTexture(this.target!.texture, this.external!)
-      if (this.backend === 'webgl') this.device.queue.copyExternalImageToTexture(
-        { source: this.canvas }, { texture: this.linear!, premultipliedAlpha: true }, { width, height })
-      this.convert(texture)
+      // 提交里的校验错误（如用到已销毁的资源）让这一层失败，而不是当成画好了。
+      await guardVideoEditGpu(this.device, '三维渲染', () => {
+        this.renderer.render(scene, camera)
+        assertCurrent()
+        if (this.backend === 'webgpu') this.renderer.copyTextureToTexture(this.target!.texture, this.external!)
+        if (this.backend === 'webgl') this.device.queue.copyExternalImageToTexture(
+          { source: this.canvas }, { texture: this.linear!, premultipliedAlpha: true }, { width, height })
+        this.convert(texture)
+      })
     })
   }
   private convert(target: GpuTexture): void {

@@ -55,6 +55,11 @@ export function assertThreeMaterials(scene: Three.Scene): void {
 }
 type ThreeResource = { dispose(): void }
 const resourceOwners = new WeakMap<ThreeResource, number>()
+/**
+ * 宿主所有、只借给作者场景用的 three 资源：作者场景释放时不能连带释放它们，否则别的场景再用就会提交到已销毁的缓冲区。
+ * three 模块级的共用资源：所有 Sprite 共用的几何体、后处理全屏四边形的几何体、纹理节点缺省的空纹理（create 时登记）。
+ */
+const hostOwned = new WeakSet<object>()
 
 /**
  * 更新、渲染与提交由作者实例队列串行；初始化与 compileAsync 预热另外独占设备根队列。
@@ -71,6 +76,9 @@ export class VideoEditAuthorThree {
   static async create(device: GpuDevice, factory: (host: AuthorThreeHost) => AuthorThreeScene | Promise<AuthorThreeScene>,
     width: number, height: number, libraries?: AuthorLibraryVersions, backend?: AuthorThreeBackend): Promise<VideoEditAuthorThree> {
     const library = await loadAuthorThreeLibrary(libraries)
+    // 各新建一个，取到模块共用的那一份（第一次时由 three 创建）。
+    const nodes = (library as unknown as { TSL?: { texture(): { value: object }; cubeTexture(): { value: object } } }).TSL
+    for (const resource of [new library.Sprite().geometry, (library as unknown as { QuadMesh?: new () => { geometry: object } }).QuadMesh ? new (library as unknown as { QuadMesh: new () => { geometry: object } }).QuadMesh().geometry : undefined, nodes?.texture().value, nodes?.cubeTexture().value]) if (resource) hostOwned.add(resource)
     const camera = new library.PerspectiveCamera()
     const host = { camera, width, height }
     const author = await factory(host)
@@ -95,8 +103,7 @@ export class VideoEditAuthorThree {
     const next = new Set<ThreeResource>(), pending: unknown[] = [this.author.scene.background, this.author.scene.environment], seen = new WeakSet<object>()
     this.author.scene.traverse(object => {
       const mesh = object as Three.Mesh
-      // Sprite 的几何体是 three 模块里所有 Sprite 共用的一份，不属于任何作者场景：释放掉它，之后的场景再画就会用到已销毁的缓冲区。
-      if (mesh.geometry && !(object as Three.Sprite).isSprite) next.add(mesh.geometry)
+      if (mesh.geometry && !hostOwned.has(mesh.geometry)) next.add(mesh.geometry)
       if (mesh.material) pending.push(...Array.isArray(mesh.material) ? mesh.material : [mesh.material])
     })
     while (pending.length) {
@@ -104,7 +111,7 @@ export class VideoEditAuthorThree {
       if (!value || typeof value !== 'object' || seen.has(value)) continue
       seen.add(value)
       const resource = value as { isTexture?: boolean; isMaterial?: boolean; isNode?: boolean; dispose?: () => void }
-      if ((resource.isTexture || resource.isMaterial) && resource.dispose) next.add(resource as ThreeResource)
+      if ((resource.isTexture || resource.isMaterial) && resource.dispose && !hostOwned.has(resource)) next.add(resource as ThreeResource)
       if (resource.isMaterial || resource.isNode || Array.isArray(value)) pending.push(...Object.values(value))
     }
     for (const resource of next) if (!this.resources.has(resource)) resourceOwners.set(resource, (resourceOwners.get(resource) ?? 0) + 1)

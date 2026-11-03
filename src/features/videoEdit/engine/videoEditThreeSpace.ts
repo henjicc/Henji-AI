@@ -7,6 +7,7 @@ import { loadAuthorThreeLibrary, loadAuthorThreeModule, type AuthorThreeLibrary 
 import { VideoEditAuthorThreeClock } from './videoEditAuthorThreeClock'
 import type { VideoEditThreeSpacePathTrace } from './videoEditThreeSpacePathTrace'
 import { runVideoEditGpuSection } from './videoEditGpuRootQueue'
+import { guardVideoEditGpu } from './videoEditGpuErrorScope'
 
 /**
  * 统一三维渲染器：一组空间卡片与作者 three 场景在同一个 three 场景里一次绘制，景深、运动模糊按整幅画面做后处理。
@@ -174,6 +175,7 @@ export class VideoEditThreeSpace {
   private closed = false
   /** 各空间组的追踪器；切到其他显示方式时全部释放（它们的累积目标与加速结构很占显存）。 */
   private readonly pathTraces = new Map<string, Promise<VideoEditThreeSpacePathTrace>>()
+  private get device(): GpuDevice { return (this.renderer as unknown as { backend: { device: GpuDevice } }).backend.device }
 
   private constructor(private readonly library: Library, private readonly tsl: Tsl, private readonly post: PostNodes,
     private readonly renderer: InstanceType<AuthorThreeLibrary['WebGPURenderer']>, private readonly clock: VideoEditAuthorThreeClock,
@@ -266,22 +268,23 @@ export class VideoEditThreeSpace {
       if (!entry.primed) {
         // three 在第一次绘制时才搭节点图，那一帧里场景通道还没登记逐帧更新、什么也不画，同一帧号内也不会再更新：
         // 新建的管线先在单独一帧里空画一次，正式这一帧才有内容（否则导出、选帧的第一帧是空的）。
-        await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, () => {
+        await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, () => guardVideoEditGpu(this.device, '三维渲染', () => {
           this.renderer.setRenderTarget(target); this.renderer.setOutputRenderTarget(target)
           try { pipeline.render() } finally { this.renderer.setOutputRenderTarget(null); this.renderer.setRenderTarget(null) }
-        })
+        }))
         entry.primed = true
       }
-      await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, async () => {
+      // 渲染失败（如提交里用到已销毁的资源）要让这一帧失败，而不是当成画好了交出去。
+      await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, () => guardVideoEditGpu(this.device, '三维渲染', () => {
         // 后处理的最后一步画到“输出渲染目标”，中间各步画到“当前渲染目标”：两个都指向本帧目标，否则最后一步会落到看不见的画布上。
         this.renderer.setRenderTarget(target)
         this.renderer.setOutputRenderTarget(target)
-        pipeline.render()
-        input.assertCurrent()
-        this.renderer.copyTextureToTexture(target.texture, output.external)
-        this.renderer.setOutputRenderTarget(null)
-        this.renderer.setRenderTarget(null)
-      })
+        try {
+          pipeline.render()
+          input.assertCurrent()
+          this.renderer.copyTextureToTexture(target.texture, output.external)
+        } finally { this.renderer.setOutputRenderTarget(null); this.renderer.setRenderTarget(null) }
+      }))
     } finally { restore() }
     return { refining: false }
   }
@@ -329,8 +332,8 @@ export class VideoEditThreeSpace {
         refining = await tracer.render({ ...(plan.key === undefined ? {} : { key: plan.key }), scene: this.scene, camera, cards, aperture, focusDistance: effects.focusDistance,
           samples: plan.samples, ...(plan.budgetMs === undefined ? {} : { budgetMs: plan.budgetMs }), target, light: input.light, assertCurrent: input.assertCurrent })
         input.assertCurrent()
-        this.renderer.copyTextureToTexture(target.texture, output.external)
-        this.renderer.setRenderTarget(null)
+        try { await guardVideoEditGpu(this.device, '路径追踪', () => this.renderer.copyTextureToTexture(target.texture, output.external)) }
+        finally { this.renderer.setRenderTarget(null) }
       })
     } finally { restore() }
     return refining
