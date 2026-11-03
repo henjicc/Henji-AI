@@ -1,4 +1,5 @@
 import { desktopEffectLibrarySources } from './videoEditEffectLibrarySources'
+import { henjiExtension } from '@/core/fileExtensions'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { createTestStyleLibraryIo } from './videoEditStyleTestKit'
 import { ContentTrustSession, installContentTrustSession } from '../../../../electron/main/services/content-trust/runtime'
@@ -1027,7 +1028,7 @@ it('公共收录引用确切附加效果，清单不包含选中片段的生成�
     expect(result, JSON.stringify(result)).toMatchObject({ ok: true, data: { resultRef: { kind: 'asset' }, verification: { verified: true } } })
     // 能力调用不弹保存对话框，写进项目“导出”文件夹。
     expect(platform.system.dialog.save).not.toHaveBeenCalled()
-    const written = [...bytes.keys()].find(path => /导出[\\/]可编辑代码素材\.henji-code$/.test(path))
+    const written = [...bytes.keys()].find(path => /导出[\\/]/.test(path) && path.endsWith(`可编辑代码素材${henjiExtension('code_effect')}`))
     expect(written, [...bytes.keys()].join(',')).toBeDefined()
     expect(decodeCodeAsset(bytes.get(written!)!)).toMatchObject({ ...testCodeAssetSource(filterSource), parameters: { gain: .8 } })
     expect((await app.call('collect_video_edit_code_asset', { ...input, documentRef: { kind: 'video_edit.document', id: 'other-project' } })).ok).toBe(false)

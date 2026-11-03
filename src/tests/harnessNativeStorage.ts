@@ -49,6 +49,8 @@ import { DEFAULT_AUDIO_CAPTURE_SETTINGS, type AudioCaptureSettings } from '@/cor
 import { createContentTrustTestSession } from '../../electron/main/services/content-trust/test-support'
 import { executeContentTrust } from '../../electron/main/services/content-trust/commands'
 import type { ContentTrustCommand } from '@/core/contentTrust'
+import type { VideoEditExportJobRecord, VideoEditExportPlatform } from '@/platform/contracts/videoEditExport'
+import { getPlatform } from '@/platform/runtime'
 
 const FIX_HINT = '替身只负责存储：要用到新方法，就在 src/tests/harnessNativeStorage.ts 里补一段'
   + '**只存不判断**的实现，不要返回空值糊过去——那等于伪造业务结果。'
@@ -226,6 +228,77 @@ const documentsStorage = Object.fromEntries(DOCUMENT_METHODS.map((method) => [
   },
 ]))
 
+/* ── 剪辑导出登记（主进程 jobRegistry 的内存表） ─────────────────────────── */
+
+/*
+ * 只存登记行、快照、状态与“本项创建过哪些未发布文件”；不复刻主进程的校验（编号重复、路径归属、
+ * 跨页面写入）、非保留项的自动撤销与页面离开时把运行项标成已中断。capabilities 与压制是设备能力，
+ * 不属于存储，不在这里实现：要用的测试自己声明一套编码器能力。
+ * 文件落在渲染层看到的同一个文件系统上（测试里是 `platform.system.fs` 的替身），主进程用的是同一块盘。
+ */
+interface StoredExportJob extends Omit<VideoEditExportJobRecord, 'invocationIds'> {
+  invocationIds: string[]
+  restorable: boolean
+  /** 本项经 createOutput 创建、尚未发布的文件。 */
+  created: string[]
+}
+
+const exportJobs = new Map<string, StoredExportJob>()
+
+function exportRecord(job: StoredExportJob): VideoEditExportJobRecord {
+  const { restorable: _restorable, created: _created, ...record } = job
+  return wire(record)
+}
+
+/** 模拟渲染层整页重载：主进程登记仍在，新页面经 restore 接管。不模拟离开时的状态改写与文件清理。 */
+const videoEditExportStorage: Omit<VideoEditExportPlatform, 'capabilities' | 'prepareCompression' | 'compress' | 'compressionProgress' | 'cancelCompression'> = {
+  async register(request) {
+    const { snapshots, jobs } = wire(request)
+    return jobs.map(job => {
+      const existing = exportJobs.get(job.id)
+      if (existing) {
+        if (job.invocationId && !existing.invocationIds.includes(job.invocationId)) existing.invocationIds.push(job.invocationId)
+        return { id: job.id, retained: existing.restorable }
+      }
+      const snapshotJson = job.restorable && job.snapshotIndex !== undefined ? snapshots[job.snapshotIndex] : undefined
+      exportJobs.set(job.id, {
+        invocationIds: job.invocationId ? [job.invocationId] : [], id: job.id, projectId: job.projectId, name: job.name, presetName: job.presetName,
+        outputPaths: job.outputPaths, ...(snapshotJson === undefined ? {} : { snapshotJson }), payload: job.restorable ? job.payload : undefined,
+        state: 'queued', progress: 0, outputPublished: false, restorable: job.restorable, created: [],
+      })
+      return { id: job.id, retained: job.restorable }
+    })
+  },
+  async update(update) {
+    const job = exportJobs.get(update.id)
+    if (!job) return
+    const { invocationId, state, progress, error } = wire(update)
+    if (invocationId && !job.invocationIds.includes(invocationId)) job.invocationIds.push(invocationId)
+    job.state = state; job.progress = progress
+    if (error === undefined) delete job.error
+    else job.error = error
+  },
+  async createOutput(id, path) {
+    await getPlatform().system.fs.writeFile(path, new Uint8Array(), { exclusive: true })
+    exportJobs.get(id)?.created.push(path)
+  },
+  async outputPublished(id) {
+    const job = exportJobs.get(id)
+    if (job) { job.outputPublished = true; job.created = [] }
+  },
+  async discardLeftovers(id) {
+    const job = exportJobs.get(id)
+    if (!job || job.outputPublished) return
+    for (const path of [...job.created]) {
+      await getPlatform().system.fs.remove(path)
+      job.created = job.created.filter(value => value !== path)
+    }
+  },
+  async remove(ids) { for (const id of ids) exportJobs.delete(id) },
+  // 替身只有一个页面：restore 取的是别的页面留下的项，这里没有。
+  async restore() { return [] },
+}
+
 /* ── 装配与安装 ─────────────────────────────────────────────────────────── */
 let fontCatalog: FontCatalog = { faces: [], revision: 0 }
 const recycledFiles = new Map<string, { item: RecycledItem; restore(): Promise<void> }>()
@@ -316,6 +389,7 @@ const NAMESPACES: Record<string, object> = {
   audio: audioEditStorage,
   generationHistory: generationHistoryStorage,
   documents: documentsStorage,
+  videoEditExport: videoEditExportStorage,
   imageEditorV3: {
     async writeLayoutResource(request: Parameters<NonNullable<ImageEditorV3Platform['writeLayoutResource']>>[0]) {
       const value = wire(request.value), bytes = Buffer.from(JSON.stringify(value))
@@ -436,6 +510,7 @@ export function resetHarnessNativeStorage(): void {
   imageLayoutResources.clear(); imageLayoutLeases.clear()
   libraries.clear()
   generationHistory.clear()
+  exportJobs.clear()
   documentStore = new FakeDocumentCommands({ realKinds: true })
 }
 

@@ -635,7 +635,8 @@ it('正式事务撤销保留实体引用，帧率写入回执包含实际片段�
     const expectedCascade = declarationId ? expect.objectContaining({ entityType: 'video_edit.clip', propertyIds: expect.arrayContaining(['video_edit.clip.opacity.keyframes']), refs: [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }], origin: { kind: 'cascade', declarationId } }) : undefined
     if (expectedCascade) {
       expect(result.effects).toEqual(expect.arrayContaining([expectedCascade]))
-      expect(getActiveVideoEditSequence(instance).clips[0].curves!.opacity!.at(-1)?.time).toBe(propertyId === 'video_edit.sequence.frame_rate' ? 60 : 19)
+      // 片段关键帧是连续轨迹：缩短时长后右边界控制点落在新时长处。
+      expect(getActiveVideoEditSequence(instance).clips[0].curves!.opacity!.at(-1)?.time).toBe(propertyId === 'video_edit.sequence.frame_rate' ? 60 : 20)
     } else expect(result.effects.filter(effect => effect.origin.kind === 'cascade')).toEqual([])
     const undone = await engine.undo({ undoRef: result.undoRef, expectedRevisions: result.resultingRevisions, idempotencyKey: crypto.randomUUID() }, context)
     expect(undone.status, JSON.stringify(undone)).toBe('completed')

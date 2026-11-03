@@ -23,7 +23,7 @@ import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 // Publication tests explicitly exclude normalization/collection, which have their own boundary tests.
 const exportVideoEdit: typeof exportWithSettings = async (id, target, background, signal, loudness, options) => {
   const owner = requireVideoEditInstance(id); const snapshot = getActiveVideoEditSequence(owner)
-  return exportWithSettings(id, target, background, signal, loudness, options ?? { snapshot, range: videoEditExportRange(owner), settings: { ...videoEditSequenceExportSettings(snapshot), loudness: null, addToLibrary: false, captionMode: 'burn' } })
+  return exportWithSettings(id, target, background, signal, loudness, options ?? { snapshot, range: videoEditExportRange(owner), settings: { ...videoEditSequenceExportSettings(snapshot), encoding: undefined, loudness: null, addToLibrary: false, captionMode: 'burn' } })
 }
 // Only codec/pixel and native I/O boundaries are replaced. Services, ownership,
 // capability permission/registration, collection and project persistence are real.
@@ -34,7 +34,7 @@ vi.mock('mediabunny', () => ({
   CanvasSource: class { async add(timestamp: number) { encoder.videoTimestamps.push(timestamp) } }, AudioBufferSource: class { async add() {} },
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
-  setTracks() {}
+  setTracks() {} setOutputScale() {} setRenderCache() {}
   canvas = {}; constructor() { if (encoder.failConstructor) throw new Error('GPU unavailable') }
   render = encoder.render; dispose = encoder.dispose; mixAudio = encoder.mix; setSmartRegions = vi.fn()
 } }))
