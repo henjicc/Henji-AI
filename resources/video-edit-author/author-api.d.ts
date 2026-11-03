@@ -62,7 +62,14 @@ export interface AuthorElement {
   edge(side: 'bottom' | 'top' | 'left' | 'right', spacing?: number): AuthorElementPoint[]
   /** 在不透明区域里按覆盖均匀撒 count 个点（同一 seed 结果相同）。 */
   sample(count: number, seed?: number): AuthorElementPoint[]
+  /**
+   * 作者 API 17 起：不透明区域的轮廓，每块一个外轮廓与若干洞，点为画面 uv。用 uv 建 THREE.Shape（或 ExtrudeGeometry）后
+   * geometry.applyMatrix4(new THREE.Matrix4().fromArray(element.matrix)) 即放到片段的真实位置（挤出的 z 在 matrix 里一个显示高度一个单位）。
+   * tolerance 为简化容差（显示高度的比例，缺省 0.0015）。形状按长边 512 格取样；逐帧变化的画面每帧都会重新取。
+   */
+  outline?(tolerance?: number): AuthorElementPolygon[]
 }
+export interface AuthorElementPolygon { outer: Array<[number, number]>; holes: Array<Array<[number, number]>> }
 
 export interface AuthorFrameInfo {
   space?: AuthorSpaceInfo
@@ -356,6 +363,45 @@ export interface AuthorThreeHost {
   readonly camera: import('three').PerspectiveCamera
   readonly width: number
   readonly height: number
+  /**
+   * 作者 API 17 起：本场景的源时间（秒）的 TSL 均匀量，节点材质里的动画用它（如 sin(host.time.mul(2))）。
+   * TSL 自带的 time 按渲染次数推进、同组场景共用，预览与导出会对不上。
+   */
+  readonly time?: import('three/webgpu').UniformNode<'float', number>
+  /** 作者 API 17 起：与时间线物体同一实现的标准材质与环境，实时与“渲染”方式读同一份参数。 */
+  readonly space?: AuthorSpaceHost
+}
+export type AuthorSpaceMaterialPreset = 'matte' | 'metal' | 'thin-film' | 'acrylic' | 'glass' | 'emissive'
+export interface AuthorSpaceMaterialParams {
+  /** '#rrggbb' 或 0xrrggbb：磨砂、金属、薄膜金属的底色，发光体的光色。 */
+  color?: string | number
+  /** 表面粗糙 0–1（磨砂缺省 0.7、金属 0.25、薄膜 0.2）。 */
+  roughness?: number
+  /** 亚克力、玻璃的磨砂程度 0–1（玻璃缺省 0.05、亚克力 0.15）。 */
+  frost?: number
+  /** 亚克力、玻璃透出的颜色。 */
+  tint?: string | number
+  /** 玻璃色散 0–1（缺省 0.3）。 */
+  dispersion?: number
+  /** 玻璃吸收 0–1（缺省 0.2）：越厚颜色越深。 */
+  absorption?: number
+  /** 玻璃折射率 1–2.5（缺省 1.5）。 */
+  ior?: number
+  /** 薄膜金属：膜厚范围（纳米，缺省 [250, 650]）、强度 0–1、沿 u 的色带条数（缺省 3）。 */
+  range?: readonly [number, number]
+  strength?: number
+  frequency?: number
+  /** 发光体亮度（线性倍数，缺省 2）。 */
+  intensity?: number
+}
+export interface AuthorSpaceHost {
+  /**
+   * 标准材质：matte 磨砂、metal 金属、thin-film 薄膜金属、acrylic 亚克力（薄透明板）、glass 实心玻璃（两次折射、色散、按厚度吸收）、emissive 发光体。
+   * 实心玻璃在实时里是屏幕空间近似（看不到屏幕外与凹形体内部），“渲染”方式下是真实体积。返回的材质归作者场景所有。
+   */
+  material(preset: AuthorSpaceMaterialPreset, params?: AuthorSpaceMaterialParams): import('three').Material
+  /** 预设环境图（等距柱状，赋给 scene.environment）：宿主所有，不要释放。 */
+  environment(preset: 'none' | 'studioNeutral' | 'studioWarm' | 'studioCool' | 'rim' | 'sky'): import('three').Texture | null
 }
 export interface AuthorThreeScene<P extends readonly AuthorParamDeclaration[] = readonly AuthorParamDeclaration[]> {
   scene: import('three').Scene

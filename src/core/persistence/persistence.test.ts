@@ -381,7 +381,7 @@ describe('Schema结构指纹', () => {
 })
 
 /** 序列三维渲染里只影响观感的可选项，按缺省值补齐，旧样本与新样本可直接比较。 */
-const spaceRenderLooks = (value: VideoEditSequence['spaceRender']): unknown[] => [value?.exposure ?? 0, value?.toneMapping ?? 'neutral', value?.environment ?? 'none', value?.environmentIntensity ?? 1, value?.environmentRotation ?? 0]
+const spaceRenderLooks = (value: VideoEditSequence['spaceRender']): unknown[] => [value?.exposure ?? 0, value?.toneMapping ?? 'neutral', value?.environment ?? 'none', value?.environmentIntensity ?? 1, value?.environmentRotation ?? 0, value?.bloomThreshold ?? .75, value?.bloomRadius ?? .45]
 describe('所有登记格式的黄金样本', () => {
   it('运动模糊改为序列总开关：剪辑 v31、录制会话 v34 提高最低可读版本；关着的旧序列迁移成打开总开关、有变换动画的片段单独关掉', () => {
     const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
@@ -563,8 +563,8 @@ describe('所有登记格式的黄金样本', () => {
           expect([clip.spaceEmission ?? 0, clip.curves?.spaceEmission?.map(point => point.value) ?? []]).toEqual(version >= 63 ? [1.5, [0, 3]] : [0, []])
           // v64：代码图片参数的片段引用原样读回；旧样本没有这一分支。
           expect(clip.code?.parameters.partner ?? null).toEqual(version >= 64 ? { kind: 'clip', clipId: 'golden-cursor-clip' } : null)
-          // v66：三维曝光与色调映射；v67：三维环境光。原样读回；旧样本没有，按缺省值不改变画面。
-          expect(spaceRenderLooks(document.sequences[0].spaceRender)).toEqual([...version >= 66 ? [.5, 'agx'] : [0, 'neutral'], ...version >= 67 ? ['studioWarm', 1.5, 45] : ['none', 1, 0]])
+          // v66：三维曝光与色调映射；v67：三维环境光；v68：泛光阈值与范围。原样读回；旧样本没有，按缺省值不改变画面。
+          expect(spaceRenderLooks(document.sequences[0].spaceRender)).toEqual([...version >= 66 ? [.5, 'agx'] : [0, 'neutral'], ...version >= 67 ? ['studioWarm', 1.5, 45] : ['none', 1, 0], ...version >= 68 ? [.5, .7] : [.75, .45]])
           // v21：音频重构子片段的参数与原始源范围随片段保存；旧样本没有该字段。
           const sound = document.sequences[0].clips.find(value => value.id === 'golden-sound-clip')
           expect(sound?.gainDb ?? 0).toBe(version >= 23 ? 19 : 0)
@@ -605,10 +605,10 @@ describe('所有登记格式的黄金样本', () => {
             expect(document.styles).toBeUndefined(); expect(document.sequences.every(sequence => sequence.styleId === undefined)).toBe(true)
           }
         }
-        // 录制 v69：嵌入序列的三维曝光与色调映射；v70：三维环境光。
+        // 录制 v69：嵌入序列的三维曝光与色调映射；v70：三维环境光；v71：泛光阈值与范围。
         if (format.id === 'document.screen_recording' && version >= 63) {
           const sequence = (upgraded as RecordingDocument).scriptCapture?.baselines[0]?.content.sequences.find(value => value.id === 'golden-sequence')
-          expect(spaceRenderLooks(sequence?.spaceRender)).toEqual([...version >= 69 ? [.5, 'agx'] : [0, 'neutral'], ...version >= 70 ? ['studioWarm', 1.5, 45] : ['none', 1, 0]])
+          expect(spaceRenderLooks(sequence?.spaceRender)).toEqual([...version >= 69 ? [.5, 'agx'] : [0, 'neutral'], ...version >= 70 ? ['studioWarm', 1.5, 45] : ['none', 1, 0], ...version >= 71 ? [.5, .7] : [.75, .45]])
         }
         // style-kits v1/v2：参数式风格不再适用，升级后清空。
         if (format.id === 'style-kits' && version < 3) expect(upgraded).toEqual([])

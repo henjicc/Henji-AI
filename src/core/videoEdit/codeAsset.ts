@@ -9,9 +9,9 @@ import { formatMigrations } from '../persistence/formatMigrations'
 import { PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
 export const CODE_ASSET_MIME = 'application/x-henji-code'
-export const CODE_ASSET_VERSION = 23
-/** v20 可携带 fill 画面来源的作者接口；旧程序无法执行，必须明确要求升级。v22 的片段引用分支在资产里只能为空，旧程序照常能读，最低可读版本不变。v23 的源码可用作者接口 16（三维作者的 info.elements），旧程序无法执行，提高到 23。 */
-export const CODE_ASSET_MIN_READER_VERSION = 23
+export const CODE_ASSET_VERSION = 24
+/** v20 可携带 fill 画面来源的作者接口；旧程序无法执行，必须明确要求升级。v22 的片段引用分支在资产里只能为空，旧程序照常能读，最低可读版本不变。v23 的源码可用作者接口 16（三维作者的 info.elements），旧程序无法执行，提高到 23。v24 同理（作者接口 17（三维作者的 host.time、host.space 标准材质与环境、元素轮廓 outline））。 */
+export const CODE_ASSET_MIN_READER_VERSION = 24
 export const codeAssetSchema = z.object({
   format: z.literal('henji-code-asset'), version: z.literal(CODE_ASSET_VERSION), minReaderVersion: z.number().int().positive().optional(), name: z.string().trim().min(1).max(200),
   sourceVersion: z.object({ apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, entry: codeMaterialVersionSchema.shape.entry, files: codeMaterialVersionSchema.shape.files, imports: codeMaterialVersionSchema.shape.imports, libraries: codeMaterialVersionSchema.shape.libraries }).strict(),

@@ -212,7 +212,7 @@ export class VideoEditAuthorRuntime {
     const result = this.renders.then(async () => {
       if (this.closed) throw new Error('代码效果会话已关闭。')
       if (!this.effect.createThree || !info.space) throw new Error('三维场景需要 createThree 与空间上下文。')
-      this.three ??= await VideoEditAuthorThree.create(this.device, this.effect.createThree, width, height, this.libraries)
+      this.three ??= await VideoEditAuthorThree.create(this.device, this.effect.createThree, width, height, this.libraries, undefined, this.apiVersion)
       const worldBounds = this.three.update(authorParameterValues(this.parameterMetadata, params), assets, { ...info, space: info.space })
       return { root: this.three.root, worldBounds, time: info.time }
     })
@@ -262,7 +262,7 @@ export class VideoEditAuthorRuntime {
       if (!this.effect.space && !this.effect.createThree && info.space) { const { space: _space, ...plain } = info; info = plain }
       if ((this.effect.space || this.effect.createThree) && !info.space) throw new Error('空间作者需要宿主提供当前样本的空间上下文。')
       if (this.effect.createThree) {
-        this.three ??= await VideoEditAuthorThree.create(this.device, this.effect.createThree, width, height, this.libraries)
+        this.three ??= await VideoEditAuthorThree.create(this.device, this.effect.createThree, width, height, this.libraries, undefined, this.apiVersion)
         beforeCommit()
         const target = resolveInitialTarget()
         await this.three.render(target, outWidth, outHeight, params, assets, { ...info, space: info.space! }, beforeCommit)

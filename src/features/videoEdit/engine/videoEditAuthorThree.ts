@@ -3,7 +3,10 @@ import type { SpatialBounds, SpatialFrame, SpatialMat4, SpatialVec3 } from '@/co
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { AuthorAssets, AuthorFrameInfo, AuthorParameters } from './videoEditAuthorModule'
-import { loadAuthorThreeLibrary, VideoEditAuthorThreeWebGpu, type AuthorThreeBackend, type AuthorThreeLibrary } from './videoEditAuthorThreeWebGpu'
+import { loadAuthorThreeLibrary, loadAuthorThreeModule, VideoEditAuthorThreeWebGpu, type AuthorThreeBackend, type AuthorThreeLibrary } from './videoEditAuthorThreeWebGpu'
+import { isSpaceSharedTexture, type SpaceMaterialParams, type SpaceMaterialPreset } from './videoEditSpaceMaterials'
+import type { VideoEditSpaceEnvironment } from '@/core/videoEdit/document'
+import { CODE_AUTHOR_SPACE_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 
 export interface AuthorSpaceInfo {
   readonly camera: SpatialFrame['camera']
@@ -19,6 +22,19 @@ export interface AuthorThreeHost {
   readonly camera: Three.PerspectiveCamera
   readonly width: number
   readonly height: number
+  /**
+   * 作者接口 17 起：本场景的源时间（秒）的 TSL 均匀量。TSL 自带的 `time` 按渲染次数推进，一组里多个作者场景共用一个时钟；
+   * 节点材质里的动画用它才与片段时间、预览与导出一致。
+   */
+  readonly time?: { readonly value: number }
+  /** 作者接口 17 起：与时间线物体同一实现的标准材质与环境（实时与路径追踪读同一份参数）。 */
+  readonly space?: AuthorSpaceHost
+}
+export interface AuthorSpaceHost {
+  /** 标准材质：matte 磨砂、metal 金属、thin-film 薄膜金属、acrylic 亚克力、glass 实心玻璃、emissive 发光体；参数见 SpaceMaterialParams。 */
+  material(preset: SpaceMaterialPreset, params?: SpaceMaterialParams): Three.Material
+  /** 预设环境图（等距柱状、线性半精度）：宿主所有，作者不必也不能释放；none 返回 null。 */
+  environment(preset: VideoEditSpaceEnvironment): Three.Texture | null
 }
 export interface AuthorThreeScene {
   scene: Three.Scene
@@ -72,13 +88,25 @@ export class VideoEditAuthorThree {
   private constructor(private readonly library: AuthorThreeLibrary, private readonly device: GpuDevice, private readonly backend: AuthorThreeBackend,
     private readonly author: AuthorThreeScene, private readonly host: AuthorThreeHost, private readonly sceneRoot: Three.Group, private readonly scene: Three.Scene) {}
   static async create(device: GpuDevice, factory: (host: AuthorThreeHost) => AuthorThreeScene | Promise<AuthorThreeScene>,
-    width: number, height: number, libraries?: AuthorLibraryVersions, backend?: AuthorThreeBackend): Promise<VideoEditAuthorThree> {
+    width: number, height: number, libraries?: AuthorLibraryVersions, backend?: AuthorThreeBackend, apiVersion = 0): Promise<VideoEditAuthorThree> {
     const library = await loadAuthorThreeLibrary(libraries)
     // 各新建一个，取到模块共用的那一份（第一次时由 three 创建）。
     const nodes = (library as unknown as { TSL?: { texture(): { value: object }; cubeTexture(): { value: object } } }).TSL
     for (const resource of [new library.Sprite().geometry, (library as unknown as { QuadMesh?: new () => { geometry: object } }).QuadMesh ? new (library as unknown as { QuadMesh: new () => { geometry: object } }).QuadMesh().geometry : undefined, nodes?.texture().value, nodes?.cubeTexture().value]) if (resource) hostOwned.add(resource)
     const camera = new library.PerspectiveCamera()
-    const host = { camera, width, height }
+    let host: AuthorThreeHost = { camera, width, height }
+    if (apiVersion >= CODE_AUTHOR_SPACE_MIN_API_VERSION) {
+      const [tsl, materials, environments] = await Promise.all([loadAuthorThreeModule<{ uniform(value: number): { value: number } }>('three/tsl', libraries), import('./videoEditSpaceMaterials'), import('./videoEditSpaceEnvironment')])
+      host = { camera, width, height, time: tsl.uniform(0), space: {
+        material: (preset, params) => materials.createSpaceMaterial(library, tsl as never, preset, params),
+        environment: preset => {
+          const texture = environments.videoEditSpaceEnvironment(library, preset)
+          // 预设环境图全 Worker 共用一份：登记为宿主所有，作者场景释放时不连带释放。
+          if (texture) hostOwned.add(texture)
+          return texture
+        },
+      } }
+    }
     const author = await factory(host)
     if (!(author?.scene instanceof library.Scene) || typeof author.update !== 'function') {
       await author?.dispose?.()
@@ -109,7 +137,7 @@ export class VideoEditAuthorThree {
       if (!value || typeof value !== 'object' || seen.has(value)) continue
       seen.add(value)
       const resource = value as { isTexture?: boolean; isMaterial?: boolean; isNode?: boolean; dispose?: () => void }
-      if ((resource.isTexture || resource.isMaterial) && resource.dispose && !hostOwned.has(resource)) next.add(resource as ThreeResource)
+      if ((resource.isTexture || resource.isMaterial) && resource.dispose && !hostOwned.has(resource) && !isSpaceSharedTexture(resource)) next.add(resource as ThreeResource)
       if (resource.isMaterial || resource.isNode || Array.isArray(value)) pending.push(...Object.values(value))
     }
     for (const resource of next) if (!this.resources.has(resource)) resourceOwners.set(resource, (resourceOwners.get(resource) ?? 0) + 1)
@@ -141,6 +169,7 @@ export class VideoEditAuthorThree {
   update(params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo & { space: AuthorSpaceInfo }): SpatialBounds | null {
     if (this.closed) throw new Error('three 场景已释放。')
     this.synchronize(info.space)
+    if (this.host.time) (this.host.time as { value: number }).value = info.time
     this.author.update(params, assets, info)
     assertThreeMaterials(this.author.scene)
     this.retainResources()

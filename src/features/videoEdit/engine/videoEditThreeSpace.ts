@@ -1,6 +1,7 @@
 import type * as Three from 'three'
 import { videoEditToneMapping } from './videoEditToneMapping'
 import { videoEditSpaceEnvironment } from './videoEditSpaceEnvironment'
+import { isSpaceGlassMaterial, markSpaceSharedTexture, spaceGlassShared, spacePathTraceReplacement, type SpaceGlassShared } from './videoEditSpaceMaterials'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { SpatialCardGeometry, SpatialFrame } from '@/core/videoEdit/spatialTypes'
@@ -68,6 +69,9 @@ export interface ThreeSpaceEffects {
   shutterScale: number
   /** 泛光、环境光遮蔽、屏幕空间反射的强度（序列三维效果设置，0 为不开）；只作用于实时显示与成片的实时渲染。 */
   bloom: number
+  /** 泛光阈值与范围（序列三维设置，缺省 0.75 与 0.45）。 */
+  bloomThreshold: number
+  bloomRadius: number
   ambientOcclusion: number
   reflections: number
   /** 序列里有片段发光（整段任意时刻）：管线多一个发光附件，发光不依赖序列泛光开关也会扩成光晕。 */
@@ -92,6 +96,11 @@ export interface ThreeSpaceFrame {
   light: boolean
   /** 显示方式为“渲染”时的路径追踪安排；缺省按 TRACE_SAMPLES 一次追踪到底。 */
   trace?: ThreeSpaceTrace
+  /**
+   * 组下方已经合成好的画面（宿主纹理，预乘、2.4 伽马，与目标同尺寸）：组里有透射材质（玻璃）时才给，玻璃透过去看到它。
+   * `light` 与卡片同义（rgb 可大于 alpha）。输出里会扣掉它，宿主照常把组画面叠在下方画面上。
+   */
+  below?: { texture: GpuTexture; width: number; height: number; light: boolean }
   assertCurrent(): void
 }
 export interface ThreeSpaceTrace {
@@ -111,6 +120,11 @@ const TRACE_GROUPS = 8
 const TRACE_IDLE_RELEASE_MS = 30_000
 /** 后处理管线按最近使用保留的套数：每套都占着全分辨率的多重采样目标（4K 下近 1GB），同一份作品只用到实时与一种简化组合。 */
 const PIPELINE_SETS = 2
+/**
+ * 发光卡片照亮周围（实时）用的面光源槽数：固定数量、不用时强度为 0，灯数不变就不会重编译着色器。
+ * 选型：屏幕空间全局光照要靠多帧时间累积去噪，成片逐帧确定不了；面光源确定、便宜，代价是只有矩形、最多这么多张、不投影。
+ */
+const AREA_LIGHT_SLOTS = 8
 
 /** 作者版 three 的 TSL 节点。类型声明跟着应用自带的 three 版本，这里只描述用到的部分。 */
 interface TslNode {
@@ -129,15 +143,15 @@ interface Tsl {
   select: TslFn; vec2: TslFn; vec3: TslFn; vec4: TslFn; pow: TslFn; max: TslFn; clamp: TslFn; mix: TslFn; convertToTexture: TslFn
   sin: TslFn; asin: TslFn; sign: TslFn; float: TslFn; neutralToneMapping: TslFn; agxToneMapping: TslFn; acesFilmicToneMapping: TslFn; textureLoad: TslFn; ivec2: TslFn
   viewportOpaqueMipTexture(): TslNode & { referenceNode: unknown }
-  screenCoordinate: TslNode
+  screenCoordinate: TslNode; screenUV: TslNode; floor: TslFn; min: TslFn
   packNormalToRGB: TslFn; unpackRGBToNormal: TslFn; sample(fn: (coord: TslNode) => TslNode): TslNode
   normalView: TslNode; metalness: TslNode; roughness: TslNode
   mrt(outputs: Record<string, TslNode>): TslNode
   pass(scene: Three.Scene, camera: Three.Camera, options?: Record<string, unknown>): TslPass
-  output: TslNode; positionLocal: TslNode; modelViewMatrix: TslNode; cameraProjectionMatrix: TslNode
+  output: TslNode; positionLocal: TslNode; modelViewMatrix: TslNode; cameraProjectionMatrix: TslNode; positionGeometry: TslNode
 }
 interface PostNodes { dof: TslFn; motionBlur: TslFn; bloom: TslFn; ao: TslFn; ssr: TslFn; fxaa: TslFn }
-interface NodeMaterial extends Three.Material { colorNode: TslNode | null; mrtNode: TslNode | null; maskNode: TslNode | null }
+interface NodeMaterial extends Three.Material { colorNode: TslNode | null; mrtNode: TslNode | null; maskNode: TslNode | null; vertexNode?: TslNode | null }
 interface RenderPipeline { outputNode: TslNode; outputColorTransform: boolean; render(): void; dispose(): void }
 type Library = AuthorThreeLibrary & {
   MeshBasicNodeMaterial: new (parameters: Record<string, unknown>) => NodeMaterial
@@ -147,6 +161,15 @@ type Library = AuthorThreeLibrary & {
   QuadMesh: new (material: NodeMaterial) => { render(renderer: unknown): void }
   ViewportTextureNode: { prototype: { getUpdateBeforeType(this: { referenceNode?: unknown }, frame: unknown): string } }
   NodeUpdateType: { OBJECT: string }
+}
+interface AreaLightSlot {
+  light: Three.RectAreaLight
+  target: Three.RenderTarget
+  source: TslUniform<Three.Texture>
+  glow: TslUniform<number>
+  strength: TslUniform<number>
+  quad: { render(renderer: unknown): void }
+  material: Three.Material
 }
 interface CardEntry {
   mesh: Three.Mesh
@@ -181,7 +204,7 @@ export class VideoEditThreeSpace {
    * 按后处理组合缓存的管线：实时与实体、线框来回切时不重建（否则换档那一下的卡顿又会触发下一次换档）。
    * 释放时一并释放各自的节点：RenderPipeline.dispose 只释放全屏四边形的材质，场景与景深节点的渲染目标要单独释放。
    */
-  private readonly pipelines = new Map<string, { pipeline: RenderPipeline; nodes: Array<{ dispose(): void }>; primed: boolean; emission: boolean }>()
+  private readonly pipelines = new Map<string, { pipeline: RenderPipeline; nodes: Array<{ dispose(): void }>; primed: boolean; emission: boolean; bloom?: { threshold: { value: number }; radius: { value: number } } }>()
   private renders = 0
   private overrides?: Record<'solid' | 'wireframe', Three.Material>
   private readonly focus: TslUniform<number>
@@ -209,6 +232,23 @@ export class VideoEditThreeSpace {
   /** 渲染方式混合合成时暂存的路径追踪那一层。 */
   private traceLayerTarget?: Three.RenderTarget
   private underlay?: { source: TslNode & { value: Three.Texture }; quad: { render(renderer: unknown): void } }
+  /**
+   * 下方画面：铺满画面、在最远处的背景面（rgb = 下方画面的线性预乘色、alpha = 0），透射材质透过去看到它；
+   * 场景通道一出来就按 内容 = C − (1 − A)·B 扣掉，组画面仍只含组自己的内容。路径追踪里它是一张 matte 发光背板。
+   */
+  private readonly belowMap: TslUniform<Three.Texture>
+  private readonly belowLight: TslUniform<number>
+  private readonly belowOn: TslUniform<number>
+  private readonly belowSize: TslNode & { value: Three.Vector2 }
+  private readonly belowPlaceholder: Three.Texture
+  private belowEntry?: { mesh: Three.Mesh; source?: GpuTexture; external?: Three.Texture; backplate: Three.Mesh }
+  /**
+   * 发光卡片的面光源：颜色 = 卡片画面的平均线性预乘色（每帧在显卡上归约到 1×1，不读回）× 发光强度，
+   * 尺寸与朝向取卡片本身，朝场景物体那一侧发光。只照亮作者物体（卡片自己不受光）；路径追踪里卡片本身就是发光面，这些灯关掉。
+   */
+  private areaLights?: Promise<AreaLightSlot[]>
+  /** 实心玻璃的背面通道：玻璃网格单独画一遍背面，记下视空间法线与视深，正面折射时读它求出穿过的距离与出射法线。 */
+  private glassBack?: { target: Three.RenderTarget; camera: Three.PerspectiveCamera; material: Three.Material; shared: SpaceGlassShared }
 
   private traceLayer(width: number, height: number): Three.RenderTarget {
     if (!this.traceLayerTarget || this.traceLayerTarget.width !== width || this.traceLayerTarget.height !== height) {
@@ -250,6 +290,11 @@ export class VideoEditThreeSpace {
     this.ambientOcclusion = tsl.uniform(0)
     this.reflections = tsl.uniform(0)
     this.lightOutput = tsl.uniform(0)
+    this.belowPlaceholder = new library.Texture()
+    this.belowMap = tsl.texture(this.belowPlaceholder)
+    this.belowSize = (tsl as unknown as { uniform(value: Three.Vector2): TslNode & { value: Three.Vector2 } }).uniform(new library.Vector2(1, 1))
+    this.belowLight = tsl.uniform(0)
+    this.belowOn = tsl.uniform(0)
     // 速度：本帧与快门开始时的裁剪坐标差（与 three 的 VelocityNode 同一定义），所有物体共用；任一时刻在相机平面后方时记为静止，不爆出长拖影。
     // 只按物体的世界矩阵：实例矩阵、骨骼与形变在快门内的位移不计。
     const previousModel = tsl.uniform(new library.Matrix4()).onObjectUpdate(({ object }) => this.previousWorld.get(object) ?? object.matrixWorld)
@@ -340,6 +385,7 @@ export class VideoEditThreeSpace {
     this.cocMax.value = Math.max(1, effects.cocMax)
     this.shutterScale.value = effects.shutterScale
     this.bloom.value = effects.bloom
+    if (entry.bloom) { entry.bloom.threshold.value = effects.bloomThreshold; entry.bloom.radius.value = effects.bloomRadius }
     // 实体、线框是看结构用的统一明暗，不受曝光与色调映射影响。
     this.exposure.value = effects.display === 'realtime' ? 2 ** effects.exposure : 1
     this.ambientOcclusion.value = effects.ambientOcclusion
@@ -351,6 +397,10 @@ export class VideoEditThreeSpace {
     const restore = (): void => { restoreDepth?.(); restoreOpacity() }
     const underlay = options.underlay ? this.underlayQuad(options.underlay) : undefined
     try {
+      // 卡片那一层（渲染方式混合合成）不要下方画面：玻璃透过去的画面已在路径追踪那一层里。作者场景自带背景时背景挡住一切，也不用。
+      this.syncBelow(!options.cardsOnly && effects.display === 'realtime' && !this.scene.background ? input.below : undefined, entry.emission, effects.motionBlur)
+      if (effects.emission || this.areaLights) await this.syncAreaLights(input, effects.display === 'realtime' && effects.emission && !options.cardsOnly)
+      await this.renderGlassBack(input, effects.display === 'realtime' && !options.cardsOnly)
       if (!entry.primed) {
         // three 在第一次绘制时才搭节点图，那一帧里场景通道还没登记逐帧更新、什么也不画，同一帧号内也不会再更新：
         // 新建的管线先在单独一帧里空画一次，正式这一帧才有内容（否则导出、选帧的第一帧是空的）。
@@ -377,7 +427,11 @@ export class VideoEditThreeSpace {
           this.renderer.copyTextureToTexture(target.texture, output.external)
         } finally { this.renderer.setOutputRenderTarget(null); this.renderer.setRenderTarget(null) }
       }))
-    } finally { restore() }
+    } finally {
+      restore()
+      // 背面纹理只在本渲染器这一次绘制里有效：作者场景单独渲染成一层时按固定厚度近似。
+      if (this.glassBack) this.glassBack.shared.on.value = 0
+    }
   }
 
   /**
@@ -446,6 +500,170 @@ export class VideoEditThreeSpace {
   }
 
   /** 把路径追踪的结果（同尺寸、线性编码后的预乘画面）相加画到卡片那一层上的全屏四边形。 */
+  private async syncAreaLights(input: ThreeSpaceFrame, enabled: boolean): Promise<void> {
+    const { library, tsl } = this
+    this.areaLights ??= (async () => {
+      const { RectAreaLightTexturesLib } = await loadAuthorThreeModule<{ RectAreaLightTexturesLib: { init(): unknown } }>('three/addons/lights/RectAreaLightTexturesLib.js', this.libraries)
+      ;(library as unknown as { RectAreaLightNode: { setLTC(value: unknown): void } }).RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init())
+      return Array.from({ length: AREA_LIGHT_SLOTS }, (_, index): AreaLightSlot => {
+        const target = new library.RenderTarget(1, 1, { type: library.HalfFloatType, depthBuffer: false })
+        const source = tsl.texture(new library.Texture()), glow = tsl.uniform(0), strength = tsl.uniform(0)
+        // 8×8 个采样点的平均：卡片画面按卡片的解码约定换成线性预乘色（发光画面逐通道），透明处算 0，平均值即单位面积发出的光。
+        let sum: TslNode = tsl.vec3(0)
+        for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+          const sample = (source as unknown as { sample(uv: TslNode): TslNode }).sample(tsl.vec2((x + .5) / 8, (y + .5) / 8))
+          const glowing = tsl.pow(tsl.max(sample.rgb, tsl.vec3(0)), tsl.vec3(2.4))
+          const plain = tsl.pow(tsl.max(tsl.select(sample.a.greaterThan(0), sample.rgb.div(sample.a), tsl.vec3(0)), tsl.vec3(0)), tsl.vec3(2.4)).mul(sample.a)
+          sum = sum.add(tsl.select(glow.greaterThan(.5), glowing, plain))
+        }
+        const material = new library.MeshBasicNodeMaterial({ toneMapped: false, depthTest: false, depthWrite: false })
+        material.colorNode = tsl.vec4(sum.div(64), 1)
+        const light = new library.RectAreaLight(0xffffff, 1, 1, 1)
+        ;(light as unknown as { colorNode: TslNode }).colorNode = tsl.textureLoad(tsl.texture(target.texture), tsl.ivec2(0, 0)).rgb.mul(strength)
+        light.name = `card-light:${index}`
+        this.scene.add(light)
+        return { light, target, source, glow, strength, material, quad: new library.QuadMesh(material) }
+      })
+    })()
+    const slots = await this.areaLights
+    const ranked = enabled ? input.cards.filter(card => card.emission > 0 && card.opacity > 0 && !card.geometry.behindCamera && this.cards.get(card.clipId)?.external)
+      .map(card => ({ card, score: card.emission * card.geometry.screenBounds.width * card.geometry.screenBounds.height }))
+      .sort((a, b) => b.score - a.score).slice(0, slots.length) : []
+    // 朝向：发光那一面对着作者物体（没有物体时对着相机）。
+    const box = new library.Box3()
+    for (const root of this.attached) box.expandByObject(root)
+    const toward = box.isEmpty() ? this.camera.position.clone() : box.getCenter(new library.Vector3())
+    for (const [index, slot] of slots.entries()) {
+      const entry = ranked[index]
+      // 不用的槽只把强度设为 0、灯照样可见：隐藏会让灯从灯光列表里消失，所有受光材质按新的灯光组合重编译。
+      if (!entry) { slot.strength.value = 0; continue }
+      const matrix = this.cardMatrix(entry.card.geometry)
+      const center = new library.Vector3().setFromMatrixPosition(matrix)
+      const across = new library.Vector3().setFromMatrixColumn(matrix, 0), down = new library.Vector3().setFromMatrixColumn(matrix, 1)
+      const width = across.length(), height = down.length()
+      const normal = across.clone().cross(down).normalize()
+      // 面光源沿自身 −z 发光：让 −z 指向物体那一侧。
+      const z = toward.clone().sub(center).dot(normal) > 0 ? normal.clone().negate() : normal
+      const x = across.normalize(), y = z.clone().cross(x).normalize()
+      slot.light.position.copy(center)
+      slot.light.quaternion.setFromRotationMatrix(new library.Matrix4().makeBasis(x, y, z))
+      slot.light.width = width; slot.light.height = height
+      slot.light.updateMatrixWorld(true)
+      slot.source.value = this.cards.get(entry.card.clipId)!.external!
+      slot.glow.value = entry.card.light ? 1 : 0
+      slot.strength.value = entry.card.emission * entry.card.opacity
+      await guardVideoEditGpu(this.device, '三维渲染', () => {
+        try { this.renderer.setRenderTarget(slot.target); slot.quad.render(this.renderer) } finally { this.renderer.setRenderTarget(null) }
+      })
+    }
+  }
+
+  /**
+   * 实心玻璃的背面：把用到标准玻璃材质的网格放进玻璃层，用只看这一层的相机画一遍背面（视空间法线、视深），
+   * 结果交给所有玻璃材质共用的纹理。没有玻璃或不在实时显示时关掉（玻璃按固定厚度近似）。
+   */
+  private async renderGlassBack(input: ThreeSpaceFrame, enabled: boolean): Promise<void> {
+    const { library, tsl } = this
+    const shared = this.glassBack?.shared ?? spaceGlassShared(library as never, tsl as never)
+    const meshes: Three.Mesh[] = []
+    if (enabled) for (const root of this.attached) root.traverse(object => {
+      const mesh = object as Three.Mesh
+      if (mesh.isMesh && mesh.visible && (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).some(material => material && isSpaceGlassMaterial(material))) meshes.push(mesh)
+    })
+    if (!meshes.length) { shared.on.value = 0; return }
+    const width = input.target.width, height = input.target.height
+    if (!this.glassBack) {
+      // 不混合：three 会把被替换材质的 transparent 带给覆盖材质，玻璃是透明的，按普通混合时 alpha 里的视深会被混乱。
+      const material = new library.MeshBasicNodeMaterial({ side: library.BackSide, toneMapped: false, blending: library.NoBlending })
+      const view = tsl as unknown as { normalView: TslNode; positionView: TslNode }
+      material.colorNode = tsl.vec4((view.normalView as unknown as { normalize(): TslNode }).normalize(), (view.positionView as unknown as { z: TslNode }).z.negate())
+      const camera = new library.PerspectiveCamera()
+      camera.layers.set(shared.layer)
+      this.glassBack = { target: new library.RenderTarget(width, height, { type: library.HalfFloatType }), camera, material, shared }
+    }
+    const back = this.glassBack
+    if (back.target.width !== width || back.target.height !== height) back.target.setSize(width, height)
+    for (const mesh of meshes) mesh.layers.enable(shared.layer)
+    back.camera.matrixWorld.copy(this.camera.matrixWorld); back.camera.matrixWorldInverse.copy(this.camera.matrixWorldInverse)
+    back.camera.projectionMatrix.copy(this.camera.projectionMatrix); back.camera.projectionMatrixInverse.copy(this.camera.projectionMatrixInverse)
+    back.camera.matrixAutoUpdate = false; back.camera.matrixWorldAutoUpdate = false
+    const scene = this.scene as Three.Scene & { overrideMaterial: Three.Material | null }
+    const background = scene.background
+    scene.background = null; scene.overrideMaterial = back.material
+    try {
+      await guardVideoEditGpu(this.device, '三维渲染', () => {
+        try { this.renderer.setRenderTarget(back.target); this.renderer.render(scene, back.camera) } finally { this.renderer.setRenderTarget(null) }
+      })
+    } finally { scene.overrideMaterial = null; scene.background = background; for (const mesh of meshes) mesh.layers.disable(shared.layer) }
+    markSpaceSharedTexture(back.target.texture)
+    shared.back.value = back.target.texture
+    shared.on.value = 1
+    const environment = this.scene.environment ?? shared.placeholder
+    for (const node of shared.environments) if (node.value !== environment) node.value = environment
+    shared.environmentIntensity.value = this.scene.environment ? this.scene.environmentIntensity : 0
+    shared.environmentRotation.value = this.scene.environmentRotation.y
+  }
+
+  /**
+   * 下方画面在本像素的线性预乘色（与卡片同一解码约定）。按画面比例坐标换到下方画面的像素取：
+   * 泛光的亮部通道在半分辨率上求值，按屏幕像素坐标取会错位。
+   */
+  private belowColor(): TslNode {
+    const { tsl } = this
+    const texel = tsl.min(tsl.floor(tsl.screenUV.mul(this.belowSize)), this.belowSize.sub(1))
+    const sample = tsl.textureLoad(this.belowMap, tsl.ivec2(texel))
+    const glowing = tsl.pow(tsl.max(sample.rgb, tsl.vec3(0)), tsl.vec3(2.4))
+    const plain = tsl.pow(tsl.max(tsl.select(sample.a.greaterThan(0), sample.rgb.div(sample.a), tsl.vec3(0)), tsl.vec3(0)), tsl.vec3(2.4)).mul(sample.a)
+    return tsl.select(this.belowLight.greaterThan(.5), glowing, plain)
+  }
+
+  /**
+   * 下方画面的背景面：裁剪空间里铺满、深度在最远处，只在没有物体的地方写入（深度测试），写入时不混合（rgb = 下方画面、alpha = 0）。
+   * 作为透明物体排在最前画，之后的卡片与半透明物体照常叠在它上面，透射材质的帧缓冲拷贝里就有它；不进法线预通道（只画不透明物体）。
+   * 后处理属性、发光与速度写 0（速度不写 0 时运动模糊会按这块面的错误速度把物体拖进背景）；三种附件组合各一份输出。
+   */
+  private syncBelow(below: ThreeSpaceFrame['below'], emission: boolean, velocity: boolean, quad = true): void {
+    const { library, tsl } = this
+    // 关掉时换回占位纹理：扣除节点在所有实时管线里都绑着它，下方画面的纹理下一帧可能已被回收。
+    if (!below) { if (this.belowEntry) this.belowEntry.mesh.visible = false; this.belowOn.value = 0; this.belowMap.value = this.belowPlaceholder; return }
+    if (!this.belowEntry) {
+      const material = new library.MeshBasicNodeMaterial({ transparent: true, blending: library.NoBlending, depthTest: true, depthWrite: false, toneMapped: false, side: library.DoubleSide })
+      material.vertexNode = tsl.vec4(tsl.positionGeometry.xy.mul(2), .9999999, 1)
+      // alpha 写 1：three 的透射会把材质的 alpha 乘上透过去取到的 alpha，写 0 时完全透射的玻璃覆盖率也成了 0。
+      // 组内容的覆盖率另记在后处理属性的 b 通道里（背景面那里写 0）。
+      material.colorNode = tsl.vec4(this.belowColor(), 1)
+      const mesh = new library.Mesh(this.quad, material)
+      mesh.frustumCulled = false
+      mesh.renderOrder = -1e9
+      mesh.name = 'below'
+      // 路径追踪用的背板：与卡片同一四边形与解码，追踪时换成 matte 发光材质，平时隐藏。
+      const backplate = new library.Mesh(this.quad, new library.MeshBasicNodeMaterial({}))
+      backplate.matrixAutoUpdate = false
+      backplate.frustumCulled = false
+      backplate.visible = false
+      backplate.name = 'below:backplate'
+      this.scene.add(mesh, backplate)
+      this.belowEntry = { mesh, backplate }
+    }
+    const entry = this.belowEntry
+    if (entry.source !== below.texture) {
+      entry.external?.dispose()
+      entry.external = this.external(below.texture, below.width, below.height, true)
+      entry.source = below.texture
+    }
+    this.belowMap.value = entry.external!
+    this.belowSize.value.set(below.width, below.height)
+    this.belowLight.value = below.light ? 1 : 0
+    this.belowOn.value = 1
+    if (!quad) return
+    const zero = tsl.vec4(0, 0, 0, 0), material = entry.mesh.material as NodeMaterial
+    const key = `${emission}:${velocity}`
+    const outputs = (material.userData.outputs ??= {}) as Record<string, TslNode>
+    outputs[key] ??= tsl.mrt({ attr: zero, ...emission ? { emission: zero } : {}, ...velocity ? { velocity: tsl.vec2(0) } : {} })
+    if (material.mrtNode !== outputs[key]) { material.mrtNode = outputs[key]; material.needsUpdate = true }
+    entry.mesh.visible = true
+  }
+
   private underlayQuad(texture: Three.Texture): { render(renderer: unknown): void } {
     const { library, tsl } = this
     if (!this.underlay) {
@@ -495,13 +713,31 @@ export class VideoEditThreeSpace {
       const entry = this.cards.get(card.clipId)
       return entry?.external && entry.mesh.visible ? [{ mesh: entry.mesh, texture: entry.external, width: card.width, height: card.height, opacity: card.opacity, light: card.light, emission: card.emission }] : []
     })
+    // 下方画面：追踪里是一张 matte 发光背板（相机看不见、穿过玻璃的光线看得见；它也照亮场景）。
+    const backplate = input.below && !this.scene.background ? this.placeBackplate(input.below) : undefined
+    // 追踪里卡片本身就是发光面，实时用的面光源再照一遍就重复了。
+    // 追踪器读灯的经典参数（颜色 × 强度），不读颜色节点：追踪期间把强度设为 0，结束后还原。
+    const areaSlots = this.areaLights ? await this.areaLights : []
+    for (const slot of areaSlots) { slot.strength.value = 0; slot.light.intensity = 0 }
+    // 标准材质里实时版与追踪版不同的（实心玻璃）：追踪期间换成同参数的经典材质。
+    const swapped = new Map<Three.Mesh, Three.Material | Three.Material[]>()
+    for (const root of this.attached) root.traverse(object => {
+      const mesh = object as Three.Mesh
+      if (!mesh.isMesh || !mesh.material) return
+      const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      if (!list.some(material => spacePathTraceReplacement(material))) return
+      swapped.set(mesh, mesh.material)
+      mesh.material = Array.isArray(mesh.material) ? list.map(material => spacePathTraceReplacement(material) ?? material) : spacePathTraceReplacement(mesh.material)!
+    })
+    if (this.belowEntry) this.belowEntry.mesh.visible = false
+    const traced = backplate ? [...cards, backplate] : cards
     // 物体的泛光与实时相同（序列泛光的强度、半径、阈值）；卡片的发光光晕在卡片那一层里按实时画。
-    const glow = effects.bloom > 0 ? { strength: effects.bloom, radius: .45, threshold: .75 } : undefined
+    const glow = effects.bloom > 0 ? { strength: effects.bloom, radius: effects.bloomRadius, threshold: effects.bloomThreshold } : undefined
     const restore = this.applySceneOpacity(input.scenes)
     let refining = false
     try {
       await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, async () => {
-        refining = await tracer.render({ ...(plan.key === undefined ? {} : { key: plan.key }), scene: this.scene, camera, cards, aperture, focusDistance: effects.focusDistance,
+        refining = await tracer.render({ ...(plan.key === undefined ? {} : { key: plan.key }), scene: this.scene, camera, cards: traced, aperture, focusDistance: effects.focusDistance,
           samples: plan.samples, ...(plan.budgetMs === undefined ? {} : { budgetMs: plan.budgetMs }), ...(glow ? { glow } : {}), exposure: 2 ** effects.exposure, toneMapping: effects.toneMapping, target, light: input.light, assertCurrent: input.assertCurrent })
         input.assertCurrent()
         // 有卡片时：留下路径追踪那一层，再画卡片那一层把它加上（混合合成）；没有卡片时直接交出。
@@ -509,10 +745,38 @@ export class VideoEditThreeSpace {
         try { await guardVideoEditGpu(this.device, '路径追踪', () => this.renderer.copyTextureToTexture(target.texture, layer?.texture ?? output.external)) }
         finally { this.renderer.setRenderTarget(null) }
       })
-    } finally { restore() }
+    } finally { restore(); for (const slot of areaSlots) slot.light.intensity = 1; if (backplate) backplate.mesh.visible = false; for (const [mesh, material] of swapped) mesh.material = material }
     const layer = cards.length ? this.traceLayerTarget : undefined
     if (layer && tracer.covered) await this.raster(input, { ...effects, display: 'realtime', ambientOcclusion: 0, reflections: 0, motionBlur: false }, { cardsOnly: true, underlay: layer.texture })
     return { refining, covered: tracer.covered, progress: tracer.progress(plan.samples) }
+  }
+
+  /**
+   * 背板放在镜头正前方、铺满视野：深度取画面平面（世界原点所在的视深）与场景最远处两者中较远的，玻璃后面的东西都在它前面；
+   * 放在画面平面上时折射偏移与实时的屏幕空间透射大致相当，太远会让透过玻璃的画面偏得过多。
+   */
+  private placeBackplate(below: NonNullable<ThreeSpaceFrame['below']>): { mesh: Three.Mesh; texture: Three.Texture; width: number; height: number; opacity: number; light: boolean; emission: number } {
+    const { library, camera } = this
+    this.syncBelow(below, false, false, false)
+    const entry = this.belowEntry!
+    entry.mesh.visible = false
+    const view = camera.matrixWorldInverse
+    let far = -new library.Vector3(0, 0, 0).applyMatrix4(view).z
+    const box = new library.Box3()
+    for (const root of this.attached) box.expandByObject(root)
+    if (!box.isEmpty()) for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) far = Math.max(far, -new library.Vector3(x, y, z).applyMatrix4(view).z * 1.02)
+    const depth = Math.max(far, camera.near * 4)
+    const ty = Math.tan(camera.fov * Math.PI / 360), tx = ty * camera.aspect
+    const right = new library.Vector3().setFromMatrixColumn(camera.matrixWorld, 0), up = new library.Vector3().setFromMatrixColumn(camera.matrixWorld, 1)
+    const forward = new library.Vector3().setFromMatrixColumn(camera.matrixWorld, 2).negate()
+    // uv（左上为 0、向右向下，与卡片的 uvToWorld 同一约定）→ 世界。
+    const across = right.clone().multiplyScalar(2 * depth * tx), down = up.clone().multiplyScalar(-2 * depth * ty)
+    const origin = camera.position.clone().addScaledVector(forward, depth).addScaledVector(right, -depth * tx).addScaledVector(up, depth * ty)
+    const uvToWorld = new library.Matrix4().makeBasis(across, down, forward).setPosition(origin)
+    entry.backplate.matrix.copy(uvToWorld).multiply(this.center)
+    entry.backplate.matrixWorld.copy(entry.backplate.matrix)
+    entry.backplate.visible = true
+    return { mesh: entry.backplate, texture: entry.external!, width: below.width, height: below.height, opacity: 1, light: below.light, emission: 0 }
   }
 
   private ensureTargets(target: ThreeSpaceFrame['target']): void {
@@ -618,7 +882,8 @@ export class VideoEditThreeSpace {
     if (light) material.maskNode = map.a.add(map.rgb.r).add(map.rgb.g).add(map.rgb.b).greaterThan(1 / 512)
     // 平面卡片：跳过色调映射（r）与整幅景深、FXAA、遮蔽、反射（g）；按覆盖率混合（a），发光处整片算卡片。
     // 有没有发光附件随管线而定（序列里有片段发光时才有），两份多目标输出按当前管线切换（attachMrt）。
-    const attr = tsl.vec4(1, 1, 0, light ? 1 : alpha)
+    // b：组内容的覆盖率（按 a 混合后正是叠加的覆盖率）；发光卡片 a 整片为 1，b 只记真实覆盖，透明的光晕处不算挡住下方画面。
+    const attr = tsl.vec4(1, 1, light ? alpha : 1, light ? 1 : alpha)
     const outputs = { plain: tsl.mrt({ attr }), emission: tsl.mrt({ attr, emission: tsl.vec4(extra, alpha) }) }
     material.mrtNode = outputs.plain
     const mesh = new library.Mesh(this.quad, material)
@@ -647,6 +912,8 @@ export class VideoEditThreeSpace {
     // 没有作者环境时用序列的环境光预设（实时与路径追踪读同一张图）。
     if (!authors.some(scene => scene.environment) && effects.environment !== 'none') {
       this.scene.environment = videoEditSpaceEnvironment(this.library, effects.environment)
+      // 预设环境图全 Worker 共用：玻璃节点会引用它，作者场景登记资源时不能当成自己的。
+      markSpaceSharedTexture(this.scene.environment)
       this.scene.environmentIntensity = effects.environmentIntensity
       this.scene.environmentRotation.set(0, effects.environmentRotation * Math.PI / 180, 0)
     }
@@ -709,7 +976,7 @@ export class VideoEditThreeSpace {
     }
   }
 
-  private ensurePipeline(effects: ThreeSpaceEffects): { pipeline: RenderPipeline; primed: boolean; emission: boolean } {
+  private ensurePipeline(effects: ThreeSpaceEffects): { pipeline: RenderPipeline; primed: boolean; emission: boolean; bloom?: { threshold: { value: number }; radius: { value: number } } } {
     if (effects.display !== 'realtime') effects = { ...effects, motionBlur: false, depthOfField: false, bloom: 0, ambientOcclusion: 0, reflections: 0, emission: false, toneMapping: 'neutral' }
     // 强度是每帧更新的均匀量，管线只按开关组合缓存。
     const key = JSON.stringify([effects.motionBlur, effects.depthOfField, effects.bloom > 0, effects.ambientOcclusion > 0, effects.reflections > 0, effects.emission, effects.toneMapping])
@@ -731,7 +998,7 @@ export class VideoEditThreeSpace {
     // three 的多目标输出里 output 以外的附件缺省不混合（最后写入者赢），半透明文字边缘会让后面的作者物体整像素被当成卡片；
     // attr 改为按覆盖率普通混合：rgb 累积卡片的覆盖率，a 累积总覆盖率（普通混合的 alpha 正是叠加后的覆盖率），
     // 两者相除才是“这个像素的颜色里卡片占多少”——半透明卡片叠在空白处时仍完全按卡片处理，叠在物体上时按比例。作者物体写 0。
-    const attributes = tsl.mrt({ output: tsl.output, attr: tsl.vec4(0, 0, 0, tsl.output.a), ...effects.motionBlur ? { velocity: this.velocity } : {},
+    const attributes = tsl.mrt({ output: tsl.output, attr: tsl.vec4(0, 0, 1, tsl.output.a), ...effects.motionBlur ? { velocity: this.velocity } : {},
       // 发光附件：卡片写“额外光”（预乘），作者物体写 0 与自身覆盖率，挡在发光字前面的物体会遮住它的光晕。
       ...effects.emission ? { emission: tsl.vec4(0, 0, 0, tsl.output.a) } : {} }) as TslNode & { setBlendMode(name: string, mode: unknown): void; setClearColor(name: string, color: number, alpha: number): void }
     attributes.setBlendMode('attr', new library.BlendMode(library.NormalBlending))
@@ -749,6 +1016,10 @@ export class VideoEditThreeSpace {
     scenePass.getTexture('attr').type = library.UnsignedByteType
     const attr = scenePass.getTextureNode('attr'), total = tsl.max(attr.a, 1e-4), flat = attr.r.div(total), still = attr.g.div(total)
     let color = scenePass.getTextureNode('output')
+    // 扣掉下方画面：C = 内容 + (1 − A)·B（背景面 alpha 为 0，之后的物体按覆盖率叠在它上面），玻璃像素的颜色里已含折射后的 B。
+    // 扣在遮蔽、景深、泛光之前，它们只作用于组自己的内容；屏幕反射读的仍是含 B 的场景通道。
+    const content = attr.b
+    color = tsl.select(this.belowOn.greaterThan(.5), tsl.vec4(color.rgb.sub(this.belowColor().mul(tsl.float(1).sub(content))), content), color)
     // 环境光遮蔽与反射只加在作者物体上：卡片是已经画好的画面，不该被压暗或叠上反射。
     const objects = tsl.float(1).sub(still)
     if (surfaces) {
@@ -793,9 +1064,11 @@ export class VideoEditThreeSpace {
       nodes.push(source as unknown as { dispose(): void })
       color = this.post.motionBlur(source, scenePass.getTextureNode('velocity').xy.mul(tsl.vec2(this.shutterScale, this.shutterScale.negate())))
     }
+    let bloom: (TslNode & { threshold: { value: number }; radius: { value: number } }) | undefined
     if (effects.bloom > 0) {
       // 泛光在景深与运动模糊之后：模糊掉的高光一样发光；亮度超过阈值的部分才扩散，暗处不变。辉光落在透明处时是透明度为 0 的发光。
-      const glow = this.post.bloom(color, this.bloom, .45, .75)
+      const glow = this.post.bloom(color, this.bloom, .45, .75) as TslNode & { threshold: { value: number }; radius: { value: number } }
+      bloom = glow
       nodes.push(glow as unknown as { dispose(): void })
       color = tsl.vec4(color.rgb.add(glow.rgb), color.a)
     }
@@ -823,7 +1096,7 @@ export class VideoEditThreeSpace {
     // 卡片是已经画好、抗过锯齿的画面，不再处理，免得文字被抹软。
     pipeline.outputNode = tsl.mix(this.post.fxaa(output), output, still)
     pipeline.outputColorTransform = false
-    const entry = { pipeline, nodes, primed: false, emission: effects.emission }
+    const entry = { pipeline, nodes, primed: false, emission: effects.emission, bloom }
     this.pipelines.set(key, entry)
     return entry
   }
@@ -862,6 +1135,9 @@ export class VideoEditThreeSpace {
     for (const root of this.attached) this.scene.remove(root)
     this.attached.clear()
     for (const [clipId, entry] of this.cards) this.dropCard(clipId, entry)
+    for (const slot of this.areaLights ? await this.areaLights.catch(() => []) : []) { this.scene.remove(slot.light); slot.target.dispose(); slot.light.dispose(); slot.material.dispose() }
+    if (this.glassBack) { this.glassBack.target.dispose(); this.glassBack.material.dispose(); this.glassBack.shared.on.value = 0 }
+    if (this.belowEntry) { (this.belowEntry.mesh.material as Three.Material).dispose(); (this.belowEntry.backplate.material as Three.Material).dispose(); this.belowEntry.external?.dispose() }
     this.quad.dispose()
     this.disposePipelines()
     await this.disposePathTraces()

@@ -10,7 +10,7 @@ import {
 } from '@/core/videoEdit/sequencePresets'
 import NumberInput from '@/components/ui/NumberInput'
 import { Dropdown, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiModal, UiPanel, UiSegmented, UiSelect, UiSwitch } from '@/components/ui'
-import { VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, VIDEO_EDIT_SPACE_ENVIRONMENTS, type VideoEditSpaceEnvironment, type VideoEditBin, type VideoEditSequence, type VideoEditSpaceRender } from '@/core/videoEdit/document'
+import { VIDEO_EDIT_DEFAULT_BLOOM_RADIUS, VIDEO_EDIT_DEFAULT_BLOOM_THRESHOLD, VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, VIDEO_EDIT_SPACE_ENVIRONMENTS, type VideoEditSpaceEnvironment, type VideoEditBin, type VideoEditSequence, type VideoEditSpaceRender } from '@/core/videoEdit/document'
 import { videoEditCompositionHasSpace } from '@/core/videoEdit/spaceDisplay'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from '@/core/videoEdit/time'
 import type { VideoEditSequenceSettings } from '../application/videoEditProjectItems'
@@ -162,6 +162,12 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
         <UiFormRow label="泛光" inline info="亮处向四周发光：发光粒子、灯和高光更有光感。0 为不开。">
           <NumberInput ariaLabel="泛光强度" disabled={busy} value={space.bloom ?? 0} min={0} max={3} step={.05} precision={2} widthClassName="w-full" onChange={bloom => setSpace({ bloom })} />
         </UiFormRow>
+        {(space.bloom ?? 0) > 0 && <UiFormRow label="泛光阈值" inline info="亮度超过它的部分才发光：调低连较暗的面也泛光，调高只有灯与强高光泛光。">
+          <NumberInput ariaLabel="泛光阈值" disabled={busy} value={space.bloomThreshold ?? VIDEO_EDIT_DEFAULT_BLOOM_THRESHOLD} min={0} max={2} step={.05} precision={2} widthClassName="w-full" onChange={bloomThreshold => setSpace({ bloomThreshold })} />
+        </UiFormRow>}
+        {(space.bloom ?? 0) > 0 && <UiFormRow label="泛光范围" inline info="光晕扩散多远，越大越朦胧。">
+          <NumberInput ariaLabel="泛光范围" disabled={busy} value={space.bloomRadius ?? VIDEO_EDIT_DEFAULT_BLOOM_RADIUS} min={0} max={1} step={.05} precision={2} widthClassName="w-full" onChange={bloomRadius => setSpace({ bloomRadius })} />
+        </UiFormRow>}
         <UiFormRow label="环境光遮蔽" inline info="物体相接处和凹处变暗，体积更实。只作用于三维物体，卡片画面不变。0 为不开。">
           <NumberInput ariaLabel="环境光遮蔽强度" disabled={busy} value={space.ambientOcclusion ?? 0} min={0} max={1} step={.05} precision={2} widthClassName="w-full" onChange={ambientOcclusion => setSpace({ ambientOcclusion })} />
         </UiFormRow>

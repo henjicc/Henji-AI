@@ -39,6 +39,11 @@ it('三维成片渲染按两个标量属性单项改写，写后读回核对通�
   expect(owner.document.sequences[0].spaceRender).toMatchObject({ environment: 'studioWarm', environmentRotation: 45 })
   expect(await write({ 'video_edit.sequence.space_environment': 'none', 'video_edit.sequence.space_environment_rotation': 0, 'video_edit.sequence.space_environment_intensity': 1 })).toMatchObject({ ok: true })
   expect(owner.document.sequences[0].spaceRender).toEqual({ finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: 1.2, ambientOcclusion: .5 })
+  // 泛光阈值与范围单独写入也要落盘；回到缺省 0.75 与 0.45 时不存。
+  expect(await write({ 'video_edit.sequence.space_bloom_threshold': .4 })).toMatchObject({ ok: true })
+  expect(owner.document.sequences[0].spaceRender).toMatchObject({ bloomThreshold: .4 })
+  expect(await write({ 'video_edit.sequence.space_bloom_threshold': .75, 'video_edit.sequence.space_bloom_radius': .45 })).toMatchObject({ ok: true })
+  expect(owner.document.sequences[0].spaceRender).toEqual({ finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: 1.2, ambientOcclusion: .5 })
 })
 
 it('片段发光强度写入非零值时同一步开启空间，读回核对通过；关键帧同样开启，可撤销', async () => {

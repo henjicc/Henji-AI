@@ -132,7 +132,7 @@ export class VideoEditThreeSpacePathTrace {
   /** 当前累积里最少的那个像素已有的采样数。 */
   private samples = 0
   private notedNodeEffects = false
-  private readonly glowPipelines = new Map<string, { pipeline: RenderPipeline; strength: TslNode & { value: number }; source: SizedTexture; nodes: Array<{ dispose(): void }> }>()
+  private readonly glowPipelines = new Map<string, { pipeline: RenderPipeline; strength: TslNode & { value: number }; halo: { radius: { value: number }; threshold: { value: number } }; source: SizedTexture; nodes: Array<{ dispose(): void }> }>()
   private denoiser?: Denoiser
   /** 降噪失败（权重读不到、显卡不支持、分块执行出错）：这个追踪器之后不再降噪。 */
   private denoiseFailed = false
@@ -211,9 +211,9 @@ export class VideoEditThreeSpacePathTrace {
     return quad
   }
 
-  /** 带泛光的编码：结果先拷成可过滤的半精度图（泛光按线性过滤采样），加上泛光再编码。半径与阈值不同的各建一套，强度是 uniform。 */
+  /** 带泛光的编码：结果先拷成可过滤的半精度图（泛光按线性过滤采样），加上泛光再编码。按色调映射各建一套，强度、半径与阈值是 uniform（可调，不随值多建）。 */
   private async glowPipeline(glow: NonNullable<PathTraceFrame['glow']>, toneMapping: PathTraceFrame['toneMapping'], width: number, height: number): Promise<RenderPipeline> {
-    const key = `${glow.radius}:${glow.threshold}:${toneMapping}`
+    const key = toneMapping
     let entry = this.glowPipelines.get(key)
     if (!entry) {
       const { tsl, library } = this
@@ -221,15 +221,16 @@ export class VideoEditThreeSpacePathTrace {
       const strength = tsl.uniform(0) as TslNode & { value: number }
       // 显式渲染成纹理：按像素读取的节点本身算作纹理节点，convertToTexture 会原样返回它，泛光就会去采样不可过滤的单精度图。
       const source = tsl.rtt(this.encodeTexel(), width, height)
-      const halo = bloom(source, strength, glow.radius, glow.threshold)
+      const halo = bloom(source, strength, glow.radius, glow.threshold) as TslNode & { radius: { value: number }; threshold: { value: number } }
       const pipeline = new library.RenderPipeline(this.renderer)
       // 辉光落在透明处时是透明度为 0 的发光，与实时相同。
       pipeline.outputNode = this.encoded(tsl.vec4(source.rgb.add(halo.rgb), source.a), toneMapping)
       pipeline.outputColorTransform = false
-      entry = { pipeline, strength, source: source as unknown as SizedTexture, nodes: [source, halo] as unknown as Array<{ dispose(): void }> }
+      entry = { pipeline, strength, halo, source: source as unknown as SizedTexture, nodes: [source, halo] as unknown as Array<{ dispose(): void }> }
       this.glowPipelines.set(key, entry)
     }
     entry.strength.value = glow.strength
+    entry.halo.radius.value = glow.radius; entry.halo.threshold.value = glow.threshold
     // 中间图固定为本帧输出尺寸：跟随渲染器画布尺寸时，与输出尺寸不同就会按屏幕坐标读错位置。
     if (entry.source.width !== width || entry.source.height !== height) { entry.source.width = width; entry.source.height = height; entry.source.setSize(width, height) }
     return entry.pipeline

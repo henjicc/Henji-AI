@@ -22,7 +22,7 @@ import { ensureVideoEditProxyState, getVideoEditProxyPreference, readVideoEditPr
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
 import { videoEditClipMedia, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditClipSpeedData } from './videoEditClipSpeed'
-import { VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, videoEditComposition } from '@/core/videoEdit/document'
+import { VIDEO_EDIT_DEFAULT_BLOOM_RADIUS, VIDEO_EDIT_DEFAULT_BLOOM_THRESHOLD, VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditTranscriptWords, resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEditTransitionClipIds, VIDEO_EDIT_TRANSITION_PRESETS, VIDEO_EDIT_TRANSITION_REF_PREFIX } from '@/core/videoEdit/transitions'
@@ -126,6 +126,8 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     data.finalRenderer = spaceRender?.finalRenderer ?? 'realtime'
     data.pathTraceSamples = spaceRender?.pathTraceSamples ?? VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES
     data.spaceBloom = spaceRender?.bloom ?? 0
+    data.spaceBloomThreshold = spaceRender?.bloomThreshold ?? VIDEO_EDIT_DEFAULT_BLOOM_THRESHOLD
+    data.spaceBloomRadius = spaceRender?.bloomRadius ?? VIDEO_EDIT_DEFAULT_BLOOM_RADIUS
     data.spaceAmbientOcclusion = spaceRender?.ambientOcclusion ?? 0
     data.spaceReflections = spaceRender?.reflections ?? 0
     data.spaceExposure = spaceRender?.exposure ?? 0

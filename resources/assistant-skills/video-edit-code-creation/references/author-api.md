@@ -1,4 +1,4 @@
-> 作者 API 16：三维作者的图片参数可引用时间线片段，`info.elements[键]` 给出它的位置与形状（见空间配方）。作者 API 15：真实几何用受管 createThree，宿主掌管相机、景深与曝光。其他入口仅显式 space:true 才获得 info.space。普通卡片中心生成一次；three 场景逐子时刻渲染。空间构图调用宿主能力，不手写投影、布局或景深。旧 API 按各自版本保留行为。见 [空间配方](recipes-3d.md)。
+> 作者 API 17：三维作者的 `host.time`（本场景源时间）、`host.space.material/environment`（标准材质与环境，实时与渲染方式一致）与元素轮廓 `outline()`。作者 API 16：三维作者的图片参数可引用时间线片段，`info.elements[键]` 给出它的位置与形状（见空间配方）。作者 API 15：真实几何用受管 createThree，宿主掌管相机、景深与曝光。其他入口仅显式 space:true 才获得 info.space。普通卡片中心生成一次；three 场景逐子时刻渲染。空间构图调用宿主能力，不手写投影、布局或景深。旧 API 按各自版本保留行为。见 [空间配方](recipes-3d.md)。
 
 # 作者接口：模块、绘制与图层
 

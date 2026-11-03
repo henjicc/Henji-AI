@@ -16,6 +16,7 @@ import type { VideoEditGpuCompositor, VideoEditPicture, VideoEditMaterialViewpor
 import { planVideoEditBuiltinEffect } from './videoEditBuiltinEffectPasses'
 import { isShaderGraphEffect } from '@/core/videoEdit/shaderGraph/effects'
 import { VIDEO_EDIT_PRECISE_FORMAT, videoEditPictureHighPrecision } from './videoEditGpuFrame'
+import { isSpaceGlassMaterial } from './videoEditSpaceMaterials'
 import type { VideoEditTrackedClip } from './videoEditTrackResults'
 import type { AuthorGpuInputs } from './videoEditAuthorModule'
 import type { PreparedVideoEditCodeEffect } from './videoEditCodeSources'
@@ -29,6 +30,11 @@ export type VideoEditFilterFrameReader = (clip: VideoEditClip, plan: PreparedVid
 interface Layer { clip: VideoEditClip; picture: VideoEditPicture }
 export interface VideoEditCompositeReplacements {
   pictures: ReadonlyMap<string, VideoEditCodePicture>
+  /**
+   * 要看见下方画面的空间组（组里有玻璃等透射材质）：合成树走到它时，把它下面已经解析好的各层（含父层级更早的层）
+   * 先合成为一张画面交给它，再画这一组。下方各层只解析一次，最终合成照常再叠一遍；没有下方内容时给 undefined。
+   */
+  deferred?: ReadonlyMap<string, (below: VideoEditCodePicture | undefined) => Promise<VideoEditCodePicture>>
   replaced: ReadonlySet<string>
 }
 const effective = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).length > 0
@@ -59,6 +65,8 @@ const maskKeys = (keys: Set<string>, clip: VideoEditClip): void => {
 export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditCompositeNode[]): Set<string> {
   const keys = new Set<string>()
   const visit = (node: VideoEditCompositeNode): void => {
+    // 空间组要看见下方画面时合成那张下方画面的目标（只登记名字，用到时才分配）：键名不在这里，下一帧会被当成用不着而销毁。
+    if (node.kind !== 'adjustment') keys.add(`composite:below:${node.kind === 'transition' ? `transition:${node.window.transition.id}` : node.clip.id}`)
     if (node.kind === 'clip') { if (effective(node.clip)) slots(node.clip).forEach(key => keys.add(key)); maskKeys(keys, node.clip) }
     else if (node.kind === 'transition') {
       for (const clip of videoEditTransitionPictureClips(node.window)) { slots(clip).forEach(key => keys.add(key)); maskKeys(keys, clip) }
@@ -188,13 +196,25 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
     // 结果再整体乘一次；乘在画面里而不是交给最后的绘制，过渡两端拿到的画面同样带着不透明度。
     return { clip: identity(clip), picture: await apply(clip, await normalize(clip, [{ clip: { ...clip, opacity: 1 }, picture: layer.picture }]), true) }
   }
-  const resolve = async (nodes: readonly VideoEditCompositeNode[]): Promise<Layer[]> => {
+  const resolve = async (nodes: readonly VideoEditCompositeNode[], outer: readonly Layer[] = []): Promise<Layer[]> => {
     const layers: Layer[] = []
     for (const node of nodes) {
       current()
       const id = node.kind === 'transition' ? `transition:${node.window.transition.id}` : node.clip.id
       const replacement = replacements?.pictures.get(id)
       if (replacement) { layers.push({ clip: identity(node.kind === 'transition' ? node.window.left : node.clip), picture: replacement }); continue }
+      const deferred = replacements?.deferred?.get(id)
+      if (deferred) {
+        const under = [...outer, ...layers]
+        let below: VideoEditCodePicture | undefined
+        if (under.length) {
+          below = await (await gpu()).target(`composite:below:${id}`, document.width, document.height, VIDEO_EDIT_PRECISE_FORMAT); current()
+          const drawn = await compositor.draw(document, under.map(layer => layer.clip), under.map(layer => layer.picture), shouldPresent, undefined, below, materialViewport)
+          watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
+        }
+        layers.push({ clip: identity(node.kind === 'transition' ? node.window.left : node.clip), picture: await deferred(below) }); current()
+        continue
+      }
       if (replacements?.replaced.has(id)) continue
       if (node.kind === 'clip') layers.push(await resolveClip(node.clip))
       else if (node.kind === 'transition') {
@@ -214,7 +234,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
         current()
         layers.push({ clip: identity(shown), picture })
       } else {
-        const children = await resolve(node.children)
+        const children = await resolve(node.children, [...outer, ...layers])
         if (!effective(node.clip) || node.clip.opacity <= 0) layers.push(...children)
         else {
           const band = await normalize(node.clip, children)
@@ -385,7 +405,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
     const postEffects = { display: options.display ?? 'realtime', motionBlur: drawn.motionBlur === true, depthOfField: Boolean(camera?.defocus || camera?.curves?.defocus?.length),
       focusDistance: center.camera.focusDistance, cocScale, cocMax: Math.max(0, ...center.cards.map(card => card.cocRangePx[1]), ...sceneCoc),
       shutterScale: plan.samples.length > 1 ? plan.samples.length / (plan.samples.length - 1) : 1,
-      bloom: options.spaceRender?.bloom ?? 0, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0,
+      bloom: options.spaceRender?.bloom ?? 0, bloomThreshold: options.spaceRender?.bloomThreshold ?? .75, bloomRadius: options.spaceRender?.bloomRadius ?? .45, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0,
       exposure: options.spaceRender?.exposure ?? 0, toneMapping: options.spaceRender?.toneMapping ?? 'neutral',
       environment: options.spaceRender?.environment ?? 'none', environmentIntensity: options.spaceRender?.environmentIntensity ?? 1, environmentRotation: options.spaceRender?.environmentRotation ?? 0,
       emission: emitting.size > 0 }
@@ -397,7 +417,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
       // 卡片材料是否带发光跟着它的中心画面（材料面由这张画面画出），转场两端还没画时也能先定下来。
       || group.clipIds.some(clipId => (pictures.get(clipId) as { carriesLight?: boolean } | null | undefined)?.carriesLight === true || emitsLight(clipId)) || (postEffects.display === 'realtime' && postEffects.bloom > 0)
     // 一组画面：去掉 excluded 里的片段后整组在同一三维场景里画一次。
-    const renderGroup = async (group: (typeof plan.groups)[number], excluded: ReadonlySet<string>, variant: string, groupCarriesLight?: boolean): Promise<SpatialPictureLease> => {
+    const renderGroup = async (group: (typeof plan.groups)[number], excluded: ReadonlySet<string>, variant: string, groupCarriesLight?: boolean, below?: VideoEditCodePicture): Promise<SpatialPictureLease> => {
       const cards: import('./videoEditThreeSpace').ThreeSpaceCard[] = []
       for (const clipId of group.clipIds) {
         if (excluded.has(clipId)) continue
@@ -412,15 +432,31 @@ export async function renderVideoEditThreeSpaceScene(options: {
       const light = groupCarriesLight ?? (cards.some(card => card.light || emitsLight(card.clipId)) || groupScenes.length > 0 || (postEffects.display === 'realtime' && postEffects.bloom > 0))
       return capture(outputSpec(`three:group:${group.id}${variant}`), async target => {
         const { refining, progress } = await space.render({ frame: center, light, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects,
+          ...(below ? { below: { texture: below.texture, width: below.width, height: below.height, light: below.carriesLight } } : {}),
           target: { texture: target.texture, width: target.width, height: target.height }, ...(options.trace ? { trace: { ...options.trace, group: `${group.id}${variant}` } } : {}), assertCurrent: () => { current() } })
         if (refining) options.onRefining?.(progress ?? 0)
         return { completion: spatial.completion() }
       }, light)
     }
     const transitionWindows = videoEditPictureTransitionsAt(request.composition, request.sequenceFrame)
-    for (const group of plan.groups) {
+    // 组里有透射材质（玻璃、亚克力）才要下方画面：作者物体的材质 transmission > 0。没有的组照旧先画好，零额外开销。
+    const transmits = (group: (typeof plan.groups)[number]): boolean => (options.display ?? 'realtime') !== 'solid' && (options.display ?? 'realtime') !== 'wireframe' && scenes.some(scene => {
+      if (!group.clipIds.includes(scene.clipId)) return false
+      let found = false
+      scene.root.traverse(object => {
+        const material = (object as { material?: import('three').Material | import('three').Material[] }).material
+        // three 把 transmission > 0、或设了透射 / 背景节点的节点材质都当透射处理；标准实心玻璃读的也是身后的画面。
+        for (const value of Array.isArray(material) ? material : material ? [material] : []) {
+          const fields = value as { transmission?: number; transmissionNode?: unknown; backdropNode?: unknown }
+          if ((fields.transmission ?? 0) > 0 || fields.transmissionNode || fields.backdropNode || isSpaceGlassMaterial(value)) found = true
+        }
+      })
+      return found
+    })
+    const deferred = new Map<string, (below: VideoEditCodePicture | undefined) => Promise<VideoEditCodePicture>>()
+    const renderWhole = async (group: (typeof plan.groups)[number], below?: VideoEditCodePicture): Promise<SpatialPictureLease> => {
       const windows = group.itemIds.flatMap(id => id.startsWith('transition:') ? transitionWindows.filter(window => window.transition.id === id.slice('transition:'.length)) : [])
-      if (!windows.length) { groupPictures.push({ groupId: group.id, picture: await renderGroup(group, new Set(), '') }); continue }
+      if (!windows.length) return await renderGroup(group, new Set(), '', undefined, below)
       // 空间转场：整组画两次再用这个转场自己的混合或着色器合成，两端与组里其他三维内容的遮挡、景深关系照旧。
       // 双侧转场两次各去掉另一端的片段；单侧转场（入点淡入、出点淡出）一次不画这个片段、一次画，
       // 在两者之间过渡，只有这个片段出现或消失，组里其他内容不跟着淡。
@@ -438,8 +474,8 @@ export async function renderVideoEditThreeSpaceScene(options: {
       try {
         // 出现或消失的是可见的那一端：左侧停用（empty 为 left）时是右侧片段。
         const withoutClip = new Set([...base, (window.empty === 'left' ? window.right : window.left).id])
-        first = await renderGroup(group, single ? incoming ? withoutClip : base : new Set([...base, window.right.id]), ':a', light)
-        second = await renderGroup(group, single ? incoming ? base : withoutClip : new Set([...base, window.left.id]), ':b', light)
+        first = await renderGroup(group, single ? incoming ? withoutClip : base : new Set([...base, window.right.id]), ':a', light, below)
+        second = await renderGroup(group, single ? incoming ? base : withoutClip : new Set([...base, window.left.id]), ':b', light, below)
         const transition = videoEditTransitionRender(window, request.sequenceFrame), key = `three:transition:${window.transition.id}`
         const a = compositor.spatialPicture(first), b = compositor.spatialPicture(second)
         // 两端都是整组画面，没有“空的一侧”：着色器转场去掉空端标记。
@@ -452,15 +488,23 @@ export async function renderVideoEditThreeSpaceScene(options: {
         const borrowed: SpatialPictureLease = { texture: mixed.texture, width: mixed.width, height: mixed.height, format: mixed.textureFormat,
           owner: 'composite-host', highPrecision: mixed.highPrecision, carriesLight: light, completion: Promise.resolve(),
           async release(afterUse) { await afterUse } }
-        groupPictures.push({ groupId: group.id, picture: await spatial.consume(borrowed, outputSpec(`three:group:${group.id}`)) })
+        return await spatial.consume(borrowed, outputSpec(`three:group:${group.id}`))
       } finally {
         const settled = spatial.completion()
         await Promise.allSettled([first?.release(settled), second?.release(settled)])
       }
     }
+    for (const group of plan.groups) {
+      if (!transmits(group)) { groupPictures.push({ groupId: group.id, picture: await renderWhole(group) }); continue }
+      deferred.set(group.itemIds[0], async below => {
+        const picture = await renderWhole(group, below)
+        groupPictures.push({ groupId: group.id, picture })
+        return compositor.spatialPicture(picture)
+      })
+    }
     const replacements: VideoEditCompositeReplacements = {
       pictures: new Map(groupPictures.map(group => [plan.groups.find(value => value.id === group.groupId)!.itemIds[0], compositor.spatialPicture(group.picture)])),
-      replaced: new Set(plan.groups.flatMap(group => group.itemIds)),
+      deferred, replaced: new Set(plan.groups.flatMap(group => group.itemIds)),
     }
     return await capture(outputSpec('spatial:frame'), target => renderVideoEditCompositeScene(drawn, nodes, pictures, effects, compositor, request.sequenceFrame, current, undefined,
       request.composition, target, options.onEffectError, request.quality, options.readFilterFrames, replacements), groupPictures.some(group => group.picture.carriesLight))

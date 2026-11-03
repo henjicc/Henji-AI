@@ -1,4 +1,6 @@
 import type { SpatialMat4 } from '@/core/videoEdit/spatialTypes'
+import { contours } from 'd3-contour'
+import simplify from 'simplify-js'
 
 /** 作者根空间里的一个点（three 的 Vector3 可以直接 copy）。 */
 export interface AuthorElementPoint { x: number; y: number; z: number }
@@ -18,7 +20,14 @@ export interface AuthorElement {
   edge(side: 'bottom' | 'top' | 'left' | 'right', spacing?: number): AuthorElementPoint[]
   /** 在不透明区域里按覆盖均匀撒 `count` 个点（同一 `seed` 结果相同）。 */
   sample(count: number, seed?: number): AuthorElementPoint[]
+  /**
+   * 不透明区域的轮廓（作者接口 17 起）：每块一个外轮廓与若干个洞，点为画面 uv（左上为 0、向右向下）。
+   * 用 uv 建 `THREE.Shape`（或挤出体）后整体乘 `matrix` 就放到片段的真实位置；挤出方向（z）在 `matrix` 里是一个显示高度一个单位。
+   * `tolerance`：简化容差（画面高度的比例，缺省 0.0015），越大点越少。
+   */
+  outline?(tolerance?: number): AuthorElementPolygon[]
 }
+export interface AuthorElementPolygon { outer: Array<[number, number]>; holes: Array<Array<[number, number]>> }
 
 interface Coverage { width: number; height: number; alpha: Uint8ClampedArray }
 /**
@@ -41,7 +50,7 @@ function coverageOf(picture: CanvasImageSource & { width: number; height: number
 const OPAQUE = 128
 
 /** `picture()` 在第一次真用到形状时才取（读回画面有代价，只用位置的作者不付这个代价）。 */
-export function createAuthorElement(clipId: string, matrix: SpatialMat4, picture: () => CanvasImageSource & { width: number; height: number }, displayAspect: number): AuthorElement {
+export function createAuthorElement(clipId: string, matrix: SpatialMat4, picture: () => CanvasImageSource & { width: number; height: number }, displayAspect: number, withOutline = false): AuthorElement {
   const m = matrix
   // 同一帧里第一次用到形状时才读回画面，之后复用（不再去取画面）。
   let coverage: Coverage | undefined
@@ -50,7 +59,7 @@ export function createAuthorElement(clipId: string, matrix: SpatialMat4, picture
     const w = m[3] * u + m[7] * v + m[15] || 1
     return { x: (m[0] * u + m[4] * v + m[12]) / w, y: (m[1] * u + m[5] * v + m[13]) / w, z: (m[2] * u + m[6] * v + m[14]) / w }
   }
-  return Object.freeze({
+  const element: AuthorElement = {
     clipId, matrix: Object.freeze([...matrix]), at,
     edge(side: 'bottom' | 'top' | 'left' | 'right', spacing = .004): AuthorElementPoint[] {
       const { width, height, alpha } = shape()
@@ -73,6 +82,17 @@ export function createAuthorElement(clipId: string, matrix: SpatialMat4, picture
       }
       return points
     },
+    outline(tolerance = .0015): AuthorElementPolygon[] {
+      const { width, height, alpha } = shape()
+      // 半透明阈值 128 与 edge、sample 相同；按像素网格的等值线（d3-contour，行进方块），再按显示高度的比例简化（simplify-js）。
+      const values = Float64Array.from(alpha)
+      const [field] = contours().size([width, height]).thresholds([OPAQUE])(values as unknown as number[])
+      if (!field) return []
+      const toUv = (ring: Array<[number, number]>): Array<[number, number]> => simplify(ring.map(([x, y]) => ({ x, y })), Math.max(0, tolerance) * height, true)
+        .map(point => [point.x / width, point.y / height] as [number, number])
+      return field.coordinates.map(polygon => ({ outer: toUv(polygon[0] as Array<[number, number]>), holes: polygon.slice(1).map(ring => toUv(ring as Array<[number, number]>)) }))
+        .filter(polygon => polygon.outer.length >= 3)
+    },
     sample(count: number, seed = 1): AuthorElementPoint[] {
       const { width, height, alpha } = shape()
       const covered: number[] = []
@@ -85,5 +105,8 @@ export function createAuthorElement(clipId: string, matrix: SpatialMat4, picture
         return at((index % width + next()) / width, (Math.floor(index / width) + next()) / height)
       })
     },
-  })
+  }
+  // 轮廓从作者接口 17 起提供，更早的接口版本保持原样。
+  if (!withOutline) delete element.outline
+  return Object.freeze(element)
 }
