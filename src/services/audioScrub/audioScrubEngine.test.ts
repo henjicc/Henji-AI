@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { AudioScrubEngine, audioScrubWantedBlocks, type AudioScrubSource } from './audioScrubEngine'
+import { AudioScrubEngine, audioScrubWantedBlocks, preloadAudioScrubProcessor, type AudioScrubSource } from './audioScrubEngine'
 
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 
@@ -33,6 +33,17 @@ const flush = () => new Promise(resolve => setTimeout(resolve, 0))
 
 beforeEach(() => { FakeNode.created = []; vi.stubGlobal('AudioWorkletNode', FakeNode) })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+it('提前载入处理器只载模块不建节点；之后接上输出不再重复载入', async () => {
+  const { value: ctx, load } = context()
+  preloadAudioScrubProcessor(ctx)
+  load(); await flush()
+  expect(FakeNode.created).toHaveLength(0)
+  const engine = new AudioScrubEngine()
+  engine.attach({ context: ctx, destination: {} as AudioNode }); await flush()
+  expect(ctx.audioWorklet.addModule).toHaveBeenCalledTimes(1)
+  expect(FakeNode.created).toHaveLength(1)
+})
 
 it('处理器加载完成前的配置与拖动按顺序排队，接上后一次送出；读块从目标位置开始', async () => {
   const engine = new AudioScrubEngine()

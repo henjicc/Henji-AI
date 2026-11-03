@@ -66,6 +66,14 @@ function loadProcessor(context: BaseAudioContext): Promise<void> {
 }
 
 /**
+ * 提前把处理器载入音频上下文（只载模块，不建节点、不占音频线程）。宿主在已经要准备声音的时机调用，第一次拖动就不必等模块加载；
+ * 加载失败不在这里报，接上输出时会重试并报告。
+ */
+export function preloadAudioScrubProcessor(context: BaseAudioContext): void {
+  loadProcessor(context).catch(() => undefined)
+}
+
+/**
  * 读头附近要备好的块，按优先级：目标与读头所在块，沿运动方向往前（够读头在“0.5 秒 + 三倍读取耗时”里走完，速度越快、
  * 读取越慢取得越远），最后往回一两块（反向拖动）。
  */

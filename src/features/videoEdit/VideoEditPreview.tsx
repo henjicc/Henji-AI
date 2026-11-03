@@ -40,6 +40,7 @@ import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { finishVideoEditAudioFade, VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { subscribeVideoEditScrub, VideoEditAudioScrubber, type VideoEditScrubIntent } from './engine/videoEditAudioScrub'
+import { preloadAudioScrubProcessor } from '@/services/audioScrub/audioScrubEngine'
 import { alignVideoEditClockToDisplay, followVideoEditAudioClock, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditAudioClockOrigin, videoEditLiveFrame, videoEditPlaybackTarget } from './engine/videoEditDisplayClock'
 import { setVideoEditPlaybackLevels } from './application/videoEditPlaybackLevels'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
@@ -433,11 +434,14 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const scrubAudio = (intent: VideoEditScrubIntent): void => {
       const document = videoMotionComposition(instance)
       if (!document || instance.playing || !audibleVideoEditClips(document).length) return
+      // 第一次拖动时混音会话还没起：现在就开始启动，和下面唤醒音频设备、载入处理器同时进行，而不是等设备就绪后才开始。
+      audioRenderer ??= new VideoEditRenderSession(document)
       scrubber.request({
         seconds: intent.seconds, fps: document.fps, endTime: videoEditDuration(document) / document.fps, mode: intent.kind ?? 'step', quantum: intent.quantum, at: intent.at,
         prepare: async () => {
           audio ??= new AudioContext({ sampleRate: document.sampleRate })
           const context = audio
+          preloadAudioScrubProcessor(context)
           await context.resume()
           if (stopped || audio !== context) throw new DOMException('擦洗声音已关闭。', 'AbortError')
           meter ??= createVideoEditAudioMeter(context, document.channels)
@@ -468,6 +472,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       try {
         if (audibleVideoEditClips(document).length && (!audio || audio.sampleRate === document.sampleRate)) {
           audio ??= new AudioContext({ sampleRate: document.sampleRate }); void audio.resume().catch(() => undefined)
+          // 声音已经在为起播准备，顺带载入擦洗处理器：只载模块不建节点，空闲时不多耗电。
+          preloadAudioScrubProcessor(audio)
           // 与调度器共用采样网格，否则非整数帧率的首块预混会因浮点起点不同而失配。
           const firstSample = Math.round(frame / document.fps * document.sampleRate)
           const from = firstSample / document.sampleRate
