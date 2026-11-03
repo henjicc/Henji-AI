@@ -145,10 +145,13 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 64：代码图片参数新增片段引用 {kind:'clip'}；旧程序的图片引用是封闭联合，读到它会把整份剪辑判成内容无效，提高到 64 让它明确提示升级。
   // 65：新建代码素材默认作者接口 16（三维作者的 info.elements），旧程序的作者接口上限不认识它，会把整份剪辑判成内容无效，提高到 65 让它明确提示升级。
   // 68：新建代码素材默认作者接口 17（三维作者的 host.time、host.space 标准材质与环境、元素轮廓 outline），旧程序的作者接口上限不认识它，会把整份剪辑判成内容无效，提高到 68 让它明确提示升级。
-  minReaderVersion: 68,
+  // 69：片段关键帧新增 spaceThickness（三维厚度）；旧程序的片段关键帧键是封闭枚举，读到它会把整份剪辑判成内容无效，提高到 69 让它明确提示升级。
+  minReaderVersion: 69,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 68 → 69：片段新增三维表面：厚度 spaceThickness（可关键帧）、受光 spaceLit、材质 spaceMaterial、倒角 spaceBevel、投影 spaceCastShadow / spaceReceiveShadow；旧内容没有这些字段，缺省为平面画面，画面不变；关键帧键是封闭枚举，旧程序读到 curves.spaceThickness 会拒读，最低可读版本随版本提高。
+    68: content => structuredClone(content),
     // 67 → 68：接受作者接口 17（三维作者的 host.time、host.space 标准材质与环境、元素轮廓 outline）；序列 spaceRender 新增可选 bloomThreshold、bloomRadius（泛光阈值与范围），省略即今天的 0.75 与 0.45，画面不变。旧源码与固定接口原样保留。
     67: content => structuredClone(content),
     // 66 → 67：序列 spaceRender 新增可选 environment、environmentIntensity、environmentRotation（三维环境光预设、强度与转角），省略即无环境光，画面不变；旧程序忽略它们只是不打环境光，最低可读版本保持 65。

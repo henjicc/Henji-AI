@@ -83,7 +83,8 @@ interface Denoiser {
   dispose(): void
 }
 
-export interface PathTraceCard { mesh: Three.Mesh; texture: Three.Texture; width: number; height: number; opacity: number; light: boolean; emission: number }
+/** `solid`：实体卡片（受光、有厚度）按真实物体追踪——画面作底色贴图、不是 matte，参数取它的表面材质。 */
+export interface PathTraceCard { mesh: Three.Mesh; texture: Three.Texture; width: number; height: number; opacity: number; light: boolean; emission: number; solid?: { roughness: number; metalness: number } }
 export interface PathTraceFrame {
   /**
    * 画面身份：相同时接着累积；缺省时每次从头追踪。宿主只在这一帧的输入都是精确画面时给出，
@@ -142,7 +143,7 @@ export class VideoEditThreeSpacePathTrace {
   /** 重新降噪期间显示的上一张降噪图。 */
   private keptTarget?: Three.RenderTarget
   private kept = false
-  private readonly cardTargets = new Map<Three.Mesh, { target: Three.RenderTarget; material: Three.MeshPhysicalMaterial }>()
+  private readonly cardTargets = new Map<Three.Mesh, { target: Three.RenderTarget; material: Three.MeshPhysicalMaterial; solid: boolean; side?: Three.MeshPhysicalMaterial }>()
   /** 展开过的环境图，按来源贴图；只留最近几张（换环境的作品很少）。 */
   private readonly environments = new Map<Three.Texture, { version: number; key?: string; texture: Three.DataTexture }>()
   private readonly decode: QuadMesh
@@ -406,17 +407,20 @@ export class VideoEditThreeSpacePathTrace {
   private applyCards(cards: readonly PathTraceCard[], restores: Array<() => void>): void {
     const { library, renderer } = this
     // 已从场景里移除的卡片（宿主释放了它）不再需要解码目标。
-    for (const [mesh, entry] of this.cardTargets) if (!mesh.parent) { entry.target.dispose(); entry.material.dispose(); this.cardTargets.delete(mesh) }
+    for (const [mesh, entry] of this.cardTargets) if (!mesh.parent) { entry.target.dispose(); entry.material.dispose(); entry.side?.dispose(); this.cardTargets.delete(mesh) }
     for (const card of cards) {
       let entry = this.cardTargets.get(card.mesh)
+      if (entry && entry.solid !== !!card.solid) { entry.target.dispose(); entry.material.dispose(); entry.side?.dispose(); this.cardTargets.delete(card.mesh); entry = undefined }
       if (!entry || entry.target.width !== card.width || entry.target.height !== card.height) {
-        entry?.target.dispose(); entry?.material.dispose()
+        entry?.target.dispose(); entry?.material.dispose(); entry?.side?.dispose()
         const target = new library.RenderTarget(card.width, card.height, { type: library.HalfFloatType, depthBuffer: false })
         target.texture.colorSpace = library.LinearSRGBColorSpace
         // 只发光、不反光：底色黑、无高光；覆盖率决定光线是否穿过卡片。matte：相机看不见，卡片由实时那一层叠上来。
-        const material = Object.assign(new library.MeshPhysicalMaterial({ color: 0x000000, roughness: 1, metalness: 0, specularIntensity: 0,
-          emissive: 0xffffff, emissiveMap: target.texture, map: target.texture, transparent: true, side: library.DoubleSide }), { matte: true })
-        entry = { target, material }
+        const material = card.solid
+          ? new library.MeshPhysicalMaterial({ color: 0xffffff, map: target.texture, alphaTest: .5, emissive: 0xffffff, emissiveMap: target.texture, emissiveIntensity: 0, side: library.DoubleSide })
+          : Object.assign(new library.MeshPhysicalMaterial({ color: 0x000000, roughness: 1, metalness: 0, specularIntensity: 0,
+            emissive: 0xffffff, emissiveMap: target.texture, map: target.texture, transparent: true, side: library.DoubleSide }), { matte: true })
+        entry = { target, material, solid: !!card.solid }
         this.cardTargets.set(card.mesh, entry)
       }
       this.decodeSource.value = card.texture
@@ -425,9 +429,16 @@ export class VideoEditThreeSpacePathTrace {
       this.decode.render(renderer)
       entry.material.opacity = card.opacity
       // 卡片照亮周围的光：亮度 1 时与画面颜色一致，发光强度在此之上加亮。
-      entry.material.emissiveIntensity = 1 + card.emission
+      entry.material.emissiveIntensity = card.solid ? card.emission : 1 + card.emission
+      if (card.solid) { entry.material.roughness = card.solid.roughness; entry.material.metalness = card.solid.metalness }
       const original = card.mesh.material
-      card.mesh.material = entry.material
+      // 挤出体的侧面 uv 落在轮廓上（透明度约一半），按正面的透明度裁剪会出破洞：侧面另用一份不裁剪的同参数材质。
+      if (card.solid && card.mesh.geometry.groups.length) {
+        entry.side ??= entry.material.clone()
+        entry.side.alphaTest = 0
+        entry.side.roughness = entry.material.roughness; entry.side.metalness = entry.material.metalness; entry.side.emissiveIntensity = entry.material.emissiveIntensity
+        card.mesh.material = [entry.material, entry.side]
+      } else card.mesh.material = entry.material
       restores.push(() => { card.mesh.material = original })
     }
   }

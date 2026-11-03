@@ -1,3 +1,4 @@
+import { spaceClipIsSolid } from '@/core/videoEdit/spatialSchema'
 import { spatialDefocusStrength } from './videoEditBuiltinEffectPasses'
 import { evaluateSpatialFrame, includeSpatialWorldBounds, SpatialEvaluationError, spatialBoundsCorners, spatialClipPolygon, spatialCocRadius, spatialClipEnabled, spatialClipMatrix } from '@/core/videoEdit/spatialEvaluation'
 import { spatialScale, spatialTranslation, spatialMultiply, spatialTransform, spatialInverse, spatialHomogeneous } from '@/core/videoEdit/spatialMatrices'
@@ -346,10 +347,10 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
       target: { key: `spatial:${card.clipId}:material`, width, height, format: 'rgba16float', usage: 1 | 2 | 4 | 16 }, highPrecision: true, carriesLight: false }
   })
   const rasterLimits = drafts.filter(draft => draft.tier < wanted.get(draft)!).map(draft => ({ clipId: draft.card.clipId, wantedTier: wanted.get(draft)!, tier: draft.tier }))
-  // 几何是平的但有片段在发光时也要走三维（二维合成没有发光）；空间帧本身的 flatIdentity 只表达几何，压平、展开拿它作判据。
+  // 几何是平的但有片段在发光、受光、有厚度或非画面材质时也要走三维（二维合成没有这些）；空间帧本身的 flatIdentity 只表达几何，压平、展开拿它作判据。
   const emitting = centerFrame.cards.some(card => {
     const source = request.composition.clips.find(clip => clip.id === card.clipId)
-    return !!source && (evaluateVideoEditClip(source, request.sequenceFrame).spaceEmission ?? 0) > 0
+    return !!source && ((evaluateVideoEditClip(source, request.sequenceFrame).spaceEmission ?? 0) > 0 || spaceClipIsSolid(source))
   })
   return { centerFrame: { ...centerFrame, flatIdentity: centerFrame.flatIdentity && samples.every(sample => sample.frame.flatIdentity) && worldScenes.size === 0 && !emitting }, samples, shotRange, groups, materials,
     workingSetBytes: bytes(), ...(rasterLimits.length ? { rasterLimits } : {}) }

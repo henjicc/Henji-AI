@@ -1,5 +1,5 @@
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
-import { SPACE_ONLY_FIELDS } from '@/core/videoEdit/spatialSchema'
+import { SPACE_ONLY_FIELDS, spaceClipIsSolid } from '@/core/videoEdit/spatialSchema'
 import type { VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
@@ -315,6 +315,17 @@ export async function renderVideoEditThreeSpaceScene(options: {
   const cache = caches.get(request.composition.id) ?? new Map<string, ThreeSpaceMaterial>()
   caches.set(request.composition.id, cache)
   const used = new Set<string>()
+  // 卡片画面的内容身份（材料缓存键；画面逐帧变化时没有）：实体卡片的轮廓按它缓存。
+  const contentKeys = new Map<string, string | undefined>()
+  const solidOf = (clipId: string): import('./videoEditThreeSpaceSolid').SolidSurface | undefined => {
+    const source = request.composition.clips.find(clip => clip.id === clipId)
+    if (!source || source.spatial?.enabled !== true || !spaceClipIsSolid(source)) return undefined
+    const evaluated = evaluateVideoEditClip(source, request.sequenceFrame)
+    const material = source.spaceMaterial ?? { preset: 'picture' as const }
+    // 非画面材质自然受光；画面材质要显式打开受光。
+    return { lit: source.spaceLit === true || material.preset !== 'picture', material, thickness: evaluated.spaceThickness ?? 0, bevel: source.spaceBevel ?? 0,
+      castShadow: source.spaceCastShadow === true, receiveShadow: source.spaceReceiveShadow === true, ...(contentKeys.get(clipId) === undefined ? {} : { contentKey: contentKeys.get(clipId) }) }
+  }
   const cardMaterial = async (material: SpatialMaterialPlan): Promise<SpatialPictureLease> => {
     current()
     const input = pictures.get(material.clipId)
@@ -330,6 +341,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
       plans.map(value => materialBuiltinPlan(value.builtin!, original, request.sequenceFrame, material.target, drawn.fps, request.quality, { referenceSize: material.referenceSize, bounds: material.logicalBounds }))]) : undefined
     used.add(material.clipId)
     const held = cache.get(material.clipId)
+    contentKeys.set(material.clipId, key)
     if (key !== undefined && held?.key === key) return defocused(material, held)
     const clip = { ...original, opacity: 1 } as VideoEditClip & VideoEditMotionSampledClip
     delete clip.motionSamples
@@ -347,8 +359,8 @@ export async function renderVideoEditThreeSpaceScene(options: {
     return defocused(material, entry)
   }
   const defocused = async (material: SpatialMaterialPlan, entry: ThreeSpaceMaterial, once = false): Promise<SpatialPictureLease> => {
-    // 实体、线框预览不做景深，卡片也不虚化。
-    if (material.defocus.bypass || (options.display ?? 'realtime') !== 'realtime') return entry.lease
+    // 实体、线框预览不做景深，卡片也不虚化；实体卡片（受光、有厚度）走整幅景深，宿主不预先虚化。
+    if (material.defocus.bypass || (options.display ?? 'realtime') !== 'realtime' || solidOf(material.clipId)?.lit) return entry.lease
     const defocusKey = JSON.stringify(material.defocus)
     if (entry.defocusKey === defocusKey && entry.defocused) return entry.defocused
     const result = await spatial.defocus(entry.lease, material)
@@ -425,13 +437,14 @@ export async function renderVideoEditThreeSpaceScene(options: {
         const geometry = center.cards.find(card => card.clipId === clipId)
         if (!material || material.kind === 'worldScene' || !geometry || !active.some(value => value.id === clipId)) continue
         const lease = await cardMaterial(material)
-        cards.push({ clipId, texture: lease.texture, width: lease.width, height: lease.height, geometry: place(geometry), opacity: opacityOf(clipId), light: lease.carriesLight, emission: emissionOf(clipId) })
+        const surface = solidOf(clipId)
+        cards.push({ clipId, texture: lease.texture, width: lease.width, height: lease.height, geometry: place(geometry), opacity: opacityOf(clipId), light: lease.carriesLight, emission: emissionOf(clipId), ...(surface ? { surface } : {}) })
       }
       const groupScenes = scenes.filter(scene => group.clipIds.includes(scene.clipId) && !excluded.has(scene.clipId))
         .map(scene => ({ ...scene, opacity: opacityOf(scene.clipId), ...previous.has(scene.clipId) ? { previous: previous.get(scene.clipId)! } : {} }))
       const light = groupCarriesLight ?? (cards.some(card => card.light || emitsLight(card.clipId)) || groupScenes.length > 0 || (postEffects.display === 'realtime' && postEffects.bloom > 0))
       return capture(outputSpec(`three:group:${group.id}${variant}`), async target => {
-        const { refining, progress } = await space.render({ frame: center, light, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects,
+        const { refining, progress } = await space.render({ frame: center, light, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects, exact: request.quality === 'final' || request.sessionKind !== 'preview',
           ...(below ? { below: { texture: below.texture, width: below.width, height: below.height, light: below.carriesLight } } : {}),
           target: { texture: target.texture, width: target.width, height: target.height }, ...(options.trace ? { trace: { ...options.trace, group: `${group.id}${variant}` } } : {}), assertCurrent: () => { current() } })
         if (refining) options.onRefining?.(progress ?? 0)
@@ -440,7 +453,11 @@ export async function renderVideoEditThreeSpaceScene(options: {
     }
     const transitionWindows = videoEditPictureTransitionsAt(request.composition, request.sequenceFrame)
     // 组里有透射材质（玻璃、亚克力）才要下方画面：作者物体的材质 transmission > 0。没有的组照旧先画好，零额外开销。
-    const transmits = (group: (typeof plan.groups)[number]): boolean => (options.display ?? 'realtime') !== 'solid' && (options.display ?? 'realtime') !== 'wireframe' && scenes.some(scene => {
+    const transmits = (group: (typeof plan.groups)[number]): boolean => (options.display ?? 'realtime') !== 'solid' && (options.display ?? 'realtime') !== 'wireframe' && (group.clipIds.some(clipId => {
+      // 片段材质是玻璃、亚克力的实体卡片同样透出身后的画面。
+      const preset = solidOf(clipId)?.material.preset
+      return preset === 'glass' || preset === 'acrylic'
+    }) || scenes.some(scene => {
       if (!group.clipIds.includes(scene.clipId)) return false
       let found = false
       scene.root.traverse(object => {
@@ -452,7 +469,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
         }
       })
       return found
-    })
+    }))
     const deferred = new Map<string, (below: VideoEditCodePicture | undefined) => Promise<VideoEditCodePicture>>()
     const renderWhole = async (group: (typeof plan.groups)[number], below?: VideoEditCodePicture): Promise<SpatialPictureLease> => {
       const windows = group.itemIds.flatMap(id => id.startsWith('transition:') ? transitionWindows.filter(window => window.transition.id === id.slice('transition:'.length)) : [])

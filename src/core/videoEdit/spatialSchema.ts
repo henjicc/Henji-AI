@@ -4,17 +4,41 @@ import type { SpatialCamera, SpatialCameraNumericKey, SpatialClipFields } from '
 
 const finite = z.number().finite()
 export const SPATIAL_KEYS = ['depth', 'rotationX', 'rotationY', 'anchorDepth'] as const
-/** 只影响三维里怎么呈现、不影响几何与二维画面的片段字段。 */
-export const SPACE_SURFACE_KEYS = ['spaceEmission'] as const
+/** 只影响三维里怎么呈现、不影响几何与二维画面、可做关键帧的片段字段。 */
+export const SPACE_SURFACE_KEYS = ['spaceEmission', 'spaceThickness'] as const
+/** 同上但不做关键帧的三维呈现字段（受光、材质、倒角、阴影）。 */
+export const SPACE_SURFACE_SETTINGS = ['spaceLit', 'spaceMaterial', 'spaceBevel', 'spaceCastShadow', 'spaceReceiveShadow'] as const
 export const SPACE_EMISSION_MAX = 10
+export const SPACE_THICKNESS_MAX = 1
 /** 卡片画面的缓存键里要去掉的字段：它们不改变二维画面，动画时不该让卡片画面每帧重画。 */
-export const SPACE_ONLY_FIELDS = Object.fromEntries(SPACE_SURFACE_KEYS.map(key => [key, undefined])) as Record<typeof SPACE_SURFACE_KEYS[number], undefined>
+export const SPACE_ONLY_FIELDS = Object.fromEntries([...SPACE_SURFACE_KEYS, ...SPACE_SURFACE_SETTINGS].map(key => [key, undefined])) as Record<typeof SPACE_SURFACE_KEYS[number] | typeof SPACE_SURFACE_SETTINGS[number], undefined>
+const unitInterval = finite.min(0).max(1)
+const materialColor = z.string().regex(/^#[0-9a-fA-F]{6}$/)
+/**
+ * 片段在三维里的材质（判别联合，每种材质自己的参数）：picture 画面（缺省，与今天相同）；matte 磨砂、metal 金属、thin-film 薄膜金属以画面为底色；
+ * acrylic 亚克力、glass 实心玻璃按片段轮廓成形、透光（画面不再作颜色）。参数含义与作者的 host.space.material 相同。
+ */
+export const spaceMaterialSchema = z.discriminatedUnion('preset', [
+  z.object({ preset: z.literal('picture') }).strict(),
+  z.object({ preset: z.literal('matte'), roughness: unitInterval.optional() }).strict(),
+  z.object({ preset: z.literal('metal'), roughness: unitInterval.optional() }).strict(),
+  z.object({ preset: z.literal('thin-film'), range: z.tuple([finite.min(0).max(2000), finite.min(0).max(2000)]).optional(), strength: unitInterval.optional(), frequency: finite.positive().max(64).optional() }).strict(),
+  z.object({ preset: z.literal('acrylic'), frost: unitInterval.optional(), tint: materialColor.optional() }).strict(),
+  z.object({ preset: z.literal('glass'), frost: unitInterval.optional(), dispersion: unitInterval.optional(), tint: materialColor.optional(), absorption: unitInterval.optional() }).strict(),
+])
+export type SpaceMaterial = z.infer<typeof spaceMaterialSchema>
 export const SPATIAL_DEFAULT_FSTOP = 5.6
 export const SPATIAL_SENSOR_WIDTH_MM = 36
 export const SPATIAL_FOCAL_LENGTH_MM = 80
 export const spatialClipFields = {
   depth: finite.optional(), rotationX: finite.optional(), rotationY: finite.optional(), anchorDepth: finite.optional(),
   spaceEmission: finite.min(0).max(SPACE_EMISSION_MAX).optional(),
+  spaceThickness: finite.min(0).max(SPACE_THICKNESS_MAX).optional(),
+  spaceLit: z.boolean().optional(),
+  spaceMaterial: spaceMaterialSchema.optional(),
+  spaceBevel: finite.min(0).max(.5).optional(),
+  spaceCastShadow: z.boolean().optional(),
+  spaceReceiveShadow: z.boolean().optional(),
   spatial: z.object({ enabled: z.boolean() }).strict().optional(),
 } satisfies Record<keyof SpatialClipFields, z.ZodType>
 export const spatialClipSchema = z.object(spatialClipFields).strict()
@@ -54,3 +78,12 @@ export const spatialCameraFields = {
   bindings: z.object({ framing: hold(spatialTargetSchema).optional(), aim: hold(spatialTargetSchema).optional(), focus: hold(spatialFocusSchema).optional() }).strict().optional(),
 }
 export const spatialCameraSchema: z.ZodType<SpatialCamera> = z.object(spatialCameraFields).strict()
+
+/**
+ * 片段在三维里是否要按“实体”画（受光、非画面材质、有厚度或投下阴影）：受光的按物体处理（受光、整幅景深、色调映射）；
+ * 画面材质又不受光的仍是平面画面，只长出厚度或投影。
+ */
+export function spaceClipIsSolid(clip: { spaceLit?: boolean; spaceMaterial?: SpaceMaterial; spaceThickness?: number; spaceCastShadow?: boolean; curves?: Partial<Record<string, readonly { value: unknown }[]>> }): boolean {
+  return clip.spaceLit === true || clip.spaceCastShadow === true || (clip.spaceMaterial !== undefined && clip.spaceMaterial.preset !== 'picture') || (clip.spaceThickness ?? 0) > 0
+    || !!clip.curves?.spaceThickness?.some(point => typeof point.value === 'number' && point.value > 0)
+}

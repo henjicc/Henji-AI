@@ -6,6 +6,15 @@ export interface SpatialClipFields {
   depth?: number; rotationX?: number; rotationY?: number; anchorDepth?: number;
   /** 发光强度：画面自身发出的光（线性倍数），0 为不发光。 */
   spaceEmission?: number;
+  /** 厚度：按片段轮廓向后长出的厚度（世界单位，即显示高度），0 为平面。 */
+  spaceThickness?: number;
+  /** 被灯光与环境照亮。 */
+  spaceLit?: boolean;
+  spaceMaterial?: import('./spatialSchema').SpaceMaterial;
+  /** 倒角：厚度的比例 0–0.5。 */
+  spaceBevel?: number;
+  spaceCastShadow?: boolean;
+  spaceReceiveShadow?: boolean;
   spatial?: { enabled: boolean };
 }
 

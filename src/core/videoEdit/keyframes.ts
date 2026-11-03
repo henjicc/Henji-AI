@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { SPACE_EMISSION_MAX, SPACE_SURFACE_KEYS, SPATIAL_KEYS } from './spatialSchema'
+import { SPACE_EMISSION_MAX, SPACE_SURFACE_KEYS, SPACE_THICKNESS_MAX, SPATIAL_KEYS } from './spatialSchema'
 import { videoEditKeyframesSchema, type VideoEditKeyframe, type VideoEditKeyframes } from './keyframeSchema'
 export { videoEditKeyframeSchema, videoEditKeyframesSchema, type VideoEditKeyframe, type VideoEditKeyframes } from './keyframeSchema'
 import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe, VIDEO_EDIT_DEFAULT_BEZIER } from './keyframeInterpolation'
@@ -10,6 +10,7 @@ import type { VideoEditEffect } from './compositing'
 export const videoEditClipAnimatedValueSchemas = {
   depth: z.number().finite(), rotationX: z.number().finite(), rotationY: z.number().finite(), anchorDepth: z.number().finite(),
   spaceEmission: z.number().finite().min(0).max(SPACE_EMISSION_MAX),
+  spaceThickness: z.number().finite().min(0).max(SPACE_THICKNESS_MAX),
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(.01).max(4), rotation: z.number().min(-360).max(360),
   anchorX: z.number().min(0).max(1), anchorY: z.number().min(0).max(1),
