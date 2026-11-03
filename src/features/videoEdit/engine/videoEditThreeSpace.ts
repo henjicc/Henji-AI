@@ -94,6 +94,8 @@ export interface ThreeSpaceTrace {
 const TRACE_SAMPLES = 256
 /** 一帧里同时累积的空间组上限：每个追踪器都占着全分辨率的累积目标与加速结构。 */
 const TRACE_GROUPS = 8
+/** 后处理管线按最近使用保留的套数：每套都占着全分辨率的多重采样目标（4K 下近 1GB），同一份作品只用到实时与一种简化组合。 */
+const PIPELINE_SETS = 2
 
 /** 作者版 three 的 TSL 节点。类型声明跟着应用自带的 three 版本，这里只描述用到的部分。 */
 interface TslNode {
@@ -124,6 +126,7 @@ type Library = AuthorThreeLibrary & {
   MeshBasicNodeMaterial: new (parameters: Record<string, unknown>) => NodeMaterial
   MeshMatcapNodeMaterial: new (parameters: Record<string, unknown>) => NodeMaterial
   RenderPipeline: new (renderer: unknown) => RenderPipeline
+  BlendMode: new (blending: number) => unknown
 }
 interface CardEntry {
   mesh: Three.Mesh
@@ -430,9 +433,10 @@ export class VideoEditThreeSpace {
     material.colorNode = light
       ? tsl.vec4(tsl.pow(tsl.max(map.rgb, tsl.vec3(0)), tsl.vec3(2.4)).mul(opacity), alpha)
       : tsl.vec4(tsl.pow(tsl.max(tsl.select(map.a.greaterThan(0), map.rgb.div(map.a), tsl.vec3(0)), tsl.vec3(0)), tsl.vec3(2.4)).mul(alpha), alpha)
-    // 发光画面整块覆盖四边形：只在真有覆盖或发光的片元写深度、卡片标记与速度，背后的作者物体照常景深与色调映射。
+    // 发光画面整块覆盖四边形：只在真有覆盖或发光的片元写深度、后处理属性与速度，背后的作者物体照常景深与色调映射。
     if (light) material.maskNode = map.a.add(map.rgb.r).add(map.rgb.g).add(map.rgb.b).greaterThan(1 / 512)
-    material.mrtNode = tsl.mrt({ card: tsl.float(1) })
+    // 平面卡片：跳过色调映射（r）与整幅景深、FXAA、遮蔽、反射（g）；按覆盖率混合（a），发光处整片算卡片。
+    material.mrtNode = tsl.mrt({ attr: tsl.vec4(1, 1, 0, light ? 1 : alpha) })
     const mesh = new library.Mesh(this.quad, material)
     mesh.matrixAutoUpdate = false
     mesh.frustumCulled = false
@@ -520,22 +524,34 @@ export class VideoEditThreeSpace {
     // 强度是每帧更新的均匀量，管线只按开关组合缓存。
     const key = JSON.stringify([effects.motionBlur, effects.depthOfField, effects.bloom > 0, effects.ambientOcclusion > 0, effects.reflections > 0])
     const cached = this.pipelines.get(key)
-    if (cached) return cached
-    // 同一份作品只会用到实时与一种简化组合；超过两套说明作品设置变了，旧的不再需要。
-    if (this.pipelines.size >= 2) this.disposePipelines()
+    if (cached) { this.pipelines.delete(key); this.pipelines.set(key, cached); return cached }
+    // 按最近使用只淘汰最久没用的那套，不整表释放：换显示方式时仍在用的那套不必重建、重新编译着色器。
+    if (this.pipelines.size >= PIPELINE_SETS) {
+      const [oldest, entry] = this.pipelines.entries().next().value!
+      this.pipelines.delete(oldest)
+      this.disposePipeline(entry)
+    }
     const nodes: Array<{ dispose(): void }> = []
     const { tsl, library } = this
     const scenePass = tsl.pass(this.scene, this.camera, { samples: 4 })
     nodes.push(scenePass)
     // 只声明后处理会读的输出：three 只给被读取的输出建纹理，声明了却没读会让绘制管线校验失败。
     const surfaces = effects.ambientOcclusion > 0 || effects.reflections > 0
-    scenePass.setMRT(tsl.mrt({ output: tsl.output, card: tsl.float(0), ...effects.motionBlur ? { velocity: this.velocity } : {} }))
-    // 卡片标记用 8 位就够（多目标输出每样本字节数有上限）。
-    scenePass.getTexture('card').type = library.UnsignedByteType
-    const card = scenePass.getTextureNode('card').r
+    // 后处理属性 attr：r = 跳过色调映射，g = 跳过整幅景深、FXAA、遮蔽与反射（平面卡片两样都跳过）。
+    // three 的多目标输出里 output 以外的附件缺省不混合（最后写入者赢），半透明文字边缘会让后面的作者物体整像素被当成卡片；
+    // attr 改为按覆盖率普通混合：rgb 累积卡片的覆盖率，a 累积总覆盖率（普通混合的 alpha 正是叠加后的覆盖率），
+    // 两者相除才是“这个像素的颜色里卡片占多少”——半透明卡片叠在空白处时仍完全按卡片处理，叠在物体上时按比例。作者物体写 0。
+    const attributes = tsl.mrt({ output: tsl.output, attr: tsl.vec4(0, 0, 0, tsl.output.a), ...effects.motionBlur ? { velocity: this.velocity } : {} }) as TslNode & { setBlendMode(name: string, mode: unknown): void; setClearColor(name: string, color: number, alpha: number): void }
+    attributes.setBlendMode('attr', new library.BlendMode(library.NormalBlending))
+    // 清成全透明：总覆盖率从 0 开始累积（缺省清屏透明度是 1）。
+    attributes.setClearColor('attr', 0, 0)
+    scenePass.setMRT(attributes)
+    // 8 位就够（多目标输出每样本字节数有上限，rgba8 也按 8 字节计）。
+    scenePass.getTexture('attr').type = library.UnsignedByteType
+    const attr = scenePass.getTextureNode('attr'), total = tsl.max(attr.a, 1e-4), flat = attr.r.div(total), still = attr.g.div(total)
     let color = scenePass.getTextureNode('output')
     // 环境光遮蔽与反射只加在作者物体上：卡片是已经画好的画面，不该被压暗或叠上反射。
-    const objects = tsl.float(1).sub(card)
+    const objects = tsl.float(1).sub(still)
     if (surfaces) {
       // 遮蔽与反射要读不带多重采样的深度与法线：另画一遍只出法线（与金属度粗糙度）的预通道，主通道照旧多重采样抗锯齿。
       const prePass = tsl.pass(this.scene, this.camera) as TslPass & { transparent: boolean }
@@ -563,7 +579,9 @@ export class VideoEditThreeSpace {
       }
     }
     if (effects.depthOfField) {
-      const viewZ = this.opticalViewZ(scenePass.getViewZNode(), card)
+      // 景深看深度归谁，不看颜色占比：卡片写深度，像素里只要有卡片覆盖，深度就是那张已由宿主预虚化的卡片的，
+      // 按占比混合会用卡片的弥散半径把它身后的物体连同卡片再虚化一遍（失焦标题的光晕边缘出硬圈）。
+      const viewZ = this.opticalViewZ(scenePass.getViewZNode(), attr.g.greaterThan(.5 / 255))
       // 景深节点把弥散半径存在 alpha 里、输出 alpha 恒为 1：预乘颜色与覆盖率各做一遍同样的景深再合起来，透明处才不变黑。
       const blurred = this.post.dof(tsl.vec4(color.rgb, 1), viewZ, this.focus, 1, this.cocMax)
       const coverage = this.post.dof(tsl.vec4(tsl.vec3(color.a), 1), viewZ, this.focus, 1, this.cocMax)
@@ -588,27 +606,29 @@ export class VideoEditThreeSpace {
     const alpha = tsl.clamp(color.a, 0, 1)
     const covered = color.a.greaterThan(1e-5)
     const straight = tsl.select(covered, color.rgb.div(color.a), color.rgb)
-    const mapped = tsl.mix(tsl.neutralToneMapping(straight, 1), straight, card)
+    const mapped = tsl.mix(tsl.neutralToneMapping(straight, 1), straight, flat)
     const encoded = tsl.pow(tsl.max(mapped, tsl.vec3(0)), tsl.vec3(1 / 2.4))
-    const lightEncoded = tsl.pow(tsl.max(tsl.mix(tsl.neutralToneMapping(color.rgb, 1), color.rgb, card), tsl.vec3(0)), tsl.vec3(1 / 2.4))
+    const lightEncoded = tsl.pow(tsl.max(tsl.mix(tsl.neutralToneMapping(color.rgb, 1), color.rgb, flat), tsl.vec3(0)), tsl.vec3(1 / 2.4))
     const pipeline = new library.RenderPipeline(this.renderer)
     const output = tsl.convertToTexture(tsl.vec4(tsl.select(this.lightOutput.greaterThan(.5), lightEncoded, tsl.select(covered, encoded.mul(alpha), encoded)), alpha))
     nodes.push(output as unknown as { dispose(): void })
     // 多重采样只抹平几何轮廓，而且是在色调映射前按线性亮度平均：强高光贴着暗处时平均完仍过亮、边缘照样硬；
     // 细高光这类着色锯齿它也管不到。所以在编码后的画面上再做一遍 FXAA（SMAA 要在 Worker 里加载图片，用不了）。
     // 卡片是已经画好、抗过锯齿的画面，不再处理，免得文字被抹软。
-    pipeline.outputNode = tsl.mix(this.post.fxaa(output), output, card)
+    pipeline.outputNode = tsl.mix(this.post.fxaa(output), output, still)
     pipeline.outputColorTransform = false
     const entry = { pipeline, nodes, primed: false }
     this.pipelines.set(key, entry)
     return entry
   }
 
+  private disposePipeline({ pipeline, nodes }: { pipeline: RenderPipeline; nodes: Array<{ dispose(): void }> }): void {
+    for (const node of nodes) if (typeof node?.dispose === 'function') node.dispose()
+    pipeline.dispose()
+  }
+
   private disposePipelines(): void {
-    for (const { pipeline, nodes } of this.pipelines.values()) {
-      for (const node of nodes) if (typeof node?.dispose === 'function') node.dispose()
-      pipeline.dispose()
-    }
+    for (const entry of this.pipelines.values()) this.disposePipeline(entry)
     this.pipelines.clear()
   }
 
@@ -621,7 +641,7 @@ export class VideoEditThreeSpace {
     const { tsl } = this
     const depth = viewZ.negate()
     // 没画到东西的像素深度停在远裁剪面、卡片已整张虚化过：都按对焦处理，远景虚化才不会把卡片颜色吸进空白处。
-    const empty = tsl.select(depth.greaterThan(this.far.mul(.999)), 1, card.greaterThan(.5))
+    const empty = tsl.select(depth.greaterThan(this.far.mul(.999)), 1, card)
     const signed = tsl.select(empty, 0, depth.sub(this.focus).div(tsl.max(depth, 1e-4)).mul(this.cocScale))
     const amount = tsl.clamp(signed.abs().div(this.cocMax), 0, 1)
     // smoothstep 的反函数：y = 3x² − 2x³ ⇒ x = 0.5 − sin(asin(1 − 2y) / 3)。
