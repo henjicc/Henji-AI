@@ -1,4 +1,4 @@
-import type { VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
+import { VIDEO_EDIT_LEVEL_FLOOR_DB, type VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
 
 const decibelsOf = (value: number): number => 20 * Math.log10(Math.max(value, 1e-5))
 const label = (value: number): string => value > 0 ? `${Math.max(-96, decibelsOf(value)).toFixed(1)} dBFS` : '−∞ dBFS'
@@ -6,9 +6,6 @@ const label = (value: number): string => value > 0 ? `${Math.max(-96, decibelsOf
 const fill = (peak: number): number => Math.max(0, Math.min(1, (decibelsOf(peak) - VIDEO_EDIT_LEVEL_FLOOR_DB) / -VIDEO_EDIT_LEVEL_FLOOR_DB))
 /** 设计稿电平色：正常为成功色，−6 dBFS 以上警示色，过载（> 0 dBFS）危险色。 */
 const tone = (peak: number): string => peak > 1 ? 'bg-danger-solid' : decibelsOf(peak) > -6 ? 'bg-warning-solid' : 'bg-success-solid'
-
-/** 电平条显示的 dB 范围下限（0 在顶）。 */
-export const VIDEO_EDIT_LEVEL_FLOOR_DB = -60
 
 /**
  * 播放电平：每声道一条纵向条，读数放在悬停提示。`surface`：`panel` 是音频仪表面板里的宽条（底槽比面板暗一级），

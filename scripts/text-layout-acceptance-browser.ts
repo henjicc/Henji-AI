@@ -82,9 +82,13 @@ async function run() {
     try {
       selection = []
       const layout = create(item), expected = planned(item, layout), actual = dom(item), upstream = unmodified(item)
+      const advances = layout.lines.map((line, index) => {
+        const sum = layout.graphemes.filter(grapheme => grapheme.line === index).reduce((total, grapheme) => total + grapheme.advance, 0)
+        return { start: line.start, end: line.end, width: line.width, sum, difference: line.width - sum }
+      })
       const breaks = (a: typeof expected, b: typeof expected) => JSON.stringify(a.map(l => [l.start, l.end])) === JSON.stringify(b.map(l => [l.start, l.end]))
       const error = expected.length === actual.length ? Math.max(0, ...expected.map((l, i) => Math.abs(l.width - actual[i].width))) : null
-      cases.push({ id: item.id, origin: item.origin, selection, expected, occupied: layout.lines.map(line => line.width), actual, upstream: upstream.map(({ width, ...line }) => ({ ...line, occupiedWidth: width })), breaksMatch: breaks(expected, actual), upstreamBreaksMatch: breaks(upstream, actual), geometryMatch: error !== null && error <= 1 / 32, maxError: error, missing: layout.diagnostics })
+      cases.push({ id: item.id, origin: item.origin, selection, expected, advances, occupied: layout.lines.map(line => line.width), actual, upstream: upstream.map(({ width, ...line }) => ({ ...line, occupiedWidth: width })), breaksMatch: breaks(expected, actual), upstreamBreaksMatch: breaks(upstream, actual), geometryMatch: error !== null && error <= 1 / 32, maxError: error, missing: layout.diagnostics })
     } catch (error) { cases.push({ id: item.id, error: String(error), breaksMatch: false, geometryMatch: false }) }
     for (const delta of [-1 / 64, 0, 1 / 64]) {
       const width = snap(item.width) + delta

@@ -4,6 +4,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import esbuild, { type Plugin } from 'esbuild-wasm'
 import { pathToFileURL } from 'node:url'
+import { computeRenderEngineVersion, VIDEO_EDIT_RENDER_ENGINE_MODULE } from './vite/renderEngineVersion.mjs'
 const root = process.cwd(), out = path.join(root, '.tmp/text-layout-acceptance')
 fs.mkdirSync(out, { recursive: true })
 const frozen = process.argv.includes('--frozen')
@@ -42,6 +43,11 @@ await esbuild.build({ entryPoints: ['scripts/text-layout-acceptance-browser.ts']
 fs.copyFileSync('resources/video-edit-author/vendor/harfbuzzjs/1.6.4/harfbuzz.wasm', path.join(out, 'harfbuzz.wasm'))
 fs.writeFileSync(path.join(out, 'index.html'), '<!doctype html><meta charset="utf-8"><title>文字排版固定样本</title><style>body{margin:0;background:white;color:black}#samples{position:absolute;left:0;top:0}.sample{box-sizing:content-box;padding:0;border:0;margin:0}</style><div id="samples"></div><script type="module" src="experiment.mjs"></script>')
 if (process.argv.includes('--worker')) {
+  const engine = await computeRenderEngineVersion({ root })
+  const renderEngine: Plugin = { name: 'text-render-engine-version', setup(build) {
+    build.onResolve({ filter: /^virtual:video-edit-render-engine$/ }, () => ({ path: VIDEO_EDIT_RENDER_ENGINE_MODULE, namespace: 'text-render-engine' }))
+    build.onLoad({ filter: /.*/, namespace: 'text-render-engine' }, () => ({ contents: `export const VIDEO_EDIT_RENDER_ENGINE_VERSION = ${JSON.stringify(engine.version)}`, loader: 'js' }))
+  } }
   const dynamicText = '★ ✓ ① 한 𠀀'
   const dynamicCases = [
     { id: 'parameter-slice', value: dynamicText, expression: 'params.text.slice(0, Math.floor(time * 100))' },
@@ -65,7 +71,7 @@ if (process.argv.includes('--worker')) {
         ['const previous = this.history.get(slot)', 'const experimentRecordStarted = performance.now();\n          const previous = this.history.get(slot)'],
         ['return { painted, volatile: quiet < QUIET_FRAMES,', "recordVideoEditPreparation('experimentRecord', performance.now() - experimentRecordStarted);\n          return { painted, volatile: quiet < QUIET_FRAMES,"],
         ['const recorded = parts.every(part => part.painted)', 'const experimentSurfaceStarted = performance.now();\n          const recorded = parts.every(part => part.painted)'],
-        ['if (!raster) { statistics.reused += layers; statistics.video += video; return }', "if (!raster) { recordVideoEditPreparation('experimentEmptySurface', 0); statistics.reused += layers; statistics.video += video; return }"],
+        ['if (!exact) { statistics.reused += layers; statistics.video += video; return }', "if (!exact) { recordVideoEditPreparation('experimentEmptySurface', 0); statistics.reused += layers; statistics.video += video; return }"],
         ['statistics.video += video\n          //', "statistics.video += video\n          recordVideoEditPreparation('experimentSurface', performance.now() - experimentSurfaceStarted);\n          //"],
       ]
       for (const [needle, replacement] of insertions) {
@@ -83,7 +89,7 @@ if (process.argv.includes('--worker')) {
     'worker-font-session': 'src/core/imaging/vectorContent/shaping/fontPolicy.ts',
     'worker-fingerprint': 'src/features/videoEdit/engine/videoEditAuthorFingerprint.ts',
     'worker-experiment': 'scripts/text-layout-worker-experiment.ts',
-  }, outdir: out, outExtension: { '.js': '.mjs' }, chunkNames: 'chunks/[name]-[hash]', splitting: true, bundle: true, minify: true, platform: 'browser', format: 'esm', target: 'es2022', alias: { '@': path.join(root, 'src') }, define: { 'import.meta.env': '{}' }, external: ['module', 'node:module', 'fs', 'node:fs', 'path', 'url'], loader: { '.wgsl': 'text', '.wasm': 'file' }, plugins: [...frozen ? [frozenPolicy] : [], timingProbe, { name: 'raw', setup(build) { build.onLoad({ filter: /\?raw$/ }, args => ({ contents: fs.readFileSync(args.path.replace(/\?raw$/, ''), 'utf8'), loader: 'text' })) } }] })
+  }, outdir: out, outExtension: { '.js': '.mjs' }, chunkNames: 'chunks/[name]-[hash]', splitting: true, bundle: true, minify: true, platform: 'browser', format: 'esm', target: 'es2022', alias: { '@': path.join(root, 'src') }, define: { 'import.meta.env': '{}' }, external: ['module', 'node:module', 'fs', 'node:fs', 'path', 'url'], loader: { '.wgsl': 'text', '.wasm': 'file' }, plugins: [...frozen ? [frozenPolicy] : [], renderEngine, timingProbe, { name: 'raw', setup(build) { build.onLoad({ filter: /\?raw$/ }, args => ({ contents: fs.readFileSync(args.path.replace(/\?raw$/, ''), 'utf8'), loader: 'text' })) } }] })
   const baseline = 'resources/video-edit-author/frozen/henji-layout/1.2.0'
   fs.mkdirSync(path.join(out, 'layout-1.2.0'), { recursive: true })
   for (const file of fs.readdirSync(baseline).filter(file => file.endsWith('.mjs'))) fs.copyFileSync(path.join(baseline, file), path.join(out, 'layout-1.2.0', file))

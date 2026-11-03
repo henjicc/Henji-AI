@@ -59,7 +59,6 @@ import { videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
 import { authorSpaceInfo } from './videoEditAuthorThree'
 import { preparedSpatialBrand, type PreparedSpatialFrame, type SpatialCodeSources, type SpatialPrepareRequest, type SpatialPictureLease, type SpatialSceneSample, type SpatialSourceDescriptor } from './videoEditSpatialContracts'
 import type { AuthorEffectMetadata } from './videoEditAuthorParameters'
-import type { VideoEditGpuColorFormat } from './videoEditGpuFrame'
 import { WEB_TEXT_AUTHOR_API_VERSION, type WebTextDeclaration } from '@/core/videoEdit/webTextGeometry'
 
 const logger = createLogger('features.videoEdit.codeSources')

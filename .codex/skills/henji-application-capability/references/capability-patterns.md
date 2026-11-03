@@ -15,6 +15,8 @@
 
 渲染层和主进程分别维护模块级处理器注册。应用运行时提供统一目录，Pi 与 MCP 从同一份定义投影工具，不手写第二份业务元数据。
 
+代码作者的文字排版复用已冻结的 `henji-layout@2.0.0`（最低作者接口 v10）：`henji-layout/text` 的同步 `layoutText` 与 `GraphemePose` 接口由 Pretext 1.0.0 断行、harfbuzzjs 1.6.4（HarfBuzz 15.0） 整形支持，字体由宿主提前准备。不要另写断行、字位或同义 MCP 工具；旧作品继续使用已记录的冻结版本。作者用法见 [author-text-motion](../../../../resources/assistant-skills/video-edit-code-creation/references/author-text-motion.md)，库版本与显式升级见 [code-project](../../../../resources/assistant-skills/video-edit-code-creation/references/code-project.md)。
+
 ## 字段选择
 
 | 字段 | 选择规则 |

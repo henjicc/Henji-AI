@@ -1,6 +1,7 @@
 import type { VideoEditInstance } from '../application/videoEditService'
 import { useVideoEditPlaybackLevels } from '../application/videoEditPlaybackLevels'
-import { VIDEO_EDIT_LEVEL_FLOOR_DB, VideoEditLevelMeter } from './VideoEditLevelMeter'
+import { VideoEditLevelMeter } from './VideoEditLevelMeter'
+import { VIDEO_EDIT_LEVEL_FLOOR_DB } from '../engine/videoEditAudioMeter'
 
 /** 刻度：0 到 −54 dBFS，每 6 dB 一格（PR 音频仪表的常用刻度）。 */
 const TICKS = [0, -6, -12, -18, -24, -30, -36, -42, -48, -54] as const

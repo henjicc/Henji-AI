@@ -1,5 +1,8 @@
 export interface VideoEditAudioLevel { peak: number; rms: number }
 
+/** 电平条与刻度共用下限，避免二者比例不一致。 */
+export const VIDEO_EDIT_LEVEL_FLOOR_DB = -60
+
 /** Measures samples pulled by the actual playback graph, after the formal mix. */
 export function createVideoEditAudioMeter(context: AudioContext, channels: 1 | 2): { input: GainNode; read: () => VideoEditAudioLevel[]; dispose: () => void } {
   const input = context.createGain(); input.channelCount = channels; input.channelCountMode = 'explicit'; input.connect(context.destination)
