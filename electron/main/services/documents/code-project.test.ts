@@ -25,6 +25,12 @@ it('整批只提交一次；工作区可读，历史固定，撤销追加新提�
   expect((await repo.state()).log).toHaveLength(3)
   expect((await repo.state()).changes).toEqual([])
 })
+it('软件维护的素材副本不算作者文件，不能经工程改动写入', async () => {
+  await fsp.mkdir(path.join(repo.dir, '软件维护/素材/开场'), { recursive: true })
+  await fsp.writeFile(path.join(repo.dir, '软件维护/素材/开场/main.ts'), 'export default 1')
+  expect((await repo.state()).files).toEqual([])
+  await expect(repo.change({ message: '改副本', changes: [edit('软件维护/素材/开场/main.ts', 'x', 'export default 1')] })).rejects.toThrow('软件维护')
+})
 it('点名外部修改，保持文件原文；不相关修改不进入自动提交；显式提交外部状态', async () => {
   await repo.change({ message: '开始', changes: [edit('a.ts', 'a'), edit('b.ts', 'b')] })
   await fsp.writeFile(path.join(repo.dir, 'a.ts'), 'external')

@@ -15,7 +15,27 @@ let cacheBytes = 0
 const recovery = '代码仓库无法使用，请保留“代码”文件夹并从备份恢复仓库；未保存的源码不要删除。'
 export interface GitCodeVersion { kind: '素材' | '组件'; name: string; version: number; oid: string; tag: string }
 export interface GitCodeWrite { kind: GitCodeVersion['kind']; name: string; version: number; files: Record<string, string> }
-export const codeWorkingPrefix = (kind: GitCodeVersion['kind'], name: string): string => `legacy/${kind === '素材' ? 'materials' : 'components'}/${name}`
+/**
+ * 软件维护的素材/组件工作副本根目录，第一项是当前写入位置。更早的工程把副本放在后两处（`legacy/…` 与最初的 `素材/`、`组件/`），
+ * 已提交的版本引用写死了这些路径，所以读取、转移与撤回都要认；已有副本留在原处继续写，由 migrate_project_code_storage 统一搬到当前位置。
+ */
+const CODE_WORKING_ROOTS: Record<GitCodeVersion['kind'], readonly string[]> = {
+  素材: ['软件维护/素材', 'legacy/materials', '素材'],
+  组件: ['软件维护/组件', 'legacy/components', '组件'],
+}
+export const codeWorkingPrefix = (kind: GitCodeVersion['kind'], name: string): string => `${CODE_WORKING_ROOTS[kind][0]}/${name}`
+/** 这份素材/组件可能的全部工作副本目录，当前位置在前。 */
+export const codeWorkingPrefixes = (kind: GitCodeVersion['kind'], name: string): string[] => CODE_WORKING_ROOTS[kind].map(root => `${root}/${name}`)
+/** 仓库内路径属于哪份素材/组件的工作副本；工程作者自己的文件返回 null。 */
+export function codeWorkingOwner(filepath: string): { kind: GitCodeVersion['kind']; name: string; prefix: string } | null {
+  for (const kind of ['素材', '组件'] as const) for (const root of CODE_WORKING_ROOTS[kind]) {
+    if (!filepath.startsWith(`${root}/`)) continue
+    const name = filepath.slice(root.length + 1).split('/')[0]
+    return name ? { kind, name, prefix: `${root}/${name}` } : null
+  }
+  return null
+}
+const OUTDATED_WORKING_ROOTS = Object.values(CODE_WORKING_ROOTS).flatMap(roots => roots.slice(1))
 
 /** Git rejects spaces and a handful of ref characters. Preserve readable Chinese names. */
 export const codeVersionTag = (kind: GitCodeVersion['kind'], name: string, version: number): string => `${kind}/${name.replace(/[%\s~^:?*[\\/]/g, value => `%${value.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`).replace(/\.\./g, '%2E%2E').replace(/@\{/g, '%40%7B').replace(/^\./, '%2E')}@v${version}`
@@ -72,7 +92,7 @@ export class CodeGitRepository {
       if ((await fsp.readFile(path.join(this.dir, '.git', 'HEAD'), 'utf8')) !== 'ref: refs/heads/main\n') throw new Error('代码仓库分支已切换，请切回 main 后重试；已有版本仍可读取。')
       return
     }
-    for (const folder of ['素材', '组件', 'legacy/materials', 'legacy/components']) {
+    for (const folder of Object.values(CODE_WORKING_ROOTS).flat()) {
       const entries = await fsp.readdir(path.join(this.dir, folder)).catch(error => { if (error.code === 'ENOENT') return []; throw error })
       if (entries.some(name => name !== '.definition' && !/^v[1-9]\d*$/.test(name))) throw new Error(`${recovery} 工作区已经存在，但 Git 历史缺失，不能自动重建。`)
     }
@@ -92,8 +112,17 @@ export class CodeGitRepository {
     return result.sort((a, b) => a.version - b.version)
   }
   async versionPrefix(version: GitCodeVersion): Promise<string> {
-    const next = codeWorkingPrefix(version.kind, version.name)
-    return (await this.files(version.oid, next)).length ? next : `${version.kind}/${version.name}`
+    const prefixes = codeWorkingPrefixes(version.kind, version.name)
+    for (const prefix of prefixes) if ((await this.files(version.oid, prefix)).length) return prefix
+    return prefixes[0]
+  }
+
+  /** 已有工作副本留在原处，新建的用当前位置；免得同一份素材在两处各有一份，迁移时互相冲突。 */
+  private async workingPrefixLocked(kind: GitCodeVersion['kind'], name: string): Promise<string> {
+    const prefixes = codeWorkingPrefixes(kind, name)
+    const head = await git.resolveRef({ ...this.options, ref: 'HEAD' }).catch(error => { if (error.code === 'NotFoundError') return null; throw error })
+    if (head) for (const prefix of prefixes) if ((await this.files(head, prefix)).length) return prefix
+    return prefixes[0]
   }
 
   async files(oid: string, prefix = ''): Promise<string[]> {
@@ -166,7 +195,7 @@ export class CodeGitRepository {
 
   async withdrawLocked(location: string, hash: string): Promise<void> {
     const reference = parseGitCodeLocation(location)
-    if (!reference || !/^(?:组件|legacy\/components)\//.test(reference.filepath) || path.resolve(reference.repository) !== this.dir) throw new Error('只能撤回本项目的组件发布。')
+    if (!reference || codeWorkingOwner(reference.filepath)?.kind !== '组件' || path.resolve(reference.repository) !== this.dir) throw new Error('只能撤回本项目的组件发布。')
     await this.read(location, hash)
     if (!(await this.isWithdrawn(location))) await git.tag({ ...this.options, ref: `撤回/${reference.oid}`, object: reference.oid })
   }
@@ -175,7 +204,7 @@ export class CodeGitRepository {
   async recoverImportLocked(input: GitCodeWrite): Promise<void> {
     await this.initialize()
     if ((await this.versions(input.kind)).some(version => version.tag === codeVersionTag(input.kind, input.name, input.version))) return
-    const prefix = `${codeWorkingPrefix(input.kind, input.name)}/`
+    const prefix = `${await this.workingPrefixLocked(input.kind, input.name)}/`
     const matrix = await git.statusMatrix(this.options)
     const changed = matrix.filter(([file, head, workdir, stage]) => (head !== 0 || stage !== 0 || file.startsWith(prefix)) && (head !== workdir || head !== stage))
     if (!changed.length) return
@@ -216,11 +245,11 @@ export class CodeGitRepository {
   /** Caller may hold exclusive across allocating an ordinal and committing it. */
   async writeLocked(input: GitCodeWrite): Promise<{ oid: string; files: Array<{ path: string; location: string; hash: string }> }> {
     if (!Number.isSafeInteger(input.version) || input.version < 1 || !input.name || /[/\\:\0]/.test(input.name) || ['.', '..', '.git'].includes(input.name.toLowerCase())) throw new Error('代码版本名称或序号无效。')
-    const prefix = codeWorkingPrefix(input.kind, input.name)
     const entries = Object.entries(input.files)
-    for (const [file] of entries) await this.safePath(`${prefix}/${file}`)
+    for (const [file] of entries) for (const prefix of codeWorkingPrefixes(input.kind, input.name)) await this.safePath(`${prefix}/${file}`)
     if (!entries.length) throw new Error('代码版本不能为空。')
     await this.initialize()
+    const prefix = await this.workingPrefixLocked(input.kind, input.name)
     const tag = codeVersionTag(input.kind, input.name, input.version)
     let existing = (await this.versions(input.kind)).find(value => value.tag === tag)
     // A process can exit after publishing HEAD but before publishing its lightweight tag.
@@ -246,7 +275,7 @@ export class CodeGitRepository {
   /** Importing an older missing version must not leave it as the latest worktree. */
   async restoreLatestLocked(): Promise<void> {
     const latest = new Map<string, GitCodeVersion>()
-    for (const version of await this.versions()) latest.set(codeWorkingPrefix(version.kind, version.name), version)
+    for (const version of await this.versions()) latest.set(await this.workingPrefixLocked(version.kind, version.name), version)
     for (const [prefix, version] of latest) {
       const head = await git.resolveRef({ ...this.options, ref: 'HEAD' })
       if (head === version.oid) continue
@@ -269,24 +298,42 @@ export class CodeGitRepository {
   async migrateLayoutLocked(): Promise<number> {
     if (!await this.exists()) return 0
     const matrix = await git.statusMatrix(this.options)
-    const old = matrix.filter(([file]) => /^(素材|组件)\//.test(file))
+    const outdated = (file: string): boolean => OUTDATED_WORKING_ROOTS.some(root => file.startsWith(`${root}/`))
+    const old = matrix.filter(([file]) => outdated(file))
     if (!old.length) return 0
-    const dirty = matrix.filter(([file, h, w, s]) => (h !== s || /^(素材|组件)\//.test(file) && h !== w)).map(([file]) => file)
+    const dirty = matrix.filter(([file, h, w, s]) => (h !== s || outdated(file) && h !== w)).map(([file]) => file)
     if (dirty.length) throw new Error(`迁移前请处理未提交的外部修改：${dirty.join('、')}。原文件未移动。`)
-    const moves = old.map(([file]) => ({ from: file, to: file.replace(/^素材\//, 'legacy/materials/').replace(/^组件\//, 'legacy/components/') }))
+    // 早期工程可能同一份素材在几个位置各有一份副本。保留写新版时会选中的那份（与 workingPrefixLocked 同序），其余在同一提交里移除；
+    // 移除的副本已提交过，内容仍在 Git 历史里，已有版本引用照常能读。
+    const present = new Set<string>()
+    for (const [file, head] of matrix) { const owner = head !== 0 ? codeWorkingOwner(file) : null; if (owner) present.add(owner.prefix) }
+    const moves: Array<{ from: string; to: string }> = [], drops: string[] = []
+    for (const [file] of old) {
+      const owner = codeWorkingOwner(file)!
+      const kept = codeWorkingPrefixes(owner.kind, owner.name).find(prefix => present.has(prefix))
+      if (kept === owner.prefix) moves.push({ from: file, to: `${codeWorkingPrefix(owner.kind, owner.name)}${file.slice(owner.prefix.length)}` })
+      else drops.push(file)
+    }
+    const dropped = new Map<string, Buffer>()
+    for (const file of drops) { await this.safePath(file); dropped.set(file, await fsp.readFile(path.join(this.dir, file))) }
     for (const move of moves) {
       await this.safePath(move.from); await this.safePath(move.to)
       if (await fsp.lstat(path.join(this.dir, move.to)).catch(error => { if (error.code === 'ENOENT') return null; throw error })) throw new Error(`迁移目标 ${move.to} 已存在，请先保留并整理两份工作区后重试。`)
     }
-    const moved: typeof moves = []
+    const moved: typeof moves = [], removed: string[] = []
     try {
       for (const move of moves) {
         await fsp.mkdir(path.dirname(path.join(this.dir, move.to)), { recursive: true })
         await fsp.rename(path.join(this.dir, move.from), path.join(this.dir, move.to)); moved.push(move)
         await git.remove({ ...this.options, filepath: move.from }); await git.add({ ...this.options, filepath: move.to })
       }
-      await git.commit({ ...this.options, author, message: '将旧素材和组件工作区迁移到 legacy' })
+      for (const file of drops) { await fsp.unlink(path.join(this.dir, file)); removed.push(file); await git.remove({ ...this.options, filepath: file }) }
+      await git.commit({ ...this.options, author, message: '将素材和组件工作区迁移到“软件维护”目录' })
     } catch (error) {
+      for (const file of removed.reverse()) {
+        await fsp.mkdir(path.dirname(path.join(this.dir, file)), { recursive: true })
+        await fsp.writeFile(path.join(this.dir, file), dropped.get(file)!); await git.add({ ...this.options, filepath: file })
+      }
       for (const move of moved.reverse()) {
         await fsp.rename(path.join(this.dir, move.to), path.join(this.dir, move.from))
         await git.remove({ ...this.options, filepath: move.to }); await git.add({ ...this.options, filepath: move.from })
@@ -298,8 +345,8 @@ export class CodeGitRepository {
       for (const entry of await fsp.readdir(directory, { withFileTypes: true })) if (entry.isDirectory() && !entry.isSymbolicLink()) await removeEmpty(path.join(directory, entry.name))
       await fsp.rmdir(directory).catch(error => { if (!['ENOENT', 'ENOTEMPTY'].includes(error.code)) throw error })
     }
-    for (const folder of ['素材', '组件']) if (await fsp.stat(path.join(this.dir, folder)).catch(() => null)) await removeEmpty(path.join(this.dir, folder))
-    return moves.length
+    for (const folder of ['素材', '组件', 'legacy']) if (await fsp.stat(path.join(this.dir, folder)).catch(() => null)) await removeEmpty(path.join(this.dir, folder))
+    return moves.length + drops.length
   }
 
   private async commitFiles(prefix: string, files: Record<string, string>, message: string): Promise<string> {

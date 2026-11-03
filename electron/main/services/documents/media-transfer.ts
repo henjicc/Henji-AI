@@ -12,6 +12,7 @@ import type { ResolvedContainer } from './workspace'
 import { ensureCodeCollectionTarget } from './code-paths'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import { transferGitCode } from './code-git-transfer'
+import { codeWorkingOwner } from './code-git'
 import { assertSeparateWebFolder, contentWebReferences, copyWebFolder, existingWebFolder, webReferenceIn } from './web-folders'
 
 /*
@@ -237,7 +238,7 @@ export function rewriteContentPaths(content: unknown, mapping: ReadonlyMap<strin
     const location: unknown = definition.versions[0]?.files?.[0]?.location
     if (typeof location !== 'string') continue
     const git = parseGitCodeLocation(location)
-    if (git) { if (git.filepath.startsWith('素材/')) definition.folder = git.filepath.split('/')[1]; else if (git.filepath.startsWith('legacy/materials/')) definition.folder = git.filepath.split('/')[2]; continue }
+    if (git) { const owner = codeWorkingOwner(git.filepath); if (owner?.kind === '素材') definition.folder = owner.name; continue }
     const segments = location.split(/[\\/]/); const index = segments.lastIndexOf('代码')
     if (index >= 0 && segments[index + 1] !== '组件库') definition.folder = segments[index + 1]
   }

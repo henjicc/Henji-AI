@@ -12,7 +12,7 @@ import type { DiscardCodeFilesRequest, PublishCodeComponentRequest, WriteCodeVer
 import { isPathInside } from '../../../../src/core/storage/pathSyntax'
 import { sameEntryName } from '../../../../src/core/documents/naming'
 import { createFileExclusively } from '../fs/no-overwrite'
-import { CodeGitRepository, codeWorkingPrefix } from './code-git'
+import { CodeGitRepository, codeWorkingPrefixes } from './code-git'
 import { gitCodeLocation, parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
 import type { MainLogger } from '../logging/main-logger'
 import type { DocumentWorkspace } from './workspace'
@@ -132,9 +132,11 @@ export class DocumentCodeFiles {
       const stem = codeFolderName(request.name)
       for (let suffix = 1; ; suffix++) {
         const candidate = folder ?? (suffix === 1 ? stem : `${stem} (${suffix})`)
-        const marker = path.join(root, '代码', codeWorkingPrefix('素材', candidate), '.definition')
-        const oldMarker = path.join(root, '代码', '素材', candidate, '.definition')
-        const owner = await fsp.readFile(marker, 'utf8').catch(async error => { if (error.code === 'ENOENT') return fsp.readFile(oldMarker, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error }); throw error })
+        let owner: string | null = null
+        for (const prefix of codeWorkingPrefixes('素材', candidate)) {
+          owner = await fsp.readFile(path.join(root, '代码', prefix, '.definition'), 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error })
+          if (owner !== null) break
+        }
         if (owner && owner !== request.definitionId) {
           if (folder) throw new Error('素材目录属于另一份代码定义，请重新创建素材。')
           continue

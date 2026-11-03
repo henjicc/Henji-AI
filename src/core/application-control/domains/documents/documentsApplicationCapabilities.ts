@@ -205,7 +205,7 @@ const collectDocumentMedia = defineApplicationCapability({
 
 const migrateCodeStorage = defineApplicationCapability({
   id: 'migrate_project_code_storage', version: 2, title: '整理项目代码历史',
-  description: '把项目里按版本复制的旧代码素材和组件整理为内置版本历史，保留各版本原文、编号与依赖；旧 Git 工作区的素材/组件目录一次提交移到 legacy/materials 与 legacy/components，历史引用不变。先备份、保存并读回所有项目文档，再把不再使用的旧文件夹归档到项目备份区；被其他文档引用的旧文件继续保留。可中断后重试。打开的文档会先保存并重新载入，撤销记录从迁移后重新开始。',
+  description: '把项目里按版本复制的旧代码素材和组件整理为内置版本历史，保留各版本原文、编号与依赖；旧位置（素材/、组件/、legacy/materials、legacy/components）下的素材与组件工作区一次提交移到 软件维护/素材 与 软件维护/组件，历史引用不变。先备份、保存并读回所有项目文档，再把不再使用的旧文件夹归档到项目备份区；被其他文档引用的旧文件继续保留。可中断后重试。打开的文档会先保存并重新载入，撤销记录从迁移后重新开始。',
   domain: DOCUMENTS_DOMAIN, aliases: ['迁移代码到 Git', '整理代码版本', 'migrate code storage'],
   readOnly: false, dataClasses: ['C1'], idempotent: true, destructive: false,
   timeoutMs: 600_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
@@ -216,7 +216,7 @@ const migrateCodeStorage = defineApplicationCapability({
   resolveOperationTargets: input => [{ kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: input.projectId }],
   control: capabilityControl('execute', [DOCUMENT_PROJECT_ENTITY_TYPE], { revisionScopes: [DOCUMENTS_DOMAIN] }),
   failureRecovery: ['校验或保存失败时恢复所提示的原文件后重试；备份与已导入的历史均保留。'],
-  summarize: output => `已迁移 ${output.relocatedFiles} 个工作区文件到 legacy；整理 ${output.importedVersions} 个代码版本，归档 ${output.archivedFolders} 个旧文件夹，保留 ${output.retainedFolders} 个仍需使用或检查的文件夹。`,
+  summarize: output => `已把 ${output.relocatedFiles} 个旧位置的工作区文件整理到“软件维护”；整理 ${output.importedVersions} 个代码版本，归档 ${output.archivedFolders} 个旧文件夹，保留 ${output.retainedFolders} 个仍需使用或检查的文件夹。`,
 })
 
 const trashDocument = defineApplicationCapability({
