@@ -2184,6 +2184,8 @@ export class VideoEditRenderer {
             for (const message of result.sceneIssues ?? []) if (!sceneIssues.includes(message)) sceneIssues.push(message)
             if (!nestedRender) recordVideoEditPreparation('nestedRender', performance.now() - nestedStarted)
             timestamps.push(...result.sourceTimestamps); blankPictures += result.blankPictures; singleFrameReads += result.singleFrameReads; if (result.approximate) nestedContext.approximate.add(result.nestedPicture)
+            // 嵌套序列里的路径追踪还在收敛：进度交给外层，节目监视器的进度提示按最慢的一组显示。
+            if (result.spaceProgress !== undefined) spaceProgress = Math.min(spaceProgress ?? 1, result.spaceProgress)
             return result.nestedPicture
           })
           entry.tail = picture; nestedContext.pictures.set(key, picture)
