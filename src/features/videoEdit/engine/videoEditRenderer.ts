@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_ELEMENTS_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import type { WebSourceProvenance, WebSourceCaptureRequest } from '@/platform/contracts/videoFrames'
 import { freezeWebText, unavailableWebText } from '@/core/videoEdit/webTextGeometry'
 import { resolveVideoEditTransitionSource } from '@/core/videoEdit/transitionCatalog'
@@ -2404,6 +2405,27 @@ export class VideoEditRenderer {
               }
             }
             const info: NonNullable<SpatialAuthorInputs['info']> = Object.keys(web).length ? { web } : {}
+            // 引用时间线片段的图片参数：再给出那个片段此刻在作者根空间里的位置与形状（画面照旧在 assets）。作者接口 16 起提供。
+            // 时刻与空间帧取这一次暂存的取样时刻（快门开始时刻与中心各一份），片段姿态取跟随、防抖之后的（与卡片、画面同一份）。
+            const elements: Record<string, import('./videoEditAuthorElement').AuthorElement | null> = {}
+            if ((plan.program?.apiVersion ?? 0) >= CODE_AUTHOR_ELEMENTS_MIN_API_VERSION) {
+              const [{ createAuthorElement }, { spatialElementPictureToAuthor }] = await Promise.all([import('./videoEditAuthorElement'), import('@/core/videoEdit/spatialElements')])
+              const at = plan.context.frame
+              const spaceFrame = spatial.plan.samples.find(sample => sample.sequenceFrame === at)?.frame ?? spatial.plan.centerFrame
+              let posed: VideoEditComposition | undefined
+              try { posed = spatial.compositionAt?.(at) } catch (error) {
+                logger.warn('引用元素的时刻没有准备跟踪姿态，按未跟随的姿态计算位置', { event: 'video_edit.space.element_pose_missing', context: { frame: at, error: error instanceof Error ? error.message : String(error) } })
+              }
+              for (const [name, value] of Object.entries(plan.inputParameters ?? {})) {
+                if (!isCodeImageReference(value) || value.kind !== 'clip') continue
+                const target = posed?.clips.find(clip => clip.id === value.clipId) ?? (() => { const raw = sourceDocument.clips.find(clip => clip.id === value.clipId); return raw && evaluateVideoEditClip(raw, at) })()
+                let matrix: import('@/core/videoEdit/spatialTypes').SpatialMat4 | undefined
+                // 缩放为 0 的关键帧（入场动画常见）矩阵不可逆：这一刻片段看不见，这个元素给空，不让整幅三维画面失败。
+                if (plan.imageKeys.has(name) && images[name] && target) try { matrix = spatialElementPictureToAuthor(sourceDocument, target, spaceFrame, plan.clip.id) } catch (error) { if (!(error instanceof Error && error.message.includes('不可逆'))) throw error }
+                elements[name] = matrix ? createAuthorElement(value.clipId, matrix, () => assets[name] as CanvasImageSource & { width: number; height: number }, spaceFrame.output.displayWidth / spaceFrame.output.displayHeight) : null
+              }
+            }
+            if (Object.keys(elements).length) info.elements = elements
             if (codeMaterialUsesAudio(plan.program!)) {
               const source = codeAudioComposition(sourceDocument, sourceDocument.clips.find(clip => clip.id === plan.clip.id) ?? plan.clip, codeAudioReferenceMediaId(plan.inputParameters ?? {}))
               info.audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)

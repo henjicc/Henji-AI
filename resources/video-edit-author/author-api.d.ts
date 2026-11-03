@@ -47,8 +47,27 @@ export interface AuthorSimulation<S extends SimulationData = SimulationData, V e
 export interface AuthorSimulationDeclaration { rate?: number; snapshotEvery?: number; seed?: number }
 export interface AuthorSimulationSampler { at(sourceSeconds: number): Readonly<SimulationData> }
 
+/** 作者根空间里的一个点（three 的 Vector3 可以直接 copy）。 */
+export interface AuthorElementPoint { x: number; y: number; z: number }
+/**
+ * 作者 API 16 起，三维作者的图片参数绑定时间线片段（{kind:'clip',clipId}）时，那个片段此刻在作者根空间里的位置与形状。
+ * 画面照旧在 assets[参数键]。没开空间的片段算在画面平面（z=0）上。
+ */
+export interface AuthorElement {
+  readonly clipId: string
+  /** 片段画面（整幅序列大小）的 uv（左上为 0、向右向下）→ 作者根空间，列主序 4×4。 */
+  readonly matrix: readonly number[]
+  at(u: number, v: number): AuthorElementPoint
+  /** 外沿采样点：逐列（上下沿）或逐行（左右沿）取最外侧的不透明像素；spacing 为相邻两点间隔（显示高度的比例，缺省 0.004；形状按长边 512 格取样，间隔不会小于一格）。 */
+  edge(side: 'bottom' | 'top' | 'left' | 'right', spacing?: number): AuthorElementPoint[]
+  /** 在不透明区域里按覆盖均匀撒 count 个点（同一 seed 结果相同）。 */
+  sample(count: number, seed?: number): AuthorElementPoint[]
+}
+
 export interface AuthorFrameInfo {
   space?: AuthorSpaceInfo
+  /** 作者 API 16：图片参数引用时间线片段时的位置与形状（按参数键；那个片段此刻不在画面上为 null）。 */
+  elements?: Readonly<Record<string, AuthorElement | null>>
   simulation?: AuthorSimulationSampler
   time: number
   /** 一帧的秒数。 */

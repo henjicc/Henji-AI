@@ -1,4 +1,4 @@
-> 作者 API 15：真实几何用受管 createThree，宿主掌管相机、景深与曝光。其他入口仅显式 space:true 才获得 info.space。普通卡片中心生成一次；three 场景逐子时刻渲染。空间构图调用宿主能力，不手写投影、布局或景深。旧 API 按各自版本保留行为。见 [空间配方](recipes-3d.md)。
+> 作者 API 16：三维作者的图片参数可引用时间线片段，`info.elements[键]` 给出它的位置与形状（见空间配方）。作者 API 15：真实几何用受管 createThree，宿主掌管相机、景深与曝光。其他入口仅显式 space:true 才获得 info.space。普通卡片中心生成一次；three 场景逐子时刻渲染。空间构图调用宿主能力，不手写投影、布局或景深。旧 API 按各自版本保留行为。见 [空间配方](recipes-3d.md)。
 
 # 作者接口：模块、绘制与图层
 
@@ -58,7 +58,7 @@ layers(params, width, height, assets, info) => Layer[]
 - `ctx` 是 `OffscreenCanvasRenderingContext2D`，画布即输出尺寸，左上角为原点。
 - `time` 是素材源时间（秒，随片段裁剪、变速、倒放连续），关键帧与动画都按它写。
 - `params` 为当前帧参数值（已应用关键帧曲线），见 parameter-types 的取值表。
-- `assets` 为 image 参数的画面（`CanvasImageSource`），按参数键取，如 `assets.logo`；未绑定时没有该键。
+- `assets` 为 image 参数的画面（`CanvasImageSource`），按参数键取，如 `assets.logo`；未绑定时没有该键。image 参数可绑素材、视频、下方画面、网页，或同序列里的另一个片段 `{kind:'clip',clipId}`（拿到它此刻的画面，透明处透明；它此刻不在画面上时参数为空）。
 - `info`：`time`、`frameDuration`（一帧秒数）、`clip.time` / `clip.duration`（片段内时间与片段时长）、可选 `audio` / `audioTime`（见 author-api-media）、可选 `renderScale`（见下）、可选 `web`（绑定了网页的图片参数这一帧的页面时间、取景与元素矩形，见 author-api-media）。
 - 预览降分辨率（1/2、1/4…）与导出按输出分辨率渲染时，宿主按比例缩小栅格与上传，`info.renderScale` 给出输出像素与画布像素之比（≤1，如 0.5；省略即 1）。`ctx` 的坐标、`width` / `height` 仍是画布像素，Canvas 代码不用处理；WebGPU / WebGL 中按像素写的长度乘 `info.renderScale ?? 1`。输出大于序列或填充裁切需要放大时，按序列尺寸渲染后再放大。
 

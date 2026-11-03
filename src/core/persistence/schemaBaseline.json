@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 64,
-      "fingerprint": "4c3cc73a0d91873df0d2cb9c017b951b9be86dd25152cc3ac0eb7d793fa748d6",
+      "version": 65,
+      "fingerprint": "51b32502d16ddcd5127818f4f03b986a03bc318aebfb049cf495e0e66d5fcfe6",
       "supportedFrom": 17,
-      "minReaderVersion": 64
+      "minReaderVersion": 65
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 67,
-      "fingerprint": "2b0a47c55a9a29c146c18ea737c8ead3cc9356d1a1e8e4b7936e59930a3a9372",
+      "version": 68,
+      "fingerprint": "b9a731f932128ae1588c03436e6d0bc01534fdeac4a3aef0b9d41adceacdebb0",
       "supportedFrom": 19,
-      "minReaderVersion": 67
+      "minReaderVersion": 68
     },
     "project": {
       "version": 3,
@@ -174,16 +174,16 @@
       "minReaderVersion": 1
     },
     "code-version": {
-      "version": 16,
-      "fingerprint": "107eaedeb4e9a0e211884c05b937496d0241400eac803c48a4f6b74f980a62c2",
+      "version": 17,
+      "fingerprint": "25fbe3aa5a0c4868979d37f37ed92027ae77c098775f751039cba8f069879a2a",
       "supportedFrom": 1,
-      "minReaderVersion": 16
+      "minReaderVersion": 17
     },
     "code-author-api": {
-      "version": 15,
-      "fingerprint": "3a4c39b62358308fff4e31b4dff12b60ef75f7b0a7d86655728c4db1c6610638",
+      "version": 16,
+      "fingerprint": "7fbb8414903debc2dedcdf5c7abb0093a1ab1f33be88145b83f421a4c47206eb",
       "supportedFrom": 4,
-      "minReaderVersion": 15
+      "minReaderVersion": 16
     },
     "code-component": {
       "version": 1,
@@ -192,10 +192,10 @@
       "minReaderVersion": 1
     },
     "code-asset": {
-      "version": 22,
-      "fingerprint": "e63d461a67c7fd29a124f8c3f05c05a95ac1ac1fc5e6652385221e119b3a1057",
+      "version": 23,
+      "fingerprint": "b7bb57d31be6afbf54788b0c206fd68ffc02c025e4b3a8922888e2f80ad99d02",
       "supportedFrom": 6,
-      "minReaderVersion": 21
+      "minReaderVersion": 23
     },
     "settings": {
       "version": 16,
@@ -240,10 +240,10 @@
       "minReaderVersion": 2
     },
     "video-preset-package": {
-      "version": 21,
-      "fingerprint": "d6e948be367f15ab81477bab4ea639341063f222a9ad715e271e5406a200f0ba",
+      "version": 22,
+      "fingerprint": "c2f6fc6d2519e72b289e4ebcfab11f64a2cc39f8ce378155536c9c9f1233aead",
       "supportedFrom": 5,
-      "minReaderVersion": 20
+      "minReaderVersion": 22
     },
     "voice-library": {
       "version": 1,
@@ -324,22 +324,22 @@
       "minReaderVersion": 1
     },
     "video-style-library": {
-      "version": 16,
-      "fingerprint": "6ae4d11b8723940a24de92271a070d2685f7e81c32f1c3a888c7aa39ad9d3a37",
+      "version": 17,
+      "fingerprint": "10ed3074376a57b8f426e6176341bd752a261baab58511ae6dd3f3cba3b4cb39",
+      "supportedFrom": 1,
+      "minReaderVersion": 17
+    },
+    "video-template-library": {
+      "version": 15,
+      "fingerprint": "6a8b33468bb855cec30156cbd5679e285764c6368fc39706a9ed28a64660e37a",
       "supportedFrom": 1,
       "minReaderVersion": 15
     },
-    "video-template-library": {
-      "version": 14,
-      "fingerprint": "3611f2c44cbec861e42e1e3423bc61c0092f999ddd33087eccc3674b49299689",
-      "supportedFrom": 1,
-      "minReaderVersion": 13
-    },
     "video-style-package": {
-      "version": 20,
-      "fingerprint": "a04b35069b236fb59f395569abbb03177e1e65bc6d486442fe434570416af061",
+      "version": 21,
+      "fingerprint": "1ea8ac7a5f6234d2c823dc9d47a395b23171e4785a89dea2e503cacf2bb1323d",
       "supportedFrom": 1,
-      "minReaderVersion": 19
+      "minReaderVersion": 21
     },
     "workspace-layouts": {
       "version": 1,
@@ -396,10 +396,10 @@
       "minReaderVersion": 1
     },
     "video-effect-library": {
-      "version": 13,
-      "fingerprint": "5e4895817761c7563354f5f6d6e2768a94c314fa16db864195c65ab21b40d55c",
+      "version": 14,
+      "fingerprint": "b720cfbeaf4ebbead39efb1947d8c7f856ce175dd963bd999af06d2ac17a704a",
       "supportedFrom": 1,
-      "minReaderVersion": 12
+      "minReaderVersion": 14
     }
   },
   "devBreaks": [],

@@ -69,7 +69,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...format('project', '项目说明', PROJECT_MANIFEST_VERSION, 'ProjectManifest.version', 'electron/main/services/documents/workspace.ts::readManifest', projectManifestSchema), minReaderVersion: 1 },
   { ...format('project-package', '项目和文档包', PACKAGE_VERSION, 'henji-package.json.version', 'electron/main/services/documents/package-service.ts::readManifest', packageManifestSchema), minReaderVersion: 1, requiredFixtures: [{ extension: 'json' }, { extension: 'henjipack' }] },
   format('code-git-location', 'Git 源码位置', 1, 'git:<40位提交OID>:<encodeURIComponent(仓库位置)>:<encodeURIComponent(POSIX仓库内路径)>；仓库位置存取时使用既有 henji:/ 编码。轻量版本标签：素材或组件/<转义名>@vN；撤回标签：撤回/<OID>。', 'src/core/storage/gitCodeLocation.ts::parseGitCodeLocation', gitCodeLocationSchema),
-  { ...format('code-version', '代码源码版本', CODE_MATERIAL_VERSION_RECORD, '所在剪辑内容版本（记录随剪辑文档的 kindVersion 读写）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }), minReaderVersion: 16 },
+  { ...format('code-version', '代码源码版本', CODE_MATERIAL_VERSION_RECORD, '所在剪辑内容版本（记录随剪辑文档的 kindVersion 读写）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }), minReaderVersion: 17 },
   // 作者宿主接口：每个代码版本记录 apiVersion；宿主接口变化时升版本并按 apiVersion 保持旧代码的原行为，不迁移源码。
   // 最低可读版本就是接口版本本身：按新接口写的代码只有认识它的宿主才能运行。
   format('code-author-api', '代码作者宿主接口', CODE_AUTHOR_API_VERSION, 'CodeMaterialVersion.apiVersion / CodeAsset.sourceVersion.apiVersion', 'src/features/videoEdit/engine/videoEditAuthorRuntime.ts', codeAuthorApiSchema),
@@ -82,11 +82,12 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...format('style-kits', '本机风格包', LOCAL_LIBRARY_FORMATS['video-edit-style-kits'].version, 'video-edit-style-kits.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::importStoredStyleKits', z.array(styleKitMigrationSchema), 'local-storage'), minReaderVersion: 3 },
   { ...format('title-templates', '本机标题模板', LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].version, 'video-edit-title-templates.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::importStoredStyleKits', z.array(titleTemplateMigrationSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].minReaderVersion },
   // 代码成员带完整快照，旧程序会拒绝风格件；最低可读版本只在改变语义时显式提高。样片与代码可用作者接口 10（排版）与 11（效果 key），旧程序无法执行，最低可读版本随版本提高。
-  { ...format('video-style-library', '风格库中的风格', VIDEO_EDIT_STYLE_LIBRARY_VERSION, '风格库/styles/<id>/style.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readStyleFile', videoEditStyleSchema), minReaderVersion: 15 },
+  { ...format('video-style-library', '风格库中的风格', VIDEO_EDIT_STYLE_LIBRARY_VERSION, '风格库/styles/<id>/style.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readStyleFile', videoEditStyleSchema), minReaderVersion: 17 },
+  // 风格库 17、模板库 15、风格包 21：风格件代码快照、样片与代码模板可用作者接口 16（三维作者的 info.elements），旧程序无法执行，最低可读版本随版本提高。
   // 风格库 16、模板库 14、风格包 20：代码参数的片段引用分支只可能出现在风格件里，风格件拒绝它，模板片段的图形对象参数也写不出它，最低可读版本保持不变。
   // 模板库 3、风格包 6：原生模板片段新增 enabled:false，旧程序忽略它会把停用的模板片段当成启用，最低可读版本提高到新版本。
-  { ...format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema), minReaderVersion: 13 },
-  { ...format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.hjsty.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema), minReaderVersion: 19 },
+  { ...format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema), minReaderVersion: 15 },
+  { ...format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.hjsty.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema), minReaderVersion: 21 },
   // 效果库 v3 接入版本化 content 容器；v2 仅接受 {state, version:1|2}，不能读取该外壳。
   { ...format('video-effect-library', '本机风格件与效果收藏', VIDEO_EDIT_EFFECT_LIBRARY_VERSION, 'video-edit-effects-library.version', 'src/features/videoEdit/application/videoEditEffectPresets.ts::createVideoEditEffectLibraryStore', storedVideoEditEffectLibrarySchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-effects-library'].minReaderVersion },
   format('text-presets', '本机文字和字幕预设', LOCAL_LIBRARY_FORMATS['video-edit-text-presets'].version, 'video-edit-text-presets.version', 'src/features/videoEdit/application/videoEditLocalLibrary.ts', z.array(videoEditTextPresetSchema), 'local-storage'),

@@ -16,6 +16,8 @@ import type { WebTextDeclaration, WebTextImageMapping, WebTextResults } from '@/
 /** Executable ES module contract. These functions never cross a worker boundary. */
 export interface AuthorFrameInfo {
   space?: AuthorSpaceInfo
+  /** 三维作者：图片参数引用时间线片段时，那个片段此刻在三维里的位置与形状（按参数键；此刻不在画面上为 null）。 */
+  elements?: Readonly<Record<string, import('./videoEditAuthorElement').AuthorElement | null>>
   simulation?: AuthorSimulationSampler
   time: number
   frameDuration: number

@@ -1,4 +1,5 @@
 // ticket 35 归因台：在页面主线程直接驱动正式 VideoEditRenderer，逐帧统计 GPU 命令与按阶段耗时。
+import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 // 只做测量，不改任何渲染行为；阶段标签按调用栈归属，异步交错处可能有少量误差。
 import { VideoEditRenderer } from '@/features/videoEdit/engine/videoEditRenderer'
 import { VideoEditSpatialGpu } from '@/features/videoEdit/engine/videoEditSpatialComposite'
@@ -178,7 +179,7 @@ interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: 
 async function attribute(project: unknown, sceneSource: string, hash: string, media: Record<string, string>, config: Config) {
   const raw = structuredClone(project) as { media: Array<{ id: string; path: string }>; codeMaterials: Array<{ versions: Array<{ files: Array<{ location: string; hash: string }> }> }>; sequences: Array<{ motionBlur?: boolean; spatialCamera?: { curves?: Record<string, unknown>; defocus?: number } }> }
   const location = rememberTransientCodeSource(hash, sceneSource)
-  for (const material of raw.codeMaterials) for (const version of material.versions) for (const file of version.files) file.location = location
+  for (const material of raw.codeMaterials) for (const version of material.versions) { for (const file of version.files) file.location = location; (version as { apiVersion: number }).apiVersion = CODE_AUTHOR_API_VERSION }
   const sequence = raw.sequences[0]
   sequence.motionBlur = config.motionBlur
   // --transition：把一张空间卡片在第 150 帧切成两段，中间 30 帧交叉溶解，右段下移一点以便看出转场。

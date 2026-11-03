@@ -143,10 +143,13 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 57：新建代码素材默认作者接口 13（累积模拟），旧程序的作者接口枚举不认识它，会把整份剪辑判成内容无效；提高到 57 让它明确提示升级。
   // 63：片段新增发光强度 spaceEmission，并可做关键帧；旧程序的片段关键帧键是封闭枚举，读到 curves.spaceEmission 会把整份剪辑判成内容无效，提高到 63 让它明确提示升级。
   // 64：代码图片参数新增片段引用 {kind:'clip'}；旧程序的图片引用是封闭联合，读到它会把整份剪辑判成内容无效，提高到 64 让它明确提示升级。
-  minReaderVersion: 64,
+  // 65：新建代码素材默认作者接口 16（三维作者的 info.elements），旧程序的作者接口上限不认识它，会把整份剪辑判成内容无效，提高到 65 让它明确提示升级。
+  minReaderVersion: 65,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 64 → 65：接受作者接口 16（三维作者的 info.elements）；旧源码与固定接口原样保留。
+    64: content => structuredClone(content),
     // 63 → 64：代码图片参数新增片段引用 {kind:'clip', clipId}；旧内容没有这一分支，原样保留。
     63: content => structuredClone(content),
     // 62 → 63：片段新增可选发光强度 spaceEmission（0–10）及其关键帧；旧内容没有该字段，缺省 0 不改变画面，原样保留。
