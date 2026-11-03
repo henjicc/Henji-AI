@@ -559,6 +559,8 @@ describe('所有登记格式的黄金样本', () => {
           expect([clip.spaceEmission ?? 0, clip.curves?.spaceEmission?.map(point => point.value) ?? []]).toEqual(version >= 63 ? [1.5, [0, 3]] : [0, []])
           // v64：代码图片参数的片段引用原样读回；旧样本没有这一分支。
           expect(clip.code?.parameters.partner ?? null).toEqual(version >= 64 ? { kind: 'clip', clipId: 'golden-cursor-clip' } : null)
+          // v66：三维曝光与色调映射原样读回；旧样本没有，按 0 与 neutral 不改变画面。
+          expect([document.sequences[0].spaceRender?.exposure ?? 0, document.sequences[0].spaceRender?.toneMapping ?? 'neutral']).toEqual(version >= 66 ? [.5, 'agx'] : [0, 'neutral'])
           // v21：音频重构子片段的参数与原始源范围随片段保存；旧样本没有该字段。
           const sound = document.sequences[0].clips.find(value => value.id === 'golden-sound-clip')
           expect(sound?.gainDb ?? 0).toBe(version >= 23 ? 19 : 0)

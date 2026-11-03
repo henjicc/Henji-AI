@@ -64,6 +64,9 @@ export function videoEditNativeDecoding(status: NativeVideoDecoderStatus): boole
 }
 
 /** A bounded request stream owned by a view/export, independent from the project lifetime. */
+/** 降噪权重拿不到之后，看片隔多久再试。 */
+const DENOISER_RETRY_MS = 60_000
+
 export interface VideoEditRenderHost {
   authorEffects?(): AuthorEffectEnvironment
 
@@ -73,6 +76,8 @@ export interface VideoEditRenderHost {
   readCodeMetadata?(key: string): Promise<import('./videoEditAuthorMetadataCache').AuthorCachedMetadata | undefined>
   writeCodeMetadata?(key: string, metadata: import('./videoEditAuthorMetadataCache').AuthorCachedMetadata): Promise<void>
   loadCodeModules?(files: CodeMaterialFiles): Promise<AuthorModuleUrls>
+  /** 路径追踪降噪权重的可读取地址；没有（下载失败）时路径追踪不降噪。 */
+  denoiserWeights?(): Promise<string | undefined>
 }
 
 export interface VideoEditRenderTransportOptions {
@@ -487,7 +492,32 @@ export class VideoEditRenderTransport {
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** 节目网页输入的屏幕显示档位，见 `videoEditWebDisplayTier`。 */
   async setWebDisplayScale(scale: number): Promise<void> { await this.ready; await this.request({ kind: 'webDisplayScale', scale }) }
-  async setSpaceDisplay(display: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay): Promise<void> { await this.ready; await this.request({ kind: 'spaceDisplay', display }) }
+  async setSpaceDisplay(display: import('@/core/videoEdit/spaceDisplay').VideoEditSpaceRenderDisplay): Promise<void> {
+    await this.ready; await this.request({ kind: 'spaceDisplay', display })
+    // 看片换到渲染方式时在后台把降噪权重交给 Worker（第一次要下载约 2 MB；离线时下载会重试很久，不能卡住看片）。
+    // 交到之后通知节目监视器重画当前帧：已经追踪完的停住画面也要降噪。拿不到权重时照常不降噪，下次换到渲染方式再试。
+    if (display === 'render') {
+      // 选了渲染方式时每次暂停都会走到这里：拿不到权重后隔一分钟才重试，离线时不会每暂停一次都重新下载。
+      if (this.denoiserUnavailableAt !== undefined && performance.now() - this.denoiserUnavailableAt >= DENOISER_RETRY_MS) this.denoiserUnavailableAt = undefined
+      const before = this.denoiser
+      void this.ensureDenoiser().then(() => { if (!before && this.denoiser && !this.disposed) this.onDenoiserReady?.() }, () => undefined)
+    }
+  }
+  /** 降噪权重第一次交到 Worker 时（看片用渲染方式）。 */
+  onDenoiserReady?: () => void
+  private denoiser?: Promise<void>
+  /** 这个会话里权重拿不到的时刻：之后成片各帧都不再等下载（结果一致），看片隔一段时间再试。 */
+  private denoiserUnavailableAt?: number
+  /** 把降噪权重交给 Worker（每个渲染会话一次）。 */
+  private ensureDenoiser(): Promise<void> {
+    if (this.denoiserUnavailableAt !== undefined) return Promise.resolve()
+    this.denoiser ??= (async () => {
+      const url = await this.host.denoiserWeights?.()
+      if (!url) { this.denoiser = undefined; this.denoiserUnavailableAt = performance.now(); return }
+      await this.ready; await this.request({ kind: 'denoiser', url })
+    })().catch(error => { this.denoiser = undefined; this.denoiserUnavailableAt = performance.now(); throw error })
+    return this.denoiser
+  }
   async setOutputScale(scale: number, renderAtOutputResolution = true): Promise<void> {
     await this.ready; await this.request({ kind: 'outputScale', scale, renderAtOutputResolution })
     const size = videoEditRenderSize(this.document.width, this.document.height, renderAtOutputResolution ? videoEditOutputRenderDivisor(this.document.width, this.document.height, scale) : 1)
@@ -512,6 +542,8 @@ export class VideoEditRenderTransport {
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false, precision: VideoEditRenderPrecision = 'exact'): Promise<RenderResponse> {
     if (this.disposed) throw this.failure ?? new Error('剪辑渲染已关闭。')
+    // 路径追踪成片（导出、选帧、封面）每帧都要降噪：先等权重交给 Worker，成片各帧一致。
+    if (quality === 'final' && this.document.spaceRender?.finalRenderer === 'pathTrace') await this.ensureDenoiser().catch(() => undefined)
     // 入口定一次是否预检，排队与预检用同一判断；不预检的帧也排在已登记的预检帧之后提交，内容切换时不乱序。旧接口工程从无登记帧，不会等待。
     const preflight = this.needsTextPreflight
     const previousSubmission = this.submissionTail

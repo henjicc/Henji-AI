@@ -1,4 +1,5 @@
 // ticket 35 归因台：在页面主线程直接驱动正式 VideoEditRenderer，逐帧统计 GPU 命令与按阶段耗时。
+import { setVideoEditDenoiserWeights } from '@/features/videoEdit/engine/videoEditDenoiserWeights'
 import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 // 只做测量，不改任何渲染行为；阶段标签按调用栈归属，异步交错处可能有少量误差。
 import { VideoEditRenderer } from '@/features/videoEdit/engine/videoEditRenderer'
@@ -175,7 +176,7 @@ wrap(VideoEditGpuCompositor.prototype, 'draw', (_self, args) => {
   return args[6] ? clips[0]?.kind === 'code' ? 'sceneToMaterial' : 'cardMaterial2d' : 'final'
 })
 
-interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: boolean; from: number; to: number; quality: 'interactive' | 'final'; shots?: number[]; display?: 'realtime' | 'solid' | 'wireframe' | 'render'; noWarmup?: boolean; pathTrace?: boolean; transition?: boolean | 'single'; effects?: { bloom?: number; ambientOcclusion?: number; reflections?: number }; emission?: Record<string, number>; bind?: Record<string, string>; refine?: number }
+interface Config { scale: 1 | 2; motionBlur: boolean; dof: boolean; timestamps: boolean; from: number; to: number; quality: 'interactive' | 'final'; shots?: number[]; display?: 'realtime' | 'solid' | 'wireframe' | 'render'; noWarmup?: boolean; pathTrace?: boolean; transition?: boolean | 'single'; effects?: { bloom?: number; ambientOcclusion?: number; reflections?: number }; emission?: Record<string, number>; bind?: Record<string, string>; refine?: number; denoise?: string }
 async function attribute(project: unknown, sceneSource: string, hash: string, media: Record<string, string>, config: Config) {
   const raw = structuredClone(project) as { media: Array<{ id: string; path: string }>; codeMaterials: Array<{ versions: Array<{ files: Array<{ location: string; hash: string }> }> }>; sequences: Array<{ motionBlur?: boolean; spatialCamera?: { curves?: Record<string, unknown>; defocus?: number } }> }
   const location = rememberTransientCodeSource(hash, sceneSource)
@@ -205,6 +206,8 @@ async function attribute(project: unknown, sceneSource: string, hash: string, me
   for (const [clipId, value] of Object.entries(config.emission ?? {})) { const clip = (sequence as unknown as { clips: Array<{ id: string; spaceEmission?: number }> }).clips.find(item => item.id === clipId); if (clip) clip.spaceEmission = value }
   if (config.pathTrace || config.effects) (sequence as { spaceRender?: unknown }).spaceRender = { ...(config.pathTrace ? { finalRenderer: 'pathTrace' } : {}), ...config.effects }
   if (!config.dof && sequence.spatialCamera) { delete sequence.spatialCamera.curves?.defocus; sequence.spatialCamera.defocus = 0 }
+  // --denoise：路径追踪降噪权重（data URL）。
+  if (config.denoise) setVideoEditDenoiserWeights(config.denoise)
   const parsed = parseVideoEditDocument(raw)
   // 页面内用 data URL 读取图片；格式校验要求绝对路径，校验后再替换（解析结果已冻结，复制出新对象）。
   const document = { ...parsed, media: parsed.media.map(item => ({ ...item, path: media[item.id] })) }

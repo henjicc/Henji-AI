@@ -1,5 +1,5 @@
 // ticket 36 质感样片「三块磨砂玻璃」：三块圆角磨砂玻璃板上下叠放、斜俯视，缓慢转动并错开浮动。
-// 只用经典材质参数（透射、粗糙度、厚度、吸收颜色）：实时与路径追踪读同一份材质。蓝色的光来自板子下面的一块发光面和蓝调环境。
+// 只用经典材质参数（透射、粗糙度、厚度、吸收颜色）：实时与路径追踪读同一份材质。蓝色的光来自最下面一块板自身发光和蓝调环境。
 // 世界单位 = 显示高度。
 import * as THREE from 'three/webgpu'
 
@@ -42,11 +42,14 @@ function slab(): THREE.BufferGeometry {
   const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICK - 2 * bevel, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4, curveSegments: 16 })
   geometry.translate(0, 0, -(THICK - 2 * bevel) / 2)
   geometry.rotateX(-Math.PI / 2)
+  // uv 按板面铺满 0–1（挤出体默认的 uv 是形状坐标），发光贴图的圆斑正好落在板子中央。
+  const position = geometry.getAttribute('position'), uv = geometry.getAttribute('uv')
+  for (let index = 0; index < uv.count; index++) uv.setXY(index, position.getX(index) / SIZE + .5, position.getZ(index) / SIZE + .5)
   geometry.computeVertexNormals()
   return geometry
 }
 
-// 中心亮、向外柔和衰减、到圆周正好为 0 的圆斑：辉光不出硬边。
+// 中心亮、向外柔和衰减、到圆周正好为 0 的圆斑：板子中央发光，四角不发光。
 function radial(): THREE.DataTexture {
   const size = 128, data = new Uint8Array(size * size * 4)
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
@@ -60,10 +63,11 @@ function radial(): THREE.DataTexture {
 }
 
 // 三块板：上面一块深蓝、中间一块近白、下面一块浅蓝；越往上吸收越强（颜色越深）。
-const SLABS: Array<{ color: number; attenuation: number; distance: number; roughness: number }> = [
-  { color: 0x5a7cff, attenuation: 0x2a4cff, distance: .09, roughness: .28 },
-  { color: 0xf4f8ff, attenuation: 0xe0e8ff, distance: .6, roughness: .32 },
-  { color: 0xb8d2ff, attenuation: 0x7aa4ff, distance: .25, roughness: .3 },
+// glow：板子自身发光的强度（中心亮、向四周衰减）；光从最下面一块里透出来，照亮上面两块。
+const SLABS: Array<{ color: number; attenuation: number; distance: number; roughness: number; glow: number }> = [
+  { color: 0x5a7cff, attenuation: 0x2a4cff, distance: .09, roughness: .28, glow: 0 },
+  { color: 0xf4f8ff, attenuation: 0xe0e8ff, distance: .6, roughness: .32, glow: .25 },
+  { color: 0xb8d2ff, attenuation: 0x7aa4ff, distance: .25, roughness: .3, glow: 2.2 },
 ]
 
 export default {
@@ -75,22 +79,19 @@ export default {
     stack.position.set(0, .02, -1.5)
     scene.add(stack)
     const geometry = slab()
+    const glowMap = radial()
     const slabs = SLABS.map((value, index) => {
       const material = new THREE.MeshPhysicalMaterial({
         color: value.color, metalness: 0, roughness: value.roughness, transmission: 1, thickness: THICK, ior: 1.5,
         attenuationColor: new THREE.Color(value.attenuation), attenuationDistance: value.distance,
         specularIntensity: 1, clearcoat: .3, clearcoatRoughness: .2,
+        ...(value.glow > 0 ? { emissive: new THREE.Color(.35, .55, 1), emissiveIntensity: value.glow, emissiveMap: glowMap } : {}),
       })
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.y = (1 - index) * GAP
       stack.add(mesh)
       return mesh
     })
-    // 板子下面的蓝色发光圆盘（不透明黑底、只有发光，黑背景上看不见盘面本身）：透过磨砂玻璃成为柔和辉光，也从下方照亮板子的边。
-    const glow = new THREE.Mesh(new THREE.CircleGeometry(SIZE * .75, 96), new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 1, emissive: new THREE.Color(.3, .5, 1), emissiveIntensity: 5, emissiveMap: radial() }))
-    glow.rotation.x = -Math.PI / 2
-    glow.position.y = -GAP - .09
-    stack.add(glow)
     return { scene, update(_parameters: unknown, _assets: unknown, info: { time: number }) {
       const t = info.time
       // 斜俯视、慢慢转；三块板错开相位上下浮动，间距一张一合。

@@ -36,6 +36,12 @@ interface LibraryPlan {
   directories?: Record<string, string[]>
   /** 版本目录内路径 → 本脚本生成的入口源码（上游入口带着不随包的部分时，另写一个只导出随包部分的入口）。 */
   entries?: Record<string, string>
+  /**
+   * 补丁版（版本号带 `-henji.N`）：别名包装的是上游 `upstream` 版，安装时 patch-package 按 `patch` 改过源码。
+   * 构建前核对补丁确实打上了（`marker` 文件里含 `henji:` 注释），补丁文件计入构建指纹。
+   * 作者库地址按版本长期缓存，已发行的补丁版内容不可变：补丁内容一旦改变，版本号必须升到下一个 `-henji.N`。
+   */
+  patched?: { upstream: string; patch: string; marker: string }
 }
 
 const PLANS: Record<string, LibraryPlan> = {
@@ -67,7 +73,7 @@ const PLANS: Record<string, LibraryPlan> = {
   'three-gpu-pathtracer@0.0.27': {
     files: {},
     directories: { 'src/': ['core', 'materials', 'objects', 'shader', 'textures', 'uniforms', 'utils', 'webgpu'] },
-    // 上游 webgpu 入口还导出 OIDN 降噪与 FSR 超分，它们要从网络加载模型与 wasm；这里只导出路径追踪器与它的相机、灯光，并保留相机扩展的副作用导入。
+    // 上游 webgpu 入口还导出 OIDN 降噪与 FSR 超分，它们要从网络加载模型与 wasm；webgpu 入口只导出路径追踪器与它的相机、灯光，并保留相机扩展的副作用导入。
     entries: {
       'webgpu.js': [
         "export * from './src/webgpu/WebGPUPathTracer.js';",
@@ -82,6 +88,33 @@ const PLANS: Record<string, LibraryPlan> = {
         "import './src/webgpu/shims/PhysicalCameraShim.js';",
         "import './src/webgpu/shims/ArrayCameraShim.js';",
       ].join('\n'),
+      // OIDN 降噪封装单独一个入口：模型权重由宿主下载后交给它，加载路径追踪器时不连带加载。
+      'denoise.js': "export * from './src/webgpu/denoise/OIDNDenoiser.js';",
+    },
+  },
+  // 宿主自用的补丁版（patches/henji-author-three-gpu-pathtracer-0.0.27-henji.1+0.0.27.patch）：材质贴图图集半精度（8 位线性暗部有台阶），
+  // matte 判断移到半透明随机穿透之后（半透明 matte 纹素保留覆盖率）。入口与 0.0.27 相同。
+  'three-gpu-pathtracer@0.0.27-henji.1': {
+    patched: { upstream: '0.0.27', patch: 'patches/henji-author-three-gpu-pathtracer-0.0.27-henji.1+0.0.27.patch', marker: 'src/webgpu/nodes/PathtracerBVHComputeData.js' },
+    files: {},
+    directories: { 'src/': ['core', 'materials', 'objects', 'shader', 'textures', 'uniforms', 'utils', 'webgpu'] },
+    // 上游 webgpu 入口还导出 OIDN 降噪与 FSR 超分，它们要从网络加载模型与 wasm；webgpu 入口只导出路径追踪器与它的相机、灯光，并保留相机扩展的副作用导入。
+    entries: {
+      'webgpu.js': [
+        "export * from './src/webgpu/WebGPUPathTracer.js';",
+        "export * from './src/webgpu/BlurredEnvMapGenerator.js';",
+        "export * from './src/webgpu/constants.js';",
+        "export * from './src/webgpu/materials/RenderToScreenMaterial.js';",
+        "export * from './src/objects/PhysicalCamera.js';",
+        "export * from './src/objects/EquirectCamera.js';",
+        "export * from './src/objects/PhysicalSpotLight.js';",
+        "export * from './src/objects/ShapedAreaLight.js';",
+        "import './src/webgpu/shims/EquirectCameraShim.js';",
+        "import './src/webgpu/shims/PhysicalCameraShim.js';",
+        "import './src/webgpu/shims/ArrayCameraShim.js';",
+      ].join('\n'),
+      // OIDN 降噪封装单独一个入口：模型权重由宿主下载后交给它，加载路径追踪器时不连带加载。
+      'denoise.js': "export * from './src/webgpu/denoise/OIDNDenoiser.js';",
     },
   },
 }
@@ -256,7 +289,8 @@ async function buildRelease(library: string, version: string, destination: strin
   const manifestFile = path.join(source, 'package.json')
   if (!fs.existsSync(manifestFile)) throw new Error(`缺少依赖 ${authorLibraryPackageName(library, version)}，请先 npm install`)
   const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8')) as { name?: string; version?: string; license?: string }
-  if (manifest.name !== library || manifest.version !== version) throw new Error(`${authorLibraryPackageName(library, version)} 实际是 ${manifest.name}@${manifest.version}`)
+  if (manifest.name !== library || manifest.version !== (plan.patched?.upstream ?? version)) throw new Error(`${authorLibraryPackageName(library, version)} 实际是 ${manifest.name}@${manifest.version}`)
+  if (plan.patched && !fs.readFileSync(path.join(source, plan.patched.marker), 'utf8').includes('henji:')) throw new Error(`${key} 的补丁没有打上（${plan.patched.patch}），请重新 npm install`)
   if (manifest.license !== release.license) throw new Error(`${key} 包内许可为 ${manifest.license}，与登记的 ${release.license} 不一致`)
   const own = components.filter(component => component.library === key)
   for (const component of own) {
@@ -348,6 +382,8 @@ function inputsHash(): string {
         continue
       }
       add(`${library}@${version}`, path.join(packageDirectory(authorLibraryPackageName(library, version)), 'package.json'))
+      const patched = PLANS[`${library}@${version}`]?.patched
+      if (patched) add(`${library}@${version} patch`, path.join(root, patched.patch))
       if (release.types.source === 'package') add(`${library}@${version} types`, path.join(packageDirectory(authorLibraryTypesPackageName(library, version)), 'package.json'))
       else if (release.types.source === 'file') add(`${library}@${version} types`, path.join(root, release.types.file))
     }

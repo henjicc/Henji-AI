@@ -1,10 +1,13 @@
 import type * as Three from 'three'
 import type { AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { ManagedThreeRenderer } from './videoEditAuthorThreeWebGpu'
-import { loadAuthorThreeDependent } from './videoEditAuthorThreeWebGpu'
+import { loadAuthorThreeDependent, loadAuthorThreeModule } from './videoEditAuthorThreeWebGpu'
 import { guardVideoEditGpu } from './videoEditGpuErrorScope'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { createLogger } from '@/core/logging'
+import { videoEditToneMapping } from './videoEditToneMapping'
+import type { VideoEditSpaceToneMapping } from '@/core/videoEdit/document'
+import { videoEditDenoiserWeightsUrl } from './videoEditDenoiserWeights'
 
 const logger = createLogger('features.videoEdit.space')
 
@@ -13,13 +16,14 @@ const logger = createLogger('features.videoEdit.space')
  *
  * - 同一画面（宿主给的 key 与输出尺寸都不变）连续调用时接着累积，换帧、改动或改尺寸后从头开始；每次调用在时间预算内追踪，
  *   没到目标采样数时返回 refining，节目监视器据此再要一次同一帧。
- * - 追踪器的贴图图集是 8 位线性：很暗的卡片颜色只剩几级（上游限制）。
+ * - 宿主用补丁版追踪库（HOST_PATH_TRACER_VERSION）：贴图图集是半精度，暗部渐变与发光衰减不出台阶。
  * - 卡片画面是预乘、2.4 伽马编码的宿主纹理，追踪器的贴图图集只认普通贴图：先解码成线性、非预乘的渲染目标，
  *   作为只发光不反光的材质（透明度取覆盖率）；发光画面的覆盖率取覆盖与亮度较大者，乘回来仍是原来的发光。
  * - 环境光要逐像素有数据的等距柱状图：PMREM、立方体与贴图环境都先在 GPU 上展开再读回（按贴图版本缓存）。
  * - 景深按相机的光学参数换成光圈直径（与实时景深同一弥散公式）；路径追踪不做运动模糊。
- * - 追踪结果是线性预乘颜色，输出前与实时一样做中性色调映射与 2.4 伽马编码。追踪里分不出哪些像素是卡片，
- *   所以卡片的发光先做一遍中性色调映射的逆运算：正对着看时映射回原色（与实时、二维一致），照到别处的光略强。
+ * - 追踪结果是线性预乘颜色，输出前与实时一样做泛光、中性色调映射与 2.4 伽马编码。
+ * - 平面卡片是 matte：相机直接看不见（那里输出透明，半透明处按覆盖率穿透），但照亮周围、出现在反射与折射里；
+ *   卡片本身由宿主用实时渲染画好叠上来（与实时、二维逐像素一致），见 VideoEditThreeSpace 的混合合成。
  */
 
 interface TslNode {
@@ -30,12 +34,17 @@ interface TslNode {
 type TslFn = (...args: unknown[]) => TslNode
 interface Tsl {
   uniform: TslFn; texture: TslFn; textureLoad: TslFn; cubeTexture: TslFn; pmremTexture: TslFn; equirectUV: TslFn
-  vec3: TslFn; vec4: TslFn; ivec2: TslFn; uv: TslFn; select: TslFn; pow: TslFn; max: TslFn; min: TslFn; sqrt: TslFn; float: TslFn; clamp: TslFn; cos: TslFn; sin: TslFn; neutralToneMapping: TslFn
+  vec3: TslFn; vec4: TslFn; ivec2: TslFn; uv: TslFn; select: TslFn; pow: TslFn; max: TslFn; min: TslFn; sqrt: TslFn; float: TslFn; clamp: TslFn; cos: TslFn; sin: TslFn; neutralToneMapping: TslFn; agxToneMapping: TslFn; acesFilmicToneMapping: TslFn
+  rtt: TslFn
   screenCoordinate: TslNode
 }
 interface NodeMaterial extends Three.Material { colorNode: unknown }
 interface QuadMesh { material: NodeMaterial; render(renderer: unknown): void }
+/** three 的渲染到纹理节点：width 为空时跟随渲染器画布尺寸，设了就固定。 */
+interface SizedTexture { width: number | null; height: number | null; setSize(width: number, height: number): void }
+interface RenderPipeline { outputNode: TslNode; outputColorTransform: boolean; render(): void; dispose(): void }
 type Library = typeof Three & {
+  RenderPipeline: new (renderer: unknown) => RenderPipeline
   MeshBasicNodeMaterial: new (parameters?: Record<string, unknown>) => NodeMaterial
   QuadMesh: new (material: NodeMaterial) => QuadMesh
 }
@@ -57,6 +66,22 @@ interface PathTraceModule {
   TRANSMISSIVE_BACKGROUND_TRANSPARENT: number
   PhysicalCamera: new (fov: number, aspect: number, near: number, far: number) => Three.PerspectiveCamera & { focusDistance: number; bokehSize: number; apertureBlades: number }
 }
+interface DenoiseModule {
+  OIDNDenoiser: new (options: { initUNetFromURL: (url: string, backend: unknown, options: unknown) => Promise<unknown>; auxWeightsUrl: string }) => Denoiser
+}
+/** 追踪库自带的 OIDN 降噪封装：按反照率与法线引导、分块执行，结果是线性 HDR 纹理（逐块从原图换成降噪图）。 */
+interface Denoiser {
+  readonly texture: Three.Texture | null
+  readonly complete: boolean
+  readonly running: boolean
+  /** 上一次降噪失败的原因（补丁版封装提供）；失败后 running 复位为 false。 */
+  readonly error: unknown
+  init(renderer: unknown): void
+  setScene(scene: Three.Scene, camera: Three.Camera): void
+  update(color: Three.Texture): Three.Texture | null
+  reset(): void
+  dispose(): void
+}
 
 export interface PathTraceCard { mesh: Three.Mesh; texture: Three.Texture; width: number; height: number; opacity: number; light: boolean; emission: number }
 export interface PathTraceFrame {
@@ -75,12 +100,25 @@ export interface PathTraceFrame {
   samples: number
   /** 本次调用最多追踪多久（毫秒）；缺省追踪到目标采样数为止。 */
   budgetMs?: number
+  /** 曝光倍数（2^EV）与色调映射：与实时相同，只作用于追踪出的三维物体（卡片在追踪里不可见）。 */
+  exposure: number
+  toneMapping: VideoEditSpaceToneMapping
+  /** 泛光（与实时同一个 three 泛光节点，在色调映射前的线性画面上）；缺省不做。 */
+  glow?: { strength: number; radius: number; threshold: number }
   /** 组画面是否带发光：决定输出的编码约定（与实时渲染相同）。 */
   light: boolean
   /** 追踪结果的去处：线性预乘、半精度，与实时渲染的中间目标相同。 */
   target: Three.RenderTarget
   assertCurrent(): void
 }
+
+/**
+ * 看片时第一次降噪的采样数：这时已能看清大致光影，降噪后先给一张干净的画面；到目标采样数再降噪一次。
+ * 成片只在目标采样数时降噪一次。
+ */
+const FIRST_DENOISE_SAMPLES = 32
+
+const HOST_PATH_TRACER_VERSION = '0.0.27-henji.1'
 
 /** 展开环境图的分辨率：环境光按亮度做重要性采样，用不着更细。 */
 const ENVIRONMENT_WIDTH = 1024
@@ -94,75 +132,122 @@ export class VideoEditThreeSpacePathTrace {
   /** 当前累积里最少的那个像素已有的采样数。 */
   private samples = 0
   private notedNodeEffects = false
+  private readonly glowPipelines = new Map<string, { pipeline: RenderPipeline; strength: TslNode & { value: number }; source: SizedTexture; nodes: Array<{ dispose(): void }> }>()
+  private denoiser?: Denoiser
+  /** 降噪失败（权重读不到、显卡不支持、分块执行出错）：这个追踪器之后不再降噪。 */
+  private denoiseFailed = false
+  /** 正在降噪或已降噪的那一次对应的采样数。 */
+  private denoisedSamples = 0
+  private denoiseStartedAt?: number
+  /** 重新降噪期间显示的上一张降噪图。 */
+  private keptTarget?: Three.RenderTarget
+  private kept = false
   private readonly cardTargets = new Map<Three.Mesh, { target: Three.RenderTarget; material: Three.MeshPhysicalMaterial }>()
   /** 展开过的环境图，按来源贴图；只留最近几张（换环境的作品很少）。 */
   private readonly environments = new Map<Three.Texture, { version: number; key?: string; texture: Three.DataTexture }>()
   private readonly decode: QuadMesh
   private readonly decodeSource: TslNode & { value: Three.Texture }
   private readonly decodeLight: TslNode & { value: number }
-  private readonly encode: QuadMesh
+  /** 按色调映射各一个编码四边形（曝光是 uniform）。 */
+  private readonly encodes = new Map<PathTraceFrame['toneMapping'], QuadMesh>()
+  private readonly exposure: TslNode & { value: number }
   private readonly encodeSource: TslNode & { value: Three.Texture }
   private readonly encodeLight: TslNode & { value: number }
   private readonly camera: InstanceType<PathTraceModule['PhysicalCamera']>
 
-  private constructor(private readonly library: Library, private readonly tsl: Tsl, private readonly renderer: Renderer, private readonly tracer: Tracer, module: PathTraceModule) {
+  private constructor(private readonly library: Library, private readonly tsl: Tsl, private readonly renderer: Renderer, private readonly tracer: Tracer, module: PathTraceModule, private readonly libraries?: AuthorLibraryVersions) {
     tracer.renderDelay = 0; tracer.fadeDuration = 0; tracer.minSamples = 0; tracer.dynamicLowRes = false; tracer.synchronizeRenderSize = false
     // 三维组画面要透明地叠回二维合成：穿过半透明卡片、玻璃看到的“背景”是透明，而不是按环境光染色的不透明底。
     tracer.transmissiveBackground = module.TRANSMISSIVE_BACKGROUND_TRANSPARENT
     this.camera = new module.PhysicalCamera(45, 1, .1, 100)
     this.camera.apertureBlades = 0
-    // 卡片解码：预乘 2.4 伽马 → 线性非预乘；发光画面的覆盖率取覆盖与亮度较大者。
+    // 卡片解码：预乘 2.4 伽马 → 线性非预乘。
     this.decodeSource = tsl.texture(new library.Texture()) as TslNode & { value: Three.Texture }
     this.decodeLight = tsl.uniform(0) as TslNode & { value: number }
     const source = this.decodeSource, light = this.decodeLight.greaterThan(.5)
-    // 普通画面先解预乘再解码；发光画面按预乘逐通道解码，覆盖率取覆盖与亮度较大者，再按它解预乘。
+    // 覆盖率（追踪里挡住身后物体的程度）一律取画面自身的透明度，与实时卡片那一层一致；发光画面按预乘逐通道解码，
+    // 光晕处透明度近 0、几乎不会被打中：发光卡片照亮周围、出现在反射里的只有字芯，光晕那部分光略去（除数下限免得零星打中时亮成噪点）。
     const premultiplied = tsl.pow(tsl.max(source.rgb, tsl.vec3(0)), tsl.vec3(2.4))
-    const glow = tsl.max(source.a, tsl.max(premultiplied.r, tsl.max(premultiplied.g, premultiplied.b)))
-    const coverage = tsl.select(light, glow, source.a)
-    const straight = tsl.select(light, premultiplied.div(tsl.max(glow, 1e-5)), tsl.pow(tsl.max(source.rgb.div(tsl.max(source.a, 1e-5)), tsl.vec3(0)), tsl.vec3(2.4)))
+    const coverage = source.a
+    const straight = tsl.select(light, premultiplied.div(tsl.max(source.a, .05)), tsl.pow(tsl.max(source.rgb.div(tsl.max(source.a, 1e-5)), tsl.vec3(0)), tsl.vec3(2.4)))
     const decodeMaterial = new library.MeshBasicNodeMaterial({ blending: library.NoBlending, toneMapped: false, depthTest: false, depthWrite: false })
-    decodeMaterial.colorNode = tsl.vec4(tsl.select(coverage.greaterThan(1e-5), this.inverseNeutral(straight), tsl.vec3(0)), tsl.clamp(coverage, 0, 1))
+    decodeMaterial.colorNode = tsl.vec4(tsl.select(coverage.greaterThan(1e-5), straight, tsl.vec3(0)), tsl.clamp(coverage, 0, 1))
     this.decode = new library.QuadMesh(decodeMaterial)
     // 追踪结果按行自上而下存放、是不可过滤的单精度纹理：按像素读取，与实时渲染一样做色调映射与编码（保持预乘）。
     this.encodeSource = tsl.texture(new library.Texture()) as TslNode & { value: Three.Texture }
-    const texel = tsl.textureLoad(this.encodeSource, tsl.ivec2(tsl.screenCoordinate.xy))
-    const alpha = tsl.clamp(texel.a, 0, 1)
-    const covered = texel.a.greaterThan(1e-5)
-    // 编码约定与实时渲染相同：组画面带发光时按预乘逐通道，否则解预乘编码再乘回透明度。
-    const mapped = tsl.neutralToneMapping(tsl.select(covered, texel.rgb.div(texel.a), texel.rgb), 1)
-    const encoded = tsl.pow(tsl.max(mapped, tsl.vec3(0)), tsl.vec3(1 / 2.4))
-    const lightEncoded = tsl.pow(tsl.max(tsl.neutralToneMapping(texel.rgb, 1), tsl.vec3(0)), tsl.vec3(1 / 2.4))
     this.encodeLight = tsl.uniform(0) as TslNode & { value: number }
-    const encodeMaterial = new library.MeshBasicNodeMaterial({ blending: library.NoBlending, toneMapped: false, depthTest: false, depthWrite: false })
-    encodeMaterial.colorNode = tsl.vec4(tsl.select(this.encodeLight.greaterThan(.5), lightEncoded, tsl.select(covered, encoded.mul(alpha), encoded)), alpha)
-    this.encode = new library.QuadMesh(encodeMaterial)
+    this.exposure = tsl.uniform(1) as TslNode & { value: number }
   }
 
-  /**
-   * three 的中性色调映射（Khronos PBR Neutral）的逆：先还原高光压缩（忽略压缩区很小的去饱和），再加回暗部偏移。
-   * 偏移按输入最小分量 x 取：x < 0.08 时 x − 6.25x²，否则 0.04；输出最小分量 m = x − 偏移，于是 m < 0.04 时 x = √m / 2.5。
-   */
-  private inverseNeutral(color: TslNode): TslNode {
+  /** 追踪结果按行自上而下存放、是不可过滤的单精度纹理：按像素读取。 */
+  private encodeTexel(): TslNode {
     const { tsl } = this
-    const start = .76, d = 1 - start
-    const peak = tsl.max(color.r, tsl.max(color.g, color.b))
-    // 压缩区接近 1 时逆运算发散：发光画面最多还原到约 3.4 倍。
-    const compressed = tsl.min(peak, .98)
-    const unpeak = tsl.select(peak.lessThan(start), peak, tsl.float(d * d).div(tsl.float(1).sub(compressed)).sub(d).add(start))
-    const expanded = color.mul(unpeak.div(tsl.max(peak, 1e-6)))
-    const low = tsl.max(tsl.min(expanded.r, tsl.min(expanded.g, expanded.b)), 0)
-    const offset = tsl.select(low.lessThan(.04), tsl.sqrt(low).div(2.5).sub(low), .04)
-    return expanded.add(offset)
+    // 全透明处颜色清零：降噪会让透明背景与 matte 处带上一点颜色，编码时它会被当作加性的光叠上去。
+    const texel = tsl.textureLoad(this.encodeSource, tsl.ivec2(tsl.screenCoordinate.xy))
+    return tsl.select(texel.a.greaterThan(0), texel, tsl.vec4(0, 0, 0, 0))
+  }
+
+  /** 与实时渲染相同的色调映射与编码（保持预乘）：组画面带发光时按预乘逐通道，否则解预乘编码再乘回透明度。 */
+  private encoded(color: TslNode, toneMapping: PathTraceFrame['toneMapping']): TslNode {
+    const { tsl } = this
+    const tone = videoEditToneMapping(tsl, toneMapping)
+    const alpha = tsl.clamp(color.a, 0, 1)
+    const covered = color.a.greaterThan(1e-5)
+    const mapped = tone(tsl.select(covered, color.rgb.div(color.a), color.rgb), this.exposure)
+    const encoded = tsl.pow(tsl.max(mapped, tsl.vec3(0)), tsl.vec3(1 / 2.4))
+    const lightEncoded = tsl.pow(tsl.max(tone(color.rgb, this.exposure), tsl.vec3(0)), tsl.vec3(1 / 2.4))
+    return tsl.vec4(tsl.select(this.encodeLight.greaterThan(.5), lightEncoded, tsl.select(covered, encoded.mul(alpha), encoded)), alpha)
+  }
+
+  private encodeQuad(toneMapping: PathTraceFrame['toneMapping']): QuadMesh {
+    let quad = this.encodes.get(toneMapping)
+    if (!quad) {
+      const { library } = this
+      const material = new library.MeshBasicNodeMaterial({ blending: library.NoBlending, toneMapped: false, depthTest: false, depthWrite: false })
+      material.colorNode = this.encoded(this.encodeTexel(), toneMapping)
+      quad = new library.QuadMesh(material)
+      this.encodes.set(toneMapping, quad)
+    }
+    return quad
+  }
+
+  /** 带泛光的编码：结果先拷成可过滤的半精度图（泛光按线性过滤采样），加上泛光再编码。半径与阈值不同的各建一套，强度是 uniform。 */
+  private async glowPipeline(glow: NonNullable<PathTraceFrame['glow']>, toneMapping: PathTraceFrame['toneMapping'], width: number, height: number): Promise<RenderPipeline> {
+    const key = `${glow.radius}:${glow.threshold}:${toneMapping}`
+    let entry = this.glowPipelines.get(key)
+    if (!entry) {
+      const { tsl, library } = this
+      const { bloom } = await loadAuthorThreeModule<{ bloom: TslFn }>('three/addons/tsl/display/BloomNode.js', this.libraries)
+      const strength = tsl.uniform(0) as TslNode & { value: number }
+      // 显式渲染成纹理：按像素读取的节点本身算作纹理节点，convertToTexture 会原样返回它，泛光就会去采样不可过滤的单精度图。
+      const source = tsl.rtt(this.encodeTexel(), width, height)
+      const halo = bloom(source, strength, glow.radius, glow.threshold)
+      const pipeline = new library.RenderPipeline(this.renderer)
+      // 辉光落在透明处时是透明度为 0 的发光，与实时相同。
+      pipeline.outputNode = this.encoded(tsl.vec4(source.rgb.add(halo.rgb), source.a), toneMapping)
+      pipeline.outputColorTransform = false
+      entry = { pipeline, strength, source: source as unknown as SizedTexture, nodes: [source, halo] as unknown as Array<{ dispose(): void }> }
+      this.glowPipelines.set(key, entry)
+    }
+    entry.strength.value = glow.strength
+    // 中间图固定为本帧输出尺寸：跟随渲染器画布尺寸时，与输出尺寸不同就会按屏幕坐标读错位置。
+    if (entry.source.width !== width || entry.source.height !== height) { entry.source.width = width; entry.source.height = height; entry.source.setSize(width, height) }
+    return entry.pipeline
   }
 
   static async create(library: Library, tsl: Tsl, renderer: Renderer, libraries?: AuthorLibraryVersions): Promise<VideoEditThreeSpacePathTrace> {
-    const module = await loadAuthorThreeDependent<PathTraceModule>('three-gpu-pathtracer/webgpu', libraries)
-    return new VideoEditThreeSpacePathTrace(library, tsl, renderer, new module.WebGPUPathTracer(renderer), module)
+    // 宿主用补丁版（贴图图集半精度、matte 按覆盖率）；作者代码里固定的 0.0.27 不受影响。
+    const host = { ...libraries, 'three-gpu-pathtracer': HOST_PATH_TRACER_VERSION }
+    const module = await loadAuthorThreeDependent<PathTraceModule>('three-gpu-pathtracer/webgpu', host)
+    return new VideoEditThreeSpacePathTrace(library, tsl, renderer, new module.WebGPUPathTracer(renderer), module, host)
   }
 
   /** 追踪一批采样写进 frame.target；返回是否还没到目标采样数。 */
   /** 当前画面每个像素都至少追踪过一次（采样数取全幅最少处）；之前输出里没追到的块是黑的。 */
   get covered(): boolean { return this.samples >= 1 }
+
+  /** 当前画面追踪到了目标的几成（0–1，最后一次降噪做完才算 1）。 */
+  progress(target: number): number { return Math.min(1, this.samples / Math.max(1, target)) * (this.denoiser?.running || (videoEditDenoiserWeightsUrl() && !this.denoiseFailed && this.denoisedSamples < target) ? .99 : 1) }
 
   /** 这一画面（同一 key 与尺寸）是否已在累积：看片换到新画面时，先交实时画面，下一次再开始追踪。 */
   accumulating(key: string | undefined, width: number, height: number): boolean { return key !== undefined && key === this.key && width === this.width && height === this.height }
@@ -184,12 +269,14 @@ export class VideoEditThreeSpacePathTrace {
         this.noteNodeEffects(frame.scene)
         this.key = frame.key; this.width = width; this.height = height
         this.samples = 0
+        this.denoiser?.reset(); this.denoisedSamples = 0; this.kept = false
       }
       tracer.maxSamples = frame.samples
       // 追踪器每次采样后把结果画到当前渲染目标：指向本帧目标，随后再被编码结果覆盖。
       renderer.setRenderTarget(frame.target)
       const started = performance.now(), batch = frame.budgetMs === undefined ? SAMPLE_BATCH : 1
-      while (this.samples < frame.samples) {
+      // 降噪分块读取当前累积结果，读完之前不再累积，否则各块取到的采样数不同。
+      while (this.samples < frame.samples && !this.denoiser?.running) {
         await guardVideoEditGpu(device, '路径追踪', () => { for (let i = 0; i < batch; i++) tracer.renderSample() })
         // 读回采样数要等显卡做完这一批：排队的显卡工作每次只有一小批（不会一下排进几秒的计算触发显卡超时），也能及时取消。
         // 波前追踪每次只推进一次弹射，采样数只能按追踪器自己的统计。
@@ -197,12 +284,21 @@ export class VideoEditThreeSpacePathTrace {
         frame.assertCurrent()
         if (frame.budgetMs !== undefined && performance.now() - started >= frame.budgetMs) break
       }
-      const result = tracer.target
-      if (!result) throw new Error('路径追踪没有输出画面。')
-      this.encodeSource.value = result
+      const raw = tracer.target
+      if (!raw) throw new Error('路径追踪没有输出画面。')
+      const denoised = await this.denoise(frame, raw, started)
+      this.encodeSource.value = denoised.texture ?? raw
       this.encodeLight.value = frame.light ? 1 : 0
-      await guardVideoEditGpu(device, '路径追踪', () => this.encode.render(renderer))
-      return this.samples < frame.samples
+      this.exposure.value = frame.exposure
+      if (frame.glow) {
+        const pipeline = await this.glowPipeline(frame.glow, frame.toneMapping, width, height)
+        await guardVideoEditGpu(device, '路径追踪', () => {
+          // 泛光的中间各步画到当前渲染目标，最后一步画到输出渲染目标：两个都指向本帧目标。
+          renderer.setRenderTarget(frame.target); renderer.setOutputRenderTarget(frame.target)
+          try { pipeline.render() } finally { renderer.setOutputRenderTarget(null) }
+        })
+      } else { const encode = this.encodeQuad(frame.toneMapping); await guardVideoEditGpu(device, '路径追踪', () => encode.render(renderer)) }
+      return this.samples < frame.samples || denoised.pending
     } catch (error) {
       // 半途失败的累积不再可信：下次从头开始。
       this.key = undefined
@@ -211,6 +307,68 @@ export class VideoEditThreeSpacePathTrace {
       renderer.setRenderTarget(previous)
       for (const restore of restores.reverse()) restore()
     }
+  }
+
+  /**
+   * 降噪（OIDN，与 Blender 相同的网络）：到了降噪点（看片先在 FIRST_DENOISE_SAMPLES、再在目标采样数；成片只在目标采样数）
+   * 就对当前累积结果降噪一次，之后显示降噪图，直到下一个降噪点。成片等这一次降噪做完再交画面；看片在本次时间预算内等。
+   * 没有权重（还在下载或下载失败）或降噪失败时照常交原图，这个追踪器之后不再降噪。
+   */
+  private async denoise(frame: PathTraceFrame, raw: Three.Texture, started: number): Promise<{ texture: Three.Texture | null; pending: boolean }> {
+    const url = videoEditDenoiserWeightsUrl()
+    // 看片时画面其他部分还是粗略画面（没有身份）就不降噪：下次调用会从头累积，这次的降噪结果用不上。
+    if (!url || this.denoiseFailed || frame.key === undefined && frame.budgetMs !== undefined) return { texture: null, pending: false }
+    try {
+      if (!this.denoiser) {
+        const [{ initUNetFromURL }, { OIDNDenoiser }] = await Promise.all([import('oidn-web'), loadAuthorThreeDependent<DenoiseModule>('three-gpu-pathtracer/denoise', this.libraries)])
+        this.denoiser = new OIDNDenoiser({ auxWeightsUrl: url, initUNetFromURL: (source, backend, options) => initUNetFromURL(source, backend as never, options as never) })
+        this.denoiser.init(this.renderer)
+      }
+      const denoiser = this.denoiser, target = frame.samples, first = Math.min(FIRST_DENOISE_SAMPLES, target)
+      const point = this.samples >= target ? target : frame.budgetMs !== undefined && this.samples >= first ? first : 0
+      if (point > this.denoisedSamples && !denoiser.running) {
+        // 重新降噪会释放上一张降噪图：先留一份，新的一张整张做完之前照旧显示它，不闪回噪点图。
+        await this.keepDenoised(denoiser)
+        denoiser.reset()
+        // 反照率与法线引导图按这一帧的场景（卡片已换成追踪用的材质）与追踪相机现画。
+        denoiser.setScene(frame.scene, this.camera)
+        denoiser.update(raw)
+        this.denoisedSamples = point
+        this.denoiseStartedAt = performance.now()
+      }
+      // 成片等到做完；看片最多等到本次预算用完（从追踪开始算），免得节目监视器在降噪期间空转着反复合成。
+      const deadline = frame.budgetMs === undefined ? Infinity : started + frame.budgetMs
+      while (denoiser.running && performance.now() < deadline) { await new Promise(resolve => setTimeout(resolve, 8)); frame.assertCurrent() }
+      if (denoiser.error) throw denoiser.error
+      if (denoiser.complete && this.denoiseStartedAt !== undefined) {
+        logger.debug('路径追踪降噪完成', { event: 'video_edit.space.denoise.completed', context: { samples: this.denoisedSamples, width: frame.target.width, height: frame.target.height, durationMs: Math.round(performance.now() - this.denoiseStartedAt) } })
+        this.denoiseStartedAt = undefined
+        this.kept = false
+      }
+      const texture = denoiser.complete ? denoiser.texture : this.kept ? this.keptTarget!.texture : null
+      return { texture, pending: denoiser.running || this.denoisedSamples < target }
+    } catch (error) {
+      // 这一帧已经过时（取消）照常往外抛；其余失败退回原图。
+      frame.assertCurrent()
+      this.denoiseFailed = true
+      this.denoiser?.dispose(); this.denoiser = undefined; this.kept = false
+      logger.warn('渲染降噪失败，路径追踪画面不降噪', { event: 'video_edit.space.denoise.failed', error })
+      return { texture: null, pending: false }
+    }
+  }
+
+  /** 留一份当前已完成的降噪图（同尺寸的半精度目标里），供重新降噪期间显示。补丁版封装的结果纹理可作拷贝源。 */
+  private async keepDenoised(denoiser: Denoiser): Promise<void> {
+    const texture = denoiser.complete ? denoiser.texture : null
+    if (!texture) { this.kept = false; return }
+    const { width, height } = texture.image as { width: number; height: number }
+    if (!this.keptTarget || this.keptTarget.width !== width || this.keptTarget.height !== height) {
+      this.keptTarget?.dispose()
+      this.keptTarget = new this.library.RenderTarget(width, height, { type: this.library.HalfFloatType, depthBuffer: false })
+    }
+    const kept = this.keptTarget
+    await guardVideoEditGpu((this.renderer as unknown as { backend: { device: GpuDevice } }).backend.device, '保留降噪画面', () => this.renderer.copyTextureToTexture(texture, kept.texture))
+    this.kept = true
   }
 
   /**
@@ -254,9 +412,9 @@ export class VideoEditThreeSpacePathTrace {
         entry?.target.dispose(); entry?.material.dispose()
         const target = new library.RenderTarget(card.width, card.height, { type: library.HalfFloatType, depthBuffer: false })
         target.texture.colorSpace = library.LinearSRGBColorSpace
-        // 只发光、不反光：底色黑、无高光；覆盖率决定光线是否穿过卡片。
-        const material = new library.MeshPhysicalMaterial({ color: 0x000000, roughness: 1, metalness: 0, specularIntensity: 0,
-          emissive: 0xffffff, emissiveMap: target.texture, map: target.texture, transparent: true, side: library.DoubleSide })
+        // 只发光、不反光：底色黑、无高光；覆盖率决定光线是否穿过卡片。matte：相机看不见，卡片由实时那一层叠上来。
+        const material = Object.assign(new library.MeshPhysicalMaterial({ color: 0x000000, roughness: 1, metalness: 0, specularIntensity: 0,
+          emissive: 0xffffff, emissiveMap: target.texture, map: target.texture, transparent: true, side: library.DoubleSide }), { matte: true })
         entry = { target, material }
         this.cardTargets.set(card.mesh, entry)
       }
@@ -265,7 +423,7 @@ export class VideoEditThreeSpacePathTrace {
       renderer.setRenderTarget(entry.target)
       this.decode.render(renderer)
       entry.material.opacity = card.opacity
-      // 卡片在追踪里本就是发光面（亮度 1 时颜色与画面一致）；发光强度在此之上加亮，照亮周围、出现在反射与折射里。
+      // 卡片照亮周围的光：亮度 1 时与画面颜色一致，发光强度在此之上加亮。
       entry.material.emissiveIntensity = 1 + card.emission
       const original = card.mesh.material
       card.mesh.material = entry.material
@@ -348,10 +506,13 @@ export class VideoEditThreeSpacePathTrace {
   }
 
   dispose(): void {
+    for (const entry of this.glowPipelines.values()) { for (const node of entry.nodes) node.dispose(); entry.pipeline.dispose() }
+    this.denoiser?.dispose()
+    this.keptTarget?.dispose()
     this.tracer.dispose()
     for (const entry of this.cardTargets.values()) { entry.target.dispose(); entry.material.dispose() }
     for (const entry of this.environments.values()) entry.texture.dispose()
     this.decode.material.dispose()
-    this.encode.material.dispose()
+    for (const quad of this.encodes.values()) quad.material.dispose()
   }
 }

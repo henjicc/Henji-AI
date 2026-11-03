@@ -71,7 +71,7 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
       types: { mount: '@types/three', license: 'MIT', source: 'package' },
     },
   },
-  // 网格加速结构与路径追踪：只收 WebGPU 路径追踪器需要的部分，降噪与超分依赖网络加载的模型，暂不随包。
+  // 网格加速结构与路径追踪：只收 WebGPU 路径追踪器需要的部分与 OIDN 降噪封装（权重由宿主下载）；超分要从网络加载 wasm，不随包。
   'three-mesh-bvh': {
     '0.9.17': {
       license: 'MIT', minApiVersion: 15,
@@ -83,7 +83,14 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
   'three-gpu-pathtracer': {
     '0.0.27': {
       license: 'MIT', minApiVersion: 15,
-      modules: { 'three-gpu-pathtracer/webgpu': 'webgpu.js' },
+      modules: { 'three-gpu-pathtracer/webgpu': 'webgpu.js', 'three-gpu-pathtracer/denoise': 'denoise.js' },
+      dependencies: { three: '0.186.1', 'three-mesh-bvh': '0.9.17' },
+      types: { mount: 'three-gpu-pathtracer', license: 'MIT', source: 'bundled' },
+    },
+    // 宿主路径追踪用的补丁版：材质贴图图集改半精度，matte 判断移到半透明随机穿透之后（见 scripts/build-author-libraries.ts）。
+    '0.0.27-henji.1': {
+      license: 'MIT', minApiVersion: 15,
+      modules: { 'three-gpu-pathtracer/webgpu': 'webgpu.js', 'three-gpu-pathtracer/denoise': 'denoise.js' },
       dependencies: { three: '0.186.1', 'three-mesh-bvh': '0.9.17' },
       types: { mount: 'three-gpu-pathtracer', license: 'MIT', source: 'bundled' },
     },

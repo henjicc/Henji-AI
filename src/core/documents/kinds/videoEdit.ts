@@ -148,6 +148,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 65 → 66：序列 spaceRender 新增可选 exposure（三维曝光 EV）与 toneMapping（三维色调映射），省略即 0 与 neutral，画面不变；旧程序忽略它们只是不做这两项，最低可读版本保持 65。
+    65: content => structuredClone(content),
     // 64 → 65：接受作者接口 16（三维作者的 info.elements）；旧源码与固定接口原样保留。
     64: content => structuredClone(content),
     // 63 → 64：代码图片参数新增片段引用 {kind:'clip', clipId}；旧内容没有这一分支，原样保留。

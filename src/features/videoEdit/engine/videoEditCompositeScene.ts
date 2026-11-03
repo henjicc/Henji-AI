@@ -261,7 +261,8 @@ export async function renderVideoEditThreeSpaceScene(options: {
   /** 显示方式为“渲染”时的路径追踪安排（各空间组按组号再细分）。 */
   trace?: Omit<import('./videoEditThreeSpace').ThreeSpaceTrace, 'group'>
   /** 路径追踪这一帧还没收敛：画面先交出去，宿主稍后再要一次同一帧。 */
-  onRefining?: () => void
+  /** 画面还在收敛（路径追踪没到目标）；`progress` 是这一组的追踪进度（0–1）。 */
+  onRefining?: (progress: number) => void
   /** 导出的那条序列的三维渲染设置（嵌套序列跟随它）：泛光、遮蔽、反射强度从这里取。 */
   spaceRender?: import('@/core/videoEdit/document').VideoEditSpaceRender }): Promise<SpatialPictureLease> {
   const { request, plan, sources, drawn, active, nodes, pictures, effects, compositor } = options
@@ -385,6 +386,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
       focusDistance: center.camera.focusDistance, cocScale, cocMax: Math.max(0, ...center.cards.map(card => card.cocRangePx[1]), ...sceneCoc),
       shutterScale: plan.samples.length > 1 ? plan.samples.length / (plan.samples.length - 1) : 1,
       bloom: options.spaceRender?.bloom ?? 0, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0,
+      exposure: options.spaceRender?.exposure ?? 0, toneMapping: options.spaceRender?.toneMapping ?? 'neutral',
       emission: emitting.size > 0 }
     /**
      * 组画面是否“带发光”（宿主据此选解码约定）：有作者场景、发光卡片，或实时显示开了泛光（辉光会溢到透明处）。
@@ -408,9 +410,9 @@ export async function renderVideoEditThreeSpaceScene(options: {
         .map(scene => ({ ...scene, opacity: opacityOf(scene.clipId), ...previous.has(scene.clipId) ? { previous: previous.get(scene.clipId)! } : {} }))
       const light = groupCarriesLight ?? (cards.some(card => card.light || emitsLight(card.clipId)) || groupScenes.length > 0 || (postEffects.display === 'realtime' && postEffects.bloom > 0))
       return capture(outputSpec(`three:group:${group.id}${variant}`), async target => {
-        const { refining } = await space.render({ frame: center, light, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects,
+        const { refining, progress } = await space.render({ frame: center, light, ...(open ? { shutterOpen: open } : {}), cards, scenes: groupScenes, effects: postEffects,
           target: { texture: target.texture, width: target.width, height: target.height }, ...(options.trace ? { trace: { ...options.trace, group: `${group.id}${variant}` } } : {}), assertCurrent: () => { current() } })
-        if (refining) options.onRefining?.()
+        if (refining) options.onRefining?.(progress ?? 0)
         return { completion: spatial.completion() }
       }, light)
     }

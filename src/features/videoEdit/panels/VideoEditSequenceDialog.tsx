@@ -166,6 +166,12 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
         <UiFormRow label="屏幕反射" inline info="光滑、金属表面反射画面里看得到的东西。只作用于三维物体。0 为不开。">
           <NumberInput ariaLabel="屏幕反射强度" disabled={busy} value={space.reflections ?? 0} min={0} max={1} step={.05} precision={2} widthClassName="w-full" onChange={reflections => setSpace({ reflections })} />
         </UiFormRow>
+        <UiFormRow label="曝光" inline info="三维物体整体提亮或压暗，每加 1 亮一倍。卡片画面不变。">
+          <NumberInput ariaLabel="三维曝光" disabled={busy} value={space.exposure ?? 0} min={-5} max={5} step={.1} precision={1} widthClassName="w-full" onChange={exposure => setSpace({ exposure })} />
+        </UiFormRow>
+        <UiFormRow label="色调" inline info="中性：颜色最接近原样。胶片：高光柔和地过渡到白，玻璃和发光更自然。电影：对比更强。只作用于三维物体。">
+          <UiSegmented ariaLabel="三维色调映射" disabled={busy} value={space.toneMapping ?? 'neutral'} options={[{ value: 'neutral', label: '中性' }, { value: 'agx', label: '胶片' }, { value: 'aces', label: '电影' }]} onChange={toneMapping => setSpace({ toneMapping })} />
+        </UiFormRow>
       </UiGroup>}
       <div>
         <UiButton aria-expanded={advanced} disabled={busy} onClick={() => setAdvanced(value => !value)}>{advanced ? <ChevronDown /> : <ChevronRight />}更多设置</UiButton>

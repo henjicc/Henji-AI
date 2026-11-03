@@ -350,6 +350,27 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
     // MDX-Net（UVR model_data：compensate 1.035、dim_f 3072、dim_t 512、n_fft 6144），模型预测的是混响分量。
     files: [uvrMdxFile('Reverb_HQ_By_FoxJoy.onnx', 66_780_123, '233bb5c6aaa365e568659a0a81211746fa881f8f47f82d9e864fce1f7692db80')],
   },
+  {
+    // 路径追踪降噪（Intel Open Image Denoise 的权重，与 Blender 用的同一套网络）：由 oidn-web 在渲染 Worker 里跑在共用显卡设备上。
+    // 用带反照率与法线引导的 HDR 版（rt_hdr_alb_nrm），固定 oidn-weights 仓库版本（2026-11-03 核对大小与 SHA-256）。
+    id: 'path_trace_denoise_oidn',
+    title: { zh: '渲染降噪 OIDN', en: 'Render Denoiser (OIDN)' },
+    purpose: { zh: '去掉三维“渲染”方式与路径追踪成片的噪点', en: 'Removes noise from path traced 3D renders' },
+    folderName: { zh: '渲染降噪 OIDN', en: 'Render Denoiser OIDN' },
+    homepage: 'https://github.com/RenderKit/oidn-weights',
+    license: { spdx: 'Apache-2.0', url: 'https://github.com/RenderKit/oidn-weights/blob/master/LICENSE.txt' },
+    availability: 'available',
+    files: [{
+      name: 'rt_hdr_alb_nrm.tza',
+      role: 'model',
+      sizeBytes: 1_841_160,
+      sha256: 'e586ef2ff48d7fbb7611986405220ed8fc5c13ca79bfc40be4dc742fbf959e1a',
+      sources: [
+        { region: 'domestic', label: 'own-modelscope', url: ownUrl('path_trace_denoise_oidn/rt_hdr_alb_nrm.tza') },
+        { region: 'global', label: 'github-oidn-weights', url: 'https://github.com/RenderKit/oidn-weights/raw/28883d1769d5930e13cf7f1676dd852bd81ed9e7/rt_hdr_alb_nrm.tza' },
+      ],
+    }],
+  },
 ]
 
 export function findLocalModelSpec(id: LocalModelId): LocalModelSpec {

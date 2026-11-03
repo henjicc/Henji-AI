@@ -141,7 +141,7 @@ export type VideoEditRenderPrecision = NonNullable<WebSourceCaptureRequest['prec
 export type VideoEditPresentedSource = 'prerendered' | 'live' | 'jump'
 export interface VideoEditRenderResult { provenance?: WebSourceProvenance; presentedSource?: VideoEditPresentedSource; renderStages?: Record<string, number>; canvas: OffscreenCanvas; nestedPicture?: VideoEditCodePicture; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; renderCached: boolean; decodeMs: number; gpuMs: number; effectErrors?: string[];
   /** 这一帧用到的片子数据里会让画面缺内容的问题（含嵌套序列里的）：要呈现给用户，但不是效果失败，不挡试渲染与导出。 */
-  sceneIssues?: string[]; approximate?: boolean; /** Not presented because a later request's picture reached the screen first. */ superseded?: boolean; completion: Promise<void> }
+  sceneIssues?: string[]; approximate?: boolean; /** 渲染显示方式下路径追踪的进度（0–1），画面还在收敛时才有。 */ spaceProgress?: number; /** Not presented because a later request's picture reached the screen first. */ superseded?: boolean; completion: Promise<void> }
 export interface VideoEditRenderCacheWindow { provenance?: WebSourceProvenance; key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
 /**
  * How the walk of an input session opened ahead ended: it reached the clip's first picture; it failed (the decoder
@@ -1990,6 +1990,8 @@ export class VideoEditRenderer {
     const precision = nestedContext.precision
     let approximatePictures = 0
     const markApproximate = (): void => { approximatePictures++ }
+    // 渲染显示方式下各三维组里最慢的那组追踪进度（0–1）；没有在追踪的组时缺省。
+    let spaceProgress: number | undefined
     if (!nestedRender && (sequential || _scrubbing !== false) && this.previewWidth && !capturePresentation && quality !== 'final') nestedContext.webDeadline = performance.now() + 1000 / document.fps
     const readSignal = nestedContext.signal
     const path = nestedRender?.path ?? [document.id]
@@ -2438,7 +2440,7 @@ export class VideoEditRenderer {
           // 没收敛的画面算作粗略画面，节目监视器停住时会再要精确画面；成片一次追踪到目标采样数。
           const samples = this.finalSpaceRender?.pathTraceSamples ?? VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES
           const trace = quality === 'final' ? { samples } : { samples, budgetMs: 150, ...(approximatePictures ? {} : { key: `${document.id}:${document.revision}:${frame}:${precision}` }) }
-          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplayFor(quality), trace, onRefining: markApproximate, spaceRender: this.finalSpaceRender, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
+          const lease = await renderVideoEditThreeSpaceScene({ ...spatial, display: this.spaceDisplayFor(quality), trace, onRefining: progress => { markApproximate(); spaceProgress = Math.min(spaceProgress ?? 1, progress) }, spaceRender: this.finalSpaceRender, sources: this.codeSources!, drawn, active, nodes: composite ?? buildVideoEditCompositePlan(active, transitions), pictures: pictureMap, effects, compositor: gpu, readFilterFrames, onEffectError })
           let completion = lease.completion
           try {
             const input = gpu.spatialPicture(lease)
@@ -2490,7 +2492,7 @@ export class VideoEditRenderer {
     const frameCompletion = !nestedRender && nestedContext.completions.length ? Promise.all([completion, ...nestedContext.completions]).then(() => undefined) : completion
     // A top-level frame is approximate when any picture of its tree is, code video inputs included.
     if (nestedPicture) nestedPicture.provenance = provenance
-    return { provenance, canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, presentedSource: cachedWindow ? 'prerendered' : 'live', decodeMs, gpuMs, effectErrors, ...(sceneIssues.length ? { sceneIssues } : {}), ...(approximatePictures ? { approximate: true } : {}), completion: frameCompletion }
+    return { provenance, canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, renderCached: !!cachedWindow, presentedSource: cachedWindow ? 'prerendered' : 'live', decodeMs, gpuMs, effectErrors, ...(sceneIssues.length ? { sceneIssues } : {}), ...(approximatePictures ? { approximate: true } : {}), ...(spaceProgress !== undefined ? { spaceProgress } : {}), completion: frameCompletion }
   }
   /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
   private readonly audioChains = new Map<string, AudioEffectChain>()

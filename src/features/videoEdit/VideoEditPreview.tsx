@@ -98,6 +98,23 @@ const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>>
 /** 回放分辨率（PR“回放分辨率”）：控制条上的下拉与“更多”里的同一组选项。 */
 const PLAYBACK_RESOLUTION_OPTIONS = VIDEO_EDIT_PLAYBACK_RESOLUTIONS.map(value => ({ value, label: VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS[value] }))
 const PLAYBACK_RESOLUTION_TIP = '回放分辨率：播放卡顿时调低，画面变粗但更流畅；暂停时默认回到完整。导出、选帧和封面始终是完整分辨率。'
+interface SpaceProgressStore { get(): number | null; set(value: number | null): void; subscribe(listener: () => void): () => void }
+function createSpaceProgressStore(): SpaceProgressStore {
+  let value: number | null = null
+  const listeners = new Set<() => void>()
+  return {
+    get: () => value,
+    set(next) { if (next === value) return; value = next; for (const listener of listeners) listener() },
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener) } },
+  }
+}
+/** 渲染显示方式下路径追踪还没收敛时，画面左上角的进度。 */
+function SpaceProgressBadge({ store }: { store: SpaceProgressStore }): JSX.Element | null {
+  const value = useSyncExternalStore(store.subscribe, store.get)
+  if (value === null) return null
+  return <Tooltip content="渲染：停住后用路径追踪逐渐算出真实光影，算完后提示消失；拖动或播放时显示实时画面"><div className="absolute left-2 top-2 rounded-lg bg-media-scrim px-2 py-1 text-xs text-on-media" data-video-edit-space-progress>渲染中 {value}%</div></Tooltip>
+}
+
 const SPACE_DISPLAY_TIPS: Record<import('@/core/videoEdit/spaceDisplay').VideoEditSpaceDisplay, string> = {
   auto: '自动：播放跟不上时逐级简化为实体、线框，暂停时回到实时',
   realtime: '实时：灯光、阴影、景深、运动模糊全开',
@@ -222,6 +239,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   const recovery = useRef(new VideoEditRenderRecovery())
   const recoveryPending = useRef(false)
   const [effectFailure, setEffectFailure] = useState<string | null>(null)
+  // 渲染显示方式停住时路径追踪的进度（整百分比）；画面收敛后或不在追踪时为空。只有提示本身订阅，不让整个节目面板跟着重渲染。
+  const spaceProgress = useMemo(createSpaceProgressStore, [])
   const [renderFailure, setRenderFailure] = useState<string | null>(null)
   const [trustFailure, setTrustFailure] = useState<ContentTrustFailure>()
   const [trustPending, setTrustPending] = useState(false)
@@ -475,6 +494,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (error) { backgroundFailure = { composition, frame: instance.frame, error }; wake(0) }
       else if (result.presented) { pausedPicture = true; setEffectFailure(result.effectErrors?.join('\n') ?? null); wake(0) }
     }
+    // 降噪权重刚交到 Worker：重画当前帧，已经追踪完的渲染画面也降一次噪。
+    renderer.onDenoiserReady = () => { if (!stopped) { lastRequested = -1; wake(0) } }
     renderer.onPresentation = (frame, source, authorElements, provenance = 'live') => {
       if (stopped || session.current !== renderer || canvas.current !== surface) return
       if (surface.dataset.presentedSource !== source) surface.dataset.presentedSource = source
@@ -519,6 +540,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.approximate = String(!!result.approximate)
       surface.dataset.presentedFrame = String(target)
+      spaceProgress.set(result.spaceProgress === undefined ? null : Math.floor(result.spaceProgress * 100))
       surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor); surface.dataset.spaceDisplay = appliedSpaceDisplay; surface.dataset.webTier = videoEditCompositionHasWeb(composition) ? String(requestedWebTiers.get(result) ?? appliedWebTier) : '1'
       if (result.presented !== false) recordVideoMotionPresentation(instance, { frame: target, revision, sequenceId: composition.id, at: performance.now(), scrubbing })
       if (result.presented === true) recordVideoExplanationPresentation(instance, { frame: target, revision: composition.revision, sequenceId: composition.id, composition, at: performance.now(), scrubbing })
@@ -938,7 +960,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     }
     void initialize().catch(error => { if (!stopped) { setTrustFailure(readContentTrustFailure(error)); setRenderFailure(error instanceof Error ? error.message : String(error)); onError(error) } })
     return () => { clearTimeout(recoveryTimer); stop() }
-  }, [instance, onError, retry, visible])
+  }, [instance, onError, retry, visible, spaceProgress])
   const busy = collecting || preparing
   /** 选帧、设封面、编辑当前帧：先原地暂停，等播放头落在实际上屏的那一帧（见 `settlePause`），再按那一帧取图。 */
   const pauseForFrame = async (): Promise<void> => { setVideoEditView(instance.document.id, { playing: false }); await pauseSettled.current() }
@@ -1043,6 +1065,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         {/* 节目底是不随主题的媒体黑：放在玻璃浮层里，浅色主题下文字也看得清 */}
         <div className="ui-glass rounded-xl px-4"><UiLoading size="sm" message="正在准备画面…" /></div>
       </div>}
+      {!spaceSimplified && !preparing && !collecting && <SpaceProgressBadge store={spaceProgress} />}
       {spaceSimplified && !preparing && !collecting && <Tooltip content="播放跟不上，三维暂时按实体或线框显示；暂停后恢复。可在“更多”里固定三维显示方式。"><div className="absolute left-2 top-2 rounded-lg bg-media-scrim px-2 py-1 text-xs text-on-media" data-video-edit-space-simplified>预览已简化</div></Tooltip>}
       {(preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}

@@ -30,6 +30,11 @@ it('三维成片渲染按两个标量属性单项改写，写后读回核对通�
   expect(await write({ 'video_edit.sequence.space_bloom': 1.2 })).toMatchObject({ ok: true })
   expect(await write({ 'video_edit.sequence.space_ambient_occlusion': .5, 'video_edit.sequence.space_reflections': 0 })).toMatchObject({ ok: true })
   expect(owner.document.sequences[0].spaceRender).toEqual({ finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: 1.2, ambientOcclusion: .5 })
+  // 曝光与色调映射：默认值（0、中性）不存。
+  expect(await write({ 'video_edit.sequence.space_exposure': .5, 'video_edit.sequence.space_tone_mapping': 'agx' })).toMatchObject({ ok: true })
+  expect(owner.document.sequences[0].spaceRender).toMatchObject({ exposure: .5, toneMapping: 'agx' })
+  expect(await write({ 'video_edit.sequence.space_exposure': 0, 'video_edit.sequence.space_tone_mapping': 'neutral' })).toMatchObject({ ok: true })
+  expect(owner.document.sequences[0].spaceRender).toEqual({ finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: 1.2, ambientOcclusion: .5 })
 })
 
 it('片段发光强度写入非零值时同一步开启空间，读回核对通过；关键帧同样开启，可撤销', async () => {
