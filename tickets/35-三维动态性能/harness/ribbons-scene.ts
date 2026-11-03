@@ -1,7 +1,7 @@
 // ticket 35 质感样片「光带」：一束彩虹光泽的金属丝带从顶部标题下方涌出，向两边展开、朝镜头铺开，光沿丝带往下流。
 // 丝带是一张合并的网格（每条一段扁平带子），彩虹来自薄膜干涉（iridescence）对彩色摄影棚环境的反射。世界单位 = 显示高度。
 import * as THREE from 'three/webgpu'
-import { abs, attribute, dot, exp, float, mix, normalize, normalView, positionView, pow, sin, smoothstep, step, time, uv, vec3 } from 'three/tsl'
+import { abs, attribute, texture, dot, exp, float, mix, normalize, normalView, positionView, pow, sin, smoothstep, step, time, uv, vec3 } from 'three/tsl'
 
 const RIBBONS = 340, SEGMENTS = 220
 
@@ -87,22 +87,41 @@ export default {
     // 薄膜厚度沿带子变化：同一条带子上颜色一段段变，像全息膜。
     material.iridescenceThicknessNode = mix(float(180), float(950), sin(along.mul(9).add(seed.mul(25))).mul(.5).add(.5))
     // 自发光：越靠近顶部的光源越亮；一段段亮光沿带子往下流（每条带子相位不同）。
-    const source = pow(float(1).sub(along), 9).mul(2.6)
+    const source = pow(float(1).sub(along), 9).mul(1.2)
     // 两头渐隐的光斑（正弦尖峰），不留硬切的末端。
     const flow = pow(sin(along.mul(3.4).sub(time.mul(.9)).add(seed.mul(40))).mul(.5).add(.5), 18).mul(smoothstep(0, .15, along)).mul(.9)
     const shimmer = sin(along.mul(40).add(seed.mul(30)).sub(time.mul(2))).mul(.5).add(.5)
     // 开场光从字底下涌出：光头沿带子往下推进，光头处最亮；推进到画外之后只剩顺着带子往下流的光。
     // 每条带子的光头错开一点，不齐成一条线。
-    const head = smoothstep(.15, 2.8, time.sub(seed.mul(.5))).mul(1.25)
+    const head = smoothstep(.8, 3.4, time.sub(seed.mul(.5))).mul(1.25)
     material.opacityNode = step(along, head)
     material.alphaTest = .5
-    const front = exp(along.sub(head).div(.035).pow(2).negate()).mul(3)
+    const front = exp(along.sub(head).div(.035).pow(2).negate()).mul(1.8)
     // 带子侧对镜头时变得很窄、在像素间闪烁，按朝向淡掉。
     const facing = smoothstep(.04, .3, abs(dot(normalView, normalize(positionView).negate())))
     material.colorNode = mix(vec3(1, .86, .62), vec3(.85, .9, 1), seed).mul(facing)
     material.emissiveNode = vec3(1, .8, .55).mul(source.add(flow.mul(shimmer.mul(.6).add(.4))).add(front)).mul(facing)
     const bundle = new THREE.Mesh(ribbons(), material)
     scene.add(bundle)
+    // 标题是场景里的发光体（不是时间线上的文字卡片）：卡片是画好的平面画面、自己不发光，淡入时只是一层灰字，
+    // 和丝带的光连不到一起。这里把字画进贴图、按高动态亮度自发光，和丝带同一套泛光；字先烧亮，光再从它底下涌出。
+    const canvas = new OffscreenCanvas(1024, 256), context = canvas.getContext('2d')!
+    context.fillStyle = '#fff'; context.textAlign = 'center'; context.textBaseline = 'middle'
+    context.font = '500 250px "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif'
+    context.fillText('痕　迹', 512, 140)
+    const glyphs = new THREE.CanvasTexture(canvas as unknown as HTMLCanvasElement)
+    glyphs.colorSpace = THREE.SRGBColorSpace
+    const ignite = smoothstep(0, 1.1, time)
+    const title = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
+    const glyph = texture(glyphs).r
+    // 亮度只略高于泛光阈值：字芯清楚可读，四周再带一圈光晕。
+    title.colorNode = vec3(1, .92, .8).mul(ignite.mul(ignite).mul(2.2))
+    // 只有笔画处不透明：整块平面不透明会在宿主合成时盖住背景，成一个暗框。
+    title.opacityNode = glyph
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(.5, .125), title)
+    // 字的下沿正好落在丝带顶端。
+    label.position.set(0, .33 + .085, -1.88)
+    scene.add(label)
     return { scene, update(_parameters: unknown, _assets: unknown, info: { time: number }) {
       void info
     } }
