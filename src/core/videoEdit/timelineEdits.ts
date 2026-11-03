@@ -1,4 +1,5 @@
 import type { SpatialPropagationRequest } from './spatialTypes'
+import { remapVideoEditCodeClipReferences } from './codeClipReferences'
 import { VideoEditTimelineClock } from './timelineClock'
 import { splitSpatialCameraTarget, remapSpatialCameraReferences } from './spatialPropagation'
 import { clipVideoEditAnnotationTime, mapVideoEditAnnotationTime } from './annotations'
@@ -244,6 +245,9 @@ export function applyVideoEditTimelineEditResult(document: VideoEditDocument, se
   result.sequence = { ...result.sequence, clips: retimeVideoEditContentClips(sequenceOf(document, sequenceId), result.sequence, new Map()) }
   if (edit.kind === 'frame_hold') result.selectedClipIds = result.sequence.clips.filter(clip => clip.frameHold && clip.start === edit.frame && edit.clipIds.some(id => sequenceOf(document, sequenceId).clips.find(original => original.id === id)?.itemId === clip.itemId)).map(clip => clip.id)
   if (result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('编辑结果超出序列时间边界。')
+  // 删除、范围删除、覆盖或粘贴到别的序列后，代码里指向本序列已不存在片段的引用置空（引用不到了），不留下每帧都找不到的引用。
+  const present = new Set(result.sequence.clips.map(clip => clip.id))
+  result.sequence = { ...result.sequence, clips: result.sequence.clips.map(clip => remapVideoEditCodeClipReferences(clip, target => present.has(target) ? undefined : null)) }
   validateVideoEditAdjustmentRanges(result.sequence)
   validateVideoEditTransitions({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? result.sequence : sequence) }, metadata)
   return { ...result, clipMap: mapping.clipMap, sequenceTimeMap: mapping.clock.maps }
@@ -419,7 +423,8 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     const clone = structuredClone(clip)
     if (clone.effects) clone.effects = clone.effects.map(effect => ({ ...effect, id: crypto.randomUUID() }))
     const animated = rescaleVideoEditClipKeyframes(clone, time => convert(clip.start + time) - convert(clip.start), duration)
-    return { ...animated, id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration }
+    // 一起粘贴的片段之间的代码引用指向新副本；引用没粘贴的片段照旧指向原片段（同一剪辑里仍在）。
+    return { ...remapVideoEditCodeClipReferences(animated, target => ids.get(target)), id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration }
   }))
   assertTargets(sequence, incoming)
   assertNewInternalOverlap(edit.clipboard.clips, incoming)

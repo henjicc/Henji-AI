@@ -37,6 +37,7 @@ export const videoEditEffectPresetSchema = z.object({
     const snapshot = preset.codeSnapshots?.[effect.id]
     if (!snapshot || snapshot.version.id !== effect.code.versionId) context.addIssue({ code: 'custom', message: '代码滤镜成员必须带完整的固定版本快照。' })
     else try { prepareCodeMaterialParameters({ name: effect.name, kind: 'filter', mode: 'dynamic', seed: 0, parameters: styleCodeParameters(snapshot) }, effect.code) } catch (error) { context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : String(error) }) }
+    if (Object.values(effect.code.parameters).some(value => isCodeImageReference(value) && value.kind === 'clip')) context.addIssue({ code: 'custom', message: '风格件不携带对时间线片段的引用，这类参数须为空。' })
     if (snapshot) for (const value of Object.values(effect.code.parameters)) {
       if ((isCodeAudioReference(value) || isCodeImageReference(value) && (value.kind === 'image' || value.kind === 'video')) && !snapshot.media?.some(media => media.id === value.mediaId && (value.kind === 'audio' ? media.kind === 'audio' || media.kind === 'video' : media.kind === value.kind))) context.addIssue({ code: 'custom', message: '代码滤镜快照缺少匹配的媒体依赖。' })
       if (isCodeSceneReference(value) && !snapshot.scenes?.some(scene => scene.id === value.sceneId)) context.addIssue({ code: 'custom', message: '代码滤镜快照缺少引用的片子数据。' })

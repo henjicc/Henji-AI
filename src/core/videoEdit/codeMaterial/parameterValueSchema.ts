@@ -42,7 +42,8 @@ const webReference = z.object({
   const issue = codeWebViewIssue(value) ?? (value.time !== undefined && value.spans !== undefined ? '网页参数的 time 与 spans 不能同时给出。' : undefined) ?? (value.boxes ? codeWebBoxesIssue(value.boxes) : undefined)
   if (issue) context.addIssue({ code: 'custom', message: issue })
 })
-export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), videoReference, z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict(), webReference])
+export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), videoReference, z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict(), webReference,
+  z.object({ kind: z.literal('clip'), clipId: z.string().min(1).max(100) }).strict()])
 export const codeMaterialAudioReferenceSchema = z.object({ kind: z.literal('audio'), mediaId: z.string().min(1).max(100) }).strict()
 /** 片子数据参数的值（剪辑内容第 37 版，作者接口 v5）：引用同一剪辑 scenes 里的一份，引用须存在由剪辑文档校验。 */
 export const codeMaterialSceneReferenceSchema = z.object({ kind: z.literal('scene'), sceneId: z.string().min(1).max(100) }).strict()

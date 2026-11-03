@@ -21,7 +21,7 @@ import { codeMaterialFilesSchema } from '../videoEdit/codeMaterial/sources'
 import { styleKitMigrationSchema, titleTemplateMigrationSchema } from '../videoEdit/styles/styleTemplateMigration'
 import { videoEditStyleSchema } from '../videoEdit/styles/styleSchemas'
 import { VIDEO_EDIT_STYLE_LIBRARY_VERSION, VIDEO_EDIT_STYLE_PACKAGE_VERSION, VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, videoEditStylePackageSchema, videoEditTemplateSchema } from '../videoEdit/styles/templateSchemas'
-import { VIDEO_EDIT_PRESET_PACKAGE_VERSION, videoEditPresetPackageSchema, videoEditPresetPreferencesSchema } from '../videoEdit/presetPackage'
+import { VIDEO_EDIT_PRESET_PACKAGE_MIN_READER_VERSION, VIDEO_EDIT_PRESET_PACKAGE_VERSION, videoEditPresetPackageSchema, videoEditPresetPreferencesSchema } from '../videoEdit/presetPackage'
 import { videoEditExportPresetSchema } from '../videoEdit/exportPresets'
 import { videoEditExportMemorySchema } from '../videoEdit/exportMemory'
 import { audioEditProjectSchema } from '../audioEdit/schema'
@@ -83,6 +83,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...format('title-templates', '本机标题模板', LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].version, 'video-edit-title-templates.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::importStoredStyleKits', z.array(titleTemplateMigrationSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].minReaderVersion },
   // 代码成员带完整快照，旧程序会拒绝风格件；最低可读版本只在改变语义时显式提高。样片与代码可用作者接口 10（排版）与 11（效果 key），旧程序无法执行，最低可读版本随版本提高。
   { ...format('video-style-library', '风格库中的风格', VIDEO_EDIT_STYLE_LIBRARY_VERSION, '风格库/styles/<id>/style.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readStyleFile', videoEditStyleSchema), minReaderVersion: 15 },
+  // 风格库 16、模板库 14、风格包 20：代码参数的片段引用分支只可能出现在风格件里，风格件拒绝它，模板片段的图形对象参数也写不出它，最低可读版本保持不变。
   // 模板库 3、风格包 6：原生模板片段新增 enabled:false，旧程序忽略它会把停用的模板片段当成启用，最低可读版本提高到新版本。
   { ...format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema), minReaderVersion: 13 },
   { ...format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.hjsty.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema), minReaderVersion: 19 },
@@ -92,7 +93,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...format('export-presets', '本机导出预设', LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].version, 'video-edit-export-presets.version', 'src/features/videoEdit/application/videoEditExportPresets.ts', z.array(videoEditExportPresetSchema), 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].minReaderVersion },
   { ...format('export-memory', '上次导出设置', LOCAL_LIBRARY_FORMATS['video-edit-export-memory'].version, 'video-edit-export-memory.version', 'src/features/videoEdit/application/videoEditExportMemory.ts', videoEditExportMemorySchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-export-memory'].minReaderVersion },
   { ...format('preset-preferences', '预设评分与默认', LOCAL_LIBRARY_FORMATS['video-edit-preset-preferences'].version, 'video-edit-preset-preferences.version', 'src/features/videoEdit/application/videoEditPresetPreferences.ts', videoEditPresetPreferencesSchema, 'local-storage'), minReaderVersion: LOCAL_LIBRARY_FORMATS['video-edit-preset-preferences'].minReaderVersion },
-  { ...format('video-preset-package', '可分享剪辑预设', VIDEO_EDIT_PRESET_PACKAGE_VERSION, 'henji-video-presets.version', 'src/features/videoEdit/application/videoEditPresetCatalog.ts::importVideoEditPresetPackage', videoEditPresetPackageSchema), minReaderVersion: 20 },
+  { ...format('video-preset-package', '可分享剪辑预设', VIDEO_EDIT_PRESET_PACKAGE_VERSION, 'henji-video-presets.version', 'src/features/videoEdit/application/videoEditPresetCatalog.ts::importVideoEditPresetPackage', videoEditPresetPackageSchema), minReaderVersion: VIDEO_EDIT_PRESET_PACKAGE_MIN_READER_VERSION },
   format('voice-library', '克隆音色库', LOCAL_LIBRARY_FORMATS['voice_library_records'].version, 'settings.voice_library_records.version', 'src/services/voiceLibrary/VoiceLibraryService.ts::parseVoiceRecords', z.array(voiceLibraryRecordSchema)),
   { ...format('sound-library-folders', '音效文件夹', SOUND_LIBRARY_FOLDERS_VERSION, 'settings.sound_library.folders.version', 'electron/main/services/sound-library/runtime.ts::readFolders', soundLibraryFoldersSchema), minReaderVersion: 1 },
   format('preset-export', '可分享生成预设', 1, 'PresetService export.version（1.0 → 1）', 'src/services/presets/PresetService.ts::importPreset', presetExportSchema),
@@ -102,7 +103,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('model-defaults', '默认生成与转写模型', MODEL_DEFAULTS_VERSION, 'ModelDefaultsState.version', 'src/features/settings/modelDefaultsManager.ts::loadState', modelDefaultsSchema, 'local-storage'),
   format('onboarding', '首次引导进度', ONBOARDING_VERSION, 'OnboardingStateV2.version', 'src/features/onboarding/application/onboardingManager.ts::loadState', onboardingSchema, 'local-storage'),
   // 22：声音片段新增 enabled:false（停用），旧程序忽略后会把停用的声音当成在发声，最低可读版本提高到 22。
-  { ...format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema), minReaderVersion: 28 },
+  { ...format('subtitle-manifest', '字幕回填记录', SUBTITLE_MANIFEST_VERSION, '字幕声音.subtitle.json.version', 'src/features/videoEdit/application/videoEditAutoSubtitles.ts::complete', videoEditSubtitleManifestSchema), minReaderVersion: 29 },
   { ...format('setting-records', '设置记录', SETTING_RECORD_VERSION, 'SETTING_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger', { paidApproval: paidApprovalSettingsSchema }), minReaderVersion: 22 },
   { ...format('asset-records', '素材库记录', ASSET_RECORD_VERSION, 'ASSET_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger', { foreign: foreignContentSchema }), minReaderVersion: 21 },
   format('generation-presets', '生成预设', GENERATION_PRESET_VERSION, 'GENERATION_PRESET_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/presets/store.ts', presetRecordSchema, 'sqlite-ledger'),

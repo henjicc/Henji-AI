@@ -10,7 +10,7 @@ import { migrateStyleKit, migrateTitleTemplate } from '@/core/videoEdit/styles/s
 import { VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import type { VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
 import { markVideoEditStylePieceForeign } from '@/core/videoEdit/effectPresets'
-import { VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_PACKAGE_VERSION, VIDEO_EDIT_PRESET_PANEL_CATEGORIES, videoEditPresetPackageSchema, type VideoEditPresetCategory, type VideoEditPresetPackageItem } from '@/core/videoEdit/presetPackage'
+import { VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_PACKAGE_MIN_READER_VERSION, VIDEO_EDIT_PRESET_PACKAGE_VERSION, VIDEO_EDIT_PRESET_PANEL_CATEGORIES, videoEditPresetPackageSchema, type VideoEditPresetCategory, type VideoEditPresetPackageItem } from '@/core/videoEdit/presetPackage'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { listVideoEditSubtitlePresets, type VideoEditSubtitlePreset } from './videoEditSubtitlePresetList'
 import { videoEditTextPresetLibrary } from './videoEditTextPresets'
@@ -106,7 +106,7 @@ function packageItem(category: VideoEditPresetCategory, id: string): VideoEditPr
 export function videoEditPresetExportable(category: VideoEditPresetCategory, _id: string): boolean { return category === 'text' || category === 'effect' }
 /** Serialized exchange file (pretty JSON) for one or more presets. */
 export function exportVideoEditPresetPackage(refs: ReadonlyArray<{ category: VideoEditPresetCategory; id: string }>): string {
-  const value = videoEditPresetPackageSchema.parse({ format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, minReaderVersion: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: refs.map(ref => packageItem(ref.category, ref.id)) })
+  const value = videoEditPresetPackageSchema.parse({ format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, minReaderVersion: VIDEO_EDIT_PRESET_PACKAGE_MIN_READER_VERSION, items: refs.map(ref => packageItem(ref.category, ref.id)) })
   return `${JSON.stringify(value, null, 2)}\n`
 }
 const unique = (name: string, taken: readonly string[]): string => { if (!taken.includes(name)) return name; let index = 2; while (taken.includes(`${name} ${index}`)) index++; return `${name} ${index}` }

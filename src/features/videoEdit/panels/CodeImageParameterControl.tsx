@@ -47,6 +47,9 @@ export function CodeImageParameterControl({ target, parameterKey, title, value, 
   }
   const bind = (input: VideoEditCodeImageBinding): void => { void run(signal => bindVideoEditCodeImage(target, parameterKey, input, signal)) }
   const images = requireVideoEditInstance(target.projectId).document.media.filter(media => (mediaType === 'audio' ? ['audio', 'video'] : ['image', 'video']).includes(media.kind))
+  // 同一序列里可引用的其他片段（代码拿到它此刻的画面）。
+  // 代码滤镜拿不到这类输入，只给代码片段本身列出。
+  const clips = mediaType === 'image' && !target.effectId ? requireVideoEditInstance(target.projectId).document.sequences.find(sequence => sequence.id === target.sequenceId)?.clips.filter(clip => clip.id !== target.clipId && clip.kind !== 'audio') ?? [] : []
   const drop = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault(); event.stopPropagation()
     try {
@@ -69,7 +72,7 @@ export function CodeImageParameterControl({ target, parameterKey, title, value, 
     } catch (reason) { setError(reason instanceof Error ? reason.message : '无法识别拖入的素材。') }
   }
   return <div className="flex flex-col gap-2" aria-label={`${title}${mediaType === 'audio' ? '音频' : '图片'}拖放区`} data-video-edit-code-image={parameterKey} onDrop={drop} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy' } }}>
-    <Dropdown ariaLabel={`${title}${mediaType === 'audio' ? '声音素材' : '素材图片'}`} value={value?.kind === 'web' ? 'web' : value?.mediaId ?? ''} options={[{ value: '', label: mediaType === 'audio' ? '下方序列混音' : '未绑定画面' }, ...(mediaType === 'image' ? [{ value: 'below', label: '下方轨道画面' }] : []), ...(value?.kind === 'web' ? [{ value: 'web', label: `网页 ${value.path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''}` }] : []), ...images.map(media => ({ value: media.id, label: media.name }))]} disabled={busy} onSelect={mediaId => { if (mediaId !== 'web') bind(mediaId === 'below' ? { kind: 'below' } : mediaId ? { kind: 'media', mediaId } : null) }} />
+    <Dropdown ariaLabel={`${title}${mediaType === 'audio' ? '声音素材' : '素材图片'}`} value={value?.kind === 'web' ? 'web' : value?.kind === 'clip' ? `clip:${value.clipId}` : value?.mediaId ?? ''} options={[{ value: '', label: mediaType === 'audio' ? '下方序列混音' : '未绑定画面' }, ...(mediaType === 'image' ? [{ value: 'below', label: '下方轨道画面' }] : []), ...(value?.kind === 'web' ? [{ value: 'web', label: `网页 ${value.path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''}` }] : []), ...images.map(media => ({ value: media.id, label: media.name })), ...clips.map(clip => ({ value: `clip:${clip.id}`, label: `片段 ${clip.name}` }))]} disabled={busy} onSelect={mediaId => { if (mediaId !== 'web') bind(mediaId === 'below' ? { kind: 'below' } : mediaId.startsWith('clip:') ? { kind: 'clip', clipId: mediaId.slice('clip:'.length) } : mediaId ? { kind: 'media', mediaId } : null) }} />
     <div className="flex flex-wrap items-center gap-2">
       {mediaType === 'image' && <PanelTrigger key={scope} panelSize="wide" panelPadding="content" open={generationOpen} onOpenChange={setGenerationOpen} renderPanel={() => <CodeImageGenerationPanel target={target} parameterKey={parameterKey} title={title} onClose={() => setGenerationOpen(false)} />}>
         {({ togglePanel }) => <UiButton variant="secondary" disabled={busy || activeJobs.length > 0} onClick={togglePanel}>生成</UiButton>}

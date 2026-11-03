@@ -1,7 +1,7 @@
 import { testCodeAssetSource } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { CODE_ASSET_VERSION, decodeCodeAsset, detachCodeAssetScenes, encodeCodeAsset, type CodeAsset } from './codeAsset'
+import { CODE_ASSET_VERSION, decodeCodeAsset, detachCodeAssetLocalReferences, encodeCodeAsset, type CodeAsset } from './codeAsset'
 import { videoEditDocumentSchema } from './document'
 
 const content = { sizeBytes: 123, fileModifiedAt: 456, contentIdentity: 'a'.repeat(64) }
@@ -9,10 +9,10 @@ const fixture = (): CodeAsset => ({ format: 'henji-code-asset', version: CODE_AS
 describe('可编辑代码资产文件契约', () => {
   it('片子数据不随资产带走：收录时片子数据参数置空并报出参数名，资产不接受残留的片子数据引用', () => {
     const asset = fixture()
-    const { parameters, detached } = detachCodeAssetScenes({ ...asset.parameters, film: { kind: 'scene', sceneId: 'golden-scene' } })
-    expect(detached).toEqual(['film'])
-    expect(decodeCodeAsset(encodeCodeAsset({ ...asset, parameters })).parameters).toEqual({ ...asset.parameters, film: null })
-    expect(detachCodeAssetScenes(asset.parameters)).toEqual({ parameters: asset.parameters, detached: [] })
+    const { parameters, detached } = detachCodeAssetLocalReferences({ ...asset.parameters, film: { kind: 'scene', sceneId: 'golden-scene' }, title: { kind: 'clip', clipId: 'title' } })
+    expect(detached).toEqual(['film', 'title'])
+    expect(decodeCodeAsset(encodeCodeAsset({ ...asset, parameters })).parameters).toEqual({ ...asset.parameters, film: null, title: null })
+    expect(detachCodeAssetLocalReferences(asset.parameters)).toEqual({ parameters: asset.parameters, detached: [] })
     expect(() => encodeCodeAsset({ ...asset, parameters: { ...asset.parameters, film: { kind: 'scene', sceneId: 'golden-scene' } } })).toThrow('片子数据')
   })
   it('音频、视频固定时间和下方画面无损往返，拒绝依赖种类错配', () => {

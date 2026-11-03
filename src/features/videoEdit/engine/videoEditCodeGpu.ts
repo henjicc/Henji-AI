@@ -1,3 +1,4 @@
+import { codeImageInputKey } from '@/core/imaging/parameterTypes'
 import type { CodeSimulationInput } from '@/core/videoEdit/codeSimulation'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
@@ -425,14 +426,14 @@ export class VideoEditCodeGpu {
     const usedGlyphs = new Set(draws.flatMap(draw => draw.command.kind === 'text' && draw.command.text ? [draw.textStyle ? this.styledGlyphKey(draw, width, height, rasterScale) : JSON.stringify([draw.command.text, draw.command.fontSize, draw.command.fontFamily])] : []))
     await this.ready; this.assertLive()
     const inputs = new Map<string, { input: VideoEditCodeImageInput; view: unknown }>()
-    for (const command of commands) if (command.kind === 'image' && !inputs.has(command.source.mediaId)) {
-      const raw = images?.get(command.source.mediaId)
-      if (!raw) throw new CodeMaterialError('CONTEXT', `代码图片输入不存在：${command.source.mediaId}`)
+    for (const command of commands) if (command.kind === 'image' && !inputs.has(codeImageInputKey(command.source))) {
+      const raw = images?.get(codeImageInputKey(command.source))
+      if (!raw) throw new CodeMaterialError('CONTEXT', `代码图片输入不存在：${codeImageInputKey(command.source)}`)
       const input = { ...raw }
       this.assertInput(input.texture)
       if (input.owner !== this.device || ![input.width, input.height].every(value => Number.isInteger(value) && value > 0 && value <= 8192) || typeof input.premultiplied !== 'boolean') throw new CodeMaterialError('CONTEXT', '代码图片输入必须属于当前设备并具有有效尺寸和alpha模式。')
       if (input.texture === this.surfaces.get(key)?.picture.texture) throw new CodeMaterialError('CONTEXT', '代码图片输入输出不能引用同一纹理。')
-      inputs.set(command.source.mediaId, { input, view: input.texture.createView() })
+      inputs.set(codeImageInputKey(command.source), { input, view: input.texture.createView() })
     }
     if (draws.some(draw => draw.textStyle) || commands.some(command => command.kind === 'image' && command.width > 0 && command.height > 0 && command.opacity > 0)) await this.prepareImagePipeline()
     this.assertLive()
@@ -447,7 +448,7 @@ export class VideoEditCodeGpu {
       let box: number[]; let color: CodeColor; let endpoints = [0, 0, 0, 0]; let radius = 0; let kind = 0; let glyph: Glyph | undefined; let image: { input: VideoEditCodeImageInput; view: unknown } | undefined
       if (command.kind === 'image') {
         if (command.opacity <= 0) return
-        image = inputs.get(command.source.mediaId)!
+        image = inputs.get(codeImageInputKey(command.source))!
         box = [command.x, command.y, command.width, command.height]; color = [1, 1, 1, command.opacity]; radius = image.input.premultiplied ? 1 : 0
       } else if (command.kind === 'text') {
         if (!command.text) return

@@ -1618,7 +1618,8 @@ export class VideoEditRenderer {
             recordVideoEditPreparation('codeInputDocument', performance.now() - updating)
             session.sourceKey = source.sampleKey; session.document = document
           }
-          const result = await session.renderer.render(source.frame, false, scrubbing, current, undefined, { context, key: targetKey, ownerKey: session.ownerKey, path, opaqueBackground: true }, quality)
+          // 视频与下方画面是整幅画面（不透明）；引用的片段只要它自己，透明处保持透明，作者才能叠加它、按轮廓取形状。
+          const result = await session.renderer.render(source.frame, false, scrubbing, current, undefined, { context, key: targetKey, ownerKey: session.ownerKey, path, opaqueBackground: reference.kind !== 'clip' }, quality)
           if (!current() || !result.presented || !result.nestedPicture) throw new DOMException('旧视频输入画面已取消。', 'AbortError')
           const nested = result.nestedPicture
           // Submitted, not awaited: whatever samples the picture runs after it on the same queue (waiting here also

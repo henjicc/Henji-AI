@@ -41,11 +41,11 @@ export function codeOutputObjectSignature(value: unknown): string {
 /** 网页、序列与近似样本没有本票可用的完整身份，沿正式生成路径执行。 */
 export function codeOutputInputs(document: VideoEditComposition, plan: VideoEditCodePlan, frame: number,
   inputs: ReadonlyMap<string, VideoEditCodeImageInput> | undefined, exact: (input: VideoEditCodeImageInput) => boolean): Record<string, AuthorFingerprintInput> | undefined {
-  if (Object.values(plan.inputParameters ?? {}).some(value => isCodeImageReference(value) && (value.kind === 'web' || value.kind === 'sequence'))) return undefined
+  if (Object.values(plan.inputParameters ?? {}).some(value => isCodeImageReference(value) && (value.kind === 'web' || value.kind === 'sequence' || value.kind === 'clip'))) return undefined
   const result: Record<string, AuthorFingerprintInput> = {}
   for (const [name, key] of plan.imageKeys) {
     const reference = codeMediaInputReference(plan.inputParameters?.[name], name)
-    if (!reference || reference.kind === 'web' || reference.kind === 'sequence') return undefined
+    if (!reference || reference.kind === 'web' || reference.kind === 'sequence' || reference.kind === 'clip') return undefined
     const media = document.media.find(value => value.id === reference.mediaId), input = inputs?.get(key)
     if (!media || !input || !exact(input)) return undefined
     result[name] = { width: input.width, height: input.height, identity: codeOutputSignature([

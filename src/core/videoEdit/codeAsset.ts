@@ -9,8 +9,8 @@ import { formatMigrations } from '../persistence/formatMigrations'
 import { PersistenceError, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
 
 export const CODE_ASSET_MIME = 'application/x-henji-code'
-export const CODE_ASSET_VERSION = 21
-/** v20 可携带 fill 画面来源的作者接口；旧程序无法执行，必须明确要求升级。 */
+export const CODE_ASSET_VERSION = 22
+/** v20 可携带 fill 画面来源的作者接口；旧程序无法执行，必须明确要求升级。v22 的片段引用分支在资产里只能为空，旧程序照常能读，最低可读版本不变。 */
 export const CODE_ASSET_MIN_READER_VERSION = 21
 export const codeAssetSchema = z.object({
   format: z.literal('henji-code-asset'), version: z.literal(CODE_ASSET_VERSION), minReaderVersion: z.number().int().positive().optional(), name: z.string().trim().min(1).max(200),
@@ -26,20 +26,23 @@ export const codeAssetSchema = z.object({
   try { codeMaterialVersionSchema.parse({ ...value.sourceVersion, id: 'asset-version' }) } catch (error) { context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '代码素材文件无效。' }) }
   // 片子数据存在剪辑里，资产不携带它，片子数据参数在资产里只能是 null。
   if (Object.values(value.parameters).some(isCodeSceneReference)) context.addIssue({ code: 'custom', message: '代码资产不携带片子数据，片子数据参数须为空。' })
+  if (Object.values(value.parameters).some(isCodeClipReference)) context.addIssue({ code: 'custom', message: '代码资产不携带对时间线片段的引用，这类参数须为空。' })
   const ids = value.images.map(image => image.id)
   if (new Set(ids).size !== ids.length) context.addIssue({ code: 'custom', message: '代码素材媒体依赖标识重复。' })
   const references = Object.values(value.parameters).flatMap(value => (isCodeImageReference(value) && (value.kind === 'image' || value.kind === 'video') || isCodeAudioReference(value)) ? [value.mediaId] : [])
   if (references.some(id => !ids.includes(id)) || ids.some(id => !references.includes(id))) context.addIssue({ code: 'custom', message: '媒体参数与固定依赖清单不一致。' })
   for (const parameter of Object.values(value.parameters)) {
-    if (!isCodeAudioReference(parameter) && !isCodeImageReference(parameter) || parameter.kind === 'sequence' || parameter.kind === 'web') continue
+    if (!isCodeAudioReference(parameter) && !isCodeImageReference(parameter) || parameter.kind === 'sequence' || parameter.kind === 'web' || parameter.kind === 'clip') continue
     const dependency = value.images.find(media => media.id === parameter.mediaId)
     if (dependency && (parameter.kind === 'audio' ? !['audio', 'video'].includes(dependency.kind) : parameter.kind !== dependency.kind)) context.addIssue({ code: 'custom', message: '媒体参数与依赖种类不一致。' })
   }
 })
+/** 引用同一剪辑里某个片段的图片参数。 */
+function isCodeClipReference(value: unknown): boolean { return isCodeImageReference(value) && value.kind === 'clip' }
 export type CodeAsset = z.infer<typeof codeAssetSchema>
-/** 片子数据存在剪辑里，不随资产带走：收录时把片子数据参数置空，返回置空后的参数与被置空的参数名。 */
-export function detachCodeAssetScenes(parameters: CodeAsset['parameters']): { parameters: CodeAsset['parameters']; detached: string[] } {
-  const detached = Object.keys(parameters).filter(key => isCodeSceneReference(parameters[key]))
+/** 片子数据与时间线片段都在剪辑里，不随资产带走：收录时把这些参数置空，返回置空后的参数与被置空的参数名。 */
+export function detachCodeAssetLocalReferences(parameters: CodeAsset['parameters']): { parameters: CodeAsset['parameters']; detached: string[] } {
+  const detached = Object.keys(parameters).filter(key => isCodeSceneReference(parameters[key]) || isCodeClipReference(parameters[key]))
   return { parameters: { ...parameters, ...Object.fromEntries(detached.map(key => [key, null])) }, detached }
 }
 /** 网页画面参数记的是网页文件夹在本机的位置，文件夹不随资产带走：返回这些参数名，收录时如实告知。 */

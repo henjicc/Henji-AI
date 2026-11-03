@@ -84,6 +84,10 @@ export function codeImageReference(value: unknown, label: string): CodeImageRefe
   if (typeof value !== 'object' || value === null || Array.isArray(value) || ![null, Object.prototype].includes(Object.getPrototypeOf(value))) throw new CodeMaterialError('PARAMETERS', `${label}必须是明确的剪辑图片引用。`)
   const fields = plainFields(value)
   if (fields?.kind?.value === 'web') return codeWebReference(fields, label)
+  if (fields?.kind?.value === 'clip') {
+    if (Object.keys(fields).some(key => !['kind', 'clipId'].includes(key)) || typeof fields.clipId?.value !== 'string' || fields.clipId.value.length < 1 || fields.clipId.value.length > 100) throw new CodeMaterialError('PARAMETERS', `${label}引用片段需要 {kind:'clip',clipId}。`)
+    return { kind: 'clip', clipId: fields.clipId.value }
+  }
   if (!fields || Object.keys(fields).some(key => !['kind', 'mediaId', 'time', 'spans'].includes(key)) || !['image', 'video', 'sequence'].includes(fields.kind?.value) || typeof fields.mediaId?.value !== 'string' || fields.mediaId.value.length < 1 || fields.mediaId.value.length > 100 || fields.kind.value === 'sequence' && (fields.mediaId.value !== 'below' || fields.time || fields.spans)) throw new CodeMaterialError('PARAMETERS', `${label}需要图片/视频 mediaId、{kind:'sequence',mediaId:'below'} 或 {kind:'web',path}。`)
   const time = fields.time?.value
   if (fields.time && (typeof time !== 'number' || !Number.isFinite(time) || time < 0 || fields.kind.value !== 'video')) throw new CodeMaterialError('PARAMETERS', `${label}.time 仅支持视频的非负秒数。`)

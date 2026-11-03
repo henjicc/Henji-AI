@@ -1,4 +1,5 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
+import { videoEditCodeClipReferenceIds } from './codeClipReferences'
 import { createVideoEditSequence, videoEditDocumentSchema, videoEditDuration, videoEditPictureFilter, videoEditVisibleTrackIndexes, type VideoEditClip, type VideoEditDocument, type VideoEditSequence, type VideoEditComposition } from './document'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { clipSourceSeconds } from './document'
@@ -54,6 +55,7 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
   const minimum = visuals.length ? Math.min(...visuals.map(clip => clip.kind === 'adjustment' ? clip.adjustment!.fromTrack : clip.track)) : track
   if (parent.clips.some(clip => !ids.has(clip.id) && clip.kind !== 'audio' && clip.track >= minimum && clip.track <= track && clip.start < end && clip.start + clip.duration > start)) throw new Error('所选画面之间还有未选片段，请一并选中，避免嵌套后改变画面叠放顺序。')
   if (parent.clips.some(clip => clip.follow && ids.has(clip.id) !== ids.has(clip.follow.clipId))) throw new Error('跟随片段与被跟踪片段必须一起嵌套。')
+  if (parent.clips.some(clip => videoEditCodeClipReferenceIds(clip).some(target => parent.clips.some(item => item.id === target) && ids.has(clip.id) !== ids.has(target)))) throw new Error('代码引用的片段与引用它的代码片段必须一起嵌套。')
   const movedTransitions = (parent.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id)))
   if ((parent.transitions ?? []).some(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id)) && !videoEditTransitionClipIds(transition).every(id => ids.has(id)))) throw new Error('过渡两侧片段必须一起嵌套，请扩大选区或先移除边界过渡。')
   const anchored = (value: { clipId?: string }): boolean => Boolean(value.clipId && ids.has(value.clipId))

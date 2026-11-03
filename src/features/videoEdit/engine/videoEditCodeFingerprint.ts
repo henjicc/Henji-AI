@@ -97,6 +97,9 @@ export class VideoEditCodeFingerprint {
         if (!content || content === 'unknown' || content === 'unavailable') return { fallback: 'unknown-web-content' }
         hasWeb = true
         inputs[key] = { ...codeWebPixelSize(codeWebView(reference)), identity: JSON.stringify([reference, content, sample]) }
+      } else if (reference.kind === 'clip') {
+        // 引用片段的画面随那个片段的全部输入变化，这里没有它的内容身份：不按指纹复用。
+        return { fallback: 'clip-reference' }
       } else {
         const media = this.media.get(reference.mediaId)
         if (!media) return { fallback: 'missing-media' }

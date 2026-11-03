@@ -97,7 +97,7 @@ function codeFrameValues(document: VideoEditComposition, clip: VideoEditClip, pr
   const parameters = evaluateCodeMaterialParameters(prepared, sourceTime)
   const derived = generator ? inputs?.derived : undefined
   const imageParameters = codeMaterialImageParameterKeys(program.parameters, derived)
-  const frameParameters = codeMediaFrameParameters(clip, derived && Object.keys(derived).length ? { ...parameters, ...derived } : parameters, frame, document.frameRate, imageParameters)
+  const frameParameters = codeMediaFrameParameters(clip, derived && Object.keys(derived).length ? { ...parameters, ...derived } : parameters, frame, document.frameRate, imageParameters, document)
   const origin = generator ? undefined : videoEditClipSourceTimeAt(clip, 0, document.frameRate)
   const simulation = program.simulation ? simulationFrameInput(program, prepared, inputs, context, sourceTime, origin, clip.reverse ? -1 : 1) : undefined
   return { context, sourceTime, ...(simulation ? { simulation } : {}), inputParameters: { ...parameters, ...derived }, parameters: frameParameters.parameters, imageKeys: frameParameters.images,

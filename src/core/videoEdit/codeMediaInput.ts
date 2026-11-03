@@ -5,6 +5,7 @@ import type { CodeImageReference, CodeVideoSpan } from '../imaging/parameterType
 import { videoEditFrameFraction, videoEditSourceSeconds, type VideoEditRatio } from './time'
 import { webTimeGridFromFraction, type WebTimeGrid } from './webTimeCache'
 import { RECORDING_CURSOR_EFFECT } from './recordingCursor'
+import { videoEditPictureFilter } from './clipGeometry'
 
 type CodeMediaInputClip = Pick<VideoEditClip, 'start' | 'sourceInUs' | 'sourceRemainder'>
 
@@ -24,13 +25,17 @@ export interface CodeMediaFrameParameters { parameters: CodeParameterValues; ima
  * 这一帧交给作者代码的参数：视频与下方画面换成这一帧的输入画面；带时间表的视频参数在不落在任何一段的帧里为 null
  * （和未绑定一样，`assets`/`inputs.images` 里没有这个键）。
  */
-export function codeMediaFrameParameters(clip: VideoEditClip, parameters: CodeParameterValues, frame: number, rate: VideoEditRatio, imageParameters: ReadonlySet<string>): CodeMediaFrameParameters {
+export function codeMediaFrameParameters(clip: VideoEditClip, parameters: CodeParameterValues, frame: number, rate: VideoEditRatio, imageParameters: ReadonlySet<string>, document?: VideoEditComposition): CodeMediaFrameParameters {
   const images = new Map<string, string>()
   const values = Object.fromEntries(Object.entries(parameters).map(([key, value]) => {
     if (!imageParameters.has(key)) return [key, value]
     const reference = codeMediaInputReference(value, key)
     if (!reference) return [key, value]
-    if (reference.kind !== 'image' && !codeMediaInputActive(clip, reference, frame, rate)) return [key, null]
+    if (reference.kind === 'clip') {
+      // 渲染时手上的常是缩减过的合成（引用的子合成、下方画面、滤镜取相邻帧），找不到目标只说明它不在这份合成里，按“不在”给空；
+      // 引用不到的片段由时间线编辑在删除时置空。
+      if (!document || !codeClipReferencePresent(document, clip, reference.clipId, frame)) return [key, null]
+    } else if (reference.kind !== 'image' && !codeMediaInputActive(clip, reference, frame, rate)) return [key, null]
     const input = reference.kind === 'image' ? reference.mediaId : codeMediaInputKey(clip.id, key)
     images.set(key, input)
     return [key, reference.kind === 'image' ? value : { kind: 'image', mediaId: input }]
@@ -118,6 +123,11 @@ function spansDigest(spans: readonly CodeVideoSpan[]): string {
   return digest
 }
 
+/** 引用的片段此刻是否在画面上（与节目画面同一可见性：停用、隐藏轨道、独奏压下都算不在）；引用自身也算不在。 */
+export function codeClipReferencePresent(document: VideoEditComposition, clip: VideoEditClip, clipId: string, frame: number): boolean {
+  const target = document.clips.find(candidate => candidate.id === clipId)
+  return !!target && target.id !== clip.id && frame >= target.start && frame < target.start + target.duration && videoEditPictureFilter(document).has(target)
+}
 /** 一个代码输入在这一帧的取样：`document` 是只含这一幅画面的普通合成，由正常渲染器解码与合成。 */
 export interface CodeMediaInput { kind: 'video' | 'sequence'; still: boolean; timetabled: boolean; document: VideoEditComposition; frame: number; sessionKey: string; sampleKey: string }
 /**
@@ -135,6 +145,17 @@ export interface CodeMediaInput { kind: 'video' | 'sequence'; still: boolean; ti
 export function codeMediaInputComposition(document: VideoEditComposition, clip: VideoEditClip, reference: CodeImageReference, frame: number): CodeMediaInput | undefined {
   // 网页画面不经合成，由网页来源按页面时间取帧（渲染器单独准备），不占解码会话。
   if (reference.kind === 'web') return undefined
+  if (reference.kind === 'clip') {
+    // 引用的片段：只合成它自己与它跟随的跟踪源，关掉它的空间、不带序列的三维设置，免得在子合成里又进三维。
+    // 转场不带：转场段里它按自身不透明度画，转场手柄延伸出去的部分没有输入。
+    if (!codeClipReferencePresent(document, clip, reference.clipId, frame)) return undefined
+    const target = document.clips.find(candidate => candidate.id === reference.clipId)!
+    const { spatial: _spatial, ...flat } = target
+    // 跟踪源只用来算跟随位置，停用后带进去，不画进输入图。
+    const follow = target.follow ? document.clips.filter(candidate => candidate.id === target.follow!.clipId).map(source => ({ ...source, enabled: false })) : []
+    const { spatialCamera: _camera, spaceRender: _render, ...sequence } = document as VideoEditComposition & { spatialCamera?: unknown; spaceRender?: unknown }
+    return { kind: 'sequence', still: false, timetabled: false, document: { ...sequence, clips: [...follow, flat], captions: [], transitions: [] } as VideoEditComposition, frame, sessionKey: JSON.stringify([document.id, 'clip', target.id]), sampleKey: String(frame) }
+  }
   if (reference.kind === 'sequence') {
     const clips = document.clips.filter(candidate => candidate.track < clip.track)
     const ids = new Set(clips.map(candidate => candidate.id))

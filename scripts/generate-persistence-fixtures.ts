@@ -67,6 +67,8 @@ const parameters = {
   screen: { type: 'image', title: '录屏', default: null },
   // 剪辑内容 v41：图片参数可绑定网页画面（见下方片段的 page）。
   page: { type: 'image', title: '网页', default: null },
+  // 剪辑内容 v64：图片参数可引用同一序列里的另一个片段（见下方片段的 partner）。
+  partner: { type: 'image', title: '引用片段', default: null },
   // 剪辑内容 v37 / 作者接口 v5：片子数据参数，声明记录种类与字段含义（见下方 document.scenes 与片段的 film）。
   film: { type: 'scene', title: '片子数据', schema: GOLDEN_SCENE_DECLARATION },
 }
@@ -149,6 +151,8 @@ clip.code!.parameters.page = { kind: 'web', path: '/persistence-project/素材/�
 // 剪辑内容 v37：片子数据存在文档里，代码参数只引用它。
 document.scenes = [goldenScene('golden-screen')]
 clip.code!.parameters.film = { kind: 'scene', sceneId: 'golden-scene' }
+// 剪辑内容 v64：代码图片参数引用同一序列里的录屏片段。
+clip.code!.parameters.partner = { kind: 'clip', clipId: 'golden-cursor-clip' }
 const cursorClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 90, duration: 90 })
 cursorClip.id = 'golden-cursor-clip'
 cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true, amount: 1, builtin: { id: 'recording_cursor', params: { size: 3, smoothing: 40, click_style: 'ripple' } } },
@@ -425,12 +429,14 @@ export function getImageLayoutFixtureResources(): readonly unknown[] {
  * 音频案例早于空间字段与作者接口 10：剪辑 54、录制 57 给黄金片段补空间属性与序列相机；风格包 13 的原生模板换成带空间属性的同一人名条；
  * 预设包 14 补一件带作者接口 10 代码快照的风格件（标题条目只出现在旧文件里，写不出空间片段）。
  * 剪辑 63、录制 66 起黄金片段另带发光强度与其关键帧，风格包与模板库的人名条同样带上。
+ * 剪辑 64、录制 67 起黄金片段的代码图片参数 partner 引用同一序列里的录屏片段。
  */
 function withSpatialVideo(value: unknown): unknown {
   const video = value as VideoEditDocument
   const fields = { spatial: clip.spatial, depth: clip.depth, rotationX: clip.rotationX, rotationY: clip.rotationY, anchorDepth: clip.anchorDepth, spaceEmission: clip.spaceEmission }
   return { ...video, sequences: video.sequences.map(entry => entry.id !== sequence.id ? entry : { ...entry, spatialCamera: structuredClone(sequence.spatialCamera), spaceRender: structuredClone(sequence.spaceRender),
-    clips: entry.clips.map(item => item.id !== clip.id ? item : { ...item, ...structuredClone(fields), curves: { ...item.curves, ...structuredClone(spatialCurves) } }) }) }
+    clips: entry.clips.map(item => item.id !== clip.id ? item : { ...item, ...structuredClone(fields), curves: { ...item.curves, ...structuredClone(spatialCurves) },
+      ...(item.code ? { code: { ...item.code, parameters: { ...item.code.parameters, partner: structuredClone(clip.code!.parameters.partner) } } } : {}) }) }) }
 }
 function withSpatialTemplates(formatId: string, value: unknown): unknown {
   if (formatId === 'video-preset-package') {

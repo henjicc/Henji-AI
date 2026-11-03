@@ -4,7 +4,7 @@ import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { PersistenceError } from '@/core/persistence/migrations'
 import { snapshotCodeSourceClosure, documentCodeSourceResolver, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
-import { CODE_ASSET_VERSION, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, detachCodeAssetScenes, codeAssetWebParameters, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
+import { CODE_ASSET_VERSION, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, detachCodeAssetLocalReferences, codeAssetWebParameters, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
@@ -82,8 +82,8 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     await ensureVideoEditCodeParameterMetadata(owner, baseline, selected.code.definitionId, selected.code.versionId, signal)
     const source = codeMaterialSource(baseline, selected.code)
     prepareCodeMaterialParameters(readVideoEditCodeMetadata(owner, baseline)(selected.code), selected.code)
-    const { parameters, detached } = detachCodeAssetScenes(structuredClone(selected.code.parameters))
-    if (detached.length) logger.info('片子数据不随代码资产带走，资产里的片子数据参数置空', { event: 'video_edit.code_asset.scenes_detached', context: { projectId, parameters: detached } })
+    const { parameters, detached } = detachCodeAssetLocalReferences(structuredClone(selected.code.parameters))
+    if (detached.length) logger.info('片子数据与时间线片段引用不随代码资产带走，资产里的这些参数置空', { event: 'video_edit.code_asset.scenes_detached', context: { projectId, parameters: detached } })
     const webParameters = codeAssetWebParameters(parameters)
     if (webParameters.length) logger.info('网页文件夹不随代码资产带走，资产里的网页参数仍指向本机位置', { event: 'video_edit.code_asset.web_not_carried', context: { projectId, parameters: webParameters } })
     const cached = latest.get(owner)

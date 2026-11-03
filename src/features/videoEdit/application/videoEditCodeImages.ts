@@ -9,9 +9,9 @@ import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata } from 
 import { importVideoEditSources } from './videoEditMedia'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 
-export type VideoEditCodeImageBinding = { kind: 'media'; mediaId: string; time?: number } | { kind: 'below' } | { kind: 'file'; path: string } | { kind: 'asset'; assetId: string } | null
+export type VideoEditCodeImageBinding = { kind: 'media'; mediaId: string; time?: number } | { kind: 'below' } | { kind: 'clip'; clipId: string } | { kind: 'file'; path: string } | { kind: 'asset'; assetId: string } | null
 /** 现有图片选择与生成结果导入共用的候选文档检查；调用方负责一次提交。 */
-export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarget, key: string, document: VideoEditDocument, mediaId: string | null, contentVersion: number, signal?: AbortSignal, time?: number, below = false): Promise<VideoEditDocument> {
+export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarget, key: string, document: VideoEditDocument, mediaId: string | null, contentVersion: number, signal?: AbortSignal, time?: number, below = false, clipId?: string): Promise<VideoEditDocument> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId)
   const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
@@ -24,8 +24,9 @@ export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarg
   const media = mediaId ? document.media.find(media => media.id === mediaId) : undefined
   if (mediaId && (!media || !(declaration.type === 'audio' ? ['audio', 'video'] : ['image', 'video']).includes(media.kind))) throw new Error('请选择与参数类型匹配的剪辑素材。')
   if (below && declaration.type !== 'image') throw new Error('下方画面只能绑定 image 参数。')
+  if (clipId && (declaration.type !== 'image' || clipId === clip.id || !sequence.clips.some(item => item.id === clipId))) throw new Error('只能引用同一序列里的另一个片段。')
   const before = target.effectId ? undefined : structuredClone(clip)
-  code.parameters[key] = validateCodeMaterialParameterValue(declaration, below ? { kind: 'sequence', mediaId: 'below' } : media ? { kind: declaration.type === 'audio' ? 'audio' : media.kind, mediaId: media.id, ...(time === undefined ? {} : { time }) } : null)
+  code.parameters[key] = validateCodeMaterialParameterValue(declaration, below ? { kind: 'sequence', mediaId: 'below' } : clipId ? { kind: 'clip', clipId } : media ? { kind: declaration.type === 'audio' ? 'audio' : media.kind, mediaId: media.id, ...(time === undefined ? {} : { time }) } : null)
   // 选媒体与回填生成图片只由界面发起；助手改媒体参数走通用 code_parameters，由执行器按操作来源记录。
   if (before) recordVideoEditCodeEdits(before, clip, 'user')
   const frame = Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? clip.start))
@@ -35,8 +36,8 @@ export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarg
 export async function bindVideoEditCodeImage(target: VideoEditCodeTarget, key: string, input: VideoEditCodeImageBinding, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
-  const bind = (document: VideoEditDocument, mediaId: string | null): Promise<VideoEditDocument> => prepareVideoEditCodeImageBinding(target, key, document, mediaId, contentVersion, signal, input?.kind === 'media' ? input.time : undefined, input?.kind === 'below')
-  if (!input || input.kind === 'media' || input.kind === 'below') {
+  const bind = (document: VideoEditDocument, mediaId: string | null): Promise<VideoEditDocument> => prepareVideoEditCodeImageBinding(target, key, document, mediaId, contentVersion, signal, input?.kind === 'media' ? input.time : undefined, input?.kind === 'below', input?.kind === 'clip' ? input.clipId : undefined)
+  if (!input || input.kind === 'media' || input.kind === 'below' || input.kind === 'clip') {
     const document = await bind(structuredClone(baseline), input?.kind === 'media' ? input.mediaId : null)
     signal?.throwIfAborted()
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已关闭或内容已改变，请重新选择素材。')

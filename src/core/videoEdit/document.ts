@@ -1,4 +1,5 @@
 import { videoEditClipEnabled, videoEditPictureFilter } from './clipGeometry'
+import { remapVideoEditCodeClipReferences } from './codeClipReferences'
 export { videoEditClipEnabled, videoEditVisibleTrackIndexes, videoEditPictureFilter, videoEditPictureTransitionWindows, videoEditPictureTransitionsAt, type VideoEditPictureFilter } from './clipGeometry'
 import { composeVideoEditSequence } from './composition'
 import { spatialCameraSchema, spatialClipFields } from './spatialSchema'
@@ -504,7 +505,10 @@ export function splitVideoEditClip(sequence: VideoEditSequence, id: string, at: 
     leftPart.contentAnchor = sliceVideoEditContentAnchor(clip.contentAnchor, sequence, clip.start, at)
     right.contentAnchor = sliceVideoEditContentAnchor(clip.contentAnchor, sequence, at, clip.start + clip.duration)
   }
-  const next = { ...sequence, clips: sequence.clips.flatMap(item => item.id === id ? [leftPart, right] : [item]), annotations: sequence.annotations.flatMap(item => {
+  // 别的代码引用被拆开的片段时，改指与引用方时间重叠最多的那一半（重叠相同取左半）。
+  const overlap = (item: VideoEditClip, from: number, to: number): number => Math.max(0, Math.min(item.start + item.duration, to) - Math.max(item.start, from))
+  const half = (item: VideoEditClip): string => overlap(item, at, clip.start + clip.duration) > overlap(item, clip.start, at) ? right.id : id
+  const next = { ...sequence, clips: sequence.clips.flatMap(item => item.id === id ? [leftPart, right] : [remapVideoEditCodeClipReferences(item, target => target === id ? half(item) : undefined)]), annotations: sequence.annotations.flatMap(item => {
     const spansSplit = item.frame < at && (item.endFrame ?? item.frame) >= at
     if (item.clipId === id && spansSplit && item.target.kind === 'element') return [{ ...item, endFrame: at - 1 }, { ...item, id: crypto.randomUUID(), clipId: right.id, frame: at, status: item.status === 'draft' ? 'draft' as const : 'open' as const, addressedBy: undefined }]
     const target = item.target.kind === 'range' && (item.target.clipIds?.includes(id) || item.clipId === id && spansSplit) ? { ...item.target, clipIds: [...new Set((item.target.clipIds ?? [id]).flatMap(value => value !== id ? [value] : item.frame >= at ? [right.id] : spansSplit ? [id, right.id] : [id]))] } : item.target

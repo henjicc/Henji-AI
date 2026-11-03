@@ -15,6 +15,8 @@ export interface CodeVideoSpan { from: number; to: number; src: number; rate?: n
  */
 export interface CodeWebReference { kind: 'web'; path: string; width?: number; height?: number; region?: [number, number, number, number]; scale?: number; time?: number; spans?: CodeVideoSpan[]; boxes?: string[]; mediaId?: never }
 export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never; spans?: never } | { kind: 'video'; mediaId: string; time?: number; spans?: CodeVideoSpan[] } | { kind: 'sequence'; mediaId: 'below'; time?: never; spans?: never } | CodeWebReference
+  /** 同一序列里的另一个片段：作者拿到它此刻的画面（作为图片源），三维作者另外拿到它在空间里的位置与形状。 */
+  | { kind: 'clip'; clipId: string; mediaId?: never; time?: never; spans?: never }
 export interface CodeAudioReference { kind: 'audio'; mediaId: string }
 /** 片子数据参数的值：引用同一剪辑 scenes 里的一份（作者接口 v5 起）。 */
 export interface CodeSceneReference { kind: 'scene'; sceneId: string }
@@ -57,3 +59,5 @@ export type CodeParameterDeclaration = CodeBasicParameterDeclaration | CodeTextS
   | { type: 'table'; default: CodeParameterTableRow[]; fields: Record<string, CodeBasicParameterDeclaration | CodeTextStyleParameterDeclaration>; rowKey?: string }
   | { type: 'custom'; typeName: string; default: CodeParameterObject; fields: Record<string, CodeBasicParameterDeclaration> }
 ))
+/** 图片输入在一帧里的键：素材按 mediaId，引用的片段按片段 ID（与素材 ID 不同名空间）。 */
+export function codeImageInputKey(reference: CodeImageReference): string { return reference.kind === 'clip' ? `clip:${reference.clipId}` : reference.kind === 'web' ? reference.path : reference.mediaId }

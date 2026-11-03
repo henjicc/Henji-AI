@@ -32,7 +32,7 @@ const jobs = new Map<string, CodeImageGenerationJob>()
 /** 参数当前绑定的身份：生成结果放回前核对用户期间没有改过它。网页画面按路径与取景区分（换了页面或取景都算改过）。 */
 function bindingIdentity(value: unknown): string | null {
   if (!isCodeImageReference(value)) return null
-  const origin = value.kind === 'web' ? [value.path, value.width ?? null, value.height ?? null, value.region ?? null, value.scale ?? null, value.boxes ?? null] : [value.mediaId]
+  const origin = value.kind === 'web' ? [value.path, value.width ?? null, value.height ?? null, value.region ?? null, value.scale ?? null, value.boxes ?? null] : value.kind === 'clip' ? [value.clipId] : [value.mediaId]
   return JSON.stringify([value.kind, ...origin, value.time ?? null, ...(value.spans ? [value.spans] : [])])
 }
 const controllers = new Map<string, AbortController>()

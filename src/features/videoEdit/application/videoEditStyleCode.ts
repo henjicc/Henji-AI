@@ -1,4 +1,5 @@
 import type { CodeAuthorApiVersion } from '@/core/videoEdit/codeAuthorProgram'
+import { detachVideoEditEffectClipReferences } from '@/core/videoEdit/codeClipReferences'
 import { compileVideoEditCode, ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
 import { prepareCodeVersionPublication } from './videoEditCodeStorage'
 import { requireVideoEditInstance } from './videoEditService'
@@ -22,7 +23,8 @@ import { videoEditSceneRecordMediaIds } from '@/core/videoEdit/scene/sceneMedia'
 const logger = createLogger('features.videoEdit.styleCode')
 
 /** 人和助手保存同一份快照；只读取已经存在的固定代码版本。 */
-export async function snapshotVideoEditStyleEffects(projectId: string, effects: readonly VideoEditEffect[], signal?: AbortSignal): Promise<Pick<VideoEditEffectPreset, 'effects' | 'codeSnapshots'>> {
+export async function snapshotVideoEditStyleEffects(projectId: string, original: readonly VideoEditEffect[], signal?: AbortSignal): Promise<Pick<VideoEditEffectPreset, 'effects' | 'codeSnapshots'>> {
+  const effects = detachVideoEditEffectClipReferences(original)
   logger.info('读取代码风格件快照', { event: 'video_edit.style_piece.snapshot.start', context: { projectId, effects: effects.length } })
   try {
     const owner = requireVideoEditInstance(projectId), document = owner.document, contentVersion = owner.contentVersion
