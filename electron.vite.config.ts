@@ -128,6 +128,8 @@ export default defineConfig({
       // Vite 会等第一次用到某个库才现场预构建并整页刷新，开发运行就和正式版不一样（2026-10-26）。
       // 测试与测试夹具引用 vitest 等只在 Node 里跑的库，不扫。
       entries: ['index.html', 'src/**/*.{ts,tsx}', '!src/tests/**', '!src/**/*.test.{ts,tsx}', '!src/**/*.testSupport.ts', '!src/**/*TestKit.ts', '!src/**/*TestUtils.ts', '!src/**/*TestFixture*.ts'],
+      // 作者库别名包扫描不到（第一次运行三维代码时才现场预构建并整页刷新，剪辑 Worker 随之中止），显式列出。
+      include: ['henji-author-three-0.186.1'],
     },
     build: {
       outDir: 'out/renderer',
