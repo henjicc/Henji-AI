@@ -248,7 +248,7 @@ const trashProject = defineApplicationCapability({
   readOnly: false, dataClasses: ['C1'], idempotent: true, destructive: true,
   timeoutMs: 30_000, supportsPreview: true, supportsUndo: false, requiredScopes: [],
   acceptsRefs: [DOCUMENT_PROJECT_ENTITY_TYPE],
-  failureRecovery: ['项目里有正在编辑的文档时先请用户关闭；项目已不存在时重新列出项目。'],
+  failureRecovery: ['项目里有正在编辑的文档时，错误会点名是哪几份，请用户关闭它们后重试；项目已不存在时重新列出项目。'],
   inputSchema: z.object({ projectId: z.string().min(1).describe('项目 ID（来自 list_projects）') }).strict(),
   outputSchema: capabilityOutputSchema({ resultRef: projectRefSchema, name: z.string(), status: z.literal('trashed') }),
   concurrencyKey: 'documents_write',

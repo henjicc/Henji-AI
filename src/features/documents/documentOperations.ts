@@ -128,10 +128,10 @@ export class DocumentInUseError extends Error {
   }
 }
 
-/** 项目里有正在编辑的文档时不能移到回收站。 */
+/** 项目里有正在编辑的文档时不能移到回收站；点名是哪几份，用户和助手才知道该关哪个。 */
 export class ProjectInUseError extends Error {
-  constructor(name: string) {
-    super(`项目“${name}”里有正在编辑的文档，请先关闭后再移到回收站。`)
+  constructor(name: string, openDocuments: readonly string[]) {
+    super(`项目“${name}”里的${openDocuments.join('、')}还开着，请先关闭再移到回收站。`)
     this.name = 'ProjectInUseError'
   }
 }
@@ -660,11 +660,15 @@ export class DocumentOperations {
    */
   async trashProject(project: Pick<ProjectSummary, 'id' | 'name'>): Promise<void> {
     await this.write('trash_project', project.id, async () => {
+      const open: string[] = []
       for (const session of this.registry().list()) {
         const container = session.documentMeta.container
         if (container.kind !== 'project' || container.projectId !== project.id) continue
-        if (!await this.release(session.documentMeta.kind, session.id)) throw new ProjectInUseError(project.name)
+        if (await this.release(session.documentMeta.kind, session.id)) continue
+        const busy = this.busyChecks.get(session.documentMeta.kind)?.(session.id)
+        open.push(`${session.kind.untitledNames.zh.replace(/^未命名/, '')}“${session.documentMeta.name}”${busy ? `（${busy.replace(/。$/, '')}）` : ''}`)
       }
+      if (open.length) throw new ProjectInUseError(project.name, open)
       await this.commands.trashProject(project.id)
     })
   }

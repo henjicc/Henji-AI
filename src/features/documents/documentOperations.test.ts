@@ -159,6 +159,18 @@ describe('与打开的文档会话配合', () => {
     expect(kit.commands.trashed).toEqual([meta.id])
   })
 
+  it('项目里有释放不了的文档时拒绝移到回收站，并点名是哪几份、为什么', async () => {
+    const kit = setup()
+    const project = kit.commands.seedProject({ name: '宣传片' })
+    for (const name of ['镜头一', '镜头二']) {
+      const meta = kit.commands.seed({ name, content: { items: [] }, projectId: project.id, folder: project.path })
+      await kit.registry.open({ id: meta.id, path: meta.path })
+    }
+    kit.operations.registerBusyCheck('canvas', id => kit.registry.get(id)?.documentMeta.name === '镜头二' ? '请等待导出完成或取消导出。' : null)
+    await expect(kit.operations.trashProject(project)).rejects.toThrow('项目“宣传片”里的测试“镜头一”、测试“镜头二”（请等待导出完成或取消导出）还开着，请先关闭再移到回收站。')
+    expect(kit.commands.calls).not.toContain('trashProject')
+  })
+
   it('从列表移除只对找不到文件的文档生效，文件还在时拒绝', async () => {
     const kit = setup()
     const present = kit.commands.seed({ name: '还在', content: { items: [] } })
