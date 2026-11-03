@@ -27,6 +27,7 @@ const HELP = `用法：npm run bench:video-edit -- [选项]
 
 选项：
   --scenario code-output  代码输出复用专项（交替顺序；可叠加 --diagnostics）
+  --scenario code-output-history  代码输出按帧历史专项：拖动往返、逐帧、改别的片段后回放、循环播放的命中与耗时
   --project <路径>     真实工程文件夹（或工程里的任一文件）：按 .henji/project.json 找到工程根，只把这个工程复制到临时目录再测
   --document <ID>      工程里有多份剪辑时指定剪辑文档 ID（默认工程的主剪辑）
   --from <帧>          起播帧（默认 0）
@@ -56,7 +57,7 @@ function parseArgs(argv) {
     const arg = argv[index]
     if (arg === '--help' || arg === '-h') options.help = true
     else if (arg === '--diagnostics') options.diagnostics = true
-    else if (arg === '--scenario') { options.scenario = value(index++, arg); if (options.scenario !== 'code-output') throw new Error('未知基准场景') }
+    else if (arg === '--scenario') { options.scenario = value(index++, arg); if (!['code-output', 'code-output-history'].includes(options.scenario)) throw new Error('未知基准场景') }
     else if (arg === '--project') options.project = path.resolve(value(index++, arg))
     else if (arg === '--document') options.document = value(index++, arg)
     else if (arg === '--from') options.from = integer(value(index++, arg), arg, 0)
@@ -281,7 +282,8 @@ if (require.main === module) {
   let options
   try { options = parseArgs(process.argv.slice(2)) } catch (error) { console.error(`[bench:video-edit] ${error.message}\n\n${HELP}`); process.exit(1) }
   if (options.help) { console.log(HELP); process.exit(0) }
-  const run = options.scenario === 'code-output' ? require('./lib/benchVideoEditCodeOutput.cjs').runCodeOutputBench(options) : main(options)
+  const codeOutput = options.scenario && require('./lib/benchVideoEditCodeOutput.cjs')
+  const run = options.scenario === 'code-output' ? codeOutput.runCodeOutputBench(options) : options.scenario === 'code-output-history' ? codeOutput.runCodeOutputHistoryBench(options) : main(options)
   run.then(outcome => {
     if (!outcome) return
     const { result, outFile } = outcome
