@@ -25,7 +25,8 @@ describe('gl-transitions 转场登记', () => {
       const listed = registry.some(entry => entry.transitionKind === kind)
       expect(listed || isRemovedVideoEditTransition(kind) || CURATED_TRANSITIONS.some(entry => entry.variants.some(variant => variant[2] === kind)), kind).toBe(true)
     }
-    expect(registry.every(entry => entry.group && entry.category === 'video_transition')).toBe(true)
+    // 不常用的转场统一收进“更多”文件夹（效果库只留一个“更多”），其余在画面转场分类里。
+    expect(registry.every(entry => entry.group && (entry.category === 'video_transition' || entry.category === 'more'))).toBe(true)
     // 面板按分组连续排列：同一分组只出现一段。
     const groups = GL_TRANSITION_PRESETS.map(preset => preset.group)
     expect(groups.filter((group, index) => group !== groups[index - 1])).toEqual(Object.values(data.groups))
