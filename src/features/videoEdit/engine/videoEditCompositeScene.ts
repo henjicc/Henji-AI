@@ -387,6 +387,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
       shutterScale: plan.samples.length > 1 ? plan.samples.length / (plan.samples.length - 1) : 1,
       bloom: options.spaceRender?.bloom ?? 0, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0,
       exposure: options.spaceRender?.exposure ?? 0, toneMapping: options.spaceRender?.toneMapping ?? 'neutral',
+      environment: options.spaceRender?.environment ?? 'none', environmentIntensity: options.spaceRender?.environmentIntensity ?? 1, environmentRotation: options.spaceRender?.environmentRotation ?? 0,
       emission: emitting.size > 0 }
     /**
      * 组画面是否“带发光”（宿主据此选解码约定）：有作者场景、发光卡片，或实时显示开了泛光（辉光会溢到透明处）。

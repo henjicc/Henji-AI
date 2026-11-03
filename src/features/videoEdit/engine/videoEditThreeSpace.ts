@@ -1,5 +1,6 @@
 import type * as Three from 'three'
 import { videoEditToneMapping } from './videoEditToneMapping'
+import { videoEditSpaceEnvironment } from './videoEditSpaceEnvironment'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { SpatialCardGeometry, SpatialFrame } from '@/core/videoEdit/spatialTypes'
@@ -74,6 +75,10 @@ export interface ThreeSpaceEffects {
   /** 三维物体的曝光（EV）与色调映射（序列三维设置）；卡片不做色调映射，不受影响。 */
   exposure: number
   toneMapping: import('@/core/videoEdit/document').VideoEditSpaceToneMapping
+  /** 序列三维环境光预设、强度与水平旋转（度）；作者场景自己设了环境时以作者为准。 */
+  environment: import('@/core/videoEdit/document').VideoEditSpaceEnvironment
+  environmentIntensity: number
+  environmentRotation: number
 }
 export interface ThreeSpaceFrame {
   frame: SpatialFrame
@@ -291,7 +296,7 @@ export class VideoEditThreeSpace {
     this.ensureTargets(input.target)
     this.syncCamera(input.frame, input.shutterOpen)
     this.syncCards(input)
-    this.syncScenes(input.scenes)
+    this.syncScenes(input.scenes, input.effects)
     if (input.effects.display === 'render') {
       // 看片（有时间预算）换到新画面：追踪一批要上秒，先交实时画面，节目监视器随后再要这一帧时才开始追踪。
       const plan = input.trace, pending = plan?.key === undefined ? undefined : JSON.stringify([plan.group, plan.key])
@@ -621,7 +626,7 @@ export class VideoEditThreeSpace {
     return entry
   }
 
-  private syncScenes(scenes: readonly ThreeSpaceScene[]): void {
+  private syncScenes(scenes: readonly ThreeSpaceScene[], effects: ThreeSpaceEffects): void {
     const next = new Set<Three.Object3D>(scenes.map(scene => scene.root))
     for (const root of this.attached) if (!next.has(root)) { this.scene.remove(root); this.attached.delete(root) }
     for (const root of next) if (!this.attached.has(root)) { this.scene.add(root); this.attached.add(root) }
@@ -633,6 +638,12 @@ export class VideoEditThreeSpace {
       const source = authors.find(scene => scene[key] !== null && scene[key] !== undefined)
       if (key.endsWith('Rotation')) { (settings[key] as Three.Euler).copy(source ? source[key] as Three.Euler : new this.library.Euler()); continue }
       settings[key] = source ? source[key] : key.endsWith('Intensity') ? 1 : key === 'backgroundBlurriness' ? 0 : null
+    }
+    // 没有作者环境时用序列的环境光预设（实时与路径追踪读同一张图）。
+    if (!authors.some(scene => scene.environment) && effects.environment !== 'none') {
+      this.scene.environment = videoEditSpaceEnvironment(this.library, effects.environment)
+      this.scene.environmentIntensity = effects.environmentIntensity
+      this.scene.environmentRotation.set(0, effects.environmentRotation * Math.PI / 180, 0)
     }
   }
 

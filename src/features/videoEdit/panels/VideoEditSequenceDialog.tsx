@@ -10,7 +10,7 @@ import {
 } from '@/core/videoEdit/sequencePresets'
 import NumberInput from '@/components/ui/NumberInput'
 import { Dropdown, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiModal, UiPanel, UiSegmented, UiSelect, UiSwitch } from '@/components/ui'
-import { VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, type VideoEditBin, type VideoEditSequence, type VideoEditSpaceRender } from '@/core/videoEdit/document'
+import { VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, VIDEO_EDIT_SPACE_ENVIRONMENTS, type VideoEditSpaceEnvironment, type VideoEditBin, type VideoEditSequence, type VideoEditSpaceRender } from '@/core/videoEdit/document'
 import { videoEditCompositionHasSpace } from '@/core/videoEdit/spaceDisplay'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from '@/core/videoEdit/time'
 import type { VideoEditSequenceSettings } from '../application/videoEditProjectItems'
@@ -28,6 +28,8 @@ function FrameShape({ size, custom }: { size: VideoEditSequenceSize; custom: boo
     {custom && <span className="text-xs tabular-nums">{videoEditSequenceRatioLabel(size)}</span>}
   </div>
 }
+const SPACE_ENVIRONMENT_LABELS: Record<VideoEditSpaceEnvironment, string> = { none: '无', studioNeutral: '摄影棚 · 中性', studioWarm: '摄影棚 · 暖', studioCool: '摄影棚 · 冷', rim: '黑棚轮廓光', sky: '天光' }
+
 export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate = false, mode = 'create', onClose, onSubmit }: {
   title: string; initial: VideoEditSequenceSettings; bins: VideoEditBin[]; requireFrameRate?: boolean; mode?: 'create' | 'edit'; onClose: () => void; onSubmit: (settings: VideoEditSequenceSettings) => void | Promise<unknown>
 }): React.ReactElement {
@@ -172,6 +174,17 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
         <UiFormRow label="色调" inline info="中性：颜色最接近原样。胶片：高光柔和地过渡到白，玻璃和发光更自然。电影：对比更强。只作用于三维物体。">
           <UiSegmented ariaLabel="三维色调映射" disabled={busy} value={space.toneMapping ?? 'neutral'} options={[{ value: 'neutral', label: '中性' }, { value: 'agx', label: '胶片' }, { value: 'aces', label: '电影' }]} onChange={toneMapping => setSpace({ toneMapping })} />
         </UiFormRow>
+        <UiFormRow label="环境光" inline info="照亮三维物体，出现在金属反射和玻璃里，不当背景显示。代码场景自己设了环境时以代码为准。">
+          <Dropdown ariaLabel="三维环境光" className="w-full" disabled={busy} value={space.environment ?? 'none'} display={SPACE_ENVIRONMENT_LABELS[space.environment ?? 'none']} options={VIDEO_EDIT_SPACE_ENVIRONMENTS.map(value => ({ value, label: SPACE_ENVIRONMENT_LABELS[value] }))} onSelect={environment => setSpace({ environment: environment as VideoEditSpaceEnvironment })} />
+        </UiFormRow>
+        {(space.environment ?? 'none') !== 'none' && <>
+          <UiFormRow label="环境光强度" inline>
+            <NumberInput ariaLabel="三维环境光强度" disabled={busy} value={space.environmentIntensity ?? 1} min={0} max={4} step={.05} precision={2} widthClassName="w-full" onChange={environmentIntensity => setSpace({ environmentIntensity })} />
+          </UiFormRow>
+          <UiFormRow label="环境光旋转" inline info="转动灯位，换高光与反射落在物体哪里。">
+            <NumberInput ariaLabel="三维环境光旋转" disabled={busy} value={space.environmentRotation ?? 0} min={-180} max={180} step={5} precision={0} widthClassName="w-full" onChange={environmentRotation => setSpace({ environmentRotation })} />
+          </UiFormRow>
+        </>}
       </UiGroup>}
       <div>
         <UiButton aria-expanded={advanced} disabled={busy} onClick={() => setAdvanced(value => !value)}>{advanced ? <ChevronDown /> : <ChevronRight />}更多设置</UiButton>

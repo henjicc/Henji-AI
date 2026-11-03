@@ -34,6 +34,10 @@ it('三维成片渲染按两个标量属性单项改写，写后读回核对通�
   expect(await write({ 'video_edit.sequence.space_exposure': .5, 'video_edit.sequence.space_tone_mapping': 'agx' })).toMatchObject({ ok: true })
   expect(owner.document.sequences[0].spaceRender).toMatchObject({ exposure: .5, toneMapping: 'agx' })
   expect(await write({ 'video_edit.sequence.space_exposure': 0, 'video_edit.sequence.space_tone_mapping': 'neutral' })).toMatchObject({ ok: true })
+  // 环境光预设：无、强度 1、旋转 0 都不存。
+  expect(await write({ 'video_edit.sequence.space_environment': 'studioWarm', 'video_edit.sequence.space_environment_rotation': 45 })).toMatchObject({ ok: true })
+  expect(owner.document.sequences[0].spaceRender).toMatchObject({ environment: 'studioWarm', environmentRotation: 45 })
+  expect(await write({ 'video_edit.sequence.space_environment': 'none', 'video_edit.sequence.space_environment_rotation': 0, 'video_edit.sequence.space_environment_intensity': 1 })).toMatchObject({ ok: true })
   expect(owner.document.sequences[0].spaceRender).toEqual({ finalRenderer: 'pathTrace', pathTraceSamples: 512, bloom: 1.2, ambientOcclusion: .5 })
 })
 

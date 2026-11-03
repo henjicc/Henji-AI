@@ -126,8 +126,8 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 66,
-      "fingerprint": "9dafb0ae165de3199faa9c10034768830766e5cd2df2832d5532629b61b460cf",
+      "version": 67,
+      "fingerprint": "cc30005e29cc9f59bfedf94b25d6d06fb6d412d03218813028e8fc85bfbc5b1c",
       "supportedFrom": 17,
       "minReaderVersion": 65
     },
@@ -156,8 +156,8 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 69,
-      "fingerprint": "5a29bb9a92442adf3ea86b048014aa8955ed3968572dc881f76860880bd76b59",
+      "version": 70,
+      "fingerprint": "59c12d6c93e099d6dc25afd2bd91905400b404d4533f8e9b90c8b32a7967ff93",
       "supportedFrom": 19,
       "minReaderVersion": 68
     },

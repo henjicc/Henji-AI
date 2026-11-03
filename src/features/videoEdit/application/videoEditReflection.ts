@@ -130,6 +130,9 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     data.spaceReflections = spaceRender?.reflections ?? 0
     data.spaceExposure = spaceRender?.exposure ?? 0
     data.spaceToneMapping = spaceRender?.toneMapping ?? 'neutral'
+    data.spaceEnvironment = spaceRender?.environment ?? 'none'
+    data.spaceEnvironmentIntensity = spaceRender?.environmentIntensity ?? 1
+    data.spaceEnvironmentRotation = spaceRender?.environmentRotation ?? 0
     const transcript = !propertyIds?.length || propertyIds.includes('video_edit.sequence.transcript')
     const silences = !propertyIds?.length || propertyIds.includes('video_edit.sequence.text_silences')
     if (transcript || silences) {

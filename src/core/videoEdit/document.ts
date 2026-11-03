@@ -165,6 +165,9 @@ export type VideoEditNativeTemplateClip = z.infer<typeof videoEditNativeTemplate
 /** 三维物体的色调映射：中性（缺省）、胶片（AgX）、电影（ACES）。 */
 export const VIDEO_EDIT_SPACE_TONE_MAPPINGS = ['neutral', 'agx', 'aces'] as const
 export type VideoEditSpaceToneMapping = typeof VIDEO_EDIT_SPACE_TONE_MAPPINGS[number]
+/** 三维环境预设（程序生成、确定、无外部文件）：无、摄影棚（中性 / 暖 / 冷）、黑棚轮廓光、天光。 */
+export const VIDEO_EDIT_SPACE_ENVIRONMENTS = ['none', 'studioNeutral', 'studioWarm', 'studioCool', 'rim', 'sky'] as const
+export type VideoEditSpaceEnvironment = typeof VIDEO_EDIT_SPACE_ENVIRONMENTS[number]
 /** 三维的成片渲染：导出、选帧、封面与预渲染按它出画；节目监视器看片的显示方式是本机查看状态，不在这里。 */
 export const videoEditSpaceRenderSchema = z.object({
   finalRenderer: z.enum(['realtime', 'pathTrace']).optional().describe('成片的三维渲染器：realtime 实时（与节目监视器“实时”同一画面，快，默认）；pathTrace 路径追踪（全局光照、真实反射折射与景深，1080p 每帧约数秒到数十秒；不做运动模糊）。'),
@@ -173,6 +176,9 @@ export const videoEditSpaceRenderSchema = z.object({
   ambientOcclusion: z.number().min(0).max(1).optional().describe('环境光遮蔽强度 0–1，省略为 0：物体相接、凹处变暗，体积更实。只作用于三维物体，卡片画面不变。'),
   reflections: z.number().min(0).max(1).optional().describe('屏幕空间反射强度 0–1，省略为 0：光滑、金属表面反射画面里看得到的东西。只作用于三维物体。'),
   exposure: z.number().min(-5).max(5).optional().describe('三维曝光（EV）−5–5，省略为 0：三维物体整体提亮或压暗，每加 1 亮一倍。只作用于三维物体，卡片画面不变。'),
+  environment: z.enum(VIDEO_EDIT_SPACE_ENVIRONMENTS).optional().describe('三维环境光（照亮物体、出现在反射与玻璃里，不当背景显示），省略为 none：none 无；studioNeutral 摄影棚中性（顶上柔光 + 两侧条灯）；studioWarm 摄影棚偏暖；studioCool 摄影棚偏冷；rim 黑棚轮廓光（只有身后两侧强条灯勾边）；sky 天光（蓝天、柔和太阳）。作者场景自己设了环境时以作者为准。'),
+  environmentIntensity: z.number().min(0).max(4).optional().describe('三维环境光强度 0–4，省略为 1。'),
+  environmentRotation: z.number().min(-180).max(180).optional().describe('三维环境光水平旋转角度 −180–180°，省略为 0：转动灯位，换高光与反射落在哪里。'),
   toneMapping: z.enum(VIDEO_EDIT_SPACE_TONE_MAPPINGS).optional().describe('三维色调映射，省略为 neutral：neutral 中性（颜色最接近原样）；agx 胶片（高光柔和地过渡到白，像 Blender 默认）；aces 电影（对比更强、暗部更深）。只作用于三维物体。'),
 }).strict()
 export type VideoEditSpaceRender = z.infer<typeof videoEditSpaceRenderSchema>
@@ -187,6 +193,9 @@ export function storedVideoEditSpaceRender(value: VideoEditSpaceRender): VideoEd
     ...value.reflections ? { reflections: value.reflections } : {},
     ...value.exposure ? { exposure: value.exposure } : {},
     ...value.toneMapping && value.toneMapping !== 'neutral' ? { toneMapping: value.toneMapping } : {},
+    ...value.environment && value.environment !== 'none' ? { environment: value.environment } : {},
+    ...value.environmentIntensity !== undefined && value.environmentIntensity !== 1 ? { environmentIntensity: value.environmentIntensity } : {},
+    ...value.environmentRotation ? { environmentRotation: value.environmentRotation } : {},
   }
   return Object.keys(stored).length ? stored : undefined
 }

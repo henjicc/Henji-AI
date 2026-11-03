@@ -470,6 +470,9 @@ export class VideoEditThreeSpacePathTrace {
     const channels = Math.round(values.length / pixels)
     const half = new Uint16Array(pixels * 4)
     const srgb = texture.colorSpace === library.SRGBColorSpace
+    // 输出按 flipY = false 存放（追踪器不再看源贴图的 flipY）：源贴图要翻转的（如 HDR 加载器读出的环境图）在这里按行倒过来，
+    // 否则追踪里的环境与实时上下颠倒。
+    const flip = texture.flipY, width = image.width, height = image.height
     for (let pixel = 0; pixel < pixels; pixel++) for (let channel = 0; channel < 4; channel++) {
       // 单通道当灰度；双通道（红绿）缺的蓝按 0；缺透明度按不透明。
       const source = channel === 3 ? (channels === 4 ? 3 : -1) : channels === 1 ? 0 : channel < channels ? channel : -1
@@ -479,7 +482,8 @@ export class VideoEditThreeSpacePathTrace {
         value /= 255
         if (srgb && channel < 3) value = value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4
       }
-      half[pixel * 4 + channel] = library.DataUtils.toHalfFloat(value)
+      const target = flip ? (height - 1 - Math.floor(pixel / width)) * width + pixel % width : pixel
+      half[target * 4 + channel] = library.DataUtils.toHalfFloat(value)
     }
     return new library.DataTexture(half, image.width, image.height, library.RGBAFormat, library.HalfFloatType)
   }

@@ -10,9 +10,11 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 69, minReaderVersion: 68,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 70, minReaderVersion: 68,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
+    // 69 → 70：嵌入剪辑的序列 spaceRender 新增可选三维环境光预设、强度与转角，省略即无环境光，最低可读版本保持 68。
+    69: content => structuredClone(content),
     // 68 → 69：嵌入剪辑的序列 spaceRender 新增可选三维曝光与色调映射，省略即 0 与 neutral，最低可读版本保持 68。
     68: content => structuredClone(content),
     // 67 → 68：嵌入剪辑的代码版本可用作者接口 16（三维作者的 info.elements），旧源码与固定接口原样保留；旧程序无法执行，最低可读版本提高到 68。
