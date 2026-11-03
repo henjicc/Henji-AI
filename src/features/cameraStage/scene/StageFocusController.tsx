@@ -37,6 +37,8 @@ const StageFocusController: React.FC = () => {
     const goal = goalRef.current
     const controls = (rootState as unknown as { controls?: FocusableControls }).controls
     if (!goal || !controls) return
+    // 平滑过渡要连续出帧，按需渲染下逐帧续到落点为止
+    rootState.invalidate()
     controls.target.lerp(goal, FOCUS_LERP_FACTOR)
     controls.update()
     if (controls.target.distanceTo(goal) < FOCUS_SNAP_DISTANCE) {

@@ -55,6 +55,7 @@ const StageObjectNameLabel: React.FC<StageObjectNameLabelProps> = ({ object, tar
   const worldTop = useMemo(() => new Vector3(), [])
   const localPosition = useMemo(() => new Vector3(), [])
   const worldScale = useMemo(() => new Vector3(), [])
+  const localScale = useMemo(() => new Vector3(), [])
   const effectiveBackgroundColor = settings.followObjectColor ? object.color : settings.backgroundColor
   const backgroundColor = toRgba(effectiveBackgroundColor, settings.backgroundOpacity)
   const shadowColor = toRgba(settings.shadowColor, settings.shadowOpacity)
@@ -63,7 +64,7 @@ const StageObjectNameLabel: React.FC<StageObjectNameLabelProps> = ({ object, tar
   const shadowOffsetY = Math.sin(shadowRadians) * settings.shadowDistance
   const textShadow = `${shadowOffsetX.toFixed(2)}px ${shadowOffsetY.toFixed(2)}px ${settings.shadowBlur.toFixed(2)}px ${shadowColor}`
 
-  useFrame(() => {
+  useFrame(({ invalidate }) => {
     const anchor = anchorRef.current
     const target = targetRef.current
     const parent = anchor?.parent
@@ -82,14 +83,17 @@ const StageObjectNameLabel: React.FC<StageObjectNameLabelProps> = ({ object, tar
     )
 
     parent.worldToLocal(localPosition.copy(worldTop))
-    anchor.position.copy(localPosition)
-
     parent.getWorldScale(worldScale)
-    anchor.scale.set(
+    localScale.set(
       Math.abs(worldScale.x) > 1e-4 ? 1 / worldScale.x : 1,
       Math.abs(worldScale.y) > 1e-4 ? 1 / worldScale.y : 1,
       Math.abs(worldScale.z) > 1e-4 ? 1 / worldScale.z : 1,
     )
+    if (anchor.position.equals(localPosition) && anchor.scale.equals(localScale)) return
+    anchor.position.copy(localPosition)
+    anchor.scale.copy(localScale)
+    // 子级 Html 的帧回调先于本回调执行，本帧用的还是旧锚点；按需渲染下补一帧让标签跟上
+    invalidate()
   })
 
   if (!label) return null

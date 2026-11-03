@@ -1,7 +1,7 @@
-import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import React, { memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
-import { BufferGeometry, Vector3 } from 'three'
-import type { Group, MeshStandardMaterial } from 'three'
+import { BufferGeometry, MeshStandardMaterial, Vector3 } from 'three'
+import type { Group, Mesh } from 'three'
 import { registerPlaybackApplier } from '../store/playbackAppliers'
 import { rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import type {
@@ -17,6 +17,7 @@ import CameraModel from './CameraModel'
 import CharacterModel from './CharacterModel'
 import StageObjectNameLabel from './StageObjectNameLabel'
 import { useCameraModelUrl, useCharacterModelUrl } from './useCharacterModelUrl'
+import { useStagePrimitiveMaterial, useStagePrimitiveResources } from './stagePrimitiveResources'
 
 /**
  * 单个场景对象的三维渲染：
@@ -43,22 +44,17 @@ interface StageObjectMeshProps {
   nameLabelSettings: StageNameLabelSettings
 }
 
-const PrimitiveGeometry: React.FC<{ kind: StagePrimitiveKind }> = ({ kind }) => {
-  switch (kind) {
-    case 'sphere':
-      return <sphereGeometry args={[0.5, 32, 32]} />
-    case 'cylinder':
-      return <cylinderGeometry args={[0.5, 0.5, 1, 32]} />
-    case 'cone':
-      return <coneGeometry args={[0.5, 1, 32]} />
-    case 'pyramid':
-      return <coneGeometry args={[0.6, 1, 4]} />
-    case 'torus':
-      return <torusGeometry args={[0.5, 0.2, 16, 48]} />
-    case 'box':
-    default:
-      return <boxGeometry args={[1, 1, 1]} />
-  }
+/** 基础几何体：几何与材质取自所在 Canvas 的共享资源，同种同色的物体共用一份。 */
+const PrimitiveBody: React.FC<{
+  kind: StagePrimitiveKind
+  color: string
+  selected: boolean
+  meshRef: React.RefObject<Mesh>
+  onClick: (event: ThreeEvent<MouseEvent>) => void
+}> = ({ kind, color, selected, meshRef, onClick }) => {
+  const resources = useStagePrimitiveResources()
+  const material = useStagePrimitiveMaterial(color, selected)
+  return <mesh ref={meshRef} geometry={resources.geometry(kind)} material={material} onClick={onClick} />
 }
 
 const StageMaterial: React.FC<{ color: string; selected: boolean }> = ({ color, selected }) => (
@@ -211,7 +207,8 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
 }) => {
   const groupRef = useRef<Group>(null)
   const contentRef = useRef<Group>(null)
-  const materialRef = useRef<MeshStandardMaterial>(null)
+  const meshRef = useRef<Mesh>(null)
+  const ownMaterialRef = useRef<MeshStandardMaterial | null>(null)
   const { transform } = object
 
   useEffect(() => {
@@ -259,15 +256,24 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
     if (object.type === 'primitive') {
       unregs.push(
         registerPlaybackApplier(object.id, 'color', (value) => {
-          const material = materialRef.current
-          if (!material) return
-          material.color.set(value as string)
-          material.emissive.set(value as string)
+          const mesh = meshRef.current
+          if (!mesh) return
+          // 共享材质被同色物体共用，颜色动画只能写进本物体自己的材质副本
+          const own = ownMaterialRef.current ?? new MeshStandardMaterial()
+          ownMaterialRef.current = own
+          if (mesh.material !== own) {
+            own.copy(mesh.material as MeshStandardMaterial)
+            mesh.material = own
+          }
+          own.color.set(value as string)
+          own.emissive.set(value as string)
         }),
       )
     }
     return () => unregs.forEach((unregister) => unregister())
   }, [object.id, object.type])
+
+  useEffect(() => () => ownMaterialRef.current?.dispose(), [])
 
   const handleClick = (event: ThreeEvent<MouseEvent>): void => {
     event.stopPropagation()
@@ -295,15 +301,13 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
       >
         <group ref={contentRef}>
           {object.type === 'primitive' && (
-            <mesh onClick={handleClick}>
-              <PrimitiveGeometry kind={object.kind} />
-              <meshStandardMaterial
-                ref={materialRef}
-                color={object.color}
-                emissive={object.color}
-                emissiveIntensity={selected ? 0.35 : 0}
-              />
-            </mesh>
+            <PrimitiveBody
+              kind={object.kind}
+              color={object.color}
+              selected={selected}
+              meshRef={meshRef}
+              onClick={handleClick}
+            />
           )}
           {object.type === 'character' && (
             <group onClick={handleClick}>
@@ -330,4 +334,8 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
   )
 }
 
-export default StageObjectMesh
+/*
+ * 播放与 seek 只会换掉被采样的那几个对象；其余物体 props 不变就跳过重渲染，
+ * 上千个物体的场景里每帧整表重渲染是主要 CPU 开销。回调由 StageScene 保持稳定。
+ */
+export default memo(StageObjectMesh)

@@ -42,11 +42,13 @@ const StagePlaybackDriver: React.FC = () => {
     }
   }, [currentProjectId])
 
-  useFrame((_, rawDelta) => {
+  useFrame((rootState, rawDelta) => {
     const driver = driverRef.current
     if (!driver) return
     const state = useCameraStageStore.getState()
     const { playing, currentTime, loop } = state.playback
+    // 按需渲染下播放靠驱动自己续帧；暂时拿不到驱动租约时也要续，下一帧重试认领
+    if (playing) rootState.invalidate()
     if (!resumeCameraStagePlaybackDriver(driver, state.currentProjectId)) return
     const runtime = readCameraStagePlaybackRuntime()
 

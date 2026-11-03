@@ -17,7 +17,6 @@ import {
 export function useRenderCameraId(): string | null {
   const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
-  const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const playing = useCameraStageStore((state) => state.playback.playing)
 
   const schedule = useMemo(
@@ -28,17 +27,19 @@ export function useRenderCameraId(): string | null {
   const resolveAt = useCallback((time: number): string | null => (
     schedule.length === 0 ? activeCameraId : resolveRenderCameraAt(schedule, time) ?? activeCameraId
   ), [activeCameraId, schedule])
-  const [runtimeCameraId, setRuntimeCameraId] = useState(() => resolveAt(currentTime))
+  // 只订阅换算后的机位 id：直接订阅播放头会让每个窗格连同整棵三维场景随播放头重渲染
+  const pausedCameraId = useCameraStageStore((state) => resolveAt(state.playback.currentTime))
+  const [runtimeCameraId, setRuntimeCameraId] = useState(() => resolveAt(readCameraStagePlaybackRuntime().time))
 
   useEffect(() => {
+    if (!playing) return undefined
     const sync = (time: number): void => {
       const next = resolveAt(time)
       setRuntimeCameraId((current) => current === next ? current : next)
     }
-    sync(playing ? readCameraStagePlaybackRuntime().time : currentTime)
-    if (!playing) return undefined
+    sync(readCameraStagePlaybackRuntime().time)
     return subscribeCameraStagePlaybackRuntime((runtime) => sync(runtime.time))
-  }, [currentTime, playing, resolveAt])
+  }, [playing, resolveAt])
 
-  return runtimeCameraId
+  return playing ? runtimeCameraId : pausedCameraId
 }

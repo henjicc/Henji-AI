@@ -44,6 +44,9 @@ function parseSource(value: string): StageViewportSource {
   return { kind: 'fixed', view }
 }
 
+// 常量引用：窗格随对象列表重渲染时，传给 StageScene 的取景源不变，场景可以跳过重渲染
+const FOLLOW_ACTIVE_CAMERA: StageViewportSource = { kind: 'active_camera' }
+
 const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captureRef, primary }) => {
   const config = useCameraStageViewportStore((state) => state.viewports[viewportId])
   const active = useCameraStageViewportStore((state) => state.activeViewportId === viewportId)
@@ -67,7 +70,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
    */
   const source: StageViewportSource = configuredCameraId
     && !cameras.some((camera) => camera.id === configuredCameraId)
-    ? { kind: 'active_camera' }
+    ? FOLLOW_ACTIVE_CAMERA
     : config.source
   // 取景框覆盖层要知道画的是哪台机器；跟随档在这里落成具体 id。
   const overlayCameraId = source.kind === 'camera'

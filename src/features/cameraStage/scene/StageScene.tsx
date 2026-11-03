@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { Color, EquirectangularReflectionMapping, SRGBColorSpace, TextureLoader, type Group } from 'three'
@@ -23,6 +23,8 @@ import StageSunLight from './StageSunLight'
 import StageViewportCamera from './StageViewportCamera'
 import StageTransformControls from './StageTransformControls'
 import StageMotionPathOverlay from './StageMotionPathOverlay'
+import StageDemandFrames from './StageDemandFrames'
+import { StagePrimitiveResourcesProvider } from './stagePrimitiveResources'
 import { useRenderCameraId } from './useRenderCameraId'
 import type { StageViewportSource } from '../viewport/viewportTypes'
 import StageFixedViewportCamera from './StageFixedViewportCamera'
@@ -40,6 +42,7 @@ const logger = createLogger('cameraStage.environment')
 
 function StageEnvironment({ imageUrl, fallbackColor, onAssetReady }: { imageUrl: string; fallbackColor: string; onAssetReady?: (id: string, error?: unknown) => void }): null {
   const scene = useThree((state) => state.scene)
+  const invalidate = useThree((state) => state.invalidate)
 
   useEffect(() => {
     let disposed = false
@@ -62,6 +65,8 @@ function StageEnvironment({ imageUrl, fallbackColor, onAssetReady }: { imageUrl:
         texture.needsUpdate = true
         scene.background = texture
         scene.environment = texture
+        // 按需渲染：异步贴图落位不经过 React 属性，要自己请求一帧
+        invalidate()
         onAssetReady?.('environment')
         logger.info('3D 全景环境加载完成', {
           event: 'camera_stage.environment.load.completed',
@@ -86,7 +91,37 @@ function StageEnvironment({ imageUrl, fallbackColor, onAssetReady }: { imageUrl:
       if (scene.environment === appliedTexture) scene.environment = previousEnvironment
       appliedTexture?.dispose()
     }
-  }, [fallbackColor, imageUrl, onAssetReady, scene])
+  }, [fallbackColor, imageUrl, invalidate, onAssetReady, scene])
+
+  return null
+}
+
+/**
+ * 路径工具跟随播放头选中当前状态关键帧段。播放头订阅只放在这里：放进 StageScene 会让
+ * 播放与 seek 时整棵场景（上千个物体）跟着重渲染。
+ */
+function StagePathSelectionSync({ selectedId }: { selectedId: string | null }): null {
+  const editorTool = useCameraStageToolStore((state) => state.tool)
+  const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
+  const selectedStateKeyframeId = useCameraStageStore((state) => state.selectedStateKeyframeId)
+  const currentTime = useCameraStageStore((state) => state.playback.currentTime)
+  const automaticPathStateKeyframeId = useMemo(
+    () => resolvePathStateKeyframeId(stateKeyframes, currentTime, selectedStateKeyframeId),
+    [currentTime, selectedStateKeyframeId, stateKeyframes],
+  )
+
+  useEffect(() => {
+    const tools = useCameraStageToolStore.getState()
+    if (tools.tool !== 'path') return
+    if (!selectedId || !automaticPathStateKeyframeId) {
+      tools.clearPathSelection()
+      return
+    }
+    if (tools.pathSelection?.objectId !== selectedId
+      || tools.pathSelection.stateKeyframeId !== automaticPathStateKeyframeId) {
+      tools.selectPath({ stateKeyframeId: automaticPathStateKeyframeId, objectId: selectedId })
+    }
+  }, [automaticPathStateKeyframeId, editorTool, selectedId])
 
   return null
 }
@@ -118,8 +153,6 @@ const StageScene: React.FC<StageSceneProps> = ({
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
   const renderStyle = useCameraStageStore((state) => state.sceneSettings.render.style)
   const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
-  const selectedStateKeyframeId = useCameraStageStore((state) => state.selectedStateKeyframeId)
-  const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const objects = cameraMotionPreview(useCameraStageStore.getState())?.objects ?? storedObjects
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
@@ -127,24 +160,6 @@ const StageScene: React.FC<StageSceneProps> = ({
   const prepareStateKeyframeEdit = useCameraStageStore((state) => state.prepareStateKeyframeEdit)
   const editorTool = useCameraStageToolStore((state) => state.tool)
   const pathSelection = useCameraStageToolStore((state) => state.pathSelection)
-  const automaticPathStateKeyframeId = useMemo(
-    () => resolvePathStateKeyframeId(stateKeyframes, currentTime, selectedStateKeyframeId),
-    [currentTime, selectedStateKeyframeId, stateKeyframes],
-  )
-
-  useEffect(() => {
-    if (!interactive) return
-    const tools = useCameraStageToolStore.getState()
-    if (tools.tool !== 'path') return
-    if (!selectedId || !automaticPathStateKeyframeId) {
-      tools.clearPathSelection()
-      return
-    }
-    if (tools.pathSelection?.objectId !== selectedId
-      || tools.pathSelection.stateKeyframeId !== automaticPathStateKeyframeId) {
-      tools.selectPath({ stateKeyframeId: automaticPathStateKeyframeId, objectId: selectedId })
-    }
-  }, [automaticPathStateKeyframeId, editorTool, interactive, selectedId])
 
   // 节点注册表用 state 而不是 ref：新对象"添加即选中"时，必须等它挂载注册后
   // 触发一次重渲染，TransformControls 才能立刻拿到节点（ref 版本不会重渲染，
@@ -197,6 +212,10 @@ const StageScene: React.FC<StageSceneProps> = ({
       scale: { x: node.scale.x, y: node.scale.y, z: node.scale.z },
     })
   }, [updateCameraView, updateTransform])
+
+  const handleSelect = useCallback((id: string): void => {
+    if (interactive) setSelected(id)
+  }, [interactive, setSelected])
 
   const handleGizmoInteractionStart = useCallback((): void => {
     const state = useCameraStageStore.getState(), id = state.selectedId
@@ -260,9 +279,13 @@ const StageScene: React.FC<StageSceneProps> = ({
       camera={canvasCamera}
       // preserveDrawingBuffer 让截图能读到当前帧；场景为静态摆拍，性能代价可忽略
       gl={{ preserveDrawingBuffer: true, alpha: false }}
+      // 摆场景时画面大多静止：只在 store、控制器、播放或资源变化时出帧，见 StageDemandFrames
+      frameloop="demand"
       style={{ background: sceneSettings.sky.color }}
       onPointerMissed={() => interactive && setSelected(null)}
     >
+      <StageDemandFrames />
+      {interactive && <StagePathSelectionSync selectedId={selectedId} />}
       {sceneSettings.sky.environmentImageUrl ? (
         <StageEnvironment
           imageUrl={sceneSettings.sky.environmentImageUrl}
@@ -312,20 +335,22 @@ const StageScene: React.FC<StageSceneProps> = ({
           )}
         </>
       )}
-      {objects.map((object) => (
-        <StageObjectMesh
-          key={object.id}
-          onAssetReady={onAssetReady}
-          object={object}
-          selected={object.id === selectedId}
-          onSelect={(id) => interactive && setSelected(id)}
-          onRegister={registerNode}
-          cameraLookAtTarget={cameraLookAtTargets.get(object.id)}
-          showCameraHelpers={!isCameraView}
-          showNameLabel={sceneSettings.display.showNameLabels && !(isCameraView && object.id === activeCamera?.id)}
-          nameLabelSettings={sceneSettings.display.nameLabel}
-        />
-      ))}
+      <StagePrimitiveResourcesProvider>
+        {objects.map((object) => (
+          <StageObjectMesh
+            key={object.id}
+            onAssetReady={onAssetReady}
+            object={object}
+            selected={object.id === selectedId}
+            onSelect={handleSelect}
+            onRegister={registerNode}
+            cameraLookAtTarget={cameraLookAtTargets.get(object.id)}
+            showCameraHelpers={!isCameraView}
+            showNameLabel={sceneSettings.display.showNameLabels && !(isCameraView && object.id === activeCamera?.id)}
+            nameLabelSettings={sceneSettings.display.nameLabel}
+          />
+        ))}
+      </StagePrimitiveResourcesProvider>
       {!isCameraView && selectedId && (
         <StageMotionPathOverlay objectId={selectedId} stateKeyframes={stateKeyframes} editable={interactive} />
       )}
@@ -353,4 +378,4 @@ const StageScene: React.FC<StageSceneProps> = ({
   )
 }
 
-export default StageScene
+export default memo(StageScene)

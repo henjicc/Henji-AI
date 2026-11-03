@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
-import { flushSync } from '@react-three/fiber'
 import {
   notifyCameraStageRenderWorkerReady,
   onCameraStageRenderWorkerCancel,
@@ -15,6 +14,7 @@ import { exportCameraStageVideo } from '../export/cameraStageVideo'
 import { sceneFromDocumentContent } from '../domain/sceneSerialization'
 import StageScene from '../scene/StageScene'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
+import { commitCameraStageFrame } from '../scene/stageFrameCommit'
 import { attachCameraStageStore, createCameraStageStore, useCameraStageStore } from '../store/cameraStageStore'
 import {
   assertCameraStageRenderOutputKind,
@@ -141,7 +141,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
         }
         if (disposed) return
         if (cancelRef.current) throw new Error('后台渲染已取消')
-        flushSync(() => useCameraStageStore.getState().seek(selectedTimeSec))
+        commitCameraStageFrame(() => useCameraStageStore.getState().seek(selectedTimeSec))
 
         const exportState = useCameraStageStore.getState()
         const renderSchedule = buildRenderCameraSchedule(exportState.stateKeyframes, exportState.activeCameraId)
@@ -236,11 +236,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           captureFrame: async (targetSize) => captureRef.current?.(targetSize) ?? null,
           disposeCaptureFrame: () => captureRef.current?.disposeOffscreen(),
           seekFrame: (time) => {
-            // 隐藏窗口的 RAF 会被 Chromium 节流到约 1fps；使用 R3F 自身的同步提交，
-            // 保证对象、摄像机、FOV 与注视方向全部落到当前帧后立即抓取。
-            flushSync(() => {
-              useCameraStageStore.getState().seek(time)
-            })
+            commitCameraStageFrame(() => useCameraStageStore.getState().seek(time))
             return Promise.resolve()
           },
           onProgress: (progress) => {

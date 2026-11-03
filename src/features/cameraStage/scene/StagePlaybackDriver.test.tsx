@@ -35,13 +35,13 @@ describe('StagePlaybackDriver', () => {
     expect(framePriority).toBe(-2)
     expect(frameCallback).not.toBeNull()
 
-    act(() => frameCallback?.({}, 0.1))
+    act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
     expect(readCameraStagePlaybackRuntime().time).toBeCloseTo(1 / 15)
     expect(useCameraStageStore.getState().playback.currentTime).toBeCloseTo(1 / 15)
 
     view.unmount()
     const timeAfterUnmount = readCameraStagePlaybackRuntime().time
-    act(() => frameCallback?.({}, 0.1))
+    act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
     expect(readCameraStagePlaybackRuntime().time).toBe(timeAfterUnmount)
   })
 
@@ -68,7 +68,7 @@ describe('StagePlaybackDriver', () => {
       animation: { ...state.animation, duration: 1 },
     }))
     useCameraStageStore.getState().play()
-    act(() => frameCallback?.({}, 0.1))
+    act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
 
     expect(readCameraStagePlaybackRuntime()).toMatchObject({ playing: true, time: 0.1 })
     view.unmount()
@@ -81,7 +81,7 @@ describe('StagePlaybackDriver', () => {
       animation: { ...state.animation, duration: 1 },
     }))
     useCameraStageStore.getState().play()
-    act(() => frameCallback?.({}, 0.1))
+    act(() => frameCallback?.({ invalidate: () => undefined }, 0.1))
 
     expect(readCameraStagePlaybackRuntime()).toMatchObject({ playing: true, time: 0.1 })
     view.unmount()

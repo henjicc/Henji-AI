@@ -33,6 +33,7 @@ import { useCameraStageShortcuts } from './hooks/useCameraStageShortcuts'
 import CameraStageDock from './layout/CameraStageDock'
 import type { CameraStageDockHandle } from './layout/CameraStageDock'
 import type { StageCaptureFn } from './scene/StageCaptureBridge'
+import { commitCameraStageFrame } from './scene/stageFrameCommit'
 import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
@@ -267,9 +268,9 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         renderStyle: exportState.sceneSettings.render.style,
         captureFrame: async (targetSize) => captureRef.current?.(targetSize) ?? null,
         disposeCaptureFrame: () => captureRef.current?.disposeOffscreen(),
-        seekFrame: async (time) => {
-          useCameraStageStore.getState().seek(time)
-          await waitForCameraStageRender(1)
+        seekFrame: (time) => {
+          commitCameraStageFrame(() => useCameraStageStore.getState().seek(time))
+          return Promise.resolve()
         },
         onProgress: (progress) => {
           setVideoProgress(progress)

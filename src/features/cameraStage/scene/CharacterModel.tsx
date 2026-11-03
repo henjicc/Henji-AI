@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useGLTF } from '@react-three/drei'
+import { useThree } from '@react-three/fiber'
 import { AnimationMixer, Bone, Euler, Group, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { getBodyVariant } from '../domain/bodyVariants'
@@ -68,6 +69,7 @@ function buildRig(source: Group): CharacterRig {
 
 const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }) => {
   const gltf = useGLTF(url)
+  const invalidate = useThree((state) => state.invalidate)
   const rig = useMemo(() => buildRig(gltf.scene as Group), [gltf.scene])
   const mixer = useMemo(() => new AnimationMixer(rig.scene), [rig])
   const material = useMemo(() => new MeshStandardMaterial(), [])
@@ -178,6 +180,9 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
     const head = rig.bones.get(HEAD_BONE_NAME)
     head?.scale.setScalar(variant.headScale)
   }, [rig, variant])
+
+  // 上面的 effect 直接改材质与骨骼，不经过 R3F 属性；按需渲染下每次提交后补一帧，模型异步加载完成时也靠这一帧显示
+  useEffect(() => { invalidate() })
 
   return (
     <group scale={[variant.bodyScale.x, variant.bodyScale.y, variant.bodyScale.z]}>
