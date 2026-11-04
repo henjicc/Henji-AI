@@ -5,6 +5,8 @@ import { createDefaultAnimation } from '../domain/animationTypes'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { cameraStageStateKeyframeService } from './cameraStageStateKeyframeService'
+import { applicationReflectionHandlers } from '@/features/application-control/capabilities/applicationReflectionAdapter'
+import { getHostScopeRevisions } from '@/features/application-control/hostContext/hostContext'
 
 /**
  * 「状态关键帧删不掉也排不了序」以前无解：`camera_stage.state_keyframe` 的实体、属性、mutation 执行器全都
@@ -173,4 +175,13 @@ describe('三维状态关键帧集合写入', () => {
     expect(remaining[0].transitionDuration).toBeCloseTo(5, 2)
   })
 
+  it('经公共事务撤销批量新建，状态关键帧被移除且撤销报告成功', async () => {
+    const context = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal, expectedRevisions: { camera_stage: getHostScopeRevisions().camera_stage } })
+    const created = await applicationReflectionHandlers.changeEntities({ summary: '新建两张状态关键帧', changes: [{ kind: 'create_items', parent: { kind: 'camera_stage.scene', id: 'project-1' }, entityType: 'camera_stage.state_keyframe',
+      items: [{ properties: { 'camera_stage.state_keyframe.time': 1 } }, { properties: { 'camera_stage.state_keyframe.time': 2 } }] }] }, context())
+    expect(useCameraStageStore.getState().stateKeyframes).toHaveLength(2)
+    const undone = await applicationReflectionHandlers.undoEntities({ undoRef: created.undoRef! }, context())
+    expect(undone.resultRefs.map(ref => ref.id)).toEqual(created.resultRefs.map(ref => ref.id))
+    expect(useCameraStageStore.getState().stateKeyframes).toHaveLength(0)
+  })
 })

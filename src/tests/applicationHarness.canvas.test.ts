@@ -41,6 +41,26 @@ it('公共实体调用在 A 页面创建、修改并保存 B，打开 B 复用�
   } finally { app.dispose() }
 })
 
+it('公共撤销属性修改与批量新建节点，画布恢复且撤销报告成功', async () => {
+  setCanvasTestProjectState({ currentProjectId: null, currentProject: null })
+  const app = createApplicationHarness()
+  try {
+    const project = await app.requireResult('create_document', { kind: 'canvas', name: '公共撤销' })
+    const parent = { kind: 'canvas.document', id: documentId(project) }
+    const create = (count: number) => app.requireResult('change_application_entities', { summary: '新建文本', changes: [{
+      kind: 'create_items', parent, entityType: 'canvas.node',
+      items: Array.from({ length: count }, () => ({ properties: { 'canvas.node.node_type': 'textAnnotationNode' } })),
+    }] })
+    const [target] = (await create(1)).resultRefs as ApplicationRef[]
+    await app.requireResult('undo_application_changes', { undoRef: (await create(2)).undoRef })
+    expect((await readPersistedCanvasProjectSnapshot(parent.id)).nodes).toHaveLength(1)
+    const changed = await app.change(target, { 'canvas.node.text_content': '要撤销的正文' })
+    if (!changed.ok) throw new Error(JSON.stringify(changed.error))
+    await app.requireResult('undo_application_changes', { undoRef: changed.data.undoRef })
+    expect((await readPersistedCanvasProjectSnapshot(parent.id)).nodes[0].data.content).not.toBe('要撤销的正文')
+  } finally { app.dispose() }
+})
+
 it('公共入口连续创建节点和连线，位置与持久化结果一致，旧版本写入被拒绝', async () => {
   const app = createApplicationHarness()
   try {

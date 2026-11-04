@@ -118,9 +118,6 @@ function setIdOf(ref: { id: string }): string {
 export class CameraStageSetCollectionExecutor implements ApplicationCollectionExecutor {
   readonly entityType = CAMERA_STAGE_ENTITY_TYPES.set
   readonly effectContract = { direct: [], cascades: [] }
-  /** 撤销回执要报出被恢复的那几片布景（引擎按删除目标核对引用），按撤销令牌记下。 */
-  private readonly removedRefs = new Map<string, string[]>()
-
   constructor(private readonly dependencies: CameraStageControlExecutorDependencies) {}
 
   async apply(step: CollectionStep): Promise<ApplicationCompletedStepResult> {
@@ -130,7 +127,6 @@ export class CameraStageSetCollectionExecutor implements ApplicationCollectionEx
     const projectId = step.parent.id.includes(':') ? step.parent.id.slice(0, step.parent.id.indexOf(':')) : step.parent.id
     const setIds = step.operation.targets.map(setIdOf)
     const result = await cameraStageApplicationService.removeSets(projectId, setIds)
-    this.removedRefs.set(result.undoToken, setIds.map(id => `${projectId}:${id}`))
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     return {
@@ -154,16 +150,12 @@ export class CameraStageSetCollectionExecutor implements ApplicationCollectionEx
   }
 
   forget(undoToken: string): void {
-    this.removedRefs.delete(undoToken)
     forgetCameraStageUndo(undoToken)
   }
 
+  /** 集合撤销的直接引用由引擎按原删除步骤给出，这里只恢复场景。 */
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
-    const ids = this.removedRefs.get(undoToken) ?? []
-    const result = await undoCompleted(undoToken, this.dependencies, '三维布景删除已撤销。')
-    this.removedRefs.delete(undoToken)
-    const revision = result.resultingRevisions.camera_stage
-    const { directEffects: _projectEffects, ...rest } = result
-    return { ...rest, directRefs: ids.map(id => ({ kind: CAMERA_STAGE_ENTITY_TYPES.set, id, revision })) }
+    const { directEffects: _projectEffects, ...rest } = await undoCompleted(undoToken, this.dependencies, '三维布景删除已撤销。')
+    return { ...rest, directRefs: [] }
   }
 }

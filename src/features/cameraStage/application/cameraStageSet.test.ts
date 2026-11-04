@@ -137,8 +137,8 @@ describe('布景生成落地', () => {
     const removed = await collection.apply(step)
     expect(store.getState().objects).toHaveLength(before)
     expect((await cameraStageApplicationService.observeProject('set-doc')).sets).toEqual([])
-    const undone = await collection.undo(removed.undoToken!)
-    expect(undone.directRefs.map(ref => ref.id)).toEqual([setRef.id])
+    await collection.undo(removed.undoToken!)
+    expect((await cameraStageApplicationService.observeProject('set-doc')).sets.map(set => set.id)).toEqual([setId])
     expect(store.getState().objects.filter(object => object.setId === setId)).toHaveLength(thinned)
   })
 

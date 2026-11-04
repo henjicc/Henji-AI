@@ -342,7 +342,13 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
             for (let index = record.steps.length - 1; index >= 0; index -= 1) {
               const original = record.results[index]
               if (!original.undoToken) throw new Error('UNDO_NOT_SUPPORTED')
-              applied.push(await this.undoStep(record.steps[index], original.undoToken, batchContext))
+              const step = record.steps[index]
+              const undone = await this.undoStep(step, original.undoToken, batchContext)
+              // 撤销属性或集合写入触及的就是原步骤的那些引用，提交时已经核对并保存；由引擎给出，
+              // 执行器只管恢复状态，免得它漏报引用时撤销已生效却被判成引用数量不符。
+              // 引用上的 revision 是提交时的版本，撤销后已过时，去掉。
+              applied.push(step.kind === 'operation' ? undone
+                : { ...undone, directRefs: original.directRefs.map(({ revision: _revision, ...ref }) => ref) })
             }
           } catch (error) {
             if (applied.length > 0) this.forgetUndoRecord(request.undoRef)
