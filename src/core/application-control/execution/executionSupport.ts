@@ -1,7 +1,7 @@
 import type { ApplicationChangePlan, ApplicationPlannedStep, ApplicationEffectReceipt, ApplicationTransactionMode, ApplicationEvidence } from '../transactions'
 import type { ApplicationReflectionRegistry } from '../registry'
 import { assertCollectionOperationAvailable } from './availability'
-import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, normalizeEffectRefLabels } from './persistence'
+import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, applicationFailureReason, normalizeEffectRefLabels } from './persistence'
 import type { ApplicationMutationExecutor, ApplicationCollectionExecutor, ApplicationSemanticOperationExecutor, ApplicationControlExecutionDependencies, ApplicationExecutionContext, ApplicationCompletedStepResult, ApplicationStepExecutionResult } from './types'
 import { resolveUndoExpectedAbsentMutations } from './undoRevisionProbe'
 import { normalizeApplicationRefLabel } from '../identifiers'
@@ -458,10 +458,10 @@ export class ApplicationExecutionSupport {
           try { await this.compensateStep(steps[index], results[index], context); compensated.push(index) }
           catch (cause) {
             throw new ApplicationExecutionProgressFailure(
-              `${String(error)}；补偿失败：${String(cause)}`, results, compensated, error)
+              `${applicationFailureReason(error)}；补偿失败：${applicationFailureReason(cause)}`, results, compensated, error)
           }
         }
-        throw new ApplicationExecutionProgressFailure(String(error), results, compensated, error)
+        throw new ApplicationExecutionProgressFailure(applicationFailureReason(error), results, compensated, error)
       }
       return { completed: results }
     }
@@ -485,14 +485,14 @@ export class ApplicationExecutionSupport {
         throw new ApplicationPersistenceBoundaryFailure(error.failure, [...completed, ...error.completed.map(normalizeCompletedRefLabels)], undefined,
           error.receipts, [...completed.map((_, index) => index), ...error.completedStepIndexes.map((index) => offset + index)])
       }
-      const original = error instanceof Error ? error.message : String(error)
+      const original = applicationFailureReason(error)
       const executionFailure = (message: string, compensated: number[] = []) =>
         new ApplicationExecutionProgressFailure(message, completed, compensated, error)
       // `atomic` 也必须补偿。此前只有 `compensatable` 走补偿，于是声明 atomic 的计划失败后
       // 把已完成的步骤原样留在应用里，却对调用方自称"事务"——三维布置就是这么留下一个
       // 压在立方体上的圆柱体的。只有 `non_reversible` 才允许不补偿，那是它的字面语义。
       if (plan.transactionMode === 'non_reversible') {
-        throw executionFailure(`PARTIAL_FAILURE:${completed.length}:${original}`)
+        throw executionFailure(original)
       }
       const compensated: number[] = []
       for (let index = completed.length - 1; index >= 0; index -= 1) {
@@ -502,15 +502,10 @@ export class ApplicationExecutionSupport {
         } catch (compensationError) {
           // 补偿失败不能顶掉原始错误：原始错误才是调用方需要据以决策的那条。这里如实降级
           // 成"部分未补偿"，并把两条信息都带出去。
-          const detail = compensationError instanceof Error
-            ? compensationError.message
-            : String(compensationError)
-          throw executionFailure(
-            `PARTIAL_FAILURE:${completed.length}:${original}（补偿在第 ${index} 步失败：${detail}）`, compensated,
-          )
+          throw executionFailure(`${original}（补偿在第 ${index} 步失败：${applicationFailureReason(compensationError)}）`, compensated)
         }
       }
-      throw executionFailure(`COMPENSATED_FAILURE:${compensated.join(',')}:${original}`, compensated)
+      throw executionFailure(original, compensated)
     }
   }
 

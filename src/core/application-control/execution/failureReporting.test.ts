@@ -155,6 +155,9 @@ describe('事务失败报告', () => {
     })
     expect(result.status === 'failed' && result.message).toContain('targetObjectId')
     expect(result.status === 'failed' && result.message).toContain('立方体')
+    // 完成与补偿的步骤走 partial 字段，引擎的内部标记不进文案。
+    expect(result.status === 'failed' && result.message).not.toMatch(/_FAILURE:/)
+    expect(result).toMatchObject({ code: 'EXECUTION_FAILED', partial: { completedStepIndexes: [], uncompensatedStepIndexes: [] } })
   })
 
   /*

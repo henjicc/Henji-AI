@@ -64,6 +64,11 @@ export class ApplicationPersistenceBoundaryFailure extends Error {
   }
 }
 
+/** 进度失败的文案原因：只取错误原文，不带 `Error: ` 这类运行时前缀。 */
+export function applicationFailureReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 export class ApplicationExecutionProgressFailure extends Error {
   constructor(message: string, readonly completed: ApplicationCompletedStepResult[],
     readonly compensatedStepIndexes: number[], readonly cause?: unknown,

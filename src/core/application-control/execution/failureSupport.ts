@@ -12,19 +12,6 @@ function failure(
   return applicationTransactionResultSchema.parse({ status: 'failed', code, message, recoverable, ...extra })
 }
 
-/**
- * 从 `PARTIAL_FAILURE:<n>:<原始错误>` / `COMPENSATED_FAILURE:<下标>:<原始错误>` 里取回原因。
- *
- * 这些包装串以前只用来判分支，原始错误连一个字都没进最终结果——调用方拿到的永远是
- * "事务执行失败"这六个字。实测排查三维布置时，模型收到的就是这句，它既不知道是
- * targetObjectId 填错了，也不可能自我修正。
- */
-function failureCause(message: string): string {
-  const cause = /^(?:PARTIAL_FAILURE|COMPENSATED_FAILURE):[^:]*:([\s\S]+)$/.exec(message)
-  const detail = cause?.[1]?.trim()
-  return detail ? `原因：${detail}` : ''
-}
-
 function mergeRevisions(target: Record<string, number>, source: Record<string, number>): void {
   for (const [scope, revision] of Object.entries(source)) target[scope] = revision
 }
@@ -51,33 +38,6 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
   ): Promise<ApplicationTransactionResult> {
     if (error instanceof ApplicationPersistenceBoundaryFailure) return this.describePersistenceFailure(error, plan.steps, _context, transactionRef)
     if (error instanceof ApplicationExecutionProgressFailure) return this.describeProgressFailure(error, plan.steps, _context, transactionRef, receipts)
-    const message = error instanceof Error ? error.message : String(error)
-    const compensated = /^COMPENSATED_FAILURE:([^:]*):/.exec(message)
-    if (compensated) {
-      const indexes = compensated[1] ? compensated[1].split(',').map(Number) : []
-      return failure('EXECUTION_FAILED', `事务执行失败，已完成步骤均已补偿，应用状态未改变。${failureCause(message)}`, true, {
-        transactionRef,
-        partial: { completedStepIndexes: indexes, compensatedStepIndexes: indexes, uncompensatedStepIndexes: [] },
-      })
-    }
-    const partial = /^PARTIAL_FAILURE:(\d+):/.exec(message)
-    if (partial) {
-      const count = Number(partial[1])
-      const indexes = Array.from({ length: count }, (_, index) => index)
-      // 零步完成时**不能**说"部分步骤已完成且未补偿、不可重试"。这句话曾经无视 count 硬写
-      // 出来：单步事务失败时一步都没写，调用方却被告知应用已被改动且不可重试。实测中模型
-      // 就是读到这句之后按规则停止了所有后续写入——它的行为是对的，是这条报告在骗它。
-      if (count === 0) {
-        return failure('EXECUTION_FAILED', `事务执行失败，没有任何步骤被提交，应用状态未改变。${failureCause(message)}`, true, {
-          transactionRef,
-          partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] },
-        })
-      }
-      return failure('EXECUTION_FAILED', `事务执行失败，前 ${count} 步已完成且未补偿，应用处于中间状态。${failureCause(message)}`, false, {
-        transactionRef,
-        partial: { completedStepIndexes: indexes, compensatedStepIndexes: [], uncompensatedStepIndexes: indexes },
-      })
-    }
     return this.toFailure(error, transactionRef, planRevisions(plan))
   }
 
@@ -123,7 +83,8 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
       const uncompensated = indexes.filter((index) => !error.compensatedStepIndexes.includes(index))
       const state = indexes.length === 0 ? '没有任何步骤被提交，应用状态未改变。'
         : uncompensated.length === 0 ? '已完成步骤均已补偿。' : '仍有已执行的步骤未补偿，请先检查当前内容，不要重复已执行的步骤。'
-      return failure('EXECUTION_FAILED', `操作未完整完成：${error.message}。${state}`.slice(0, 2000), uncompensated.length === 0, {
+      // 原因只写业务原文；完成、补偿到哪一步由 partial 字段表达，不拼进文案。
+      return failure('EXECUTION_FAILED', `${indexes.length === 0 ? '操作失败' : '操作未完整完成'}：${error.message.replace(/[。.]$/, '')}。${state}`.slice(0, 2000), uncompensated.length === 0, {
         transactionRef, partial: { completedStepIndexes: indexes, compensatedStepIndexes: error.compensatedStepIndexes,
           uncompensatedStepIndexes: uncompensated },
       })

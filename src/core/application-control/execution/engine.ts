@@ -15,7 +15,7 @@ import { ApplicationPlanBuilder } from './planner'
 import { ApplicationTransactionVerifier } from './verifier'
 import { ApplicationExecutionFailureSupport } from './failureSupport'
 import { ApplicationExecutionScopeGuard } from './scopeGuard'
-import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, withApplicationPersistenceBoundary, type ApplicationPersistenceReceipt } from './persistence'
+import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, applicationFailureReason, withApplicationPersistenceBoundary, type ApplicationPersistenceReceipt } from './persistence'
 import { acceptedPropertyOperations, type ApplicationMutationOperation } from './writerTable'
 import type {
   ApplicationCollectionExecutor,
@@ -352,7 +352,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
             }
           } catch (error) {
             if (applied.length > 0) this.forgetUndoRecord(request.undoRef)
-            throw new ApplicationExecutionProgressFailure(`撤销执行失败：${String(error)}`, applied, [], error,
+            throw new ApplicationExecutionProgressFailure(`撤销执行失败：${applicationFailureReason(error)}`, applied, [], error,
               applied.map((_, index) => record.steps.length - 1 - index))
           }
           return applied

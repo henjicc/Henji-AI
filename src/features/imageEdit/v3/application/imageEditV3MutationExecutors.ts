@@ -39,7 +39,7 @@ const logger = createLogger('features.imageEdit.v3.application_mutation')
 const UNDO_PREFIX = 'image-edit-v3-undo:'
 
 import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
-import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
+import { ApplicationExecutionProgressFailure, applicationFailureReason } from '@/core/application-control/execution/persistence'
 import { IMAGE_EDIT_HISTORY_FIELDS_V3, type ImageEditHistoryMutationDraftV3 } from './imageEditHistoryFields'
 import { IMAGE_EDIT_WORKFLOW_FIELDS_V3, imageEditLayerMovesSchemaV3, type ImageEditWorkflowDraftV3 } from './imageEditWorkflowFields'
 import { prepareSmartContentMutationV3 } from '../smartContent/service'
@@ -257,10 +257,10 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
           if (token) await rollbackPayload(decodeUndo(token))
           compensated.push(index)
         } catch (cause) {
-          throw new ApplicationExecutionProgressFailure(`${String(error)}；补偿失败：${String(cause)}`, results, compensated, error)
+          throw new ApplicationExecutionProgressFailure(`${applicationFailureReason(error)}；补偿失败：${applicationFailureReason(cause)}`, results, compensated, error)
         }
       }
-      throw new ApplicationExecutionProgressFailure(String(error), results, compensated, error)
+      throw new ApplicationExecutionProgressFailure(applicationFailureReason(error), results, compensated, error)
     }
   }
 
