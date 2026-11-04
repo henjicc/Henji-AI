@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Plane, Vector3 } from 'three'
-import type { Group, Ray } from 'three'
+import type { Group, OrthographicCamera, Ray } from 'three'
 import { CAMERA_STAGE_MOTION_PATH_HEX } from '@/core/theme/colorTokens'
 import type { StageVec3 } from '../domain/sceneTypes'
 import { beginHistorySession, endHistorySession, useCameraStageStore } from '../store/cameraStageStore'
@@ -78,9 +78,12 @@ const PathControlPoint: React.FC<PathControlPointProps> = ({
   useFrame(() => {
     const group = groupRef.current
     if (!group) return
-    const worldPosition = new Vector3(position.x, position.y, position.z)
-    const scale = Math.max(0.08, camera.position.distanceTo(worldPosition) * 0.03)
-    group.scale.setScalar(scale)
+    // 控制点在屏幕上保持同样大小：透视按距离，正交按可见高度（正交相机离场景几千米，距离没有意义）
+    const ortho = camera as OrthographicCamera
+    const visibleSize = ortho.isOrthographicCamera
+      ? (ortho.top - ortho.bottom) / ortho.zoom
+      : camera.position.distanceTo(new Vector3(position.x, position.y, position.z))
+    group.scale.setScalar(Math.max(0.08, visibleSize * 0.03))
   })
 
   const handlePointerDown = (event: ThreeEvent<PointerEvent>): void => {

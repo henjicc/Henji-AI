@@ -7,7 +7,6 @@ import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import { STAGE_STYLE_HIDDEN_KEY } from '../render/stageStyleTags'
 import type { StageGroundSettings } from '../domain/sceneTypes'
 
-const GROUND_SIZE = 160
 const CHECKER_BASE_CELL = 2
 const GRID_BASE_CELL = 2
 
@@ -51,7 +50,8 @@ function hexToRgb(hex: string): [number, number, number] {
   ]
 }
 
-const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) => {
+/** size：地面边长（米），随场景尺度变化，见 stageGroundSize */
+const StageGround: React.FC<{ settings: StageGroundSettings; size: number }> = ({ settings, size }) => {
   const invalidate = useThree((state) => state.invalidate)
   const checkerShaderRef = useRef<CheckerShader | null>(null)
   const checkerMaterialRef = useRef<MeshStandardMaterial>(null)
@@ -133,7 +133,7 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
           rotation={[-Math.PI / 2, 0, 0]}
           position={[0, -0.002, 0]}
         >
-          <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
+          <planeGeometry args={[size, size]} />
           <meshStandardMaterial
             ref={checkerMaterialRef}
             color={WHITE_HEX}
@@ -143,7 +143,7 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
         </mesh>
       ) : (
         <mesh key={`ground-${settings.pattern}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]}>
-          <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
+          <planeGeometry args={[size, size]} />
           <meshStandardMaterial color={settings.color} />
         </mesh>
       )}

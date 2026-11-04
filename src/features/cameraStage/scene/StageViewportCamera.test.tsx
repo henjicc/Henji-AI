@@ -85,6 +85,7 @@ describe('StageViewportCamera', () => {
         lookAtTargets={lookAtTargets}
         renderCameraSchedule={schedule}
         fallbackCameraId={cameraA.id}
+        sceneExtent={{ center: { x: 0, y: 0, z: 0 }, radius: 0, reach: 0 }}
       />,
     )
     expect(mocks.framePriority).toBe(-0.5)

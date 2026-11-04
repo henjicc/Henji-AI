@@ -3,19 +3,21 @@ import { useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
 import type { OrthographicCamera } from 'three'
 import type { StageFixedView } from '../viewport/viewportTypes'
+import { STAGE_FIXED_VIEW_DISTANCE } from './stageClipPlanes'
 
 interface FixedViewPose {
-  position: readonly [number, number, number]
+  /** 相机所在的方向（单位向量），距离统一取 STAGE_FIXED_VIEW_DISTANCE */
+  direction: readonly [number, number, number]
   up: readonly [number, number, number]
 }
 
 const FIXED_VIEW_POSES: Record<StageFixedView, FixedViewPose> = {
-  top: { position: [0, 20, 0], up: [0, 0, -1] },
-  bottom: { position: [0, -20, 0], up: [0, 0, 1] },
-  front: { position: [0, 0, 20], up: [0, 1, 0] },
-  back: { position: [0, 0, -20], up: [0, 1, 0] },
-  left: { position: [-20, 0, 0], up: [0, 1, 0] },
-  right: { position: [20, 0, 0], up: [0, 1, 0] },
+  top: { direction: [0, 1, 0], up: [0, 0, -1] },
+  bottom: { direction: [0, -1, 0], up: [0, 0, 1] },
+  front: { direction: [0, 0, 1], up: [0, 1, 0] },
+  back: { direction: [0, 0, -1], up: [0, 1, 0] },
+  left: { direction: [-1, 0, 0], up: [0, 1, 0] },
+  right: { direction: [1, 0, 0], up: [0, 1, 0] },
 }
 
 interface StageFixedViewportCameraProps {
@@ -28,7 +30,7 @@ const StageFixedViewportCamera: React.FC<StageFixedViewportCameraProps> = ({ vie
 
   useLayoutEffect(() => {
     const pose = FIXED_VIEW_POSES[view]
-    camera.position.fromArray(pose.position)
+    camera.position.fromArray(pose.direction).multiplyScalar(STAGE_FIXED_VIEW_DISTANCE)
     camera.up.fromArray(pose.up)
     camera.lookAt(new Vector3(0, 0, 0))
     camera.updateProjectionMatrix()

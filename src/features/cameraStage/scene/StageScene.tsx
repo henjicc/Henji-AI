@@ -32,6 +32,8 @@ import { StagePrimitiveResourcesProvider } from './stagePrimitiveResources'
 import { useRenderCameraId } from './useRenderCameraId'
 import type { StageViewportSource } from '../viewport/viewportTypes'
 import StageFixedViewportCamera from './StageFixedViewportCamera'
+import StageEditorViewRange from './StageEditorViewRange'
+import { resolveStageSceneExtent, stageGroundSize } from '../application/stageSceneExtent'
 import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
 import { useSyncExternalStore } from 'react'
 import { cameraMotionPreview, subscribeCameraMotion, cameraMotionRevision, demonstrateCameraMotion, cameraMotionDraft } from '../application/cameraMotionDraft'
@@ -279,6 +281,12 @@ const StageScene: React.FC<StageSceneProps> = ({
   // 播放头落在过渡段时视口只读：隐藏 gizmo，阻断手动编辑插值状态
   const fogNear = Math.max(12, sceneSettings.fog.distance * 0.38)
   const fogFar = Math.max(fogNear + 1, sceneSettings.fog.distance)
+  // 正交视图是量位置用的技术视图，相机离场景几千米，雾只会把它整个吞掉
+  const fogVisible = sceneSettings.fog.enabled && !isFixedView
+  const editorFog = useMemo(() => (fogVisible ? { near: fogNear, far: fogFar } : null), [fogFar, fogNear, fogVisible])
+  // 裁剪面与地面只跟着存下来的对象走：运镜示范的临时预览不改变场景尺度
+  const sceneExtent = useMemo(() => resolveStageSceneExtent(storedObjects), [storedObjects])
+  const groundSize = stageGroundSize(sceneExtent)
 
   // 未选中的可见基础几何体进合批，不挂逐物体组件；隐藏又没选中的什么都不挂
   const { batchedPrimitives, meshObjects } = useMemo(() => {
@@ -330,7 +338,7 @@ const StageScene: React.FC<StageSceneProps> = ({
         <color attach="background" args={[sceneSettings.sky.color]} />
       )}
       {isFixedView && <StageFixedViewportCamera view={viewportSource.view} />}
-      {sceneSettings.fog.enabled && (
+      {fogVisible && (
         <fog
           key={`scene-fog-${sceneSettings.sky.color}-${fogNear}-${fogFar}`}
           attach="fog"
@@ -348,6 +356,7 @@ const StageScene: React.FC<StageSceneProps> = ({
       <StageGround
         key={`stage-ground-${sceneSettings.ground.pattern}`}
         settings={sceneSettings.ground}
+        size={groundSize}
       />
       {isCameraView && activeCamera && activeCameraTarget && (
         <>
@@ -359,6 +368,7 @@ const StageScene: React.FC<StageSceneProps> = ({
             lookAtTargets={cameraLookAtTargets}
             renderCameraSchedule={viewportSource?.kind === 'camera' ? null : renderCameraSchedule}
             fallbackCameraId={activeCameraId}
+            sceneExtent={sceneExtent}
           />
           {interactive && activeCamera.lookAt.mode === 'manual' && (
             <StageCameraViewControls
@@ -413,6 +423,7 @@ const StageScene: React.FC<StageSceneProps> = ({
           {!isFixedView && <StageDirectorViewRestorer />}
           {interactive && <StageFocusController />}
           {!isFixedView && primary && <DirectorViewTracker />}
+          <StageEditorViewRange extent={sceneExtent} fixedView={isFixedView} fog={editorFog} />
         </>
       )}
     </Canvas>

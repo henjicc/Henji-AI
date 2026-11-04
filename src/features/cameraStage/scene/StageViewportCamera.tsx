@@ -12,6 +12,8 @@ import {
   subscribeCameraStagePlaybackRuntime,
 } from './playbackRuntime'
 import { resolveStageViewportCameraId } from './viewportCameraRuntime'
+import type { StageSceneExtent } from '../application/stageSceneExtent'
+import { resolveStageClipPlanes, STAGE_MIN_FAR, STAGE_MIN_NEAR } from './stageClipPlanes'
 
 interface StageViewportCameraProps {
   cameraObject: StageCameraObject
@@ -21,6 +23,7 @@ interface StageViewportCameraProps {
   lookAtTargets: ReadonlyMap<string, StageVec3>
   renderCameraSchedule: RenderCameraScheduleEntry[] | null
   fallbackCameraId: string | null
+  sceneExtent: StageSceneExtent
 }
 
 interface RuntimeCameraSample {
@@ -28,6 +31,8 @@ interface RuntimeCameraSample {
   position: StageVec3
   rotation: StageVec3
   fov: number
+  /** 注视点：只用来估计“看多远”，决定近裁剪面 */
+  lookAtTarget: StageVec3
 }
 
 function createRuntimeCameraSample(
@@ -45,6 +50,7 @@ function createRuntimeCameraSample(
       )
       : object.transform.rotation,
     fov: object.fov,
+    lookAtTarget,
   }
 }
 
@@ -57,8 +63,12 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({
   lookAtTargets,
   renderCameraSchedule,
   fallbackCameraId,
+  sceneExtent,
 }) => {
   const cameraRef = useRef<ThreePerspectiveCamera>(null)
+  // 场景尺度变化不重建取样回调：只在下一次出帧时用最新值算裁剪面
+  const sceneExtentRef = useRef(sceneExtent)
+  sceneExtentRef.current = sceneExtent
   const samplesRef = useRef(new Map<string, RuntimeCameraSample>())
   const fallbackSample = useMemo(
     () => createRuntimeCameraSample(cameraObject, lookAtTarget),
@@ -75,7 +85,7 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({
       time,
     )
     const sample = (scheduledId ? samplesRef.current.get(scheduledId) : null) ?? fallbackSample
-    const { position, rotation, object, fov } = sample
+    const { position, rotation, object, fov, lookAtTarget: target } = sample
     camera.position.set(position.x, position.y, position.z)
     camera.rotation.order = 'YXZ'
     camera.rotation.set(
@@ -91,6 +101,10 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({
     camera.rotateX(rotationOffset.x)
     camera.rotateY(rotationOffset.y)
     camera.rotateZ(rotationOffset.z)
+    const focusDistance = Math.hypot(target.x - position.x, target.y - position.y, target.z - position.z)
+    const planes = resolveStageClipPlanes(camera.position, focusDistance, sceneExtentRef.current)
+    camera.near = planes.near
+    camera.far = planes.far
     camera.updateProjectionMatrix()
   }, [cameraObject.id, fallbackCameraId, fallbackSample, interactionRef, renderCameraSchedule])
 
@@ -142,8 +156,8 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({
       ref={cameraRef}
       makeDefault
       fov={cameraObject.fov}
-      near={0.05}
-      far={1000}
+      near={STAGE_MIN_NEAR}
+      far={STAGE_MIN_FAR}
       position={[
         cameraObject.transform.position.x,
         cameraObject.transform.position.y,
