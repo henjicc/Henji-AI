@@ -1661,13 +1661,15 @@ export class VideoEditRenderer {
         const trust = this.webTrust(document, clip)
         const outputScale = this.webScale
         const view = codeWebView(reference)
-        const ahead = sequential
-          ? [1, 2].flatMap(offset => {
-            const at = frame + offset
-            if (at >= clip.start + clip.duration) return []
-            const sample = codeMediaInputSample(clip, reference, at, document.frameRate)
-            return sample ? [sample.seconds] : []
-          }) : []
+        // 前视只取同一页面接着推进的时刻（与 continuesWeb 同一规则）：跨段的页面时刻跳转由剪点前预开的另一个页面取，不能让当前页面先跳过去。
+        let span = sequential ? codeMediaInputSample(clip, reference, frame, document.frameRate)?.span : undefined, before = seconds
+        const ahead: number[] = []
+        for (const offset of sequential ? [1, 2] : []) {
+          const at = frame + offset
+          const sample = at < clip.start + clip.duration ? codeMediaInputSample(clip, reference, at, document.frameRate) : undefined
+          if (!sample || sample.span !== span && !(sample.seconds >= before && sample.seconds - before <= 1)) break
+          ahead.push(sample.seconds); span = sample.span; before = sample.seconds
+        }
         const text = clip.code ? this.codeSources?.webText(clip.code)?.[parameter] : undefined
         const picture = webs.picture(reference, seconds, context, copy, trust, {
           precision: context.precision,

@@ -430,9 +430,11 @@ it.each([false, true])('网页未到时节目继续合成且标近似，暂停�
     document.codeMaterials![0].versions[0] = { ...document.codeMaterials![0].versions[0], apiVersion: 12, ...testCodeManifest(source, document) }
   }
   const captures: Array<{ time: number; scale: number }> = []
+  const exactDemands: number[] = []
   installVideoEditWebChannel(() => ({
-    call: async (method: string, params: { time: number; scale: number }) => {
+    call: async (method: string, params: { time: number; scale: number; latest?: boolean }) => {
       if (method === 'openWeb') return { streamId: 'web', pixelWidth: 100, pixelHeight: 100, duration: 100, contentHash: 'hash', route: 'route' }
+      if (method === 'cacheWeb' && params.latest === false) exactDemands.push(params.time)
       if (method === 'captureWeb') { captures.push(params); return new Promise(() => undefined) }
       return true
     },
@@ -448,9 +450,13 @@ it.each([false, true])('网页未到时节目继续合成且标近似，暂停�
     for (const frame of [20, 40, 10]) {
       expect(await renderer.render(frame, false, 'fast')).toMatchObject({ presented: true, approximate: true })
     }
+    // 播放时当前帧先发，前视两帧排在后面。暂停的精确帧没有文字时接管在途的同刻前视，不重复取帧；要文字时读键不同，另发一次。
+    expect(captures.map(capture => Math.round(capture.time * 30))).toEqual([15, 16, 17])
+    const expected = captures.length + (textEnabled ? 1 : 0)
     const paused = renderer.render(16)
-    for (let turn = 0; turn < 100 && captures.length < 2; turn++) await new Promise(resolve => setTimeout(resolve, 1))
-    expect(captures).toHaveLength(2)
+    for (let turn = 0; turn < 100 && (!exactDemands.length || captures.length < expected); turn++) await new Promise(resolve => setTimeout(resolve, 1))
+    expect(exactDemands.map(time => Math.round(time * 30))).toEqual([16])
+    expect(captures).toHaveLength(expected)
     renderer.supersedePausedFrame(500)
     expect(await paused).toMatchObject({ presented: false, superseded: true })
   } finally { renderer.abandonPausedFrame(); await renderer.dispose(); installVideoEditWebChannel(() => undefined) }

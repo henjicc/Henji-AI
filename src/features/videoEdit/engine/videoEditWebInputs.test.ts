@@ -206,6 +206,16 @@ it('慢网页到预算即交回，后台只追最新目标且保留上一幅，�
   expect(approximate).toHaveBeenCalledTimes(4)
 })
 
+it('播放前视排在没发出的当前帧之后；那一帧没轮到就被丢下时，前视不被卡着的上一幅挂住', async () => {
+  const picture = (time: number, ahead: number[] = []) => renderPicture(time, { deadline: performance.now() + 16, ahead })
+  const stuck = picture(1); await vi.advanceTimersByTimeAsync(16); await stuck
+  const skipped = picture(2, [2.1]); await vi.advanceTimersByTimeAsync(16); await skipped
+  expect(requests.map(request => request.params.time)).toEqual([1])
+  const next = picture(2.1, [2.2]); await vi.advanceTimersByTimeAsync(0)
+  expect(requests.map(request => request.params.time)).toEqual([1, 2.1, 2.2])
+  await vi.advanceTimersByTimeAsync(16); await next
+})
+
 it('取消立即放弃慢回执，迟到帧归还；重新拖动不等待旧回执', async () => {
   const controller = new AbortController()
   const pending = inputs.picture(reference, 1, {}, copy, [], { signal: controller.signal })

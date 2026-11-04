@@ -7,7 +7,7 @@ import { VideoEditCodeSources } from './videoEditCodeSources'
 const fontState = vi.hoisted(() => ({ revision: 0 }))
 vi.mock('@/platform/fontFaces', () => ({ documentFontRevision: () => fontState.revision }))
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); fontState.revision = 0 })
-it('4K多层文字纹理跨帧及片段运动复用，样式/字体资源变化才重绘，淘汰与销毁关闭位图', async () => {
+it('4K多层文字纹理跨帧及片段运动复用，样式/字体资源变化才重绘，淘汰与销毁交还旧目标', async () => {
   class Bitmap { readonly close = vi.fn(); width = 3840; height = 2160 }
   vi.stubGlobal('ImageBitmap', Bitmap)
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return {} } transferToImageBitmap() { return new Bitmap() } })
@@ -25,8 +25,12 @@ it('4K多层文字纹理跨帧及片段运动复用，样式/字体资源变化�
     expect(second.pictures.get(clip.id)).toBe(bitmap); expect(runtime.draw).toHaveBeenCalledTimes(1)
     const changed = structuredClone(document.clips[0].graphic!); changed.objects[0].textStyle!.tracking = 150
     document = { ...document, clips: [{ ...document.clips[0], graphic: changed }] }; sources.updateDocument(document)
-    await sources.prepare(document, document.clips, 2, () => true); expect(bitmap.close).toHaveBeenCalledOnce(); expect(runtime.draw).toHaveBeenCalledTimes(2)
-    fontState.revision++; const third = await sources.prepare(document, document.clips, 3, () => true); expect(runtime.draw).toHaveBeenCalledTimes(3)
-    const current = third.pictures.get(clip.id) as unknown as Bitmap; await sources.dispose(); expect(current.close).toHaveBeenCalledOnce()
+    // 绘制目标归 GPU 会话所有：淘汰与销毁时由会话按保留键释放，旧样式的目标不在保留键里。
+    const kept = (): ReadonlySet<string> => runtime.releaseUnused.mock.lastCall![0]
+    const firstKey = runtime.draw.mock.calls[0][0]
+    await sources.prepare(document, document.clips, 2, () => true); expect(runtime.draw).toHaveBeenCalledTimes(2); expect(kept().has(firstKey)).toBe(false)
+    fontState.revision++; await sources.prepare(document, document.clips, 3, () => true); expect(runtime.draw).toHaveBeenCalledTimes(3)
+    expect(kept().has(runtime.draw.mock.calls[1][0])).toBe(false)
+    await sources.dispose(); expect(kept().size).toBe(0)
   } finally { await sources.dispose() }
 })

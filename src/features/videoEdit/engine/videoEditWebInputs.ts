@@ -54,6 +54,11 @@ interface WebSession {
   opening: Promise<WebSourceInfo>
   info?: WebSourceInfo
   previewTail: Promise<unknown>
+  /**
+   * 排在播放队列里、还没发出取帧请求的最后一个读（发出或放弃后清空）。页面逐幅串行取帧，前视要排在它后面发，
+   * 否则页面先跳到后面再倒回，当前帧反而最后取到。
+   */
+  queued?: Promise<void>
   reads: Map<string, WebRead>
   last?: VideoEditWebPicture
   frame?: object
@@ -217,7 +222,8 @@ export class VideoEditWebInputs {
       }
     }
     session.lastUsed = performance.now()
-    const times = [time, ...options.ahead ?? []]
+    // 与当前帧同一时刻的前视（固定时刻、停住的段）没有用处，还会把当前读改成非 latest。
+    const times = [...new Set([time, ...options.ahead ?? []])]
     const precision = options.precision ?? 'exact'
     const readKey = (at: number): string => webReadKey(at, view, reference, precision, options.cacheGrid, options.deadline !== undefined, options.cachePolicy, textSelectors)
     const keep = new Set(times.map(readKey))
@@ -247,7 +253,7 @@ export class VideoEditWebInputs {
     try {
       this.checkBudget(frame, state.availableBytes())
       // 前视与当前帧共用读键，但不更新最近显示画面，也不以 latest 语义取消当前目标。
-      for (const at of times.slice(1)) this.read(session, readKey(at), reference, view, at, copy, false, state, precision, options.cacheGrid, options.cachePolicy, options.cacheWrite, textSelectors)
+      for (const at of times.slice(1)) this.read(session, readKey(at), reference, view, at, copy, false, state, precision, options.cacheGrid, options.cachePolicy, options.cacheWrite, textSelectors, true)
       if (options.deadline === undefined) {
         const picture = await abortable(read.promise, options.signal)
         this.remember(session, picture)
@@ -324,7 +330,7 @@ export class VideoEditWebInputs {
     session.last = picture
   }
 
-  private read(session: WebSession, key: string, reference: CodeWebReference, view: CodeWebView, time: number, copy: VideoEditWebFrameCopy, preview: boolean, state: WebFrameState, precision: NonNullable<WebSourceCaptureRequest['precision']>, cacheGrid?: WebTimeGrid, cachePolicy?: WebSourceCaptureRequest['cachePolicy'], cacheWrite?: boolean, textSelectors?: string[]): WebRead {
+  private read(session: WebSession, key: string, reference: CodeWebReference, view: CodeWebView, time: number, copy: VideoEditWebFrameCopy, preview: boolean, state: WebFrameState, precision: NonNullable<WebSourceCaptureRequest['precision']>, cacheGrid?: WebTimeGrid, cachePolicy?: WebSourceCaptureRequest['cachePolicy'], cacheWrite?: boolean, textSelectors?: string[], ahead = false): WebRead {
     const existing = session.reads.get(key)
     if (existing) {
       // 无文本的旧捕获可继续接管；文本读键分开，预览的覆盖状态不能作为精确结果。
@@ -333,8 +339,19 @@ export class VideoEditWebInputs {
     }
     const controller = new AbortController()
     const read: WebRead = { key, abort: controller, started: false, preview, promise: Promise.resolve(undefined as never) }
+    // 播放读（latest）经 previewTail 排队；前视只在前面还有没发出的播放读或前视时排在它后面，其余读按调用顺序直接发出。
+    const previous = ahead ? session.queued : undefined
+    let issue = (): void => undefined, release = (): void => undefined
+    if (preview || previous) {
+      const queued: Promise<void> = new Promise<void>(resolve => { issue = () => { if (session.queued === queued) session.queued = undefined; resolve() } })
+      session.queued = queued
+      // 没发出就结束（取消、失败）时等前面的读发出再让位：后面的读不越过前面的，取消也不会把整条队列挂在一个永远轮不到的读上。
+      release = () => { if (previous) void previous.then(issue); else issue() }
+      controller.signal.addEventListener('abort', release, { once: true })
+    }
     const run = async (): Promise<VideoEditWebPicture> => {
       const info = await abortable(session.info ? Promise.resolve(session.info) : session.opening, controller.signal)
+      if (previous) await abortable(previous, controller.signal)
       if (session.closed || controller.signal.aborted) throw aborted()
       read.started = true
       for (;;) {
@@ -348,7 +365,9 @@ export class VideoEditWebInputs {
         }
         controller.signal.addEventListener('abort', cancel, { once: true })
         try {
-          const result = await abortable(session.channel.call('captureWeb', { streamId: info.streamId, time, ticket, scale: view.scale, latest: read.preview, precision, ...(cacheWrite ? { cacheWrite } : {}), ...(cachePolicy ? { cachePolicy } : {}), ...(cacheGrid ? { cacheGrid } : {}), ...(reference.boxes ? { boxes: reference.boxes } : {}), ...(textSelectors ? { text: textSelectors } : {}) }), controller.signal)
+          const request = session.channel.call('captureWeb', { streamId: info.streamId, time, ticket, scale: view.scale, latest: read.preview, precision, ...(cacheWrite ? { cacheWrite } : {}), ...(cachePolicy ? { cachePolicy } : {}), ...(cacheGrid ? { cacheGrid } : {}), ...(reference.boxes ? { boxes: reference.boxes } : {}), ...(textSelectors ? { text: textSelectors } : {}) })
+          issue()
+          const result = await abortable(request, controller.signal)
           if (result.dropped || generation !== session.generation) {
             if (!read.preview && !session.closed && !controller.signal.aborted) continue
             throw aborted()
@@ -404,7 +423,7 @@ export class VideoEditWebInputs {
         }
       }
     }
-    read.promise = (preview ? session.previewTail.catch(() => undefined).then(run) : run()).catch(error => {
+    read.promise = (preview ? session.previewTail.catch(() => undefined).then(run) : run()).finally(release).catch(error => {
       if (session.reads.get(key) === read) session.reads.delete(key)
       throw error
     })
