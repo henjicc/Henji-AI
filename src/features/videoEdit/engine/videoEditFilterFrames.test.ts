@@ -5,6 +5,7 @@ import type { CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { AuthorFrameInfo, AuthorGpuInputs } from './videoEditAuthorModule'
 import type { PreparedVideoEditEffect } from './videoEditCodeSources'
+import type { SpatialSourceDescriptor } from './videoEditSpatialContracts'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { VideoEditRenderer } from './videoEditRenderer'
 
@@ -60,6 +61,10 @@ vi.mock('./videoEditCodeSources', () => ({ VideoEditCodeSources: class {
   updateDocument() {}
   async prepareInputDeclarations() {}
   declarations() { return [] }
+  // 替身的代码片段都是不带空间声明的平面卡片，与真实实现对旧接口片段的描述一致。
+  async describeSpatialSources(composition: VideoEditComposition): Promise<SpatialSourceDescriptor[]> {
+    return composition.clips.filter(clip => clip.kind === 'code' && clip.code).map(clip => ({ clipId: clip.id, kind: 'card', spaceDependency: false }))
+  }
   async prepare(document: VideoEditComposition, clips: VideoEditClip[], frame: number, _current: unknown, images: Promise<unknown>) {
     await images
     const effects = new Map<string, PreparedVideoEditEffect[]>()
