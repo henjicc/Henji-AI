@@ -13,7 +13,7 @@ let cameraId: string
 beforeEach(async () => {
   const camera = createCameraObject('机位', pickDefaultColor(0)); cameraId = camera.id
   camera.transform.position = { x: 0, y: 2, z: 10 }; camera.lookAt = { mode: 'manual', target: { x: 0, y: 2, z: 0 } }
-  const start = createStateKeyframe([camera], '开始', cameraId, 0), end = createStateKeyframe([camera], '结束', cameraId, 2)
+  const start = createStateKeyframe([camera], '开始', 0), end = createStateKeyframe([camera], '结束', 2)
   end.objectStates[cameraId].transform.position.z = 6
   await loadCameraStageTestProject({ objects: [camera], activeCameraId: cameraId, animation: createDefaultAnimation(), sceneSettings: createDefaultSceneSettings(), stateKeyframes: [start, end] }, { id: projectId, name: '超级关键帧' })
   useCameraStageStore.temporal.getState().clear()

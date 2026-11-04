@@ -4,7 +4,7 @@ import type { useCameraStageStore } from '../store/cameraStageStore'
 import { CAMERA_FIELDS, OBJECT_FIELDS } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES as ENTITY } from './cameraStageReflection'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
-import { PLAYBACK_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
+import { CAMERA_CUT_FIELDS, PLAYBACK_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
 import { TRAJECTORY_FIELDS } from './cameraStageTrajectoryFields'
 
 /*
@@ -91,6 +91,14 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
      * 而是显式指定目标状态关键帧，写 capture_object_refs 属性即可（2.2，见重要记录 004 最终结论）。
      */
     captureIntoSelectedStateKeyframe: { kind: 'property', propertyIds: [`${ENTITY.stateKeyframe}.capture_object_refs`] },
+
+    /* ── 机位轨与多机位覆盖 ─────────────────────────────────────── */
+    setCameraCutAt: { kind: 'collection', entityType: ENTITY.cameraCut, operation: 'create' },
+    removeCameraCut: { kind: 'collection', entityType: ENTITY.cameraCut, operation: 'remove' },
+    // 定义收敛在 cameraStageTimelineFields.ts：time 走 moveCameraCut，camera_ref 走 updateCameraCutCamera。
+    ...fieldLedgerEntries(CAMERA_CUT_FIELDS),
+    replaceCameraCuts: { kind: 'capability', capabilityId: 'cut_camera_stage_coverage' },
+    setCoverage: { kind: 'capability', capabilityId: 'cover_camera_stage_scene' },
 
     /* ── 轨迹 ───────────────────────────────────────────────── */
     // 定义收敛在 cameraStageTrajectoryFields.ts；knots/start_out_tangent/end_in_tangent

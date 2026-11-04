@@ -1,4 +1,9 @@
 import type { ApplicationControlExecutionEngine, ApplicationTransactionResult, JsonValue } from '@/core/application-control/index'
+import { z } from 'zod'
+import { cameraStageCheckIntentShape } from '@/core/application-control/domains/cameraStage/cameraStageCoverageSchemas'
+import { COVERAGE_FACT, CUT_FACT } from './cameraStageCoverageExecutors'
+import { checkCameraStageEdit } from './editService'
+
 import { cameraStageApplicationService, type CameraStageObjectUpdate } from '@/features/cameraStage/application/cameraStageApplicationService'
 import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/features/cameraStage/application/cameraStageVerification'
 
@@ -9,6 +14,8 @@ import { ApplicationTransactionFailure } from '@/core/application-control/execut
 import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
+
+const cameraStageCheckInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageCheckIntentShape }).strict()
 
 const permissions = new Set(['camera_stage:read', 'camera_stage:write', 'camera_stage:delete'])
 
@@ -56,6 +63,8 @@ const OPERATION_SUMMARIES = {
   compose_camera_stage_shot: '按构图意图摆机位',
   block_camera_stage_character: '编排角色走位与动作',
   follow_camera_stage_character: '摄像机跟拍角色',
+  cover_camera_stage_scene: '布置多机位覆盖',
+  cut_camera_stage_coverage: '按节拍剪辑切机位',
 } as const
 
 type CameraStagePlanRequest = Parameters<ApplicationControlExecutionEngine['plan']>[0]
@@ -237,7 +246,7 @@ export async function composeCameraStageShotOperation(input: Record<string, unkn
 /**
  * 走位与跟拍的读回同样从执行器证据提到结果顶层；证据只留引用。
  */
-async function timelineOperation(capabilityId: 'block_camera_stage_character' | 'follow_camera_stage_character', input: Record<string, unknown>, context: CapabilityExecutionContext, fact: string): Promise<Record<string, unknown>> {
+async function timelineOperation(capabilityId: 'block_camera_stage_character' | 'follow_camera_stage_character' | 'cover_camera_stage_scene' | 'cut_camera_stage_coverage', input: Record<string, unknown>, context: CapabilityExecutionContext, fact: string): Promise<Record<string, unknown>> {
   const transaction = await executeOperation(capabilityId, input as JsonValue, context, fact)
   const evidence = transaction.evidence as Array<Record<string, unknown>>
   const index = evidence.findIndex(item => item.fact === fact)
@@ -255,6 +264,19 @@ export async function blockCameraStageCharacterOperation(input: Record<string, u
 
 export async function followCameraStageCharacterOperation(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   return await timelineOperation('follow_camera_stage_character', input, context, '摄像机跟拍已写进时间轴。')
+}
+
+export async function coverCameraStageSceneOperation(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  return await timelineOperation('cover_camera_stage_scene', input, context, COVERAGE_FACT)
+}
+
+export async function cutCameraStageCoverageOperation(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  return await timelineOperation('cut_camera_stage_coverage', input, context, CUT_FACT)
+}
+
+export async function checkCameraStageEditQuery(input: { projectId: string } & Record<string, unknown>): Promise<Record<string, unknown>> {
+  const parsed = cameraStageCheckInputSchema.parse(input)
+  return { ...await checkCameraStageEdit(parsed) }
 }
 
 export async function verifyCameraStage(

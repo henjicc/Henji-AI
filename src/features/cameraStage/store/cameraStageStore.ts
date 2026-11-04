@@ -60,8 +60,11 @@ import type {
   StageVec3,
   StageViewMode,
 } from '../domain/sceneTypes'
+import type { StageCoverage } from '../domain/coverage'
+import type { StageCameraCut } from '../domain/renderCameraSchedule'
+import { createCameraCutSlice, type CameraCutSliceActions } from './cameraCutSlice'
 
-export interface CameraStageState extends CameraStagePathActions {
+export interface CameraStageState extends CameraStagePathActions, CameraCutSliceActions {
   objects: StageObject[]
   selectedId: string | null
   gizmoMode: StageGizmoMode
@@ -81,6 +84,10 @@ export interface CameraStageState extends CameraStagePathActions {
   stateKeyframes: StageStateKeyframe[]
   /** 生成过的布景及其参数；成员对象在 objects 里，用 setId 指回这里。随镜头参考持久化、进撤销历史。 */
   sets: StageSet[]
+  /** 机位切换点（时间轴上的机位轨），按时间排好；与状态关键帧互不牵连。随镜头参考持久化、进撤销历史。 */
+  cameraCuts: StageCameraCut[]
+  /** 多机位覆盖：每台摄像机在一段戏里担任的镜头与台词节拍。随镜头参考持久化、进撤销历史。 */
+  coverages: StageCoverage[]
   selectedStateKeyframeId: string | null
   /** 时间轴框选出的多个状态关键帧 id（界面态，不持久化、不进撤销历史） */
   selectedStateKeyframeIds: string[]
@@ -99,8 +106,6 @@ export interface CameraStageState extends CameraStagePathActions {
   updateStateKeyframeTiming: (id: string, patch: StateKeyframeTimingPatch) => void
   updateStateKeyframeName: (id: string, name: string) => void
   updateStateKeyframeTransition: (id: string, patch: StateKeyframeTransitionPatch) => void
-  /** 修改状态关键帧拍摄机位（重要记录 005）；null = 取消指定，沿用全局 activeCameraId */
-  updateStateKeyframeCamera: (id: string, cameraId: string | null) => void
   updateStateKeyframeContinuity: (id: string, continuity: StageStateKeyframe['continuity']) => void
   captureIntoSelectedStateKeyframe: (objectIds?: string[]) => void
   addPrimitive: (kind: StagePrimitiveKind) => void
@@ -191,7 +196,7 @@ export interface CameraStageState extends CameraStagePathActions {
 export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
 /** 撤销历史跟踪场景数据切片（对象列表 + 动画轨道），界面态/播放态不入历史 */
-type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'stateKeyframes' | 'sets'>
+type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'stateKeyframes' | 'sets' | 'cameraCuts' | 'coverages'>
 
 /** 生成同类对象的递增序号名，如"摄像机01"；按已用最大编号 +1，避免删除中间对象后再新增撞号 */
 function nextName(objects: StageObject[], base: string): string {
@@ -237,6 +242,8 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
   sceneSettings: createDefaultSceneSettings(),
   stateKeyframes: [initialStateKeyframe],
   sets: [],
+  cameraCuts: [],
+  coverages: [],
   selectedStateKeyframeId: initialStateKeyframe.id,
   selectedStateKeyframeIds: [],
   focusToken: 0,
@@ -354,6 +361,8 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         objects,
         animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
         stateKeyframes,
+        // 删掉的摄像机不再拍任何一段：它的切点一起去掉，前一段机位接着拍。
+        ...(state.cameraCuts.some((cut) => cut.cameraId === id) ? { cameraCuts: state.cameraCuts.filter((cut) => cut.cameraId !== id) } : {}),
         selectedId: state.selectedId === id ? null : state.selectedId,
         activeCameraId,
         viewMode: state.viewMode === 'camera' && !activeCameraId ? 'director' : state.viewMode,
@@ -539,6 +548,8 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         sceneSettings: snapshot.sceneSettings,
         stateKeyframes: snapshot.stateKeyframes,
         sets: snapshot.sets ?? [],
+        cameraCuts: [],
+        coverages: [],
         selectedStateKeyframeId: snapshot.defaultStateKeyframeId,
         selectedStateKeyframeIds: [],
         focusToken: 0,
@@ -568,6 +579,8 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         sceneSettings: snapshot.sceneSettings ?? createDefaultSceneSettings(),
         stateKeyframes: snapshot.stateKeyframes,
         sets: snapshot.sets ?? [],
+        cameraCuts: snapshot.cameraCuts ?? [],
+        coverages: snapshot.coverages ?? [],
         selectedStateKeyframeId: snapshot.stateKeyframes[0]?.id ?? null,
         selectedStateKeyframeIds: [],
         focusToken: 0,
@@ -576,6 +589,8 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
   },
 
   ...createStateKeyframeSlice(set),
+
+  ...createCameraCutSlice(set),
 
   ...createPlaybackSlice(set, get, applySampledObjectsSilently, isAttached),
 
@@ -854,13 +869,17 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         animation: state.animation,
         stateKeyframes: state.stateKeyframes,
         sets: state.sets,
+        cameraCuts: state.cameraCuts,
+        coverages: state.coverages,
       }),
       // 对象数组与动画对象都走不可变更新，引用相等即无实质变化 → 跳过记录
       equality: (a, b) =>
         a.objects === b.objects &&
         a.animation === b.animation &&
         a.stateKeyframes === b.stateKeyframes &&
-        a.sets === b.sets,
+        a.sets === b.sets &&
+        a.cameraCuts === b.cameraCuts &&
+        a.coverages === b.coverages,
       handleSet: (handleSet) => {
         historyRecord = handleSet
         return (pastState) => {
@@ -874,7 +893,7 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
     },
   ),
   // 名称是文档文件名，由文档会话同步（bindProject），不属于受写入屏障保护的场景内容
-  ['objects', 'animation', 'stateKeyframes', 'sceneSettings', 'activeCameraId', 'sets'],
+  ['objects', 'animation', 'stateKeyframes', 'sceneSettings', 'activeCameraId', 'sets', 'cameraCuts', 'coverages'],
   ),
 )
 
@@ -892,6 +911,8 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         sceneSettings: restored.sceneSettings ?? createDefaultSceneSettings(),
         stateKeyframes: restored.stateKeyframes,
         sets: restored.sets ?? [],
+        cameraCuts: restored.cameraCuts ?? [],
+        coverages: restored.coverages ?? [],
         activeCameraId: isCameraId(restored.objects, restored.activeCameraId) ? restored.activeCameraId : firstCameraId(restored.objects),
         selectedId: restored.objects.some(object => object.id === state.selectedId) ? state.selectedId : null,
         selectedStateKeyframeId: restored.stateKeyframes.some(frame => frame.id === state.selectedStateKeyframeId) ? state.selectedStateKeyframeId : null,

@@ -91,7 +91,7 @@ describe('播放期摄像机朝向', () => {
     }) as StageCameraObject
     const stateKeyframeA = createStateKeyframe([camera], '卡1')
     stateKeyframeA.transition.perObject[camera.id] = { speedPreset: 'uniform' }
-    const stateKeyframeB = createStateKeyframe([camera], '卡2', null, 1)
+    const stateKeyframeB = createStateKeyframe([camera], '卡2', 1)
     stateKeyframeB.objectStates[camera.id].lookAt = { mode: 'manual', target: { x: -5, y: 1, z: 5 } }
     const animation = compileStateKeyframesToAnimation([stateKeyframeA, stateKeyframeB], [camera])
 

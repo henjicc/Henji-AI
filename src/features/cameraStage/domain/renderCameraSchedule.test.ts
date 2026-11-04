@@ -1,77 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { createStateKeyframe } from './stateKeyframeTypes'
-import { buildRenderCameraSchedule, resolveRenderCameraAt } from './renderCameraSchedule'
+import { buildRenderCameraSchedule, normalizeCameraCuts, resolveRenderCameraAt } from './renderCameraSchedule'
 
 describe('buildRenderCameraSchedule / resolveRenderCameraAt', () => {
-  it('空状态关键帧数组返回空表，查询回退 null', () => {
+  it('没有切换点返回空表，查询回退 null', () => {
     const schedule = buildRenderCameraSchedule([], 'fallback-camera')
     expect(schedule).toEqual([])
     expect(resolveRenderCameraAt(schedule, 0)).toBeNull()
   })
 
-  it('未指定机位的卡沿用 fallbackCameraId（旧镜头参考/单机位镜头参考行为不变）', () => {
-    const stateKeyframeA = createStateKeyframe([], '卡1')
-    const stateKeyframeB = createStateKeyframe([], '卡2')
-    stateKeyframeA.transitionDuration = 1
-    stateKeyframeB.time = stateKeyframeA.transitionDuration + 1
-    const schedule = buildRenderCameraSchedule([stateKeyframeA, stateKeyframeB], 'camera-fallback')
-    expect(schedule.every((entry) => entry.cameraId === 'camera-fallback')).toBe(true)
-  })
-
-  it('机位不同的相邻卡在区间末端（下一卡静止段起点）切换渲染机位', () => {
-    const stateKeyframeA = createStateKeyframe([], '卡1', 'camera-a')
-    const stateKeyframeB = createStateKeyframe([], '卡2', 'camera-b')
-    stateKeyframeA.transitionDuration = 2 // 区间时长保留，硬切发生在区间末端（编译层 hold 缓动）
-    stateKeyframeB.time = stateKeyframeA.transitionDuration + 1
-    const schedule = buildRenderCameraSchedule([stateKeyframeA, stateKeyframeB], null)
-
-    // A 段：[0, 3)（含硬切前的整段区间）；B 点：3，切换点与画面跳变点（区间末端）重合
-    expect(schedule).toEqual([
-      { startTime: 0, endTime: 3, cameraId: 'camera-a' },
-      { startTime: 3, endTime: 3, cameraId: 'camera-b' },
-    ])
-    expect(resolveRenderCameraAt(schedule, 0)).toBe('camera-a')
+  it('第一个切换点之前与 null 切换点用活动摄像机，切换点时刻归属后一段', () => {
+    const schedule = buildRenderCameraSchedule([
+      { id: 'b', time: 3, cameraId: 'camera-b' },
+      { id: 'a', time: 1, cameraId: 'camera-a' },
+      { id: 'back', time: 5, cameraId: null },
+    ], 'active')
+    expect(resolveRenderCameraAt(schedule, 0.5)).toBe('active')
+    expect(resolveRenderCameraAt(schedule, 1)).toBe('camera-a')
     expect(resolveRenderCameraAt(schedule, 2.99)).toBe('camera-a')
     expect(resolveRenderCameraAt(schedule, 3)).toBe('camera-b')
-    expect(resolveRenderCameraAt(schedule, 3.5)).toBe('camera-b')
+    expect(resolveRenderCameraAt(schedule, 999)).toBe('active')
   })
 
-  it('同机位相邻卡保留真实过渡时长，过渡段整体归属前一卡机位', () => {
-    const stateKeyframeA = createStateKeyframe([], '卡1', 'camera-a')
-    const stateKeyframeB = createStateKeyframe([], '卡2', 'camera-a')
-    stateKeyframeA.transitionDuration = 2
-    stateKeyframeB.time = stateKeyframeA.transitionDuration + 1
-    const schedule = buildRenderCameraSchedule([stateKeyframeA, stateKeyframeB], null)
-
-    expect(schedule).toEqual([
-      { startTime: 0, endTime: 3, cameraId: 'camera-a' },
-      { startTime: 3, endTime: 3, cameraId: 'camera-a' },
-    ])
-  })
-
-  it('查询越界钳制到首段/尾段', () => {
-    const stateKeyframeA = createStateKeyframe([], '卡1', 'camera-a')
-    const stateKeyframeB = createStateKeyframe([], '卡2', 'camera-b')
-    stateKeyframeA.transitionDuration = 1
-    stateKeyframeB.time = stateKeyframeA.transitionDuration + 1
-    const schedule = buildRenderCameraSchedule([stateKeyframeA, stateKeyframeB], null)
-
-    expect(resolveRenderCameraAt(schedule, -5)).toBe('camera-a')
-    expect(resolveRenderCameraAt(schedule, 999)).toBe('camera-b')
-  })
-
-  it('机位不同不再压缩布点区间：切换只影响切换时刻的归属，原始数据不被改写', () => {
-    const stateKeyframeA = createStateKeyframe([], '卡1', 'camera-a')
-    const stateKeyframeB = createStateKeyframe([], '卡2', 'camera-b')
-    stateKeyframeA.transitionDuration = 2
-    stateKeyframeB.time = stateKeyframeA.transitionDuration + 1
-
-    const diffSchedule = buildRenderCameraSchedule([stateKeyframeA, stateKeyframeB], null)
-    expect(diffSchedule[0].endTime).toBe(3) // 区间时长保留，硬切在区间末端
-
-    const sameStateKeyframeB = { ...stateKeyframeB, cameraId: 'camera-a' }
-    const sameSchedule = buildRenderCameraSchedule([stateKeyframeA, sameStateKeyframeB], null)
-    expect(sameSchedule[0].endTime).toBe(3) // 机位相同布点完全一致
-    expect(stateKeyframeA.transitionDuration).toBe(2) // 原始数据全程未被改写
+  it('读文件时丢掉坏切换点、同一时刻只留最后一条', () => {
+    expect(normalizeCameraCuts([
+      { id: 'x', time: 2, cameraId: 'a' }, { time: -1, cameraId: 'a' }, null, { id: 'y', time: 2, cameraId: 'b' }, { id: 'z', time: 0, cameraId: '' },
+    ])).toEqual([{ id: 'z', time: 0, cameraId: null }, { id: 'y', time: 2, cameraId: 'b' }])
   })
 })

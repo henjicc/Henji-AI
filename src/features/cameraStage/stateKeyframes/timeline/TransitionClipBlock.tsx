@@ -1,7 +1,6 @@
 import React from 'react'
-import { Camera, Spline } from 'lucide-react'
+import { Spline } from 'lucide-react'
 import { PanelTrigger, UiIconButton } from '@/components/ui'
-import { hasForcedHardCut } from '../../domain/stateKeyframeCompiler'
 import type { StageObject } from '../../domain/sceneTypes'
 import type { StageStateKeyframe } from '../../domain/stateKeyframeTypes'
 import type { StateKeyframeTimingPatch, StateKeyframeTransitionPatch } from '../../store/stateKeyframeSlice'
@@ -43,9 +42,6 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
   updateStateKeyframeTransition,
 }) => {
   const isHardCut = block.width <= 0
-  // 两侧机位不同 → 布点层已强制硬切（3.1），这里额外区分"机位造成的硬切"与"用户手动拖到 0 帧的硬切"，
-  // 呈现与可编辑性不同：前者时长编辑不生效（record 005：不支持跨机位带时长过渡），后者仍可编辑。
-  const camerasDiffer = hasForcedHardCut(stateKeyframe, nextStateKeyframe)
   const left = isHardCut ? block.x - HARD_CUT_HIT_WIDTH / 2 : block.x
   const width = isHardCut ? HARD_CUT_HIT_WIDTH : Math.max(block.width, MIN_TRANSITION_WIDTH)
 
@@ -71,7 +67,6 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
             stateKeyframeIndex={stateKeyframeIndex}
             objects={objects}
             fps={fps}
-            camerasDiffer={camerasDiffer}
             onDurationFramesChange={handleDurationFramesChange}
             onDetailChange={handleDetailChange}
           />
@@ -89,36 +84,12 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               style={{ width: '100%', height: '100%' }}
               data-panel-trigger-button
               aria-label={transitionLabel}
-              tooltip={
-                camerasDiffer
-                  ? '机位切换（强制硬切），点击查看详情'
-                  : '硬切（0 帧过渡），点击可调整；拖右缘可拉出过渡时长'
-              }
+              tooltip="硬切（0 帧过渡），点击可调整；拖右缘可拉出过渡时长"
               className="cursor-pointer"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >
-              {camerasDiffer ? (
-                <Camera className="text-accent" />
-              ) : (
-                <span className="h-full w-0.5 rounded-full bg-text2 transition-colors hover:bg-accent" />
-              )}
-            </UiIconButton>
-          ) : camerasDiffer ? (
-            <UiIconButton
-              type="button" tone="bare" size="sm"
-              style={{ width: '100%', height: '100%' }}
-              data-panel-trigger-button
-              aria-label={transitionLabel}
-              tooltip="区间末端切换机位，点击查看详情"
-              className="cursor-pointer"
-              onClick={togglePanel}
-              onKeyDown={handleKeyDown}
-            >
-              <span className="flex h-full w-full items-center justify-center gap-1 overflow-hidden border-y border-dashed border-line bg-hover/40 px-1 text-2xs text-text2 hover:bg-hover/70">
-                <Camera className="text-accent" />
-                <span className="truncate">末端硬切</span>
-              </span>
+              <span className="h-full w-0.5 rounded-full bg-text2 transition-colors hover:bg-accent" />
             </UiIconButton>
           ) : (
             <UiIconButton

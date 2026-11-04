@@ -61,7 +61,6 @@ export interface CharacterTransitionInterval {
   intervalIndex: number
   segStart: number
   segEnd: number
-  hardCut: boolean
   fromState: StageStateKeyframeObjectState
   toState: StageStateKeyframeObjectState
   motionOverride?: StageCharacterMotion
@@ -237,7 +236,7 @@ function buildSpans(input: BuildInput): Built {
 
   /** 这一段过渡里角色走跑或原地转身时的动作段（与朝向表）；不动时为 null。 */
   const movementSpan = (interval: CharacterTransitionInterval | undefined): StageCharacterMotionSpan | null => {
-    if (!interval || interval.hardCut || !(interval.segEnd - interval.segStart > 1e-3)) return null
+    if (!interval || !(interval.segEnd - interval.segStart > 1e-3)) return null
     const { segStart, segEnd, fromState, toState } = interval
     const moved = Math.hypot(toState.transform.position.x - fromState.transform.position.x, toState.transform.position.z - fromState.transform.position.z) > 1e-4
       || (interval.motionOverride !== undefined)

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Scissors } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
@@ -10,11 +10,12 @@ import { PlaybackButtons } from '../timeline/PlaybackControls'
 import TimeRuler from '../timeline/TimeRuler'
 import { clampPxPerSecond, timeToX, xToTime, type TimeRulerMode } from '../timeline/timeScale'
 import { TIMELINE_RULER_HEIGHT } from '../timeline/timelineLayout'
+import CameraCutTrack from './timeline/CameraCutTrack'
 import StateKeyframeClipTrack from './timeline/StateKeyframeClipTrack'
 import StateKeyframeTimecodeText from './timeline/StateKeyframeTimecodeText'
 import { formatCompactStateKeyframeTimecode, type StateKeyframeTimecodeMode } from './timeline/stateKeyframeTimecodeFormat'
 import { quantizeToFrame } from './timeline/stateKeyframeClipGeometry'
-import { STATE_KEYFRAME_CLIP_TRACK_HEIGHT } from './timeline/stateKeyframeTimelineLayout'
+import { CAMERA_CUT_TRACK_HEIGHT, STATE_KEYFRAME_CLIP_TRACK_HEIGHT } from './timeline/stateKeyframeTimelineLayout'
 import { useStateKeyframeMarqueeSelect } from './timeline/useStateKeyframeMarqueeSelect'
 
 /**
@@ -48,7 +49,12 @@ const StateKeyframeTimelinePanel: React.FC = () => {
   const updateStateKeyframeName = useCameraStageStore((state) => state.updateStateKeyframeName)
   const updateStateKeyframeTiming = useCameraStageStore((state) => state.updateStateKeyframeTiming)
   const updateStateKeyframeTransition = useCameraStageStore((state) => state.updateStateKeyframeTransition)
-  const updateStateKeyframeCamera = useCameraStageStore((state) => state.updateStateKeyframeCamera)
+  const cameraCuts = useCameraStageStore((state) => state.cameraCuts)
+  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
+  const setCameraCutAt = useCameraStageStore((state) => state.setCameraCutAt)
+  const moveCameraCut = useCameraStageStore((state) => state.moveCameraCut)
+  const updateCameraCutCamera = useCameraStageStore((state) => state.updateCameraCutCamera)
+  const removeCameraCut = useCameraStageStore((state) => state.removeCameraCut)
   const updateStateKeyframeContinuity = useCameraStageStore((state) => state.updateStateKeyframeContinuity)
   const setSelectedStateKeyframeIdOnly = useCameraStageStore((state) => state.setSelectedStateKeyframeIdOnly)
   const selectedStateKeyframeIds = useCameraStageStore((state) => state.selectedStateKeyframeIds)
@@ -182,6 +188,15 @@ const StateKeyframeTimelinePanel: React.FC = () => {
         >
           <Plus  />
         </UiIconButton>
+        <UiIconButton
+          tooltip="在播放头切到当前摄像机"
+          aria-label="切机位"
+          disabled={!activeCameraId}
+          disabledReason="先添加一台摄像机"
+          onClick={() => setCameraCutAt(currentTime, activeCameraId)}
+        >
+          <Scissors />
+        </UiIconButton>
       </div>
 
       <div
@@ -217,16 +232,26 @@ const StateKeyframeTimelinePanel: React.FC = () => {
             onRemoveStateKeyframe={removeStateKeyframe}
             onUpdateStateKeyframeTiming={updateStateKeyframeTiming}
             onUpdateStateKeyframeTransition={updateStateKeyframeTransition}
-            onUpdateStateKeyframeCamera={updateStateKeyframeCamera}
             onMoveStateKeyframeTime={moveStateKeyframeTime}
             onUpdateStateKeyframeContinuity={updateStateKeyframeContinuity}
+          />
+          <CameraCutTrack
+            cuts={cameraCuts}
+            objects={objects}
+            pxPerSecond={pxPerSecond}
+            contentWidth={contentWidth}
+            fps={fps}
+            currentTime={currentTime}
+            onMoveCut={moveCameraCut}
+            onChangeCamera={updateCameraCutCamera}
+            onRemoveCut={removeCameraCut}
           />
           <div
             className="pointer-events-none absolute z-sticky"
             style={{
               left: timeToX(currentTime, pxPerSecond),
               top: 0,
-              height: TIMELINE_RULER_HEIGHT + STATE_KEYFRAME_CLIP_TRACK_HEIGHT,
+              height: TIMELINE_RULER_HEIGHT + STATE_KEYFRAME_CLIP_TRACK_HEIGHT + CAMERA_CUT_TRACK_HEIGHT,
               borderLeft: `1px solid ${themeColors.accentRing}`,
             }}
           >

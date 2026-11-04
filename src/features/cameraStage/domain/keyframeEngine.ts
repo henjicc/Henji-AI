@@ -112,7 +112,6 @@ export function cruiseRamp(span: number | undefined): number {
 
 /** span 是区间时长（秒），只有 cruise 用它定加减速段的长度。 */
 export function easeProgress(easing: StageEasing, u: number, span?: number): number {
-  if (easing === 'hold') return u >= 1 ? 1 : 0
   if (easing === 'cruise') return cruiseProgress(u, cruiseRamp(span))
   const [x1, y1, x2, y2] = resolveEasingControlPoints(easing)
   return cubicBezierEase(x1, y1, x2, y2, u)
@@ -156,12 +155,9 @@ function interpolateSmoothSegment(
   const a = keyframes[index]
   const b = keyframes[index + 1]
   if (a.continuity !== 'smooth' && b.continuity !== 'smooth') return undefined
-  // hold = 硬切段（机位切换等），必须保持阶跃跳变，不参与平滑；
-  // 相邻段是硬切时也不让切线"穿过"跳变点，按单侧边界处理。
-  if (a.easing === 'hold') return undefined
   const span = b.time - a.time
-  const previous = index > 0 && keyframes[index - 1].easing !== 'hold' ? keyframes[index - 1] : undefined
-  const next = b.easing !== 'hold' ? keyframes[index + 2] : undefined
+  const previous = index > 0 ? keyframes[index - 1] : undefined
+  const next = keyframes[index + 2]
   if (type === 'scalar') {
     const tangentA = a.continuity === 'smooth' ? smoothTangent(previous, a, b, span) : 0
     const tangentB = b.continuity === 'smooth' ? smoothTangent(a, b, next, span) : 0

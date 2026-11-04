@@ -19,8 +19,8 @@ beforeEach(async () => {
   camera.lookAt = { mode: 'manual', target: { x: 0, y: 2, z: 0 } }
   const subject = createPrimitiveObject('sphere', '主体', pickDefaultColor(1))
   const objects = [camera, subject]
-  const start = createStateKeyframe(objects, '开始', camera.id, 0)
-  const end = createStateKeyframe(objects, '结束', camera.id, 2)
+  const start = createStateKeyframe(objects, '开始', 0)
+  const end = createStateKeyframe(objects, '结束', 2)
   end.objectStates[camera.id].transform.position.z = 6
   end.objectStates[camera.id].fov = 35
   await loadCameraStageTestProject({ objects, activeCameraId: camera.id, animation: createDefaultAnimation(), sceneSettings: createDefaultSceneSettings(), stateKeyframes: [start, end] }, { id: 'candidate-project', name: '候选测试' })

@@ -116,21 +116,6 @@ function animatedUntil(source: StageAnimationSampleSource): number {
   return end
 }
 
-/** 硬切（hold）让机位或注视目标瞬间跳位的时刻：滞后在这里直接对齐，不让镜头甩过去。 */
-function jumpTimes(source: StageAnimationSampleSource): number[] {
-  const times: number[] = []
-  for (const track of source.tracks) {
-    track.keyframes.forEach((keyframe, index) => {
-      const next = track.keyframes[index + 1]
-      if (keyframe.easing === 'hold' && next) times.push(next.time)
-    })
-  }
-  for (const motion of source.spatialMotions) {
-    for (const segment of motion.segments) if (segment.easing === 'hold') times.push(segment.endTime)
-  }
-  return times
-}
-
 /** 编译产物里被轨道或路径链驱动的分量（对象 id:属性路径）。 */
 const drivenCache = new WeakMap<StageAnimationSampleSource, Set<string>>()
 
@@ -202,7 +187,7 @@ function aimLagSamplerFor(
         const frame = sampleAnimationFrame(involved, source, time, { aimLag: false }).objects
         const sampledCamera = frame[0] as StageCameraObject
         return forwardOf(sampledCamera.transform.rotation)
-      }, jumpTimes(source))
+      })
       : null
     if (aimLagByContent.size >= AIM_LAG_CACHE_SIZE) aimLagByContent.delete(aimLagByContent.keys().next().value as string)
     aimLagByContent.set(contentKey, sampler)

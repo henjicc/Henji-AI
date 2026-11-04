@@ -17,6 +17,8 @@ import {
 } from '../domain/sceneSerialization'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
 import type { StageSet } from '../domain/sceneTypes'
+import type { StageCameraCut } from '../domain/renderCameraSchedule'
+import type { StageCoverage } from '../domain/coverage'
 import {
   attachCameraStageStore,
   cameraStageStoreAttachment,
@@ -44,6 +46,8 @@ export interface CameraStageProjectSnapshot extends StageSceneRuntimeSnapshot {
   /** 文档名（文件名去扩展名）。 */
   name: string
   sets: StageSet[]
+  cameraCuts: StageCameraCut[]
+  coverages: StageCoverage[]
 }
 
 export interface CameraStageProjectInstance {
@@ -87,7 +91,7 @@ export function findCameraStageProjectInstance(projectId: string): CameraStagePr
 function contentChanged(state: ReturnType<CameraStageOwnedStore['getState']>, previous: ReturnType<CameraStageOwnedStore['getState']>): boolean {
   return state.objects !== previous.objects || state.stateKeyframes !== previous.stateKeyframes
     || state.sceneSettings !== previous.sceneSettings || state.activeCameraId !== previous.activeCameraId
-    || state.sets !== previous.sets
+    || state.sets !== previous.sets || state.cameraCuts !== previous.cameraCuts || state.coverages !== previous.coverages
 }
 
 /** 空白场景（新建文档的空内容）补上默认摄像机与第一张状态关键帧；其余内容原样。 */
@@ -102,6 +106,8 @@ function initialSnapshot(content: unknown): { snapshot: StageSceneRuntimeSnapsho
       sceneSettings: defaults.sceneSettings,
       stateKeyframes: defaults.stateKeyframes,
       sets: defaults.sets,
+      cameraCuts: [],
+      coverages: [],
       animation: compileStateKeyframesToAnimation(defaults.stateKeyframes, defaults.objects),
     },
     filledDefaults: true,
@@ -246,6 +252,7 @@ export function readCameraStageProjectInstance(projectId: string): CameraStagePr
     id: projectId, name: state.currentProjectName,
     objects: state.objects, activeCameraId: state.activeCameraId, animation: state.animation,
     sceneSettings: state.sceneSettings, stateKeyframes: state.stateKeyframes, sets: state.sets,
+    cameraCuts: state.cameraCuts, coverages: state.coverages,
   }
 }
 

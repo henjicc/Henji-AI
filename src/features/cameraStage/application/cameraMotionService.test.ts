@@ -18,7 +18,7 @@ describe('三维摄像机语义运镜', () => {
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
       sceneSettings: createDefaultSceneSettings(),
-      stateKeyframes: [createStateKeyframe(objects, '关键帧 1', camera.id, 0)],
+      stateKeyframes: [createStateKeyframe(objects, '关键帧 1', 0)],
     }, { id: 'project-1', name: '运镜测试' })
   })
 

@@ -15,6 +15,8 @@ import type { DocumentKindDescriptor } from './registry'
  * - stateKeyframes：状态关键帧，唯一可编辑的时间轴真相源（派生动画只在运行时编译，不进文件）；
  * - sets：生成过的布景（id、名称、补齐后的生成参数）。成员是 objects 里的普通对象，用 setId 指回布景，
  *   所以旧程序不认识布景也能照常显示和编辑这些对象。
+ * - cameraCuts：机位切换点（时间轴上的“机位”轨），与状态关键帧互不牵连；
+ * - coverages：多机位覆盖，记每台摄像机在一段戏里担任什么镜头、谁在什么时候说话。
  *
  * 这里只校验外层结构，对象、关键帧与场景设置的细节由工具读取时逐字段规范化
  * （`sceneFromDocumentContent`，与旧工程数据的读取规则相同）。嵌套对象一律保留未知字段：
@@ -102,6 +104,83 @@ function migrateStageSetV4(set: LooseRecord): LooseRecord {
   return { ...set, params: { curvature: 0.5, river: true, parks: true, ...params } }
 }
 
+/** 机位切换点（v8 起）：从 time 起由 cameraId 拍摄，null 回到活动摄像机。 */
+const cameraCutSchema = z.looseObject({
+  id: z.string().min(1),
+  time: z.number().nonnegative(),
+  cameraId: z.string().min(1).nullable(),
+})
+
+/** 多机位覆盖（v8 起）：一段戏的主体、时段、台词与每台摄像机担任的镜头。 */
+const coverageSchema = z.looseObject({
+  id: z.string().min(1),
+  name: z.string(),
+  subjectIds: z.array(z.string()),
+  startTime: z.number(),
+  endTime: z.number(),
+  axisSide: z.union([z.literal(1), z.literal(-1)]).nullable(),
+  lines: z.array(z.looseObject({ speakerId: z.string().min(1), startTime: z.number(), endTime: z.number(), text: z.string().optional() })),
+  setups: z.array(z.looseObject({ cameraId: z.string().min(1), role: z.string().min(1), subjectIds: z.array(z.string()), size: z.string().min(1) })),
+})
+
+/** 镜头参考的帧率固定为 30（CAMERA_STAGE_DEFAULT_FPS）；迁移按它算“前一帧”。 */
+const MIGRATION_FRAME = 1 / 30
+
+/**
+ * 7 → 8：机位从状态关键帧上搬到独立的切换点轨。
+ *
+ * 旧文件每张卡带 cameraId（null 为活动摄像机），从这张卡起由它拍摄；改成在机位变化的卡的时刻放一个切换点。
+ * 旧规则下相邻两张卡都指定了机位且不同时，整段过渡冻结在前一张卡、到后一张卡才一跳（硬切）。新规则切机位
+ * 不再冻结画面，为保持旧文件画面不变，在后一张卡前一帧补一张复制前一张卡的卡：前一段静止，最后一帧才变到后一张。
+ * 前一张卡原来的过渡细节（路径、跟拍、错峰）挪到补的那张卡上，前一张只留动作覆盖。硬切两侧的卡都改为停靠：
+ * 冻结段两端值相同，停靠才保证中间不漂；后一张不与补的那一帧连成运动链。取舍：旧规则下这两张卡若是平滑通过，
+ * 外侧那段在卡处取单侧切线，迁移后变成停靠，只有这两点附近的速度曲线略有不同。导出按整帧采样与旧画面一致，
+ * 高于 30Hz 的实时播放在切换前最后一帧内会看到滑向后一张。
+ * 旧规则下第一张卡之前也用它的机位拍，所以首卡指定了机位时它的切点放在 0 秒。
+ */
+function migrateCameraCutsV7(content: LooseRecord): LooseRecord {
+  const next = structuredClone(content)
+  const frames = (Array.isArray(next.stateKeyframes) ? next.stateKeyframes as LooseRecord[] : [])
+    .slice().sort((left, right) => Number(left.time) - Number(right.time))
+  const cameraOf = (frame: LooseRecord): string | null => typeof frame.cameraId === 'string' && frame.cameraId ? frame.cameraId : null
+  const cuts: LooseRecord[] = []
+  let shooting: string | null = null
+  frames.forEach((frame) => {
+    const camera = cameraOf(frame)
+    if (camera !== shooting) cuts.push({ id: `cut-${String(frame.id)}`, time: frame === frames[0] ? 0 : Number(frame.time) || 0, cameraId: camera })
+    shooting = camera
+  })
+  const result: LooseRecord[] = []
+  frames.forEach((frame, index) => {
+    const following = frames[index + 1]
+    const from = cameraOf(frame)
+    const to = following ? cameraOf(following) : null
+    const holdTime = following ? Number(following.time) - MIGRATION_FRAME : 0
+    if (!following || !from || !to || from === to || holdTime - Number(frame.time) < MIGRATION_FRAME / 2) {
+      result.push(frame)
+      return
+    }
+    const transition = (frame.transition ?? { perObject: {} }) as LooseRecord
+    const perObject = (transition.perObject ?? {}) as Record<string, LooseRecord>
+    const overridesOnly = Object.fromEntries(Object.entries(perObject).flatMap(([objectId, detail]) => (
+      detail && typeof detail === 'object' && detail.motionOverride !== undefined ? [[objectId, { motionOverride: detail.motionOverride }]] : []
+    )))
+    result.push({ ...frame, continuity: 'stop', transition: { ...transition, perObject: overridesOnly } })
+    result.push({
+      ...structuredClone(frame),
+      id: `${String(frame.id)}-hold`,
+      name: `${typeof frame.name === 'string' ? frame.name : '关键帧'}（切换前）`,
+      time: Math.round(holdTime * 1e6) / 1e6,
+      continuity: 'stop',
+    })
+    following.continuity = 'stop'
+  })
+  next.stateKeyframes = result.map(({ cameraId: _camera, ...frame }) => frame)
+  next.cameraCuts = cuts
+  next.coverages = []
+  return next
+}
+
 export const cameraStageContentSchema = z.object({
   objects: z.array(stageObjectSchema),
   activeCameraId: z.string().nullable(),
@@ -109,6 +188,8 @@ export const cameraStageContentSchema = z.object({
   sceneSettings: persistedStageSettingsSchema,
   stateKeyframes: z.array(stateKeyframeSchema),
   sets: z.array(stageSetSchema),
+  cameraCuts: z.array(cameraCutSchema),
+  coverages: z.array(coverageSchema),
 })
 
 export type CameraStageDocumentContent = z.infer<typeof cameraStageContentSchema>
@@ -154,8 +235,11 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
   //   跟拍 follow（主体、偏移、注视偏移、参照系、滞后），角色动作新增挥手 Wave。含义也变了：走跑动作按走过的路程推进
   //   （motionOverride 里走跑片段的 speed 不再是播放倍速），卡内动作在静止的卡之间也会切换，一次性动作做完接后续动作。
   //   版本 6 的程序会把 cruise、跟拍与挥手当成非法值丢掉，保存时改掉用户的走位与跟拍，所以最低可读版本提高到 7。
-  version: 7,
-  minReaderVersion: 7,
+  // 版本 8 = 机位从状态关键帧搬到独立的切换点轨 cameraCuts，新增多机位覆盖 coverages；状态关键帧不再带 cameraId。
+  //   含义也变了：切机位只换渲染用的摄像机，场景照常连续运动，不再把相邻两张不同机位卡之间的画面冻结。
+  //   版本 7 的程序读不到切换点（整段都用活动摄像机拍），所以最低可读版本提高到 8。
+  version: 8,
+  minReaderVersion: 8,
   contentSchema: cameraStageContentSchema,
   migrations: {
     // 1 → 2：旧文件没有生成过布景，补一个空列表。
@@ -176,8 +260,9 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
     5: (content) => structuredClone(content as LooseRecord),
     // 6 → 7：旧文件没有 cruise、跟拍与挥手，内容原样保留；走跑按路程推进与卡内动作切换是播放规则，不改数据。
     6: (content) => structuredClone(content as LooseRecord),
+    7: (content) => migrateCameraCutsV7(content as LooseRecord),
   },
-  createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [] }),
+  createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [], cameraCuts: [], coverages: [] }),
   isEmptyContent: isEmptyCameraStageContent,
   summarize: (content) => ({
     objects: content.objects.length,

@@ -9,8 +9,8 @@ describe('当前状态关键帧空间路径持久化', () => {
       position: { x: 0, y: 2, z: 5 },
       target: { x: 0, y: 0, z: 0 },
     })
-    const stateKeyframeA = createStateKeyframe([camera], 'A', camera.id, 0)
-    const stateKeyframeB = createStateKeyframe([camera], 'B', camera.id, 2)
+    const stateKeyframeA = createStateKeyframe([camera], 'A', 0)
+    const stateKeyframeB = createStateKeyframe([camera], 'B', 2)
     stateKeyframeA.transition.perObject[camera.id] = {
       spatialPath: {
         kind: 'bezier',

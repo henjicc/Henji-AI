@@ -48,7 +48,7 @@ describe('三维姿态状态关键帧写入', () => {
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
       sceneSettings: createDefaultSceneSettings(),
-      stateKeyframes: [createStateKeyframe(objects, '关键帧 1', camera.id, 0)],
+      stateKeyframes: [createStateKeyframe(objects, '关键帧 1', 0)],
     }, { id: 'project-1', name: '姿态写入测试' })
   })
 

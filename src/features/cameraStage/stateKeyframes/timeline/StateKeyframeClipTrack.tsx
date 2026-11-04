@@ -1,7 +1,6 @@
 import React, { useMemo, useRef } from 'react'
 import { TooltipContent } from '@/components/ui/Tooltip'
 import { UiEmpty } from '@/components/ui'
-import { getCameraObjects } from '../../domain/cameraUtils'
 import type { StageObject } from '../../domain/sceneTypes'
 import type { StageStateKeyframe } from '../../domain/stateKeyframeTypes'
 import type { StateKeyframeTransitionPatch } from '../../store/stateKeyframeSlice'
@@ -28,7 +27,6 @@ interface StateKeyframeClipTrackProps {
   onMoveStateKeyframeTime: (id: string, time: number) => void
   onUpdateStateKeyframeTiming: (id: string, patch: { transitionDuration?: number }) => void
   onUpdateStateKeyframeTransition: (id: string, patch: StateKeyframeTransitionPatch) => void
-  onUpdateStateKeyframeCamera: (id: string, cameraId: string | null) => void
   onUpdateStateKeyframeContinuity: (id: string, continuity: StageStateKeyframe['continuity']) => void
 }
 
@@ -48,11 +46,9 @@ const StateKeyframeClipTrack: React.FC<StateKeyframeClipTrackProps> = ({
   onMoveStateKeyframeTime,
   onUpdateStateKeyframeTiming,
   onUpdateStateKeyframeTransition,
-  onUpdateStateKeyframeCamera,
   onUpdateStateKeyframeContinuity,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null)
-  const cameras = useMemo(() => getCameraObjects(objects), [objects])
   const drag = useKeyframeTimeDrag({
     stateKeyframes,
     fps,
@@ -102,8 +98,6 @@ const StateKeyframeClipTrack: React.FC<StateKeyframeClipTrackProps> = ({
               }}
               dragging={dragging}
               consumeClickSuppression={drag.consumeClickSuppression}
-              cameras={cameras}
-              onSelectCamera={(cameraId) => onUpdateStateKeyframeCamera(block.stateKeyframeId, cameraId)}
               onUpdateContinuity={(continuity) => onUpdateStateKeyframeContinuity(block.stateKeyframeId, continuity)}
             />
           )

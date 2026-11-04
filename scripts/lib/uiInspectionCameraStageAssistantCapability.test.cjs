@@ -94,7 +94,7 @@ test('观察新建的镜头参考必须得到唯一默认相机与零秒关键�
       documentId: 'doc-1',
       activeCameraId: 'camera-1',
       objects: [{ id: 'camera-1', type: 'camera' }],
-      stateKeyframes: [{ id: 'state-1', time: 0, cameraId: 'camera-1' }],
+      stateKeyframes: [{ id: 'state-1', time: 0 }],
     },
   }
   assert.deepEqual(requireObservedDefaultScene('doc-1', observed), { cameraId: 'camera-1', stateKeyframeId: 'state-1', baseRevision: 3 })
@@ -110,15 +110,15 @@ test('视频取消场景只接受正式运镜后持久化在文档里的第二�
       activeCameraId: 'camera-1',
       objects: [{ id: 'camera-1', type: 'camera' }],
       stateKeyframes: [
-        { id: 'state-1', time: 0, cameraId: 'camera-1' },
-        { id: 'state-2', time: 2, cameraId: 'camera-1' },
+        { id: 'state-1', time: 0 },
+        { id: 'state-2', time: 2 },
       ],
     },
   }
   assert.equal(requireVideoReadyCameraStageDocument(defaults, read), 2)
   assert.throws(() => requireVideoReadyCameraStageDocument(defaults, {
     ...read,
-    content: { ...read.content, stateKeyframes: [{ id: 'state-1', time: 0, cameraId: 'camera-1' }] },
+    content: { ...read.content, stateKeyframes: [{ id: 'state-1', time: 0 }] },
   }), /第二个状态关键帧/)
 })
 

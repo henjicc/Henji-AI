@@ -11,6 +11,7 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
 import type { StageObject, StageSceneSettings, StageSet } from '../domain/sceneTypes'
+import type { StageCameraCut } from '../domain/renderCameraSchedule'
 import { liveStageSets } from '../domain/stageSets'
 import { getAnimatablePropByPath } from '../domain/animatableProps'
 import type { CameraStageProjectSnapshot } from './cameraStageProjectRuntime'
@@ -27,7 +28,7 @@ import {
   OBJECT_FIELDS,
 } from './cameraStageObjectFields'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
-import { PLAYBACK_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
+import { CAMERA_CUT_FIELDS, PLAYBACK_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
 import { TRAJECTORY_FIELDS, TRAJECTORY_SCHEMA_DOCUMENTS } from './cameraStageTrajectoryFields'
 import { calculateStageObjectBounds } from './sceneAnalysis'
 import { summarizeStageSet } from './cameraStageApplicationService'
@@ -43,6 +44,7 @@ const ENTITY_TYPES = {
   camera: 'camera_stage.camera',
   set: 'camera_stage.set',
   stateKeyframe: 'camera_stage.state_keyframe',
+  cameraCut: 'camera_stage.camera_cut',
   trajectory: 'camera_stage.trajectory',
   playback: 'camera_stage.playback',
 } as const
@@ -149,6 +151,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.scene, 'document_ref', '所属镜头参考', { kind: 'ref', refKinds: [ENTITY_TYPES.project] }, { readOnly: '所属镜头参考不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.project], cardinality: 'one' } }),
     property(ENTITY_TYPES.scene, 'object_refs', '场景对象', { kind: 'ref_list', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { description: '用户与助手逐个放置的对象和摄像机，不含布景成员；布景成员数量大，按 set_refs 读摘要，或用 list_application_entities 分页列出 camera_stage.object。', readOnly: '对象集合通过正式创建和删除操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'many' } }),
     property(ENTITY_TYPES.scene, 'set_refs', '布景', { kind: 'ref_list', refKinds: [ENTITY_TYPES.set] }, { readOnly: '布景由 generate_camera_stage_set 生成，删除用 camera_stage.set 的集合写入。', relation: { targetEntityTypes: [ENTITY_TYPES.set], cardinality: 'many' } }),
+    property(ENTITY_TYPES.scene, 'camera_cut_refs', '机位切换点', { kind: 'ref_list', refKinds: [ENTITY_TYPES.cameraCut] }, { readOnly: '切换点的增删通过 camera_stage.camera_cut 的集合写入维护，这里只读列出当前机位轨。', relation: { targetEntityTypes: [ENTITY_TYPES.cameraCut], cardinality: 'many' } }),
     property(ENTITY_TYPES.scene, 'state_keyframe_refs', '状态关键帧', { kind: 'ref_list', refKinds: [ENTITY_TYPES.stateKeyframe] }, { readOnly: '状态关键帧的增删排序通过 camera_stage.state_keyframe 的集合写入维护，这里只读列出当前集合。', relation: { targetEntityTypes: [ENTITY_TYPES.stateKeyframe], cardinality: 'many' } }),
     /*
      * 场景外观 26 项 + 活动摄像机：界面上有的每一项这里都要有。
@@ -187,6 +190,9 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
   [ENTITY_TYPES.stateKeyframe]: [
     ...fieldDescriptors(STATE_KEYFRAME_FIELDS),
   ],
+  [ENTITY_TYPES.cameraCut]: [
+    ...fieldDescriptors(CAMERA_CUT_FIELDS),
+  ],
   [ENTITY_TYPES.playback]: [
     ...fieldDescriptors(PLAYBACK_FIELDS),
   ],
@@ -206,6 +212,11 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
  */
 export function sceneAppearanceProperties(settings: StageSceneSettings): Record<string, JsonValue> {
   return fieldReadValues(SCENE_APPEARANCE_FIELDS, settings)
+}
+
+function cutLabel(cut: StageCameraCut, objects: readonly StageObject[]): string {
+  const camera = cut.cameraId ? objects.find((object) => object.id === cut.cameraId)?.name ?? cut.cameraId : '活动摄像机'
+  return `${Math.round(cut.time * 100) / 100} 秒切到${camera}`
 }
 
 function childRef(kind: EntityType, projectId: string, id: string, label?: string): ApplicationRef {
@@ -301,6 +312,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       if (this.entityType === ENTITY_TYPES.set) return liveStageSets(snapshot.sets, snapshot.objects).map((set) => childRef(this.entityType, snapshot.id, set.id, set.name))
       if (this.entityType === ENTITY_TYPES.camera) return snapshot.objects.filter((object) => object.type === 'camera').map((object) => childRef(this.entityType, snapshot.id, object.id, object.name))
       if (this.entityType === ENTITY_TYPES.stateKeyframe) return snapshot.stateKeyframes.map((stateKeyframe) => childRef(this.entityType, snapshot.id, stateKeyframe.id, stateKeyframe.name))
+      if (this.entityType === ENTITY_TYPES.cameraCut) return snapshot.cameraCuts.map((cut) => childRef(this.entityType, snapshot.id, cut.id, cutLabel(cut, snapshot.objects)))
       if (this.entityType === ENTITY_TYPES.trajectory) return snapshot.stateKeyframes.flatMap((stateKeyframe) => Object.entries(stateKeyframe.transition.perObject).flatMap(([objectId, detail]) => detail.spatialPath ? [childRef(this.entityType, snapshot.id, `${stateKeyframe.id}:${objectId}`)] : []))
       return []
     })
@@ -315,12 +327,17 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   private async normalizeRef(ref: ApplicationRef): Promise<ApplicationRef> {
     if (ref.kind !== this.entityType || ref.id.includes(':')) return ref
     const shortRefEntityTypes = new Set<EntityType>([
-      ENTITY_TYPES.object, ENTITY_TYPES.camera, ENTITY_TYPES.stateKeyframe, ENTITY_TYPES.set,
+      ENTITY_TYPES.object, ENTITY_TYPES.camera, ENTITY_TYPES.stateKeyframe, ENTITY_TYPES.set, ENTITY_TYPES.cameraCut,
     ])
     if (!shortRefEntityTypes.has(this.entityType)) return ref
     const matches = (await this.snapshots()).flatMap((snapshot) => {
       if (this.entityType === ENTITY_TYPES.stateKeyframe) {
         return snapshot.stateKeyframes.some((item) => item.id === ref.id)
+          ? [childRef(this.entityType, snapshot.id, ref.id, ref.label)]
+          : []
+      }
+      if (this.entityType === ENTITY_TYPES.cameraCut) {
+        return snapshot.cameraCuts.some((item) => item.id === ref.id)
           ? [childRef(this.entityType, snapshot.id, ref.id, ref.label)]
           : []
       }
@@ -362,6 +379,11 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       if (!stateKeyframe) throw new Error('NOT_FOUND')
       return this.stateKeyframeProperties(projectId, stateKeyframe, snapshot.objects)
     }
+    if (this.entityType === ENTITY_TYPES.cameraCut) {
+      const cut = snapshot.cameraCuts.find((candidate) => candidate.id === childId)
+      if (!cut) throw new Error('NOT_FOUND')
+      return fieldReadValues(CAMERA_CUT_FIELDS, { projectId, cut })
+    }
     if (this.entityType === ENTITY_TYPES.trajectory) return this.trajectoryProperties(projectId, snapshot, childId)
     if (this.entityType === ENTITY_TYPES.set) {
       const set = liveStageSets(snapshot.sets, snapshot.objects).find((candidate) => candidate.id === childId)
@@ -399,6 +421,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       [`${ENTITY_TYPES.scene}.document_ref`]: { kind: ENTITY_TYPES.project, id: snapshot.id, label: snapshot.name },
       [`${ENTITY_TYPES.scene}.object_refs`]: snapshot.objects.filter((object) => !object.setId).map((object) => childRef(object.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, snapshot.id, object.id, object.name)),
       [`${ENTITY_TYPES.scene}.set_refs`]: liveStageSets(snapshot.sets, snapshot.objects).map((set) => childRef(ENTITY_TYPES.set, snapshot.id, set.id, set.name)),
+      [`${ENTITY_TYPES.scene}.camera_cut_refs`]: snapshot.cameraCuts.map((cut) => childRef(ENTITY_TYPES.cameraCut, snapshot.id, cut.id, cutLabel(cut, snapshot.objects))),
       [`${ENTITY_TYPES.scene}.state_keyframe_refs`]: snapshot.stateKeyframes.map((stateKeyframe) => childRef(ENTITY_TYPES.stateKeyframe, snapshot.id, stateKeyframe.id, stateKeyframe.name)),
       ...fieldReadValues(SCENE_TIMELINE_FIELDS, snapshot),
       ...sceneAppearanceProperties(snapshot.sceneSettings),
@@ -456,6 +479,7 @@ const ENTITY_META: Record<EntityType, { title: string; description: string; pare
   [ENTITY_TYPES.camera]: { title: '三维摄像机', description: '具有取景、注视和轨迹控制的摄像机。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.set]: { title: '三维布景', description: '按参数一次生成的一片布景（城市、街道、广场、人群）；成员是普通对象，可逐个修改。生成与重新生成用 generate_camera_stage_set，整片删除用集合写入 remove。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.stateKeyframe]: { title: '状态关键帧', description: '指定时刻的完整场景状态和到下一时刻的过渡定义。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.cameraCut]: { title: '机位切换点', description: '时间轴机位轨上的一次切机位：从 time 起由 camera_ref 拍摄，直到下一个切换点；与状态关键帧互不牵连，切机位时场景照常连续运动。按剧情节拍一次排好整段切换用 cut_camera_stage_coverage，检查剪辑规则用 check_camera_stage_edit。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.trajectory]: { title: '三维轨迹', description: '对象或摄像机在相邻状态关键帧间的空间路径。', parents: [ENTITY_TYPES.stateKeyframe], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.playback]: { title: '三维播放控制', description: '时间轴的播放、播放头位置与循环开关。只对当前打开的镜头参考有意义。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
 }
@@ -480,6 +504,14 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         ...(entityType === ENTITY_TYPES.project ? { writeExclusion: { reason: PROJECT_WRITE_EXCLUSION } } : {}),
         ...(entityType === ENTITY_TYPES.set ? {
           collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 },
+        } : {}),
+        ...(entityType === ENTITY_TYPES.cameraCut ? {
+          collectionWrite: {
+            creatable: true,
+            removable: true,
+            requiredPropertyIds: [`${ENTITY_TYPES.cameraCut}.time`, `${ENTITY_TYPES.cameraCut}.camera_ref`],
+            maxItemsPerChange: 64,
+          },
         } : {}),
         ...(entityType === ENTITY_TYPES.stateKeyframe ? {
           collectionWrite: {

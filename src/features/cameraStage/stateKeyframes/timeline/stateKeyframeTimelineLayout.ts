@@ -2,3 +2,6 @@
 
 /** 轨道行高（px），静止块占满、过渡块居中收窄 */
 export const STATE_KEYFRAME_CLIP_TRACK_HEIGHT = 64
+
+/** 机位轨行高（px） */
+export const CAMERA_CUT_TRACK_HEIGHT = 32

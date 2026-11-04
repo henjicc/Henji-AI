@@ -255,6 +255,18 @@ successData.block_camera_stage_character = { ...transaction, characterId: 'actor
 ] }
 successData.follow_camera_stage_character = { ...transaction, cameraId: 'camera', subjectId: 'actor', startTime: 0, endTime: 5, offset: { x: 0, y: 1.6, z: -4 }, adjusted: null,
   samples: [{ time: 0, shotSize: 'full', heightRatio: 0.8, horizontal: 'center', keyVisible: true }], occlusions: [] }
+const editShots = [
+  { index: 0, startTime: 0, endTime: 3, duration: 3, cameraId: 'wide', cameraName: '覆盖1·建立', role: 'establishing', size: 'extreme_long', primarySubjectId: null, visibleSubjectIds: ['a', 'b'], reason: '开场先交代环境' },
+  { index: 1, startTime: 3, endTime: 6, duration: 3, cameraId: 'ots', cameraName: '覆盖1·过肩 甲→乙', role: 'over_shoulder', size: 'close', primarySubjectId: 'b', visibleSubjectIds: ['b'] },
+]
+const editCheck = { shots: editShots, violations: [{ rule: 'cut_on_action', severity: 'warning', shotIndexes: [0, 1], time: 3, message: '切点落在「甲」转身的开头（10%）', suggestion: '把切点挪到 3.5 秒左右（动作中段）' }],
+  passedRules: ['axis', 'jump_cut'], summary: '2 镜里有 0 处错误、1 处提示：cut_on_action。' }
+successData.cover_camera_stage_scene = { ...transaction, coverageId: 'coverage', name: '覆盖1', startTime: 0, endTime: 20, axis: { screenLeft: '甲', screenRight: '乙' },
+  lines: [{ speakerId: 'a', startTime: 6, endTime: 9, text: '你怎么来了？' }],
+  setups: [{ cameraId: 'ots', name: '覆盖1·过肩 甲→乙', role: 'over_shoulder', subjectIds: ['a', 'b'], size: 'close', referenceTime: 6, created: true, axisSide: 'coverage_side',
+    visibleSpans: [{ startTime: 3, endTime: 20 }], adjusted: null, composition: (successData.compose_camera_stage_shot as { shots: Array<{ composition: unknown }> }).shots[0].composition }] }
+successData.cut_camera_stage_coverage = { ...transaction, coverageId: 'coverage', startTime: 0, endTime: 20, pace: 'medium', cutCount: 2, ...editCheck }
+successData.check_camera_stage_edit = { documentId: 'stage', startTime: 0, endTime: 20, ...editCheck, ...revisions }
 const generationPlan = { action: 'generate_shot', sequenceRef, startSeconds: 1, durationSeconds: 5, trackRef: null, placement: 'add', references: [] }
 successData.generate_video_edit_in_place = { documentRef, taskRef: ref('generation.task', 'task'), plan: generationPlan, status: 'submitted', verified: true, message }
 successData.prepare_video_edit_in_place_generation = { documentRef, plan: generationPlan, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'video', options: {} }, stylePrompt: '', message }

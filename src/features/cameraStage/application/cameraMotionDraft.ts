@@ -89,7 +89,7 @@ function captureCameraMotion(projectId: string, cameraId: string, patch: CameraG
   }
   const existing = draft.frames.find(frame => frame.time === time)
   if (existing && draft.pinnedIds.includes(existing.id)) throw new Error('当前机位已钉住，请先解钉。')
-  const frame = createStateKeyframe(objects.map(object => object.id === cameraId ? camera : object), '机位示范', cameraId, time)
+  const frame = createStateKeyframe(objects.map(object => object.id === cameraId ? camera : object), '机位示范', time)
   frame.id = existing?.id ?? frame.id
   draft.frames = [...draft.frames.filter(value => value.time !== time), frame].sort((a, b) => a.time - b.time)
   draft.pose = camera; draft.poseTime = time; draft.review = undefined; draft.preview = undefined; draft.selected = 'original'; draft.message = undefined; publish()

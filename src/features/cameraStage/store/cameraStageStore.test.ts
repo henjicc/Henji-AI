@@ -20,9 +20,9 @@ describe('3D 镜头镜头参考快照加载', () => {
   it('打开镜头参考时立即显示播放头 0 秒的首关键帧画面', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     camera.transform.position.x = 99
-    const first = createStateKeyframe([camera], '关键帧 1', camera.id, 0)
+    const first = createStateKeyframe([camera], '关键帧 1', 0)
     first.objectStates[camera.id].transform.position.x = 3
-    const second = createStateKeyframe([camera], '关键帧 2', camera.id, 2)
+    const second = createStateKeyframe([camera], '关键帧 2', 2)
     second.objectStates[camera.id].transform.position.x = 12
 
     useCameraStageStore.getState().loadSnapshot({

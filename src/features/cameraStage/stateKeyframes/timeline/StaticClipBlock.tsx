@@ -1,13 +1,11 @@
-import React, { useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import { Diamond, Trash2 } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiFormRow, UiIconButton, UiInput } from '@/components/ui'
-import type { StageCameraObject } from '../../domain/sceneTypes'
 import type { StageStateKeyframe } from '../../domain/stateKeyframeTypes'
 import type { StateKeyframeClipBlock } from './stateKeyframeClipGeometry'
 import { formatStateKeyframeTimecode } from './stateKeyframeTimecodeFormat'
 
 const KEYFRAME_HIT_SIZE = 24
-const DEFAULT_CAMERA_OPTION_VALUE = '__default__'
 
 export interface ClipBlockPointerHandlers {
   onPointerDown: (event: React.PointerEvent) => void
@@ -30,12 +28,10 @@ interface StaticClipBlockProps {
   dragging: boolean
   /** 拖拽刚结束时返回 true 一次，用于吞掉浏览器补发的 click，避免拖完误弹面板 */
   consumeClickSuppression: () => boolean
-  cameras: StageCameraObject[]
-  onSelectCamera: (cameraId: string | null) => void
   onUpdateContinuity: (continuity: StageStateKeyframe['continuity']) => void
 }
 
-/** 关键帧只以菱形占据时间坐标；名称、机位和通过方式收进点击浮层。 */
+/** 关键帧只以菱形占据时间坐标；名称和通过方式收进点击浮层。 */
 const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
   stateKeyframe,
   block,
@@ -48,18 +44,9 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
   dragHandlers,
   dragging,
   consumeClickSuppression,
-  cameras,
-  onSelectCamera,
   onUpdateContinuity,
 }) => {
   const [draftName, setDraftName] = useState(stateKeyframe.name)
-  const cameraOptions = useMemo(() => [
-    { label: '跟随默认', value: DEFAULT_CAMERA_OPTION_VALUE },
-    ...cameras.map((camera) => ({ label: camera.name, value: camera.id })),
-  ], [cameras])
-  const cameraLabel = stateKeyframe.cameraId
-    ? cameras.find((camera) => camera.id === stateKeyframe.cameraId)?.name ?? '未知机位'
-    : '跟随默认'
 
   const commitName = (): void => {
     onRename(draftName)
@@ -109,19 +96,6 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') event.currentTarget.blur()
                 }}
-              />
-            </UiFormRow>
-            <UiFormRow label="拍摄机位" density="compact">
-              <Dropdown<string>
-                ariaLabel="拍摄机位"
-                value={stateKeyframe.cameraId ?? DEFAULT_CAMERA_OPTION_VALUE}
-                display={cameraLabel}
-                options={cameraOptions}
-                onSelect={(value) => onSelectCamera(value === DEFAULT_CAMERA_OPTION_VALUE ? null : value)}
-                disabled={cameras.length === 0}
-                className="w-full"
-                size="sm"
-                minWidthStrategy="none"
               />
             </UiFormRow>
             <UiFormRow label="经过本关键帧时" density="compact">

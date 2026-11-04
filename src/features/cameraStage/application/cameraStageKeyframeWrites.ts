@@ -1,7 +1,6 @@
 import type { StageObject, StageObjectPatch } from '../domain/sceneTypes'
 import type { StageStateKeyframeTransitionObjectDetail } from '../domain/stateKeyframeTypes'
 import { quantizeToFrame } from '../stateKeyframes/timeline/stateKeyframeClipGeometry'
-import { shotCameraAt } from '../store/stateKeyframeSlice'
 import { cameraStageProjectStore } from './cameraStageProjectRuntime'
 
 /**
@@ -15,24 +14,17 @@ export function stateKeyframeTimeAt(store: Store, time: number): number {
   return quantizeToFrame(time, store.getState().animation.fps)
 }
 
-/**
- * time 那一刻的状态关键帧：已有就用（按帧对齐），没有就新建（其余对象记下那一刻的播放画面）。
- * 新建的卡沿用那一刻正在拍的机位（前一张卡的机位）：界面上新建卡取当前活动摄像机，算法能力在镜头中途插卡时
- * 若取了别的摄像机，相邻两卡机位不同就成了强制硬切，整个场景在那里跳一下。
- */
+/** time 那一刻的状态关键帧：已有就用（按帧对齐），没有就新建（其余对象记下那一刻的播放画面）。 */
 export function ensureStateKeyframeAt(store: Store, time: number): { id: string; created: boolean } {
   const quantized = stateKeyframeTimeAt(store, time)
   const fps = store.getState().animation.fps
   const before = store.getState().stateKeyframes
   const existing = before.find((item) => Math.abs(item.time - quantized) <= 1 / (2 * Math.max(1, fps)))
   if (existing) return { id: existing.id, created: false }
-  const shot = shotCameraAt(before, quantized, store.getState().activeCameraId)
   store.getState().seek(quantized)
   store.getState().addStateKeyframe()
   const id = store.getState().selectedStateKeyframeId
   if (!id) throw new Error('CAPABILITY_REJECTED')
-  const created = store.getState().stateKeyframes.find((item) => item.id === id)
-  if (created && created.cameraId !== shot) store.getState().updateStateKeyframeCamera(id, shot)
   return { id, created: true }
 }
 

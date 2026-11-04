@@ -11,6 +11,7 @@ const TYPES = {
   project: 'camera_stage.document',
   scene: 'camera_stage.scene',
   stateKeyframe: 'camera_stage.state_keyframe',
+  cameraCut: 'camera_stage.camera_cut',
   set: 'camera_stage.set',
   playback: 'camera_stage.playback',
 } as const
@@ -60,8 +61,8 @@ export function cameraStageCollectionAvailability(
     parent,
     create: isSet
       ? operation(false, '布景要按参数生成：调用 generate_camera_stage_set。')
-      : operation(entityType === TYPES.stateKeyframe),
-    remove: operation(entityType === TYPES.stateKeyframe || isSet),
+      : operation(entityType === TYPES.stateKeyframe || entityType === TYPES.cameraCut),
+    remove: operation(entityType === TYPES.stateKeyframe || entityType === TYPES.cameraCut || isSet),
     revisions: { camera_stage: revision },
   }
 }

@@ -36,9 +36,8 @@ it('角色绕开挡路的箱子走到门口，转身朝摄像机挥手；跟拍�
   const wide = createCameraObject('全景机', pickDefaultColor(4))
   const objects = [camera, actor, door, crate, wide]
   const documentId = 'blocking-scene'
-  // 活动摄像机是另一台：新插的状态关键帧要沿用正在拍的机位，否则两卡机位不同成了硬切，人直接跳到门口。
   await loadCameraStageTestProject({ objects, activeCameraId: wide.id, animation: createDefaultAnimation(),
-    sceneSettings: createDefaultSceneSettings(), stateKeyframes: [createStateKeyframe(objects, '起点', camera.id, 0)] }, { id: documentId, name: '走位' })
+    sceneSettings: createDefaultSceneSettings(), stateKeyframes: [createStateKeyframe(objects, '起点', 0)] }, { id: documentId, name: '走位' })
   const app = createApplicationHarness()
   try {
     const blocking = await app.requireResult('block_camera_stage_character', {

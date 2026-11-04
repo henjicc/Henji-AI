@@ -56,14 +56,13 @@ function requireObservedDefaultScene(documentId, observed) {
     && camera?.type === 'camera'
     && scene.stateKeyframes?.length === 1
     && stateKeyframe?.time === 0
-    && stateKeyframe?.cameraId === camera.id
     && Number.isInteger(observed.baseRevision)
   if (!valid) {
     throw new Error(`新建镜头参考的默认相机、关键帧或稳定引用不一致：${JSON.stringify({
       documentId: scene?.documentId ?? null,
       activeCameraId: scene?.activeCameraId ?? null,
       objects: scene?.objects?.map((object) => ({ id: object.id, type: object.type })) ?? null,
-      stateKeyframes: scene?.stateKeyframes?.map((item) => ({ id: item.id, time: item.time, cameraId: item.cameraId })) ?? null,
+      stateKeyframes: scene?.stateKeyframes?.map((item) => ({ id: item.id, time: item.time })) ?? null,
     })}`)
   }
   return { cameraId: camera.id, stateKeyframeId: stateKeyframe.id, baseRevision: observed.baseRevision }

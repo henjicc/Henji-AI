@@ -8,11 +8,13 @@ import { CAMERA_STAGE_RENDER_CAPABILITY_ID, CANCEL_CAMERA_STAGE_RENDER_TASK_CAPA
 
 import { COMPOSE_CAMERA_STAGE_SHOT_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageShotApplicationCapabilities'
 import { BLOCK_CAMERA_STAGE_CHARACTER_CAPABILITY_ID, FOLLOW_CAMERA_STAGE_CHARACTER_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageBlockingApplicationCapabilities'
+import { CHECK_CAMERA_STAGE_EDIT_CAPABILITY_ID, COVER_CAMERA_STAGE_SCENE_CAPABILITY_ID, CUT_CAMERA_STAGE_COVERAGE_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageCoverageApplicationCapabilities'
 import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 
 import { parseDocumentCapabilityInput as parseCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
+import { checkCameraStageEditQuery, coverCameraStageSceneOperation, cutCameraStageCoverageOperation } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
 import { assertCameraStageRevision, applyCameraStageCameraMove, blockCameraStageCharacterOperation, composeCameraStageShotOperation, followCameraStageCharacterOperation, deleteCameraStageObject, duplicateCameraStageObject, generateCameraStageSet, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
 import { releaseCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 import { createDraftCameraStageDocument, openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
@@ -132,6 +134,24 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<Record<string, unknown>>(FOLLOW_CAMERA_STAGE_CHARACTER_CAPABILITY_ID, input)
     return await followCameraStageCharacterOperation(parsed, context)
+  })
+
+  registrar.registerHandler(COVER_CAMERA_STAGE_SCENE_CAPABILITY_ID, async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<Record<string, unknown>>(COVER_CAMERA_STAGE_SCENE_CAPABILITY_ID, input)
+    return await coverCameraStageSceneOperation(parsed, context)
+  })
+
+  registrar.registerHandler(CUT_CAMERA_STAGE_COVERAGE_CAPABILITY_ID, async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<Record<string, unknown>>(CUT_CAMERA_STAGE_COVERAGE_CAPABILITY_ID, input)
+    return await cutCameraStageCoverageOperation(parsed, context)
+  })
+
+  registrar.registerHandler(CHECK_CAMERA_STAGE_EDIT_CAPABILITY_ID, async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<{ projectId: string } & Record<string, unknown>>(CHECK_CAMERA_STAGE_EDIT_CAPABILITY_ID, input)
+    return await checkCameraStageEditQuery(parsed)
   })
 
   registrar.registerHandler('verify_camera_stage_scene', async (input, context) => {

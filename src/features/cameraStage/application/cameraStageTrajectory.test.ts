@@ -47,8 +47,8 @@ describe('三维轨迹手工编辑', () => {
       target: { x: 0, y: 0, z: 0 },
     })
     cameraId = camera.id
-    const stateKeyframeA = createStateKeyframe([camera], 'A', camera.id, 0)
-    const stateKeyframeB = createStateKeyframe([camera], 'B', camera.id, 2)
+    const stateKeyframeA = createStateKeyframe([camera], 'A', 0)
+    const stateKeyframeB = createStateKeyframe([camera], 'B', 2)
     stateKeyframeAId = stateKeyframeA.id
     stateKeyframeBId = stateKeyframeB.id
     await loadCameraStageTestProject({

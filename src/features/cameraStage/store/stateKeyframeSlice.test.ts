@@ -52,8 +52,8 @@ describe('状态关键帧模式 store 分片', () => {
       position: { x: 0, y: 2, z: 5 },
       target: { x: 0, y: 0, z: 0 },
     })
-    const stateKeyframeA = createStateKeyframe([camera], 'A', camera.id, 0)
-    const stateKeyframeB = createStateKeyframe([camera], 'B', camera.id, 2)
+    const stateKeyframeA = createStateKeyframe([camera], 'A', 0)
+    const stateKeyframeB = createStateKeyframe([camera], 'B', 2)
     useCameraStageStore.setState({
       objects: [camera],
       stateKeyframes: [stateKeyframeA, stateKeyframeB],
@@ -75,7 +75,7 @@ describe('状态关键帧模式 store 分片', () => {
       position: { x: 0, y: 2, z: 5 },
       target: { x: 0, y: 0, z: 0 },
     })
-    const stateKeyframeA = createStateKeyframe([camera], 'A', camera.id, 0)
+    const stateKeyframeA = createStateKeyframe([camera], 'A', 0)
     const movedCamera = {
       ...camera,
       transform: {
@@ -83,7 +83,7 @@ describe('状态关键帧模式 store 分片', () => {
         position: { x: 6, y: 3, z: 1 },
       },
     }
-    const stateKeyframeB = createStateKeyframe([movedCamera], 'B', camera.id, 2)
+    const stateKeyframeB = createStateKeyframe([movedCamera], 'B', 2)
     const stateKeyframes = [stateKeyframeA, stateKeyframeB]
     useCameraStageStore.setState({
       objects: [camera],
@@ -139,9 +139,8 @@ describe('状态关键帧模式 store 分片', () => {
     expect(state.viewMode).toBe('camera')
     expect(state.activeCameraId).toBe(camera?.id)
     expect(state.selectedId).toBe(camera?.id)
-    // 默认状态关键帧同步捕获了摄像机快照，且拍摄机位指向默认摄像机
+    // 默认状态关键帧同步捕获了摄像机快照
     expect(state.stateKeyframes).toHaveLength(1)
-    expect(state.stateKeyframes[0].cameraId).toBe(camera?.id)
     expect(camera && state.stateKeyframes[0].objectStates[camera.id]).toBeDefined()
   })
 
@@ -262,8 +261,8 @@ describe('状态关键帧模式 store 分片', () => {
 
   it('摄像机视图一次原子更新同时记录位置、XYZ 旋转和注视点', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
-    const first = createStateKeyframe([camera], '关键帧 1', camera.id, 0)
-    const second = createStateKeyframe([camera], '关键帧 2', camera.id, 2)
+    const first = createStateKeyframe([camera], '关键帧 1', 0)
+    const second = createStateKeyframe([camera], '关键帧 2', 2)
     const stateKeyframes = [first, second]
     useCameraStageStore.setState({
       objects: [camera],
@@ -292,8 +291,8 @@ describe('状态关键帧模式 store 分片', () => {
 
   it('修改注视目标会同步全部状态关键帧但不会自动添加关键帧', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
-    const first = createStateKeyframe([camera], '关键帧 1', camera.id, 0)
-    const second = createStateKeyframe([camera], '关键帧 2', camera.id, 2)
+    const first = createStateKeyframe([camera], '关键帧 1', 0)
+    const second = createStateKeyframe([camera], '关键帧 2', 2)
     const stateKeyframes = [first, second]
     useCameraStageStore.setState({
       objects: [camera],
@@ -315,8 +314,8 @@ describe('状态关键帧模式 store 分片', () => {
 
   it('仅更新摄像机注视点时不会自动添加关键帧', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
-    const first = createStateKeyframe([camera], '关键帧 1', camera.id, 0)
-    const second = createStateKeyframe([camera], '关键帧 2', camera.id, 2)
+    const first = createStateKeyframe([camera], '关键帧 1', 0)
+    const second = createStateKeyframe([camera], '关键帧 2', 2)
     const stateKeyframes = [first, second]
     useCameraStageStore.setState({
       objects: [camera],
@@ -393,33 +392,6 @@ describe('状态关键帧模式 store 分片', () => {
     const selected = useCameraStageStore.getState()
     expect(selected.objects[0].transform.position.x).toBe(3)
     expect(selected.playback.currentTime).toBe(2)
-  })
-
-  it('建卡默认沿用当前 activeCameraId 作为拍摄机位', () => {
-    useCameraStageStore.getState().addCamera()
-    const cameraId = useCameraStageStore.getState().activeCameraId
-    expect(cameraId).toBeTruthy()
-    addStateKeyframeAt(2)
-    const stateKeyframes = useCameraStageStore.getState().stateKeyframes
-    expect(stateKeyframes[stateKeyframes.length - 1].cameraId).toBe(cameraId)
-  })
-
-  it('updateStateKeyframeCamera 更新机位并触发重编译（机位不同的相邻卡强制硬切）', () => {
-    useCameraStageStore.getState().addCamera()
-    const cameraA = useCameraStageStore.getState().activeCameraId
-    if (!cameraA) throw new Error('测试需要摄像机 A')
-    useCameraStageStore.getState().updateStateKeyframeCamera(useCameraStageStore.getState().stateKeyframes[0].id, cameraA)
-    useCameraStageStore.getState().addCamera()
-    const cameraB = useCameraStageStore.getState().activeCameraId
-    if (!cameraB) throw new Error('测试需要摄像机 B')
-    addStateKeyframeAt(2)
-    const stateKeyframes1 = useCameraStageStore.getState().stateKeyframes
-    useCameraStageStore.getState().updateStateKeyframeCamera(stateKeyframes1[1].id, cameraB)
-
-    const state = useCameraStageStore.getState()
-    expect(state.stateKeyframes[1].cameraId).toBe(cameraB)
-    // 机位不同 → 区间保留，画面在后关键帧时刻执行阶跃硬切。
-    expect(state.animation.duration).toBeCloseTo(2, 5)
   })
 
   it('新建摄像机在已有摄像机时继承首摄像机画幅，且非首摄像机画幅补丁被钳制忽略', () => {

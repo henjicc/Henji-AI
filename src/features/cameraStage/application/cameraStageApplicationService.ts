@@ -29,6 +29,7 @@ import {
 } from './sceneAnalysis'
 import { afterCameraStageWrite, captureCameraStageUndo, rollbackCameraStageWrite } from './cameraStageUndo'
 import { observeCameraComposition, shotObstacles, type ShotReadback } from './shotGeometry'
+import { liveCoverages, type StageCoverage } from '../domain/coverage'
 
 const logger = createLogger('features.cameraStage.application')
 
@@ -63,7 +64,6 @@ export interface CameraStageStateKeyframeUpdate {
   time?: number
   transitionDuration?: number
   continuity?: StageStateKeyframe['continuity']
-  cameraId?: string | null
   /**
    * 把列出的对象/摄像机当前在场景中的实时状态记录进这张状态关键帧（2.2 状态捕获入口）。
    * 只覆盖列出的对象，不触碰这张卡上其余对象、也不触碰其他状态关键帧——不会重新打开
@@ -93,7 +93,18 @@ export interface CameraStageSceneObservation {
     time: number
     transitionDuration: number
     continuity: StageStateKeyframe['continuity']
-    cameraId: string | null
+  }>
+  /** 机位轨：从 time 起由哪台摄像机拍；第一个切点之前是活动摄像机。 */
+  cameraCuts: Array<{ id: string; time: number; cameraId: string | null; cameraName: string | null }>
+  /** 多机位覆盖：每台摄像机在这段戏里担任的镜头，以及台词节拍。 */
+  coverages: Array<{
+    id: string
+    name: string
+    subjectIds: string[]
+    startTime: number
+    endTime: number
+    lines: StageCoverage['lines']
+    setups: Array<{ cameraId: string; cameraName: string; role: string; subjectIds: string[]; size: string }>
   }>
   trajectories: Array<{
     stateKeyframeId: string
@@ -331,7 +342,16 @@ function sceneObservation(snapshot: CameraStageProjectSnapshot, times: readonly 
       time: stateKeyframe.time,
       transitionDuration: stateKeyframe.transitionDuration,
       continuity: stateKeyframe.continuity,
-      cameraId: stateKeyframe.cameraId,
+    })),
+    cameraCuts: snapshot.cameraCuts.map((cut) => ({
+      id: cut.id, time: cut.time, cameraId: cut.cameraId,
+      cameraName: cut.cameraId ? snapshot.objects.find((object) => object.id === cut.cameraId)?.name ?? null : null,
+    })),
+    coverages: liveCoverages(snapshot.coverages, snapshot.objects).map((coverage) => ({
+      id: coverage.id, name: coverage.name, subjectIds: coverage.subjectIds, startTime: coverage.startTime, endTime: coverage.endTime, lines: coverage.lines,
+      setups: coverage.setups.map((setup) => ({
+        cameraId: setup.cameraId, cameraName: snapshot.objects.find((object) => object.id === setup.cameraId)?.name ?? '', role: setup.role, subjectIds: setup.subjectIds, size: setup.size,
+      })),
     })),
     trajectories: snapshot.stateKeyframes.flatMap((stateKeyframe) => Object.entries(stateKeyframe.transition.perObject).flatMap(([objectId, detail]) => {
       const path = detail.spatialPath
@@ -758,7 +778,6 @@ const implementation = {
     await ensureProjectLoaded(projectId)
     const state = cameraStageProjectStore(projectId).getState()
     if (!state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === stateKeyframeId)) throw new Error('NOT_FOUND')
-    if (update.cameraId && !state.objects.some((object) => object.id === update.cameraId && object.type === 'camera')) throw new Error('INVALID_REFERENCE')
     if (update.transitionDuration !== undefined && (!Number.isFinite(update.transitionDuration) || update.transitionDuration < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.time !== undefined && (!Number.isFinite(update.time) || update.time < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.captureObjectIds !== undefined) {
@@ -777,7 +796,6 @@ const implementation = {
       if (update.time !== undefined) state.moveStateKeyframeTime(stateKeyframeId, update.time)
       if (update.transitionDuration !== undefined) state.updateStateKeyframeTiming(stateKeyframeId, update)
       if (update.continuity !== undefined) state.updateStateKeyframeContinuity(stateKeyframeId, update.continuity)
-      if (update.cameraId !== undefined) state.updateStateKeyframeCamera(stateKeyframeId, update.cameraId)
       if (update.captureObjectIds !== undefined) {
         // 只覆盖列出的对象在目标状态关键帧上的快照，不触碰其余对象或其他时间点。
         const current = cameraStageProjectStore(projectId).getState()

@@ -16,7 +16,7 @@ it('连续运镜结果带平滑度证据；改注视点后读回的朝向对准�
   const subject = createPrimitiveObject('sphere', '主体', pickDefaultColor(1))
   const documentId = 'smooth-move-scene'
   await loadCameraStageTestProject({ objects: [camera, subject], activeCameraId: camera.id, animation: createDefaultAnimation(),
-    sceneSettings: createDefaultSceneSettings(), stateKeyframes: [createStateKeyframe([camera, subject], '起点', camera.id, 0)] }, { id: documentId, name: '连续运镜' })
+    sceneSettings: createDefaultSceneSettings(), stateKeyframes: [createStateKeyframe([camera, subject], '起点', 0)] }, { id: documentId, name: '连续运镜' })
   const app = createApplicationHarness()
   try {
     const base = { documentId, cameraId: camera.id, targetObjectId: subject.id }
@@ -52,7 +52,7 @@ it('放置新对象同步进全部状态关键帧', async () => {
   const documentId = 'place-sync-scene'
   await loadCameraStageTestProject({ objects: [camera], activeCameraId: camera.id, animation: createDefaultAnimation(),
     sceneSettings: createDefaultSceneSettings(),
-    stateKeyframes: [createStateKeyframe([camera], '起点', camera.id, 0), createStateKeyframe([camera], '终点', camera.id, 2)] }, { id: documentId, name: '放置同步' })
+    stateKeyframes: [createStateKeyframe([camera], '起点', 0), createStateKeyframe([camera], '终点', 2)] }, { id: documentId, name: '放置同步' })
   const app = createApplicationHarness()
   try {
     const placed = await app.requireResult('place_camera_stage_object', {

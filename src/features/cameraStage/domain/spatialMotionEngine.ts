@@ -121,7 +121,6 @@ const RUNTIME_CONTENT_CACHE_SIZE = 32
 
 /** 缓动曲线两端的归一化斜率，让链首尾仍遵守该段的速度预设。 */
 function easingEndSlopes(easing: StageEasingPreset): [number, number] {
-  if (easing === 'hold') return [0, 0]
   return [
     easeProgress(easing, SLOPE_PROBE) / SLOPE_PROBE,
     (1 - easeProgress(easing, 1 - SLOPE_PROBE)) / SLOPE_PROBE,
@@ -562,8 +561,7 @@ function buildChain(segments: StageSpatialMotionSegment[], curves: ArcLengthCurv
     requiredDuration: requiredDuration(endTime - startTime, check.peaks, limits),
   })
 
-  // 硬切（hold）段在末尾瞬间到位，不能被设备的时间律改成一段运动；平滑链不会包含 hold 段。
-  if (segments.length === 1 && (rig === 'free' || segments[0].easing === 'hold')) {
+  if (segments.length === 1 && rig === 'free') {
     const curve = curves[0]
     const law = easingLaw(curve.length, startTime, endTime, segments[0].easing)
     return { startTime, endTime, curve, law, report: report(checkProfile(law, times, curvatureTable(curve)), null) }

@@ -137,8 +137,6 @@ function applyStateKeyframeMotion(
   }
   if (!endStateKeyframe) throw new Error('CAPABILITY_REJECTED')
 
-  state.updateStateKeyframeCamera(startStateKeyframe.id, camera.id)
-  state.updateStateKeyframeCamera(endStateKeyframe.id, camera.id)
   state.updateStateKeyframeTiming(startStateKeyframe.id, { transitionDuration: input.duration })
   state.updateStateKeyframeTransition(startStateKeyframe.id, {
     perObject: { [camera.id]: { speedPreset: input.speed } },

@@ -32,7 +32,7 @@ it('正反打一对按意图记进时间点，两台机位守在轴线同一侧�
   const objects = [first, second, a, b]
   const documentId = 'shot-reverse-scene'
   await loadCameraStageTestProject({ objects, activeCameraId: first.id, animation: createDefaultAnimation(),
-    sceneSettings: createDefaultSceneSettings(), stateKeyframes: [createStateKeyframe(objects, '起点', first.id, 0)] }, { id: documentId, name: '正反打' })
+    sceneSettings: createDefaultSceneSettings(), stateKeyframes: [createStateKeyframe(objects, '起点', 0)] }, { id: documentId, name: '正反打' })
   const app = createApplicationHarness()
   try {
     const data = await app.requireResult('compose_camera_stage_shot', {

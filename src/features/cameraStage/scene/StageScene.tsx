@@ -161,6 +161,7 @@ const StageScene: React.FC<StageSceneProps> = ({
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
   const renderStyle = useCameraStageStore((state) => state.sceneSettings.render.style)
   const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
+  const cameraCuts = useCameraStageStore((state) => state.cameraCuts)
   const storedAnimation = useCameraStageStore((state) => state.animation)
   const objects = cameraMotionPreview(useCameraStageStore.getState())?.objects ?? storedObjects
   const setSelected = useCameraStageStore((state) => state.setSelected)
@@ -273,12 +274,12 @@ const StageScene: React.FC<StageSceneProps> = ({
     [objects],
   )
   const renderCameraSchedule = useMemo(
-    () => buildRenderCameraSchedule(stateKeyframes, activeCameraId),
-    [activeCameraId, stateKeyframes],
+    () => buildRenderCameraSchedule(cameraCuts, activeCameraId),
+    [activeCameraId, cameraCuts],
   )
   /*
    * `active_camera` 走 renderCameraId 而不是 activeCameraId：播放/scrub 跨机位切换点时
-   * 渲染机位按状态关键帧时间表走（重要记录 005），跟随档要跟的是**画面上真正在用的那台**，
+   * 渲染机位按机位切换点走，跟随档要跟的是**画面上真正在用的那台**，
    * 否则播放到切机位那一刻，跟随窗格还停在上一台机器上。
    */
   const requestedCameraId = viewportSource?.kind === 'camera'

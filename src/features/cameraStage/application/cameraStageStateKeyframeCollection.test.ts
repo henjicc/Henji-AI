@@ -30,10 +30,6 @@ describe('三维状态关键帧集合写入', () => {
     }, { id: 'project-1', name: '状态关键帧集合写入测试' })
   })
 
-  function cameraId(): string {
-    return useCameraStageStore.getState().objects.find((object) => object.type === 'camera')!.id
-  }
-
   function cubeId(): string {
     return useCameraStageStore.getState().objects.find((object) => object.type === 'primitive')!.id
   }
@@ -106,22 +102,13 @@ describe('三维状态关键帧集合写入', () => {
     const result = await cameraStageStateKeyframeService.createStateKeyframes('project-1', [
       { time: 0, name: '开场' },
       { time: 1, name: '中段' },
-      { time: 2, name: '结尾', cameraId: cameraId() },
+      { time: 2, name: '结尾' },
     ])
 
     expect(result.stateKeyframeIds).toHaveLength(3)
     const stateKeyframes = useCameraStageStore.getState().stateKeyframes
     expect(stateKeyframes).toHaveLength(3)
     expect(stateKeyframes.map((stateKeyframe) => stateKeyframe.time)).toEqual([0, 1, 2])
-    expect(stateKeyframes.find((stateKeyframe) => stateKeyframe.name === '结尾')?.cameraId).toBe(cameraId())
-  })
-
-  it('摄像机引用不存在时在写入之前被拒绝，不新建任何卡', async () => {
-    await expect(cameraStageStateKeyframeService.createStateKeyframes('project-1', [
-      { time: 0, cameraId: '不存在的摄像机' },
-    ])).rejects.toThrow('STATE_KEYFRAME_CAMERA_NOT_FOUND')
-    expect(useCameraStageStore.getState().stateKeyframes).toHaveLength(0)
-    expect(cameraStageTestDocuments()!.writes).toBe(0)
   })
 
   it('批量新建里有一条非法就整批不写', async () => {

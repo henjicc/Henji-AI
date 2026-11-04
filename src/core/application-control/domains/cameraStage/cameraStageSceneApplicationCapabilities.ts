@@ -17,18 +17,19 @@ import { cameraStageSetLayoutSchema } from './cameraStageSetSchemas'
 const observeScene = defineApplicationCapability({
   id: 'observe_camera_stage_scene', version: 1, title: '观察 3D 场景状态',
   description: '读取镜头参考对象、摄像机、状态关键帧、边界盒、轨迹和碰撞摘要。生成的布景只给摘要（id、数量、范围、参数），不逐个列出成员。'
-    + '每个角色带动作时间线 blocking（每段在做什么、走多远多快）；给 times 时另读回这些时刻每个角色的位置、朝向、正在做的动作与速度。', domain: 'camera_stage',
+    + '每个角色带动作时间线 blocking（每段在做什么、走多远多快）；给 times 时另读回这些时刻每个角色的位置、朝向、正在做的动作与速度。'
+    + 'cameraCuts 是时间轴的机位轨（从几秒起由哪台摄像机拍），coverages 是布置过的多机位覆盖（每台摄像机担任的镜头与台词节拍）。', domain: 'camera_stage',
   aliases: ['观察三维场景', '场景状态', '摄像机和对象', 'observe 3D scene'], readOnly: true, dataClasses: ['C1'],
   idempotent: true, destructive: false, timeoutMs: 10_000,
   supportsPreview: false, supportsUndo: false, requiredScopes: ['camera_stage'], acceptsRefs: ['camera_stage.document'],
-  producesRefs: ['camera_stage.document', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.set', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
+  producesRefs: ['camera_stage.document', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.set', 'camera_stage.state_keyframe', 'camera_stage.camera_cut', 'camera_stage.trajectory'],
   inputSchema: z.object({
     documentId: cameraStageDocumentIdSchema,
     times: z.array(z.number().nonnegative().max(3600)).max(64).optional().describe('要读回角色状态的时刻（秒）'),
   }).strict(),
   outputSchema: capabilityOutputSchema({ scene: z.record(z.string(), z.unknown()) }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.documentId}:observe`, resolveTargetIds: (input) => cameraStageTarget(input.documentId),
-  control: cameraStageControl('observe', ['camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.set', 'camera_stage.state_keyframe', 'camera_stage.trajectory']),
+  control: cameraStageControl('observe', ['camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.set', 'camera_stage.state_keyframe', 'camera_stage.camera_cut', 'camera_stage.trajectory']),
   summarize: (output) => `已观察镜头参考 ${String(output.scene.documentId ?? '')} 的场景状态。`,
 })
 

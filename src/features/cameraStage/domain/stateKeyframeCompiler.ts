@@ -77,17 +77,7 @@ export interface StateKeyframeTimelineSegment {
   transitionEnd: number
 }
 
-/**
- * 相邻两卡是否均已指定机位且机位不同（重要记录 005：多机位强制硬切）。
- * 只要有一侧未指定机位（cameraId 为 null，沿用全局值），就不视为"机位不同"，
- * 因为此时无法确定该段实际是否跨机位——保持与改动前一致的行为，避免旧镜头参考/单机位镜头参考误判。
- * 导出供 UI 层（3.2 过渡块/气泡的跨机位硬切呈现）复用，不另起一套判断。
- */
-export function hasForcedHardCut(current: StageStateKeyframe, next: StageStateKeyframe): boolean {
-  return !!current.cameraId && !!next.cameraId && current.cameraId !== next.cameraId
-}
-
-/** 绝对时间点决定过渡区间；跨机位硬切在区间末端发生。 */
+/** 绝对时间点决定过渡区间。 */
 export function buildStateKeyframeTimeline(stateKeyframes: StageStateKeyframe[]): StateKeyframeTimelineSegment[] {
   return stateKeyframes.map((stateKeyframe, index) => {
     const time = Math.max(0, stateKeyframe.time)
@@ -229,8 +219,8 @@ function compileSpatialPositionGroup(
 }
 
 /**
- * 把同一对象的空间路径段串成链：相邻区间首尾相接（没有错峰停顿）、衔接卡为“平滑通过”、
- * 两侧都不是硬切时并入同一条链，链内衔接点位置、速度、加速度连续；其余各自成链，两端按速度预设停靠。
+ * 把同一对象的空间路径段串成链：相邻区间首尾相接（没有错峰停顿）、衔接卡为“平滑通过”时
+ * 并入同一条链，链内衔接点位置、速度、加速度连续；其余各自成链，两端按速度预设停靠。
  */
 function chainSpatialSegments(
   segmentsByObject: Map<string, IndexedSpatialSegment[]>,
@@ -248,8 +238,6 @@ function chainSpatialSegments(
         && item.intervalIndex === previous.intervalIndex + 1
         && stateKeyframes[item.intervalIndex].continuity === 'smooth'
         && Math.abs(item.segment.startTime - previous.segment.endTime) <= KEYFRAME_TIME_EPSILON
-        && item.segment.easing !== 'hold'
-        && previous.segment.easing !== 'hold'
       if (joins && current) {
         current.segments.push(item.segment)
       } else {
@@ -284,10 +272,9 @@ function resolveSpatialPaths(stateKeyframes: StageStateKeyframe[], objects: Stag
       const from = fromStateKeyframe.objectStates[object.id]?.transform.position
       const to = toStateKeyframe.objectStates[object.id]?.transform.position
       const detail = fromStateKeyframe.transition.perObject[object.id]
-      const hardCut = hasForcedHardCut(fromStateKeyframe, toStateKeyframe)
       const [start, end] = applyTransitionDelay(timeline[index].transitionStart, timeline[index].transitionEnd, detail?.delay ?? 0)
       const explicit = from && to ? detail?.spatialPath : undefined
-      const moved = !!from && !!to && !hardCut && (!!explicit || positionChanged(from, to))
+      const moved = !!from && !!to && (!!explicit || positionChanged(from, to))
       return { from, to, explicit, moved, start, end }
     })
     const paths = new Map<number, StageSpatialPath>()
@@ -307,10 +294,6 @@ function resolveSpatialPaths(stateKeyframes: StageStateKeyframe[], objects: Stag
       }
       runStart = index
     }
-    // 硬切区间不并链，但显式路径仍要登记，端点关键帧由路径分组负责。
-    intervals.forEach((item, index) => {
-      if (!paths.has(index) && item.explicit) paths.set(index, item.explicit)
-    })
     if (paths.size > 0) result.set(object.id, paths)
   }
   return result
@@ -373,11 +356,11 @@ function compileObjectTransition(
   const fromObject = mergeStateIntoObject(object, fromState, sceneObjects)
   const toObject = mergeStateIntoObject(object, toState, sceneObjects)
   // 走动的角色朝向由朝向表在区间内求出；轨道只写两端，播放时才会推送朝向分组。
-  const walking = object.type === 'character' && easing !== 'hold' && positionChanged(fromState.transform.position, toState.transform.position)
+  const walking = object.type === 'character' && positionChanged(fromState.transform.position, toState.transform.position)
   if (object.type === 'character') {
     output.characterIntervals.push({
       objectId: object.id,
-      interval: { intervalIndex: interval.index, segStart, segEnd, hardCut: easing === 'hold', fromState, toState, ...(motionOverride ? { motionOverride } : {}) },
+      interval: { intervalIndex: interval.index, segStart, segEnd, fromState, toState, ...(motionOverride ? { motionOverride } : {}) },
     })
   }
 
@@ -530,9 +513,7 @@ export function compileStateKeyframesToAnimation(stateKeyframes: StageStateKeyfr
       if (!fromState || !toState) continue
 
       const detail = fromStateKeyframe.transition.perObject[object.id]
-      const easing = hasForcedHardCut(fromStateKeyframe, toStateKeyframe)
-        ? 'hold'
-        : resolveSpeedPresetEasing(detail?.speedPreset)
+      const easing = resolveSpeedPresetEasing(detail?.speedPreset)
       const [segStart, segEnd] = applyTransitionDelay(seg.transitionStart, seg.transitionEnd, detail?.delay ?? 0)
       compileObjectTransition(
         output,
@@ -611,7 +592,7 @@ function compileCameraFollows(stateKeyframes: StageStateKeyframe[], objects: Sta
       const follow = stateKeyframe.transition.perObject[object.id]?.follow
       const { transitionStart, transitionEnd } = timeline[index]
       if (!follow || !objects.some((item) => item.id === follow.subjectId)
-        || hasForcedHardCut(stateKeyframe, stateKeyframes[index + 1]) || !(transitionEnd > transitionStart)) {
+        || !(transitionEnd > transitionStart)) {
         current = null
         continue
       }

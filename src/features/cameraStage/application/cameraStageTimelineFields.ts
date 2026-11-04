@@ -5,6 +5,7 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains
 
 import type { StageObject } from '../domain/sceneTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
+import type { StageCameraCut } from '../domain/renderCameraSchedule'
 import type { CameraStageStateKeyframeUpdate } from './cameraStageApplicationService'
 import {
   booleanCodec, enumCodec, nameCodec, numberCodec, refIdCodec, stageDescriptor, stageField,
@@ -86,22 +87,6 @@ export const STATE_KEYFRAME_FIELDS = [
     read: ({ stateKeyframe }) => stateKeyframe.continuity, write: (draft, v) => { draft.continuity = v },
     storeActions: ['updateStateKeyframeContinuity'] as const,
   }),
-  {
-    propertyId: `${STATE_KEYFRAME_ENTITY_TYPE}.camera_ref`,
-    descriptor: stageDescriptor(STATE_KEYFRAME_ENTITY_TYPE, 'camera_ref', '拍摄机位', { kind: 'ref', refKinds: [CAMERA_ENTITY_TYPE] }, {
-      nullable: true,
-      relation: { targetEntityTypes: [CAMERA_ENTITY_TYPE], cardinality: 'optional' },
-    }),
-    read: ({ projectId, stateKeyframe }: StateKeyframeFieldSource) => (stateKeyframe.cameraId
-      ? ({ kind: CAMERA_ENTITY_TYPE, id: `${projectId}:${stateKeyframe.cameraId}` } satisfies ApplicationRef)
-      : null),
-    writer: {
-      write: (draft: CameraStageStateKeyframeDraft, mutation: ApplicationPropertyMutation) => {
-        draft.cameraId = refIdCodec([CAMERA_ENTITY_TYPE]).parse(mutation.value)
-      },
-    },
-    storeActions: ['updateStateKeyframeCamera'] as const,
-  },
   /*
    * 把列出的对象/摄像机当前在场景中的实时状态记录进这一枚状态关键帧。
    * 只覆盖列出的对象、只落在目标状态关键帧上——不触碰其余对象、也不触碰其他时间点，
@@ -133,6 +118,47 @@ export const STATE_KEYFRAME_FIELDS = [
 ]
 
 export const CAMERA_STAGE_STATE_KEYFRAME_WRITERS = fieldWriterTable(STATE_KEYFRAME_FIELDS)
+
+/* ── 机位切换点 ───────────────────────────────────────────────────────── */
+
+const CAMERA_CUT_ENTITY_TYPE = 'camera_stage.camera_cut' as const
+
+/** 一次写入累积到这里，再交给 updateCameraCut 一起落：先挪时间、再换机位。 */
+export interface CameraStageCameraCutDraft {
+  time?: number
+  cameraId?: string | null
+}
+
+interface CameraCutFieldSource {
+  readonly projectId: string
+  readonly cut: StageCameraCut
+}
+
+export const CAMERA_CUT_FIELDS = [
+  stageField<CameraCutFieldSource, CameraStageCameraCutDraft, number, 'moveCameraCut'>(CAMERA_CUT_ENTITY_TYPE, 'time', '切换时刻', numberCodec({ min: 0, max: 3600 }), {
+    read: ({ cut }) => cut.time, write: (draft, v) => { draft.time = v }, storeActions: ['moveCameraCut'], unit: 'second',
+    description: '从这一刻起由 camera_ref 拍摄（按帧对齐）；挪动时不越过前后两个切换点。',
+  }),
+  {
+    propertyId: `${CAMERA_CUT_ENTITY_TYPE}.camera_ref`,
+    descriptor: stageDescriptor(CAMERA_CUT_ENTITY_TYPE, 'camera_ref', '切到的摄像机', { kind: 'ref', refKinds: [CAMERA_ENTITY_TYPE] }, {
+      nullable: true,
+      relation: { targetEntityTypes: [CAMERA_ENTITY_TYPE], cardinality: 'optional' },
+      description: '从这一刻起拍摄的摄像机；null 回到活动摄像机。与前一段相同的切换点会被合并掉。',
+    }),
+    read: ({ projectId, cut }: CameraCutFieldSource) => (cut.cameraId
+      ? ({ kind: CAMERA_ENTITY_TYPE, id: `${projectId}:${cut.cameraId}` } satisfies ApplicationRef)
+      : null),
+    writer: {
+      write: (draft: CameraStageCameraCutDraft, mutation: ApplicationPropertyMutation) => {
+        draft.cameraId = refIdCodec([CAMERA_ENTITY_TYPE]).parse(mutation.value)
+      },
+    },
+    storeActions: ['updateCameraCutCamera'] as const,
+  },
+]
+
+export const CAMERA_STAGE_CAMERA_CUT_WRITERS = fieldWriterTable(CAMERA_CUT_FIELDS)
 
 /* ── 播放控制 ─────────────────────────────────────────────────────────── */
 

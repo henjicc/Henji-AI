@@ -4,9 +4,9 @@ import { resolvePathStateKeyframeId } from './cameraStageToolStore'
 
 describe('路径工具默认过渡选择', () => {
   const stateKeyframes = [
-    createStateKeyframe([], '关键帧 1', null, 0),
-    createStateKeyframe([], '关键帧 2', null, 2),
-    createStateKeyframe([], '关键帧 3', null, 5),
+    createStateKeyframe([], '关键帧 1', 0),
+    createStateKeyframe([], '关键帧 2', 2),
+    createStateKeyframe([], '关键帧 3', 5),
   ]
 
   it('播放头位于过渡中时直接选择对应路径', () => {

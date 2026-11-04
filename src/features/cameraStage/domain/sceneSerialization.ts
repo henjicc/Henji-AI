@@ -14,6 +14,8 @@ import type { StageStateKeyframe } from './stateKeyframeTypes'
 import { compileStateKeyframesToAnimation } from './stateKeyframeCompiler'
 import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings, StageSet } from './sceneTypes'
 import { liveStageSets } from './stageSets'
+import { normalizeCameraCuts, type StageCameraCut } from './renderCameraSchedule'
+import { liveCoverages, normalizeCoverages, type StageCoverage } from './coverage'
 
 export interface StageSceneSnapshotInput {
   objects: StageObject[]
@@ -25,6 +27,10 @@ export interface StageSceneSnapshotInput {
   stateKeyframes: StageStateKeyframe[]
   /** 生成过的布景（文档格式 v2 引入）；成员对象在 objects 里用 setId 指回。省略等于没有布景。 */
   sets?: StageSet[]
+  /** 机位切换点（文档格式 v8 引入），按时间排好；省略等于没有切机位。 */
+  cameraCuts?: StageCameraCut[]
+  /** 多机位覆盖（文档格式 v8 引入）。 */
+  coverages?: StageCoverage[]
 }
 
 export interface StageSceneRuntimeSnapshot extends StageSceneSnapshotInput {
@@ -246,14 +252,22 @@ export function sceneToDocumentContent(input: StageSceneSnapshotInput): CameraSt
     stateKeyframes: input.stateKeyframes,
     // 成员被逐个删光的布景不写进文件。
     sets: liveStageSets(input.sets ?? [], input.objects),
+    cameraCuts: liveCameraCuts(input.cameraCuts ?? [], input.objects),
+    coverages: liveCoverages(input.coverages ?? [], input.objects),
   }
+}
+
+/** 摄像机被删掉的切换点不再生效，也不写进文件。 */
+export function liveCameraCuts(cuts: readonly StageCameraCut[], objects: readonly StageObject[]): StageCameraCut[] {
+  const cameras = new Set(objects.filter((object) => object.type === 'camera').map((object) => object.id))
+  return cuts.filter((cut) => cut.cameraId === null || cameras.has(cut.cameraId))
 }
 
 /** 文档内容 → 运行时快照：与旧镜头参考数据相同的逐字段规范化，非法字段回退默认值。 */
 export function sceneFromDocumentContent(content: unknown): StageSceneRuntimeSnapshot {
   if (!content || typeof content !== 'object') throw new Error('[cameraStage] 场景数据结构无效')
-  const { objects, activeCameraId, animation, sceneSettings, stateKeyframes, sets } = normalizeSceneRecord(content as Record<string, unknown>)
-  return { objects, activeCameraId, animation, sceneSettings, stateKeyframes, sets }
+  const { objects, activeCameraId, animation, sceneSettings, stateKeyframes, sets, cameraCuts, coverages } = normalizeSceneRecord(content as Record<string, unknown>)
+  return { objects, activeCameraId, animation, sceneSettings, stateKeyframes, sets, cameraCuts, coverages }
 }
 
 /** 场景是否完全空白（新建文档的空内容）：工具打开时补上默认摄像机与第一张状态关键帧。 */
@@ -306,5 +320,7 @@ function normalizeSceneRecord(record: Record<string, unknown>): StageSceneRuntim
     sceneSettings,
     stateKeyframes,
     sets,
+    cameraCuts: liveCameraCuts(normalizeCameraCuts(record.cameraCuts), objects),
+    coverages: liveCoverages(normalizeCoverages(record.coverages), objects),
   }
 }

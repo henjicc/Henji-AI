@@ -25,11 +25,14 @@ import { CAMERA_FIELDS, OBJECT_FIELDS, CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 import { CAMERA_STAGE_SCENE_WRITERS } from './cameraStageSceneFields'
 import {
+  CAMERA_STAGE_CAMERA_CUT_WRITERS,
   CAMERA_STAGE_PLAYBACK_WRITERS,
   CAMERA_STAGE_STATE_KEYFRAME_WRITERS,
+  type CameraStageCameraCutDraft,
   type CameraStagePlaybackDraft,
   type CameraStageStateKeyframeDraft,
 } from './cameraStageTimelineFields'
+import { cameraStageCameraCutService } from './cameraStageCameraCutService'
 import { CAMERA_STAGE_TRAJECTORY_WRITERS, type CameraStageTrajectoryDraft } from './cameraStageTrajectoryFields'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
@@ -53,6 +56,7 @@ const WRITER_TABLES = {
   [CAMERA_STAGE_ENTITY_TYPES.object]: CAMERA_STAGE_OBJECT_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.camera]: CAMERA_STAGE_CAMERA_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.stateKeyframe]: CAMERA_STAGE_STATE_KEYFRAME_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.cameraCut]: CAMERA_STAGE_CAMERA_CUT_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.playback]: CAMERA_STAGE_PLAYBACK_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.trajectory]: CAMERA_STAGE_TRAJECTORY_WRITERS,
 } as const satisfies Record<MutationEntityType, ApplicationPropertyWriterTable<never>>
@@ -196,6 +200,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.scene) return await this.applyScene(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.object || this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera) return await this.applyObject(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.stateKeyframe) return await this.applyStateKeyframe(step)
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.cameraCut) return await this.applyCameraCut(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.playback) return await this.applyPlayback(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.trajectory) return await this.applyTrajectory(step)
     throw new Error('NOT_FOUND')
@@ -257,6 +262,13 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const draft: CameraStageStateKeyframeDraft = {}
     await applyWriterTable(CAMERA_STAGE_STATE_KEYFRAME_WRITERS, draft, step.mutations)
     return (await cameraStageApplicationService.updateStateKeyframe(projectId, stateKeyframeId, draft)).undoToken
+  }
+
+  private async applyCameraCut(step: MutationStep): Promise<string> {
+    const { projectId, childId: cutId } = childTarget(step.target.id)
+    const draft: CameraStageCameraCutDraft = {}
+    await applyWriterTable(CAMERA_STAGE_CAMERA_CUT_WRITERS, draft, step.mutations)
+    return (await cameraStageCameraCutService.updateCameraCut(projectId, cutId, draft)).undoToken
   }
 
   private async applyPlayback(step: MutationStep): Promise<string> {
@@ -509,6 +521,7 @@ export const CAMERA_STAGE_MUTATION_ENTITY_TYPES: MutationEntityType[] = [
   CAMERA_STAGE_ENTITY_TYPES.object,
   CAMERA_STAGE_ENTITY_TYPES.camera,
   CAMERA_STAGE_ENTITY_TYPES.stateKeyframe,
+  CAMERA_STAGE_ENTITY_TYPES.cameraCut,
   CAMERA_STAGE_ENTITY_TYPES.playback,
   CAMERA_STAGE_ENTITY_TYPES.trajectory,
 ]

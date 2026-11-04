@@ -12,7 +12,7 @@ it('A：放置、复制、删除与运镜经正式公共入口回读 verified，
   camera.lookAt = { mode: 'manual', target: { x: 0, y: 2, z: 0 } }
   const documentId = 't191-scene'
   await loadCameraStageTestProject({ objects: [camera], activeCameraId: camera.id, animation: createDefaultAnimation(),
-    sceneSettings: createDefaultSceneSettings(), stateKeyframes: [createStateKeyframe([camera], '起点', camera.id, 0)] }, { id: documentId, name: '核对场景' })
+    sceneSettings: createDefaultSceneSettings(), stateKeyframes: [createStateKeyframe([camera], '起点', 0)] }, { id: documentId, name: '核对场景' })
   const app = createApplicationHarness()
   try {
     const place = () => app.requireResult('place_camera_stage_object', { documentId, objectType: 'primitive', primitiveKind: 'sphere', reusePolicy: 'require_new', placement: { position: { x: 3, y: 0, z: 0 }, allowOverlap: true } })

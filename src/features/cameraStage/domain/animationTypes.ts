@@ -19,7 +19,7 @@ export type StageAnimatableValueType = 'scalar' | 'vec3' | 'color'
  * 缓动预设名，前四种参数对齐 CSS 标准 ease 系列。cruise 是人走路的时间律：起步、停下各用一小段平滑加减速，
  * 中间匀速（见 keyframeEngine.cruiseProgress）。
  */
-export type StageEasingPreset = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'cruise' | 'hold'
+export type StageEasingPreset = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'cruise'
 
 /**
  * 自定义贝塞尔缓动：等价 CSS `cubic-bezier(out[0], out[1], in[0], in[1])`。

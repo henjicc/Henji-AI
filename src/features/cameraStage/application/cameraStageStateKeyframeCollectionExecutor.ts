@@ -37,18 +37,6 @@ function optionalStringValue(value: JsonValue | undefined): string | undefined {
   return value
 }
 
-/** 引用可能是 `projectId:objectId` 形式的稳定引用，也可能是裸对象 id，两者都接受。 */
-function optionalCameraId(value: JsonValue | undefined): string | null | undefined {
-  if (value === undefined) return undefined
-  if (value === null) return null
-  if (typeof value === 'string') return value.includes(':') ? value.slice(value.indexOf(':') + 1) : value
-  if (typeof value === 'object' && !Array.isArray(value)) {
-    const id = (value as Record<string, JsonValue>).id
-    if (typeof id === 'string') return id.includes(':') ? id.slice(id.indexOf(':') + 1) : id
-  }
-  throw new Error('STATE_KEYFRAME_CAMERA_REF_INVALID：camera_ref 必须是对象引用或对象 id 字符串。')
-}
-
 function optionalContinuity(value: JsonValue | undefined): StageStateKeyframe['continuity'] | undefined {
   if (value === undefined) return undefined
   if (typeof value === 'string' && CONTINUITY_VALUES.has(value as StageStateKeyframe['continuity'])) {
@@ -83,7 +71,6 @@ export class CameraStageStateKeyframeCollectionExecutor implements ApplicationCo
       const inputs: CameraStageStateKeyframeCreateInput[] = step.operation.items.map((item) => ({
         time: numberValue(property(item.properties, 'time'), 'TIME'),
         name: optionalStringValue(property(item.properties, 'name')),
-        cameraId: optionalCameraId(property(item.properties, 'camera_ref')),
         continuity: optionalContinuity(property(item.properties, 'continuity')),
         transitionDuration: optionalNumberValue(property(item.properties, 'transition_duration'), 'TRANSITION_DURATION'),
       }))

@@ -3,7 +3,6 @@ import React, { useMemo } from 'react'
 import { Camera, Cuboid, PenTool, UserRound } from 'lucide-react'
 import NumberInput from '@/components/ui/NumberInput'
 import { Dropdown, UiButton, UiEmpty, UiFormRow, UiGroup } from '@/components/ui'
-import { getCameraObjects } from '../../domain/cameraUtils'
 import { diffStateKeyframeObjects } from '../../domain/stateKeyframeCompiler'
 import type {
   StageStateKeyframe,
@@ -28,14 +27,8 @@ interface TransitionPopoverProps {
   stateKeyframeIndex: number
   objects: StageObject[]
   fps: number
-  camerasDiffer: boolean
   onDurationFramesChange: (frames: number) => void
   onDetailChange: (objectId: string, detail: StageStateKeyframeTransitionObjectDetail) => void
-}
-
-function cameraDisplayName(objects: StageObject[], cameraId: string | null): string {
-  if (!cameraId) return '默认机位'
-  return getCameraObjects(objects).find((camera) => camera.id === cameraId)?.name ?? '未知机位'
 }
 
 function detailSummary(detail: StageStateKeyframeTransitionObjectDetail): string {
@@ -53,7 +46,6 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
   stateKeyframeIndex,
   objects,
   fps,
-  camerasDiffer,
   onDurationFramesChange,
   onDetailChange,
 }) => {
@@ -81,13 +73,6 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
         关键帧 {stateKeyframeIndex + 1} → 关键帧 {stateKeyframeIndex + 2}
       </div>
 
-      {/* 浮层本身已是一张卡片，提示只写成说明文字，不再套一层描边底色块 */}
-      {camerasDiffer ? (
-        <p className="text-xs leading-5 text-text2">
-          机位切换：{cameraDisplayName(objects, stateKeyframe.cameraId)} → {cameraDisplayName(objects, nextStateKeyframe.cameraId)}。
-          区间末端执行硬切；需要连续运镜时，请把两侧机位改为相同。
-        </p>
-      ) : null}
 
       <div className="grid grid-cols-2 gap-3">
         <UiFormRow label="时长（帧）" density="compact">
@@ -118,7 +103,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
         </UiFormRow>
       </div>
 
-      {!camerasDiffer && durationFrames === 0 ? (
+      {durationFrames === 0 ? (
         <p className="text-xs leading-5 text-text2">0 帧表示硬切；增加时长后即可编辑过渡路径。</p>
       ) : null}
 

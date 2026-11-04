@@ -11,7 +11,7 @@ import { CHARACTER_CROSSFADE_SECONDS, resolveCharacterMotionLayers, sampleCharac
 
 describe('compileStateKeyframesToAnimation', () => {
   it('只使用绝对时间点，创建结果不携带停留字段', () => {
-    const frame = createStateKeyframe([], '关键帧', null, 3)
+    const frame = createStateKeyframe([], '关键帧', 3)
     expect(frame).not.toHaveProperty('hold')
     expect(buildStateKeyframeTimeline([frame, { ...frame }])).toEqual([
       { holdStart: 3, transitionStart: 3, transitionEnd: 3 },
@@ -20,8 +20,8 @@ describe('compileStateKeyframesToAnimation', () => {
   })
   it('空间贝塞尔路径登记为运行时采样段，轨道只留端点，曲线形状独立于速度时间轴', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
-    const stateKeyframeA = createStateKeyframe([box], '卡1', null, 0)
-    const stateKeyframeB = createStateKeyframe([box], '卡2', null, 2)
+    const stateKeyframeA = createStateKeyframe([box], '卡1', 0)
+    const stateKeyframeB = createStateKeyframe([box], '卡2', 2)
     stateKeyframeB.objectStates[box.id].transform.position = { x: 6, y: 0, z: 0 }
     stateKeyframeA.transition.perObject[box.id] = {
       speedPreset: 'uniform',
@@ -55,12 +55,12 @@ describe('compileStateKeyframesToAnimation', () => {
 
   it('角色走动按路程推进走路片段（脚钉在地上），朝向沿前进方向，到达后交叉淡入卡内动作', () => {
     const character = createCharacterObject('Character', pickDefaultColor(1))
-    const stateKeyframeA = createStateKeyframe([character], '卡1', null, 1)
+    const stateKeyframeA = createStateKeyframe([character], '卡1', 1)
     stateKeyframeA.transition.perObject[character.id] = {
       speedPreset: 'cruise',
       motionOverride: { mode: 'clip', clipName: 'Walk_Formal_Loop', speed: 0.8 },
     }
-    const stateKeyframeB = createStateKeyframe([character], '卡2', null, 4)
+    const stateKeyframeB = createStateKeyframe([character], '卡2', 4)
     stateKeyframeB.objectStates[character.id].transform.position = { x: 3, y: 0, z: 0 }
     stateKeyframeB.objectStates[character.id].motion = { mode: 'clip', clipName: 'Idle_Loop', speed: 1 }
 
@@ -86,13 +86,13 @@ describe('compileStateKeyframesToAnimation', () => {
   it('挥手做完后下一张卡再记挥手就再挥一次；还在挥的时候插卡接着挥', () => {
     const character = createCharacterObject('Character', pickDefaultColor(1))
     const wave = { mode: 'clip', clipName: 'Wave', speed: 1 } as const
-    const frames = [0, 1, 4].map((time, index) => createStateKeyframe([character], `卡${index}`, null, time))
+    const frames = [0, 1, 4].map((time, index) => createStateKeyframe([character], `卡${index}`, time))
     for (const frame of frames) frame.objectStates[character.id].motion = wave
     const spans = compileStateKeyframesToAnimation(frames, [character]).characterMotions[0].spans
     expect(spans.map((span) => [span.startTime, span.motion.mode === 'clip' && span.motion.clipName])).toEqual([[0, 'Wave'], [2.4, 'Idle_Loop'], [4, 'Wave'], [6.4, 'Idle_Loop']])
     // 两拳连打：第二拳的卡落在整帧 26/30 秒，比出拳片段 0.867 秒早不到半帧，也算第一拳打完。
     const punch = { mode: 'clip', clipName: 'Punch_Jab', speed: 1 } as const
-    const punches = [0, 26 / 30].map((time, index) => createStateKeyframe([character], `拳${index}`, null, time))
+    const punches = [0, 26 / 30].map((time, index) => createStateKeyframe([character], `拳${index}`, time))
     for (const frame of punches) frame.objectStates[character.id].motion = punch
     const punchSpans = compileStateKeyframesToAnimation(punches, [character]).characterMotions[0].spans
     expect(punchSpans.filter((span) => span.motion.mode === 'clip' && span.motion.clipName === 'Punch_Jab')).toHaveLength(2)
@@ -392,7 +392,7 @@ describe('compileStateKeyframesToAnimation', () => {
     stateKeyframe1.time = 0.5
     stateKeyframe1.transitionDuration = 1
 
-    const stateKeyframe2 = createStateKeyframe([box, character, camera], '卡2', null, 2)
+    const stateKeyframe2 = createStateKeyframe([box, character, camera], '卡2', 2)
     stateKeyframe2.objectStates[camera.id] = {
       ...stateKeyframe2.objectStates[camera.id],
       transform: {
@@ -418,75 +418,5 @@ describe('compileStateKeyframesToAnimation', () => {
       expect(getAnimatablePropByPath(track.propertyPath)).toBeDefined()
       expect(track.objectId).not.toBe(box.id)
     }
-  })
-})
-
-describe('buildStateKeyframeTimeline 强制硬切（重要记录 005）', () => {
-  it('相邻两卡机位不同时，布点保留真实区间时长（硬切改由编译产物的 hold 缓动在区间末端表达），原始 transitionDuration 不被改写', () => {
-    const stateKeyframeA = createStateKeyframe([], '卡1', 'camera-a')
-    const stateKeyframeB = createStateKeyframe([], '卡2', 'camera-b')
-    stateKeyframeB.time = 3
-    stateKeyframeA.time = 1
-    stateKeyframeA.transitionDuration = 2
-
-    const timeline = buildStateKeyframeTimeline([stateKeyframeA, stateKeyframeB])
-    expect(timeline[0]).toEqual({ holdStart: 1, transitionStart: 1, transitionEnd: 3 })
-    expect(stateKeyframeA.transitionDuration).toBe(2)
-  })
-
-  it('未指定机位的卡（cameraId 为 null）不触发强制硬切，行为与改动前一致', () => {
-    const stateKeyframeA = createStateKeyframe([], '卡1')
-    const stateKeyframeB = createStateKeyframe([], '卡2')
-    stateKeyframeB.time = 3
-    stateKeyframeA.time = 1
-    stateKeyframeA.transitionDuration = 2
-
-    const timeline = buildStateKeyframeTimeline([stateKeyframeA, stateKeyframeB])
-    expect(timeline[0]).toEqual({ holdStart: 1, transitionStart: 1, transitionEnd: 3 })
-  })
-
-  it('机位相同的相邻卡保留真实过渡时长', () => {
-    const stateKeyframeA = createStateKeyframe([], '卡1', 'camera-a')
-    const stateKeyframeB = createStateKeyframe([], '卡2', 'camera-a')
-    stateKeyframeB.time = 3
-    stateKeyframeA.time = 1
-    stateKeyframeA.transitionDuration = 2
-
-    const timeline = buildStateKeyframeTimeline([stateKeyframeA, stateKeyframeB])
-    expect(timeline[0]).toEqual({ holdStart: 1, transitionStart: 1, transitionEnd: 3 })
-  })
-
-  it('机位不同的强制硬切编译为 hold 缓动：区间内保持起点值，到区间末端直接跳变到目标值', () => {
-    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
-    const stateKeyframeA = createStateKeyframe([camera], '卡1', 'camera-a')
-    const stateKeyframeB = createStateKeyframe([camera], '卡2', 'camera-b')
-    stateKeyframeB.time = 3
-    stateKeyframeA.time = 1
-    stateKeyframeA.transitionDuration = 2
-
-    stateKeyframeB.objectStates[camera.id] = {
-      ...stateKeyframeB.objectStates[camera.id],
-      transform: {
-        ...stateKeyframeB.objectStates[camera.id].transform,
-        position: { ...stateKeyframeB.objectStates[camera.id].transform.position, x: 5 },
-      },
-    }
-
-    const animation = compileStateKeyframesToAnimation([stateKeyframeA, stateKeyframeB], [camera])
-    const positionXTrack = animation.tracks.find(
-      (track) => track.objectId === camera.id && track.propertyPath === 'transform.position.x',
-    )
-    expect(positionXTrack).toBeDefined()
-    // 硬切段：过渡起点关键帧保持 A 值且缓动为 hold，目标值只在区间末端（=3）出现
-    const startKeyframe = positionXTrack!.keyframes.find((kf) => Math.abs(kf.time - 1) < 1e-6)
-    expect(startKeyframe).toBeDefined()
-    expect(startKeyframe!.value).toBe(0)
-    expect(startKeyframe!.easing).toBe('hold')
-    const endKeyframe = positionXTrack!.keyframes.find((kf) => Math.abs(kf.time - 3) < 1e-6)
-    expect(endKeyframe).toBeDefined()
-    expect(endKeyframe!.value).toBe(5)
-    // 采样验证：区间内不插值，末端才跳变
-    expect(sampleTrack(positionXTrack!, 2.9, 'scalar')).toBe(0)
-    expect(sampleTrack(positionXTrack!, 3, 'scalar')).toBe(5)
   })
 })

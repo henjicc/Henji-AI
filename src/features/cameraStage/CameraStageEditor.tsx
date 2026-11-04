@@ -227,7 +227,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
     const exportCameras = getCameraObjects(exportState.objects)
     const exportCamera = exportCameras[0]
     if (!exportCamera) return
-    const renderCameraSchedule = buildRenderCameraSchedule(exportState.stateKeyframes, exportState.activeCameraId)
+    const renderCameraSchedule = buildRenderCameraSchedule(exportState.cameraCuts, exportState.activeCameraId)
     const renderCameraIds = new Set(
       (renderCameraSchedule.length > 0
         ? renderCameraSchedule.map((entry) => entry.cameraId)

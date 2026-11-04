@@ -9,8 +9,8 @@ describe('Camera Stage 单一状态关键帧架构结果', () => {
     const camera = createCameraObject('摄像机', pickDefaultColor(0))
     const object = createPrimitiveObject('sphere', '球', pickDefaultColor(1))
     const objects = [camera, object]
-    const first = createStateKeyframe(objects, '关键帧 1', camera.id, 0)
-    const second = createStateKeyframe(objects, '关键帧 2', camera.id, 1)
+    const first = createStateKeyframe(objects, '关键帧 1', 0)
+    const second = createStateKeyframe(objects, '关键帧 2', 1)
     useCameraStageStore.getState().loadSnapshot({
       objects,
       activeCameraId: camera.id,

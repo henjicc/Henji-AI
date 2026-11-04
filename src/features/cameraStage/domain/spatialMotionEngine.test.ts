@@ -31,7 +31,7 @@ function scene(rig?: StageCameraRig): StageObject[] {
 
 /** 按正式运镜写入方式：每段在起点卡上物化路径，终点卡机位落到路径终点。 */
 function moves(objects: StageObject[], list: Array<{ move: StageCameraMovePreset | 'direct' | 'line'; duration: number; to?: StageVec3 }>, continuity: 'stop' | 'smooth'): StageStateKeyframe[] {
-  const result: StageStateKeyframe[] = [createStateKeyframe(objects, 'k0', 'cam', 0)]
+  const result: StageStateKeyframe[] = [createStateKeyframe(objects, 'k0', 0)]
   let time = 0
   for (const [index, item] of list.entries()) {
     const from = result[index]
@@ -45,7 +45,7 @@ function moves(objects: StageObject[], list: Array<{ move: StageCameraMovePreset
       end = generated.endPosition
     }
     time += item.duration
-    const next = { ...createStateKeyframe(objects, `k${index + 1}`, 'cam', time), continuity }
+    const next = { ...createStateKeyframe(objects, `k${index + 1}`, time), continuity }
     next.objectStates.cam = { ...next.objectStates.cam, transform: { ...next.objectStates.cam.transform, position: end } }
     result.push(next)
   }

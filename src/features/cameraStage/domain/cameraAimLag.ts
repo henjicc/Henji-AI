@@ -63,14 +63,12 @@ function propagate(state: FilterState, from: StageVec3, to: StageVec3, duration:
 
 /**
  * idealDirection(t) 给出不滞后时的朝向（单位向量）。start 之前不滞后；end 之后输入保持 end 时的值，镜头继续收敛。
- * jumpTimes 是已知的跳变时刻（硬切）：所在的那一步直接对齐，不论转角大小。
  */
 export function createAimLagSampler(
   delay: number,
   start: number,
   end: number,
   idealDirection: (time: number) => StageVec3,
-  jumpTimes: readonly number[] = [],
 ): AimLagSampler {
   const omega = 2 / delay
   const count = Math.max(1, Math.ceil((end - start) / LAG_GRID_STEP))
@@ -85,11 +83,8 @@ export function createAimLagSampler(
     } : { x: 0, y: 0, z: 0 },
   }]
   const resets = new Set<number>()
-  for (const time of jumpTimes) {
-    if (time > start && time <= end) resets.add(Math.min(count - 1, Math.max(0, Math.ceil((time - start) / step) - 1)))
-  }
   for (let index = 0; index < count; index += 1) {
-    if (resets.has(index) || angleBetween(inputs[index], inputs[index + 1]) > RESET_ANGLE) {
+    if (angleBetween(inputs[index], inputs[index + 1]) > RESET_ANGLE) {
       resets.add(index)
       states.push({ position: inputs[index + 1], velocity: { x: 0, y: 0, z: 0 } })
       continue

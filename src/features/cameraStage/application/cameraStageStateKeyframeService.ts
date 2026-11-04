@@ -21,7 +21,6 @@ const logger = createLogger('features.cameraStage.application')
 export interface CameraStageStateKeyframeCreateInput {
   time: number
   name?: string
-  cameraId?: string | null
   continuity?: StageStateKeyframe['continuity']
   transitionDuration?: number
 }
@@ -32,16 +31,9 @@ async function ensureProjectLoaded(projectId: string): Promise<void> {
 
 /** 纯输入校验，必须在任何写入之前跑完——写到一半才发现参数不对，留下的残局比失败本身更难收拾。 */
 function assertStateKeyframeInputsValid(inputs: CameraStageStateKeyframeCreateInput[], objects: StageObject[]): void {
-  const cameraIds = new Set(objects.filter((object) => object.type === 'camera').map((object) => object.id))
   for (const [index, input] of inputs.entries()) {
     if (!Number.isFinite(input.time) || input.time < 0 || input.time > 3_600) {
       throw new Error(`STATE_KEYFRAME_TIME_INVALID：第 ${index} 项的 time 必须是 0~3600 秒之间的有限数。`)
-    }
-    if (input.cameraId && !cameraIds.has(input.cameraId)) {
-      throw new Error(
-        `STATE_KEYFRAME_CAMERA_NOT_FOUND：第 ${index} 项的 camera_ref «${input.cameraId}» 不是本场景中的摄像机。`
-        + `camera_ref 必须取自观察结果里 objects[].id 的原值。当前可用摄像机：${[...cameraIds].join('、') || '无'}。`
-      )
     }
     if (input.transitionDuration !== undefined && (!Number.isFinite(input.transitionDuration) || input.transitionDuration < 0)) {
       throw new Error(`STATE_KEYFRAME_TRANSITION_DURATION_INVALID：第 ${index} 项的 transition_duration 必须是不小于 0 的有限数。`)
@@ -99,7 +91,6 @@ const implementation = {
         const stateKeyframeId = after.selectedStateKeyframeId
         if (!stateKeyframeId) throw new Error('CAPABILITY_REJECTED')
         if (input.name !== undefined) after.updateStateKeyframeName(stateKeyframeId, resolveUniqueStateKeyframeName(after.stateKeyframes, input.name, stateKeyframeId))
-        if (input.cameraId !== undefined) after.updateStateKeyframeCamera(stateKeyframeId, input.cameraId)
         if (input.continuity !== undefined) after.updateStateKeyframeContinuity(stateKeyframeId, input.continuity)
         if (input.transitionDuration !== undefined) {
           after.updateStateKeyframeTiming(stateKeyframeId, { transitionDuration: input.transitionDuration })

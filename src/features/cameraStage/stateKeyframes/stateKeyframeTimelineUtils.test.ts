@@ -4,7 +4,7 @@ import { getStateKeyframeAtTime, getStateKeyframeTimeRanges } from './stateKeyfr
 
 describe('状态关键帧时间范围', () => {
   it('按绝对时间点计算过渡区间', () => {
-    const stateKeyframes = [createStateKeyframe([], 'A'), createStateKeyframe([], 'B', null, 2)]
+    const stateKeyframes = [createStateKeyframe([], 'A'), createStateKeyframe([], 'B', 2)]
     stateKeyframes[0].time = 1
     stateKeyframes[0].transitionDuration = 2
     stateKeyframes[1].time = 3
@@ -15,7 +15,7 @@ describe('状态关键帧时间范围', () => {
   })
 
   it('按播放头返回当前卡并钳制边界', () => {
-    const stateKeyframes = [createStateKeyframe([], 'A'), createStateKeyframe([], 'B', null, 2)]
+    const stateKeyframes = [createStateKeyframe([], 'A'), createStateKeyframe([], 'B', 2)]
     expect(getStateKeyframeAtTime(stateKeyframes, -1)?.stateKeyframeId).toBe(stateKeyframes[0].id)
     expect(getStateKeyframeAtTime(stateKeyframes, 2.5)?.stateKeyframeId).toBe(stateKeyframes[1].id)
   })

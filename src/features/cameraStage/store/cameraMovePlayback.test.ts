@@ -38,14 +38,14 @@ function scene(lookAt: 'manual' | 'object'): StageObject[] {
 
 /** 按正式运镜写入方式：每段在起点卡上物化环绕路径，终点卡机位落到环绕终点。 */
 function orbitKeyframes(objects: StageObject[], segments: Array<{ degrees: number; duration: number }>, continuity: 'stop' | 'smooth'): StageStateKeyframe[] {
-  const stateKeyframes = [{ ...createStateKeyframe(objects, '卡0', 'cam', 0), continuity }]
+  const stateKeyframes = [{ ...createStateKeyframe(objects, '卡0', 0), continuity }]
   let time = 0
   for (const [index, segment] of segments.entries()) {
     const from = stateKeyframes[index]
     const generated = createCameraPresetPath({ kind: 'orbit', degrees: segment.degrees, direction: 'cw' }, from.objectStates.cam.transform.position, SUBJECT)
     from.transition.perObject.cam = { spatialPath: generated.path, speedPreset: 'easeInOut' }
     time += segment.duration
-    const next = { ...createStateKeyframe(objects, `卡${index + 1}`, 'cam', time), continuity }
+    const next = { ...createStateKeyframe(objects, `卡${index + 1}`, time), continuity }
     next.objectStates.cam = { ...next.objectStates.cam, transform: { ...next.objectStates.cam.transform, position: generated.endPosition } }
     stateKeyframes.push(next)
   }
@@ -120,7 +120,7 @@ describe('运镜朝向与速度', () => {
     const near = { x: 0, y: 1, z: 5 }
     const far = { x: -5, y: 1, z: 10 }
     const keyframe = (time: number, position: StageVec3, target: StageVec3, delay = 0): StageStateKeyframe => {
-      const stateKeyframe = createStateKeyframe(objects, `卡${time}`, 'cam', time)
+      const stateKeyframe = createStateKeyframe(objects, `卡${time}`, time)
       stateKeyframe.objectStates.cam = { ...stateKeyframe.objectStates.cam, transform: { ...stateKeyframe.objectStates.cam.transform, position }, lookAt: { mode: 'manual', target } }
       stateKeyframe.transition.perObject.cam = { speedPreset: 'uniform', delay }
       return stateKeyframe

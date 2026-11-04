@@ -8,6 +8,8 @@ import { CameraStagePlacementOperationExecutor } from './cameraStagePlacementExe
 import { CameraStageShotOperationExecutor } from './cameraStageShotExecutor'
 import { CameraStageBlockingOperationExecutor, CameraStageFollowOperationExecutor } from './cameraStageBlockingExecutors'
 import { CameraStageStateKeyframeCollectionExecutor } from './cameraStageStateKeyframeCollectionExecutor'
+import { CameraStageCameraCutCollectionExecutor } from './cameraStageCameraCutService'
+import { CameraStageCoverageOperationExecutor, CameraStageCutOperationExecutor } from './cameraStageCoverageExecutors'
 import { CameraStageSetCollectionExecutor, CameraStageSetGenerateOperationExecutor } from './cameraStageSetExecutors'
 import { registerCameraStageCapabilityHandlers } from './registerCameraStageCapabilityHandlers'
 
@@ -25,7 +27,10 @@ export const cameraStageApplicationDomain: ApplicationDomainModule = {
     engine.registerOperationExecutor(new CameraStageShotOperationExecutor(current))
     engine.registerOperationExecutor(new CameraStageBlockingOperationExecutor(current))
     engine.registerOperationExecutor(new CameraStageFollowOperationExecutor(current))
+    engine.registerOperationExecutor(new CameraStageCoverageOperationExecutor(current))
+    engine.registerOperationExecutor(new CameraStageCutOperationExecutor(current))
     engine.registerCollectionExecutor(new CameraStageStateKeyframeCollectionExecutor(current))
+    engine.registerCollectionExecutor(new CameraStageCameraCutCollectionExecutor(current))
     engine.registerOperationExecutor(new CameraStageSetGenerateOperationExecutor(current))
     engine.registerCollectionExecutor(new CameraStageSetCollectionExecutor(current))
   },

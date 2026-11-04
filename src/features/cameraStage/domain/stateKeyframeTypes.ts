@@ -120,12 +120,6 @@ export interface StageStateKeyframe {
   transitionDuration: number
   objectStates: Record<string, StageStateKeyframeObjectState>
   transition: StageStateKeyframeTransition
-  /**
-   * 拍摄机位（可选，重要记录 005）：null/缺失 = 未指定，渲染/导出时沿用全局 activeCameraId。
-   * 创建时取当前 activeCameraId；相邻两点机位均已指定且不同时，两点之间的过渡在布点层
-   * （buildStateKeyframeTimeline）强制视为 0 时长硬切，本字段与 transitionDuration 本身不互相改写。
-   */
-  cameraId: string | null
 }
 
 /** 摄像机效果器（3.1 实装，本任务仅类型 + 默认空数组） */
@@ -180,14 +174,10 @@ export function captureStateKeyframeObjectState(object: StageObject): StageState
   return state
 }
 
-/**
- * 由当前场景对象列表新建一枚状态关键帧：捕获全部对象状态，过渡细节留空由编译器按默认规则处理。
- * `cameraId` 创建时取调用方当前的 activeCameraId；省略/传 null 表示未指定机位（沿用全局值）。
- */
+/** 由当前场景对象列表新建一枚状态关键帧：捕获全部对象状态，过渡细节留空由编译器按默认规则处理。 */
 export function createStateKeyframe(
   objects: StageObject[],
   name: string,
-  cameraId: string | null = null,
   time = 0,
 ): StageStateKeyframe {
   const objectStates: Record<string, StageStateKeyframeObjectState> = {}
@@ -202,7 +192,6 @@ export function createStateKeyframe(
     transitionDuration: STAGE_STATE_KEYFRAME_DEFAULT_TRANSITION_DURATION,
     objectStates,
     transition: { perObject: {} },
-    cameraId,
   }
 }
 
@@ -373,8 +362,6 @@ function normalizeStateKeyframe(raw: unknown): StageStateKeyframe | undefined {
         : STAGE_STATE_KEYFRAME_DEFAULT_TRANSITION_DURATION,
     objectStates,
     transition: normalizeStateKeyframeTransition(record.transition),
-    // 旧镜头参考无该字段 → null（未指定机位，沿用全局 activeCameraId，行为与改动前完全一致）
-    cameraId: typeof record.cameraId === 'string' && record.cameraId ? record.cameraId : null,
   }
 }
 

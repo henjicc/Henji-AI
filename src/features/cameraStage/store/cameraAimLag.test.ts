@@ -21,10 +21,10 @@ function orbitScene(aimLag: number) {
     { ...camera, id: 'cam', lookAt: { mode: 'object', objectId: 'box', fallbackTarget: SUBJECT }, rig: 'steadicam', aimLag },
     { ...box, id: 'box', transform: { ...box.transform, position: SUBJECT } },
   ]
-  const start = createStateKeyframe(objects, 'k0', 'cam', 0)
+  const start = createStateKeyframe(objects, 'k0', 0)
   const generated = createCameraPresetPath({ kind: 'orbit', degrees: 180, direction: 'cw' }, start.objectStates.cam.transform.position, SUBJECT)
   start.transition.perObject.cam = { spatialPath: generated.path, speedPreset: 'easeInOut' }
-  const end = createStateKeyframe(objects, 'k1', 'cam', 6)
+  const end = createStateKeyframe(objects, 'k1', 6)
   end.objectStates.cam = { ...end.objectStates.cam, transform: { ...end.objectStates.cam.transform, position: generated.endPosition } }
   return { objects, animation: compileStateKeyframesToAnimation([start, end], objects) }
 }

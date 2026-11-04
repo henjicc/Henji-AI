@@ -23,7 +23,8 @@ interface DragRef {
 }
 
 interface UseKeyframeTimeDragOptions {
-  stateKeyframes: StageStateKeyframe[]
+  /** 按时间排好的时间点（状态关键帧或机位切换点），拖动不越过前后两个 */
+  stateKeyframes: ReadonlyArray<Pick<StageStateKeyframe, 'id' | 'time'>>
   fps: number
   pxPerSecond: number
   onCommit: (stateKeyframeId: string, time: number) => void

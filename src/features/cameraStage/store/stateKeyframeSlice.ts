@@ -16,6 +16,7 @@ import { createCameraPresetPath } from '../domain/spatialPath'
 import { markSpatialPathCustom } from '../domain/spatialPath'
 import { clampTransition, isTimeInStateKeyframeStaticSegment, quantizeToFrame } from '../stateKeyframes/timeline/stateKeyframeClipGeometry'
 import type { CameraStageState } from './cameraStageStore'
+import { cameraLiveAt } from './cameraCutSlice'
 import { applyAnimationAtTime } from './playbackSampling'
 
 const logger = createLogger('features.cameraStage.stateKeyframes')
@@ -36,7 +37,6 @@ export type StateKeyframeSliceActions = Pick<
   | 'setStateKeyframeSpatialPath'
   | 'applyCameraPathPreset'
   | 'setStateKeyframePathAnchor'
-  | 'updateStateKeyframeCamera'
   | 'updateStateKeyframeContinuity'
   | 'captureIntoSelectedStateKeyframe'
 >
@@ -359,17 +359,9 @@ function insertCapturedStateKeyframe(
   if (existing) {
     return { stateKeyframes: captureObjectsIntoStateKeyframe(state.stateKeyframes, existing.id, objects, undefined, sampledAtStateKeyframe(state, existing.id)), stateKeyframe: existing }
   }
-  // 编辑过渡画面时自动插的卡在镜头中途，沿用正在拍的机位；取活动摄像机的话，选中过别的摄像机就成了硬切。
-  const stateKeyframe = createStateKeyframe(objects, `关键帧 ${state.stateKeyframes.length + 1}`, shotCameraAt(state.stateKeyframes, time, state.activeCameraId), time)
+  const stateKeyframe = createStateKeyframe(objects, `关键帧 ${state.stateKeyframes.length + 1}`, time)
   const stateKeyframes = inheritFollowAtInsert(syncTransitionDurations([...state.stateKeyframes, stateKeyframe].sort((a, b) => a.time - b.time)), stateKeyframe.id)
   return { stateKeyframes, stateKeyframe }
-}
-
-/** time 时刻正在拍的机位：它之前最近一张卡的机位，前面没有卡就取后面第一张，时间轴是空的才用 fallback。 */
-export function shotCameraAt(stateKeyframes: StageStateKeyframe[], time: number, fallback: string | null): string | null {
-  const previous = [...stateKeyframes].reverse().find((stateKeyframe) => stateKeyframe.time < time)
-  const shot = previous ?? stateKeyframes.find((stateKeyframe) => stateKeyframe.time > time)
-  return shot ? shot.cameraId : fallback
 }
 
 export function compileStateKeyframeEdit(
@@ -423,7 +415,7 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
         const stateKeyframes = captureObjectsIntoStateKeyframe(state.stateKeyframes, existing.id, state.objects, undefined, sampledAtStateKeyframe(state, existing.id))
         return { stateKeyframes, selectedStateKeyframeId: existing.id, animation: compile(stateKeyframes, state.objects) }
       }
-      const stateKeyframe = createStateKeyframe(state.objects, `关键帧 ${state.stateKeyframes.length + 1}`, state.activeCameraId, time)
+      const stateKeyframe = createStateKeyframe(state.objects, `关键帧 ${state.stateKeyframes.length + 1}`, time)
       const stateKeyframes = inheritFollowAtInsert(syncTransitionDurations([...state.stateKeyframes, stateKeyframe].sort((a, b) => a.time - b.time)), stateKeyframe.id)
       logger.debug('新增状态关键帧', { event: 'camera_stage.state_keyframe.added', stateKeyframeCount: stateKeyframes.length })
       return {
@@ -501,9 +493,10 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
       if (index < 0) return {}
       const stateKeyframe = state.stateKeyframes[index]
       const time = stateKeyframe.time
-      // 选择状态关键帧 = 进入该时间点的拍摄视角编辑（显式用户动作，允许写 store，重要记录 005/3.2）；
-      // 卡未指定机位，或机位指向已删除的对象时，activeCameraId 保持不变（不写入无效 id）。
-      const activeCameraId = isCameraId(state.objects, stateKeyframe.cameraId) ? (stateKeyframe.cameraId as string) : state.activeCameraId
+      // 选择状态关键帧 = 进入该时间点正在拍的机位编辑（显式用户动作，允许写 store）；
+      // 那一刻没有切到某台摄像机，或机位指向已删除的对象时，activeCameraId 保持不变（不写入无效 id）。
+      const shooting = cameraLiveAt(state.cameraCuts, time)
+      const activeCameraId = isCameraId(state.objects, shooting) ? (shooting as string) : state.activeCameraId
       return {
         selectedStateKeyframeId: id,
         selectedStateKeyframeIds: [],
@@ -625,19 +618,6 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
         }
       })
       return compileAndAlignCurrentFrame(state, stateKeyframes)
-    }),
-    /**
-     * 修改某张状态关键帧的拍摄机位（重要记录 005）。重编译是必须的：机位变化可能触发或解除
-     * 与相邻卡之间的强制硬切（buildStateKeyframeTimeline 的有效过渡时长会随之变化）。
-     */
-    updateStateKeyframeCamera: (id, cameraId) => set((state) => {
-      const stateKeyframes = state.stateKeyframes.map((stateKeyframe) => stateKeyframe.id === id ? { ...stateKeyframe, cameraId } : stateKeyframe)
-      logger.debug('更新状态关键帧拍摄机位', {
-        event: 'state_keyframe.stateKeyframe.camera_updated',
-        stateKeyframeId: id,
-        cameraId,
-      })
-      return { stateKeyframes, animation: compile(stateKeyframes, state.objects) }
     }),
     updateStateKeyframeContinuity: (id, continuity) => set((state) => {
       const stateKeyframes = state.stateKeyframes.map((stateKeyframe) => stateKeyframe.id === id ? { ...stateKeyframe, continuity } : stateKeyframe)

@@ -14,13 +14,15 @@ export interface DefaultCameraStageSceneSnapshot extends StageSceneSnapshotInput
 export function createDefaultCameraStageSceneSnapshot(): DefaultCameraStageSceneSnapshot {
   const camera = createCameraObject('摄像机01', pickDefaultColor(0))
   const objects = [camera]
-  const stateKeyframe = createStateKeyframe(objects, '关键帧 1', camera.id)
+  const stateKeyframe = createStateKeyframe(objects, '关键帧 1')
   return {
     objects,
     activeCameraId: camera.id,
     sceneSettings: createDefaultSceneSettings(),
     stateKeyframes: [stateKeyframe],
     sets: [],
+    cameraCuts: [],
+    coverages: [],
     defaultCameraId: camera.id,
     defaultStateKeyframeId: stateKeyframe.id,
   }

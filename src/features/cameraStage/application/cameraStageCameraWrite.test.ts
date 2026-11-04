@@ -58,7 +58,7 @@ describe('摄像机属性写入', () => {
     const objects = [cameraObject, subject]
     await loadCameraStageTestProject({
       objects, activeCameraId: cameraId, animation: createDefaultAnimation(), sceneSettings: createDefaultSceneSettings(),
-      stateKeyframes: [createStateKeyframe(objects, '关键帧 1', cameraId, 0)],
+      stateKeyframes: [createStateKeyframe(objects, '关键帧 1', 0)],
     }, { id: 'project-1', name: '摄像机写入测试' })
     await applyCameraStageMotion({
       projectId: 'project-1', cameraId, targetPoint: { x: 0, y: 1, z: 0 },

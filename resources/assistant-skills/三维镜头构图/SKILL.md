@@ -57,7 +57,7 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 ### 常见配方
 
 - **建立镜头**：开场交代环境用 `size: extreme_long` 或 `long`，`angle: high` 或 `birds_eye`，`lens: wide`；主体可以是主角，也可以是布景里的地点 `{ point, height }`。
-- **过肩正反打**：先建两台摄像机，`relation: reverse_pair`、`size: close`（或 `closeup`），一次定好正打和反打，两台自动在轴线同侧；对话开场再加一个 `two_shot` 交代两人关系。切换机位用 `change_application_entities` 改各状态关键帧的 `camera_stage.state_keyframe.camera_ref`。
+- **过肩正反打**：先建两台摄像机，`relation: reverse_pair`、`size: close`（或 `closeup`），一次定好正打和反打，两台自动在轴线同侧；对话开场再加一个 `two_shot` 交代两人关系。一整段戏要多机位时直接用下一节的 `cover_camera_stage_scene`。
 - **揭示**：终点先定——在终点时刻 `at.time` 给清楚的构图；起点在更早的时刻让主体被前景挡住（`avoidOcclusion: false`，从前景物体后面的 `view` 拍），中间交给运镜引擎；也可以起点定好后用 `apply_camera_stage_camera_move` 的 `truck` 或 `crane` 移出遮挡。
 - **跟拍**：主体会走动时用 `follow_camera_stage_character`（见下一节），不要在起点终点各定一次构图让引擎去接。
 
@@ -88,6 +88,15 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 - **坐下说话**：`move` 到椅子 → `turn` 背对椅子 → `action sit_down` → `action sit_talk`（给 `duration`）。
 
 `observe_camera_stage_scene` 的 `characters[].blocking` 是每个角色的动作时间线；传 `times` 读回这些时刻角色的位置、朝向（0 朝 +Z、90 朝 +X）、正在做的动作与速度，`follows` 列出跟拍时段。
+
+## 多机位覆盖与剪辑（导演思维）
+
+一段戏要拍成有景别变化、能切镜的段落时，按 **布景 → 走位 → 覆盖 → 剪辑 → 自检 → 修正** 做，景别与情绪、各种场面的覆盖配方和完整示例见 [导演思维](references/directing.md)（用 `load_assistant_skill` 读 `references/directing.md`）。
+
+- `cover_camera_stage_scene`：给主体、时段、台词，一次布好建立、主镜头、过肩正反打、单人近景（可加反应、插入），全部守轴线同侧、整段静止；结果的 `visibleSpans` 是每台拍得到主体的时段。
+- `cut_camera_stage_coverage`：按节拍剪成切镜序列写进**机位轨**（`camera_stage.camera_cut`，与状态关键帧互不牵连，切机位时人物动作照常连续），`pace` 选 fast / medium / slow；结果带规则检查。
+- `check_camera_stage_edit`：对机位轨上已有的切镜跑剪辑规则，列出违规、涉及哪两镜与改法。手改切点后再查一遍。
+- 单个切点：`change_application_entities` 对 `camera_stage.camera_cut` 执行 `create_items`（`time`、`camera_ref`）或 `remove_items`，改 `camera_stage.camera_cut.time` / `camera_stage.camera_cut.camera_ref`；观察结果的 `cameraCuts` 是当前机位轨，`coverages` 是记下的覆盖。
 
 ## 观察与验证
 
