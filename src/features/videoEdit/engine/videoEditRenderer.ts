@@ -59,7 +59,7 @@ import { videoEditAudioTransitionClipGain, videoEditHandleFrame, videoEditTransi
 import { videoEditClipFades, videoEditFadeGain, videoEditFadeOpacity } from '@/core/videoEdit/fades'
 import { applyVideoEditClipFollow, applyVideoEditStabilization, videoEditClipTrackingQuad } from './videoEditTrackResults'
 import { activeVideoEditAudioEffects, activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
-import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
+import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys, videoEditSpatialBelowKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
 import { readVideoEditExportPicture } from './videoEditExportPictures'
 import { isVideoEditRenderDivisor, videoEditRenderSize, videoEditOutputRenderDivisor } from '@/core/videoEdit/playbackResolution'
@@ -2123,6 +2123,7 @@ export class VideoEditRenderer {
     const imagesSettled = Promise.allSettled([imagesReady])
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
+    if (spatial) for (const key of videoEditSpatialBelowKeys(spatial.plan)) surfaceKeys.add(key)
     const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { observeElements, spatialFrame: spatial?.plan.centerFrame, deferredGenerators, exactInput: input => !approximateCodeInputs.has(input), quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
       if (!codeMaterialUsesAudio(program)) return {}
       const source = codeAudioComposition(sourceDocument, sourceDocument.clips.find(value => value.id === clip.id) ?? clip, codeAudioReferenceMediaId(parameters))

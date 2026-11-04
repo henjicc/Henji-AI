@@ -66,12 +66,18 @@ const maskKeys = (keys: Set<string>, clip: VideoEditClip): void => {
     if (videoEditEffectUsesSubject(effect.builtin)) keys.add(regionKey(clip, effect, true))
   }
 }
+const belowKey = (id: string): string => `composite:below:${id}`
+/**
+ * 空间组要看见下方画面时合成那张下方画面的目标。只有空间组的首项可能被延后绘制，按空间计划登记名字，用到时才分配；
+ * 不登记的键下一帧会被当成用不着而销毁，没有合成树（无效果、转场、调整层）时也要登记，否则这张整幅目标每帧重建。
+ */
+export function videoEditSpatialBelowKeys(plan: Pick<SpatialExposurePlan, 'groups'>): string[] {
+  return plan.groups.map(group => belowKey(group.itemIds[0]))
+}
 /** Reserve the entire frame together with generated pictures before releasing old targets. */
 export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditCompositeNode[]): Set<string> {
   const keys = new Set<string>()
   const visit = (node: VideoEditCompositeNode): void => {
-    // 空间组要看见下方画面时合成那张下方画面的目标（只登记名字，用到时才分配）：键名不在这里，下一帧会被当成用不着而销毁。
-    if (node.kind !== 'adjustment') keys.add(`composite:below:${node.kind === 'transition' ? `transition:${node.window.transition.id}` : node.clip.id}`)
     if (node.kind === 'clip') { if (effective(node.clip)) slots(node.clip).forEach(key => keys.add(key)); maskKeys(keys, node.clip) }
     else if (node.kind === 'transition') {
       for (const clip of videoEditTransitionPictureClips(node.window)) { slots(clip).forEach(key => keys.add(key)); maskKeys(keys, clip) }
@@ -213,7 +219,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
         const under = [...outer, ...layers]
         let below: VideoEditCodePicture | undefined
         if (under.length) {
-          below = await (await gpu()).target(`composite:below:${id}`, document.width, document.height, VIDEO_EDIT_PRECISE_FORMAT); current()
+          below = await (await gpu()).target(belowKey(id), document.width, document.height, VIDEO_EDIT_PRECISE_FORMAT); current()
           const drawn = await compositor.draw(document, under.map(layer => layer.clip), under.map(layer => layer.picture), shouldPresent, undefined, below, materialViewport)
           watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
         }
