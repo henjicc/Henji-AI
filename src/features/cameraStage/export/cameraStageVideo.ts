@@ -9,8 +9,17 @@ import { createLogger } from '@/core/logging'
 import { QUICK_DOWNLOAD_SETTING_SPECS, readLocalStorageSettings } from '@/hooks/useLocalStorageSetting'
 import { join, saveDialog, toDisplaySrc } from '@/platform/desktopApi'
 import type { StageRenderStyle } from '../domain/renderStyles'
+import { yuv420pFrameByteLength } from '../scene/stageVideoFrameReader'
 
 const logger = createLogger('cameraStage.videoExport')
+
+/*
+ * 逐帧流水：seek 与渲染提交在渲染线程同步完成，显卡读回、IPC 复制与编码都在别处进行。
+ * 最多 READBACK_DEPTH 帧在等读回、APPEND_DEPTH 帧在等编码器接收，渲染线程只在队列满时等待；
+ * 深度只需盖住各段的抖动，再深只会多占内存（1080p 每帧约 3MB）。
+ */
+const READBACK_DEPTH = 3
+const APPEND_DEPTH = 3
 
 export type CameraStageVideoResolutionPreset = '720p' | '1080p'
 
@@ -38,7 +47,11 @@ export interface CameraStageVideoExportOptions {
   resolutionPreset: CameraStageVideoResolutionPreset
   /** 本次成片的渲染方式；只进日志，画面本身由截帧管线按镜头参考设置成像 */
   renderStyle: StageRenderStyle
-  captureFrame: (targetSize: { width: number; height: number }) => Promise<Uint8Array | null>
+  /**
+   * 同步提交当前画面的离屏渲染，返回的 Promise 在 yuv420p 帧（自上而下）写入 target 后兑现；
+   * 兑现前导出流程不会复用 target，也会继续 seek 并提交后续帧。
+   */
+  captureFrame: (request: { width: number; height: number; target: Uint8Array }) => Promise<Uint8Array | null>
   disposeCaptureFrame: () => void
   seekFrame: (time: number) => Promise<void>
   onProgress: (progress: CameraStageVideoExportProgress) => void
@@ -83,8 +96,11 @@ export async function exportCameraStageVideo(
   const exportStartedAt = performance.now()
   let seekElapsedMs = 0
   let captureElapsedMs = 0
-  let appendElapsedMs = 0
+  let readbackWaitMs = 0
+  let appendWaitMs = 0
   let sessionId: string | null = null
+  const readbacks: Promise<Uint8Array | null>[] = []
+  const appends: Promise<unknown>[] = []
   let renderingComplete = false
   const unsubscribeProgress = onVideoFrameExportProgress((progress) => {
     if (progress.sessionId !== sessionId || !renderingComplete) return
@@ -97,6 +113,7 @@ export async function exportCameraStageVideo(
 
   try {
     const session = await startVideoFrameExport({
+      pixelFormat: 'yuv420p',
       frameCount,
       fps: options.fps,
       width,
@@ -130,6 +147,24 @@ export async function exportCameraStageVideo(
       })
     }
 
+    const frameBuffers = Array.from({ length: READBACK_DEPTH }, () => new Uint8Array(yuv420pFrameByteLength(width, height)))
+    let appendedFrames = 0
+    // 按帧序取最早的读回交给主进程；append 调用当下就复制了数据，帧缓冲随即可以给后面的帧复用。
+    const appendOldestFrame = async (): Promise<void> => {
+      const readbackStartedAt = performance.now()
+      const bytes = await readbacks.shift()
+      readbackWaitMs += performance.now() - readbackStartedAt
+      if (!bytes) throw new Error('未获取到当前离屏视频帧')
+      appends.push(quiet(appendVideoFrameExport({ sessionId: session.sessionId, frameIndex: appendedFrames, bytes })))
+      appendedFrames += 1
+      options.onProgress({ phase: 'rendering', doneFrames: appendedFrames, totalFrames: frameCount })
+      if (appends.length >= APPEND_DEPTH) {
+        const appendStartedAt = performance.now()
+        await appends.shift()
+        appendWaitMs += performance.now() - appendStartedAt
+      }
+    }
+
     for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
       throwIfCancelled(options)
       const time = Math.min(options.durationSeconds, frameIndex / options.fps)
@@ -137,16 +172,20 @@ export async function exportCameraStageVideo(
       await options.seekFrame(time)
       seekElapsedMs += performance.now() - seekStartedAt
       const captureStartedAt = performance.now()
-      const bytes = await options.captureFrame({ width, height })
+      readbacks.push(quiet(options.captureFrame({ width, height, target: frameBuffers[frameIndex % READBACK_DEPTH] })))
       captureElapsedMs += performance.now() - captureStartedAt
-      if (!bytes) throw new Error('未获取到当前离屏视频帧')
-      const appendStartedAt = performance.now()
-      await appendVideoFrameExport({ sessionId, frameIndex, bytes })
-      appendElapsedMs += performance.now() - appendStartedAt
-      options.onProgress({ phase: 'rendering', doneFrames: frameIndex + 1, totalFrames: frameCount })
+      if (readbacks.length >= READBACK_DEPTH) await appendOldestFrame()
     }
+    while (readbacks.length > 0) {
+      throwIfCancelled(options)
+      await appendOldestFrame()
+    }
+    const appendStartedAt = performance.now()
+    while (appends.length > 0) await appends.shift()
+    appendWaitMs += performance.now() - appendStartedAt
 
     throwIfCancelled(options)
+    const renderingElapsedMs = performance.now() - exportStartedAt
     renderingComplete = true
     options.onProgress({ phase: 'encoding', doneFrames: 0, totalFrames: frameCount })
     const result = await finishVideoFrameExport({ sessionId, targetPath: targetPath ?? undefined })
@@ -160,9 +199,13 @@ export async function exportCameraStageVideo(
         height,
         frameCount,
         elapsedMs: Math.round(performance.now() - exportStartedAt),
-        averageSeekMs: Math.round(seekElapsedMs / frameCount),
-        averageCaptureMs: Math.round(captureElapsedMs / frameCount),
-        averageAppendMs: Math.round(appendElapsedMs / frameCount),
+        renderingElapsedMs: Math.round(renderingElapsedMs),
+        framesPerSecond: Math.round(frameCount / (renderingElapsedMs / 1000)),
+        // seek 与渲染提交在渲染线程上实耗；读回、编码两项是渲染线程排队等待的时间，与前两项不重叠
+        averageSeekMs: roundMs(seekElapsedMs / frameCount),
+        averageCaptureMs: roundMs(captureElapsedMs / frameCount),
+        averageReadbackWaitMs: roundMs(readbackWaitMs / frameCount),
+        averageAppendWaitMs: roundMs(appendWaitMs / frameCount),
       },
     })
     return {
@@ -171,10 +214,12 @@ export async function exportCameraStageVideo(
     }
   } catch (error) {
     if (sessionId) {
+      // 先结束会话再等在途帧：编码器退出后，还在等管道的 append 会随之失败，不会一直挂着。
       await cancelVideoFrameExport(sessionId).catch((cancelError) => {
-        logger.warn('[cameraStage] 取消视频导出清理失败', cancelError)
+        logger.warn('取消视频导出清理失败', { event: 'camera_stage.video_export.cancel_failed', taskId: sessionId ?? undefined, error: cancelError })
       })
     }
+    await Promise.allSettled([...readbacks, ...appends])
     options.onSession(null)
     if (options.isCancelled()) {
       logger.info('离屏视频导出已取消', {
@@ -238,6 +283,16 @@ function ensureMp4Path(targetPath: string): string {
 function makeEven(value: number): number {
   const rounded = Math.max(2, Math.round(value))
   return rounded % 2 === 0 ? rounded : rounded + 1
+}
+
+/** 在途的读回与 append 可能在被 await 之前就失败；先挂上空处理，避免记成未处理的拒绝，原 Promise 照常抛错。 */
+function quiet<T>(promise: Promise<T>): Promise<T> {
+  promise.catch(() => undefined)
+  return promise
+}
+
+function roundMs(value: number): number {
+  return Math.round(value * 10) / 10
 }
 
 function throwIfCancelled(options: CameraStageVideoExportOptions): void {

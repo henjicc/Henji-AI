@@ -252,13 +252,20 @@ function parseStartFrameExportPayload(input: unknown): StartVideoFrameExportPayl
   const record = parseRecord(input)
   if (record.format !== undefined && record.format !== 'mp4' && record.format !== 'gif') throw new Error('format 必须是 mp4 或 gif')
   if (record.orientation !== undefined && record.orientation !== 'bottom-up' && record.orientation !== 'top-down') throw new Error('orientation 必须是 bottom-up 或 top-down')
+  if (record.pixelFormat !== undefined && record.pixelFormat !== 'rgba' && record.pixelFormat !== 'yuv420p') throw new Error('pixelFormat 必须是 rgba 或 yuv420p')
+  const width = readPositiveInteger(record, 'width')
+  const height = readPositiveInteger(record, 'height')
+  if (record.pixelFormat === 'yuv420p' && (record.format === 'gif' || width % 2 !== 0 || height % 2 !== 0)) {
+    throw new Error('yuv420p 帧只支持 mp4，且宽高必须为偶数')
+  }
   return {
     ...(record.format ? { format: record.format } : {}),
     ...(record.orientation ? { orientation: record.orientation } : {}),
+    ...(record.pixelFormat ? { pixelFormat: record.pixelFormat } : {}),
     frameCount: readPositiveInteger(record, 'frameCount'),
     fps: readBoundedNumber(record, 'fps', 1, 120),
-    width: readPositiveInteger(record, 'width'),
-    height: readPositiveInteger(record, 'height'),
+    width,
+    height,
     fileNameStem: readString(record, 'fileNameStem'),
   }
 }

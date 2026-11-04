@@ -266,7 +266,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         durationSeconds: exportState.animation.duration,
         resolutionPreset: videoPreset,
         renderStyle: exportState.sceneSettings.render.style,
-        captureFrame: async (targetSize) => captureRef.current?.(targetSize) ?? null,
+        captureFrame: (request) => captureRef.current?.captureVideoFrame(request) ?? Promise.resolve(null),
         disposeCaptureFrame: () => captureRef.current?.disposeOffscreen(),
         seekFrame: (time) => {
           commitCameraStageFrame(() => useCameraStageStore.getState().seek(time))

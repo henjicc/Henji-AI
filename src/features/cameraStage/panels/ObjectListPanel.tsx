@@ -1,5 +1,5 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Camera, Copy, Eye, EyeOff, Trash2, User } from 'lucide-react'
 import { UiEmpty, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 import type { StageObject } from '../domain/sceneTypes'
@@ -9,20 +9,89 @@ import { ownerWindowOf } from '@/utils/crossRealmDom'
 
 /** 场景对象列表：列表选中/显隐/复制/删除；双击对象名称可直接行内改名 */
 
-const TypeIcon: React.FC<{ object: StageObject }> = ({ object }) => {
-  if (object.type === 'character') return <User size={UI_ICON_SIZE.sm} />
-  if (object.type === 'camera') return <Camera size={UI_ICON_SIZE.sm} />
+const TypeIcon: React.FC<{ type: StageObject['type'] }> = ({ type }) => {
+  if (type === 'character') return <User size={UI_ICON_SIZE.sm} />
+  if (type === 'camera') return <Camera size={UI_ICON_SIZE.sm} />
   return <Box size={UI_ICON_SIZE.sm} />
 }
+
+/*
+ * 行内组件只接收列表展示用到的字段：播放与逐帧导出每次 seek 都会换掉整份 objects（变换被重新采样），
+ * 名称、显隐不变的行据此跳过重渲染，否则每帧要重建全部行的悬停提示。
+ */
+interface ObjectNameButtonProps {
+  id: string
+  name: string
+  type: StageObject['type']
+  selected: boolean
+  framingCamera: boolean
+  onBeginRename: (id: string, name: string) => void
+}
+
+const ObjectNameButton = memo(function ObjectNameButton({ id, name, type, selected, framingCamera, onBeginRename }: ObjectNameButtonProps) {
+  const setSelected = useCameraStageStore((state) => state.setSelected)
+  return (
+    <UiOptionButton
+      active={selected}
+      variant="menu"
+      onClick={() => setSelected(id)}
+      onDoubleClick={() => onBeginRename(id, name)}
+      size="sm"
+      className="min-w-0 flex-1 gap-2"
+      tooltip={`${name}（双击可改名）`}
+    >
+      <span aria-hidden="true" className="shrink-0 text-text2">
+        <TypeIcon type={type} />
+      </span>
+      <span className="truncate">{name}</span>
+      {framingCamera && (
+        <span className="ml-auto shrink-0 text-2xs text-text2">取景</span>
+      )}
+    </UiOptionButton>
+  )
+})
+
+const ObjectRowActions = memo(function ObjectRowActions({ id, name, visible }: { id: string; name: string; visible: boolean }) {
+  const removeObject = useCameraStageStore((state) => state.removeObject)
+  const updateObject = useCameraStageStore((state) => state.updateObject)
+  const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
+  return (
+    <>
+      <UiIconButton
+        size="xs"
+        tooltip={visible ? '隐藏' : '显示'}
+        aria-label={visible ? `隐藏${name}` : `显示${name}`}
+        onClick={() => updateObject(id, { visible: !visible })}
+      >
+        {visible ? <Eye  /> : <EyeOff  />}
+      </UiIconButton>
+      <UiIconButton
+        size="xs"
+        tooltip="复制 (Ctrl+D)"
+        aria-label={`复制${name}`}
+        onClick={() => duplicateObject(id)}
+      >
+        <Copy  />
+      </UiIconButton>
+      <UiIconButton
+        size="xs"
+        tone="danger"
+        tooltip="删除"
+        aria-label={`删除${name}`}
+        onClick={() => removeObject(id)}
+      >
+        <Trash2  />
+      </UiIconButton>
+    </>
+  )
+})
 
 const ObjectListPanel: React.FC = () => {
   const objects = useCameraStageStore((state) => state.objects)
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setSelected = useCameraStageStore((state) => state.setSelected)
-  const removeObject = useCameraStageStore((state) => state.removeObject)
   const updateObject = useCameraStageStore((state) => state.updateObject)
-  const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -45,11 +114,11 @@ const ObjectListPanel: React.FC = () => {
     return () => focus.cancel()
   }, [editingId, objects])
 
-  const beginRename = (object: StageObject): void => {
-    setSelected(object.id)
-    setEditingId(object.id)
-    setDraftName(object.name)
-  }
+  const beginRename = useCallback((id: string, name: string): void => {
+    setSelected(id)
+    setEditingId(id)
+    setDraftName(name)
+  }, [setSelected])
 
   const finishRename = (mode: 'commit' | 'cancel'): void => {
     if (!editingId) return
@@ -81,7 +150,7 @@ const ObjectListPanel: React.FC = () => {
               // 改名直接把名称换成输入框，不再给输入框外面套一圈强调色描边的框
               <div className="flex min-w-0 flex-1 items-center gap-2 pl-3">
                 <span aria-hidden="true" className="shrink-0 text-text2">
-                  <TypeIcon object={object} />
+                  <TypeIcon type={object.type} />
                 </span>
                 <UiInput
                   ref={inputRef}
@@ -105,49 +174,16 @@ const ObjectListPanel: React.FC = () => {
                 />
               </div>
             ) : (
-              <UiOptionButton
-                active={isSelected}
-                variant="menu"
-                onClick={() => setSelected(object.id)}
-                onDoubleClick={() => beginRename(object)}
-                size="sm"
-                className="min-w-0 flex-1 gap-2"
-                tooltip={`${object.name}（双击可改名）`}
-              >
-                <span aria-hidden="true" className="shrink-0 text-text2">
-                  <TypeIcon object={object} />
-                </span>
-                <span className="truncate">{object.name}</span>
-                {isFramingCamera && (
-                  <span className="ml-auto shrink-0 text-2xs text-text2">取景</span>
-                )}
-              </UiOptionButton>
+              <ObjectNameButton
+                id={object.id}
+                name={object.name}
+                type={object.type}
+                selected={isSelected}
+                framingCamera={isFramingCamera}
+                onBeginRename={beginRename}
+              />
             )}
-            <UiIconButton
-              size="xs"
-              tooltip={object.visible ? '隐藏' : '显示'}
-              aria-label={object.visible ? `隐藏${object.name}` : `显示${object.name}`}
-              onClick={() => updateObject(object.id, { visible: !object.visible })}
-            >
-              {object.visible ? <Eye  /> : <EyeOff  />}
-            </UiIconButton>
-            <UiIconButton
-              size="xs"
-              tooltip="复制 (Ctrl+D)"
-              aria-label={`复制${object.name}`}
-              onClick={() => duplicateObject(object.id)}
-            >
-              <Copy  />
-            </UiIconButton>
-            <UiIconButton
-              size="xs"
-              tone="danger"
-              tooltip="删除"
-              aria-label={`删除${object.name}`}
-              onClick={() => removeObject(object.id)}
-            >
-              <Trash2  />
-            </UiIconButton>
+            <ObjectRowActions id={object.id} name={object.name} visible={object.visible} />
           </div>
         )
       })}

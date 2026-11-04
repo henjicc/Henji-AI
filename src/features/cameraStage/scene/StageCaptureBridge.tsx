@@ -14,11 +14,13 @@ import { StageStyleRenderer, isStageStyleRenderStyle } from '../render/stageStyl
 import type { StageStyleRenderStyle } from '../render/stageStyleRenderer'
 import { cameraStageStoreAttachment, useCameraStageStore } from '../store/cameraStageStore'
 import { resolveCenteredCaptureView } from './captureFraming'
+import { StageVideoFrameReader } from './stageVideoFrameReader'
 
 /**
- * 截图桥：Canvas 内部注册两类捕获能力。
+ * 截图桥：Canvas 内部注册三类捕获能力。
  * - 不传参数：读取视口 PNG dataURL，供截图功能沿用既有裁剪路径。
  * - 传目标尺寸：渲染至离屏 RenderTarget 后直接读取原始 RGBA，避免逐帧 PNG 压缩。
+ * - captureVideoFrame：同一离屏画面在显卡上转成 yuv420p 后异步读回，供逐帧视频导出流水。
  *
  * 离屏渲染按镜头参考当前的渲染方式分流：彩色走场景渲染 + OutputPass 补色调映射与 sRGB；
  * 深度/线稿等样式画面本身就是显示态数据，直接由样式管线写出，再补一次转换会把灰度整体拉偏，
@@ -30,9 +32,16 @@ export interface StageOffscreenCaptureOptions {
   height: number
 }
 
+export interface StageVideoFrameCaptureOptions extends StageOffscreenCaptureOptions {
+  /** 写入目标，长度为 yuv420pFrameByteLength(width, height)；Promise 兑现前调用方不得复用。 */
+  target: Uint8Array
+}
+
 export interface StageCaptureFn {
   (): string | null
   (options: StageOffscreenCaptureOptions): Promise<Uint8Array | null>
+  /** 调用时同步提交本帧渲染，读回异步完成；可以在兑现前 seek 并提交下一帧。 */
+  captureVideoFrame: (options: StageVideoFrameCaptureOptions) => Promise<Uint8Array>
   disposeOffscreen: () => void
 }
 
@@ -46,6 +55,7 @@ interface ExportRendererResources {
   outputTarget: WebGLRenderTarget
   outputPass: OutputPass
   pixels: Uint8Array
+  frameReader: StageVideoFrameReader | null
   width: number
   height: number
 }
@@ -62,9 +72,7 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef, cov
     let coverTimer: number | null = null
 
     const disposeOffscreen = (): void => {
-      resources?.sceneTarget.dispose()
-      resources?.outputTarget.dispose()
-      resources?.outputPass.dispose()
+      if (resources) disposeExportRenderer(resources)
       resources = null
       styleRenderer?.dispose()
       styleRenderer = null
@@ -83,15 +91,43 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef, cov
         }
       }
 
-      resources = getExportRenderer(resources, options)
+      try {
+        const current = getExportRenderer(resources, options)
+        resources = current
+        return Promise.resolve(withOffscreenRendererState(gl, () => {
+          renderOffscreen(current, options)
+          gl.readRenderTargetPixels(current.outputTarget, 0, 0, options.width, options.height, current.pixels)
+          return current.pixels
+        }))
+      } catch (error) {
+        return Promise.reject(error)
+      }
+    }
+
+    const renderOffscreen = (current: ExportRendererResources, options: StageOffscreenCaptureOptions): void => {
       const renderStyle = useCameraStageStore.getState().sceneSettings.render.style
       if (isStageStyleRenderStyle(renderStyle)) {
         styleRenderer = styleRenderer ?? new StageStyleRenderer()
-        return captureStyledRgba(resources, styleRenderer, renderStyle, gl, scene, camera, options)
+        renderStyledOffscreen(current, styleRenderer, renderStyle, gl, scene, camera, options)
+      } else {
+        renderColorOffscreen(current, gl, scene, camera, options)
       }
-      return captureOffscreenRgba(resources, gl, scene, camera, options)
     }
 
+    captureFrame.captureVideoFrame = (options: StageVideoFrameCaptureOptions): Promise<Uint8Array> => {
+      try {
+        const current = getExportRenderer(resources, options)
+        resources = current
+        const reader = current.frameReader ?? new StageVideoFrameReader(options.width, options.height)
+        current.frameReader = reader
+        return withOffscreenRendererState(gl, () => {
+          renderOffscreen(current, options)
+          return reader.read(gl, current.outputTarget.texture, options.target)
+        })
+      } catch (error) {
+        return Promise.reject(error)
+      }
+    }
     captureFrame.disposeOffscreen = disposeOffscreen
     captureRef.current = captureFrame
 
@@ -150,9 +186,7 @@ function getExportRenderer(
   const sizeChanged = !current || current.width !== options.width || current.height !== options.height
   if (current && !sizeChanged) return current
 
-  current?.sceneTarget.dispose()
-  current?.outputTarget.dispose()
-  current?.outputPass.dispose()
+  if (current) disposeExportRenderer(current)
   const targetOptions = {
     format: RGBAFormat,
     type: UnsignedByteType,
@@ -167,9 +201,17 @@ function getExportRenderer(
     outputTarget: new WebGLRenderTarget(options.width, options.height, targetOptions),
     outputPass: new OutputPass(),
     pixels: new Uint8Array(options.width * options.height * 4),
+    frameReader: null,
     width: options.width,
     height: options.height,
   }
+}
+
+function disposeExportRenderer(resources: ExportRendererResources): void {
+  resources.sceneTarget.dispose()
+  resources.outputTarget.dispose()
+  resources.outputPass.dispose()
+  resources.frameReader?.dispose()
 }
 
 /** 导出画幅与视口画幅不一致时，用视图偏移在原始取景里居中裁出目标画幅。 */
@@ -217,26 +259,23 @@ function withOffscreenRendererState<T>(renderer: WebGLRenderer, run: () => T): T
   }
 }
 
-async function captureOffscreenRgba(
+/** 彩色画面：场景渲染进线性半浮点目标，再由 OutputPass 写出与主画布一致的显示态结果到 outputTarget。 */
+function renderColorOffscreen(
   resources: ExportRendererResources,
   renderer: WebGLRenderer,
   scene: Scene,
   camera: Camera,
   options: StageOffscreenCaptureOptions,
-): Promise<Uint8Array | null> {
+): void {
   const exportCamera = createExportCamera(camera, options)
-  const { sceneTarget, outputTarget, outputPass, pixels } = resources
-  return withOffscreenRendererState(renderer, () => {
-    renderer.setRenderTarget(sceneTarget)
-    renderer.clear()
-    renderer.render(scene, exportCamera)
-    outputPass.render(renderer, outputTarget, sceneTarget, 0, false)
-    renderer.readRenderTargetPixels(outputTarget, 0, 0, options.width, options.height, pixels)
-    return pixels
-  })
+  const { sceneTarget, outputTarget, outputPass } = resources
+  renderer.setRenderTarget(sceneTarget)
+  renderer.clear()
+  renderer.render(scene, exportCamera)
+  outputPass.render(renderer, outputTarget, sceneTarget, 0, false)
 }
 
-async function captureStyledRgba(
+function renderStyledOffscreen(
   resources: ExportRendererResources,
   styleRenderer: StageStyleRenderer,
   style: StageStyleRenderStyle,
@@ -244,21 +283,15 @@ async function captureStyledRgba(
   scene: Scene,
   camera: Camera,
   options: StageOffscreenCaptureOptions,
-): Promise<Uint8Array | null> {
-  const exportCamera = createExportCamera(camera, options)
-  const { outputTarget, pixels } = resources
-  return withOffscreenRendererState(renderer, () => {
-    styleRenderer.render({
-      renderer,
-      scene,
-      camera: exportCamera,
-      style,
-      target: outputTarget,
-      width: options.width,
-      height: options.height,
-    })
-    renderer.readRenderTargetPixels(outputTarget, 0, 0, options.width, options.height, pixels)
-    return pixels
+): void {
+  styleRenderer.render({
+    renderer,
+    scene,
+    camera: createExportCamera(camera, options),
+    style,
+    target: resources.outputTarget,
+    width: options.width,
+    height: options.height,
   })
 }
 

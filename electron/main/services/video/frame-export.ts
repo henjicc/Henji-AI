@@ -30,6 +30,7 @@ interface VideoFrameExportSession {
   fps: number
   width: number
   height: number
+  frameBytes: number
   fileNameStem: string
   receivedFrames: number
   lastActivity: number
@@ -48,6 +49,7 @@ const SESSION_IDLE_LIMIT_MS = 30 * 60 * 1000
 const SESSION_SWEEP_INTERVAL_MS = 5 * 60 * 1000
 const STAGED_OUTPUT_PREFIX = '.henji-camera-stage-export-'
 const STAGED_OUTPUT_SUFFIX = '.part'
+const ENCODER_EXIT_GRACE_MS = 5_000
 let stagedArtifactsCleanupPromise: Promise<void> | null = null
 
 const sessionSweepTimer = setInterval(() => {
@@ -77,15 +79,16 @@ export async function startVideoFrameExport(
   const encodeArgs = !encoder || encoder.id === 'cpu'
     ? ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20']
     : encoder.buildEncodeArgs(bitrateKbps, maxrateKbps, bufsizeKbps)
+  const pixelFormat = payload.pixelFormat ?? 'rgba'
   const child = spawn(ffmpegPath, [
     '-y',
     '-hide_banner',
     '-loglevel', 'info',
     '-f', 'rawvideo',
-    '-pixel_format', 'rgba',
+    '-pixel_format', pixelFormat,
     '-video_size', `${payload.width}x${payload.height}`,
     '-framerate', String(payload.fps),
-    '-color_range', 'pc',
+    '-color_range', pixelFormat === 'yuv420p' ? 'tv' : 'pc',
     '-colorspace', 'bt709',
     '-color_primaries', 'bt709',
     '-color_trc', 'iec61966-2-1',
@@ -106,6 +109,9 @@ export async function startVideoFrameExport(
   let stderr = ''
   let progressBuffer = ''
   let lastEncodedFrames = 0
+  // 编码器提前退出（如磁盘写满）时管道写入会报 EPIPE；失败原因由 close 的退出码与 stderr 交给 completion，
+  // 这里只接住事件，避免没有等待 drain 的那一刻出错变成主进程未捕获异常。
+  child.stdin.on('error', () => undefined)
   const completion = new Promise<void>((resolve, reject) => {
     child.stderr.on('data', (chunk: Buffer) => {
       const output = chunk.toString()
@@ -147,6 +153,7 @@ export async function startVideoFrameExport(
     fps: payload.fps,
     width: payload.width,
     height: payload.height,
+    frameBytes: pixelFormat === 'yuv420p' ? payload.width * payload.height * 3 / 2 : payload.width * payload.height * 4,
     fileNameStem: sanitizeFileStem(payload.fileNameStem),
     receivedFrames: 0,
     lastActivity: Date.now(),
@@ -165,7 +172,7 @@ export async function startVideoFrameExport(
       width: payload.width,
       height: payload.height,
       encoder: encoder?.label ?? 'GIF',
-      inputFormat: 'raw-rgba-pipe',
+      inputFormat: `raw-${pixelFormat}-pipe`,
     },
   })
   return { sessionId }
@@ -179,9 +186,8 @@ export async function appendVideoFrameExport(
   if (payload.frameIndex !== session.receivedFrames) {
     throw new Error(`Expected sequential video frame ${session.receivedFrames}, received ${payload.frameIndex}`)
   }
-  const expectedBytes = session.width * session.height * 4
-  if (payload.bytes.byteLength !== expectedBytes) {
-    throw new Error(`Raw video frame byte length mismatch: expected ${expectedBytes}, received ${payload.bytes.byteLength}`)
+  if (payload.bytes.byteLength !== session.frameBytes) {
+    throw new Error(`Raw video frame byte length mismatch: expected ${session.frameBytes}, received ${payload.bytes.byteLength}`)
   }
   if (session.child.exitCode !== null || session.child.stdin.destroyed) {
     await session.completion
@@ -189,9 +195,12 @@ export async function appendVideoFrameExport(
   }
 
   const frame = Buffer.from(payload.bytes.buffer, payload.bytes.byteOffset, payload.bytes.byteLength)
-  if (!session.child.stdin.write(frame)) await waitForDrain(session.child)
+  // 渲染层会让下一帧在本帧等待 drain 时就到达：帧号在写入管道时立即推进，保证顺序校验对并发到达的帧成立；
+  // 每次调用仍等到自己的数据被编码器接走才返回，渲染层据此限制在途帧数。
+  const accepted = session.child.stdin.write(frame)
   session.receivedFrames += 1
   session.lastActivity = Date.now()
+  if (!accepted) await waitForDrain(session.child)
   return { frameIndex: payload.frameIndex }
 }
 
@@ -249,6 +258,12 @@ export async function cancelVideoFrameExport(sessionId: string, reason = 'reques
   session.child.stdin.destroy()
   session.child.kill('SIGTERM')
   sessions.delete(sessionId)
+  // Windows 上编码器退出前一直占着 output.mp4，目录删不掉；等进程真正关闭（completion 随 close 收口）再清理。
+  // 编码器卡在硬件里不响应 SIGTERM 时强制结束，取消不能无限期挂住。
+  if (!await waitForEncoderExit(session, ENCODER_EXIT_GRACE_MS)) {
+    session.child.kill('SIGKILL')
+    await waitForEncoderExit(session, ENCODER_EXIT_GRACE_MS)
+  }
   await cleanupSessionDir(session.dir)
   logger.info('视频帧导出会话已清理', {
     event: 'video_frame_export.session.cleaned',
@@ -281,6 +296,17 @@ function getSession(sessionId: string): VideoFrameExportSession {
   const session = sessions.get(sessionId)
   if (!session) throw new Error('Video export session was not found')
   return session
+}
+
+function waitForEncoderExit(session: VideoFrameExportSession, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs)
+    timer.unref()
+    void session.completion.catch(() => undefined).then(() => {
+      clearTimeout(timer)
+      resolve(true)
+    })
+  })
 }
 
 function waitForDrain(child: ChildProcessWithoutNullStreams): Promise<void> {
@@ -393,7 +419,9 @@ async function copyToTarget(mediaPath: string, targetPath: string, format: 'mp4'
 }
 
 /** Per-frame palettes keep the raw pipe bounded; a whole-movie palette would retain all frames. */
-export function videoFrameExportFilterArgs(payload: Pick<StartVideoFrameExportPayloadDto, 'format' | 'orientation'>, encodeArgs: string[]): string[] {
+export function videoFrameExportFilterArgs(payload: Pick<StartVideoFrameExportPayloadDto, 'format' | 'orientation' | 'pixelFormat'>, encodeArgs: string[]): string[] {
+  // yuv420p 帧由渲染层按输出规格转好且自上而下排列，直接交给编码器。
+  if (payload.pixelFormat === 'yuv420p') return encodeArgs
   const flip = payload.orientation === 'top-down' ? '' : 'vflip,'
   return payload.format === 'gif'
     ? ['-filter_complex', `${flip}split[a][b];[a]palettegen=stats_mode=single[p];[b][p]paletteuse=new=1`, '-c:v', 'gif']
