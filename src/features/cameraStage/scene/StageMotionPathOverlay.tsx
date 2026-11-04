@@ -25,8 +25,6 @@ interface PathSegment {
   path?: StageSpatialPath
   /** 这一段时间里对象实际走过的位置（与播放同一条采样链） */
   points: StageVec3[]
-  /** 等时间间隔的位置：点越疏走得越快 */
-  timeDots: StageVec3[]
 }
 
 const SAMPLE_COUNT = 64
@@ -63,7 +61,6 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
       result.push({
         stateKeyframe, from, to, path,
         points: sampleObjectTrajectory(objects, animation, objectId, evenTimes(stateKeyframe.time, next.time, SAMPLE_COUNT)),
-        timeDots: sampleObjectTrajectory(objects, animation, objectId, evenTimes(stateKeyframe.time, next.time, TIME_DOT_COUNT)),
       })
     }
     return result
@@ -72,6 +69,15 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
   const selectedSegment = segments.find((segment) => (
     pathSelection?.objectId === objectId && pathSelection.stateKeyframeId === segment.stateKeyframe.id
   ))
+  // 等时间间隔的位置只画在选中的那段上：点越疏走得越快。
+  const selectedTimeDots = useMemo(() => {
+    if (!selectedSegment) return []
+    const index = stateKeyframes.indexOf(selectedSegment.stateKeyframe)
+    const next = stateKeyframes[index + 1]
+    return next
+      ? sampleObjectTrajectory(useCameraStageStore.getState().objects, animation, objectId, evenTimes(selectedSegment.stateKeyframe.time, next.time, TIME_DOT_COUNT))
+      : []
+  }, [animation, objectId, selectedSegment, stateKeyframes])
 
   const selectSegment = (segment: PathSegment): void => {
     selectPath({ stateKeyframeId: segment.stateKeyframe.id, objectId })
@@ -91,7 +97,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
     <>
       {segments.map((segment) => {
         const selected = selectedSegment?.stateKeyframe.id === segment.stateKeyframe.id
-        const timeDots = selected ? segment.timeDots : []
+        const timeDots = selected ? selectedTimeDots : []
         const dotPositions = new Float32Array(timeDots.flatMap((point) => [point.x, point.y, point.z]))
         return (
           <React.Fragment key={segment.stateKeyframe.id}>

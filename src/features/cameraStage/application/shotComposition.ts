@@ -546,7 +546,8 @@ function evaluateCandidate(spec: ShotSpec, candidate: Candidate): Evaluated {
 
 function describeAdjustment(spec: ShotSpec, requested: Evaluated, chosen: Evaluated): ShotAdjustment | null {
   const reasons: ShotAdjustment['reasons'] = []
-  if (chosen.candidate.separationNote) reasons.push('separation')
+  const crowded = requested.invalid === 'crowded'
+  if (chosen.candidate.separationNote || crowded) reasons.push('separation')
   if (requested.invalid && requested.invalid !== 'unsolvable' && requested.invalid !== 'crowded') reasons.push(requested.invalid)
   if (!requested.invalid && !requested.clear && spec.avoidOcclusion) reasons.push('occlusion')
   const azimuth = chosen.candidate.azimuth
@@ -576,7 +577,7 @@ function describeAdjustment(spec: ShotSpec, requested: Evaluated, chosen: Evalua
   if (focal !== requestedFocal) changes.push(`焦距从 ${requestedFocal}mm 换成 ${focal}mm（机位${focal < requestedFocal ? '更近' : '更远'}）`)
   if (size) changes.push(`景别从${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}放宽到${CAMERA_STAGE_SHOT_SIZE_LABELS[size]}`)
   const why = reasons.map((reason) => ({
-    separation: chosen.candidate.separationNote ?? '',
+    separation: chosen.candidate.separationNote ?? (crowded ? '两人挨得近，按原定焦距前景那人会挤到画面中间' : ''),
     occlusion: `意图机位被${requested.blockedBy.length > 0 ? `「${requested.blockedBy.join('」「')}」` : '其他对象'}挡住`,
     ground: '意图机位会钻到地面以下',
     inside_object: `意图机位会落进「${requested.insideOf ?? '某个对象'}」里面`,
@@ -593,12 +594,20 @@ function describeAdjustment(spec: ShotSpec, requested: Evaluated, chosen: Evalua
   }
 }
 
+/** 比这一档更紧的两档景别，用来建议改道；已经最紧时为空。 */
+function tighterSizesHint(size: CameraStageShotSize): string {
+  const tighter = CAMERA_STAGE_SHOT_SIZES.slice(CAMERA_STAGE_SHOT_SIZES.indexOf(size) + 1, CAMERA_STAGE_SHOT_SIZES.indexOf(size) + 3)
+  return tighter.length > 0 ? `换更紧的景别（${tighter.map((item) => CAMERA_STAGE_SHOT_SIZE_LABELS[item]).join('、')}），或` : ''
+}
+
 /** 求一台摄像机的构图机位；意图在任何焦距与角度邻域里都无解时抛 ShotCompositionError。 */
 export function composeShot(spec: ShotSpec): ShotSolution {
   const { candidates, tooFar } = candidatesFor(spec)
   if (tooFar !== null) {
+    const loosest = CAMERA_STAGE_SHOT_SIZES[Math.min(CAMERA_STAGE_SHOT_SIZES.indexOf(OVER_SHOULDER_LOOSEST), CAMERA_STAGE_SHOT_SIZES.indexOf(spec.size))]
     throw new ShotCompositionError(`SHOT_NOT_REACHABLE：两人眼睛相距 ${metres(tooFar)} 米，过肩机位要站在前景那人身后，`
-      + `放宽到${CAMERA_STAGE_SHOT_SIZE_LABELS[OVER_SHOULDER_LOOSEST]}也要超过 ${OVER_SHOULDER_FOCAL.max}mm 的焦距；把两人拉近一些，或改用 two_shot、给被拍者单独一个 single。`)
+      + `${loosest === spec.size ? `拍${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}` : `放宽到${CAMERA_STAGE_SHOT_SIZE_LABELS[loosest]}`}也要超过 ${OVER_SHOULDER_FOCAL.max}mm 的焦距；`
+      + '把两人拉近一些，或改用 two_shot、给被拍者单独一个 single。')
   }
   const evaluated: Evaluated[] = []
   let chosen: Evaluated | null = null
@@ -614,7 +623,7 @@ export function composeShot(spec: ShotSpec): ShotSolution {
       ? 'SHOT_NOT_REACHABLE：意图附近的机位都在地面以下或其他对象内部；换角度（angle）、景别或主体位置。'
       : spec.kind === 'over_shoulder' && failures.has('crowded')
         ? `SHOT_NOT_REACHABLE：两人眼睛只相距 ${metres(shoulderPoints(spec).a.distanceTo(shoulderPoints(spec).b))} 米，拍${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}时被拍者站三分线，`
-          + '前景那人只能挤到画面中间压住他；换更紧的景别（近景、特写），或把两人拉开一些、改用 two_shot。'
+          + `前景那人只能挤到画面中间压住他；${tighterSizesHint(spec.size)}把两人拉开一些，或改用 two_shot。`
         : 'SHOT_NOT_REACHABLE：这个景别与角度在场景里求不出机位；换景别或角度。')
   }
   const requested = evaluated[0]
