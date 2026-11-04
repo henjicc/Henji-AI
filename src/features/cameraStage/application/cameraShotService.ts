@@ -18,6 +18,7 @@ import { quantizeToFrame } from '../stateKeyframes/timeline/stateKeyframeClipGeo
 import { applyAnimationAtTime } from '../store/playbackSampling'
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
 import { afterCameraStageWrite, captureCameraStageUndo } from './cameraStageUndo'
+import { ensureStateKeyframeAt } from './cameraStageKeyframeWrites'
 import { axisNormalFor, axisSideOf, composeShot, SHOT_LENS_FOCAL_LENGTH, type ShotKind, type ShotSolution } from './shotComposition'
 import {
   projectPoint,
@@ -123,6 +124,7 @@ function objectMoves(state: CameraStageState, objectId: string): boolean {
  */
 function cameraIsAnimated(state: CameraStageState, cameraId: string): boolean {
   if (objectMoves(state, cameraId)) return true
+  if (state.stateKeyframes.some((stateKeyframe) => stateKeyframe.transition.perObject[cameraId]?.follow)) return true
   const states = state.stateKeyframes.map((stateKeyframe) => stateKeyframe.objectStates[cameraId]).filter(Boolean)
   const signature = (index: number): string => JSON.stringify([states[index]?.fov, states[index]?.lookAt])
   if (states.some((_, index) => signature(index) !== signature(0))) return true
@@ -253,16 +255,10 @@ async function composeCameraStageShotInternal(input: CameraStageShotInput): Prom
       let targetStateKeyframeId = stateKeyframeId
       if (input.at) {
         if (!targetStateKeyframeId) {
-          const fps = store.getState().animation.fps
-          targetStateKeyframeId = store.getState().stateKeyframes.find((item) => Math.abs(item.time - time) <= 1 / (2 * Math.max(1, fps)))?.id ?? null
+          const ensured = ensureStateKeyframeAt(store, time)
+          targetStateKeyframeId = ensured.id
+          createdStateKeyframe = ensured.created
         }
-        if (!targetStateKeyframeId) {
-          store.getState().seek(time)
-          store.getState().addStateKeyframe()
-          targetStateKeyframeId = store.getState().selectedStateKeyframeId
-          createdStateKeyframe = true
-        }
-        if (!targetStateKeyframeId) throw new Error('CAPABILITY_REJECTED')
         store.getState().selectStateKeyframe(targetStateKeyframeId)
       }
       for (const { plan, solution } of solved) {

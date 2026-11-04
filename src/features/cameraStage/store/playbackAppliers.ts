@@ -71,6 +71,7 @@ export function applyAnimationToPlaybackAppliers(
   const frame = sampleAnimationFrame(objects, animation, time)
   // 城市群里绝大多数物体没有轨道；逐个展开属性组再查轨道键，上万个物体每帧就要几十毫秒
   const trackedObjectIds = new Set(animation.tracks.map((track) => track.objectId))
+  const followedCameraIds = new Set((animation.cameraFollows ?? []).map((entry) => entry.cameraId))
 
   for (const object of frame.objects) {
     if (object.type !== 'camera' && !trackedObjectIds.has(object.id)) continue
@@ -82,10 +83,11 @@ export function applyAnimationToPlaybackAppliers(
       const sampledTrack = group.children.some((child) => (
         frame.trackKeys.has(`${object.id}::${child.path}`)
       ))
-      const drivesCameraEffectors = object.type === 'camera'
+      // 跟拍区间的机位由内核求出，不一定有位置轨道。
+      const drivesCameraPosition = object.type === 'camera'
         && group.groupPath === 'transform.position'
-        && resolveCameraEffectors(object).some((effector) => effector.enabled)
-      if (sampledTrack || drivesCameraEffectors) {
+        && (resolveCameraEffectors(object).some((effector) => effector.enabled) || followedCameraIds.has(object.id))
+      if (sampledTrack || drivesCameraPosition) {
         runPlaybackAppliers(object.id, group.groupPath, group.getBaseValue(object), time)
       }
     }

@@ -6,6 +6,8 @@ import { createCameraObject, createCharacterObject, createPrimitiveObject, pickD
 import { createCameraPresetPath, cubicSpatialPoint, sampleSpatialMotion } from './spatialPath'
 import { buildStateKeyframeTimeline, compileStateKeyframesToAnimation } from './stateKeyframeCompiler'
 import { createStateKeyframe, type StageSpatialPath } from './stateKeyframeTypes'
+import { characterClipFacts } from './characterMotion'
+import { CHARACTER_CROSSFADE_SECONDS, resolveCharacterMotionLayers, sampleCharacterHeading, spanClipTime } from './characterMotionTimeline'
 
 describe('compileStateKeyframesToAnimation', () => {
   it('只使用绝对时间点，创建结果不携带停留字段', () => {
@@ -51,37 +53,49 @@ describe('compileStateKeyframesToAnimation', () => {
     expect(sampled.y).toBeCloseTo(midpoint.y, 5)
   })
 
-  it('角色位移生成转身轨道与可覆盖的动作时间表', () => {
+  it('角色走动按路程推进走路片段（脚钉在地上），朝向沿前进方向，到达后交叉淡入卡内动作', () => {
     const character = createCharacterObject('Character', pickDefaultColor(1))
-    const stateKeyframeA = createStateKeyframe([character], '卡1')
-    stateKeyframeA.time = 1
-    stateKeyframeA.transitionDuration = 1
+    const stateKeyframeA = createStateKeyframe([character], '卡1', null, 1)
     stateKeyframeA.transition.perObject[character.id] = {
+      speedPreset: 'cruise',
       motionOverride: { mode: 'clip', clipName: 'Walk_Formal_Loop', speed: 0.8 },
     }
-    const stateKeyframeB = createStateKeyframe([character], '卡2')
-    stateKeyframeB.time = stateKeyframeA.time + stateKeyframeA.transitionDuration
-    stateKeyframeB.objectStates[character.id] = {
-      ...stateKeyframeB.objectStates[character.id],
-      transform: {
-        ...stateKeyframeB.objectStates[character.id].transform,
-        position: { ...stateKeyframeB.objectStates[character.id].transform.position, x: 3 },
-      },
-    }
+    const stateKeyframeB = createStateKeyframe([character], '卡2', null, 4)
+    stateKeyframeB.objectStates[character.id].transform.position = { x: 3, y: 0, z: 0 }
     stateKeyframeB.objectStates[character.id].motion = { mode: 'clip', clipName: 'Idle_Loop', speed: 1 }
 
     const animation = compileStateKeyframesToAnimation([stateKeyframeA, stateKeyframeB], [character])
-    const yawTrack = animation.tracks.find((track) => track.propertyPath === 'transform.rotation.y')
+    const spans = animation.characterMotions.find((timeline) => timeline.objectId === character.id)!.spans
+    const walk = spans.find((span) => span.locomotion)!
+    expect(walk).toMatchObject({ startTime: 1, endTime: 4, motion: { clipName: 'Walk_Formal_Loop' } })
+    // 距离匹配：片段推进的时间 × 着地速度 = 走过的路程，速度怎么变都一样（cruise 有加减速）。
+    const motion = animation.spatialMotions.find((item) => item.objectId === character.id)!
+    for (const [from, to] of [[1.2, 1.5], [2.2, 2.6]] as const) {
+      const distance = sampleSpatialMotion(motion, to)!.x - sampleSpatialMotion(motion, from)!.x
+      const { duration, groundSpeed } = characterClipFacts('Walk_Formal_Loop')!
+      const clipAdvance = ((spanClipTime(walk, to) - spanClipTime(walk, from)) % duration + duration) % duration
+      expect(clipAdvance * (groundSpeed ?? 0)).toBeCloseTo(distance, 2)
+    }
+    expect(sampleCharacterHeading(animation.characterHeadings, character.id, 2.5)).toBeCloseTo(90, 0)
+    expect(spans.find((span) => span.startTime === 4)?.motion).toEqual({ mode: 'clip', clipName: 'Idle_Loop', speed: 1 })
+    const layers = resolveCharacterMotionLayers(animation.characterMotions[0], 4 + CHARACTER_CROSSFADE_SECONDS / 2, character.motion)
+    expect(layers.map((layer) => layer.motion.mode === 'clip' && layer.motion.clipName)).toEqual(['Idle_Loop', 'Walk_Formal_Loop'])
+    expect(layers[0].weight + layers[1].weight).toBeCloseTo(1, 6)
+  })
 
-    expect(yawTrack?.keyframes).toHaveLength(4)
-    expect(yawTrack?.keyframes[1].value).toBeCloseTo(90, 5)
-    expect(animation.motionSchedule).toEqual([{
-      objectId: character.id,
-      startTime: 1,
-      endTime: 2,
-      motion: { mode: 'clip', clipName: 'Walk_Formal_Loop', speed: 0.8 },
-      afterMotion: { mode: 'clip', clipName: 'Idle_Loop', speed: 1 },
-    }])
+  it('挥手做完后下一张卡再记挥手就再挥一次；还在挥的时候插卡接着挥', () => {
+    const character = createCharacterObject('Character', pickDefaultColor(1))
+    const wave = { mode: 'clip', clipName: 'Wave', speed: 1 } as const
+    const frames = [0, 1, 4].map((time, index) => createStateKeyframe([character], `卡${index}`, null, time))
+    for (const frame of frames) frame.objectStates[character.id].motion = wave
+    const spans = compileStateKeyframesToAnimation(frames, [character]).characterMotions[0].spans
+    expect(spans.map((span) => [span.startTime, span.motion.mode === 'clip' && span.motion.clipName])).toEqual([[0, 'Wave'], [2.4, 'Idle_Loop'], [4, 'Wave'], [6.4, 'Idle_Loop']])
+    // 两拳连打：第二拳的卡落在整帧 26/30 秒，比出拳片段 0.867 秒早不到半帧，也算第一拳打完。
+    const punch = { mode: 'clip', clipName: 'Punch_Jab', speed: 1 } as const
+    const punches = [0, 26 / 30].map((time, index) => createStateKeyframe([character], `拳${index}`, null, time))
+    for (const frame of punches) frame.objectStates[character.id].motion = punch
+    const punchSpans = compileStateKeyframesToAnimation(punches, [character]).characterMotions[0].spans
+    expect(punchSpans.filter((span) => span.motion.mode === 'clip' && span.motion.clipName === 'Punch_Jab')).toHaveLength(2)
   })
 
   it('两卡仅一个对象位置变化时，只为变化分量建轨道，关键帧时间与绝对时间点吻合', () => {

@@ -64,7 +64,9 @@ function cameraSampler(objects: StageObject[], animation: StageAnimationSampleSo
   const camera = objects.find((object): object is StageCameraObject => object.id === cameraId && object.type === 'camera')
   if (!camera) return null
   const target = camera.lookAt.mode === 'object' ? objects.find((object) => object.id === (camera.lookAt as { objectId: string }).objectId) : undefined
-  const involved = target ? [camera, target] : [camera]
+  // 跟拍区间的机位由主体决定，主体也要一起采样。
+  const followed = new Set((animation.cameraFollows ?? []).filter((entry) => entry.cameraId === cameraId).map((entry) => entry.follow.subjectId))
+  const involved = [camera, ...objects.filter((object) => object !== camera && (object === target || followed.has(object.id)))]
   return (time: number): { position: StageVec3; forward: StageVec3 } => {
     const sampled = sampleAnimationFrame(involved, animation, time).objects[0]
     return { position: sampled.transform.position, forward: forwardOf(sampled.transform.rotation) }

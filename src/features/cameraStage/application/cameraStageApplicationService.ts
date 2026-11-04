@@ -1,3 +1,4 @@
+import { characterBlockingSummary, readCharacterAt, type CharacterReadback } from './characterReadback'
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, findCameraStageProjectInstance, saveCameraStageProjectRuntime, bindCameraStageProjectOperation, readCameraStageProjectInstance, type CameraStageProjectSnapshot } from './cameraStageProjectRuntime'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { createLogger } from '@/core/logging'
@@ -106,6 +107,10 @@ export interface CameraStageSceneObservation {
   collisions: Array<{ objectIds: [string, string] }>
   /** 逐个放置的对象压进了哪片布景、压到几个成员（不逐个列成员）。 */
   setCollisions: Array<{ objectId: string; setId: string; memberCount: number }>
+  /** 每个角色的动作时间线；给了时刻时附这些时刻的位置、朝向与动作。 */
+  characters: Array<{ id: string; name: string; blocking: Array<Record<string, unknown>>; samples?: CharacterReadback[] }>
+  /** 摄像机跟拍的时段 */
+  follows: Array<{ cameraId: string; subjectId: string; startTime: number; endTime: number; frame: 'travel' | 'world' }>
 }
 
 export interface CameraStageSetSummary {
@@ -305,7 +310,7 @@ function summarizePlacementConflicts(ids: string[], objects: StageObject[]): { c
   return { conflicts, setConflicts: [...counts].map(([setId, memberCount]) => ({ setId, memberCount })) }
 }
 
-function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageSceneObservation {
+function sceneObservation(snapshot: CameraStageProjectSnapshot, times: readonly number[] = []): CameraStageSceneObservation {
   const obstacles = shotObstacles(snapshot.objects)
   return {
     project: { id: snapshot.id, name: snapshot.name },
@@ -334,6 +339,15 @@ function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageScen
     })),
     sets: liveStageSets(snapshot.sets, snapshot.objects).map((set) => summarizeStageSet(set, snapshot.objects)),
     ...sceneCollisions(snapshot.objects),
+    characters: snapshot.objects.filter((object) => object.type === 'character' && !object.setId).map((character) => ({
+      id: character.id,
+      name: character.name,
+      blocking: characterBlockingSummary(snapshot.animation, character.id),
+      ...(times.length > 0 ? { samples: times.flatMap((time) => readCharacterAt(snapshot.objects, snapshot.animation, character.id, time) ?? []) } : {}),
+    })),
+    follows: snapshot.animation.cameraFollows.map((entry) => ({
+      cameraId: entry.cameraId, subjectId: entry.follow.subjectId, startTime: entry.startTime, endTime: entry.endTime, frame: entry.follow.frame,
+    })),
   }
 }
 
@@ -356,8 +370,8 @@ const implementation = {
       .map((document) => ({ id: document.id, name: document.name, path: document.path }))
   },
 
-  async observeProject(projectId: string): Promise<CameraStageSceneObservation> {
-    return sceneObservation(await readDomainSnapshot(projectId))
+  async observeProject(projectId: string, times: readonly number[] = []): Promise<CameraStageSceneObservation> {
+    return sceneObservation(await readDomainSnapshot(projectId), times)
   },
 
   async readSnapshot(projectId: string): Promise<CameraStageProjectSnapshot> {

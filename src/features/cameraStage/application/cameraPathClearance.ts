@@ -36,16 +36,19 @@ export interface CameraPathClearance {
   belowGroundAt: number | null
 }
 
-function animationOf(animation: StageSceneAnimation, objectId: string): StageAnimationSampleSource {
+/** 只含这些对象的编译产物；跟拍的摄像机连同主体一起给，机位才是跟拍算出的位置。 */
+function animationOf(animation: StageSceneAnimation, objectIds: ReadonlySet<string>): StageAnimationSampleSource {
   return {
-    tracks: animation.tracks.filter((track) => track.objectId === objectId),
-    spatialMotions: animation.spatialMotions.filter((motion) => motion.objectId === objectId),
+    tracks: animation.tracks.filter((track) => objectIds.has(track.objectId)),
+    spatialMotions: animation.spatialMotions.filter((motion) => objectIds.has(motion.objectId)),
     cameraOrientations: [],
+    characterHeadings: animation.characterHeadings.filter((entry) => objectIds.has(entry.objectId)),
+    cameraFollows: animation.cameraFollows.filter((entry) => objectIds.has(entry.cameraId) && objectIds.has(entry.follow.subjectId)),
   }
 }
 
-function sampleObject(object: StageObject, source: StageAnimationSampleSource, time: number): StageObject {
-  return sampleAnimationFrame([object], source, time).objects[0]
+function sampleObject(objects: StageObject[], source: StageAnimationSampleSource, time: number): StageObject {
+  return sampleAnimationFrame(objects, source, time).objects[0]
 }
 
 export function checkCameraPathClearance(
@@ -56,9 +59,11 @@ export function checkCameraPathClearance(
 ): CameraPathClearance {
   const camera = objects.find((object) => object.id === cameraId)
   if (!camera || !(range.end > range.start)) return { obstructions: [], obstructionCount: 0, belowGroundAt: null }
-  const cameraSource = animationOf(animation, cameraId)
+  const followed = new Set(animation.cameraFollows.filter((entry) => entry.cameraId === cameraId).map((entry) => entry.follow.subjectId))
+  const cameraObjects = [camera, ...objects.filter((object) => followed.has(object.id))]
+  const cameraSource = animationOf(animation, new Set(cameraObjects.map((object) => object.id)))
   const timesFor = (count: number): number[] => Array.from({ length: count + 1 }, (_, index) => range.start + ((range.end - range.start) * index) / count)
-  const positionsAt = (times: number[]): StageVec3[] => times.map((time) => sampleObject(camera, cameraSource, time).transform.position)
+  const positionsAt = (times: number[]): StageVec3[] => times.map((time) => sampleObject(cameraObjects, cameraSource, time).transform.position)
 
   let times = timesFor(MIN_SAMPLES)
   let positions = positionsAt(times)
@@ -95,11 +100,11 @@ export function checkCameraPathClearance(
   const hits: CameraPathObstruction[] = []
   for (const object of objects) {
     if (!object.visible || object.type === 'camera') continue
-    const source = animated.has(object.id) ? animationOf(animation, object.id) : null
+    const source = animated.has(object.id) ? animationOf(animation, new Set([object.id])) : null
     const fixed = source ? null : stageObjectObstacle(object, CAMERA_CLEARANCE)
     if (fixed && !nearPath(fixed)) continue
     for (let index = 1; index < positions.length; index += 1) {
-      const obstacle = fixed ?? stageObjectObstacle(sampleObject(object, source!, times[index - 1]), CAMERA_CLEARANCE)
+      const obstacle = fixed ?? stageObjectObstacle(sampleObject([object], source!, times[index - 1]), CAMERA_CLEARANCE)
       if (segmentHitsObstacle(positions[index - 1], positions[index], obstacle)) {
         hits.push({ objectId: object.id, name: object.name, time: times[index - 1] })
         break

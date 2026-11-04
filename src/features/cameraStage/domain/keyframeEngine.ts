@@ -84,8 +84,36 @@ export function cubicBezierEase(
   return bezierAxis(y1, y2, t)
 }
 
-export function easeProgress(easing: StageEasing, u: number): number {
+/** 起步与停下各用多少秒加减速（cruise）：成人从站立到正常步速约两步。 */
+const CRUISE_RAMP_SECONDS = 0.8
+/** 不知道区间时长时（只有归一化时间）两端各占的比例 */
+const CRUISE_DEFAULT_RAMP = 0.2
+
+/**
+ * 匀速巡航的进度：速度在两端按五次平滑阶跃从 0 升到匀速、再降回 0，中间匀速，速度与加速度都连续。
+ * ramp 是一端加减速占总时长的比例。平滑阶跃 10x³−15x⁴+6x⁵ 的积分是 2.5x⁴−3x⁵+x⁶，在 1 处为 0.5，
+ * 所以匀速段速度为 1/(1−ramp)。
+ */
+export function cruiseProgress(u: number, ramp: number): number {
+  const clamped = Math.max(0, Math.min(1, u))
+  const r = Math.max(1e-6, Math.min(0.5, ramp))
+  const peak = 1 / (1 - r)
+  const integral = (x: number): number => x * x * x * x * (2.5 + x * (-3 + x))
+  if (clamped <= r) return peak * r * integral(clamped / r)
+  if (clamped >= 1 - r) return 1 - peak * r * integral((1 - clamped) / r)
+  return peak * (r / 2 + clamped - r)
+}
+
+/** cruise 在给定区间时长下一端加减速占的比例 */
+export function cruiseRamp(span: number | undefined): number {
+  if (span === undefined || !(span > 0)) return CRUISE_DEFAULT_RAMP
+  return Math.max(0.05, Math.min(0.4, CRUISE_RAMP_SECONDS / span))
+}
+
+/** span 是区间时长（秒），只有 cruise 用它定加减速段的长度。 */
+export function easeProgress(easing: StageEasing, u: number, span?: number): number {
   if (easing === 'hold') return u >= 1 ? 1 : 0
+  if (easing === 'cruise') return cruiseProgress(u, cruiseRamp(span))
   const [x1, y1, x2, y2] = resolveEasingControlPoints(easing)
   return cubicBezierEase(x1, y1, x2, y2, u)
 }
@@ -243,7 +271,7 @@ export function sampleTrack(
   const u = span <= KEYFRAME_TIME_EPSILON ? 0 : (time - a.time) / span
   const smoothValue = interpolateSmoothSegment(keyframes, i, u, type)
   if (smoothValue !== undefined) return smoothValue
-  const f = easeProgress(a.easing, u)
+  const f = easeProgress(a.easing, u, span)
   return interpolateValue(a.value, b.value, f, type)
 }
 

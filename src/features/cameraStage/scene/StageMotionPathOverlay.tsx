@@ -28,11 +28,12 @@ interface PathSegment {
 
 const SAMPLE_COUNT = 64
 const TIME_DOT_COUNT = 28
-const SPEED_EASING: Record<StageSpeedPreset, 'linear' | 'easeIn' | 'easeOut' | 'easeInOut'> = {
+const SPEED_EASING: Record<StageSpeedPreset, 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'cruise'> = {
   uniform: 'linear',
   easeInOut: 'easeInOut',
   fastStart: 'easeOut',
   slowStart: 'easeIn',
+  cruise: 'cruise',
 }
 
 function samePosition(a: StageVec3, b: StageVec3): boolean {

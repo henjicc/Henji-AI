@@ -150,8 +150,12 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
   //   版本 4 的程序不认识这个风格：画不出人行道与水面，重新生成会失败，所以最低可读版本提高到 5。
   // 版本 6 = 摄像机对象新增可选的运镜设备 rig 与注视跟随滞后 aimLag（秒）。版本 5 的程序原样保留这两个字段，
   //   只是不认识它们，按不模拟设备播放，不会误解其余内容，所以最低可读版本不变。
-  version: 6,
-  minReaderVersion: 5,
+  // 版本 7 = 角色走位与动作、摄像机跟拍：过渡细节的速度预设新增 cruise（起停平滑、中间匀速），摄像机过渡细节新增
+  //   跟拍 follow（主体、偏移、注视偏移、参照系、滞后），角色动作新增挥手 Wave。含义也变了：走跑动作按走过的路程推进
+  //   （motionOverride 里走跑片段的 speed 不再是播放倍速），卡内动作在静止的卡之间也会切换，一次性动作做完接后续动作。
+  //   版本 6 的程序会把 cruise、跟拍与挥手当成非法值丢掉，保存时改掉用户的走位与跟拍，所以最低可读版本提高到 7。
+  version: 7,
+  minReaderVersion: 7,
   contentSchema: cameraStageContentSchema,
   migrations: {
     // 1 → 2：旧文件没有生成过布景，补一个空列表。
@@ -170,6 +174,8 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
     },
     // 5 → 6：旧文件的摄像机没有运镜设备与注视跟随滞后，按不模拟设备、不滞后播放，内容原样保留。
     5: (content) => structuredClone(content as LooseRecord),
+    // 6 → 7：旧文件没有 cruise、跟拍与挥手，内容原样保留；走跑按路程推进与卡内动作切换是播放规则，不改数据。
+    6: (content) => structuredClone(content as LooseRecord),
   },
   createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [] }),
   isEmptyContent: isEmptyCameraStageContent,

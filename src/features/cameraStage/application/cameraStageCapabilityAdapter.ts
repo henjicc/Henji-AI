@@ -54,6 +54,8 @@ const OPERATION_SUMMARIES = {
   apply_camera_stage_camera_move: '应用摄像机语义运镜',
   generate_camera_stage_set: '生成三维布景',
   compose_camera_stage_shot: '按构图意图摆机位',
+  block_camera_stage_character: '编排角色走位与动作',
+  follow_camera_stage_character: '摄像机跟拍角色',
 } as const
 
 type CameraStagePlanRequest = Parameters<ApplicationControlExecutionEngine['plan']>[0]
@@ -129,8 +131,8 @@ function vec3Value(value: { x: number; y: number; z: number }): JsonValue {
   return { x: value.x, y: value.y, z: value.z }
 }
 
-export async function observeCameraStageScene(projectId: string): Promise<Record<string, unknown>> {
-  const scene = await cameraStageApplicationService.observeProject(projectId)
+export async function observeCameraStageScene(projectId: string, times: readonly number[] = []): Promise<Record<string, unknown>> {
+  const scene = await cameraStageApplicationService.observeProject(projectId, times)
   return { scene: { documentId: projectId, ...scene } }
 }
 
@@ -230,6 +232,29 @@ export async function composeCameraStageShotOperation(input: Record<string, unkn
       ? { ...item, data: { cameraIds: readback.shots.map(shot => shot.cameraId), stateKeyframeId: readback.stateKeyframeId } }
       : item),
   }
+}
+
+/**
+ * 走位与跟拍的读回同样从执行器证据提到结果顶层；证据只留引用。
+ */
+async function timelineOperation(capabilityId: 'block_camera_stage_character' | 'follow_camera_stage_character', input: Record<string, unknown>, context: CapabilityExecutionContext, fact: string): Promise<Record<string, unknown>> {
+  const transaction = await executeOperation(capabilityId, input as JsonValue, context, fact)
+  const evidence = transaction.evidence as Array<Record<string, unknown>>
+  const index = evidence.findIndex(item => item.fact === fact)
+  const readback = evidence[index].data as Record<string, unknown>
+  return {
+    ...transaction,
+    ...readback,
+    evidence: evidence.map((item, position) => position === index ? { ...item, data: { target: item.target ?? null } } : item),
+  }
+}
+
+export async function blockCameraStageCharacterOperation(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  return await timelineOperation('block_camera_stage_character', input, context, '角色走位与动作已写进时间轴。')
+}
+
+export async function followCameraStageCharacterOperation(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  return await timelineOperation('follow_camera_stage_character', input, context, '摄像机跟拍已写进时间轴。')
 }
 
 export async function verifyCameraStage(

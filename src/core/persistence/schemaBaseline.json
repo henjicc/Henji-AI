@@ -144,10 +144,10 @@
       "minReaderVersion": 7
     },
     "document.camera_stage": {
-      "version": 6,
+      "version": 7,
       "fingerprint": "8f6e711098996abdde254ee05d9cd2ba680bd184282fcb52dd1a4e2822f1a4cb",
       "supportedFrom": 1,
-      "minReaderVersion": 5
+      "minReaderVersion": 7
     },
     "document.image_document": {
       "version": 1,

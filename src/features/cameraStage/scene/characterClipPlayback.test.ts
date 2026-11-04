@@ -1,46 +1,32 @@
 import { AnimationClip, AnimationMixer, Group } from 'three'
 import { describe, expect, it, vi } from 'vitest'
-import type { ResolvedCharacterMotion } from '../domain/animationTypes'
+import type { CharacterMotionLayer } from '../domain/characterMotionTimeline'
 import { CharacterClipPlaybackController } from './characterClipPlayback'
 
-const clipMotion = (
-  timeOrigin: number,
-  speed: number,
-): ResolvedCharacterMotion => ({
-  motion: { mode: 'clip', clipName: 'Walk_Loop', speed },
-  timeOrigin,
+const clip = (clipName: 'Walk_Loop' | 'Idle_Loop', clipTime: number, weight: number): CharacterMotionLayer => ({
+  motion: { mode: 'clip', clipName, speed: 1 }, clipTime, weight,
 })
 
 describe('CharacterClipPlaybackController', () => {
-  it('同一 clip 连续帧只创建一次 action，但逐帧采用最新 timeOrigin 和 speed', () => {
+  it('交叉淡入淡出时两段片段按权重同时生效，片段时间取领域层给的值；回到姿态时停掉全部片段', () => {
     const root = new Group()
     const mixer = new AnimationMixer(root)
-    const clip = new AnimationClip('Walk_Loop', 2, [])
+    const walk = new AnimationClip('Walk_Loop', 1.333, [])
+    const idle = new AnimationClip('Idle_Loop', 2.5, [])
     const clipAction = vi.spyOn(mixer, 'clipAction')
-    const setTime = vi.spyOn(mixer, 'setTime')
-    const controller = new CharacterClipPlaybackController(mixer, root, [clip])
+    const controller = new CharacterClipPlaybackController(mixer, root, [walk, idle])
 
-    expect(controller.apply(clipMotion(1, 1), 1.25)).toBe(true)
-    expect(controller.apply(clipMotion(2, 2), 2.4)).toBe(true)
+    expect(controller.apply([clip('Walk_Loop', 0.4, 1)])).toBe(0)
+    expect(controller.apply([clip('Idle_Loop', 0.1, 0.25), clip('Walk_Loop', 0.5, 0.75)])).toBe(0)
+    const walkAction = mixer.existingAction(walk, root)!
+    const idleAction = mixer.existingAction(idle, root)!
+    expect(walkAction.time).toBeCloseTo(0.5)
+    expect(walkAction.getEffectiveWeight()).toBeCloseTo(0.75)
+    expect(idleAction.getEffectiveWeight()).toBeCloseTo(0.25)
+    expect(clipAction.mock.calls.filter(([candidate]) => candidate === walk)).toHaveLength(1)
 
-    expect(clipAction).toHaveBeenCalledTimes(1)
-    expect(setTime).toHaveBeenLastCalledWith(expect.closeTo(0.8))
-  })
-
-  it('clip/FK 边界和缺失片段立即停止旧 action，回到同片段时重新启用', () => {
-    const root = new Group()
-    const mixer = new AnimationMixer(root)
-    const clip = new AnimationClip('Walk_Loop', 2, [])
-    const action = mixer.clipAction(clip, root)
-    const stop = vi.spyOn(action, 'stop')
-    const controller = new CharacterClipPlaybackController(mixer, root, [clip])
-
-    expect(controller.apply(clipMotion(0, 1), 0.5)).toBe(true)
-    expect(controller.apply({ motion: { mode: 'pose' }, timeOrigin: 1 }, 1)).toBe(false)
-    expect(stop).toHaveBeenCalledTimes(1)
+    expect(controller.apply([{ motion: { mode: 'pose' }, clipTime: 0, weight: 1 }])).toBe(1)
     expect(controller.clipDriven).toBe(false)
-
-    expect(controller.apply(clipMotion(1, 1), 1.1)).toBe(true)
-    expect(controller.clipDriven).toBe(true)
+    expect(walkAction.isRunning()).toBe(false)
   })
 })

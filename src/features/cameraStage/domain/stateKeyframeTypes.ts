@@ -32,7 +32,8 @@ export interface StageStateKeyframeObjectState {
   motion?: StageCharacterMotion
 }
 
-export type StageSpeedPreset = 'uniform' | 'easeInOut' | 'fastStart' | 'slowStart'
+/** cruise：起步、停下各用一小段平滑加减速，中间匀速（人走路的时间律，角色走位写入它）。 */
+export type StageSpeedPreset = 'uniform' | 'easeInOut' | 'fastStart' | 'slowStart' | 'cruise'
 
 /**
  * 摄像机运镜预设判别联合（参数于 1.3 定稿）。
@@ -76,7 +77,21 @@ export interface StageSpatialPath {
   endInTangent: StageVec3
 }
 
-/** 单个对象在过渡段的细节覆盖：速度预设 / 错峰延迟 / 动作覆盖 */
+/**
+ * 摄像机跟拍（镜头参考 v7 起）：这段过渡里机位跟着主体走，不在两端机位之间插值。
+ * 机位 = 主体平滑后的位置 + 按参照系转过的 offset；注视点 = 主体实时位置 + 按参照系转过的 aimOffset。
+ * frame=travel 时参照系是主体平滑后的行进方向（跟在身后、走在前面、侧跟随路线转弯），world 时不转（沿街平移）。
+ * lag 是机位跟随主体的滞后（秒，临界阻尼），朝向另有摄像机的注视跟随滞后。
+ */
+export interface StageCameraFollow {
+  subjectId: string
+  offset: StageVec3
+  aimOffset: StageVec3
+  frame: 'travel' | 'world'
+  lag: number
+}
+
+/** 单个对象在过渡段的细节覆盖：速度预设 / 错峰延迟 / 动作覆盖 / 跟拍 */
 export interface StageStateKeyframeTransitionObjectDetail {
   speedPreset?: StageSpeedPreset
   /** 未设置 = 直线；设置后位置按三次贝塞尔空间路径编译。 */
@@ -85,6 +100,8 @@ export interface StageStateKeyframeTransitionObjectDetail {
   delay?: number
   /** 覆盖自动走跑推断得到的卡内动作 */
   motionOverride?: StageCharacterMotion
+  /** 仅摄像机：这段过渡里跟拍某个主体 */
+  follow?: StageCameraFollow
 }
 
 export interface StageStateKeyframeTransition {
@@ -199,7 +216,8 @@ function normalizeStateKeyframeTransitionObjectDetail(raw: unknown): StageStateK
     speedPreset === 'uniform' ||
     speedPreset === 'easeInOut' ||
     speedPreset === 'fastStart' ||
-    speedPreset === 'slowStart'
+    speedPreset === 'slowStart' ||
+    speedPreset === 'cruise'
   ) {
     detail.speedPreset = speedPreset
   }
@@ -209,6 +227,8 @@ function normalizeStateKeyframeTransitionObjectDetail(raw: unknown): StageStateK
   if (record.motionOverride !== undefined) {
     detail.motionOverride = normalizeCharacterMotion(record.motionOverride)
   }
+  const follow = normalizeCameraFollow(record.follow)
+  if (follow) detail.follow = follow
   const spatialPath = record.spatialPath
   if (spatialPath && typeof spatialPath === 'object') {
     const path = spatialPath as Record<string, unknown>
@@ -261,6 +281,31 @@ function normalizeStateKeyframeTransitionObjectDetail(raw: unknown): StageStateK
     }
   }
   return detail
+}
+
+function finiteVec3(value: unknown): StageVec3 | null {
+  if (!value || typeof value !== 'object') return null
+  const vec = value as Record<string, unknown>
+  const x = Number(vec.x)
+  const y = Number(vec.y)
+  const z = Number(vec.z)
+  return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null
+}
+
+function normalizeCameraFollow(raw: unknown): StageCameraFollow | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const record = raw as Record<string, unknown>
+  const offset = finiteVec3(record.offset)
+  const aimOffset = finiteVec3(record.aimOffset)
+  const lag = Number(record.lag)
+  if (typeof record.subjectId !== 'string' || !record.subjectId || !offset || !aimOffset) return undefined
+  return {
+    subjectId: record.subjectId,
+    offset,
+    aimOffset,
+    frame: record.frame === 'world' ? 'world' : 'travel',
+    lag: Number.isFinite(lag) && lag >= 0 ? Math.min(lag, 5) : 0.5,
+  }
 }
 
 function normalizeCameraMove(raw: unknown): StageCameraMove | undefined {

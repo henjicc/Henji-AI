@@ -53,4 +53,15 @@ describe('镜头参考文档内容', () => {
     const v6 = sample(6) as { objects: Array<Record<string, unknown>> }
     expect(v6.objects.find((object) => object.type === 'camera')).toMatchObject({ rig: 'crane', aimLag: 0.2 })
   })
+
+  it('v6 文件升到 v7 内容不变；v7 黄金样本读回角色的 cruise 走位、到达后挥手与摄像机跟拍', () => {
+    const sample = (version: number) => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/document.camera_stage/v${version}.json`, 'utf8')).content
+    expect(cameraStageDocumentKind.migrations[6]!(sample(6))).toEqual(sample(6))
+    const scene = sceneFromDocumentContent(sample(7))
+    expect(scene.stateKeyframes[0].transition.perObject.actor).toMatchObject({ speedPreset: 'cruise', motionOverride: { clipName: 'Walk_Loop' } })
+    expect(scene.stateKeyframes[0].transition.perObject.camera.follow).toMatchObject({ subjectId: 'actor', frame: 'travel', lag: 0.5 })
+    expect(scene.animation.cameraFollows).toEqual([expect.objectContaining({ cameraId: 'camera', startTime: 0, endTime: 4 })])
+    const spans = scene.animation.characterMotions.find((timeline) => timeline.objectId === 'actor')!.spans
+    expect(spans.map((span) => span.motion.mode === 'clip' && span.motion.clipName)).toEqual(['Walk_Loop', 'Wave', 'Idle_Loop'])
+  })
 })

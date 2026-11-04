@@ -102,6 +102,7 @@
     "release": "node scripts/release.cjs",
     "publish:sdk": "npm publish -w packages/ai-sdk --registry=https://registry.npmjs.org/ --access public",
     "gen:camera-stage-poses": "node scripts/generate-camera-stage-poses.cjs",
+    "gen:camera-stage-clips": "node scripts/generate-camera-stage-clips.mjs",
     "ui:tour": "node scripts/ui-tour.cjs",
     "ui:residue": "node scripts/ui-residue-scan.cjs",
     "check:ui-visual": "node scripts/ui-visual-audit.cjs",

@@ -6,6 +6,7 @@ import { createCameraStageReflectionRegistrations } from './cameraStageReflectio
 import { CAMERA_STAGE_MUTATION_ENTITY_TYPES, CameraStageMutationExecutor, CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'
 import { CameraStagePlacementOperationExecutor } from './cameraStagePlacementExecutor'
 import { CameraStageShotOperationExecutor } from './cameraStageShotExecutor'
+import { CameraStageBlockingOperationExecutor, CameraStageFollowOperationExecutor } from './cameraStageBlockingExecutors'
 import { CameraStageStateKeyframeCollectionExecutor } from './cameraStageStateKeyframeCollectionExecutor'
 import { CameraStageSetCollectionExecutor, CameraStageSetGenerateOperationExecutor } from './cameraStageSetExecutors'
 import { registerCameraStageCapabilityHandlers } from './registerCameraStageCapabilityHandlers'
@@ -22,6 +23,8 @@ export const cameraStageApplicationDomain: ApplicationDomainModule = {
     engine.registerOperationExecutor(new CameraStageMotionOperationExecutor(current))
     engine.registerOperationExecutor(new CameraStagePlacementOperationExecutor(current))
     engine.registerOperationExecutor(new CameraStageShotOperationExecutor(current))
+    engine.registerOperationExecutor(new CameraStageBlockingOperationExecutor(current))
+    engine.registerOperationExecutor(new CameraStageFollowOperationExecutor(current))
     engine.registerCollectionExecutor(new CameraStageStateKeyframeCollectionExecutor(current))
     engine.registerOperationExecutor(new CameraStageSetGenerateOperationExecutor(current))
     engine.registerCollectionExecutor(new CameraStageSetCollectionExecutor(current))

@@ -249,6 +249,12 @@ successData.compose_camera_stage_shot = { ...transaction, time: 2, stateKeyframe
   composition: { angle: 'eye_level', focalLength: 85, subjects: [{ objectId: 'b', name: '乙', inFrame: true, screenBox: { left: 0.4, top: 0.1, right: 0.9, bottom: 1 },
     center: { x: 0.67, y: 0.3 }, heightRatio: 2.9, shotSize: 'close', horizontal: 'right', lookRoom: 'open', visibleFraction: 1, keyVisible: true, occludedBy: [] }] },
 }] }
+successData.block_camera_stage_character = { ...transaction, characterId: 'actor', stateKeyframeIds: ['start', 'arrive'], createdStateKeyframes: 1, laterStateKeyframesAligned: 0, beats: [
+  { kind: 'move', startTime: 0, endTime: 4, summary: '走 5 米，4 秒', position: { x: 0, y: 0, z: -5 }, facing: 180, route: { length: 5, averageSpeed: 1.25, gait: 'walk', playbackRate: 1.28, detourPoints: 0, crossings: [] } },
+  { kind: 'action', startTime: 4, endTime: 6.4, summary: '挥手', position: { x: 0, y: 0, z: -5 }, facing: 180, action: { name: 'wave', clip: 'Wave', followUp: 'Idle_Loop' } },
+] }
+successData.follow_camera_stage_character = { ...transaction, cameraId: 'camera', subjectId: 'actor', startTime: 0, endTime: 5, offset: { x: 0, y: 1.6, z: -4 }, adjusted: null,
+  samples: [{ time: 0, shotSize: 'full', heightRatio: 0.8, horizontal: 'center', keyVisible: true }], occlusions: [] }
 const generationPlan = { action: 'generate_shot', sequenceRef, startSeconds: 1, durationSeconds: 5, trackRef: null, placement: 'add', references: [] }
 successData.generate_video_edit_in_place = { documentRef, taskRef: ref('generation.task', 'task'), plan: generationPlan, status: 'submitted', verified: true, message }
 successData.prepare_video_edit_in_place_generation = { documentRef, plan: generationPlan, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'video', options: {} }, stylePrompt: '', message }

@@ -342,13 +342,26 @@ const values: Record<string, unknown> = {
       { id: 'fx-comp', kind: 'builtin', name: '压缩器', enabled: true, amount: 1, builtin: { id: 'compressor', params: { amount: 40, speed: 'normal', makeup: true } } },
     ],
     chainBypassed: false, output: { volumeDb: -1.5, loudness: { enabled: true, targetLufs: -16, gainDb: 3.5 } } },
-  // 镜头参考 v6：自然路网城市（弯曲程度、河流、公园），装饰含任意形状铺装，与指回它的一栋楼（朝向跟着街）；
-  // 雾距用超过旧上限 200 米的值；摄像机带运镜设备与注视跟随滞后。
+  // 镜头参考 v7：自然路网城市（弯曲程度、河流、公园），装饰含任意形状铺装，与指回它的一栋楼（朝向跟着街）；
+  // 雾距用超过旧上限 200 米的值；摄像机带运镜设备与注视跟随滞后；角色走一段 cruise 路线到达后挥手，摄像机跟拍。
   'document.camera_stage': (() => {
     const { set, objects } = buildStageSet([], { layout: { preset: 'city', style: 'organic', width: 200, depth: 200, seed: 7 }, name: '城市' })
     const fixedSet = { ...set, id: 'city' }
     const tower = { ...objects[0], id: 'tower', setId: 'city' }
-    return { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5], rig: 'crane', aimLag: 0.2 }, tower], activeCameraId: 'camera', sceneSettings: { sky: {}, fog: { enabled: true, distance: 1200 } }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }], sets: [fixedSet] }
+    const transform = (x: number, z: number, yaw: number) => ({ position: { x, y: 0, z }, rotation: { x: 0, y: yaw, z: 0 }, scale: { x: 1, y: 1, z: 1 } })
+    const actor = { id: 'actor', name: '甲', type: 'character', transform: transform(0, 0, 180), color: '#ffffff', visible: true, variant: 'standard', pose: { joints: {} }, motion: { mode: 'pose' } }
+    const walk = { kind: 'bezier', source: { kind: 'custom' }, startOutTangent: { x: 0.3, y: 0, z: -0.6 }, knots: [{ id: 'turn', position: { x: 1, y: 0, z: -2 }, inTangent: { x: -0.2, y: 0, z: 0.4 }, outTangent: { x: 0.2, y: 0, z: -0.4 } }], endInTangent: { x: 0, y: 0, z: 0.6 } }
+    const follow = { subjectId: 'actor', offset: { x: 0, y: 1.6, z: -3 }, aimOffset: { x: 0, y: 1.5, z: 2 }, frame: 'travel', lag: 0.5 }
+    return {
+      objects: [{ id: 'camera', name: '主摄影机', type: 'camera', transform: { position: { x: 0, y: 1.6, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } }, color: '#ffffff', visible: true,
+        fov: 50, lookAt: { mode: 'manual', target: { x: 0, y: 1, z: 0 } }, aspectRatio: { preset: '16:9', ratio: 16 / 9 }, effectors: [], rig: 'crane', aimLag: 0.2 }, tower, actor], activeCameraId: 'camera', sceneSettings: { sky: {}, fog: { enabled: true, distance: 1200 } },
+      stateKeyframes: [
+        { id: 'key', time: 0, objects: {}, objectStates: { actor: { transform: transform(0, 0, 180), color: '#ffffff', motion: { mode: 'clip', clipName: 'Idle_Loop', speed: 1 } } },
+          transition: { perObject: { actor: { speedPreset: 'cruise', motionOverride: { mode: 'clip', clipName: 'Walk_Loop', speed: 1 }, spatialPath: walk }, camera: { follow } } } },
+        { id: 'arrive', time: 4, objectStates: { actor: { transform: transform(1, -4, 180), color: '#ffffff', motion: { mode: 'clip', clipName: 'Wave', speed: 1 } } }, transition: { perObject: {} } },
+      ],
+      sets: [fixedSet],
+    }
   })(),
   'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id, memories: [{ id: 'brand', content: '这期品牌色用红色。', source: 'user', revision: 1, updatedAt: timestamp }] }),

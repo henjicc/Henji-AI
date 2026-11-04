@@ -19,6 +19,7 @@ const SPEED_OPTIONS: Array<{ label: string; value: StageSpeedPreset }> = [
   { label: '平滑', value: 'easeInOut' },
   { label: '快速起步', value: 'fastStart' },
   { label: '缓慢起步', value: 'slowStart' },
+  { label: '起停自然', value: 'cruise' },
 ]
 
 interface TransitionPopoverProps {

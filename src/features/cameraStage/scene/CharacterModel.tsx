@@ -5,7 +5,7 @@ import { AnimationMixer, Bone, Euler, Group, Mesh, MeshStandardMaterial, Quatern
 import { SkeletonUtils } from 'three-stdlib'
 import { getBodyVariant } from '../domain/bodyVariants'
 import { DEFAULT_CHARACTER_MOTION } from '../domain/characterMotion'
-import { resolveCharacterMotionAtTime } from '../domain/animationTypes'
+import { resolveCharacterMotionLayers } from '../domain/characterMotionTimeline'
 import { POSE_JOINT_BONES } from '../domain/poseTypes'
 import type { StagePoseJointId } from '../domain/poseTypes'
 import { poseJointPath } from '../domain/animatableProps'
@@ -26,6 +26,7 @@ import { CharacterClipPlaybackController } from './characterClipPlayback'
 
 const DEG2RAD = Math.PI / 180
 const HEAD_BONE_NAME = 'Head'
+const FK_JOINT_BY_BONE = new Map(Object.entries(POSE_JOINT_BONES).map(([jointId, boneName]) => [boneName, jointId as StagePoseJointId]))
 
 interface CharacterRig {
   scene: Group
@@ -73,7 +74,7 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
   const rig = useMemo(() => buildRig(gltf.scene as Group), [gltf.scene])
   const mixer = useMemo(() => new AnimationMixer(rig.scene), [rig])
   const material = useMemo(() => new MeshStandardMaterial(), [])
-  const motionSchedule = useCameraStageStore((state) => state.animation.motionSchedule)
+  const motionTimeline = useCameraStageStore((state) => state.animation.characterMotions.find((timeline) => timeline.objectId === object.id))
   const clipController = useMemo(
     () => new CharacterClipPlaybackController(mixer, rig.scene, gltf.animations),
     [gltf.animations, mixer, rig.scene],
@@ -102,51 +103,57 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
     material.emissiveIntensity = selected ? 0.35 : 0
   }, [material, object.color, selected])
 
-  const applyFkPose = useCallback(() => {
+  /**
+   * 把骨骼写成（或按 weight 混向）FK 姿态。weight=1 直接写入；小于 1 时骨骼已由片段驱动，
+   * 再向姿态插值，片段与姿态之间的切换因此也是交叉淡入淡出。未受控的骨骼姿态里就是绑定姿态。
+   */
+  const applyFkPose = useCallback((weight = 1) => {
     const euler = new Euler()
     const offset = new Quaternion()
-    for (const [jointId, boneName] of Object.entries(POSE_JOINT_BONES)) {
-      const bone = rig.bones.get(boneName)
+    const target = new Quaternion()
+    for (const [boneName, bone] of rig.bones) {
       const rest = rig.restQuaternions.get(boneName)
-      if (!bone || !rest) continue
-      const pose = object.pose.joints[jointId as StagePoseJointId]
+      if (!rest) continue
+      const jointId = FK_JOINT_BY_BONE.get(boneName)
+      const pose = jointId ? object.pose.joints[jointId] : undefined
+      target.copy(rest)
       if (pose) {
         euler.set(pose.x * DEG2RAD, pose.y * DEG2RAD, pose.z * DEG2RAD, 'XYZ')
         offset.setFromEuler(euler)
-        bone.quaternion.copy(rest).multiply(offset)
-      } else {
-        bone.quaternion.copy(rest)
+        target.multiply(offset)
       }
+      if (weight >= 1) bone.quaternion.copy(target)
+      else bone.quaternion.slerp(target, weight)
     }
 
     const pelvis = rig.bones.get(POSE_JOINT_BONES.body)
     if (pelvis) {
       const { hipsOffset } = object.pose
-      pelvis.position
-        .copy(rig.pelvisRestPosition)
-        .add(hipsOffset ? new Vector3(hipsOffset.x, hipsOffset.y, hipsOffset.z) : new Vector3())
+      const position = rig.pelvisRestPosition.clone().add(hipsOffset ? new Vector3(hipsOffset.x, hipsOffset.y, hipsOffset.z) : new Vector3())
+      if (weight >= 1) pelvis.position.copy(position)
+      else pelvis.position.lerp(position, weight)
     }
   }, [object.pose, rig])
 
-  // 同一 runtime 通知内决定 clip/FK 并推进 mixer；先于本帧轨道 applier，边界不会晚 50ms。
+  // 同一 runtime 通知内决定各动作层并推进 mixer；先于本帧轨道 applier，边界不会晚 50ms。
   useEffect(() => {
     let initialized = false
     const applyAt = (time: number): void => {
-      const resolved = resolveCharacterMotionAtTime(
-        motionSchedule,
-        object.id,
-        time,
-        object.motion ?? DEFAULT_CHARACTER_MOTION,
-      )
+      const layers = resolveCharacterMotionLayers(motionTimeline, time, object.motion ?? DEFAULT_CHARACTER_MOTION)
       const wasClipDriven = clipDrivenRef.current
-      clipDrivenRef.current = clipController.apply(resolved, time)
-      // FK 静态姿态只在首次或 clip→pose 边界恢复；逐帧 FK 动画继续由下方 applier 写骨骼。
-      if (!clipDrivenRef.current && (!initialized || wasClipDriven)) applyFkPose()
+      const poseWeight = clipController.apply(layers)
+      clipDrivenRef.current = poseWeight < 1
+      // 完全是姿态时，FK 静态姿态只在首次或片段→姿态边界恢复；逐帧 FK 动画继续由下方 applier 写骨骼。
+      if (clipDrivenRef.current) {
+        if (poseWeight > 0) applyFkPose(poseWeight)
+      } else if (!initialized || wasClipDriven) {
+        applyFkPose()
+      }
       initialized = true
     }
     applyAt(readCameraStagePlaybackRuntime().time)
     return subscribeCameraStagePlaybackRuntime((runtime) => applyAt(runtime.time))
-  }, [applyFkPose, clipController, motionSchedule, object.id, object.motion])
+  }, [applyFkPose, clipController, motionTimeline, object.motion])
 
   // 播放期命令式采样：clip 生效时骨骼只由 mixer 驱动，避免与关节关键帧采样双写。
   useEffect(() => {

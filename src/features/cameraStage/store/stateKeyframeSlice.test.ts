@@ -154,7 +154,7 @@ describe('状态关键帧模式 store 分片', () => {
     const state = useCameraStageStore.getState()
     expect(state.stateKeyframes[1].objectStates[objectId].transform.position.x).toBe(4)
     expect(state.animation.tracks.some((track) => track.propertyPath === 'transform.position.x')).toBe(true)
-    expect(state.animation.motionSchedule).toEqual([])
+    expect(state.animation.characterMotions).toEqual([])
 
     useCameraStageStore.temporal.getState().undo()
     const undone = useCameraStageStore.getState()

@@ -3,6 +3,7 @@ import { CAMERA_STAGE_MOTION_APPLICATION_CAPABILITIES } from './cameraStageMotio
 import { CAMERA_STAGE_RENDER_APPLICATION_CAPABILITIES } from './cameraStageRenderApplicationCapabilities'
 import { CAMERA_STAGE_SCENE_APPLICATION_CAPABILITIES } from './cameraStageSceneApplicationCapabilities'
 import { composeCameraStageShotCapability } from './cameraStageShotApplicationCapabilities'
+import { blockCameraStageCharacterCapability, followCameraStageCharacterCapability } from './cameraStageBlockingApplicationCapabilities'
 
 /*
  * 镜头参考的内容能力（场景、运镜、渲染）。文档本身的列出、新建、打开、改名、移动、副本、删除
@@ -12,5 +13,7 @@ export const CAMERA_STAGE_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinit
   ...CAMERA_STAGE_SCENE_APPLICATION_CAPABILITIES,
   ...CAMERA_STAGE_MOTION_APPLICATION_CAPABILITIES,
   composeCameraStageShotCapability,
+  blockCameraStageCharacterCapability,
+  followCameraStageCharacterCapability,
   ...CAMERA_STAGE_RENDER_APPLICATION_CAPABILITIES,
 ]

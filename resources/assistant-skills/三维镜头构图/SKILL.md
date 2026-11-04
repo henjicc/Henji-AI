@@ -59,7 +59,35 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 - **建立镜头**：开场交代环境用 `size: extreme_long` 或 `long`，`angle: high` 或 `birds_eye`，`lens: wide`；主体可以是主角，也可以是布景里的地点 `{ point, height }`。
 - **过肩正反打**：先建两台摄像机，`relation: reverse_pair`、`size: close`（或 `closeup`），一次定好正打和反打，两台自动在轴线同侧；对话开场再加一个 `two_shot` 交代两人关系。切换机位用 `change_application_entities` 改各状态关键帧的 `camera_stage.state_keyframe.camera_ref`。
 - **揭示**：终点先定——在终点时刻 `at.time` 给清楚的构图；起点在更早的时刻让主体被前景挡住（`avoidOcclusion: false`，从前景物体后面的 `view` 拍），中间交给运镜引擎；也可以起点定好后用 `apply_camera_stage_camera_move` 的 `truck` 或 `crane` 移出遮挡。
-- **跟拍起点**：`view: back`、`size: medium`、`angle: eye_level`，摄像机设备 `camera_stage.camera.rig` 设 `steadicam`；在起点和终点时刻各定一次构图，中间由平滑运动引擎接上（衔接设 `continuity: smooth`）。
+- **跟拍**：主体会走动时用 `follow_camera_stage_character`（见下一节），不要在起点终点各定一次构图让引擎去接。
+
+## 角色走位、动作与跟拍
+
+**先排走位，再定机位、做运镜和跟拍。** 走位每一拍都写成状态关键帧，后排的运镜才对得上人的节拍。
+
+`block_camera_stage_character` 用按顺序的节拍 `beats` 给一个角色排戏，一次调用一个撤销点：
+
+| 节拍 | 参数 |
+| --- | --- |
+| 走到某处 `move` | `to` 目的地、`via` 途经点：地面坐标 `{ point: {x, z} }` 或对象 `{ objectId, side, distance }`（站在门、桌子、另一个人旁边，`side` 为 near / front / back / left / right）；时间三选一：`duration` 走多久、`endTime` 第几秒走到、`speed` 米/秒，都省略按步态默认速度；`gait`：walk 走 1.3、formal_walk 端正地走、crouch_walk 蹲着走、jog 跑 3、sprint 冲刺 7（米/秒）；`avoidObstacles` 默认绕开挡路的对象 |
+| 转向 `turn` | `toward` 一个地点或对象（含摄像机：转身面对镜头），或 `{ yaw }`；`duration` 省略按角度，转 180° 约 1 秒 |
+| 做动作 `action` | `action`：idle 待机、talk 站着说话、wave 挥手、sit_down 坐下、sit 坐着、stand_up 起身、interact 伸手操作、pick_up 拿东西、crouch 蹲着、dance、jump、fall 倒地、hit 受击等；一次性动作做完自己接后续（坐下后坐着，挥手后待机），循环动作给 `duration` 就做这么久再回到之前的动作 |
+| 停一会 `wait` | `duration` |
+
+每拍默认紧接上一拍，`at` 指定开始时刻，`startTime` 是第一拍的时刻（默认 0）。应用自己规划绕障路线、起步停下平滑加减速、朝向沿前进方向转；走跑动作按走过的路程推进，脚不打滑；动作之间交叉淡入淡出。走位接管角色从第一拍起的时间轴：之后已有的状态关键帧里角色都改成走位终点（结果的 `laterStateKeyframesAligned`）。
+
+结果 `beats[]` 读回每拍的实际起止、终点位置与朝向；走动附 `route`（路线长度、平均速度、步态、`playbackRate` 动作放慢倍数、`detourPoints` 绕障拐点、`crossings` 仍穿过的对象）。出现 `crossings` 或 `blockingHint` 时换途经点或目的地重排。
+
+`follow_camera_stage_character` 让摄像机在 `startTime`–`endTime` 跟着走动的角色拍，`size`、`position`、`angle`、`lens` 取值同定机位；`view` 相对行进方向：back 跟在身后、front 在前面倒退拍、left/right 侧跟；`frame: travel` 机位随路线转弯，`world` 方向不变（沿街平移）；`lag` 机位滞后秒数（默认 0.5，0 为硬贴）。起止时刻放在角色的状态关键帧上或角色停着的时候，主体停下后多留一秒。默认预判整段里主体会不会被挡，被挡就换方位或抬高并在 `adjusted` 里说明；`samples[]` 是几帧实际构图，`occlusions[]` 是被挡时段。跟拍时段里再给这台摄像机定机位（`at`）、做运镜或拖动机位，会结束那张卡前后两段的跟拍；整段重跟就再调一次。
+
+### 常见配方
+
+- **走到门口停下，转身挥手**：`move`（`to: { objectId: 门, side: front }`）→ `turn`（`toward: { objectId: 摄像机 }`）→ `action wave`。
+- **跟着走的背影**：先排 `move`，再 `follow_camera_stage_character`（`view: back`、`size: full` 或 `medium`、`endTime` = 到达时刻 + 1）。
+- **侧跟**：`view: left` 或 `right`，直街用 `frame: world`。
+- **坐下说话**：`move` 到椅子 → `turn` 背对椅子 → `action sit_down` → `action sit_talk`（给 `duration`）。
+
+`observe_camera_stage_scene` 的 `characters[].blocking` 是每个角色的动作时间线；传 `times` 读回这些时刻角色的位置、朝向（0 朝 +Z、90 朝 +X）、正在做的动作与速度，`follows` 列出跟拍时段。
 
 ## 观察与验证
 

@@ -620,7 +620,8 @@
         "3": "f16edd63ba079bd78330fd7eab55adefa830709a2aaca7c6a122665ec31e9b99",
         "4": "f16edd63ba079bd78330fd7eab55adefa830709a2aaca7c6a122665ec31e9b99",
         "5": "8f6e711098996abdde254ee05d9cd2ba680bd184282fcb52dd1a4e2822f1a4cb",
-        "6": "8f6e711098996abdde254ee05d9cd2ba680bd184282fcb52dd1a4e2822f1a4cb"
+        "6": "8f6e711098996abdde254ee05d9cd2ba680bd184282fcb52dd1a4e2822f1a4cb",
+        "7": "8f6e711098996abdde254ee05d9cd2ba680bd184282fcb52dd1a4e2822f1a4cb"
       },
       "readers": {
         "1": 1,
@@ -628,7 +629,8 @@
         "3": 3,
         "4": 4,
         "5": 5,
-        "6": 5
+        "6": 5,
+        "7": 7
       },
       "samples": {
         "v1.json": "d2e82b88d6f5f0994ad30150db1ab1714f2a6965f524519fa9ceda368484153b",
@@ -636,7 +638,8 @@
         "v3.json": "7795fe000990797c9206c6b54f1c4ac3d80104fc1f0969dffbf07e70060c2c90",
         "v4.json": "a77dbfb606c3c4e6fab57857b3043fe633764e4ed348d8cf76873cf1fcb534b7",
         "v5.json": "ca9027e9d6b21c352836a95369c426b808d3acbd2d2bc0d1ac53b5a1f5e4a3c0",
-        "v6.json": "cf1645203581052a407c9a26eccf06f8bc5754e1c3af364c14aa9f548a827ad9"
+        "v6.json": "cf1645203581052a407c9a26eccf06f8bc5754e1c3af364c14aa9f548a827ad9",
+        "v7.json": "68513e5e02e8d21921c4c6de7bef50d37a1e6be5c80731a8922d8c4c9bfdb268"
       }
     },
     "document.image_document": {

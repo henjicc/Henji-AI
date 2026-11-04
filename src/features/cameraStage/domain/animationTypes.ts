@@ -8,15 +8,18 @@
 
 import type { StageCameraLookAt, StageCameraRig, StageVec3 } from './sceneTypes'
 import type { StageCharacterMotion } from './characterMotion'
-import type { StageSpatialPath } from './stateKeyframeTypes'
+import type { StageCameraFollow, StageSpatialPath } from './stateKeyframeTypes'
 
 /** 关键帧可承载三类值：标量（数值）、Vec3（逐分量）、颜色（hex 字符串） */
 export type StageKeyframeValue = number | StageVec3 | string
 
 export type StageAnimatableValueType = 'scalar' | 'vec3' | 'color'
 
-/** 缓动预设名，参数对齐 CSS 标准 ease 系列 */
-export type StageEasingPreset = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'hold'
+/**
+ * 缓动预设名，前四种参数对齐 CSS 标准 ease 系列。cruise 是人走路的时间律：起步、停下各用一小段平滑加减速，
+ * 中间匀速（见 keyframeEngine.cruiseProgress）。
+ */
+export type StageEasingPreset = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'cruise' | 'hold'
 
 /**
  * 自定义贝塞尔缓动：等价 CSS `cubic-bezier(out[0], out[1], in[0], in[1])`。
@@ -48,34 +51,45 @@ export interface StageTrack {
   keyframes: StageKeyframe[]
 }
 
-/** 状态关键帧编译出的角色临时动作区间；结束后切换到目标状态关键帧动作。 */
-export interface StageCharacterMotionScheduleEntry {
+/**
+ * 角色的一段动作（状态关键帧编译出的运行时产物，见 characterMotionTimeline）。
+ * clock 决定片段内时间怎么推进：time 按时间（(t − origin) × rate）；distance 按走过的路程
+ * （startClipTime + 路程 ÷ groundSpeed，路程按固定网格取样），走跑时脚因此钉在地上。
+ */
+export interface StageCharacterMotionSpan {
+  startTime: number
+  /** 下一段开始的时刻；最后一段为 Infinity */
+  endTime: number
+  motion: StageCharacterMotion
+  clock:
+    | { kind: 'time'; origin: number; rate: number }
+    | { kind: 'distance'; startClipTime: number; groundSpeed: number; gridStart: number; gridStep: number; distances: number[] }
+  /** 走跑或原地转身踩步：路程（米）、平均速度与片段放慢/加快的倍数 */
+  locomotion?: { kind: 'walk' | 'turn'; distance: number; averageSpeed: number; playbackRate: number }
+  /** 紧接上一段同一个走跑片段（途经卡）：相位接着走，不交叉淡入淡出 */
+  continuesPrevious?: boolean
+}
+
+export interface StageCharacterMotionTimeline {
+  objectId: string
+  spans: StageCharacterMotionSpan[]
+}
+
+/** 角色走跑期间的朝向表（度，已解包），沿实际轨迹的前进方向。 */
+export interface StageCharacterHeadingEntry {
   objectId: string
   startTime: number
   endTime: number
-  motion: StageCharacterMotion
-  afterMotion: StageCharacterMotion
+  gridStep: number
+  yaws: number[]
 }
 
-export interface ResolvedCharacterMotion {
-  motion: StageCharacterMotion
-  timeOrigin: number
-}
-
-/** 解析指定时刻的角色动作；区间结束后沿用目标状态关键帧的动作，直到后续区间覆盖。 */
-export function resolveCharacterMotionAtTime(
-  schedule: StageCharacterMotionScheduleEntry[],
-  objectId: string,
-  time: number,
-  fallback: StageCharacterMotion,
-): ResolvedCharacterMotion {
-  let resolved: ResolvedCharacterMotion = { motion: fallback, timeOrigin: 0 }
-  for (const entry of schedule) {
-    if (entry.objectId !== objectId || time < entry.startTime) continue
-    if (time < entry.endTime) return { motion: entry.motion, timeOrigin: entry.startTime }
-    resolved = { motion: entry.afterMotion, timeOrigin: entry.endTime }
-  }
-  return resolved
+/** 摄像机在一段时间内跟拍某个主体（由过渡细节 follow 编译而来，相邻同设置的区间合并）。 */
+export interface StageCameraFollowEntry {
+  cameraId: string
+  startTime: number
+  endTime: number
+  follow: StageCameraFollow
 }
 
 /** 空间路径上的一段过渡；位置在运行时按弧长取点，不预先烤成折线。 */
@@ -109,9 +123,11 @@ export type StageCameraOrientationEntry =
 /** 场景级动画状态：轨道集合 + 时长 + 帧率 */
 export interface StageSceneAnimation {
   tracks: StageTrack[]
-  motionSchedule: StageCharacterMotionScheduleEntry[]
+  characterMotions: StageCharacterMotionTimeline[]
+  characterHeadings: StageCharacterHeadingEntry[]
   spatialMotions: StageSpatialMotion[]
   cameraOrientations: StageCameraOrientationEntry[]
+  cameraFollows: StageCameraFollowEntry[]
   /** 秒 */
   duration: number
   /** 仅显示/导出用 */
@@ -120,6 +136,7 @@ export interface StageSceneAnimation {
 
 /** 单帧求值需要的编译产物；播放、scrub 与离屏导出共用。 */
 export type StageAnimationSampleSource = Pick<StageSceneAnimation, 'tracks' | 'spatialMotions' | 'cameraOrientations'>
+  & Partial<Pick<StageSceneAnimation, 'characterMotions' | 'characterHeadings' | 'cameraFollows'>>
 
 /** 播放界面态（不进撤销历史） */
 export interface StagePlaybackState {
@@ -133,7 +150,7 @@ export const CAMERA_STAGE_DEFAULT_DURATION = 5
 export const CAMERA_STAGE_DEFAULT_FPS = 30
 
 export function createDefaultAnimation(): StageSceneAnimation {
-  return { tracks: [], motionSchedule: [], spatialMotions: [], cameraOrientations: [], duration: CAMERA_STAGE_DEFAULT_DURATION, fps: CAMERA_STAGE_DEFAULT_FPS }
+  return { tracks: [], characterMotions: [], characterHeadings: [], spatialMotions: [], cameraOrientations: [], cameraFollows: [], duration: CAMERA_STAGE_DEFAULT_DURATION, fps: CAMERA_STAGE_DEFAULT_FPS }
 }
 
 export function createDefaultPlayback(): StagePlaybackState {

@@ -7,11 +7,13 @@
 
 import { getAnimatablePropByPath } from '../domain/animatableProps'
 import { createAimLagSampler, type AimLagSampler } from '../domain/cameraAimLag'
+import { createCameraFollowSampler, findCameraFollowEntry, type CameraFollowSampler } from '../domain/cameraFollow'
+import { heldCharacterMotionAt, sameCharacterMotion, sampleCharacterHeading } from '../domain/characterMotionTimeline'
 import { resolveCameraAimLag } from '../domain/cameraRigs'
 import { resolveCameraLookAtTarget, rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import { sampleTrack } from '../domain/keyframeEngine'
 import { sampleSpatialMotion } from '../domain/spatialPath'
-import type { StageAnimationSampleSource, StageCameraOrientationEntry, StageSceneAnimation } from '../domain/animationTypes'
+import type { StageAnimationSampleSource, StageCameraFollowEntry, StageCameraOrientationEntry, StageSceneAnimation } from '../domain/animationTypes'
 import type { StageCameraObject, StageObject, StageVec3 } from '../domain/sceneTypes'
 
 export interface SampledAnimationFrame {
@@ -63,8 +65,13 @@ function resolveDirectCameraRotation(
   objects: StageObject[],
   orientations: StageCameraOrientationEntry[],
   time: number,
+  followAim?: StageVec3,
 ): StageVec3 {
   const { position, rotation } = camera.transform
+  if (followAim) {
+    if (Math.hypot(followAim.x - position.x, followAim.y - position.y, followAim.z - position.z) < 1e-6) return rotation
+    return rotationFromPositionAndTarget(position, followAim, rotation.z)
+  }
   let lookAt = camera.lookAt
   if (lookAt.mode === 'manual') {
     const entry = findOrientationEntry(orientations, camera.id, time)
@@ -93,6 +100,9 @@ function sourceFor(animation: StageAnimationSampleSource, objectIds: ReadonlySet
     tracks: animation.tracks.filter((track) => objectIds.has(track.objectId)),
     spatialMotions: animation.spatialMotions.filter((motion) => objectIds.has(motion.objectId)),
     cameraOrientations: animation.cameraOrientations.filter((entry) => objectIds.has(entry.objectId)),
+    characterMotions: (animation.characterMotions ?? []).filter((timeline) => objectIds.has(timeline.objectId)),
+    characterHeadings: (animation.characterHeadings ?? []).filter((entry) => objectIds.has(entry.objectId)),
+    cameraFollows: (animation.cameraFollows ?? []).filter((entry) => objectIds.has(entry.cameraId) && objectIds.has(entry.follow.subjectId)),
   }
 }
 
@@ -102,6 +112,7 @@ function animatedUntil(source: StageAnimationSampleSource): number {
   for (const track of source.tracks) end = Math.max(end, track.keyframes[track.keyframes.length - 1]?.time ?? 0)
   for (const motion of source.spatialMotions) end = Math.max(end, motion.segments[motion.segments.length - 1]?.endTime ?? 0)
   for (const entry of source.cameraOrientations) end = Math.max(end, entry.endTime)
+  for (const entry of source.cameraFollows ?? []) end = Math.max(end, entry.endTime)
   return end
 }
 
@@ -168,9 +179,11 @@ function aimLagSamplerFor(
   delay: number,
 ): AimLagSampler | null {
   const targetId = camera.lookAt.mode === 'object' ? camera.lookAt.objectId : null
-  const target = targetId ? objects.find((object) => object.id === targetId) : undefined
-  const involved = [camera, ...(target ? [target] : [])]
-  const key = JSON.stringify([camera.id, delay, camera.lookAt, target?.type ?? null, undrivenTransform(involved, drivenComponents(animation))])
+  const followed = new Set((animation.cameraFollows ?? []).filter((entry) => entry.cameraId === camera.id).map((entry) => entry.follow.subjectId))
+  const others = objects.filter((object) => object.id !== camera.id && (object.id === targetId || followed.has(object.id)))
+  const target = targetId ? others.find((object) => object.id === targetId) : undefined
+  const involved = [camera, ...others]
+  const key = JSON.stringify([camera.id, delay, camera.lookAt, target?.type ?? null, others.map((object) => object.id), undrivenTransform(involved, drivenComponents(animation))])
   let byKey = aimLagByAnimation.get(animation)
   if (!byKey) {
     byKey = new Map()
@@ -198,6 +211,62 @@ function aimLagSamplerFor(
   return sampler
 }
 
+/*
+ * 跟拍要从跟拍开始积分主体位置。与注视滞后同样先按编译产物对象、再按输入内容（这一段跟拍、主体的轨道与
+ * 路径链、没被驱动的变换分量）缓存，编辑无关对象时不必重新积分。
+ */
+const followByAnimation = new WeakMap<StageAnimationSampleSource, Map<string, CameraFollowSampler>>()
+const followByContent = new Map<string, CameraFollowSampler>()
+const FOLLOW_CACHE_SIZE = 16
+
+/** 跟拍开始时的行进方向：主体在这段时间里第一次走出 0.3 米的方向；一直没走动就取它的朝向。 */
+export function initialTravelHeading(subjectAt: (time: number) => StageVec3, startTime: number, endTime: number, facing: number): number {
+  const start = subjectAt(startTime)
+  const step = Math.max(1 / 30, (endTime - startTime) / 120)
+  for (let time = startTime + step; time <= endTime + 1e-9; time += step) {
+    const point = subjectAt(time)
+    if (Math.hypot(point.x - start.x, point.z - start.z) >= 0.3) return Math.atan2(point.x - start.x, point.z - start.z) * 180 / Math.PI
+  }
+  return facing
+}
+
+function followSamplerFor(entry: StageCameraFollowEntry, subject: StageObject, animation: StageAnimationSampleSource): CameraFollowSampler {
+  const key = JSON.stringify([entry, undrivenTransform([subject], drivenComponents(animation))])
+  let byKey = followByAnimation.get(animation)
+  if (!byKey) {
+    byKey = new Map()
+    followByAnimation.set(animation, byKey)
+  }
+  const cached = byKey.get(key)
+  if (cached) return cached
+  if (byKey.size >= FOLLOW_CACHE_SIZE) byKey.delete(byKey.keys().next().value as string)
+  const source = sourceFor(animation, new Set([subject.id]))
+  const contentKey = JSON.stringify([key, source])
+  let sampler = followByContent.get(contentKey)
+  if (!sampler) {
+    const subjectAt = (time: number): StageVec3 => sampleAnimationFrame([subject], source, time, { aimLag: false }).objects[0].transform.position
+    const facing = sampleAnimationFrame([subject], source, entry.startTime, { aimLag: false }).objects[0].transform.rotation.y
+    sampler = createCameraFollowSampler(entry, subjectAt, initialTravelHeading(subjectAt, entry.startTime, entry.endTime, facing))
+    if (followByContent.size >= FOLLOW_CACHE_SIZE) followByContent.delete(followByContent.keys().next().value as string)
+    followByContent.set(contentKey, sampler)
+  }
+  byKey.set(key, sampler)
+  return sampler
+}
+
+/** 跟拍区间内的机位与注视点；不在跟拍区间或主体不在场景里返回 undefined。 */
+export function resolveCameraFollowPose(
+  camera: StageCameraObject,
+  objects: StageObject[],
+  animation: StageAnimationSampleSource,
+  time: number,
+): { position: StageVec3; aimTarget: StageVec3 } | undefined {
+  const entry = findCameraFollowEntry(animation.cameraFollows, camera.id, time)
+  if (!entry) return undefined
+  const subject = indexObjects(objects).get(entry.follow.subjectId)
+  return subject ? followSamplerFor(entry, subject, animation)(time) : undefined
+}
+
 /**
  * 摄像机朝向的唯一求解点：采样位置之后、按同一帧里注视目标的采样位置求俯仰与水平角，再叠加注视跟随滞后。
  *
@@ -214,7 +283,7 @@ export function resolveSampledCameraRotation(
   time: number,
   options: { aimLag?: boolean } = {},
 ): StageVec3 {
-  const direct = resolveDirectCameraRotation(camera, objects, animation.cameraOrientations, time)
+  const direct = resolveDirectCameraRotation(camera, objects, animation.cameraOrientations, time, resolveCameraFollowPose(camera, objects, animation, time)?.aimTarget)
   const delay = options.aimLag === false ? 0 : resolveCameraAimLag(camera)
   if (delay <= 0 || !animation.cameraOrientations.some((entry) => entry.objectId === camera.id)) return direct
   const sampler = aimLagSamplerFor(camera, objects, animation, delay)
@@ -238,7 +307,7 @@ export function resolveCameraViewTarget(
   animation: StageAnimationSampleSource,
   time: number,
 ): StageVec3 {
-  const target = resolveCameraLookAtTarget(camera, objects)
+  const target = resolveCameraFollowPose(camera, objects, animation, time)?.aimTarget ?? resolveCameraLookAtTarget(camera, objects)
   if (resolveCameraAimLag(camera) <= 0) return target
   const position = camera.transform.position
   const distance = Math.hypot(target.x - position.x, target.y - position.y, target.z - position.z)
@@ -256,7 +325,8 @@ function sameRotation(a: StageVec3, b: StageVec3): boolean {
  *
  * scrub / 暂停 / 离屏导出消费 `objects`，实时播放消费同一批已求值对象并把分组值推给
  * Three.js applier。两条路径只保留“结果写到哪里”的差异，不再分别求值。
- * 顺序固定：轨道 → 空间路径（覆盖路径段内的位置）→ 摄像机朝向（依赖本帧全部位置）。
+ * 顺序固定：轨道 → 空间路径（覆盖路径段内的位置）→ 角色走跑朝向 → 跟拍机位（依赖主体位置）
+ * → 摄像机朝向（依赖本帧全部位置）。
  */
 export function sampleAnimationFrame(
   objects: StageObject[],
@@ -286,6 +356,34 @@ export function sampleAnimationFrame(
     const object = position ? current(motion.objectId) : undefined
     if (!position || !object) continue
     overrides.set(motion.objectId, { ...object, transform: { ...object.transform, position } })
+  }
+
+  for (const entry of animation.characterHeadings ?? []) {
+    if (time < entry.startTime || time > entry.endTime) continue
+    const object = current(entry.objectId)
+    const yaw = sampleCharacterHeading([entry], entry.objectId, time)
+    if (!object || yaw === undefined) continue
+    overrides.set(entry.objectId, { ...object, transform: { ...object.transform, rotation: { ...object.transform.rotation, y: yaw } } })
+  }
+
+  // 角色此刻的卡内动作写回对象：在这一刻插卡、读回、面板显示的都是时间线上正在做的动作，而不是对象的基础动作。
+  for (const timeline of animation.characterMotions ?? []) {
+    const object = current(timeline.objectId)
+    const motion = object?.type === 'character' ? heldCharacterMotionAt(timeline, time) : undefined
+    if (!object || object.type !== 'character' || !motion || sameCharacterMotion(object.motion, motion)) continue
+    overrides.set(object.id, { ...object, motion })
+  }
+
+  if (animation.cameraFollows?.length) {
+    const frameObjects = objects.map((object) => overrides.get(object.id) ?? object)
+    for (const entry of animation.cameraFollows) {
+      if (time < entry.startTime || time > entry.endTime) continue
+      const camera = current(entry.cameraId)
+      const subject = current(entry.follow.subjectId)
+      if (camera?.type !== 'camera' || !subject) continue
+      const pose = resolveCameraFollowPose(camera, frameObjects, animation, time)
+      if (pose) overrides.set(camera.id, { ...camera, transform: { ...camera.transform, position: pose.position } })
+    }
   }
 
   const sampledObjects = overrides.size === 0

@@ -312,7 +312,7 @@ function polynomialLaw(intervals: PolynomialInterval[]): TimingLaw {
 
 function easingLaw(length: number, startTime: number, endTime: number, easing: StageEasingPreset): TimingLaw {
   const span = endTime - startTime
-  const at = (time: number): number => length * easeProgress(easing, Math.max(0, Math.min(1, (time - startTime) / span)))
+  const at = (time: number): number => length * easeProgress(easing, Math.max(0, Math.min(1, (time - startTime) / span)), span)
   const step = Math.min(1e-3, span / 100)
   return {
     evaluate: (time) => {
