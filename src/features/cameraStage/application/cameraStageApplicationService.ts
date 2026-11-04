@@ -27,6 +27,7 @@ import {
   type StageObjectBounds,
 } from './sceneAnalysis'
 import { afterCameraStageWrite, captureCameraStageUndo, rollbackCameraStageWrite } from './cameraStageUndo'
+import { observeCameraComposition, shotObstacles, type ShotReadback } from './shotGeometry'
 
 const logger = createLogger('features.cameraStage.application')
 
@@ -82,6 +83,8 @@ export interface CameraStageSceneObservation {
     bounds: StageObjectBounds
     primitiveKind?: string
     lookAt?: StageCameraLookAt
+    /** 摄像机当前画面的构图读回：角度、焦距、拍到的主体及其景别、位置与遮挡 */
+    composition?: ShotReadback
   }>
   stateKeyframes: Array<{
     id: string
@@ -303,6 +306,7 @@ function summarizePlacementConflicts(ids: string[], objects: StageObject[]): { c
 }
 
 function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageSceneObservation {
+  const obstacles = shotObstacles(snapshot.objects)
   return {
     project: { id: snapshot.id, name: snapshot.name },
     activeCameraId: snapshot.activeCameraId,
@@ -314,7 +318,7 @@ function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageScen
       transform: structuredClone(object.transform),
       bounds: calculateStageObjectBounds(object),
       ...(object.type === 'primitive' ? { primitiveKind: object.kind } : {}),
-      ...(object.type === 'camera' ? { lookAt: structuredClone(object.lookAt) } : {}),
+      ...(object.type === 'camera' ? { lookAt: structuredClone(object.lookAt), composition: observeCameraComposition(object, snapshot.objects, obstacles) } : {}),
     })),
     stateKeyframes: snapshot.stateKeyframes.map((stateKeyframe) => ({
       id: stateKeyframe.id,

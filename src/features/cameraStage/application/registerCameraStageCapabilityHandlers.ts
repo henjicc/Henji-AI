@@ -6,12 +6,13 @@ import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/applic
 
 import { CAMERA_STAGE_RENDER_CAPABILITY_ID, CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, WAIT_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageRenderApplicationCapabilities'
 
+import { COMPOSE_CAMERA_STAGE_SHOT_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageShotApplicationCapabilities'
 import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 
 import { parseDocumentCapabilityInput as parseCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
-import { assertCameraStageRevision, applyCameraStageCameraMove, deleteCameraStageObject, duplicateCameraStageObject, generateCameraStageSet, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
+import { assertCameraStageRevision, applyCameraStageCameraMove, composeCameraStageShotOperation, deleteCameraStageObject, duplicateCameraStageObject, generateCameraStageSet, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
 import { releaseCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 import { createDraftCameraStageDocument, openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
@@ -112,6 +113,12 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<Record<string, unknown>>('apply_camera_stage_camera_move', input)
     return await applyCameraStageCameraMove(parsed, context)
+  })
+
+  registrar.registerHandler(COMPOSE_CAMERA_STAGE_SHOT_CAPABILITY_ID, async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<Record<string, unknown>>(COMPOSE_CAMERA_STAGE_SHOT_CAPABILITY_ID, input)
+    return await composeCameraStageShotOperation(parsed, context)
   })
 
   registrar.registerHandler('verify_camera_stage_scene', async (input, context) => {

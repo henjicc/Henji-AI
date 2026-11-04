@@ -5,6 +5,7 @@ import type { ApplicationDomainModule } from '@/features/application-control/dom
 import { createCameraStageReflectionRegistrations } from './cameraStageReflection'
 import { CAMERA_STAGE_MUTATION_ENTITY_TYPES, CameraStageMutationExecutor, CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'
 import { CameraStagePlacementOperationExecutor } from './cameraStagePlacementExecutor'
+import { CameraStageShotOperationExecutor } from './cameraStageShotExecutor'
 import { CameraStageStateKeyframeCollectionExecutor } from './cameraStageStateKeyframeCollectionExecutor'
 import { CameraStageSetCollectionExecutor, CameraStageSetGenerateOperationExecutor } from './cameraStageSetExecutors'
 import { registerCameraStageCapabilityHandlers } from './registerCameraStageCapabilityHandlers'
@@ -20,6 +21,7 @@ export const cameraStageApplicationDomain: ApplicationDomainModule = {
     for (const entityType of CAMERA_STAGE_MUTATION_ENTITY_TYPES) engine.registerMutationExecutor(new CameraStageMutationExecutor(entityType, current))
     engine.registerOperationExecutor(new CameraStageMotionOperationExecutor(current))
     engine.registerOperationExecutor(new CameraStagePlacementOperationExecutor(current))
+    engine.registerOperationExecutor(new CameraStageShotOperationExecutor(current))
     engine.registerCollectionExecutor(new CameraStageStateKeyframeCollectionExecutor(current))
     engine.registerOperationExecutor(new CameraStageSetGenerateOperationExecutor(current))
     engine.registerCollectionExecutor(new CameraStageSetCollectionExecutor(current))

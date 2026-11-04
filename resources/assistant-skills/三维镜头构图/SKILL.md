@@ -34,11 +34,40 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 - 改参数重新生成：传 `replaceSetId`（取自观察结果 `sets[].id`），只写要改的字段，其余沿用上一次（包括种子）；换风格又没给楼层时楼层取新风格的默认；换一种随机布局就换 `seed`。
 - 整片删除：`change_application_entities` 对 `camera_stage.set` 执行 `remove_items`。新建布景不能用 `create_items`。
 
+## 按构图意图定机位
+
+**机位不要自己算坐标。** 用 `compose_camera_stage_shot` 描述想要的镜头，应用求出机位、注视点和焦距，并读回实际构图。一次调用一个撤销点。
+
+| 意图 | 参数与取值 |
+| --- | --- |
+| 镜头关系 | `relation`：`single` 单人、`two_shot` 双人镜头、`over_shoulder` 过肩（`subjects` 为 [肩膀在前景的人, 被拍的人]）、`reverse_pair` 正反打一对（再给 `reverseCameraId`，第一台从 A 肩后拍 B，第二台从 B 肩后拍 A）。省略时一个主体为单人、两个为双人 |
+| 景别 | `size`：`extreme_long` 大远景（人约占画高 1/10）、`long` 远景（约 1/3，脚在下三分线）、`full` 全景（头到脚）、`medium` 中景（膝以上）、`medium_close` 中近景（腰以上）、`close` 近景（胸口以上）、`closeup` 特写（肩以上）、`extreme_closeup` 大特写（脸的局部）。省略时单人、双人为中景，过肩、正反打为近景 |
+| 画面位置 | `position`（单人）：`left` / `center` / `right` 落在三分线；默认 `auto` 按视线留空——人朝画面右看就站左三分线，正对镜头居中 |
+| 从哪一面拍 | `view`（单人，按主体自己的左右）：`front`、`front_left`、`front_right`、`left`、`right`、`back`；省略取 3/4 正面，落在摄像机现在所在的一侧 |
+| 角度 | `angle`：`eye_level` 平视（与眼睛同高）、`high` 俯拍、`low` 仰拍、`birds_eye` 鸟瞰。过肩与正反打只用平视：机位在前景那人肩后与他眼睛同高，站着的人肩后拍坐着的人自然是俯拍 |
+| 焦距倾向 | `lens`：`wide` 广角 24mm（离得近、透视强）、`standard` 标准 50mm、`telephoto` 长焦 85mm（离得远、压缩空间）；过肩、正反打默认长焦 |
+| 轴线 | 两人镜头默认守在两人连线的同一侧，跟已经拍这两人的机位一致；`crossAxis: true` 才有意越轴 |
+| 遮挡 | 默认被挡时在意图范围内换角度或换焦距距离并在结果的 `adjusted` 里说明；`avoidOcclusion: false` 只报告不避让 |
+| 时间 | `at.time` 或 `at.stateKeyframeId`：只把机位记进那一刻（没有状态关键帧就新建）；省略则整条时间轴都摆在这里，摄像机已有运镜时必须给 `at` |
+
+主体用 `{ objectId }`（取自观察结果；布景里的楼用 `list_application_entities` 查 id），或布景里的一个地点 `{ point, height }`。新机位先用 `place_camera_stage_object`（`objectType: camera`, `reusePolicy: require_new`）建一台摄像机再定。
+
+结果的 `shots[]` 是写入后按那一刻实际画面读回的：每个主体的 `shotSize`、`heightRatio`（占画高比例）、`horizontal` 左中右、`screenBox` 投影框、`lookRoom` 视线留空、`keyVisible` 脸或中心是否可见、`occludedBy` 被谁挡；两人镜头附 `axis`（谁在画左、谁在画右）。出现 `compositionHint`（改了机位、被挡、出画，或实际景别、角度与要的不同）或 `adjusted` 时，把实际情况如实告诉用户；还要换就改意图重新调用，不要手改坐标。
+
+### 常见配方
+
+- **建立镜头**：开场交代环境用 `size: extreme_long` 或 `long`，`angle: high` 或 `birds_eye`，`lens: wide`；主体可以是主角，也可以是布景里的地点 `{ point, height }`。
+- **过肩正反打**：先建两台摄像机，`relation: reverse_pair`、`size: close`（或 `closeup`），一次定好正打和反打，两台自动在轴线同侧；对话开场再加一个 `two_shot` 交代两人关系。切换机位用 `change_application_entities` 改各状态关键帧的 `camera_stage.state_keyframe.camera_ref`。
+- **揭示**：终点先定——在终点时刻 `at.time` 给清楚的构图；起点在更早的时刻让主体被前景挡住（`avoidOcclusion: false`，从前景物体后面的 `view` 拍），中间交给运镜引擎；也可以起点定好后用 `apply_camera_stage_camera_move` 的 `truck` 或 `crane` 移出遮挡。
+- **跟拍起点**：`view: back`、`size: medium`、`angle: eye_level`，摄像机设备 `camera_stage.camera.rig` 设 `steadicam`；在起点和终点时刻各定一次构图，中间由平滑运动引擎接上（衔接设 `continuity: smooth`）。
+
 ## 观察与验证
 
 `observe_camera_stage_scene` 的 `objects` 只列逐个放置的对象；布景只在 `sets` 里给摘要（数量、范围、参数）。需要某栋楼时用 `list_application_entities` 分页列 `camera_stage.object`，或按范围判断，不要整片读回。
 
-相对位置依据观察到的边界盒，不要凭空猜坐标；用户要求复用当前摄像机时不要新建。空间写入后用 `verify_camera_stage_scene` 做结构化验证；没有真读画面时只说结构化结果，不描述没看到的构图或遮挡。
+每台摄像机带 `composition`：当前画面的角度、焦距、拍到的主体及其景别、左中右、投影框与遮挡。自检构图先看它，再按需截图看画面。
+
+相对位置依据观察到的边界盒，不要凭空猜坐标；用户要求复用当前摄像机时不要新建。空间写入后用 `verify_camera_stage_scene` 做结构化验证；没有真读画面时只说结构化结果，不描述没看到的画面。
 
 ## 动画与运镜
 

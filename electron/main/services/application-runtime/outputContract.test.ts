@@ -243,6 +243,12 @@ successData.recover_camera_stage_render_task = { ...taskObservation, recoveryAtt
 const transaction = { status: 'completed', transactionRef: 'transaction', undoRef: 'undo', verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: new Date(0).toISOString() }, resultingRevisions: { 'video_edit:document': 29 }, resultRefs: [documentRef], effects: [], evidence: [], ...revisions }
 for (const name of ['change_application_entities', 'undo_application_changes']) successData[name] = transaction
 for (const name of ['apply_camera_stage_camera_move', 'place_camera_stage_object', 'generate_camera_stage_set']) successData[name] = { ...transaction }
+successData.compose_camera_stage_shot = { ...transaction, time: 2, stateKeyframeId: 'frame', createdStateKeyframe: true, shots: [{
+  cameraId: 'camera', name: '机位', kind: 'over_shoulder', position: { x: 0, y: 1.6, z: 3 }, lookAtTarget: { x: 0, y: 1.6, z: 0 }, focalLength: 85,
+  size: 'close', angle: 'eye_level', lens: 'telephoto', adjusted: null, axis: { reference: '「机位」原来所在的一侧', crossed: false, screenLeft: '甲', screenRight: '乙' },
+  composition: { angle: 'eye_level', focalLength: 85, subjects: [{ objectId: 'b', name: '乙', inFrame: true, screenBox: { left: 0.4, top: 0.1, right: 0.9, bottom: 1 },
+    center: { x: 0.67, y: 0.3 }, heightRatio: 2.9, shotSize: 'close', horizontal: 'right', lookRoom: 'open', visibleFraction: 1, keyVisible: true, occludedBy: [] }] },
+}] }
 const generationPlan = { action: 'generate_shot', sequenceRef, startSeconds: 1, durationSeconds: 5, trackRef: null, placement: 'add', references: [] }
 successData.generate_video_edit_in_place = { documentRef, taskRef: ref('generation.task', 'task'), plan: generationPlan, status: 'submitted', verified: true, message }
 successData.prepare_video_edit_in_place_generation = { documentRef, plan: generationPlan, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'video', options: {} }, stylePrompt: '', message }

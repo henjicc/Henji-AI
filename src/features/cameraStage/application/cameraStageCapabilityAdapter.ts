@@ -53,6 +53,7 @@ const OPERATION_SUMMARIES = {
   place_camera_stage_object: '复用或布置三维场景对象',
   apply_camera_stage_camera_move: '应用摄像机语义运镜',
   generate_camera_stage_set: '生成三维布景',
+  compose_camera_stage_shot: '按构图意图摆机位',
 } as const
 
 type CameraStagePlanRequest = Parameters<ApplicationControlExecutionEngine['plan']>[0]
@@ -78,7 +79,7 @@ async function planAndCommit(context: CapabilityExecutionContext, idempotencyNam
 }
 
 async function executeOperation(
-  capabilityId: 'place_camera_stage_object' | 'apply_camera_stage_camera_move' | 'generate_camera_stage_set',
+  capabilityId: keyof typeof OPERATION_SUMMARIES,
   input: JsonValue,
   context: CapabilityExecutionContext,
   evidenceFact: string,
@@ -210,6 +211,25 @@ export async function updateCameraStageObject(
 
 export async function applyCameraStageCameraMove(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   return await executeOperation('apply_camera_stage_camera_move', input as JsonValue, context, '三维摄像机运镜已应用。')
+}
+
+/**
+ * 构图读回是这个能力的主要结果，从执行器证据提到结果顶层：外部客户端默认不展开证据，
+ * 留在证据里等于看不到景别、位置与遮挡。证据只留机位引用，不重复整份读回。
+ */
+export async function composeCameraStageShotOperation(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  const transaction = await executeOperation('compose_camera_stage_shot', input as JsonValue, context, '三维摄像机已按构图意图摆好。')
+  const evidence = transaction.evidence as Array<Record<string, unknown>>
+  // 执行器每次都把读回放在证据里。
+  const index = evidence.findIndex(item => Array.isArray((item.data as { shots?: unknown } | undefined)?.shots))
+  const readback = evidence[index].data as Record<string, unknown> & { shots: Array<{ cameraId: string }> }
+  return {
+    ...transaction,
+    ...readback,
+    evidence: evidence.map((item, position) => position === index
+      ? { ...item, data: { cameraIds: readback.shots.map(shot => shot.cameraId), stateKeyframeId: readback.stateKeyframeId } }
+      : item),
+  }
 }
 
 export async function verifyCameraStage(
