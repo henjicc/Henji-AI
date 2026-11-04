@@ -4,11 +4,14 @@ import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
 import { useCameraStageStore } from './store/cameraStageStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
 import { useCameraStageToolStore } from './store/cameraStageToolStore'
+import { useCameraStageViewportStore } from './store/cameraStageViewportStore'
+import { toggleViewportMaximized } from './viewport/viewportMaximize'
 
 export function CameraStageAppMenus(): null {
   const visible = useAppMenuVisibility()
   const selectedId = useCameraStageStore(state => state.selectedId)
   const { canUndo, canRedo, undo, redo } = useCameraStageHistory()
+  const viewportMaximized = useCameraStageViewportStore(state => state.maximizedViewportId !== null)
   useEffect(() => {
     if (!visible) return
     const missing = selectedId ? undefined : '请先选择对象'
@@ -23,7 +26,10 @@ export function CameraStageAppMenus(): null {
         { kind: 'action', id: 'cameraStage.focus', label: '聚焦选中对象', disabledReason: missing, run: () => useCameraStageStore.getState().requestFocusSelected() },
         { kind: 'action', id: 'cameraStage.stageSet', label: '生成布景…', run: () => useCameraStageToolStore.getState().setStageSetPanelOpen(true) },
       ] },
+      { menu: 'view', order: 100, items: [
+        { kind: 'action', id: 'cameraStage.maximizeViewport', label: viewportMaximized ? '还原视口窗格' : '最大化视口窗格', shortcut: '`', run: toggleViewportMaximized },
+      ] },
     ])
-  }, [visible, selectedId, canUndo, canRedo, undo, redo])
+  }, [visible, selectedId, canUndo, canRedo, undo, redo, viewportMaximized])
   return null
 }

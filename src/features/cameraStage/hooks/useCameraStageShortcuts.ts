@@ -6,9 +6,10 @@ import {
   useCameraStageToolStore,
   type StageEditorTool,
 } from '../store/cameraStageToolStore'
+import { toggleViewportMaximized } from '../viewport/viewportMaximize'
 
 /**
- * 编辑器作用域快捷键：W/E/R 切 gizmo 模式、F 聚焦选中对象、Delete/Backspace 删除选中、
+ * 编辑器作用域快捷键：W/E/R 切 gizmo 模式、F 聚焦选中对象、` 最大化/还原光标下的视口窗格、Delete/Backspace 删除选中、
  * Ctrl/Cmd+D 复制选中、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z / Ctrl+Y 重做。
  * 输入框/可编辑区域内不拦截，交给原生行为。
  */
@@ -67,7 +68,10 @@ export function useCameraStageShortcuts(params: UseCameraStageShortcutsParams): 
         return
       }
 
-      if (key in GIZMO_KEY_MODE) {
+      if (event.code === 'Backquote' && !event.altKey && !event.shiftKey) {
+        event.preventDefault()
+        toggleViewportMaximized()
+      } else if (key in GIZMO_KEY_MODE) {
         const mode = GIZMO_KEY_MODE[key]
         setGizmoMode(mode.gizmo)
         useCameraStageToolStore.getState().setTool(mode.tool)
