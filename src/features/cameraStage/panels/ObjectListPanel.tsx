@@ -107,24 +107,24 @@ const ObjectListPanel: React.FC = () => {
   // 虚拟列表的行晚于列表本身提交，输入框挂上后才能按它所在的窗口（可能是浮窗）排聚焦帧
   const [input, setInput] = useState<HTMLInputElement | null>(null)
 
+  // 正在改名的对象被删掉（撤销、助手写入）就退出改名。
   useEffect(() => {
-    if (!editingId) return
-    const editingObject = objects.find((item) => item.id === editingId)
-    if (!editingObject) {
+    if (editingId && !objects.some((item) => item.id === editingId)) {
       setEditingId(null)
       setDraftName('')
-      return
     }
-    if (!input) return
+  }, [editingId, objects])
 
+  // 只在进入改名、输入框挂上时聚焦并全选一次：场景里其他对象一变（播放、助手写入）就重选，会打断正在输入的文字。
+  useEffect(() => {
+    if (!editingId || !input) return
     const focus = createRafScheduler(() => {
       input.focus()
       input.select()
     }, ownerWindowOf(input))
     focus.schedule()
-
     return () => focus.cancel()
-  }, [editingId, input, objects])
+  }, [editingId, input])
 
   const beginRename = useCallback((id: string, name: string): void => {
     setSelected(id)

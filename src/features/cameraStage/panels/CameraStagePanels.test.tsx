@@ -60,6 +60,9 @@ describe('3D 镜头参考停靠面板', () => {
     expect(popout.document.activeElement).toBe(input)
     expect(input.selectionEnd).toBe(name.length)
     expect(frames.size).toBe(0)
+    // 改名途中场景里别的对象变化（播放、助手写入）不再重新聚焦全选，正在输入的文字不被打断。
+    act(() => useCameraStageStore.getState().addPrimitive('sphere'))
+    expect(frames.size).toBe(0)
     fireEvent.keyDown(input, { key: 'Escape' })
     fireEvent.keyDown(rename(), { key: 'Escape' })
     expect(frames.size).toBe(0)
