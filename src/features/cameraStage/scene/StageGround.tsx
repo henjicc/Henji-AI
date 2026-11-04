@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Grid } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
-import type { MeshStandardMaterial, WebGLProgramParametersWithUniforms } from 'three'
+import { Plane, Vector3 } from 'three'
+import type { Camera, Mesh, MeshStandardMaterial, ShaderMaterial, WebGLProgramParametersWithUniforms } from 'three'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import { STAGE_STYLE_HIDDEN_KEY } from '../render/stageStyleTags'
 import type { StageGroundSettings } from '../domain/sceneTypes'
@@ -16,6 +17,28 @@ interface CheckerShader extends WebGLProgramParametersWithUniforms {
     uCheckerDark: { value: [number, number, number] }
     uCheckerLight: { value: [number, number, number] }
   }
+}
+
+const GRID_UP = new Vector3(0, 1, 0)
+const GRID_ORIGIN = new Vector3(0, 0, 0)
+const gridPlane = new Plane()
+const cameraWorldPosition = new Vector3()
+
+/*
+ * drei 的 Grid 在帧回调里按默认相机更新渐隐中心，离屏导出逐帧 seek 后直接抓图、不经过帧回调，
+ * 地面网格就会按上一帧的机位渐隐。挂在网格自己的绘制前回调里，按正在绘制它的相机更新，
+ * 视口与离屏导出因此一致。
+ */
+function syncGridFadeToRenderCamera(grid: Mesh, camera: Camera): void {
+  const { uniforms } = grid.material as ShaderMaterial
+  cameraWorldPosition.setFromMatrixPosition(camera.matrixWorld)
+  gridPlane.setFromNormalAndCoplanarPoint(GRID_UP, GRID_ORIGIN).applyMatrix4(grid.matrixWorld)
+  gridPlane.projectPoint(cameraWorldPosition, uniforms.worldCamProjPosition.value)
+  uniforms.worldPlanePosition.value.set(0, 0, 0).applyMatrix4(grid.matrixWorld)
+}
+
+function followRenderCamera(grid: Mesh | null): void {
+  if (grid) grid.onBeforeRender = (_renderer, _scene, camera) => syncGridFadeToRenderCamera(grid, camera)
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -126,6 +149,7 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
       )}
       {settings.pattern === 'grid' && (
         <Grid
+          ref={followRenderCamera}
           key={`ground-grid-${settings.density}-${settings.gridLineColor}-${settings.gridLineThickness}`}
           // 网格线是摆场景用的辅助面；深度/线稿画面里它会被当成一块贴着地面的实体几何
           userData={{ [STAGE_STYLE_HIDDEN_KEY]: true }}
