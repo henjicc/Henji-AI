@@ -88,20 +88,3 @@ resultRef 交给 `read_application_media(mode="image")`，直接查看返回的�
 眯眼看缩略帧辨焦点，再想象灰度检查明暗层级；小于约40px的字／线和玻璃边缘不要凭缩图判断。先全帧再局部：已有关联标注时用 cropAnnotationId，没有则先按正式字段创建有意义的 region 或 ellipse 标注，不能伪造任意 crop 输入。原宽超过3840时诚实说明观察分辨率限制。
 
 参考 source 与成片 program 分别取帧后读图，按相同语义节点比较；工具没有 compareWith；看一段节奏用联系表，接缝与细节再逐帧取。落地位置对了还要看动作中间和相邻接缝；循环须查接缝两侧的方向与速度，不只首尾颜色。
-
-
-## 文字撑框、连续性、口播与效果
-
-`query_video_edit_review` 的 `motion:{}` 还检查：
-
-- `text_box_overflow`：原生 Canvas 文字或排版库墨迹超绘制矩形/自身图层 bounds，持续至少 0.3 秒；`motionEvidence.canvas` 给原文及作者画幅坐标的墨迹/框。跨层绘制矩形按几何位置关联，候选不是卡片语义；先取帧核对，再增宽卡片、缩字或换行。GPU 内部文字、无关联框、直接 Canvas 绘制仍需读图。
-- `visibility_dip`：同一作者元素的外接范围可见度与透明度中途降到此前的一半以下，随后恢复到至少一半。检查 hidden/opacity、位置轨提前结束或换目标两端空窗；不根据图层名字识别高亮，不检测 draw 内部清除或其他图层遮挡。正常入场、末尾收起不报。
-- `shadow_outside_source`：源图形完全在图层栅格外、用 shadowOffset 投回的风险；改成层内绘制后 blur，或扩大 bounds，详见 author-api。它不等于已测得像素缺失。
-
-启用 `visual:{}` 会按每段字幕的句首渲染合成帧，`narration_alignment` 逐条给出时间、原文和该时刻的片段/图层/可观察文字清单。逐页读完，不以 checkpoints 的少量抽样代替逐句核对；用返回 documentVersion 与该记录帧号调用 observe_video_edit_frame 读图，判断这句话说的主体有没有出现。工具不自动判断句意与画面相符，未看到/未遮挡不能由结构清单证明。查询从句中开始时不伪造句首。
-
-`visual.effects` 默认 true，给已启用且 amount 非零的画面效果，在查询放置区间首/中/末帧做单变量“开→关→开”全尺寸像素比较，包括代码滤镜/WebGPU。`effect_unchanged` 是该帧无差异，可能效果未绘制、被遮挡、裁切或本帧自然为零；`effect_visible` 是有像素差异，仍要读图判是否符合预期；`effect_unstable` 是重复开启也不同，先处理确定性或输入就绪问题再查。每条都有时间和改法。
-
-作者生成器参数没有统一的关闭值；通过 `visual.probes` 指定 `{clipRef,frame,parameter,offValue}` 比较一个数值/布尔参数。工具按真实源时钟读取当前曲线，在临时副本里设关闭值并去掉该参数曲线；不改作品和播放头。用参数声明判断 offValue，不能假设任意数值参数都能设零。重复引用同一嵌套实体时开关影响该实体全部实例。分页复用已完成证据，文件/字体/作品变化后重新查询。网页取帧是否就绪不在本检查保证内。
-
-图层效果复核：公共取帧及元素读回中的 effects 是已成功绘制帧的真实解析参数，含 look 展开项、amount 和兼容 pose.blur；失败帧不能作为成功证据。源码检查的 suggestions 仅为 AST 静态证据，带文件行列和工厂建议；shadowBlur 不等于投影可被 blur 直接替换。检查全幅效果层是否可补 bounds。深色／浅色／彩色背景都看主体外光晕，独立下方片段只能被提亮；比较强度零、source_opacity 零、层 opacity 零、遮挡和 clip。连续参数跨外扩档位、半分辨率、旋转及推近时检查光形和噪声相位，不能只看停帧。pose.blur 的 GPU 高斯与 Canvas 旧高斯做相同像素半径 A/B，lens 另看散焦，数值测试不代替观感。

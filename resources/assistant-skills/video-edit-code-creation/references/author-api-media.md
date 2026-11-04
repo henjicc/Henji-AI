@@ -46,7 +46,7 @@ draw(ctx, time, params, width, height, assets) {
 }
 ```
 
-参数值支持 `{kind:"image",mediaId}`、`{kind:"video",mediaId,time?:number,spans?:[...]}`、`{kind:"sequence",mediaId:"below"}`，以及本地网页 `{kind:"web",path,...}`（见下文“网页画面”）。视频 `time` 是源素材非负秒数，省略时从片段入点起随片段本地时间（裁掉开头时视频也跟着往后，不经过代码片段的变速与倒放换算）；超出视频范围明确失败。`below` 是当前序列帧中更低轨道的合成画面，排除当前及更高轨道与字幕覆盖，避免循环。代码没有路径或 URL 访问权，所有输入走工程媒体引用、正式解码与合成；同一来源与取样时刻复用同一画面。需要逐像素处理下方画面时写滤镜（author-shaders）。
+参数值支持 `{kind:"image",mediaId}`、`{kind:"video",mediaId,time?:number,spans?:[...]}`、`{kind:"sequence",mediaId:"below"}`，以及本地网页 `{kind:"web",path,...}`（见 [author-api-web](author-api-web.md)）。视频 `time` 是源素材非负秒数，省略时从片段入点起随片段本地时间（裁掉开头时视频也跟着往后，不经过代码片段的变速与倒放换算）；超出视频范围明确失败。`below` 是当前序列帧中更低轨道的合成画面，排除当前及更高轨道与字幕覆盖，避免循环。代码没有路径或 URL 访问权，所有输入走工程媒体引用、正式解码与合成；同一来源与取样时刻复用同一画面。需要逐像素处理下方画面时写滤镜（author-shaders）。
 
 ### 视频取帧时间表 spans
 
@@ -62,58 +62,3 @@ draw(ctx, time, params, width, height, assets) {
 ```
 
 同一片段可以带很多视频参数（如每扇窗口一个），只有落在段内（或三秒内要进入下一段）的参数占解码会话。整个节目同一时刻的视频输入超过 7 路时，多出的改为共用素材的解码会话，画面照常但播放变慢；超过 32 路直接报错。
-
-## 网页画面
-
-图片参数可绑定本地网页：浏览器在隔离的离屏页面里真正排版绘制（HTML、CSS、JS、React 都行），按页面时间出这一刻的画面，与视频参数一样从 `assets` / `inputs.images` 取。
-
-**什么时候用**：默认用显卡画法——普通标题、花字、字幕式文字、简单表格、数据卡用内置排版库算位置、显卡直接画，没有额外进程，推近按矢量重画始终清楚，每个字都能做特效。网页画面只用在显卡画法做不好或做不像的地方：复刻真实网页应用界面、依赖大量 CSS 的富排版、本来就是网页的内容。它每个来源多开一个隔离页面，每帧 seek、排版绘制再交给合成，成本明显更高。
-
-**网页文件夹**是专门放这个网页的文件夹，入口是其中的 `index.html`，放项目里（如 `素材/网页/知多少/`，构建好的静态文件）；零散的 html 文件不行。文件夹就是站点根，移动、复制、收集素材和打包都整个带上，页面只能取到这里的文件，别的网址照常联网，拿不到痕迹的任何接口；文件改了打开着的页面自动重新载入。页面实现时间约定，确定性由页面负责（CSS 动画、过渡在 seek 里 `pause()` 后设 `currentTime`，不滚动整个文档）；画面只由 seek 的时间决定，不靠 localStorage、IndexedDB、Cookie 这类存储——同一网页文件夹的页面共用存储，关掉重开、别的剪辑用它时都还在：
-
-```text
-window.henjiWeb = { ready /* Promise：资源字体就绪 */, duration /* 秒 */,
-  async seek(t) {} /* 摆成第 t 秒，可任意前后跳 */, boxes(selectors) {} /* 可选：{选择器: [x,y,w,h]|null} */ }
-```
-
-**舞台**：把全部内容放进一个标有 `data-henji-stage` 的根元素，左上角固定在视口 (0,0)、大小等于视口（如 `position:absolute;left:0;top:0;width:1920px;height:1080px`）；背景画在舞台上，动态新增内容也挂在舞台里。宿主从舞台快照直接出图，取帧快好几倍、跳远不出黑块；普通浏览器里照常显示。不标舞台时宿主会自动搬入快照舞台，显式标舞台更稳。跨源图片与跨源 iframe 不进入快照，同源 iframe 可用。
-取帧时宿主会把舞台搬进自己的画布：舞台元素本身不要替换或移除；不要用依赖舞台父元素的选择器（如 `body > main`）或可能取到宿主画布的 `document.querySelector('canvas')`；弹层、portal 等动态内容也挂在舞台里，舞台之外不要有会变化的可见内容。
-
-**绑定值**（参数照常声明 `type: "image"`，用通用实体工具写片段代码参数）：
-
-```text
-{ kind: "web", path: "<项目>/素材/网页/知多少/index.html",  // 网页文件夹或其中的 index.html
-  width: 1920, height: 1080,       // 视口 CSS 像素，默认 1920×1080
-  region: [640, 360, 640, 360],    // 只渲染这一块，默认整个视口
-  scale: 6,                        // 每 CSS 像素几个画面像素，默认 2
-  spans: [{ from: 0, to: 4, src: 0 }],  // 页面时间，time / spans 同视频参数；都不给随片段时间
-  boxes: ["#send"] }               // 每帧读矩形的选择器
-```
-
-**清晰度**：画面是 region 宽高 × scale（取整数），每边最多 8192；页面始终按整个视口排版，取景只决定画哪块。不推近时 scale = 输出宽 ÷ 视口宽；推近 N 倍时 region 取露出的 1/N、scale = 输出宽 ÷ region 宽（4K 推近 3 倍：640×360、6 倍），每个输出像素都有设备像素，成本按画面像素算、推多近不涨。一段推近里取景与倍率不变（变了会重新栅格、文字抖）；幅度很大就分远景、近景两个参数各用 spans，交接处叠化。
-
-**元素矩形**：`info.web[key]` 是 `{ time, width, height, region, scale, duration, boxes }`，`boxes[选择器]` 为视口 CSS 像素 `[x, y, w, h]` 或 null，换到画面像素 `(x - region[0]) * scale`：
-
-```text
-draw(ctx, time, params, width, height, assets, info) {
-  if (!assets.app) return
-  ctx.drawImage(assets.app, 0, 0, width, height)
-  const web = info.web?.app, box = web?.boxes["#send"]
-  if (!box) return
-  const sx = width / web.region[2], sy = height / web.region[3]
-  ctx.strokeRect((box[0] - web.region[0]) * sx, (box[1] - web.region[1]) * sy, box[2] * sx, box[3] * sy)
-}
-```
-
-页面打不开、没有 `window.henjiWeb`、seek 超过 30 秒或取不到画面时这一帧报错，不会换成旧画面。
-
-
-**网页文本几何（作者接口 12 起）**：在模块上声明 `webText: { app: ["#title"] }`（键是 `type:"image"` 的参数名）。绑定网页时，四种作者入口共用 `info.web.app.text["#title"]`；换成普通图片或未绑定时不采样。逐字效果只选需要的元素，500 字素实时采样 P95 预算 25ms；整页 5000 字素成本显著更高，不能按每帧实时使用。
-
-结果先看 `status`：`ready` 才读 `geometry`；其余为 `not-found`、`unsupported` 或带原因的 `unavailable`。`geometry.text` 是 DOM 原文，`graphemes` / `words` 的 `source` 是半开 UTF-16 区间，字素含 `rects`、`bounds`、盒中心 `pivot`；字体是 CSS 声明，`lineFragments` 是文字 run 的行片段。坐标均为视口 CSS 像素；换到实际纹理用 `web.imageMapping.viewportToImage`，不要再乘 DPR。几何随同一票据画面交付；预览回退时只读返回的同幅几何，不把请求时刻当作返回画面时刻。
-
-Range 返回排版盒，`baseline:null`，不提供字形墨迹、真实基线、独立字形或干净背景。Canvas、SVG text、表单、伪元素、iframe 和 Shadow DOM 内文字不在自动采样范围；需要逐字移动时先由网页提供满足分片条件的文字层，不能把整页背景当作可独立提字的图层。
-
-文本几何要求网页提供 `[data-henji-stage]` 舞台：舞台 CSS 尺寸等于视口、原点为 `(0,0)`，根上没有 transform、padding 或 border。`henjiWeb.seek(t)` 完成后须把动画定位并暂停，直到下次 seek 不自主改布局；paint 监听器不得改 DOM。字体须加载成功，所选文字子树与祖先不能仍在播放动画或滚动。缺舞台或快照不可用时返回 `unavailable/capture-path`；布局、字体、滚动或动画不稳定返回 `unavailable/unsynchronized`，`details` 记录具体原因。
-
-`breaks` 每项为 `{offset, kind}`，offset 是原文 UTF-16 位置，kind 分别为 `line-break`（BR）、`block`、`language`、`replaced-element`。`layoutStatus` 区分普通盒、零宽、折叠空白、display:none、visibility:hidden 与 content-visibility:hidden；零宽保留位置盒，隐藏文本保留来源。`transparent` 表示贡献布局片段的来源全部透明，`outsideRegion` 表示布局片段全部在取景外；`regionRects` 是与取景的矩形交集。`rendered` 只表示有非透明且落入取景的正宽布局片段，不证明最终墨迹可见（遮挡、mask 等仍不由 Range 判断）。

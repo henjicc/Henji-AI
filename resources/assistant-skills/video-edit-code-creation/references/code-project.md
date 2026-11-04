@@ -54,21 +54,6 @@
 - 同样的代码出现第二次就提到上层；改风格只动 `style/`，改某段只动这段的描述。做不到说明拆分不对，先重新拆。
 - 每个文件职责单一、单独读得懂，一般几十到两三百行；64KiB 是单文件上限，不是目标。只有一次性、约 100 行以内、别处不会再用的小效果可以直接放在一个入口里。
 
-## 内置库
-
-随软件发行、不联网，直接 `import`：
-
-| 库 | 当前版本 | 起始接口 | 能写的导入路径 |
-| --- | --- | --- | --- |
-| three | 0.186.1 | v5 | `three`、`three/webgpu`、`three/tsl`；附加模块写 `three/addons/<子路径>.js`（同 `three/examples/jsm/…`，`.js` 不能省） |
-| opentype.js | 2.0.0 | v5 | `opentype.js`，只有具名导出：`import { parse } from "opentype.js"`（没有默认导出，字体字节读进来再 `parse`） |
-| henji-layout | 2.0.0 | v10 | `henji-layout/text`（`layoutText`、`drawText` 排版、字素动画与缓存绘制）、`henji-layout/flex`（`layoutBoxes` 盒子布局）、`henji-layout/table`（`layoutTable` 数字与文本表格）；见 author-text-motion |
-
-- 低于起始接口不能导入；另存新版本按当前作者接口编译。
-- 新库选兼容最新版；旧导入沿用记录，无记录用第一套。升级：`upgrade_video_edit_code_materials`、`upgradeLibraries:true`（指定素材、保留作者 API、改指可撤销）。明确要升级作者接口时使用 `upgradeAuthorApi:true`，同时选择兼容库，返回实际 `apiVersion` 与 `libraries`；升级与改指共用一次撤销。新建素材默认 API 10，文字、flex 与 table 统一使用 `henji-layout@2.0.0`。
-- 同一版本的库各片段共用一份实例，模块顶层不放会被别的片段看到的状态。
-- 类型检查按库的真实类型报错。three 接管宿主 WebGL 上下文见 [纵深与三维](recipes-3d.md) 的“用 three 画真实网格”。
-
 ## 一镜到底
 
 全片背景只放**一个**台面片段（`entries/shared/background.ts`），读 `film/<film>/film.ts` 编排好的全片描述和镜头路线，段与段之间的背景天然连续。各段在 `segments/` 里用段内时间写自己的窗口、对焦与组件，`film.ts` 给每段一个开始时间，由风格层的片段编排函数换算成全片时间。录屏窗口与标注按段各放片段，参数 `offset` 填这个片段开头对应的段内时刻。

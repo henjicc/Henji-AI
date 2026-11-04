@@ -1,6 +1,6 @@
 # 文字与动效
 
-动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.0.0（见 code-project 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
+动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.0.0（见 author-api 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
 
 ## 字体声明
 
@@ -104,16 +104,3 @@ export default {
 文字 `options.maxLines/maxHeight` 的测量高度按实际显示行数返回，不为遗漏行留白；`totalLines/truncated/omittedRanges` 仍保存完整事实。需要正文全部可读时用 fit、增宽或改版，不能用截断隐藏原文。
 
 同一 row 用 `alignItems: "baseline"`（单项可用 `alignSelf: "baseline"`），标签、数值和单位按首行 `alphabeticBaseline` 自动对齐，不手写 y 补偿；嵌套容器沿用首个参考子节点的基线。使用排版库的基线对齐即可，不再手工叠加补偿。完整表格参数与数据卡见 recipes-text-data。
-
-## 缓动、弹簧与随机
-
-- 缓动是普通函数：`cubicOut = t => 1 - (1 - t) ** 3`、`backOut`、`elasticOut` 等按需要自己写；easing 参数值为名称或 `[x1,y1,x2,y2]`，用贝塞尔反解求值。
-- 时间映射先夹到 0–1：`clamp01((time - start) / duration)`；超出区间保持端值，避免过冲闪烁。
-- 随机必须可重现：用种子哈希而不是 `Math.random()`。
-
-```text
-const hash = (i, seed = 0) => { let h = Math.imul(i ^ seed, 0x9e3779b1); h ^= h >>> 15; h = Math.imul(h, 0x85ebca77); h ^= h >>> 13; return (h >>> 0) / 4294967296 }
-```
-
-- 运动模糊：需要曝光拖影的元素写成带 `pose` 的图层；整体快门、相位与采样上限写在模块 `motionBlur`。关闭某层写 `motionBlur: false`。
-- 景深：pose 返回 `blur`（像素）并设 `blurShape: "lens"` 得到镜头散焦；默认 `gaussian`。
