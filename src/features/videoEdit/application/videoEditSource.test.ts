@@ -13,6 +13,7 @@ import { reopenVideoEdit } from './videoEditDocumentTestKit'
 import { createVideoEditGraphicItem } from './videoEditProjectItems'
 import { videoEditSourceTiming } from './videoEditSourcePreview'
 import { activateVideoEditProjectItem } from './videoEditItemActivation'
+import { ApplicationExecutionProgressFailure, applicationFailureOrigin, isApplicationConflict } from '@/core/application-control/execution/persistence'
 const files = new Map<string, string>()
 it('失败发布中的立即重试先退役旧请求，不被旧catch释放新宿主', async () => {
   const owner = await fixture(); const id = owner.document.id; const events: string[] = []; let attempt = 0
@@ -391,5 +392,27 @@ it('没有源文件的图形、代码画面在源监视器预览：命令标识�
     await activateVideoEditProjectItem(id, graphic)
     expect(requests.at(-1)).toBe(graphic)
     expect(owner.document.sequences.map(sequence => sequence.clips.length)).toEqual(clips)
+  } finally { off() }
+})
+it('节目开播前发现冲突、源恢复又失败：报告源暂停未补偿，错误码仍认得出冲突', async () => {
+  const owner = await fixture(); const id = owner.document.id; let pause!: () => void; let failRestore = false
+  const off = registerVideoEditSourcePresenter(id, request => {
+    const result = { timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume }
+    if (request.playing && failRestore) return Promise.reject(new Error('源宿主无响应'))
+    return request.playing ? Promise.resolve(result) : new Promise(resolve => { pause = () => resolve(result) })
+  })
+  try {
+    await updateVideoEditSource(id, { itemId: owner.document.items[0].id, playing: true })
+    const executor = new VideoEditMutationExecutor('video_edit.document')
+    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = { kind: 'mutation', entityType: executor.entityType, target: { kind: executor.entityType, id }, expectedRevisions: {}, mutations: [{ propertyId: 'video_edit.document.program_playback', operation: 'set', value: { frame: 30, playing: true, playbackDirection: 1 } }] }
+    const failure = executor.apply(step, sourceContext()).catch(error => error)
+    await vi.waitFor(() => expect(pause).toBeTypeOf('function'))
+    failRestore = true
+    editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '新名称' }) })); pause()
+    const error = await failure
+    expect(error).toBeInstanceOf(ApplicationExecutionProgressFailure)
+    expect(error.compensatedStepIndexes).toEqual([])
+    expect(error.message).toContain('源宿主无响应')
+    expect(isApplicationConflict(applicationFailureOrigin(error))).toBe(true)
   } finally { off() }
 })

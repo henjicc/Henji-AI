@@ -89,3 +89,13 @@ it('批量模板删除的撤销中途失败后，只重试尚未恢复的回收�
     } finally { spy.mockRestore() }
   } finally { app.dispose() }
 })
+
+it('批量新建中途失败时撤回已建的项，不把已写入的模板当成整步没执行', async () => {
+  const executor = new VideoEditStyleCollectionExecutor('video_edit.template')
+  const failure = await executor.apply({ kind: 'collection', parent: library, entityType: 'video_edit.template', expectedRevisions: {}, operation: { kind: 'create', items: [
+    { properties: { 'video_edit.template.name': '甲', 'video_edit.template.body': body } },
+    { properties: { 'video_edit.template.name': '乙', 'video_edit.template.body': { kind: 'code' } } },
+  ] } }, { requestId: 'create-templates', exposure: 'assistant', acceptedDataClasses: new Set() }).catch(error => error)
+  expect(failure).toBeInstanceOf(Error)
+  expect(videoEditStyleLibrary.listTemplates()).toEqual([])
+})

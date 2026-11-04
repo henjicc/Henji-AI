@@ -30,6 +30,7 @@ import { getVideoEditProxyPreference, setVideoEditProxyPreference } from './vide
 import type { VideoEditProxyPreference } from '@/core/videoEdit/proxy'
 import { fieldEffectContract, fieldWriterTable, type ApplicationEffectContract, type ApplicationCollectionExecutor, type ApplicationCompletedStepResult, type ApplicationEffectReceipt, type ApplicationEvidence, type ApplicationExecutionContext, type ApplicationMutationExecutor, type ApplicationPlannedStep, type ApplicationRef } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
+import { ApplicationConflictError, ApplicationExecutionProgressFailure, applicationFailureReason, rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { storedVideoEditSpaceRender, videoEditAnnotationSchema, videoEditClipSchema, videoEditDocumentSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, createVideoEditSequence, changeVideoEditSequenceSettings, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_SPATIAL_CAMERA_CASCADE, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CONTENT_CASCADES, VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE, VIDEO_EDIT_TIME_CASCADES, VIDEO_EDIT_COMPOSITE_CASCADES, VIDEO_EDIT_PROGRAM_SOURCE_CASCADE, videoEditCollectionValues, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
@@ -79,6 +80,8 @@ function codeCascade(entityType: 'video_edit.item' | 'video_edit.code_version', 
   return { declarationId: `video_edit.code_${entityType.split('.').at(-1)}_${effect}`, effect, entityType, propertyIds: [], revisionScopes: ['video_edit'] }
 }
 function sourcePauseEffect(projectId: string): ApplicationEffectReceipt { return { effect: 'update', entityType: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.entityType, propertyIds: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.propertyIds, refs: [{ kind: 'video_edit.source', id: `${projectId}:source` }], origin: { kind: 'cascade', declarationId: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.declarationId } } }
+/** 源预览已暂停却没能恢复：留下的是源播放状态，不是剪辑内容，所以不列引用。 */
+function sourceLeftover(): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: [], evidence: [] } }
 function cascades(before: VideoEditDocument, after: VideoEditDocument, direct: readonly ApplicationRef[] = [], directProperties: readonly string[] = []): ApplicationEffectReceipt[] {
   const effects: ApplicationEffectReceipt[] = []
   if (!directProperties.includes('video_edit.sequence.spatial_camera')) for (const sequence of after.sequences) {
@@ -193,19 +196,21 @@ async function restore(token: string, compensation = false, context?: Applicatio
     const pausedCommand = setVideoEditView(record.before.id, { playing: false })
     const controller = new AbortController()
     const valid = (): boolean => listVideoEditInstances().includes(instance) && content(instance.document) === content(record.after) && !!record.viewAfter && sameProjectView({ ...projectViewSnapshot(record.before.id), programCommand: previousCommand }, record.viewAfter) && videoEditProgramCommandIdentity(record.before.id) === pausedCommand
-    const cancelIfChanged = (): void => { if (!valid()) controller.abort(new Error('剪辑或节目已有后续操作，源恢复已取消。')) }
+    const cancelIfChanged = (): void => { if (!valid()) controller.abort(new ApplicationConflictError('剪辑或节目已有后续操作，源恢复已取消。')) }
     const unsubscribeView = subscribeVideoEditView(cancelIfChanged)
     const unsubscribeDomain = subscribeVideoEditDomain(cancelIfChanged)
     const pending = restoreVideoEditSourcePause(record.before.id, record.sourcePause, controller.signal)
     const restoringSource = videoEditSourceCommandIdentity(record.before.id)
     try {
       await pending
-      if (!valid()) throw new Error('剪辑或节目已有后续操作，未覆盖新状态。')
+      if (!valid()) throw new ApplicationConflictError('剪辑或节目已有后续操作，未覆盖新状态。')
     } catch (error) {
       const expected = matchesVideoEditSourceCommand(record.before.id, restoringSource) ? restoringSource : record.sourcePause.beforeCommand
       if (listVideoEditInstances().includes(instance) && matchesVideoEditSourceCommand(record.before.id, expected)) {
         try { await revertVideoEditSourcePause(record.before.id, record.sourcePause, expected) }
-        catch (recoveryError) { throw new AggregateError([error, recoveryError], '旧节目操作未恢复；源暂停恢复也未确认，请按当前监视器状态操作。') }
+        catch (recoveryError) {
+          throw new ApplicationExecutionProgressFailure(`${applicationFailureReason(error)}；源暂停恢复也未确认：${applicationFailureReason(recoveryError)}`, [sourceLeftover()], [], error)
+        }
       }
       if (listVideoEditInstances().includes(instance) && videoEditProgramCommandIdentity(record.before.id) === pausedCommand) {
         const restored = setVideoEditView(record.before.id, program); restoreVideoEditProgramCommandIdentity(record.before.id, restored, previousCommand)
@@ -361,11 +366,10 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       sourcePause = await pauseVideoEditSourceForProgram(projectId, context?.signal)
       try {
         context?.signal?.throwIfAborted()
-        if (!isVideoEditContentCurrent(owner, contentVersion) || viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore)) throw new Error('剪辑或节目已有后续修改，节目尚未开始。')
+        if (!isVideoEditContentCurrent(owner, contentVersion) || viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore)) throw new ApplicationConflictError('剪辑或节目已有后续修改，节目尚未开始。')
       } catch (error) {
         if (sourcePause && listVideoEditInstances().includes(owner) && viewBefore && !viewBefore.program.playing && videoEditProgramCommandIdentity(projectId) === viewBefore.programCommand && matchesVideoEditSourceCommand(projectId, sourcePause.afterCommand)) {
-          try { await restoreVideoEditSourcePause(projectId, sourcePause) }
-          catch (recoveryError) { throw new AggregateError([error, recoveryError], '节目尚未开始，原源预览恢复未确认，请按当前状态重试。') }
+          return rollbackStepWrites(error, () => restoreVideoEditSourcePause(projectId, sourcePause!), sourceLeftover)
         }
         throw error
       }

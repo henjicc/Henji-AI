@@ -2,7 +2,8 @@ import { resolveVideoEditStyleMembers, videoEditStylePieceDefinitionInputSchema 
 import { videoEditEffectPresetSchema } from '@/core/videoEdit/effectPresets'
 import { videoEditPresetCreationProperties } from './videoEditEffectPresets'
 import { videoEditPresetCreationItemsSchema } from './videoEditEffectPresetReflection'
-import { captureRecycledRemoval } from '@/features/application-control'
+import { UntrackedRecycledRemovalError, captureRecycledRemoval } from '@/features/application-control'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { restoreDeleted } from '@/services/recycle'
 import { z } from 'zod'
 import { fieldDescriptors, fieldReadValues, fieldWriterTable, unrestrictedCollectionAvailability, type ApplicationFieldDefinition, type ApplicationEntityRegistration, type ApplicationMutationExecutor, type ApplicationCollectionExecutor, type ApplicationPlannedStep, type ApplicationCompletedStepResult, type ApplicationExecutionContext, type ApplicationEvidence, type ApplicationRef, type JsonValue } from '@/core/application-control'
@@ -253,6 +254,15 @@ class LibraryExecutor {
     this.undos.delete(token); return done(state.refs, '已恢复风格库写入前的记录。')
   }
   async compensate(_step: unknown, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await this.undo(result.undoToken)).evidence : [] }
+  /** 一步里已有写入进了风格库：先撤回；撤不回就带着还留着的项抛出，不能当成整步没执行。 */
+  protected async failAfterWrites(error: unknown, state: LibraryUndo, untracked: ApplicationRef[], remainingRefs: () => ApplicationRef[]): Promise<never> {
+    if (!state.styles.length && !state.templates.length && state.defaultBefore === undefined && !untracked.length) throw error
+    const token = this.remember(state)
+    return rollbackStepWrites(error, async () => {
+      await this.undo(token)
+      if (untracked.length) throw new Error('没有恢复记录的删除无法撤回')
+    }, () => done([...remainingRefs(), ...untracked], '风格库写入未能撤回。'))
+  }
 }
 function newStyle(name: string): VideoEditStyle {
   return videoEditStyleSchema.parse({ id: crypto.randomUUID(), name, description: '', version: 0, contentHash: '', updatedAt: new Date().toISOString(), guide: styleGuideTemplate(name), sample: { ...NEW_STYLE_SAMPLE, anchors: [...NEW_STYLE_SAMPLE.anchors], code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } } } })
@@ -260,10 +270,8 @@ function newStyle(name: string): VideoEditStyle {
 async function resolveStyleMutations(mutations: Extract<ApplicationPlannedStep, { kind: 'mutation' }>['mutations'], signal?: AbortSignal, previous: VideoEditStyle['effectPresets'] = []) {
   return Promise.all(mutations.map(async mutation => mutation.propertyId === `${STYLE_ENTITY}.effect_presets` ? { ...mutation, value: await resolveVideoEditStyleMembers(mutation.value, previous, signal) as unknown as JsonValue } : mutation))
 }
-async function saveStyleWithMemberReadback(style: VideoEditStyle): Promise<VideoEditLibraryStyle> {
-  const saved = await videoEditStyleLibrary.saveStyle(style)
+function assertStyleMemberReadback(style: VideoEditStyle): void {
   if (!jsonEqual(videoEditStyleLibrary.requireStyle(style.id).style.effectPresets, style.effectPresets)) throw new Error('风格成员保存读回不一致。')
-  return saved
 }
 export class VideoEditStyleCollectionExecutor extends LibraryExecutor implements ApplicationCollectionExecutor {
   constructor(readonly entityType: typeof STYLE_ENTITY | typeof TEMPLATE_ENTITY) { super() }
@@ -272,15 +280,18 @@ export class VideoEditStyleCollectionExecutor extends LibraryExecutor implements
     await videoEditStyleLibrary.ready()
     const state: LibraryUndo = { styles: [], templates: [], refs: [] }
     const fields = this.entityType === STYLE_ENTITY ? styleFields : templateFields
+    let current: ApplicationRef | undefined
+    try {
     if (step.operation.kind === 'create') for (const item of step.operation.items) {
       const unknown = Object.keys(item.properties).filter(key => !fields.some(value => value.propertyId === key && value.writer))
       if (unknown.length) throw new Error(`创建时不能写这些属性：${unknown.join('、')}；可写：${fields.filter(value => value.writer).map(value => value.propertyId).join('、')}。`)
       if (this.entityType === STYLE_ENTITY) {
         const draft: StyleDraft = { entry: undefined as unknown as VideoEditLibraryStyle, style: newStyle(styleShape.name.parse(item.properties[`${STYLE_ENTITY}.name`])), isDefault: false }
         await applyWriterTable(fieldWriterTable(styleFields), draft, await resolveStyleMutations(Object.entries(item.properties).map(([propertyId, value]) => ({ propertyId, operation: 'set' as const, value: value as JsonValue })), context.signal))
-        const saved = await saveStyleWithMemberReadback(draft.style)
-        if (draft.isDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); await videoEditStyleLibrary.setDefaultStyle(saved.style.id, 'assistant') }
+        const saved = await videoEditStyleLibrary.saveStyle(draft.style)
         state.styles.push({ id: saved.style.id, after: saved.style }); state.refs.push({ kind: STYLE_ENTITY, id: saved.style.id })
+        assertStyleMemberReadback(draft.style)
+        if (draft.isDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); await videoEditStyleLibrary.setDefaultStyle(saved.style.id, 'assistant') }
       } else {
         const draft = videoEditTemplateSchema.parse({ id: crypto.randomUUID(), name: item.properties[`${TEMPLATE_ENTITY}.name`], description: '', version: 1, contentHash: '', updatedAt: new Date().toISOString(), style: null, body: item.properties[`${TEMPLATE_ENTITY}.body`] })
         await applyWriterTable(fieldWriterTable(templateFields), draft, Object.entries(item.properties).map(([propertyId, value]) => ({ propertyId, operation: 'set' as const, value: value as JsonValue })))
@@ -291,14 +302,19 @@ export class VideoEditStyleCollectionExecutor extends LibraryExecutor implements
       if (ref.kind !== this.entityType) throw new Error(`请使用 ${this.entityType} 引用。`)
       if (this.entityType === STYLE_ENTITY) {
         const entry = videoEditStyleLibrary.requireStyle(ref.id); if (entry.builtin) throw new Error('内置风格只读，不能删除。')
-        const recycleId = await captureRecycledRemoval(() => videoEditStyleLibrary.removeStyle(ref.id), item => item.path === entry.dir)
+        current = ref; const recycleId = await captureRecycledRemoval(() => videoEditStyleLibrary.removeStyle(ref.id), item => item.path === entry.dir)
         state.styles.push({ id: ref.id, before: entry.style, recycleId })
       } else {
         const entry = videoEditStyleLibrary.requireTemplate(ref.id)
-        const recycleId = await captureRecycledRemoval(() => videoEditStyleLibrary.removeTemplate(ref.id), item => item.path === entry.file)
+        current = ref; const recycleId = await captureRecycledRemoval(() => videoEditStyleLibrary.removeTemplate(ref.id), item => item.path === entry.file)
         state.templates.push({ id: ref.id, before: entry.template, recycleId })
       }
       state.refs.push(ref)
+    }
+    } catch (error) {
+      // 撤回时逐项出栈，只报告还没恢复的项。
+      return this.failAfterWrites(error, state, error instanceof UntrackedRecycledRemovalError && current ? [current] : [],
+        () => [...state.styles.map(({ id }) => ({ kind: STYLE_ENTITY, id })), ...state.templates.map(({ id }) => ({ kind: TEMPLATE_ENTITY, id }))])
     }
     return done(state.refs, '已从风格库目录回读。', this.remember(state))
   }
@@ -318,8 +334,10 @@ export class VideoEditStyleMutationExecutor extends LibraryExecutor implements A
       if (draft.entry.builtin && contentKeys.length) throw new Error('内置风格只读；要改先以它的内容创建个人风格。')
       await applyWriterTable(fieldWriterTable(styleFields), draft, await resolveStyleMutations(step.mutations, context.signal, before.effectPresets))
       context.signal?.throwIfAborted()
-      if (contentKeys.length) state.styles.push({ id: before.id, before, after: (await saveStyleWithMemberReadback(draft.style)).style })
-      if (draft.isDefault !== wasDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); await videoEditStyleLibrary.setDefaultStyle(draft.isDefault ? before.id : null, 'assistant') }
+      try {
+        if (contentKeys.length) { state.styles.push({ id: before.id, before, after: (await videoEditStyleLibrary.saveStyle(draft.style)).style }); assertStyleMemberReadback(draft.style) }
+        if (draft.isDefault !== wasDefault) { state.defaultBefore = videoEditStyleLibrary.defaultStyleId(); await videoEditStyleLibrary.setDefaultStyle(draft.isDefault ? before.id : null, 'assistant') }
+      } catch (error) { return this.failAfterWrites(error, state, [], () => [step.target]) }
     } else {
       const before = await templateValue(step.target); const draft = structuredClone(before)
       await applyWriterTable(fieldWriterTable(templateFields), draft, step.mutations); context.signal?.throwIfAborted()
