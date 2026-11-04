@@ -3,7 +3,7 @@ import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Camera, Copy, Eye, EyeOff, Trash2, User } from 'lucide-react'
 import { UiEmpty, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 import type { StageObject } from '../domain/sceneTypes'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import { useCameraStageStore, type CameraStageState } from '../store/cameraStageStore'
 import { createRafScheduler } from '@/utils/createRafScheduler'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 
@@ -18,6 +18,8 @@ const TypeIcon: React.FC<{ type: StageObject['type'] }> = ({ type }) => {
 /*
  * 行内组件只接收列表展示用到的字段：播放与逐帧导出每次 seek 都会换掉整份 objects（变换被重新采样），
  * 名称、显隐不变的行据此跳过重渲染，否则每帧要重建全部行的悬停提示。
+ * 操作函数也由列表传入、行内不订阅 store：每个订阅在每次 store 写入时都要检查一遍，
+ * 上万行时，仅播放头的低频回写就要检查几万次。
  */
 interface ObjectNameButtonProps {
   id: string
@@ -25,16 +27,16 @@ interface ObjectNameButtonProps {
   type: StageObject['type']
   selected: boolean
   framingCamera: boolean
+  onSelect: (id: string) => void
   onBeginRename: (id: string, name: string) => void
 }
 
-const ObjectNameButton = memo(function ObjectNameButton({ id, name, type, selected, framingCamera, onBeginRename }: ObjectNameButtonProps) {
-  const setSelected = useCameraStageStore((state) => state.setSelected)
+const ObjectNameButton = memo(function ObjectNameButton({ id, name, type, selected, framingCamera, onSelect, onBeginRename }: ObjectNameButtonProps) {
   return (
     <UiOptionButton
       active={selected}
       variant="menu"
-      onClick={() => setSelected(id)}
+      onClick={() => onSelect(id)}
       onDoubleClick={() => onBeginRename(id, name)}
       size="sm"
       className="min-w-0 flex-1 gap-2"
@@ -51,17 +53,23 @@ const ObjectNameButton = memo(function ObjectNameButton({ id, name, type, select
   )
 })
 
-const ObjectRowActions = memo(function ObjectRowActions({ id, name, visible }: { id: string; name: string; visible: boolean }) {
-  const removeObject = useCameraStageStore((state) => state.removeObject)
-  const updateObject = useCameraStageStore((state) => state.updateObject)
-  const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
+interface ObjectRowActionsProps {
+  id: string
+  name: string
+  visible: boolean
+  onUpdate: CameraStageState['updateObject']
+  onDuplicate: CameraStageState['duplicateObject']
+  onRemove: CameraStageState['removeObject']
+}
+
+const ObjectRowActions = memo(function ObjectRowActions({ id, name, visible, onUpdate, onDuplicate, onRemove }: ObjectRowActionsProps) {
   return (
     <>
       <UiIconButton
         size="xs"
         tooltip={visible ? '隐藏' : '显示'}
         aria-label={visible ? `隐藏${name}` : `显示${name}`}
-        onClick={() => updateObject(id, { visible: !visible })}
+        onClick={() => onUpdate(id, { visible: !visible })}
       >
         {visible ? <Eye  /> : <EyeOff  />}
       </UiIconButton>
@@ -69,7 +77,7 @@ const ObjectRowActions = memo(function ObjectRowActions({ id, name, visible }: {
         size="xs"
         tooltip="复制 (Ctrl+D)"
         aria-label={`复制${name}`}
-        onClick={() => duplicateObject(id)}
+        onClick={() => onDuplicate(id)}
       >
         <Copy  />
       </UiIconButton>
@@ -78,7 +86,7 @@ const ObjectRowActions = memo(function ObjectRowActions({ id, name, visible }: {
         tone="danger"
         tooltip="删除"
         aria-label={`删除${name}`}
-        onClick={() => removeObject(id)}
+        onClick={() => onRemove(id)}
       >
         <Trash2  />
       </UiIconButton>
@@ -92,6 +100,8 @@ const ObjectListPanel: React.FC = () => {
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateObject = useCameraStageStore((state) => state.updateObject)
+  const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
+  const removeObject = useCameraStageStore((state) => state.removeObject)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -180,10 +190,18 @@ const ObjectListPanel: React.FC = () => {
                 type={object.type}
                 selected={isSelected}
                 framingCamera={isFramingCamera}
+                onSelect={setSelected}
                 onBeginRename={beginRename}
               />
             )}
-            <ObjectRowActions id={object.id} name={object.name} visible={object.visible} />
+            <ObjectRowActions
+              id={object.id}
+              name={object.name}
+              visible={object.visible}
+              onUpdate={updateObject}
+              onDuplicate={duplicateObject}
+              onRemove={removeObject}
+            />
           </div>
         )
       })}
