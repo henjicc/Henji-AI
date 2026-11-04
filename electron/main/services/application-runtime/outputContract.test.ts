@@ -184,7 +184,7 @@ const successData: Record<string, Record<string, unknown>> = {
   observe_camera_stage_scene: { scene: { objects: [{ id: 'object' }] }, ...revisions },
   verify_camera_stage_scene: { verified: true, checkedAt: new Date(0).toISOString(), evidence: [], unmetConditions: [], ...revisions },
   organize_camera_stage_motion: { resultRef: ref('camera_stage.document', 'camera'), reviewId: 'review', candidates: [{ id: 'candidate', label: '移动' }], unavailable: [], ...revisions },
-  apply_camera_stage_motion_candidate: { resultRef: ref('camera_stage.document', 'camera'), saved: true, undoToken: 'undo', stateKeyframeRefs: [ref('camera_stage.state_keyframe', 'camera:key')], verification: { verified: true, condition: message }, ...revisions },
+  apply_camera_stage_motion_candidate: { resultRef: ref('camera_stage.document', 'camera'), saved: true, undoToken: 'undo', stateKeyframeRefs: [ref('camera_stage.state_keyframe', 'camera:key')], verification: { verified: true, condition: message }, clearance: { obstructions: [], obstructionCount: 0, belowGroundAt: null }, ...revisions },
   render_camera_stage_output: { taskRef: ref('camera_stage.render_task', 'task'), status: 'submitted', resultRefs: [ref('camera_stage.render_task', 'task')], ...revisions },
   cancel_camera_stage_render_task: { taskRef: ref('camera_stage.render_task', 'task'), status: 'cancelled', resultRefs: [nodeRef], ...revisions },
   prepare_canvas_node_generation: { preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'image', options: {} }, submitInput: { documentId: 'canvas', nodeId: 'node' }, ...revisions },
