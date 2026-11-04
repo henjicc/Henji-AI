@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { ApplicationCollectionExecutor, ApplicationCompletedStepResult, ApplicationEvidence, ApplicationPlannedStep } from '@/core/application-control'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { createLogger } from '@/core/logging'
 import { getPlatform } from '@/platform'
 
@@ -31,8 +32,23 @@ export class WebRecordingCollectionExecutor implements ApplicationCollectionExec
     try {
       for (const id of ids) { await platform.remove(id); removed.push(id) }
     } catch (error) {
-      for (const id of removed.reverse()) await platform.restore(id).catch(rollbackError => logger.error('网页录制删除回滚失败', rollbackError, { event: 'web_replay.collection.rollback.failed', context: { id } }))
-      throw error
+      // 每段都尝试恢复；恢复不了的留在 removed 里，作为仍被删除的事实报告。
+      const unrestored: string[] = []
+      let firstRollbackError: unknown
+      return rollbackStepWrites(error, async () => {
+        for (const id of [...removed].reverse()) {
+          await platform.restore(id).catch(rollbackError => {
+            logger.error('网页录制删除回滚失败', rollbackError, { event: 'web_replay.collection.rollback.failed', context: { id } })
+            unrestored.push(id)
+            firstRollbackError ??= rollbackError
+          })
+        }
+        removed.splice(0, removed.length, ...unrestored)
+        if (unrestored.length > 0) throw firstRollbackError
+      }, () => ({
+        status: 'completed', resultingRevisions: { screen_recording: 0 },
+        directRefs: removed.map(id => ({ kind: WEB_RECORDING_TYPE, id, revision: 0 })), evidence: [],
+      }))
     }
     const undoToken = `web-recording-collection-undo:${uuidv4()}`
     undoRecords.set(undoToken, removed)

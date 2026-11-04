@@ -7,6 +7,7 @@ import { intentHost, intentDocuments, intentProvider, intentRevisions, type Inte
 import { creativeIntentSchemaRef } from './creativeIntentFields'
 import { intentResult, retainIntentUndo, undoIntent } from './creativeIntentMutationExecutors'
 import { createLogger } from '@/core/logging'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 const logger = createLogger('features.applicationControl.creativeIntent')
 
 export function explanationBodyRecord(ref: ApplicationRef) {
@@ -73,7 +74,11 @@ export class CreativeExplanationMutationExecutor implements ApplicationMutationE
     await applyWriterTable(this.table, changes, step.mutations)
     logger.info('讲解校正开始', { event: 'creative_intent.body.change.start', requestId: context.requestId, entityType: this.entityType })
     try { await editor.apply(changes, context) }
-    catch (error) { logger.warn('讲解校正未完成', { event: 'creative_intent.body.change.failed', requestId: context.requestId, entityType: this.entityType }); await editor.restore(before, context); throw error }
+    catch (error) {
+      logger.warn('讲解校正未完成', { event: 'creative_intent.body.change.failed', requestId: context.requestId, entityType: this.entityType })
+      // 编辑器先改内存、最后才写回文档；文档没变不代表没写入，所以总是先恢复，恢复不了就按未补偿报告。
+      return rollbackStepWrites(error, () => editor.restore(before, context), () => ({ ...intentResult([step.target], this.domain), evidence: [] }))
+    }
     const after = JSON.stringify(explanationBodyRecord(step.target).session)
     logger.info('讲解校正完成', { event: 'creative_intent.body.change.completed', requestId: context.requestId, entityType: this.entityType })
     return { ...intentResult([step.target], this.domain), undoToken: retainIntentUndo(async undoContext => {

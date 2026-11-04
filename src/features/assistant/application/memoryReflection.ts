@@ -10,6 +10,7 @@ import { readMemory, writeMemory, refreshMemory, revertMemory } from '@/services
 import { styleMemoryStorage } from '@/services/assistantMemory/styleMemoryStorage'
 
 import { MEMORY_RULES } from '@/core/assistant/memoryEntries'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 const types = { global: 'assistant.memory', project: 'document.project_memory', style: 'video_edit.style_preference' } as const
 const parents = { global: 'assistant.memory_settings', project: 'documents.project', style: 'video_edit.style' } as const
 const schemaRef = (kind: 'entity' | 'property', id: string) => ({ catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 1, digest: `sha256:${'9'.repeat(64)}` })
@@ -93,11 +94,11 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
   private readonly table
   constructor(private readonly layer: MemoryLayer) { this.entityType = types[layer]; this.table = fieldWriterTable(fields(layer)); this.writableProperties = writableProperties(this.table); this.propertyOperations = propertyOperations(this.table) }
   async apply(step: Step): Promise<ApplicationCompletedStepResult> {
-    const changes: string[] = [], refs: ApplicationRef[] = [], facts: string[] = []
+    const changes: string[] = [], changedRefs: ApplicationRef[] = [], refs: ApplicationRef[] = [], facts: string[] = []
     const resultingRevisions: Record<string, number> = { assistant_memory: 0 }
     const write = async (ref: ApplicationRef, target: MemoryTarget, id: string, expectedRevision: number, entry: MemoryEntryInput | null): Promise<void> => {
       const change = await writeMemory({ target, id, expectedRevision, entry: entry ? { ...entry, source: WRITER_SOURCE } : null, actor: WRITER_SOURCE, reason: entry?.reason ?? '根据用户明确表达的偏好更新记忆。' })
-      if (change) changes.push(change.id)
+      if (change) { changes.push(change.id); changedRefs.push(ref) }
       refs.push(ref); facts.push(entry ? `记忆已保存，来源记为 ${WRITER_SOURCE}（经助手写入的记忆来源由写入者决定，用户在设置里亲手改的才记为 user）。` : '记忆已删除。')
       // 集合撤销由历史条目的 CAS 保护；集合回执只报告集合时钟，已删除条目没有可读取的修订。
       if (step.kind === 'mutation') resultingRevisions[await scope(ref)] = change ? change.after?.revision ?? 0 : expectedRevision
@@ -120,7 +121,12 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
         if (expected === undefined) throw new Error('BASELINE_REQUIRED：删除前先读取该条记忆。')
         await write(ref, current.target, current.entry.id, expected, null)
       }
-    } catch (error) { for (const id of changes.reverse()) await revertMemory(id, 'assistant'); throw error }
+    } catch (error) {
+      // 撤回一条去掉一条；回滚中途失败时，剩下的 changes 就是仍然生效的记忆修改。
+      return rollbackStepWrites(error, async () => {
+        while (changes.length) { await revertMemory(changes[changes.length - 1], 'assistant'); changes.pop(); changedRefs.pop() }
+      }, () => ({ status: 'completed', resultingRevisions, directRefs: changedRefs, evidence: [] }))
+    }
     return { status: 'completed', resultingRevisions, directRefs: refs, evidence: refs.map((target, index) => ({ kind: 'entity_state', target, fact: facts[index], capturedAt: new Date().toISOString() })), undoToken: JSON.stringify(changes) }
   }
   async undo(token: string): Promise<ApplicationCompletedStepResult> {

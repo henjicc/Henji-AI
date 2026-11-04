@@ -3,7 +3,7 @@ import { creativeIntentFields, type IntentWrite } from './creativeIntentFields'
 import { intentRecord, intentHost, splitIntentRef, intentRevisions, type IntentDomain, type IntentEntity } from './creativeIntentHost'
 import { onExplanationBodyErased, explanationBodyRef } from '@/core/creativeIntent/semanticIntentEdits'
 import { createLogger } from '@/core/logging'
-import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
+import { ApplicationExecutionProgressFailure, rollbackStepWrites } from '@/core/application-control/execution/persistence'
 const logger = createLogger('features.applicationControl.creativeIntent')
 type Step = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 const undos = new Map<string, (context?: ApplicationExecutionContext) => Promise<ApplicationCompletedStepResult>>()
@@ -62,8 +62,8 @@ export class CreativeIntentMutationExecutor implements ApplicationMutationExecut
         const result = { ...intentResult([step.target], this.domain), undoToken: retainIntentUndo(finish(), [step.target], this.domain) }
         throw new ApplicationExecutionProgressFailure('候选已应用但保存未完成；请重试保存，不要再次生成或应用。', [result], [], error)
       }
-      if (JSON.stringify(record.host.read()) !== JSON.stringify(record.head)) await finish()()
-      throw error
+      if (JSON.stringify(record.host.read()) === JSON.stringify(record.head)) throw error
+      return rollbackStepWrites(error, () => finish()(), () => ({ ...intentResult([step.target], this.domain), evidence: [] }))
     }
   }
   async undo(token: string) { return undoIntent(token) }

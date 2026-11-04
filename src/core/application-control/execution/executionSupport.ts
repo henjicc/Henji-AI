@@ -1,7 +1,7 @@
 import type { ApplicationChangePlan, ApplicationPlannedStep, ApplicationEffectReceipt, ApplicationTransactionMode, ApplicationEvidence } from '../transactions'
 import type { ApplicationReflectionRegistry } from '../registry'
 import { assertCollectionOperationAvailable } from './availability'
-import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, applicationFailureReason, normalizeEffectRefLabels } from './persistence'
+import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, applicationFailureReason, failedStepFacts, normalizeEffectRefLabels } from './persistence'
 import type { ApplicationMutationExecutor, ApplicationCollectionExecutor, ApplicationSemanticOperationExecutor, ApplicationControlExecutionDependencies, ApplicationExecutionContext, ApplicationCompletedStepResult, ApplicationStepExecutionResult } from './types'
 import { resolveUndoExpectedAbsentMutations } from './undoRevisionProbe'
 import { normalizeApplicationRefLabel } from '../identifiers'
@@ -68,10 +68,12 @@ export class ApplicationExecutionSupport {
     assertWritable()
     return assertWritable
   }
+  /** `exact` 为假时用于失败报告：失败那一步只写了一部分，引用可以少于计划，算法操作可以没有直接 Effect。 */
   protected collectEffects(
     steps: ApplicationPlannedStep[],
     results: ApplicationCompletedStepResult[],
     direction: 'commit' | 'undo' = 'commit',
+    exact = true,
   ): ApplicationEffectReceipt[] {
     return results.flatMap((result, index) => {
       const step = steps[index]
@@ -111,30 +113,31 @@ export class ApplicationExecutionSupport {
               origin: { kind: 'direct' as const },
             }]
           : result.directEffects ?? []
-      this.assertDirectRefs(step, direct)
+      this.assertDirectRefs(step, direct, exact)
       return [...direct, ...(result.cascadeEffects ?? [])]
     })
   }
 
-  protected assertDirectRefs(step: ApplicationPlannedStep, effects: ApplicationEffectReceipt[]): void {
+  protected assertDirectRefs(step: ApplicationPlannedStep, effects: ApplicationEffectReceipt[], exact = true): void {
     if (step.kind === 'operation') {
-      if (effects.length === 0) throw new Error(`DIRECT_EFFECT_REQUIRED:${step.capabilityId}`)
+      if (exact && effects.length === 0) throw new Error(`DIRECT_EFFECT_REQUIRED:${step.capabilityId}`)
       return
     }
     const refs = effects.flatMap((effect) => effect.refs)
     if (refs.some((ref) => ref.kind !== step.entityType)) throw new Error('DIRECT_EFFECT_REF_KIND_MISMATCH')
     if (step.kind === 'mutation') {
       const expected = refKey(step.target)
-      if (refs.length !== 1 || refKey(refs[0]) !== expected) throw new Error('DIRECT_EFFECT_REF_MISMATCH')
+      if ((exact ? refs.length !== 1 : refs.length > 1) || refs.some((ref) => refKey(ref) !== expected)) throw new Error('DIRECT_EFFECT_REF_MISMATCH')
       return
     }
     const expectedCount = step.operation.kind === 'create'
       ? step.operation.items.length
       : step.operation.targets.length
-    if (refs.length !== expectedCount) throw new Error('DIRECT_EFFECT_REF_COUNT_MISMATCH')
+    if (exact ? refs.length !== expectedCount : refs.length > expectedCount) throw new Error('DIRECT_EFFECT_REF_COUNT_MISMATCH')
     if (step.operation.kind === 'remove') {
       const actual = new Set(refs.map(refKey))
-      if (step.operation.targets.some((target) => !actual.has(refKey(target)))) {
+      const planned = new Set(step.operation.targets.map(refKey))
+      if (exact ? step.operation.targets.some((target) => !actual.has(refKey(target))) : refs.some((ref) => !planned.has(refKey(ref)))) {
         throw new Error('DIRECT_EFFECT_REF_MISMATCH')
       }
     }
@@ -441,6 +444,11 @@ export class ApplicationExecutionSupport {
   protected operationKey(capabilityId: string, version: number): string {
     return `${capabilityId}@${version}`
   }
+
+  protected failedStepFacts(error: unknown, stepIndex: number): ReturnType<typeof failedStepFacts> {
+    const facts = failedStepFacts(error, stepIndex)
+    return { ...facts, results: facts.results.map(normalizeCompletedRefLabels) }
+  }
   protected async executePlan(
     plan: ApplicationChangePlan,
     context: ApplicationExecutionContext
@@ -486,8 +494,10 @@ export class ApplicationExecutionSupport {
           error.receipts, [...completed.map((_, index) => index), ...error.completedStepIndexes.map((index) => offset + index)])
       }
       const original = applicationFailureReason(error)
+      const failedStep = this.failedStepFacts(error, completed.length)
       const executionFailure = (message: string, compensated: number[] = []) =>
-        new ApplicationExecutionProgressFailure(message, completed, compensated, error)
+        new ApplicationExecutionProgressFailure(message, [...completed, ...failedStep.results], [...failedStep.compensated, ...compensated],
+          error, [...completed.map((_, index) => index), ...failedStep.indexes])
       // `atomic` 也必须补偿。此前只有 `compensatable` 走补偿，于是声明 atomic 的计划失败后
       // 把已完成的步骤原样留在应用里，却对调用方自称"事务"——三维布置就是这么留下一个
       // 压在立方体上的圆柱体的。只有 `non_reversible` 才允许不补偿，那是它的字面语义。

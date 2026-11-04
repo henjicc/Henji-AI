@@ -1,6 +1,7 @@
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { ApplicationCollectionExecutor, ApplicationCompletedStepResult, ApplicationEntityRegistration, ApplicationPlannedStep, ApplicationRef, ApplicationSchemaRef, JsonValue } from '@/core/application-control'
 import { unrestrictedCollectionAvailability } from '@/core/application-control'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { listDeleted, restoreDeleted } from '@/services/recycle'
 import type { RecycledItem } from '@/core/localRecords/recycle'
 
@@ -31,8 +32,12 @@ export class RecyclableCollectionExecutor implements ApplicationCollectionExecut
       this.undoEntries.set(undoToken, { pending: removed, refs: removed.map(item => item.ref) })
       return result
     } catch (error) {
-      for (const item of removed.reverse()) await restoreDeleted(item.recycleId)
-      throw error
+      return rollbackStepWrites(error, async () => {
+        while (removed.length) {
+          await restoreDeleted(removed[removed.length - 1].recycleId)
+          removed.pop()
+        }
+      }, () => this.receipt(removed.map(item => item.ref), '内容已移到最近删除，回滚未能恢复。'))
     }
   }
   async undo(token: string): Promise<ApplicationCompletedStepResult> {

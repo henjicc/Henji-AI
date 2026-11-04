@@ -338,8 +338,10 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         execute: async (batchContext) => {
           executionStarted = true
           const applied: ApplicationCompletedStepResult[] = []
+          let current = record.steps.length - 1
           try {
             for (let index = record.steps.length - 1; index >= 0; index -= 1) {
+              current = index
               const original = record.results[index]
               if (!original.undoToken) throw new Error('UNDO_NOT_SUPPORTED')
               const step = record.steps[index]
@@ -351,9 +353,11 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
                 : { ...undone, directRefs: original.directRefs.map(({ revision: _revision, ...ref }) => ref) })
             }
           } catch (error) {
-            if (applied.length > 0) this.forgetUndoRecord(request.undoRef)
-            throw new ApplicationExecutionProgressFailure(`撤销执行失败：${applicationFailureReason(error)}`, applied, [], error,
-              applied.map((_, index) => record.steps.length - 1 - index))
+            const failedStep = this.failedStepFacts(error, current)
+            if (applied.length > 0 || failedStep.results.length > 0) this.forgetUndoRecord(request.undoRef)
+            throw new ApplicationExecutionProgressFailure(`撤销执行失败：${applicationFailureReason(error)}`,
+              [...applied, ...failedStep.results], failedStep.compensated, error,
+              [...applied.map((_, index) => record.steps.length - 1 - index), ...failedStep.indexes])
           }
           return applied
         },

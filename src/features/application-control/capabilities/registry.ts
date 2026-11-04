@@ -267,7 +267,8 @@ function projectFailure(error: unknown): ApplicationCapabilityFailure {
   }
   if (error instanceof ApplicationTransactionFailure) {
     const transaction = transactionFailureFacts(error.result)
-    return { ok: false, error: { code: error.result.code === 'CONFLICT' ? 'CONFLICT' : 'CAPABILITY_REJECTED', message: error.message,
+    const code = error.result.code === 'CONFLICT' ? 'CONFLICT' : error.result.code === 'CANCELLED' ? 'ABORTED' : 'CAPABILITY_REJECTED'
+    return { ok: false, error: { code, message: error.message,
       recoverable: error.result.recoverable, ...(transaction ? { details: { transaction,
         ...(error.result.partial?.completedStepIndexes.length === 0 && !error.result.persistence && !error.result.effects?.length ? { execution: { notExecuted: true } } : {}),
       } } : {}) } }

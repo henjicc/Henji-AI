@@ -7,6 +7,7 @@ import type {
   ApplicationPlannedStep,
 } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
+import { applicationFailureReason, rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { createLogger } from '@/core/logging'
 
 import {
@@ -69,7 +70,7 @@ async function restoreSnapshot(
     }
   }
   if (failures.length > 0) {
-    throw new Error(`ASSET_ROLLBACK_FAILED：${failures.map(String).join('；')}`)
+    throw new Error(`ASSET_ROLLBACK_FAILED：${failures.map(applicationFailureReason).join('；')}`)
   }
 }
 
@@ -93,18 +94,28 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
     try {
       await applyWriterTable(WRITERS, { assetId, applied }, step.mutations)
     } catch (error) {
-      try {
-        await restoreSnapshot(assetId, before, applied)
-      } catch (rollbackError) {
-        logger.error('素材属性回滚失败', rollbackError, {
-          event: 'asset.mutation.rollback.failed', assetId, appliedCount: applied.size,
-        })
-        throw new Error(`ASSET_MUTATION_AND_ROLLBACK_FAILED：${String(error)}；${String(rollbackError)}`)
-      }
       logger.error('素材属性写入失败', error, {
         event: 'asset.mutation.apply.failed', assetId, appliedCount: applied.size,
       })
-      throw error
+      return rollbackStepWrites(error, async () => {
+        try {
+          await restoreSnapshot(assetId, before, applied)
+        } catch (rollbackError) {
+          logger.error('素材属性回滚失败', rollbackError, {
+            event: 'asset.mutation.rollback.failed', assetId, appliedCount: applied.size,
+          })
+          throw rollbackError
+        }
+      }, () => {
+        this.dependencies.bumpRevision()
+        const revision = this.dependencies.readRevision()
+        return {
+          status: 'completed',
+          resultingRevisions: { assets: revision },
+          directRefs: [{ kind: this.entityType, id: assetId, revision }],
+          evidence: [],
+        }
+      })
     }
 
     this.dependencies.bumpRevision()

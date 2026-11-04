@@ -1,7 +1,8 @@
 import { applicationTransactionResultSchema, type ApplicationTransactionResult, type ApplicationChangePlan, type ApplicationPlannedStep } from '../transactions'
 import type { ApplicationExecutionContext } from './types'
 import { ApplicationExecutionSupport } from './executionSupport'
-import { ApplicationPersistenceBoundaryFailure, ApplicationExecutionProgressFailure, type ApplicationPersistenceReceipt } from './persistence'
+import { ApplicationPersistenceBoundaryFailure, ApplicationExecutionProgressFailure, applicationFailureOrigin, isApplicationCancellation, isApplicationConflict,
+  type ApplicationPersistenceReceipt } from './persistence'
 
 function failure(
   code: Extract<ApplicationTransactionResult, { status: 'failed' }>['code'],
@@ -65,7 +66,7 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
     if (result.status !== 'failed') return result
     const remaining = completed.map((item, offset) => ({ item, index: indexes[offset] }))
       .filter(({ index }) => !compensated.includes(index))
-    const effects = this.collectEffects(remaining.map(({ index }) => steps[index]), remaining.map(({ item }) => item), direction)
+    const effects = this.collectEffects(remaining.map(({ index }) => steps[index]), remaining.map(({ item }) => item), direction, false)
     const current = await this.readCurrentRevisions(steps, context).catch(() => ({}))
     const completedRevisions = Object.assign({}, ...completed.map((item) => item.resultingRevisions)) as Record<string, number>
     return { ...result, currentRevisions: { ...completedRevisions, ...result.currentRevisions, ...current },
@@ -79,15 +80,21 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
     currentRevisions?: Record<string, number>
   ): ApplicationTransactionResult {
     if (error instanceof ApplicationExecutionProgressFailure) {
-      const indexes = error.completedStepIndexes
-      const uncompensated = indexes.filter((index) => !error.compensatedStepIndexes.includes(index))
+      // 失败那一步的多条结果记在同一下标上，partial 只列步骤。
+      const indexes = [...new Set(error.completedStepIndexes)]
+      const compensated = [...new Set(error.compensatedStepIndexes)]
+      const uncompensated = indexes.filter((index) => !compensated.includes(index))
       const state = indexes.length === 0 ? '没有任何步骤被提交，应用状态未改变。'
         : uncompensated.length === 0 ? '已完成步骤均已补偿。' : '仍有已执行的步骤未补偿，请先检查当前内容，不要重复已执行的步骤。'
+      // 取消与冲突不因包装变成执行失败：调用方据错误码决定停下还是重新读取后规划。
+      const origin = applicationFailureOrigin(error)
+      const code = isApplicationCancellation(origin) ? 'CANCELLED' : isApplicationConflict(origin) ? 'CONFLICT' : 'EXECUTION_FAILED'
       // 原因只写业务原文；完成、补偿到哪一步由 partial 字段表达，不拼进文案。
-      return failure('EXECUTION_FAILED', `${indexes.length === 0 ? '操作失败' : '操作未完整完成'}：${error.message.replace(/[。.]$/, '')}。${state}`.slice(0, 2000), uncompensated.length === 0, {
-        transactionRef, partial: { completedStepIndexes: indexes, compensatedStepIndexes: error.compensatedStepIndexes,
-          uncompensatedStepIndexes: uncompensated },
-      })
+      return failure(code, `${indexes.length === 0 ? '操作失败' : '操作未完整完成'}：${error.message.replace(/[。.]$/, '')}。${state}`.slice(0, 2000),
+        uncompensated.length === 0 && code !== 'CANCELLED', {
+          transactionRef, partial: { completedStepIndexes: indexes, compensatedStepIndexes: compensated,
+            uncompensatedStepIndexes: uncompensated },
+        })
     }
     if (error instanceof ApplicationPersistenceBoundaryFailure) {
       const indexes = error.completedStepIndexes
@@ -106,7 +113,8 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
       })
     }
     const message = error instanceof Error ? error.message : String(error)
-    if (message.includes('REVISION_CONFLICT')) {
+    if (isApplicationCancellation(error)) return failure('CANCELLED', '操作已取消。', false, { transactionRef })
+    if (isApplicationConflict(error)) {
       return failure('CONFLICT', '应用状态已变化，请重新观察并规划。', true, { transactionRef, currentRevisions })
     }
     // 属性写不了要报出是哪条、以及这个实体上有哪些能写——原始错误里已经带了这些，
@@ -121,7 +129,6 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
       return failure('PERMISSION_DENIED', '提交时权限或属性可写状态已变化。', true, { transactionRef })
     }
     if (message.includes('NOT_FOUND')) return failure('NOT_FOUND', `计划引用的对象不存在。原因：${message}`, true, { transactionRef })
-    if (message === 'CANCELLED') return failure('CANCELLED', '操作已取消。', false, { transactionRef })
     // 兜底分支同样要带上原始错误：否则任何未归类的失败对调用方都只是"应用事务执行失败"，
     // 既无法自我修正，也无法据以判断该不该重试。
     return failure('EXECUTION_FAILED', `应用事务执行失败。原因：${message}`, false, { transactionRef })

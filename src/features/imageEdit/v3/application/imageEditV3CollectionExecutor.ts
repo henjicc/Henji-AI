@@ -20,6 +20,7 @@ import { listCreatableImageEditOperationIdsV3 } from '@/core/imageEdit/v3/operat
 import type { ImageEditCommandV3 } from '@/core/imageEdit/v3/commandTypes'
 import type { ImageEditJsonObjectV3, ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { createLogger } from '@/core/logging'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 
 import { getImageEditDocumentCatalogRevisionV3, requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
 import { findImageEditV3LiveLayer, imageEditV3GroupRef, imageEditV3LayerRef, splitImageEditV3DocumentRef, splitImageEditV3LayerRef } from './imageEditDocumentRefs'
@@ -277,7 +278,6 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
         }),
       }
     } catch (error) {
-      if (commandIds.length > 0) await bus.rollbackCommands([...commandIds].reverse())
       logger.error('图片编辑 V3 图层集合写入失败', {
         event: 'image_edit.v3.application_collection.apply.failed',
         requestId: context.requestId,
@@ -286,7 +286,12 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
         operation: step.operation.kind,
         error: error instanceof Error ? error.message : String(error),
       })
-      throw error
+      if (commandIds.length === 0) throw error
+      return rollbackStepWrites(error, async () => {
+        if (!(await bus.rollbackCommands([...commandIds].reverse()))) throw new Error('图层修改没能撤回')
+      }, () => ({
+        status: 'completed', resultingRevisions: { image_edit: getImageEditDocumentCatalogRevisionV3() }, directRefs: refs, evidence: [],
+      }))
     }
   }
 

@@ -1,4 +1,4 @@
-import { ApplicationPersistenceBoundaryFailure, ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
+import { ApplicationPersistenceBoundaryFailure, ApplicationPersistenceFailure, rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { z } from 'zod'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import {
@@ -123,10 +123,13 @@ async function edit(controller: WorkspaceLayoutController, action: () => Promise
     }]
     return result
   } catch (error) {
-    if (error instanceof WorkspaceLayoutSaveError) {
+    const changedRefs = (): ApplicationRef[] => {
       const afterIds = controller.getSnapshot().users.map(p => p.id), beforeIds = before.users.map(p => p.id)
       const changedIds = [...afterIds.filter(id => !beforeIds.includes(id)), ...beforeIds.filter(id => !afterIds.includes(id))]
-      const token = crypto.randomUUID(), refs = collection ? changedIds.map(id => ref(controller, id)) : failureRefs
+      return collection ? changedIds.map(id => ref(controller, id)) : failureRefs
+    }
+    if (error instanceof WorkspaceLayoutSaveError) {
+      const token = crypto.randomUUID(), refs = changedRefs()
       undos.set(token, { controller, before, refs })
       const result = completed(refs, token)
       result.evidence = [{ kind: 'entity_state', fact: '布局修改已保留在内存，保存尚未确认。读取 saved 后可设为 true 重试保存。', capturedAt: new Date().toISOString() }]
@@ -135,8 +138,9 @@ async function edit(controller: WorkspaceLayoutController, action: () => Promise
       }, error), [result])
     }
     const after = controller.getSnapshot()
-    if (JSON.stringify({ activeId: after.activeId, current: after.current, users: after.users }) !== JSON.stringify(before)) await controller.restore(before)
-    throw error
+    if (JSON.stringify({ activeId: after.activeId, current: after.current, users: after.users }) === JSON.stringify(before)) throw error
+    const refs = changedRefs()
+    return rollbackStepWrites(error, () => controller.restore(before), () => ({ ...completed(refs), evidence: [] }))
   }
 }
 async function undo(token: string): Promise<ApplicationCompletedStepResult> {

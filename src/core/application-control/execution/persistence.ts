@@ -64,9 +64,25 @@ export class ApplicationPersistenceBoundaryFailure extends Error {
   }
 }
 
-/** 进度失败的文案原因：只取错误原文，不带 `Error: ` 这类运行时前缀。 */
-export function applicationFailureReason(error: unknown): string {
+function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/** 取消有两个来源：引擎的 CANCELLED 标记，以及 AbortSignal 抛出的 AbortError（撤销授权同名）。 */
+export function isApplicationCancellation(error: unknown): boolean {
+  return errorMessage(error) === 'CANCELLED'
+    || (typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError')
+}
+
+export function isApplicationConflict(error: unknown): boolean {
+  return errorMessage(error).includes('REVISION_CONFLICT')
+}
+
+/** 进度失败的文案原因：只取错误原文，不带 `Error: ` 前缀；取消与冲突的内部标记换成用户能懂的话。 */
+export function applicationFailureReason(error: unknown): string {
+  if (isApplicationCancellation(error)) return '操作已取消'
+  if (isApplicationConflict(error)) return '应用状态已变化，请重新观察并规划'
+  return errorMessage(error)
 }
 
 export class ApplicationExecutionProgressFailure extends Error {
@@ -76,6 +92,46 @@ export class ApplicationExecutionProgressFailure extends Error {
     super(message)
     this.name = 'ApplicationExecutionProgressFailure'
   }
+}
+
+/** 进度失败层层包着的最初那条错误；错误码按它判断，外层包装不改变失败的性质。 */
+export function applicationFailureOrigin(error: unknown): unknown {
+  let current = error
+  while (current instanceof ApplicationExecutionProgressFailure && current.cause !== undefined) current = current.cause
+  return current
+}
+
+/**
+ * 单步执行器写入失败后自行回滚。回滚也失败时，这一步的写入还留在应用里：带着执行器给出的剩余事实抛出，
+ * 引擎据此报告“已执行未补偿”，不会说成没有任何步骤被提交。回滚成功则原样抛出写入错误。
+ */
+export async function rollbackStepWrites(error: unknown, rollback: () => Promise<unknown>,
+  remaining: () => ApplicationCompletedStepResult | Promise<ApplicationCompletedStepResult>): Promise<never> {
+  try {
+    await rollback()
+  } catch (rollbackError) {
+    // 读不到剩余事实时仍报告“这一步有写入未撤回”，只是不列出具体引用；不能退回成零步失败。
+    const left = await Promise.resolve().then(remaining)
+      .catch((): ApplicationCompletedStepResult => ({ status: 'completed', resultingRevisions: {}, directRefs: [], evidence: [] }))
+    throw new ApplicationExecutionProgressFailure(
+      `${applicationFailureReason(error)}；回滚未完成：${applicationFailureReason(rollbackError)}`, [left], [], error)
+  }
+  throw error
+}
+
+/**
+ * 逐步执行的外层（引擎、执行器自己的原子组）包装失败时，失败的那一步可能已经带着自己的写入事实抛出。
+ * 这些事实全部记在下标 `stepIndex` 上；这一步内部的回滚归执行器，外层不再补偿它：
+ * 执行器已撤回全部写入时记为已补偿，否则记为未补偿。
+ */
+export function failedStepFacts(error: unknown, stepIndex: number): {
+  results: ApplicationCompletedStepResult[]; indexes: number[]; compensated: number[]
+} {
+  if (!(error instanceof ApplicationExecutionProgressFailure) || error.completed.length === 0) {
+    return { results: [], indexes: [], compensated: [] }
+  }
+  const withdrawn = error.completedStepIndexes.every((index) => error.compensatedStepIndexes.includes(index))
+  return { results: error.completed, indexes: error.completed.map(() => stepIndex), compensated: withdrawn ? [stepIndex] : [] }
 }
 
 /** 唯一整批聚合点；未注册参与者的领域保持原执行语义。 */

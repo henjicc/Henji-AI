@@ -7,6 +7,7 @@ import type {
   ApplicationPlannedStep,
 } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { createLogger } from '@/core/logging'
 
 import { assetApplicationService } from './assetApplicationService'
@@ -41,11 +42,14 @@ export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor
     try {
       await applyWriterTable(WRITERS, libraryId, step.mutations)
     } catch (error) {
-      await assetApplicationService.renameLibrary(libraryId, previousName)
       logger.error('素材集合属性写入失败', error, {
         event: 'asset.library_mutation.apply.failed', libraryId,
       })
-      throw error
+      return rollbackStepWrites(error, () => assetApplicationService.renameLibrary(libraryId, previousName), () => {
+        this.dependencies.bumpRevision()
+        const revision = this.dependencies.readRevision()
+        return { status: 'completed', resultingRevisions: { assets: revision }, directRefs: [{ kind: this.entityType, id: libraryId, revision }], evidence: [] }
+      })
     }
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()

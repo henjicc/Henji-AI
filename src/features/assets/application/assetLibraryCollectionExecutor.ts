@@ -7,6 +7,7 @@ import type {
   ApplicationPlannedStep,
   JsonValue,
 } from '@/core/application-control'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { createLogger } from '@/core/logging'
 import type { AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 
@@ -31,12 +32,19 @@ function libraryName(value: JsonValue | undefined): string {
   return normalized
 }
 
+/** 撤回一个就从列表里去掉一个：回滚中途失败时，列表里剩下的就是仍留在应用里的修改。 */
 async function rollbackCreated(libraryIds: string[]): Promise<void> {
-  for (const libraryId of [...libraryIds].reverse()) await assetApplicationService.deleteLibrary(libraryId)
+  while (libraryIds.length > 0) {
+    await assetApplicationService.deleteLibrary(libraryIds[libraryIds.length - 1])
+    libraryIds.pop()
+  }
 }
 
-async function rollbackRemoved(snapshots: AssetLibrarySnapshot[]): Promise<void> {
-  for (const snapshot of [...snapshots].reverse()) await assetApplicationService.restoreLibrary(snapshot)
+async function rollbackRemoved(removed: AssetLibrarySnapshot[]): Promise<void> {
+  while (removed.length > 0) {
+    await assetApplicationService.restoreLibrary(removed[removed.length - 1])
+    removed.pop()
+  }
 }
 
 /** 素材集合的创建/删除执行器；删除前保存集合及成员关系，补偿时按原稳定 ID 原子恢复。 */
@@ -76,19 +84,31 @@ export class AssetLibraryCollectionExecutor implements ApplicationCollectionExec
         }
       }
     } catch (error) {
-      try {
-        if (created.length > 0) await rollbackCreated(created.map((item) => String(item.id)))
-        if (removed.length > 0) await rollbackRemoved(removed)
-      } catch (rollbackError) {
-        logger.error('素材集合写入回滚失败', rollbackError, {
-          event: 'asset.library_collection.rollback.failed', operation: step.operation.kind,
-        })
-        throw new Error(`ASSET_LIBRARY_MUTATION_AND_ROLLBACK_FAILED：${String(error)}；${String(rollbackError)}`)
-      }
       logger.error('素材集合写入失败', error, {
         event: 'asset.library_collection.apply.failed', operation: step.operation.kind,
       })
-      throw error
+      const createdIds = created.map((item) => String(item.id))
+      return rollbackStepWrites(error, async () => {
+        try {
+          await rollbackCreated(createdIds)
+          await rollbackRemoved(removed)
+        } catch (rollbackError) {
+          logger.error('素材集合写入回滚失败', rollbackError, {
+            event: 'asset.library_collection.rollback.failed', operation: step.operation.kind,
+          })
+          throw rollbackError
+        }
+      }, () => {
+        this.dependencies.bumpRevision()
+        const revision = this.dependencies.readRevision()
+        return {
+          status: 'completed',
+          resultingRevisions: { assets: revision },
+          directRefs: [...createdIds.map((id) => ({ kind: this.entityType, id, revision })),
+            ...removed.map((item) => ({ kind: this.entityType, id: item.id, revision }))],
+          evidence: [],
+        }
+      })
     }
 
     this.dependencies.bumpRevision()

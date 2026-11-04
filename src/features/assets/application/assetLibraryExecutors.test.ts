@@ -100,6 +100,31 @@ describe('素材集合通用写入执行器', () => {
     expect(mocks.libraries.get('lib-old')).toEqual(before)
   })
 
+  it('创建中途失败且回滚删不掉时，只把仍留下的集合作为已执行事实报告', async () => {
+    let sequence = 0
+    mocks.createLibrary.mockImplementation(async (name: string) => {
+      if (sequence === 2) throw new Error('磁盘已满')
+      const item = { id: `lib-${++sequence}`, name, createdAt: 30, updatedAt: 30, assetIds: [] }
+      mocks.libraries.set(item.id, item)
+      return { ...item }
+    })
+    mocks.deleteLibrary.mockImplementation(async (id: string) => {
+      if (id === 'lib-1') throw new Error('文件被占用')
+      mocks.libraries.delete(id)
+      return {}
+    })
+    const executor = new AssetLibraryCollectionExecutor(dependencies)
+    const failure = await executor.apply({
+      kind: 'collection', parent: { kind: 'asset.catalog', id: 'default' }, entityType: 'asset.library',
+      expectedRevisions: { assets: 1 },
+      operation: { kind: 'create', items: ['一', '二', '三'].map((name) => ({ properties: { 'asset.library.name': name } })) },
+    } as never).catch((error: unknown) => error)
+
+    expect(failure).toMatchObject({ name: 'ApplicationExecutionProgressFailure', compensatedStepIndexes: [],
+      completed: [{ directRefs: [{ kind: 'asset.library', id: 'lib-1' }] }] })
+    expect((failure as Error).message).toBe('磁盘已满；回滚未完成：文件被占用')
+  })
+
   it('集合名称修改后可恢复包含冒号的原名称', async () => {
     const old = mocks.libraries.get('lib-old')
     if (old) old.name = '旧:集合'

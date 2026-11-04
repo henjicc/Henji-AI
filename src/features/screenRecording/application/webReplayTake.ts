@@ -5,6 +5,7 @@ import {
   type ApplicationEntityRegistration, type ApplicationEvidence, type ApplicationPlannedStep,
   type ApplicationPropertyDescriptor, type ApplicationRef, type JsonValue,
 } from '@/core/application-control'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { webReplayTakeNameSchema } from '@/core/webReplay/director'
 import { getPlatform } from '@/platform'
 import { sha256HexString } from '@/utils/save/hash'
@@ -108,9 +109,13 @@ export class WebReplayTakeCollectionExecutor implements ApplicationCollectionExe
     try {
       for (const target of targets) removed.push({ ref: target.ref, trashId: await getPlatform().webReplay.removeTake(target.recordingId, target.name) })
     } catch (error) {
-      // 补偿失败保留回收副本，交由统一事务按未知结果报告，不能声称没有写入。
-      for (const item of [...removed].reverse()) await getPlatform().webReplay.restore(item.trashId)
-      throw error
+      // 恢复不了的版本留在回收区，作为这一步仍然生效的删除报告，不能声称没有写入。
+      return rollbackStepWrites(error, async () => {
+        while (removed.length > 0) {
+          await getPlatform().webReplay.restore(removed[removed.length - 1].trashId)
+          removed.pop()
+        }
+      }, async () => ({ status: 'completed', resultingRevisions: (await state()).revisions, directRefs: removed.map(item => item.ref), evidence: [] }))
     }
     const undoToken = `web-replay-take-undo:${uuidv4()}`
     this.undoRecords.set(undoToken, removed)
@@ -130,11 +135,15 @@ export class WebReplayTakeCollectionExecutor implements ApplicationCollectionExe
       for (const item of removed) { await getPlatform().webReplay.restore(item.trashId); restored.push(item) }
     } catch (error) {
       // 一步撤销必须保持整组原子性，否则公共事务的删除后基线会失效，不能用同一回执重试。
-      for (const item of restored.reverse()) {
-        const { recordingId, name } = parseRef(item.ref)
-        item.trashId = await getPlatform().webReplay.removeTake(recordingId, name)
-      }
-      throw error
+      // 重新删不掉的版本已经恢复，作为这一步撤销的部分结果报告。
+      return rollbackStepWrites(error, async () => {
+        while (restored.length > 0) {
+          const item = restored[restored.length - 1]
+          const { recordingId, name } = parseRef(item.ref)
+          item.trashId = await getPlatform().webReplay.removeTake(recordingId, name)
+          restored.pop()
+        }
+      }, async () => ({ status: 'completed', resultingRevisions: (await state()).revisions, directRefs: restored.map(item => item.ref), evidence: [] }))
     }
     this.undoRecords.delete(undoToken)
     return { status: 'completed', resultingRevisions: (await state()).revisions, directRefs: removed.map(item => item.ref),

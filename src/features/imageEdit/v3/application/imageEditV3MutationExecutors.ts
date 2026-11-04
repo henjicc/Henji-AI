@@ -39,7 +39,7 @@ const logger = createLogger('features.imageEdit.v3.application_mutation')
 const UNDO_PREFIX = 'image-edit-v3-undo:'
 
 import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
-import { ApplicationExecutionProgressFailure, applicationFailureReason } from '@/core/application-control/execution/persistence'
+import { ApplicationExecutionProgressFailure, applicationFailureReason, failedStepFacts, rollbackStepWrites } from '@/core/application-control/execution/persistence'
 import { IMAGE_EDIT_HISTORY_FIELDS_V3, type ImageEditHistoryMutationDraftV3 } from './imageEditHistoryFields'
 import { IMAGE_EDIT_WORKFLOW_FIELDS_V3, imageEditLayerMovesSchemaV3, type ImageEditWorkflowDraftV3 } from './imageEditWorkflowFields'
 import { prepareSmartContentMutationV3 } from '../smartContent/service'
@@ -216,8 +216,6 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
       })
       return result
     } catch (error) {
-      if (applied.length > 0) await bus.rollbackCommands([...applied].reverse())
-      if (historyChanged) await bus.jumpToHistory(historyBefore)
       logger.error('图片编辑 V3 属性写入失败', {
         event: 'image_edit.v3.application_mutation.apply.failed',
         requestId: context.requestId,
@@ -225,7 +223,13 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
         targetId: step.target.id,
         error: error instanceof Error ? error.message : String(error),
       })
-      throw error
+      if (applied.length === 0 && !historyChanged) throw error
+      return rollbackStepWrites(error, async () => {
+        // 命令撤不回也要把历史位置跳回去，能恢复的先恢复。
+        const commandsWithdrawn = applied.length === 0 || await bus.rollbackCommands([...applied].reverse())
+        if (historyChanged) await bus.jumpToHistory(historyBefore)
+        if (!commandsWithdrawn) throw new Error('图片修改没能撤回')
+      }, () => ({ status: 'completed', resultingRevisions: { image_edit: getImageEditDocumentCatalogRevisionV3() }, directRefs: [step.target], evidence: [] }))
     } finally { await release?.() }
   }
 
@@ -250,6 +254,10 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
       for (const step of steps) results.push(await this.apply(step, context))
       return results
     } catch (error) {
+      const failedStep = failedStepFacts(error, results.length)
+      const progress = (message: string, compensated: number[]) => new ApplicationExecutionProgressFailure(message,
+        [...results, ...failedStep.results], [...failedStep.compensated, ...compensated], error,
+        [...results.map((_, index) => index), ...failedStep.indexes])
       const compensated: number[] = []
       for (let index = results.length - 1; index >= 0; index -= 1) {
         const token = results[index]?.undoToken
@@ -257,10 +265,10 @@ export abstract class ImageEditV3MutationExecutorBase implements ApplicationMuta
           if (token) await rollbackPayload(decodeUndo(token))
           compensated.push(index)
         } catch (cause) {
-          throw new ApplicationExecutionProgressFailure(`${applicationFailureReason(error)}；补偿失败：${applicationFailureReason(cause)}`, results, compensated, error)
+          throw progress(`${applicationFailureReason(error)}；补偿失败：${applicationFailureReason(cause)}`, compensated)
         }
       }
-      throw new ApplicationExecutionProgressFailure(applicationFailureReason(error), results, compensated, error)
+      throw progress(applicationFailureReason(error), compensated)
     }
   }
 

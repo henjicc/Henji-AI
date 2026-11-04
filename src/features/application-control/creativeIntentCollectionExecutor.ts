@@ -5,6 +5,7 @@ import { applicationRefSchema } from '@/core/application-control/identifiers'
 import { motionDraftSchema, refKey } from '@/core/creativeIntent/contracts'
 import { creativeIntentPageSchema } from '@/core/creativeIntent/pages'
 import { intentResult, retainIntentUndo, undoIntent } from './creativeIntentMutationExecutors'
+import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 type Step = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 export class CreativeIntentPinCollectionExecutor implements ApplicationCollectionExecutor {
   readonly entityType: string
@@ -34,7 +35,10 @@ export class CreativeIntentPinCollectionExecutor implements ApplicationCollectio
       }
     }
     return { ...intentResult(refs, this.domain), undoToken: retainIntentUndo(finish(), refs, this.domain) }
-    } catch (error) { if (JSON.stringify(record.host.read()) !== JSON.stringify(record.head)) await finish()(); throw error }
+    } catch (error) {
+      if (JSON.stringify(record.host.read()) === JSON.stringify(record.head)) throw error
+      return rollbackStepWrites(error, () => finish()(), () => ({ ...intentResult(refs, this.domain), evidence: [] }))
+    }
   }
   async undo(token: string) { return undoIntent(token) }
   async compensate(_step: Step, result: ApplicationCompletedStepResult) { if (result.undoToken) await undoIntent(result.undoToken); return [] }
@@ -100,7 +104,10 @@ export class CreativeIntentEvidenceCollectionExecutor implements ApplicationColl
       if (host.read() !== before) throw new Error('原稿在读取期间变化，请重新规划。')
       host.commit(head); committed = true
       return { ...intentResult(refs, this.domain), undoToken: retainIntentUndo(finish(), refs, this.domain) }
-    } catch (error) { if (committed) await finish()(); throw error }
+    } catch (error) {
+      if (!committed) throw error
+      return rollbackStepWrites(error, () => finish()(), () => ({ ...intentResult(refs, this.domain), evidence: [] }))
+    }
   }
   async undo(token: string) { return undoIntent(token) }
   async compensate(_step: Step, result: ApplicationCompletedStepResult) { if (result.undoToken) await undoIntent(result.undoToken); return [] }
