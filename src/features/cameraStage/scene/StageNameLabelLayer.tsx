@@ -1,15 +1,24 @@
 import React, { createRef, memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Html } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Box3, Vector3, type Group, type Object3D } from 'three'
+import { Box3, Matrix4, Vector3, type Group, type Object3D } from 'three'
 import type { StageNameLabelSettings, StageObject } from '../domain/sceneTypes'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { useStagePrimitiveResources } from './stagePrimitiveResources'
 
 /**
- * 名称标签层：一个 Canvas 只挂一层。合批物体没有自己的节点，标签按对象 id 取世界包围盒
- * （合批物体按合批位置的矩阵算），锚点放在世界空间里，逐帧摆到对象正上方。
+ * 名称标签层：一个 Canvas 只挂一层，只给视口内离相机最近的若干个对象画标签。
+ *
+ * 标签是 drei Html 的 CSS 三维变换节点，每个都是一块和画布等大的合成层，逐帧改变换；上万个物体
+ * 全开时浏览器直接卡死，而且那么多标签叠在一起也读不出来。所以逐帧按对象位置挑出视口内最近的
+ * 一批，只为它们挂 DOM，外观仍是原来的 Html 标签。
  */
+
+/** 每个窗格同时显示的标签上限：再多就互相叠住读不出字，而且每个标签每帧都要改一次 CSS 变换。 */
+const STAGE_NAME_LABEL_LIMIT = 120
+
+/** 投影后超出画面这么多（NDC）仍算视口内：对象中心刚出画时，标签往往还在画面里。 */
+const VIEW_MARGIN = 1.15
 
 interface StageNameLabelLayerProps {
   /** 要画标签的对象（已排除隐藏、无名与摄像机视角下正在取景的那台） */
@@ -130,7 +139,17 @@ const StageNameLabelLayer: React.FC<StageNameLabelLayerProps> = ({ objects, sett
     return () => view.cancelAnimationFrame(frame)
   }, [canvas, invalidate, shown])
   const labelsRef = useRef(new Map<string, ShownLabel>())
-  const scratch = useMemo(() => ({ bounds: new Box3(), center: new Vector3() }), [])
+  const scratch = useMemo(() => ({
+    position: new Vector3(),
+    projected: new Vector3(),
+    viewProjection: new Matrix4(),
+    bounds: new Box3(),
+    center: new Vector3(),
+    cameraPosition: new Vector3(),
+    // 候选只存对象下标、距离按下标存：上万个对象逐帧挑选不产生临时对象
+    candidates: [] as number[],
+    distances: new Float64Array(0),
+  }), [])
 
   const objectPosition = (id: string, target: Vector3): boolean => {
     const slot = resources.slot(id)
@@ -158,11 +177,34 @@ const StageNameLabelLayer: React.FC<StageNameLabelLayerProps> = ({ objects, sett
   }
 
   // 优先级 -1：排在播放驱动（-2）写完本帧变换之后、Html 逐帧算 CSS 变换（0）之前，标签当帧跟上
-  useFrame(() => {
-    const { bounds, center } = scratch
+  useFrame(({ camera }) => {
+    const { position, projected, viewProjection, bounds, center, cameraPosition, candidates } = scratch
+    if (scratch.distances.length < objects.length) scratch.distances = new Float64Array(objects.length)
+    const { distances } = scratch
+    camera.updateMatrixWorld()
+    viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    camera.getWorldPosition(cameraPosition)
+    candidates.length = 0
+    for (let order = 0; order < objects.length; order += 1) {
+      const object = objects[order]
+      if (!objectPosition(object.id, position)) continue
+      projected.copy(position).applyMatrix4(viewProjection)
+      if (projected.z < -1 || projected.z > 1) continue
+      if (Math.abs(projected.x) > VIEW_MARGIN || Math.abs(projected.y) > VIEW_MARGIN) continue
+      distances[order] = position.distanceToSquared(cameraPosition)
+      candidates.push(order)
+    }
+    if (candidates.length > STAGE_NAME_LABEL_LIMIT) {
+      candidates.sort((a, b) => distances[a] - distances[b])
+      candidates.length = STAGE_NAME_LABEL_LIMIT
+      // 按对象顺序排列：只是远近次序变化时标签集合不变，不触发重渲染
+      candidates.sort((a, b) => a - b)
+    }
+
     const labels = labelsRef.current
     const next: ShownLabel[] = []
-    for (const object of objects) {
+    for (const order of candidates) {
+      const object = objects[order]
       const hasBounds = objectBounds(object.id, bounds) && !bounds.isEmpty()
       // 没有可见几何的对象（摄像机视角下其他摄像机的辅助模型不画）标签落在对象原点
       if (!hasBounds && !objectPosition(object.id, center)) continue
@@ -188,6 +230,7 @@ const StageNameLabelLayer: React.FC<StageNameLabelLayerProps> = ({ objects, sett
       label.anchor.current?.position.copy(label.position)
       next.push(label)
     }
+    candidates.length = 0
     if (sameLabels(next, shown)) return
     if (next.length < labels.size) {
       const keep = new Set(next.map((label) => label.object.id))
