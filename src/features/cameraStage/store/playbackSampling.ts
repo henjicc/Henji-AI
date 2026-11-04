@@ -21,6 +21,22 @@ function trackKey(objectId: string, propertyPath: string): string {
   return `${objectId}::${propertyPath}`
 }
 
+/*
+ * 上万个物体都带轨道时逐条 find 是平方级。播放期间对象数组不变（不写 store），
+ * 索引按数组缓存，每帧不必重建。
+ */
+const objectIndexCache = new WeakMap<StageObject[], Map<string, StageObject>>()
+
+function indexObjects(objects: StageObject[]): Map<string, StageObject> {
+  let index = objectIndexCache.get(objects)
+  if (!index) {
+    index = new Map()
+    for (const object of objects) if (!index.has(object.id)) index.set(object.id, object)
+    objectIndexCache.set(objects, index)
+  }
+  return index
+}
+
 /** 取覆盖该时刻的朝向区间；时间落在全部区间之外时按首尾区间夹取，与轨道首尾取值一致。 */
 function findOrientationEntry(
   entries: StageCameraOrientationEntry[],
@@ -85,7 +101,7 @@ export function sampleAnimationFrame(
   const trackKeys = new Set<string>()
   const overrides = new Map<string, StageObject>()
   const current = (objectId: string): StageObject | undefined => (
-    overrides.get(objectId) ?? objects.find((object) => object.id === objectId)
+    overrides.get(objectId) ?? indexObjects(objects).get(objectId)
   )
 
   for (const track of animation.tracks) {

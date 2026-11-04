@@ -68,8 +68,11 @@ export function applyAnimationToPlaybackAppliers(
   time: number,
 ): void {
   const frame = sampleAnimationFrame(objects, animation, time)
+  // 城市群里绝大多数物体没有轨道；逐个展开属性组再查轨道键，上万个物体每帧就要几十毫秒
+  const trackedObjectIds = new Set(animation.tracks.map((track) => track.objectId))
 
   for (const object of frame.objects) {
+    if (object.type !== 'camera' && !trackedObjectIds.has(object.id)) continue
     for (const group of listAnimatableGroups(object)) {
       if (object.type === 'camera' && group.groupPath === 'transform.rotation') {
         runPlaybackAppliers(object.id, group.groupPath, group.getBaseValue(object), time)
