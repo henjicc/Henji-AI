@@ -1,7 +1,8 @@
 import { expect, it, vi } from 'vitest'
 import type { ApplicationPlannedStep } from '@/core/application-control'
-import { RecyclableCollectionExecutor } from './recyclableCollection'
-import { restoreDeleted } from '@/services/recycle'
+import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
+import { RecyclableCollectionExecutor, captureRecycledRemoval } from './recyclableCollection'
+import { listDeleted, restoreDeleted } from '@/services/recycle'
 
 vi.mock('@/services/recycle', () => ({ restoreDeleted: vi.fn(), listDeleted: vi.fn() }))
 
@@ -42,4 +43,21 @@ it('删除完成后的回读失败仍补偿回收项，不留下已删除却无�
   await expect(executor.apply({ kind: 'collection', parent: { kind: 'record', id: 'root' }, entityType: 'record',
     expectedRevisions: {}, operation: { kind: 'remove', targets: [{ kind: 'record', id: 'one' }] } })).rejects.toThrow('索引读取失败')
   expect(exists).toBe(true)
+})
+
+it('删除后找不到恢复记录时，已删的这项作为未补偿写入报告，其余照常恢复', async () => {
+  let providers = ['A', 'B']
+  vi.mocked(listDeleted).mockImplementation(async () => providers.includes('A') ? [] : [{ id: 'recycle-A', path: 'A' } as never])
+  vi.mocked(restoreDeleted).mockImplementation(async () => { providers = ['A', ...providers] })
+  const executor = new RecyclableCollectionExecutor('provider', {
+    read: async () => undefined,
+    remove: ref => captureRecycledRemoval(async () => { providers = providers.filter(id => id !== ref.id) }, item => item.path === ref.id),
+    revisions: () => ({ providers: 0 }),
+  })
+  const failure = await executor.apply({ kind: 'collection', parent: { kind: 'settings.registry', id: 'singleton' }, entityType: 'provider',
+    expectedRevisions: {}, operation: { kind: 'remove', targets: [{ kind: 'provider', id: 'A' }, { kind: 'provider', id: 'B' }] } }).catch(error => error)
+  expect(failure).toBeInstanceOf(ApplicationExecutionProgressFailure)
+  expect(failure.compensatedStepIndexes).toEqual([])
+  expect(failure.completed[0].directRefs.map((ref: { id: string }) => ref.id)).toEqual(['B'])
+  expect(providers).toEqual(['A'])
 })

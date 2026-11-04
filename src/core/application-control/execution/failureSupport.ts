@@ -1,7 +1,7 @@
 import { applicationTransactionResultSchema, type ApplicationTransactionResult, type ApplicationChangePlan, type ApplicationPlannedStep } from '../transactions'
 import type { ApplicationExecutionContext } from './types'
 import { ApplicationExecutionSupport } from './executionSupport'
-import { ApplicationPersistenceBoundaryFailure, ApplicationExecutionProgressFailure, applicationFailureOrigin, isApplicationCancellation, isApplicationConflict,
+import { ApplicationConflictError, ApplicationPersistenceBoundaryFailure, ApplicationExecutionProgressFailure, applicationFailureOrigin, isApplicationCancellation, isApplicationConflict,
   type ApplicationPersistenceReceipt } from './persistence'
 
 function failure(
@@ -115,7 +115,7 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
     const message = error instanceof Error ? error.message : String(error)
     if (isApplicationCancellation(error)) return failure('CANCELLED', '操作已取消。', false, { transactionRef })
     if (isApplicationConflict(error)) {
-      return failure('CONFLICT', '应用状态已变化，请重新观察并规划。', true, { transactionRef, currentRevisions })
+      return failure('CONFLICT', error instanceof ApplicationConflictError ? error.message : '应用状态已变化，请重新观察并规划。', true, { transactionRef, currentRevisions })
     }
     // 属性写不了要报出是哪条、以及这个实体上有哪些能写——原始错误里已经带了这些，
     // 归类时丢掉它们，模型看到的就只剩"权限或可写状态已变化"，无从自纠。

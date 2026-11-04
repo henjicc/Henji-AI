@@ -24,8 +24,14 @@ export class RecyclableCollectionExecutor implements ApplicationCollectionExecut
       await this.dependencies.read(ref)
     }
     const removed: Array<{ ref: ApplicationRef; recycleId: string }> = []
+    const untracked: ApplicationRef[] = []
     try {
-      for (const ref of step.operation.targets) removed.push({ ref, recycleId: await this.dependencies.remove(ref) })
+      for (const ref of step.operation.targets) {
+        try { removed.push({ ref, recycleId: await this.dependencies.remove(ref) }) } catch (error) {
+          if (error instanceof UntrackedRecycledRemovalError) untracked.push(ref)
+          throw error
+        }
+      }
       await this.dependencies.changed?.()
       const undoToken = crypto.randomUUID()
       const result = await this.receipt(removed.map(item => item.ref), '内容已移到最近删除。', undoToken)
@@ -37,7 +43,8 @@ export class RecyclableCollectionExecutor implements ApplicationCollectionExecut
           await restoreDeleted(removed[removed.length - 1].recycleId)
           removed.pop()
         }
-      }, () => this.receipt(removed.map(item => item.ref), '内容已移到最近删除，回滚未能恢复。'))
+        if (untracked.length) throw new Error('没有恢复记录的删除无法撤回')
+      }, () => this.receipt([...removed.map(item => item.ref), ...untracked], '内容已移到最近删除，回滚未能恢复。'))
     }
   }
   async undo(token: string): Promise<ApplicationCompletedStepResult> {
@@ -61,12 +68,21 @@ export class RecyclableCollectionExecutor implements ApplicationCollectionExecut
   }
 }
 
+/** 删除已经发生却找不到回收身份：调用方不能把它当成“没有删除”，也无从自动恢复。 */
+export class UntrackedRecycledRemovalError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super('删除已执行，但未找到恢复记录，请检查最近删除。', options)
+    this.name = 'UntrackedRecycledRemovalError'
+  }
+}
+
 /** 文件仓库也只返回同一回收身份，不维护各自的恢复副本。 */
 export async function captureRecycledRemoval(remove: () => Promise<unknown>, matches: (item: RecycledItem) => boolean): Promise<string> {
   const before = new Set((await listDeleted()).map(item => item.id))
   await remove()
-  const item = (await listDeleted()).find(item => !before.has(item.id) && matches(item))
-  if (!item) throw new Error('删除已执行，但未找到恢复记录，请检查最近删除。')
+  const after = await listDeleted().catch((cause: unknown) => { throw new UntrackedRecycledRemovalError({ cause }) })
+  const item = after.find(item => !before.has(item.id) && matches(item))
+  if (!item) throw new UntrackedRecycledRemovalError()
   return item.id
 }
 

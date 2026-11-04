@@ -74,14 +74,26 @@ export function isApplicationCancellation(error: unknown): boolean {
     || (typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError')
 }
 
-export function isApplicationConflict(error: unknown): boolean {
+/** 领域自己的并发冲突（文案已是用户能懂的话）继承它，引擎按类型认出冲突，不靠内部标记文本。 */
+export class ApplicationConflictError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options)
+    this.name = 'ApplicationConflictError'
+  }
+}
+
+function hasConflictMarker(error: unknown): boolean {
   return errorMessage(error).includes('REVISION_CONFLICT')
+}
+
+export function isApplicationConflict(error: unknown): boolean {
+  return error instanceof ApplicationConflictError || hasConflictMarker(error)
 }
 
 /** 进度失败的文案原因：只取错误原文，不带 `Error: ` 前缀；取消与冲突的内部标记换成用户能懂的话。 */
 export function applicationFailureReason(error: unknown): string {
   if (isApplicationCancellation(error)) return '操作已取消'
-  if (isApplicationConflict(error)) return '应用状态已变化，请重新观察并规划'
+  if (hasConflictMarker(error)) return '应用状态已变化，请重新观察并规划'
   return errorMessage(error)
 }
 

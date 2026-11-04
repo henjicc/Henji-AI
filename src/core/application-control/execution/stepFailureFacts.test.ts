@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { ApplicationExecutionProgressFailure, rollbackStepWrites } from './persistence'
+import { ApplicationConflictError, ApplicationExecutionProgressFailure, rollbackStepWrites } from './persistence'
 import { createFixture, createEngine, context, mutationStep } from './engineTestFixture'
 
 /*
@@ -93,5 +93,37 @@ describe('步骤失败事实穿过引擎包装', () => {
     })
     expect(result).toMatchObject({ status: 'failed', code: 'CONFLICT', recoverable: true,
       partial: { completedStepIndexes: [0], compensatedStepIndexes: [0], uncompensatedStepIndexes: [] } })
+  })
+
+  it('领域冲突类型带着未补偿写入时报冲突且不可重试，原文案保留', async () => {
+    const { result } = await commitSteps([mutationStep('one', 6)], (executor) => {
+      vi.spyOn(executor, 'apply').mockRejectedValueOnce(new ApplicationExecutionProgressFailure('画布事务期间出现新的编辑',
+        [partialResult('one')], [], new ApplicationConflictError('画布事务期间出现新的编辑')))
+    })
+    expect(result).toMatchObject({ status: 'failed', code: 'CONFLICT', recoverable: false, partial: { uncompensatedStepIndexes: [0] } })
+    expect(result.status === 'failed' && result.message).toContain('画布事务期间出现新的编辑')
+  })
+
+  it('取消后补偿不受已中止信号影响，前一步照常撤回', async () => {
+    const controller = new AbortController()
+    const fixture = createFixture()
+    const { engine, executor } = createEngine(fixture)
+    const apply = executor.apply.bind(executor)
+    vi.spyOn(executor, 'apply').mockImplementation(async (step) => {
+      const result = await apply(step)
+      if (step.target.id === 'one') controller.abort()
+      return result
+    })
+    const compensate = executor.compensate.bind(executor)
+    vi.spyOn(executor, 'compensate').mockImplementation(async (step, result, rollbackContext?: { signal?: AbortSignal }) => {
+      rollbackContext?.signal?.throwIfAborted()
+      return compensate(step, result)
+    })
+    const plan = await engine.plan({ summary: '取消后补偿', transactionMode: 'compensatable', steps: [mutationStep('one', 6), mutationStep('two', 8)] }, context())
+    const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'step-failure-cancel-0001' },
+      { ...context(), signal: controller.signal })
+    expect(result).toMatchObject({ status: 'failed', code: 'CANCELLED',
+      partial: { completedStepIndexes: [0], compensatedStepIndexes: [0], uncompensatedStepIndexes: [] } })
+    expect(fixture.values.get('one')).toBe(2)
   })
 })

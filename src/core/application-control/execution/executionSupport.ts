@@ -410,19 +410,21 @@ export class ApplicationExecutionSupport {
     result: ApplicationCompletedStepResult,
     context: ApplicationExecutionContext
   ): Promise<ApplicationEvidence[]> {
+    // 补偿常常就是取消之后的收尾：带着已中止的信号，执行器一检查就放弃回滚，已写入的步骤全被留下。
+    const rollback: ApplicationExecutionContext = { ...context, signal: undefined }
     if (step.kind === 'mutation') {
       const executor = this.mutationExecutors.get(step.entityType)
       if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-      return normalizeEvidenceRefLabels(await executor.compensate(step, result, context))
+      return normalizeEvidenceRefLabels(await executor.compensate(step, result, rollback))
     }
     if (step.kind === 'collection') {
       const executor = this.collectionExecutors.get(step.entityType)
       if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-      return normalizeEvidenceRefLabels(await executor.compensate(step, result, context))
+      return normalizeEvidenceRefLabels(await executor.compensate(step, result, rollback))
     }
     const executor = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
     if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-    return normalizeEvidenceRefLabels(await executor.compensate(step.input, result, context))
+    return normalizeEvidenceRefLabels(await executor.compensate(step.input, result, rollback))
   }
 
 
