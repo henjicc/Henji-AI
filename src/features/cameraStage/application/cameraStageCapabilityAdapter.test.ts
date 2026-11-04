@@ -5,6 +5,7 @@ vi.mock('@/features/application-control/hostContext/hostContext', () => ({ getHo
 
 import { applyCameraStageCameraMove } from './cameraStageCapabilityAdapter'
 import { CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'
+import { CONFLICT_RECOVERY } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 it('运镜能力委托上下文注入的事务引擎并保留并发基线与回读修订', async () => {
   const plan = vi.fn().mockResolvedValue({ planRef: 'plan-1' })
@@ -35,4 +36,19 @@ it.each([
   const normalize = () => executor.normalizeInput({ projectId: 'document-1', cameraId: 'camera-1', move, duration: 1, speed: 'uniform' })
   if (accepted) expect(normalize).not.toThrow()
   else expect(normalize).toThrow()
+})
+
+it.each([
+  [true, true],
+  [false, false],
+])('冲突回执只在可重试时附上重试办法：recoverable=%s', async (recoverable, hinted) => {
+  const plan = vi.fn().mockResolvedValue({ planRef: 'plan-1' })
+  const commit = vi.fn().mockResolvedValue({ status: 'failed', code: 'CONFLICT', message: '操作未完整完成。', recoverable,
+    partial: { completedStepIndexes: [0], compensatedStepIndexes: recoverable ? [0] : [], uncompensatedStepIndexes: recoverable ? [] : [0] } })
+  const engine = { plan, commit } as unknown as ApplicationControlExecutionEngine
+  const failure = await applyCameraStageCameraMove({ projectId: 'document-1' }, {
+    signal: new AbortController().signal, expectedRevisions: { camera_stage: 4 }, requestId: 'request-1', getExecutionEngine: () => engine,
+  }).catch((error) => error)
+  expect(failure.result.recoverable).toBe(recoverable)
+  expect(failure.message.includes(CONFLICT_RECOVERY)).toBe(hinted)
 })

@@ -465,7 +465,7 @@ const implementation = {
         undoToken,
       }
     } catch (error) {
-      await rollbackCameraStageWrite(input.projectId, undoToken, 'camera_stage.object.place.rollback_failed')
+      await rollbackCameraStageWrite(input.projectId, undoToken, error, 'camera_stage.object.place.rollback_failed')
       throw error
     }
     } catch (error) {
@@ -508,7 +508,7 @@ const implementation = {
         before.applyStageSet(set, objects)
         await saveCameraStageProjectRuntime(input.projectId)
       } catch (error) {
-        await rollbackCameraStageWrite(input.projectId, undoToken, 'camera_stage.set.generate.rollback_failed')
+        await rollbackCameraStageWrite(input.projectId, undoToken, error, 'camera_stage.set.generate.rollback_failed')
         throw error
       }
       const summary = summarizeStageSet(set, store.getState().objects)
@@ -551,7 +551,7 @@ const implementation = {
         for (const id of setIds) store.getState().removeStageSet(id)
         await saveCameraStageProjectRuntime(projectId)
       } catch (error) {
-        await rollbackCameraStageWrite(projectId, undoToken, 'camera_stage.set.remove.rollback_failed')
+        await rollbackCameraStageWrite(projectId, undoToken, error, 'camera_stage.set.remove.rollback_failed')
         throw error
       }
       logger.info('三维布景已删除', { event: 'camera_stage.set.remove.completed', projectId, setCount: setIds.length, removedObjectCount })

@@ -1,6 +1,7 @@
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { useCameraStageStore, type CameraStageOwnedStore } from '../store/cameraStageStore'
 import { createLogger } from '@/core/logging'
+import { ApplicationExecutionProgressFailure, applicationFailureReason } from '@/core/application-control/execution/persistence'
 
 const logger = createLogger('features.cameraStage.application')
 
@@ -75,22 +76,25 @@ export async function restoreCameraStageUndo(token: string): Promise<{ projectId
   return { projectId: snapshot.project.id }
 }
 
-/** 写入失败后恢复到快照。恢复再失败也不盖掉原始错误——原始错误才是调用方据以修正的那条，恢复失败单独记日志。 */
-export async function rollbackCameraStageWrite(projectId: string, undoToken: string, event = 'camera_stage.write.rollback_failed'): Promise<void> {
+/**
+ * 写入失败后恢复到快照；恢复成功就返回，由调用方抛出原始错误。
+ * 恢复也失败时场景还留着这次写入：带着原始错误抛出进度失败，引擎据此报告“已执行未补偿”，
+ * 不会把它说成没有任何步骤被提交、可以直接重试。
+ */
+export async function rollbackCameraStageWrite(projectId: string, undoToken: string, error: unknown, event = 'camera_stage.write.rollback_failed'): Promise<void> {
   try {
     await restoreCameraStageUndo(undoToken)
   } catch (rollbackError) {
-    logger.error('三维场景写入回滚失败', rollbackError, { event, projectId })
+    logger.error('三维场景写入回滚失败', rollbackError, { event, projectId, writeError: applicationFailureReason(error) })
+    throw new ApplicationExecutionProgressFailure(`${applicationFailureReason(error)}；回滚未完成：${applicationFailureReason(rollbackError)}`,
+      [{ status: 'completed', resultingRevisions: {}, directRefs: [], evidence: [] }], [], error)
   }
 }
 
-/**
- * 抓快照之后的写入、存盘与核对。引擎把单步内的失败记为“零步完成”，调用方据此可以直接重试；
- * 所以这里任何一步失败都先恢复到快照再抛出，否则场景已改却报未执行，重试会叠出重复内容。
- */
+/** 抓快照之后的写入、存盘与核对：任何一步失败都先恢复到快照再抛出，否则场景已改却报未执行，重试会叠出重复内容。 */
 export async function afterCameraStageWrite<T>(projectId: string, undoToken: string, work: () => T | Promise<T>): Promise<T> {
   try { return await work() } catch (error) {
-    await rollbackCameraStageWrite(projectId, undoToken)
+    await rollbackCameraStageWrite(projectId, undoToken, error)
     throw error
   }
 }

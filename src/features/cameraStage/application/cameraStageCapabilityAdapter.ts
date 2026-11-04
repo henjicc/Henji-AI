@@ -43,7 +43,8 @@ function idempotencyKey(capabilityId: string, revision: number, context: Capabil
 function completedTransaction(result: ApplicationTransactionResult): Extract<ApplicationTransactionResult, { status: 'completed' }> {
   if (result.status === 'completed') return result
   if (result.status === 'failed') {
-    throw new ApplicationTransactionFailure(result.code === 'CONFLICT' ? { ...result, message: `${result.message}${CONFLICT_RECOVERY}` } : result)
+    // 还有未补偿的写入时重新读取后重试会叠加写入，只有可重试的冲突才附上重试办法。
+    throw new ApplicationTransactionFailure(result.code === 'CONFLICT' && result.recoverable ? { ...result, message: `${result.message}${CONFLICT_RECOVERY}` } : result)
   }
   throw new Error('CAPABILITY_REJECTED')
 }

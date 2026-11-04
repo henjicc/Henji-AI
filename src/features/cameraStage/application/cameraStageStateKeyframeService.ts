@@ -112,7 +112,7 @@ const implementation = {
       })
       return { projectId, stateKeyframeIds, undoToken }
     } catch (error) {
-      await rollbackCameraStageWrite(projectId, undoToken, 'camera_stage.state_keyframe.create.rollback_failed')
+      await rollbackCameraStageWrite(projectId, undoToken, error, 'camera_stage.state_keyframe.create.rollback_failed')
       logger.error('三维状态关键帧批量新建失败', error, { event: 'camera_stage.state_keyframe.create.failed', projectId })
       throw error
     }
@@ -136,7 +136,7 @@ const implementation = {
       await saveCameraStageProjectRuntime(projectId)
       return { projectId, removedCount: stateKeyframeIds.length, undoToken }
     } catch (error) {
-      await rollbackCameraStageWrite(projectId, undoToken, 'camera_stage.state_keyframe.remove.rollback_failed')
+      await rollbackCameraStageWrite(projectId, undoToken, error, 'camera_stage.state_keyframe.remove.rollback_failed')
       logger.error('三维状态关键帧删除失败', error, { event: 'camera_stage.state_keyframe.remove.failed', projectId })
       throw error
     }
