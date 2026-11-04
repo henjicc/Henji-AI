@@ -66,7 +66,8 @@ export const cameraStageShotIntentShape = {
     .describe('机位角度：eye_level 平视（与眼睛同高）、high 俯拍、low 仰拍、birds_eye 鸟瞰（几乎垂直向下）；'
       + '过肩与正反打只用平视，机位在前景那人肩后与他眼睛同高，俯仰由两人高低决定'),
   lens: z.enum(CAMERA_STAGE_SHOT_LENSES).optional()
-    .describe('焦距倾向：wide 广角 24mm（离得近、透视强）、standard 标准 50mm、telephoto 长焦 85mm（离得远、压缩空间）；省略时过肩与正反打用长焦，其余用标准'),
+    .describe('焦距倾向：wide 广角 24mm（离得近、透视强）、standard 标准 50mm、telephoto 长焦 85mm（离得远、压缩空间）；省略时过肩与正反打用长焦，其余用标准。'
+      + '过肩与正反打的焦距按两人间距连续求：机位站在前景那人身后、前景约占画宽三分之一，两人离得远时焦距变长，200mm 也不够时景别逐档放宽，都写在 adjusted 里'),
   crossAxis: z.boolean().default(false)
     .describe('两人镜头默认守在轴线（两人连线）同一侧，跟已经拍这两人的机位一致；true 表示有意越轴到另一侧'),
   avoidOcclusion: z.boolean().default(true)
@@ -109,18 +110,20 @@ export const cameraStageComposedShotSchema = z.object({
   kind: z.enum(['single', 'two_shot', 'over_shoulder']),
   position: cameraStageVec3Schema,
   lookAtTarget: cameraStageVec3Schema,
-  focalLength: z.number(),
-  size: z.enum(CAMERA_STAGE_SHOT_SIZES),
+  focalLength: z.number().describe('实际焦距（毫米）'),
+  size: z.enum(CAMERA_STAGE_SHOT_SIZES).describe('实际景别；过肩两人离得太远时比要的更松'),
   angle: z.enum(CAMERA_STAGE_SHOT_ANGLES),
-  lens: z.enum(CAMERA_STAGE_SHOT_LENSES),
+  lens: z.enum(CAMERA_STAGE_SHOT_LENSES).describe('实际焦距所属的档位'),
   adjusted: z.object({
-    reasons: z.array(z.enum(['occlusion', 'ground', 'inside_object', 'too_close'])),
+    reasons: z.array(z.enum(['separation', 'occlusion', 'ground', 'inside_object']))
+      .describe('separation：过肩按两人间距改了焦距或景别；occlusion 被挡；ground 会钻地；inside_object 会落进对象里'),
     blockedBy: z.array(z.string()),
     azimuthDegrees: z.number(),
     elevationDegrees: z.number(),
     lens: z.enum(CAMERA_STAGE_SHOT_LENSES).nullable(),
+    size: z.enum(CAMERA_STAGE_SHOT_SIZES).nullable().describe('景别放宽到哪一档；没改为 null'),
     summary: z.string(),
-  }).strict().nullable().describe('意图机位被挡、钻地或贴到前景人时改了什么；没改为 null'),
+  }).strict().nullable().describe('意图机位被挡、钻地，或过肩按两人间距改了焦距与景别时改了什么；没改为 null'),
   axis: z.object({
     reference: z.string(),
     crossed: z.boolean(),

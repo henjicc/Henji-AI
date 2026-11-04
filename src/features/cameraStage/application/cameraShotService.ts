@@ -10,7 +10,6 @@ import {
   type CameraStageShotAngle,
   type cameraStageShotIntentShape,
   type CameraStageShotRelation,
-  type CameraStageShotSize,
   type CameraStageShotSubjectInput,
 } from '@/core/application-control/domains/cameraStage/cameraStageShotSchemas'
 import type { StageCameraObject, StageObject, StageVec3 } from '../domain/sceneTypes'
@@ -19,7 +18,7 @@ import { applyAnimationAtTime } from '../store/playbackSampling'
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
 import { afterCameraStageWrite, captureCameraStageUndo } from './cameraStageUndo'
 import { ensureStateKeyframeAt } from './cameraStageKeyframeWrites'
-import { axisNormalFor, axisSideOf, composeShot, SHOT_LENS_FOCAL_LENGTH, type ShotKind, type ShotSolution } from './shotComposition'
+import { axisNormalFor, axisSideOf, composeShot, type ShotKind, type ShotSolution } from './shotComposition'
 import {
   projectPoint,
   readShot,
@@ -163,7 +162,7 @@ function shotHints(shot: CameraStageShotCameraResult): string[] {
 function readBack(
   solved: ReadonlyArray<{ plan: ShotPlan; solution: ShotSolution }>,
   objects: StageObject[],
-  request: { size: CameraStageShotSize; angle: CameraStageShotAngle; axis: { reference: string } | null; crossAxis: boolean },
+  request: { angle: CameraStageShotAngle; axis: { reference: string } | null; crossAxis: boolean },
 ): CameraStageShotCameraResult[] {
   const obstacles = shotObstacles(objects)
   return solved.map(({ plan, solution }) => {
@@ -178,8 +177,8 @@ function readBack(
       kind: plan.kind,
       position: vec(pose.position),
       lookAtTarget: camera.lookAt.mode === 'manual' ? { ...camera.lookAt.target } : vec(solution.lookAtTarget),
-      focalLength: SHOT_LENS_FOCAL_LENGTH[solution.lens],
-      size: request.size,
+      focalLength: solution.focalLength,
+      size: solution.size,
       angle: request.angle,
       lens: solution.lens,
       adjusted: solution.adjusted,
@@ -286,7 +285,7 @@ async function composeCameraStageShotInternal(input: CameraStageShotInput): Prom
       }
       // 读回按写入后的正式场景在该时刻采样，与播放、导出看到的是同一帧；放在写入保护里，算不出来也会恢复。
       const objectsAt = input.at ? applyAnimationAtTime(after.objects, after.animation, time) : after.objects
-      const shots = readBack(solved, objectsAt, { size, angle: input.angle, axis, crossAxis: input.crossAxis })
+      const shots = readBack(solved, objectsAt, { angle: input.angle, axis, crossAxis: input.crossAxis })
       await saveCameraStageProjectRuntime(input.projectId)
       return { createdStateKeyframe, stateKeyframeId: targetStateKeyframeId, shots }
     })

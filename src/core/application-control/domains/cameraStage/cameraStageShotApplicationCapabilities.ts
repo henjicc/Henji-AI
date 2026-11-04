@@ -29,11 +29,11 @@ export const composeCameraStageShotCapability = defineApplicationCapability({
   acceptsRefs: ['camera_stage.document', 'camera_stage.camera', 'camera_stage.object', 'camera_stage.state_keyframe'],
   producesRefs: ['camera_stage.camera', 'camera_stage.state_keyframe'],
   successEvidence: ['结果 shots[] 给出每台摄像机的机位、注视点、焦距、实际构图读回（景别、画面位置、投影框、遮挡）；'
-    + '意图机位被挡、钻地或贴到人身上而改了角度或焦距时附 adjusted（原因、挡住它的对象、改了什么）。'],
+    + '意图机位被挡、钻地而改了角度或焦距，或过肩按两人间距改了焦距与景别时，附 adjusted（原因、挡住它的对象、改了什么）。'],
   failureRecovery: [
     CONFLICT_RECOVERY,
     '摄像机、主体或状态关键帧 id 不对时按错误里列出的可用 id 重试；摄像机已有运镜时传 at 只定那一刻。',
-    'SHOT_NOT_REACHABLE 时换景别、角度或关系，或把主体挪开一些。',
+    'SHOT_NOT_REACHABLE 时按错误里说的原因改：钻地或落进对象就换角度、景别或主体位置；过肩两人离得太远就把两人拉近，或改用 two_shot、single。',
   ],
   inputSchema: z.object({ documentId: cameraStageDocumentIdSchema, ...cameraStageShotIntentShape }).strict().superRefine(refineCameraStageShotIntent),
   outputSchema: capabilityOutputSchema({ ...cameraStageTransactionResultShape, ...cameraStageShotResultShape }),

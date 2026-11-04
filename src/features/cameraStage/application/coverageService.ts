@@ -10,7 +10,7 @@ import {
   type CameraStageCoverageSetupResult,
   type cameraStageCoverageIntentShape,
 } from '@/core/application-control/domains/cameraStage/cameraStageCoverageSchemas'
-import { CAMERA_STAGE_SHOT_SIZE_LABELS, type CameraStageShotAngle, type CameraStageShotLens, type CameraStageShotSize } from '@/core/application-control/domains/cameraStage/cameraStageShotSchemas'
+import type { CameraStageShotAngle, CameraStageShotLens, CameraStageShotSize } from '@/core/application-control/domains/cameraStage/cameraStageShotSchemas'
 import { v4 as uuidv4 } from 'uuid'
 
 import type { StageCoverage, StageCoverageSetup } from '../domain/coverage'
@@ -61,7 +61,6 @@ const DEFAULT_SHOTS: Record<1 | 2, CameraStageCoverageRole[]> = {
   2: ['establishing', 'master', 'over_shoulder', 'single'],
 }
 const WIDE_SAMPLE_STEP = 0.5
-const OVER_SHOULDER_SIZES: readonly CameraStageShotSize[] = ['close', 'medium_close', 'medium']
 const INSERT_HEIGHT = 0.3
 const round = (value: number): number => Math.round(value * 100) / 100
 const vec = (value: Vector3): StageVec3 => ({ x: Math.round(value.x * 1000) / 1000, y: Math.round(value.y * 1000) / 1000, z: Math.round(value.z * 1000) / 1000 })
@@ -193,28 +192,20 @@ async function coverCameraStageSceneInternal(input: CameraStageCoverageInput): P
       const target = spec.role === 'establishing'
         ? [shotSubjectFromPoint({ x: middle.x, y: middle.y + 0.9, z: middle.z }, 1.8)]
         : subjects
-      // 过肩的机位要在前景那人身后：两人离得远时长焦下近景的机位会站到他前面，逐档放松景别再求。
-      const sizes = spec.kind === 'over_shoulder' ? OVER_SHOULDER_SIZES.slice(OVER_SHOULDER_SIZES.indexOf(spec.size)) : [spec.size]
-      let failure: string | null = null
-      for (const size of sizes) {
-        try {
-          const solution = composeShot({
-            kind: spec.kind, subjects: target, size, position: 'auto', angle: spec.angle, lens: spec.lens, aspect,
-            currentPosition: hint, axisNormal: normal, avoidOcclusion: true, obstacles: shotObstacles(objects),
-          })
-          const loosened = size !== spec.size ? `两人离得远，过肩景别从${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}放松到${CAMERA_STAGE_SHOT_SIZE_LABELS[size]}` : null
-          solved.push({
-            spec: { ...spec, size }, position: solution.camera.position, rotation: solution.camera.rotation, fov: solution.camera.fov, lookAtTarget: solution.lookAtTarget,
-            adjusted: [loosened, solution.adjusted?.summary.replace(/。$/, '')].filter(Boolean).join('；') || null,
-          })
-          failure = null
-          break
-        } catch (error) {
-          if (!(error instanceof ShotCompositionError)) throw error
-          failure = error.message
-        }
+      try {
+        // 过肩两人离得远时求解自己会换长焦、必要时放宽景别，实际景别以结果为准。
+        const solution = composeShot({
+          kind: spec.kind, subjects: target, size: spec.size, position: 'auto', angle: spec.angle, lens: spec.lens, aspect,
+          currentPosition: hint, axisNormal: normal, avoidOcclusion: true, obstacles: shotObstacles(objects),
+        })
+        solved.push({
+          spec: { ...spec, size: solution.size }, position: solution.camera.position, rotation: solution.camera.rotation, fov: solution.camera.fov, lookAtTarget: solution.lookAtTarget,
+          adjusted: solution.adjusted?.summary.replace(/。$/, '') ?? null,
+        })
+      } catch (error) {
+        if (!(error instanceof ShotCompositionError)) throw error
+        skipped.push(`${CAMERA_STAGE_COVERAGE_ROLE_LABELS[spec.role]}${spec.subjectIds.length === 1 ? `「${objects.find((object) => object.id === spec.subjectIds[0])?.name}」` : ''}：${error.message}`)
       }
-      if (failure) skipped.push(`${CAMERA_STAGE_COVERAGE_ROLE_LABELS[spec.role]}${spec.subjectIds.length === 1 ? `「${objects.find((object) => object.id === spec.subjectIds[0])?.name}」` : ''}：${failure}`)
     }
     if (solved.length === 0) throw rejected(`SHOT_NOT_REACHABLE：一台机位都求不出来。${skipped.join('；')}`)
 

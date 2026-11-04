@@ -2,19 +2,22 @@ import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 
 import type { z } from 'zod'
 
-import type {
-  cameraStageComposedShotSchema,
-  CameraStageShotAngle,
-  CameraStageShotLens,
-  CameraStageShotPosition,
-  CameraStageShotSize,
-  CameraStageShotView,
+import {
+  CAMERA_STAGE_SHOT_SIZE_LABELS,
+  CAMERA_STAGE_SHOT_SIZES,
+  type cameraStageComposedShotSchema,
+  type CameraStageShotAngle,
+  type CameraStageShotLens,
+  type CameraStageShotPosition,
+  type CameraStageShotSize,
+  type CameraStageShotView,
 } from '@/core/application-control/domains/cameraStage/cameraStageShotSchemas'
-import { focalLengthToFov } from '../domain/cameraOptics'
+import { focalLengthToFov, fovToFocalLength } from '../domain/cameraOptics'
 import type { StageVec3 } from '../domain/sceneTypes'
 import {
   BODY,
   SHOT_FRAMES,
+  foregroundEdge,
   projectedHeightRatio,
   shotHeightRatio,
   WORLD_UP,
@@ -42,6 +45,9 @@ import { pointInsideObstacle, type StageObstacle } from './stageObstacles'
  *
  * 遮挡：以意图机位为中心，在 Toric 参数（方位、俯仰、焦距档位）的邻域里由近到远试，取第一个主体关键点
  * 可见、画面内采样点大部分可见的机位；轴线一侧不变。都挡住时取可见最多的那个并如实报告。
+ *
+ * 过肩镜头的焦距不按档位取，按两人间距连续求（见 overShoulderCandidates）：机位要站在前景那人身后，
+ * 到被拍者的距离 = 两人间距 + 到前景那人的距离，而景别又把这段距离和焦距绑在一起。
  */
 
 const DEG = Math.PI / 180
@@ -61,8 +67,28 @@ const ANGLE_ELEVATION: Record<CameraStageShotAngle, { base: number; min: number;
 const VIEW_AZIMUTH: Record<CameraStageShotView, number> = { front: 0, front_left: 40, front_right: -40, left: 90, right: -90, back: 180 }
 const THREE_QUARTER = 40
 const THIRD = 1 / 3
-/** 过肩镜头前景那人头部中心的水平位置（NDC）。 */
-const SHOULDER_X = 0.7
+/**
+ * 过肩镜头前景那人在画面里占的宽度：从他那一侧的画缘量到他身体内侧边缘，取画宽的 0.3
+ * （业内常说前景肩占画面 1/4 到 1/3）。头部中心的位置由这个宽度反求，起点按 0.7 估。
+ */
+const FOREGROUND_EDGE = 0.3
+const FOREGROUND_EDGE_TOLERANCE = 0.02
+/** 前景那人挤进画面超过这个宽度就压到被拍者身上了，不算过肩镜头。 */
+const FOREGROUND_EDGE_MAX = 0.45
+const SHOULDER_X_GUESS = 0.7
+/**
+ * 前景那人看起来比被拍者大多少倍（到被拍者距离 / 到前景那人距离）。小于 1.3 前景小得像路人，
+ * 大于 2.2 前景的头占满画面一侧；两人间距一定时这个倍数只由焦距决定。
+ */
+const FOREGROUND_SCALE = { min: 1.3, max: 2.2 }
+/** 机位离前景那人眼睛至少多远才不贴着后脑勺（米）。 */
+const MIN_FOREGROUND_DISTANCE = 0.5
+/** 过肩求焦距时的可用范围（全画幅等效，毫米）。 */
+const OVER_SHOULDER_FOCAL = { min: 18, max: 200 }
+const OVER_SHOULDER_FOCAL_VARIANTS = [1, 1.2, 1 / 1.2]
+/** 景别最多放宽到全景：再松被拍者只剩一个小人，前景肩膀就不再是过肩镜头了。 */
+const OVER_SHOULDER_LOOSEST: CameraStageShotSize = 'full'
+const SENSOR_HEIGHT_MM = 24
 /** 机位离地最低高度、离障碍物表面最小距离（米）。 */
 const MIN_CAMERA_HEIGHT = 0.15
 const CAMERA_CLEARANCE = 0.15
@@ -100,7 +126,11 @@ export type ShotAdjustment = NonNullable<z.infer<typeof cameraStageComposedShotS
 export interface ShotSolution {
   camera: StageShotCamera
   lookAtTarget: Vector3
+  /** 实际焦距（毫米）与它所属的档位 */
+  focalLength: number
   lens: CameraStageShotLens
+  /** 实际景别：过肩镜头两人离得太远时会放宽 */
+  size: CameraStageShotSize
   adjusted: ShotAdjustment | null
   readback: ShotReadback
 }
@@ -111,8 +141,17 @@ interface Candidate {
   azimuth: number
   beta: number
   elevation: number
-  lens: CameraStageShotLens
+  /** 焦距（毫米）；单人与双人取档位焦距，过肩按两人间距求 */
+  focal: number
+  size: CameraStageShotSize
   cost: number
+  /** 过肩焦距或景别偏离意图的原因 */
+  separationNote?: string
+}
+
+/** 焦距归到档位：35mm 以下算广角，70mm 以上算长焦。 */
+export function lensOfFocalLength(focal: number): CameraStageShotLens {
+  return focal < 35 ? 'wide' : focal > 70 ? 'telephoto' : 'standard'
 }
 
 function ray(fov: number, aspect: number, x: number, y: number): Vector3 {
@@ -192,7 +231,62 @@ function elevationsFor(angle: CameraStageShotAngle): number[] {
   return [...new Set(ELEVATION_OFFSETS.map((offset) => Math.max(range.min, Math.min(range.max, range.base + offset))))]
 }
 
-function candidatesFor(spec: ShotSpec): Candidate[] {
+/** 过肩镜头的两点：前景那人的眼睛与被拍者的关键点。 */
+function shoulderPoints(spec: ShotSpec): { a: Vector3; b: Vector3 } {
+  return { a: subjectAxisPoint(spec.subjects[0], BODY.eye), b: subjectKeyPoint(spec.subjects[1]) }
+}
+
+const metres = (value: number): string => (Math.round(value * 10) / 10).toString()
+
+/**
+ * 过肩的焦距与景别：被拍者按景别占画高，机位到他的距离 d 与焦距成正比（d = 画框高 × 焦距 / 底片高）；
+ * 机位又要站在前景那人身后，d ≈ 两人间距 s + 到前景那人的距离，于是前景放大倍数 d / (d − s) 只由焦距定。
+ * 先取意图档位的焦距，把 d 夹进“前景倍数 1.3–2.2、离前景至少 0.5 米”的窗口里换算回焦距；
+ * 两人离得太远、窗口要求的焦距超过 200mm 时逐档放宽景别（同样的焦距下景别越松 d 越大）。
+ * 邻域里再放几个焦距变化与机位升降供避让遮挡。
+ */
+function overShoulderCandidates(spec: ShotSpec): { candidates: Candidate[]; tooFar: number | null } {
+  const subject = spec.subjects[1]
+  const { a, b } = shoulderPoints(spec)
+  const separation = a.distanceTo(b)
+  const preferred = SHOT_LENS_FOCAL_LENGTH[spec.lens]
+  const nearest = Math.max(separation + MIN_FOREGROUND_DISTANCE, (separation * FOREGROUND_SCALE.max) / (FOREGROUND_SCALE.max - 1))
+  const farthest = Math.max(nearest, (separation * FOREGROUND_SCALE.min) / (FOREGROUND_SCALE.min - 1))
+  const loosest = Math.min(CAMERA_STAGE_SHOT_SIZES.indexOf(OVER_SHOULDER_LOOSEST), CAMERA_STAGE_SHOT_SIZES.indexOf(spec.size))
+  const sizes = CAMERA_STAGE_SHOT_SIZES.slice(loosest, CAMERA_STAGE_SHOT_SIZES.indexOf(spec.size) + 1).reverse()
+  // 按意图焦距拍意图景别时机位离被拍者多远，用来说明为什么改。
+  const intended = ((SHOT_FRAMES[spec.size].top - SHOT_FRAMES[spec.size].bottom) * subject.height * preferred) / SENSOR_HEIGHT_MM
+  for (const [step, size] of sizes.entries()) {
+    const frameHeight = (SHOT_FRAMES[size].top - SHOT_FRAMES[size].bottom) * subject.height
+    const focalAt = (distance: number): number => (distance * SENSOR_HEIGHT_MM) / frameHeight
+    if (focalAt(nearest) > OVER_SHOULDER_FOCAL.max) continue
+    const low = Math.max(OVER_SHOULDER_FOCAL.min, focalAt(nearest))
+    const high = Math.max(low, Math.min(OVER_SHOULDER_FOCAL.max, focalAt(farthest)))
+    const planned = Math.max(low, Math.min(high, preferred))
+    // 差不到 5% 就照意图焦距拍：前景倍数略出窗口看不出来，不值得报一次改动。
+    const focal = step === 0 && Math.abs(planned / preferred - 1) < 0.05 ? preferred : planned
+    const notes: string[] = []
+    if ((focal !== preferred || step > 0) && intended < nearest) {
+      notes.push(`两人眼睛相距 ${metres(separation)} 米，按 ${preferred}mm 拍${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}机位会${intended <= separation ? '站到前景那人前面' : '贴着前景那人、他会占满画面一侧'}`)
+    } else if (focal !== preferred && intended > farthest) {
+      notes.push(`两人眼睛只相距 ${metres(separation)} 米，按 ${preferred}mm 拍前景那人会显得太小`)
+    }
+    if (step > 0) notes.push(`${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}要超过 ${OVER_SHOULDER_FOCAL.max}mm 才能站到前景那人身后`)
+    const focals = [...new Set(OVER_SHOULDER_FOCAL_VARIANTS.map((variant) => (
+      variant === 1 ? focal : Math.round(Math.max(low, Math.min(high, focal * variant)) * 10) / 10
+    )))]
+    const candidates = focals.flatMap((value) => elevationsFor('eye_level').map((elevation): Candidate => ({
+      azimuth: 0, beta: 0, elevation, focal: value, size,
+      cost: Math.abs(Math.log(value / focal)) * 2 + Math.abs(elevation) / 20,
+      ...(notes.length > 0 ? { separationNote: notes.join('，') } : {}),
+    })))
+    return { candidates: candidates.sort((left, right) => left.cost - right.cost), tooFar: null }
+  }
+  return { candidates: [], tooFar: separation }
+}
+
+function candidatesFor(spec: ShotSpec): { candidates: Candidate[]; tooFar: number | null } {
+  if (spec.kind === 'over_shoulder') return overShoulderCandidates(spec)
   const base = ANGLE_ELEVATION[spec.angle].base
   const azimuths = spec.kind === 'single' ? AZIMUTH_OFFSETS : [0]
   const betas = spec.kind === 'two_shot' ? BETA_OFFSETS : [0]
@@ -202,22 +296,22 @@ function candidatesFor(spec: ShotSpec): Candidate[] {
       for (const azimuth of azimuths) {
         for (const beta of betas) {
           list.push({
-            azimuth, beta, elevation, lens,
+            azimuth, beta, elevation, focal: SHOT_LENS_FOCAL_LENGTH[lens], size: spec.size,
             cost: Math.abs(azimuth) / 45 + Math.abs(beta) / 0.25 + Math.abs(elevation - base) / 20 + lensCost(spec.lens, lens),
           })
         }
       }
     }
   }
-  return list.sort((left, right) => left.cost - right.cost)
+  return { candidates: list.sort((left, right) => left.cost - right.cost), tooFar: null }
 }
 
-type Solved = { camera: StageShotCamera; key: Vector3 } | { failure: 'too_close' }
+type Solved = { camera: StageShotCamera; key: Vector3 }
 
 function solveSingle(spec: ShotSpec, candidate: Candidate): Solved | null {
   const subject = spec.subjects[0]
-  const frame = SHOT_FRAMES[spec.size]
-  const fov = focalLengthToFov(SHOT_LENS_FOCAL_LENGTH[candidate.lens])
+  const frame = SHOT_FRAMES[candidate.size]
+  const fov = focalLengthToFov(candidate.focal)
   const toCamera = horizontal(spec.currentPosition.clone().sub(subject.base))
   const front = subject.front?.clone() ?? (toCamera.lengthSq() > 1e-9 ? toCamera.clone().normalize() : new Vector3(0, 0, 1))
   const left = new Vector3().crossVectors(WORLD_UP, front)
@@ -285,19 +379,17 @@ function choosePhi(a: Vector3, b: Vector3, alpha: number, beta: number, side: Ve
 /** 一组画面参数下的两点定位：先按机位高低取 φ，a 的画面高度由“画面不歪”反求。 */
 function solveTwoOnce(
   spec: ShotSpec, candidate: Candidate, fov: number, a: Vector3, b: Vector3,
-  screen: { ax: number; bx: number; by: number }, beta: (alpha: number) => number | 'too_close' | null,
+  screen: { ax: number; bx: number; by: number }, beta: (alpha: number) => number | null,
 ): Solved | null {
   const { ax, bx, by } = screen
   const side = spec.axisNormal ?? new Vector3(1, 0, 0)
-  let tooClose = false
   const evaluate = (ay: number, phi: number): { position: Vector3; rotation: StageVec3; upright: boolean } | null => {
     const alpha = ray(fov, spec.aspect, ax, ay).angleTo(ray(fov, spec.aspect, bx, by))
     const angle = beta(alpha)
-    if (angle === 'too_close') { tooClose = true; return null }
     if (angle === null) return null
     const position = toricPosition(a, b, alpha, angle, phi * DEG, side)
     if (!position) return null
-    if (spec.kind === 'over_shoulder' && position.distanceTo(a) < MIN_SHOULDER_DISTANCE) { tooClose = true; return null }
+    if (spec.kind === 'over_shoulder' && position.distanceTo(a) < MIN_SHOULDER_DISTANCE) return null
     // 先看两人在机位看来谁左谁右，再把画面位置对上；左右互换不改变夹角，机位不变。
     const forward = a.clone().add(b).multiplyScalar(0.5).sub(position)
     const right = new Vector3().crossVectors(forward, WORLD_UP)
@@ -336,7 +428,6 @@ function solveTwoOnce(
   const phiAt = (ay: number): number | null => {
     const alpha = ray(fov, spec.aspect, ax, ay).angleTo(ray(fov, spec.aspect, bx, by))
     const angle = beta(alpha)
-    if (angle === 'too_close') { tooClose = true; return null }
     return angle === null ? null : choosePhi(a, b, alpha, angle, side, heightError)
   }
   const phi = phiAt(by)
@@ -346,58 +437,88 @@ function solveTwoOnce(
     const refined = levelAt(refinedPhi)
     if (refined && Math.abs(heightError(refined.result.position)) < Math.abs(heightError(best.result.position))) best = refined
   }
-  if (!best) return tooClose ? { failure: 'too_close' } : null
+  if (!best) return null
   return { camera: { position: best.result.position, rotation: { ...best.result.rotation, z: 0 }, fov, aspect: spec.aspect }, key: b }
 }
 
 /**
- * 两人：双人镜头两人的眼睛落在两侧，画面上下缘取两人各自该景别画框的并集（一高一矮时高的那个不被切头），
- * 两人在画面上拉开多远由景别反推；过肩镜头被拍者落在三分线上，前景那人头部在另一边画缘附近，机位离被拍者的距离由景别给出。
- * 俯拍、仰拍时身体在画面里被透视压短，按读回的景别把间距或距离校正一两次。
+ * 过肩时前景那人的头最远能放到画面哪儿（NDC，取正值）：机位在两人连线附近，两人在机位看来最多相隔
+ * asin(间距 / 到被拍者距离)。两人挨得近、画框又松时，被拍者站三分线、前景就只能往画面中间挤。
  */
-function solveTwo(spec: ShotSpec, candidate: Candidate): Solved | null {
+function shoulderReach(fov: number, aspect: number, by: number, separation: number, subjectDistance: number): number {
+  const limit = Math.asin(Math.min(1, (0.97 * separation) / subjectDistance))
+  const target = ray(fov, aspect, THIRD, by)
+  const within = (x: number): boolean => ray(fov, aspect, -x, by).angleTo(target) <= limit
+  let low = 0
+  let high = 3
+  if (within(high)) return high
+  for (let iteration = 0; iteration < 40; iteration += 1) {
+    const middle = (low + high) / 2
+    if (within(middle)) low = middle
+    else high = middle
+  }
+  return low
+}
+
+/**
+ * 两人：双人镜头两人的眼睛落在两侧，画面上下缘取两人各自该景别画框的并集（一高一矮时高的那个不被切头），
+ * 两人在画面上拉开多远由景别反推；过肩镜头被拍者落在三分线上，前景那人在另一边画缘、占画宽 0.3，机位离被拍者的距离由景别给出。
+ * 俯拍、仰拍时身体在画面里被透视压短，按读回的景别把间距或距离校正几次；过肩同时按读回的前景宽度挪他的头部位置。
+ */
+function solveTwo(spec: ShotSpec, candidate: Candidate): Solved | 'crowded' | null {
   const [first, second] = spec.subjects
   const shoulder = spec.kind === 'over_shoulder'
-  const fov = focalLengthToFov(SHOT_LENS_FOCAL_LENGTH[candidate.lens])
-  const a = shoulder ? subjectAxisPoint(first, BODY.eye) : subjectKeyPoint(first)
-  const b = subjectKeyPoint(second)
+  const fov = focalLengthToFov(candidate.focal)
+  const { a, b } = shoulder ? shoulderPoints(spec) : { a: subjectKeyPoint(first), b: subjectKeyPoint(second) }
   const separation = a.distanceTo(b)
   if (separation < 0.05) return null
-  const frame = SHOT_FRAMES[spec.size]
+  const frame = SHOT_FRAMES[candidate.size]
   const tanV = Math.tan((fov * DEG) / 2)
   const frameTop = Math.max(...spec.subjects.map((subject) => subject.base.y + frame.top * subject.height))
   const frameBottom = Math.min(...spec.subjects.map((subject) => subject.base.y + frame.bottom * subject.height))
   const reference = shoulder ? second : [first, second].sort((left, right) => right.height - left.height)[0]
-  const target = shoulder ? shotHeightRatio(spec.size) : reference.height / (frameTop - frameBottom)
-  const by = shoulder ? keyScreenY(spec.size, second) : Math.max(-0.85, Math.min(0.85, 1 - (2 * (frameTop - b.y)) / (frameTop - frameBottom)))
+  const target = shoulder ? shotHeightRatio(candidate.size) : reference.height / (frameTop - frameBottom)
+  const by = shoulder ? keyScreenY(candidate.size, second) : Math.max(-0.85, Math.min(0.85, 1 - (2 * (frameTop - b.y)) / (frameTop - frameBottom)))
   let scale = 1
+  let ax = -SHOULDER_X_GUESS
   let solved: Solved | null = null
-  for (let pass = 0; pass < 3; pass += 1) {
+  let edge: number | null = null
+  for (let pass = 0; pass < (shoulder ? 5 : 3); pass += 1) {
+    let next: Solved | null
     if (shoulder) {
-      // 过肩：机位在前景那人身后，离被拍者的距离由景别给出，取 β 的钝角解。
+      // 过肩：机位在前景那人身后，离被拍者的距离由景别给出，取 β 的钝角解（机位到前景那人比到被拍者近）。
       const subjectDistance = (((frame.top - frame.bottom) * second.height) / (2 * tanV)) * scale
-      solved = solveTwoOnce(spec, candidate, fov, a, b, { ax: -SHOULDER_X, bx: THIRD, by }, (alpha) => {
+      ax = Math.max(ax, -shoulderReach(fov, spec.aspect, by, separation, subjectDistance))
+      next = solveTwoOnce(spec, candidate, fov, a, b, { ax, bx: THIRD, by }, (alpha) => {
         const sine = (subjectDistance * Math.sin(alpha)) / separation
-        return sine > 1 || subjectDistance <= separation ? 'too_close' : Math.PI - Math.asin(sine)
+        return sine > 1 || subjectDistance <= separation ? null : Math.PI - Math.asin(sine)
       })
     } else {
       const spread = Math.max(0.15, Math.min(0.72, (horizontal(b.clone().sub(a)).length() / ((frameTop - frameBottom) * spec.aspect)) * scale))
-      solved = solveTwoOnce(spec, candidate, fov, a, b, { ax: -spread, bx: spread, by }, (alpha) => (Math.PI - alpha) / 2 + candidate.beta)
+      next = solveTwoOnce(spec, candidate, fov, a, b, { ax: -spread, bx: spread, by }, (alpha) => (Math.PI - alpha) / 2 + candidate.beta)
     }
-    if (!solved || 'failure' in solved || candidate.elevation >= 60) return solved
+    // 校正中途求不出时保留上一轮的解。
+    if (!next) break
+    solved = next
+    if (candidate.elevation >= 60) return solved
     const actual = projectedHeightRatio(solved.camera, reference)
-    if (actual === null || Math.abs(actual / target - 1) < 0.03) return solved
+    edge = shoulder ? foregroundEdge(solved.camera, first) : null
+    const sizeOk = actual === null || Math.abs(actual / target - 1) < 0.03
+    const edgeOk = edge === null || Math.abs(edge - FOREGROUND_EDGE) < FOREGROUND_EDGE_TOLERANCE
+    if (sizeOk && edgeOk) break
     // 主体显得太小就离近一些：过肩缩短距离，双人拉开间距。
-    scale *= shoulder ? actual / target : target / actual
+    if (actual !== null) scale *= shoulder ? actual / target : target / actual
+    // 前景内缘与头部位置近似同步移动（画面坐标 0..1 对 NDC 是一半），一步牛顿就差不多到位。
+    if (edge !== null) ax = Math.max(-1.9, Math.min(-0.35, ax - 2 * (edge - FOREGROUND_EDGE)))
   }
-  return solved
+  return shoulder && solved && edge !== null && edge > FOREGROUND_EDGE_MAX ? 'crowded' : solved
 }
 
 interface Evaluated {
   candidate: Candidate
   solved: Solved | null
   /** 几何上不成立的原因；成立为 null */
-  invalid: ShotAdjustment['reasons'][number] | 'unsolvable' | null
+  invalid: Exclude<ShotAdjustment['reasons'][number], 'separation' | 'occlusion'> | 'unsolvable' | 'crowded' | null
   clear: boolean
   score: number
   blockedBy: string[]
@@ -409,7 +530,7 @@ function evaluateCandidate(spec: ShotSpec, candidate: Candidate): Evaluated {
   const solved = spec.kind === 'single' ? solveSingle(spec, candidate) : solveTwo(spec, candidate)
   const rejected = { clear: false, score: -Infinity, blockedBy: [], insideOf: null }
   if (!solved) return { ...rejected, candidate, solved, invalid: 'unsolvable' }
-  if ('failure' in solved) return { ...rejected, candidate, solved: null, invalid: solved.failure }
+  if (solved === 'crowded') return { ...rejected, candidate, solved: null, invalid: 'crowded' }
   const position = solved.camera.position
   if (position.y < MIN_CAMERA_HEIGHT) return { ...rejected, candidate, solved, invalid: 'ground' }
   const inside = spec.obstacles.find((obstacle) => pointInsideObstacle(position, obstacle, CAMERA_CLEARANCE))
@@ -425,20 +546,26 @@ function evaluateCandidate(spec: ShotSpec, candidate: Candidate): Evaluated {
 
 function describeAdjustment(spec: ShotSpec, requested: Evaluated, chosen: Evaluated): ShotAdjustment | null {
   const reasons: ShotAdjustment['reasons'] = []
-  if (requested.invalid && requested.invalid !== 'unsolvable') reasons.push(requested.invalid)
+  if (chosen.candidate.separationNote) reasons.push('separation')
+  if (requested.invalid && requested.invalid !== 'unsolvable' && requested.invalid !== 'crowded') reasons.push(requested.invalid)
   if (!requested.invalid && !requested.clear && spec.avoidOcclusion) reasons.push('occlusion')
   const azimuth = chosen.candidate.azimuth
   // 过肩的候选按机位高度换算，报告实际升降与从被拍者看的仰角变化，不报候选里的名义度数。
   const shoulder = spec.kind === 'over_shoulder'
-  const requestedCamera = requested.solved && !('failure' in requested.solved) ? requested.solved.camera.position : null
-  const chosenCamera = chosen.solved && !('failure' in chosen.solved) ? chosen.solved.camera.position : null
+  const requestedCamera = requested.solved ? requested.solved.camera.position : null
+  const chosenCamera = chosen.solved ? chosen.solved.camera.position : null
   const key = subjectKeyPoint(spec.subjects[spec.subjects.length - 1])
   const rise = shoulder && requestedCamera && chosenCamera ? Math.round((chosenCamera.y - requestedCamera.y) * 100) : 0
   const elevation = shoulder
     ? (requestedCamera && chosenCamera ? Math.round((elevationFrom(key, chosenCamera) - elevationFrom(key, requestedCamera)) * 10) / 10 : 0)
     : chosen.candidate.elevation - requested.candidate.elevation
-  const lens = chosen.candidate.lens !== spec.lens ? chosen.candidate.lens : null
-  const moved = azimuth !== 0 || chosen.candidate.elevation !== requested.candidate.elevation || chosen.candidate.beta !== 0 || lens !== null
+  const requestedFocal = SHOT_LENS_FOCAL_LENGTH[spec.lens]
+  const focal = Math.round(chosen.candidate.focal)
+  const chosenLens = lensOfFocalLength(chosen.candidate.focal)
+  const lens = chosenLens !== spec.lens ? chosenLens : null
+  const size = chosen.candidate.size !== spec.size ? chosen.candidate.size : null
+  const moved = azimuth !== 0 || chosen.candidate.elevation !== requested.candidate.elevation || chosen.candidate.beta !== 0
+    || focal !== requestedFocal || size !== null
   if (!moved) return null
   const changes: string[] = []
   if (azimuth !== 0) changes.push(`绕主体${azimuth > 0 ? '向主体左手' : '向主体右手'}转了 ${Math.abs(azimuth)}°`)
@@ -446,12 +573,13 @@ function describeAdjustment(spec: ShotSpec, requested: Evaluated, chosen: Evalua
   if (chosen.candidate.beta !== 0) changes.push(`机位往${chosen.candidate.beta > 0 ? '第一个人' : '第二个人'}那边挪了一些`)
   if (shoulder && rise !== 0) changes.push(`机位${rise > 0 ? '升高' : '降低'}了 ${Math.abs(rise)} 厘米`)
   else if (!shoulder && elevation !== 0) changes.push(`机位${elevation > 0 ? '抬高' : '降低'}了 ${Math.abs(elevation)}°`)
-  if (lens) changes.push(`焦距从 ${SHOT_LENS_FOCAL_LENGTH[spec.lens]}mm 换成 ${SHOT_LENS_FOCAL_LENGTH[lens]}mm（机位${LENS_ORDER.indexOf(lens) < LENS_ORDER.indexOf(spec.lens) ? '更近' : '更远'}）`)
+  if (focal !== requestedFocal) changes.push(`焦距从 ${requestedFocal}mm 换成 ${focal}mm（机位${focal < requestedFocal ? '更近' : '更远'}）`)
+  if (size) changes.push(`景别从${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}放宽到${CAMERA_STAGE_SHOT_SIZE_LABELS[size]}`)
   const why = reasons.map((reason) => ({
+    separation: chosen.candidate.separationNote ?? '',
     occlusion: `意图机位被${requested.blockedBy.length > 0 ? `「${requested.blockedBy.join('」「')}」` : '其他对象'}挡住`,
     ground: '意图机位会钻到地面以下',
     inside_object: `意图机位会落进「${requested.insideOf ?? '某个对象'}」里面`,
-    too_close: '这个焦距下机位会贴到前景那人身上',
   }[reason]))
   if (why.length === 0 && changes.length === 0) return null
   return {
@@ -460,13 +588,18 @@ function describeAdjustment(spec: ShotSpec, requested: Evaluated, chosen: Evalua
     azimuthDegrees: azimuth,
     elevationDegrees: elevation,
     lens,
+    size,
     summary: `${[why.join('，'), changes.join('，')].filter(Boolean).join('；')}。`,
   }
 }
 
 /** 求一台摄像机的构图机位；意图在任何焦距与角度邻域里都无解时抛 ShotCompositionError。 */
 export function composeShot(spec: ShotSpec): ShotSolution {
-  const candidates = candidatesFor(spec)
+  const { candidates, tooFar } = candidatesFor(spec)
+  if (tooFar !== null) {
+    throw new ShotCompositionError(`SHOT_NOT_REACHABLE：两人眼睛相距 ${metres(tooFar)} 米，过肩机位要站在前景那人身后，`
+      + `放宽到${CAMERA_STAGE_SHOT_SIZE_LABELS[OVER_SHOULDER_LOOSEST]}也要超过 ${OVER_SHOULDER_FOCAL.max}mm 的焦距；把两人拉近一些，或改用 two_shot、给被拍者单独一个 single。`)
+  }
   const evaluated: Evaluated[] = []
   let chosen: Evaluated | null = null
   for (const candidate of candidates) {
@@ -475,12 +608,13 @@ export function composeShot(spec: ShotSpec): ShotSolution {
     if (!result.invalid && (result.clear || !spec.avoidOcclusion)) { chosen = result; break }
   }
   chosen ??= evaluated.filter((item) => !item.invalid).sort((left, right) => right.score - left.score)[0] ?? null
-  if (!chosen?.solved || 'failure' in chosen.solved) {
+  if (!chosen?.solved) {
     const failures = new Set(evaluated.map((item) => item.invalid))
-    throw new ShotCompositionError(failures.has('too_close')
-      ? 'SHOT_NOT_REACHABLE：两人离得太近，任何焦距下机位都会贴到前景那人身上；把两人拉开一些或改用 two_shot。'
-      : failures.has('ground') || failures.has('inside_object')
-        ? 'SHOT_NOT_REACHABLE：意图附近的机位都在地面以下或其他对象内部；换角度（angle）、景别或主体位置。'
+    throw new ShotCompositionError(failures.has('ground') || failures.has('inside_object')
+      ? 'SHOT_NOT_REACHABLE：意图附近的机位都在地面以下或其他对象内部；换角度（angle）、景别或主体位置。'
+      : spec.kind === 'over_shoulder' && failures.has('crowded')
+        ? `SHOT_NOT_REACHABLE：两人眼睛只相距 ${metres(shoulderPoints(spec).a.distanceTo(shoulderPoints(spec).b))} 米，拍${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}时被拍者站三分线，`
+          + '前景那人只能挤到画面中间压住他；换更紧的景别（近景、特写），或把两人拉开一些、改用 two_shot。'
         : 'SHOT_NOT_REACHABLE：这个景别与角度在场景里求不出机位；换景别或角度。')
   }
   const requested = evaluated[0]
@@ -489,7 +623,9 @@ export function composeShot(spec: ShotSpec): ShotSolution {
   return {
     camera,
     lookAtTarget: camera.position.clone().addScaledVector(cameraForward(camera.rotation), Math.max(0.5, camera.position.distanceTo(chosen.solved.key))),
-    lens: chosen.candidate.lens,
+    focalLength: Math.round(fovToFocalLength(camera.fov)),
+    lens: lensOfFocalLength(chosen.candidate.focal),
+    size: chosen.candidate.size,
     adjusted: describeAdjustment(spec, requested, chosen),
     readback: readShot(camera, spec.subjects, spec.obstacles, ignore),
   }

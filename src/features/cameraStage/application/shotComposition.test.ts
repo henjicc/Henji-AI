@@ -5,8 +5,8 @@ import { composeCameraStageShotCapability } from '@/core/application-control/dom
 import { CAMERA_STAGE_SHOT_SIZES } from '@/core/application-control/domains/cameraStage/cameraStageShotSchemas'
 import { createCharacterObject, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import type { StageObject } from '../domain/sceneTypes'
-import { axisNormalFor, axisSideOf, composeShot, type ShotSpec } from './shotComposition'
-import { shotObstacles, shotSubjectFromObject } from './shotGeometry'
+import { axisNormalFor, axisSideOf, composeShot, ShotCompositionError, type ShotSpec } from './shotComposition'
+import { foregroundEdge, shotObstacles, shotSubjectFromObject } from './shotGeometry'
 
 function character(name: string, x: number, z: number, yaw: number): StageObject {
   const object = createCharacterObject(name, pickDefaultColor(1))
@@ -89,6 +89,47 @@ describe('按构图意图定机位', () => {
     })
     expect(refused.success).toBe(false)
     expect(refused.error?.issues[0].message).toContain('two_shot')
+  })
+
+  it('过肩按两人间距求焦距：离得远换长焦、再远放宽景别，前景始终约占画宽三分之一且在机位前方', () => {
+    const pair = (gap: number) => {
+      const a = character('甲', -gap / 2, 0, 90)
+      const b = character('乙', gap / 2, 0, -90)
+      const subjects = [shotSubjectFromObject(a), shotSubjectFromObject(b)]
+      const axisNormal = axisNormalFor(subjects, axisSideOf(new Vector3(0, 1.6, 6), subjects))
+      return { subjects, request: spec([a, b], { kind: 'over_shoulder', subjects, size: 'close', lens: 'telephoto', axisNormal }) }
+    }
+    for (const gap of [0.6, 1.2, 2, 3, 6]) {
+      const { subjects, request } = pair(gap)
+      const shot = composeShot(request)
+      const main = shot.readback.subjects[1]
+      expect(main.keyVisible, `${gap}`).toBe(true)
+      expect(main.shotSize, `${gap}`).toBe(shot.size)
+      // 前景约占画宽 0.3；两人挨得很近时被拍者站三分线，前景只能多挤进来一些。
+      const edge = foregroundEdge(shot.camera, subjects[0])!
+      if (gap >= 1.2) expect(edge, `${gap}`).toBeCloseTo(0.3, 1)
+      else expect(edge, `${gap}`).toBeLessThanOrEqual(0.45)
+      // 机位在前景那人身后：离他比离被拍者近。
+      const fgEye = subjects[0].base.clone().setY(subjects[0].height * 0.936)
+      expect(shot.camera.position.distanceTo(fgEye), `${gap}`).toBeLessThan(shot.camera.position.distanceTo(subjects[1].base.clone().setY(1.6)))
+      if (gap >= 2) {
+        expect(shot.adjusted?.reasons, `${gap}`).toContain('separation')
+        expect(shot.focalLength, `${gap}`).toBeGreaterThan(85)
+        expect(shot.adjusted?.summary, `${gap}`).toContain('相距')
+      }
+    }
+    // 两米：近景换长焦就够；三米：200mm 内拍不了近景，放宽到中近景。
+    expect(composeShot(pair(2).request).size).toBe('close')
+    const far = composeShot(pair(3).request)
+    expect(far.size).toBe('medium_close')
+    expect(far.adjusted?.size).toBe('medium_close')
+    expect(far.adjusted?.summary).toContain('放宽')
+
+    let refused: unknown
+    try { composeShot(pair(40).request) } catch (error) { refused = error }
+    expect(refused).toBeInstanceOf(ShotCompositionError)
+    expect((refused as Error).message).toContain('相距 40 米')
+    expect((refused as Error).message).not.toContain('太近')
   })
 
   it('意图机位被挡时绕开并报告挡住它的是谁；不避让时如实报告遮挡', () => {

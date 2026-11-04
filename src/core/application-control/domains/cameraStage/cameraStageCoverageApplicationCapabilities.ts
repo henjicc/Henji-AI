@@ -47,7 +47,7 @@ export const coverCameraStageSceneCapability = defineApplicationCapability({
   successEvidence: ['结果 setups[] 是写入后读回的每台机位：镜头角色、实际构图（景别、画面位置、遮挡）、在轴线哪一侧、拍得到主要主体的时段 visibleSpans。'],
   failureRecovery: [
     CONFLICT_RECOVERY,
-    '主体或插入对象 id 不对时按错误里列出的可用 id 重试；SHOT_NOT_REACHABLE 时去掉那个镜头或把两人拉开一些。',
+    '主体或插入对象 id 不对时按错误里列出的可用 id 重试；SHOT_NOT_REACHABLE 时按错误里说的原因调整两人距离，或去掉那个镜头。',
     'visibleSpans 很短的机位（主体走开了）可以换 referenceTime 再布一组，或在那段用主镜头和建立镜头。',
   ],
   inputSchema: z.object({ documentId: cameraStageDocumentIdSchema, ...cameraStageCoverageIntentShape }).strict().superRefine(refineCameraStageCoverage),

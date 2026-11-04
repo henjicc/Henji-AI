@@ -307,6 +307,35 @@ function outlinePoints(subject: StageShotSubject, lateral: Vector3): Vector3[] {
   })
 }
 
+/**
+ * 过肩镜头前景那人占的画宽：从他所在那一侧的画缘量到他身体内侧边缘（0..1）。
+ * 只算落在画面上下缘之间的那部分轮廓：近景里前景那人的肩膀常在画框下面，露出来的只有头。
+ * 轮廓完全不在画面里为 null。
+ */
+export function foregroundEdge(camera: StageShotCamera, subject: StageShotSubject): number | null {
+  const inverse = cameraQuaternion(camera.rotation).invert()
+  const key = projectPoint(camera, subjectKeyPoint(subject), inverse)
+  if (!key.front) return null
+  const side = key.x <= 0 ? 1 : -1
+  const lateral = lateralFor(camera, subject)
+  const outline = subject.kind === 'character' ? CHARACTER_OUTLINE : OBJECT_OUTLINE
+  let inner = -Infinity
+  for (let index = 1; index < outline.length; index += 1) {
+    const [upper, upperWidth] = outline[index - 1]
+    const [lower, lowerWidth] = outline[index]
+    for (let step = 0; step <= 4; step += 1) {
+      const t = step / 4
+      const axis = subjectAxisPoint(subject, upper + (lower - upper) * t)
+      const width = (upperWidth + (lowerWidth - upperWidth) * t) * subject.halfWidth
+      for (const sign of [-1, 1]) {
+        const projected = projectPoint(camera, axis.clone().addScaledVector(lateral, sign * width), inverse)
+        if (projected.front && Math.abs(projected.y) <= 1) inner = Math.max(inner, side * projected.x)
+      }
+    }
+  }
+  return Number.isFinite(inner) ? Math.max(0, Math.min(1, (inner + 1) / 2)) : null
+}
+
 /** 机位相对主体关键点的仰角分类；没有主体时按镜头俯仰。 */
 export function classifyShotAngle(camera: StageShotCamera, subject: StageShotSubject | null): CameraStageShotAngle {
   let elevation = camera.rotation.x

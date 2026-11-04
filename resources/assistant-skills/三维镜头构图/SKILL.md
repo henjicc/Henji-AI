@@ -45,7 +45,7 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 | 画面位置 | `position`（单人）：`left` / `center` / `right` 落在三分线；默认 `auto` 按视线留空——人朝画面右看就站左三分线，正对镜头居中 |
 | 从哪一面拍 | `view`（单人，按主体自己的左右）：`front`、`front_left`、`front_right`、`left`、`right`、`back`；省略取 3/4 正面，落在摄像机现在所在的一侧 |
 | 角度 | `angle`：`eye_level` 平视（与眼睛同高）、`high` 俯拍、`low` 仰拍、`birds_eye` 鸟瞰。过肩与正反打只用平视：机位在前景那人肩后与他眼睛同高，站着的人肩后拍坐着的人自然是俯拍 |
-| 焦距倾向 | `lens`：`wide` 广角 24mm（离得近、透视强）、`standard` 标准 50mm、`telephoto` 长焦 85mm（离得远、压缩空间）；过肩、正反打默认长焦 |
+| 焦距倾向 | `lens`：`wide` 广角 24mm（离得近、透视强）、`standard` 标准 50mm、`telephoto` 长焦 85mm（离得远、压缩空间）；过肩、正反打默认长焦。过肩的焦距按两人间距连续求：机位站在前景那人身后、前景约占画宽三分之一，两人离得远就换更长的焦距，200mm 也不够时景别逐档放宽，改了什么写在 `adjusted` 里 |
 | 轴线 | 两人镜头默认守在两人连线的同一侧，跟已经拍这两人的机位一致；`crossAxis: true` 才有意越轴 |
 | 遮挡 | 默认被挡时在意图范围内换角度或换焦距距离并在结果的 `adjusted` 里说明；`avoidOcclusion: false` 只报告不避让 |
 | 时间 | `at.time` 或 `at.stateKeyframeId`：只把机位记进那一刻（没有状态关键帧就新建）；省略则整条时间轴都摆在这里，摄像机已有运镜时必须给 `at` |
@@ -125,4 +125,4 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
   选了设备后起步和停下的加速度都从零开始，转弯按设备的惯性放缓。
 - **注视跟随**：设备自带“镜头比主体慢半拍”的跟随（`camera_stage.camera.aim_lag`，单位秒，常用 0.1–0.3，0 为始终正对）。要构图锁死主体就设 0。播放、拖动时间轴与导出逐帧一致。
 - **自检**：运镜结果的证据里有 `smoothness`：整条连续链的峰值速度、加速度、角速度，每个衔接点的 `velocityJump`（应接近 0）、中途停顿 `stops`（应为空）、与上一段的衔接 `continuityWithPrevious`（stop 表示停稳再走，有意的节拍停顿就不用改），以及 `timing.sag`（塌速）、`timing.reverses`（往回走）和设备上限检查 `timing.withinLimits` / `timing.requiredDuration`。出现 `smoothnessHint` 时按提示改：设平滑、调衔接时刻、加长时长或换设备。
-- 运镜结果的证据里出现 `clearance` / `clearanceHint`，说明轨迹穿过了楼、角色等对象（列出名称与第几秒）或钻到地面以下：按 `clearanceHint` 撤销后调整再应用（环绕把起始机位放远或抬高、推近调大 `distanceRatio`、升降减小幅度），直到不再出现。推得太近、环绕半径小于楼宽时，注视对象本身也会被列出。
+- 运镜结果的证据里、或应用机位候选（`apply_camera_stage_motion_candidate`）的结果里出现 `clearanceHint`，说明轨迹穿过了楼、角色等对象（`clearance` 列出名称与第几秒）或钻到地面以下：按 `clearanceHint` 撤销后调整再应用（环绕把起始机位放远或抬高、推近调大 `distanceRatio`、升降减小幅度；候选就挪机位或改选其他候选），直到不再出现。推得太近、环绕半径小于楼宽时，注视对象本身也会被列出。
