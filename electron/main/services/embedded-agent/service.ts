@@ -15,8 +15,50 @@ import { createMainLogger } from '../logging'
 import { resolveEmbeddedModel, resolveMemoryOrganizerModel } from './models'
 import type { EngineCommand, EngineEvent } from './contracts'
 import { prepareEmbeddedAttachments } from './attachments'
+import { recordPiRunEnded, recordPiTrace } from './piTrace'
+import { estimateContextTokens } from './contextBudget'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 
 const logger = createMainLogger('main.embedded_agent')
+
+/** 助手追踪按块显示首轮上下文的体量；token 用与上下文预算相同的估算。 */
+function contextPart(id: string, label: string, text: string, count?: number): { id: string; label: string; chars: number; estimatedTokens: number; count?: number } {
+  return { id, label, chars: text.length, estimatedTokens: estimateContextTokens(text), ...(count === undefined ? {} : { count }) }
+}
+
+function describeEmbeddedTool(name: string): { title?: string; readOnly?: boolean; paid: boolean } {
+  const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)
+  return { title: definition?.title, readOnly: definition?.readOnly,
+    paid: Boolean(definition?.paidGenerationPreparation || definition?.mayRequirePaidConfirmation) }
+}
+
+/**
+ * 工具回执里与执行事务相关的事实（事务、写入引用、撤销点、保存状态），其余只留截断预览。
+ * 写能力的回执是操作账本外壳 { operationId, executionState, verificationState, result }，事务在 result（或 result.data）里，
+ * 事务失败时在 result.error.details.transaction；读能力直接是 { ok, data }。预览去掉媒体字节，图片原文不进日志。
+ */
+export function summarizeEmbeddedToolResult(value: unknown): Record<string, unknown> {
+  const record = (item: unknown): Record<string, unknown> => item !== null && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {}
+  const root = record(value)
+  const inner = record(root.result)
+  const failedTransaction = (item: Record<string, unknown>): Record<string, unknown> => record(record(record(item.error).details).transaction)
+  const layers = [record(inner.data), failedTransaction(inner), inner, record(root.data), failedTransaction(root), root]
+  const pick = (key: string): unknown => layers.find(layer => layer[key] !== undefined)?.[key]
+  const refs = pick('resultRefs')
+  const effects = pick('effects')
+  const verification = record(pick('verification'))
+  let preview: string | undefined
+  try { preview = JSON.stringify(value, (key, item: unknown) => MEDIA_BYTE_KEYS.has(key) && typeof item === 'string' && item.length > 200 ? `[媒体数据 ${item.length} 字符]` : item)?.slice(0, 4000) } catch { preview = undefined }
+  return Object.fromEntries(Object.entries({
+    ok: root.ok, executionState: root.executionState, verificationState: root.verificationState, status: pick('status'), operationId: pick('operationId'),
+    transactionRef: pick('transactionRef'), undoRef: pick('undoRef'),
+    resultRefs: Array.isArray(refs) ? refs.slice(0, 50) : undefined, resultRefCount: Array.isArray(refs) ? refs.length : undefined,
+    effectCount: Array.isArray(effects) ? effects.length : undefined,
+    verified: typeof verification.verified === 'boolean' ? verification.verified : undefined,
+    persistence: record(pick('persistence')).state, recovered: root.recoveryResult ? true : undefined, taskRef: pick('taskRef'), preview,
+  }).filter(([, item]) => item !== undefined))
+}
+const MEDIA_BYTE_KEYS = new Set(['base64', 'data'])
 /** 在工具预算和幂等登记之前固定默认落点；显式目标始终由用户任务决定。 */
 export function withGenerationOrigin(name: string, input: Record<string, unknown>, context?: string): Record<string, unknown> {
   if (!['create_visible_generation_task', 'prepare_generation_task', 'add_generation_result_to_canvas'].includes(name) || !context) return input
@@ -144,10 +186,13 @@ export class EmbeddedAgentService {
           const startedAt = Date.now()
           const context = { sessionId: this.state.sessionId, toolCallId: message.id, toolName: message.name,
             operationId: typeof message.input.operationId === 'string' ? message.input.operationId : undefined }
-          logger.info('内置助手开始调用工具', { event: 'embedded_agent.tool.start', requestId, context })
+          // 参数与回执进日志，供助手追踪与 logs:query --chain 还原完整链路；统一日志入口负责脱敏与截断。
+          logger.info('内置助手开始调用工具', { event: 'embedded_agent.tool.start', requestId, context: { ...context, ...describeEmbeddedTool(message.name), input: message.input } })
           void (client ? (message.name === 'load_assistant_skill' ? callEmbeddedSkill(message.input, controller.signal, this.state.sessionId!) : client.call(message.name, withGenerationOrigin(message.name, message.input, this.originContext), controller.signal)) : Promise.reject(new Error('操作未获授权')))
             .then((value) => {
+              // 等待用户确认付费也回 ok:false，但不是失败
               const failed = typeof value === 'object' && value !== null && 'ok' in value && value.ok === false
+                && (value as { executionState?: unknown }).executionState !== 'awaiting_user_confirmation'
               /*
                * 工具抛异常那一支记了 error，返回 { ok:false } 这一支以前只记"失败了"。真机排障时
                * 这等于什么都没说：模型看得到拒绝原因，日志里却只有工具名和耗时，只能靠复现反推。
@@ -156,7 +201,7 @@ export class EmbeddedAgentService {
                */
               const failure = failed ? (value as { error?: { code?: unknown; message?: unknown } }).error : undefined
               const fields = { event: `embedded_agent.tool.${failed ? 'failed' : 'completed'}`, requestId,
-                context: { ...context, durationMs: Date.now() - startedAt,
+                context: { ...context, durationMs: Date.now() - startedAt, result: summarizeEmbeddedToolResult(value),
                   ...(failure ? { failureCode: typeof failure.code === 'string' ? failure.code : undefined,
                     failureReason: String(failure.message ?? '').slice(0, 300) } : {}) } }
               if (failed) logger.error('内置助手工具返回失败', fields)
@@ -169,9 +214,13 @@ export class EmbeddedAgentService {
             .finally(() => { this.toolControllers.delete(message.id); this.progress() })
         } else if (message.type === 'log') {
           const fields = { event: `embedded_agent.turn.${message.phase}`, requestId: message.requestId, modelId: message.modelId, providerId: message.providerId,
-            context: { sessionId: message.sessionId, durationMs: message.durationMs, metrics: message.metrics, requestMetrics: message.requestMetrics, summary: message.summary },
+            context: { sessionId: message.sessionId, durationMs: message.durationMs, turn: message.turn, stopReason: message.stopReason,
+              metrics: message.metrics, requestMetrics: message.requestMetrics, summary: message.summary, answer: message.answer, tool: message.tool },
             ...(message.message ? { error: new Error(message.message) } : {}) }
-          if (message.phase === 'failed') logger.error('内置助手回复失败', fields); else logger.info('内置助手回复状态', fields)
+          if (message.phase === 'failed' || message.stopReason === 'error') logger.error('内置助手回复失败', fields)
+          else if (message.tool?.isError) logger.warn('内置助手工具执行出错', fields)
+          else logger.info('内置助手回复状态', fields)
+          recordPiTrace(message, message.requestId.endsWith(':memory') ? '后台整理记忆' : this.sending?.input.text)
         }
       })
       child.on('exit', (code) => {
@@ -196,7 +245,8 @@ export class EmbeddedAgentService {
     const entry = { id: requestId, input }
     if (input.delivery === 'interrupt') this.queue.unshift(entry)
     else this.queue.push(entry)
-    logger.info('内置助手消息已加入等待列表', { event: 'embedded_agent.message.queued', requestId: entry.id, context: { delivery: input.delivery ?? 'wait', count: this.queue.length } })
+    logger.info('内置助手消息已加入等待列表', { event: 'embedded_agent.message.queued', requestId: entry.id,
+      context: { delivery: input.delivery ?? 'wait', count: this.queue.length, text: input.text, attachmentCount: input.attachments?.length ?? 0, model: input.model } })
     this.publish(this.state)
     if (input.delivery === 'interrupt' && this.running) {
       // 停止当前官方 Pi 请求；等待它退出后才配置下一条，工具回执仍按原操作记账。
@@ -231,6 +281,7 @@ export class EmbeddedAgentService {
     this.running = true; this.cancelled = false
     this.preparation = new AbortController()
     this.publish({ ...this.state, error: null, activity: '正在准备…' })
+    const preparedAt = Date.now()
     let detachMemory: (() => void) | undefined
     try {
       await this.ensureReady()
@@ -264,7 +315,19 @@ export class EmbeddedAgentService {
       const attachments = await prepareEmbeddedAttachments(input.attachments ?? [], model, this.preparation.signal)
       if (this.cancelled) return
       this.client = createEmbeddedApplicationClient(this.state.sessionId!)
-      await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model, tools: [...this.client.catalog(), ...skills.tools], instructions: `${SYSTEM_INSTRUCTIONS}${skills.instructions}\n\n用户指令：\n${instructions.content}` } })
+      const tools = [...this.client.catalog(), ...skills.tools]
+      logger.info('内置助手上下文已组装', { event: 'embedded_agent.context.prepared', requestId, modelId: model.model.modelId, providerId: model.providerId,
+        context: { sessionId: this.state.sessionId, durationMs: Date.now() - preparedAt, parts: [
+          contextPart('system', '系统提示词', SYSTEM_INSTRUCTIONS),
+          contextPart('userInstructions', '用户指令', instructions.content),
+          contextPart('skills', '技能目录', skills.instructions, skills.names.length),
+          contextPart('memory', '记忆', memory.settings.enabled ? JSON.stringify({ global: memory.entries, project: projectMemory, style: styleMemory }) : '',
+            memory.settings.enabled ? memory.entries.length + projectMemory.length + styleMemory.length : 0),
+          contextPart('host', '宿主上下文', input.context),
+          contextPart('tools', '可加载工具', '', tools.length),
+          contextPart('attachments', '附件', '', attachments.length),
+        ], skillNames: skills.names, memoryEnabled: memory.settings.enabled, workspace: host.workspace?.id, documentId, projectId } })
+      await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model, tools, instructions: `${SYSTEM_INSTRUCTIONS}${skills.instructions}\n\n用户指令：\n${instructions.content}` } })
       if (!this.cancelled) {
         await this.send({ action: 'prompt', input: { text: input.text, context: promptContext, selectionSnapshot: input.selectionSnapshot, requestId, attachments, creativeIntent: input.creativeIntent } })
         if (this.state.error) throw new Error(this.state.error)
@@ -275,6 +338,8 @@ export class EmbeddedAgentService {
           try {
             const organizer = await resolveMemoryOrganizerModel(input.model)
             await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model: organizer, tools: this.client.catalog(), instructions: SYSTEM_INSTRUCTIONS } })
+            // 整理记忆另起一条链路，工具日志不能记到用户这次运行名下
+            this.requestId = `${requestId}:memory`
             await this.send({ action: 'prompt', input: { text: '后台整理记忆：读取全局、各项目与风格记忆，合并重复、压缩措辞、删掉明确过时的内容；相同偏好在至少两个项目出现才提升到全局，不提升项目事实。不推断新偏好，不改用户作品。读取每条基线后调用 organize_assistant_memory，changes 带上原 revision；无需改动时不编造修改。不要向用户发送长报告。', background: true, context: promptContext, requestId: `${requestId}:memory` } })
           } catch (error) { logger.warn('记忆自动整理未完成，保留原记忆与修改历史', { event: 'memory.organize.failed', requestId, error }) }
         }
@@ -282,6 +347,7 @@ export class EmbeddedAgentService {
     } catch (error) {
       if (this.cancelled) return
       logger.error('内置助手请求失败', { event: 'embedded_agent.request.failed', requestId, error })
+      recordPiRunEnded(requestId, input.text, input.model, 'failed', error instanceof Error ? error.message : '助手请求失败。')
       this.publish({ ...this.state, error: error instanceof Error ? error.message : '助手请求失败。' })
       throw error
     } finally {
@@ -289,6 +355,11 @@ export class EmbeddedAgentService {
       if (this.cancelled && this.sending && this.state.messages.filter(message => message.role === 'user').length <= this.sending.userCount) {
         this.failedMessages.push({ id: requestId, text: input.text, attachments: input.attachments, error: '已停止发送' })
       }
+      // 停止后 Pi 没回应被直接结束时没有回合结束事件，追踪在这里收尾
+      // 停在记忆整理时收尾的是整理那条运行，用户这次运行已经结束
+      const stoppedId = this.requestId ?? requestId
+      if (this.cancelled) recordPiRunEnded(stoppedId, stoppedId === requestId ? input.text : '后台整理记忆', input.model, 'cancelled', '已停止')
+      this.requestId = undefined
       this.sending = undefined; this.preparation = undefined; this.client?.close(); this.client = undefined; this.running = false
       this.publish({ ...this.state, busy: false, activity: null })
     }

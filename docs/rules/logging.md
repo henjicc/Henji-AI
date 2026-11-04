@@ -38,6 +38,8 @@
 npm run logs:query -- --chain <runId>
 ```
 
+内置助手的运行（runId 即侧栏发送时的 requestId）输出完整处理链路：输入、上下文组装、每轮模型、每次工具调用的参数与返回、执行事务、最终回复与全部相关日志，先可读摘要后结构化 JSON（`--json` 只要 JSON）；与日志窗口“助手追踪 › 复制完整链路”同一份内容，由 `src/core/assistant/assistantChain.ts` 统一生成。
+
 ## 改动后
 
 按 [docs/rules/testing.md](../../docs/rules/testing.md) 的最小分层选择精确检查。只有结论依赖真实窗口、Electron 原生 I/O 或主进程到日志查询的可见性，且精确测试不足以证明时，才升级到正式容器验收并回读结构化日志；可自动验证的结果不得默认改为用户手动步骤。确有无法自动验证的外部条件时，才记录原因和最小手动步骤。

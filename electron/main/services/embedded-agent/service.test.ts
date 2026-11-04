@@ -11,11 +11,12 @@ vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
 vi.mock('../application-runtime/runtime', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close, call: mocks.call }) }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => '/fixture' }))
 vi.mock('../../window', () => ({ getMainWindow: () => undefined }))
+vi.mock('./piTrace', () => ({ recordPiTrace: () => undefined, recordPiRunEnded: () => undefined }))
 vi.mock('../assistant/user-instructions', () => ({ getAssistantUserInstructions: async () => ({ content: '' }) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: mocks.info, error: mocks.error }) }))
 vi.mock('./models', () => ({ resolveEmbeddedModel: mocks.resolveModel }))
 vi.mock('./attachments', () => ({ prepareEmbeddedAttachments: mocks.prepare }))
-import { EmbeddedAgentService, withGenerationOrigin } from './service'
+import { EmbeddedAgentService, summarizeEmbeddedToolResult, withGenerationOrigin } from './service'
 
 it('默认生成落点固定为消息原项目，明确目标优先，非画布不借用后台项目', () => {
   const context = JSON.stringify({ workspace: { id: 'nodes' }, canvas: { id: 'original', selectedNodeId: 'reference' } })
@@ -41,6 +42,17 @@ it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 未�
     .toEqual({ destination: { mode: 'canvas', documentId: 'original', sourceNodeIds: [] } })
 })
 
+// 写能力的回执是操作账本外壳，事务事实在 result 里；链路的“执行事务”步骤靠它。
+it('工具回执摘要从操作账本外壳里取出事务、写入引用与撤销点', () => {
+  const summary = summarizeEmbeddedToolResult({ ok: true, operationId: 'op', executionState: 'completed', verificationState: 'verified',
+    result: { ok: true, data: { status: 'completed', transactionRef: 'tx', undoRef: 'undo', resultRefs: [{ kind: 'settings.registry', id: 'singleton' }], verification: { verified: true } }, persistence: { state: 'saved' } } })
+  expect(summary).toMatchObject({ operationId: 'op', verificationState: 'verified', transactionRef: 'tx', undoRef: 'undo', resultRefCount: 1, verified: true, persistence: 'saved' })
+  const failed = summarizeEmbeddedToolResult({ ok: false, operationId: 'op', executionState: 'completed',
+    result: { ok: false, error: { code: 'VERIFICATION_FAILED', message: '验证未通过', details: { transaction: { transactionRef: 'tx2', undoRef: 'undo2', resultRefs: [{ kind: 'k', id: 'a' }, { kind: 'k', id: 'b' }], verification: { verified: false } } } } } })
+  expect(failed).toMatchObject({ transactionRef: 'tx2', undoRef: 'undo2', resultRefCount: 2, verified: false })
+  expect(JSON.stringify(summarizeEmbeddedToolResult({ ok: true, data: { base64: 'A'.repeat(5000) } }))).not.toContain('AAAA')
+})
+
 it('已有生成结果导入沿用原选中对象或原视口，显式落点与其他项目保持优先', () => {
   const name = 'add_generation_result_to_canvas'
   const input = { resultRef: { kind: 'generation.result', id: 'saved' } }
@@ -57,8 +69,10 @@ it('已有生成结果导入沿用原选中对象或原视口，显式落点与�
   expect(withGenerationOrigin(name, input, 'null')).toBe(input)
 })
 
+/** 只用到日志里的供应商与模型标识。 */
+const fixtureModel = { providerId: 'p', model: { modelId: 'm' } }
 function setup({ holdNavigation = false } = {}) {
-  mocks.skills.mockResolvedValue({ tools: [], instructions: '' })
+  mocks.skills.mockResolvedValue({ tools: [], instructions: '', names: [] })
   const child = new EventEmitter() as EventEmitter & { postMessage: (value: { id: string; command: EngineCommand }) => void; kill: () => void }
   const prompts: string[] = []
   let active: string | undefined
@@ -73,7 +87,7 @@ function setup({ holdNavigation = false } = {}) {
   }
   child.kill = () => child.emit('exit', 0)
   mocks.fork.mockReturnValue(child)
-  mocks.resolveModel.mockResolvedValue({})
+  mocks.resolveModel.mockResolvedValue(fixtureModel)
   mocks.prepare.mockResolvedValue([])
   const service = new EmbeddedAgentService()
   const send = (text: string, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery, model: { providerId: 'test', modelId: 'fixture' }, context: '' })
@@ -171,7 +185,7 @@ describe('内置助手消息调度', () => {
     await f.send('立即停止')
     await vi.waitFor(() => expect(resolveModel).toBeTypeOf('function'))
     const cancel = f.service.cancel()
-    resolveModel({})
+    resolveModel(fixtureModel)
     f.finishCancel()
     await cancel
     await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
@@ -186,7 +200,7 @@ describe('内置助手消息调度', () => {
     await f.send('立即看到气泡')
     await vi.waitFor(() => expect(resolveModel).toBeTypeOf('function'))
     expect(f.service.snapshot().sendingMessage?.text).toBe('立即看到气泡')
-    resolveModel({})
+    resolveModel(fixtureModel)
     await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
     f.child.emit('message', { type: 'snapshot', value: { sessionId: 'session', busy: true, activity: null, error: null,
       messages: [{ id: 'user', role: 'user', text: '立即看到气泡' }] } })
@@ -197,7 +211,7 @@ describe('内置助手消息调度', () => {
   })
   it('主进程注入技能索引并把读取交给正式技能入口，不调用应用写入工具', async () => {
     const f = setup()
-    mocks.skills.mockResolvedValue({ tools: [{ name: 'load_assistant_skill', inputSchema: {} }], instructions: 'skills_index: prompt-optimization' })
+    mocks.skills.mockResolvedValue({ tools: [{ name: 'load_assistant_skill', inputSchema: {} }], instructions: 'skills_index: prompt-optimization', names: ['prompt-optimization'] })
     const post = vi.spyOn(f.child, 'postMessage')
     await f.send('优化提示词')
     await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
@@ -216,23 +230,25 @@ describe('内置助手消息调度', () => {
     f.service.dispose()
   })
 
-  it('工具失败日志关联原消息和操作，不记录工具输入正文', async () => {
+  it('工具失败日志关联原消息和操作，并带上参数供 logs:query --chain 还原链路', async () => {
     const f = setup()
-    await f.send('消息正文不进日志')
+    await f.send('调整参数')
     await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
     const queued = mocks.info.mock.calls.find(call => call[1].event === 'embedded_agent.message.queued')![1] as { requestId: string }
     mocks.call.mockResolvedValue({ ok: false, error: { code: 'DENIED', message: '拒绝' } })
     // 工具回执不经过本测试的 command 替身。
     const postMessage = f.child.postMessage
     f.child.postMessage = vi.fn()
-    f.child.emit('message', { type: 'tool', id: 'tool-call', name: 'change_application_entities', input: { operationId: 'operation-original', secret: '不可记录的输入' } })
+    f.child.emit('message', { type: 'tool', id: 'tool-call', name: 'change_application_entities', input: { operationId: 'operation-original', target: 'clip-1' } })
     await vi.waitFor(() => expect(mocks.error).toHaveBeenCalledWith('内置助手工具返回失败', expect.objectContaining({
       event: 'embedded_agent.tool.failed', requestId: queued.requestId,
       // 失败码和那句给调用方看的话必须进日志：只记"失败了"等于排障时什么都没说。
       context: expect.objectContaining({ toolCallId: 'tool-call', operationId: 'operation-original',
         failureCode: 'DENIED', failureReason: '拒绝' }),
     })))
-    expect(JSON.stringify([...mocks.info.mock.calls, ...mocks.error.mock.calls])).not.toContain('不可记录的输入')
+    // 密钥类字段由统一日志入口脱敏，这里只确认参数随开始事件进入日志。
+    expect(mocks.info).toHaveBeenCalledWith('内置助手开始调用工具', expect.objectContaining({ event: 'embedded_agent.tool.start',
+      context: expect.objectContaining({ input: { operationId: 'operation-original', target: 'clip-1' } }) }))
     f.child.postMessage = postMessage
     f.finish()
     await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))

@@ -172,7 +172,8 @@ describe('Pi official SDK engine', () => {
     expect(payload).toContain('调整构图'); expect(payload).toContain('image_url')
     expect(payload).toContain('data:image/jpeg;base64,aGlzdG9yaWNhbC1pbWFnZQ==')
     expect(payload).not.toContain('input_audio')
-    expect(f.events.filter(event => event.type === 'log').every(event => !JSON.stringify(event).includes('调整构图'))).toBe(true)
+    // 日志带工具回执文字供链路排查，图片原文不进日志。
+    expect(f.events.filter(event => event.type === 'log').every(event => !JSON.stringify(event).includes('aGlzdG9yaWNhbC1pbWFnZQ=='))).toBe(true)
   })
   it('DeepSeek 用量按输入 token 加权汇总，失败仍输出汇总', async () => {
     const f = await fixture()

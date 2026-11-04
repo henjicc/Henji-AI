@@ -15,6 +15,20 @@ import { deduplicateHostContexts, prepareHostContext } from './hostContext'
 import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
+/**
+ * 本回合最后一条带文字的模型消息（不含思考与工具调用），写进回合结束日志，链路排查不依赖界面快照。
+ * 从末尾往前找到本回合的发起消息为止（用户消息，或记忆整理的自定义消息）：回合中途压缩会改写更早的历史，按下标切会错位。
+ */
+function turnAnswer(messages: AgentSession['messages']): string {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message.role === 'user' || message.role === 'custom') break
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) continue
+    const text = message.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('').trim()
+    if (text) return text
+  }
+  return ''
+}
 export class PiEngine implements EmbeddedAgentEngine {
   private sdk!: PiSdk
   private directory = ''
@@ -33,6 +47,7 @@ export class PiEngine implements EmbeddedAgentEngine {
   private contextMetrics = { contextCount: 0, contextBytes: 0 }
   private disclosure?: PiToolDisclosure
   private toolTitles = new Map<string, string>()
+  private toolArgs = new Map<string, unknown>()
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
@@ -129,9 +144,9 @@ export class PiEngine implements EmbeddedAgentEngine {
         const system = body.system ?? body.instructions ?? messages.filter(message => message && typeof message === 'object'
           && ['system', 'developer'].includes(String((message as Record<string, unknown>).role)))
         const requestTools = Array.isArray(body.tools) ? body.tools : []
-        // 只记录尺寸，不复制聊天正文、附件、工具参数或凭据到日志。
+        // 请求体含整段历史与附件，只记录尺寸；本轮输入、工具参数与回复在各自的链路日志里。
         this.emit({ type: 'log', phase: 'model_requested', requestId: this.requestId, sessionId: this.manager.getSessionId(),
-          modelId: model.modelId, providerId: selected.providerId,
+          modelId: model.modelId, providerId: selected.providerId, turn: this.usageTotals.requests,
           requestMetrics: { toolCount: requestTools.length, toolBytes: Buffer.byteLength(JSON.stringify(requestTools), 'utf8'),
             systemBytes: Buffer.byteLength(JSON.stringify(system), 'utf8'), messageCount: messages.length, ...this.contextMetrics } })
       }
@@ -148,9 +163,11 @@ export class PiEngine implements EmbeddedAgentEngine {
         this.usageTotals.cacheWrite += cacheWrite
         this.emit({ type: 'log', phase: 'model_completed', requestId: this.requestId, sessionId: this.manager.getSessionId(),
           modelId: model.modelId, providerId: selected.providerId, durationMs: Math.max(0, Date.now() - this.modelStartedAt),
+          turn: this.usageTotals.requests, stopReason: event.message.stopReason,
+          ...(event.message.stopReason === 'error' ? { message: event.message.errorMessage ?? '模型请求失败' } : {}),
           metrics: { input, output, cacheRead, cacheWrite, totalTokens } })
       }
-      if (event.type === 'tool_execution_start') this.state.activity = '正在操作应用…'
+      if (event.type === 'tool_execution_start') { this.state.activity = '正在操作应用…'; this.toolArgs.set(event.toolCallId, event.args) }
       if (event.type === 'tool_execution_end') {
         this.state.activity = '正在整理结果…'
         const textBytes = Buffer.byteLength(JSON.stringify(event.result?.content?.filter((part: { type: string }) => part.type === 'text') ?? []), 'utf8')
@@ -159,6 +176,10 @@ export class PiEngine implements EmbeddedAgentEngine {
         this.usageTotals.toolResults++
         this.usageTotals.toolTextBytes += textBytes
         this.usageTotals.largestToolTextBytes = Math.max(this.usageTotals.largestToolTextBytes, textBytes)
+        const resultText = (event.result?.content ?? []).flatMap((part: { type: string; text?: string }) => part.type === 'text' && part.text ? [part.text] : []).join('\n').slice(0, 4000)
+        this.emit({ type: 'log', phase: 'tool_executed', requestId: this.requestId, sessionId: this.manager.getSessionId(),
+          tool: { toolCallId: event.toolCallId, toolName: event.toolName, args: this.toolArgs.get(event.toolCallId), isError: event.isError, durationMs: event.durationMs, resultText } })
+        this.toolArgs.delete(event.toolCallId)
       }
       if (event.type === 'message_end' && event.message.role === 'assistant' && event.message.stopReason === 'error') {
         this.state.error = event.message.errorMessage ?? '模型请求失败，请检查配置后重试。'
@@ -239,7 +260,7 @@ export class PiEngine implements EmbeddedAgentEngine {
         else await this.session.prompt(text)
       }
       this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : this.state.error ? 'failed' : 'completed', requestId: this.requestId,
-        durationMs: Date.now() - startedAt, sessionId: this.manager.getSessionId(), message: this.state.error ?? undefined })
+        durationMs: Date.now() - startedAt, sessionId: this.manager.getSessionId(), message: this.state.error ?? undefined, answer: turnAnswer(this.session.messages) })
     } catch (error) {
       this.state.error = error instanceof Error ? error.message : '回复失败，请重试。'
       this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : 'failed', requestId: this.requestId,

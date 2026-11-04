@@ -5,10 +5,11 @@ import type { ApplicationResult } from '../../../../src/core/application-control
 import type { EmbeddedTool } from './contracts'
 
 // 准入名单、启停核对与路径边界都在 assistant/skills/agentSkills.ts，与外部 MCP 共用同一份。
-export async function embeddedSkillCatalog(): Promise<{ tools: EmbeddedTool[]; instructions: string }> {
+export async function embeddedSkillCatalog(): Promise<{ tools: EmbeddedTool[]; instructions: string; names: string[] }> {
   const skills = await agentSkillIndex()
-  if (!skills.length) return { tools: [], instructions: '' }
+  if (!skills.length) return { tools: [], instructions: '', names: [] }
   return {
+    names: skills.map(skill => skill.name),
     tools: [{ name: loadAssistantSkillCapability.id, title: loadAssistantSkillCapability.title,
       description: loadAssistantSkillCapability.description,
       inputSchema: z.toJSONSchema(loadAssistantSkillInputSchema, { io: 'input' }) as Record<string, unknown> }],

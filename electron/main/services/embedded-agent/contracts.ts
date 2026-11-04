@@ -15,9 +15,12 @@ export type EngineEvent =
   | { type: 'snapshot'; value: EmbeddedAgentSnapshot }
   | { type: 'tool'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'toolCancel'; id: string }
-  | { type: 'log'; phase: 'start' | 'completed' | 'failed' | 'cancelled' | 'model_requested' | 'model_completed' | 'usage_summary'; sessionId: string | null; requestId: string; message?: string;
+  | { type: 'log'; phase: 'start' | 'completed' | 'failed' | 'cancelled' | 'model_requested' | 'model_completed' | 'usage_summary' | 'tool_executed'; sessionId: string | null; requestId: string; message?: string;
       requestMetrics?: { toolCount: number; toolBytes: number; systemBytes: number; messageCount: number; contextCount: number; contextBytes: number };
       summary?: { requests: number; usageResponses: number; input: number; output: number; cacheRead: number; cacheWrite: number; cacheHitRate: number | null; toolResults: number; toolTextBytes: number; largestToolTextBytes: number; toolTextByName: Record<string, { calls: number; bytes: number; maxBytes: number }> };
+      turn?: number; stopReason?: string; answer?: string;
+      /** Pi 层的每次工具执行，含 Pi 自己处理或拒绝、没有交给应用的调用（未加载的工具、参数不合格、本地读取工具）。 */
+      tool?: { toolCallId: string; toolName: string; args: unknown; isError: boolean; durationMs?: number; resultText?: string };
       durationMs?: number; modelId?: string; providerId?: string; metrics?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number } }
 export interface EmbeddedAgentEngine {
   command(command: EngineCommand): Promise<unknown>

@@ -4,6 +4,20 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const readline = require('node:readline');
+const Module = require('node:module');
+
+const ROOT = path.resolve(__dirname, '..');
+/** 助手链路与日志窗口共用 src/core/assistant/assistantChain.ts，命令行按需用 esbuild 加载。 */
+function loadAssistantChain() {
+  const { buildSync } = require('esbuild');
+  const file = path.join(ROOT, 'src/core/assistant/assistantChain.ts');
+  const result = buildSync({ entryPoints: [file], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent' });
+  const compiled = new Module(file, module);
+  compiled.filename = file;
+  compiled.paths = Module._nodeModulePaths(path.dirname(file));
+  compiled._compile(result.outputFiles[0].text, file);
+  return compiled.exports;
+}
 
 const APP_IDENTIFIER = 'com.henji.ai';
 const LOG_FILE_PREFIX = 'henji-';
@@ -29,12 +43,13 @@ function getToday() {
 function printHelp() {
   console.log(`用法：npm run logs:query -- [选项]
 
-默认查询今天的日志文件，并输出紧凑摘要。--chain 会输出指定 requestId 的完整事件内容。
+默认查询今天的日志文件，并输出紧凑摘要。--chain 会输出指定 requestId 的完整事件内容；
+内置助手的运行（runId）输出与日志窗口“助手追踪 › 复制完整链路”相同的链路：可读摘要 + 完整 JSON（加 --json 只输出 JSON）。
 
 选项：
   --date YYYY-MM-DD       查询日期（默认今天，按 UTC 日期命名）
   --request-id ID         精确匹配 requestId
-  --chain ID              输出该 requestId 的完整请求链路（忽略其余筛选条件）
+  --chain ID              输出该 requestId 的完整请求链路（忽略其余筛选条件）；助手 runId 输出完整处理链路
   --domain PREFIX         按 domain 前缀匹配
   --level LEVEL           最低级别：trace/debug/info/warn/error
   --event NAME            精确匹配 event
@@ -213,7 +228,9 @@ async function queryLogFile(options) {
       if (!matches(event, line, options)) {
         continue;
       }
-      if (options.tail && !options.chain) {
+      if (options.chain) {
+        matched.push(event);
+      } else if (options.tail) {
         matched.push(event);
         if (matched.length > options.tail) {
           matched.shift();
@@ -227,8 +244,14 @@ async function queryLogFile(options) {
     stream.close();
   }
 
-  for (const event of matched) {
-    writeEvent(event, options);
+  const chain = options.chain ? loadAssistantChain() : null;
+  if (chain && chain.isAssistantChainRun(matched)) {
+    const run = chain.buildAssistantChain(options.chain, matched);
+    console.log(options.json ? JSON.stringify(run, null, 2) : chain.formatAssistantChainReport(run));
+  } else {
+    for (const event of matched) {
+      writeEvent(event, options);
+    }
   }
   if (malformedLines > 0) {
     console.error(`[logs:query] 已跳过 ${malformedLines} 行损坏或不符合日志 schema 的数据。`);

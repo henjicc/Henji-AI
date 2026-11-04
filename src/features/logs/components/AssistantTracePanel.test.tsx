@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({ query: vi.fn<[AgentTraceQuery], Promise<AgentT
 vi.mock('@/commands/logging', () => ({ queryAgentTraces: mocks.query,
   getAgentTraceCaptureMode: async () => 'summary', listLogDates: async () => [], getAgentTraceDetail: async () => null,
   clearAgentTraces: vi.fn(), setAgentTraceCaptureMode: vi.fn(),
+  queryLogEvents: async () => ({ events: [], hasMore: false, corruptedLines: 0 }), listenLogEvent: async () => () => undefined,
 }))
 vi.mock('./AssistantTraceToolbar', () => ({ AssistantTraceToolbar: () => null }))
 vi.mock('./AssistantTraceDetail', () => ({ AssistantTraceDetail: () => null }))
@@ -30,7 +31,7 @@ const page = (ids: string[], cursor?: string): AgentTraceQueryResult => ({
 })
 it('加载更多携带复合游标并继续传递新游标，跨页运行去重后重算汇总', async () => {
   mocks.query.mockResolvedValueOnce(page(['c'], 'c')).mockResolvedValueOnce(page(['c', 'b'], 'b')).mockResolvedValueOnce(page(['a']))
-  const { container } = render(<AssistantTracePanel refreshToken={0} surfaceSwitch={null} />)
+  const { container } = render(<AssistantTracePanel refreshToken={0} surfaceSwitch={null} onViewRunLogs={vi.fn()} />)
   await waitFor(() => expect(container.querySelector('output')?.textContent).toContain('"traceId":"c"'))
   fireEvent.click(screen.getByText('加载更多'))
   await waitFor(() => expect(mocks.query).toHaveBeenCalledWith(expect.objectContaining({ beforeTimestamp: timestamp, beforeTraceId: 'c' })))

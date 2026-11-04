@@ -1,5 +1,5 @@
 vi.mock('../assistant/memory', () => ({ getAgentMemoryStore: () => ({ read: () => ({ entries: [], settings: { enabled: false, autoOrganize: false }, changesSinceOrganization: 0, lastOrganizedAt: null, revision: 1 }), onMemoryChange: () => () => undefined }) }))
-vi.mock('./skills', () => ({ embeddedSkillCatalog: async () => ({ tools: [], instructions: '' }), callEmbeddedSkill: vi.fn() }))
+vi.mock('./skills', () => ({ embeddedSkillCatalog: async () => ({ tools: [], instructions: '', names: [] }), callEmbeddedSkill: vi.fn() }))
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -16,6 +16,7 @@ vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
 vi.mock('../application-runtime/runtime', () => ({ createEmbeddedApplicationClient: mocks.client }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => mocks.directory }))
 vi.mock('../../window', () => ({ getMainWindow: () => undefined }))
+vi.mock('./piTrace', () => ({ recordPiTrace: () => undefined, recordPiRunEnded: () => undefined }))
 vi.mock('../assistant/user-instructions', () => ({ getAssistantUserInstructions: async () => ({ content: '' }) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: mocks.info, error: mocks.error }) }))
 vi.mock('./models', () => ({ resolveEmbeddedModel: mocks.model }))

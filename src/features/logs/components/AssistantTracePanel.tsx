@@ -8,8 +8,13 @@ import {
   getAgentTraceDetail,
   listLogDates,
   queryAgentTraces,
+  queryLogEvents,
   setAgentTraceCaptureMode,
 } from '@/commands/logging'
+import { buildAssistantChain, formatAssistantChainReport, isAssistantChainRun, type AssistantChain, type AssistantChainLogEvent, type AssistantChainStep } from '@/core/assistant/assistantChain'
+import { useLogWindowStore } from '../logStore'
+import { copyTextToClipboard } from '../copyFormats'
+import { AssistantChainStepDetail } from './AssistantChainStepDetail'
 import { createLogger } from '@/core/logging'
 import type {
   AgentTraceCaptureMode,
@@ -33,9 +38,14 @@ interface AssistantTracePanelProps {
   refreshToken: number
   /** 日志窗口顶层视图切换，注入到本面板命令带左端（任务 5.7）。 */
   surfaceSwitch: ReactNode
+  /** 切到事件日志，只看这次运行（runId 即日志 requestId）；date 为运行所在的日志日期。 */
+  onViewRunLogs: (runId: string, date: string) => void
 }
 
-export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTracePanelProps): JSX.Element {
+/** 按页读完一次运行的全部日志。 */
+const RUN_LOG_PAGE_SIZE = 2000
+
+export function AssistantTracePanel({ refreshToken, surfaceSwitch, onViewRunLogs }: AssistantTracePanelProps): JSX.Element {
   const [mode, setMode] = useState<AssistantTraceViewMode>('live')
   const [keyword, setKeyword] = useState('')
   const [providerId, setProviderId] = useState('all')
@@ -56,6 +66,8 @@ export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTr
   const [diffOpen, setDiffOpen] = useState(false)
   const [diffLoading, setDiffLoading] = useState(false)
   const [diff, setDiff] = useState<AgentTraceDiff | null>(null)
+  const [chainSelection, setChainSelection] = useState<{ runId: string; stepId: string } | null>(null)
+  const [chainCopied, setChainCopied] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -131,6 +143,29 @@ export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTr
     })
     return () => { cancelled = true }
   }, [selectedTraceId, revision])
+
+  const selectedRun = useMemo(() => runs.find((run) => run.steps.some((step) => step.traceId === selectedTraceId)) ?? null, [runs, selectedTraceId])
+  const chain = useAssistantRunChain(selectedRun, mode === 'live')
+  // 选中键带上 runId：input、reply 这类步骤 id 各运行同名，切换运行时不能命中别的运行
+  const chainStepId = chain && chainSelection?.runId === chain.runId ? chainSelection.stepId : ''
+  const chainStep = chain?.steps.find((step) => step.id === chainStepId) ?? null
+  useEffect(() => {
+    if (!chainCopied) return
+    const timer = window.setTimeout(() => setChainCopied(false), 1_500)
+    return () => window.clearTimeout(timer)
+  }, [chainCopied])
+
+  function handleSelectChainStep(step: AssistantChainStep): void {
+    // 模型轮次在助手追踪里有记录，详情沿用模型追踪；其余步骤显示链路事实
+    if (step.traceId && traceIds.has(step.traceId)) setSelectedTraceId(step.traceId)
+    if (chain) setChainSelection({ runId: chain.runId, stepId: step.id })
+  }
+
+  async function handleCopyChain(): Promise<void> {
+    if (!chain) return
+    await copyTextToClipboard(formatAssistantChainReport(chain))
+    setChainCopied(true)
+  }
 
   const providers = useMemo(() => unique(runs.flatMap((run) => run.steps.map((step) => step.providerId))), [runs])
   const models = useMemo(() => unique(runs.flatMap((run) => run.steps.map((step) => step.modelId))), [runs])
@@ -243,13 +278,21 @@ export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTr
         <AssistantTraceList
           runs={runs}
           selectedTraceId={selectedTraceId}
-          onSelectTrace={setSelectedTraceId}
+          onSelectTrace={(traceId) => { setSelectedTraceId(traceId); setChainSelection(null) }}
           loading={loading}
           hasMore={queryResult.hasMore}
           loadingMore={loadingMore}
           onLoadMore={() => void handleLoadMore()}
+          chain={chain}
+          selectedChainStepId={chainStepId}
+          onSelectChainStep={handleSelectChainStep}
+          chainCopied={chainCopied}
+          onCopyChain={() => void handleCopyChain()}
+          onViewRunLogs={(run) => onViewRunLogs(run.runId, run.startedAt.slice(0, 10))}
         />
-        <AssistantTraceDetail result={detail} loading={detailLoading} canCompare={Boolean(comparison && detail?.detail)} onCompare={() => void handleCompare()} />
+        {chain && chainStep && chainStep.kind !== 'model'
+          ? <AssistantChainStepDetail chain={chain} step={chainStep} />
+          : <AssistantTraceDetail result={detail} loading={detailLoading} canCompare={Boolean(comparison && detail?.detail)} onCompare={() => void handleCompare()} />}
       </div>
 
       <UiModal
@@ -272,6 +315,48 @@ export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTr
       />
     </div>
   )
+}
+
+/**
+ * 选中运行的完整链路：实时模式用推送到本窗口的日志，日志窗口打开前就开始的、已结束的或历史模式的运行，
+ * 按 requestId 从日志文件读全（实时缓冲有上限）。与 logs:query --chain 用同一个构建函数。
+ */
+function useAssistantRunChain(run: AgentTraceRunSummary | null, live: boolean): AssistantChain | null {
+  const runId = run?.runId ?? ''
+  const date = run?.startedAt.slice(0, 10) ?? ''
+  const liveEvents = useLogWindowStore((state) => state.events)
+  const pushed = useMemo(() => (live && runId ? liveEvents.filter((event) => event.requestId === runId) : []), [live, runId, liveEvents])
+  const settled = run ? run.status !== 'running' : false
+  const pushedChain = isAssistantChainRun(pushed)
+  const [stored, setStored] = useState<{ runId: string; events: AssistantChainLogEvent[] } | null>(null)
+  useEffect(() => {
+    if (!runId || !date || (!settled && live && pushedChain)) return
+    let cancelled = false
+    void readRunLogs(date, runId).then((events) => {
+      if (!cancelled) setStored({ runId, events })
+    }).catch((error) => {
+      logger.warn('读取运行日志失败', { event: 'assistant_trace.chain.query_failed', requestId: runId, error })
+    })
+    return () => { cancelled = true }
+  }, [runId, date, settled, live, pushedChain])
+  return useMemo(() => {
+    if (!runId) return null
+    const events = stored?.runId === runId && stored.events.length >= pushed.length ? stored.events : pushed
+    return isAssistantChainRun(events) ? buildAssistantChain(runId, events) : null
+  }, [runId, stored, pushed])
+}
+
+/** 查询按新到旧分页返回；翻完后倒成文件顺序，与 logs:query --chain 读到的顺序一致。 */
+async function readRunLogs(date: string, requestId: string): Promise<AssistantChainLogEvent[]> {
+  const events: AssistantChainLogEvent[] = []
+  let beforeLine: number | undefined
+  for (;;) {
+    const page = await queryLogEvents({ date, requestId, limit: RUN_LOG_PAGE_SIZE, ...(beforeLine === undefined ? {} : { beforeLine }) })
+    events.push(...page.events)
+    if (!page.hasMore || page.nextBeforeLine === undefined) break
+    beforeLine = page.nextBeforeLine
+  }
+  return events.reverse()
 }
 
 function unique(values: string[]): string[] {

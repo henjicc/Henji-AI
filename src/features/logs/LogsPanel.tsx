@@ -19,6 +19,7 @@ const logger = createLogger('features.logs.LogsPanel')
 /** 历史模式链路查询的单次上限：远大于实际单条请求链路的事件数量（通常几条到十几条）。 */
 const CHAIN_QUERY_LIMIT = 500
 const EMPTY_LIVE_EVENTS: DisplayLogEvent[] = []
+const TURN_END_EVENTS = new Set(['embedded_agent.turn.completed', 'embedded_agent.turn.failed', 'embedded_agent.turn.cancelled', 'embedded_agent.request.failed'])
 
 /**
  * 日志窗口页面编排：接线数据源（实时 `logStore` / 历史 `useLogHistoryQuery`）、过滤状态、
@@ -130,11 +131,24 @@ export function LogsPanel(): JSX.Element {
 
   const selectedEvent: DisplayLogEvent | null = filteredEvents.find((event) => event.id === selectedId) || null
   const traceRefreshToken = useMemo(
-    () => liveEvents.filter((event) => event.event.startsWith('agent_trace.step.')).length,
+    // 回合结束会改运行状态，也要刷新
+    () => liveEvents.filter((event) => event.event.startsWith('agent_trace.step.') || TURN_END_EVENTS.has(event.event)).length,
     [liveEvents]
   )
 
   // 视图切换注入到各自命令带的最左端：窗口标题栏下只有一条命令带 + 一条过滤从属带（任务 5.7）
+  // 助手追踪里“查看这次运行的日志”：切到事件日志，读运行当天的日志文件（实时缓冲有上限），只按 runId 过滤
+  const viewRunLogs = (runId: string, date: string): void => {
+    setSurface('events')
+    setMode('history')
+    history.setSelectedDate(date)
+    setSourceFilter('all')
+    setLevelFilter('all')
+    setDomainFilter('all')
+    setErrorOnly(false)
+    setKeyword(runId)
+  }
+
   const surfaceSwitch = (
     <UiSegmented ariaLabel="日志视图" value={surface} onChange={setSurface} options={[{ value: 'events', label: '事件日志', icon: <ListTree className={`${UI_ICON_SIZE_CLASS.sm} mr-1.5`} /> }, { value: 'assistant', label: '助手追踪', icon: <BrainCircuit className={`${UI_ICON_SIZE_CLASS.sm} mr-1.5`} /> }]} />
   )
@@ -142,7 +156,7 @@ export function LogsPanel(): JSX.Element {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {surface === 'assistant' ? (
-        <div className="min-h-0 flex-1"><AssistantTracePanel refreshToken={traceRefreshToken} surfaceSwitch={surfaceSwitch} /></div>
+        <div className="min-h-0 flex-1"><AssistantTracePanel refreshToken={traceRefreshToken} surfaceSwitch={surfaceSwitch} onViewRunLogs={viewRunLogs} /></div>
       ) : (
         <>
           <LogFilterToolbar

@@ -179,6 +179,7 @@ function statusFromRuntime(
   if (runtimeStatus === 'completed' || runtimeStatus === 'completed_with_warning') return 'completed'
   if (runtimeStatus === 'failed' || runtimeStatus === 'budget_exhausted') return 'failed'
   if (runtimeStatus === 'cancelled') return 'cancelled'
+  if (runtimeStatus === 'interrupted') return 'interrupted'
   if (runtimeStatus === null) return requestAggregate
   return 'running'
 }
@@ -186,6 +187,20 @@ function statusFromRuntime(
 export class AgentTraceStore {
   /** 表由迁移账本第 13 项创建（traceSchema.ts）。 */
   constructor(private readonly database: Database.Database) {}
+
+  /** 运行级事实随最后一条追踪一起删除，用户目标原文不单独留下。 */
+  private deleteOrphanRunContexts(): void {
+    this.database.prepare('DELETE FROM model_trace_contexts WHERE run_id NOT IN (SELECT DISTINCT run_id FROM application_model_traces)').run()
+  }
+
+  /** 运行级事实（会话、用户目标、整次运行状态）；只传的字段才覆盖。 */
+  saveRunContext(input: { runId: string; threadId?: string | null; goal?: string; status?: 'running' | 'completed' | 'failed' | 'cancelled' }): void {
+    this.database.prepare(`
+      INSERT INTO model_trace_contexts(run_id, thread_id, goal, status) VALUES (?, ?, ?, ?)
+      ON CONFLICT(run_id) DO UPDATE SET thread_id = COALESCE(excluded.thread_id, thread_id),
+        goal = COALESCE(excluded.goal, goal), status = COALESCE(excluded.status, status)
+    `).run(input.runId, input.threadId ?? null, input.goal?.slice(0, 32 * 1024) ?? null, input.status ?? null)
+  }
 
   start(rawInput: AgentTraceStartInput): void {
     const input = agentTraceStartInputSchema.parse(rawInput)
@@ -410,6 +425,8 @@ export class AgentTraceStore {
             elapsed_ms = MAX(0, ? - started_at), updated_at = ?
         WHERE status = 'running'
       `).run(now, now, now)
+      // 上次退出时还在跑的运行
+      this.database.prepare("UPDATE model_trace_contexts SET status = 'interrupted' WHERE status = 'running'").run()
       return
     }
     const placeholders = runIds.map(() => '?').join(', ')
@@ -424,6 +441,7 @@ export class AgentTraceStore {
   clear(date?: string): void {
     if (!date) {
       const result = this.database.prepare('DELETE FROM application_model_traces').run()
+      this.deleteOrphanRunContexts()
       logger.info('助手模型追踪已清空', {
         event: 'agent_trace.records.cleared',
         context: { count: result.changes, scope: 'all' },
@@ -433,6 +451,7 @@ export class AgentTraceStore {
     const { start, end } = localDateRange(date)
     const result = this.database.prepare('DELETE FROM application_model_traces WHERE started_at >= ? AND started_at < ?')
       .run(start, end)
+    this.deleteOrphanRunContexts()
     logger.info('助手模型追踪已按日期清空', {
       event: 'agent_trace.records.cleared',
       context: { count: result.changes, scope: 'date', date },
@@ -447,6 +466,7 @@ export class AgentTraceStore {
         WHERE status = 'running' AND started_at < ?
       `).run(now, cutoff)
       this.database.prepare('DELETE FROM application_model_traces WHERE started_at < ?').run(cutoff)
+      this.deleteOrphanRunContexts()
       const totalRow = this.database.prepare(
         'SELECT COALESCE(SUM(detail_bytes), 0) AS total FROM application_model_traces'
       ).get() as { total: number } | undefined
