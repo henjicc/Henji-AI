@@ -9,6 +9,12 @@ import { ApplicationHostBridge } from '../../../electron/main/services/applicati
 import { APPLICATION_WRITE_CAPABILITY_IDS, type ApplicationHostPlatform, type LocalHostRequest } from '@/core/application-control/localHostContracts'
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
+/** 连接授权以存储为准（多实例共用），替身必须真的保存写入的内容。 */
+function memoryConnectionStorage(): { read(): string | null; write(value: string): void } {
+  let saved: string | null = null
+  return { read: () => saved, write: (value) => { saved = value } }
+}
+
 it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置，业务写入可发现且内部实体排除', async () => {
   const dom = new JSDOM('', { url: 'http://localhost' })
   vi.stubGlobal('window', dom.window)
@@ -17,7 +23,7 @@ it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置�
   vi.stubGlobal('localStorage', dom.window.localStorage)
   const { attachLocalApplicationHost } = await import('./localApplicationHost')
   const { useSettingsStore } = await import('@/stores/settingsStore')
-  const connections = new McpConnections({ read: () => null, write: () => {} })
+  const connections = new McpConnections(memoryConnectionStorage())
   const identity = connections.create('集成客户端')
   const bridge = new ApplicationHostBridge((id) => connections.assertActive(id))
   let handler: (request: LocalHostRequest) => void = () => {}

@@ -24,13 +24,19 @@ const it = test.skipIf(!process.versions.electron)
 vi.mock('../../../electron/main/services/settings/store', () => ({ getSettingsStore: () => ({ get: () => null, set: () => { throw new Error('此测试未授权写入设置') } }) }))
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
+/** 连接授权以存储为准（多实例共用），替身必须真的保存写入的内容。 */
+function memoryConnectionStorage(): { read(): string | null; write(value: string): void } {
+  let saved: string | null = null
+  return { read: () => saved, write: (value) => { saved = value } }
+}
+
 it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置保存；拒绝后可恢复并读回实际结果', async () => {
   const dom = new JSDOM('', { url: 'http://localhost' })
   vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document)
   vi.stubGlobal('navigator', dom.window.navigator); vi.stubGlobal('localStorage', dom.window.localStorage)
   const { attachLocalApplicationHost } = await import('./localApplicationHost')
   const { useSettingsStore } = await import('@/stores/settingsStore')
-  const connections = new McpConnections({ read: () => null, write: () => {} })
+  const connections = new McpConnections(memoryConnectionStorage())
   const identity = connections.create('受控集成客户端')
   const db = new Database(':memory:')
   createApplicationOperationTablesV1(db)
@@ -265,7 +271,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
 }, 30_000)
 
 it('关闭现代 HTTP 监听只结束等待，已登记写入仍可完成并从原账本查询', async () => {
-  const connections = new McpConnections({ read: () => null, write: () => {} })
+  const connections = new McpConnections(memoryConnectionStorage())
   const caller = connections.create('断线写入验收')
   const db = new Database(':memory:')
   createApplicationOperationTablesV1(db)
@@ -452,7 +458,7 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
     const project = await loadAudioEditProject(request.projectId)
     return { project: { ...project.document, transcript: [{ id: 'word', text: 'Hello', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' }] }, modelId: 'test-asr', granularity: 'word' }
   })
-  const connections = new McpConnections({ read: () => null, write: () => {} })
+  const connections = new McpConnections(memoryConnectionStorage())
   const identity = connections.create('确认回执测试')
   const db = new Database(':memory:'); createApplicationOperationTablesV1(db)
   const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => bridge.writableEntityTypes())

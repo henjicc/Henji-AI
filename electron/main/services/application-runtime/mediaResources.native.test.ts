@@ -64,6 +64,12 @@ it.each([
   expect(await readApplicationMediaResource({ ref, mode: 'chunk', offset: bytes.length })).toMatchObject({ base64: '', byteLength: 0, eof: true })
 })
 
+/** 连接授权以存储为准（多实例共用），替身必须真的保存写入的内容。 */
+function memoryConnectionStorage(): { read(): string | null; write(value: string): void } {
+  let saved: string | null = null
+  return { read: () => saved, write: (value) => { saved = value } }
+}
+
 it('未保存的正式记录拒绝，任意本地位置的正式资产可读', async () => {
   await expect(readApplicationMediaResource({ ref: { kind: 'generation.result', id: 'not-saved' } })).rejects.toMatchObject({ code: 'MEDIA_NOT_PERSISTED' })
   const outside = path.join(parent, 'outside.png'); await fs.writeFile(outside, bytes)
@@ -72,7 +78,7 @@ it('未保存的正式记录拒绝，任意本地位置的正式资产可读', a
 })
 
 it('真实SDK客户端读取媒体，缺少凭据和撤销连接后均不能读取', async () => {
-  const connections = new McpConnections({ read: () => null, write: () => {} })
+  const connections = new McpConnections(memoryConnectionStorage())
   const connection = connections.create('媒体客户端')
   const bridge = new ApplicationHostBridge((id) => connections.assertActive(id))
   // 此原生用例控制渲染授权边界；文件解析、SQLite 与协议均为正式实现。
