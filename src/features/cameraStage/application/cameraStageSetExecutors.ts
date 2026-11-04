@@ -16,7 +16,7 @@ import { cameraStageSetLayoutSchema } from '@/core/application-control/domains/c
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import type { CameraStageControlExecutorDependencies } from './cameraStageControlExecutors'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
-import { forgetCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
+import { forgetCameraStageUndo, restoreCameraStageUndo, afterCameraStageWrite } from './cameraStageUndo'
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 
@@ -67,13 +67,13 @@ export class CameraStageSetGenerateOperationExecutor implements ApplicationSeman
   async execute(input: JsonValue, _context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const parsed = cameraStageSetGenerateInputSchema.parse(input)
     const result = await cameraStageApplicationService.generateSet(parsed)
-    const snapshot = await cameraStageApplicationService.readSnapshot(parsed.projectId)
-    const count = snapshot.objects.reduce((total, object) => total + (object.setId === result.set.id ? 1 : 0), 0)
-    if (!snapshot.sets.some(set => set.id === result.set.id) || count !== result.set.objectCount) {
-      // 已经写入：先恢复到生成前再报错，不留“失败但场景已改”的状态。
-      await restoreCameraStageUndo(result.undoToken)
-      throw new Error('生成后正式场景中的布景成员与结果不一致，已恢复到生成前。')
-    }
+    await afterCameraStageWrite(parsed.projectId, result.undoToken, async () => {
+      const snapshot = await cameraStageApplicationService.readSnapshot(parsed.projectId)
+      const count = snapshot.objects.reduce((total, object) => total + (object.setId === result.set.id ? 1 : 0), 0)
+      if (!snapshot.sets.some(set => set.id === result.set.id) || count !== result.set.objectCount) {
+        throw new Error('生成后正式场景中的布景成员与结果不一致，已恢复到生成前。')
+      }
+    })
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     const ref = { kind: CAMERA_STAGE_ENTITY_TYPES.set, id: `${parsed.projectId}:${result.set.id}`, label: result.set.name, revision }

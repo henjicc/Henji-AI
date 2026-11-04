@@ -24,7 +24,7 @@ import {
   type CameraStagePlacementIntent,
   type StageObjectBounds,
 } from './sceneAnalysis'
-import { captureCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
+import { afterCameraStageWrite, captureCameraStageUndo, rollbackCameraStageWrite } from './cameraStageUndo'
 
 const logger = createLogger('features.cameraStage.application')
 
@@ -196,21 +196,6 @@ function validateObjectUpdate(object: StageObject, objects: StageObject[], updat
 
 async function ensureProjectLoaded(projectId: string): Promise<void> {
   await ensureCameraStageProjectRuntime(projectId)
-}
-
-/**
- * 写入失败后把场景恢复到快照。回滚本身再失败也不能盖掉原始错误——原始错误才是模型需要
- * 看到的那条，回滚失败单独记日志。
- */
-async function rollbackFailedPlacement(projectId: string, undoToken: string): Promise<void> {
-  try {
-    await restoreCameraStageUndo(undoToken)
-  } catch (rollbackError) {
-    logger.error('三维场景布置回滚失败', rollbackError, {
-      event: 'camera_stage.object.place.rollback_failed',
-      projectId,
-    })
-  }
 }
 
 /**
@@ -477,7 +462,7 @@ const implementation = {
         undoToken,
       }
     } catch (error) {
-      await rollbackFailedPlacement(input.projectId, undoToken)
+      await rollbackCameraStageWrite(input.projectId, undoToken, 'camera_stage.object.place.rollback_failed')
       throw error
     }
     } catch (error) {
@@ -520,7 +505,7 @@ const implementation = {
         before.applyStageSet(set, objects)
         await saveCameraStageProjectRuntime(input.projectId)
       } catch (error) {
-        await rollbackFailedPlacement(input.projectId, undoToken)
+        await rollbackCameraStageWrite(input.projectId, undoToken, 'camera_stage.set.generate.rollback_failed')
         throw error
       }
       const summary = summarizeStageSet(set, store.getState().objects)
@@ -563,7 +548,7 @@ const implementation = {
         for (const id of setIds) store.getState().removeStageSet(id)
         await saveCameraStageProjectRuntime(projectId)
       } catch (error) {
-        await rollbackFailedPlacement(projectId, undoToken)
+        await rollbackCameraStageWrite(projectId, undoToken, 'camera_stage.set.remove.rollback_failed')
         throw error
       }
       logger.info('三维布景已删除', { event: 'camera_stage.set.remove.completed', projectId, setCount: setIds.length, removedObjectCount })
@@ -580,19 +565,21 @@ const implementation = {
     const state = cameraStageProjectStore(projectId).getState()
     const patch = validateObjectUpdate(object, state.objects, update)
     const undoToken = captureCameraStageUndo(projectId)
-    /*
-     * 助手的写入是**建模**，不是动画编辑，必须同步到所有状态关键帧。
-     *
-     * 动画编辑时 store.updateObject 会把改动只捕获进当前时间点的状态关键帧（captureObjectsIntoStateKeyframe
-     * 对其他状态关键帧直接原样返回），而新对象在创建时是以默认状态写进**所有**状态关键帧的。两者一叠加：
-     * 助手"放一个白色球体"之后，球体在 1 张卡上是新位置+白色、在其余 146 张卡上是默认位置+
-     * 默认颜色——播放时插值，球体一边移动一边变色，实测截图里它是淡黄色而不是白色。
-     *
-     * 人手动拖物体时希望自动打点（那确实是在编辑动画），所以 store.updateObject 的行为不动；
-     * 走能力层的写入改用建模语义。
-     */
-    state.updateObjectAcrossStateKeyframes(objectId, patch)
-    await saveCameraStageProjectRuntime(projectId)
+    await afterCameraStageWrite(projectId, undoToken, async () => {
+      /*
+       * 助手的写入是**建模**，不是动画编辑，必须同步到所有状态关键帧。
+       *
+       * 动画编辑时 store.updateObject 会把改动只捕获进当前时间点的状态关键帧（captureObjectsIntoStateKeyframe
+       * 对其他状态关键帧直接原样返回），而新对象在创建时是以默认状态写进**所有**状态关键帧的。两者一叠加：
+       * 助手"放一个白色球体"之后，球体在 1 张卡上是新位置+白色、在其余 146 张卡上是默认位置+
+       * 默认颜色——播放时插值，球体一边移动一边变色，实测截图里它是淡黄色而不是白色。
+       *
+       * 人手动拖物体时希望自动打点（那确实是在编辑动画），所以 store.updateObject 的行为不动；
+       * 走能力层的写入改用建模语义。
+       */
+      state.updateObjectAcrossStateKeyframes(objectId, patch)
+      await saveCameraStageProjectRuntime(projectId)
+    })
     return { projectId, objectId, updatedKeys: Object.keys(patch), undoToken }
   },
 
@@ -622,22 +609,24 @@ const implementation = {
       }
     }
     const undoToken = captureCameraStageUndo(projectId)
-    const actions = cameraStageProjectStore(projectId).getState()
-    for (const path of paths) {
-      const current = requireObject(projectId, objectId)
-      const descriptor = getAnimatablePropByPath(path)!
-      const next = descriptor.applyToObject(current, values[path])
-      if (path.startsWith('transform.position')) actions.updateTransform(objectId, { position: next.transform.position }, [path])
-      else if (path.startsWith('transform.rotation')) actions.updateTransform(objectId, { rotation: next.transform.rotation }, [path])
-      else if (path.startsWith('transform.scale')) actions.updateTransform(objectId, { scale: next.transform.scale }, [path])
-      else if (path === 'color') actions.updateObject(objectId, { color: next.color })
-      else if (path === 'fov' && next.type === 'camera') actions.updateObject(objectId, { fov: next.fov })
-      else if (path.startsWith('pose.joints.') && next.type === 'character') {
-        const jointId = path.split('.')[2] as keyof typeof next.pose.joints
-        actions.updatePoseJoint(objectId, jointId, next.pose.joints[jointId] ?? { x: 0, y: 0, z: 0 }, [path])
+    await afterCameraStageWrite(projectId, undoToken, async () => {
+      const actions = cameraStageProjectStore(projectId).getState()
+      for (const path of paths) {
+        const current = requireObject(projectId, objectId)
+        const descriptor = getAnimatablePropByPath(path)!
+        const next = descriptor.applyToObject(current, values[path])
+        if (path.startsWith('transform.position')) actions.updateTransform(objectId, { position: next.transform.position }, [path])
+        else if (path.startsWith('transform.rotation')) actions.updateTransform(objectId, { rotation: next.transform.rotation }, [path])
+        else if (path.startsWith('transform.scale')) actions.updateTransform(objectId, { scale: next.transform.scale }, [path])
+        else if (path === 'color') actions.updateObject(objectId, { color: next.color })
+        else if (path === 'fov' && next.type === 'camera') actions.updateObject(objectId, { fov: next.fov })
+        else if (path.startsWith('pose.joints.') && next.type === 'character') {
+          const jointId = path.split('.')[2] as keyof typeof next.pose.joints
+          actions.updatePoseJoint(objectId, jointId, next.pose.joints[jointId] ?? { x: 0, y: 0, z: 0 }, [path])
+        }
       }
-    }
-    await saveCameraStageProjectRuntime(projectId)
+      await saveCameraStageProjectRuntime(projectId)
+    })
     return { projectId, objectId, updatedPaths: paths, undoToken }
   },
 
@@ -660,8 +649,10 @@ const implementation = {
       throw new Error(`POSE_PRESET_NOT_FOUND：«${presetId}» 不是已知预设。可用预设：${POSE_PRESETS.map((item) => item.id).join('、')}。`)
     }
     const undoToken = captureCameraStageUndo(projectId)
-    state.applyPosePreset(objectId, preset)
-    await saveCameraStageProjectRuntime(projectId)
+    await afterCameraStageWrite(projectId, undoToken, async () => {
+      state.applyPosePreset(objectId, preset)
+      await saveCameraStageProjectRuntime(projectId)
+    })
     return { projectId, objectId, presetId, undoToken }
   },
 
@@ -685,10 +676,12 @@ const implementation = {
     const state = cameraStageProjectStore(projectId).getState()
     if (!state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === stateKeyframeId)) throw new Error('NOT_FOUND')
     const undoToken = captureCameraStageUndo(projectId)
-    if (update.path !== undefined) state.setStateKeyframeSpatialPath(stateKeyframeId, objectId, markSpatialPathCustom(update.path))
-    if (update.startPosition !== undefined) state.setStateKeyframePathAnchor(stateKeyframeId, objectId, 'start', update.startPosition)
-    if (update.endPosition !== undefined) state.setStateKeyframePathAnchor(stateKeyframeId, objectId, 'end', update.endPosition)
-    await saveCameraStageProjectRuntime(projectId)
+    await afterCameraStageWrite(projectId, undoToken, async () => {
+      if (update.path !== undefined) state.setStateKeyframeSpatialPath(stateKeyframeId, objectId, markSpatialPathCustom(update.path))
+      if (update.startPosition !== undefined) state.setStateKeyframePathAnchor(stateKeyframeId, objectId, 'start', update.startPosition)
+      if (update.endPosition !== undefined) state.setStateKeyframePathAnchor(stateKeyframeId, objectId, 'end', update.endPosition)
+      await saveCameraStageProjectRuntime(projectId)
+    })
     return { projectId, stateKeyframeId, objectId, undoToken }
   },
 
@@ -728,19 +721,21 @@ const implementation = {
       }
     }
     const undoToken = captureCameraStageUndo(projectId)
-    if (update.name !== undefined) state.updateStateKeyframeName(stateKeyframeId, update.name)
-    // 时间点先落，后续的过渡时长都是相对这个位置计算的。
-    if (update.time !== undefined) state.moveStateKeyframeTime(stateKeyframeId, update.time)
-    if (update.transitionDuration !== undefined) state.updateStateKeyframeTiming(stateKeyframeId, update)
-    if (update.continuity !== undefined) state.updateStateKeyframeContinuity(stateKeyframeId, update.continuity)
-    if (update.cameraId !== undefined) state.updateStateKeyframeCamera(stateKeyframeId, update.cameraId)
-    if (update.captureObjectIds !== undefined) {
-      // 只覆盖列出的对象在目标状态关键帧上的快照，不触碰其余对象或其他时间点。
-      const current = cameraStageProjectStore(projectId).getState()
-      const stateKeyframes = captureObjectsIntoStateKeyframe(current.stateKeyframes, stateKeyframeId, current.objects, update.captureObjectIds)
-      cameraStageProjectStore(projectId).setState({ stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, current.objects) })
-    }
-    await saveCameraStageProjectRuntime(projectId)
+    await afterCameraStageWrite(projectId, undoToken, async () => {
+      if (update.name !== undefined) state.updateStateKeyframeName(stateKeyframeId, update.name)
+      // 时间点先落，后续的过渡时长都是相对这个位置计算的。
+      if (update.time !== undefined) state.moveStateKeyframeTime(stateKeyframeId, update.time)
+      if (update.transitionDuration !== undefined) state.updateStateKeyframeTiming(stateKeyframeId, update)
+      if (update.continuity !== undefined) state.updateStateKeyframeContinuity(stateKeyframeId, update.continuity)
+      if (update.cameraId !== undefined) state.updateStateKeyframeCamera(stateKeyframeId, update.cameraId)
+      if (update.captureObjectIds !== undefined) {
+        // 只覆盖列出的对象在目标状态关键帧上的快照，不触碰其余对象或其他时间点。
+        const current = cameraStageProjectStore(projectId).getState()
+        const stateKeyframes = captureObjectsIntoStateKeyframe(current.stateKeyframes, stateKeyframeId, current.objects, update.captureObjectIds)
+        cameraStageProjectStore(projectId).setState({ stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, current.objects) })
+      }
+      await saveCameraStageProjectRuntime(projectId)
+    })
     return { projectId, stateKeyframeId, status: 'updated', undoToken }
   },
 }

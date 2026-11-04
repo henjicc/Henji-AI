@@ -3,7 +3,7 @@ import { createLogger } from '@/core/logging'
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
 import type { StageCameraMovePreset, StageSpeedPreset } from '../domain/stateKeyframeTypes'
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
-import { captureCameraStageUndo } from './cameraStageUndo'
+import { afterCameraStageWrite, captureCameraStageUndo } from './cameraStageUndo'
 import { cameraMotionIdentity, cameraMotionSourceKey, compileCameraMotionCandidates, assertCameraCandidateCurrent, type CameraMotionCandidateRequest } from './cameraMotionCandidates'
 import { checkCancelled, CreativeIntentError, type ComputationControl } from '@/core/creativeIntent/sampling'
 import { applyAnimationAtTime } from '../store/playbackSampling'
@@ -145,8 +145,11 @@ async function applyCameraStageMotionInternal(input: CameraStageMotionInput): Pr
     if (!camera) throw new Error('NOT_FOUND')
     const target = resolveTarget(input)
     const undoToken = captureCameraStageUndo(input.projectId)
-    const applied = applyStateKeyframeMotion(input, camera, target)
-    await saveCameraStageProjectRuntime(input.projectId)
+    const applied = await afterCameraStageWrite(input.projectId, undoToken, async () => {
+      const applied = applyStateKeyframeMotion(input, camera, target)
+      await saveCameraStageProjectRuntime(input.projectId)
+      return applied
+    })
     const result: CameraStageMotionResult = {
       projectId: input.projectId,
       cameraId: camera.id,

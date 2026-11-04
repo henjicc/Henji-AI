@@ -1,5 +1,8 @@
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { useCameraStageStore, type CameraStageOwnedStore } from '../store/cameraStageStore'
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('features.cameraStage.application')
 
 interface CameraStageUndoSnapshot {
   project: { id: string; name: string }
@@ -70,6 +73,26 @@ export async function restoreCameraStageUndo(token: string): Promise<{ projectId
   await saveCameraStageProjectRuntime(snapshot.project.id)
   undoSnapshots.delete(token)
   return { projectId: snapshot.project.id }
+}
+
+/** 写入失败后恢复到快照。恢复再失败也不盖掉原始错误——原始错误才是调用方据以修正的那条，恢复失败单独记日志。 */
+export async function rollbackCameraStageWrite(projectId: string, undoToken: string, event = 'camera_stage.write.rollback_failed'): Promise<void> {
+  try {
+    await restoreCameraStageUndo(undoToken)
+  } catch (rollbackError) {
+    logger.error('三维场景写入回滚失败', rollbackError, { event, projectId })
+  }
+}
+
+/**
+ * 抓快照之后的写入、存盘与核对。引擎把单步内的失败记为“零步完成”，调用方据此可以直接重试；
+ * 所以这里任何一步失败都先恢复到快照再抛出，否则场景已改却报未执行，重试会叠出重复内容。
+ */
+export async function afterCameraStageWrite<T>(projectId: string, undoToken: string, work: () => T | Promise<T>): Promise<T> {
+  try { return await work() } catch (error) {
+    await rollbackCameraStageWrite(projectId, undoToken)
+    throw error
+  }
 }
 
 export function forgetCameraStageUndo(token: string): void {

@@ -6,6 +6,7 @@ import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/applic
 
 import { CAMERA_STAGE_RENDER_CAPABILITY_ID, CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, WAIT_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageRenderApplicationCapabilities'
 
+import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 
 import { parseDocumentCapabilityInput as parseCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
@@ -42,8 +43,10 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
   publicRegistrar.registerHandler(applyCameraIntentCapability.id, async (raw, context) => {
     context.signal.throwIfAborted()
     const input = applyCameraIntentCapability.inputSchema.parse(raw), projectId = input.documentRef.id
-    assertCameraStageRevision(context)
-    if (cameraMotionDraft(projectId)?.reviewId !== input.reviewId) throw new Error('候选已失效，请重新整理。')
+    await applicationWritePreflight(context, () => {
+      assertCameraStageRevision(context)
+      if (cameraMotionDraft(projectId)?.reviewId !== input.reviewId) throw new Error('候选已失效，请重新整理。')
+    })
     const result = await applyCameraMotion(projectId, input.candidateId)
     notifyHostScopeChanged('camera_stage')
     return { ...result, resultRef: input.documentRef, stateKeyframeRefs: cameraStageProjectStore(projectId).getState().stateKeyframes.map(frame => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${frame.id}` })), revision: getHostScopeRevisions().camera_stage, scopeRevisions: getHostScopeRevisions() }

@@ -4,7 +4,7 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains
 import type { StageObject } from '../domain/sceneTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
-import { captureCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
+import { captureCameraStageUndo, rollbackCameraStageWrite } from './cameraStageUndo'
 
 const logger = createLogger('features.cameraStage.application')
 
@@ -64,14 +64,6 @@ function resolveUniqueStateKeyframeName(stateKeyframes: StageStateKeyframe[], re
   throw new Error('STATE_KEYFRAME_NAME_CONFLICT')
 }
 
-async function rollback(projectId: string, undoToken: string, event: string): Promise<void> {
-  try {
-    await restoreCameraStageUndo(undoToken)
-  } catch (rollbackError) {
-    logger.error('三维状态关键帧回滚失败', rollbackError, { event, projectId })
-  }
-}
-
 const implementation = {
   /** 批量新建状态关键帧；同一批次里落在同一帧的两项会像人工操作一样合并为一个时间点。 */
   async createStateKeyframes(projectId: string, inputs: CameraStageStateKeyframeCreateInput[]): Promise<{
@@ -120,7 +112,7 @@ const implementation = {
       })
       return { projectId, stateKeyframeIds, undoToken }
     } catch (error) {
-      await rollback(projectId, undoToken, 'camera_stage.state_keyframe.create.rollback_failed')
+      await rollbackCameraStageWrite(projectId, undoToken, 'camera_stage.state_keyframe.create.rollback_failed')
       logger.error('三维状态关键帧批量新建失败', error, { event: 'camera_stage.state_keyframe.create.failed', projectId })
       throw error
     }
@@ -144,7 +136,7 @@ const implementation = {
       await saveCameraStageProjectRuntime(projectId)
       return { projectId, removedCount: stateKeyframeIds.length, undoToken }
     } catch (error) {
-      await rollback(projectId, undoToken, 'camera_stage.state_keyframe.remove.rollback_failed')
+      await rollbackCameraStageWrite(projectId, undoToken, 'camera_stage.state_keyframe.remove.rollback_failed')
       logger.error('三维状态关键帧删除失败', error, { event: 'camera_stage.state_keyframe.remove.failed', projectId })
       throw error
     }

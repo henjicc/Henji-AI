@@ -11,7 +11,7 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains
 
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import type { CameraStageControlExecutorDependencies } from './cameraStageControlExecutors'
-import { forgetCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
+import { forgetCameraStageUndo, restoreCameraStageUndo, afterCameraStageWrite } from './cameraStageUndo'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 
 const vec3Schema = z.object({ x: z.number(), y: z.number(), z: z.number() }).strict()
@@ -74,19 +74,24 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
       },
       placement: parsed.placement,
     })
+    const verify = async () => {
+      const snapshot = await cameraStageApplicationService.readSnapshot(parsed.projectId)
+      const object = snapshot.objects.find(item => item.id === result.objectId)
+      if (!object || object.type !== parsed.objectType
+        || JSON.stringify(object.transform.position) !== JSON.stringify(result.position)
+        || (parsed.placement.rotation && JSON.stringify(object.transform.rotation) !== JSON.stringify(parsed.placement.rotation))
+        || (parsed.placement.scale && JSON.stringify(object.transform.scale) !== JSON.stringify(parsed.placement.scale))) {
+        throw new Error('布置后正式场景中的对象属性与结果不一致。')
+      }
+    }
+    // 复用已有对象时没有写入、也没有撤销凭据，核对失败无需恢复。
+    if (result.undoToken) await afterCameraStageWrite(parsed.projectId, result.undoToken, verify)
+    else await verify()
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     const entityType = result.objectType === 'camera'
       ? CAMERA_STAGE_ENTITY_TYPES.camera
       : CAMERA_STAGE_ENTITY_TYPES.object
-    const snapshot = await cameraStageApplicationService.readSnapshot(parsed.projectId)
-    const object = snapshot.objects.find(item => item.id === result.objectId)
-    if (!object || object.type !== parsed.objectType
-      || JSON.stringify(object.transform.position) !== JSON.stringify(result.position)
-      || (parsed.placement.rotation && JSON.stringify(object.transform.rotation) !== JSON.stringify(parsed.placement.rotation))
-      || (parsed.placement.scale && JSON.stringify(object.transform.scale) !== JSON.stringify(parsed.placement.scale))) {
-      throw new Error('布置后正式场景中的对象属性与结果不一致。')
-    }
     return {
       status: 'completed',
       resultingRevisions: { camera_stage: revision },

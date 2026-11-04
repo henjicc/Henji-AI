@@ -18,7 +18,7 @@ import { applyWriterTable, directOnlyEffectContract, fieldEffectContract, proper
 import { cameraStageProjectStore, leaseCameraStageProjectRuntime, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion } from './cameraMotionService'
-import { forgetCameraStageUndo, restoreCameraStageUndo, captureCameraStageUndo } from './cameraStageUndo'
+import { forgetCameraStageUndo, restoreCameraStageUndo, captureCameraStageUndo, afterCameraStageWrite } from './cameraStageUndo'
 import { CAMERA_FIELDS, OBJECT_FIELDS, CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 import { CAMERA_STAGE_SCENE_WRITERS } from './cameraStageSceneFields'
@@ -203,8 +203,10 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const projectId = step.target.id
     await ensureCameraStageProjectRuntime(projectId)
     const undoToken = captureCameraStageUndo(projectId)
-    await applyWriterTable(CAMERA_STAGE_SCENE_WRITERS, cameraStageProjectStore(projectId!).getState(), step.mutations)
-    await saveCameraStageProjectRuntime(projectId)
+    await afterCameraStageWrite(projectId, undoToken, async () => {
+      await applyWriterTable(CAMERA_STAGE_SCENE_WRITERS, cameraStageProjectStore(projectId!).getState(), step.mutations)
+      await saveCameraStageProjectRuntime(projectId)
+    })
     return undoToken
   }
 
@@ -329,13 +331,15 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
 
   async execute(input: JsonValue, _context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const result = await applyCameraStageMotion(motionInputSchema.parse(input))
-    const snapshot = await cameraStageApplicationService.readSnapshot(result.projectId)
-    const [start, end] = result.affectedStateKeyframeIds.map(id => snapshot.stateKeyframes.find(frame => frame.id === id))
-    if (!start || !end || !start.transition.perObject[result.cameraId]?.spatialPath
-      || JSON.stringify(start.objectStates[result.cameraId]?.transform.position) !== JSON.stringify(result.path.start)
-      || JSON.stringify(end.objectStates[result.cameraId]?.transform.position) !== JSON.stringify(result.path.end)) {
-      throw new Error('运镜后正式状态关键帧中的轨迹与结果不一致。')
-    }
+    await afterCameraStageWrite(result.projectId, result.undoToken, async () => {
+      const snapshot = await cameraStageApplicationService.readSnapshot(result.projectId)
+      const [start, end] = result.affectedStateKeyframeIds.map(id => snapshot.stateKeyframes.find(frame => frame.id === id))
+      if (!start || !end || !start.transition.perObject[result.cameraId]?.spatialPath
+        || JSON.stringify(start.objectStates[result.cameraId]?.transform.position) !== JSON.stringify(result.path.start)
+        || JSON.stringify(end.objectStates[result.cameraId]?.transform.position) !== JSON.stringify(result.path.end)) {
+        throw new Error('运镜后正式状态关键帧中的轨迹与结果不一致。')
+      }
+    })
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     return {

@@ -7,6 +7,7 @@ import { CANVAS_NODE_TYPES, isCameraStageNode } from '@/features/canvas/domain/c
 import type { CameraStageRenderRequest, CameraStageRenderTaskSnapshot } from '@/platform/contracts/cameraStageRender'
 
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
+import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 
 interface RenderTargetInput {
   canvasRef: ApplicationRef & { kind: 'canvas.document' }
@@ -276,23 +277,28 @@ export async function renderCameraStageOutput(
   input: RenderTargetInput,
   context: CapabilityExecutionContext,
 ): Promise<Record<string, unknown>> {
-  const target = await requireCurrentTarget(input)
   const requestId = requestIdFor(context)
-  const requestedIdentity: RenderTaskIdentity = {
-    version: 1,
-    requestId,
-    canvasProjectId: input.canvasRef.id,
-    nodeId: target.nodeId,
-    cameraStageDocumentId: target.cameraStageDocumentId ?? GENERATED_PROJECT_ID_PLACEHOLDER,
-    resolutionPreset: input.resolutionPreset,
-    outputKind: input.outputKind,
-    ...(target.selectedTimeSec === undefined ? {} : { selectedTimeSec: target.selectedTimeSec }),
-  }
-  // 在创建后台镜头参考和提交主进程任务前拒绝无法形成合法稳定引用的输入。
-  createCameraStageRenderTaskRef(requestedIdentity)
-  const existing = await readPersistedCompletion(input.canvasRef.id, requestId)
-  await requireUnchangedTarget(input, target)
+  // 目标核对在提交主进程任务之前；放进写入准备阶段，拒绝才会被记为未执行。
+  const { target, requestedIdentity, existing } = await applicationWritePreflight(context, async () => {
+    const target = await requireCurrentTarget(input)
+    const requestedIdentity: RenderTaskIdentity = {
+      version: 1,
+      requestId,
+      canvasProjectId: input.canvasRef.id,
+      nodeId: target.nodeId,
+      cameraStageDocumentId: target.cameraStageDocumentId ?? GENERATED_PROJECT_ID_PLACEHOLDER,
+      resolutionPreset: input.resolutionPreset,
+      outputKind: input.outputKind,
+      ...(target.selectedTimeSec === undefined ? {} : { selectedTimeSec: target.selectedTimeSec }),
+    }
+    // 在创建后台镜头参考和提交主进程任务前拒绝无法形成合法稳定引用的输入。
+    createCameraStageRenderTaskRef(requestedIdentity)
+    const existing = await readPersistedCompletion(input.canvasRef.id, requestId)
+    await requireUnchangedTarget(input, target)
+    return { target, requestedIdentity, existing }
+  })
   if (existing) {
+    // 有完成回执说明同一调用此前已经输出过，形状不符只能是冲突，不能当作未执行。
     const expected = target.cameraStageDocumentId
       ? requestedIdentity
       : { ...requestedIdentity, cameraStageDocumentId: existing.identity.cameraStageDocumentId }
