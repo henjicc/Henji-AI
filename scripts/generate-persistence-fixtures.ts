@@ -342,12 +342,12 @@ const values: Record<string, unknown> = {
       { id: 'fx-comp', kind: 'builtin', name: '压缩器', enabled: true, amount: 1, builtin: { id: 'compressor', params: { amount: 40, speed: 'normal', makeup: true } } },
     ],
     chainBypassed: false, output: { volumeDb: -1.5, loudness: { enabled: true, targetLufs: -16, gainDb: 3.5 } } },
-  // 镜头参考 v4：真实尺度布景（城市风格、道路等级、楼层与参照物开关）、生成时算好的装饰，与指回它的楼；
+  // 镜头参考 v5：自然路网城市（弯曲程度、河流、公园），装饰含任意形状铺装，与指回它的一栋楼（朝向跟着街）；
   // 雾距用超过旧上限 200 米的值。
   'document.camera_stage': (() => {
-    const { set, objects } = buildStageSet([], { layout: { preset: 'street', length: 24, seed: 7 }, name: '街道' })
-    const fixedSet = { ...set, id: 'street' }
-    const tower = { ...objects[0], id: 'tower', setId: 'street' }
+    const { set, objects } = buildStageSet([], { layout: { preset: 'city', style: 'organic', width: 200, depth: 200, seed: 7 }, name: '城市' })
+    const fixedSet = { ...set, id: 'city' }
+    const tower = { ...objects[0], id: 'tower', setId: 'city' }
     return { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }, tower], activeCameraId: 'camera', sceneSettings: { sky: {}, fog: { enabled: true, distance: 1200 } }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }], sets: [fixedSet] }
   })(),
   'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },

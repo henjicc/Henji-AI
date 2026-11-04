@@ -95,6 +95,7 @@ function inputFingerprint(options) {
     'scripts/generate-third-party-licenses.cjs', 'scripts/lib/thirdPartyLicenses.cjs',
     'scripts/lib/distributionNotices.cjs', 'scripts/video-decoder-ffmpeg.cjs',
     'scripts/lib/audioCaptureLicenses.cjs', 'scripts/build-audio-capture.cjs', 'native/audio-capture/target/release/audio-capture-build.json',
+    'src/features/cameraStage/domain/vendor/mapgenerator/COPYING.LESSER', 'src/features/cameraStage/domain/vendor/mapgenerator/COPYING',
     ...NATIVE_CRATES.map((crate) => `${crate.dir}/Cargo.lock`),
   ]
   for (const file of files) hash.update(`${file}\n${readTextIfExists(path.join(root, file)) ?? ''}\n`)
@@ -288,6 +289,15 @@ function generate(options) {
   else runtime.push({ id: 'vendored:chromium-scroll-curve', name: 'Chromium (scroll animation curve, ported to web replay)', version: 'deb41ddc5770bd74cc7d0e4d6a7d7b12e2c5ecec', license: 'BSD-3-Clause', ecosystem: 'runtime',
     homepage: 'https://www.chromium.org', sources: ['https://chromium.googlesource.com/chromium/src/+/deb41ddc5770bd74cc7d0e4d6a7d7b12e2c5ecec/cc/animation/scroll_offset_animation_curve.cc (ease-in-out curve, segment durations and retargeting, ported to TypeScript)'],
     textIds: [textTable.add(chromiumLicense)], textOrigin: 'package' })
+  // 镜头参考的自然路网移植自 MapGenerator（LGPL-3.0-only），源码与许可全文在 src/features/cameraStage/domain/vendor/mapgenerator，不在 npm ls 里。
+  const mapGeneratorDir = path.join(root, 'src/features/cameraStage/domain/vendor/mapgenerator')
+  const mapGeneratorLgpl = readTextIfExists(path.join(mapGeneratorDir, 'COPYING.LESSER'))
+  const mapGeneratorGpl = readTextIfExists(path.join(mapGeneratorDir, 'COPYING'))
+  if (!mapGeneratorLgpl || !mapGeneratorGpl) missing.push('MapGenerator：缺少 LGPL-3.0 或 GPL-3.0 许可全文')
+  else runtime.push({ id: 'vendored:mapgenerator', name: 'MapGenerator (tensor-field road network, ported to camera stage sets)', version: 'f487e4cee321d105d5b0e14258363fa8b4d004ef', license: 'LGPL-3.0-only', ecosystem: 'runtime',
+    homepage: 'https://github.com/ProbableTrain/MapGenerator', sources: ['https://github.com/ProbableTrain/MapGenerator/tree/f487e4cee321d105d5b0e14258363fa8b4d004ef/src/ts (tensor field, streamlines, river; ported to TypeScript modules with seeded randomness, modifications dated in each file header)',
+      `Modified source: https://github.com/henjicc/Henji-AI/tree/v${packageJson.version}/src/features/cameraStage/domain/vendor/mapgenerator (the release tag matching this build). It is a separate module behind index.ts; replace or modify that directory and rebuild the renderer to use another version.`],
+    textIds: [textTable.add(mapGeneratorLgpl), textTable.add(mapGeneratorGpl)], textOrigin: 'package' })
   // HQ-ICON 的输入解析与苹果高清图地址规则是非 npm 来源，沿用同一许可清单。
   const hqIconLicense = readTextIfExists(path.join(REFERENCE_DIR, 'HQ-ICON-MIT.txt'))
   if (!hqIconLicense) missing.push('HQ-ICON：缺少 MIT 许可原文')

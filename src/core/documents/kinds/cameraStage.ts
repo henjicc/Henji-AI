@@ -40,6 +40,7 @@ const numbers = z.array(z.number())
  * 布景的地面铺装与比例参照物（v3 起）：生成时算好的扁平数字数组，坐标为布景局部坐标（米）。
  * 每项占几个数见 STAGE_SET_DECOR_STRIDE：铺装 [中心 x, 中心 z, 宽, 深]，标线 [起点 x, 起点 z, 终点 x, 终点 z]，
  * 树 [x, z, 朝向, 缩放, 树种]，路灯 [x, z, 灯臂朝向, 杆高]，车辆 [x, z, 车头朝向, 车型, 颜色]。
+ * 任意形状铺装 areas（v5 起，自然路网才有）每块写 [圈数, 第一圈点数, x, z…, 第二圈点数, …]，第一圈外轮廓、其余是洞。
  */
 const stageSetDecorSchema = z.looseObject({
   surfaces: z.looseObject({ road: numbers, sidewalk: numbers, curb: numbers, median: numbers, lawn: numbers, plaza: numbers }),
@@ -47,6 +48,7 @@ const stageSetDecorSchema = z.looseObject({
   trees: numbers,
   lamps: numbers,
   vehicles: numbers,
+  areas: z.looseObject({ sidewalk: numbers, median: numbers, lawn: numbers, water: numbers }).optional(),
 })
 
 const stageSetSchema = z.looseObject({
@@ -88,6 +90,16 @@ function migrateStageSetV2(set: LooseRecord): LooseRecord {
     return { ...set, params: { ...rest, floors: floorsFromHeight(height, { min: 4, max: 10 }), props: true } }
   }
   return set
+}
+
+/**
+ * 4 → 5：城市布景新增自然路网风格的三个参数（路网弯曲程度、河流、公园）。已有城市布景补上默认值，
+ * 方格类风格不读它们，画面与重新生成的结果都不变。
+ */
+function migrateStageSetV4(set: LooseRecord): LooseRecord {
+  const params = set.params as LooseRecord
+  if (params.preset !== 'city') return set
+  return { ...set, params: { curvature: 0.5, river: true, parks: true, ...params } }
 }
 
 export const cameraStageContentSchema = z.object({
@@ -134,8 +146,10 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
   //   版本 2 的程序会按旧字段重新生成而算出无效布景，所以最低可读版本提高到 3。
   // 版本 4 = 雾距 sceneSettings.fog.distance 的取值范围从 30–200 米放宽到 30–10000 米，供上千米的城区布景用。
   //   版本 3 的程序把超过 200 的雾距当成非法值换回默认 90 米，保存时会改掉用户的雾，所以最低可读版本提高到 4。
-  version: 4,
-  minReaderVersion: 4,
+  // 版本 5 = 城市新增自然路网风格（style = organic）与路网弯曲程度、河流、公园三个参数，装饰新增任意形状铺装 areas。
+  //   版本 4 的程序不认识这个风格：画不出人行道与水面，重新生成会失败，所以最低可读版本提高到 5。
+  version: 5,
+  minReaderVersion: 5,
   contentSchema: cameraStageContentSchema,
   migrations: {
     // 1 → 2：旧文件没有生成过布景，补一个空列表。
@@ -147,6 +161,11 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
     },
     // 3 → 4：只放宽雾距的取值范围，旧文件里的值都在新范围内，内容原样保留。
     3: (content) => structuredClone(content as LooseRecord),
+    4: (content) => {
+      const next = structuredClone(content as LooseRecord)
+      next.sets = (Array.isArray(next.sets) ? next.sets as LooseRecord[] : []).map(migrateStageSetV4)
+      return next
+    },
   },
   createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [] }),
   isEmptyContent: isEmptyCameraStageContent,

@@ -3,15 +3,18 @@ import {
   BufferGeometry,
   CylinderGeometry,
   ExtrudeGeometry,
+  Float32BufferAttribute,
   Matrix4,
   PlaneGeometry,
   Quaternion,
   Shape,
+  ShapeUtils,
+  Vector2,
   Vector3,
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
-import { STAGE_SET_DECOR_STRIDE, type StageSet, type StageSetMarkingKind, type StageSetSurfaceKind } from '../domain/sceneTypes'
+import { LANE_DASH, STAGE_SET_DECOR_STRIDE, type StageSet, type StageSetAreaKind, type StageSetMarkingKind, type StageSetSurfaceKind } from '../domain/sceneTypes'
 import type { VehicleType } from '../domain/stageSetProps'
 import { stageSetPlacement, stageSetToWorld, type StageSetPlacement } from '../domain/stageSetPlacement'
 
@@ -34,7 +37,7 @@ export const SURFACE_LEVELS: Record<StageSetSurfaceKind, { top: number; thicknes
 
 /** 标线宽度与虚线节奏（米）；period 为 0 表示实线。人行横道是一条横过车行道的宽线，斑马纹按 1 米一个周期。 */
 export const MARKING_STYLES: Record<StageSetMarkingKind, { width: number; period: number; on: number }> = {
-  laneDashed: { width: 0.15, period: 9, on: 3 },
+  laneDashed: { width: 0.15, period: LANE_DASH.period, on: LANE_DASH.on },
   edgeLine: { width: 0.15, period: 0, on: 0 },
   centerLine: { width: 0.15, period: 0, on: 0 },
   stopLine: { width: 0.4, period: 0, on: 0 },
@@ -42,6 +45,17 @@ export const MARKING_STYLES: Record<StageSetMarkingKind, { width: number; period
 }
 
 export const MARKING_HEIGHT = 0.026
+
+/** 任意形状铺装的顶面高度与厚度：与同名的矩形铺装一致；水面压在车行道上、低于人行道。 */
+export const AREA_LEVELS: Record<StageSetAreaKind, { top: number; thickness: number }> = {
+  sidewalk: SURFACE_LEVELS.sidewalk,
+  median: SURFACE_LEVELS.median,
+  lawn: SURFACE_LEVELS.lawn,
+  water: { top: 0.03, thickness: 0.03 },
+}
+
+/** 路缘石宽（米） */
+const CURB_WIDTH = 0.2
 
 /** 换算到场景坐标：装饰实例与楼体对象共用 stageSetToWorld。 */
 function placementOf(set: StageSet): { placement: StageSetPlacement; rotation: number } {
@@ -111,6 +125,95 @@ export function markingInstances(sets: readonly StageSet[], kind: StageSetMarkin
       compose(matrices, index, (from.x + to.x) / 2, MARKING_HEIGHT, (from.z + to.z) / 2, Math.atan2(to.x - from.x, to.z - from.z), width, 1, length)
       index += 1
     }
+  }
+  return { matrices, count }
+}
+
+/** 解出一种任意形状铺装的每一块：每块若干圈，第一圈外轮廓、其余是洞，点已换到场景坐标（Vector2 的 y 是场景 z）。 */
+function areaPolygons(sets: readonly StageSet[], kind: StageSetAreaKind): Vector2[][][] {
+  const polygons: Vector2[][][] = []
+  for (const set of sets) {
+    const values = set.decor?.areas?.[kind]
+    if (!values) continue
+    const { placement } = placementOf(set)
+    let offset = 0
+    while (offset < values.length) {
+      const rings = values[offset++]
+      const polygon: Vector2[][] = []
+      for (let ring = 0; ring < rings; ring += 1) {
+        const count = values[offset++]
+        const points: Vector2[] = []
+        for (let point = 0; point < count; point += 1) {
+          const world = stageSetToWorld(placement, values[offset], values[offset + 1])
+          points.push(new Vector2(world.x, world.z))
+          offset += 2
+        }
+        polygon.push(points)
+      }
+      polygons.push(polygon)
+    }
+  }
+  return polygons
+}
+
+/** 一种任意形状铺装合成一个网格：顶面按外轮廓与洞三角化，每条边往下补一圈侧面（材质双面）。 */
+export function areaGeometry(sets: readonly StageSet[], kind: StageSetAreaKind): BufferGeometry | null {
+  const level = AREA_LEVELS[kind]
+  const bottom = level.top - level.thickness
+  const positions: number[] = []
+  const normals: number[] = []
+  const triangle = (a: Vector2, b: Vector2, c: Vector2): void => {
+    // 让顶面正面朝上：(b - a) × (c - a) 的 y 分量为正
+    const upward = (b.y - a.y) * (c.x - a.x) - (b.x - a.x) * (c.y - a.y) > 0
+    const [second, third] = upward ? [b, c] : [c, b]
+    positions.push(a.x, level.top, a.y, second.x, level.top, second.y, third.x, level.top, third.y)
+    normals.push(0, 1, 0, 0, 1, 0, 0, 1, 0)
+  }
+  for (const polygon of areaPolygons(sets, kind)) {
+    const [contour, ...holes] = polygon
+    if (!contour || contour.length < 3) continue
+    // triangulateShape 会就地调整绕向，三角形序号对应调整后的“外轮廓 + 各洞”顺序
+    const faces = ShapeUtils.triangulateShape(contour, holes)
+    const vertices = [...contour, ...holes.flat()]
+    for (const [a, b, c] of faces) triangle(vertices[a], vertices[b], vertices[c])
+    for (const ring of polygon) {
+      for (let index = 0; index < ring.length; index += 1) {
+        const a = ring[index]
+        const b = ring[(index + 1) % ring.length]
+        const length = Math.hypot(b.x - a.x, b.y - a.y)
+        if (length < 1e-6) continue
+        const nx = (b.y - a.y) / length
+        const nz = -(b.x - a.x) / length
+        positions.push(a.x, bottom, a.y, b.x, bottom, b.y, b.x, level.top, b.y, a.x, bottom, a.y, b.x, level.top, b.y, a.x, level.top, a.y)
+        for (let vertex = 0; vertex < 6; vertex += 1) normals.push(nx, 0, nz)
+      }
+    }
+  }
+  if (positions.length === 0) return null
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3))
+  geometry.computeBoundingSphere()
+  geometry.computeBoundingBox()
+  return geometry
+}
+
+/** 人行道铺装每条边上的路缘石：单位方块沿边放，跨边居中，两头各多伸出半个石宽盖住折角处的缝。 */
+export function curbInstances(sets: readonly StageSet[]): InstanceList {
+  const level = SURFACE_LEVELS.curb
+  const edges: Array<[Vector2, Vector2]> = []
+  for (const polygon of areaPolygons(sets, 'sidewalk')) {
+    for (const ring of polygon) {
+      for (let index = 0; index < ring.length; index += 1) edges.push([ring[index], ring[(index + 1) % ring.length]])
+    }
+  }
+  const matrices = new Float32Array(edges.length * 16)
+  let count = 0
+  for (const [a, b] of edges) {
+    const length = Math.hypot(b.x - a.x, b.y - a.y)
+    if (length < 0.05) continue
+    compose(matrices, count, (a.x + b.x) / 2, level.top - level.thickness / 2, (a.y + b.y) / 2, Math.atan2(b.x - a.x, b.y - a.y), CURB_WIDTH, level.thickness, length + CURB_WIDTH)
+    count += 1
   }
   return { matrices, count }
 }

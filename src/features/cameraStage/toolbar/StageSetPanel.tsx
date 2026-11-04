@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
 import { UiButton, UiError, UiFormRow, UiGroup, UiSegmented, UiSeedInput, UiSwitch } from '@/components/ui'
 import {
@@ -78,6 +78,16 @@ function PresetFields({ params, update }: { params: CameraStageSetParams; update
           options={CAMERA_STAGE_CITY_STYLES.map(style => ({ value: style, label: CAMERA_STAGE_CITY_STYLE_LABELS[style] }))} />
       </UiFormRow>
       <NumberRow label="范围" unit="米" value={Math.max(city.width, city.depth)} min={100} onChange={size => update({ width: size, depth: size })} />
+      {city.style === 'organic' && <>
+        <NumberRow label="弯曲程度" unit="%" value={Math.round(city.curvature * 100)} min={0} max={100}
+          onChange={next => update({ curvature: Math.max(0, Math.min(100, next)) / 100 })} />
+        <UiFormRow label="河流" density="compact">
+          <UiSwitch checked={city.river} onCheckedChange={river => update({ river })} />
+        </UiFormRow>
+        <UiFormRow label="公园" density="compact">
+          <UiSwitch checked={city.parks} onCheckedChange={parks => update({ parks })} />
+        </UiFormRow>
+      </>}
       <DensityRow value={city.density} onChange={density => update({ density })} />
       <MaxFloorsRow value={city.floors} onChange={floors => update({ floors })} />
       <UiFormRow label="楼高分布" density="compact">
@@ -138,9 +148,13 @@ export function StageSetPanel({ onDone }: { onDone: () => void }): React.ReactEl
   const [params, setParams] = useState<CameraStageSetParams>(() => editing ? structuredClone(editing.params) : defaultsFor('city'))
   const [error, setError] = useState<string>()
   const update = (patch: Partial<CameraStageSetParams>): void => setParams(current => ({ ...current, ...patch }) as CameraStageSetParams)
-  // 数楼要把整片布局算一遍；拖动数值时延后算，输入不卡。
-  const deferredParams = useDeferredValue(params)
-  const estimate = useMemo(() => estimateStageSet(deferredParams), [deferredParams])
+  // 数楼要把整片布局算一遍（自然路网连路网一起算，几公里时要大半秒）：参数停下来 300 毫秒后再数，拖动数值不卡。
+  const [estimatedParams, setEstimatedParams] = useState(params)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setEstimatedParams(params), 300)
+    return () => window.clearTimeout(timer)
+  }, [params])
+  const estimate = useMemo(() => estimateStageSet(estimatedParams), [estimatedParams])
 
   const generate = (): void => {
     const state = useCameraStageStore.getState()

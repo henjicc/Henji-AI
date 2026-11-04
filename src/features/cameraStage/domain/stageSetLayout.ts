@@ -2,7 +2,15 @@ import PoissonDiskSampling from 'poisson-disk-sampling'
 
 import type { CameraStageFloorRange, CameraStageRoadClass, CameraStageSetParams } from '@/core/application-control/domains/cameraStage/cameraStageSetSchemas'
 
-import { STAGE_SET_MARKING_KINDS, STAGE_SET_SURFACE_KINDS, type StageSetDecor, type StageSetMarkingKind, type StageSetSurfaceKind } from './sceneTypes'
+import {
+  STAGE_SET_AREA_KINDS,
+  STAGE_SET_MARKING_KINDS,
+  STAGE_SET_SURFACE_KINDS,
+  type StageSetAreaKind,
+  type StageSetDecor,
+  type StageSetMarkingKind,
+  type StageSetSurfaceKind,
+} from './sceneTypes'
 import { VEHICLE_TYPE_INDEX, VEHICLE_TYPES } from './stageSetProps'
 import {
   BUILDING_TYPES,
@@ -15,6 +23,7 @@ import {
   clampFloorRange,
   floorsAt,
   roadWidth,
+  type AxisCityStyle,
   type BuildingType,
   type CityAxis,
   type CityStyle,
@@ -32,6 +41,18 @@ import {
 type Params<P extends CameraStageSetParams['preset']> = Extract<CameraStageSetParams, { preset: P }>
 export type Random = () => number
 
+/** mulberry32：足够均匀、可复现，种子取 32 位整数。 */
+export function createRandom(seed: number): Random {
+  let state = seed >>> 0
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0
+    let value = state
+    value = Math.imul(value ^ (value >>> 15), value | 1)
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 export interface BuildingPart {
   x: number
   z: number
@@ -41,6 +62,8 @@ export interface BuildingPart {
   base: number
   height: number
   role: 'main' | 'podium' | 'tower' | 'crown'
+  /** 绕竖直轴的朝向（度），宽沿局部 x、深沿局部 z；沿弯路排的楼才有 */
+  yaw?: number
 }
 
 /** 一栋楼由一到三个体块组成。 */
@@ -51,7 +74,8 @@ export interface StageSetLayout {
   decor: StageSetDecor | null
 }
 
-interface Rect { x0: number; z0: number; x1: number; z1: number }
+export interface Rect { x0: number; z0: number; x1: number; z1: number }
+export interface Point { x: number; z: number }
 
 const CURB_WIDTH = 0.2
 /** 人行横道离路口的距离与宽度、停止线位置（沿道路方向，米） */
@@ -62,13 +86,13 @@ const STOP_LINE_OFFSET = CROSSWALK_GAP + CROSSWALK_DEPTH + 0.6
 const TREE_CURB_OFFSET = 1.2
 const LAMP_CURB_OFFSET = 0.45
 
-function lerp(min: number, max: number, t: number): number {
+export function lerp(min: number, max: number, t: number): number {
   return min + (max - min) * t
 }
 
 const round2 = (value: number): number => Math.round(value * 100) / 100
 
-function pick<T>(items: readonly T[], random: Random): T {
+export function pick<T>(items: readonly T[], random: Random): T {
   return items[Math.min(items.length - 1, Math.floor(random() * items.length))]
 }
 
@@ -87,7 +111,7 @@ const VEHICLE_COLOR_WEIGHTS = [[0, 26], [1, 20], [2, 16], [3, 12], [4, 8], [5, 7
 const PARKED_TYPES = [[VEHICLE_TYPE_INDEX.sedan, 42], [VEHICLE_TYPE_INDEX.hatchback, 20], [VEHICLE_TYPE_INDEX.suv, 28], [VEHICLE_TYPE_INDEX.van, 10]] as const
 const MOVING_TYPES = [[VEHICLE_TYPE_INDEX.sedan, 40], [VEHICLE_TYPE_INDEX.hatchback, 14], [VEHICLE_TYPE_INDEX.suv, 24], [VEHICLE_TYPE_INDEX.van, 10], [VEHICLE_TYPE_INDEX.truck, 8]] as const
 
-class DecorWriter {
+export class DecorWriter {
   readonly decor: StageSetDecor = {
     surfaces: Object.fromEntries(STAGE_SET_SURFACE_KINDS.map(kind => [kind, [] as number[]])) as Record<StageSetSurfaceKind, number[]>,
     markings: Object.fromEntries(STAGE_SET_MARKING_KINDS.map(kind => [kind, [] as number[]])) as Record<StageSetMarkingKind, number[]>,
@@ -112,6 +136,19 @@ class DecorWriter {
     this.surface('curb', { ...rect, z0: rect.z1 - CURB_WIDTH })
     this.surface('curb', { ...rect, x1: rect.x0 + CURB_WIDTH, z0: rect.z0 + CURB_WIDTH, z1: rect.z1 - CURB_WIDTH })
     this.surface('curb', { ...rect, x0: rect.x1 - CURB_WIDTH, z0: rect.z0 + CURB_WIDTH, z1: rect.z1 - CURB_WIDTH })
+  }
+
+  /** 任意形状的铺装：第一圈是外轮廓，其余是洞。编码见 StageSetDecor.areas。 */
+  area(kind: StageSetAreaKind, rings: readonly (readonly Point[])[]): void {
+    const kept = rings.filter(ring => ring.length >= 3)
+    if (kept.length === 0) return
+    const areas = this.decor.areas ??= Object.fromEntries(STAGE_SET_AREA_KINDS.map(name => [name, [] as number[]])) as Record<StageSetAreaKind, number[]>
+    const values = areas[kind]
+    values.push(kept.length)
+    for (const ring of kept) {
+      values.push(ring.length)
+      for (const point of ring) values.push(round2(point.x), round2(point.z))
+    }
   }
 
   marking(kind: StageSetMarkingKind, from: { x: number; z: number }, to: { x: number; z: number }): void {
@@ -152,88 +189,122 @@ class DecorWriter {
 // 道路
 // ---------------------------------------------------------------------------------------------
 
-interface Road {
-  /** 沿哪个轴延伸 */
-  dir: 'x' | 'z'
-  /** 道路中心线在另一轴上的坐标 */
-  offset: number
+/**
+ * 一条路的中心线，按沿路距离 along 与横向偏移 across 取点。直路与弯路共用同一套沿路装饰规则（decorateSegment），
+ * 只在取点、朝向和沿路画线上不同。
+ */
+export interface RoadPath {
   section: RoadSection
   roadClass: CameraStageRoadClass
   treeVariant: number
+  /** 沿 +along 方向行驶时右手边在 across 的哪一侧（右侧通行） */
+  rightSide: 1 | -1
+  point(along: number, across: number): Point
+  /** 车头朝向（度）：模型车头朝局部 +Z */
+  heading(along: number, forward: boolean): number
+  /** 第 side 侧路灯的灯臂朝向（度）：灯臂伸向路中心 */
+  lampYaw(along: number, side: 1 | -1): number
+  /** 沿路从 from 到 to、横向偏移 across 的一条标线 */
+  line(writer: DecorWriter, kind: StageSetMarkingKind, from: number, to: number, across: number): void
+  /** from 到 to 的中央分隔带 */
+  median(writer: DecorWriter, from: number, to: number): void
+  /**
+   * 这一点能不能放东西：行道树与路灯要落在人行道上，停着的车要在自己的车行道里而不在水上或别的路口里。
+   * 方格路网的人行道与车行道都是整段的矩形，省略即处处可放。
+   */
+  placeable?(point: Point, on: 'sidewalk' | 'carriageway'): boolean
 }
 
-interface RoadEnds {
-  /** 两端是不是路口（画人行横道与停止线） */
-  crosswalks: boolean
+export interface RoadEnds {
+  /** 起点与终点是不是路口（画人行横道与停止线） */
+  start: boolean
+  end: boolean
   treeSpacing: number
 }
 
-function roadPoint(road: Road, along: number, across: number): { x: number; z: number } {
-  return road.dir === 'x' ? { x: along, z: road.offset + across } : { x: road.offset + across, z: along }
-}
+/** 方格路网里沿 x 或 z 轴的直路。 */
+class StraightRoad implements RoadPath {
+  readonly rightSide: 1 | -1
 
-/** 沿 +along 方向行驶时右手边在 across 的哪一侧（右侧通行）。 */
-function rightSide(road: Road): 1 | -1 {
-  return road.dir === 'x' ? 1 : -1
-}
+  constructor(
+    /** 沿哪个轴延伸 */
+    readonly dir: 'x' | 'z',
+    /** 道路中心线在另一轴上的坐标 */
+    readonly offset: number,
+    readonly section: RoadSection,
+    readonly roadClass: CameraStageRoadClass,
+    readonly treeVariant: number,
+  ) {
+    this.rightSide = dir === 'x' ? 1 : -1
+  }
 
-/** 车头朝向（度）：模型车头朝局部 +Z。 */
-function headingYaw(road: Road, forward: boolean): number {
-  if (road.dir === 'x') return forward ? 90 : -90
-  return forward ? 0 : 180
-}
+  point(along: number, across: number): Point {
+    return this.dir === 'x' ? { x: along, z: this.offset + across } : { x: this.offset + across, z: along }
+  }
 
-/** 灯臂伸向路中心。 */
-function lampYaw(road: Road, side: 1 | -1): number {
-  if (road.dir === 'x') return side > 0 ? 180 : 0
-  return side > 0 ? -90 : 90
+  heading(_along: number, forward: boolean): number {
+    if (this.dir === 'x') return forward ? 90 : -90
+    return forward ? 0 : 180
+  }
+
+  lampYaw(_along: number, side: 1 | -1): number {
+    if (this.dir === 'x') return side > 0 ? 180 : 0
+    return side > 0 ? -90 : 90
+  }
+
+  line(writer: DecorWriter, kind: StageSetMarkingKind, from: number, to: number, across: number): void {
+    writer.marking(kind, this.point(from, across), this.point(to, across))
+  }
+
+  median(writer: DecorWriter, from: number, to: number): void {
+    const half = this.section.median / 2
+    writer.surface('median', this.dir === 'x'
+      ? { x0: from, x1: to, z0: this.offset - half, z1: this.offset + half }
+      : { x0: this.offset - half, x1: this.offset + half, z0: from, z1: to })
+  }
 }
 
 /** 一段路（两个路口之间）的车道线、人行横道、中央分隔带、行道树、路灯与车辆。 */
-function decorateSegment(writer: DecorWriter, road: Road, start: number, end: number, ends: RoadEnds): void {
+export function decorateSegment(writer: DecorWriter, road: RoadPath, start: number, end: number, ends: RoadEnds): void {
   const random = writer.random
   const section = road.section
   const half = carriagewayWidth(section) / 2
   const median = section.median / 2
   const lanesPerSide = section.lanes / 2
   const lanesEdge = median + lanesPerSide * section.laneWidth
-  const inset = ends.crosswalks ? STOP_LINE_OFFSET : 0
-  const lineStart = start + inset
-  const lineEnd = end - inset
+  const lineStart = start + (ends.start ? STOP_LINE_OFFSET : 0)
+  const lineEnd = end - (ends.end ? STOP_LINE_OFFSET : 0)
   if (lineEnd - lineStart < 4) return
-  const point = (along: number, across: number) => roadPoint(road, along, across)
-  const forwardSide = rightSide(road)
+  const point = (along: number, across: number) => road.point(along, across)
+  const forwardSide = road.rightSide
+  const placeable = (at: Point, on: 'sidewalk' | 'carriageway'): boolean => road.placeable?.(at, on) ?? true
 
   if (section.median > 0) {
-    writer.surface('median', road.dir === 'x'
-      ? { x0: lineStart, x1: lineEnd, z0: road.offset - median, z1: road.offset + median }
-      : { x0: road.offset - median, x1: road.offset + median, z0: lineStart, z1: lineEnd })
+    road.median(writer, lineStart, lineEnd)
   } else {
-    writer.marking('centerLine', point(lineStart, 0.12), point(lineEnd, 0.12))
-    writer.marking('centerLine', point(lineStart, -0.12), point(lineEnd, -0.12))
+    road.line(writer, 'centerLine', lineStart, lineEnd, 0.12)
+    road.line(writer, 'centerLine', lineStart, lineEnd, -0.12)
   }
   for (const side of [1, -1] as const) {
     for (let lane = 1; lane < lanesPerSide; lane += 1) {
-      const across = side * (median + lane * section.laneWidth)
-      writer.marking('laneDashed', point(lineStart, across), point(lineEnd, across))
+      road.line(writer, 'laneDashed', lineStart, lineEnd, side * (median + lane * section.laneWidth))
     }
-    if (section.bike > 0 || section.parking > 0) writer.marking('edgeLine', point(lineStart, side * lanesEdge), point(lineEnd, side * lanesEdge))
+    if (section.bike > 0 || section.parking > 0) road.line(writer, 'edgeLine', lineStart, lineEnd, side * lanesEdge)
   }
-  if (ends.crosswalks) {
-    for (const along of [start + CROSSWALK_GAP + CROSSWALK_DEPTH / 2, end - CROSSWALK_GAP - CROSSWALK_DEPTH / 2]) {
-      writer.marking('crosswalk', point(along, -half + 0.3), point(along, half - 0.3))
-    }
-    // 停止线只横过驶向路口的那半幅
-    writer.marking('stopLine', point(lineEnd, forwardSide * Math.max(median, 0.2)), point(lineEnd, forwardSide * lanesEdge))
-    writer.marking('stopLine', point(lineStart, -forwardSide * Math.max(median, 0.2)), point(lineStart, -forwardSide * lanesEdge))
-  }
+  if (ends.start) writer.marking('crosswalk', point(start + CROSSWALK_GAP + CROSSWALK_DEPTH / 2, -half + 0.3), point(start + CROSSWALK_GAP + CROSSWALK_DEPTH / 2, half - 0.3))
+  if (ends.end) writer.marking('crosswalk', point(end - CROSSWALK_GAP - CROSSWALK_DEPTH / 2, -half + 0.3), point(end - CROSSWALK_GAP - CROSSWALK_DEPTH / 2, half - 0.3))
+  // 停止线只横过驶向路口的那半幅
+  if (ends.end) writer.marking('stopLine', point(lineEnd, forwardSide * Math.max(median, 0.2)), point(lineEnd, forwardSide * lanesEdge))
+  if (ends.start) writer.marking('stopLine', point(lineStart, -forwardSide * Math.max(median, 0.2)), point(lineStart, -forwardSide * lanesEdge))
 
   // 路灯两侧错开排，行道树避开灯杆。
   for (const side of [1, -1] as const) {
     const lamps: number[] = []
     const first = start + 4 + (side < 0 ? section.lampSpacing / 2 : 0)
     for (let along = first; along < end - 4; along += section.lampSpacing) {
-      writer.lamp(point(along, side * (half + LAMP_CURB_OFFSET)), lampYaw(road, side), section.lampHeight)
+      const at = point(along, side * (half + LAMP_CURB_OFFSET))
+      if (!placeable(at, 'sidewalk')) continue
+      writer.lamp(at, road.lampYaw(along, side), section.lampHeight)
       lamps.push(along)
     }
     if (section.sidewalk < 3) continue
@@ -241,7 +312,9 @@ function decorateSegment(writer: DecorWriter, road: Road, start: number, end: nu
       const at = along + lerp(-0.4, 0.4, random())
       if (random() < 0.08) continue
       if (lamps.some(lamp => Math.abs(lamp - at) < 2.5)) continue
-      writer.tree(point(at, side * (half + TREE_CURB_OFFSET)), road.treeVariant)
+      const position = point(at, side * (half + TREE_CURB_OFFSET))
+      if (!placeable(position, 'sidewalk')) continue
+      writer.tree(position, road.treeVariant)
     }
   }
 
@@ -252,7 +325,10 @@ function decorateSegment(writer: DecorWriter, road: Road, start: number, end: nu
       for (let along = start + 9; along < end - 9; along += 6.3) {
         if (random() >= 0.55) continue
         const type = weighted(PARKED_TYPES, random)
-        writer.vehicle(point(along + lerp(-0.3, 0.3, random()), side * (half - section.parking / 2)), headingYaw(road, forward), type)
+        const at = along + lerp(-0.3, 0.3, random())
+        const position = point(at, side * (half - section.parking / 2))
+        if (!placeable(position, 'carriageway')) continue
+        writer.vehicle(position, road.heading(at, forward), type)
       }
     }
   }
@@ -272,7 +348,8 @@ function decorateSegment(writer: DecorWriter, road: Road, start: number, end: nu
         const length = VEHICLE_TYPES[type].length
         if (cursor + length > limit) break
         const center = cursor + length / 2
-        writer.vehicle(point(forward ? lineEnd - center : lineStart + center, across), headingYaw(road, forward), type)
+        const along = forward ? lineEnd - center : lineStart + center
+        writer.vehicle(point(along, across), road.heading(along, forward), type)
         cursor += length + (queue > 0 ? lerp(1.8, 3, random()) : lerp(12, 55, random()))
         if (queue > 0) queue -= 1
       }
@@ -284,14 +361,14 @@ function decorateSegment(writer: DecorWriter, road: Road, start: number, end: nu
 // 楼体
 // ---------------------------------------------------------------------------------------------
 
-function box(rect: Rect, base: number, height: number, role: BuildingPart['role'] = 'main'): BuildingPart {
+export function box(rect: Rect, base: number, height: number, role: BuildingPart['role'] = 'main'): BuildingPart {
   return { x: (rect.x0 + rect.x1) / 2, z: (rect.z0 + rect.z1) / 2, width: rect.x1 - rect.x0, depth: rect.z1 - rect.z0, base, height, role }
 }
 
 /**
  * 写字楼：裙楼铺满地块，塔楼四面收进，30 层以上加一层屋顶机房。地块太窄放不下像样的塔楼时就是一个体块。
  */
-function towerMassing(lot: Rect, floors: number, type: BuildingType, podiumFloors: number): BuildingSpec {
+export function towerMassing(lot: Rect, floors: number, type: BuildingType, podiumFloors: number): BuildingSpec {
   const total = buildingHeight(floors, type.heights)
   const width = lot.x1 - lot.x0
   const depth = lot.z1 - lot.z0
@@ -309,7 +386,7 @@ function towerMassing(lot: Rect, floors: number, type: BuildingType, podiumFloor
   return parts
 }
 
-interface HeightContext {
+export interface HeightContext {
   random: Random
   floors: CameraStageFloorRange
   density: number
@@ -319,7 +396,7 @@ interface HeightContext {
 }
 
 /** 0–1 的高度倾向：多数偏矮、少数接近最高；中心高时越往外越矮。 */
-function heightBias(context: HeightContext, x: number, z: number): number {
+export function heightBias(context: HeightContext, x: number, z: number): number {
   const falloff = context.downtown ? 0.12 + 0.88 * (1 - context.distance(x, z)) ** 2 : 1
   return context.random() ** 2 * falloff
 }
@@ -519,7 +596,8 @@ function axisRoads(axis: CityAxis, style: CityStyle, span: number): AxisRoad[] {
 }
 
 function cityLayout(params: Params<'city'>, random: Random, decorRandom: Random | null): StageSetLayout {
-  const style = CITY_STYLES[params.style]
+  // 自然路网由 stageSets 分派给 organicCityLayout，到这里的都是按轴排布的风格
+  const style = CITY_STYLES[params.style as AxisCityStyle]
   const columns = axisRoads(style.x, style, params.width)
   const rows = axisRoads(style.z, style, params.depth)
   const halfX = columns[columns.length - 1].center
@@ -562,8 +640,8 @@ function cityLayout(params: Params<'city'>, random: Random, decorRandom: Random 
     writer.platform({ x0: building(first.x, -1), x1: building(last.x, 1), z0: maxZ, z1: building(last.z, 1) })
     writer.platform({ x0: building(first.x, -1), x1: minX, z0: minZ, z1: maxZ })
     writer.platform({ x0: maxX, x1: building(last.x, 1), z0: minZ, z1: maxZ })
-    const roadsAlongZ: Road[] = columns.map(road => ({ dir: 'z', offset: road.center, section: road.section, roadClass: road.roadClass, treeVariant: pick(style.treeVariants, writer.random) }))
-    const roadsAlongX: Road[] = rows.map(road => ({ dir: 'x', offset: road.center, section: road.section, roadClass: road.roadClass, treeVariant: pick(style.treeVariants, writer.random) }))
+    const roadsAlongZ = columns.map(road => new StraightRoad('z', road.center, road.section, road.roadClass, pick(style.treeVariants, writer.random)))
+    const roadsAlongX = rows.map(road => new StraightRoad('x', road.center, road.section, road.roadClass, pick(style.treeVariants, writer.random)))
     for (const road of roadsAlongZ) {
       const half = carriagewayWidth(road.section) / 2
       writer.surface('road', { x0: road.offset - half, x1: road.offset + half, z0: minZ, z1: maxZ })
@@ -574,12 +652,12 @@ function cityLayout(params: Params<'city'>, random: Random, decorRandom: Random 
     }
     for (const road of roadsAlongZ) {
       for (let index = 0; index < rows.length - 1; index += 1) {
-        decorateSegment(writer, road, curb(rows[index], 1), curb(rows[index + 1], -1), { crosswalks: true, treeSpacing: style.treeSpacing })
+        decorateSegment(writer, road, curb(rows[index], 1), curb(rows[index + 1], -1), { start: true, end: true, treeSpacing: style.treeSpacing })
       }
     }
     for (const road of roadsAlongX) {
       for (let index = 0; index < columns.length - 1; index += 1) {
-        decorateSegment(writer, road, curb(columns[index], 1), curb(columns[index + 1], -1), { crosswalks: true, treeSpacing: style.treeSpacing })
+        decorateSegment(writer, road, curb(columns[index], 1), curb(columns[index + 1], -1), { start: true, end: true, treeSpacing: style.treeSpacing })
       }
     }
   }
@@ -624,8 +702,8 @@ function streetLayout(params: Params<'street'>, random: Random, decorRandom: Ran
   writer.surface('road', { x0: -ends, x1: ends, z0: -half, z1: half })
   writer.platform({ x0: -ends, x1: ends, z0: -line, z1: -half })
   writer.platform({ x0: -ends, x1: ends, z0: half, z1: line })
-  const road: Road = { dir: 'x', offset: 0, section, roadClass: params.road, treeVariant: pick([0, 1, 2], decorRandom) }
-  decorateSegment(writer, road, -ends, ends, { crosswalks: false, treeSpacing: 8 })
+  const road = new StraightRoad('x', 0, section, params.road, pick([0, 1, 2], decorRandom))
+  decorateSegment(writer, road, -ends, ends, { start: false, end: false, treeSpacing: 8 })
   return { buildings, decor: writer.decor }
 }
 
@@ -652,11 +730,11 @@ function plazaLayout(params: Params<'plaza'>, random: Random, decorRandom: Rando
   writer.platform({ x0: -line, x1: line, z0: outerCurb, z1: line })
   writer.platform({ x0: -line, x1: -outerCurb, z0: -outerCurb, z1: outerCurb })
   writer.platform({ x0: outerCurb, x1: line, z0: -outerCurb, z1: outerCurb })
-  const roads: Road[] = [
-    { dir: 'x', offset: -roadCenter, section, roadClass: 'local', treeVariant: 0 },
-    { dir: 'x', offset: roadCenter, section, roadClass: 'local', treeVariant: 0 },
-    { dir: 'z', offset: -roadCenter, section, roadClass: 'local', treeVariant: 1 },
-    { dir: 'z', offset: roadCenter, section, roadClass: 'local', treeVariant: 1 },
+  const roads = [
+    new StraightRoad('x', -roadCenter, section, 'local', 0),
+    new StraightRoad('x', roadCenter, section, 'local', 0),
+    new StraightRoad('z', -roadCenter, section, 'local', 1),
+    new StraightRoad('z', roadCenter, section, 'local', 1),
   ]
   for (const road of roads) {
     const rect = road.dir === 'x'
@@ -664,7 +742,7 @@ function plazaLayout(params: Params<'plaza'>, random: Random, decorRandom: Rando
       : { x0: road.offset - carriage / 2, x1: road.offset + carriage / 2, z0: -outerCurb, z1: outerCurb }
     writer.surface('road', rect)
     // 广场一侧的行道树与路灯落在广场铺装边上，中间空出来。
-    decorateSegment(writer, road, -plazaHalf, plazaHalf, { crosswalks: true, treeSpacing: 8 })
+    decorateSegment(writer, road, -plazaHalf, plazaHalf, { start: true, end: true, treeSpacing: 8 })
   }
   return { buildings, decor: writer.decor }
 }

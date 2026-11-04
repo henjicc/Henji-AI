@@ -12,7 +12,8 @@ import {
 import type { StageBodyVariantId } from './bodyVariants'
 import { createCharacterObject } from './sceneDefaults'
 import { STAGE_SET_DECOR_STRIDE, type StageObject, type StagePrimitiveKind, type StageSet, type StageSetDecor } from './sceneTypes'
-import { layoutStageSet, type BuildingPart, type BuildingSpec } from './stageSetLayout'
+import { createRandom, layoutStageSet, type BuildingPart, type BuildingSpec, type Random, type StageSetLayout } from './stageSetLayout'
+import { organicCityLayout } from './stageSetOrganic'
 import { stageSetPlacement, stageSetToWorld, type StageSetPlacement } from './stageSetPlacement'
 
 /*
@@ -24,18 +25,6 @@ import { stageSetPlacement, stageSetToWorld, type StageSetPlacement } from './st
  */
 
 type Params<P extends CameraStageSetParams['preset']> = Extract<CameraStageSetParams, { preset: P }>
-
-/** mulberry32：足够均匀、可复现，种子取 32 位整数。 */
-function createRandom(seed: number): () => number {
-  let state = seed >>> 0
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0
-    let value = state
-    value = Math.imul(value ^ (value >>> 15), value | 1)
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 /** 装饰用另一条随机序列：开关参照物不改变楼的布局。 */
 function decorRandomOf(params: CameraStageSetParams): (() => number) | null {
@@ -88,7 +77,7 @@ function primitive(set: StageSet, placement: StageSetPlacement, kind: StagePrimi
     setId: set.id,
     transform: {
       position: { x: world.x, y: part.base + part.height / 2, z: world.z },
-      rotation: { x: 0, y: placement.rotation, z: 0 },
+      rotation: { x: 0, y: placement.rotation + (part.yaw ?? 0), z: 0 },
       scale: { x: part.width, y: part.height, z: part.depth },
     },
   }
@@ -201,11 +190,15 @@ function crowdObjects(set: StageSet, random: () => number): StageObject[] {
   })
 }
 
+function layoutOf(params: Exclude<CameraStageSetParams, { preset: 'crowd' }>, random: Random, decorRandom: Random | null): StageSetLayout {
+  return params.preset === 'city' && params.style === 'organic' ? organicCityLayout(params, random, decorRandom) : layoutStageSet(params, random, decorRandom)
+}
+
 /** 一片布景的成员对象与装饰。装饰只在参照物打开时才有。 */
 export function generateStageSet(set: Omit<StageSet, 'decor'>): { objects: StageObject[]; decor?: StageSetDecor; buildingCount: number } {
   const params = set.params
   if (params.preset === 'crowd') return { objects: crowdObjects(set, createRandom(params.seed)), buildingCount: 0 }
-  const layout = layoutStageSet(params, createRandom(params.seed), decorRandomOf(params))
+  const layout = layoutOf(params, createRandom(params.seed), decorRandomOf(params))
   const objects = buildingObjects(set, layout.buildings)
   if (params.preset === 'plaza' && params.monument) objects.push(...monumentObjects(set))
   return { objects, ...(layout.decor ? { decor: layout.decor } : {}), buildingCount: layout.buildings.length }
@@ -239,7 +232,7 @@ export function buildStageSet(
 /** 不建对象就数出这组参数会生成几栋楼、几个对象（同一份布局算法，只是不生成装饰与对象）。 */
 export function estimateStageSet(params: CameraStageSetParams): { objects: number; buildings: number } {
   if (params.preset === 'crowd') return { objects: params.count, buildings: 0 }
-  const layout = layoutStageSet(params, createRandom(params.seed), null)
+  const layout = layoutOf(params, createRandom(params.seed), null)
   const parts = layout.buildings.reduce((total, building) => total + building.length, 0)
   return { objects: parts + (params.preset === 'plaza' && params.monument ? 2 : 0), buildings: layout.buildings.length }
 }

@@ -21,15 +21,15 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 
 | preset | 常用参数 |
 | --- | --- |
-| `city` 城市街区 | `style` grid 方格城市（纽约式 80×260 米街区，默认）/ superblock 国内新城（50 米主干道围出约 400 米超级街区，小区高层加商业裙楼塔楼）/ oldtown 欧式老城（113 米方街区、6 层左右）、`width`/`depth` 范围、`density` 0–1、`floors {min,max}` 楼层、`heightProfile` downtown 中心高 / uniform、`props` 参照物 |
+| `city` 城市街区 | `style` grid 方格城市（纽约式 80×260 米街区，默认）/ superblock 国内新城（50 米主干道围出约 400 米超级街区，小区高层加商业裙楼塔楼）/ oldtown 欧式老城（113 米方街区、6 层左右）/ organic 自然路网（三级道路自然弯曲交织，楼沿街排）、`width`/`depth` 范围、`density` 0–1、`floors {min,max}` 楼层、`heightProfile` downtown 中心高 / uniform、`props` 参照物；organic 另有 `curvature` 0–1 路网弯曲程度、`river` 穿城河流、`parks` 公园 |
 | `street` 街道 | `length`、`road` local 支路 / collector 次干道 / arterial 主干道、`density`、`floors`、`props` |
 | `plaza` 广场 | `size` 广场边长、`density`、`floors`、`monument`、`props` |
 | `crowd` 人群 | `count`、`formation` grid / scatter / ring、`spacing`（默认 0.9 米）、`facing` forward / center / random |
 
-通用：`center {x,z}`、`rotation`、`seed`。城市中心总落在两条干路的路口上，主角放在原点附近的路口不会和楼相交。
+通用：`center {x,z}`、`rotation`、`seed`。方格类城市的中心总落在两条干路的路口上，主角放在原点附近的路口不会和楼相交；自然路网的原点不一定是路口，主角用自动布置找空地。
 
 - 参照物（`props`，默认开）：人行道与路缘、车道线与斑马线、行道树、路灯、车辆，按真实尺寸摆好，帮生成模型读出尺度。它们不是对象，点不中、不参与碰撞；要清掉就 `props: false` 重新生成。角色站在人行道上时脚下的铺装只高 4 厘米，不用抬高角色。
-- 规模：默认方格城市约 370 栋；`width/depth` 给 1500 约 2400 栋，给 3100 约 1 万栋。新城楼少而高，欧式老城楼多而矮。密度为 0（或太低碰巧一栋没有）时会在写入前被拒绝。
+- 规模：默认方格城市约 370 栋；`width/depth` 给 1500 约 2400 栋，给 3100 约 1 万栋。新城楼少而高，欧式老城楼多而矮，自然路网 3000 米约 8000 栋。密度为 0（或太低碰巧一栋没有）时会在写入前被拒绝。
 - 雾：场景默认 90 米。生成或删除布景时，雾距自动推到与布景尺度相配（上千米的城区约 1–2 千米，上限 10000 米）；用户关掉的雾或手调过的 `fog_distance` 不被改动。要更通透就调大 `camera_stage.scene.fog_distance` 或关掉 `fog_enabled`。
 - 改参数重新生成：传 `replaceSetId`（取自观察结果 `sets[].id`），只写要改的字段，其余沿用上一次（包括种子）；换风格又没给楼层时楼层取新风格的默认；换一种随机布局就换 `seed`。
 - 整片删除：`change_application_entities` 对 `camera_stage.set` 执行 `remove_items`。新建布景不能用 `create_items`。

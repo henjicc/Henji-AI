@@ -8,7 +8,7 @@ import type { ApplicationPlannedStep } from '@/core/application-control'
 
 import { createDefaultCameraStageSceneSnapshot } from '../domain/defaultSceneSnapshot'
 import { sceneFromDocumentContent, sceneToDocumentContent, type CameraStageSceneContent } from '../domain/sceneSerialization'
-import { buildStageSet, countStageSetDecor, estimateStageSet, generateStageSet } from '../domain/stageSets'
+import { buildStageSet, countStageSetDecor, estimateStageSet, generateStageSet, resolveStageSetParams } from '../domain/stageSets'
 import { CITY_STYLES, roadWidth } from '../domain/stageSetStyles'
 import { STAGE_SET_DECOR_STRIDE } from '../domain/sceneTypes'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
@@ -92,6 +92,73 @@ describe('布景生成算法', () => {
     }
     for (let offset = 0; offset < decor.vehicles.length; offset += STAGE_SET_DECOR_STRIDE.vehicle) {
       expect(Math.abs(decor.vehicles[offset + 1])).toBeLessThan(section.carriage / 2)
+    }
+  })
+
+  it('自然路网：同一种子复现；楼、行道树都落在人行道铺装上，车不上人行道；楼朝向跟着街；河流与公园可开关', () => {
+    const layout = { preset: 'city', style: 'organic', width: 700, depth: 700, curvature: 0.8, seed: 21 } as const
+    const first = buildStageSet([], { layout })
+    // 路网按参数缓存最近两张：换两组参数挤掉它，再生成一次必须从头算出同样的结果
+    buildStageSet([], { layout: { ...layout, seed: 22 } })
+    buildStageSet([], { layout: { ...layout, seed: 23 } })
+    const again = buildStageSet([], { layout })
+    expect(again.objects.map(object => object.transform)).toEqual(first.objects.map(object => object.transform))
+    expect(again.set.decor).toEqual(first.set.decor)
+    expect(estimateStageSet(first.set.params).objects).toBe(first.objects.length)
+    expect(first.objects.length).toBeGreaterThan(200)
+
+    // 解出任意形状铺装：[圈数, 点数, x, z…]，偶奇规则判断点在不在里面（洞自动扣掉）
+    const polygons = (values: number[] = []): Array<Array<Array<[number, number]>>> => {
+      const out: Array<Array<Array<[number, number]>>> = []
+      for (let offset = 0; offset < values.length;) {
+        const rings = values[offset++]
+        const polygon: Array<Array<[number, number]>> = []
+        for (let ring = 0; ring < rings; ring += 1) {
+          const count = values[offset++]
+          polygon.push(Array.from({ length: count }, (_, index) => [values[offset + index * 2], values[offset + index * 2 + 1]] as [number, number]))
+          offset += count * 2
+        }
+        out.push(polygon)
+      }
+      return out
+    }
+    const inside = (areas: ReturnType<typeof polygons>, x: number, z: number): boolean => areas.some(polygon => {
+      let hit = false
+      for (const ring of polygon) {
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          if ((ring[i][1] > z) !== (ring[j][1] > z) && x < ((ring[j][0] - ring[i][0]) * (z - ring[i][1])) / (ring[j][1] - ring[i][1]) + ring[i][0]) hit = !hit
+        }
+      }
+      return hit
+    })
+    const decor = first.set.decor!
+    const sidewalk = polygons(decor.areas?.sidewalk)
+    const lawn = polygons(decor.areas?.lawn)
+    expect(polygons(decor.areas?.water).length).toBeGreaterThan(0)
+    expect(lawn.length).toBeGreaterThan(0)
+    for (const object of first.objects) {
+      const { position, rotation, scale } = object.transform
+      const yaw = (rotation.y * Math.PI) / 180
+      for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const lx = (sx * scale.x) / 2 * 0.98
+        const lz = (sz * scale.z) / 2 * 0.98
+        expect(inside(sidewalk, position.x + lx * Math.cos(yaw) + lz * Math.sin(yaw), position.z - lx * Math.sin(yaw) + lz * Math.cos(yaw))).toBe(true)
+      }
+    }
+    expect(first.objects.some(object => Math.abs(object.transform.rotation.y % 90) > 1)).toBe(true)
+    for (let offset = 0; offset < decor.trees.length; offset += STAGE_SET_DECOR_STRIDE.tree) {
+      expect(inside(sidewalk, decor.trees[offset], decor.trees[offset + 1]) || inside(lawn, decor.trees[offset], decor.trees[offset + 1])).toBe(true)
+    }
+    for (let offset = 0; offset < decor.vehicles.length; offset += STAGE_SET_DECOR_STRIDE.vehicle) {
+      expect(inside(sidewalk, decor.vehicles[offset], decor.vehicles[offset + 1])).toBe(false)
+    }
+
+    const plain = buildStageSet([], { layout: { ...layout, river: false, parks: false } }).set.decor!
+    expect(plain.areas?.water).toEqual([])
+    expect(plain.areas?.lawn).toEqual([])
+    // 范围窄到放不下河道时不放河，不会因为河铺满整片而一栋楼都没有
+    for (let seed = 1; seed <= 20; seed += 1) {
+      expect(estimateStageSet(resolveStageSetParams({ preset: 'city', style: 'organic', width: 100, depth: 100, seed })).buildings).toBeGreaterThan(0)
     }
   })
 
@@ -237,8 +304,16 @@ describe('布景生成落地', () => {
       { preset: 'street', center: { x: 0, z: 0 }, rotation: 0, seed: 1, length: 120, density: 0.9, road: 'collector', floors: { min: 2, max: 8 }, props: true },
       v2.sets[2].params,
     ])
-    // 换算后的参数能直接重新生成
-    expect(buildStageSet(v3.sets!, { layout: { preset: 'city' }, replaceSetId: 'city' }).objects.length).toBeGreaterThan(0)
+    // v5 给城市补上自然路网的三个参数，其余布景不动；换算后的参数能直接重新生成
+    const v4 = cameraStageDocumentKind.migrations[3]!(v3) as CameraStageSceneContent
+    const v5 = cameraStageDocumentKind.migrations[4]!(v4) as CameraStageSceneContent
+    expect(v5.sets!.map(set => set.params)).toEqual([
+      { ...v3.sets![0].params, curvature: 0.5, river: true, parks: true },
+      v3.sets![1].params,
+      v3.sets![2].params,
+    ])
+    expect(buildStageSet(v5.sets!, { layout: { preset: 'city' }, replaceSetId: 'city' }).objects.length).toBeGreaterThan(0)
+    expect(buildStageSet(v5.sets!, { layout: { preset: 'city', style: 'organic' }, replaceSetId: 'city' }).set.params).toMatchObject({ style: 'organic', floors: { min: 3, max: 30 }, curvature: 0.5 })
     const scene = createDefaultCameraStageSceneSnapshot()
     const { set, objects } = buildStageSet([], { layout: { preset: 'street', seed: 2 } })
     const content = sceneToDocumentContent({ ...scene, objects: [...scene.objects, ...objects], sets: [set] })

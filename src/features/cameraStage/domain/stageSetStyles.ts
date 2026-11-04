@@ -120,13 +120,33 @@ const OLDTOWN: CityStyle = {
   treeVariants: [0, 1],
 }
 
-export const CITY_STYLES: Record<CameraStageCityStyle, CityStyle> = { grid: GRID, superblock: SUPERBLOCK, oldtown: OLDTOWN }
+/** 按轴排布街区的风格；自然路网不按轴排，见 ORGANIC_STYLE。 */
+export type AxisCityStyle = Exclude<CameraStageCityStyle, 'organic'>
+
+export const CITY_STYLES: Record<AxisCityStyle, CityStyle> = { grid: GRID, superblock: SUPERBLOCK, oldtown: OLDTOWN }
 
 /** 单条街道与广场的道路断面（不随城市风格变）。 */
 export const STREET_ROADS: Record<CameraStageRoadClass, RoadSection> = {
   local: { lanes: 2, laneWidth: 3.2, median: 0, bike: 0, parking: 2.2, sidewalk: 4, lampHeight: 7.5, lampSpacing: 28 },
   collector: { lanes: 4, laneWidth: 3.4, median: 0, bike: 2.5, parking: 0, sidewalk: 5, lampHeight: 10, lampSpacing: 32 },
   arterial: SUPERBLOCK.roads.arterial,
+}
+
+/**
+ * 自然路网：道路断面沿用单条街道的三级（支路红线约 19 米、次干道约 29 米、主干道 50 米）。
+ * 同级道路平行时的中心距取城市里常见的值：支路约 110 米（街区 90 米上下）、次干道约 330 米、主干道约 900 米。
+ * 河宽 64 米（中等城市河道），水面到沿河路车行道之间留 3 米滨河步道再加人行道。
+ */
+export const ORGANIC_STYLE = {
+  roads: STREET_ROADS,
+  spacing: { local: 110, collector: 330, arterial: 900 } as Record<CameraStageRoadClass, number>,
+  river: { waterHalf: 32, promenade: 3 },
+  /** 园路宽 */
+  pathWidth: 3,
+  /** 路口转角的路缘半径 */
+  curbRadius: 6,
+  treeSpacing: 8,
+  treeVariants: [0, 1, 2] as readonly number[],
 }
 
 export const BUILDING_TYPES = {

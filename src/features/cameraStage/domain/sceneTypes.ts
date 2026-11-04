@@ -68,8 +68,15 @@ export type StageSetSurfaceKind = typeof STAGE_SET_SURFACE_KINDS[number]
 export const STAGE_SET_MARKING_KINDS = ['laneDashed', 'edgeLine', 'centerLine', 'stopLine', 'crosswalk'] as const
 export type StageSetMarkingKind = typeof STAGE_SET_MARKING_KINDS[number]
 
+/** 任意形状的铺装：自然路网的人行道铺装、中央分隔带、草地与水面。 */
+export const STAGE_SET_AREA_KINDS = ['sidewalk', 'median', 'lawn', 'water'] as const
+export type StageSetAreaKind = typeof STAGE_SET_AREA_KINDS[number]
+
 /** 布景装饰数组每一项占几个数。 */
 export const STAGE_SET_DECOR_STRIDE = { surface: 4, marking: 4, tree: 5, lamp: 4, vehicle: 5 } as const
+
+/** 车道虚线的节奏（米）：每 period 一段、画 on 长。弯路上逐段写出，渲染按同一节奏丢片元。 */
+export const LANE_DASH = { period: 9, on: 3 } as const
 
 /**
  * 布景的地面铺装与比例参照物。不是场景对象：不能点选、不参与碰撞，成千上万个也只占几次绘制；
@@ -86,6 +93,11 @@ export interface StageSetDecor {
   lamps: number[]
   /** 车辆，每项 [x, z, 车头朝向（度）, 车型序号, 颜色序号] */
   vehicles: number[]
+  /**
+   * 任意形状的铺装（v5 起，只有自然路网有）。每块依次写 [圈数, 第一圈点数, x, z, x, z…, 第二圈点数, …]，
+   * 第一圈是外轮廓，其余是洞；路缘沿人行道铺装的每条边生成。
+   */
+  areas?: Record<StageSetAreaKind, number[]>
 }
 
 export interface StagePrimitiveObject extends StageObjectBase {

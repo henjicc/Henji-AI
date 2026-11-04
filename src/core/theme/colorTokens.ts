@@ -190,6 +190,7 @@ export const CAMERA_STAGE_SET_DECOR_HEX = {
   median: '#5d7348',
   lawn: '#667f4e',
   plaza: '#a39c90',
+  water: '#4f6f86',
   marking: '#e6e3da',
   centerLine: '#d4ad3c',
   trunk: '#5f4b3b',

@@ -20,13 +20,14 @@ export const CAMERA_STAGE_SET_PRESET_LABELS: Record<CameraStageSetPreset, string
   crowd: '人群',
 }
 
-export const CAMERA_STAGE_CITY_STYLES = ['grid', 'superblock', 'oldtown'] as const
+export const CAMERA_STAGE_CITY_STYLES = ['grid', 'superblock', 'oldtown', 'organic'] as const
 export type CameraStageCityStyle = typeof CAMERA_STAGE_CITY_STYLES[number]
 
 export const CAMERA_STAGE_CITY_STYLE_LABELS: Record<CameraStageCityStyle, string> = {
   grid: '方格城市',
   superblock: '新城街区',
   oldtown: '欧式老城',
+  organic: '自然路网',
 }
 
 export const CAMERA_STAGE_ROAD_CLASSES = ['local', 'collector', 'arterial'] as const
@@ -65,14 +66,20 @@ export const cameraStageCityLayoutSchema = z.object({
   style: z.enum(CAMERA_STAGE_CITY_STYLES).optional()
     .describe('城市风格，决定路网分级、街区尺寸、层高与建筑体量：grid 方格城市（纽约式 80×260 米长条街区，默认）、'
       + 'superblock 国内新城（50 米主干道围出约 400 米超级街区，内部支路分成小区与商业地块，高层住宅加裙楼塔楼）、'
-      + 'oldtown 欧式老城（巴塞罗那扩展区式 113 米方街区、20 米街道，6 层左右沿街围合）'),
-  width: length('城市范围东西向宽度（米），默认 600；街区数取偶数且至少 2×2，场景中心总落在路口上').optional(),
+      + 'oldtown 欧式老城（巴塞罗那扩展区式 113 米方街区、20 米街道，6 层左右沿街围合）、'
+      + 'organic 自然路网（主干道、次干道、支路随张量场自然弯曲交织，街区形状不规则，楼沿街排开，可带河流与公园）'),
+  width: length('城市范围东西向宽度（米），默认 600；方格类风格的街区数取偶数且至少 2×2，场景中心总落在路口上').optional(),
   depth: length('城市范围南北向进深（米），默认 600').optional(),
   density: ratio('地块建楼比例 0–1，默认 0.85；空出来的地块是空地').optional(),
   floors: floorRangeSchema.optional()
-    .describe('楼层范围（层），默认按风格：方格城市 4–40、新城 2–33、欧式老城 4–7；换风格且没给时取新风格的默认'),
+    .describe('楼层范围（层），默认按风格：方格城市 4–40、新城 2–33、欧式老城 4–7、自然路网 3–30；换风格且没给时取新风格的默认'),
   heightProfile: z.enum(['downtown', 'uniform']).optional()
     .describe('楼高分布：downtown 中心高四周低（默认），uniform 各处一样'),
+  curvature: ratio('路网弯曲程度 0–1，只对 organic 有效，默认 0.5：0 近乎方正的格网，越大各片区走向越不一致、'
+    + '弯路与环形路越多').optional(),
+  river: z.boolean().optional().describe('是否有一条河穿城而过（两岸有沿河路，主次干道过河是桥），只对 organic 有效，默认有；'
+    + '范围短边不到约 190 米时放不下，不放河'),
+  parks: z.boolean().optional().describe('是否留出几片公园（草地、树与弯曲的园路，不建楼），只对 organic 有效，默认有'),
   ...propsShape,
 }).strict()
 
@@ -132,12 +139,14 @@ export const CITY_STYLE_DEFAULT_FLOORS: Record<CameraStageCityStyle, CameraStage
   grid: { min: 4, max: 40 },
   superblock: { min: 2, max: 33 },
   oldtown: { min: 4, max: 7 },
+  organic: { min: 3, max: 30 },
 }
 
 export const STAGE_SET_DEFAULTS: { [P in CameraStageSetPreset]: DefaultsOf<P> } = {
   city: {
     preset: 'city', center: { x: 0, z: 0 }, rotation: 0,
-    style: 'grid', width: 600, depth: 600, density: 0.85, floors: CITY_STYLE_DEFAULT_FLOORS.grid, heightProfile: 'downtown', props: true,
+    style: 'grid', width: 600, depth: 600, density: 0.85, floors: CITY_STYLE_DEFAULT_FLOORS.grid, heightProfile: 'downtown',
+    curvature: 0.5, river: true, parks: true, props: true,
   },
   street: {
     preset: 'street', center: { x: 0, z: 0 }, rotation: 0,

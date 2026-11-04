@@ -3,13 +3,14 @@ import { useGLTF } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import {
   Color,
+  DoubleSide,
   Group,
   InstancedBufferAttribute,
   InstancedMesh,
+  Mesh,
   MeshStandardMaterial,
   type BufferGeometry,
   type Material,
-  type Mesh,
   type WebGLProgramParametersWithUniforms,
 } from 'three'
 
@@ -20,11 +21,22 @@ import {
 } from '@/core/theme/colorTokens'
 import { createLogger } from '@/core/logging'
 
-import { STAGE_SET_DECOR_STRIDE, STAGE_SET_MARKING_KINDS, STAGE_SET_SURFACE_KINDS, type StageSet, type StageSetMarkingKind, type StageSetSurfaceKind } from '../domain/sceneTypes'
+import {
+  STAGE_SET_AREA_KINDS,
+  STAGE_SET_DECOR_STRIDE,
+  STAGE_SET_MARKING_KINDS,
+  STAGE_SET_SURFACE_KINDS,
+  type StageSet,
+  type StageSetAreaKind,
+  type StageSetMarkingKind,
+  type StageSetSurfaceKind,
+} from '../domain/sceneTypes'
 import { STREET_TREE_VARIANTS, VEHICLE_TYPES } from '../domain/stageSetProps'
 import { STAGE_STYLE_HIDDEN_KEY, STAGE_STYLE_SUBJECT_KEY } from '../render/stageStyleTags'
 import {
   MARKING_STYLES,
+  areaGeometry,
+  curbInstances,
   lampHeadGeometry,
   lampPoleGeometry,
   markingGeometry,
@@ -56,6 +68,15 @@ const SURFACE_COLORS: Record<StageSetSurfaceKind, string> = {
 
 /** 铺装层层相叠、彼此只差几厘米；远处深度精度不够时靠多边形偏移决定谁在上面。 */
 const SURFACE_OFFSET: Record<StageSetSurfaceKind, number> = { road: -1, sidewalk: -2, plaza: -2, curb: -3, lawn: -3, median: -2 }
+
+const AREA_COLORS: Record<StageSetAreaKind, string> = {
+  sidewalk: SURFACE_COLORS.sidewalk,
+  median: SURFACE_COLORS.median,
+  lawn: SURFACE_COLORS.lawn,
+  water: CAMERA_STAGE_SET_DECOR_HEX.water,
+}
+/** 水面在车行道之上、人行道之下 */
+const AREA_OFFSET: Record<StageSetAreaKind, number> = { sidewalk: SURFACE_OFFSET.sidewalk, median: SURFACE_OFFSET.median, lawn: SURFACE_OFFSET.lawn, water: -1.5 }
 
 function decorMesh(geometry: BufferGeometry, material: Material, list: InstanceList, options: { subject?: boolean; hidden?: boolean; palette?: readonly string[] } = {}): InstancedMesh | null {
   if (list.count === 0) return null
@@ -127,10 +148,23 @@ function buildStaticDecor(sets: readonly StageSet[]): BuiltDecor {
   }
 
   const box = own(surfaceGeometry())
+  const surfaceMaterials = {} as Record<StageSetSurfaceKind, MeshStandardMaterial>
   for (const kind of STAGE_SET_SURFACE_KINDS) {
     const material = own(new MeshStandardMaterial({ color: SURFACE_COLORS[kind], polygonOffset: true, polygonOffsetFactor: SURFACE_OFFSET[kind], polygonOffsetUnits: SURFACE_OFFSET[kind] * 2 }))
+    surfaceMaterials[kind] = material
     add(decorMesh(box, material, surfaceInstances(sets, kind)))
   }
+  // 自然路网的铺装是任意形状：每种合成一个网格；路缘石沿人行道铺装的边，与矩形铺装的路缘同材质
+  for (const kind of STAGE_SET_AREA_KINDS) {
+    const geometry = areaGeometry(sets, kind)
+    if (!geometry) continue
+    own(geometry)
+    const material = own(new MeshStandardMaterial({ color: AREA_COLORS[kind], side: DoubleSide, polygonOffset: true, polygonOffsetFactor: AREA_OFFSET[kind], polygonOffsetUnits: AREA_OFFSET[kind] * 2 }))
+    const mesh = new Mesh(geometry, material)
+    mesh.raycast = () => {}
+    group.add(mesh)
+  }
+  add(decorMesh(box, surfaceMaterials.curb, curbInstances(sets)))
   const plane = own(markingGeometry())
   for (const kind of STAGE_SET_MARKING_KINDS) add(decorMesh(plane, own(markingMaterial(kind)), markingInstances(sets, kind), { hidden: true }))
 
@@ -158,7 +192,7 @@ function buildStaticDecor(sets: readonly StageSet[]): BuiltDecor {
   return {
     group,
     dispose: () => {
-      for (const child of group.children) (child as InstancedMesh).dispose()
+      for (const child of group.children) if (child instanceof InstancedMesh) child.dispose()
       for (const geometry of geometries) geometry.dispose()
       for (const material of materials) material.dispose()
     },

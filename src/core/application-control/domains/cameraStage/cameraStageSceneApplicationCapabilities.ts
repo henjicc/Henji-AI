@@ -77,12 +77,13 @@ const generateSet = defineApplicationCapability({
   resolveOperationTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }],
   resolveOperationAppendTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }],
   version: 1, title: '生成 3D 布景',
-  description: '按意图参数一次生成一整片按真实城市尺度的抽象布景：城市（方格城市、国内新城超级街区、欧式老城三种风格，'
-    + '分级道路、楼高按层、裙楼加塔楼）、街道、广场或人群阵列；默认带人行道、车道线、行道树、路灯和车辆作比例参照物。'
+  description: '按意图参数一次生成一整片按真实城市尺度的抽象布景：城市（方格城市、国内新城超级街区、欧式老城、'
+    + '自然路网四种风格，分级道路、楼高按层、裙楼加塔楼；自然路网的道路自然弯曲，可带河流与公园）、街道、广场或人群阵列；'
+    + '默认带人行道、车道线、行道树、路灯和车辆作比例参照物。'
     + '一次调用一个撤销点、一次存盘；楼与人是普通对象，可以逐个修改。给 replaceSetId 时整体重新生成那片布景，省略的参数沿用它上一次的值。'
     + '结果只返回布景摘要（数量、范围、参照物数量、完整参数），不逐个列出成员。删除整片布景用 change_application_entities 对 camera_stage.set 执行 remove_items。',
   domain: 'camera_stage',
-  aliases: ['生成城市', '城市群', '搭场景', '快速布景', '街道', '广场', '人群', '楼群', '街景', '行道树', '车流', 'generate 3D set', 'city block'],
+  aliases: ['生成城市', '城市群', '搭场景', '快速布景', '街道', '广场', '人群', '楼群', '街景', '行道树', '车流', '自然路网', '河流', '公园', 'generate 3D set', 'city block'],
   readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: false,
   timeoutMs: 60_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['camera_stage'],
   acceptsRefs: ['camera_stage.document', 'camera_stage.set'], producesRefs: ['camera_stage.set'],
