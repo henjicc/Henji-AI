@@ -1,12 +1,11 @@
 import React, { useMemo } from 'react'
 import { Line } from '@react-three/drei'
 import { CAMERA_STAGE_MOTION_PATH_HEX } from '@/core/theme/colorTokens'
-import { easeProgress } from '../domain/keyframeEngine'
-import { createSpatialPathSampler, markSpatialPathCustom, sampleSpatialMotion } from '../domain/spatialPath'
+import { markSpatialPathCustom } from '../domain/spatialPath'
 import type { StageVec3 } from '../domain/sceneTypes'
 import type { StageStateKeyframe, StageSpatialPath } from '../domain/stateKeyframeTypes'
-import type { StageSpeedPreset } from '../domain/stateKeyframeTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { sampleObjectTrajectory } from '../store/playbackSampling'
 import {
   useCameraStageToolStore,
   type StagePathControlSelection,
@@ -24,16 +23,17 @@ interface PathSegment {
   from: StageVec3
   to: StageVec3
   path?: StageSpatialPath
+  /** 这一段时间里对象实际走过的位置（与播放同一条采样链） */
+  points: StageVec3[]
+  /** 等时间间隔的位置：点越疏走得越快 */
+  timeDots: StageVec3[]
 }
 
 const SAMPLE_COUNT = 64
 const TIME_DOT_COUNT = 28
-const SPEED_EASING: Record<StageSpeedPreset, 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'cruise'> = {
-  uniform: 'linear',
-  easeInOut: 'easeInOut',
-  fastStart: 'easeOut',
-  slowStart: 'easeIn',
-  cruise: 'cruise',
+
+function evenTimes(start: number, end: number, count: number): number[] {
+  return Array.from({ length: count + 1 }, (_, index) => start + ((end - start) * index) / count)
 }
 
 function samePosition(a: StageVec3, b: StageVec3): boolean {
@@ -47,8 +47,11 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
   const selectControl = useCameraStageToolStore((state) => state.selectControl)
   const setStateKeyframeSpatialPath = useCameraStageStore((state) => state.setStateKeyframeSpatialPath)
   const setStateKeyframePathAnchor = useCameraStageStore((state) => state.setStateKeyframePathAnchor)
-  const spatialMotions = useCameraStageStore((state) => state.animation.spatialMotions)
+  const animation = useCameraStageStore((state) => state.animation)
+  // 路线画实际轨迹：平滑衔接的拐角被切圆、设备时间律与跟拍都由编译产物决定，作者折线不是镜头真正走的路。
+  // 位置全由编译产物驱动，对象只取作采样底稿；增删对象与改卡都会重编译，不必跟着播放头逐帧重算。
   const segments = useMemo<PathSegment[]>(() => {
+    const objects = useCameraStageStore.getState().objects
     const result: PathSegment[] = []
     for (let index = 0; index < stateKeyframes.length - 1; index += 1) {
       const stateKeyframe = stateKeyframes[index]
@@ -57,10 +60,14 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
       const to = next.objectStates[objectId]?.transform.position
       const path = stateKeyframe.transition.perObject[objectId]?.spatialPath
       if (!from || !to || (samePosition(from, to) && !path)) continue
-      result.push({ stateKeyframe, from, to, path })
+      result.push({
+        stateKeyframe, from, to, path,
+        points: sampleObjectTrajectory(objects, animation, objectId, evenTimes(stateKeyframe.time, next.time, SAMPLE_COUNT)),
+        timeDots: sampleObjectTrajectory(objects, animation, objectId, evenTimes(stateKeyframe.time, next.time, TIME_DOT_COUNT)),
+      })
     }
     return result
-  }, [objectId, stateKeyframes])
+  }, [animation, objectId, stateKeyframes])
 
   const selectedSegment = segments.find((segment) => (
     pathSelection?.objectId === objectId && pathSelection.stateKeyframeId === segment.stateKeyframe.id
@@ -84,43 +91,12 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
     <>
       {segments.map((segment) => {
         const selected = selectedSegment?.stateKeyframe.id === segment.stateKeyframe.id
-        const samplePath = segment.path
-          ? createSpatialPathSampler(segment.from, segment.to, segment.path)
-          : null
-        const points = segment.path
-          ? Array.from({ length: SAMPLE_COUNT + 1 }, (_, index) => (
-            samplePath?.(index / SAMPLE_COUNT) ?? segment.from
-          ))
-          : [segment.from, segment.to]
-        // 时间点取自编译产物的同一条采样链：平滑通过的衔接段速度与播放一致，不按单段缓动估算。
-        const motion = segment.path
-          ? spatialMotions.find((item) => item.objectId === objectId && item.segments.some((part) => part.path === segment.path))
-          : undefined
-        const motionSegment = motion?.segments.find((part) => part.path === segment.path)
-        const timeDots = selected
-          ? Array.from({ length: TIME_DOT_COUNT + 1 }, (_, index) => {
-            if (motion && motionSegment) {
-              const time = motionSegment.startTime + (motionSegment.endTime - motionSegment.startTime) * index / TIME_DOT_COUNT
-              return sampleSpatialMotion(motion, time) ?? motionSegment.from
-            }
-            const progress = easeProgress(
-              SPEED_EASING[segment.stateKeyframe.transition.perObject[objectId]?.speedPreset ?? 'easeInOut'],
-              index / TIME_DOT_COUNT,
-            )
-            return samplePath
-              ? samplePath(progress)
-              : {
-                x: segment.from.x + (segment.to.x - segment.from.x) * progress,
-                y: segment.from.y + (segment.to.y - segment.from.y) * progress,
-                z: segment.from.z + (segment.to.z - segment.from.z) * progress,
-              }
-          })
-          : []
+        const timeDots = selected ? segment.timeDots : []
         const dotPositions = new Float32Array(timeDots.flatMap((point) => [point.x, point.y, point.z]))
         return (
           <React.Fragment key={segment.stateKeyframe.id}>
             <Line
-              points={points.map((point) => [point.x, point.y, point.z])}
+              points={segment.points.map((point) => [point.x, point.y, point.z])}
               color={CAMERA_STAGE_MOTION_PATH_HEX.path}
               lineWidth={selected ? 2 : 1}
               transparent

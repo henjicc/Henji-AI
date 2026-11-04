@@ -393,3 +393,32 @@ export function applyAnimationAtTime(
 ): StageObject[] {
   return sampleAnimationFrame(objects, animation, time).objects
 }
+
+/** 只含这些对象的编译产物；摄像机朝向不影响位置，不参与。 */
+export function animationForObjects(animation: StageSceneAnimation, objectIds: ReadonlySet<string>): StageAnimationSampleSource {
+  return {
+    tracks: animation.tracks.filter((track) => objectIds.has(track.objectId)),
+    spatialMotions: animation.spatialMotions.filter((motion) => objectIds.has(motion.objectId)),
+    cameraOrientations: [],
+    characterHeadings: animation.characterHeadings.filter((entry) => objectIds.has(entry.objectId)),
+    cameraFollows: animation.cameraFollows.filter((entry) => objectIds.has(entry.cameraId) && objectIds.has(entry.follow.subjectId)),
+  }
+}
+
+/**
+ * 一个对象在这些时刻的实际位置，与播放、拖播放头、导出走同一条采样链（平滑衔接的拐角融合、设备时间律、跟拍都算在内）。
+ * 跟拍的摄像机连同主体一起采样，机位才是跟拍算出的位置；其余对象不参与，长轨迹取样也便宜。
+ */
+export function sampleObjectTrajectory(
+  objects: readonly StageObject[],
+  animation: StageSceneAnimation,
+  objectId: string,
+  times: readonly number[],
+): StageVec3[] {
+  const object = objects.find((item) => item.id === objectId)
+  if (!object) return []
+  const followed = new Set(animation.cameraFollows.filter((entry) => entry.cameraId === objectId).map((entry) => entry.follow.subjectId))
+  const involved = [object, ...objects.filter((item) => followed.has(item.id))]
+  const source = animationForObjects(animation, new Set(involved.map((item) => item.id)))
+  return times.map((time) => sampleAnimationFrame(involved, source, time).objects[0].transform.position)
+}
