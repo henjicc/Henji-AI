@@ -39,8 +39,12 @@ uniform int uMode;
 
 varying vec2 vUv;
 
-/* 清屏值 1.0 表示这里没有几何体；真实几何的非线性深度离 1.0 还很远（远平面 1000 时约 333 单位外才逼近）。 */
-const float BACKGROUND_DEPTH = 0.9999;
+/*
+ * 清屏白（四个字节全是 255）表示这里没有几何体。不能按解包后的深度设阈值：透视深度在远处
+ * 极贴近 1.0，近裁剪面 5 厘米时 300 多米外的楼就会被当成背景截掉。真实几何在远裁剪面以内，
+ * 打包后至少有一个字节小于 255。
+ */
+const float BACKGROUND_BYTE = 254.5 / 255.0;
 /* 逆深度二阶差分：平面恒为 0，越过遮挡边界才跳起来 */
 const float DEPTH_EDGE_MIN = 0.01;
 const float DEPTH_EDGE_MAX = 0.04;
@@ -50,9 +54,9 @@ const float NORMAL_EDGE_MAX = 0.35;
 
 /** 返回视距；背景返回 -1 */
 float viewDistanceAt(vec2 uv) {
-  float clipZ = unpackRGBAToDepth(texture2D(uDepthBuffer, uv));
-  if (clipZ >= BACKGROUND_DEPTH) return -1.0;
-  return -perspectiveDepthToViewZ(clipZ, uCameraNear, uCameraFar);
+  vec4 packedDepth = texture2D(uDepthBuffer, uv);
+  if (all(greaterThanEqual(packedDepth, vec4(BACKGROUND_BYTE)))) return -1.0;
+  return -perspectiveDepthToViewZ(unpackRGBAToDepth(packedDepth), uCameraNear, uCameraFar);
 }
 
 vec3 viewNormalAt(vec2 uv) {
