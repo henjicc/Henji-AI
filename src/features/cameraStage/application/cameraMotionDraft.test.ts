@@ -82,7 +82,7 @@ it('保存失败保留同一次应用，钉点不覆盖恢复句柄，重试只�
   const applied = useCameraStageStore.getState().stateKeyframes
   expect(() => pinCameraMotion(projectId)).toThrow('重试保存')
   const retry = await applyCameraMotion(projectId, 'orbit')
-  expect(retry).toEqual({ undoToken: first.undoToken, saved: true, verification: { verified: true, condition: expect.any(String) } })
+  expect(retry).toMatchObject({ undoToken: first.undoToken, saved: true, verification: { verified: true, condition: expect.any(String) } })
   expect(useCameraStageStore.getState().stateKeyframes).toBe(applied)
   expect(useCameraStageStore.temporal.getState().pastStates).toHaveLength(1)
 })

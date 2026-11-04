@@ -72,6 +72,18 @@ describe('cameraStage 3D 原生候选', () => {
     expect(useCameraStageStore.getState().stateKeyframes).toEqual(original)
   })
 
+  it('应用候选后沿实际轨迹查净空，穿过的对象与改法写进结果', async () => {
+    const store = cameraStageProjectStore('candidate-project')
+    const wall = createPrimitiveObject('box', '墙', pickDefaultColor(2))
+    wall.transform.position = { x: 0, y: 2, z: 8 }
+    wall.transform.scale = { x: 4, y: 4, z: 0.2 }
+    store.setState({ objects: [...store.getState().objects, wall] })
+    const review = await prepareCameraStageMotion('candidate-project', request)
+    const crossing = await applyCameraStageMotionCandidate('candidate-project', review, 'smooth')
+    expect(crossing.clearance.obstructions.map(item => item.name)).toEqual(['墙'])
+    expect(crossing.clearanceHint).toContain('「墙」')
+  })
+
   it('source edits and cross-project reviews reject without writing', async () => {
     const review = await prepareCameraStageMotion('candidate-project', request)
     useCameraStageStore.getState().updateStateKeyframeName(request.stateKeyframeIds[0], '改名')

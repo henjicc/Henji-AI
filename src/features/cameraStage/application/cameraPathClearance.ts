@@ -100,3 +100,26 @@ export function checkCameraPathClearance(
     belowGroundAt: belowGroundIndex < 0 ? null : times[belowGroundIndex],
   }
 }
+
+/** 净空问题怎么改：穿过对象时一句、钻地时一句，按运镜种类给。 */
+export interface CameraPathClearanceAdvice {
+  obstruction: string
+  belowGround: string
+}
+
+/** 轨迹撞楼或钻地时说清穿过了谁、第几秒、撤销后怎么改；通畅时为 null。 */
+export function describeCameraPathClearance(clearance: CameraPathClearance, advice: CameraPathClearanceAdvice): string | null {
+  if (clearance.obstructionCount === 0 && clearance.belowGroundAt === null) return null
+  const facts: string[] = []
+  const fixes: string[] = []
+  if (clearance.obstructionCount > 0) {
+    const first = clearance.obstructions[0]
+    facts.push(`轨迹在 ${first.time.toFixed(1)} 秒穿过「${first.name}」${clearance.obstructionCount > 1 ? `等 ${clearance.obstructionCount} 个对象` : ''}`)
+    fixes.push(advice.obstruction)
+  }
+  if (clearance.belowGroundAt !== null) {
+    facts.push(`在 ${clearance.belowGroundAt.toFixed(1)} 秒低于地面`)
+    fixes.push(advice.belowGround)
+  }
+  return `${facts.join('，')}：撤销后${[...new Set(fixes)].join('；')}，再重新应用。`
+}

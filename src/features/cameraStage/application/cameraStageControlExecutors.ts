@@ -18,7 +18,7 @@ import { applyWriterTable, directOnlyEffectContract, fieldEffectContract, proper
 import { cameraStageProjectStore, leaseCameraStageProjectRuntime, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion, type CameraStageMotionResult } from './cameraMotionService'
-import type { CameraPathClearance } from './cameraPathClearance'
+import { describeCameraPathClearance, type CameraPathClearance } from './cameraPathClearance'
 import { CAMERA_JOINT_JUMP_RATIO } from './cameraMotionSmoothness'
 import { forgetCameraStageUndo, restoreCameraStageUndo, captureCameraStageUndo, afterCameraStageWrite } from './cameraStageUndo'
 import { CAMERA_FIELDS, OBJECT_FIELDS, CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
@@ -395,25 +395,18 @@ function cameraSmoothnessEvidence(result: CameraStageMotionResult): Record<strin
 
 /** 轨迹撞楼或钻地时把穿过了谁、第几秒写进结果，附一句怎么改；通畅时不加字段。 */
 function cameraPathClearanceEvidence(moveKind: CameraStageMotionResult['moveKind'], clearance: CameraPathClearance): Record<string, JsonValue> {
-  if (clearance.obstructionCount === 0 && clearance.belowGroundAt === null) return {}
-  const facts: string[] = []
-  const advice: string[] = []
-  if (clearance.obstructionCount > 0) {
-    const first = clearance.obstructions[0]
-    facts.push(`轨迹在 ${first.time.toFixed(1)} 秒穿过「${first.name}」${clearance.obstructionCount > 1 ? `等 ${clearance.obstructionCount} 个对象` : ''}`)
-    advice.push(OBSTRUCTION_ADVICE[moveKind])
-  }
-  if (clearance.belowGroundAt !== null) {
-    facts.push(`在 ${clearance.belowGroundAt.toFixed(1)} 秒低于地面`)
-    advice.push(moveKind === 'crane' ? '减小下降幅度或抬高起始机位' : '抬高起始机位')
-  }
+  const hint = describeCameraPathClearance(clearance, {
+    obstruction: OBSTRUCTION_ADVICE[moveKind],
+    belowGround: moveKind === 'crane' ? '减小下降幅度或抬高起始机位' : '抬高起始机位',
+  })
+  if (!hint) return {}
   return {
     clearance: {
       obstructions: clearance.obstructions.map(({ objectId, name, time }) => ({ objectId, name, time })),
       obstructionCount: clearance.obstructionCount,
       belowGroundAt: clearance.belowGroundAt,
     },
-    clearanceHint: `${facts.join('，')}：撤销后${[...new Set(advice)].join('；')}，再重新应用。`,
+    clearanceHint: hint,
   }
 }
 

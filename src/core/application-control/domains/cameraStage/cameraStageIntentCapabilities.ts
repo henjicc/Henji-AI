@@ -13,11 +13,21 @@ export const organizeCameraIntentCapability = defineApplicationCapability({
   summarize: () => '机位候选已整理，请确认后应用。',
 })
 export const applyCameraIntentCapability = defineApplicationCapability({
-  id: 'apply_camera_stage_motion_candidate', version: 1, title: '应用机位超级关键帧', description: '应用本次整理的机位候选，一步撤销。reviewId 和 candidateId 取自整理结果；场景变化后须重新整理。saved=false 时再次传同一候选只重试保存，不重复应用。', domain: 'camera_stage', aliases: ['应用运镜', '超级关键帧'], readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: false, timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['camera_stage'], acceptsRefs: ['camera_stage.document'], producesRefs: ['camera_stage.state_keyframe'],
+  id: 'apply_camera_stage_motion_candidate', version: 1, title: '应用机位超级关键帧', description: '应用本次整理的机位候选，一步撤销。reviewId 和 candidateId 取自整理结果；场景变化后须重新整理。saved=false 时再次传同一候选只重试保存，不重复应用。'
+    + '结果附 clearance：沿选区实际轨迹查到穿过的对象（第几秒）与钻地时刻；有问题时附 clearanceHint，按它撤销后挪机位或改选其他候选。', domain: 'camera_stage', aliases: ['应用运镜', '超级关键帧'], readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: false, timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['camera_stage'], acceptsRefs: ['camera_stage.document'], producesRefs: ['camera_stage.state_keyframe'],
   failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({ documentRef, reviewId: z.string().min(1), candidateId: z.enum(['smooth', 'orbit', 'dolly-hold']) }).strict(),
-  outputSchema: capabilityOutputSchema({ resultRef: documentRef, saved: z.boolean(), undoToken: z.string(), stateKeyframeRefs: z.array(applicationRefSchema), verification: z.object({ verified: z.boolean(), condition: z.string() }).strict() }),
+  outputSchema: capabilityOutputSchema({
+    resultRef: documentRef, saved: z.boolean(), undoToken: z.string(), stateKeyframeRefs: z.array(applicationRefSchema),
+    verification: z.object({ verified: z.boolean(), condition: z.string() }).strict(),
+    clearance: z.object({
+      obstructions: z.array(z.object({ objectId: z.string(), name: z.string(), time: z.number().describe('第一次碰到它的时间（秒）') }).strict()).describe('轨迹穿过的对象，只列最早的几个'),
+      obstructionCount: z.number().int().nonnegative(),
+      belowGroundAt: z.number().nullable().describe('第一次低于地面的时间（秒）'),
+    }).strict(),
+    clearanceHint: z.string().optional().describe('轨迹穿模或钻地时怎么改'),
+  }),
   control: capabilityControl('update', ['camera_stage.state_keyframe'], { revisionScopes: ['camera_stage'] }), resolveOperationTargets: input => [input.documentRef], resolveOperationWriteTargets: input => [input.documentRef], concurrencyKey: 'camera_stage', resolveConcurrencyKey: input => `camera_stage:${input.documentRef.id}`,
-  resolveObservedEffects: (_input, output) => [{ effect: 'update', entityTypes: ['camera_stage.state_keyframe'], propertyIds: [], targetRefs: output.stateKeyframeRefs, count: output.stateKeyframeRefs.length, verified: output.verification.verified, evidence: [output.verification.condition] }],
+  resolveObservedEffects: (_input, output) => [{ effect: 'update', entityTypes: ['camera_stage.state_keyframe'], propertyIds: [], targetRefs: output.stateKeyframeRefs, count: output.stateKeyframeRefs.length, verified: output.verification.verified, evidence: [output.verification.condition, ...(output.clearanceHint ? [output.clearanceHint] : [])] }],
   summarize: output => output.saved ? '机位已应用并保存。' : '机位已应用，请重试保存。',
 })

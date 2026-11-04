@@ -11,7 +11,8 @@ import { cameraMotionIdentity, cameraMotionSourceKey, compileCameraMotionCandida
 import { checkCancelled, CreativeIntentError, type ComputationControl } from '@/core/creativeIntent/sampling'
 import { applyAnimationAtTime } from '../store/playbackSampling'
 import type { CameraMotionNativeCandidate } from './cameraMotionCandidates'
-import { checkCameraPathClearance, type CameraPathClearance } from './cameraPathClearance'
+import type { CameraStageState } from '../store/cameraStageStore'
+import { checkCameraPathClearance, describeCameraPathClearance, type CameraPathClearance, type CameraPathClearanceAdvice } from './cameraPathClearance'
 
 const logger = createLogger('features.cameraStage.camera_motion')
 
@@ -266,6 +267,26 @@ export function readCameraStageMotionPreview(projectId: string, review: CameraMo
 }
 
 
+/** 候选轨迹穿模时怎么改：候选本身的幅度固定，只能挪机位或换候选。 */
+const CANDIDATE_CLEARANCE_ADVICE: Record<string, CameraPathClearanceAdvice> = {
+  smooth: { obstruction: '把穿过处两端状态关键帧的机位挪到开阔一侧，或改选其他候选', belowGround: '抬高那一段的机位' },
+  orbit: { obstruction: '把机位放远（加大环绕半径）或抬高，或改选其他候选', belowGround: '抬高机位' },
+  'dolly-hold': { obstruction: '把机位或注视点挪到开阔处，或改选其他候选', belowGround: '抬高机位' },
+}
+
+/**
+ * 候选落进正式场景后，沿整段选区的实际轨迹查净空：与语义运镜共用同一套障碍与取样，只报告不改轨迹。
+ * 选区从第一张到最后一张状态关键帧。
+ */
+function candidateClearance(state: CameraStageState, request: CameraMotionCandidateRequest, candidateId: string): { clearance: CameraPathClearance; clearanceHint?: string } {
+  const times = request.stateKeyframeIds
+    .map((id) => state.stateKeyframes.find((frame) => frame.id === id)?.time)
+    .filter((time): time is number => time !== undefined)
+  const clearance = checkCameraPathClearance(state.objects, state.animation, request.cameraId, { start: Math.min(...times), end: Math.max(...times) })
+  const hint = describeCameraPathClearance(clearance, CANDIDATE_CLEARANCE_ADVICE[candidateId] ?? CANDIDATE_CLEARANCE_ADVICE.smooth)
+  return { clearance, ...(hint ? { clearanceHint: hint } : {}) }
+}
+
 /** Commit one native state-keyframe change; a failed save retains the change and retries only the original save. */
 export const applyCameraStageMotionCandidate = bindCameraStageProjectOperation(async (projectId: string, review: CameraMotionReview, candidateId: string) => {
   logger.info('三维机位候选应用开始', { event: 'camera_stage.motion.candidate.apply.start', projectId, candidateId })
@@ -292,14 +313,18 @@ export const applyCameraStageMotionCandidate = bindCameraStageProjectOperation(a
     const current = store.getState()
     const verification = { verified: JSON.stringify(current.stateKeyframes) === JSON.stringify(candidate.native.stateKeyframes)
       && JSON.stringify(current.animation) === JSON.stringify(candidate.native.animation), condition: '从正式场景回读确认候选状态关键帧及编译动画一致。' }
+    const clearance = candidateClearance(current, record.request, candidateId)
     try {
       await saveCameraStageProjectRuntime(projectId)
     } catch (error) {
       logger.error('三维机位候选已应用但保存失败', error, { event: 'camera_stage.motion.candidate.save.failed', projectId, candidateId })
-      return { undoToken: record.applied.undoToken, saved: false, verification }
+      return { undoToken: record.applied.undoToken, saved: false, verification, ...clearance }
     }
-    logger.info('三维机位候选应用完成', { event: 'camera_stage.motion.candidate.apply.completed', projectId, candidateId })
-    return { undoToken: record.applied.undoToken, saved: true, verification }
+    logger.info('三维机位候选应用完成', {
+      event: 'camera_stage.motion.candidate.apply.completed', projectId, candidateId,
+      obstructionCount: clearance.clearance.obstructionCount, belowGround: clearance.clearance.belowGroundAt !== null,
+    })
+    return { undoToken: record.applied.undoToken, saved: true, verification, ...clearance }
   } catch (error) {
     logger.error('三维机位候选应用失败', error, { event: 'camera_stage.motion.candidate.apply.failed', projectId, candidateId })
     throw error
