@@ -31,7 +31,7 @@ const plans = new Map<string, CanvasBatchPlan>()
 import { canvasBatchUndos as undos } from './canvasBatchUndo'
 export { undoCanvasBatch } from './canvasBatchUndo'
 import { pauseCanvasProjectPersistence } from './canvasPersistenceService';
-import { confirmCanvasPersistence, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasTransactionRuntime } from './canvasPersistenceService';
+import { confirmCanvasPersistence, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, CanvasSourceCompensationError, type CanvasCommitOptions, type CanvasTransactionRuntime } from './canvasPersistenceService';
 const PLAN_TTL_MS = 15 * 60_000
 const logger = createLogger('features.canvas.batch')
 
@@ -168,7 +168,7 @@ export async function runCanvasTransaction(
   runtime?: CanvasTransactionRuntime,
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
   if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
-  if (runtime ? !runtime.isCurrent() : false) throw new CanvasTransactionConflictError(projectId)
+  if (runtime ? !runtime.isCurrent() : false) throw new CanvasTransactionConflictError(projectId, undefined, false)
   if (!runtime) requireCanvasProjectInstance(projectId)
   const store = runtime?.store ?? requireCanvasProjectInstance(projectId).store
   const persist = runtime?.persist ?? (() => confirmCanvasPersistence(projectId))
@@ -184,6 +184,8 @@ export async function runCanvasTransaction(
   })
 
   const checkpoint = createCanvasMutationCheckpoint(projectId, runtime)
+  // 每个写入阶段结束才把检查点推进到当前画布；仍等于事务前引用，说明本事务还没写过。
+  const transactionWrote = () => checkpoint.nodes !== beforeNodes || checkpoint.edges !== beforeEdges || checkpoint.history !== beforeHistory
   const releasePersistence = runtime ? runtime.pause() : pauseCanvasProjectPersistence(projectId)
   const persistenceEffects: Array<() => void> = []
   const rollbackEffects: Array<() => Promise<void>> = []
@@ -200,7 +202,8 @@ export async function runCanvasTransaction(
   } catch (error) {
     if (!isCanvasMutationCheckpointCurrent(checkpoint)) {
       releasePersistence()
-      throw new CanvasTransactionConflictError(projectId, error)
+      // 来源副本属于本事务的外部写入，画布检查点看不到它。
+      throw new CanvasTransactionConflictError(projectId, error, transactionWrote() || error instanceof CanvasSourceCompensationError)
     }
     // 只有事务仍保持原始快照的参数校验失败，才有证据认定未写入。
     // 已修改后失败、外部并发冲突、回滚保存失败均不得伪装成“未执行”。
@@ -216,12 +219,14 @@ export async function runCanvasTransaction(
     const recovery = persist()
     releasePersistence()
     await recovery
-    const compensationFailures: unknown[] = []
+    // 步骤自己报告来源补偿未完成时，合并进同一份失败，不能包成“已回滚”。
+    const original = error instanceof CanvasSourceCompensationError ? error.errors[0] : error
+    const compensationFailures: unknown[] = error instanceof CanvasSourceCompensationError ? error.errors.slice(1) : []
     for (const effect of rollbackEffects.reverse()) {
       try { await effect() } catch (compensationError) { compensationFailures.push(compensationError) }
     }
     if (compensationFailures.length) {
-      const failure = new AggregateError([error, ...compensationFailures], '画布已恢复，复制来源补偿未完成')
+      const failure = new CanvasSourceCompensationError(original, compensationFailures)
       logger.error('画布批事务来源补偿失败', failure, { event: 'canvas.batch.rollback.failed', projectId })
       throw failure
     }
@@ -233,7 +238,7 @@ export async function runCanvasTransaction(
 
   if (!isCanvasMutationCheckpointCurrent(checkpoint)) {
     releasePersistence()
-    throw new CanvasTransactionConflictError(projectId)
+    throw new CanvasTransactionConflictError(projectId, undefined, transactionWrote())
   }
   const after = store.getState()
   const undoRef = `canvas-batch-undo:${uuidv4()}`

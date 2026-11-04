@@ -7,6 +7,7 @@ import { CANVAS_NODE_WRITERS as WRITERS } from './canvasFields';
 import { applyCanvasNodePropertyPatches, applyStoryboardFramePatches, type CanvasNodePropertyPatch } from './canvasMutationService';
 import { CANVAS_ENTITY_TYPES } from './canvasReflection';
 import { runCanvasTransaction, undoCanvasBatch } from './canvasBatchService';
+import { canvasRemainingWrite, canvasStepFailure } from './canvasStepFailure';
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 
@@ -57,7 +58,9 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
         if (patch.storyboardFrames) await applyStoryboardFramePatches(projectId, patch.nodeId, patch.storyboardFrames, options)
       }
       return patches.map((patch) => ({ nodeId: patch.nodeId }))
-    }, { requestId: context.requestId })
+    }, { requestId: context.requestId }).catch((error: unknown) => {
+      throw canvasStepFailure(error, () => targets.map((target) => canvasRemainingWrite(projectId, [{ kind: this.entityType, id: `${projectId}:${target.nodeId}` }])))
+    })
     const undoToken = transaction.undoRef
     this.undoProjects.set(undoToken, projectId)
     const resultingRevision = revision(projectId)

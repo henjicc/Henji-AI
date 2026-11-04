@@ -5,6 +5,7 @@ import type { CanvasBatchOperation } from '@/core/application-control/domains/ca
 
 import { applyCanvasOperationsAtomically, undoCanvasBatch } from './canvasBatchService';
 import { CANVAS_ENTITY_TYPES } from './canvasReflection';
+import { canvasRemainingWrite, canvasStepFailure } from './canvasStepFailure';
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 const UNDO_PREFIX = 'canvas-collection-undo:'
@@ -57,6 +58,10 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     const beforeEdges = new Set(requireCanvasProjectInstance(projectId).store.getState().edges.map((item) => item.id))
     const { appliedOperations, undoRef } = await applyCanvasOperationsAtomically(projectId, operations, {
       source: 'application_collection', entityType: this.entityType,
+    }).catch((error: unknown) => {
+      throw canvasStepFailure(error, (createdRefs) => [canvasRemainingWrite(projectId, step.operation.kind === 'remove'
+        ? step.operation.targets
+        : createdRefs.filter((ref) => ref.kind === this.entityType).slice(0, step.operation.items.length))])
     })
     const revision = requireCanvasProjectInstance(projectId).snapshot().updatedAt
     const resultRefs = appliedOperations.flatMap((result) => {

@@ -39,6 +39,7 @@ import {
   assertCanvasCommitContext,
   assertCanvasPersistenceEffectRegistration,
   confirmCanvasPersistence,
+  CanvasSourceCompensationError,
   runAfterCanvasPersistence,
   type CanvasCommitOptions,
   runCanvasMutationStage,
@@ -242,7 +243,7 @@ export function commitCanvasNodesDuplication<T>(input: CanvasNodesDuplicationInp
     try { await compensateSources() } catch (cleanupError) { compensationError = cleanupError }
     logger.error('复制画布节点失败', error, { event: 'canvas.node.duplicate.failed', projectId: input.projectId,
       context: { compensationFailed: Boolean(compensationError) } })
-    if (compensationError) throw new AggregateError([error, compensationError], '节点复制失败，来源文档补偿未完成')
+    if (compensationError) throw new CanvasSourceCompensationError(error, [compensationError], '节点复制失败，来源文档补偿未完成')
     throw error
   }
 

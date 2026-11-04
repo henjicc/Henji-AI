@@ -2,6 +2,7 @@ import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProje
 import { createLogger } from '@/core/logging'
 import type { useCanvasStore } from '@/stores/canvasStore'
 import type { ApplicationTransactionResult } from '@/core/application-control/transactions'
+import { ApplicationConflictError } from '@/core/application-control/execution/persistence'
 
 const logger = createLogger('features.canvas.persistence')
 
@@ -39,14 +40,25 @@ export function runAfterCanvasPersistence(options: CanvasCommitOptions, effect: 
   else effect()
 }
 
-export class CanvasTransactionConflictError extends Error {
+export class CanvasTransactionConflictError extends ApplicationConflictError {
   readonly code = 'STALE_CONTEXT'
   readonly memoryState = 'preserved'
   readonly persistenceState = 'unconfirmed'
   readonly recovery = { capabilityId: 'retry_canvas_document_save', replayMutation: false }
-  constructor(readonly projectId: string, readonly cause?: unknown) {
-    super('画布事务期间出现新的编辑，已保留当前内容；请重试保存并检查结果后重新规划，不会覆盖新编辑')
+  /** transactionWrote 为假：冲突在本事务第一次写入之前就被发现，保留下来的只有别处的新编辑，没有要重试保存的东西。 */
+  constructor(readonly projectId: string, readonly cause?: unknown, readonly transactionWrote = true) {
+    super(transactionWrote
+      ? '画布事务期间出现新的编辑，已保留当前内容；请重试保存并检查结果后重新规划，不会覆盖新编辑'
+      : '画布在本次写入前出现新的编辑，本次没有写入；请重新读取画布后规划')
     this.name = 'CanvasTransactionConflictError'
+  }
+}
+
+/** 画布已恢复原快照并保存，但事务里交付给外部来源的写入没能撤回。errors[0] 是让事务回滚的原始错误。 */
+export class CanvasSourceCompensationError extends AggregateError {
+  constructor(error: unknown, compensationFailures: unknown[], message = '画布已恢复，复制来源补偿未完成') {
+    super([error, ...compensationFailures], message)
+    this.name = 'CanvasSourceCompensationError'
   }
 }
 
