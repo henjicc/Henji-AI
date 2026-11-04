@@ -9,6 +9,8 @@ export interface UiVirtualListProps<T> {
   /** 过滤语义改变时回到首屏，避免靠未挂载的 DOM 找高亮项。 */
   resetKey?: Key
   highlightedIndex?: number
+  /** 条目增删时保留滚动位置（就地编辑的列表，如场景对象）；默认条数一变就回到首屏，适合搜索结果。 */
+  retainScroll?: boolean
 }
 
 /**
@@ -16,7 +18,7 @@ export interface UiVirtualListProps<T> {
  * 按列表总高度自撑并封顶到 `max-h-virtual-list`、超出在列表里滚动。
  * Virtuoso 的视口是绝对定位的，不给高度时贡献 0：浮层里的网格曾因此高度为 0，一个模型都看不见（重要记录 020）。
  */
-export function UiVirtualList<T>({ data, getKey, renderItem, emptyState, resetKey = '', highlightedIndex }: UiVirtualListProps<T>): JSX.Element {
+export function UiVirtualList<T>({ data, getKey, renderItem, emptyState, resetKey = '', highlightedIndex, retainScroll = false }: UiVirtualListProps<T>): JSX.Element {
   const ref = useRef<VirtuosoHandle>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   // null：还没量；true：容器高度随内容，按总高度自撑；false：容器给了确定高度，铺满
@@ -33,7 +35,7 @@ export function UiVirtualList<T>({ data, getKey, renderItem, emptyState, resetKe
   if (!data.length) return <div className="flex h-full min-h-0 flex-col">{emptyState}</div>
   return <div ref={boxRef} className={autoHeight ? 'max-h-virtual-list min-h-0' : 'h-full min-h-0'} style={autoHeight ? { height: listHeight } : undefined}>
     <Virtuoso
-      key={`${resetKey}:${data.length}`}
+      key={retainScroll ? String(resetKey) : `${resetKey}:${data.length}`}
       ref={ref}
       className="h-full min-h-0 overscroll-contain"
       data={data as T[]}

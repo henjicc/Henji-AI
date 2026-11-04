@@ -7,7 +7,6 @@ import { rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import type {
   StageCameraObject,
   StageCharacterObject,
-  StageNameLabelSettings,
   StageObject,
   StagePrimitiveKind,
   StageVec3,
@@ -15,13 +14,8 @@ import type {
 import { STAGE_STYLE_SUBJECT_KEY } from '../render/stageStyleTags'
 import CameraModel from './CameraModel'
 import CharacterModel from './CharacterModel'
-import StageObjectNameLabel from './StageObjectNameLabel'
 import { useCameraModelUrl, useCharacterModelUrl } from './useCharacterModelUrl'
-import {
-  useStagePrimitiveMaterial,
-  useStagePrimitiveResources,
-  type StagePrimitiveSlot,
-} from './stagePrimitiveResources'
+import { useStagePrimitiveMaterial, useStagePrimitiveResources } from './stagePrimitiveResources'
 
 /**
  * 单个场景对象的三维渲染：
@@ -43,14 +37,11 @@ interface StageObjectMeshProps {
   cameraLookAtTarget?: StageVec3
   /** 摄像机视角下隐藏相机图标/视锥体，避免编辑辅助进入实际取景画面 */
   showCameraHelpers: boolean
-  /** 场景级名称标签开关；激活后在对象上方渲染朝向摄像机的标签 */
-  showNameLabel: boolean
-  nameLabelSettings: StageNameLabelSettings
 }
 
 /**
  * 基础几何体：几何与材质取自所在 Canvas 的共享资源，同种同色的物体共用一份。
- * 合批时外层把内容 group 设为不可见，这个网格只作点选、包围盒与实例矩阵的来源。
+ * 只有选中的基础几何体走这里；未选中的可见物体由合批画出，隐藏的不挂载（见 stagePrimitiveResources）。
  */
 const PrimitiveBody: React.FC<{
   kind: StagePrimitiveKind
@@ -217,18 +208,14 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
   onRegister,
   cameraLookAtTarget,
   showCameraHelpers,
-  showNameLabel,
-  nameLabelSettings,
 }) => {
   const groupRef = useRef<Group>(null)
-  const contentRef = useRef<Group>(null)
   const meshRef = useRef<Mesh>(null)
-  const slotRef = useRef<StagePrimitiveSlot | null>(null)
   const ownMaterialRef = useRef<MeshStandardMaterial | null>(null)
-  const resources = useStagePrimitiveResources()
   const { transform } = object
 
-  useEffect(() => {
+  // 与合批让出位置在同一次提交里注册：刚选中的物体在 gizmo 和名称标签那里不会断一帧
+  useLayoutEffect(() => {
     onRegister(object.id, groupRef.current)
     return () => onRegister(object.id, null)
   }, [object.id, onRegister])
@@ -241,42 +228,15 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
     group.rotation.order = 'YXZ'
   }, [object.type])
 
-  // 未选中的可见基础几何体交给所在 Canvas 的合批绘制；选中、隐藏或换形状时退出或换批
-  const primitiveKind = object.type === 'primitive' ? object.kind : null
-  const batched = primitiveKind !== null && object.visible && !selected
-  useLayoutEffect(() => {
-    const mesh = meshRef.current
-    const group = groupRef.current
-    if (!batched || !primitiveKind || !mesh || !group) return
-    const slot = resources.acquireSlot(primitiveKind, mesh, group)
-    slotRef.current = slot
-    return () => {
-      resources.releaseSlot(slot)
-      if (slotRef.current === slot) slotRef.current = null
-    }
-  }, [batched, primitiveKind, resources])
-
-  // 每次提交都同步（含刚进入合批的这次）：R3F 已把 store 里的新变换写进外层 group，颜色也可能变了
-  useLayoutEffect(() => {
-    const slot = slotRef.current
-    if (!slot) return
-    resources.markSlotDirty(slot)
-    resources.setSlotColor(slot, object.color)
-  })
-
-  // 播放期命令式采样：变换直改本对象容器 group，颜色直改合批实例或 primitive 材质（不写 store）
+  // 播放期命令式采样：变换直改本对象容器 group，颜色直改 primitive 材质（不写 store）
   useEffect(() => {
     const unregs: Array<() => void> = []
-    const markBatchDirty = (): void => {
-      if (slotRef.current) resources.markSlotDirty(slotRef.current)
-    }
     unregs.push(
       registerPlaybackApplier(object.id, 'transform.position', (value) => {
         const group = groupRef.current
         if (!group) return
         const v = value as StageVec3
         group.position.set(v.x, v.y, v.z)
-        markBatchDirty()
       }),
     )
     unregs.push(
@@ -285,7 +245,6 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
         if (!group) return
         const v = value as StageVec3
         group.rotation.set(v.x * DEG2RAD, v.y * DEG2RAD, v.z * DEG2RAD)
-        markBatchDirty()
       }),
     )
     if (object.type !== 'camera') {
@@ -295,17 +254,12 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
           if (!group) return
           const v = value as StageVec3
           group.scale.set(v.x, v.y, v.z)
-          markBatchDirty()
         }),
       )
     }
     if (object.type === 'primitive') {
       unregs.push(
         registerPlaybackApplier(object.id, 'color', (value) => {
-          if (slotRef.current) {
-            resources.setSlotColor(slotRef.current, value as string)
-            return
-          }
           const mesh = meshRef.current
           if (!mesh) return
           // 共享材质被同色物体共用，颜色动画只能写进本物体自己的材质副本
@@ -321,7 +275,7 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
       )
     }
     return () => unregs.forEach((unregister) => unregister())
-  }, [object.id, object.type, resources])
+  }, [object.id, object.type])
 
   useEffect(() => () => ownMaterialRef.current?.dispose(), [])
 
@@ -349,44 +303,33 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
         ]}
         scale={object.type === 'camera' ? [1, 1, 1] : [transform.scale.x, transform.scale.y, transform.scale.z]}
       >
-        {/* 合批物体由所在 Canvas 的实例网格画出；内容 group 不可见，出帧投影时整段跳过 */}
-        <group ref={contentRef} visible={!batched}>
-          {object.type === 'primitive' && (
-            <PrimitiveBody
-              kind={object.kind}
-              color={object.color}
-              selected={selected}
-              meshRef={meshRef}
-              onClick={handleClick}
-            />
-          )}
-          {object.type === 'character' && (
-            <group onClick={handleClick}>
-              <CharacterMesh object={object} selected={selected} onAssetReady={onAssetReady} />
-            </group>
-          )}
-          {object.type === 'camera' && showCameraHelpers && cameraLookAtTarget && (
-            <group onClick={handleClick}>
-              <CameraHelperMesh
-                object={object}
-                selected={selected}
-              />
-            </group>
-          )}
-        </group>
-        {showNameLabel && (
-          <StageObjectNameLabel
-            object={object}
-            targetRef={contentRef}
-            settings={nameLabelSettings}
+        {object.type === 'primitive' && (
+          <PrimitiveBody
+            kind={object.kind}
+            color={object.color}
+            selected={selected}
+            meshRef={meshRef}
+            onClick={handleClick}
           />
+        )}
+        {object.type === 'character' && (
+          <group onClick={handleClick}>
+            <CharacterMesh object={object} selected={selected} onAssetReady={onAssetReady} />
+          </group>
+        )}
+        {object.type === 'camera' && showCameraHelpers && cameraLookAtTarget && (
+          <group onClick={handleClick}>
+            <CameraHelperMesh
+              object={object}
+              selected={selected}
+            />
+          </group>
         )}
       </group>
   )
 }
 
 /*
- * 播放与 seek 只会换掉被采样的那几个对象；其余物体 props 不变就跳过重渲染，
- * 上千个物体的场景里每帧整表重渲染是主要 CPU 开销。回调由 StageScene 保持稳定。
+ * 播放与 seek 只会换掉被采样的那几个对象；其余对象 props 不变就跳过重渲染。回调由 StageScene 保持稳定。
  */
 export default memo(StageObjectMesh)

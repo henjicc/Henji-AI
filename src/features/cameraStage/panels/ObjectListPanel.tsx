@@ -1,7 +1,7 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useState } from 'react'
 import { Box, Camera, Copy, Eye, EyeOff, Trash2, User } from 'lucide-react'
-import { UiEmpty, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import { UiEmpty, UiIconButton, UiInput, UiOptionButton, UiVirtualList } from '@/components/ui'
 import type { StageObject } from '../domain/sceneTypes'
 import { useCameraStageStore, type CameraStageState } from '../store/cameraStageStore'
 import { createRafScheduler } from '@/utils/createRafScheduler'
@@ -104,7 +104,8 @@ const ObjectListPanel: React.FC = () => {
   const removeObject = useCameraStageStore((state) => state.removeObject)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
+  // 虚拟列表的行晚于列表本身提交，输入框挂上后才能按它所在的窗口（可能是浮窗）排聚焦帧
+  const [input, setInput] = useState<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!editingId) return
@@ -114,15 +115,16 @@ const ObjectListPanel: React.FC = () => {
       setDraftName('')
       return
     }
+    if (!input) return
 
     const focus = createRafScheduler(() => {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    }, ownerWindowOf(inputRef.current))
+      input.focus()
+      input.select()
+    }, ownerWindowOf(input))
     focus.schedule()
 
     return () => focus.cancel()
-  }, [editingId, objects])
+  }, [editingId, input, objects])
 
   const beginRename = useCallback((id: string, name: string): void => {
     setSelected(id)
@@ -143,68 +145,78 @@ const ObjectListPanel: React.FC = () => {
     setDraftName('')
   }
 
-  // 面板标题由停靠标签给出（“场景对象”），这里不再重复一条标题带
-  return (
-    <div className="flex h-full w-full flex-col overflow-y-auto px-2 py-1.5" role="list" aria-label="场景对象">
-      {objects.length === 0 && (
-        <UiEmpty size="xs" title="场景为空" description="用顶部命令带的快速添加按钮放入几何体、角色或摄像机" />
-      )}
-      {objects.map((object) => {
-        const isEditing = object.id === editingId
-        const isSelected = object.id === selectedId
-        const isFramingCamera = object.type === 'camera' && object.id === activeCameraId
+  const renderRow = (object: StageObject): React.ReactNode => {
+    const isEditing = object.id === editingId
+    const isSelected = object.id === selectedId
+    const isFramingCamera = object.type === 'camera' && object.id === activeCameraId
 
-        return (
-          <div key={object.id} role="listitem" className="flex items-center gap-0.5">
-            {isEditing ? (
-              // 改名直接把名称换成输入框，不再给输入框外面套一圈强调色描边的框
-              <div className="flex min-w-0 flex-1 items-center gap-2 pl-3">
-                <span aria-hidden="true" className="shrink-0 text-text2">
-                  <TypeIcon type={object.type} />
-                </span>
-                <UiInput
-                  ref={inputRef}
-                  aria-label="对象名称"
-                  size="sm"
-                  value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)}
-                  onBlur={() => finishRename('commit')}
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => {
-                    event.stopPropagation()
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      finishRename('commit')
-                    } else if (event.key === 'Escape') {
-                      event.preventDefault()
-                      finishRename('cancel')
-                    }
-                  }}
-                  className="min-w-0 flex-1"
-                />
-              </div>
-            ) : (
-              <ObjectNameButton
-                id={object.id}
-                name={object.name}
-                type={object.type}
-                selected={isSelected}
-                framingCamera={isFramingCamera}
-                onSelect={setSelected}
-                onBeginRename={beginRename}
-              />
-            )}
-            <ObjectRowActions
-              id={object.id}
-              name={object.name}
-              visible={object.visible}
-              onUpdate={updateObject}
-              onDuplicate={duplicateObject}
-              onRemove={removeObject}
+    return (
+      <div role="listitem" className="flex items-center gap-0.5 px-2">
+        {isEditing ? (
+          // 改名直接把名称换成输入框，不再给输入框外面套一圈强调色描边的框
+          <div className="flex min-w-0 flex-1 items-center gap-2 pl-3">
+            <span aria-hidden="true" className="shrink-0 text-text2">
+              <TypeIcon type={object.type} />
+            </span>
+            <UiInput
+              ref={setInput}
+              aria-label="对象名称"
+              size="sm"
+              value={draftName}
+              onChange={(event) => setDraftName(event.target.value)}
+              onBlur={() => finishRename('commit')}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                event.stopPropagation()
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  finishRename('commit')
+                } else if (event.key === 'Escape') {
+                  event.preventDefault()
+                  finishRename('cancel')
+                }
+              }}
+              className="min-w-0 flex-1"
             />
           </div>
-        )
-      })}
+        ) : (
+          <ObjectNameButton
+            id={object.id}
+            name={object.name}
+            type={object.type}
+            selected={isSelected}
+            framingCamera={isFramingCamera}
+            onSelect={setSelected}
+            onBeginRename={beginRename}
+          />
+        )}
+        <ObjectRowActions
+          id={object.id}
+          name={object.name}
+          visible={object.visible}
+          onUpdate={updateObject}
+          onDuplicate={duplicateObject}
+          onRemove={removeObject}
+        />
+      </div>
+    )
+  }
+
+  // 面板标题由停靠标签给出（“场景对象”），这里不再重复一条标题带。
+  // 上万个物体时整表挂载要几秒（每行四个按钮和悬停提示），只挂可见的行；滚动条仍贴面板右缘，所以左右留白放在行上
+  return (
+    <div className="flex h-full w-full flex-col py-1.5" role="list" aria-label="场景对象">
+      <UiVirtualList
+        data={objects}
+        getKey={(object) => object.id}
+        retainScroll
+        emptyState={(
+          <div className="px-2">
+            <UiEmpty size="xs" title="场景为空" description="用顶部命令带的快速添加按钮放入几何体、角色或摄像机" />
+          </div>
+        )}
+        renderItem={renderRow}
+      />
     </div>
   )
 }

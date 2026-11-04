@@ -5,7 +5,7 @@ import { Color, EquirectangularReflectionMapping, SRGBColorSpace, TextureLoader,
 import { createLogger } from '@/core/logging'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { cameraTargetFromRotation, resolveCameraLookAtTarget } from '../domain/cameraUtils'
-import type { StageCameraObject } from '../domain/sceneTypes'
+import type { StageCameraObject, StageObject, StagePrimitiveObject } from '../domain/sceneTypes'
 import { isStageStyleRenderStyle } from '../render/stageStyleRenderer'
 import { cameraStageStoreAttachment, useCameraStageStore, type CameraStageOwnedStore } from '../store/cameraStageStore'
 import { resolvePathStateKeyframeId, useCameraStageToolStore } from '../store/cameraStageToolStore'
@@ -24,6 +24,8 @@ import StageViewportCamera from './StageViewportCamera'
 import StageTransformControls from './StageTransformControls'
 import StageMotionPathOverlay from './StageMotionPathOverlay'
 import StageDemandFrames from './StageDemandFrames'
+import StageNameLabelLayer from './StageNameLabelLayer'
+import StagePrimitiveBatch from './StagePrimitiveBatch'
 import { StagePrimitiveResourcesProvider } from './stagePrimitiveResources'
 import { useRenderCameraId } from './useRenderCameraId'
 import type { StageViewportSource } from '../viewport/viewportTypes'
@@ -168,8 +170,12 @@ const StageScene: React.FC<StageSceneProps> = ({
   const cameraViewInteractionRef = useRef(false)
   const objectNodesRef = useRef(objectNodes)
   objectNodesRef.current = objectNodes
+  // 名称标签逐帧读取；注册当场生效，不等 state 提交
+  const liveObjectNodesRef = useRef(new Map<string, Group>())
 
   const registerNode = useCallback((id: string, node: Group | null): void => {
+    if (node) liveObjectNodesRef.current.set(id, node)
+    else liveObjectNodesRef.current.delete(id)
     setObjectNodes((prev) => {
       if (node ? prev.get(id) === node : !prev.has(id)) return prev
       const next = new Map(prev)
@@ -271,6 +277,22 @@ const StageScene: React.FC<StageSceneProps> = ({
   const fogNear = Math.max(12, sceneSettings.fog.distance * 0.38)
   const fogFar = Math.max(fogNear + 1, sceneSettings.fog.distance)
 
+  // 未选中的可见基础几何体进合批，不挂逐物体组件；隐藏又没选中的什么都不挂
+  const { batchedPrimitives, meshObjects } = useMemo(() => {
+    const batched: StagePrimitiveObject[] = []
+    const meshes: StageObject[] = []
+    for (const object of objects) {
+      if (object.type !== 'primitive' || object.id === selectedId) meshes.push(object)
+      else if (object.visible) batched.push(object)
+    }
+    return { batchedPrimitives: batched, meshObjects: meshes }
+  }, [objects, selectedId])
+  const showNameLabels = sceneSettings.display.showNameLabels
+  const framingCameraId = isCameraView ? activeCamera?.id : undefined
+  const labelObjects = useMemo(() => (showNameLabels
+    ? objects.filter((object) => object.visible && object.name.trim() !== '' && object.id !== framingCameraId)
+    : []), [framingCameraId, objects, showNameLabels])
+
   return (
     <Canvas
       key={isFixedView ? viewportSource.view : viewportSource?.kind ?? 'legacy'}
@@ -335,8 +357,9 @@ const StageScene: React.FC<StageSceneProps> = ({
           )}
         </>
       )}
-      <StagePrimitiveResourcesProvider>
-        {objects.map((object) => (
+      <StagePrimitiveResourcesProvider onSelect={handleSelect}>
+        <StagePrimitiveBatch objects={batchedPrimitives} />
+        {meshObjects.map((object) => (
           <StageObjectMesh
             key={object.id}
             onAssetReady={onAssetReady}
@@ -346,10 +369,15 @@ const StageScene: React.FC<StageSceneProps> = ({
             onRegister={registerNode}
             cameraLookAtTarget={cameraLookAtTargets.get(object.id)}
             showCameraHelpers={!isCameraView}
-            showNameLabel={sceneSettings.display.showNameLabels && !(isCameraView && object.id === activeCamera?.id)}
-            nameLabelSettings={sceneSettings.display.nameLabel}
           />
         ))}
+        {labelObjects.length > 0 && (
+          <StageNameLabelLayer
+            objects={labelObjects}
+            settings={sceneSettings.display.nameLabel}
+            nodes={liveObjectNodesRef}
+          />
+        )}
       </StagePrimitiveResourcesProvider>
       {!isCameraView && selectedId && (
         <StageMotionPathOverlay objectId={selectedId} stateKeyframes={stateKeyframes} editable={interactive} />
