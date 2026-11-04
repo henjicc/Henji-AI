@@ -20,6 +20,7 @@ export function createDefaultCameraStageSceneSnapshot(): DefaultCameraStageScene
     activeCameraId: camera.id,
     sceneSettings: createDefaultSceneSettings(),
     stateKeyframes: [stateKeyframe],
+    sets: [],
     defaultCameraId: camera.id,
     defaultStateKeyframeId: stateKeyframe.id,
   }

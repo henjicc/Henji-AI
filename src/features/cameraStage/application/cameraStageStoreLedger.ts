@@ -35,6 +35,9 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     addCamera: { kind: 'capability', capabilityId: 'place_camera_stage_object' },
     duplicateObject: { kind: 'capability', capabilityId: 'duplicate_camera_stage_object' },
     removeObject: { kind: 'capability', capabilityId: 'delete_camera_stage_object' },
+    // 布景：界面与助手都经 buildStageSet 生成、applyStageSet 落地；整片删除走布景集合写入。
+    applyStageSet: { kind: 'capability', capabilityId: 'generate_camera_stage_set' },
+    removeStageSet: { kind: 'collection', entityType: ENTITY.set, operation: 'remove' },
     /*
      * updateObject/updateObjectAcrossStateKeyframes/updateTransform（object 域）与 updateCameraView
      * （camera 域）定义收敛在 cameraStageObjectFields.ts，账本条目从 storeActions 派生。

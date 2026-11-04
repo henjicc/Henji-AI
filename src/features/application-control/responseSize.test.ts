@@ -38,7 +38,7 @@ it('代表性调用序列与 tools/list 的字符预算可重复测量', async (
   for (const kind of ['external', 'embedded'] as const) {
     expect(JSON.stringify({ ok: true, data: buildApplicationContract({ ...contractInput, callerKind: kind }) }).length).toBeLessThan(4700)
   }
-  expect(skills).toHaveLength(8)
+  expect(skills).toHaveLength(9)
 
   const scopeRevisions = Object.fromEntries(domains.map((domain, index) => [domain.id, index]))
   const revisionEnvelope = { revision: 12, scopeRevisions }

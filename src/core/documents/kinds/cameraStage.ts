@@ -12,7 +12,9 @@ import type { DocumentKindDescriptor } from './registry'
  * - objects：场景对象（几何体、角色、摄像机），每项至少有 id / type / name；
  * - activeCameraId：当前取景摄像机；
  * - sceneSettings：地面、天空（含全景环境图路径）、阳光、雾、渲染方式、标签显示；
- * - stateKeyframes：状态关键帧，唯一可编辑的时间轴真相源（派生动画只在运行时编译，不进文件）。
+ * - stateKeyframes：状态关键帧，唯一可编辑的时间轴真相源（派生动画只在运行时编译，不进文件）；
+ * - sets：生成过的布景（id、名称、补齐后的生成参数）。成员是 objects 里的普通对象，用 setId 指回布景，
+ *   所以旧程序不认识布景也能照常显示和编辑这些对象。
  *
  * 这里只校验外层结构，对象、关键帧与场景设置的细节由工具读取时逐字段规范化
  * （`sceneFromDocumentContent`，与旧工程数据的读取规则相同）。嵌套对象一律保留未知字段：
@@ -32,12 +34,19 @@ const stateKeyframeSchema = z.looseObject({
   id: z.string().min(1),
 })
 
+const stageSetSchema = z.looseObject({
+  id: z.string().min(1),
+  name: z.string(),
+  params: z.looseObject({ preset: z.string().min(1) }),
+})
+
 export const cameraStageContentSchema = z.object({
   objects: z.array(stageObjectSchema),
   activeCameraId: z.string().nullable(),
   /** 场景级设置；缺字段或不合法时工具按默认值补齐。 */
   sceneSettings: persistedStageSettingsSchema,
   stateKeyframes: z.array(stateKeyframeSchema),
+  sets: z.array(stageSetSchema),
 })
 
 export type CameraStageDocumentContent = z.infer<typeof cameraStageContentSchema>
@@ -70,10 +79,15 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
   untitledNames: { zh: '未命名镜头参考', en: 'Untitled Camera Stage' },
   storage: 'json',
   // 版本 1 = 旧工程场景数据第 14 版的持久字段（去掉 schemaVersion，由外壳的 kindVersion 表达）。
-  version: 1,
+  // 版本 2 = 新增布景列表 sets 与对象上可选的 setId；成员仍是普通对象，旧程序照常读写，最低可读版本不变。
+  version: 2,
+  minReaderVersion: 1,
   contentSchema: cameraStageContentSchema,
-  migrations: {},
-  createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [] }),
+  migrations: {
+    // 1 → 2：旧文件没有生成过布景，补一个空列表。
+    1: (content) => ({ ...structuredClone(content as Record<string, unknown>), sets: [] }),
+  },
+  createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [] }),
   isEmptyContent: isEmptyCameraStageContent,
   summarize: (content) => ({
     objects: content.objects.length,

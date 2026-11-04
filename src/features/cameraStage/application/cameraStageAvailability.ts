@@ -11,6 +11,7 @@ const TYPES = {
   project: 'camera_stage.document',
   scene: 'camera_stage.scene',
   stateKeyframe: 'camera_stage.state_keyframe',
+  set: 'camera_stage.set',
   playback: 'camera_stage.playback',
 } as const
 
@@ -47,18 +48,20 @@ export function cameraStageCollectionAvailability(
   _snapshot: CameraStageProjectSnapshot,
   revision: number,
 ): ApplicationCollectionAvailability {
-  const available = entityType === TYPES.stateKeyframe
-  const operation = {
+  const operation = (available: boolean, reason = '该实体没有可写集合。') => ({
     available,
-    reasons: available ? [] : ['该实体没有可写集合。'],
+    reasons: available ? [] : [reason],
     requiredPermissions: ['camera_stage:write'],
     recoveries: [],
-  }
+  })
+  const isSet = entityType === TYPES.set
   return {
     entityType,
     parent,
-    create: operation,
-    remove: operation,
+    create: isSet
+      ? operation(false, '布景要按参数生成：调用 generate_camera_stage_set。')
+      : operation(entityType === TYPES.stateKeyframe),
+    remove: operation(entityType === TYPES.stateKeyframe || isSet),
     revisions: { camera_stage: revision },
   }
 }

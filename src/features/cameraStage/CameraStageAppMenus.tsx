@@ -3,6 +3,7 @@ import { contributeAppMenus } from '@/core/appMenu/appMenu'
 import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
 import { useCameraStageStore } from './store/cameraStageStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
+import { useCameraStageToolStore } from './store/cameraStageToolStore'
 
 export function CameraStageAppMenus(): null {
   const visible = useAppMenuVisibility()
@@ -20,6 +21,7 @@ export function CameraStageAppMenus(): null {
       { menu: 'cameraStage', label: '场景', order: 100, items: [
         { kind: 'action', id: 'cameraStage.duplicate', label: '创建对象副本', disabledReason: missing, run: () => { if (selectedId) useCameraStageStore.getState().duplicateObject(selectedId) } },
         { kind: 'action', id: 'cameraStage.focus', label: '聚焦选中对象', disabledReason: missing, run: () => useCameraStageStore.getState().requestFocusSelected() },
+        { kind: 'action', id: 'cameraStage.stageSet', label: '生成布景…', run: () => useCameraStageToolStore.getState().setStageSetPanelOpen(true) },
       ] },
     ])
   }, [visible, selectedId, canUndo, canRedo, undo, redo])

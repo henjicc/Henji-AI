@@ -341,7 +341,9 @@ const values: Record<string, unknown> = {
       { id: 'fx-comp', kind: 'builtin', name: '压缩器', enabled: true, amount: 1, builtin: { id: 'compressor', params: { amount: 40, speed: 'normal', makeup: true } } },
     ],
     chainBypassed: false, output: { volumeDb: -1.5, loudness: { enabled: true, targetLufs: -16, gainDb: 3.5 } } },
-  'document.camera_stage': { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }], activeCameraId: 'camera', sceneSettings: { sky: {} }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }] },
+  // 镜头参考 v2：布景记录（补齐后的生成参数）与一栋指回它的楼。
+  'document.camera_stage': { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }, { id: 'tower', name: '城市 楼01', type: 'primitive', kind: 'box', setId: 'city', color: '#8d939c', visible: true, transform: { position: { x: 5, y: 10, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 8, y: 20, z: 8 } } }], activeCameraId: 'camera', sceneSettings: { sky: {} }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }],
+    sets: [{ id: 'city', name: '城市', params: { preset: 'city', center: { x: 0, z: 0 }, rotation: 0, seed: 7, width: 240, depth: 240, blockSize: 40, streetWidth: 12, lotSize: 10, density: 0.85, height: { min: 6, max: 60 }, heightProfile: 'downtown' } }] },
   'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id, memories: [{ id: 'brand', content: '这期品牌色用红色。', source: 'user', revision: 1, updatedAt: timestamp }] }),
   'project-package': { format: 'henji-package', version: PACKAGE_VERSION, minReaderVersion: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },

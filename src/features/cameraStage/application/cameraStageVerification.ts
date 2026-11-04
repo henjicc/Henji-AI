@@ -77,7 +77,8 @@ export async function verifyCameraStageScene(
   ])
   const evidence: CameraStageVerificationEvidence[] = []
   const unmetConditions: string[] = []
-  const objectIds = new Set(scene.objects.map((object) => object.id))
+  // 观察结果不逐个列布景成员，存在性按完整场景判断。
+  const objectIds = new Set(snapshot.objects.map((object) => object.id))
 
   const expectedObjectIds = [
     ...request.expectedObjectIds,
@@ -104,10 +105,11 @@ export async function verifyCameraStageScene(
   }
 
   if (request.requireNoCollisions) {
-    if (scene.collisions.length === 0) {
-      evidence.push({ kind: 'layout', fact: '可见非摄像机对象之间没有边界盒重叠。', refs: [] })
+    if (scene.collisions.length === 0 && scene.setCollisions.length === 0) {
+      evidence.push({ kind: 'layout', fact: '可见非摄像机对象之间、对象与布景之间都没有边界盒重叠。', refs: [] })
     } else {
-      unmetConditions.push(`检测到 ${scene.collisions.length} 组对象边界盒重叠。`)
+      if (scene.collisions.length > 0) unmetConditions.push(`检测到 ${scene.collisions.length} 组对象边界盒重叠。`)
+      for (const hit of scene.setCollisions) unmetConditions.push(`对象 ${hit.objectId} 压进布景 ${hit.setId} 的 ${hit.memberCount} 个成员。`)
     }
   }
 

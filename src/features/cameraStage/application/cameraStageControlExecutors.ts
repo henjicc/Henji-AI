@@ -31,8 +31,8 @@ import {
 import { CAMERA_STAGE_TRAJECTORY_WRITERS, type CameraStageTrajectoryDraft } from './cameraStageTrajectoryFields'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
-/** 有写入执行器的实体；camera_stage.project（文档本身）只读，名称经通用 documents.document.name 改。 */
-type MutationEntityType = Exclude<typeof CAMERA_STAGE_ENTITY_TYPES[keyof typeof CAMERA_STAGE_ENTITY_TYPES], typeof CAMERA_STAGE_ENTITY_TYPES.project>
+/** 有属性写入执行器的实体；camera_stage.project（文档本身）只读，名称经通用 documents.document.name 改；布景只有集合删除。 */
+type MutationEntityType = Exclude<typeof CAMERA_STAGE_ENTITY_TYPES[keyof typeof CAMERA_STAGE_ENTITY_TYPES], typeof CAMERA_STAGE_ENTITY_TYPES.project | typeof CAMERA_STAGE_ENTITY_TYPES.set>
 
 export interface CameraStageControlExecutorDependencies {
   readRevision: () => number

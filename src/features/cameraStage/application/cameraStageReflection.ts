@@ -10,7 +10,8 @@ import {
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
-import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
+import type { StageObject, StageSceneSettings, StageSet } from '../domain/sceneTypes'
+import { liveStageSets } from '../domain/stageSets'
 import { getAnimatablePropByPath } from '../domain/animatableProps'
 import type { CameraStageProjectSnapshot } from './cameraStageProjectRuntime'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
@@ -29,6 +30,9 @@ import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSce
 import { PLAYBACK_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
 import { TRAJECTORY_FIELDS, TRAJECTORY_SCHEMA_DOCUMENTS } from './cameraStageTrajectoryFields'
 import { calculateStageObjectBounds } from './sceneAnalysis'
+import { summarizeStageSet } from './cameraStageApplicationService'
+import { z } from 'zod'
+import { cameraStageSetLayoutSchema } from '@/core/application-control/domains/cameraStage/cameraStageSetSchemas'
 
 const DOMAIN = 'camera_stage'
 const REVISION_SCOPE = 'camera_stage'
@@ -37,6 +41,7 @@ const ENTITY_TYPES = {
   scene: 'camera_stage.scene',
   object: 'camera_stage.object',
   camera: 'camera_stage.camera',
+  set: 'camera_stage.set',
   stateKeyframe: 'camera_stage.state_keyframe',
   trajectory: 'camera_stage.trajectory',
   playback: 'camera_stage.playback',
@@ -126,6 +131,11 @@ const PROJECT_WRITE_EXCLUSION = 'camera_stage.document 就是一份镜头参考�
   + '移动、创建副本、移到回收站用 move_document / duplicate_document / trash_document；新建用 create_document（kind=camera_stage）。'
   + '场景内容经 camera_stage.scene 及其对象、摄像机、状态关键帧等子实体写入。'
 const INTEGER = { kind: 'integer', hardRange: { min: 0 } } as const
+const SET_READ_ONLY = '布景参数改了要重新生成成员：调用 generate_camera_stage_set 并传 replaceSetId，省略的参数沿用原值。'
+const SET_PARAMS_VALUE = { kind: 'json', schemaRef: schemaRef('property', 'camera_stage.set.params.value') } as const
+const SET_SCHEMA_DOCUMENTS = [
+  { ref: SET_PARAMS_VALUE.schemaRef, value: z.toJSONSchema(cameraStageSetLayoutSchema, { io: 'input' }) as JsonValue },
+]
 const VECTOR3 = { kind: 'vector3', unit: 'scene_unit' } as const
 
 const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = {
@@ -136,7 +146,8 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
   ],
   [ENTITY_TYPES.scene]: [
     property(ENTITY_TYPES.scene, 'document_ref', '所属镜头参考', { kind: 'ref', refKinds: [ENTITY_TYPES.project] }, { readOnly: '所属镜头参考不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.project], cardinality: 'one' } }),
-    property(ENTITY_TYPES.scene, 'object_refs', '场景对象', { kind: 'ref_list', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '对象集合通过正式创建和删除操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'many' } }),
+    property(ENTITY_TYPES.scene, 'object_refs', '场景对象', { kind: 'ref_list', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { description: '用户与助手逐个放置的对象和摄像机，不含布景成员；布景成员数量大，按 set_refs 读摘要，或用 list_application_entities 分页列出 camera_stage.object。', readOnly: '对象集合通过正式创建和删除操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'many' } }),
+    property(ENTITY_TYPES.scene, 'set_refs', '布景', { kind: 'ref_list', refKinds: [ENTITY_TYPES.set] }, { readOnly: '布景由 generate_camera_stage_set 生成，删除用 camera_stage.set 的集合写入。', relation: { targetEntityTypes: [ENTITY_TYPES.set], cardinality: 'many' } }),
     property(ENTITY_TYPES.scene, 'state_keyframe_refs', '状态关键帧', { kind: 'ref_list', refKinds: [ENTITY_TYPES.stateKeyframe] }, { readOnly: '状态关键帧的增删排序通过 camera_stage.state_keyframe 的集合写入维护，这里只读列出当前集合。', relation: { targetEntityTypes: [ENTITY_TYPES.stateKeyframe], cardinality: 'many' } }),
     /*
      * 场景外观 26 项 + 活动摄像机：界面上有的每一项这里都要有。
@@ -160,6 +171,14 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     ...fieldDescriptors(CAMERA_FIELDS),
     property(ENTITY_TYPES.camera, 'look_at_mode', '注视模式', { kind: 'enum', values: [{ value: 'manual', label: '坐标' }, { value: 'object', label: '对象' }] }, { readOnly: '注视模式由注视点或注视对象修改推导。' }),
     property(ENTITY_TYPES.camera, 'effector_count', '效果器数量', INTEGER, { readOnly: '效果器数量由效果器列表计算。' }),
+  ],
+  [ENTITY_TYPES.set]: [
+    property(ENTITY_TYPES.set, 'name', '名称', STRING, { readOnly: SET_READ_ONLY }),
+    property(ENTITY_TYPES.set, 'preset', '布景类型', { kind: 'enum', values: [{ value: 'city', label: '城市' }, { value: 'street', label: '街道' }, { value: 'plaza', label: '广场' }, { value: 'crowd', label: '人群' }] }, { readOnly: SET_READ_ONLY }),
+    property(ENTITY_TYPES.set, 'object_count', '成员数量', INTEGER, { readOnly: '成员数量由场景对象计算。' }),
+    property(ENTITY_TYPES.set, 'bounds.min', '范围最小点', VECTOR3, { readOnly: '范围由成员边界盒计算。' }),
+    property(ENTITY_TYPES.set, 'bounds.max', '范围最大点', VECTOR3, { readOnly: '范围由成员边界盒计算。' }),
+    property(ENTITY_TYPES.set, 'params', '生成参数', SET_PARAMS_VALUE, { description: '补齐默认值后的完整生成参数，格式同 generate_camera_stage_set 的 layout。', readOnly: SET_READ_ONLY }),
   ],
   [ENTITY_TYPES.stateKeyframe]: [
     ...fieldDescriptors(STATE_KEYFRAME_FIELDS),
@@ -275,6 +294,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
           : []
       }
       if (this.entityType === ENTITY_TYPES.object) return snapshot.objects.filter((object) => object.type !== 'camera').map((object) => childRef(this.entityType, snapshot.id, object.id, object.name))
+      if (this.entityType === ENTITY_TYPES.set) return liveStageSets(snapshot.sets, snapshot.objects).map((set) => childRef(this.entityType, snapshot.id, set.id, set.name))
       if (this.entityType === ENTITY_TYPES.camera) return snapshot.objects.filter((object) => object.type === 'camera').map((object) => childRef(this.entityType, snapshot.id, object.id, object.name))
       if (this.entityType === ENTITY_TYPES.stateKeyframe) return snapshot.stateKeyframes.map((stateKeyframe) => childRef(this.entityType, snapshot.id, stateKeyframe.id, stateKeyframe.name))
       if (this.entityType === ENTITY_TYPES.trajectory) return snapshot.stateKeyframes.flatMap((stateKeyframe) => Object.entries(stateKeyframe.transition.perObject).flatMap(([objectId, detail]) => detail.spatialPath ? [childRef(this.entityType, snapshot.id, `${stateKeyframe.id}:${objectId}`)] : []))
@@ -291,12 +311,17 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   private async normalizeRef(ref: ApplicationRef): Promise<ApplicationRef> {
     if (ref.kind !== this.entityType || ref.id.includes(':')) return ref
     const shortRefEntityTypes = new Set<EntityType>([
-      ENTITY_TYPES.object, ENTITY_TYPES.camera, ENTITY_TYPES.stateKeyframe,
+      ENTITY_TYPES.object, ENTITY_TYPES.camera, ENTITY_TYPES.stateKeyframe, ENTITY_TYPES.set,
     ])
     if (!shortRefEntityTypes.has(this.entityType)) return ref
     const matches = (await this.snapshots()).flatMap((snapshot) => {
       if (this.entityType === ENTITY_TYPES.stateKeyframe) {
         return snapshot.stateKeyframes.some((item) => item.id === ref.id)
+          ? [childRef(this.entityType, snapshot.id, ref.id, ref.label)]
+          : []
+      }
+      if (this.entityType === ENTITY_TYPES.set) {
+        return liveStageSets(snapshot.sets, snapshot.objects).some((item) => item.id === ref.id)
           ? [childRef(this.entityType, snapshot.id, ref.id, ref.label)]
           : []
       }
@@ -334,7 +359,24 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       return this.stateKeyframeProperties(projectId, stateKeyframe, snapshot.objects)
     }
     if (this.entityType === ENTITY_TYPES.trajectory) return this.trajectoryProperties(projectId, snapshot, childId)
+    if (this.entityType === ENTITY_TYPES.set) {
+      const set = liveStageSets(snapshot.sets, snapshot.objects).find((candidate) => candidate.id === childId)
+      if (!set) throw new Error('NOT_FOUND')
+      return this.setProperties(set, snapshot.objects)
+    }
     throw new Error('NOT_FOUND')
+  }
+
+  private setProperties(set: StageSet, objects: StageObject[]): Record<string, JsonValue> {
+    const summary = summarizeStageSet(set, objects)
+    return {
+      [`${ENTITY_TYPES.set}.name`]: summary.name,
+      [`${ENTITY_TYPES.set}.preset`]: summary.params.preset,
+      [`${ENTITY_TYPES.set}.object_count`]: summary.objectCount,
+      [`${ENTITY_TYPES.set}.bounds.min`]: vec3Value(summary.bounds.min),
+      [`${ENTITY_TYPES.set}.bounds.max`]: vec3Value(summary.bounds.max),
+      [`${ENTITY_TYPES.set}.params`]: JSON.parse(JSON.stringify(summary.params)) as JsonValue,
+    }
   }
 
   private projectProperties(snapshot: CameraStageProjectSnapshot): Record<string, JsonValue> {
@@ -348,7 +390,8 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   private sceneProperties(snapshot: CameraStageProjectSnapshot): Record<string, JsonValue> {
     return {
       [`${ENTITY_TYPES.scene}.document_ref`]: { kind: ENTITY_TYPES.project, id: snapshot.id, label: snapshot.name },
-      [`${ENTITY_TYPES.scene}.object_refs`]: snapshot.objects.map((object) => childRef(object.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, snapshot.id, object.id, object.name)),
+      [`${ENTITY_TYPES.scene}.object_refs`]: snapshot.objects.filter((object) => !object.setId).map((object) => childRef(object.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, snapshot.id, object.id, object.name)),
+      [`${ENTITY_TYPES.scene}.set_refs`]: liveStageSets(snapshot.sets, snapshot.objects).map((set) => childRef(ENTITY_TYPES.set, snapshot.id, set.id, set.name)),
       [`${ENTITY_TYPES.scene}.state_keyframe_refs`]: snapshot.stateKeyframes.map((stateKeyframe) => childRef(ENTITY_TYPES.stateKeyframe, snapshot.id, stateKeyframe.id, stateKeyframe.name)),
       ...fieldReadValues(SCENE_TIMELINE_FIELDS, snapshot),
       ...sceneAppearanceProperties(snapshot.sceneSettings),
@@ -404,6 +447,7 @@ const ENTITY_META: Record<EntityType, { title: string; description: string; pare
   [ENTITY_TYPES.scene]: { title: '三维场景', description: '镜头参考中的对象、活动摄像机和状态关键帧集合。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.object]: { title: '三维对象', description: '基础几何体或角色对象。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.camera]: { title: '三维摄像机', description: '具有取景、注视和轨迹控制的摄像机。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.set]: { title: '三维布景', description: '按参数一次生成的一片布景（城市、街道、广场、人群）；成员是普通对象，可逐个修改。生成与重新生成用 generate_camera_stage_set，整片删除用集合写入 remove。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.stateKeyframe]: { title: '状态关键帧', description: '指定时刻的完整场景状态和到下一时刻的过渡定义。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.trajectory]: { title: '三维轨迹', description: '对象或摄像机在相邻状态关键帧间的空间路径。', parents: [ENTITY_TYPES.stateKeyframe], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.playback]: { title: '三维播放控制', description: '时间轴的播放、播放头位置与循环开关。只对当前打开的镜头参考有意义。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
@@ -427,6 +471,9 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         queryCapabilityIds: meta.queryIds,
         schemaRef: schemaRef('entity', entityType),
         ...(entityType === ENTITY_TYPES.project ? { writeExclusion: { reason: PROJECT_WRITE_EXCLUSION } } : {}),
+        ...(entityType === ENTITY_TYPES.set ? {
+          collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 },
+        } : {}),
         ...(entityType === ENTITY_TYPES.stateKeyframe ? {
           collectionWrite: {
             creatable: true,
@@ -438,7 +485,7 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
       },
       properties: propertiesByEntity[entityType],
       provider: new CameraStageReflectionProvider(entityType, readRevision),
-      schemaDocuments: entityType === ENTITY_TYPES.trajectory ? TRAJECTORY_SCHEMA_DOCUMENTS : [],
+      schemaDocuments: entityType === ENTITY_TYPES.trajectory ? TRAJECTORY_SCHEMA_DOCUMENTS : entityType === ENTITY_TYPES.set ? SET_SCHEMA_DOCUMENTS : [],
     }
   })
 }

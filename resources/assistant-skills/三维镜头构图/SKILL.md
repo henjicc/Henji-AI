@@ -1,48 +1,43 @@
 ---
 name: 三维镜头构图
-description: 用户要在三维镜头工具里布置场景、摆放物体、调整构图，或要求做环绕、推拉、平移、升降运镜时使用。也适用于"帮我看看构图对不对"这类三维画面检查。
+description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布景，摆人物和机位定构图，做状态关键帧与运镜时使用。
 ---
 
-# 三维布景、状态关键帧与运镜
+# 3D 镜头参考：快速布景、构图与运镜
 
-应用写入只有一个入口：先调用 `discover_application_capabilities`，读取返回的
-`scriptApi`，然后只调用一次 `run_henji_script`。不要直接调用低层三维写工具，不要填写
-能力版本、revision、`$from/$path`，也不要声明 Action Plan。
+镜头参考用来快速摆抽象场景、定构图和人物关系，效率第一，画面次要。
 
-## 状态动画优先使用已验证 Recipe
+## 铁律
 
-用户要新建工程、放置对象、制作多个时间点的动画并播放时，优先使用发现结果中的
-`camera_stage.state_animation`。它会在同一受控执行中创建工程、打开页面、放置对象、
-写入状态关键帧、开启播放，并从正式状态源验证结果。
+1. 文档 ID 取自宿主上下文或 `list_documents`（kind=camera_stage）；对象、布景、摄像机 id 取自 `observe_camera_stage_scene`，不猜、不按名称定位。
+2. **成片布景一次生成**：城市、街道、广场、人群用 `generate_camera_stage_set`，一次调用一个撤销点、一次存盘。不要用 `place_camera_stage_object` 一栋一栋地摆楼。
+3. 单个主体（主角、道具、摄像机）用 `place_camera_stage_object`；改已有对象的属性用 `change_application_entities` 的 `set_properties`。
+4. 布景成员是普通对象，可以逐个改；要整体换参数就重新生成，不要逐个改几百栋楼。
 
-```ts
-const result = await app.recipe('camera_stage.state_animation', {
-  projectName: '浮动球演示',
-  object: { primitiveKind: 'sphere', name: '浮动球' },
-  samples: [
-    { time: 0, position: { y: 0 } },
-    { time: 1, position: { y: 1.5 } },
-    { time: 2, position: { y: 0 } },
-  ],
-  loop: true,
-  play: true,
-})
-app.assert.exists(result.resultRefs)
-```
+## 布景生成
 
-这条路径已经通过真实 Electron 运行验证。只替换用户明确要求的名称、物体类型、时间和属性；
-不要把示例里的值误当成固定要求。
+`layout.preset` 必填，其余参数都可省略（单位米、角度为度），默认值见能力说明：
 
-## 自定义布景
+| preset | 常用参数 |
+| --- | --- |
+| `city` 城市街区 | `width`/`depth` 范围、`blockSize` 街区边长、`streetWidth` 街道宽、`lotSize` 地块宽、`density` 0–1、`height {min,max}`、`heightProfile` downtown 中心高 / uniform |
+| `street` 街道 | `length`、`streetWidth`、`lotWidth`、`buildingDepth`、`density`、`height` |
+| `plaza` 广场 | `size` 空地边长、`lotWidth`、`buildingDepth`、`density`、`height`、`monument` |
+| `crowd` 人群 | `count`、`formation` grid / scatter / ring、`spacing`、`facing` forward / center / random |
 
-没有匹配 Recipe 时，按发现到的 `scriptApi.actions` 与实体属性组合一段 Henji Script。
-顺序保持为“取得或创建工程 → 打开三维页面 → 读取现状 → 布置 → 运镜 → 正式读取或断言”。
-变量保存完整稳定引用，由宿主传递；禁止手工拼接或截断 ID。
+通用：`center {x,z}`、`rotation`、`seed`。城市中心总落在路口上，主角放在原点附近的街道上不会和楼相交。
 
-相对位置应依据正式观察到的主体与包围盒，不要凭空猜坐标。用户要求复用当前摄像机时不要新建。
+- 规模：默认城市约 220 栋；`width/depth` 给 600 约 2000 栋，给 1450 约 1 万栋。城市至少 2×2 个街区。密度为 0（或太低碰巧一栋没有）时会在写入前被拒绝。
+- 改参数重新生成：传 `replaceSetId`（取自观察结果 `sets[].id`），只写要改的字段，其余沿用上一次（包括种子）；换一种随机布局就换 `seed`。
+- 整片删除：`change_application_entities` 对 `camera_stage.set` 执行 `remove_items`。新建布景不能用 `create_items`。
 
-## 验证与视觉边界
+## 观察与验证
 
-脚本的 CRUD 会自动正式读回；算法型 action/recipe 必须自带验证契约。只有 Effect Receipt 与
-正式验证都通过才能声称完成。若当前模型不能读取应用画面，只能说明结构化验证结果，不能描述
-未经观察的构图、遮挡或视觉质量。
+`observe_camera_stage_scene` 的 `objects` 只列逐个放置的对象；布景只在 `sets` 里给摘要（数量、范围、参数）。需要某栋楼时用 `list_application_entities` 分页列 `camera_stage.object`，或按范围判断，不要整片读回。
+
+相对位置依据观察到的边界盒，不要凭空猜坐标；用户要求复用当前摄像机时不要新建。空间写入后用 `verify_camera_stage_scene` 做结构化验证；没有真读画面时只说结构化结果，不描述没看到的构图或遮挡。
+
+## 动画与运镜
+
+- 状态关键帧动画：同一次 `change_application_entities` 里交替写 `camera_stage.playback.current_time` 与对象或摄像机的 `animatable.*` / `pose_preset`，应用自动建关键帧；最后可同事务写 `loop`、`playing`。不要按时间点拆成多轮。
+- 语义运镜（环绕、推拉、平移、升降）用 `apply_camera_stage_camera_move`，轨迹按弧长平滑采样；整理示范机位用 `organize_camera_stage_motion` 再 `apply_camera_stage_motion_candidate`。

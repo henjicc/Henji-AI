@@ -1,5 +1,5 @@
-import React from 'react'
-import { Box, Camera, Circle, Cone, Cylinder, Plus, Pyramid, Torus, User } from 'lucide-react'
+import React, { useRef } from 'react'
+import { Box, Building2, Camera, Circle, Cone, Cylinder, Plus, Pyramid, Torus, User } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { PanelTrigger, UiIconButton, UiOptionButton, UiOverflowRow } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -7,12 +7,15 @@ import { Z_LAYERS } from '@/core/theme/zLayers'
 import { PRIMITIVE_KIND_LABELS } from '../domain/sceneDefaults'
 import type { StagePrimitiveKind } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { useCameraStageToolStore } from '../store/cameraStageToolStore'
+import { StageSetPanel } from './StageSetPanel'
 
 /**
  * 顶部工具栏图标化快速添加栏：几何体/角色/摄像机一击添加并自动选中。
  * 命令带放不下时（960 宽），从不常用的几何体开始收进“更多添加”菜单，角色与摄像机最后收；
  * 收纳行借用命令带左端的空余宽度（命令带 leadingLayout="share"），窗口放宽后能把收起的按钮放回来。
  * 此前八个按钮硬挤，后面的“超级关键帧”与右侧布局按钮叠在一起，路径参数条被挤成零宽（重要记录 020）。
+ * “更多添加”菜单常驻，末尾的“布景…”打开布景面板（锚在这个按钮上）；菜单栏“场景 > 生成布景…”打开的是同一个面板。
  */
 
 type QuickAddValue = StagePrimitiveKind | 'character' | 'camera'
@@ -61,6 +64,9 @@ const QuickAddGroup: React.FC = () => {
   const addPrimitive = useCameraStageStore((state) => state.addPrimitive)
   const addCharacter = useCameraStageStore((state) => state.addCharacter)
   const addCamera = useCameraStageStore((state) => state.addCamera)
+  const stageSetPanelOpen = useCameraStageToolStore((state) => state.stageSetPanelOpen)
+  const setStageSetPanelOpen = useCameraStageToolStore((state) => state.setStageSetPanelOpen)
+  const moreAnchor = useRef<HTMLSpanElement | null>(null)
 
   const handleAdd = (value: QuickAddValue): void => {
     if (value === 'character') addCharacter()
@@ -69,8 +75,10 @@ const QuickAddGroup: React.FC = () => {
   }
 
   return (
+    <>
     <UiOverflowRow
       growIntoParent
+      alwaysShowOverflow
       className="min-w-0 shrink gap-0.5"
       items={QUICK_ADD_ORDER.map((value) => {
         const Icon = QUICK_ADD_ICONS[value]
@@ -105,17 +113,35 @@ const QuickAddGroup: React.FC = () => {
                   </UiOptionButton>
                 )
               })}
+              <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setStageSetPanelOpen(true)}>
+                <Building2 size={UI_ICON_SIZE.sm} />
+                布景…
+              </UiOptionButton>
             </div>
           )}
         >
           {({ open, togglePanel }) => (
-            <UiIconButton size="md" aria-label="更多添加" tooltip="更多添加" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
-              <Plus />
-            </UiIconButton>
+            <span ref={moreAnchor} className="inline-flex">
+              <UiIconButton size="md" aria-label="更多添加" tooltip="更多添加" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
+                <Plus />
+              </UiIconButton>
+            </span>
           )}
         </PanelTrigger>
       )}
     />
+    {stageSetPanelOpen && (
+      <PanelTrigger
+        anchor={moreAnchor.current}
+        open
+        onOpenChange={(open) => { if (!open) setStageSetPanelOpen(false) }}
+        panelSize="compact"
+        panelPadding="content"
+        zIndex={Z_LAYERS.dropdown}
+        renderPanel={() => <StageSetPanel onDone={() => setStageSetPanelOpen(false)} />}
+      />
+    )}
+    </>
   )
 }
 

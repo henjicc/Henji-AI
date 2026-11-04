@@ -172,6 +172,16 @@ export const CAMERA_STAGE_OBJECT_PALETTE_HEX = [
   '#9aa3ad',
 ] as const;
 
+// 3D 镜头参考生成布景的楼体颜色：低饱和的几档灰，构图时退在主体后面
+export const CAMERA_STAGE_SET_BUILDING_PALETTE_HEX = [
+  '#8d939c',
+  '#a3a8b0',
+  '#787e88',
+  '#b4b0a8',
+  '#9a958c',
+  '#6f747c',
+] as const;
+
 export const ANNOTATION_DEFAULT_STROKE_HEX = '#ff4d4f';
 export const ANNOTATION_DEFAULT_TEXT_HEX = '#ffffff';
 

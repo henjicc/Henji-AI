@@ -40,8 +40,14 @@ function completedTransaction(result: ApplicationTransactionResult): Extract<App
   throw new Error('CAPABILITY_REJECTED')
 }
 
+const OPERATION_SUMMARIES = {
+  place_camera_stage_object: '复用或布置三维场景对象',
+  apply_camera_stage_camera_move: '应用摄像机语义运镜',
+  generate_camera_stage_set: '生成三维布景',
+} as const
+
 async function executeOperation(
-  capabilityId: 'place_camera_stage_object' | 'apply_camera_stage_camera_move',
+  capabilityId: 'place_camera_stage_object' | 'apply_camera_stage_camera_move' | 'generate_camera_stage_set',
   input: JsonValue,
   revision: number,
   context: CapabilityExecutionContext,
@@ -52,7 +58,7 @@ async function executeOperation(
   if (!engine) throw new Error('CAPABILITY_NOT_READY:事务引擎尚未装配。')
   const appContext = executionContext(context)
   const plan = await engine.plan({
-    summary: capabilityId === 'place_camera_stage_object' ? '复用或布置三维场景对象' : '应用摄像机语义运镜',
+    summary: OPERATION_SUMMARIES[capabilityId],
     transactionMode: 'atomic',
     steps: [{ kind: 'operation', capabilityId, capabilityVersion: 1, input, expectedRevisions: { camera_stage: revision } }],
     verificationConditions: [{ kind: 'evidence_fact', fact: evidenceFact }],
@@ -117,6 +123,16 @@ export async function placeCameraStageObject(input: Record<string, unknown>, con
   return await executeOperation('place_camera_stage_object', operationInput as JsonValue, revision, context, '三维场景对象已按复用与空间约束处理。')
 }
 
+export async function generateCameraStageSet(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  const revision = assertCameraStageRevision(context)
+  return await executeOperation('generate_camera_stage_set', input as JsonValue, revision, context, '三维布景已生成。')
+}
+
+function withoutSetId<T extends { setId?: string }>(object: T): Omit<T, 'setId'> {
+  const { setId: _setId, ...rest } = object
+  return rest
+}
+
 export async function duplicateCameraStageObject(input: { projectId: string; objectId: string }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   assertCameraStageRevision(context)
   const before = await cameraStageApplicationService.readSnapshot(input.projectId)
@@ -126,7 +142,8 @@ export async function duplicateCameraStageObject(input: { projectId: string; obj
   const after = await cameraStageApplicationService.readSnapshot(input.projectId)
   const created = after.objects.find(object => object.id === result.objectId)
   const verified = Boolean(source && created && !before.objects.some(object => object.id === created.id)
-    && JSON.stringify({ ...source, id: created.id, name: created.name }) === JSON.stringify(created))
+    // 副本不随布景重新生成，所以不带 setId；其余属性应与源对象一致。
+    && JSON.stringify(withoutSetId({ ...source, id: created.id, name: created.name })) === JSON.stringify(created))
   return { projectId: result.projectId, objectId: result.objectId, duplicatedFromObjectId: result.duplicatedFromObjectId, undoRef: result.undoToken,
     verification: { verified, condition: '从正式场景回读副本，确认新身份及源对象属性一致。', target: { kind: created?.type === 'camera' ? 'camera_stage.camera' : 'camera_stage.object', id: `${input.projectId}:${result.objectId}` } } }
 }

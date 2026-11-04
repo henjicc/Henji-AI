@@ -109,6 +109,7 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
             max: { x: result.bounds.max.x, y: result.bounds.max.y, z: result.bounds.max.z },
           },
           conflicts: result.conflicts,
+          setConflicts: result.setConflicts,
           reason: result.reason,
         },
         capturedAt: new Date().toISOString(),

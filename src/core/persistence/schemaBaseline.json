@@ -144,8 +144,8 @@
       "minReaderVersion": 7
     },
     "document.camera_stage": {
-      "version": 1,
-      "fingerprint": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813",
+      "version": 2,
+      "fingerprint": "a86fa83387c6981af5cbf9b7ecaa85c5c86f4f30a5d6131697f0e2a9ae635a6c",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },

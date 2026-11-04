@@ -101,7 +101,8 @@ export function matchReusableSceneObject(
     if (active) return { object: active, reason: '复用当前镜头参考的活动摄像机。' }
   }
 
-  const candidates = objects.filter((object) => matchesType(object, spec) && roleMatches(object, spec.role))
+  // 按角色或名称复用只在逐个放置的对象里找，不会把布景里的某栋楼当成要复用的主体。
+  const candidates = objects.filter((object) => !object.setId && matchesType(object, spec) && roleMatches(object, spec.role))
   const wantedName = normalizedName(spec.name)
   if (wantedName) {
     const exact = candidates.find((object) => normalizedName(object.name) === wantedName)
@@ -174,8 +175,9 @@ export function listStageBoundsConflicts(
     .map((object) => object.id)
 }
 
+/** 布景成员不参与“场景中心”：上千栋楼会把中心拉到楼群重心、高度拉到半个楼高。 */
 function sceneCenter(objects: StageObject[]): StageVec3 {
-  const visible = objects.filter((object) => object.type !== 'camera' && object.visible)
+  const visible = objects.filter((object) => object.type !== 'camera' && object.visible && !object.setId)
   if (visible.length === 0) return { x: 0, y: 0.5, z: 0 }
   return {
     x: visible.reduce((total, object) => total + object.transform.position.x, 0) / visible.length,

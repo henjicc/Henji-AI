@@ -10,7 +10,7 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 
 import { parseDocumentCapabilityInput as parseCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
-import { assertCameraStageRevision, applyCameraStageCameraMove, deleteCameraStageObject, duplicateCameraStageObject, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
+import { assertCameraStageRevision, applyCameraStageCameraMove, deleteCameraStageObject, duplicateCameraStageObject, generateCameraStageSet, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
 import { releaseCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 import { createDraftCameraStageDocument, openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
@@ -74,6 +74,12 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<Record<string, unknown>>('place_camera_stage_object', input)
     return await placeCameraStageObject(parsed, context)
+  })
+
+  registrar.registerHandler('generate_camera_stage_set', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<Record<string, unknown>>('generate_camera_stage_set', input)
+    return await generateCameraStageSet(parsed, context)
   })
 
   registrar.registerHandler('duplicate_camera_stage_object', async (input, context) => {

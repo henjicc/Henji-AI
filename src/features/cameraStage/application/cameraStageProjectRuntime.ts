@@ -16,6 +16,7 @@ import {
   type StageSceneRuntimeSnapshot,
 } from '../domain/sceneSerialization'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
+import type { StageSet } from '../domain/sceneTypes'
 import {
   attachCameraStageStore,
   cameraStageStoreAttachment,
@@ -42,6 +43,7 @@ export interface CameraStageProjectSnapshot extends StageSceneRuntimeSnapshot {
   id: string
   /** 文档名（文件名去扩展名）。 */
   name: string
+  sets: StageSet[]
 }
 
 export interface CameraStageProjectInstance {
@@ -85,6 +87,7 @@ export function findCameraStageProjectInstance(projectId: string): CameraStagePr
 function contentChanged(state: ReturnType<CameraStageOwnedStore['getState']>, previous: ReturnType<CameraStageOwnedStore['getState']>): boolean {
   return state.objects !== previous.objects || state.stateKeyframes !== previous.stateKeyframes
     || state.sceneSettings !== previous.sceneSettings || state.activeCameraId !== previous.activeCameraId
+    || state.sets !== previous.sets
 }
 
 /** 空白场景（新建文档的空内容）补上默认摄像机与第一张状态关键帧；其余内容原样。 */
@@ -98,6 +101,7 @@ function initialSnapshot(content: unknown): { snapshot: StageSceneRuntimeSnapsho
       activeCameraId: defaults.activeCameraId,
       sceneSettings: defaults.sceneSettings,
       stateKeyframes: defaults.stateKeyframes,
+      sets: defaults.sets,
       animation: compileStateKeyframesToAnimation(defaults.stateKeyframes, defaults.objects),
     },
     filledDefaults: true,
@@ -241,7 +245,7 @@ export function readCameraStageProjectInstance(projectId: string): CameraStagePr
   return {
     id: projectId, name: state.currentProjectName,
     objects: state.objects, activeCameraId: state.activeCameraId, animation: state.animation,
-    sceneSettings: state.sceneSettings, stateKeyframes: state.stateKeyframes,
+    sceneSettings: state.sceneSettings, stateKeyframes: state.stateKeyframes, sets: state.sets,
   }
 }
 

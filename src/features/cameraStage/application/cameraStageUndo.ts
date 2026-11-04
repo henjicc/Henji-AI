@@ -7,7 +7,7 @@ interface CameraStageUndoSnapshot {
   history: Pick<ReturnType<CameraStageOwnedStore['temporal']['getState']>, 'pastStates' | 'futureStates'>
   scene: Pick<
     ReturnType<typeof useCameraStageStore.getState>,
-    'objects' | 'activeCameraId' | 'animation' | 'sceneSettings' | 'stateKeyframes'
+    'objects' | 'activeCameraId' | 'animation' | 'sceneSettings' | 'stateKeyframes' | 'sets'
   >
 }
 
@@ -40,6 +40,7 @@ export function captureCameraStageUndo(projectId: string): string {
       animation: state.animation,
       sceneSettings: state.sceneSettings,
       stateKeyframes: state.stateKeyframes,
+      sets: state.sets,
     }),
   })
   while (undoSnapshots.size > MAX_UNDO_SNAPSHOTS) {

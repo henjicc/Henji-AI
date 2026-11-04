@@ -24,5 +24,10 @@ export const CAMERA_STAGE_TOOL_STORE_LEDGER: ApplicationStoreActionLedger<Action
     selectPath: { kind: 'excluded', category: 'transient_selection', reason: CONTROL_SELECTION_REASON },
     selectControl: { kind: 'excluded', category: 'transient_selection', reason: CONTROL_SELECTION_REASON },
     clearPathSelection: { kind: 'excluded', category: 'transient_selection', reason: CONTROL_SELECTION_REASON },
+    setStageSetPanelOpen: {
+      kind: 'excluded',
+      category: 'view_state',
+      reason: '只是打开布景参数面板这个界面入口，不改场景；助手直接调用 generate_camera_stage_set 生成布景。',
+    },
   },
 }

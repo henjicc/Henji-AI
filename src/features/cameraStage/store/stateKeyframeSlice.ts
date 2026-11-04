@@ -135,6 +135,26 @@ export function syncAddedObjectToStateKeyframes(stateKeyframes: StageStateKeyfra
   return stateKeyframes.map((stateKeyframe) => ({ ...stateKeyframe, objectStates: { ...stateKeyframe.objectStates, [object.id]: snapshot } }))
 }
 
+/**
+ * 一次性替换一批对象在全部状态关键帧里的快照（布景生成与删除用）：先去掉 removedIds，再写入 added。
+ * 逐个调用单对象版本时每次都要复制整张 objectStates，上万个对象就是平方级。
+ */
+export function replaceObjectsInStateKeyframes(
+  stateKeyframes: StageStateKeyframe[],
+  removedIds: ReadonlySet<string>,
+  added: readonly StageObject[],
+): StageStateKeyframe[] {
+  const snapshots = added.map((object) => [object.id, captureStateKeyframeObjectState(object)] as const)
+  return stateKeyframes.map((stateKeyframe) => {
+    const objectStates: StageStateKeyframe['objectStates'] = {}
+    for (const [id, state] of Object.entries(stateKeyframe.objectStates)) if (!removedIds.has(id)) objectStates[id] = state
+    for (const [id, state] of snapshots) objectStates[id] = state
+    const perObject: StageStateKeyframe['transition']['perObject'] = {}
+    for (const [id, detail] of Object.entries(stateKeyframe.transition.perObject)) if (!removedIds.has(id)) perObject[id] = detail
+    return { ...stateKeyframe, objectStates, transition: { ...stateKeyframe.transition, perObject } }
+  })
+}
+
 export function syncRemovedObjectFromStateKeyframes(stateKeyframes: StageStateKeyframe[], objectId: string): StageStateKeyframe[] {
   return stateKeyframes.map((stateKeyframe) => {
     const objectStates = { ...stateKeyframe.objectStates }

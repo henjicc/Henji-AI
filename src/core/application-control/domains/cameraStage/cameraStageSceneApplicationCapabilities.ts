@@ -12,18 +12,19 @@ import {
   cameraStageTarget,
   cameraStageTransactionResultShape,
 } from './cameraStageCapabilitySchemas'
+import { cameraStageSetLayoutSchema } from './cameraStageSetSchemas'
 
 const observeScene = defineApplicationCapability({
   id: 'observe_camera_stage_scene', version: 1, title: '观察 3D 场景状态',
-  description: '读取镜头参考对象、摄像机、状态关键帧、边界盒、轨迹和碰撞摘要。', domain: 'camera_stage',
+  description: '读取镜头参考对象、摄像机、状态关键帧、边界盒、轨迹和碰撞摘要。生成的布景只给摘要（id、数量、范围、参数），不逐个列出成员。', domain: 'camera_stage',
   aliases: ['观察三维场景', '场景状态', '摄像机和对象', 'observe 3D scene'], readOnly: true, dataClasses: ['C1'],
   idempotent: true, destructive: false, timeoutMs: 10_000,
   supportsPreview: false, supportsUndo: false, requiredScopes: ['camera_stage'], acceptsRefs: ['camera_stage.document'],
-  producesRefs: ['camera_stage.document', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
+  producesRefs: ['camera_stage.document', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.set', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
   inputSchema: z.object({ documentId: cameraStageDocumentIdSchema }).strict(),
   outputSchema: capabilityOutputSchema({ scene: z.record(z.string(), z.unknown()) }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.documentId}:observe`, resolveTargetIds: (input) => cameraStageTarget(input.documentId),
-  control: cameraStageControl('observe', ['camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory']),
+  control: cameraStageControl('observe', ['camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.set', 'camera_stage.state_keyframe', 'camera_stage.trajectory']),
   summarize: (output) => `已观察镜头参考 ${String(output.scene.documentId ?? '')} 的场景状态。`,
 })
 
@@ -67,6 +68,37 @@ const placeObject = defineApplicationCapability({
     { effect: 'create', entityTypes: ['camera_stage.object', 'camera_stage.camera'] },
   ]),
   summarize: (output) => `3D 对象布置事务 ${output.transactionRef} 已完成。`,
+})
+
+export const GENERATE_CAMERA_STAGE_SET_CAPABILITY_ID = 'generate_camera_stage_set'
+
+const generateSet = defineApplicationCapability({
+  id: GENERATE_CAMERA_STAGE_SET_CAPABILITY_ID,
+  resolveOperationTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }],
+  resolveOperationAppendTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }],
+  version: 1, title: '生成 3D 布景',
+  description: '按意图参数一次生成一整片抽象布景：城市街区（街道网格、楼高分布、密度、范围）、街道、广场或人群阵列。'
+    + '一次调用一个撤销点、一次存盘；成员是普通对象，可以逐个修改。给 replaceSetId 时整体重新生成那片布景，省略的参数沿用它上一次的值。'
+    + '结果只返回布景摘要（数量、范围、完整参数），不逐个列出成员。删除整片布景用 change_application_entities 对 camera_stage.set 执行 remove_items。',
+  domain: 'camera_stage',
+  aliases: ['生成城市', '城市群', '搭场景', '快速布景', '街道', '广场', '人群', '楼群', 'generate 3D set', 'city block'],
+  readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: false,
+  timeoutMs: 60_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['camera_stage'],
+  acceptsRefs: ['camera_stage.document', 'camera_stage.set'], producesRefs: ['camera_stage.set'],
+  successEvidence: ['事务证据包含布景引用、成员数量、范围边界盒与补齐后的完整参数。'],
+  failureRecovery: [CONFLICT_RECOVERY, 'STAGE_SET_NOT_FOUND 时从 observe_camera_stage_scene 的 sets[].id 取布景 id，或省略 replaceSetId 新建。'],
+  inputSchema: z.object({
+    documentId: cameraStageDocumentIdSchema,
+    layout: cameraStageSetLayoutSchema.describe('布景类型与参数，preset 必填，其余可省略'),
+    name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional().describe('布景名称，也是成员名称的前缀；默认按类型命名'),
+    replaceSetId: z.string().min(1).optional().describe('要重新生成的布景 id：取自 observe_camera_stage_scene 返回的 sets[].id'),
+  }).strict(),
+  outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
+  resolveConcurrencyKey: (input) => `camera_stage:${input.documentId}`, resolveTargetIds: (input) => cameraStageTarget(input.documentId),
+  control: cameraStageControl('create', ['camera_stage.set'], [], ['camera_stage'], [
+    { effect: 'create', entityTypes: ['camera_stage.object'] },
+  ]),
+  summarize: (output) => `3D 布景生成事务 ${output.transactionRef} 已完成。`,
 })
 
 const duplicateObject = defineApplicationCapability({
@@ -131,5 +163,5 @@ const updateObject = defineApplicationCapability({
  */
 
 export const CAMERA_STAGE_SCENE_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  observeScene, placeObject, duplicateObject, deleteObject, updateObject,
+  observeScene, placeObject, generateSet, duplicateObject, deleteObject, updateObject,
 ]

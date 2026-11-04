@@ -36,6 +36,7 @@ import {
   syncCameraLookAtAcrossStateKeyframes,
   syncAddedObjectToStateKeyframes,
   syncRemovedObjectFromStateKeyframes,
+  replaceObjectsInStateKeyframes,
   type StateKeyframeTimingPatch,
   type StateKeyframeTransitionPatch,
 } from './stateKeyframeSlice'
@@ -49,6 +50,7 @@ import type {
   StageObjectPatch,
   StagePrimitiveKind,
   StageSceneSettings,
+  StageSet,
   StageTransform,
   StageVec3,
   StageViewMode,
@@ -72,6 +74,8 @@ export interface CameraStageState extends CameraStagePathActions {
   sceneSettings: StageSceneSettings
   /** 唯一可编辑时间轴真相源，随镜头参考持久化。 */
   stateKeyframes: StageStateKeyframe[]
+  /** 生成过的布景及其参数；成员对象在 objects 里，用 setId 指回这里。随镜头参考持久化、进撤销历史。 */
+  sets: StageSet[]
   selectedStateKeyframeId: string | null
   /** 时间轴框选出的多个状态关键帧 id（界面态，不持久化、不进撤销历史） */
   selectedStateKeyframeIds: string[]
@@ -97,6 +101,10 @@ export interface CameraStageState extends CameraStagePathActions {
   addPrimitive: (kind: StagePrimitiveKind) => void
   addCharacter: () => void
   addCamera: () => void
+  /** 放入一片布景：同 ID 的旧布景连同全部成员一起换掉，一次 set 合并为单条撤销记录。 */
+  applyStageSet: (set: StageSet, objects: StageObject[]) => void
+  /** 删除一片布景及其全部成员 */
+  removeStageSet: (setId: string) => void
   /** 深拷贝复制对象（含角色姿态/摄像机设置），名称自动递增，复制后自动选中 */
   duplicateObject: (id: string) => void
   removeObject: (id: string) => void
@@ -173,7 +181,7 @@ export interface CameraStageState extends CameraStagePathActions {
 export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
 /** 撤销历史跟踪场景数据切片（对象列表 + 动画轨道），界面态/播放态不入历史 */
-type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'stateKeyframes'>
+type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'stateKeyframes' | 'sets'>
 
 /** 生成同类对象的递增序号名，如"摄像机01"；按已用最大编号 +1，避免删除中间对象后再新增撞号 */
 function nextName(objects: StageObject[], base: string): string {
@@ -218,6 +226,7 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
   playback: createDefaultPlayback(),
   sceneSettings: createDefaultSceneSettings(),
   stateKeyframes: [initialStateKeyframe],
+  sets: [],
   selectedStateKeyframeId: initialStateKeyframe.id,
   selectedStateKeyframeIds: [],
   focusToken: 0,
@@ -273,11 +282,42 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
       }
     }),
 
+  applyStageSet: (stageSet, members) =>
+    set((state) => {
+      const removed = new Set(state.objects.filter((object) => object.setId === stageSet.id).map((object) => object.id))
+      const objects = [...state.objects.filter((object) => !removed.has(object.id)), ...members]
+      const stateKeyframes = replaceObjectsInStateKeyframes(state.stateKeyframes, removed, members)
+      const existing = state.sets.some((item) => item.id === stageSet.id)
+      return {
+        objects,
+        stateKeyframes,
+        sets: existing ? state.sets.map((item) => item.id === stageSet.id ? stageSet : item) : [...state.sets, stageSet],
+        animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
+        selectedId: state.selectedId && removed.has(state.selectedId) ? null : state.selectedId,
+      }
+    }),
+
+  removeStageSet: (setId) =>
+    set((state) => {
+      const removed = new Set(state.objects.filter((object) => object.setId === setId).map((object) => object.id))
+      const objects = state.objects.filter((object) => !removed.has(object.id))
+      const stateKeyframes = replaceObjectsInStateKeyframes(state.stateKeyframes, removed, [])
+      return {
+        objects,
+        stateKeyframes,
+        sets: state.sets.filter((item) => item.id !== setId),
+        animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
+        selectedId: state.selectedId && removed.has(state.selectedId) ? null : state.selectedId,
+      }
+    }),
+
   duplicateObject: (id) =>
     set((state) => {
       const source = state.objects.find((item) => item.id === id)
       if (!source) return {}
       const clone = structuredClone(source)
+      // 副本是用户自己加的对象，不随布景重新生成被换掉。
+      delete clone.setId
       clone.id = uuidv4()
       clone.name = nextName(state.objects, source.name)
       const objects = [...state.objects, clone]
@@ -462,6 +502,7 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         playback: createDefaultPlayback(),
         sceneSettings: snapshot.sceneSettings,
         stateKeyframes: snapshot.stateKeyframes,
+        sets: snapshot.sets ?? [],
         selectedStateKeyframeId: snapshot.defaultStateKeyframeId,
         selectedStateKeyframeIds: [],
         focusToken: 0,
@@ -490,6 +531,7 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         playback: createDefaultPlayback(),
         sceneSettings: snapshot.sceneSettings ?? createDefaultSceneSettings(),
         stateKeyframes: snapshot.stateKeyframes,
+        sets: snapshot.sets ?? [],
         selectedStateKeyframeId: snapshot.stateKeyframes[0]?.id ?? null,
         selectedStateKeyframeIds: [],
         focusToken: 0,
@@ -775,12 +817,14 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         objects: state.objects,
         animation: state.animation,
         stateKeyframes: state.stateKeyframes,
+        sets: state.sets,
       }),
       // 对象数组与动画对象都走不可变更新，引用相等即无实质变化 → 跳过记录
       equality: (a, b) =>
         a.objects === b.objects &&
         a.animation === b.animation &&
-        a.stateKeyframes === b.stateKeyframes,
+        a.stateKeyframes === b.stateKeyframes &&
+        a.sets === b.sets,
       handleSet: (handleSet) => {
         historyRecord = handleSet
         return (pastState) => {
@@ -794,7 +838,7 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
     },
   ),
   // 名称是文档文件名，由文档会话同步（bindProject），不属于受写入屏障保护的场景内容
-  ['objects', 'animation', 'stateKeyframes', 'sceneSettings', 'activeCameraId'],
+  ['objects', 'animation', 'stateKeyframes', 'sceneSettings', 'activeCameraId', 'sets'],
   ),
 )
 
@@ -811,6 +855,7 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
         animation,
         sceneSettings: restored.sceneSettings ?? createDefaultSceneSettings(),
         stateKeyframes: restored.stateKeyframes,
+        sets: restored.sets ?? [],
         activeCameraId: isCameraId(restored.objects, restored.activeCameraId) ? restored.activeCameraId : firstCameraId(restored.objects),
         selectedId: restored.objects.some(object => object.id === state.selectedId) ? state.selectedId : null,
         selectedStateKeyframeId: restored.stateKeyframes.some(frame => frame.id === state.selectedStateKeyframeId) ? state.selectedStateKeyframeId : null,

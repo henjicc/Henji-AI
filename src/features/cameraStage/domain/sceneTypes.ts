@@ -11,6 +11,7 @@ import type { StageCharacterMotion } from './characterMotion'
 import type { StageCharacterPose } from './poseTypes'
 import type { StageRenderStyle } from './renderStyles'
 import type { StageCameraEffector } from './stateKeyframeTypes'
+import type { CameraStageSetParams } from '@/core/application-control/domains/cameraStage/cameraStageSetSchemas'
 
 export interface StageVec3 {
   x: number
@@ -49,6 +50,15 @@ interface StageObjectBase {
   /** 纯色材质颜色（hex），符合一期"纯色渲染"美术方向 */
   color: string
   visible: boolean
+  /** 由哪片布景生成；成员是普通对象，可以逐个修改，重新生成或删除布景时整体替换。 */
+  setId?: string
+}
+
+/** 一片布景：生成参数（已补齐默认值）。成员对象通过 setId 指回它，没有成员的布景视为已不存在。 */
+export interface StageSet {
+  id: string
+  name: string
+  params: CameraStageSetParams
 }
 
 export interface StagePrimitiveObject extends StageObjectBase {

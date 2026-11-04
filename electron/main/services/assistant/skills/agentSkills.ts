@@ -12,13 +12,13 @@ const logger = createMainLogger('main.assistant_skills')
 /**
  * 智能体可用技能的唯一准入名单，内置 Pi 与外部 MCP 共用。
  *
- * 旧的中文内置技能（图片生成、生成排障、三维镜头构图）仍依赖已移除的自研助手协议，
+ * 旧的中文内置技能（图片生成、生成排障）仍依赖已移除的自研助手协议，
  * 未迁移前不能交给任何智能体；用户自装技能同样要经过适配后才加入。启用/停用、覆盖来源、
  * 路径与大小限制仍全部由正式注册表在每次读取时核对，这里只决定"哪些名字可被智能体看见"。
  */
 export const AGENT_SKILL_NAMES: ReadonlySet<string> = new Set([
   'prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench', 'image-edit-workbench', 'color-grading',
-  'audio-edit-workbench',
+  'audio-edit-workbench', '三维镜头构图',
 ])
 
 export type AgentSkillCaller = 'embedded' | 'external'

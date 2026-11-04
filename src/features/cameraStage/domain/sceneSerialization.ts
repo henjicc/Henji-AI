@@ -11,7 +11,8 @@ import { rotationFromPositionAndTarget } from './cameraUtils'
 import { normalizeStateKeyframes } from './stateKeyframeTypes'
 import type { StageStateKeyframe } from './stateKeyframeTypes'
 import { compileStateKeyframesToAnimation } from './stateKeyframeCompiler'
-import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings } from './sceneTypes'
+import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings, StageSet } from './sceneTypes'
+import { liveStageSets } from './stageSets'
 
 export interface StageSceneSnapshotInput {
   objects: StageObject[]
@@ -21,6 +22,8 @@ export interface StageSceneSnapshotInput {
   sceneSettings: StageSceneSettings
   /** 唯一可编辑时间轴真相源。 */
   stateKeyframes: StageStateKeyframe[]
+  /** 生成过的布景（文档格式 v2 引入）；成员对象在 objects 里用 setId 指回。省略等于没有布景。 */
+  sets?: StageSet[]
 }
 
 export interface StageSceneRuntimeSnapshot extends StageSceneSnapshotInput {
@@ -228,14 +231,16 @@ export function sceneToDocumentContent(input: StageSceneSnapshotInput): CameraSt
     activeCameraId: input.activeCameraId,
     sceneSettings: input.sceneSettings,
     stateKeyframes: input.stateKeyframes,
+    // 成员被逐个删光的布景不写进文件。
+    sets: liveStageSets(input.sets ?? [], input.objects),
   }
 }
 
 /** 文档内容 → 运行时快照：与旧镜头参考数据相同的逐字段规范化，非法字段回退默认值。 */
 export function sceneFromDocumentContent(content: unknown): StageSceneRuntimeSnapshot {
   if (!content || typeof content !== 'object') throw new Error('[cameraStage] 场景数据结构无效')
-  const { objects, activeCameraId, animation, sceneSettings, stateKeyframes } = normalizeSceneRecord(content as Record<string, unknown>)
-  return { objects, activeCameraId, animation, sceneSettings, stateKeyframes }
+  const { objects, activeCameraId, animation, sceneSettings, stateKeyframes, sets } = normalizeSceneRecord(content as Record<string, unknown>)
+  return { objects, activeCameraId, animation, sceneSettings, stateKeyframes, sets }
 }
 
 /** 场景是否完全空白（新建文档的空内容）：工具打开时补上默认摄像机与第一张状态关键帧。 */
@@ -243,8 +248,35 @@ export function isBlankSceneContent(snapshot: StageSceneSnapshotInput): boolean 
   return snapshot.objects.length === 0 && snapshot.stateKeyframes.length === 0
 }
 
+/**
+ * 布景记录：结构不对的整条丢掉。类型不认识的（更新版本新增的布景类型）原样保留，保存时不丢。
+ * 记录被丢掉的成员去掉 setId，回到普通对象，不会从观察和列表里消失。
+ */
+function normalizeStageSets(raw: unknown, objects: StageObject[]): { sets: StageSet[]; objects: StageObject[] } {
+  const sets = Array.isArray(raw) ? raw.filter((item): item is StageSet => {
+    if (!item || typeof item !== 'object') return false
+    const record = item as Record<string, unknown>
+    const params = record.params as Record<string, unknown> | undefined
+    return typeof record.id === 'string' && typeof record.name === 'string'
+      && !!params && typeof params === 'object' && typeof params.preset === 'string' && params.preset.length > 0
+  }) : []
+  const known = new Set(sets.map((set) => set.id))
+  if (!objects.some((object) => object.setId !== undefined && !known.has(object.setId))) return { sets, objects }
+  return {
+    sets,
+    objects: objects.map((object) => {
+      if (object.setId === undefined || known.has(object.setId)) return object
+      const { setId: _orphan, ...rest } = object
+      return rest as StageObject
+    }),
+  }
+}
+
 function normalizeSceneRecord(record: Record<string, unknown>): StageSceneRuntimeSnapshot {
   let objects = Array.isArray(record.objects) ? (record.objects as StageObject[]) : []
+  const normalizedSets = normalizeStageSets(record.sets, objects)
+  const sets = normalizedSets.sets
+  objects = normalizedSets.objects
   objects = withNormalizedCharacterMotion(objects)
   objects = withDefaultCameraEffectors(objects)
   objects = withNormalizedCameraRotations(objects)
@@ -259,5 +291,6 @@ function normalizeSceneRecord(record: Record<string, unknown>): StageSceneRuntim
     animation,
     sceneSettings,
     stateKeyframes,
+    sets,
   }
 }

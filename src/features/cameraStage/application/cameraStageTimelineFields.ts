@@ -113,12 +113,16 @@ export const STATE_KEYFRAME_FIELDS = [
     descriptor: stageDescriptor(STATE_KEYFRAME_ENTITY_TYPE, 'capture_object_refs', '捕获对象状态', { kind: 'ref_list', refKinds: [OBJECT_ENTITY_TYPE, CAMERA_ENTITY_TYPE] }, {
       relation: { targetEntityTypes: [OBJECT_ENTITY_TYPE, CAMERA_ENTITY_TYPE], cardinality: 'many' },
       description: '写入会把列出的对象/摄像机当前在场景中的实时状态（位置、旋转、缩放、颜色等）记录进这张状态关键帧，'
-        + '只影响列出的对象和目标状态关键帧。读取返回该时间点当前跟踪状态的全部对象。',
+        + '只影响列出的对象和目标状态关键帧。读取返回该时间点当前跟踪状态的对象（不含布景成员）。',
     }),
-    read: ({ projectId, stateKeyframe, objects }: StateKeyframeFieldSource): JsonValue => Object.keys(stateKeyframe.objectStates).map((id) => ({
-      kind: objects.find((object) => object.id === id)?.type === 'camera' ? CAMERA_ENTITY_TYPE : OBJECT_ENTITY_TYPE,
-      id: `${projectId}:${id}`,
-    } satisfies ApplicationRef)),
+    // 布景成员不逐个列出（上千个引用读不进去），与 camera_stage.scene.object_refs 同一口径；写入照样接受成员 id。
+    read: ({ projectId, stateKeyframe, objects }: StateKeyframeFieldSource): JsonValue => {
+      const byId = new Map(objects.map((object) => [object.id, object]))
+      return Object.keys(stateKeyframe.objectStates).filter((id) => !byId.get(id)?.setId).map((id) => ({
+        kind: byId.get(id)?.type === 'camera' ? CAMERA_ENTITY_TYPE : OBJECT_ENTITY_TYPE,
+        id: `${projectId}:${id}`,
+      } satisfies ApplicationRef))
+    },
     writer: {
       write: (draft: CameraStageStateKeyframeDraft, mutation: ApplicationPropertyMutation) => {
         draft.captureObjectIds = parseCaptureObjectRefs(mutation.value)

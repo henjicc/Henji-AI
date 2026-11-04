@@ -37,16 +37,20 @@ interface CameraStageToolState {
   tool: StageEditorTool
   pathSelection: StagePathSelection | null
   controlSelection: StagePathControlSelection | null
+  /** 布景面板是否打开：快速添加的“更多添加”菜单与菜单栏“场景”菜单共用这一个开关。 */
+  stageSetPanelOpen: boolean
   setTool: (tool: StageEditorTool) => void
   selectPath: (selection: StagePathSelection) => void
   selectControl: (selection: StagePathControlSelection | null) => void
   clearPathSelection: () => void
+  setStageSetPanelOpen: (open: boolean) => void
 }
 
 export const useCameraStageToolStore = create<CameraStageToolState>((set) => ({
   tool: 'translate',
   pathSelection: null,
   controlSelection: null,
+  stageSetPanelOpen: false,
   setTool: (tool) => set({
     tool,
     ...(tool === 'path' ? {} : { pathSelection: null, controlSelection: null }),
@@ -54,4 +58,5 @@ export const useCameraStageToolStore = create<CameraStageToolState>((set) => ({
   selectPath: (pathSelection) => set({ tool: 'path', pathSelection, controlSelection: null }),
   selectControl: (controlSelection) => set({ controlSelection }),
   clearPathSelection: () => set({ pathSelection: null, controlSelection: null }),
+  setStageSetPanelOpen: (stageSetPanelOpen) => set({ stageSetPanelOpen }),
 }))

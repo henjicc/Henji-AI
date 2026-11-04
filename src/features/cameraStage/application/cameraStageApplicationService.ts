@@ -4,7 +4,9 @@ import { createLogger } from '@/core/logging'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 import { getAnimatablePropByPath } from '../domain/animatableProps'
-import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageTransform, StageVec3 } from '../domain/sceneTypes'
+import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageSet, StageTransform, StageVec3 } from '../domain/sceneTypes'
+import { buildStageSet, liveStageSets } from '../domain/stageSets'
+import type { CameraStageSetLayoutInput, CameraStageSetParams } from '@/core/application-control/domains/cameraStage/cameraStageSetSchemas'
 import type { StageCameraEffector, StageStateKeyframe, StageSpatialPath } from '../domain/stateKeyframeTypes'
 import type { StageKeyframeValue, StagePlaybackState } from '../domain/animationTypes'
 import { POSE_PRESETS } from '../domain/posePresets.gen'
@@ -15,6 +17,7 @@ import {
   calculateStageObjectBounds,
   dimensionsToScale,
   listSceneCollisionPairs,
+  stageBoundsOverlap,
   matchReusableSceneObject,
   resolveScenePlacement,
   type CameraStageObjectSpec,
@@ -79,7 +82,28 @@ export interface CameraStageSceneObservation {
     source: string
     knotCount: number
   }>
+  /** 布景只给摘要：成员数量动辄上千，逐个列出模型读不进去；成员用 list_application_entities 分页读。 */
+  sets: CameraStageSetSummary[]
+  /** 逐个放置的对象之间的重叠。 */
   collisions: Array<{ objectIds: [string, string] }>
+  /** 逐个放置的对象压进了哪片布景、压到几个成员（不逐个列成员）。 */
+  setCollisions: Array<{ objectId: string; setId: string; memberCount: number }>
+}
+
+export interface CameraStageSetSummary {
+  id: string
+  name: string
+  objectCount: number
+  bounds: { min: StageVec3; max: StageVec3 }
+  params: CameraStageSetParams
+}
+
+export interface CameraStageSetResult {
+  projectId: string
+  set: CameraStageSetSummary
+  replaced: boolean
+  removedObjectCount: number
+  undoToken: string
 }
 
 interface PlaceObjectInput {
@@ -199,8 +223,9 @@ async function rollbackFailedPlacement(projectId: string, undoToken: string): Pr
 function requirePlacementTarget(objects: StageObject[], targetObjectId?: string): void {
   if (!targetObjectId) return
   if (objects.some((object) => object.id === targetObjectId)) return
+  // 布景成员成千上万，不逐个列；要参照布景里的某栋楼，先按范围从 list_application_entities 里找。
   const available = objects
-    .filter((object) => object.type !== 'camera')
+    .filter((object) => object.type !== 'camera' && !object.setId)
     .map((object) => `${object.id}（${object.name}）`)
   throw new Error(
     `TARGET_OBJECT_NOT_FOUND：targetObjectId «${targetObjectId}» 不是本场景中的对象 id。`
@@ -209,11 +234,67 @@ function requirePlacementTarget(objects: StageObject[], targetObjectId?: string)
   )
 }
 
+export function summarizeStageSet(set: StageSet, objects: readonly StageObject[]): CameraStageSetSummary {
+  const min = { x: Infinity, y: Infinity, z: Infinity }
+  const max = { x: -Infinity, y: -Infinity, z: -Infinity }
+  let objectCount = 0
+  for (const object of objects) {
+    if (object.setId !== set.id) continue
+    objectCount += 1
+    const bounds = calculateStageObjectBounds(object)
+    min.x = Math.min(min.x, bounds.min.x); min.y = Math.min(min.y, bounds.min.y); min.z = Math.min(min.z, bounds.min.z)
+    max.x = Math.max(max.x, bounds.max.x); max.y = Math.max(max.y, bounds.max.y); max.z = Math.max(max.z, bounds.max.z)
+  }
+  const round = (value: StageVec3): StageVec3 => ({ x: Math.round(value.x * 100) / 100, y: Math.round(value.y * 100) / 100, z: Math.round(value.z * 100) / 100 })
+  return {
+    id: set.id,
+    name: set.name,
+    objectCount,
+    bounds: objectCount > 0 ? { min: round(min), max: round(max) } : { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } },
+    params: structuredClone(set.params),
+  }
+}
+
+/**
+ * 碰撞只查用户自己摆的对象之间、以及它们与布景成员之间：布景成员彼此紧挨是生成时就定好的，
+ * 两两比较上万个成员既慢又没有意义。与布景的重叠按“对象 × 布景”计数，一块大地面压住整座城也只有一条。
+ */
+function sceneCollisions(objects: StageObject[]): Pick<CameraStageSceneObservation, 'collisions' | 'setCollisions'> {
+  const own = objects.filter((object) => !object.setId)
+  const collisions = listSceneCollisionPairs(own)
+  const members = objects.filter((object) => object.setId && object.visible)
+  const setCollisions: CameraStageSceneObservation['setCollisions'] = []
+  if (members.length === 0) return { collisions, setCollisions }
+  const memberBounds = members.map((object) => calculateStageObjectBounds(object))
+  for (const object of own) {
+    if (object.type === 'camera' || !object.visible) continue
+    const bounds = calculateStageObjectBounds(object)
+    const counts = new Map<string, number>()
+    memberBounds.forEach((member, index) => {
+      if (stageBoundsOverlap(bounds, member)) counts.set(members[index].setId!, (counts.get(members[index].setId!) ?? 0) + 1)
+    })
+    for (const [setId, memberCount] of counts) setCollisions.push({ objectId: object.id, setId, memberCount })
+  }
+  return { collisions, setCollisions }
+}
+
+function summarizePlacementConflicts(ids: string[], objects: StageObject[]): { conflicts: string[]; setConflicts: Array<{ setId: string; memberCount: number }> } {
+  const setIdByObject = new Map(objects.flatMap((object) => object.setId ? [[object.id, object.setId] as const] : []))
+  const conflicts: string[] = []
+  const counts = new Map<string, number>()
+  for (const id of ids) {
+    const setId = setIdByObject.get(id)
+    if (setId) counts.set(setId, (counts.get(setId) ?? 0) + 1)
+    else conflicts.push(id)
+  }
+  return { conflicts, setConflicts: [...counts].map(([setId, memberCount]) => ({ setId, memberCount })) }
+}
+
 function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageSceneObservation {
   return {
     project: { id: snapshot.id, name: snapshot.name },
     activeCameraId: snapshot.activeCameraId,
-    objects: snapshot.objects.map((object) => ({
+    objects: snapshot.objects.filter((object) => !object.setId).map((object) => ({
       id: object.id,
       type: object.type,
       name: object.name,
@@ -235,7 +316,8 @@ function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageScen
       const path = detail.spatialPath
       return path ? [{ stateKeyframeId: stateKeyframe.id, objectId, source: path.source.kind === 'preset' ? path.source.preset.kind : 'custom', knotCount: path.knots.length }] : []
     })),
-    collisions: listSceneCollisionPairs(snapshot.objects),
+    sets: liveStageSets(snapshot.sets, snapshot.objects).map((set) => summarizeStageSet(set, snapshot.objects)),
+    ...sceneCollisions(snapshot.objects),
   }
 }
 
@@ -302,7 +384,10 @@ const implementation = {
     reason: string
     position: StageVec3
     bounds: StageObjectBounds
+    /** 与之重叠的逐个放置对象 id。 */
     conflicts: string[]
+    /** 与之重叠的布景成员按布景计数，不逐个列出（压住整座城时有上万个）。 */
+    setConflicts: Array<{ setId: string; memberCount: number }>
     undoToken?: string
   }> {
     logger.info('三维场景对象布置开始', {
@@ -340,6 +425,7 @@ const implementation = {
         position: reuse.object.transform.position,
         bounds,
         conflicts: [],
+        setConflicts: [],
       }
     }
     const undoToken = captureCameraStageUndo(input.projectId)
@@ -387,7 +473,7 @@ const implementation = {
         reason: `${reuse.reason} ${layout.reason}`,
         position: saved.transform.position,
         bounds: calculateStageObjectBounds(saved),
-        conflicts: layout.conflicts,
+        ...summarizePlacementConflicts(layout.conflicts, state.objects),
         undoToken,
       }
     } catch (error) {
@@ -405,6 +491,85 @@ const implementation = {
         targetObjectId: input.placement.targetObjectId ?? null,
         hasExplicitPosition: Boolean(input.placement.position),
       })
+      throw error
+    }
+  },
+
+  /**
+   * 布景生成：一次调用算出整片布景，一次 store 写入（一条撤销记录）、一次存盘。
+   * 给 replaceSetId 时整体换掉那片布景的成员，省略的参数沿用它上一次的值。
+   */
+  async generateSet(input: {
+    projectId: string
+    layout: CameraStageSetLayoutInput
+    name?: string
+    replaceSetId?: string
+  }): Promise<CameraStageSetResult> {
+    // 稳定引用（文档 ID:布景 ID）与裸布景 ID 都接受。
+    const replaceSetId = input.replaceSetId?.startsWith(`${input.projectId}:`) ? input.replaceSetId.slice(input.projectId.length + 1) : input.replaceSetId
+    const startedAt = performance.now()
+    try {
+      await ensureProjectLoaded(input.projectId)
+      const store = cameraStageProjectStore(input.projectId)
+      const before = store.getState()
+      const existing = liveStageSets(before.sets, before.objects)
+      const { set, objects } = buildStageSet(existing, { ...input, replaceSetId })
+      const removedObjectCount = replaceSetId ? before.objects.filter((object) => object.setId === replaceSetId).length : 0
+      const undoToken = captureCameraStageUndo(input.projectId)
+      try {
+        before.applyStageSet(set, objects)
+        await saveCameraStageProjectRuntime(input.projectId)
+      } catch (error) {
+        await rollbackFailedPlacement(input.projectId, undoToken)
+        throw error
+      }
+      const summary = summarizeStageSet(set, store.getState().objects)
+      logger.info('三维布景生成完成', {
+        event: 'camera_stage.set.generate.completed',
+        projectId: input.projectId,
+        setId: set.id,
+        preset: set.params.preset,
+        objectCount: summary.objectCount,
+        replaced: Boolean(replaceSetId),
+        durationMs: Math.round(performance.now() - startedAt),
+      })
+      return { projectId: input.projectId, set: summary, replaced: Boolean(replaceSetId), removedObjectCount, undoToken }
+    } catch (error) {
+      logger.error('三维布景生成失败', error, {
+        event: 'camera_stage.set.generate.failed',
+        projectId: input.projectId,
+        preset: input.layout.preset,
+        replaceSetId: replaceSetId ?? null,
+      })
+      throw error
+    }
+  },
+
+  async removeSets(projectId: string, setIds: string[]): Promise<{ projectId: string; removedObjectCount: number; undoToken: string }> {
+    try {
+      await ensureProjectLoaded(projectId)
+      const store = cameraStageProjectStore(projectId)
+      const state = store.getState()
+      const live = new Set(liveStageSets(state.sets, state.objects).map((set) => set.id))
+      const missing = setIds.filter((id) => !live.has(id))
+      if (missing.length > 0) {
+        throw new Error(`STAGE_SET_NOT_FOUND：${missing.join('、')} 不是本场景中的布景 id。`
+          + (live.size > 0 ? `当前布景：${[...live].join('、')}。` : '当前场景没有布景。'))
+      }
+      const removedIds = new Set(setIds)
+      const removedObjectCount = state.objects.filter((object) => object.setId && removedIds.has(object.setId)).length
+      const undoToken = captureCameraStageUndo(projectId)
+      try {
+        for (const id of setIds) store.getState().removeStageSet(id)
+        await saveCameraStageProjectRuntime(projectId)
+      } catch (error) {
+        await rollbackFailedPlacement(projectId, undoToken)
+        throw error
+      }
+      logger.info('三维布景已删除', { event: 'camera_stage.set.remove.completed', projectId, setCount: setIds.length, removedObjectCount })
+      return { projectId, removedObjectCount, undoToken }
+    } catch (error) {
+      logger.error('三维布景删除失败', error, { event: 'camera_stage.set.remove.failed', projectId, setIds })
       throw error
     }
   },
@@ -583,6 +748,8 @@ const implementation = {
 export const cameraStageApplicationService = {
   ...implementation,
   placeObject: bindCameraStageProjectOperation(implementation.placeObject, (input) => input.projectId),
+  generateSet: bindCameraStageProjectOperation(implementation.generateSet, (input) => input.projectId),
+  removeSets: bindCameraStageProjectOperation(implementation.removeSets, (projectId) => projectId),
   updatePlayback: bindCameraStageProjectOperation(implementation.updatePlayback, (projectId) => projectId),
   updateObject: bindCameraStageProjectOperation(implementation.updateObject, (projectId) => projectId),
   updateAnimatableProperties: bindCameraStageProjectOperation(implementation.updateAnimatableProperties, (projectId) => projectId),

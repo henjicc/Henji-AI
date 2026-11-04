@@ -6,6 +6,7 @@ import { createCameraStageReflectionRegistrations } from './cameraStageReflectio
 import { CAMERA_STAGE_MUTATION_ENTITY_TYPES, CameraStageMutationExecutor, CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'
 import { CameraStagePlacementOperationExecutor } from './cameraStagePlacementExecutor'
 import { CameraStageStateKeyframeCollectionExecutor } from './cameraStageStateKeyframeCollectionExecutor'
+import { CameraStageSetCollectionExecutor, CameraStageSetGenerateOperationExecutor } from './cameraStageSetExecutors'
 import { registerCameraStageCapabilityHandlers } from './registerCameraStageCapabilityHandlers'
 
 import { dependencies } from './cameraStageControlDependencies'
@@ -20,6 +21,8 @@ export const cameraStageApplicationDomain: ApplicationDomainModule = {
     engine.registerOperationExecutor(new CameraStageMotionOperationExecutor(current))
     engine.registerOperationExecutor(new CameraStagePlacementOperationExecutor(current))
     engine.registerCollectionExecutor(new CameraStageStateKeyframeCollectionExecutor(current))
+    engine.registerOperationExecutor(new CameraStageSetGenerateOperationExecutor(current))
+    engine.registerCollectionExecutor(new CameraStageSetCollectionExecutor(current))
   },
   registerCapabilities(registrar) {
     registerCurrentDocumentProvider('cameraStage', host => host.activeWorkspace === 'tools' && host.activeToolId === 'cameraStage' && useCameraStageSessionStore.getState().appView === 'editor' ? useCameraStageSessionStore.getState().lastDocumentId ?? undefined : undefined)

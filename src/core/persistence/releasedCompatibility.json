@@ -615,13 +615,16 @@
         }
       ],
       "versions": {
-        "1": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813"
+        "1": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813",
+        "2": "a86fa83387c6981af5cbf9b7ecaa85c5c86f4f30a5d6131697f0e2a9ae635a6c"
       },
       "readers": {
-        "1": 1
+        "1": 1,
+        "2": 1
       },
       "samples": {
-        "v1.json": "d2e82b88d6f5f0994ad30150db1ab1714f2a6965f524519fa9ceda368484153b"
+        "v1.json": "d2e82b88d6f5f0994ad30150db1ab1714f2a6965f524519fa9ceda368484153b",
+        "v2.json": "d6655415332fa6901a87960dcf2c9fb4982a314e78b7b980e13d770f60c40d5f"
       }
     },
     "document.image_document": {
