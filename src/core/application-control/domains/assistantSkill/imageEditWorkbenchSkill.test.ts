@@ -13,7 +13,8 @@ import { PROTOCOL_TOOL_SPECS } from '../../../../../electron/main/services/appli
 const skillDirectory = path.resolve('resources/assistant-skills/image-edit-workbench')
 const referencePaths = fs.readdirSync(path.join(skillDirectory, 'references')).map(name => `references/${name}`).sort()
 const files = ['SKILL.md', ...referencePaths].map(relativePath => ({
-  relativePath, content: fs.readFileSync(path.join(skillDirectory, relativePath), 'utf8'),
+  // 篇幅预算按内容算，不随检出时的换行符（Windows 上 autocrlf 会转成 CRLF）变化。
+  relativePath, content: fs.readFileSync(path.join(skillDirectory, relativePath), 'utf8').replace(/\r\n/g, '\n'),
 }))
 const all = files.map(file => file.content).join('\n')
 const registrations = [...createImageEditReflectionRegistrations(), ...createLocalModelRegistrations()]
