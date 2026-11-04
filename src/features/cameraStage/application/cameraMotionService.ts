@@ -8,6 +8,7 @@ import { cameraMotionIdentity, cameraMotionSourceKey, compileCameraMotionCandida
 import { checkCancelled, CreativeIntentError, type ComputationControl } from '@/core/creativeIntent/sampling'
 import { applyAnimationAtTime } from '../store/playbackSampling'
 import type { CameraMotionNativeCandidate } from './cameraMotionCandidates'
+import { checkCameraPathClearance, type CameraPathClearance } from './cameraPathClearance'
 
 const logger = createLogger('features.cameraStage.camera_motion')
 
@@ -38,6 +39,8 @@ export interface CameraStageMotionResult {
     start: StageVec3
     end: StageVec3
   }
+  /** 轨迹穿过的对象与是否钻到地面以下，供助手调整半径、高度或注视点 */
+  clearance: CameraPathClearance
   undoToken: string
 }
 
@@ -116,9 +119,16 @@ function applyStateKeyframeMotion(
   const path = updatedStart?.transition.perObject[camera.id]?.spatialPath
   const startPosition = updatedStart?.objectStates[camera.id]?.transform.position ?? camera.transform.position
   const endPosition = updatedEnd?.objectStates[camera.id]?.transform.position ?? camera.transform.position
+  const endTime = updatedEnd?.time ?? startStateKeyframe.time + input.duration
   return {
     startTime: startStateKeyframe.time,
-    endTime: updatedEnd?.time ?? startStateKeyframe.time + input.duration,
+    endTime,
+    clearance: checkCameraPathClearance(
+      updated.objects,
+      updated.animation,
+      camera.id,
+      { start: startStateKeyframe.time, end: endTime },
+    ),
     affectedStateKeyframeIds: [startStateKeyframe.id, endStateKeyframe.id],
     affectedStateKeyframeCount: 2,
     path: {
@@ -164,6 +174,8 @@ async function applyCameraStageMotionInternal(input: CameraStageMotionInput): Pr
       cameraId: input.cameraId,
       moveKind: input.move.kind,
       affectedStateKeyframeCount: result.affectedStateKeyframeCount,
+      obstructionCount: result.clearance.obstructionCount,
+      belowGround: result.clearance.belowGroundAt !== null,
     })
     return result
   } catch (error) {

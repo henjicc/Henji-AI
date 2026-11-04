@@ -44,3 +44,4 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 
 - 状态关键帧动画：同一次 `change_application_entities` 里交替写 `camera_stage.playback.current_time` 与对象或摄像机的 `animatable.*` / `pose_preset`，应用自动建关键帧；最后可同事务写 `loop`、`playing`。不要按时间点拆成多轮。
 - 语义运镜（环绕、推拉、平移、升降）用 `apply_camera_stage_camera_move`，轨迹按弧长平滑采样；整理示范机位用 `organize_camera_stage_motion` 再 `apply_camera_stage_motion_candidate`。
+- 运镜结果的证据里出现 `clearance` / `clearanceHint`，说明轨迹穿过了楼、角色等对象（列出名称与第几秒）或钻到地面以下：按 `clearanceHint` 撤销后调整再应用（环绕把起始机位放远或抬高、推近调大 `distanceRatio`、升降减小幅度），直到不再出现。推得太近、环绕半径小于楼宽时，注视对象本身也会被列出。

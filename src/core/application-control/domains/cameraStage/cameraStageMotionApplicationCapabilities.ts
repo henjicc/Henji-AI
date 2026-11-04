@@ -23,7 +23,7 @@ const applyCameraMove = defineApplicationCapability({
   timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['camera_stage'],
   acceptsRefs: ['camera_stage.document', 'camera_stage.camera', 'camera_stage.object', 'camera_stage.state_keyframe'],
   producesRefs: ['camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
-  successEvidence: ['事务返回路径起终点、采样数和受影响状态关键帧，并提供可撤销引用。'],
+  successEvidence: ['事务返回路径起终点、采样数和受影响状态关键帧，并提供可撤销引用；轨迹穿过对象或低于地面时附 clearance（对象、时间）与 clearanceHint。'],
   failureRecovery: [
     CONFLICT_RECOVERY,
     '缺少目标、摄像机或有效时间范围时停止，重新观察场景后使用稳定引用；不得猜测名称。',

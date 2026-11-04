@@ -17,7 +17,8 @@ import { applyWriterTable, directOnlyEffectContract, fieldEffectContract, proper
 
 import { cameraStageProjectStore, leaseCameraStageProjectRuntime, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
-import { applyCameraStageMotion } from './cameraMotionService'
+import { applyCameraStageMotion, type CameraStageMotionResult } from './cameraMotionService'
+import type { CameraPathClearance } from './cameraPathClearance'
 import { forgetCameraStageUndo, restoreCameraStageUndo, captureCameraStageUndo, afterCameraStageWrite } from './cameraStageUndo'
 import { CAMERA_FIELDS, OBJECT_FIELDS, CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
@@ -306,6 +307,39 @@ const motionInputSchema = z.object({
   speed: z.enum(['uniform', 'easeInOut', 'fastStart', 'slowStart']),
 }).strict()
 
+/** 按运镜类型说怎么改：环绕没有半径参数，半径由起始机位到注视点的距离决定。 */
+const OBSTRUCTION_ADVICE: Record<CameraStageMotionResult['moveKind'], string> = {
+  orbit: '把起始机位放远（加大环绕半径）或抬高，或减小环绕角度',
+  dollyIn: '减小推近幅度（调大 distanceRatio），或换注视点',
+  dollyOut: '减小拉远幅度（调小 distanceRatio），或把起始机位移到开阔一侧',
+  truck: '减小横移距离或改横移方向',
+  crane: '减小升降幅度，或把起始机位移到开阔处',
+}
+
+/** 轨迹撞楼或钻地时把穿过了谁、第几秒写进结果，附一句怎么改；通畅时不加字段。 */
+function cameraPathClearanceEvidence(moveKind: CameraStageMotionResult['moveKind'], clearance: CameraPathClearance): Record<string, JsonValue> {
+  if (clearance.obstructionCount === 0 && clearance.belowGroundAt === null) return {}
+  const facts: string[] = []
+  const advice: string[] = []
+  if (clearance.obstructionCount > 0) {
+    const first = clearance.obstructions[0]
+    facts.push(`轨迹在 ${first.time.toFixed(1)} 秒穿过「${first.name}」${clearance.obstructionCount > 1 ? `等 ${clearance.obstructionCount} 个对象` : ''}`)
+    advice.push(OBSTRUCTION_ADVICE[moveKind])
+  }
+  if (clearance.belowGroundAt !== null) {
+    facts.push(`在 ${clearance.belowGroundAt.toFixed(1)} 秒低于地面`)
+    advice.push(moveKind === 'crane' ? '减小下降幅度或抬高起始机位' : '抬高起始机位')
+  }
+  return {
+    clearance: {
+      obstructions: clearance.obstructions.map(({ objectId, name, time }) => ({ objectId, name, time })),
+      obstructionCount: clearance.obstructionCount,
+      belowGroundAt: clearance.belowGroundAt,
+    },
+    clearanceHint: `${facts.join('，')}：撤销后${[...new Set(advice)].join('；')}，再重新应用。`,
+  }
+}
+
 export class CameraStageMotionOperationExecutor implements ApplicationSemanticOperationExecutor {
   readonly effectContract = {
     direct: [],
@@ -372,6 +406,7 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
           },
           affectedStateKeyframeIds: result.affectedStateKeyframeIds,
           affectedStateKeyframeCount: result.affectedStateKeyframeCount,
+          ...cameraPathClearanceEvidence(result.moveKind, result.clearance),
         },
         capturedAt: new Date().toISOString(),
       }],
