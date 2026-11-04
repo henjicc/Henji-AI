@@ -39,6 +39,8 @@ const FILE_EXCEPTIONS: Record<string, Record<string, string>> = {
   'electron/main/services/video/ffmpeg-loader.test.ts': { filter_complex_script: '旧写法分支的精确测试' },
   'electron/main/services/screen-recording/capture/process.ts': { e: 'Node 采集看护进程的脚本参数，不传给 FFmpeg' },
   'scripts/lib/uiInspectionSceneScreenCapture.cjs': { EncodedCommand: 'PowerShell 性能采样脚本参数，不传给 FFmpeg' },
+  'scripts/lib/webTimeCacheAcceptanceProbe.ts': { heavy: '输出文件名后缀 “-heavy”，不是命令行参数' },
+  'scripts/probe-web-time-cache.cjs': { qp0: '输出文件名 “2560-qp0.mp4” 的一部分，不是命令行参数' },
   // 两个录音构建脚本只因复用 video-decoder-ffmpeg.cjs 的下载函数而含 ffmpeg 字样，参数属于 cmake / git。
   'scripts/build-audio-capture.cjs': { S: 'cmake -S 源码目录', B: 'cmake -B 构建目录', A: 'cmake -A 目标平台' },
   'scripts/publish-audio-capture-source.cjs': { B: 'git checkout -B', A: 'git add -A', m: 'git commit -m' },
