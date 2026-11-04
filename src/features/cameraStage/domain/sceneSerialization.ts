@@ -8,6 +8,7 @@ import { normalizeStageRenderStyle } from './renderStyles'
 import type { StageSceneAnimation } from './animationTypes'
 import { createDefaultSceneSettings, STAGE_FOG_DISTANCE_RANGE } from './sceneDefaults'
 import { rotationFromPositionAndTarget } from './cameraUtils'
+import { isStageCameraRig, STAGE_CAMERA_AIM_LAG_MAX } from './cameraRigs'
 import { normalizeStateKeyframes } from './stateKeyframeTypes'
 import type { StageStateKeyframe } from './stateKeyframeTypes'
 import { compileStateKeyframesToAnimation } from './stateKeyframeCompiler'
@@ -204,6 +205,18 @@ function withDefaultCameraEffectors(objects: StageObject[]): StageObject[] {
   })
 }
 
+/** 运镜设备与注视跟随滞后（镜头参考 v6 起）：不认识的设备或非法滞后值去掉，回到“不模拟设备、取设备默认滞后”。 */
+function withNormalizedCameraRig(objects: StageObject[]): StageObject[] {
+  return objects.map((object) => {
+    if (object.type !== 'camera') return object
+    const { rig, aimLag, ...rest } = object as StageCameraObject & { rig?: unknown; aimLag?: unknown }
+    const normalized: StageCameraObject = { ...rest }
+    if (isStageCameraRig(rig)) normalized.rig = rig
+    if (typeof aimLag === 'number' && Number.isFinite(aimLag) && aimLag >= 0 && aimLag <= STAGE_CAMERA_AIM_LAG_MAX) normalized.aimLag = aimLag
+    return normalized
+  })
+}
+
 /** 统一旧镜头参考摄像机的手动注视点与 XYZ 旋转；Z 轴 roll 无法由 lookAt 推导，因此原样保留。 */
 function withNormalizedCameraRotations(objects: StageObject[]): StageObject[] {
   return objects.map((object) => {
@@ -279,6 +292,7 @@ function normalizeSceneRecord(record: Record<string, unknown>): StageSceneRuntim
   objects = normalizedSets.objects
   objects = withNormalizedCharacterMotion(objects)
   objects = withDefaultCameraEffectors(objects)
+  objects = withNormalizedCameraRig(objects)
   objects = withNormalizedCameraRotations(objects)
   const activeCameraId = typeof record.activeCameraId === 'string' ? record.activeCameraId : null
   const sceneSettings = parseSceneSettings(record.sceneSettings)

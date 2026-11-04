@@ -84,6 +84,49 @@ describe('三维摄像机语义运镜', () => {
     expect(crane.clearance.belowGroundAt).not.toBeNull()
   })
 
+  it('连续几段传 continuity=smooth 合成一条连续轨迹，结果里的平滑度给出衔接点与设备上限', async () => {
+    const state = useCameraStageStore.getState()
+    const camera = state.objects.find((object) => object.type === 'camera')!
+    const subject = state.objects.find((object) => object.type === 'primitive')!
+    const base = { projectId: 'project-1', cameraId: camera.id, targetObjectId: subject.id, speed: 'easeInOut' as const }
+    await applyCameraStageMotion({ ...base, move: { kind: 'dollyIn', distanceRatio: 0.6 }, duration: 6, rig: 'steadicam' })
+    const stopped = await applyCameraStageMotion({ ...base, move: { kind: 'crane', height: 3 }, duration: 7 })
+    expect(stopped.continuityWithPrevious).toBe('stop')
+    expect(stopped.smoothness?.start).toBe(6)
+
+    useCameraStageStore.getState().updateStateKeyframeContinuity(useCameraStageStore.getState().stateKeyframes[1].id, 'smooth')
+    const joined = await applyCameraStageMotion({ ...base, move: { kind: 'orbit', degrees: 120, direction: 'cw' }, duration: 7, continuity: 'smooth' })
+    expect(joined.continuityWithPrevious).toBe('smooth')
+    const smoothness = joined.smoothness!
+    expect([smoothness.start, smoothness.end]).toEqual([0, 20])
+    expect(smoothness.stops).toEqual([])
+    expect(smoothness.joints.map((joint) => joint.time)).toEqual([6, 13])
+    for (const joint of smoothness.joints) expect(joint.velocityJump).toBeLessThan(0.01 * smoothness.peakSpeed)
+    expect(smoothness.timing?.rig).toBe('steadicam')
+    expect(useCameraStageStore.getState().objects.find((object) => object.id === camera.id)).toMatchObject({ rig: 'steadicam' })
+
+    // 衔接卡是途经点：拖到衔接卡上改别的属性、或把当前状态记进这张卡，都不能把切圆后的采样机位写回去。
+    const positions = () => useCameraStageStore.getState().stateKeyframes.map((stateKeyframe) => stateKeyframe.objectStates[camera.id].transform.position)
+    const before = positions()
+    const store = useCameraStageStore.getState()
+    store.seek(6)
+    store.setSelectedStateKeyframeIdOnly(store.stateKeyframes[1].id)
+    useCameraStageStore.getState().updateObject(camera.id, { fov: 40 })
+    useCameraStageStore.getState().captureIntoSelectedStateKeyframe([camera.id])
+    expect(positions()).toEqual(before)
+    expect(useCameraStageStore.getState().stateKeyframes[1].objectStates[camera.id].fov).toBe(40)
+
+    // 在采样画面上把摄像机往 x 拖 0.1：卡里原机位加上这段增量，其余分量不动。
+    const sampled = useCameraStageStore.getState().objects.find((object) => object.id === camera.id)!
+    useCameraStageStore.getState().updateObject(camera.id, {
+      transform: { ...sampled.transform, position: { ...sampled.transform.position, x: sampled.transform.position.x + 0.1 } },
+    })
+    const dragged = positions()[1]
+    expect(dragged.x).toBeCloseTo(before[1].x + 0.1, 9)
+    expect(dragged.y).toBe(before[1].y)
+    expect(dragged.z).toBe(before[1].z)
+  })
+
   it('拒绝没有目标的非升降运镜', async () => {
     const camera = useCameraStageStore.getState().objects.find((object) => object.type === 'camera')!
 

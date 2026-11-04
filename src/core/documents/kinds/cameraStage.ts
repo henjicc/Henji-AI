@@ -148,7 +148,9 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
   //   版本 3 的程序把超过 200 的雾距当成非法值换回默认 90 米，保存时会改掉用户的雾，所以最低可读版本提高到 4。
   // 版本 5 = 城市新增自然路网风格（style = organic）与路网弯曲程度、河流、公园三个参数，装饰新增任意形状铺装 areas。
   //   版本 4 的程序不认识这个风格：画不出人行道与水面，重新生成会失败，所以最低可读版本提高到 5。
-  version: 5,
+  // 版本 6 = 摄像机对象新增可选的运镜设备 rig 与注视跟随滞后 aimLag（秒）。版本 5 的程序原样保留这两个字段，
+  //   只是不认识它们，按不模拟设备播放，不会误解其余内容，所以最低可读版本不变。
+  version: 6,
   minReaderVersion: 5,
   contentSchema: cameraStageContentSchema,
   migrations: {
@@ -166,6 +168,8 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
       next.sets = (Array.isArray(next.sets) ? next.sets as LooseRecord[] : []).map(migrateStageSetV4)
       return next
     },
+    // 5 → 6：旧文件的摄像机没有运镜设备与注视跟随滞后，按不模拟设备、不滞后播放，内容原样保留。
+    5: (content) => structuredClone(content as LooseRecord),
   },
   createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [] }),
   isEmptyContent: isEmptyCameraStageContent,

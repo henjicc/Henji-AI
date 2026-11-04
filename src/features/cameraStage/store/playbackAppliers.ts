@@ -11,6 +11,7 @@
 
 import type { StageAnimationSampleSource, StageKeyframeValue } from '../domain/animationTypes'
 import { listAnimatableGroups } from '../domain/animatableProps'
+import { resolveCameraEffectors } from '../domain/cameraRigs'
 import type { StageObject } from '../domain/sceneTypes'
 import { sampleAnimationFrame } from './playbackSampling'
 
@@ -83,7 +84,7 @@ export function applyAnimationToPlaybackAppliers(
       ))
       const drivesCameraEffectors = object.type === 'camera'
         && group.groupPath === 'transform.position'
-        && object.effectors.some((effector) => effector.enabled)
+        && resolveCameraEffectors(object).some((effector) => effector.enabled)
       if (sampledTrack || drivesCameraEffectors) {
         runPlaybackAppliers(object.id, group.groupPath, group.getBaseValue(object), time)
       }

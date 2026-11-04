@@ -7,9 +7,10 @@ import {
   type StageCameraMovePreset,
   type StageStateKeyframe,
   type StageSpatialPath,
+  type StageStateKeyframeObjectState,
   type StageStateKeyframeTransitionObjectDetail,
 } from '../domain/stateKeyframeTypes'
-import type { StageCameraLookAt, StageObject } from '../domain/sceneTypes'
+import type { StageCameraLookAt, StageObject, StageObjectPatch, StageVec3 } from '../domain/sceneTypes'
 import { isCameraId } from '../domain/cameraUtils'
 import { createCameraPresetPath } from '../domain/spatialPath'
 import { markSpatialPathCustom } from '../domain/spatialPath'
@@ -50,7 +51,7 @@ function compile(stateKeyframes: StageStateKeyframe[], objects: StageObject[]): 
   return animation
 }
 
-function compileAndAlignCurrentFrame(
+export function compileAndAlignCurrentFrame(
   state: CameraStageState,
   stateKeyframes: StageStateKeyframe[],
   objects: StageObject[] = state.objects,
@@ -112,27 +113,119 @@ export function applyStateKeyframeToObjects(objects: StageObject[], stateKeyfram
   })
 }
 
+/**
+ * 采样值不是作者值，逐分量写回：
+ * - 与采样值相同的分量只是动画求出来的结果，保留卡里原值；
+ * - 位置改过的分量按“卡里原值 +（这次的值 − 采样值）”写：平滑衔接卡上看到的是切圆后的位置，
+ *   在它上面拖了一段，就只把这段增量加到原机位上，不会把切圆后的位置整个写进卡；
+ * - 其余分量（旋转、缩放、视野、颜色）改过就照写新值。摄像机注视区间的旋转由注视点求出，卡里的旋转
+ *   不参与画面，按增量换算没有意义；手动转镜头时写的就是要的角度。
+ * 没被动画驱动的分量采样值就是卡里的值，结果即这次的值。
+ */
+function rebaseOnStored(
+  stored: StageStateKeyframeObjectState,
+  captured: StageStateKeyframeObjectState,
+  sampled: StageStateKeyframeObjectState,
+): StageStateKeyframeObjectState {
+  const vector = (key: keyof StageStateKeyframeObjectState['transform'], shift: boolean): StageVec3 => {
+    const component = (axis: keyof StageVec3): number => {
+      const value = captured.transform[key][axis]
+      const reference = sampled.transform[key][axis]
+      const original = stored.transform[key][axis]
+      if (value === reference) return original
+      // 采样值就是原值时直接取这次的值，免得加减带进浮点尾差。
+      return shift && reference !== original ? original + (value - reference) : value
+    }
+    return { x: component('x'), y: component('y'), z: component('z') }
+  }
+  return {
+    ...captured,
+    transform: { position: vector('position', true), rotation: vector('rotation', false), scale: vector('scale', false) },
+    color: captured.color === sampled.color ? stored.color : captured.color,
+    ...(captured.fov !== undefined && captured.fov === sampled.fov && stored.fov !== undefined ? { fov: stored.fov } : {}),
+  }
+}
+
+/**
+ * 把对象当前状态写进一张状态关键帧。
+ *
+ * sampled 是当前编译产物在这张卡时刻的采样结果（播放头正停在这张卡上时才传）。平滑衔接的拐角被切圆、
+ * 注视跟随有滞后，采样出的机位与朝向不再等于卡里存的值；不加区分地写回，每写一次卡就往拐角内侧漂一次。
+ * 所以按 rebaseOnStored 逐分量区分：没改过的保留原值，改过的才写进去。
+ */
 export function captureObjectsIntoStateKeyframe(
   stateKeyframes: StageStateKeyframe[],
   selectedStateKeyframeId: string | null,
   objects: StageObject[],
   objectIds?: string[],
+  sampled?: readonly StageObject[],
 ): StageStateKeyframe[] {
   if (!selectedStateKeyframeId) return stateKeyframes
   const allowedIds = objectIds ? new Set(objectIds) : null
+  const sampledById = sampled ? new Map(sampled.map((object) => [object.id, object])) : null
   return stateKeyframes.map((stateKeyframe) => {
     if (stateKeyframe.id !== selectedStateKeyframeId) return stateKeyframe
     const objectStates = { ...stateKeyframe.objectStates }
     for (const object of objects) {
-      if (!allowedIds || allowedIds.has(object.id)) objectStates[object.id] = captureStateKeyframeObjectState(object)
+      if (allowedIds && !allowedIds.has(object.id)) continue
+      const captured = captureStateKeyframeObjectState(object)
+      const stored = objectStates[object.id]
+      const sampledObject = sampledById?.get(object.id)
+      objectStates[object.id] = stored && sampledObject
+        ? rebaseOnStored(stored, captured, captureStateKeyframeObjectState(sampledObject))
+        : captured
     }
     return { ...stateKeyframe, objectStates }
   })
 }
 
+/**
+ * 播放头正停在这张状态关键帧上时，从卡快照出发、按当前编译产物在该时刻采样的结果；否则为 undefined
+ * （写入就是有意把当前状态记进去）。从卡快照出发：没有轨道驱动的分组采样出来就是卡里的值，
+ * 实时改过它就与采样值不同，照常写入；只有被动画驱动、且与采样值相同的分组才算“播放出来的值”。
+ */
+export function sampledAtStateKeyframe(state: CameraStageState, stateKeyframeId: string | null): StageObject[] | undefined {
+  const stateKeyframe = state.stateKeyframes.find((item) => item.id === stateKeyframeId)
+  if (!stateKeyframe || Math.abs(stateKeyframe.time - state.playback.currentTime) > 0.5 / Math.max(1, state.animation.fps)) return undefined
+  return applyAnimationAtTime(applyStateKeyframeToObjects(state.objects, stateKeyframe), state.animation, stateKeyframe.time)
+}
+
 export function syncAddedObjectToStateKeyframes(stateKeyframes: StageStateKeyframe[], object: StageObject): StageStateKeyframe[] {
   const snapshot = captureStateKeyframeObjectState(object)
   return stateKeyframes.map((stateKeyframe) => ({ ...stateKeyframe, objectStates: { ...stateKeyframe.objectStates, [object.id]: snapshot } }))
+}
+
+function sameVec3(a: StageVec3, b: StageVec3): boolean {
+  return a.x === b.x && a.y === b.y && a.z === b.z
+}
+
+/**
+ * 建模写入（助手、批量写入）同步进全部状态关键帧：只写这次改到的可动画字段，其余字段保留各状态关键帧自己的值。
+ * 整份快照覆盖会把对象在其他时间点的位置一并抹平——改个注视点或名称，整段运镜就没了。
+ * 变换按位置、旋转、缩放三组比较，没变的组不动。状态关键帧里还没有这个对象时补完整快照。
+ */
+export function syncObjectPatchAcrossStateKeyframes(
+  stateKeyframes: StageStateKeyframe[],
+  before: StageObject,
+  after: StageObject,
+  patch: StageObjectPatch,
+): StageStateKeyframe[] {
+  const snapshot = captureStateKeyframeObjectState(after)
+  const transformGroups = patch.transform
+    ? (['position', 'rotation', 'scale'] as const).filter((group) => !sameVec3(before.transform[group], after.transform[group]))
+    : []
+  return stateKeyframes.map((stateKeyframe) => {
+    const existing = stateKeyframe.objectStates[after.id]
+    if (!existing) return { ...stateKeyframe, objectStates: { ...stateKeyframe.objectStates, [after.id]: snapshot } }
+    const next: StageStateKeyframeObjectState = { ...existing, transform: { ...existing.transform } }
+    for (const group of transformGroups) next.transform[group] = { ...snapshot.transform[group] }
+    if (patch.color !== undefined) next.color = snapshot.color
+    if (patch.fov !== undefined) next.fov = snapshot.fov
+    if (patch.lookAt !== undefined) next.lookAt = structuredClone(snapshot.lookAt)
+    if (patch.pose !== undefined) next.pose = snapshot.pose
+    if (patch.motion !== undefined) next.motion = snapshot.motion
+    return { ...stateKeyframe, objectStates: { ...stateKeyframe.objectStates, [after.id]: next } }
+  })
 }
 
 /**
@@ -226,7 +319,7 @@ function insertCapturedStateKeyframe(
   //（重复时间会让 buildStateKeyframeTimeline 误判为旧版时序数据，整条时间轴布点退化）
   const existing = stateKeyframeAtTime(state.stateKeyframes, time, state.animation.fps)
   if (existing) {
-    return { stateKeyframes: captureObjectsIntoStateKeyframe(state.stateKeyframes, existing.id, objects), stateKeyframe: existing }
+    return { stateKeyframes: captureObjectsIntoStateKeyframe(state.stateKeyframes, existing.id, objects, undefined, sampledAtStateKeyframe(state, existing.id)), stateKeyframe: existing }
   }
   const stateKeyframe = createStateKeyframe(objects, `关键帧 ${state.stateKeyframes.length + 1}`, state.activeCameraId, time)
   const stateKeyframes = syncTransitionDurations([...state.stateKeyframes, stateKeyframe].sort((a, b) => a.time - b.time))
@@ -257,7 +350,9 @@ export function compileStateKeyframeEdit(
       playback: { ...state.playback, currentTime: inserted.stateKeyframe.time },
     }
   }
-  const stateKeyframes = captureObjectsIntoStateKeyframe(state.stateKeyframes, state.selectedStateKeyframeId, objects, objectIds)
+  const stateKeyframes = captureObjectsIntoStateKeyframe(
+    state.stateKeyframes, state.selectedStateKeyframeId, objects, objectIds, sampledAtStateKeyframe(state, state.selectedStateKeyframeId),
+  )
   return { objects, stateKeyframes, animation: compile(stateKeyframes, objects) }
 }
 
@@ -267,7 +362,7 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
       const time = quantizeToFrame(state.playback.currentTime, state.animation.fps)
       const existing = stateKeyframeAtTime(state.stateKeyframes, time, state.animation.fps)
       if (existing) {
-        const stateKeyframes = captureObjectsIntoStateKeyframe(state.stateKeyframes, existing.id, state.objects)
+        const stateKeyframes = captureObjectsIntoStateKeyframe(state.stateKeyframes, existing.id, state.objects, undefined, sampledAtStateKeyframe(state, existing.id))
         return { stateKeyframes, selectedStateKeyframeId: existing.id, animation: compile(stateKeyframes, state.objects) }
       }
       const stateKeyframe = createStateKeyframe(state.objects, `关键帧 ${state.stateKeyframes.length + 1}`, state.activeCameraId, time)
@@ -362,7 +457,8 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
     /**
      * 只切换选中的状态关键帧，不应用快照、不移动播放头（界面态，不进撤销历史）。
      * 用于播放头 scrub 落入某静止段时的"选中跟随"（重要记录 003 前置逻辑）：
-     * 静止段内采样值本就等于卡快照，重复调用 selectStateKeyframe 只会多余地污染撤销历史。
+     * 重复调用 selectStateKeyframe 只会多余地污染撤销历史。平滑衔接卡上的采样值可能不等于卡快照（拐角被切圆），
+     * 写回时由 captureObjectsIntoStateKeyframe 按采样值区分，不会把采样值当成编辑写进去。
      */
     setSelectedStateKeyframeIdOnly: (id) => set((state) => {
       if (state.selectedStateKeyframeId === id) return {}
@@ -499,7 +595,9 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
           animation: compile(inserted.stateKeyframes, state.objects),
         }
       }
-      const stateKeyframes = captureObjectsIntoStateKeyframe(state.stateKeyframes, state.selectedStateKeyframeId, state.objects, objectIds)
+      const stateKeyframes = captureObjectsIntoStateKeyframe(
+        state.stateKeyframes, state.selectedStateKeyframeId, state.objects, objectIds, sampledAtStateKeyframe(state, state.selectedStateKeyframeId),
+      )
       return stateKeyframes === state.stateKeyframes ? {} : { stateKeyframes, animation: compile(stateKeyframes, state.objects) }
     }),
   }

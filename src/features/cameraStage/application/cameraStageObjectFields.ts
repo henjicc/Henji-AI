@@ -6,7 +6,8 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains
 import { getAnimatablePropByPath, listAnimatablePropertyPaths } from '../domain/animatableProps'
 import type { StageAnimatableValueType, StageKeyframeValue } from '../domain/animationTypes'
 import { POSE_PRESETS } from '../domain/posePresets.gen'
-import type { StageObject, StageTransform } from '../domain/sceneTypes'
+import { resolveCameraAimLag, STAGE_CAMERA_AIM_LAG_MAX, STAGE_CAMERA_RIG_IDS, STAGE_CAMERA_RIG_PRESETS } from '../domain/cameraRigs'
+import type { StageCameraRig, StageObject, StageTransform } from '../domain/sceneTypes'
 import type { CameraStageObjectUpdate } from './cameraStageApplicationService'
 import {
   booleanCodec, colorCodec, enumCodec, nameCodec, nullableEnumCodec, numberCodec, refIdCodec, stageDescriptor,
@@ -89,10 +90,17 @@ function cameraField<T, TAction extends string>(
     storeActions: readonly TAction[]
     unit?: string
     nullable?: boolean
+    description?: string
   },
 ) {
   return stageField<CameraFieldSource, CameraStageObjectDraft, T, TAction>(CAMERA_ENTITY_TYPE, suffix, title, codec, options)
 }
+
+const RIG_LABELS = Object.fromEntries(STAGE_CAMERA_RIG_IDS.map((id) => [id, STAGE_CAMERA_RIG_PRESETS[id].label])) as Record<StageCameraRig, string>
+
+const RIG_DESCRIPTION = '运镜设备：决定运动上限与手感。dolly 轨道车（平稳推轨）、crane 摇臂（大幅升降、起停最柔）、'
+  + 'steadicam 斯坦尼康（跟拍、轻微漂浮）、drone 无人机（大范围高速、朝向跟得慢）、handheld 手持（起步快、带晃动）；'
+  + 'free 不模拟设备，各段按速度预设走。改设备不动状态关键帧，只改轨迹的时间律与手感。'
 
 /*
  * 逐分量动画属性（2.4）：63 条由这一个工厂生成，不逐条手写。id 生成规则与反射层曾经的
@@ -308,6 +316,19 @@ export const CAMERA_FIELDS = [
       draft.update.aspectRatio = { preset: draft.update.aspectRatio?.preset ?? draft.current.aspectRatio.preset, ratio: v }
     },
     storeActions: [] as const,
+  }),
+  cameraField('rig', '运镜设备', enumCodec(STAGE_CAMERA_RIG_IDS, RIG_LABELS), {
+    read: ({ camera }) => camera.rig ?? 'free',
+    write: (draft, v) => { draft.update.rig = v },
+    storeActions: ['updateCameraRig'] as const,
+    description: RIG_DESCRIPTION,
+  }),
+  cameraField('aim_lag', '注视跟随滞后', numberCodec({ min: 0, max: STAGE_CAMERA_AIM_LAG_MAX }, { min: 0, max: 0.5 }), {
+    read: ({ camera }) => resolveCameraAimLag(camera),
+    write: (draft, v) => { draft.update.aimLag = v },
+    unit: 'second',
+    storeActions: ['updateCameraRig'] as const,
+    description: '镜头朝向比注视目标晚多少秒（摄影师跟主体的反应），常用 0.1–0.3；0 = 始终正对。未设置时取运镜设备的默认值。',
   }),
   {
     propertyId: `${CAMERA_ENTITY_TYPE}.look_at_object_ref`,

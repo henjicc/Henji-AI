@@ -342,13 +342,13 @@ const values: Record<string, unknown> = {
       { id: 'fx-comp', kind: 'builtin', name: '压缩器', enabled: true, amount: 1, builtin: { id: 'compressor', params: { amount: 40, speed: 'normal', makeup: true } } },
     ],
     chainBypassed: false, output: { volumeDb: -1.5, loudness: { enabled: true, targetLufs: -16, gainDb: 3.5 } } },
-  // 镜头参考 v5：自然路网城市（弯曲程度、河流、公园），装饰含任意形状铺装，与指回它的一栋楼（朝向跟着街）；
-  // 雾距用超过旧上限 200 米的值。
+  // 镜头参考 v6：自然路网城市（弯曲程度、河流、公园），装饰含任意形状铺装，与指回它的一栋楼（朝向跟着街）；
+  // 雾距用超过旧上限 200 米的值；摄像机带运镜设备与注视跟随滞后。
   'document.camera_stage': (() => {
     const { set, objects } = buildStageSet([], { layout: { preset: 'city', style: 'organic', width: 200, depth: 200, seed: 7 }, name: '城市' })
     const fixedSet = { ...set, id: 'city' }
     const tower = { ...objects[0], id: 'tower', setId: 'city' }
-    return { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }, tower], activeCameraId: 'camera', sceneSettings: { sky: {}, fog: { enabled: true, distance: 1200 } }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }], sets: [fixedSet] }
+    return { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5], rig: 'crane', aimLag: 0.2 }, tower], activeCameraId: 'camera', sceneSettings: { sky: {}, fog: { enabled: true, distance: 1200 } }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }], sets: [fixedSet] }
   })(),
   'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id, memories: [{ id: 'brand', content: '这期品牌色用红色。', source: 'user', revision: 1, updatedAt: timestamp }] }),

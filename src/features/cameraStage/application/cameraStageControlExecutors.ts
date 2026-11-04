@@ -1,4 +1,4 @@
-import { cameraStageMoveSchema } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
+import { cameraStageMoveSchema, cameraStageRigSchema } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 import { z } from 'zod'
 
 import type {
@@ -19,6 +19,7 @@ import { cameraStageProjectStore, leaseCameraStageProjectRuntime, ensureCameraSt
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion, type CameraStageMotionResult } from './cameraMotionService'
 import type { CameraPathClearance } from './cameraPathClearance'
+import { CAMERA_JOINT_JUMP_RATIO } from './cameraMotionSmoothness'
 import { forgetCameraStageUndo, restoreCameraStageUndo, captureCameraStageUndo, afterCameraStageWrite } from './cameraStageUndo'
 import { CAMERA_FIELDS, OBJECT_FIELDS, CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
@@ -305,6 +306,8 @@ const motionInputSchema = z.object({
   endStateKeyframeId: z.string().min(1).optional(),
   duration: z.number().positive().max(3600),
   speed: z.enum(['uniform', 'easeInOut', 'fastStart', 'slowStart']),
+  rig: cameraStageRigSchema.optional(),
+  continuity: z.enum(['smooth', 'stop']).optional(),
 }).strict()
 
 /** 按运镜类型说怎么改：环绕没有半径参数，半径由起始机位到注视点的距离决定。 */
@@ -314,6 +317,68 @@ const OBSTRUCTION_ADVICE: Record<CameraStageMotionResult['moveKind'], string> = 
   dollyOut: '减小拉远幅度（调小 distanceRatio），或把起始机位移到开阔一侧',
   truck: '减小横移距离或改横移方向',
   crane: '减小升降幅度，或把起始机位移到开阔处',
+}
+
+const round = (value: number): number => Math.round(value * 1000) / 1000
+
+/**
+ * 整条连续链的平滑度写进结果：峰值、衔接点、停顿、塌速与设备上限。有顿挫或超限时附一句怎么改；
+ * 有意的停靠衔接不算问题，只在 continuityWithPrevious 里如实写出。无穷大的上限（未指定设备）不写，JSON 里没有无穷大。
+ */
+function cameraSmoothnessEvidence(result: CameraStageMotionResult): Record<string, JsonValue> {
+  const { smoothness, continuityWithPrevious } = result
+  if (!smoothness) return {}
+  const timing = smoothness.timing
+  const facts: string[] = []
+  for (const time of smoothness.stops) facts.push(`${time.toFixed(1)} 秒速度降到接近零又起步：不是有意停顿就把那张状态关键帧的 continuity 设为 smooth`)
+  for (const joint of smoothness.joints) {
+    if (joint.velocityJump > CAMERA_JOINT_JUMP_RATIO * Math.max(smoothness.peakSpeed, 1e-6)) {
+      facts.push(`${joint.time.toFixed(1)} 秒衔接处速度突变 ${joint.velocityJump.toFixed(2)} 米/秒：不是有意停顿就把衔接设为平滑`)
+    }
+  }
+  if (timing?.sag) {
+    const suggestion = timing.suggestedJointTimes
+      ? `；整条一口气走完时衔接卡应在 ${timing.suggestedJointTimes.map((time) => `${time.toFixed(1)} 秒`).join('、')}（现在是 ${timing.jointTimes.map((time) => `${time.toFixed(1)} 秒`).join('、')}），可用 change_application_entities 改这些状态关键帧的 camera_stage.state_keyframe.time，或按路程重新分配各段 duration`
+      : ''
+    facts.push(`${timing.sag.time.toFixed(1)} 秒附近速度塌到 ${timing.sag.speed.toFixed(2)} 米/秒（两侧约 ${timing.sag.around.toFixed(2)}）：各段时长与路程不成比例${suggestion}`)
+  }
+  if (timing?.reverses) facts.push('镜头会往回走一段：各段时长与路程差得太多，按路程重新分配时长')
+  if (timing && !timing.withinLimits) {
+    facts.push(`这条连续运镜用当前设备在 ${(timing.endTime - timing.startTime).toFixed(1)} 秒内走完会超出上限，至少需要 ${timing.requiredDuration.toFixed(1)} 秒：加长 duration、缩短距离或换速度更高的设备`)
+  }
+  return {
+    smoothness: {
+      ...(continuityWithPrevious ? { continuityWithPrevious } : {}),
+      start: round(smoothness.start),
+      end: round(smoothness.end),
+      peakSpeed: round(smoothness.peakSpeed),
+      peakAcceleration: round(smoothness.peakAcceleration),
+      peakJerk: round(smoothness.peakJerk),
+      peakAngularSpeed: round(smoothness.peakAngularSpeed),
+      joints: smoothness.joints.map((joint) => ({
+        time: round(joint.time),
+        speed: round(joint.speed),
+        velocityJump: round(joint.velocityJump),
+        accelerationJump: round(joint.accelerationJump),
+        angularSpeedJump: round(joint.angularSpeedJump),
+      })),
+      stops: smoothness.stops.map(round),
+      ...(timing ? {
+        timing: {
+          rig: timing.rig,
+          sag: timing.sag ? { time: round(timing.sag.time), speed: round(timing.sag.speed), around: round(timing.sag.around) } : null,
+          ...(timing.suggestedJointTimes ? { suggestedJointTimes: timing.suggestedJointTimes.map(round) } : {}),
+          reverses: timing.reverses,
+          withinLimits: timing.withinLimits,
+          ...(timing.rig === 'free' ? {} : {
+            requiredDuration: round(timing.requiredDuration),
+            limits: { speed: timing.limits.speed, acceleration: timing.limits.acceleration, jerk: timing.limits.jerk },
+          }),
+        },
+      } : {}),
+    },
+    ...(facts.length > 0 ? { smoothnessHint: `${facts.join('；')}。` } : {}),
+  }
 }
 
 /** 轨迹撞楼或钻地时把穿过了谁、第几秒写进结果，附一句怎么改；通畅时不加字段。 */
@@ -407,6 +472,7 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
           affectedStateKeyframeIds: result.affectedStateKeyframeIds,
           affectedStateKeyframeCount: result.affectedStateKeyframeCount,
           ...cameraPathClearanceEvidence(result.moveKind, result.clearance),
+          ...cameraSmoothnessEvidence(result),
         },
         capturedAt: new Date().toISOString(),
       }],

@@ -1,7 +1,10 @@
 import { createLogger } from '@/core/logging'
 
-import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
-import type { StageCameraMovePreset, StageSpeedPreset } from '../domain/stateKeyframeTypes'
+import type { StageSceneAnimation } from '../domain/animationTypes'
+import type { StageCameraObject, StageCameraRig, StageObject, StageVec3 } from '../domain/sceneTypes'
+import { describeSpatialMotionTiming } from '../domain/spatialMotionEngine'
+import type { StageCameraMovePreset, StageSpeedPreset, StageStateKeyframe } from '../domain/stateKeyframeTypes'
+import { measureCameraMotionSmoothness, type CameraMotionSmoothness } from './cameraMotionSmoothness'
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
 import { afterCameraStageWrite, captureCameraStageUndo } from './cameraStageUndo'
 import { cameraMotionIdentity, cameraMotionSourceKey, compileCameraMotionCandidates, assertCameraCandidateCurrent, type CameraMotionCandidateRequest } from './cameraMotionCandidates'
@@ -22,6 +25,10 @@ export interface CameraStageMotionInput {
   endStateKeyframeId?: string
   duration: number
   speed: StageSpeedPreset
+  /** 运镜设备；省略则沿用摄像机当前设置。 */
+  rig?: StageCameraRig
+  /** 与上一段运镜在起点卡的衔接；省略则保持起点卡现有设置。 */
+  continuity?: StageStateKeyframe['continuity']
 }
 
 export interface CameraStageMotionResult {
@@ -41,7 +48,28 @@ export interface CameraStageMotionResult {
   }
   /** 轨迹穿过的对象与是否钻到地面以下，供助手调整半径、高度或注视点 */
   clearance: CameraPathClearance
+  /** 本段所在整条连续轨迹的平滑度：衔接点有没有跳变、中途有没有停顿、设备上限够不够 */
+  smoothness: CameraMotionSmoothness | null
+  /** 起点前一段摄像机也在动时，两段在起点怎么衔接；前面没有运动时为 null */
+  continuityWithPrevious: StageStateKeyframe['continuity'] | null
   undoToken: string
+}
+
+/** 本段所在的那条连续链（衔接为平滑通过时会跨过多段），没有空间路径时就是本段自己。 */
+function measureMoveSmoothness(
+  objects: StageObject[],
+  animation: StageSceneAnimation,
+  stateKeyframes: StageStateKeyframe[],
+  cameraId: string,
+  move: { start: number; end: number },
+): CameraMotionSmoothness | null {
+  const chain = animation.spatialMotions
+    .filter((motion) => motion.objectId === cameraId)
+    .flatMap(describeSpatialMotionTiming)
+    .find((report) => report.startTime <= move.start + 1e-4 && report.endTime >= move.end - 1e-4)
+  const range = chain ? { start: chain.startTime, end: chain.endTime } : move
+  const joints = stateKeyframes.map((stateKeyframe) => stateKeyframe.time).filter((time) => time > range.start + 1e-4 && time < range.end - 1e-4)
+  return measureCameraMotionSmoothness(objects, animation, cameraId, range, joints)
 }
 
 function requireFiniteVec3(value: StageVec3): StageVec3 {
@@ -90,6 +118,9 @@ function applyStateKeyframeMotion(
   })
   state = cameraStageProjectStore(input.projectId).getState()
   state.captureIntoSelectedStateKeyframe([camera.id])
+  state = cameraStageProjectStore(input.projectId).getState()
+  if (input.rig !== undefined) state.updateCameraRig(camera.id, { rig: input.rig })
+  if (input.continuity !== undefined) state.updateStateKeyframeContinuity(startStateKeyframe.id, input.continuity)
 
   const startIndex = state.stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === startStateKeyframe.id)
   let endStateKeyframe = input.endStateKeyframeId
@@ -120,7 +151,13 @@ function applyStateKeyframeMotion(
   const startPosition = updatedStart?.objectStates[camera.id]?.transform.position ?? camera.transform.position
   const endPosition = updatedEnd?.objectStates[camera.id]?.transform.position ?? camera.transform.position
   const endTime = updatedEnd?.time ?? startStateKeyframe.time + input.duration
+  const startIndexNow = updated.stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === startStateKeyframe.id)
+  const previous = updated.stateKeyframes[startIndexNow - 1]
+  const previousFrom = previous?.objectStates[camera.id]?.transform.position
+  const previousMoved = !!previous && (!!previous.transition.perObject[camera.id]?.spatialPath
+    || (!!previousFrom && Math.hypot(previousFrom.x - startPosition.x, previousFrom.y - startPosition.y, previousFrom.z - startPosition.z) > 1e-3))
   return {
+    continuityWithPrevious: previousMoved && updatedStart ? updatedStart.continuity : null,
     startTime: startStateKeyframe.time,
     endTime,
     clearance: checkCameraPathClearance(
@@ -129,6 +166,7 @@ function applyStateKeyframeMotion(
       camera.id,
       { start: startStateKeyframe.time, end: endTime },
     ),
+    smoothness: measureMoveSmoothness(updated.objects, updated.animation, updated.stateKeyframes, camera.id, { start: startStateKeyframe.time, end: endTime }),
     affectedStateKeyframeIds: [startStateKeyframe.id, endStateKeyframe.id],
     affectedStateKeyframeCount: 2,
     path: {
@@ -176,6 +214,10 @@ async function applyCameraStageMotionInternal(input: CameraStageMotionInput): Pr
       affectedStateKeyframeCount: result.affectedStateKeyframeCount,
       obstructionCount: result.clearance.obstructionCount,
       belowGround: result.clearance.belowGroundAt !== null,
+      rig: input.rig,
+      continuity: input.continuity,
+      stopCount: result.smoothness?.stops.length ?? 0,
+      withinRigLimits: result.smoothness?.timing?.withinLimits ?? true,
     })
     return result
   } catch (error) {

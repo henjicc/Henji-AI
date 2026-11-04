@@ -43,5 +43,20 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 ## 动画与运镜
 
 - 状态关键帧动画：同一次 `change_application_entities` 里交替写 `camera_stage.playback.current_time` 与对象或摄像机的 `animatable.*` / `pose_preset`，应用自动建关键帧；最后可同事务写 `loop`、`playing`。不要按时间点拆成多轮。
-- 语义运镜（环绕、推拉、平移、升降）用 `apply_camera_stage_camera_move`，轨迹按弧长平滑采样；整理示范机位用 `organize_camera_stage_motion` 再 `apply_camera_stage_motion_candidate`。
+- 语义运镜（环绕、推拉、平移、升降）用 `apply_camera_stage_camera_move`，每次追加一段；整理示范机位用 `organize_camera_stage_motion` 再 `apply_camera_stage_motion_candidate`。
+
+### 连续运镜与运镜设备
+
+- **一气呵成**：几段运镜要连成一个动作（推进接升降接环绕），从第二段起每段都传 `continuity: "smooth"`。这几段会合成一条连续轨迹：衔接处不减速，拐角自动圆滑，镜头角速度也连续。要在某处停住（节拍、对白）就传 `continuity: "stop"` 或不传；已经做好的衔接用 `change_application_entities` 改该状态关键帧的 `camera_stage.state_keyframe.continuity`。
+- **按长度给时长**：各段时长尽量和路程成比例（同样 7 秒，3 米的升降和 10 米的环绕快慢差三倍），否则慢的那段中途会塌速，看着还是一顿。衔接卡是途经点，拐角会被切圆，经过时在拐角内侧一点。塌速时结果的 `timing.sag` 给出时刻与速度，`timing.suggestedJointTimes` 是整条一口气走完时各衔接卡应在的时刻：按它用 `change_application_entities` 改这些状态关键帧的 `camera_stage.state_keyframe.time`，或撤销后按路程重新分配各段 `duration`。
+- **运镜设备**：`rig` 参数（或摄像机属性 `camera_stage.camera.rig`）选设备，人和助手都按名称选：
+  - `dolly` 轨道车：平稳推拉横移，起停很柔，速度 ≤1.5 米/秒；
+  - `crane` 摇臂：大幅升降与越过前景，转弯最缓，加速度 ≤0.5 米/秒²；
+  - `steadicam` 斯坦尼康：跟拍、绕人走，带轻微漂浮；
+  - `drone` 无人机：大范围高速、航拍，朝向跟得最慢；
+  - `handheld` 手持：起步快、带手抖，纪实感；
+  - `free` 不模拟设备（默认）：各段按 `speed` 预设走，衔接设平滑时仍连续。
+  选了设备后起步和停下的加速度都从零开始，转弯按设备的惯性放缓。
+- **注视跟随**：设备自带“镜头比主体慢半拍”的跟随（`camera_stage.camera.aim_lag`，单位秒，常用 0.1–0.3，0 为始终正对）。要构图锁死主体就设 0。播放、拖动时间轴与导出逐帧一致。
+- **自检**：运镜结果的证据里有 `smoothness`：整条连续链的峰值速度、加速度、角速度，每个衔接点的 `velocityJump`（应接近 0）、中途停顿 `stops`（应为空）、与上一段的衔接 `continuityWithPrevious`（stop 表示停稳再走，有意的节拍停顿就不用改），以及 `timing.sag`（塌速）、`timing.reverses`（往回走）和设备上限检查 `timing.withinLimits` / `timing.requiredDuration`。出现 `smoothnessHint` 时按提示改：设平滑、调衔接时刻、加长时长或换设备。
 - 运镜结果的证据里出现 `clearance` / `clearanceHint`，说明轨迹穿过了楼、角色等对象（列出名称与第几秒）或钻到地面以下：按 `clearanceHint` 撤销后调整再应用（环绕把起始机位放远或抬高、推近调大 `distanceRatio`、升降减小幅度），直到不再出现。推得太近、环绕半径小于楼宽时，注视对象本身也会被列出。

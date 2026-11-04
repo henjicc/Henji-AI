@@ -9,10 +9,12 @@ import {
   resolveCameraRotation,
 } from '../domain/cameraUtils'
 import { focalLengthToFov, fovToFocalLength } from '../domain/cameraOptics'
+import { resolveCameraAimLag, resolveCameraRigPreset, STAGE_CAMERA_AIM_LAG_MAX, STAGE_CAMERA_RIG_IDS, STAGE_CAMERA_RIG_PRESETS } from '../domain/cameraRigs'
 import { CAMERA_ASPECT_RATIO_PRESETS } from '../domain/sceneDefaults'
 import type {
   StageCameraAspectRatioPreset,
   StageCameraLookAt,
+  StageCameraRig,
   StageCameraObject,
   StageVec3,
 } from '../domain/sceneTypes'
@@ -96,6 +98,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
   const objects = useCameraStageStore((state) => state.objects)
   const updateObject = useCameraStageStore((state) => state.updateObject)
   const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
+  const updateCameraRig = useCameraStageStore((state) => state.updateCameraRig)
   // 注视目标可锁定任意场景对象（角色/几何体/其他摄像机），只排除自己
   const lockableTargets = objects.filter((item) => item.id !== object.id)
   const resolvedTarget = resolveCameraLookAtTarget(object, objects)
@@ -273,6 +276,32 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
             />
           </UiFormRow>
         )}
+      </UiGroup>
+
+      <UiGroup title="运镜设备" titleTone="compact" divided>
+        <UiFormRow label="设备" density="compact">
+          <Dropdown<StageCameraRig>
+            ariaLabel="运镜设备"
+            value={object.rig ?? 'free'}
+            display={resolveCameraRigPreset(object.rig).label}
+            options={STAGE_CAMERA_RIG_IDS.map((id) => ({ label: STAGE_CAMERA_RIG_PRESETS[id].label, value: id }))}
+            onSelect={(rig) => updateCameraRig(object.id, { rig })}
+            className="w-full"
+            size="sm"
+            minWidthStrategy="none"
+          />
+        </UiFormRow>
+        <SliderNumberRow
+          label="注视跟随（秒）"
+          info="镜头朝向比注视目标晚多少秒，像摄影师跟主体；0 为始终正对。"
+          ariaLabel="注视跟随"
+          min={0}
+          max={STAGE_CAMERA_AIM_LAG_MAX}
+          step={0.01}
+          precision={2}
+          value={resolveCameraAimLag(object)}
+          onChange={(aimLag) => updateCameraRig(object.id, { aimLag })}
+        />
       </UiGroup>
 
       <UiGroup title="效果器" titleTone="compact" divided>

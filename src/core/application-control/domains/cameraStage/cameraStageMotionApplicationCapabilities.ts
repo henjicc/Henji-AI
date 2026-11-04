@@ -8,6 +8,7 @@ import {
   cameraStageDocumentIdSchema,
   cameraStageControl,
   cameraStageMoveSchema,
+  cameraStageRigSchema,
   cameraStageTarget,
   CONFLICT_RECOVERY,
   cameraStageTransactionResultShape,
@@ -17,13 +18,18 @@ import {
 const applyCameraMove = defineApplicationCapability({
   id: 'apply_camera_stage_camera_move',
   resolveOperationTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }], version: 1, title: '应用摄像机语义运镜',
-  description: '按摄像机、注视目标、时间、方向、距离和缓动应用环绕、推拉、横移或升降轨迹。', domain: 'camera_stage',
+  description: '按摄像机、注视目标、时间、方向、距离和缓动应用环绕、推拉、横移或升降轨迹。'
+    + '连续几段运镜要一气呵成时，后一段传 continuity=smooth：整条链合成一条连续轨迹，衔接处不减速、拐角自动圆滑。'
+    + 'rig 选运镜设备（轨道车、摇臂、斯坦尼康、无人机、手持），决定起停手感、速度上限、注视跟随滞后与晃动。'
+    + '结果证据里的 smoothness 给出整条链的速度、加速度峰值、衔接点跳变、中途停顿和设备上限检查，据此自检。',
+  domain: 'camera_stage',
   aliases: ['环绕主体', '推近拉远', '横移镜头', '升降镜头', 'orbit', 'dolly', 'truck', 'crane', 'camera move'],
   readOnly: false, dataClasses: ['C1'], idempotent: true, destructive: false,
   timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['camera_stage'],
   acceptsRefs: ['camera_stage.document', 'camera_stage.camera', 'camera_stage.object', 'camera_stage.state_keyframe'],
   producesRefs: ['camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
-  successEvidence: ['事务返回路径起终点、采样数和受影响状态关键帧，并提供可撤销引用；轨迹穿过对象或低于地面时附 clearance（对象、时间）与 clearanceHint。'],
+  successEvidence: ['事务返回路径起终点、采样数和受影响状态关键帧，并提供可撤销引用；轨迹穿过对象或低于地面时附 clearance（对象、时间）与 clearanceHint；'
+    + '附 smoothness（整条连续链的峰值、衔接点跳变、停顿、设备上限），有顿挫或超限时附 smoothnessHint。'],
   failureRecovery: [
     CONFLICT_RECOVERY,
     '缺少目标、摄像机或有效时间范围时停止，重新观察场景后使用稳定引用；不得猜测名称。',
@@ -33,6 +39,8 @@ const applyCameraMove = defineApplicationCapability({
     move: cameraStageMoveSchema, targetObjectId: z.string().min(1).optional(), targetPoint: cameraStageVec3Schema.optional(),
     startStateKeyframeId: z.string().min(1).optional(), endStateKeyframeId: z.string().min(1).optional(),
     duration: z.number().positive().max(3600), speed: z.enum(['uniform', 'easeInOut', 'fastStart', 'slowStart']).default('easeInOut'),
+    rig: cameraStageRigSchema.optional().describe('运镜设备：dolly 轨道车、crane 摇臂、steadicam 斯坦尼康、drone 无人机、handheld 手持、free 不模拟；省略沿用摄像机当前设备'),
+    continuity: z.enum(['smooth', 'stop']).optional().describe('与上一段运镜的衔接：smooth 不停顿接上，stop 在起点停稳再走；省略保持起点状态关键帧现有设置'),
   }).strict().superRefine((input, context) => {
     if (input.targetObjectId && input.targetPoint) context.addIssue({ code: 'custom', path: ['targetPoint'], message: '注视对象和注视点只能选择一种' })
     if (input.move.kind !== 'crane' && !input.targetObjectId && !input.targetPoint) context.addIssue({ code: 'custom', path: ['targetObjectId'], message: '该运镜必须声明注视对象或注视点' })

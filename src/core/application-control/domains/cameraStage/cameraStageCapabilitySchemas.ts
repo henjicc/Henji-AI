@@ -62,6 +62,9 @@ export const cameraStageMoveSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('crane'), height: z.number().min(-10_000).max(10_000) }).strict(),
 ])
 
+/** 运镜设备；与 camera_stage.camera.rig 属性同一组取值。 */
+export const cameraStageRigSchema = z.enum(['free', 'dolly', 'crane', 'steadicam', 'drone', 'handheld'])
+
 /** 并发基线由可信宿主提供，调用者通过正式实体读取刷新。 */
 export const CONFLICT_RECOVERY = 'CONFLICT 时读取目标当前状态后重试；需要严格按读取状态修改时，用 read_application_entity 返回的 baselineId 提交 baselineIds，禁止猜测 revision。'
 

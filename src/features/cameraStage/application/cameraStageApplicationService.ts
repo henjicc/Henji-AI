@@ -4,7 +4,9 @@ import { createLogger } from '@/core/logging'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 import { getAnimatablePropByPath } from '../domain/animatableProps'
-import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageSet, StageTransform, StageVec3 } from '../domain/sceneTypes'
+import type { StageCameraAspectRatio, StageCameraLookAt, StageCameraRig, StageObject, StageObjectPatch, StageSet, StageTransform, StageVec3 } from '../domain/sceneTypes'
+import { isStageCameraRig, STAGE_CAMERA_AIM_LAG_MAX } from '../domain/cameraRigs'
+import { cameraTargetFromRotation } from '../domain/cameraUtils'
 import { buildStageSet, countStageSetDecor, liveStageSets, type StageSetDecorCounts } from '../domain/stageSets'
 import type { CameraStageSetLayoutInput, CameraStageSetParams } from '@/core/application-control/domains/cameraStage/cameraStageSetSchemas'
 import type { StageCameraEffector, StageStateKeyframe, StageSpatialPath } from '../domain/stateKeyframeTypes'
@@ -12,7 +14,7 @@ import type { StageKeyframeValue, StagePlaybackState } from '../domain/animation
 import { POSE_PRESETS } from '../domain/posePresets.gen'
 import { markSpatialPathCustom } from '../domain/spatialPath'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
-import { captureObjectsIntoStateKeyframe } from '../store/stateKeyframeSlice'
+import { captureObjectsIntoStateKeyframe, sampledAtStateKeyframe } from '../store/stateKeyframeSlice'
 import {
   calculateStageObjectBounds,
   dimensionsToScale,
@@ -38,6 +40,19 @@ export interface CameraStageObjectUpdate {
   aspectRatio?: StageCameraAspectRatio
   variant?: 'standard' | 'strong' | 'slim' | 'child'
   effectors?: StageCameraEffector[]
+  /** 运镜设备与注视跟随滞后是摄像机级设置，不同步进状态关键帧，见 updateCameraRig。 */
+  rig?: StageCameraRig
+  aimLag?: number
+}
+
+function validateCameraRigUpdate(object: StageObject, update: Pick<CameraStageObjectUpdate, 'rig' | 'aimLag'>): { rig?: StageCameraRig; aimLag?: number } | null {
+  if (update.rig === undefined && update.aimLag === undefined) return null
+  if (object.type !== 'camera') throw new Error('OBJECT_TYPE_MISMATCH')
+  if (update.rig !== undefined && !isStageCameraRig(update.rig)) throw new Error('INVALID_INPUT')
+  if (update.aimLag !== undefined && !(Number.isFinite(update.aimLag) && update.aimLag >= 0 && update.aimLag <= STAGE_CAMERA_AIM_LAG_MAX)) {
+    throw new Error('INVALID_INPUT')
+  }
+  return { ...(update.rig !== undefined ? { rig: update.rig } : {}), ...(update.aimLag !== undefined ? { aimLag: update.aimLag } : {}) }
 }
 
 export interface CameraStageStateKeyframeUpdate {
@@ -179,6 +194,15 @@ function validateObjectUpdate(object: StageObject, objects: StageObject[], updat
       if (lookAtObjectId === object.id || !objects.some((candidate) => candidate.id === lookAtObjectId)) throw new Error('INVALID_REFERENCE')
     }
     patch.lookAt = structuredClone(update.lookAt)
+  }
+  /*
+   * 摄像机朝向只有一个数据源：注视点。直接写旋转角时换算成同方向、同距离的手动注视点（与面板、
+   * 手柄改角度同一做法），否则写入后重新采样会按旧注视点把角度改回去。roll 不在注视点里，原样保留。
+   */
+  const transform = patch.transform
+  if (object.type === 'camera' && transform && update.lookAt === undefined
+    && (transform.rotation.x !== object.transform.rotation.x || transform.rotation.y !== object.transform.rotation.y)) {
+    patch.lookAt = { mode: 'manual', target: cameraTargetFromRotation({ ...object, transform }, objects, transform.rotation) }
   }
   if (update.aspectRatio !== undefined) {
     if (object.type !== 'camera' || !Number.isFinite(update.aspectRatio.ratio) || update.aspectRatio.ratio <= 0) throw new Error('INVALID_ASPECT_RATIO')
@@ -443,7 +467,9 @@ const implementation = {
       const name = input.spec.name
         ? resolveUniqueCameraStageObjectName(state.objects, input.spec.name, object.id)
         : object.name
-      state.updateObject(object.id, { name, transform })
+      // 新建对象以默认状态进了每一张状态关键帧，放置位置也要同步进每一张，否则播放时它会从默认位置滑过来。
+      if (reuse.object) state.updateObject(object.id, { name, transform })
+      else state.updateObjectAcrossStateKeyframes(object.id, { name, transform })
       await saveCameraStageProjectRuntime(input.projectId)
       const saved = requireObject(input.projectId, object.id)
       logger.info('三维场景对象布置完成', {
@@ -566,7 +592,9 @@ const implementation = {
     await ensureProjectLoaded(projectId)
     const object = requireObject(projectId, objectId)
     const state = cameraStageProjectStore(projectId).getState()
-    const patch = validateObjectUpdate(object, state.objects, update)
+    const { rig, aimLag, ...modeling } = update
+    const rigPatch = validateCameraRigUpdate(object, { rig, aimLag })
+    const patch = rigPatch && Object.keys(modeling).length === 0 ? {} : validateObjectUpdate(object, state.objects, modeling)
     const undoToken = captureCameraStageUndo(projectId)
     await afterCameraStageWrite(projectId, undoToken, async () => {
       /*
@@ -580,10 +608,11 @@ const implementation = {
        * 人手动拖物体时希望自动打点（那确实是在编辑动画），所以 store.updateObject 的行为不动；
        * 走能力层的写入改用建模语义。
        */
-      state.updateObjectAcrossStateKeyframes(objectId, patch)
+      if (Object.keys(patch).length > 0) state.updateObjectAcrossStateKeyframes(objectId, patch)
+      if (rigPatch) cameraStageProjectStore(projectId).getState().updateCameraRig(objectId, rigPatch)
       await saveCameraStageProjectRuntime(projectId)
     })
-    return { projectId, objectId, updatedKeys: Object.keys(patch), undoToken }
+    return { projectId, objectId, updatedKeys: [...Object.keys(patch), ...Object.keys(rigPatch ?? {})], undoToken }
   },
 
   /**
@@ -734,7 +763,9 @@ const implementation = {
       if (update.captureObjectIds !== undefined) {
         // 只覆盖列出的对象在目标状态关键帧上的快照，不触碰其余对象或其他时间点。
         const current = cameraStageProjectStore(projectId).getState()
-        const stateKeyframes = captureObjectsIntoStateKeyframe(current.stateKeyframes, stateKeyframeId, current.objects, update.captureObjectIds)
+        const stateKeyframes = captureObjectsIntoStateKeyframe(
+          current.stateKeyframes, stateKeyframeId, current.objects, update.captureObjectIds, sampledAtStateKeyframe(current, stateKeyframeId),
+        )
         cameraStageProjectStore(projectId).setState({ stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, current.objects) })
       }
       await saveCameraStageProjectRuntime(projectId)

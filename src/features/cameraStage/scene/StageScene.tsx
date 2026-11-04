@@ -35,6 +35,7 @@ import StageFixedViewportCamera from './StageFixedViewportCamera'
 import StageEditorViewRange from './StageEditorViewRange'
 import { resolveStageSceneExtent, stageGroundSize } from '../application/stageSceneExtent'
 import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
+import { resolveCameraViewTarget } from '../store/playbackSampling'
 import { useSyncExternalStore } from 'react'
 import { cameraMotionPreview, subscribeCameraMotion, cameraMotionRevision, demonstrateCameraMotion, cameraMotionDraft } from '../application/cameraMotionDraft'
 
@@ -160,6 +161,7 @@ const StageScene: React.FC<StageSceneProps> = ({
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
   const renderStyle = useCameraStageStore((state) => state.sceneSettings.render.style)
   const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
+  const storedAnimation = useCameraStageStore((state) => state.animation)
   const objects = cameraMotionPreview(useCameraStageStore.getState())?.objects ?? storedObjects
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
@@ -248,6 +250,24 @@ const StageScene: React.FC<StageSceneProps> = ({
     }
     return targets
   }, [objects])
+  /*
+   * 视口与摄像机图标实际看向的点：带注视跟随滞后时与注视目标不同。拖动时间轴会换掉 objects，重编译会换掉
+   * 动画产物，这里按当时的播放头时间求值；播放中由 applier 逐帧推朝向，不走这里。
+   */
+  const cameraViewTargets = useMemo(() => {
+    const state = useCameraStageStore.getState()
+    const animation = cameraMotionPreview(state)?.animation ?? storedAnimation
+    const targets = new Map<string, ReturnType<typeof resolveCameraLookAtTarget>>()
+    for (const object of objects) {
+      if (object.type !== 'camera') continue
+      const lookAtTarget = cameraLookAtTargets.get(object.id)
+      if (!lookAtTarget) continue
+      targets.set(object.id, object.lookAt.mode === 'object'
+        ? resolveCameraViewTarget(object, objects, animation, state.playback.currentTime)
+        : lookAtTarget)
+    }
+    return targets
+  }, [cameraLookAtTargets, objects, storedAnimation])
   const cameraObjects = useMemo(
     () => objects.filter((object): object is StageCameraObject => object.type === 'camera'),
     [objects],
@@ -270,6 +290,7 @@ const StageScene: React.FC<StageSceneProps> = ({
     (item): item is StageCameraObject => item.id === requestedCameraId && item.type === 'camera',
   )
   const activeCameraTarget = activeCamera ? cameraLookAtTargets.get(activeCamera.id) : undefined
+  const activeCameraViewTarget = activeCamera ? cameraViewTargets.get(activeCamera.id) : undefined
   const isCameraView = viewportSource
     ? (viewportSource.kind === 'camera' || viewportSource.kind === 'active_camera')
       && !!activeCamera && !!activeCameraTarget
@@ -362,10 +383,10 @@ const StageScene: React.FC<StageSceneProps> = ({
         <>
           <StageViewportCamera
             cameraObject={activeCamera}
-            lookAtTarget={activeCameraTarget}
+            lookAtTarget={activeCameraViewTarget ?? activeCameraTarget}
             interactionRef={cameraViewInteractionRef}
             cameraObjects={cameraObjects}
-            lookAtTargets={cameraLookAtTargets}
+            lookAtTargets={cameraViewTargets}
             renderCameraSchedule={viewportSource?.kind === 'camera' ? null : renderCameraSchedule}
             fallbackCameraId={activeCameraId}
             sceneExtent={sceneExtent}
@@ -390,7 +411,7 @@ const StageScene: React.FC<StageSceneProps> = ({
             selected={object.id === selectedId}
             onSelect={handleSelect}
             onRegister={registerNode}
-            cameraLookAtTarget={cameraLookAtTargets.get(object.id)}
+            cameraLookAtTarget={cameraViewTargets.get(object.id)}
             showCameraHelpers={!isCameraView}
           />
         ))}

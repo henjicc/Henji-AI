@@ -5,6 +5,7 @@ import type { PerspectiveCamera as ThreePerspectiveCamera } from 'three'
 import { registerPlaybackApplier } from '../store/playbackAppliers'
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
 import { sampleCameraEffectorOffsets } from '../domain/cameraEffectors'
+import { resolveCameraEffectors } from '../domain/cameraRigs'
 import { rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import type { RenderCameraScheduleEntry } from '../domain/renderCameraSchedule'
 import {
@@ -94,7 +95,7 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({
       rotation.z * Math.PI / 180,
     )
     camera.fov = fov
-    const { positionOffset, rotationOffset } = sampleCameraEffectorOffsets(object.effectors, time)
+    const { positionOffset, rotationOffset } = sampleCameraEffectorOffsets(resolveCameraEffectors(object), time)
     camera.translateX(positionOffset.x)
     camera.translateY(positionOffset.y)
     camera.translateZ(positionOffset.z)

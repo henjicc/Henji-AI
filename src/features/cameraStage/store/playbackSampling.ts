@@ -6,6 +6,8 @@
  */
 
 import { getAnimatablePropByPath } from '../domain/animatableProps'
+import { createAimLagSampler, type AimLagSampler } from '../domain/cameraAimLag'
+import { resolveCameraAimLag } from '../domain/cameraRigs'
 import { resolveCameraLookAtTarget, rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import { sampleTrack } from '../domain/keyframeEngine'
 import { sampleSpatialMotion } from '../domain/spatialPath'
@@ -55,15 +57,8 @@ function findOrientationEntry(
   return time < first.startTime ? first : last
 }
 
-/**
- * 摄像机朝向的唯一求解点：采样位置之后、按同一帧里注视目标的采样位置求俯仰与水平角。
- *
- * - object 模式：注视对象是摄像机级设置，始终逐帧盯住该对象的实时位置；与导出相机、
- *   摄像机图标、属性面板的 resolveCameraRotation 同一公式。
- * - manual 模式：两端注视同一点的区间盯住该点；作者手动转过镜头的区间沿用旋转轨道。
- * roll 不属于注视点，始终取轨道或快照值。
- */
-function resolveSampledCameraRotation(
+/** 不含注视跟随滞后的朝向：位置之后按同一帧里注视目标的采样位置求俯仰与水平角。 */
+function resolveDirectCameraRotation(
   camera: StageCameraObject,
   objects: StageObject[],
   orientations: StageCameraOrientationEntry[],
@@ -82,6 +77,176 @@ function resolveSampledCameraRotation(
   return rotationFromPositionAndTarget(position, target, rotation.z)
 }
 
+const DEG = Math.PI / 180
+
+function forwardOf(rotation: StageVec3): StageVec3 {
+  return {
+    x: -Math.sin(rotation.y * DEG) * Math.cos(rotation.x * DEG),
+    y: Math.sin(rotation.x * DEG),
+    z: -Math.cos(rotation.y * DEG) * Math.cos(rotation.x * DEG),
+  }
+}
+
+/** 只含该摄像机与它注视对象的编译产物：滞后预积分逐步采样时不必扫全场景的轨道。路径链保持原对象，共用运行时缓存。 */
+function sourceFor(animation: StageAnimationSampleSource, objectIds: ReadonlySet<string>): StageAnimationSampleSource {
+  return {
+    tracks: animation.tracks.filter((track) => objectIds.has(track.objectId)),
+    spatialMotions: animation.spatialMotions.filter((motion) => objectIds.has(motion.objectId)),
+    cameraOrientations: animation.cameraOrientations.filter((entry) => objectIds.has(entry.objectId)),
+  }
+}
+
+/** 最后一次变化的时刻；滞后积分到这里为止，之后输入不变、镜头继续收敛。 */
+function animatedUntil(source: StageAnimationSampleSource): number {
+  let end = 0
+  for (const track of source.tracks) end = Math.max(end, track.keyframes[track.keyframes.length - 1]?.time ?? 0)
+  for (const motion of source.spatialMotions) end = Math.max(end, motion.segments[motion.segments.length - 1]?.endTime ?? 0)
+  for (const entry of source.cameraOrientations) end = Math.max(end, entry.endTime)
+  return end
+}
+
+/** 硬切（hold）让机位或注视目标瞬间跳位的时刻：滞后在这里直接对齐，不让镜头甩过去。 */
+function jumpTimes(source: StageAnimationSampleSource): number[] {
+  const times: number[] = []
+  for (const track of source.tracks) {
+    track.keyframes.forEach((keyframe, index) => {
+      const next = track.keyframes[index + 1]
+      if (keyframe.easing === 'hold' && next) times.push(next.time)
+    })
+  }
+  for (const motion of source.spatialMotions) {
+    for (const segment of motion.segments) if (segment.easing === 'hold') times.push(segment.endTime)
+  }
+  return times
+}
+
+/** 编译产物里被轨道或路径链驱动的分量（对象 id:属性路径）。 */
+const drivenCache = new WeakMap<StageAnimationSampleSource, Set<string>>()
+
+function drivenComponents(animation: StageAnimationSampleSource): Set<string> {
+  let driven = drivenCache.get(animation)
+  if (!driven) {
+    driven = new Set(animation.tracks.map((track) => `${track.objectId}:${track.propertyPath}`))
+    for (const motion of animation.spatialMotions) {
+      for (const axis of ['x', 'y', 'z']) driven.add(`${motion.objectId}:transform.position.${axis}`)
+    }
+    drivenCache.set(animation, driven)
+  }
+  return driven
+}
+
+/**
+ * 没有被动画驱动、采样时直接取对象当前值的位置与缩放分量；它们变了，滞后的输入也就变了。
+ * 旋转不算输入：摄像机在注视区间的俯仰与水平角由注视点求出（拖动时间轴后对象上存的就是上一帧的结果），
+ * 手动转镜头的区间由旋转轨道驱动；注视点只取目标的位置与缩放。
+ */
+function undrivenTransform(objects: StageObject[], driven: ReadonlySet<string>): number[] {
+  const values: number[] = []
+  for (const object of objects) {
+    for (const group of ['position', 'scale'] as const) {
+      for (const axis of ['x', 'y', 'z'] as const) {
+        if (!driven.has(`${object.id}:transform.${group}.${axis}`)) values.push(object.transform[group][axis])
+      }
+    }
+  }
+  return values
+}
+
+/*
+ * 滞后要从时间轴起点积分。先按编译产物对象查（播放、拖动时间轴每帧只做这一次查找），没有再按输入内容查：
+ * 这台摄像机与注视对象的轨道、路径链、朝向区间，以及没被驱动的变换分量。编辑别的对象会重编译出新的产物，
+ * 但这两个对象的输入没变，照样命中，不必重新积分。
+ */
+const aimLagByAnimation = new WeakMap<StageAnimationSampleSource, Map<string, AimLagSampler | null>>()
+const aimLagByContent = new Map<string, AimLagSampler | null>()
+const AIM_LAG_CACHE_SIZE = 16
+
+function aimLagSamplerFor(
+  camera: StageCameraObject,
+  objects: StageObject[],
+  animation: StageAnimationSampleSource,
+  delay: number,
+): AimLagSampler | null {
+  const targetId = camera.lookAt.mode === 'object' ? camera.lookAt.objectId : null
+  const target = targetId ? objects.find((object) => object.id === targetId) : undefined
+  const involved = [camera, ...(target ? [target] : [])]
+  const key = JSON.stringify([camera.id, delay, camera.lookAt, target?.type ?? null, undrivenTransform(involved, drivenComponents(animation))])
+  let byKey = aimLagByAnimation.get(animation)
+  if (!byKey) {
+    byKey = new Map()
+    aimLagByAnimation.set(animation, byKey)
+  }
+  if (byKey.has(key)) return byKey.get(key) ?? null
+  // 播放中拖动未被驱动的分量不会重编译，同一份产物下的键会不断变化：只留最近的若干个。
+  if (byKey.size >= AIM_LAG_CACHE_SIZE) byKey.delete(byKey.keys().next().value as string)
+  const source = sourceFor(animation, new Set(involved.map((object) => object.id)))
+  const contentKey = JSON.stringify([key, source])
+  let sampler = aimLagByContent.get(contentKey)
+  if (sampler === undefined) {
+    const end = animatedUntil(source)
+    sampler = end > 0
+      ? createAimLagSampler(delay, 0, end, (time) => {
+        const frame = sampleAnimationFrame(involved, source, time, { aimLag: false }).objects
+        const sampledCamera = frame[0] as StageCameraObject
+        return forwardOf(sampledCamera.transform.rotation)
+      }, jumpTimes(source))
+      : null
+    if (aimLagByContent.size >= AIM_LAG_CACHE_SIZE) aimLagByContent.delete(aimLagByContent.keys().next().value as string)
+    aimLagByContent.set(contentKey, sampler)
+  }
+  byKey.set(key, sampler)
+  return sampler
+}
+
+/**
+ * 摄像机朝向的唯一求解点：采样位置之后、按同一帧里注视目标的采样位置求俯仰与水平角，再叠加注视跟随滞后。
+ *
+ * - object 模式：注视对象是摄像机级设置，始终逐帧盯住该对象的实时位置；与导出相机、
+ *   摄像机图标、属性面板的 resolveCameraRotation 同一公式。
+ * - manual 模式：两端注视同一点的区间盯住该点；作者手动转过镜头的区间沿用旋转轨道。
+ * - 注视跟随滞后（设备默认或摄像机单独设置）对上面得到的朝向统一滤波，只在动画产物里有这台摄像机时生效。
+ * roll 不属于注视点，始终取轨道或快照值。
+ */
+export function resolveSampledCameraRotation(
+  camera: StageCameraObject,
+  objects: StageObject[],
+  animation: StageAnimationSampleSource,
+  time: number,
+  options: { aimLag?: boolean } = {},
+): StageVec3 {
+  const direct = resolveDirectCameraRotation(camera, objects, animation.cameraOrientations, time)
+  const delay = options.aimLag === false ? 0 : resolveCameraAimLag(camera)
+  if (delay <= 0 || !animation.cameraOrientations.some((entry) => entry.objectId === camera.id)) return direct
+  const sampler = aimLagSamplerFor(camera, objects, animation, delay)
+  if (!sampler) return direct
+  const forward = sampler(time)
+  const position = camera.transform.position
+  return rotationFromPositionAndTarget(
+    position,
+    { x: position.x + forward.x, y: position.y + forward.y, z: position.z + forward.z },
+    direct.z,
+  )
+}
+
+/**
+ * 摄像机视口实际看向的点：注视目标的实时位置，叠加注视跟随滞后后沿镜头方向取同样的距离。
+ * 视口与摄像机图标在 object 模式下按“机位 + 这个点”求朝向，所以拖动时间轴、导出与播放看到的是同一个朝向。
+ */
+export function resolveCameraViewTarget(
+  camera: StageCameraObject,
+  objects: StageObject[],
+  animation: StageAnimationSampleSource,
+  time: number,
+): StageVec3 {
+  const target = resolveCameraLookAtTarget(camera, objects)
+  if (resolveCameraAimLag(camera) <= 0) return target
+  const position = camera.transform.position
+  const distance = Math.hypot(target.x - position.x, target.y - position.y, target.z - position.z)
+  if (distance < 1e-6) return target
+  const forward = forwardOf(resolveSampledCameraRotation(camera, objects, animation, time))
+  return { x: position.x + forward.x * distance, y: position.y + forward.y * distance, z: position.z + forward.z * distance }
+}
+
 function sameRotation(a: StageVec3, b: StageVec3): boolean {
   return Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9 && Math.abs(a.z - b.z) < 1e-9
 }
@@ -97,6 +262,7 @@ export function sampleAnimationFrame(
   objects: StageObject[],
   animation: StageAnimationSampleSource,
   time: number,
+  options: { aimLag?: boolean } = {},
 ): SampledAnimationFrame {
   const trackKeys = new Set<string>()
   const overrides = new Map<string, StageObject>()
@@ -128,7 +294,7 @@ export function sampleAnimationFrame(
   let cameraChanged = false
   const resolvedObjects = sampledObjects.map((object) => {
     if (object.type !== 'camera') return object
-    const rotation = resolveSampledCameraRotation(object, sampledObjects, animation.cameraOrientations, time)
+    const rotation = resolveSampledCameraRotation(object, sampledObjects, animation, time, options)
     if (sameRotation(rotation, object.transform.rotation)) return object
     cameraChanged = true
     return { ...object, transform: { ...object.transform, rotation } }

@@ -124,7 +124,13 @@ export interface StageCameraObject extends StageObjectBase {
   aspectRatio: StageCameraAspectRatio
   /** 挂载的效果器（手持晃动等），采样层按 time 纯函数叠加，不产生关键帧（3.1 实装） */
   effectors: StageCameraEffector[]
+  /** 运镜设备：决定运动上限、惯性手感与自带晃动；缺省 = 不模拟设备。 */
+  rig?: StageCameraRig
+  /** 注视跟随滞后（秒，匀速摇镜时镜头晚多久）；缺省取设备默认，0 = 不滞后。 */
+  aimLag?: number
 }
+
+export type StageCameraRig = 'free' | 'dolly' | 'crane' | 'steadicam' | 'drone' | 'handheld'
 
 export type StageObject = StagePrimitiveObject | StageCharacterObject | StageCameraObject
 
@@ -148,6 +154,10 @@ export interface StageObjectPatch {
   motion?: StageCharacterMotion
   /** 仅 camera 对象有效 */
   effectors?: StageCameraEffector[]
+  /** 仅 camera 对象有效 */
+  rig?: StageCameraRig
+  /** 仅 camera 对象有效 */
+  aimLag?: number
 }
 
 export type StageGizmoMode = 'translate' | 'rotate' | 'scale'

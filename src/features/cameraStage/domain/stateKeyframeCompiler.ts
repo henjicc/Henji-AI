@@ -10,7 +10,7 @@
  *
  * 扩展点（1.3/1.4 在本文件基础上扩展，不改变整体结构）：
  * - 摄像机运镜预设在写入状态关键帧时物化为 StageSpatialPath；本编译器只登记路径段并串成
- *   平滑衔接链（spatialMotions），段内位置由采样内核按弧长在运行时取点。
+ *   平滑衔接链（spatialMotions），整条链由 spatialMotionEngine 作为一次连续运动求值。
  * - 摄像机两端注视同一目标的区间登记为 aim（cameraOrientations），朝向逐帧求解。
  * - 角色自动走跑：见 compileObjectTransition 内 TODO(1.4)。
  */
@@ -35,6 +35,7 @@ import { upsertKeyframe } from './keyframeEngine'
 import type { StageCameraLookAt, StageObject, StageVec3 } from './sceneTypes'
 import { rotationFromPositionAndTarget } from './cameraUtils'
 import { inferCharacterTransition } from './characterTransitionInference'
+import { defaultSpatialPath } from './spatialPath'
 import type { StageStateKeyframe, StageStateKeyframeObjectState, StageSpatialPath, StageSpeedPreset } from './stateKeyframeTypes'
 
 /** scalar 属性差异容差：|a-b| 不超过该值视为未变化 */
@@ -224,14 +225,17 @@ function compileSpatialPositionGroup(
 
 /**
  * 把同一对象的空间路径段串成链：相邻区间首尾相接（没有错峰停顿）、衔接卡为“平滑通过”、
- * 两侧都不是硬切时并入同一条链，链内衔接点速度连续；其余各自成链，两端按速度预设停靠。
+ * 两侧都不是硬切时并入同一条链，链内衔接点位置、速度、加速度连续；其余各自成链，两端按速度预设停靠。
  */
 function chainSpatialSegments(
   segmentsByObject: Map<string, IndexedSpatialSegment[]>,
   stateKeyframes: StageStateKeyframe[],
+  objects: StageObject[],
 ): StageSpatialMotion[] {
   const motions: StageSpatialMotion[] = []
   for (const [objectId, indexed] of segmentsByObject) {
+    const object = objects.find((item) => item.id === objectId)
+    const rig = object?.type === 'camera' ? object.rig : undefined
     let current: StageSpatialMotion | null = null
     let previous: IndexedSpatialSegment | null = null
     for (const item of indexed) {
@@ -244,13 +248,66 @@ function chainSpatialSegments(
       if (joins && current) {
         current.segments.push(item.segment)
       } else {
-        current = { objectId, segments: [item.segment] }
+        current = rig ? { objectId, segments: [item.segment], rig } : { objectId, segments: [item.segment] }
         motions.push(current)
       }
       previous = item
     }
   }
   return motions
+}
+
+function positionChanged(a: StageVec3, b: StageVec3): boolean {
+  return Math.abs(a.x - b.x) > SCALAR_EPSILON || Math.abs(a.y - b.y) > SCALAR_EPSILON || Math.abs(a.z - b.z) > SCALAR_EPSILON
+}
+
+/**
+ * 每个对象各区间实际走的空间路径（区间序号 → 路径）。
+ *
+ * 显式路径照用。没有路径的直线位移在两种情况下也按直线路径并入链：与路径段平滑相连（直线接环绕），
+ * 或者对象是挂了运镜设备的摄像机。否则直插轨道在路径端点被迫停靠，衔接处速度降到零；
+ * 设备的时间律也只作用在链上。其余直线位移仍走轨道，旧工程画面不变。
+ */
+function resolveSpatialPaths(stateKeyframes: StageStateKeyframe[], objects: StageObject[]): Map<string, Map<number, StageSpatialPath>> {
+  const timeline = buildStateKeyframeTimeline(stateKeyframes)
+  const result = new Map<string, Map<number, StageSpatialPath>>()
+  for (const object of objects) {
+    const rigged = object.type === 'camera' && (object.rig ?? 'free') !== 'free'
+    const intervals = stateKeyframes.slice(0, -1).map((fromStateKeyframe, index) => {
+      const toStateKeyframe = stateKeyframes[index + 1]
+      const from = fromStateKeyframe.objectStates[object.id]?.transform.position
+      const to = toStateKeyframe.objectStates[object.id]?.transform.position
+      const detail = fromStateKeyframe.transition.perObject[object.id]
+      const hardCut = hasForcedHardCut(fromStateKeyframe, toStateKeyframe)
+      const [start, end] = applyTransitionDelay(timeline[index].transitionStart, timeline[index].transitionEnd, detail?.delay ?? 0)
+      const explicit = from && to ? detail?.spatialPath : undefined
+      const moved = !!from && !!to && !hardCut && (!!explicit || positionChanged(from, to))
+      return { from, to, explicit, moved, start, end }
+    })
+    const paths = new Map<number, StageSpatialPath>()
+    let runStart = 0
+    for (let index = 1; index <= intervals.length; index += 1) {
+      const previous = intervals[index - 1]
+      const current = intervals[index]
+      const continues = !!current && previous.moved && current.moved
+        && stateKeyframes[index].continuity === 'smooth'
+        && Math.abs(current.start - previous.end) <= KEYFRAME_TIME_EPSILON
+      if (continues) continue
+      const run = intervals.slice(runStart, index)
+      if (rigged || run.some((item) => item.explicit && item.moved)) {
+        run.forEach((item, offset) => {
+          if (item.moved && item.from && item.to) paths.set(runStart + offset, item.explicit ?? defaultSpatialPath(item.from, item.to))
+        })
+      }
+      runStart = index
+    }
+    // 硬切区间不并链，但显式路径仍要登记，端点关键帧由路径分组负责。
+    intervals.forEach((item, index) => {
+      if (!paths.has(index) && item.explicit) paths.set(index, item.explicit)
+    })
+    if (paths.size > 0) result.set(object.id, paths)
+  }
+  return result
 }
 
 /** 两端注视点是否为同一目标：同一对象，或同一手动注视点。 */
@@ -465,6 +522,7 @@ export function compileStateKeyframesToAnimation(stateKeyframes: StageStateKeyfr
 
   const timeline = buildStateKeyframeTimeline(stateKeyframes)
   const duration = timeline[timeline.length - 1].transitionEnd
+  const spatialPaths = resolveSpatialPaths(stateKeyframes, objects)
   const output: CompileOutput = {
     authoredRotationCameraIds: collectAuthoredRotationCameraIds(stateKeyframes, objects),
     trackMap: new Map(),
@@ -500,7 +558,7 @@ export function compileStateKeyframesToAnimation(stateKeyframes: StageStateKeyfr
         easing,
         holdGuard,
         detail?.motionOverride,
-        detail?.spatialPath,
+        spatialPaths.get(object.id)?.get(i),
         objects,
       )
     }
@@ -509,7 +567,7 @@ export function compileStateKeyframesToAnimation(stateKeyframes: StageStateKeyfr
   return {
     tracks: finalizeTracks(output.trackMap, stateKeyframes),
     motionSchedule: output.motionSchedule,
-    spatialMotions: chainSpatialSegments(output.spatialSegments, stateKeyframes),
+    spatialMotions: chainSpatialSegments(output.spatialSegments, stateKeyframes, objects),
     cameraOrientations: output.cameraOrientations,
     duration,
     fps: CAMERA_STAGE_DEFAULT_FPS,

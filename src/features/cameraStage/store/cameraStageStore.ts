@@ -37,6 +37,8 @@ import {
   createStateKeyframeSlice,
   syncCameraLookAtAcrossStateKeyframes,
   syncAddedObjectToStateKeyframes,
+  syncObjectPatchAcrossStateKeyframes,
+  compileAndAlignCurrentFrame,
   syncRemovedObjectFromStateKeyframes,
   replaceObjectsInStateKeyframes,
   type StateKeyframeTimingPatch,
@@ -47,6 +49,7 @@ import { createPlaybackSlice } from './playbackSlice'
 import { resetCameraStagePlaybackRuntime } from '../scene/playbackRuntime'
 import type { CameraStagePathActions } from './pathActionTypes'
 import type {
+  StageCameraRig,
   StageGizmoMode,
   StageObject,
   StageObjectPatch,
@@ -117,6 +120,11 @@ export interface CameraStageState extends CameraStagePathActions {
   updateObject: (id: string, patch: StageObjectPatch) => void
   /** 建模语义写入：改动同步进所有状态关键帧，不在单一时间点产生动画（助手与批量写入用）。 */
   updateObjectAcrossStateKeyframes: (id: string, patch: StageObjectPatch) => void
+  /**
+   * 运镜设备与注视跟随滞后：摄像机级设置，不属于时间轴，不打关键帧也不改任何状态关键帧；
+   * 设备决定时间律，所以要重编译。aimLag 传 null 表示回到设备默认。
+   */
+  updateCameraRig: (id: string, patch: { rig?: StageCameraRig; aimLag?: number | null }) => void
   /** 交互开始前冻结当前帧，避免首个变换增量中途触发插帧重编译。 */
   prepareStateKeyframeEdit: (id: string) => void
   updateTransform: (id: string, patch: Partial<StageTransform>, changedPaths?: string[]) => void
@@ -396,11 +404,33 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
    */
   updateObjectAcrossStateKeyframes: (id, patch) =>
     set((state) => {
+      const before = state.objects.find((item) => item.id === id)
       const objects = applyObjectPatch(state.objects, id, patch)
       const object = objects.find((item) => item.id === id)
-      if (!object) return { objects }
-      const stateKeyframes = syncAddedObjectToStateKeyframes(state.stateKeyframes, object)
-      return { objects, stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, objects) }
+      if (!before || !object) return { objects }
+      const stateKeyframes = syncObjectPatchAcrossStateKeyframes(state.stateKeyframes, before, object, patch)
+      // 落回当前帧：摄像机朝向由注视点在采样时求出，写注视点后不重新采样，读回与视口都还是旧角度。
+      return compileAndAlignCurrentFrame(state, stateKeyframes, objects)
+    }),
+
+  updateCameraRig: (id, patch) =>
+    set((state) => {
+      const objects = state.objects.map((object) => {
+        if (object.id !== id || object.type !== 'camera') return object
+        const { rig: currentRig, aimLag: currentLag, ...rest } = object
+        const rig = patch.rig === undefined ? currentRig : patch.rig
+        const aimLag = patch.aimLag === undefined ? currentLag : patch.aimLag ?? undefined
+        return {
+          ...rest,
+          ...(rig && rig !== 'free' ? { rig } : {}),
+          ...(aimLag !== undefined ? { aimLag } : {}),
+        }
+      })
+      const animation = compileStateKeyframesToAnimation(state.stateKeyframes, objects)
+      return {
+        animation,
+        objects: state.playback.playing ? objects : applyAnimationAtTime(objects, animation, state.playback.currentTime),
+      }
     }),
 
   updateObject: (id, patch) =>

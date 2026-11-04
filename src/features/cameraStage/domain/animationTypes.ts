@@ -6,7 +6,7 @@
  * 「本关键帧到下一关键帧」这段区间的缓动（速度曲线），语义对齐 AE 的分段缓动。
  */
 
-import type { StageCameraLookAt, StageVec3 } from './sceneTypes'
+import type { StageCameraLookAt, StageCameraRig, StageVec3 } from './sceneTypes'
 import type { StageCharacterMotion } from './characterMotion'
 import type { StageSpatialPath } from './stateKeyframeTypes'
 
@@ -89,10 +89,12 @@ export interface StageSpatialMotionSegment {
   easing: StageEasingPreset
 }
 
-/** 同一对象首尾相接、在衔接点平滑通过的一串空间路径段；链内速度连续。 */
+/** 同一对象首尾相接、在衔接点平滑通过的一串空间路径段；链内位置、速度、加速度连续。 */
 export interface StageSpatialMotion {
   objectId: string
   segments: StageSpatialMotionSegment[]
+  /** 摄像机的运镜设备；决定时间律与运动上限，缺省 = 不模拟设备。 */
+  rig?: StageCameraRig
 }
 
 /**
