@@ -8,7 +8,7 @@ import { createVideoEditSequence } from '@/core/videoEdit/document'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
+import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys, videoEditSpatialBelowKeys } from './videoEditCompositeScene'
 import { VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { PreparedVideoEditCodeEffect as PreparedVideoEditEffect } from './videoEditCodeSources'
@@ -302,5 +302,22 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     await (await renderVideoEditCompositeScene(document, nodes, pictures, new Map(), boundary.compositor, 60, () => true)).completion
     expect(boundary.formats.get('composite:clip:left:0')).toBe('rgba16float'); expect(boundary.formats.get('composite:clip:right:0')).toBe('rgba8unorm')
     expectPixel(boundary.canvas(), [.6, 0, .4, 1])
+  })
+  it('二维与三维混合转场里，看得见下方的三维一端拿到它下面的画面再参与转场', async () => {
+    const lower = clip('lower', 0); const left = clip('left', 2, { duration: 60 }); const right = clip('right', 2, { start: 60, duration: 60 })
+    const document = composition([lower, left, right])
+    const window = videoEditTransitionWindow(document, { id: 'dissolve', kind: 'cross_dissolve', leftClipId: left.id, rightClipId: right.id, durationFrames: 5 })
+    const nodes = buildVideoEditCompositePlan(document.clips, [window])
+    // 混合转场的三维一端单独成组，组首项就是这个片段。
+    const reserved = new Set([...videoEditCompositeSurfaceKeys(nodes), ...videoEditSpatialBelowKeys({ groups: [{ id: 'spatial:right', mode: 'single', clipIds: [right.id], itemIds: [right.id], orderBySample: [] }] })])
+    const boundary = pixels(document, reserved)
+    const seen: Array<CodeColor | undefined> = []
+    const replacements = { pictures: new Map(), replaced: new Set([right.id]), deferred: new Map([[right.id, async (below: VideoEditCodePicture | undefined) => {
+      seen.push(below && boundary.pixel(below)); return boundary.picture('right-glass', [0, 1, 0, 1])
+    }]]) }
+    const pictures = new Map([[lower.id, boundary.picture('lower-raw', [0, 0, 1, 1])], [left.id, boundary.picture('left-raw', [1, 0, 0, 1])], [right.id, boundary.picture('right-flat', [1, 1, 1, 1])]])
+    await (await renderVideoEditCompositeScene(document, nodes, pictures, new Map(), boundary.compositor, 60, () => true, undefined, document, undefined, undefined, 'interactive', undefined, replacements)).completion
+    expect(seen).toHaveLength(1); expectPixel(seen[0]!, [0, 0, 1, 1])
+    expect(boundary.mixes).toHaveLength(1); expect(boundary.mixes[0].rightKey).toBe('right-glass')
   })
 })

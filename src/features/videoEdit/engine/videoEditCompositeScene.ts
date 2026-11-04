@@ -196,9 +196,23 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       return result
     } catch (error) { if (batch) runtime.abandonBuiltinBatch(batch); throw error }
   }
-  const resolveClip = async (clip: VideoEditClip, force = false): Promise<Layer> => {
+  /** 延后绘制的空间组：先把它下方已解析的各层合成为一张画面交给它；没有下方内容时给 undefined。 */
+  const drawDeferred = async (id: string, draw: (below: VideoEditCodePicture | undefined) => Promise<VideoEditCodePicture>, under: readonly Layer[]): Promise<VideoEditCodePicture> => {
+    let below: VideoEditCodePicture | undefined
+    if (under.length) {
+      below = await (await gpu()).target(belowKey(id), document.width, document.height, VIDEO_EDIT_PRECISE_FORMAT); current()
+      const drawn = await compositor.draw(document, under.map(layer => layer.clip), under.map(layer => layer.picture), shouldPresent, undefined, below, materialViewport)
+      watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
+    }
+    const picture = await draw(below); current()
+    return picture
+  }
+  /** `under` 是这个片段下方已解析的各层：二维与三维混合转场里，三维一端单独成组（组首项是片段本身），要看见下方时由这里延后绘制。 */
+  const resolveClip = async (clip: VideoEditClip, force = false, under: readonly Layer[] = []): Promise<Layer> => {
     const replacement = replacements?.pictures.get(clip.id)
     if (replacement) return { clip: identity(clip), picture: replacement }
+    const deferred = replacements?.deferred?.get(clip.id)
+    if (deferred) return { clip: identity(clip), picture: await drawDeferred(clip.id, deferred, under) }
     if (!pictures.has(clip.id)) throw new Error(`合成片段“${clip.name}”尚未准备画面。`)
     const layer = { clip, picture: pictures.get(clip.id)! }
     if (!force && !materialViewport && !effective(clip)) return layer
@@ -216,14 +230,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       if (replacement) { layers.push({ clip: identity(node.kind === 'transition' ? node.window.left : node.clip), picture: replacement }); continue }
       const deferred = replacements?.deferred?.get(id)
       if (deferred) {
-        const under = [...outer, ...layers]
-        let below: VideoEditCodePicture | undefined
-        if (under.length) {
-          below = await (await gpu()).target(belowKey(id), document.width, document.height, VIDEO_EDIT_PRECISE_FORMAT); current()
-          const drawn = await compositor.draw(document, under.map(layer => layer.clip), under.map(layer => layer.picture), shouldPresent, undefined, below, materialViewport)
-          watch(drawn.completion); current(); if (!drawn.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')
-        }
-        layers.push({ clip: identity(node.kind === 'transition' ? node.window.left : node.clip), picture: await deferred(below) }); current()
+        layers.push({ clip: identity(node.kind === 'transition' ? node.window.left : node.clip), picture: await drawDeferred(id, deferred, [...outer, ...layers]) })
         continue
       }
       if (replacements?.replaced.has(id)) continue
@@ -233,8 +240,9 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
         // 怎么画由 videoEditTransitionRender 统一给出：交叉溶解、黑场、白场走混合，带参数的过渡（4.7）走内置效果着色器。预览与导出都经过这里。
         const { window } = node
         const shown = window.empty === 'left' ? window.right : window.left
-        const first = (await resolveClip(shown, true)).picture as VideoEditCodePicture
-        const second = window.side || window.empty ? first : (await resolveClip(window.right, true)).picture as VideoEditCodePicture
+        const under = [...outer, ...layers]
+        const first = (await resolveClip(shown, true, under)).picture as VideoEditCodePicture
+        const second = window.side || window.empty ? first : (await resolveClip(window.right, true, under)).picture as VideoEditCodePicture
         const left = window.empty === 'left' ? 'transparent' : first; const right = window.empty === 'right' ? 'transparent' : second
         const render = videoEditTransitionRender(window, frame); const key = `composite:transition:${window.transition.id}`
         const runtime = await gpu()
