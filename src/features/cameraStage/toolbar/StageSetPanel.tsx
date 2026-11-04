@@ -1,14 +1,20 @@
-import React, { useMemo, useState } from 'react'
+import React, { useDeferredValue, useMemo, useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
 import { UiButton, UiError, UiFormRow, UiGroup, UiSegmented, UiSeedInput, UiSwitch } from '@/components/ui'
 import {
+  CAMERA_STAGE_CITY_STYLE_LABELS,
+  CAMERA_STAGE_CITY_STYLES,
+  CAMERA_STAGE_ROAD_CLASS_LABELS,
+  CAMERA_STAGE_ROAD_CLASSES,
   CAMERA_STAGE_SET_PRESET_LABELS,
   CAMERA_STAGE_SET_PRESETS,
+  CITY_STYLE_DEFAULT_FLOORS,
   STAGE_SET_DEFAULTS,
+  type CameraStageFloorRange,
   type CameraStageSetParams,
   type CameraStageSetPreset,
 } from '@/core/application-control/domains/cameraStage/cameraStageSetSchemas'
-import { buildStageSet, estimateStageSetObjectCount, isKnownStageSetPreset, liveStageSets, randomStageSetSeed } from '../domain/stageSets'
+import { buildStageSet, estimateStageSet, isKnownStageSetPreset, liveStageSets, randomStageSetSeed } from '../domain/stageSets'
 import type { StageSet } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 
@@ -42,48 +48,68 @@ function NumberRow({ label, value, onChange, min = 0.5, max, step = 1, precision
   )
 }
 
-/** 面板只放最常调的几项；最低楼高、地块与楼的面宽进深等细项沿用当前值，助手可以按 layout 全部指定。 */
-function MaxHeightRow({ value, onChange }: { value: { min: number; max: number }; onChange: (value: { min: number; max: number }) => void }): React.ReactElement {
-  return <NumberRow label="最高楼高" unit="米" value={value.max} min={1} onChange={max => onChange({ min: Math.min(value.min, max), max })} />
+/** 面板只放最常调的几项；最少层数等细项沿用当前值，助手可以按 layout 全部指定。 */
+function MaxFloorsRow({ value, onChange }: { value: CameraStageFloorRange; onChange: (value: CameraStageFloorRange) => void }): React.ReactElement {
+  return <NumberRow label="最高" unit="层" value={value.max} min={1} max={200} onChange={max => {
+    const floors = Math.max(1, Math.round(max))
+    onChange({ min: Math.min(value.min, floors), max: floors })
+  }} />
 }
 
 function DensityRow({ value, onChange }: { value: number; onChange: (value: number) => void }): React.ReactElement {
   return <NumberRow label="密度" unit="%" value={Math.round(value * 100)} min={0} max={100} onChange={next => onChange(Math.max(0, Math.min(100, next)) / 100)} />
 }
 
+function PropsRow({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }): React.ReactElement {
+  return (
+    <UiFormRow label="参照物" density="compact" info="人行道、车道线、行道树、路灯和车辆，按真实尺寸摆放，帮生成模型判断画面尺度">
+      <UiSwitch checked={value} onCheckedChange={onChange} />
+    </UiFormRow>
+  )
+}
+
 function PresetFields({ params, update }: { params: CameraStageSetParams; update: (patch: Partial<CameraStageSetParams>) => void }): React.ReactElement {
   if (params.preset === 'city') {
     const city = params as Params<'city'>
     return <>
-      <NumberRow label="范围" unit="米" value={Math.max(city.width, city.depth)} min={10} onChange={size => update({ width: size, depth: size })} />
-      <NumberRow label="街区" unit="米" value={city.blockSize} min={4} onChange={blockSize => update({ blockSize })} />
-      <NumberRow label="街道宽" unit="米" value={city.streetWidth} min={1} onChange={streetWidth => update({ streetWidth })} />
+      <UiFormRow label="风格" density="compact">
+        <UiSegmented ariaLabel="城市风格" size="sm" value={city.style}
+          onChange={style => update({ style, floors: { ...CITY_STYLE_DEFAULT_FLOORS[style] } })}
+          options={CAMERA_STAGE_CITY_STYLES.map(style => ({ value: style, label: CAMERA_STAGE_CITY_STYLE_LABELS[style] }))} />
+      </UiFormRow>
+      <NumberRow label="范围" unit="米" value={Math.max(city.width, city.depth)} min={100} onChange={size => update({ width: size, depth: size })} />
       <DensityRow value={city.density} onChange={density => update({ density })} />
-      <MaxHeightRow value={city.height} onChange={height => update({ height })} />
+      <MaxFloorsRow value={city.floors} onChange={floors => update({ floors })} />
       <UiFormRow label="楼高分布" density="compact">
         <UiSegmented ariaLabel="楼高分布" size="sm" value={city.heightProfile} onChange={heightProfile => update({ heightProfile })}
           options={[{ value: 'downtown', label: '中心高' }, { value: 'uniform', label: '均匀' }]} />
       </UiFormRow>
+      <PropsRow value={city.props} onChange={props => update({ props })} />
     </>
   }
   if (params.preset === 'street') {
     const street = params as Params<'street'>
     return <>
-      <NumberRow label="长度" unit="米" value={street.length} min={10} onChange={length => update({ length })} />
-      <NumberRow label="街道宽" unit="米" value={street.streetWidth} min={1} onChange={streetWidth => update({ streetWidth })} />
+      <NumberRow label="长度" unit="米" value={street.length} min={20} onChange={length => update({ length })} />
+      <UiFormRow label="道路" density="compact">
+        <UiSegmented ariaLabel="道路等级" size="sm" value={street.road} onChange={road => update({ road })}
+          options={CAMERA_STAGE_ROAD_CLASSES.map(road => ({ value: road, label: CAMERA_STAGE_ROAD_CLASS_LABELS[road] }))} />
+      </UiFormRow>
       <DensityRow value={street.density} onChange={density => update({ density })} />
-      <MaxHeightRow value={street.height} onChange={height => update({ height })} />
+      <MaxFloorsRow value={street.floors} onChange={floors => update({ floors })} />
+      <PropsRow value={street.props} onChange={props => update({ props })} />
     </>
   }
   if (params.preset === 'plaza') {
     const plaza = params as Params<'plaza'>
     return <>
-      <NumberRow label="广场边长" unit="米" value={plaza.size} min={4} onChange={size => update({ size })} />
+      <NumberRow label="广场边长" unit="米" value={plaza.size} min={10} onChange={size => update({ size })} />
       <DensityRow value={plaza.density} onChange={density => update({ density })} />
-      <MaxHeightRow value={plaza.height} onChange={height => update({ height })} />
+      <MaxFloorsRow value={plaza.floors} onChange={floors => update({ floors })} />
       <UiFormRow label="纪念碑" density="compact">
         <UiSwitch checked={plaza.monument} onCheckedChange={monument => update({ monument })} />
       </UiFormRow>
+      <PropsRow value={plaza.props} onChange={props => update({ props })} />
     </>
   }
   const crowd = params as Params<'crowd'>
@@ -112,7 +138,9 @@ export function StageSetPanel({ onDone }: { onDone: () => void }): React.ReactEl
   const [params, setParams] = useState<CameraStageSetParams>(() => editing ? structuredClone(editing.params) : defaultsFor('city'))
   const [error, setError] = useState<string>()
   const update = (patch: Partial<CameraStageSetParams>): void => setParams(current => ({ ...current, ...patch }) as CameraStageSetParams)
-  const estimate = estimateStageSetObjectCount(params)
+  // 数楼要把整片布局算一遍；拖动数值时延后算，输入不卡。
+  const deferredParams = useDeferredValue(params)
+  const estimate = useMemo(() => estimateStageSet(deferredParams), [deferredParams])
 
   const generate = (): void => {
     const state = useCameraStageStore.getState()
@@ -148,9 +176,11 @@ export function StageSetPanel({ onDone }: { onDone: () => void }): React.ReactEl
       </UiGroup>
       {error && <UiError size="sm" title="生成不了" message={error} />}
       <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
-        <span className="mr-auto min-w-0 truncate text-xs text-text3">约 {estimate.toLocaleString()} 个对象</span>
+        <span className="mr-auto min-w-0 truncate text-xs text-text3">
+          {params.preset === 'crowd' ? `${estimate.objects.toLocaleString()} 人` : `${estimate.buildings.toLocaleString()} 栋楼`}
+        </span>
         {replacing && <UiButton variant="danger" size="sm" onClick={remove}>删除布景</UiButton>}
-        <UiButton variant="primary" size="sm" disabled={estimate === 0} disabledReason="调大密度" onClick={generate}>{replacing ? '重新生成' : '生成'}</UiButton>
+        <UiButton variant="primary" size="sm" disabled={estimate.objects === 0} disabledReason="调大密度" onClick={generate}>{replacing ? '重新生成' : '生成'}</UiButton>
       </div>
     </div>
   )

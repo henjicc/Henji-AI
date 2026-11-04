@@ -10,17 +10,24 @@ import { createLogger } from '@/core/logging'
 
 const CHARACTER_MODEL_RESOURCE = 'camera-stage/UAL1_Standard.glb'
 const CAMERA_MODEL_RESOURCE = 'camera-stage/Video Camera.glb'
+/** 布景行道树（ez-tree 预生成，见 scripts/generate-camera-stage-trees.mjs） */
+const STREET_TREE_RESOURCE = 'camera-stage/street-trees.glb'
+/** 后台渲染等待行道树模型就绪时用的资源标识 */
+export const STREET_TREE_ASSET_ID = 'street-trees'
 
 const cachedUrls = new Map<string, string | null>()
 const pendingResolves = new Map<string, Promise<string | null>>()
 const logger = createLogger('features.cameraStage.bundledResources')
 
-function useBundledCameraStageResourceUrl(resourcePath: string): string | null {
+/** settled 表示地址已经解析完（失败时 url 为 null），等待中的 null 与失败的 null 由它区分。 */
+function useBundledCameraStageResource(resourcePath: string): { url: string | null; settled: boolean } {
   const [url, setUrl] = useState<string | null>(cachedUrls.get(resourcePath) ?? null)
+  const [settled, setSettled] = useState(cachedUrls.has(resourcePath))
 
   useEffect(() => {
     if (cachedUrls.has(resourcePath)) {
       setUrl(cachedUrls.get(resourcePath) ?? null)
+      setSettled(true)
       return
     }
     let mounted = true
@@ -34,6 +41,7 @@ function useBundledCameraStageResourceUrl(resourcePath: string): string | null {
       if (pendingResolves.get(resourcePath) === pendingResolve) pendingResolves.delete(resourcePath)
       if (mounted) {
         setUrl(value)
+        setSettled(true)
       }
     }, (error: unknown) => {
       if (pendingResolves.get(resourcePath) === pendingResolve) pendingResolves.delete(resourcePath)
@@ -41,20 +49,27 @@ function useBundledCameraStageResourceUrl(resourcePath: string): string | null {
         event: 'camera_stage.bundled_resource.resolve.failed',
         context: { resourcePath, reason: error instanceof Error ? error.message : String(error) },
       })
-      if (mounted) setUrl(null)
+      if (mounted) {
+        setUrl(null)
+        setSettled(true)
+      }
     })
     return () => {
       mounted = false
     }
   }, [resourcePath])
 
-  return url
+  return { url, settled }
 }
 
 export function useCharacterModelUrl(): string | null {
-  return useBundledCameraStageResourceUrl(CHARACTER_MODEL_RESOURCE)
+  return useBundledCameraStageResource(CHARACTER_MODEL_RESOURCE).url
 }
 
 export function useCameraModelUrl(): string | null {
-  return useBundledCameraStageResourceUrl(CAMERA_MODEL_RESOURCE)
+  return useBundledCameraStageResource(CAMERA_MODEL_RESOURCE).url
+}
+
+export function useStreetTreeModel(): { url: string | null; settled: boolean } {
+  return useBundledCameraStageResource(STREET_TREE_RESOURCE)
 }

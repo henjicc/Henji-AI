@@ -16,19 +16,22 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 
 ## 布景生成
 
-`layout.preset` 必填，其余参数都可省略（单位米、角度为度），默认值见能力说明：
+`layout.preset` 必填，其余参数都可省略（单位米、角度为度、楼高按层），默认值见能力说明。1 单位 = 1 米，角色约 1.8 米高。
+街宽、街区尺寸、层高、楼的体量由城市风格按真实城市取值，不要试图用参数凑：
 
 | preset | 常用参数 |
 | --- | --- |
-| `city` 城市街区 | `width`/`depth` 范围、`blockSize` 街区边长、`streetWidth` 街道宽、`lotSize` 地块宽、`density` 0–1、`height {min,max}`、`heightProfile` downtown 中心高 / uniform |
-| `street` 街道 | `length`、`streetWidth`、`lotWidth`、`buildingDepth`、`density`、`height` |
-| `plaza` 广场 | `size` 空地边长、`lotWidth`、`buildingDepth`、`density`、`height`、`monument` |
-| `crowd` 人群 | `count`、`formation` grid / scatter / ring、`spacing`、`facing` forward / center / random |
+| `city` 城市街区 | `style` grid 方格城市（纽约式 80×260 米街区，默认）/ superblock 国内新城（50 米主干道围出约 400 米超级街区，小区高层加商业裙楼塔楼）/ oldtown 欧式老城（113 米方街区、6 层左右）、`width`/`depth` 范围、`density` 0–1、`floors {min,max}` 楼层、`heightProfile` downtown 中心高 / uniform、`props` 参照物 |
+| `street` 街道 | `length`、`road` local 支路 / collector 次干道 / arterial 主干道、`density`、`floors`、`props` |
+| `plaza` 广场 | `size` 广场边长、`density`、`floors`、`monument`、`props` |
+| `crowd` 人群 | `count`、`formation` grid / scatter / ring、`spacing`（默认 0.9 米）、`facing` forward / center / random |
 
-通用：`center {x,z}`、`rotation`、`seed`。城市中心总落在路口上，主角放在原点附近的街道上不会和楼相交。
+通用：`center {x,z}`、`rotation`、`seed`。城市中心总落在两条干路的路口上，主角放在原点附近的路口不会和楼相交。
 
-- 规模：默认城市约 220 栋；`width/depth` 给 600 约 2000 栋，给 1450 约 1 万栋。城市至少 2×2 个街区。密度为 0（或太低碰巧一栋没有）时会在写入前被拒绝。
-- 改参数重新生成：传 `replaceSetId`（取自观察结果 `sets[].id`），只写要改的字段，其余沿用上一次（包括种子）；换一种随机布局就换 `seed`。
+- 参照物（`props`，默认开）：人行道与路缘、车道线与斑马线、行道树、路灯、车辆，按真实尺寸摆好，帮生成模型读出尺度。它们不是对象，点不中、不参与碰撞；要清掉就 `props: false` 重新生成。角色站在人行道上时脚下的铺装只高 4 厘米，不用抬高角色。
+- 规模：默认方格城市约 370 栋；`width/depth` 给 1500 约 2400 栋，给 3100 约 1 万栋。新城楼少而高，欧式老城楼多而矮。密度为 0（或太低碰巧一栋没有）时会在写入前被拒绝。
+- 场景默认有 90 米的雾，看整座城或长街时先把 `camera_stage.scene.fog_enabled` 关掉或调大 `fog_distance`。
+- 改参数重新生成：传 `replaceSetId`（取自观察结果 `sets[].id`），只写要改的字段，其余沿用上一次（包括种子）；换风格又没给楼层时楼层取新风格的默认；换一种随机布局就换 `seed`。
 - 整片删除：`change_application_entities` 对 `camera_stage.set` 执行 `remove_items`。新建布景不能用 `create_items`。
 
 ## 观察与验证

@@ -5,7 +5,8 @@ import { Color, EquirectangularReflectionMapping, SRGBColorSpace, TextureLoader,
 import { createLogger } from '@/core/logging'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { cameraTargetFromRotation, resolveCameraLookAtTarget } from '../domain/cameraUtils'
-import type { StageCameraObject, StageObject, StagePrimitiveObject } from '../domain/sceneTypes'
+import type { StageCameraObject, StageObject, StagePrimitiveObject, StageSet } from '../domain/sceneTypes'
+import { liveStageSets } from '../domain/stageSets'
 import { isStageStyleRenderStyle } from '../render/stageStyleRenderer'
 import { cameraStageStoreAttachment, useCameraStageStore, type CameraStageOwnedStore } from '../store/cameraStageStore'
 import { resolvePathStateKeyframeId, useCameraStageToolStore } from '../store/cameraStageToolStore'
@@ -26,6 +27,7 @@ import StageMotionPathOverlay from './StageMotionPathOverlay'
 import StageDemandFrames from './StageDemandFrames'
 import StageNameLabelLayer from './StageNameLabelLayer'
 import StagePrimitiveBatch from './StagePrimitiveBatch'
+import StageSetDecorLayer from './StageSetDecorLayer'
 import { StagePrimitiveResourcesProvider } from './stagePrimitiveResources'
 import { useRenderCameraId } from './useRenderCameraId'
 import type { StageViewportSource } from '../viewport/viewportTypes'
@@ -145,6 +147,7 @@ const StageScene: React.FC<StageSceneProps> = ({
   primary = true,
 }) => {
   const storedObjects = useCameraStageStore((state) => state.objects)
+  const sets = useCameraStageStore((state) => state.sets)
   useSyncExternalStore(subscribeCameraMotion, cameraMotionRevision)
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
@@ -287,6 +290,15 @@ const StageScene: React.FC<StageSceneProps> = ({
     }
     return { batchedPrimitives: batched, meshObjects: meshes }
   }, [objects, selectedId])
+  // 装饰只跟着布景走：对象每次编辑都会换引用，布景列表没变时沿用上一次的数组，装饰层不重建。
+  const liveSetsRef = useRef<StageSet[]>([])
+  const liveSets = useMemo(() => {
+    const next = liveStageSets(sets, storedObjects)
+    const previous = liveSetsRef.current
+    if (next.length === previous.length && next.every((set, index) => set === previous[index])) return previous
+    liveSetsRef.current = next
+    return next
+  }, [sets, storedObjects])
   const showNameLabels = sceneSettings.display.showNameLabels
   const framingCameraId = isCameraView ? activeCamera?.id : undefined
   const labelObjects = useMemo(() => (showNameLabels
@@ -357,6 +369,7 @@ const StageScene: React.FC<StageSceneProps> = ({
           )}
         </>
       )}
+      {liveSets.length > 0 && <StageSetDecorLayer sets={liveSets} onAssetReady={onAssetReady} />}
       <StagePrimitiveResourcesProvider onSelect={handleSelect}>
         <StagePrimitiveBatch objects={batchedPrimitives} />
         {meshObjects.map((object) => (

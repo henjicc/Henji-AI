@@ -132,6 +132,7 @@ const PROJECT_WRITE_EXCLUSION = 'camera_stage.document 就是一份镜头参考�
   + '场景内容经 camera_stage.scene 及其对象、摄像机、状态关键帧等子实体写入。'
 const INTEGER = { kind: 'integer', hardRange: { min: 0 } } as const
 const SET_READ_ONLY = '布景参数改了要重新生成成员：调用 generate_camera_stage_set 并传 replaceSetId，省略的参数沿用原值。'
+const SET_PROPS_READ_ONLY = '比例参照物随布景一起生成，按 layout.props 开关；要增减就重新生成布景。'
 const SET_PARAMS_VALUE = { kind: 'json', schemaRef: schemaRef('property', 'camera_stage.set.params.value') } as const
 const SET_SCHEMA_DOCUMENTS = [
   { ref: SET_PARAMS_VALUE.schemaRef, value: z.toJSONSchema(cameraStageSetLayoutSchema, { io: 'input' }) as JsonValue },
@@ -179,6 +180,9 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.set, 'bounds.min', '范围最小点', VECTOR3, { readOnly: '范围由成员边界盒计算。' }),
     property(ENTITY_TYPES.set, 'bounds.max', '范围最大点', VECTOR3, { readOnly: '范围由成员边界盒计算。' }),
     property(ENTITY_TYPES.set, 'params', '生成参数', SET_PARAMS_VALUE, { description: '补齐默认值后的完整生成参数，格式同 generate_camera_stage_set 的 layout。', readOnly: SET_READ_ONLY }),
+    property(ENTITY_TYPES.set, 'tree_count', '行道树数量', INTEGER, { readOnly: SET_PROPS_READ_ONLY }),
+    property(ENTITY_TYPES.set, 'lamp_count', '路灯数量', INTEGER, { readOnly: SET_PROPS_READ_ONLY }),
+    property(ENTITY_TYPES.set, 'vehicle_count', '车辆数量', INTEGER, { readOnly: SET_PROPS_READ_ONLY }),
   ],
   [ENTITY_TYPES.stateKeyframe]: [
     ...fieldDescriptors(STATE_KEYFRAME_FIELDS),
@@ -376,6 +380,9 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       [`${ENTITY_TYPES.set}.bounds.min`]: vec3Value(summary.bounds.min),
       [`${ENTITY_TYPES.set}.bounds.max`]: vec3Value(summary.bounds.max),
       [`${ENTITY_TYPES.set}.params`]: JSON.parse(JSON.stringify(summary.params)) as JsonValue,
+      [`${ENTITY_TYPES.set}.tree_count`]: summary.propCounts.trees,
+      [`${ENTITY_TYPES.set}.lamp_count`]: summary.propCounts.lamps,
+      [`${ENTITY_TYPES.set}.vehicle_count`]: summary.propCounts.vehicles,
     }
   }
 

@@ -12,7 +12,9 @@ import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
 import { exportCameraStageImage } from '../export/cameraStageImage'
 import { exportCameraStageVideo } from '../export/cameraStageVideo'
 import { sceneFromDocumentContent } from '../domain/sceneSerialization'
+import { liveStageSets } from '../domain/stageSets'
 import StageScene from '../scene/StageScene'
+import { STREET_TREE_ASSET_ID } from '../scene/useCharacterModelUrl'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { commitCameraStageFrame } from '../scene/stageFrameCommit'
 import { attachCameraStageStore, createCameraStageStore, useCameraStageStore } from '../store/cameraStageStore'
@@ -128,6 +130,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
         // 摄像机辅助 GLB 在取景模式不挂载、不参与导出；角色和环境必须真正提交。
         pendingAssets.current = new Set(loadedState.objects.filter(object => object.type === 'character').map(object => object.id))
         if (loadedState.sceneSettings.sky.environmentImageUrl) pendingAssets.current.add('environment')
+        if (liveStageSets(loadedState.sets, loadedState.objects).some(set => (set.decor?.trees.length ?? 0) > 0)) pendingAssets.current.add(STREET_TREE_ASSET_ID)
         assetFailure.current = null
         setSceneRequestId(request.requestId)
         await waitForCaptureBridge(captureRef)

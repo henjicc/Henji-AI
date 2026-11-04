@@ -34,11 +34,61 @@ const stateKeyframeSchema = z.looseObject({
   id: z.string().min(1),
 })
 
+const numbers = z.array(z.number())
+
+/**
+ * 布景的地面铺装与比例参照物（v3 起）：生成时算好的扁平数字数组，坐标为布景局部坐标（米）。
+ * 每项占几个数见 STAGE_SET_DECOR_STRIDE：铺装 [中心 x, 中心 z, 宽, 深]，标线 [起点 x, 起点 z, 终点 x, 终点 z]，
+ * 树 [x, z, 朝向, 缩放, 树种]，路灯 [x, z, 灯臂朝向, 杆高]，车辆 [x, z, 车头朝向, 车型, 颜色]。
+ */
+const stageSetDecorSchema = z.looseObject({
+  surfaces: z.looseObject({ road: numbers, sidewalk: numbers, curb: numbers, median: numbers, lawn: numbers, plaza: numbers }),
+  markings: z.looseObject({ laneDashed: numbers, edgeLine: numbers, centerLine: numbers, stopLine: numbers, crosswalk: numbers }),
+  trees: numbers,
+  lamps: numbers,
+  vehicles: numbers,
+})
+
 const stageSetSchema = z.looseObject({
   id: z.string().min(1),
   name: z.string(),
   params: z.looseObject({ preset: z.string().min(1) }),
+  decor: stageSetDecorSchema.optional(),
 })
+
+type LooseRecord = Record<string, unknown>
+
+/** v2 的楼高范围（米）换成楼层范围：按 3.2 米一层取整。 */
+function floorsFromHeight(height: unknown, fallback: { min: number; max: number }): { min: number; max: number } {
+  const range = height as { min?: unknown; max?: unknown } | undefined
+  if (typeof range?.min !== 'number' || typeof range.max !== 'number') return fallback
+  const min = Math.max(1, Math.round(range.min / 3.2))
+  return { min, max: Math.max(min, Math.round(range.max / 3.2)) }
+}
+
+/**
+ * 2 → 3：布景参数从“街区边长、街道宽、地块宽、楼高（米）”换成“城市风格、道路等级、楼层”。
+ * 已生成的楼是普通对象，画面不变；换算后的参数只决定以后重新生成成什么样。
+ * 旧布景没有装饰，参照物开关取默认的开，重新生成时补上。
+ */
+function migrateStageSetV2(set: LooseRecord): LooseRecord {
+  const params = set.params as LooseRecord
+  if (params.preset === 'city') {
+    const { blockSize: _block, streetWidth: _street, lotSize: _lot, height, ...rest } = params
+    return { ...set, params: { ...rest, style: 'grid', floors: floorsFromHeight(height, { min: 4, max: 40 }), props: true } }
+  }
+  if (params.preset === 'street') {
+    const { streetWidth, lotWidth: _lot, buildingDepth: _depth, height, ...rest } = params
+    const width = typeof streetWidth === 'number' ? streetWidth : 0
+    const road = width >= 35 ? 'arterial' : width >= 22 ? 'collector' : 'local'
+    return { ...set, params: { ...rest, road, floors: floorsFromHeight(height, { min: 3, max: 8 }), props: true } }
+  }
+  if (params.preset === 'plaza') {
+    const { lotWidth: _lot, buildingDepth: _depth, height, ...rest } = params
+    return { ...set, params: { ...rest, floors: floorsFromHeight(height, { min: 4, max: 10 }), props: true } }
+  }
+  return set
+}
 
 export const cameraStageContentSchema = z.object({
   objects: z.array(stageObjectSchema),
@@ -80,12 +130,19 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
   storage: 'json',
   // 版本 1 = 旧工程场景数据第 14 版的持久字段（去掉 schemaVersion，由外壳的 kindVersion 表达）。
   // 版本 2 = 新增布景列表 sets 与对象上可选的 setId；成员仍是普通对象，旧程序照常读写，最低可读版本不变。
-  version: 2,
-  minReaderVersion: 1,
+  // 版本 3 = 布景按真实尺度生成：参数换成城市风格、道路等级与楼层，并新增可选的装饰 decor。
+  //   版本 2 的程序会按旧字段重新生成而算出无效布景，所以最低可读版本提高到 3。
+  version: 3,
+  minReaderVersion: 3,
   contentSchema: cameraStageContentSchema,
   migrations: {
     // 1 → 2：旧文件没有生成过布景，补一个空列表。
     1: (content) => ({ ...structuredClone(content as Record<string, unknown>), sets: [] }),
+    2: (content) => {
+      const next = structuredClone(content as LooseRecord)
+      next.sets = (Array.isArray(next.sets) ? next.sets as LooseRecord[] : []).map(migrateStageSetV2)
+      return next
+    },
   },
   createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [] }),
   isEmptyContent: isEmptyCameraStageContent,

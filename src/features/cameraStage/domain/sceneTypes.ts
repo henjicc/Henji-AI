@@ -59,6 +59,33 @@ export interface StageSet {
   id: string
   name: string
   params: CameraStageSetParams
+  /** 生成时一并算好的地面铺装与比例参照物；关掉参照物或旧版本生成的布景没有。 */
+  decor?: StageSetDecor
+}
+
+export const STAGE_SET_SURFACE_KINDS = ['road', 'sidewalk', 'curb', 'median', 'lawn', 'plaza'] as const
+export type StageSetSurfaceKind = typeof STAGE_SET_SURFACE_KINDS[number]
+export const STAGE_SET_MARKING_KINDS = ['laneDashed', 'edgeLine', 'centerLine', 'stopLine', 'crosswalk'] as const
+export type StageSetMarkingKind = typeof STAGE_SET_MARKING_KINDS[number]
+
+/** 布景装饰数组每一项占几个数。 */
+export const STAGE_SET_DECOR_STRIDE = { surface: 4, marking: 4, tree: 5, lamp: 4, vehicle: 5 } as const
+
+/**
+ * 布景的地面铺装与比例参照物。不是场景对象：不能点选、不参与碰撞，成千上万个也只占几次绘制；
+ * 生成时算好存下来，以后改了生成算法，已有文件的画面也不变。坐标是布景局部坐标（米，绕布景中心与朝向）。
+ */
+export interface StageSetDecor {
+  /** 每项 [中心 x, 中心 z, x 向宽, z 向深] */
+  surfaces: Record<StageSetSurfaceKind, number[]>
+  /** 每项 [起点 x, 起点 z, 终点 x, 终点 z]；线宽与虚线节奏按种类固定 */
+  markings: Record<StageSetMarkingKind, number[]>
+  /** 行道树，每项 [x, z, 朝向（度）, 缩放, 树种序号] */
+  trees: number[]
+  /** 路灯，每项 [x, z, 灯臂朝向（度）, 杆高（米）] */
+  lamps: number[]
+  /** 车辆，每项 [x, z, 车头朝向（度）, 车型序号, 颜色序号] */
+  vehicles: number[]
 }
 
 export interface StagePrimitiveObject extends StageObjectBase {

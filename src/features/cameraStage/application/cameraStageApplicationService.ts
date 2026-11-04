@@ -5,7 +5,7 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains
 
 import { getAnimatablePropByPath } from '../domain/animatableProps'
 import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageSet, StageTransform, StageVec3 } from '../domain/sceneTypes'
-import { buildStageSet, liveStageSets } from '../domain/stageSets'
+import { buildStageSet, countStageSetDecor, liveStageSets, type StageSetDecorCounts } from '../domain/stageSets'
 import type { CameraStageSetLayoutInput, CameraStageSetParams } from '@/core/application-control/domains/cameraStage/cameraStageSetSchemas'
 import type { StageCameraEffector, StageStateKeyframe, StageSpatialPath } from '../domain/stateKeyframeTypes'
 import type { StageKeyframeValue, StagePlaybackState } from '../domain/animationTypes'
@@ -96,6 +96,8 @@ export interface CameraStageSetSummary {
   objectCount: number
   bounds: { min: StageVec3; max: StageVec3 }
   params: CameraStageSetParams
+  /** 比例参照物的数量（行道树、路灯、车辆）；参照物关着、或旧版本生成还没重新生成的布景都是 0 */
+  propCounts: StageSetDecorCounts
 }
 
 export interface CameraStageSetResult {
@@ -237,6 +239,7 @@ export function summarizeStageSet(set: StageSet, objects: readonly StageObject[]
     objectCount,
     bounds: objectCount > 0 ? { min: round(min), max: round(max) } : { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } },
     params: structuredClone(set.params),
+    propCounts: countStageSetDecor(set.decor),
   }
 }
 

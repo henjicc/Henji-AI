@@ -7,6 +7,7 @@ import { SCHEMA_MIGRATIONS } from '../electron/main/services/db-migrations'
 import { emptyMemorySnapshot } from '../src/core/assistant/memoryEntries'
 import { createWorkspaceLayoutEnvelope } from '../src/core/workspaceLayouts/schema'
 import { defaultCameraStageLayout } from '../src/features/cameraStage/layout/dockLayout'
+import { buildStageSet } from '../src/features/cameraStage/domain/stageSets'
 import { MOTION_CANDIDATE_VERSION } from '../src/core/creativeIntent/persistence'
 import { mcpConnectionStorageSchema } from '../src/core/persistence/mcpConnectionSchema'
 import { createRecordingDocument } from '../src/core/screenRecording/document'
@@ -341,9 +342,13 @@ const values: Record<string, unknown> = {
       { id: 'fx-comp', kind: 'builtin', name: '压缩器', enabled: true, amount: 1, builtin: { id: 'compressor', params: { amount: 40, speed: 'normal', makeup: true } } },
     ],
     chainBypassed: false, output: { volumeDb: -1.5, loudness: { enabled: true, targetLufs: -16, gainDb: 3.5 } } },
-  // 镜头参考 v2：布景记录（补齐后的生成参数）与一栋指回它的楼。
-  'document.camera_stage': { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }, { id: 'tower', name: '城市 楼01', type: 'primitive', kind: 'box', setId: 'city', color: '#8d939c', visible: true, transform: { position: { x: 5, y: 10, z: 5 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 8, y: 20, z: 8 } } }], activeCameraId: 'camera', sceneSettings: { sky: {} }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }],
-    sets: [{ id: 'city', name: '城市', params: { preset: 'city', center: { x: 0, z: 0 }, rotation: 0, seed: 7, width: 240, depth: 240, blockSize: 40, streetWidth: 12, lotSize: 10, density: 0.85, height: { min: 6, max: 60 }, heightProfile: 'downtown' } }] },
+  // 镜头参考 v3：真实尺度布景（城市风格、道路等级、楼层与参照物开关）、生成时算好的装饰，与指回它的楼。
+  'document.camera_stage': (() => {
+    const { set, objects } = buildStageSet([], { layout: { preset: 'street', length: 24, seed: 7 }, name: '街道' })
+    const fixedSet = { ...set, id: 'street' }
+    const tower = { ...objects[0], id: 'tower', setId: 'street' }
+    return { objects: [{ id: 'camera', name: '主摄影机', type: 'camera', position: [0, 1, 5] }, tower], activeCameraId: 'camera', sceneSettings: { sky: {} }, stateKeyframes: [{ id: 'key', time: 0, objects: {} }], sets: [fixedSet] }
+  })(),
   'document.image_document': { workingRevision: 0, emptyUntilRevision: 0, width: 32, height: 40, layers: image.layers.length },
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id, memories: [{ id: 'brand', content: '这期品牌色用红色。', source: 'user', revision: 1, updatedAt: timestamp }] }),
   'project-package': { format: 'henji-package', version: PACKAGE_VERSION, minReaderVersion: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },

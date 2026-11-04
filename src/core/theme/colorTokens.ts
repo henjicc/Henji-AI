@@ -182,6 +182,43 @@ export const CAMERA_STAGE_SET_BUILDING_PALETTE_HEX = [
   '#6f747c',
 ] as const;
 
+// 3D 镜头参考布景的地面铺装、标线与参照物：接近真实材质的低饱和色，压在楼体与主体后面
+export const CAMERA_STAGE_SET_DECOR_HEX = {
+  road: '#3b3e44',
+  sidewalk: '#8f8b85',
+  curb: '#b9b5ad',
+  median: '#5d7348',
+  lawn: '#667f4e',
+  plaza: '#a39c90',
+  marking: '#e6e3da',
+  centerLine: '#d4ad3c',
+  trunk: '#5f4b3b',
+  lampPole: '#4d5157',
+  lampHead: '#dcd8c8',
+  vehicleGlass: '#2b3238',
+  vehicleTire: '#1f2124',
+} as const;
+
+// 行道树树冠的几档绿，逐棵轮换，避免整排一个颜色
+export const CAMERA_STAGE_SET_CANOPY_PALETTE_HEX = [
+  '#56763f',
+  '#62834a',
+  '#4c6a3a',
+  '#6c8c52',
+] as const;
+
+// 车身颜色：白、黑、银、灰、深蓝、红、米、深绿，序号与布景装饰里的颜色序号一一对应
+export const CAMERA_STAGE_SET_VEHICLE_PALETTE_HEX = [
+  '#e4e4e0',
+  '#25272b',
+  '#a9adb2',
+  '#6b7077',
+  '#2f4466',
+  '#9c3434',
+  '#c8bba0',
+  '#3e5446',
+] as const;
+
 export const ANNOTATION_DEFAULT_STROKE_HEX = '#ff4d4f';
 export const ANNOTATION_DEFAULT_TEXT_HEX = '#ffffff';
 

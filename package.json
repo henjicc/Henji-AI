@@ -179,6 +179,7 @@
     "pica": "^9.0.1",
     "pinyin-match": "^1.2.10",
     "pinyin-pro": "3.29.4",
+    "poisson-disk-sampling": "^2.3.1",
     "polygon-clipping": "0.15.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
