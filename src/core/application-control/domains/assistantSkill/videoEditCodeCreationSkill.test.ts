@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 import { queryVideoEditReviewCapability } from '../videoEdit/videoEditReviewCapability'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS } from '@/core/videoEdit/builtinEffects'
+import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { authorEffectMetadata } from '@/features/videoEdit/engine/videoEditAuthorParameters'
 import { testAuthorModule } from '@/features/videoEdit/engine/videoEditAuthorTestFixtures'
 import { createVideoEditRegistrations } from '@/features/videoEdit/application/videoEditReflection'
@@ -31,7 +32,10 @@ const reviewKind = reviewItem && typeof reviewItem === 'object' && !Array.isArra
 const reviewKinds = typeof reviewKind === 'object' ? reviewKind.enum?.filter((value): value is string => typeof value === 'string') ?? [] : []
 const knownNames = new Set([
   ...reviewKinds,
+  // 技能按效果 ID 点名内置效果，并在“片段 / 序列”语境里用属性 ID 的末段称呼属性（如 `space_emission`）。
+  ...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(effect => effect.id),
   ...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.flatMap(effect => effect.params.map(parameter => parameter.key)),
+  ...[...properties.keys()].map(id => id.slice(id.lastIndexOf('.') + 1)),
   ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().map(definition => definition.id),
   ...PROTOCOL_TOOL_SPECS.map(spec => spec.name),
   ...(piDisclosureSource.includes("name: 'load_application_tools'") ? ['load_application_tools'] : []),
@@ -66,7 +70,8 @@ describe('剪辑代码素材技能只引用真实契约', () => {
     const sources = files.flatMap(file => [...text(file).matchAll(/```ts\n([\s\S]*?)```/g)].map(match => ({ file: path.basename(file), source: match[1] })))
     expect(sources.length).toBeGreaterThanOrEqual(12)
     for (const { file, source } of sources) {
-      const metadata = authorEffectMetadata(testAuthorModule(source))
+      // 技能教的是新建素材，新建素材按当前作者接口编译（三维入口要求 v15 起）。
+      const metadata = authorEffectMetadata(testAuthorModule(source), CODE_AUTHOR_API_VERSION)
       expect(metadata.name, file).toBeTruthy()
     }
   })

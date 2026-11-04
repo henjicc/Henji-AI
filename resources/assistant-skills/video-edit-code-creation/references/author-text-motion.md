@@ -7,10 +7,19 @@
 固定字体在模块顶层导出静态 `textFonts`；参数文字通过 `bindings` 绑定内容与样式。声明只能用字面量或模块常量，不能调用函数或等待网络。宿主在模块求值、首帧和参数变化前准备所需字体，`layoutText` 保持同步。
 
 ```ts
+import { layoutText, drawText } from "henji-layout/text"
 export const textFonts = {
   faces: [{ family: "Noto Sans SC", weight: 700 }],
   text: ["固定标题"],
   bindings: [{ text: "title", style: "titleStyle" }]
+}
+export default {
+  name: "字体声明", params: [
+    { key: "title", type: "text", default: "痕迹AI" }, { key: "titleStyle", type: "textStyle" }
+  ],
+  draw(ctx, time, params) {
+    drawText(ctx, layoutText("固定标题", { fontFamily: "Noto Sans SC", fontWeight: 700 }))
+  }
 }
 ```
 

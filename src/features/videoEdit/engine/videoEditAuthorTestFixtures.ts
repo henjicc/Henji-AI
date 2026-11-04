@@ -1,7 +1,8 @@
 import ts from 'typescript'
 import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeAuthorProgram'
 import { normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
-import { resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { latestAuthorLibraryVersions, resolveAuthorLibraryModule } from '@/core/videoEdit/codeMaterial/authorLibraries'
+import { CODE_AUTHOR_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { authorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata } from './videoEditAuthorParameters'
 import type { AuthorModule } from './videoEditAuthorModule'
@@ -28,7 +29,7 @@ export function testAuthorModule(source: string): AuthorModule {
   const exports: { default?: AuthorModule } = {}
   new Function('exports', 'require', compiled)(exports, builtInLibraryStub)
   const effect = exports.default
-  if (!effect || ![effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU].some(value => typeof value === 'function')) throw new Error('缺少作者绘制入口。')
+  if (!effect || ![effect.draw, effect.layers, effect.createWebGL, effect.createWebGPU, effect.createThree].some(value => typeof value === 'function')) throw new Error('缺少作者绘制入口。')
   return effect
 }
 
@@ -37,6 +38,7 @@ export function testAuthorModule(source: string): AuthorModule {
  * 一旦在模块顶层真的用到库里的东西就报错，免得测试悄悄跑在假库上。
  */
 function builtInLibraryStub(specifier: string): unknown {
-  if (!resolveAuthorLibraryModule(specifier)) throw new Error(`测试夹具只认内置库，不认 ${specifier}`)
+  // 无版本记录时解析到第一套库；新建素材按当前接口选最新库（如 henji-layout/table 只在 2.0.0 起提供），两者都认。
+  if (!resolveAuthorLibraryModule(specifier) && !resolveAuthorLibraryModule(specifier, latestAuthorLibraryVersions(CODE_AUTHOR_API_VERSION))) throw new Error(`测试夹具只认内置库，不认 ${specifier}`)
   return new Proxy({}, { get: (_target, key) => { if (key === '__esModule') return true; throw new Error(`测试夹具不求值内置库 ${specifier}（读取了 ${String(key)}）`) } })
 }
