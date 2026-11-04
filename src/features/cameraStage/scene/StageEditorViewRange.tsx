@@ -3,9 +3,11 @@ import { useFrame } from '@react-three/fiber'
 import type { Fog, PerspectiveCamera, Vector3 } from 'three'
 import type { StageSceneExtent } from '../application/stageSceneExtent'
 import { resolveFixedViewFar, resolveStageClipPlanes } from './stageClipPlanes'
+import { directorMaxPolarAngle } from './directorViewState'
 
 interface OrbitTarget {
   target: Vector3
+  maxPolarAngle: number
 }
 
 interface StageEditorViewRangeProps {
@@ -18,7 +20,7 @@ interface StageEditorViewRangeProps {
 /**
  * 编辑视角（自由透视与正交视图）的看得见范围。
  *
- * 裁剪面随相机与场景尺度每帧更新；雾按“离环绕中心多远”往后推：雾是成片的外观，
+ * 裁剪面随相机与场景尺度每帧更新；环绕不能把机位转到地面以下；雾按“离环绕中心多远”往后推：雾是成片的外观，
  * 在摄像机画面里照原值生效，但编辑时拉远看全景，原值会让整个场景都淡进天空。
  *
  * 挂在聚焦与视角恢复之后：同一帧里它们改过的机位，这里读到的已是最新的。
@@ -42,6 +44,7 @@ const StageEditorViewRange: React.FC<StageEditorViewRangeProps> = ({ extent, fix
       return
     }
 
+    if (controls) controls.maxPolarAngle = directorMaxPolarAngle(controls.target.y, focusDistance)
     const planes = resolveStageClipPlanes(camera.position, focusDistance, currentExtent)
     const perspective = camera as PerspectiveCamera
     if (perspective.near !== planes.near || perspective.far !== planes.far) {

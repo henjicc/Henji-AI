@@ -66,3 +66,17 @@ export function persistDirectorView(): void {
   if (typeof localStorage === 'undefined' || !current) return
   localStorage.setItem(DIRECTOR_VIEW_STORAGE_KEY, JSON.stringify(current))
 }
+
+/** 自由视角机位最低离地多高（米）：可以贴地仰拍，不能钻到地面以下 */
+const DIRECTOR_MIN_HEIGHT = 0.05
+
+/**
+ * 环绕的最大极角：让机位不低于地面。注视点高于地面时允许转到水平线以下仰拍，
+ * 注视点越高、离得越近，能仰的角度越大。
+ */
+export function directorMaxPolarAngle(targetHeight: number, distance: number): number {
+  if (!(distance > 0)) return Math.PI / 2
+  const cos = (DIRECTOR_MIN_HEIGHT - targetHeight) / distance
+  // 留一点余量，正下方仰视时 OrbitControls 的朝上向量不会翻转
+  return Math.min(Math.PI - 0.01, Math.acos(Math.max(-1, Math.min(1, cos))))
+}
