@@ -109,6 +109,17 @@ export function createCameraObject(
   }
 }
 
+/**
+ * 雾淡出距离（米）。上限按上千米的城区布景留：雾距是从摄像机算起的，
+ * 布景生成会把雾距推到与布景尺度相配的值（见 stageSceneFogDistance）。
+ */
+export const STAGE_FOG_DEFAULT_DISTANCE = 90
+export const STAGE_FOG_DISTANCE_RANGE = { min: 30, max: 10_000 } as const
+
+export function clampStageFogDistance(distance: number): number {
+  return Math.max(STAGE_FOG_DISTANCE_RANGE.min, Math.min(STAGE_FOG_DISTANCE_RANGE.max, distance))
+}
+
 export function createDefaultSceneSettings(): StageSceneSettings {
   return {
     ground: {
@@ -131,7 +142,7 @@ export function createDefaultSceneSettings(): StageSceneSettings {
     },
     fog: {
       enabled: true,
-      distance: 90,
+      distance: STAGE_FOG_DEFAULT_DISTANCE,
     },
     render: {
       style: DEFAULT_STAGE_RENDER_STYLE,

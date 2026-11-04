@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Dropdown, UiFormRow, UiGroup, UiSwitch } from '@/components/ui'
-import { GROUND_PATTERN_OPTIONS } from '../domain/sceneDefaults'
+import { GROUND_PATTERN_OPTIONS, STAGE_FOG_DISTANCE_RANGE } from '../domain/sceneDefaults'
+import { resolveStageSceneExtent, stageSceneFogDistance } from '../application/stageSceneExtent'
 import type { StageGroundPattern } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { ColorRow, SliderNumberRow, SwitchRow, Vec3Row } from './panelFields'
@@ -40,6 +41,12 @@ const SceneSettingsPanel: React.FC = () => {
   const setSceneNameLabelShadowDistance = useCameraStageStore((state) => state.setSceneNameLabelShadowDistance)
   const setSceneNameLabelShadowAngle = useCameraStageStore((state) => state.setSceneNameLabelShadowAngle)
   const labelSettings = sceneSettings.display.nameLabel
+  const objects = useCameraStageStore((state) => state.objects)
+  // 滑杆量程跟着场景走：小场景 30–200 米好调，上千米的城区也拖得到够远
+  const fogSliderMax = useMemo(() => Math.min(STAGE_FOG_DISTANCE_RANGE.max, Math.max(
+    200,
+    Math.ceil(stageSceneFogDistance(resolveStageSceneExtent(objects)) * 2 / 100) * 100,
+  )), [objects])
 
   return (
     // 未选中对象时属性面板显示场景设置；面板标题由停靠标签给出，这里不再重复一条标题带
@@ -114,7 +121,8 @@ const SceneSettingsPanel: React.FC = () => {
         divided
         actions={<UiSwitch aria-label="雾" checked={sceneSettings.fog.enabled} onCheckedChange={setSceneFogEnabled} />}
       >
-        <SliderNumberRow label="淡出距离" ariaLabel="雾淡出距离" min={30} max={200} step={1} precision={0}
+        <SliderNumberRow label="淡出距离" ariaLabel="雾淡出距离" min={STAGE_FOG_DISTANCE_RANGE.min}
+          max={Math.max(fogSliderMax, sceneSettings.fog.distance)} step={1} precision={0}
           value={sceneSettings.fog.distance} onChange={setSceneFogDistance} />
       </UiGroup>
 

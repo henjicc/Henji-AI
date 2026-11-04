@@ -1,10 +1,11 @@
-import type { StageObject, StageVec3 } from '../domain/sceneTypes'
+import { clampStageFogDistance, STAGE_FOG_DEFAULT_DISTANCE } from '../domain/sceneDefaults'
+import type { StageFogSettings, StageObject, StageVec3 } from '../domain/sceneTypes'
 import { calculateStageObjectBounds } from './sceneAnalysis'
 
 /**
- * 场景尺度：视口裁剪面与地面范围按它走。
+ * 场景尺度：视口裁剪面、地面范围与布景生成后的雾距按它走。
  *
- * 布景从十几米的街角到上千米的城区都有；任何写死的距离（远裁剪 1000 米、地面 160 米）
+ * 布景从十几米的街角到上千米的城区都有；任何写死的距离（远裁剪 1000 米、地面 160 米、雾 90 米）
  * 都会在某一档尺度上把画面吃掉。这里只看可见对象的包围盒，转角按包围盒对角线放宽，
  * 不必逐个处理朝向。
  */
@@ -58,4 +59,26 @@ export function resolveStageSceneExtent(objects: readonly StageObject[]): StageS
 export function stageGroundSize(extent: StageSceneExtent): number {
   const half = Math.max(STAGE_GROUND_MIN_SIZE / 2, extent.reach * 1.5)
   return Math.ceil((half * 2) / STAGE_GROUND_MIN_SIZE) * STAGE_GROUND_MIN_SIZE
+}
+
+/** 与场景尺度相配的雾距：从布景一侧看过去，对面边缘正好淡进天空。小场景保持默认值。 */
+export function stageSceneFogDistance(extent: StageSceneExtent): number {
+  return clampStageFogDistance(Math.max(STAGE_FOG_DEFAULT_DISTANCE, Math.round((extent.reach * 3) / 10) * 10))
+}
+
+/**
+ * 生成或删除布景后让雾距跟上场景尺度，但不覆盖用户自己的设置：
+ * 只有雾开着、雾距还是默认值或上一次自动给出的值时才改。关掉的雾、手调过的雾距原样保留。
+ */
+export function followSceneScaleFog(
+  fog: StageFogSettings,
+  before: readonly StageObject[],
+  after: readonly StageObject[],
+): StageFogSettings {
+  if (!fog.enabled) return fog
+  const untouched = fog.distance === STAGE_FOG_DEFAULT_DISTANCE
+    || fog.distance === stageSceneFogDistance(resolveStageSceneExtent(before))
+  if (!untouched) return fog
+  const distance = stageSceneFogDistance(resolveStageSceneExtent(after))
+  return distance === fog.distance ? fog : { ...fog, distance }
 }

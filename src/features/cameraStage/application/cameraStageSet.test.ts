@@ -15,6 +15,7 @@ import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, setCameraStageDocumentRegistryForTests } from './cameraStageProjectRuntime'
 import { CameraStageSetCollectionExecutor, CameraStageSetGenerateOperationExecutor } from './cameraStageSetExecutors'
 import { verifyCameraStageScene } from './cameraStageVerification'
+import { stepCameraStageHistory } from '../store/useCameraStageHistory'
 
 /*
  * 布景生成：一次调用整片布景进场景、一条撤销记录、一次存盘；观察只给摘要；重新生成沿用参数；
@@ -136,6 +137,9 @@ describe('布景生成落地', () => {
     expect(store.getState().objects).toHaveLength(before + members.length)
     expect(commands.writes - writesBefore).toBe(1)
     expect(store.temporal.getState().pastStates.length - historyBefore).toBe(1)
+    // 默认雾距跟着城区尺度推远
+    const cityFog = store.getState().sceneSettings.fog.distance
+    expect(cityFog).toBeGreaterThan(600)
 
     const observation = await cameraStageApplicationService.observeProject('set-doc')
     expect(observation.objects).toHaveLength(before)
@@ -181,12 +185,40 @@ describe('布景生成落地', () => {
 
     const collection = new CameraStageSetCollectionExecutor(dependencies)
     const step = { kind: 'collection', entityType: 'camera_stage.set', parent: { kind: 'camera_stage.scene', id: 'set-doc' }, operation: { kind: 'remove', targets: [setRef] } } as unknown as Extract<ApplicationPlannedStep, { kind: 'collection' }>
+    const regeneratedFog = store.getState().sceneSettings.fog.distance
     const removed = await collection.apply(step)
+    // 没手调过的雾距随布景删除回到默认
+    expect(store.getState().sceneSettings.fog.distance).toBe(90)
     expect(store.getState().objects).toHaveLength(before)
     expect((await cameraStageApplicationService.observeProject('set-doc')).sets).toEqual([])
     await collection.undo(removed.undoToken!)
     expect((await cameraStageApplicationService.observeProject('set-doc')).sets.map(set => set.id)).toEqual([setId])
     expect(store.getState().objects.filter(object => object.setId === setId)).toHaveLength(thinned)
+    expect(store.getState().sceneSettings.fog.distance).toBe(regeneratedFog)
+
+    // 界面撤销重做：撤销历史不记场景设置，雾距按同一条规则跟回去
+    store.getState().removeStageSet(setId)
+    expect(store.getState().sceneSettings.fog.distance).toBe(90)
+    stepCameraStageHistory(store, 'undo')
+    expect(store.getState().sceneSettings.fog.distance).toBe(regeneratedFog)
+    stepCameraStageHistory(store, 'redo')
+    expect(store.getState().sceneSettings.fog.distance).toBe(90)
+    stepCameraStageHistory(store, 'undo')
+
+    // 手调过的雾距不被删除与撤销覆盖
+    store.getState().setSceneFogDistance(regeneratedFog + 7)
+    store.getState().removeStageSet(setId)
+    stepCameraStageHistory(store, 'undo')
+    expect(store.getState().sceneSettings.fog.distance).toBe(regeneratedFog + 7)
+
+    // 没有布景、雾距默认时，撤销普通对象的移动不动雾距（摄像机离原点 40 米，超过默认雾距照顾的范围）
+    store.getState().removeStageSet(setId)
+    store.getState().setSceneFogDistance(90)
+    const cameraId = store.getState().objects.find(object => object.type === 'camera')!.id
+    store.getState().updateTransform(cameraId, { position: { x: 40, y: 1.5, z: 0 } })
+    store.getState().updateTransform(cameraId, { position: { x: 5, y: 1.5, z: 0 } })
+    stepCameraStageHistory(store, 'undo')
+    expect(store.getState().sceneSettings.fog.distance).toBe(90)
   })
 
   it('旧版文档迁移后没有布景；v2 的布景参数换成风格与楼层，楼不动；布景连同装饰随文档写出与读回', () => {
@@ -215,6 +247,8 @@ describe('布景生成落地', () => {
     expect(restored.sets).toEqual([set])
     expect(countStageSetDecor(restored.sets?.[0]?.decor).trees).toBeGreaterThan(0)
     expect(restored.objects.filter(object => object.setId === set.id)).toHaveLength(objects.length)
+    // v4 起雾距可以超过 200 米，读回不被换成默认值
+    expect(sceneFromDocumentContent({ ...JSON.parse(JSON.stringify(content)), sceneSettings: { fog: { enabled: true, distance: 1200 }, sky: {} } }).sceneSettings.fog.distance).toBe(1200)
     // 成员删光的布景不写进文件。
     expect(sceneToDocumentContent({ ...scene, sets: [set] }).sets).toEqual([])
     // 更新版本才有的布景类型原样保留；记录丢了的成员回到普通对象。

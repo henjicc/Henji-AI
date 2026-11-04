@@ -8,11 +8,13 @@ import {
   PRIMITIVE_KIND_LABELS,
   createCameraObject,
   createCharacterObject,
+  clampStageFogDistance,
   createDefaultSceneSettings,
   createPrimitiveObject,
   pickDefaultColor,
 } from '../domain/sceneDefaults'
 import { createDefaultCameraStageSceneSnapshot } from '../domain/defaultSceneSnapshot'
+import { followSceneScaleFog } from '../application/stageSceneExtent'
 import { createPoseMotion } from '../domain/characterMotion'
 import { applyObjectPatch, getCameraObjects, isCameraId } from '../domain/cameraUtils'
 import { getDirectorView, resetDirectorView } from '../scene/directorViewState'
@@ -288,9 +290,11 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
       const objects = [...state.objects.filter((object) => !removed.has(object.id)), ...members]
       const stateKeyframes = replaceObjectsInStateKeyframes(state.stateKeyframes, removed, members)
       const existing = state.sets.some((item) => item.id === stageSet.id)
+      const fog = followSceneScaleFog(state.sceneSettings.fog, state.objects, objects)
       return {
         objects,
         stateKeyframes,
+        ...(fog === state.sceneSettings.fog ? {} : { sceneSettings: { ...state.sceneSettings, fog } }),
         sets: existing ? state.sets.map((item) => item.id === stageSet.id ? stageSet : item) : [...state.sets, stageSet],
         animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
         selectedId: state.selectedId && removed.has(state.selectedId) ? null : state.selectedId,
@@ -302,9 +306,11 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
       const removed = new Set(state.objects.filter((object) => object.setId === setId).map((object) => object.id))
       const objects = state.objects.filter((object) => !removed.has(object.id))
       const stateKeyframes = replaceObjectsInStateKeyframes(state.stateKeyframes, removed, [])
+      const fog = followSceneScaleFog(state.sceneSettings.fog, state.objects, objects)
       return {
         objects,
         stateKeyframes,
+        ...(fog === state.sceneSettings.fog ? {} : { sceneSettings: { ...state.sceneSettings, fog } }),
         sets: state.sets.filter((item) => item.id !== setId),
         animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
         selectedId: state.selectedId && removed.has(state.selectedId) ? null : state.selectedId,
@@ -642,7 +648,7 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
     set((state) => ({
       sceneSettings: {
         ...state.sceneSettings,
-        fog: { ...state.sceneSettings.fog, distance: Math.max(30, Math.min(200, distance)) },
+        fog: { ...state.sceneSettings.fog, distance: clampStageFogDistance(distance) },
       },
     })),
 

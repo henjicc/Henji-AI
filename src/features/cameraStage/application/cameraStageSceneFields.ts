@@ -4,6 +4,7 @@ import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationRef
 
 import { STAGE_RENDER_STYLE_LABELS, STAGE_RENDER_STYLE_VALUES } from '../domain/renderStyles'
 import type { StageSceneSettings } from '../domain/sceneTypes'
+import { STAGE_FOG_DISTANCE_RANGE } from '../domain/sceneDefaults'
 import type { CameraStageProjectSnapshot } from './cameraStageProjectRuntime'
 import type { useCameraStageStore } from '../store/cameraStageStore'
 import {
@@ -93,7 +94,7 @@ export const SCENE_APPEARANCE_FIELDS = [
   appearanceField('fog_enabled', '雾开启', booleanCodec, {
     read: (s) => s.fog.enabled, write: (store, v) => store.setSceneFogEnabled(v), storeAction: 'setSceneFogEnabled',
   }),
-  appearanceField('fog_distance', '雾距离', numberCodec({ min: 0, max: 10_000 }), {
+  appearanceField('fog_distance', '雾距离', numberCodec(STAGE_FOG_DISTANCE_RANGE), {
     read: (s) => s.fog.distance, write: (store, v) => store.setSceneFogDistance(v), storeAction: 'setSceneFogDistance', unit: 'scene_unit',
   }),
   appearanceField('render_style', '渲染方式', enumCodec(STAGE_RENDER_STYLE_VALUES, STAGE_RENDER_STYLE_LABELS), {

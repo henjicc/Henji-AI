@@ -132,8 +132,10 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
   // 版本 2 = 新增布景列表 sets 与对象上可选的 setId；成员仍是普通对象，旧程序照常读写，最低可读版本不变。
   // 版本 3 = 布景按真实尺度生成：参数换成城市风格、道路等级与楼层，并新增可选的装饰 decor。
   //   版本 2 的程序会按旧字段重新生成而算出无效布景，所以最低可读版本提高到 3。
-  version: 3,
-  minReaderVersion: 3,
+  // 版本 4 = 雾距 sceneSettings.fog.distance 的取值范围从 30–200 米放宽到 30–10000 米，供上千米的城区布景用。
+  //   版本 3 的程序把超过 200 的雾距当成非法值换回默认 90 米，保存时会改掉用户的雾，所以最低可读版本提高到 4。
+  version: 4,
+  minReaderVersion: 4,
   contentSchema: cameraStageContentSchema,
   migrations: {
     // 1 → 2：旧文件没有生成过布景，补一个空列表。
@@ -143,6 +145,8 @@ export const cameraStageDocumentKind: DocumentKindDescriptor<CameraStageDocument
       next.sets = (Array.isArray(next.sets) ? next.sets as LooseRecord[] : []).map(migrateStageSetV2)
       return next
     },
+    // 3 → 4：只放宽雾距的取值范围，旧文件里的值都在新范围内，内容原样保留。
+    3: (content) => structuredClone(content as LooseRecord),
   },
   createEmptyContent: () => ({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [] }),
   isEmptyContent: isEmptyCameraStageContent,

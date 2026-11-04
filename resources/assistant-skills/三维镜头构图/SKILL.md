@@ -30,7 +30,7 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 
 - 参照物（`props`，默认开）：人行道与路缘、车道线与斑马线、行道树、路灯、车辆，按真实尺寸摆好，帮生成模型读出尺度。它们不是对象，点不中、不参与碰撞；要清掉就 `props: false` 重新生成。角色站在人行道上时脚下的铺装只高 4 厘米，不用抬高角色。
 - 规模：默认方格城市约 370 栋；`width/depth` 给 1500 约 2400 栋，给 3100 约 1 万栋。新城楼少而高，欧式老城楼多而矮。密度为 0（或太低碰巧一栋没有）时会在写入前被拒绝。
-- 场景默认有 90 米的雾，看整座城或长街时先把 `camera_stage.scene.fog_enabled` 关掉或调大 `fog_distance`。
+- 雾：场景默认 90 米。生成或删除布景时，雾距自动推到与布景尺度相配（上千米的城区约 1–2 千米，上限 10000 米）；用户关掉的雾或手调过的 `fog_distance` 不被改动。要更通透就调大 `camera_stage.scene.fog_distance` 或关掉 `fog_enabled`。
 - 改参数重新生成：传 `replaceSetId`（取自观察结果 `sets[].id`），只写要改的字段，其余沿用上一次（包括种子）；换风格又没给楼层时楼层取新风格的默认；换一种随机布局就换 `seed`。
 - 整片删除：`change_application_entities` 对 `camera_stage.set` 执行 `remove_items`。新建布景不能用 `create_items`。
 

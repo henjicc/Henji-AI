@@ -6,7 +6,7 @@
 import { normalizeCharacterMotion } from './characterMotion'
 import { normalizeStageRenderStyle } from './renderStyles'
 import type { StageSceneAnimation } from './animationTypes'
-import { createDefaultSceneSettings } from './sceneDefaults'
+import { createDefaultSceneSettings, STAGE_FOG_DISTANCE_RANGE } from './sceneDefaults'
 import { rotationFromPositionAndTarget } from './cameraUtils'
 import { normalizeStateKeyframes } from './stateKeyframeTypes'
 import type { StageStateKeyframe } from './stateKeyframeTypes'
@@ -111,7 +111,7 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
       fog: {
         enabled: typeof fogRecord?.enabled === 'boolean' ? fogRecord.enabled : fallback.fog.enabled,
         distance:
-          Number.isFinite(fogDistance) && fogDistance >= 30 && fogDistance <= 200
+          Number.isFinite(fogDistance) && fogDistance >= STAGE_FOG_DISTANCE_RANGE.min && fogDistance <= STAGE_FOG_DISTANCE_RANGE.max
             ? fogDistance
             : fallback.fog.distance,
       },
