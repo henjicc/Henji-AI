@@ -180,14 +180,22 @@ export function captureObjectsIntoStateKeyframe(
 }
 
 /**
- * 播放头正停在这张状态关键帧上时，从卡快照出发、按当前编译产物在该时刻采样的结果；否则为 undefined
- * （写入就是有意把当前状态记进去）。从卡快照出发：没有轨道驱动的分组采样出来就是卡里的值，
- * 实时改过它就与采样值不同，照常写入；只有被动画驱动、且与采样值相同的分组才算“播放出来的值”。
+ * 一张状态关键帧时刻的画面：从卡快照出发，按当前编译产物在该时刻采样。
+ * 点选关键帧与拖播放头到同一时刻必须看到同一帧：平滑衔接的拐角被切圆，卡快照本身不在实际轨迹上。
+ */
+function sampleStateKeyframe(state: CameraStageState, stateKeyframe: StageStateKeyframe): StageObject[] {
+  return applyAnimationAtTime(applyStateKeyframeToObjects(state.objects, stateKeyframe), state.animation, stateKeyframe.time)
+}
+
+/**
+ * 播放头正停在这张状态关键帧上时的采样结果；否则为 undefined（写入就是有意把当前状态记进去）。
+ * 从卡快照出发：没有轨道驱动的分组采样出来就是卡里的值，实时改过它就与采样值不同，照常写入；
+ * 只有被动画驱动、且与采样值相同的分组才算“播放出来的值”。
  */
 export function sampledAtStateKeyframe(state: CameraStageState, stateKeyframeId: string | null): StageObject[] | undefined {
   const stateKeyframe = state.stateKeyframes.find((item) => item.id === stateKeyframeId)
   if (!stateKeyframe || Math.abs(stateKeyframe.time - state.playback.currentTime) > 0.5 / Math.max(1, state.animation.fps)) return undefined
-  return applyAnimationAtTime(applyStateKeyframeToObjects(state.objects, stateKeyframe), state.animation, stateKeyframe.time)
+  return sampleStateKeyframe(state, stateKeyframe)
 }
 
 export function syncAddedObjectToStateKeyframes(stateKeyframes: StageStateKeyframe[], object: StageObject): StageStateKeyframe[] {
@@ -500,7 +508,7 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
       return {
         selectedStateKeyframeId: id,
         selectedStateKeyframeIds: [],
-        objects: applyStateKeyframeToObjects(state.objects, stateKeyframe),
+        objects: sampleStateKeyframe(state, stateKeyframe),
         activeCameraId,
         playback: { ...state.playback, playing: false, currentTime: time },
       }

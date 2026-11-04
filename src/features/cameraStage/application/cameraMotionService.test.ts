@@ -125,6 +125,13 @@ describe('三维摄像机语义运镜', () => {
     expect(dragged.x).toBeCloseTo(before[1].x + 0.1, 9)
     expect(dragged.y).toBe(before[1].y)
     expect(dragged.z).toBe(before[1].z)
+
+    // 点选衔接卡与把播放头拖到同一时刻看到的是同一帧（切圆后的机位），不是卡里存的原机位。
+    const cameraPosition = () => useCameraStageStore.getState().objects.find((object) => object.id === camera.id)!.transform.position
+    useCameraStageStore.getState().seek(13)
+    const scrubbed = { ...cameraPosition() }
+    useCameraStageStore.getState().selectStateKeyframe(useCameraStageStore.getState().stateKeyframes[2].id)
+    expect(cameraPosition()).toEqual(scrubbed)
   })
 
   it('拒绝没有目标的非升降运镜', async () => {
