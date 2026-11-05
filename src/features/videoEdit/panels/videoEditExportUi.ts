@@ -39,3 +39,11 @@ export function videoEditExportStages(job: ExportJob): Array<{ label: '合成' |
   const done = job.state === 'completed'
   return [{ label: '合成', progress: done ? 1 : clamp(job.task.compositionProgress ?? 0) }, { label: '压制', progress: done ? 1 : clamp(job.task.compressionProgress ?? 0) }]
 }
+
+/**
+ * 界面重新加载前就结束的项留在导出队列列表里，不再弹窗挡住界面。被重新加载打断的（interrupted）要弹：
+ * 用户还不知道它停了。恢复后重新跑过的项有 startedAt，照常弹。
+ */
+export function endedBeforeReload(job: { restored?: boolean; startedAt?: number; state: string }): boolean {
+  return !!job.restored && job.startedAt === undefined && (job.state === 'completed' || job.state === 'cancelled' || job.state === 'failed')
+}

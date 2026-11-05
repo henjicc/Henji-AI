@@ -3,7 +3,7 @@ import { UiButton, UiError, UiModal } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { videoEditExportJobProgress, videoEditExportQueue } from '../application/videoEditExportQueue'
 import { subscribeVideoEdit, videoEditRevision } from '../application/videoEditService'
-import { videoEditExportStages } from './videoEditExportUi'
+import { endedBeforeReload, videoEditExportStages } from './videoEditExportUi'
 
 function duration(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000))
@@ -19,7 +19,7 @@ export function VideoEditExportProgress(): React.ReactElement | null {
   const jobs = videoEditExportQueue.list()
   const job = jobs.find(value => value.state === 'running') ?? jobs.find(value => value.state === 'queued') ?? jobs.at(-1)
   const attempt = job && `${job.id}:${job.startedAt ?? ''}`
-  if (!job || attempt === dismissed && job.state !== 'running' && job.state !== 'queued') return null
+  if (!job || endedBeforeReload(job) || attempt === dismissed && job.state !== 'running' && job.state !== 'queued') return null
   return <ExportProgress key={attempt} job={job} onClose={() => setDismissed(attempt)} />
 }
 

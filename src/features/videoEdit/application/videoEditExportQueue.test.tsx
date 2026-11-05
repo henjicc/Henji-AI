@@ -19,6 +19,7 @@ import { VideoEditExportQueue, cancelWaitingVideoEditExport, enqueueVideoEditExp
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { VideoEditExportProgress } from '../panels/VideoEditExportProgress'
+import { endedBeforeReload } from '../panels/videoEditExportUi'
 import { VideoEditExportQueueList } from '../panels/VideoEditExportQueueList'
 import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'
 import { exportVideoEdit, videoEditExportTask } from './videoEditExport'
@@ -937,6 +938,12 @@ it('单次导出删不掉未完成文件时保留登记交给主进程兜底，�
   expect(remove).toHaveBeenLastCalledWith([create.mock.calls.at(-1)![0]])
   await expect(exportVideoEdit(projectId, file('transient-done.mp4'), false, undefined, undefined, options())).resolves.toBe(file('transient-done.mp4'))
   expect(remove).toHaveBeenLastCalledWith([create.mock.calls.at(-1)![0]])
+})
+it('重新加载前就结束的导出不再弹窗；被打断的和恢复后重新跑过的照常弹', () => {
+  expect(endedBeforeReload({ restored: true, state: 'completed' })).toBe(true)
+  expect(endedBeforeReload({ restored: true, state: 'interrupted' })).toBe(false)
+  expect(endedBeforeReload({ restored: true, state: 'completed', startedAt: 1 })).toBe(false)
+  expect(endedBeforeReload({ state: 'completed' })).toBe(false)
 })
 it('界面取消等待原剪辑打开的项：从登记移除并释放输出路径', async () => {
   const owner = await project(); const projectId = owner.document.id
