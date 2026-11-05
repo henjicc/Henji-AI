@@ -374,7 +374,7 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       revisionScopes: ['generation'],
       queryCapabilityIds: ['list_generation_history'],
       schemaRef: schemaRef('entity', GENERATION_ENTITY_TYPES.record),
-      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 },
+      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] },
     },
     properties: properties[GENERATION_ENTITY_TYPES.record],
     provider: new GenerationHistoryReflectionProvider(),

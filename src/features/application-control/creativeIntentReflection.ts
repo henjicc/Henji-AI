@@ -15,7 +15,7 @@ export function creativeIntentRegistration(domain: IntentDomain, type: IntentEnt
   return {
     entity: { id: entityType, domain, version: 1, title: titles[type], description: '读取原稿、示范、钉点与候选。整理仅生成候选；用户确认后写候选 applied=true，整组结果可撤销。', refKind: entityType,
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [type === 'intent_draft' ? `${domain}.document` : `${domain}.intent_draft`], revisionScopes: [domain], queryCapabilityIds: ['read_application_entity'], schemaRef: creativeIntentSchemaRef('entity', entityType),
-      ...(['intent_draft', 'intent_pin', ...(domain === 'video_edit' ? ['intent_take'] : [])].includes(type) ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.${type === 'intent_pin' ? 'sample_id' : 'source_ref'}`], maxItemsPerChange: 256 } } : {}),
+      ...(['intent_draft', 'intent_pin', ...(domain === 'video_edit' ? ['intent_take'] : [])].includes(type) ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.${type === 'intent_pin' ? 'sample_id' : 'source_ref'}`] } } : {}),
       ...(type === 'intent_take' && domain === 'image_edit' ? { writeExclusion: { reason: '图片示范段记录不可变采样证据；静态布局使用所有目标，通过原稿保真度和钉住姿态校正。' } } : {}),
     },
     properties: fieldDescriptors(fields),

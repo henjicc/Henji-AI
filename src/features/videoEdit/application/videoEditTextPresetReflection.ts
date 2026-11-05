@@ -27,7 +27,7 @@ export function createVideoEditTextPresetRegistration(): ApplicationEntityRegist
   }
   const properties = fieldDescriptors(fields)
   return {
-    entity: { id: type, domain: 'video_edit', version: 1, title: '文字样式预设', description: reason, refKind: type, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', type), collectionWrite: { creatable: true, removable: true, requiredPropertyIds: fields.map(field => field.propertyId), maxItemsPerChange: 32 } },
+    entity: { id: type, domain: 'video_edit', version: 1, title: '文字样式预设', description: reason, refKind: type, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', type), collectionWrite: { creatable: true, removable: true, requiredPropertyIds: fields.map(field => field.propertyId) } },
     properties, schemaDocuments: [{ ref: videoEditSchemaRef('property', `${type}.style.value`), value: z.toJSONSchema(videoEditTextStyleSchema) as JsonValue }],
     provider: {
       entityType: type,

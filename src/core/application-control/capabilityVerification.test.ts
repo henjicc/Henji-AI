@@ -5,6 +5,8 @@ import { analyzeVideoEditBeatsCapability } from './domains/videoEdit/videoEditBe
 import { capabilityVerificationEnvelope } from './capabilityVerification'
 import { VIDEO_EDIT_TEXT_CAPABILITIES } from './domains/videoEdit/videoEditTextCapabilities'
 import { prepareVideoEditSubtitleCapability } from './domains/videoEdit/videoEditSubtitleCapabilities'
+import { upgradeVideoEditCodeMaterialsCapability } from './domains/videoEdit/videoEditCodeProjectCapabilities'
+import { detectVideoEditPrivacyCapability } from './domains/videoEdit/videoEditPrivacyCapability'
 
 const input = { documentRef: { kind: 'video_edit.document', id: 'doc' }, sequenceRef: { kind: 'video_edit.sequence', id: 'doc:seq' }, frame: 12 }
 const output = { resultRef: input.documentRef, markerRefs: [{ kind: 'video_edit.marker', id: 'doc:marker' }], message: '已保存', verified: true }
@@ -27,6 +29,14 @@ it('D1：领域 verified 经已声明效果回执桥接；没有写入、证据�
   const noChange = { documentRef: input.documentRef, resultRef: input.sequenceRef, ranges: [], changed: false, verified: true, message: '没有匹配范围' }
   expect(capabilityVerificationEnvelope(VIDEO_EDIT_TEXT_CAPABILITIES[0], input, noChange)).toMatchObject({ verification: { verified: true } })
   expect(capabilityVerificationEnvelope(VIDEO_EDIT_TEXT_CAPABILITIES[0], input, { ...noChange, verified: false })).toMatchObject({ verification: { verified: false } })
+})
+it('合法的无操作是正常完成：领域回读确认即通过，并带上领域说明；回读未确认仍不成立', () => {
+  const documentRef = { kind: 'video_edit.document', id: 'doc' }
+  const upToDate = { commit: '', upgrades: [], instances: [], resultRefs: [], verified: true, message: '全部素材已是最新。' }
+  expect(capabilityVerificationEnvelope(upgradeVideoEditCodeMaterialsCapability, { documentRef }, upToDate)).toMatchObject({ verification: { verified: true, condition: '全部素材已是最新。' } })
+  expect(capabilityVerificationEnvelope(upgradeVideoEditCodeMaterialsCapability, { documentRef }, { ...upToDate, verified: false })).toMatchObject({ verification: { verified: false } })
+  const clipRef = { kind: 'video_edit.clip', id: 'doc:clip' }
+  expect(capabilityVerificationEnvelope(detectVideoEditPrivacyCapability, { documentRef, clipRef }, { resultRef: clipRef, effectRefs: [], verified: true, message: '没有发现敏感文字。' })).toMatchObject({ verification: { verified: true } })
 })
 it('同源审查：所有直接返回 verified 的写能力必须有可执行效果回执，公共桥接覆盖整个注册表', () => {
   const definitions = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().filter(definition => !definition.readOnly && Boolean(z.toJSONSchema(definition.outputSchema, { io: 'output' }).properties?.verified))

@@ -19,7 +19,7 @@ const waitingOutput = z.object({ ok: z.literal(false), operationId: z.string().u
 /** 对外工具与内置助手共用正式能力声明。 */
 /** 协议信封：所有写工具共用，不只是 change_application_entities。 */
 const OPERATION_ID_FIELD = { type: 'string', format: 'uuid', description: '调用者范围内唯一的幂等键；调用前生成并保存，丢响应后复用此值查询，不得重新生成重放。' }
-const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 32, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除也可省略，由应用在执行前读取当前基线。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
+const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除也可省略，由应用在执行前读取当前基线。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
 
 export interface ProtocolToolSpec {
   name: string

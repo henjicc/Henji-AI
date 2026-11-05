@@ -1,19 +1,22 @@
 import { z } from 'zod'
 import { applicationTransactionResultSchema, type ApplicationTransactionResult } from './transactions'
 import { applicationObservedEffectSchema, type ApplicationObservedEffect } from './observedEffect'
+import { boundedTransactionResult } from './execution/receiptBounds'
 
 /** 失败通道只携带已经发生的事务事实；没有属性值、文档、任意 details 或异常栈。 */
 export const applicationTransactionFailureFactsSchema = applicationTransactionResultSchema.options[3].pick({
   transactionRef: true, code: true, currentRevisions: true, resultRefs: true,
-  effects: true, undoRef: true, partial: true, persistence: true, verification: true, recoveryVerification: true,
+  effects: true, undoRef: true, partial: true, persistence: true, verification: true, recoveryVerification: true, receiptTruncation: true,
 }).extend({ replayMutation: z.literal(false) }).strict()
 export type ApplicationTransactionFailureFacts = z.infer<typeof applicationTransactionFailureFactsSchema>
 
 export function transactionFailureFacts(result: Extract<ApplicationTransactionResult, { status: 'failed' }>): ApplicationTransactionFailureFacts | undefined {
   if (!result.persistence && !result.effects?.length && !result.partial && !result.verification) return undefined
-  const { transactionRef, code, currentRevisions, resultRefs, effects, undoRef, partial, persistence, verification, recoveryVerification } = result
+  // 领域也会直接抛出事务事实（批量保存失败），这里要与引擎结果走同一个出口。
+  const bounded = boundedTransactionResult(result) as typeof result
+  const { transactionRef, code, currentRevisions, resultRefs, effects, undoRef, partial, persistence, verification, recoveryVerification, receiptTruncation } = bounded
   return applicationTransactionFailureFactsSchema.parse({ transactionRef, code, currentRevisions, resultRefs,
-    effects, undoRef, partial, persistence, verification, recoveryVerification, replayMutation: false })
+    effects, undoRef, partial, persistence, verification, recoveryVerification, receiptTruncation, replayMutation: false })
 }
 
 /** 类型化的传输错误；只允许合法的有界事实跨越既有进程边界。 */

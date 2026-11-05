@@ -32,7 +32,7 @@ export function createVoiceLibraryReflectionRegistration(): ApplicationEntityReg
     schemaRef: schemaRef('property', `${entityType}.${key}`), readOnlyReason: reason,
   }))
   return {
-    entity: { id: entityType, version: 1, domain: 'generation', title: '克隆音色库', description: '读取已保存的音色与训练状态；合成时将 voice_id 填入对应模型的音色参数。移除仅删除本地记录，不删除供应商音色或取消费用。新音色必须通过正式克隆任务创建。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['generation.model'], revisionScopes: ['generation'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType), collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 1 } },
+    entity: { id: entityType, version: 1, domain: 'generation', title: '克隆音色库', description: '读取已保存的音色与训练状态；合成时将 voice_id 填入对应模型的音色参数。移除仅删除本地记录，不删除供应商音色或取消费用。新音色必须通过正式克隆任务创建。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['generation.model'], revisionScopes: ['generation'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType), collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] } },
     properties,
     provider: {
       entityType,

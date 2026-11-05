@@ -154,7 +154,6 @@ function registration(): ApplicationEntityRegistration {
         creatable: true,
         removable: false,
         requiredPropertyIds: ['sample.enabled'],
-        maxItemsPerChange: 8,
       },
     },
     properties,

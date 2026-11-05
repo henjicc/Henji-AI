@@ -67,8 +67,8 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
      */
     ...fieldLedgerEntries(NODE_FIELDS),
     groupNodes: { kind: 'capability', capabilityId: 'group_canvas_nodes' },
-    // 画布级整体状态操作，与 undo/group 同属专用能力（3.1，见执行记录：走集合删除要么绕两步、
-    // 要么撞 maxItemsPerChange，不如照 undo_canvas_change 的先例）。
+    // 画布级整体状态操作，与 undo/group 同属专用能力：走集合删除要先枚举全部引用，
+    // 不如照 undo_canvas_change 的先例。
     clearCanvas: { kind: 'capability', capabilityId: 'clear_canvas' },
     // 集合删除对节点早就是级联删除子节点的语义，解散分组要求子节点保留，两者冲突，
     // 不能共用 remove_items（3.1）。

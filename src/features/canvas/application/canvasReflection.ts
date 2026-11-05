@@ -314,7 +314,6 @@ export function createCanvasReflectionRegistrations(): ApplicationEntityRegistra
           creatable: true,
           removable: true,
           requiredPropertyIds: [`${CANVAS_ENTITY_TYPES.node}.node_type`],
-          maxItemsPerChange: 50,
         },
       } : {}),
       ...(entityType === CANVAS_ENTITY_TYPES.edge ? {
@@ -325,7 +324,6 @@ export function createCanvasReflectionRegistrations(): ApplicationEntityRegistra
             `${CANVAS_ENTITY_TYPES.edge}.source_ref`,
             `${CANVAS_ENTITY_TYPES.edge}.target_ref`,
           ],
-          maxItemsPerChange: 50,
         },
       } : {}),
     },

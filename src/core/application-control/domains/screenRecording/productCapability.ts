@@ -7,7 +7,7 @@ export const recordingExportRefSchema = z.object({ kind: z.literal('screen_recor
 export const recordingProductInputSchema = z.object({
   sessionRef: z.object({ kind: z.literal('screen_recording.session'), id: z.string().uuid() }).strict(),
   product: recordingProductKindSchema.describe('steps: Markdown/HTML 配图；gif: 每步动图；bug_report: 步骤、出错帧与可关联的脱敏日志；image_document: 每步一份可编辑多图层图片文档'),
-  stepIds: z.array(z.string().min(1)).min(1).max(100).optional().describe('省略为全部步骤，每批最多 100 步；缺陷报告建议只选出错步骤'),
+  stepIds: z.array(z.string().min(1)).min(1).optional().describe('省略为全部步骤；缺陷报告建议只选出错步骤'),
   destination: canvasDownloadDestinationSchema.optional().describe('已配置的快速下载或预设目录；省略使用用户导出目录。图片文档使用正式草稿容器'),
 }).strict()
 export const exportRecordingProductCapability = defineApplicationCapability({

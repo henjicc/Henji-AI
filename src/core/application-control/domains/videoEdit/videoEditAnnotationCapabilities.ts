@@ -11,14 +11,13 @@ const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const reply = z.string().trim().min(1).max(2000)
 const verification = z.object({ verified: z.boolean(), condition: z.string() }).strict()
 /** 同一次修改或删除最多处理的批注数：一份工程的批注很少上百，再多就该先缩小条件。 */
-const MAX_BATCH = 500
 
 const where = z.object({
   sequenceRef: ref('video_edit.sequence').optional().describe('只看这个序列；省略为整份剪辑的全部序列。'),
   statuses: z.array(videoEditAnnotationStatusSchema).min(1).max(4).optional().describe('draft 待发送、open 待处理、addressed 已改完、resolved 已确认，列多个为“或”。'),
   authorKinds: z.array(videoEditAnnotationAuthorSchema.shape.kind).min(1).max(3).optional().describe('作者种类：user 用户、assistant 内置助手、external 外部智能体。'),
   range: videoEditAnnotationFrameRangeSchema.optional().describe('序列帧闭区间 {fromFrame,toFrame}，与批注自身时间（frame 到 end_frame）有重叠即命中。'),
-  clipRefs: z.array(ref('video_edit.clip')).min(1).max(64).optional().describe('挂在这些片段上的批注：所属片段 clip_id，或时间段目标 target.clipIds 含该片段。'),
+  clipRefs: z.array(ref('video_edit.clip')).min(1).optional().describe('挂在这些片段上的批注：所属片段 clip_id，或时间段目标 target.clipIds 含该片段。'),
 }).strict()
 
 export const queryVideoEditAnnotationsCapability = defineApplicationCapability({
@@ -59,7 +58,7 @@ export const removeVideoEditAnnotationsCapability = defineApplicationCapability(
   aliases: ['批量删除批注', '清除已处理批注', '清空批注', '合并重复批注'], readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: true,
   timeoutMs: 20_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.annotation'], producesRefs: ['video_edit.annotation'],
   baselineCapabilityId: 'query_video_edit_annotations',
-  inputSchema: z.object({ documentRef: ref('video_edit.document'), annotationRefs: z.array(annotationRef).min(1).max(MAX_BATCH), mergeInto: annotationRef.optional(), mergeNote: reply.optional() }).strict().superRefine((value, ctx) => {
+  inputSchema: z.object({ documentRef: ref('video_edit.document'), annotationRefs: z.array(annotationRef).min(1), mergeInto: annotationRef.optional(), mergeNote: reply.optional() }).strict().superRefine((value, ctx) => {
     if (value.mergeNote && !value.mergeInto) ctx.addIssue({ code: 'custom', path: ['mergeNote'], message: 'mergeNote 只在合并时使用，请同时给 mergeInto。' })
     if (value.mergeInto && value.annotationRefs.some(item => item.id === value.mergeInto!.id)) ctx.addIssue({ code: 'custom', path: ['mergeInto'], message: '保留的那一条不能同时出现在要删除的 annotationRefs 里。' })
   }),

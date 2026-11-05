@@ -63,7 +63,7 @@ function registrations(): ApplicationEntityRegistration[] {
         description: '共享布局预设。读取工作区的 presets 获取预设引用，active_id 用预设引用末段标识。新建预设保存当前布局；内置预设只读。图片宿主第一次打开后登记，布局只影响面板排列。',
         refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityType === PRESET ? [WORKSPACE] : [],
         revisionScopes: [DOMAIN], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType),
-        ...(entityType === PRESET ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${PRESET}.name`], maxItemsPerChange: 16 } } : {}),
+        ...(entityType === PRESET ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${PRESET}.name`] } } : {}),
       },
       properties: fieldDescriptors(fields),
       provider: {

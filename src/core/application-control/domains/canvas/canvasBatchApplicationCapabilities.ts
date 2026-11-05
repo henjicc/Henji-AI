@@ -30,7 +30,7 @@ export const canvasBatchOperationSchema = z.discriminatedUnion('kind', [
   }).strict(),
   z.object({
     kind: z.literal('delete_nodes'),
-    nodeIds: z.array(z.string().min(1)).min(1).max(50),
+    nodeIds: z.array(z.string().min(1)).min(1),
   }).strict(),
   z.object({
     kind: z.literal('connect_nodes'),
@@ -45,7 +45,7 @@ export const canvasBatchOperationSchema = z.discriminatedUnion('kind', [
   }).strict(),
   z.object({
     kind: z.literal('group_nodes'),
-    nodeIds: z.array(z.string().min(1)).min(2).max(50),
+    nodeIds: z.array(z.string().min(1)).min(2),
   }).strict(),
   z.object({
     kind: z.literal('select_node'),
@@ -156,7 +156,7 @@ const planCanvasBatch = defineApplicationCapability({
   producesRefs: ['canvas.batch_plan'],
   inputSchema: z.object({
     documentId: canvasDocumentIdSchema,
-    operations: z.array(canvasBatchOperationSchema).min(1).max(20),
+    operations: z.array(canvasBatchOperationSchema).min(1),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     planRef: z.string(),

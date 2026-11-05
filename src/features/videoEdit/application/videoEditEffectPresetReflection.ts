@@ -31,7 +31,7 @@ export function createVideoEditEffectPresetRegistration(): ApplicationEntityRegi
   }
   const properties = fieldDescriptors(fields)
   return {
-    entity: { id: entityType, domain: 'video_edit', version: 1, title: '全局风格件', description: reason + '收藏与取消收藏写 video_edit.effect_library:singleton 的 favorite_ids；删除走通用 remove_items，进入最近删除，可从 settings.deleted_item 通用移出恢复。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['video_edit.style_library'], revisionScopes: [VIDEO_EDIT_EFFECT_LIBRARY_SCOPE], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', entityType), collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.definition`], maxItemsPerChange: 32 } },
+    entity: { id: entityType, domain: 'video_edit', version: 1, title: '全局风格件', description: reason + '收藏与取消收藏写 video_edit.effect_library:singleton 的 favorite_ids；删除走通用 remove_items，进入最近删除，可从 settings.deleted_item 通用移出恢复。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['video_edit.style_library'], revisionScopes: [VIDEO_EDIT_EFFECT_LIBRARY_SCOPE], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', entityType), collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.definition`] } },
     properties,
     schemaDocuments: [{ ref: videoEditSchemaRef('property', `${entityType}.definition.value`), value: z.toJSONSchema(videoEditStylePieceDefinitionInputSchema) as JsonValue }, { ref: videoEditSchemaRef('property', `${entityType}.creation_items.value`), value: z.toJSONSchema(videoEditPresetCreationItemsSchema) as JsonValue }],
     provider: {

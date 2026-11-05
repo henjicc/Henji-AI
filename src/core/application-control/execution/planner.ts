@@ -166,7 +166,7 @@ export class ApplicationPlanBuilder {
     context: ApplicationExecutionContext
   ): Promise<ApplicationChangePlan> {
     if (!request.summary.trim()) throw new Error('PLAN_SUMMARY_REQUIRED')
-    if (request.steps.length === 0 || request.steps.length > 256) throw new Error('INVALID_PLAN_STEPS')
+    if (request.steps.length === 0) throw new Error('INVALID_PLAN_STEPS')
     const normalizedSteps: ApplicationPlannedStep[] = []
     const requestedVerificationConditions: ApplicationVerificationCondition[] = [
       ...(request.verificationConditions ?? []),

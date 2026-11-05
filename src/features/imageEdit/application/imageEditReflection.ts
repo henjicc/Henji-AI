@@ -193,7 +193,6 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
             'image_edit.layer.definition_id',
             'image_edit.layer.params',
           ],
-          maxItemsPerChange: 32,
         },
       } : {}),
       ...(entityType === IMAGE_EDIT_ENTITY_TYPES.group ? {
@@ -201,7 +200,6 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
           creatable: true,
           removable: true,
           requiredPropertyIds: ['image_edit.group.name'],
-          maxItemsPerChange: 32,
         },
       } : {}),
     },

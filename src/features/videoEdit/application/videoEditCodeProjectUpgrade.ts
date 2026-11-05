@@ -103,7 +103,7 @@ export async function upgradeVideoEditCodeMaterials(input: Input, signal?: Abort
     })
     await saveVideoEdit(id)
     logger.info('代码素材升级完成', { event: 'video_edit.code.upgrade.completed', context: { documentId: id, count: upgrades.length } })
-    return { commit: commit ?? '', upgrades, instances, resultRefs: [...new Map(resultRefs.map(ref => [`${ref.kind}:${ref.id}`, ref])).values()], verified: await verifyVideoEditSaved(id), message: upgrades.length ? `已升级 ${upgrades.length} 个代码素材。${[...notices].join('')}` : '源码、作者接口与内置库未变化，无需升级。' }
+    return { commit: commit ?? '', upgrades, instances, resultRefs: [...new Map(resultRefs.map(ref => [`${ref.kind}:${ref.id}`, ref])).values()], verified: await verifyVideoEditSaved(id), message: upgrades.length ? `已升级 ${upgrades.length} 个代码素材。${[...notices].join('')}` : selected.length ? '全部素材已是最新（源码、作者接口与内置库都未变化），无需升级。' : '没有可升级的代码素材。' }
   } catch (error) {
     logger.error('代码素材升级失败', { event: 'video_edit.code.upgrade.failed', error, context: { documentId: input.documentRef.id } })
     throw error

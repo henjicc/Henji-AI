@@ -97,7 +97,7 @@ export function createFixture(): Fixture {
       queryCapabilityIds: ['get_sample_item'],
       schemaRef: schemaRef('entity', 'sample.item'),
       collectionWrite: {
-        creatable: true, removable: true, requiredPropertyIds: ['sample.value'], maxItemsPerChange: 8,
+        creatable: true, removable: true, requiredPropertyIds: ['sample.value'],
       },
     },
     properties: [{

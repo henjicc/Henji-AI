@@ -119,7 +119,7 @@ export function createSoundLibraryRegistrations(): ApplicationEntityRegistration
       },
     },
     {
-      entity: descriptor(SOUND_LIBRARY_FOLDER_ENTITY, '音效文件夹', '一个登记的音效文件夹及其整理状态。删除只取消登记，不删除任何文件；新登记用 add_sound_library_folder。', [SOUND_LIBRARY_ENTITY], { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 8 } }),
+      entity: descriptor(SOUND_LIBRARY_FOLDER_ENTITY, '音效文件夹', '一个登记的音效文件夹及其整理状态。删除只取消登记，不删除任何文件；新登记用 add_sound_library_folder。', [SOUND_LIBRARY_ENTITY], { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] } }),
       properties: fieldDescriptors(folderFields),
       provider: {
         entityType: SOUND_LIBRARY_FOLDER_ENTITY,

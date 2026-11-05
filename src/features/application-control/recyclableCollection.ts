@@ -116,7 +116,7 @@ export function createRecyclableRecordSource(source: RecyclableRecordSource): { 
   const registration: ApplicationEntityRegistration = {
     entity: { id: source.entityType, domain: source.domain, version: 1, title: source.title, description: `${source.title}的本机记录；删除进入统一最近删除，可恢复。`, refKind: source.entityType,
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['settings.registry'], revisionScopes: [scope], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', source.entityType),
-      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 } },
+      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] } },
     properties: [
       { suffix: 'name', title: '名称', value: { kind: 'string' as const } },
     ].map(({ suffix, title, value }) => ({ id: `${source.entityType}.${suffix}`, entityType: source.entityType, version: 1, title, description: title, value, nullable: false,

@@ -68,11 +68,11 @@ const verifyScene = defineApplicationCapability({
   requiredScopes: ['camera_stage'], acceptsRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
   producesRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
   inputSchema: z.object({
-    documentId: cameraStageDocumentIdSchema, expectedObjectIds: z.array(z.string().min(1)).max(128).default([]),
+    documentId: cameraStageDocumentIdSchema, expectedObjectIds: z.array(z.string().min(1)).default([]),
     expectedObjectRefs: z.array(applicationRefSchema.refine(
       (ref) => ref.kind === 'camera_stage.object',
       { message: 'expectedObjectRefs 只接受 camera_stage.object 稳定引用' },
-    )).max(128).default([]),
+    )).default([]),
     expectedCameraId: z.string().min(1).optional(), expectedMoveKind: z.enum(['orbit', 'dollyIn', 'dollyOut', 'truck', 'crane']).optional(),
     expectedStateSamples: z.array(z.object({
       objectId: z.string().min(1).optional(),
@@ -90,7 +90,7 @@ const verifyScene = defineApplicationCapability({
     }).strict().refine(
       (sample) => Number(Boolean(sample.objectId)) + Number(Boolean(sample.objectRef)) === 1,
       { message: '每个采样必须且只能提供 objectId 或 objectRef' },
-    )).max(128).default([]),
+    )).default([]),
     expectedPlayback: z.object({
       playing: z.boolean().optional(),
       loop: z.boolean().optional(),

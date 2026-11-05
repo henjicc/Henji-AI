@@ -48,7 +48,7 @@ export const getApplicationSettingsCapability = defineApplicationCapability({
   acceptsRefs: ['settings.registry'], producesRefs: ['settings.registry'],
   successEvidence: ['返回设置当前值或脱敏状态。'],
   failureRecovery: ['设置 ID 不存在时重新搜索，不猜测 ID。'],
-  inputSchema: z.object({ ids: z.array(z.string().min(1)).min(1).max(30) }).strict(),
+  inputSchema: z.object({ ids: z.array(z.string().min(1)).min(1) }).strict(),
   outputSchema: z.object({
     revision: z.number().int().nonnegative(),
     settings: z.array(z.record(z.string(), z.unknown())),

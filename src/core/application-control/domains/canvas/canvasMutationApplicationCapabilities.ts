@@ -540,7 +540,7 @@ const deleteCanvasNodes = defineApplicationCapability({
   producesRefs: ['canvas.undo'],
   inputSchema: z.object({
     documentId: canvasDocumentIdSchema,
-    nodeIds: z.array(z.string().min(1)).min(1).max(50),
+    nodeIds: z.array(z.string().min(1)).min(1),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     documentId: z.string(),
@@ -624,7 +624,7 @@ const groupCanvasNodes = defineApplicationCapability({
   producesRefs: ['canvas.node'],
   inputSchema: z.object({
     documentId: canvasDocumentIdSchema,
-    nodeIds: z.array(z.string().min(1)).min(2).max(50),
+    nodeIds: z.array(z.string().min(1)).min(2),
     groupKind: z.enum(['spatial', 'asset']).optional().default('spatial'),
   }).strict(),
   outputSchema: capabilityOutputSchema({

@@ -111,7 +111,7 @@ export function createDocumentsReflectionRegistrations(operations: () => Documen
       description: ENTITY_META[entityType].description, refKind: entityType,
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [],
       revisionScopes: ['documents'], queryCapabilityIds: ['read_application_entity'], schemaRef: documentsSchemaRef('entity', entityType),
-      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 },
+      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] },
     },
     properties: entityType === DOCUMENTS_ENTITY_TYPES.document ? fieldDescriptors(DOCUMENT_FIELDS) : fieldDescriptors(PROJECT_FIELDS),
     provider: new DocumentsReflectionProvider(entityType, operations),

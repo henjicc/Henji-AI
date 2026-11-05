@@ -503,14 +503,13 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         schemaRef: schemaRef('entity', entityType),
         ...(entityType === ENTITY_TYPES.project ? { writeExclusion: { reason: PROJECT_WRITE_EXCLUSION } } : {}),
         ...(entityType === ENTITY_TYPES.set ? {
-          collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 },
+          collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] },
         } : {}),
         ...(entityType === ENTITY_TYPES.cameraCut ? {
           collectionWrite: {
             creatable: true,
             removable: true,
             requiredPropertyIds: [`${ENTITY_TYPES.cameraCut}.time`, `${ENTITY_TYPES.cameraCut}.camera_ref`],
-            maxItemsPerChange: 64,
           },
         } : {}),
         ...(entityType === ENTITY_TYPES.stateKeyframe ? {
@@ -518,7 +517,6 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
             creatable: true,
             removable: true,
             requiredPropertyIds: [`${ENTITY_TYPES.stateKeyframe}.time`],
-            maxItemsPerChange: 64,
           },
         } : {}),
       },

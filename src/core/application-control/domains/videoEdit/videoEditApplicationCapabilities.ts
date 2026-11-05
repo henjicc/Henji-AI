@@ -41,7 +41,7 @@ import { importVideoEditProjectFilesCapability } from './videoEditProjectFileImp
 
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 const clipRef = applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict()
-const input = z.object({ documentRef, clipRef: applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict().optional(), frame: z.number().int().nonnegative().optional(), paths: z.array(z.string().min(1).max(32767)).min(1).max(64).optional().describe('用户授权的任意本机绝对文件或目录路径；给出后不弹窗，链接原文件，需要复制进项目时用 collect_document_media 收集媒体。'), assetRef: applicationRefSchema.extend({ kind: z.literal('asset') }).strict().optional() }).strict()
+const input = z.object({ documentRef, clipRef: applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict().optional(), frame: z.number().int().nonnegative().optional(), paths: z.array(z.string().min(1).max(32767)).min(1).optional().describe('用户授权的任意本机绝对文件或目录路径；给出后不弹窗，链接原文件，需要复制进项目时用 collect_document_media 收集媒体。'), assetRef: applicationRefSchema.extend({ kind: z.literal('asset') }).strict().optional() }).strict()
 function operationInput(id: string): z.ZodType<z.infer<typeof input>> {
   if (id === 'split_video_edit' || id === 'add_video_edit_frame_hold') return input.pick({ documentRef: true, clipRef: true, frame: true }).required({ clipRef: true, frame: true })
   if (id === 'import_video_edit_folder') return input.pick({ documentRef: true, paths: true })
@@ -50,7 +50,7 @@ function operationInput(id: string): z.ZodType<z.infer<typeof input>> {
 }
 const itemRef = applicationRefSchema.extend({ kind: z.literal('video_edit.item') }).strict()
 // itemRefs：引用素材库素材时新建或复用的素材项，助手据此接着设素材箱、放进时间线，不必再列一遍素材找
-const output = z.object({ resultRef: documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: documentRef }), itemRefs: z.array(itemRef).max(64).optional(), truncated: z.boolean().optional().describe('引用或跳过明细超过回执上限时为 true，其余可读取素材列表。'), skippedEntries: z.array(z.object({ name: z.string(), reason: z.string(), message: z.string() }).strict()).max(200).optional() }).strict()
+const output = z.object({ resultRef: documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: documentRef }), itemRefs: z.array(itemRef).optional(), truncated: z.boolean().optional().describe('引用或跳过明细超过回执上限时为 true，其余可读取素材列表。'), skippedEntries: z.array(z.object({ name: z.string(), reason: z.string(), message: z.string() }).strict()).max(200).optional() }).strict()
 const libraryRef = applicationRefSchema.extend({ kind: z.literal('asset.library') }).strict()
 const assetRef = applicationRefSchema.extend({ kind: z.literal('asset') }).strict()
 const collectInput = z.object({ documentRef, libraryRef: libraryRef.optional(), kind: z.enum(['export', 'frame']), taskId: z.string().min(1).optional(), frame: z.number().int().nonnegative().optional() }).strict().superRefine((value, context) => {

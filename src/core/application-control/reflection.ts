@@ -59,8 +59,6 @@ export const applicationEntityTypeDescriptorSchema = z.object({
     creatable: z.boolean(),
     removable: z.boolean(),
     requiredPropertyIds: z.array(applicationPropertyIdSchema).max(32).default([]),
-    /** 一次事务里最多创建多少个，防止模型一口气写爆场景 */
-    maxItemsPerChange: z.number().int().positive().max(256).default(64),
   }).strict().optional(),
   /**
    * 这个实体类型**有意**不开放写入，以及由谁维护它的状态。

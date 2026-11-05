@@ -13,6 +13,8 @@ export const detectVideoEditPrivacyCapability = defineApplicationCapability({
   acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.effect'],
   resolveOperationTargets: input => [input.documentRef, input.clipRef], resolveOperationWriteTargets: input => [input.documentRef, input.clipRef], resolveConcurrencyKey: input => `video_edit:${input.documentRef.id}`,
   control: capabilityControl('create', ['video_edit.effect'], { cancelable: true, revisionScopes: ['video_edit'] }),
+  // 画面里没有敏感文字时不产生写入，是正常完成。
+  verificationContract: { kind: 'effect_receipt', requireEffects: false, requireVerifiedEffects: true },
   resolveObservedEffects: (_input, result) => result.effectRefs.length ? [{ effect: 'create', entityTypes: ['video_edit.effect'], propertyIds: [], targetRefs: result.effectRefs, count: result.effectRefs.length, verified: result.verified, evidence: result.verified ? ['已保存并读回未启用的打码效果。'] : [] }] : [],
   summarize: result => result.message,
 })

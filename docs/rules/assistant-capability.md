@@ -135,6 +135,8 @@ MCP 工具集合由正式前端能力声明自动派生，不再维护独立 ID 
 - 播放头、播放开关等提交后会继续变化的会话控制属性必须声明 `verificationStrategy: 'execution'`，用正式执行器证据验收；持久状态仍默认用最终世界状态验收。
 - 输入中 `entityType` 与 `target.kind` 表达同一事实时，由适配器统一规范化；领域 provider 可将全局唯一的短引用补全成正式稳定引用，但存在歧义时必须拒绝。不得让模型为可无歧义消解的引用格式多空转一轮。
 - 一次正式写入产生领域级联副作用（例如对象动画属性自动创建状态关键帧）时，执行器必须返回强类型 Effect Receipt；`evidence` 只用于验证和人类说明，禁止承担副作用记账。级联 receipt 必须引用静态 `declarationId`，未声明的级联使事务失败并补偿。
+- 事务回执的唯一出口是 `boundedTransactionResult`（`execution/receiptBounds.ts`）：事务规模不设上限，只有回执受协议长度限制；业务已生效后超长一律收口并报告 `receiptTruncation`，不得抛错或报成失败。
+- 允许“没有可做的”合法结束的能力声明 `verificationContract.requireEffects: false`，由领域回读给出 `verified` 与 `message`；否则无操作会被判成未验证。
 - 公共执行入口在执行器完成后立即运行 `resolveObservedEffects` 并把校验后的 Effect 固化进 observation；操作账本只记录这份结构化事实，不从输入、引用字段或 evidence 文本猜测。
 - 动态 availability 的阻断必须区分 structural 与 state；只有 state 阻断且前序 direct/cascade Effect 可能满足条件时，才允许延迟到该步骤执行前复核。
 - **拒绝必须能被自我修正。** 任何拒绝路径都要带上运行时已经知道的事实：实体类型写错就列出该域注册了哪些，属性写错就列出这个实体有哪些，参数被静默丢弃就说清丢了哪些键、可用的是哪些。只给一个错误码等于让模型继续猜，而它猜不中就是死循环。

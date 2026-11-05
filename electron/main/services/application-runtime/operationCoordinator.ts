@@ -12,7 +12,7 @@ import { createMainLogger } from '../logging'
 import { applicationNotReadyFailure, type ApplicationHostUnavailable, type ApplicationHostUnavailableReason } from './applicationHostBridge'
 
 const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
-const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).max(32).default([]) })
+const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).default([]) })
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
 /** 拒绝信息只点名前 10 个目标并给总数：一次删几百条时整段引用会把错误撑到读不完。 */
@@ -231,7 +231,7 @@ export class ApplicationOperationCoordinator {
       refs.push(...definition.resolveOperationTargets(parsed))
       writeRefs = definition.resolveOperationWriteTargets?.(parsed, applicationInvocationId(callerId, operationId))
     } else {
-    const changes = z.array(z.object({ kind: z.string(), entityType: z.string() }).passthrough()).min(1).max(32).parse(input.changes)
+    const changes = z.array(z.object({ kind: z.string(), entityType: z.string() }).passthrough()).min(1).parse(input.changes)
     const writable = this.writableEntityTypes()
     for (const change of changes) {
       if (!writable.has(change.entityType)) throw new Error(`PERMISSION_DENIED:实体 ${change.entityType} 不属于公开业务写入范围；用 describe_application_contract 查看可写实体，用 describe_application_entities 查看只读原因。`)

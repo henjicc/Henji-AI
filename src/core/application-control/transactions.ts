@@ -22,11 +22,26 @@ export type ApplicationOperationImpact = z.infer<typeof applicationOperationImpa
 export const applicationEffectKindSchema = z.enum(['create', 'update', 'delete', 'execute'])
 export type ApplicationEffectKind = z.infer<typeof applicationEffectKindSchema>
 
+/**
+ * 只限回执的长度，不限一次能改多少：回执每次都会完整进入调用方（含模型）的上下文，
+ * 所以是协议层字段。事务规模本身不设上限，超出部分由 boundedTransactionResult 收口并报告。
+ */
+export const APPLICATION_RECEIPT_LIMITS = {
+  message: 2_000,
+  text: 1_000,
+  resultRefs: 256,
+  effects: 512,
+  effectRefs: 256,
+  effectPropertyIds: 256,
+  evidence: 256,
+  unmetConditions: 64,
+} as const
+
 export const applicationEffectReceiptSchema = z.object({
   effect: applicationEffectKindSchema,
   entityType: applicationEntityTypeIdSchema,
-  refs: z.array(applicationRefSchema).max(256),
-  propertyIds: z.array(applicationPropertyIdSchema).max(256),
+  refs: z.array(applicationRefSchema).max(APPLICATION_RECEIPT_LIMITS.effectRefs),
+  propertyIds: z.array(applicationPropertyIdSchema).max(APPLICATION_RECEIPT_LIMITS.effectPropertyIds),
   origin: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('direct') }).strict(),
     z.object({
@@ -81,7 +96,7 @@ export const applicationMutationPlanSchema = z.object({
   target: applicationRefSchema,
   entityType: applicationEntityTypeIdSchema,
   expectedRevisions: applicationRevisionSetSchema,
-  mutations: z.array(applicationPropertyMutationSchema).min(1).max(256),
+  mutations: z.array(applicationPropertyMutationSchema).min(1),
 }).strict()
 
 export const applicationSemanticOperationPlanSchema = z.object({
@@ -114,11 +129,11 @@ export const applicationCollectionPlanSchema = z.object({
       kind: z.literal('create'),
       items: z.array(z.object({
         properties: z.record(applicationPropertyIdSchema, jsonValueSchema),
-      }).strict()).min(1).max(256),
+      }).strict()).min(1),
     }).strict(),
     z.object({
       kind: z.literal('remove'),
-      targets: z.array(applicationRefSchema).min(1).max(256),
+      targets: z.array(applicationRefSchema).min(1),
     }).strict(),
   ]),
 }).strict()
@@ -170,8 +185,8 @@ export const applicationChangePlanSchema = z.object({
   summary: z.string().min(1).max(2_000),
   atomic: z.boolean(),
   transactionMode: applicationTransactionModeSchema,
-  steps: z.array(applicationPlannedStepSchema).min(1).max(256),
-  verificationConditions: z.array(applicationVerificationConditionSchema).max(256),
+  steps: z.array(applicationPlannedStepSchema).min(1),
+  verificationConditions: z.array(applicationVerificationConditionSchema),
   createdAt: z.string().datetime(),
   expiresAt: z.string().datetime(),
 }).strict().refine(
@@ -190,7 +205,7 @@ export type ApplicationCommitRequest = z.infer<typeof applicationCommitRequestSc
 export const applicationEvidenceSchema = z.object({
   kind: z.enum(['entity_state', 'property_value', 'operation_result', 'task_state', 'observation']),
   target: applicationRefSchema.optional(),
-  fact: z.string().min(1).max(1_000),
+  fact: z.string().min(1).max(APPLICATION_RECEIPT_LIMITS.text),
   data: jsonValueSchema.optional(),
   capturedAt: z.string().datetime(),
 }).strict()
@@ -198,22 +213,30 @@ export type ApplicationEvidence = z.infer<typeof applicationEvidenceSchema>
 
 export const applicationVerificationResultSchema = z.object({
   verified: z.boolean(),
-  evidence: z.array(applicationEvidenceSchema).max(256),
-  unmetConditions: z.array(z.string().min(1).max(1_000)).max(64),
+  evidence: z.array(applicationEvidenceSchema).max(APPLICATION_RECEIPT_LIMITS.evidence),
+  unmetConditions: z.array(z.string().min(1).max(APPLICATION_RECEIPT_LIMITS.text)).max(APPLICATION_RECEIPT_LIMITS.unmetConditions),
   checkedAt: z.string().datetime(),
 }).strict()
 export type ApplicationVerificationResult = z.infer<typeof applicationVerificationResultSchema>
+
+/** 回执被收口时告诉调用方少了什么，免得把列出的部分当成全部。 */
+export const applicationReceiptTruncationSchema = z.object({
+  omitted: z.record(z.string(), z.number().int().positive()),
+  note: z.string().min(1).max(500),
+}).strict()
+export type ApplicationReceiptTruncation = z.infer<typeof applicationReceiptTruncationSchema>
 
 export const applicationTransactionResultSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('completed'),
     transactionRef: applicationOpaqueRefSchema,
     resultingRevisions: applicationRevisionSetSchema,
-    resultRefs: z.array(applicationRefSchema).max(256),
-    effects: z.array(applicationEffectReceiptSchema).max(512),
-    evidence: z.array(applicationEvidenceSchema).min(1).max(256),
+    resultRefs: z.array(applicationRefSchema).max(APPLICATION_RECEIPT_LIMITS.resultRefs),
+    effects: z.array(applicationEffectReceiptSchema).max(APPLICATION_RECEIPT_LIMITS.effects),
+    evidence: z.array(applicationEvidenceSchema).min(1).max(APPLICATION_RECEIPT_LIMITS.evidence),
     verification: applicationVerificationResultSchema,
     undoRef: applicationOpaqueRefSchema.optional(),
+    receiptTruncation: applicationReceiptTruncationSchema.optional(),
     completedAt: z.string().datetime(),
   }).strict(),
   z.object({
@@ -233,7 +256,7 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
     status: z.literal('failed'),
     transactionRef: applicationOpaqueRefSchema.optional(),
     code: z.enum(['INVALID_PLAN', 'CONFLICT', 'NOT_FOUND', 'NOT_AVAILABLE', 'PERMISSION_DENIED', 'CANCELLED', 'EXECUTION_FAILED', 'VERIFICATION_FAILED']),
-    message: z.string().min(1).max(2_000),
+    message: z.string().min(1).max(APPLICATION_RECEIPT_LIMITS.message),
     recoverable: z.boolean(),
     persistence: z.object({
       memoryState: z.enum(['modified', 'preserved']),
@@ -247,16 +270,18 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
       }).strict(),
     }).strict().optional(),
     currentRevisions: applicationRevisionSetSchema.optional(),
-    resultRefs: z.array(applicationRefSchema).max(256).optional(),
-    effects: z.array(applicationEffectReceiptSchema).max(512).optional(),
+    resultRefs: z.array(applicationRefSchema).max(APPLICATION_RECEIPT_LIMITS.resultRefs).optional(),
+    effects: z.array(applicationEffectReceiptSchema).max(APPLICATION_RECEIPT_LIMITS.effects).optional(),
     undoRef: applicationOpaqueRefSchema.optional(),
+    // 步骤下标与恢复条件决定“哪些不能重放、恢复后核对什么”，少一条就会判错，所以不截断。
     partial: z.object({
-      completedStepIndexes: z.array(z.number().int().nonnegative()).max(256),
-      compensatedStepIndexes: z.array(z.number().int().nonnegative()).max(256),
-      uncompensatedStepIndexes: z.array(z.number().int().nonnegative()).max(256),
+      completedStepIndexes: z.array(z.number().int().nonnegative()),
+      compensatedStepIndexes: z.array(z.number().int().nonnegative()),
+      uncompensatedStepIndexes: z.array(z.number().int().nonnegative()),
     }).strict().optional(),
     verification: applicationVerificationResultSchema.optional(),
-    recoveryVerification: z.object({ conditions: z.array(applicationVerificationConditionSchema).max(256), evidence: z.array(applicationEvidenceSchema).max(256) }).optional(),
+    recoveryVerification: z.object({ conditions: z.array(applicationVerificationConditionSchema), evidence: z.array(applicationEvidenceSchema).max(APPLICATION_RECEIPT_LIMITS.evidence) }).optional(),
+    receiptTruncation: applicationReceiptTruncationSchema.optional(),
   }).strict(),
 ])
 export type ApplicationTransactionResult = z.infer<typeof applicationTransactionResultSchema>

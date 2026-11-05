@@ -128,7 +128,7 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
           }
           context.signal.throwIfAborted(); record.host.assertCurrent()
           if (JSON.stringify(record.host.read().drafts.find(d => d.id === record.draftId)) !== baseline) throw new Error('核对期间原稿已有修改，请重新读取。')
-          return { resultRef: input.draftRef, candidateRefs: draft.candidateRefs.map(c => intentRef(record.documentRef, 'intent_candidate', record.draftId, c.resourceId)), status, questions, revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) }
+          return { resultRef: input.draftRef, candidateRefs: draft.candidateRefs.map(c => intentRef(record.documentRef, 'intent_candidate', record.draftId, c.resourceId)), status, questions, ...(status === 'confirmation_required' ? { verified: true, message: questions.join('') || '需要先确认后再整理。' } : {}), revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) }
         }
         const review = await applicationWritePreflight(context, async () => {
         if ('semanticPlan' in input) {

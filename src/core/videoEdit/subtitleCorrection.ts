@@ -7,7 +7,7 @@ import { normalizeTranscriptSearch } from '../media/transcriptSearch'
 import { joinAudioEditText } from '../audioEdit/captions'
 
 export const subtitleCorrectionCueSchema = z.object({ startWord: z.number().int().nonnegative().safe(), endWord: z.number().int().nonnegative().safe(), text: z.string().trim().min(1).max(2000) }).strict()
-export const subtitleCorrectionCuesSchema = z.array(subtitleCorrectionCueSchema).min(1).max(128)
+export const subtitleCorrectionCuesSchema = z.array(subtitleCorrectionCueSchema).min(1)
 export const subtitleCorrectionBudgetsSchema = z.object({ inputTokens: z.number().int().min(2048).max(64000).default(12000), outputTokens: z.number().int().min(1024).max(64000).default(6000), contextTokens: z.number().int().min(0).max(2000).default(500) }).strict()
 export const subtitleCorrectionTermSchema = z.object({ term: z.string().trim().min(1).max(100), variants: z.array(z.string().trim().min(1).max(100)).max(8).default([]) }).strict()
 export type SubtitleCorrectionBudgets = z.infer<typeof subtitleCorrectionBudgetsSchema>
@@ -93,7 +93,6 @@ export function buildSubtitleCorrectionBatches(groups: readonly SubtitleCorrecti
   const batches: SubtitleCorrectionBatch[] = []
   for (let start = 0; start < groups.length;) {
     let best: SubtitleCorrectionBatch | undefined
-    // Bounded at 64 original captions and 128 returned cues, independently of transcript duration.
     for (let end = start + 1; end <= Math.min(groups.length, start + 64); end++) {
       const selected = groups.slice(start, end); const value = packet(selected, true)
       const estimatedInputTokens = estimateSubtitleCorrectionTokens(JSON.stringify(value)) + 512; const estimatedOutputTokens = outputCost(selected)

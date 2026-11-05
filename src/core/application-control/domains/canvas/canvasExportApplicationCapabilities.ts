@@ -38,7 +38,7 @@ const downloadCanvasMedia = defineApplicationCapability({
   failureRecovery: ['未配置目标目录时提示用户先配置；部分文件失败时返回失败节点，不猜测或改写其它目录。'],
   inputSchema: z.object({
     documentId: canvasDocumentIdSchema,
-    nodeIds: z.array(z.string().min(1)).min(1).max(50),
+    nodeIds: z.array(z.string().min(1)).min(1),
     destination: canvasDownloadDestinationSchema,
   }).strict(),
   outputSchema: capabilityOutputSchema({

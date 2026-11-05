@@ -38,6 +38,8 @@ export const upgradeVideoEditCodeMaterialsCapability = defineApplicationCapabili
   concurrencyKey: 'video_edit', resolveConcurrencyKey: input => `video_edit:${input.documentRef.id}`,
   resolveOperationTargets: input => [input.documentRef, ...(input.materialRefs ?? [])], resolveOperationWriteTargets: input => [input.documentRef],
   control: capabilityControl('update', ['video_edit.code_material', 'video_edit.clip', 'video_edit.item', 'video_edit.effect'], { revisionScopes: ['video_edit'], alsoImpacts: [{ effect: 'create', entityTypes: ['video_edit.code_version'] }] }),
+  // 全部素材已是最新时不产生写入，是正常完成；是否成立由领域回读保存结果的 verified 决定。
+  verificationContract: { kind: 'effect_receipt', requireEffects: false, requireVerifiedEffects: true },
   resolveObservedEffects: (_input, output) => ['video_edit.code_version', 'video_edit.code_material', 'video_edit.clip', 'video_edit.item', 'video_edit.effect'].flatMap(type => {
     const refs = output.resultRefs.filter(ref => ref.kind === type)
     return refs.length ? [{ effect: type === 'video_edit.code_version' ? 'create' as const : 'update' as const, entityTypes: [type], propertyIds: [], targetRefs: refs, count: refs.length, verified: output.verified, evidence: ['已回读升级后的版本与片段引用。'] }] : []

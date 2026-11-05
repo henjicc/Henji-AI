@@ -37,7 +37,7 @@ export async function executeVideoEditPrivacy(raw: unknown, context: CapabilityE
     try { await saveVideoEdit(baseline.id) } catch (error) { throw new ApplicationPersistenceFailure('候选打码已生成但未保存，请重试保存，不要重复识别。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: input.documentRef, replayMutation: false } }, error) }
     const verified = await verifyVideoEditContentSaved(owner, expected, nextVersion)
     logger.info('敏感文字候选已生成', { event: 'video_edit.privacy.completed', context: { documentId: baseline.id, candidates: effects.length } })
-    return { resultRef: input.clipRef, effectRefs: effects.map(effect => ({ kind: 'video_edit.effect', id: `${baseline.id}:${effect.id}` })), verified, message: `已生成 ${effects.length} 个未启用的打码效果；请检查画面并确认后启用。` }
+    return { resultRef: input.clipRef, effectRefs: effects.map(effect => ({ kind: 'video_edit.effect', id: `${baseline.id}:${effect.id}` })), verified, message: effects.length ? `已生成 ${effects.length} 个未启用的打码效果；请检查画面并确认后启用。` : '没有发现敏感文字，未添加打码效果。这是每秒约十帧的抽样结果，快速滚动、一闪而过和很小的文字仍要人工复核。' }
   } catch (error) { logger.error('寻找敏感文字失败', error, { event: context.signal.aborted ? 'video_edit.privacy.cancelled' : 'video_edit.privacy.failed', context: { documentId: baseline.id } }); throw error }
   finally { context.signal.removeEventListener('abort', cancel); release() }
 }

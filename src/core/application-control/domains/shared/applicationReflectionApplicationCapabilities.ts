@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { applicationVerificationResultSchema } from '../../transactions'
+import { applicationReceiptTruncationSchema, applicationVerificationResultSchema } from '../../transactions'
 
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
@@ -19,6 +19,8 @@ import { capabilityOutputSchema, defineApplicationCapability } from './defineApp
  * 表达不了，也不该表达。
  */
 
+// 批量不设条数上限，耗时随规模增长；等待到点业务仍在执行，调用方却会收到超时，所以按最大的批量留够时间。
+const LARGE_BATCH_TIMEOUT_MS = 600_000
 const refSchema = z.object({
   kind: z.string().min(1),
   id: z.string().min(1),
@@ -35,14 +37,14 @@ const describeEntities = defineApplicationCapability({
   idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: false,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
   inputSchema: z.object({
-    domains: z.array(z.string().min(1)).max(16).default([]),
-    entityTypes: z.array(z.string().min(1)).max(32).default([]),
+    domains: z.array(z.string().min(1)).default([]),
+    entityTypes: z.array(z.string().min(1)).default([]),
     entityType: z.string().min(1).optional(),
-    propertyIds: z.array(z.string().min(1)).max(64).default([]),
+    propertyIds: z.array(z.string().min(1)).default([]),
     detail: z.enum(['compact', 'full']).default('compact'),
     cursor: z.string().regex(/^\d+$/).optional(),
     limit: z.number().int().min(1).max(100).default(40),
-    refs: z.array(refSchema).max(16).default([]),
+    refs: z.array(refSchema).default([]),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     entities: z.array(z.record(z.string(), z.unknown())),
@@ -78,7 +80,7 @@ const listEntities = defineApplicationCapability({
      * 简单说——list 只给 kind/id，模型看不见名称，而脚本语言不允许遍历读取结果去逐个比对，
      * 于是"确认改名成功了""把叫 X 的那个删掉"这类最普通的请求以前根本写不出来。
      */
-    propertyIds: z.array(z.string().min(1)).max(16).default([]),
+    propertyIds: z.array(z.string().min(1)).default([]),
     where: z.record(
       z.string().min(1),
       z.union([z.string(), z.number(), z.boolean(), z.null()])
@@ -119,7 +121,7 @@ const readEntity = defineApplicationCapability({
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
   inputSchema: z.object({
     ref: refSchema,
-    propertyIds: z.array(z.string().min(1)).max(64).optional(),
+    propertyIds: z.array(z.string().min(1)).optional(),
     textPage: z.object({ propertyId: z.string().min(1), offset: z.number().int().nonnegative().default(0), limit: z.number().int().positive().default(4000) }).strict().optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -165,21 +167,21 @@ const changeEntitiesInputSchema = z.object({
       }).strict().refine(
         (mutation) => mutation.operation === 'clear' || mutation.value !== undefined,
         { message: 'set/append/remove 修改必须提供 value' },
-      )).min(1).max(256),
+      )).min(1),
     }).strict(),
     z.object({
       kind: z.literal('create_items'),
       parent: refSchema,
       entityType: z.string().min(1),
-      items: z.array(z.object({ properties: z.record(z.string(), z.unknown()) }).strict()).min(1).max(128),
+      items: z.array(z.object({ properties: z.record(z.string(), z.unknown()) }).strict()).min(1),
     }).strict(),
     z.object({
       kind: z.literal('remove_items'),
       parent: refSchema,
       entityType: z.string().min(1),
-      targets: z.array(refSchema).min(1).max(128),
+      targets: z.array(refSchema).min(1),
     }).strict(),
-  ])).min(1).max(32),
+  ])).min(1),
 }).strict()
 
 const changeEntities = defineApplicationCapability({
@@ -188,7 +190,7 @@ const changeEntities = defineApplicationCapability({
   domain: 'application',
   aliases: ['改属性', '增删属性值', '加关键帧', '做动画', '上下漂浮', '新增成员', '删除成员', 'change entities', 'set property'],
   readOnly: false, dataClasses: ['C1'],
-  idempotent: false, destructive: false, timeoutMs: 30_000, supportsPreview: false, supportsUndo: true,
+  idempotent: false, destructive: false, timeoutMs: LARGE_BATCH_TIMEOUT_MS, supportsPreview: false, supportsUndo: true,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
   successEvidence: ['事务返回受影响引用、写入后的并发基线和结构化证据。'],
   failureRecovery: [
@@ -209,6 +211,7 @@ const changeEntities = defineApplicationCapability({
     resultRefs: z.array(z.record(z.string(), z.unknown())),
     effects: z.array(z.record(z.string(), z.unknown())),
     evidence: z.array(z.record(z.string(), z.unknown())),
+    receiptTruncation: applicationReceiptTruncationSchema.optional(),
   }),
   resolveConcurrencyKey: (input) => `application:change:${input.changes[0]?.entityType ?? 'unknown'}`,
   resolveTargetIds: (input) => Object.fromEntries(input.changes.flatMap((change, changeIndex) => {
@@ -298,7 +301,7 @@ const undoEntities = defineApplicationCapability({
   id: 'undo_application_changes', version: 1, title: '撤销一组应用修改', domain: 'application',
   description: '使用 change_application_entities 返回的 undoRef 撤销整组修改，包括原稿元数据。只接受本连接的未使用回执；仍检查当前版本并确认保存。保存未确认时只恢复保存，不重复撤销。',
   aliases: ['撤销原稿修改', '撤销事务'], readOnly: false, dataClasses: ['C1'],
-  idempotent: false, destructive: false, timeoutMs: 30_000, supportsPreview: false, supportsUndo: false,
+  idempotent: false, destructive: false, timeoutMs: LARGE_BATCH_TIMEOUT_MS, supportsPreview: false, supportsUndo: false,
   requiredScopes: [], acceptsRefs: ['application.transaction'], producesRefs: [],
   inputSchema: z.object({ undoRef: z.string().min(1) }).strict(), outputSchema: changeEntities.outputSchema,
   resolveOperationTargets: input => [{ kind: 'application.transaction', id: input.undoRef }],

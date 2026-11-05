@@ -29,11 +29,13 @@ export const CREATIVE_INTENT_CAPABILITIES = (['video_edit', 'image_edit'] as con
     inputSchema: domain === 'video_edit' ? z.object({ draftRef, ...videoMotionOrganizeOptionsSchema.shape }).strict() : z.object({ draftRef }).strict(),
     outputSchema: capabilityOutputSchema({ resultRef: draftRef, candidateRefs: z.array(applicationRefSchema), status: z.enum(['candidate', 'confirmation_required', 'local_fallback']), questions: z.array(z.string()) }),
     resolveOperationTargets: input => [input.draftRef], resolveOperationWriteTargets: input => [input.draftRef],
+    // 需要先确认时不产生写入，问题交回调用方，是正常完成。
+    verificationContract: { kind: 'effect_receipt', requireEffects: false, requireVerifiedEffects: true },
     resolveObservedEffects: (_input, output) => output.status === 'confirmation_required' ? [] : [
       { effect: 'update', entityTypes: [`${domain}.intent_draft`], propertyIds: [], targetRefs: [output.resultRef], count: 1, verified: true, evidence: ['已保存并回读正式原稿，核对候选引用未变化。'] },
       { effect: 'create', entityTypes: [`${domain}.intent_candidate`], propertyIds: [], targetRefs: output.candidateRefs, count: output.candidateRefs.length, verified: true, evidence: ['已按正式资源目录回读候选并核对文件摘要与字节数。'] },
     ],
-    concurrencyKey: domain, resolveConcurrencyKey: input => `${domain}:${input.draftRef.id}`, summarize: () => domain === 'video_edit' ? '候选已整理，请读回并按用户要求应用；仅在用户要求挑选时等待选择。' : '候选已整理，请读回并按用户要求应用。',
+    concurrencyKey: domain, resolveConcurrencyKey: input => `${domain}:${input.draftRef.id}`, summarize: output => output.status === 'confirmation_required' ? '需要先确认，见 questions；作品未改变。' : domain === 'video_edit' ? '候选已整理，请读回并按用户要求应用；仅在用户要求挑选时等待选择。' : '候选已整理，请读回并按用户要求应用。',
   })
   const semantic = defineApplicationCapability({ ...optimize,
     id: `interpret_${domain}_intent`, title: '从讲解生成语义候选', dataClasses: ['C1', 'C2'],

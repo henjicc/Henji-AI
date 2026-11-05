@@ -54,7 +54,7 @@ export function createRecycleReflectionRegistration(): ApplicationEntityRegistra
   return {
     entity: { id: ENTITY, domain: 'settings', version: 1, title: '最近删除', description: '统一回收区，保留 30 天。remove 操作将条目从最近删除移出，并把原内容恢复到原位置。', refKind: ENTITY,
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['settings.registry'], revisionScopes: [scope], queryCapabilityIds: ['list_application_entities'], schemaRef: schemaRef('entity', ENTITY),
-      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 } },
+      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] } },
     properties, provider: new RecycleProvider(),
   }
 }

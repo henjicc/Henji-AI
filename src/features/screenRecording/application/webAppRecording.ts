@@ -103,7 +103,7 @@ export function webAppRecordingRegistrations(): ApplicationEntityRegistration[] 
   return ([APP, RECORDING, LIBRARY] as const).map(type => ({
     entity: { id: type, domain: 'screen_recording', version: 1, title: type === APP ? '已接入的网页应用' : type === LIBRARY ? '网页录制库' : '网页应用录制', description: reasonOf(type), refKind: type, dataClass: 'C1' as const,
       exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: type === RECORDING ? [LIBRARY] : [], revisionScopes: ['screen_recording'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', type),
-      ...(type === RECORDING ? { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 32 } } : { writeExclusion: { reason: reasonOf(type) } }) },
+      ...(type === RECORDING ? { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] } } : { writeExclusion: { reason: reasonOf(type) } }) },
     properties: properties(type), provider: new WebAppProvider(type), schemaDocuments: type === LIBRARY ? [] : [{ ref: schemaRef('property', `${type}.details.value`), value: z.toJSONSchema(detailsSchema) as JsonValue }],
   })) as ApplicationEntityRegistration[]
 }

@@ -1,6 +1,7 @@
-import { applicationTransactionResultSchema, type ApplicationTransactionResult, type ApplicationChangePlan, type ApplicationPlannedStep } from '../transactions'
+import { type ApplicationTransactionResult, type ApplicationChangePlan, type ApplicationPlannedStep } from '../transactions'
 import type { ApplicationExecutionContext } from './types'
 import { ApplicationExecutionSupport } from './executionSupport'
+import { boundedTransactionResult } from './receiptBounds'
 import { ApplicationConflictError, ApplicationPersistenceBoundaryFailure, ApplicationExecutionProgressFailure, applicationFailureOrigin, isApplicationCancellation, isApplicationConflict,
   type ApplicationPersistenceReceipt } from './persistence'
 
@@ -10,7 +11,7 @@ function failure(
   recoverable: boolean,
   extra: Partial<Omit<Extract<ApplicationTransactionResult, { status: 'failed' }>, 'status' | 'code' | 'message' | 'recoverable'>> = {}
 ): ApplicationTransactionResult {
-  return applicationTransactionResultSchema.parse({ status: 'failed', code, message, recoverable, ...extra })
+  return boundedTransactionResult({ status: 'failed', code, message, recoverable, ...extra })
 }
 
 function mergeRevisions(target: Record<string, number>, source: Record<string, number>): void {
@@ -90,7 +91,7 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
       const origin = applicationFailureOrigin(error)
       const code = isApplicationCancellation(origin) ? 'CANCELLED' : isApplicationConflict(origin) ? 'CONFLICT' : 'EXECUTION_FAILED'
       // 原因只写业务原文；完成、补偿到哪一步由 partial 字段表达，不拼进文案。
-      return failure(code, `${indexes.length === 0 ? '操作失败' : '操作未完整完成'}：${error.message.replace(/[。.]$/, '')}。${state}`.slice(0, 2000),
+      return failure(code, `${indexes.length === 0 ? '操作失败' : '操作未完整完成'}：${error.message.replace(/[。.]$/, '')}。${state}`,
         uncompensated.length === 0 && code !== 'CANCELLED', {
           transactionRef, partial: { completedStepIndexes: indexes, compensatedStepIndexes: compensated,
             uncompensatedStepIndexes: uncompensated },
@@ -103,7 +104,7 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
       error.completed.forEach((result) => mergeRevisions(revisions, result.resultingRevisions))
       error.receipts.forEach((receipt) => mergeRevisions(revisions, receipt.resultingRevisions))
       return failure('EXECUTION_FAILED', error.executionFailure
-        ? `${error.message} 原业务失败：${error.executionFailure.message}`.slice(0, 2000) : error.message, true, {
+        ? `${error.message} 原业务失败：${error.executionFailure.message}` : error.message, true, {
         transactionRef,
         currentRevisions: revisions,
         effects: error.receipts.flatMap((receipt) => receipt.effects),

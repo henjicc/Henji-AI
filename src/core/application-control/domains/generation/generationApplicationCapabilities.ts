@@ -6,7 +6,7 @@ import { canvasNodePlacementSchema } from '../canvas/canvasMutationApplicationCa
 
 export const generationDestinationSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('history') }).strict(),
-  z.object({ mode: z.literal('canvas'), documentId: z.string().min(1), sourceNodeIds: z.array(z.string().min(1)).max(16).default([]), placement: canvasNodePlacementSchema.optional() }).strict(),
+  z.object({ mode: z.literal('canvas'), documentId: z.string().min(1), sourceNodeIds: z.array(z.string().min(1)).default([]), placement: canvasNodePlacementSchema.optional() }).strict(),
 ])
 export type GenerationDestination = z.infer<typeof generationDestinationSchema>
 
@@ -14,7 +14,7 @@ export const canvasGenerationResumeInputSchema = z.object({
   taskId: z.string().min(1),
   documentId: z.string().min(1),
   sourceNodeId: z.string().min(1),
-  resultNodeIds: z.array(z.string().min(1)).min(1).max(64),
+  resultNodeIds: z.array(z.string().min(1)).min(1),
 }).strict()
 export type CanvasGenerationResumeInput = z.infer<typeof canvasGenerationResumeInputSchema>
 

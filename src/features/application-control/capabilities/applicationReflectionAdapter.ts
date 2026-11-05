@@ -293,7 +293,7 @@ function describedEntity(entity: Record<string, unknown>): Record<string, unknow
     // refKind 绝大多数等于 id，只有不同才有信息量。
     ...(entity.refKind !== id ? { refKind: entity.refKind } : {}),
     ...(entity.queryCapabilityIds ? { queryCapabilityIds: entity.queryCapabilityIds } : {}),
-    // 能不能增删、建的时候至少要给哪些属性、一次最多几个——写入前的关键约束。
+    // 能不能增删、建的时候至少要给哪些属性——写入前的关键约束。
     ...(entity.collectionWrite ? { collectionWrite: entity.collectionWrite } : {}),
     // 有意只读时把原因给模型，让它知道该改用哪条路径而不是反复试。
     ...(entity.writeExclusion
@@ -563,6 +563,7 @@ export const applicationReflectionHandlers = {
       resultRefs: result.resultRefs as unknown as Array<Record<string, unknown>>,
       effects: result.effects as unknown as Array<Record<string, unknown>>,
       evidence: result.evidence as unknown as Array<Record<string, unknown>>,
+      ...(result.receiptTruncation ? { receiptTruncation: result.receiptTruncation } : {}),
     }
   },
   async undoEntities(input: { undoRef: string }, context: CapabilityExecutionContext) {
@@ -577,6 +578,7 @@ export const applicationReflectionHandlers = {
     const result = completedTransaction(raw)
     return { status: 'completed' as const, transactionRef: result.transactionRef, verification: result.verification,
       resultingRevisions: result.resultingRevisions, resultRefs: result.resultRefs as unknown as Array<Record<string, unknown>>,
-      effects: result.effects as unknown as Array<Record<string, unknown>>, evidence: result.evidence as unknown as Array<Record<string, unknown>> }
+      effects: result.effects as unknown as Array<Record<string, unknown>>, evidence: result.evidence as unknown as Array<Record<string, unknown>>,
+      ...(result.receiptTruncation ? { receiptTruncation: result.receiptTruncation } : {}) }
   },
 }

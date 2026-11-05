@@ -1,6 +1,5 @@
 import {
   applicationCommitRequestSchema,
-  applicationTransactionResultSchema,
   applicationUndoRequestSchema,
   type ApplicationChangePlan,
   type ApplicationCommitRequest,
@@ -14,6 +13,7 @@ import { ApplicationPreflightFailure } from './transactionFailure'
 import { ApplicationPlanBuilder } from './planner'
 import { ApplicationTransactionVerifier } from './verifier'
 import { ApplicationExecutionFailureSupport } from './failureSupport'
+import { boundedTransactionResult, boundedVerificationResult } from './receiptBounds'
 import { ApplicationExecutionScopeGuard } from './scopeGuard'
 import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, applicationFailureReason, withApplicationPersistenceBoundary, type ApplicationPersistenceReceipt } from './persistence'
 import { acceptedPropertyOperations, type ApplicationMutationOperation } from './writerTable'
@@ -28,10 +28,6 @@ import type {
   ApplicationPlanRequest,
   ApplicationSemanticOperationExecutor,
 } from './types'
-
-// 这时业务已经执行完，证据只是回执；写多了也不能让已生效的修改报成失败。
-const boundedEvidence = <T extends { fact: string }>(evidence: readonly T[]): T[] => evidence.slice(0, 256).map(item => item.fact.length > 1000 ? { ...item, fact: item.fact.slice(0, 1000) } : item)
-
 
 interface UndoRecord {
   steps: ApplicationPlannedStep[]
@@ -51,7 +47,7 @@ function failure(
   recoverable: boolean,
   extra: Partial<Omit<Extract<ApplicationTransactionResult, { status: 'failed' }>, 'status' | 'code' | 'message' | 'recoverable'>> = {}
 ): ApplicationTransactionResult {
-  return applicationTransactionResultSchema.parse({ status: 'failed', code, message, recoverable,
+  return boundedTransactionResult({ status: 'failed', code, message, recoverable,
     partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] }, ...extra })
 }
 
@@ -148,8 +144,8 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
   registerVerifier(verifier: ApplicationCustomVerifier): void {
     this.verifier.register(verifier)
   }
-  verifyRecovery(conditions: import('../transactions').ApplicationVerificationCondition[], evidence: import('../transactions').ApplicationEvidence[], context: ApplicationExecutionContext): Promise<import('../transactions').ApplicationVerificationResult> {
-    return this.verifier.verify(conditions, evidence, context, this.now())
+  async verifyRecovery(conditions: import('../transactions').ApplicationVerificationCondition[], evidence: import('../transactions').ApplicationEvidence[], context: ApplicationExecutionContext): Promise<import('../transactions').ApplicationVerificationResult> {
+    return boundedVerificationResult(await this.verifier.verify(conditions, evidence, context, this.now()))
   }
 
   async plan(
@@ -208,15 +204,15 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       })
       if (execution.deferred) {
         this.store.markCommitted(stored.plan.planRef)
-        const result = execution.deferred.status === 'submitted'
-          ? applicationTransactionResultSchema.parse({
+        const result = boundedTransactionResult(execution.deferred.status === 'submitted'
+          ? {
               status: 'submitted',
               transactionRef,
               taskRef: execution.deferred.taskRef,
               resultingRevisions: execution.deferred.resultingRevisions,
               submittedAt: this.now().toISOString(),
-            })
-          : applicationTransactionResultSchema.parse({
+            }
+          : {
               status: 'waiting_user',
               transactionRef,
               reason: execution.deferred.reason,
@@ -263,13 +259,13 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
         return result
       }
-      const result = applicationTransactionResultSchema.parse({
+      const result = boundedTransactionResult({
         status: 'completed',
         transactionRef,
         resultingRevisions,
         resultRefs: execution.completed.flatMap((item) => item.directRefs),
         effects,
-        evidence: boundedEvidence([...evidence, ...verification.evidence]),
+        evidence: [...evidence, ...verification.evidence],
         verification,
         ...(undoRef ? { undoRef } : {}),
         completedAt: this.now().toISOString(),
@@ -290,9 +286,9 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         const undoRef = this.createUndoRef(stored.plan.steps, error.completed)
         if (undoRef) failureResult.undoRef = undoRef
       }
-      const result = failureResult.status === 'failed' && error instanceof ApplicationPersistenceBoundaryFailure
-        ? { ...failureResult, recoveryVerification: { conditions: stored.plan.verificationConditions, evidence: boundedEvidence(error.completed.flatMap((item) => item.evidence)) } }
-        : failureResult
+      const result = boundedTransactionResult(failureResult.status === 'failed' && error instanceof ApplicationPersistenceBoundaryFailure
+        ? { ...failureResult, recoveryVerification: { conditions: stored.plan.verificationConditions, evidence: error.completed.flatMap((item) => item.evidence) } }
+        : failureResult)
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
     }
@@ -373,13 +369,14 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       const undoRevisions: Record<string, number> = {}
       results.forEach((result) => mergeRevisions(undoRevisions, result.resultingRevisions))
       persistenceReceipts.forEach((receipt) => mergeRevisions(undoRevisions, receipt.resultingRevisions))
-      const result = applicationTransactionResultSchema.parse({
+      const result = boundedTransactionResult({
         status: 'completed',
         transactionRef: this.createOpaqueRef('transaction'),
         resultingRevisions: undoRevisions,
         resultRefs: results.flatMap((item) => item.directRefs),
         effects: [...this.collectEffects([...record.steps].reverse(), results, 'undo'), ...persistenceReceipts.flatMap((receipt) => receipt.effects)],
-        evidence: boundedEvidence(evidence),
+        // 撤销已经生效；执行器不一定回读，此时只如实记下撤销本身完成，不能因此报成失败。
+        evidence: evidence.length > 0 ? evidence : [{ kind: 'operation_result', fact: '撤销已执行。', capturedAt: this.now().toISOString() }],
         verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: this.now().toISOString() },
         completedAt: this.now().toISOString(),
       })
@@ -387,11 +384,12 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       return result
     } catch (error) {
       if (error instanceof ApplicationPersistenceBoundaryFailure) this.forgetUndoRecord(request.undoRef)
-      const result = error instanceof ApplicationPersistenceBoundaryFailure
+      const failureResult = error instanceof ApplicationPersistenceBoundaryFailure
         ? await this.describePersistenceFailure(error, record.steps, context, undefined, 'undo')
         : error instanceof ApplicationExecutionProgressFailure
           ? await this.describeProgressFailure(error, record.steps, context, undefined, persistenceReceipts, 'undo') : this.toFailure(error)
-      if (!executionStarted && result.status === 'failed' && !result.persistence) result.partial = { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] }
+      if (!executionStarted && failureResult.status === 'failed' && !failureResult.persistence) failureResult.partial = { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] }
+      const result = boundedTransactionResult(failureResult)
       this.store.saveIdempotent(request.idempotencyKey, request.undoRef, result)
       return result
     }

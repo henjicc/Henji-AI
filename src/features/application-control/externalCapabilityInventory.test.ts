@@ -94,7 +94,7 @@ describe('新登记的业务实体自动进入外部能力面', () => {
       refKind: 'sample.widget', dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'],
       parentTypes: [], revisionScopes: ['sample'], queryCapabilityIds: ['read_application_entity'],
       schemaRef: schemaRef('entity', 'sample.widget'),
-      collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [], maxItemsPerChange: 8 },
+      collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [] },
     },
     properties: [{
       id: 'sample.widget.name', entityType: 'sample.widget', version: 1, title: '名称', description: '部件名称。',

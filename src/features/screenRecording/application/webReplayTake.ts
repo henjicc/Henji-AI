@@ -89,7 +89,7 @@ export function webReplayTakeRegistration(): ApplicationEntityRegistration {
       id: WEB_REPLAY_TAKE_TYPE, domain: 'screen_recording', version: 1, title: '网页重演版本', description: reason,
       refKind: WEB_REPLAY_TAKE_TYPE, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [WEB_RECORDING_TYPE],
       revisionScopes: [SCOPE], queryCapabilityIds: ['read_application_entity'], schemaRef: webAppSchemaRef('entity', WEB_REPLAY_TAKE_TYPE),
-      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 32 },
+      collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] },
     },
     properties, provider,
   }

@@ -217,13 +217,12 @@ export function createAssetReflectionRegistrations(
       revisionScopes: ['assets'],
       queryCapabilityIds: [entityType === ASSET_ENTITY_TYPES.asset ? 'get_asset' : 'list_asset_libraries'],
       schemaRef: schemaRef('entity', entityType),
-      ...(entityType === ASSET_ENTITY_TYPES.asset ? { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 64 } } : {}),
+      ...(entityType === ASSET_ENTITY_TYPES.asset ? { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] } } : {}),
       ...(entityType === ASSET_ENTITY_TYPES.library ? {
         collectionWrite: {
           creatable: true,
           removable: true,
           requiredPropertyIds: ['asset.library.name'],
-          maxItemsPerChange: 32,
         },
       } : {}),
       ...(entityType === ASSET_ENTITY_TYPES.catalog ? {

@@ -169,7 +169,7 @@ describe('应用反射通用能力适配器', () => {
         title: '样例项', description: '测试集合成员。', refKind: 'sample.item',
         dataClass: 'C1', exposures: ['ui', 'assistant'], parentTypes: ['camera_stage.scene'],
         revisionScopes: ['camera_stage'], queryCapabilityIds: ['observe_camera_stage_scene'],
-        collectionWrite: { creatable: true, removable: true, requiredPropertyIds: ['sample.item.time'], maxItemsPerChange: 128 },
+        collectionWrite: { creatable: true, removable: true, requiredPropertyIds: ['sample.item.time'] },
         schemaRef: { catalogVersion: 'application-capabilities/v2', kind: 'entity', id: 'sample.item', version: 1, digest: `sha256:${'a'.repeat(64)}` },
       }],
       properties: [{
@@ -238,7 +238,7 @@ describe('应用反射通用能力适配器', () => {
       entities: [{
         id: 'sample.item', title: '样例项', description: '测试集合成员。',
         parentTypes: ['camera_stage.scene'],
-        collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [], maxItemsPerChange: 128 },
+        collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [] },
       }],
       properties: [],
     })

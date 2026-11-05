@@ -44,7 +44,7 @@ export const importVideoEditProjectFilesCapability = defineApplicationCapability
   failureRecovery: ['路径无法读取时按点名原因核对位置后重试；目标素材箱不存在时重新读取 video_edit.bin；部分导入后失败或取消时不要重复导入，先读回剪辑或撤销本次导入。'],
   inputSchema: z.object({
     documentRef,
-    paths: z.array(z.string().min(1).max(1024)).min(1).max(64).describe('绝对路径或以项目文件夹为基准的相对路径（/ 或 \\ 分隔），文件或文件夹均可，例如 素材/截图/产品主页.png、素材/截图。'),
+    paths: z.array(z.string().min(1).max(1024)).min(1).describe('绝对路径或以项目文件夹为基准的相对路径（/ 或 \\ 分隔），文件或文件夹均可，例如 素材/截图/产品主页.png、素材/截图。'),
     binRef: ref('video_edit.bin').optional().describe('放进哪个已有素材箱（取自 video_edit.bin 列表，须属于这份剪辑）；省略时放在顶层。'),
   }).strict(),
   outputSchema: output,

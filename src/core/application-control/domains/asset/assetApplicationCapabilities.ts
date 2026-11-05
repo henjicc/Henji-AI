@@ -172,7 +172,7 @@ const setAssetTags = defineApplicationCapability({
   producesRefs: ['asset'],
   inputSchema: z.object({
     assetId: z.string().min(1),
-    tags: z.array(z.string().trim().min(1).max(80)).max(32),
+    tags: z.array(z.string().trim().min(1).max(80)),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     assetId: z.string(),

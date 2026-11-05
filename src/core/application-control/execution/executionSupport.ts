@@ -170,7 +170,7 @@ export class ApplicationExecutionSupport {
   }
 
   /**
-   * 集合写入的预检：类型必须声明 creatable/removable，创建时必须给齐必填属性，数量不得超上限。
+   * 集合写入的预检：类型必须声明 creatable/removable，创建时必须给齐必填属性。
    *
    * 全部在执行之前做完——这是三维布置那次事故的教训：任何能靠输入判断的错误都不该等到写了
    * 一半才抛。
@@ -220,12 +220,6 @@ export class ApplicationExecutionSupport {
           `COLLECTION_CREATE_NOT_ALLOWED:${step.entityType}${this.collectionWriterHint(step.entityType, 'create')}`
         )
       }
-      if (step.operation.items.length > rule.maxItemsPerChange) {
-        throw new Error(
-          `COLLECTION_TOO_MANY_ITEMS:${step.entityType} 一次最多创建 ${rule.maxItemsPerChange} 个，`
-          + `本次 ${step.operation.items.length} 个`
-        )
-      }
       for (const [index, item] of step.operation.items.entries()) {
         const missing = rule.requiredPropertyIds.filter((propertyId) => !(propertyId in item.properties))
         if (missing.length > 0) {
@@ -238,9 +232,6 @@ export class ApplicationExecutionSupport {
       throw new Error(
         `COLLECTION_REMOVE_NOT_ALLOWED:${step.entityType}${this.collectionWriterHint(step.entityType, 'remove')}`
       )
-    }
-    if (step.operation.targets.length > rule.maxItemsPerChange) {
-      throw new Error(`COLLECTION_TOO_MANY_ITEMS:${step.entityType} 一次最多删除 ${rule.maxItemsPerChange} 个`)
     }
   }
 

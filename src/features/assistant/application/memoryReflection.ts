@@ -53,7 +53,7 @@ export function createMemoryRegistrations(): ApplicationEntityRegistration[] {
     const entityType = types[layer], definitions = fields(layer)
     return { entity: { id: entityType, domain: 'memory', version: 1, title: { global: '全局记忆', project: '项目记忆', style: '风格使用者偏好' }[layer], description: MEMORY_RULES,
       refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [parents[layer]], revisionScopes: ['assistant_memory'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType),
-      collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.entry`], maxItemsPerChange: 10 } },
+      collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.entry`] } },
     properties: fieldDescriptors(definitions), schemaDocuments: [{ ref: schemaRef('property', `${entityType}.entry.value`), value: z.toJSONSchema(memoryEntryWriteSchema, { io: 'input' }) as JsonValue, validator: memoryEntryWriteSchema }],
     provider: { entityType,
       async listEntities(request) {
