@@ -76,7 +76,10 @@ export function codeWebLayerIssue(layer: unknown): string | undefined {
   return codeWebBoxesIssue(selectors)
 }
 
-/** 宿主注入的用户级样式：用户级 !important 压过页面自己的 !important。不改布局，文字位置在各层一致。 */
+/**
+ * 宿主注入的用户级样式：用户级 !important 压过页面自己的 !important。不改布局，文字位置在各层一致。
+ * 两层都去掉文字阴影：页面写的发光会被字素格子切开，留下细条，发光一律交给效果库。
+ */
 export function codeWebLayerCss(layer: CodeWebLayer): string {
   const selectors = layer.only ?? layer.hide
   const target = selectors.map(selector => `:is(${selector})`).join(', ')
@@ -87,7 +90,7 @@ export function codeWebLayerCss(layer: CodeWebLayer): string {
   // 只藏目标以外且不含目标的元素：目标和它的祖先不碰 visibility，页面自己隐藏的选项卡、打字机还是隐藏的。
   // 祖先还留着，要清掉它的底和它自己的文字；文字填充色会继承，到目标处还原。
   const ancestors = selectors.map(selector => `:has(${selector})`).join(', ')
-  return `html, body, [data-henji-stage], henji-web-stage { ${clear} } body *:not(${inside}, ${ancestors}) { visibility: hidden !important; ${clear} } :is(${ancestors}) { ${clear}; -webkit-text-fill-color: transparent !important } ${target} { -webkit-text-fill-color: currentcolor !important } ${inside} { background-color: transparent !important; background-image: none !important; border-color: transparent !important; box-shadow: none !important; outline-color: transparent !important }`
+  return `html, body, [data-henji-stage], henji-web-stage { ${clear} } body *:not(${inside}, ${ancestors}) { visibility: hidden !important; ${clear} } :is(${ancestors}) { ${clear}; -webkit-text-fill-color: transparent !important } ${target} { -webkit-text-fill-color: currentcolor !important } ${inside} { text-shadow: none !important; background-color: transparent !important; background-image: none !important; border-color: transparent !important; box-shadow: none !important; outline-color: transparent !important }`
 }
 
 /** 选择器列表不合法时的说明；合法为 undefined。 */

@@ -29,4 +29,7 @@ it('藏文字不改布局也不碰背景；只留文字把背景清掉', () => {
   expect(only).toContain('body *:not(:is(#title), :is(#title) *, :is(.body), :is(.body) *, :has(#title), :has(.body)) { visibility: hidden')
   expect(only).not.toMatch(/visibility: visible/)
   expect(only).toContain('background-image: none')
+  // 页面写的发光会被格子切开，两层都去掉，发光交给效果库。
+  expect(only).toContain('text-shadow: none')
+  expect(hide).toContain('text-shadow: none')
 })

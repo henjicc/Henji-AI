@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>网页逐字样片</title>
+<!-- 普通网页排版：卡片、线条和文字。文字不带发光，发光交给效果库。 -->
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  [data-henji-stage] { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #101216; }
+  #rule { position: absolute; left: 180px; top: 300px; width: 10px; height: 420px; background: #f0b429; }
+  #panel { position: absolute; left: 230px; top: 300px; width: 1460px; height: 420px; background: #181b21; border-radius: 12px; }
+  #line { position: absolute; left: 290px; top: 530px; width: 1340px; height: 2px; background: #2b303a; }
+  #title { position: absolute; left: 290px; top: 350px; font-size: 128px; font-weight: 700; color: #f5f6f8; white-space: nowrap; }
+  #body { position: absolute; left: 292px; top: 566px; width: 1320px; font-size: 44px; line-height: 1.5; color: #b8bec9; }
+  #body em { font-style: normal; color: #f0b429; }
+</style>
+</head>
+<body>
+<div data-henji-stage>
+  <div id="rule"></div>
+  <div id="panel"></div>
+  <div id="line"></div>
+  <div id="title">每个字都能单独动</div>
+  <div id="body">排版交给浏览器，换行和标点都不用重算；<em>动作和发光</em>交给剪辑，推近也还是这份排版。</div>
+</div>
+<script>
+  window.henjiWeb = { ready: document.fonts.ready, duration: 10, async seek() {} }
+</script>
+</body>
+</html>

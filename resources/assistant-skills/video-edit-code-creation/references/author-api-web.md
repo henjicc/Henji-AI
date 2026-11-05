@@ -57,50 +57,53 @@ Range 返回排版盒，`baseline:null`，不提供字形墨迹和真实基线�
 **逐字特效**：要让网页里每个字单独动（位移、缩放、旋转、淡入、打字机、变色、沿路径走都一样），把同一个网页绑定成两层，再按 `cells` 切文字层。字形和排版都是浏览器的结果，不用重新排版。
 
 - 绑定值加 `layer`：`{ only: [选择器] }` 只留这些元素的文字，背景透明；`{ hide: [选择器] }` 只藏它们的文字，其余原样，字移开后露出的就是这层。两层用同一份 `path`、`width`、`height`、`region`、`scale`、时间。
-- `geometry.cells` 与 `graphemes` 一一对应，是画面像素整数 `[x, y, w, h]`，互不重叠地铺满文字；所有字不动时拼出来与网页原画面一致。竖排或没有位置的字素为 null。同一个参数声明的所有选择器一起算，不会互相切到。
+- `geometry.cells` 与 `graphemes` 一一对应，是画面像素整数 `[x, y, w, h]`，互不重叠地铺满文字；所有字不动时拼出来与网页原画面一致（页面文字自带的发光和阴影除外，见下）。竖排或没有位置的字素为 null。同一个参数声明的所有选择器一起算，不会互相切到。
+
+每个字写成一个图层：用 `pose` 动，运动模糊、点选和 `effects` 都是现成的。发光、模糊、描边用 `henji-effects`，不要在网页里写 `text-shadow`，拆层时宿主会把页面文字自带的发光和阴影去掉（留着会被格子切开）。
 
 ```text
+import { glow } from "henji-effects"
+const clamp = value => Math.min(1, Math.max(0, value))
 export default {
   name: "网页逐字", kind: "generator", mode: "dynamic", width: 1920, height: 1080,
   webText: { text: ["#title"] },
   params: [{ key: "clean", type: "image", title: "干净背景" }, { key: "text", type: "image", title: "文字层" }],
-  draw(ctx, time, params, width, height, assets, info) {
-    if (!assets.clean || !assets.text) return
-    ctx.drawImage(assets.clean, 0, 0, width, height)
-    const web = info.web?.text, result = web?.text["#title"]
+  layers(params, width, height, assets, info) {
+    const layers = []
+    if (assets.clean) layers.push({ id: "背景", bounds: [0, 0, width, height], draw(ctx) { ctx.drawImage(assets.clean, 0, 0, width, height) } })
+    if (!assets.text) return layers
+    const web = info.web?.text, result = web?.text?.["#title"]
     // 预览回退到上一幅时位置可能还没到（pending-picture）：这一帧把文字层整张画上，不留空，也不要抛错
-    if (result?.status !== "ready") { ctx.drawImage(assets.text, 0, 0, width, height); return }
-    const map = web.imageMapping
+    if (result?.status !== "ready") { layers.push({ id: "文字", bounds: [0, 0, width, height], draw(ctx) { ctx.drawImage(assets.text, 0, 0, width, height) } }); return layers }
+    // 格子是文字层的画面像素，画面大小随 scale 和监视器显示档变化，一律换算到画布
+    const kx = width / web.imageMapping.contentWidth, ky = height / web.imageMapping.contentHeight
     result.geometry.cells.forEach((cell, index) => {
       if (!cell) return
       const [x, y, w, h] = cell
-      ctx.save()
-      // 这里决定每个字怎么动；下面是逐字错峰上浮淡入，换成任何变换、透明度或滤镜都行。位移写在换算之前，是画布像素
-      const t = Math.min(1, Math.max(0, time * 2 - index * .08))
-      ctx.globalAlpha = t
-      ctx.translate(0, (1 - t) * 60)
-      // 格子是文字层的画面像素，画面大小随 scale 和监视器显示档变化，这里换算到画布
-      ctx.scale(width / map.contentWidth, height / map.contentHeight)
-      ctx.drawImage(assets.text, x, y, w, h, x, y, w, h)
-      ctx.restore()
+      layers.push({
+        id: "字" + index, bounds: [x * kx, y * ky, (x + w) * kx, (y + h) * ky],
+        draw(ctx) { ctx.drawImage(assets.text, x, y, w, h, x * kx, y * ky, w * kx, h * ky) },
+        // 这里决定每个字怎么动，下面是逐字错峰上浮淡入
+        pose: t => { const p = clamp(t * 2 - index * .08); return { x: 0, y: (1 - p) * 60, opacity: p } },
+        effects: () => [glow({ strength: 20, radius: 26 })],
+      })
     })
+    return layers
   },
 }
 // 片段参数：clean: { kind: "web", path, layer: { hide: ["#title"] } }，text: { kind: "web", path, layer: { only: ["#title"] } }
 ```
 
-旋转、缩放绕字的中心转，写在换算之后，因为锚点是画面像素。格子的中心不一定是字的中心，不要拿它当锚点：
+旋转、缩放绕字的中心转。`pose` 绕画布原点变换，格子的中心也不一定是字的中心，所以用 `graphemes[index].pivot`（视口 CSS 像素）算出中心 `cx, cy` 再补偿：
 
 ```text
-ctx.scale(width / map.contentWidth, height / map.contentHeight)
-const [a, , , d, e, f] = map.viewportToImage, pivot = result.geometry.graphemes[index].pivot
-const px = pivot[0] * a + e, py = pivot[1] * d + f
-ctx.translate(px, py); ctx.rotate(angle); ctx.scale(s, s); ctx.translate(-px, -py)
-ctx.drawImage(assets.text, x, y, w, h, x, y, w, h)
+const [a, , , d, e, f] = web.imageMapping.viewportToImage, pivot = result.geometry.graphemes[index].pivot
+const cx = (pivot[0] * a + e) * kx, cy = (pivot[1] * d + f) * ky
+// 旋转 r、缩放 s：
+pose = { rotation: r, scale: s, x: cx - s * (cx * Math.cos(r) - cy * Math.sin(r)), y: cy - s * (cx * Math.sin(r) + cy * Math.cos(r)) }
 ```
 
 - 成本：每层各开一个页面，不进页面时间缓存，只走实时取帧。一段文字逐字动时只选需要的元素。
-- 页面文字自带的发光、阴影留在文字层里，会被格子切开：字分开后邻字之间能看到细条。要逐字发光就去掉页面上的发光，改用效果库的发光加在每个字上；不分开的动画（淡入、整体位移）没有这个问题。
 - 文字背后如果是这个元素自己的背景（按钮底色），`only` 不带这块底色，`hide` 会保留它。
 - 每个选择器只能命中一个元素，一组字用多个选择器分别写；选择器不要嵌套。载入时命中多个或写错会报错。页面 seek 之后才变成多个的情况查不出来，其余的字会没有格子。
 - `background-clip: text` 的渐变字拆不开，底色就是字，文字层里没有它。图片、SVG、伪元素不算文字，两层都会留下。要逐字动的文字写成普通 `color`。

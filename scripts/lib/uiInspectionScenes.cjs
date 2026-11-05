@@ -211,6 +211,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     require('./uiInspectionSceneVideoEditWebPipeline.cjs').createVideoEditWebPipelineScene(),
     require('./uiInspectionSceneVideoEditWebObserve.cjs').createVideoEditWebObserveScene(),
     require('./uiInspectionSceneVideoEditWebLayers.cjs').createVideoEditWebLayersScene(),
+    require('./uiInspectionSceneVideoEditWebGlyphSample.cjs').createVideoEditWebGlyphSampleScene(),
     createVideoFramesScene(),
     createVideoEditMediaProbeScene(),
     createVideoEditNativeAudioScene(),
