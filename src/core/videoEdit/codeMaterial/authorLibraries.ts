@@ -130,6 +130,12 @@ export const AUTHOR_LIBRARIES: Readonly<Record<string, Readonly<Record<string, A
       modules: { 'henji-layout/text': 'text.mjs', 'henji-layout/flex': 'flex.mjs', 'henji-layout/table': 'table.mjs' },
       types: { mount: 'henji-layout', license: 'Apache-2.0', source: 'frozen' },
     },
+    '2.0.2': {
+      license: 'Apache-2.0', minApiVersion: 10,
+      frozen: 'resources/video-edit-author/frozen/henji-layout/2.0.2',
+      modules: { 'henji-layout/text': 'text.mjs', 'henji-layout/flex': 'flex.mjs', 'henji-layout/table': 'table.mjs' },
+      types: { mount: 'henji-layout', license: 'Apache-2.0', source: 'frozen' },
+    },
   },
 }
 

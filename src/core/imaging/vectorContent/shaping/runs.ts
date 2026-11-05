@@ -1,6 +1,7 @@
 import type { TextStyle } from '../text'
 import type { TextFontAccess, TextFontRequest } from './fontSession'
 import { TextShaper, shapingKey, orderedValues, type ShapeOptions } from './harfbuzz'
+import { resolveBidi, type BaseDirection, type BidiLevels } from './bidi'
 import { graphemeEnds, type ParagraphOptions, type ParagraphRun } from './paragraph'
 
 export interface TextStyleSpan { readonly start: number; readonly end: number; readonly style: TextStyle }
@@ -13,6 +14,7 @@ export interface ShapingRuns {
   readonly text: string; readonly runs: readonly ParagraphRun[]
   readonly graphemes: readonly DisplayGrapheme[]; readonly fontIdentity: string
   readonly spacing: NonNullable<ParagraphOptions['spacing']>
+  readonly bidi?: BidiLevels
 }
 
 // ECMAScript 的 Unicode Script/Script_Extensions 负责分类；Common/Inherited 沿段落邻接上下文归属。
@@ -31,7 +33,7 @@ export function textScript(text: string): string | undefined {
 export const textFontRequest = (style: TextStyle): TextFontRequest => ({ family: style.fontFamily, weight: style.fontWeight, style: style.fontStyle })
 
 /** 富文本的绘制样式单独保留；仅真正影响 shaping 的事实划分 run。 */
-export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, source: string, spans: readonly TextStyleSpan[], options: ShapeOptions): ShapingRuns {
+export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, source: string, spans: readonly TextStyleSpan[], options: ShapeOptions, baseDirection: BaseDirection = options.direction ?? 'ltr'): ShapingRuns {
   const ends = graphemeEnds(source)
   let covered = 0
   for (const span of spans) {
@@ -46,8 +48,12 @@ export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, so
     const span = spans[spanIndex]
     if (!span) throw new Error('字素缺少文字样式')
     const value = source.slice(start, end)
-    return { start, end, style: span.style, value, script: textScript(value) }
+    // CRLF 是同一原文字素；大小写展开后仍由这一个原文字素拥有。
+    const normalized = value.replace(/\r\n?/g, '\n')
+    const small = !span.style.allCaps && span.style.smallCaps && normalized.toUpperCase() !== normalized
+    return { start, end, style: span.style, value, script: textScript(value), small, display: span.style.allCaps || small ? normalized.toUpperCase() : normalized }
   })
+  const bidi = resolveBidi(original.map(item => item.display).join(''), baseDirection)
   const runs: ParagraphRun[] = [], graphemes: DisplayGrapheme[] = [], identities = new Set<string>()
   const following: Array<string | undefined> = []
   let nextScript: string | undefined
@@ -59,19 +65,17 @@ export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, so
   let text = '', previousKey = '', inherited: string | undefined
   original.forEach((item, index) => {
     const style = item.style
-    // CRLF 是同一原文字素；大小写展开后仍由这一个原文字素拥有。
-    const normalized = item.value.replace(/\r\n?/g, '\n')
-    const small = !style.allCaps && style.smallCaps && normalized.toUpperCase() !== normalized
-    const value = style.allCaps || small ? normalized.toUpperCase() : normalized
+    const { small, display: value } = item
+    const level = bidi?.levels[text.length] ?? (options.direction === 'rtl' ? 1 : 0)
     const size = style.fontSize * (small ? .75 : 1) * (style.superscript || style.subscript ? .65 : 1)
     const script = item.script ?? inherited ?? following[index] ?? options.script ?? 'Latn'
     inherited = value === '\n' ? undefined : script
-    const shapeOptions: ShapeOptions = { ...options, size, features: { ...options.features, kern: style.kerning === 'auto' ? 1 : 0 }, script: script === 'Emoji' ? 'Zyyy' : script === 'Zzzz' ? options.script : script }
+    const shapeOptions: ShapeOptions = { ...options, size, direction: level % 2 ? 'rtl' : 'ltr', features: { ...options.features, kern: style.kerning === 'auto' ? 1 : 0 }, script: script === 'Emoji' ? 'Zyyy' : script === 'Zzzz' ? options.script : script }
     const request = textFontRequest(style), chain = fonts.chain(request)
     identities.add(chain.identity)
     const { font, missing } = fonts.choose(chain, value, shaper, shapeOptions)
     const start = text.length, end = start + value.length
-    const key = JSON.stringify([font.hash, font.face ?? 0, orderedValues(font.variations), shapingKey(shapeOptions), script === 'Zzzz' ? item.value : script])
+    const key = JSON.stringify([font.hash, font.face ?? 0, orderedValues(font.variations), shapingKey(shapeOptions), script === 'Zzzz' ? item.value : script, level])
     const last = runs.at(-1)
     if (last && previousKey === key && value !== '\n' && text.at(-1) !== '\n') runs[runs.length - 1] = { ...last, end }
     else runs.push({ start, end, source: font, options: shapeOptions })
@@ -81,5 +85,5 @@ export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, so
       baselineShift: (style.superscript ? -.35 * style.fontSize : style.subscript ? .2 * style.fontSize : 0) - style.baselineShift }))
   })
   const spacing = graphemes.map(({ start, end, style }) => Object.freeze({ start, end, tsume: style.tsume, letterSpacing: style.fontSize * (style.tracking + (typeof style.kerning === 'number' ? style.kerning : 0)) / 1000 }))
-  return Object.freeze({ text, runs: Object.freeze(runs.map(run => Object.freeze(run))), graphemes: Object.freeze(graphemes), spacing: Object.freeze(spacing), fontIdentity: JSON.stringify([...identities]) })
+  return Object.freeze({ text, runs: Object.freeze(runs.map(run => Object.freeze(run))), graphemes: Object.freeze(graphemes), spacing: Object.freeze(spacing), fontIdentity: JSON.stringify([...identities]), ...(bidi ? { bidi } : {}) })
 }

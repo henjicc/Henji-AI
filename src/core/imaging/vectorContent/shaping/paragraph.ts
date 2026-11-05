@@ -1,6 +1,7 @@
 import { analyzeText, HARD_BREAK, KIND_BITS, TEXT, SPACE, PRESERVED_SPACE, TAB, SOFT_HYPHEN, UNBROKEN, type TextAnalysis } from '../../../../../resources/video-edit-author/vendor/pretext/1.0.0/analysis.js'
 import { findGraphemeEnds } from '../../../../../resources/video-edit-author/vendor/pretext/1.0.0/graphemes.js'
 import { normalizePreparedLineStart, stepPreparedLineGeometryFromStart, isDiscretionaryLineEnd, type PreparedLineData } from '../../../../../resources/video-edit-author/vendor/pretext/1.0.0/line-break.js'
+import { visualOrder, type BidiLevels } from './bidi'
 import { type FontSource, type ShapeOptions, type ShapeResult, type ShapedGlyph, TextShaper } from './harfbuzz'
 import { PunctuationPlanner, type PunctuationPlan } from './punctuation'
 
@@ -12,6 +13,8 @@ export interface ParagraphOptions extends ShapeOptions {
   letterSpacing?: number
   tsume?: number
   spacing?: readonly { start: number; end: number; letterSpacing: number; tsume: number }[]
+  /** 段内含从右到左文字时的 UAX #9 层级；缺省表示整段同一方向。 */
+  bidi?: BidiLevels
   /** 文字新版接口只接受但忽略；编译器负责给作者提示。 */
   forceGraphemes?: boolean
 }
@@ -23,6 +26,8 @@ export interface ParagraphLine {
   readonly start: number; readonly end: number; readonly width: number
   readonly contentEnd: number
   readonly glyphs: readonly ShapedGlyph[]
+  /** 从右到左的行尾空白排在显示最左边且悬挂在栏外时，第一个字形的起点（负数）。 */
+  readonly visualStart?: number
 }
 export interface ParagraphLayout {
   readonly text: string
@@ -59,6 +64,7 @@ export class ShapedParagraph {
   private readonly boundaryGaps = new Map<number, number>()
   private readonly hasTabs: boolean
   private readonly segmentEnds: number[][]
+  private readonly edgePairs: readonly Readonly<{ target: number; earlier: number; later: number }>[]
   constructor(private readonly shaper: TextShaper, source: FontSource, readonly text: string, readonly options: ParagraphOptions, runs?: readonly ParagraphRun[], sourceGraphemeEnds?: readonly number[]) {
     this.analysis = analyzeText(text, profile, 'pre-wrap', 'normal', options.language ?? 'zh-CN')
     this.hasTabs = text.includes('\t')
@@ -99,6 +105,7 @@ export class ShapedParagraph {
     if (end !== text.length) throw new Error('整形 run 未覆盖完整段落')
     const planner = new PunctuationPlanner(shaper)
     this.punctuation = this.runs.map(run => planner.plan(run.source, text, run.options))
+    this.edgePairs = this.punctuation.flatMap((plan, index) => plan.pairs.filter(pair => pair.target >= this.runs[index].start && pair.target < this.runs[index].end))
     this.space = shaper.shape(this.runs[0]?.source ?? source, ' ', this.runs[0]?.options ?? options)
     this.runSpaces.set(0, this.space)
     this.initial = this.shape(0, text.length)
@@ -131,13 +138,24 @@ export class ShapedParagraph {
     }
   }
   private gapBetween(left: number, right: number): number {
-    const before = this.text.slice(left, this.ends.find(end => end > left)), after = this.text.slice(right, this.ends.find(end => end > right))
+    const before = this.text.slice(left, this.graphemeEndAfter(left)), after = this.text.slice(right, this.graphemeEndAfter(right))
     if (/[\r\n]/.test(this.text.slice(left, right) + after)) return 0
     const run = this.runs.find(run => run.start <= left && run.end > left)!
     return (this.spacingAt(left, run.options).letterSpacing ?? 0) + (this.options.autospace !== false && autospaceBetween(before, after) ? this.options.size / 8 : 0)
   }
+  private graphemeEndAfter(at: number): number | undefined {
+    let low = 0, high = this.ends.length
+    while (low < high) { const middle = (low + high) >> 1; if (this.ends[middle] > at) high = middle; else low = middle + 1 }
+    return this.ends[low]
+  }
+  // 间距区间按字素顺序排列；每个字形都要查一次，长段落不能逐个扫描。
   private spacingAt(at: number, fallback: Pick<ParagraphOptions, 'letterSpacing' | 'tsume'>): Pick<ParagraphOptions, 'letterSpacing' | 'tsume'> {
-    return this.options.spacing?.find(span => span.start <= at && span.end > at) ?? fallback
+    const spacing = this.options.spacing
+    if (!spacing) return fallback
+    let low = 0, high = spacing.length
+    while (low < high) { const middle = (low + high) >> 1; if (spacing[middle].end > at) high = middle; else low = middle + 1 }
+    const span = spacing[low]
+    return span && span.start <= at ? span : fallback
   }
   private tabSpace(at: number): ShapeResult {
     const index = this.runs.findIndex(run => run.start <= at && at < run.end)
@@ -155,10 +173,8 @@ export class ShapedParagraph {
     // Blink 在当前字体有 U+2010 时使用它，缺字才使用 ASCII 连字符。
     const hyphenText = hyphenRun && this.shaper.shape(hyphenRun.source, '\u2010', hyphenRun.options).glyphs.every(glyph => glyph.id !== 0) ? '\u2010' : '-'
     const text = this.text.slice(start, end)
-    const ordered = this.options.direction === 'rtl' ? [...this.runs.keys()].reverse() : [...this.runs.keys()]
-    const glyphs = ordered.flatMap(index => {
-      const run = this.runs[index], from = Math.max(start, run.start), to = Math.min(end, run.end)
-      if (from >= to) return []
+    const glyphs = this.visualPieces(start, end).flatMap(({ index, from, to }) => {
+      const run = this.runs[index]
       const featureRanges = [
         ...(run.options.featureRanges ?? []).filter(feature => feature.start < end && feature.end > start).map(feature => ({ ...feature, start: Math.max(0, feature.start - start), end: Math.min(end - start, feature.end - start) })),
         ...this.punctuation[index].pairs.filter(pair => pair.earlier >= start && pair.later < end && pair.target >= from && pair.target < to).map(pair => ({ tag: 'halt', value: 1, start: pair.target - start, end: pair.target - start + 1 })),
@@ -182,16 +198,30 @@ export class ShapedParagraph {
     })
     return { width: glyphs.reduce((sum, glyph) => sum + glyph.advance, 0), glyphs }
   }
+  /** 一行里按显示顺序排好的 run 片段。行尾空白按 UAX #9 L1 回到段落基准层级。 */
+  private visualPieces(start: number, end: number): { index: number; from: number; to: number; level: number }[] {
+    const { bidi } = this.options
+    const content = bidi ? start + this.text.slice(start, end).replace(/[\t ]+$/, '').length : end
+    const base = bidi?.paragraphs.find(paragraph => paragraph.start <= start && start <= paragraph.end)?.level ?? 0
+    return visualOrder(this.runs.flatMap((run, index) => {
+      const from = Math.max(start, run.start), to = Math.min(end, run.end)
+      if (from >= to) return []
+      const level = bidi ? bidi.levels[run.start] : run.options.direction === 'rtl' ? 1 : 0
+      if (to <= content) return [{ index, from, to, level }]
+      return [...(from < content ? [{ index, from, to: content, level }] : []), { index, from: Math.max(from, content), to, level: base }]
+    }))
+  }
   private safe(at: number): boolean {
     // cluster 内部没有 flags，不能把不存在的边界当作 safe。
     return this.safeBoundaries.has(at)
   }
   private changedEdge(start: number, end: number): boolean {
-    return this.punctuation.some((plan, index) => plan.pairs.some(pair => pair.target >= this.runs[index].start && pair.target < this.runs[index].end && pair.target >= start && pair.target < end && (pair.earlier < start || pair.later >= end)))
+    return this.edgePairs.some(pair => pair.target >= start && pair.target < end && (pair.earlier < start || pair.later >= end))
   }
   private rangeWidth(start: number, end: number): number {
     if (start === end) return 0
-    if (this.safe(start) && this.safe(end) && !this.changedEdge(start, end) && !this.hasTabs) {
+    // 混排时字距和中英间距按显示相邻计算，前缀差只认逻辑相邻，两者可能不等。
+    if (!this.options.bidi && this.safe(start) && this.safe(end) && !this.changedEdge(start, end) && !this.hasTabs) {
       // gaps 在边界前累计；行首与前文之间的附加间距必须回收。
       const spacing = (this.gaps.get(end) ?? 0) - (this.gapsAfter.get(start) ?? 0)
       return this.advances.get(end)! - this.advances.get(start)! + spacing
@@ -201,7 +231,8 @@ export class ShapedParagraph {
   range(start: number, end: number, hyphen = false, haltAt?: number): ShapeResult {
     if (!this.boundaries.has(start) || !this.boundaries.has(end) || end < start) throw new Error('断行只能发生在完整字素边界')
     let result: ShapeResult
-    if (!hyphen && haltAt === undefined && this.safe(start) && this.safe(end) && !this.changedEdge(start, end)) {
+    // 整段结果的显示顺序是按全段定的；混排时每行要各排各的，不能从中截取。
+    if (!hyphen && haltAt === undefined && !this.options.bidi && this.safe(start) && this.safe(end) && !this.changedEdge(start, end)) {
       const glyphs = this.initial.glyphs.filter(glyph => glyph.cluster >= start && glyph.cluster < end)
       result = { glyphs, width: glyphs.reduce((sum, glyph) => sum + glyph.advance, 0) }
     } else {
@@ -238,14 +269,22 @@ export class ShapedParagraph {
   }
 
   /** 用整段结果的前缀差注入上游 walker；不是按词测量后拼接。 */
-  private prepared(start: number): { data: PreparedLineData; ends: number[][] } {
+  private prepared(start: number, available: number): { data: PreparedLineData; ends: number[][] } {
     const { starts, texts, flags } = this.analysis
     const ends = this.segmentEnds
     const measured = new Map<number, number>()
+    // 走到这里已经放不下了：再加上最大的行尾标点收缩量也回不到栏内。后面的字不会排进本行，不必为它们整形。
+    // 软连字符的预留宽度取全段最大值，每一处都要真实量过，这里不能提前收手。
+    const reach = this.analysis.flags.some(flag => (flag & KIND_BITS) === SOFT_HYPHEN) ? Infinity : available + layoutUnits(4 * Math.max(...this.runs.map(run => run.options.size), this.options.size))
+    let farthest = 0, farthestEnd = start
     const prefix = (end: number): number => {
       if (end <= start) return 0
+      if (farthest > reach && end > farthestEnd) return farthest
       let value = measured.get(end)
-      if (value === undefined) { value = layoutUnits(this.rangeWidth(start, end)); measured.set(end, value) }
+      if (value === undefined) {
+        value = layoutUnits(this.rangeWidth(start, end)); measured.set(end, value)
+        if (value > farthest) { farthest = value; farthestEnd = end }
+      }
       return value
     }
     const widths = texts.map((text, index) => {
@@ -257,7 +296,8 @@ export class ShapedParagraph {
     const hyphenWidths = hasHyphens ? texts.map((text, index) => (flags[index] & KIND_BITS) === SOFT_HYPHEN && starts[index] >= start ? layoutUnits(this.range(start, starts[index] + text.length, true).width) - prefix(starts[index]) : 0) : null
     const endTrims = texts.map((text, index) => {
       const end = starts[index] + text.length, at = end - 1
-      if (end <= start || !this.punctuation.some((plan, run) => at >= this.runs[run].start && at < this.runs[run].end && plan.closings.includes(at))) return 0
+      // 这一段的起点已经超出本行，不可能成为行尾，不必为它重新整形。
+      if (end <= start || prefix(Math.max(start, starts[index])) > available || !this.punctuation.some((plan, run) => at >= this.runs[run].start && at < this.runs[run].end && plan.closings.includes(at))) return 0
       return Math.max(0, prefix(end) - layoutUnits(this.range(start, end, false, at).width))
     })
     const breakAfter = (index: number): boolean => index + 1 === texts.length || (flags[index + 1] & KIND_BITS) === TEXT && !(flags[index + 1] & UNBROKEN)
@@ -275,9 +315,10 @@ export class ShapedParagraph {
     }
     return { data, ends }
   }
-  layout(): ParagraphLayout {
-    if ((this.options.maxWidth ?? 0) < 0 || Number.isNaN(this.options.maxWidth)) throw new Error('段落宽度不能为负数或 NaN')
-    const maxWidth = this.options.maxWidth || Infinity
+  layout(requestedWidth = this.options.maxWidth): ParagraphLayout {
+    if ((requestedWidth ?? 0) < 0 || Number.isNaN(requestedWidth)) throw new Error('段落宽度不能为负数或 NaN')
+    const maxWidth = requestedWidth || Infinity
+    const available = this.options.wrap === 'none' ? Infinity : availableUnits(maxWidth)
     const lines: ParagraphLine[] = []
     let cursor = { segmentIndex: 0, graphemeIndex: 0 }
     const offsets = (value: typeof cursor, ends: number[][]): number => value.graphemeIndex
@@ -285,12 +326,12 @@ export class ShapedParagraph {
     while (cursor.segmentIndex < this.analysis.starts.length) {
       const segmentStart = this.analysis.starts[cursor.segmentIndex]
       const initialOffset = cursor.graphemeIndex ? this.segmentEnds[cursor.segmentIndex][cursor.graphemeIndex - 1] : segmentStart
-      const { data, ends } = this.prepared(initialOffset)
+      const { data, ends } = this.prepared(initialOffset, available)
       if (!normalizePreparedLineStart(data, cursor)) break
       const start = offsets(cursor, ends)
       if (start !== initialOffset) continue
       const before = { ...cursor }
-      const fittedWidth = stepPreparedLineGeometryFromStart(data, cursor, this.options.wrap === 'none' ? Infinity : availableUnits(maxWidth))
+      const fittedWidth = stepPreparedLineGeometryFromStart(data, cursor, available)
       const rawEnd = offsets(cursor, ends)
       let end = rawEnd
       // 尾空白的占用宽由 walker 决定；部分悬挂不能通过删除整个字素来模拟。
@@ -307,7 +348,8 @@ export class ShapedParagraph {
         const contentWidth = hyphen ? this.range(start, withoutTail, true).width : this.rangeWidth(start, withoutTail)
         width = layoutUnits(contentWidth) >= fittedWidth ? contentWidth : fittedWidth / 64
       }
-      lines.push(Object.freeze({ start, end: rawEnd, contentEnd: end, width, glyphs: Object.freeze(shape.glyphs.map(glyph => Object.freeze({ ...glyph }))) }))
+      const rightToLeft = !!this.options.bidi && (this.options.bidi.paragraphs.find(paragraph => paragraph.start <= start && start <= paragraph.end)?.level ?? 0) % 2 === 1
+      lines.push(Object.freeze({ start, end: rawEnd, contentEnd: end, width, ...(rightToLeft && width < shape.width ? { visualStart: width - shape.width } : {}), glyphs: Object.freeze(shape.glyphs.map(glyph => Object.freeze({ ...glyph }))) }))
       if (before.segmentIndex === cursor.segmentIndex && before.graphemeIndex === cursor.graphemeIndex) throw new Error('Pretext walker 未推进原文位置')
       cursor = { ...cursor }
     }

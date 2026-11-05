@@ -1,6 +1,6 @@
 # 文字与动效
 
-动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.0.1（见 author-api 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
+动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.0.2（见 author-api 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
 
 ## 字体声明
 
@@ -57,7 +57,7 @@ export default {
 
 | options | 作用 |
 | --- | --- |
-| `maxWidth` | 超过就折行（0 为不限）；中文按字、英文单词不拆开另设 `wrap: "word"`，`"none"` 只在 `\n` 处换行 |
+| `maxWidth` | 超过就折行（0 为不限）；同时给 `fit` 又没给 `maxLines`、`maxHeight` 时不折行，按单行缩字号；中文按字、英文单词不拆开另设 `wrap: "word"`，`"none"` 只在 `\n` 处换行 |
 | `maxLines`、`maxHeight` | 行数、高度上限。超出的整行默认截掉，`truncate: false` 保留；`maxHeight: 0` 表示一行都放不下，不限就不写 |
 | `fit` | `{ minFontSize, maxFontSize? }`：放不下时在上下限内缩小字号，描边、阴影、行距同比缩放 |
 | `box` | 固定放置盒 `{ width, height }`；`align`、`verticalAlign` 在盒内生效。不给时盒子就是文字本身 |
@@ -66,6 +66,24 @@ export default {
 返回值都是作品像素：`box`（底板、选框、遮罩按它算）、`lines`（每行 `text`、`x`、`y`、`width`、`height`、`baseline`）、`graphemes`（每个字素 `text`、`x`、`y` 为基线、`advance`、`line`、`style`）、`style`（缩字号后的实际样式，`fit.fontSize` 为实际字号）、`totalLines`，以及 `truncated`、`omittedRanges`、`overflow`。原文不能被静默截掉：`truncated` 为真时加 `fit`、加高盒子或分拍；用排版库画的文字，复核能检查超框。
 
 drawText 按当前变换、`globalAlpha` 与 clip 绘制。相同内容、样式、选项和字体字节可复用只读布局；可在 `layers()` 中排版。普通文字按字形轮廓绘制，描边与阴影按当前采样密度缓存。静止图层可用 `cacheKey` 复用，但参数或文字变化必须更新键。
+
+## 同一段里混样式与混方向
+
+一段字要混颜色、字号、字重时，把内容写成富文本交给 `layoutText`，第二个参数是基础样式。只有 `runs` 必填：`align` 沿用基础样式，`direction` 默认自动，`spaceBefore`、`spaceAfter` 默认 0。折行、挤压、基线都按整段算，不要拆成几个 `layoutText` 手工拼。
+
+```text
+layoutText({ paragraphs: [{ runs: [{ text: "少了一个", style }, { text: "字", style: { ...style, fill: { color: "#d3331f" } } }] }] }, style, { maxWidth: 800, box: { width: 800 } })
+```
+
+方向按 Unicode 双向算法处理：阿拉伯文、希伯来文从右到左连写，夹在里面的数字和拉丁字母仍从左到右，中文开头的段落只翻转其中从右到左的片段。默认由第一个强方向字符决定整段基准方向；段落写 `direction: "rtl"` 或 `"ltr"`（或 `options.direction`）可以强制。纯从右到左的段落要靠右时自己写 `align: "right"`。
+
+## 字里透出画面
+
+要让视频或图片只从字形里露出来：图层带 `pose` 才有独立画布；先用默认混合 `drawText`，再把 `globalCompositeOperation` 切到 `source-in` 画内容。文字是逐簇逐笔绘制的，反过来用 `destination-in` 这类会清空其余内容的混合方式画字会报错。
+
+```text
+draw(ctx) { drawText(ctx, word); ctx.globalCompositeOperation = "source-in"; ctx.drawImage(assets.clip, 0, 0, width, height); ctx.globalCompositeOperation = "source-over" }
+```
 
 ## 逐字与逐词动画
 

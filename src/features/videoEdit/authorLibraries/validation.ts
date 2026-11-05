@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { textStyleSchema } from '../../../core/imaging/vectorContent/text'
 import { richTextContentSchema } from '../../../core/imaging/vectorContent/schema'
 import type { FlexNode, FlexStyle } from './flex'
+import type { RichTextContent as ResolvedRichText } from '../../../core/imaging/vectorContent/contracts'
 import type { RichTextContent, TextOptions, TextStyleInput } from './text'
 
 const nonnegative = z.number({ error: '必须为有限非负数' }).finite({ error: '必须为有限非负数' }).min(0, { error: '必须为有限非负数' })
@@ -55,8 +56,15 @@ function parse<T>(schema: z.ZodType<T>, value: unknown, label: string, fields?: 
   throw new Error(details.join('；'))
 }
 
-export function parseTextInput(content: string | RichTextContent, style: TextStyleInput): { content: string | RichTextContent; style: z.output<typeof textStyleSchema> } {
-  const parsed = typeof content === 'string' ? content : parse(richTextContentSchema, content, '富文本')
+const richTextWithDefaults = (content: RichTextContent, style: TextStyleInput): unknown => {
+  if (!Array.isArray(content?.paragraphs)) return content
+  const align = textStyleSchema.shape.align.safeParse(style?.align)
+  return { ...content, box: content.box ?? { x: 0, y: 0, width: 0, height: 0 }, paragraphs: content.paragraphs.map(paragraph => !paragraph || typeof paragraph !== 'object' ? paragraph : ({
+    ...paragraph, align: paragraph.align ?? (align.success ? align.data : undefined), direction: paragraph.direction ?? 'auto', spaceBefore: paragraph.spaceBefore ?? 0, spaceAfter: paragraph.spaceAfter ?? 0,
+  })) }
+}
+export function parseTextInput(content: string | RichTextContent, style: TextStyleInput): { content: string | ResolvedRichText; style: z.output<typeof textStyleSchema> } {
+  const parsed = typeof content === 'string' ? content : parse(richTextContentSchema, richTextWithDefaults(content, style), '富文本')
   if (typeof parsed !== 'string' && typeof content !== 'string') {
     // 共享排版用源样式身份保留相邻 run 的连写；Zod 深拷贝不能拆散这种身份关系。
     const styles = new Map<TextStyleInput, z.output<typeof textStyleSchema>>()

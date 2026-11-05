@@ -24,6 +24,7 @@ it('正式作者入口无 Canvas 度量地录制轮廓/外观指纹，揭示共�
       expect(a.comparable).toBe(true); expect(sameAuthorCanvasRecording(a, b)).toBe(true)
       expect(a.ops.some(op => op[0] === 'textAppearance')).toBe(true)
       expect(a.textDraws[1].constraint.maxWidth).toBe(500)
+      expect(() => recordAuthorCanvas({ width: 800, height: 300 }, measure, [1, 0, 0, 1, 0, 0], ctx => { ctx.globalCompositeOperation = 'destination-in'; drawText(ctx, plain) }, true)).toThrow('source-in')
       const hidden = recordAuthorCanvas({ width: 800, height: 300 }, measure, [1, 0, 0, 1, 0, 0], ctx => drawText(ctx, plain, { graphemes: [1] }), true)
       expect(hidden.textDraws[0].inkBounds).toBeNull()
       const erased = recordAuthorCanvas({ width: 800, height: 300 }, measure, [1, 0, 0, 1, 0, 0], ctx => { drawText(ctx, plain); ctx.globalCompositeOperation = 'destination-out'; drawText(ctx, appearance) }, true)

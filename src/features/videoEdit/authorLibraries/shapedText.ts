@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import * as hb from '../../../../resources/video-edit-author/vendor/harfbuzzjs/1.6.4/index.mjs'
-import type { RichTextContent } from '../../../core/imaging/vectorContent/contracts'
+import type { TextParagraph } from '../../../core/imaging/vectorContent/contracts'
 import { textStyleSchema } from '../../../core/imaging/vectorContent/text'
 import { createShapedTextPlan, type ShapedTextPlan, type ShapedTextOptions, type ShapedTextCluster } from '../../../core/imaging/vectorContent/shaping/textPlan'
 import { TextShaper } from '../../../core/imaging/vectorContent/shaping/harfbuzz'
@@ -22,7 +22,11 @@ export interface TextDrawOptions {
   graphemes?: number | readonly number[] | ((grapheme: TextLayout['graphemes'][number], index: number) => GraphemePose | null)
   backgroundAndDecorationOpacity?: number
 }
-export type { RichTextContent }
+/** 作者写富文本时只有 runs 必填：对齐沿用基础样式，方向自动判断，段距为 0，盒子由 options 决定。 */
+export interface RichTextContent {
+  box?: { x: number; y: number; width: number; height: number }
+  paragraphs: readonly (Partial<Omit<TextParagraph, 'runs'>> & { runs: readonly { text: string; style: TextStyleInput }[] })[]
+}
 const schema = textOptionsSchema.extend({ wrap: z.enum(['normal', 'word', 'grapheme', 'none']).optional(), ligatures: z.boolean().optional(), autospace: z.boolean().optional() })
 interface State { fontDiagnostics: readonly string[]; plan: ShapedTextPlan; id: string; rasters: Map<string, Raster>; owner: object; rich: boolean; options: TextOptions }
 interface Raster { image: ImageBitmap; pixels: number; restore(): Raster }
@@ -69,6 +73,8 @@ export function prepareTextLayout(input: string | RichTextContent, style: TextSt
   observe(id)
   return layout
 }
+
+const WHOLE_CANVAS_COMPOSITES = new Set(['source-in', 'source-out', 'destination-in', 'destination-atop', 'copy'])
 
 function paintCluster(ctx: OffscreenCanvasRenderingContext2D, cluster: ShapedTextCluster, outline = 0): void {
   ctx.save()
@@ -126,6 +132,8 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
     if (pose && Object.values(pose).some(value => !Number.isFinite(value))) throw new Error('字素位姿必须为有限数值')
     return pose && (pose.opacity ?? 1) > 0 ? pose : null
   })
+  // 文字逐簇逐笔绘制；这些混合方式每画一笔都会清掉笔画以外的内容，最后只剩一笔或全空。
+  if (WHOLE_CANVAS_COMPOSITES.has(context.globalCompositeOperation) && poses.some(Boolean)) throw new Error(`drawText 不能在 ${context.globalCompositeOperation} 下绘制：要让内容从字里透出来，先用默认混合画字，再切到 source-in 画内容`)
   const opacity = options.backgroundAndDecorationOpacity ?? (poses.some(Boolean) ? 1 : 0)
   if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new Error('底板和装饰透明度必须在 0–1 之间')
   const { background } = plan.style

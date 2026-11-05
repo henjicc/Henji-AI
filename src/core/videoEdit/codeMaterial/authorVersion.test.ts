@@ -56,8 +56,9 @@ it('显式版本经过写入读回保留，旧源码版本不被隐式升级，�
   sample.sample.apiVersion = 6; sample.sample.libraries = { 'henji-layout': '1.0.0' }
   expect(upgradePersistenceContent(format, JSON.parse(JSON.stringify(sample)), 6)).toEqual(sample)
   const source = { entry: 'main.js', files: { 'main.js': "import { layoutText } from 'henji-layout/text'; export default { draw() { return layoutText('A') } }" } }
-  expect(pinPreviewAuthor(source)).toEqual({ apiVersion: CODE_AUTHOR_API_VERSION, libraries: { 'henji-layout': '2.0.0' } })
-  expect(pinPreviewAuthor(source, { apiVersion: 10 }).libraries['henji-layout']).toBe('2.0.0')
+  const newest = latestAuthorLibraryVersions(CODE_AUTHOR_API_VERSION)['henji-layout']
+  expect(pinPreviewAuthor(source)).toEqual({ apiVersion: CODE_AUTHOR_API_VERSION, libraries: { 'henji-layout': newest } })
+  expect(pinPreviewAuthor(source, { apiVersion: 10 }).libraries['henji-layout']).toBe(newest)
   expect(pinPreviewAuthor(source, { apiVersion: 6, libraries: { 'henji-layout': '1.0.0' } })).toEqual({ apiVersion: 6, libraries: { 'henji-layout': '1.0.0' } })
   expect(() => resolvePreviewAuthor({ apiVersion: 10, libraries: { 'henji-layout': '99.0.0' } })).toThrow('未提供')
   const code = PERSISTENCE_FORMATS.find(value => value.id === 'code-version')!

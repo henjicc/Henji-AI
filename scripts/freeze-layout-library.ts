@@ -43,7 +43,7 @@ const configFile = path.join(root, '.tmp', `layout-types-${process.pid}.json`)
 const ambientFile = path.join(root, '.tmp', `layout-ambient-${process.pid}.d.ts`)
 fs.mkdirSync(path.dirname(configFile), { recursive: true })
 // HarfBuzz 的上游声明引用可选的 Emscripten 全局；它不是作者契约，不向作者输出。
-fs.writeFileSync(ambientFile, 'interface EmscriptenModule {}\n')
+fs.writeFileSync(ambientFile, `interface EmscriptenModule {}\n${fs.readFileSync(path.join(root, 'src/types/bidi-js.d.ts'), 'utf8')}`)
 fs.writeFileSync(configFile, JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler', strict: true, skipLibCheck: true, esModuleInterop: true, baseUrl: root, paths: { '@/*': ['src/*'] }, types: [ambientFile], lib: ['ESNext', 'WebWorker', 'WebWorker.Iterable'] }, files: [...entries.map(entry => path.join(root, entry)), ambientFile] }))
 let declarations: string[]
 try { declarations = generateDtsBundle(entries.map(filePath => ({ filePath: path.join(root, filePath), output: { noBanner: true, exportReferencedTypes: false }, libraries: { allowedTypesLibraries: [] } })), { preferredConfigPath: configFile }) }
@@ -67,25 +67,26 @@ const bundled = await esbuild.build({ absWorkingDir: root, entryPoints: { ...Obj
   build.onResolve({ filter: /harfbuzzjs\/1\.6\.4\/index\.mjs$/ }, () => ({ path: './harfbuzz/index.mjs', external: true }))
 } }] })
 for (const file of bundled.outputFiles) outputs[path.relative(destination, file.path).split(path.sep).join('/')] = file.contents
-// 分块名由构建器决定，许可登记必须指向实际包含 Pretext 的产物。
-const pretextFiles = Object.entries(bundled.metafile!.outputs).filter(([, output]) => Object.keys(output.inputs).some(input => input.includes('/vendor/pretext/'))).map(([file]) => path.relative(destination, path.resolve(root, file)).split(path.sep).join('/'))
-if (pretextFiles.length) {
+// 分块名由构建器决定，许可登记必须指向实际包含这些组件的产物。
+for (const [component, input] of [['Pretext', '/vendor/pretext/'], ['bidi-js', '/bidi-js/']]) {
+  const chunks = Object.entries(bundled.metafile!.outputs).filter(([, output]) => Object.keys(output.inputs).some(file => file.includes(input))).map(([file]) => path.relative(destination, path.resolve(root, file)).split(path.sep).join('/'))
+  if (!chunks.length) continue
   const componentsPath = path.join(root, 'scripts/third-party-licenses/author-libs/components.json')
   const text = fs.readFileSync(componentsPath, 'utf8').replace(/\r\n/g, '\n')
   let matched = false
-  const next = text.replace(/^[ \t]*\{[^\r\n]+"name":\s*"Pretext"[^\r\n]+$/gm, line => {
-    const component = JSON.parse(line.trim().replace(/,$/, ''))
-    if (component.library !== `henji-layout@${version}`) return line
+  const next = text.replace(new RegExp(`^[ \\t]*\\{[^\\r\\n]+"name":\\s*"${component}"[^\\r\\n]+$`, 'gm'), line => {
+    const entry = JSON.parse(line.trim().replace(/,$/, ''))
+    if (entry.library !== `henji-layout@${version}`) return line
     matched = true
-    return `    ${JSON.stringify({ ...component, files: pretextFiles.sort() })},`
+    return `    ${JSON.stringify({ ...entry, files: chunks.sort() })},`
   })
-  if (!matched) throw new Error('缺少 Pretext 许可登记')
+  if (!matched) throw new Error(`缺少 ${component} 许可登记`)
   fs.writeFileSync(componentsPath, next)
 }
 // 顶层 await 只在独立 ESM 发行外壳执行，ES2020 bundle 使用 /load 显式初始化，不打包 Yoga 默认入口。
 outputs['flex.mjs'] = "import { ready, layoutBoxes } from './flex-runtime.mjs';\nawait ready;\nexport { layoutBoxes };\n"
 outputs.LICENSE = fs.readFileSync(path.join(root, 'LICENSE'), 'utf8')
-outputs['NOTICE.txt'] = `Yoga 3.2.1 (MIT)\n${fs.readFileSync(path.join(root, 'scripts/third-party-licenses/author-libs/yoga-MIT.txt'), 'utf8')}\nZod\n${fs.readFileSync(path.join(root, 'node_modules/zod/LICENSE'), 'utf8')}`
+outputs['NOTICE.txt'] = `bidi-js 1.0.3 (MIT)\n${fs.readFileSync(path.join(root, 'scripts/third-party-licenses/author-libs/bidi-js-MIT.txt'), 'utf8')}\nYoga 3.2.1 (MIT)\n${fs.readFileSync(path.join(root, 'scripts/third-party-licenses/author-libs/yoga-MIT.txt'), 'utf8')}\nZod\n${fs.readFileSync(path.join(root, 'node_modules/zod/LICENSE'), 'utf8')}`
 for (const [library, vendorVersion] of [['harfbuzzjs', '1.6.4'], ['pretext', '1.0.0']]) {
   const directory = `resources/video-edit-author/vendor/${library}/${vendorVersion}`
   const source = JSON.parse(fs.readFileSync(path.join(root, directory, 'source.json'), 'utf8')) as { files: Record<string, unknown>; localArtifacts: Record<string, unknown> }

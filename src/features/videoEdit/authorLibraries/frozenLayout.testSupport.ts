@@ -6,5 +6,6 @@ const text = await import(/* @vite-ignore */ pathToFileURL(path.join(root, 'text
 const flex = await import(/* @vite-ignore */ pathToFileURL(path.join(root, 'flex-runtime.mjs')).href) as typeof import('./flex')
 export const { layoutText, drawText } = text
 export const { layoutBoxes, ready } = flex
-export type { RichTextContent, TextStyleInput, TextOptions } from './text'
+export type { TextStyleInput, TextOptions } from './text'
+export type { RichTextContent } from '../../../core/imaging/vectorContent/contracts'
 export type { FlexNode, FlexStyle } from './flex'

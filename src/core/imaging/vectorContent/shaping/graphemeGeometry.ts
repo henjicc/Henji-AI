@@ -13,7 +13,7 @@ export function lineGraphemeGeometry(text: string, line: ParagraphLine): readonl
   const ends = graphemeEnds(text), starts = [0, ...ends.slice(0, -1)]
   const clusters = [...new Set(line.glyphs.map(glyph => glyph.cluster))].sort((a, b) => a - b)
   const positions = new Map<number, { x: number; width: number }>()
-  let x = 0
+  let x = line.visualStart ?? 0
   for (const glyph of line.glyphs) {
     const position = positions.get(glyph.cluster)
     if (position) position.width += glyph.advance

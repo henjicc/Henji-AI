@@ -15,15 +15,21 @@ export interface ShapedTextPlan extends Omit<TextDrawPlan, 'batches' | 'rasterBo
 interface Row { paragraph: number; sourceOffset: number; source: string; runs: ShapingRuns; line: ParagraphLine; y: number; height: number; ascent: number; descent: number; align: TextStyle['align'] }
 const ideographic = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
 const boundsAt = (rect: TextPlanRect, x: number, y: number): TextPlanRect => ({ ...rect, x: rect.x + x, y: rect.y + y })
+// 动态排版每帧都可能换栏宽，整形结果与栏宽无关；按内容、样式和字体复用，换宽度只重新断行。
+const PARAGRAPH_CACHE_SIZE = 32
+const paragraphCaches = new WeakMap<TextShaper, Map<string, { runs: ShapingRuns; shape: ShapedParagraph; intrinsic: { min: number; max: number } }>>()
 
 /** 整形、选行与放置共用一个段落结果；fit 每次改变实际字号重新整形。 */
 export function createShapedTextPlan(shaper: TextShaper, fonts: TextFontAccess, input: string | RichTextContent, originalStyle: TextStyle, options: ShapedTextOptions = {}): ShapedTextPlan {
-  const original: TextParagraph[] = typeof input === 'string' ? [{ runs: [{ text: input, style: originalStyle }], align: originalStyle.align, direction: options.direction === 'rtl' ? 'rtl' : 'ltr', spaceBefore: 0, spaceAfter: 0 }] : input.paragraphs
+  const original: TextParagraph[] = typeof input === 'string' ? [{ runs: [{ text: input, style: originalStyle }], align: originalStyle.align, direction: 'auto', spaceBefore: 0, spaceAfter: 0 }] : input.paragraphs
   const sourceText = original.map(paragraph => paragraph.runs.map(run => run.text).join('')).join('\n')
   const richBox = typeof input === 'string' ? undefined : input.box
   const boxWidth = options.box?.width || originalStyle.boxWidth * (options.frame?.width ?? 0) || richBox?.width || undefined
   const boxHeight = options.box?.height ?? (originalStyle.boxHeight * (options.frame?.height ?? 0) || richBox?.height || undefined)
-  const wrapWidth = options.wrapWidth ?? boxWidth
+  // 只给 maxWidth 时按它折行；同时要 fit 又没给行数或高度上限，折行后永远放得下、fit 就失效了，所以按单行缩字号。
+  const fitActive = !!options.fit && (options.fit.trigger !== 'maxLines' || options.maxLines !== undefined)
+  const wrapsAtMaxWidth = !fitActive || (options.maxLines ?? 1) > 1 || options.maxHeight !== undefined
+  const wrapWidth = options.wrapWidth ?? boxWidth ?? (wrapsAtMaxWidth ? options.maxWidth : undefined)
   const constraints: TextDrawConstraints = { ...options, wrap: options.wrap === 'normal' ? 'word' : options.wrap }
   const make = (size: number) => {
     const factor = size / originalStyle.fontSize, style = scaleTextSpatialStyle(originalStyle, factor), rows: Row[] = []
@@ -32,14 +38,25 @@ export function createShapedTextPlan(shaper: TextShaper, fonts: TextFontAccess, 
       let at = 0
       const spans = paragraph.runs.map(run => { const start = at; at += run.text.length; return { start, end: at, style: scaleTextSpatialStyle(run.style, factor) } })
       const source = paragraph.runs.map(run => run.text).join('')
-      const direction = options.direction === 'rtl' || paragraph.direction === 'rtl' ? 'rtl' : 'ltr'
-      const shapeOptions: ShapeOptions = { size, direction, ligatures: options.ligatures, features: options.features, axes: options.axes }
-      const runs = prepareShapingRuns(shaper, fonts, source, spans, shapeOptions)
+      const base = options.direction === 'rtl' || options.direction === 'ltr' ? options.direction : paragraph.direction
+      const shapeOptions: ShapeOptions = { size, direction: base === 'rtl' ? 'rtl' : 'ltr', ligatures: options.ligatures, features: options.features, axes: options.axes }
       const fallback = fonts.chain().candidates.find(candidate => candidate.font)?.font
       if (!fallback) throw new Error('默认文字字体不可用')
-      const paragraphShape = new ShapedParagraph(shaper, runs.runs[0]?.source ?? fallback, runs.text, { ...shapeOptions, spacing: runs.spacing, maxWidth: wrapWidth, autospace: options.autospace, wrap: options.wrap === 'word' ? 'normal' : options.wrap }, runs.runs, runs.graphemes.map(g => g.end))
-      const lines = [...paragraphShape.layout().lines]
-      const intrinsic = paragraphShape.intrinsicWidths(); min = Math.max(min, intrinsic.min); max = Math.max(max, intrinsic.max)
+      let cache = paragraphCaches.get(shaper)
+      if (!cache) paragraphCaches.set(shaper, cache = new Map())
+      const cacheKey = JSON.stringify([source, base, shapeOptions, options.autospace, options.wrap, spans, spans.map(span => fonts.chain(textFontRequest(span.style)).identity), fonts.chain().identity])
+      let prepared = cache.get(cacheKey)
+      if (prepared) cache.delete(cacheKey)
+      else {
+        const runs = prepareShapingRuns(shaper, fonts, source, spans, shapeOptions, base)
+        const shape = new ShapedParagraph(shaper, runs.runs[0]?.source ?? fallback, runs.text, { ...shapeOptions, bidi: runs.bidi, spacing: runs.spacing, autospace: options.autospace, wrap: options.wrap === 'word' ? 'normal' : options.wrap }, runs.runs, runs.graphemes.map(g => g.end))
+        prepared = { runs, shape, intrinsic: shape.intrinsicWidths() }
+        if (cache.size >= PARAGRAPH_CACHE_SIZE) cache.delete(cache.keys().next().value!)
+      }
+      cache.set(cacheKey, prepared)
+      const { runs, intrinsic } = prepared
+      const lines = [...prepared.shape.layout(wrapWidth).lines]
+      min = Math.max(min, intrinsic.min); max = Math.max(max, intrinsic.max)
       if (!lines.length || runs.text.endsWith('\n')) lines.push({ start: runs.text.length, end: runs.text.length, contentEnd: runs.text.length, width: 0, glyphs: [] })
       y += paragraph.spaceBefore * factor
       lines.forEach(line => {
@@ -88,29 +105,43 @@ export function createShapedTextPlan(shaper: TextShaper, fonts: TextFontAccess, 
     const reason = options.maxLines !== undefined && selected.rows.indexOf(row) >= options.maxLines ? 'maxLines' : 'maxHeight'
     omittedRanges.push(...range(row, sourceAt(row, row.line.start), sourceAt(row, row.line.end)).map(value => ({ ...value, reason } as const)))
   }
+  // 同一字形在一份版面里反复出现，字形范围和轮廓按字体与字号各查一次。
+  const inkCache = new Map<string, ReturnType<TextShaper['ink']>>(), outlineCache = new Map<string, TextOutline>(), metricCache = new Map<string, ReturnType<TextShaper['metrics']>>()
   for (const row of visible) {
-    const { line, runs } = row, lineIndex = lines.length
+    const { line, runs } = row, lineIndex = lines.length, firstGrapheme = graphemes.length
     const actual = runs.graphemes.filter(g => g.start >= line.start && g.start < line.contentEnd)
     const last = selected.rows[selected.rows.indexOf(row) + 1]?.paragraph !== row.paragraph
     const justify = row.align.startsWith('justify') && (!last || row.align === 'justify-all')
     const ends = [...new Set(line.glyphs.map(g => g.cluster))].sort((a, b) => a - b)
-    const legal = ends.filter((at, index) => index > 0 && (/\s/u.test(runs.text.slice(ends[index - 1], at)) || ideographic.test(runs.text.slice(ends[index - 1], at)) && ideographic.test(runs.text.slice(at, ends[index + 1] ?? line.contentEnd))))
-    const extra = justify && legal.length ? Math.max(0, width - line.width) / legal.length : 0
-    const occupied = line.width + legal.length * extra, align = row.align === 'justify-center' ? 'center' : row.align === 'justify-right' ? 'right' : row.align
+    const segments = new Map(ends.map((at, index) => [at, runs.text.slice(at, ends[index + 1] ?? line.contentEnd)]))
+    // 余量加在显示相邻的两簇之间；混排时显示相邻不一定是逻辑相邻。
+    const pairKey = (a: number, b: number): string => `${Math.min(a, b)}:${Math.max(a, b)}`
+    const shown = line.glyphs.map(g => g.cluster).filter((at, index, all) => at !== all[index - 1])
+    const legal = new Set(shown.flatMap((at, index) => {
+      if (!index) return []
+      const before = segments.get(Math.min(at, shown[index - 1])) ?? '', after = segments.get(Math.max(at, shown[index - 1])) ?? ''
+      return /\s/u.test(before) || ideographic.test(before) && ideographic.test(after) ? [pairKey(at, shown[index - 1])] : []
+    }))
+    const extra = justify && legal.size ? Math.max(0, width - line.width) / legal.size : 0
+    const occupied = line.width + legal.size * extra, align = row.align === 'justify-center' ? 'center' : row.align === 'justify-right' ? 'right' : row.align
     const x = box.x + (align === 'center' ? (width - occupied) / 2 : align === 'right' ? width - occupied : 0)
     const baseline = top + row.y + (row.height - row.ascent - row.descent) / 2 + row.ascent
     const baselines = { baselineKind: 'alphabetic' as const, baseline, alphabeticBaseline: baseline, middleBaseline: top + row.y + row.height / 2, baselineConversion: 'measured' as const }
     const rowGroups: number[] = [], owned = new Map<number, ShapedTextCluster>()
-    let advance = 0
-    for (const glyph of line.glyphs) {
-      const source = [...actual].reverse().find(g => g.start <= glyph.cluster)
-      if (!source) continue
-      const owner = actual.indexOf(source) + graphemes.length, run = runs.runs[glyph.run ?? 0]
+    let advance = line.visualStart ?? 0
+    for (const [glyphIndex, glyph] of line.glyphs.entries()) {
+      let low = 0, high = actual.length
+      while (low < high) { const middle = (low + high) >> 1; if (actual[middle].start > glyph.cluster) high = middle; else low = middle + 1 }
+      if (!low) continue
+      const source = actual[low - 1], owner = low - 1 + graphemes.length, run = runs.runs[glyph.run ?? 0]
       let cluster = owned.get(source.start)
       if (!cluster) { cluster = { owner, style: source.style, x: x + advance, baseline: baseline + source.baselineShift, advance: 0, glyphs: [], inkBounds: null }; owned.set(source.start, cluster); clusters.push(cluster) }
       const gx = x + advance + glyph.xOffset, gy = baseline + source.baselineShift - glyph.yOffset
-      const ink = shaper.ink(run.source, glyph.id, run.options), metric = shaper.metrics(run.source, run.options)
-      const outline = shaper.outlineShape(run.source, glyph.id, run.options.axes)
+      const runKey = `${row.paragraph}:${glyph.run ?? 0}`, glyphKey = `${runKey}:${glyph.id}`
+      let ink = inkCache.get(glyphKey), outline = outlineCache.get(glyphKey), metric = metricCache.get(runKey)
+      if (ink === undefined) inkCache.set(glyphKey, ink = shaper.ink(run.source, glyph.id, run.options))
+      if (!outline) outlineCache.set(glyphKey, outline = shaper.outlineShape(run.source, glyph.id, run.options.axes))
+      if (!metric) metricCache.set(runKey, metric = shaper.metrics(run.source, run.options))
       cluster.glyphs.push({ outline, x: gx - cluster.x, y: gy - cluster.baseline, scale: metric.scale })
       if (ink) {
         const placed = boundsAt(ink, gx, gy), bold = source.style.fauxBold ? Math.max(.5, run.options.size / 30) / 2 : 0
@@ -120,8 +151,8 @@ export function createShapedTextPlan(shaper: TextShaper, fonts: TextFontAccess, 
       }
       if (/\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u.test(runs.text.slice(source.start, source.end)) && (!outline.svg || shaper.isColorGlyph(run.source, glyph.id, run.options.axes))) cluster.emoji = runs.text.slice(source.start, source.end)
       advance += glyph.advance; cluster.advance += glyph.advance
-      const next = line.glyphs[line.glyphs.indexOf(glyph) + 1]
-      if (next && glyph.cluster !== next.cluster && legal.includes(Math.max(glyph.cluster, next.cluster))) { advance += extra; cluster.advance += extra }
+      const next = line.glyphs[glyphIndex + 1]
+      if (next && glyph.cluster !== next.cluster && legal.has(pairKey(glyph.cluster, next.cluster))) { advance += extra; cluster.advance += extra }
     }
     actual.forEach(g => {
       const cluster = owned.get(g.start) ?? [...owned.entries()].sort(([a], [b]) => b - a).find(([start]) => start <= g.start)?.[1]
@@ -129,10 +160,15 @@ export function createShapedTextPlan(shaper: TextShaper, fonts: TextFontAccess, 
       const gx = cluster?.x ?? x
       graphemes.push({ ...baselines, baseline: cluster?.baseline ?? baseline, alphabeticBaseline: cluster?.baseline ?? baseline, y: cluster?.baseline ?? baseline, text: row.source.slice(g.sourceStart, g.sourceEnd), displayText: runs.text.slice(g.start, g.end), source: { start, end }, sources: range(row, g.sourceStart, g.sourceEnd), style: g.style, line: lineIndex, group: groups.length, x: gx, advance: owner === graphemes.length ? cluster?.advance ?? 0 : 0, owner, positionKind: owner === graphemes.length ? 'individual' : 'shared-cluster' })
     })
+    const members = new Map<number, number[]>()
+    for (let index = firstGrapheme; index < graphemes.length; index++) {
+      const list = members.get(graphemes[index].owner)
+      if (list) list.push(index); else members.set(graphemes[index].owner, [index])
+    }
     for (const cluster of owned.values()) {
       rowGroups.push(groups.length)
-      for (const grapheme of graphemes) if (grapheme.owner === cluster.owner) grapheme.group = groups.length
-      groups.push({ ...baselines, text: graphemes[cluster.owner]?.displayText ?? '', font: cluster.style.fontFamily, size: cluster.style.fontSize, x: cluster.x, baseline: cluster.baseline, style: cluster.style, graphemes: graphemes.flatMap((g, index) => g.owner === cluster.owner ? [index] : []), indivisible: true, inkBounds: cluster.inkBounds })
+      for (const index of members.get(cluster.owner) ?? []) graphemes[index].group = groups.length
+      groups.push({ ...baselines, text: graphemes[cluster.owner]?.displayText ?? '', font: cluster.style.fontFamily, size: cluster.style.fontSize, x: cluster.x, baseline: cluster.baseline, style: cluster.style, graphemes: members.get(cluster.owner) ?? [], indivisible: true, inkBounds: cluster.inkBounds })
       inkBounds = union(inkBounds, cluster.inkBounds)
       paintedBounds = union(paintedBounds, appearanceBounds(cluster.inkBounds, { lines: [], left: cluster.x, top: top + row.y, width: occupied, height: row.height, lineHeight: row.height, contentTop: top, style: { ...cluster.style, background: { ...cluster.style.background, enabled: false } } }))
     }
