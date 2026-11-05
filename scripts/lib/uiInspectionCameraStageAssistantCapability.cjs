@@ -1,5 +1,10 @@
+const { execFileSync } = require('node:child_process')
 const { randomUUID } = require('node:crypto')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const mediaBinaries = require('./mediaBinaries.cjs')
+const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 
 const CAMERA_NODE_ID = '__ui_camera_stage_assistant_capability'
 const REQUIRED_CAPABILITY_IDS = [
@@ -56,7 +61,6 @@ function requireObservedDefaultScene(documentId, observed) {
     && camera?.type === 'camera'
     && scene.stateKeyframes?.length === 1
     && stateKeyframe?.time === 0
-    && Number.isInteger(observed.baseRevision)
   if (!valid) {
     throw new Error(`新建镜头参考的默认相机、关键帧或稳定引用不一致：${JSON.stringify({
       documentId: scene?.documentId ?? null,
@@ -65,7 +69,7 @@ function requireObservedDefaultScene(documentId, observed) {
       stateKeyframes: scene?.stateKeyframes?.map((item) => ({ id: item.id, time: item.time })) ?? null,
     })}`)
   }
-  return { cameraId: camera.id, stateKeyframeId: stateKeyframe.id, baseRevision: observed.baseRevision }
+  return { cameraId: camera.id, stateKeyframeId: stateKeyframe.id }
 }
 
 /** 运镜后文档文件里必须有默认摄像机与第二个状态关键帧（视频输出需要时长）。 */
@@ -165,9 +169,33 @@ function requireCompletedTask(task, canvasProjectId) {
   if (task.status !== 'completed' || task.resultRefs?.length !== 1
     || task.resultRefs[0]?.kind !== 'canvas.node'
     || !task.resultRefs[0].id.startsWith(`${canvasProjectId}:`)) {
-    throw new Error(`图片输出 completed 未返回唯一持久结果节点：${JSON.stringify(task)}`)
+    throw new Error(`输出任务 completed 未返回唯一持久结果节点：${JSON.stringify(task)}`)
   }
   return task
+}
+
+/** 视频节点的媒体依次含封面与视频，封面排在前面，按类型取视频那一项。 */
+async function readVideoOutput(client, nodeRef) {
+  for (const outputIndex of [0, 1]) {
+    const media = await readAllMedia(client, nodeRef, { chunkBytes: 200 * 1024, outputIndex })
+    if (media.mimeType?.startsWith('video/')) return media
+  }
+  throw new Error('视频输出节点读不回视频媒体')
+}
+
+/** 文件头和字节数证明不了完整：编码中断的文件也有这些，要由 ffprobe 读出画面尺寸与时长。 */
+function requireCompleteVideoFile(media, expectedSeconds) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-camera-output-'))
+  try {
+    const file = path.join(directory, 'output.mp4')
+    fs.writeFileSync(file, media.bytes)
+    const probed = JSON.parse(execFileSync(mediaBinaries.ffprobePath, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=height:format=duration', '-of', 'json', file], { encoding: 'utf8' }))
+    if (probed.streams?.[0]?.height !== 720 || Math.abs(Number(probed.format?.duration) - expectedSeconds) > 0.5) {
+      throw new Error(`视频输出不完整：${JSON.stringify(probed)}`)
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
 }
 
 function requireCancellationRequested(result) {
@@ -274,18 +302,19 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
       input: { documentId },
     }), 'observe_camera_stage_scene')),
   }
+  // 并发基线走统一修订信封：观察能力补默认摄像机时会改文档，所以在观察之后读取。
+  const documentBaseline = await callTool(client, 'read_application_entity', { ref: { kind: 'camera_stage.document', id: documentId } })
   requireCapabilitySuccess(await executeCapability(client, {
     id: 'apply_camera_stage_camera_move',
     input: {
       documentId,
       cameraId: defaults.cameraId,
-      baseRevision: defaults.baseRevision,
       move: { kind: 'truck', offset: 1.5 },
       targetPoint: { x: 0, y: 0, z: 0 },
       duration: 2,
       speed: 'uniform',
     },
-  }), 'apply_camera_stage_camera_move')
+  }, [documentBaseline]), 'apply_camera_stage_camera_move')
   requireVideoReadyCameraStageDocument(defaults, await readDocument(documentId))
   if (!await page.locator('.react-flow:visible').count()
     || await page.locator('[data-camera-stage-editor]:visible').count()) {
@@ -318,6 +347,20 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
     throw new Error('图片输出任务引用没有对应到正式持久画布结果')
   }
 
+  // 只有跑完才能证明后台三维窗口的完整视频输出：逐帧渲染、编码、落成画布结果并能读回媒体。
+  const finishedVideo = requireCompletedTask(await waitForTaskStatus(
+    page, client, requireSubmittedTask(await executeCapability(client, {
+      id: 'render_camera_stage_output',
+      input: { canvasRef: projectRef, nodeRef, outputKind: 'video', resolutionPreset: '720p' },
+    }), 'render_camera_stage_output').taskRef,
+    ['completed'], ['failed', 'cancelled', 'interrupted'], 180000,
+  ), canvasProjectId)
+  const finishedVideoId = finishedVideo.resultRefs[0].id.slice(`${canvasProjectId}:`.length)
+  if (!(await readCanvasNodes(page, canvasProjectId)).some((node) => node.id === finishedVideoId && node.type === 'exportVideoNode')) {
+    throw new Error('视频输出任务引用没有对应到正式持久画布结果')
+  }
+  requireCompleteVideoFile(await readVideoOutput(client, finishedVideo.resultRefs[0]), 2)
+
   await beginCameraStageTaskEventCapture(page)
   try {
     const videoSubmitted = requireSubmittedTask(await executeCapability(client, {
@@ -336,13 +379,14 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
       input: { taskRef: videoSubmitted.taskRef },
     }, [baseline]))
     await waitForCancelledTaskEvent(page, videoRequestId, 15000)
-    await page.waitForFunction(async ({ projectId, nodeId }) => {
+    // 被取消的任务不能再添结果：画布上仍只有前面跑完的那一个视频节点。
+    await page.waitForFunction(async ({ projectId, nodeId, finishedVideoId }) => {
       const stored = await window.henjiNative.testFixtures.readCanvas(projectId)
       const nodes = (stored?.nodes ?? [])
       const source = nodes.find((node) => node.id === nodeId)
       return source?.data?.renderTask == null && source?.data?.videoExporting === false
-        && nodes.every((node) => node.type !== 'exportVideoNode')
-    }, { projectId: canvasProjectId, nodeId: CAMERA_NODE_ID }, { timeout: 15000 })
+        && nodes.filter((node) => node.type === 'exportVideoNode').every((node) => node.id === finishedVideoId)
+    }, { projectId: canvasProjectId, nodeId: CAMERA_NODE_ID, finishedVideoId }, { timeout: 15000 })
   } finally {
     await endCameraStageTaskEventCapture(page)
   }

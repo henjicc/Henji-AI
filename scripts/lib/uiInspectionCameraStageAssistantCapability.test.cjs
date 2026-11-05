@@ -89,7 +89,6 @@ test('后台新建镜头参考必须按返回引用落成非草稿文档文件',
 
 test('观察新建的镜头参考必须得到唯一默认相机与零秒关键帧', () => {
   const observed = {
-    baseRevision: 3,
     scene: {
       documentId: 'doc-1',
       activeCameraId: 'camera-1',
@@ -97,7 +96,7 @@ test('观察新建的镜头参考必须得到唯一默认相机与零秒关键�
       stateKeyframes: [{ id: 'state-1', time: 0 }],
     },
   }
-  assert.deepEqual(requireObservedDefaultScene('doc-1', observed), { cameraId: 'camera-1', stateKeyframeId: 'state-1', baseRevision: 3 })
+  assert.deepEqual(requireObservedDefaultScene('doc-1', observed), { cameraId: 'camera-1', stateKeyframeId: 'state-1' })
   assert.throws(() => requireObservedDefaultScene('doc-1', { ...observed, scene: { ...observed.scene, activeCameraId: 'other' } }), /默认相机、关键帧或稳定引用不一致/)
   assert.throws(() => requireObservedDefaultScene('doc-2', observed), /不一致/)
 })
