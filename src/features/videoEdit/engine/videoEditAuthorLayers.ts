@@ -1,3 +1,4 @@
+import { CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampling'
 import type { AuthorFrameInfo, AuthorLayer, AuthorModule, AuthorPose } from './videoEditAuthorModule'
@@ -117,12 +118,36 @@ function authorExposure(effect: AuthorModule): { shutter: number; phase: number;
 const exposureOffset = (phase: number, shutter: number, i: number, count: number): number => (phase + (i + .5) / count * shutter) / 360
 
 /** 声明键一次描述整个曝光区间；范围包含中心帧，覆盖中心绘制与快门位姿。 */
-export function authorFrameExposure(effect: AuthorModule, info: AuthorFrameInfo, enabled: boolean): NonNullable<AuthorFrameInfo['exposure']> {
+export function authorFrameExposure(effect: AuthorModule, info: AuthorFrameInfo, enabled: boolean, apiVersion = 0): NonNullable<AuthorFrameInfo['exposure']> {
   const { shutter, phase } = authorExposure(effect)
-  const active = enabled && !!effect.layers && shutter > 0
-  return { start: info.time + Math.min(0, active ? phase / 360 : 0) * info.frameDuration,
+  const active = enabled && (!!effect.layers || apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && !!effect.draw) && shutter > 0
+  // 没有位姿的图层运动模糊看前两帧：frameKey 和模拟的准备范围都要算上，否则跳帧和连续播放的画面不一样。
+  const history = active && apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && effect.mode !== 'static' ? -2 : 0
+  return { start: info.time + Math.min(0, history, active ? phase / 360 : 0) * info.frameDuration,
     end: info.time + Math.max(0, active ? (phase + shutter) / 360 : 0) * info.frameDuration,
     shutter: active ? shutter : 0, phase: active ? phase : 0 }
+}
+
+/**
+ * 没有位姿的图层比较前一帧和这一帧的绘制指令算运动，前两帧用来看速度连不连续。这些都是连续播放时已经录好的，不用多跑作者代码。
+ */
+export const AUTHOR_MOTION_HISTORY = [-1, -2] as const
+/** 作者函数在另一时刻看到的帧信息。保留取值器：有些字段是用到时才算的。 */
+export function authorShiftedFrameInfo(info: AuthorFrameInfo, frames: number): AuthorFrameInfo {
+  const shifted = Object.defineProperties({} as AuthorFrameInfo, Object.getOwnPropertyDescriptors(info)), delta = frames * info.frameDuration
+  shifted.time = info.time + delta
+  shifted.clip = { ...info.clip, time: info.clip.time + delta }
+  return shifted
+}
+export function authorDrawExposure(effect: AuthorModule, enabled: boolean, apiVersion: number): { fraction: number; shutter: number; phase: number; centered: boolean; max: number } | undefined {
+  if (!enabled || apiVersion < CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION || effect.mode === 'static') return undefined
+  const { shutter, phase, max } = authorExposure(effect)
+  return shutter > 0 ? { fraction: shutter / 360, shutter, phase, centered: Math.abs(phase + shutter / 2) < 1e-6, max } : undefined
+}
+export const authorDrawSampleOffset = (exposure: { shutter: number; phase: number }, index: number, count: number): number => exposureOffset(exposure.phase, exposure.shutter, index, count)
+/** 插值取样只花栅格，不跑作者代码；样本隔约 5 像素，再疏就看得出分帧。 */
+export function authorDrawSampleCount(displacement: number, cap: number): number {
+  return Math.max(1, Math.min(cap, Math.ceil(displacement / 5)))
 }
 
 /** `enabled`：序列的运动模糊总开关；关掉时带位姿的图层只取当前时刻一个姿态。 */

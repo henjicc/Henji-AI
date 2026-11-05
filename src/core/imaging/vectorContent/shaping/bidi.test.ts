@@ -21,4 +21,5 @@ it('非基本平面字符按真实方向类别算：表情不决定基准方向�
   expect(resolveBidi('😀 שלום', 'auto')?.paragraphs[0].level).toBe(1)
   expect(resolveBidi('שלום 😀 עולם', 'auto')?.levels[5]).toBe(1)
   expect(resolveBidi('𞤀𞤁', 'auto')?.levels[0]).toBe(1)
+  expect(resolveBidi('🅰 אב', 'auto')?.paragraphs[0].level).toBe(0)
 })

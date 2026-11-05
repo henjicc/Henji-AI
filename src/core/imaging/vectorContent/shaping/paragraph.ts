@@ -29,10 +29,14 @@ export interface ParagraphLine {
   /** 从右到左的行尾空白排在显示最左边且悬挂在栏外时，第一个字形的起点（负数）。 */
   readonly visualStart?: number
 }
+/** 每行可用宽度不同（分栏、绕排、缩进）时逐行询问；返回 null 表示放不下了，后面的字不再排。 */
+export type LineWidthAt = (lineIndex: number) => number | null
 export interface ParagraphLayout {
   readonly text: string
   readonly lines: readonly ParagraphLine[]
   readonly width: number; readonly height: number; readonly overflow: boolean
+  /** 分栏或绕排的空间用完时，没排进去的文字从这里开始。 */
+  readonly stoppedAt?: number
 }
 const profile = { lineBreakScan: 'blink', graphemeTable: 'chromium/char', hangTabs: true } as const
 // 保留量化前精度；只在 walker 的 fit 边界转换，不逐 glyph 累计舍入误差。
@@ -43,6 +47,7 @@ export function graphemeEnds(text: string): number[] {
   const ends = new Int32Array(text.length)
   return Array.from(ends.subarray(0, findGraphemeEnds('chromium/char', text, 0, text.length, ends)))
 }
+const halfWidthFeature = (options: ShapeOptions): string => options.direction === 'ttb' ? 'vhal' : 'halt'
 const ideograph = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
 const latinOrNumber = /[\p{Script=Latin}\p{Number}]/u
 const autospaceBetween = (a: string, b: string): boolean => (ideograph.test(a) && latinOrNumber.test(b)) || (latinOrNumber.test(a) && ideograph.test(b))
@@ -177,8 +182,8 @@ export class ShapedParagraph {
       const run = this.runs[index]
       const featureRanges = [
         ...(run.options.featureRanges ?? []).filter(feature => feature.start < end && feature.end > start).map(feature => ({ ...feature, start: Math.max(0, feature.start - start), end: Math.min(end - start, feature.end - start) })),
-        ...this.punctuation[index].pairs.filter(pair => pair.earlier >= start && pair.later < end && pair.target >= from && pair.target < to).map(pair => ({ tag: 'halt', value: 1, start: pair.target - start, end: pair.target - start + 1 })),
-        ...(haltAt !== undefined && haltAt >= from && haltAt < to ? [{ tag: 'halt', value: 1, start: haltAt - start, end: haltAt - start + 1 }] : []),
+        ...this.punctuation[index].pairs.filter(pair => pair.earlier >= start && pair.later < end && pair.target >= from && pair.target < to).map(pair => ({ tag: halfWidthFeature(run.options), value: 1, start: pair.target - start, end: pair.target - start + 1 })),
+        ...(haltAt !== undefined && haltAt >= from && haltAt < to ? [{ tag: halfWidthFeature(run.options), value: 1, start: haltAt - start, end: haltAt - start + 1 }] : []),
       ]
       // 行边切断上下文；字体/style run 仍以完整行作 context，不能用子串丢掉邻接信息。
       // 可见软连字符是独立的插入字形，不参与前文字偶距；原文位置仍归属 U+00AD。
@@ -315,15 +320,25 @@ export class ShapedParagraph {
     }
     return { data, ends }
   }
-  layout(requestedWidth = this.options.maxWidth): ParagraphLayout {
-    if ((requestedWidth ?? 0) < 0 || Number.isNaN(requestedWidth)) throw new Error('段落宽度不能为负数或 NaN')
-    const maxWidth = requestedWidth || Infinity
-    const available = this.options.wrap === 'none' ? Infinity : availableUnits(maxWidth)
+  layout(requestedWidth: number | undefined | LineWidthAt = this.options.maxWidth, onLine?: (line: ParagraphLine) => void): ParagraphLayout {
+    const perLine = typeof requestedWidth === 'function' ? requestedWidth : undefined
+    if (!perLine && (((requestedWidth as number | undefined) ?? 0) < 0 || Number.isNaN(requestedWidth))) throw new Error('段落宽度不能为负数或 NaN')
+    let maxWidth = (perLine ? Infinity : requestedWidth as number | undefined) || Infinity
+    let stoppedAt: number | undefined
     const lines: ParagraphLine[] = []
     let cursor = { segmentIndex: 0, graphemeIndex: 0 }
     const offsets = (value: typeof cursor, ends: number[][]): number => value.graphemeIndex
       ? ends[value.segmentIndex][value.graphemeIndex - 1] : this.analysis.starts[value.segmentIndex] ?? this.text.length
+    // 行首被吃掉的字符会让循环重来一次，这时还是同一行，不能再问一次宽度：绕排会多占一段。
+    let askedFor = -1
     while (cursor.segmentIndex < this.analysis.starts.length) {
+      if (perLine && askedFor !== lines.length) {
+        const width = perLine(lines.length)
+        askedFor = lines.length
+        if (width === null) { stoppedAt = cursor.graphemeIndex ? this.segmentEnds[cursor.segmentIndex][cursor.graphemeIndex - 1] : this.analysis.starts[cursor.segmentIndex]; break }
+        maxWidth = width
+      }
+      const available = this.options.wrap === 'none' ? Infinity : availableUnits(maxWidth)
       const segmentStart = this.analysis.starts[cursor.segmentIndex]
       const initialOffset = cursor.graphemeIndex ? this.segmentEnds[cursor.segmentIndex][cursor.graphemeIndex - 1] : segmentStart
       const { data, ends } = this.prepared(initialOffset, available)
@@ -350,11 +365,12 @@ export class ShapedParagraph {
       }
       const rightToLeft = !!this.options.bidi && (this.options.bidi.paragraphs.find(paragraph => paragraph.start <= start && start <= paragraph.end)?.level ?? 0) % 2 === 1
       lines.push(Object.freeze({ start, end: rawEnd, contentEnd: end, width, ...(rightToLeft && width < shape.width ? { visualStart: width - shape.width } : {}), glyphs: Object.freeze(shape.glyphs.map(glyph => Object.freeze({ ...glyph }))) }))
+      onLine?.(lines.at(-1)!)
       if (before.segmentIndex === cursor.segmentIndex && before.graphemeIndex === cursor.graphemeIndex) throw new Error('Pretext walker 未推进原文位置')
       cursor = { ...cursor }
     }
     const width = Math.max(0, ...lines.map(line => line.width))
-    return Object.freeze({ text: this.text, lines: Object.freeze(lines), width, height: lines.length * (this.options.lineHeight ?? this.options.size * 1.2), overflow: layoutUnits(width) > availableUnits(maxWidth) })
+    return Object.freeze({ text: this.text, lines: Object.freeze(lines), width, height: lines.length * (this.options.lineHeight ?? this.options.size * 1.2), overflow: layoutUnits(width) > availableUnits(maxWidth), ...(stoppedAt === undefined ? {} : { stoppedAt }) })
   }
   intrinsicWidths(): { min: number; max: number } {
     let min = 0, max = 0, lineStart = 0

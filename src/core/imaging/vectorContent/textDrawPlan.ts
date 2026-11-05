@@ -29,7 +29,7 @@ export interface TextDrawConstraints {
   signal?: AbortSignal
   /** 纹理取整的坐标原点；纹理范围相对此原点返回，保留宿主先平移再取整的浮点顺序。 */
   rasterOrigin?: { x: number; y: number }
-  /** 仅约束 fit 与超框判定，不隐式换行；只给 maxWidth 且启用 fit 时会缩小长行。 */
+  /** 文字工具里仅约束 fit 与超框判定，不隐式换行；作者排版库的折行规则见 shaping/textPlan。 */
   maxWidth?: number
   maxHeight?: number
   maxLines?: number

@@ -4,14 +4,16 @@ export type BaseDirection = 'auto' | 'ltr' | 'rtl'
 export interface BidiLevels { readonly levels: Uint8Array; readonly paragraphs: readonly { start: number; end: number; level: number }[] }
 
 const bidi = bidiFactory()
+const farArabicNumber = /[\u{10d30}-\u{10d39}\u{10e60}-\u{10e7e}]/u, farLeftToRightSymbol = /[\u{1f100}-\u{1f1ff}]/u
 const farRightToLeft = /[\u{10800}-\u{10fff}\u{1e800}-\u{1efff}]/u
 // 只有这些字符才可能产生非零层级；纯中英文段落每帧重排时不必走完整算法。
 const rightToLeft = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc\u200f\u202b\u202e\u2067\u{10800}-\u{10fff}\u{1e800}-\u{1efff}]/u
 
 // bidi-js 按 UTF-16 单元查方向类别，非基本平面字符一律当成从左到右；换成同类别的占位，长度不变。
 const basicPlaneStandIn = (text: string): string => text.replace(/[\u{10000}-\u{10ffff}]/gu, char => {
+  if (farArabicNumber.test(char)) return '\u0660\u0660'
   if (farRightToLeft.test(char)) return '\u05d0\u05d0'
-  return /\p{Extended_Pictographic}/u.test(char) ? '\u2605\u2605' : char
+  return /\p{Extended_Pictographic}/u.test(char) && !farLeftToRightSymbol.test(char) ? '\u2605\u2605' : char
 })
 
 /** 按 UAX #9 求每个 UTF-16 单元的层级；整段都是第 0 层时返回 undefined。 */

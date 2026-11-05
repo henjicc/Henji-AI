@@ -89,6 +89,8 @@ export function layoutBoxes(tree: FlexNode, size: { width: number; height: numbe
     const left = node.getComputedPadding(Edge.Left), right = node.getComputedPadding(Edge.Right)
     const top = node.getComputedPadding(Edge.Top), bottom = node.getComputedPadding(Edge.Bottom)
     const contentWidth = Math.max(0, width - left - right), contentHeight = Math.max(0, height - top - bottom)
+    // 竖排的折行方向是高度，盒子由 Yoga 给定的高决定一列放多少字。
+    if (source.text.options?.writingMode === 'vertical') return layoutText(source.text.content, source.text.style, { ...source.text.options, wrapWidth: textLimit(contentHeight, measured?.contentSize.height, height, top, bottom), maxWidth: Math.min(source.text.options?.maxWidth ?? Infinity, textLimit(contentWidth, measured?.visibleContentSize.width, width, left, right)), box: { width: contentWidth || Number.EPSILON, height: contentHeight || Number.EPSILON } })
     const wrapWidth = textLimit(contentWidth, measured?.contentSize.width, width, left, right)
     const maxHeight = Math.min(source.text.options?.maxHeight ?? Infinity, textLimit(contentHeight, measured?.visibleContentSize.height, height, top, bottom))
     return layoutText(source.text.content, source.text.style, { ...source.text.options, maxWidth: wrapWidth, wrapWidth, maxHeight, box: { width: contentWidth || Number.EPSILON, height: contentHeight || Number.EPSILON } })
@@ -116,13 +118,21 @@ export function layoutBoxes(tree: FlexNode, size: { width: number; height: numbe
         entry.baseline = reference; measuredNode = content
       }
       measuredNode.setMeasureFunc((width, widthMode, height, heightMode) => {
+        // 分栏和绕排要有确定的行内尺寸才排得了；还没给时先按普通文字量自然尺寸。
+        const natural = { ...text.options, columns: undefined, exclusions: undefined }
         // Yoga 传入的宽高已扣除 padding；Undefined 必须保持自然尺寸，不把 NaN 当约束。
         const padding = source.style?.padding
         const left = typeof padding === 'number' ? padding : padding?.left ?? 0
         const right = typeof padding === 'number' ? padding : padding?.right ?? 0
+        if (text.options?.writingMode === 'vertical') {
+          const inline = heightMode === MeasureMode.Undefined ? undefined : height
+          const plan = observeTextLayouts(() => {}, () => layoutText(text.content, text.style, { ...(inline === undefined || widthMode === MeasureMode.Undefined ? natural : text.options), wrapWidth: inline, box: widthMode === MeasureMode.Undefined ? undefined : { width: width || Number.EPSILON }, anchor: undefined }))
+          entry.measured = plan
+          return { width: measuredAxis(plan.visibleContentSize.width, width, widthMode), height: measuredAxis(plan.visibleContentSize.height, height, heightMode) }
+        }
         const maxWidth = widthMode === MeasureMode.Undefined ? undefined : textLimit(width, entry.measured?.contentSize.width, width + left + right, left, right)
         // 探测计划不能算成作者待绘制的布局；最终布局在结果生成时照常登记。
-        const plan = observeTextLayouts(() => {}, () => layoutText(text.content, text.style, { ...text.options, maxWidth, wrapWidth: maxWidth, box: undefined, anchor: undefined }))
+        const plan = observeTextLayouts(() => {}, () => layoutText(text.content, text.style, { ...(maxWidth === undefined ? natural : text.options), maxWidth, wrapWidth: maxWidth, box: undefined, anchor: undefined }))
         entry.measured = plan
         return { width: measuredAxis(plan.visibleContentSize.width, width, widthMode), height: measuredAxis(plan.visibleContentSize.height, height, heightMode) }
       })

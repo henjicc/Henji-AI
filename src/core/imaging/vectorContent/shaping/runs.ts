@@ -30,10 +30,12 @@ export function textScript(text: string): string | undefined {
   if (/\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u.test(text)) return 'Emoji'
   return scriptPatterns.find(([, pattern]) => pattern.test(text))?.[0] ?? ([...text].some(char => /\p{Letter}/u.test(char) && !/[\p{Script=Common}\p{Script=Inherited}]/u.test(char)) ? 'Zzzz' : undefined)
 }
+// UAX #50 里竖排保持直立的文字；其余（拉丁字母、数字、西文标点）转 90 度。
+const uprightInVertical = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}\p{Script=Yi}\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3\u2460-\u24ff\u3200-\u33ff\u3000-\u303f\uff00-\uff60\uffe0-\uffe6\u30a0-\u30ff\u2e80-\u2fdf]/u
 export const textFontRequest = (style: TextStyle): TextFontRequest => ({ family: style.fontFamily, weight: style.fontWeight, style: style.fontStyle })
 
 /** 富文本的绘制样式单独保留；仅真正影响 shaping 的事实划分 run。 */
-export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, source: string, spans: readonly TextStyleSpan[], options: ShapeOptions, baseDirection: BaseDirection = options.direction ?? 'ltr'): ShapingRuns {
+export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, source: string, spans: readonly TextStyleSpan[], options: ShapeOptions, baseDirection: BaseDirection = options.direction === 'rtl' ? 'rtl' : 'ltr', vertical = false): ShapingRuns {
   const ends = graphemeEnds(source)
   let covered = 0
   for (const span of spans) {
@@ -70,7 +72,7 @@ export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, so
     const size = style.fontSize * (small ? .75 : 1) * (style.superscript || style.subscript ? .65 : 1)
     const script = item.script ?? inherited ?? following[index] ?? options.script ?? 'Latn'
     inherited = value === '\n' ? undefined : script
-    const shapeOptions: ShapeOptions = { ...options, size, direction: level % 2 ? 'rtl' : 'ltr', features: { ...options.features, kern: style.kerning === 'auto' ? 1 : 0 }, script: script === 'Emoji' ? 'Zyyy' : script === 'Zzzz' ? options.script : script }
+    const shapeOptions: ShapeOptions = { ...options, size, direction: vertical && uprightInVertical.test(value) ? 'ttb' : level % 2 ? 'rtl' : 'ltr', features: { ...options.features, kern: style.kerning === 'auto' ? 1 : 0 }, script: script === 'Emoji' ? 'Zyyy' : script === 'Zzzz' ? options.script : script }
     const request = textFontRequest(style), chain = fonts.chain(request)
     identities.add(chain.identity)
     const { font, missing } = fonts.choose(chain, value, shaper, shapeOptions)

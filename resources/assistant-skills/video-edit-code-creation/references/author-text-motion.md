@@ -1,6 +1,6 @@
 # 文字与动效
 
-动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.0.2（见 author-api 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
+动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.1.0（见 author-api 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
 
 ## 字体声明
 
@@ -76,6 +76,23 @@ layoutText({ paragraphs: [{ runs: [{ text: "少了一个", style }, { text: "字
 ```
 
 方向按 Unicode 双向算法处理：阿拉伯文、希伯来文从右到左连写，夹在里面的数字和拉丁字母仍从左到右，中文开头的段落只翻转其中从右到左的片段。默认由第一个强方向字符决定整段基准方向；段落写 `direction: "rtl"` 或 `"ltr"`（或 `options.direction`）可以强制。纯从右到左的段落要靠右时自己写 `align: "right"`。
+
+## 竖排、分栏、绕排、缩进和列表
+
+这些都是 `layoutText` 的选项或段落字段，不用手算每行位置：
+
+| 写法 | 作用 |
+| --- | --- |
+| `writingMode: "vertical"` | 竖排：从上到下成列，第一列在最右。中文直立并用字体的竖排标点，拉丁字母和数字转 90 度。一列的高度来自 `box.height` 或 `maxHeight`；字素的 `x` 是列中线，`y` 是字的起点 |
+| `columns: { count, gap }` | 分栏续排，排满一栏接下一栏。给了 `box.height` 按它算栏高，放不下的进 `omittedRanges`、`truncated` 为真，配 `fit` 自动缩字号；没给高度时各栏自动等高 |
+| `exclusions: [{ x, y, width, height, shape, margin }]` | 文字绕开这些区域（图片、人物），`shape` 为 `rect` 或 `ellipse`，坐标相对放置盒左上。需要确定的行内尺寸 |
+| `columns`、`exclusions` 的对齐 | 分栏和绕排总从盒子起点排，`verticalAlign` 不生效，否则内容挪动后会压到绕排区域 |
+| 段落 `firstLineIndent`、`indent`、`indentEnd` | 首行缩进、整段缩进，单位是作品像素 |
+| 段落 `list: { type, level, start, indent, marker }` | 列表。`type` 为 `decimal`、`cjk`（一、）、`alpha`、`bullet`，同一 `level`、同一 `type` 的相邻段落自动计数，换类型或写新的 `start` 重新数；`list.indent` 的单位是字号倍数（默认 2），段落 `indent` 才是作品像素。折行悬挂在标记之后，从右到左的段落标记在右边；标记不进原文，字素的 `source` 是空范围 |
+
+表格单元格写 `{ text, colSpan, rowSpan }` 合并单元格，被占住的格子不用写；`cells` 里的 `box` 已经是合并后的范围。
+
+`glyphLayers(layout, { id, pose, effects, offset, clip })` 把整段拆成每字一层：`pose(t, index, { cx, cy }, grapheme)` 里的 `cx`、`cy` 是字面中心，返回值就是图层位姿。逐字飞入、散开这类动作用它，每个字的范围按它实际的墨迹、描边和阴影算好了。底板和下划线不进这些层，要的话另画。
 
 ## 字里透出画面
 

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import * as hb from '../../../../resources/video-edit-author/vendor/harfbuzzjs/1.6.4/index.mjs'
 import type { TextParagraph } from '../../../core/imaging/vectorContent/contracts'
+import type { TextParagraphLayout } from '../../../core/imaging/vectorContent/shaping/textPlan'
 import { textStyleSchema } from '../../../core/imaging/vectorContent/text'
 import { createShapedTextPlan, type ShapedTextPlan, type ShapedTextOptions, type ShapedTextCluster } from '../../../core/imaging/vectorContent/shaping/textPlan'
 import { TextShaper } from '../../../core/imaging/vectorContent/shaping/harfbuzz'
@@ -15,7 +16,7 @@ import { TEXT_DRAW_OBSERVER, TEXT_LAYOUT_OBSERVER, TEXT_RASTER_CONTEXT, TEXT_BIT
 
 type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> }
 export type TextStyleInput = DeepReadonly<z.input<typeof textStyleSchema>>
-export type TextOptions = Pick<ShapedTextOptions, 'maxWidth' | 'maxHeight' | 'maxLines' | 'fit' | 'wrap' | 'wrapWidth' | 'anchor' | 'box' | 'frame' | 'direction' | 'truncate' | 'forceGraphemes' | 'ligatures' | 'autospace'>
+export type TextOptions = Pick<ShapedTextOptions, 'maxWidth' | 'maxHeight' | 'maxLines' | 'fit' | 'wrap' | 'wrapWidth' | 'anchor' | 'box' | 'frame' | 'direction' | 'truncate' | 'forceGraphemes' | 'ligatures' | 'autospace' | 'writingMode' | 'columns' | 'exclusions'>
 export type TextLayout = DeepReadonly<Omit<ShapedTextPlan, 'clusters' | 'fontIdentity' | 'intrinsicWidths'>>
 export interface GraphemePose { x?: number; y?: number; scale?: number; rotate?: number; opacity?: number }
 export interface TextDrawOptions {
@@ -25,7 +26,7 @@ export interface TextDrawOptions {
 /** 作者写富文本时只有 runs 必填：对齐沿用基础样式，方向自动判断，段距为 0，盒子由 options 决定。 */
 export interface RichTextContent {
   box?: { x: number; y: number; width: number; height: number }
-  paragraphs: readonly (Partial<Omit<TextParagraph, 'runs'>> & { runs: readonly { text: string; style: TextStyleInput }[] })[]
+  paragraphs: readonly (Partial<Omit<TextParagraph, 'runs'>> & TextParagraphLayout & { runs: readonly { text: string; style: TextStyleInput }[] })[]
 }
 const schema = textOptionsSchema.extend({ wrap: z.enum(['normal', 'word', 'grapheme', 'none']).optional(), ligatures: z.boolean().optional(), autospace: z.boolean().optional() })
 interface State { fontDiagnostics: readonly string[]; plan: ShapedTextPlan; id: string; rasters: Map<string, Raster>; owner: object; rich: boolean; options: TextOptions }
@@ -41,6 +42,35 @@ const observe = (id: string): void => (globalThis as TextLayoutObserverGlobal)[T
 export function layoutText(input: string | RichTextContent, style: TextStyleInput = {}, options: TextOptions = {}): TextLayout {
   schema.parse(options)
   return prepareTextLayout(input, style, options)
+}
+/** 宿主图层的字段；这里只声明本函数会填的部分，宿主另有校验。 */
+export interface GlyphLayer { id: string; bounds: [number, number, number, number]; cacheKey: string; clip?: readonly [number, number, number, number]; pose(t: number): unknown; effects?: (t: number) => unknown; draw(ctx: OffscreenCanvasRenderingContext2D): void }
+export interface GlyphLayerOptions {
+  /** 图层 id 前缀，同一模块里要唯一。 */
+  id?: string
+  /** 每个字的位姿；cx、cy 是字面中心，转和缩放要绕它就用这两个值。返回 null 表示这一刻不显示。 */
+  pose(t: number, index: number, center: { cx: number; cy: number }, grapheme: TextLayout['graphemes'][number]): unknown
+  effects?: (t: number, index: number) => unknown
+  /** 整段的偏移，字的位置按它平移。 */
+  offset?: { x: number; y: number }
+  clip?: readonly [number, number, number, number]
+}
+/** 整段拆成每字一层：位姿走宿主的运动模糊和效果链，不用自己算字的范围。空白和连字的后续字素不单独成层。 */
+export function glyphLayers(layout: TextLayout, options: GlyphLayerOptions): GlyphLayer[] {
+  const { id = 'glyph', offset = { x: 0, y: 0 } } = options, state = states.get(layout)
+  if (!state) throw new Error('glyphLayers 需要同一库 layoutText 返回的布局')
+  const clusters = new Map(state.plan.clusters.map(cluster => [cluster.owner, cluster]))
+  return layout.graphemes.flatMap((g, index) => {
+    const cluster = clusters.get(index)
+    if (g.owner !== index || !g.displayText.trim() || !cluster?.inkBounds) return []
+    // 范围按这个字实际的墨迹和描边、阴影算：混排里大字号、描边和阴影都不会被裁。
+    const size = cluster.style.fontSize, along = Math.max(g.advance, size * .1), ink = cluster.inkBounds
+    const rect = appearanceBounds(ink, { lines: [], left: 0, top: 0, width: 0, height: 0, contentTop: 0, lineHeight: 0, style: { ...cluster.style, background: { ...cluster.style.background, enabled: false } } }) ?? ink
+    const cx = (layout.vertical ? ink.x + ink.width / 2 : (g.x ?? 0) + along / 2) + offset.x, cy = (layout.vertical ? ink.y + ink.height / 2 : g.y - size * .36) + offset.y
+    return [{ id: `${id}-${index}`, bounds: [rect.x - 2 + offset.x, rect.y - 2 + offset.y, rect.x + rect.width + 2 + offset.x, rect.y + rect.height + 2 + offset.y] as [number, number, number, number], cacheKey: `${state.id}:${index}`, ...(options.clip ? { clip: options.clip } : {}),
+      pose: (t: number) => options.pose(t, index, { cx, cy }, g), ...(options.effects ? { effects: (t: number) => options.effects!(t, index) } : {}),
+      draw(ctx: OffscreenCanvasRenderingContext2D) { ctx.save(); ctx.translate(offset.x, offset.y); drawText(ctx, layout, { graphemes: (_, k) => k === index ? {} : null, backgroundAndDecorationOpacity: 0 }); ctx.restore() } }]
+  })
 }
 export function textIntrinsicWidths(layout: TextLayout): { min: number; max: number } { return states.get(layout)!.plan.intrinsicWidths }
 /** 表格只在准备阶段添加数值特性；不扩展公共文字样式。 */
@@ -81,7 +111,8 @@ function paintCluster(ctx: OffscreenCanvasRenderingContext2D, cluster: ShapedTex
   if (cluster.style.fauxItalic) ctx.transform(1, 0, -.2, 1, 0, 0)
   if (cluster.emoji) {
     ctx.font = `${cluster.style.fontSize}px system-ui`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'
-    if (outline) { ctx.lineWidth = outline * 2; ctx.strokeText(cluster.emoji, 0, 0) } else ctx.fillText(cluster.emoji, 0, 0)
+    const emojiX = cluster.upright ? cluster.glyphs[0]?.x ?? 0 : 0, emojiY = cluster.upright ? cluster.glyphs[0]?.y ?? 0 : 0
+    if (outline) { ctx.lineWidth = outline * 2; ctx.strokeText(cluster.emoji, emojiX, emojiY) } else ctx.fillText(cluster.emoji, emojiX, emojiY)
   } else for (const glyph of cluster.glyphs) {
     if (!glyph.outline.svg) continue
     ctx.save(); ctx.translate(glyph.x, glyph.y); ctx.scale(glyph.scale, -glyph.scale)
@@ -139,9 +170,10 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
   const { background } = plan.style
   let actualAppearance: TextPlanRect | null = null
   const backgrounds: Array<{ paint: ShapedTextCluster['style']['background']; box: TextPlanRect; line?: number }> = []
-  if (state.rich) for (const [index, line] of plan.lines.entries()) for (const group of line.groups.map(i => plan.groups[i]).sort((a, b) => a.x - b.x)) {
-    const box = { x: group.x, y: line.y, width: plan.graphemes[group.graphemes[0]].advance, height: line.height }, previous = backgrounds.at(-1)
-    if (previous?.line === index && JSON.stringify(previous.paint) === JSON.stringify(group.style.background)) previous.box.width = box.x + box.width - previous.box.x
+  if (state.rich) for (const [index, line] of plan.lines.entries()) for (const group of line.groups.map(i => plan.groups[i]).sort((a, b) => plan.vertical ? a.baseline - b.baseline : a.x - b.x)) {
+    const advance = plan.graphemes[group.graphemes[0]].advance, previous = backgrounds.at(-1)
+    const box = plan.vertical ? { x: line.x, y: group.baseline, width: line.width, height: advance } : { x: group.x, y: line.y, width: advance, height: line.height }
+    if (previous?.line === index && JSON.stringify(previous.paint) === JSON.stringify(group.style.background)) { if (plan.vertical) previous.box.height = box.y + box.height - previous.box.y; else previous.box.width = box.x + box.width - previous.box.x }
     else backgrounds.push({ paint: group.style.background, box, line: index })
   }
   else backgrounds.push({ paint: background, box: plan.box })
@@ -156,14 +188,16 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
     if (!pose) continue
     const appearance = cluster.style.strokes.some(stroke => stroke.enabled && stroke.width) || cluster.style.shadows.some(shadow => shadow.enabled && shadow.opacity)
     if (!appearance && (part === 'underlay' || !cluster.style.fill.enabled)) continue
-    context.save(); context.globalAlpha *= Math.min(1, pose.opacity ?? 1); context.translate(cluster.x + (pose.x ?? 0), cluster.baseline + (pose.y ?? 0)); context.rotate(pose.rotate ?? 0); context.scale(pose.scale ?? 1, pose.scale ?? 1)
+    context.save(); context.globalAlpha *= Math.min(1, pose.opacity ?? 1); context.translate(cluster.x + (pose.x ?? 0), cluster.baseline + (pose.y ?? 0)); context.rotate((pose.rotate ?? 0) + (cluster.rotate ?? 0)); context.scale(pose.scale ?? 1, pose.scale ?? 1)
     if (!appearance) { context.fillStyle = cluster.style.fill.color; context.strokeStyle = cluster.style.fill.color; paintCluster(context, cluster) }
     else if (cluster.inkBounds) {
-      const rect = appearanceBounds(cluster.inkBounds, { lines: [], left: 0, top: 0, width: 0, height: 0, contentTop: 0, lineHeight: 0, style: { ...cluster.style, background: { ...background, enabled: false } } })
+      // 旋转的簇已经在旋转后的坐标系里，栅格范围要用它自身坐标的墨迹。
+      const ink = cluster.localInk ?? cluster.inkBounds, originX = cluster.localInk ? 0 : cluster.x, originY = cluster.localInk ? 0 : cluster.baseline
+      const rect = appearanceBounds(ink, { lines: [], left: 0, top: 0, width: 0, height: 0, contentTop: 0, lineHeight: 0, style: { ...cluster.style, background: { ...background, enabled: false } } })
       if (rect) {
         // 密度至少为 1：左上留边最多 1，右下取整加留边小于 2 个作品像素。
-        drawTextAppearance(context, { identity: JSON.stringify([state.id, cluster.owner, part]), bounds: { x: rect.x - cluster.x - 1, y: rect.y - cluster.baseline - 1, width: rect.width + 3, height: rect.height + 3 }, draw: target => {
-        const bounds = { ...rect, x: rect.x - cluster.x, y: rect.y - cluster.baseline }
+        drawTextAppearance(context, { identity: JSON.stringify([state.id, cluster.owner, part]), bounds: { x: rect.x - originX - 1, y: rect.y - originY - 1, width: rect.width + 3, height: rect.height + 3 }, draw: target => {
+        const bounds = { ...rect, x: rect.x - originX, y: rect.y - originY }
         const provider = target as TextRasterProvider, physical = provider[TEXT_RASTER_CONTEXT]?.(), matrix = physical?.matrix ?? (() => { const m = target.getTransform(); return [m.a, m.b, m.c, m.d] })()
         const scale = (Math.hypot(matrix[0] + matrix[3], matrix[1] - matrix[2]) + Math.hypot(matrix[0] - matrix[3], matrix[1] + matrix[2])) / 2
         const density = 2 ** Math.ceil(Math.log2(Math.max(1, scale))), colorSpace = physical?.colorSpace ?? provider.getContextAttributes?.().colorSpace ?? 'srgb'
@@ -193,7 +227,7 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
     const group = plan.groups[index]
     if (!group.style.underline) continue
     const advance = Math.max(0, ...group.graphemes.map(index => plan.graphemes[index].advance))
-    context.save(); context.globalAlpha *= opacity; context.fillStyle = group.style.fill.color; context.fillRect(group.x, group.baseline + group.style.fontSize / 12, advance, Math.max(1, group.style.fontSize / 24)); context.restore()
+    context.save(); context.globalAlpha *= opacity; context.fillStyle = group.style.fill.color; if (plan.vertical) context.fillRect(plan.lines[plan.graphemes[group.graphemes[0]].line].x + plan.lines[plan.graphemes[group.graphemes[0]].line].width * .92, group.baseline, Math.max(1, group.style.fontSize / 24), advance); else context.fillRect(group.x, group.baseline + group.style.fontSize / 12, advance, Math.max(1, group.style.fontSize / 24)); context.restore()
   }
   const { sourceText, box, contentSize, visibleContentSize, overflow, truncated, omittedRanges, totalLines, fit } = plan
   const painted = plan.clusters.map(cluster => cluster.style.fill.enabled || cluster.style.strokes.some(stroke => stroke.enabled && stroke.width))

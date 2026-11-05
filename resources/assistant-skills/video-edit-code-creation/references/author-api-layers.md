@@ -4,7 +4,7 @@
 
 ## 图层：layers
 
-需要点选、拖动或运动模糊的元素写成图层；会动的一律用 `pose` 表达，draw 不读 time（只画一次、按位姿合成，见 performance）。`layers()` 每帧返回数组，按顺序从底到顶合成：
+需要点选、拖动的元素写成图层；整块移动、缩放、旋转优先用 `pose`（只画一次、按位姿合成，最省也最顺，见 performance）。每帧内容在变的（重新排版、字距、数字滚动）写在 draw 里按 time 算，同样有运动模糊，只是每次取样要重画。`layers()` 每帧返回数组，按顺序从底到顶合成：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -14,7 +14,7 @@
 | `clip` | 可选裁切矩形 `[x0, y0, x1, y1]` |
 | `draw(ctx, t)` | 绘制本图层；坐标仍是画布像素 |
 | `pose(t)` | 可选；返回 `{x, y, rotation, scale, scaleX, scaleY, opacity, blur}` 或 `null`（本时刻不显示）。变换作用在画布坐标上：先绕画布原点缩放、旋转（弧度），再平移 x/y；绕自身中心缩放时把 `中心 × (1 − scale)` 加进 x/y。有 pose 的图层只画一次内容，位姿在快门内按 `pose(t)` 采样 |
-| `motionBlur` | 有 pose 时默认开启运动模糊，`false` 只关这一层；序列运动模糊总开关关掉时一律不模糊 |
+| `motionBlur` | 默认开启运动模糊，`false` 只关这一层；有 pose 时按位姿曝光，没有 pose 时比较相邻帧的绘制指令得出位移（作者 API 18，不多跑 draw）；序列运动模糊总开关关掉时一律不模糊 |
 | `blurShape` | `gaussian`（默认）或 `lens`（镜头散焦），配合 pose 的 `blur` |
 | `cacheKey` | 可选内容键（字符串或数字）。与上一帧同一图层的值相同、bounds/clip 与用到的图片没变时，引擎不再调用 draw，沿用上一帧的画面，pose 照常每帧求值。动画落定后给它，例如 `'settled'`；内容还在变时不给，或每次变化换一个值 |
 | `data` | `{ parameter, index }` 或 `{ parameter, keyField, key }`，把图层绑定到 table 参数的一行 |

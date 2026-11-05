@@ -13,7 +13,7 @@ dataFiles?: readonly string[]
 
 `frameKey` 是纯函数，返回 JSON 数据：null、布尔、字符串、有限数字、数组或普通对象。不能包含 undefined、函数、symbol、bigint、循环引用、NaN/Infinity 或异步结果。只用参数、尺寸、时刻和模块自己的数据，不读 GPU、画布、素材像素或网页布局；不调用文字测量、栅格或绘制入口。宿主按代码身份、返回值、本帧排到的素材/网页内容与取帧时间、相关片子数据记录及画面参数判断能否复用。提供 frameKey 后，Canvas、文字栅格、layers 读取素材、WebGPU 与 WebGL 都走声明键，不再尝试录画布；报错或返回非 JSON 值时保守使用版本摘要，并记录原因。目前用于代码生成片段，附加代码滤镜继续按版本依赖失效。
 
-`frameKey` 描述这一帧的整个曝光区间，宿主每帧只调用一次。`info.time` 与 `info.clip` 始终是中心帧上下文；`info.frameDuration` 为一帧秒数。宿主在 frameKey 的 `info.exposure` 提供 `{ start, end, shutter, phase }`：start/end 为包含中心时刻的完整曝光范围（素材秒数），shutter/phase 为有效快门角度；未开启图层运动模糊时 start = end = time，角度均为 0。默认快门 180°、相位 -90°，范围为 time ± frameDuration / 4；自定义快门与相位按模块 motionBlur 求值。
+`frameKey` 描述这一帧的整个曝光区间（作者接口 18 起，运动模糊要比较前两帧，`info.exposure.start` 含这两帧），宿主每帧只调用一次。`info.time` 与 `info.clip` 始终是中心帧上下文；`info.frameDuration` 为一帧秒数。宿主在 frameKey 的 `info.exposure` 提供 `{ start, end, shutter, phase }`：start/end 为包含中心时刻的完整曝光范围（素材秒数），shutter/phase 为有效快门角度；未开启图层运动模糊时 start = end = time，角度均为 0。默认快门 180°、相位 -90°，范围为 time ± frameDuration / 4；自定义快门与相位按模块 motionBlur 求值。
 
 作者负责把曝光范围内会影响画面的量全部放进返回值，包括文字、位置、颜色、镜头轨迹与落点，以及曝光边界内的出现/退场。可以用 frameDuration 作保守 padding，但不能只描述中心时刻，也不能只给段落名。两次返回值相同，且 dataFiles 以外的代码与输入相同，整个曝光画面必须相同。宿主不再替作者枚举快门候选时刻。不要依赖调用次数、顺序或上次调用留下的状态。
 

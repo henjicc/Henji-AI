@@ -389,11 +389,15 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   return { ops, comparable, assets, isolated, balanced, textDraws, canvasReview, textUncovered: [...textUncovered], textUncoveredByLayer }
 }
 
+/** 只重放一部分绘制动作，或把它们画成速度图（`velocity` 给每个动作的编码颜色）。 */
+export interface AuthorReplayFilter { only?: ReadonlySet<number>; velocity?: (op: number) => string }
+const VELOCITY_IGNORED = new Set(['fillStyle', 'strokeStyle', 'globalAlpha', 'globalCompositeOperation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'filter'])
+
 /**
  * 在真实画布上按录制顺序重放；作者图片在用到时才取本帧的位图。`transform` 与录制时相同，作者的 setTransform 相对它生效。
  * `effects`：栅格相对画布像素缩小的比例。阴影与 filter 的长度不随变换缩放，按这个比例换算（见 scaleAuthorCanvasEffect）。
  */
-export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: OffscreenCanvasRenderingContext2D, asset: (key: string) => CanvasImageSource, transform: Matrix = [1, 0, 0, 1, 0, 0], effects?: { sx: number; sy: number }): void {
+export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: OffscreenCanvasRenderingContext2D, asset: (key: string) => CanvasImageSource, transform: Matrix = [1, 0, 0, 1, 0, 0], effects?: { sx: number; sy: number }, filter?: AuthorReplayFilter): void {
   const gradients = new Map<number, CanvasGradient>(), patterns = new Map<number, CanvasPattern | null>()
   const decode = (value: Value): Value => {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
@@ -409,9 +413,24 @@ export function replayAuthorCanvas(recording: AuthorCanvasRecording, ctx: Offscr
     return value
   }
   const target = ctx as unknown as Record<string, unknown>
-  for (const [name, ...args] of recording.ops as Array<[string, ...Value[]]>) {
+  for (const [index, [name, ...args]] of (recording.ops as Array<[string, ...Value[]]>).entries()) {
+    if (filter && PAINT.has(name)) {
+      if (filter.only && !filter.only.has(index)) continue
+      if (filter.velocity) {
+        const color = filter.velocity(index)
+        ctx.fillStyle = color; ctx.strokeStyle = color
+        // 速度图只要覆盖范围：图片和带描边的文字按它们的矩形填，透明的部分收集时颜色本来就是空的。
+        if (name === 'textAppearance') { const [, x, y, width, height] = args as number[]; ctx.fillRect(x, y, width, height); continue }
+        if (name === 'drawImage') {
+          const image = decode(args[0]) as { width: number; height: number }, rest = args.slice(1) as number[]
+          const [x, y, width, height] = rest.length === 8 ? rest.slice(4) : rest.length === 4 ? rest : [rest[0], rest[1], image.width, image.height]
+          ctx.fillRect(x, y, width, height); continue
+        }
+      }
+    }
     if (name === 'set') {
       const property = args[0] as string, value = decode(args[1])
+      if (filter?.velocity && VELOCITY_IGNORED.has(property)) continue
       target[property] = effects && SCALED_EFFECTS.has(property) ? scaleAuthorCanvasEffect(property, value, effects.sx, effects.sy) ?? value : value
     }
     else if (name === 'gradient') {

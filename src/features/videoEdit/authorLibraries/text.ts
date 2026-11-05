@@ -1,2 +1,2 @@
-export { layoutText, drawText } from './shapedText'
-export type { TextStyleInput, TextOptions, TextLayout, GraphemePose, TextDrawOptions, RichTextContent } from './shapedText'
+export { layoutText, drawText, glyphLayers } from './shapedText'
+export type { TextStyleInput, TextOptions, TextLayout, GraphemePose, TextDrawOptions, RichTextContent, GlyphLayer, GlyphLayerOptions } from './shapedText'

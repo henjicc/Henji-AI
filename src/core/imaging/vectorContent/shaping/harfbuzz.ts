@@ -7,7 +7,8 @@ export interface ShapeOptions {
   size: number
   language?: string
   script?: string
-  direction?: 'ltr' | 'rtl'
+  /** ttb 只用于竖排里直立的字；竖排里旋转的拉丁文仍按 ltr 整形，由放置阶段转 90 度。 */
+  direction?: 'ltr' | 'rtl' | 'ttb'
   ligatures?: boolean
   features?: Readonly<Record<string, number>>
   axes?: Readonly<Record<string, number>>
@@ -114,7 +115,7 @@ export class TextShaper {
       buffer.addText(text, start, end - start)
       buffer.setLanguage(options.language ?? 'zh-CN')
       if (options.script) buffer.setScript(options.script)
-      buffer.setDirection(options.direction === 'rtl' ? this.hb.Direction.RTL : this.hb.Direction.LTR)
+      buffer.setDirection(options.direction === 'ttb' ? this.hb.Direction.TTB : options.direction === 'rtl' ? this.hb.Direction.RTL : this.hb.Direction.LTR)
       buffer.setClusterLevel(this.hb.ClusterLevel.MONOTONE_GRAPHEMES)
       buffer.setFlags(this.hb.BufferFlag.PRODUCE_UNSAFE_TO_CONCAT | this.hb.BufferFlag.BOT | this.hb.BufferFlag.EOT)
       buffer.guessSegmentProperties()
@@ -128,7 +129,8 @@ export class TextShaper {
       const positions = buffer.getGlyphPositions()
       const glyphs = buffer.getGlyphInfos().map((info, index) => ({
         id: info.codepoint, cluster: info.cluster, flags: info.flags,
-        advance: positions[index].xAdvance * scale,
+        // 段落只认行内方向的推进；竖排时它就是向下走的距离。
+        advance: (options.direction === 'ttb' ? -positions[index].yAdvance : positions[index].xAdvance) * scale,
         xOffset: positions[index].xOffset * scale, yOffset: positions[index].yOffset * scale,
       }))
       return { glyphs, width: glyphs.reduce((sum, glyph) => sum + glyph.advance, 0) }

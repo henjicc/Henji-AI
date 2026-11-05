@@ -37,6 +37,9 @@ export const textOptionsSchema = z.object({
   box: z.object({ width: nonnegative.optional(), height: nonnegative.optional() }).strict().optional(),
   frame: z.object({ width: positive, height: positive }).strict().optional(),
   direction: z.enum(['ltr', 'rtl', 'inherit']).optional(), truncate: z.boolean().optional(), forceGraphemes: z.boolean().optional(),
+  writingMode: z.enum(['horizontal', 'vertical']).optional(),
+  columns: z.object({ count: positive.int(), gap: nonnegative.optional() }).strict().optional(),
+  exclusions: z.array(z.object({ x: finite, y: finite, width: nonnegative, height: nonnegative, shape: z.enum(['rect', 'ellipse']).optional(), margin: nonnegative.optional() }).strict()).optional(),
 }).strict() satisfies z.ZodType<TextOptions>
 const nodeSchema = z.object({ id: z.string().min(1, { error: 'id 必须为非空字符串' }), style: z.unknown().optional(), children: z.array(z.unknown()).optional(), text: z.unknown().optional() }).strict()
 const nodeTextSchema = z.object({ content: z.unknown(), style: z.unknown().optional(), options: z.unknown().optional() }).strict()
@@ -56,16 +59,27 @@ function parse<T>(schema: z.ZodType<T>, value: unknown, label: string, fields?: 
   throw new Error(details.join('；'))
 }
 
+// 段落版式只给作者排版用，不进共享的富文本落盘格式；先摘出来单独校验，整理完再放回去。
+const paragraphLayoutSchema = z.object({
+  firstLineIndent: finite.optional(), indent: nonnegative.optional(), indentEnd: nonnegative.optional(),
+  list: z.object({ type: z.enum(['decimal', 'cjk', 'alpha', 'bullet']).optional(), level: z.number().int().min(0).optional(), start: z.number().int().optional(), indent: nonnegative.optional(), marker: z.string().optional() }).strict().optional(),
+})
+const PARAGRAPH_LAYOUT_KEYS = Object.keys(paragraphLayoutSchema.shape) as Array<keyof typeof paragraphLayoutSchema.shape>
 const richTextWithDefaults = (content: RichTextContent, style: TextStyleInput): unknown => {
   if (!Array.isArray(content?.paragraphs)) return content
   const align = textStyleSchema.shape.align.safeParse(style?.align)
   return { ...content, box: content.box ?? { x: 0, y: 0, width: 0, height: 0 }, paragraphs: content.paragraphs.map(paragraph => !paragraph || typeof paragraph !== 'object' ? paragraph : ({
-    ...paragraph, align: paragraph.align ?? (align.success ? align.data : undefined), direction: paragraph.direction ?? 'auto', spaceBefore: paragraph.spaceBefore ?? 0, spaceAfter: paragraph.spaceAfter ?? 0,
+    ...Object.fromEntries(Object.entries(paragraph).filter(([key]) => !PARAGRAPH_LAYOUT_KEYS.includes(key as typeof PARAGRAPH_LAYOUT_KEYS[number]))), runs: paragraph.runs, align: paragraph.align ?? (align.success ? align.data : undefined), direction: paragraph.direction ?? 'auto', spaceBefore: paragraph.spaceBefore ?? 0, spaceAfter: paragraph.spaceAfter ?? 0,
   })) }
 }
 export function parseTextInput(content: string | RichTextContent, style: TextStyleInput): { content: string | ResolvedRichText; style: z.output<typeof textStyleSchema> } {
   const parsed = typeof content === 'string' ? content : parse(richTextContentSchema, richTextWithDefaults(content, style), '富文本')
   if (typeof parsed !== 'string' && typeof content !== 'string') {
+    parsed.paragraphs.forEach((paragraph, p) => {
+      const source = content.paragraphs[p]
+      const picked = Object.fromEntries(PARAGRAPH_LAYOUT_KEYS.flatMap(key => source[key] === undefined ? [] : [[key, source[key]]]))
+      if (Object.keys(picked).length) Object.assign(paragraph, parse(paragraphLayoutSchema, picked, `富文本.paragraphs.${p}`))
+    })
     // 共享排版用源样式身份保留相邻 run 的连写；Zod 深拷贝不能拆散这种身份关系。
     const styles = new Map<TextStyleInput, z.output<typeof textStyleSchema>>()
     parsed.paragraphs.forEach((paragraph, p) => paragraph.runs.forEach((run, r) => {

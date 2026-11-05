@@ -50,7 +50,7 @@ export default {
 
 ## 简单数字表
 
-`layoutTable` 负责列宽、逐格换行和行高。数字列设 `numeric: true`，启用字体等宽数字并默认右对齐；输入是已格式化字符串。固定列用 `width`，自动列省略。若 `overflow` 为真就加宽、减小字号或分表；若 `diagnostics` 提示数字不等宽就换字体。无跨行跨列，复杂表格交给网页。
+`layoutTable` 负责列宽、逐格换行和行高。数字列设 `numeric: true`，启用字体等宽数字并默认右对齐；输入是已格式化字符串。固定列用 `width`，自动列省略。若 `overflow` 为真就加宽、减小字号或分表；若 `diagnostics` 提示数字不等宽就换字体。单元格写 `{ text, colSpan, rowSpan }` 合并。
 
 ```ts
 import { layoutTable } from "henji-layout/table"

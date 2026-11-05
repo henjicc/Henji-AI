@@ -14,12 +14,13 @@ import { BLUR_AMOUNT_MAX, blurAmountForSigma } from '@/core/videoEdit/blur'
 import { VideoEditAuthorEffects } from './videoEditAuthorEffects'
 import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampling'
 import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeLayerStatistics } from '@/core/videoEdit/codeMaterial/performance'
 import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
 import { codeSimulationIdentity, type CodeSimulationInput } from '@/core/videoEdit/codeSimulation'
 import { VideoEditAuthorSimulation } from './videoEditAuthorSimulation'
-import { authorFrameExposure, authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups, authorStillRaster, authorStillSurfaceSize } from './videoEditAuthorLayers'
+import { AUTHOR_MOTION_HISTORY, authorDrawExposure, authorDrawSampleCount, authorShiftedFrameInfo, authorDrawSampleOffset, authorFrameExposure, authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale, authorStillCrop, authorStillGroups, authorStillRaster, authorStillSurfaceSize } from './videoEditAuthorLayers'
 import { authorCanvasContent, type AuthorCanvasBox } from './videoEditAuthorCanvasBounds'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
@@ -28,7 +29,10 @@ import { authorFramePosition, isAuthorAdjustment } from './videoEditAuthorModule
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { authorInterpolateRecording, authorMotionRuns, authorPaintMotion, authorRecordingMeasurable, type AuthorPaintMotion } from './videoEditAuthorMotionOps'
+import { VideoEditAuthorExposureGpu } from './videoEditAuthorExposureGpu'
 import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, authorCanvasTextContext, trackAuthorCanvasText, recordAuthorCanvas, replayAuthorCanvas, sameAuthorCanvasRecording, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
+import type { AuthorReplayFilter } from './videoEditAuthorCanvasRecorder'
 import { TEXT_DRAW_OBSERVER, TEXT_LAYER_CONTEXT, observeTextLayouts, authorModuleTextLayouts, type TextDrawObservation, type TextDrawObserverContext } from '../../../core/videoEdit/textDrawObservation'
 
 /** One recorded layer. The same object is kept across frames while its commands and image versions stay equal. */
@@ -43,7 +47,7 @@ interface Surface { texture: GpuTexture; width: number; height: number; mips?: b
 /** `quiet`: frames since the layer last changed; Infinity while it has not changed since it first appeared. */
 /** `cache`：作者给的内容键与 bounds/clip 组成的签名；与上一帧相同就不调用 draw，沿用上一帧的录制。 */
 interface LayerHistory { textLayouts?: Map<string, number | undefined>; painted?: Painted; quiet: number; cache?: string; textRaster?: string }
-interface Part { painted?: Painted; draw(ctx: OffscreenCanvasRenderingContext2D): void }
+interface Part { painted?: Painted; filter?: AuthorReplayFilter; draw(ctx: OffscreenCanvasRenderingContext2D): void }
 type Matrix = [number, number, number, number, number, number]
 const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
 /** 一段相邻无位姿图层最多拆成几张栅格；每张一份不超过整帧的纹理。 */
@@ -55,6 +59,11 @@ const SCRATCH_CANVASES = 4
  * （低帧率计数、间歇闪烁）时一直留在“在变”组里，分组不来回切换，静止组不被反复重画。
  */
 const QUIET_FRAMES = 12
+const MAX_EXPOSURE_RUNS = 6
+const EXPOSURE_MEMO_FRAMES = 4
+const AUTHOR_PAINT_OPS = new Set(['fill', 'stroke', 'fillRect', 'strokeRect', 'fillText', 'strokeText', 'drawImage', 'textAppearance'])
+/** 一组静止层这一帧怎么曝光：按速度图收集，或累加取样。`pad`：拖影可能超出内容范围多远（画布像素）。 */
+interface StillExposure { pad: number; gather?: { motions: Array<AuthorPaintMotion | undefined>; longest: number; runs: Array<{ moving: boolean; paints: Map<number, Set<number>> }> }; samples?: Part[][] }
 /** 在录制之外读过的图片，这么多帧没再读就不再每帧预先拷位图（再读时经 AuthorAssetPending 重试补上）。 */
 const EAGER_FRAMES = 8
 const sameContent = (held: SurfaceContent | undefined, next: SurfaceContent): boolean =>
@@ -129,7 +138,7 @@ export class VideoEditAuthorRuntime {
     return texture
   }
   get canvasBytes(): number {
-    return ([...this.scratchCanvases.values(), ...this.surfaces.flatMap(surface => surface?.canvas ? [surface.canvas] : [])]).reduce((bytes, canvas) => bytes + canvas.width * canvas.height * 4, 0)
+    return ([...this.scratchCanvases.values(), ...this.surfaces.flatMap(surface => surface?.canvas ? [surface.canvas] : [])]).reduce((bytes, canvas) => bytes + canvas.width * canvas.height * 4, 0) + (this.exposureTarget ? this.exposureTarget.width * this.exposureTarget.height * 8 : 0)
   }
   private releaseTexture(texture: GpuTexture): void {
     if (this.allocator) this.allocator.release(texture)
@@ -151,6 +160,32 @@ export class VideoEditAuthorRuntime {
     if (previous) this.release(previous)
     this.surfaces[index] = surface
     return surface
+  }
+  private exposureTarget?: OffscreenCanvas
+  private exposureGpu?: VideoEditAuthorExposureGpu
+  /** 每个图层最近几帧的录制；连续播放时运动比较全靠它，不用重跑作者代码。 */
+  private exposureMemo = new Map<string, Array<{ time: number; painted: Painted; params: string }>>()
+  private exposureMemoKey = ''
+  private exposureTextures = new Map<string, GpuTexture>()
+  /** 只增不减：内容范围逐帧变化时不用反复建高精度画布。 */
+  private exposureCanvas(width: number, height: number): OffscreenCanvas {
+    if (!this.exposureTarget || this.exposureTarget.width < width || this.exposureTarget.height < height) {
+      this.exposureTarget = new OffscreenCanvas(Math.max(width, this.exposureTarget?.width ?? 0), Math.max(height, this.exposureTarget?.height ?? 0))
+      this.exposureTarget.getContext('2d', { colorType: 'float16' } as CanvasRenderingContext2DSettings)
+    }
+    return this.exposureTarget
+  }
+  /** 曝光用的中间纹理按名字留到下一帧复用，这一帧没用到的在帧尾还掉。 */
+  private exposureTexture(key: string, width: number, height: number, format: string, mips: boolean, used: Set<string>): GpuTexture {
+    const name = `${key}:${width}x${height}:${format}:${mips}`
+    used.add(name)
+    let texture = this.exposureTextures.get(name)
+    if (!texture) { texture = this.texture(width, height, mips, format); this.exposureTextures.set(name, texture) }
+    return texture
+  }
+  private settleExposureTextures(used: ReadonlySet<string>): void {
+    for (const [name, texture] of this.exposureTextures) if (!used.has(name)) { this.releaseTexture(texture); this.exposureTextures.delete(name) }
+    this.exposureGpu?.release()
   }
   private scratch(width: number, height: number, budget: number): OffscreenCanvas {
     const key = `${width}x${height}`
@@ -253,7 +288,7 @@ export class VideoEditAuthorRuntime {
           await this.simulation?.dispose()
           this.simulation = new VideoEditAuthorSimulation(this.effect.createSimulation!.bind(this.effect), this.parameterMetadata.simulation, { width, height }, identity, this.effect.durationSeconds)
         }
-        const exposure = authorFrameExposure(this.effect, info, motionBlur)
+        const exposure = authorFrameExposure(this.effect, info, motionBlur, this.apiVersion)
         const relative = (time: number) => input.sourceOrigin ? (time - videoEditSourceSeconds(input.sourceOrigin)) * (input.sourceDirection ?? 1) : time
         const simulation = await this.simulation.prepare({ start: Math.min(relative(exposure.start), relative(exposure.end)), end: Math.max(relative(exposure.start), relative(exposure.end)), center: relative(info.time), input: { ...input, identity, parametersAt: (step, rate) => authorParameterValues(this.parameterMetadata, input.parametersAt(step, rate)), assertCurrent: () => { beforeCommit(); input.assertCurrent?.() } } })
         info = { ...info, simulation: input.sourceOrigin ? { at: time => simulation.at(relative(time)) } : simulation }
@@ -401,7 +436,7 @@ export class VideoEditAuthorRuntime {
           else this.layers.clear(upgraded)
           target = upgraded
         }
-        const used = new Set<number>()
+        const used = new Set<number>(), usedExposure = new Set<string>()
         /**
          * Records one layer slot. A recording equal to the previous frame's (same commands, same image versions) is
          * replaced by that previous object, so a texture's content is compared by reference. Unrecordable: undefined.
@@ -421,7 +456,9 @@ export class VideoEditAuthorRuntime {
             recording = true
             try {
               recordedLayouts = layouts = new Map(); textLayer = undefined
+              const drawStarted = performance.now()
               const recorded = authorCall(() => recordAuthorCanvas(size, measure, setup, draw))
+              recordVideoEditPreparation('authorDraw', performance.now() - drawStarted)
               const assetVersions = assetSignature(recorded.assets), held = previous?.painted
               painted = held && held.assets === assetVersions && sameAuthorCanvasRecording(held.recording, recorded) ? held : { recording: recorded, assets: assetVersions }
             } catch (error) {
@@ -442,7 +479,7 @@ export class VideoEditAuthorRuntime {
           ctx.reset(); ctx.setTransform(...setup)
           const rasterStarted = performance.now()
           for (const part of parts) {
-            if (part.painted) replayAuthorCanvas(part.painted.recording, ctx, key => fresh.get(key)!, setup, effects)
+            if (part.painted) replayAuthorCanvas(part.painted.recording, ctx, key => fresh.get(key)!, setup, effects, part.filter)
             else authorCall(() => part.draw(authorCanvasContext(ctx, setup)))
           }
           recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
@@ -474,26 +511,69 @@ export class VideoEditAuthorRuntime {
          * with mip levels and drawn smaller. `layers`/`video`: how many author layers the parts stand for, and how many of
          * them draw a video input.
          */
-        const stillGroup = async (slot: string, surfaceIndex: number, parts: Part[], crop: { x: number; y: number; width: number; height: number }, layers: number, video: number): Promise<void> => {
+        /** `exposure`：这一组有运动时怎么曝光；有它时不走相邻帧的纹理沿用。 */
+        const stillGroup = async (slot: string, surfaceIndex: number, parts: Part[], crop: { x: number; y: number; width: number; height: number }, layers: number, video: number, exposure?: StillExposure): Promise<void> => {
           const recorded = parts.every(part => part.painted) ? parts.map(part => part.painted!) : undefined
           const analysed = recorded ? contentOf(recorded) : { bounds: undefined, scalable: false }
+          if (exposure && analysed.bounds) analysed.bounds = [analysed.bounds[0] - exposure.pad, analysed.bounds[1] - exposure.pad, analysed.bounds[2] + exposure.pad, analysed.bounds[3] + exposure.pad]
           const rx = analysed.scalable ? sx : 1, ry = analysed.scalable ? sy : 1
           const exact = analysed.bounds === null ? null : authorStillRaster(crop, analysed.bounds, rx, ry, rx === 1 ? width : outWidth, ry === 1 ? height : outHeight)
           // 什么也没画（或全在裁剪外）：不占纹理、不画。
           if (!exact) { statistics.reused += layers; statistics.video += video; return }
           const mips = !!scale && rx === 1 && ry === 1
           const raster = { ...exact, width: authorStillSurfaceSize(exact.width, rx === 1 ? width : outWidth), height: authorStillSurfaceSize(exact.height, ry === 1 ? height : outHeight) }
+          const placed: CodeMotionSample[] = [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1 / rx, 0, 0, 1 / ry, raster.x / rx, raster.y / ry], opacity: 1 } }]
+          if (exposure?.gather) {
+            // 按绘制顺序分段：静止段直接上屏，运动段再按速度图收集，运动的字不会带走压在下面的内容。
+            const setup: Matrix = [rx, 0, 0, ry, 0 - raster.x, 0 - raster.y], effects = rx !== 1 || ry !== 1 ? { sx: rx, sy: ry } : undefined
+            const canvas = this.scratch(raster.width, raster.height, 2 * Math.max(width * height, outWidth * outHeight))
+            const range = exposure.gather.longest * Math.max(rx, ry) * 2 + 4
+            for (const [runIndex, run] of exposure.gather.runs.entries()) {
+              const only = (partIndex: number): ReadonlySet<number> => run.paints.get(partIndex) ?? new Set()
+              await paint(canvas, setup, parts.map((part, partIndex) => ({ ...part, filter: { only: only(partIndex) } })), effects)
+              const color = this.exposureTexture(`${slot}:${runIndex}:color`, raster.width, raster.height, 'rgba8unorm', mips && !run.moving, usedExposure)
+              upload(canvas, color, { x: 0, y: 0, width: raster.width, height: raster.height })
+              let picture = color
+              if (run.moving) {
+                const encode = (value: number): string => (value / range + .5).toFixed(5)
+                const sum = this.exposureCanvas(raster.width, raster.height)
+                await paint(sum, setup, parts.map((part, partIndex) => ({ ...part, filter: { only: only(partIndex), velocity: (op: number): string => {
+                  const move = exposure.gather!.motions[partIndex]?.moves.get(op)
+                  return `color(srgb ${encode((move?.[0] ?? 0) * rx)} ${encode((move?.[1] ?? 0) * ry)} 0)`
+                } } })), effects)
+                const velocity = this.exposureTexture(`${slot}:${runIndex}:velocity`, raster.width, raster.height, 'rgba16float', false, usedExposure)
+                upload(sum, velocity, { x: 0, y: 0, width: raster.width, height: raster.height })
+                picture = this.exposureTexture(`${slot}:${runIndex}:out`, raster.width, raster.height, 'rgba8unorm', mips, usedExposure)
+                recordVideoEditPreparation('authorExposureRuns', 1)
+                this.exposureGpu ??= new VideoEditAuthorExposureGpu(this.device, this.effectAllocator)
+                await this.exposureGpu.encode(this.layers.commandEncoder(), color, velocity, picture, raster, range, exposure.gather.longest * Math.max(rx, ry), quality === 'final' ? 63 : 25, quality === 'final' ? 1 : 2)
+              }
+              if (mips) this.layers.mipmaps(picture, raster.width, raster.height)
+              hasContent = this.layers.draw(stackTarget, outWidth, outHeight, { texture: picture, x: 0, y: 0, width: raster.width, height: raster.height }, placed, undefined, scale) || hasContent
+            }
+            statistics.redrawn += layers; statistics.video += video
+            return
+          }
           const surface = this.surface(surfaceIndex, raster.width, raster.height, false, mips)
           used.add(surfaceIndex)
-          const content = recorded && { key: `${slot}\u0000${width}x${height}\u0000${raster.x},${raster.y}\u0000${rx},${ry}`, parts: recorded }
+          const content = recorded && !exposure && { key: `${slot}\u0000${width}x${height}\u0000${raster.x},${raster.y}\u0000${rx},${ry}`, parts: recorded }
           if (content && sameContent(surface.content, content)) { statistics.reused += layers; recordVideoEditPreparation('authorRasterReused', 0) }
           else {
             changedSurfaces.add(surface)
             surface.content = undefined
             const canvas = this.scratch(raster.width, raster.height, 2 * Math.max(width * height, outWidth * outHeight))
-            await paint(canvas, [rx, 0, 0, ry, 0 - raster.x, 0 - raster.y], parts, rx !== 1 || ry !== 1 ? { sx: rx, sy: ry } : undefined)
+            const setup: Matrix = [rx, 0, 0, ry, 0 - raster.x, 0 - raster.y], effects = rx !== 1 || ry !== 1 ? { sx: rx, sy: ry } : undefined
+            let finished: OffscreenCanvas = canvas
+            if (exposure?.samples) {
+              // 各次取样在高精度画布上相加求平均，最后只上传一次；8 位画布累加 1/N 会把静止的内容算淡。
+              const sum = this.exposureCanvas(raster.width, raster.height), target = sum.getContext('2d') as OffscreenCanvasRenderingContext2D
+              target.reset()
+              target.globalCompositeOperation = 'lighter'; target.globalAlpha = 1 / exposure.samples.length
+              for (const sample of exposure.samples) { await paint(canvas, setup, sample, effects); target.drawImage(canvas, 0, 0) }
+              finished = sum
+            } else await paint(canvas, setup, parts, effects)
             const uploadStarted = performance.now()
-            upload(canvas, surface.texture, { x: 0, y: 0, width: raster.width, height: raster.height })
+            upload(finished, surface.texture, { x: 0, y: 0, width: raster.width, height: raster.height })
             if (mips) this.layers.mipmaps(surface.texture, raster.width, raster.height)
             recordVideoEditPreparation('authorUpload', performance.now() - uploadStarted)
             surface.content = content && recorded!.every(part => part.recording.comparable) ? content : undefined
@@ -501,7 +581,7 @@ export class VideoEditAuthorRuntime {
           }
           statistics.video += video
           // 栅格像素 → 画布像素；输出比例由 scale 叠在外面（完整分辨率时就是 [1,0,0,1,x,y]）。
-          hasContent = this.layers.draw(stackTarget, outWidth, outHeight, { texture: surface.texture, x: 0, y: 0, width: raster.width, height: raster.height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1 / rx, 0, 0, 1 / ry, raster.x / rx, raster.y / ry], opacity: 1 } }], undefined, scale) || hasContent
+          hasContent = this.layers.draw(stackTarget, outWidth, outHeight, { texture: surface.texture, x: 0, y: 0, width: raster.width, height: raster.height }, placed, undefined, scale) || hasContent
         }
         try {
       const listStarted = performance.now()
@@ -512,11 +592,16 @@ export class VideoEditAuthorRuntime {
       const evaluated = new Map<number, ResolvedAuthorEffect[]>()
       const effectStates = new Map<number, import('@/core/videoEdit/authorEffects').AuthorElementEffectState[]>()
       let carriesLight = false
-      const drawStill = (ctx: OffscreenCanvasRenderingContext2D, still: AuthorLayer, position: number): void => {
+      const drawExposure = authorDrawExposure(this.effect, motionBlur, this.apiVersion ?? 0)
+      if (drawExposure) {
+        const exposureKey = JSON.stringify([width, height, info.clip.duration])
+        if (exposureKey !== this.exposureMemoKey) { this.exposureMemo.clear(); this.exposureMemoKey = exposureKey }
+      }
+      const drawStill = (ctx: OffscreenCanvasRenderingContext2D, still: AuthorLayer, position: number, time = info.time): void => {
         ctx.save()
         try {
           if (still.clip) { const [x0, y0, x1, y1] = still.clip; ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip() }
-          still.draw!(textContext(ctx, position), info.time)
+          still.draw!(textContext(ctx, position), time)
         } catch (cause) { throw cause instanceof AuthorCanvasUnrecordable || cause instanceof AuthorAssetPending || cause instanceof TypeError ? cause : new Error(`静态层 ${position + 1}：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
         finally { ctx.restore() }
       }
@@ -524,9 +609,124 @@ export class VideoEditAuthorRuntime {
        * Adjacent untransformed layers [start, end). Each is recorded on its own; layers that changed recently (QUIET_FRAMES)
        * are split from the still ones (see authorStillGroups), so a pulse or a video redraws without the static part.
        */
+      const probes = new Map<number, AuthorLayer[] | undefined>()
+      const frameParams = drawExposure ? JSON.stringify(params) : '', touched = new Set<string>()
+      const probeCall = <T>(run: () => T): T => withTextFontSession(text?.fonts, () => trackAuthorCanvasText(run))
       const stillRun = async (start: number, end: number): Promise<void> => {
         const run = `flat:${start}:${end}`, frame = { width, height }, full = { x: 0, y: 0, width, height }
         const stills: Array<{ position: number; layer: AuthorLayer; painted: Painted; volatile: boolean; video: boolean }> = []
+        /** 另一时刻的图层表。不进文字观察：那一帧的排版不属于这一帧。 */
+        const probeLayers = (frames: number): AuthorLayer[] | undefined => {
+          if (probes.has(frames)) return probes.get(frames)
+          const earlier = authorShiftedFrameInfo(info, frames)
+          let layers: AuthorLayer[] | undefined
+          try {
+            layers = this.effect.layers ? probeCall(() => this.effect.layers!(params, width, height, assets, earlier)) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, earlier) }]
+          } catch (error) {
+            if (error instanceof AuthorAssetPending) throw error
+          }
+          probes.set(frames, Array.isArray(layers) ? layers : undefined)
+          return probes.get(frames)
+        }
+        /** 在另一时刻录一遍这一层；那一刻没有这一层或者画不了，就当它刚出现。 */
+        const recordAt = (member: typeof stills[number], frames: number): Painted | undefined => {
+          const earlier = probeLayers(frames)?.[member.position]
+          if (!measure || !earlier || earlier.pose || typeof earlier.draw !== 'function' || authorLayerId(earlier, member.position) !== authorLayerId(member.layer, member.position)) return undefined
+          recording = true
+          try {
+            const recorded = probeCall(() => recordAuthorCanvas(frame, measure, IDENTITY, ctx => drawStill(ctx, earlier, member.position, info.time + frames * info.frameDuration)))
+            return recorded.balanced ? { recording: recorded, assets: assetSignature(recorded.assets) } : undefined
+          } catch (error) {
+            if (error instanceof AuthorAssetPending) throw error
+            return undefined
+          } finally { recording = false; textLayer = undefined }
+        }
+        const remembered = (member: typeof stills[number], slot: string, frames: number): Painted | undefined => {
+          const time = info.time + frames * info.frameDuration, tolerance = info.frameDuration * 1e-3
+          const list = this.exposureMemo.get(slot) ?? []
+          const held = list.find(entry => Math.abs(entry.time - time) < tolerance)
+          if (held) return held.painted
+          const painted = frames === 0 ? member.painted : recordAt(member, frames)
+          if (painted) { list.push({ time, painted, params: frameParams }); if (list.length > EXPOSURE_MEMO_FRAMES) list.shift(); this.exposureMemo.set(slot, list) }
+          return painted
+        }
+        /**
+         * 拿哪两帧比。预览时手边有最近录过的就用，隔几帧、倒放都按帧数折算：已经跟不上的时候再多跑作者代码，只会掉更多帧，
+         * 下一帧又缺前一帧，播放就再也追不上了。导出和没有邻近帧时（跳帧）按严格的前两帧。
+         */
+        const historyOf = (member: typeof stills[number], slot: string): { previous?: Painted; gap: number; older(): Painted | undefined; olderGap: number } => {
+          const near = quality === 'final' ? [] : (this.exposureMemo.get(slot) ?? []).map(entry => ({ painted: entry.painted, gap: (info.time - entry.time) / info.frameDuration }))
+            .filter(entry => Math.abs(entry.gap) > 1e-3 && Math.abs(entry.gap) <= EXPOSURE_MEMO_FRAMES).sort((a, b) => Math.abs(a.gap) - Math.abs(b.gap))
+          if (near[0]) {
+            const further = near.find(entry => entry !== near[0] && Math.sign(entry.gap) === Math.sign(near[0].gap))
+            return { previous: near[0].painted, gap: near[0].gap, older: () => further?.painted, olderGap: further?.gap ?? near[0].gap * 2 }
+          }
+          return { previous: remembered(member, slot, AUTHOR_MOTION_HISTORY[0]), gap: 1, older: () => remembered(member, slot, AUTHOR_MOTION_HISTORY[1]), olderGap: 2 }
+        }
+        /**
+         * 比前一帧和这一帧的指令得出每个绘制动作的位移。都是整块平移时按速度图收集，耗时与速度无关；有形状在变形、
+         * 动的内容被裁剪，或者混合方式不是普通叠加时，按录制插值出快门内的时刻再累加。
+         */
+        const exposureFor = (members: typeof stills): StillExposure | undefined => {
+          if (!drawExposure) return undefined
+          const motionStarted = performance.now()
+          const reachFrames = Math.max(1, (Math.abs(drawExposure.phase) + drawExposure.shutter) / 360)
+          const motions: Array<AuthorPaintMotion | undefined> = [], before: Array<{ painted: Painted; gap: number } | undefined> = []
+          let longest = 0, pad = 0, shrink = 1, deforming = false
+          // 按段重放时每段画在空白画布上；组里只要有一层靠前面的内容混合（遮罩、擦除），都得整组一起累加。
+          const plain = drawExposure.centered && members.every(member => member.painted.recording.isolated)
+          for (const member of members) {
+            const slot = `still:${member.position}:${authorLayerId(member.layer, member.position)}`
+            touched.add(slot)
+            // 参数带关键帧时每帧本来就不同，录制留着才拖得出影；同一时刻参数却变了，是用户改了，之前的录制都作废。
+            if (this.exposureMemo.get(slot)?.some(entry => Math.abs(entry.time - info.time) < info.frameDuration * 1e-3 && entry.params !== frameParams)) this.exposureMemo.delete(slot)
+            remembered(member, slot, 0)
+            const recording = member.painted.recording
+            const history = member.layer.motionBlur === false || !authorRecordingMeasurable(recording) ? undefined : historyOf(member, slot)
+            const previous = history?.previous
+            if (!history || !previous || previous === member.painted || sameAuthorCanvasRecording(previous.recording, recording)) { motions.push(undefined); before.push(undefined); continue }
+            const motion = authorPaintMotion(recording, previous.recording, history.older()?.recording, drawExposure.fraction, history.gap, history.olderGap)
+            if (!motion.moves.size && !motion.deforming) { motions.push(undefined); before.push(undefined); continue }
+            motions.push(motion); before.push({ painted: previous, gap: history.gap })
+            longest = Math.max(longest, motion.longest); pad = Math.max(pad, motion.reach); deforming ||= motion.deforming; shrink = Math.min(shrink, motion.shrink)
+          }
+          recordVideoEditPreparation('authorMotion', performance.now() - motionStarted)
+          if (!before.some(Boolean)) return undefined
+          if (deforming || !plain) {
+            motions.forEach((motion, index) => { if (motion?.jumped) before[index] = undefined })
+            if (!before.some(Boolean)) return undefined
+            const sample = (member: typeof stills[number], memberIndex: number, offset: number): Painted | undefined => {
+              const previous = before[memberIndex]
+              if (!previous) return member.painted
+              const recording = authorInterpolateRecording(previous.painted.recording, member.painted.recording, 1 + offset / previous.gap)
+              return recording ? { recording, assets: member.painted.assets } : undefined
+            }
+            const matched = members.every((member, memberIndex) => sample(member, memberIndex, 0))
+            const cap = quality === 'final' ? drawExposure.max : Math.min(drawExposure.max, matched ? 8 : 4)
+            const count = authorDrawSampleCount(Math.max(longest, pad * drawExposure.fraction * shrink, 15), cap)
+            recordVideoEditPreparation('authorExposureSamples', count)
+            return { pad: pad * reachFrames, samples: Array.from({ length: count }, (_, index) => members.map((member, memberIndex) => {
+              const offset = authorDrawSampleOffset(drawExposure, index, count) * shrink
+              return { painted: sample(member, memberIndex, offset) ?? recordAt(member, offset) ?? member.painted, draw: (ctx: OffscreenCanvasRenderingContext2D) => drawStill(ctx, member.layer, member.position) }
+            })) }
+          }
+          if (longest < 1) return undefined
+          // 段落跨多层时按层顺序连起来切段；每段记着每层要画哪些动作。
+          const STEP = 1e7, all = { moves: new Map<number, readonly [number, number]>(), paints: [] as number[] }
+          members.forEach((member, memberIndex) => {
+            for (const [index, op] of member.painted.recording.ops.entries()) if (AUTHOR_PAINT_OPS.has(op[0] as string)) {
+              const id = memberIndex * STEP + index, move = motions[memberIndex]?.moves.get(index)
+              all.paints.push(id)
+              if (move) all.moves.set(id, move)
+            }
+          })
+          const runs = authorMotionRuns(all, MAX_EXPOSURE_RUNS).map(run => {
+            const paints = new Map<number, Set<number>>()
+            for (const id of run.paints) { const part = Math.floor(id / STEP); let set = paints.get(part); if (!set) paints.set(part, set = new Set()); set.add(id - part * STEP) }
+            return { moving: run.moving, paints }
+          })
+          return { pad: pad * reachFrames, gather: { motions, longest, runs } }
+        }
         if (!this.combinedRuns.has(run)) {
           for (let position = start; position < end; position++) {
             const still = list[position]
@@ -550,7 +750,7 @@ export class VideoEditAuthorRuntime {
           const crop = authorStillCrop(members.map(member => member.layer.clip), width, height)
           const video = members.filter(member => member.video).length
           if (!crop) { statistics.reused += members.length; statistics.video += video; continue }
-          await stillGroup(`flat:${members[0].position}:${members.at(-1)!.position + 1}`, members[0].position * 2, members.map(member => ({ painted: member.painted, draw: ctx => drawStill(ctx, member.layer, member.position) })), crop, members.length, video)
+          await stillGroup(`flat:${members[0].position}:${members.at(-1)!.position + 1}`, members[0].position * 2, members.map(member => ({ painted: member.painted, draw: ctx => drawStill(ctx, member.layer, member.position) })), crop, members.length, video, exposureFor(members))
         }
       }
       await this.layers.begin(undefined, typeof initialTarget === 'function' ? inputs?.current?.format : initialTarget.format)
@@ -688,6 +888,8 @@ export class VideoEditAuthorRuntime {
       beforeCommit()
       this.layers.finish()
       this.layerEffects?.commit()
+      this.settleExposureTextures(usedExposure)
+      if (drawExposure) for (const slot of this.exposureMemo.keys()) if (!touched.has(slot)) this.exposureMemo.delete(slot)
       this.renderedTarget = target
       this.history = history
       this.lastFrame = { carriesLight, effects: evaluated, effectStates, layers: list, width, height, time: info.time, parameters: params, overrides, directText, textUncovered, textLayouts }
@@ -724,6 +926,9 @@ export class VideoEditAuthorRuntime {
     this.lastFrame = undefined
     const errors: unknown[] = []
     await this.renders
+    this.exposureGpu?.dispose(); this.exposureGpu = undefined
+    this.exposureMemo.clear(); this.exposureTextures.clear()
+    if (this.exposureTarget) this.exposureTarget.width = this.exposureTarget.height = 1
     await this.simulation?.dispose().catch(error => { errors.push(error) })
     this.simulation = undefined
     this.lastFrame = undefined

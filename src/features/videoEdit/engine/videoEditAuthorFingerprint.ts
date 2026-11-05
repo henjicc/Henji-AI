@@ -3,7 +3,7 @@ import { CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/code
 import { assertCodeElementOverrideAllowed } from '@/core/videoEdit/codeElementOverrides'
 import { resolveAuthorElementEffects, authorEffectsFingerprint, type AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import { renderFingerprintHash, type VideoEditFrameFingerprint } from '@/core/videoEdit/renderFingerprint'
-import { authorFrameExposure, authorLayerSamples } from './videoEditAuthorLayers'
+import { AUTHOR_MOTION_HISTORY, authorDrawExposure, authorFrameExposure, authorLayerSamples, authorShiftedFrameInfo } from './videoEditAuthorLayers'
 import { codeMaterialFilesKey, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, type AuthorElementOverrides } from './videoEditAuthorElements'
 import { AuthorCanvasAsset, AuthorCanvasUnrecordable, recordAuthorCanvas } from './videoEditAuthorCanvasRecorder'
@@ -66,7 +66,7 @@ export function fingerprintAuthorFrameKey(effect: AuthorModule, size: { width: n
   if (apiVersion >= CODE_AUTHOR_SIMULATION_MIN_API_VERSION && effect.createSimulation) return { fallback: 'simulation-history-required' }
   try {
     const frameInfo = Object.defineProperties({} as AuthorFrameInfo, Object.getOwnPropertyDescriptors(info))
-    frameInfo.exposure = authorFrameExposure(effect, info, motionBlur)
+    frameInfo.exposure = authorFrameExposure(effect, info, motionBlur, apiVersion)
     const key = frameKeyJson(effect.frameKey!(params, size.width, size.height, frameInfo))
     const effects = apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION && effect.layers ? fingerprintLayerEffects(effect, size, params, info, inputs, environment, overrides, motionBlur, apiVersion) : undefined
     return { method: 'frameKey', digest: renderFingerprintHash(JSON.stringify([codeIdentity, size.width, size.height, key,
@@ -96,6 +96,16 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
     const list: AuthorLayer[] = effect.layers ? effect.layers(params, size.width, size.height, assets as AuthorAssets, info)
       : [{ id: AUTHOR_WHOLE_EFFECT_ID, draw: (ctx, time) => effect.draw!(ctx, time, params, size.width, size.height, assets, info) }]
     if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组')
+    const history = new Map<number, AuthorLayer[] | undefined>()
+    const historyLayers = (frames: number): AuthorLayer[] | undefined => {
+      if (!effect.layers) { const earlier = authorShiftedFrameInfo(info, frames); return [{ id: AUTHOR_WHOLE_EFFECT_ID, draw: (ctx, time) => effect.draw!(ctx, time, params, size.width, size.height, assets, earlier) }] }
+      if (!history.has(frames)) {
+        // 和渲染一致：那一刻算不出图层，就当这一层刚出现。
+        try { const earlier = effect.layers(params, size.width, size.height, assets as AuthorAssets, authorShiftedFrameInfo(info, frames)); history.set(frames, Array.isArray(earlier) ? earlier : undefined) }
+        catch { history.set(frames, undefined) }
+      }
+      return history.get(frames)
+    }
     const layers: unknown[] = []
     for (const [index, layer] of list.entries()) {
       if (isAuthorAdjustment(layer, apiVersion)) { layers.push(adjustmentFingerprint(layer, index, info, authorFramePosition(effect, info), environment, overrides, apiVersion)); continue }
@@ -120,7 +130,19 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
       } finally { recording = false }
       if (!commands.comparable || !commands.balanced) return { fallback: 'unrecordable-layer' }
       const effects = apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION ? authorEffectsFingerprint(resolveAuthorElementEffects(layer.effects?.(info.time) ?? [], override, environment, info.clip.time / info.frameDuration, id, 'layer', apiVersion).effects, environment, authorFramePosition(effect, info)) : undefined
-      layers.push([id, !!layer.pose, properties, poses, center, commands.ops, ...(apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION ? [effects] : [])])
+      // 运动模糊由前几帧的指令决定：这一帧相同、之前不同的帧不能算同一帧。带效果或覆盖的层走位姿路径，不看这些。
+      const drawExposure = !layer.pose && layer.effects === undefined && override === undefined && layer.motionBlur !== false ? authorDrawExposure(effect, motionBlur, apiVersion) : undefined
+      const edges = drawExposure ? AUTHOR_MOTION_HISTORY.map(frames => {
+        const earlier = historyLayers(frames)?.[index]
+        if (!earlier || earlier.pose || typeof earlier.draw !== 'function' || authorLayerId(earlier, index) !== id) return 'absent'
+        recording = true
+        try {
+          const edge = recordAuthorCanvas(size, measure, [1, 0, 0, 1, 0, 0], ctx => { ctx.save(); if (earlier.clip) { const [x0, y0, x1, y1] = earlier.clip; ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip() } earlier.draw!(ctx, info.time + frames * info.frameDuration); ctx.restore() }, true)
+          return edge.comparable ? edge.ops : null
+        } catch { return 'absent' } finally { recording = false }
+      }) : undefined
+      if (edges?.includes(null)) return { fallback: 'unrecordable-layer' }
+      layers.push([id, !!layer.pose, properties, poses, center, commands.ops, ...(apiVersion >= CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION ? [effects] : []), ...(edges ? [edges] : [])])
     }
     const value = [{ width: size.width, height: size.height }, layers, [...used].sort().map(key => [key, inputs[key]])]
     const json = JSON.stringify(value, (_key, value: unknown) => {

@@ -158,7 +158,7 @@ export function imageEditLayerFilterRegistrationV3(): ApplicationEntityRegistrat
   return { entity: { id: ENTITY, domain: 'image_edit', version: 1, title: '图层滤镜', description: '内容图层上的有序、非破坏滤镜；开关、参数、强度、蒙版与顺序可独立修改。',
     refKind: ENTITY, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['image_edit.layer', 'image_edit.group'],
     revisionScopes: ['image_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: imageEditV3SchemaRef('entity', ENTITY),
-    collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${ENTITY}.operation_type`, `${ENTITY}.effect_id`, `${ENTITY}.params`], maxItemsPerChange: 256 } },
+    collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${ENTITY}.operation_type`, `${ENTITY}.effect_id`, `${ENTITY}.params`] } },
     properties: fieldDescriptors(IMAGE_EDIT_V3_FILTER_FIELDS), provider: new FilterProvider(),
     schemaDocuments: [{ ref: imageEditV3SchemaRef('property', `${ENTITY}.mask.value`), value: z.toJSONSchema(imageEditLayerFilterSchemaV3.shape.mask, { io: 'input' }) as JsonValue }] }
 }

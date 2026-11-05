@@ -23,7 +23,7 @@ export class PunctuationPlanner {
     }
     const fontKey = JSON.stringify([source.hash, source.face ?? 0, orderedValues(source.variations), shapingKey(options)])
     const classify = (char: string): number => {
-      const shape = this.shaper.shape(source, char, { ...options, script: 'Hani' })
+      const shape = this.shaper.shape(source, char, { ...options, direction: 'ltr', script: 'Hani' })
       let x = 0, left = Infinity, right = -Infinity
       for (const glyph of shape.glyphs) {
         const extents = this.shaper.extents(source, glyph.id, options)

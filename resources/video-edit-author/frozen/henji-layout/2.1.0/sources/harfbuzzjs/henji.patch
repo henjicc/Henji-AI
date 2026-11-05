@@ -1,0 +1,73 @@
+--- a/index.mjs
++++ b/index.mjs
+@@ -1,4 +1,4 @@
+-import createHarfBuzz from "./harfbuzz.js";
++import createHarfBuzz from "./harfbuzz.mjs";
+ //#region src/helpers.ts
+ let Module;
+ let exports;
+@@ -9,8 +9,20 @@
+ 	cleanup();
+ });
+ function track(obj, destroy) {
+-	const ptr = obj.ptr;
+-	registry.register(obj, () => destroy(ptr));
++ const ptr = obj.ptr;
++ let disposed = false;
++ const token = {};
++ registry.register(obj, () => destroy(ptr), token);
++ Object.defineProperty(obj, "ptr", { get() {
++  if (disposed) throw new Error("HarfBuzz object disposed");
++  return ptr;
++ } });
++ Object.defineProperty(obj, "dispose", { value() {
++  if (disposed) return;
++  disposed = true;
++  registry.unregister(token);
++  destroy(ptr);
++ } });
+ }
+ /**
+ * Initialize the HarfBuzz module.
+--- a/index.d.mts
++++ b/index.d.mts
+@@ -307,6 +307,7 @@
+  * A blob wraps a chunk of binary data, typically the contents of a font file.
+  */
+ declare class Blob {
++  dispose(): void;
+   readonly ptr: number;
+   /**
+    * @param data Binary font data.
+@@ -329,6 +330,7 @@
+  * foundation for creating Font objects used in text shaping.
+  */
+ declare class Face {
++  dispose(): void;
+   readonly ptr: number;
+   readonly upem: number;
+   /**
+@@ -519,6 +521,7 @@
+  * output glyphs and their information after shaping.
+  */
+ declare class Buffer {
++  dispose(): void;
+   readonly ptr: number;
+   /**
+    * @param existingPtr @internal Wrap an existing buffer pointer.
+@@ -659,6 +662,7 @@
+  * implementations which can be selectively overridden.
+  */
+ declare class FontFuncs {
++  dispose(): void;
+   readonly ptr: number;
+   constructor();
+   /**
+@@ -1261,6 +1265,7 @@
+  * primary input to the shaping process.
+  */
+ declare class Font {
++  dispose(): void;
+   readonly ptr: number;
+   private _face?;
+   /**
