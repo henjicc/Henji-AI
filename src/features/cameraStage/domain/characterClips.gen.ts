@@ -2,13 +2,15 @@
  * 自动生成文件，禁止手改：npm run gen:camera-stage-clips（scripts/generate-camera-stage-clips.mjs）
  * 数据来源：resources/camera-stage/UAL1_Standard.glb（Quaternius Universal Animation Library，CC0）
  * duration 秒；loop 循环片段；groundSpeed 原地走跑片段按原速播放时对应的前进速度（米/秒，模型原尺寸）；
- * leftStrikePhase 左脚掌刚着地的时刻占周期的比例。
+ * leftStrikePhase 左脚掌刚着地的时刻占周期的比例；groundContact 有腾空的跑步片段把周期等分取样，
+ * 每点至少一只脚着地的程度（1 着地，0 腾空）。
  */
 export interface CharacterClipFacts {
   duration: number
   loop: boolean
   groundSpeed?: number
   leftStrikePhase?: number
+  groundContact?: number[]
 }
 
 export const CHARACTER_CLIP_FACTS: Record<string, CharacterClipFacts> = {
@@ -70,7 +72,57 @@ export const CHARACTER_CLIP_FACTS: Record<string, CharacterClipFacts> = {
     "duration": 0.933,
     "loop": true,
     "groundSpeed": 5.907,
-    "leftStrikePhase": 0.058
+    "leftStrikePhase": 0.058,
+    "groundContact": [
+      0,
+      0,
+      0.7,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0.4,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.87,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0.39,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
   },
   "Jump_Land": {
     "duration": 1.267,
@@ -164,7 +216,57 @@ export const CHARACTER_CLIP_FACTS: Record<string, CharacterClipFacts> = {
     "duration": 0.667,
     "loop": true,
     "groundSpeed": 8.95,
-    "leftStrikePhase": 0.16
+    "leftStrikePhase": 0.16,
+    "groundContact": [
+      0,
+      0,
+      0.32,
+      0.85,
+      0.91,
+      0.56,
+      0.81,
+      0.56,
+      1,
+      1,
+      0.22,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.1,
+      0.92,
+      1,
+      0.92,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
   },
   "Swim_Fwd_Loop": {
     "duration": 1.333,

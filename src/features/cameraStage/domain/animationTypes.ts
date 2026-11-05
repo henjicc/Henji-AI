@@ -55,6 +55,7 @@ export interface StageTrack {
  * 角色的一段动作（状态关键帧编译出的运行时产物，见 characterMotionTimeline）。
  * clock 决定片段内时间怎么推进：time 按时间（(t − origin) × rate）；distance 按走过的路程
  * （startClipTime + 路程 ÷ groundSpeed，路程按固定网格取样），走跑时脚因此钉在地上。
+ * 有腾空的跑步片段另带 cycle：一个周期内等分片段时间上的累计路程，着地段仍按 groundSpeed，腾空段按跑速缩短。
  */
 export interface StageCharacterMotionSpan {
   startTime: number
@@ -63,7 +64,10 @@ export interface StageCharacterMotionSpan {
   motion: StageCharacterMotion
   clock:
     | { kind: 'time'; origin: number; rate: number }
-    | { kind: 'distance'; startClipTime: number; groundSpeed: number; gridStart: number; gridStep: number; distances: number[] }
+    | {
+      kind: 'distance'; startClipTime: number; groundSpeed: number; gridStart: number; gridStep: number; distances: number[]
+      cycle?: { duration: number; distances: number[] }
+    }
   /** 走跑或原地转身踩步：路程（米）、平均速度与片段放慢/加快的倍数 */
   locomotion?: { kind: 'walk' | 'turn'; distance: number; averageSpeed: number; playbackRate: number }
   /** 紧接上一段同一个走跑片段（途经卡）：相位接着走，不交叉淡入淡出 */

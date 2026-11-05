@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createDefaultPlayback } from '../domain/animationTypes'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
-import { createCameraObject, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
+import { createCameraObject, createCharacterObject, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
+import { characterMotionSpanAt } from '../domain/characterMotionTimeline'
+import { createSpatialPathSampler } from '../domain/spatialPath'
 import { createStateKeyframe } from '../domain/stateKeyframeTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
 import type { StageVec3 } from '../domain/sceneTypes'
@@ -418,5 +420,87 @@ describe('状态关键帧模式 store 分片', () => {
     for (const item of after) {
       if (item.type === 'camera') expect(item.aspectRatio).toEqual({ preset: '16:9', ratio: 16 / 9 })
     }
+  })
+
+  it('行走中途插状态关键帧：路线、步态不变，角色平滑通过新卡', () => {
+    const character = createCharacterObject('角色', pickDefaultColor(1))
+    const start = createStateKeyframe([character], 'A', 0)
+    const end = createStateKeyframe([character], 'B', 4)
+    end.objectStates[character.id].transform.position = { x: 8, y: 0, z: 4 }
+    // 绕一个弯的路线（途经点在 (4, 0, -2)），步态按平均速度自动选，cruise 起停。
+    const path = {
+      kind: 'bezier' as const, source: { kind: 'custom' as const }, startOutTangent: { x: 1.5, y: 0, z: -1 },
+      knots: [{ id: 'detour', position: { x: 4, y: 0, z: -2 }, inTangent: { x: -1.5, y: 0, z: 0 }, outTangent: { x: 1.5, y: 0, z: 0 } }],
+      endInTangent: { x: -1.5, y: 0, z: -1 },
+    }
+    start.transition.perObject[character.id] = { speedPreset: 'cruise', spatialPath: path }
+    const stateKeyframes = [start, end]
+    useCameraStageStore.setState({
+      objects: [character], stateKeyframes, selectedStateKeyframeId: start.id,
+      animation: compileStateKeyframesToAnimation(stateKeyframes, [character]), playback: createDefaultPlayback(),
+    })
+    const read = () => {
+      const { animation, objects } = useCameraStageStore.getState()
+      const times = Array.from({ length: 41 }, (_, index) => index / 10)
+      return times.map((time) => {
+        const sampled = applyAnimationAtTime(objects, animation, time).find((object) => object.id === character.id)!
+        const span = characterMotionSpanAt(animation.characterMotions[0], time)
+        return { time, position: sampled.transform.position, clip: span?.locomotion && span.motion.mode === 'clip' ? span.motion.clipName : null }
+      })
+    }
+    const original = read()
+    expect(original[20].clip).toBe('Jog_Fwd_Loop')
+
+    addStateKeyframeAt(1.3)
+    const state = useCameraStageStore.getState()
+    expect(state.stateKeyframes).toHaveLength(3)
+    const inserted = read()
+    const route = createSpatialPathSampler(start.objectStates[character.id].transform.position, end.objectStates[character.id].transform.position, path)
+    const routePoints = Array.from({ length: 2001 }, (_, index) => route(index / 2000))
+    for (const [index, item] of inserted.entries()) {
+      const offRoute = Math.min(...routePoints.map((point) => Math.hypot(point.x - item.position.x, point.y - item.position.y, point.z - item.position.z)))
+      expect(offRoute, `${item.time}`).toBeLessThan(0.01)
+      if (item.time > 0.05 && item.time < 3.95) expect(item.clip, `${item.time}`).toBe(original[index].clip)
+    }
+    // 新卡时刻位置不变，前后都在走（没有在新卡上停）。
+    expect(state.stateKeyframes[1].continuity).toBe('smooth')
+    const at = inserted.find((item) => Math.abs(item.time - 1.3) < 1e-6)!
+    const near = (time: number) => inserted.find((item) => Math.abs(item.time - time) < 1e-6)!.position
+    expect(Math.hypot(at.position.x - original[13].position.x, at.position.z - original[13].position.z)).toBeLessThan(1e-3)
+    expect(Math.hypot(near(1.4).x - near(1.2).x, near(1.4).z - near(1.2).z)).toBeGreaterThan(0.2)
+  })
+
+  it('带错峰延迟的过渡中途插卡：出发与到达时刻不变，提前到达不在新卡上停，等待期内插卡不提前出发', () => {
+    const run = (delay: number, insertAt: number) => {
+      const box = createPrimitiveObject('box', '方块', pickDefaultColor(0))
+      const start = createStateKeyframe([box], 'A', 0)
+      const end = createStateKeyframe([box], 'B', 4)
+      end.objectStates[box.id].transform.position = { x: 8, y: 0, z: 0 }
+      const from = start.objectStates[box.id].transform.position
+      start.transition.perObject[box.id] = {
+        delay, spatialPath: { kind: 'bezier', source: { kind: 'custom' }, startOutTangent: { x: (8 - from.x) / 3, y: -from.y / 3, z: -from.z / 3 }, knots: [], endInTangent: { x: -(8 - from.x) / 3, y: from.y / 3, z: from.z / 3 } },
+      }
+      useCameraStageStore.setState({
+        objects: [box], stateKeyframes: [start, end], selectedStateKeyframeId: start.id,
+        animation: compileStateKeyframesToAnimation([start, end], [box]), playback: createDefaultPlayback(),
+      })
+      const x = (time: number) => {
+        const { animation, objects } = useCameraStageStore.getState()
+        return applyAnimationAtTime(objects, animation, time).find((object) => object.id === box.id)!.transform.position.x
+      }
+      const original = (time: number) => x(time)
+      const before = [0.5, 1, 1.4, 1.6, 2.5, 2.9, 3, 3.5].map(original)
+      addStateKeyframeAt(insertAt)
+      return { before, after: [0.5, 1, 1.4, 1.6, 2.5, 2.9, 3, 3.5].map(x), x, startX: from.x }
+    }
+    // 提前 1 秒到达（3 秒到 B）：插卡后仍在 3 秒到达，插卡处一直在走。
+    const early = run(-1, 2)
+    expect(early.x(3)).toBeCloseTo(8, 3)
+    expect(early.x(2.9)).toBeLessThan(7.99)
+    expect(early.x(2.1) - early.x(1.9)).toBeGreaterThan(0.1)
+    // 晚 1.5 秒出发，在等待期内的 1 秒插卡：1.5 秒前不动，之后与原来一样走。
+    const late = run(1.5, 1)
+    expect(late.x(1.4)).toBeCloseTo(late.startX, 6)
+    for (const [index, value] of late.before.entries()) expect(late.after[index]).toBeCloseTo(value, 3)
   })
 })

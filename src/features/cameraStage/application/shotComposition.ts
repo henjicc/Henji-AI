@@ -147,6 +147,8 @@ interface Candidate {
   cost: number
   /** 过肩焦距或景别偏离意图的原因 */
   separationNote?: string
+  /** 过肩焦距按被拍者身高换算时的说明 */
+  focalNote?: string
 }
 
 /** 焦距归到档位：35mm 以下算广角，70mm 以上算长焦。 */
@@ -245,8 +247,10 @@ const metres = (value: number): string => (Math.round(value * 10) / 10).toString
  * 两人离得太远、窗口要求的焦距超过 200mm 时逐档放宽景别（同样的焦距下景别越松 d 越大）。
  * 邻域里再放几个焦距变化与机位升降供避让遮挡。
  */
-function overShoulderCandidates(spec: ShotSpec): { candidates: Candidate[]; tooFar: number | null } {
-  const subject = spec.subjects[1]
+type TooFar = { separation: number; limitedBy: string | null }
+
+function overShoulderCandidates(spec: ShotSpec): { candidates: Candidate[]; tooFar: TooFar | null } {
+  const [foreground, subject] = spec.subjects
   const { a, b } = shoulderPoints(spec)
   const separation = a.distanceTo(b)
   const preferred = SHOT_LENS_FOCAL_LENGTH[spec.lens]
@@ -254,24 +258,44 @@ function overShoulderCandidates(spec: ShotSpec): { candidates: Candidate[]; tooF
   const farthest = Math.max(nearest, (separation * FOREGROUND_SCALE.min) / (FOREGROUND_SCALE.min - 1))
   const loosest = Math.min(CAMERA_STAGE_SHOT_SIZES.indexOf(OVER_SHOULDER_LOOSEST), CAMERA_STAGE_SHOT_SIZES.indexOf(spec.size))
   const sizes = CAMERA_STAGE_SHOT_SIZES.slice(loosest, CAMERA_STAGE_SHOT_SIZES.indexOf(spec.size) + 1).reverse()
+  // 正反打两台机位各求各的，但距离、能否拍到与放宽到哪一档只用两人共有的量（间距、两人身高）：
+  // 两台离各自被拍者一样远，前景放大倍数与景别一致；焦距再按各自被拍者的身高换算，矮的那个用更长的焦距。
+  // 只按被拍者身高定距离时，矮的那边距离先撞到窗口下限、焦距被推长，两台就不对称了。
+  const pair = foreground.kind === 'character' && subject.kind === 'character'
+  const heights = pair ? [foreground.height, subject.height] : [subject.height]
+  const sharedHeight = heights.reduce((sum, value) => sum + value, 0) / heights.length
+  const frameOf = (size: CameraStageShotSize, height: number): number => (SHOT_FRAMES[size].top - SHOT_FRAMES[size].bottom) * height
+  const distanceOf = (size: CameraStageShotSize): number => (frameOf(size, sharedHeight) * preferred) / SENSOR_HEIGHT_MM
   // 按意图焦距拍意图景别时机位离被拍者多远，用来说明为什么改。
-  const intended = ((SHOT_FRAMES[spec.size].top - SHOT_FRAMES[spec.size].bottom) * subject.height * preferred) / SENSOR_HEIGHT_MM
+  const intended = distanceOf(spec.size)
+  // 焦距上限按矮的那个人卡：拍高个子的这台自己用不到 200mm，是为了与反打那台景别一致才跟着放宽或求不出。
+  const shorter = pair && foreground.height < subject.height ? foreground : subject
+  const reachLimit = (label: string): string => (shorter === subject
+    ? `${label}要超过 ${OVER_SHOULDER_FOCAL.max}mm 才能站到前景那人身后`
+    : `反打拍「${shorter.name}」那台${label}要超过 ${OVER_SHOULDER_FOCAL.max}mm 才能站到前景那人身后，两台景别保持一致`)
   for (const [step, size] of sizes.entries()) {
-    const frameHeight = (SHOT_FRAMES[size].top - SHOT_FRAMES[size].bottom) * subject.height
+    const frameHeight = frameOf(size, subject.height)
     const focalAt = (distance: number): number => (distance * SENSOR_HEIGHT_MM) / frameHeight
-    if (focalAt(nearest) > OVER_SHOULDER_FOCAL.max) continue
-    const low = Math.max(OVER_SHOULDER_FOCAL.min, focalAt(nearest))
-    const high = Math.max(low, Math.min(OVER_SHOULDER_FOCAL.max, focalAt(farthest)))
-    const planned = Math.max(low, Math.min(high, preferred))
-    // 差不到 5% 就照意图焦距拍：前景倍数略出窗口看不出来，不值得报一次改动。
-    const focal = step === 0 && Math.abs(planned / preferred - 1) < 0.05 ? preferred : planned
+    // 焦距上限卡矮的那个人、下限卡高的那个人，两台机位得到同一个距离范围。
+    const lowest = Math.max(nearest, (OVER_SHOULDER_FOCAL.min * frameOf(size, Math.max(...heights))) / SENSOR_HEIGHT_MM)
+    const highest = Math.min(farthest, (OVER_SHOULDER_FOCAL.max * frameOf(size, Math.min(...heights))) / SENSOR_HEIGHT_MM)
+    if (highest < nearest) continue
+    const wanted = distanceOf(size)
+    const planned = Math.max(lowest, Math.min(Math.max(lowest, highest), wanted))
+    // 差不到 5% 就照意图距离拍：前景倍数略出窗口看不出来，不值得报一次改动。
+    const distance = step === 0 && Math.abs(planned / wanted - 1) < 0.05 ? wanted : planned
+    const low = focalAt(lowest)
+    const high = Math.max(low, focalAt(highest))
+    const focal = focalAt(distance)
     const notes: string[] = []
-    if ((focal !== preferred || step > 0) && intended < nearest) {
+    if ((distance !== wanted || step > 0) && intended < nearest) {
       notes.push(`两人眼睛相距 ${metres(separation)} 米，按 ${preferred}mm 拍${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}机位会${intended <= separation ? '站到前景那人前面' : '贴着前景那人、他会占满画面一侧'}`)
-    } else if (focal !== preferred && intended > farthest) {
+    } else if (distance !== wanted && intended > farthest) {
       notes.push(`两人眼睛只相距 ${metres(separation)} 米，按 ${preferred}mm 拍前景那人会显得太小`)
     }
-    if (step > 0) notes.push(`${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}要超过 ${OVER_SHOULDER_FOCAL.max}mm 才能站到前景那人身后`)
+    if (step > 0) notes.push(reachLimit(CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]))
+    const heightNote = Math.abs(subject.height / sharedHeight - 1) >= 0.05
+      ? `两人身高不同，正反打两台机位离被拍者一样远，焦距按「${subject.name}」的身高换算` : undefined
     const focals = [...new Set(OVER_SHOULDER_FOCAL_VARIANTS.map((variant) => (
       variant === 1 ? focal : Math.round(Math.max(low, Math.min(high, focal * variant)) * 10) / 10
     )))]
@@ -279,13 +303,14 @@ function overShoulderCandidates(spec: ShotSpec): { candidates: Candidate[]; tooF
       azimuth: 0, beta: 0, elevation, focal: value, size,
       cost: Math.abs(Math.log(value / focal)) * 2 + Math.abs(elevation) / 20,
       ...(notes.length > 0 ? { separationNote: notes.join('，') } : {}),
+      ...(heightNote ? { focalNote: heightNote } : {}),
     })))
     return { candidates: candidates.sort((left, right) => left.cost - right.cost), tooFar: null }
   }
-  return { candidates: [], tooFar: separation }
+  return { candidates: [], tooFar: { separation, limitedBy: shorter === subject ? null : shorter.name } }
 }
 
-function candidatesFor(spec: ShotSpec): { candidates: Candidate[]; tooFar: number | null } {
+function candidatesFor(spec: ShotSpec): { candidates: Candidate[]; tooFar: TooFar | null } {
   if (spec.kind === 'over_shoulder') return overShoulderCandidates(spec)
   const base = ANGLE_ELEVATION[spec.angle].base
   const azimuths = spec.kind === 'single' ? AZIMUTH_OFFSETS : [0]
@@ -574,7 +599,9 @@ function describeAdjustment(spec: ShotSpec, requested: Evaluated, chosen: Evalua
   if (chosen.candidate.beta !== 0) changes.push(`机位往${chosen.candidate.beta > 0 ? '第一个人' : '第二个人'}那边挪了一些`)
   if (shoulder && rise !== 0) changes.push(`机位${rise > 0 ? '升高' : '降低'}了 ${Math.abs(rise)} 厘米`)
   else if (!shoulder && elevation !== 0) changes.push(`机位${elevation > 0 ? '抬高' : '降低'}了 ${Math.abs(elevation)}°`)
-  if (focal !== requestedFocal) changes.push(`焦距从 ${requestedFocal}mm 换成 ${focal}mm（机位${focal < requestedFocal ? '更近' : '更远'}）`)
+  if (focal !== requestedFocal) {
+    changes.push(`焦距从 ${requestedFocal}mm 换成 ${focal}mm（${chosen.candidate.focalNote ?? `机位${focal < requestedFocal ? '更近' : '更远'}`}）`)
+  }
   if (size) changes.push(`景别从${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}放宽到${CAMERA_STAGE_SHOT_SIZE_LABELS[size]}`)
   const why = reasons.map((reason) => ({
     separation: chosen.candidate.separationNote ?? (crowded ? '两人挨得近，按原定焦距前景那人会挤到画面中间' : ''),
@@ -605,8 +632,11 @@ export function composeShot(spec: ShotSpec): ShotSolution {
   const { candidates, tooFar } = candidatesFor(spec)
   if (tooFar !== null) {
     const loosest = CAMERA_STAGE_SHOT_SIZES[Math.min(CAMERA_STAGE_SHOT_SIZES.indexOf(OVER_SHOULDER_LOOSEST), CAMERA_STAGE_SHOT_SIZES.indexOf(spec.size))]
-    throw new ShotCompositionError(`SHOT_NOT_REACHABLE：两人眼睛相距 ${metres(tooFar)} 米，过肩机位要站在前景那人身后，`
-      + `${loosest === spec.size ? `拍${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}` : `放宽到${CAMERA_STAGE_SHOT_SIZE_LABELS[loosest]}`}也要超过 ${OVER_SHOULDER_FOCAL.max}mm 的焦距；`
+    const tried = loosest === spec.size ? `拍${CAMERA_STAGE_SHOT_SIZE_LABELS[spec.size]}` : `放宽到${CAMERA_STAGE_SHOT_SIZE_LABELS[loosest]}`
+    throw new ShotCompositionError(`SHOT_NOT_REACHABLE：两人眼睛相距 ${metres(tooFar.separation)} 米，过肩机位要站在前景那人身后，`
+      + (tooFar.limitedBy
+        ? `反打拍「${tooFar.limitedBy}」那台${tried}也要超过 ${OVER_SHOULDER_FOCAL.max}mm 的焦距（两台景别保持一致，这台跟着求不出）；`
+        : `${tried}也要超过 ${OVER_SHOULDER_FOCAL.max}mm 的焦距；`)
       + '把两人拉近一些，或改用 two_shot、给被拍者单独一个 single。')
   }
   const evaluated: Evaluated[] = []

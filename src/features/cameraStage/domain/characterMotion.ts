@@ -99,7 +99,8 @@ export function isLocomotionClip(clipName: string): boolean {
 
 /**
  * 按平均速度选步态。动作库的慢跑按约 5.9 米/秒制作（落地时脚往后扫得很快），走路约 1 米/秒：
- * 走路放到 2.25 倍还像快走，再快就换慢跑（这时慢跑放慢到四成多，步频偏慢但脚不滑），冲刺同理。
+ * 走路放到 2.25 倍还像快走，再快就换慢跑，冲刺同理。跑得比片段原速慢时只有着地段同比放慢、脚不滑，
+ * 腾空段按跑速缩短，步频才像真人（见 characterMotionTimeline 的 runningCycle）；这个速度也是腾空缩到最短的走跑交界。
  */
 export const CHARACTER_JOG_MIN_SPEED = 2.2
 export const CHARACTER_SPRINT_MIN_SPEED = 7

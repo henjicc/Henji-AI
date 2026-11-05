@@ -132,6 +132,28 @@ describe('按构图意图定机位', () => {
     expect((refused as Error).message).not.toContain('太近')
   })
 
+  it('两人身高差很大时正反打对称：景别一致、离被拍者一样远，焦距按被拍者身高换算', () => {
+    for (const scale of [0.8, 0.6]) {
+      const a = character('甲', -1.25, 0, 90)
+      const b = character('乙', 1.25, 0, -90)
+      b.transform.scale = { x: scale, y: scale, z: scale }
+      const subjects = [shotSubjectFromObject(a), shotSubjectFromObject(b)]
+      const axisNormal = axisNormalFor(subjects, axisSideOf(new Vector3(0, 1.6, 6), subjects))
+      const request = spec([a, b], { kind: 'over_shoulder', subjects, size: 'close', lens: 'telephoto', axisNormal })
+      const forward = composeShot(request)
+      const reverse = composeShot({ ...request, subjects: [subjects[1], subjects[0]] })
+      expect(forward.size, `${scale}`).toBe(reverse.size)
+      expect(forward.readback.subjects[1].shotSize, `${scale}`).toBe(reverse.readback.subjects[1].shotSize)
+      const eye = (subject: typeof subjects[number]) => subject.base.clone().setY(subject.height * 0.936)
+      const forwardDistance = forward.camera.position.distanceTo(eye(subjects[1]))
+      const reverseDistance = reverse.camera.position.distanceTo(eye(subjects[0]))
+      expect(Math.abs(forwardDistance / reverseDistance - 1), `${scale}`).toBeLessThan(0.1)
+      expect(forward.focalLength / reverse.focalLength, `${scale}`).toBeCloseTo(1 / scale, 0)
+      // 放宽是被拍矮个子那台的 200mm 上限逼的：拍高个子这台的说明要点明是谁。
+      if (reverse.adjusted?.size) expect(reverse.adjusted.summary, `${scale}`).toContain('拍「乙」那台')
+    }
+  })
+
   it('意图机位被挡时绕开并报告挡住它的是谁；不避让时如实报告遮挡', () => {
     const hero = character('主角', 0, 0, 0)
     const wall = createPrimitiveObject('box', '墙', pickDefaultColor(2))

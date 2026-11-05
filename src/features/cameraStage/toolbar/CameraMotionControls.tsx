@@ -3,7 +3,7 @@ import { PanelTrigger } from '@/components/ui'
 import { CreativeIntentControls } from '@/features/creativeIntent'
 import { createLogger } from '@/core/logging'
 import { useCameraStageStore } from '../store/cameraStageStore'
-import { cameraMotionDraft, cameraMotionRevision, subscribeCameraMotion, startCameraMotion, setCameraMotionProperty, setCameraMotionStatus, organizeCameraMotion, previewCameraMotion, applyCameraMotion, pinCameraMotion, clearCameraMotionPreview, type CameraMotionProperty } from '../application/cameraMotionDraft'
+import { cameraMotionDraft, cameraMotionRevision, subscribeCameraMotion, startCameraMotion, setCameraMotionProperty, setCameraMotionStatus, organizeCameraMotion, previewCameraMotion, applyCameraMotion, pinCameraMotion, clearCameraMotionPreview, cameraMotionClearanceHint, type CameraMotionProperty } from '../application/cameraMotionDraft'
 
 const logger = createLogger('cameraStage.motionControls')
 
@@ -27,7 +27,7 @@ export function CameraMotionControls(): React.ReactElement {
   return <PanelTrigger display={draft?.status === 'recording' ? '正在示范' : '超级关键帧'} appearance="quiet" buttonClassName="w-auto" alignment="aboveCenter" gap={8} panelPadding="content" panelWidth="content"
     onOpenChange={open => { if (!open && projectId) clearCameraMotionPreview(projectId) }}
     renderPanel={() => <CreativeIntentControls profile="camera" property={draft?.property ?? property} status={draft?.status ?? 'idle'} candidates={draft?.review?.candidates.map(candidate => ({ ...candidate, label: candidate.id === 'dolly-hold' ? '推近停顿' : candidate.label })) ?? []} selected={draft?.selected ?? 'original'} fidelity={.5}
-      pins={draft?.pinnedIds.map(id => ({ id, label: '机位' })) ?? []} canPin={Boolean(draft?.frames.some(frame => Math.abs(frame.time - time) < .5 / useCameraStageStore.getState().animation.fps))} needsSave={draft?.needsSave} message={message ?? draft?.message}
+      pins={draft?.pinnedIds.map(id => ({ id, label: '机位' })) ?? []} canPin={Boolean(draft?.frames.some(frame => Math.abs(frame.time - time) < .5 / useCameraStageStore.getState().animation.fps))} needsSave={draft?.needsSave} message={message ?? draft?.message} clearanceHint={projectId ? cameraMotionClearanceHint(projectId) : undefined}
       onStart={() => run(() => { if (!projectId || !cameraId) throw new Error('请选择一个机位。'); startCameraMotion(projectId, cameraId, property) })}
       onStop={() => run(() => setCameraMotionStatus(projectId!, 'reviewing'))} onPause={() => run(() => setCameraMotionStatus(projectId!, 'paused'))} onResume={() => run(() => setCameraMotionStatus(projectId!, 'recording'))}
       onProperty={value => { setProperty(value); if (draft && projectId) run(() => setCameraMotionProperty(projectId, value)) }}

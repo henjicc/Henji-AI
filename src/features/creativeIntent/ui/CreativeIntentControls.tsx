@@ -41,6 +41,8 @@ interface SharedCreativeIntentControlsProps {
   status: 'idle' | 'recording' | 'paused' | 'reviewing' | 'optimizing'
   candidates: { id: string; label: string }[]; selected: string; fidelity: number
   pins: { id: string; label: string }[]; canPin: boolean; message?: string; needsSave?: boolean; pinLabel?: string
+  /** 已应用、但轨迹穿过对象或钻地时怎么改 */
+  clearanceHint?: string
   referenceControls?: ReactNode
   /** 有生效中的参照或约束时，“参照与约束”区默认展开。 */
   referenceActive?: boolean
@@ -173,6 +175,7 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
       </UiButton>
       <UiDisclosurePanel open={referenceOpen} className="flex flex-col gap-3 pt-2">{props.referenceControls}</UiDisclosurePanel>
     </div>}
+    {props.clearanceHint && <UiError size="sm" align="start" title={t('creativeIntent.clearanceTitle', { defaultValue: '已应用，但轨迹会穿模' })} message={props.clearanceHint} />}
     {props.message && <UiError size="sm" title={demonstration ? t('creativeIntent.demonstrationError', { defaultValue: '请调整示范' }) : t('creativeIntent.layoutError', { defaultValue: '请调整布局' })} message={props.message} />}
     {showFooter && <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
       {busy ? <>

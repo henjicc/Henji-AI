@@ -2016,6 +2016,7 @@
     "original": "Original",
     "originalA": "Original A",
     "play": "Preview at normal speed",
+    "clearanceTitle": "Applied, but the path clips through",
     "demonstrationError": "Adjust the demonstration",
     "layoutError": "Adjust the layout",
     "cameraLoading": "Organizing camera…",

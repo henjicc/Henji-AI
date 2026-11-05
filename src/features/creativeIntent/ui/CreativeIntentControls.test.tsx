@@ -91,3 +91,10 @@ it('整理通过共享付费预检，取消不生成，发送后只生成一次'
   await waitFor(() => expect(p.onOptimize).toHaveBeenCalledOnce())
   expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith()
 })
+it('应用后轨迹穿模时显示穿模提示，没有提示时不占位', () => {
+  const p = props(), view = render(<CreativeIntentControls {...p} />)
+  expect(screen.queryByText('已应用，但轨迹会穿模')).toBeNull()
+  view.rerender(<CreativeIntentControls {...p} clearanceHint="轨迹在 0.6 秒穿过「墙」：撤销后把机位挪到开阔一侧，再重新应用。" />)
+  expect(screen.getByText('已应用，但轨迹会穿模')).toBeDefined()
+  expect(screen.getByText(/穿过「墙」/)).toBeDefined()
+})

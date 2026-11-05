@@ -25,6 +25,10 @@ const EXTRA_LOOPS = new Set(['Sword_Idle'])
 const SAMPLES = 480
 /** 脚掌离最低点不到这么高算贴地（米） */
 const CONTACT_HEIGHT = 0.015
+/** 着地程度从 1 降到 0 的离地高度范围（米），让腾空段的起止平滑 */
+const CONTACT_BLEND = 0.04
+/** 着地程度每个周期取多少个点 */
+const CONTACT_SAMPLES = 48
 
 const buffer = fs.readFileSync(GLB_PATH)
 const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(
@@ -66,7 +70,16 @@ function measureGait(clip) {
     }
   }
   speeds.sort((a, b) => a - b)
-  return { groundSpeed: round(speeds[Math.floor(speeds.length / 2)], 3), leftStrikePhase: round(strikes.l ?? 0, 3) }
+  // 着地程度：每个取样点上贴地最紧的那只脚，离地 CONTACT_HEIGHT 以内算 1，再高 CONTACT_BLEND 降到 0。
+  const floors = Object.fromEntries(['l', 'r'].map((side) => [side, Math.min(...rows.map((row) => row[side].y))]))
+  const contactAt = (row) => Math.max(...['l', 'r'].map((side) => Math.max(0, Math.min(1, 1 - (row[side].y - floors[side] - CONTACT_HEIGHT) / CONTACT_BLEND))))
+  const contact = Array.from({ length: CONTACT_SAMPLES }, (_, index) => round(contactAt(rows[Math.round((index * SAMPLES) / CONTACT_SAMPLES)]), 2))
+  return {
+    groundSpeed: round(speeds[Math.floor(speeds.length / 2)], 3),
+    leftStrikePhase: round(strikes.l ?? 0, 3),
+    // 走路总有一只脚着地，不需要；有腾空的跑步片段才记。
+    ...(Math.min(...contact) < 0.5 ? { groundContact: contact } : {}),
+  }
 }
 
 const facts = {}
@@ -85,13 +98,15 @@ const banner = [
   ' * 自动生成文件，禁止手改：npm run gen:camera-stage-clips（scripts/generate-camera-stage-clips.mjs）',
   ' * 数据来源：resources/camera-stage/UAL1_Standard.glb（Quaternius Universal Animation Library，CC0）',
   ' * duration 秒；loop 循环片段；groundSpeed 原地走跑片段按原速播放时对应的前进速度（米/秒，模型原尺寸）；',
-  ' * leftStrikePhase 左脚掌刚着地的时刻占周期的比例。',
+  ' * leftStrikePhase 左脚掌刚着地的时刻占周期的比例；groundContact 有腾空的跑步片段把周期等分取样，',
+  ' * 每点至少一只脚着地的程度（1 着地，0 腾空）。',
   ' */',
   'export interface CharacterClipFacts {',
   '  duration: number',
   '  loop: boolean',
   '  groundSpeed?: number',
   '  leftStrikePhase?: number',
+  '  groundContact?: number[]',
   '}',
   '',
   `export const CHARACTER_CLIP_FACTS: Record<string, CharacterClipFacts> = ${JSON.stringify(facts, null, 2)}`,

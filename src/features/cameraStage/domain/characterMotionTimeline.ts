@@ -5,6 +5,7 @@
  * 这里把它们排成一条按时间首尾相接的动作段：
  * - 走跑段的片段时间按走过的路程推进（距离匹配）：片段时间 = 起步相位 + 路程 ÷ 着地速度。原地走跑片段
  *   着地那只脚在模型里以着地速度往后扫，身体以同样的速度前进，脚就钉在地上；加减速、转弯都成立。
+ *   有腾空的跑步片段只在着地段这样推进，腾空段按跑速缩短（见 runningCycle）。
  * - 原地转身用走路片段踩步，片段时间按转过的弧长推进。
  * - 其余段按时间推进；一次性动作做完后接 CHARACTER_CLIP_FOLLOW_UPS 里的后续动作，没有的停在最后一帧。
  * - 段与段之间交叉淡入淡出：新段在开头 CROSSFADE 秒内权重从 0 平滑升到 1，上一段继续推进并淡出。
@@ -22,6 +23,7 @@ import {
 import { getBodyVariant } from './bodyVariants'
 import {
   CHARACTER_CLIP_FOLLOW_UPS,
+  CHARACTER_JOG_MIN_SPEED,
   CHARACTER_MOVE_MIN_SPEED,
   characterClipFacts,
   isLocomotionClip,
@@ -47,7 +49,9 @@ const TURN_STEP_RADIUS = 0.25
 /** 原地转身至少转这么多度才踩步 */
 const TURN_STEP_MIN_DEGREES = 20
 /** 走动的最短距离（米）；更短的位移按平移处理，不换走路动作 */
-const LOCOMOTION_MIN_DISTANCE = 0.05
+export const LOCOMOTION_MIN_DISTANCE = 0.05
+/** 跑得最慢时腾空段至少保留片段原长的这么多（真实时间），腿不至于一闪而过 */
+const FLIGHT_MIN_RATIO = 0.1
 
 export interface CharacterMotionLayer {
   motion: StageCharacterMotion
@@ -137,6 +141,53 @@ interface Built {
   headings: StageCharacterHeadingEntry[]
 }
 
+/**
+ * 有腾空的跑步片段一个周期里片段时间与路程的对应：等分取样点上的累计路程。
+ * 着地时身体每片段秒前进 groundSpeed，脚钉在地上；腾空时每片段秒前进的路程按跑速定：
+ * 真人跑慢时着地变长、腾空变短，步频变化不大。整段只按“路程 ÷ 着地速度”同比放慢的话，腾空也跟着拉长，
+ * 动作库的慢跑（按约 5.9 米/秒制作、腾空约占周期三分之二）跑 3 米/秒时步频只剩每分钟约 65 步。
+ * 腾空的真实时长从走跑交界的接近 0 线性长到原速时的片段原长；比原速还快时与着地段同比加快。
+ */
+function runningCycle(contact: readonly number[], duration: number, nativeGroundSpeed: number, groundSpeed: number, averageSpeed: number): { duration: number; distances: number[] } {
+  const relative = averageSpeed / groundSpeed
+  const transition = CHARACTER_JOG_MIN_SPEED / nativeGroundSpeed
+  const flightRatio = Math.max(FLIGHT_MIN_RATIO, Math.min(1, (relative - transition) / (1 - transition)))
+  const flightSpeed = Math.min(groundSpeed, averageSpeed * flightRatio)
+  const step = duration / contact.length
+  const distances = [0]
+  for (let index = 0; index < contact.length; index += 1) {
+    const weight = (contact[index] + contact[(index + 1) % contact.length]) / 2
+    distances.push(distances[index] + step * (weight * groundSpeed + (1 - weight) * flightSpeed))
+  }
+  return { duration, distances }
+}
+
+type DistanceClock = Extract<StageCharacterMotionSpan['clock'], { kind: 'distance' }>
+
+/** 跑步周期里片段时间（未取模）对应的累计路程。 */
+function cycleDistanceAt(cycle: NonNullable<DistanceClock['cycle']>, clipTime: number): number {
+  const total = cycle.distances[cycle.distances.length - 1]
+  const laps = Math.floor(clipTime / cycle.duration)
+  const position = ((clipTime - laps * cycle.duration) / cycle.duration) * (cycle.distances.length - 1)
+  const index = Math.min(cycle.distances.length - 2, Math.floor(position))
+  return laps * total + cycle.distances[index] + (cycle.distances[index + 1] - cycle.distances[index]) * (position - index)
+}
+
+/** 走跑段从起点走了 distance 米时的片段时间（未取模）。 */
+function distanceClipTime(clock: DistanceClock, distance: number): number {
+  const cycle = clock.cycle
+  if (!cycle) return clock.startClipTime + distance / clock.groundSpeed
+  const total = cycle.distances[cycle.distances.length - 1]
+  const target = cycleDistanceAt(cycle, clock.startClipTime) + distance
+  const laps = Math.floor(target / total)
+  const remainder = target - laps * total
+  let index = 0
+  while (index < cycle.distances.length - 2 && cycle.distances[index + 1] <= remainder) index += 1
+  const span = cycle.distances[index + 1] - cycle.distances[index]
+  const fraction = span > 0 ? (remainder - cycle.distances[index]) / span : 0
+  return laps * cycle.duration + ((index + fraction) / (cycle.distances.length - 1)) * cycle.duration
+}
+
 function distanceSpan(
   start: number,
   end: number,
@@ -149,12 +200,20 @@ function distanceSpan(
   const facts = characterClipFacts(clipName)!
   const groundSpeed = (facts.groundSpeed ?? 1) * scale
   const averageSpeed = end > start ? pathLength / (end - start) : 0
+  const cycle = facts.groundContact && averageSpeed > 0
+    ? runningCycle(facts.groundContact, facts.duration, facts.groundSpeed ?? 1, groundSpeed, averageSpeed)
+    : undefined
+  // 片段平均比原速快多少倍：一个周期的片段时长 ÷ 跑完这个周期路程的真实时间。
+  const playbackRate = cycle ? (averageSpeed * cycle.duration) / cycle.distances[cycle.distances.length - 1] : averageSpeed / groundSpeed
   return {
     startTime: start,
     endTime: end,
     motion: { mode: 'clip', clipName, speed: 1 },
-    clock: { kind: 'distance', startClipTime: (facts.leftStrikePhase ?? 0) * facts.duration, groundSpeed, gridStart: start, gridStep: (end - start) / Math.max(1, distances.length - 1), distances },
-    locomotion: { kind, distance: pathLength, averageSpeed, playbackRate: averageSpeed / groundSpeed },
+    clock: {
+      kind: 'distance', startClipTime: (facts.leftStrikePhase ?? 0) * facts.duration, groundSpeed, gridStart: start,
+      gridStep: (end - start) / Math.max(1, distances.length - 1), distances, ...(cycle ? { cycle } : {}),
+    },
+    locomotion: { kind, distance: pathLength, averageSpeed, playbackRate },
   }
 }
 
@@ -282,7 +341,7 @@ function buildSpans(input: BuildInput): Built {
     if (previous && previous.clock.kind === 'distance' && span.clock.kind === 'distance' && Math.abs(previous.endTime - span.startTime) <= 1e-4
       && previous.motion.mode === 'clip' && span.motion.mode === 'clip' && previous.motion.clipName === span.motion.clipName) {
       const clock = previous.clock
-      span = { ...span, continuesPrevious: true, clock: { ...span.clock, startClipTime: clock.startClipTime + clock.distances[clock.distances.length - 1] / clock.groundSpeed } }
+      span = { ...span, continuesPrevious: true, clock: { ...span.clock, startClipTime: distanceClipTime(clock, clock.distances[clock.distances.length - 1]) } }
     }
     push(span)
     arrival = { motion: interval.toState.motion ?? fallback, time: interval.segEnd }
@@ -349,7 +408,7 @@ export function spanClipTime(span: StageCharacterMotionSpan, time: number): numb
   const facts = characterClipFacts(motion.clipName)
   const duration = facts?.duration ?? 1
   const raw = span.clock.kind === 'distance'
-    ? span.clock.startClipTime + interpolateGrid(span.clock.distances, span.clock.gridStart, span.clock.gridStep, time) / span.clock.groundSpeed
+    ? distanceClipTime(span.clock, interpolateGrid(span.clock.distances, span.clock.gridStart, span.clock.gridStep, time))
     : Math.max(0, time - span.clock.origin) * span.clock.rate
   if (facts && !facts.loop) return Math.min(raw, Math.max(0, duration - 1e-4))
   return ((raw % duration) + duration) % duration

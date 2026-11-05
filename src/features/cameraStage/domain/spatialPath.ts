@@ -4,6 +4,7 @@ import { compileCameraMoveSamples } from './stateKeyframeCameraMovePresets'
 import {
   addVec3,
   createBezierArcLengthCurve,
+  cubicSegmentPoint,
   getSpatialPathAnchors,
   scaleVec3,
   subtractVec3,
@@ -130,6 +131,75 @@ export function createCameraPresetPath(
       source: { kind: 'preset', preset },
     },
     endPosition,
+  }
+}
+
+const lerpVec3 = (a: StageVec3, b: StageVec3, t: number): StageVec3 => addVec3(a, scaleVec3(subtractVec3(b, a), t))
+const distanceVec3 = (a: StageVec3, b: StageVec3): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+
+/**
+ * 在离 point 最近的位置把路径一分为二（de Casteljau 分割），前后两段拼起来与原路径完全重合。
+ * point 落在起点或终点上时那一侧没有路程，为 null。两段都记为自定义路径：预设的幅度只对整段成立。
+ */
+export function splitSpatialPath(
+  from: StageVec3,
+  to: StageVec3,
+  path: StageSpatialPath,
+  point: StageVec3,
+): { before: StageSpatialPath | null; after: StageSpatialPath | null } {
+  const anchors = getSpatialPathAnchors(from, to, path)
+  const pieces = anchors.length - 1
+  const distanceAt = (piece: number, t: number): number => distanceVec3(cubicSegmentPoint(anchors[piece], anchors[piece + 1], t), point)
+  const COARSE = 64
+  let best = { piece: 0, t: 0, distance: Infinity }
+  for (let piece = 0; piece < pieces; piece += 1) {
+    for (let step = 0; step <= COARSE; step += 1) {
+      const distance = distanceAt(piece, step / COARSE)
+      if (distance < best.distance) best = { piece, t: step / COARSE, distance }
+    }
+  }
+  // 黄金分割在最近取样点两侧各一格内细化。
+  let low = Math.max(0, best.t - 1 / COARSE)
+  let high = Math.min(1, best.t + 1 / COARSE)
+  for (let iteration = 0; iteration < 40; iteration += 1) {
+    const a = high - (high - low) / 1.618034
+    const b = low + (high - low) / 1.618034
+    if (distanceAt(best.piece, a) < distanceAt(best.piece, b)) high = b
+    else low = a
+  }
+  const piece = best.piece
+  const t = (low + high) / 2
+  if (piece + t <= 1e-4) return { before: null, after: path }
+  if (piece + t >= pieces - 1e-4) return { before: path, after: null }
+
+  const start = anchors[piece]
+  const end = anchors[piece + 1]
+  const p0 = start.position
+  const p1 = addVec3(p0, start.outTangent)
+  const p3 = end.position
+  const p2 = addVec3(p3, end.inTangent)
+  const left1 = lerpVec3(p0, p1, t)
+  const middle = lerpVec3(p1, p2, t)
+  const right2 = lerpVec3(p2, p3, t)
+  const left2 = lerpVec3(left1, middle, t)
+  const right1 = lerpVec3(middle, right2, t)
+  const cut = lerpVec3(left2, right1, t)
+  // 锚点 0 是起点、1..n 是 knots、n+1 是终点；被切的那段两端的切线换成分割后的控制点。
+  const beforeKnots = path.knots.slice(0, piece).map((knot, index) => (index === piece - 1 ? { ...knot, outTangent: subtractVec3(left1, p0) } : knot))
+  const afterKnots = path.knots.slice(piece).map((knot, index) => (index === 0 ? { ...knot, inTangent: subtractVec3(right2, p3) } : knot))
+  return {
+    before: markSpatialPathCustom({
+      ...path,
+      startOutTangent: piece === 0 ? subtractVec3(left1, p0) : path.startOutTangent,
+      knots: beforeKnots,
+      endInTangent: subtractVec3(left2, cut),
+    }),
+    after: markSpatialPathCustom({
+      ...path,
+      startOutTangent: subtractVec3(right1, cut),
+      knots: afterKnots,
+      endInTangent: piece === pieces - 1 ? subtractVec3(right2, p3) : path.endInTangent,
+    }),
   }
 }
 

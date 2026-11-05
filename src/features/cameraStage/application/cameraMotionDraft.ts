@@ -19,6 +19,8 @@ export interface CameraMotionDraft {
   frames: StageStateKeyframe[]; pinnedIds: string[]; selected: string; review?: CameraMotionReview
   original?: CameraMotionNativeCandidate; preview?: CameraMotionNativeCandidate; pose?: StageCameraObject; poseTime?: number
   needsSave?: boolean; message?: string; controller?: AbortController; reviewId?: string
+  /** 应用后轨迹穿过对象或钻地时怎么改；界面与助手看到同一句 */
+  clearanceHint?: string
 }
 const drafts = new WeakMap<object, CameraMotionDraft>()
 const listeners = new Set<() => void>(); let revision = 0
@@ -92,7 +94,7 @@ function captureCameraMotion(projectId: string, cameraId: string, patch: CameraG
   const frame = createStateKeyframe(objects.map(object => object.id === cameraId ? camera : object), '机位示范', time)
   frame.id = existing?.id ?? frame.id
   draft.frames = [...draft.frames.filter(value => value.time !== time), frame].sort((a, b) => a.time - b.time)
-  draft.pose = camera; draft.poseTime = time; draft.review = undefined; draft.preview = undefined; draft.selected = 'original'; draft.message = undefined; publish()
+  draft.pose = camera; draft.poseTime = time; draft.review = undefined; draft.preview = undefined; draft.selected = 'original'; draft.message = undefined; draft.clearanceHint = undefined; publish()
   return true
 }
 export function pinCameraMotion(projectId: string, unpinId?: string): void {
@@ -126,7 +128,7 @@ export async function organizeCameraMotion(projectId: string, cameraId?: string,
   original.animation = compileStateKeyframesToAnimation(original.stateKeyframes, state.objects)
   const ids = stateKeyframeIds ?? (draft.frames.length ? original.stateKeyframes.filter(value => value.time >= draft.frames[0].time && value.time <= draft.frames.at(-1)!.time).map(value => value.id) : state.stateKeyframes.map(value => value.id))
   const request = cameraMotionRequest(state, draft.cameraId, ids, draft.pinnedIds)
-  draft.status = 'optimizing'; draft.message = undefined; publish()
+  draft.status = 'optimizing'; draft.message = undefined; draft.clearanceHint = undefined; publish()
   try {
     const review = await prepareCameraStageMotion(projectId, request, { cancelled: () => controller.signal.aborted }, original)
     controller.signal.throwIfAborted(); requireDraft(projectId)
@@ -150,9 +152,17 @@ export async function applyCameraMotion(projectId: string, candidateId?: string)
   draft.preview = undefined; draft.pose = undefined; publish()
   const result = await applyCameraStageMotionCandidate(projectId, draft.review, selected)
   draft.sourceKey = cameraMotionSourceKey(cameraStageProjectStore(projectId).getState())
-  draft.needsSave = !result.saved; draft.selected = selected; draft.status = 'reviewing'
+  draft.needsSave = !result.saved; draft.selected = selected; draft.status = 'reviewing'; draft.clearanceHint = result.clearanceHint
   if (result.saved) { draft.review = undefined; draft.original = undefined; draft.frames = []; draft.pinnedIds = [] }
   publish(); return result
+}
+/** 穿模提示只对应用后的那一版场景成立：撤销或场景再变之后改法就不对了，不再显示。 */
+export function cameraMotionClearanceHint(projectId: string): string | undefined {
+  const draft = cameraMotionDraft(projectId)
+  if (!draft?.clearanceHint) return undefined
+  if (draft.sourceKey === cameraMotionSourceKey(cameraStageProjectStore(projectId).getState())) return draft.clearanceHint
+  draft.clearanceHint = undefined
+  return undefined
 }
 export function clearCameraMotionPreview(projectId: string): void {
   const draft = cameraMotionDraft(projectId)

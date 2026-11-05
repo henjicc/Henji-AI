@@ -83,6 +83,41 @@ describe('compileStateKeyframesToAnimation', () => {
     expect(layers[0].weight + layers[1].weight).toBeCloseTo(1, 6)
   })
 
+  it('慢跑比片段原速慢时只缩短腾空：着地时脚仍钉在地上，步频在真人慢跑范围内', () => {
+    const character = createCharacterObject('Character', pickDefaultColor(1))
+    const from = createStateKeyframe([character], '卡1', 0)
+    from.transition.perObject[character.id] = { speedPreset: 'uniform' }
+    const to = createStateKeyframe([character], '卡2', 4)
+    to.objectStates[character.id].transform.position = { x: 12, y: 0, z: 0 }
+    const animation = compileStateKeyframesToAnimation([from, to], [character])
+    const jog = animation.characterMotions[0].spans.find((span) => span.locomotion)!
+    expect(jog.motion).toMatchObject({ clipName: 'Jog_Fwd_Loop' })
+    const { duration, groundSpeed, groundContact } = characterClipFacts('Jog_Fwd_Loop')!
+    const position = (time: number): number => sampleSpatialMotion(animation.spatialMotions[0], time)?.x
+      ?? Number(sampleTrack(animation.tracks.find((track) => track.objectId === character.id && track.propertyPath === 'transform.position.x')!, time, 'scalar'))
+    const step = 1 / 240
+    let laps = 0
+    let lockChecked = 0
+    for (let time = 0.5; time < 3.5; time += step) {
+      const a = spanClipTime(jog, time)
+      const b = spanClipTime(jog, time + step)
+      const advance = ((b - a) % duration + duration) % duration
+      laps += advance / duration
+      // 所在取样区间两端都着地：片段推进 × 着地速度 = 走过的路程。
+      const index = Math.floor((a / duration) * groundContact!.length)
+      const grounded = [index, index + 1].every((item) => groundContact![item % groundContact!.length] === 1)
+      if (grounded && Math.floor((b / duration) * groundContact!.length) === index) {
+        expect(advance * groundSpeed!).toBeCloseTo(position(time + step) - position(time), 3)
+        lockChecked += 1
+      }
+    }
+    expect(lockChecked).toBeGreaterThan(20)
+    // 一个周期两步：3 米/秒时每分钟 150–185 步，真人慢跑的范围（按路程同比放慢时约 65 步）。
+    const cadence = (2 * laps * 60) / 3
+    expect(cadence).toBeGreaterThan(150)
+    expect(cadence).toBeLessThan(185)
+  })
+
   it('挥手做完后下一张卡再记挥手就再挥一次；还在挥的时候插卡接着挥', () => {
     const character = createCharacterObject('Character', pickDefaultColor(1))
     const wave = { mode: 'clip', clipName: 'Wave', speed: 1 } as const

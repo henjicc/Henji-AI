@@ -63,7 +63,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /** 按对象错峰延迟平移过渡起止时间，钳制在原过渡区间内（压缩而非越界） */
-function applyTransitionDelay(transitionStart: number, transitionEnd: number, delay: number): [number, number] {
+export function applyTransitionDelay(transitionStart: number, transitionEnd: number, delay: number): [number, number] {
   const start = clamp(transitionStart + delay, transitionStart, transitionEnd)
   const end = clamp(transitionEnd + delay, transitionStart, transitionEnd)
   return [start, end]

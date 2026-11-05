@@ -1,12 +1,13 @@
 import { beforeEach, expect, it } from 'vitest'
 import { loadCameraStageTestProject, cameraStageTestDocuments } from '@/tests/cameraStageProjectFixture'
 import { createDefaultAnimation } from '../domain/animationTypes'
-import { createCameraObject, createDefaultSceneSettings, pickDefaultColor } from '../domain/sceneDefaults'
+import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { createStateKeyframe } from '../domain/stateKeyframeTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
-import { startCameraMotion, demonstrateCameraMotion, setCameraMotionStatus, organizeCameraMotion, previewCameraMotion, applyCameraMotion, cameraMotionDraft, cameraMotionPreview, pinCameraMotion } from './cameraMotionDraft'
+import { startCameraMotion, demonstrateCameraMotion, setCameraMotionStatus, organizeCameraMotion, previewCameraMotion, applyCameraMotion, cameraMotionDraft, cameraMotionPreview, pinCameraMotion, cameraMotionClearanceHint } from './cameraMotionDraft'
 import { restoreCameraStageUndo } from './cameraStageUndo'
 import { createApplicationHarness } from '@/tests/applicationHarness'
+import { cameraStageProjectStore } from './cameraStageProjectRuntime'
 
 const projectId = 'camera-intent'
 let cameraId: string
@@ -97,4 +98,24 @@ it('视口采集遇到钉住点保留原姿态，并通过共享面板报告失�
   expect(cameraMotionDraft(projectId)!.message).toContain('已钉住')
   expect(cameraMotionDraft(projectId)!.frames).toEqual(original)
   expect(useCameraStageStore.temporal.getState().pastStates).toHaveLength(0)
+})
+it('界面应用候选后轨迹穿模，面板读到与助手同一句穿模提示；撤销、场景变化或重新整理后清掉', async () => {
+  const wall = createPrimitiveObject('box', '墙', pickDefaultColor(2))
+  wall.transform.position = { x: 0, y: 2, z: 8 }; wall.transform.scale = { x: 4, y: 4, z: 0.2 }
+  const store = cameraStageProjectStore(projectId)
+  store.setState({ objects: [...store.getState().objects, wall] })
+  await organizeCameraMotion(projectId, cameraId)
+  const result = await applyCameraMotion(projectId, 'smooth')
+  expect(result.clearanceHint).toContain('「墙」')
+  expect(cameraMotionClearanceHint(projectId)).toBe(result.clearanceHint)
+  // 撤销应用后场景回到应用前，这句改法不再成立。
+  await restoreCameraStageUndo(result.undoToken)
+  expect(cameraMotionClearanceHint(projectId)).toBeUndefined()
+  // 重新整理并应用后提示又出现；之后场景再变（改名）也不再显示。
+  await organizeCameraMotion(projectId, cameraId)
+  expect(cameraMotionClearanceHint(projectId)).toBeUndefined()
+  await applyCameraMotion(projectId, 'smooth')
+  expect(cameraMotionClearanceHint(projectId)).toContain('「墙」')
+  useCameraStageStore.getState().updateObject(cameraId, { name: '改名' })
+  expect(cameraMotionClearanceHint(projectId)).toBeUndefined()
 })

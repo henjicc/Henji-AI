@@ -1,6 +1,7 @@
 import type { StoreApi } from 'zustand'
 import { createLogger } from '@/core/logging'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
+import { continueTransitionsThroughInserted } from '../domain/stateKeyframeInsertion'
 import {
   captureStateKeyframeObjectState,
   createStateKeyframe,
@@ -322,21 +323,6 @@ function replaceSpatialPath(
 }
 
 /**
- * 在一段跟拍中间插卡时，新卡到下一张卡这一段接着跟拍（与上一段设置相同，编译时合成一段，滤波不断）。
- */
-function inheritFollowAtInsert(stateKeyframes: StageStateKeyframe[], insertedId: string): StageStateKeyframe[] {
-  const index = stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === insertedId)
-  const previous = stateKeyframes[index - 1]
-  if (index <= 0 || !previous || index === stateKeyframes.length - 1) return stateKeyframes
-  const follows = Object.entries(previous.transition.perObject).filter(([, detail]) => detail.follow)
-  if (follows.length === 0) return stateKeyframes
-  return stateKeyframes.map((stateKeyframe) => stateKeyframe.id !== insertedId ? stateKeyframe : {
-    ...stateKeyframe,
-    transition: { perObject: { ...stateKeyframe.transition.perObject, ...Object.fromEntries(follows.map(([objectId, detail]) => [objectId, { ...stateKeyframe.transition.perObject[objectId], follow: structuredClone(detail.follow) }])) } },
-  })
-}
-
-/**
  * 作者在一张卡上动了摄像机（拖动、定机位、改注视），这张卡前后两段就不再跟拍：跟拍会盖住这次改动。
  */
 export function endFollowAround(stateKeyframes: StageStateKeyframe[], stateKeyframeId: string | null, objectIds: readonly string[]): StageStateKeyframe[] {
@@ -368,8 +354,8 @@ function insertCapturedStateKeyframe(
     return { stateKeyframes: captureObjectsIntoStateKeyframe(state.stateKeyframes, existing.id, objects, undefined, sampledAtStateKeyframe(state, existing.id)), stateKeyframe: existing }
   }
   const stateKeyframe = createStateKeyframe(objects, `关键帧 ${state.stateKeyframes.length + 1}`, time)
-  const stateKeyframes = inheritFollowAtInsert(syncTransitionDurations([...state.stateKeyframes, stateKeyframe].sort((a, b) => a.time - b.time)), stateKeyframe.id)
-  return { stateKeyframes, stateKeyframe }
+  const stateKeyframes = continueTransitionsThroughInserted(syncTransitionDurations([...state.stateKeyframes, stateKeyframe].sort((a, b) => a.time - b.time)), stateKeyframe.id, objects)
+  return { stateKeyframes, stateKeyframe: stateKeyframes.find((item) => item.id === stateKeyframe.id)! }
 }
 
 export function compileStateKeyframeEdit(
@@ -424,7 +410,7 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
         return { stateKeyframes, selectedStateKeyframeId: existing.id, animation: compile(stateKeyframes, state.objects) }
       }
       const stateKeyframe = createStateKeyframe(state.objects, `关键帧 ${state.stateKeyframes.length + 1}`, time)
-      const stateKeyframes = inheritFollowAtInsert(syncTransitionDurations([...state.stateKeyframes, stateKeyframe].sort((a, b) => a.time - b.time)), stateKeyframe.id)
+      const stateKeyframes = continueTransitionsThroughInserted(syncTransitionDurations([...state.stateKeyframes, stateKeyframe].sort((a, b) => a.time - b.time)), stateKeyframe.id, state.objects)
       logger.debug('新增状态关键帧', { event: 'camera_stage.state_keyframe.added', stateKeyframeCount: stateKeyframes.length })
       return {
         stateKeyframes,
