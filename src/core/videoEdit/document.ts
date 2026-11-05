@@ -116,8 +116,8 @@ const videoEditClipStateSchema = z.object({
   /** 非等比缩放（重要记录 019，AE 缩放链条解开）：垂直缩放与水平缩放之比。scale 是水平缩放，垂直缩放 = scale × scaleAspect；缺省为 1（等比）。 */
   scaleAspect: z.number().min(0.01).max(100).optional().describe('非等比缩放：垂直缩放与水平缩放之比，缺省 1 为等比。scale 是水平缩放，垂直缩放 = scale × scale_aspect；scale 的关键帧按这个比例同时缩放两个方向。'),
   anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipCurvesSchema.optional(),
-  /** 片段自身变换动画的运动模糊（2026-10-27，只给助手调，界面不提供）：省略跟随序列总开关，false 只关这个片段。 */
-  motionBlur: z.literal(false).optional().describe('片段自身动画（位置、缩放、旋转、锚点关键帧）的运动模糊：省略时跟随序列总开关，false 只关掉这个片段。代码素材里各图层的模糊由源码图层的 motionBlur 控制；序列总开关关掉时一律不模糊。'),
+  /** 片段的运动模糊（只给助手调，界面不提供）：省略跟随序列总开关，true 强制开，false 关。 */
+  motionBlur: z.boolean().optional().describe('片段的运动模糊：省略时跟随序列总开关，true 即使序列总开关关着也开，false 只关掉这个片段（作者接口 18 起含片段里的代码图层）。代码素材里单个图层看源码图层的 motionBlur 和元素覆盖。'),
   /** 片段启用开关（剪辑内容第 37 版，PR 的“启用”）：只存“停用”，省略即启用。 */
   enabled: z.literal(false).optional().describe('片段是否启用：省略为启用，false 时片段留在时间线上但不参与画面与声音。'),
   opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, gainDb: videoEditGainDbSchema.optional(), audioRole: videoEditAudioRoleSchema.optional(), essentialSound: essentialSoundSettingsSchema.optional(), text: z.string().max(2000),
@@ -223,7 +223,7 @@ export const videoEditSequenceSchema = z.object({
   captionTrackEnabled: z.boolean().optional().describe('字幕轨道是否输出到节目画面，省略时显示。'),
   captionTrackLocked: z.boolean().optional().describe('锁定字幕轨道后禁止修改、添加或删除字幕，省略时未锁定。'),
   /** 时间线统一开关（重要记录 019）：运动模糊与帧混合作用于整条序列，预览与导出一致。 */
-  motionBlur: z.boolean().optional().describe('运动模糊总开关：开启后，位置、缩放、旋转、锚点有动画的片段与代码素材里带位姿的图层按 180° 快门（前后各四分之一帧）沿运动方向模糊；关闭时整条序列一律不模糊。单个片段用片段的 motion_blur 关，单个代码图层在源码里关。预览与导出一致。新建序列默认开启，省略为关闭。'),
+  motionBlur: z.boolean().optional().describe('运动模糊总开关，新建序列默认开。开着时按规则自动判断：连续的位移、缩放、旋转、形变模糊；只变内容或颜色、跳变、文字重新排版、刚出现或消失的不模糊。拖影留在运动方向身后。关掉后整条序列默认不模糊，片段或元素写了强制打开的除外。预览与导出一致。'),
   frameBlend: z.boolean().optional().describe('帧混合：慢放片段没有单独设补帧方式时，默认把相邻两帧按位置混合；片段自己的 frame_interpolation 优先。省略为关闭（帧采样）。'),
   transitions: z.array(videoEditTransitionSchema).optional(),
   master: videoEditMasterSchema.optional().describe('主轨：序列总输出的音量 dB 与主轨效果（音频内置效果），作用在所有轨道混好之后。'),

@@ -419,6 +419,27 @@ it('助手读写片段启用：读回布尔，停用只存 false、启用省略�
     expect(getActiveVideoEditSequence(await reopenVideoEdit(instance.document.id)).clips[0].enabled).toBe(false)
   } finally { app.dispose() }
 })
+it('片段的运动模糊三档：跟随序列、强制开、关，都能写回读回并保存', async () => {
+  const instance = (await createLegacyTrackVideoEditProject())
+  appendVideoEditClip(instance.document.id)
+  const clip = getActiveVideoEditSequence(instance).clips[0]
+  const app = createApplicationHarness()
+  try {
+    const ref = { kind: 'video_edit.clip', id: `${instance.document.id}:${clip.id}` }
+    const read = async () => ((await app.read(ref, ['video_edit.clip.motion_blur'])).properties as Record<string, unknown>)['video_edit.clip.motion_blur']
+    expect(await read()).toBe('auto')
+    expect(await app.change(ref, { 'video_edit.clip.motion_blur': 'on' })).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(instance).clips[0].motionBlur).toBe(true)
+    expect(await read()).toBe('on')
+    expect(await app.change(ref, { 'video_edit.clip.motion_blur': 'off' })).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(instance).clips[0].motionBlur).toBe(false)
+    expect(await app.change(ref, { 'video_edit.clip.motion_blur': 'auto' })).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(instance).clips[0]).not.toHaveProperty('motionBlur')
+    expect(await app.change(ref, { 'video_edit.clip.motion_blur': 'on' })).toMatchObject({ ok: true })
+    await saveVideoEdit(instance.document.id)
+    expect(getActiveVideoEditSequence(await reopenVideoEdit(instance.document.id)).clips[0].motionBlur).toBe(true)
+  } finally { app.dispose() }
+})
 it('保存失败保留助手修改且恢复不会重放编辑', async () => {
   const instance = (await createLegacyTrackVideoEditProject())
   const app = createApplicationHarness()

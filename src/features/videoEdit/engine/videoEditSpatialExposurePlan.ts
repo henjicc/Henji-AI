@@ -6,7 +6,7 @@ import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
 import { requireVideoEditBuiltinEffect, resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import { videoEditPictureFilter } from '@/core/videoEdit/clipGeometry'
 import { videoEditClipSourceSecondsAt } from '@/core/videoEdit/clipSpeed'
-import { VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES, VIDEO_EDIT_MOTION_BLUR_SHUTTER } from '@/core/videoEdit/motionBlur'
+import { videoEditClipMotionBlur, VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES, VIDEO_EDIT_MOTION_BLUR_SHUTTER } from '@/core/videoEdit/motionBlur'
 import { activeVideoEditEffects, buildVideoEditCompositePlan, type VideoEditCompositeNode } from '@/core/videoEdit/compositing'
 import { videoEditPictureTransitionsAt } from '@/core/videoEdit/clipGeometry'
 import { videoEditTransitionAmount, videoEditTransitionPictureClips } from '@/core/videoEdit/transitions'
@@ -208,8 +208,9 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
   const centerFrame = sceneGeometry(rawCenter, -1, scenes, worldScenes)
   const centerCards = new Map(centerFrame.cards.map(card => [card.clipId, card]))
   const shotRange = shutterRange(request)
-  const canBlur = composition.motionBlur === true && shotRange[1] > shotRange[0]
   const active = new Map(composition.clips.map(clip => [clip.id, clip]))
+  const canBlur = composition.clips.some(clip => videoEditClipMotionBlur(composition, clip)) && shotRange[1] > shotRange[0]
+  const sharp = (id: string): boolean => { const clip = active.get(id); return !!clip && !videoEditClipMotionBlur(composition, clip) }
   const visible = videoEditPictureFilter(composition)
   const transitions = videoEditPictureTransitionsAt(composition, sequenceFrame)
   const clips = composition.clips.filter(clip => visible.has(clip) && clip.start <= sequenceFrame && sequenceFrame < clip.start + clip.duration)
@@ -233,7 +234,7 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
     flush()
   }
   visit(buildVideoEditCompositePlan(clips, transitions), 'spatial')
-  const effective = (frame: SpatialFrame): SpatialFrame => ({ ...frame, cards: frame.cards.map(card => active.get(card.clipId)?.motionBlur === false ? centerCards.get(card.clipId) ?? card : card) })
+  const effective = (frame: SpatialFrame): SpatialFrame => ({ ...frame, cards: frame.cards.map(card => sharp(card.clipId) ? centerCards.get(card.clipId) ?? card : card) })
   const probes = Array.from({ length: 9 }, (_, index) => effective(evaluate(shotRange[0] + (shotRange[1] - shotRange[0]) * index / 8)))
   let travel = 0
   for (let index = 1; index < probes.length; index++) {
@@ -241,7 +242,7 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
     for (const card of probes[index].cards) if (previous.has(card.clipId)) travel = Math.max(travel, distance(previous.get(card.clipId)!, card, request) * 8)
   }
   const maxSamples = request.quality === 'interactive' ? VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES : VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES
-  const dynamicScene = [...worldScenes].some(id => centerCards.has(id) && active.get(id)?.motionBlur !== false)
+  const dynamicScene = [...worldScenes].some(id => centerCards.has(id) && !sharp(id))
   const dynamicTransition = runs.some(run => run.items.some(item => item.node.kind === 'transition'))
   const crossing = runs.some(run => changesOrder(probes.map(frame => depthOrder(run.items, frame))))
   const count = canBlur ? dynamicScene || dynamicTransition || crossing ? maxSamples : travel >= .75 ? Math.min(maxSamples, Math.max(2, Math.ceil(travel / 1.5))) : 1 : 1
@@ -249,7 +250,7 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
     const time = count === 1 ? sequenceFrame : shotRange[0] + (index + .5) / count * (shotRange[1] - shotRange[0])
     const frame = effective(sceneGeometry(evaluate(time), index, scenes, worldScenes))
     return { index, sequenceFrame: time, weight: 1 / count, frame, clips: centerFrame.cards.map(card => {
-      const clip = active.get(card.clipId)!, motionBlur = canBlur && clip.motionBlur !== false
+      const clip = active.get(card.clipId)!, motionBlur = canBlur && !sharp(clip.id)
       const centerSourceTime = videoEditClipSourceSecondsAt(clip, sequenceFrame, composition.fps)
       return { clipId: clip.id, sequenceFrame: motionBlur ? time : sequenceFrame, sourceTime: motionBlur && worldScenes.has(clip.id) ? videoEditClipSourceSecondsAt(clip, time, composition.fps) : centerSourceTime, centerSourceTime, motionBlur }
     }) }
@@ -259,7 +260,7 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
       const orderBySample = samples.map(sample => depthOrder(items, sample.frame))
       const clipIds = items.flatMap(entry => entry.clips)
       const crossing = changesOrder(orderBySample)
-      const moving = count > 1 && (crossing || items.some(item => item.node.kind === 'transition') || clipIds.some(id => worldScenes.has(id) && active.get(id)?.motionBlur !== false) || samples.some(sample => clipIds.some(id => {
+      const moving = count > 1 && (crossing || items.some(item => item.node.kind === 'transition') || clipIds.some(id => worldScenes.has(id) && !sharp(id)) || samples.some(sample => clipIds.some(id => {
         const a = centerCards.get(id), b = sample.frame.cards.find(card => card.clipId === id)
         return a && b && distance(a, b, request) > 0
       })))

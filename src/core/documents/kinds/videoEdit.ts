@@ -149,13 +149,15 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 70：新增灯光片段与灯光素材项（kind light）及关键帧键 lightIntensity；旧程序的 kind 与关键帧键是封闭枚举，读到会把整份剪辑判成内容无效，提高到 70。
   // 71：网页图片引用新增可选 layer（{ only } 或 { hide }，按文字拆层）；旧内容没有该字段，画面不变。旧程序的网页引用是严格结构且画不出拆层，读到会把整份内容判成无效，提高到 71 让它明确提示升级。
   // 72：新建代码素材默认作者接口 18（没有位姿的图层比较相邻帧的绘制指令，draw 里的动画也有运动模糊），旧程序的作者接口上限不认识它，提高到 72。
-  minReaderVersion: 72,
+  minReaderVersion: 73,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
     // 69 → 70：新增灯光片段与灯光素材项（kind light，字段 lightKind、lightColor、lightIntensity 可关键帧、lightCastShadow、lightSoftness、lightAngle），序列 spaceRender 新增 defaultLighting；旧内容没有灯光，画面不变；片段与素材项的 kind、关键帧键是封闭枚举，旧程序读到 light 或 curves.lightIntensity 会拒读，最低可读版本随版本提高。
     // 70 → 71：网页图片引用新增可选 layer（{ only } 或 { hide }，按文字拆层）；旧内容没有该字段，画面不变。旧程序的网页引用是严格结构且画不出拆层，读到会把整份内容判成无效，最低可读版本提高到 71。
     // 71 → 72：接受作者接口 18（没有位姿的图层比较相邻帧的绘制指令，draw 里的动画也有运动模糊）。
+    // 72 → 73：片段 motionBlur 从只能写 false 放宽到 true/false（true 强制打开）；代码元素覆盖新增 motionBlur。旧程序读不了 true，提高最低可读版本。
+    72: content => structuredClone(content),
     71: content => structuredClone(content),
     70: content => structuredClone(content),
     69: content => structuredClone(content),

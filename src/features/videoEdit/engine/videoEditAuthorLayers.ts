@@ -122,8 +122,8 @@ const exposureOffset = (phase: number, shutter: number, i: number, count: number
 export function authorFrameExposure(effect: AuthorModule, info: AuthorFrameInfo, enabled: boolean, apiVersion = 0): NonNullable<AuthorFrameInfo['exposure']> {
   const { shutter, phase } = authorExposure(effect, apiVersion)
   const active = enabled && (!!effect.layers || apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && !!effect.draw) && shutter > 0
-  // 没有位姿的图层运动模糊看前两帧：frameKey 和模拟的准备范围都要算上，否则跳帧和连续播放的画面不一样。
-  const history = active && apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && effect.mode !== 'static' ? -2 : 0
+  // 运动模糊看前两帧：frameKey 和模拟的准备范围都要算上，否则跳帧和连续播放的画面不一样。单个元素可以强制打开，所以不看总开关。
+  const history = shutter > 0 && (!!effect.layers || !!effect.draw) && apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && effect.mode !== 'static' ? -2 : 0
   return { start: info.time + Math.min(0, history, active ? phase / 360 : 0) * info.frameDuration,
     end: info.time + Math.max(0, active ? (phase + shutter) / 360 : 0) * info.frameDuration,
     shutter: active ? shutter : 0, phase: active ? phase : 0 }
@@ -140,8 +140,19 @@ export function authorShiftedFrameInfo(info: AuthorFrameInfo, frames: number): A
   shifted.clip = { ...info.clip, time: info.clip.time + delta }
   return shifted
 }
-export function authorDrawExposure(effect: AuthorModule, enabled: boolean, apiVersion: number): { fraction: number; shutter: number; phase: number; trailing: boolean; max: number } | undefined {
-  if (!enabled || apiVersion < CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION || effect.mode === 'static') return undefined
+/**
+ * 一层的运动模糊开关：元素覆盖 > 源码图层 > 片段与序列。true 强制打开，false 关掉，不写按规则自动判断。
+ * `enabled` 是片段与序列得出的结果。旧作者接口里 true 只是默认值，不能越过序列总开关。
+ */
+export function authorLayerMotionBlur(layer: Pick<AuthorLayer, 'motionBlur'>, override: { motionBlur?: boolean } | undefined, enabled: boolean, apiVersion: number): { on: boolean; forced: boolean } {
+  if (apiVersion < CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION) return { on: enabled && layer.motionBlur !== false, forced: false }
+  const choice = override?.motionBlur ?? layer.motionBlur
+  return { on: choice ?? enabled, forced: choice === true }
+}
+/** 元素覆盖只写了运动模糊开关时，这一层不用因为有覆盖就改走位姿路径。 */
+export const authorOverrideMovesLayer = (override: object | undefined, apiVersion: number): boolean => !!override && (apiVersion < CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION || !Object.keys(override).every(key => key === 'motionBlur') || !Object.keys(override).length)
+export function authorDrawExposure(effect: AuthorModule, apiVersion: number): { fraction: number; shutter: number; phase: number; trailing: boolean; max: number } | undefined {
+  if (apiVersion < CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION || effect.mode === 'static') return undefined
   const { shutter, phase, max } = authorExposure(effect, apiVersion)
   return shutter > 0 ? { fraction: shutter / 360, shutter, phase, trailing: Math.abs(phase + shutter) < 1e-6, max } : undefined
 }
@@ -151,10 +162,13 @@ export function authorDrawSampleCount(displacement: number, cap: number): number
   return Math.max(1, Math.min(cap, Math.ceil(displacement / 5)))
 }
 
-/** `enabled`：序列的运动模糊总开关；关掉时带位姿的图层只取当前时刻一个姿态。 */
+const JUMP_MIN_PX = 12
+const JUMP_RATIO = .7
+/** `enabled`：片段与序列得出的运动模糊开关；关掉时带位姿的图层只取当前时刻一个姿态。 */
 export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }, override?: AuthorElementOverride, enabled = true, apiVersion = 0): CodeMotionSample[] {
   const { shutter, phase, max } = authorExposure(effect, apiVersion)
-  const moving = enabled && !!layer.pose && layer.motionBlur !== false && shutter > 0
+  const blur = authorLayerMotionBlur(layer, override, enabled, apiVersion)
+  const moving = blur.on && !!layer.pose && shutter > 0
   const offset = (i: number, count: number): number => moving ? exposureOffset(phase, shutter, i, count) : 0
   const poseAt = (delta: number): { matrix: CodeMatrix; opacity: number } | null => {
     const pose = layer.pose ? layer.pose(info.time + delta * info.frameDuration) : {}
@@ -167,13 +181,13 @@ export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, inf
     return { matrix, opacity }
   }
   const probes = Array.from({ length: moving ? 16 : 1 }, (_, i) => poseAt(offset(i, moving ? 16 : 1)))
-  let longest = 0
+  let longest = 0, largest = 0
   for (const [x, y] of [[bounds.x, bounds.y], [bounds.x + bounds.width, bounds.y], [bounds.x, bounds.y + bounds.height], [bounds.x + bounds.width, bounds.y + bounds.height]]) {
     let previous: number[] | undefined, length = 0
     for (const pose of probes) {
       if (!pose) { previous = undefined; continue }
       const m = pose.matrix, p = [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
-      if (previous) length += Math.hypot(p[0] - previous[0], p[1] - previous[1])
+      if (previous) { const step = Math.hypot(p[0] - previous[0], p[1] - previous[1]); length += step; largest = Math.max(largest, step) }
       previous = p
     }
     longest = Math.max(longest, length)
@@ -181,6 +195,8 @@ export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, inf
   // 快门在当前帧结束时，样本都早于当前帧：这一刻不显示就是不显示，这一刻才出现的也要画出来，都不能晚一帧。
   const trailing = moving && apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && Math.abs(phase + shutter) < 1e-6
   if (trailing && !poseAt(0)) return [{ offset: { numerator: 0, denominator: 1 }, pose: null, weight: 1 }]
+  // 快门内一步走完大部分路：是跳过去的（定格、切换），不是在动。
+  if (trailing && !blur.forced && longest >= JUMP_MIN_PX && largest > longest * JUMP_RATIO) return [{ offset: { numerator: 0, denominator: 1 }, pose: poseAt(0), weight: 1 }]
   const visibility = probes.some(Boolean) && probes.some(p => !p) ? 4 : 1
   const count = moving ? Math.max(visibility, Math.min(max, Math.ceil(longest / 4))) : 1
   return Array.from({ length: count }, (_, i) => {

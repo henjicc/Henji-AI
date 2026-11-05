@@ -30,7 +30,7 @@ import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effe
 import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import { isGlTransition } from '@/core/videoEdit/glTransitions/transitions'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
-import { VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES, videoEditMotionBlurSamples, videoEditMotionBounds, type VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
+import { videoEditClipMotionBlur, VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES, videoEditMotionBlurSamples, videoEditMotionBounds, type VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { videoEditClipMedia, videoEditNestedComposition, videoEditDuration, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditPictureFilter, videoEditPictureTransitionsAt, type VideoEditClip, type VideoEditComposition, type VideoEditMedia, type VideoEditPictureFilter } from '@/core/videoEdit/document'
 import { videoEditNestedFrame, videoEditNestedPictureFrame, videoEditNestedPictureKey } from '@/core/videoEdit/nestedSequences'
@@ -2087,10 +2087,10 @@ export class VideoEditRenderer {
       const evaluated = evaluateVideoEditClip(clip, frame)
       return videoEditClipFades(clip) ? { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(clip, frame) } : evaluated
     }), frame)).filter(clip => !['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length || transitionIds.has(clip.id))
-    // 运动模糊（序列开关）：有变换动画的画面片段带上快门内的取样变换，合成器平均后叠到画面上（预览与导出同一份）。
-    if (document.motionBlur) for (const [index, clip] of active.entries()) {
+    // 运动模糊（片段开关优先，没写跟随序列）：有变换动画的画面片段带上快门内的取样变换，合成器平均后叠到画面上（预览与导出同一份）。
+    for (const [index, clip] of active.entries()) {
       const source = candidates.get(clip.id)
-      if (!source || source.motionBlur === false || clip.kind === 'adjustment' || videoEditClipTrackingQuad(clip)) continue
+      if (!source || !videoEditClipMotionBlur(document, source) || clip.kind === 'adjustment' || videoEditClipTrackingQuad(clip)) continue
       // 播放预览时取样减半；停下来看与导出用满
       const motionSamples = videoEditMotionBlurSamples(document, source, clip, frame, sequential && quality !== 'final' ? VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES : VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES)
       if (motionSamples) active[index] = { ...clip, motionSamples, motionBounds: videoEditMotionBounds(document, source, motionSamples) } as VideoEditMotionSampledClip

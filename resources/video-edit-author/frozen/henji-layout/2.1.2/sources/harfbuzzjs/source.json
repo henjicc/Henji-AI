@@ -1,0 +1,43 @@
+{
+  "package": "harfbuzzjs",
+  "version": "1.6.4",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harfbuzz/harfbuzzjs.git"
+  },
+  "license": "MIT",
+  "tarball": "https://registry.npmjs.org/harfbuzzjs/-/harfbuzzjs-1.6.4.tgz",
+  "integrity": "sha512-T/PyfhVt1gGR2Tkf5KJUj1DQFkVBXHw552lS1iLEEDhV1Lukb3eq1pk2ov85kgbT2YUiZtJBTak9w+M7YgzUEQ==",
+  "files": {
+    "index.mjs": {
+      "upstream": "dist/index.mjs",
+      "upstreamSha256": "16016989059a6600a1b82b42f61b494c776db02dec49bf645af65b8a5e599bf9",
+      "sha256": "07195f13efb3a42fc35b26f3a2c582fa2bdd978f2e88a90b299f095cbfcca200"
+    },
+    "index.d.mts": {
+      "upstream": "dist/index.d.mts",
+      "upstreamSha256": "eea353da4ea469ed438573b798ff8b718be9cd11c29f373c61a13800cf696bd4",
+      "sha256": "b80ea828eca03e3878eb5aba9f15fcc6e2476187e33af702e0c6af828b0d9b1f"
+    },
+    "harfbuzz.mjs": {
+      "upstream": "dist/harfbuzz.js",
+      "upstreamSha256": "28392846ce6accb53e34bdce197b8aa00721e84846ff4b2c0ccfad5137a0e699",
+      "sha256": "28392846ce6accb53e34bdce197b8aa00721e84846ff4b2c0ccfad5137a0e699"
+    },
+    "harfbuzz.wasm": {
+      "upstream": "dist/harfbuzz.wasm",
+      "upstreamSha256": "6eeed8e1bc9ad7773038e48ff8f9e07e0ad228572c594b45e5357e9c2f7a0b2e",
+      "sha256": "6eeed8e1bc9ad7773038e48ff8f9e07e0ad228572c594b45e5357e9c2f7a0b2e"
+    }
+  },
+  "gitHead": "3f162fa2c6ba68b40839fe2c11502a26632e20df",
+  "localArtifacts": {
+    "LICENSE": "5d09767b2cc476f08028b56d9384dc45061c5a3e90f9ad966e44addc8d26c8b1",
+    "henji.patch": "a1a21d9cc70fcb4ca2e32d8f0630020aa14a459e59ace641f1b83beee0cb276a",
+    "HARFBUZZ-LICENSE": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"
+  },
+  "wasmSource": {
+    "version": "15.0.0",
+    "licenseUrl": "https://raw.githubusercontent.com/harfbuzz/harfbuzz/15.0.0/COPYING"
+  }
+}

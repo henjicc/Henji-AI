@@ -25,7 +25,7 @@ export type CodeElementOverrideValues = z.infer<typeof codeElementOverrideValues
 export type CodeElementOverrideKey = keyof CodeElementOverrideValues
 export const CODE_ELEMENT_OVERRIDE_KEYS = Object.keys(codeElementOverrideValuesSchema.shape) as CodeElementOverrideKey[]
 const curves = z.partialRecord(z.enum(CODE_ELEMENT_OVERRIDE_KEYS as [CodeElementOverrideKey, ...CodeElementOverrideKey[]]), z.array(codeMaterialKeyframeSchema).min(1))
-export const codeElementOverrideSchema = codeElementOverrideValuesSchema.extend({ curves: curves.optional(), effects: z.record(codeElementEffectKeySchema, codeElementEffectOverrideSchema).optional(), addedEffects: z.array(codeElementAddedEffectSchema).optional() }).superRefine((value, ctx) => {
+export const codeElementOverrideSchema = codeElementOverrideValuesSchema.extend({ curves: curves.optional(), motionBlur: z.boolean().optional(), effects: z.record(codeElementEffectKeySchema, codeElementEffectOverrideSchema).optional(), addedEffects: z.array(codeElementAddedEffectSchema).optional() }).superRefine((value, ctx) => {
   const keys = value.addedEffects?.map(effect => effect.key) ?? []
   if (new Set(keys).size !== keys.length) ctx.addIssue({ code: 'custom', message: '追加效果的 key 不能重复。' })
   for (const [key, points] of Object.entries(value.curves ?? {})) {
@@ -53,7 +53,7 @@ export type CodeElementOverride = z.infer<typeof codeElementOverrideSchema>
 export type CodeElementOverrides = z.infer<typeof codeElementOverridesSchema>
 export type CodeElementEffectOverride = z.infer<typeof codeElementEffectOverrideSchema>
 export type CodeElementAddedEffect = z.infer<typeof codeElementAddedEffectSchema>
-export type EvaluatedCodeElementOverride = CodeElementOverrideValues & { effects?: Record<string, Omit<CodeElementEffectOverride, 'curves'>>; addedEffects?: Array<Omit<CodeElementAddedEffect, 'curves'>> }
+export type EvaluatedCodeElementOverride = CodeElementOverrideValues & { motionBlur?: boolean; effects?: Record<string, Omit<CodeElementEffectOverride, 'curves'>>; addedEffects?: Array<Omit<CodeElementAddedEffect, 'curves'>> }
 export function readCodeElementOverride(values: CodeElementOverrides | undefined, id: string): CodeElementOverride | undefined { return values && Object.hasOwn(values, id) ? values[id] : undefined }
 
 /** 调整层没有可变换的几何，静态值与动画通道遵守同一约束。 */
@@ -69,7 +69,7 @@ export function assertCodeElementOverrideAllowed(kind: 'adjust' | undefined, val
 
 /** Source-anchored curves survive trimming, speed changes and reversed playback. */
 export function evaluateCodeElementOverride(value: CodeElementOverride, time: VideoEditSourceTime): EvaluatedCodeElementOverride {
-  const { effects, addedEffects, curves: _curves, ...result } = value
+  const { effects, addedEffects, curves: _curves, motionBlur, ...result } = value
   const values: Record<string, unknown> = { ...result }
   for (const [key, raw] of Object.entries(value.curves ?? {})) {
     const points = [...raw].sort(compareCodeMaterialTime)
@@ -83,7 +83,7 @@ export function evaluateCodeElementOverride(value: CodeElementOverride, time: Vi
     }
     values[key] = clampVideoEditAnimationValue(values[key] as CodeMaterialKeyframe['value'], codeElementOverrideValuesSchema.shape[key as CodeElementOverrideKey])
   }
-  return { ...codeElementOverrideValuesSchema.parse(values),
+  return { ...codeElementOverrideValuesSchema.parse(values), ...(motionBlur === undefined ? {} : { motionBlur }),
     ...(effects ? { effects: Object.fromEntries(Object.entries(effects).map(([key, effect]) => [key, { ...(effect.enabled === undefined ? {} : { enabled: effect.enabled }), values: evaluateCodeElementEffectValues(effect.values ?? {}, effect.curves, time) }])) } : {}),
     ...(addedEffects ? { addedEffects: addedEffects.map(({ curves, ...effect }) => ({ ...effect, params: evaluateCodeElementEffectValues(effect.params, curves, time) })) } : {}),
   }

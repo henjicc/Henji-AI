@@ -36,6 +36,7 @@ import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMateri
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
 import { offsetVideoEditSource, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
+import { videoEditCodeMotionBlur } from '@/core/videoEdit/motionBlur'
 import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame, codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
 import type { CodeMotionClock } from '@/core/videoEdit/codeMaterial/motionSampling'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
@@ -711,7 +712,7 @@ export class VideoEditCodeSources implements SpatialCodeSources {
                 } })
               }
               const { info, overrides, environment } = plan.outputFrame!
-              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, environment, options.quality, assertCurrent, ...(plan.simulation ? [plan.simulation] : []))
+              picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, videoEditCodeMotionBlur(document, plan.clip, plan.program!.apiVersion ?? 0), images, plan.divisor ?? 1, environment, options.quality, assertCurrent, ...(plan.simulation ? [plan.simulation] : []))
             }
             assertCurrent()
             if (contentKey) this.lastOutputs.set(plan.key, { key: contentKey, picture, gpuEpoch: videoEditGpuOutputEpoch(), ...(options.gpuFrame ? { gpuOutcome: options.gpuFrame.outcome } : {}) })
@@ -736,7 +737,7 @@ export class VideoEditCodeSources implements SpatialCodeSources {
     if (!dependencies) return undefined
     const program = plan.program!, context = plan.context
     const { overrides, info, environment } = plan.outputFrame!
-    const declared = await this.runtime?.authorFrameKey?.(program, context, plan.author, info, overrides, document.motionBlur === true, plan.divisor ?? 1, environment, dependencies)
+    const declared = await this.runtime?.authorFrameKey?.(program, context, plan.author, info, overrides, videoEditCodeMotionBlur(document, plan.clip, program.apiVersion ?? 0), plan.divisor ?? 1, environment, dependencies)
     // 旧接口没有文字身份，逐帧不进入作者运行时取身份。
     const textIdentity = authorBundleShapesText(program.bundle) ? await this.runtime?.authorTextIdentity?.(program, plan.author) : undefined
     return codeOutputKey(document, plan, dependencies, declared, options.quality, textIdentity)

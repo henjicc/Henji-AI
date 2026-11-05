@@ -1,5 +1,6 @@
 import { videoEditClipPictureSize, videoEditClipToFrame, type VideoEditClipPlacement } from './clipGeometry'
 import type { VideoEditClip, VideoEditComposition } from './document'
+import { CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION } from './codeAuthorVersions'
 import { evaluateVideoEditClip } from './keyframes'
 
 /*
@@ -20,6 +21,11 @@ const MIN_TRAVEL_PX = 0.75
 const PX_PER_SAMPLE = 1.5
 /** 看紧贴当前帧之前的一小段：连续运动在这里走不了多远，走得多就是跳变。 */
 const HOLD_PROBE_FRAMES = .001
+
+/** 片段的运动模糊开不开：片段写了就听片段的（true 强制开、false 关），没写跟随序列总开关。 */
+export const videoEditClipMotionBlur = (document: { motionBlur?: boolean }, clip: { motionBlur?: boolean }): boolean => clip.motionBlur ?? document.motionBlur === true
+/** 代码片段里的图层听谁的：旧作者接口里片段的 false 只管片段自身的动画，内部图层只看序列，不能静默改变旧代码的画面。 */
+export const videoEditCodeMotionBlur = (document: { motionBlur?: boolean }, clip: { motionBlur?: boolean }, apiVersion: number): boolean => apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION ? videoEditClipMotionBlur(document, clip) : document.motionBlur === true
 
 /**
  * 渲染用的片段：带上快门内各取样时刻的变换与扫过的范围（画面比例坐标 [左, 上, 右, 下]），只在渲染时存在，不进文档。

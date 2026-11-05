@@ -83,7 +83,7 @@ schemas['video_edit.sequence'].styleId = z.string().max(64)
 schemas['video_edit.sequence'].captionTrackEnabled = videoEditSequenceSchema.shape.captionTrackEnabled.unwrap()
 schemas['video_edit.sequence'].motionBlur = videoEditSequenceSchema.shape.motionBlur.unwrap()
 // 片段只存“关掉”：true 表示跟随序列总开关（存储时省略），false 只关这个片段
-schemas['video_edit.clip'].motionBlur = z.boolean()
+schemas['video_edit.clip'].motionBlur = z.enum(['auto', 'on', 'off'])
 // 片段启用同样只存“停用”：true 为启用（存储时省略）
 schemas['video_edit.clip'].enabled = z.boolean()
 schemas['video_edit.sequence'].frameBlend = videoEditSequenceSchema.shape.frameBlend.unwrap()
@@ -279,7 +279,7 @@ const descriptions: Record<string, string> = {
   'video_edit.code_version.types': '此固定源码版本的自定义参数组件类型（只读）：title、layout 与基础类型 fields；参数 type 引用这里的类型名。',
   'video_edit.document.selected_code_element': '当前帧选中的代码元素，只读：clipRef、elementRef（video_edit.code_element 引用，读写它的变换、属性、效果三组）、elementId、源码UTF-16位置sourceSpan（file 为相对文件路径）及关联参数parameterKeys。由节目点选与源码光标维护；或新建 annotation 的 element 目标绑定它。null 表示没有当前可见选中元素。',
   'video_edit.clip.edits': '代码参数与元素覆盖的最后修改者和时间，只读。由人与助手共用的正式写入函数维护；重置删除对应记录，源码重写保留记录。',
-  'video_edit.clip.element_overrides': '此代码生成片段的元素覆盖，按当前选区的 elementId 索引。dx/dy 为合成坐标的位移，scale/scaleX/scaleY 为相对倍率，rotation 为角度；opacity 为透明度；hidden 隐藏；不接受填色、描边、文字或字体样式覆盖，这些内容必须修改作者声明的 code_parameters。可选 curves 使用与代码参数相同的源微秒/余量/插值结构；linear/ease/hold/bezier，左点 bezier:[x1,y1,x2,y2] 的 x 为 0–1 时间比例，y 可过冲，求值按字段范围夹取；隐藏只支持hold。可选 effects（按代码效果 key 的 enabled/values/curves）与 addedEffects（末尾追加的 {key,id,params,curves?}）改元素效果链，校验与 video_edit.code_element.effects 相同；按单个元素修改优先用 video_edit.code_element。整体替换前先读并保留其它元素与字段；删除一个键即重置该元素。源码移除元素时保留覆盖。文字和文字样式通过绑定图层的参数修改，未声明参数时请让助手修改源码。写回源码应新建 code_version，再在同一事务绑定 code_version_id 并清除已合并覆盖，禁止改写旧版本。',
+  'video_edit.clip.element_overrides': '此代码生成片段的元素覆盖，按当前选区的 elementId 索引。dx/dy 为合成坐标的位移，scale/scaleX/scaleY 为相对倍率，rotation 为角度；opacity 为透明度；hidden 隐藏；motionBlur 这个元素的运动模糊（true 强制开、false 关、不写按规则自动判断，优先于片段和序列）；不接受填色、描边、文字或字体样式覆盖，这些内容必须修改作者声明的 code_parameters。可选 curves 使用与代码参数相同的源微秒/余量/插值结构；linear/ease/hold/bezier，左点 bezier:[x1,y1,x2,y2] 的 x 为 0–1 时间比例，y 可过冲，求值按字段范围夹取；隐藏只支持hold。可选 effects（按代码效果 key 的 enabled/values/curves）与 addedEffects（末尾追加的 {key,id,params,curves?}）改元素效果链，校验与 video_edit.code_element.effects 相同；按单个元素修改优先用 video_edit.code_element。整体替换前先读并保留其它元素与字段；删除一个键即重置该元素。源码移除元素时保留覆盖。文字和文字样式通过绑定图层的参数修改，未声明参数时请让助手修改源码。写回源码应新建 code_version，再在同一事务绑定 code_version_id 并清除已合并覆盖，禁止改写旧版本。',
   'video_edit.clip.code_parameters': '按固定源码声明校验参数字典，只改此片段。图片参数接受 null、{kind:"image",mediaId}（mediaId 必须来自当前剪辑图片），或 {kind:"clip",clipId}——引用同一序列里的另一个片段（不能是自己，也不能是声音、灯光、调整层或三维世界场景片段：世界场景请放进子序列后引用嵌套片段），代码拿到那个片段此刻的画面（透明处保持透明）；那个片段此刻不在画面上时参数为空；复制、粘贴、拆分会自动改指对应片段（拆分时改指与引用方时间重叠最多的一半，两者同时被切开时各半指向同侧）；被引用片段被删除时参数置空，删除结果的证据与 cascadeEffects 会列出失去引用的片段和参数；风格件与代码资产不携带这类引用。可先用通用图片生成，再通过 place_video_edit_creative_result 的 library 模式导入，读取返回 video_edit.item 的 media_id 后绑定。先读原参数并保留其他键；不要用 generation.result、asset 引用或文件路径代替 mediaId。生成与取消使用正式生成任务，参数切换一步撤销。',
   'video_edit.media.code_image_generation': '此剪辑图片候选的完成来源，只读：prompt/modelId/taskId/outputIndex 与 sequenceId/clipId/versionId/parameterKey/effectId 标记原图片参数归属。候选切换通过 clip.code_parameters 或 effect.parameters 的图片 mediaId 通用写入，生成历史任务可查询进度、取消和读取结果。',
   'video_edit.clip.effects_enabled': '附加效果总开关；false 跳过此片段全部画面或声音附加效果，true 恢复。保留每项效果的 enabled、参数与关键帧，预览与导出一致，一步撤销。',
@@ -395,8 +395,8 @@ descriptions['video_edit.sequence.space_environment_intensity'] = '三维环境�
 descriptions['video_edit.sequence.space_environment_rotation'] = '三维环境光水平旋转角度 −180–180°，默认 0：转动灯位，换高光与反射落在物体哪里。'
 descriptions['video_edit.sequence.space_default_lighting'] = '三维缺省布光，默认 auto：序列里有受光的片段（受光、非画面材质），却没有灯光片段与环境光、作者场景也没布光时，自动加摄影棚中性环境与一盏左前上方的主光（投影）；加入第一盏灯或设了环境光后自动不加。off 关闭。'
 descriptions['video_edit.sequence.path_trace_samples'] = '路径追踪每像素采样数 16–4096，默认 256；越多噪点越少、越慢，大致与采样数成正比。只在 final_renderer 为 pathTrace 时起作用。'
-descriptions['video_edit.sequence.motion_blur'] = '整条序列的运动模糊总开关（新建序列默认开）：开着时有位置、缩放、旋转、锚点动画的片段，以及代码素材里声明了 motionBlur 的会动图层沿运动方向模糊；关掉则全部不模糊。单个片段用 video_edit.clip.motion_blur 关掉。'
-descriptions['video_edit.clip.motion_blur'] = '这个片段自身动画（位置、缩放、旋转、锚点关键帧）的运动模糊：true 跟随序列总开关（默认），false 只关掉这个片段。序列总开关 video_edit.sequence.motion_blur 关掉时一律不模糊。代码素材里单个图层的模糊在源码图层的 motionBlur 里控制。界面不提供这一项，由助手按画面需要调整。'
+descriptions['video_edit.sequence.motion_blur'] = '整条序列的运动模糊总开关（新建序列默认开）。开着时按规则自动判断：连续的位移、缩放、旋转、形变模糊；只变内容或颜色、跳变、文字重新排版、刚出现或消失的不模糊。关掉后整条序列默认不模糊，单个片段或元素写了强制打开的除外。优先级从低到高是序列、片段（video_edit.clip.motion_blur）、元素（video_edit.code_element.transform 的 motionBlur）；批量调整就在同一次修改里改多个片段或元素。'
+descriptions['video_edit.clip.motion_blur'] = '这个片段的运动模糊：auto 跟随序列总开关（默认）；on 强制打开，序列总开关关着也开；off 关掉。管片段自身的关键帧动画，作者接口 18 起也管片段里的代码图层。代码片段里单个元素用 video_edit.code_element.transform 的 motionBlur。界面不提供这一项，由助手按用户要求调整。'
 descriptions['video_edit.clip.enabled'] = '片段是否启用（PR 剪辑 > 启用，Shift+E）：true 为启用（默认）；false 时片段留在时间线上、位置不变，但不参与节目画面、导出与混音，审片、源映射与封面也跳过它。一侧停用的视频过渡照常进行、停用那一侧按透明画；两侧都停用的过渡不出现。轨道隐藏、静音、独奏仍按轨道各自生效。锁定轨道上的片段不能改。'
 descriptions['video_edit.source.item_id'] = '源监视器打开的素材项，空字符串为关闭。视频、图片、音频按原文件播放；代码画面、图形、文字没有源文件，按只放这一项的临时序列预览（画幅与帧率跟当前序列，时长为放进时间线时的默认时长，没有声音，不设入出点）。打开不改作品，也不往时间线里放东西。'
 Object.assign(labels, { contentQueries: '素材内容查询进度' })
@@ -447,8 +447,9 @@ export function videoEditCollectionValues(entityType: VideoEditEntityType, prope
       const curves = data[store]
       data[store] = { ...(curves && typeof curves === 'object' && !Array.isArray(curves) ? curves : {}), [curveKey]: parsed }
     } else if (!((entityType === 'video_edit.clip' && ['textStyle', 'audioRole'].includes(key) || entityType === 'video_edit.item' && key === 'sourceRange') && parsed === null)
-      // 片段的启用与运动模糊只存 false，true 即缺省
-      && !(entityType === 'video_edit.clip' && ['enabled', 'motionBlur'].includes(key) && parsed === true)) data[key] = parsed
+      // 片段的启用只存 false，true 即缺省；运动模糊 auto 是不写，on、off 存成 true、false
+      && !(entityType === 'video_edit.clip' && key === 'enabled' && parsed === true)
+      && !(entityType === 'video_edit.clip' && key === 'motionBlur' && parsed === 'auto')) data[key] = entityType === 'video_edit.clip' && key === 'motionBlur' ? parsed === 'on' : parsed
   }
   return data
 }

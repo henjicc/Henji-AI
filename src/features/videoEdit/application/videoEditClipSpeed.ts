@@ -28,8 +28,10 @@ export function updateVideoEditClipInSequence(document: VideoEditDocument, seque
   // 速度字段由速度编辑维护：结构写入时保持原值。
   const keep = { ...(original.speed ? { speed: original.speed } : {}), ...(original.reverse ? { reverse: true } : {}), ...(original.preservePitch ? { preservePitch: true } : {}), ...(original.timeRemap ? { timeRemap: original.timeRemap } : {}), ...(original.frameInterpolation ? { frameInterpolation: original.frameInterpolation } : {}), ...(original.pitchSemitones ? { pitchSemitones: original.pitchSemitones } : {}) }
   const plain = Object.fromEntries(Object.entries(rest).filter(([key]) => !['speed', 'reverse', 'preservePitch', 'timeRemap', 'frameInterpolation', 'pitchSemitones'].includes(key)))
-  // 运动模糊与启用只存“关掉”：跟随序列总开关、启用时省略
-  if (plain.motionBlur !== false) delete plain.motionBlur
+  // 反射层的运动模糊是 auto、on、off 三档，存的是省略、true、false；启用只存“关掉”
+  if (plain.motionBlur === 'on') plain.motionBlur = true
+  else if (plain.motionBlur === 'off') plain.motionBlur = false
+  else if (typeof plain.motionBlur !== 'boolean') delete plain.motionBlur
   if (plain.enabled !== false) delete plain.enabled
   if (keys.includes('contentAnchor')) {
     const anchor = resolveVideoEditContentAnchor(document.id, sequence.id, clipId, data.contentAnchor ?? null)

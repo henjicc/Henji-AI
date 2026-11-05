@@ -1,3 +1,4 @@
+import { videoEditCodeMotionBlur } from '@/core/videoEdit/motionBlur'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
 import type { VideoEditFrameFingerprint } from '@/core/videoEdit/renderFingerprint'
@@ -80,6 +81,6 @@ export function codeOutputKey(document: VideoEditComposition, plan: VideoEditCod
   return codeOutputSignature([plan.outputIdentity, plan.parameters, ...(textIdentity === undefined ? [] : [textIdentity]), ...(plan.simulation ? [plan.simulation.identity] : []), codeOutputScenes(document, plan), dependencies,
     declared?.digest ?? (!declared && program.mode === 'static' && !codeMaterialUsesAudio(program) ? 'static' : [context.time, context.localTime, sourceTime]),
     codeOutputObjectSignature(context.audio), context.audioTime, info.frameDuration, info.clip.duration, context.width, context.height, plan.divisor ?? 1,
-    documentFontRevision(), overrides, document.motionBlur === true, codeOutputObjectSignature(environment), quality,
+    documentFontRevision(), overrides, videoEditCodeMotionBlur(document, plan.clip, program.apiVersion ?? 0), codeOutputObjectSignature(environment), quality,
     ...authorSpatialFingerprint(program as CodeAuthorProgram & AuthorEffectMetadata, info)])
 }

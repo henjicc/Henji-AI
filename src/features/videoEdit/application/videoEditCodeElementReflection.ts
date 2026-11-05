@@ -21,12 +21,12 @@ import { readVideoEditCodeElementEdit, videoEditCodeElementEffectStates, videoEd
 const type = VIDEO_EDIT_CODE_ELEMENT
 type Data = Record<string, JsonValue>
 const schemas = {
-  transform: z.object({ ...codeElementOverrideValuesSchema.shape, curves: codeElementOverrideSchema.shape.curves }).strict(),
+  transform: z.object({ ...codeElementOverrideValuesSchema.shape, curves: codeElementOverrideSchema.shape.curves, motionBlur: codeElementOverrideSchema.shape.motionBlur }).strict(),
   properties: z.object({ values: codeMaterialInstanceSchema.shape.parameters, curves: codeMaterialCurvesSchema.optional() }).strict(),
   effects: z.object({ effects: codeElementOverrideSchema.shape.effects, addedEffects: codeElementOverrideSchema.shape.addedEffects }).strict(),
 }
 const descriptions: Record<keyof typeof schemas, string> = {
-  transform: '元素的位移 dx/dy（合成像素）、相对缩放 scale/scaleX/scaleY、旋转 rotation（度）、不透明度 opacity 与隐藏 hidden；curves 用源素材时间的关键帧（与片段 element_overrides 同一结构），修剪、变速、倒放不错位。整组替换，写 {} 回到代码给的值。调整层只能改 opacity 和 hidden。',
+  transform: '元素的位移 dx/dy（合成像素）、相对缩放 scale/scaleX/scaleY、旋转 rotation（度）、不透明度 opacity、隐藏 hidden 与运动模糊 motionBlur（true 强制开、false 关、不写按规则自动判断，优先于片段和序列的开关）；curves 用源素材时间的关键帧（与片段 element_overrides 同一结构），修剪、变速、倒放不错位。整组替换，写 {} 回到代码给的值。调整层只能改 opacity 和 hidden。',
   properties: '绑定到这个元素的作者参数（observation.parameterKeys，声明见 observation.declarations）：values 为静态值，curves 为源时间关键帧。整组替换，没写的绑定参数回到源码默认值；未绑定的参数用 video_edit.clip.code_parameters 修改。',
   effects: '元素效果链。effects 按代码效果 key 覆盖：enabled:false 关掉代码给的效果，values 改参数，curves 为源时间关键帧；风格件（look:<名称>）只接受旋钮。addedEffects 追加到链末尾：{ key, id（内置效果 ID）, params, curves? }，key 不能与代码效果重名；源码后来用了追加项已占的 key 时，追加项换成 <效果 ID>+N，代码那一项保留原 key。参数按代码值加覆盖整组校验（含调色起点不大于终点这类跨参数约束）。先读 observation.effectStates 的代码值、实际值与 key；整组替换，写 {} 重置全部效果改动。',
 }

@@ -53,3 +53,9 @@ it('代码资产编码/导入默认值/新片段复制保留覆盖，并保持�
   const clip = makeVideoEditItemClip(document, 'i', document.sequences[0].id, { frame: 0 }, () => ({ name: '编辑', kind: 'generator', mode: 'dynamic', seed: 0, parameters: [], width: 1920, height: 1080, durationSeconds: 10 }))
   expect(clip.elementOverrides).toEqual(asset.elementOverrides); clip.elementOverrides!.box.dx = 90; expect(asset.elementOverrides!.box.dx).toBe(20)
 })
+
+it('运动模糊开关不走关键帧，求值后原样带着', () => {
+  expect(evaluateCodeElementOverride({ motionBlur: false, dx: 1 }, time(0))).toMatchObject({ motionBlur: false, dx: 1 })
+  expect(evaluateCodeElementOverride({ motionBlur: true }, time(0))).toEqual({ motionBlur: true })
+  expect(evaluateCodeElementOverride({ dx: 1 }, time(0))).not.toHaveProperty('motionBlur')
+})

@@ -14,7 +14,7 @@
 | `clip` | 可选裁切矩形 `[x0, y0, x1, y1]` |
 | `draw(ctx, t)` | 绘制本图层；坐标仍是画布像素 |
 | `pose(t)` | 可选；返回 `{x, y, rotation, scale, scaleX, scaleY, opacity, blur}` 或 `null`（本时刻不显示）。变换作用在画布坐标上：先绕画布原点缩放、旋转（弧度），再平移 x/y；绕自身中心缩放时把 `中心 × (1 − scale)` 加进 x/y。有 pose 的图层只画一次内容，位姿在快门内按 `pose(t)` 采样 |
-| `motionBlur` | 默认开启运动模糊，`false` 只关这一层；有 pose 时按位姿曝光，没有 pose 时比较相邻帧的绘制指令得出位移（作者 API 18，不多跑 draw）；序列运动模糊总开关关掉时一律不模糊 |
+| `motionBlur` | 不写时按规则自动判断（见 author-api 开头）；`true` 强制有，连文字重新排版和跳变也模糊；`false` 不要。有 pose 时按位姿曝光，draw 里的动画比较相邻帧的绘制指令得出位移，两者都生效。片段和元素的开关优先于这里 |
 | `blurShape` | `gaussian`（默认）或 `lens`（镜头散焦），配合 pose 的 `blur` |
 | `cacheKey` | 可选内容键（字符串或数字）。与上一帧同一图层的值相同、bounds/clip 与用到的图片没变时，引擎不再调用 draw，沿用上一帧的画面，pose 照常每帧求值。动画落定后给它，例如 `'settled'`；内容还在变时不给，或每次变化换一个值 |
 | `data` | `{ parameter, index }` 或 `{ parameter, keyField, key }`，把图层绑定到 table 参数的一行 |

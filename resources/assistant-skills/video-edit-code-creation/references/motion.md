@@ -73,5 +73,5 @@
 const hash = (i, seed = 0) => { let h = Math.imul(i ^ seed, 0x9e3779b1); h ^= h >>> 15; h = Math.imul(h, 0x85ebca77); h ^= h >>> 13; return (h >>> 0) / 4294967296 }
 ```
 
-- 运动模糊：默认都有；整体快门、相位与采样上限写在模块 `motionBlur`，整块快速运动用 `pose` 拖影最顺。关闭某层写 `motionBlur: false`。
+- 运动模糊：默认按规则自动判断；整体快门、相位与采样上限写在模块 `motionBlur`，整块快速运动用 `pose` 拖影最顺。某层不要写 `motionBlur: false`，自动判断没糊但想要写 `true`，只管一段字写 `drawText` 的 `motionBlur`。
 - 景深：pose 返回 `blur`（像素）并设 `blurShape: "lens"` 得到镜头散焦；默认 `gaussian`。

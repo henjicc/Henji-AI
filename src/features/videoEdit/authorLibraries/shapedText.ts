@@ -9,7 +9,7 @@ import { currentTextFontSession } from '../../../core/imaging/vectorContent/shap
 import { textFontRequest } from '../../../core/imaging/vectorContent/shaping/runs'
 import { paintVectorAppearance } from '../../../services/vectorContent/appearance'
 import { appearanceBounds, union, type TextPlanRect } from '../../../core/imaging/vectorContent/textDrawPlan'
-import { drawTextOutline, drawTextAppearance } from '../engine/videoEditTextOutlines'
+import { drawTextOutline, drawTextAppearance, TEXT_RUN_DRAW, type TextRunContext } from '../engine/videoEditTextOutlines'
 import { parseTextInput, textOptionsSchema } from './validation'
 import { codePoint } from '../../../core/videoEdit/codeMaterial/geometry'
 import { TEXT_DRAW_OBSERVER, TEXT_LAYOUT_OBSERVER, TEXT_RASTER_CONTEXT, TEXT_BITMAP_RESTORE, type TextDrawObserverContext, type TextLayoutObserverGlobal, type TextRasterProvider, type RestorableTextBitmap } from '../../../core/videoEdit/textDrawObservation'
@@ -22,6 +22,8 @@ export interface GraphemePose { x?: number; y?: number; scale?: number; rotate?:
 export interface TextDrawOptions {
   graphemes?: number | readonly number[] | ((grapheme: TextLayout['graphemes'][number], index: number) => GraphemePose | null)
   backgroundAndDecorationOpacity?: number
+  /** 这段字的运动模糊：true 强制有，false 不要；不写按规则自动判断。 */
+  motionBlur?: boolean
 }
 /** 作者写富文本时只有 runs 必填：对齐沿用基础样式，方向自动判断，段距为 0，盒子由 options 决定。 */
 export interface RichTextContent {
@@ -156,6 +158,7 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
   if (!state) throw new Error('drawText 需要同一库 layoutText 返回的布局')
   if (closedOwners.has(state.owner)) throw new Error('文字字体会话已经释放')
   const { plan } = state, selection = options.graphemes
+  const endRun = (context as TextRunContext)[TEXT_RUN_DRAW]?.(state.id, options.motionBlur)
   if (typeof selection === 'number' && (!Number.isFinite(selection) || selection < 0)) throw new Error('graphemes 必须为非负有限数')
   if (Array.isArray(selection) && selection.some(index => !Number.isInteger(index) || index < 0 || index >= layout.graphemes.length)) throw new Error('graphemes 索引超出布局')
   const poses = layout.graphemes.map((g, index): GraphemePose | null => {
@@ -231,5 +234,6 @@ export function drawText(context: OffscreenCanvasRenderingContext2D, layout: Tex
   }
   const { sourceText, box, contentSize, visibleContentSize, overflow, truncated, omittedRanges, totalLines, fit } = plan
   const painted = plan.clusters.map(cluster => cluster.style.fill.enabled || cluster.style.strokes.some(stroke => stroke.enabled && stroke.width))
+  endRun?.()
   ;(context as TextDrawObserverContext)[TEXT_DRAW_OBSERVER]?.({ fontDiagnostics: state.fontDiagnostics, layoutId: state.id, sourceText, box, contentSize, visibleContentSize, inkBounds: actualInk, appearanceBounds: actualAppearance, boundsKind: 'measured', overflow, truncated, omittedRanges, totalLines, fit, actualLines: plan.lines.length, revealComplete: plan.clusters.every(cluster => poses[cluster.owner]), paintKey: JSON.stringify(plan.clusters.map(cluster => cluster.style)), bodyCoverage: !poses.some(Boolean) ? 'none' : painted.every(Boolean) ? 'complete' : painted.some(Boolean) ? 'partial' : 'none', constraint: { x: box.x, y: plan.contentTop, width: state.options.box?.width || state.options.maxWidth, height: state.options.box?.height ?? state.options.maxHeight, maxWidth: state.options.maxWidth, maxHeight: state.options.maxHeight, maxLines: state.options.maxLines } })
 }

@@ -150,7 +150,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
             const fps = videoEditFps(rate)
             return { label: `${Number(fps.toFixed(3))} 帧`, value: `${rate.numerator}/${rate.denominator}`, tooltip: fps > 60 ? PREVIEW_HINT : undefined }
           })} onSelect={value => { const [numerator, denominator] = value.split('/').map(Number); setValues({ ...values, frameRate: { numerator, denominator } }) }} /></UiFormRow>
-          <UiFormRow label="运动模糊" inline info="整条序列的总开关：在动的片段与图层沿运动方向模糊。关掉后整条序列都不模糊。"><UiSwitch aria-label="运动模糊" disabled={busy} checked={values.motionBlur} onCheckedChange={checked => setValues({ ...values, motionBlur: checked })} /></UiFormRow>
+          <UiFormRow label="运动模糊" inline info="整条序列的总开关：在动的片段与图层沿运动方向模糊。关掉后默认都不模糊，单独打开的片段或元素除外。"><UiSwitch aria-label="运动模糊" disabled={busy} checked={values.motionBlur} onCheckedChange={checked => setValues({ ...values, motionBlur: checked })} /></UiFormRow>
         </UiGroup>
       {hasSpace && <UiGroup title="三维" divided>
         <UiFormRow label="成片渲染" inline info="导出、选帧和封面用哪种渲染。路径追踪有真实的光影、反射和景深，1080p 每帧要几秒到几十秒，不做运动模糊；节目监视器看片另在“更多 → 三维”里切换。">

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { videoEditClipSchema, type VideoEditClip } from './document'
 import { evaluateVideoEditClip } from './keyframes'
-import { VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, videoEditMotionBlurSamples } from './motionBlur'
+import { VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, videoEditClipMotionBlur, videoEditCodeMotionBlur, videoEditMotionBlurSamples } from './motionBlur'
 
 const document = { width: 1920, height: 1080, media: [], items: [], sequences: [] }
 const clip = (patch: Partial<VideoEditClip> = {}): VideoEditClip => videoEditClipSchema.parse({ id: 'c', itemId: 'i', name: '画面', kind: 'text', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: 'A', ...patch })
@@ -35,6 +35,15 @@ describe('运动模糊快门取样', () => {
   it('定格关键帧在这一帧跳变时不模糊，画面就在新位置', () => {
     const cut = clip({ curves: { x: [{ time: 0, value: 0, interpolation: 'hold' }, { time: 20, value: .5, interpolation: 'linear' }] } })
     expect(videoEditMotionBlurSamples(document, cut, evaluateVideoEditClip(cut, 20), 20)).toBeUndefined()
+  })
+
+  it('片段写了就听片段的，没写跟随序列；旧作者接口的代码图层只看序列', () => {
+    expect(videoEditClipMotionBlur({ motionBlur: true }, {})).toBe(true)
+    expect(videoEditClipMotionBlur({ motionBlur: false }, {})).toBe(false)
+    expect(videoEditClipMotionBlur({ motionBlur: false }, { motionBlur: true })).toBe(true)
+    expect(videoEditClipMotionBlur({ motionBlur: true }, { motionBlur: false })).toBe(false)
+    expect(videoEditCodeMotionBlur({ motionBlur: true }, { motionBlur: false }, 18)).toBe(false)
+    expect(videoEditCodeMotionBlur({ motionBlur: true }, { motionBlur: false }, 17)).toBe(true)
   })
 
   it('缩放按倍率叠加，非等比比例保留在每个样本上', () => {

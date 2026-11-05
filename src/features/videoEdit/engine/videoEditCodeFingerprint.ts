@@ -1,3 +1,4 @@
+import { videoEditCodeMotionBlur } from '@/core/videoEdit/motionBlur'
 import { withTextFontSession } from '@/core/imaging/vectorContent/shaping/fontContext'
 import { prepareAuthorTextParameters } from './videoEditAuthorTextResources'
 import { videoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
@@ -120,7 +121,7 @@ export class VideoEditCodeFingerprint {
     if (program.simulation) {
       if (!plan.simulation) return { fallback: 'simulation-history-required' }
       result = fingerprintAuthorSimulation(effect, plan.simulation.identity, plan.context, info, inputs, plan.parameters, overrides,
-        this.document.motionBlur === true, { ...this.document.authorEffects, luts: this.document.colorLuts })
+        videoEditCodeMotionBlur(this.document, plan.clip, program.apiVersion ?? 0), { ...this.document.authorEffects, luts: this.document.colorLuts }, program.apiVersion ?? 0)
     } else if (declared) {
       let identity = this.codeIdentities.get(program.bundle)
       if (!identity) {
@@ -129,11 +130,11 @@ export class VideoEditCodeFingerprint {
         identity = authorFrameCodeIdentity(files, effect, codeVersionContentKey({ ...version, files: [] }))
         this.codeIdentities.set(program.bundle, identity)
       }
-      result = withTextFontSession(text?.fonts, () => fingerprintAuthorFrameKey(effect, plan.context, params, info, inputs, identity, plan.parameters, overrides, this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion))
+      result = withTextFontSession(text?.fonts, () => fingerprintAuthorFrameKey(effect, plan.context, params, info, inputs, identity, plan.parameters, overrides, videoEditCodeMotionBlur(this.document, plan.clip, program.apiVersion ?? 0), authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion))
     } else {
       const measure = this.measure ??= new OffscreenCanvas(1, 1).getContext('2d') ?? undefined
       if (!measure) return { fallback: 'canvas-unavailable' }
-      result = withTextFontSession(text?.fonts, () => fingerprintAuthorFrame(effect, plan.context, params, info, inputs, measure, overrides, this.document.motionBlur === true, authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion))
+      result = withTextFontSession(text?.fonts, () => fingerprintAuthorFrame(effect, plan.context, params, info, inputs, measure, overrides, videoEditCodeMotionBlur(this.document, plan.clip, program.apiVersion ?? 0), authorEffectEnvironmentForClip(this.document, plan.clip), program.apiVersion))
     }
     if (!result.digest) return result
     if (text) result = { ...result, digest: renderFingerprintHash(JSON.stringify([result.digest, text.identity])) }

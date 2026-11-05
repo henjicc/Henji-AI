@@ -1,8 +1,16 @@
-import type { AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
+import type { AuthorCanvasRecording, AuthorTextRun } from './videoEditAuthorCanvasRecorder'
 
 /**
  * 从绘制指令算运动：把相邻帧录制的绘制动作逐个对齐，就知道每个字、每个形状这一帧走了多远，不用猜，也不用看像素。
  * 比较用的都是已经录好的帧：连续播放时不需要为运动模糊多跑一次作者代码。
+ *
+ * 判断规则：东西真的在动才模糊，内容变了或排版重排了都不算动。
+ * - 只变颜色、透明度、数字：位置没变，自然没有位移。
+ * - 跳变（换行、切换）：速度和上一帧接不上。
+ * - 排版变化：文字换了一份版面，字号没变，每个字走的路又不一样。整段走一样的路是整块在移动，要模糊。
+ * - 同一份版面上逐字飞行是动画，要模糊。
+ * - 连续的位移、缩放、旋转、形变都模糊。
+ * 这些都可以被开关改掉：强制打开时不看跳变和排版变化，关掉时什么都不糊。
  */
 
 type Matrix = [number, number, number, number, number, number]
@@ -11,7 +19,7 @@ const multiply = (m: Matrix, n: Matrix): Matrix => [m[0] * n[0] + m[2] * n[1], m
 const apply = (m: Matrix, x: number, y: number): [number, number] => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
 
 /** 一次绘制动作：画到哪（锚点）、多大（范围），身份用来跨录制对齐。 */
-interface Paint { index: number; kind: string; key: string; x: number; y: number; width: number; height: number; angle: number; clipped: boolean; shadowed: boolean }
+interface Paint { index: number; run?: AuthorTextRun; kind: string; key: string; x: number; y: number; width: number; height: number; angle: number; clipped: boolean; shadowed: boolean }
 const PATH_POINTS: Record<string, (args: number[]) => Array<[number, number]>> = {
   moveTo: ([x, y]) => [[x, y]], lineTo: ([x, y]) => [[x, y]],
   quadraticCurveTo: ([a, b, x, y]) => [[a, b], [x, y]], bezierCurveTo: ([a, b, c, d, x, y]) => [[a, b], [c, d], [x, y]],
@@ -72,6 +80,7 @@ function paintsOf(recording: AuthorCanvasRecording): Paint[] {
       else paints.push({ index, kind: name, key: name, x: 0, y: 0, width: 0, height: 0, angle: 0, clipped: clips > 0, shadowed })
     }
   }
+  for (const run of recording.textRuns ?? []) for (const paint of paints) if (paint.index >= run.start && paint.index < run.end) paint.run = run
   paintLists.set(recording, paints)
   return paints
 }
@@ -126,10 +135,14 @@ function align(from: readonly Paint[], to: readonly Paint[]): Map<Paint, Paint> 
  */
 const CONTINUITY = .66
 /**
- * 拖影不超过内容自身大小的这个比例。物理上一个字飞快走时拖得比自己长得多，单看是对的，但一整段字各走各的，拖影交错，
- * 画面就成了一团乱飞的线；压到比字短，字形还在，只是带一点方向感。大的内容（整张卡片）自身就大，拖影照样长。
+ * 字的拖影不超过自身大小的这个比例。物理上一个字飞快走时拖得比自己长得多，单看是对的，但一整段字各走各的，拖影交错，
+ * 画面就成了一团乱飞的线；压到比字短，字形还在，只是带一点方向感。卡片、图片不会这样，按真实速度走。
  */
 const STREAK_LIMIT = .35
+const isText = (paint: Paint): boolean => !!paint.run || paint.kind.endsWith(':outline') || paint.kind === 'fillText' || paint.kind === 'strokeText' || paint.kind === 'textAppearance'
+/** 排版变化时每个字走的路差得比这多（像素、比例取大的），才算不是整段一起走。 */
+const UNIFORM_PX = 1
+const UNIFORM_RATIO = .1
 /** 比这短的路看不出拖影，只会把字弄软。 */
 const MOVING = 1
 /** 走这么点路不用查连续性：缓动的开头和结尾速度比例变化大，但本来就糊不到哪去。 */
@@ -152,18 +165,44 @@ export interface AuthorPaintMotion {
   span: number
 }
 
+/** 这一层的开关：`on` 不开时只有单独声明要模糊的文字才算；`forced` 强制打开，不看跳变和排版变化。 */
+export interface AuthorMotionPolicy { on: boolean; forced: boolean }
+const AUTO_POLICY: AuthorMotionPolicy = { on: true, forced: false }
+/** 换了版面的文字段里，哪些是真的重新排版：字号没变，每个字走的路不一样。 */
+function relaidRuns(paints: readonly Paint[], pairs: Map<Paint, Paint>, gap: number): Set<AuthorTextRun> {
+  const speeds = new Map<AuthorTextRun, Array<readonly [number, number]>>(), scaled = new Set<AuthorTextRun>()
+  for (const paint of paints) {
+    const before = pairs.get(paint), run = paint.run
+    if (!run || !before?.run || before.run.layout === run.layout) continue
+    if (Math.abs(before.width - paint.width) + Math.abs(before.height - paint.height) > UNIFORM_PX) scaled.add(run)
+    const list = speeds.get(run) ?? []
+    list.push([(paint.x - before.x) / gap, (paint.y - before.y) / gap]); speeds.set(run, list)
+  }
+  const relaid = new Set<AuthorTextRun>()
+  for (const [run, list] of speeds) {
+    if (scaled.has(run)) continue
+    const middle = (axis: 0 | 1): number => list.map(value => value[axis]).sort((a, b) => a - b)[list.length >> 1]
+    const x = middle(0), y = middle(1), allowed = Math.max(UNIFORM_PX, Math.hypot(x, y) * UNIFORM_RATIO)
+    if (list.some(value => Math.hypot(value[0] - x, value[1] - y) > allowed)) relaid.add(run)
+  }
+  return relaid
+}
+
 /**
  * `previous`、`older`：更早两个时刻的录制（older 只用来看速度连不连续）；`exposure`：快门占一帧的比例。
  * `gap`、`olderGap`：它们离这一帧几帧。掉帧时隔的不止一帧，倒放时是负数，按帧数折算成每帧的速度。
  */
-export function authorPaintMotion(center: AuthorCanvasRecording, previous: AuthorCanvasRecording, older: AuthorCanvasRecording | undefined, exposure: number, gap = 1, olderGap = 2): AuthorPaintMotion {
+export function authorPaintMotion(center: AuthorCanvasRecording, previous: AuthorCanvasRecording, older: AuthorCanvasRecording | undefined, exposure: number, gap = 1, olderGap = 2, policy: AuthorMotionPolicy = AUTO_POLICY): AuthorPaintMotion {
   const paints = paintsOf(center), earlier = paintsOf(previous), toPrevious = align(paints, earlier), toOlder = older ? align(earlier, paintsOf(older)) : undefined
   const moves = new Map<number, readonly [number, number]>()
-  const scales = new Map<number, number>()
+  const scales = new Map<number, number>(), relaid = policy.forced ? new Set<AuthorTextRun>() : relaidRuns(paints, toPrevious, gap)
   let deforming = false, longest = 0, reach = 0, span = 0
   for (const paint of paints) {
     const before = toPrevious.get(paint)
+    const on = paint.run?.motionBlur ?? policy.on, forced = paint.run?.motionBlur === true || policy.forced && paint.run?.motionBlur !== false
+    if (!on) { scales.set(paint.index, 0); continue }
     if (!before) continue
+    if (!forced && paint.run && relaid.has(paint.run)) { scales.set(paint.index, 0); continue }
     const speedX = (paint.x - before.x) / gap, speedY = (paint.y - before.y) / gap, framePath = Math.hypot(speedX, speedY)
     const turn = Math.abs(Math.atan2(Math.sin(paint.angle - before.angle), Math.cos(paint.angle - before.angle)))
     const growth = (Math.abs(before.width - paint.width) + Math.abs(before.height - paint.height) + turn * Math.max(paint.width, paint.height) / 2) / Math.abs(gap)
@@ -171,9 +210,9 @@ export function authorPaintMotion(center: AuthorCanvasRecording, previous: Autho
     if (!Number.isFinite(framePath) || !Number.isFinite(growth)) continue
     const oldest = toOlder?.get(before)
     // 换了内容又没有更早的一帧可比，分不出是在动还是换了个地方。
-    if (!oldest && paint.key !== before.key) { scales.set(paint.index, 0); continue }
-    if (oldest && framePath >= ALWAYS_CONTINUOUS && Math.hypot(speedX - (before.x - oldest.x) / (olderGap - gap), speedY - (before.y - oldest.y) / (olderGap - gap)) > framePath * CONTINUITY) { scales.set(paint.index, 0); continue }
-    const physical = framePath * exposure, size = Math.max(paint.width, paint.height), limit = size > 0 ? size * STREAK_LIMIT : Infinity
+    if (!forced && !oldest && paint.key !== before.key) { scales.set(paint.index, 0); continue }
+    if (!forced && oldest && framePath >= ALWAYS_CONTINUOUS && Math.hypot(speedX - (before.x - oldest.x) / (olderGap - gap), speedY - (before.y - oldest.y) / (olderGap - gap)) > framePath * CONTINUITY) { scales.set(paint.index, 0); continue }
+    const physical = framePath * exposure, size = Math.max(paint.width, paint.height), limit = isText(paint) && size > 0 ? size * STREAK_LIMIT : Infinity
     const scale = physical > limit ? limit / physical : 1, distance = physical * scale
     reach = Math.max(reach, framePath + growth)
     if (scale < 1) scales.set(paint.index, scale)

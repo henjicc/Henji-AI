@@ -50,7 +50,7 @@ export function videoEditCodeElementKind(current: Pick<ReturnType<typeof readVid
 }
 
 export type VideoEditCodeElementGroups = {
-  transform?: Pick<CodeElementOverride, CodeElementOverrideKey | 'curves'>
+  transform?: Pick<CodeElementOverride, CodeElementOverrideKey | 'curves' | 'motionBlur'>
   properties?: { values: Record<string, unknown>; curves?: import('@/core/videoEdit/codeMaterialAnimation').CodeMaterialCurves }
   effects?: Pick<CodeElementOverride, 'effects' | 'addedEffects'>
 }
@@ -98,7 +98,7 @@ export function writeVideoEditCodeElementGroups(target: VideoEditCodeElementTarg
   if (kind === 'adjust' && writes.properties) throw new Error('调整层只能修改效果参数与 opacity。')
   const next = structuredClone(current.override)
   if (groups.transform) {
-    for (const key of [...Object.keys(codeElementOverrideValuesSchema.shape), 'curves']) delete (next as Record<string, unknown>)[key]
+    for (const key of [...Object.keys(codeElementOverrideValuesSchema.shape), 'curves', 'motionBlur']) delete (next as Record<string, unknown>)[key]
     Object.assign(next, groups.transform)
   }
   if (groups.effects) { delete next.effects; delete next.addedEffects; Object.assign(next, groups.effects) }

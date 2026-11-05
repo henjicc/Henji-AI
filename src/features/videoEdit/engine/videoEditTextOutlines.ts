@@ -2,6 +2,9 @@ import type { TextOutline } from '@/core/imaging/vectorContent/shaping/harfbuzz'
 
 export const TEXT_OUTLINE_DRAW = Symbol.for('henji-layout.text.outline.draw')
 export const TEXT_APPEARANCE_DRAW = Symbol.for('henji-layout.text.appearance.draw')
+/** 录制时标出一次 drawText 画了哪些动作、用的哪份版面：运动模糊靠它区分“重新排版”和“字在动”。返回结束标记的函数。 */
+export const TEXT_RUN_DRAW = Symbol.for('henji-layout.text.run.draw')
+export type TextRunContext = { [TEXT_RUN_DRAW]?: (layout: number | string, motionBlur: boolean | undefined) => () => void }
 export interface TextAppearance {
   identity: string
   /** 局部坐标中的完整栅格范围，包含描边、阴影及栅格取整留边。 */

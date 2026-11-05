@@ -4,7 +4,7 @@ import { codePoint } from '../../../core/videoEdit/codeMaterial/geometry'
 import type { AuthorCanvasReviewObservation } from '../../../core/videoEdit/codeAuthorProgram'
 import { videoEditQuadOutside } from '../../../core/videoEdit/textOverflowReview'
 import { parseColor } from '../../../core/theme/themeColor'
-import { textOutlineIdentity, textOutlinePath, TEXT_OUTLINE_DRAW, TEXT_APPEARANCE_DRAW, type TextAppearance } from './videoEditTextOutlines'
+import { textOutlineIdentity, textOutlinePath, TEXT_OUTLINE_DRAW, TEXT_APPEARANCE_DRAW, TEXT_RUN_DRAW, type TextAppearance } from './videoEditTextOutlines'
 import type { TextOutline } from '@/core/imaging/vectorContent/shaping/harfbuzz'
 
 /**
@@ -129,11 +129,14 @@ const matrixOf = (args: Value[]): Matrix => {
 }
 const isIdentity = (m: Matrix): boolean => m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0
 
+export interface AuthorTextRun { start: number; end: number; layout: number | string; motionBlur?: boolean }
 export interface AuthorCanvasRecording {
   canvasReview?: AuthorCanvasReviewObservation[]
   textUncovered?: string[]
   textUncoveredByLayer?: Record<number, string[]>
   textDraws: TextDrawObservation[]
+  /** 每次 drawText 占的指令范围 [start, end) 和版面身份，只影响运动模糊怎么判断。比较时只看开关：版面身份不进画面。 */
+  textRuns?: AuthorTextRun[]
   ops: Value[][]
   /** 指令全部可比对：与上一帧相同即可沿用纹理。 */
   comparable: boolean
@@ -149,8 +152,9 @@ export interface AuthorCanvasRecording {
 }
 
 /** 两次录制的指令逐条相同（作者位图按身份）。只比指令；作者图片的像素版本由调用方另比。 */
+const blurChoices = (recording: AuthorCanvasRecording): unknown[] => recording.textRuns?.map(run => run.motionBlur ?? null) ?? []
 export function sameAuthorCanvasRecording(a: AuthorCanvasRecording, b: AuthorCanvasRecording): boolean {
-  return a.comparable && b.comparable && same(a.ops, b.ops) && same(a.textDraws, b.textDraws)
+  return a.comparable && b.comparable && same(a.ops, b.ops) && same(a.textDraws, b.textDraws) && same(blurChoices(a), blurChoices(b))
 }
 function same(a: Value, b: Value): boolean {
   if (a === b) return true
@@ -175,7 +179,7 @@ function same(a: Value, b: Value): boolean {
 export function recordAuthorCanvas(size: { width: number; height: number }, measure: OffscreenCanvasRenderingContext2D, transform: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void, stable = false): AuthorCanvasRecording {
   measure.reset()
   const ops: Value[][] = []
-  const textDraws: TextDrawObservation[] = []
+  const textDraws: TextDrawObservation[] = [], textRuns: AuthorTextRun[] = []
   const canvasReview: AuthorCanvasReviewObservation[] = []
   const textUncovered = new Set<string>()
   const textUncoveredByLayer: Record<number, string[]> = {}
@@ -343,6 +347,10 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   const context = new Proxy(target, {
     get(_, property) {
       if (property === TEXT_LAYER_CONTEXT) return (index: number): void => { layerIndex = index }
+      if (property === TEXT_RUN_DRAW) return (layout: number | string, motionBlur: boolean | undefined): (() => void) => {
+        const start = ops.length
+        return () => { textRuns.push({ start, end: ops.length, layout, ...(motionBlur === undefined ? {} : { motionBlur }) }) }
+      }
       if (property === TEXT_OUTLINE_DRAW) return (outline: TextOutline, stroke: boolean): void => {
         const name = stroke ? 'stroke' : 'fill', path = new OutlineRef(outline.identity, () => textOutlinePath(outline), outline.em)
         apply(name, [path]); ops.push([name, path])
@@ -386,7 +394,7 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   // 多出的 save 没有 restore：画完时状态与裁剪还留在栈上，同样会漏给后面的层。
   if (stack.length) balanced = false
   if (!balanced) for (const fact of textDraws) { fact.retained = false; fact.uncovered.push('跨绘制状态或合成遮挡') }
-  return { ops, comparable, assets, isolated, balanced, textDraws, canvasReview, textUncovered: [...textUncovered], textUncoveredByLayer }
+  return { ops, comparable, assets, isolated, balanced, textDraws, textRuns, canvasReview, textUncovered: [...textUncovered], textUncoveredByLayer }
 }
 
 /** 只重放一部分绘制动作，或把它们画成速度图（`velocity` 给每个动作的编码颜色）。 */

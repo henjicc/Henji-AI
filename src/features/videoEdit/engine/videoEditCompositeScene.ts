@@ -2,7 +2,7 @@ import { videoEditGpuOutputEpoch } from './videoEditGpuErrorScope'
 import { createLogger } from '@/core/logging'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import { SPACE_ONLY_FIELDS, spaceClipIsSolid } from '@/core/videoEdit/spatialSchema'
-import type { VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
+import { videoEditClipMotionBlur, type VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditCompositeNode } from '@/core/videoEdit/compositing'
@@ -397,9 +397,11 @@ export async function renderVideoEditThreeSpaceScene(options: {
   try {
     const opened = plan.samples.length > 1 ? plan.samples.reduce((first, sample) => sample.sequenceFrame < first.sequenceFrame ? sample : first).frame : undefined
     // 作者场景先更新到快门开始那一刻记下各物体的世界矩阵（运动模糊的速度由它求），再更新到中心帧绘制。
+    // 序列总开关关着时，单个片段也可以强制打开。
+    const anyMotionBlur = drawn.clips.some(clip => videoEditClipMotionBlur(drawn, clip))
     const previous = new Map<string, Map<import('three').Object3D, import('three').Matrix4>>()
     // 实体、线框不做运动模糊，不必多算一遍快门开始时刻的场景。
-    if (opened && drawn.motionBlur === true && (options.display ?? 'realtime') === 'realtime') for (const staged of await sources.stageSpatialScenes(prepared, 'open')) {
+    if (opened && anyMotionBlur && (options.display ?? 'realtime') === 'realtime') for (const staged of await sources.stageSpatialScenes(prepared, 'open')) {
       const matrices = new Map<import('three').Object3D, import('three').Matrix4>()
       staged.root.traverse(object => { matrices.set(object, object.matrixWorld.clone()) })
       previous.set(staged.clipId, matrices)
@@ -447,7 +449,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
     const sequenceLit = request.composition.clips.some(clip => clip.kind === 'light' && clip.enabled !== false && lightTracks.has(clip))
     const defaultLighting = options.spaceRender?.defaultLighting !== 'off' && litClips && !sequenceLit && (options.spaceRender?.environment ?? 'none') === 'none' && !authorLit
     if (defaultLighting) lights = [{ clipId: 'default-key', kind: 'directional', color: VIDEO_EDIT_SPACE_LIGHT_DEFAULT_HEX, intensity: 1, castShadow: true, softness: .5, angle: 50, position: [-1.2, 1.6, 2], direction: [.45, -.55, -.7], size: 1 }]
-    const postEffects = { display: options.display ?? 'realtime', motionBlur: drawn.motionBlur === true, depthOfField: Boolean(camera?.defocus || camera?.curves?.defocus?.length),
+    const postEffects = { display: options.display ?? 'realtime', motionBlur: anyMotionBlur, depthOfField: Boolean(camera?.defocus || camera?.curves?.defocus?.length),
       focusDistance: center.camera.focusDistance, cocScale, cocMax: Math.max(0, ...center.cards.map(card => card.cocRangePx[1]), ...sceneCoc),
       shutterScale: plan.samples.length > 1 ? plan.samples.length / (plan.samples.length - 1) : 1,
       bloom: options.spaceRender?.bloom ?? 0, bloomThreshold: options.spaceRender?.bloomThreshold ?? .75, bloomRadius: options.spaceRender?.bloomRadius ?? .45, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0,

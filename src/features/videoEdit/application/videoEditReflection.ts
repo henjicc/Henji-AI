@@ -148,7 +148,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     const clip = instance.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === childId)!
     const source = instance.document.sequences.find(sequence => sequence.id === instance.document.items.find(item => item.id === clip.itemId)?.sequenceId)
     if (source?.multicam) data.multicamCameraId = clip.multicamCameraId ?? source.multicam.cameras[0].id
-    data.motionBlur = clip.motionBlur !== false
+    data.motionBlur = clip.motionBlur === undefined ? 'auto' : clip.motionBlur ? 'on' : 'off'
     data.enabled = clip.enabled !== false
     Object.assign(data, { graphicObjectIds: clip.graphic?.objects.map(object => object.id) ?? [], effectIds: clip.effects?.map(effect => effect.id) ?? [], adjustmentFromTrack: clip.adjustment?.fromTrack ?? null }, videoEditClipSpeedData(clip))
   }
