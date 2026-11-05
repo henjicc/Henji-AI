@@ -344,6 +344,7 @@ async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs
   if (!fs.existsSync(mainEntry)) {
     throw new Error(`未找到 Electron 构建产物：${mainEntry}\n请先运行 npm run electron:bundle`)
   }
+  process.env.HENJI_UI_PROFILE = profile
   const app = await launchElectronApp({
     mainEntry,
     appPath: root,

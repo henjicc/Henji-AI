@@ -40,7 +40,13 @@ async function assignIsolatedMcpPort(page) {
 }
 
 /** 通过可信设置入口配置客户端，令牌不进入模型上下文或日志。 */
+const isolatedPages = new WeakSet()
 async function authorizeMcpConnection(page, { name }) {
+  // 隔离资料的场景不能用默认端口：开发实例的常驻接线员占着它，隔离实例发的令牌在那边只会得到 401。
+  if (process.env.HENJI_UI_PROFILE === 'temporary' && !isolatedPages.has(page)) {
+    isolatedPages.add(page)
+    await assignIsolatedMcpPort(page)
+  }
   const identity = await page.evaluate(async (input) => {
     const before = await window.henjiNative.mcp.status()
     if (!before.enabled) await window.henjiNative.mcp.configure({ enabled: true, port: before.port })
