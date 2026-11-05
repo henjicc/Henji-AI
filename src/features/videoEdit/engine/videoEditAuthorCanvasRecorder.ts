@@ -36,7 +36,7 @@ class AppearanceRef {
 }
 /** 可枚举数据只有内容身份；真实 Path2D 留在弱引用表，指纹不依赖进程对象编号。 */
 class OutlineRef {
-  constructor(readonly outline: string, path: object) { outlinePaths.set(this, path); Object.freeze(this) }
+  constructor(readonly outline: string, path: object, readonly em?: number) { outlinePaths.set(this, path); Object.freeze(this) }
 }
 
 /** 作者自己的位图：ImageBitmap 创建后内容不再变，同一对象跨帧得到同一编号，按编号比对。 */
@@ -344,7 +344,7 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
     get(_, property) {
       if (property === TEXT_LAYER_CONTEXT) return (index: number): void => { layerIndex = index }
       if (property === TEXT_OUTLINE_DRAW) return (outline: TextOutline, stroke: boolean): void => {
-        const name = stroke ? 'stroke' : 'fill', path = new OutlineRef(outline.identity, () => textOutlinePath(outline))
+        const name = stroke ? 'stroke' : 'fill', path = new OutlineRef(outline.identity, () => textOutlinePath(outline), outline.em)
         apply(name, [path]); ops.push([name, path])
       }
       if (property === TEXT_APPEARANCE_DRAW) return (appearance: TextAppearance): void => {

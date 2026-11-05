@@ -44,14 +44,14 @@ it('音频切点不截断画面曝光，运动禁用按中心相机冻结', () =
   const request = fixture()
   request.composition = { ...request.composition, clips: [...request.composition.clips.map(clip => clip.id === 'card' ? { ...clip, motionBlur: false as const } : clip), { ...request.composition.clips[0], id: 'audio', kind: 'audio', start: 20 }], spatialCamera: { offsetX: .2, curves: { offsetX: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 40, value: 1, interpolation: 'linear' }] } } }
   const plan = planSpatialExposure(request)
-  expect(plan.shotRange).toEqual([19.75, 20.25])
+  expect(plan.shotRange).toEqual([19.5, 20])
   for (const sample of plan.samples) expect(sample.frame.cards.find(card => card.clipId === 'card')!.clipFromUv).toEqual(plan.centerFrame.cards.find(card => card.clipId === 'card')!.clipFromUv)
 })
 it('亚像素深度交叉仍按完整快门采样整组遮挡', () => {
   const request = fixture()
   request.sources = []
   request.composition = { ...request.composition, clips: request.composition.clips.map((clip, index) => index ? clip : { ...clip,
-    curves: { depth: [{ time: 19, value: -.0004, interpolation: 'linear' }, { time: 21, value: .0004, interpolation: 'linear' }] } }) }
+    curves: { depth: [{ time: 18.75, value: -.0004, interpolation: 'linear' }, { time: 20.75, value: .0004, interpolation: 'linear' }] } }) }
   const plan = planSpatialExposure(request)
   expect(plan.samples).toHaveLength(16)
   expect(plan.groups[0].mode).toBe('group')

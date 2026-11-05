@@ -2,8 +2,8 @@ import type { GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/
 
 /**
  * 按速度图收集的运动模糊（McGuire 2012、Jimenez 2014 的思路）：只画一次颜色和一次速度，耗时与走多快无关，也不会有分帧重影。
- * 分块记下附近最快的速度，每个像素沿它取一串样本；样本自己的运动能扫到这里才算数，每个样本的能量摊在它走过的整条路径上，
- * 所以亮度守恒，静止的像素原样不变。作者图层底色透明，这里按预乘颜色收集，不用猜背景。
+ * 快门在当前帧结束，拖影只留在运动方向的身后。分块记下附近最快的速度，每个像素沿速度方向往前取一串样本；
+ * 这个样本刚才从这里经过才算数，每个样本的能量摊在它走过的整条路径上，所以亮度守恒，静止的像素原样不变。作者图层底色透明，这里按预乘颜色收集，不用猜背景。
  */
 
 const quad = `@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
@@ -49,29 +49,33 @@ struct P { size:vec4f, taps:vec4f }
 @group(0) @binding(3) var neighbors:texture_2d<f32>;
 @group(0) @binding(4) var linearSampler:sampler;
 ${decode}
-/** 沿一条线取样。样本只有在这个像素正好落在它自己走过的路径上才算数，方向不同的样本不会被扫到不该去的地方。 */
-fn line(here:vec2f, along:vec2f, total:f32, skipCenter:bool)->vec4f {
- let count=clamp(i32(ceil(total/p.taps.y))|1,3,i32(p.taps.x));
- let step=total/f32(count-1);
+fn stepOf(total:f32)->f32 { return total/f32(clamp(i32(ceil(total/p.taps.y))+1,2,i32(p.taps.x))-1); }
+/**
+ * 沿一条线两头取样：附近可能有反向运动的内容。样本只有刚才正好从这个像素经过才算数，方向不同的样本不会被扫到不该去的地方。
+ * 走得比取样间距还短的样本待在自己的像素上：间距大时再分摊，就成了隔开的两个半透明副本。
+ */
+fn line(here:vec2f, along:vec2f, total:f32, skipHere:bool)->vec4f {
+ let step=stepOf(total);
+ let reach=i32(round(total/step));
  var sum=vec4f(0);
- for(var i=0;i<count;i++) {
-  if(skipCenter&&i==(count-1)/2) { continue; }
-  let offset=(f32(i)-f32(count-1)*0.5)*step;
-  let q=here+along*offset;
+ for(var i=-reach;i<=reach;i++) {
+  if(skipHere&&i==0) { continue; }
+  let q=here+along*(f32(i)*step);
+  if(q.x<0.0||q.y<0.0||q.x>=p.size.x||q.y>=p.size.y) { continue; }
   let own=velocityAt(vec2i(q));
   let ownLength=length(own);
-  var distance=abs(offset);
-  if(ownLength>0.5) {
-   let direction=own/ownLength;
-   let d=here-q;
-   if(abs(d.x*direction.y-d.y*direction.x)>1.0+step*0.5) { continue; }
-   distance=abs(dot(d,direction));
+  if(ownLength<=0.5||ownLength<step) {
+   if(i==0) { sum+=textureLoad(color,vec2i(q),0); }
+   continue;
   }
+  let direction=own/ownLength;
+  let d=q-here;
+  if(abs(d.x*direction.y-d.y*direction.x)>1.0+step*0.5) { continue; }
+  let behind=dot(d,direction);
   // 样本的能量摊在它自己走过的路径上；梯形权重让任意步长下的总和都正好是 1。
-  let path=max(ownLength,step);
-  let covered=clamp((path*0.5+step*0.5-distance)/step,0.0,1.0);
+  let covered=clamp(min(behind+step*0.5,ownLength+step*0.5-behind)/step,0.0,1.0);
   if(covered<=0.0) { continue; }
-  sum+=textureSampleLevel(color,linearSampler,q/p.size.xy,0.0)*covered*step/path;
+  sum+=textureSampleLevel(color,linearSampler,q/p.size.xy,0.0)*covered*step/ownLength;
  }
  return sum;
 }
@@ -83,10 +87,10 @@ fn line(here:vec2f, along:vec2f, total:f32, skipCenter:bool)->vec4f {
  if(total<0.5) { return textureLoad(color,vec2i(here),0); }
  let along=reach/total;
  var sum=line(here,along,total,false);
- // 自己的方向和附近最快的不一样时，再顺着自己的方向收一遍，否则自己的能量收不全。
+ // 自己的方向和附近最快的不在一条线上时，再顺着自己的方向收一遍，否则自己的能量收不全。
  let own=velocityAt(vec2i(here));
  let ownLength=length(own);
- if(ownLength>1.0&&abs(dot(own/ownLength,along))<0.97) { sum+=line(here,own/ownLength,ownLength,true); }
+ if(ownLength>=stepOf(total)&&ownLength>0.5&&abs(dot(own/ownLength,along))<0.97) { sum+=line(here,own/ownLength,ownLength,true); }
  return sum;
 }`
 const TILE_FORMAT = 'rgba16float'
@@ -120,8 +124,8 @@ export class VideoEditAuthorExposureGpu {
    */
   async encode(encoder: ReturnType<GpuDevice['createCommandEncoder']>, color: GpuTexture, velocity: GpuTexture, target: GpuTexture, size: { width: number; height: number }, range: number, longest: number, taps: number, spacing: number): Promise<void> {
     const { tile, neighbor, gather } = await this.prepare()
-    // 分块边长盖住一半路径，3×3 邻域就覆盖了所有可能扫到这里的像素。
-    const tileSize = Math.max(4, Math.ceil(longest / 2) + 1)
+    // 分块边长盖住整条路径，3×3 邻域就覆盖了所有可能从这里经过的样本。
+    const tileSize = Math.max(4, Math.ceil(longest) + 1)
     const tileWidth = Math.ceil(size.width / tileSize), tileHeight = Math.ceil(size.height / tileSize)
     const first = this.allocator.allocate(tileWidth, tileHeight, TILE_FORMAT), second = this.allocator.allocate(tileWidth, tileHeight, TILE_FORMAT)
     const uniforms = new Float32Array([size.width, size.height, tileSize, range, taps, spacing, 0, 0])

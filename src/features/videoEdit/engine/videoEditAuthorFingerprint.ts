@@ -112,7 +112,7 @@ export function fingerprintAuthorFrame(effect: AuthorModule, size: { width: numb
       const id = authorLayerId(layer, index), override = overrides?.[id]
       const [x, y, right, bottom] = layer.bounds ?? [0, 0, size.width, size.height]
       if (layer.pose && !layer.bounds || ![x, y, right, bottom].every(Number.isFinite) || right <= x || bottom <= y) throw new Error('图层范围无效')
-      const samples = authorLayerSamples(layer, effect, info, { x, y, width: right - x, height: bottom - y }, override, motionBlur)
+      const samples = authorLayerSamples(layer, effect, info, { x, y, width: right - x, height: bottom - y }, override, motionBlur, apiVersion)
       // 元数据（源码行号、名称、作者缓存提示）不参与画面；未知字段保守计入，函数等无法散列则回退。
       const { draw: _draw, pose: _pose, sourceSpan: _span, factory: _factory, name: _name, data: _data, cacheKey: _cache, effects: _effects, ...properties } = layer
       const poses = samples.map(sample => [sample, layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration) ?? null])
@@ -180,7 +180,7 @@ function fingerprintLayerEffects(effect: AuthorModule, size: { width: number; he
   return layers.map((layer, index) => {
     if (isAuthorAdjustment(layer, apiVersion)) return adjustmentFingerprint(layer, index, info, authorFramePosition(effect, info), environment, overrides, apiVersion)
     const [x, y, right, bottom] = layer.bounds ?? [0, 0, size.width, size.height]
-    const samples = authorLayerSamples(layer, effect, info, { x, y, width: right - x, height: bottom - y }, overrides?.[authorLayerId(layer, index)], motionBlur)
+    const samples = authorLayerSamples(layer, effect, info, { x, y, width: right - x, height: bottom - y }, overrides?.[authorLayerId(layer, index)], motionBlur, apiVersion)
     if (!samples.some(sample => sample.pose)) return null
     const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration)).find(Boolean)
     const effects = resolveAuthorElementEffects(layer.effects?.(info.time) ?? [], overrides?.[authorLayerId(layer, index)], environment, info.clip.time / info.frameDuration, authorLayerId(layer, index), 'layer', apiVersion).effects

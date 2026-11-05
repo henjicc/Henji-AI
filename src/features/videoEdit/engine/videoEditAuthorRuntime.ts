@@ -29,7 +29,7 @@ import { authorFramePosition, isAuthorAdjustment } from './videoEditAuthorModule
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
-import { authorInterpolateRecording, authorMotionRuns, authorPaintMotion, authorRecordingMeasurable, type AuthorPaintMotion } from './videoEditAuthorMotionOps'
+import { authorMotionRuns, authorPaintMotion, authorRecordingMeasurable, authorSampleRecording, type AuthorPaintMotion } from './videoEditAuthorMotionOps'
 import { VideoEditAuthorExposureGpu } from './videoEditAuthorExposureGpu'
 import { AuthorCanvasAsset, AuthorCanvasUnrecordable, authorCanvasContext, authorCanvasTextContext, trackAuthorCanvasText, recordAuthorCanvas, replayAuthorCanvas, sameAuthorCanvasRecording, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
 import type { AuthorReplayFilter } from './videoEditAuthorCanvasRecorder'
@@ -317,7 +317,7 @@ export class VideoEditAuthorRuntime {
         const statistics = await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs, motionBlur, output, environment, quality, beforeCommit, promote, simulationInput)
         const target = resolveInitialTarget()
         await this.layers.begin(target)
-        const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID], motionBlur)
+        const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID], motionBlur, this.apiVersion ?? 0)
         // 整幅画面按画布像素取样（纹理坐标与纹理尺寸无关），覆盖矩阵仍是画布像素，外面再叠输出比例。
         this.layers.draw(target, outWidth, outHeight, { texture: picture, x: 0, y: 0, width, height }, samples, undefined, scale)
         this.layers.finish()
@@ -672,9 +672,9 @@ export class VideoEditAuthorRuntime {
           const motionStarted = performance.now()
           const reachFrames = Math.max(1, (Math.abs(drawExposure.phase) + drawExposure.shutter) / 360)
           const motions: Array<AuthorPaintMotion | undefined> = [], before: Array<{ painted: Painted; gap: number } | undefined> = []
-          let longest = 0, pad = 0, shrink = 1, deforming = false
+          let longest = 0, span = 0, pad = 0, deforming = false
           // 按段重放时每段画在空白画布上；组里只要有一层靠前面的内容混合（遮罩、擦除），都得整组一起累加。
-          const plain = drawExposure.centered && members.every(member => member.painted.recording.isolated)
+          const plain = drawExposure.trailing && members.every(member => member.painted.recording.isolated)
           for (const member of members) {
             const slot = `still:${member.position}:${authorLayerId(member.layer, member.position)}`
             touched.add(slot)
@@ -688,26 +688,25 @@ export class VideoEditAuthorRuntime {
             const motion = authorPaintMotion(recording, previous.recording, history.older()?.recording, drawExposure.fraction, history.gap, history.olderGap)
             if (!motion.moves.size && !motion.deforming) { motions.push(undefined); before.push(undefined); continue }
             motions.push(motion); before.push({ painted: previous, gap: history.gap })
-            longest = Math.max(longest, motion.longest); pad = Math.max(pad, motion.reach); deforming ||= motion.deforming; shrink = Math.min(shrink, motion.shrink)
+            longest = Math.max(longest, motion.longest); span = Math.max(span, motion.span); pad = Math.max(pad, motion.reach); deforming ||= motion.deforming
           }
           recordVideoEditPreparation('authorMotion', performance.now() - motionStarted)
           if (!before.some(Boolean)) return undefined
           if (deforming || !plain) {
-            motions.forEach((motion, index) => { if (motion?.jumped) before[index] = undefined })
-            if (!before.some(Boolean)) return undefined
             const sample = (member: typeof stills[number], memberIndex: number, offset: number): Painted | undefined => {
               const previous = before[memberIndex]
               if (!previous) return member.painted
-              const recording = authorInterpolateRecording(previous.painted.recording, member.painted.recording, 1 + offset / previous.gap)
+              const recording = authorSampleRecording(previous.painted.recording, member.painted.recording, motions[memberIndex]!, offset, previous.gap)
               return recording ? { recording, assets: member.painted.assets } : undefined
             }
             const matched = members.every((member, memberIndex) => sample(member, memberIndex, 0))
             const cap = quality === 'final' ? drawExposure.max : Math.min(drawExposure.max, matched ? 8 : 4)
-            const count = authorDrawSampleCount(Math.max(longest, pad * drawExposure.fraction * shrink, 15), cap)
+            const count = authorDrawSampleCount(Math.max(span, 15), cap)
             recordVideoEditPreparation('authorExposureSamples', count)
             return { pad: pad * reachFrames, samples: Array.from({ length: count }, (_, index) => members.map((member, memberIndex) => {
-              const offset = authorDrawSampleOffset(drawExposure, index, count) * shrink
-              return { painted: sample(member, memberIndex, offset) ?? recordAt(member, offset) ?? member.painted, draw: (ctx: OffscreenCanvasRenderingContext2D) => drawStill(ctx, member.layer, member.position) }
+              const offset = authorDrawSampleOffset(drawExposure, index, count)
+              // 前后指令对不上时重跑作者代码。有限长或跳变的动作就不能这样，它们会按完整位移走。
+              return { painted: sample(member, memberIndex, offset) ?? (motions[memberIndex]?.scales.size ? member.painted : recordAt(member, offset) ?? member.painted), draw: (ctx: OffscreenCanvasRenderingContext2D) => drawStill(ctx, member.layer, member.position) }
             })) }
           }
           if (longest < 1) return undefined
@@ -799,7 +798,7 @@ export class VideoEditAuthorRuntime {
           const [x, y, right, bottom] = layer.bounds ?? [0, 0, width, height]
           if (![x, y, right, bottom].every(Number.isFinite) || right <= x || bottom <= y) throw new Error('图层范围无效。')
           const bounds = { x, y, width: right - x, height: bottom - y }
-          const samples = authorLayerSamples(layer, this.effect, info, bounds, override, motionBlur)
+          const samples = authorLayerSamples(layer, this.effect, info, bounds, override, motionBlur, this.apiVersion ?? 0)
           if (!samples.some(sample => sample.pose)) continue
           const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator / sample.offset.denominator * info.frameDuration)).find(Boolean)
           const need = Math.max(1, ...samples.flatMap(sample => sample.pose ? [Math.hypot(sample.pose.matrix[0], sample.pose.matrix[1]), Math.hypot(sample.pose.matrix[2], sample.pose.matrix[3])] : []))

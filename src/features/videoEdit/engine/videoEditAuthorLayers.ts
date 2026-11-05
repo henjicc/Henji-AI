@@ -108,8 +108,9 @@ export function authorPoseMatrix(pose: AuthorPose): CodeMatrix {
   return [c * sx, s * sx, -s * sy, c * sy, pose.x ?? 0, pose.y ?? 0]
 }
 
-function authorExposure(effect: AuthorModule): { shutter: number; phase: number; max: number } {
-  const shutter = effect.motionBlur?.shutter ?? 180, phase = effect.motionBlur?.phase ?? -shutter / 2
+function authorExposure(effect: AuthorModule, apiVersion: number): { shutter: number; phase: number; max: number } {
+  // 快门在当前帧结束：画面上的位置就是这一帧的位置，拖影只留在身后。以当前帧为中心时，字还没动，要去的方向就先糊出来了。
+  const shutter = effect.motionBlur?.shutter ?? 180, phase = effect.motionBlur?.phase ?? (apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION ? -shutter : -shutter / 2)
   // 每次取样沿运动方向拉长到相邻样本间距（见 videoEditAuthorGpu），约每 4 像素一个样本、默认最多 16 个就平滑
   const max = effect.motionBlur?.maxSamples ?? 16
   if (!Number.isFinite(shutter) || shutter < 0 || !Number.isFinite(phase) || !Number.isInteger(max) || max < 1 || max > 64) throw new Error('运动模糊需要非负有限快门和 1–64 个样本。')
@@ -119,7 +120,7 @@ const exposureOffset = (phase: number, shutter: number, i: number, count: number
 
 /** 声明键一次描述整个曝光区间；范围包含中心帧，覆盖中心绘制与快门位姿。 */
 export function authorFrameExposure(effect: AuthorModule, info: AuthorFrameInfo, enabled: boolean, apiVersion = 0): NonNullable<AuthorFrameInfo['exposure']> {
-  const { shutter, phase } = authorExposure(effect)
+  const { shutter, phase } = authorExposure(effect, apiVersion)
   const active = enabled && (!!effect.layers || apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && !!effect.draw) && shutter > 0
   // 没有位姿的图层运动模糊看前两帧：frameKey 和模拟的准备范围都要算上，否则跳帧和连续播放的画面不一样。
   const history = active && apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && effect.mode !== 'static' ? -2 : 0
@@ -139,10 +140,10 @@ export function authorShiftedFrameInfo(info: AuthorFrameInfo, frames: number): A
   shifted.clip = { ...info.clip, time: info.clip.time + delta }
   return shifted
 }
-export function authorDrawExposure(effect: AuthorModule, enabled: boolean, apiVersion: number): { fraction: number; shutter: number; phase: number; centered: boolean; max: number } | undefined {
+export function authorDrawExposure(effect: AuthorModule, enabled: boolean, apiVersion: number): { fraction: number; shutter: number; phase: number; trailing: boolean; max: number } | undefined {
   if (!enabled || apiVersion < CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION || effect.mode === 'static') return undefined
-  const { shutter, phase, max } = authorExposure(effect)
-  return shutter > 0 ? { fraction: shutter / 360, shutter, phase, centered: Math.abs(phase + shutter / 2) < 1e-6, max } : undefined
+  const { shutter, phase, max } = authorExposure(effect, apiVersion)
+  return shutter > 0 ? { fraction: shutter / 360, shutter, phase, trailing: Math.abs(phase + shutter) < 1e-6, max } : undefined
 }
 export const authorDrawSampleOffset = (exposure: { shutter: number; phase: number }, index: number, count: number): number => exposureOffset(exposure.phase, exposure.shutter, index, count)
 /** 插值取样只花栅格，不跑作者代码；样本隔约 5 像素，再疏就看得出分帧。 */
@@ -151,8 +152,8 @@ export function authorDrawSampleCount(displacement: number, cap: number): number
 }
 
 /** `enabled`：序列的运动模糊总开关；关掉时带位姿的图层只取当前时刻一个姿态。 */
-export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }, override?: AuthorElementOverride, enabled = true): CodeMotionSample[] {
-  const { shutter, phase, max } = authorExposure(effect)
+export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }, override?: AuthorElementOverride, enabled = true, apiVersion = 0): CodeMotionSample[] {
+  const { shutter, phase, max } = authorExposure(effect, apiVersion)
   const moving = enabled && !!layer.pose && layer.motionBlur !== false && shutter > 0
   const offset = (i: number, count: number): number => moving ? exposureOffset(phase, shutter, i, count) : 0
   const poseAt = (delta: number): { matrix: CodeMatrix; opacity: number } | null => {
@@ -177,10 +178,13 @@ export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, inf
     }
     longest = Math.max(longest, length)
   }
+  // 快门在当前帧结束时，样本都早于当前帧：这一刻不显示就是不显示，这一刻才出现的也要画出来，都不能晚一帧。
+  const trailing = moving && apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION && Math.abs(phase + shutter) < 1e-6
+  if (trailing && !poseAt(0)) return [{ offset: { numerator: 0, denominator: 1 }, pose: null, weight: 1 }]
   const visibility = probes.some(Boolean) && probes.some(p => !p) ? 4 : 1
   const count = moving ? Math.max(visibility, Math.min(max, Math.ceil(longest / 4))) : 1
   return Array.from({ length: count }, (_, i) => {
-    const delta = offset(i, count)
+    const delta = trailing && count === 1 ? 0 : offset(i, count)
     return { offset: { numerator: delta, denominator: 1 }, pose: poseAt(delta), weight: 1 / count }
   })
 }

@@ -89,7 +89,8 @@ function distance(a: SpatialCardGeometry, b: SpatialCardGeometry, request: Spati
 }
 function shutterRange(request: SpatialFrameRequest): readonly [number, number] {
   const center = request.sequenceFrame
-  let start = Math.max(0, center - VIDEO_EDIT_MOTION_BLUR_SHUTTER / 2), end = center + VIDEO_EDIT_MOTION_BLUR_SHUTTER / 2
+  // 和二维同一个方向：快门在当前帧结束，拖影只留在身后。
+  let start = Math.max(0, center - VIDEO_EDIT_MOTION_BLUR_SHUTTER), end = center
   const cut = (time: number): void => { if (time <= center) start = Math.max(start, time); else end = Math.min(end, time) }
   const visible = videoEditPictureFilter(request.composition)
   const transitions = videoEditPictureTransitionsAt(request.composition, center)

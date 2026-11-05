@@ -17,18 +17,24 @@ describe('运动模糊快门取样', () => {
     expect(videoEditMotionBlurSamples(document, off, evaluateVideoEditClip(off, 5), 5)).toBeUndefined()
   })
 
-  it('180° 快门以当前帧为中心，样本数随位移增多并封顶；跟随、防抖带来的偏移在快门内保持不变', () => {
+  it('180° 快门在当前帧结束，拖影只在身后，样本数随位移增多并封顶；跟随、防抖带来的偏移在快门内保持不变', () => {
     // 每帧向右移动画面宽度的 1%（19.2 像素）：半帧快门覆盖 9.6 像素
     const moving = clip({ curves: { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 50, value: .5, interpolation: 'linear' }] } })
     const evaluated = { ...evaluateVideoEditClip(moving, 20), y: .1 }
     const samples = videoEditMotionBlurSamples(document, moving, evaluated, 20)!
     expect(samples.length).toBe(7)
     const xs = samples.map(sample => sample.x)
-    expect((xs[0] + xs[xs.length - 1]) / 2).toBeCloseTo(evaluated.x)
+    expect((xs[0] + xs[xs.length - 1]) / 2).toBeCloseTo(evaluated.x - .0025)
+    expect(Math.max(...xs)).toBeLessThan(evaluated.x)
     expect(xs[xs.length - 1] - xs[0]).toBeCloseTo(.01 * (samples.length - 1) / samples.length * .5)
     expect(samples.every(sample => sample.y === .1)).toBe(true)
     const fast = clip({ curves: { rotation: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 10, value: 360, interpolation: 'linear' }] } })
     expect(videoEditMotionBlurSamples(document, fast, evaluateVideoEditClip(fast, 5), 5)).toHaveLength(VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES)
+  })
+
+  it('定格关键帧在这一帧跳变时不模糊，画面就在新位置', () => {
+    const cut = clip({ curves: { x: [{ time: 0, value: 0, interpolation: 'hold' }, { time: 20, value: .5, interpolation: 'linear' }] } })
+    expect(videoEditMotionBlurSamples(document, cut, evaluateVideoEditClip(cut, 20), 20)).toBeUndefined()
   })
 
   it('缩放按倍率叠加，非等比比例保留在每个样本上', () => {
@@ -37,6 +43,7 @@ describe('运动模糊快门取样', () => {
     const samples = videoEditMotionBlurSamples(document, zoom, evaluated, 5)!
     expect(samples.every(sample => sample.scaleAspect === 2)).toBe(true)
     const middle = samples.reduce((sum, sample) => sum + sample.scale, 0) / samples.length
-    expect(middle).toBeCloseTo(evaluated.scale, 3)
+    // 第 5 帧倍率 1.5；样本平均落在第 4.75 帧，倍率 1.475。
+    expect(middle).toBeCloseTo(evaluated.scale * 1.475 / 1.5, 3)
   })
 })

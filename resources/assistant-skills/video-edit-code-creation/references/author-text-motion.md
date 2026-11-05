@@ -1,6 +1,6 @@
 # 文字与动效
 
-动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.1.0（见 author-api 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
+动效直接用 Canvas2D 与普通 JS 写；文字的量字、换行、对齐、描边阴影与自动缩字号交给内置排版库：`import { layoutText, drawText } from "henji-layout/text"`，使用整段整形与单一字素几何。几个框按内容排成行列时用 `henji-layout/flex` 的 `layoutBoxes`。新建代码使用作者接口 v10 与 henji-layout 2.1.1（见 author-api 的内置库）。不要自己写量字、折行、两端对齐或多层描边。
 
 ## 字体声明
 

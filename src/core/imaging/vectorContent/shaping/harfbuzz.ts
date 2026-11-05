@@ -1,7 +1,8 @@
 import type * as HarfBuzz from '../../../../../resources/video-edit-author/vendor/harfbuzzjs/1.6.4/index.mjs'
 
 export type HarfBuzzModule = typeof HarfBuzz
-export interface TextOutline { readonly identity: string; readonly svg: string }
+/** `em`：这个字体一个字身有多少轮廓单位。各字体不同，要知道字实际多大得靠它。 */
+export interface TextOutline { readonly identity: string; readonly svg: string; readonly em?: number }
 export interface FontSource { hash: string; bytes: ArrayBuffer; face?: number; variations?: Readonly<Record<string, number>> }
 export interface ShapeOptions {
   size: number
@@ -62,7 +63,7 @@ export class TextShaper {
     const identity = JSON.stringify(['font-outline', this.hb.versionString(), source.hash, source.face ?? 0, glyph, orderedValues({ ...source.variations, ...axes })])
     let path = this.outlines.get(identity)
     if (path) this.outlines.delete(identity)
-    else { path = Object.freeze({ svg: this.outline(source, glyph, axes), identity }); this.outlineBytes += (path.svg.length + identity.length) * 2 }
+    else { path = Object.freeze({ svg: this.outline(source, glyph, axes), identity, em: this.font(source, axes).face.upem }); this.outlineBytes += (path.svg.length + identity.length) * 2 }
     this.outlines.set(identity, path)
     // 软预算只回收可重建缓存，布局持有的轮廓仍有效。
     while (this.outlineBytes > 4 * 1024 * 1024 && this.outlines.size > 1) {

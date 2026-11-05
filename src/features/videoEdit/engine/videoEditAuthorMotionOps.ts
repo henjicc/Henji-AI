@@ -11,7 +11,7 @@ const multiply = (m: Matrix, n: Matrix): Matrix => [m[0] * n[0] + m[2] * n[1], m
 const apply = (m: Matrix, x: number, y: number): [number, number] => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
 
 /** 一次绘制动作：画到哪（锚点）、多大（范围），身份用来跨录制对齐。 */
-interface Paint { index: number; key: string; x: number; y: number; width: number; height: number; angle: number; clipped: boolean; shadowed: boolean }
+interface Paint { index: number; kind: string; key: string; x: number; y: number; width: number; height: number; angle: number; clipped: boolean; shadowed: boolean }
 const PATH_POINTS: Record<string, (args: number[]) => Array<[number, number]>> = {
   moveTo: ([x, y]) => [[x, y]], lineTo: ([x, y]) => [[x, y]],
   quadraticCurveTo: ([a, b, x, y]) => [[a, b], [x, y]], bezierCurveTo: ([a, b, c, d, x, y]) => [[a, b], [c, d], [x, y]],
@@ -19,7 +19,7 @@ const PATH_POINTS: Record<string, (args: number[]) => Array<[number, number]>> =
   rect: ([x, y, w, h]) => [[x, y], [x + w, y + h]], roundRect: ([x, y, w, h]) => [[x, y], [x + w, y + h]],
   arc: ([x, y, r]) => [[x - r, y - r], [x + r, y + r]], ellipse: ([x, y, a, b]) => [[x - a, y - b], [x + a, y + b]],
 }
-// 轮廓的字形单位约 1000 一个字宽；用它估算字号变化让边缘多走了多远。
+// 旧排版库的轮廓不带字身单位，按常见的 1000 估。
 const OUTLINE_UNITS = 1000
 
 // 同一份录制要跟前后两帧各比一次。
@@ -37,7 +37,7 @@ function paintsOf(recording: AuthorCanvasRecording): Paint[] {
     const corners = [apply(matrix, x, y), apply(matrix, x + width, y), apply(matrix, x, y + height), apply(matrix, x + width, y + height)]
     const xs = corners.map(point => point[0]), ys = corners.map(point => point[1])
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
-    paints.push({ index, key, x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, angle: 0, clipped: clips > 0, shadowed })
+    paints.push({ index, kind: key.split(':')[0], key, x: (minX + maxX) / 2, y: (minY + maxY) / 2, width: maxX - minX, height: maxY - minY, angle: 0, clipped: clips > 0, shadowed })
   }
   for (const [index, op] of recording.ops.entries()) {
     const name = op[0] as string, args = op.slice(1) as number[]
@@ -66,10 +66,10 @@ function paintsOf(recording: AuthorCanvasRecording): Paint[] {
     else if (name === 'fill' || name === 'stroke') {
       const outline = op[1] !== null && typeof op[1] === 'object' ? identityOf(op[1]) : undefined
       if (outline !== undefined) {
-        const [x, y] = apply(matrix, 0, 0)
-        paints.push({ index, key: `${name}:${outline}`, x, y, width: Math.hypot(matrix[0], matrix[1]) * OUTLINE_UNITS, height: Math.hypot(matrix[2], matrix[3]) * OUTLINE_UNITS, angle: angle(), clipped: clips > 0, shadowed })
-      } else if (right >= left) paints.push({ index, key: name, x: (left + right) / 2, y: (top + bottom) / 2, width: right - left, height: bottom - top, angle: 0, clipped: clips > 0, shadowed })
-      else paints.push({ index, key: name, x: 0, y: 0, width: 0, height: 0, angle: 0, clipped: clips > 0, shadowed })
+        const [x, y] = apply(matrix, 0, 0), em = (op[1] as { em?: number }).em ?? OUTLINE_UNITS
+        paints.push({ index, kind: `${name}:outline`, key: `${name}:${outline}`, x, y, width: Math.hypot(matrix[0], matrix[1]) * em, height: Math.hypot(matrix[2], matrix[3]) * em, angle: angle(), clipped: clips > 0, shadowed })
+      } else if (right >= left) paints.push({ index, kind: name, key: name, x: (left + right) / 2, y: (top + bottom) / 2, width: right - left, height: bottom - top, angle: 0, clipped: clips > 0, shadowed })
+      else paints.push({ index, kind: name, key: name, x: 0, y: 0, width: 0, height: 0, angle: 0, clipped: clips > 0, shadowed })
     }
   }
   paintLists.set(recording, paints)
@@ -88,9 +88,21 @@ const readsLiveCanvas = (op: readonly unknown[]): boolean => (op[0] === 'drawIma
 /** 作者自己的离屏画布按活引用录制，重放时才读内容；为比较多录一遍会把它改到别的时刻，这种图层不比较。 */
 export const authorRecordingMeasurable = (recording: AuthorCanvasRecording): boolean => !recording.ops.some(readsLiveCanvas)
 
-/** 两张绘制清单逐个对齐：相同身份按顺序配对；错峰显现时一边多几个字，往后找一小段再接上。 */
+/** 换了内容还算同一个：同类动作、大小相近（滚动的数字）。换一张大小悬殊的图是换画面，不是在动。 */
+const sameSlot = (a: Paint, b: Paint): boolean => {
+  if (a.key === b.key) return true
+  if (a.kind !== b.kind) return false
+  const near = (x: number, y: number): boolean => Math.max(x, y) <= Math.min(x, y) * 1.5 + 1
+  return near(a.width, b.width) && near(a.height, b.height)
+}
+/** 两张绘制清单逐个对齐：相同身份按顺序配对；错峰显现时一边多几个字，往后找一小段再接上；都找不到是这个位置换了内容（滚动的数字），还算同一个。 */
 function align(from: readonly Paint[], to: readonly Paint[]): Map<Paint, Paint> {
   const pairs = new Map<Paint, Paint>()
+  // 个数相同就是同一批内容，按顺序对应：滚动的数字每帧换字形，按身份找会错位到别的数字上。
+  if (from.length === to.length) {
+    from.forEach((paint, index) => { if (sameSlot(paint, to[index])) pairs.set(paint, to[index]) })
+    return pairs
+  }
   let i = 0, j = 0
   const WINDOW = 64
   while (i < from.length && j < to.length) {
@@ -103,7 +115,7 @@ function align(from: readonly Paint[], to: readonly Paint[]): Map<Paint, Paint> 
     }
     if (skipTo >= 0 && (skipFrom < 0 || skipTo <= skipFrom)) j += skipTo
     else if (skipFrom >= 0) i += skipFrom
-    else { i++; j++ }
+    else { if (sameSlot(from[i], to[j])) pairs.set(from[i], to[j]); i++; j++ }
   }
   return pairs
 }
@@ -130,14 +142,14 @@ export interface AuthorPaintMotion {
   paints: number[]
   /** 不能当成整块平移：形状在变形（缩放、拉伸、旋转），动的内容被裁剪着（拖影不能越过裁剪），或者带阴影、滤镜（它们得一起拖）。 */
   deforming: boolean
-  /** 有动作是跳过去的（文字重新折行）。这种录制不能插值，否则跳的字又被拉开。 */
-  jumped: boolean
   /** 走得最远的距离。 */
   longest: number
   /** 一帧之内内容可能超出当前范围多远（画布像素）。 */
   reach: number
-  /** 拖影限长后，最短的那个相对物理长度的比例。累加取样只能整体缩，按它来。 */
-  shrink: number
+  /** 拖影短于物理长度的绘制动作 → 比例：限了长的按比例缩，跳过去的（文字折行）是 0。不在表里的按 1。 */
+  scales: Map<number, number>
+  /** 边缘这次曝光最远走了多远（含变形），决定累加几次。 */
+  span: number
 }
 
 /**
@@ -147,7 +159,8 @@ export interface AuthorPaintMotion {
 export function authorPaintMotion(center: AuthorCanvasRecording, previous: AuthorCanvasRecording, older: AuthorCanvasRecording | undefined, exposure: number, gap = 1, olderGap = 2): AuthorPaintMotion {
   const paints = paintsOf(center), earlier = paintsOf(previous), toPrevious = align(paints, earlier), toOlder = older ? align(earlier, paintsOf(older)) : undefined
   const moves = new Map<number, readonly [number, number]>()
-  let deforming = false, jumped = false, longest = 0, reach = 0, shrink = 1
+  const scales = new Map<number, number>()
+  let deforming = false, longest = 0, reach = 0, span = 0
   for (const paint of paints) {
     const before = toPrevious.get(paint)
     if (!before) continue
@@ -157,18 +170,21 @@ export function authorPaintMotion(center: AuthorCanvasRecording, previous: Autho
     // 作者函数在片段开头之前可能算出 NaN：那一刻不算有内容。
     if (!Number.isFinite(framePath) || !Number.isFinite(growth)) continue
     const oldest = toOlder?.get(before)
-    if (oldest && framePath >= ALWAYS_CONTINUOUS && Math.hypot(speedX - (before.x - oldest.x) / (olderGap - gap), speedY - (before.y - oldest.y) / (olderGap - gap)) > framePath * CONTINUITY) { jumped = true; continue }
+    // 换了内容又没有更早的一帧可比，分不出是在动还是换了个地方。
+    if (!oldest && paint.key !== before.key) { scales.set(paint.index, 0); continue }
+    if (oldest && framePath >= ALWAYS_CONTINUOUS && Math.hypot(speedX - (before.x - oldest.x) / (olderGap - gap), speedY - (before.y - oldest.y) / (olderGap - gap)) > framePath * CONTINUITY) { scales.set(paint.index, 0); continue }
     const physical = framePath * exposure, size = Math.max(paint.width, paint.height), limit = size > 0 ? size * STREAK_LIMIT : Infinity
     const scale = physical > limit ? limit / physical : 1, distance = physical * scale
     reach = Math.max(reach, framePath + growth)
+    if (scale < 1) scales.set(paint.index, scale)
+    span = Math.max(span, distance + growth * exposure)
     // 边缘多走的路比整块位移还长，就是在变形。
     if (growth * exposure > Math.max(3, distance)) deforming = true
     if (distance < MOVING) continue
-    shrink = Math.min(shrink, scale)
     if (paint.clipped || paint.shadowed) deforming = true
     moves.set(paint.index, [speedX * exposure * scale, speedY * exposure * scale]); longest = Math.max(longest, distance)
   }
-  return { moves, paints: paints.map(paint => paint.index), deforming, jumped, longest, reach, shrink }
+  return { moves, scales, paints: paints.map(paint => paint.index), deforming, longest, reach, span }
 }
 
 // 只有几何是连续的；渐变色标、颜色、文字这些取 b 的。外插出的数字不能抛错：透明度越界会被忽略，半径为负会抛错。
@@ -176,9 +192,10 @@ const GEOMETRY_OPS = new Set(['moveTo', 'lineTo', 'quadraticCurveTo', 'bezierCur
 const NON_NEGATIVE: Record<string, readonly number[]> = { arc: [3], ellipse: [3, 4], arcTo: [5], roundRect: [5] }
 
 /** 两次录制逐条相同形状时，几何线性插值就是快门内任意时刻的指令，不必再跑作者代码。`amount` 可以略超出 0 到 1；图片、颜色等都按 b。 */
-export function authorInterpolateRecording(a: AuthorCanvasRecording, b: AuthorCanvasRecording, amount: number): AuthorCanvasRecording | undefined {
+export function authorInterpolateRecording(a: AuthorCanvasRecording, b: AuthorCanvasRecording, amountAt: number | ((op: number) => number)): AuthorCanvasRecording | undefined {
   if (a.ops.length !== b.ops.length) return undefined
   const ops: AuthorCanvasRecording['ops'] = []
+  let amount = typeof amountAt === 'number' ? amountAt : 1
   const mix = (left: unknown, right: unknown): unknown => {
     if (typeof left === 'number' && typeof right === 'number') { const value = left + (right - left) * amount; return Number.isFinite(value) ? value : right }
     const m = (left as { matrix?: number[] } | null)?.matrix, n = (right as { matrix?: number[] } | null)?.matrix
@@ -186,6 +203,7 @@ export function authorInterpolateRecording(a: AuthorCanvasRecording, b: AuthorCa
   }
   for (let index = 0; index < a.ops.length; index++) {
     const left = a.ops[index], right = b.ops[index], name = right[0] as string
+    if (typeof amountAt === 'function') amount = amountAt(index)
     if (left[0] !== name || left.length !== right.length) return undefined
     if (name === 'set' && right[1] === 'globalAlpha') { ops.push(['set', 'globalAlpha', Math.max(0, Math.min(1, mix(left[2], right[2]) as number))]); continue }
     if (!GEOMETRY_OPS.has(name)) { ops.push(right); continue }
@@ -194,6 +212,17 @@ export function authorInterpolateRecording(a: AuthorCanvasRecording, b: AuthorCa
     ops.push(op)
   }
   return { ...b, ops }
+}
+
+/**
+ * 快门内 `offset` 帧处的录制：每个绘制动作按自己的比例走，变换和路径指令跟着它后面那个绘制动作。
+ * 同一组里字限了长、卡片没限，字折行时不动而卡片照样糊，都靠这个。drawText 每个字有自己的变换；作者把一个变换共用给大小悬殊的内容时，按它后面第一个动作算。
+ */
+export function authorSampleRecording(previous: AuthorCanvasRecording, center: AuthorCanvasRecording, motion: Pick<AuthorPaintMotion, 'paints' | 'scales'>, offset: number, gap: number): AuthorCanvasRecording | undefined {
+  const scaleOf = new Float64Array(center.ops.length).fill(1)
+  let start = 0
+  for (const paint of motion.paints) { scaleOf.fill(motion.scales.get(paint) ?? 1, start, paint + 1); start = paint + 1 }
+  return authorInterpolateRecording(previous, center, op => 1 + offset * scaleOf[op] / gap)
 }
 
 /** 按绘制顺序切成静止段和运动段，每段单独栅格：运动的字才不会把压在下面的静止内容带走。段数有上限，多出来的并进最后一段。 */

@@ -3,7 +3,7 @@ import type { VideoEditClip, VideoEditComposition } from './document'
 import { evaluateVideoEditClip } from './keyframes'
 
 /*
- * 运动模糊（重要记录 019，时间线统一开关）：180° 快门，以当前帧为中心前后各四分之一帧，沿片段的变换动画取几次样，
+ * 运动模糊（重要记录 019，时间线统一开关）：180° 快门，在当前帧结束（前半帧到当前帧），沿片段的变换动画取几次样，拖影只留在运动方向的身后，
  * 合成器把这些样本平均后再叠到画面上。只看位置、缩放、旋转、锚点的关键帧；跟随、防抖带来的偏移在快门内视为不变。
  * 被主进程引用的可能：只用相对路径导入。
  */
@@ -18,6 +18,8 @@ const TRANSFORM_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY'] as 
 const MIN_TRAVEL_PX = 0.75
 /** 平均每隔多少像素取一次样，样本之间不出现可见的断层。 */
 const PX_PER_SAMPLE = 1.5
+/** 看紧贴当前帧之前的一小段：连续运动在这里走不了多远，走得多就是跳变。 */
+const HOLD_PROBE_FRAMES = .001
 
 /**
  * 渲染用的片段：带上快门内各取样时刻的变换与扫过的范围（画面比例坐标 [左, 上, 右, 下]），只在渲染时存在，不进文档。
@@ -41,16 +43,17 @@ export function videoEditMotionBlurSamples(document: Pick<VideoEditComposition, 
       ...(evaluated.scaleAspect !== undefined ? { scaleAspect: evaluated.scaleAspect } : {}),
     }
   }
-  const half = VIDEO_EDIT_MOTION_BLUR_SHUTTER / 2
-  const first = sample(-half), last = sample(half)
   const picture = videoEditClipPictureSize(document, source)
-  const travel = Math.max(...[[0, 0], [1, 0], [0, 1], [1, 1], [.5, .5]].map(([u, v]) => {
+  const travelBetween = (first: VideoEditClipPlacement, last: VideoEditClipPlacement): number => Math.max(...[[0, 0], [1, 0], [0, 1], [1, 1], [.5, .5]].map(([u, v]) => {
     const a = videoEditClipToFrame(first, picture, document, u, v), b = videoEditClipToFrame(last, picture, document, u, v)
     return Math.hypot((a.x - b.x) * document.width, (a.y - b.y) * document.height)
   }))
+  const last = sample(0), travel = travelBetween(sample(-VIDEO_EDIT_MOTION_BLUR_SHUTTER), last)
   if (!(travel >= MIN_TRAVEL_PX)) return undefined
+  // 定格关键帧正好在这一帧跳变：样本都早于当前帧，全取到旧位置，重构图就晚了一帧。跳变也不是运动，不模糊。
+  if (travelBetween(sample(-HOLD_PROBE_FRAMES), last) >= MIN_TRAVEL_PX && travelBetween(sample(-HOLD_PROBE_FRAMES), last) > travel * .5) return undefined
   const count = Math.min(maxSamples, Math.max(2, Math.ceil(travel / PX_PER_SAMPLE)))
-  return Array.from({ length: count }, (_, index) => sample(((index + .5) / count - .5) * VIDEO_EDIT_MOTION_BLUR_SHUTTER))
+  return Array.from({ length: count }, (_, index) => sample(((index + .5) / count - 1) * VIDEO_EDIT_MOTION_BLUR_SHUTTER))
 }
 
 /** 这些取样姿态扫过的画面范围（比例坐标，夹在画面内）；仿射变换下四个角的外包就是整层的外包。 */

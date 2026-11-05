@@ -1,4 +1,4 @@
-> 作者 API 18：没有位姿的图层也有运动模糊。宿主比较相邻帧的绘制指令，算出每个字、每个形状走了多远，不用多跑作者代码，内容没动就不花算力。只有连续的运动才拖影：文字折行时字跳到别处不算运动。拖影限制在内容自身大小的 0.35 倍以内，字不会拖成长线。动画写在 `draw(ctx, t)` 的 `t` 或 `info.time` 上都算。`motionBlur: false` 只关这一层。
+> 作者 API 18：没有位姿的图层也有运动模糊。宿主比较相邻帧的绘制指令，算出每个字、每个形状走了多远，不用多跑作者代码，内容没动就不花算力。只有连续的运动才拖影：文字折行时字跳到别处不算运动。字的拖影限制在自身大小的 0.35 倍以内，不会拖成长线；同一层里卡片这类大块内容照样拖得长。动画写在 `draw(ctx, t)` 的 `t` 或 `info.time` 上都算。`motionBlur: false` 只关这一层。
 > 作者 API 17：三维作者的 `host.time`（本场景源时间）、`host.space.material/environment`（标准材质与环境，实时与渲染方式一致）与元素轮廓 `outline()`。作者 API 16：三维作者的图片参数可引用时间线片段，`info.elements[键]` 给出它的位置与形状（见空间配方）。作者 API 15：真实几何用受管 createThree，宿主掌管相机、景深与曝光。其他入口仅显式 space:true 才获得 info.space。普通卡片中心生成一次；three 场景逐子时刻渲染。空间构图调用宿主能力，不手写投影、布局或景深。旧 API 按各自版本保留行为。见 [空间配方](recipes-3d.md)。
 
 # 作者接口：模块契约与内置库
@@ -46,7 +46,7 @@ export default {
 | `width` / `height` / `durationSeconds` | 可选的放置提示；实际画布尺寸与时间由宿主给出，不要假定等于提示值 |
 | `params` / `types` | 参数声明数组与自定义组件类型，见 parameter-types |
 | `frames` | 滤镜需要的相邻帧偏移（宿主帧单位，非零、不重复），见 author-shaders |
-| `motionBlur` | `{ shutter?, phase?, maxSamples? }`，layers 的运动曝光默认值 |
+| `motionBlur` | `{ shutter?, phase?, maxSamples? }`，layers 的运动曝光默认值；作者接口 18 起 `phase` 默认 `-shutter`，快门在当前帧结束，拖影只留在运动方向的身后 |
 | `frameKey` | 可选纯函数，声明这一帧画了什么，供预渲染复用；约定见 author-api-frame |
 | `dataFiles` | 可选工程相对路径数组；仅有 frameKey 时，这些非入口文件从代码身份中排除 |
 | 绘制入口 | `draw`、`layers`、`createWebGL`、`createWebGPU` 至少一个；`layers` 不能与 GPU 入口同时声明 |
@@ -74,10 +74,10 @@ layers(params, width, height, assets, info) => Layer[]
 | --- | --- | --- | --- |
 | three | 0.186.1 | v5 | `three`、`three/webgpu`、`three/tsl`；附加模块写 `three/addons/<子路径>.js`（同 `three/examples/jsm/…`，`.js` 不能省） |
 | opentype.js | 2.0.0 | v5 | `opentype.js`，只有具名导出：`import { parse } from "opentype.js"`（没有默认导出，字体字节读进来再 `parse`） |
-| henji-layout | 2.1.0 | v10 | `henji-layout/text`（`layoutText`、`drawText` 排版、字素动画与缓存绘制）、`henji-layout/flex`（`layoutBoxes` 盒子布局）、`henji-layout/table`（`layoutTable` 数字与文本表格）；见 author-text-motion |
+| henji-layout | 2.1.1 | v10 | `henji-layout/text`（`layoutText`、`drawText` 排版、字素动画与缓存绘制）、`henji-layout/flex`（`layoutBoxes` 盒子布局）、`henji-layout/table`（`layoutTable` 数字与文本表格）；见 author-text-motion |
 
 - 低于起始接口不能导入；另存新版本按当前作者接口编译。
-- 新库选兼容最新版；旧导入沿用记录，无记录用第一套。升级：`upgrade_video_edit_code_materials`、`upgradeLibraries:true`（指定素材、保留作者 API、改指可撤销；henji-layout 升到 2.0.2 后，`maxWidth` 配大于 1 的 `maxLines` 和 `fit` 会真正折行，写死 `bounds` 的素材要复核）。明确要升级作者接口时使用 `upgradeAuthorApi:true`，同时选择兼容库，返回实际 `apiVersion` 与 `libraries`；升级与改指共用一次撤销。新建素材默认用当前作者接口，文字、flex 与 table 统一使用 `henji-layout@2.1.0`。
+- 新库选兼容最新版；旧导入沿用记录，无记录用第一套。升级：`upgrade_video_edit_code_materials`、`upgradeLibraries:true`（指定素材、保留作者 API、改指可撤销；henji-layout 升到 2.0.2 后，`maxWidth` 配大于 1 的 `maxLines` 和 `fit` 会真正折行，写死 `bounds` 的素材要复核）。明确要升级作者接口时使用 `upgradeAuthorApi:true`，同时选择兼容库，返回实际 `apiVersion` 与 `libraries`；升级与改指共用一次撤销。新建素材默认用当前作者接口，文字、flex 与 table 统一使用 `henji-layout@2.1.1`。
 - 同一版本的库各片段共用一份实例，模块顶层不放会被别的片段看到的状态。
 - 类型检查按库的真实类型报错。three 接管宿主 WebGL 上下文见 [纵深与三维](recipes-3d.md) 的“用 three 画真实网格”。
 
