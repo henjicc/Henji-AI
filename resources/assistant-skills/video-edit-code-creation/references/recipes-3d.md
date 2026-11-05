@@ -25,7 +25,7 @@
 
 ## 真实几何与灯光（作者 API 15 起）
 
-用受管 `createThree(host)` 返回 `{scene, update, dispose?}`。作者只创建标准 three 内容，宿主掌管相机、渲染器、景深与曝光；不调用 render、setAnimationLoop 或 RAF。材质使用标准材质或节点材质，不使用 GLSL ShaderMaterial。相机、three/webgpu、three/tsl 必须来自同一冻结作者库。
+用受管 `createThree(host)` 返回 `{scene, update, dispose?}`。作者只创建标准 three 内容，宿主掌管相机、渲染器、景深与曝光；不调用 render、setAnimationLoop 或 RAF。材质使用标准材质或节点材质，不使用 GLSL ShaderMaterial。相机、three/webgpu、three/tsl 必须来自同一冻结作者库。`dispose` 只释放自己创建的几何体、材质和纹理；Sprite 的几何体等 three 内部共用的资源不要释放，宿主拦不住，会弄坏之后所有同类物体。
 
 ```ts
 import * as THREE from "three"
