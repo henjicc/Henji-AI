@@ -2,7 +2,7 @@ import { sharedTexture, type WebFrameMain } from 'electron'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { WebSourcePage } from './page'
 import { WebCacheSubmissions } from './submissions'
-import { WebSnapshotFrames } from './snapshotFrames'
+import { WebSnapshotFrames, WebSnapshotUnsupported } from './snapshotFrames'
 vi.mock('./session', () => ({ webSourceSession: () => ({ partition: 'test', observe: async () => undefined, release: () => undefined }) }))
 import { WEB_TEXT_SAMPLER_VERSION } from '../../../../src/core/videoEdit/webTextGeometry'
 
@@ -11,6 +11,7 @@ const boundary = vi.hoisted(() => {
     setWindowOpenHandler: vi.fn(), on: vi.fn(), setFrameRate: vi.fn(),
     isDestroyed: () => false, isPainting: () => true, startPainting: vi.fn(), stopPainting: vi.fn(),
     loadURL: vi.fn(async () => undefined),
+    insertCSS: vi.fn(async () => 'css'),
     debugger: { isAttached: () => true, sendCommand: vi.fn(async () => undefined) },
     executeJavaScript: vi.fn(async (_code: string) => ({})),
     // 快照身份区原像素由单独一次脚本领取；用例只模拟快照脚本，把它返回的 restore 当作这次领取的结果。
@@ -65,7 +66,7 @@ beforeEach(async () => {
   boundary.contents.executeJavaScript.mockImplementation(async () => ({}))
   boundary.isolated.mockImplementation(async (_world, [{ code }]) => {
     if (code.includes('requestAdapter')) return { captureMode: 'compositor', fallbackReason: 'missing-stage' }
-    if (code.includes('__henjiWebSourceMark')) {
+    if (code.includes('__henjiWebSourceMark') && code.includes('i < 2')) {
       const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)?.[1]
       paint({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 }, metadata: { captureUpdateRect: { x: 0, y: 0, width: 1, height: 1 } } } } })
     }
@@ -254,6 +255,142 @@ it('普通绘制低倍率时取帧标记仍覆盖输出像素，不会等待到�
   const captured = expect(page.capture(1, 'small', undefined, { scale: .125 })).resolves.toMatchObject({ pixelWidth: 12, pixelHeight: 12 })
   await vi.advanceTimersByTimeAsync(3200)
   await captured
+})
+
+it('普通绘制等 seek 的内容激活后才打标记：重内容跳远时不把旧画面当成这一刻', async () => {
+  page.capturePath = { captureMode: 'compositor', fallbackReason: null }
+  // 合成器模型：seek 之后第二次提交才能完成（要等上一次激活），激活前画出来的都是旧画面。
+  let commits = 0
+  const mark = { isConnected: true, style: {}, set width(_value: number) { commits++ }, height: 0, getContext: () => ({ clearRect: () => undefined }) }
+  const runScript = (code: string): Promise<unknown> => new Function('window', 'document', 'requestAnimationFrame', `return ${code}`)({ __henjiWebSourceMark: mark }, {}, (resolve: () => void) => resolve()) as Promise<unknown>
+  boundary.isolated.mockImplementation(async (_world, [{ code }]) => {
+    if (!code.includes('__henjiWebSourceMark')) return null
+    await runScript(code)
+    if (code.includes('i < 2')) {
+      const paint = boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)?.[1]
+      paint({ texture: { release: boundary.release, textureInfo: { id: commits >= 2 ? 'fresh' : 'stale', codedSize: { width: 100, height: 100 }, metadata: { captureUpdateRect: { x: 0, y: 0, width: 100, height: 100 } } } } })
+    }
+    return null
+  })
+  const imported = vi.spyOn(sharedTexture, 'importSharedTexture')
+  const captured = page.capture(1, 'far', undefined)
+  await vi.advanceTimersByTimeAsync(50)
+  await captured
+  expect(imported.mock.calls[0][0].textureInfo).toMatchObject({ id: 'fresh' })
+})
+
+it('普通绘制的视口跟随页面滚动，滚动不变不重复设置，重新载入后归零', async () => {
+  page.capturePath = { captureMode: 'compositor', fallbackReason: null }
+  const viewports = (): Array<{ x: number; y: number }> => (boundary.contents.debugger.sendCommand.mock.calls as unknown as Array<[string, { viewport: { x: number; y: number } }]>).map(([, params]) => params.viewport)
+  const execute = boundary.isolated.getMockImplementation()!
+  // 页面可以把滚动延后到 seek 之后的动画帧：滚动位置按激活之后读到的算。
+  boundary.isolated.mockImplementation(async (world, scripts) => scripts[0].code.includes('return { boxes, scroll') ? { boxes: null, scroll: { x: 0, y: 5000 } } : execute(world, scripts))
+  const before = viewports().length
+  for (const [time, ticket] of [[1, 'scrolled'], [2, 'same']] as const) {
+    const captured = page.capture(time, ticket, undefined)
+    await vi.advanceTimersByTimeAsync(200)
+    await captured
+  }
+  expect(viewports().slice(before)).toMatchObject([{ x: 0, y: 5000 }])
+  await page.reload('next')
+  expect(viewports().at(-1)).toMatchObject({ x: 0, y: 0 })
+})
+
+it('普通绘制空闲时不停绘：取帧余波不算，页面自己在动才停，恢复时先等重发的上一幅过去', async () => {
+  page.capturePath = { captureMode: 'compositor', fallbackReason: null }
+  const paint = (): void => boundary.contents.on.mock.calls.filter(([event]) => event === 'paint').at(-1)?.[1]({ texture: { release: boundary.release, textureInfo: { codedSize: { width: 100, height: 100 }, metadata: { captureUpdateRect: { x: 0, y: 0, width: 100, height: 100 } } } } })
+  await page.capture(1, 'still', undefined)
+  paint()
+  expect(boundary.contents.stopPainting).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(33)
+  const held = boundary.release.mock.calls.length
+  paint()
+  expect(boundary.release.mock.calls.length).toBe(held + 1)
+  expect(boundary.contents.stopPainting).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(100)
+  paint()
+  expect(boundary.contents.stopPainting).toHaveBeenCalledOnce()
+  const isPainting = vi.spyOn(boundary.contents, 'isPainting').mockReturnValue(false)
+  const seeks = (): number => boundary.contents.executeJavaScript.mock.calls.filter(([code]) => code.includes('page.seek(2)')).length
+  const captured = page.capture(2, 'resume', undefined)
+  await vi.advanceTimersByTimeAsync(10)
+  expect(boundary.contents.startPainting).toHaveBeenCalled()
+  expect(seeks()).toBe(0)
+  paint()
+  await vi.advanceTimersByTimeAsync(5)
+  expect(seeks()).toBe(1)
+  isPainting.mockRestore()
+  await captured
+})
+
+it('普通绘制平滑滚动跟到稳定才打标记；一直在滚就有上界并标为没停住', async () => {
+  page.capturePath = { captureMode: 'compositor', fallbackReason: null }
+  const viewports = (): Array<{ y: number }> => (boundary.contents.debugger.sendCommand.mock.calls as unknown as Array<[string, { viewport: { y: number } }]>).map(([, params]) => params.viewport)
+  const execute = boundary.isolated.getMockImplementation()!
+  let y = 0, ceiling = 300
+  boundary.isolated.mockImplementation(async (world, scripts) => scripts[0].code.includes('return { boxes, scroll') ? { boxes: null, scroll: { x: 0, y: y = Math.min(ceiling, y + 100) } } : execute(world, scripts))
+  const before = viewports().length
+  const settled = page.capture(1, 'smooth', undefined)
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(await settled).toMatchObject({ unsettled: false })
+  expect(viewports().slice(before).map(viewport => viewport.y)).toEqual([100, 200, 300])
+  ceiling = Infinity
+  const rounds = viewports().length
+  const endless = page.capture(2, 'endless', undefined)
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(await endless).toMatchObject({ unsettled: true })
+  expect(viewports().length - rounds).toBe(8)
+})
+
+it('普通绘制标记发出之后页面才滚走：超时后挪取景重打一次，并标为没停住；没滚走才报错', async () => {
+  page.capturePath = { captureMode: 'compositor', fallbackReason: null }
+  const execute = boundary.isolated.getMockImplementation()!
+  let marks = 0, scroll = 0
+  boundary.isolated.mockImplementation(async (world, scripts) => {
+    if (!scripts[0].code.includes('i < 2')) return execute(world, scripts)
+    if (++marks === 3) return execute(world, scripts)
+    return { scroll: { x: 0, y: scroll } }
+  })
+  const captured = page.capture(1, 'moved', undefined)
+  await vi.advanceTimersByTimeAsync(2900)
+  scroll = 700
+  await vi.advanceTimersByTimeAsync(800)
+  expect(await captured).toMatchObject({ unsettled: true })
+  boundary.isolated.mockImplementation(async (_world, scripts) => scripts[0].code.includes('i < 2') ? { scroll: { x: 0, y: scroll } } : null)
+  const stuck = expect(page.capture(2, 'stuck', undefined)).rejects.toThrow('网页取帧超时')
+  await vi.advanceTimersByTimeAsync(3500)
+  await stuck
+})
+
+it('普通绘制打完标记发现页面又滚走：挪取景后重新打标记，不等到超时', async () => {
+  page.capturePath = { captureMode: 'compositor', fallbackReason: null }
+  const execute = boundary.isolated.getMockImplementation()!
+  let marks = 0
+  boundary.isolated.mockImplementation(async (world, scripts) => {
+    if (!scripts[0].code.includes('i < 2')) return execute(world, scripts)
+    // 第一次标记时取景还没跟上，标记不在画面里，出不了画面。
+    if (++marks === 1) return { scroll: { x: 0, y: 400 } }
+    await execute(world, scripts)
+    return { scroll: { x: 0, y: 400 } }
+  })
+  const captured = page.capture(1, 'late', undefined)
+  await vi.advanceTimersByTimeAsync(600)
+  expect(await captured).toMatchObject({ unsettled: false })
+  expect(marks).toBe(2)
+})
+
+it('快照因文档滚动画不对时，可靠帧报不支持，不走搬迁重试', async () => {
+  const submissions = new WebCacheSubmissions({ info: vi.fn() }, { acquire: async () => ({ current: () => true, release: async () => undefined }) } as never)
+  const recording = new WebSourcePage('recording', { id: 1, mainFrame: {} as WebFrameMain, isDestroyed: () => false, send: vi.fn(), onGone: () => () => undefined },
+    'route', { root: 'site' }, { width: 100, height: 100, region: [0, 0, 100, 100], scale: 1 }, 'hash', vi.fn(), boundary.fallback, submissions)
+  await recording.open()
+  recording.capturePath = { captureMode: 'html-in-canvas', fallbackReason: null }
+  const prepares = (): number => boundary.isolated.mock.calls.filter(([, [{ code }]]) => code.includes('requestAdapter')).length
+  const before = prepares()
+  boundary.isolated.mockImplementation(async (_world, [{ code }]) => { if (code.includes('const paint =')) throw new Error('网页文档滚动需要普通绘制'); return null })
+  await expect(recording.captureReliable(1, 'scrolled', { readSnapshot: vi.fn() })).rejects.toBeInstanceOf(WebSnapshotUnsupported)
+  expect(prepares()).toBe(before)
+  recording.close()
 })
 
 it.each([true, false])('清理完成后才切换普通绘制并告警，自动舞台 %s 决定是否重新定位', async automatic => {

@@ -41,7 +41,7 @@ export function webCacheVariantKey(contentHash: string, variant: WebCacheVariant
   const { width, height, region, scale } = variant.view
   return crypto.createHash('sha256').update(JSON.stringify({ contentHash, width, height, region, scale,
     dpr: variant.deviceScaleFactor, grid: variant.grid, environment: variant.environmentSignature, chromium: variant.chromium,
-    capture: 'html-in-canvas-identity-restore', encoding: 'hevc444-8-constqp0-bt709-limited-srgb' })).digest('hex')
+    capture: 'html-in-canvas-identity-restore-2', encoding: 'hevc444-8-constqp0-bt709-limited-srgb' })).digest('hex')
 }
 
 /**

@@ -10,7 +10,7 @@ import { waitWebCacheTask, type WebCacheSubmissions } from './submissions'
 import { unavailableWebText, WEB_TEXT_SAMPLER_VERSION, type WebTextCapture } from '../../../../src/core/videoEdit/webTextGeometry'
 import { WebTextCaptureError, TEXT_GEOMETRY_PREPARE_SCRIPT, textGeometryPaintSetup, validateWebTextResults } from './textGeometry'
 import { WEB_SOURCE_ENTRY_URL, WEB_SOURCE_ORIGIN, type WebSourceFolder } from './site'
-import { WebSnapshotFrames, WebSnapshotMiss } from './snapshotFrames'
+import { WebSnapshotFrames, WebSnapshotMiss, WebSnapshotUnsupported } from './snapshotFrames'
 import { createMainLogger } from '../logging/main-logger'
 
 const LOAD_TIMEOUT_MS = 30_000
@@ -21,7 +21,7 @@ const SEEK_TIMEOUT_MS = 30_000
 const RELOAD_RETRY_MS = 2_000
 /** 标记帧的画面通常几毫秒内到达；超过这么久仍没有任何新画面算取帧失败。 */
 const PAINT_TIMEOUT_MS = 3_000
-/** 页面换绘制链路后，先接完仍在传输的画面；这段等待只用于准备与降级，不进入逐帧取图。 */
+/** 页面换绘制链路或挪动取景后，先接完仍在传输的画面；这段等待只用于准备、降级与文档滚动，不进入普通的逐帧取图。 */
 const PREPARE_QUIET_MS = 100
 const PREPARE_BUSY_MS = 500
 /**
@@ -31,7 +31,15 @@ const PREPARE_BUSY_MS = 500
 const MARK_QUIET_MS = 20
 /** 过了这么久画面仍在不停变化（页面没按约定停住），取最新一幅盖住标记的画面。 */
 const MARK_BUSY_MS = 300
-/** 页面帧率上限：seek 后等的几帧与标记帧都按它推进，越高取帧越快；取帧间隔里停止绘制。 */
+/** 取帧结束这么久以后还有新画面，就是页面在自己动，不是取帧的余波。 */
+const IDLE_PAINT_GRACE_MS = 100
+/** 恢复绘制重发上一幅通常十几毫秒送到；等到它再动页面。 */
+const RESEND_WAIT_MS = 50
+/** 一轮跟随最多等 500 毫秒，跟这么多轮还在滚就按没停住的页面取帧。 */
+const SCROLL_FOLLOW_ROUNDS = 8
+/** 快照的显示列表按视口裁剪，文档滚走后舞台内容不再录制，画出来只剩固定定位的元素。 */
+const DOCUMENT_SCROLL_REASON = '网页文档滚动需要普通绘制'
+/** 页面帧率上限：seek 后等的几帧与标记帧都按它推进，越高取帧越快。 */
 const FRAME_RATE = 240
 /** 浏览器借出的共享纹理池很小，取帧过程中只留最新几幅。 */
 const HELD_PAINTS = 3
@@ -185,6 +193,7 @@ function snapshotPrepareScript(view: CodeWebView, frameToken?: string): string {
       context.configure({ device, format: 'rgba8unorm', alphaMode: 'opaque', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC })
       Object.assign(state, { stage, container, output, context, device, copy, checkFrame(end = false) {
         checkTopLayer()
+        if (window.scrollX || window.scrollY) throw new Error(${JSON.stringify(DOCUMENT_SCROLL_REASON)})
         if (end) container.removeAttribute('data-henji-frame-active')
         if (container.hasAttribute('data-henji-script-error')) throw new Error(container.getAttribute('data-henji-script-error'))
       } })
@@ -396,35 +405,54 @@ function boxesScript(selectors: readonly string[]): string {
   })()`
 }
 
-/**
- * 隔离世界：等三帧，再按选择器量元素（页面没实现 boxes 时）。等三帧的依据（Electron 44 离屏页面实测）：改动后只等两帧，
- * 约三分之一的取帧还是上一刻的画面；三帧时数百次随机跳转全部正确。
- */
-function settleScript(selectors: readonly string[] | undefined): string {
-  return `(async () => {
+/** 隔离世界：让出三帧，页面延后到 requestAnimationFrame 里的 DOM 改动先做完。 */
+const SETTLE_SCRIPT = `(async () => {
     for (let i = 0; i < 3; i++) await new Promise(resolve => requestAnimationFrame(resolve))
-    ${measureBoxesScript(selectors)}
+  })()`
+
+/** 取景左上角的透明小画布：每清一次像素不变，但这一帧必须提交，并带着只有这一点的损坏区。 */
+function touchMarkScript({ region, scale }: CodeWebView): string {
+  // 损坏区至少覆盖一个输出像素，低倍率下亚像素透明画布不会触发新的 paint。
+  const side = Math.max(1, Math.ceil(1 / scale))
+  return `const touchMark = () => {
+      let mark = window.__henjiWebSourceMark
+      if (!mark || !mark.isConnected) {
+        mark = document.createElement('canvas'); mark.setAttribute('aria-hidden', 'true')
+        document.documentElement.appendChild(mark); window.__henjiWebSourceMark = mark
+      }
+      mark.width = ${side}; mark.height = ${side}
+      mark.style.cssText = 'all:initial!important;display:block!important;position:fixed!important;left:${region[0]}px!important;top:${region[1]}px!important;width:${side}px!important;height:${side}px!important;pointer-events:none!important;z-index:2147483647!important'
+      mark.getContext('2d').clearRect(0, 0, ${side}, ${side})
+    }`
+}
+
+/**
+ * 隔离世界：等 seek 的内容真正上屏，再按选择器量元素（页面没实现 boxes 时）并读滚动位置。可见区域栅格完之前新内容不会激活，
+ * 这期间合成器画出来的仍是旧画面；后一次提交要等前一次激活，所以前两帧都碰一下标记强制提交，第三帧到来时 seek 的内容已经激活。
+ * 只等 requestAnimationFrame 不够：没有改动的帧不提交，也就不等栅格，重页面跳远时会把旧画面当成这一刻。
+ */
+function activationScript(view: CodeWebView, selectors: readonly string[] | undefined): string {
+  return `(async () => {
+    ${touchMarkScript(view)}
+    for (let i = 0; i < 3; i++) {
+      touchMark()
+      await new Promise(resolve => requestAnimationFrame(resolve))
+    }
+    const boxes = (() => { ${measureBoxesScript(selectors)} })()
+    return { boxes, scroll: { x: window.scrollX, y: window.scrollY } }
   })()`
 }
 
 /**
- * 隔离世界里的标记帧：取景左上角一个 1×1 的透明画布清一次。像素不变，但这一帧带着只有这一点的损坏区，
- * 共享纹理的 paint 按损坏区出画面（`invalidate()` 在共享纹理模式下给不出纹理），据此认出 seek 之后的那一幅。
+ * 隔离世界里的标记帧：共享纹理的 paint 按损坏区出画面（`invalidate()` 在共享纹理模式下给不出纹理），
+ * 据此认出 seek 之后的那一幅。
  */
-function markScript({ region, scale }: CodeWebView): string {
-  // 损坏区至少覆盖一个输出像素，低倍率下亚像素透明画布不会触发新的 paint。
-  const side = Math.max(1, Math.ceil(1 / scale))
+function markScript(view: CodeWebView): string {
   return `(async () => {
-    let mark = window.__henjiWebSourceMark
-    if (!mark || !mark.isConnected) {
-      mark = document.createElement('canvas'); mark.setAttribute('aria-hidden', 'true')
-      document.documentElement.appendChild(mark); window.__henjiWebSourceMark = mark
-    }
-    mark.width = ${side}; mark.height = ${side}
-    mark.style.cssText = 'all:initial!important;display:block!important;position:fixed!important;left:${region[0]}px!important;top:${region[1]}px!important;width:${side}px!important;height:${side}px!important;pointer-events:none!important;z-index:2147483647!important'
-    mark.getContext('2d').clearRect(0, 0, ${side}, ${side})
+    ${touchMarkScript(view)}
+    touchMark()
     for (let i = 0; i < 2; i++) await new Promise(resolve => requestAnimationFrame(resolve))
-    return true
+    return { scroll: { x: window.scrollX, y: window.scrollY } }
   })()`
 }
 
@@ -491,6 +519,9 @@ export class WebSourcePage {
   private readonly jobs = new Map<string, CaptureJob>()
   private deviceScale: number
   private lastSeekTime?: number
+  private viewportScroll = { x: 0, y: 0 }
+  private loading = false
+  private lastBusyPaintAt = 0
   private rendererLifetime = new AbortController()
   private readonly pageLifetime = new AbortController()
   private snapshotFailure?: string
@@ -568,6 +599,16 @@ export class WebSourcePage {
       const size = texture.textureInfo.codedSize
       if (this.closed || this.window !== window || !size.width || !size.height) { texture.release(); return }
       this.lastPaintAt = Date.now()
+      if (this.capturePath.captureMode !== 'html-in-canvas') {
+        if (this.jobs.size || this.loading) this.lastBusyPaintAt = this.lastPaintAt
+        else {
+          // 没人取帧时的画面没有用处。页面自己在动就停止绘制，每幅都要走共享纹理与 IPC；
+          // 停得住的页面没有改动就没有画面，一直开着，免得恢复绘制重发上一幅。
+          texture.release()
+          if (this.lastPaintAt - this.lastBusyPaintAt >= IDLE_PAINT_GRACE_MS && contents.isPainting()) contents.stopPainting()
+          return
+        }
+      }
       if (this.snapshotFrames && this.capturePath.captureMode === 'html-in-canvas') {
         if (this.coversOutput(texture)) this.snapshotFrames.accept(texture)
         else texture.release()
@@ -592,6 +633,12 @@ export class WebSourcePage {
 
   /** 载入（或重新载入）网页并等它就绪；页面进程退出过或调试会话断了，先回到空白页重新接上视口设置。 */
   private async load(signal?: AbortSignal): Promise<void> {
+    this.loading = true
+    try { await this.loadPage(signal) }
+    finally { this.loading = false }
+  }
+
+  private async loadPage(signal?: AbortSignal): Promise<void> {
     this.rendererLifetime.abort()
     this.snapshotFrames?.close(); this.snapshotFrames = undefined
     const contents = this.window!.webContents
@@ -600,12 +647,15 @@ export class WebSourcePage {
       await this.submitPage(() => withTimeout(contents.loadURL('about:blank'), LOAD_TIMEOUT_MS, '网页来源页面启动超时'), signal)
       if (!contents.debugger.isAttached()) contents.debugger.attach('1.3')
     }
+    this.viewportScroll = { x: 0, y: 0 }
     await this.submitPage(() => this.configureViewport(), signal)
     await this.submitPage(() => webSourceSession(this.folder.root).observe(contents), signal)
     await this.submitPage(() => {
       if (!contents.isPainting()) contents.startPainting()
       return withTimeout(contents.loadURL(WEB_SOURCE_ENTRY_URL), LOAD_TIMEOUT_MS, '网页加载超时')
     }, signal)
+    // 平滑滚动是页面时间之外的动画：seek 之后要立刻到位，取帧才确定。
+    await this.submitPage(() => withTimeout(contents.insertCSS('* { scroll-behavior: auto !important }', { cssOrigin: 'user' }), LOAD_TIMEOUT_MS, '网页样式设置超时'), signal)
     this.duration = await this.submitPage(() => withTimeout(contents.executeJavaScript(READY_SCRIPT, false) as Promise<number | null>, READY_TIMEOUT_MS, '网页没有在 30 秒内就绪（window.henjiWeb.ready）'), signal)
     this.stale = undefined
     this.lastSeekTime = undefined
@@ -633,8 +683,6 @@ export class WebSourcePage {
     else this.releasePaints()
     if (this.stale) throw new Error('网页来源准备未完成，需要重新载入')
     this.rendererLifetime = new AbortController()
-    // 快照只在复制时更新输出；保持接收，避免恢复绘制额外重发上一幅画面。
-    if (this.capturePath.captureMode !== 'html-in-canvas') contents.stopPainting()
   }
 
   private async prepareSnapshot(signal?: AbortSignal, frameToken?: string): Promise<SnapshotPreparation> {
@@ -649,10 +697,25 @@ export class WebSourcePage {
 
   private async prepareAfterSeek(job: CaptureJob): Promise<void> {
     // 延后的 rAF 也必须在原 DOM 中完成；否则重新搬迁仍会打断这一帧的脚本。
-    await this.submit(job, () => withTimeout(this.window!.webContents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: settleScript(undefined) }], false), SEEK_TIMEOUT_MS, '网页没有画出新画面'))
+    await this.submit(job, () => withTimeout(this.window!.webContents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: SETTLE_SCRIPT }], false), SEEK_TIMEOUT_MS, '网页没有画出新画面'))
     await this.prepareSnapshot(job.signal, crypto.randomUUID())
     if (this.capturePath.captureMode !== 'html-in-canvas') throw new Error('网页缓存要求 html-in-canvas 快照：' + this.capturePath.fallbackReason)
     await this.drainPaints()
+  }
+
+  /**
+   * 视口覆盖按文档坐标钉住可见区域，不随页面滚动；不跟上时远处滚动的内容永远画不到，
+   * 窗口露出黑底、标记也出不了画面，所以页面滚动后把取景原点一起挪过去。返回是否挪动。
+   */
+  private async followScroll(job: CaptureJob, scroll: { x: number; y: number } | undefined): Promise<boolean> {
+    if (!scroll || scroll.x === this.viewportScroll.x && scroll.y === this.viewportScroll.y) return false
+    const previous = this.viewportScroll
+    this.viewportScroll = scroll
+    try { await this.submit(job, () => this.configureViewport()) }
+    catch (error) { this.viewportScroll = previous; throw error }
+    // 视口设置与页面脚本走不同通道，返回时页面可能还没用上：等它画完，免得挪动前露出的黑底被当成这一幅。普通绘制的上一幅此时已领走。
+    await this.drainPaints()
+    return true
   }
 
   private async configureViewport(): Promise<void> {
@@ -661,7 +724,7 @@ export class WebSourcePage {
     this.window!.setContentSize(Math.max(1, Math.ceil(region[2] * ratio)), Math.max(1, Math.ceil(region[3] * ratio)))
     await withTimeout(this.window!.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
       width: this.view.width, height: this.view.height, deviceScaleFactor: this.deviceScale, mobile: false,
-      viewport: { x: region[0] * this.deviceScale, y: region[1] * this.deviceScale, width: region[2], height: region[3], scale: ratio },
+      viewport: { x: (region[0] + this.viewportScroll.x) * this.deviceScale, y: (region[1] + this.viewportScroll.y) * this.deviceScale, width: region[2], height: region[3], scale: ratio },
     }), LOAD_TIMEOUT_MS, '网页来源页面没有响应视口设置')
   }
 
@@ -878,8 +941,8 @@ export class WebSourcePage {
     const contents = this.window!.webContents
     try {
       const from = this.lastSeekTime
-      await this.submit(job, () => {
-        if (!contents.isPainting()) contents.startPainting()
+      await this.submit(job, async () => {
+        if (!contents.isPainting()) await this.resumePainting(contents)
         return this.pageScript(seekScript(time), `网页 seek(${time}) 超过 ${SEEK_TIMEOUT_MS / 1000} 秒没有完成（上次完成 ${from ?? '未取帧'}，${from === undefined ? '首次定位' : time < from ? '向后跳转' : '向前推进'}）`)
       })
       this.lastSeekTime = time
@@ -893,6 +956,19 @@ export class WebSourcePage {
         contents.forcefullyCrashRenderer()
       }
       throw error
+    }
+  }
+
+  /** 恢复绘制会重发上一幅，晚于标记送到就会被当成这一刻，所以先等它过去再动页面。 */
+  private async resumePainting(contents: Electron.WebContents): Promise<void> {
+    const seen = this.seq, until = Date.now() + RESEND_WAIT_MS
+    contents.startPainting()
+    while (this.seq === seen && Date.now() < until && !this.closed) {
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, until - Date.now())
+        this.wake = () => { clearTimeout(timer); resolve() }
+      })
+      this.wake = undefined
     }
   }
 
@@ -949,6 +1025,7 @@ export class WebSourcePage {
           if (job.cancelled) return undefined
           if (error instanceof WebSnapshotMiss) throw error
           if (this.closed || this.window!.isDestroyed() || contents.isDestroyed() || this.stale === 'gone') throw error
+          if (identity && error instanceof Error && error.message.includes(DOCUMENT_SCROLL_REASON)) throw new WebSnapshotUnsupported(DOCUMENT_SCROLL_REASON, { cause: error })
           // 下一次 seek 已开始时不能在同一个 DOM 上重画上一刻。收口为重载回退，阻止迟到脚本污染下一幅。
           if (advanced) {
             this.snapshotFailure = error instanceof Error ? error.message : String(error)
@@ -983,16 +1060,38 @@ export class WebSourcePage {
           return { texture: snapshot.texture, restore: snapshot.restore, boxes: selectors ? webSourceBoxes(seeked.boxes ?? snapshot.measured, selectors) : null, unsettled: false }
         }
       }
-      const measured = await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: settleScript(measure) }], false), SEEK_TIMEOUT_MS, '网页没有画出新画面')
-      if (job.cancelled || this.closed) return undefined
-      const mark = this.seq
-      await withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: markScript(this.view) }], false), SEEK_TIMEOUT_MS, '网页没有响应取帧标记')
-      const { texture, unsettled } = await this.markedPaint(mark)
-      return { texture, boxes: selectors ? webSourceBoxes(seeked.boxes ?? measured, selectors) : null, ...(wantsText ? { text: { ...textIdentity, samplerVersion: WEB_TEXT_SAMPLER_VERSION, results: unavailableWebText(textSelectors!, 'capture-path'), sampleMs: 0, serializationMs: 0, bytes: 0 } } : {}), unsettled }
+      const activate = (): Promise<{ boxes: unknown; scroll: { x: number; y: number } } | null> => withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: activationScript(this.view, measure) }], false), SEEK_TIMEOUT_MS, '网页没有画出新画面')
+      const markPage = (): Promise<{ scroll: { x: number; y: number } } | null> => withTimeout(contents.executeJavaScriptInIsolatedWorld(HOST_WORLD, [{ code: markScript(this.view) }], false), SEEK_TIMEOUT_MS, '网页没有响应取帧标记')
+      // 延后或脚本发起的平滑滚动时，一轮跟随之后位置还会变。打完标记再核对一次：取景落后时标记不在画面里，也就等不到这一幅。
+      let activated: Awaited<ReturnType<typeof activate>> = null
+      let mark = this.seq
+      let scrolling = true
+      for (let round = 0; scrolling && round < SCROLL_FOLLOW_ROUNDS; round++) {
+        activated = await activate()
+        if (job.cancelled || this.closed) return undefined
+        if (await this.followScroll(job, activated?.scroll)) continue
+        mark = this.seq
+        scrolling = await this.followScroll(job, (await markPage())?.scroll)
+        if (job.cancelled || this.closed) return undefined
+      }
+      if (scrolling) { mark = this.seq; await markPage() }
+      let painted: Awaited<ReturnType<WebSourcePage['markedPaint']>> | undefined
+      for (let round = 0; !painted; round++) {
+        try { painted = await this.markedPaint(mark) }
+        catch (error) {
+          if (this.closed || this.stale || round >= SCROLL_FOLLOW_ROUNDS) throw error
+          // 标记发出之后页面才滚走时，画面里既没有标记也没有新内容；挪过去重打一次，真没有画面才报错。
+          scrolling = true
+          if (!await this.followScroll(job, (await markPage())?.scroll)) throw error
+          mark = this.seq
+          await markPage()
+        }
+      }
+      const { texture } = painted, unsettled = painted.unsettled || scrolling
+      return { texture, boxes: selectors ? webSourceBoxes(seeked.boxes ?? activated?.boxes, selectors) : null, ...(wantsText ? { text: { ...textIdentity, samplerVersion: WEB_TEXT_SAMPLER_VERSION, results: unavailableWebText(textSelectors!, 'capture-path'), sampleMs: 0, serializationMs: 0, bytes: 0 } } : {}), unsettled }
     } finally {
       // 下一次 seek 尚未领取绘制锁，不能释放上一幅仍在等待的纹理。
       if (!this.snapshotFrames) await previousPaint.catch(() => undefined)
-      if (!this.closed && !contents.isDestroyed() && this.capturePath.captureMode !== 'html-in-canvas') contents.stopPainting()
       if (!this.snapshotFrames || this.capturePath.captureMode !== 'html-in-canvas') this.releasePaints()
     }
   }
@@ -1030,8 +1129,6 @@ export class WebSourcePage {
     if (disposed?.reloadRequired) {
       this.snapshotFailure = reason
       await this.loadRecording(signal)
-      // load 在普通绘制准备结束后停止绘制，而当前帧仍要完成重定位与标记。
-      contents.startPainting()
     }
     return disposed?.automatic === true
   }

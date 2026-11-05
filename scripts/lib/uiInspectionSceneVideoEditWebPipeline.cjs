@@ -44,8 +44,11 @@ function createVideoEditWebPipelineScene() {
       await build({ entryPoints: [entry], bundle: true, platform: 'node', format: 'cjs', packages: 'external', outfile: path.join(output, 'main/probe.cjs') })
       await build({ entryPoints: [entry], bundle: true, platform: 'node', format: 'cjs', packages: 'external', outfile: path.join(output, 'main/probe-head.cjs'), plugins: [headSourcePlugin(headRoot)] })
       await build({ entryPoints: [path.join(ROOT, 'scripts/lib/webSourcePipelineReceiver.ts')], bundle: true, platform: 'browser', format: 'cjs', external: ['electron'], outfile: path.join(output, 'receiver.cjs') })
-      const run = (bundle, mode) => app.evaluate(async (_electron, input) => process.mainModule.require(input.bundle).webSourcePipelineProbe(input.output, input.mode),
-        { bundle: path.join(output, 'main', bundle), output, mode })
+      // 两个包各带一份读回窗口的启动应答；同步应答只取第一个监听，后跑的包读回窗口起不来，会退回串行、测不到流水线。
+      const run = (bundle, mode) => app.evaluate(async ({ ipcMain }, input) => {
+        ipcMain.removeAllListeners('web-replay:boot')
+        return process.mainModule.require(input.bundle).webSourcePipelineProbe(input.output, input.mode)
+      }, { bundle: path.join(output, 'main', bundle), output, mode })
       const baseline = await run('probe-head.cjs', 'baseline')
       const report = await run('probe.cjs', 'pipeline')
       fs.writeFileSync(path.join(output, 'summary.json'), JSON.stringify({ baseline, pipeline: report }, null, 2))

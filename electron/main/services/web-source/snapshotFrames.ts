@@ -1,5 +1,8 @@
 import type { OffscreenSharedTexture } from 'electron'
 
+/** 这个页面的状态快照画不对也补救不了：不要重录，交回实时取帧。 */
+export class WebSnapshotUnsupported extends Error {}
+
 export class WebSnapshotMiss extends Error {
   constructor() { super('网页快照被合并，重新取这一帧'); this.name = 'WebSnapshotMiss' }
 }

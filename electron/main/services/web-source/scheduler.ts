@@ -10,6 +10,7 @@ import type { WebCacheLocks } from './locks'
 import type { WebSourcePage } from './page'
 import { publishWebTimeSegment, webCacheVariantKey } from './publication'
 import { WebCacheRecordingSlot, WebCacheOverlap, WebCacheOverlapMismatch, webCacheFrameEvidence } from './recording'
+import { WebSnapshotUnsupported } from './snapshotFrames'
 import type { WebCacheRegistration, WebCacheRegistrations } from './registration'
 import { WebCacheSubmissions } from './submissions'
 
@@ -60,6 +61,7 @@ export class WebCacheScheduler {
   private slots = 1
   private growAfter = 0
   private readonly sequential = new WeakSet<WebCacheRegistration['batch']>()
+  private readonly unsupported = new WeakSet<WebCacheRegistration['batch']>()
 
   constructor(private readonly options: SchedulerOptions) { this.submissions = new WebCacheSubmissions(options.logger, options.activity) }
 
@@ -67,7 +69,7 @@ export class WebCacheScheduler {
     if (this.lifetime.signal.aborted || !request.cacheGrid || source.capturePath.captureMode !== 'html-in-canvas') return
     const registration = this.options.registrations.get(source.streamId)
     const frame = webTimeFrameAt(request.cacheGrid, request.time)
-    if (!registration || frame === undefined) return
+    if (!registration || frame === undefined || this.unsupported.has(registration.batch)) return
     const view = { ...source.view, region: [...source.view.region] as CodeWebView['region'], scale: request.scale ?? source.view.scale }
     const size = codeWebPixelSize(view)
     const preview = { ...view, scale: view.scale * Math.min(1, 2560 / size.width, 1440 / size.height) }
@@ -182,6 +184,12 @@ export class WebCacheScheduler {
             for (const at of indices) variant.pending.set(at, { distance: selected.distance, at: selected.at })
             // 前台结束前不再领取槽位，免得刚释放的会话又被重建。
             while (this.options.activity.active && !this.lifetime.signal.aborted) await sleep(250, this.lifetime.signal)
+          }
+          else if (error instanceof WebSnapshotUnsupported) {
+            // 换页面重录结果一样：同一内容的变体全部移除，不重试，也不占其他来源的槽位。
+            this.unsupported.add(variant.registration.batch)
+            for (const affected of [...this.variants.values()]) if (affected.registration.batch === variant.registration.batch) this.remove(affected)
+            this.options.logger.warn('这个网页不能进页面时间缓存，继续实时取帧', { event: 'web_source.scheduler.unsupported', error, context: { streamId: variant.source.streamId, segment: index } })
           }
           else if (error instanceof WebCacheOverlapMismatch) {
             this.sequential.add(variant.registration.batch)

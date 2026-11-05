@@ -242,11 +242,13 @@ function createVideoEditWebSourceScene() {
             const candidates = []
             for (const contents of webContents.getAllWebContents()) {
               if (contents.isOffscreen() && contents.getURL().startsWith('https://web-source.henji.invalid')) {
-                const area = await contents.executeJavaScriptInIsolatedWorld(1001, [{ code: 'window.__henjiWebSourceSnapshot?.output.width * window.__henjiWebSourceSnapshot?.output.height' }], false)
+                // 文件改动后其他页面可能正在重载，脚本执行不了就不算候选。
+                const area = await contents.executeJavaScriptInIsolatedWorld(1001, [{ code: "window.__henjiWebSourceSnapshot?.output.style.width === '1920px' ? window.__henjiWebSourceSnapshot.output.width * window.__henjiWebSourceSnapshot.output.height : NaN" }], false).catch(() => NaN)
                 if (Number.isFinite(area) && area > 0) candidates.push({ contents, area })
               }
             }
-            // 预览采用最小栅格，精确观察与导出另有页面；故障只注入即将取帧的预览，避免拆坏仍在准备的其他消费者。
+            // 预览采用最小栅格，精确观察与导出另有页面；推近片段的页面取景不同，栅格可能更小但不服务接下来的整幅取帧。
+            // 故障只注入即将取帧的预览，避免拆坏仍在准备的其他消费者。
             candidates.sort((left, right) => left.area - right.area)
             const target = candidates[0]?.contents
             return target && await target.executeJavaScriptInIsolatedWorld(1001, [{ code: script }], false) ? 1 : 0
@@ -258,8 +260,8 @@ function createVideoEditWebSourceScene() {
           const fallbacks = events.filter(event => event.event === 'web_source.capture.fallback')
           evidence[name] = { injected, ...shot, fallbacks }; store()
           assert.equal(shot.timeCode, Math.round(frame / FPS * 1000), '快照降级当帧的时间条码错误')
-          assert.equal(fallbacks.length, 1, '快照降级没有恰好记录一次')
-          assert.ok(fallbacks.some(event => event.context.reason.includes(reason)), JSON.stringify(fallbacks))
+          // 文件改动让所有页面一起重载，其他页面在高负载下可能各自降级；这里只数被注入的这一次。
+          assert.equal(fallbacks.filter(event => event.context.reason.includes(reason)).length, 1, `快照降级没有恰好记录一次：${JSON.stringify(fallbacks)}`)
           assert.ok(events.some(event => event.event === 'web_source.capture.completed' && event.context?.time === frame / FPS && event.context.captureMode === 'compositor'), '降级当帧没有正常完成普通绘制')
           assert.ok(!events.some(event => event.event === 'web_source.capture.failed'), '快照降级仍导致取帧失败')
         }
@@ -298,7 +300,7 @@ function createVideoEditWebSourceScene() {
         for (let attempt = 0; attempt < 40; attempt++) {
           automaticReady = await app.evaluate(async ({ webContents }) => {
             for (const contents of webContents.getAllWebContents()) if (contents.isOffscreen() && contents.getURL().startsWith('https://web-source.henji.invalid') &&
-              await contents.executeJavaScriptInIsolatedWorld(1001, [{ code: '!!window.__henjiWebSourceSnapshot?.sync' }], false)) return true
+              await contents.executeJavaScriptInIsolatedWorld(1001, [{ code: '!!window.__henjiWebSourceSnapshot?.sync' }], false).catch(() => false)) return true
             return false
           })
           if (automaticReady) break

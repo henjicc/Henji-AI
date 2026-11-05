@@ -5,8 +5,9 @@ import type { WebCacheRegistration } from './registration'
 import type { WebCacheSegmentLease } from './locks'
 import os from 'node:os'
 import { WebCacheScheduler } from './scheduler'
+import { WebSnapshotUnsupported } from './snapshotFrames'
 
-const boundary = vi.hoisted(() => ({ attempts: [] as Array<{ index: number; width: number; times: number[]; selectors: readonly string[] }>, close: vi.fn(), fail: false, stateful: false, color: 0, captures: [] as number[][], pause: undefined as (() => Promise<void>) | undefined }))
+const boundary = vi.hoisted(() => ({ attempts: [] as Array<{ index: number; width: number; times: number[]; selectors: readonly string[] }>, close: vi.fn(), fail: false, reliableError: undefined as Error | undefined, stateful: false, color: 0, captures: [] as number[][], pause: undefined as (() => Promise<void>) | undefined }))
 vi.mock('../web-replay/player/gpuCapture', () => ({ GpuFrameCapture: class {
   targetContents = { id: 10, mainFrame: {}, isDestroyed: () => false }
   async open() {} async dispose() {}
@@ -17,6 +18,7 @@ vi.mock('./page', () => ({ WebSourcePage: class {
   constructor() { boundary.captures.push(this.times) }
   async open() {} close = boundary.close
   async captureReliable(time: number) {
+    if (boundary.reliableError) throw boundary.reliableError
     if (this.times.length && time <= this.times[this.times.length - 1]) throw new Error('不能倒退')
     this.times.push(time)
     return { time, frame: { width: 8, height: 4, bitmap: () => Buffer.alloc(96, boundary.stateful ? this.times.length : time + this.color) }, isCurrent: () => true, validate: async () => true }
@@ -37,7 +39,7 @@ vi.mock('./publication', () => ({ webCacheVariantKey: () => 'variant', publishWe
 
 const grid = { rate: { numerator: 1, denominator: 1 }, phase: { numerator: '0', denominator: '1' } }
 const live: WebCacheScheduler[] = []
-beforeEach(() => { vi.useFakeTimers(); boundary.attempts = []; boundary.captures = []; boundary.fail = false; boundary.stateful = false; boundary.color = 0; boundary.pause = undefined; boundary.close.mockClear() })
+beforeEach(() => { vi.useFakeTimers(); boundary.attempts = []; boundary.captures = []; boundary.fail = false; boundary.reliableError = undefined; boundary.stateful = false; boundary.color = 0; boundary.pause = undefined; boundary.close.mockClear() })
 afterEach(async () => { for (const scheduler of live.splice(0)) { scheduler.dispose(); await scheduler.drained() } vi.useRealTimers() })
 
 function fixture(duration: number | null = 2) {
@@ -78,6 +80,22 @@ it('资源失败释放槽位并从段首向前重演；源撤销取消排队且�
   expect(environment.close).toHaveBeenCalledOnce()
   await vi.advanceTimersByTimeAsync(60_000)
   expect(boundary.attempts).toHaveLength(2)
+})
+
+it('页面不支持可靠快照：移除同内容全部变体，不退槽不重试，新需求也不再开录', async () => {
+  const { scheduler, demand, options } = fixture()
+  boundary.reliableError = new WebSnapshotUnsupported('网页文档滚动需要普通绘制')
+  demand(0)
+  await scheduler.drained()
+  const attempts = boundary.attempts.length
+  expect(attempts).toBeGreaterThan(0)
+  await vi.advanceTimersByTimeAsync(120_000)
+  demand(1)
+  await vi.advanceTimersByTimeAsync(120_000)
+  await scheduler.drained()
+  expect(boundary.attempts.length).toBe(attempts)
+  expect(options.logger.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'web_source.scheduler.unsupported' }))
+  expect(options.logger.warn).not.toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'web_source.scheduler.throttled' }))
 })
 
 it('初始化环境期间撤销时关闭迟到环境；录制中新增几何需求不能误标完成', async () => {
