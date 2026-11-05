@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { expect, it, vi } from 'vitest'
 import { createTestEnvironment, silentLogger } from './documents.test-support'
+import { DocumentReadFailures } from './read-failures'
 
 it('同一坏文件重复扫描只告警一次，大小或修改时间变化后重新读取，修复后恢复索引', async () => {
   const logger = { ...silentLogger(), warn: vi.fn() }
@@ -33,6 +34,42 @@ it('同一坏文件重复扫描只告警一次，大小或修改时间变化后�
     await fsp.writeFile(bad, JSON.stringify({ ...raw, id: 'repaired' }))
     await scanner.refresh()
     expect(env.catalog.getDocument('repaired')).toMatchObject({ path: bad, missing: false })
+  } finally { vi.restoreAllMocks(); await env.cleanup() }
+})
+
+it('项目说明读不出时重复扫描只告警一次，内容变化后重报，修复后恢复项目', async () => {
+  const logger = { ...silentLogger(), warn: vi.fn() }
+  const env = createTestEnvironment({ logger })
+  try {
+    const { service, scanner, workspace } = env.services
+    const project = await service.createProject({ name: '说明坏了' })
+    const file = workspace.manifestPath(project.path)
+    const original = await fsp.readFile(file, 'utf8')
+    await fsp.writeFile(file, '{')
+    const warnings = () => logger.warn.mock.calls.filter(([, meta]) => meta?.event === 'documents.index.project_invalid')
+    for (let i = 0; i < 3; i++) await expect(scanner.refresh()).resolves.toMatchObject({ invalid: 1 })
+    expect(warnings()).toHaveLength(1)
+    expect(warnings()[0][1]).toMatchObject({ context: { path: project.path }, error: expect.any(Error) })
+    await fsp.writeFile(file, '{{')
+    for (let i = 0; i < 2; i++) await scanner.refresh()
+    expect(warnings()).toHaveLength(2)
+    await fsp.writeFile(file, original)
+    await expect(scanner.refresh()).resolves.toMatchObject({ invalid: 0 })
+    expect(env.catalog.getProject(project.id)).toMatchObject({ path: project.path })
+  } finally { await env.cleanup() }
+})
+
+it('项目里没有项目说明的普通子文件夹不进读取失败缓存', async () => {
+  const env = createTestEnvironment()
+  try {
+    const { service, scanner } = env.services
+    const project = await service.createProject({ name: '普通子文件夹' })
+    const plain = path.join(project.path, '分镜')
+    await fsp.mkdir(plain)
+    const reads = vi.spyOn(DocumentReadFailures.prototype, 'read')
+    await scanner.refresh()
+    expect(reads.mock.calls.filter(([target]) => String(target).startsWith(plain))).toHaveLength(0)
+    expect(reads.mock.calls.some(([target]) => String(target).startsWith(project.path))).toBe(true)
   } finally { vi.restoreAllMocks(); await env.cleanup() }
 })
 

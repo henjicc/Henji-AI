@@ -172,10 +172,9 @@ export class DocumentIndexScanner {
     for (const candidate of await this.listProjectCandidates()) {
       let manifest: ProjectManifest
       try {
-        manifest = (await this.workspace.ensureManifest(candidate.root)).manifest
+        manifest = (await this.readProjectManifest(candidate.root, () => this.workspace.ensureManifest(candidate.root), report)).manifest
       } catch (error) {
         if (!isUnreadableFileContent(error)) throw error
-        this.recordInvalid(candidate.root, error, report, true)
         continue
       }
       if (await this.isDuplicateProject(manifest.id, candidate.root, claimed, report)) {
@@ -202,13 +201,29 @@ export class DocumentIndexScanner {
     const existing = this.workspace.catalog.getProject(id)
     if (!existing || samePath(this.workspace.style, existing.path, root)) return false
     try {
-      const other = await this.workspace.readManifest(existing.path)
+      const other = await this.readProjectManifest(existing.path, () => this.workspace.readManifest(existing.path), report)
       return other?.id === id
     } catch (error) {
       if (!isUnreadableFileContent(error) && !isMissing(error)) throw error
-      this.recordInvalid(existing.path, error, report, true)
       return false
     }
+  }
+
+  /**
+   * 同一份项目说明内容没变时只告警一次，也不重复读取；与文档读取失败共用指纹判据。
+   * 没有项目说明文件的普通文件夹直接读取，不进失败缓存；扫描中途消失的项目不算读不出。
+   */
+  private async readProjectManifest<T>(root: string, operation: () => Promise<T>, report: MutableReport): Promise<T> {
+    const file = this.workspace.manifestPath(root)
+    const stat = await fsp.stat(file).catch(() => null)
+    const onFailure = (error: unknown, repeated = false): void => {
+      if (isUnreadableFileContent(error)) this.recordInvalid(root, error, report, true, !repeated)
+    }
+    if (!stat?.isFile()) {
+      try { return await operation() }
+      catch (error) { onFailure(error); throw error }
+    }
+    return await this.readFailures.read(file, operation, onFailure, { stat })
   }
 
   /** 本轮没扫到的项目：文件夹不在了标缺失，不在扫描范围的旧记录删除。 */
@@ -361,10 +376,9 @@ export class DocumentIndexScanner {
           if (options.recursive === false) continue
           if (entry.name.startsWith('.')) continue
           if (level === 0 && options.skipTop.some((name) => sameEntryName(name, entry.name))) continue
-          try { if (await this.workspace.readManifest(entryPath)) continue }
+          try { if (await this.readProjectManifest(entryPath, () => this.workspace.readManifest(entryPath), report)) continue }
           catch (error) {
             if (!isUnreadableFileContent(error)) throw error
-            this.recordInvalid(entryPath, error, report, true)
             continue
           }
           await this.collect(entryPath, container, candidates, options, report, level + 1, ancestors, physicalPath)

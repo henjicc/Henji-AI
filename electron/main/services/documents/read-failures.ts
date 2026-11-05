@@ -18,14 +18,17 @@ export function isUnreadableFileContent(error: unknown): boolean {
     || error instanceof SyntaxError || (error instanceof PersistenceError && error.code !== 'backup-failed')
 }
 
-/** 只记失败，不缓存内容；沿用成功索引的大小与修改时间判据，不写入持久索引。 */
+/**
+ * 只记失败，不缓存内容；沿用成功索引的大小与修改时间判据，不写入持久索引。
+ * 不是文档类型的文件（如项目说明）由调用方给出 stat，否则取不到指纹、不复用失败。
+ */
 export class DocumentReadFailures {
   private readonly failures = new Map<string, { stat: DocumentFileStat; error: unknown }>()
 
   constructor(private readonly style: PathStyle, private readonly dependencies: DocumentFileDependencies) {}
 
   async read<T>(filePath: string, operation: () => Promise<T>, onFailure: (error: unknown, repeated: boolean) => void,
-    snapshot?: { documentId: string; stat?: DocumentFileStat }): Promise<T> {
+    snapshot?: { documentId?: string; stat?: DocumentFileStat }): Promise<T> {
     const key = JSON.stringify([pathKey(this.style, filePath) ?? filePath, snapshot?.documentId])
     let stat = snapshot?.stat
     if (!stat) {

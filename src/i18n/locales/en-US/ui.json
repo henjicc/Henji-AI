@@ -860,6 +860,7 @@
       },
       "keywordPlaceholder": "Filter by keyword (message/context/error)",
       "errorOnly": "Errors only",
+      "moreFilters": "More filters",
       "chainLookupPlaceholder": "Enter/paste requestId to view chain",
       "pause": "Pause",
       "resume": "Resume",

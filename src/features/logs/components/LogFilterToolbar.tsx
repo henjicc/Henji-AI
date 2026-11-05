@@ -1,9 +1,13 @@
-import { UiSegmented } from '@/components/ui'
+import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { getLogCaptureMode } from '@/commands/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { UiButton, UiCheckbox, UiInput, UiSelect, UiToolbar } from '@/components/ui'
+import {
+  PanelTrigger, UiButton, UiCheckbox, UiIconButton, UiInput, UiOverflowRow, UiSegmented, UiSelect, UiToolbar,
+  type UiOverflowRowItem,
+} from '@/components/ui'
+import { UI_INLINE_GAP_CLASS } from '@/components/ui/styleTokens'
 import type { LogLevel } from '../eventDisplay'
 
 export type SourceFilter = 'all' | 'frontend' | 'backend'
@@ -102,6 +106,102 @@ export function LogFilterToolbar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // priority 越大越晚收起；关键词搜索最常用，永不收起。
+  const filterItems: UiOverflowRowItem[] = [
+    {
+      id: 'source',
+      priority: 50,
+      node: (
+        <UiSelect
+          value={sourceFilter}
+          onChange={(event) => onSourceFilterChange(event.target.value as SourceFilter)}
+          className="w-28"
+        >
+          <option value="all">{t('logsWindow.toolbar.source.all')}</option>
+          <option value="frontend">{t('logsWindow.toolbar.source.frontend')}</option>
+          <option value="backend">{t('logsWindow.toolbar.source.backend')}</option>
+        </UiSelect>
+      ),
+    },
+    {
+      id: 'level',
+      priority: 60,
+      node: (
+        <UiSelect
+          value={levelFilter}
+          onChange={(event) => onLevelFilterChange(event.target.value as LevelFilter)}
+          className="w-28"
+        >
+          <option value="all">{t('logsWindow.toolbar.level.all')}</option>
+          {LEVEL_VALUES.map((level) => (
+            <option key={level} value={level}>{level.toUpperCase()}</option>
+          ))}
+        </UiSelect>
+      ),
+    },
+    {
+      id: 'domain',
+      priority: 40,
+      node: (
+        <UiSelect
+          value={domainFilter}
+          onChange={(event) => onDomainFilterChange(event.target.value)}
+          className="w-40"
+        >
+          <option value="all">{t('logsWindow.toolbar.domain.all')}</option>
+          {domainOptions.map((domain) => (
+            <option key={domain} value={domain}>{domain}</option>
+          ))}
+        </UiSelect>
+      ),
+    },
+    {
+      id: 'keyword',
+      priority: 100,
+      pinned: true,
+      node: (
+        <UiInput
+          value={keyword}
+          onChange={(event) => onKeywordChange(event.target.value)}
+          placeholder={t('logsWindow.toolbar.keywordPlaceholder')}
+          className="w-40"
+        />
+      ),
+    },
+    {
+      id: 'errorOnly',
+      priority: 30,
+      node: (
+        <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2">
+          <UiCheckbox checked={errorOnly} onCheckedChange={onErrorOnlyChange} />
+          {t('logsWindow.toolbar.errorOnly')}
+        </label>
+      ),
+    },
+    {
+      id: 'chain',
+      priority: 10,
+      node: (
+        <div className="flex shrink-0 items-center gap-1">
+          <UiInput
+            value={chainQuery}
+            onChange={(event) => setChainQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                handleChainLookup()
+              }
+            }}
+            placeholder={t('logsWindow.toolbar.chainLookupPlaceholder')}
+            className="w-36"
+          />
+          <UiButton type="button" className="shrink-0" onClick={handleChainLookup}>
+            {t('logsWindow.chain.viewButton')}
+          </UiButton>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <UiToolbar
       variant="command"
@@ -149,63 +249,35 @@ export function LogFilterToolbar({
         </>
       }
       subordinate={
-        <>
-          <UiSelect
-            value={sourceFilter}
-            onChange={(event) => onSourceFilterChange(event.target.value as SourceFilter)}
-            className="w-28"
-          >
-            <option value="all">{t('logsWindow.toolbar.source.all')}</option>
-            <option value="frontend">{t('logsWindow.toolbar.source.frontend')}</option>
-            <option value="backend">{t('logsWindow.toolbar.source.backend')}</option>
-          </UiSelect>
-          <UiSelect
-            value={levelFilter}
-            onChange={(event) => onLevelFilterChange(event.target.value as LevelFilter)}
-            className="w-28"
-          >
-            <option value="all">{t('logsWindow.toolbar.level.all')}</option>
-            {LEVEL_VALUES.map((level) => (
-              <option key={level} value={level}>{level.toUpperCase()}</option>
-            ))}
-          </UiSelect>
-          <UiSelect
-            value={domainFilter}
-            onChange={(event) => onDomainFilterChange(event.target.value)}
-            className="w-40"
-          >
-            <option value="all">{t('logsWindow.toolbar.domain.all')}</option>
-            {domainOptions.map((domain) => (
-              <option key={domain} value={domain}>{domain}</option>
-            ))}
-          </UiSelect>
-          <UiInput
-            value={keyword}
-            onChange={(event) => onKeywordChange(event.target.value)}
-            placeholder={t('logsWindow.toolbar.keywordPlaceholder')}
-            className="min-w-40 flex-1"
-          />
-          <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2">
-            <UiCheckbox checked={errorOnly} onCheckedChange={onErrorOnlyChange} />
-            {t('logsWindow.toolbar.errorOnly')}
-          </label>
-          <div className="flex shrink-0 items-center gap-1">
-            <UiInput
-              value={chainQuery}
-              onChange={(event) => setChainQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  handleChainLookup()
-                }
-              }}
-              placeholder={t('logsWindow.toolbar.chainLookupPlaceholder')}
-              className="w-36"
-            />
-            <UiButton type="button" className="shrink-0" onClick={handleChainLookup}>
-              {t('logsWindow.chain.viewButton')}
-            </UiButton>
-          </div>
-        </>
+        // 窄窗口下一行放不下全部筛选：按使用频率从链路查询起收进“更多筛选”。
+        // 选择框不能靠 flex 收缩让位，否则内边距吃掉文字区，选择框显示成空白。
+        <UiOverflowRow
+          className={`flex-1 ${UI_INLINE_GAP_CLASS.row}`}
+          items={filterItems}
+          renderOverflow={(hiddenIds) => (
+            <PanelTrigger panelSize="menu" panelPadding="content" renderPanel={() => (
+              <div className="flex flex-col items-start gap-3">
+                {filterItems.filter((item) => hiddenIds.includes(item.id)).map((item) => (
+                  <div key={item.id} className="flex items-center">{item.node}</div>
+                ))}
+              </div>
+            )}>
+              {({ open, togglePanel }) => (
+                <UiIconButton
+                  size="md"
+                  aria-label={t('logsWindow.toolbar.moreFilters')}
+                  tooltip={t('logsWindow.toolbar.moreFilters')}
+                  on={open}
+                  aria-expanded={open}
+                  onClick={togglePanel}
+                  data-panel-trigger-button
+                >
+                  <MoreHorizontal />
+                </UiIconButton>
+              )}
+            </PanelTrigger>
+          )}
+        />
       }
     >
       {surfaceSwitch}
