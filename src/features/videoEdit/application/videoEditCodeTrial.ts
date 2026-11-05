@@ -1,3 +1,4 @@
+import { VideoEditGpuFrameError } from '../engine/videoEditGpuFailure'
 import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import { videoEditOffscreenPool, type VideoEditOffscreenLease } from '../engine/videoEditOffscreenPool'
 import { type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
@@ -167,7 +168,7 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
     const kept = keepLast ? bitmap : undefined
     if (!keepLast) bitmap?.close()
     bitmap = undefined; return kept
-  } catch (error) { throw error instanceof VideoEditRenderWorkerError ? error.authorError() : error }
+  } catch (error) { throw error instanceof VideoEditRenderWorkerError || error instanceof VideoEditGpuFrameError ? error.authorError() : error }
   finally {
     bitmap?.close(); clearTimeout(timer); if (abort) signal.removeEventListener('abort', abort)
     await lease?.release(!succeeded || expired || signal.aborted)

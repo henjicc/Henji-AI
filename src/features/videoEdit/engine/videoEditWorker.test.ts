@@ -6,10 +6,10 @@ import type { VideoEditPresentationCapture } from './videoEditGpuCompositor'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import type { VideoEditRenderer } from './videoEditRenderer'
-import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError } from './videoEditGpuFailure'
 
-const gpuErrors = vi.hoisted(() => ({ observe: vi.fn<[(message: string) => void], void>() }))
-vi.mock('./videoEditCodeGpu', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditCodeGpu')>(), setVideoEditCodeGpuErrorObserver: gpuErrors.observe }))
+const gpuErrors = vi.hoisted(() => ({ observe: vi.fn<[(event: string, message: string, context?: Record<string, unknown>) => void], void>() }))
+vi.mock('./videoEditGpuErrorScope', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditGpuErrorScope')>(), setVideoEditGpuFaultObserver: gpuErrors.observe }))
 
 const state = vi.hoisted(() => ({ presentation: undefined as VideoEditRenderer['onPresentation'], elements: vi.fn(), hover: vi.fn(), render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, arm: vi.fn(), supersede: vi.fn(), abandon: vi.fn() }))
 vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
@@ -115,8 +115,8 @@ it('渲染 Worker 入口显式注册未捕获异常与未处理拒绝的监听',
 it('设备错误原文经过既有 Worker 日志通道发送', () => {
   const observe = gpuErrors.observe.mock.lastCall![0]
   const message = 'Attachment rgba16float does not match pipeline rgba8unorm'
-  observe(message)
-  expect(postMessage).toHaveBeenLastCalledWith({ kind: 'log', level: 'warn', message: '代码 GPU 执行失败', event: 'video_edit.code_gpu.failed', context: { message } })
+  observe('video_edit.gpu.uncaptured_error', message)
+  expect(postMessage).toHaveBeenLastCalledWith({ kind: 'log', level: 'warn', message: 'GPU 执行失败', event: 'video_edit.gpu.uncaptured_error', context: { message } })
 })
 
 it('联系表/单帧/试渲染在同次提交捕获全尺寸像素，不读已过期的画布', async () => {
@@ -417,6 +417,60 @@ it.each([true, 'fast'] as const)('缓存拖动（%s）后同帧松手先完成�
   } finally { release(); await init(true) }
 })
 
+it('不取像素的帧遇到 GPU 帧失败：照常回执上屏并提示，不走错误回执', async () => {
+  await init(true)
+  const failure = new VideoEditGpuFrameError('content', ['Invalid CommandBuffer'])
+  state.render.mockResolvedValueOnce({ presented: true, presentedSource: 'live', effectErrors: ['效果失败'], renderCached: false, decodeMs: 0, gpuMs: 0, completion: Promise.reject(failure) })
+  const result = await send(request)
+  expect(result).toMatchObject({ presented: true, effectErrors: ['效果失败', failure.message], gpuFrame: { source: 'content', faults: ['Invalid CommandBuffer'] } })
+  expect(result.error).toBeUndefined()
+})
+it('流水播放的帧失败也照常回执，后面的帧不受影响', async () => {
+  await init(true)
+  const failure = new VideoEditGpuFrameError('content', ['Invalid CommandBuffer'])
+  state.render.mockResolvedValueOnce({ presented: true, presentedSource: 'live', renderCached: false, decodeMs: 0, gpuMs: 0, completion: Promise.reject(failure) })
+  const result = await send({ ...request, sequential: true, deadline: 1 })
+  expect(result).toMatchObject({ presented: true, effectErrors: [failure.message] })
+  expect(result.error).toBeUndefined()
+})
+it.each([['历史图', { history: true }], ['取色', { readRgb: { x: 0, y: 0, width: 1, height: 1 } }], ['要求现场画面', { requireLive: true }]])('%s遇到 GPU 帧失败：错误回执，不交像素', async (_name, extra) => {
+  await init(true)
+  const pixels = bitmap()
+  render(pixels, Promise.reject(new VideoEditGpuFrameError('content', ['Invalid CommandBuffer'])))
+  const result = await send({ ...request, ...extra } as typeof request)
+  expect(result.error).toBeDefined()
+  expect(result.bitmap).toBeUndefined(); expect(result.history).toBeUndefined(); expect(result.rgb).toBeUndefined()
+  // 直连的现场帧没有快照；有快照的请求失败时要关闭它。
+  if (!('requireLive' in extra)) await vi.waitFor(() => expect(pixels.close).toHaveBeenCalledOnce())
+})
+it('离屏画面遇到 GPU 帧失败：错误回执，不交位图', async () => {
+  const pixels = bitmap()
+  render(pixels, Promise.reject(new VideoEditGpuFrameError('composite', ['Invalid CommandBuffer'])))
+  const result = await send(request)
+  expect(result.error).toBeDefined(); expect(result.bitmap).toBeUndefined()
+  expect(result.gpuFrame).toEqual({ source: 'composite', faults: ['Invalid CommandBuffer'] })
+  await vi.waitFor(() => expect(pixels.close).toHaveBeenCalledOnce())
+})
+it('缓存帧遇到 GPU 帧失败：照常回执并提示，不走错误回执', async () => {
+  await init(true)
+  state.hasJump = true
+  const failure = new VideoEditGpuFrameError('composite', ['Invalid CommandBuffer'])
+  state.jump.mockResolvedValue({ presented: true, presentedSource: 'prerendered', completion: Promise.reject(failure) })
+  state.render.mockResolvedValue({ presented: true, presentedSource: 'live', completion: Promise.resolve() })
+  const result = await send({ kind: 'render', frame: 10, sequential: false })
+  expect(result).toMatchObject({ presented: true, effectErrors: [failure.message], gpuFrame: { source: 'composite', faults: ['Invalid CommandBuffer'] } })
+  expect(result.error).toBeUndefined()
+})
+it('后台现场帧遇到 GPU 帧失败：refined 回执带上这一帧原有的提示与失败提示', async () => {
+  await init(true)
+  state.hasJump = true
+  state.jump.mockResolvedValue({ presented: true, presentedSource: 'prerendered', completion: Promise.resolve() })
+  const failure = new VideoEditGpuFrameError('content', ['Invalid CommandBuffer'])
+  state.render.mockResolvedValue({ presented: true, presentedSource: 'live', effectErrors: ['效果失败'], sceneIssues: ['素材缺失'], completion: Promise.reject(failure) })
+  await send({ kind: 'render', frame: 10, sequential: false })
+  await vi.waitFor(() => expect(messages.find(message => message.phase === 'refined')).toMatchObject({ presented: true, frame: 10, effectErrors: ['效果失败', '素材缺失', failure.message], gpuFrame: { source: 'content' } }))
+  expect(messages.find(message => message.phase === 'refined')?.error).toBeUndefined()
+})
 it('缓存请求已完成后，后台 GPU 丢失仍独立通知宿主，不重复回执', async () => {
   await init(true)
   state.hasJump = true

@@ -9,6 +9,28 @@ export class VideoEditGpuDeviceLostError extends Error {
   }
 }
 
+/**
+ * 这一帧的提交在 GPU 上失败。`composite` 是合成器自己的提交（屏幕上可能是空白或上一帧），`content` 是合成之前的代码、效果提交。
+ * 文案给用户看；GPU 原文含内部对象标签，只放进日志与 `faults`。
+ */
+export class VideoEditGpuFrameError extends Error {
+  readonly code = 'video-edit-gpu-frame-failed'
+  constructor(readonly source: VideoEditGpuFrameFacts['source'], readonly faults: readonly string[]) {
+    super(GPU_FRAME_MESSAGES[source], { cause: new Error(faults.join('\n')) })
+    this.name = 'VideoEditGpuFrameError'
+  }
+  get facts(): VideoEditGpuFrameFacts { return { source: this.source, faults: [...this.faults] } }
+  /** 写代码的人要看 GPU 原文才能改；普通界面只显示 `message`。 */
+  authorError(): Error { return new Error(`${this.message}\n${this.faults.join('\n').slice(0, 700)}`) }
+}
+/** Worker 回执里的帧失败：不要像素的帧照常上屏并带上它，要像素的帧连同错误一起回传。 */
+export interface VideoEditGpuFrameFacts { source: 'composite' | 'content'; faults: string[] }
+const GPU_FRAME_MESSAGES: Record<VideoEditGpuFrameFacts['source'], string> = {
+  composite: '画面合成在 GPU 上失败，显示的可能是空白或上一帧。',
+  content: '这一帧有内容在 GPU 上执行失败，画面可能不完整。',
+}
+export function isVideoEditGpuFrameFailureText(text: string): boolean { return Object.values(GPU_FRAME_MESSAGES).some(message => text.includes(message)) }
+
 export interface VideoEditWorkerDiagnostic { message: string; filename?: string; line?: number; column?: number }
 
 /** Worker 已退出，当前会话的画布与帧通道都不能复用；超时不属于可自动重放的故障。 */
@@ -77,9 +99,10 @@ export function installVideoEditWorkerErrorReporting(scope: WorkerErrorScope): v
   })
 }
 
-export function videoEditRenderFailure(error: unknown): { error: string; gpuDeviceLost?: string; contentTrust?: ContentTrustFailure } {
+export function videoEditRenderFailure(error: unknown): { error: string; gpuDeviceLost?: string; gpuFrame?: VideoEditGpuFrameFacts; contentTrust?: ContentTrustFailure } {
   return { error: error instanceof Error ? error.message : String(error),
     ...(error instanceof VideoEditGpuDeviceLostError ? { gpuDeviceLost: error.detail } : {}),
+    ...(error instanceof VideoEditGpuFrameError ? { gpuFrame: error.facts } : {}),
     ...(readContentTrustFailure(error) ? { contentTrust: readContentTrustFailure(error) } : {}) }
 }
 

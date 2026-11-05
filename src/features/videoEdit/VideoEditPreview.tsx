@@ -3,7 +3,7 @@ import { codeMaterialTrustContext } from '@/core/videoEdit/codeMaterialDocument'
 import { installVideoEditCodeElements } from './application/videoEditCodeElements'
 import { subscribeContentTrustContext, runForeignContent } from '@/services/contentTrust'
 import { readContentTrustFailure, type ContentTrustFailure } from '@/core/contentTrust'
-import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError, VideoEditRenderRecovery } from './engine/videoEditGpuFailure'
+import { isVideoEditGpuFrameFailureText, VideoEditGpuDeviceLostError, VideoEditGpuFrameError, VideoEditRenderBusyError, VideoEditRenderWorkerError, VideoEditRenderRecovery } from './engine/videoEditGpuFailure'
 import { createVideoEditProgramSurface as createProgramSurface, retainVideoEditProgramWarmup, takeVideoEditProgram } from './engine/videoEditProgramPool'
 import { recordVideoEditFirstFrame } from './engine/videoEditFirstFrameTiming'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -360,6 +360,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let lastFrame = -1
     /** `lastFrame` on screen is a paused picture (exact, not a playback frame): frame capture waits for one. */
     let pausedPicture = false
+    /** 这一帧在 GPU 上没画完整：仍可能显示着，但不能当成功存成图片。 */
+    let gpuFailure: { frame: number; faults: readonly string[] } | undefined
     let appliedFonts = renderer.fontPresentationRevision
     let lastScrubbing = false
     /** Whether the newest frame request sent was a scrub frame: releasing the playhead on the same frame asks for it exactly once. */
@@ -510,7 +512,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       const composition = videoMotionComposition(instance)
       if (stopped || session.current !== renderer || canvas.current !== surface || !composition || result.sequenceId !== composition.id || result.revision !== composition.revision || result.frame !== instance.frame || instance.playing || instance.scrubbing) return
       if (error) { backgroundFailure = { composition, frame: instance.frame, error }; wake(0) }
-      else if (result.presented) { pausedPicture = true; setEffectFailure(result.effectErrors?.join('\n') ?? null); wake(0) }
+      else if (result.presented) { pausedPicture = true; gpuFailure = result.gpuFrame ? { frame: instance.frame, faults: result.gpuFrame.faults } : undefined; setEffectFailure(result.effectErrors?.join('\n') ?? null); wake(0) }
     }
     // 降噪权重刚交到 Worker：重画当前帧，已经追踪完的渲染画面也降一次噪。
     renderer.onDenoiserReady = () => { if (!stopped) { lastRequested = -1; wake(0) } }
@@ -577,8 +579,16 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       const start = performance.now()
       // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
       captureFull++
+      // 瞬时错误重画一次就好；同一帧再失败说明一直画不出来，把原文交出去，不等超时也不让调用方反复重试。
+      let gpuAttempts = 0
+      const redrawAfterGpuFailure = (): boolean => {
+        if (gpuFailure?.frame !== request.frame) return false
+        if (++gpuAttempts >= 2) throw new Error(`这一帧在显卡上画不出来，没有保存：${gpuFailure.faults.join('；').slice(0, 500)}`)
+        gpuFailure = undefined; lastFrame = -1; lastRequested = -1; failedRetryAt = 0; wake(0)
+        return true
+      }
       try {
-        while (appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.provenance === 'web-cache' || surface.dataset.webTier !== '1' || surface.dataset.renderDivisor !== '1' || (surface.dataset.spaceDisplay ?? 'realtime') !== (picture && videoEditCompositionHasSpace(picture) ? videoEditFinalSpaceDisplay(picture) : 'realtime') || surface.width !== request.document.width || surface.height !== request.document.height) {
+        while (redrawAfterGpuFailure() || appliedProxy !== 'original' || appliedDocument !== picture || lastFrame !== request.frame || !pausedPicture || surface.dataset.presentedRevision !== String(picture?.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.approximate === 'true' || surface.dataset.provenance === 'web-cache' || surface.dataset.webTier !== '1' || surface.dataset.renderDivisor !== '1' || (surface.dataset.spaceDisplay ?? 'realtime') !== (picture && videoEditCompositionHasSpace(picture) ? videoEditFinalSpaceDisplay(picture) : 'realtime') || surface.width !== request.document.width || surface.height !== request.document.height) {
           current()
           // 路径追踪要累积到目标采样数才算精确画面，1080p 也要十几秒。
           if (performance.now() - start > (picture && videoEditFinalSpaceDisplay(picture) === 'render' ? 300000 : 10000)) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
@@ -908,7 +918,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             if (!recordPresentation(target, result, requestedAt, scrubbing, document)) { wake(0); return }
             if (playing) playbackShown = target
             approximateFrame = result.approximate ? target : -1; approximateWhileActive = !!result.approximate && steppingBack
-            if (instance.playing || result.presentedSource !== 'prerendered') setEffectFailure(result.effectErrors?.join('\n') ?? null)
+            gpuFailure = result.gpuFrame ? { frame: target, faults: result.gpuFrame.faults } : undefined
+            if (instance.playing || result.presentedSource !== 'prerendered' || result.gpuFrame) setEffectFailure(result.effectErrors?.join('\n') ?? null)
             lastFrame = target; lastScrubbing = scrubbing; pausedPicture = !playing && !scrubbing && result.presentedSource !== 'prerendered' && !result.approximate
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
           }
@@ -961,6 +972,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           return
         }
         if (renderer.terminated || audioRenderer?.terminated) { stop(); setRenderFailure(error instanceof Error ? error.message : String(error)); return }
+        if (error instanceof VideoEditGpuFrameError) gpuFailure = { frame: instance.frame, faults: error.faults }
         failedDocument = requestDocument; failedFrame = instance.frame; lastFrame = -1; lastRequested = -1
         failedRetryAt = Date.now() + failedRetryMs; failedRetryMs = Math.min(10_000, failedRetryMs * 2)
         setRenderFailure(error instanceof Error ? error.message : String(error))
@@ -1106,7 +1118,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       </div>}
       {(renderFailure || effectFailure) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
         <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
-          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiError title="部分效果已跳过" message={effectFailure ?? ''} />}
+          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiError title={isVideoEditGpuFrameFailureText(effectFailure ?? '') ? '画面可能不完整' : '部分效果已跳过'} message={effectFailure ?? ''} />}
           {!!trustFailure?.records.length && <UiButton variant="quiet" disabled={trustPending} onClick={() => {
             setTrustPending(true)
             void runForeignContent(trustFailure.records).catch(onError).finally(() => setTrustPending(false))

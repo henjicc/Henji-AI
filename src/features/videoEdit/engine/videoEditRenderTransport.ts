@@ -7,7 +7,7 @@ import { captureTextFontSnapshot } from '@/platform/textFontSnapshot'
 import type { TextFontChannelAttach } from './videoEditTextFontChannel'
 import { authorEffectEnvironmentForStyle, type AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
 import { prepareVideoEditAuthorBundle } from './videoEditSharedCompiler'
-import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { SharedCompilationRequest, SharedCompilationResponse } from './videoEditSharedCompilation'
 import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
@@ -331,7 +331,7 @@ export class VideoEditRenderTransport {
         return
       }
       const value = event.data; const pending = this.pending.get(value.id)
-      const failure = value.error ? value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : restoreContentTrustError(new Error(value.error), value.contentTrust) : undefined
+      const failure = value.error ? value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : value.gpuFrame ? new VideoEditGpuFrameError(value.gpuFrame.source, value.gpuFrame.faults) : restoreContentTrustError(new Error(value.error), value.contentTrust) : undefined
       if (value.phase === 'refined') {
         clearTimeout(this.backgroundTimers.get(value.id)); this.backgroundTimers.delete(value.id)
         if (failure instanceof VideoEditGpuDeviceLostError) this.fail(failure)

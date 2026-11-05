@@ -1,3 +1,4 @@
+import { videoEditGpuOutputEpoch, type VideoEditFrameGpu } from './videoEditGpuErrorScope'
 import { CODE_AUTHOR_SPATIAL_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { authorBundleShapesText, authorTextMetadataKey } from './videoEditAuthorTextResources'
 import { codeOutputInputs, codeOutputKey, codeOutputSignature } from './videoEditCodeOutputKey'
@@ -83,7 +84,7 @@ export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; built
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 /** `sceneIssues`：这一帧的片子数据或画面参数中需要用户处理的问题，由渲染器和效果错误一起呈现。 */
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number; sceneIssues: string[] }
-export interface VideoEditCodePrepareOptions { observeElements?: boolean; exactInput?: (input: VideoEditCodeImageInput) => boolean; quality?: import('@/core/imaging/effects/descriptor').EffectQuality; authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>>;
+export interface VideoEditCodePrepareOptions { gpuFrame?: VideoEditFrameGpu; observeElements?: boolean; exactInput?: (input: VideoEditCodeImageInput) => boolean; quality?: import('@/core/imaging/effects/descriptor').EffectQuality; authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>>;
   spatialFrame?: import('@/core/videoEdit/spatialTypes').SpatialFrame
   deferredGenerators?: ReadonlySet<string>
 }
@@ -303,7 +304,7 @@ export class VideoEditCodeSources implements SpatialCodeSources {
   private knownBytes = 0
   private readonly programs = new Map<string, CachedProgram>()
   private programBytes = 0
-  private readonly lastOutputs = new Map<string, { key: string; picture: VideoEditCodePicture }>()
+  private readonly lastOutputs = new Map<string, { key: string; picture: VideoEditCodePicture; gpuEpoch: number; gpuOutcome?: VideoEditFrameGpu['outcome'] }>()
   private outputTargetSequence = 0
   private readonly outputReuse = { hits: 0, misses: 0, bypasses: 0 }
   private readonly targetPictures = new Map<string, VideoEditCodePicture | ImageBitmap>()
@@ -678,8 +679,8 @@ export class VideoEditCodeSources implements SpatialCodeSources {
           assertCurrent()
           const contentKey = contentKeys.get(plan)
           const previous = this.lastOutputs.get(plan.key)
-          let picture = contentKey && !options.observeElements && previous?.key === contentKey ? previous.picture : undefined
-          if (picture) { result.cacheHits++; if (plan.program) this.outputReuse.hits++ }
+          let picture = contentKey && !options.observeElements && previous?.key === contentKey && previous.gpuEpoch === videoEditGpuOutputEpoch() ? previous.picture : undefined
+          if (picture) { result.cacheHits++; if (plan.program) this.outputReuse.hits++; options.gpuFrame?.reuse(previous?.gpuOutcome) }
           else {
             // 作者可能先写目标再失败；开始覆写前就撤销旧键，取消也不能把半帧登记成命中。
             this.lastOutputs.delete(plan.key)
@@ -713,7 +714,7 @@ export class VideoEditCodeSources implements SpatialCodeSources {
               picture = await this.runtime!.authorGenerator(plan.key, plan.clip.id, plan.program!, plan.context, plan.author, assets satisfies AuthorAssets, info, overrides, document.motionBlur === true, images, plan.divisor ?? 1, environment, options.quality, assertCurrent, ...(plan.simulation ? [plan.simulation] : []))
             }
             assertCurrent()
-            if (contentKey) this.lastOutputs.set(plan.key, { key: contentKey, picture })
+            if (contentKey) this.lastOutputs.set(plan.key, { key: contentKey, picture, gpuEpoch: videoEditGpuOutputEpoch(), ...(options.gpuFrame ? { gpuOutcome: options.gpuFrame.outcome } : {}) })
           }
           resident.delete(plan.key); resident.set(plan.key, picture)
           if (picture instanceof VideoEditCodePicture) picture.contentKey = contentKey

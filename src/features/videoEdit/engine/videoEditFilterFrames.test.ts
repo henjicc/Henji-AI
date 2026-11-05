@@ -27,6 +27,7 @@ const pixel = (input: VideoEditCodePicture): number => values.get(input.texture)
 vi.mock('./videoEditGpuCompositor', () => ({ VideoEditGpuCompositor: class {
   private targets = new Map<string, VideoEditCodePicture>()
   fork() { return new this.constructorClass() }
+  async beginFrameGpu() { return { outcome: Promise.resolve([]), reuse() {}, end() {}, settle: async () => [] } }
   private get constructorClass() { return this.constructor as new () => typeof this }
   prepareImages() { return new Map() }
   setPictureDivisor() {}

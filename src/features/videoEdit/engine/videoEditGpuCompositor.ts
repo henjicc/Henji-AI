@@ -2,7 +2,9 @@ import { codeSimulationIdentity } from '@/core/videoEdit/codeSimulation'
 import { loadAuthorCandidate, readAuthorCandidateMetadata, releaseAuthorCandidate } from './videoEditAuthorCandidates'
 import type { CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
-import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError } from './videoEditGpuFailure'
+import { VideoEditFrameGpu, videoEditGpuLedger, type VideoEditGpuWindow } from './videoEditGpuErrorScope'
+import { VideoEditGpuFrameFences, type VideoEditGpuFrameFence } from './videoEditGpuFrameFence'
 import { recordVideoEditPreparation, videoEditGpuTimer, videoEditRenderDiagnosticsEnabled } from './videoEditPreparationTiming'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { documentFontRevision } from '@/platform/fontFaces'
@@ -121,7 +123,9 @@ export class VideoEditGpuCompositor {
     }
     const assertCurrent = () => { if (signal?.aborted) throw new DOMException('试画已取消。', 'AbortError') }
     const started = performance.now()
-    this.device.pushErrorScope('validation')
+    // 作者代码在 await 里提交，中间让出，窗口会与同时在途的节目帧重叠。
+    const gpu = videoEditGpuLedger(this.device).open()
+    let fence: VideoEditGpuFrameFence | undefined
     try {
       const simulationInput = { identity: codeSimulationIdentity(url, params, { width, height }, runtime.parameterMetadata.simulation), parametersAt: () => params, signal, assertCurrent }
       assertCurrent()
@@ -136,11 +140,15 @@ export class VideoEditGpuCompositor {
       const encoder = this.device.createCommandEncoder(), pipeline = precise ? this.authorFloatPresentation! : this.authorPresentation
       const pass = encoder.beginRenderPass({ colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store' }] })
       pass.setPipeline(pipeline); pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: rendered.createView() }] }))
-      pass.draw(3); pass.end(); this.device.queue.submit([encoder.finish()])
-      await this.device.queue.onSubmittedWorkDone()
-    } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
-    const error = await this.device.popErrorScope()
-    if (error) throw new Error(`作者效果 GPU 执行失败：${error.message}`)
+      pass.draw(3); pass.end()
+      fence = this.fences!.arm(encoder)
+      this.device.queue.submit([encoder.finish()])
+      gpu.end()
+      const finished = fence; fence = undefined
+      await finished.wait()
+    } catch (error) { gpu.discard(); fence?.abandon(); throw error }
+    const [fault] = await gpu.settle()
+    if (fault) throw new Error(`作者效果 GPU 执行失败：${fault.message}`)
     assertCurrent()
     return { elapsedMs: performance.now() - started, bitmap: this.canvas.transferToImageBitmap(), ...(options?.observe ? { elements: runtime.observeElements() } : {}) }
   }
@@ -174,7 +182,9 @@ export class VideoEditGpuCompositor {
   private lost: string | undefined
   private readonly ready: Promise<void>
   private readonly waits = new Set<() => void>()
+  /** 在途的合成帧，只用于背压：只等结清，帧的失败交给各自的 `completion`，不在后面的帧里抛出。 */
   private readonly uploads = new Set<Promise<void>>()
+  private fences?: VideoEditGpuFrameFences
   private readonly copies = new Set<Promise<void>>()
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
@@ -192,6 +202,11 @@ export class VideoEditGpuCompositor {
     this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
   }
+  /** 这一帧的提交窗口从这里开始；嵌套合成与代码画面共用设备，提交都落在根帧的窗口里。 */
+  async beginFrameGpu(): Promise<VideoEditFrameGpu> {
+    await this.ready
+    return new VideoEditFrameGpu(videoEditGpuLedger(this.device))
+  }
   private assertDevice(): void {
     this.shared?.assertDevice()
     if (this.lost) throw new VideoEditGpuDeviceLostError(this.lost)
@@ -204,6 +219,8 @@ export class VideoEditGpuCompositor {
     timing?.(performance.now() - deviceStarted, 'device')
     const pipelineStarted = performance.now()
     this.device = this.shared?.device ?? managed!.device as VideoGpuDevice
+    videoEditGpuLedger(this.device)
+    this.fences = new VideoEditGpuFrameFences(this.device, reason => { this.lost ??= reason })
     const format = this.shared?.canvasFormat ?? managed!.provider.getPreferredCanvasFormat()
     this.canvasFormat = format
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied', usage: 0x10 | 0x01 })
@@ -353,8 +370,11 @@ export class VideoEditGpuCompositor {
     const chroma = compact ? recycled?.chroma ?? this.device.createTexture({ size: [uvWidth, uvHeight], format: 'rg8unorm', usage: 0x04 | 0x10 }) : undefined
     const bytes = compact ? width * height + uvWidth * uvHeight * 2 : width * height * (owned === 'rgba16float' ? 8 : 4)
     let retained = false
+    let copying: VideoEditGpuWindow | undefined
     try {
       if (frame.colorSpace?.transfer === 'iec61966-2-1') reduced = await this.downscalePipelines(divisor, true)
+      // 延迟完成的复制由使用它的帧负责：不认领，落在那一帧的窗口里。
+      if (!deferCompletion) copying = videoEditGpuLedger(this.device).openSync()
       const encoder = this.device.createCommandEncoder()
       const resource = this.device.importExternalTexture({ source: frame })
       const planes: Array<readonly [GpuTexture, GpuRenderPipeline]> = reduced
@@ -367,11 +387,14 @@ export class VideoEditGpuCompositor {
         pass.draw(3); pass.end()
       }
       this.device.queue.submit([encoder.finish()])
+      copying?.end()
       const completion = this.device.queue.onSubmittedWorkDone().finally(() => { closeFrame(); this.copies.delete(completion) })
       if (borrowed) sample.holdUntil(completion)
       this.copies.add(completion); retained = true
       void completion.catch(() => {})
       if (!deferCompletion) await completion
+      const faults = await copying?.settle()
+      if (faults?.length) throw new VideoEditGpuFrameError('content', faults.map(fault => fault.message))
       if (highPrecision) this.precision.snapshots++
       return new VideoEditGpuFrame(sample, texture, chroma, bytes, () => {
         // Reuse evicted allocations instead of stalling the driver at every
@@ -380,7 +403,7 @@ export class VideoEditGpuCompositor {
         if (!this.disposed && this.pool.length < 4 && this.pool.reduce((sum, entry) => sum + entry.bytes, 0) + bytes <= 64 * 1024 ** 2) this.pool.push({ width, height, format, texture, chroma, bytes })
         else { texture.destroy(); chroma?.destroy() }
       }, undefined, highPrecision)
-    } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { if (!retained) closeFrame() }
+    } catch (error) { copying?.discard(); texture.destroy(); chroma?.destroy(); throw error } finally { if (!retained) closeFrame() }
   }
   /**
    * 网页画面：把借来的共享纹理帧左上角 width×height 原样拷进本设备的 rgba8unorm 纹理（网页内容与图片、Canvas 一样按
@@ -662,9 +685,11 @@ export class VideoEditGpuCompositor {
     if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
     const device = this.device
     const frames: VideoFrame[] = []
+    const submission = videoEditGpuLedger(device).openSync()
     device.pushErrorScope('validation')
     let scopeOpen = true
     let historyBuffer: PresentationBuffer | undefined
+    let fence: VideoEditGpuFrameFence | undefined
     try {
       const encoder = device.createCommandEncoder()
       // 上屏这一次提交是本帧在 GPU 上的最后一段：首尾打点，并在同一提交里解析本帧所有计时点。
@@ -827,12 +852,15 @@ export class VideoEditGpuCompositor {
         // Encode the copy in this submission: canvas expiry cannot clear the owned buffer afterwards.
         ;(encoder as unknown as PresentationEncoder).copyTextureToBuffer({ texture: canvas }, { buffer: historyBuffer, bytesPerRow }, { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 })
       }
+      // 栅栏编进这一帧最后一次提交：取位图时是位图拷贝那一次。
+      const capturing = capture?.gpu && canvas
+      if (!capturing) fence = this.fences!.arm(encoder)
       device.queue.submit([encoder.finish()])
       readGpuTimings?.()
       if (target) target.carriesLight = pictures.some(picture => picture instanceof VideoEditCodePicture && picture.carriesLight)
       if (capture?.gpu && canvas) {
         this.bitmapBridge ??= new VideoEditGpuBitmapBridge(device)
-        capture(Promise.resolve(this.bitmapBridge.capture(canvas, this.canvas.width, this.canvas.height, this.canvasFormat)))
+        capture(Promise.resolve(this.bitmapBridge.capture(canvas, this.canvas.width, this.canvas.height, this.canvasFormat, last => { fence = this.fences!.arm(last) })))
       }
       if (capture && historyBuffer) {
         const buffer = historyBuffer; historyBuffer = undefined
@@ -854,16 +882,20 @@ export class VideoEditGpuCompositor {
         capture(pixels)
       }
       const validation = device.popErrorScope(); scopeOpen = false
-      const completion = Promise.all([device.queue.onSubmittedWorkDone(), validation]).then(([, error]) => {
+      submission.end()
+      const finished = fence!; fence = undefined
+      const completion = Promise.all([finished.wait(), validation, submission.settle()]).then(([, error, faults]) => {
         this.assertDevice()
-        if (error) throw new Error(`剪辑 GPU 合成失败：${error.message}`)
-      }).finally(() => { frames.forEach(frame => frame.close()); this.uploads.delete(completion) })
-      this.uploads.add(completion)
+        const messages = [...(error?.message ? [error.message] : []), ...faults.map(fault => fault.message)]
+        if (messages.length) throw new VideoEditGpuFrameError('composite', messages)
+      }).finally(() => { frames.forEach(frame => frame.close()) })
+      const inFlight: Promise<void> = completion.catch(() => {}).finally(() => { this.uploads.delete(inFlight) })
+      this.uploads.add(inFlight)
       const ids = new Set(clips.map(clip => clip.id))
       this.retainTextures(new Set([...this.protectedImages, ...pictures.flatMap((picture, index) => picture instanceof VideoSample || picture instanceof VideoEditGpuFrame || picture instanceof VideoEditCodePicture ? [] : [picture ? this.imageKey(picture) : `text:${clips[index].id}`])]))
       for (const [id, value] of this.uniforms) if (!ids.has(id) && !retained.has(id) && !this.protectedUniforms.has(id)) { value.destroy(); this.uniforms.delete(id) }
       return { presented: true, completion }
-    } catch (error) { historyBuffer?.destroy(); if (scopeOpen) await device.popErrorScope(); frames.forEach(frame => frame.close()); throw error }
+    } catch (error) { submission.discard(); fence?.abandon(); historyBuffer?.destroy(); if (scopeOpen) await device.popErrorScope(); frames.forEach(frame => frame.close()); throw error }
   }
   async dispose(): Promise<void> {
     if (this.disposed) return
@@ -890,7 +922,7 @@ export class VideoEditGpuCompositor {
     await Promise.allSettled([...this.copies])
     this.precise?.texture.destroy(); this.precise = undefined
     this.motionTarget?.texture.destroy(); this.motionTarget = undefined
-    this.textures.clear(); this.uniforms.clear(); if (!this.shared) this.manager.destroy()
+    this.textures.clear(); this.uniforms.clear(); this.fences?.dispose(); if (!this.shared) this.manager.destroy()
     if (failures.length) throw new AggregateError(failures, '剪辑渲染资源释放失败。')
   }
   cancelPresentation(): void { for (const finish of this.waits) finish() }

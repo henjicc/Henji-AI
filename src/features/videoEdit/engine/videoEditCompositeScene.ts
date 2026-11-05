@@ -1,3 +1,4 @@
+import { videoEditGpuOutputEpoch } from './videoEditGpuErrorScope'
 import { createLogger } from '@/core/logging'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import { SPACE_ONLY_FIELDS, spaceClipIsSolid } from '@/core/videoEdit/spatialSchema'
@@ -357,7 +358,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
       : input === null && original.kind === 'text' ? ['text', documentFontRevision()]
       : typeof ImageBitmap !== 'undefined' && input instanceof ImageBitmap ? ['bitmap', spatial.identity(input), input.width, input.height] : undefined
     const cacheable = inputKey !== undefined && plans.every(value => value.builtin && !value.mask && !value.subject && !isShaderGraphEffect(value.builtin.id))
-    const key = cacheable ? JSON.stringify([inputKey, { ...original, curves: undefined, spatial: undefined, depth: undefined, rotationX: undefined, rotationY: undefined, anchorDepth: undefined, ...SPACE_ONLY_FIELDS, motionSamples: undefined, opacity: 1 },
+    const key = cacheable ? JSON.stringify([videoEditGpuOutputEpoch(), inputKey, { ...original, curves: undefined, spatial: undefined, depth: undefined, rotationX: undefined, rotationY: undefined, anchorDepth: undefined, ...SPACE_ONLY_FIELDS, motionSamples: undefined, opacity: 1 },
       material.referenceSize, material.logicalBounds, material.rasterScale, material.target.width, material.target.height, request.output, request.quality, drawn.colorLuts,
       plans.map(value => materialBuiltinPlan(value.builtin!, original, request.sequenceFrame, material.target, drawn.fps, request.quality, { referenceSize: material.referenceSize, bounds: material.logicalBounds }))]) : undefined
     used.add(material.clipId)

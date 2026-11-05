@@ -2,7 +2,7 @@ import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
 import { resolveVideoEditDecodeBackend, VIDEO_EDIT_NATIVE_PRIMARY, type VideoEditAudioChunk, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditDecodeBackend, type VideoEditDecodeSupport, type VideoEditDecodedPicture, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
 import { videoEditNativeClosed, videoEditNativeFailureCode, videoEditNativeFailureKind } from './videoEditNativeFailure'
-import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError } from './videoEditGpuFailure'
 
 /** What the render worker knows about native decoding when it starts: the service state and the diagnostic setting. */
 export interface VideoEditDecodeSettings {
@@ -140,7 +140,8 @@ export class VideoEditFrameRouter implements VideoEditFrameBackend {
    */
   async recover(decision: Decision, media: VideoEditMedia, failed: VideoEditDecodeBackend, error: unknown, attempt: number): Promise<Recovery> {
     // A read its caller abandoned (`VideoEditFrameReadOptions.signal`) did not fail: no retry, no fallback.
-    if (error instanceof VideoEditGpuDeviceLostError || (error as { name?: unknown } | null)?.name === 'AbortError') return { error }
+    // 显卡错误：解码没出问题，换解码器或重置会话都于事无补。
+    if (error instanceof VideoEditGpuDeviceLostError || error instanceof VideoEditGpuFrameError || (error as { name?: unknown } | null)?.name === 'AbortError') return { error }
     const kind = videoEditNativeFailureKind(error)
     if (failed === 'browser') {
       // The browser is the only reader here (native unavailable or not this file): name the format problem in user

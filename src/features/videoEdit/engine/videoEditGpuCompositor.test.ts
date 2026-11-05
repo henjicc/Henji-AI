@@ -4,7 +4,8 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
-import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError } from './videoEditGpuFailure'
+import { videoEditGpuLedger } from './videoEditGpuErrorScope'
 import type { VideoSample } from 'mediabunny'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { VideoEditNativePicture } from './videoEditNativePicture'
@@ -58,7 +59,7 @@ it('精确网页快照在GPU拷贝后还原身份区，合成和编码读取同�
   try {
     const result = await compositor.copyWebFrame({ frame: {} as VideoFrame, meta: { webRestore: restore }, release } as unknown as NativeVideoFrame, 100, 100)
     expect(writeTexture).toHaveBeenCalledWith({ texture: result.texture }, Uint8Array.from(restore), { bytesPerRow: 256 }, [8, 4])
-    expect(device.queue.submit.mock.invocationCallOrder[0]).toBeLessThan(writeTexture.mock.invocationCallOrder[0])
+    expect(device.submit.mock.invocationCallOrder[0]).toBeLessThan(writeTexture.mock.invocationCallOrder[0])
     expect(release).toHaveBeenCalledWith(device)
     result.texture.destroy()
   } finally { await compositor.dispose() }
@@ -108,6 +109,103 @@ it('导出捕获在画布纹理过期前复制到 GPU 位图，不映射 CPU 缓
   const copies = device.createCommandEncoder.mock.results.map(result => result.value)
   expect(copies.some(encoder => encoder.copyTextureToTexture.mock.calls.length === 1)).toBe(true)
   expect(copies.every(encoder => encoder.copyTextureToBuffer.mock.calls.length === 0)).toBe(true)
+  await compositor.dispose()
+})
+it('合成编码中途抛错时放弃窗口，台账不留开着的窗口', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  await compositor.prepare()
+  const project = createVideoEditDocument('合成抛错')
+  device.createCommandEncoder.mockImplementationOnce(() => { throw new Error('编码失败') })
+  await expect(compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)).rejects.toThrow('编码失败')
+  expect(videoEditGpuLedger(device as unknown as GpuDevice).openWindows).toBe(0)
+  await compositor.dispose()
+})
+it('试画的提交发生在 await 里，失败时不交位图', async () => {
+  const transfer = vi.fn()
+  const { compositor, device, output } = copyFixture(async () => {})
+  Object.assign(output, { transferToImageBitmap: transfer })
+  await compositor.prepare()
+  candidates.render.mockImplementationOnce(async () => { await Promise.resolve(); device.popErrorScope.mockResolvedValueOnce({ message: '作者提交无效' }); device.queue.submit([]) })
+  await expect(compositor.renderAuthorFrame('candidate', {}, { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } })).rejects.toThrow('作者效果 GPU 执行失败：作者提交无效')
+  expect(transfer).not.toHaveBeenCalled()
+  await compositor.dispose()
+})
+it('设备丢失的那一帧当帧报失败，不等丢失回调，下一帧也拒绝', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  await compositor.prepare()
+  const project = createVideoEditDocument('设备丢失')
+  Object.assign(device, { lost: Promise.resolve({ reason: 'unknown', message: '驱动已重置' }) })
+  device.createBuffer.mockReturnValueOnce({ destroy: vi.fn(), mapAsync: async () => { throw Object.assign(new Error('映射中止'), { name: 'AbortError' }) }, unmap: vi.fn() })
+  const { completion } = await compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)
+  await expect(completion).rejects.toBeInstanceOf(VideoEditGpuDeviceLostError)
+  await expect(compositor.prepare()).rejects.toBeInstanceOf(VideoEditGpuDeviceLostError)
+  await compositor.dispose()
+})
+it('取位图的帧把栅栏编进最后那次位图拷贝，拷贝期间设备丢失也查得出', async () => {
+  const capture = Object.assign(vi.fn(), { gpu: true, maxPixels: Infinity })
+  vi.stubGlobal('OffscreenCanvas', class {
+    constructor(public width: number, public height: number) {}
+    getContext() { return { configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) } }
+    transferToImageBitmap = () => ({ close: vi.fn() })
+  })
+  const { compositor, device } = copyFixture(async () => {}, () => capture)
+  const project = createVideoEditDocument('位图栅栏')
+  await (await compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)).completion
+  const encoders = device.createCommandEncoder.mock.results.map(result => result.value)
+  const copying = encoders.find(encoder => encoder.copyTextureToTexture.mock.calls.length === 1)!
+  expect(copying.clearBuffer).toHaveBeenCalledOnce()
+  expect(encoders.filter(encoder => encoder !== copying).every(encoder => encoder.clearBuffer.mock.calls.length === 0)).toBe(true)
+  await compositor.dispose()
+})
+it('试画遇到设备丢失不交位图', async () => {
+  const transfer = vi.fn()
+  const { compositor, device, output } = copyFixture(async () => {})
+  Object.assign(output, { transferToImageBitmap: transfer })
+  await compositor.prepare()
+  Object.assign(device, { lost: Promise.resolve({ reason: 'unknown', message: '驱动已重置' }) })
+  device.createBuffer.mockReturnValueOnce({ destroy: vi.fn(), mapAsync: async () => { throw Object.assign(new Error('映射中止'), { name: 'AbortError' }) }, unmap: vi.fn() })
+  await expect(compositor.renderAuthorFrame('candidate', {}, { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } })).rejects.toBeInstanceOf(VideoEditGpuDeviceLostError)
+  expect(transfer).not.toHaveBeenCalled()
+  await compositor.dispose()
+})
+it('背压只等结清：前面的帧失败不在后面的帧的 draw 里抛出', async () => {
+  const pending: Array<() => void> = []
+  const fence = (): Promise<void> => new Promise(resolve => { pending.push(resolve) })
+  const { compositor, device } = copyFixture(fence)
+  await compositor.prepare()
+  const project = createVideoEditDocument('背压')
+  const composition = videoEditComposition(project, project.sequences[0].id)
+  device.popErrorScope.mockResolvedValueOnce({ message: '第一帧无效' })
+  const first = await compositor.draw(composition, [], [], () => true)
+  const failing = first.completion.catch((error: unknown) => error)
+  const second = await compositor.draw(composition, [], [], () => true)
+  const third = compositor.draw(composition, [], [], () => true)
+  await Promise.resolve()
+  pending[0]()
+  await expect(failing).resolves.toBeInstanceOf(VideoEditGpuFrameError)
+  pending[1]()
+  await second.completion
+  const drawn = await third
+  pending[2]()
+  await drawn.completion
+  await compositor.dispose()
+})
+it('不延迟完成的复制提交失败时直接抛出；延迟完成的复制留给帧窗口', async () => {
+  const { compositor, device, sample, destroyed } = copyFixture(async () => {})
+  await compositor.prepare()
+  const overlapping = videoEditGpuLedger(device as unknown as GpuDevice).open()
+  device.popErrorScope.mockResolvedValueOnce({ message: '复制无效' })
+  const failure = await compositor.snapshot(sample, false).catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(VideoEditGpuFrameError)
+  expect(failure).toMatchObject({ source: 'content', faults: ['复制无效'] })
+  expect(destroyed).toHaveBeenCalled()
+  // 后台补帧的复制失败由它自己交出，不让同时开着的帧窗口失败。
+  expect(await overlapping.settle()).toEqual([])
+  const window = videoEditGpuLedger(device as unknown as GpuDevice).open()
+  device.popErrorScope.mockResolvedValueOnce({ message: '延迟复制无效' })
+  const deferred = await compositor.snapshot(sample, false, true)
+  expect((await window.settle()).map(fault => fault.message)).toEqual(['延迟复制无效'])
+  deferred.close()
   await compositor.dispose()
 })
 it('设备丢失必须交给会话重建，父设备丢失同样使嵌套画面失效', async () => {
@@ -196,16 +294,16 @@ it('首帧管线并行异步编译，全部就绪前不提交 GPU 命令', async
   const draw = compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)
   await vi.waitFor(() => expect(compile).toHaveBeenCalledTimes(9))
   expect(device.createRenderPipeline).not.toHaveBeenCalled()
-  expect(device.queue.submit).not.toHaveBeenCalled()
+  expect(device.submit).not.toHaveBeenCalled()
   for (const finish of finishes) finish()
   await (await draw).completion
-  expect(device.queue.submit).toHaveBeenCalledOnce()
+  expect(device.submit).toHaveBeenCalledOnce()
   await compositor.dispose()
 })
 it('空闲预建只完成设备和管线，不提交画面；释放后不能再接管', async () => {
   const { compositor, device } = copyFixture(async () => {})
   await compositor.prepare()
-  expect(device.queue.submit).not.toHaveBeenCalled()
+  expect(device.submit).not.toHaveBeenCalled()
   await compositor.dispose()
   await expect(compositor.prepare()).rejects.toThrow('会话不可用')
 })
@@ -257,7 +355,7 @@ it('历史像素复制编码在同一提交内，保留带行填充的 BGRA；�
   const mapped = new Uint8Array(512); mapped.set([3, 2, 1, 255, 6, 5, 4, 255]); mapped.set([9, 8, 7, 255, 12, 11, 10, 255], 256)
   const buffer = { mapAsync: vi.fn(async () => {}), getMappedRange: () => mapped.buffer, unmap: vi.fn(), destroy: vi.fn() }
   device.createBuffer.mockReturnValueOnce(buffer)
-  capture.mockImplementation(() => { expect(device.queue.submit).toHaveBeenCalled() })
+  capture.mockImplementation(() => { expect(device.submit).toHaveBeenCalled() })
   const project = createVideoEditDocument('历史呈现')
   const composition = videoEditComposition(project, project.sequences[0].id)
   const result = await compositor.draw(composition, [], [], () => true)
@@ -314,7 +412,9 @@ it('GPU validation failure rejects the frame receipt instead of reporting a blan
   await compositor.code()
   device.popErrorScope.mockResolvedValueOnce({ message: 'invalid draw binding' })
   const result = await compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)
-  await expect(result.completion).rejects.toThrow('invalid draw binding')
+  const failure = await result.completion.catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(VideoEditGpuFrameError)
+  expect(failure).toMatchObject({ source: 'composite', faults: ['invalid draw binding'] })
   await compositor.dispose()
 })
 vi.mock('@/core/imageEdit/webgpu/deviceManager', () => ({ ImageEditWebGpuDeviceManager: class {
@@ -337,11 +437,14 @@ it('嵌套合成共享父 GPU 设备，子合成器销毁不销毁父设备，�
 function copyFixture(fence: () => Promise<void>, capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined, idle?: () => void) {
   const closed = vi.fn(); const destroyed = vi.fn()
   const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }
+  // 台账把 `queue.submit` 换成自己的收口，断言看原始提交。
+  const submit = vi.fn()
   const device = {
-    queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: fence },
+    submit,
+    queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit, onSubmittedWorkDone: fence },
     lost: new Promise<{ reason?: string; message?: string }>(() => {}), createShaderModule: vi.fn(), createRenderPipeline: vi.fn((descriptor: unknown) => ({ descriptor, getBindGroupLayout: () => ({}) })), createSampler: vi.fn(),
-    createTexture: vi.fn((descriptor: unknown) => ({ descriptor, createView: () => ({ descriptor }), destroy: destroyed })), createBuffer: vi.fn((): { destroy: ReturnType<typeof vi.fn>; mapAsync?: (mode: number) => Promise<void>; getMappedRange?: () => ArrayBuffer; unmap?: () => void } => ({ destroy: vi.fn() })),
-    createBindGroup: vi.fn(), createCommandEncoder: vi.fn(() => ({ beginRenderPass: vi.fn((_descriptor: unknown) => pass), copyTextureToBuffer: vi.fn(), copyTextureToTexture: vi.fn(), finish: () => ({}) })), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(), importExternalTexture: vi.fn(),
+    createTexture: vi.fn((descriptor: unknown) => ({ descriptor, createView: () => ({ descriptor }), destroy: destroyed })), createBuffer: vi.fn((): { destroy: ReturnType<typeof vi.fn>; mapAsync: (mode: number) => Promise<void>; getMappedRange?: () => ArrayBuffer; unmap?: () => void } => ({ destroy: vi.fn(), mapAsync: fence, unmap: vi.fn() })),
+    createBindGroup: vi.fn(), createCommandEncoder: vi.fn(() => ({ beginRenderPass: vi.fn((_descriptor: unknown) => pass), copyTextureToBuffer: vi.fn(), copyTextureToTexture: vi.fn(), clearBuffer: vi.fn(), finish: () => ({}) })), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(), importExternalTexture: vi.fn(),
   }
   state.device = device
   const canvasView = { canvas: true }
@@ -357,7 +460,7 @@ it('已经到时的画面直接提交，不再等待额外一次垂直同步', a
   const document = createVideoEditDocument('到时呈现')
   const result = await compositor.draw(videoEditComposition(document, document.sequences[0].id), [], [], () => true, performance.timeOrigin + performance.now() - 1)
   await result.completion
-  expect(result.presented).toBe(true); expect(device.queue.submit).toHaveBeenCalledOnce(); expect(request).not.toHaveBeenCalled()
+  expect(result.presented).toBe(true); expect(device.submit).toHaveBeenCalledOnce(); expect(request).not.toHaveBeenCalled()
   await compositor.dispose()
 })
 describe('全尺寸离屏合成与迟到校验', () => {
@@ -406,7 +509,7 @@ describe('全尺寸离屏合成与迟到校验', () => {
     let closed = false; const closing = compositor.dispose().then(() => { closed = true })
     await Promise.resolve(); expect(closed).toBe(false)
     finish(); await rejected; await closing
-    expect(device.queue.submit).not.toHaveBeenCalled(); expect(code.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })
+    expect(device.submit).not.toHaveBeenCalled(); expect(code.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })
   })
   it.each(['input', 'target'] as const)('离屏编译等待期间%s退役，校验完成后不提交已释放纹理', async retired => {
     const { compositor, device } = copyFixture(async () => {}); const { document, clip } = composition()
@@ -418,7 +521,7 @@ describe('全尺寸离屏合成与迟到校验', () => {
     for (let index = 0; index < 10; index++) await Promise.resolve()
     code.releaseUnused(new Set([retired === 'input' ? 'target' : 'input']))
     finish(); await rejected
-    expect(device.queue.submit).not.toHaveBeenCalled(); expect(code.diagnostics()).toMatchObject({ surfaces: 1, textureAllocations: 2 })
+    expect(device.submit).not.toHaveBeenCalled(); expect(code.diagnostics()).toMatchObject({ surfaces: 1, textureAllocations: 2 })
     await compositor.dispose()
   })
 })
@@ -431,10 +534,10 @@ it('未来帧仍等指定时刻，取消等待不能提交已失效画面', asyn
   let owned = true
   const rendering = compositor.draw(videoEditComposition(document, document.sequences[0].id), [], [], () => owned, performance.timeOrigin + performance.now() + 1000)
   for (let index = 0; index < 20; index++) await Promise.resolve()
-  expect(request).toHaveBeenCalledOnce(); expect(device.queue.submit).not.toHaveBeenCalled()
+  expect(request).toHaveBeenCalledOnce(); expect(device.submit).not.toHaveBeenCalled()
   expect(compositor.waitingForPresentation).toBe(true); expect(idle).toHaveBeenCalledOnce()
   owned = false; compositor.cancelPresentation()
-  expect((await rendering).presented).toBe(false); expect(device.queue.submit).not.toHaveBeenCalled(); expect(callbacks.size).toBe(0)
+  expect((await rendering).presented).toBe(false); expect(device.submit).not.toHaveBeenCalled(); expect(callbacks.size).toBe(0)
   expect(compositor.waitingForPresentation).toBe(false)
   await compositor.dispose()
 })
@@ -442,11 +545,11 @@ it('同队列顺序复制不逐层等待，外部解码帧保留到完成；销�
   let complete!: () => void; const fence = new Promise<void>(resolve => { complete = resolve })
   const { compositor, sample, device, closed, destroyed } = copyFixture(() => fence)
   const copies = await Promise.all([compositor.snapshot(sample, true, true), compositor.snapshot(sample, true, true)])
-  expect(device.queue.submit).toHaveBeenCalledTimes(2); expect(closed).not.toHaveBeenCalled()
+  expect(device.submit).toHaveBeenCalledTimes(2); expect(closed).not.toHaveBeenCalled()
   // The final composition is enqueued after copies without awaiting their fences.
   const document = createVideoEditDocument('同队列合成')
   const drawing = await compositor.draw(videoEditComposition(document, document.sequences[0].id), [], [], () => true)
-  expect(device.queue.submit).toHaveBeenCalledTimes(3)
+  expect(device.submit).toHaveBeenCalledTimes(3)
   let disposed = false; const closing = compositor.dispose().then(() => { disposed = true })
   await Promise.resolve(); expect(disposed).toBe(false)
   complete(); await drawing.completion; await closing
@@ -499,9 +602,9 @@ it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后�
   const { compositor, sample, device, closed } = copyFixture(() => new Promise<void>(resolve => { finish.push(resolve) }))
   const pending = Array.from({ length: 4 }, () => compositor.snapshot(sample, true, true))
   const tick = async (): Promise<void> => { for (let index = 0; index < 30; index++) await Promise.resolve() }
-  await tick(); expect(device.queue.submit).toHaveBeenCalledTimes(2)
-  finish[0](); await tick(); expect(device.queue.submit).toHaveBeenCalledTimes(3)
-  finish[1](); await tick(); expect(device.queue.submit).toHaveBeenCalledTimes(4)
+  await tick(); expect(device.submit).toHaveBeenCalledTimes(2)
+  finish[0](); await tick(); expect(device.submit).toHaveBeenCalledTimes(3)
+  finish[1](); await tick(); expect(device.submit).toHaveBeenCalledTimes(4)
   finish[2](); finish[3](); const copies = await Promise.all(pending)
   await tick(); expect(closed).toHaveBeenCalledTimes(4)
   copies.forEach(copy => copy.close()); await compositor.dispose()
@@ -569,8 +672,8 @@ describe('合成器共享图片候选生命周期', () => {
     state.device = {
       queue: { copyExternalImageToTexture: copy, writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: async () => {} },
       lost: new Promise(() => {}), createShaderModule: vi.fn(), createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }), createSampler: vi.fn(),
-      createTexture: () => { const texture = { createView: () => ({}), destroy: vi.fn() }; textures.push(texture); return texture }, createBuffer: () => ({ destroy: vi.fn() }),
-      createBindGroup: vi.fn(), createCommandEncoder: () => ({ beginRenderPass: () => pass, finish: () => ({}) }), pushErrorScope: vi.fn(), popErrorScope: async () => null, destroy: vi.fn(),
+      createTexture: () => { const texture = { createView: () => ({}), destroy: vi.fn() }; textures.push(texture); return texture }, createBuffer: () => ({ destroy: vi.fn(), mapAsync: async () => {}, unmap: vi.fn() }),
+      createBindGroup: vi.fn(), createCommandEncoder: () => ({ beginRenderPass: () => pass, clearBuffer: vi.fn(), finish: () => ({}) }), pushErrorScope: vi.fn(), popErrorScope: async () => null, destroy: vi.fn(),
     }
     const output = { getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) }) } as unknown as OffscreenCanvas
     const compositor = new VideoEditGpuCompositor(output)
@@ -643,7 +746,7 @@ describe('高位深合成（任务 2.7）', () => {
     // Four layer pipelines for the rgba16float target and one quantizing pass for the canvas, compiled once.
     expect(device.createRenderPipeline.mock.calls.slice(compiles).map(([descriptor]) => (descriptor as Descriptor).fragment!.targets[0].format)).toEqual(['rgba16float', 'rgba16float', 'rgba16float', 'rgba16float', 'bgra8unorm'])
     expect(textureFormats(device).slice(textures)).toEqual(['rgba16float'])
-    expect(device.queue.submit).toHaveBeenCalledTimes(5)
+    expect(device.submit).toHaveBeenCalledTimes(5)
     expect(compositor.precisionDiagnostics()).toEqual({ highPrecisionSnapshots: 1, highPrecisionFrames: 2, preciseTargetBytes: 3840 * 2160 * 8 })
     eight.close(); ten.close()
     const before = destroyed.mock.calls.length; await compositor.dispose()
@@ -667,7 +770,7 @@ it('试画给共享运行时传入模拟参数与取消信号，取消后不提�
   })
   try {
     await expect(compositor.renderAuthorFrame('candidate', { force: 2 }, info, undefined, { apiVersion: 9 }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
-    expect(device.queue.submit).not.toHaveBeenCalled()
+    expect(device.submit).not.toHaveBeenCalled()
   } finally { await compositor.dispose() }
 })
 

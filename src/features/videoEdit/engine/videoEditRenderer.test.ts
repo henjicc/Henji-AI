@@ -1,3 +1,5 @@
+import { setVideoEditGpuFaultObserver, videoEditGpuOutputEpoch } from './videoEditGpuErrorScope'
+import { VideoEditGpuFrameError } from './videoEditGpuFailure'
 import { WEB_TEXT_SAMPLER_VERSION } from '@/core/videoEdit/webTextGeometry'
 import { videoEditLookaheadTargets } from './videoEditDecodeLookahead'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
@@ -32,7 +34,7 @@ vi.mock('./videoEditCompositeScene', async importOriginal => {
   } }
 })
 const placeholders = vi.hoisted(() => ({ released: 0 }))
-const boundary = vi.hoisted(() => ({ drawHook: undefined as (() => void) | undefined, pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, snapshotBytes: 100, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[], targetKeys: [] as string[], offscreenCompletion: undefined as Promise<void> | undefined }))
+const boundary = vi.hoisted(() => ({ frameFaults: [] as Array<Array<{ seq: number; message: string }> | Promise<Array<{ seq: number; message: string }>>>, frameGpuSettled: 0, drawHook: undefined as (() => void) | undefined, pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, snapshotBytes: 100, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[], targetKeys: [] as string[], offscreenCompletion: undefined as Promise<void> | undefined }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -84,6 +86,11 @@ vi.mock('./videoEditGpuCompositor', async () => {
   class MockCompositor {
   constructor(_canvas?: OffscreenCanvas, _shared?: MockCompositor, private readonly capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined) {}
   fork(canvas: OffscreenCanvas, capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined): MockCompositor { return new MockCompositor(canvas, this, capture) }
+  async beginFrameGpu() {
+    const { VideoEditFrameGpu } = await import('./videoEditGpuErrorScope')
+    const window = { end() {}, settle: async () => { boundary.frameGpuSettled++; return (await boundary.frameFaults.shift()) ?? [] } }
+    return new VideoEditFrameGpu({ open: () => window } as never)
+  }
   async blank(width: number, height: number, timestamp: number, duration: number) {
     return new VideoEditGpuFrame({ timestamp, duration, displayWidth: width, displayHeight: height, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 0, () => { placeholders.released++ })
   }
@@ -118,6 +125,7 @@ vi.mock('./videoEditSeekDecoder', () => ({ VideoEditSeekDecoder: class {
   async dispose() { this.cache.deleteMedia(this.path) }
 } }))
 beforeEach(() => {
+  boundary.frameFaults = []; boundary.frameGpuSettled = 0
   spatialBoundary.frames = []; spatialBoundary.releases = 0
   contentInputs.uploads = []; contentInputs.borrows = []; contentInputs.closed = 0; contentInputs.web = []
   boundary.pendingSchedule = undefined; boundary.disposed = []; boundary.pictures = []
@@ -1820,6 +1828,130 @@ it('可见原视频和代码画面走同一合成，静态变换修改复用纹�
     await renderer.render(70); expect(boundary.released.at(-1)).toEqual([])
   } finally { await renderer.dispose() }
   expect(boundary.compilerDisposed).toBe(1)
+})
+const bad = [{ seq: 1, message: 'Invalid CommandBuffer' }]
+it('上屏的帧 GPU 失败：完成报内容失败，输出缓存失效，下一帧重新生成', async () => {
+  const renderer = new VideoEditRenderer(mixedFixture())
+  const report = vi.fn(); const stop = setVideoEditGpuFaultObserver(report)
+  try {
+    boundary.frameFaults.push(bad)
+    const failed = await renderer.render(0)
+    const failure = await failed.completion.catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(VideoEditGpuFrameError)
+    expect(failure).toMatchObject({ source: 'content', faults: ['Invalid CommandBuffer'] })
+    expect(report).toHaveBeenCalledWith('video_edit.gpu.frame.failed', 'Invalid CommandBuffer', expect.objectContaining({ frame: 0 }))
+    expect(boundary.generatorCalls).toBe(1)
+    const again = await renderer.render(20)
+    await again.completion
+    expect(again.cacheHits).toBe(0); expect(boundary.generatorCalls).toBe(2)
+  } finally { stop(); await renderer.dispose() }
+})
+it('流水播放复用还没结清的输出：产出那一帧失败时，复用的帧也报失败', async () => {
+  const renderer = new VideoEditRenderer(mixedFixture())
+  const report = vi.fn(); const stop = setVideoEditGpuFaultObserver(report)
+  try {
+    let settleFirst!: (faults: typeof bad) => void
+    boundary.frameFaults.push(new Promise(resolve => { settleFirst = resolve }))
+    const first = await renderer.render(0)
+    const second = await renderer.render(20)
+    expect(second.cacheHits).toBe(1); expect(boundary.generatorCalls).toBe(1)
+    const reused = second.completion.catch((error: unknown) => error)
+    settleFirst(bad)
+    await expect(first.completion).rejects.toBeInstanceOf(VideoEditGpuFrameError)
+    expect(await reused).toBeInstanceOf(VideoEditGpuFrameError)
+  } finally { stop(); await renderer.dispose() }
+})
+it('没上屏的帧不上报失败，但窗口照样结清，输出同样失效', async () => {
+  const renderer = new VideoEditRenderer(mixedFixture())
+  const report = vi.fn(); const stop = setVideoEditGpuFaultObserver(report)
+  const { VideoEditGpuCompositor } = await import('./videoEditGpuCompositor')
+  const draw = vi.spyOn(VideoEditGpuCompositor.prototype, 'draw').mockResolvedValueOnce({ presented: false, completion: Promise.resolve() })
+  try {
+    boundary.frameFaults.push([{ seq: 1, message: '没上屏的帧提交无效' }])
+    const hidden = await renderer.render(0)
+    expect(hidden.presented).toBe(false)
+    await hidden.completion
+    await vi.waitFor(() => expect(boundary.frameGpuSettled).toBe(1))
+    await vi.waitFor(() => expect(report).toHaveBeenCalled())
+    await (await renderer.render(20)).completion
+    expect(boundary.generatorCalls).toBe(2)
+  } finally { draw.mockRestore(); stop(); await renderer.dispose() }
+})
+it('渲染抛错时窗口也结清；绘制完成先拒绝时窗口照样结清，合成失败不被降级', async () => {
+  const renderer = new VideoEditRenderer(mixedFixture())
+  const stop = setVideoEditGpuFaultObserver(vi.fn())
+  const { VideoEditGpuCompositor } = await import('./videoEditGpuCompositor')
+  const composite = new VideoEditGpuFrameError('composite', ['合成提交无效'])
+  const draw = vi.spyOn(VideoEditGpuCompositor.prototype, 'draw')
+  try {
+    draw.mockRejectedValueOnce(new Error('绘制抛错'))
+    await expect(renderer.render(0)).rejects.toThrow('绘制抛错')
+    await vi.waitFor(() => expect(boundary.frameGpuSettled).toBe(1))
+    draw.mockResolvedValueOnce({ presented: true, completion: Promise.reject(composite) })
+    boundary.frameFaults.push(bad)
+    const failed = await renderer.render(20)
+    await expect(failed.completion).rejects.toBe(composite)
+    expect(boundary.frameGpuSettled).toBe(2)
+  } finally { draw.mockRestore(); stop(); await renderer.dispose() }
+})
+function nestedCodeFixture(): ReturnType<typeof videoEditComposition> {
+  const document = mixedFixture()
+  const child = createVideoEditSequence('嵌套代码'); addLegacyVideoEditTracks(child)
+  child.width = document.width; child.height = document.height
+  child.clips = [document.clips[1]]
+  const item = { id: 'nested-code', name: child.name, kind: 'sequence' as const, sequenceId: child.id }
+  document.items.push(item); document.sequences = [...document.sequences!, child]
+  document.clips = [{ ...document.clips[0], id: 'parent', itemId: item.id, kind: 'sequence', start: 0, duration: 120, sourceInUs: 0 }]
+  return document
+}
+it('嵌套序列里内容不变的代码画面失败一次：下一帧重新生成，不继承失败', async () => {
+  const renderer = new VideoEditRenderer(nestedCodeFixture())
+  const stop = setVideoEditGpuFaultObserver(vi.fn())
+  try {
+    boundary.frameFaults.push(bad)
+    await expect((await renderer.render(0)).completion).rejects.toBeInstanceOf(VideoEditGpuFrameError)
+    expect(boundary.generatorCalls).toBe(1)
+    await (await renderer.render(1)).completion
+    expect(boundary.generatorCalls).toBe(2)
+    await (await renderer.render(2)).completion
+    expect(boundary.generatorCalls).toBe(2)
+  } finally { stop(); await renderer.dispose() }
+})
+it('嵌套序列的合成提交失败：根帧的完成也失败，不交出带坏嵌套层的画面', async () => {
+  const renderer = new VideoEditRenderer(nestedCodeFixture())
+  const { VideoEditGpuCompositor } = await import('./videoEditGpuCompositor')
+  const composite = new VideoEditGpuFrameError('composite', ['嵌套合成提交无效'])
+  const original = VideoEditGpuCompositor.prototype.draw
+  const draw = vi.spyOn(VideoEditGpuCompositor.prototype, 'draw').mockImplementation(async function (this: InstanceType<typeof VideoEditGpuCompositor>, ...args) {
+    const drawn = await original.apply(this, args)
+    if (!args[5]) return drawn
+    const completion = Promise.reject(composite); void completion.catch(() => {})
+    return { ...drawn, completion }
+  })
+  try {
+    const result = await renderer.render(0)
+    expect(result.presented).toBe(true)
+    await expect(result.completion).rejects.toBe(composite)
+  } finally { draw.mockRestore(); await renderer.dispose() }
+})
+it.each([
+  ['没上屏', async (): Promise<{ presented: boolean; completion: Promise<void> }> => ({ presented: false, completion: Promise.resolve() })],
+  ['中途抛错', async (): Promise<{ presented: boolean; completion: Promise<void> }> => { throw new Error('根帧绘制抛错') }],
+])('嵌套合成提交失败而根帧%s：旧输出同样失效', async (_name, rootDraw) => {
+  const renderer = new VideoEditRenderer(nestedCodeFixture())
+  const { VideoEditGpuCompositor } = await import('./videoEditGpuCompositor')
+  const original = VideoEditGpuCompositor.prototype.draw
+  const draw = vi.spyOn(VideoEditGpuCompositor.prototype, 'draw').mockImplementation(async function (this: InstanceType<typeof VideoEditGpuCompositor>, ...args) {
+    if (!args[5]) return rootDraw()
+    const drawn = await original.apply(this, args)
+    const completion = Promise.reject(new VideoEditGpuFrameError('composite', ['嵌套合成提交无效'])); void completion.catch(() => {})
+    return { ...drawn, completion }
+  })
+  const before = videoEditGpuOutputEpoch()
+  try {
+    await renderer.render(0).catch(() => undefined)
+    await vi.waitFor(() => expect(videoEditGpuOutputEpoch()).toBeGreaterThan(before))
+  } finally { draw.mockRestore(); await renderer.dispose() }
 })
 it('顶层代码提前准备模块但不绘制废弃帧，进入时复用同一版本', async () => {
   const document = mixedFixture(); document.clips[1] = { ...document.clips[1], start: 90, duration: 60 }

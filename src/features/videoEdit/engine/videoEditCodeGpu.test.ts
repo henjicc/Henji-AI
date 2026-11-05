@@ -191,7 +191,7 @@ describe('代码GPU会话复用与资源边界', () => {
   })
 
   it('混合编译等待期间输入退役后拒绝提交和迟到目标分配', async () => {
-    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const { device } = gpu(); const submit = device.queue.submit; const runtime = new VideoEditCodeGpu(device)
     const left = await runtime.target('left', 3840, 2160); const right = await runtime.target('right', 3840, 2160)
     let finish!: () => void
     vi.mocked(device.popErrorScope).mockReturnValueOnce(new Promise(resolve => { finish = () => resolve(null) }))
@@ -199,7 +199,7 @@ describe('代码GPU会话复用与资源边界', () => {
     const rejected = expect(pending).rejects.toThrow('退役')
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
     runtime.releaseUnused(new Set()); finish(); await rejected
-    expect(device.queue.submit).not.toHaveBeenCalled()
+    expect(submit).not.toHaveBeenCalled()
     expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0, textureAllocations: 2 })
     await runtime.dispose()
   })

@@ -1,3 +1,4 @@
+import { VideoEditGpuFrameError } from './videoEditGpuFailure'
 import { ALL_FORMATS, EncodedPacketSink, Input, UrlSource, VideoSample, VideoSampleSink, type EncodedPacket } from 'mediabunny'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
@@ -88,8 +89,10 @@ export class VideoEditSeekDecoder {
     } catch (error) {
       held?.close(); held = undefined
       if (!this.disposed && !range.cancelled) {
-        this.failure = error instanceof Error ? error : new Error(String(error))
-        for (const waiter of range.waiters) waiter.reject(this.failure)
+        const failure = error instanceof Error ? error : new Error(String(error))
+        // 复制进显存失败不是解码失败：只让等着的读取失败，下一次读取重新解。
+        if (!(error instanceof VideoEditGpuFrameError)) this.failure = failure
+        for (const waiter of range.waiters) waiter.reject(failure)
       }
     } finally {
       range.completed = true

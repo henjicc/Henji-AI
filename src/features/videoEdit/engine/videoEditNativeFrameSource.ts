@@ -1,3 +1,4 @@
+import { VideoEditGpuFrameError } from './videoEditGpuFailure'
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoFrameDecoderInfo, VideoFrameNativeStats, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
@@ -96,6 +97,8 @@ const closedFailure = (): VideoEditNativeFailure => videoEditNativeClosed()
 /** A read its caller abandoned (`VideoEditFrameReadOptions.signal`); not a decoding failure. */
 const readAbandoned = (): DOMException => new DOMException('取帧已取消。', 'AbortError')
 const isAbandoned = (error: unknown): boolean => (error as { name?: unknown } | null)?.name === 'AbortError'
+/** 放弃的读取与复制进显存失败都不是解码会话的问题，会话留着。 */
+const keepsSession = (error: unknown): boolean => isAbandoned(error) || error instanceof VideoEditGpuFrameError
 /** Aborted when either is (a preemption here, or the caller abandoning the read). */
 const eitherSignal = (signal: AbortSignal, caller?: AbortSignal): AbortSignal => caller ? AbortSignal.any([signal, caller]) : signal
 
@@ -546,7 +549,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
             return await (await pending).frameAt(seconds, options?.keyFrame === true, speculative, signal)
           } catch (error) {
             // An abandoned read keeps the session: the next read continues where the native decode stopped.
-            if (isAbandoned(error)) throw error
+            if (keepsSession(error)) throw error
             const kind = videoEditNativeFailureKind(error)
             if (kind === 'budget' && !speculative && !closed) {
               sharingUntil = performance.now() + EXCLUSIVE_RETRY_MS
@@ -1029,7 +1032,7 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
         return value
       }).catch(error => {
         // 自己开的会话出了服务故障（未送达、卡住）：丢掉读取者，路由重试时重开，不再落回这个会话。
-        if (reader?.own && scrub && !isAbandoned(error) && videoEditNativeFailureKind(error) === 'service') this.dropReader(scrub.reader, reader)
+        if (reader?.own && scrub && !keepsSession(error) && videoEditNativeFailureKind(error) === 'service') this.dropReader(scrub.reader, reader)
         throw error
       })
       if (this.disposed) { picture?.close(); throw closedFailure() }

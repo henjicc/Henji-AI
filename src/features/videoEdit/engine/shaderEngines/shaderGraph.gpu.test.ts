@@ -48,6 +48,12 @@ async function frame(session: ShaderGraphSession, timeSeconds: number, input?: G
 }
 
 describe('shader graph session', () => {
+  it('提交用到已销毁的输出时报错，不当成画好了', async () => {
+    const session = await ShaderGraphSession.create(device, { layers: [{ type: 'Aurora' }] })
+    const output = texture(); output.destroy()
+    await expect(session.render({ timeSeconds: 0, width: W, height: H, output, outputFormat: 'rgba8unorm' })).rejects.toBeInstanceOf(ShaderGraphError)
+    session.dispose()
+  })
   it('renders a generator into a host texture and seeks deterministically', async () => {
     const session = await ShaderGraphSession.create(device, { layers: [{ type: 'Aurora' }] })
     const a = await frame(session, 1)

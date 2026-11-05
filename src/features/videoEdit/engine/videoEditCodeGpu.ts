@@ -39,33 +39,7 @@ import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeA
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs } from './videoEditAuthorModule'
 import type { AuthorElementOverrides } from './videoEditAuthorElements'
 import { videoEditRenderSize, videoEditOutputRenderDivisor } from '@/core/videoEdit/playbackResolution'
-import { createLogger } from '@/core/logging'
-
-const logger = createLogger('features.videoEdit.codeGpu')
-let reportDeviceError = (message: string): void => {
-  logger.error('代码 GPU 执行失败', { event: 'video_edit.code_gpu.failed', error: new Error(message) })
-}
-export function setVideoEditCodeGpuErrorObserver(observer: typeof reportDeviceError): () => void {
-  const previous = reportDeviceError
-  reportDeviceError = observer
-  return () => { reportDeviceError = previous }
-}
-type DeviceErrorListener = (event: { error: { message: string } }) => void
-type DeviceErrorSource = GpuDevice & {
-  addEventListener?: (type: 'uncapturederror', listener: DeviceErrorListener) => void
-  removeEventListener?: (type: 'uncapturederror', listener: DeviceErrorListener) => void
-}
-interface DeviceErrors { owners: number; listener: DeviceErrorListener }
-const deviceErrors = new WeakMap<GpuDevice, DeviceErrors>()
-
-function observeDeviceErrors(device: DeviceErrorSource): DeviceErrors {
-  const existing = deviceErrors.get(device)
-  if (existing) { existing.owners++; return existing }
-  const errors: DeviceErrors = { owners: 1, listener: event => reportDeviceError(event.error.message) }
-  deviceErrors.set(device, errors)
-  device.addEventListener?.('uncapturederror', errors.listener)
-  return errors
-}
+import { videoEditGpuLedger } from './videoEditGpuErrorScope'
 
 // 只用于缓存淘汰与前视控制；正在绘制的必需资源按真实字节记账，不以固定预算拒绝。
 interface Glyph { texture: GpuTexture; width: number; height: number; bytes: number; x?: number; y?: number }
@@ -287,9 +261,8 @@ export class VideoEditCodeGpu {
   private pending: Promise<void> = Promise.resolve()
   private readonly counts = { pipelineCompiles: 0, textureAllocations: 0, externalCopies: 0, generatorFrames: 0, filterFrames: 0, mixFrames: 0, builtinFrames: 0 }
   private readonly stopFonts: () => void
-  private readonly errors: DeviceErrors
   constructor(private readonly device: GpuDevice) {
-    this.errors = observeDeviceErrors(device)
+    videoEditGpuLedger(device)
     // Worker font resets recreate this host after t63 loads/imports the new FontFace payloads.
     invalidateCodeTextMetrics()
     let revision = fontLibrarySnapshot().revision
@@ -865,10 +838,6 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.authorPrograms = undefined
     await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled([...this.mixReady.values(), ...this.maskedMixPipelines.values()])
     await this.pending.catch(() => {})
-    if (--this.errors.owners === 0) {
-      (this.device as DeviceErrorSource).removeEventListener?.('uncapturederror', this.errors.listener)
-      deviceErrors.delete(this.device)
-    }
     this.batchMixBuffers.forEach(buffer => buffer.destroy()); this.batchMixBuffers.length = 0
     this.releaseUnused(new Set()); this.evictScratch(Number.MAX_SAFE_INTEGER); this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; this.graphCache?.dispose(); this.graphCache = undefined; this.glTransitionRuntime?.dispose(); this.glTransitionRuntime = undefined; this.transparentPixel?.destroy(); this.transparentPixel = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
     this.glyphs.clear(); this.glyphBytes = 0; this.image = undefined; this.mixPipelines.clear(); this.maskedMixPipelines.clear()

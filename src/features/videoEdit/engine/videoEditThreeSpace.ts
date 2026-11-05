@@ -11,7 +11,7 @@ import { loadAuthorThreeLibrary, loadAuthorThreeModule, type AuthorThreeLibrary 
 import { VideoEditAuthorThreeClock } from './videoEditAuthorThreeClock'
 import type { VideoEditThreeSpacePathTrace } from './videoEditThreeSpacePathTrace'
 import { runVideoEditGpuSection } from './videoEditGpuRootQueue'
-import { guardVideoEditGpu } from './videoEditGpuErrorScope'
+import { guardVideoEditThree, observeThreePipelines } from './videoEditThreePipelineProbe'
 
 /**
  * 统一三维渲染器：一组空间卡片与作者 three 场景在同一个 three 场景里一次绘制，景深、运动模糊按整幅画面做后处理。
@@ -337,6 +337,7 @@ export class VideoEditThreeSpace {
       const previous = errors.onuncapturederror
       try { await renderer.init() } finally { errors.onuncapturederror = previous }
     })
+    observeThreePipelines(renderer)
     renderer.setClearColor(0, 0)
     // 作者灯光的 castShadow 要生效得先打开阴影；没有投影灯时不花额外的时间。
     const shadows = (renderer as unknown as { shadowMap: { enabled: boolean; type: number } }).shadowMap
@@ -421,14 +422,14 @@ export class VideoEditThreeSpace {
       if (!entry.primed) {
         // three 在第一次绘制时才搭节点图，那一帧里场景通道还没登记逐帧更新、什么也不画，同一帧号内也不会再更新：
         // 新建的管线先在单独一帧里空画一次，正式这一帧才有内容（否则导出、选帧的第一帧是空的）。
-        await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, () => guardVideoEditGpu(this.device, '三维渲染', () => {
+        await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, () => guardVideoEditThree(this.renderer, this.device, '三维渲染', () => {
           this.renderer.setRenderTarget(target); this.renderer.setOutputRenderTarget(target)
           try { this.withLayeredTransmission(!options.cardsOnly, () => pipeline.render()) } finally { this.renderer.setOutputRenderTarget(null); this.renderer.setRenderTarget(null) }
         }))
         entry.primed = true
       }
       // 渲染失败（如提交里用到已销毁的资源）要让这一帧失败，而不是当成画好了交出去。
-      await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, () => guardVideoEditGpu(this.device, '三维渲染', () => {
+      await this.clock.run(input.scenes[0]?.time ?? input.frame.sequenceTime, () => guardVideoEditThree(this.renderer, this.device, '三维渲染', () => {
         // 后处理的最后一步画到“输出渲染目标”，中间各步画到“当前渲染目标”：两个都指向本帧目标，否则最后一步会落到看不见的画布上。
         this.renderer.setRenderTarget(target)
         this.renderer.setOutputRenderTarget(target)
@@ -638,7 +639,7 @@ export class VideoEditThreeSpace {
       slot.source.value = this.cards.get(entry.card.clipId)!.external!
       slot.glow.value = entry.card.light ? 1 : 0
       slot.strength.value = entry.card.emission * entry.card.opacity
-      await guardVideoEditGpu(this.device, '三维渲染', () => {
+      await guardVideoEditThree(this.renderer, this.device, '三维渲染', () => {
         try { this.renderer.setRenderTarget(slot.target); slot.quad.render(this.renderer) } finally { this.renderer.setRenderTarget(null) }
       })
     }
@@ -677,7 +678,7 @@ export class VideoEditThreeSpace {
     const background = scene.background
     scene.background = null; scene.overrideMaterial = back.material
     try {
-      await guardVideoEditGpu(this.device, '三维渲染', () => {
+      await guardVideoEditThree(this.renderer, this.device, '三维渲染', () => {
         try { this.renderer.setRenderTarget(back.target); this.renderer.render(scene, back.camera) } finally { this.renderer.setRenderTarget(null) }
       })
     } finally { scene.overrideMaterial = null; scene.background = background; for (const mesh of meshes) mesh.layers.disable(shared.layer) }
@@ -835,7 +836,7 @@ export class VideoEditThreeSpace {
         // 有卡片时：留下路径追踪那一层，再画卡片那一层把它加上（混合合成）；没有卡片时直接交出。
         const flat = cards.some(card => !('solid' in card))
         const layer = flat ? this.traceLayer(target.width, target.height) : undefined
-        try { await guardVideoEditGpu(this.device, '路径追踪', () => this.renderer.copyTextureToTexture(target.texture, layer?.texture ?? output.external)) }
+        try { await guardVideoEditThree(this.renderer, this.device, '路径追踪', () => this.renderer.copyTextureToTexture(target.texture, layer?.texture ?? output.external)) }
         finally { this.renderer.setRenderTarget(null) }
       })
     } finally { restore(); for (const slot of areaSlots) slot.light.intensity = 1; if (backplate) backplate.mesh.visible = false; for (const [mesh, material] of swapped) mesh.material = material }

@@ -3,7 +3,7 @@ import type { GpuDevice, GpuTexture, GpuRenderPipeline } from '@/core/imageEdit/
 import { authorLibraryDependencyError, resolveAuthorLibraryModule, type AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import { VideoEditAuthorThreeClock } from './videoEditAuthorThreeClock'
 import { runVideoEditGpuSection } from './videoEditGpuRootQueue'
-import { guardVideoEditGpu } from './videoEditGpuErrorScope'
+import { guardVideoEditThree, observeThreeConsole, observeThreePipelines } from './videoEditThreePipelineProbe'
 import { videoEditThreeTargetBytes } from './videoEditGpuBudget'
 
 export interface ManagedThreeRenderer {
@@ -30,7 +30,9 @@ const importLibrary = new Function('url', 'return import(url)') as (url: string)
 export async function loadAuthorThreeLibrary(libraries?: AuthorLibraryVersions): Promise<AuthorThreeLibrary> {
   const resolved = resolveAuthorLibraryModule('three/webgpu', libraries)
   if (!resolved || resolved.version !== '0.186.1') throw new Error('受管 three 需要已验证的 three 0.186.1。')
-  return importLibrary(resolved.url)
+  const library = await importLibrary(resolved.url)
+  observeThreeConsole(library)
+  return library
 }
 
 /** 建在 three 上的内置库（如路径追踪器）：它钉住的 three 必须就是受管场景用的这一份，否则类与材质互不认识。 */
@@ -83,6 +85,7 @@ export class VideoEditAuthorThreeWebGpu {
         const previous = errors.onuncapturederror
         try { await bridge.renderer.init() } finally { errors.onuncapturederror = previous }
       })
+      observeThreePipelines(bridge.renderer)
       bridge.clock = new VideoEditAuthorThreeClock(bridge.renderer, library.REVISION)
       if (backend === 'webgpu' && !bridge.renderer.backend.isWebGPUBackend || backend === 'webgl' && !bridge.renderer.backend.isWebGLBackend) {
         throw new Error('受管 three 后端与宿主请求不一致。')
@@ -123,7 +126,7 @@ export class VideoEditAuthorThreeWebGpu {
       if (compile) await (this.backend === 'webgpu' ? runVideoEditGpuSection(this.device, () => this.renderer.compileAsync(scene, camera)) : this.renderer.compileAsync(scene, camera))
       assertCurrent()
       // 提交里的校验错误（如用到已销毁的资源）让这一层失败，而不是当成画好了。
-      await guardVideoEditGpu(this.device, '三维渲染', () => {
+      await guardVideoEditThree(this.renderer, this.device, '三维渲染', () => {
         this.renderer.render(scene, camera)
         assertCurrent()
         if (this.backend === 'webgpu') this.renderer.copyTextureToTexture(this.target!.texture, this.external!)

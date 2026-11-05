@@ -1,4 +1,5 @@
 import { addressCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { videoEditGpuLedger } from './videoEditGpuErrorScope'
 import { isUiInspectionActive } from '@/platform/runtime'
 import { buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
@@ -55,8 +56,8 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     const prepared = await sources.prepare(composition, active, frame, () => true, undefined, { transitions: windows, surfaceKeys: videoEditCompositeSurfaceKeys(nodes) })
     const inspected = prepared.pictures.values().next().value
     const device = inspect && inspected && 'owner' in inspected ? inspected.owner : undefined
-    device?.pushErrorScope('validation')
-    let validationError: { message?: string } | null | undefined
+    const gpu = device ? videoEditGpuLedger(device).open() : undefined
+    let faults: Array<{ message: string }> | undefined
     try {
       const result = await renderVideoEditCompositeScene(composition, nodes, new Map(active.map(clip => [clip.id, prepared.pictures.get(clip.id) ?? null])), prepared.effects, compositor, frame, () => true)
       check(result.presented, '正式合成没有提交画面')
@@ -65,9 +66,9 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
       if (inspect) { snapshot?.close(); snapshot = output.transferToImageBitmap() }
       await result.completion
     } finally {
-      validationError = await device?.popErrorScope()
+      faults = await gpu?.settle()
     }
-    if (validationError) throw new Error(`真实合成GPU验证失败：${validationError.message}`)
+    if (faults?.length) throw new Error(`真实合成GPU验证失败：${faults[0].message}`)
     const elapsed = performance.now() - began
     return { elapsed, cacheHits: prepared.cacheHits }
   }

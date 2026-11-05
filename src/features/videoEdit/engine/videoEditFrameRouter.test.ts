@@ -4,7 +4,7 @@ import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditFrameRouter, type VideoEditNativeCapableBackend } from './videoEditFrameRouter'
 import type { VideoEditAudioChunk, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
 import { VideoEditNativeFailure } from './videoEditNativeFailure'
-import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError } from './videoEditGpuFailure'
 
 /** A backend that records opens/releases; `decodable` is the browser's answer for the file. */
 function fakeBackend(name: string, options: { decodable?: boolean; unreadable?: boolean; reads?: boolean } = {}) {
@@ -36,6 +36,17 @@ describe('剪辑渲染的解码路由', () => {
     expect(await router.recover(decision, source, 'native', error, 0)).toEqual({ error })
     expect(browser.log).toHaveLength(opened)
     expect(native.log).toHaveLength(0)
+  })
+  it.each(['native', 'browser'] as const)('复制进显存失败（%s）不算解码故障：不重置会话，不换解码器，不改判文件格式', async failed => {
+    const browser = fakeBackend('browser'); const native = fakeBackend('native'); const log = vi.fn()
+    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, log)
+    const source = media(); const decision = router.decide(source)
+    await decision.backend
+    const error = new VideoEditGpuFrameError('content', ['Invalid CommandBuffer'])
+    const opened = browser.log.length; log.mockClear()
+    expect(await router.recover(decision, source, failed, error, 0)).toEqual({ error })
+    expect(browser.log).toHaveLength(opened); expect(native.log).toHaveLength(0)
+    expect(log).not.toHaveBeenCalled()
   })
   it('原生不是主路径时：浏览器能完整解的文件整体走浏览器，并复用询问时打开的同一次解析；决定只做一次并记日志', async () => {
     const browser = fakeBackend('browser'); const native = fakeBackend('native'); const log = vi.fn()

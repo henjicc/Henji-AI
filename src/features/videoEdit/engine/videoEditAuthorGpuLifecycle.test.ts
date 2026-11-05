@@ -2,13 +2,12 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
+import { setVideoEditGpuFaultObserver } from './videoEditGpuErrorScope'
 import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
 import type { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import type { VideoEditBuiltinScratchAllocator } from './videoEditBuiltinEffectsGpu'
 
 const author = vi.hoisted(() => ({ render: vi.fn(), dispose: vi.fn(), instance: vi.fn(), constructed: vi.fn() }))
-const logError = vi.hoisted(() => vi.fn())
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: logError }) }))
 vi.mock('./videoEditAuthorPrograms', () => ({ VideoEditAuthorPrograms: class {
   constructor(...args: unknown[]) { author.constructed(...args) }
   instance = author.instance
@@ -70,32 +69,18 @@ it.each(['frame', 'nested:frame:child'])('连续触发帧两档热循环零分�
   } finally { await runtime.dispose() }
 })
 
-it('共享设备错误在作者执行前后和并发期间只记一次原文，最后一个宿主关闭才移除监听', async () => {
-  const { runtime, program, device, emitError } = fixture()
+it('共享设备的未捕获错误只记一次原文，不随某个宿主关闭而停止', async () => {
+  const { runtime, device, emitError } = fixture()
   const other = new VideoEditCodeGpu(device)
-  const raw = 'Attachment rgba16float does not match pipeline rgba8unorm'
+  const report = vi.fn()
+  const stop = setVideoEditGpuFaultObserver(report)
   try {
-    const input = await runtime.target('input', 16, 16, 'rgba16float')
-    emitError(raw)
-    author.render.mockImplementationOnce(async () => { emitError(raw) })
-    expect((await runtime.authorFilter('filter', 'filter', program, {}, input, info)).textureFormat).toBe('rgba16float')
-    let complete!: () => void
-    author.render.mockImplementationOnce(() => new Promise<void>(resolve => { complete = resolve }))
-    const pending = runtime.authorFilter('first', 'first', program, {}, input, info)
-    await vi.waitFor(() => expect(complete).toBeTypeOf('function'))
-    await other.authorFilter('second', 'second', program, {}, input, info)
-    emitError(raw); complete(); await pending
-    emitError(raw)
-    expect(logError).toHaveBeenCalledTimes(4)
-    for (const [, details] of logError.mock.calls) {
-      expect(details.error.message).toBe(raw)
-      expect(details).not.toHaveProperty('context')
-    }
-    await runtime.dispose(); emitError(raw)
-    expect(logError).toHaveBeenCalledTimes(5)
-  } finally { await runtime.dispose(); await other.dispose() }
-  emitError(raw)
-  expect(logError).toHaveBeenCalledTimes(5)
+    emitError('共享设备错误')
+    expect(report).toHaveBeenCalledOnce()
+    expect(report).toHaveBeenCalledWith('video_edit.gpu.uncaptured_error', '共享设备错误', undefined)
+    await runtime.dispose(); emitError('关闭一个宿主之后')
+    expect(report).toHaveBeenCalledTimes(2)
+  } finally { stop(); await runtime.dispose(); await other.dispose() }
 })
 
 it('图层效果分配器进入宿主预算，完整 mip 按实际尺寸计费并在释放时归还', async () => {

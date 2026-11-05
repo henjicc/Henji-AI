@@ -12,7 +12,7 @@ if (process.env.HENJI_THREE_GPU === '1') it('真实 G/W、ExternalTexture、TSL 
   const { createServer } = await import('node:http')
   const { readFile, mkdir, writeFile } = await import('node:fs/promises')
   const path = await import('node:path')
-  const bundled = await build({ stdin: { contents: "export * from './src/features/videoEdit/engine/videoEditAuthorThreeWebGpu'; export * from './src/features/videoEdit/engine/videoEditAuthorThreeClock'", resolveDir: process.cwd() }, bundle: true, format: 'esm', write: false })
+  const bundled = await build({ stdin: { contents: "export * from './src/features/videoEdit/engine/videoEditAuthorThreeWebGpu'; export * from './src/features/videoEdit/engine/videoEditAuthorThreeClock'", resolveDir: process.cwd() }, bundle: true, format: 'esm', write: false, alias: { '@': process.cwd() + '/src' }, define: { 'import.meta.env': '{}' } })
   const server = createServer(async (request, response) => {
     try {
       const name = new URL(request.url!, 'http://localhost').pathname

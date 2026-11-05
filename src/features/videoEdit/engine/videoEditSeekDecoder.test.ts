@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditSeekDecoder } from './videoEditSeekDecoder'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
+import { VideoEditGpuFrameError } from './videoEditGpuFailure'
 import type { VideoSample } from 'mediabunny'
 
 const fixture = vi.hoisted(() => ({ gate: undefined as Promise<void> | undefined, fail: false, ranges: vi.fn(), inputClosed: vi.fn(), decodedClosed: vi.fn(), copied: vi.fn() }))
@@ -117,6 +118,19 @@ it('后台解码失败传给后续定位，不能永远等待或重复启动失�
   await expect(decoder.sample(.1, 0)).rejects.toThrow('decode failed')
   await expect(decoder.sample(.1, 0)).rejects.toThrow('decode failed')
   expect(fixture.ranges).toHaveBeenCalledOnce(); await decoder.dispose()
+})
+it('复制进显存失败不是解码失败：这次读取失败，下一次重新解，不把错误存下来', async () => {
+  let failing = true
+  const copying = async (sample: VideoSample): Promise<VideoEditGpuFrame> => {
+    if (failing) throw new VideoEditGpuFrameError('content', ['Invalid CommandBuffer'])
+    return snapshot(sample)
+  }
+  const cache = new VideoEditFrameCache(2400); const decoder = new VideoEditSeekDecoder('media:original', cache, copying)
+  await expect(decoder.sample(.1, 0)).rejects.toBeInstanceOf(VideoEditGpuFrameError)
+  failing = false
+  const read = await decoder.sample(.1, 0)
+  expect(read.sample).toBeDefined(); read.sample?.close()
+  expect(fixture.ranges).toHaveBeenCalledTimes(2); await decoder.dispose()
 })
 it('反向预取检查上一段末帧，不能因已淘汰的首帧重复解码整个 GOP', async () => {
   const cache = new VideoEditFrameCache(2000); const decoder = new VideoEditSeekDecoder('media:original', cache, snapshot)

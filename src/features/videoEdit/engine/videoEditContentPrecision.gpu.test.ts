@@ -25,7 +25,8 @@ import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtur
 import type { AuthorModule } from './videoEditAuthorModule'
 import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
 import { VideoEditAuthorEffects } from './videoEditAuthorEffects'
-import { VideoEditCodeGpu, VideoEditCodePicture, setVideoEditCodeGpuErrorObserver } from './videoEditCodeGpu'
+import { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
+import { setVideoEditGpuFaultObserver } from './videoEditGpuErrorScope'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { readVideoEditPreciseRow, videoEditHalfToFloat } from './videoEditGpuShaders'
@@ -383,7 +384,7 @@ it('背景层加发光标题连续热帧零纹理分配，键离开后两档完�
 
 it('原生滤镜格式不匹配只写设备日志，按 target.format 修正后恢复（待显卡恢复验证）', async () => {
   const host = new VideoEditCodeGpu(device), report = vi.fn()
-  const stopObserving = setVideoEditCodeGpuErrorObserver(report)
+  const stopObserving = setVideoEditGpuFaultObserver(report)
   let correct = false
   const module: AuthorModule = { name: '格式错误', kind: 'filter', createWebGPU: () => ({ draw(target) {
     const shader = gpu.gpu.createShaderModule({ code: '@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f { let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3)); return vec4f(p[i],0,1); } @fragment fn fs()->@location(0) vec4f { return vec4f(1.5,0,0,1); }' })
@@ -400,8 +401,9 @@ it('原生滤镜格式不匹配只写设备日志，按 target.format 修正后�
   try {
     const input = await host.target('input', W, H, 'rgba16float')
     await host.authorFilter('filter', 'filter', program, {}, input, info)
-    await vi.waitFor(() => expect(report).toHaveBeenCalled())
-    expect(report.mock.calls[0][0]).toMatch(/rgba16float/i)
+    // 校验原文在 encoder.finish() 时报出（未捕获），提交无效命令缓冲再由台账记一条。
+    await vi.waitFor(() => expect(report.mock.calls.map(call => call[0])).toEqual(expect.arrayContaining(['video_edit.gpu.uncaptured_error', 'video_edit.gpu.submit.failed'])))
+    expect(report.mock.calls.some(call => /rgba16float/i.test(call[1]))).toBe(true)
     correct = true
     const calls = report.mock.calls.length
     const output = await host.authorFilter('filter', 'filter', program, {}, input, info)

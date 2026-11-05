@@ -2,7 +2,7 @@ import type * as Three from 'three'
 import type { AuthorLibraryVersions } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { ManagedThreeRenderer } from './videoEditAuthorThreeWebGpu'
 import { loadAuthorThreeDependent, loadAuthorThreeModule } from './videoEditAuthorThreeWebGpu'
-import { guardVideoEditGpu } from './videoEditGpuErrorScope'
+import { guardVideoEditThree } from './videoEditThreePipelineProbe'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { createLogger } from '@/core/logging'
 import { videoEditToneMapping } from './videoEditToneMapping'
@@ -279,7 +279,7 @@ export class VideoEditThreeSpacePathTrace {
       const started = performance.now(), batch = frame.budgetMs === undefined ? SAMPLE_BATCH : 1
       // 降噪分块读取当前累积结果，读完之前不再累积，否则各块取到的采样数不同。
       while (this.samples < frame.samples && !this.denoiser?.running) {
-        await guardVideoEditGpu(device, '路径追踪', () => { for (let i = 0; i < batch; i++) tracer.renderSample() })
+        await guardVideoEditThree(renderer, device, '路径追踪', () => { for (let i = 0; i < batch; i++) tracer.renderSample() })
         // 读回采样数要等显卡做完这一批：排队的显卡工作每次只有一小批（不会一下排进几秒的计算触发显卡超时），也能及时取消。
         // 波前追踪每次只推进一次弹射，采样数只能按追踪器自己的统计。
         this.samples = (await tracer.getSampleCountsAsync()).min
@@ -294,12 +294,12 @@ export class VideoEditThreeSpacePathTrace {
       this.exposure.value = frame.exposure
       if (frame.glow) {
         const pipeline = await this.glowPipeline(frame.glow, frame.toneMapping, width, height)
-        await guardVideoEditGpu(device, '路径追踪', () => {
+        await guardVideoEditThree(renderer, device, '路径追踪', () => {
           // 泛光的中间各步画到当前渲染目标，最后一步画到输出渲染目标：两个都指向本帧目标。
           renderer.setRenderTarget(frame.target); renderer.setOutputRenderTarget(frame.target)
           try { pipeline.render() } finally { renderer.setOutputRenderTarget(null) }
         })
-      } else { const encode = this.encodeQuad(frame.toneMapping); await guardVideoEditGpu(device, '路径追踪', () => encode.render(renderer)) }
+      } else { const encode = this.encodeQuad(frame.toneMapping); await guardVideoEditThree(renderer, device, '路径追踪', () => encode.render(renderer)) }
       return this.samples < frame.samples || denoised.pending
     } catch (error) {
       // 半途失败的累积不再可信：下次从头开始。
@@ -369,7 +369,7 @@ export class VideoEditThreeSpacePathTrace {
       this.keptTarget = new this.library.RenderTarget(width, height, { type: this.library.HalfFloatType, depthBuffer: false })
     }
     const kept = this.keptTarget
-    await guardVideoEditGpu((this.renderer as unknown as { backend: { device: GpuDevice } }).backend.device, '保留降噪画面', () => this.renderer.copyTextureToTexture(texture, kept.texture))
+    await guardVideoEditThree(this.renderer, (this.renderer as unknown as { backend: { device: GpuDevice } }).backend.device, '保留降噪画面', () => this.renderer.copyTextureToTexture(texture, kept.texture))
     this.kept = true
   }
 

@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { resolveAuthorEffects } from '@/core/videoEdit/authorEffects'
 import { VideoEditAuthorEffects } from './videoEditAuthorEffects'
+import { retireVideoEditGpuOutputs } from './videoEditGpuErrorScope'
 
 vi.mock('./videoEditBuiltinEffectsGpu', () => ({ VideoEditBuiltinEffectsGpu: class {
   encodePlan = vi.fn(async () => {})
@@ -9,6 +10,23 @@ vi.mock('./videoEditBuiltinEffectsGpu', () => ({ VideoEditBuiltinEffectsGpu: cla
   abandon = vi.fn()
   dispose = vi.fn()
 } }))
+
+it('一帧在 GPU 上失败后，按内容键缓存的效果输出不再命中', async () => {
+  const allocate = vi.fn(() => ({ createView: () => ({}), destroy: vi.fn() }))
+  const chain = new VideoEditAuthorEffects({ createSampler: () => ({}) } as unknown as GpuDevice, { allocate, release: vi.fn() })
+  const input = { createView: () => ({}), destroy: vi.fn() }
+  const context = { referenceSize: { width: 100, height: 50 }, contentBounds: { x: 0, y: 0, width: 20, height: 10 }, rasterScale: 1, rasterOrigin: [0, 0] as const, quality: 'interactive' as const }
+  const encode = async () => {
+    chain.begin({} as ReturnType<GpuDevice['createCommandEncoder']>)
+    const output = await chain.encode('title', input, 64, 32, [{ ...resolveAuthorEffects([{ id: 'black_white' }])[0], amount: .5 }], context, {}, 'same-pixels', { radius: 0, lens: false }, () => {}, 0)
+    chain.commit()
+    return output
+  }
+  const first = await encode()
+  expect(await encode()).toBe(first)
+  retireVideoEditGpuOutputs()
+  expect(await encode()).not.toBe(first)
+})
 
 it('动态效果按尺寸复用工作纹理，覆写前撤销缓存资格，缩放和删层回收资源', async () => {
   const allocate = vi.fn(() => ({ createView: () => ({}), destroy: vi.fn() }))

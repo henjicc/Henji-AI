@@ -616,6 +616,9 @@ it('后台完成保留普通失败和效果提示，GPU 丢失进入同一会话
     const completed = { id: 0, phase: 'refined', frame: 15, presented: true, effectErrors: ['素材缺失'] }
     worker.onmessage!({ data: completed } as MessageEvent)
     expect(session.onRefinement).toHaveBeenLastCalledWith(completed, undefined)
+    worker.onmessage!({ data: { ...failed, gpuFrame: { source: 'content', faults: ['Invalid CommandBuffer'] } } } as MessageEvent)
+    expect(session.onRefinement).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ name: 'VideoEditGpuFrameError', faults: ['Invalid CommandBuffer'] }))
+    expect(session.terminalError).toBeUndefined()
     worker.onmessage!({ data: { ...failed, gpuDeviceLost: 'device reset' } } as MessageEvent)
     expect(session.terminalError).toBeInstanceOf(VideoEditGpuDeviceLostError)
     expect(session.terminated).toBe(true)

@@ -11,8 +11,9 @@ export class VideoEditGpuBitmapBridge {
   private captureFormat?: string
   constructor(private readonly device: GpuDevice) {}
   /** Copy the current presentation before any await can expire its canvas texture.
-   * The detached bitmap keeps GPU storage alive for transfer to the encoder host. */
-  capture(texture: GpuTexture, width: number, height: number, format: string): ImageBitmap {
+   * The detached bitmap keeps GPU storage alive for transfer to the encoder host.
+   * `beforeSubmit` 让调用方把帧栅栏编进这次拷贝，它是这一帧最后一次提交。 */
+  capture(texture: GpuTexture, width: number, height: number, format: string, beforeSubmit?: (encoder: unknown) => void): ImageBitmap {
     if (!this.captureCanvas) {
       this.captureCanvas = new OffscreenCanvas(width, height)
       this.captureContext = getWebGpuContext(this.captureCanvas)
@@ -26,6 +27,7 @@ export class VideoEditGpuBitmapBridge {
     const encoder = this.device.createCommandEncoder()
     ;(encoder as typeof encoder & { copyTextureToTexture(source: unknown, destination: unknown, size: unknown): void })
       .copyTextureToTexture({ texture }, { texture: this.captureContext!.getCurrentTexture() }, { width, height, depthOrArrayLayers: 1 })
+    beforeSubmit?.(encoder)
     this.device.queue.submit([encoder.finish()])
     return this.captureCanvas.transferToImageBitmap()
   }

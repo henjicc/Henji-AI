@@ -14,7 +14,7 @@ import type { VideoEditPresentedSource } from './engine/videoEditRenderer'
 import type { RenderResponse } from './engine/videoEditWorker'
 import type { CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
 import * as codeElements from './application/videoEditCodeElements'
-import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './engine/videoEditGpuFailure'
+import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './engine/videoEditGpuFailure'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
@@ -23,7 +23,7 @@ import * as captionTargets from './panels/videoEditCaptionTextTargets'
 import { useSettingsStore } from '@/stores/settingsStore'
 import * as monitorButtons from './panels/VideoEditMonitorButtons'
 const stopNotification = vi.hoisted(() => vi.fn())
-const pixel = vi.hoisted(() => ({ refinement: undefined as ((result: RenderResponse, error?: Error) => void) | undefined, presentation: undefined as ((frame: number, source: VideoEditPresentedSource, authorElements?: CodeAuthorFrameObservation, provenance?: 'live' | 'web-cache') => void) | undefined, preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; precision?: string; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean; presentedSource?: VideoEditPresentedSource; effectErrors?: string[]; skipped?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn(), webScale: vi.fn(async (_scale: number) => undefined) }))
+const pixel = vi.hoisted(() => ({ refinement: undefined as ((result: RenderResponse, error?: Error) => void) | undefined, presentation: undefined as ((frame: number, source: VideoEditPresentedSource, authorElements?: CodeAuthorFrameObservation, provenance?: 'live' | 'web-cache') => void) | undefined, preopen: vi.fn(), arm: vi.fn(async () => undefined), requests: [] as Array<{ frame: number; sequential?: boolean; scrubbing?: boolean | 'fast'; deadline?: number; submitted?: () => void; precision?: string; resolve: (value: { sourceTimestamps: number[]; presented?: boolean; history?: ImageBitmap; approximate?: boolean; presentedSource?: VideoEditPresentedSource; effectErrors?: string[]; gpuFrame?: RenderResponse['gpuFrame']; skipped?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), invalidate: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn(), webScale: vi.fn(async (_scale: number) => undefined) }))
 const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
 // 网页显示档位只在合成里有网页时生效；这里的片段替身没有真实网页代码素材，按“有网页”处理。
 vi.mock('./application/videoEditWebContent', async importOriginal => ({ ...await importOriginal<typeof import('./application/videoEditWebContent')>(), videoEditCompositionHasWeb: () => true }))
@@ -712,6 +712,47 @@ it('回放分辨率（4.9）：播放时按所选倍数缩小渲染，暂停回�
   await act(async () => { await vi.advanceTimersByTimeAsync(5) })
   expect(pixel.scale).toHaveBeenLastCalledWith(4)
   expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+it('暂停帧在 GPU 上瞬时失败：提示不误导；设为封面自动重画一次，好了就保存', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; appendVideoEditClip(id)
+  const toBlob = vi.fn((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })))
+  HTMLCanvasElement.prototype.toBlob = toBlob as unknown as HTMLCanvasElement['toBlob']
+  const failure = new VideoEditGpuFrameError('composite', ['Invalid CommandBuffer'])
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [], effectErrors: [failure.message], gpuFrame: failure.facts }); await vi.advanceTimersByTimeAsync(5) })
+  expect(view.getByText('画面可能不完整')).toBeTruthy()
+  expect(view.queryByText('部分效果已跳过')).toBeNull()
+  const requests = pixel.requests.length
+  const saved = setVideoEditPosterFrame(id)
+  await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+  expect(toBlob).not.toHaveBeenCalled()
+  expect(pixel.requests.length).toBeGreaterThan(requests)
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [] }); await vi.advanceTimersByTimeAsync(20) })
+  await act(async () => { await saved })
+  expect(toBlob).toHaveBeenCalledTimes(1)
+  view.unmount()
+})
+it.each([
+  ['上屏回执', (failure: VideoEditGpuFrameError) => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [], effectErrors: [failure.message], gpuFrame: failure.facts }) }],
+  ['错误回执', (failure: VideoEditGpuFrameError) => { pixel.requests.at(-1)!.reject(failure) }],
+])('同一帧 GPU 持续失败（%s）：第二次就带原文报错，不等超时，也不保存坏画面', async (_name, fail) => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; appendVideoEditClip(id)
+  const toBlob = vi.fn((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })))
+  HTMLCanvasElement.prototype.toBlob = toBlob as unknown as HTMLCanvasElement['toBlob']
+  const failure = new VideoEditGpuFrameError('content', ['Destroyed texture used in a submit'])
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [], effectErrors: [failure.message], gpuFrame: failure.facts }); await vi.advanceTimersByTimeAsync(5) })
+  let outcome: string | undefined
+  void setVideoEditPosterFrame(id).then(() => { outcome = 'saved' }, (error: Error) => { outcome = error.message })
+  await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+  expect(outcome).toBeUndefined()
+  await act(async () => { fail(failure); await vi.advanceTimersByTimeAsync(20) })
+  expect(outcome).toContain('Destroyed texture used in a submit')
+  expect(outcome).toContain('没有保存')
+  expect(toBlob).not.toHaveBeenCalled()
+  view.unmount()
 })
 it('回放分辨率（4.9）：暂停也用 1/8 时，设为封面先按完整分辨率重画这一帧再取图，取完回到所选分辨率', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; appendVideoEditClip(id)

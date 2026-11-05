@@ -1,3 +1,4 @@
+import { videoEditGpuOutputEpoch } from './videoEditGpuErrorScope'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { authorEffectsFingerprint, type AuthorEffectEnvironment, type ResolvedAuthorEffect } from '@/core/videoEdit/authorEffects'
@@ -31,7 +32,7 @@ export class VideoEditAuthorEffects {
     if (!this.batch) throw new Error('图层效果尚未开始编码。')
     this.used.add(slot)
     const format = input.format === 'rgba16float' || needsFloat ? 'rgba16float' : 'rgba8unorm'
-    const key = JSON.stringify([format, contentKey, width, height, context, authorEffectsFingerprint(effects, environment, frame), frameDuration, defocus, adjustment])
+    const key = JSON.stringify([videoEditGpuOutputEpoch(), format, contentKey, width, height, context, authorEffectsFingerprint(effects, environment, frame), frameDuration, defocus, adjustment])
     const cached = this.cache.get(slot)
     if (contentKey !== undefined && cached?.key === key) return cached.output
     // 内容键失效即撤销缓存资格；同尺寸像素可以覆写，取消后必须重新编码才能发布。

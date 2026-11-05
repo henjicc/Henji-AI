@@ -24,6 +24,8 @@ import { VideoEditContentAudio } from './videoEditContentAudio'
 import { codeAudioComposition, codeAudioReferenceMediaId, codeAudioTime } from '@/core/videoEdit/codeAudio'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { createLogger } from '@/core/logging'
+import { reportVideoEditGpuFault, retireVideoEditGpuOutputs, videoEditGpuOutputEpoch, type VideoEditFrameGpu, type VideoEditGpuFault } from './videoEditGpuErrorScope'
+import { VideoEditGpuFrameError } from './videoEditGpuFailure'
 import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/videoEdit/shaderGraph/transitions'
 import { isGlTransition } from '@/core/videoEdit/glTransitions/transitions'
@@ -153,7 +155,7 @@ type CodeInputPrewarm = 'reached' | 'failed' | 'stopped'
  * `prewarm`: stops the walk of a session opened ahead (the clip starts, playback stops, the session closes); `ahead`:
  * how that walk ended.
  */
-interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; /** The last picture is an approximate one (fast scrub, far jump): an exact request draws it again. */ lastApproximate?: boolean; ownerKey: string; prewarm?: AbortController; ahead?: Promise<CodeInputPrewarm> }
+interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; lastGpuOutcome?: VideoEditFrameGpu['outcome']; lastGpuEpoch?: number; /** The last picture is an approximate one (fast scrub, far jump): an exact request draws it again. */ lastApproximate?: boolean; ownerKey: string; prewarm?: AbortController; ahead?: Promise<CodeInputPrewarm> }
 /** A read abandoned through its signal (or a walk stopped through its own): never a failure to report or recover from. */
 const isAbortError = (error: unknown): boolean => (error as { name?: unknown } | null)?.name === 'AbortError'
 /** A still being decoded in the background (owner only); `urgent` once a showing frame waits for it. */
@@ -166,7 +168,7 @@ interface StillDecode { done: Promise<boolean>; controller: AbortController; urg
  * `signal`: abandons the video reads anywhere in the tree once a newer paused request replaced the frame
  * (`supersedePausedFrame`).
  */
-interface NestedFrameContext { precision: VideoEditRenderPrecision; webCacheAdaptive?: boolean; webCacheWrite?: boolean; pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number; completions: Array<Promise<void>>; instances: Set<string>; approximate: WeakSet<VideoEditCodePicture>; placeholderReleases: Set<() => void>; ended?: boolean; signal?: AbortSignal; webDeadline?: number }
+interface NestedFrameContext { gpu: VideoEditFrameGpu; precision: VideoEditRenderPrecision; webCacheAdaptive?: boolean; webCacheWrite?: boolean; pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number; completions: Array<Promise<void>>; instances: Set<string>; approximate: WeakSet<VideoEditCodePicture>; placeholderReleases: Set<() => void>; ended?: boolean; signal?: AbortSignal; webDeadline?: number }
 /**
  * The render target of a code input session: one per session (each input renderer owns its targets), drawn again
  * every frame. A target per sample allocated and destroyed a 4K rgba16float texture (66MB) per frame and input.
@@ -1611,9 +1613,10 @@ export class VideoEditRenderer {
         const keys = context.keys.get(session.ownerKey) ?? new Set<string>(); keys.add(targetKey); context.keys.set(session.ownerKey, keys)
         picture = session.tail.catch(() => undefined).then(async () => {
           if (!current()) throw new DOMException('视频取帧已取消。', 'AbortError')
-          if (session.lastKey === sampleKey && session.lastPicture && (scrubbing !== false || !session.lastApproximate) && (context.precision === 'web-cache' || session.lastPicture.provenance !== 'web-cache') && (reference.kind === 'video' || session.document === document)) {
+          if (session.lastKey === sampleKey && session.lastPicture && session.lastGpuEpoch === videoEditGpuOutputEpoch() && (scrubbing !== false || !session.lastApproximate) && (context.precision === 'web-cache' || session.lastPicture.provenance !== 'web-cache') && (reference.kind === 'video' || session.document === document)) {
             recordVideoEditPreparation('codeInputFrameHit', 0)
             if (session.lastApproximate) context.approximate.add(session.lastPicture)
+            context.gpu.reuse(session.lastGpuOutcome)
             return session.lastPicture
           }
           // The target is drawn again below: a cancelled or failed new frame must never resurrect the previous picture.
@@ -1635,7 +1638,7 @@ export class VideoEditRenderer {
           // top-level completion and is never reused.
           void result.completion.catch(() => { if (session.lastPicture === nested) { session.lastKey = undefined; session.lastPicture = undefined } })
           context.completions.push(result.completion)
-          session.lastKey = sampleKey; session.lastPicture = nested; session.document = document; session.lastApproximate = !!result.approximate
+          session.lastKey = sampleKey; session.lastPicture = nested; session.lastGpuOutcome = context.gpu.outcome; session.lastGpuEpoch = videoEditGpuOutputEpoch(); session.document = document; session.lastApproximate = !!result.approximate
           if (result.approximate) context.approximate.add(nested)
           recordVideoEditPreparation('codeInputRender', performance.now() - started)
           return nested
@@ -1975,11 +1978,18 @@ export class VideoEditRenderer {
     } finally { unlock() }
   }
   private async renderFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, signal?: AbortSignal, requestOrder?: number, observeElements = false, precision: VideoEditRenderPrecision = 'exact'): Promise<VideoEditRenderResult> {
-    this.capturePresentation = capturePresentation
     if (this.disposed) throw new Error('预览已关闭。')
-    const nestedContext: NestedFrameContext = nestedRender?.context ?? { precision, webCacheWrite: this.cacheWebOutput && precision === 'exact', webCacheAdaptive: !!this.previewWidth && !capturePresentation && quality !== 'final', pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0, completions: [], instances: new Set(), approximate: new WeakSet(), placeholderReleases: new Set(), ...(signal ? { signal } : {}) }
+    const gpu = nestedRender?.context.gpu ?? await this.ensureCompositor().beginFrameGpu()
+    this.capturePresentation = capturePresentation
+    const nestedContext: NestedFrameContext = nestedRender?.context ?? { gpu, precision, webCacheWrite: this.cacheWebOutput && precision === 'exact', webCacheAdaptive: !!this.previewWidth && !capturePresentation && quality !== 'final', pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0, completions: [], instances: new Set(), approximate: new WeakSet(), placeholderReleases: new Set(), ...(signal ? { signal } : {}) }
     try {
-      return await this.renderPreparedFrame(frame, sequential, _scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation, nestedContext, requestOrder, observeElements)
+      const result = await this.renderPreparedFrame(frame, sequential, _scrubbing, shouldPresent, deadline, nestedRender, quality, capturePresentation, nestedContext, requestOrder, observeElements)
+      // 每一层都挂：合成提交的错误被同步窗口认领，根帧的窗口读不到；根帧随后没上屏或抛错时，它的完成也没有人看。
+      void result.completion.catch((error: unknown) => { if (error instanceof VideoEditGpuFrameError) retireVideoEditGpuOutputs() })
+      return nestedRender ? result : this.settleFrameGpu(result, gpu, frame)
+    } catch (error) {
+      if (!nestedRender) void this.frameGpuFaults(gpu, frame)
+      throw error
     } finally {
       // 输入必须保护到根帧提交；取消与失败也结束本帧，子树共享的状态由根统一释放。
       if (!nestedRender) {
@@ -1989,6 +1999,30 @@ export class VideoEditRenderer {
         nestedContext.placeholderReleases.clear()
       }
     }
+  }
+  /**
+   * 每个根帧都结清窗口：没上屏的帧（提前返回、被取代）也可能已经跑过代码 GPU，它的输出留在缓存里，要有结果。
+   * 只有上屏的帧才把失败报给调用方。
+   */
+  private settleFrameGpu(result: VideoEditRenderResult, gpu: VideoEditFrameGpu, frame: number): VideoEditRenderResult {
+    const faults = this.frameGpuFaults(gpu, frame)
+    if (!result.presented) return result
+    const completion = Promise.allSettled([result.completion, faults]).then(([completed, settled]) => {
+      if (completed.status === 'rejected') throw completed.reason
+      if (settled.status === 'fulfilled' && settled.value.length) throw new VideoEditGpuFrameError('content', settled.value.map(fault => fault.message))
+    })
+    // 后台帧的完成没有人等；等它的人照常拿到拒绝。
+    void completion.catch(() => {})
+    return { ...result, completion }
+  }
+  private async frameGpuFaults(gpu: VideoEditFrameGpu, frame: number): Promise<readonly VideoEditGpuFault[]> {
+    gpu.end()
+    const faults = await gpu.settle()
+    if (faults.length) {
+      retireVideoEditGpuOutputs()
+      reportVideoEditGpuFault('video_edit.gpu.frame.failed', faults[0].message, { sequenceId: this.document.id, frame, faults: faults.length })
+    }
+    return faults
   }
   private async renderPreparedFrame(frame: number, sequential: boolean, _scrubbing: VideoEditScrubMode, shouldPresent: () => boolean, deadline: number | undefined, nestedRender: NestedRender | undefined, quality: EffectQuality, capturePresentation: ((pixels: Promise<ImageBitmap>) => void) | undefined, nestedContext: NestedFrameContext, requestOrder?: number, observeElements = false): Promise<VideoEditRenderResult> {
     const document = this.document; const epoch = this.presentationEpoch
@@ -2126,7 +2160,7 @@ export class VideoEditRenderer {
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
     if (spatial) for (const key of videoEditSpatialBelowKeys(spatial.plan)) surfaceKeys.add(key)
-    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { observeElements, spatialFrame: spatial?.plan.centerFrame, deferredGenerators, exactInput: input => !approximateCodeInputs.has(input), quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
+    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { gpuFrame: nestedContext.gpu, observeElements, spatialFrame: spatial?.plan.centerFrame, deferredGenerators, exactInput: input => !approximateCodeInputs.has(input), quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
       if (!codeMaterialUsesAudio(program)) return {}
       const source = codeAudioComposition(sourceDocument, sourceDocument.clips.find(value => value.id === clip.id) ?? clip, codeAudioReferenceMediaId(parameters))
       const audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)
@@ -2183,6 +2217,8 @@ export class VideoEditRenderer {
             const nestedStarted = performance.now()
             const result = await renderer.render(childFrame, playing, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: rendererKey, ...(playbackPlan ? { playbackPlan } : {}) }, quality)
             if (!result.presented || !result.nestedPicture) throw new DOMException('旧嵌套画面已取消。', 'AbortError')
+            // 嵌套层的合成提交在它自己的同步窗口里，根帧的窗口读不到，要并进根帧的完成。
+            nestedContext.completions.push(result.completion)
             effectErrors.push(...(result.effectErrors ?? []))
             for (const message of result.sceneIssues ?? []) if (!sceneIssues.includes(message)) sceneIssues.push(message)
             if (!nestedRender) recordVideoEditPreparation('nestedRender', performance.now() - nestedStarted)

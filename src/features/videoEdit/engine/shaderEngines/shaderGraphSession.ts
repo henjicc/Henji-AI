@@ -15,6 +15,7 @@ import type { GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/
 import { SHADER_GRAPH_INPUT, SHADER_GRAPH_SECOND, type ShaderGraphCustomShader, type ShaderGraphLayer, type ShaderGraphSpec, shaderGraphCustomPropKind, shaderGraphLayerId, shaderGraphStructureKey } from '@/core/videoEdit/shaderGraph/spec'
 import { SHADER_COMPONENT_LOADERS } from './componentLoaders.generated'
 import { runVideoEditGpuSection } from '../videoEditGpuRootQueue'
+import { videoEditGpuLedger } from '../videoEditGpuErrorScope'
 
 type Renderer = ReturnType<typeof shaderRendererGPU>
 // 框架的组件定义对象；类型来自 shaders 包，这里只按名称传递，不读内部字段以外的结构。
@@ -334,7 +335,9 @@ export class ShaderGraphSession {
     this.applyProps(request.props)
     const host = hostDevice(this.device)
     // 三个作用域跨越着色器图的异步绘制，与 three 初始化、预热共用设备根队列。
-    const { thrown, errors } = await runVideoEditGpuSection(this.device, async () => {
+    const { thrown, errors, faults } = await runVideoEditGpuSection(this.device, async () => {
+      // 提交错误由台账接住，下面的作用域只看得到建对象这类错误。
+      const gpu = videoEditGpuLedger(this.device).open()
       const scopes = ['validation', 'out-of-memory', 'internal'] as const
       scopes.forEach(scope => this.device.pushErrorScope(scope))
       host.owner = this
@@ -360,9 +363,9 @@ export class ShaderGraphSession {
         this.device.queue.submit([present.finish()])
       } catch (error) { thrown = error }
       host.owner = null
-      return { thrown, errors: await Promise.all(scopes.map(() => this.device.popErrorScope())).catch(() => []) }
+      return { thrown, errors: await Promise.all(scopes.map(() => this.device.popErrorScope())).catch(() => []), faults: await gpu.settle() }
     })
-    const message = this.gpuError ?? errors.find(error => error?.message)?.message
+    const message = this.gpuError ?? errors.find(error => error?.message)?.message ?? faults[0]?.message
     const failure = renderer.getFailureReason()
     this.gpuError = undefined
     // GPU 报的错（多为作者 WGSL）比后续“没有产出画面”更接近原因，优先交还。

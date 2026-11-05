@@ -3,7 +3,8 @@ import { setVideoEditDenoiserWeights } from './videoEditDenoiserWeights'
 import { readAuthorCandidateMetadata, releaseAuthorCandidate, closeAuthorCandidates } from './videoEditAuthorCandidates'
 import { renewTextFontLease, acquireSharedTextFontLease, attachTextFontChannel, closeTextFontChannel, type TextFontChannelAttach } from './videoEditTextFontChannel'
 import { videoEditRenderFailure, installVideoEditWorkerErrorReporting } from './videoEditGpuFailure'
-import { setVideoEditCodeGpuErrorObserver } from './videoEditCodeGpu'
+import { setVideoEditGpuFaultObserver } from './videoEditGpuErrorScope'
+import { VideoEditGpuFrameError } from './videoEditGpuFailure'
 import { VideoEditCodeFingerprint } from './videoEditCodeFingerprint'
 import { enableVideoEditFrameTrace, traceVideoEditFrame } from './videoEditFrameTrace'
 import { VideoEditSharedCompilation, type SharedCompilationResponse } from './videoEditSharedCompilation'
@@ -80,7 +81,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { provenance?: import('@/platform/contracts/videoFrames').WebSourceProvenance; fingerprints?: Array<[number, import('@/core/videoEdit/renderFingerprint').VideoEditFrameFingerprint]>; hoverBytes?: Uint8Array; /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; refining?: boolean; /** 渲染显示方式下路径追踪的进度（0–1）。 */ spaceProgress?: number; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted' | 'presented' | 'refined'; frame?: number; sequenceId?: string; revision?: number; presentedSource?: VideoEditPresentedSource; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { gpuFrame?: import('./videoEditGpuFailure').VideoEditGpuFrameFacts; provenance?: import('@/platform/contracts/videoFrames').WebSourceProvenance; fingerprints?: Array<[number, import('@/core/videoEdit/renderFingerprint').VideoEditFrameFingerprint]>; hoverBytes?: Uint8Array; /** A program scrub frame answered without rendering: a newer frame request had already arrived. */ skipped?: boolean; refining?: boolean; /** 渲染显示方式下路径追踪的进度（0–1）。 */ spaceProgress?: number; renderCached?: boolean; renderElapsedMs?: number; renderStages?: Record<string, number>; approximate?: boolean; gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted' | 'presented' | 'refined'; frame?: number; sequenceId?: string; revision?: number; presentedSource?: VideoEditPresentedSource; error?: string; contentTrust?: import('@/core/contentTrust').ContentTrustFailure; /** 效果错误，后接 sceneIssues（节目监视器按这一项提示用户）。 */ effectErrors?: string[]; /** 片子数据里会让画面缺内容的问题，也已在 effectErrors 里：试渲染等据此不把它们当成失败。 */ sceneIssues?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -168,7 +169,7 @@ const log = (level: RenderLogMessage['level'], message: string, event: string, c
   if (event === 'video_edit.decode.preopen.skipped') { if (context.reason === 'budget') lookaheadStats.budgetSkipped++; else lookaheadStats.foregroundSkipped++ }
   self.postMessage({ kind: 'log', level, message, event, context } satisfies RenderLogMessage) }
 setVideoEditMaskTimingObserver(context => log('debug', '遮罩栅格化', 'video_edit.mask.raster.completed', context))
-setVideoEditCodeGpuErrorObserver(message => log('warn', '代码 GPU 执行失败', 'video_edit.code_gpu.failed', { message }))
+setVideoEditGpuFaultObserver((event, message, context) => log('warn', 'GPU 执行失败', event, { message, ...context }))
 /** The renderer's decoding: the browser backend, plus native decoding when the frame channel is attached. */
 function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFrames {
   setProxies(decode?.proxies)
@@ -221,6 +222,14 @@ installVideoEditWebChannel(() => nativeFrames)
 self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse | TextFontChannelAttach>) => {
   if (videoEditRenderDiagnosticsEnabled()) probeVideoEditTask(`message.${event.data.kind}`, () => receive(event))
   else receive(event)
+}
+/** 要像素的请求按失败处理，不交坏画面；不要像素的请求画面已在屏幕上，照常显示并提示。 */
+async function frameGpuFault(completion: Promise<void>, needsPixels: boolean): Promise<VideoEditGpuFrameError | undefined> {
+  try { await completion; return undefined }
+  catch (error) {
+    if (needsPixels || !(error instanceof VideoEditGpuFrameError)) throw error
+    return error
+  }
 }
 function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse | TextFontChannelAttach>): void {
   if (event.data.kind === 'code.trustResult' || event.data.kind === 'code.compiled' || event.data.kind === 'code.source' || event.data.kind === 'code.metadataResult' || event.data.kind === 'code.moduleUrls') { sharedCompilation.receive(event.data); return }
@@ -296,9 +305,10 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
       if (!shown.presented && latestRender === request) return false
       queuedFrames.delete(request.id); releaseForeground()
       const completingAt = performance.now()
-      await shown.completion
+      // 这条路径的请求不取像素：画面已在屏幕上，照常回执并提示。
+      const gpuFault = await frameGpuFault(shown.completion, false)
       skipped = !shown.presented
-      self.postMessage({ id: request.id, presented: shown.presented, ...(!shown.presented ? { skipped: true } : {}), provenance: shown.provenance, presentedSource: shown.presentedSource, refining: !request.scrubbing, renderCached: true, renderElapsedMs: performance.now() - receivedAt, ...(videoEditRenderDiagnosticsEnabled() ? { preparationStages: videoEditPreparationSnapshot() } : {}), renderStages: { ...shown.renderStages, queue: 0, presentComplete: performance.now() - completingAt, ...(videoEditRenderDiagnosticsEnabled() && request.sentAt !== undefined ? videoEditDeliveryStages(request.sentAt, performance.timeOrigin + receivedAt) : {}) }, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: shown.cacheHits, cacheBytes: shown.cacheBytes, decodeMs: shown.decodeMs, gpuMs: shown.gpuMs } satisfies RenderResponse)
+      self.postMessage({ id: request.id, presented: shown.presented, ...(gpuFault ? { effectErrors: [gpuFault.message], gpuFrame: gpuFault.facts } : {}), ...(!shown.presented ? { skipped: true } : {}), provenance: shown.provenance, presentedSource: shown.presentedSource, refining: !request.scrubbing, renderCached: true, renderElapsedMs: performance.now() - receivedAt, ...(videoEditRenderDiagnosticsEnabled() ? { preparationStages: videoEditPreparationSnapshot() } : {}), renderStages: { ...shown.renderStages, queue: 0, presentComplete: performance.now() - completingAt, ...(videoEditRenderDiagnosticsEnabled() && request.sentAt !== undefined ? videoEditDeliveryStages(request.sentAt, performance.timeOrigin + receivedAt) : {}) }, sourceTimestamps: [], blankPictures: 0, singleFrameReads: 0, cacheHits: shown.cacheHits, cacheBytes: shown.cacheBytes, decodeMs: shown.decodeMs, gpuMs: shown.gpuMs } satisfies RenderResponse)
       return true
     }).catch(error => { skipped = true; queuedFrames.delete(request.id); releaseForeground(); self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse); return true })
     // 缓存成功即完成请求；暂停帧的现场合成在队列内继续，后续缓存请求仍可在队列外上屏。
@@ -452,7 +462,8 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
           const start = performance.now()
           for (const message of result.effectErrors ?? []) if (!effectWarnings.has(message)) log('warn', message, 'video_edit.effect.skipped', { sequenceId: renderer?.document.id, frame: request.frame })
           effectWarnings = new Set(result.effectErrors)
-          await result.completion
+          const gpuFault = await frameGpuFault(result.completion, needsPixels || !!request.history || request.requireLive === true)
+          const frameErrors = [...(result.effectErrors ?? []), ...(result.sceneIssues ?? []), ...(gpuFault ? [gpuFault.message] : [])]
           traceVideoEditFrame('compositor.complete', request.frame, start)
           recordVideoEditPreparation('presentComplete', performance.now() - start)
           // 流水播放会主动等待刷新时刻，这段等待不是计算瓶颈，不能使正常画面标红。
@@ -481,9 +492,9 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
           const bitmap = rgb || direct || !result.presented ? undefined : pixels
           traceVideoEditFrame('bitmap.prepare', request.frame, transferStarted)
           const postedAt = performance.now()
-          if (backgroundRender) self.postMessage({ id: request.id, phase: 'refined', provenance: result.provenance, frame: request.frame, sequenceId: composition.id, revision: composition.revision, presented: result.presented && latestRender === request && revision === composition.revision, effectErrors: [...(result.effectErrors ?? []), ...(result.sceneIssues ?? [])] } satisfies RenderResponse)
+          if (backgroundRender) self.postMessage({ id: request.id, phase: 'refined', provenance: result.provenance, frame: request.frame, sequenceId: composition.id, revision: composition.revision, presented: result.presented && latestRender === request && revision === composition.revision, effectErrors: frameErrors, ...(gpuFault ? { gpuFrame: gpuFault.facts } : {}) } satisfies RenderResponse)
           if (!backgroundRender) {
-          probeVideoEditTask('render.post', () => self.postMessage({ id: request.id, ...(result.superseded && latestRender !== request || !result.presented && cancelledByStop() ? { skipped: true } : {}), provenance: result.provenance, renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.sceneIssues ? [...(result.effectErrors ?? []), ...result.sceneIssues] : result.effectErrors, ...(result.sceneIssues ? { sceneIssues: result.sceneIssues } : {}), sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, presentedSource: result.presentedSource, ...(result.approximate ? { approximate: true } : {}), ...(result.spaceProgress !== undefined ? { spaceProgress: result.spaceProgress } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance().filter(sample => sample.frame === request.frame), ...(videoEditRenderDiagnosticsEnabled() ? { preparationStages: videoEditPreparationSnapshot() } : {}) } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] }))
+          probeVideoEditTask('render.post', () => self.postMessage({ id: request.id, ...(result.superseded && latestRender !== request || !result.presented && cancelledByStop() ? { skipped: true } : {}), provenance: result.provenance, renderCached: result.renderCached, renderElapsedMs, renderStages, bitmap, history, rgb, authorElements, effectErrors: result.sceneIssues || gpuFault ? frameErrors : result.effectErrors, ...(gpuFault ? { gpuFrame: gpuFault.facts } : {}), ...(result.sceneIssues ? { sceneIssues: result.sceneIssues } : {}), sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, presentedSource: result.presentedSource, ...(result.approximate ? { approximate: true } : {}), ...(result.spaceProgress !== undefined ? { spaceProgress: result.spaceProgress } : {}), decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance().filter(sample => sample.frame === request.frame), ...(videoEditRenderDiagnosticsEnabled() ? { preparationStages: videoEditPreparationSnapshot() } : {}) } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] }))
           }
           if (bitmap) owned.delete(bitmap)
           traceVideoEditFrame('worker.post', request.frame, postedAt)
