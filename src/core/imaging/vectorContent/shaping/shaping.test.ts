@@ -25,6 +25,14 @@ describe.skipIf(!file)('纯 CPU HarfBuzz + Pretext（实验 2/8）', () => {
   const create = (): TextShaper => { const shaper = new TextShaper(hb); shapers.push(shaper); return shaper }
   afterEach(() => { shapers.splice(0).forEach(shaper => shaper.dispose()); vi.restoreAllMocks() })
 
+  it('按文字自身的宽度再排一次不会多折行：盒子按内容收缩时末尾的字不能被裁掉', () => {
+    const shaper = create()
+    for (const size of [24, 27, 28, 31, 33, 40]) for (const text of ['Rich Text', 'Pretext line', 'AV Te', 'office affine', 'one two three']) {
+      const natural = new ShapedParagraph(shaper, source, text, { ...options, size }).layout().lines[0].width
+      expect(new ShapedParagraph(shaper, source, text, { ...options, size, maxWidth: natural }).layout().lines.length, `${text}@${size}`).toBe(1)
+    }
+  })
+
   it('有基底轮廓的彩色 emoji 整簇交给系统绘制，仍保留 HarfBuzz 的度量与断行', async () => {
     const fonts = new TextFontSession('win32', async () => ({ bytes: source.bytes }))
     await fonts.prepare()
