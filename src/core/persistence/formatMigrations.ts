@@ -183,7 +183,8 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   'audio-capture-recovery': { 1: value => ({ ...value as object, version: 2 }) },
   // 实验性功能开关 experimentalWebAppRecording（2026-10-23）：只新增可选字段，缺省即关闭。
   // 剪辑片段缩略图模式 videoEditClipThumbnails（2026-10-24）：只新增可选字段，缺省即“只在开头”。
-  settings: { 14: value => value, 15: value => value },
+  // 播放时时间线自动滚动 videoEditTimelineAutoScroll（2026-11-05）：只新增可选字段，缺省即开启。
+  settings: { 14: value => value, 15: value => value, 16: value => value },
   // 网页录制：步骤与 `.hjweb` 文档类型共用（同一份 recording.json）。
   'web-recording': WEB_RECORDING_MIGRATIONS,
   // 全能调色参数格式 v2（2026-10-21）：开尔文白平衡、创意分离色调并入色轮。

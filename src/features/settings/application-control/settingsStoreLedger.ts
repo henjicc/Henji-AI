@@ -119,5 +119,6 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setVideoEditDuplicatePolicy: property('video_edit.duplicate_policy'),
     setVideoEditClipThumbnails: property('video_edit.clip_thumbnails'),
     setVideoEditSelectionFollowsPlayhead: property('video_edit.selection_follows_playhead'),
+    setVideoEditTimelineAutoScroll: property('video_edit.timeline_auto_scroll'),
   },
 }

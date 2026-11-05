@@ -19,11 +19,16 @@ const VideoEditSection: React.FC = () => {
   const setThumbnails = useSettingsStore(state => state.setVideoEditClipThumbnails)
   const enabled = useSettingsStore(state => state.videoEditSelectionFollowsPlayhead)
   const setEnabled = useSettingsStore(state => state.setVideoEditSelectionFollowsPlayhead)
+  const autoScroll = useSettingsStore(state => state.videoEditTimelineAutoScroll)
+  const setAutoScroll = useSettingsStore(state => state.setVideoEditTimelineAutoScroll)
   const cache = useSyncExternalStore(subscribeMediaCacheSettings, getMediaCacheSettings)
   return (
     <>
     <UiFormRow label={t('sections.videoEdit.selectionFollowsPlayheadLabel')} info={t('sections.videoEdit.selectionFollowsPlayheadInfo')} inline>
       <UiSwitch aria-label={t('sections.videoEdit.selectionFollowsPlayheadLabel')} checked={enabled} onCheckedChange={setEnabled} />
+    </UiFormRow>
+    <UiFormRow label={t('sections.videoEdit.timelineAutoScrollLabel')} info={t('sections.videoEdit.timelineAutoScrollInfo')} inline>
+      <UiSwitch aria-label={t('sections.videoEdit.timelineAutoScrollLabel')} checked={autoScroll} onCheckedChange={setAutoScroll} />
     </UiFormRow>
     <UiFormRow label={t('sections.videoEdit.binsFirstLabel')} inline>
       <UiSwitch aria-label={t('sections.videoEdit.binsFirstLabel')} checked={binsFirst} onCheckedChange={setBinsFirst} />

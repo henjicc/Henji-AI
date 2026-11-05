@@ -17,7 +17,7 @@ import { beginVideoEditGesture, finishVideoEditGesture, setVideoEditView, videoE
 import { videoEditSceneNamingFor } from '../panels/videoEditSceneNaming'
 import { KEYFRAME_LANE_HEADER, KEYFRAME_LANE_ROW } from './keyframeLaneGeometry'
 import { clearTimelineSnap, snapTimelineEdges, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
-import { TIMELINE_HEADER_WIDTH, timelineTimecode, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_HEADER_WIDTH, TIMELINE_STICKY_LABEL_STYLE, timelineTimecode, type TimelineViewport } from './timelineGeometry'
 
 interface Props {
   instance: VideoEditInstance; sequence: VideoEditSequence; trackName: string; locked: boolean
@@ -246,7 +246,7 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
       {/* ui-surface-allow 片子数据记录块：时间轴记号（段落条、窗口内容块、关键点、剪切口），外观随记录样式，不是按钮档位（同关键帧记号） */}
       <UiButton data-ui-timeline-item data-video-edit-scene-item={item.record.id} data-video-edit-scene-clip={clip.id} data-scene-style={item.style} data-clipped={clippedLeft || clippedRight ? [clippedLeft ? 'left' : '', clippedRight ? 'right' : ''].filter(Boolean).join(' ') : undefined}
         size="sm" aria-label={`${name} ${timelineTimecode(frame, fps)}`} aria-pressed={selected} tooltip={tooltip}
-        className={`absolute min-w-0 !justify-start overflow-hidden ${shape} ${tone} ${clippedLeft ? '!rounded-l-none' : ''} ${clippedRight ? '!rounded-r-none' : ''} ${draggable ? point ? 'cursor-ew-resize' : 'cursor-grab' : ''}`}
+        className={`absolute min-w-0 !justify-start overflow-clip ${shape} ${tone} ${clippedLeft ? '!rounded-l-none' : ''} ${clippedRight ? '!rounded-r-none' : ''} ${draggable ? point ? 'cursor-ew-resize' : 'cursor-grab' : ''}`}
         style={{ left, top: rowTop + offsetTop, ...(point ? {} : { width: Math.max(3, width) }) }}
         onPointerDown={event => {
           event.stopPropagation()
@@ -261,7 +261,7 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
         {item.style === 'key' ? <Diamond fill="currentColor" aria-hidden="true" />
           : point ? <><span aria-hidden="true" className="absolute inset-y-0 left-1/2 w-px bg-line-strong" /><Scissors aria-hidden="true" className="relative" /></>
             : <>
-              {width >= 40 && item.style !== 'row' && <span data-user-content className="min-w-0 truncate text-2xs leading-4">{name}</span>}
+              {width >= 40 && item.style !== 'row' && <span data-user-content className="sticky min-w-0 truncate text-2xs leading-4" style={TIMELINE_STICKY_LABEL_STYLE}>{name}</span>}
               {userIssue && width >= 20 && <TriangleAlert aria-label="画面会缺内容" className="ml-auto shrink-0 text-danger-text" />}
               {item.style === 'cut' && width >= 20 && <Scissors aria-hidden="true" className="ml-auto shrink-0" />}
               {clippedLeft && <span aria-hidden="true" data-video-edit-scene-clipped="left" className="absolute inset-y-0 left-0 w-0.5 bg-text3" />}

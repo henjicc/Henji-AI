@@ -67,6 +67,18 @@ describe('Tooltip', () => {
     expect(screen.getByRole('tooltip')).toBeTruthy()
   })
 
+  it('长条触发器大半被滚动容器裁掉时，提示框对准看得见的部分，不跑到面板外', () => {
+    vi.useFakeTimers(); measure()
+    render(<div data-testid="panel" style={{ overflowX: 'auto' }}><Tooltip asChild content="横跨全片的片段" delay={0}><UiIconButton aria-label="片段" /></Tooltip></div>)
+    const rect = (left: number, right: number) => ({ left, right, top: 100, bottom: 120, width: right - left, height: 20, x: left, y: 100, toJSON: () => ({}) })
+    vi.spyOn(screen.getByTestId('panel'), 'getBoundingClientRect').mockReturnValue(rect(100, 500))
+    const button = screen.getByRole('button', { name: '片段' })
+    vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(rect(-3000, 9000))
+    fireEvent.mouseEnter(button); act(() => vi.advanceTimersByTime(0))
+    // 可见部分 100–500 的中点减去提示框半宽；按整个盒子居中则会落在 3000 处，被夹到窗口右缘
+    expect(screen.getByRole('tooltip').style.left).toBe('200px')
+  })
+
   it('聚焦时测量靠左且靠上的提示，翻到下方并夹紧', () => {
     measure()
     render(<Tooltip content="完整说明"><UiIconButton aria-label="说明" /></Tooltip>)

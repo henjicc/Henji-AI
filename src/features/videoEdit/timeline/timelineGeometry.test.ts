@@ -2,7 +2,7 @@ import { createVideoEditTestDocument as createVideoEditDocument } from '../../..
 import { expect, it } from 'vitest'
 import { type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { TIMELINE_CAPTION_HEIGHT, TIMELINE_NEW_TRACK_ZONE, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction } from './timelineGeometry'
+import { TIMELINE_CAPTION_HEIGHT, TIMELINE_END_MARGIN, TIMELINE_NEW_TRACK_ZONE, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineFollowScrollLeft, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction } from './timelineGeometry'
 
 function fixture(): VideoEditSequence {
   const document = createVideoEditDocument('轨道几何')
@@ -147,4 +147,20 @@ it('标尺随缩放变细：放大到逐帧，缩小到秒和分；次刻度整�
   expect(timelineRulerScale(10, 60).major).toBe(10)
   const seconds = timelineRulerScale(2, 60); expect(seconds.major).toBe(60); expect(60 % seconds.minor).toBe(0)
   expect(timelineRulerScale(0.01, 30).major).toBeGreaterThanOrEqual(300 * 30)
+})
+
+it('播放跟随：序列结尾滚到头后播放头继续走到底，不滚进尾部留白；不在可见区时直接滚到它', () => {
+  const base = { pixels: 2, durationFrames: 1000, trackWidth: 400, direction: 1 as const }
+  // 结尾 2000 + 留白 16 对齐可见区右缘
+  const end = 2000 + TIMELINE_END_MARGIN - 400
+  expect(timelineFollowScrollLeft({ ...base, frame: 900, scrollLeft: 1400 })).toBe(1600)
+  expect(timelineFollowScrollLeft({ ...base, frame: 950, scrollLeft: 1600 })).toBe(end)
+  expect(timelineFollowScrollLeft({ ...base, frame: 1000, scrollLeft: end })).toBe(end)
+  // 用户已经滚进尾部留白：不往回拉
+  expect(timelineFollowScrollLeft({ ...base, frame: 950, scrollLeft: end + 50 })).toBe(end + 50)
+  // 序列放得下：永远不滚
+  expect(timelineFollowScrollLeft({ ...base, durationFrames: 100, frame: 100, scrollLeft: 0 })).toBe(0)
+  // 播放头在可见区左边或右边：跳过去让它居中
+  expect(timelineFollowScrollLeft({ ...base, frame: 400, scrollLeft: 1200 })).toBe(600)
+  expect(timelineFollowScrollLeft({ ...base, frame: 400, scrollLeft: 0, direction: -1 })).toBe(600)
 })

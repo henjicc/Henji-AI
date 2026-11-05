@@ -114,6 +114,12 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
   }, () => useSettingsStore.getState().videoEditSelectionFollowsPlayhead,
   (value) => useSettingsStore.getState().setVideoEditSelectionFollowsPlayhead(value)),
   storeSetting({
+    id: 'video_edit.timeline_auto_scroll', title: '播放时时间线自动滚动', description: '正放、倒放时播放头走到时间线可见区中间后保持在中间，时间线跟着滚动，到序列结尾附近不再多滚；暂停或拖动播放头时不滚动。关闭后播放不滚动时间线。默认开启。',
+    aliases: ['时间线自动滚动', '播放自动滚动', '平滑滚动', '跟随播放头', 'timeline auto scroll', 'smooth scroll'], schema: z.boolean(), defaultValue: true,
+    target: settingsTarget('workspace-video-edit'), requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().videoEditTimelineAutoScroll,
+  (value) => useSettingsStore.getState().setVideoEditTimelineAutoScroll(value)),
+  storeSetting({
     id: 'interface.scale', title: '界面缩放', description: '调整整个应用界面的显示大小，自动模式按当前显示器的可用空间选择合适比例，调整窗口大小不会改变比例。',
     aliases: ['界面大小', '显示缩放', 'UI 缩放', 'scale', 'zoom'], schema: z.enum(UI_SCALE_MODES), defaultValue: DEFAULT_UI_SCALE_MODE,
     target: settingsTarget('general-appearance'), requiresReload: false, requiresRestart: false, sensitive: false,

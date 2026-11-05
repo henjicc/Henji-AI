@@ -578,6 +578,8 @@
       "clipThumbnailsContinuous": "Continuous",
       "selectionFollowsPlayheadLabel": "Selection follows playhead",
       "selectionFollowsPlayheadInfo": "Same as Premiere Pro's Selection Follows Playhead: while playing or moving the playhead, the topmost visible clip at the current frame is selected and Effect Controls shows it.",
+      "timelineAutoScrollLabel": "Timeline auto-scroll during playback",
+      "timelineAutoScrollInfo": "Once the playhead reaches the middle of the timeline it stays there and the timeline scrolls with it. Nothing scrolls while paused or dragging the playhead.",
       "renderFormatLabel": "Render Format",
       "renderFormatInfo": "Automatic uses H.264 for the smoothest playback. HEVC files are about 30% smaller at the same quality; choose it manually to save space. Resolution always follows the sequence.",
       "renderFormatAuto": "Automatic",

@@ -173,6 +173,7 @@ export const SETTINGS_DECLARATION = {
           ...searchRows(8, [
             ['videoEditShortcuts.label', ['快捷键', '键位', 'shortcut', 'hotkey']],
             ['sections.videoEdit.selectionFollowsPlayheadLabel', ['剪辑', '播放头', '自动选中', '效果控件', 'playhead', 'selection']],
+            ['sections.videoEdit.timelineAutoScrollLabel', ['时间线', '自动滚动', '跟随', '播放头', 'auto scroll', 'smooth scroll']],
             ['sections.videoEdit.binsFirstLabel', ['素材箱', 'bin']],
             ['sections.videoEdit.folderBinsLabel', ['素材箱', 'folder bin']],
             ['sections.videoEdit.duplicatePolicyLabel', ['重复文件', 'duplicate']],

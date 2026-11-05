@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { UI_DURATION } from './motion'
 import { useDialogTransition } from './useDialogTransition'
-import { resolveTooltipPosition, TOOLTIP_VIEWPORT_GUTTER_PX, type TooltipAnchorRect, type TooltipPlacement } from './tooltipPosition'
+import { resolveTooltipPosition, TOOLTIP_VIEWPORT_GUTTER_PX, visibleTooltipAnchorRect, type TooltipAnchorRect, type TooltipPlacement } from './tooltipPosition'
 
 /** 最近一次输入是不是指针（按文档记录，跨窗口浮出的面板各算各的）：键盘导航带来的聚焦才显示说明，等同浏览器的 :focus-visible 判断。 */
 const pointerModality = new WeakMap<Document, boolean>()
@@ -46,7 +46,7 @@ export function TooltipContent({ anchorRef, content, visible = true, closing = f
         tooltip.style.maxWidth = `${Math.min(320, Math.max(0, ownerWindow.innerWidth - TOOLTIP_VIEWPORT_GUTTER_PX * 2))}px`
         tooltip.style.maxHeight = `${Math.max(0, ownerWindow.innerHeight - TOOLTIP_VIEWPORT_GUTTER_PX * 2)}px`
         const next = resolveTooltipPosition({
-            rect: getAnchorRect?.() ?? trigger.getBoundingClientRect(), placement, alignment,
+            rect: getAnchorRect?.() ?? visibleTooltipAnchorRect(trigger, ownerWindow), placement, alignment,
             tooltipWidth: tooltip.offsetWidth, tooltipHeight: tooltip.offsetHeight,
             viewportWidth: ownerWindow.innerWidth, viewportHeight: ownerWindow.innerHeight,
         })

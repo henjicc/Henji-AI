@@ -16,7 +16,7 @@ import { moveVideoEditCaption, rollVideoEditCaptionEdge, updateVideoEditCaptionT
 import { selectVideoEditSubtitle, selectedVideoEditSubtitleId, subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision } from '../application/videoEditSubtitleSelection'
 import { VideoEditTrackHeader } from './VideoEditTrackHeader'
 import { VideoEditTimelinePlayhead } from './VideoEditTimelineTransport'
-import { TIMELINE_HEADER_WIDTH, timelineArmedEdgeVelocity, timelineEdgeAxis, type TimelineLayout, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_HEADER_WIDTH, TIMELINE_STICKY_LABEL_STYLE, timelineArmedEdgeVelocity, timelineEdgeAxis, type TimelineLayout, type TimelineViewport } from './timelineGeometry'
 import { clearTimelineSnap, reportTimelineSnap, snapTimelineEdges, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; geometry: TimelineLayout['caption']; pixels: number; view: TimelineViewport; viewport: React.RefObject<HTMLDivElement>; onError: (error: unknown) => void }
@@ -102,8 +102,8 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
         className={`absolute top-0.5 ${locked(caption) ? 'cursor-default' : 'cursor-grab'}`}
         style={{ height: row.height - 4, left: TIMELINE_HEADER_WIDTH + caption.start * pixels, width: Math.max(3, caption.duration * pixels) }}
         onPointerDown={event => down(event, original, 'move')} onClick={event => { if (event.detail === 0) run(() => select(caption.id)) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); run(() => select(caption.id)) } }}>
-        <span className={`flex h-full w-full items-center gap-1 overflow-hidden rounded-md border px-1.5 text-2xs text-text1 ${selected === caption.id ? 'border-accent-ring ring-1 ring-accent-ring' : ''}`} style={videoEditClipLabelSurface(videoEditLabelOf('caption'), selected === caption.id)}>
-          <Captions className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{caption.text}</span>
+        <span className={`flex h-full w-full items-center gap-1 overflow-clip rounded-md border px-1.5 text-2xs text-text1 ${selected === caption.id ? 'border-accent-ring ring-1 ring-accent-ring' : ''}`} style={videoEditClipLabelSurface(videoEditLabelOf('caption'), selected === caption.id)}>
+          <span className="sticky flex min-w-0 items-center gap-1" style={TIMELINE_STICKY_LABEL_STYLE}><Captions className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{caption.text}</span></span>
           {Boolean(caption.reviewReasons?.length) && <span className="shrink-0">{t('captionTrack.review')}</span>}
           {!locked(caption) && (['in', 'out'] as const).map(edge => <span key={edge} data-caption-trim={edge} title={t(`captionTrack.${edge === 'in' ? 'trimStart' : 'trimEnd'}`)} className={`absolute inset-y-0 w-1 cursor-ew-resize ${edge === 'in' ? 'left-0' : 'right-0'}`} onPointerDown={event => down(event, original, edge)} />)}
         </span>

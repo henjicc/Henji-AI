@@ -111,6 +111,8 @@ interface SettingsState {
   videoEditDefaultTransitions: VideoEditDefaultTransitionPreferences;
   /** 剪辑：播放头移动时自动选中该帧最上面的可见片段（PR“选择跟随播放指示器”，默认关）。 */
   videoEditSelectionFollowsPlayhead: boolean;
+  /** 播放时时间线跟着播放头滚动，默认开启。 */
+  videoEditTimelineAutoScroll: boolean;
   videoEditBinsFirst: boolean;
   videoEditImportFolderBins: boolean;
   videoEditDuplicatePolicy: 'skip' | 'import';
@@ -166,6 +168,7 @@ interface SettingsState {
   /** `null` = 恢复 PR 默认。 */
   setVideoEditDefaultTransition: (medium: VideoEditTransitionMedium, kind: VideoEditTransitionKind | null) => void;
   setVideoEditSelectionFollowsPlayhead: (enabled: boolean) => void;
+  setVideoEditTimelineAutoScroll: (enabled: boolean) => void;
 }
 
 /** 主题文件导入范围：全部 / 仅配色 / 仅圆角。 */
@@ -234,6 +237,7 @@ export const useSettingsStore = create<SettingsState>()(
       videoEditTrackHeaderButtons: {},
       videoEditDefaultTransitions: {},
       videoEditSelectionFollowsPlayhead: false,
+      videoEditTimelineAutoScroll: true,
       videoEditBinsFirst: true,
       videoEditImportFolderBins: true,
       videoEditDuplicatePolicy: 'skip',
@@ -331,6 +335,7 @@ export const useSettingsStore = create<SettingsState>()(
       setVideoEditDuplicatePolicy: (videoEditDuplicatePolicy) => set({ videoEditDuplicatePolicy }),
       setVideoEditClipThumbnails: (videoEditClipThumbnails) => set({ videoEditClipThumbnails }),
       setVideoEditSelectionFollowsPlayhead: (videoEditSelectionFollowsPlayhead) => set({ videoEditSelectionFollowsPlayhead }),
+      setVideoEditTimelineAutoScroll: (videoEditTimelineAutoScroll) => set({ videoEditTimelineAutoScroll }),
     }),
     {
       name: 'settings-storage',

@@ -384,7 +384,7 @@ const values: Record<string, unknown> = {
   'image-header': { format: 'henji-image-document', version: 1, id: image.id, revision: 0, kindVersion: 1, createdAt: timestamp, updatedAt: timestamp, contentRevision: 0, emptyUntilRevision: 0, summary: { width: 32, height: 40, layers: image.layers.length } },
   'image-package': { packageFormat: 'henjiimg', packageVersion: IMAGE_PACKAGE_VERSION, createdAt: timestamp, document: working, resources: [...image.creativeIntents.resources.map(r=>({resourceId:r.resourceId,sha256:r.digest.slice(7),byteLength:r.bytes,path:r.path,mediaType:'application/vnd.henji.layout+json'})),{resourceId:historyId,sha256:historyId.slice(7),byteLength:historyBytes.byteLength,path:`resources/${historyId.slice(7)}`,mediaType:'application/vnd.henji.image-history+json'}] },
   'image-working-copy': working,
-  settings: { providerKeyStatus: { kie: false }, uploadProvider: 'kie', uploadFallbackEnabled: false, canvasLodLevel: 'balanced', videoEditBinsFirst: true, experimentalWebAppRecording: true, videoEditClipThumbnails: 'head_tail' },
+  settings: { providerKeyStatus: { kie: false }, uploadProvider: 'kie', uploadFallbackEnabled: false, canvasLodLevel: 'balanced', videoEditBinsFirst: true, experimentalWebAppRecording: true, videoEditClipThumbnails: 'head_tail', videoEditTimelineAutoScroll: false },
   theme: { theme: 'dark' },
   'video-effect-library': storedVideoEditEffectLibrary({ favorites: ['preset:golden-piece'], presets: [goldenPiece] }),
   'style-kits': legacyKits,

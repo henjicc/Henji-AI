@@ -1,8 +1,12 @@
+import { useCallback, useSyncExternalStore, type RefObject } from 'react'
 import { TIMELINE_HEADER_WIDTH } from './timelineGeometry'
 import { timelineZoomBarCenterAt, timelineZoomBarDrag, timelineZoomBarThumb, type TimelineZoomBarPart, type TimelineZoomBarState } from './timelineZoomBar'
 
 interface Props {
-  state: TimelineZoomBarState
+  /** 滚动容器：滑块位置直接跟它的 scrollLeft，播放跟随时滑块逐帧走，时间线本身不用重渲染。 */
+  scrollHost: RefObject<HTMLElement>
+  pixels: number
+  extent: Pick<TimelineZoomBarState, 'totalFrames' | 'visibleFrames'>
   /** 条的可用像素宽度（轨道区宽度减去两侧留白）。 */
   width: number
   /** 平移：可见范围从 `frame` 开始（缩放不变）。 */
@@ -17,7 +21,14 @@ interface Props {
  * PR 时间线底部的缩放滚动条：与轨道区左缘对齐，滑块两端各有一个圆形手柄。
  * 拖中间平移、拖两端缩放、在条上滚滚轮缩放、单击空白处跳到那里。取代原生横向滚动条。
  */
-export function VideoEditTimelineZoomBar({ state, width, onScroll, onRange, onZoom }: Props): React.ReactElement {
+export function VideoEditTimelineZoomBar({ scrollHost, pixels, extent, width, onScroll, onRange, onZoom }: Props): React.ReactElement {
+  const subscribe = useCallback((listener: () => void) => {
+    const host = scrollHost.current
+    host?.addEventListener('scroll', listener)
+    return () => host?.removeEventListener('scroll', listener)
+  }, [scrollHost])
+  const scrollLeft = useSyncExternalStore(subscribe, () => scrollHost.current?.scrollLeft ?? 0)
+  const state: TimelineZoomBarState = { ...extent, startFrame: scrollLeft / pixels }
   const thumb = timelineZoomBarThumb(state, width)
   const begin = (event: React.PointerEvent<HTMLElement>, part: TimelineZoomBarPart): void => {
     if (event.button !== 0) return

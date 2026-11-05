@@ -578,6 +578,8 @@
       "clipThumbnailsContinuous": "连续",
       "selectionFollowsPlayheadLabel": "播放头自动选中片段",
       "selectionFollowsPlayheadInfo": "对应 PR 的“选择跟随播放指示器”：播放或拖动播放头时，自动选中当前帧最上面的可见片段，效果控件随之显示它的参数。",
+      "timelineAutoScrollLabel": "播放时时间线自动滚动",
+      "timelineAutoScrollInfo": "播放头走到时间线中间后保持在中间，时间线跟着滚动；暂停或拖动播放头时不滚动。",
       "renderFormatLabel": "预渲染格式",
       "renderFormatInfo": "自动：使用 H.264，播放最流畅。HEVC 同画质文件约小 30%，需要省空间时可手动选择。分辨率始终跟随序列。",
       "renderFormatAuto": "自动",

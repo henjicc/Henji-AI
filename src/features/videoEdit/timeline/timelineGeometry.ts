@@ -29,6 +29,25 @@ export interface TimelineLayoutInput { viewportHeight: number; split: number; sc
 export interface TimelineLayout { rows: TimelineTrackRow[]; caption: Pick<TimelineTrackRow, 'top' | 'height' | 'clipTop' | 'clipBottom'>; zoom: Pick<TimelineTrackRow, 'top' | 'height' | 'clipTop' | 'clipBottom'> | null; regions: Record<TimelineRegionKind, TimelineRegion>; divider: number }
 export interface TimelineViewport { left: number; top: number; width: number; height: number }
 export const TIMELINE_DEFAULT_SPLIT = 0.5
+/** 序列末尾滚到可见区右缘时留的空隙，末尾不贴边。 */
+export const TIMELINE_END_MARGIN = 16
+/**
+ * 片段、字幕等块上的名称随横向滚动贴在块可见部分的左端：吸附点是轨道头右缘。配合 `position: sticky` 使用，
+ * 块自身要用 `overflow-clip` 而不是 `overflow-hidden`，后者会建立滚动容器，名称就只相对块自己吸附了。
+ */
+export const TIMELINE_STICKY_LABEL_STYLE = { left: TIMELINE_HEADER_WIDTH } as const
+/**
+ * 播放跟随时的滚动位置（PR 平滑滚动）：播放头没走到可见区中间不滚，走到了就保持在中间；序列结尾滚到头后播放头继续走到底，不滚进尾部留白。
+ * 倒放镜像。播放头不在可见区（换了位置才开始播放、循环跳回）时直接滚到让它居中的位置。
+ */
+export function timelineFollowScrollLeft({ frame, pixels, durationFrames, scrollLeft, trackWidth, direction }: { frame: number; pixels: number; durationFrames: number; scrollLeft: number; trackWidth: number; direction: 1 | -1 }): number {
+  const x = frame * pixels; const center = trackWidth / 2
+  const target = Math.max(0, Math.min(durationFrames * pixels + TIMELINE_END_MARGIN - trackWidth, x - center))
+  const at = x - scrollLeft
+  if (at < 0 || at > trackWidth) return target
+  if (direction > 0) return at < center ? scrollLeft : Math.max(scrollLeft, target)
+  return at > center ? scrollLeft : target
+}
 /**
  * PR 的时间线：视频区在上、音频区在下，中间一条分隔条，两区各自纵向滚动；V1 贴在分隔条上方，A1 贴在下方，
  * 轨道少时视频轨靠下、音频轨靠上，整体居中。字幕轨 C1 同 PR 置顶在视频区最上方（标尺下），不随视频区滚动；

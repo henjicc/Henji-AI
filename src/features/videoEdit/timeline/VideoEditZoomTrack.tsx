@@ -7,7 +7,7 @@ import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { isVideoEditContentCurrent } from '../application/videoEditDocumentAlgorithm'
 import { focusVideoEditPanel, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { RECORDING_ZOOM_DEPTH_LABELS, recordingClipEffect, setRecordingZoomRegions } from '../application/videoEditRecordingClip'
-import { TIMELINE_HEADER_WIDTH, type TimelineLayout, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_HEADER_WIDTH, TIMELINE_STICKY_LABEL_STYLE, type TimelineLayout, type TimelineViewport } from './timelineGeometry'
 import { VideoEditTimelinePlayhead } from './VideoEditTimelineTransport'
 
 type Mode = 'move' | 'in' | 'out'
@@ -92,8 +92,8 @@ export function VideoEditZoomTrack({ instance, sequence, geometry, pixels, view,
         style={{ height: geometry.height - 4, left: TIMELINE_HEADER_WIDTH + frames.startFrame * pixels, width: Math.max(3, (frames.endFrame - frames.startFrame) * pixels) }}
         onPointerDown={event => down(event, clip, original, frames, 'move')} onClick={event => { if (event.detail === 0) focus(clip, frames.startFrame) }}
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); focus(clip, frames.startFrame) } }}>
-        <span className={`flex h-full w-full items-center gap-1 overflow-hidden rounded-md border bg-clip-video px-1.5 text-2xs text-text1 ${current ? 'border-accent-ring ring-1 ring-accent-ring' : 'border-clip-video-line'}`}>
-          <ZoomIn className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{label}</span>
+        <span className={`flex h-full w-full items-center gap-1 overflow-clip rounded-md border bg-clip-video px-1.5 text-2xs text-text1 ${current ? 'border-accent-ring ring-1 ring-accent-ring' : 'border-clip-video-line'}`}>
+          <span className="sticky flex min-w-0 items-center gap-1" style={TIMELINE_STICKY_LABEL_STYLE}><ZoomIn className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{label}</span></span>
           {!locked(clip) && (['in', 'out'] as const).map(edge => <span key={edge} title={edge === 'in' ? '拖动调整开始' : '拖动调整结束'} className={`absolute inset-y-0 w-1 cursor-ew-resize ${edge === 'in' ? 'left-0' : 'right-0'}`} onPointerDown={event => down(event, clip, original, frames, edge)} />)}
         </span>
       </UiIconButton>
