@@ -3,6 +3,9 @@ import type { TextFontSession } from '@/core/imaging/vectorContent/shaping/fontP
 import { authorLibraryUrl } from '@/core/videoEdit/codeMaterial/authorLibraries'
 
 export type TextFontChannelAttach = { kind: 'textFonts.attach'; port: MessagePort }
+// 变量地址的 import() 会被 Vite 4 改写成依赖 /@vite/client 的形式（@vite-ignore 也一样），这个模块跑在渲染 Worker 里，
+// 而客户端收到热更新时要访问 Worker 没有的 document。固定函数体让原生加载不经过 import-analysis。
+const importFontPolicy = new Function('url', 'return import(url)') as (url: string) => Promise<{ TextFontSession: typeof TextFontSession }>
 let channel: TextFontChannel | undefined
 const shared = new Map<string, { lease: Promise<TextFontLease>; references: number }>()
 export function renewTextFontLease(): void {
@@ -35,7 +38,7 @@ export async function acquireSharedTextFontLease(version?: string): Promise<Text
 }
 export async function acquireTextFontLease(signal?: AbortSignal, version?: string): Promise<TextFontLease> {
   if (!channel) return Promise.reject(new Error('文字字体通道尚未连接'))
-  const policy = version ? await import(/* @vite-ignore */ authorLibraryUrl('henji-layout', version, 'font-session.mjs')) as { TextFontSession: typeof TextFontSession } : undefined
+  const policy = version ? await importFontPolicy(authorLibraryUrl('henji-layout', version, 'font-session.mjs')) : undefined
   return channel.open(signal, policy?.TextFontSession)
 }
 export function closeTextFontChannel(): void { renewTextFontLease(); channel?.close(); channel = undefined }
