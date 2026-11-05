@@ -232,6 +232,21 @@ it('剪辑内容 v41：网页画面引用是可选增量，v40 样本原样升�
   expect(codeMaterialImageReferenceSchema.parse({ kind: 'web', path: 'D:/视频/网页/知多少' })).toEqual({ kind: 'web', path: 'D:\\视频\\网页\\知多少' })
 })
 
+it('剪辑内容 v71：网页引用可带 layer 按文字拆层，v70 样本原样升上来，layer 只接受单个非空的 only 或 hide', () => {
+  const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+  const v70 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v70.json', 'utf8'))
+  const upgraded = upgradePersistenceContent(format, structuredClone(v70.content), 70) as { sequences: Array<{ clips: Array<{ code?: { parameters: { page?: { layer?: unknown } } } }> }> }
+  expect(upgraded.sequences[0].clips[0].code?.parameters.page?.layer).toBeUndefined()
+  const v71 = parseDocumentText(fs.readFileSync('tests/fixtures/persistence/document.video_edit/v71.json', 'utf8')).content as typeof upgraded
+  expect(v71.sequences[0].clips[0].code?.parameters.page?.layer).toEqual({ hide: ['.banner'] })
+  const accepts = (layer: unknown): boolean => codeMaterialImageReferenceSchema.safeParse({ kind: 'web', path: '/p/site', layer }).success
+  expect(accepts({ only: ['#send'] })).toBe(true)
+  expect(accepts({ hide: ['.banner', '#ad'] })).toBe(true)
+  expect(accepts({ only: ['#a'], hide: ['#b'] })).toBe(false)
+  expect(accepts({ only: [] })).toBe(false)
+  expect(accepts({})).toBe(false)
+})
+
 it('剪辑内容 v37：片段停用、片子数据与内置库，旧样本原样升上来；新样本经内容外形与完整 schema 读回不丢字段', () => {
   const versioned = (id: string) => PERSISTENCE_FORMATS.find(value => value.id === id)!
   const unstamped = (value: unknown): unknown => { if (!value || typeof value !== 'object' || Array.isArray(value)) return value; const { version: _version, minReaderVersion: _minimum, ...rest } = value as Record<string, unknown>; return rest }

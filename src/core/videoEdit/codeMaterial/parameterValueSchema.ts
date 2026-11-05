@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { textStyleSchema } from '../../imaging/vectorContent/text'
 import { formatAbsolutePath, parseAbsolutePath } from '../../storage/pathSyntax'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
-import { CODE_WEB_BOX_LIMIT, CODE_WEB_SELECTOR_LENGTH, codeWebBoxesIssue, codeWebFolderOf, codeWebViewIssue } from './webSource'
+import { CODE_WEB_BOX_LIMIT, CODE_WEB_SELECTOR_LENGTH, codeWebBoxesIssue, codeWebLayerIssue, codeWebFolderOf, codeWebViewIssue } from './webSource'
 
 const finite = z.number().finite()
 const unit = finite.min(0).max(1)
@@ -38,8 +38,9 @@ const webReference = z.object({
   width: z.number().int().optional(), height: z.number().int().optional(), region: z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()]).optional(), scale: finite.optional(),
   time: finite.nonnegative().optional(), spans: codeMaterialVideoSpansSchema.optional(),
   boxes: z.array(z.string().min(1).max(CODE_WEB_SELECTOR_LENGTH)).max(CODE_WEB_BOX_LIMIT).optional(),
+  layer: z.union([z.object({ only: z.array(z.string().min(1).max(CODE_WEB_SELECTOR_LENGTH)).min(1).max(CODE_WEB_BOX_LIMIT) }).strict(), z.object({ hide: z.array(z.string().min(1).max(CODE_WEB_SELECTOR_LENGTH)).min(1).max(CODE_WEB_BOX_LIMIT) }).strict()]).optional(),
 }).strict().superRefine((value, context) => {
-  const issue = codeWebViewIssue(value) ?? (value.time !== undefined && value.spans !== undefined ? '网页参数的 time 与 spans 不能同时给出。' : undefined) ?? (value.boxes ? codeWebBoxesIssue(value.boxes) : undefined)
+  const issue = codeWebViewIssue(value) ?? (value.time !== undefined && value.spans !== undefined ? '网页参数的 time 与 spans 不能同时给出。' : undefined) ?? (value.boxes ? codeWebBoxesIssue(value.boxes) : undefined) ?? (value.layer ? codeWebLayerIssue(value.layer) : undefined)
   if (issue) context.addIssue({ code: 'custom', message: issue })
 })
 export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), videoReference, z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict(), webReference,

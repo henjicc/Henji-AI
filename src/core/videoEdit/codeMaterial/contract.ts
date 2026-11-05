@@ -2,9 +2,9 @@ import type { AudioContentAnalysis } from '../../audioAnalysis/contentAnalysis'
 /** Host safety bounds for structured graphics, component graphs and glyph requests; author JS has no language budget. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ stringLength: 4096, textCharacters: 8192, pathPoints: 4096 })
 export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodeSceneReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
-import type { CodeColor, CodeImageReference, CodeVideoSpan, CodeWebReference } from '../../imaging/parameterTypes'
+import type { CodeColor, CodeImageReference, CodeVideoSpan, CodeWebLayer, CodeWebReference } from '../../imaging/parameterTypes'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
-import { codeWebBoxesIssue, codeWebFolderOf, codeWebViewIssue } from './webSource'
+import { codeWebBoxesIssue, codeWebFolderOf, codeWebLayerIssue, codeWebViewIssue } from './webSource'
 export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'textStyle', 'table', 'font', 'image', 'audio', 'easing', 'seed', 'scene'] as const
 export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; audio?: AudioContentAnalysis; audioTime?: number }
 export interface CodeSourceSpan { file: string; start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
@@ -96,7 +96,7 @@ export function codeImageReference(value: unknown, label: string): CodeImageRefe
   const spans = fields.spans ? codeVideoSpans(fields.spans.value, label) : undefined
   return { kind: fields.kind.value, mediaId: fields.mediaId.value, ...(time === undefined ? {} : { time }), ...(spans ? { spans } : {}) }
 }
-const WEB_FIELDS = ['kind', 'path', 'width', 'height', 'region', 'scale', 'time', 'spans', 'boxes']
+const WEB_FIELDS = ['kind', 'path', 'width', 'height', 'region', 'scale', 'time', 'spans', 'boxes', 'layer']
 function codeWebReference(fields: Record<string, PropertyDescriptor>, label: string): CodeWebReference {
   const fail = (detail: string): never => { throw new CodeMaterialError('PARAMETERS', `${label}${detail}`) }
   const unknown = Object.keys(fields).filter(key => !WEB_FIELDS.includes(key))
@@ -119,7 +119,13 @@ function codeWebReference(fields: Record<string, PropertyDescriptor>, label: str
     const issue = codeWebBoxesIssue([...boxes as unknown[]])
     if (issue) fail(`：${issue}`)
   }
-  return { kind: 'web', path: path as string, ...(view.width === undefined ? {} : { width: view.width }), ...(view.height === undefined ? {} : { height: view.height }), ...(view.region ? { region: view.region as [number, number, number, number] } : {}), ...(view.scale === undefined ? {} : { scale: view.scale }), ...(time === undefined ? {} : { time: time as number }), ...(spans ? { spans } : {}), ...(boxes ? { boxes: [...boxes as string[]] } : {}) }
+  // 先拷成普通数据再校验：校验过的值和写入的值必须是同一份。
+  const layer = plain('layer') === undefined ? undefined : JSON.parse(JSON.stringify(plain('layer'))) as CodeWebLayer
+  if (layer !== undefined) {
+    const issue = codeWebLayerIssue(layer)
+    if (issue) fail(`：${issue}`)
+  }
+  return { kind: 'web', path: path as string, ...(view.width === undefined ? {} : { width: view.width }), ...(view.height === undefined ? {} : { height: view.height }), ...(view.region ? { region: view.region as [number, number, number, number] } : {}), ...(view.scale === undefined ? {} : { scale: view.scale }), ...(time === undefined ? {} : { time: time as number }), ...(spans ? { spans } : {}), ...(boxes ? { boxes: [...boxes as string[]] } : {}), ...(layer ? { layer } : {}) }
 }
 export function isCodeImageReference(value: unknown): value is CodeImageReference {
   try { codeImageReference(value, '图片'); return true } catch { return false }

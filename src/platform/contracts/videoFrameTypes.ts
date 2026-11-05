@@ -238,6 +238,8 @@ export interface WebSourceOpenRequest {
   height: number
   region: [number, number, number, number]
   scale: number
+  /** 按文字拆层，见 CodeWebReference.layer。 */
+  layer?: import('../../core/imaging/parameterTypes').CodeWebLayer
   /** 原网页所在文档/代码的外来标记；省略仅允许实时开页，不登记后台补录。 */
   trust?: import('../../core/contentTrust').ContentTrustReference[]
 }

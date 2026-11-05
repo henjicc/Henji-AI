@@ -32,9 +32,9 @@ export const videoEditPresetPreferencesSchema = z.array(videoEditPresetPreferenc
 })
 
 /** One exchange file may carry presets of several kinds; ids are replaced on import. */
-export const VIDEO_EDIT_PRESET_PACKAGE_VERSION = 25
-/** v21 的片段引用分支只可能出现在风格件代码参数里，而风格件拒绝它；v22 的风格件代码快照可用作者接口 16（三维作者的 info.elements），v23 可用作者接口 17（host.time、host.space、元素轮廓），旧程序都无法执行；v24 标题条目的片段关键帧可含 spaceThickness，v25 可含 lightIntensity，旧程序拒读。 */
-export const VIDEO_EDIT_PRESET_PACKAGE_MIN_READER_VERSION = 25
+export const VIDEO_EDIT_PRESET_PACKAGE_VERSION = 26
+/** v21 的片段引用分支只可能出现在风格件代码参数里，而风格件拒绝它；v22 的风格件代码快照可用作者接口 16（三维作者的 info.elements），v23 可用作者接口 17（host.time、host.space、元素轮廓），旧程序都无法执行；v24 标题条目的片段关键帧可含 spaceThickness，v25 可含 lightIntensity，v26 的网页图片引用可带 layer，旧程序拒读。 */
+export const VIDEO_EDIT_PRESET_PACKAGE_MIN_READER_VERSION = 26
 export const videoEditPresetPackageItemSchema = z.discriminatedUnion('category', [
   // 风格与标题条目只出现在 2026-10-22 之前导出的文件里，导入时转成新的风格与原生模板；新导出不再写这两类。
   z.object({ category: z.literal('style'), preset: styleKitMigrationSchema }).strict(),

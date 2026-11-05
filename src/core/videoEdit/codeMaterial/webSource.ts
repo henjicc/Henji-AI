@@ -1,3 +1,5 @@
+import type { CodeWebLayer } from '../../imaging/parameterTypes'
+
 /**
  * 网页来源：`path` 是一个专门的网页文件夹（或其中的 index.html），文件夹就是站点根，入口是 index.html。
  *
@@ -15,8 +17,8 @@ const CODE_WEB_MAX_TEXTURE = 8192
 export const CODE_WEB_BOX_LIMIT = 64
 export const CODE_WEB_SELECTOR_LENGTH = 512
 
-export interface CodeWebView { width: number; height: number; region: [number, number, number, number]; scale: number }
-interface CodeWebViewInput { width?: number; height?: number; region?: readonly number[]; scale?: number }
+export interface CodeWebView { width: number; height: number; region: [number, number, number, number]; scale: number; layer?: CodeWebLayer }
+interface CodeWebViewInput { width?: number; height?: number; region?: readonly number[]; scale?: number; layer?: CodeWebLayer }
 
 const integer = (value: unknown, min: number, max: number): boolean => typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
 
@@ -44,7 +46,7 @@ export function codeWebView(input: CodeWebViewInput, purpose: 'author' | 'output
   if (issue) throw new Error(issue)
   const width = input.width ?? CODE_WEB_DEFAULT_VIEWPORT.width, height = input.height ?? CODE_WEB_DEFAULT_VIEWPORT.height
   const [x, y, w, h] = input.region ?? [0, 0, width, height]
-  return { width, height, region: [x, y, w, h], scale: input.scale ?? CODE_WEB_DEFAULT_SCALE }
+  return { width, height, region: [x, y, w, h], scale: input.scale ?? CODE_WEB_DEFAULT_SCALE, ...(input.layer ? { layer: input.layer } : {}) }
 }
 
 /** 画面像素尺寸。离屏页面的画面总比取景乘倍率大一两个像素，取左上角这一块。 */
@@ -63,6 +65,29 @@ export function codeWebFolderOf(referencePath: string): string | undefined {
   const match = /^(.*?)[\\/]+index\.html?$/i.exec(referencePath)
   const folder = match ? match[1] : /\.html?$/i.test(referencePath) ? undefined : referencePath.replace(/[\\/]+$/, '')
   return folder && !FILESYSTEM_ROOT.test(folder) ? folder : undefined
+}
+
+/** 拆层不合法时的说明；合法为 undefined。 */
+export function codeWebLayerIssue(layer: unknown): string | undefined {
+  const fields = layer && typeof layer === 'object' && !Array.isArray(layer) ? Object.keys(layer) : []
+  if (fields.length !== 1 || !['only', 'hide'].includes(fields[0])) return '网页 layer 需要 { only: [选择器] } 或 { hide: [选择器] }。'
+  const selectors = (layer as Record<string, unknown>)[fields[0]]
+  if (!Array.isArray(selectors) || !selectors.length) return '网页 layer 至少要一个 CSS 选择器。'
+  return codeWebBoxesIssue(selectors)
+}
+
+/** 宿主注入的用户级样式：用户级 !important 压过页面自己的 !important。不改布局，文字位置在各层一致。 */
+export function codeWebLayerCss(layer: CodeWebLayer): string {
+  const selectors = layer.only ?? layer.hide
+  const target = selectors.map(selector => `:is(${selector})`).join(', ')
+  const inside = selectors.map(selector => `:is(${selector}), :is(${selector}) *`).join(', ')
+  // 不碰 color：currentColor 会连带图标和边框一起消失。
+  if (layer.hide) return `${inside} { -webkit-text-fill-color: transparent !important; -webkit-text-stroke-color: transparent !important; text-shadow: none !important; text-decoration-color: transparent !important }`
+  const clear = 'background: none !important; border-color: transparent !important; box-shadow: none !important; outline-color: transparent !important'
+  // 只藏目标以外且不含目标的元素：目标和它的祖先不碰 visibility，页面自己隐藏的选项卡、打字机还是隐藏的。
+  // 祖先还留着，要清掉它的底和它自己的文字；文字填充色会继承，到目标处还原。
+  const ancestors = selectors.map(selector => `:has(${selector})`).join(', ')
+  return `html, body, [data-henji-stage], henji-web-stage { ${clear} } body *:not(${inside}, ${ancestors}) { visibility: hidden !important; ${clear} } :is(${ancestors}) { ${clear}; -webkit-text-fill-color: transparent !important } ${target} { -webkit-text-fill-color: currentcolor !important } ${inside} { background-color: transparent !important; background-image: none !important; border-color: transparent !important; box-shadow: none !important; outline-color: transparent !important }`
 }
 
 /** 选择器列表不合法时的说明；合法为 undefined。 */

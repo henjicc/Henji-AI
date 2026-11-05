@@ -24,7 +24,8 @@ window.henjiWeb = { ready /* Promise：资源字体就绪 */, duration /* 秒 */
   region: [640, 360, 640, 360],    // 只渲染这一块，默认整个视口
   scale: 6,                        // 每 CSS 像素几个画面像素，默认 2
   spans: [{ from: 0, to: 4, src: 0 }],  // 页面时间，time / spans 同视频参数；都不给随片段时间
-  boxes: ["#send"] }               // 每帧读矩形的选择器
+  boxes: ["#send"],                // 每帧读矩形的选择器
+  layer: { only: ["#title"] } }    // 按文字拆层，见下面“逐字特效”
 ```
 
 **清晰度**：画面是 region 宽高 × scale（取整数），每边最多 8192；页面始终按整个视口排版，取景只决定画哪块。不推近时 scale = 输出宽 ÷ 视口宽；推近 N 倍时 region 取露出的 1/N、scale = 输出宽 ÷ region 宽（4K 推近 3 倍：640×360、6 倍），每个输出像素都有设备像素，成本按画面像素算、推多近不涨。一段推近里取景与倍率不变（变了会重新栅格、文字抖）；幅度很大就分远景、近景两个参数各用 spans，交接处叠化。
@@ -49,8 +50,60 @@ draw(ctx, time, params, width, height, assets, info) {
 
 结果先看 `status`：`ready` 才读 `geometry`；其余为 `not-found`、`unsupported` 或带原因的 `unavailable`。`geometry.text` 是 DOM 原文，`graphemes` / `words` 的 `source` 是半开 UTF-16 区间，字素含 `rects`、`bounds`、盒中心 `pivot`；字体是 CSS 声明，`lineFragments` 是文字 run 的行片段。坐标均为视口 CSS 像素；换到实际纹理用 `web.imageMapping.viewportToImage`，不要再乘 DPR。几何随同一票据画面交付；预览回退时只读返回的同幅几何，不把请求时刻当作返回画面时刻。
 
-Range 返回排版盒，`baseline:null`，不提供字形墨迹、真实基线、独立字形或干净背景。Canvas、SVG text、表单、伪元素、iframe 和 Shadow DOM 内文字不在自动采样范围；需要逐字移动时先由网页提供满足分片条件的文字层，不能把整页背景当作可独立提字的图层。
+Range 返回排版盒，`baseline:null`，不提供字形墨迹和真实基线。Canvas、SVG text、表单、伪元素、iframe 和 Shadow DOM 内文字不在自动采样范围。
 
 文本几何要求网页提供 `[data-henji-stage]` 舞台：舞台 CSS 尺寸等于视口、原点为 `(0,0)`，根上没有 transform、padding 或 border。`henjiWeb.seek(t)` 完成后须把动画定位并暂停，直到下次 seek 不自主改布局；paint 监听器不得改 DOM。字体须加载成功，所选文字子树与祖先不能仍在播放动画或滚动。缺舞台或快照不可用时返回 `unavailable/capture-path`；布局、字体、滚动或动画不稳定返回 `unavailable/unsynchronized`，`details` 记录具体原因。
+
+**逐字特效**：要让网页里每个字单独动（位移、缩放、旋转、淡入、打字机、变色、沿路径走都一样），把同一个网页绑定成两层，再按 `cells` 切文字层。字形和排版都是浏览器的结果，不用重新排版。
+
+- 绑定值加 `layer`：`{ only: [选择器] }` 只留这些元素的文字，背景透明；`{ hide: [选择器] }` 只藏它们的文字，其余原样，字移开后露出的就是这层。两层用同一份 `path`、`width`、`height`、`region`、`scale`、时间。
+- `geometry.cells` 与 `graphemes` 一一对应，是画面像素整数 `[x, y, w, h]`，互不重叠地铺满文字；所有字不动时拼出来与网页原画面一致。竖排或没有位置的字素为 null。同一个参数声明的所有选择器一起算，不会互相切到。
+
+```text
+export default {
+  name: "网页逐字", kind: "generator", mode: "dynamic", width: 1920, height: 1080,
+  webText: { text: ["#title"] },
+  params: [{ key: "clean", type: "image", title: "干净背景" }, { key: "text", type: "image", title: "文字层" }],
+  draw(ctx, time, params, width, height, assets, info) {
+    if (!assets.clean || !assets.text) return
+    ctx.drawImage(assets.clean, 0, 0, width, height)
+    const web = info.web?.text, result = web?.text["#title"]
+    // 预览回退到上一幅时位置可能还没到（pending-picture）：这一帧把文字层整张画上，不留空，也不要抛错
+    if (result?.status !== "ready") { ctx.drawImage(assets.text, 0, 0, width, height); return }
+    const map = web.imageMapping
+    result.geometry.cells.forEach((cell, index) => {
+      if (!cell) return
+      const [x, y, w, h] = cell
+      ctx.save()
+      // 这里决定每个字怎么动；下面是逐字错峰上浮淡入，换成任何变换、透明度或滤镜都行。位移写在换算之前，是画布像素
+      const t = Math.min(1, Math.max(0, time * 2 - index * .08))
+      ctx.globalAlpha = t
+      ctx.translate(0, (1 - t) * 60)
+      // 格子是文字层的画面像素，画面大小随 scale 和监视器显示档变化，这里换算到画布
+      ctx.scale(width / map.contentWidth, height / map.contentHeight)
+      ctx.drawImage(assets.text, x, y, w, h, x, y, w, h)
+      ctx.restore()
+    })
+  },
+}
+// 片段参数：clean: { kind: "web", path, layer: { hide: ["#title"] } }，text: { kind: "web", path, layer: { only: ["#title"] } }
+```
+
+旋转、缩放绕字的中心转，写在换算之后，因为锚点是画面像素。格子的中心不一定是字的中心，不要拿它当锚点：
+
+```text
+ctx.scale(width / map.contentWidth, height / map.contentHeight)
+const [a, , , d, e, f] = map.viewportToImage, pivot = result.geometry.graphemes[index].pivot
+const px = pivot[0] * a + e, py = pivot[1] * d + f
+ctx.translate(px, py); ctx.rotate(angle); ctx.scale(s, s); ctx.translate(-px, -py)
+ctx.drawImage(assets.text, x, y, w, h, x, y, w, h)
+```
+
+- 成本：每层各开一个页面，不进页面时间缓存，只走实时取帧。一段文字逐字动时只选需要的元素。
+- 页面文字自带的发光、阴影留在文字层里，会被格子切开：字分开后邻字之间能看到细条。要逐字发光就去掉页面上的发光，改用效果库的发光加在每个字上；不分开的动画（淡入、整体位移）没有这个问题。
+- 文字背后如果是这个元素自己的背景（按钮底色），`only` 不带这块底色，`hide` 会保留它。
+- 每个选择器只能命中一个元素，一组字用多个选择器分别写；选择器不要嵌套。载入时命中多个或写错会报错。页面 seek 之后才变成多个的情况查不出来，其余的字会没有格子。
+- `background-clip: text` 的渐变字拆不开，底色就是字，文字层里没有它。图片、SVG、伪元素不算文字，两层都会留下。要逐字动的文字写成普通 `color`。
+- 不需要字分开时用不到这些：对整块文字做效果直接处理网页画面，只高亮某个字用 `geometry.graphemes` 的位置就够。
 
 `breaks` 每项为 `{offset, kind}`，offset 是原文 UTF-16 位置，kind 分别为 `line-break`（BR）、`block`、`language`、`replaced-element`。`layoutStatus` 区分普通盒、零宽、折叠空白、display:none、visibility:hidden 与 content-visibility:hidden；零宽保留位置盒，隐藏文本保留来源。`transparent` 表示贡献布局片段的来源全部透明，`outsideRegion` 表示布局片段全部在取景外；`regionRects` 是与取景的矩形交集。`rendered` 只表示有非透明且落入取景的正宽布局片段，不证明最终墨迹可见（遮挡、mask 等仍不由 Range 判断）。

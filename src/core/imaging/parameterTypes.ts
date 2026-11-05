@@ -13,7 +13,9 @@ export interface CodeVideoSpan { from: number; to: number; src: number; rate?: n
  * `boxes` 是每帧要读矩形的 CSS 选择器。语义与限制见 `codeMaterial/webSource.ts`。
  * `data-henji-stage` 标记视口大小、原点 (0,0) 的舞台；宿主搬入画布后不依赖父元素选择器或泛选 canvas，背景与动态内容（含弹层）留在舞台内，舞台外可见内容保持静止。
  */
-export interface CodeWebReference { kind: 'web'; path: string; width?: number; height?: number; region?: [number, number, number, number]; scale?: number; time?: number; spans?: CodeVideoSpan[]; boxes?: string[]; mediaId?: never }
+/** 同一网页按文字拆层：`only` 只留这些元素的文字（透明底），`hide` 只藏它们的文字（背景干净）。 */
+export type CodeWebLayer = { only: string[]; hide?: never } | { hide: string[]; only?: never }
+export interface CodeWebReference { kind: 'web'; path: string; width?: number; height?: number; region?: [number, number, number, number]; scale?: number; time?: number; spans?: CodeVideoSpan[]; boxes?: string[]; layer?: CodeWebLayer; mediaId?: never }
 export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never; spans?: never } | { kind: 'video'; mediaId: string; time?: number; spans?: CodeVideoSpan[] } | { kind: 'sequence'; mediaId: 'below'; time?: never; spans?: never } | CodeWebReference
   /** 同一序列里的另一个片段：作者拿到它此刻的画面（作为图片源），三维作者另外拿到它在空间里的位置与形状。 */
   | { kind: 'clip'; clipId: string; mediaId?: never; time?: never; spans?: never }

@@ -8,7 +8,7 @@ import type { AuthorWebFrame } from './videoEditAuthorModule'
 import { assertAuthorTrust } from './videoEditAuthorTrust'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
-import { freezeWebText, webTextUnavailableMessage, unavailableWebText, WEB_TEXT_SAMPLER_VERSION, webTextImageMapping, webTextSelectors } from '@/core/videoEdit/webTextGeometry'
+import { freezeWebText, webTextUnavailableMessage, unavailableWebText, WEB_TEXT_SAMPLER_VERSION, webTextImageMapping, webTextSelectors, withWebTextCells } from '@/core/videoEdit/webTextGeometry'
 
 export class VideoEditWebPicture extends VideoEditCodePicture {
   constructor(texture: GpuTexture, width: number, height: number, owner: GpuDevice, readonly web: AuthorWebFrame, opaqueBackground = true, display?: { width: number; height: number }) { super(texture, width, height, owner, 'rgba8unorm', opaqueBackground, display) }
@@ -93,7 +93,7 @@ export function videoEditWebDisplayTier(ratio: number, current?: number): number
 }
 export function videoEditWebSourceKey(reference: CodeWebReference): string {
   const view = codeWebView(reference)
-  return JSON.stringify([reference.path, view.width, view.height, view.region, view.scale])
+  return JSON.stringify([reference.path, view.width, view.height, view.region, view.scale, ...(view.layer ? [view.layer] : [])])
 }
 
 /** 同一页面时刻的读取身份：精度、缓存网格与预览档（播放帧取预览档）不同的读不能互相顶替。 */
@@ -410,7 +410,7 @@ export class VideoEditWebInputs {
             if (!read.preview && !session.closed && !controller.signal.aborted) continue
             throw aborted()
           }
-          const picture = new VideoEditWebPicture(copied.texture, result.pixelWidth, result.pixelHeight, copied.owner, { time, width: view.width, height: view.height, region: [...view.region], scale: view.scale, duration: result.duration, boxes: result.boxes ?? {}, ...(textSelectors ? { text: freezeWebText(result.text!.results), imageMapping: freezeWebText(webTextImageMapping(view.region, result.pixelWidth, result.pixelHeight)) } : {}) })
+          const picture = new VideoEditWebPicture(copied.texture, result.pixelWidth, result.pixelHeight, copied.owner, { time, width: view.width, height: view.height, region: [...view.region], scale: view.scale, duration: result.duration, boxes: result.boxes ?? {}, ...(textSelectors ? { text: freezeWebText(withWebTextCells(result.text!.results, webTextImageMapping(view.region, result.pixelWidth, result.pixelHeight))), imageMapping: freezeWebText(webTextImageMapping(view.region, result.pixelWidth, result.pixelHeight)) } : {}) }, !view.layer?.only)
           picture.provenance = result.provenance ?? 'live'
           read.picture = picture
           // 前视不能把未来帧当作当前播放的回退画面。

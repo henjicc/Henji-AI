@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { BrowserWindow, sharedTexture, type OffscreenSharedTexture } from 'electron'
-import { codeWebPixelSize, type CodeWebView } from '../../../../src/core/videoEdit/codeMaterial/webSource'
+import { codeWebLayerCss, codeWebPixelSize, type CodeWebView } from '../../../../src/core/videoEdit/codeMaterial/webSource'
 import type { VideoFrameMeta, WebSourceBox, WebSourceCaptureRequest } from '../../../../src/platform/contracts/videoFrameTypes'
 import type { VideoFrameTarget } from '../video-decoder'
 import { webSourceSession } from './session'
@@ -57,6 +57,20 @@ const READY_SCRIPT = `(async () => {
   const duration = Number(window.henjiWeb.duration)
   return Number.isFinite(duration) && duration >= 0 ? duration : null
 })()`
+
+/** 文字几何只取每个选择器的第一个元素，样式却命中全部：命中多个时其余的字会从两层都消失。写错的选择器也在这里报出来。 */
+function layerSelectorCheckScript(layer: NonNullable<CodeWebView['layer']>): string {
+  return `(() => {
+    for (const selector of ${JSON.stringify(layer.only ?? layer.hide)}) {
+      let count
+      try { count = document.querySelectorAll(selector).length } catch { return '网页 layer 的选择器写错了：' + selector }
+      if (count > 1) return '网页 layer 的选择器要只命中一个元素：' + selector + ' 命中了 ' + count + ' 个'
+    }
+    // 页面写了 transition 时，刚注入的样式会慢慢过渡过去，这期间的画面不是拆好的层。
+    for (const animation of document.getAnimations()) if (animation instanceof CSSTransition) animation.finish()
+    return null
+  })()`
+}
 
 /** 隔离世界保存资源与还原操作，准备失败和运行中降级都恢复普通页面绘制。 */
 function snapshotPrepareScript(view: CodeWebView, frameToken?: string): string {
@@ -190,7 +204,7 @@ function snapshotPrepareScript(view: CodeWebView, frameToken?: string): string {
       document.documentElement.appendChild(output)
       const context = output.getContext('webgpu')
       if (!context) throw new Error('输出画布的 WebGPU 上下文不可用')
-      context.configure({ device, format: 'rgba8unorm', alphaMode: 'opaque', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC })
+      context.configure({ device, format: 'rgba8unorm', alphaMode: '${view.layer?.only ? 'premultiplied' : 'opaque'}', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC })
       Object.assign(state, { stage, container, output, context, device, copy, checkFrame(end = false) {
         checkTopLayer()
         if (window.scrollX || window.scrollY) throw new Error(${JSON.stringify(DOCUMENT_SCROLL_REASON)})
@@ -240,7 +254,7 @@ function snapshotPaintScript(view: CodeWebView, selectors: readonly string[] | u
         const texture = context.getCurrentTexture()
         device.pushErrorScope('validation')
         copy.call(device.queue, { source: stage, sx: ${sx}, sy: ${sy}, swidth: ${swidth}, sheight: ${sheight} },
-          { destination: { texture }, width: ${width}, height: ${height} })
+          { destination: { texture${view.layer?.only ? ', premultipliedAlpha: true' : ''} }, width: ${width}, height: ${height} })
         ${identity ? `const saved = device.createBuffer({ size: 1024, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ })
         const encoder = device.createCommandEncoder()
         encoder.copyTextureToBuffer({ texture }, { buffer: saved, bytesPerRow: 256 }, [8, 4])
@@ -577,6 +591,8 @@ export class WebSourcePage {
     // 离屏窗口的内容尺寸就是取景，设备像素比是倍率；视口与取景原点见 load()。
     const window = new BrowserWindow({
       show: false, focusable: false, skipTaskbar: true, frame: false, width: region[2], height: region[3], useContentSize: true,
+      // 只留文字的层靠窗口透明把 alpha 交出去。
+      ...(this.view.layer?.only ? { transparent: true } : {}),
       webPreferences: { partition, contextIsolation: true, sandbox: true, nodeIntegration: false, enableBlinkFeatures: 'CanvasDrawElement', offscreen: { useSharedTexture: true, deviceScaleFactor: this.deviceScale }, backgroundThrottling: false, spellcheck: false },
     })
     this.window = window
@@ -656,7 +672,13 @@ export class WebSourcePage {
     }, signal)
     // 平滑滚动是页面时间之外的动画：seek 之后要立刻到位，取帧才确定。
     await this.submitPage(() => withTimeout(contents.insertCSS('* { scroll-behavior: auto !important }', { cssOrigin: 'user' }), LOAD_TIMEOUT_MS, '网页样式设置超时'), signal)
+    const layer = this.view.layer
+    if (layer) await this.submitPage(() => withTimeout(contents.insertCSS(codeWebLayerCss(layer), { cssOrigin: 'user' }), LOAD_TIMEOUT_MS, '网页拆层样式注入超时'), signal)
     this.duration = await this.submitPage(() => withTimeout(contents.executeJavaScript(READY_SCRIPT, false) as Promise<number | null>, READY_TIMEOUT_MS, '网页没有在 30 秒内就绪（window.henjiWeb.ready）'), signal)
+    if (layer) {
+      const issue = await this.submitPage(() => withTimeout(contents.executeJavaScript(layerSelectorCheckScript(layer), false) as Promise<string | null>, LOAD_TIMEOUT_MS, '网页拆层选择器核对超时'), signal)
+      if (issue) throw new Error(issue)
+    }
     this.stale = undefined
     this.lastSeekTime = undefined
     let pageChanged = false

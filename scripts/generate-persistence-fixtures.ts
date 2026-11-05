@@ -148,8 +148,8 @@ document.media.push({ id: 'golden-screen', name: '屏幕原片', path: '/persist
 document.items.push({ id: 'golden-screen-item', name: '屏幕原片', kind: 'video', mediaId: 'golden-screen' })
 // 剪辑内容 v36：代码视频参数的取帧时间表——正常播放、停住并关掉录制鼠标、段间空档不参与、三倍速快放。
 clip.code!.parameters.screen = { kind: 'video', mediaId: 'golden-screen', spans: [{ from: 0, to: 1, src: 0 }, { from: 1, to: 1.5, src: 1, rate: 0, cursor: false }, { from: 2, to: 2.5, src: 1, rate: 3 }] }
-// 剪辑内容 v41：网页画面——项目里的网页文件夹，1920×1080 视口只渲染推近后露出的 640×360，6 倍栅格；按时间表取页面时间并读按钮矩形。
-clip.code!.parameters.page = { kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', width: 1920, height: 1080, region: [640, 360, 640, 360], scale: 6, spans: [{ from: 0, to: 2, src: 0 }, { from: 2, to: 3, src: 2, rate: 0 }], boxes: ['#send'] }
+// 剪辑内容 v41：网页画面——项目里的网页文件夹，1920×1080 视口只渲染推近后露出的 640×360，6 倍栅格；按时间表取页面时间并读按钮矩形；v71 起可带 layer 按选择器拆层。
+clip.code!.parameters.page = { kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', width: 1920, height: 1080, region: [640, 360, 640, 360], scale: 6, spans: [{ from: 0, to: 2, src: 0 }, { from: 2, to: 3, src: 2, rate: 0 }], boxes: ['#send'], layer: { hide: ['.banner'] } }
 // 剪辑内容 v37：片子数据存在文档里，代码参数只引用它。
 document.scenes = [goldenScene('golden-screen')]
 clip.code!.parameters.film = { kind: 'scene', sceneId: 'golden-scene' }
@@ -380,7 +380,7 @@ const values: Record<string, unknown> = {
   'code-author-api': { apiVersion: CODE_AUTHOR_API_VERSION },
   'code-component': { schemaVersion: 1, name: '组件', version: 1, description: '黄金组件', exports: ['value'], imports: [] },
   // 代码资产 v12：网页参数随资产带上网页路径（不打包网页文件夹）。
-  'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], elementOverrides: { 'golden-motion': { addedEffects: [{ key: 'extraBlur', id: 'blur', params: { amount: 10 } }] } }, parameters: { label: '黄金样本', page: { kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', time: 1.5 } }, curves: {}, images: [] }),
+  'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], elementOverrides: { 'golden-motion': { addedEffects: [{ key: 'extraBlur', id: 'blur', params: { amount: 10 } }] } }, parameters: { label: '黄金样本', page: { kind: 'web', path: '/persistence-project/素材/网页/知多少/index.html', time: 1.5, layer: { only: ['#send'] } } }, curves: {}, images: [] }),
   'image-header': { format: 'henji-image-document', version: 1, id: image.id, revision: 0, kindVersion: 1, createdAt: timestamp, updatedAt: timestamp, contentRevision: 0, emptyUntilRevision: 0, summary: { width: 32, height: 40, layers: image.layers.length } },
   'image-package': { packageFormat: 'henjiimg', packageVersion: IMAGE_PACKAGE_VERSION, createdAt: timestamp, document: working, resources: [...image.creativeIntents.resources.map(r=>({resourceId:r.resourceId,sha256:r.digest.slice(7),byteLength:r.bytes,path:r.path,mediaType:'application/vnd.henji.layout+json'})),{resourceId:historyId,sha256:historyId.slice(7),byteLength:historyBytes.byteLength,path:`resources/${historyId.slice(7)}`,mediaType:'application/vnd.henji.image-history+json'}] },
   'image-working-copy': working,
@@ -467,6 +467,7 @@ export function getImageLayoutFixtureResources(): readonly unknown[] {
  * 剪辑 63、录制 66 起黄金片段另带发光强度与其关键帧，风格包与模板库的人名条同样带上；剪辑 69、录制 72 起再带三维表面（厚度及其关键帧、受光、材质、倒角、阴影）。
  * 剪辑 64、录制 67 起黄金片段的代码图片参数 partner 引用同一序列里的录屏片段。
  * 剪辑 70、录制 73 起黄金序列另带一盏灯光片段（聚光、投影、亮度关键帧）与它的灯光素材项。
+ * 剪辑 71、录制 74 起黄金片段的网页图片参数 page 另带 layer（按选择器拆层）。
  */
 function withGoldenLight(video: VideoEditDocument): VideoEditDocument {
   if (video.items.some(item => item.id === 'golden-light-item')) return video
@@ -478,7 +479,7 @@ function withSpatialVideo(value: unknown): unknown {
   const fields = { spatial: clip.spatial, depth: clip.depth, rotationX: clip.rotationX, rotationY: clip.rotationY, anchorDepth: clip.anchorDepth, spaceEmission: clip.spaceEmission, spaceThickness: clip.spaceThickness, spaceLit: clip.spaceLit, spaceMaterial: clip.spaceMaterial, spaceBevel: clip.spaceBevel, spaceCastShadow: clip.spaceCastShadow, spaceReceiveShadow: clip.spaceReceiveShadow }
   return { ...video, sequences: video.sequences.map(entry => entry.id !== sequence.id ? entry : { ...entry, spatialCamera: structuredClone(sequence.spatialCamera), spaceRender: structuredClone(sequence.spaceRender),
     clips: entry.clips.map(item => item.id !== clip.id ? item : { ...item, ...structuredClone(fields), curves: { ...item.curves, ...structuredClone(spatialCurves) },
-      ...(item.code ? { code: { ...item.code, parameters: { ...item.code.parameters, partner: structuredClone(clip.code!.parameters.partner) } } } : {}) }) }) }
+      ...(item.code ? { code: { ...item.code, parameters: { ...item.code.parameters, partner: structuredClone(clip.code!.parameters.partner), page: structuredClone(clip.code!.parameters.page) } } } : {}) }) }) }
 }
 function withSpatialTemplates(formatId: string, value: unknown): unknown {
   if (formatId === 'video-preset-package') {

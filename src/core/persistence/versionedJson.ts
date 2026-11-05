@@ -8,9 +8,9 @@ export interface VersionedPersistenceJson { version: number; minReaderVersion?: 
 /** 每个本机库只有一份当前内容：记住最近一次前向读取，保存时带回未知字段与原版本戳。 */
 const forwardReads = new Map<string, { version: number; minReaderVersion: number; fields: readonly ForwardField[] }>()
 export const LOCAL_LIBRARY_FORMATS: Readonly<Record<string, { id: string; name: string; version: number; minReaderVersion?: number }>> = {
-  'video-edit-effects-library': { id: 'video-effect-library', name: '本机风格件与效果收藏', version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, minReaderVersion: 15 },
+  'video-edit-effects-library': { id: 'video-effect-library', name: '本机风格件与效果收藏', version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, minReaderVersion: 16 },
   'video-edit-style-kits': { id: 'style-kits', name: '本机风格包', version: 4, minReaderVersion: 3 },
-  'video-edit-title-templates': { id: 'title-templates', name: '本机标题模板', version: 14, minReaderVersion: 14 },
+  'video-edit-title-templates': { id: 'title-templates', name: '本机标题模板', version: 15, minReaderVersion: 15 },
   'video-edit-text-presets': { id: 'text-presets', name: '本机文字和字幕预设', version: 1 },
   'video-edit-export-presets': { id: 'export-presets', name: '本机导出预设', version: 5, minReaderVersion: 1 },
   'video-edit-export-memory': { id: 'export-memory', name: '上次导出设置', version: 3, minReaderVersion: 1 },

@@ -135,6 +135,8 @@ export interface WebTextGeometry {
   readonly graphemes: readonly WebTextGrapheme[]
   readonly words: readonly WebTextWord[]
   readonly lineFragments: readonly WebTextLineFragment[]
+  /** 与 graphemes 一一对应的格子（画面像素整数 [x,y,w,h]），互不重叠地铺满文字；按它切文字层，所有字不动时与原画面一致。竖排或没有位置的字素为 null。 */
+  readonly cells?: readonly (WebTextRect | null)[]
   readonly segmentation: readonly { readonly source: WebTextSource; readonly locale: string; readonly contract: 'intl-segmenter' }[]
   readonly limitations: readonly string[]
 }

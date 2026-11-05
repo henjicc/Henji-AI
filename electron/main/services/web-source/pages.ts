@@ -1,4 +1,5 @@
-import { codeWebBoxesIssue, codeWebFolderOf, codeWebView } from '../../../../src/core/videoEdit/codeMaterial/webSource'
+import type { CodeWebLayer } from '../../../../src/core/imaging/parameterTypes'
+import { codeWebBoxesIssue, codeWebFolderOf, codeWebLayerIssue, codeWebView } from '../../../../src/core/videoEdit/codeMaterial/webSource'
 import type { WebSourceCacheRequest, WebSourceCaptureRequest, WebSourceCaptureResult, WebSourceContentChange, WebSourceInfo, WebSourceOpenRequest } from '../../../../src/platform/contracts/videoFrameTypes'
 import type { MainLogger } from '../logging/main-logger'
 import type { VideoFrameTarget } from '../video-decoder'
@@ -30,7 +31,9 @@ export function parseWebSourceOpenRequest(input: unknown): WebSourceOpenRequest 
   const fields = record(input, '网页来源请求')
   if (typeof fields.route !== 'string' || !ROUTE_PATTERN.test(fields.route)) throw new Error('网页来源参数 route 无效')
   if (['width', 'height', 'region', 'scale'].some(key => fields[key] === undefined)) throw new Error('网页来源需要 width、height、region 与 scale')
-  const view = codeWebView({ width: fields.width as number, height: fields.height as number, region: fields.region as number[], scale: fields.scale as number }, 'output')
+  const layerIssue = fields.layer === undefined ? undefined : codeWebLayerIssue(fields.layer)
+  if (layerIssue) throw new Error(layerIssue)
+  const view = codeWebView({ width: fields.width as number, height: fields.height as number, region: fields.region as number[], scale: fields.scale as number, ...(fields.layer ? { layer: fields.layer as CodeWebLayer } : {}) }, 'output')
   const trust = fields.trust === undefined ? undefined : contentTrustQuerySchema.parse({ contents: fields.trust }).contents
   return { route: fields.route, path: sourcePath(fields.path), ...view, ...(trust ? { trust } : {}) }
 }
@@ -188,14 +191,15 @@ export class WebSourcePages {
     const selection = request.precision === 'web-cache' && request.cachePolicy === 'adaptive' ? this.readTiming.select(page.contentHash, request) : undefined
     try {
       if (selection?.changed) this.logger.debug('网页画面按实测耗时选择来源', { event: 'web_source.cache.selection', context: { streamId: page.streamId, reason: selection.reason, liveMs: selection.liveMs, cacheMs: selection.cacheMs } })
-      // 缓存帧不带文字几何：要文字位置的请求只走实时取帧。
-      const cached = request.text?.length || selection && !selection.cache ? undefined : await this.reader?.capture(page, request)
+      // 缓存帧不带文字几何，也存不下透明：要文字位置的请求与拆层页面只走实时取帧。
+      const liveOnly = !!request.text?.length || !!page.view.layer
+      const cached = liveOnly || selection && !selection.cache ? undefined : await this.reader?.capture(page, request)
       if (cached) {
         if (selection && !cached.dropped) this.readTiming.record(selection.key, true, performance.now() - startedAt, selection.warmup)
         return cached
       }
       try {
-        const written = request.text?.length ? undefined : await this.exportWriter?.capture(page, request)
+        const written = liveOnly ? undefined : await this.exportWriter?.capture(page, request)
         if (written) return written
       } catch (error) {
         this.logger.warn('网页精确导出缓存不可用，继续实时取帧', { event: 'web_source.export_cache.failed', error, context: { streamId: page.streamId, time: request.time } })
@@ -223,7 +227,7 @@ export class WebSourcePages {
   }
 
   private async register(page: WebSourcePage): Promise<void> {
-    if (this.pages.get(page.streamId) !== page) return
+    if (this.pages.get(page.streamId) !== page || page.view.layer) return
     try { await this.registrations?.register(page, this.pageTrust.get(page.streamId)) }
     catch (error) { this.logger.warn('网页后台登记不可用，继续实时网页', { event: 'web_source.registration.failed', error, context: { streamId: page.streamId } }) }
     // 热重载会撤销旧批次；已收到的最新需求跟随登记完成重放，不能由一次空登记永久丢弃。
