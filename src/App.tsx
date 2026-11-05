@@ -50,6 +50,7 @@ import { showAlertDialog } from '@/stores/alertDialogStore'
 import { CameraStageRenderLifecycleHost } from '@/features/canvas/application/CameraStageRenderLifecycleHost'
 
 const logger = createLogger('App')
+let reloadResumeInstalled = false
 
 // 设置面板、智能助手、资产悬浮面板都是「按需打开」的浮层，却各自拖着一大棵子树
 // （设置分区、Markdown 渲染、资产库列表）。放进启动同步图会让冷启动白解析一遍，
@@ -192,6 +193,14 @@ const App: React.FC = () => {
   useEffect(() => {
     if (startupSurfaceId) return
     if (useSettingsStore.getState().startupWorkspace === 'assets') openAssetLibrary('workspace')
+  }, [])
+
+  // 页面重新加载（开发运行改到业务模块、崩溃后自动重载）后回到原来的工作区、文档和播放位置。
+  // 要排在上面两个启动定位之后：恢复记下当前导航作为基准，基准之后导航变了就当用户接管。
+  useEffect(() => {
+    if (reloadResumeInstalled) return
+    reloadResumeInstalled = true
+    void import('@/features/documents/rendererReloadResume').then(({ installRendererReloadResume }) => installRendererReloadResume())
   }, [])
 
   const openAssetFloating = React.useCallback((): void => {

@@ -31,13 +31,15 @@ const FIRST_SCREEN_HEAVY_MODULE_PREFIXES = [
 ]
 
 function firstScreenReachability(edges, entry = 'src/main.tsx') {
+  // App 由入口按视图懒加载，但它的静态子树仍是主窗口每次启动都要解析的代码，算作首屏。
+  const entries = [entry, ...(edges.some((item) => item.from === entry && item.to === 'src/App.tsx') ? ['src/App.tsx'] : [])]
   const outgoing = new Map()
   for (const edge of edges.filter((item) => item.kind === 'static')) {
     if (!outgoing.has(edge.from)) outgoing.set(edge.from, [])
     outgoing.get(edge.from).push(edge)
   }
-  const routes = new Map([[entry, [entry]]])
-  const queue = [entry]
+  const routes = new Map(entries.map((entry) => [entry, [entry]]))
+  const queue = [...entries]
   const heavy = new Map()
   for (let index = 0; index < queue.length; index += 1) {
     const from = queue[index]

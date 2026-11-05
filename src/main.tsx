@@ -1,6 +1,5 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App'
 // 界面字体 Geist / Geist Mono（SIL OFL 1.1，随包离线可用；字体栈见 tailwind.config.js fontFamily）
 import '@fontsource-variable/geist'
 import '@fontsource-variable/geist-mono'
@@ -56,6 +55,9 @@ const isCameraStageRenderView = new URLSearchParams(window.location.search).get(
 // 静态导入会把 three/@react-three 整包压进启动 chunk，主窗口每次启动都要白解析一遍，
 // 因此改为按视图懒加载：主窗口启动路径不再包含这两棵子树。
 const LogsShell = React.lazy(() => import('./features/logs/LogsShell'))
+// 主界面同样按视图加载：它的模块顶层带启动副作用（恢复导出队列等），只有主窗口过得了主进程的来源校验，
+// 辅助窗口求值这棵树只会白白解析，还会留下被拒绝的假报错。
+const App = React.lazy(() => import('./App'))
 const CameraStageRenderWorker = React.lazy(
   () => import('./features/cameraStage/render/CameraStageRenderWorker'),
 )
@@ -97,7 +99,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 >
                     <GlobalContextMenuProvider>
                         <DragDropProvider>
-                            <App />
+                            <React.Suspense fallback={null}>
+                                <App />
+                            </React.Suspense>
                         </DragDropProvider>
                     </GlobalContextMenuProvider>
                 </UiErrorBoundary>
@@ -106,7 +110,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     ),
 )
 
-// 页面重新加载（开发运行改到业务模块、崩溃后自动重载）后回到原来的工作区、文档和播放位置（只在主窗口）
-if (!isLogsView && !isRecordingControlView && !isRecordingFrameView && !isCameraStageRenderView) {
-  void import('@/features/documents/rendererReloadResume').then(({ installRendererReloadResume }) => installRendererReloadResume())
-}

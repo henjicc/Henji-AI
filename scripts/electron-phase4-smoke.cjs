@@ -143,9 +143,7 @@ async function checkWorkspaceShell(page) {
   if (await page.locator('.react-flow').count() === 0) {
     // 新建画布直接打开一份草稿；离开时空草稿自动删除，不留数据
     createdDraft = true
-    await page.locator('[data-ui-page-header]').getByRole('button', {
-      name: /新建画布|New Canvas/,
-    }).click()
+    await page.getByRole('button', { name: /新建画布|New Canvas/ }).first().click()
   }
 
   try {
