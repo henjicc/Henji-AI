@@ -3,7 +3,7 @@ import { createVideoEditDocument, createVideoEditSequence, splitVideoEditClip, t
 import { addLegacyVideoEditTracks } from './testFixtures'
 import { assertVideoEditLockedTracks } from './lockedTracks'
 import { reconcileVideoEditTimedContent } from './timedContent'
-import { applyVideoEditTimelineEdit } from './timelineEdits'
+import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult } from './timelineEdits'
 import { detachVideoEditRemovedCodeClipReferences, remapVideoEditCodeClipReferences, videoEditCodeClipReferenceIds, videoEditLostCodeClipReferences } from './codeClipReferences'
 
 const base = { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '', itemId: 'text' }
@@ -112,6 +112,19 @@ it('片段从序列移除后引用置空并能查出失去了哪个参数；连�
   const filter = { ...code('ribbon', 0, 100), kind: 'text', code: undefined, effects: [{ id: 'fx', name: '滤镜', enabled: true, amount: 1, code: { definitionId: 'm', versionId: 'v', parameters: { light: { kind: 'clip', clipId: 'title' } } } }] } as unknown as VideoEditClip
   const after = { ...filter, effects: [{ ...filter.effects![0], code: { ...filter.effects![0].code!, parameters: { light: null } } }] } as VideoEditClip
   expect(videoEditLostCodeClipReferences([title, filter], [after])).toEqual([{ clipId: 'ribbon', effectId: 'fx', parameter: 'light', targetClipId: 'title' }])
+})
+
+it('粘贴到别的序列：不在目标序列的引用置空并按来源片段查出；一起粘贴的片段之间改指新副本，不算失去', () => {
+  const document = createVideoEditDocument('粘贴'), source = { ...createVideoEditSequence('来源'), clips: [title, code('ribbon', 0, 100)] }
+  const target = addLegacyVideoEditTracks({ ...createVideoEditSequence('目标'), clips: [] })
+  document.sequences = [addLegacyVideoEditTracks(source), target]; document.items = [{ id: 'text', kind: 'text', name: '文字' }]
+  const clipboard = { projectId: document.id, frameRate: source.frameRate, annotations: [] }
+  const alone = applyVideoEditTimelineEditResult(document, target.id, { kind: 'place', mode: 'paste', frame: 0, clipboard: { ...clipboard, clips: [code('ribbon', 0, 100)] } })
+  const pasted = alone.sequence.clips[0]
+  expect(pasted.code!.parameters.light).toBeNull()
+  expect(videoEditLostCodeClipReferences(target.clips, alone.sequence.clips, alone.pastedClips)).toEqual([{ clipId: pasted.id, parameter: 'light', targetClipId: 'title' }])
+  const together = applyVideoEditTimelineEditResult(document, target.id, { kind: 'place', mode: 'paste', frame: 0, clipboard: { ...clipboard, clips: [title, code('ribbon', 0, 100)] } })
+  expect(videoEditLostCodeClipReferences(target.clips, together.sequence.clips, together.pastedClips)).toEqual([])
 })
 
 it('三维引用事实：隔着二维片段引用报 cross-group，同组不报；互相引用成环报一次 element-cycle', async () => {

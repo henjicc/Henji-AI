@@ -17,6 +17,7 @@ import { trialVideoEditCodeFrames, videoEditCodeValidationFrames } from './video
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { createLogger } from '@/core/logging'
 import { inheritApplicationConfirmation } from '@/core/application-control/userConfirmation'
+import { assertVideoEditCodeClipReferenceWrite } from './videoEditCodeClipReferenceWrite'
 
 
 const logger = createLogger('features.videoEdit.codeCandidates')
@@ -107,6 +108,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const document = videoEditDocumentSchema.parse(moved.document)
     await ensureVideoEditChangedCodeMetadata(owner, baseline, document, controller.signal)
     validateCodeMaterialDocument(document, readVideoEditCodeMetadata(owner, document), changedCodeMaterialVersions(baseline, document))
+    for (const { target: instance } of moved.instances) if (instance.kind === 'clip') await assertVideoEditCodeClipReferenceWrite(owner, baseline, document, instance.sequenceId, instance.id, controller.signal)
     const requested = owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? original.start
     const frame = videoEditTransitionsAt(videoEditComposition(document, target.sequenceId), requested).some(window => window.left.id === original.id || window.right.id === original.id) ? requested : Math.max(original.start, Math.min(original.start + original.duration - 1, requested))
     const uniqueFrames = videoEditCodeValidationFrames(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => selectedIds.has(clip.id)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: selectedEffects.get(clip.id) } : {}) }))), { sequenceId: target.sequenceId, frame })

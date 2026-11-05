@@ -93,7 +93,7 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
     const job = findVideoEditInPlaceJobByTask(input.taskRef.id)
     if (!job || job.projectId !== input.documentRef.id || job.status === 'placed') {
       const placed = findVideoEditPlacedGeneration(input.documentRef.id, input.taskRef.id)
-      if (placed) return { documentRef: input.documentRef, taskRef: input.taskRef, status: 'placed', clipRef: { kind: 'video_edit.clip', id: `${input.documentRef.id}:${placed.clipId}` }, ...(placed.takeIndex !== undefined ? { takeIndex: placed.takeIndex } : {}), message: placed.takeIndex !== undefined ? `结果已保存在片段镜头版本 ${placed.takeIndex}，可切回。` : '结果已落进当前剪辑，可读取片段核对。' }
+      if (placed) return { documentRef: input.documentRef, taskRef: input.taskRef, status: 'placed', clipRef: { kind: 'video_edit.clip', id: `${input.documentRef.id}:${placed.clipId}` }, ...(placed.takeIndex !== undefined ? { takeIndex: placed.takeIndex } : {}), message: `${placed.takeIndex !== undefined ? `结果已保存在片段镜头版本 ${placed.takeIndex}，可切回。` : '结果已落进当前剪辑，可读取片段核对。'}${job?.projectId === input.documentRef.id ? job.lostCodeClipReferences ?? '' : ''}` }
       if (!job || job.status === 'placed' || job.projectId !== input.documentRef.id) throw new Error('当前剪辑中没有该任务的占位、片段或镜头版本。请核对原剪辑与任务引用；已撤销或删除的结果可从生成历史读取。')
     }
     let progress: number | undefined

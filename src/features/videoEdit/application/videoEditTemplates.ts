@@ -26,11 +26,13 @@ import { CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION } from '@/core/videoEdit/codeAu
 import { videoEditFps } from '@/core/videoEdit/time'
 import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
 import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, setVideoEditView, type VideoEditInstance } from './videoEditService'
-import { ensureVideoEditRetargetMetadata, withVideoEditCodeMetadata, withVideoEditUnreadableCodeVersions, readVideoEditCodeMetadata } from './videoEditCodeState'
+import { ensureVideoEditRetargetMetadata, peekVideoEditCodeProgram, withVideoEditCodeMetadata, withVideoEditUnreadableCodeVersions, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditCodeVersions, createVideoEditPlacedCodeItems } from './videoEditCodeService'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { findVideoEditStyle, videoEditTemplateStyle } from './videoEditPresetCatalog'
 import type { VideoEditDropPlacement } from './videoEditDrop'
+import { noteVideoEditCodeClipWorldScenes } from './videoEditCodeClipReferenceWrite'
+import { videoEditLostCodeClipReferenceReport, videoEditLostCodeClipReferenceUserFact } from './videoEditLostCodeClipReferences'
 
 const logger = createLogger('features.videoEdit.templates')
 
@@ -296,10 +298,11 @@ function syncNativeItems(document: VideoEditDocument, templateId: string): Video
   const graphics = new Map(document.sequences.flatMap(sequence => sequence.clips.filter(clip => clip.templateId === templateId).map(clip => [clip.itemId, clip] as const)))
   return { ...document, items: [...document.items.map(item => { const clip = graphics.get(item.id); return clip ? { ...item, name: clip.name, kind: clip.kind, ...(clip.graphic ? { graphic: structuredClone(clip.graphic) } : {}) } : item }), ...[...graphics].filter(([id]) => !document.items.some(item => item.id === id)).map(([id, clip]) => ({ id, name: clip.name, kind: clip.kind, ...(clip.graphic ? { graphic: structuredClone(clip.graphic) } : {}) }) as VideoEditItem)] }
 }
-function rebindCode(owner: VideoEditInstance, document: VideoEditDocument, definitionId: string, versionId: string, unreadable: ReadonlySet<string>): { document: VideoEditDocument; codeInstances: VideoEditCodeInstanceMigration[] } {
+function rebindCode(owner: VideoEditInstance, document: VideoEditDocument, definitionId: string, versionId: string, unreadable: ReadonlySet<string>): { document: VideoEditDocument; codeInstances: VideoEditCodeInstanceMigration[]; notices: string[] } {
   const read = readVideoEditCodeMetadata(owner, document)
   const moved = retargetCodeMaterialInstances(document, definitionId, versionId, read({ definitionId, versionId, parameters: {} }), read, { unreadable })
-  return { document: { ...moved.document, codeMaterials: moved.document.codeMaterials!.map(definition => definition.id === definitionId ? { ...definition, defaultVersionId: versionId } : definition) }, codeInstances: moved.instances.map(instance => videoEditCodeInstanceMigration(document.id, instance)) }
+  const noted = noteVideoEditCodeClipWorldScenes(owner, document, moved, unreadable)
+  return { document: { ...moved.document, codeMaterials: moved.document.codeMaterials!.map(definition => definition.id === definitionId ? { ...definition, defaultVersionId: versionId } : definition) }, codeInstances: noted.instances.map(instance => videoEditCodeInstanceMigration(document.id, instance)), notices: noted.facts }
 }
 
 /** 换版本后给用户的一句话：去掉与恢复默认的参数各几个，按参数计、不按实例重复计；逐实例明细写日志。 */
@@ -313,7 +316,7 @@ export type VideoEditTemplateUpdateSource ={ kind: 'version'; versionId: string 
  * 改模板内容并刷新全部联动实例（先说影响范围再调用）：代码模板换成该定义的另一个源码版本；原生模板按一组实例片段重新登记；
  * library 用库里的更新版本覆盖工程副本。内容变了版本加 1。
  */
-export function updateVideoEditTemplate(projectId: string, templateId: string, source: VideoEditTemplateUpdateSource, signal?: AbortSignal): Promise<{ template: VideoEditProjectTemplate; instances: number; codeInstances: VideoEditCodeInstanceMigration[] }> {
+export function updateVideoEditTemplate(projectId: string, templateId: string, source: VideoEditTemplateUpdateSource, signal?: AbortSignal): Promise<{ template: VideoEditProjectTemplate; instances: number; codeInstances: VideoEditCodeInstanceMigration[]; notices: string[]; userNotices: string[] }> {
   return templateOperation(projectId, async external => {
     // 局部副本：在本函数里重新赋值，类型收窄才能跟到后面的回调里。
     let content = source
@@ -363,17 +366,20 @@ export function updateVideoEditTemplate(projectId: string, templateId: string, s
     const equivalentSourceHash = beforeVersion && beforeVersion.apiVersion < CODE_AUTHOR_SHAPED_TEXT_MIN_API_VERSION && template.contentHash === await codeVersionHash(beforeVersion, false) && hash === await codeVersionHash(beforeVersion) && sourceMatches.every(value => value.source !== template.contentHash || value.author === hash)
     const changed = hash !== template.contentHash && !equivalentSourceHash
     const next = videoEditProjectTemplateSchema.parse({ ...template, origin, contentHash: changed ? hash : template.contentHash, version: template.version + (changed ? 1 : 0), updatedAt: new Date().toISOString() })
-    let instances = 0; let codeInstances: VideoEditCodeInstanceMigration[] = []
+    let instances = 0; let codeInstances: VideoEditCodeInstanceMigration[] = []; let notices: string[] = []
     // 等待期间新出现的版本引用在写入时才知道，读取中就等它读完再重试。
     await withVideoEditUnreadableCodeVersions(owner, unreadable, () => withVideoEditCodeMetadata(() => editVideoProject(projectId, current => {
       let value: VideoEditDocument = { ...withVideoEditTemplateStyle(current, style), templates: current.templates!.map(item => item.id === templateId ? next : item) }
-      if (next.body.kind === 'code' && content.kind === 'version') ({ document: value, codeInstances } = rebindCode(owner, value, next.body.definitionId, content.versionId, unreadable))
+      if (next.body.kind === 'code' && content.kind === 'version') ({ document: value, codeInstances, notices } = rebindCode(owner, value, next.body.definitionId, content.versionId, unreadable))
       if (next.body.kind === 'native') value = syncNativeItems(refreshNativeInstances(value, next), next.id)
       instances = videoEditTemplateInstances(value, next).length
       return videoEditDocumentSchema.parse(value)
     })))
   logger.info('template.update.completed', '模板与联动实例已更新', { context: { projectId, instances, changed, codeInstances: codeInstances.filter(row => row.removedParameters.length || row.resetParameters.length || row.note) } })
-  return { template: next, instances, codeInstances }
+  // 原生模板内容变少时，多出来的实例片段被移除，指向它们的引用随之置空。
+  const after = requireVideoEditInstance(projectId).document
+  const lost = videoEditLostCodeClipReferenceReport(document, after)
+  return { template: next, instances, codeInstances, notices: lost ? [...notices, lost.fact] : notices, userNotices: lost ? [...notices, videoEditLostCodeClipReferenceUserFact(lost, after, versionId => peekVideoEditCodeProgram(owner, versionId))] : notices }
   })
 }
 async function findSameVersion(document: VideoEditDocument, definitionId: string, body: Extract<VideoEditTemplateBody, { kind: 'code' }> | undefined): Promise<string | undefined> {

@@ -220,6 +220,17 @@ describe('原地生成执行', () => {
     expect(imports).toHaveBeenCalledTimes(1)
     expect(saves).toHaveBeenCalled()
   })
+  it('延长覆盖掉被引用的片段：引用置空，事实记在任务上（落位发生在提交能力返回之后）', async () => {
+    const sequence = state.document.sequences[0]
+    const referrer = { ...sequence.clips[0], id: 'c', name: 'c', start: 300, code: { definitionId: 'm', versionId: 'v', parameters: { light: { kind: 'clip' as const, clipId: 'b' } } } }
+    state.document = { ...state.document, sequences: [{ ...sequence, clips: [...sequence.clips, referrer] }] }
+    const started = await service.startVideoEditInPlaceGeneration({ projectId: state.document.id, sequenceId: sequence.id, intent: { action: 'extend_shot', clipId: 'a', mode: 'overwrite' }, prompt: '继续' }, { taskId: 'task-extend' })
+    notify({ status: 'success', resultAvailable: true })
+    await flush(); await flush()
+    expect(state.document.sequences[0].clips.find(clip => clip.id === 'b')).toBeUndefined()
+    expect(state.document.sequences[0].clips.find(clip => clip.id === 'c')!.code!.parameters.light).toBeNull()
+    expect(service.readVideoEditInPlaceJob(started.job.id)?.lostCodeClipReferences).toContain('参数 light')
+  })
   it('提交前失败：撤回占位、剪辑不变，错误交给发起方', async () => {
     state.submitError = new Error('供应商密钥未配置')
     const before = state.document

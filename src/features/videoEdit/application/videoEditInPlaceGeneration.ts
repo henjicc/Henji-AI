@@ -21,6 +21,7 @@ import { placeVideoEditFileInProject } from './videoEditResultTarget'
 import { importVideoEditSources } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, saveVideoEdit, subscribeVideoEdit, updateVideoEditInPlaceMetadata } from './videoEditService'
 import { videoEditStyleGenerationPrompt } from './videoEditStylePrompt'
+import { videoEditLostCodeClipReferenceReport, type VideoEditLostCodeClipReferenceReport } from './videoEditLostCodeClipReferences'
 
 /*
  * 原地生成（4.12）的执行：规划 → 放占位 → 取参考帧 → 走正式生成链路提交 → 等待 → 结果复制进项目并收录 → 一步编辑落进时间线。
@@ -61,6 +62,8 @@ export interface VideoEditInPlaceJob {
   error?: string
   /** 落位时原落点被占用或原片段已删除，改放到了新轨道上。 */
   fallback?: 'clip_missing' | 'slot_taken'
+  /** 落位覆盖掉了被引用的片段：哪些代码参数因此变空。 */
+  lostCodeClipReferences?: string
 }
 export interface VideoEditInPlacePreparation {
   plan: VideoEditInPlacePlan
@@ -318,16 +321,19 @@ async function land(job: VideoEditInPlaceJob, taskId: string, signal: AbortSigna
   const prepared = await prepareVideoEditCreativeResult({ type: 'generation', recordId: taskId, outputIndex: 0 }, { signal, assertTarget, place: path => placeVideoEditFileInProject(requireVideoEditInstance(job.projectId), path) })
   assertTarget()
   let landed: ReturnType<typeof landVideoEditInPlaceResult> | undefined
+  let lost: VideoEditLostCodeClipReferenceReport | undefined
   await importVideoEditSources(job.projectId, [{ assetId: prepared.asset.id }], undefined, signal, async (document, itemIds) => {
     const item = document.items.find(value => itemIds.includes(value.id) && document.media.some(media => media.id === value.mediaId && media.assetId === prepared.asset.id))
     if (!item) throw new Error('生成结果没有导入项目。')
     landed = landVideoEditInPlaceResult(document, job.plan, item.id, prepared.origin)
+    lost = videoEditLostCodeClipReferenceReport(document, landed.document)
     landed.document = await propagateVideoEditSpatialFields(document, landed.document, signal, { clipMap: landed.clipMap, sequenceTimeMap: landed.sequenceTimeMap })
     // 落位与已应用标记是同一份内容；保存响应丢失/崩溃重开仅保存，不再次放置。
     return { ...landed.document, inPlaceGenerations: (document.inPlaceGenerations ?? []).map(value => value.id === job.id ? { ...value, status: 'placing' as const, clipId: landed!.clipId } : value) }
   })
   // 在等待保存前记住已发生的编辑：保存失败/取消竞态不能再次导入同一结果。
-  update(job.id, { clipId: landed!.clipId })
+  // 落位发生在提交能力返回之后，事实只能跟着任务状态交给查询方。
+  update(job.id, { clipId: landed!.clipId, ...(lost ? { lostCodeClipReferences: lost.fact } : {}) })
   return { clipId: landed!.clipId, ...(landed!.fallback ? { fallback: landed!.fallback } : {}) }
 }
 

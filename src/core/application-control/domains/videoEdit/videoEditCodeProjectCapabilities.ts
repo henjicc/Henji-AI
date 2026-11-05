@@ -21,7 +21,7 @@ export const videoEditCodeInstanceMigrationsSchema = z.array(z.object({
   ref: applicationRefSchema,
   removedParameters: z.array(z.string()).describe('新版本不再声明、随换版本去掉的参数键'),
   resetParameters: z.array(z.string()).describe('写过的值或关键帧不再适用、已重置为跟随默认值的参数键'),
-  note: z.string().optional().describe('迁移依据受限时的说明，例如旧版本无法读取、只按新版本声明处理'),
+  note: z.string().optional().describe('需要交代的说明，例如旧版本无法读取、只按新版本声明处理，或片段换版本后成了世界场景而仍被别的片段直接引用'),
 }).strict()).describe('每个换到新版本的素材项、片段或附加效果一条')
 export type VideoEditCodeInstanceMigration = z.infer<typeof videoEditCodeInstanceMigrationsSchema>[number]
 export function videoEditCodeInstanceMigration(projectId: string, instance: CodeMaterialRetargetedInstance): VideoEditCodeInstanceMigration {

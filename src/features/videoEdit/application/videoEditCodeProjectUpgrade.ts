@@ -18,6 +18,7 @@ import { requireVideoEditInstance, editVideoProject, saveVideoEdit, verifyVideoE
 import { compileVideoEditCode, ensureVideoEditChangedCodeMetadata, ensureVideoEditRetargetMetadata, readVideoEditCodeMetadata, withVideoEditUnreadableCodeVersions } from './videoEditCodeState'
 import { validateCodeMaterialDocument, codeMaterialTrustContext, changedCodeMaterialVersions, retargetCodeMaterialInstances, videoEditCodeReferences } from '@/core/videoEdit/codeMaterialDocument'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { noteVideoEditCodeClipWorldScenes } from './videoEditCodeClipReferenceWrite'
 const logger = createLogger('features.videoEdit.codeUpgrade')
 
 type Input = z.infer<typeof upgradeVideoEditCodeMaterialsCapability.inputSchema>
@@ -64,18 +65,20 @@ export async function upgradeVideoEditCodeMaterials(input: Input, signal?: Abort
     }
     signal?.throwIfAborted()
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('解析工程期间剪辑已修改，请重试升级。')
-    const resultRefs: Output['resultRefs'] = []; const instances: Output['instances'] = []
+    const resultRefs: Output['resultRefs'] = []; const instances: Output['instances'] = []; const notices = new Set<string>()
     const retarget = (document: VideoEditDocument, versions: string[]): VideoEditDocument => {
       const read = readVideoEditCodeMetadata(owner, document)
       for (const row of upgrades) {
         const definitionId = row.materialRef.id.slice(id.length + 1)
         if (!row.newVersion) { row.newVersion = versions[pending.findIndex(value => value.definitionId === definitionId)]; resultRefs.push({ kind: 'video_edit.code_version', id: `${id}:${row.newVersion}` }) }
         const moved = retargetCodeMaterialInstances(document, definitionId, row.newVersion, read({ definitionId, versionId: row.newVersion, parameters: {} }), read, { unreadable })
+        const noted = noteVideoEditCodeClipWorldScenes(owner, document, moved, unreadable)
+        for (const fact of noted.facts) notices.add(fact)
         document = moved.document
         document.codeMaterials!.find(definition => definition.id === definitionId)!.defaultVersionId = row.newVersion
         resultRefs.push(row.materialRef)
         const clips = new Map<string, string>()
-        for (const instance of moved.instances) {
+        for (const instance of noted.instances) {
           const row = videoEditCodeInstanceMigration(id, instance); const { target } = instance
           resultRefs.push(row.ref); instances.push(row)
           if (target.kind !== 'item') clips.set(target.kind === 'clip' ? target.id : target.clipId, target.sequenceId)
@@ -100,7 +103,7 @@ export async function upgradeVideoEditCodeMaterials(input: Input, signal?: Abort
     })
     await saveVideoEdit(id)
     logger.info('代码素材升级完成', { event: 'video_edit.code.upgrade.completed', context: { documentId: id, count: upgrades.length } })
-    return { commit: commit ?? '', upgrades, instances, resultRefs: [...new Map(resultRefs.map(ref => [`${ref.kind}:${ref.id}`, ref])).values()], verified: await verifyVideoEditSaved(id), message: upgrades.length ? `已升级 ${upgrades.length} 个代码素材。` : '源码、作者接口与内置库未变化，无需升级。' }
+    return { commit: commit ?? '', upgrades, instances, resultRefs: [...new Map(resultRefs.map(ref => [`${ref.kind}:${ref.id}`, ref])).values()], verified: await verifyVideoEditSaved(id), message: upgrades.length ? `已升级 ${upgrades.length} 个代码素材。${[...notices].join('')}` : '源码、作者接口与内置库未变化，无需升级。' }
   } catch (error) {
     logger.error('代码素材升级失败', { event: 'video_edit.code.upgrade.failed', error, context: { documentId: input.documentRef.id } })
     throw error

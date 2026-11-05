@@ -81,19 +81,27 @@ export function detachVideoEditRemovedCodeClipReferences(previous: Pick<VideoEdi
 
 /** 一次编辑让仍在序列里的片段失去的引用：哪个片段（或它的哪个代码滤镜）的哪个参数原来指向哪个片段。 */
 export interface VideoEditLostCodeClipReference { clipId: string; effectId?: string; parameter: string; targetClipId: string }
-export function videoEditLostCodeClipReferences(before: readonly VideoEditClip[], after: readonly VideoEditClip[]): VideoEditLostCodeClipReference[] {
+/** 粘贴出的新片段换了 ID，只能和剪贴板里的来源片段对照。 */
+export interface VideoEditPastedClip { clipId: string; source: VideoEditClip }
+export function videoEditLostCodeClipReferences(before: readonly VideoEditClip[], after: readonly VideoEditClip[], pasted: readonly VideoEditPastedClip[] = []): VideoEditLostCodeClipReference[] {
   const remaining = new Map(after.map(clip => [clip.id, clip]))
   const existed = new Set(before.map(clip => clip.id))
-  return before.flatMap(clip => {
+  const lost = (clipId: string, parameters: object | undefined, now: object | undefined, effectId?: string): VideoEditLostCodeClipReference[] => Object.entries(parameters ?? {}).flatMap(([parameter, value]) => {
+    if (!isClipReference(value) || remaining.has(value.clipId) || isClipReference((now as CodeParameters | undefined)?.[parameter])) return []
+    return [{ clipId, ...(effectId ? { effectId } : {}), parameter, targetClipId: value.clipId }]
+  })
+  const edited = before.flatMap(clip => {
     const current = remaining.get(clip.id)
     if (!current) return []
-    const lost = (parameters: object | undefined, now: object | undefined, effectId?: string): VideoEditLostCodeClipReference[] => Object.entries(parameters ?? {}).flatMap(([parameter, value]) => {
-      // 编辑前就指向不存在片段的旧引用被顺手清掉，不是这次编辑造成的损失。
-      if (!isClipReference(value) || !existed.has(value.clipId) || remaining.has(value.clipId) || isClipReference((now as CodeParameters | undefined)?.[parameter])) return []
-      return [{ clipId: clip.id, ...(effectId ? { effectId } : {}), parameter, targetClipId: value.clipId }]
-    })
-    return [...lost(clip.code?.parameters, current.code?.parameters), ...(clip.effects ?? []).flatMap(effect => lost(effect.code?.parameters, current.effects?.find(value => value.id === effect.id)?.code?.parameters, effect.id))]
+    // 编辑前就指向不存在片段的旧引用被顺手清掉，不是这次编辑造成的损失。
+    return [...lost(clip.id, clip.code?.parameters, current.code?.parameters), ...(clip.effects ?? []).flatMap(effect => lost(clip.id, effect.code?.parameters, current.effects?.find(value => value.id === effect.id)?.code?.parameters, effect.id))].filter(reference => existed.has(reference.targetClipId))
   })
+  // 粘贴出的片段不看 existed：被引用的片段本来就在来源序列里，不在目标序列的片段列表中。效果也换了 ID，按次序对应。
+  return [...edited, ...pasted.flatMap(({ clipId, source }) => {
+    const current = remaining.get(clipId)
+    if (!current) return []
+    return [...lost(clipId, source.code?.parameters, current.code?.parameters), ...(source.effects ?? []).flatMap((effect, index) => lost(clipId, effect.code?.parameters, current.effects?.[index]?.code?.parameters, current.effects?.[index]?.id))]
+  })]
 }
 
 /** 风格件带到别的剪辑里用：效果代码里对本剪辑片段的引用在那里没有意义，保存时置空。 */

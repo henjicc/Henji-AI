@@ -79,6 +79,17 @@ describe('原地生成助手能力', () => {
     expect(output).toMatchObject({ verification: { verified: true } })
     expect(state.document.sequences[0].clips[0]).toMatchObject({ itemId: 'item', duration: 60, takes: [expect.objectContaining({ itemId: 'gen-item' })] })
   })
+  it('落位时失去引用的事实随查询结果返回', async () => {
+    const document = state.document
+    document.sequences[0].clips[0].creativeSource = { type: 'generation', recordId: 'done', outputIndex: 0 }
+    jobs.set('done', { id: 'job', projectId: document.id, status: 'placed', taskId: 'done', clipId: 'a', lostCodeClipReferences: '片段“c”的参数 light 现在为空。' })
+    const output = await handleVideoEditInPlaceCapability('get_video_edit_in_place_generation', { documentRef: { kind: 'video_edit.document', id: document.id }, taskRef: { kind: 'generation.task', id: 'done' } }, context) as { message: string }
+    expect(output.message).toContain('参数 light')
+    // 工程副本里的片段带着同一个 taskId：原工程任务上的事实不串进来。
+    jobs.set('done', { id: 'job', projectId: 'original', status: 'placed', taskId: 'done', clipId: 'a', lostCodeClipReferences: '片段“c”的参数 light 现在为空。' })
+    const copy = await handleVideoEditInPlaceCapability('get_video_edit_in_place_generation', { documentRef: { kind: 'video_edit.document', id: document.id }, taskRef: { kind: 'generation.task', id: 'done' } }, context) as { message: string }
+    expect(copy.message).not.toContain('light')
+  })
   it('不是原地生成的能力交回原处理', async () => {
     expect(await handleVideoEditInPlaceCapability('save_video_edit', {}, context)).toBeUndefined()
   })

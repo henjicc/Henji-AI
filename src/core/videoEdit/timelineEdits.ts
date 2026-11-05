@@ -1,5 +1,5 @@
 import type { SpatialPropagationRequest } from './spatialTypes'
-import { remapVideoEditCodeClipReferences, retargetVideoEditSplitCodeClipReferences } from './codeClipReferences'
+import { remapVideoEditCodeClipReferences, retargetVideoEditSplitCodeClipReferences, type VideoEditPastedClip } from './codeClipReferences'
 import { VideoEditTimelineClock } from './timelineClock'
 import { splitSpatialCameraTarget, remapSpatialCameraReferences } from './spatialPropagation'
 import { clipVideoEditAnnotationTime, mapVideoEditAnnotationTime } from './annotations'
@@ -20,8 +20,8 @@ import { validateVideoEditAdjustmentRanges } from './compositing'
 import { applyVideoEditTrim, type VideoEditTrimMode } from './timelineTrims'
 import { applyVideoEditRateStretch, applyVideoEditSpeedChange, type VideoEditSpeedChange } from './clipSpeedEdits'
 
-export interface VideoEditTimelineMapping { clipMap: SpatialPropagationRequest['clipMap'][number][]; clock: VideoEditTimelineClock }
-export function createVideoEditTimelineMapping(sequenceId: string): VideoEditTimelineMapping { return { clipMap: [], clock: new VideoEditTimelineClock(sequenceId) } }
+export interface VideoEditTimelineMapping { clipMap: SpatialPropagationRequest['clipMap'][number][]; clock: VideoEditTimelineClock; pastedClips: VideoEditPastedClip[] }
+export function createVideoEditTimelineMapping(sequenceId: string): VideoEditTimelineMapping { return { clipMap: [], clock: new VideoEditTimelineClock(sequenceId), pastedClips: [] } }
 type TimelineMapping = VideoEditTimelineMapping
 
 export interface VideoEditClipboard {
@@ -235,7 +235,7 @@ export function videoEditMoveTrackMap(sequence: VideoEditSequence, clipIds: read
 export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
   return applyVideoEditTimelineEditResult(document, sequenceId, edit, metadata).sequence
 }
-export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader, mapping = createVideoEditTimelineMapping(sequenceId)): { sequence: VideoEditSequence; selectedClipIds?: string[]; clipMap: SpatialPropagationRequest['clipMap']; sequenceTimeMap: SpatialPropagationRequest['sequenceTimeMap'] } {
+export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader, mapping = createVideoEditTimelineMapping(sequenceId)): { sequence: VideoEditSequence; selectedClipIds?: string[]; clipMap: SpatialPropagationRequest['clipMap']; sequenceTimeMap: SpatialPropagationRequest['sequenceTimeMap']; pastedClips: readonly VideoEditPastedClip[] } {
   if (edit.kind === 'adjust' && edit.newTracks?.length) document = { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? withVideoEditTracks(value, edit.newTracks) : value) }
   const trimmed = edit.kind === 'trim' ? applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata) : undefined
   if (trimmed?.timeSplice) mapping.clock.splice(trimmed.timeSplice.from, trimmed.timeSplice.to, trimmed.timeSplice.insertedFrames)
@@ -250,7 +250,7 @@ export function applyVideoEditTimelineEditResult(document: VideoEditDocument, se
   result.sequence = { ...result.sequence, clips: result.sequence.clips.map(clip => remapVideoEditCodeClipReferences(clip, target => present.has(target) ? undefined : null)) }
   validateVideoEditAdjustmentRanges(result.sequence)
   validateVideoEditTransitions({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? result.sequence : sequence) }, metadata)
-  return { ...result, clipMap: mapping.clipMap, sequenceTimeMap: mapping.clock.maps }
+  return { ...result, clipMap: mapping.clipMap, sequenceTimeMap: mapping.clock.maps, pastedClips: mapping.pastedClips }
 }
 function removeRange(sequence: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'range' }>, mapping: TimelineMapping): VideoEditSequence {
   integer(edit.from); integer(edit.to)
@@ -426,6 +426,7 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     // 一起粘贴的片段之间的代码引用指向新副本；引用没粘贴的片段照旧指向原片段（同一剪辑里仍在）。
     return { ...remapVideoEditCodeClipReferences(animated, target => ids.get(target)), id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration }
   }))
+  mapping.pastedClips.push(...edit.clipboard.clips.map(clip => ({ clipId: ids.get(clip.id)!, source: clip })))
   assertTargets(sequence, incoming)
   assertNewInternalOverlap(edit.clipboard.clips, incoming)
   if (incoming.some(clip => !document.items.some(item => item.id === clip.itemId) || clip.duration < 1 || clip.start < 0 || clip.start + clip.duration > Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('剪贴板引用已移除，或粘贴范围超出序列边界。')

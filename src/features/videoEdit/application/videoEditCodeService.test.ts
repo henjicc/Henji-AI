@@ -11,6 +11,8 @@ import { createTestEnvironment } from '../../../../electron/main/services/docume
 import { createElement } from 'react'
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { CodeSourceEditor } from '../panels/CodeSourceEditor'
+import { createVideoEditTemplate, updateVideoEditTemplate } from './videoEditTemplates'
+import { noteVideoEditCodeClipWorldScenes } from './videoEditCodeClipReferenceWrite'
 import { codeVersionContentKey, documentCodeSourceResolver, resolveCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { testCodeSource, testSetCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { testCodeAssetSource, testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
@@ -154,6 +156,66 @@ it('被引用片段换源码版本：本来就是世界场景的旧工程照常�
     expect(became.ok).toBe(false)
     expect(JSON.stringify(became)).toContain('三维世界场景')
     expect(clipOf(1).code!.versionId).toBe(plain.code!.versionId)
+  } finally { boundary.honorApiVersion = false; app.dispose() }
+})
+it('被引用片段经批量升级变成世界场景：不整批失败，引用保留，事实写进实例说明与结果', async () => {
+  boundary.honorApiVersion = true
+  const { owner, id, app, plain, referrer, clipOf, write } = await codeClipReferenceFixture()
+  try {
+    expect(await write(plain.id)).toMatchObject({ ok: true })
+    const definitionId = plain.code!.definitionId
+    await createVideoEditCodeVersions(id, [{ definitionId, source: 'export default {name:"世界",createThree(){return {scene:null,update(){}}}}', apiVersion: 15 }])
+    const upgraded = await app.requireResult('upgrade_video_edit_code_materials', { documentRef: { kind: 'video_edit.document', id }, materialRefs: [{ kind: 'video_edit.code_material', id: `${id}:${definitionId}` }], upgradeLibraries: true })
+    expect(clipOf(1).code!.versionId).toBe(owner.document.codeMaterials!.find(definition => definition.id === definitionId)!.defaultVersionId)
+    expect(clipOf(0).code!.parameters.light).toEqual({ kind: 'clip', clipId: plain.id })
+    expect(upgraded.message).toContain('三维世界场景')
+    expect(upgraded.instances).toEqual(expect.arrayContaining([expect.objectContaining({ ref: expect.objectContaining({ id: `${id}:${plain.id}` }), note: expect.stringContaining(`“${referrer.name}”`) })]))
+  } finally { boundary.honorApiVersion = false; app.dispose() }
+})
+it('模板：换源码变成世界场景与内容变少移除实例，事实都进结果；编辑器提交这次才变成世界场景的源码被拒绝', async () => {
+  boundary.honorApiVersion = true
+  const { id, seq, app, plain, referrer, clipOf, write } = await codeClipReferenceFixture()
+  try {
+    const { template } = await createVideoEditTemplate(id, seq, [plain.id], { name: '代码模板' })
+    const definitionId = plain.code!.definitionId, worldSource = 'export default {name:"世界",createThree(){return {scene:null,update(){}}}}'
+    expect(await write(plain.id)).toMatchObject({ ok: true })
+    await expect(prepareVideoEditCodeCandidate({ projectId: id, sequenceId: seq, clipId: plain.id, versionId: plain.code!.versionId }, worldSource)).rejects.toThrow('三维世界场景')
+    const [versionId] = await createVideoEditCodeVersions(id, [{ definitionId, source: worldSource, apiVersion: 15 }])
+    const updated = await app.requireResult('update_video_edit_template', { templateRef: { kind: 'video_edit.project_template', id: `${id}:${template.id}` }, content: { kind: 'version', versionId } })
+    expect(clipOf(1).code!.versionId).toBe(versionId)
+    expect(clipOf(0).code!.parameters.light).toEqual({ kind: 'clip', clipId: plain.id })
+    expect(updated.message).toContain('三维世界场景')
+    expect(updated.codeInstances).toEqual(expect.arrayContaining([expect.objectContaining({ note: expect.stringContaining(`“${referrer.name}”`) })]))
+  } finally { boundary.honorApiVersion = false; app.dispose() }
+})
+it('原生模板内容变少移除实例片段：引用置空，事实进结果（这个能力的入参没有 documentRef）', async () => {
+  boundary.honorApiVersion = true
+  const { id, seq, app, clipOf, write } = await codeClipReferenceFixture()
+  try {
+    const item = createVideoEditGraphicItem(id, { kind: 'rect' }), [left, right] = appendVideoEditItems(id, [item, item], seq)
+    editVideoSequence(id, seq, sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === left || clip.id === right ? { ...clip, groupId: 'pair' } : clip) }))
+    const { template } = await createVideoEditTemplate(id, seq, [left, right], { name: '两层模板' })
+    expect(await write(right)).toMatchObject({ ok: true })
+    const updated = await app.requireResult('update_video_edit_template', { templateRef: { kind: 'video_edit.project_template', id: `${id}:${template.id}` }, content: { kind: 'clips', sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${seq}` }, clipRefs: [{ kind: 'video_edit.clip', id: `${id}:${left}` }] } })
+    expect(clipOf(0).code!.parameters.light).toBeNull()
+    expect(updated.message).toContain('参数 light')
+    undoVideoEdit(id)
+    const direct = await updateVideoEditTemplate(id, template.id, { kind: 'clips', sequenceId: seq, clipIds: [left] })
+    expect(direct.userNotices.join('')).toContain('“光源”')
+    expect(direct.userNotices.join('')).not.toContain('light')
+  } finally { boundary.honorApiVersion = false; app.dispose() }
+})
+it('批量换版本：旧版本读不到时不知道本来是不是世界场景，不报“这次才变成”', async () => {
+  boundary.honorApiVersion = true
+  const { owner, id, seq, app, plain, write } = await codeClipReferenceFixture()
+  try {
+    expect(await write(plain.id)).toMatchObject({ ok: true })
+    const [versionId] = await createVideoEditCodeVersions(id, [{ definitionId: plain.code!.definitionId, source: 'export default {name:"世界",createThree(){return {scene:null,update(){}}}}', apiVersion: 15 }])
+    const document = structuredClone(owner.document)
+    document.sequences.find(sequence => sequence.id === seq)!.clips.find(clip => clip.id === plain.id)!.code!.versionId = versionId
+    const moved = { document, instances: [{ target: { kind: 'clip' as const, id: plain.id, label: plain.name, sequenceId: seq }, removedParameters: [], resetParameters: [], impacts: [] }] }
+    expect(noteVideoEditCodeClipWorldScenes(owner, owner.document, moved, new Set()).facts).toHaveLength(1)
+    expect(noteVideoEditCodeClipWorldScenes(owner, owner.document, moved, new Set([plain.code!.versionId])).facts).toEqual([])
   } finally { boundary.honorApiVersion = false; app.dispose() }
 })
 it('删除被引用片段：引用置空，结果列出失去引用的片段与参数，撤销恢复', async () => {
