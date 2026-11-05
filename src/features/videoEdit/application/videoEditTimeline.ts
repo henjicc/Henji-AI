@@ -8,6 +8,7 @@ import { clampVideoEditTrackHeight, VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/co
 import { insertVideoEditTracks, removeVideoEditTracks, type VideoEditTrackKind } from '@/core/videoEdit/tracks'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { videoEditLostCodeClipReferenceReport } from './videoEditLostCodeClipReferences'
 import { inspectVideoEditMedia } from './videoEditMedia'
 
 const logger = createLogger('features.videoEdit.timeline')
@@ -39,6 +40,8 @@ export async function executeVideoEditTimelineEdit(projectId: string, sequenceId
       setVideoEditTimelineView(projectId, { selectedClipIds: expandVideoEditSelection(sequence, sequence.clips.filter(clip => !original.has(clip.id)).map(clip => clip.id), videoEditPickRelations(owner.linkedSelection !== false)) })
     }
     logger.debug('时间线剪辑已提交', { event: 'video_edit.timeline.edit.completed', context: { projectId, sequenceId, operation: edit.kind } })
+    const lost = videoEditLostCodeClipReferenceReport(baseline, committed)
+    if (lost) logger.info(lost.fact, { event: 'video_edit.code_clip_reference.detached', context: { projectId, sequenceId, operation: edit.kind, references: lost.references } })
     return committed.sequences.find(value => value.id === sequenceId)!
   } catch (error) { logger.debug('时间线剪辑未提交', { event: 'video_edit.timeline.edit.failed', error, context: { projectId, sequenceId, operation: edit.kind } }); throw error }
 }

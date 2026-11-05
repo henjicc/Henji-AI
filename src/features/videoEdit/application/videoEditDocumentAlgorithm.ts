@@ -2,6 +2,7 @@ import { ApplicationWriteExecution, applicationWritePreflight } from '@/core/app
 import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
 import { listVideoEditInstances, openVideoEditDocument, requireVideoEditInstance, verifyVideoEditSaved, type VideoEditInstance } from './videoEditService'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditLostCodeClipReferenceReport } from './videoEditLostCodeClipReferences'
 
 /** 异步操作只因原实例关闭或内容变化而失效；元数据写入不改变这份证明。 */
 export function isVideoEditContentCurrent(owner: VideoEditInstance, contentVersion: number): boolean {
@@ -38,10 +39,15 @@ export function guardVideoEditDocumentAlgorithm(id: string, handler: CapabilityH
     if (input.documentRef?.kind !== 'video_edit.document') return handler(raw, context)
     const documentId = input.documentRef.id
     const owner = await applicationWritePreflight(context, () => openVideoEditDocument({ id: documentId }, { focus: false }))
-    if (!ATOMIC_DOCUMENT_ALGORITHMS.has(id)) return handler(raw, context)
-    return (context.execution ?? new ApplicationWriteExecution()).atomic(() => {
-      if (requireVideoEditInstance(documentId) !== owner) throw new Error('原剪辑实例已变化')
-      return owner.contentVersion
-    }, () => handler(raw, context))
+    const before = owner.document
+    const result = await (ATOMIC_DOCUMENT_ALGORITHMS.has(id)
+      ? (context.execution ?? new ApplicationWriteExecution()).atomic(() => {
+        if (requireVideoEditInstance(documentId) !== owner) throw new Error('原剪辑实例已变化')
+        return owner.contentVersion
+      }, () => handler(raw, context))
+      : handler(raw, context))
+    // 能力的结果里没有证据列表，失去引用的事实随 message 交给调用方。
+    const lost = owner.document === before ? undefined : videoEditLostCodeClipReferenceReport(before, owner.document)
+    return lost && typeof result.message === 'string' ? { ...result, message: `${result.message} ${lost.fact}` } : result
   }
 }

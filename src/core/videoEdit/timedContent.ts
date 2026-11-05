@@ -5,6 +5,7 @@ import type { VideoEditClip, VideoEditSequence, VideoEditDocument } from './docu
 import { videoEditFps, type VideoEditRatio } from './time'
 import { videoEditClipContentShift } from './clipSpeed'
 import { retimeVideoEditAnnotation } from './annotations'
+import { detachVideoEditRemovedCodeClipReferences } from './codeClipReferences'
 import { buildSubtitleText, parseSubtitleText } from '../media/subtitleFormat'
 import { retimeVideoEditTransitions } from './transitions'
 import { subtitleGraphic, videoEditSubtitleStyleSchema } from './subtitleStyle'
@@ -87,9 +88,11 @@ export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEd
 
 /** Raw property writes receive the same clip anchoring as manual timeline commands. */
 export function reconcileVideoEditTimedContent(before: VideoEditDocument, requested: VideoEditDocument, preserveProgramAnchors: readonly string[] = [], preserveCaptions = false): VideoEditDocument {
-  const sequences = requested.sequences.map(sequence => {
-    const previous = before.sequences.find(value => value.id === sequence.id)
-    if (!previous || previous === sequence || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator) return sequence
+  const sequences = requested.sequences.map(value => {
+    const previous = before.sequences.find(candidate => candidate.id === value.id)
+    if (!previous || previous === value) return value
+    const sequence = detachVideoEditRemovedCodeClipReferences(previous, value)
+    if (previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator) return sequence
     const mappedAnnotations = sequence.annotations.flatMap(mark => {
       const prior = previous.annotations.find(value => value.id === mark.id)
       if (!prior) return [mark]

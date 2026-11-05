@@ -1,5 +1,5 @@
 import type { SpatialPropagationRequest } from './spatialTypes'
-import { remapVideoEditCodeClipReferences } from './codeClipReferences'
+import { remapVideoEditCodeClipReferences, retargetVideoEditSplitCodeClipReferences } from './codeClipReferences'
 import { VideoEditTimelineClock } from './timelineClock'
 import { splitSpatialCameraTarget, remapSpatialCameraReferences } from './spatialPropagation'
 import { clipVideoEditAnnotationTime, mapVideoEditAnnotationTime } from './annotations'
@@ -153,7 +153,7 @@ function splitClips(sequence: VideoEditSequence, ids: string[], frame: number, m
     mapping.clipMap.push({ fromSequenceId: sequence.id, fromClipId: id, sourceRange: [mapping.clock.sourceFrame(frame), mapping.clock.sourceFrame(clip.start + clip.duration)], toSequenceId: sequence.id, toClipId: rightId })
   }
   if (next === sequence) throw new Error('请将播放头置于所选片段内部再拆分。')
-  return { ...next, clips: separateRightRelations(sequence, next.clips, rights, frame) }
+  return { ...next, clips: retargetVideoEditSplitCodeClipReferences(separateRightRelations(sequence, next.clips, rights, frame), rights) }
 }
 function holdFrame(sequence: VideoEditSequence, ids: string[], frame: number, mapping: TimelineMapping): VideoEditSequence {
   integer(frame)
@@ -489,6 +489,8 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
       const piece = pieces.find(clip => mark.frame >= clip.start && mark.frame < clip.start + clip.duration)
       return piece ? [{ ...mark, clipId: piece.id }] : []
     }) }, origins, true)
+    // 只有开头被盖掉的片段保留原 ID，不算切开；真正切成两段的才重新决定引用指向。
+    kept = { ...kept, clips: retargetVideoEditSplitCodeClipReferences(kept.clips, new Map([...rights].filter(([right, left]) => right !== left))) }
   }
   const copiedRanges = intervals(edit.clipboard.clips)
   const annotations = edit.clipboard.annotations.flatMap(mark => {

@@ -8,6 +8,7 @@ import type { CodeImageReference, CodeAudioReference } from '@/core/videoEdit/co
 import { openAssetLibrary } from '@/stores/navigationStore'
 import { acceptsVideoEditDrop, readVideoEditDrop } from '../application/videoEditDrop'
 import { bindVideoEditCodeImage, chooseVideoEditCodeImage, type VideoEditCodeImageBinding } from '../application/videoEditCodeImages'
+import { videoEditCodeClipReferenceSelectable } from '../application/videoEditCodeClipReferenceWrite'
 import type { VideoEditCodeTarget } from '../application/videoEditCodeParameters'
 import { requireVideoEditInstance } from '../application/videoEditService'
 import { cancelCodeImageGeneration, codeImageGenerationCandidates, codeImageGenerationJobs, codeImageGenerationRevision, retryCodeImageGenerationBinding, subscribeCodeImageGeneration } from '../application/videoEditCodeImageGeneration'
@@ -48,8 +49,9 @@ export function CodeImageParameterControl({ target, parameterKey, title, value, 
   const bind = (input: VideoEditCodeImageBinding): void => { void run(signal => bindVideoEditCodeImage(target, parameterKey, input, signal)) }
   const images = requireVideoEditInstance(target.projectId).document.media.filter(media => (mediaType === 'audio' ? ['audio', 'video'] : ['image', 'video']).includes(media.kind))
   // 同一序列里可引用的其他片段（代码拿到它此刻的画面）。
-  // 代码滤镜拿不到这类输入，只给代码片段本身列出。
-  const clips = mediaType === 'image' && !target.effectId ? requireVideoEditInstance(target.projectId).document.sequences.find(sequence => sequence.id === target.sequenceId)?.clips.filter(clip => clip.id !== target.clipId && clip.kind !== 'audio') ?? [] : []
+  // 代码滤镜拿不到这类输入，只给代码片段本身列出。已绑定的引用即使不再可选也留在选单里，显示当前值。
+  const owner = requireVideoEditInstance(target.projectId)
+  const clips = mediaType === 'image' && !target.effectId ? owner.document.sequences.find(sequence => sequence.id === target.sequenceId)?.clips.filter(clip => clip.id !== target.clipId && (videoEditCodeClipReferenceSelectable(owner, clip) || value?.kind === 'clip' && value.clipId === clip.id)) ?? [] : []
   const drop = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault(); event.stopPropagation()
     try {

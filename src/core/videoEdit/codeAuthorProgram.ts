@@ -81,6 +81,8 @@ export interface CodeAuthorProgram extends CodeMaterialMetadata {
   apiVersion: CodeAuthorApiVersionNumber
   webText?: WebTextDeclaration
   simulation?: Required<import('./codeSimulation').AuthorSimulationDeclaration>
+  /** createThree 世界场景：内容直接进序列的三维世界，由序列的相机与灯光决定怎么看，没有独立于序列的平面画面。 */
+  worldScene?: boolean
   languageVersion: 4
   bundle: CodeAuthorBundle
   frames: number[]

@@ -107,6 +107,79 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 const source = "export default {name:\"原创移动圆\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:4,params:[{key:\"amount\",type:\"number\",title:\"透明度\",default:.5,min:0,max:1,step:.01,animatable:true}],draw(ctx,t,p){ctx.fillRect(100+t*20,100,500,500)}}"
 
 const files = new Map<string, string>()
+async function codeClipReferenceFixture() {
+  const owner = await createLegacyTrackVideoEditProject(), id = owner.document.id, seq = owner.activeSequenceId, app = createApplicationHarness()
+  const picture = 'export default {name:"引用方",params:[{key:"light",type:"image",title:"光源"}],draw(){}}'
+  const items = await createVideoEditCodeItems(id, [{ source: picture, apiVersion: 15 }, { source: source, apiVersion: 15 }, { source: 'export default {name:"世界",createThree(){return {scene:null,update(){}}}}', apiVersion: 15 }])
+  for (const [track, item] of items.entries()) appendVideoEditItems(id, [item], seq, { frame: 0, track: track + 1 })
+  const clipOf = (index: number) => getActiveVideoEditSequence(owner).clips.find(clip => clip.itemId === items[index])!
+  const referrer = clipOf(0), plain = clipOf(1), world = clipOf(2)
+  const referrerRef = { kind: 'video_edit.clip', id: `${id}:${referrer.id}` }, sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${seq}` }
+  const write = (clipId: string) => app.change(referrerRef, { 'video_edit.clip.code_parameters': { light: { kind: 'clip', clipId } } })
+  return { owner, id, seq, app, clipOf, referrer, plain, world, referrerRef, sequenceRef, write }
+}
+it('片段引用世界场景：写入时拒绝并说明改法，文档不变', async () => {
+  boundary.honorApiVersion = true
+  const { owner, id, seq, app, referrer, world, write } = await codeClipReferenceFixture()
+  try {
+    const before = owner.document
+    const rejected = await write(world.id)
+    expect(rejected.ok).toBe(false)
+    expect(JSON.stringify(rejected)).toContain('三维世界场景')
+    expect(JSON.stringify(rejected)).toContain('子序列')
+    expect(owner.document).toBe(before)
+    await expect(bindVideoEditCodeImage({ projectId: id, sequenceId: seq, clipId: referrer.id, versionId: referrer.code!.versionId }, 'light', { kind: 'clip', clipId: world.id })).rejects.toThrow('三维世界场景')
+    expect(JSON.stringify(await write('missing'))).toContain('只能引用同一序列里的另一个片段')
+  } finally { boundary.honorApiVersion = false; app.dispose() }
+})
+it('被引用片段换源码版本：本来就是世界场景的旧工程照常能换，这次才变成世界场景的拒绝', async () => {
+  boundary.honorApiVersion = true
+  const { owner, id, seq, app, plain, world, referrer, clipOf } = await codeClipReferenceFixture()
+  try {
+    const worldSource = 'export default {name:"世界",createThree(){return {scene:null,update(){}}}}'
+    const newVersion = async (definitionId: string, text: string): Promise<string> => {
+      await createVideoEditCodeVersions(id, [{ definitionId, source: text, apiVersion: 15 }])
+      return owner.document.codeMaterials!.find(definition => definition.id === definitionId)!.versions.at(-1)!.id
+    }
+    const setVersion = (clipId: string, versionId: string) => app.change({ kind: 'video_edit.clip', id: `${id}:${clipId}` }, { 'video_edit.clip.code_version_id': versionId })
+    const bind = (clipId: string): void => { editVideoSequence(id, seq, sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.id === referrer.id ? { ...clip, code: { ...clip.code!, parameters: { light: { kind: 'clip' as const, clipId } } } } : clip) })) }
+
+    bind(world.id)
+    const stillWorld = await setVersion(world.id, await newVersion(world.code!.definitionId, worldSource.replace('世界', '世界二')))
+    expect(stillWorld, JSON.stringify(stillWorld)).toMatchObject({ ok: true })
+    expect(clipOf(2).code!.versionId).not.toBe(world.code!.versionId)
+
+    bind(plain.id)
+    const became = await setVersion(plain.id, await newVersion(plain.code!.definitionId, worldSource))
+    expect(became.ok).toBe(false)
+    expect(JSON.stringify(became)).toContain('三维世界场景')
+    expect(clipOf(1).code!.versionId).toBe(plain.code!.versionId)
+  } finally { boundary.honorApiVersion = false; app.dispose() }
+})
+it('删除被引用片段：引用置空，结果列出失去引用的片段与参数，撤销恢复', async () => {
+  boundary.honorApiVersion = true
+  const { id, seq, app, clipOf, plain, referrerRef, sequenceRef, write } = await codeClipReferenceFixture()
+  try {
+    const bound = await write(plain.id)
+    expect(bound, JSON.stringify(bound)).toMatchObject({ ok: true })
+    const removed = await app.requireResult('change_application_entities', { summary: '删除被引用片段', changes: [{ kind: 'remove_items', entityType: 'video_edit.clip', parent: sequenceRef, targets: [{ kind: 'video_edit.clip', id: `${id}:${plain.id}` }] }] }, (await app.read(sequenceRef)).revisions as Record<string, number>)
+    expect(clipOf(0).code!.parameters.light).toBeNull()
+    expect(removed.effects).toEqual(expect.arrayContaining([expect.objectContaining({ effect: 'update', entityType: 'video_edit.clip', propertyIds: ['video_edit.clip.code_parameters'], refs: [expect.objectContaining(referrerRef)], origin: { kind: 'cascade', declarationId: 'video_edit.code_clip_reference_detach' } })]))
+    expect(JSON.stringify(removed.evidence)).toContain('参数 light')
+    expect(removed.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'operation_result', data: [expect.objectContaining({ clipRef: referrerRef, parameter: 'light', targetClipRef: { kind: 'video_edit.clip', id: `${id}:${plain.id}` } })] })]))
+    undoVideoEdit(id)
+    expect(clipOf(0).code!.parameters.light).toEqual({ kind: 'clip', clipId: plain.id })
+
+    // 不走执行器的能力（如按文本波纹删除）：事实随 message 返回。
+    const { guardVideoEditDocumentAlgorithm } = await import('./videoEditDocumentAlgorithm')
+    const result = await guardVideoEditDocumentAlgorithm('test', async () => {
+      editVideoSequence(id, seq, sequence => ({ ...sequence, clips: sequence.clips.filter(clip => clip.id !== plain.id) }))
+      return { message: '已处理。' }
+    })({ documentRef: { kind: 'video_edit.document', id } }, { signal: new AbortController().signal } as never)
+    expect(result.message).toContain('已处理。')
+    expect(result.message).toContain('参数 light')
+  } finally { boundary.honorApiVersion = false; app.dispose() }
+})
 it('编辑非默认历史片段保持该片段的作者接口和库，显式升级过的默认版本不影响候选', async () => {
   boundary.honorApiVersion = true
   try {

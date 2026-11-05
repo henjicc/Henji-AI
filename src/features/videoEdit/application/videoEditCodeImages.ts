@@ -8,6 +8,7 @@ import type { VideoEditCodeTarget } from './videoEditCodeParameters'
 import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { importVideoEditSources } from './videoEditMedia'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
+import { assertVideoEditCodeClipReferenceWrite } from './videoEditCodeClipReferenceWrite'
 
 export type VideoEditCodeImageBinding = { kind: 'media'; mediaId: string; time?: number } | { kind: 'below' } | { kind: 'clip'; clipId: string } | { kind: 'file'; path: string } | { kind: 'asset'; assetId: string } | null
 /** 现有图片选择与生成结果导入共用的候选文档检查；调用方负责一次提交。 */
@@ -27,6 +28,7 @@ export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarg
   if (clipId && (declaration.type !== 'image' || clipId === clip.id || !sequence.clips.some(item => item.id === clipId))) throw new Error('只能引用同一序列里的另一个片段。')
   const before = target.effectId ? undefined : structuredClone(clip)
   code.parameters[key] = validateCodeMaterialParameterValue(declaration, below ? { kind: 'sequence', mediaId: 'below' } : clipId ? { kind: 'clip', clipId } : media ? { kind: declaration.type === 'audio' ? 'audio' : media.kind, mediaId: media.id, ...(time === undefined ? {} : { time }) } : null)
+  if (clipId) await assertVideoEditCodeClipReferenceWrite(owner, owner.document, document, sequence.id, clip.id, signal)
   // 选媒体与回填生成图片只由界面发起；助手改媒体参数走通用 code_parameters，由执行器按操作来源记录。
   if (before) recordVideoEditCodeEdits(before, clip, 'user')
   const frame = Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? clip.start))
