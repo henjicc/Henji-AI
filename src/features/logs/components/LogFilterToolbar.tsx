@@ -1,10 +1,9 @@
-import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { getLogCaptureMode } from '@/commands/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
-  PanelTrigger, UiButton, UiCheckbox, UiIconButton, UiInput, UiOverflowRow, UiSegmented, UiSelect, UiToolbar,
+  PanelTrigger, UiButton, UiCheckbox, UiFieldTrigger, UiInput, UiOverflowRow, UiSegmented, UiSelect, UiToolbar,
   type UiOverflowRowItem,
 } from '@/components/ui'
 import { UI_INLINE_GAP_CLASS } from '@/components/ui/styleTokens'
@@ -106,6 +105,13 @@ export function LogFilterToolbar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const activeFilterIds = new Set([
+    ...(sourceFilter !== 'all' ? ['source'] : []),
+    ...(levelFilter !== 'all' ? ['level'] : []),
+    ...(domainFilter !== 'all' ? ['domain'] : []),
+    ...(errorOnly ? ['errorOnly'] : []),
+  ])
+
   // priority 越大越晚收起；关键词搜索最常用，永不收起。
   const filterItems: UiOverflowRowItem[] = [
     {
@@ -159,12 +165,13 @@ export function LogFilterToolbar({
       id: 'keyword',
       priority: 100,
       pinned: true,
+      fillFrom: 160,
       node: (
         <UiInput
           value={keyword}
           onChange={(event) => onKeywordChange(event.target.value)}
           placeholder={t('logsWindow.toolbar.keywordPlaceholder')}
-          className="w-40"
+          className="w-full"
         />
       ),
     },
@@ -254,29 +261,35 @@ export function LogFilterToolbar({
         <UiOverflowRow
           className={`flex-1 ${UI_INLINE_GAP_CLASS.row}`}
           items={filterItems}
-          renderOverflow={(hiddenIds) => (
-            <PanelTrigger panelSize="menu" panelPadding="content" renderPanel={() => (
-              <div className="flex flex-col items-start gap-3">
-                {filterItems.filter((item) => hiddenIds.includes(item.id)).map((item) => (
-                  <div key={item.id} className="flex items-center">{item.node}</div>
-                ))}
-              </div>
-            )}>
-              {({ open, togglePanel }) => (
-                <UiIconButton
-                  size="md"
-                  aria-label={t('logsWindow.toolbar.moreFilters')}
-                  tooltip={t('logsWindow.toolbar.moreFilters')}
-                  on={open}
-                  aria-expanded={open}
-                  onClick={togglePanel}
-                  data-panel-trigger-button
-                >
-                  <MoreHorizontal />
-                </UiIconButton>
-              )}
-            </PanelTrigger>
-          )}
+          renderOverflow={(hiddenIds) => {
+            // 收起的筛选仍在生效：入口要说出来，否则列表少了条目却看不出原因
+            const activeCount = hiddenIds.filter((id) => activeFilterIds.has(id)).length
+            const label = t('logsWindow.toolbar.moreFilters')
+            const status = activeCount > 0 ? t('logsWindow.toolbar.activeFilters', { count: activeCount }) : null
+            return (
+              <PanelTrigger panelSize="menu" panelPadding="content" renderPanel={() => (
+                <div className="flex flex-col items-start gap-3">
+                  {filterItems.filter((item) => hiddenIds.includes(item.id)).map((item) => (
+                    <div key={item.id} className="flex items-center">{item.node}</div>
+                  ))}
+                </div>
+              )}>
+                {({ open, togglePanel }) => (
+                  <UiFieldTrigger
+                    appearance="quiet"
+                    open={open}
+                    aria-label={status ? `${label} ${status}` : label}
+                    aria-expanded={open}
+                    onClick={togglePanel}
+                    data-panel-trigger-button
+                  >
+                    <span className="text-text2">{label}</span>
+                    {status && <span className="ml-1.5 text-text1">{status}</span>}
+                  </UiFieldTrigger>
+                )}
+              </PanelTrigger>
+            )
+          }}
         />
       }
     >

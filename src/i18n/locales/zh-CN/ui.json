@@ -861,6 +861,7 @@
       "keywordPlaceholder": "关键词筛选（message/context/error）",
       "errorOnly": "只看错误",
       "moreFilters": "更多筛选",
+      "activeFilters": "已筛选 {{count}}",
       "chainLookupPlaceholder": "输入/粘贴 requestId 查链路",
       "pause": "暂停",
       "resume": "恢复",

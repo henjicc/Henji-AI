@@ -21,6 +21,8 @@ import { resolveOverflowHiddenIds, UI_OVERFLOW_TRIGGER_FALLBACK_WIDTH, type Over
 
 export interface UiOverflowRowItem extends OverflowLayoutItem {
   node: ReactNode
+  /** 可伸展项（如搜索框）：收纳按这个宽度计算，行内余下的宽度都归它，内容用 `w-full` 填满 */
+  fillFrom?: number
 }
 
 export interface UiOverflowRowProps {
@@ -72,9 +74,14 @@ export function UiOverflowRow({
     }
     const items = itemsRef.current
     for (const [id, element] of itemElements.current) {
-      const pinned = items.find((item) => item.id === id)?.pinned
+      const item = items.find((candidate) => candidate.id === id)
+      // 可伸展项的实际宽度取决于收纳结果，量它会让收纳结果反过来依赖自己
+      if (item?.fillFrom !== undefined) {
+        widths.current.set(id, item.fillFrom)
+        continue
+      }
       // 被压缩的 pinned 项保留压缩前的自然宽度
-      if (pinned && compressPinned) continue
+      if (item?.pinned && compressPinned) continue
       widths.current.set(id, element.getBoundingClientRect().width)
     }
     if (overflowRef.current) overflowWidth.current = overflowRef.current.getBoundingClientRect().width
@@ -146,7 +153,10 @@ export function UiOverflowRow({
             if (element) itemElements.current.set(item.id, element)
             else itemElements.current.delete(item.id)
           }}
-          className={item.pinned && compressPinned ? 'flex min-w-0 shrink items-center' : 'flex shrink-0 items-center'}
+          style={item.fillFrom !== undefined ? { flexBasis: item.fillFrom } : undefined}
+          className={item.fillFrom !== undefined
+            ? 'flex min-w-0 grow items-center'
+            : item.pinned && compressPinned ? 'flex min-w-0 shrink items-center' : 'flex shrink-0 items-center'}
         >
           {item.node}
         </div>
