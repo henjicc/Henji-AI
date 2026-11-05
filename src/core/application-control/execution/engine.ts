@@ -29,6 +29,9 @@ import type {
   ApplicationSemanticOperationExecutor,
 } from './types'
 
+// 这时业务已经执行完，证据只是回执；写多了也不能让已生效的修改报成失败。
+const boundedEvidence = <T extends { fact: string }>(evidence: readonly T[]): T[] => evidence.slice(0, 256).map(item => item.fact.length > 1000 ? { ...item, fact: item.fact.slice(0, 1000) } : item)
+
 
 interface UndoRecord {
   steps: ApplicationPlannedStep[]
@@ -266,7 +269,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         resultingRevisions,
         resultRefs: execution.completed.flatMap((item) => item.directRefs),
         effects,
-        evidence: [...evidence, ...verification.evidence],
+        evidence: boundedEvidence([...evidence, ...verification.evidence]),
         verification,
         ...(undoRef ? { undoRef } : {}),
         completedAt: this.now().toISOString(),
@@ -288,7 +291,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         if (undoRef) failureResult.undoRef = undoRef
       }
       const result = failureResult.status === 'failed' && error instanceof ApplicationPersistenceBoundaryFailure
-        ? { ...failureResult, recoveryVerification: { conditions: stored.plan.verificationConditions, evidence: error.completed.flatMap((item) => item.evidence) } }
+        ? { ...failureResult, recoveryVerification: { conditions: stored.plan.verificationConditions, evidence: boundedEvidence(error.completed.flatMap((item) => item.evidence)) } }
         : failureResult
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
@@ -376,7 +379,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         resultingRevisions: undoRevisions,
         resultRefs: results.flatMap((item) => item.directRefs),
         effects: [...this.collectEffects([...record.steps].reverse(), results, 'undo'), ...persistenceReceipts.flatMap((receipt) => receipt.effects)],
-        evidence,
+        evidence: boundedEvidence(evidence),
         verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: this.now().toISOString() },
         completedAt: this.now().toISOString(),
       })
