@@ -116,18 +116,21 @@ export function VideoEditInOutDuration({ instance, className = '' }: { instance:
   return <span aria-label="入出点持续时间" title="入出点持续时间" data-video-edit-in-out-duration={frames}
     className={`shrink-0 select-none font-mono tabular-nums text-text2 ${className}`}>{timelineTimecode(frames, sequence.fps)}</span>
 }
-/** 播放头：强调色竖线（设计稿 VideoEdit；强调色只用于主动作、焦点、播放头与选中指示）。 */
-export function VideoEditTimelinePlayhead({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement {
+/**
+ * 播放头：强调色竖线（设计稿 VideoEdit；强调色只用于主动作、焦点、播放头与选中指示）。
+ * 钉住的行（字幕轨、缩放轨）盖住滚上来的轨道，各自再画一段；`overBorder` 让这段盖过行底的分隔线，否则竖线在每条分隔线处断开 1 像素。
+ */
+export function VideoEditTimelinePlayhead({ instance, pixels, overBorder = false }: { instance: VideoEditInstance; pixels: number; overBorder?: boolean }): React.ReactElement {
   const header = useTimelineHeaderWidth()
   useVideoEditViewSelector(() => instance.frame)
-  return <div className="pointer-events-none absolute bottom-0 top-0 z-raised w-px bg-accent-ring" style={{ left: header + instance.frame * pixels }} data-video-edit-playhead />
+  return <div className={`pointer-events-none absolute top-0 z-raised w-px bg-accent-ring ${overBorder ? '-bottom-px' : 'bottom-0'}`} style={{ left: header + instance.frame * pixels }} data-video-edit-playhead />
 }
 /** 头宽 12（w-3）。轨道里的竖线从帧位置起向右 1 像素，头的中线要对准这 1 像素的中间，不能对准帧位置，否则高分屏上两段竖线错开一个物理像素，看着像断开。 */
 const PLAYHEAD_HEAD_OFFSET = 6 - 0.5
-/** 播放头在标尺上的“头”（Premiere 的蓝色指示器）：标尺压在轨道之上，竖线画不进标尺，头放在标尺里，下端接竖线。 */
+/** 播放头在标尺上的“头”（Premiere 的蓝色指示器）：标尺压在轨道之上，竖线画不进标尺，头放在标尺里，下端盖过标尺底边接上竖线。 */
 export function VideoEditTimelinePlayheadHead({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement {
   useVideoEditViewSelector(() => instance.frame)
-  return <div aria-hidden="true" data-video-edit-playhead-head className="pointer-events-none absolute bottom-0 top-0 z-raised flex w-3 flex-col items-center" style={{ left: instance.frame * pixels - PLAYHEAD_HEAD_OFFSET }}>
+  return <div aria-hidden="true" data-video-edit-playhead-head className="pointer-events-none absolute -bottom-px top-0 z-raised flex w-3 flex-col items-center" style={{ left: instance.frame * pixels - PLAYHEAD_HEAD_OFFSET }}>
     <div data-video-edit-playhead-grip className="pointer-events-auto mt-auto h-3 w-3 cursor-ew-resize bg-accent-ring" style={TIMELINE_PLAYHEAD_HEAD_SHAPE} />
     <div className="h-1 w-px bg-accent-ring" />
   </div>
