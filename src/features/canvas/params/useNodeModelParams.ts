@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { registry } from '@/core/ModelRegistry';
 import { LinkageEngine } from '@/core/linkage';
+import { resolveModeForMedia } from '@/core/inputs/modeForMedia';
 import type { ParamDef } from '@/core/types';
 import { extractDefaults } from '@/hooks/utils/defaultExtractor';
 import {
@@ -88,6 +89,11 @@ export function resolveNodeModelExecutionParamValues(
     const linkageEngine = new LinkageEngine(model.linkages);
     for (const key of MEDIA_KEYS) values = linkageEngine.execute(key, values, schema);
   }
+  values = resolveModeForMedia(modelId, values, {
+    images: media?.images?.length ?? 0,
+    videos: media?.videos?.length ?? 0,
+    audios: media?.audios?.length ?? 0,
+  });
   return reconcileDerivedMediaState(schema, values);
 }
 

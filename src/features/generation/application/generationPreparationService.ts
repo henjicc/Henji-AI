@@ -3,6 +3,7 @@ import { toApplicationStableIdSegment } from '@/core/application-control'
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import { resolveModeForMedia } from '@/core/inputs/modeForMedia'
 import { hasAlternativeModelInput } from '@/core/inputs/alternativeInput'
 import {
   convertPriceAmount,
@@ -475,10 +476,10 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
     ...supplied,
     prompt: input.prompt,
   }
-  const normalized = applyLinkages(model, values, supplied)
   const imagesCount = mediaCount(supplied, 'uploadedFilePaths', 'images')
   const videosCount = mediaCount(supplied, 'uploadedVideoFilePaths', 'videos')
   const audiosCount = mediaCount(supplied, 'uploadedAudioFilePaths', 'audios')
+  const normalized = resolveModeForMedia(model.meta.id, applyLinkages(model, values, supplied), { images: imagesCount, videos: videosCount, audios: audiosCount })
   const limits = resolveInputLimits(model.meta.id, normalized, { imagesCount, videosCount })
   const mediaErrors = [
     ['images', imagesCount, limits.images],
