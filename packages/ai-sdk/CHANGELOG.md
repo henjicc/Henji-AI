@@ -7,6 +7,9 @@
 - PPIO 默认助手改为 V4.1 Flash；DeepSeek 原厂旧别名按新 Flash 能力匹配，网关保留独立契约；Kimi 思考字段按模型区分。
 - 更新 APIMart/KIE 指定价格、Omni Ext ID/360p/参考图限制与 Fal H3 扩写字段；清理无有效期证据的智谱中国区优惠，MiniMax 元信息改为官方新域名。
 - Qwen Audio 3.1 TTS 提供注明工程假设的估算上限；无真实付费验证，不承诺绝对账单上限。
+- 火山引擎与百炼大语言模型预设补全：方舟新增 Seed 2.1 Pro/Lite 260915、Seed 2.0 Lite/Mini LTS、Character，以及方舟托管的 DeepSeek V4.1 Flash（含经济版）、V4 Pro/Flash 正式版、Kimi K3.1 Pro、GLM-5.3 Flash、GLM-5.2；百炼新增 Qwen3.8-Flash、Qwen3.7-Plus 与托管的 DeepSeek、Kimi、GLM、MiniMax-M3.1-Flash、MiMo、Step-5-Preview。
+- 百炼新增 Qwen-Audio 3.0 语音识别三种预设（短音频、文件、实时），按音频秒数计费，不发送 3.1 专属参数。
+- 能力目录支持按完整快照 ID 覆盖字段（如 Seed 2.1 Pro 260628 仍为 256K 上下文），并用别名收拢方舟、百炼的平台写法；Qwen3.8-Max 补登上下文 1M、最大输出 128K。
 
 ## 0.9.0 - 2026-10-06
 

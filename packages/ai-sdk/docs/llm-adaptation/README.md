@@ -4,7 +4,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-11-07 |
 | 覆盖供应商 | 火山引擎（Doubao）、Kimi（Moonshot）、智谱 GLM、DeepSeek、小米 MiMo、阿里云百炼（Qwen）、MiniMax |
 | 覆盖模型 | 7 家供应商的当前旗舰文本/多模态系列；供应商专属模型见各自文档内的“模型清单” |
 
@@ -54,7 +54,7 @@ docs/llm-adaptation/
 - 协议不是供应商级一刀切：例如智谱国内只有 `glm-5.3` 默认 Responses，`glm-5.3-flash` / `glm-5v-turbo` 保持 Chat；派欧云聚合网关也不会因为底层模型原厂支持 Responses 就被误切换。
 - 预制供应商的协议控件不在界面显示；自定义未知端点才允许选择 Chat / Responses。Anthropic 没有运行时实现，也不在界面显示，存量伪配置继续归一化成 OpenAI Chat。
 
-当前已自动走 Responses 的预制组合：DeepSeek V4 Pro / Flash / Vision、火山引擎目录内三款 Doubao、百炼 Qwen3.8-Max、MiniMax-M3、智谱中国大陆 GLM-5.3。MiMo 2.6 Pro / Flash / Pro-UltraSpeed 也支持并默认走 Responses；Kimi、Groq、派欧云以及未确认的智谱模型继续走 Chat。
+当前已自动走 Responses 的预制组合：DeepSeek V4 Pro / Flash / Vision、火山引擎预设内的豆包自研模型（方舟托管的 DeepSeek / Kimi / GLM 走 Chat）、百炼官方列入 Responses 清单的 Qwen3.8-Max / 3.8-Flash / 3.7-Plus 与托管 DeepSeek / GLM-5.3、MiniMax-M3、智谱中国大陆 GLM-5.3。MiMo 2.6 Pro / Flash / Pro-UltraSpeed 也支持并默认走 Responses；Kimi、Groq、派欧云以及未确认的智谱模型继续走 Chat。
 
 ### 2.3 Responses 事件契约与验证证据
 

@@ -13,6 +13,7 @@ import {
   createBailianAsrModule,
   bailianQwenAudio31AsrFlash,
   bailianQwenAudio31AsrFlashFiletrans,
+  bailianQwenAudio30AsrFlash,
 } from '../src/capabilities/speech-recognition/bailian'
 import { parseFunShortSse } from '../src/capabilities/speech-recognition/bailian/parse'
 import type { RuntimeContext } from '../src/runtime'
@@ -59,6 +60,18 @@ describe('百炼非实时 ASR 按需模块', () => {
     expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'qwen-audio-3.1-asr-flash', input: { messages: [{ role: 'user', content: [{ type: 'input_text', text: '领域词' }, { type: 'input_audio' }] }] }, parameters: { sample_rate: '16000', keep_dialect: true, vocabulary: { 张三: 5 }, speaker_diarization_enabled: true } })
   })
 
+  it('3.0 短音频走同一接口，发送即时热词，不发送 3.1 才支持的方言保留与说话人分离', async () => {
+    const official = fixture<unknown>('asr-qwen-audio-3.1.json')
+    const fetch = vi.fn(async () => json(official.payload))
+    const client = createCapabilityClient({ runtime: runtime(fetch), modules: [createBailianAsrModule(bailianQwenAudio30AsrFlash)] })
+    await client.execute(bailianQwenAudio30AsrFlash.id, { ...bytesInput, options: { keepDialect: true, vocabulary: { 张三: 5 }, diarizationEnabled: true } })
+    const body = JSON.parse(String(fetch.mock.calls[0][1]?.body))
+    expect(body.model).toBe('qwen-audio-3.0-asr-flash')
+    expect(body.parameters).not.toHaveProperty('keep_dialect')
+    expect(body.parameters).not.toHaveProperty('speaker_diarization_enabled')
+    expect(body.parameters.vocabulary).toEqual({ 张三: 5 })
+  })
+
   it('3.1 字段表构造分离结果：累计 sentences 去重并保留说话人；合成错误不伪装成功', () => {
     const sentence = { text: '你好', sentence_end: true, begin_time: 0, end_time: 100, speaker_id: 0, words: [{ text: '你好', speaker_id: 0 }] }
     const payload = JSON.stringify({ output: { sentences: [sentence] } })
@@ -94,6 +107,8 @@ describe('百炼非实时 ASR 按需模块', () => {
       'qwen3-asr-flash-filetrans',
       'qwen-audio-3.1-asr-flash',
       'qwen-audio-3.1-asr-flash-filetrans',
+      'qwen-audio-3.0-asr-flash',
+      'qwen-audio-3.0-asr-flash-filetrans',
     ])
     expect(bailianNonRealtimeAsrPresets.every((preset) => preset.protocol !== 'realtime')).toBe(true)
   })

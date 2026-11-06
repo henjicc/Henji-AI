@@ -20,6 +20,11 @@ export interface LlmModelCatalogEntry {
   vendor: string
   /** 规范化后仍与 `id` 不同的其他写法（例如同能力的价格变体） */
   aliases?: readonly string[]
+  /**
+   * 同一模型的不同快照能力不同时，按完整 Model ID（去掉厂商前缀与档位标记、小写）覆盖的字段。
+   * 例：方舟 doubao-seed-2-1-pro 的 260915 快照上下文 1024K，旧快照 260628 只有 256K。
+   */
+  snapshots?: Readonly<Record<string, Partial<Pick<LlmModelCatalogEntry, 'contextWindow' | 'maxOutputTokens' | 'input' | 'reasoning' | 'structuredOutputMode'>>>>
   /** 本项目当前请求路径下真实可用的输入模态，取值依据见 `modelCatalogEntries.ts` 顶部注释 */
   input: { image: boolean; video: boolean; audio: boolean; file?: boolean }
   toolCall: boolean
@@ -78,7 +83,13 @@ export function findLlmModelCatalogEntry(modelId: string, providerId?: string): 
     const official = DEEPSEEK_OFFICIAL_FLASH_ALIASES.find(entry => entry.id === key)
     if (official) return official
   }
-  return key ? CATALOG_BY_KEY.get(key) ?? null : null
+  const entry = key ? CATALOG_BY_KEY.get(key) ?? null : null
+  const snapshot = entry?.snapshots?.[withoutRouting(modelId)]
+  return entry && snapshot ? { ...entry, ...snapshot } : entry
+}
+function withoutRouting(modelId: string): string {
+  const trimmed = modelId.trim().toLowerCase()
+  return trimmed.slice(trimmed.lastIndexOf('/') + 1).split(':')[0]
 }
 
 /**

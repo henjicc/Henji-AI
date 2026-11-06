@@ -54,8 +54,12 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
    */
   const updateModelId = (modelId: string): void => {
     if (!model) return
-    const entry = findLlmModelCatalogEntry(modelId, model.adapter === 'deepseek' ? 'deepseek' : model.providerId)
-    if (!entry || entry.id === model.catalogId) {
+    const providerId = model.adapter === 'deepseek' ? 'deepseek' : model.providerId
+    const entry = findLlmModelCatalogEntry(modelId, providerId)
+    // 同一目录条目的不同快照能力可能不同（如上下文 1M 与 256K），换快照也要重新标注。
+    const previous = findLlmModelCatalogEntry(model.modelId, providerId)
+    const sameSnapshot = JSON.stringify(previous) === JSON.stringify(entry)
+    if (!entry || (entry.id === model.catalogId && sameSnapshot)) {
       onChange({ ...model, modelId })
       return
     }

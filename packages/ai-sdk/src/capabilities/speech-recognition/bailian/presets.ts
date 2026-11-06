@@ -10,6 +10,8 @@ export interface BailianAsrPreset {
   /** Data URI 路径的原始音频上限；更大文件应走远端 URL 或异步文件转写。 */
   maxInlineBytes?: number
   asyncInputField?: 'file_urls' | 'file_url'
+  /** Qwen-Audio-ASR 接口里按模型开放的参数：即时热词 vocabulary、方言保留 keep_dialect、短音频说话人分离。 */
+  supports?: { vocabulary?: true; keepDialect?: true; speakerDiarization?: true }
 }
 
 function definePreset(input: Omit<BailianAsrPreset, 'id' | 'descriptor'>): BailianAsrPreset {
@@ -65,8 +67,11 @@ export const bailianQwen3AsrFlashFiletrans = definePreset({
   asyncInputField: 'file_url',
 })
 
-export const bailianQwenAudio31AsrFlash = definePreset({ modelId: 'qwen-audio-3.1-asr-flash', protocol: 'fun-short-sse', maxInlineBytes: 7_500_000 })
-export const bailianQwenAudio31AsrFlashFiletrans = definePreset({ modelId: 'qwen-audio-3.1-asr-flash-filetrans', protocol: 'file-async', asyncInputField: 'file_urls' })
+export const bailianQwenAudio31AsrFlash = definePreset({ modelId: 'qwen-audio-3.1-asr-flash', protocol: 'fun-short-sse', maxInlineBytes: 7_500_000, supports: { vocabulary: true, keepDialect: true, speakerDiarization: true } })
+export const bailianQwenAudio31AsrFlashFiletrans = definePreset({ modelId: 'qwen-audio-3.1-asr-flash-filetrans', protocol: 'file-async', asyncInputField: 'file_urls', supports: { vocabulary: true, keepDialect: true } })
+// 3.0 与 3.1 是同一套 Qwen-Audio-ASR 接口，按音频秒数计费；官方标注方言保留与短音频说话人分离仅 3.1 支持。
+export const bailianQwenAudio30AsrFlash = definePreset({ modelId: 'qwen-audio-3.0-asr-flash', protocol: 'fun-short-sse', maxInlineBytes: 7_500_000, supports: { vocabulary: true } })
+export const bailianQwenAudio30AsrFlashFiletrans = definePreset({ modelId: 'qwen-audio-3.0-asr-flash-filetrans', protocol: 'file-async', asyncInputField: 'file_urls', supports: { vocabulary: true } })
 
 export const bailianNonRealtimeAsrPresets = [
   bailianFunAsrFlash20260615,
@@ -76,4 +81,6 @@ export const bailianNonRealtimeAsrPresets = [
   bailianQwen3AsrFlashFiletrans,
   bailianQwenAudio31AsrFlash,
   bailianQwenAudio31AsrFlashFiletrans,
+  bailianQwenAudio30AsrFlash,
+  bailianQwenAudio30AsrFlashFiletrans,
 ] as const satisfies readonly BailianAsrPreset[]

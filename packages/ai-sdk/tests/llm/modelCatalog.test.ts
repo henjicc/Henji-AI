@@ -48,6 +48,24 @@ describe('findLlmModelCatalogEntry', () => {
     expect(findLlmModelCatalogEntry('qwen3.8-max-prime')?.id).toBe('qwen3.8-max')
   })
 
+  it('方舟与百炼的平台写法归到同一条能力记录', () => {
+    expect(findLlmModelCatalogEntry('kimi-k3-1-pro-261024', 'volcengine')?.id).toBe('kimi-k3.1-pro')
+    expect(findLlmModelCatalogEntry('glm-5-3-flash-260828', 'volcengine')?.id).toBe('glm-5.3-flash')
+    expect(findLlmModelCatalogEntry('deepseek-v4-1-flash-economy-261017', 'volcengine')?.id).toBe('deepseek-v4.1-flash')
+    expect(findLlmModelCatalogEntry('deepseek-v4-pro-ga-260813', 'volcengine')?.id).toBe('deepseek-v4-pro')
+    expect(findLlmModelCatalogEntry('deepseek-v4.1-flash-1017', 'bailian')?.id).toBe('deepseek-v4.1-flash')
+    expect(findLlmModelCatalogEntry('MiniMax/MiniMax-M3.1-Flash', 'bailian')?.id).toBe('minimax-m3.1-flash')
+    expect(findLlmModelCatalogEntry('stepfun/step-5-preview', 'bailian')?.id).toBe('step-5-preview')
+    expect(findLlmModelCatalogEntry('qwen3.8-max-0902', 'bailian')?.id).toBe('qwen3.8-max')
+  })
+
+  it('同一模型不同快照能力不同时按完整 Model ID 覆盖', () => {
+    expect(findLlmModelCatalogEntry('doubao-seed-2-1-pro-260915', 'volcengine')?.contextWindow).toBe(1_048_576)
+    expect(findLlmModelCatalogEntry('doubao-seed-2-1-pro-260628', 'volcengine')?.contextWindow).toBe(262_144)
+    expect(findLlmModelCatalogEntry('doubao-seed-character-251128', 'volcengine')).toMatchObject({ reasoning: false, input: { image: false } })
+    expect(findLlmModelCatalogEntry('doubao-seed-character-260628', 'volcengine')?.reasoning).toBe(true)
+  })
+
   it('查不到的模型返回 null，不做任何猜测', () => {
     expect(findLlmModelCatalogEntry('some-unknown-model-v9')).toBeNull()
     expect(findLlmModelCatalogEntry('')).toBeNull()

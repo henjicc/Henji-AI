@@ -97,8 +97,17 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
-    modelIds: ['doubao-seed-evolving', 'doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo-260628'],
-    responsesModelIds: ['doubao-seed-evolving', 'doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo-260628'],
+    modelIds: [
+      'doubao-seed-evolving', 'doubao-seed-2-1-pro-260915', 'doubao-seed-2-1-lite-260915', 'doubao-seed-2-1-turbo-260628',
+      'doubao-seed-2-0-lite-260428', 'doubao-seed-2-0-mini-260428', 'doubao-seed-character-260628',
+      'deepseek-v4-1-flash-261017', 'deepseek-v4-1-flash-economy-261017', 'deepseek-v4-pro-ga-260813', 'deepseek-v4-flash-ga-260731',
+      'kimi-k3-1-pro-261024', 'glm-5-3-flash-260828', 'glm-5-2-260617',
+    ],
+    // 方舟说明 250615 以后的大模型默认支持 Responses；托管的第三方模型未逐个核实字段兼容，留在 Chat。
+    responsesModelIds: [
+      'doubao-seed-evolving', 'doubao-seed-2-1-pro-260915', 'doubao-seed-2-1-lite-260915', 'doubao-seed-2-1-turbo-260628',
+      'doubao-seed-2-0-lite-260428', 'doubao-seed-2-0-mini-260428', 'doubao-seed-character-260628',
+    ],
     websiteUrl: providerMetadata('volcengine').websiteUrl,
     apiKeyUrl: providerMetadata('volcengine').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/火山引擎.md',
@@ -173,12 +182,17 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     baseUrlHint: '形如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1，在百炼控制台模型页的「查看代码」里复制当前值。',
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
-    modelIds: ['qwen3.8-max'],
-    responsesModelIds: ['qwen3.8-max'],
+    modelIds: [
+      'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus',
+      'deepseek-v4.1-flash', 'deepseek-v4-pro-0813', 'kimi-k3.1-pro', 'kimi-k3', 'glm-5.3',
+      'MiniMax/MiniMax-M3.1-Flash', 'xiaomi/mimo-v2.6-pro-ultraspeed', 'stepfun/step-5-preview',
+    ],
+    // 百炼 Responses 支持清单里的模型；kimi-k3 虽在清单里，但原厂 Kimi 不支持 Responses，目录按模型登记协议，留在 Chat。
+    responsesModelIds: ['qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'deepseek-v4.1-flash', 'deepseek-v4-pro-0813', 'glm-5.3'],
     websiteUrl: providerMetadata('bailian').websiteUrl,
     apiKeyUrl: providerMetadata('bailian').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/百炼Qwen.md',
-    note: 'qwen3.8-max 必须走多模态消息格式，纯文本也要写成内容块数组。',
+    note: 'qwen3.8-max 走 Chat 时必须用多模态消息格式，纯文本也要写成内容块数组。三方直供模型的 Model ID 带厂商前缀（如 MiniMax/MiniMax-M3.1-Flash）。',
   },
 ]
 
@@ -197,8 +211,12 @@ export function resolvePresetModelApiProtocol(
   }
   const modelEntry = findLlmModelCatalogEntry(modelId, preset.providerId)
   const normalizedModelId = modelEntry?.id ?? modelId.trim().toLowerCase()
+  // 带厂商前缀的是平台上的另一条渠道（如百炼 ZHIPU/GLM-5.3 与 glm-5.3），Responses 支持要按原写法单独确认。
+  const routed = (value: string): boolean => value.includes('/')
   const supportsResponses = preset.responsesModelIds?.some(candidate => (
-    (findLlmModelCatalogEntry(candidate, preset.providerId)?.id ?? candidate.trim().toLowerCase()) === normalizedModelId
+    routed(candidate) || routed(modelId)
+      ? candidate.trim().toLowerCase() === modelId.trim().toLowerCase()
+      : (findLlmModelCatalogEntry(candidate, preset.providerId)?.id ?? candidate.trim().toLowerCase()) === normalizedModelId
   )) === true
   return supportsResponses && modelEntry && modelSupportsLlmApiProtocol(modelEntry, 'openai-responses')
     ? 'openai-responses'

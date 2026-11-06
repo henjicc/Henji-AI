@@ -95,11 +95,9 @@ async function executeFunShort(
   if (options.context?.trim()) content.push({ type: 'input_text', text: options.context.trim() })
   const parameters: Record<string, unknown> = { format: formatFrom(input, options) }
   if (options.sampleRateHz !== undefined) parameters.sample_rate = String(options.sampleRateHz)
-  if (preset.modelId === 'qwen-audio-3.1-asr-flash') {
-    if (options.keepDialect !== undefined) parameters.keep_dialect = options.keepDialect
-    if (options.diarizationEnabled !== undefined) parameters.speaker_diarization_enabled = options.diarizationEnabled
-    if (options.vocabulary !== undefined) parameters.vocabulary = options.vocabulary
-  }
+  if (preset.supports?.keepDialect && options.keepDialect !== undefined) parameters.keep_dialect = options.keepDialect
+  if (preset.supports?.speakerDiarization && options.diarizationEnabled !== undefined) parameters.speaker_diarization_enabled = options.diarizationEnabled
+  if (preset.supports?.vocabulary && options.vocabulary !== undefined) parameters.vocabulary = options.vocabulary
   if (options.vocabularyId) parameters.vocabulary_id = options.vocabularyId
   const languageHints = [...new Set([...(input.hints ?? []), ...(input.language ? [input.language] : [])]
     .map((hint) => hint.trim()).filter(Boolean))]
@@ -164,10 +162,8 @@ function asyncParameters(
     ...(options.speakerCount !== undefined ? { speaker_count: options.speakerCount } : {}),
     ...(options.channelId !== undefined ? { channel_id: [options.channelId] } : {}),
     ...(options.specialWordFilter ? { special_word_filter: options.specialWordFilter } : {}),
-    ...(preset.modelId === 'qwen-audio-3.1-asr-flash-filetrans' ? {
-      ...(options.keepDialect !== undefined ? { keep_dialect: options.keepDialect } : {}),
-      ...(options.vocabulary !== undefined ? { vocabulary: options.vocabulary } : {}),
-    } : {}),
+    ...(preset.supports?.keepDialect && options.keepDialect !== undefined ? { keep_dialect: options.keepDialect } : {}),
+    ...(preset.supports?.vocabulary && options.vocabulary !== undefined ? { vocabulary: options.vocabulary } : {}),
   }
 }
 

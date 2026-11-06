@@ -1,6 +1,6 @@
 # 阿里云百炼 / Qwen
 
-> 核对时间：2026-08-26。信息来源见文末「原始链接索引」。**控制台模型详情页（`bailian.console.aliyun.com`）需要登录**，实测自动化浏览器访问会被拦截（`请求失败，请检查网络设置`）；本文档内容全部来自 `help.aliyun.com` 的公开文档页，未登录也能完整核对协议、模型清单与价格。仅当需要交互式"体验中心"截图或账号级用量数据时才必须登录控制台。
+> 核对时间：2026-11-07（第 2b 节模型清单、价格与 Responses 支持范围）；其余部分 2026-08-26。信息来源见文末「原始链接索引」。**控制台模型详情页（`bailian.console.aliyun.com`）需要登录**，实测自动化浏览器访问会被拦截（`请求失败，请检查网络设置`）；本文档内容全部来自 `help.aliyun.com` 的公开文档页，未登录也能完整核对协议、模型清单与价格。仅当需要交互式"体验中心"截图或账号级用量数据时才必须登录控制台。
 
 ## 1. 摘要
 
@@ -8,7 +8,7 @@
 |---|---|
 | `providerId`（项目内约定） | `bailian` / `dashscope` |
 | 对应项目 `adapter` | `openai`（Chat Completions）；官方也提供 Responses API |
-| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | Qwen3.8-Max 已默认走 **Responses API**；Chat Completions 保留兼容，官方没有 Anthropic Messages API |
+| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | 官方列入 Responses 支持清单的模型默认走 **Responses API**（见第 2b 节）；其余走 Chat Completions；官方没有 Anthropic Messages API |
 | 鉴权 | `Authorization: Bearer $DASHSCOPE_API_KEY` |
 | Base URL | `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（**地域相关，`{WorkspaceId}` 和区域后缀需要从控制台"查看代码"复制当前值，不要硬编码**） |
 | 官方协议 | OpenAI Chat Completions（`/chat/completions`）+ OpenAI Responses API（`/responses`），同一 Base URL 下两个路径 |
@@ -31,6 +31,32 @@
 `qwen3.8-max-prime` 是此前资料遗漏的一个变体——"优速模式"，价格是标准版的整整 2 倍，用于对延迟更敏感的场景，属于同一发布线下的独立计价档位，接入时应作为一个可选的产品级参数（渠道/模式）而不是隐藏细节。
 
 国际（`国际`）与欧盟区域价格更高（`qwen3.8-max` 国际区 14.988/44.965 元），实际扣费以当前请求命中的区域为准；Batch 调用半价，上下文缓存命中享折扣（具体折扣比例见 [上下文缓存文档](https://help.aliyun.com/document_detail/2862577.html)）。
+
+## 2b. 其他文本模型（2026-11-07 核对）
+
+按[文本生成模型选型](https://help.aliyun.com/zh/model-studio/text-generation-model)与[模型调用计费](https://help.aliyun.com/zh/model-studio/model-pricing)（华北2 北京）核对。官方推荐：默认 `qwen3.7-plus`，效果优先 `qwen3.8-max`，成本优先 `qwen3.8-flash`；Plus、Max、Flash 都接收文本、图像和视频，输出文本。
+
+| 模型 ID | 上下文 / 最大输出 | 思考 | 工具 | 内置工具 | 结构化输出 | 输入 / 输出（元/百万 tokens） |
+|---|---|---|---|---|---|---|
+| `qwen3.8-max`（含快照 `qwen3.8-max-0902`） | 1M / 128K | 思考与非思考 | 支持 | 支持 | 支持 | 12 / 36 |
+| `qwen3.8-flash` | 1M / 128K | 思考与非思考 | 支持 | 支持 | 支持 | 0.8 / 2.7 |
+| `qwen3.7-plus` | 1M / 128K | 思考与非思考 | 支持 | 支持 | 支持 | ≤256K：2 / 8；256K–1M：6 / 24（页面标注限时 8 折，表内为原价） |
+| `deepseek-v4.1-flash`（含 `-1017`） | 1M / 未列 | 支持 | 支持 | 支持 | 支持 | 忙时 2 / 8，闲时 1 / 4 |
+| `deepseek-v4-pro-0813` | 1M / 未列 | 支持 | 支持 | — | — | 忙时 9 / 27，闲时 4.5 / 13.5 |
+| `kimi-k3.1-pro` | 1M / 未列 | 思考与非思考（默认开） | 支持 | 支持（仅 Responses） | JSON Mode | 13 / 68（缓存命中输入 1.3） |
+| `kimi-k3` | 1M / 未列 | 仅思考 | 支持 | 不支持 | 支持 | 20 / 100 |
+| `glm-5.3` | 1M / 未列 | 思考与非思考 | 支持 | 不支持 | 支持 | 8 / 28 |
+| `MiniMax/MiniMax-M3.1-Flash` | 1M / 未列 | 仅思考 | 支持 | 不支持 | 不支持 | 1 / 4 |
+| `xiaomi/mimo-v2.6-pro-ultraspeed` | 1M / 未列 | 支持 | 支持 | 不支持 | 支持 | 30 / 60 |
+| `stepfun/step-5-preview` | 1M / 未列 | 支持 | 支持 | 不支持 | 支持 | 7 / 20 |
+
+图像与视频参数（Max / Flash / Plus 相同）：单图最大 16M 像素、最多 2048 张图；视频最长 2 小时、最大 2GB、最多 64 段。
+
+忙时为北京时间 08:00–22:00。Batch 调用半价；上下文缓存只给输入打折，二者不能同时生效。三方模型在华北2以外地域没有免费额度。
+
+**Responses 支持的模型**（[OpenAI 兼容-Responses](https://help.aliyun.com/zh/model-studio/compatibility-with-openai-responses-api)，2026-11-07）：Qwen 3.5–3.8 各档（含 `qwen3.8-flash`、`qwen3.7-plus`），以及 `deepseek-v4.1-flash`、`deepseek-v4.1-flash-1017`、`deepseek-v4-pro`、`deepseek-v4-pro-0813`、`deepseek-v4-flash-0731`、`glm-5.3`、`glm-5.2`、`kimi-k3`。列表里没有 `kimi-k3.1-pro`、`MiniMax-M3.1-Flash`、`mimo-v2.6-pro-ultraspeed`、`step-5-preview`，项目对它们走 Chat。Responses 下 `reasoning.effort` 优先于 `enable_thinking`。
+
+三方直供模型的 API Model ID 带厂商前缀（计费页“模型 ID”列，如 `MiniMax/MiniMax-M3.1-Flash`、`kimi/kimi-k3`），选型页只写短名；`kimi-k3` 与 `kimi/kimi-k3` 是百炼代运营与月之暗面直供两个渠道，同价。带日期后缀的四位快照（`-0902`、`-1017`、`-0813`）不在目录的自动去快照规则内，项目目录用别名登记。`qwen3.8-omni-flash` 面向音视频输入，需要按 Omni 调用指南走流式输出，暂不进预设。
 
 ## 3. Responses API 接入示例
 
@@ -78,7 +104,9 @@ response = client.responses.create(
 - [模型概览（含所有可用模型清单）](https://help.aliyun.com/zh/model-studio/models) — 无需登录
 - [文本生成（含 Chat Completions/Responses 双协议代码示例、多模态接口区分表）](https://help.aliyun.com/zh/model-studio/text-generation) — 无需登录
 - [联网搜索工具](https://help.aliyun.com/zh/model-studio/web-search) — 无需登录
-- [模型价格](https://help.aliyun.com/zh/model-studio/model-pricing) — 无需登录
+- [模型价格](https://help.aliyun.com/zh/model-studio/model-pricing) — 无需登录（2026-11-07 核对）
+- [文本生成模型选型](https://help.aliyun.com/zh/model-studio/text-generation-model) — 无需登录（2026-11-07 核对）
+- [OpenAI 兼容-Responses 支持模型](https://help.aliyun.com/zh/model-studio/compatibility-with-openai-responses-api) — 无需登录（2026-11-07 核对）
 - [Qwen 使用指南](https://help.aliyun.com/zh/model-studio/user-guide/qwen) — 无需登录
 - [OpenAI 兼容-Responses（完整迁移指南）](https://help.aliyun.com/document_detail/3016539.html) — 无需登录
 - 百炼控制台模型详情页（`bailian.console.aliyun.com/.../model-market/detail/qwen3.8-max`）—— **需要登录**，自动化访问被拦截；需要交互式体验或账号级信息时再手动登录查看

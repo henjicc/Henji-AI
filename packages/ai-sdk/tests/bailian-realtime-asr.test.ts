@@ -119,6 +119,7 @@ describe('百炼实时 ASR', () => {
       ['qwen3-asr-flash-realtime', 'qwen-realtime'],
       ['qwen3-asr-flash-realtime-2026-02-10', 'qwen-realtime'],
       ['qwen-audio-3.1-asr-flash-streaming', 'fun-duplex'],
+      ['qwen-audio-3.0-asr-flash-streaming', 'fun-duplex'],
     ])
     expect(bailianRealtimeAsrPresets.every((preset) => preset.descriptor.executionModes?.includes('realtime'))).toBe(true)
   })

@@ -5,8 +5,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-09-28 |
-| 模型数量 | 生成主清单 20（图片 11 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 20（ASR 15 / 翻译 3 / LLM 2） |
+| 最后更新 | 2026-11-07 |
+| 模型数量 | 生成主清单 20（图片 11 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 26（ASR 21 / 翻译 3 / LLM 2） |
 | 模型供应商文档数量 | 生成/存量 84 + SDK 跨项目能力 20（另有 Fal 工具 12） |
 | 覆盖供应商 | 火山引擎（官方生成/ASR）、百炼（官方）、硅基流动（官方 ASR）、智谱（官方 LLM）、Groq（官方 LLM/ASR）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
@@ -165,9 +165,9 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 
 魔搭侧另有 5 个已适配的开源图像模型（`Qwen/Qwen-Image`、`Qwen/Qwen-Image-Edit-2509`、`black-forest-labs/FLUX.1-Krea-dev`、`MusePublic/majicMIX_realistic`、`MusePublic/14_ckpt_SD_XL`）。它们共用魔搭 API-Inference 的同一套端点与参数，差异只有 model ID、尺寸上限和魔粒档位，因此不单独建文件，统一记在 [供应商/魔搭.md](供应商/魔搭.md) 第 7 节。
 
-### SDK / Say-It 语音识别（15）
+### SDK / Say-It 语音识别（21）
 
-以下 15 个模型均有独立 SDK capability descriptor 与按需执行模块；消费应用仍需显式导入和注册，升级包版本不会自动增加界面入口。火山文件版只接受供应商可访问的公网 URL，Say-It 在没有受管上传/TOS 之前不得把它伪装成本地文件入口。
+以下 21 个模型均有独立 SDK capability descriptor 与按需执行模块；消费应用仍需显式导入和注册，升级包版本不会自动增加界面入口。火山文件版只接受供应商可访问的公网 URL，Say-It 在没有受管上传/TOS 之前不得把它伪装成本地文件入口。
 
 | 模型 | 模式 | 主协议 | 上限 | 文档 |
 |---|---|---|---|---|
@@ -180,6 +180,9 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | `qwen3-asr-flash-2026-02-10` | 短音频快照 | OpenAI 兼容 / DashScope 同步 | 5 分钟 / 10 MB | [百炼](Qwen3-ASR-Flash-2026-02-10/Qwen3-ASR-Flash-2026-02-10_百炼.md) |
 | `fun-asr` | 文件异步 | 提交 + 轮询 + 结果 JSON | 12 小时 / 2 GB | [百炼](Fun-ASR/Fun-ASR_百炼.md) |
 | `qwen3-asr-flash-filetrans` | 文件异步 | 提交 + 轮询 | 12 小时 / 2 GB | [百炼](Qwen3-ASR-Flash-Filetrans/Qwen3-ASR-Flash-Filetrans_百炼.md) |
+| `qwen-audio-3.1-asr-flash` / `qwen-audio-3.0-asr-flash` | 短音频 | Qwen-Audio-ASR HTTP（短于 1 分钟返回 JSON，否则 SSE） | 5 分钟 / 2 GB（内联 7.5 MB） | [百炼](供应商/百炼.md#2026-11-07-qwen-audio-30-asr与新模型盘点) |
+| `qwen-audio-3.1-asr-flash-filetrans` / `qwen-audio-3.0-asr-flash-filetrans` | 文件异步 | 提交 + 轮询 | 12 小时 / 2 GB | [百炼](供应商/百炼.md#2026-11-07-qwen-audio-30-asr与新模型盘点) |
+| `qwen-audio-3.1-asr-flash-streaming` / `qwen-audio-3.0-asr-flash-streaming` | 实时 | WebSocket `run-task`（duplex） | 时长无限制 | [百炼](供应商/百炼.md#2026-11-07-qwen-audio-30-asr与新模型盘点) |
 | `seedasr-2.0-realtime` | 实时 | 火山二进制 WebSocket | PCM S16LE / 16kHz / mono | [火山引擎](SeedASR-2.0-Realtime/SeedASR-2.0-Realtime_火山引擎.md) |
 | `seedasr-2.0-file` | 文件异步 | HTTP submit + query | 仅公网 URL；本地文件需外部 TOS/受管上传 | [火山引擎](SeedASR-2.0-File/SeedASR-2.0-File_火山引擎.md) |
 | `FunAudioLLM/SenseVoiceSmall` | 文件同步 | multipart HTTP | 1 小时 / 50 MB | [硅基流动](SenseVoiceSmall/SenseVoiceSmall_硅基流动.md) |

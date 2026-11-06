@@ -8,6 +8,7 @@ import {
   createModelsFromPreset,
   createProviderFromPreset,
   findLlmProviderPreset,
+  resolvePresetModelApiProtocol,
 } from '../../src/llm/providerPresets'
 import { hasProviderReasoningRule } from '../../src/llm/providerReasoningRequest'
 import { BIGMODEL_ENDPOINT_PROFILE_FAMILY } from '../../src/llm/bigmodel/profiles'
@@ -177,6 +178,16 @@ describe('createProviderFromPreset / createModelsFromPreset', () => {
     const bigmodelPreset = findLlmProviderPreset('bigmodel')!
     const bigmodel = createModelsFromPreset(bigmodelPreset, createProviderFromPreset(bigmodelPreset))
     expect(bigmodel.find(model => model.modelId === 'glm-5.3')?.apiProtocol).toBe('openai-responses')
+    const volcengine = createModelsFromPreset(findLlmProviderPreset('volcengine')!, createProviderFromPreset(findLlmProviderPreset('volcengine')!))
+    expect(volcengine.find(model => model.modelId === 'doubao-seed-2-1-lite-260915')?.apiProtocol).toBe('openai-responses')
+    expect(volcengine.find(model => model.modelId === 'kimi-k3-1-pro-261024')).toMatchObject({ apiProtocol: 'openai-compatible', catalogId: 'kimi-k3.1-pro' })
+    const bailian = createModelsFromPreset(findLlmProviderPreset('bailian')!, createProviderFromPreset(findLlmProviderPreset('bailian')!))
+    expect(bailian.find(model => model.modelId === 'qwen3.8-flash')?.apiProtocol).toBe('openai-responses')
+    expect(bailian.find(model => model.modelId === 'kimi-k3')?.apiProtocol).toBe('openai-compatible')
+    expect(bailian.every(model => model.catalogId)).toBe(true)
+    // 带厂商前缀的直供渠道不在 Responses 清单里，不能沿用同名短 ID 的协议。
+    expect(resolvePresetModelApiProtocol(findLlmProviderPreset('bailian')!, 'ZHIPU/GLM-5.3')).toBe('openai-compatible')
+    expect(resolvePresetModelApiProtocol(findLlmProviderPreset('bailian')!, 'glm-5.3')).toBe('openai-responses')
     expect(bigmodel.find(model => model.modelId === 'glm-5.3-flash')?.apiProtocol).toBe('openai-compatible')
   })
 })

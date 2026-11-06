@@ -50,6 +50,7 @@ export const bailianQwen3AsrFlashRealtime20260210 = definePreset(
 )
 
 export const bailianQwenAudio31AsrFlashStreaming = definePreset('qwen-audio-3.1-asr-flash-streaming', 'fun-duplex')
+export const bailianQwenAudio30AsrFlashStreaming = definePreset('qwen-audio-3.0-asr-flash-streaming', 'fun-duplex')
 
 export const bailianRealtimeAsrPresets = [
   bailianFunAsrRealtime,
@@ -57,4 +58,5 @@ export const bailianRealtimeAsrPresets = [
   bailianQwen3AsrFlashRealtime,
   bailianQwen3AsrFlashRealtime20260210,
   bailianQwenAudio31AsrFlashStreaming,
+  bailianQwenAudio30AsrFlashStreaming,
 ] as const satisfies readonly BailianRealtimeAsrPreset[]
