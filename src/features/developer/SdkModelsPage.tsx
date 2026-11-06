@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CircleCheck, CircleX, Copy, Play } from 'lucide-react'
+import { ArrowLeft, CircleCheck, CircleX, Copy, FlaskConical, X } from 'lucide-react'
 import PriceEstimate from '@/components/ui/PriceEstimate'
 import {
   UI_TEXT_META_CLASS,
@@ -7,6 +7,7 @@ import {
   UI_TEXT_SECONDARY_CLASS,
   UI_TEXT_TIMECODE_CLASS,
   UiButton,
+  UiCheckbox,
   UiChipButton,
   UiEmpty,
   UiFormRow,
@@ -26,9 +27,10 @@ import { llmGetProviderKeyStatus } from '@/commands/llmRuntime'
 import { createLogger } from '@/core/logging'
 import { llmConfigService } from '@/services/llm'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
-import { openApplicationSurface } from '@/features/navigation/application/surfaceNavigationService'
+import { ModelTestBench } from './ModelTestBench'
 import { dryRunGenerationModel, listSdkModels, sdkModelDefaults, sdkProviderName, SDK_MODEL_CATEGORIES, type SdkDryRunResult, type SdkModelCategory, type SdkModelRow } from './sdkModelInventory'
+
+const ROW_COLUMNS = 'grid-cols-[minmax(0,2fr)_6rem_5rem_minmax(0,1.4fr)_2rem]'
 
 const CATEGORY_LABEL: Readonly<Record<SdkModelCategory, string>> = {
   image: '图片', video: '视频', audio: '音频', tool: '图片工具', llm: '大语言模型', asr: '语音识别', translation: '翻译',
@@ -82,6 +84,14 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [checks, setChecks] = useState<ReadonlyMap<string, SdkDryRunResult>>(new Map())
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
+  // 测试台：一次只放同一类模型，勾了别的类别就从那一类重新开始
+  const [testKeys, setTestKeys] = useState<readonly string[]>([])
+  const [benchOpen, setBenchOpen] = useState(false)
+  const testRows = useMemo(() => testKeys.flatMap((key) => rows.find((row) => row.key === key) ?? []), [rows, testKeys])
+  const toggleTest = (row: SdkModelRow): void => setTestKeys((current) => current.includes(row.key)
+    ? current.filter((key) => key !== row.key)
+    : testRows[0] && testRows[0].category !== row.category ? [row.key] : [...current, row.key])
+  const openBench = (keys: readonly string[]): void => { setTestKeys(keys); setBenchOpen(true) }
 
   const providerIds = useMemo(() => [...new Set(rows.map((row) => row.providerId).filter(Boolean))].sort(), [rows])
   const filtered = useMemo(() => {
@@ -119,12 +129,25 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   }
   const failedCount = [...checks.values()].filter((result) => !result.ok).length
 
+  if (benchOpen && testRows.length) {
+    return <ModelTestBench rows={testRows} onBack={() => setBenchOpen(false)} onRemove={(key) => {
+      const remaining = testKeys.filter((item) => item !== key)
+      setTestKeys(remaining)
+      // 列全移走就回到列表，免得之后勾一个模型测试台又立刻弹开
+      if (!remaining.length) setBenchOpen(false)
+    }} />
+  }
+
   return (
     <>
       <UiToolbar
         variant="command"
         center={<UiSearchInput className="w-80" size="sm" placeholder="搜索名称、Model ID、供应商、能力" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除搜索" />}
         trailing={<>
+          {testRows.length ? <>
+            <UiButton size="sm" variant="primary" onClick={() => setBenchOpen(true)} data-test-bench-open=""><FlaskConical />测试 {testRows.length} 个</UiButton>
+            <UiIconButton tooltip="清空勾选" aria-label="清空勾选" onClick={() => setTestKeys([])}><X /></UiIconButton>
+          </> : null}
           <UiButton size="sm" loading={batch !== null} onClick={() => void checkAll()} tooltip="把当前筛选出的生成模型全部离线构建一次请求（补示例输入），不联网不扣费">
             <CircleCheck />{batch ? `检查中 ${batch.done}/${batch.total}` : '离线检查全部'}
           </UiButton>
@@ -165,8 +188,10 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </UiGroup>
         </aside>
         <section aria-label="模型" className="flex min-h-0 flex-col">
-          <div className={`grid grid-cols-[minmax(0,2fr)_6rem_5rem_minmax(0,1.4fr)_2rem] gap-3 border-b border-line px-5 py-2 ${UI_TEXT_META_CLASS}`}>
-            <span>模型</span><span>供应商</span><span>类别</span><span>能力</span><span>检查</span>
+          {/* 表头和行同一套两段结构：勾选列 + 菜单项（菜单项自带 px-3），列宽才对得齐 */}
+          <div className={`grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-1 border-b border-line py-2 pl-4 pr-2 ${UI_TEXT_META_CLASS}`}>
+            <span />
+            <span className={`grid ${ROW_COLUMNS} gap-3 px-3`}><span>模型</span><span>供应商</span><span>类别</span><span>能力</span><span>检查</span></span>
           </div>
           <div className="min-h-0 flex-1">
             <UiVirtualList
@@ -175,14 +200,16 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               resetKey={`${query}|${category}|${[...providers].join(',')}|${onlyConfigured}|${onlyFailed}`}
               emptyState={<UiEmpty title="没有符合条件的模型" />}
               renderItem={(row) => (
-                // 行内边距沿用菜单项自带的 px-3，外面再留 px-2，表头按两者之和对齐
-                <div className="px-2">
+                <div className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-1 pl-4 pr-2">
+                <span className="flex justify-center">
+                  <UiCheckbox checked={testKeys.includes(row.key)} onCheckedChange={() => toggleTest(row)} aria-label={`加入测试台：${row.name}`} data-test-bench-pick={row.key} />
+                </span>
                 <UiOptionButton
                   variant="menu"
                   active={row.key === selectedKey}
                   data-sdk-model-row={row.key}
                   data-check-status={checkStatus(checks.get(row.modelId))}
-                  className="grid min-h-11 w-full grid-cols-[minmax(0,2fr)_6rem_5rem_minmax(0,1.4fr)_2rem] items-center gap-3 text-left"
+                  className={`grid min-h-11 w-full ${ROW_COLUMNS} items-center gap-3 text-left`}
                   onClick={() => setSelectedKey(row.key)}
                 >
                   <span className="flex min-w-0 flex-col">
@@ -201,7 +228,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </section>
         <aside aria-label="模型详情" className="min-h-0 overflow-y-auto border-l border-line p-4">
           {selected
-            ? <ModelDetail key={selected.key} row={selected} configured={isConfigured(selected)} result={checks.get(selected.modelId)} onResult={(result) => record(selected.modelId, result)} />
+            ? <ModelDetail key={selected.key} row={selected} configured={isConfigured(selected)} result={checks.get(selected.modelId)} onResult={(result) => record(selected.modelId, result)} onTest={() => openBench([selected.key])} />
             : <UiEmpty title="选一个模型查看详情" />}
         </aside>
       </div>
@@ -223,17 +250,13 @@ const CheckIcon: React.FC<{ result: SdkDryRunResult | undefined }> = ({ result }
     : <CircleX aria-label="离线检查失败" className="h-4 w-4 text-danger-text" />
 }
 
-const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: SdkDryRunResult | undefined; onResult: (result: SdkDryRunResult) => void }> = ({ row, configured, result, onResult }) => {
+const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: SdkDryRunResult | undefined; onResult: (result: SdkDryRunResult) => void; onTest: () => void }> = ({ row, configured, result, onResult, onTest }) => {
   const [sample, setSample] = useState(true)
   const [running, setRunning] = useState(false)
   const defaults = useMemo(() => (row.generation ? sdkModelDefaults(row.modelId) : {}), [row])
   const run = async (): Promise<void> => {
     setRunning(true)
     try { onResult(await dryRunGenerationModel(row.modelId, undefined, { sample })) } finally { setRunning(false) }
-  }
-  const openInGeneration = (): void => {
-    useGenerationDraftStore.getState().patch({ selectedModel: row.modelId, selectedProvider: row.providerId })
-    openApplicationSurface('workspace.generation', { requestId: 'developer-panel' })
   }
 
   return (
@@ -293,14 +316,12 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: Sdk
             </div>
           ) : null}
         </UiGroup>
-        {row.category !== 'tool' ? (
-          <UiGroup title="真实调用" titleTone="compact" divided>
-            <UiButton variant="primary" onClick={openInGeneration} data-sdk-open-generation="" tooltip="在生成页选中这个模型，用正式链路提交；照常走付费策略">
-              <Play />在生成页打开
-            </UiButton>
-          </UiGroup>
-        ) : null}
       </> : null}
+      <UiGroup title="真实调用" titleTone="compact" divided>
+        <UiButton variant="primary" onClick={onTest} data-sdk-open-bench="" tooltip="在测试台里真实调用这个模型；要和同类模型对比，在列表里勾选多个">
+          <FlaskConical />在测试台打开
+        </UiButton>
+      </UiGroup>
     </div>
   )
 }

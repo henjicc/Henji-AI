@@ -11,6 +11,7 @@ import { createElectronImage } from './image'
 import { createElectronImageEditorV3 } from './imageEditorV3'
 import { createElectronVideo } from './video'
 import { createElectronClipboard } from './clipboard'
+import { createElectronDeveloper } from './developer'
 import { createElectronDragDrop } from './dragDrop'
 import { createElectronCameraStageRender } from './cameraStageRender'
 import { createElectronWindow } from './window'
@@ -59,6 +60,7 @@ export function createElectronPlatform(): PlatformRuntime {
     imageEditorV3: createElectronImageEditorV3(),
     video: createElectronVideo(),
     clipboard: createElectronClipboard(),
+    developer: createElectronDeveloper(),
     dragDrop: createElectronDragDrop(),
     cameraStageRender: createElectronCameraStageRender(),
     window: createElectronWindow(),

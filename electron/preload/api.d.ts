@@ -69,6 +69,11 @@ export interface HenjiNativeApi {
   assistant: HenjiAssistantApi
   ai: HenjiAiApi
   llm: HenjiLlmApi
+  /** 开发者面板测试台：主进程直接调用语音识别与翻译；正式安装包里调用会被拒绝。 */
+  developer: {
+    runTest(request: import('../../src/core/developer/developerTest').DeveloperTestRequest): Promise<import('../../src/core/developer/developerTest').DeveloperTestResult>
+    cancelTest(requestId: string): Promise<void>
+  }
   /** 原始 SQL 通道：只在自动化 / 隔离测试模式下存在（测试脚本造画布数据用），生产代码不得使用；3.4 删除。 */
   /** 测试夹具：只在自动化 / 隔离测试模式下存在。 */
   testFixtures?: HenjiTestFixturesApi

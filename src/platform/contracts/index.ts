@@ -9,6 +9,7 @@ import type { ImagePlatform } from './image'
 import type { ImageEditorV3Platform } from './imageEditorV3'
 import type { VideoPlatform } from './video'
 import type { ClipboardPlatform } from './clipboard'
+import type { DeveloperPlatform } from './developer'
 import type { DragDropPlatform } from './dragDrop'
 import type { CameraStageRenderPlatform } from './cameraStageRender'
 import type { WindowPlatform } from './window'
@@ -55,6 +56,7 @@ export interface PlatformRuntime {
   imageEditorV3: ImageEditorV3Platform
   video: VideoPlatform
   clipboard: ClipboardPlatform
+  developer: DeveloperPlatform
   dragDrop: DragDropPlatform
   cameraStageRender: CameraStageRenderPlatform
   window: WindowPlatform
@@ -116,6 +118,7 @@ export * from './image'
 export * from './imageEditorV3'
 export * from './video'
 export * from './clipboard'
+export * from './developer'
 export * from './dragDrop'
 export * from './cameraStageRender'
 export * from './window'

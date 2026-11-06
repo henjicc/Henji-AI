@@ -498,6 +498,10 @@ const api: HenjiNativeApi = {
   },
   assistant: assistantApi,
   ai: aiApi,
+  developer: {
+    runTest: request => nativeInvoke('developer:runTest', request),
+    cancelTest: requestId => nativeInvoke('developer:cancelTest', { requestId }),
+  },
   llm: llmApi,
   ...(automationTestMode ? { testFixtures: testFixturesApi } : {}),
   generationHistory: createGenerationHistoryApi(nativeInvoke),

@@ -43,6 +43,7 @@ import { registerImageIpc } from './ipc/image'
 import { disposeImageEditorV3Ipc, registerImageEditorV3Ipc } from './ipc/image-editor-v3'
 import { registerKeystoreIpc } from './ipc/keystore'
 import { registerLlmRuntimeIpc } from './ipc/llm-runtime'
+import { registerDeveloperIpc } from './ipc/developer'
 import { registerLlmProviderSettingsIpc } from './ipc/llm-provider-settings'
 import { registerLoggingIpc } from './ipc/logging'
 import { registerMediaIpc } from './ipc/media'
@@ -188,6 +189,7 @@ app.whenReady().then(async () => {
   registerImageEditorV3Ipc()
   registerKeystoreIpc()
   registerLlmRuntimeIpc()
+  registerDeveloperIpc()
   registerLlmProviderSettingsIpc()
   registerLoggingIpc()
   registerMediaIpc()
