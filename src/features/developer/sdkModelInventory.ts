@@ -30,21 +30,52 @@ export interface SdkModelRow {
   /** 发给供应商或写进配置的 Model ID。 */
   modelId: string
   providerId: string
+  /** 列表与详情里显示的中文能力名。 */
   tags: readonly string[]
+  /** 模型声明里的原始标签或特性，只在详情里给开发者核对。 */
+  rawTags: readonly string[]
   /** 只有生成模型能做请求预览与估价。 */
   generation?: { definition: ModelDefinition }
   llm?: { catalogId: string | null; protocol: 'responses' | 'chat' | null; note?: string; capabilities: readonly string[]; contextWindow: number | null; maxOutputTokens: number | null }
   capability?: { descriptor: CapabilityDescriptor }
 }
 
+/**
+ * 功能标签用模型筛选的中文名；其余有信息量的标签和特性在这里起名。
+ * 不在表里的是内部判断用的标记，或与功能标签重复（如 supports-image-editing 就是“图片编辑”），不显示。
+ */
+const FEATURE_LABEL: Readonly<Record<string, string>> = {
+  'voice-cloning': '语音克隆', 'text-to-speech': '语音合成', 'voice-synthesis': '语音合成',
+  'supports-4k': '4K', 'supports-2k': '2K', 'multi-output': '一次出多张', 'english-prompt-only': '仅英文提示词',
+  'supports-audio-generation': '带声音', 'supports-layer-decomposition': '图层拆分', 'supports-prompt-expansion': '提示词扩写',
+  'multi-image-reference': '多图参考', 'video-reference': '视频参考', 'fast-mode': '快速档', 'turbo-mode': '极速档',
+  upscaling: '放大', 'alpha-preserving': '保留透明', 'alpha-output': '透明输出', relighting: '打光', 'image-edit': '图片编辑',
+  'style-presets': '风格预设', outpainting: '扩图', 'photo-restoration': '老照片修复', 'background-removal': '抠图',
+  'multi-angle': '多角度', 'camera-control': '镜头控制', 'perspective-preset': '视角预设',
+  timestamps: '时间戳', 'short-audio': '短音频', 'file-transcription': '文件转写', 'async-polling': '异步任务',
+  'remote-url': '网址输入', realtime: '实时', streaming: '流式', 'partial-results': '中间结果', 'pcm-s16le-16khz-mono': '16kHz PCM 输入',
+}
+
+function featureLabels(tags: readonly string[]): string[] {
+  return [...new Set(tags.flatMap((tag) => {
+    const key = `models:tags.${tag}`
+    if (i18n.exists(key)) return [i18n.t(key)]
+    const maxImages = /^max-images-(\d+)$/.exec(tag)
+    if (maxImages) return [`最多 ${maxImages[1]} 张图`]
+    return FEATURE_LABEL[tag] ? [FEATURE_LABEL[tag]] : []
+  }))]
+}
+
 function generationRow(definition: ModelDefinition, hidden: boolean): SdkModelRow {
+  const rawTags = (definition.meta.tags ?? []).filter((tag) => !tag.startsWith('provider-'))
   return {
     key: `generation:${definition.meta.id}`,
     category: hidden || !GENERATION_TYPES.has(definition.meta.type) ? 'tool' : definition.meta.type as SdkModelCategory,
     name: getI18nText(definition.meta.name, 'zh-CN') || definition.meta.id,
     modelId: definition.meta.id,
     providerId: definition.meta.provider,
-    tags: (definition.meta.tags ?? []).filter((tag) => !tag.startsWith('provider-')).map((tag) => i18n.t(`models:tags.${tag}`, { defaultValue: tag })),
+    tags: featureLabels(rawTags),
+    rawTags,
     generation: { definition },
   }
 }
@@ -85,7 +116,7 @@ function catalogKey(modelId: string): string {
 function llmRow(key: string, modelId: string, providerId: string, entry: (typeof LLM_MODEL_CATALOG_ENTRIES)[number] | undefined, protocol: 'responses' | 'chat' | null): SdkModelRow {
   const capabilities = entry ? [
     entry.input.image ? '看图' : null, entry.input.video ? '看视频' : null, entry.input.audio ? '听音频' : null,
-    entry.toolCall ? '工具' : null, entry.structuredOutputMode !== 'none' ? `结构化:${entry.structuredOutputMode}` : null, entry.reasoning ? '思考' : null,
+    entry.toolCall ? '工具调用' : null, entry.structuredOutputMode === 'none' ? null : entry.structuredOutputMode === 'json' ? 'JSON 输出' : 'Schema 输出', entry.reasoning ? '思考' : null,
   ].filter((value): value is string => value !== null) : []
   return {
     key: `llm:${key}`,
@@ -93,7 +124,8 @@ function llmRow(key: string, modelId: string, providerId: string, entry: (typeof
     name: entry?.displayName ?? modelId,
     modelId,
     providerId,
-    tags: [...capabilities, ...(protocol === 'responses' ? ['Responses'] : [])],
+    tags: [...capabilities, ...(protocol === 'responses' ? ['Responses 接口'] : [])],
+    rawTags: [],
     llm: { catalogId: entry?.id ?? null, protocol, note: entry?.note, capabilities, contextWindow: entry?.contextWindow ?? null, maxOutputTokens: entry?.maxOutputTokens ?? null },
   }
 }
@@ -105,7 +137,8 @@ function capabilityRow(category: 'asr', descriptor: CapabilityDescriptor): SdkMo
     name: descriptor.modelId ?? descriptor.id,
     modelId: descriptor.modelId ?? descriptor.id,
     providerId: descriptor.providerIds?.[0] ?? '',
-    tags: [...(descriptor.features ?? []), ...(descriptor.executionModes?.includes('realtime') ? ['实时'] : [])],
+    tags: featureLabels([...(descriptor.features ?? []), ...(descriptor.executionModes?.includes('realtime') ? ['realtime'] : [])]),
+    rawTags: descriptor.features ?? [],
     capability: { descriptor },
   }
 }
@@ -127,7 +160,7 @@ export function listSdkModels(): SdkModelRow[] {
   ].map((descriptor) => capabilityRow('asr', descriptor))
   const translation = Object.values(BAILIAN_QWEN_MT_PRESETS).map((preset): SdkModelRow => ({
     key: `translation:${preset.moduleId}`, category: 'translation', name: preset.modelId, modelId: preset.modelId,
-    providerId: 'bailian', tags: ['流式翻译', preset.streamingContent === 'cumulative' ? '累积输出' : '增量输出'],
+    providerId: 'bailian', tags: ['流式翻译', preset.streamingContent === 'cumulative' ? '累积输出' : '增量输出'], rawTags: [],
   }))
   return [...generation, ...tools, ...llmRows(), ...asr, ...translation]
 }

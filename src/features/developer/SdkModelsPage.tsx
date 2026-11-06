@@ -90,7 +90,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       && (!providers.size || providers.has(row.providerId))
       && (!onlyConfigured || (row.llm ? llmKeyStatus : keyStatus)[row.providerId] === true)
       && (!onlyFailed || checks.get(row.modelId)?.ok === false)
-      && (!needle || `${row.name} ${row.modelId} ${row.providerId} ${providerName(row.providerId)} ${row.tags.join(' ')}`.toLowerCase().includes(needle)))
+      && (!needle || `${row.name} ${row.modelId} ${row.providerId} ${providerName(row.providerId)} ${row.tags.join(' ')} ${row.rawTags.join(' ')}`.toLowerCase().includes(needle)))
   }, [rows, query, category, providers, onlyConfigured, onlyFailed, keyStatus, llmKeyStatus, checks])
   const selected = rows.find((row) => row.key === selectedKey) ?? null
 
@@ -249,6 +249,7 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: Sdk
         <UiFormRow label="供应商" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{providerName(row.providerId)}{row.generation || row.capability || row.llm ? (configured ? ' · 已配密钥' : ' · 未配密钥') : ''}</span></UiFormRow>
         <UiFormRow label="类别" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{CATEGORY_LABEL[row.category]}</span></UiFormRow>
         {row.tags.length ? <UiFormRow label="能力" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.tags.join(' · ')}</span></UiFormRow> : null}
+        {row.rawTags.length ? <UiFormRow label="原始标签" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.rawTags.join(' ')}</span></UiFormRow> : null}
         {row.generation ? <>
           <UiFormRow label="通用标识" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.generation.definition.meta.canonicalModelId}</span></UiFormRow>
           <UiFormRow label="估价" density="compact"><PriceEstimate variant="badge" providerId={row.providerId} modelId={row.modelId} params={defaults} /></UiFormRow>
