@@ -70,7 +70,11 @@ export async function llmChatStream(
   request = { ...request, requestId }
   // 主进程记录供应商失败；此处记录授权、调用与流终止的调用方结果。
   const pending = { controller: new AbortController(), started: false }
-  const abort = (): void => pending.controller.abort(paidContext.signal?.reason)
+  // 流已经发出后，信号中止要连主进程的请求一起取消；只停本地等待会让请求跑完、照常计费
+  const abort = (): void => {
+    pending.controller.abort(paidContext.signal?.reason)
+    if (pending.started) void getPlatform().llmRuntime.cancelTask(requestId).catch((error: unknown) => logger.error('[LlmRuntimeCmd] 取消 LLM 请求失败', error, { event: 'llm_runtime.chat_stream.cancel_failed', requestId }))
+  }
   paidContext.signal?.addEventListener('abort', abort, { once: true })
   if (paidContext.signal?.aborted) abort()
   paidRequests.set(requestId, pending)

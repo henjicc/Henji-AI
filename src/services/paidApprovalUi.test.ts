@@ -13,7 +13,7 @@ import { notifyUser } from '@/contexts/NotificationContext'
 import { UI_PAID_CAPABILITIES } from '@/core/application-control/paidApproval'
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 
-const ports = vi.hoisted(() => ({ complete: vi.fn(), chatStream: vi.fn(), verifyModelCapabilities: vi.fn(), findDocument: vi.fn(), findProject: vi.fn() }))
+const ports = vi.hoisted(() => ({ complete: vi.fn(), chatStream: vi.fn(), cancelTask: vi.fn(), verifyModelCapabilities: vi.fn(), findDocument: vi.fn(), findProject: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => true, getPlatform: () => ({ applicationControl: ports, llmRuntime: ports }) }))
 vi.mock('@/features/documents/documentOperations', () => ({ getDocumentOperations: () => ports }))
 vi.mock('@/contexts/NotificationContext', () => ({ notifyUser: vi.fn() }))
@@ -120,6 +120,21 @@ it('提示词优化在等待费用确认时取消，撤下弹窗且不发模型�
   expect(bridge.store.generationSpendSince(0)).toBe(0)
 })
 
+
+it('流已发出后信号中止，连主进程的请求一起取消', async () => {
+  const controller = new AbortController()
+  let finish = (): void => undefined
+  ports.chatStream.mockImplementation((_request: unknown, onEvent: (event: { type: string; data: string }) => void) => new Promise<void>((resolve) => {
+    finish = () => { onEvent({ type: 'Error', data: 'cancelled' }); resolve() }
+  }))
+  ports.cancelTask.mockImplementation(async () => finish())
+  const pending = llmChatStream({ requestId: 'bench-column' } as Parameters<typeof llmChatStream>[0], () => {}, { category: 'generation', estimatedCny: 0.01, signal: controller.signal })
+  const rejected = expect(pending).rejects.toThrow()
+  await vi.waitFor(() => expect(ports.chatStream).toHaveBeenCalledOnce())
+  controller.abort()
+  await rejected
+  expect(ports.cancelTask).toHaveBeenCalledWith('bench-column')
+})
 
 it.each(['generation', 'recognition', 'translation', 'title', 'explanation'] as const)('%s 共用英文结构化费用展示，拒绝不派发', async category => {
   await i18n.changeLanguage('en-US')
