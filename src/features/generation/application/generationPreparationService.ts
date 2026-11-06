@@ -10,7 +10,7 @@ import {
   resolvePricingCurrency,
 } from '@/core/pricing/priceDisplay'
 import { validateParams, type ValidationError } from '@/core/request/paramValidator'
-import { getI18nText, type ModelDefinition, type ModelType, type ParamDef } from '@/core/types'
+import { getI18nText, type ModelDefinition, type ModelTag, type ModelType, type ParamDef } from '@/core/types'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
 const logger = createLogger('features.generation.preparation')
@@ -21,7 +21,7 @@ export interface GenerationModelSearchInput {
   query?: string
   mediaType?: GenerationMediaType
   providerId?: string
-  tags?: string[]
+  tags?: ModelTag[]
   sortBy?: GenerationModelSearchSort
 }
 
@@ -263,6 +263,7 @@ function toCatalogModel(model: ModelDefinition, usdToCnyRate: number): Record<st
     name: getI18nText(model.meta.name, 'zh') || getI18nText(model.meta.name, 'en'),
     description,
     tags: (model.meta.tags ?? []).slice(0, 8),
+    ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),
     priceEstimate: createCatalogPriceEstimate(model, usdToCnyRate),
     recommendedByDescription: description.includes('推荐使用'),
   }
@@ -324,6 +325,7 @@ export function getGenerationModelCatalogBootstrap(): GenerationModelCatalogBoot
       name: getI18nText(model.meta.name, 'zh') || getI18nText(model.meta.name, 'en'),
       description,
       tags: (model.meta.tags ?? []).slice(0, 8),
+      ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),
       recommendedByDescription: description.includes('推荐使用'),
       providers: [providerModel],
     })
@@ -351,7 +353,7 @@ export function searchGenerationModelCatalog(input: GenerationModelSearchInput):
   const provider = resolveProviderId(input.providerId, allModels)
   const matchedQueryTerms = terms.filter((term) => allModels.some((model) => matchesSearchTerm(modelSearchText(model), term)))
   const ignoredQueryTerms = terms.filter((term) => !matchedQueryTerms.includes(term))
-  const requestedTags = (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean)
+  const requestedTags = input.tags ?? []
   const models = allModels
     .filter((model) => {
       if (input.mediaType && model.meta.type !== input.mediaType) return false
@@ -395,6 +397,7 @@ export function describeGenerationModel(model: ModelDefinition): Record<string, 
       name: model.meta.name,
       description: model.meta.description,
       tags: model.meta.tags ?? [],
+      ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),
     },
     inputLimits: toSafeValue(model.inputLimits),
     priceEstimate: createPriceEstimate(model),
@@ -414,13 +417,15 @@ function mediaCount(options: Record<string, unknown>, uploadedKey: string, visib
   return uploaded.length > 0 ? uploaded.length : stringArray(options[visibleKey]).length
 }
 
+// 媒体不是模型参数，但“有没有图、视频”会驱动模式切换等联动；与画布节点一样按媒体键再执行一遍
+const MEDIA_LINKAGE_TRIGGERS = ['images', 'uploadedImages', 'videos', 'uploadedVideos', 'audios'] as const
+
 function applyLinkages(model: ModelDefinition, values: DynamicValueMap, supplied: Record<string, unknown>): DynamicValueMap {
   if (!model.linkages?.length) return values
   const engine = new LinkageEngine(model.linkages)
   const paramIds = new Set(model.params.map((param) => param.id))
-  return Object.keys(supplied).reduce<DynamicValueMap>((result, key) => (
-    paramIds.has(key) ? engine.execute(key, result, model.params) : result
-  ), values)
+  const triggers = [...Object.keys(supplied).filter((key) => paramIds.has(key)), ...MEDIA_LINKAGE_TRIGGERS]
+  return triggers.reduce<DynamicValueMap>((result, key) => engine.execute(key, result, model.params), values)
 }
 
 function validateDynamicConstraints(
@@ -528,6 +533,7 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
       recommendedByDescription: modelDescriptionText(model).includes('推荐使用'),
       qualitativeDescription: modelDescriptionText(model),
       tags: model.meta.tags ?? [],
+      ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),
       schemaValidated: true,
       mediaTypeMatched: model.meta.type === input.mediaType,
       requestBuilderValidated: Boolean(model.request?.builder),

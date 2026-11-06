@@ -1,5 +1,5 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 import { resolveKieImageSources } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieSeedream45Model = defineModel({
@@ -10,7 +10,7 @@ export const kieSeedream45Model = defineModel({
         seriesRank: 4.5,
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-kie'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['seedream-4.5-kie']
     },
     inputLimits: {

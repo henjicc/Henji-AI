@@ -4,6 +4,11 @@ import { sharedFieldText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
 
+function hasUploadedImagePresentation(params: Record<string, unknown>): boolean {
+  return [params.uploadedFilePaths, params.images, params.uploadedImages]
+    .some((value) => Array.isArray(value) && value.length > 0)
+}
+
 export const kiePresentationPart1: Record<string, ModelPresentation> = {
   "kie-gemini-omni-video": {
     meta: {
@@ -264,6 +269,13 @@ export const kiePresentationPart1: Record<string, ModelPresentation> = {
         })),
       },
     },
-    linkages: [],
+    linkages: [{
+      // 文生图模式不收图；画布、助手带着图片调用时自动切到图生图，图片才不会被丢掉
+      trigger: ['uploadedImages', 'images'],
+      effect: 'autoSwitch',
+      target: 'kieGrokImagineMode',
+      condition: (_value, allParams) => hasUploadedImagePresentation(allParams) && allParams.kieGrokImagineMode !== 'image-to-image',
+      value: 'image-to-image'
+    }],
   },
 }

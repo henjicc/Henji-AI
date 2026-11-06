@@ -12,7 +12,7 @@ export const falProductPhotographyModel = defineModel({
     canonicalModelId: 'image-apps-v2-product-photography',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'product-photography', 'background-generation', 'provider-fal'],
+    tags: ['product-photography'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   acceptsPrompt: false,

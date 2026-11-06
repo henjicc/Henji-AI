@@ -8,7 +8,7 @@ export const nanoBananaModel = defineModel({
         seriesRank: 1,
         provider: 'fal',
         type: 'image',
-        tags: ['image', 'text-to-image', 'image-to-image']
+        tags: ['text-to-image', 'image-to-image']
     },
     params: [
         // 1. 生成数量

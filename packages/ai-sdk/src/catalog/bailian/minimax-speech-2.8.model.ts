@@ -5,7 +5,7 @@ import { speechCharacterPrice, speechNumber, speechString, speechText } from '..
 export const bailianMinimaxSpeech28Model = defineModel({
   meta: {
     id: 'bailian-minimax-speech-2.8', canonicalModelId: 'minimax-speech-2.8', provider: 'bailian', type: 'audio',
-    tags: ['text-to-audio', 'provider-bailian'],
+    tags: ['text-to-audio'],
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [

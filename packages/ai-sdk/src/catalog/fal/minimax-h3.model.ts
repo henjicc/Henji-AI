@@ -10,7 +10,7 @@ export const falMiniMaxH3Model = defineModel({
     meta: {
         id: 'fal-ai-minimax-h3', canonicalModelId: 'minimax-h3', seriesId: 'minimax-hailuo', seriesRank: 3,
         provider: 'fal', type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'mixed-upload-mode', 'multi-mode-switch', 'supports-4k', 'provider-fal'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
         aliases: ['minimax-h3-fal'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 75 }
     },
     inputLimits: {

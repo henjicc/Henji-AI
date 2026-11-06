@@ -8,10 +8,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
   meta: {
     id: 'apimart-gemini-omni-flash', canonicalModelId: 'gemini-omni-video',
     seriesId: 'gemini-omni', seriesRank: 1, provider: 'apimart', type: 'video',
-    tags: [
-      'text-to-video', 'image-to-video', 'video-to-video', 'supports-video-editing',
-      'supports-multi-image', 'mixed-upload-mode', 'supports-4k', 'provider-apimart'
-    ],
+    tags: ['text-to-video', 'image-to-video', 'reference-mode', 'video-to-video'],
     aliases: [
       'gemini-omni-flash-apimart',
       'apimart-gemini-omni-flash-ext',

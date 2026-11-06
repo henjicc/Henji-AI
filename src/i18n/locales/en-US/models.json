@@ -39,16 +39,29 @@
     "volcengine-speech": "Volcengine Speech"
   },
   "tags": {
-    "text-to-image": "Image Generation",
+    "text-to-image": "Text to Image",
     "image-to-image": "Image Editing",
     "text-to-video": "Text to Video",
     "image-to-video": "Image to Video",
     "start-end-frame": "Start/End Frame",
     "reference-mode": "Reference to Video",
-    "motion-control": "Motion Control",
     "video-to-video": "Video Editing",
     "video-extension": "Video Extension",
-    "text-to-audio": "Audio Synthesis",
-    "voice-clone": "Voice Cloning"
+    "motion-control": "Motion Control",
+    "text-to-audio": "Speech Synthesis",
+    "voice-clone": "Voice Cloning",
+    "inpainting": "Inpainting",
+    "erase": "Erase",
+    "relighting": "Relighting",
+    "multi-angle": "Multi-Angle",
+    "outpainting": "Outpainting",
+    "upscaling": "Upscaling",
+    "photo-restoration": "Photo Restoration",
+    "layer-decomposition": "Layer Decomposition",
+    "transparent-background": "Transparent Background",
+    "low-light-enhancement": "Low-Light Enhancement",
+    "product-photography": "Product Photography",
+    "multi-speaker-dialogue": "Multi-Speaker Dialogue",
+    "timestamps": "Timestamps"
   }
 }

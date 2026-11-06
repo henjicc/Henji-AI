@@ -19,7 +19,7 @@ export const falPerspectiveChangeModel = defineModel({
     canonicalModelId: 'perspective-change',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'multi-angle', 'perspective-preset', 'provider-fal'],
+    tags: ['multi-angle'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   acceptsPrompt: false,

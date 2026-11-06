@@ -5,7 +5,7 @@ import { speechCharacterPrice, speechNumber, speechString, speechText } from '..
 export const falQwen3Tts17bModel = defineModel({
   meta: {
     id: 'fal-qwen3-tts-1.7b', canonicalModelId: 'qwen3-tts-1.7b', provider: 'fal', type: 'audio',
-    tags: ['text-to-audio', 'provider-fal'],
+    tags: ['text-to-audio'],
     polling: { interval: 3000, maxAttempts: 120, expectedAttempts: 20 },
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },

@@ -9,7 +9,7 @@ export const grsaiGptImage25Model = defineModel({
   meta: {
     id: 'grsai-gpt-image-2.5', canonicalModelId: 'gpt-image-2.5', seriesId: 'gpt-image', seriesRank: 2.5,
     provider: 'grsai', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'provider-grsai'],
+    tags: ['text-to-image', 'image-to-image'],
     polling: { interval: 3000, maxAttempts: 200 },
   },
   // Grsai官方未声明参考图数量上限，不附加本地产品上限。

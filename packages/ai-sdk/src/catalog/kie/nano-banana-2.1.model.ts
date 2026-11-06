@@ -6,7 +6,7 @@ export const kieNanoBanana21Model = defineModel({
   meta: {
     id: 'kie-nano-banana-2.1', canonicalModelId: 'nano-banana-2.1', seriesId: 'nano-banana', seriesRank: 2.1,
     provider: 'kie', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-4k', 'provider-kie'],
+    tags: ['text-to-image', 'image-to-image'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 },
   },
   inputLimits: { images: { max: 10 }, videos: { max: 0 }, audios: { max: 0 } },

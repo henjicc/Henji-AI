@@ -22,7 +22,7 @@ return defineModel({
   meta: {
     id: config.id, canonicalModelId: config.canonicalModelId, seriesId: 'seedream', seriesRank: 5.1,
     provider: 'volcengine', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-layer-decomposition', 'max-images-10', 'provider-volcengine'],
+    tags: ['text-to-image', 'image-to-image', 'layer-decomposition', 'transparent-background'],
     aliases: config.aliases
   },
   inputLimits: {

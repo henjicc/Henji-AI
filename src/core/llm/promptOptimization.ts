@@ -12,6 +12,8 @@ export interface PromptOptimizationTargetModel {
   modelName?: string
   modelType?: string
   modelFunctions?: string[]
+  /** 模型只认这种语言的提示词 */
+  modelPromptLanguage?: 'en'
   modelDescription?: string
 }
 
@@ -121,7 +123,8 @@ function buildVariableMap(context: PromptOptimizationContext): Record<string, st
     '{{target.model.name}}': target?.modelName || target?.modelId || '未知模型',
     '{{target.model.id}}': target?.modelId || 'DynamicValue',
     '{{target.model.type}}': toModelTypeLabel(target?.modelType),
-    '{{target.model.functions}}': joinList(target?.modelFunctions),
+    // 只认英文的模型写进能力清单，现有模板不用改就能让优化结果用英文
+    '{{target.model.functions}}': joinList([...(target?.modelFunctions ?? []), ...(target?.modelPromptLanguage === 'en' ? ['仅支持英文提示词'] : [])]),
     '{{target.model.description}}': target?.modelDescription || '无模型描述',
   }
 }

@@ -18,7 +18,7 @@ export const apimartGptImage2Model = defineModel({
     seriesRank: 2,
     provider: 'apimart',
     type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-16', 'multi-output', 'supports-4k', 'provider-apimart'],
+    tags: ['text-to-image', 'image-to-image', 'inpainting', 'transparent-background'],
     aliases: ['gpt-image-2-apimart', 'apimart-gpt-image-2-official', 'gpt-image-2-official-apimart'],
     aliasParamDefaults: {
       'apimart-gpt-image-2-official': { apimartGptImage2Version: 'official' },

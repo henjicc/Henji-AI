@@ -7,14 +7,7 @@ export const kieGptImage2Model = defineModel({
         canonicalModelId: 'gpt-image-2',
         provider: 'kie',
         type: 'image',
-        tags: [
-            'text-to-image',
-            'image-to-image',
-            'supports-image-editing',
-            'supports-multi-image',
-            'supports-4k',
-            'provider-kie'
-        ],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['gpt-image-2-kie']
     },
     inputLimits: {

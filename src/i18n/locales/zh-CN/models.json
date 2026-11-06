@@ -39,16 +39,29 @@
     "volcengine-speech": "火山引擎（豆包语音）"
   },
   "tags": {
-    "text-to-image": "图片生成",
+    "text-to-image": "文生图",
     "image-to-image": "图片编辑",
     "text-to-video": "文生视频",
     "image-to-video": "图生视频",
     "start-end-frame": "首尾帧",
     "reference-mode": "参考生视频",
-    "motion-control": "动作控制",
     "video-to-video": "视频编辑",
     "video-extension": "视频延长",
+    "motion-control": "动作控制",
     "text-to-audio": "语音合成",
-    "voice-clone": "语音克隆"
+    "voice-clone": "克隆音色",
+    "inpainting": "局部重绘",
+    "erase": "擦除",
+    "relighting": "打光",
+    "multi-angle": "多角度",
+    "outpainting": "扩图",
+    "upscaling": "放大",
+    "photo-restoration": "老照片修复",
+    "layer-decomposition": "图层拆分",
+    "transparent-background": "透明背景",
+    "low-light-enhancement": "暗光增强",
+    "product-photography": "商品图",
+    "multi-speaker-dialogue": "多人对话",
+    "timestamps": "时间戳"
   }
 }

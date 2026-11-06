@@ -9,7 +9,7 @@ export const kieGrokImagine20Model = defineModel({
         seriesRank: 2,
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'multi-mode-switch', 'provider-kie'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['grok-imagine-image-2-kie']
     },
     inputLimits: {

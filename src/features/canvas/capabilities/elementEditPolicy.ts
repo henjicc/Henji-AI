@@ -6,7 +6,7 @@ import type { CanvasImageCapabilityModelPolicy } from './types'
 export const ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION = 'local-redraw-crop-v2'
 export const ELEMENT_EDIT_DEFAULT_MODEL_ID = 'apimart-gpt-image-2'
 export const ELEMENT_EDIT_MODEL_POLICY: Extract<CanvasImageCapabilityModelPolicy, { mode: 'node-schema' }> = {
-  mode: 'node-schema', requiredTags: ['supports-image-editing'],
+  mode: 'node-schema', requiredTags: ['image-to-image'],
 }
 export const ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS = {
   referenceImageCount: 1, outputCount: 1, localRedrawContractVersion: 2,

@@ -6,7 +6,7 @@ export const zImageTurboModel = defineModel({
     meta: {
         id: 'fal-ai-z-image-turbo', canonicalModelId: 'z-image-turbo', seriesId: 'z-image', seriesRank: 1,
         provider: 'fal', type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-prompt-expansion', 'turbo-mode', 'provider-fal'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['z-image-turbo-fal'], polling: { interval: 3000, maxAttempts: 160, expectedAttempts: 30 }
     },
     inputLimits: { images: { max: 1 }, videos: { max: 0 } },

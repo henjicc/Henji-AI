@@ -8,7 +8,7 @@ export const bailianZImageTurboModel = defineModel({
   meta: {
     id: 'bailian-z-image-turbo', canonicalModelId: 'z-image-turbo', seriesId: 'z-image', seriesRank: 1,
     provider: 'bailian', type: 'image',
-    tags: ['text-to-image', 'provider-bailian'], aliases: ['z-image-turbo-official']
+    tags: ['text-to-image'], aliases: ['z-image-turbo-official']
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [

@@ -72,17 +72,11 @@ function collectCatalogConditions(): Array<{
 }
 
 describe('catalog consumer contract', () => {
-  it('输出模态与能力标签一致，参考图编辑不能标记为参考生视频', () => {
-    const videoOnlyTags = ['text-to-video', 'image-to-video', 'video-to-video', 'reference-mode', 'start-end-frame', 'supports-video-editing']
-    for (const model of catalog) {
-      if (model.meta.type !== 'video') {
-        expect((model.meta.tags ?? []).filter(tag => videoOnlyTags.includes(tag)), model.meta.id).toEqual([])
-      }
-    }
+  it('参考图编辑仍是图片模型，不能标记为参考生视频', () => {
     for (const id of ['kie-gpt-image-2', 'kie-gpt-image-2.5']) {
       const model = catalog.find(candidate => candidate.meta.id === id)
       expect(model?.meta.type).toBe('image')
-      expect(model?.meta.tags).toEqual(expect.arrayContaining(['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image']))
+      expect(model?.meta.tags).toEqual(expect.arrayContaining(['text-to-image', 'image-to-image']))
     }
     expect(catalog.filter(model => model.meta.tags?.includes('reference-mode')).length).toBeGreaterThan(0)
   })
@@ -117,8 +111,8 @@ describe('catalog consumer contract', () => {
       expect(client.catalog.listByType('video')).toHaveLength(46)
       expect(client.catalog.listByProvider('fal')).toHaveLength(42)
       expect(client.catalog.listByProvider('volcengine')).toHaveLength(3)
-      expect(client.catalog.listByTag('voice-cloning').map((model) => model.meta.id))
-        .toEqual(['ppio-minimax-speech'])
+      expect(client.catalog.listByTag('voice-clone').map((model) => model.meta.id))
+        .toEqual(expect.arrayContaining(['ppio-minimax-speech', 'volcengine-seed-icl-2.0']))
 
       expect(client.catalog.getDefaultValues('volcengine-seedream-5.0-lite')).toEqual({
         volcengineSeedream50LiteAspectRatio: 'smart',

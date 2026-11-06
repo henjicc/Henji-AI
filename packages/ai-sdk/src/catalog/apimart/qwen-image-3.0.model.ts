@@ -10,7 +10,7 @@ export const apimartQwenImage30Model = defineModel({
   meta: {
     id: 'apimart-qwen-image-3.0', canonicalModelId: 'qwen-image-3.0', seriesId: 'qwen-image', seriesRank: 3,
     provider: 'apimart', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-3', 'multi-output', 'provider-apimart'],
+    tags: ['text-to-image', 'image-to-image'],
     aliases: ['qwen-image-3-apimart'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
   },

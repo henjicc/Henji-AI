@@ -6,7 +6,7 @@ export const seedanceModel = defineModel({
         canonicalModelId: 'seedance-v1',
         provider: 'fal',
         type: 'video',
-        tags: ['video', 'text-to-video', 'image-to-video'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
         aliases: ['fal-ai-bytedance-seedance', 'bytedance-seedance-v1']
     },
     inputLimits: {

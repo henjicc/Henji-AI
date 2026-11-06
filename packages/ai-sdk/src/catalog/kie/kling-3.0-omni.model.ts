@@ -10,18 +10,7 @@ export const kieKling30OmniModel = defineModel({
         seriesRank: 3.02,
         provider: 'kie',
         type: 'video',
-        tags: [
-            'text-to-video',
-            'image-to-video',
-            'video-to-video',
-            'supports-video-editing',
-            'reference-mode',
-            'multi-mode-switch',
-            'mixed-upload-mode',
-            'supports-audio-generation',
-            'supports-4k',
-            'provider-kie'
-        ],
+        tags: ['text-to-video', 'image-to-video', 'reference-mode', 'video-to-video'],
         polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 90 }
     },
     inputLimits: {

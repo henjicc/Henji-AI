@@ -18,9 +18,6 @@ export { defineModel } from './defineModel'
 export * from './modelCatalog/generationModelDescriptions'
 export * from './modelCatalog/applicationModelProfile'
 
-// 标签系统
-export * from './tags'
-
 // 联动系统
 export * from './linkage/priority'
 export * from './linkage'

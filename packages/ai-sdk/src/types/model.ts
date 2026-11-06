@@ -9,6 +9,7 @@
  * 契约；JSON DTO 等跨进程数据类型仍位于 `./runtime.ts`。
  */
 
+import type { ModelTag } from './modelTags'
 import type {
   GenerateStatus,
   JsonValue,
@@ -50,15 +51,6 @@ export type BuiltinProviderId = (typeof BUILTIN_PROVIDER_IDS)[number]
 // eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 避免开放类型把内置 provider 字面量提示坍缩掉。
 export type ProviderId = BuiltinProviderId | (string & {})
 
-/**
- * 模型标签。
- *
- * 应用侧 `src/core/types/ModelTags.ts` 维护了完整的 `KnownModelTag` 字面量清单 +
- * 中文描述表（给标签管理 UI 用），那份是产品资产，不搬进 SDK。SDK 只需要知道
- * "这是一串标签字符串"，不需要在类型层枚举穷尽值——枚举校验交给应用侧或未来的
- * 标签注册表。
- */
-export type ModelTag = string
 
 // ========== 进度估算配置（纯数值配置，无 I18nText 依赖） ==========
 
@@ -126,8 +118,11 @@ export interface ModelRuntimeMeta {
   provider: ProviderId
   type: ModelType
 
-  /** 模型能力标签 */
+  /** 模型能力标签，取值与判断标准见 MODEL_TAG_DEFINITIONS */
   tags?: ModelTag[]
+
+  /** 只认这种语言的提示词；不填表示不限。 */
+  promptLanguage?: 'en'
 
   /** 轮询配置：异步任务状态轮询 */
   polling?: {
@@ -573,3 +568,5 @@ export interface ModelRuntimeDefinition {
   /** 价格配置 */
   pricing: RuntimePricingConfig
 }
+
+export * from './modelTags'

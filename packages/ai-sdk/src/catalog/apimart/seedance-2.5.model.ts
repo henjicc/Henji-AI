@@ -5,7 +5,7 @@ export const apimartSeedance25Model = defineModel({
     meta: {
         id: 'apimart-seedance-2.5', canonicalModelId: 'seedance-2.5', seriesId: 'seedance', seriesRank: 2.5,
         provider: 'apimart', type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'multi-mode-switch', 'mixed-upload-mode', 'supports-audio-generation', 'provider-apimart'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'video-to-video', 'video-extension'],
         aliases: ['seedance-2-5-apimart'], polling: { interval: 3000, maxAttempts: 400, expectedAttempts: 100 }
     },
     inputLimits: {

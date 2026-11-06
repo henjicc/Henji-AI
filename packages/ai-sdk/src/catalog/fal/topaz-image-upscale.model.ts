@@ -63,7 +63,7 @@ export const falTopazImageUpscaleModel = defineModel({
     canonicalModelId: 'topaz-image-upscale',
     provider: 'fal',
     type: 'image',
-    tags: ['image-to-image', 'upscaling', 'provider-fal'],
+    tags: ['upscaling'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 45 },
   },
   acceptsPrompt: false,

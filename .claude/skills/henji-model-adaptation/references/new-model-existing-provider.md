@@ -25,7 +25,7 @@
   - `params/linkages/endpoints/request/pricing`
 - 供应商模型文件禁止填写 `meta.description`。先检查 `src/core/modelCatalog/generationModelDescriptions.ts`：已有 `canonicalModelId` 就直接引用；没有就新增空描述条目，并在交付时告诉用户在该文件补充定性描述。
 - 文件名必须以 `.model.ts` 结尾。
-- `meta.tags` 不是装饰信息，而是功能筛选数据源；凡是产品要支持筛选的能力，都必须在适配时显式核对是否已写入 tags。
+- `meta.tags` 不是装饰信息，而是功能筛选、画布挑模型和助手搜索的数据源；按 SDK 的 `MODEL_TAG_DEFINITIONS` 两层词表打，凡是模型支持的形态和专项都必须在适配时显式核对是否已写入 tags。
 
 ### 2.1) 先判断要不要“一个模型多端点”
 

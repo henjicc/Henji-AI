@@ -5,7 +5,7 @@ import { speechCharacterPrice, speechString, speechText } from '../audio/tts-com
 export const siliconflowMossTtsd05Model = defineModel({
   meta: {
     id: 'siliconflow-moss-ttsd-0.5', canonicalModelId: 'moss-ttsd-v0.5', provider: 'siliconflow', type: 'audio',
-    tags: ['text-to-audio'],
+    tags: ['text-to-audio', 'multi-speaker-dialogue'],
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [

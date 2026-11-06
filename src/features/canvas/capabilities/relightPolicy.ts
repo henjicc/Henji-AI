@@ -84,7 +84,7 @@ export const DEFAULT_RELIGHT_SETTINGS: RelightSettingsV1 = {
 export const RELIGHT_MANUAL_MODEL_POLICY = {
   mode: 'verified-families',
   allowedCanonicalFamilies: ['ic-light-v2'],
-  requiredTags: ['image-to-image', 'supports-image-editing', 'relighting'],
+  requiredTags: ['relighting'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [{ providerId: 'fal' }],
   semanticRequirements: {
@@ -96,7 +96,7 @@ export const RELIGHT_MANUAL_MODEL_POLICY = {
 export const RELIGHT_SMART_MODEL_POLICY = {
   mode: 'verified-families',
   allowedCanonicalFamilies: ['gpt-image-2'],
-  requiredTags: ['image-to-image', 'supports-image-editing'],
+  requiredTags: ['image-to-image'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [
     { providerId: 'fal' },

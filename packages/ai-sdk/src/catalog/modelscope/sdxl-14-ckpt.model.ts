@@ -11,7 +11,7 @@ export const modelscopeSdxl14Model = defineModel({
     canonicalModelId: 'sdxl-14-checkpoint',
     provider: 'modelscope',
     type: 'image',
-    tags: ['text-to-image', 'provider-modelscope'],
+    tags: ['text-to-image'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

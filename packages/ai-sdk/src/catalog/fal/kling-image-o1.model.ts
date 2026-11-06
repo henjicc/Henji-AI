@@ -6,7 +6,7 @@ export const klingImageO1Model = defineModel({
         canonicalModelId: 'kling-image-o1',
         provider: 'fal',
         type: 'image',
-        tags: ['image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10', 'provider-fal']
+        tags: ['image-to-image']
     },
     inputLimits: {
         images: { min: 1, max: 10 },

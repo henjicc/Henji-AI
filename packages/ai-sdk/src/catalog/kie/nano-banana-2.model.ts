@@ -12,7 +12,7 @@ export const kieNanoBanana2Model = defineModel({
         seriesRank: 2,
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-14', 'supports-4k', 'provider-kie'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['nano-banana-2-kie']
     },
     inputLimits: {

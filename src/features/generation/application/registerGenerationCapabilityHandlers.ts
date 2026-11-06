@@ -1,4 +1,5 @@
 import { waitForGenerationTask } from '@/features/generation/application/waitForGenerationTask'
+import type { ModelTag } from '@/core/types'
 import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity'
 import { registry } from '@/core/ModelRegistry'
 import { createMediaGeneratorPromptReferences } from '@/components/MediaGenerator/promptState'
@@ -23,7 +24,7 @@ interface SearchModelsInput {
   query: string
   mediaType?: 'image' | 'video' | 'audio'
   providerId?: string
-  tags?: string[]
+  tags?: ModelTag[]
   sortBy?: 'registry' | 'recommended' | 'lowest_estimated_price'
   cursor: number
   limit: number

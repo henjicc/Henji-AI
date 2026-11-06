@@ -15,7 +15,7 @@ export const kieHappyHorse11Model = defineModel({
   meta: {
     id: 'kie-happyhorse-1.1', canonicalModelId: 'happyhorse-1.1', seriesId: 'happyhorse', seriesRank: 1.1,
     provider: 'kie', type: 'video',
-    tags: ['text-to-video', 'image-to-video', 'reference-mode', 'multi-mode-switch', 'supports-multi-image', 'provider-kie'],
+    tags: ['text-to-video', 'image-to-video', 'reference-mode'],
     polling: { interval: 5000, maxAttempts: 180, expectedAttempts: 60 },
   },
   inputLimits: {

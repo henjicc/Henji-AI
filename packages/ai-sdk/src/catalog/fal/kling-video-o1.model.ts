@@ -8,7 +8,7 @@ export const klingVideoO1Model = defineModel({
         seriesRank: 10,
         provider: 'fal',
         type: 'video',
-        tags: ['video', 'text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'supports-video-editing', 'multi-mode-switch']
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'video-to-video']
     },
     inputLimits: {
         images: { max: 2 },

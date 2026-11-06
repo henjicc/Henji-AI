@@ -6,7 +6,7 @@ export const falGrokImagine20Model = defineModel({
     meta: {
         id: 'fal-ai-grok-imagine-2.0', canonicalModelId: 'grok-imagine-image-2.0', seriesId: 'grok-imagine-image', seriesRank: 2,
         provider: 'fal', type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'provider-fal'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['grok-imagine-image-2-fal'], polling: { interval: 3000, maxAttempts: 180, expectedAttempts: 35 }
     },
     inputLimits: { images: { max: 3 }, videos: { max: 0 } },

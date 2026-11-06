@@ -21,7 +21,7 @@ export function isExperimentalWidePanoramaFamily(canonicalModelId: string): bool
 export const PANORAMA_MODEL_POLICY = {
   mode: 'verified-families',
   allowedCanonicalFamilies: ['gpt-image-2', ...PANORAMA_EXPERIMENTAL_WIDE_FAMILIES],
-  requiredTags: ['text-to-image', 'image-to-image', 'supports-image-editing'],
+  requiredTags: ['text-to-image', 'image-to-image'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [
     { providerId: 'apimart', allowedChannels: ['ext', 'official'] },

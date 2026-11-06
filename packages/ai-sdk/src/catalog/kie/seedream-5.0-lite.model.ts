@@ -10,7 +10,7 @@ export const kieSeedream50LiteModel = defineModel({
         seriesRank: 5.0,
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-14', 'supports-4k', 'provider-kie'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['seedream-5-lite-kie']
     },
     inputLimits: {

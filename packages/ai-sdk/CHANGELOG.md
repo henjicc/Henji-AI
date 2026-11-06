@@ -2,6 +2,11 @@
 
 ## 0.10.0 - 未发布
 
+- **破坏性**：模型标签收成一份封闭词表 `MODEL_TAG_DEFINITIONS`（形态 11 个、专项 13 个，各带判断标准），`ModelTag` 不再接受任意字符串，`validateRuntimeModel`（`defineModel` 也走它）拒绝词表外的标签；`catalog` 全部模型按新词表重打。新增公开导出 `MODEL_TAGS`、`isModelTag`、`getModelTagDefinition` 与类型 `ModelTagDefinition`、`ModelTagLayer`；`ModelRuntimeMeta` 新增 `promptLanguage`。
+  - 迁移：`supports-image-editing` → `image-to-image`，`supports-video-editing` → `video-to-video`，`multi-image-reference` / `video-reference` → `reference-mode`，`text-to-speech` / `voice-synthesis` → `text-to-audio`，`voice-cloning` → `voice-clone`，`supports-layer-decomposition` → `layer-decomposition`，`alpha-preserving` / `alpha-output` / `background-removal` → `transparent-background`，`camera-control` / `perspective-preset` → `multi-angle`，`background-generation` → `product-photography`；受控工具的 `image-edit` 改为各自专项，`mask-input` 由 `erase` 表达，`style-presets` 删除（读参数）。按这些旧值查询 discovery `features` 会得到空结果。
+  - 删除的标签改读模型配置：`provider-*` 读 `meta.provider`，`image` / `video` / `audio` 读 `meta.type`，`max-images-*`、`supports-multi-image`、`mixed-upload-mode` 读 `inputLimits`，`supports-4k` / `supports-2k`、`multi-output`、`fast-mode` / `turbo-mode`、`multi-mode-switch`、`supports-prompt-expansion`、`supports-audio-generation` 读参数；`english-prompt-only` 改为 `meta.promptLanguage: 'en'`。
+  - 放大模型和 Fal 受控工具不再标 `image-to-image`；补上漏标的能力：LTX-2 视频编辑、Vidu Q2 参考生视频与视频延长、Veo 3.1（Fal）首尾帧与参考生视频、Seedance 2.5（APIMart）视频编辑与延长、Gemini Omni Flash（APIMart）参考生视频、Gemini Omni（KIE）视频编辑、Kling 3.0 Omni（APIMart）与 Seedance V1（Fal）首尾帧、Seedream 5.0 Pro/Flash（火山）透明背景、Grok Imagine 图片（KIE）图片编辑；新增局部重绘、透明背景、多人对话标注。
+  - 能力发现的 `operations` 名称不变，改为由新标签直接得出。
 - 新增 Nano Banana 2.1：APIMart 官方/Ext、KIE、Fal 生成/编辑和 Grsai；分渠道数量限制、Token/单张计费与上传参数。
 - 移除 PPIO 已停服的 Wan 2.5 Preview、Wan 2.6、Hailuo 2.3、Wan 2.7；Grsai GPT Image 2.5 暂停 Flare/Sunburst 变体。开发期不迁移旧配置。
 - PPIO 默认助手改为 V4.1 Flash；DeepSeek 原厂旧别名按新 Flash 能力匹配，网关保留独立契约；Kimi 思考字段按模型区分。

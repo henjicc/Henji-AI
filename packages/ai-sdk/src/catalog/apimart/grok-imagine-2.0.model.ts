@@ -20,7 +20,7 @@ export const apimartGrokImagine20Model = defineModel({
     seriesRank: 2,
     provider: 'apimart',
     type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-3', 'multi-output', 'supports-2k', 'provider-apimart'],
+    tags: ['text-to-image', 'image-to-image'],
     aliases: ['grok-imagine-2-apimart', 'apimart-grok-imagine-2.0-official', 'grok-imagine-image-2-official-apimart'],
     aliasParamDefaults: {
       'apimart-grok-imagine-2.0-official': { apimartGrokImagine20Version: 'official' },

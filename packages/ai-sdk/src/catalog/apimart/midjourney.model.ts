@@ -1,7 +1,6 @@
 /** APIMart Midjourney 生成、编辑与混图统一模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
-import { hasUploadedImage } from '../shared/mediaPresence'
 import type { JsonValue, JsonObject } from '../../types/runtime'
 
 export const apimartMidjourneyModel = defineModel({
@@ -12,7 +11,7 @@ export const apimartMidjourneyModel = defineModel({
     seriesRank: 1,
     provider: 'apimart',
     type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'provider-apimart'],
+    tags: ['text-to-image', 'image-to-image'],
     aliases: [
       'midjourney-apimart',
       'apimart-midjourney-edit',

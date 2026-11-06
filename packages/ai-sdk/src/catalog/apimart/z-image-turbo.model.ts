@@ -1,12 +1,11 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
 const APIMART_IMAGE_ENDPOINT = '/v1/images/generations';
 const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] as const;
 export const apimartZImageTurboModel = defineModel({
     meta: {
         id: 'apimart-z-image-turbo', canonicalModelId: 'z-image-turbo', seriesId: 'z-image', seriesRank: 1,
         provider: 'apimart', type: 'image',
-        tags: ['text-to-image', 'supports-2k', 'provider-apimart'], aliases: ['z-image-turbo-apimart'],
+        tags: ['text-to-image'], aliases: ['z-image-turbo-apimart'],
         polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
     },
     inputLimits: { images: { max: 0 }, videos: { max: 0 } },

@@ -251,14 +251,11 @@ export interface ModelMeta {
    */
   i18nScope?: string
 
-  /**
-   * 模型标签
-   *
-   * 用于描述模型的能力和特性
-   *
-   * @example ['text-to-image', 'supports-image-editing', 'supports-4k']
-   */
+  /** 模型能力标签，取值与判断标准见 SDK 的 MODEL_TAG_DEFINITIONS */
   tags?: ModelTag[]
+
+  /** 只认这种语言的提示词；不填表示不限 */
+  promptLanguage?: 'en'
 
   /**
    * 模型图标 URL（可选）
@@ -373,7 +370,7 @@ export type { Linkage } from './Linkage'
  *     provider: 'fal',
  *     type: 'image',
  *     name: { zh: 'Nano Banana', en: 'Nano Banana' },
- *     tags: ['text-to-image', 'image-to-image', 'supports-image-editing'],
+ *     tags: ['text-to-image', 'image-to-image'],
  *     polling: {
  *       interval: 3000,
  *       maxAttempts: 100,

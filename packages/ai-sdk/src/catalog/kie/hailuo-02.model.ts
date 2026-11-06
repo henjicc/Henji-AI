@@ -38,7 +38,7 @@ export const kieHailuo02Model = defineModel({
         seriesRank: 2.0,
         provider: 'kie',
         type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'provider-kie'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
         aliases: ['hailuo-02-kie'],
         polling: {
             interval: 3000,

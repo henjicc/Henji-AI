@@ -4,7 +4,7 @@ export const falSeedance20FastModel = defineModel({
     meta: {
         id: 'fal-ai-seedance-2.0-fast', canonicalModelId: 'seedance-2.0-fast', seriesId: 'seedance', seriesRank: 2.01,
         provider: 'fal', type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'mixed-upload-mode', 'supports-audio-generation', 'multi-mode-switch', 'fast-mode', 'provider-fal'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
         aliases: ['seedance-2-fast-fal'], polling: { interval: 3000, maxAttempts: 320, expectedAttempts: 75 }
     },
     inputLimits: {

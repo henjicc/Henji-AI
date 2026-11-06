@@ -7,7 +7,7 @@ export const apimartKling30OmniModel = defineModel({
   meta: {
     id: 'apimart-kling-3.0-omni', canonicalModelId: 'kling-video-3.0-omni', seriesId: 'kling-video', seriesRank: 3.2,
     provider: 'apimart', type: 'video',
-    tags: ['text-to-video', 'image-to-video', 'video-to-video', 'supports-video-editing', 'reference-mode', 'mixed-upload-mode', 'supports-audio-generation', 'supports-4k', 'provider-apimart'],
+    tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'video-to-video'],
     aliases: ['kling-v3-omni-apimart'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 80 }
   },
   inputLimits: {

@@ -19,14 +19,7 @@ export const nanoBananaExample: ModelDefinition = {
       zh: 'Nano Banana',
       en: 'Nano Banana'
     },
-    tags: [
-      'text-to-image',
-      'image-to-image',
-      'supports-image-editing',
-      'supports-multi-image',
-      'no-resolution-panel',
-      'provider-fal'
-    ],
+    tags: ['text-to-image', 'image-to-image'],
     icon: '/icons/nano-banana.png',
     polling: {
       interval: 3000,
@@ -100,15 +93,7 @@ export const seedream40Example: ModelDefinition = {
       zh: '即梦图片 4.0',
       en: 'Seedream 4.0'
     },
-    tags: [
-      'text-to-image',
-      'image-to-image',
-      'supports-image-editing',
-      'supports-multi-image',
-      'sequential-generation',
-      'supports-4k',
-      'provider-ppio'
-    ],
+    tags: ['text-to-image', 'image-to-image'],
     polling: {
       interval: 3000,
       maxAttempts: 120,
@@ -160,16 +145,7 @@ export const kling26ProExample: ModelDefinition = {
       zh: '可灵 2.6 Pro',
       en: 'Kling 2.6 Pro'
     },
-    tags: [
-      'text-to-video',
-      'image-to-video',
-      'supports-motion-control',
-      'supports-audio-generation',
-      'mixed-upload-mode',
-      'video-duration-check',
-      'multi-mode-switch',
-      'provider-ppio'
-    ],
+    tags: ['text-to-video', 'image-to-video', 'motion-control'],
     polling: {
       interval: 3000,
       maxAttempts: 200,

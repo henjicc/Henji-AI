@@ -12,7 +12,7 @@ export const kieSeedream50ProModel = defineModel({
         seriesRank: 5.0,
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-layer-decomposition', 'max-images-10', 'provider-kie'],
+        tags: ['text-to-image', 'image-to-image', 'layer-decomposition'],
         aliases: ['seedream-5-pro-kie']
     },
     inputLimits: {

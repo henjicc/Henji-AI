@@ -1,5 +1,5 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieZImageModel = defineModel({
     meta: {
@@ -7,7 +7,7 @@ export const kieZImageModel = defineModel({
         canonicalModelId: 'z-image-turbo',
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'provider-kie'],
+        tags: ['text-to-image'],
         aliases: ['z-image-kie']
     },
     inputLimits: {

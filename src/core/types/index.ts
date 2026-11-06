@@ -9,8 +9,7 @@ export type { I18nText } from './I18nText'
 export { getI18nText } from './I18nText'
 
 // 模型标签
-export type { ModelTag, ModelTagConfig } from './ModelTags'
-export { TAG_CATEGORIES, TAG_DESCRIPTIONS } from './ModelTags'
+export type { ModelTag } from './ModelTags'
 
 // 端点配置
 export type {

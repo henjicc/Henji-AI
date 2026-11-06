@@ -12,7 +12,7 @@ export const falOutpaintModel = defineModel({
     canonicalModelId: 'image-apps-v2-outpaint',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'outpainting', 'provider-fal'],
+    tags: ['outpainting'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   inputLimits: { images: { exact: 1 }, videos: { max: 0 } },

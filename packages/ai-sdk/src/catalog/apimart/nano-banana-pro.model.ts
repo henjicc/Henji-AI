@@ -10,7 +10,7 @@ export const apimartNanoBananaProModel = defineModel({
   meta: {
     id: 'apimart-nano-banana-pro', canonicalModelId: 'nano-banana-pro', seriesId: 'nano-banana', seriesRank: 2,
     provider: 'apimart', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-14', 'supports-4k', 'provider-apimart'],
+    tags: ['text-to-image', 'image-to-image'],
     aliases: ['nano-banana-pro-apimart'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
   },

@@ -7,7 +7,7 @@ export const apimartKling30TurboModel = defineModel({
   meta: {
     id: 'apimart-kling-3.0-turbo', canonicalModelId: 'kling-video-3.0-turbo', seriesId: 'kling-video', seriesRank: 3.1,
     provider: 'apimart', type: 'video',
-    tags: ['text-to-video', 'image-to-video', 'max-images-1', 'turbo-mode', 'provider-apimart'],
+    tags: ['text-to-video', 'image-to-video'],
     aliases: ['kling-3-turbo-apimart'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 70 }
   },
   inputLimits: { images: { max: 1 }, videos: { max: 0 } },

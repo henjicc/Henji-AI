@@ -305,10 +305,13 @@ Henji-AI 在执行层按需装入工具 pack，但普通模型选择器、`@henj
 
 消费方从 client 私有目录读取模型，不需要自行复刻 canonical/alias 索引规则：
 
+模型标签只从 `MODEL_TAG_DEFINITIONS` 取值，分两层：形态按“输入什么、输出什么”判断（文生图、图片编辑、首尾帧……），
+专项只给有专门参数或接口的模型（局部重绘、放大、透明背景……）；每个标签带判断标准，可用 `isModelTag` 校验。
+
 ```ts
 const images = client.catalog.listByType('image')
 const falModels = client.catalog.listByProvider('fal')
-const editors = client.catalog.listByTag('supports-image-editing')
+const editors = client.catalog.listByTag('image-to-image')
 const params = client.catalog.getParams('fal-ai-gpt-image-2')
 const defaults = client.catalog.getDefaultValues('fal-ai-gpt-image-2')
 const price = client.catalog.estimatePrice('fal-ai-gpt-image-2', defaults)

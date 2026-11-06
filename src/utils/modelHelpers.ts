@@ -78,6 +78,7 @@ export function getAvailableProviders() {
       description: string
       functions: string[]
       tags?: string[]
+      promptLanguage?: 'en'
       seriesId?: string
       seriesRank?: number
     }>
@@ -103,6 +104,7 @@ export function getAvailableProviders() {
       description: model.meta.description ? getLocalizedText(model.meta.description, locale) : '',
       functions: model.meta.tags || [],
       tags: model.meta.tags,
+      promptLanguage: model.meta.promptLanguage,
       seriesId: model.meta.seriesId,
       seriesRank: model.meta.seriesRank
     })
@@ -147,6 +149,7 @@ export function getModelInfo(modelId: string) {
     type: model.meta.type,
     description,
     functions: model.meta.tags || [],
-    tags: model.meta.tags
+    tags: model.meta.tags,
+    promptLanguage: model.meta.promptLanguage
   }
 }

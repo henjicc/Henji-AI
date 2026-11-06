@@ -5,7 +5,7 @@ export const falKling30OmniModel = defineModel({
     meta: {
         id: 'fal-ai-kling-3.0-omni', canonicalModelId: 'kling-video-3.0-omni', seriesId: 'kling-video', seriesRank: 3.02,
         provider: 'fal', type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'supports-multi-image', 'supports-audio-generation', 'multi-mode-switch', 'provider-fal'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
         aliases: ['kling-o3-fal'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 75 }
     },
     inputLimits: {

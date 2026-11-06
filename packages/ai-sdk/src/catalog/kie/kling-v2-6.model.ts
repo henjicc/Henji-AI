@@ -1,5 +1,5 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 import { hasUploadedImage, resolveKieImageSources, resolveKiePrimaryVideoSource } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieKlingV26Model = defineModel({
@@ -10,7 +10,7 @@ export const kieKlingV26Model = defineModel({
         seriesRank: 2.6,
         provider: 'kie',
         type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'motion-control', 'provider-kie'],
+        tags: ['text-to-video', 'image-to-video', 'motion-control'],
         aliases: ['kling-v2-6-kie'],
         polling: {
             interval: 3000,

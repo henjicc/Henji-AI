@@ -5,7 +5,7 @@ import { speechCharacterPrice, speechString, speechText } from '../audio/tts-com
 export const volcengineSeedTts20Model = defineModel({
   meta: {
     id: 'volcengine-seed-tts-2.0', canonicalModelId: 'seed-tts-2.0', provider: 'volcengine-speech', type: 'audio',
-    tags: ['text-to-audio', 'provider-volcengine', 'timestamps'],
+    tags: ['text-to-audio', 'timestamps'],
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [

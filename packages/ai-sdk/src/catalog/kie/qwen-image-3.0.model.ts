@@ -13,15 +13,7 @@ export const kieQwenImage30Model = defineModel({
         seriesRank: 3,
         provider: 'kie',
         type: 'image',
-        tags: [
-            'text-to-image',
-            'image-to-image',
-            'supports-image-editing',
-            'supports-multi-image',
-            'max-images-3',
-            'supports-prompt-expansion',
-            'provider-kie'
-        ],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['qwen-image-3-kie']
     },
     inputLimits: {

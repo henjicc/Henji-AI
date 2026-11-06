@@ -10,7 +10,7 @@ export const VOLC_CLONE_LANGUAGES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1
 export const volcengineSeedIcl20Model = defineModel({
   meta: {
     id: 'volcengine-seed-icl-2.0', canonicalModelId: 'seed-icl-2.0', provider: 'volcengine-speech', type: 'audio',
-    tags: ['text-to-audio', 'voice-clone', 'provider-volcengine', 'timestamps'],
+    tags: ['text-to-audio', 'voice-clone', 'timestamps'],
     polling: { interval: 3000, maxAttempts: 120 },
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },

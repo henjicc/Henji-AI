@@ -8,7 +8,7 @@ export const kieGeminiOmniVideoModel = defineModel({
         canonicalModelId: 'gemini-omni-video',
         provider: 'kie',
         type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'multi-image-reference', 'video-reference', 'provider-kie'],
+        tags: ['text-to-video', 'image-to-video', 'reference-mode', 'video-to-video'],
         polling: {
             interval: 3000,
             maxAttempts: 180,

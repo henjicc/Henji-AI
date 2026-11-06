@@ -9,7 +9,7 @@ export const klingVideoV26ProModel = defineModel({
         seriesRank: 2.6,
         provider: 'fal',
         type: 'video',
-        tags: ['video', 'text-to-video', 'image-to-video', 'motion-control']
+        tags: ['text-to-video', 'image-to-video', 'motion-control']
     },
     inputLimits: {
         images: { max: 1 },

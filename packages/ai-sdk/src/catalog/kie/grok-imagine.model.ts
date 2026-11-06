@@ -7,7 +7,7 @@ export const kieGrokImagineModel = defineModel({
         canonicalModelId: 'grok-imagine-image',
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'provider-kie'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['grok-imagine-kie']
     },
     inputLimits: {

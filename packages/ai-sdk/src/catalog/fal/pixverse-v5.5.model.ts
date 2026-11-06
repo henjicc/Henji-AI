@@ -8,7 +8,7 @@ export const pixverseV55Model = defineModel({
         seriesRank: 5.5,
         provider: 'fal',
         type: 'video',
-        tags: ['video', 'text-to-video', 'image-to-video', 'start-end-frame']
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame']
     },
     inputLimits: {
         images: { max: 2 },

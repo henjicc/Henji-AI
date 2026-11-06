@@ -7,7 +7,8 @@ import type { GenerationPack } from '../generation/core'
 import type { LlmModelCatalogEntry } from '../llm/modelCatalog'
 import type { LlmModelConfig } from '../llm/types'
 import type { LlmModuleDescriptor } from '../llm/modules/types'
-import type { ModelRuntimeDefinition, ModelType, RuntimeInputLimitsConfig } from '../types/model'
+import type { ModelRuntimeDefinition, ModelTag, ModelType, RuntimeInputLimitsConfig } from '../types/model'
+import { getModelTagDefinition, isModelTag } from '../types/modelTags'
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import {
   normalizeCapabilityStableId,
@@ -155,7 +156,8 @@ export function createModelCapabilityDiscovery(input: CreateCapabilityDiscoveryI
 
 export function profileGenerationModel(model: ModelRuntimeDefinition): ModelCapabilityProfile {
   const tags = [...new Set(model.meta.tags ?? [])]
-  const operations = deriveGenerationOperations(model.meta.type, tags)
+  // 未经 defineModel 校验的模型可能带词表外的旧标签：照样留在 tags 里，只是不参与推导操作
+  const operations = deriveGenerationOperations(model.meta.type, tags.filter(isModelTag))
   const inputs = new Set<ModelContentKind>()
   if (model.acceptsPrompt !== false) inputs.add('text')
   collectParamInputs(model, inputs)
@@ -169,7 +171,7 @@ export function profileGenerationModel(model: ModelRuntimeDefinition): ModelCapa
     operations,
     acceptedInputContentKinds: [...inputs],
     outputContentKinds: [output],
-    features: tags.filter((tag) => !tag.startsWith('provider-') && !operations.includes(tag as ModelOperation)),
+    features: tags.filter((tag) => !operations.includes(tag)),
     tags,
   }
 }
@@ -257,18 +259,19 @@ function criterionMatches<T extends string>(
     all.every((value) => values.includes(value))
 }
 
-function deriveGenerationOperations(type: ModelType, tags: readonly string[]): ModelOperation[] {
+function deriveGenerationOperations(type: ModelType, tags: readonly ModelTag[]): ModelOperation[] {
   const operations = new Set<ModelOperation>()
   if (type === 'image') {
     operations.add('image-generation')
     if (tags.includes('text-to-image')) operations.add('text-to-image')
-    if (tags.some((tag) => ['image-to-image', 'supports-image-editing', 'image-edit'].includes(tag))) operations.add('image-edit')
+    // 发现接口的图片操作只分生成与编辑，专项都归入编辑。
+    if (tags.some((tag) => tag === 'image-to-image' || getModelTagDefinition(tag).layer === 'specialty')) operations.add('image-edit')
   } else if (type === 'video') {
     operations.add('video-generation')
     if (tags.includes('text-to-video')) operations.add('text-to-video')
-    if (tags.some((tag) => ['image-to-video', 'start-end-frame'].includes(tag))) operations.add('image-to-video')
-    if (tags.some((tag) => ['reference-mode', 'video-reference', 'multi-image-reference'].includes(tag))) operations.add('reference-to-video')
-    if (tags.some((tag) => ['supports-video-editing', 'video-to-video', 'video-extension'].includes(tag))) operations.add('video-edit')
+    if (tags.includes('image-to-video')) operations.add('image-to-video')
+    if (tags.includes('reference-mode')) operations.add('reference-to-video')
+    if (tags.some((tag) => tag === 'video-to-video' || tag === 'video-extension')) operations.add('video-edit')
   } else if (type === 'audio') {
     operations.add('audio-generation')
   } else {

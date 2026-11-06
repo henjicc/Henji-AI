@@ -65,7 +65,7 @@ const UPSCALE_PREFLIGHT_PROFILES: Readonly<Record<string, UpscalePreflightProfil
 export const UPSCALE_MODEL_POLICY = {
   mode: 'verified-families',
   allowedCanonicalFamilies: Object.keys(UPSCALE_PREFLIGHT_PROFILES),
-  requiredTags: ['image-to-image', 'upscaling'],
+  requiredTags: ['upscaling'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [{ providerId: 'fal' }],
   semanticRequirements: {

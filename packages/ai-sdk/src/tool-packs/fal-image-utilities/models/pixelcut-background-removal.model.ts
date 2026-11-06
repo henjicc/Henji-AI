@@ -8,7 +8,7 @@ export const falPixelcutBackgroundRemovalModel = defineModel({
     canonicalModelId: 'pixelcut-background-removal',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'background-removal', 'alpha-output', 'provider-fal'],
+    tags: ['transparent-background'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   acceptsPrompt: false,

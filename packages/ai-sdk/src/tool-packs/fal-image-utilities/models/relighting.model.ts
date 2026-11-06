@@ -33,7 +33,7 @@ export const falRelightingModel = defineModel({
     canonicalModelId: 'image-apps-v2-relighting',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'relighting', 'style-presets', 'provider-fal'],
+    tags: ['relighting'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   acceptsPrompt: false,

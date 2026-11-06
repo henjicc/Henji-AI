@@ -2,7 +2,7 @@ import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, LayoutGrid } from 'lucide-react'
-import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
+import { MODEL_TAG_DEFINITIONS } from '@/core/types/ModelTags'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { providerBrandId } from '@/core/config/providerBrands'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
@@ -59,6 +59,12 @@ const CELL_WIDTH = 200
 const CELL_GAP = 6
 const GRID_CHROME = 128 + 1 + 16 + 2
 const TYPE_FILTERS: Array<Exclude<GenerationModelFilterType, 'favorite'>> = ['all', 'image', 'video', 'audio', 'other']
+
+/** 选了某种类型时只列这种类型的能力；当前选中的能力始终保留，免得切换类型后筛选值没有对应选项。 */
+function functionTagsFor(type: GenerationModelFilterType, selected: string): string[] {
+  const tags = MODEL_TAG_DEFINITIONS.filter((tag) => type !== 'image' && type !== 'video' && type !== 'audio' || tag.mediaType === type).map((tag) => tag.id as string)
+  return selected === 'all' || tags.includes(selected) ? tags : [selected, ...tags]
+}
 const TYPE_GROUPS = ['image', 'video', 'audio', 'other'] as const
 
 type ModelEntry = { p: { id: string; name: string }; m: { id: string; type: ModelType; name: string; functions: string[]; seriesId?: string; seriesRank?: number } }
@@ -181,6 +187,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
     || providerBrandId(item.p.id) === providerBrandId(modelFilterProvider), [modelFilterProvider])
   const matchesFunction = useCallback((item: ModelEntry): boolean => modelFilterFunction === 'all'
     || item.m.functions.includes(modelFilterFunction), [modelFilterFunction])
+  const functionTags = useMemo(() => functionTagsFor(modelFilterType, modelFilterFunction), [modelFilterType, modelFilterFunction])
 
   // 左栏数量：按当前类型与功能算各供应商的模型数，收藏按功能算
   const providerCounts = useMemo(() => {
@@ -291,7 +298,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
             ))}
           </div>
           <Dropdown size="sm" label={t('filters.function')} value={modelFilterFunction} ariaLabel={t('filters.function')}
-            options={[{ label: t('all'), value: 'all' }, ...FILTERABLE_TAGS.map(tag => ({ label: t(`tags.${tag}`), value: tag }))]}
+            options={[{ label: t('all'), value: 'all' }, ...functionTags.map(tag => ({ label: t(`tags.${tag}`), value: tag }))]}
             onSelect={onFilterFunctionChange} />
         </UiFieldLayoutContext.Provider>
       )}

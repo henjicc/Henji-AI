@@ -13,7 +13,7 @@ export const falPhotoRestorationModel = defineModel({
     canonicalModelId: 'image-apps-v2-photo-restoration',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'photo-restoration', 'provider-fal'],
+    tags: ['photo-restoration'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   acceptsPrompt: false,

@@ -5,7 +5,6 @@ import PinyinMatch from 'pinyin-match';
 import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types/I18nText';
 import type { ModelTag } from '@/core/types';
-import { FILTERABLE_TAGS } from '@/core/types/ModelTags';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
 import { resolveCanvasCapabilityModelCandidates } from '@/features/canvas/capabilities/modelCompatibility';
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
@@ -153,9 +152,7 @@ export function useModelPickerList({
   );
   const modelOptions = useMemo<ModelPickerOption[]>(() => models.map((model) => {
     const displayName = resolveModelName(model, i18n.language);
-    const detailLabels = (model.meta.tags ?? [])
-      .filter((tag) => FILTERABLE_TAGS.includes(tag))
-      .map((tag) => tModels(`tags.${tag}`, { defaultValue: tag }));
+    const detailLabels = (model.meta.tags ?? []).map((tag) => tModels(`tags.${tag}`));
     const description = model.meta.description
       ? getI18nText(model.meta.description, i18n.language)
       : '';

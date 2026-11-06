@@ -3,6 +3,7 @@ import { bailianQwenAudio31TtsFlashModel } from '../../../../packages/ai-sdk/src
 import { catalog } from '@henjicc/ai-sdk'
 import { volcengineSeedIcl20Model } from '../../../../packages/ai-sdk/src/catalog/volcengine-speech/seed-icl-2.0.model'
 import { kieGemini31FlashTtsModel } from '../../../../packages/ai-sdk/src/catalog/kie/gemini-3.1-flash-tts.model'
+import { kieGrokImagineModel } from '../../../../packages/ai-sdk/src/catalog/kie/grok-imagine.model'
 
 import {
   applicationSchemaRefSchema,
@@ -191,6 +192,17 @@ describe('generationPreparation', () => {
         priceEstimate: expect.objectContaining({ comparableCnyAmount: 3.385 }),
       }),
     ]))
+  })
+
+  it('带图调用时按图片联动切换模式，与画布节点一致', () => {
+    registry.register(composeModelDefinition(kieGrokImagineModel, modelPresentations[kieGrokImagineModel.meta.id]))
+    const prepared = prepareGenerationTask({
+      modelId: kieGrokImagineModel.meta.id,
+      prompt: '换成水彩风格',
+      mediaType: 'image',
+      options: { images: ['https://example.com/source.png'] },
+    })
+    expect((prepared.options as Record<string, unknown>).kieGrokImagineMode).toBe('image-to-image')
   })
 
   it('合并默认值并在提交前校验媒体和参数', () => {

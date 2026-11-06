@@ -7,7 +7,7 @@ export const falSeedream50ProModel = defineModel({
     meta: {
         id: 'fal-ai-seedream-5.0-pro', canonicalModelId: 'seedream-5.0-pro', seriesId: 'seedream', seriesRank: 5.1,
         provider: 'fal', type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'provider-fal'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['seedream-5-pro-fal'], polling: { interval: 3000, maxAttempts: 180, expectedAttempts: 35 }
     },
     inputLimits: { images: { max: 10 }, videos: { max: 0 } },

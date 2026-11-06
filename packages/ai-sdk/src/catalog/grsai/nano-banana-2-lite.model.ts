@@ -23,7 +23,7 @@ export const grsaiNanoBanana2LiteModel = defineModel({
     seriesRank: 1,
     provider: 'grsai',
     type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'provider-grsai'],
+    tags: ['text-to-image', 'image-to-image'],
     aliases: ['nano-banana-2-lite-grsai'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 35 }
   },

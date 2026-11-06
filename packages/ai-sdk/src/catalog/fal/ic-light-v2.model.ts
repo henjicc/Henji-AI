@@ -25,7 +25,7 @@ export const falIcLightV2Model = defineModel({
     seriesRank: 2,
     provider: 'fal',
     type: 'image',
-    tags: ['image-to-image', 'supports-image-editing', 'relighting', 'provider-fal'],
+    tags: ['image-to-image', 'relighting'],
     aliases: ['ic-light-v2-fal'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 45 },
   },

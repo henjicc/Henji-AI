@@ -1,5 +1,5 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 import { resolveKieImageSources } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieGrokImagineVideoModel = defineModel({
@@ -8,7 +8,8 @@ export const kieGrokImagineVideoModel = defineModel({
         canonicalModelId: 'grok-imagine-video',
         provider: 'kie',
         type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'english-prompt-only', 'provider-kie'],
+        tags: ['text-to-video', 'image-to-video'],
+        promptLanguage: 'en',
         aliases: ['grok-imagine-video-kie'],
         polling: {
             interval: 3000,

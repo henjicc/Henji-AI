@@ -19,7 +19,7 @@ export const grsaiGptImage2Model = defineModel({
     seriesRank: 1,
     provider: 'grsai',
     type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-4k', 'provider-grsai'],
+    tags: ['text-to-image', 'image-to-image'],
     aliases: ['gpt-image-2-grsai'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
   },

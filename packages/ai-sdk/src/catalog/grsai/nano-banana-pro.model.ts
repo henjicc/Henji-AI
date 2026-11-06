@@ -20,7 +20,7 @@ export const grsaiNanoBananaProModel = defineModel({
     seriesRank: 3,
     provider: 'grsai',
     type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-4k', 'provider-grsai'],
+    tags: ['text-to-image', 'image-to-image'],
     aliases: ['nano-banana-pro-grsai'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 45 }
   },

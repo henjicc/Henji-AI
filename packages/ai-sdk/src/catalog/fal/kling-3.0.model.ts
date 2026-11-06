@@ -4,7 +4,7 @@ export const falKling30Model = defineModel({
     meta: {
         id: 'fal-ai-kling-3.0', canonicalModelId: 'kling-video-3.0', seriesId: 'kling-video', seriesRank: 3,
         provider: 'fal', type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'supports-audio-generation', 'provider-fal'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
         aliases: ['kling-v3-fal'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 75 }
     },
     inputLimits: { images: { max: 2 }, videos: { max: 0 }, audios: { max: 0 } },

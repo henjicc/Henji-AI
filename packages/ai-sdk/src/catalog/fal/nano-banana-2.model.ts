@@ -5,7 +5,7 @@ export const falNanoBanana2Model = defineModel({
     meta: {
         id: 'fal-ai-nano-banana-2', canonicalModelId: 'nano-banana-2', seriesId: 'nano-banana', seriesRank: 2,
         provider: 'fal', type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-4k', 'provider-fal'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['nano-banana-2-fal'], polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
     },
     inputLimits: { images: { max: 14 }, videos: { max: 1 }, audios: { max: 1 } },

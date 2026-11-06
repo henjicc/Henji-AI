@@ -11,7 +11,7 @@ export const modelscopeMajicMixRealisticModel = defineModel({
     canonicalModelId: 'majicmix-realistic',
     provider: 'modelscope',
     type: 'image',
-    tags: ['text-to-image', 'provider-modelscope'],
+    tags: ['text-to-image'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

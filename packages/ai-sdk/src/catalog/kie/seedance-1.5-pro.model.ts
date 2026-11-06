@@ -1,5 +1,5 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 import { resolveKieImageSources } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieSeedance15ProModel = defineModel({
@@ -10,7 +10,7 @@ export const kieSeedance15ProModel = defineModel({
         seriesRank: 1.5,
         provider: 'kie',
         type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'provider-kie'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
         polling: {
             interval: 3000,
             maxAttempts: 180,

@@ -9,7 +9,7 @@ import type {
 } from '@/components/ui'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
-import { hasTag } from '@/core/tags'
+import { registry } from '@/core/ModelRegistry'
 import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
 import { usePromptOptimizationPreviewPlayback } from '../hooks/usePromptOptimizationPreviewPlayback'
@@ -147,7 +147,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   const isMultiple = maxImageCount > 1
   const needsAudioUpload = maxAudioCount > 0 && Boolean(onAudioUpload)
   const shouldShowUpload = currentModel?.type !== 'audio' && (maxImageCount > 0 || needsVideoUpload || needsAudioUpload)
-  const isEnglishPromptOnly = hasTag(selectedModel, 'english-prompt-only')
+  const isEnglishPromptOnly = registry.getModel(selectedModel)?.meta.promptLanguage === 'en'
   const formatLimitText = (min: number, max: number, unit: string) => {
     if (max <= 0) return ''
     if (min === max) return t('inputArea.limit.exact', { count: max, unit })

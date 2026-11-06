@@ -9,7 +9,7 @@ const generation: Provider = {
   type: 'api',
   models: [{
     id: 'image-one', canonicalModelId: 'image-one', name: '图片模型', originalName: '图片模型',
-    type: 'image', description: '', functions: ['text-to-image', 'supports-image-editing'],
+    type: 'image', description: '', functions: ['text-to-image', 'image-to-image'],
   }],
 }
 

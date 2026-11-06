@@ -7,7 +7,7 @@ export const apimartGptImage25Model = defineModel({
   meta: {
     id: 'apimart-gpt-image-2.5', canonicalModelId: 'gpt-image-2.5', seriesId: 'gpt-image', seriesRank: 2.5,
     provider: 'apimart', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'multi-output', 'supports-4k', 'provider-apimart'],
+    tags: ['text-to-image', 'image-to-image', 'transparent-background'],
     polling: { interval: 3000, maxAttempts: 200 },
   },
   inputLimits: { images: { max: 16 }, videos: { max: 0 } },

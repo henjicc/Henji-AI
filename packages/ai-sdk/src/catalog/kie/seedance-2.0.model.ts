@@ -10,7 +10,7 @@ export const kieSeedance20Model = defineModel({
         seriesRank: 2.0,
         provider: 'kie',
         type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'multi-mode-switch', 'mixed-upload-mode', 'supports-audio-generation', 'supports-4k', 'provider-kie'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
         polling: {
             interval: 3000,
             maxAttempts: 180,

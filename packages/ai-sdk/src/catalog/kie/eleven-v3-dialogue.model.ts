@@ -17,7 +17,7 @@ function dialogueFrom(params: JsonObject): JsonObject[] {
 export const kieElevenV3DialogueModel = defineModel({
   meta: {
     id: 'kie-eleven-v3-dialogue', canonicalModelId: 'eleven-v3-dialogue', provider: 'kie', type: 'audio',
-    tags: ['text-to-audio', 'provider-kie'],
+    tags: ['text-to-audio', 'multi-speaker-dialogue'],
     polling: { interval: 3000, maxAttempts: 120, expectedAttempts: 20 },
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },

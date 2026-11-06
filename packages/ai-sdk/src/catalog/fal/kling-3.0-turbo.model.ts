@@ -4,7 +4,7 @@ export const falKling30TurboModel = defineModel({
     meta: {
         id: 'fal-ai-kling-3.0-turbo', canonicalModelId: 'kling-video-3.0-turbo', seriesId: 'kling-video', seriesRank: 3.01,
         provider: 'fal', type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'fast-mode', 'provider-fal'],
+        tags: ['text-to-video', 'image-to-video'],
         aliases: ['kling-v3-turbo-fal'], polling: { interval: 3000, maxAttempts: 280, expectedAttempts: 65 }
     },
     inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } },

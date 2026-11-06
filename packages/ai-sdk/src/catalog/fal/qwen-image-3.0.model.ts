@@ -6,7 +6,7 @@ export const falQwenImage30Model = defineModel({
     meta: {
         id: 'fal-ai-qwen-image-3.0', canonicalModelId: 'qwen-image-3.0', seriesId: 'qwen-image', seriesRank: 3,
         provider: 'fal', type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-prompt-expansion', 'provider-fal'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['qwen-image-3-fal'], polling: { interval: 3000, maxAttempts: 180, expectedAttempts: 35 }
     },
     inputLimits: { images: { max: 3 }, videos: { max: 0 } },

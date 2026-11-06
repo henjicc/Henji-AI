@@ -8,7 +8,7 @@ export const viduQ2Model = defineModel({
         seriesRank: 2,
         provider: 'fal',
         type: 'video',
-        tags: ['video', 'text-to-video', 'image-to-video']
+        tags: ['text-to-video', 'image-to-video', 'reference-mode', 'video-extension']
     },
     inputLimits: {
         images: { max: 0 },

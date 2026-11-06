@@ -27,7 +27,7 @@ export const falFlux2MultipleAnglesModel = defineModel({
     canonicalModelId: 'flux-2-multiple-angles',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'multi-angle', 'camera-control', 'provider-fal'],
+    tags: ['multi-angle'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   acceptsPrompt: false,

@@ -6,7 +6,7 @@ export const briaEraserModel = defineModel({
     canonicalModelId: 'bria-eraser',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'erase', 'mask-input', 'provider-fal'],
+    tags: ['erase'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 20 },
   },
   acceptsPrompt: false,

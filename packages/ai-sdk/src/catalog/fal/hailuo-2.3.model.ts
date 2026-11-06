@@ -9,7 +9,7 @@ export const hailuo23Model = defineModel({
         seriesRank: 2.3,
         provider: 'fal',
         type: 'video',
-        tags: ['video', 'text-to-video', 'image-to-video'],
+        tags: ['text-to-video', 'image-to-video'],
         aliases: ['fal-ai-hailuo-2.3', 'minimax-hailuo-2.3-fal']
     },
     inputLimits: {

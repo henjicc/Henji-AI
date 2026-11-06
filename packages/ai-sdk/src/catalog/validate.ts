@@ -9,6 +9,7 @@
  * 静默分叉。
  */
 
+import { isModelTag } from '../types/modelTags'
 import type {
   ModelRuntimeDefinition,
   RuntimeParamDef,
@@ -75,6 +76,10 @@ function validateMeta(model: ModelRuntimeDefinition, fail: ValidationFailure): v
   if (meta.tags) {
     if (!Array.isArray(meta.tags)) {
       fail('Model meta.tags must be an array')
+    }
+    const unknown = meta.tags.filter((tag) => typeof tag !== 'string' || !isModelTag(tag))
+    if (unknown.length) {
+      fail(`Model meta.tags has tags outside MODEL_TAG_DEFINITIONS: ${unknown.join(', ')}`)
     }
   }
 

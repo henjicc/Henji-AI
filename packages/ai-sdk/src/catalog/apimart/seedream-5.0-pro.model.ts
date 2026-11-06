@@ -8,7 +8,7 @@ export const apimartSeedream50ProModel = defineModel({
     meta: {
         id: 'apimart-seedream-5.0-pro', canonicalModelId: 'seedream-5.0-pro', seriesId: 'seedream', seriesRank: 5.1,
         provider: 'apimart', type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-layer-decomposition', 'max-images-10', 'provider-apimart'],
+        tags: ['text-to-image', 'image-to-image', 'layer-decomposition', 'transparent-background'],
         aliases: ['seedream-5-pro-apimart'], polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
     },
     inputLimits: {

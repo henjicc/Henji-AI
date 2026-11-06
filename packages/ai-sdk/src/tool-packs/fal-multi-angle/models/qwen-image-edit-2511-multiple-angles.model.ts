@@ -26,7 +26,7 @@ export const falQwenImageEdit2511MultipleAnglesModel = defineModel({
     canonicalModelId: 'qwen-image-edit-2511-multiple-angles',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'multi-angle', 'camera-control', 'provider-fal'],
+    tags: ['multi-angle'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   acceptsPrompt: false,

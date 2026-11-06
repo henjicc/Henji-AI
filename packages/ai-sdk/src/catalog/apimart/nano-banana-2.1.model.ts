@@ -7,7 +7,7 @@ export const apimartNanoBanana21Model = defineModel({
   meta: {
     id: 'apimart-nano-banana-2.1', canonicalModelId: 'nano-banana-2.1', seriesId: 'nano-banana', seriesRank: 3.1,
     provider: 'apimart', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-4k', 'provider-apimart'],
+    tags: ['text-to-image', 'image-to-image'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 },
   },
   // 官方只声明单张 20MB；Ext 另外声明总计 50MB，未声明参考图数量上限。

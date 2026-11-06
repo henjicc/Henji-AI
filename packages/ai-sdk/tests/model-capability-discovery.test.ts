@@ -108,17 +108,11 @@ describe('统一模型能力画像与筛选', () => {
       const tags = model.meta.tags ?? []
       const operations = profileGenerationModel(model).operations
       if (tags.includes('text-to-image')) expect(operations).toContain('text-to-image')
-      if (tags.some((tag) => ['image-to-image', 'supports-image-editing', 'image-edit'].includes(tag))) {
-        expect(operations).toContain('image-edit')
-      }
+      if (tags.includes('image-to-image')) expect(operations).toContain('image-edit')
       if (model.meta.type === 'video' && tags.includes('text-to-video')) expect(operations).toContain('text-to-video')
-      if (model.meta.type === 'video' && tags.some((tag) => ['image-to-video', 'start-end-frame'].includes(tag))) {
-        expect(operations).toContain('image-to-video')
-      }
-      if (model.meta.type === 'video' && tags.some((tag) => ['reference-mode', 'video-reference', 'multi-image-reference'].includes(tag))) {
-        expect(operations).toContain('reference-to-video')
-      }
-      if (model.meta.type === 'video' && tags.some((tag) => ['supports-video-editing', 'video-to-video', 'video-extension'].includes(tag))) {
+      if (model.meta.type === 'video' && tags.includes('image-to-video')) expect(operations).toContain('image-to-video')
+      if (model.meta.type === 'video' && tags.includes('reference-mode')) expect(operations).toContain('reference-to-video')
+      if (model.meta.type === 'video' && tags.some((tag) => tag === 'video-to-video' || tag === 'video-extension')) {
         expect(operations).toContain('video-edit')
       }
     }
@@ -150,7 +144,7 @@ describe('统一模型能力画像与筛选', () => {
       outpainting: ['fal-image-apps-v2-outpaint'],
       'product-photography': ['fal-image-apps-v2-product-photography'],
       'photo-restoration': ['fal-image-apps-v2-photo-restoration'],
-      'background-removal': ['fal-pixelcut-background-removal'],
+      'transparent-background': ['fal-pixelcut-background-removal'],
     } as const
 
     for (const [feature, expectedIds] of Object.entries(expectedByFeature)) {

@@ -6,7 +6,7 @@ export const falMinimaxSpeech28Model = defineModel({
   meta: {
     id: 'fal-minimax-speech-2.8', canonicalModelId: 'minimax-speech-2.8',
     provider: 'fal', type: 'audio',
-    tags: ['text-to-audio', 'provider-fal'],
+    tags: ['text-to-audio'],
     polling: { interval: 3000, maxAttempts: 120, expectedAttempts: 20 },
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },

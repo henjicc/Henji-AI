@@ -11,7 +11,7 @@ export const modelscopeQwenImageModel = defineModel({
     canonicalModelId: 'qwen-image',
     provider: 'modelscope',
     type: 'image',
-    tags: ['text-to-image', 'provider-modelscope'],
+    tags: ['text-to-image'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

@@ -10,7 +10,7 @@ export const kieKling30TurboModel = defineModel({
         seriesRank: 3.01,
         provider: 'kie',
         type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'turbo-mode', 'provider-kie'],
+        tags: ['text-to-video', 'image-to-video'],
         polling: { interval: 3000, maxAttempts: 240, expectedAttempts: 70 }
     },
     inputLimits: {

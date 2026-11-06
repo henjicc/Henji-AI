@@ -8,7 +8,7 @@ export const wan25PreviewModel = defineModel({
         seriesRank: 2.5,
         provider: 'fal',
         type: 'video',
-        tags: ['video', 'text-to-video', 'image-to-video'],
+        tags: ['text-to-video', 'image-to-video'],
         aliases: ['fal-ai-wan-2.5-preview', 'wan-25-preview']
     },
     inputLimits: {

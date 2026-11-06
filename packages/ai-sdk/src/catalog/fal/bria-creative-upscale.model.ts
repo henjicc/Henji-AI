@@ -7,7 +7,7 @@ export const falBriaCreativeUpscaleModel = defineModel({
     canonicalModelId: 'bria-creative-upscale',
     provider: 'fal',
     type: 'image',
-    tags: ['image-to-image', 'upscaling', 'alpha-preserving', 'provider-fal'],
+    tags: ['upscaling', 'transparent-background'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 45 },
   },
   acceptsPrompt: false,

@@ -10,7 +10,7 @@ export const bailianQwenImage30Model = defineModel({
   meta: {
     id: 'bailian-qwen-image-3.0', canonicalModelId: 'qwen-image-3.0', seriesId: 'qwen-image', seriesRank: 3,
     provider: 'bailian', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-3', 'multi-output', 'provider-bailian'],
+    tags: ['text-to-image', 'image-to-image'],
     aliases: ['qwen-image-3-official']
   },
   inputLimits: { images: { max: 3 }, videos: { max: 0 } },

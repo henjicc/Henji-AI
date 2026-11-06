@@ -40,42 +40,21 @@ export interface SdkModelRow {
   capability?: { descriptor: CapabilityDescriptor }
 }
 
-/**
- * 功能标签用模型筛选的中文名；其余有信息量的标签和特性在这里起名。
- * 不在表里的是内部判断用的标记，或与功能标签重复（如 supports-image-editing 就是“图片编辑”），不显示。
- */
-const FEATURE_LABEL: Readonly<Record<string, string>> = {
-  'voice-cloning': '语音克隆', 'text-to-speech': '语音合成', 'voice-synthesis': '语音合成',
-  'supports-4k': '4K', 'supports-2k': '2K', 'multi-output': '一次出多张', 'english-prompt-only': '仅英文提示词',
-  'supports-audio-generation': '带声音', 'supports-layer-decomposition': '图层拆分', 'supports-prompt-expansion': '提示词扩写',
-  'multi-image-reference': '多图参考', 'video-reference': '视频参考', 'fast-mode': '快速档', 'turbo-mode': '极速档',
-  upscaling: '放大', 'alpha-preserving': '保留透明', 'alpha-output': '透明输出', relighting: '打光', 'image-edit': '图片编辑',
-  'style-presets': '风格预设', outpainting: '扩图', 'photo-restoration': '老照片修复', 'background-removal': '抠图',
-  'multi-angle': '多角度', 'camera-control': '镜头控制', 'perspective-preset': '视角预设',
+/** 语音识别的特性是协议层面的另一套描述，不属于模型能力标签，在这里起中文名；不在表里的不显示。 */
+const ASR_FEATURE_LABEL: Readonly<Record<string, string>> = {
   timestamps: '时间戳', 'short-audio': '短音频', 'file-transcription': '文件转写', 'async-polling': '异步任务',
   'remote-url': '网址输入', realtime: '实时', streaming: '流式', 'partial-results': '中间结果', 'pcm-s16le-16khz-mono': '16kHz PCM 输入',
 }
 
-function featureLabels(tags: readonly string[]): string[] {
-  return [...new Set(tags.flatMap((tag) => {
-    const key = `models:tags.${tag}`
-    if (i18n.exists(key)) return [i18n.t(key)]
-    const maxImages = /^max-images-(\d+)$/.exec(tag)
-    if (maxImages) return [`最多 ${maxImages[1]} 张图`]
-    return FEATURE_LABEL[tag] ? [FEATURE_LABEL[tag]] : []
-  }))]
-}
-
 function generationRow(definition: ModelDefinition, hidden: boolean): SdkModelRow {
-  const rawTags = (definition.meta.tags ?? []).filter((tag) => !tag.startsWith('provider-'))
   return {
     key: `generation:${definition.meta.id}`,
     category: hidden || !GENERATION_TYPES.has(definition.meta.type) ? 'tool' : definition.meta.type as SdkModelCategory,
     name: getI18nText(definition.meta.name, 'zh-CN') || definition.meta.id,
     modelId: definition.meta.id,
     providerId: definition.meta.provider,
-    tags: featureLabels(rawTags),
-    rawTags,
+    tags: (definition.meta.tags ?? []).map((tag) => i18n.t(`models:tags.${tag}`)),
+    rawTags: definition.meta.tags ?? [],
     generation: { definition },
   }
 }
@@ -137,7 +116,7 @@ function capabilityRow(category: 'asr', descriptor: CapabilityDescriptor): SdkMo
     name: descriptor.modelId ?? descriptor.id,
     modelId: descriptor.modelId ?? descriptor.id,
     providerId: descriptor.providerIds?.[0] ?? '',
-    tags: featureLabels([...(descriptor.features ?? []), ...(descriptor.executionModes?.includes('realtime') ? ['realtime'] : [])]),
+    tags: [...new Set([...(descriptor.features ?? []), ...(descriptor.executionModes?.includes('realtime') ? ['realtime'] : [])].flatMap((feature) => ASR_FEATURE_LABEL[feature] ?? []))],
     rawTags: descriptor.features ?? [],
     capability: { descriptor },
   }

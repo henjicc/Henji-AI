@@ -8,7 +8,7 @@ export const apimartMidjourneyVideoModel = defineModel({
   meta: {
     id: 'apimart-midjourney-video', canonicalModelId: 'midjourney-video', seriesId: 'midjourney', seriesRank: 2,
     provider: 'apimart', type: 'video',
-    tags: ['image-to-video', 'start-end-frame', 'multi-mode-switch', 'provider-apimart'],
+    tags: ['image-to-video', 'start-end-frame'],
     aliases: ['midjourney-video-apimart'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 80 }
   },
   alternativeInputParamIds: ['apimartMidjourneyVideoTaskId'],

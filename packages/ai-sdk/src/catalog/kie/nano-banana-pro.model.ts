@@ -1,5 +1,5 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 import { resolveKieImageSources } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieNanoBananaProModel = defineModel({
@@ -10,7 +10,7 @@ export const kieNanoBananaProModel = defineModel({
         seriesRank: 2,
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-4k', 'provider-kie'],
+        tags: ['text-to-image', 'image-to-image'],
         aliases: ['nano-banana-pro-kie']
     },
     inputLimits: {

@@ -9,7 +9,7 @@ export const LAYER_SEPARATION_PROVIDER_PRIORITY = ['volcengine', 'apimart', 'kie
 export const LAYER_SEPARATION_MODEL_POLICY = {
   mode: 'verified-families',
   allowedCanonicalFamilies: ['seedream-5.0-pro'],
-  requiredTags: ['supports-layer-decomposition'],
+  requiredTags: ['layer-decomposition'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: LAYER_SEPARATION_PROVIDER_PRIORITY.map((providerId) => ({ providerId })),
   semanticRequirements: {
@@ -24,7 +24,7 @@ export function selectDefaultLayerSeparationModel(
 ): ModelDefinition | null {
   return [...models]
     .filter((model) => model.meta.canonicalModelId === 'seedream-5.0-pro'
-      && model.meta.tags?.includes('supports-layer-decomposition')
+      && model.meta.tags?.includes('layer-decomposition')
       && LAYER_SEPARATION_PROVIDER_PRIORITY.includes(
         model.meta.provider as (typeof LAYER_SEPARATION_PROVIDER_PRIORITY)[number],
       ))

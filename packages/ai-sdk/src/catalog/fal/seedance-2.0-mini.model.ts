@@ -4,7 +4,7 @@ export const falSeedance20MiniModel = defineModel({
     meta: {
         id: 'fal-ai-seedance-2.0-mini', canonicalModelId: 'seedance-2.0-mini', seriesId: 'seedance', seriesRank: 2.001,
         provider: 'fal', type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'mixed-upload-mode', 'supports-audio-generation', 'multi-mode-switch', 'fast-mode', 'provider-fal'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
         aliases: ['seedance-2-mini-fal'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 65 }
     },
     inputLimits: {

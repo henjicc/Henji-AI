@@ -356,8 +356,7 @@ export class ModelRegistry {
    *
    * @example
    * ```typescript
-   * const modelsWithImageEditing = registry.getModelsByTag('supports-image-editing')
-   * const fastModels = registry.getModelsByTag('fast-generation')
+   * const modelsWithImageEditing = registry.getModelsByTag('image-to-image')
    * ```
    */
   getModelsByTag(tag: ModelTag): ModelDefinition[] {

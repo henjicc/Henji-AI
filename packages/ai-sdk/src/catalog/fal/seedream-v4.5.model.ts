@@ -1,5 +1,5 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 import { calculateSeedreamSizeFromRatio, getImageSize, normalizeSeedreamCustomSize, resolveSeedreamRatio, type SeedreamResolutionValue, } from "../shared/seedreamResolution";
 const FAL_SEEDREAM_V45_CONSTRAINTS = {
     minSide: 1920,
@@ -45,7 +45,7 @@ export const seedreamV45Model = defineModel({
         seriesRank: 4.5,
         provider: 'fal',
         type: 'image',
-        tags: ['image', 'text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10']
+        tags: ['text-to-image', 'image-to-image']
     },
     inputLimits: {
         images: { max: 10 },

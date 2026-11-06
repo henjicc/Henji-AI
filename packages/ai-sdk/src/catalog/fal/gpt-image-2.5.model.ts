@@ -8,7 +8,7 @@ export const falGptImage25Model = defineModel({
   meta: {
     id: 'fal-ai-gpt-image-2.5', canonicalModelId: 'gpt-image-2.5', seriesId: 'gpt-image', seriesRank: 2.5,
     provider: 'fal', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'multi-output', 'supports-4k', 'provider-fal'],
+    tags: ['text-to-image', 'image-to-image', 'inpainting', 'transparent-background'],
     polling: { interval: 3000, maxAttempts: 200 },
   },
   inputLimits: { images: { max: 16 }, videos: { max: 0 } },

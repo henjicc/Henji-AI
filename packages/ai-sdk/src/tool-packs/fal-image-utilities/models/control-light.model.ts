@@ -8,7 +8,7 @@ export const falControlLightModel = defineModel({
     canonicalModelId: 'control-light',
     provider: 'fal',
     type: 'image',
-    tags: ['image-edit', 'low-light-enhancement', 'provider-fal'],
+    tags: ['low-light-enhancement'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
   acceptsPrompt: false,

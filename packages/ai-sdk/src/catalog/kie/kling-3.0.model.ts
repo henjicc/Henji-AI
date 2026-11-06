@@ -9,14 +9,7 @@ export const kieKling30Model = defineModel({
         seriesRank: 3,
         provider: 'kie',
         type: 'video',
-        tags: [
-            'text-to-video',
-            'image-to-video',
-            'start-end-frame',
-            'supports-audio-generation',
-            'supports-4k',
-            'provider-kie'
-        ],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
         polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 90 }
     },
     inputLimits: {

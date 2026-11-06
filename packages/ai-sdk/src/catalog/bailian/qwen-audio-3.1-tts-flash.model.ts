@@ -6,7 +6,7 @@ export const bailianQwenAudio31TtsFlashModel = defineModel({
   meta: {
     id: 'bailian-qwen-audio-3.1-tts-flash', canonicalModelId: 'qwen-audio-3.1-tts-flash',
     provider: 'bailian', type: 'audio',
-    tags: ['text-to-audio', 'provider-bailian'],
+    tags: ['text-to-audio'],
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [

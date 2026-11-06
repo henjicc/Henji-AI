@@ -5,7 +5,7 @@ import { speechNumber, speechString, speechText } from '../audio/tts-common'
 export const kieGemini31FlashTtsModel = defineModel({
   meta: {
     id: 'kie-gemini-3.1-flash-tts', canonicalModelId: 'gemini-3.1-flash-tts', provider: 'kie', type: 'audio',
-    tags: ['text-to-audio', 'provider-kie'],
+    tags: ['text-to-audio'],
     polling: { interval: 3000, maxAttempts: 120, expectedAttempts: 20 },
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },

@@ -4,7 +4,7 @@ export const falGeminiOmniFlashModel = defineModel({
     meta: {
         id: 'fal-ai-gemini-omni-flash', canonicalModelId: 'gemini-omni-video', seriesId: 'gemini-omni', seriesRank: 1,
         provider: 'fal', type: 'video',
-        tags: ['image-to-video', 'reference-mode', 'supports-multi-image', 'multi-mode-switch', 'provider-fal'],
+        tags: ['image-to-video', 'reference-mode'],
         aliases: ['gemini-omni-flash-fal'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 70 }
     },
     inputLimits: {

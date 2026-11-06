@@ -10,7 +10,7 @@ export const kling30Model = defineModel({
     seriesRank: 3.0,
     provider: 'ppio',
     type: 'video',
-    tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'motion-control', 'provider-ppio'],
+    tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'motion-control'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

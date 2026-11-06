@@ -11,7 +11,7 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
     canonicalModelId: 'qwen-image-edit-2509',
     provider: 'modelscope',
     type: 'image',
-    tags: ['image-to-image', 'supports-image-editing', 'supports-multi-image', 'provider-modelscope'],
+    tags: ['image-to-image'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

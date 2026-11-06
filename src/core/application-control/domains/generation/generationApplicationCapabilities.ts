@@ -4,6 +4,7 @@ import { APPLICATION_MEDIA_REFERENCE_GUIDANCE, APPLICATION_MEDIA_REFERENCE_KINDS
 import { applicationSchemaRefSchema } from '../..'
 import { canvasNodePlacementSchema } from '../canvas/canvasMutationApplicationCapabilities'
 
+
 export const generationDestinationSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('history') }).strict(),
   z.object({ mode: z.literal('canvas'), documentId: z.string().min(1), sourceNodeIds: z.array(z.string().min(1)).default([]), placement: canvasNodePlacementSchema.optional() }).strict(),
@@ -25,11 +26,17 @@ const canvasNodeGenerationInputSchema = z.object({
 export type CanvasNodeGenerationInput = z.infer<typeof canvasNodeGenerationInputSchema>
 
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
+import { MODEL_TAG_DEFINITIONS, MODEL_TAGS, type ModelTag } from '@/core/types/ModelTags'
 import {
   capabilityControl,
   capabilityOutputSchema,
   defineApplicationCapability,
 } from '../shared/defineApplicationCapability'
+
+
+const MODEL_TAG_SCHEMA = z.enum(MODEL_TAGS as [ModelTag, ...ModelTag[]])
+// 形态按输入输出判断；专项只给有专门参数或接口的模型，通用编辑模型靠提示词也能做到的不算。
+const MODEL_TAG_GUIDANCE = MODEL_TAG_DEFINITIONS.map((tag) => `${tag.id}（${tag.layer === 'form' ? '形态' : '专项'}）：${tag.criterion}`).join('；')
 
 const switchWorkspace = defineApplicationCapability({
   id: 'switch_workspace',
@@ -78,7 +85,7 @@ const searchModels = defineApplicationCapability({
     query: z.string().max(500).default(''),
     mediaType: z.enum(['image', 'video', 'audio']).optional(),
     providerId: z.string().min(1).optional(),
-    tags: z.array(z.string().min(1).max(100)).max(8).optional(),
+    tags: z.array(MODEL_TAG_SCHEMA).max(8).optional().describe(`只返回同时具备这些能力的模型。${MODEL_TAG_GUIDANCE}`),
     sortBy: z.enum(['registry', 'recommended', 'lowest_estimated_price']).optional(),
     cursor: z.number().int().nonnegative().default(0),
     limit: z.number().int().min(1).max(50).default(32),

@@ -424,6 +424,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
                 modelName: currentModel?.name,
                 modelType: currentModel?.type,
                 modelFunctions: currentModel?.functions,
+                modelPromptLanguage: currentModel?.promptLanguage,
                 modelDescription: currentModel?.description,
               }}
               disabled={inputBusy}

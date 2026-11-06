@@ -28,7 +28,7 @@ export const modelscopeCustomModel = defineModel({
     canonicalModelId: 'modelscope-custom',
     provider: 'modelscope',
     type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'provider-modelscope'],
+    tags: ['text-to-image', 'image-to-image'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

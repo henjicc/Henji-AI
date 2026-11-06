@@ -11,7 +11,8 @@ export const modelscopeFluxKreaDevModel = defineModel({
     canonicalModelId: 'flux-1-krea-dev',
     provider: 'modelscope',
     type: 'image',
-    tags: ['text-to-image', 'english-prompt-only', 'provider-modelscope'],
+    tags: ['text-to-image'],
+    promptLanguage: 'en',
     polling: {
       interval: 3000,
       maxAttempts: 120,
