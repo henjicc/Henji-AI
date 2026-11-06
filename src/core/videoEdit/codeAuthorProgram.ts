@@ -15,6 +15,8 @@ export interface AuthorElementObservation {
   id: string
   name: string
   bounds?: [number, number, number, number]
+  /** 这一帧实际画到的范围（图层坐标）：缺省表示不知道，点选按 bounds；null 表示这一帧什么也没画。 */
+  drawnBounds?: [number, number, number, number] | null
   baseMatrix?: CodeMatrix
   baseOpacity?: number
   opacity?: number

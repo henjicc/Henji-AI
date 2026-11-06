@@ -7,7 +7,7 @@ import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditClipFadeOpacity } from '@/core/videoEdit/fades'
 import { videoEditClipPictureSize, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
-import { codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, cycleCodeElement, hitCodeElementIndex, prepareAuthorElementIndex, type CodeElementIndex } from '@/core/videoEdit/codeElementSelection'
+import { codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, hitCodeElementIndex, prepareAuthorElementIndex, type CodeElementIndex } from '@/core/videoEdit/codeElementSelection'
 import type { CodeElementBounds } from '@/core/videoEdit/codeMaterial/geometry'
 import type { AuthorElementObservation, CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
 import type { VideoEditSourceTime } from '@/core/videoEdit/time'
@@ -93,28 +93,36 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
   }
   return result
 }
-/** Pick only within the top visible picture. A non-code clip occludes code beneath it. */
-export function videoEditProgramClipAt(instance: VideoEditInstance, point: { x: number; y: number }): { clip: VideoEditClip; picture: { width: number; height: number }; entry?: VideoEditCodeElementFrame } | undefined {
+/**
+ * 画面点选，从最上层片段往下找：代码片段多是透明叠层，点处没有它的元素就继续看下面的片段；非代码画面（视频、图片、文字）挡住下面。
+ * `element` 是点中的代码元素（可能在下层片段里），`cycle` 在点处所有元素（`hits`）间轮换；都没点中时 `clip` 是点处最下面露出来的片段。
+ */
+export function pickVideoEditProgram(instance: VideoEditInstance, point: { x: number; y: number }, cycle = false): { clip: VideoEditClip; element?: CodeElementBounds; hits: Array<{ clip: VideoEditClip; element: CodeElementBounds }> } | undefined {
   const sequence = getActiveVideoEditSequence(instance); const picture = videoEditPictureFilter(sequence)
   const elements = videoEditCodeElementFrames(instance)
   const clips = sequence.clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'adjustment' && clip.kind !== 'light' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && picture.has(clip)).sort((a, b) => b.track - a.track)
+  const hits: Array<{ clip: VideoEditClip; element: CodeElementBounds }> = []
+  let seen: VideoEditClip | undefined
   for (const raw of clips) {
     const evaluated = evaluateVideoEditClip(raw, instance.frame); const clip = { ...evaluated, opacity: evaluated.opacity * videoEditClipFadeOpacity(sequence, raw, instance.frame) }; if (clip.opacity <= 0) continue
     const entry = elements.get(clip.id)
-    const picture = entry?.picture ?? videoEditClipPictureSize({ ...instance.document, ...sequence }, clip)
-    const local = videoEditFrameToClip(clip, picture, sequence, point.x, point.y)
+    const size = entry?.picture ?? videoEditClipPictureSize({ ...instance.document, ...sequence }, clip)
+    const local = videoEditFrameToClip(clip, size, sequence, point.x, point.y)
     if (local.u < 0 || local.v < 0 || local.u > 1 || local.v > 1) continue
-    return { clip, picture, entry }
+    seen = clip
+    // 没有元素观察的代码片段（WebGL、三维等整幅绘制）看不出哪里透明，和非代码画面一样挡住下面。
+    if (!entry?.index.bounds.length) break
+    const author = codeElementAuthorPoint(clip, entry.picture, sequence, point)
+    for (const element of hitCodeElementIndex(entry.index, author.x, author.y)) hits.push({ clip, element })
   }
-  return undefined
+  if (!hits.length) return seen && { clip: seen, hits }
+  const selected = instance.selectedCodeElement
+  const current = selected ? hits.findIndex(hit => hit.clip.id === selected.clipId && hit.element.elementId === selected.elementId) : -1
+  return { ...hits[cycle ? (current + 1) % hits.length : 0], hits }
 }
 export function hitVideoEditCodeElement(instance: VideoEditInstance, point: { x: number; y: number }, cycle = false): { clipId: string; element: CodeElementBounds } | undefined {
-  const target = videoEditProgramClipAt(instance, point)
-  if (!target?.entry) return undefined
-  const author = codeElementAuthorPoint(target.clip, target.picture, getActiveVideoEditSequence(instance), point)
-  const hits = hitCodeElementIndex(target.entry.index, author.x, author.y)
-  const element = cycleCodeElement(hits, instance.selectedCodeElement?.clipId === target.clip.id ? instance.selectedCodeElement.elementId : undefined, cycle)
-  return element ? { clipId: target.clip.id, element } : undefined
+  const pick = pickVideoEditProgram(instance, point, cycle)
+  return pick?.element && { clipId: pick.clip.id, element: pick.element }
 }
 export function selectVideoEditCodeElement(instance: VideoEditInstance, clipId: string, elementId: string | null): void {
   const entry = videoEditCodeElementFrames(instance).get(clipId)

@@ -1,6 +1,6 @@
 import type { CodeAuthorProgram } from '../codeAuthorProgram'
 
-export interface CodeAuthoringHint { code: 'NO_PARAMETERS' | 'MISSING_TEXT_STYLE' | 'UNBOUND_TEXT' | 'UNBOUND_VISUAL'; message: string; line?: number }
+export interface CodeAuthoringHint { code: 'NO_PARAMETERS' | 'MISSING_TEXT_STYLE' | 'UNBOUND_TEXT' | 'UNBOUND_VISUAL' | 'MISSING_LAYER'; message: string; line?: number }
 
 /** Declaration-only feedback. Never infer arbitrary JS reads or Canvas calls. */
 export function codeMaterialAuthoringHints(program: CodeAuthorProgram): CodeAuthoringHint[] {
@@ -10,6 +10,11 @@ export function codeMaterialAuthoringHints(program: CodeAuthorProgram): CodeAuth
     if (parameter.type !== 'text') continue
     if (!parameter.layer) hints.push({ code: 'UNBOUND_TEXT', message: `文字参数 ${parameter.key} 未绑定图层；在 params 中声明 layer 以支持点选和双击改字。` })
     if (!program.parameters.some(style => style.type === 'textStyle' && style.layer === parameter.layer)) hints.push({ code: 'MISSING_TEXT_STYLE', message: `文字参数 ${parameter.key} 还需要绑定同一图层的 textStyle 参数，默认值跟随当前风格包。` })
+  }
+  // 图层 id 全是字面量时才能断定 layer 指向的图层不存在；动态生成的 id 只能运行时才知道。
+  const locations = program.bundle.locations
+  if (locations?.staticLayerIds) for (const parameter of program.parameters) {
+    if (parameter.layer && !Object.hasOwn(locations.layers, parameter.layer)) hints.push({ code: 'MISSING_LAYER', message: `参数 ${parameter.key} 的 layer「${parameter.layer}」不是任何图层的 id，点选、双击改字找不到它；layer 要写成图层对象的 id。` })
   }
   // 点中元素时属性块只列绑定到它的参数；除文字外一个都没有，用户就改不了它的颜色、字号。调整层没有可调的视觉属性。
   const adjust = new Set(program.bundle.locations?.adjustLayerIds ?? [])

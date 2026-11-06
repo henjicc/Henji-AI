@@ -33,7 +33,7 @@ function textCandidates(author: AuthorElementObservation, declarations: readonly
  * 编辑时把画出来的每段文字对上参数：内容相同的唯一候选就是它；只有一段字、一个候选时即使内容经过拼接也认定是它。
  * 没有绘制观察（旧作者接口、网页文字）时，只有唯一候选才能编辑。
  */
-export function readCodeAuthorTextTargets(author: AuthorElementObservation | undefined, declarations: readonly CodeParameterDeclaration[], values: CodeParameterValues): CodeAuthorTextTarget[] {
+export function readCodeAuthorTextTargets(author: AuthorElementObservation | undefined, declarations: readonly CodeParameterDeclaration[], values: CodeParameterValues, layers: ReadonlySet<string> = new Set()): CodeAuthorTextTarget[] {
   if (!author) return []
   const candidates = textCandidates(author, declarations, values)
   const seen = new Set<string>()
@@ -58,6 +58,12 @@ export function readCodeAuthorTextTargets(author: AuthorElementObservation | und
     const containing = open.filter(index => value && draws[index].sourceText.toLowerCase().includes(value))
     const chosen = containing.length === 1 ? containing[0] : open.length === 1 && draws.length === 1 ? open[0] : undefined
     if (chosen !== undefined) bindings[chosen] = left[0]
+  }
+  // 逐字动画每个字一层，参数挂不到每一层上：没挂到现存图层（`layers`）的文字参数，值与画出来的整段字相同且唯一时也认定是它。
+  for (const [index, draw] of draws.entries()) {
+    if (bindings[index]) continue
+    const equal = declarations.filter(item => item.type === 'text' && !(item.layer && layers.has(item.layer)) && values[item.key] === draw.sourceText)
+    if (equal.length === 1) bindings[index] = { parameter: equal[0].key, value: draw.sourceText }
   }
   return draws.map((draw, index) => {
     const binding = bindings[index]

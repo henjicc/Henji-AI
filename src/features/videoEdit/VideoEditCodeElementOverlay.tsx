@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { codeElementFramePolygon, codeElementLabel } from '@/core/videoEdit/codeElementSelection'
-import { hitVideoEditCodeElement, selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames, videoEditProgramClipAt } from './application/videoEditCodeElements'
+import { hitVideoEditCodeElement, pickVideoEditProgram, selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames } from './application/videoEditCodeElements'
 import { getActiveVideoEditSequence, setVideoEditView, videoEditRevision, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from './application/videoEditService'
 import { sameVideoEditViewFields, useVideoEditViewSelector } from './application/useVideoEditViewSelector'
 import { getVideoEditMaskEditing, subscribeVideoEditMaskEditing, videoEditMaskEditingRevision } from './application/videoEditMaskEditing'
@@ -37,17 +37,17 @@ export function VideoEditCodeElementOverlay({ instance, enabled, onError }: { in
       try {
         const at = point(event); const old = last.current
         const repeated = Boolean(old && old.document === instance.document && old.frame === instance.frame && old.sequenceId === instance.activeSequenceId && Math.hypot(old.x - event.clientX, old.y - event.clientY) <= 4)
-        const hit = hitVideoEditCodeElement(instance, at, event.altKey || repeated)
+        const pick = pickVideoEditProgram(instance, at, event.altKey || repeated)
         last.current = { x: event.clientX, y: event.clientY, frame: instance.frame, sequenceId: instance.activeSequenceId, document: instance.document }
-        if (!hit) {
-          const clip = videoEditProgramClipAt(instance, at)?.clip
+        if (!pick?.element) {
+          const clip = pick?.clip
           if (clip?.kind === 'code') { selectVideoEditCodeElement(instance, clip.id, null); event.stopPropagation() }
           else if (clip?.kind !== 'text') setVideoEditView(instance.document.id, { selection: clip?.id ?? null, selectedCodeElement: null })
           return
         }
         const active = host.ownerDocument.activeElement as HTMLElement | null
         if (active?.matches('input,textarea,select,[contenteditable="true"]')) active.blur()
-        selectVideoEditCodeElement(instance, hit.clipId, hit.element.elementId)
+        selectVideoEditCodeElement(instance, pick.clip.id, pick.element.elementId)
         event.stopPropagation(); event.preventDefault()
       } catch (error) { errorRef.current(error) }
     }

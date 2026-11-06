@@ -39,7 +39,8 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
       }
       if (ts.isObjectLiteralExpression(node)) {
         const key = (property: ts.ObjectLiteralElementLike): string | undefined => property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : undefined
-        const draw = node.properties.find(property => ['draw', 'adjust'].includes(key(property) ?? ''))
+        // fill 图层的 fill 必须是函数；数据行里的 fill 颜色字符串不算图层。
+        const draw = node.properties.find(property => ['draw', 'adjust'].includes(key(property) ?? '') || key(property) === 'fill' && (ts.isMethodDeclaration(property) || ts.isPropertyAssignment(property) && (ts.isArrowFunction(property.initializer) || ts.isFunctionExpression(property.initializer))))
         const id = node.properties.find(property => key(property) === 'id')
         const spread = node.properties.some(ts.isSpreadAssignment)
         if (draw && id && ts.isPropertyAssignment(id) && ts.isStringLiteral(id.initializer) && !spread) {
@@ -48,6 +49,8 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
           else layers[value] = span(node)
           if (node.properties.some(property => key(property) === 'adjust')) adjust.add(value)
         } else if (draw || id && spread) dynamicIds = true // 展开对象可能带来 draw 或 id，静态表就不完整。
+        // fill 写成函数名或调用时看不出是不是图层，静态表就不能断定完整。
+        else if (id && node.properties.some(property => key(property) === 'fill' && ts.isPropertyAssignment(property) && (ts.isIdentifier(property.initializer) || ts.isCallExpression(property.initializer) || ts.isPropertyAccessExpression(property.initializer)))) dynamicIds = true
         if (file === input.entry) {
           const entry = node.properties.find(property => ['layers', 'draw', 'createWebGL', 'createWebGPU', 'createThree'].includes(key(property) ?? ''))
           if (entry && !fallback) fallback = span(entry)

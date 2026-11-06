@@ -66,6 +66,11 @@ it('轻量 JS 导航保留元素与工厂范围，重复 ID 不误指到某个�
   // 写了 adjust 的字面量图层不等当前帧观察就能认出是调整层。
   expect(authorJsLocations({ entry: 'main.js', files: { 'main.js': 'export default {layers(){return [{id:"a",draw(){}},{id:"b",adjust:()=>[]}]}}' } }).adjustLayerIds).toEqual(['b'])
   for (const layers of ['{id:`a${1}`,draw(){}}', '{...base,draw(){}}', '{draw(){}}', '{id:"a",...card()}']) expect(literal(layers)).toBeUndefined()
+  // fill 是函数时是图层；数据行里的 fill 颜色不是。
+  const fills = authorJsLocations({ entry: 'main.js', files: { 'main.js': 'const rows=[{id:"r",fill:"#fff"}]; export default {layers(){return [{id:"bg",fill:()=>({})},{id:"m",fill(){return {}}}]}}' } })
+  expect(Object.keys(fills.layers).sort()).toEqual(['bg', 'm'])
+  expect(fills.staticLayerIds).toBe(true)
+  expect(literal('{id:"bg",fill:grad}')).toBeUndefined()
 })
 
 it('JSON 模块改写同时移除静态和动态导入的 JSON 属性', async () => {

@@ -36,7 +36,7 @@ export function readVideoEditCodeElementEdit(target: VideoEditCodeElementTarget,
   const renamedAddedKeys = addedKeys ? stored.addedEffects!.flatMap((effect, index) => effect.key === addedKeys[index] ? [] : [[effect.key, addedKeys[index]] as [string, string]]) : []
   const override: CodeElementOverride = renamedAddedKeys.length ? { ...stored, addedEffects: stored.addedEffects!.map((effect, index) => ({ ...effect, key: addedKeys![index] })) } : stored
   const editor = readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId)
-  const textTargets = readCodeAuthorTextTargets(element?.author, editor.metadata.parameters, editor.parameters)
+  const textTargets = readCodeAuthorTextTargets(element?.author, editor.metadata.parameters, editor.parameters, new Set([...entry?.index.byId.keys() ?? [], ...Object.keys(program.bundle.locations.layers)]))
   return { owner, sequence, clip, entry, element, program, override, renamedAddedKeys, values: evaluateCodeElementOverride(override, time), time, textTargets, declarations: editor.metadata.parameters, parameters: editor.parameters }
 }
 /**

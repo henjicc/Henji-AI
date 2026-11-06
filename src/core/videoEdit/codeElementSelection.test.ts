@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { codeElementAtSource, codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, cycleCodeElement, hitCodeElementIndex, prepareAuthorElementIndex } from './codeElementSelection'
+import { codeElementAtSource, codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, hitCodeElementIndex, prepareAuthorElementIndex } from './codeElementSelection'
 import { videoEditClipToFrame } from './clipGeometry'
 import { videoEditAnnotationTargetSchema } from './annotations'
 import type { AuthorElementObservation } from './codeAuthorProgram'
@@ -8,13 +8,11 @@ function layer(id: string, x = 0, y = 0, size = 100): AuthorElementObservation {
   return { id, name: id, bounds: [0, 0, size, size], matrix: [1, 0, 0, 1, x, y], corners: [[x,y],[x+size,y],[x+size,y+size],[x,y+size]], parameterKeys: [], textParameterKeys: [] }
 }
 describe('代码图层点选共享几何', () => {
-  it('同名图层按稳定ID区分并循环选择，标注保留完整身份', () => {
+  it('同名图层按稳定ID区分，标注保留完整身份', () => {
     const name = '作者图层'.repeat(40)
     const index = prepareAuthorElementIndex([{ ...layer('node-0'), name }, { ...layer('node-1'), name }])
     const hits = hitCodeElementIndex(index, 50, 50)
     expect(hits.map(hit => hit.elementId)).toEqual(['node-1', 'node-0'])
-    expect(cycleCodeElement(hits, hits[0].elementId, true)).toBe(hits[1])
-    expect(cycleCodeElement(hits, hits[1].elementId, true)).toBe(hits[0])
     expect(index.byId.get(hits[1].elementId)).toBe(hits[1]); expect(codeElementLabel(hits[0])).toBe(name)
     expect(videoEditAnnotationTargetSchema.parse({ kind: 'element', elementId: hits[0].elementId })).toMatchObject({ elementId: hits[0].elementId })
   })
@@ -27,6 +25,18 @@ describe('代码图层点选共享几何', () => {
     const polygon = codeElementFramePolygon({ x: 576, y: 432, width: 50, height: 30 }, placement, picture, frame)
     expect(polygon[0].x).toBeCloseTo(point.x); expect(polygon[0].y).toBeCloseTo(point.y)
     expect(codeElementAuthorPoint(placement, picture, frame, polygon[2]).x).toBeCloseTo(626)
+  })
+  it('有绘制观察时按实际画到的范围命中，文字优先；这一帧没画的图层不参与', () => {
+    const text = { sourceText: '一行字', box: { x: 40, y: 70, width: 40, height: 20 }, inkBounds: { x: 42, y: 72, width: 36, height: 16 }, matrix: [1, 0, 0, 1, 0, 0] } as unknown as NonNullable<AuthorElementObservation['textDraws']>[number]
+    const index = prepareAuthorElementIndex([
+      { ...layer('glyph'), drawnBounds: [10, 10, 30, 30] },
+      { ...layer('caption'), drawnBounds: [42, 72, 78, 88], textDraws: [text] },
+      { ...layer('frame'), drawnBounds: [0, 0, 100, 100] },
+      { ...layer('cursor'), drawnBounds: null },
+    ])
+    expect(hitCodeElementIndex(index, 20, 20).map(hit => hit.elementId)).toEqual(['frame', 'glyph'])
+    expect(hitCodeElementIndex(index, 60, 80).map(hit => hit.elementId)).toEqual(['caption', 'frame'])
+    expect(hitCodeElementIndex(index, 60, 40).map(hit => hit.elementId)).toEqual(['frame'])
   })
   it('以作者声明的图层bounds命中，透明层不参与，不识别内部绘制语句', () => {
     const index = prepareAuthorElementIndex([layer('background'), { ...layer('hidden'), opacity: 0 }, layer('foreground', 10, 10, 20)])

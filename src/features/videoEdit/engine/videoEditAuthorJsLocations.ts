@@ -40,13 +40,16 @@ export function authorJsLocations(input: CodeMaterialFiles): CodeAuthorSourceLoc
         const key = (property: Node): string | undefined => property.computed ? undefined : name(property.key)
         const id = properties.find(property => key(property) === 'id')
         const layerId = id && node(id.value) && id.value.type === 'Literal' ? name(id.value) : undefined
-        const layer = properties.some(property => ['draw', 'adjust'].includes(key(property) ?? ''))
+        // fill 图层的 fill 必须是函数；数据行里的 fill 颜色字符串不算图层。
+        const layer = properties.some(property => ['draw', 'adjust'].includes(key(property) ?? '') || key(property) === 'fill' && (property.method || node(property.value) && ['ArrowFunctionExpression', 'FunctionExpression'].includes(property.value.type)))
         const spread = properties.some(property => property.type === 'SpreadElement')
         if (layer && layerId && !spread) {
           if (Object.hasOwn(layers, layerId)) duplicates.add(layerId)
           else layers[layerId] = span(value)
           if (properties.some(property => key(property) === 'adjust')) adjust.add(layerId)
         } else if (layer || id && spread) dynamicIds = true // 展开对象可能带来 draw 或 id，静态表就不完整。
+        // fill 写成函数名或调用时看不出是不是图层，静态表就不能断定完整。
+        else if (id && properties.some(property => key(property) === 'fill' && node(property.value) && ['Identifier', 'CallExpression', 'MemberExpression'].includes(property.value.type))) dynamicIds = true
         if (file === input.entry && !fallback && properties.some(property => ['layers', 'draw', 'createWebGL', 'createWebGPU', 'createThree'].includes(key(property) ?? ''))) fallback = span(value)
       }
       for (const child of Object.values(value)) {

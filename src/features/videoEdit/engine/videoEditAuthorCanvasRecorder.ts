@@ -130,10 +130,16 @@ const matrixOf = (args: Value[]): Matrix => {
 const isIdentity = (m: Matrix): boolean => m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0
 
 export interface AuthorTextRun { start: number; end: number; layout: number | string; motionBlur?: boolean }
+export interface AuthorCanvasInk { layerIndex?: number; bounds: [number, number, number, number] | null }
 export interface AuthorCanvasRecording {
   canvasReview?: AuthorCanvasReviewObservation[]
   textUncovered?: string[]
   textUncoveredByLayer?: Record<number, string[]>
+  /**
+   * 每个图层实际画到的范围（作者图层坐标，未计阴影与滤镜外扩），只给画面点选用：作者常把图层范围声明成整屏，
+   * 按声明范围点选会让上层整屏图层挡住下面的内容。`bounds: null` 表示有算不出范围的绘制（任意 Path2D），点选退回声明范围。
+   */
+  ink?: AuthorCanvasInk[]
   textDraws: TextDrawObservation[]
   /** 每次 drawText 占的指令范围 [start, end) 和版面身份，只影响运动模糊怎么判断。比较时只看开关：版面身份不进画面。 */
   textRuns?: AuthorTextRun[]
@@ -181,6 +187,8 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   const ops: Value[][] = []
   const textDraws: TextDrawObservation[] = [], textRuns: AuthorTextRun[] = []
   const canvasReview: AuthorCanvasReviewObservation[] = []
+  const ink: AuthorCanvasInk[] = []
+  let pathInk: Array<[number, number]> = []
   const textUncovered = new Set<string>()
   const textUncoveredByLayer: Record<number, string[]> = {}
   let layerIndex: number | undefined
@@ -197,6 +205,20 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   let matrix: Matrix = [...transform], dash: number[] = []
   const stack: Array<{ state: Record<string, Value>; matrix: Matrix; dash: number[] }> = []
   const standIn = new CanvasStandIn(size.width, size.height)
+  const authorPoint = (x: number, y: number): [number, number] => codePoint(multiply(invert(transform), matrix), x, y)
+  const inkEntry = (): AuthorCanvasInk => {
+    let entry = ink.find(item => item.layerIndex === layerIndex)
+    if (!entry) { entry = { ...(layerIndex === undefined ? {} : { layerIndex }), bounds: [Infinity, Infinity, -Infinity, -Infinity] }; ink.push(entry) }
+    return entry
+  }
+  /** 作者图层坐标里的点；`pad` 是描边半宽（用户坐标），按当前缩放换算。 */
+  const paintInk = (points: ReadonlyArray<[number, number]>, pad = 0): void => {
+    const entry = inkEntry(), bounds = entry.bounds
+    if (!bounds) return
+    const m = multiply(invert(transform), matrix), grow = pad * Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]))
+    for (const [x, y] of points) if (Number.isFinite(x) && Number.isFinite(y)) { bounds[0] = Math.min(bounds[0], x - grow); bounds[1] = Math.min(bounds[1], y - grow); bounds[2] = Math.max(bounds[2], x + grow); bounds[3] = Math.max(bounds[3], y + grow) }
+  }
+  const square = (x: number, y: number, r: number): Array<[number, number]> => [authorPoint(x - r, y - r), authorPoint(x + r, y - r), authorPoint(x + r, y + r), authorPoint(x - r, y + r)]
   const idOf = (value: GradientRecord | PatternRecord): number | undefined => value.owner === ops ? (value instanceof GradientRecord ? value.record.id : value.id) : adopted.get(value)
   const adopt = (value: GradientRecord | PatternRecord): number => {
     const id = ++nextId
@@ -258,6 +280,20 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
       const [x, y, width, height] = destination as number[]
       primitive = textRectCorners({ x, y, width, height })
     }
+    const halfLine = Number(state.lineWidth ?? 1) / 2
+    if (name === 'beginPath') pathInk = []
+    else if (name === 'moveTo' || name === 'lineTo') pathInk.push(authorPoint(a, b))
+    else if (name === 'quadraticCurveTo' || name === 'arcTo') pathInk.push(authorPoint(a, b), authorPoint(c, d))
+    else if (name === 'bezierCurveTo') pathInk.push(authorPoint(a, b), authorPoint(c, d), authorPoint(e, f))
+    else if (name === 'arc') pathInk.push(...square(a, b, Math.abs(c)))
+    else if (name === 'ellipse') pathInk.push(...square(a, b, Math.max(Math.abs(c), Math.abs(d))))
+    else if (name === 'rect' || name === 'roundRect') pathInk.push(...textRectCorners({ x: a, y: b, width: c, height: d }).map(([x, y]) => authorPoint(x, y)))
+    else if (name === 'fill' || name === 'stroke') {
+      // 字形轮廓由排版库的绘制观察计入；其他 Path2D 看不到内容。
+      if (args[0] instanceof OutlineRef) { /* 见文字绘制观察 */ }
+      else if (args[0] !== null && typeof args[0] === 'object') inkEntry().bounds = null
+      else paintInk(pathInk, name === 'stroke' ? halfLine : 0)
+    } else if (primitive && name !== 'textAppearance') paintInk(primitive.map(([x, y]) => authorPoint(x, y)), name === 'strokeRect' ? halfLine : 0)
     if (primitive && (Number(state.shadowOffsetX) || Number(state.shadowOffsetY))) {
       // 只对可能投回画布的绘制规范化颜色，状态与路径指令无需解析阴影。
       measure.shadowColor = String(state.shadowColor ?? 'transparent')
@@ -365,6 +401,8 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
         return () => ({ matrix: [...matrix], colorSpace: (measure as TextRasterProvider).getContextAttributes?.().colorSpace ?? 'srgb' })
       }
       if (property === TEXT_DRAW_OBSERVER) return (fact: TextDrawFact): void => {
+        const drawn = fact.appearanceBounds ?? fact.inkBounds
+        if (drawn) paintInk(textRectCorners(drawn).map(([x, y]) => authorPoint(x, y)))
         if (fact.inkBounds && fact.boundsKind === 'measured' && fact.revealComplete !== false && !fact.animatedGraphemes && fact.bodyCoverage !== 'none') canvasReview.push({ kind: 'text', layerIndex, text: fact.sourceText, quad: textRectCorners(fact.inkBounds).map(([x, y]) => codePoint(multiply(invert(transform), matrix), x, y)), opacity: Number(state.globalAlpha ?? 1) })
         const uncovered = [ ...(fact.animatedGraphemes ? ['独立字素动画的墨迹裁切'] : []), ...(unknownClip ? ['任意 Canvas clip'] : []), ...(state.filter && state.filter !== 'none' ? ['Canvas filter'] : []), ...(state.globalCompositeOperation && state.globalCompositeOperation !== 'source-over' ? ['Canvas 混合遮挡'] : []), ...(fact.bodyCoverage && fact.bodyCoverage !== 'complete' ? ['部分或全部正文未启用填充或描边，文字完整性未覆盖'] : []) ]
         const canvasClip = textRectCorners({ x: 0, y: 0, ...size }).map(([x, y]) => codePoint(invert(transform), x, y))
@@ -394,7 +432,8 @@ export function recordAuthorCanvas(size: { width: number; height: number }, meas
   // 多出的 save 没有 restore：画完时状态与裁剪还留在栈上，同样会漏给后面的层。
   if (stack.length) balanced = false
   if (!balanced) for (const fact of textDraws) { fact.retained = false; fact.uncovered.push('跨绘制状态或合成遮挡') }
-  return { ops, comparable, assets, isolated, balanced, textDraws, textRuns, canvasReview, textUncovered: [...textUncovered], textUncoveredByLayer }
+  for (const entry of ink) if (entry.bounds && !entry.bounds.every(Number.isFinite)) entry.bounds = null
+  return { ops, comparable, assets, isolated, balanced, textDraws, textRuns, canvasReview, ink, textUncovered: [...textUncovered], textUncoveredByLayer }
 }
 
 /** 只重放一部分绘制动作，或把它们画成速度图（`velocity` 给每个动作的编码颜色）。 */

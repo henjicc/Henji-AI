@@ -18,7 +18,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { createVideoEditTestProject, closeAllVideoEdits } from './videoEditDocumentTestKit'
 
 
-import { installVideoEditCodeElements, readSelectedVideoEditCodeElement, selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditSelectedCodeElementContext, videoEditCodeElementFrames, videoEditProgramClipAt } from './videoEditCodeElements'
+import { installVideoEditCodeElements, readSelectedVideoEditCodeElement, selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditSelectedCodeElementContext, videoEditCodeElementFrames, pickVideoEditProgram } from './videoEditCodeElements'
 
 
 
@@ -33,7 +33,7 @@ afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninst
 it('non-code scenes do not initialize font measurement or author indices', async () => {
   installHarnessNativeStorage(); const owner = await createVideoEditTestProject(); const before = font.calls
   expect(videoEditCodeElementFrames(owner).size).toBe(0)
-  expect(videoEditProgramClipAt(owner, { x: .5, y: .5 })).toBeUndefined()
+  expect(pickVideoEditProgram(owner, { x: .5, y: .5 })?.element).toBeUndefined()
   expect(font.calls).toBe(before)
 })
 

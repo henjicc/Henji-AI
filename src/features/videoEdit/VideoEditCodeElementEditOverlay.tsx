@@ -12,9 +12,10 @@ import type { TextStyle } from '@/core/imaging/vectorContent/text'
 import { readCodeElementOverride, type CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
 import { readVideoEditCodeElementEdit, updateVideoEditCodeElement, setVideoEditCodeElementText, resetVideoEditCodeElement, askAssistantForVideoEditCodeElement, bakeVideoEditCodeElement, showVideoEditCodeElementSource, setVideoEditCodeElementAutoKeyframes, type VideoEditCodeElementTarget } from './application/videoEditCodeElementEditing'
 import { handleVideoEditElementEffectDragOver, handleVideoEditElementEffectDrop } from './panels/videoEditEffectDrag'
-import { hitVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames, type selectedVideoEditCodeElement } from './application/videoEditCodeElements'
-import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, type VideoEditGesture, type VideoEditInstance } from './application/videoEditService'
+import { pickVideoEditProgram, selectVideoEditCodeElement, videoEditCodeElementFrames, type selectedVideoEditCodeElement } from './application/videoEditCodeElements'
+import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, setVideoEditView, type VideoEditGesture, type VideoEditInstance } from './application/videoEditService'
 import { VideoEditInlineTextEditor } from './VideoEditInlineTextEditor'
+import { editVideoEditCodeElementLiteral } from './application/videoEditCodeLiteralEditing'
 import { VideoEditCodeElementEditBar } from './VideoEditCodeElementEditBar'
 
 type Selection = NonNullable<ReturnType<typeof selectedVideoEditCodeElement>>
@@ -29,6 +30,10 @@ interface TextEdit {
   caret?: { x: number; y: number }; time: Drag['time']; placement: CodeTextPlacement; style?: TextStyle; fontSize: number; wrap: boolean; maxLength?: number
   gesture?: VideoEditGesture
 }
+/**
+ * 逐字动画每字一层，改字数时后面的字层会消失：改这种字时先改选同一段字的第一个字层，换选中会重建变换层，由新层接着进入编辑。
+ */
+let pendingTextEdit: { document: object; frame: number; clipId: string; elementId: string; at?: { client: { x: number; y: number }; frame: CodeEditPoint } } | undefined
 /** 绘制观察给出的那段字的放置；没有绘制观察时用元素自身的范围。 */
 function textPlacement(selected: Selection, target: CodeAuthorTextTarget | undefined, sequence: ReturnType<typeof getActiveVideoEditSequence>): CodeTextPlacement {
   const bounds = selected.element.author.bounds ?? [selected.element.x, selected.element.y, selected.element.x + selected.element.width, selected.element.y + selected.element.height]
@@ -119,7 +124,18 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
     event.stopPropagation(); event.preventDefault()
     const tapped = !current.gesture && current.mode === 'move'
     finish(true)
-    if (tapped && (event.altKey || !readVideoEditCodeElementEdit(current.target).textTargets.length)) { const hit = hitVideoEditCodeElement(instance, framePoint(current.rect, event.clientX, event.clientY), true); if (hit) selectVideoEditCodeElement(instance, hit.clipId, hit.element.elementId) }
+    if (tapped) { try { tap(framePoint(current.rect, event.clientX, event.clientY), event.altKey) } catch (error) { onError(error) } }
+  }
+  /** 选框按图层声明的范围画，常比画出来的东西大：轻点处若不是这个元素画的，改选点处真正看得到的东西；Alt 或元素没有字可改时在重叠的元素间轮换。 */
+  const tap = (at: CodeEditPoint, alt: boolean): void => {
+    const here = pickVideoEditProgram(instance, at)
+    const onSelected = here?.hits.some(hit => hit.clip.id === target.clipId && hit.element.elementId === target.elementId)
+    if (onSelected && !alt && readVideoEditCodeElementEdit(target).textTargets.length) return
+    const next = onSelected ? pickVideoEditProgram(instance, at, true) : here
+    if (next?.clip.kind === 'text') return
+    if (next?.element) selectVideoEditCodeElement(instance, next.clip.id, next.element.elementId)
+    else if (next?.clip.kind === 'code') selectVideoEditCodeElement(instance, next.clip.id, null)
+    else setVideoEditView(instance.document.id, { selection: next?.clip.id ?? null, selectedCodeElement: null })
   }
   /** 双击处最近的一段字（Enter 或编辑条按钮取能直接改的第一段）进入原地编辑。 */
   const editText = (at?: { client: { x: number; y: number }; frame: CodeEditPoint }): void => {
@@ -130,6 +146,13 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
     const placements = targets.map(item => textPlacement(selected, item, sequence))
     const index = at ? placements.reduce((best, placement, i) => codeTextPlacementDistance(placement, at.frame) < codeTextPlacementDistance(placements[best], at.frame) ? i : best, 0) : Math.max(0, targets.findIndex(item => item.binding))
     const item = targets[index]
+    const layoutId = item.draw?.layoutId
+    const first = layoutId && current.entry?.index.bounds.find(bound => bound.author.textDraws?.some(draw => draw.layoutId === layoutId))
+    if (first && first.elementId !== target.elementId) {
+      pendingTextEdit = { document: instance.document, frame: instance.frame, clipId: target.clipId, elementId: first.elementId, at }
+      selectVideoEditCodeElement(instance, target.clipId, first.elementId)
+      return
+    }
     const styles = current.declarations.filter(parameter => parameter.type === 'textStyle' && current.element?.author.parameterKeys.includes(parameter.key))
     const style = styles.length === 1 ? current.parameters[styles[0].key] as TextStyle : undefined
     const placement = placements[index]
@@ -137,7 +160,7 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
     const rect = root.current?.getBoundingClientRect(); if (rect) setSize({ width: rect.width, height: rect.height })
     setText({ target, index, binding: item.binding, initial: item.text, value: item.text, caret: at?.client, time: current.time, placement, style, fontSize, wrap: Boolean(item.draw?.constraint.width || item.draw?.constraint.maxWidth), maxLength: item.binding ? codeAuthorTextMaxLength(item.binding, current.declarations) : undefined })
   }
-  /** 能直接改的字逐字写参数（整次一步撤销）；写死在源码里的字结束时把改动交给助手。 */
+  /** 能直接改的字逐字写参数（整次一步撤销）；写死在源码里的字等按 Enter 时改源码。 */
   const typeText = (value: string): void => {
     const edit = textRef.current; if (!edit) return
     edit.value = value
@@ -147,21 +170,36 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
       setVideoEditCodeElementText(edit.target, edit.binding, value, { gesture: edit.gesture, time: edit.time })
     } catch (error) { endText(false); onError(error) }
   }
-  /** `send`：只有按 Enter 才把写死在源码里的字交给助手（会调用模型）；失焦、切帧只结束编辑。改回原文的不留手改记录。 */
+  /**
+   * `send`：只有按 Enter 才改写死在源码里的字：源码里唯一一处同文字面量直接改掉，找不到唯一出处才交给助手（会调用模型）。
+   * 失焦、切帧只结束编辑。改回原文的不留手改记录。
+   */
   function endText(commit: boolean, send = false): void {
     const edit = textRef.current; if (!edit) return
     setText(undefined)
     if (edit.gesture) { try { finishVideoEditGesture(edit.gesture, commit && edit.value !== edit.initial) } catch (error) { finishVideoEditGesture(edit.gesture, false); onError(error) } }
     if (!send || edit.binding || edit.value === edit.initial) return
     if (pending.current) { onError(new Error('上一条交给助手的请求还在准备画面，请稍后再按 Enter。')); return }
-    requestAssistant(`把元素「${selected.element.author.name}」里的文字「${edit.initial}」改成「${edit.value}」，并把这段文字写成 text 参数（同时加 textStyle 参数），用 layer 绑定到这个图层，以后可以在画面上直接改。`)
+    requestAssistant(`把元素「${selected.element.author.name}」里的文字「${edit.initial}」改成「${edit.value}」，并把这段文字写成 text 参数（同时加 textStyle 参数），用 layer 绑定到这个图层，以后可以在画面上直接改。`, false, { before: edit.initial, after: edit.value })
   }
   const run = (operation: () => void): void => { try { finish(true); endNudge(true); operation() } catch (error) { onError(error) } }
-  function requestAssistant(request?: string, bake = false): void {
+  /** `literal`：先试着直接改源码里的这处字，改不了再交给助手。 */
+  function requestAssistant(request?: string, bake = false, literal?: { before: string; after: string }): void {
     if (pending.current) return
     const controller = new AbortController(); pending.current = controller; setBusy(true)
-    void (bake ? bakeVideoEditCodeElement(target, controller.signal) : askAssistantForVideoEditCodeElement(target, { request }, controller.signal)).catch(error => { if (!controller.signal.aborted) onError(error) }).finally(() => { if (pending.current === controller) { pending.current = undefined; setBusy(false) } })
+    const ask = (): Promise<unknown> => bake ? bakeVideoEditCodeElement(target, controller.signal) : askAssistantForVideoEditCodeElement(target, { request }, controller.signal)
+    void (literal ? editVideoEditCodeElementLiteral(target, literal.before, literal.after, controller.signal).then(done => done || ask()) : ask()).catch(error => { if (!controller.signal.aborted) onError(error) }).finally(() => { if (pending.current === controller) { pending.current = undefined; setBusy(false) } })
   }
+  useEffect(() => {
+    const handoff = pendingTextEdit
+    if (!metadata.ready || !handoff) return
+    pendingTextEdit = undefined
+    // 交接后画面或文档变了（没能挂出新层、用户已去做别的）就作废，免得以后选中时意外进入改字。
+    if (handoff.clipId !== target.clipId || handoff.elementId !== target.elementId || handoff.document !== instance.document || handoff.frame !== instance.frame) return
+    run(() => editText(handoff.at))
+    // 只在换到这个字层、参数读好时接手一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metadata.ready])
   const cornerStyle = (point: CodeEditPoint) => ({ left: `${point.x * 100}%`, top: `${point.y * 100}%` })
   const rotationPoint = { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 }
   // 源码版本刚换、元素暂时读不到时只是不显示编辑条；选框与拖动照常。

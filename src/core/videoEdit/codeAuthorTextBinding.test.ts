@@ -53,4 +53,13 @@ describe('author text editing', () => {
     const targets = readCodeAuthorTextTargets(indexed, [{ ...table, fields: { ...table.fields, subtitle: text('subtitle') } }], { nodes: [{ id: 'a', label: 'A', subtitle: 'extra' }] })
     expect(targets.map(target => target.binding)).toEqual([{ parameter: 'nodes', row: 0, field: 'label', value: 'A' }, { parameter: 'nodes', row: 0, field: 'subtitle', value: 'extra' }])
   })
+  it('binds a per-glyph layer to the one text parameter whose value is the whole drawn paragraph', () => {
+    const glyph = { ...author, data: undefined, textDraws: [draw('Pretext 断行')] }
+    expect(readCodeAuthorTextTargets(glyph, [text('word'), text('note')], { word: 'Pretext 断行', note: '其他' })[0].binding).toEqual({ parameter: 'word', value: 'Pretext 断行' })
+    expect(readCodeAuthorTextTargets(glyph, [text('a'), text('b')], { a: 'Pretext 断行', b: 'Pretext 断行' })[0].binding).toBeUndefined()
+    // 挂在另一个现存图层上的同值参数是那个图层的字，不能抢过来；挂到不存在的图层（逐字拆层时常见）才认领。
+    const titled = [{ ...text('word'), layer: 'title' }]
+    expect(readCodeAuthorTextTargets(glyph, titled, { word: 'Pretext 断行' }, new Set(['title', 'footer']))[0].binding).toBeUndefined()
+    expect(readCodeAuthorTextTargets(glyph, titled, { word: 'Pretext 断行' }, new Set(['footer']))[0].binding?.parameter).toBe('word')
+  })
 })

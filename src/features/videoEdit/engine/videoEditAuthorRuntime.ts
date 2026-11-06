@@ -228,12 +228,16 @@ export class VideoEditAuthorRuntime {
       const combined = [...this.history.entries()].find(([key]) => { const match = /^flat:(\d+):(\d+)$/.exec(key); return match && index >= Number(match[1]) && index < Number(match[2]) })?.[1].painted?.recording
       const observed = combined ?? recording
       const textDraws = frame.directText?.get(index) ?? observed?.textDraws.filter(draw => draw.layerIndex === undefined || draw.layerIndex === index)
+      const inks = observed?.ink?.filter(entry => entry.layerIndex === undefined || entry.layerIndex === index)
+      const drawnBounds = !observed || frame.directText?.has(index) || inks?.some(entry => !entry.bounds) ? undefined
+        : inks?.length ? inks.reduce<[number, number, number, number]>((box, entry) => [Math.min(box[0], entry.bounds![0]), Math.min(box[1], entry.bounds![1]), Math.max(box[2], entry.bounds![2]), Math.max(box[3], entry.bounds![3])], [Infinity, Infinity, -Infinity, -Infinity]) : null
       const canvasReview = observed?.canvasReview?.filter(fact => (fact.layerIndex === undefined || fact.layerIndex === index) && (posed || fact.kind !== 'shadow_outside_source'))
       const textLayouts = [...frame.textLayouts ?? []].filter(([, owner]) => owner === index).map(([id]) => id)
       const unassignedTextLayouts = attachedUnassigned ? [] : [...frame.textLayouts ?? []].filter(([, owner]) => owner === undefined).map(([id]) => id)
       attachedUnassigned = true
       const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? (layer.factory && this.locations?.factories?.[layer.factory.file]?.[layer.factory.name]) ?? this.locations?.fallback
       return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), effects: frame.effects?.get(index) ?? [], effectStates: frame.effectStates?.get(index) ?? [], effectsTime: frame.time, baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1),
+        ...(drawnBounds !== undefined ? { drawnBounds } : {}),
         ...(textDraws ? { textDraws: structuredClone(textDraws).map(draw => ({ ...draw,
           // 运动层的 GPU scissor 在作者画幅坐标裁切；内部 Canvas clip 已由录制保存。
           ...(posed && layer.clip ? { stageClip: [...layer.clip] as [number, number, number, number] } : {}),

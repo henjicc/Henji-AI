@@ -1,8 +1,9 @@
 import { authorResolvedEffectSchema } from './authorEffectObservation'
 import { videoEditClipToFrame, videoEditFrameToClip, type VideoEditClipPlacement, type VideoEditSize } from './clipGeometry'
-import type { CodeElementBounds } from './codeMaterial/geometry'
+import { codePoint, type CodeElementBounds } from './codeMaterial/geometry'
 import { z } from 'zod'
 import type { AuthorElementObservation } from './codeAuthorProgram'
+import { textRectCorners } from './textDrawObservation'
 
 /** These rectangles are selection metadata only, never a reconstruction of draw(). */
 export function prepareAuthorElementIndex(observations: readonly AuthorElementObservation[]): CodeElementIndex {
@@ -14,13 +15,40 @@ export function prepareAuthorElementIndex(observations: readonly AuthorElementOb
   return { bounds, byId: new Map(bounds.map(bound => [bound.elementId, bound])), ancestors: new Map(), parameters: new Map(observations.map(author => [author.id, author.parameterKeys])) }
 }
 
-function hitAuthorBounds(author: AuthorElementObservation, x: number, y: number): boolean {
-  if (!author.bounds || author.kind === 'adjust') return false
+/** 点在图层坐标里的位置；矩阵退化时返回 undefined。 */
+function authorLocal(author: AuthorElementObservation, x: number, y: number): [number, number] | undefined {
   const [a, b, c, d, tx, ty] = author.matrix, determinant = a * d - b * c
-  if (Math.abs(determinant) < 1e-12) return false
-  const localX = (d * (x - tx) - c * (y - ty)) / determinant
-  const localY = (a * (y - ty) - b * (x - tx)) / determinant
-  return localX >= author.bounds[0] && localX <= author.bounds[2] && localY >= author.bounds[1] && localY <= author.bounds[3]
+  if (Math.abs(determinant) < 1e-12) return undefined
+  return [(d * (x - tx) - c * (y - ty)) / determinant, (a * (y - ty) - b * (x - tx)) / determinant]
+}
+const inside = (box: readonly number[], x: number, y: number, slack = 0): boolean => x >= box[0] - slack && x <= box[2] + slack && y >= box[1] - slack && y <= box[3] + slack
+/** 点到凸四边形（含容差）：文字绘制按自己的矩阵摆放，框可能旋转。 */
+function insideQuad(quad: ReadonlyArray<[number, number]>, x: number, y: number, slack: number): boolean {
+  let sign = 0
+  for (let i = 0; i < quad.length; i++) {
+    const [ax, ay] = quad[i], [bx, by] = quad[(i + 1) % quad.length], length = Math.hypot(bx - ax, by - ay) || 1
+    const side = ((bx - ax) * (y - ay) - (by - ay) * (x - ax)) / length
+    if (Math.abs(side) <= slack) continue
+    if (sign && Math.sign(side) !== sign) return false
+    sign ||= Math.sign(side)
+  }
+  return true
+}
+/** 点选容差（作者画布像素）：细线和小字也能点中。 */
+const HIT_SLACK = 6
+/**
+ * 命中分两档：点在画出来的文字上为 'text'，只在实际画到的范围里为 'paint'。作者常把图层范围声明成整屏，
+ * 只按声明范围会让排在上面的整屏图层挡住所有点击；有绘制观察时以画到的地方为准，没有时才退回声明范围。
+ */
+function hitAuthor(author: AuthorElementObservation, x: number, y: number): 'text' | 'paint' | undefined {
+  if (!author.bounds || author.kind === 'adjust' || author.drawnBounds === null) return undefined
+  const local = authorLocal(author, x, y)
+  if (!local || !inside(author.bounds, local[0], local[1])) return undefined
+  for (const draw of author.textDraws ?? []) {
+    const rect = draw.appearanceBounds ?? draw.inkBounds
+    if (rect && insideQuad(textRectCorners(rect).map(([px, py]) => codePoint(draw.matrix, px, py)), local[0], local[1], HIT_SLACK)) return 'text'
+  }
+  return !author.drawnBounds || inside(author.drawnBounds, local[0], local[1], HIT_SLACK) ? 'paint' : undefined
 }
 
 export const videoEditSelectedCodeElementContextSchema = z.object({
@@ -33,20 +61,17 @@ export const videoEditSelectedCodeElementContextSchema = z.object({
 export interface VideoEditCodeElementSelection { sequenceId: string; clipId: string; versionId: string; elementId: string }
 export interface CodeElementIndex { bounds: CodeElementBounds[]; byId: Map<string, CodeElementBounds>; ancestors: Map<CodeElementBounds, CodeElementBounds[]>; parameters: Map<string, string[]> }
 
+/** 点中的元素，文字命中排在前面，同档按从上到下。 */
 export function hitCodeElementIndex(index: CodeElementIndex, x: number, y: number): CodeElementBounds[] {
-  const result: CodeElementBounds[] = []; const added = new Set<string>()
+  const text: CodeElementBounds[] = [], paint: CodeElementBounds[] = []; const added = new Set<string>()
   for (let i = index.bounds.length - 1; i >= 0; i--) {
     const bound = index.bounds[i]
-    if (bound.author) {
-      if (bound.opacity >= .01 && hitAuthorBounds(bound.author, x, y) && !added.has(bound.elementId)) { added.add(bound.elementId); result.push(bound) }
-      continue
-    }
-
+    if (bound.opacity < .01 || added.has(bound.elementId)) continue
+    const hit = hitAuthor(bound.author, x, y)
+    if (!hit) continue
+    added.add(bound.elementId); (hit === 'text' ? text : paint).push(bound)
   }
-  return result
-}
-export function cycleCodeElement(hits: readonly CodeElementBounds[], current?: string, cycle = false): CodeElementBounds | undefined {
-  return hits.length ? hits[cycle ? (hits.findIndex(hit => hit.elementId === current) + 1) % hits.length : 0] : undefined
+  return [...text, ...paint]
 }
 export function codeElementAtSource(index: CodeElementIndex, offset: number, file = 'main.ts'): CodeElementBounds | undefined {
   return index.bounds.filter(bound => bound.sourceSpan && bound.sourceSpan.file === file && bound.sourceSpan.start <= offset && offset < bound.sourceSpan.end && bound.opacity >= .01 && (bound.author.kind === 'adjust' || bound.width > 0 && bound.height > 0)).sort((a, b) => (a.sourceSpan!.end - a.sourceSpan!.start) - (b.sourceSpan!.end - b.sourceSpan!.start))[0]

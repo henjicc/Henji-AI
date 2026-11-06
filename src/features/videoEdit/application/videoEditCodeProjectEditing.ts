@@ -18,8 +18,13 @@ const projectRef = (projectId: string): ApplicationRef => ({ kind: 'video_edit.c
 
 /** 改一个工程文件并提交，提交说明就是事务摘要。 */
 export async function commitVideoEditCodeProjectFile(projectId: string, path: string, source: string, message: string, signal: AbortSignal): Promise<void> {
-  const ref: ApplicationRef = { kind: 'video_edit.code_project_file', id: `${projectId}:${path}` }
-  await run({ id: 'change_application_entities', version: 2, expectedRevisions: await baseline(ref, signal), input: { summary: message, changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.code_project_file.source': source } }] } }, signal)
+  await commitVideoEditCodeProjectFiles(projectId, [{ path, source }], message, signal)
+}
+/** 几个工程文件一起改，进同一次提交。 */
+export async function commitVideoEditCodeProjectFiles(projectId: string, files: ReadonlyArray<{ path: string; source: string }>, message: string, signal: AbortSignal): Promise<void> {
+  const refs: ApplicationRef[] = files.map(file => ({ kind: 'video_edit.code_project_file', id: `${projectId}:${file.path}` }))
+  const expectedRevisions = Object.assign({}, ...await Promise.all(refs.map(ref => baseline(ref, signal)))) as Record<string, number>
+  await run({ id: 'change_application_entities', version: 2, expectedRevisions, input: { summary: message, changes: files.map((file, index) => ({ kind: 'set_properties', entityType: refs[index].kind, target: refs[index], properties: { 'video_edit.code_project_file.source': file.source } })) } }, signal)
 }
 /** 把在外部编辑器里改过、还没提交的文件提交成一次提交。 */
 export async function commitVideoEditCodeProjectWorkspace(projectId: string, message: string, signal: AbortSignal): Promise<void> {
