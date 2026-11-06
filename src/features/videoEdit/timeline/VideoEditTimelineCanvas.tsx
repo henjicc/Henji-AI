@@ -105,6 +105,13 @@ const TRANSITION_DROP_REACH = 40
 const TRANSITION_DROP_CENTER = 8
 /** 片段宽度够放淡化手柄（两角各一个）时才显示手柄。 */
 const FADE_HANDLE_MIN_WIDTH = 28
+/** 淡化手柄 12px：没淡化时是角上的折角，有淡化时是顶边上朝下的三角。 */
+const FADE_HANDLE_SIZE = 12
+const FADE_HANDLE_CORNER_IN = 'polygon(0 0, 100% 0, 0 100%)'
+const FADE_HANDLE_CORNER_OUT = 'polygon(0 0, 100% 0, 100% 100%)'
+const FADE_HANDLE_POINTER = 'polygon(0 0, 100% 0, 50% 75%)'
+/** 拖淡化时的读数：秒:帧。 */
+const fadeLabel = (frames: number, fps: number): string => { const nominal = Math.max(1, Math.round(fps)); return `${Math.floor(frames / nominal)}:${String(frames % nominal).padStart(2, '0')}` }
 interface TransitionDropHint { kind: VideoEditTransitionKind; pair: VideoEditTransitionPair; alignment: VideoEditTransitionAlignment; track: number; start: number; duration: number }
 export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true, corner }: Props): React.ReactElement {
   const thumbnails = useSettingsStore(state => state.videoEditClipThumbnails)
@@ -457,6 +464,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           {/* 隐藏轨/静音轨/停用片段只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
               纸白下标签只剩 1.5:1（4.1 对比度审计） */}
           {dimmed && <div className="pointer-events-none absolute inset-0 bg-window/50" aria-hidden="true" />}
+          {/* 淡化：一条亮斜线从片段底角升到淡化终点，就是音量或不透明度的走向；画在片段名下面 */}
+          {(fadeIn > 0 || fadeOut > 0) && <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full text-text1 opacity-70" viewBox={`0 0 ${clipWidth} ${row.height - 4}`} preserveAspectRatio="none">
+            {fadeIn > 0 && <line data-video-edit-fade-shape="in" x1={0} y1={row.height - 4} x2={Math.min(clipWidth, fadeIn)} y2={0} stroke="currentColor" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />}
+            {fadeOut > 0 && <line data-video-edit-fade-shape="out" x1={Math.max(0, clipWidth - fadeOut)} y1={0} x2={clipWidth} y2={row.height - 4} stroke="currentColor" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />}
+          </svg>}
           <div className="absolute inset-0 flex">
             {/* ui-surface-allow 片段入点裁剪柄：命中区不是按钮档位，外观由片段容器的 clip 令牌给出 */}
             <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
@@ -467,16 +479,20 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {/* ui-surface-allow 出点裁剪柄，同入点 */}
             <UiButton data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
           </div>
-          {/* 淡化（PR 淡化手柄）：淡入／淡出区上方压一块三角暗影，斜边就是音量或不透明度的走向 */}
-          {fadeIn > 0 && <div aria-hidden="true" data-video-edit-fade-shape="in" className="pointer-events-none absolute left-0 top-0 h-full bg-window/60" style={{ width: Math.min(clipWidth, fadeIn), clipPath: 'polygon(0 0, 100% 0, 0 100%)' }} />}
-          {fadeOut > 0 && <div aria-hidden="true" data-video-edit-fade-shape="out" className="pointer-events-none absolute right-0 top-0 h-full bg-window/60" style={{ width: Math.min(clipWidth, fadeOut), clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }} />}
           <VideoEditTimelineKeyframes projectId={projectId} sequenceId={sequence.id} clip={clip} pen={instance.tool === 'pen'} hints={!row.lane} width={clipWidth} height={row.height - 4} pixels={pixels} onError={onError} />
           {fadable && instance.tool !== 'pen' && (['in', 'out'] as const).map(edge => {
-            const length = edge === 'in' ? fadeIn : fadeOut
-            const offset = Math.max(1, Math.min(clipWidth - 11, length - 5))
-            return <div key={edge} data-video-edit-fade={edge} aria-label={edge === 'in' ? `拖动设置${clip.name}淡入` : `拖动设置${clip.name}淡出`} title={edge === 'in' ? '向右拖动淡入' : '向左拖动淡出'}
-              className={`absolute top-0.5 z-raised h-2.5 w-2.5 cursor-ew-resize rounded-hairline border border-line-strong bg-control transition-opacity duration-120 ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-              style={edge === 'in' ? { left: offset } : { right: offset }} />
+            const length = Math.min(clipWidth, edge === 'in' ? fadeIn : fadeOut)
+            const dragging = pointer.fading?.clipId === clip.id && pointer.fading.edge === edge
+            // 没有淡化时是角上的折角；有淡化时是顶边上朝下的三角，尖端对着淡化终点
+            const offset = length > 0 ? Math.max(0, Math.min(clipWidth - FADE_HANDLE_SIZE, length - FADE_HANDLE_SIZE / 2)) : 0
+            const shape = length > 0 ? FADE_HANDLE_POINTER : edge === 'in' ? FADE_HANDLE_CORNER_IN : FADE_HANDLE_CORNER_OUT
+            const frames = (edge === 'in' ? clip.fadeInFrames : clip.fadeOutFrames) ?? 0
+            return <div key={edge} data-video-edit-fade={edge} aria-label={edge === 'in' ? `拖动设置${clip.name}淡入` : `拖动设置${clip.name}淡出`}
+              className={`absolute top-0 z-raised h-3 w-3 cursor-ew-resize transition-opacity duration-120 ${selected || dragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+              style={edge === 'in' ? { left: offset } : { right: offset }}>
+              <div className="pointer-events-none h-full w-full bg-text1" style={{ clipPath: shape }} />
+              {dragging && <span className={`pointer-events-none absolute top-full mt-0.5 whitespace-nowrap rounded-hairline bg-raised px-1 text-2xs leading-4 text-text1 ${UI_TEXT_NUMERIC_CLASS} ${edge === 'in' ? 'left-0' : 'right-0'}`} data-video-edit-fade-readout>{edge === 'in' ? '淡入' : '淡出'} {fadeLabel(frames, fps)}</span>}
+            </div>
           })}
           {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-hairline bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
           </div>

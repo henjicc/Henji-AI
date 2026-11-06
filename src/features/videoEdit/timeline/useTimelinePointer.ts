@@ -79,6 +79,8 @@ export function useTimelinePointer(options: Options) {
   const [boxSelection, setBoxSelection] = useState<ReadonlySet<string> | null>(null)
   const [resized, setResized] = useState<{ trackId: string; height: number } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  /** 正在拖的淡化手柄：时间线在手柄旁显示淡化时长。 */
+  const [fading, setFading] = useState<{ clipId: string; edge: 'in' | 'out' } | null>(null)
   const waiting = useRef(new WeakSet<Promise<void>>())
   const resumeMetadata = (error: VideoEditCodeMetadataPending, gesture?: PointerGesture): void => {
     setFailure(error.message)
@@ -111,7 +113,7 @@ export function useTimelinePointer(options: Options) {
     if (previous?.kind === 'seek' && previous.owner.scrubbing && listVideoEditInstances().includes(previous.owner)) setVideoEditView(previous.owner.document.id, { scrubbing: false })
     return previous
   }
-  const clear = (): void => { setPreview(null); setBox(null); setBoxSelection(null); setResized(null); setFailure(null); clearTimelineSnap() }
+  const clear = (): void => { setPreview(null); setBox(null); setBoxSelection(null); setResized(null); setFailure(null); setFading(null); clearTimelineSnap() }
   /** 框内命中的片段（按链接选择展开），加选时并上按下前的选中；拖动中的预选中与松手写入的选区用同一算法。 */
   const boxHits = (gesture: Extract<PointerGesture, { kind: 'box' }>): string[] => {
     const { sequence, pixels } = current.current; const rows = current.current.layout.current.rows
@@ -352,6 +354,7 @@ export function useTimelinePointer(options: Options) {
       const fadeEdge = instance.tool === 'select' && clip ? target.closest('[data-video-edit-fade]')?.getAttribute('data-video-edit-fade') : undefined
       if (clip && (fadeEdge === 'in' || fadeEdge === 'out')) {
         capture({ ...base(event), kind: 'fade', drag: beginVideoEditFadeDrag(instance.document.id, sequence.id, clip.id), clipId: clip.id, fade: fadeEdge, frames: (fadeEdge === 'in' ? clip.fadeInFrames : clip.fadeOutFrames) ?? 0, moved: false })
+        setFading({ clipId: clip.id, edge: fadeEdge })
         setVideoEditView(instance.document.id, { playing: false })
         return
       }
@@ -441,5 +444,5 @@ export function useTimelinePointer(options: Options) {
     // All listeners read the fixed gesture/current refs, never a former selection closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  return { viewport, preview, box, boxSelection, resized, failure, down, move, up, resize, cancel, select }
+  return { viewport, preview, box, boxSelection, resized, failure, fading, down, move, up, resize, cancel, select }
 }
