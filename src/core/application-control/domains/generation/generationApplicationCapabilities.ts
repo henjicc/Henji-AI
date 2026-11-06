@@ -26,7 +26,7 @@ const canvasNodeGenerationInputSchema = z.object({
 export type CanvasNodeGenerationInput = z.infer<typeof canvasNodeGenerationInputSchema>
 
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
-import { MODEL_TAG_DEFINITIONS, MODEL_TAGS, type ModelTag } from '@/core/types/ModelTags'
+import { MODEL_TAG_DEFINITIONS, MODEL_TAGS, type ModelTag } from '../../../types/ModelTags'
 import {
   capabilityControl,
   capabilityOutputSchema,
