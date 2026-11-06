@@ -87,6 +87,8 @@ export const ICON_TOOL_AUDIO_EDIT: LucideIcon = AudioWaveform
 export const ICON_TOOL_SCREEN_RECORDING: LucideIcon = MonitorDot
 /** 网页应用录制（`.hjweb`）。 */
 export const ICON_TOOL_WEB_RECORDING: LucideIcon = AppWindow
+/** 开发者面板（只在开发版出现）。 */
+export const ICON_TOOL_DEVELOPER: LucideIcon = Code2
 /** 图片编辑中的多级 GPU 辉光。 */
 export const ICON_IMAGE_GLOW_PRO: LucideIcon = SunMedium
 

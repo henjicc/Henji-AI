@@ -29,6 +29,8 @@ export function isDevelopmentLayoutGuardMode(value: unknown): value is Developme
  */
 export const DEVELOPMENT_SURFACE_IDS = {
   uiGallery: 'dev.ui_gallery',
+  /** SDK 模型开发者面板：在工具箱里打开，列出 SDK 适配的全部模型，可离线构建请求、估价、转到生成页实测。 */
+  sdkModels: 'dev.sdk_models',
 } as const
 
 /** 分区在既有 dev.ui_gallery 页内选择；不新增应用 Surface 或助手入口。 */

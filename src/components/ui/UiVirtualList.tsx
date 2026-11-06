@@ -25,7 +25,19 @@ export function UiVirtualList<T>({ data, getKey, renderItem, emptyState, resetKe
   const [autoHeight, setAutoHeight] = useState<boolean | null>(null)
   const [listHeight, setListHeight] = useState(0)
   useLayoutEffect(() => {
-    if (autoHeight === null && boxRef.current) setAutoHeight(boxRef.current.clientHeight < 1)
+    const box = boxRef.current
+    if (autoHeight !== null || !box) return
+    // 挂载在隐藏的工作区或停靠面板的后台标签里时还没有布局，量到的 0 不代表容器随内容：等它显示出来再判断，
+    // 否则铺满的列表会被当成浮层列表，永远封顶成一小截。
+    const decide = (): boolean => {
+      if (!box.getClientRects().length) return false
+      setAutoHeight(box.clientHeight < 1)
+      return true
+    }
+    if (decide() || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => { if (decide()) observer.disconnect() })
+    observer.observe(box)
+    return () => observer.disconnect()
   }, [autoHeight, data.length])
   useEffect(() => {
     if (highlightedIndex !== undefined && highlightedIndex >= 0 && highlightedIndex < data.length) {

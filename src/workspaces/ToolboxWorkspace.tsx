@@ -1,7 +1,8 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationMessage } from '@/i18n/notifications'
 import React, { Suspense, useEffect, useMemo, useState } from 'react'
-import { ICON_TOOL_AUDIO_EDIT } from '@/core/theme/icons'
+import type { LucideIcon } from 'lucide-react'
+import { ICON_TOOL_AUDIO_EDIT, ICON_TOOL_DEVELOPER } from '@/core/theme/icons'
 import { TOOLBOX_RUNTIME } from './toolboxRuntime'
 import { useTranslation } from 'react-i18next'
 import {
@@ -23,6 +24,13 @@ import {
 } from '@/features/toolbox/toolboxRecentFiles'
 import { formatTaskCreatedAt } from '@/workspaces/GenerationWorkspace/utils/taskMeta'
 import { selectToolboxTool, useNavigationStore } from '@/stores/navigationStore'
+import { setDeveloperPanelOpen, useDeveloperPanel } from '@/features/developer/developerPanelState'
+
+const DEVELOPER_BUILD = import.meta.env.DEV || import.meta.env.MODE === 'development'
+// 正式构建里整块裁掉：不出现在工具箱，也不打包面板代码。
+const SdkModelsPage = DEVELOPER_BUILD
+  ? React.lazy(() => import('@/features/developer/SdkModelsPage').then((module) => ({ default: module.SdkModelsPage })))
+  : null
 
 /** 工具首页与工作面共用同一装配结果；返回入口仍由各工具持有。 */
 const TOOLS = TOOLBOX_RUNTIME.map((tool) => ({ ...tool, id: tool.descriptor.id }))
@@ -38,6 +46,19 @@ function useToolboxRecentFiles(): ToolboxRecentFile[] | null {
   }, [])
   return files
 }
+
+const ToolCard: React.FC<{ icon: LucideIcon; title: string; description: string; meta?: string; onSelect: () => void; 'data-developer-tool'?: string }> = ({ icon: Icon, title, description, meta, onSelect, ...props }) => (
+  <UiOptionButton variant="card" className="h-full flex-col !items-start gap-4 text-left" onClick={onSelect} {...props}>
+    <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-lg bg-control text-text1">
+      <Icon size={UI_ICON_SIZE.lg} />
+    </span>
+    <span className="flex flex-col gap-1.5">
+      <span className={UI_TEXT_PANEL_TITLE_CLASS}>{title}</span>
+      <span className={`break-words leading-normal [text-wrap:pretty] ${UI_TEXT_SECONDARY_CLASS}`}>{description}</span>
+    </span>
+    {meta ? <span className={`mt-auto w-full truncate ${UI_TEXT_META_CLASS}`}>{meta}</span> : null}
+  </UiOptionButton>
+)
 
 const ToolboxHome: React.FC = () => {
   const { showNotification } = useNotification()
@@ -64,26 +85,26 @@ const ToolboxHome: React.FC = () => {
       <UiRegion maxWidthClassName="max-w-5xl" className="mx-auto flex flex-col gap-8 p-8">
         <UiPageHeader title="工具" description="不依赖生成和画布、可以单独打开的处理工具" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {TOOLS.map((tool) => {
-            const latest = latestNameByTool.get(tool.id)
-            return (
-              <UiOptionButton
-                key={tool.id}
-                variant="card"
-                className="h-full flex-col !items-start gap-4 text-left"
-                onClick={() => selectToolboxTool(tool.id)}
-              >
-                <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-lg bg-control text-text1">
-                  <tool.icon size={18} strokeWidth={1.6} />
-                </span>
-                <span className="flex flex-col gap-1.5">
-                  <span className={UI_TEXT_PANEL_TITLE_CLASS}>{t(tool.descriptor.titleKey)}</span>
-                  <span className={`break-words leading-normal [text-wrap:pretty] ${UI_TEXT_SECONDARY_CLASS}`}>{t(tool.descriptor.descriptionKey)}</span>
-                </span>
-                {latest ? <span className={`mt-auto w-full truncate ${UI_TEXT_META_CLASS}`}>最近：{latest}</span> : null}
-              </UiOptionButton>
-            )
-          })}
+          {TOOLS.map((tool) => (
+            <ToolCard
+              key={tool.id}
+              icon={tool.icon}
+              title={t(tool.descriptor.titleKey)}
+              description={t(tool.descriptor.descriptionKey)}
+              meta={latestNameByTool.get(tool.id) ? `最近：${latestNameByTool.get(tool.id)}` : undefined}
+              onSelect={() => selectToolboxTool(tool.id)}
+            />
+          ))}
+          {DEVELOPER_BUILD ? (
+            <ToolCard
+              icon={ICON_TOOL_DEVELOPER}
+              title="开发者"
+              description="SDK 适配的全部模型：筛选、离线构建请求、转到生成页实测"
+              meta="仅开发版"
+              onSelect={() => setDeveloperPanelOpen(true)}
+              data-developer-tool=""
+            />
+          ) : null}
         </div>
         {listed.length > 0 ? (
           <section aria-label="最近文件" className="flex flex-col gap-3">
@@ -117,6 +138,8 @@ const ToolboxHome: React.FC = () => {
 
 const ToolboxWorkspace: React.FC = () => {
   const activeToolId = useNavigationStore((state) => state.activeToolId)
+  const developerOpen = useDeveloperPanel((state) => state.open)
+  useEffect(() => { if (activeToolId) setDeveloperPanelOpen(false) }, [activeToolId])
 
   const activeTool = TOOLS.find((tool) => tool.id === activeToolId)
   const backToToolbox = () => selectToolboxTool(null)
@@ -132,6 +155,16 @@ const ToolboxWorkspace: React.FC = () => {
             <activeTool.component onBack={backToToolbox} />
           </Suspense>
         </div>
+      </div>
+    )
+  }
+
+  if (SdkModelsPage && developerOpen) {
+    return (
+      <div data-developer-panel="" className="flex h-full flex-col bg-window">
+        <Suspense fallback={<UiLoading className="h-full" />}>
+          <SdkModelsPage onBack={() => setDeveloperPanelOpen(false)} />
+        </Suspense>
       </div>
     )
   }

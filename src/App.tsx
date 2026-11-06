@@ -177,6 +177,12 @@ const App: React.FC = () => {
   const [assetPanelMounted, setAssetPanelMounted] = useState(false)
 
   useEffect(() => {
+    // 开发者面板住在工具箱里：先到工具箱，再打开面板（只是视图状态，不是应用 Surface）
+    if ((import.meta.env.DEV || import.meta.env.MODE === 'development') && startupSurfaceId === DEVELOPMENT_SURFACE_IDS.sdkModels) {
+      openApplicationSurface('workspace.tools', { requestId: 'development-launch' })
+      void import('@/features/developer/developerPanelState').then((module) => module.setDeveloperPanelOpen(true))
+      return
+    }
     // dev.* 是开发页面，不是应用 Surface：由下方直接渲染，不走正式导航
     if (!startupSurfaceId || isDevelopmentSurfaceId(startupSurfaceId)) return
     try {
