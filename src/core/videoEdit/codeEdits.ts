@@ -11,6 +11,8 @@ export type CodeEdits = z.infer<typeof codeEditsSchema>
 // 元素 id、效果 key 与参数键都可以含冒号：记录键按冒号分段，每段只转义 % 与冒号，常见名字仍可直接读。
 const encode = (segment: string): string => segment.replace(/[%:]/g, char => char === '%' ? '%25' : '%3A')
 const decode = (segment: string): string => segment.replace(/%(25|3A)/g, (_, code: string) => code === '25' ? '%' : ':')
+/** 助手检查过手改的时刻也记在修改记录里（键 `check`）：此后用户再手改的才是待检查的改动。它不属于任何参数或元素。 */
+export const CODE_EDIT_CHECK_KEY = 'check'
 /** 修改记录的键：`param:<参数>`、`element:<元素>:<属性>`、`element:<元素>:effect:<key>:<参数|enabled>`、`element:<元素>:added:<key>`。 */
 export const codeEditKey = {
   param: (parameter: string): string => `param:${encode(parameter)}`,
@@ -18,6 +20,8 @@ export const codeEditKey = {
   effect: (elementId: string, key: string, field: string): string => `element:${encode(elementId)}:effect:${encode(key)}:${encode(field)}`,
   added: (elementId: string, key: string): string => `element:${encode(elementId)}:added:${encode(key)}`,
 }
+/** 记录键按段解码：`[类别, 参数或元素, ...属性路径]`。 */
+export function codeEditSegments(key: string): string[] { return key.split(':').map(decode) }
 /** 记录属于哪个作者参数或哪个元素；按段解析，不按字符串前缀匹配。 */
 export function codeEditOwner(key: string): { parameter: string } | { elementId: string } | undefined {
   const [kind, owner, ...rest] = key.split(':')
@@ -46,6 +50,9 @@ export function recordVideoEditCodeEdits(before: VideoEditClip, after: VideoEdit
   codeEditActorSchema.parse(actor)
   const previous = fields(before), next = fields(after)
   const edits = { ...before.edits }
+  // 检查记录不随参数变化计算；同一次写入里刚标记的检查（after 上更新的那条）保留。
+  const check = after.edits?.[CODE_EDIT_CHECK_KEY]
+  if (check) Object.defineProperty(edits, CODE_EDIT_CHECK_KEY, { value: check, enumerable: true, configurable: true, writable: true })
   for (const key of new Set([...previous.keys(), ...next.keys()])) {
     if (jsonEqual(previous.get(key), next.get(key))) continue
     if (next.has(key)) Object.defineProperty(edits, key, { value: { by: actor, at }, enumerable: true, configurable: true, writable: true })
@@ -70,4 +77,16 @@ export function dropCodeElementEdits(clip: VideoEditClip, elementIds: readonly s
   const edits = Object.fromEntries(Object.entries(clip.edits).filter(([key]) => { const owner = codeEditOwner(key); return !(owner && 'elementId' in owner && elementIds.includes(owner.elementId)) }))
   if (Object.keys(edits).length) clip.edits = edits
   else delete clip.edits
+}
+
+/** 上次助手检查之后用户手改的记录（按时间先后）。 */
+export function pendingUserCodeEdits(edits: CodeEdits | undefined): Array<[string, CodeEdits[string]]> {
+  const checked = edits && Object.hasOwn(edits, CODE_EDIT_CHECK_KEY) ? edits[CODE_EDIT_CHECK_KEY].at : 0
+  return Object.entries(edits ?? {}).filter(([key, edit]) => key !== CODE_EDIT_CHECK_KEY && edit.by === 'user' && edit.at > checked).sort((a, b) => a[1].at - b[1].at)
+}
+/** 标记助手已检查到此刻：只增加检查记录，不动其他记录。 */
+export function markCodeEditsChecked(edits: CodeEdits | undefined, at = Date.now()): CodeEdits {
+  const next = { ...edits }
+  Object.defineProperty(next, CODE_EDIT_CHECK_KEY, { value: { by: 'assistant', at }, enumerable: true, configurable: true, writable: true })
+  return next
 }

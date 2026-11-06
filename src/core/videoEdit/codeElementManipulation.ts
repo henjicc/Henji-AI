@@ -1,5 +1,6 @@
 import type { CodeElementBounds } from './codeMaterial/geometry'
-import { codePoint } from './codeMaterial/geometry'
+import { codeMultiply, codePoint } from './codeMaterial/geometry'
+import type { TextDrawObservation } from './textDrawObservation'
 import { codeInverseMatrix, type CodeElementOverrideValues } from './codeElementOverrides'
 import { videoEditClipToFrame, type VideoEditClipPlacement, type VideoEditSize } from './clipGeometry'
 
@@ -44,4 +45,30 @@ export function snapCodeElementMove(polygon: readonly CodeEditPoint[], delta: Co
   }
   const x = axis(polygon.map(point => point.x), delta.x, targets.x, threshold.x); const y = axis(polygon.map(point => point.y), delta.y, targets.y, threshold.y)
   return { delta: { x: delta.x + x.offset, y: delta.y + y.offset }, guides: { x: x.guide, y: y.guide } }
+}
+
+/**
+ * 一段绘制文字在节目画面里的放置：原点与两条边向量都是画面比例（0–1），单位是绘制处的作者坐标，
+ * 原地编辑框按它摆放，字号与行高沿用作者坐标。点文字没有排版框时用墨迹范围。
+ */
+export interface CodeTextPlacement { origin: CodeEditPoint; u: CodeEditPoint; v: CodeEditPoint; width: number; height: number }
+export function codeTextDrawPlacement(element: CodeElementBounds, draw: Pick<TextDrawObservation, 'box' | 'inkBounds' | 'matrix'>, placement: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize): CodeTextPlacement {
+  const rect = draw.box.width > 0 && draw.box.height > 0 ? draw.box : draw.inkBounds ?? draw.box
+  const matrix = codeMultiply(element.author.matrix, draw.matrix)
+  const map = (x: number, y: number): CodeEditPoint => { const [ax, ay] = codePoint(matrix, x, y); return videoEditClipToFrame(placement, picture, frame, ax / picture.width, ay / picture.height) }
+  const origin = map(rect.x, rect.y), right = map(rect.x + Math.max(1, rect.width), rect.y), down = map(rect.x, rect.y + Math.max(1, rect.height))
+  const width = Math.max(1, rect.width), height = Math.max(1, rect.height)
+  return { origin, u: { x: (right.x - origin.x) / width, y: (right.y - origin.y) / width }, v: { x: (down.x - origin.x) / height, y: (down.y - origin.y) / height }, width, height }
+}
+export function codeTextPlacementPolygon(value: CodeTextPlacement): CodeEditPoint[] {
+  const at = (x: number, y: number): CodeEditPoint => ({ x: value.origin.x + value.u.x * x + value.v.x * y, y: value.origin.y + value.u.y * x + value.v.y * y })
+  return [at(0, 0), at(value.width, 0), at(value.width, value.height), at(0, value.height)]
+}
+/** 点在凸四边形里，或离它中心最近：双击落在两段字之间时取最近的一段。 */
+export function codeTextPlacementDistance(value: CodeTextPlacement, point: CodeEditPoint): number {
+  const polygon = codeTextPlacementPolygon(value)
+  const inside = polygon.every((a, index) => { const b = polygon[(index + 1) % 4]; return (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x) >= 0 }) || polygon.every((a, index) => { const b = polygon[(index + 1) % 4]; return (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x) <= 0 })
+  if (inside) return 0
+  const cx = polygon.reduce((sum, p) => sum + p.x, 0) / 4, cy = polygon.reduce((sum, p) => sum + p.y, 0) / 4
+  return Math.hypot(point.x - cx, point.y - cy)
 }

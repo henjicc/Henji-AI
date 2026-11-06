@@ -8,7 +8,7 @@ import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnim
 import { jsonEqual } from '@/core/jsonEqual'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
-import { readCodeAuthorTextBinding } from '@/core/videoEdit/codeAuthorTextBinding'
+import { readCodeAuthorTextTargets } from '@/core/videoEdit/codeAuthorTextBinding'
 import { readVideoEditCodeProgram } from './videoEditCodeState'
 import { videoEditCodeElementFrames } from './videoEditCodeElements'
 import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, type VideoEditGesture } from './videoEditService'
@@ -22,10 +22,11 @@ export function resolveVideoEditCodeElementClip(target: VideoEditCodeElementTarg
   if (!sequence || clip?.kind !== 'code' || !clip.code || clip.code.versionId !== target.versionId || target.effectId) throw new Error('原代码元素或源码版本已改变，请重新选择。')
   return { sequence, clip }
 }
-export function readVideoEditCodeElementEdit(target: VideoEditCodeElementTarget) {
+/** `parameterLag` 只给画面编辑条与原地改字的定位用：参数刚改、新画面没上屏时沿用上一帧的观察；写入一律严格读取。 */
+export function readVideoEditCodeElementEdit(target: VideoEditCodeElementTarget, parameterLag = false) {
   const owner = requireVideoEditInstance(target.projectId); const { sequence, clip } = resolveVideoEditCodeElementClip(target)
   const time = videoEditClipSourceTimeAt(clip, Math.max(0, Math.min(clip.duration - 1, owner.frame - clip.start)), sequence.frameRate)
-  const entry = videoEditCodeElementFrames(owner, sequence.id, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame))).get(clip.id)
+  const entry = videoEditCodeElementFrames(owner, sequence.id, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)), parameterLag).get(clip.id)
   const element = entry?.index.byId.get(target.elementId)
   const program = readVideoEditCodeProgram(owner, owner.document, clip.code!)
   const stored = readCodeElementOverride(clip.elementOverrides, target.elementId) ?? {}
@@ -35,8 +36,8 @@ export function readVideoEditCodeElementEdit(target: VideoEditCodeElementTarget)
   const renamedAddedKeys = addedKeys ? stored.addedEffects!.flatMap((effect, index) => effect.key === addedKeys[index] ? [] : [[effect.key, addedKeys[index]] as [string, string]]) : []
   const override: CodeElementOverride = renamedAddedKeys.length ? { ...stored, addedEffects: stored.addedEffects!.map((effect, index) => ({ ...effect, key: addedKeys![index] })) } : stored
   const editor = readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId)
-  const textBinding = readCodeAuthorTextBinding(element?.author, editor.metadata.parameters, editor.parameters)
-  return { owner, sequence, clip, entry, element, program, override, renamedAddedKeys, values: evaluateCodeElementOverride(override, time), time, textBinding, parameters: editor.parameters }
+  const textTargets = readCodeAuthorTextTargets(element?.author, editor.metadata.parameters, editor.parameters)
+  return { owner, sequence, clip, entry, element, program, override, renamedAddedKeys, values: evaluateCodeElementOverride(override, time), time, textTargets, declarations: editor.metadata.parameters, parameters: editor.parameters }
 }
 /**
  * 元素是不是调整层：有当前帧观察时以观察为准；没有观察时按源码里静态声明的图层（对象写了 adjust 且作者接口支持调整层），

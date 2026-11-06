@@ -12,6 +12,7 @@ import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
 import { migrateVideoEditStyles } from '../../videoEdit/styles/styleTemplateMigration'
 import { migrateVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
 import { migrateVideoEditClipFades } from '../../videoEdit/fadeTransitionMigration'
+import { migrateVideoEditCodeEditChecks } from '../../videoEdit/codeEditCheckMigration'
 import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigration'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
 import { creativeIntentsSchema } from '../../creativeIntent/persistence'
@@ -161,6 +162,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     // 72 → 73：片段 motionBlur 从只能写 false 放宽到 true/false（true 强制打开）；代码元素覆盖新增 motionBlur。旧程序读不了 true，提高最低可读版本。
     // 73 → 74：片段的 fadeInFrames / fadeOutFrames 并进过渡，成为片段一端的单侧过渡（画面交叉溶解、声音恒定功率，见 fadeTransitionMigration.ts）；
     // 自带声音的画面片段的声音改由单侧画面过渡带着淡，旧程序不会，最低可读版本提高到 74。
+    // 74 → 75：修改记录新增键 check（助手检查过手改的时刻）；已有手改记为检查过（见 codeEditCheckMigration.ts）。旧程序原样保留它，最低可读版本不变。
+    74: content => migrateVideoEditCodeEditChecks(content),
     73: content => migrateVideoEditClipFades(content),
     72: content => structuredClone(content),
     71: content => structuredClone(content),

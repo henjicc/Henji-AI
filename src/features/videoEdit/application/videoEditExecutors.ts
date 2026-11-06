@@ -312,7 +312,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
         }
         // 速度属性（4.13）与其余属性一起写：速度改动交给速度编辑换算时长与内容。
         if (this.entityType === 'video_edit.clip' && sequence.clips.some(clip => clip.id === childId)) {
-          const next = updateVideoEditClipInSequence(document, sequence, childId, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1))).map(key => key === 'spatialEnabled' ? 'spatial' : key))
+          const next = updateVideoEditClipInSequence(document, sequence, childId, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1))).map(key => key === 'spatialEnabled' ? 'spatial' : key === 'userEditsChecked' ? 'edits' : key))
           if (keys.some(key => ['video_edit.clip.element_overrides', 'video_edit.clip.code_parameters', 'video_edit.clip.code_curves'].includes(key))) {
             const original = sequence.clips.find(clip => clip.id === childId)!
             const changed = next.clips.find(clip => clip.id === childId)!

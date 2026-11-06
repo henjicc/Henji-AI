@@ -12,6 +12,7 @@ import { useContextMenu } from '@/hooks/useContextMenu'
 import { VideoEditAnnotationOverlay } from './VideoEditAnnotationOverlay'
 import { VideoEditSafeMarginsOverlay } from './VideoEditSafeMarginsOverlay'
 import { VideoEditCodeElementOverlay } from './VideoEditCodeElementOverlay'
+import { VideoEditUserEditReviewButton } from './VideoEditUserEditReviewButton'
 import { askAssistantAtVideoEditFrame } from './application/videoEditAnnotations'
 import { VideoEditMulticamView } from './panels/VideoEditMulticamView'
 import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
@@ -1117,6 +1118,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
       </div>}
+      {visible && !motionRecording && <VideoEditUserEditReviewButton instance={instance} hidden={!pictureReady || Boolean(renderFailure || effectFailure)} onError={onError} />}
       {(renderFailure || effectFailure) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
         <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
           {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiError title={isVideoEditGpuFrameFailureText(effectFailure ?? '') ? '画面可能不完整' : '部分效果已跳过'} message={effectFailure ?? ''} />}

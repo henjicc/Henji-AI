@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent } from 'react'
 import { videoEditPictureFilter, type VideoEditClip } from '@/core/videoEdit/document'
 import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
 import { videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
@@ -9,6 +9,13 @@ import { selectVideoEditSubtitle, selectedVideoEditSubtitleId, subscribeVideoEdi
 import { updateVideoEditTimedContent } from '../application/videoEditTimedContent'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { addVideoEditProgramText } from '../application/videoEditProgramText'
+import { VideoEditInlineTextEditor } from '../VideoEditInlineTextEditor'
+import { VideoEditPictureEditBar } from '../VideoEditPictureEditBar'
+import { VideoEditTextStylePanel } from './VideoEditTextStylePanel'
+import { VideoEditSubtitleStyleButton } from './VideoEditSubtitleStylePanel'
+import PanelTrigger from '@/components/ui/PanelTrigger'
+import { UiIconButton } from '@/components/ui'
+import { TextCursorInput, Type } from 'lucide-react'
 import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
 import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditProgramCommandIdentity, videoEditRevision, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
 import { getVideoEditMaskEditing, setVideoEditMaskEditing, subscribeVideoEditMaskEditing, videoEditMaskEditingRevision } from '../application/videoEditMaskEditing'
@@ -64,18 +71,6 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
     // Choosing T claims the monitor; choosing a mask/tracker later suppresses this overlay immediately.
     if (enabled && instance.tool === 'type') { setVideoEditMaskEditing(null); setVideoEditTrackingEditing(null) }
   }, [instance, instance.tool, enabled])
-  useLayoutEffect(() => {
-    if (!editingId || !editor.current) return
-    const target = editing.current?.caption
-    editor.current.textContent = target ? getActiveVideoEditSequence(instance).captions?.find(value => value.id === target.captionId)?.[target.field] ?? '' : getActiveVideoEditSequence(instance).clips.find(clip => clip.id === editingId)?.text ?? ''
-    editor.current.focus()
-    const doc = editor.current.ownerDocument
-    const atPoint = caret.current && doc.caretRangeFromPoint?.(caret.current.x, caret.current.y)
-    const range = atPoint && editor.current.contains(atPoint.startContainer) ? atPoint : doc.createRange()
-    if (range !== atPoint) { range.selectNodeContents(editor.current); range.collapse(false) }
-    caret.current = undefined
-    const selection = ownerWindowOf(editor.current).getSelection(); selection?.removeAllRanges(); selection?.addRange(range)
-  }, [editingId, instance])
   useEffect(() => {
     const check = (): void => {
       const active = editing.current
@@ -144,6 +139,8 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
     } catch (error) { onError(error) }
   }
   if (!available) return null
+  const editingTarget = editing.current?.caption
+  const editingText = !editingId ? '' : editingTarget ? sequence.captions?.find(value => value.id === editingTarget.captionId)?.[editingTarget.field] ?? '' : sequence.clips.find(clip => clip.id === editingId)?.text ?? ''
   const scrubbing = Boolean(instance.scrubbing)
   const picture = videoEditPictureFilter(sequence)
   const clips = sequence.clips.filter(clip => !instance.playing && !scrubbing && clip.kind === 'text' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && picture.has(clip) && sequence.tracks.some(track => track.index === clip.track && !track.locked)).sort((a, b) => a.track - b.track).map(clip => evaluateVideoEditClip(clip, instance.frame))
@@ -156,6 +153,15 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
     context.font = font; return context.measureText(text).width
   }
   const captions = scrubbing ? [] : videoEditCaptionTextTargets(sequence, instance.frame, measure)
+  // 文字框四角在画面里的位置（画面比例）：与下面的 CSS 变换同一顺序，绕画面中心先缩放、再旋转、再平移到片段中心。
+  const framePolygon = (layout: VideoEditTextLayout, clip: VideoEditClip, center: { x: number; y: number }): Array<{ x: number; y: number }> => {
+    const radians = clip.rotation * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians)
+    return [[layout.left, layout.top], [layout.left + layout.width, layout.top], [layout.left + layout.width, layout.top + layout.height], [layout.left, layout.top + layout.height]].map(([x, y]) => {
+      const px = (x - sequence.width / 2) * clip.scale, py = (y - sequence.height / 2) * clip.scale
+      return { x: center.x + (px * cos - py * sin) / sequence.width, y: center.y + (px * sin + py * cos) / sequence.height }
+    })
+  }
+  let bar: { clip: VideoEditClip; caption?: CaptionTextTarget; polygon: Array<{ x: number; y: number }> } | undefined
   const targets = [...clips.map(clip => ({ clip, caption: undefined as CaptionTextTarget | undefined })), ...captions.map(caption => ({ clip: caption.clip, caption }))]
   return <div ref={root} className={`absolute inset-0 ${instance.tool === 'type' || editingId ? 'pointer-events-auto cursor-text' : 'pointer-events-none'}`} style={{ containerType: 'size' }} aria-label="节目文字工具" data-video-edit-text-overlay onPointerDown={event => down(event)} onPointerMove={move} onPointerUp={up} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}>
     {targets.map(({ clip, caption }) => {
@@ -165,6 +171,7 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
       layoutCache.current.set(clip.id, { key, layout })
       const selected = caption ? selectedVideoEditSubtitleId(instance) === caption.captionId : instance.selection === clip.id; const editable = editingId === clip.id
       const center = videoEditClipToFrame(clip, sequence, sequence, .5, .5)
+      if (selected && !editable && !instance.playing) bar = { clip, caption, polygon: framePolygon(layout, clip, center) }
       return <div key={clip.id} className="pointer-events-none absolute inset-0" style={{ transform: `translate(${(center.x - .5) * 100}%, ${(center.y - .5) * 100}%) rotate(${clip.rotation}deg) scale(${clip.scale})` }}>
         <div className={`${caption && !editable ? 'pointer-events-none' : 'pointer-events-auto'} absolute ${editable || caption ? 'cursor-text' : 'cursor-move'}`} data-video-edit-text-clip={clip.id} data-video-edit-caption={caption?.captionId} data-caption-field={caption?.field} tabIndex={0} style={{ left: `${layout.left / sequence.width * 100}%`, top: `${layout.top / sequence.height * 100}%`, width: `${layout.width / sequence.width * 100}%`, height: `${layout.height / sequence.height * 100}%` }} onPointerDown={event => down(event, clip, undefined, layout, caption)} onDoubleClick={event => { event.stopPropagation(); beginEditing(clip.id, caption, { x: event.clientX, y: event.clientY }) }} onKeyDown={event => { if (event.key === 'Enter' && selected && !editing.current && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); beginEditing(clip.id, caption) } }}>
           {selected && <div className="pointer-events-none absolute inset-0 outline outline-1 outline-accent" data-video-edit-text-selection />}
@@ -173,26 +180,31 @@ export function VideoEditTextOverlay({ instance, onError, enabled = true }: { in
             const left = layout.style.align.includes('center') ? (layout.width - width) / 2 : layout.style.align.includes('right') ? layout.width - width : 0
             return <div key={row} className="pointer-events-auto absolute" style={{ left: `${left / layout.width * 100}%`, top: `${row * layout.lineHeight / layout.height * 100}%`, width: `${width / layout.width * 100}%`, height: `${layout.lineHeight / layout.height * 100}%` }} />
           })}
-          {editable && <div ref={editor} role="textbox" aria-label={caption ? t('videoEdit.inlineCaption', { defaultValue: '就地编辑字幕' }) : '就地编辑文字'} aria-multiline contentEditable="plaintext-only" suppressContentEditableWarning className="h-full w-full break-all text-transparent outline-none" style={{ whiteSpace: layout.style.boxWidth ? 'pre-wrap' : 'pre', fontFamily: layout.style.fontFamily, fontSize: `calc(100cqw * ${layout.style.fontSize / sequence.width})`, lineHeight: `calc(100cqw * ${layout.lineHeight / sequence.width})`, textAlign: layout.style.align.startsWith('justify') ? 'justify' : layout.style.align as 'left' | 'center' | 'right', fontWeight: layout.style.fontWeight, fontStyle: layout.style.fontStyle, letterSpacing: `calc(100cqw * ${layout.style.fontSize * layout.style.tracking / 1000 / sequence.width})`, textTransform: layout.style.allCaps ? 'uppercase' : undefined, fontVariantCaps: layout.style.smallCaps ? 'small-caps' : undefined, caretColor: 'var(--on-media)' }} onPointerDown={event => event.stopPropagation()} onInput={event => {
-            const active = editing.current; if (!active || !valid(active)) return
-            try {
-              const raw = event.currentTarget.innerText ?? event.currentTarget.textContent ?? ''; let text = raw.slice(0, 2000)
-              if (raw.length > 2000) {
-                if (/^[\uD800-\uDBFF]$/.test(text.at(-1) ?? '')) text = text.slice(0, -1)
-                event.currentTarget.textContent = text
-                const range = event.currentTarget.ownerDocument.createRange(); range.selectNodeContents(event.currentTarget); range.collapse(false)
-                const selection = ownerWindowOf(event.currentTarget).getSelection(); selection?.removeAllRanges(); selection?.addRange(range)
-              }
-              if (active.caption) {
-                // Keep the existing non-empty source-caption contract while IME/replace-all is in progress.
-                if (text.trim()) updateVideoEditTimedContent(instance.document.id, active.sequenceId, 'caption', active.caption.captionId, { [active.caption.field]: text }, active.gesture)
-              } else updateVideoEditClipProperties(instance.document.id, active.sequenceId, active.clipId, { text }, active.gesture)
-            } catch (error) { finish(false); onError(error) }
-          }} onBlur={() => finish()} onKeyDown={event => { event.stopPropagation(); if (event.nativeEvent.isComposing) return; if (event.key === 'Escape') { event.preventDefault(); finish(!caption) } else if (caption && event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); finish() } }} />}
+          {editable && <VideoEditInlineTextEditor ref={editor} text={editingText} caret={caret.current} ariaLabel={caption ? t('videoEdit.inlineCaption', { defaultValue: '就地编辑字幕' }) : '就地编辑文字'} className="h-full w-full break-all" style={{ whiteSpace: layout.style.boxWidth ? 'pre-wrap' : 'pre', fontFamily: layout.style.fontFamily, fontSize: `calc(100cqw * ${layout.style.fontSize / sequence.width})`, lineHeight: `calc(100cqw * ${layout.lineHeight / sequence.width})`, textAlign: layout.style.align.startsWith('justify') ? 'justify' : layout.style.align as 'left' | 'center' | 'right', fontWeight: layout.style.fontWeight, fontStyle: layout.style.fontStyle, letterSpacing: `calc(100cqw * ${layout.style.fontSize * layout.style.tracking / 1000 / sequence.width})`, textTransform: layout.style.allCaps ? 'uppercase' : undefined, fontVariantCaps: layout.style.smallCaps ? 'small-caps' : undefined }}
+            onText={text => {
+              const active = editing.current; if (!active || !valid(active)) return
+              try {
+                if (active.caption) {
+                  // Keep the existing non-empty source-caption contract while IME/replace-all is in progress.
+                  if (text.trim()) updateVideoEditTimedContent(instance.document.id, active.sequenceId, 'caption', active.caption.captionId, { [active.caption.field]: text }, active.gesture)
+                } else updateVideoEditClipProperties(instance.document.id, active.sequenceId, active.clipId, { text }, active.gesture)
+              } catch (error) { finish(false); onError(error) }
+            }} onBlur={() => finish()} onEscape={() => finish(!caption)} {...(caption ? { onEnter: () => finish() } : {})} />}
           {selected && !editable && !caption && [0, 1, 2, 3].map(corner => <div key={corner} role="presentation" className="pointer-events-auto absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 border border-accent bg-on-media" data-video-edit-text-handle={corner} style={{ left: `${corner === 1 || corner === 2 ? 100 : 0}%`, top: `${corner >= 2 ? 100 : 0}%`, cursor: corner % 2 ? 'nesw-resize' : 'nwse-resize' }} onPointerDown={event => down(event, clip, corner, layout)} />)}
         </div>
       </div>
     })}
+    {bar && !editingId && (() => {
+      const { clip, caption, polygon } = bar
+      const raw = sequence.clips.find(value => value.id === clip.id)
+      return <VideoEditPictureEditBar polygon={polygon} label={caption ? '字幕编辑' : '文字编辑'}>
+        <UiIconButton size="xs" aria-label="编辑文字" tooltip="编辑文字（双击文字）" onClick={() => beginEditing(clip.id, caption)}><TextCursorInput /></UiIconButton>
+        {caption ? <VideoEditSubtitleStyleButton instance={instance} sequenceId={sequence.id} selectedCaptionId={caption.captionId} onError={onError} />
+          : raw && <PanelTrigger panelSize="compact" panelPadding="content" renderPanel={() => <div className="flex max-h-96 flex-col overflow-auto"><VideoEditTextStylePanel projectId={instance.document.id} sequenceId={sequence.id} clip={sequence.clips.find(value => value.id === clip.id) ?? raw} height={sequence.height} onError={onError} /></div>}>
+            {({ open, togglePanel }) => <UiIconButton size="xs" aria-label="文字样式" tooltip="文字样式" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Type /></UiIconButton>}
+          </PanelTrigger>}
+      </VideoEditPictureEditBar>
+    })()}
     {draftBox && <div className="pointer-events-none absolute border border-accent" style={{ left: `${draftBox.x * 100}%`, top: `${draftBox.y * 100}%`, width: `${draftBox.width * 100}%`, height: `${draftBox.height * 100}%` }} />}
   </div>
 }

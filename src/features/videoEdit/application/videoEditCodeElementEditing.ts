@@ -10,13 +10,10 @@ import { createVideoEditAnnotation, updateVideoEditAnnotation, videoEditAnnotati
 import { videoEditCodeElementRegion } from './videoEditCodeElements'
 import { focusVideoEditPanel, requireVideoEditInstance, type VideoEditGesture } from './videoEditService'
 import { videoEditCodeParameterWriter, type VideoEditCodeTarget } from './videoEditCodeParameters'
-import { codeAuthorTextParameterValue } from '@/core/videoEdit/codeAuthorTextBinding'
-import { z } from 'zod'
+import { codeAuthorTextParameterValue, type CodeAuthorTextBinding } from '@/core/videoEdit/codeAuthorTextBinding'
 import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { openVideoEditCodeProjectFile } from './videoEditCodeProjectView'
 import { editVideoEditCodeElementClip as edit, readVideoEditCodeElementEdit, resolveVideoEditCodeElementClip as resolve, videoEditCodeElementEffectStates, videoEditCodeElementKind, writeVideoEditCodeElementGroups, type VideoEditCodeElementGroups, type VideoEditCodeElementTarget } from './videoEditCodeElementWrites'
-
-const elementEditSchema = codeElementOverrideValuesSchema.extend({ text: z.string().max(4096).optional() })
 
 export { readVideoEditCodeElementEdit, videoEditCodeElementKind, videoEditCodeElementEffectStates, validateVideoEditElementEffectWrite, writeVideoEditCodeElementGroups, videoEditClipEditsBase, type VideoEditCodeElementTarget, type VideoEditCodeElementGroups } from './videoEditCodeElementWrites'
 
@@ -132,15 +129,11 @@ function upsert(points: CodeMaterialKeyframe[], time: VideoEditSourceTime, value
   return [...points.filter(point => point !== previous), { ...time, id: previous?.id ?? crypto.randomUUID(), value, interpolation: previous?.interpolation ?? (['text', 'fontFamily', 'hidden'].includes(key) ? 'hold' : 'linear') } as CodeMaterialKeyframe].sort(compareCodeMaterialTime)
 }
 /** UI and assistant persist one clip property. Existing animation records the current source time, static fields stay static. */
-function updateVideoEditCodeElementAs(actor: CodeEditActor, target: VideoEditCodeElementTarget, patch: CodeElementOverrideValues & { text?: string }, options: { gesture?: VideoEditGesture; time?: VideoEditSourceTime } = {}): void {
-  const parsed = elementEditSchema.parse(patch)
+function updateVideoEditCodeElementAs(actor: CodeEditActor, target: VideoEditCodeElementTarget, patch: CodeElementOverrideValues, options: { gesture?: VideoEditGesture; time?: VideoEditSourceTime } = {}): void {
+  const parsed = codeElementOverrideValuesSchema.parse(patch)
   const current = readVideoEditCodeElementEdit(target)
   if (!current.element) throw new Error('此帧的元素不存在，请选择可见元素。')
   assertCodeElementOverrideAllowed(current.element.author.kind, parsed)
-  if (parsed.text !== undefined && current.textBinding) {
-    if (Object.keys(parsed).length !== 1) throw new Error('文字内容和样式请分别修改。')
-    videoEditCodeParameterWriter(actor).setVideoEditCodeParameter(target, current.textBinding.parameter, codeAuthorTextParameterValue(current.textBinding, current.parameters, parsed.text), { gesture: options.gesture, time: options.time ?? current.time }); return
-  }
   const unsupported = Object.keys(parsed).filter(key => !['dx', 'dy', 'scale', 'scaleX', 'scaleY', 'rotation', 'opacity', 'hidden'].includes(key))
   if (unsupported.length) throw new Error(`此图层没有声明对应参数（${unsupported.join('、')}），请让助手修改源码。`)
   edit(actor, target, clip => {
@@ -152,6 +145,11 @@ function updateVideoEditCodeElementAs(actor: CodeEditActor, target: VideoEditCod
       else Object.assign(value, { [key]: next })
     }
   }, options.gesture)
+}
+/** 改元素上一段文字：写它绑定的作者参数（数据表只换这一格），与效果控件改参数同一条写入与撤销。 */
+function setVideoEditCodeElementTextAs(actor: CodeEditActor, target: VideoEditCodeElementTarget, binding: CodeAuthorTextBinding, text: string, options: { gesture?: VideoEditGesture; time?: VideoEditSourceTime } = {}): void {
+  const current = readVideoEditCodeElementEdit(target)
+  videoEditCodeParameterWriter(actor).setVideoEditCodeParameter(target, binding.parameter, codeAuthorTextParameterValue(binding, current.parameters, text), { gesture: options.gesture, time: options.time ?? current.time })
 }
 /** 变换的一项回到代码给的值：去掉它的静态覆盖与曲线；不需要当前帧观察，隐藏的元素也能恢复显示。 */
 function resetVideoEditCodeElementFieldAs(actor: CodeEditActor, target: VideoEditCodeElementTarget, key: CodeElementOverrideKey): void {
@@ -201,7 +199,12 @@ function toggleVideoEditCodeElementKeyframeAs(actor: CodeEditActor, target: Vide
     else override.curves = { ...override.curves, [key]: upsert([], current.time, value, key) }
   })
 }
-export async function askAssistantForVideoEditCodeElement(target: VideoEditCodeElementTarget, bake = false, signal?: AbortSignal): Promise<string> {
+/**
+ * 交给助手：附当前帧截图、图层定位与局部源码，并留一条批注。`request` 是界面已经说清的要求（改写死在源码里的字或颜色、处理排版问题），
+ * 直接发出；没有 `request` 时只打开助手等用户说明。
+ */
+export async function askAssistantForVideoEditCodeElement(target: VideoEditCodeElementTarget, options: { bake?: boolean; request?: string } = {}, signal?: AbortSignal): Promise<string> {
+  const { bake = false, request } = options
   signal?.throwIfAborted()
   const current = readVideoEditCodeElementEdit(target)
   if (!current.element || !current.entry) throw new Error('此元素当前不可见，请选择可见元素。')
@@ -215,16 +218,16 @@ export async function askAssistantForVideoEditCodeElement(target: VideoEditCodeE
   const excerpt = span ? current.entry.files.files[span.file]?.slice(span.start, span.end) : undefined
   const location = `图层：${JSON.stringify({ id: target.elementId, name: author?.name, bounds: author?.bounds, sourceSpan: span, factory: author?.factory, data: author?.data })}。${excerpt === undefined ? '' : `\n局部源码（${span!.file}）：\n${excerpt}\n`}优先使用此定位；数据内容改对应数据项，外观改工厂函数。先观察标注帧截图核对，不必先读取整个效果文件。`
   const component = span && current.entry.files.files[span.file] === undefined
-  const text = bake ? `请把这些覆盖写回源码，保留其它元素和动画。覆盖：${JSON.stringify(current.override)}；sourceSpan：${JSON.stringify(span)}。${component ? '此元素来自固定项目组件，不能改写已发布文件。先从 video_edit.code_component 的 versions/source 读回组件，发布组件新版本，再用原素材文件创建新素材版本，让组件导入解析到新版本。' : '创建新的源码版本，'}在同一事务绑定该片段的新版本并只删除已合并覆盖。` : '请修改这里（等待用户说明）。'
+  const text = request ? request : bake ? `请把这些覆盖写回源码，保留其它元素和动画。覆盖：${JSON.stringify(current.override)}；sourceSpan：${JSON.stringify(span)}。${component ? '此元素来自固定项目组件，不能改写已发布文件。先从 video_edit.code_component 的 versions/source 读回组件，发布组件新版本，再用原素材文件创建新素材版本，让组件导入解析到新版本。' : '创建新的源码版本，'}在同一事务绑定该片段的新版本并只删除已合并覆盖。` : '请修改这里（等待用户说明）。'
   const context = `${text}\n${location}`
   const id = createVideoEditAnnotation(target.projectId, target.sequenceId, { frame: current.owner.frame, clipId: target.clipId, target: { kind: 'element', elementId: target.elementId, ...(span ? { sourceSpan: { file: span.file, start: span.start, end: span.end } } : {}), region: videoEditCodeElementRegion(current.entry, current.element, current.sequence) }, text: context, status: 'open' })
   const mark = current.owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!.annotations.find(mark => mark.id === id)!
-  openAssistant(bake ? '请把这个元素的覆盖写回源码：' : '请修改这里：', { attachments: [{ attachment: assetToAgentAttachment(frame.asset), previewSrc: frame.asset.displayUrl }], context: videoEditAnnotationPrompt(target.projectId, [mark], context), onTextSubmitted: submitted => updateVideoEditAnnotation(target.projectId, id, current => ({ ...current, text: `${context}\n用户说明：${submitted}` })) })
+  openAssistant(request ?? (bake ? '请把这个元素的覆盖写回源码：' : '请修改这里：'), { ...(request ? { autoSend: true } : {}), attachments: [{ attachment: assetToAgentAttachment(frame.asset), previewSrc: frame.asset.displayUrl }], context: videoEditAnnotationPrompt(target.projectId, [mark], context), onTextSubmitted: submitted => updateVideoEditAnnotation(target.projectId, id, current => ({ ...current, text: `${context}\n用户说明：${submitted}` })) })
   return id
 }
 export async function bakeVideoEditCodeElement(target: VideoEditCodeElementTarget, signal?: AbortSignal): Promise<'baked' | 'assistant'> {
   signal?.throwIfAborted()
-  await askAssistantForVideoEditCodeElement(target, true, signal)
+  await askAssistantForVideoEditCodeElement(target, { bake: true }, signal)
   return 'assistant'
 }
 
@@ -249,6 +252,7 @@ export function showVideoEditCodeElementSource(target: VideoEditCodeElementTarge
 export function videoEditCodeElementWriter(actor: CodeEditActor) {
   return {
     updateVideoEditCodeElement: updateVideoEditCodeElementAs.bind(undefined, actor),
+    setVideoEditCodeElementText: setVideoEditCodeElementTextAs.bind(undefined, actor),
     resetVideoEditCodeElement: resetVideoEditCodeElementAs.bind(undefined, actor),
     resetVideoEditCodeElementField: resetVideoEditCodeElementFieldAs.bind(undefined, actor),
     setVideoEditCodeElementMotionBlur: setVideoEditCodeElementMotionBlurAs.bind(undefined, actor),
@@ -263,4 +267,4 @@ export function videoEditCodeElementWriter(actor: CodeEditActor) {
   }
 }
 // 现有效果控件与画面直接操作是用户入口；界面改用 videoEditCodeElementWriter('user') 后删除这组导出。
-export const { updateVideoEditCodeElement, resetVideoEditCodeElement, setVideoEditCodeElementAutoKeyframes, toggleVideoEditCodeElementKeyframe } = videoEditCodeElementWriter('user')
+export const { updateVideoEditCodeElement, setVideoEditCodeElementText, resetVideoEditCodeElement, setVideoEditCodeElementAutoKeyframes, toggleVideoEditCodeElementKeyframe } = videoEditCodeElementWriter('user')

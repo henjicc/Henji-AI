@@ -17,6 +17,7 @@ import { createVideoEditTestProject, reopenVideoEdit } from './application/video
 import { closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, setVideoEditView, undoVideoEdit, type VideoEditInstance } from './application/videoEditService'
 import { rememberVideoEditCodeMetadata, readVideoEditCodeMetadata } from './application/videoEditCodeState'
 import { installVideoEditCodeElements, selectVideoEditCodeElement, selectedVideoEditCodeElement } from './application/videoEditCodeElements'
+import { pendingUserCodeEdits } from '@/core/videoEdit/codeEdits'
 import { bakeVideoEditCodeElement, readVideoEditCodeElementEdit, resetVideoEditCodeElement, setVideoEditCodeElementAutoKeyframes, showVideoEditCodeElementSource, updateVideoEditCodeElement, videoEditCodeElementHostSummary, videoEditCodeElementOverrideSummary } from './application/videoEditCodeElementEditing'
 import { readVideoEditCodeEditor } from './application/videoEditCodeParameters'
 import { CodeSourceEditor } from './panels/CodeSourceEditor'
@@ -103,12 +104,24 @@ it('吸附画面中心和安全框，Alt取消吸附；失去指针和切帧取�
   pointer(body, 'pointerdown', 200, 150); pointer(root, 'pointermove', 200, 152); expect(result.container.querySelector('[data-code-element-guide="y"]')).toBeTruthy()
   act(() => setVideoEditView(owner.document.id, { frame: 30 })); expect(clip().elementOverrides).toBeUndefined(); expect(result.onError).not.toHaveBeenCalled()
 })
-it('双击参数文字直接写参数；Enter提交、Esc取消，与覆盖共用撤销栈', () => {
+function type(element: HTMLElement, text: string) { element.textContent = text; fireEvent.input(element) }
+it('双击参数文字原地逐字写参数；Enter提交一步撤销、Esc回滚', () => {
   selectVideoEditCodeElement(owner, clipId, 'title'); const result = view(); const body = result.container.querySelector('[data-code-element-edit-body]')!; const before = owner.past.length
-  fireEvent.doubleClick(body); const input = result.getByLabelText('原地编辑代码文字'); fireEvent.change(input, { target: { value: '改文案' } }); fireEvent.keyDown(input, { key: 'Enter' })
+  fireEvent.doubleClick(body); const input = result.getByLabelText('原地编辑代码文字'); type(input, '改'); expect(clip().code!.parameters.title).toBe('改'); type(input, '改文案'); fireEvent.keyDown(input, { key: 'Enter' })
   expect(clip().code!.parameters.title).toBe('改文案'); expect(clip().elementOverrides).toBeUndefined(); expect(owner.past).toHaveLength(before + 1)
-  act(observe); fireEvent.doubleClick(result.container.querySelector('[data-code-element-edit-body]')!); fireEvent.change(result.getByLabelText('原地编辑代码文字'), { target: { value: '取消' } }); fireEvent.keyDown(result.getByLabelText('原地编辑代码文字'), { key: 'Escape' }); expect(clip().code!.parameters.title).toBe('改文案')
+  act(observe); fireEvent.doubleClick(result.container.querySelector('[data-code-element-edit-body]')!); type(result.getByLabelText('原地编辑代码文字'), '取消'); expect(clip().code!.parameters.title).toBe('取消'); fireEvent.keyDown(result.getByLabelText('原地编辑代码文字'), { key: 'Escape' }); expect(clip().code!.parameters.title).toBe('改文案')
   act(() => undoVideoEdit(owner.document.id)); expect(clip().code!.parameters.title).toBeUndefined(); expect(result.onError).not.toHaveBeenCalled()
+})
+it('画面改字记为待检查的手改；助手写 user_edits_checked 后清零，只能写 true', async () => {
+  selectVideoEditCodeElement(owner, clipId, 'title'); const result = view()
+  fireEvent.doubleClick(result.container.querySelector('[data-code-element-edit-body]')!); const input = result.getByLabelText('原地编辑代码文字'); type(input, '手改'); fireEvent.keyDown(input, { key: 'Enter' })
+  expect(pendingUserCodeEdits(clip().edits).map(([key]) => key)).toEqual(['param:title'])
+  const app = createApplicationHarness(); const ref = { kind: 'video_edit.clip', id: `${owner.document.id}:${clipId}` }
+  expect((await app.read(ref, ['video_edit.clip.user_edits_checked'])).properties).toMatchObject({ 'video_edit.clip.user_edits_checked': false })
+  expect((await app.change(ref, { 'video_edit.clip.user_edits_checked': false })).ok).toBe(false)
+  expect(await app.change(ref, { 'video_edit.clip.user_edits_checked': true })).toMatchObject({ ok: true })
+  expect(pendingUserCodeEdits(clip().edits)).toEqual([]); expect(clip().code!.parameters.title).toBe('手改')
+  expect((await app.read(ref, ['video_edit.clip.user_edits_checked'])).properties).toMatchObject({ 'video_edit.clip.user_edits_checked': true })
 })
 it('默认静态，显式开启的属性按当前源时刻打帧；关闭冻结当前值', () => {
   updateVideoEditCodeElement(target(), { dx: 10 }); expect(clip().elementOverrides?.box.curves).toBeUndefined()

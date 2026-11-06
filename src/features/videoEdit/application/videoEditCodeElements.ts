@@ -20,7 +20,10 @@ import { getActiveVideoEditSequence, publishVideoEdit, setVideoEditView, type Vi
 
 export interface VideoEditCodeElementFrame { clip: VideoEditClip; index: CodeElementIndex; picture: { width: number; height: number }; files: CodeMaterialFiles }
 interface FrameCache { document: object; sequenceId: string; frame: number; elements: Map<string, VideoEditCodeElementFrame> }
-const frames = new WeakMap<VideoEditInstance, FrameCache>()
+/** 每个剪辑实例按序列与帧保留最近几帧的观察：助手或送检取别的帧时，不冲掉播放头所在帧的选中元素。 */
+const frames = new WeakMap<VideoEditInstance, FrameCache[]>()
+const FRAME_CACHE_SIZE = 4
+const codeSource = (code: VideoEditClip['code']) => code && { ...code, parameters: undefined, curves: undefined }
 
 /** Install only observations from the exact document revision that produced the picture. */
 export function installVideoEditCodeElements(instance: VideoEditInstance, observation: CodeAuthorFrameObservation): boolean {
@@ -36,20 +39,25 @@ export function installVideoEditCodeElements(instance: VideoEditInstance, observ
     if (clip.opacity <= 0) continue
     elements.set(raw.id, { clip, picture: { width: observed.width, height: observed.height }, index: prepareAuthorElementIndex(observed.elements), files: codeMaterialSource(instance.document, raw.code).contents })
   }
-  frames.set(instance, { document: instance.document, sequenceId: observation.sequenceId, frame: observation.frame, elements })
+  const kept = (frames.get(instance) ?? []).filter(entry => entry.sequenceId !== observation.sequenceId || entry.frame !== observation.frame)
+  frames.set(instance, [{ document: instance.document, sequenceId: observation.sequenceId, frame: observation.frame, elements }, ...kept].slice(0, FRAME_CACHE_SIZE))
   publishVideoEdit()
   return true
 }
-export function videoEditCodeElementFrames(instance: VideoEditInstance, sequenceId = instance.activeSequenceId, frame = instance.frame): Map<string, VideoEditCodeElementFrame> {
-  const cached = frames.get(instance)
-  if (!cached || cached.sequenceId !== sequenceId || cached.frame !== frame) return new Map()
+/**
+ * `parameterLag`：只给选中框的显示用。参数刚改、新画面还没上屏时沿用上一帧的观察，选框与正在进行的原地编辑不因渲染间隙消失又重建；
+ * 命中、写入与助手读取不开它，参数变了就等新画面，不会点到或写到已经不存在的元素。
+ */
+export function videoEditCodeElementFrames(instance: VideoEditInstance, sequenceId = instance.activeSequenceId, frame = instance.frame, parameterLag = false): Map<string, VideoEditCodeElementFrame> {
+  const cached = frames.get(instance)?.find(entry => entry.sequenceId === sequenceId && entry.frame === frame)
+  if (!cached) return new Map()
   if (cached.document === instance.document) return cached.elements
   const sequence = instance.document.sequences.find(value => value.id === sequenceId)
   if (!sequence) return new Map()
   const picture = videoEditPictureFilter(sequence)
   const result = new Map<string, VideoEditCodeElementFrame>()
   // Direct manipulation must remain responsive while the next frame is rendering.
-  // Reuse only the exact same source time and parameter state; apply host transforms,
+  // Reuse only the exact same source time and (unless parameterLag) parameter state; apply host transforms,
   // never call author code or infer drawing operations on the UI thread.
   const refreshEffects = (author: AuthorElementObservation, clip: VideoEditClip, time: VideoEditSourceTime): AuthorElementObservation => {
     if (!author.effectStates) return author
@@ -62,7 +70,7 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
   }
   for (const [id, entry] of cached.elements) {
     const raw = sequence.clips.find(clip => clip.id === id)
-    if (!raw || raw.kind !== 'code' || !picture.has(raw) || frame < raw.start || frame >= raw.start + raw.duration || JSON.stringify(raw.code) !== JSON.stringify(entry.clip.code)) continue
+    if (!raw || raw.kind !== 'code' || !picture.has(raw) || frame < raw.start || frame >= raw.start + raw.duration || JSON.stringify(parameterLag ? codeSource(raw.code) : raw.code) !== JSON.stringify(parameterLag ? codeSource(entry.clip.code) : entry.clip.code)) continue
     const time = videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate)
     if (JSON.stringify(time) !== JSON.stringify(videoEditClipSourceTimeAt(entry.clip, frame - entry.clip.start, sequence.frameRate))) continue
     const observations = entry.index.bounds.flatMap(bound => {
@@ -117,7 +125,7 @@ export function selectVideoEditCodeElement(instance: VideoEditInstance, clipId: 
 export function readSelectedVideoEditCodeElement(instance: VideoEditInstance): { entry: VideoEditCodeElementFrame; element: CodeElementBounds; label: string; parameterKeys: string[] } | undefined {
   const selection = instance.selectedCodeElement
   if (!selection || selection.sequenceId !== instance.activeSequenceId || selection.clipId !== instance.selection) return undefined
-  const entry = videoEditCodeElementFrames(instance).get(selection.clipId)
+  const entry = videoEditCodeElementFrames(instance, instance.activeSequenceId, instance.frame, true).get(selection.clipId)
   if (!entry || entry.clip.code?.versionId !== selection.versionId) return undefined
   const element = entry.index.byId.get(selection.elementId)
   return element && element.opacity >= .01 && (element.author.kind === 'adjust' || element.width > 0 && element.height > 0) ? { entry, element, label: codeElementLabel(element), parameterKeys: entry.index.parameters.get(element.elementId) ?? [] } : undefined

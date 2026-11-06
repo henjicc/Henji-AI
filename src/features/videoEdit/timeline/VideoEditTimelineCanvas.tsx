@@ -429,7 +429,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       return <div key={window.transition.id} data-ui-timeline-item data-video-edit-transition={window.transition.id} data-video-edit-transition-side={side} data-selected={selected || undefined} aria-label={`${preset.name}（${side === 'in' ? '淡入' : '淡出'}）`}
         className={`absolute z-raised flex overflow-hidden text-text1 ${side === 'in' ? 'rounded-l-md' : 'rounded-r-md'} ${selected ? `border ${CLIP_SELECTED_LINE}` : ''}`}
         style={{ top: row.top - region.top + 2 + inset, height, left: header + window.start * pixels, width: Math.max(4, width - (side === 'out' ? 1 : 0)) }}>
-        {/* 淡化段：亮的楔形是音量或不透明度的走向，内缘一条竖线；不压暗，片段名照常可读 */}
+        {/* icon-token-allow: 淡化段的楔形按片段长度与轨道高度画出，是图形不是图标。亮的楔形是音量或不透明度的走向，内缘一条竖线；不压暗，片段名照常可读 */}
         <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           <polygon points={side === 'in' ? `0,${height} ${width},0 ${width},${height}` : `0,0 ${width},${height} 0,${height}`} className="fill-text1 opacity-15" />
           <line x1={0} y1={side === 'in' ? height : 0} x2={width} y2={side === 'in' ? 0 : height} className="stroke-text1 opacity-50" strokeWidth={1} vectorEffect="non-scaling-stroke" />

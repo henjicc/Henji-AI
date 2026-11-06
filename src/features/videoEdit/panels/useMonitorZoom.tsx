@@ -100,7 +100,8 @@ export function useMonitorZoom({ width, height, label }: { width: number; height
   return {
     display,
     setDisplay,
-    containerClass: display === 'fit' ? 'items-center justify-center overflow-hidden' : 'overflow-auto',
+    // 适合模式不能滚动：overflow-hidden 仍会被聚焦或 scrollIntoView 滚走（画面上的文字框平移出画幅时就有可滚动的溢出），clip 彻底不滚
+    containerClass: display === 'fit' ? 'items-center justify-center overflow-clip' : 'overflow-auto',
     containerRef,
     containerProps,
     boxClass: display === 'fit' ? 'max-h-full max-w-full' : 'm-auto shrink-0',

@@ -5,6 +5,7 @@ import { migrateAudioEqualizerModes, migrateAudioMergedEffects } from '../audio/
 import { migrateRecordingTransitions, migrateVideoEditTransitions } from '../videoEdit/transitionMigration'
 import { PERSISTENCE_FORMATS } from './formats'
 import { upgradePersistenceContent } from './migrations'
+import { migrateEmbeddedVideoEditCodeEditChecks, migrateVideoEditCodeEditChecks } from '../videoEdit/codeEditCheckMigration'
 
 it('效果登记顺延保留音频合并迁移，已登记样本与旧作者源码原样读取', () => {
   for (const [id, audioVersion] of [['document.video_edit', 48], ['document.screen_recording', 51]] as const) {
@@ -12,7 +13,8 @@ it('效果登记顺延保留音频合并迁移，已登记样本与旧作者源�
     const previous = format.version - 1
     const read = (version: number): unknown => JSON.parse(readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')).content
     const released = read(previous), before = structuredClone(released)
-    const migrateAuthor = id === 'document.video_edit' ? migrateVideoAuthor : migrateRecordingAuthor
+    // 剪辑内容 74 → 75（录制 77 → 78）只给已有手改补检查记录，与作者接口无关。
+    const migrateAuthor = id === 'document.video_edit' ? (value: unknown) => migrateVideoEditCodeEditChecks(migrateVideoAuthor(value)) : (value: unknown) => migrateEmbeddedVideoEditCodeEditChecks(migrateRecordingAuthor(value))
     expect(upgradePersistenceContent(format, released, previous)).toEqual(format.schema.parse(migrateAuthor(released)))
     expect(released).toEqual(before)
     const audio = read(audioVersion), audioBefore = structuredClone(audio)
