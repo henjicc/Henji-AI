@@ -20,11 +20,12 @@ afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
 beforeEach(() => { grants.lexical.mockReturnValue(true); grants.real.mockResolvedValue(true) })
 
 describe('Electron SDK media reader', () => {
-  it('SDK 请求仍从主进程凭据槽获取明文，生成与语音识别复用同一槽', () => {
+  it('SDK 请求仍从主进程凭据槽获取明文，生成、语音识别与翻译复用同一槽', () => {
     vi.mocked(getAiProviderApiKey).mockReturnValue('generation-fixture-key')
     vi.mocked(getLlmProviderApiKey).mockReturnValue('llm-fixture-key')
     expect(electronCredentialStore.get('generation', 'fal')).toBe('generation-fixture-key')
     expect(electronCredentialStore.get('speech-recognition', 'fal')).toBe('generation-fixture-key')
+    expect(electronCredentialStore.get('translation', 'bailian')).toBe('generation-fixture-key')
     expect(electronCredentialStore.get('llm', 'shared-slot')).toBe('llm-fixture-key')
   })
   it('actual assembled runtime provides every enabled host hook without invoking adapters', () => {
