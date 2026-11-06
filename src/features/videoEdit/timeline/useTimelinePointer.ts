@@ -17,7 +17,8 @@ import { isTimelineTrimTool, timelineTrimEdge, timelineTrimNeedsEdge, timelineTr
 import { elementOfEventTarget, isEventInsideCurrentTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
-import { beginVideoEditFadeDrag, beginVideoEditTransitionDrag, finishVideoEditTimelineHandleDrag, previewVideoEditFadeDrag, previewVideoEditTransitionDrag, selectVideoEditTransition, type VideoEditTimelineHandleDrag } from '../application/videoEditTransitions'
+import { beginVideoEditFadeDrag, beginVideoEditTransitionDrag, finishVideoEditTimelineHandleDrag, previewVideoEditFadeDrag, previewVideoEditTransitionDrag, selectVideoEditTransition, type VideoEditFadeDrag, type VideoEditTimelineHandleDrag } from '../application/videoEditTransitions'
+import { videoEditClipFade } from '@/core/videoEdit/fades'
 import { clearTimelineSnap, reportTimelineSnap, snapTimelineEdges, snapTimelineFrame, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
 import { timelineHeaderWidthOf, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, type TimelineEdgeAxis, type TimelineLayout, type TimelineRegionKind, type TimelineTrackRow } from './timelineGeometry'
 
@@ -37,7 +38,7 @@ type PointerGesture = BaseGesture & (
   | { kind: 'razor'; clipId: string; linked: VideoEditRelations }
   /** 过渡块（PR）：拖左右缘改时长、拖中间平移；淡化手柄：拖到的长度就是淡入／淡出。都是一次手势，文档实时预览、松手一步撤销。 */
   | { kind: 'transition'; drag: VideoEditTimelineHandleDrag; transitionId: string; mode: 'in' | 'out' | 'move'; moved: boolean }
-  | { kind: 'fade'; drag: VideoEditTimelineHandleDrag; clipId: string; fade: 'in' | 'out'; frames: number; moved: boolean }
+  | { kind: 'fade'; drag: VideoEditFadeDrag; clipId: string; fade: 'in' | 'out'; frames: number; moved: boolean }
   /** PR 修剪工具（波纹 B、滚动 N、外滑 Y、内滑 U）：拖动实时预览，松手一步撤销；`trim` 为最近一次能做到的请求。 */
   | { kind: 'trim'; handle: VideoEditTimelineDrag; mode: TimelineTrimTool; trimEdge?: 'in' | 'out'; clipId: string; ids: string[]; moved: boolean; trim?: VideoEditTimelineTrimDrag }
   /** 缩放工具（Z）：单击放大（Alt 缩小），横向拖出范围则缩放到这一段。 */
@@ -79,8 +80,8 @@ export function useTimelinePointer(options: Options) {
   const [boxSelection, setBoxSelection] = useState<ReadonlySet<string> | null>(null)
   const [resized, setResized] = useState<{ trackId: string; height: number } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
-  /** 正在拖的淡化手柄：时间线在手柄旁显示淡化时长。 */
-  const [fading, setFading] = useState<{ clipId: string; edge: 'in' | 'out' } | null>(null)
+  /** 正在拖的过渡（含拖淡化手柄新建的单侧过渡）：时间线在过渡块上显示时长。 */
+  const [adjusting, setAdjusting] = useState<string | null>(null)
   const waiting = useRef(new WeakSet<Promise<void>>())
   const resumeMetadata = (error: VideoEditCodeMetadataPending, gesture?: PointerGesture): void => {
     setFailure(error.message)
@@ -113,7 +114,7 @@ export function useTimelinePointer(options: Options) {
     if (previous?.kind === 'seek' && previous.owner.scrubbing && listVideoEditInstances().includes(previous.owner)) setVideoEditView(previous.owner.document.id, { scrubbing: false })
     return previous
   }
-  const clear = (): void => { setPreview(null); setBox(null); setBoxSelection(null); setResized(null); setFailure(null); setFading(null); clearTimelineSnap() }
+  const clear = (): void => { setPreview(null); setBox(null); setBoxSelection(null); setResized(null); setFailure(null); setAdjusting(null); clearTimelineSnap() }
   /** 框内命中的片段（按链接选择展开），加选时并上按下前的选中；拖动中的预选中与松手写入的选区用同一算法。 */
   const boxHits = (gesture: Extract<PointerGesture, { kind: 'box' }>): string[] => {
     const { sequence, pixels } = current.current; const rows = current.current.layout.current.rows
@@ -347,14 +348,16 @@ export function useTimelinePointer(options: Options) {
         const edge = target.closest('[data-video-edit-transition-edge]')?.getAttribute('data-video-edit-transition-edge')
         selectVideoEditTransition(instance.document.id, transitionId)
         capture({ ...base(event), kind: 'transition', drag: beginVideoEditTransitionDrag(instance.document.id, sequence.id, transitionId), transitionId, mode: edge === 'in' || edge === 'out' ? edge : 'move', moved: false })
+        setAdjusting(transitionId)
         setVideoEditView(instance.document.id, { playing: false })
         return
       }
       selectVideoEditTransition(instance.document.id, null)
       const fadeEdge = instance.tool === 'select' && clip ? target.closest('[data-video-edit-fade]')?.getAttribute('data-video-edit-fade') : undefined
       if (clip && (fadeEdge === 'in' || fadeEdge === 'out')) {
-        capture({ ...base(event), kind: 'fade', drag: beginVideoEditFadeDrag(instance.document.id, sequence.id, clip.id), clipId: clip.id, fade: fadeEdge, frames: (fadeEdge === 'in' ? clip.fadeInFrames : clip.fadeOutFrames) ?? 0, moved: false })
-        setFading({ clipId: clip.id, edge: fadeEdge })
+        const drag = beginVideoEditFadeDrag(instance.document.id, sequence.id, clip.id)
+        capture({ ...base(event), kind: 'fade', drag, clipId: clip.id, fade: fadeEdge, frames: videoEditClipFade(sequence, clip.id, fadeEdge)?.durationFrames ?? 0, moved: false })
+        setAdjusting(videoEditClipFade(sequence, clip.id, fadeEdge)?.id ?? drag.transitionId)
         setVideoEditView(instance.document.id, { playing: false })
         return
       }
@@ -444,5 +447,5 @@ export function useTimelinePointer(options: Options) {
     // All listeners read the fixed gesture/current refs, never a former selection closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  return { viewport, preview, box, boxSelection, resized, failure, fading, down, move, up, resize, cancel, select }
+  return { viewport, preview, box, boxSelection, resized, failure, adjusting, down, move, up, resize, cancel, select }
 }

@@ -279,14 +279,15 @@ it('媒体不足时转场重复首尾帧（PR），黑场过渡把纯色交给�
     expect(boundary.mixes).toEqual([[3 / 10, 0, 0, 0, 1], [7 / 10, 0, 0, 0, 1]])
   } finally { await renderer.dispose() }
 })
-it('淡化手柄：画面按帧乘不透明度，声音按恒定功率包络混音（4.3）', async () => {
+it('淡入淡出就是两端的单侧交叉溶解：画面从透明混入、混出到透明，自带的声音一起按恒定功率淡（4.3）', async () => {
   const document = fixture()
-  document.clips = [{ ...document.clips[0], duration: 90, fadeInFrames: 30, fadeOutFrames: 15 }]
+  document.clips = [{ ...document.clips[0], duration: 90 }]
+  document.transitions = [{ id: 'in', kind: 'cross_dissolve', rightClipId: document.clips[0].id, durationFrames: 30 }, { id: 'out', kind: 'cross_dissolve', leftClipId: document.clips[0].id, durationFrames: 15 }]
   const renderer = new VideoEditRenderer(document)
   try {
-    await renderer.render(15); expect(boundary.opacities).toEqual([.5])
-    await renderer.render(45); expect(boundary.opacities).toEqual([1])
-    await renderer.render(82); expect(boundary.opacities[0]).toBeCloseTo(7 / 15)
+    await renderer.render(15); expect(boundary.mixes).toEqual([[.75, 0, 0, 0, 0]])
+    await renderer.render(45); expect(boundary.mixes).toHaveLength(1)
+    await renderer.render(82); expect((boundary.mixes[1] as number[])[0]).toBeCloseTo(7 / 30)
     expect((await renderer.mixAudio(0, .01))[0][0]).toBe(0)
     expect((await renderer.mixAudio(.5, .01))[0][0]).toBeCloseTo(.25 * Math.SQRT1_2)
     expect((await renderer.mixAudio(1.2, .01))[0][0]).toBe(.25)

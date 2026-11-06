@@ -62,7 +62,7 @@ export function spatialPolygonArea(polygons: MultiPolygon): number {
 }
 /** 结构查询只证明静态满幅不透明矩形；媒体 alpha 与作者输出必须留给实际渲染观察。 */
 function opaque(clip: VideoEditClip, at: number): boolean {
-  if (videoEditClipValue(clip, 'opacity', at) !== 1 || clip.effects?.some(effect => effect.enabled && effect.amount > 0) || clip.fadeInFrames || clip.fadeOutFrames || clip.follow) return false
+  if (videoEditClipValue(clip, 'opacity', at) !== 1 || clip.effects?.some(effect => effect.enabled && effect.amount > 0) || clip.follow) return false
   const graphic = clip.graphic
   if (clip.kind !== 'graphic' || !graphic || graphic.objects.length !== 1) return false
   const object = graphic.objects[0], p = prepareVideoEditGraphic(graphic).objects[0].parameters.values

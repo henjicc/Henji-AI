@@ -57,8 +57,7 @@ import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
-import { videoEditAudioTransitionClipGain, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionPictureClips, videoEditTransitionWindow, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
-import { videoEditClipFades, videoEditFadeGain, videoEditFadeOpacity } from '@/core/videoEdit/fades'
+import { videoEditAudioTransitionClipGain, videoEditClipAudioWindows, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionPictureClips, videoEditTransitionWindow, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { applyVideoEditClipFollow, applyVideoEditStabilization, videoEditClipTrackingQuad } from './videoEditTrackResults'
 import { activeVideoEditAudioEffects, activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys, videoEditSpatialBelowKeys } from './videoEditCompositeScene'
@@ -2085,7 +2084,7 @@ export class VideoEditRenderer {
     // 防抖修正在关键帧与跟随之后合成进位置、缩放、旋转（预览与导出同一份）。
     const active = (await applyVideoEditStabilization(sourceDocument, (await applyVideoEditClipFollow(sourceDocument, [...candidates.values()], frame)).map(clip => {
       const evaluated = evaluateVideoEditClip(clip, frame)
-      return videoEditClipFades(clip) ? { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(clip, frame) } : evaluated
+      return evaluated
     }), frame)).filter(clip => !['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length || transitionIds.has(clip.id))
     // 运动模糊（片段开关优先，没写跟随序列）：有变换动画的画面片段带上快门内的取样变换，合成器平均后叠到画面上（预览与导出同一份）。
     for (const [index, clip] of active.entries()) {
@@ -2688,9 +2687,12 @@ export class VideoEditRenderer {
     const { activeAudio, activeChains, activeStretchers } = sets
     const fps = this.document.fps
     // 音频过渡（PR 恒定功率／恒定增益）：左片段越过出点、右片段提前入点，在窗口里按曲线交叉淡化。
-    const audioWindows = (this.document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'audio').flatMap((transition): VideoEditTransitionWindow[] => { try { return [videoEditTransitionWindow(this.document, transition)] } catch { return [] } })
+    const windowsOf = (medium: 'audio' | 'video'): VideoEditTransitionWindow[] => (this.document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === medium).flatMap((transition): VideoEditTransitionWindow[] => { try { return [videoEditTransitionWindow(this.document, transition)] } catch { return [] } })
+    const audioWindows = windowsOf('audio'), pictureWindows = windowsOf('video')
     for (const clip of clips) {
-      const outgoing = audioWindows.filter(window => window.left.id === clip.id && window.side !== 'in'); const incoming = audioWindows.filter(window => window.right.id === clip.id && window.side !== 'out')
+      // 自带声音的画面片段两端淡化时声音一起淡（videoEditClipAudioWindows）
+      const windows = videoEditClipAudioWindows(clip, audioWindows, pictureWindows)
+      const outgoing = windows.filter(window => window.left.id === clip.id && window.side !== 'in'); const incoming = windows.filter(window => window.right.id === clip.id && window.side !== 'out')
       const sourceGain = videoEditGainMultiplier(clip.gainDb)
       const clipStart = clip.start / fps
       const playStart = Math.min(clip.start, ...incoming.map(window => window.start)) / fps
@@ -2706,11 +2708,11 @@ export class VideoEditRenderer {
       from = Math.max(from, headRoom)
       if (from >= to) continue
       const audioMode = videoEditClipAudioMode(clip)
-      // 淡化手柄与音频过渡的增益包络（按输出采样）；没有时整段就是片段音量。
-      const enveloped = videoEditClipFades(clip) || outgoing.length > 0 || incoming.length > 0 || Boolean(clip.curves?.volume?.length)
+      // 音频过渡（含两端淡化）的增益包络（按输出采样）；没有时整段就是片段音量。
+      const enveloped = outgoing.length > 0 || incoming.length > 0 || Boolean(clip.curves?.volume?.length)
       const envelope = enveloped ? Float32Array.from({ length }, (_, sample) => {
         const seconds = sampleStartSeconds + sample / rate
-        let gain = sourceGain * videoEditClipValue(clip, 'volume', seconds * fps) * (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps ? videoEditFadeGain(clip, seconds, fps) : 1)
+        let gain = sourceGain * videoEditClipValue(clip, 'volume', seconds * fps)
         for (const window of [...outgoing, ...incoming]) {
           const begin = window.start / fps; const end = window.end / fps
           if (seconds >= begin && seconds < end) gain *= videoEditAudioTransitionClipGain(window, clip.id, (seconds - begin) / (end - begin))
@@ -2821,7 +2823,6 @@ export class VideoEditRenderer {
         let shape = 1
         if (enveloped) {
           const seconds = sampleStartSeconds + sample / rate
-          if (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps) shape = videoEditFadeGain(clip, seconds, fps)
           for (const window of [...outgoing, ...incoming]) {
             const begin = window.start / fps; const end = window.end / fps
             if (seconds >= begin && seconds < end) shape *= videoEditAudioTransitionClipGain(window, clip.id, (seconds - begin) / (end - begin))

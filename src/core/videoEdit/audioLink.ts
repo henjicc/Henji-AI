@@ -5,6 +5,7 @@ import { videoEditFps, videoEditSourceSeconds } from './time'
 import type { VideoEditDocumentSource } from './creativeResult'
 import { remapVideoEditLinkedClip, remapVideoEditLinkedSpeechWord, type VideoEditLinkedTimeline } from './audioEditLink'
 import { retimeVideoEditContent } from './timedContent'
+import { retimeVideoEditTransitions } from './transitions'
 
 export interface AudioLinkNotice { clipId: string; message: string }
 function linkedTo(clip: VideoEditClip, documentId: string): boolean {
@@ -41,14 +42,14 @@ export function updateVideoEditAudioLinks(document: VideoEditDocument, documentI
         const duration = Math.min(remapped.duration, Number.isFinite(next) ? next - clip.start : remapped.duration)
         if (duration !== clip.duration) notices.push({ clipId: clip.id, message: duration < remapped.duration ? '音频编辑里这段变长了，后面紧挨着别的片段，只展开到下一个片段之前。' : duration < clip.duration ? '音频编辑里这段剪短了，片段已按原来的词对回并截短，后续片段位置保持不变。' : '音频编辑里这段变长了，片段已按原来的词对回。' })
         const sliced = duration < clip.duration ? sliceVideoEditClipKeyframes(clip, 0, duration) : clip
-        return [{ ...sliced, itemId, duration, sourceInUs: remapped.sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 }, ...(clip.fadeInFrames ? { fadeInFrames: Math.min(duration, clip.fadeInFrames) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.min(duration, clip.fadeOutFrames) } : {}), creativeSource: source }]
+        return [{ ...sliced, itemId, duration, sourceInUs: remapped.sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 }, creativeSource: source }]
       }
       const head = videoEditSourceSeconds(clip)
       const boundary = clip.frameHold ? clip.duration : videoEditClipFrameBoundaryAtSource(clip, clip.reverse ? 0 : durationSeconds, fps) - clip.start
       const duration = (clip.reverse ? head > durationSeconds : head >= durationSeconds) ? 0 : Math.min(clip.duration, Math.max(0, Math.floor(boundary + 1e-7)))
       if (duration < clip.duration) notices.push({ clipId: clip.id, message: duration ? '音频作品变短，片段结尾已截短，后续片段位置保持不变。' : '音频作品已短于片段入点，该声音片段已移除，后续片段位置保持不变。' })
       if (!duration) { removed.add(clip.id); return [] }
-      return [{ ...sliceVideoEditClipKeyframes(clip, 0, duration), itemId, duration, ...(clip.fadeInFrames ? { fadeInFrames: Math.min(duration, clip.fadeInFrames) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.min(duration, clip.fadeOutFrames) } : {}), creativeSource: source }]
+      return [{ ...sliceVideoEditClipKeyframes(clip, 0, duration), itemId, duration, creativeSource: source }]
     })
     // 整段删除使用普通剪辑的字幕归属规则；保留片段只更新参考词，不改字幕成品。
     const retained = removed.size ? retimeVideoEditContent(sequence, { ...sequence, clips: sequence.clips.filter(clip => !removed.has(clip.id)) }).captions : sequence.captions
@@ -78,7 +79,8 @@ export function updateVideoEditAudioLinks(document: VideoEditDocument, documentI
       const { clipId: _clipId, speech: _speech, ...independent } = result
       return { ...independent, reviewReasons: [...new Set([...(independent.reviewReasons ?? []), 'timing' as const])] }
     })
-    const updated = { ...sequence, clips, ...(sequence.transitions ? { transitions: sequence.transitions.filter(t => !removed.has(t.leftClipId ?? "") && !removed.has(t.rightClipId ?? "")) } : {}) }
+    // 片段变短时两端的过渡（含淡入淡出）跟着缩短，放不下就去掉
+    const updated = retimeVideoEditTransitions(sequence, { ...sequence, clips, ...(sequence.transitions ? { transitions: sequence.transitions.filter(t => !removed.has(t.leftClipId ?? "") && !removed.has(t.rightClipId ?? "")) } : {}) })
     return { ...updated, ...(captions ? { captions } : {}) }
   })
   return { document: { ...document, sequences }, notices, changed }

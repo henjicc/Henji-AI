@@ -5,7 +5,7 @@ import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditPictureFilter, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
-import { videoEditFadeOpacity } from '@/core/videoEdit/fades'
+import { videoEditClipFadeOpacity } from '@/core/videoEdit/fades'
 import { videoEditClipPictureSize, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
 import { codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, cycleCodeElement, hitCodeElementIndex, prepareAuthorElementIndex, type CodeElementIndex } from '@/core/videoEdit/codeElementSelection'
 import type { CodeElementBounds } from '@/core/videoEdit/codeMaterial/geometry'
@@ -32,7 +32,7 @@ export function installVideoEditCodeElements(instance: VideoEditInstance, observ
     const raw = sequence.clips.find(clip => clip.id === observed.clipId)
     if (!raw?.code || raw.kind !== 'code' || raw.code.versionId !== observed.versionId || !picture.has(raw) || observation.frame < raw.start || observation.frame >= raw.start + raw.duration) continue
     const evaluated = evaluateVideoEditClip(raw, observation.frame)
-    const clip = { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(raw, observation.frame) }
+    const clip = { ...evaluated, opacity: evaluated.opacity * videoEditClipFadeOpacity(sequence, raw, observation.frame) }
     if (clip.opacity <= 0) continue
     elements.set(raw.id, { clip, picture: { width: observed.width, height: observed.height }, index: prepareAuthorElementIndex(observed.elements), files: codeMaterialSource(instance.document, raw.code).contents })
   }
@@ -79,7 +79,7 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
       return [{ ...refreshEffects(author, raw, time), matrix, opacity: (author.baseOpacity ?? 1) * (override.opacity ?? 1), corners: [[x, y], [right, y], [right, bottom], [x, bottom]].map(([x, y]) => codePoint(matrix, x, y)) }]
     })
     const evaluated = evaluateVideoEditClip(raw, frame)
-    const opacity = evaluated.opacity * videoEditFadeOpacity(raw, frame)
+    const opacity = evaluated.opacity * videoEditClipFadeOpacity(sequence, raw, frame)
     if (opacity <= 0) continue
     result.set(id, { ...entry, clip: { ...evaluated, opacity }, index: prepareAuthorElementIndex(observations) })
   }
@@ -91,7 +91,7 @@ export function videoEditProgramClipAt(instance: VideoEditInstance, point: { x: 
   const elements = videoEditCodeElementFrames(instance)
   const clips = sequence.clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'adjustment' && clip.kind !== 'light' && instance.frame >= clip.start && instance.frame < clip.start + clip.duration && picture.has(clip)).sort((a, b) => b.track - a.track)
   for (const raw of clips) {
-    const evaluated = evaluateVideoEditClip(raw, instance.frame); const clip = { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(raw, instance.frame) }; if (clip.opacity <= 0) continue
+    const evaluated = evaluateVideoEditClip(raw, instance.frame); const clip = { ...evaluated, opacity: evaluated.opacity * videoEditClipFadeOpacity(sequence, raw, instance.frame) }; if (clip.opacity <= 0) continue
     const entry = elements.get(clip.id)
     const picture = entry?.picture ?? videoEditClipPictureSize({ ...instance.document, ...sequence }, clip)
     const local = videoEditFrameToClip(clip, picture, sequence, point.x, point.y)

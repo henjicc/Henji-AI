@@ -3,6 +3,7 @@ import { expect, it } from 'vitest'
 import { videoEditAudioContent } from './audioContent'
 import { createVideoEditSequence, videoEditComposition, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
+import { setVideoEditClipFade } from './fades'
 import { nestVideoEditClips } from './nestedSequences'
 
 function fixture(): VideoEditDocument {
@@ -57,7 +58,7 @@ it('音量、时钟、声道、淡化、源身份和声音效果变化必须改�
     document => { document.sequences[0].clips[0].speed = { numerator: 2, denominator: 1 } },
     document => { document.sequences[0].clips[0].reverse = true },
     document => { document.sequences[0].clips[0].preservePitch = true },
-    document => { document.sequences[0].clips[0].fadeInFrames = 10 },
+    document => { document.sequences[0] = setVideoEditClipFade(document.sequences[0], document.sequences[0].clips[0].id, 'in', 10, () => 'fade') },
     document => { document.sequences[0].clips[0].audioMapping = { format: 'mono', sources: [{ stream: 0, channel: 1 }] } },
     document => { document.sequences[0].clips[0].curves = { volume: [{ time: 0, value: .5, interpolation: 'linear' }] } },
     document => { document.sequences[0].tracks[0].muted = true },

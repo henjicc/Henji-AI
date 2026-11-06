@@ -6,17 +6,20 @@ import { henjiExtension, henjiLegacyExtensions } from '../../fileExtensions'
 import type { DocumentKindDescriptor } from './registry'
 import { migrateEmbeddedVideoEditStyles } from '../../videoEdit/styles/styleTemplateMigration'
 import { migrateEmbeddedVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
+import { migrateEmbeddedVideoEditClipFades } from '../../videoEdit/fadeTransitionMigration'
 import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigration'
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 76, minReaderVersion: 76,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 77, minReaderVersion: 77,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
     // 72 → 73：嵌入剪辑的新增灯光片段与灯光素材项（kind light，字段 lightKind、lightColor、lightIntensity 可关键帧、lightCastShadow、lightSoftness、lightAngle），序列 spaceRender 新增 defaultLighting；旧内容没有灯光，画面不变；片段与素材项的 kind、关键帧键是封闭枚举，旧程序读到 light 或 curves.lightIntensity 会拒读，最低可读版本随版本提高。
     // 73 → 74：嵌入剪辑的网页图片引用新增可选 layer（{ only } 或 { hide }，按文字拆层）；旧内容没有该字段，画面不变。旧程序的网页引用是严格结构且画不出拆层，读到会把整份内容判成无效，最低可读版本提高到 74。
     // 74 → 75：嵌入剪辑的代码版本可用作者接口 18（没有位姿的图层比较相邻帧的绘制指令，draw 里的动画也有运动模糊）。
     // 75 → 76：嵌入剪辑快照随剪辑内容 73 接受片段 motionBlur:true 与元素覆盖 motionBlur。
+    // 76 → 77：嵌入剪辑随剪辑内容 74 把片段淡入淡出并进单侧过渡；旧程序不会让自带声音的画面片段随单侧画面过渡淡，最低可读版本提高到 77。
+    76: content => migrateEmbeddedVideoEditClipFades(content),
     75: content => structuredClone(content),
     74: content => structuredClone(content),
     73: content => structuredClone(content),

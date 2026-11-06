@@ -5,7 +5,7 @@ import { videoEditAudioMixer } from './audioMixer'
 import type { VideoEditKeyframe } from './keyframes'
 import { VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from './sequenceGraph'
 import { VIDEO_EDIT_AUDIO_STRETCH_ENGINE } from './clipSpeed'
-import { videoEditTransitionMedium, videoEditTransitionWindow, type VideoEditTransitionWindow } from './transitions'
+import { videoEditClipAudioWindows, videoEditTransitionMedium, videoEditTransitionWindow, type VideoEditTransitionWindow } from './transitions'
 
 function points(values: readonly VideoEditKeyframe[] | undefined): unknown[] {
   return (values ?? []).map(({ time, value, interpolation, easeRange }) => ({ time, value, interpolation, easeRange }))
@@ -27,10 +27,11 @@ export function videoEditAudioContent(snapshot: VideoEditComposition, phase: Aud
     if (known !== undefined) return known
     const index = sequences.length
     cached.set(sequence.id, index); sequences.push(null)
-    const windows = (sequence.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'audio').flatMap((transition): VideoEditTransitionWindow[] => {
+    const windowsOf = (medium: 'audio' | 'video'): VideoEditTransitionWindow[] => (sequence.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === medium).flatMap((transition): VideoEditTransitionWindow[] => {
       // The mixer also ignores windows made invalid by a filtered clip selection.
       try { return [videoEditTransitionWindow(sequence, transition)] } catch { return [] }
     })
+    const audioWindows = windowsOf('audio'), pictureWindows = windowsOf('video')
     // 音轨混音（轨道音量、声像、效果与主轨）进入身份；没有时不加字段，已有缓存身份不变。
     const mixer = videoEditAudioMixer(sequence)
     const result = { fps: sequence.fps, sampleRate: sequence.sampleRate, channels: sequence.channels,
@@ -38,19 +39,23 @@ export function videoEditAudioContent(snapshot: VideoEditComposition, phase: Aud
       clips: audibleVideoEditClips(sequence).map(clip => {
         const nested = videoEditNestedComposition(sequence, clip)
         const media = nested ? undefined : videoEditClipMedia(sequence, clip)
+        // 两端按恒定功率淡的单侧过渡写成淡化字段：声音与淡化并进过渡之前一样，身份也一样，旧文字稿与静音证据仍能对上
+        const windows = videoEditClipAudioWindows(clip, audioWindows, pictureWindows)
+        const fadeOf = (side: 'in' | 'out'): VideoEditTransitionWindow | undefined => windows.find(window => window.side === side && (window.transition.kind === 'constant_power' || videoEditTransitionMedium(window.transition.kind) === 'video'))
+        const fadeIn = fadeOf('in'), fadeOut = fadeOf('out')
         return {
           ...(mixer ? { track: clip.track } : {}),
           start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder,
           speed: clip.speed ?? { numerator: 1, denominator: 1 }, reverse: clip.reverse ?? false, preservePitch: clip.preservePitch ?? false,
           timeRemap: clip.timeRemap ?? null, pitchSemitones: clip.pitchSemitones ?? 0,
-          gainDb: clip.gainDb ?? 0, volume: clip.disabledIntrinsicSections?.includes('audio') ? 1 : clip.volume, volumeCurve: points(clip.disabledIntrinsicSections?.includes('audio') ? undefined : clip.curves?.volume), fadeInFrames: clip.fadeInFrames ?? 0, fadeOutFrames: clip.fadeOutFrames ?? 0,
+          gainDb: clip.gainDb ?? 0, volume: clip.disabledIntrinsicSections?.includes('audio') ? 1 : clip.volume, volumeCurve: points(clip.disabledIntrinsicSections?.includes('audio') ? undefined : clip.curves?.volume), fadeInFrames: fadeIn?.transition.durationFrames ?? 0, fadeOutFrames: fadeOut?.transition.durationFrames ?? 0,
           audioMapping: clip.audioMapping,
           effects: activeVideoEditAudioEffects(clip).map(effect => {
             const builtin = audioBuiltinIdentity(effect.builtin, phase)
             return { id: builtin.id, amount: effect.amount, params: builtin.params,
               curves: Object.fromEntries(Object.entries(builtin.curves ?? {}).map(([key, values]) => [key, points(values)])) }
           }),
-          transitions: windows.filter(window => window.left.id === clip.id && window.side !== 'in' || window.right.id === clip.id && window.side !== 'out').map(window => ({
+          transitions: windows.filter(window => window !== fadeIn && window !== fadeOut).map(window => ({
             kind: window.transition.kind, start: window.start, end: window.end, side: window.side, outgoing: window.left.id === clip.id,
           })),
           source: nested ? { duration: videoEditDuration(nested) / nested.fps, sound: content(nested, [...path, sequence.id]) }

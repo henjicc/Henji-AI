@@ -11,6 +11,7 @@ import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistenc
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
 import { migrateVideoEditStyles } from '../../videoEdit/styles/styleTemplateMigration'
 import { migrateVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
+import { migrateVideoEditClipFades } from '../../videoEdit/fadeTransitionMigration'
 import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigration'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
 import { creativeIntentsSchema } from '../../creativeIntent/persistence'
@@ -149,7 +150,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 70：新增灯光片段与灯光素材项（kind light）及关键帧键 lightIntensity；旧程序的 kind 与关键帧键是封闭枚举，读到会把整份剪辑判成内容无效，提高到 70。
   // 71：网页图片引用新增可选 layer（{ only } 或 { hide }，按文字拆层）；旧内容没有该字段，画面不变。旧程序的网页引用是严格结构且画不出拆层，读到会把整份内容判成无效，提高到 71 让它明确提示升级。
   // 72：新建代码素材默认作者接口 18（没有位姿的图层比较相邻帧的绘制指令，draw 里的动画也有运动模糊），旧程序的作者接口上限不认识它，提高到 72。
-  minReaderVersion: 73,
+  // 74：片段淡入淡出并进单侧过渡。旧程序靠 fadeInFrames 给没拆开的视频、嵌套序列的声音做淡化，只认音频过渡，打开新文件这些声音不再淡；提高到 74。
+  minReaderVersion: 74,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
@@ -157,6 +159,9 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     // 70 → 71：网页图片引用新增可选 layer（{ only } 或 { hide }，按文字拆层）；旧内容没有该字段，画面不变。旧程序的网页引用是严格结构且画不出拆层，读到会把整份内容判成无效，最低可读版本提高到 71。
     // 71 → 72：接受作者接口 18（没有位姿的图层比较相邻帧的绘制指令，draw 里的动画也有运动模糊）。
     // 72 → 73：片段 motionBlur 从只能写 false 放宽到 true/false（true 强制打开）；代码元素覆盖新增 motionBlur。旧程序读不了 true，提高最低可读版本。
+    // 73 → 74：片段的 fadeInFrames / fadeOutFrames 并进过渡，成为片段一端的单侧过渡（画面交叉溶解、声音恒定功率，见 fadeTransitionMigration.ts）；
+    // 自带声音的画面片段的声音改由单侧画面过渡带着淡，旧程序不会，最低可读版本提高到 74。
+    73: content => migrateVideoEditClipFades(content),
     72: content => structuredClone(content),
     71: content => structuredClone(content),
     70: content => structuredClone(content),

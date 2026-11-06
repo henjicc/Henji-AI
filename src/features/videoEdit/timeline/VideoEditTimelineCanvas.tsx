@@ -79,6 +79,8 @@ import { dropVideoEditGenerator, placeVideoEditGenerator } from '../application/
 import { VideoEditEffectDropTargets, VideoEditTransitionDropBlock } from './VideoEditTimelineDropFeedback'
 import { useVideoEditInPlaceMenu } from './useVideoEditInPlaceMenu'
 import { VideoEditInPlacePlaceholders } from './VideoEditInPlacePlaceholders'
+import { VideoEditFadeGlyph } from './VideoEditFadeGlyph'
+import { VIDEO_EDIT_FADE_MIN_FRAMES, videoEditClipFade, videoEditClipFadeRoom, videoEditFadeMedium } from '@/core/videoEdit/fades'
 import { VideoEditNestDialog } from '../panels/VideoEditNestDialog'
 import { openVideoEditNestedClip, type VideoEditNestTarget } from '../application/videoEditNesting'
 
@@ -105,12 +107,9 @@ const TRANSITION_DROP_REACH = 40
 const TRANSITION_DROP_CENTER = 8
 /** 片段宽度够放淡化手柄（两角各一个）时才显示手柄。 */
 const FADE_HANDLE_MIN_WIDTH = 28
-/** 淡化手柄 12px：没淡化时是角上的折角，有淡化时是顶边上朝下的三角。 */
-const FADE_HANDLE_SIZE = 12
-const FADE_HANDLE_CORNER_IN = 'polygon(0 0, 100% 0, 0 100%)'
-const FADE_HANDLE_CORNER_OUT = 'polygon(0 0, 100% 0, 100% 100%)'
-const FADE_HANDLE_POINTER = 'polygon(0 0, 100% 0, 50% 75%)'
-/** 拖淡化时的读数：秒:帧。 */
+/** 淡化块让出片段名那一行；轨道高过这么多才让，矮轨道铺满。 */
+const FADE_BLOCK_LABEL_ROW = 16
+const FADE_BLOCK_MIN_HEIGHT = 36
 const fadeLabel = (frames: number, fps: number): string => { const nominal = Math.max(1, Math.round(fps)); return `${Math.floor(frames / nominal)}:${String(frames % nominal).padStart(2, '0')}` }
 interface TransitionDropHint { kind: VideoEditTransitionKind; pair: VideoEditTransitionPair; alignment: VideoEditTransitionAlignment; track: number; start: number; duration: number }
 export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true, corner }: Props): React.ReactElement {
@@ -422,8 +421,27 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const selected = window.transition.id === selectedTransitionId
     const width = Math.max(6, (window.end - window.start) * pixels)
     const Icon = ICON_VIDEO_EDIT_TRANSITION
-    // 单侧过渡（4.4）贴着片段一端：只有离开那一端的边缘能拖。
+    // 单侧过渡（4.4，即淡入淡出）贴着片段一端：只有离开那一端的边缘能拖，那一缘顶上就是淡化手柄
     const fixed = window.side === 'in' ? 'in' : window.side === 'out' ? 'out' : undefined
+    if (window.side) {
+      // 淡化块压在片段名那一行下面（PR），片段名照常可读；行太矮时铺满
+      const side = window.side, inset = row.height - 4 >= FADE_BLOCK_MIN_HEIGHT ? FADE_BLOCK_LABEL_ROW : 0, height = row.height - 4 - inset
+      return <div key={window.transition.id} data-ui-timeline-item data-video-edit-transition={window.transition.id} data-video-edit-transition-side={side} data-selected={selected || undefined} aria-label={`${preset.name}（${side === 'in' ? '淡入' : '淡出'}）`}
+        className={`absolute z-raised flex overflow-hidden text-text1 ${side === 'in' ? 'rounded-l-md' : 'rounded-r-md'} ${selected ? `border ${CLIP_SELECTED_LINE}` : ''}`}
+        style={{ top: row.top - region.top + 2 + inset, height, left: header + window.start * pixels, width: Math.max(4, width - (side === 'out' ? 1 : 0)) }}>
+        {/* 淡化段：亮的楔形是音量或不透明度的走向，内缘一条竖线；不压暗，片段名照常可读 */}
+        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+          <polygon points={side === 'in' ? `0,${height} ${width},0 ${width},${height}` : `0,0 ${width},${height} 0,${height}`} className="fill-text1 opacity-15" />
+          <line x1={0} y1={side === 'in' ? height : 0} x2={width} y2={side === 'in' ? 0 : height} className="stroke-text1 opacity-50" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        </svg>
+        <div aria-hidden="true" className={`pointer-events-none absolute inset-y-0 w-px bg-text1/40 ${side === 'in' ? 'right-0' : 'left-0'}`} />
+        {side === 'out' && <div data-video-edit-transition-edge="in" aria-hidden="true" className="h-full w-2 shrink-0 cursor-ew-resize" />}
+        <div className="relative flex min-w-0 flex-1 items-end overflow-hidden px-1 pb-0.5">
+          {width > 40 && inset > 0 && <span className="truncate text-2xs leading-4">{preset.name}</span>}
+        </div>
+        {side === 'in' && <div data-video-edit-transition-edge="out" aria-hidden="true" className="h-full w-2 shrink-0 cursor-ew-resize" />}
+      </div>
+    }
     return <div key={window.transition.id} data-ui-timeline-item data-video-edit-transition={window.transition.id} data-video-edit-transition-side={window.side} data-selected={selected || undefined} title={window.side ? `${preset.name}：拖${window.side === 'in' ? '右' : '左'}缘改时长` : `${preset.name}：拖两端改时长，拖中间沿切点移动`}
       className={`absolute z-raised flex overflow-hidden rounded-md border bg-raised text-text1 ${selected ? CLIP_SELECTED_LINE : 'border-line-strong'}`}
       style={{ top: row.top - region.top + 2, height: Math.max(12, Math.min(row.height - 4, 28)), left: header + window.start * pixels, width }}>
@@ -452,8 +470,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         // Hidden picture tracks, muted sound tracks and disabled clips dim their clips (content only, see the overlay below), as in Premiere.
         const dimmed = !row.track.enabled || row.track.kind === 'audio' && row.track.muted || !videoEditClipEnabled(clip)
         const { left: clipLeft, width: clipWidth } = timelineBlockSpan(clip.start, clip.duration, pixels, header)
-        const fadeIn = (clip.fadeInFrames ?? 0) * pixels; const fadeOut = (clip.fadeOutFrames ?? 0) * pixels
-        const fadable = clip.kind !== 'adjustment' && clipWidth >= FADE_HANDLE_MIN_WIDTH
+        // 淡化手柄（PR）：还没淡化时在角上，拖出来就是这一端的单侧过渡；有淡化时手柄骑在淡化终点的顶边上，拖它改长度。挂着普通过渡的一端没有
+        const fadeHandles = videoEditFadeMedium(clip) && clipWidth >= FADE_HANDLE_MIN_WIDTH ? (['in', 'out'] as const).flatMap(edge => {
+          const fade = videoEditClipFade(displayed, clip.id, edge)
+          return fade || videoEditClipFadeRoom(displayed, clip, edge) >= VIDEO_EDIT_FADE_MIN_FRAMES ? [{ edge, fade, offset: fade ? Math.max(1, Math.min(clipWidth - 14, fade.durationFrames * pixels - 6)) : edge === 'in' ? 1 : 2 }] : []
+        }) : []
         return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-selected={selected || undefined} data-clip-start={clip.start} data-clip-duration={clip.duration} className="group absolute" data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
           {/* 外观层带着全部内容，右端让出 1 像素当片段间的缝；外层铺满，点在缝上仍是这个片段 */}
           <div className={`${TIMELINE_BLOCK_FACE_CLASS} overflow-clip ${selected ? CLIP_SELECTED_LINE : ''}`} style={surface}>
@@ -464,11 +485,6 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           {/* 隐藏轨/静音轨/停用片段只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
               纸白下标签只剩 1.5:1（4.1 对比度审计） */}
           {dimmed && <div className="pointer-events-none absolute inset-0 bg-window/50" aria-hidden="true" />}
-          {/* 淡化：一条亮斜线从片段底角升到淡化终点，就是音量或不透明度的走向；画在片段名下面 */}
-          {(fadeIn > 0 || fadeOut > 0) && <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full text-text1 opacity-70" viewBox={`0 0 ${clipWidth} ${row.height - 4}`} preserveAspectRatio="none">
-            {fadeIn > 0 && <line data-video-edit-fade-shape="in" x1={0} y1={row.height - 4} x2={Math.min(clipWidth, fadeIn)} y2={0} stroke="currentColor" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />}
-            {fadeOut > 0 && <line data-video-edit-fade-shape="out" x1={Math.max(0, clipWidth - fadeOut)} y1={0} x2={clipWidth} y2={row.height - 4} stroke="currentColor" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />}
-          </svg>}
           <div className="absolute inset-0 flex">
             {/* ui-surface-allow 片段入点裁剪柄：命中区不是按钮档位，外观由片段容器的 clip 令牌给出 */}
             <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
@@ -480,18 +496,13 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             <UiButton data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
           </div>
           <VideoEditTimelineKeyframes projectId={projectId} sequenceId={sequence.id} clip={clip} pen={instance.tool === 'pen'} hints={!row.lane} width={clipWidth} height={row.height - 4} pixels={pixels} onError={onError} />
-          {fadable && instance.tool !== 'pen' && (['in', 'out'] as const).map(edge => {
-            const length = Math.min(clipWidth, edge === 'in' ? fadeIn : fadeOut)
-            const dragging = pointer.fading?.clipId === clip.id && pointer.fading.edge === edge
-            // 没有淡化时是角上的折角；有淡化时是顶边上朝下的三角，尖端对着淡化终点
-            const offset = length > 0 ? Math.max(0, Math.min(clipWidth - FADE_HANDLE_SIZE, length - FADE_HANDLE_SIZE / 2)) : 0
-            const shape = length > 0 ? FADE_HANDLE_POINTER : edge === 'in' ? FADE_HANDLE_CORNER_IN : FADE_HANDLE_CORNER_OUT
-            const frames = (edge === 'in' ? clip.fadeInFrames : clip.fadeOutFrames) ?? 0
+          {instance.tool !== 'pen' && fadeHandles.map(({ edge, fade, offset }) => {
+            const adjusting = fade ? pointer.adjusting === fade.id : false
             return <div key={edge} data-video-edit-fade={edge} aria-label={edge === 'in' ? `拖动设置${clip.name}淡入` : `拖动设置${clip.name}淡出`}
-              className={`absolute top-0 z-raised h-3 w-3 cursor-ew-resize transition-opacity duration-120 ${selected || dragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+              className={`absolute top-0.5 z-raised flex h-3 w-3 cursor-ew-resize items-center justify-center transition-opacity duration-120 ${selected || adjusting ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
               style={edge === 'in' ? { left: offset } : { right: offset }}>
-              <div className="pointer-events-none h-full w-full bg-text1" style={{ clipPath: shape }} />
-              {dragging && <span className={`pointer-events-none absolute top-full mt-0.5 whitespace-nowrap rounded-hairline bg-raised px-1 text-2xs leading-4 text-text1 ${UI_TEXT_NUMERIC_CLASS} ${edge === 'in' ? 'left-0' : 'right-0'}`} data-video-edit-fade-readout>{edge === 'in' ? '淡入' : '淡出'} {fadeLabel(frames, fps)}</span>}
+              <VideoEditFadeGlyph edge={edge} />
+              {adjusting && <span data-video-edit-fade-readout className={`pointer-events-none absolute top-0 whitespace-nowrap rounded-hairline bg-raised px-1 text-2xs leading-3 text-text1 ${UI_TEXT_NUMERIC_CLASS} ${edge === 'in' ? 'left-full ml-1' : 'right-full mr-1'}`}>{edge === 'in' ? '淡入' : '淡出'} {fadeLabel(fade!.durationFrames, fps)}</span>}
             </div>
           })}
           {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-hairline bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}

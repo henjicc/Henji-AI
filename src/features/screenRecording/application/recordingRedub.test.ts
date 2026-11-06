@@ -7,6 +7,7 @@ import { recordingRedubTarget, replaceRecordingNarration } from '@/core/screenRe
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { seedVideoEditDocument, closeAllVideoEdits } from '@/features/videoEdit/application/videoEditDocumentTestKit'
 import { openVideoEditDocument, editVideoProject, undoVideoEdit } from '@/features/videoEdit/application/videoEditService'
+import { videoEditClipFade } from '@/core/videoEdit/fades'
 import { buildRecordingMoviePlan } from './recordingMoviePlan'
 
 beforeEach(() => installHarnessNativeStorage())
@@ -33,7 +34,9 @@ it('按句关联普通录制文字稿；微变速保持源画面端点，字幕�
   const target = recordingRedubTarget(owner.document, clip.id)
   editVideoProject(owner.document.id, draft => replaceRecordingNarration(draft, target, media, '更新后的句子。').document)
   const after = owner.document.sequences.find(v => v.id === sequence.id)!
-  expect(after.clips.find(v => v.id === clip.id)).toMatchObject({ duration: 156, text: '更新后的句子。', fadeInFrames: 1, fadeOutFrames: 1 })
+  expect(after.clips.find(v => v.id === clip.id)).toMatchObject({ duration: 156, text: '更新后的句子。' })
+  // 配音两端防爆音的短淡化是单侧过渡，最短 2 帧
+  expect(videoEditClipFade(after, clip.id, 'in')?.durationFrames).toBe(2); expect(videoEditClipFade(after, clip.id, 'out')?.durationFrames).toBe(2)
   expect(after.captions?.[0]).toMatchObject({ text: '更新后的句子。', duration: 156, clipId: clip.id })
   expect(after.captions?.[1].start).toBe(156)
   expect(after.clips.find(v => v.kind === 'sequence' && v.start === 0)?.speed).toEqual({ numerator: 25, denominator: 26 })

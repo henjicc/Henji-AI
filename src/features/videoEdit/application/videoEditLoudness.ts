@@ -5,6 +5,7 @@ import { videoEditClipMedia, videoEditComposition, type VideoEditClip, type Vide
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { videoEditGainValues, videoEditRecordingGainDb, type VideoEditGainMode, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import { videoEditTransitionSide } from '@/core/videoEdit/transitions'
 import { editVideoProject, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.loudness')
@@ -45,10 +46,10 @@ function snapshot(target: VideoEditGainTarget): { owner: VideoEditInstance; comp
 function unchanged(owner: VideoEditInstance, contentVersion: number): void {
   if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('测量期间剪辑已有修改或已关闭，请重新测量。')
 }
-async function measureClip(composition: VideoEditComposition, clip: VideoEditClip, signal?: AbortSignal): Promise<VideoEditLoudnessMeasurement> {
-  // Solo the explicit clip, preserve its mapping, speed, effects and fades; exclude neighbours' transitions.
+async function measureClip(composition: VideoEditComposition, clip: VideoEditClip, signal?: AbortSignal, ownFades = true): Promise<VideoEditLoudnessMeasurement> {
+  // Solo the explicit clip, preserve its mapping, speed, effects and its own fades (single-sided transitions); exclude neighbours' transitions.
   const media = videoEditClipMedia(composition, clip)!
-  const isolated = { ...composition, clips: [clip], transitions: [], sequences: [], media: [media], items: composition.items.filter(item => item.id === clip.itemId), tracks: composition.tracks.map(track => ({ ...track, enabled: true, muted: false, solo: false })) }
+  const isolated = { ...composition, clips: [clip], transitions: ownFades ? (composition.transitions ?? []).filter(transition => videoEditTransitionSide(transition) && (transition.leftClipId === clip.id || transition.rightClipId === clip.id)) : [], sequences: [], media: [media], items: composition.items.filter(item => item.id === clip.itemId), tracks: composition.tracks.map(track => ({ ...track, enabled: true, muted: false, solo: false })) }
   const api = getPlatform().audioEdit.loudness
   const id = await spoolVideoEditAudio(isolated, { startFrame: clip.start, endFrame: clip.start + clip.duration }, signal)
   const abort = (): void => { void api.close(id).catch(() => undefined) }
@@ -74,7 +75,7 @@ export async function prepareVideoEditRecordingGain(composition: VideoEditCompos
   try {
     for (const clip of clips) {
       signal?.throwIfAborted()
-      const measured = await measureClip(composition, sourceLevelClip(clip), signal)
+      const measured = await measureClip(composition, sourceLevelClip(clip), signal, false)
       gains.set(clip.id, videoEditRecordingGainDb(clip.gainDb ?? 0, measured))
     }
     signal?.throwIfAborted()
@@ -96,16 +97,16 @@ export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode:
   } catch (error) { logger.error('片段增益调整失败', error, { event: 'video_edit.loudness.gain.failed' }); throw error }
 }
 
-/** 标准化只测片段所用的源声音，音量关键帧、淡化和效果不参与目标计算。 */
+/** 标准化只测片段所用的源声音，音量关键帧、两端淡化（过渡）和效果不参与目标计算。 */
 function sourceLevelClip(clip: VideoEditClip, gainDb = 0): VideoEditClip {
-  return { ...clip, gainDb, volume: 1, curves: undefined, fadeInFrames: 0, fadeOutFrames: 0, effects: [], effectsEnabled: false }
+  return { ...clip, gainDb, volume: 1, curves: undefined, effects: [], effectsEnabled: false }
 }
 
 /** 在不可变草稿上准备增益；调用方负责一次提交与过期结果保护。 */
 export async function prepareVideoEditAudioGain(composition: VideoEditComposition, clips: VideoEditClip[], mode: VideoEditGainMode, value: number, signal?: AbortSignal, assertCurrent: () => void = () => {}, retainSilence = false): Promise<{ clipId: string; gainDb: number; measurement?: VideoEditLoudnessMeasurement }[]> {
   const measurements: VideoEditLoudnessMeasurement[] = []
   if (mode !== 'set' && mode !== 'adjust') for (const clip of clips) {
-    measurements.push(await measureClip(composition, sourceLevelClip(clip), signal)); assertCurrent()
+    measurements.push(await measureClip(composition, sourceLevelClip(clip), signal, false)); assertCurrent()
   }
   const bases = clips.map(clip => clip.gainDb ?? 0)
   const gains = retainSilence && mode === 'loudness'
@@ -118,7 +119,7 @@ export async function prepareVideoEditAudioGain(composition: VideoEditCompositio
     const expected = mode === 'peak_max' ? measurements[index].samplePeakDbfs! + gains[index] : value
     // LUFS 的绝对门限会随放大纳入更多低电平片段；按回读结果有限校正，不放宽验收误差。
     for (let attempt = 0; attempt < (mode === 'loudness' ? 3 : 1); attempt++) {
-      const measured = await measureClip(composition, sourceLevelClip(clips[index], results[index].gainDb), signal)
+      const measured = await measureClip(composition, sourceLevelClip(clips[index], results[index].gainDb), signal, false)
       assertCurrent(); results[index].measurement = measured
       const level = mode === 'loudness' ? measured.integratedLufs : measured.samplePeakDbfs
       if (level !== null && Math.abs(level - expected) <= (mode === 'loudness' ? .5 : .1)) break

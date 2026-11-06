@@ -8,6 +8,7 @@ import { videoEditClipSourceMidSecondsAt, videoEditClipTailRoom } from './clipSp
 import { videoEditEdgeTracks } from './tracks'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { VideoEditOperationFailure } from './operationFailure'
+import { retimeVideoEditTransitions } from './transitions'
 
 /*
  * 原地生成（4.12）：在时间线当前位置生成镜头或声音并直接落进去。
@@ -236,10 +237,9 @@ export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: Vi
     if (origin) clip.creativeSource = structuredClone(origin); else delete clip.creativeSource
     // 生成结果按原速放进来（4.13）：原片段的速度随版本保存，切回时恢复。
     delete clip.audioMapping; delete clip.speed; delete clip.reverse; delete clip.preservePitch; delete clip.frameHold; delete clip.timeRemap; delete clip.frameInterpolation; delete clip.pitchSemitones
-    if (clip.fadeInFrames && clip.fadeInFrames > duration) clip.fadeInFrames = duration
-    if (clip.fadeOutFrames && clip.fadeOutFrames > duration) clip.fadeOutFrames = duration
     const audio = placement.clips.slice(1).map(value => origin ? { ...value, creativeSource: structuredClone(origin) } : value)
-    return { document: replaceSequence(document, { ...placement.sequence, clips: [...clean.clips, clip, ...audio] }), clipId: clip.id, newTrack: placement.sequence.tracks.length > sequence.tracks.length }
+    // 片段变短时两端的过渡（含淡入淡出）跟着缩短，放不下就去掉
+    return { document: replaceSequence(document, retimeVideoEditTransitions(sequence, { ...placement.sequence, clips: [...clean.clips, clip, ...audio] })), clipId: clip.id, newTrack: placement.sequence.tracks.length > sequence.tracks.length }
   }
   // 延长跟着原片段走：它被移动或修剪过就接在它现在的尾巴上。
   const extending = plan.action === 'extend_shot' && prior && !priorTrack?.locked
@@ -301,9 +301,7 @@ export function switchVideoEditClipTake(document: VideoEditDocument, sequenceId:
   if (take.timeRemap) next.timeRemap = structuredClone(take.timeRemap)
   if (take.frameInterpolation) next.frameInterpolation = take.frameInterpolation
   if (take.pitchSemitones) next.pitchSemitones = take.pitchSemitones
-  if (next.fadeInFrames && next.fadeInFrames > duration) next.fadeInFrames = duration
-  if (next.fadeOutFrames && next.fadeOutFrames > duration) next.fadeOutFrames = duration
-  if (take.linkedAudio === undefined || clip.kind === 'audio') return replaceSequence(document, { ...sequence, clips: sequence.clips.map(value => value.id === clip.id ? next : value) })
+  if (take.linkedAudio === undefined || clip.kind === 'audio') return replaceSequence(document, retimeVideoEditTransitions(sequence, { ...sequence, clips: sequence.clips.map(value => value.id === clip.id ? next : value) }))
   let restored = { ...sequence, clips: sequence.clips.filter(value => value.id !== clip.id && !currentAudio.some(audio => audio.id === value.id)) }
   const linkId = take.linkedAudio.length ? crypto.randomUUID() : undefined
   if (linkId) next.linkId = linkId; else delete next.linkId
@@ -317,5 +315,6 @@ export function switchVideoEditClipTake(document: VideoEditDocument, sequenceId:
     if (track === null) { const added = videoEditEdgeTracks(restored, 'audio', 1); restored = { ...restored, tracks: [...restored.tracks, ...added] }; track = added[0].index }
     restored.clips.push({ ...structuredClone(saved.clip), id: crypto.randomUUID(), start, track, linkId })
   }
-  return replaceSequence(document, { ...restored, clips: [...restored.clips, next] })
+  // 换掉的声音片段两端的过渡（含淡入淡出）跟着删掉，切回的片段变短时缩短
+  return replaceSequence(document, retimeVideoEditTransitions(sequence, { ...restored, clips: [...restored.clips, next] }))
 }

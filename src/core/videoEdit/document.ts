@@ -24,7 +24,7 @@ import { projectVideoEditNestedCaptions, projectVideoEditNestedContentClips } fr
 import { videoEditContentAnchorSchema, sliceVideoEditContentAnchor, assertVideoEditContentAnchors } from './contentAnchors'
 import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia } from './compositing'
-import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition } from './transitions'
+import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition, retimeVideoEditTransitions, videoEditTransitionSide } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
 import { videoEditCodeImageGenerationSchema } from './codeImageGeneration'
 import { videoEditLabelSchema } from './labels'
@@ -122,8 +122,6 @@ const videoEditClipStateSchema = z.object({
   enabled: z.literal(false).optional().describe('片段是否启用：省略为启用，false 时片段留在时间线上但不参与画面与声音。'),
   opacity: videoEditClipAnimatedValueSchemas.opacity, volume: videoEditClipAnimatedValueSchemas.volume, gainDb: videoEditGainDbSchema.optional(), audioRole: videoEditAudioRoleSchema.optional(), essentialSound: essentialSoundSettingsSchema.optional(), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),
-  /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
-  fadeInFrames: z.number().int().min(1).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(), fadeOutFrames: z.number().int().min(1).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES).optional(),
   /**
    * 片段速度（4.13，PR“速度/持续时间”）：倍率有理数，缺省 1；`reverse` 倒放；`preservePitch` 变速时保持音调。
    * 源时间与时间线的换算只在 `clipSpeed.ts`。
@@ -526,9 +524,7 @@ export function splitVideoEditClip(sequence: VideoEditSequence, id: string, at: 
   const left = at - clip.start
   const sliced = sliceVideoEditClipKeyframes(clip, left, clip.duration - left)
   const right = { ...sliced, ...(clip.code ? { code: structuredClone(clip.code) } : {}), ...(clip.graphic ? { graphic: structuredClone(clip.graphic) } : {}), ...(sliced.effects ? { effects: sliced.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: crypto.randomUUID(), start: at, duration: clip.duration - left, ...splitVideoEditClipSource(clip, left, sequence.frameRate) }
-  // 淡入留在左半段开头、淡出留在右半段结尾（PR 拆分后淡化手柄跟着原片段的首尾）。
-  delete right.fadeInFrames
-  const leftPart = { ...sliceVideoEditClipKeyframes(clip, 0, left), duration: left }; delete leftPart.fadeOutFrames
+  const leftPart = { ...sliceVideoEditClipKeyframes(clip, 0, left), duration: left }
   if (clip.contentAnchor) {
     leftPart.contentAnchor = sliceVideoEditContentAnchor(clip.contentAnchor, sequence, clip.start, at)
     right.contentAnchor = sliceVideoEditContentAnchor(clip.contentAnchor, sequence, at, clip.start + clip.duration)
@@ -548,13 +544,17 @@ export function changeVideoEditSequenceSettings(sequence: VideoEditSequence, set
   const convert = (frame: number): number => rescaleVideoEditFrame(frame, sequence.frameRate, rate)
   if (sequence.clips.some(clip => convert(clip.start + clip.duration) <= convert(clip.start))) throw new Error('新帧率会使部分片段短于一帧。请先调整这些片段的长度，再修改帧率。')
   if (sequence.captions?.some(caption => convert(caption.start + caption.duration) <= convert(caption.start))) throw new Error('新帧率会使部分字幕短于一帧。请先调整这些字幕的长度，再修改帧率。')
-  if (sequence.transitions?.some(transition => convert(transition.durationFrames) < 2)) throw new Error('新帧率会使部分转场短于两帧。请先调整这些转场的长度，再修改帧率。')
-  return videoEditSequenceSchema.parse({ ...sequence, ...settings,
+  // 片段两端的淡入淡出（单侧过渡）降帧率后不足两帧时保留最短两帧，跨两段的转场才要求先调长
+  const rescaled = (transition: { durationFrames: number; leftClipId?: string; rightClipId?: string }): number => videoEditTransitionSide(transition) ? Math.max(2, convert(transition.durationFrames)) : convert(transition.durationFrames)
+  if (sequence.transitions?.some(transition => rescaled(transition) < 2)) throw new Error('新帧率会使部分转场短于两帧。请先调整这些转场的长度，再修改帧率。')
+  const next = { ...sequence, ...settings,
     ...(sequence.spatialCamera ? { spatialCamera: retimeSpatialCamera(sequence.spatialCamera, convert) } : {}),
-    clips: sequence.clips.map(clip => ({ ...rescaleVideoEditClipKeyframes(clip, time => convert(clip.start + time) - convert(clip.start), convert(clip.start + clip.duration) - convert(clip.start)), start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start), ...(clip.fadeInFrames ? { fadeInFrames: Math.max(1, convert(clip.fadeInFrames)) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.max(1, convert(clip.fadeOutFrames)) } : {}) })),
+    clips: sequence.clips.map(clip => ({ ...rescaleVideoEditClipKeyframes(clip, time => convert(clip.start + time) - convert(clip.start), convert(clip.start + clip.duration) - convert(clip.start)), start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start) })),
     annotations: sequence.annotations.map(mark => mapVideoEditAnnotationTime(mark, convert)),
     ...(sequence.markers ? { markers: sequence.markers.map(mark => ({ ...mark, frame: convert(mark.frame) })) } : {}),
     ...(sequence.captions ? { captions: sequence.captions.map(caption => ({ ...caption, start: convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) })) } : {}),
-    ...(sequence.transitions ? { transitions: sequence.transitions.map(transition => ({ ...resizeVideoEditTransition(transition, convert(transition.durationFrames), convert), ...(transition.framesBeforeCut !== undefined ? { framesBeforeCut: Math.min(convert(transition.durationFrames), convert(transition.framesBeforeCut)) } : {}) })) } : {}),
-  })
+    ...(sequence.transitions ? { transitions: sequence.transitions.map(transition => ({ ...resizeVideoEditTransition(transition, rescaled(transition), convert), ...(transition.framesBeforeCut !== undefined ? { framesBeforeCut: Math.min(rescaled(transition), convert(transition.framesBeforeCut)) } : {}) })) } : {}),
+  }
+  // 换算后放不下的淡入淡出（单侧过渡）按片段新长度缩短，不足两帧就去掉
+  return videoEditSequenceSchema.parse(sequence.transitions?.length ? retimeVideoEditTransitions(sequence, next) : next)
 }

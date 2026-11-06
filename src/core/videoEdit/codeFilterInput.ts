@@ -8,10 +8,9 @@ export function codeFilterInputComposition(document: VideoEditComposition, clipI
   if (!clip || index < 0) throw new Error('滤镜输入的片段或效果已移除。')
   const prefix: VideoEditClip = { ...clip, effects: clip.effects!.slice(0, index) }
   if (clip.kind === 'adjustment') {
-    // Adjustment opacity/fades mix the completed chain, not each input pass.
+    // Adjustment opacity mixes the completed chain, not each input pass.
     prefix.opacity = 1
     prefix.curves = { ...clip.curves }; delete prefix.curves.opacity
-    delete prefix.fadeInFrames; delete prefix.fadeOutFrames
   }
   const clips = document.clips.filter(candidate => candidate.id === clipId || clip.kind === 'adjustment' && candidate.track >= clip.adjustment!.fromTrack && candidate.track < clip.track)
     .map(candidate => candidate.id === clipId ? prefix : candidate)

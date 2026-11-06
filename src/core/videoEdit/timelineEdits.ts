@@ -454,15 +454,12 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     for (const clip of overlapping) {
       const pieces: VideoEditClip[] = []
       if (clip.start < edit.frame) {
-        const left = { ...sliceVideoEditClipKeyframes(clip, 0, edit.frame - clip.start), duration: edit.frame - clip.start }
-        delete left.fadeOutFrames
-        pieces.push(left)
+        pieces.push({ ...sliceVideoEditClipKeyframes(clip, 0, edit.frame - clip.start), duration: edit.frame - clip.start })
       }
       if (clip.start + clip.duration > end) {
         const duration = clip.start + clip.duration - end
         const sliced = sliceVideoEditClipKeyframes(clip, end - clip.start, duration)
         const right = { ...structuredClone(sliced), ...(pieces.length && sliced.effects ? { effects: sliced.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: pieces.length ? crypto.randomUUID() : clip.id, start: end, duration, ...splitVideoEditClipSource(clip, end - clip.start, sequence.frameRate) }
-        if (pieces.length) delete right.fadeInFrames
         pieces.push(right)
       }
       if (kept.spatialCamera) {

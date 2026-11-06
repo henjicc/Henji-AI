@@ -83,12 +83,13 @@ function backend(): VideoEditFrameBackend {
 }
 const builtin = (builtinId: string, params: Record<string, unknown> = {}, amount = 1): VideoEditEffect => ({ id: `fx-${builtinId}`, name: builtinId, enabled: true, amount, builtin: { id: builtinId, params: normalizeVideoEditBuiltinParams(builtinId, params) } })
 /** 30fps、48kHz 立体声序列上一段 4 秒的声音片段（第 15 帧起，源入点 0.5 秒）。 */
-function sound(clip: Partial<VideoEditClip> = {}): VideoEditComposition {
+function sound(clip: Partial<VideoEditClip> = {}, transitions?: VideoEditComposition['transitions']): VideoEditComposition {
   const document = createVideoEditDocument('音频效果')
   document.media = [{ id: 'm', name: '对白', path: 'D:/dialog.wav', kind: 'audio', width: 0, height: 0, durationSeconds: 10, hasAudio: true }]
   document.items = [{ id: 'i', name: '对白', kind: 'audio', mediaId: 'm' }]
   const track = document.sequences[0].tracks.find(value => value.kind === 'audio')!.index
   document.sequences[0].clips = [{ id: 'c', itemId: 'i', name: '对白', kind: 'audio', track, start: 15, duration: 120, sourceInUs: 500_000, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', ...clip }]
+  if (transitions) document.sequences[0].transitions = transitions
   return videoEditComposition(document, document.sequences[0].id)
 }
 async function mix(composition: VideoEditComposition, blocks: number[], start = 0): Promise<Float32Array[]> {
@@ -109,7 +110,7 @@ it('音频效果在混音里生效：片段音量在效果之前、淡化在效�
   }
   expect(left[RATE / 4]).toBe(0)
   // 限幅器在片段音量之后：音量推到 200% 峰值仍不超过最大电平；之后的淡出只会更轻。
-  const limited = await mix(sound({ volume: 2, fadeOutFrames: 30, effects: [builtin('limiter', { ceiling: -6 })] }), [1, 1, 1, 1, .5])
+  const limited = await mix(sound({ volume: 2, effects: [builtin('limiter', { ceiling: -6 })] }, [{ id: 'fade', kind: 'constant_power', leftClipId: 'c', durationFrames: 30 }]), [1, 1, 1, 1, .5])
   const peak = (samples: Float32Array): number => samples.reduce((maximum, sample) => Math.max(maximum, Math.abs(sample)), 0)
   expect(peak(limited[0])).toBeLessThanOrEqual(10 ** (-6 / 20) + 1e-6)
   expect(peak(limited[0].subarray(Math.round(4.4 * RATE), Math.round(4.5 * RATE)))).toBeLessThan(.2)

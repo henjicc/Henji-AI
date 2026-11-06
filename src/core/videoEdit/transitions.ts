@@ -266,6 +266,14 @@ export function videoEditAudioTransitionClipGain(window: Pick<VideoEditTransitio
   return videoEditAudioTransitionGains(window.transition.kind, progress)[outgoing ? 0 : 1]
 }
 /**
+ * 一个出声片段参与的音频过渡窗口（`audio` 为音频过渡、`picture` 为画面过渡的窗口）：声音片段只看音频过渡；
+ * 自带声音的画面片段（没拆开的视频、嵌套序列）没有单独的声音片段可挂淡化，它两端的单侧画面过渡连声音一起按恒定功率淡入淡出。
+ */
+export function videoEditClipAudioWindows(clip: Pick<VideoEditClip, 'id' | 'kind'>, audio: readonly VideoEditTransitionWindow[], picture: readonly VideoEditTransitionWindow[]): VideoEditTransitionWindow[] {
+  const own = audio.filter(window => window.left.id === clip.id && window.side !== 'in' || window.right.id === clip.id && window.side !== 'out')
+  return clip.kind === 'audio' ? own : [...own, ...picture.filter(window => window.side && window.left.id === clip.id)]
+}
+/**
  * PR“媒体不足时重复帧”：转场让片段画面越过自己的入点或出点时，越过源素材开头或结尾的部分停在最早／最后一帧。
  * 返回实际取画面的时间线帧；片段范围内、或没有源时长（图片、文字）时原样返回。
  */

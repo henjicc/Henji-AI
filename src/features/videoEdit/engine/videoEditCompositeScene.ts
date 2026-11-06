@@ -308,7 +308,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
   /** 记下这一帧三维里实际画了什么（助手观察画面时一并返回）。 */
   observeSpace?: (value: import('@/core/videoEdit/spatialObservation').SpatialFrameObservation) => void }): Promise<SpatialPictureLease> {
   const { request, plan, sources, drawn, active, nodes, pictures, effects, compositor } = options
-  const [{ evaluateVideoEditClip, videoEditKeyframeValues }, { videoEditFadeOpacity }, { spatialClipMatrix, includeSpatialWorldBounds }, math] = await Promise.all([import('@/core/videoEdit/keyframes'), import('@/core/videoEdit/fades'),
+  const [{ evaluateVideoEditClip, videoEditKeyframeValues }, { videoEditClipFadeOpacity }, { spatialClipMatrix, includeSpatialWorldBounds }, math] = await Promise.all([import('@/core/videoEdit/keyframes'), import('@/core/videoEdit/fades'),
     import('@/core/videoEdit/spatialEvaluation'), import('@/core/videoEdit/spatialMatrices')])
   // 材料面只覆盖片段的逻辑边界：先映射回参考平面、抵掉二维放置，再乘卡片几何。
   const materialToCard = (material: SpatialMaterialPlan, clip: VideoEditClip) => {
@@ -418,10 +418,11 @@ export async function renderVideoEditThreeSpaceScene(options: {
     }
     const place = (card: import('@/core/videoEdit/spatialTypes').SpatialCardGeometry) => placements.has(card.clipId) ? { ...card, uvToWorld: math.spatialMultiply(card.uvToWorld, placements.get(card.clipId)!) } : card
     const open = opened ? { ...opened, cards: opened.cards.map(place) } : undefined
-    // 透明度按原始片段求值：active 里的片段已经乘过一次淡化。
+    // 透明度按原始片段求值。两端淡化是单侧过渡：每组只有第一个过渡整组合成（renderWhole），组里其他片段的淡化按不透明度淡。
+    const composedTransitions = new Set(plan.groups.flatMap(group => { const id = group.itemIds.find(item => item.startsWith('transition:')); return id ? [id.slice('transition:'.length)] : [] }))
     const opacityOf = (clipId: string): number => {
       const source = request.composition.clips.find(clip => clip.id === clipId)
-      return source ? evaluateVideoEditClip(source, request.sequenceFrame).opacity * videoEditFadeOpacity(source, request.sequenceFrame) : 1
+      return source ? evaluateVideoEditClip(source, request.sequenceFrame).opacity * videoEditClipFadeOpacity(request.composition, source, request.sequenceFrame, id => composedTransitions.has(id)) : 1
     }
     const emissionOf = (clipId: string): number => {
       const source = request.composition.clips.find(clip => clip.id === clipId)

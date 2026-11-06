@@ -1,4 +1,5 @@
 import { splitVideoEditClip, type VideoEditDocument, type VideoEditClip, type VideoEditMedia } from '../videoEdit/document'
+import { VIDEO_EDIT_FADE_MIN_FRAMES, setVideoEditClipFade } from '../videoEdit/fades'
 import { stretchVideoEditClip } from '../videoEdit/clipSpeed'
 
 export interface RecordingRedubTarget { sequenceId: string; clipId: string; start: number; end: number; pictureId: string; holdId?: string; fps: number }
@@ -6,7 +7,8 @@ export interface RecordingRedubTarget { sequenceId: string; clipId: string; star
 export function recordingRedubTarget(document: VideoEditDocument, clipId: string): RecordingRedubTarget {
   const sequence = document.sequences.find(v => v.clips.some(c => c.id === clipId)), clip = sequence?.clips.find(v => v.id === clipId)
   if (!sequence || !clip || clip.kind !== 'audio' || !clip.creativeSource || clip.creativeSource.type !== 'document' || !clip.creativeSource.part?.startsWith('recording-narration:')) throw new Error('请选择录制成片中有文字稿的旁白句子。')
-  if (sequence.tracks.some(v => v.locked) || sequence.transitions?.length || clip.reverse || clip.effects?.length || clip.curves) throw new Error('请先解除该序列锁轨、转场及旁白的倒放或效果，再自动补录。')
+  // 片段两端的淡入淡出（单侧过渡）跟着自己的片段走，不妨碍对齐；跨两段的转场才要先解除
+  if (sequence.tracks.some(v => v.locked) || sequence.transitions?.some(v => v.leftClipId && v.rightClipId) || clip.reverse || clip.effects?.length || clip.curves) throw new Error('请先解除该序列锁轨、转场及旁白的倒放或效果，再自动补录。')
   const picture = sequence.clips.find(v => v.kind === 'sequence' && v.start <= clip.start && v.start + v.duration > clip.start)
   if (!picture || picture.reverse || picture.curves || picture.effects?.some(effect => effect.code || effect.builtin?.curves || effect.mask && (effect.mask.regionId !== 'shapes' || effect.mask.shapes?.some(shape => shape.pathAnimation)))) throw new Error('对应画面已重新编排，请恢复普通画面片段后再自动对齐。')
   const hold = sequence.clips.find(v => v.kind === 'image' && v.creativeSource?.type === 'document' && v.creativeSource.part === `recording-hold:${clip.id}` && v.start === picture.start + picture.duration)
@@ -53,9 +55,11 @@ export function replaceRecordingNarration(draft: VideoEditDocument, target: Reco
     sequence.markers = sequence.markers?.map(marker => marker.frame >= target.end ? { ...marker, frame: marker.frame + extension.extra } : marker)
     if (sequence.annotations.length) throw new Error('此序列有时间标注，请先处理标注后再延长步骤。')
   }
-  const clip = { ...old, itemId: item.id, text, duration: extension.duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, speed: undefined,
-    fadeInFrames: Math.max(1, Math.min(Math.round(target.fps * .03), Math.floor(extension.duration / 2))), fadeOutFrames: Math.max(1, Math.min(Math.round(target.fps * .03), Math.floor(extension.duration / 2))) }
+  const clip = { ...old, itemId: item.id, text, duration: extension.duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, speed: undefined }
   sequence.clips = sequence.clips.map(v => v.id === old.id ? clip : v)
+  // 配音两端各淡 30ms 左右防爆音（单侧过渡，最短 2 帧）
+  const fade = Math.min(Math.max(VIDEO_EDIT_FADE_MIN_FRAMES, Math.round(target.fps * .03)), Math.floor(extension.duration / 2))
+  for (const edge of ['in', 'out'] as const) sequence = setVideoEditClipFade(sequence, clip.id, edge, fade)
   sequence.captions = sequence.captions?.map(caption => caption.clipId === old.id ? { ...caption, text, sourceText: text, duration: extension.duration, translation: undefined } : caption)
   return { document: { ...draft, sequences: draft.sequences.map(v => v.id === sequence.id ? sequence : v) }, clip }
 }

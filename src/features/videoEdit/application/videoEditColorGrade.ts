@@ -19,7 +19,7 @@ export interface ColorGradeAnalysisResult { parameters: VideoEditBuiltinParams; 
 const logger = createLogger('features.videoEdit.color_grade')
 function analysisClip(clip: VideoEditClip): VideoEditClip {
   const curves = { ...clip.curves }; delete curves.opacity
-  return { ...clip, opacity: 1, curves, fadeInFrames: 0, fadeOutFrames: 0 }
+  return { ...clip, opacity: 1, curves }
 }
 /** First edit creates the effect inside the same gesture. Cancelling also removes the newly created effect. */
 export function editVideoEditColorGrade(target: VideoEditCompositeTarget, changes: Pick<VideoEditBuiltinEffectChanges, 'params' | 'curves'>, gesture?: VideoEditGesture, effectId?: string): void {

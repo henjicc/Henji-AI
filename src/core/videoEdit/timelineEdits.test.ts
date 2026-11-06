@@ -10,6 +10,7 @@ import { videoEditSyncOffsets } from './linkSync'
 import { offsetVideoEditSource } from './time'
 import { videoEditClipSourceTimeAt } from './clipSpeed'
 import { addLegacyVideoEditTracks } from './testFixtures'
+import { setVideoEditClipFade, videoEditClipFade } from './fades'
 
 function fixture() {
   const document = createVideoEditDocument('多轨剪辑'); addLegacyVideoEditTracks(document.sequences[0])
@@ -77,13 +78,15 @@ it.each([10, 69])('倒放片段在边界 %i 定格，不生成零时长片段', 
 it('覆盖切段裁剪片段与内置效果曲线，并保留外侧淡入淡出', () => {
   const { document, sequence } = fixture()
   const curve = [{ time: 0, value: 0, interpolation: 'linear' as const }, { time: 59, value: 1, interpolation: 'linear' as const }]
-  Object.assign(sequence.clips[0], { curves: { opacity: curve }, fadeInFrames: 5, fadeOutFrames: 5,
+  Object.assign(sequence, setVideoEditClipFade(setVideoEditClipFade(sequence, sequence.clips[0].id, 'in', 5, () => 'fade-in'), sequence.clips[0].id, 'out', 5, () => 'fade-out'))
+  Object.assign(sequence.clips[0], { curves: { opacity: curve },
     effects: [{ id: 'exposure', name: '曝光', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {}, curves: { exposure: curve } } }] })
   const clipboard = copyVideoEditClips(document, sequence.id, ['b']); clipboard.clips[0].duration = 10
   const result = apply(document, { kind: 'place', clipboard, frame: 40, mode: 'overwrite' }).sequences[0]
   const left = result.clips.find(clip => clip.start === 10)!; const right = result.clips.find(clip => clip.start === 50)!
-  expect(left).toMatchObject({ duration: 30, fadeInFrames: 5 }); expect(left.fadeOutFrames).toBeUndefined()
-  expect(right).toMatchObject({ duration: 20, fadeOutFrames: 5 }); expect(right.fadeInFrames).toBeUndefined()
+  expect(left).toMatchObject({ duration: 30 }); expect(right).toMatchObject({ duration: 20 })
+  expect(videoEditClipFade(result, left.id, 'in')?.durationFrames).toBe(5); expect(videoEditClipFade(result, left.id, 'out')).toBeUndefined()
+  expect(videoEditClipFade(result, right.id, 'out')?.durationFrames).toBe(5); expect(videoEditClipFade(result, right.id, 'in')).toBeUndefined()
   for (const clip of [left, right]) {
     expect(clip.curves!.opacity!.every(point => point.time <= clip.duration)).toBe(true)
     expect(clip.effects![0].builtin!.curves!.exposure.every(point => point.time <= clip.duration)).toBe(true)

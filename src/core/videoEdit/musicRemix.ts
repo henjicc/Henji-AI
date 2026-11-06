@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { MusicRemixGranularity, MusicRemixPlan } from '../audioAnalysis/music/musicRemixPlan'
 import type { VideoEditClip, VideoEditSequence } from './document'
 import type { VideoEditTransition } from './transitions'
+import { VIDEO_EDIT_FADE_MIN_FRAMES, videoEditClipFade } from './fades'
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
 
 /*
@@ -103,24 +104,28 @@ export function applyMusicRemixToSequence(input: MusicRemixApplyInput): { sequen
   const end = input.startFrame + total
   const blocking = sequence.clips.find(clip => !removed.has(clip.id) && clip.track === template.track && clip.start < end && clip.start + clip.duration > input.startFrame)
   if (blocking) throw new Error(`重构结果会盖住同一轨道第 ${blocking.start} 帧起的片段“${blocking.name}”，请先挪开它或换一条空轨道。`)
-  const firstFadeIn = sequence.clips.filter(clip => removed.has(clip.id)).sort((a, b) => a.start - b.start)[0]?.fadeInFrames
-  const { id: _id, remix: _remix, fadeInFrames: _in, fadeOutFrames: _out, takes: _takes, ...base } = template
-  void _id; void _remix; void _in; void _out; void _takes
+  // 原片段两端的淡入淡出（单侧过渡）留在结果的首尾：最早那段的淡入给第一段，最晚那段的淡出与尾部收尾取长的给最后一段。
+  const replaced = sequence.clips.filter(clip => removed.has(clip.id)).sort((a, b) => a.start - b.start)
+  const fadeIn = replaced[0] && videoEditClipFade(sequence, replaced[0].id, 'in')
+  const fadeOut = replaced.at(-1) && videoEditClipFade(sequence, replaced.at(-1)!.id, 'out')
+  const { id: _id, remix: _remix, takes: _takes, ...base } = template
+  void _id; void _remix; void _takes
   const groupId = template.groupId ?? input.remix.id
   const clips: VideoEditClip[] = layout.pieces.map((piece, segment) => {
-    const last = segment === layout.pieces.length - 1
-    const fadeOut = last ? Math.max(layout.tailFadeFrames, template.fadeOutFrames ?? 0) : 0
-    const fadeIn = segment === 0 ? firstFadeIn : undefined
     return {
       ...base, id: input.newId(), groupId, start: input.startFrame + piece.startFrame, duration: piece.durationFrames,
       ...videoEditSourceTimeFromSeconds(piece.sourceInSeconds),
       gainDb: videoEditGainDbSchema.parse((template.gainDb ?? 0) + piece.gainDb),
-      ...(fadeIn ? { fadeInFrames: Math.min(fadeIn, piece.durationFrames) } : {}),
-      ...(fadeOut ? { fadeOutFrames: Math.min(fadeOut, piece.durationFrames) } : {}),
       remix: { ...input.remix, segment, ...(piece.seamConfidence === undefined ? {} : { seamConfidence: piece.seamConfidence }) },
     }
   })
   const transitions: VideoEditTransition[] = clips.slice(1).map((clip, k) => ({ id: input.newId(), kind: 'constant_power', leftClipId: clips[k].id, rightClipId: clip.id, durationFrames: MUSIC_REMIX_TRANSITION_FRAMES, alignment: 'end' }))
+  const first = clips[0], last = clips.at(-1)!
+  // 段间交叉淡化整段在左片段尾部：第一段的淡入只能用到它前面的部分
+  const inFrames = Math.min(fadeIn?.durationFrames ?? 0, first.duration - (clips.length > 1 ? MUSIC_REMIX_TRANSITION_FRAMES : 0))
+  const outFrames = Math.min(Math.max(layout.tailFadeFrames, fadeOut?.durationFrames ?? 0), last.duration - (clips.length === 1 && inFrames >= VIDEO_EDIT_FADE_MIN_FRAMES ? inFrames : 0))
+  if (inFrames >= VIDEO_EDIT_FADE_MIN_FRAMES) transitions.push({ id: input.newId(), kind: fadeIn!.kind, rightClipId: first.id, durationFrames: inFrames })
+  if (outFrames >= VIDEO_EDIT_FADE_MIN_FRAMES) transitions.push({ id: input.newId(), kind: fadeOut?.kind ?? 'constant_power', leftClipId: last.id, durationFrames: outFrames })
   return {
     sequence: {
       ...sequence,

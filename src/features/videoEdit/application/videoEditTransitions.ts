@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
+import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { setVideoEditClipFade } from '@/core/videoEdit/fades'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -138,10 +138,12 @@ export function previewVideoEditTransitionDrag(drag: VideoEditTimelineHandleDrag
     return { ...sequence, transitions: sequence.transitions!.map(value => value.id === transitionId ? next : value) }
   })
 }
-export function beginVideoEditFadeDrag(projectId: string, sequenceId: string, clipId: string): VideoEditTimelineHandleDrag { return beginDrag(projectId, sequenceId, [clipId]) }
-/** 拖淡化手柄：`frames` 为淡化长度（0 = 去掉）。 */
-export function previewVideoEditFadeDrag(drag: VideoEditTimelineHandleDrag, clipId: string, edge: 'in' | 'out', frames: number): void {
-  previewSequence(drag, sequence => ({ ...sequence, clips: sequence.clips.map((clip: VideoEditClip) => clip.id === clipId ? setVideoEditClipFade(clip, edge, frames) : clip) }))
+export interface VideoEditFadeDrag extends VideoEditTimelineHandleDrag { readonly transitionId: string }
+/** 拖淡化手柄就是给片段这一端挂单侧过渡（PR）：新建时整次拖动用同一个过渡标识，预览与提交是同一个对象。 */
+export function beginVideoEditFadeDrag(projectId: string, sequenceId: string, clipId: string): VideoEditFadeDrag { return { ...beginDrag(projectId, sequenceId, [clipId]), transitionId: crypto.randomUUID() } }
+/** 拖淡化手柄：`frames` 为淡化长度，不足 2 帧去掉这一端的淡化。 */
+export function previewVideoEditFadeDrag(drag: VideoEditFadeDrag, clipId: string, edge: 'in' | 'out', frames: number): void {
+  previewSequence(drag, sequence => setVideoEditClipFade(sequence, clipId, edge, frames, () => drag.transitionId))
 }
 /** 松手提交（只有内容真的变了才记一步撤销）；`commit: false` 撤回到按下前。 */
 export function finishVideoEditTimelineHandleDrag(drag: VideoEditTimelineHandleDrag, commit = true): void { finishVideoEditGesture(drag.gesture, commit) }

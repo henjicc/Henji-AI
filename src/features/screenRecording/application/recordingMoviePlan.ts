@@ -10,6 +10,7 @@ import { mapRecordingMovieRange, recordingMovieSpans, type RecordingMovieRecipe 
 import { confirmedRecordingPrivacyFragments } from '@/core/screenRecording/privacyEffects'
 import { recordingMediaSpans } from '@/core/screenRecording/range'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
+import { VIDEO_EDIT_FADE_MIN_FRAMES, setVideoEditClipFade } from '@/core/videoEdit/fades'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 
 export function recordingMovieEffect(id: string, name: string, params: Record<string, number | boolean | string> = {}, mask?: VideoEditEffectMask): VideoEditEffect {
@@ -62,11 +63,11 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
           // Nested screen sequence owns its picture; audio/camera links stay within their own sequence.
           if (source.kind !== 'screen') clip.linkId = linkIds.get(linkKey)
           const narration = narrationRanges.find(v => v.startUs === startUs && v.endUs === endUs)
+          let narrated = false
           if (narration && source.kind === 'microphone' && span.speed === 1 && media.creativeSource?.type === 'document') {
+            narrated = true
             clip.text = narration.text
             clip.creativeSource = { ...media.creativeSource, part: `recording-narration:${narration.id}` }
-            clip.fadeInFrames = Math.max(1, Math.min(Math.round(fps * .03), Math.floor(clip.duration / 2)))
-            clip.fadeOutFrames = clip.fadeInFrames
           }
           if (source.kind === 'screen') {
             if (recipe.cursor && media.recordingCursor) clip.effects = [recordingMovieEffect('recording_cursor', '录制光标')]
@@ -82,6 +83,11 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
             clip.effects = [recordingMovieEffect('crop', recipe.camera === 'person' ? '摄像头人像抠像' : '摄像头圆形画框', { left: 100 }, recipe.camera === 'person' ? { regionId: 'background' } : { regionId: 'shapes', shapes: [ellipse] })]
           }
           lane.clips.push(clip)
+          // 旁白两端各淡 30ms 左右防爆音（单侧过渡，最短 2 帧；片段太短时不淡）
+          if (narrated) {
+            const fade = Math.min(Math.max(VIDEO_EDIT_FADE_MIN_FRAMES, Math.round(fps * .03)), Math.floor(clip.duration / 2))
+            for (const edge of ['in', 'out'] as const) lane.transitions = setVideoEditClipFade(lane, clip.id, edge, fade).transitions
+          }
         }
       }
     }

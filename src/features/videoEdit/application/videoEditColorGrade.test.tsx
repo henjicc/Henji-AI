@@ -181,7 +181,7 @@ it('公共参考匹配多帧保留参考调色，隔离淡化/不透明度动画
   editVideoEditColorGrade(target, { params: { faded_film: 40, curve_red_2: 80 } })
   editVideoEditColorGrade(target, { curves: { faded_film: [{ time: 0, value: 40, interpolation: 'hold' }] } })
   editVideoEditColorGrade({ ...target, clipId: reference.id }, { params: { exposure: 1 } })
-  editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, fadeInFrames: 5, curves: { opacity: [{ time: 0, value: .2, interpolation: 'hold' as const }] } })) })) }))
+  editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, transitions: sequence.clips.slice(0, 1).map(clip => ({ id: `fade-${clip.id}`, kind: 'cross_dissolve' as const, rightClipId: clip.id, durationFrames: 5 })), clips: sequence.clips.map(clip => ({ ...clip, curves: { opacity: [{ time: 0, value: .2, interpolation: 'hold' as const }] } })) })) }))
   const snapshot = owner.document; const app = createApplicationHarness()
   try {
     const ref = (kind: string, child: string): { kind: string; id: string } => ({ kind, id: `${target.projectId}:${child}` })
@@ -190,7 +190,7 @@ it('公共参考匹配多帧保留参考调色，隔离淡化/不透明度动画
     const frames = vi.mocked(trialVideoEditCodeFrames).mock.calls.flatMap(call => call[0]); expect(frames).toHaveLength(6)
     expect(frames.slice(0, 3).every(frame => frame.document.clips[0].effects?.length === 0)).toBe(true)
     expect(frames.slice(3).every(frame => frame.document.clips[0].effects?.[0].builtin?.params.exposure === 1)).toBe(true)
-    expect(frames.every(frame => frame.document.clips[0].fadeInFrames === 0 && frame.document.clips[0].curves?.opacity === undefined)).toBe(true)
+    expect(frames.every(frame => !frame.document.transitions?.length && frame.document.clips[0].curves?.opacity === undefined)).toBe(true)
     expect(result.parameters).toMatchObject({ faded_film: 0, curve_red_2: 50, look_lut: '' })
     const effect = getActiveVideoEditSequence(owner).clips[0].effects![0]
     expect(await app.change(ref('video_edit.effect', effect.id), { 'video_edit.effect.frame_curves': {}, 'video_edit.effect.parameters': result.parameters })).toMatchObject({ ok: true })

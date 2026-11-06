@@ -219,7 +219,7 @@ async function executeVideoEditReview(raw: unknown, context: Pick<CapabilityExec
             try { tracks = reviewCodeTrackSeparation(suggestions.entry, local, skipTracks) }
             catch (error) { assertCurrent(); skipTracks(`拆轨分析失败：${error instanceof Error ? error.message : String(error)}`) }
             const independentPlacement = entry.path.every(({ clip }) => (clip.anchorX ?? .5) === .5 && (clip.anchorY ?? .5) === .5 && clip.x === 0 && clip.y === 0 && clip.scale === 1 && (clip.scaleAspect ?? 1) === 1 && clip.rotation === 0
-              && clip.opacity === 1 && !clip.follow && !clip.stabilization && !clip.fadeInFrames && !clip.fadeOutFrames && !clip.elementOverrides
+              && clip.opacity === 1 && !clip.follow && !clip.stabilization && !clip.elementOverrides
               && !Object.values(clip.curves ?? {}).some(points => points?.length) && !clip.effects?.length)
               && entry.path.every(step => !(composition.sequences?.find(sequence => sequence.id === step.sequenceId) ?? composition).transitions?.some(transition => transition.leftClipId === step.clipId || transition.rightClipId === step.clipId))
             const matchingSequenceSizes = entry.path.every(step => {

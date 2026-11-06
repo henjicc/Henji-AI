@@ -7,7 +7,7 @@
 1. 优先复用用户音乐、已有声音资产或口播结果，确认用途与使用权；缺音乐可用 cross-workspace 的原地生成流程，遵守付费审批。
 2. 可独立调整的对白、音乐、音效与环境声分轨摆放。通用写 `video_edit.clip.audio_role` 为 dialogue/music/sound_effect/ambience，角色取决于内容，不由轨道位置猜测。
 3. `video_edit.clip.volume` 是线性振幅0–2：1为0dB，0为静音，约0.5为−6dB，约2为+6.02dB；不是分贝参数。需要手动曲线时先发现 `video_edit.clip.volume.keyframes` 的帧时钟与点结构。
-4. 常用混音起点是音乐比对白低约12–20dB，再按人声清晰度调整；音乐主导短片、无对白纪录环境声无需套此比例。短声音切点可试2–4帧淡化，音乐可试0.3–1秒；`video_edit.clip.fade_in_frames` / `video_edit.clip.fade_out_frames` 写整数序列帧。
+4. 常用混音起点是音乐比对白低约12–20dB，再按人声清晰度调整；音乐主导短片、无对白纪录环境声无需套此比例。短声音切点可试2–4帧淡化，音乐可试0.3–1秒；淡入淡出就是片段一端的单侧过渡：在序列下创建 `video_edit.transition`，声音片段 kind 为 constant_power，画面片段为 cross_dissolve；只写 `video_edit.transition.right_clip_id`（入点淡入）或 `video_edit.transition.left_clip_id`（出点淡出），`video_edit.transition.duration_frames` 至少 2。自带声音的视频片段声音随画面一起淡。
 
 ## 自动回避：候选先做，听感校正
 
@@ -17,7 +17,7 @@
 
 ## 响度：测量范围先说清
 
-- `measure_video_edit_loudness` 用 documentRef、clipRefs 独立测每段，含片段音量、速度、映射、淡化和效果，忽略轨道静音及邻接过渡；不是整片混音。积分 LUFS、dBTP 与采样峰值 dBFS 不混用，静音／太短的 LUFS=null 不等于0。
+- `measure_video_edit_loudness` 用 documentRef、clipRefs 独立测每段，含片段音量、速度、映射、两端淡化和效果，忽略轨道静音及邻接过渡；不是整片混音。积分 LUFS、dBTP 与采样峰值 dBFS 不混用，静音／太短的 LUFS=null 不等于0。
 - `normalize_video_edit_loudness` 同样给 clipRefs，再给 targetLufs，自动迭代片段增益并核实；不加限幅，超过可用增益或受效果限制会拒绝，不靠反复加音量绕过。
 - 当前能力给出的常用目标是网络视频−14 LUFS、播客−16 LUFS、广播−23 LUFS；真峰值可试−1 dBTP。先问交付规格是否已有要求，明确规格优先；这些不是所有平台统一强制标准。
 - 整片在 `export_video_edit` 的 loudness 或完整 settings.loudness 指定 targetLufs/truePeakDbtp（按 schema）；通过 `query_video_edit_export` 读 loudnessMeasurement。该数据来自混音PCM，不能宣称已经复测最终AAC真峰值。编码成片需要单独听感／最终文件测量证据，当前没有独立公开成片复测入口。

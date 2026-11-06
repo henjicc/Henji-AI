@@ -3,7 +3,8 @@ import { planMusicRemix } from '../audioAnalysis/music/musicRemixPlan'
 import { steadyMusicAnalysis } from '../audioAnalysis/music/musicTestFixtures'
 import { videoEditSequenceSchema, type VideoEditClip, type VideoEditSequence } from './document'
 import { applyMusicRemixToSequence, layoutMusicRemix, MUSIC_REMIX_SEAM_LEAD_SECONDS, videoEditSourceTimeFromSeconds } from './musicRemix'
-import { videoEditTransitionWindow } from './transitions'
+import { videoEditTransitionWindow, type VideoEditTransition } from './transitions'
+import { videoEditClipFade } from './fades'
 
 const analysis = steadyMusicAnalysis()
 function plan(targetSeconds: number) {
@@ -20,7 +21,8 @@ function sequenceWith(clips: VideoEditClip[]): VideoEditSequence {
     clips, annotations: [],
   } as VideoEditSequence
 }
-const music: VideoEditClip = { id: 'music', itemId: 'item', name: '配乐', kind: 'audio', track: 1, start: 48, duration: 24 * 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, volume: 0.8, gainDb: 12, text: '', fadeInFrames: 12 } as VideoEditClip
+const music: VideoEditClip = { id: 'music', itemId: 'item', name: '配乐', kind: 'audio', track: 1, start: 48, duration: 24 * 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, volume: 0.8, gainDb: 12, text: '' } as VideoEditClip
+const musicFadeIn: VideoEditTransition = { id: 'music-in', kind: 'constant_power', rightClipId: 'music', durationFrames: 12 }
 
 describe('music remix timeline layout', () => {
   it.each([24, 25, 30, 60])('fills exactly the target frames at %s fps and keeps every jumped-in beat on the original grid', fps => {
@@ -50,17 +52,21 @@ describe('music remix timeline layout', () => {
     const result = plan(targetFrames / fps)
     const layout = layoutMusicRemix(result, fps, targetFrames)
     let next = 0
-    const applied = applyMusicRemixToSequence({ sequence: sequenceWith([music]), replaceClipIds: ['music'], startFrame: music.start, layout, remix: { id: 'remix-1', targetFrames, repetition: 0.5, granularity: 'bar', seed: 0, analysisIdentity: 'sha:1', sourceInUs: 0, sourceOutUs: 60_000_000 }, newId: () => `id-${next++}` })
+    const applied = applyMusicRemixToSequence({ sequence: { ...sequenceWith([music]), transitions: [musicFadeIn] }, replaceClipIds: ['music'], startFrame: music.start, layout, remix: { id: 'remix-1', targetFrames, repetition: 0.5, granularity: 'bar', seed: 0, analysisIdentity: 'sha:1', sourceInUs: 0, sourceOutUs: 60_000_000 }, newId: () => `id-${next++}` })
     expect(applied.sequence.clips.some(clip => clip.id === 'music')).toBe(false)
     expect(applied.clips).toHaveLength(layout.pieces.length)
-    expect(applied.clips[0]).toMatchObject({ start: 48, fadeInFrames: 12, groupId: 'remix-1', remix: { id: 'remix-1', segment: 0 } })
+    expect(applied.clips[0]).toMatchObject({ start: 48, groupId: 'remix-1', remix: { id: 'remix-1', segment: 0 } })
+    // 原片段的淡入留在第一段开头，尾段收尾淡出
+    expect(videoEditClipFade(applied.sequence, applied.clips[0].id, 'in')).toMatchObject({ kind: 'constant_power', durationFrames: 12 })
+    expect(videoEditClipFade(applied.sequence, 'music', 'in')).toBeUndefined()
     expect(applied.clips.at(-1)!.start + applied.clips.at(-1)!.duration).toBe(48 + targetFrames)
     applied.clips.forEach((clip, k) => {
       expect(sourceSeconds(clip)).toBeCloseTo(layout.pieces[k].sourceInSeconds, 6)
       expect(clip.volume).toBe(0.8); expect(clip.gainDb).toBe(12 + layout.pieces[k].gainDb)
     })
-    expect(applied.transitions).toHaveLength(applied.clips.length - 1)
-    for (const transition of applied.transitions) {
+    const joins = applied.transitions.filter(transition => transition.leftClipId && transition.rightClipId)
+    expect(joins).toHaveLength(applied.clips.length - 1)
+    for (const transition of joins) {
       const window = videoEditTransitionWindow(applied.sequence, transition)
       // 过渡整段在切点之前。
       expect(window.end).toBe(window.cut)

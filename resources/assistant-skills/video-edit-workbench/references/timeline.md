@@ -8,7 +8,7 @@
 2. 序列用通用 `create_items` 在文档下创建，`video_edit.sequence.name` 必填；不要依赖未指定的初始规格。轨道在序列下创建，`video_edit.track.kind` 必填；片段的 `video_edit.clip.track` 写实际 `video_edit.track.index`，不是 V1/A1 显示编号。轨道 kind/index 只读，改名走 `video_edit.track.name`。
 3. 命名可用“粗剪_访谈”“成片_竖版”“开场_走进工厂”；保留用户既有体系。素材箱 `video_edit.bin.name` / `video_edit.bin.parent_id`、项目项 `video_edit.item.name` / `video_edit.item.bin_id` 可通用修改。不为数量、目录层数设产品上限；列表分页，创建按发现的每次事务容量分批。
 4. 常用组织起点是主画面、补充画面、图文、对白、音效、音乐分轨；纪录现场声可混合呈现，一镜到底也可只用必要轨道。分轨是为了独立编辑，不规定固定轨数。
-5. 用途不同的素材设不同颜色，一眼分得清：同一类型（比如都是代码素材、都是音频）默认同色，所以按轨道分工给 `video_edit.item.label` 设色，或给按用途分的素材箱设 `video_edit.bin.label`（片段随箱变色）。例如主画面、底纸背景、角注、对白、音效、音乐各取一色，同一条轨道上的同类素材用同一色；用户自己设过的颜色不改。
+5. 按用途分色：设 `video_edit.item.label` 或 `video_edit.bin.label`。
 
 ## 时间与关联
 

@@ -89,10 +89,7 @@ function resize(clip: VideoEditClip, start: number, duration: number): VideoEdit
   if (duration === clip.duration) return { ...clip, start }
   const timed = videoEditClipSpeedSupported(clip.kind) ? stretchVideoEditClip(clip, duration) : { ...clip, duration }
   const result = rescaleVideoEditClipKeyframes(timed, time => Math.round(time * duration / clip.duration), duration)
-  return { ...result, start,
-    ...(clip.fadeInFrames ? { fadeInFrames: Math.max(1, Math.min(duration, Math.round(clip.fadeInFrames * duration / clip.duration))) } : {}),
-    ...(clip.fadeOutFrames ? { fadeOutFrames: Math.max(1, Math.min(duration, Math.round(clip.fadeOutFrames * duration / clip.duration))) } : {}),
-  }
+  return { ...result, start }
 }
 
 /** One reconciliation serves timeline edits, property transactions and generated placements. */

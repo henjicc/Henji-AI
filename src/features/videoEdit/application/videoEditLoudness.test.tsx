@@ -210,7 +210,7 @@ it.each(['peak_max', 'peak_all'] as const)('%s：最大峰值共同缩放保持�
 
 it('超过 +6 dB 的源标准化保留音量、关键帧与效果，重复执行不累加增益', async () => {
   const { owner, target, id } = await project()
-  editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, gainDb: -8, volume: .25, curves: { volume: [{ time: 0, value: .1, interpolation: 'linear' as const }, { time: 30, value: .5, interpolation: 'linear' as const }] }, fadeInFrames: 10 })) }))
+  editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, gainDb: -8, volume: .25, curves: { volume: [{ time: 0, value: .1, interpolation: 'linear' as const }, { time: 30, value: .5, interpolation: 'linear' as const }] } })) }))
   const before = structuredClone(getActiveVideoEditSequence(owner).clips)
   const result = await applyVideoEditAudioGain(target, 'loudness', -5)
   expect(result.map(value => value.gainDb)).toEqual([15, 15])

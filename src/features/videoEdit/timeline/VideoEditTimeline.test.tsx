@@ -34,6 +34,7 @@ import { createVideoEditCaption } from '../application/videoEditTimedContent'
 import { selectedVideoEditSubtitleId } from '../application/videoEditSubtitleSelection'
 import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
 import { VideoEditTextOverlay } from '../panels/VideoEditTextOverlay'
+import { videoEditClipFade } from '@/core/videoEdit/fades'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
@@ -985,8 +986,9 @@ it('过渡块：点选即选中，拖右缘改时长、拖中间平移，实时�
   expect(owner.past).toHaveLength(history + 1)
   const fade = view.container.querySelector<HTMLElement>(`[data-video-edit-clip="${ids[0]}"] [data-video-edit-fade="in"]`)!
   fireEvent.pointerDown(fade, event(header + 2)); fireEvent.pointerMove(host, event(header + 14)); fireEvent.pointerUp(host, event(header + 14))
-  expect(current().clips[0].fadeInFrames).toBe(6); expect(owner.past).toHaveLength(history + 2)
-  act(() => undoVideoEdit(owner.document.id)); expect(current().clips[0]).not.toHaveProperty('fadeInFrames')
+  // 拖淡化手柄就是在入点挂一个单侧交叉溶解（一步撤销）
+  expect(videoEditClipFade(current(), ids[0], 'in')).toMatchObject({ kind: 'cross_dissolve', durationFrames: 6 }); expect(owner.past).toHaveLength(history + 2)
+  act(() => undoVideoEdit(owner.document.id)); expect(videoEditClipFade(current(), ids[0], 'in')).toBeUndefined()
   expect(onError).not.toHaveBeenCalled()
 })
 it('不能编辑的原因浮在时间线上方不占位，指针显示禁止（4.3）', () => {
