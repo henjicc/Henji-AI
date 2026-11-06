@@ -246,6 +246,12 @@ export interface LlmTrace {
   elapsedMs: number
   inputChars: number
   outputChars: number
+  /** 发出请求到第一个字的毫秒数（含思考内容） */
+  firstTokenMs?: number | null
+  /** 首字之后的输出 token 速度（个/秒） */
+  outputTokensPerSecond?: number | null
+  inputTokens?: number | null
+  outputTokens?: number | null
 }
 
 export type LlmStreamEvent =

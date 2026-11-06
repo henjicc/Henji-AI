@@ -2,6 +2,7 @@
 
 ## 0.10.0 - 未发布
 
+- 流式聊天的结果与完成回调新增 `firstTokenMs`（发出请求到第一个字，含思考内容）和 `outputTokensPerSecond`（首字之后的输出 token 速度，供应商没给用量时为 null）；`LlmTrace` 增加对应可选字段与输入/输出 token 数。
 - **破坏性**：模型标签收成一份封闭词表 `MODEL_TAG_DEFINITIONS`（形态 11 个、专项 13 个，各带判断标准），`ModelTag` 不再接受任意字符串，`validateRuntimeModel`（`defineModel` 也走它）拒绝词表外的标签；`catalog` 全部模型按新词表重打。新增公开导出 `MODEL_TAGS`、`isModelTag`、`getModelTagDefinition` 与类型 `ModelTagDefinition`、`ModelTagLayer`；`ModelRuntimeMeta` 新增 `promptLanguage`。
   - 迁移：`supports-image-editing` → `image-to-image`，`supports-video-editing` → `video-to-video`，`multi-image-reference` / `video-reference` → `reference-mode`，`text-to-speech` / `voice-synthesis` → `text-to-audio`，`voice-cloning` → `voice-clone`，`supports-layer-decomposition` → `layer-decomposition`，`alpha-preserving` / `alpha-output` / `background-removal` → `transparent-background`，`camera-control` / `perspective-preset` → `multi-angle`，`background-generation` → `product-photography`；受控工具的 `image-edit` 改为各自专项，`mask-input` 由 `erase` 表达，`style-presets` 删除（读参数）。按这些旧值查询 discovery `features` 会得到空结果。
   - 删除的标签改读模型配置：`provider-*` 读 `meta.provider`，`image` / `video` / `audio` 读 `meta.type`，`max-images-*`、`supports-multi-image`、`mixed-upload-mode` 读 `inputLimits`，`supports-4k` / `supports-2k`、`multi-output`、`fast-mode` / `turbo-mode`、`multi-mode-switch`、`supports-prompt-expansion`、`supports-audio-generation` 读参数；`english-prompt-only` 改为 `meta.promptLanguage: 'en'`。

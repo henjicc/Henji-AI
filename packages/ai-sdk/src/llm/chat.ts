@@ -55,6 +55,10 @@ export interface LlmChatCompletedInfo {
   output: string
   reasoningOutput: string
   usage: LlmUsageDto | null
+  /** 发出请求到第一个字（含思考内容）的毫秒数；没有任何输出时为 null。 */
+  firstTokenMs: number | null
+  /** 首字之后的输出速度（输出 token / 秒，含思考 token）；供应商没给用量时为 null。 */
+  outputTokensPerSecond: number | null
   finishReason: string | null
   truncated: boolean
   toolCalls?: LlmStreamToolCall[]
@@ -77,6 +81,10 @@ export interface LlmChatStreamOutcome {
   output: string
   reasoningOutput: string
   usage: LlmUsageDto | null
+  /** 发出请求到第一个字（含思考内容）的毫秒数；没有任何输出时为 null。 */
+  firstTokenMs: number | null
+  /** 首字之后的输出速度（输出 token / 秒，含思考 token）；供应商没给用量时为 null。 */
+  outputTokensPerSecond: number | null
   finishReason: string | null
   truncated: boolean
   toolCalls?: LlmStreamToolCall[]
@@ -155,15 +163,26 @@ export async function runLlmChatStream(
       processedRequest,
     })
 
+    // 首字时间从真正发出请求算起，不含前面的媒体预处理
+    const requestSentAtMs = Date.now()
+    let firstTokenAtMs: number | null = null
     const output = await streamOpenAiCompatibleChat({
       endpoint,
       apiKey,
       providerId: identity.providerFamilyId,
       payload: requestPayload,
       signal: controller.signal,
-      emit,
+      emit: (event) => {
+        if (firstTokenAtMs === null && (event.type === 'Token' || event.type === 'ReasoningToken') && event.data) firstTokenAtMs = Date.now()
+        emit(event)
+      },
       transport: runtime.transport,
     })
+    const finishedAtMs = Date.now()
+    const firstTokenMs = firstTokenAtMs === null ? null : firstTokenAtMs - requestSentAtMs
+    const streamingSeconds = firstTokenAtMs === null ? 0 : (finishedAtMs - firstTokenAtMs) / 1000
+    const outputTokens = output.usage?.outputTokens ?? null
+    const outputTokensPerSecond = outputTokens !== null && streamingSeconds > 0 ? outputTokens / streamingSeconds : null
 
     if (isCancelled('llm', taskId)) {
       throw new Error(`[task_cancelled] LLM task cancelled: ${taskId}`)
@@ -181,6 +200,8 @@ export async function runLlmChatStream(
       output: output.output,
       reasoningOutput: output.reasoningOutput,
       usage: output.usage,
+      firstTokenMs,
+      outputTokensPerSecond,
       finishReason: output.finishReason,
       truncated: output.truncated,
       toolCalls: output.toolCalls,
@@ -197,6 +218,8 @@ export async function runLlmChatStream(
       output: output.output,
       reasoningOutput: output.reasoningOutput,
       usage: output.usage,
+      firstTokenMs,
+      outputTokensPerSecond,
       finishReason: output.finishReason,
       truncated: output.truncated,
       toolCalls: output.toolCalls,

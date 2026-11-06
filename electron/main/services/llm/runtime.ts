@@ -47,7 +47,7 @@ export async function llmChatStream(
           },
         })
       },
-      onCompleted: ({ processedRequest, startedAtMs, elapsedMs, inputChars, outputChars, output, reasoningOutput }) => {
+      onCompleted: ({ processedRequest, startedAtMs, elapsedMs, inputChars, outputChars, output, reasoningOutput, usage, firstTokenMs, outputTokensPerSecond }) => {
         logger.info('后端 LLM 响应完成', {
           event: 'llm_runtime.chat_stream.response_json',
           requestId: taskId,
@@ -58,6 +58,11 @@ export async function llmChatStream(
             elapsedMs,
             inputChars,
             outputChars,
+            firstTokenMs,
+            outputTokensPerSecond,
+            inputTokens: usage?.inputTokens ?? null,
+            outputTokens: usage?.outputTokens ?? null,
+            reasoningTokens: usage?.reasoningTokens ?? null,
             output: sanitizeJsonValue(output),
             reasoningOutput: sanitizeJsonValue(reasoningOutput),
           },
@@ -74,6 +79,10 @@ export async function llmChatStream(
         elapsedMs: outcome.elapsedMs,
         inputChars: outcome.inputChars,
         outputChars: outcome.outputChars,
+        firstTokenMs: outcome.firstTokenMs,
+        outputTokensPerSecond: outcome.outputTokensPerSecond,
+        inputTokens: outcome.usage?.inputTokens ?? null,
+        outputTokens: outcome.usage?.outputTokens ?? null,
       },
     })
   } catch (error) {

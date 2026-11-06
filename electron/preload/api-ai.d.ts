@@ -212,6 +212,10 @@ export interface HenjiLlmTrace {
   elapsedMs: number
   inputChars: number
   outputChars: number
+  firstTokenMs?: number | null
+  outputTokensPerSecond?: number | null
+  inputTokens?: number | null
+  outputTokens?: number | null
 }
 
 export type HenjiLlmStreamEvent =

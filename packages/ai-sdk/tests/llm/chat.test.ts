@@ -66,6 +66,39 @@ describe('runLlmChatStream 公共运行时抽象', () => {
     expect(traceEvents).toEqual(['start:llm.chat', 'end:llm.chat'])
   })
 
+  it('记录首字时间与首字之后的输出 token 速度，没有用量时速度为空', async () => {
+    const encoder = new TextEncoder()
+    const streamOf = (lines: string[]): ReadableStream<Uint8Array> => new ReadableStream({
+      async start(controller) {
+        for (const line of lines) {
+          controller.enqueue(encoder.encode(`${line}\n\n`))
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+        controller.close()
+      },
+    })
+    const respond = (lines: string[]): RuntimeContext['transport']['fetch'] => async () => new Response(streamOf(lines), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"第一"}}]}',
+      'data: {"choices":[{"delta":{"content":"第二"},"finish_reason":"stop"}]}',
+    ]
+
+    const withUsage = await runLlmChatStream(request, 'metrics-usage', () => {}, createRuntime(respond([
+      ...chunks,
+      'data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":8,"total_tokens":13}}',
+      'data: [DONE]',
+    ])))
+    expect(withUsage.firstTokenMs).toEqual(expect.any(Number))
+    expect(withUsage.firstTokenMs).toBeGreaterThanOrEqual(0)
+    expect(withUsage.outputTokensPerSecond).toBeGreaterThan(0)
+    // 速度按首字之后的时长算：首字到结束至少隔了两次 20ms 等待
+    expect(withUsage.outputTokensPerSecond).toBeLessThan(8 / 0.03)
+
+    const withoutUsage = await runLlmChatStream(request, 'metrics-no-usage', () => {}, createRuntime(respond([...chunks, 'data: [DONE]'])))
+    expect(withoutUsage.firstTokenMs).toEqual(expect.any(Number))
+    expect(withoutUsage.outputTokensPerSecond).toBeNull()
+  })
+
   it('错误 Key 的 401 响应归一化为可解析的鉴权错误且不重试', async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({
       error: { code: 'invalid_api_key', message: 'Invalid API key' },
