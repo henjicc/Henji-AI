@@ -7,7 +7,7 @@ import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { isVideoEditContentCurrent } from '../application/videoEditDocumentAlgorithm'
 import { focusVideoEditPanel, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { RECORDING_ZOOM_DEPTH_LABELS, recordingClipEffect, setRecordingZoomRegions } from '../application/videoEditRecordingClip'
-import { TIMELINE_HEADER_WIDTH, TIMELINE_STICKY_LABEL_STYLE, type TimelineLayout, type TimelineViewport } from './timelineGeometry'
+import { useTimelineHeaderWidth, type TimelineLayout, type TimelineViewport } from './timelineGeometry'
 import { VideoEditTimelinePlayhead } from './VideoEditTimelineTransport'
 
 type Mode = 'move' | 'in' | 'out'
@@ -21,6 +21,7 @@ function zoomRegions(clip: VideoEditClip): readonly RecordingZoomRegion[] { retu
  * the playhead on it, so the effect controls show that stretch.
  */
 export function VideoEditZoomTrack({ instance, sequence, geometry, pixels, view, viewport, onError }: Props): React.ReactElement {
+  const header = useTimelineHeaderWidth()
   const [preview, setPreview] = useState<{ clipId: string; region: RecordingZoomRegion } | null>(null)
   const cancel = useRef<(() => void) | null>(null)
   const projectId = instance.document.id
@@ -71,7 +72,7 @@ export function VideoEditZoomTrack({ instance, sequence, geometry, pixels, view,
     cancel.current = abort
     win.addEventListener('pointermove', move); win.addEventListener('pointerup', up); win.addEventListener('pointercancel', abort); win.addEventListener('blur', abort); win.addEventListener('keydown', key, true)
   }
-  const left = view.left - 32, right = view.left + view.width - TIMELINE_HEADER_WIDTH + 32
+  const left = view.left - 32, right = view.left + view.width - header + 32
   const blocks = sequence.clips.flatMap(clip => zoomRegions(clip).flatMap(original => {
     const region = preview?.clipId === clip.id && preview.region.id === original.id ? preview.region : original
     const frames = recordingZoomRegionFrames(instance.document, sequence.id, clip, region)
@@ -79,7 +80,7 @@ export function VideoEditZoomTrack({ instance, sequence, geometry, pixels, view,
   }))
   const playhead = instance.frame
   return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: geometry.top - geometry.clipTop, height: geometry.height }} data-video-edit-zoom-track data-layout-pinned onPointerDown={event => { if (event.button === 0) event.stopPropagation() }}>
-    <div className="sticky left-0 z-sticky flex h-full items-center border-r border-gap bg-panel pl-1 pr-1.5" style={{ width: TIMELINE_HEADER_WIDTH }}>
+    <div className="sticky left-0 z-sticky flex h-full items-center border-r border-gap bg-panel pl-1 pr-1.5" style={{ width: header }}>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold">Z1</span><span className="truncate text-2xs">缩放</span></div>
     </div>
     <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
@@ -89,11 +90,11 @@ export function VideoEditZoomTrack({ instance, sequence, geometry, pixels, view,
       return <UiIconButton key={`${clip.id}:${original.id}`} type="button" tone="bare" aria-label={`缩放 ${label}`} aria-pressed={current} tooltip={label}
         data-ui-timeline-item data-video-edit-zoom-region={original.id} data-zoom-start={frames.startFrame} data-zoom-end={frames.endFrame}
         className={`absolute top-0.5 ${locked(clip) ? 'cursor-default' : 'cursor-grab'}`}
-        style={{ height: geometry.height - 4, left: TIMELINE_HEADER_WIDTH + frames.startFrame * pixels, width: Math.max(3, (frames.endFrame - frames.startFrame) * pixels) }}
+        style={{ height: geometry.height - 4, left: header + frames.startFrame * pixels, width: Math.max(3, (frames.endFrame - frames.startFrame) * pixels) }}
         onPointerDown={event => down(event, clip, original, frames, 'move')} onClick={event => { if (event.detail === 0) focus(clip, frames.startFrame) }}
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); focus(clip, frames.startFrame) } }}>
         <span className={`flex h-full w-full items-center gap-1 overflow-clip rounded-md border bg-clip-video px-1.5 text-2xs text-text1 ${current ? 'border-accent-ring ring-1 ring-accent-ring' : 'border-clip-video-line'}`}>
-          <span className="sticky flex min-w-0 items-center gap-1" style={TIMELINE_STICKY_LABEL_STYLE}><ZoomIn className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{label}</span></span>
+          <span className="sticky flex min-w-0 items-center gap-1" style={{ left: header }}><ZoomIn className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{label}</span></span>
           {!locked(clip) && (['in', 'out'] as const).map(edge => <span key={edge} title={edge === 'in' ? '拖动调整开始' : '拖动调整结束'} className={`absolute inset-y-0 w-1 cursor-ew-resize ${edge === 'in' ? 'left-0' : 'right-0'}`} onPointerDown={event => down(event, clip, original, frames, edge)} />)}
         </span>
       </UiIconButton>

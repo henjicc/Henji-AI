@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { RotateCcw, Timer, Trash2 } from 'lucide-react'
-import { UiFormRow, UiIconButton, UiSwitch, useUiPropertyMenu } from '@/components/ui'
+import { UiFormRow, UiIconButton, UiSegmented, UiSwitch, useUiPropertyMenu } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS, UI_PROPERTY_REVEAL_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import NumberInput from '@/components/ui/NumberInput'
@@ -9,7 +9,7 @@ import { PropertyHeading } from '@/components/ui/params/ParamList'
 import type { ImagingParam } from '@/core/imaging/parameterDefinition'
 import { videoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 import { authorEffectEnvironmentForClip, resolveVideoEditLookByName, type AuthorElementEffectState } from '@/core/videoEdit/authorEffects'
-import { CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
+import { CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION, CODE_AUTHOR_LAYER_EFFECTS_MIN_API_VERSION } from '@/core/videoEdit/codeAuthorVersions'
 import { codeEditKey } from '@/core/videoEdit/codeEdits'
 import type { CodeElementOverrideKey, CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
 import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
@@ -22,6 +22,7 @@ import { VideoEditParameterFields } from './CodeParameterPanel'
 import { builtinParameterFields, readBuiltinField } from './params/fieldSpec'
 import { ParamList } from './params/ParamList'
 import { latestCodeEditNote } from './codeEditNote'
+import { VIDEO_EDIT_MOTION_BLUR_OPTIONS, videoEditMotionBlurChoice, videoEditMotionBlurValue } from './videoEditMotionBlurChoice'
 import { handleVideoEditElementEffectDragOver, handleVideoEditElementEffectDrop } from './videoEditEffectDrag'
 
 const writer = videoEditCodeElementWriter('user')
@@ -44,6 +45,8 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 const TRANSFORM_FIELDS: ReadonlyArray<[CodeElementOverrideKey, string, number, number]> = [['dx', '水平位移', -32768, 32768], ['dy', '垂直位移', -32768, 32768], ['scale', '整体比例', .001, 1024], ['scaleX', '水平比例', .001, 1024], ['scaleY', '垂直比例', .001, 1024], ['rotation', '旋转', -32768, 32768], ['opacity', '不透明度', 0, 1]]
 
 function Transform({ target, current, adjust, onError }: { target: VideoEditCodeElementTarget; current: Current; adjust: boolean; onError: (error: unknown) => void }): React.ReactElement {
+  // 旧作者接口的代码素材不看元素自己的运动模糊开关，不给一个不起作用的开关
+  const blurSwitch = current.program.apiVersion >= CODE_AUTHOR_DRAW_EXPOSURE_MIN_API_VERSION
   const identity = `${JSON.stringify(target)}:${JSON.stringify(current.time)}`
   const gesture = useVideoEditTypographyGesture(target.projectId, identity, onError)
   const menu = useUiPropertyMenu()
@@ -65,6 +68,9 @@ function Transform({ target, current, adjust, onError }: { target: VideoEditCode
       </UiFormRow>
     })}
     <UiFormRow label="显示" {...reset('hidden', '显示')}><UiSwitch aria-label="显示元素" checked={!current.values.hidden} onCheckedChange={visible => write({ hidden: !visible })} /></UiFormRow>
+    {!adjust && blurSwitch && <UiFormRow label="运动模糊" info="自动：不单独设置，按源码与片段的设置。开：这个元素一直按运动模糊，片段或序列关着也开。关：这个元素不模糊。">
+      <UiSegmented ariaLabel="元素运动模糊" size="sm" value={videoEditMotionBlurChoice(current.override.motionBlur)} options={VIDEO_EDIT_MOTION_BLUR_OPTIONS} onChange={choice => run(() => writer.setVideoEditCodeElementMotionBlur(target, videoEditMotionBlurValue(choice)))} />
+    </UiFormRow>}
   </Block>
 }
 

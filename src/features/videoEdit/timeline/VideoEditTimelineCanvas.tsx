@@ -64,8 +64,9 @@ import type { VideoEditSceneTarget } from '../application/videoEditSceneDetectio
 import { closeVideoEditSpeedDialog, useVideoEditSpeedDialogRequest } from '../application/videoEditSpeedDialog'
 import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { TIMELINE_DEFAULT_SPLIT, TIMELINE_END_MARGIN, TIMELINE_HEADER_WIDTH, TIMELINE_MARK_LANE_HEIGHT, TIMELINE_RULER_HEIGHT, TIMELINE_STICKY_LABEL_STYLE, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineStickyBottom, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_DEFAULT_SPLIT, TIMELINE_END_MARGIN, TIMELINE_MARK_LANE_HEIGHT, TIMELINE_RULER_HEIGHT, TimelineHeaderWidthContext, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineStickyBottom, timelineNewTrackZone, timelineRegionAt, timelineRulerLabel, timelineRulerScale, timelineTrackAt, TIMELINE_BLOCK_FACE_CLASS, TIMELINE_HEADER_WIDTH_ATTRIBUTE, timelineBlockSpan, timelineHeaderWidth, timelineHeaderWidthOf, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
+import { videoEditTrackHeaderButtons } from '@/core/videoEdit/trackHeaderButtons'
 import { useTrackHeaderMenu } from './useTrackHeaderMenu'
 import { VideoEditTimelineZoomBar } from './VideoEditTimelineZoomBar'
 import { videoEditTimelineViewport } from '../application/videoEditTimelineViewport'
@@ -107,11 +108,14 @@ const FADE_HANDLE_MIN_WIDTH = 28
 interface TransitionDropHint { kind: VideoEditTransitionKind; pair: VideoEditTransitionPair; alignment: VideoEditTransitionAlignment; track: number; start: number; duration: number }
 export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true, corner }: Props): React.ReactElement {
   const thumbnails = useSettingsStore(state => state.videoEditClipThumbnails)
-  const annotationRange = useVideoEditAnnotationRange(instance, pixels, TIMELINE_HEADER_WIDTH, onError)
+  const [viewport, setViewport] = useState<TimelineViewport & { overscan: number }>({ left: 0, top: 0, width: 900, height: 300, overscan: 0 })
+  // 窄面板里轨道头让出宽度给轨道区
+  const headerButtons = useSettingsStore(state => Math.max(...(['video', 'audio'] as const).map(kind => videoEditTrackHeaderButtons(state.videoEditTrackHeaderButtons, kind).length)))
+  const header = timelineHeaderWidth(viewport.width, headerButtons)
+  const annotationRange = useVideoEditAnnotationRange(instance, pixels, header, onError)
   const projectId = instance.document.id
   const [nestTarget, setNestTarget] = useState<VideoEditNestTarget | null>(null)
   const fps = videoEditFps(sequence.frameRate)
-  const [viewport, setViewport] = useState<TimelineViewport & { overscan: number }>({ left: 0, top: 0, width: 900, height: 300, overscan: 0 })
   // 决定渲染哪些片段、波形和刻度的窗口；要贴着实际可见区定位的东西（内容宽度、滚动条）读 viewport
   const view: TimelineViewport = viewport.overscan ? { ...viewport, left: Math.max(0, viewport.left - viewport.overscan), width: viewport.width + viewport.overscan + Math.min(viewport.left, viewport.overscan) } : viewport
   const [hint, setHint] = useState<(VideoEditDropPlacement & { ghosts?: VideoEditClip[]; shifted?: VideoEditClip[] }) | null>(null)
@@ -207,7 +211,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const clipSource = useVideoEditClipSource(onError)
   // 原地生成（4.12）：右键菜单项、生成面板与占位片段都在独立模块，这里只接线
   const inPlace = useVideoEditInPlaceMenu(instance, sequence, onError)
-  const inPlaceFrameAt = (clientX: number): number | null => { const host = pointer.viewport.current; if (!host) return null; const x = clientX - host.getBoundingClientRect().left + host.scrollLeft - TIMELINE_HEADER_WIDTH; return x < 0 ? null : Math.floor(x / pixels) }
+  const inPlaceFrameAt = (clientX: number): number | null => { const host = pointer.viewport.current; if (!host) return null; const x = clientX - host.getBoundingClientRect().left + host.scrollLeft - header; return x < 0 ? null : Math.floor(x / pixels) }
   const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId), { items: inPlace.items, frameAt: inPlaceFrameAt }, setSceneTarget, setReframeTarget, setNestTarget)
   const displayed = pointer.preview ?? sequence
   // 框选拖动中显示预选中（外观与选中一致），松手才写进选区。
@@ -220,15 +224,15 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const trackMenu = useTrackHeaderMenu(instance, sequence, onError)
   const headerRows = timelineVisibleTrackRows(rows, [focusedTrackId, trackMenu.renaming, trackMenu.retainedTrackId, pointer.resized?.trackId])
   const duration = videoEditDuration(displayed)
-  const width = Math.max(viewport.width, TIMELINE_HEADER_WIDTH + (duration + fps * 5) * pixels)
-  const visibleClips = timelineVisibleClips(displayed.clips, rows, view, pixels)
+  const width = Math.max(viewport.width, header + (duration + fps * 5) * pixels)
+  const visibleClips = timelineVisibleClips(displayed.clips, rows, view, pixels, header)
   // Out-of-sync offsets follow the drag preview so an Alt move shows its drift before release.
   const syncOffsets = videoEditSyncOffsets(displayed)
   // Waveforms slice each source's whole multi-resolution peaks (task 2.3): scrolling and zooming only redraw the visible part.
   const waveRanges = visibleClips.flatMap((clip): Array<{ clipId: string; from: number; to: number; startSeconds: number; endSeconds: number; sources: WaveformSourceRef[] }> => {
     const media = videoEditClipMedia(instance.document, clip)
     if (!media || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) return []
-    const from = Math.max(clip.start, Math.floor(Math.max(0, view.left) / pixels)); const to = Math.min(clip.start + clip.duration, Math.ceil((view.left + view.width - TIMELINE_HEADER_WIDTH) / pixels))
+    const from = Math.max(clip.start, Math.floor(Math.max(0, view.left) / pixels)); const to = Math.min(clip.start + clip.duration, Math.ceil((view.left + view.width - header) / pixels))
     if (to <= from) return []
     const head = videoEditClipSourceSecondsAtTime(clip, from / fps, fps); const tail = videoEditClipSourceSecondsAtTime(clip, to / fps, fps)
     const startSeconds = Math.max(0, Math.min(head, tail)); const endSeconds = Math.min(media.durationSeconds, Math.max(head, tail))
@@ -285,7 +289,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const requested = zoomAnchor.current; zoomAnchor.current = null
     if (!host || before === pixels) return
     const playhead = instance.frame * before - host.scrollLeft
-    const anchor = requested ?? (playhead >= 0 && playhead <= host.clientWidth - TIMELINE_HEADER_WIDTH ? { frame: instance.frame, x: playhead } : { frame: host.scrollLeft / before, x: 0 })
+    const anchor = requested ?? (playhead >= 0 && playhead <= host.clientWidth - timelineHeaderWidthOf(host) ? { frame: instance.frame, x: playhead } : { frame: host.scrollLeft / before, x: 0 })
     host.scrollLeft = Math.max(0, anchor.frame * pixels - anchor.x)
     readViewport()
   }, [pixels, instance, pointer.viewport, readViewport])
@@ -315,9 +319,9 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       if (action.kind === 'zoom') {
         const zoom = clampVideoEditZoom(owner.zoom * action.factor)
         if (zoom === owner.zoom) return
-        const x = Math.max(0, event.clientX - host.getBoundingClientRect().left - TIMELINE_HEADER_WIDTH)
+        const x = Math.max(0, event.clientX - host.getBoundingClientRect().left - timelineHeaderWidthOf(host))
         // 跟随播放时缩放也让播放头留在中间（PR），不跳到光标处再被跟随拉回来；用户滚开、播放头不在可见区时才按光标缩放
-        const playheadVisible = owner.frame * scale >= host.scrollLeft && owner.frame * scale <= host.scrollLeft + host.clientWidth - TIMELINE_HEADER_WIDTH
+        const playheadVisible = owner.frame * scale >= host.scrollLeft && owner.frame * scale <= host.scrollLeft + host.clientWidth - timelineHeaderWidthOf(host)
         if (!owner.playing || !useSettingsStore.getState().videoEditTimelineAutoScroll || !playheadVisible) zoomAnchor.current = { frame: (host.scrollLeft + x) / scale, x }
         try { setVideoEditTimelineView(owner.document.id, { zoom }) } catch (error) { zoomAnchor.current = null; onError(error) }
         return
@@ -338,27 +342,27 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     zoomToSequence: () => {
       const host = pointer.viewport.current; const { instance: owner, fps: rate, duration: frames } = latest.current
       if (!host) return
-      const zoom = videoEditZoomToFit(frames, rate, host.clientWidth - TIMELINE_HEADER_WIDTH - TIMELINE_END_MARGIN)
+      const zoom = videoEditZoomToFit(frames, rate, host.clientWidth - timelineHeaderWidthOf(host) - TIMELINE_END_MARGIN)
       if (zoom === owner.zoom) { host.scrollLeft = 0; return }
       zoomAnchor.current = { frame: 0, x: 0 }
       setVideoEditTimelineView(owner.document.id, { zoom })
     },
     showScreen: direction => {
       const host = pointer.viewport.current
-      if (host) host.scrollLeft = Math.max(0, host.scrollLeft + direction * Math.max(1, host.clientWidth - TIMELINE_HEADER_WIDTH))
+      if (host) host.scrollLeft = Math.max(0, host.scrollLeft + direction * Math.max(1, host.clientWidth - timelineHeaderWidthOf(host)))
     },
     zoomAt: (frame, factor) => {
       const host = pointer.viewport.current; const { instance: owner, pixels: scale } = latest.current
       if (!host) return
       const zoom = clampVideoEditZoom(owner.zoom * factor)
       if (zoom === owner.zoom) return
-      zoomAnchor.current = { frame, x: Math.max(0, Math.min(host.clientWidth - TIMELINE_HEADER_WIDTH, frame * scale - host.scrollLeft)) }
+      zoomAnchor.current = { frame, x: Math.max(0, Math.min(host.clientWidth - timelineHeaderWidthOf(host), frame * scale - host.scrollLeft)) }
       setVideoEditTimelineView(owner.document.id, { zoom })
     },
     showRange: (from, to) => {
       const host = pointer.viewport.current; const { instance: owner, fps: rate, pixels: scale } = latest.current
       if (!host) return
-      const zoom = videoEditZoomToFit(Math.max(1, to - from), rate, host.clientWidth - TIMELINE_HEADER_WIDTH)
+      const zoom = videoEditZoomToFit(Math.max(1, to - from), rate, host.clientWidth - timelineHeaderWidthOf(host))
       if (zoom === owner.zoom) { host.scrollLeft = Math.max(0, from * scale); return }
       zoomAnchor.current = { frame: from, x: 0 }
       setVideoEditTimelineView(owner.document.id, { zoom })
@@ -367,8 +371,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   /** 落点：命中的轨道；或视频区最上轨之上／音频区最下轨之下的空白——在那里放下会新建轨道（PR）。 */
   const placement = (event: React.DragEvent<HTMLDivElement>): VideoEditDropPlacement | undefined => {
     const host = pointer.viewport.current!; const rect = host.getBoundingClientRect()
-    const x = event.clientX - rect.left + host.scrollLeft - TIMELINE_HEADER_WIDTH
-    if (event.clientX < rect.left + TIMELINE_HEADER_WIDTH) return undefined
+    const x = event.clientX - rect.left + host.scrollLeft - header
+    if (event.clientX < rect.left + header) return undefined
     const y = event.clientY - rect.top
     const raw = Math.max(0, Math.round(x / pixels))
     // 吸附开着时落点吸到片段边缘、序列开头、播放头与标记（8 像素内，吸上时显示提示线），拖动中的虚影与松手结果用同一个落点
@@ -387,11 +391,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
    */
   const transitionDrop = (event: React.DragEvent<HTMLDivElement>, kind: VideoEditTransitionKind): TransitionDropHint | null => {
     const host = pointer.viewport.current!; const rect = host.getBoundingClientRect()
-    if (event.clientX < rect.left + TIMELINE_HEADER_WIDTH) return null
+    if (event.clientX < rect.left + header) return null
     const row = timelineTrackAt(rows, event.clientY - rect.top)
     const medium = videoEditTransitionMedium(kind)
     if (!row || row.track.kind !== medium || row.track.locked) return null
-    const x = (event.clientX - rect.left + host.scrollLeft - TIMELINE_HEADER_WIDTH) / pixels
+    const x = (event.clientX - rect.left + host.scrollLeft - header) / pixels
     const cutOf = (pair: VideoEditTransitionPair): number => videoEditTransitionPairCut(sequence, pair)!
     const pair = videoEditTransitionEditPoints(sequence, medium, new Set([row.track.index])).sort((a, b) => Math.abs(cutOf(a) - x) - Math.abs(cutOf(b) - x))[0]
     if (!pair) return null
@@ -415,7 +419,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const fixed = window.side === 'in' ? 'in' : window.side === 'out' ? 'out' : undefined
     return <div key={window.transition.id} data-ui-timeline-item data-video-edit-transition={window.transition.id} data-video-edit-transition-side={window.side} data-selected={selected || undefined} title={window.side ? `${preset.name}：拖${window.side === 'in' ? '右' : '左'}缘改时长` : `${preset.name}：拖两端改时长，拖中间沿切点移动`}
       className={`absolute z-raised flex overflow-hidden rounded-md border bg-raised text-text1 ${selected ? CLIP_SELECTED_LINE : 'border-line-strong'}`}
-      style={{ top: row.top - region.top + 2, height: Math.max(12, Math.min(row.height - 4, 28)), left: TIMELINE_HEADER_WIDTH + window.start * pixels, width }}>
+      style={{ top: row.top - region.top + 2, height: Math.max(12, Math.min(row.height - 4, 28)), left: header + window.start * pixels, width }}>
       <div data-video-edit-transition-edge={fixed === 'in' ? undefined : 'in'} aria-hidden="true" className={`h-full w-1.5 shrink-0 ${fixed === 'in' ? '' : 'cursor-ew-resize'}`} />
       <div className={`flex min-w-0 flex-1 items-center gap-1 overflow-hidden ${fixed ? '' : 'cursor-grab'}`}>
         {width > 28 && <Icon size={UI_ICON_SIZE.xs} aria-hidden="true" className="shrink-0 text-text3" />}
@@ -440,14 +444,15 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const surface = videoEditClipLabelSurface(videoEditClipLabel(instance.document, clip), selected)
         // Hidden picture tracks, muted sound tracks and disabled clips dim their clips (content only, see the overlay below), as in Premiere.
         const dimmed = !row.track.enabled || row.track.kind === 'audio' && row.track.muted || !videoEditClipEnabled(clip)
-        const clipLeft = TIMELINE_HEADER_WIDTH + clip.start * pixels
-        const clipWidth = Math.max(3, clip.duration * pixels)
+        const { left: clipLeft, width: clipWidth } = timelineBlockSpan(clip.start, clip.duration, pixels, header)
         const fadeIn = (clip.fadeInFrames ?? 0) * pixels; const fadeOut = (clip.fadeOutFrames ?? 0) * pixels
         const fadable = clip.kind !== 'adjustment' && clipWidth >= FADE_HANDLE_MIN_WIDTH
-        return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-selected={selected || undefined} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`group absolute overflow-clip rounded-md border ${selected ? CLIP_SELECTED_LINE : ''}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth, ...surface }}>
+        return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-selected={selected || undefined} data-clip-start={clip.start} data-clip-duration={clip.duration} className="group absolute" data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
+          {/* 外观层带着全部内容，右端让出 1 像素当片段间的缝；外层铺满，点在缝上仍是这个片段 */}
+          <div className={`${TIMELINE_BLOCK_FACE_CLASS} overflow-clip ${selected ? CLIP_SELECTED_LINE : ''}`} style={surface}>
           {picture && media && <VideoEditClipFilmstrip mode={thumbnails} clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
             mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6}
-            visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
+            visibleFrom={stripEdge(view.left + header - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
           {range && <VideoEditClipWaveform clipId={clip.id} gainDb={clip.gainDb} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}
           {/* 隐藏轨/静音轨/停用片段只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
               纸白下标签只剩 1.5:1（4.1 对比度审计） */}
@@ -457,7 +462,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
             {/* ui-surface-allow 片段体：整块是选择命中区，名称条压在缩略图/波形之上（设计稿 VideoEdit 片段名称条） */}
             <UiButton aria-label={`选择片段 ${clip.name}`} tooltip={`${clip.name}${speedLabel ? ` ${speedLabel}` : ''}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 !items-start !justify-start !rounded-none !bg-transparent !p-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.shiftKey || event.ctrlKey || event.metaKey, false, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
-              <span data-user-content className={`sticky max-w-full truncate rounded-br-hairline px-1.5 text-2xs leading-4 ${picture || sound ? 'bg-media-scrim text-on-media' : 'text-text1'}`} style={TIMELINE_STICKY_LABEL_STYLE}>{clip.name}{speedLabel && <span className={UI_TEXT_NUMERIC_CLASS}> {speedLabel}</span>}</span>
+              <span data-user-content className={`sticky max-w-full truncate rounded-br-hairline px-1.5 text-2xs leading-4 ${picture || sound ? 'bg-media-scrim text-on-media' : 'text-text1'}`} style={{ left: header }}>{clip.name}{speedLabel && <span className={UI_TEXT_NUMERIC_CLASS}> {speedLabel}</span>}</span>
             </UiButton>
             {/* ui-surface-allow 出点裁剪柄，同入点 */}
             <UiButton data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
@@ -470,10 +475,13 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             const length = edge === 'in' ? fadeIn : fadeOut
             const offset = Math.max(1, Math.min(clipWidth - 11, length - 5))
             return <div key={edge} data-video-edit-fade={edge} aria-label={edge === 'in' ? `拖动设置${clip.name}淡入` : `拖动设置${clip.name}淡出`} title={edge === 'in' ? '向右拖动淡入' : '向左拖动淡出'}
-              className={`absolute top-0.5 z-raised h-2.5 w-2.5 cursor-ew-resize rounded-hairline border border-line-strong bg-control transition-opacity duration-120 ${length > 0 || selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+              className={`absolute top-0.5 z-raised h-2.5 w-2.5 cursor-ew-resize rounded-hairline border border-line-strong bg-control transition-opacity duration-120 ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
               style={edge === 'in' ? { left: offset } : { right: offset }} />
           })}
           {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-hairline bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
+          </div>
+          {/* 缝上那 1 像素也是出点修剪柄，和外观层里的修剪柄连成一片 */}
+          <span aria-hidden="true" data-video-edit-trim="out" className="absolute inset-y-0 right-0 w-px cursor-ew-resize" />
         </div>
   }
   /**
@@ -503,9 +511,9 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     if (at.newTrack === 'audio') { const last = rows.filter(row => row.region === 'audio').at(-1); return Math.min(audio.top + audio.height - 26, last ? last.top + last.height + (last.lane ?? 0) + 2 : audio.top + 2) }
     return (rows.find(row => row.track.index === at.track)?.top ?? 0) + 2
   }
-  return <>
+  return <TimelineHeaderWidthContext.Provider value={header}>
     {nestTarget && <VideoEditNestDialog target={nestTarget} onClose={() => setNestTarget(null)} />}
-    <div ref={pointer.viewport} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport data-video-edit-tool={instance.tool} className={`video-edit-timeline-viewport relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent ${pointer.failure ? 'cursor-not-allowed' : ''}`}
+    <div ref={pointer.viewport} {...{ [TIMELINE_HEADER_WIDTH_ATTRIBUTE]: header }} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport data-video-edit-tool={instance.tool} className={`video-edit-timeline-viewport relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent ${pointer.failure ? 'cursor-not-allowed' : ''}`}
       onScroll={readViewport}
       onFocusCapture={event => {
         const target = elementOfEventTarget(event.target)
@@ -615,18 +623,18 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       }}>
       <div className="relative" style={{ width, height: Math.max(view.height, TIMELINE_RULER_HEIGHT) }} data-video-edit-timeline-content>
         <div className="sticky top-0 z-sticky flex border-b border-line bg-panel" style={{ height: TIMELINE_RULER_HEIGHT }} data-video-edit-ruler onPointerDownCapture={annotationRange.onPointerDownCapture} onPointerMove={annotationRange.onPointerMove} onPointerUp={annotationRange.onPointerUp} onPointerCancel={annotationRange.onPointerCancel}>
-          <div className={`sticky left-0 z-sticky flex shrink-0 border-r border-gap bg-panel ${corner ? 'pl-1 pr-1.5' : 'items-center px-3 text-2xs text-text3'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header data-video-edit-timeline-corner>{corner ?? '轨道'}</div>
+          <div className={`sticky left-0 z-sticky flex shrink-0 border-r border-gap bg-panel ${corner ? 'pl-1 pr-1.5' : 'items-center px-3 text-2xs text-text3'}`} style={{ width: header }} data-video-edit-track-header data-video-edit-timeline-corner>{corner ?? '轨道'}</div>
           <VideoEditTimelinePosition instance={instance}>
             {/* 上面一行：标记与批注，不压下面的时间数字 */}
             <div className="absolute inset-x-0 top-0" style={{ height: TIMELINE_MARK_LANE_HEIGHT }} data-video-edit-mark-lane>
               <VideoEditAnnotationMarks instance={instance} sequence={sequence} pixels={pixels} left={view.left} width={view.width} onError={onError} />
               {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 书签图形，与关键帧的菱形区分），不是按钮档位（3.5 确认保留） */}
-              {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-ui-timeline-item data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-1.5 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-text2" tooltip={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Bookmark fill="currentColor" aria-hidden="true" /></UiButton>)}
+              {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - header + 8).map(mark => <UiButton key={mark.id} data-ui-timeline-item data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-1.5 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-text2" tooltip={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Bookmark fill="currentColor" aria-hidden="true" /></UiButton>)}
             </div>
             {/* 下面一行：时间刻度、渲染状态条与入出点 */}
             <div className="absolute inset-x-0 bottom-0" style={{ top: TIMELINE_MARK_LANE_HEIGHT }}>
               {annotationRange.range && <div className="pointer-events-none absolute inset-y-0 bg-selected-accent ring-1 ring-accent-ring" style={{ left: Math.min(annotationRange.range.from, annotationRange.range.to) * pixels, width: Math.max(1, Math.abs(annotationRange.range.to - annotationRange.range.from) * pixels) }} />}
-              {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute bottom-0 top-1 border-l border-line-strong pl-1 font-mono text-2xs tabular-nums text-text3" style={{ left: index * majorWidth }}>{timelineTimecode(index * ruler.major, fps)}</span>)}
+              {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute bottom-0 top-1 border-l border-line-strong pl-1 font-mono text-2xs tabular-nums text-text3" style={{ left: index * majorWidth }}>{timelineRulerLabel(index * ruler.major, fps, ruler.major, duration)}</span>)}
               {minorPerMajor > 1 && Array.from({ length: Math.max(0, tickEnd - tickStart) * minorPerMajor }, (_, index) => tickStart * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1.5 border-l border-line" style={{ left: index * ruler.minor * pixels }} />)}
               <VideoEditRenderBar instance={instance} pixels={pixels} />
               <VideoEditTimelineInOut instance={instance} sequence={sequence} fps={fps} duration={duration} pixels={pixels} onError={onError} />
@@ -684,20 +692,20 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           <div className={`pointer-events-none w-full ${UI_DIVIDER_CLASS}`} />
         </div>
         {(['video', 'audio'] as const).map(kind => <TimelineRegionScrollbar key={kind} region={layout.regions[kind]} viewportWidth={viewport.width} onScroll={dy => scrollRegion(kind, dy)} />)}
-        {pointer.box && <div className="pointer-events-none absolute z-raised border border-accent-ring bg-accent-tint" style={{ left: TIMELINE_HEADER_WIDTH + Math.min(pointer.box.from.x, pointer.box.to.x), top: Math.min(pointer.box.from.y, pointer.box.to.y), width: Math.abs(pointer.box.to.x - pointer.box.from.x), height: Math.abs(pointer.box.to.y - pointer.box.from.y) }} data-video-edit-selection-box />}
+        {pointer.box && <div className="pointer-events-none absolute z-raised border border-accent-ring bg-accent-tint" style={{ left: header + Math.min(pointer.box.from.x, pointer.box.to.x), top: Math.min(pointer.box.from.y, pointer.box.to.y), width: Math.abs(pointer.box.to.x - pointer.box.from.x), height: Math.abs(pointer.box.to.y - pointer.box.from.y) }} data-video-edit-selection-box />}
         {hint?.ghosts?.length && hint.ghosts.every(ghost => rows.some(row => row.track.index === ghost.track))
-          ? [...(hint.shifted ?? []).map(moved => { const row = rows.find(item => item.track.index === moved.track); return row ? <div key={`shift-${moved.id}`} aria-hidden="true" data-video-edit-drop-shifted className="pointer-events-none absolute z-raised rounded-md border border-dashed border-accent-ring" style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + moved.start * pixels, width: Math.max(3, moved.duration * pixels) }} /> : null }), ...hint.ghosts.map(ghost => { const row = rows.find(item => item.track.index === ghost.track)!; return <div key={ghost.id} aria-hidden="true" data-video-edit-drop-ghost className="pointer-events-none absolute z-raised overflow-hidden rounded-md border-2 border-accent-ring bg-accent-tint px-1.5 text-2xs leading-4 text-text1" style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + ghost.start * pixels, width: Math.max(3, ghost.duration * pixels) }}><span className="truncate">{ghost.name}</span></div> })]
-          : hint && (hint.newTrack || rows.some(row => row.track.index === hint.track)) && <div className="pointer-events-none absolute z-raised flex h-6 w-40 items-center border-l-2 border-accent-ring bg-accent-tint px-2 text-2xs text-text1" style={{ top: hintTop(hint), left: TIMELINE_HEADER_WIDTH + hint.frame * pixels }}>{hint.newTrack ? '释放以新建轨道并添加' : '释放以添加素材'}</div>}
-        {snapFrame !== null && <div aria-hidden="true" data-video-edit-snap-indicator={snapFrame} className="pointer-events-none absolute bottom-0 z-raised w-px bg-text1" style={{ top: TIMELINE_RULER_HEIGHT, left: TIMELINE_HEADER_WIDTH + snapFrame * pixels }} />}
+          ? [...(hint.shifted ?? []).map(moved => { const row = rows.find(item => item.track.index === moved.track); return row ? <div key={`shift-${moved.id}`} aria-hidden="true" data-video-edit-drop-shifted className="pointer-events-none absolute z-raised rounded-md border border-dashed border-accent-ring" style={{ top: row.top + 2, height: row.height - 4, ...timelineBlockSpan(moved.start, moved.duration, pixels, header) }} /> : null }), ...hint.ghosts.map(ghost => { const row = rows.find(item => item.track.index === ghost.track)!; return <div key={ghost.id} aria-hidden="true" data-video-edit-drop-ghost className="pointer-events-none absolute z-raised overflow-hidden rounded-md border-2 border-accent-ring bg-accent-tint px-1.5 text-2xs leading-4 text-text1" style={{ top: row.top + 2, height: row.height - 4, ...timelineBlockSpan(ghost.start, ghost.duration, pixels, header) }}><span className="truncate">{ghost.name}</span></div> })]
+          : hint && (hint.newTrack || rows.some(row => row.track.index === hint.track)) && <div className="pointer-events-none absolute z-raised flex h-6 w-40 items-center border-l-2 border-accent-ring bg-accent-tint px-2 text-2xs text-text1" style={{ top: hintTop(hint), left: header + hint.frame * pixels }}>{hint.newTrack ? '释放以新建轨道并添加' : '释放以添加素材'}</div>}
+        {snapFrame !== null && <div aria-hidden="true" data-video-edit-snap-indicator={snapFrame} className="pointer-events-none absolute bottom-0 z-raised w-px bg-text1" style={{ top: TIMELINE_RULER_HEIGHT, left: header + snapFrame * pixels }} />}
         <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
         {/* 不能编辑的原因：浮在可见区域顶部居中，不占布局、不挡指针（4.3） */}
         <div role="status" aria-live="polite" data-video-edit-timeline-failure={failure ? '' : undefined}
           className={`pointer-events-none absolute z-dropdown max-w-sm -translate-x-1/2 truncate rounded-full bg-raised px-3 py-1 text-xs text-text1 shadow-panel transition-opacity duration-180 ${failure ? 'opacity-100' : 'opacity-0'}`}
-          style={{ left: viewport.left + TIMELINE_HEADER_WIDTH + Math.max(0, viewport.width - TIMELINE_HEADER_WIDTH) / 2, top: TIMELINE_RULER_HEIGHT + 8 }}>{failure ?? failureText}</div>
+          style={{ left: viewport.left + header + Math.max(0, viewport.width - header) / 2, top: TIMELINE_RULER_HEIGHT + 8 }}>{failure ?? failureText}</div>
       </div>
     </div>
     {/* PR 缩放滚动条取代原生横向滚动条：拖中间平移，拖两端缩放，滚轮缩放（4.6） */}
-    <VideoEditTimelineZoomBar scrollHost={pointer.viewport} pixels={pixels} extent={{ totalFrames: (width - TIMELINE_HEADER_WIDTH) / pixels, visibleFrames: Math.max(1, viewport.width - TIMELINE_HEADER_WIDTH) / pixels }} width={Math.max(1, viewport.width - TIMELINE_HEADER_WIDTH - 8)}
+    <VideoEditTimelineZoomBar scrollHost={pointer.viewport} pixels={pixels} extent={{ totalFrames: (width - header) / pixels, visibleFrames: Math.max(1, viewport.width - header) / pixels }} width={Math.max(1, viewport.width - header - 8)}
       onScroll={frame => { const host = pointer.viewport.current; if (host) host.scrollLeft = Math.max(0, frame * pixels) }}
       onRange={(from, to) => videoEditTimelineViewport(projectId, sequence.id)?.showRange(from, to)}
       onZoom={(frame, factor) => videoEditTimelineViewport(projectId, sequence.id)?.zoomAt(frame, factor)} />
@@ -716,7 +724,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原剪辑已关闭，请重新拖入。')
       await dropVideoEditInput(owner.document.id, input, at, undefined, { sequenceId, createSequenceWhenEmpty: true, sequenceSettings: settings })
     }} />}
-  </>
+  </TimelineHeaderWidthContext.Provider>
 }
 
 /** 一区的纵向滚动条（PR 的视频区、音频区各有一条）：贴在可见区域右缘，拖动滑块滚动这一区。 */

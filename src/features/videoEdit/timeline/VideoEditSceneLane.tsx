@@ -17,7 +17,7 @@ import { beginVideoEditGesture, finishVideoEditGesture, setVideoEditView, videoE
 import { videoEditSceneNamingFor } from '../panels/videoEditSceneNaming'
 import { KEYFRAME_LANE_HEADER, KEYFRAME_LANE_ROW } from './keyframeLaneGeometry'
 import { clearTimelineSnap, snapTimelineEdges, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
-import { TIMELINE_HEADER_WIDTH, TIMELINE_STICKY_LABEL_STYLE, timelineTimecode, type TimelineViewport } from './timelineGeometry'
+import { useTimelineHeaderWidth, timelineTimecode, type TimelineViewport } from './timelineGeometry'
 
 interface Props {
   instance: VideoEditInstance; sequence: VideoEditSequence; trackName: string; locked: boolean
@@ -79,6 +79,7 @@ function itemFrame(clip: VideoEditClip, at: number, fps: number): number {
  * Esc 取消，Delete 删除这里显示的选中记录（连同子记录时先确认）。
  */
 export function VideoEditSceneLane({ instance, sequence, trackName, locked, sceneId, clips, state, otherScenes, collapsed, onToggleGroup, top, height, pixels, fps, view, onError, onFailure }: Props): React.ReactElement {
+  const headerWidth = useTimelineHeaderWidth()
   const projectId = instance.document.id
   const root = useRef<HTMLDivElement>(null)
   const drag = useRef<Drag>()
@@ -211,7 +212,7 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
     {otherScenes && <span className="shrink-0 text-text3">另有片子数据未显示</span>}
   </div>
   const hint = !sceneId || !committedScene || !clips.length ? '这条轨道上没有使用片子数据的代码片段' : !state ? '正在读取…' : !schema ? naming.block ?? '这份片子数据暂时读不到代码声明' : !display.length ? '这份片子数据没有要在时间线上显示的记录' : undefined
-  const viewFrom = view.left / pixels - 2, viewTo = (view.left + view.width - TIMELINE_HEADER_WIDTH) / pixels + 2
+  const viewFrom = view.left / pixels - 2, viewTo = (view.left + view.width - headerWidth) / pixels + 2
 
   const renderItem = (clip: VideoEditClip, base: VideoEditSceneLaneItem, rowTop: number, range: { from: number; to: number }): React.ReactElement | null => {
     const item = draftItems?.get(base.record.id) ?? base
@@ -221,7 +222,7 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
     const reversed = Boolean(clip.reverse)
     const cutBefore = item.at < range.from - EDGE || item.clippedStart, cutAfter = item.end > range.to + EDGE || item.clippedEnd
     const clippedLeft = reversed ? cutAfter : cutBefore, clippedRight = reversed ? cutBefore : cutAfter
-    const left = TIMELINE_HEADER_WIDTH + Math.min(a, b) * pixels, width = Math.abs(b - a) * pixels
+    const left = headerWidth + Math.min(a, b) * pixels, width = Math.abs(b - a) * pixels
     const selected = item.record.id === selectedId
     const kind = schema?.kinds[item.record.kind]
     const name = naming.name(item.record.source)
@@ -261,7 +262,7 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
         {item.style === 'key' ? <Diamond fill="currentColor" aria-hidden="true" />
           : point ? <><span aria-hidden="true" className="absolute inset-y-0 left-1/2 w-px bg-line-strong" /><Scissors aria-hidden="true" className="relative" /></>
             : <>
-              {width >= 40 && item.style !== 'row' && <span data-user-content className="sticky min-w-0 truncate text-2xs leading-4" style={TIMELINE_STICKY_LABEL_STYLE}>{name}</span>}
+              {width >= 40 && item.style !== 'row' && <span data-user-content className="sticky min-w-0 truncate text-2xs leading-4" style={{ left: headerWidth }}>{name}</span>}
               {userIssue && width >= 20 && <TriangleAlert aria-label="画面会缺内容" className="ml-auto shrink-0 text-danger-text" />}
               {item.style === 'cut' && width >= 20 && <Scissors aria-hidden="true" className="ml-auto shrink-0" />}
               {clippedLeft && <span aria-hidden="true" data-video-edit-scene-clipped="left" className="absolute inset-y-0 left-0 w-0.5 bg-text3" />}
@@ -283,7 +284,7 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
       if (event.key === 'Escape' && drag.current) { event.preventDefault(); event.stopPropagation(); endDrag(false); return }
       if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId && !drag.current) { event.preventDefault(); event.stopPropagation(); void remove(selectedId) }
     }}>
-    <div className="sticky left-0 z-sticky flex h-full flex-col border-r border-gap bg-panel pl-8 pr-1.5" style={{ width: TIMELINE_HEADER_WIDTH }}>
+    <div className="sticky left-0 z-sticky flex h-full flex-col border-r border-gap bg-panel pl-8 pr-1.5" style={{ width: headerWidth }}>
       {header}
       {display.map((row, index) => <div key={index} className="flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden" data-video-edit-scene-group-row={row.group.kind}>
         {row.first ? <UiIconButton size="2xs" aria-expanded={!collapsed.has(row.group.kind)} aria-label={`${collapsed.has(row.group.kind) ? '展开' : '收起'}${row.group.label}`} tooltip={collapsed.has(row.group.kind) ? '展开这一组' : '收起这一组'} onClick={() => onToggleGroup(row.group.kind)}>{collapsed.has(row.group.kind) ? <ChevronRight /> : <ChevronDown />}</UiIconButton> : <span aria-hidden="true" className="w-5 shrink-0" />}
@@ -291,7 +292,7 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
         {row.label && <Tooltip asChild content={row.label} placement="right"><span data-user-content className="min-w-0 flex-1 truncate text-2xs text-text3">{row.label}</span></Tooltip>}
       </div>)}
     </div>
-    {hint && <span className="pointer-events-none absolute truncate text-2xs text-text3" style={{ top: KEYFRAME_LANE_HEADER + 6, left: TIMELINE_HEADER_WIDTH + view.left + 12, maxWidth: Math.max(0, view.width - TIMELINE_HEADER_WIDTH - 24) }}>{hint}</span>}
+    {hint && <span className="pointer-events-none absolute truncate text-2xs text-text3" style={{ top: KEYFRAME_LANE_HEADER + 6, left: headerWidth + view.left + 12, maxWidth: Math.max(0, view.width - headerWidth - 24) }}>{hint}</span>}
     {!hint && display.map((row, index) => {
       const rowTop = KEYFRAME_LANE_HEADER + index * KEYFRAME_LANE_ROW
       return <div key={`${row.group.kind}:${index}`} className="pointer-events-none absolute left-0 right-0" style={{ top: 0, height: 0 }}>

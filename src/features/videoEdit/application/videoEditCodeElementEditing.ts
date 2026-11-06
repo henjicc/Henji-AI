@@ -163,6 +163,16 @@ function resetVideoEditCodeElementFieldAs(actor: CodeEditActor, target: VideoEdi
     if (!Object.keys(override).length) delete clip.elementOverrides![target.elementId]
   })
 }
+/** 元素的运动模糊：true 强制开、false 关、undefined 回到跟随片段；不走关键帧。 */
+function setVideoEditCodeElementMotionBlurAs(actor: CodeEditActor, target: VideoEditCodeElementTarget, value: boolean | undefined): void {
+  edit(actor, target, clip => {
+    if (value !== undefined) { ensureOverride(clip, target.elementId).motionBlur = value; return }
+    const override = readCodeElementOverride(clip.elementOverrides, target.elementId)
+    if (!override) return
+    delete override.motionBlur
+    if (!Object.keys(override).length) delete clip.elementOverrides![target.elementId]
+  })
+}
 function resetVideoEditCodeElementAs(actor: CodeEditActor, target: VideoEditCodeElementTarget): void { edit(actor, target, clip => { if (clip.elementOverrides) delete clip.elementOverrides[target.elementId] }) }
 /** Explicitly arm/freeze transform channels. Static typography is never implicitly keyed. */
 function setVideoEditCodeElementAutoKeyframesAs(actor: CodeEditActor, target: VideoEditCodeElementTarget, enabled: boolean): void {
@@ -241,6 +251,7 @@ export function videoEditCodeElementWriter(actor: CodeEditActor) {
     updateVideoEditCodeElement: updateVideoEditCodeElementAs.bind(undefined, actor),
     resetVideoEditCodeElement: resetVideoEditCodeElementAs.bind(undefined, actor),
     resetVideoEditCodeElementField: resetVideoEditCodeElementFieldAs.bind(undefined, actor),
+    setVideoEditCodeElementMotionBlur: setVideoEditCodeElementMotionBlurAs.bind(undefined, actor),
     setVideoEditCodeElementAutoKeyframes: setVideoEditCodeElementAutoKeyframesAs.bind(undefined, actor),
     toggleVideoEditCodeElementKeyframe: toggleVideoEditCodeElementKeyframeAs.bind(undefined, actor),
     updateVideoEditCodeElementEffect: updateVideoEditCodeElementEffectAs.bind(undefined, actor),

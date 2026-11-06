@@ -62,7 +62,7 @@ it('两区各自滚动并夹在范围内：视频区往上滚露出上层轨道�
   expect(timelineTrackAt(scrolled.rows, R + 131)?.track.index).toBe(3)
   // V1 已滚到分隔条下方：在音频区坐标里不能命中它
   expect(timelineTrackAt(scrolled.rows, R + 242)).toBeUndefined()
-  expect(timelineVisibleClips(sequence.clips, scrolled.rows, { left: 0, width: 900 }, 2).map(clip => clip.track).sort()).toEqual([0, 2, 3, 4])
+  expect(timelineVisibleClips(sequence.clips, scrolled.rows, { left: 0, width: 900 }, 2, 232).map(clip => clip.track).sort()).toEqual([0, 2, 3, 4])
 })
 
 it('轨道命中采用半开边界，标尺、分隔条与新建轨道空白不伪装成轨道', () => {
@@ -78,7 +78,7 @@ it('轨道命中采用半开边界，标尺、分隔条与新建轨道空白不�
   expect(timelineTrackAt(rows, R + 140)?.track.index).toBe(0)
   expect(timelineTrackAt(rows, R + 164)?.track.index).toBe(2)
   expect(timelineTrackAt(rows, R + 196)).toBeUndefined()
-  expect(timelineVisibleClips(fixture().clips, rows, { left: 0, width: 900 }, 2).map(clip => clip.track).sort()).toEqual([0, 1, 2, 3])
+  expect(timelineVisibleClips(fixture().clips, rows, { left: 0, width: 900 }, 2, 232).map(clip => clip.track).sort()).toEqual([0, 1, 2, 3])
 })
 
 it('新序列 V1/A1 居中：最上视频轨之上、最下音频轨之下是新建轨道的落点，区由分隔条划分', () => {

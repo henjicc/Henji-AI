@@ -1,9 +1,25 @@
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { VIDEO_EDIT_TRACK_HEIGHT_MIN } from '@/core/videoEdit/timelineNavigation'
+import { createContext, useContext } from 'react'
 
 /** 轨道头宽：名称按钮 + 6 个 24 命中区的图标开关（5.8：原 20 的开关低于命中区下限 24，宽度随之 208 → 232） */
 export const TIMELINE_HEADER_WIDTH = 232
+/**
+ * 轨道头宽度随时间线可见宽度收缩：够宽时是完整宽度，窄面板里按比例让给轨道区；最窄放得下展开三角、编号与轨道头上的全部开关
+ * （按钮编辑器里选了几个就留几个的位置），名称收起。
+ */
+export function timelineHeaderWidth(viewportWidth: number, buttons: number): number {
+  return Math.round(Math.max(68 + buttons * 24, Math.min(TIMELINE_HEADER_WIDTH, viewportWidth * 0.3)))
+}
+/** 时间线把这次绘制用的轨道头宽度写在视口上，指针换算与播放跟随读同一个值；还没绘制时是完整宽度。 */
+export const TIMELINE_HEADER_WIDTH_ATTRIBUTE = 'data-timeline-header-width'
+export function timelineHeaderWidthOf(host: HTMLElement): number { return Number(host.getAttribute(TIMELINE_HEADER_WIDTH_ATTRIBUTE)) || TIMELINE_HEADER_WIDTH }
+/** 时间线里的轨道、片段与播放头读同一个轨道头宽度。 */
+export const TimelineHeaderWidthContext = createContext(TIMELINE_HEADER_WIDTH)
+export function useTimelineHeaderWidth(): number { return useContext(TimelineHeaderWidthContext) }
+/** 播放头在标尺上的“头”（Premiere 的蓝色指示器）的形状：时间线与节目标尺共用。 */
+export const TIMELINE_PLAYHEAD_HEAD_SHAPE = { clipPath: 'polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%)' }
 /** 标尺两行（参照 Premiere）：上面一行放标记与批注，下面一行是时间刻度，标记不压时间数字；角落格也正好排两行。 */
 export const TIMELINE_RULER_HEIGHT = 52
 export const TIMELINE_MARK_LANE_HEIGHT = 24
@@ -31,11 +47,6 @@ export interface TimelineViewport { left: number; top: number; width: number; he
 export const TIMELINE_DEFAULT_SPLIT = 0.5
 /** 序列末尾滚到可见区右缘时留的空隙，末尾不贴边。 */
 export const TIMELINE_END_MARGIN = 16
-/**
- * 片段、字幕等块上的名称随横向滚动贴在块可见部分的左端：吸附点是轨道头右缘。配合 `position: sticky` 使用，
- * 块自身要用 `overflow-clip` 而不是 `overflow-hidden`，后者会建立滚动容器，名称就只相对块自己吸附了。
- */
-export const TIMELINE_STICKY_LABEL_STYLE = { left: TIMELINE_HEADER_WIDTH } as const
 /**
  * 播放跟随时的滚动位置（PR 平滑滚动）：播放头没走到可见区中间不滚，走到了就保持在中间；序列结尾滚到头后播放头继续走到底，不滚进尾部留白。
  * 倒放镜像。播放头不在可见区（换了位置才开始播放、循环跳回）时直接滚到让它居中的位置。
@@ -108,10 +119,24 @@ export function timelineTrackAt(rows: readonly TimelineTrackRow[], y: number): T
 export function timelineVisibleTrackRows(rows: readonly TimelineTrackRow[], retained: readonly (string | null | undefined)[] = [], overscan = 64): TimelineTrackRow[] {
   return rows.filter(row => retained.includes(row.track.id) || row.top + row.height + (row.lane ?? 0) > row.clipTop - overscan && row.top < row.clipBottom + overscan)
 }
-export function timelineVisibleClips(clips: readonly VideoEditClip[], rows: readonly TimelineTrackRow[], viewport: Pick<TimelineViewport, 'left' | 'width'>, pixels: number): VideoEditClip[] {
+/**
+ * 片段块的外观层（底色与描边）：右端让出 1 像素，前后相连的片段之间露一道缝，两条边各自完整、紧贴而不叠成一条（PR、达芬奇）；
+ * 块本身仍铺满到下一个片段，点在缝上还是点中这个片段。
+ */
+export const TIMELINE_BLOCK_FACE_CLASS = 'absolute inset-y-0 left-0 right-px rounded-md border'
+/**
+ * 片段块（片段、字幕、拖入虚影）的横向范围：两端落在整像素上，相连的片段首尾相接。缝不在这里让：
+ * 让出来的那 1 像素不属于任何片段，点切点就落空了；缝由块里的外观层留出（TIMELINE_BLOCK_FACE_CLASS）。
+ * 块上的名称用 `position: sticky` 贴在可见部分左端，吸附点是轨道头右缘；块自身用 `overflow-clip`，不用会建立滚动容器的 `overflow-hidden`。
+ */
+export function timelineBlockSpan(start: number, duration: number, pixels: number, header: number): { left: number; width: number } {
+  const left = Math.round(start * pixels)
+  return { left: header + left, width: Math.max(3, Math.round((start + duration) * pixels) - left) }
+}
+export function timelineVisibleClips(clips: readonly VideoEditClip[], rows: readonly TimelineTrackRow[], viewport: Pick<TimelineViewport, 'left' | 'width'>, pixels: number, header: number): VideoEditClip[] {
   const tracks = new Set(timelineVisibleTrackRows(rows, [], 0).map(row => row.track.index))
   const from = Math.max(0, (viewport.left - 32) / pixels)
-  const to = Math.max(0, (viewport.left + viewport.width - TIMELINE_HEADER_WIDTH + 32) / pixels)
+  const to = Math.max(0, (viewport.left + viewport.width - header + 32) / pixels)
   return clips.filter(clip => tracks.has(clip.track) && clip.start < to && clip.start + clip.duration > from)
 }
 const TIMELINE_EDGE_ZONE = 32
@@ -161,13 +186,27 @@ export function timelineTimecode(frame: number, fps: number): string {
 }
 
 /**
- * 标尺刻度（Premiere：放得越大越细）：主刻度从“逐帧 → 若干帧 → 半秒 → 秒 → 分”的候选里取第一个间距不小于 90 像素的，
- * 够放下一个时间码；次刻度取能整除主刻度、间距不小于 8 像素的最大候选（没有就不画）。单位为帧（按名义整数帧率）。
+ * 标尺刻度上的时间：主刻度落在整秒上时只写到秒（“00:15”“01:30”，序列满一小时才带小时），窄窗口里多放几格；
+ * 放大到逐帧时写完整时间码，免得“分:秒:帧”被读成“时:分:秒”。
+ */
+export function timelineRulerLabel(frame: number, fps: number, major: number, durationFrames: number): string {
+  const nominal = Math.max(1, Math.round(fps))
+  if (major % nominal) return videoEditFrameTimecode(frame, fps)
+  const seconds = Math.floor(frame / nominal)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  // 不带小时时分钟不取模：缩小后标尺画过一小时也不会绕回 00:00
+  return (durationFrames >= nominal * 3600 ? [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60] : [Math.floor(seconds / 60), seconds % 60]).map(pad).join(':')
+}
+
+/**
+ * 标尺刻度（Premiere：放得越大越细）：主刻度从“逐帧 → 若干帧 → 半秒 → 秒 → 分”的候选里取第一个放得下刻度时间的：
+ * 整秒刻度只写到秒，间距不小于 64 像素；不足一秒的刻度写完整时间码，间距不小于 96 像素。
+ * 次刻度取能整除主刻度、间距不小于 8 像素的最大候选（没有就不画）。单位为帧（按名义整数帧率）。
  */
 export function timelineRulerScale(pixelsPerFrame: number, fps: number): { major: number; minor: number } {
   const nominal = Math.max(1, Math.round(fps))
   const candidates = [...new Set([1, 2, 5, 10, ...(nominal % 2 === 0 ? [nominal / 2] : []), ...[1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600].map(seconds => seconds * nominal)])].sort((a, b) => a - b)
-  const major = candidates.find(frames => frames * pixelsPerFrame >= 90) ?? candidates.at(-1)!
+  const major = candidates.find(frames => frames * pixelsPerFrame >= (frames % nominal ? 96 : 64)) ?? candidates.at(-1)!
   const minor = candidates.filter(frames => frames < major && major % frames === 0 && frames * pixelsPerFrame >= 8).at(-1) ?? 0
   return { major, minor }
 }

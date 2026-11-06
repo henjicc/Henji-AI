@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { subscribeVideoEditView, type VideoEditInstance } from '../application/videoEditService'
-import { TIMELINE_HEADER_WIDTH, timelineFollowScrollLeft } from './timelineGeometry'
+import { timelineFollowScrollLeft, timelineHeaderWidthOf } from './timelineGeometry'
 
 /**
  * 播放中手动滚动后，停手多久把时间线带回播放头。PR 的自动滚动最终总会回到播放头，但它当场就把手动滚动拉回去，
@@ -47,7 +47,7 @@ export function useTimelinePlaybackFollow(options: Options): void {
       if (pressed || seenLeft !== null && host.scrollLeft !== seenLeft && pixels === seenPixels) manualAt = now
       seenLeft = host.scrollLeft; seenPixels = pixels
       if (now - manualAt < MANUAL_SCROLL_RESUME_MS) { followedLeft.current = null; return }
-      const trackWidth = host.clientWidth - TIMELINE_HEADER_WIDTH
+      const trackWidth = host.clientWidth - timelineHeaderWidthOf(host)
       if (trackWidth <= 0) return
       const next = timelineFollowScrollLeft({ frame: instance.frame, pixels, durationFrames: duration, scrollLeft: host.scrollLeft, trackWidth, direction: instance.playbackDirection })
       if (next === host.scrollLeft) return

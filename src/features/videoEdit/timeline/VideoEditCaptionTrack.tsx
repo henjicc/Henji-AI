@@ -16,13 +16,14 @@ import { moveVideoEditCaption, rollVideoEditCaptionEdge, updateVideoEditCaptionT
 import { selectVideoEditSubtitle, selectedVideoEditSubtitleId, subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision } from '../application/videoEditSubtitleSelection'
 import { VideoEditTrackHeader } from './VideoEditTrackHeader'
 import { VideoEditTimelinePlayhead } from './VideoEditTimelineTransport'
-import { TIMELINE_HEADER_WIDTH, TIMELINE_STICKY_LABEL_STYLE, timelineArmedEdgeVelocity, timelineEdgeAxis, type TimelineLayout, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_BLOCK_FACE_CLASS, useTimelineHeaderWidth, timelineBlockSpan, timelineArmedEdgeVelocity, timelineEdgeAxis, type TimelineLayout, type TimelineViewport } from './timelineGeometry'
 import { clearTimelineSnap, reportTimelineSnap, snapTimelineEdges, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; geometry: TimelineLayout['caption']; pixels: number; view: TimelineViewport; viewport: React.RefObject<HTMLDivElement>; onError: (error: unknown) => void }
 
 /** 字幕和普通轨道共用轨道头、行几何、片段令牌及领域历史；手势中只预览，松手提交一次。修剪时按住 Ctrl 或 Alt，挨着的邻句跟着这条边走。 */
 export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, view, viewport, onError }: Props): React.ReactElement {
+  const header = useTimelineHeaderWidth()
   const { t } = useTranslation('ui')
   useSyncExternalStore(subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision)
   const selected = selectedVideoEditSubtitleId(instance, sequence.id)
@@ -70,7 +71,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     const tick = (): void => {
       if (moved) {
         const rect = host.getBoundingClientRect()
-        const velocity = timelineArmedEdgeVelocity(axis, x, rect.left + TIMELINE_HEADER_WIDTH, rect.right)
+        const velocity = timelineArmedEdgeVelocity(axis, x, rect.left + header, rect.right)
         if (velocity) { host.scrollLeft += velocity; update() }
       }
       if (cancel.current) animation.schedule()
@@ -91,19 +92,20 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     animation.schedule()
   }
   const row = { track: { id: `${sequence.id}:captions`, name: t('captionTrack.name'), index: -1, kind: 'video' as const, enabled: sequence.captionTrackEnabled !== false, locked: sequence.captionTrackLocked === true, muted: false, solo: false }, ...geometry, region: 'video' as const }
-  return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" data-layout-pinned onPointerDown={event => { if (event.button === 0) event.stopPropagation() }}>
+  return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-panel" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" data-layout-pinned>
     <VideoEditTrackHeader caption row={row} code="C1" targeted={false} onTarget={() => focusVideoEditPanel(projectId, 'content')} onResize={() => {}} onPatch={patch => run(() => updateVideoEditCaptionTrack(projectId, sequence.id, { ...(patch.enabled === undefined ? {} : { captionTrackEnabled: patch.enabled }), ...(patch.locked === undefined ? {} : { captionTrackLocked: patch.locked }) }))} />
     {/* The pinned row covers the tracks scrolled under it, not the playhead. */}
     <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
-    {(sequence.captions ?? []).filter(caption => preview?.some(value => value.id === caption.id) || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 32).map(original => {
+    {(sequence.captions ?? []).filter(caption => preview?.some(value => value.id === caption.id) || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - header + 32).map(original => {
       const caption = preview?.find(value => value.id === original.id) ?? original
       return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={locked(caption) || undefined} tooltip={caption.reviewReasons?.length ? `${caption.text}\n${t('captionTrack.reviewHint')}` : caption.text}
         data-ui-timeline-item data-video-edit-caption-range={caption.id} data-caption-start={caption.start} data-caption-duration={caption.duration}
         className={`absolute top-0.5 ${locked(caption) ? 'cursor-default' : 'cursor-grab'}`}
-        style={{ height: row.height - 4, left: TIMELINE_HEADER_WIDTH + caption.start * pixels, width: Math.max(3, caption.duration * pixels) }}
+        style={{ height: row.height - 4, ...timelineBlockSpan(caption.start, caption.duration, pixels, header) }}
         onPointerDown={event => down(event, original, 'move')} onClick={event => { if (event.detail === 0) run(() => select(caption.id)) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); run(() => select(caption.id)) } }}>
-        <span className={`flex h-full w-full items-center gap-1 overflow-clip rounded-md border px-1.5 text-2xs text-text1 ${selected === caption.id ? 'border-accent-ring ring-1 ring-accent-ring' : ''}`} style={videoEditClipLabelSurface(videoEditLabelOf('caption'), selected === caption.id)}>
-          <span className="sticky flex min-w-0 items-center gap-1" style={TIMELINE_STICKY_LABEL_STYLE}><Captions className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{caption.text}</span></span>
+        <span aria-hidden="true" className={`pointer-events-none ${TIMELINE_BLOCK_FACE_CLASS} ${selected === caption.id ? 'border-accent-ring ring-1 ring-accent-ring' : ''}`} style={videoEditClipLabelSurface(videoEditLabelOf('caption'), selected === caption.id)} />
+        <span className="relative flex h-full w-full items-center gap-1 overflow-clip px-1.5 text-2xs text-text1">
+          <span className="sticky flex min-w-0 items-center gap-1" style={{ left: header }}><Captions className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{caption.text}</span></span>
           {Boolean(caption.reviewReasons?.length) && <span className="shrink-0">{t('captionTrack.review')}</span>}
           {!locked(caption) && (['in', 'out'] as const).map(edge => <span key={edge} data-caption-trim={edge} title={t(`captionTrack.${edge === 'in' ? 'trimStart' : 'trimEnd'}`)} className={`absolute inset-y-0 w-1 cursor-ew-resize ${edge === 'in' ? 'left-0' : 'right-0'}`} onPointerDown={event => down(event, original, edge)} />)}
         </span>

@@ -19,7 +19,7 @@ import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { beginVideoEditFadeDrag, beginVideoEditTransitionDrag, finishVideoEditTimelineHandleDrag, previewVideoEditFadeDrag, previewVideoEditTransitionDrag, selectVideoEditTransition, type VideoEditTimelineHandleDrag } from '../application/videoEditTransitions'
 import { clearTimelineSnap, reportTimelineSnap, snapTimelineEdges, snapTimelineFrame, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
-import { TIMELINE_HEADER_WIDTH, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, type TimelineEdgeAxis, type TimelineLayout, type TimelineRegionKind, type TimelineTrackRow } from './timelineGeometry'
+import { timelineHeaderWidthOf, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, type TimelineEdgeAxis, type TimelineLayout, type TimelineRegionKind, type TimelineTrackRow } from './timelineGeometry'
 
 interface Point { x: number; y: number }
 export interface TimelineBox { from: Point; to: Point }
@@ -92,7 +92,7 @@ export function useTimelinePointer(options: Options) {
 
   const point = (client: Point): Point => {
     const host = viewport.current!; const rect = host.getBoundingClientRect()
-    return { x: client.x - rect.left + host.scrollLeft - TIMELINE_HEADER_WIDTH, y: client.y - rect.top + host.scrollTop }
+    return { x: client.x - rect.left + host.scrollLeft - timelineHeaderWidthOf(host), y: client.y - rect.top + host.scrollTop }
   }
   const valid = (gesture: PointerGesture): boolean => {
     try {
@@ -245,7 +245,7 @@ export function useTimelinePointer(options: Options) {
   const edgeVelocity = (gesture: PointerGesture, host: HTMLDivElement): Point & { region?: TimelineRegionKind } => {
     if ((gesture.kind !== 'clip' && gesture.kind !== 'box' && gesture.kind !== 'seek' && gesture.kind !== 'transition' && gesture.kind !== 'fade' && gesture.kind !== 'trim' && gesture.kind !== 'zoom') || ((gesture.kind === 'clip' || gesture.kind === 'transition' || gesture.kind === 'fade' || gesture.kind === 'trim') && !gesture.moved)) return { x: 0, y: 0 }
     const rect = host.getBoundingClientRect()
-    const x = timelineArmedEdgeVelocity(gesture.edge.x, gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right)
+    const x = timelineArmedEdgeVelocity(gesture.edge.x, gesture.client.x, rect.left + timelineHeaderWidthOf(host), rect.right)
     const region = gesture.kind === 'seek' || gesture.kind === 'transition' || gesture.kind === 'fade' || gesture.kind === 'trim' || gesture.kind === 'zoom' ? undefined : timelineRegionAt(current.current.layout.current, gesture.origin.y)
     if (!region) return { x, y: 0 }
     const bounds = current.current.layout.current.regions[region]
@@ -405,7 +405,15 @@ export function useTimelinePointer(options: Options) {
         const at = point(previous.client); const from = Math.min(previous.origin.x, at.x) / pixels; const to = Math.max(previous.origin.x, at.x) / pixels
         if (Math.abs(at.x - previous.origin.x) > 4) control?.showRange(Math.max(0, from), Math.max(0, to))
         else control?.zoomAt(Math.max(0, at.x / pixels), previous.zoomOut ? 0.5 : 2)
-      } else if (previous.kind === 'box') setVideoEditTimelineView(instance.document.id, { selectedClipIds: boxHits(previous) })
+      } else if (previous.kind === 'box') {
+        setVideoEditTimelineView(instance.document.id, { selectedClipIds: boxHits(previous) })
+        // 在空白处单击（没拖出框、没按加选键）：播放头跳到点的位置，不必瞄准标尺
+        const at = point(previous.client)
+        if (!previous.additive && Math.abs(at.x - previous.origin.x) < 3 && Math.abs(at.y - previous.origin.y) < 3) {
+          const fps = videoEditFps(sequence.frameRate)
+          setVideoEditView(instance.document.id, { playing: false, frame: Math.max(0, Math.min(Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS), Math.round(at.x / pixels))) })
+        }
+      }
       else if (previous.kind === 'height' && previous.next !== previous.height) updateVideoEditTrack(instance.document.id, sequence.id, previous.trackId, { height: previous.next })
       else if (previous.kind === 'razor') {
         const context = captureVideoEditCommandContext(instance.document.id, 'timeline', { clipIds: [previous.clipId], linked: previous.linked, frame: Math.max(0, Math.round(point(previous.client).x / pixels)) })

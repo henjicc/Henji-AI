@@ -10,7 +10,7 @@ import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressS
 import {
   cancelVideoEditInPlaceJob, dismissVideoEditInPlaceJob, listVideoEditInPlaceJobs, retryVideoEditInPlaceJob, subscribeVideoEditInPlaceJobs, videoEditInPlaceActionLabel, type VideoEditInPlaceJob,
 } from '../application/videoEditInPlaceGeneration'
-import { TIMELINE_HEADER_WIDTH, type TimelineRegion } from './timelineGeometry'
+import { useTimelineHeaderWidth, type TimelineRegion } from './timelineGeometry'
 
 interface Row { track: { index: number; kind: 'video' | 'audio' }; top: number; height: number }
 interface Props { projectId: string; sequence: VideoEditSequence; rows: readonly Row[]; region: TimelineRegion; pixels: number; onReopen: (job: VideoEditInPlaceJob) => void; onError: (error: unknown) => void }
@@ -39,6 +39,7 @@ function Progress({ taskId }: { taskId?: string }): React.ReactElement | null {
  * 不在剪辑文件里，只是时间线上的一层；结果落位时由正式片段取代。新建轨道的占位先画在同类最外侧的轨道上。
  */
 export function VideoEditInPlacePlaceholders({ projectId, sequence, rows, region, pixels, onReopen, onError }: Props): React.ReactElement | null {
+  const header = useTimelineHeaderWidth()
   useSyncExternalStore(subscribeVideoEditInPlaceJobs, listVideoEditInPlaceJobs)
   const jobs = listVideoEditInPlaceJobs().filter(job => job.projectId === projectId && job.plan.sequenceId === sequence.id && VISIBLE.has(job.status))
   if (!jobs.length) return null
@@ -56,7 +57,7 @@ export function VideoEditInPlacePlaceholders({ projectId, sequence, rows, region
       data-video-edit-in-place-job={job.id} data-status={job.status} data-video-edit-timeline-chrome
       onContextMenu={event => { event.preventDefault(); event.stopPropagation() }}
       className={`absolute z-raised flex items-center gap-1 overflow-hidden rounded-md border-2 border-dashed px-1 text-2xs leading-4 text-text1 ${failed ? 'border-danger-text bg-danger-tint' : 'border-accent-ring bg-accent-tint'}`}
-      style={{ top: row.top - region.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + at.start * pixels, width }}>
+      style={{ top: row.top - region.top + 2, height: row.height - 4, left: header + at.start * pixels, width }}>
       {failed ? <CircleAlert size={UI_ICON_SIZE.xs} aria-hidden="true" className="shrink-0 text-danger-text" /> : <UiSpinner size="2xs" tone="accent" />}
       {width > SHOW_TEXT_WIDTH && <Tooltip content={failed ? job.error ?? '' : job.request.prompt}><span className="min-w-0 flex-1 truncate">{failed ? job.error : `${label} · ${STATUS_TEXT[job.status as keyof typeof STATUS_TEXT]}`}</span></Tooltip>}
       {!failed && width > SHOW_TEXT_WIDTH && <Progress taskId={job.taskId} />}

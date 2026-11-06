@@ -13,7 +13,7 @@ import { writeVideoEditKeyframeLane } from '../application/videoEditKeyframeLane
 import { videoEditClipPropertyBounds, type VideoEditClipPropertyKey } from '../application/videoEditClipProperties'
 import { beginVideoEditGesture, finishVideoEditGesture, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
 import { formatVideoEditPropertyValue } from '../panels/videoEditPropertyViews'
-import { TIMELINE_HEADER_WIDTH, timelineTimecode, type TimelineViewport } from './timelineGeometry'
+import { useTimelineHeaderWidth, timelineTimecode, type TimelineViewport } from './timelineGeometry'
 import { KEYFRAME_LANE_HEADER, KEYFRAME_LANE_ROW, type VideoEditKeyframeLaneMode } from './keyframeLaneGeometry'
 
 interface Props {
@@ -84,6 +84,7 @@ function KeyframeGlyph({ shape }: { shape: VideoEditKeyframeShape }): React.Reac
  * 同一区域可切到速度曲线：左边选属性，右边拖关键帧改时间和数值、拖手柄改曲线；选中的关键帧可改直线、曲线或定格。
  */
 export function VideoEditTrackKeyframeLane({ instance, sequence, trackName, locked, lanes, mode, onModeChange, top, height, pixels, fps, view, onError }: Props): React.ReactElement {
+  const headerWidth = useTimelineHeaderWidth()
   const projectId = instance.document.id
   const [selected, setSelected] = useState<Selected | null>(null)
   const [curveLaneId, setCurveLaneId] = useState<string | null>(null)
@@ -152,7 +153,7 @@ export function VideoEditTrackKeyframeLane({ instance, sequence, trackName, lock
       if (event.key === 'Escape' && drag.current) { event.preventDefault(); event.stopPropagation(); endDrag(false); return }
       if ((event.key === 'Delete' || event.key === 'Backspace') && current && !locked) { event.preventDefault(); event.stopPropagation(); remove(current.entry, current.time) }
     }}>
-    <div className="sticky left-0 z-sticky flex h-full flex-col border-r border-gap bg-panel pl-8 pr-1.5" style={{ width: TIMELINE_HEADER_WIDTH }}>
+    <div className="sticky left-0 z-sticky flex h-full flex-col border-r border-gap bg-panel pl-8 pr-1.5" style={{ width: headerWidth }}>
       {header}
       {mode === 'keyframes' ? lanes.map(lane => <LaneNavigator key={lane.id} instance={instance} lane={lane} locked={locked} onSeek={seek} onToggle={() => toggleAt(lane)} />) : <>
         {curveLanes.map(lane => <UiOptionButton key={lane.id} variant="menu" size="sm" active={lane === curveLane} className="w-full" onClick={() => setCurveLaneId(lane.id)}><span className="truncate text-2xs">{lane.label}</span></UiOptionButton>)}
@@ -164,14 +165,14 @@ export function VideoEditTrackKeyframeLane({ instance, sequence, trackName, lock
       </>}
     </div>
     {mode === 'keyframes' && (lanes.length ? lanes.map((lane, index) => <div key={lane.id} className="pointer-events-none absolute left-0 right-0" style={{ top: KEYFRAME_LANE_HEADER + index * KEYFRAME_LANE_ROW, height: KEYFRAME_LANE_ROW }}>
-      {lane.entries.map(entry => <div key={entry.clip.id} aria-hidden="true" className="absolute top-1/2 h-px bg-line" style={{ left: TIMELINE_HEADER_WIDTH + entry.clip.start * pixels, width: entry.clip.duration * pixels }} />)}
+      {lane.entries.map(entry => <div key={entry.clip.id} aria-hidden="true" className="absolute top-1/2 h-px bg-line" style={{ left: headerWidth + entry.clip.start * pixels, width: entry.clip.duration * pixels }} />)}
       {lane.entries.flatMap(entry => videoEditLaneEntryTimes(entry).filter(time => visible(entry.clip.start + time)).map(time => {
         const on = selected?.laneId === lane.id && selected.clipId === entry.clip.id && selected.time === time
         const shape = shapeAt(entry, time)
         return <span key={`${entry.clip.id}:${time}`} className="pointer-events-auto">
           {/* ui-surface-allow 关键帧记号：16px 命中区 + 形状图形，是时间轴记号不是按钮档位（同标尺标记） */}
           <UiButton data-ui-timeline-item aria-label={`${lane.label}关键帧 ${timelineTimecode(entry.clip.start + time, fps)} ${SHAPE_LABELS[shape]}`} aria-pressed={on} data-video-edit-keyframe={`${entry.clip.id}:${time}`}
-            className={`absolute top-1/2 -ml-2 -mt-2 !h-4 !w-4 !p-0 ${on ? 'text-accent-text' : 'text-text2'} ${locked ? '' : 'cursor-ew-resize'}`} style={{ left: TIMELINE_HEADER_WIDTH + (entry.clip.start + time) * pixels }}
+            className={`absolute top-1/2 -ml-2 -mt-2 !h-4 !w-4 !p-0 ${on ? 'text-accent-text' : 'text-text2'} ${locked ? '' : 'cursor-ew-resize'}`} style={{ left: headerWidth + (entry.clip.start + time) * pixels }}
             onPointerDown={event => {
               event.stopPropagation()
               if (event.button !== 0) return
@@ -185,11 +186,11 @@ export function VideoEditTrackKeyframeLane({ instance, sequence, trackName, lock
             onContextMenu={event => { setSelected({ laneId: lane.id, clipId: entry.clip.id, time }); menu.showMenu(event, menuItems(entry, lane.discrete, time)) }}><KeyframeGlyph shape={shape} /></UiButton>
         </span>
       }))}
-    </div>) : <span className="pointer-events-none absolute truncate text-2xs text-text3" style={{ top: KEYFRAME_LANE_HEADER + 6, left: TIMELINE_HEADER_WIDTH + view.left + 12, maxWidth: Math.max(0, view.width - TIMELINE_HEADER_WIDTH - 24) }}>这条轨道的片段还没有关键帧：在效果控件里点属性前的秒表开始动画</span>)}
+    </div>) : <span className="pointer-events-none absolute truncate text-2xs text-text3" style={{ top: KEYFRAME_LANE_HEADER + 6, left: headerWidth + view.left + 12, maxWidth: Math.max(0, view.width - headerWidth - 24) }}>这条轨道的片段还没有关键帧：在效果控件里点属性前的秒表开始动画</span>)}
     {mode === 'curve' && (curveLane
       ? <CurveGraph lane={curveLane} sequence={sequence} selected={selected} locked={locked} height={height} pixels={pixels} view={view} projectId={projectId} write={write} onError={onError}
         onSelect={value => { setSelected(value); root.current?.focus({ preventScroll: true }) }} onMenu={(event, entry, time) => menu.showMenu(event, menuItems(entry, curveLane.discrete, time))} />
-      : <span className="pointer-events-none absolute truncate text-2xs text-text3" style={{ top: KEYFRAME_LANE_HEADER + 6, left: TIMELINE_HEADER_WIDTH + view.left + 12, maxWidth: Math.max(0, view.width - TIMELINE_HEADER_WIDTH - 24) }}>{lanes.length ? '这里的关键帧都是开关或选项，没有可画的数值曲线' : '这条轨道的片段还没有关键帧：在效果控件里点属性前的秒表开始动画'}</span>)}
+      : <span className="pointer-events-none absolute truncate text-2xs text-text3" style={{ top: KEYFRAME_LANE_HEADER + 6, left: headerWidth + view.left + 12, maxWidth: Math.max(0, view.width - headerWidth - 24) }}>{lanes.length ? '这里的关键帧都是开关或选项，没有可画的数值曲线' : '这条轨道的片段还没有关键帧：在效果控件里点属性前的秒表开始动画'}</span>)}
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
   </div>
 }
@@ -205,8 +206,9 @@ function CurveGraph({ lane, sequence, selected, locked, height, pixels, view, pr
   write: (entry: VideoEditKeyframeLaneEntry, changes: VideoEditKeyframeChanges, statics?: Record<string, VideoEditKeyframe['value']>, handle?: VideoEditGesture) => boolean
   onSelect: (value: Selected) => void; onMenu: (event: React.MouseEvent, entry: VideoEditKeyframeLaneEntry, time: number) => void; onError: (error: unknown) => void
 }): React.ReactElement {
+  const headerWidth = useTimelineHeaderWidth()
   const drag = useRef<CurveDrag>()
-  const width = Math.max(1, view.width - TIMELINE_HEADER_WIDTH)
+  const width = Math.max(1, view.width - headerWidth)
   const keys = lane.entries[0]?.channels.map(channel => channel.key) ?? []
   const ranges = new Map(keys.map(key => {
     const values = lane.entries.flatMap(entry => entry.channels.find(channel => channel.key === key)?.points.map(point => point.value as number) ?? [])
@@ -250,7 +252,7 @@ function CurveGraph({ lane, sequence, selected, locked, height, pixels, view, pr
   }
   const selectedEntry = selected?.laneId === lane.id ? lane.entries.find(entry => entry.clip.id === selected.clipId) : undefined
   // icon-token-allow 速度曲线是数据图形（曲线、关键帧、贝塞尔手柄），不是图标
-  return <svg className={`absolute ${locked ? '' : 'cursor-crosshair'}`} style={{ left: TIMELINE_HEADER_WIDTH + view.left, top: 0, width, height }} viewBox={`0 0 ${width} ${height}`} aria-label={`${lane.label}速度曲线`} data-video-edit-keyframe-curve={lane.id}
+  return <svg className={`absolute ${locked ? '' : 'cursor-crosshair'}`} style={{ left: headerWidth + view.left, top: 0, width, height }} viewBox={`0 0 ${width} ${height}`} aria-label={`${lane.label}速度曲线`} data-video-edit-keyframe-curve={lane.id}
     onPointerDown={event => {
       const element = event.target as Element
       const clipId = element.getAttribute('data-curve-clip'); const key = element.getAttribute('data-curve-key'); const time = element.getAttribute('data-curve-time')

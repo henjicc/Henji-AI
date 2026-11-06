@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore, type RefObject } from 'react'
-import { TIMELINE_HEADER_WIDTH } from './timelineGeometry'
+import { useTimelineHeaderWidth } from './timelineGeometry'
 import { timelineZoomBarCenterAt, timelineZoomBarDrag, timelineZoomBarThumb, type TimelineZoomBarPart, type TimelineZoomBarState } from './timelineZoomBar'
 
 interface Props {
@@ -22,13 +22,20 @@ interface Props {
  * 拖中间平移、拖两端缩放、在条上滚滚轮缩放、单击空白处跳到那里。取代原生横向滚动条。
  */
 export function VideoEditTimelineZoomBar({ scrollHost, pixels, extent, width, onScroll, onRange, onZoom }: Props): React.ReactElement {
+  const header = useTimelineHeaderWidth()
   const subscribe = useCallback((listener: () => void) => {
     const host = scrollHost.current
     host?.addEventListener('scroll', listener)
     return () => host?.removeEventListener('scroll', listener)
   }, [scrollHost])
   const scrollLeft = useSyncExternalStore(subscribe, () => scrollHost.current?.scrollLeft ?? 0)
-  const state: TimelineZoomBarState = { ...extent, startFrame: scrollLeft / pixels }
+  return <div className="flex h-3.5 shrink-0 items-center border-t border-gap bg-panel" data-video-edit-zoom-bar style={{ paddingLeft: header }}>
+    <VideoEditZoomBarTrack label="时间线缩放滚动条" state={{ ...extent, startFrame: scrollLeft / pixels }} width={width} onScroll={onScroll} onRange={onRange} onZoom={onZoom} />
+  </div>
+}
+
+/** 缩放滚动条本体：时间线底部与节目监视器下的小时间轴共用。`width` 是条的像素宽度。 */
+export function VideoEditZoomBarTrack({ label, state, width, onScroll, onRange, onZoom }: { label: string; state: TimelineZoomBarState; width: number } & Pick<Props, 'onScroll' | 'onRange' | 'onZoom'>): React.ReactElement {
   const thumb = timelineZoomBarThumb(state, width)
   const begin = (event: React.PointerEvent<HTMLElement>, part: TimelineZoomBarPart): void => {
     if (event.button !== 0) return
@@ -43,16 +50,14 @@ export function VideoEditTimelineZoomBar({ scrollHost, pixels, extent, width, on
     const end = (): void => { target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', end); target.removeEventListener('pointercancel', end) }
     target.addEventListener('pointermove', move); target.addEventListener('pointerup', end); target.addEventListener('pointercancel', end)
   }
-  return <div className="flex h-3.5 shrink-0 items-center border-t border-gap bg-panel" data-video-edit-zoom-bar style={{ paddingLeft: TIMELINE_HEADER_WIDTH }}>
-    <div className="relative mx-1 h-full flex-1" role="scrollbar" aria-orientation="horizontal" aria-label="时间线缩放滚动条" aria-valuemin={0} aria-valuemax={Math.round(state.totalFrames)} aria-valuenow={Math.round(state.startFrame)}
-      onPointerDown={event => { if (event.button === 0 && event.target === event.currentTarget) onScroll(timelineZoomBarCenterAt(state, event.clientX - event.currentTarget.getBoundingClientRect().left, width)) }}
-      onWheel={event => { if (event.deltaY) onZoom(state.startFrame + state.visibleFrames / 2, event.deltaY < 0 ? 1.25 : 0.8) }}>
-      <div className="group absolute top-1/2 flex h-2.5 -translate-y-1/2 items-center rounded-full bg-text2/30 hover:bg-text2/45" style={{ left: thumb.left, width: thumb.width }} data-video-edit-zoom-thumb
-        title="拖动平移，拖两端缩放" onPointerDown={event => begin(event, 'move')}>
-        <span data-video-edit-zoom-handle="start" aria-label="拖动调整可见范围起点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text2" onPointerDown={event => begin(event, 'start')} />
-        <span className="flex-1" />
-        <span data-video-edit-zoom-handle="end" aria-label="拖动调整可见范围终点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text2" onPointerDown={event => begin(event, 'end')} />
-      </div>
+  return <div className="relative mx-1 h-full flex-1" role="scrollbar" aria-orientation="horizontal" aria-label={label} aria-valuemin={0} aria-valuemax={Math.round(state.totalFrames)} aria-valuenow={Math.round(state.startFrame)}
+    onPointerDown={event => { if (event.button === 0 && event.target === event.currentTarget) onScroll(timelineZoomBarCenterAt(state, event.clientX - event.currentTarget.getBoundingClientRect().left, width)) }}
+    onWheel={event => { if (event.deltaY) onZoom(state.startFrame + state.visibleFrames / 2, event.deltaY < 0 ? 1.25 : 0.8) }}>
+    <div className="group absolute top-1/2 flex h-2.5 -translate-y-1/2 items-center rounded-full bg-text2/30 hover:bg-text2/45" style={{ left: thumb.left, width: thumb.width }} data-video-edit-zoom-thumb
+      title="拖动平移，拖两端缩放" onPointerDown={event => begin(event, 'move')}>
+      <span data-video-edit-zoom-handle="start" aria-label="拖动调整可见范围起点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text2" onPointerDown={event => begin(event, 'start')} />
+      <span className="flex-1" />
+      <span data-video-edit-zoom-handle="end" aria-label="拖动调整可见范围终点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text2" onPointerDown={event => begin(event, 'end')} />
     </div>
   </div>
 }

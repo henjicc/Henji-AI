@@ -8,6 +8,7 @@ import { captureVideoEditCommandContext, executeVideoEditCommand } from './appli
 import { useSettingsStore } from '@/stores/settingsStore'
 import { VideoEditTimelineCanvas } from './timeline/VideoEditTimelineCanvas'
 import { VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
+import { useTimelineHeaderWidth } from './timeline/timelineGeometry'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import { VideoEditSequenceTabs } from './panels/VideoEditSequenceTabs'
 
@@ -38,7 +39,7 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
   }
   const zoomSlider = <UiRangeInput aria-label="时间线缩放" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={instance.zoom} onChange={event => run(() => setVideoEditTimelineView(instance.document.id, { zoom: Number(event.target.value) }))} />
   const corner = <div className="flex min-w-0 flex-1 flex-col">
-    <div className="flex min-h-0 flex-1 items-center"><VideoEditTimecode instance={instance} label="当前时间码" className="px-1.5 text-base" /></div>
+    <div className="flex min-h-0 flex-1 items-center"><CornerTimecode instance={instance} /></div>
     <div className="flex h-6 shrink-0 items-center gap-0.5" role="toolbar" aria-label="时间线开关">
       <UiIconButton size="xs" on={linkedSelection.checked} disabled={!linkedSelection.enabled} aria-label={linkedSelection.title} tooltip={`${linkedSelection.tooltip}（按住 Alt 临时切换）`} onClick={() => execute('toggle_linked_selection')}><Link /></UiIconButton>
       <UiIconButton size="xs" on={snapping.checked} disabled={!snapping.enabled} aria-label={snapping.title} tooltip={snapping.tooltip} onClick={() => execute('toggle_snapping')}><Magnet /></UiIconButton>
@@ -56,6 +57,12 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
       zoomButton('zoom_in', '放大时间线', Plus),
     ]} />
   </div>
+}
+
+/** 角落格的时间码：轨道头随窄面板收窄时字号跟着变小，读数不被裁掉。 */
+function CornerTimecode({ instance }: { instance: VideoEditInstance }): React.ReactElement {
+  const compact = useTimelineHeaderWidth() < 180
+  return <VideoEditTimecode instance={instance} label="当前时间码" className={compact ? 'px-1 text-xs' : 'px-1.5 text-base'} />
 }
 
 export function VideoEditTimeline(props: Parameters<typeof VideoEditTimelineContent>[0]): React.ReactElement {

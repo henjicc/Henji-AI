@@ -5,7 +5,7 @@ import { demonstrateVideoMotion, videoMotionState } from './videoEditMotionDraft
 
 /** 效果控件里可直接调的片段固有属性（PR 的“运动 / 不透明度 / 音量”等固定效果）。 */
 export type VideoEditClipPropertyKey = 'x' | 'y' | 'scale' | 'rotation' | 'anchorX' | 'anchorY' | 'opacity' | 'volume'
-export type VideoEditClipPropertyPatch = Partial<Pick<VideoEditClip, VideoEditClipPropertyKey | 'scaleAspect' | 'name' | 'text' | 'textStyle' | 'effectsEnabled' | 'disabledIntrinsicSections' | 'snapToBeat'
+export type VideoEditClipPropertyPatch = Partial<Pick<VideoEditClip, VideoEditClipPropertyKey | 'scaleAspect' | 'name' | 'text' | 'textStyle' | 'effectsEnabled' | 'disabledIntrinsicSections' | 'snapToBeat' | 'motionBlur'
   | 'depth' | 'rotationX' | 'rotationY' | 'spaceEmission' | 'spaceThickness' | 'spaceLit' | 'spaceMaterial' | 'spaceBevel' | 'spaceCastShadow' | 'spaceReceiveShadow' | 'lightKind' | 'lightColor' | 'lightIntensity' | 'lightCastShadow' | 'lightSoftness' | 'lightAngle'>>
 
 const PROPERTY_KEYS: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume']
@@ -55,6 +55,8 @@ function patchDocument(sequenceId: string, clipId: string, patch: VideoEditClipP
       if (clip.id !== clipId) return clip
       const result = { ...clip, ...patch }
       if (result.scaleAspect !== undefined && Math.abs(result.scaleAspect - 1) < 1e-6) delete result.scaleAspect
+      // 运动模糊写 undefined 是回到“跟随序列”，不留空键
+      if ('motionBlur' in patch && patch.motionBlur === undefined) delete result.motionBlur
       for (const key of [...PROPERTY_KEYS, ...CURVE_SURFACE_KEYS]) if (patch[key] !== undefined && clip.curves?.[key]?.length) {
         const time = frame - clip.start
         if (time < 0 || time >= clip.duration) throw new Error(`请将播放头放在片段内（${clip.start}–${clip.start + clip.duration - 1} 帧）再编辑关键帧。`)

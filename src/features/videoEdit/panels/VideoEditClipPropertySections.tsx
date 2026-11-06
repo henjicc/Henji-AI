@@ -1,6 +1,6 @@
 import { useReducer } from 'react'
 import { Link2, Link2Off, RotateCcw, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd } from 'lucide-react'
-import { UiIconButton, UiInput, UiPropertyUnit } from '@/components/ui'
+import { UiIconButton, UiInput, UiPropertyUnit, UiSegmented } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditIntrinsicSection } from '@/core/videoEdit/document'
@@ -15,6 +15,7 @@ import { VideoEditKeyframeNavigator, VideoEditKeyframeStopwatch, type VideoEditK
 import { layoutVideoEditText } from '@/core/videoEdit/text'
 import { videoEditClipScaleAspect, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 import { VideoEditClipSpaceSection } from './VideoEditClipSpaceSection'
+import { VIDEO_EDIT_MOTION_BLUR_OPTIONS, videoEditMotionBlurChoice, videoEditMotionBlurValue } from './videoEditMotionBlurChoice'
 
 type Gesture = ReturnType<typeof useVideoEditClipPropertyGesture>
 type Frame = VideoEditPropertyFrame & { playhead: number }
@@ -101,6 +102,12 @@ function PropertyRow({ row, clip, frame, gesture }: { row: PropertyRowView; clip
   </VideoEditPropertyRow>
 }
 
+function MotionBlurRow({ clip, gesture }: { clip: VideoEditClip; gesture: Gesture }): React.ReactElement {
+  return <VideoEditPropertyRow label="运动模糊" tooltip="自动：跟随序列总开关，真的在动才模糊，排版重排和跳变不模糊。开：这个片段一直按运动模糊，序列总开关关着也开。关：这个片段不模糊。" data-video-edit-property-row="运动模糊">
+    <UiSegmented ariaLabel="片段运动模糊" size="sm" value={videoEditMotionBlurChoice(clip.motionBlur)} options={VIDEO_EDIT_MOTION_BLUR_OPTIONS} onChange={choice => { gesture.finish(); gesture.commit({ motionBlur: videoEditMotionBlurValue(choice) }) }} />
+  </VideoEditPropertyRow>
+}
+
 function switchProps(clip: VideoEditClip, gesture: Gesture, section: VideoEditIntrinsicSection) {
   return { enabled: !clip.disabledIntrinsicSections?.includes(section), onEnabledChange: (enabled: boolean): void => { gesture.finish(); gesture.commit({ disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== section) : [...(clip.disabledIntrinsicSections ?? []), section] }) } }
 }
@@ -123,6 +130,7 @@ export function VideoEditTextTransformControls({ clip, frame, gesture }: { clip:
     <EffectSection id="motion" title="运动" {...switchProps(clip, gesture, 'motion')} actions={<MotionReset clip={clip} gesture={gesture} />}>
       <div className={`flex gap-0.5 pb-1 ${UI_PROPERTY_INSET_CLASS}`}>{TEXT_ALIGNMENTS.map(([axis, value, label, Icon]) => <UiIconButton key={label} size="xs" aria-label={label} tooltip={label} onClick={() => align(axis, value)}><Icon /></UiIconButton>)}</div>
       {MOTION_ROWS.map(row => <PropertyRow key={row.label} row={row} clip={clip} frame={frame} gesture={gesture} />)}
+      <MotionBlurRow clip={clip} gesture={gesture} />
     </EffectSection>
     <EffectSection id="opacity" title="不透明度" {...switchProps(clip, gesture, 'opacity')}>
       <PropertyRow row={ROWS.opacity} clip={clip} frame={frame} gesture={gesture} />
@@ -146,6 +154,7 @@ export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: 
     </EffectSection>}
     {motion && <EffectSection id="motion" title="运动" {...switchProps(clip, gesture, 'motion')} info="画面的位置、大小与旋转。也可以在节目监视器里直接拖动画面。" actions={<MotionReset clip={clip} gesture={gesture} />}>
       {MOTION_ROWS.map(row => <PropertyRow key={row.label} row={row} clip={clip} frame={frame} gesture={gesture} />)}
+      <MotionBlurRow clip={clip} gesture={gesture} />
     </EffectSection>}
     <VideoEditClipSpaceSection clip={clip} playhead={frame.playhead} gesture={gesture} />
     {picture && clip.kind !== 'text' && <EffectSection id="opacity" title="不透明度" {...switchProps(clip, gesture, 'opacity')} info={clip.kind === 'light' ? '乘到灯光亮度上，淡入淡出就是开灯、关灯。' : '片段与下方画面叠加时的透明程度。'}>

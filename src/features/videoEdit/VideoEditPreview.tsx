@@ -53,6 +53,7 @@ import { VideoEditExplanationControls } from './panels/VideoEditExplanationContr
 import { recordVideoExplanationPresentation, recordVideoExplanationPointer, pauseVideoExplanation, videoExplanationState } from './application/videoEditExplanation'
 import { videoMotionComposition, videoMotionState, recordVideoMotionPresentation, setVideoMotionOptions, subscribeVideoMotion, pauseVideoMotion } from './application/videoEditMotionDraft'
 import { VideoEditInOutDuration, VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
+import { VideoEditProgramRuler } from './timeline/VideoEditProgramRuler'
 import { useMonitorZoom } from './panels/useMonitorZoom'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
@@ -1126,9 +1127,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         </UiPanel>
       </div>}
     </div>
+    <VideoEditProgramRuler instance={instance} />
     {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线左上角有同一读数），
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
-    <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
+    <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap px-2 py-1" role="toolbar" aria-label="节目监视器控制">
       <VideoEditMotionControls owner={instance} onError={onError} />
       <VideoEditExplanationControls owner={instance} onError={onError} />
       <ContextMenu surface="glass" visible={annotationMenu.menuVisible} items={annotationMenu.menuItems} position={annotationMenu.menuPosition} onClose={annotationMenu.hideMenu} />

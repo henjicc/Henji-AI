@@ -533,11 +533,12 @@ it('真实入出点拖动、播放头吸附和冲突失败保留基线', () => {
   expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(onError.mock.calls.at(-1)![0].message).toContain('已有片段')
 })
 
-it('空白点击与静止片段点击不编辑或定位，标尺实际定位更新叶子读数', () => {
+it('静止片段点击不编辑也不定位，空白点击只定位播放头，标尺实际定位更新叶子读数', () => {
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const baseline = owner.document; const history = owner.past.length
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20)); fireEvent.pointerUp(host, event(header + 20))
+  expect(owner.frame).toBe(0)
   fireEvent.pointerDown(host, event(header + 400, 120)); fireEvent.pointerUp(host, event(header + 400, 120))
-  expect(owner.selectedClipIds).toEqual([]); expect(owner.frame).toBe(0); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
+  expect(owner.selectedClipIds).toEqual([]); expect(owner.frame).toBe(200); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
   const ruler = view.getByRole('slider', { name: '剪辑时间定位' })
   fireEvent.pointerDown(ruler, event(header + 40, 14))
   expect(owner.scrubbing).toBe(false)
