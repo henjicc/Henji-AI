@@ -185,6 +185,7 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
  * 能做的事"的量化终点。条目要说清楚拦路的是什么、归到哪一期。
  */
 const ASSISTANT_BLIND_FEATURES = {
+  developer: '只在开发版出现的 SDK 模型清单与离线请求检查，正式构建整体编译掉；只给开发者核对适配结果，不是用户创作能力，不向助手开放。',
   audioCapture: '设备设置与会话只读状态由 application-control/audioCaptureDomain 和 audioCaptureFields 统一注册；新录音与通用录音设置已有 Surface。CaptureSession 的临时快照无 store 动作，生命周期按 AUDIO_CAPTURE_CONTROL_EXCLUSION 由音频编辑持有，不向助手开放开始、停止或放弃。',
   screenRecording: '录制由 recordingService 与主进程会话文档持有，无 Zustand Store；recordingReflection 覆盖来源、设备与会话，screenRecordingApplicationDomain 注册统一控制与事件读回能力，覆盖由录制能力回环测试验证。',
   creativeIntent: '跨工作区共用的纯 props 呈现组件，不持有业务实体、文档或 Store；'
@@ -249,6 +250,7 @@ function isZustandStoreFile(source) {
   return /from\s+['"]zustand['"]/.test(source) && /=\s*create[<(]/.test(source)
 }
 const ASSISTANT_BLIND_STORES = {
+  'src/features/developer/developerPanelState.ts': '开发版专用面板的开关状态，正式构建不包含，不属于用户业务状态。',
   // 任务 4.7 的共享工厂：自身不持有状态，由它创建的 canvasGenerationProgressStore、
   // generationTaskProgressStore、cameraStageRenderProgress 等具体进度 store 仍按各自 storeId 建账。
   'src/stores/createTransientProgressStore.ts': '高频进度 store 的共享工厂函数，本身不保存任何业务状态；具体 store 各自建账。',
