@@ -7,7 +7,7 @@ it('跳过注释、解码转义，带插值的模板字符串不算', () => {
 })
 
 it('只改唯一一处同值字面量，保留原引号并转义', () => {
-  const files = { 'film.ts': 'export const lines = [{ text: "一行字。" }, { text: "放进去。" }]', 'kit.ts': "export const RED = '#c33'" }
+  const files = { 'film.ts': 'export const lines = [{ text: "一行字。" }, { text: "放进去。" }]', 'kit.ts': "export const RED = 'red-ink'" }
   expect(replaceUniqueCodeStringLiteral(files, '一行字。', '两行"字"')).toEqual([{ path: 'film.ts', source: 'export const lines = [{ text: "两行\\"字\\"" }, { text: "放进去。" }]' }])
   expect(replaceUniqueCodeStringLiteral({ ...files, 'other.ts': 'const x = `一行字。`' }, '一行字。', '改')).toBeUndefined()
   expect(replaceUniqueCodeStringLiteral(files, '不存在', '改')).toBeUndefined()

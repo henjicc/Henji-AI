@@ -170,7 +170,7 @@ it('真实打包分别登记同文件多个调整层及跨文件调整层的精�
   expect(bundle.locations.adjustLayerIds?.sort()).toEqual(['a', 'b', 'remote'])
   const dynamic = await bundleAuthorFiles({ apiVersion: 9, entry: 'main.js', files: { 'main.js': "export default {name:'调整',layers:()=>[1,2].map(i=>({id:'card'+i,draw(){}}))}" } }, build)
   expect(dynamic.locations.staticLayerIds).toBeUndefined()
-  const fills = await bundleAuthorFiles({ apiVersion: 9, entry: 'main.js', files: { 'main.js': "const rows=[{id:'r',fill:'#fff'}]; export default {name:'底',layers:()=>[{id:'bg',fill:()=>({})},{id:'m',fill(){return {}}}]}" } }, build)
+  const fills = await bundleAuthorFiles({ apiVersion: 9, entry: 'main.js', files: { 'main.js': "const rows=[{id:'r',fill:'paper'}]; export default {name:'底',layers:()=>[{id:'bg',fill:()=>({})},{id:'m',fill(){return {}}}]}" } }, build)
   expect(Object.keys(fills.locations.layers).sort()).toEqual(['bg', 'm'])
   const named = await bundleAuthorFiles({ apiVersion: 9, entry: 'main.js', files: { 'main.js': "const grad=()=>({}); export default {name:'底',layers:()=>[{id:'bg',fill:grad}]}" } }, build)
   expect(named.locations.staticLayerIds).toBeUndefined()
