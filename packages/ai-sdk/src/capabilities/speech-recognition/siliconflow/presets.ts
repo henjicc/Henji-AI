@@ -2,7 +2,7 @@ import { defineSpeechRecognitionDescriptor } from '..'
 
 export interface SiliconFlowAsrPreset {
   id: string
-  modelId: 'FunAudioLLM/SenseVoiceSmall' | 'TeleAI/TeleSpeechASR'
+  modelId: 'FunAudioLLM/SenseVoiceSmall'
   descriptor: ReturnType<typeof defineSpeechRecognitionDescriptor>
 }
 
@@ -24,9 +24,7 @@ function definePreset(modelId: SiliconFlowAsrPreset['modelId']): SiliconFlowAsrP
 }
 
 export const siliconFlowSenseVoiceSmall = definePreset('FunAudioLLM/SenseVoiceSmall')
-export const siliconFlowTeleSpeechAsr = definePreset('TeleAI/TeleSpeechASR')
 
 export const siliconFlowAsrPresets = [
   siliconFlowSenseVoiceSmall,
-  siliconFlowTeleSpeechAsr,
 ] as const satisfies readonly SiliconFlowAsrPreset[]

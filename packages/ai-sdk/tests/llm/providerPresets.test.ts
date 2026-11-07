@@ -76,6 +76,13 @@ describe('LLM_PROVIDER_PRESETS', () => {
     }
   })
 
+  // 单价按模型 ID 登记，写错一个字就静默变成“缺价格”；新增推荐模型也必须先查到价格。
+  it('推荐模型都登记了单价，单价也只登记推荐模型', () => {
+    for (const preset of LLM_PROVIDER_PRESETS) {
+      expect(Object.keys(preset.modelPricing ?? {}).sort(), preset.providerId).toEqual([...preset.modelIds].sort())
+    }
+  })
+
   it('有专门思考参数写法的供应商，其 providerId 必须与映射表登记的一致', () => {
     // 这两份表按 providerId 对齐；预设改了 id 而映射表没改，思考模式会静默退回通用兜底。
     for (const providerId of ['deepseek', 'kimi', 'bigmodel', 'volcengine', 'bailian', 'groq']) {

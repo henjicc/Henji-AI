@@ -488,10 +488,10 @@ await capabilities.dispose()
 以下可选供应商入口只有显式 import 才进入消费方 bundle：
 
 - `capabilities/speech-recognition/bailian`：5 个百炼短音频/文件 ASR；
-- `capabilities/speech-recognition/bailian/realtime`：4 个百炼 Fun-ASR/Qwen 实时 ASR；
+- `capabilities/speech-recognition/bailian/realtime`：6 个百炼 Fun-ASR/Qwen/Qwen-Audio 实时 ASR；
 - `capabilities/speech-recognition/volcengine`：SeedASR 2.0 文件 submit/query；官方标准版只接受公网 URL；
 - `capabilities/speech-recognition/volcengine/realtime`：SeedASR 2.0 gzip 二进制 WebSocket 实时识别；
-- `capabilities/speech-recognition/siliconflow`：SenseVoiceSmall 与 TeleSpeechASR multipart 文件转写；
+- `capabilities/speech-recognition/siliconflow`：SenseVoiceSmall multipart 文件转写；
 - `capabilities/speech-recognition/groq`：Whisper Large v3 Turbo/v3 文件转写与可选词/句时间戳；
 - `capabilities/translation/bailian`：Qwen-MT Flash/Plus/Lite；
 - `llm/groq`：Groq GPT-OSS 20B 默认配置、流式聊天和模型发现。

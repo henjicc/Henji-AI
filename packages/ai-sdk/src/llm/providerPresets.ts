@@ -11,6 +11,7 @@ import { SILICONFLOW_PROVIDER_PRESET } from './siliconflow/preset'
 import { createBigmodelProvider } from './bigmodel/preset'
 import { BIGMODEL_ENDPOINT_PROFILE_FAMILY } from './bigmodel/profiles'
 import type { LlmApiProtocol } from './providerProtocol'
+import { tokenListPrice, tokenPrice, type TokenListPricing } from '../pricing/tokenPricing'
 import type { LlmCapabilities, LlmModelConfig, LlmProviderConfig, LlmReasoningEffort } from './types'
 import { findProviderMetadata } from '../providers/metadata'
 
@@ -46,12 +47,16 @@ export interface LlmProviderPreset {
   modelCapabilities?: Readonly<Record<string, Partial<LlmCapabilities>>>
   /** 这家供应商已确认可走 Responses 的具体模型；未列出的模型继续走 Chat Completions。 */
   responsesModelIds?: readonly string[]
+  /** 这家供应商对推荐模型公布的按量标准价，出处写在 docs 指向的资料里；没查到的模型不登记。 */
+  modelPricing?: Readonly<Record<string, TokenListPricing>>
   websiteUrl: string
   apiKeyUrl: string
   /** 该预设的资料出处，仓库内相对路径 */
   docs: string
   note?: string
 }
+
+const DEEPSEEK_PEAK_HOURS = '北京时间工作日 09:00–12:00、14:00–18:00'
 
 export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
   GROQ_PROVIDER_PRESET,
@@ -75,6 +80,18 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
       'minimax/minimax-m3.1-flash',
       'moonshotai/kimi-k2.6',
     ],
+    // 模型详情页刊例价；页面只显示当前时段的实际价，DeepSeek V4.1 Flash 的高峰价在“查看其他时段刊例价”里。
+    // Kimi 另计缓存写入（K3.1 Pro 5 分钟 13、K3 5 分钟 20 元/百万），不在这里登记。
+    modelPricing: {
+      'deepseek/deepseek-v4-pro': tokenListPrice('CNY', 9, 27, 3),
+      'deepseek/deepseek-v4.1-flash': { ...tokenListPrice('CNY', 2, 8, 0.04), offPeak: { ...tokenPrice(1, 4, 0.02), peakHours: DEEPSEEK_PEAK_HOURS } },
+      'moonshotai/kimi-k3.1-pro': tokenListPrice('CNY', 13, 68, 1.3),
+      'moonshotai/kimi-k3': tokenListPrice('CNY', 20, 100, 2),
+      'zai-org/glm-5.3': tokenListPrice('CNY', 8, 28, 2),
+      'xiaomimimo/mimo-v2.6-pro': tokenListPrice('CNY', 3, 6, 0.025),
+      'minimax/minimax-m3.1-flash': tokenListPrice('CNY', 1, 4, 0.1),
+      'moonshotai/kimi-k2.6': tokenListPrice('CNY', 6.5, 27, 1.1),
+    },
     websiteUrl: providerMetadata(DEFAULT_PPIO_PROVIDER_ID).websiteUrl,
     apiKeyUrl: providerMetadata(DEFAULT_PPIO_PROVIDER_ID).apiKeyUrl,
     docs: 'docs/llm-adaptation/README.md',
@@ -90,6 +107,11 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoningConfigurable: true,
     modelIds: ['deepseek-flash', 'deepseek-v4-pro'],
     responsesModelIds: ['deepseek-flash', 'deepseek-v4-pro'],
+    // 官方价格页按北京时间工作日高峰 / 其余闲时两档计价（高峰不含法定节假日）。
+    modelPricing: {
+      'deepseek-flash': { ...tokenListPrice('CNY', 2, 8, 0.04), offPeak: { ...tokenPrice(1, 4, 0.02), peakHours: DEEPSEEK_PEAK_HOURS } },
+      'deepseek-v4-pro': { ...tokenListPrice('CNY', 9, 27, 0.3), offPeak: { ...tokenPrice(4.5, 13.5, 0.15), peakHours: DEEPSEEK_PEAK_HOURS } },
+    },
     websiteUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).websiteUrl,
     apiKeyUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
@@ -113,6 +135,23 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
       'doubao-seed-evolving', 'doubao-seed-2-1-pro-260915', 'doubao-seed-2-1-lite-260915', 'doubao-seed-2-1-turbo-260628',
       'doubao-seed-2-0-lite-260428', 'doubao-seed-2-0-mini-260428', 'doubao-seed-character-260628',
     ],
+    // 常规在线推理价；分档按单次请求输入长度落档（官方单位为千 token）。音频输入另有单价，不在这里展开。
+    modelPricing: {
+      'doubao-seed-evolving': tokenListPrice('CNY', 6, 30, 1.2),
+      'doubao-seed-2-1-pro-260915': tokenListPrice('CNY', 6, 30, 1.2),
+      'doubao-seed-2-1-lite-260915': tokenListPrice('CNY', 0.8, 2.7, 0.16),
+      'doubao-seed-2-1-turbo-260628': tokenListPrice('CNY', 3, 15, 0.6),
+      'doubao-seed-2-0-lite-260428': { ...tokenListPrice('CNY', 0.6, 3.6, 0.12), tiers: [{ ...tokenPrice(0.9, 5.4, 0.18), aboveInputTokens: 32_000 }, { ...tokenPrice(1.8, 10.8, 0.36), aboveInputTokens: 128_000 }] },
+      'doubao-seed-2-0-mini-260428': { ...tokenListPrice('CNY', 0.2, 2, 0.04), tiers: [{ ...tokenPrice(0.4, 4, 0.08), aboveInputTokens: 32_000 }, { ...tokenPrice(0.8, 8, 0.16), aboveInputTokens: 128_000 }] },
+      'doubao-seed-character-260628': { ...tokenListPrice('CNY', 0.8, 2, 0.16), tiers: [{ ...tokenPrice(1.2, 6, 0.16), aboveInputTokens: 32_000 }] },
+      'deepseek-v4-1-flash-261017': { ...tokenListPrice('CNY', 2, 8, 0.04), offPeak: { ...tokenPrice(1, 4, 0.02), peakHours: DEEPSEEK_PEAK_HOURS } },
+      'deepseek-v4-1-flash-economy-261017': { ...tokenListPrice('CNY', 1.6, 6.4, 0.032), offPeak: { ...tokenPrice(0.8, 3.2, 0.016), peakHours: DEEPSEEK_PEAK_HOURS } },
+      'deepseek-v4-pro-ga-260813': tokenListPrice('CNY', 9, 27, 0.3),
+      'deepseek-v4-flash-ga-260731': tokenListPrice('CNY', 3, 9, 0.1),
+      'kimi-k3-1-pro-261024': tokenListPrice('CNY', 13, 68, 1.3),
+      'glm-5-3-flash-260828': tokenListPrice('CNY', 0.8, 2.8, 0.23),
+      'glm-5-2-260617': tokenListPrice('CNY', 8, 28, 2),
+    },
     websiteUrl: providerMetadata('volcengine').websiteUrl,
     apiKeyUrl: providerMetadata('volcengine').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/火山引擎.md',
@@ -135,6 +174,12 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
       structuredOutputMode: 'schema' as const, structuredOutputWithReasoning: true, sampling: false,
       contextWindow: 1_048_576, maxOutputTokens: 131_072,
     }])),
+    // 缓存写入按存放时长另计（5 分钟与输入同价、1 小时翻倍），不在这里登记；不按上下文长度分档。
+    modelPricing: {
+      'kimi-k3.1-pro': tokenListPrice('CNY', 13, 68, 1.3),
+      'kimi-k3.1-pro-highspeed': tokenListPrice('CNY', 26, 136, 1.3),
+      'kimi-k3': tokenListPrice('CNY', 20, 100, 2),
+    },
     websiteUrl: providerMetadata('kimi').websiteUrl,
     apiKeyUrl: providerMetadata('kimi').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/Kimi.md',
@@ -150,6 +195,13 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoningConfigurable: true,
     modelIds: ['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash', 'glm-5.3-flashx'],
     responsesModelIds: ['glm-5.3'],
+    // 中国大陆标准价（划线前价格，不含限时折扣）。
+    modelPricing: {
+      'glm-5.3': tokenListPrice('CNY', 8, 28, 2),
+      'glm-5v-turbo': { ...tokenListPrice('CNY', 5, 22, 1.2), tiers: [{ ...tokenPrice(7, 26, 1.8), aboveInputTokens: 32_000 }] },
+      'glm-5.3-flash': tokenListPrice('CNY', 0.8, 2.8, 0.23),
+      'glm-5.3-flashx': tokenListPrice('CNY', 2, 7, 0.57),
+    },
     websiteUrl: providerMetadata('bigmodel').websiteUrl,
     apiKeyUrl: providerMetadata('bigmodel').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/智谱GLM.md',
@@ -165,6 +217,10 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoningConfigurable: true,
     modelIds: ['mimo-v2.6-pro', 'mimo-v2.6-flash'],
     responsesModelIds: ['mimo-v2.6-pro', 'mimo-v2.6-flash', 'mimo-v2.6-pro-ultraspeed'],
+    modelPricing: {
+      'mimo-v2.6-pro': tokenListPrice('CNY', 3, 6, 0.025),
+      'mimo-v2.6-flash': tokenListPrice('CNY', 1, 2, 0.02),
+    },
     websiteUrl: providerMetadata('mimo').websiteUrl,
     apiKeyUrl: providerMetadata('mimo').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/小米MiMo.md',
@@ -189,6 +245,11 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
         structuredOutputMode: 'none', sampling: false, contextWindow: 1_000_000, maxOutputTokens: null,
       },
     },
+    // M3 按输入长度两档；官方标注“永久五折”，按折后价登记。
+    modelPricing: {
+      'MiniMax-M3.1-Flash': tokenListPrice('CNY', 1, 4, 0.1),
+      'MiniMax-M3': { ...tokenListPrice('CNY', 2.1, 8.4, 0.42), tiers: [{ ...tokenPrice(4.2, 16.8, 0.84), aboveInputTokens: 512_000 }] },
+    },
     websiteUrl: providerMetadata('minimax').websiteUrl,
     apiKeyUrl: providerMetadata('minimax').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/MiniMax.md',
@@ -210,6 +271,20 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     ],
     // 百炼 Responses 支持清单里的模型；kimi-k3 虽在清单里，但原厂 Kimi 不支持 Responses，目录按模型登记协议，留在 Chat。
     responsesModelIds: ['qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'deepseek-v4.1-flash', 'deepseek-v4-pro-0813', 'glm-5.3'],
+    // 华北2（北京）原价；DeepSeek 按忙时（北京时间 08:00–22:00）/ 闲时两档。计费页没有单列缓存价的不登记。
+    modelPricing: {
+      'qwen3.8-max': tokenListPrice('CNY', 12, 36),
+      'qwen3.8-flash': tokenListPrice('CNY', 0.8, 2.7),
+      'qwen3.7-plus': { ...tokenListPrice('CNY', 2, 8), tiers: [{ ...tokenPrice(6, 24), aboveInputTokens: 256_000 }] },
+      'deepseek-v4.1-flash': { ...tokenListPrice('CNY', 2, 8), offPeak: { ...tokenPrice(1, 4), peakHours: '北京时间 08:00–22:00' } },
+      'deepseek-v4-pro-0813': { ...tokenListPrice('CNY', 9, 27), offPeak: { ...tokenPrice(4.5, 13.5), peakHours: '北京时间 08:00–22:00' } },
+      'kimi-k3.1-pro': tokenListPrice('CNY', 13, 68, 1.3),
+      'kimi-k3': tokenListPrice('CNY', 20, 100),
+      'glm-5.3': tokenListPrice('CNY', 8, 28),
+      'MiniMax/MiniMax-M3.1-Flash': tokenListPrice('CNY', 1, 4),
+      'xiaomi/mimo-v2.6-pro-ultraspeed': tokenListPrice('CNY', 30, 60),
+      'stepfun/step-5-preview': tokenListPrice('CNY', 7, 20),
+    },
     websiteUrl: providerMetadata('bailian').websiteUrl,
     apiKeyUrl: providerMetadata('bailian').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/百炼Qwen.md',

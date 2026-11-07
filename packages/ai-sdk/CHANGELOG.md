@@ -2,6 +2,8 @@
 
 ## 0.10.0 - 未发布
 
+- **破坏性**：删除已下架的硅基流动 `TeleAI/TeleSpeechASR` 语音识别预设（`siliconFlowTeleSpeechAsr` 导出移除，`siliconFlowAsrPresets` 只剩 SenseVoiceSmall）；控制台与价格页都已不再列出该模型。
+- 新增 token 计价类型 `TokenListPricing`（输入 / 输出 / 缓存命中，可带按输入长度分档 `tiers` 与分时 `offPeak`）与 `tokenListPrice`、`tokenPrice`；`LlmProviderPreset` 新增 `modelPricing`，内置预设的 57 个推荐模型全部登记官方按量标准价；百炼 Qwen-MT 预设新增 `pricing`。新增 `textTokenRatioFor` 与 `estimateChineseTextCost`，按各家公布的汉字折 token 比例（DeepSeek 0.6、Kimi 1/1.5、GLM 与 MiniMax 1/1.6，未公布的按 1）把 token 单价换成每万字参考价。
 - 新增续接生成契约：`ModelRuntimeDefinition.continuations`（`RuntimeContinuation`：动作标识、目标模型、`available`、`capture` 从完成结果取平台引用、`params` 调整续接参数、`submit` 直接提交或带进输入区），续接请求在参数里带 `__continuation`（`CONTINUATION_PARAM` / `RuntimeContinuationParam`）；工具函数 `captureContinuations`、`findContinuation`、`buildContinuationParams`、`readContinuation`。宿主随结果保存引用，用户与助手不接触平台任务 ID。
 - FLUX 3 Video 接入草稿与草稿转正片：APIMart 新增“草稿”开关（`draft: true`，固定 hd，每秒 $0.048、续写 $0.096），续接 `finalize-draft` 用 `draft_from_task_id` 转正片，只发可改的 `resolution`，按正片全价计费；Fal 标准版文/图生视频与续写新增“草稿”开关（路由 `…/draft`，每秒 $0.06、续写 $0.12），续接 `finalize-draft` 从结果 `draft_cache` 取缓存，走 `draft-enhance` 出 1080p（每秒 $0.29）。转正片不收素材。Fal provider 收集结果地址时跳过 `draft_cache`，不再把缓存包当成第二段视频。
 - Midjourney 图转视频改用续接：图片模型（Imagine）声明 `animate` 续接到 `apimart-midjourney-video`，视频模型从续接引用读 `task_id`；删除手填“来源任务 ID”参数（旧工程残留值仍兼容读取），`alternativeInputParamIds` 改为 `__continuation`；“首帧”与“动画模式”只在续接时显示。

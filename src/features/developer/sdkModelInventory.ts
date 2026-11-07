@@ -2,9 +2,14 @@ import {
   LLM_MODEL_CATALOG_ENTRIES,
   LLM_PROVIDER_PRESETS,
   buildRequest,
+  estimateChineseTextCost,
+  findLlmProviderPreset,
+  textTokenRatioFor,
   normalizeRequestBody,
   type CapabilityDescriptor,
   type JsonObject,
+  type TokenListPricing,
+  type TokenPrice,
 } from '@henjicc/ai-sdk'
 import { bailianRealtimeAsrPresets } from '@henjicc/ai-sdk/capabilities/speech-recognition/bailian/realtime'
 import { volcengineRealtimeAsrPresets } from '@henjicc/ai-sdk/capabilities/speech-recognition/volcengine/realtime'
@@ -249,9 +254,24 @@ function formatAmount(amount: number): string {
   return amount >= 1 ? amount.toFixed(2) : amount.toPrecision(3).replace(/\.?0+$/, '')
 }
 
+function tokenAmounts(currency: TokenListPricing['currency'], price: TokenPrice): string {
+  const symbol = CURRENCY_SYMBOL[currency]
+  return `${symbol}${price.inputPerMillionTokens} / ${symbol}${price.outputPerMillionTokens}`
+}
+
+/** 每百万 tokens 的完整价目：输入 / 输出 / 缓存命中，外加分档与分时。 */
+function describeTokenPricing(pricing: TokenListPricing): string {
+  const line = (price: TokenPrice): string => `${tokenAmounts(pricing.currency, price)}${price.cacheReadPerMillionTokens === undefined ? '' : `，缓存命中 ${CURRENCY_SYMBOL[pricing.currency]}${price.cacheReadPerMillionTokens}`}`
+  return [
+    `每百万 tokens 输入 / 输出：${line(pricing)}${pricing.offPeak ? `（高峰：${pricing.offPeak.peakHours}）` : ''}`,
+    ...(pricing.tiers ?? []).map((tier) => `输入超过 ${tier.aboveInputTokens / 1000}K：${line(tier)}`),
+    ...(pricing.offPeak ? [`其余时段：${line(pricing.offPeak)}`] : []),
+  ].join('；')
+}
+
 /**
- * 每个模型的参考价：生成模型用默认参数加示例输入（图 1024²、视频 5 秒、音频 10 秒）算一次，语音识别按每小时单价。
- * 大语言模型与翻译在 SDK 里没有登记单价，记为缺价格。
+ * 每个模型的参考价：生成模型用默认参数加示例输入（图 1024²、视频 5 秒、音频 10 秒）算一次，语音识别按每小时单价，
+ * 大语言模型与翻译取 SDK 预设登记的每百万 tokens 单价，并按官方汉字折 token 比例换成每万字的参考价。
  * 生成模型这里直接调 calculator 而不走 createPriceEstimate：它把抛错和没声明都收成“暂不可估算”，开发者要看到具体原因。
  */
 export async function estimateSdkModelPrice(row: SdkModelRow): Promise<SdkModelPrice> {
@@ -261,8 +281,20 @@ export async function estimateSdkModelPrice(row: SdkModelRow): Promise<SdkModelP
     const display = `${CURRENCY_SYMBOL[hour.currency]}${formatAmount(hour.amount)}/小时`
     return hour.amount > 0 ? { status: 'priced', display } : { status: 'zero', display: '免费' }
   }
-  if (row.category === 'llm') return { status: 'missing', reason: 'SDK 的大语言模型目录没有单价' }
-  if (row.category === 'translation') return { status: 'missing', reason: 'SDK 的翻译预设没有单价' }
+  if (row.category === 'llm' || row.category === 'translation') {
+    const pricing = row.category === 'llm'
+      ? findLlmProviderPreset(row.providerId)?.modelPricing?.[row.modelId]
+      : Object.values(BAILIAN_QWEN_MT_PRESETS).find((preset) => preset.modelId === row.modelId)?.pricing
+    if (!pricing) return { status: 'missing', reason: row.category === 'llm' ? '供应商预设里没有登记这个模型的单价' : '翻译预设没有单价' }
+    const ratio = textTokenRatioFor(row.modelId)
+    const symbol = CURRENCY_SYMBOL[pricing.currency]
+    const perTenThousand = (input: number, output: number): string => `${symbol}${formatAmount(estimateChineseTextCost(pricing, ratio, { input, output }))}`
+    const conversion = `按 1 字约 ${Number(ratio.tokensPerChineseChar.toFixed(3))} token（${ratio.source}）`
+    // 翻译按“输入一万字、译出同样篇幅”给每万字的价；大语言模型输入输出单价差得多，分开列。
+    return row.category === 'translation'
+      ? { status: 'priced', display: `约 ${perTenThousand(10_000, 10_000)}/万字`, description: `${describeTokenPricing(pricing)}；译一万字约 ${perTenThousand(10_000, 10_000)}，${conversion}` }
+      : { status: 'priced', display: `${tokenAmounts(pricing.currency, pricing)} 每百万`, description: `${describeTokenPricing(pricing)}；每万字输入约 ${perTenThousand(10_000, 0)}、输出约 ${perTenThousand(0, 10_000)}，${conversion}` }
+  }
   const definition = row.generation?.definition
   if (!definition) return { status: 'missing', reason: '没有计价信息' }
   const { pricing } = definition

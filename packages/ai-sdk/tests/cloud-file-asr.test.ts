@@ -15,7 +15,6 @@ import {
   createSiliconFlowAsrModule,
   siliconFlowAsrPresets,
   siliconFlowSenseVoiceSmall,
-  siliconFlowTeleSpeechAsr,
 } from '../src/capabilities/speech-recognition/siliconflow'
 import type { RuntimeContext } from '../src/runtime'
 
@@ -199,11 +198,7 @@ describe('Groq 文件 ASR', () => {
 })
 
 describe('硅基流动文件 ASR', () => {
-  it('只公开 P0 两个官方模型 ID', () => {
-    expect(siliconFlowAsrPresets.map((preset) => preset.modelId)).toEqual([
-      'FunAudioLLM/SenseVoiceSmall',
-      'TeleAI/TeleSpeechASR',
-    ])
+  it('预设都声明硅基流动的文件转写', () => {
     expect(siliconFlowAsrPresets.every((preset) => (
       preset.descriptor.providerIds?.[0] === 'siliconflow'
       && preset.descriptor.features?.includes('file-transcription')
@@ -248,9 +243,9 @@ describe('硅基流动文件 ASR', () => {
         status: official.status ?? 429,
         headers: { 'x-siliconcloud-trace-id': 'error-trace-id' },
       })),
-      modules: [createSiliconFlowAsrModule(siliconFlowTeleSpeechAsr)],
+      modules: [createSiliconFlowAsrModule(siliconFlowSenseVoiceSmall)],
     })
-    const structuredFailure = await httpClient.execute(siliconFlowTeleSpeechAsr.id, {
+    const structuredFailure = await httpClient.execute(siliconFlowSenseVoiceSmall.id, {
       audio: { kind: 'bytes', bytes: new Uint8Array([1]), mediaType: 'audio/wav' },
     }).catch((error: unknown) => error)
     expect(structuredFailure).toMatchObject({ code: 'provider_http_error' })
@@ -261,35 +256,35 @@ describe('硅基流动文件 ASR', () => {
 
     const textErrorClient = createCapabilityClient({
       runtime: runtime('siliconflow', async () => new Response('Forbidden', { status: 403 })),
-      modules: [createSiliconFlowAsrModule(siliconFlowTeleSpeechAsr)],
+      modules: [createSiliconFlowAsrModule(siliconFlowSenseVoiceSmall)],
     })
-    const textFailure = await textErrorClient.execute(siliconFlowTeleSpeechAsr.id, {
+    const textFailure = await textErrorClient.execute(siliconFlowSenseVoiceSmall.id, {
       audio: { kind: 'bytes', bytes: new Uint8Array([1]), mediaType: 'audio/wav' },
     }).catch((error: unknown) => error)
     expect(textFailure).toMatchObject({ code: 'provider_http_error' })
     expect(textFailure).toBeInstanceOf(Error)
     expect((textFailure as Error).message).toContain('HTTP 403: Forbidden')
 
-    await expect(httpClient.execute(siliconFlowTeleSpeechAsr.id, {
+    await expect(httpClient.execute(siliconFlowSenseVoiceSmall.id, {
       audio: { kind: 'remote-url', url: 'https://audio.example/test.wav' },
     })).rejects.toMatchObject({ code: 'unsupported_media_source' })
-    await expect(httpClient.execute(siliconFlowTeleSpeechAsr.id, {
+    await expect(httpClient.execute(siliconFlowSenseVoiceSmall.id, {
       audio: { kind: 'bytes', bytes: new Uint8Array([1]), mediaType: 'audio/wav' },
       timestamps: 'yes' as unknown as boolean,
     })).rejects.toMatchObject({ code: 'invalid_parameter' })
-    await expect(httpClient.execute(siliconFlowTeleSpeechAsr.id, {
+    await expect(httpClient.execute(siliconFlowSenseVoiceSmall.id, {
       audio: { kind: 'bytes', bytes: new Uint8Array([1]), mediaType: 'audio/wav' },
       options: null as unknown as Readonly<Record<string, unknown>>,
     })).rejects.toMatchObject({ code: 'invalid_parameter' })
-    await expect(httpClient.execute(siliconFlowTeleSpeechAsr.id, {
+    await expect(httpClient.execute(siliconFlowSenseVoiceSmall.id, {
       audio: { kind: 'media-ref', ref: 1 as unknown as string },
     })).rejects.toMatchObject({ code: 'invalid_parameter' })
 
     const limitedClient = createCapabilityClient({
       runtime: runtime('siliconflow', async () => { throw new Error('network must not run') }),
-      modules: [createSiliconFlowAsrModule(siliconFlowTeleSpeechAsr, { maxFileBytes: 1 })],
+      modules: [createSiliconFlowAsrModule(siliconFlowSenseVoiceSmall, { maxFileBytes: 1 })],
     })
-    await expect(limitedClient.execute(siliconFlowTeleSpeechAsr.id, {
+    await expect(limitedClient.execute(siliconFlowSenseVoiceSmall.id, {
       audio: { kind: 'bytes', bytes: new Uint8Array([1, 2]), mediaType: 'audio/wav' },
     })).rejects.toMatchObject({ code: 'media_too_large' })
   })

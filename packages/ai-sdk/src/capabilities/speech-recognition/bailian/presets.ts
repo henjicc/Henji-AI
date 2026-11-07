@@ -69,7 +69,7 @@ export const bailianQwen3AsrFlashFiletrans = definePreset({
 
 export const bailianQwenAudio31AsrFlash = definePreset({ modelId: 'qwen-audio-3.1-asr-flash', protocol: 'fun-short-sse', maxInlineBytes: 7_500_000, supports: { vocabulary: true, keepDialect: true, speakerDiarization: true } })
 export const bailianQwenAudio31AsrFlashFiletrans = definePreset({ modelId: 'qwen-audio-3.1-asr-flash-filetrans', protocol: 'file-async', asyncInputField: 'file_urls', supports: { vocabulary: true, keepDialect: true } })
-// 3.0 与 3.1 是同一套 Qwen-Audio-ASR 接口，按音频秒数计费；官方标注方言保留与短音频说话人分离仅 3.1 支持。
+// 3.0 与 3.1 是同一套 Qwen-Audio-ASR 接口；3.0 按音频秒数计费，3.1 按 token 计费。官方标注方言保留与短音频说话人分离仅 3.1 支持。
 export const bailianQwenAudio30AsrFlash = definePreset({ modelId: 'qwen-audio-3.0-asr-flash', protocol: 'fun-short-sse', maxInlineBytes: 7_500_000, supports: { vocabulary: true } })
 export const bailianQwenAudio30AsrFlashFiletrans = definePreset({ modelId: 'qwen-audio-3.0-asr-flash-filetrans', protocol: 'file-async', asyncInputField: 'file_urls', supports: { vocabulary: true } })
 

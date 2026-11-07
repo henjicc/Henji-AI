@@ -56,7 +56,7 @@ Chat Completions 调用模型 API。同一账号在不同协议上的可用性�
 |---|---|---|---|---|---|
 | `glm-5.3` | 最新旗舰文本模型，面向软件工程与 Agent 任务 | 文本 → 文本 | 1M / 128K | 输入 8；输出 28；缓存命中 2 | 见国际价格页，发布前核对 |
 | `glm-5.3-flash` | GLM-5 系列首个原生多模态模型；2026-08-26 上线 | 文本、图片、视频、文件 → 文本 | 1M / 128K | 输入 0.8；输出 2.8；缓存命中 0.23 | 输入 0.15；输出 0.50；缓存命中 0.03 |
-| `glm-5v-turbo` | 面向看图、看视频写代码的多模态 Coding 基座 | 文本、图片、视频、文件 → 文本 | 200K / 128K | 官方模型页未直接列出，发布前重新查价格页 | 是否在国际站提供及价格未在本轮核对 |
+| `glm-5v-turbo` | 面向看图、看视频写代码的多模态 Coding 基座 | 文本、图片、视频、文件 → 文本 | 200K / 128K | 输入长度 0–32K：输入 5；输出 22；缓存命中 1.2。32K 以上：7 / 26 / 1.8（2026-11-08 读[文档版价格表](https://docs.bigmodel.cn/cn/guide/start/pricing)） | 是否在国际站提供及价格未在本轮核对 |
 
 2026-08-28 价格页对 `glm-5.3-flash` 显示“5 折限时两周”：输入 0.4、输出 1.4、
 缓存命中 0.115 元/百万 tokens，缓存存储限时免费。页面没有显示促销开始日或绝对结束日，
@@ -232,3 +232,7 @@ schema 未暴露 `tool_stream`，通用字段说明列出的支持模型也未�
 - [国际 HTTP API](https://docs.z.ai/guides/develop/http/introduction)（国际通用端点与 Bearer 鉴权）
 - [国际价格](https://docs.z.ai/guides/overview/pricing)（USD 标准/促销价与截止时间）
 - [国际文档索引](https://docs.z.ai/llms.txt)（国际站页面覆盖）
+
+## 2026-11-08 价格复核与文字折算
+
+文档版价格表 https://docs.bigmodel.cn/cn/guide/start/pricing （无需登录）复核 `glm-5.3` 8 / 28 / 2、`glm-5.3-flash` 0.8 / 2.8 / 0.23、`glm-5.3-flashx` 2 / 7 / 0.57 元/百万 tokens 与上表一致，缓存存储限时免费；`open.bigmodel.cn/pricing` 不列 5V-Turbo 的缓存命中价。Batch 按标准价五折。文字折算：官方[简介](https://docs.bigmodel.cn/cn/guide/start/introduction)写 token 与字数“约为 1:1.6”。

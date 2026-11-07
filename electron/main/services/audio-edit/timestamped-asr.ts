@@ -4,7 +4,7 @@ import {
   createBailianAsrModule, createCapabilityClient, createGroqAsrModule,
   createSiliconFlowAsrModule, createVolcengineAsrModule,
   groqWhisperLargeV3, groqWhisperLargeV3Turbo,
-  siliconFlowSenseVoiceSmall, siliconFlowTeleSpeechAsr, volcengineSeedAsrFile,
+  siliconFlowSenseVoiceSmall, volcengineSeedAsrFile,
   type RuntimeContext, type SpeechRecognitionEvent, type SpeechRecognitionOutput,
 } from '@henjicc/ai-sdk'
 import { ASR_CATALOG, estimateAsrCost, type AsrCostEstimate, asrProviderId, isTimestampedLocalAsr, resolveTimestampedLocalAsr } from '../../../../src/core/audioEdit/asrCatalog'
@@ -121,7 +121,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
   const client = createCapabilityClient({ runtime, modules: [
     ...bailianNonRealtimeAsrPresets.map((preset) => createBailianAsrModule(preset)),
     createGroqAsrModule(groqWhisperLargeV3Turbo), createGroqAsrModule(groqWhisperLargeV3),
-    createSiliconFlowAsrModule(siliconFlowSenseVoiceSmall), createSiliconFlowAsrModule(siliconFlowTeleSpeechAsr),
+    createSiliconFlowAsrModule(siliconFlowSenseVoiceSmall),
     createVolcengineAsrModule(volcengineSeedAsrFile),
   ] })
   return {

@@ -5,9 +5,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-11-07 |
-| 模型数量 | 生成主清单 20（图片 11 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 26（ASR 21 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 84 + SDK 跨项目能力 20（另有 Fal 工具 12） |
+| 最后更新 | 2026-11-08 |
+| 模型数量 | 生成主清单 20（图片 11 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 25（ASR 20 / 翻译 3 / LLM 2） |
+| 模型供应商文档数量 | 生成/存量 84 + SDK 跨项目能力 19（另有 Fal 工具 12） |
 | 覆盖供应商 | 火山引擎（官方生成/ASR）、百炼（官方）、硅基流动（官方 ASR）、智谱（官方 LLM）、Groq（官方 LLM/ASR）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
 另有 12 个按能力按需分发的 Fal 图像工具，不进入默认 124 模型兼容目录：
@@ -219,7 +219,6 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | `seedasr-2.0-realtime` | 实时 | 火山二进制 WebSocket | PCM S16LE / 16kHz / mono | [火山引擎](SeedASR-2.0-Realtime/SeedASR-2.0-Realtime_火山引擎.md) |
 | `seedasr-2.0-file` | 文件异步 | HTTP submit + query | 仅公网 URL；本地文件需外部 TOS/受管上传 | [火山引擎](SeedASR-2.0-File/SeedASR-2.0-File_火山引擎.md) |
 | `FunAudioLLM/SenseVoiceSmall` | 文件同步 | multipart HTTP | 1 小时 / 50 MB | [硅基流动](SenseVoiceSmall/SenseVoiceSmall_硅基流动.md) |
-| `TeleAI/TeleSpeechASR` | 文件同步 | multipart HTTP | 1 小时 / 50 MB | [硅基流动](TeleSpeechASR/TeleSpeechASR_硅基流动.md) |
 | `whisper-large-v3-turbo` | 文件同步 | OpenAI-compatible multipart | 免费层 25 MB；Developer 100 MB | [Groq](Whisper-Large-v3-Turbo/Whisper-Large-v3-Turbo_Groq.md) |
 | `whisper-large-v3` | 文件同步 | OpenAI-compatible multipart | 免费层 25 MB；Developer 100 MB | [Groq](Whisper-Large-v3/Whisper-Large-v3_Groq.md) |
 

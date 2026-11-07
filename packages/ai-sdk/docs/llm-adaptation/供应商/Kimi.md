@@ -27,7 +27,17 @@ Kimi 官方文档全文没有出现过 `responses.create`；`platform.kimi.com/d
 
 价格（2026-09-24 核对，元/百万 tokens）：缓存命中 2、缓存未命中 20、输出 100；另计缓存写入，TTL 5 分钟为 20、TTL 1 小时为 40，默认 5 分钟。命中仅按缓存命中单价计费，不重复收取缓存写入费用，命中后有效期续期。当前 SDK 未提供 Kimi 账单计算器，不从总输入 tokens 猜测缓存写入量。
 
-K3 是付费解锁模型：**充值后才能调用**，新用户认证赠送的 15 元代金券不能用于 K3。K3.1 Pro 可用代金券，Highspeed 不可用；K3.1 Pro 单价官方价格页表格未能读出，以控制台为准。
+K3 是付费解锁模型：**充值后才能调用**，新用户认证赠送的 15 元代金券不能用于 K3。K3.1 Pro 可用代金券，Highspeed 不可用。
+
+2026-11-08 用浏览器渲染 [价格页](https://platform.kimi.com/docs/pricing/chat)（无需登录；.md 地址与直接抓取只拿到空表）读到，元/百万 tokens：
+
+| 模型 | 输入（缓存未命中） | 输出 | 缓存命中 | 缓存写入 5 分钟 / 1 小时 |
+|---|---|---|---|---|
+| `kimi-k3.1-pro` | 13 | 68 | 1.3 | 13 / 26 |
+| `kimi-k3.1-pro-highspeed` | 26 | 136 | 1.3（页面原值，未翻倍） | 26 / 52 |
+| `kimi-k3` | 20 | 100 | 2 | 20 / 40 |
+
+不按上下文长度分档；Batch 只支持 K3.1 Pro 与 K3，按标准价 60%。文字折算：官方[简介](https://platform.kimi.com/docs/introduction)写“1 个 Token 大约相当于 1.5-2 个汉字”，英文 1 Token 约 3–4 个字符。
 
 K3.1 Pro 与 K3 的接口契约相同（2026-11-07 读 [K3.1 Pro 快速开始](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart)、[视觉](https://platform.kimi.com/docs/guide/use-kimi-vision-model.md)、[思考强度](https://platform.kimi.com/docs/guide/use-reasoning-effort.md)）：`reasoning_effort` low / high / max、默认 max、无法关闭；采样参数固定须省略；图片只收 base64 data URL；视频要经 Files API 上传后用 `ms://<file-id>`；`response_format` 支持 `json_schema`（strict）。项目预设：K3.1 Pro、Highspeed、K3 三个模型，图片开、视频不声明（SDK 没有 Files API 上传链路），结构化输出按 schema。官方现在也提供 Responses API（`/v1/responses`），项目仍走 Chat Completions。
 

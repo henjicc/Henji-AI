@@ -110,7 +110,7 @@ describe('能力 ID、来源命名空间与按需注册收口', () => {
     })).toHaveLength(1)
     expect(discovery.search({
       providerIds: 'siliconflow', operations: 'speech-to-text', features: 'file-transcription',
-    })).toHaveLength(2)
+    })).toHaveLength(siliconFlowAsrPresets.length)
     expect(discovery.search({
       providerIds: 'groq', operations: 'speech-to-text', features: 'file-transcription',
     })).toHaveLength(2)

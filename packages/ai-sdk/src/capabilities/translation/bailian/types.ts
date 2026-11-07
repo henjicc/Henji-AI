@@ -1,3 +1,5 @@
+import { tokenListPrice, type TokenListPricing } from '../../../pricing/tokenPricing'
+
 export type BailianQwenMtModelId =
   | 'qwen-mt-flash'
   | 'qwen-mt-plus'
@@ -9,23 +11,27 @@ export interface BailianQwenMtPreset {
   moduleId: string
   modelId: BailianQwenMtModelId
   streamingContent: BailianQwenMtStreamingContent
+  /** 华北2（北京）原价，不含限时免费额度。 */
+  pricing: TokenListPricing
 }
 
 function defineQwenMtPreset(
   modelId: BailianQwenMtModelId,
-  streamingContent: BailianQwenMtStreamingContent
+  streamingContent: BailianQwenMtStreamingContent,
+  pricing: TokenListPricing
 ): BailianQwenMtPreset {
   return {
     moduleId: `bailian.translation.${modelId}`,
     modelId,
     streamingContent,
+    pricing,
   }
 }
 
 export const BAILIAN_QWEN_MT_PRESETS = {
-  flash: defineQwenMtPreset('qwen-mt-flash', 'incremental'),
-  plus: defineQwenMtPreset('qwen-mt-plus', 'cumulative'),
-  lite: defineQwenMtPreset('qwen-mt-lite', 'incremental'),
+  flash: defineQwenMtPreset('qwen-mt-flash', 'incremental', tokenListPrice('CNY', 0.7, 1.95)),
+  plus: defineQwenMtPreset('qwen-mt-plus', 'cumulative', tokenListPrice('CNY', 1.8, 5.4)),
+  lite: defineQwenMtPreset('qwen-mt-lite', 'incremental', tokenListPrice('CNY', 0.6, 1.6)),
 } as const satisfies Record<string, BailianQwenMtPreset>
 
 export interface BailianTranslationMemoryItem {

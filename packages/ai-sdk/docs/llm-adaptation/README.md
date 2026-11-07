@@ -4,7 +4,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-11-07 |
+| 最后更新 | 2026-11-08 |
 | 覆盖供应商 | 火山引擎（Doubao）、Kimi（Moonshot）、智谱 GLM、DeepSeek、小米 MiMo、阿里云百炼（Qwen）、MiniMax |
 | 覆盖模型 | 7 家供应商的当前旗舰文本/多模态系列；供应商专属模型见各自文档内的“模型清单” |
 
@@ -164,3 +164,17 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 - **更新已有供应商**：直接改对应文件，同步更新该文件与本文件头部的"最后更新"。
 - **信息来源要求**：每条参数/价格都要能追溯到文件末尾"原始链接索引"里的某个链接；需要登录才能看到的页面必须标注，且优先尝试公开镜像（如 `help.aliyun.com` 之于百炼控制台）而不是直接要求登录。
 - **代码侧一旦补上新协议适配器**：回来更新本文件第二节"代码现状"，把对应协议从"资料"状态标记为"已实现"，否则这份文档会长期落后于代码。
+
+## 文字折算 token（2026-11-08）
+
+SDK 的 `textTokenRatioFor(modelId)` 用来把每百万 tokens 的单价换成“每万字”的参考价。比例跟着模型的分词器走，不跟托管平台走；公布区间取偏多一端。均无需登录。
+
+| 模型系列 | 每个汉字约折 token | 官方原话 | 出处 |
+|---|---|---|---|
+| DeepSeek | 0.6 | 1 个中文字符 ≈ 0.6 个 token | https://api-docs.deepseek.com/zh-cn/quick_start/token_usage |
+| Kimi | 0.667（1 token ≈ 1.5–2 字，取 1.5） | 1 个 Token 大约相当于 1.5-2 个汉字 | https://platform.kimi.com/docs/introduction |
+| 智谱 GLM | 0.625 | token 和字数的换算比例约为 1:1.6 | https://docs.bigmodel.cn/cn/guide/start/introduction |
+| MiniMax | 0.625 | 1600 中文字符约消耗 1000 tokens | https://platform.minimax.cn/docs/pricing/overview |
+| 其余（Qwen、豆包、MiMo、Step、gpt-oss） | 1（保守） | 硅基流动：对于典型的中文模型，1 Token 约等于 1-2 个汉字 | https://docs.siliconflow.com/en/faqs/billing-rules |
+
+百炼、火山方舟、小米 MiMo、派欧云、Groq 都没有公布文字折算比例（方舟明确说不同模型分词不同，让用 Token 计算器）。各供应商预设的单价登记在 `LlmProviderPreset.modelPricing`（`TokenListPricing`：输入 / 输出 / 缓存命中，可带按输入长度分档 `tiers` 与分时 `offPeak`），出处见各供应商文档。

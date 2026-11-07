@@ -1,9 +1,12 @@
 import type { LlmProviderPreset } from '../providerPresets'
 import { findProviderMetadata } from '../../providers/metadata'
+import { tokenListPrice, tokenPrice } from '../../pricing/tokenPricing'
 
 export const SILICONFLOW_PROVIDER_ID = 'siliconflow'
 export const SILICONFLOW_BASE_URL = 'https://api.siliconflow.cn/v1'
 export const SILICONFLOW_DEFAULT_MODEL_ID = 'deepseek-ai/DeepSeek-V4-Flash'
+
+const SILICONFLOW_PEAK_HOURS = '北京时间 00:00–02:00、08:00–24:00'
 
 const metadata = findProviderMetadata(SILICONFLOW_PROVIDER_ID)
 if (!metadata) throw new Error('[provider_metadata_missing] siliconflow')
@@ -45,6 +48,17 @@ export const SILICONFLOW_PROVIDER_PRESET: LlmProviderPreset = {
       toolCall: true, jsonOutput: true, structuredOutputMode: 'json' as const, reasoning: true,
       contextWindow: 1_048_576, maxOutputTokens: null,
     }])),
+  },
+  // 控制台模型详情“在线推理”价（单元格按千 tokens 标，这里换算成百万）；DeepSeek Flash 系列每天 02:00–08:00 为闲时价。
+  modelPricing: {
+    [SILICONFLOW_DEFAULT_MODEL_ID]: { ...tokenListPrice('CNY', 3, 9, 0.3), offPeak: { ...tokenPrice(1.5, 4.5, 0.15), peakHours: SILICONFLOW_PEAK_HOURS } },
+    'deepseek-ai/DeepSeek-V4.1-Flash': { ...tokenListPrice('CNY', 2, 8, 0.04), offPeak: { ...tokenPrice(1, 4, 0.02), peakHours: SILICONFLOW_PEAK_HOURS } },
+    'deepseek-ai/DeepSeek-V4-Pro': tokenListPrice('CNY', 12, 24, 1),
+    'zai-org/GLM-5.3': tokenListPrice('CNY', 8, 28, 2),
+    'zai-org/GLM-5.3-Flash': tokenListPrice('CNY', 0.8, 2.8, 0.23),
+    'zai-org/GLM-5.2': tokenListPrice('CNY', 8, 28, 2),
+    'moonshotai/Kimi-K2.7-Code': tokenListPrice('CNY', 6.5, 27, 1.3),
+    'Qwen/Qwen3.8-27B': tokenListPrice('CNY', 3, 12),
   },
   websiteUrl: metadata.websiteUrl,
   apiKeyUrl: metadata.apiKeyUrl,

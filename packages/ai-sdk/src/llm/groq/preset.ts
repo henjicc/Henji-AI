@@ -1,4 +1,5 @@
 import type { LlmProviderPreset } from '../providerPresets'
+import { tokenListPrice } from '../../pricing/tokenPricing'
 import type { LlmModelConfig } from '../types'
 import { findProviderMetadata } from '../../providers/metadata'
 
@@ -28,6 +29,11 @@ export const GROQ_PROVIDER_PRESET: LlmProviderPreset = {
       toolCall: true, jsonOutput: true, structuredOutputMode: 'schema', reasoning: true,
       contextWindow: 131_072, maxOutputTokens: 16_384,
     },
+  },
+  modelPricing: {
+    [GROQ_DEFAULT_MODEL_ID]: tokenListPrice('USD', 0.075, 0.3),
+    'openai/gpt-oss-120b': tokenListPrice('USD', 0.15, 0.6),
+    'qwen/qwen3.8-27b': tokenListPrice('USD', 0.8, 4),
   },
   websiteUrl: GROQ_PROVIDER_METADATA.websiteUrl,
   apiKeyUrl: GROQ_PROVIDER_METADATA.apiKeyUrl,
