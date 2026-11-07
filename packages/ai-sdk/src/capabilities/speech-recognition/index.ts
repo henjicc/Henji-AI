@@ -36,6 +36,8 @@ export interface SpeechRecognitionOutput {
   language?: string
   durationMs?: number
   segments?: readonly SpeechRecognitionSegment[]
+  /** 按 token 计费的模型返回的用量；按音频时长计费的模型不返回。 */
+  usage?: { inputTokens?: number; outputTokens?: number }
   providerMetadata?: unknown
 }
 

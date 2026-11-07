@@ -66,6 +66,7 @@ export function parseFunShortSse(payload: string): SpeechRecognitionOutput {
   const segments: SpeechRecognitionSegment[] = []
   let latestText = ''
   let durationMs: number | undefined
+  let usage: SpeechRecognitionOutput['usage']
   for (const line of payload.split(/\r?\n/)) {
     const trimmed = line.trim()
     if (!trimmed.startsWith('data:')) continue
@@ -81,8 +82,13 @@ export function parseFunShortSse(payload: string): SpeechRecognitionOutput {
     if (text(root?.code)) throw new AiRuntimeError('provider_task_failed', text(root?.message) ?? String(root?.code))
     const output = record(root?.output)
     latestText = text(output?.text) ?? latestText
-    const durationSeconds = numberValue(record(root?.usage)?.duration)
+    const usageRecord = record(root?.usage)
+    const durationSeconds = numberValue(usageRecord?.duration)
     if (durationSeconds !== undefined) durationMs = durationSeconds * 1_000
+    // 只有 qwen-audio-3.1-asr-flash 返回 token 用量（按 token 计费）；随句末结果给出，以最后一次为准。
+    const inputTokens = numberValue(usageRecord?.input_tokens)
+    const outputTokens = numberValue(usageRecord?.output_tokens)
+    if (inputTokens !== undefined || outputTokens !== undefined) usage = { inputTokens, outputTokens }
     for (const sentence of recordsOrOne(output?.sentences ?? output?.sentence)) {
       if (sentence.sentence_end !== true) continue
       const segment = parseBailianSentence(sentence)
@@ -104,7 +110,7 @@ export function parseFunShortSse(payload: string): SpeechRecognitionOutput {
   const combined = segments.map((segment) => segment.text).join('').trim()
   const finalText = combined || latestText
   if (!finalText) throw new AiRuntimeError('invalid_response', 'Bailian Fun-ASR response has no transcript')
-  return { text: finalText, durationMs, segments, providerMetadata: { protocol: 'fun-short-sse' } }
+  return { text: finalText, durationMs, segments, ...(usage ? { usage } : {}), providerMetadata: { protocol: 'fun-short-sse' } }
 }
 
 export function parseQwenShortResponse(payload: unknown): SpeechRecognitionOutput {

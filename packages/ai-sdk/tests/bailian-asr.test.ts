@@ -81,6 +81,18 @@ describe('百炼非实时 ASR 按需模块', () => {
     expect(() => parseFunShortSse('data:{"output":{}}')).toThrow('no transcript')
   })
 
+  // 3.1 按 token 计费，字段表写明 usage 带 input_tokens / output_tokens；宿主按它核对计费，缺了只能猜。
+  it('3.1 字段表构造用量：带出 token 数，只带时长的不伪造 token', () => {
+    const sentence = { text: '你好', sentence_end: true, begin_time: 0, end_time: 1000 }
+    const withTokens = JSON.stringify({ output: { sentence }, usage: { duration: 2, input_tokens: 85, output_tokens: 3, total_tokens: 88 } })
+    expect(parseFunShortSse(`data:${withTokens}
+
+`)).toMatchObject({ durationMs: 2000, usage: { inputTokens: 85, outputTokens: 3 } })
+    expect(parseFunShortSse(`data:${JSON.stringify({ output: { sentence }, usage: { duration: 2 } })}
+
+`)).not.toHaveProperty('usage')
+  })
+
   it('3.1 文件转写沿用 file_urls，channelId 映射数组且 parameters 始终存在', async () => {
     const calls: Array<Record<string, unknown>> = []
     const fetch = vi.fn(async (url: string, init?: RequestInit) => {

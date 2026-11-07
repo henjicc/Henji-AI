@@ -2,6 +2,7 @@
 
 ## 0.10.0 - 未发布
 
+- `SpeechRecognitionOutput` 新增可选 `usage`（`inputTokens` / `outputTokens`）；百炼短音频协议从 `usage.input_tokens` / `output_tokens` 读出，目前只有按 token 计费的 `qwen-audio-3.1-asr-flash` 返回。
 - **破坏性**：删除已下架的硅基流动 `TeleAI/TeleSpeechASR` 语音识别预设（`siliconFlowTeleSpeechAsr` 导出移除，`siliconFlowAsrPresets` 只剩 SenseVoiceSmall）；控制台与价格页都已不再列出该模型。
 - 新增 token 计价类型 `TokenListPricing`（输入 / 输出 / 缓存命中，可带按输入长度分档 `tiers` 与分时 `offPeak`）与 `tokenListPrice`、`tokenPrice`；`LlmProviderPreset` 新增 `modelPricing`，内置预设的 57 个推荐模型全部登记官方按量标准价；百炼 Qwen-MT 预设新增 `pricing`。新增 `textTokenRatioFor` 与 `estimateChineseTextCost`，按各家公布的汉字折 token 比例（DeepSeek 0.6、Kimi 1/1.5、GLM 与 MiniMax 1/1.6，未公布的按 1）把 token 单价换成每万字参考价。
 - 新增续接生成契约：`ModelRuntimeDefinition.continuations`（`RuntimeContinuation`：动作标识、目标模型、`available`、`capture` 从完成结果取平台引用、`params` 调整续接参数、`submit` 直接提交或带进输入区），续接请求在参数里带 `__continuation`（`CONTINUATION_PARAM` / `RuntimeContinuationParam`）；工具函数 `captureContinuations`、`findContinuation`、`buildContinuationParams`、`readContinuation`。宿主随结果保存引用，用户与助手不接触平台任务 ID。

@@ -68,11 +68,14 @@ export function resolveTimestampedLocalAsr(
 }
 
 /**
- * Qwen-Audio 3.1 识别按 token 计价（元/百万 tokens），官方没写每秒音频折多少 token，按接口文档的用量示例折算：
- * 2 秒音频输入 85 token（9 秒 365），取偏多的每秒 42.5；输出按每秒 6 个汉字、1 字 1 token（无公布比例时的保守取值）。
+ * Qwen-Audio 3.1 识别按 token 计价（元/百万 tokens），官方没写每秒音频折多少 token。
+ * 2026-11-08 实调短音频（不传上下文）：4.85 秒输入 61、30.6 秒输入 383 token，即每秒 12.5、没有固定开销；传了上下文文字会另计输入。
+ * 输出 18 字 10 token、125 字 62 token，约 0.5–0.56 token/字。
+ * 文件转写是同一模型同价，按同样比例；流式无法用同一方式实测，按官方流式示例（2 秒 85、9 秒 365）取偏多的每秒 42.5。
+ * 输出按每秒 6 个汉字（快语速）、每字 0.5 token 估。
  */
-function qwenAudioTokenPricePerSecond(inputPerMillion: number, outputPerMillion: number): number {
-  return (42.5 * inputPerMillion + 6 * outputPerMillion) / 1_000_000
+function qwenAudioTokenPricePerSecond(inputTokensPerSecond: number, inputPerMillion: number, outputPerMillion: number): number {
+  return (inputTokensPerSecond * inputPerMillion + 3 * outputPerMillion) / 1_000_000
 }
 
 /**
@@ -91,9 +94,9 @@ const asrDurationPrices: Readonly<Record<string, { currency: 'CNY' | 'USD'; perS
   'bailian.speech-recognition.qwen-audio-3.0-asr-flash': { currency: 'CNY', perSecond: .00022 },
   'bailian.speech-recognition.qwen-audio-3.0-asr-flash-filetrans': { currency: 'CNY', perSecond: .00022 },
   'bailian.speech-recognition.qwen-audio-3.0-asr-flash-streaming': { currency: 'CNY', perSecond: .00033 },
-  'bailian.speech-recognition.qwen-audio-3.1-asr-flash': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(.8, 2.7) },
-  'bailian.speech-recognition.qwen-audio-3.1-asr-flash-filetrans': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(.8, 2.7) },
-  'bailian.speech-recognition.qwen-audio-3.1-asr-flash-streaming': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(6, 4.5) },
+  'bailian.speech-recognition.qwen-audio-3.1-asr-flash': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(12.5, .8, 2.7) },
+  'bailian.speech-recognition.qwen-audio-3.1-asr-flash-filetrans': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(12.5, .8, 2.7) },
+  'bailian.speech-recognition.qwen-audio-3.1-asr-flash-streaming': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(42.5, 6, 4.5) },
   'bailian.speech-recognition.fun-asr-realtime': { currency: 'CNY', perSecond: .00033 },
   'bailian.speech-recognition.fun-asr-realtime-2026-02-28': { currency: 'CNY', perSecond: .00033 },
   'bailian.speech-recognition.qwen3-asr-flash-realtime': { currency: 'CNY', perSecond: .00033 },
