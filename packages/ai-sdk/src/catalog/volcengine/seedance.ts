@@ -6,6 +6,7 @@ import type { RuntimeParamDef } from '../../types/model'
 import type { JsonObject, JsonValue } from '../../types/runtime'
 
 const RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'] as const
+const MIN_BILLED_INPUT_VIDEO_SECONDS = 4
 
 /** 官方「不同宽高比对应的宽高像素值」表；2.5 与 2.0 系列在 480p 档取值不同。 */
 const PIXELS: Record<'2.5' | '2.0', Record<string, Record<string, [number, number]>>> = {
@@ -192,7 +193,9 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
         // 编辑任务输出时长跟随原视频；自动时长按上限预估。
         const outputSeconds = task === 'edit' && withVideo ? inputSeconds : autoDuration(input) ? maxDuration : duration(input)
         // 官方 token 用量估算：(输入视频时长 + 输出时长) × 宽 × 高 × 24fps / 1024。
-        const tokens = (inputSeconds + outputSeconds) * width * height * 24 / 1024
+        // 含视频时另有最低 token 用量：官方价格示例里输入 2–4 秒同价，即输入视频不足 4 秒按 4 秒计。
+        const billedInputSeconds = withVideo ? Math.max(MIN_BILLED_INPUT_VIDEO_SECONDS, inputSeconds) : 0
+        const tokens = (billedInputSeconds + outputSeconds) * width * height * 24 / 1024
         const prices = withVideo ? config.videoTokenPrices : config.tokenPrices
         return tokens * (prices[res] ?? prices['720p']) / 1_000_000
       },

@@ -19,7 +19,7 @@
 | prompt | 必填，≤8000；可用 `@first_frame`、`@keyframe_N`、`@last_frame` 指代已上传的帧 | 统一提示词 |
 | duration | 整数 3–30，默认 5；同时限制总帧数：3s→4、4s→5…8s→9、≥9s→10 | 下拉 3–30；超出帧数在提交前报错 |
 | resolution | 720p / 1080p，默认 720p | 展示 |
-| aspect_ratio | auto、16:9、9:16、1:1、21:9；仅无帧时生效，有帧跟随首帧 | 智能比例：有帧不发送，无帧本地转具体值 |
+| aspect_ratio | auto、16:9、9:16、1:1、21:9；仅无帧时生效，有帧跟随首帧 | 智能比例：有帧不发送也不显示，无帧本地转具体值 |
 | first_frame_url / keyframe_urls（≤8）/ last_frame_url | 公网图片 URL | 上传图片依次映射：第 1 张首帧，末张尾帧，中间为关键帧 |
 
 ### reference-to-video

@@ -1,6 +1,6 @@
 import type { JsonObject, JsonValue } from '../../types/runtime'
 import type { ModelRuntimeDefinition } from '../../types/model'
-import { hasUploadedVideo, resolveKieImageSources, resolveKieVideoSources } from './mediaSources'
+import { hasUploadedImage, hasUploadedVideo, resolveKieImageSources, resolveKieVideoSources } from './mediaSources'
 
 /** Kling 4.0 标准版与 Flash 共用 keyframe-to-video / reference-to-video 两个端点，差别只在档位与上限。 */
 export interface Kling40Variant {
@@ -51,7 +51,8 @@ export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDef
     },
     params: [
       { id: `${p}Mode`, type: 'dropdown', order: 1, default: 'text-image-to-video', options: MODES.map(value => ({ value })) },
-      { id: `${p}AspectRatio`, type: 'dropdown', order: 2, default: 'smart', options: ['smart', ...RATIOS].map(value => ({ value })) },
+      // 关键帧模式下有图时画面比例跟随首帧，请求不带比例，界面也不显示。
+      { id: `${p}AspectRatio`, type: 'dropdown', order: 2, default: 'smart', options: ['smart', ...RATIOS].map(value => ({ value })), visible: { condition: params => isReference(params) || !hasUploadedImage(params) } },
       ...(variant.resolutions.length > 1
         ? [{ id: `${p}Resolution`, type: 'dropdown' as const, order: 3, default: variant.resolutions[0], options: variant.resolutions.map(value => ({ value })) }]
         : []),

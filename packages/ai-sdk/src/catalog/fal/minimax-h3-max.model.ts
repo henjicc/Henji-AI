@@ -41,7 +41,7 @@ function ratio(params: JsonObject): string {
 
 export const falMiniMaxH3MaxModel = defineModel({
     meta: {
-        id: 'fal-ai-minimax-h3-max', canonicalModelId: 'minimax-h3-max', seriesId: 'minimax-hailuo', seriesRank: 3.1,
+        id: 'fal-ai-minimax-h3-max', canonicalModelId: 'minimax-h3-max', seriesId: 'hailuo', seriesRank: 3.1,
         provider: 'fal', type: 'video',
         tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
         polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 75 }

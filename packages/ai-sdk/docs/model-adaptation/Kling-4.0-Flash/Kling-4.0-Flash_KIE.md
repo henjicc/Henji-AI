@@ -17,7 +17,7 @@
 | resolution | 只有 720p（项目不显示分辨率，固定发送 720p） |
 | duration | 3–20 秒 |
 | keyframe | 只接受 `first_frame_url`；发送中间帧或尾帧会被拒绝，项目限制最多 1 张图 |
-| keyframe aspect_ratio | 16:9、9:16、1:1、21:9，没有 auto；有首帧时跟随首帧（项目不发送） |
+| keyframe aspect_ratio | 16:9、9:16、1:1、21:9，没有 auto；有首帧时跟随首帧（项目不发送，比例选项也隐藏） |
 | reference | 不支持独立 `voices`；参考视频与视频主体总时长须在 2–20 秒，否则任务失败 |
 
 elements 同样需要结构化编辑界面，本轮不显示、不请求。事件契约沿用 KIE Market 统一任务。

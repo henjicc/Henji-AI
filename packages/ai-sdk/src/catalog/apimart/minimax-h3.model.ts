@@ -6,7 +6,7 @@ import type { JsonValue, JsonObject } from '../../types/runtime'
 
 export const apimartMiniMaxH3Model = defineModel({
   meta: {
-    id: 'apimart-minimax-h3', canonicalModelId: 'minimax-h3', seriesId: 'minimax-video', seriesRank: 3,
+    id: 'apimart-minimax-h3', canonicalModelId: 'minimax-h3', seriesId: 'hailuo', seriesRank: 3,
     provider: 'apimart', type: 'video',
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
     aliases: ['minimax-h3-apimart'], polling: { interval: 5000, maxAttempts: 180, expectedAttempts: 60 }

@@ -62,6 +62,10 @@ describe('APIMart 渠道、版本与模式路由', () => {
     expect(edit).toMatchObject({ model: 'gemini-omni-1.2-flash-ext', omni_reference_task_type: 'edit', video_urls: vid })
     expect(edit).not.toHaveProperty('duration')
     expect((await build('apimart-gemini-omni-1.2-flash', { apimartGeminiOmni12Mode: 'extend', uploadedVideoFilePaths: vid, apimartGeminiOmni12Duration: 15 })).duration).toBe(10)
+    // Ext 带图时不传比例才会跟随素材；官方渠道与纯文生照常发送。
+    expect(await build('apimart-gemini-omni-1.2-flash', { apimartGeminiOmni12Channel: 'ext', uploadedFilePaths: img(1) })).not.toHaveProperty('aspect_ratio')
+    expect(await build('apimart-gemini-omni-1.2-flash', { apimartGeminiOmni12Channel: 'ext', apimartGeminiOmni12AspectRatio: '9:16' })).toMatchObject({ aspect_ratio: '9:16' })
+    expect(await build('apimart-gemini-omni-1.2-flash', { uploadedFilePaths: img(1) })).toMatchObject({ aspect_ratio: '16:9' })
   })
 
   it('Wan 3.0：版本换模型名，参考模式显式声明 reference', async () => {

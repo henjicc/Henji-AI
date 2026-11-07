@@ -7,6 +7,6 @@ export const volcengineSeedance20MiniModel = createVolcengineSeedanceModel({
   resolutions: ['480p', '720p'],
   tokenPrices: { '480p': 23, '720p': 23 },
   videoTokenPrices: { '480p': 14, '720p': 14 },
-  priceDescription: '按 token 计费：480p/720p ¥23 每百万 token；token ≈ 时长 × 宽 × 高 × 24 / 1024（720p 16:9 5 秒约 ¥2.48）；带参考视频时 480p/720p ¥14 每百万 token，输入视频时长也计入',
+  priceDescription: '按 token 计费：480p/720p ¥23 每百万 token；token ≈ 时长 × 宽 × 高 × 24 / 1024（720p 16:9 5 秒约 ¥2.48）；带参考视频时 480p/720p ¥14 每百万 token，输入视频时长也计入（不足 4 秒按 4 秒）',
 })
 export default volcengineSeedance20MiniModel

@@ -93,6 +93,14 @@ describe('2026-11 KIE / Grsai 新模型请求契约', () => {
     expect(input).not.toHaveProperty('aspect_ratio')
     await expect(build(kieKling40Model, { images: img(5), kieKling40Duration: '3' })).rejects.toThrow('关键帧')
     await expect(build(kieKling40FlashModel, { images: img(2) })).rejects.toThrow('关键帧')
+    // 比例不发送时界面也不显示，参考模式照常显示。
+    const ratioVisible = (params: JsonObject) => {
+      const visible = kieKling40Model.params.find(param => param.id === 'kieKling40AspectRatio')?.visible
+      return typeof visible?.condition === 'function' ? visible.condition(params) : true
+    }
+    expect(ratioVisible({ images: img(1) })).toBe(false)
+    expect(ratioVisible({})).toBe(true)
+    expect(ratioVisible({ kieKling40Mode: 'reference-to-video', images: img(1) })).toBe(true)
   })
 
   it('Wan 3.0 首尾帧与参考素材按模式互斥发送', async () => {

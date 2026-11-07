@@ -29,7 +29,7 @@ export const SILICONFLOW_PROVIDER_PRESET: LlmProviderPreset = {
     'Qwen/Qwen3.8-27B',
   ],
   // 托管能力以硅基流动为准（模型广场的结构化字段：vlm、functionCallSupport、jsonModeSupport、contextLen），
-  // 不继承原厂；平台没给输出上限，留空由动态验证补齐。视频输入未取得托管接口的字段契约，一律不声明。
+  // 不继承原厂；平台没有单独的输出上限（max_tokens 只受上下文窗口约束），留空。视频输入未取得托管接口的字段契约，一律不声明。
   modelCapabilities: {
     'zai-org/GLM-5.3': {
       image: false, video: false, audio: false, file: false,

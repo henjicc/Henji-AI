@@ -7,7 +7,7 @@ export const kieMiniMaxH3Model = defineModel({
     meta: {
         id: 'kie-minimax-h3',
         canonicalModelId: 'minimax-h3',
-        seriesId: 'minimax-video',
+        seriesId: 'hailuo',
         seriesRank: 3,
         provider: 'kie',
         type: 'video',

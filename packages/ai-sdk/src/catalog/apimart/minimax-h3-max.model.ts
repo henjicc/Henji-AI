@@ -28,7 +28,7 @@ function audioSources(params: JsonObject): string[] {
 
 export const apimartMiniMaxH3MaxModel = defineModel({
   meta: {
-    id: 'apimart-minimax-h3-max', canonicalModelId: 'minimax-h3-max', seriesId: 'minimax-video', seriesRank: 3.1,
+    id: 'apimart-minimax-h3-max', canonicalModelId: 'minimax-h3-max', seriesId: 'hailuo', seriesRank: 3.1,
     provider: 'apimart', type: 'video',
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
     polling: { interval: 5000, maxAttempts: 180, expectedAttempts: 50 },

@@ -156,6 +156,16 @@ describe('参考视频（火山方舟 Seedance、百炼万相 3.0）', () => {
     })).toBeCloseTo(tokens * 28 / 1_000_000, 6)
   })
 
+  it('Seedance 含视频时输入不足 4 秒按最低用量计，与官方价格示例一致', () => {
+    // 官方示例：2.0 480p 16:9 输出 5 秒，输入 2–4 秒 ¥2.53、输入 15 秒 ¥5.62。
+    const params = (seconds: number) => ({
+      volcengineSeedance20Mode: 'reference-to-video', volcengineSeedance20Resolution: '480p', volcengineSeedance20AspectRatio: '16:9',
+      volcengineSeedance20Duration: 5, uploadedVideoFilePaths: ['https://h/a.mp4'], __videoDurationSeconds: [seconds],
+    })
+    expect(price(volcengineSeedance20Model, params(2))).toBeCloseTo(2.53, 2)
+    expect(price(volcengineSeedance20Model, params(15))).toBeCloseTo(5.62, 2)
+  })
+
   it('万相 3.0 参考模式发参考视频与参考音频，输入视频时长与输出同价计入', () => {
     const params = {
       prompt: '视频1 接着往下拍', bailianWan30Mode: 'reference-to-video', bailianWan30Resolution: '720P', bailianWan30Duration: 5,

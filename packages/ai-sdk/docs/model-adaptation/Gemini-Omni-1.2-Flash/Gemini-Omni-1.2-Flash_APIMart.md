@@ -62,6 +62,7 @@
 - 新建独立模型而不并入 `apimart-gemini-omni-flash`：旧模型的通用标识是 `gemini-omni-video`（对应 Gemini Omni Flash 预览版），1.2 Flash 是另一个跨供应商的通用模型 `gemini-omni-1.2-flash`，合并会让同一模型卡片挂两个通用标识。
 - 顶层 `role: 'channel'` 渠道（默认官方）+ `role: 'mode'` 模式：文/图生视频（0 张文生、1 张首帧、2 张首尾帧；Ext 最多 1 张）、多图参考、视频编辑、视频续写。
 - 时长默认 10；编辑模式隐藏并不发送；续写模式范围收为 3–10；首尾帧在请求构建时收为 ≤ 10。
+- 比例：编辑与续写跟随输入视频；Ext 渠道带首帧或参考图时不传 `aspect_ratio` 以跟随素材。这些情况下比例选项隐藏且不发送。
 - 不显示、不请求：`extend_from_task_id`、`negative_prompt`、`system_prompt`。
 - APIMart 没有通用视频上传端点，视频素材必须是公网 URL。
 
