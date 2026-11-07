@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { Provider } from '@/config/providers'
-import { buildProviderCenterGroups, migrateLegacyTypeVisibility } from './providerCenterModel'
+import { buildProviderCenterGroups, migrateLegacyTypeVisibility, setLlmModelsEnabled } from './providerCenterModel'
 
 const generation: Provider = {
   id: 'ppio',
@@ -48,9 +48,27 @@ describe('providerCenterModel', () => {
       hiddenProviders: new Set(), hiddenModels: new Set(),
     })
     expect(group.credentialId).toBe('ppio')
-    expect(group.models.map(model => model.source)).toEqual(['generation', 'llm'])
+    expect(group.models.slice(0, 2).map(model => model.source)).toEqual(['generation', 'llm'])
     expect(group.models[0]).toMatchObject({ category: 'image-generation', capabilityIds: ['image-generation'] })
     expect(group.models[1]).toMatchObject({ category: 'text-generation', capabilityIds: ['text-generation'] })
+  })
+
+  it('预设后来新增、配置里没有的模型也列出，显示为未启用，打开时加入配置', () => {
+    const [group] = buildProviderCenterGroups({
+      generationProviders: [generation], llmProviders: [llmProvider()], llmModels: [llmModel],
+      hiddenProviders: new Set(), hiddenModels: new Set(),
+    })
+    const notAdded = group.models.find(model => model.source === 'llm' && model.modelId === 'zai-org/glm-5.3')
+    expect(notAdded).toMatchObject({ enabled: false })
+    // 预设里已过时的不列
+    expect(group.models.some(model => model.modelId === 'moonshotai/kimi-k2.6')).toBe(false)
+    const next = setLlmModelsEnabled([llmModel], [notAdded!], true)
+    expect(next.map(model => [model.modelId, model.enabled])).toEqual([['text-one', true], ['zai-org/glm-5.3', true]])
+    expect(setLlmModelsEnabled([llmModel], [group.models[1]], false)).toEqual([{ ...llmModel, enabled: false }])
+    // 停用时不把未加入的预设模型写进配置；预设模型只能开关，不提供删除。
+    expect(setLlmModelsEnabled([llmModel], [notAdded!], false)).toEqual([llmModel])
+    expect(notAdded?.presetModel).toBe(true)
+    expect(group.models[1].presetModel).toBe(false)
   })
 
   it('LLM 停用但生成模型仍可用时，供应商总状态保持启用', () => {

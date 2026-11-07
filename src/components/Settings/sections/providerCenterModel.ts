@@ -1,4 +1,4 @@
-import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
+import { createModelsFromPreset, findLlmProviderPreset, type LlmModelConfig, type LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { Provider } from '@/config/providers'
 import { providerBrandId } from '@/core/config/providerBrands'
 
@@ -21,6 +21,8 @@ export interface ProviderCenterModelItem {
   enabled: boolean
   generationModel?: Provider['models'][number]
   llmModel?: LlmModelConfig
+  /** 预设自带的大语言模型：总是列出，只能开关，不能删除（删了下次也会以未启用重新列出）。 */
+  presetModel?: boolean
 }
 
 export interface ProviderCenterGroup {
@@ -84,20 +86,45 @@ function generationItems(
   })
 }
 
+/** 预设供应商当前分档下的预设模型（已过时的不算）。 */
+export function presetLlmModels(provider: LlmProviderConfig): LlmModelConfig[] {
+  const preset = provider.setup?.kind === 'preset' ? findLlmProviderPreset(provider.setup.presetId) : undefined
+  return preset ? createModelsFromPreset(preset, provider) : []
+}
+
 function llmItems(provider: LlmProviderConfig, models: LlmModelConfig[]): ProviderCenterModelItem[] {
-  return models
-    .filter(model => model.providerId === provider.providerId)
-    .map(model => ({
-      id: `llm:${provider.providerId}:${model.modelId}`,
-      source: 'llm',
-      providerId: provider.providerId,
-      modelId: model.modelId,
-      name: model.displayName,
-      category: 'text-generation',
-      capabilityIds: ['text-generation'],
-      enabled: provider.enabled && model.enabled,
-      llmModel: model,
-    }))
+  const configured = models.filter(model => model.providerId === provider.providerId)
+  const presets = presetLlmModels(provider)
+  const presetIds = new Set(presets.map(model => model.modelId))
+  // 配置只在添加供应商时按当时的预设写入一次，预设后来新增的模型不会进已有配置：
+  // 这里一并列出、显示为未启用，打开时由 setLlmModelsEnabled 加入配置。
+  const notAdded = presets
+    .filter(model => !configured.some(item => item.modelId === model.modelId))
+    .map(model => ({ ...model, enabled: false }))
+  return [...configured, ...notAdded].map(model => ({
+    id: `llm:${provider.providerId}:${model.modelId}`,
+    source: 'llm',
+    providerId: provider.providerId,
+    modelId: model.modelId,
+    name: model.displayName,
+    category: 'text-generation',
+    capabilityIds: ['text-generation'],
+    enabled: provider.enabled && model.enabled,
+    llmModel: model,
+    presetModel: presetIds.has(model.modelId),
+  }))
+}
+
+/** 改大语言模型的启用状态；列表里还没加入配置的预设模型（见 llmItems）打开时才加入，关闭时不写入。 */
+export function setLlmModelsEnabled(models: LlmModelConfig[], items: ProviderCenterModelItem[], enabled: boolean): LlmModelConfig[] {
+  const targets = items.filter(item => item.source === 'llm' && item.llmModel)
+  const keyOf = (providerId: string, modelId: string): string => `${providerId}:${modelId}`
+  const keys = new Set(targets.map(item => keyOf(item.providerId, item.modelId)))
+  const existing = new Set(models.map(model => keyOf(model.providerId, model.modelId)))
+  return [
+    ...models.map(model => keys.has(keyOf(model.providerId, model.modelId)) ? { ...model, enabled } : model),
+    ...(enabled ? targets.filter(item => !existing.has(keyOf(item.providerId, item.modelId))).map(item => ({ ...item.llmModel!, enabled })) : []),
+  ]
 }
 
 export function buildProviderCenterGroups(input: BuildProviderCenterGroupsInput): ProviderCenterGroup[] {

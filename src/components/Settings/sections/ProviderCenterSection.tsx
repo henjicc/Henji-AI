@@ -35,7 +35,7 @@ import LlmProviderDialog from './LlmProviderDialog'
 import { ModelSyncDialog } from './ModelSyncDialog'
 import ProviderCenterModelList from './ProviderCenterModelList'
 import ProviderCredentialGuide from './ProviderCredentialGuide'
-import { buildProviderCenterGroups, type ProviderCenterCategory, type ProviderCenterModelItem } from './providerCenterModel'
+import { buildProviderCenterGroups, presetLlmModels, setLlmModelsEnabled, type ProviderCenterCategory, type ProviderCenterModelItem } from './providerCenterModel'
 import { useGenerationModelVisibility } from './useGenerationModelVisibility'
 import { createEmptyModel } from './llmSettingsSectionHelpers'
 
@@ -142,29 +142,22 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
       generationVisibility.setModelEnabled(model.providerId, model.modelId, enabled)
       return
     }
-    await llm.saveConfig({
-      ...llm.config,
-      models: llm.config.models.map(item => item.providerId === model.providerId && item.modelId === model.modelId
-        ? { ...item, enabled }
-        : item),
-    })
+    await llm.saveConfig({ ...llm.config, models: setLlmModelsEnabled(llm.config.models, [model], enabled) })
   }
 
   const setFilteredEnabled = async (models: ProviderCenterModelItem[], enabled: boolean): Promise<void> => {
     const generationModels = models.filter(model => model.source === 'generation')
     if (generationModels.length > 0) generationVisibility.setModelsEnabled(generationModels, enabled)
-    const llmIds = new Set(models.filter(model => model.source === 'llm').map(model => `${model.providerId}:${model.modelId}`))
-    if (llmIds.size > 0) {
-      await llm.saveConfig({
-        ...llm.config,
-        models: llm.config.models.map(model => llmIds.has(`${model.providerId}:${model.modelId}`) ? { ...model, enabled } : model),
-      })
+    if (models.some(model => model.source === 'llm')) {
+      await llm.saveConfig({ ...llm.config, models: setLlmModelsEnabled(llm.config.models, models, enabled) })
     }
   }
 
   const openModelDialog = (model?: ProviderCenterModelItem): void => {
     if (!selected?.llmProvider) return
-    setModelDraft(model?.llmModel ? { ...model.llmModel } : createEmptyModel(selected.llmProvider))
+    // 还没加入配置的预设模型，编辑保存就是加入，按启用保存。
+    const added = model?.llmModel ? llm.config.models.some(item => item.providerId === model.providerId && item.modelId === model.modelId) : false
+    setModelDraft(model?.llmModel ? { ...model.llmModel, enabled: added ? model.llmModel.enabled : true } : createEmptyModel(selected.llmProvider))
     setModelDialogOpen(true)
   }
 
@@ -221,15 +214,29 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
         maxOutputTokens: item.maxOutputTokens,
       })] : []
     })
-    if (additions.length > 0) await llm.saveConfig({ ...llm.config, models: [...llm.config.models, ...additions] })
+    // 已在配置里但停用的（如在同步里“移除”过的预设模型），添加就是重新启用。
+    const reenable = new Set(modelIds.filter(id => existing.has(id)))
+    if (additions.length > 0 || reenable.size > 0) {
+      await llm.saveConfig({
+        ...llm.config,
+        models: [
+          ...llm.config.models.map(model => model.providerId === syncProvider.providerId && reenable.has(model.modelId) ? { ...model, enabled: true } : model),
+          ...additions,
+        ],
+      })
+    }
   }
 
   const syncRemove = async (modelIds: string[]): Promise<void> => {
     if (!syncProvider) return
     const removing = new Set(modelIds)
+    // 预设模型删了也会以未启用重新列出，同步里“移除”它们就是停用。
+    const presetIds = new Set(presetLlmModels(syncProvider).map(model => model.modelId))
     await llm.saveConfig({
       ...llm.config,
-      models: llm.config.models.filter(model => !(model.providerId === syncProvider.providerId && removing.has(model.modelId))),
+      models: llm.config.models.flatMap(model => model.providerId !== syncProvider.providerId || !removing.has(model.modelId)
+        ? [model]
+        : presetIds.has(model.modelId) ? [{ ...model, enabled: false }] : []),
     })
   }
 
@@ -430,8 +437,9 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
         open={syncProvider !== null}
         providerName={syncProvider?.displayName ?? ''}
         discovered={syncDiscovered}
+        // 停用的预设模型（同步里“移除”过）算作未添加，才能在对话框里重新添加。
         addedModelIds={new Set(syncProvider
-          ? llm.config.models.filter(model => model.providerId === syncProvider.providerId).map(model => model.modelId)
+          ? llm.config.models.filter(model => model.providerId === syncProvider.providerId && model.enabled).map(model => model.modelId)
           : [])}
         onClose={() => setSyncProvider(null)}
         onAdd={syncAdd}

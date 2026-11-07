@@ -161,14 +161,16 @@ const ProviderCenterModelList = ({
                       >
                         <Pencil  />
                       </UiIconButton>
-                      <UiIconButton size="md" tone="danger"
-                        type="button"
-                        aria-label={t('providerCenter.actions.deleteModel')}
-                        tooltip={t('providerCenter.actions.deleteModel')}
-                        onClick={() => void onDeleteModel(model)}
-                      >
-                        <Trash2  />
-                      </UiIconButton>
+                      {model.presetModel ? null : (
+                        <UiIconButton size="md" tone="danger"
+                          type="button"
+                          aria-label={t('providerCenter.actions.deleteModel')}
+                          tooltip={t('providerCenter.actions.deleteModel')}
+                          onClick={() => void onDeleteModel(model)}
+                        >
+                          <Trash2  />
+                        </UiIconButton>
+                      )}
                     </>
                   ) : (
                     <UiIconButton size="md"
