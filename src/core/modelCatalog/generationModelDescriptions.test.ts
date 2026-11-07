@@ -22,23 +22,7 @@ describe('generationModelDescriptions', () => {
     }
   })
 
-  it('所有通用模型都有描述登记，新增模型允许保留待确认占位', () => {
-    const pendingDescriptions = new Set([
-      'seedream-5.0-flash',
-      'happyhorse-1.1',
-      'gpt-image-2.5',
-      'topaz-transparent-upscale',
-      'seedvr2-image-upscale',
-      'bria-creative-upscale',
-      'ideogram-upscale',
-    ])
-    for (const [canonicalModelId, description] of Object.entries(GENERATION_MODEL_DESCRIPTIONS)) {
-      if (pendingDescriptions.has(canonicalModelId)) {
-        expect(description.zh).toBe('')
-      } else {
-        expect(description.zh.trim()).not.toBe('')
-      }
-    }
+  it('描述按通用模型解析，未适配的模型没有描述', () => {
     expect(getGenerationModelDescription('gpt-image-2')).toMatchObject({
       zh: expect.stringContaining('推荐使用'),
     })

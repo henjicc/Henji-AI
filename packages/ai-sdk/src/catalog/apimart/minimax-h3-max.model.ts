@@ -88,7 +88,8 @@ export const apimartMiniMaxH3MaxModel = defineModel({
     calculator: (params) => {
       const tier = resolution(params)
       const reference = params.apimartMiniMaxH3MaxMode === 'reference-to-video'
-      const videoSeconds = reference ? resolveUploadedVideoDurationSeconds(params) : 0
+      // 读不到素材时长时按输出时长估，不按 0 秒低估。
+      const videoSeconds = reference ? resolveUploadedVideoDurationSeconds(params, duration(params)) : 0
       return OUTPUT_RATES[tier] * duration(params)
         + Math.max(0, countUploadedImages(params) - 2) * 0.05712
         + VIDEO_INPUT_RATES[tier] * videoSeconds

@@ -5,7 +5,7 @@
 | 最后更新 | 2026-11-07 |
 | 模态 | 图片 |
 | 供应商 | APIMart（聚合平台） |
-| 项目模型 ID | `apimart-flux-3-image`（通用标识 `flux-3-image`） |
+| 项目模型 ID | `apimart-flux-3-image`（通用标识 `flux-3`，与 Fal 一致） |
 | 平台模型 ID | `flux-3-image`、`flux-3-image-klein` |
 | 接口形态 | 异步任务 |
 | 文档 / 价格可见性 | 公开，无需登录 |

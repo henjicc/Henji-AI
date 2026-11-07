@@ -39,3 +39,10 @@ it('当前设置已经收得下时不改动', () => {
   expect(resolveModeForMedia('kie-grok-imagine', defaults, { images: 0, videos: 0, audios: 0 })).toBe(defaults)
   expect(resolveModeForMedia('kie-grok-imagine', defaults, { images: 1, videos: 0, audios: 0 }).kieGrokImagineMode).toBe('image-to-image')
 })
+
+it('版本不支持参考图时换到支持的版本，而不是停在会被拒的组合上', () => {
+  const defaults = registry.getDefaultValues('apimart-veo-3.1')
+  const resolved = resolveModeForMedia('apimart-veo-3.1', { ...defaults, apimartVeo31Channel: 'ext', apimartVeo31Variant: 'lite', apimartVeo31Mode: 'reference-to-video' }, { images: 1, videos: 0, audios: 0 })
+  expect(resolved.apimartVeo31Variant).not.toBe('lite')
+  expect(fits('apimart-veo-3.1', resolved, { images: 1, videos: 0, audios: 0 })).toBe(true)
+})

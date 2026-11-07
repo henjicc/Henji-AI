@@ -58,7 +58,11 @@ export const apimartGeminiOmni12FlashModel = defineModel({
   params: [
     { id: 'apimartGeminiOmni12Channel', type: 'dropdown', order: 1, default: 'official', options: [{ value: 'official' }, { value: 'ext' }] },
     { id: 'apimartGeminiOmni12Mode', type: 'dropdown', order: 2, default: 'text-image-to-video', options: MODES.map(value => ({ value })) },
-    { id: 'apimartGeminiOmni12AspectRatio', type: 'dropdown', order: 3, default: '16:9', options: [{ value: '16:9' }, { value: '9:16' }] },
+    // 编辑与续写的画幅跟随输入视频，不显示也不发送比例。
+    {
+      id: 'apimartGeminiOmni12AspectRatio', type: 'dropdown', order: 3, default: '16:9', options: [{ value: '16:9' }, { value: '9:16' }],
+      visible: { condition: 'apimartGeminiOmni12Mode !== "edit" && apimartGeminiOmni12Mode !== "extend"' },
+    },
     { id: 'apimartGeminiOmni12Resolution', type: 'dropdown', order: 4, default: '720p', options: RESOLUTIONS.map(value => ({ value })) },
     // 编辑时输出时长跟随源视频，不能传 duration。
     {
@@ -82,7 +86,6 @@ export const apimartGeminiOmni12FlashModel = defineModel({
         model: route === 'ext' ? 'gemini-omni-1.2-flash-ext' : 'gemini-omni-1.2-flash',
         prompt,
         resolution,
-        aspect_ratio: params.apimartGeminiOmni12AspectRatio === '9:16' ? '9:16' : '16:9',
       }
 
       if (current === 'edit' || current === 'extend') {
@@ -93,6 +96,7 @@ export const apimartGeminiOmni12FlashModel = defineModel({
         return body
       }
 
+      body.aspect_ratio = params.apimartGeminiOmni12AspectRatio === '9:16' ? '9:16' : '16:9'
       body.duration = duration(params, images.length)
       if (current === 'reference-to-video') {
         if (images.length === 0) throw new Error('Gemini Omni 1.2 Flash 多图参考至少需要 1 张参考图')

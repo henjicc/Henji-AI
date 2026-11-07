@@ -46,7 +46,7 @@ export const apimartVeo31Model = defineModel({
     images: { max: 2 }, videos: { max: 0 },
     rules: [
       { when: 'apimartVeo31Channel !== "official" && apimartVeo31Variant === "lite"', images: { max: 0 } },
-      { when: 'apimartVeo31Channel !== "official" && apimartVeo31Mode === "reference-to-video"', images: { min: 1, max: 3 } },
+      { when: 'apimartVeo31Channel !== "official" && apimartVeo31Variant === "fast" && apimartVeo31Mode === "reference-to-video"', images: { min: 1, max: 3 } },
     ],
   },
   requirements: [{

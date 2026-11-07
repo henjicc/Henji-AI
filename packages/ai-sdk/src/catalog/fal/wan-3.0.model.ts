@@ -131,7 +131,8 @@ export const falWan30Model = defineModel({
             const rates = params.falWan30Version === 'prime' ? RATES.prime : RATES.standard;
             const rate = rates[String(params.falWan30Resolution)] ?? rates['1080p'];
             // 参考视频的输入时长与输出时长一起计费。
-            const inputVideo = isReference(params) ? resolveUploadedVideoDurationSeconds(params) : 0;
+            // 读不到素材时长时按输出时长估，不按 0 秒低估。
+            const inputVideo = isReference(params) ? resolveUploadedVideoDurationSeconds(params, duration(params)) : 0;
             return rate * (duration(params) + inputVideo);
         },
         description: '标准版 480p/720p/1080p $0.05/$0.10/$0.20 每秒，Prime $0.068/$0.14/$0.28 每秒；参考视频的输入时长另计'

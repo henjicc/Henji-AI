@@ -10,7 +10,7 @@ const secondsOf = (params: JsonObject) => Math.min(15, Math.max(1, Math.round(Nu
 
 export const kieGrokImagineVideo15Model = defineModel({
   meta: {
-    id: 'kie-grok-imagine-video-1.5', canonicalModelId: 'grok-imagine-video-1.5',
+    id: 'kie-grok-imagine-video-1.5', canonicalModelId: 'grok-imagine-video-1.5', seriesId: 'grok-imagine-video', seriesRank: 1.5,
     provider: 'kie', type: 'video',
     tags: ['image-to-video'],
     promptLanguage: 'en',

@@ -19,7 +19,7 @@ function nearestRatio(params: JsonObject): string {
 
 export const kieFlux3KleinModel = defineModel({
   meta: {
-    id: 'kie-flux-3-klein', canonicalModelId: 'flux-3-klein',
+    id: 'kie-flux-3-klein', canonicalModelId: 'flux-3-klein', seriesId: 'flux', seriesRank: 3,
     provider: 'kie', type: 'image',
     tags: ['text-to-image', 'image-to-image'],
     polling: { interval: 2000, maxAttempts: 150 },

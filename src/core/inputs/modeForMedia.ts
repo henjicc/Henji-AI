@@ -35,7 +35,8 @@ function choices(roleParams: readonly OptionParamDef[], params: DynamicValueMap)
 /**
  * 按实际带的素材选模式：当前设置收不下这些素材（或缺了必需的素材）时，换到第一个收得下的组合。
  * 文生模式不收图、图生模式必须给图这类模型，画布和助手带图调用时不用逐个模型写联动。
- * 先只换模式；当前渠道下所有模式都不行才换渠道（渠道关系到路由与价格，真实付费仍走付费策略）。
+ * 先在当前渠道内换模式与版本（越靠后声明的越先换，通常是“模式”先于“版本”）；都不行才换渠道。
+ * 换版本或渠道都可能改价，真实付费仍走付费策略。
  * 都收不下时原样返回，交给数量校验报错。
  */
 export function resolveModeForMedia(modelId: string, params: DynamicValueMap, counts: MediaCounts): DynamicValueMap {
