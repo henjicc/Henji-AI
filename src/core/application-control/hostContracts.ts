@@ -91,7 +91,9 @@ export const hostContextSnapshotSchema = z.object({
         name: z.string().min(1),
         description: z.string(),
         tags: z.array(z.string()),
-        recommendedByDescription: z.boolean(),
+        promptLanguage: z.string().optional(),
+        standing: z.enum(['preferred', 'standard', 'legacy']),
+        standingReason: z.string().optional(),
         providers: z.array(z.object({
           providerId: z.string().min(1),
           modelId: z.string().min(1),

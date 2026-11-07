@@ -96,10 +96,8 @@ describe('generationPreparation', () => {
       mediaType: 'image', providerId: 'test-provider', tags: ['text-to-image'],
     })
     expect(models).toHaveLength(1)
-    expect(models[0].selectionEvidence).toMatchObject({
-      compatible: true,
-      recommendedByDescription: false,
-    })
+    expect(models[0].selectionEvidence).toMatchObject({ compatible: true })
+    expect(models[0].standing).toMatch(/^(preferred|standard|legacy)$/)
     expect(models[0].priceEstimate).toMatchObject({
       amount: 0.5,
       currency: '$',
@@ -151,7 +149,7 @@ describe('generationPreparation', () => {
           id: `agent-preparation-batch-${index}`,
           canonicalModelId: 'nano-banana',
           name: { zh: `候选 ${index}`, en: `Candidate ${index}` },
-          description: { zh: `推荐使用！${'高质量商业视觉'.repeat(12)}`, en: 'Recommended for commercial visual output.' },
+          description: { zh: '高质量商业视觉'.repeat(12), en: 'Commercial visual output.' },
         },
       })
     }
@@ -159,6 +157,19 @@ describe('generationPreparation', () => {
     const models = searchGenerationModels({ mediaType: 'image' })
     expect(models).toHaveLength(32)
     expect(Buffer.byteLength(JSON.stringify(models), 'utf8')).toBeLessThan(24 * 1024)
+  })
+
+  // 推荐表决定助手先看哪些模型：被新版取代的不能排在新的前面。
+  it('按推荐排序时推荐的在前、已过时的在后，并带上理由', () => {
+    // 按注册顺序先过时、再一般、最后推荐，排序后应该倒过来。
+    for (const [suffix, canonicalModelId] of [['old', 'nano-banana'], ['mid', 'seedream-4.5'], ['new', 'nano-banana-2.1']] as const) {
+      registry.register({ ...testModel, meta: { ...testModel.meta, id: `agent-preparation-standing-${suffix}`, canonicalModelId } })
+    }
+    const ids = searchGenerationModelCatalog({ mediaType: 'image', sortBy: 'recommended' }).models.map((model) => model.modelId)
+    expect(ids.indexOf('agent-preparation-standing-new')).toBeLessThan(ids.indexOf('agent-preparation-standing-mid'))
+    expect(ids.indexOf('agent-preparation-standing-mid')).toBeLessThan(ids.indexOf('agent-preparation-standing-old'))
+    const legacy = searchGenerationModelCatalog({ mediaType: 'image' }).models.find((model) => model.modelId === 'agent-preparation-standing-old')
+    expect(legacy).toMatchObject({ standing: 'legacy', standingReason: expect.any(String) })
   })
 
   it('忽略误传的题材词并按供应商标识大小写归一化，避免无效重复搜索', () => {

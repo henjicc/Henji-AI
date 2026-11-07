@@ -4,6 +4,7 @@ import { attachVideoDurations } from '@/core/services/generationVideoDurations'
 import { toApplicationStableIdSegment } from '@/core/application-control'
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
+import { generationModelStandingRank, getGenerationModelStanding, type GenerationModelStanding } from '@/core/modelCatalog/generationModelStanding'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { resolveModeForMedia } from '@/core/inputs/modeForMedia'
 import { hasAlternativeModelInput } from '@/core/inputs/alternativeInput'
@@ -226,9 +227,13 @@ function priceSortValue(candidate: Record<string, unknown>): number {
 }
 
 function recommendedSortValue(candidate: Record<string, unknown>): number {
-  const evidence = candidate.selectionEvidence
-  if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return 0
-  return (evidence as Record<string, unknown>).recommendedByDescription === true ? 1 : 0
+  return generationModelStandingRank(String(candidate.canonicalModelId))
+}
+
+/** 推荐程度与理由：助手据此优先选新且好的模型，避开已过时的版本。 */
+function standingFields(model: ModelDefinition): { standing: GenerationModelStanding; standingReason?: string } {
+  const { standing, reason } = getGenerationModelStanding(model.meta.canonicalModelId)
+  return { standing, ...(reason ? { standingReason: reason } : {}) }
 }
 
 function sortSearchCandidates(
@@ -253,13 +258,10 @@ function sortSearchCandidates(
 }
 
 function createSelectionEvidence(
-  model: ModelDefinition,
   matchedQueryTerms: string[],
   ignoredQueryTerms: string[]
 ): Record<string, unknown> {
-  const description = modelDescriptionText(model)
   return {
-    recommendedByDescription: description.includes('推荐使用'),
     matchedQueryTerms,
     ignoredQueryTerms,
     compatible: true,
@@ -278,7 +280,7 @@ function toCatalogModel(model: ModelDefinition, usdToCnyRate: number): Record<st
     tags: (model.meta.tags ?? []).slice(0, 8),
     ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),
     priceEstimate: createCatalogPriceEstimate(model, usdToCnyRate),
-    recommendedByDescription: description.includes('推荐使用'),
+    ...standingFields(model),
   }
 }
 
@@ -316,7 +318,8 @@ export function getGenerationModelCatalogBootstrap(): GenerationModelCatalogBoot
     name: string
     description: string
     tags: string[]
-    recommendedByDescription: boolean
+    standing: GenerationModelStanding
+    standingReason?: string
     providers: Array<Record<string, unknown>>
   }>()
   for (const model of registry.listAllModels()) {
@@ -339,7 +342,7 @@ export function getGenerationModelCatalogBootstrap(): GenerationModelCatalogBoot
       description,
       tags: (model.meta.tags ?? []).slice(0, 8),
       ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),
-      recommendedByDescription: description.includes('推荐使用'),
+      ...standingFields(model),
       providers: [providerModel],
     })
   }
@@ -377,7 +380,7 @@ export function searchGenerationModelCatalog(input: GenerationModelSearchInput):
     })
     .map((model) => ({
       ...toCatalogModel(model, usdToCnyRate),
-      selectionEvidence: createSelectionEvidence(model, matchedQueryTerms, ignoredQueryTerms),
+      selectionEvidence: createSelectionEvidence(matchedQueryTerms, ignoredQueryTerms),
     }))
   return {
     models: sortSearchCandidates(models, input.sortBy),
@@ -545,7 +548,7 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
       canonicalModelId: model.meta.canonicalModelId,
       providerId: model.meta.provider,
       availableInRegistry: true,
-      recommendedByDescription: modelDescriptionText(model).includes('推荐使用'),
+      ...standingFields(model),
       qualitativeDescription: modelDescriptionText(model),
       tags: model.meta.tags ?? [],
       ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),

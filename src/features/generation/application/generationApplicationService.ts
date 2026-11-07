@@ -1,5 +1,6 @@
 import { normalizeGenerationTaskStatus } from '@/core/application-control/domains/generation/taskStatus'
 import { registry } from '@/core/ModelRegistry'
+import { generationModelStandingRank } from '@/core/modelCatalog/generationModelStanding'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import { generationService } from '@/core/services/GenerationService'
 import { databaseService } from '@/services/database/DatabaseService'
@@ -73,9 +74,10 @@ export function selectExecutableGenerationModel(
     })
   }
 
+  // 同一优先级里先试推荐的、最后试已过时的：用户没点名时不该落到被新版取代的模型上。
   const allCandidates = registry.listAllModels().filter((model) => (
     model.meta.type === input.mediaType && configuredProviders.has(model.meta.provider)
-  ))
+  )).sort((a, b) => generationModelStandingRank(b.meta.canonicalModelId) - generationModelStandingRank(a.meta.canonicalModelId))
   const preferredProviders = unique(input.preferredProviderIds ?? [])
   const ordered = requested
     ? [requested]

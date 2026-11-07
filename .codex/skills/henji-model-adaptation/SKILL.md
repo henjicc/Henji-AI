@@ -58,7 +58,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 - 信息不足时，停止编码并向用户补充最小必要信息。
 - 若用户未提供价格或计费规则，必须先追问价格，再继续模型实现。
 - 优先复用同供应商、同模态、同模型家族的现有模型定义；仅将其作为起点，以官方 API 文档为准。
-- 供应商模型文件只填写 `meta.canonicalModelId`，禁止填写 `meta.description`。适配前先检查 `src/core/modelCatalog/generationModelDescriptions.ts`：已有同一通用模型标识就直接引用；不存在就新增空描述条目，并在交付时明确告诉用户需要在该文件补充这个模型的定性描述。通用描述只写模型擅长方向或相对定位，不重复 tags 已表达的固有能力。
+- 供应商模型文件只填写 `meta.canonicalModelId`，禁止填写 `meta.description`。适配前先检查 `src/core/modelCatalog/generationModelDescriptions.ts`：已有同一通用模型标识就直接引用；不存在就新增空描述条目，并在交付时明确告诉用户需要在该文件补充这个模型的定性描述。通用描述只写模型擅长方向或相对定位，不重复 tags 已表达的固有能力。推荐还是过时不写进描述：在 `src/core/modelCatalog/generationModelStanding.ts` 判断新模型是否 preferred，并核对被它取代的旧版本是否该改成 legacy（依据盲测榜、发布记录与社区反馈，新的不一定更好）。
 - 对接已接入的 provider 时，先核对该 provider 在仓库里的既有 route 写法与 runtime 约定，再决定 `endpoints` 填什么；不要只按文档标题猜路径，也不要漏掉现有 provider 统一前缀（例如部分 PPIO 路由实际要走 `/async/...`）。
 - 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
 - 参数展示补丁中的 `description` 是给智能助手、能力反射与语义检索使用的参数说明，正式参数界面不得渲染它；给用户看的解释、限制和操作后果必须写入 `tooltip`，并按 `henji-ui-surface` 通过标签旁的说明入口呈现。两者受众不同，可以同时存在，界面不得用 `description` 兜底 `tooltip`。
