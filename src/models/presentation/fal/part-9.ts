@@ -127,7 +127,7 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
       falWan30Version: {
         name: sharedFieldText('version'), role: 'mode',
         optionLabels: { standard: { label: sharedOptionText('standard') }, prime: { label: 'Prime' } },
-        tooltip: { zh: 'Prime 画质更高，单价约为标准版的 1.4 倍。', en: 'Prime offers higher quality at about 1.4× the standard price.' },
+        tooltip: { zh: 'Prime 能力与标准版相同、出片更快，单价约为标准版的 1.4 倍。', en: 'Prime has the same capability and renders faster, at about 1.4× the standard price.' },
       },
       falWan30Mode: {
         name: sharedFieldText('mode'), role: 'mode',
