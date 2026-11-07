@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CircleCheck, CircleX, Copy, FlaskConical, X } from 'lucide-react'
+import { ArrowLeft, CircleCheck, CircleX, Copy, FlaskConical, ListChecks, X } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
 import {
   UI_TEXT_META_CLASS,
@@ -29,6 +29,8 @@ import { createLogger } from '@/core/logging'
 import { llmConfigService } from '@/services/llm'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { ModelTestBench } from './ModelTestBench'
+import { loadRecentGenerationFailures, type ModelFailureSummary } from './recentGenerationFailures'
+import { checkLlmAvailability, llmAvailabilityKey, type LlmAvailability } from './llmAvailability'
 import { dryRunGenerationModel, estimateSdkModelPrice, listSdkModels, sdkModelDefaults, sdkProviderName, SDK_MODEL_CATEGORIES, type SdkDryRunResult, type SdkModelCategory, type SdkModelPrice, type SdkModelRow } from './sdkModelInventory'
 
 /** 三栏宽度与表格列宽都能拖，记在本机；能力列吃掉剩余宽度。 */
@@ -88,6 +90,19 @@ function priceLabel(price: SdkModelPrice | undefined): string {
   return price.status === 'missing' ? '缺价格' : price.display
 }
 
+/** 打开面板时读一次本机日志里最近 7 天的生成失败。 */
+function useRecentFailures(): ReadonlyMap<string, ModelFailureSummary> {
+  const [failures, setFailures] = useState<ReadonlyMap<string, ModelFailureSummary>>(new Map())
+  useEffect(() => {
+    let disposed = false
+    loadRecentGenerationFailures()
+      .then((result) => { if (!disposed) setFailures(result) })
+      .catch((error: unknown) => logger.error('读取近期生成失败记录失败', error))
+    return () => { disposed = true }
+  }, [])
+  return failures
+}
+
 /** 一次算完全部参考价：示例素材的指标是写死的，不读文件、不联网。 */
 function useSdkModelPrices(rows: readonly SdkModelRow[]): ReadonlyMap<string, SdkModelPrice> {
   const [prices, setPrices] = useState<ReadonlyMap<string, SdkModelPrice>>(new Map())
@@ -133,6 +148,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { layout, resize } = usePanelLayout()
   const rowColumns = { gridTemplateColumns: `${layout.model}px ${layout.provider}px ${layout.category}px ${layout.price}px minmax(0,1fr) 2rem` }
   const prices = useSdkModelPrices(rows)
+  const failures = useRecentFailures()
   const keyStatus = useSettingsStore((state) => state.providerKeyStatus)
   const llmKeyStatus = useLlmKeyStatus()
   const isConfigured = (row: SdkModelRow): boolean => (row.llm ? llmKeyStatus : keyStatus)[row.providerId] === true
@@ -144,6 +160,10 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [onlyConfigured, setOnlyConfigured] = useState(false)
   const [onlyFailed, setOnlyFailed] = useState(false)
   const [onlyUnpriced, setOnlyUnpriced] = useState(false)
+  const [onlyRecentFailures, setOnlyRecentFailures] = useState(false)
+  const [availability, setAvailability] = useState<LlmAvailability | null>(null)
+  const [checkingAvailability, setCheckingAvailability] = useState(false)
+  const [onlyUnlisted, setOnlyUnlisted] = useState(false)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [checks, setChecks] = useState<ReadonlyMap<string, SdkDryRunResult>>(new Map())
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
@@ -163,8 +183,10 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       && (!onlyConfigured || (row.llm ? llmKeyStatus : keyStatus)[row.providerId] === true)
       && (!onlyFailed || checks.get(row.modelId)?.ok === false)
       && (!onlyUnpriced || isUnpriced(prices.get(row.key)))
+      && (!onlyRecentFailures || failures.has(row.modelId))
+      && (!onlyUnlisted || availability?.listed.get(llmAvailabilityKey(row.providerId, row.modelId)) === false)
       && (!needle || `${row.name} ${row.modelId} ${row.providerId} ${providerName(row.providerId)} ${row.tags.join(' ')} ${row.rawTags.join(' ')}`.toLowerCase().includes(needle)))
-  }, [rows, query, category, providers, onlyConfigured, onlyFailed, onlyUnpriced, keyStatus, llmKeyStatus, checks, prices])
+  }, [rows, query, category, providers, onlyConfigured, onlyFailed, onlyUnpriced, onlyRecentFailures, onlyUnlisted, availability, keyStatus, llmKeyStatus, checks, prices, failures])
   const selected = rows.find((row) => row.key === selectedKey) ?? null
 
   const toggleProvider = (providerId: string): void => setProviders((current) => {
@@ -186,6 +208,18 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
     setBatch(null)
   }
+  const checkAvailability = async (): Promise<void> => {
+    setCheckingAvailability(true)
+    try {
+      const result = await checkLlmAvailability()
+      if (mounted.current) setAvailability(result)
+    } catch (error) {
+      logger.error('核对大语言模型在售失败', error)
+    } finally {
+      if (mounted.current) setCheckingAvailability(false)
+    }
+  }
+  const unlistedCount = availability ? [...availability.listed.values()].filter((listed) => !listed).length : 0
   const copyList = (): void => {
     const lines = filtered.map((row) => {
       const price = prices.get(row.key)
@@ -214,6 +248,9 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <UiButton size="sm" variant="primary" onClick={() => setBenchOpen(true)} data-test-bench-open=""><FlaskConical />测试 {testRows.length} 个</UiButton>
             <UiIconButton tooltip="清空勾选" aria-label="清空勾选" onClick={() => setTestKeys([])}><X /></UiIconButton>
           </> : null}
+          <UiButton size="sm" loading={checkingAvailability} onClick={() => void checkAvailability()} tooltip="用已配的密钥读取大语言模型供应商的模型列表（不收费），找出预设里已经不在列表的模型">
+            <ListChecks />核对在售
+          </UiButton>
           <UiButton size="sm" loading={batch !== null} onClick={() => void checkAll()} tooltip="把当前筛选出的生成模型全部离线构建一次请求（补示例输入），不联网不扣费">
             <CircleCheck />{batch ? `检查中 ${batch.done}/${batch.total}` : '离线检查全部'}
           </UiButton>
@@ -251,6 +288,8 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <UiChipButton size="sm" active={onlyConfigured} onClick={() => setOnlyConfigured((value) => !value)}>已配密钥</UiChipButton>
               <UiChipButton size="sm" active={onlyFailed} onClick={() => setOnlyFailed((value) => !value)}>检查失败</UiChipButton>
               <UiChipButton size="sm" active={onlyUnpriced} onClick={() => setOnlyUnpriced((value) => !value)} tooltip="算不出价格，或算出来是 0 要核对的">缺价格</UiChipButton>
+              <UiChipButton size="sm" active={onlyRecentFailures} onClick={() => setOnlyRecentFailures((value) => !value)} tooltip="最近 7 天日常生成里失败过的模型，供应商拒绝请求多半是适配问题">近期失败 · {failures.size}</UiChipButton>
+              {availability ? <UiChipButton size="sm" active={onlyUnlisted} onClick={() => setOnlyUnlisted((value) => !value)} tooltip="供应商模型列表里已经没有的预设模型，可能下架或改名">不在列表 · {unlistedCount}</UiChipButton> : null}
             </div>
           </UiGroup>
         </aside>
@@ -271,7 +310,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <UiVirtualList
               data={filtered}
               getKey={(row) => row.key}
-              resetKey={`${query}|${category}|${[...providers].join(',')}|${onlyConfigured}|${onlyFailed}|${onlyUnpriced}`}
+              resetKey={`${query}|${category}|${[...providers].join(',')}|${onlyConfigured}|${onlyFailed}|${onlyUnpriced}|${onlyRecentFailures}|${onlyUnlisted}`}
               emptyState={<UiEmpty title="没有符合条件的模型" />}
               renderItem={(row) => (
                 <div className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-1 pl-4 pr-2">
@@ -305,12 +344,22 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         <UiResizeHandle label="调整详情栏宽度" grow="start" {...resize('detail')} />
         <aside aria-label="模型详情" className="min-h-0 shrink-0 overflow-y-auto border-l border-line p-4" style={{ width: layout.detail }}>
           {selected
-            ? <ModelDetail key={selected.key} row={selected} configured={isConfigured(selected)} price={prices.get(selected.key)} result={checks.get(selected.modelId)} onResult={(result) => record(selected.modelId, result)} />
+            ? <ModelDetail key={selected.key} row={selected} configured={isConfigured(selected)} price={prices.get(selected.key)} failure={failures.get(selected.modelId)} availability={availability} result={checks.get(selected.modelId)} onResult={(result) => record(selected.modelId, result)} />
             : <UiEmpty title="选一个模型查看详情" />}
         </aside>
       </div>
     </>
   )
+}
+
+const AvailabilityText: React.FC<{ row: SdkModelRow; availability: LlmAvailability }> = ({ row, availability }) => {
+  const error = availability.errors.get(row.providerId)
+  if (error) return <span className="text-warning-text">读不到模型列表：{error}</span>
+  const listed = availability.listed.get(llmAvailabilityKey(row.providerId, row.modelId))
+  if (listed === undefined) return <span className={UI_TEXT_SECONDARY_CLASS}>没配密钥，未核对</span>
+  return listed
+    ? <span className={UI_TEXT_SECONDARY_CLASS}>供应商模型列表里有</span>
+    : <span className="text-warning-text">供应商模型列表里没有，可能已下架或改名</span>
 }
 
 function isUnpriced(price: SdkModelPrice | undefined): boolean {
@@ -340,7 +389,7 @@ const CheckIcon: React.FC<{ result: SdkDryRunResult | undefined }> = ({ result }
     : <CircleX aria-label="离线检查失败" className="h-4 w-4 text-danger-text" />
 }
 
-const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; price: SdkModelPrice | undefined; result: SdkDryRunResult | undefined; onResult: (result: SdkDryRunResult) => void }> = ({ row, configured, price, result, onResult }) => {
+const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; price: SdkModelPrice | undefined; failure: ModelFailureSummary | undefined; availability: LlmAvailability | null; result: SdkDryRunResult | undefined; onResult: (result: SdkDryRunResult) => void }> = ({ row, configured, price, failure, availability, result, onResult }) => {
   const [sample, setSample] = useState(true)
   const [running, setRunning] = useState(false)
   const defaults = useMemo(() => (row.generation ? sdkModelDefaults(row.modelId) : {}), [row])
@@ -367,6 +416,14 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; price: SdkM
             ? <span className="text-warning-text">缺价格：{price.reason}</span>
             : <span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{priceLabel(price)}{price?.status === 'zero' ? '（核对是否免费）' : ''}</span>}
         </UiFormRow>
+        {failure ? (
+          <UiFormRow label="近期失败" density="compact">
+            <span className="flex flex-col gap-1">
+              <span className="text-warning-text">最近 7 天 {failure.count} 次，最后一次 {new Date(failure.lastAt).toLocaleString()}</span>
+              {failure.messages.map((message) => <span key={message} className={`break-all ${UI_TEXT_SECONDARY_CLASS}`}>{message}</span>)}
+            </span>
+          </UiFormRow>
+        ) : null}
         {price?.description ? <UiFormRow label="计价说明" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{price.description}</span></UiFormRow> : null}
         {row.tags.length ? <UiFormRow label="能力" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.tags.join(' · ')}</span></UiFormRow> : null}
         {row.rawTags.length ? <UiFormRow label="原始标签" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.rawTags.join(' ')}</span></UiFormRow> : null}
@@ -375,6 +432,7 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; price: SdkM
         </> : null}
         {row.llm ? <>
           <UiFormRow label="目录条目" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.llm.catalogId ?? '未登记（按纯文本处理）'}</span></UiFormRow>
+          {availability ? <UiFormRow label="在售" density="compact"><AvailabilityText row={row} availability={availability} /></UiFormRow> : null}
           <UiFormRow label="接口" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.llm.protocol === 'responses' ? 'Responses' : row.llm.protocol === 'chat' ? 'Chat Completions' : '不在预设里'}</span></UiFormRow>
           <UiFormRow label="上下文" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.llm.contextWindow?.toLocaleString() ?? '未登记'} / 输出 {row.llm.maxOutputTokens?.toLocaleString() ?? '未登记'}</span></UiFormRow>
           {row.llm.note ? <UiFormRow label="备注" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.llm.note}</span></UiFormRow> : null}
