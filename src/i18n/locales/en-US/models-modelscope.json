@@ -15,14 +15,14 @@
         "name": "ModelScope Custom"
       }
     },
-    "Qwen/Qwen-Image-Edit-2509": {
+    "Qwen/Qwen-Image-Edit-2511": {
       "meta": {
-        "name": "Qwen-Image-Edit-2509"
+        "name": "Qwen-Image-Edit-2511"
       }
     },
-    "Qwen/Qwen-Image": {
+    "Qwen/Qwen-Image-2512": {
       "meta": {
-        "name": "Qwen-Image"
+        "name": "Qwen-Image-2512"
       }
     },
     "MusePublic/14_ckpt_SD_XL": {

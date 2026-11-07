@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { modelscopeCustomModel } from '../../src/catalog/modelscope/modelscope-custom.model'
 import { replaceModelscopeCustomModels } from '../../src/catalog/modelscope/customModelRegistry'
-import { modelscopeQwenImageEdit2509Model } from '../../src/catalog/modelscope/qwen-image-edit-2509.model'
+import { modelscopeQwenImageEdit2511Model } from '../../src/catalog/modelscope/qwen-image-edit-2511.model'
 import { buildModelscopeRequest, MODELSCOPE_CREATE_TASK_ENDPOINT, resolveModelscopeSize } from '../../src/catalog/modelscope/utils'
 
 describe('魔搭提交路由', () => {
   it('SDK catalog 与共享实现都使用官方路由', () => {
     expect(MODELSCOPE_CREATE_TASK_ENDPOINT).toBe('/v1/images/generations')
-    expect(modelscopeQwenImageEdit2509Model.endpoints).toBe(MODELSCOPE_CREATE_TASK_ENDPOINT)
+    expect(modelscopeQwenImageEdit2511Model.endpoints).toBe(MODELSCOPE_CREATE_TASK_ENDPOINT)
   })
 })
 
@@ -29,7 +29,7 @@ describe('resolveModelscopeSize 尺寸边界', () => {
 })
 
 describe('buildModelscopeRequest 图片来源', () => {
-  const options = { modelId: 'Qwen/Qwen-Image-Edit-2509', allowImage: true }
+  const options = { modelId: 'Qwen/Qwen-Image-Edit-2511', allowImage: true }
 
   it('读生成页提交用的 uploadedFilePaths', () => {
     expect(buildModelscopeRequest({ prompt: 'p', uploadedFilePaths: ['a.png', 'b.png'] }, options).image_url)
@@ -46,15 +46,15 @@ describe('buildModelscopeRequest 图片来源', () => {
   })
 
   it('allowImage 为 false 时不发送图片', () => {
-    expect(buildModelscopeRequest({ prompt: 'p', uploadedFilePaths: ['a.png'] }, { modelId: 'Qwen/Qwen-Image', allowImage: false }).image_url)
+    expect(buildModelscopeRequest({ prompt: 'p', uploadedFilePaths: ['a.png'] }, { modelId: 'Qwen/Qwen-Image-2512', allowImage: false }).image_url)
       .toBeUndefined()
   })
 
   it('真实 catalog builder 复用同一实现并保留图片契约', async () => {
     const params = { prompt: 'p', uploadedFilePaths: ['a.png', 'b.png'] }
-    const actual = await modelscopeQwenImageEdit2509Model.request!.builder!(params)
+    const actual = await modelscopeQwenImageEdit2511Model.request!.builder!(params)
     const expected = buildModelscopeRequest(params, {
-      modelId: 'Qwen/Qwen-Image-Edit-2509', allowGuidance: false, allowNegativePrompt: false,
+      modelId: 'Qwen/Qwen-Image-Edit-2511', allowGuidance: false, allowNegativePrompt: false,
       allowImage: true, baseSize: 1024, sizeBounds: { min: 64, max: 1664 },
     })
     expect(actual).toEqual(expected)

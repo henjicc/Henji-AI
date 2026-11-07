@@ -18,7 +18,7 @@ vi.mock('@/platform/desktopApi', async importOriginal => ({ ...await importOrigi
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: (selector: (state: typeof mocks.settings) => unknown) => selector(mocks.settings) }))
 vi.mock('@/hooks/useWaveformData', () => ({ useWaveformData: () => ({ status: 'idle' }) }))
-vi.mock('./hooks/useAssetSidebarResize', () => ({ useAssetSidebarResize: () => ({ width: 208, startResize: vi.fn(), resizeByKeyboard: vi.fn() }) }))
+vi.mock('./hooks/useAssetSidebarResize', () => ({ useAssetSidebarResize: () => ({ width: 208, min: 160, max: 400, setWidth: vi.fn() }) }))
 vi.mock('@/components/mediaViewer/ImageViewerModal', () => ({ ImageViewerModal: () => null }))
 vi.mock('@/components/mediaViewer/VideoViewerModal', () => ({ VideoViewerModal: () => null }))
 vi.mock('@/components/mediaViewer/AudioViewerModal', () => ({ AudioViewerModal: () => null }))

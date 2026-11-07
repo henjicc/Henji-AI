@@ -61,10 +61,10 @@ export const modelscopePresentation: Record<string, ModelPresentation> = {
     linkages: [],
   },
 
-  'Qwen/Qwen-Image': {
+  'Qwen/Qwen-Image-2512': {
     meta: {
-      name: { key: 'meta.name', fallback: 'Qwen-Image' },
-      i18nScope: 'models.defs.Qwen/Qwen-Image',
+      name: { key: 'meta.name', fallback: 'Qwen-Image-2512' },
+      i18nScope: 'models.defs.Qwen/Qwen-Image-2512',
     },
     params: {
       modelscopeImageSize: { name: sharedFieldText('aspectRatio'), optionLabels: ASPECT_RATIO_OPTION_LABELS },
@@ -90,10 +90,10 @@ export const modelscopePresentation: Record<string, ModelPresentation> = {
     linkages: [],
   },
 
-  'Qwen/Qwen-Image-Edit-2509': {
+  'Qwen/Qwen-Image-Edit-2511': {
     meta: {
-      name: { key: 'meta.name', fallback: 'Qwen-Image-Edit-2509' },
-      i18nScope: 'models.defs.Qwen/Qwen-Image-Edit-2509',
+      name: { key: 'meta.name', fallback: 'Qwen-Image-Edit-2511' },
+      i18nScope: 'models.defs.Qwen/Qwen-Image-Edit-2511',
     },
     params: {
       modelscopeImageSize: {

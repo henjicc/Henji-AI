@@ -1,14 +1,16 @@
 /**
- * ModelScope Qwen-Image 模型（运行时契约）
+ * ModelScope Qwen-Image-2512 模型（运行时契约）
  */
 
 import { defineModel } from '../defineModel'
 import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CREATE_TASK_ENDPOINT } from './utils'
 
-export const modelscopeQwenImageModel = defineModel({
+export const modelscopeQwenImage2512Model = defineModel({
   meta: {
-    id: 'Qwen/Qwen-Image',
-    canonicalModelId: 'qwen-image',
+    id: 'Qwen/Qwen-Image-2512',
+    canonicalModelId: 'qwen-image-2512',
+    // 2512 是 Qwen-Image 的直接后继，接口与参数相同；旧工程里的 Qwen-Image 按别名打开。
+    aliases: ['Qwen/Qwen-Image'],
     provider: 'modelscope',
     type: 'image',
     tags: ['text-to-image'],
@@ -67,7 +69,7 @@ export const modelscopeQwenImageModel = defineModel({
   endpoints: MODELSCOPE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => buildModelscopeRequest(params, {
-      modelId: 'Qwen/Qwen-Image',
+      modelId: 'Qwen/Qwen-Image-2512',
       allowGuidance: true,
       allowNegativePrompt: true,
       allowImage: false,
@@ -84,4 +86,4 @@ export const modelscopeQwenImageModel = defineModel({
   }
 })
 
-export default modelscopeQwenImageModel
+export default modelscopeQwenImage2512Model

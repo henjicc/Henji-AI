@@ -1,9 +1,7 @@
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { GripVertical, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react';
-import { UiIconButton } from '@/components/ui';
+import { useEffect, useState, type ReactNode } from 'react';
+import { PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react';
+import { UiIconButton, UiResizeHandle } from '@/components/ui';
 import {
-  clampImageEditorInspectorWidth,
   clampImageEditorInspectorWidthToViewport,
   IMAGE_EDITOR_INSPECTOR_MAX_WIDTH,
   IMAGE_EDITOR_INSPECTOR_MIN_WIDTH,
@@ -24,64 +22,17 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
   const setInspectorWidth = useImageEditorUiStore((state) => state.setInspectorWidth);
   const setInspectorCollapsed = useImageEditorUiStore((state) => state.setInspectorCollapsed);
   const resetInspector = useImageEditorUiStore((state) => state.resetInspector);
-  const [draftWidth, setDraftWidth] = useState(() => clampImageEditorInspectorWidth(persistedWidth));
-  const resizeActiveRef = useRef(false);
-  const draftWidthRef = useRef(draftWidth);
-  draftWidthRef.current = draftWidth;
-
-  const clampWidthToViewport = useCallback((width: number): number => {
-    return clampImageEditorInspectorWidthToViewport(width, window.innerWidth);
-  }, []);
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  // 拖动中只改本地宽度，松手才写入偏好；保存的是用户拖出的宽度，显示时再按视口夹紧，窗口缩小再放大后恢复原宽度。
+  const [draftWidth, setDraftWidth] = useState<number | null>(null);
+  const width = clampImageEditorInspectorWidthToViewport(draftWidth ?? persistedWidth, viewportWidth);
+  const maxWidth = clampImageEditorInspectorWidthToViewport(IMAGE_EDITOR_INSPECTOR_MAX_WIDTH, viewportWidth);
 
   useEffect(() => {
-    setDraftWidth(clampWidthToViewport(persistedWidth));
-    // 从用户保存的宽度重新夹紧，窗口缩小再放大后恢复原宽度。
-    const handleViewportResize = () => {
-      if (resizeActiveRef.current) return;
-      setDraftWidth(clampWidthToViewport(persistedWidth));
-    };
+    const handleViewportResize = () => setViewportWidth(window.innerWidth);
     window.addEventListener('resize', handleViewportResize);
     return () => window.removeEventListener('resize', handleViewportResize);
-  }, [clampWidthToViewport, persistedWidth]);
-
-  const handlePointerMove = useCallback((event: globalThis.PointerEvent) => {
-    if (!resizeActiveRef.current) return;
-    const nextWidth = clampWidthToViewport(window.innerWidth - event.clientX);
-    setDraftWidth(nextWidth);
-  }, [clampWidthToViewport]);
-
-  const stopResize = useCallback(() => {
-    if (!resizeActiveRef.current) return;
-    resizeActiveRef.current = false;
-    setInspectorWidth(draftWidthRef.current);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    window.removeEventListener('pointermove', handlePointerMove);
-    window.removeEventListener('pointerup', stopResize);
-    window.removeEventListener('pointercancel', stopResize);
-  }, [handlePointerMove, setInspectorWidth]);
-
-  const startResize = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (collapsed) return;
-    event.preventDefault();
-    resizeActiveRef.current = true;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', stopResize);
-    window.addEventListener('pointercancel', stopResize);
-  }, [collapsed, handlePointerMove, stopResize]);
-
-  const adjustWidthByKeyboard = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    event.preventDefault();
-    const delta = event.key === 'ArrowLeft' ? 16 : -16;
-    const nextWidth = clampWidthToViewport(draftWidthRef.current + delta);
-    setDraftWidth(nextWidth);
-    setInspectorWidth(nextWidth);
-  }, [clampWidthToViewport, setInspectorWidth]);
-
-  useEffect(() => () => stopResize(), [stopResize]);
+  }, []);
 
   return (
     <div className={`flex min-h-0 min-w-0 flex-col overflow-hidden ${className}`}>
@@ -93,25 +44,21 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {canvas}
         </main>
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整参数面板宽度"
-          tabIndex={collapsed ? -1 : 0}
-          onPointerDown={startResize}
-          onKeyDown={adjustWidthByKeyboard}
-          className={`group relative z-raised flex w-2 shrink-0 items-center justify-center ${collapsed ? 'pointer-events-none opacity-0' : 'cursor-col-resize'}`}
-          style={{ touchAction: 'none' }}
-        >
-          <span className="h-full w-px bg-line transition-colors group-hover:bg-accent group-focus-visible:bg-accent" />
-          <GripVertical className={`${UI_ICON_SIZE_CLASS.md} absolute text-text2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100`} />
-        </div>
+        {!collapsed && (
+          <UiResizeHandle
+            label="调整参数面板宽度"
+            grow="start"
+            value={width}
+            min={IMAGE_EDITOR_INSPECTOR_MIN_WIDTH}
+            max={maxWidth}
+            onChange={setDraftWidth}
+            onCommit={(value) => { setInspectorWidth(value); setDraftWidth(null); }}
+          />
+        )}
         <aside
           className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-gap bg-panel"
           style={{
-            width: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : draftWidth,
-            minWidth: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : IMAGE_EDITOR_INSPECTOR_MIN_WIDTH,
-            maxWidth: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : Math.min(IMAGE_EDITOR_INSPECTOR_MAX_WIDTH, Math.max(IMAGE_EDITOR_INSPECTOR_MIN_WIDTH, draftWidth)),
+            width: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : width,
           }}
         >
           <div className="flex h-10 shrink-0 items-center justify-end gap-1 px-1">

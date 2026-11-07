@@ -1,5 +1,5 @@
 /** 由 scripts/generate-catalog-index.cjs 自动生成；`pack` 是完整执行单元，`model` 仅供低层目录用途。 */
-import model from '../../../catalog/modelscope/qwen-image.model'
+import model from '../../../catalog/modelscope/qwen-image-edit-2511.model'
 import * as adapter from '../../../providers/modelscope'
 import { preprocess } from '../../../upload/provider-preprocessors/public-host'
 import type { GenerationClientProviderRegistration, GenerationPack } from '../../../generation/core'

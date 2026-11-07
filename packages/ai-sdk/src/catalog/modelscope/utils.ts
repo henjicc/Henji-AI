@@ -40,7 +40,7 @@ interface ResolutionSize {
 }
 
 /**
- * Qwen-Image-Edit-2509 专用分辨率计算（不使用基数系统，每个比例自动计算 [64, 2048] 范围内的最佳值）。
+ * Qwen-Image-Edit 专用分辨率计算（不使用基数系统，每个比例自动计算 [64, 2048] 范围内的最佳值）。
  * 原实现在应用侧 `src/utils/qwenResolutionCalculator.ts`，这里内联一份纯函数副本——
  * 该文件同时被 UI 组件 `UniversalResolutionSelector.tsx` 消费，SDK 不能反向依赖 `@/utils`，
  * 只搬运 `resolveModelscopeSize` 实际用到的这一个函数（不含 logger 的批量/展示层变体）。
@@ -156,7 +156,7 @@ export function resolveModelscopeSize(
   const [w, h] = ratio.split(':').map(Number)
   if (!w || !h) return undefined
 
-  if (modelId === 'Qwen/Qwen-Image-Edit-2509') {
+  if (modelId === 'Qwen/Qwen-Image-Edit-2511') {
     const size = calculateQwenResolution(w, h)
     return `${size.width}x${size.height}`
   }

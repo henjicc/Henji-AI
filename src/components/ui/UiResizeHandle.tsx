@@ -16,12 +16,14 @@ export interface UiResizeHandleProps {
   grow?: 'end' | 'start'
   /** pane：两块区域之间的竖条；column：表头单元格右缘（父级需 relative） */
   variant?: 'pane' | 'column'
+  /** 静息时也画一条分隔线：表格列之间需要看得出边界时（如剪辑素材列表） */
+  divider?: boolean
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.round(Math.min(max, Math.max(min, value)))
 
 /** 拖动或用左右方向键调整相邻区域的宽度；侧栏宽度与表格列宽共用这一份。 */
-export const UiResizeHandle: React.FC<UiResizeHandleProps> = ({ label, value, min, max, onChange, onCommit, grow = 'end', variant = 'pane' }) => {
+export const UiResizeHandle: React.FC<UiResizeHandleProps> = ({ label, value, min, max, onChange, onCommit, grow = 'end', variant = 'pane', divider = false }) => {
   const latest = useRef(value)
   latest.current = value
   const sign = grow === 'end' ? 1 : -1
@@ -76,7 +78,7 @@ export const UiResizeHandle: React.FC<UiResizeHandleProps> = ({ label, value, mi
         : 'group absolute -right-1 bottom-0 top-0 z-raised flex w-2 cursor-col-resize justify-center outline-none'}
       style={{ touchAction: 'none' }}
     >
-      <span className={`h-full ${variant === 'pane' ? 'w-0.5' : 'w-px'} bg-transparent transition-colors duration-120 group-hover:bg-accent group-focus-visible:bg-accent`} />
+      <span className={`h-full ${variant === 'pane' ? 'w-0.5' : 'w-px'} ${divider ? 'bg-line' : 'bg-transparent'} transition-colors duration-120 group-hover:bg-accent group-focus-visible:bg-accent`} />
     </div>
   )
 }

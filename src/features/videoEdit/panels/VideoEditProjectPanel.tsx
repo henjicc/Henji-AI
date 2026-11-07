@@ -7,7 +7,7 @@ import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } 
 import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon, ICON_VIDEO_EDIT_PROXY as ProxyIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
-import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiOverflowRow, UiSwitch, UiToolbar } from '@/components/ui'
+import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiOverflowRow, UiResizeHandle, UiSwitch, UiToolbar } from '@/components/ui'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { chooseVideoEditFolders } from '../application/videoEditFolderImport'
@@ -79,18 +79,11 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   // PR 列表视图：素材箱是可展开的树（三角展开），没有单独的素材箱侧栏。
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [columnWidths, setColumnWidths] = useState<Record<ListColumnKey, number>>(readColumnWidths)
-  const resizeColumn = (key: ListColumnKey) => (event: React.PointerEvent<HTMLElement>): void => {
-    if (event.button !== 0) return
-    event.preventDefault(); event.stopPropagation()
-    const handle = event.currentTarget; handle.setPointerCapture(event.pointerId)
-    const startX = event.clientX; const startWidth = columnWidths[key]
-    const move = (next: PointerEvent): void => setColumnWidths(current => ({ ...current, [key]: Math.max(MIN_COLUMN_WIDTH, Math.min(800, Math.round(startWidth + next.clientX - startX))) }))
-    const up = (): void => {
-      handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up)
-      setColumnWidths(current => { try { localStorage.setItem(COLUMN_WIDTHS_KEY, JSON.stringify(current)) } catch { /* 只是本机偏好 */ } return current })
-    }
-    handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up)
-  }
+  const columnResize = (key: ListColumnKey) => ({
+    value: columnWidths[key], min: MIN_COLUMN_WIDTH, max: 800,
+    onChange: (value: number) => setColumnWidths(current => ({ ...current, [key]: value })),
+    onCommit: () => setColumnWidths(current => { try { localStorage.setItem(COLUMN_WIDTHS_KEY, JSON.stringify(current)) } catch { /* 只是本机偏好 */ } return current }),
+  })
   const tableWidth = Object.values(columnWidths).reduce((sum, value) => sum + value, 0) + 20 + 12
   // 拖出素材时跟着鼠标的小标签（浏览器缩略图已去掉）；到了时间线上由时间线画片段虚影，这里隐藏
   const [dragFollow, setDragFollow] = useState<{ count: number; x: number; y: number; hidden: boolean } | null>(null)
@@ -369,7 +362,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
               {([{ key: 'name' as const, label: '名称' }, ...LIST_COLUMNS]).map(column => <div key={column.key} className="relative flex shrink-0 items-center" style={{ width: columnWidths[column.key] }}>
                 <UiButton size="sm" className="min-w-0 flex-1 !justify-start " disabled={column.key === 'proxy'} aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => { if (column.key !== 'proxy') sortBy(column.key) }}>{column.label}{column.key !== 'proxy' && <SortMark sort={sort} column={column.key} />}</UiButton>
                 {/* 列分隔线：按住左右拖动调整列宽 */}
-                <span role="separator" aria-orientation="vertical" aria-label={`调整“${column.label}”列宽`} title="拖动调整列宽" className="absolute -right-1 bottom-1 top-1 z-raised w-2 cursor-col-resize border-r border-line hover:border-accent-ring" onPointerDown={resizeColumn(column.key)} onClick={event => event.stopPropagation()} />
+                <UiResizeHandle variant="column" divider label={`调整“${column.label}”列宽`} {...columnResize(column.key)} />
               </div>)}
             </div>
             <Virtuoso ref={listRef} className="min-h-0 flex-1" key={`${binId}:list`} data={rows} computeItemKey={(_index, row) => row.entry.value.id} itemContent={renderRow} role="tree" aria-label="素材与素材箱" />

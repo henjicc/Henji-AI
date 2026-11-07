@@ -4,8 +4,8 @@ import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import { VirtuosoGrid } from 'react-virtuoso'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { FolderPlus, GripVertical, Settings2, X } from 'lucide-react'
-import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiPageHeader, UiRangeInput } from '@/components/ui'
+import { FolderPlus, Settings2, X } from 'lucide-react'
+import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiPageHeader, UiRangeInput, UiResizeHandle } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, inspectAssets, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
@@ -84,7 +84,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   const queryVersionRef = useRef(0)
   const loadingMoreRef = useRef(false)
   const wasActiveRef = useRef(active)
-  const { width: sidebarWidth, startResize: startSidebarResize, resizeByKeyboard: resizeSidebarByKeyboard } = useAssetSidebarResize()
+  const sidebar = useAssetSidebarResize()
   const { menuVisible: blankMenuVisible, menuPosition: blankMenuPosition, menuItems: blankMenuItems, showMenu: showBlankMenu, hideMenu: hideBlankMenu } = useContextMenu()
   const workspaceBatchMode = mode === 'workspace' && batchMode
   useEffect(() => { if (!active) setPreviewAsset(null) }, [active])
@@ -328,22 +328,10 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           onCreate={(name) => mutate(() => createAssetLibrary(name), true)}
           onRename={(library, name) => mutate(() => renameAssetLibrary(library.id, name), true)}
           onDelete={deleteLibrary}
-          width={mode === 'workspace' ? sidebarWidth : undefined}
+          width={mode === 'workspace' ? sidebar.width : undefined}
         />
         {mode === 'workspace' && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={t('assetLibrary.resizeSidebar')}
-            tabIndex={0}
-            onPointerDown={startSidebarResize}
-            onKeyDown={resizeSidebarByKeyboard}
-            className="group relative z-raised -ml-1 flex w-2 shrink-0 cursor-col-resize items-center justify-center outline-none"
-            style={{ touchAction: 'none' }}
-          >
-            <span className="h-full w-0.5 bg-transparent transition-colors duration-120 group-hover:bg-accent group-focus-visible:bg-accent" />
-            <GripVertical className={`${UI_ICON_SIZE_CLASS.md} absolute text-text3 opacity-0 transition-opacity duration-120 group-hover:opacity-100 group-focus-visible:opacity-100`} />
-          </div>
+          <UiResizeHandle label={t('assetLibrary.resizeSidebar')} value={sidebar.width} min={sidebar.min} max={sidebar.max} onChange={sidebar.setWidth} />
         )}
         <main className="flex min-w-0 flex-1 flex-col">
           {mode === 'floating' && (

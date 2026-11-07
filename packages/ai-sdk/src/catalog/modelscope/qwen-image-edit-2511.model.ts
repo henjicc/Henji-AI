@@ -1,14 +1,16 @@
 /**
- * ModelScope Qwen-Image-Edit-2509 模型（运行时契约）
+ * ModelScope Qwen-Image-Edit-2511 模型（运行时契约）
  */
 
 import { defineModel } from '../defineModel'
 import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CREATE_TASK_ENDPOINT } from './utils'
 
-export const modelscopeQwenImageEdit2509Model = defineModel({
+export const modelscopeQwenImageEdit2511Model = defineModel({
   meta: {
-    id: 'Qwen/Qwen-Image-Edit-2509',
-    canonicalModelId: 'qwen-image-edit-2509',
+    id: 'Qwen/Qwen-Image-Edit-2511',
+    canonicalModelId: 'qwen-image-edit-2511',
+    // 2511 是 2509 的直接后继，接口与参数相同；旧工程里的 2509 按别名打开。
+    aliases: ['Qwen/Qwen-Image-Edit-2509'],
     provider: 'modelscope',
     type: 'image',
     tags: ['image-to-image'],
@@ -66,7 +68,7 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
   endpoints: MODELSCOPE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => buildModelscopeRequest(params, {
-      modelId: 'Qwen/Qwen-Image-Edit-2509',
+      modelId: 'Qwen/Qwen-Image-Edit-2511',
       allowGuidance: false,
       allowNegativePrompt: false,
       allowImage: true,
@@ -83,4 +85,4 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
   }
 })
 
-export default modelscopeQwenImageEdit2509Model
+export default modelscopeQwenImageEdit2511Model

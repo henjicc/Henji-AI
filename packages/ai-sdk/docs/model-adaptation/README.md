@@ -193,7 +193,7 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Bria 创意放大 | 图片 | Fal | [Bria-创意放大_Fal.md](Bria-创意放大/Bria-创意放大_Fal.md) |
 | Ideogram 图片放大 | 图片 | Fal | [Ideogram-图片放大_Fal.md](Ideogram-图片放大/Ideogram-图片放大_Fal.md) |
 
-魔搭侧另有 5 个已适配的开源图像模型（`Qwen/Qwen-Image`、`Qwen/Qwen-Image-Edit-2509`、`black-forest-labs/FLUX.1-Krea-dev`、`MusePublic/majicMIX_realistic`、`MusePublic/14_ckpt_SD_XL`）。它们共用魔搭 API-Inference 的同一套端点与参数，差异只有 model ID、尺寸上限和魔粒档位，因此不单独建文件，统一记在 [供应商/魔搭.md](供应商/魔搭.md) 第 7 节。
+魔搭侧另有 5 个已适配的开源图像模型（`Qwen/Qwen-Image-2512`、`Qwen/Qwen-Image-Edit-2511`，旧 ID 为别名；`black-forest-labs/FLUX.1-Krea-dev`、`MusePublic/majicMIX_realistic`、`MusePublic/14_ckpt_SD_XL`）。它们共用魔搭 API-Inference 的同一套端点与参数，差异只有 model ID、尺寸上限和魔粒档位，因此不单独建文件，统一记在 [供应商/魔搭.md](供应商/魔搭.md) 第 7 节。
 
 ### SDK / Say-It 语音识别（21）
 
