@@ -1,6 +1,6 @@
 # MiniMax
 
-> 核对时间：2026-08-26。信息来源见文末「原始链接索引」，均无需登录。
+> 核对时间：2026-08-26；M3.1 Flash 与国内域名于 2026-11-07 补核。信息来源见文末「原始链接索引」，均无需登录。
 
 ## 1. 摘要
 
@@ -17,15 +17,20 @@ MiniMax 是本次调研 7 家里**唯一把 Anthropic 协议列为默认推荐�
 
 | 协议 | Base URL |
 |---|---|
-| Anthropic Messages（推荐） | `https://api.minimaxi.com/anthropic` |
-| OpenAI Chat Completions | `https://api.minimaxi.com/v1`（路径 `/chat/completions`） |
-| OpenAI Responses API | `https://api.minimaxi.com/v1`（路径 `/responses`） |
+| Anthropic Messages（推荐） | `https://api.minimax.cn/anthropic` |
+| OpenAI Chat Completions | `https://api.minimax.cn/v1`（路径 `/chat/completions`） |
+| OpenAI Responses API | `https://api.minimax.cn/v1`（路径 `/responses`） |
+
+官方国内文档现在写的接口域名是 `api.minimax.cn`；旧域名 `api.minimaxi.com` 2026-11-07 实测仍可用（未带密钥请求两边都返回 401），项目预设改用新域名。
 
 ## 3. 模型清单
 
 | 模型 ID | 简介 | 输入 → 输出 | 上下文 | 最大输出 |
 |---|---|---|---|---|
-| `MiniMax-M3` | 当前最新旗舰，原生多模态，1M 上下文，面向 Frontier Coding、复杂推理、Agent | 文本、图片、视频 → 文本 | 1,000,000 | 官方建议 131,072，硬上限 524,288 |
+| `MiniMax-M3.1-Flash` | 高性价比多模态编程模型，输出可达 200+ TPS | 文本、图片、视频 → 文本 | 1,000,000（输入加输出） | 官方未写 |
+| `MiniMax-M3` | 旗舰，原生多模态，1M 上下文，面向 Frontier Coding、复杂推理、Agent | 文本、图片、视频 → 文本 | 1,000,000 | 官方建议 131,072，硬上限 524,288 |
+
+M3.1 Flash（2026-11-07 读 [模型调用](https://platform.minimax.cn/docs/guides/text-generation)、[OpenAI 兼容接口](https://platform.minimax.cn/docs/api-reference/text-openai-api)、[价格](https://platform.minimax.cn/docs/pricing/overview)）：思考强度 `reasoning_effort` 为 low / medium / high / xhigh / max，省略即 max，**无法关闭**（传 none 或 thinking disabled 返回 400）；temperature 与 top_p 被固定（1 与 0.95），项目不下发；不支持音频输入；官方未提结构化输出，项目不声明；价格 ¥1 / ¥4 / 缓存读 ¥0.1 每百万 tokens。项目走 Chat Completions，思考「关闭」时发最低档 low。
 
 `MiniMax-M2.7`（含 `-highspeed`）仍在正常提供服务，属于上一代仍在售的并行线，不是 M3 的档位变体；`M2.5`/`M2.1`/`M2` 系列已归入官方"历史模型"分组。
 

@@ -124,14 +124,21 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     adapter: 'openai',
     apiProtocol: 'openai-compatible',
     baseUrl: 'https://api.moonshot.cn/v1',
-    // K3 始终思考、无法关闭，只能调强度，所以不给"关闭"这个选项。
+    // K3 系列始终思考、无法关闭，只能调强度，所以不给"关闭"这个选项。
     reasoning: { enabled: true, effort: 'max' },
     reasoningConfigurable: true,
-    modelIds: ['kimi-k3'],
+    modelIds: ['kimi-k3.1-pro', 'kimi-k3.1-pro-highspeed', 'kimi-k3'],
+    // 原厂 K3 系列：采样参数固定、必须省略；结构化输出支持 json_schema 且可与思考同用。
+    // 视频只收 Files API 上传后的 ms://<file-id>，SDK 没有这条上传链路，所以不声明视频。
+    modelCapabilities: Object.fromEntries(['kimi-k3.1-pro', 'kimi-k3.1-pro-highspeed', 'kimi-k3'].map(modelId => [modelId, {
+      image: true, video: false, audio: false,
+      structuredOutputMode: 'schema' as const, structuredOutputWithReasoning: true, sampling: false,
+      contextWindow: 1_048_576, maxOutputTokens: 131_072,
+    }])),
     websiteUrl: providerMetadata('kimi').websiteUrl,
     apiKeyUrl: providerMetadata('kimi').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/Kimi.md',
-    note: '文档站是 platform.kimi.com，但接口域名仍是 moonshot.cn，不要混用；K3 需要充值后才能调用。K3 的思考无法关闭，思考模式选「关闭」时按最低强度发送。',
+    note: '文档站是 platform.kimi.com，但接口域名仍是 moonshot.cn，不要混用；K3 系列需要充值后才能调用。K3.1 Pro Highspeed 速度约为 K3.1 Pro 的 2～3 倍。K3 系列思考无法关闭，思考模式选「关闭」时按最低强度发送。',
   },
   {
     providerId: 'bigmodel',
@@ -168,11 +175,20 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     displayName: 'MiniMax',
     adapter: 'openai',
     apiProtocol: 'openai-compatible',
-    baseUrl: 'https://api.minimaxi.com/v1',
+    // 官方国内接口域名已改为 minimax.cn（旧域名 minimaxi.com 仍可用）。
+    baseUrl: 'https://api.minimax.cn/v1',
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
-    modelIds: ['MiniMax-M3'],
+    modelIds: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
     responsesModelIds: ['MiniMax-M3'],
+    // 原厂 M3.1 Flash 收图片与视频；思考无法关闭；temperature / top_p 被固定，不下发；
+    // 官方没写结构化输出与最大输出长度，保持未声明。
+    modelCapabilities: {
+      'MiniMax-M3.1-Flash': {
+        image: true, video: true, audio: false,
+        structuredOutputMode: 'none', sampling: false, contextWindow: 1_000_000, maxOutputTokens: null,
+      },
+    },
     websiteUrl: providerMetadata('minimax').websiteUrl,
     apiKeyUrl: providerMetadata('minimax').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/MiniMax.md',

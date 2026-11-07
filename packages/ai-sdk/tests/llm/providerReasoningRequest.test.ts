@@ -45,6 +45,17 @@ describe('applyProviderReasoningRequestBody', () => {
     expect(apply('kimi', { enabled: true, effort: 'xhigh' })).toMatchObject({ reasoning_effort: 'high' })
     expect(apply('kimi', { enabled: true, effort: 'max' })).toMatchObject({ reasoning_effort: 'max' })
     expect(apply('kimi', { enabled: true, effort: 'low' })).not.toHaveProperty('thinking')
+    for (const model of ['kimi-k3.1-pro', 'kimi-k3.1-pro-highspeed']) {
+      expect(applyProviderReasoningRequestBody('kimi', undefined, { model }, { enabled: false, effort: 'max' })).toEqual({ model, reasoning_effort: 'low' })
+    }
+  })
+
+  it('MiniMax M3.1 Flash 五档透传，关闭退到 low；M3 仍走通用写法', () => {
+    const flash = (reasoning: { enabled: boolean; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' }) =>
+      applyProviderReasoningRequestBody('minimax', undefined, { model: 'MiniMax-M3.1-Flash' }, reasoning)
+    expect(flash({ enabled: true, effort: 'xhigh' })).toMatchObject({ reasoning_effort: 'xhigh' })
+    expect(flash({ enabled: false, effort: 'max' })).toMatchObject({ reasoning_effort: 'low' })
+    expect(applyProviderReasoningRequestBody('minimax', undefined, { model: 'MiniMax-M3' }, { enabled: false, effort: 'high' })).toEqual({ model: 'MiniMax-M3' })
   })
 
   it('GLM 关闭思考时整段不发，避免 GLM-5.3 因 thinking.disabled 直接失败', () => {

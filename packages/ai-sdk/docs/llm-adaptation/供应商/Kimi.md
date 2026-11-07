@@ -1,6 +1,6 @@
 # Kimi（Moonshot）
 
-> 核对时间：2026-08-26。信息来源见文末「原始链接索引」，均无需登录。
+> 核对时间：2026-08-26；K3.1 Pro 于 2026-11-07 补核。信息来源见文末「原始链接索引」，均无需登录。
 
 ## 1. 摘要
 
@@ -21,11 +21,15 @@ Kimi 官方文档全文没有出现过 `responses.create`；`platform.kimi.com/d
 
 | 模型 ID | 简介 | 输入 → 输出 | 上下文 | 最大输出 |
 |---|---|---|---|---|
-| `kimi-k3` | 当前旗舰，2.8 万亿参数，KDA 混合线性注意力，全球首个开源 3 万亿级模型 | 文本、图片、视频 → 文本 | 1,048,576 tokens（1M） | 默认 131,072，最大可设 1,048,576 |
+| `kimi-k3.1-pro` | 当前旗舰，K3 后继，长程编程与端到端知识工作 | 文本、图片、视频 → 文本 | 1,048,576 tokens（1M） | 默认 131,072，最大可设 1,048,576 |
+| `kimi-k3.1-pro-highspeed` | K3.1 Pro 高速版，速度约 2～3 倍 | 同上 | 同上 | 同上 |
+| `kimi-k3` | 上一代旗舰，2.8 万亿参数，KDA 混合线性注意力 | 文本、图片、视频 → 文本 | 1,048,576 tokens（1M） | 默认 131,072，最大可设 1,048,576 |
 
 价格（2026-09-24 核对，元/百万 tokens）：缓存命中 2、缓存未命中 20、输出 100；另计缓存写入，TTL 5 分钟为 20、TTL 1 小时为 40，默认 5 分钟。命中仅按缓存命中单价计费，不重复收取缓存写入费用，命中后有效期续期。当前 SDK 未提供 Kimi 账单计算器，不从总输入 tokens 猜测缓存写入量。
 
-K3 是付费解锁模型：**充值后才能调用**，新用户认证赠送的 15 元代金券不能用于 K3。
+K3 是付费解锁模型：**充值后才能调用**，新用户认证赠送的 15 元代金券不能用于 K3。K3.1 Pro 可用代金券，Highspeed 不可用；K3.1 Pro 单价官方价格页表格未能读出，以控制台为准。
+
+K3.1 Pro 与 K3 的接口契约相同（2026-11-07 读 [K3.1 Pro 快速开始](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart)、[视觉](https://platform.kimi.com/docs/guide/use-kimi-vision-model.md)、[思考强度](https://platform.kimi.com/docs/guide/use-reasoning-effort.md)）：`reasoning_effort` low / high / max、默认 max、无法关闭；采样参数固定须省略；图片只收 base64 data URL；视频要经 Files API 上传后用 `ms://<file-id>`；`response_format` 支持 `json_schema`（strict）。项目预设：K3.1 Pro、Highspeed、K3 三个模型，图片开、视频不声明（SDK 没有 Files API 上传链路），结构化输出按 schema。官方现在也提供 Responses API（`/v1/responses`），项目仍走 Chat Completions。
 
 ## 4. 思考模式（始终开启，不可关闭）
 

@@ -58,11 +58,11 @@ const PROVIDER_REASONING_BODY: Readonly<Record<string, ReasoningBodyBuilder>> = 
     ? { thinking: { type: 'enabled' }, reasoning_effort: pickEffort(reasoning.effort, ['high', 'max']) }
     : { thinking: { type: 'disabled' } }),
 
-  // Kimi K3：始终思考、官方没有关闭开关，只有 low / high / max 三档。
+  // Kimi K3 系列（K3、K3.1 Pro 与 Highspeed）：始终思考、官方没有关闭开关，只有 low / high / max 三档。
   // 用户选「关闭」时退到最低档，而不是假装关掉——这一点在供应商预设的说明里也写了。
   kimi: (reasoning, body) => {
     const model = typeof body.model === 'string' ? body.model.toLowerCase() : ''
-    if (model === 'kimi-k3') {
+    if (model === 'kimi-k3' || model.startsWith('kimi-k3.1-pro')) {
       return { reasoning_effort: reasoning.enabled ? pickEffort(reasoning.effort, ['low', 'high', 'max']) : 'low' }
     }
     if (model === 'kimi-k2.6') return { thinking: { type: reasoning.enabled ? 'enabled' : 'disabled' } }
@@ -85,6 +85,14 @@ const PROVIDER_REASONING_BODY: Readonly<Record<string, ReasoningBodyBuilder>> = 
         reasoning_effort: pickEffort(reasoning.effort, ['low', 'medium', 'high', 'xhigh', 'max']),
       }
     : { thinking: { type: 'disabled' } }),
+
+  // MiniMax M3.1 Flash：reasoning_effort 有 low / medium / high / xhigh / max 五档，省略即 max，
+  // 发 none 会 400，所以「关闭」退到最低档。M3 走 Responses，保持通用写法。
+  minimax: (reasoning, body) => {
+    const model = typeof body.model === 'string' ? body.model.toLowerCase() : ''
+    if (model !== 'minimax-m3.1-flash') return defaultReasoningBody(reasoning, body)
+    return { reasoning_effort: reasoning.enabled ? pickEffort(reasoning.effort, ['low', 'medium', 'high', 'xhigh', 'max']) : 'low' }
+  },
 
   // 阿里云百炼：布尔开关，没有强度分级。
   bailian: reasoning => ({ enable_thinking: reasoning.enabled }),
