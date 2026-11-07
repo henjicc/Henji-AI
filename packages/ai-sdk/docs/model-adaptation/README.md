@@ -26,9 +26,26 @@
 - **2026-11-07 火山、百炼大语言模型做全**：预设覆盖官方清单里未下线的模型，包括两家托管的 DeepSeek、Kimi、GLM、MiniMax、MiMo、Step；即将下线与翻译专用模型不进预设。托管第三方在逐个核实前走 Chat。
 - **2026-11-07 语音识别只补资料齐全的**：已加百炼 Qwen-Audio 3.0；火山 1.0 极速版、闲时版不做（2.0 更便宜）；百炼 `qwen-audio-3.1-asr-flash-message` 等事件协议整理后再做；硅基流动星辰与 Qwen3-ASR 等官方 API 列出后再接。
 - **2026-11-07 生成模型第一批待定**：候选 GPT Image 2.6、Wan 3.0、Kling 4.0、Gemini Omni 1.2、火山官方 Seedance，用户未确认前不动。
+  - 同日用户改为“缺的都补上”：第一批及 FLUX 3、Grok Imagine Video 1.5、MiniMax H3 Max、LTX-2.3、Veo 3.1（APIMart）、Seedream 5.0 Flash（APIMart）、HappyHorse 1.1（APIMart）、Eleven v4、Gemini 3.8 TTS 已接入，见下方“2026-11-07 已适配更新”。
 - **2026-11-07 能力标签两层封闭词表**：标签只说“模型能做什么事”，一件事一个标签，词表只在 `src/types/modelTags.ts`。形态按输入输出判断（图片编辑是大类，参考生视频不等于视频编辑或延长，首尾帧必同时有图生视频）；专项只给有专门参数或接口的模型（打光、多角度、扩图、放大、老照片修复、图层拆分、局部重绘、擦除、透明背景等，抠图并入透明背景）。不要“带声音”；能传几张图、分辨率、供应商这类配置事实不做标签；“仅英文提示词”是使用限制，改成 `promptLanguage`。
 - **2026-11-07 下线模型先标“已过时”不删代码**：平台已下线或即将下线的模型、派欧云全部生成模型（派欧云只保留大语言模型）写 `meta.deprecated`（大语言模型写目录条目的 `deprecated`），用户入口一律不再列出，开发者面板照常显示并注明原因。首批：Fal LTX-2、Fal Veo 3.1、火山 Seedream 5.0 Lite、KIE Seedance 1.5 Pro、派欧云 Kling 3.0 与 MiniMax Speech、Kimi K2.6 / K2.7 Code、MiMo 2.5。
 - **发布**：0.10.0 起的改动只接入痕迹AI，用户试过并明确要求后才发 npm（见 AGENTS.md 第 7 条）。
+
+## 2026-11-07 已适配更新
+
+全部只做了离线请求构建与价格核对，没有真实付费生成；价格与出处见各模型文档。
+
+- [GPT Image 2.6](GPT-Image-2.6/)：[Fal](GPT-Image-2.6/GPT-Image-2.6_Fal.md)、[KIE](GPT-Image-2.6/GPT-Image-2.6_KIE.md)、[APIMart](GPT-Image-2.6/GPT-Image-2.6_APIMart.md)、[Grsai](GPT-Image-2.6/GPT-Image-2.6_Grsai.md)。
+- [FLUX 3](FLUX-3/)：[Fal](FLUX-3/FLUX-3_Fal.md)、[APIMart（含 Klein 版本）](FLUX-3/FLUX-3_APIMart.md)；[FLUX 3 Klein · KIE](FLUX-3-Klein/FLUX-3-Klein_KIE.md)。
+- [Seedream 5.0 Flash · APIMart](Seedream-5.0-Flash/Seedream-5.0-Flash_APIMart.md)。
+- [Kling 4.0](Kling-4.0/)：[Fal](Kling-4.0/Kling-4.0_Fal.md)、[KIE](Kling-4.0/Kling-4.0_KIE.md)、[APIMart](Kling-4.0/Kling-4.0_APIMart.md)；[Kling 4.0 Flash](Kling-4.0-Flash/)：[Fal](Kling-4.0-Flash/Kling-4.0-Flash_Fal.md)、[KIE](Kling-4.0-Flash/Kling-4.0-Flash_KIE.md)。
+- [Wan 3.0](Wan-3.0/)：[Fal](Wan-3.0/Wan-3.0_Fal.md)、[APIMart](Wan-3.0/Wan-3.0_APIMart.md)（两家 Prime 为版本选项）、[KIE](Wan-3.0/Wan-3.0_KIE.md)、[Grsai](Wan-3.0/Wan-3.0_Grsai.md)；[Wan 3.0 Prime · KIE](Wan-3.0-Prime/Wan-3.0-Prime_KIE.md)。
+- [Gemini Omni 1.2 Flash](Gemini-Omni-1.2-Flash/)：[Fal](Gemini-Omni-1.2-Flash/Gemini-Omni-1.2-Flash_Fal.md)、[APIMart](Gemini-Omni-1.2-Flash/Gemini-Omni-1.2-Flash_APIMart.md)。
+- [Grok Imagine Video 1.5](Grok-Imagine-Video-1.5/)：[Fal](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_Fal.md)、[KIE](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_KIE.md)、[APIMart](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_APIMart.md)。
+- [MiniMax H3 Max](MiniMax-H3-Max/)：[Fal](MiniMax-H3-Max/MiniMax-H3-Max_Fal.md)、[APIMart](MiniMax-H3-Max/MiniMax-H3-Max_APIMart.md)。
+- [LTX-2.3 · Fal](LTX-2.3/LTX-2.3_Fal.md)（取代已过时的 LTX-2）、[Veo 3.1 · APIMart](Veo-3.1/Veo-3.1_APIMart.md)（Fal 的 Veo 3.1 11-17 下线）、[HappyHorse 1.1 · APIMart](HappyHorse-1.1/HappyHorse-1.1_APIMart.md)。
+- 语音：[Eleven v4 · Fal](Eleven-v4/Eleven-v4_Fal.md)、[Gemini 3.8 Flash TTS · KIE](Gemini-3.8-Flash-TTS/Gemini-3.8-Flash-TTS_KIE.md)、[Gemini 3.8 Flash-Lite TTS · KIE](Gemini-3.8-Flash-Lite-TTS/Gemini-3.8-Flash-Lite-TTS_KIE.md)（限时价到 2026-12-31）。
+- 已过时（用户界面不再列出，文档保留）：LTX-2 · Fal、Veo 3.1 · Fal、Seedream 5.0 Lite · 火山方舟、Seedance 1.5 Pro · KIE、派欧云 Kling 3.0 与 MiniMax Speech。
 
 ## 2026-09-27 TTS 适配
 

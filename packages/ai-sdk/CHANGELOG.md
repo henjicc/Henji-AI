@@ -3,6 +3,7 @@
 ## 0.10.0 - 未发布
 
 - `ModelRuntimeMeta` 与 `LlmModelCatalogEntry` 新增可选 `deprecated`（过时原因）：能力发现跳过这类模型，`createModelsFromPreset` 与 `createBigmodelModels` 不再为它们建模型，仍可按 ID 解析。首批标记 Fal LTX-2 / Veo 3.1、火山 Seedream 5.0 Lite、KIE Seedance 1.5 Pro、派欧云 Kling 3.0 与 MiniMax Speech、Kimi K2.6 / K2.7 Code、MiMo 2.5 / 2.5 Pro。
+- 新增生成模型（全部只做离线请求构建与官方价格核对）：GPT Image 2.6（Fal、KIE、APIMart、Grsai）、FLUX 3（Fal、APIMart）与 FLUX 3 Klein（KIE）、Seedream 5.0 Flash（APIMart）、Kling 4.0 与 4.0 Flash（Fal、KIE；APIMart 4.0）、Wan 3.0（Fal、APIMart、KIE、Grsai）与 Wan 3.0 Prime（KIE）、Gemini Omni 1.2 Flash（Fal、APIMart）、Grok Imagine Video 1.5（Fal、KIE、APIMart）、MiniMax H3 Max（Fal、APIMart）、LTX-2.3（Fal）、Veo 3.1 与 HappyHorse 1.1（APIMart）、Eleven v4 / v4 Turbo（Fal）、Gemini 3.8 Flash / Flash-Lite TTS（KIE）。
 - 大语言模型预设按 2026-11-07 的平台清单补充：派欧云 Kimi K3.1 Pro / K3、GLM-5.3、MiMo-V2.6-Pro、MiniMax-M3.1-Flash（按平台模型列表核对），DeepSeek V4 Pro，Groq GPT-OSS 120B（新增目录条目）。
 - 包入口新增导出翻译能力（`createQwenMt*TranslationModule` 等），与语音识别一致，不再必须走 `capabilities/translation` 子路径。
 - 流式聊天的结果与完成回调新增 `firstTokenMs`（发出请求到第一个字，含思考内容）和 `outputTokensPerSecond`（首字之后的输出 token 速度，供应商没给用量时为 null）；`LlmTrace` 增加对应可选字段与输入/输出 token 数。

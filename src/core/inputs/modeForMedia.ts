@@ -10,13 +10,12 @@ export interface MediaCounts {
 
 type OptionParamDef = Extract<ParamDef, { type: 'dropdown' | 'radio' }>
 
-function findRoleParam(params: readonly ParamDef[], role: 'mode' | 'channel'): OptionParamDef | undefined {
-  for (const param of params) {
-    if ((param.type === 'dropdown' || param.type === 'radio') && param.role === role && param.options?.length) return param
-    const nested = param.type === 'panel' ? findRoleParam(param.children, role) : undefined
-    if (nested) return nested
-  }
-  return undefined
+/** 同一模型可以有多个主选择器（如“版本”和“模式”都声明为 mode），按声明顺序全部返回。 */
+function findRoleParams(params: readonly ParamDef[], role: 'mode' | 'channel'): OptionParamDef[] {
+  return params.flatMap((param): OptionParamDef[] => {
+    if ((param.type === 'dropdown' || param.type === 'radio') && param.role === role && param.options?.length) return [param]
+    return param.type === 'panel' ? findRoleParams(param.children, role) : []
+  })
 }
 
 function fits(modelId: string, params: DynamicValueMap, counts: MediaCounts): boolean {
@@ -24,12 +23,13 @@ function fits(modelId: string, params: DynamicValueMap, counts: MediaCounts): bo
   return (['images', 'videos', 'audios'] as const).every((kind) => counts[kind] >= limits[kind].min && counts[kind] <= limits[kind].max)
 }
 
-/** 当前值排第一，其余按模型声明顺序；参数不存在时只有“不改”这一种取值。 */
-function choices(param: OptionParamDef | undefined, params: DynamicValueMap): Array<DynamicValueMap> {
-  if (!param) return [{}]
-  const current = params[param.id]
-  const values = [current, ...(param.options ?? []).map((option) => option.value).filter((value) => value !== current)]
-  return values.map((value) => ({ [param.id]: value }))
+/** 各参数的取值组合：每个参数当前值排第一、其余按声明顺序，越靠后的参数越先变；没有参数时只有“不改”。 */
+function choices(roleParams: readonly OptionParamDef[], params: DynamicValueMap): Array<DynamicValueMap> {
+  return roleParams.reduce<Array<DynamicValueMap>>((combos, param) => {
+    const current = params[param.id]
+    const values = [current, ...(param.options ?? []).map((option) => option.value).filter((value) => value !== current)]
+    return combos.flatMap((combo) => values.map((value) => ({ ...combo, [param.id]: value })))
+  }, [{}])
 }
 
 /**
@@ -41,11 +41,11 @@ function choices(param: OptionParamDef | undefined, params: DynamicValueMap): Ar
 export function resolveModeForMedia(modelId: string, params: DynamicValueMap, counts: MediaCounts): DynamicValueMap {
   const model = registry.getModel(modelId)
   if (!model || fits(modelId, params, counts)) return params
-  const modeParam = findRoleParam(model.params, 'mode')
-  const channelParam = findRoleParam(model.params, 'channel')
-  if (!modeParam && !channelParam) return params
-  for (const channel of choices(channelParam, params)) {
-    for (const mode of choices(modeParam, params)) {
+  const modeParams = findRoleParams(model.params, 'mode')
+  const channelParams = findRoleParams(model.params, 'channel')
+  if (!modeParams.length && !channelParams.length) return params
+  for (const channel of choices(channelParams, params)) {
+    for (const mode of choices(modeParams, params)) {
       const candidate = { ...params, ...channel, ...mode }
       if (fits(modelId, candidate, counts)) return candidate
     }

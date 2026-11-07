@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-11-07 |
 | 供应商类型 | 聚合中转（转发 Google Nano Banana 系列、OpenAI GPT Image 系列等第三方模型，非模型原厂） |
 | 项目内 providerId | `grsai` |
 | 控制台域名 | `grsai.ai` 与 `grsai.com` 两个域名，页面结构、数据、API 域名完全一致（互为镜像，可视为同一站点） |
@@ -188,7 +188,7 @@ Grsai 用积分计费，dashboard「充值」页给出六档套餐（¥10 起，
 | 启动预热 | [electron/main/index.ts](../../../../../electron/main/index.ts)（仅在已配置 Key 时触发，不阻塞启动） |
 | 前端 Key 元信息 | [src/core/config/providers.ts](../../../../../src/core/config/providers.ts) |
 | 本地图片上传策略 | [src/upload/preprocess.ts](../../../src/upload/preprocess.ts)（内联 base64，无独立上传接口） |
-| 模型定义 | `packages/ai-sdk/src/catalog/grsai/{gpt-image-2,nano-banana-2,nano-banana-2-lite,nano-banana-pro}.model.ts` |
+| 模型定义 | `packages/ai-sdk/src/catalog/grsai/*.model.ts`（2026-11-07 起含第一个视频模型 Wan 3.0，见 [Wan-3.0_Grsai.md](../Wan-3.0/Wan-3.0_Grsai.md)） |
 | 国际化 | `src/i18n/locales/{zh-CN,en-US}/models-grsai.json`、`settings.json` 的 `apiKeys.providers.grsai` |
 | 测试 | `packages/ai-sdk/tests/providers/endpoints/grsai.test.ts`、`packages/ai-sdk/tests/providers/grsai.test.ts`、`packages/ai-sdk/tests/catalog/grsai.test.ts` |
 

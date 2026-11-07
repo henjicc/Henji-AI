@@ -51,7 +51,9 @@ describe('createGenerationClient', () => {
       models: [model],
     })
 
-    expect(client.catalog.list()).toHaveLength(124)
+    // 自定义模型追加在默认目录之后，默认目录本身不丢
+    expect(client.catalog.list().at(-1)?.meta.id).toBe(model.meta.id)
+    expect(client.catalog.list().length).toBeGreaterThan(1)
     expect('chat' in client).toBe(false)
     await expect(client.generate({
       modelId: model.meta.id,
