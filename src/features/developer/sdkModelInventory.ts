@@ -10,7 +10,9 @@ import { bailianRealtimeAsrPresets } from '@henjicc/ai-sdk/capabilities/speech-r
 import { volcengineRealtimeAsrPresets } from '@henjicc/ai-sdk/capabilities/speech-recognition/volcengine/realtime'
 import { BAILIAN_QWEN_MT_PRESETS } from '@henjicc/ai-sdk/capabilities/translation/bailian'
 import { registry } from '@/core/ModelRegistry'
-import { ASR_CATALOG } from '@/core/audioEdit/asrCatalog'
+import { ASR_CATALOG, estimateAsrCost } from '@/core/audioEdit/asrCatalog'
+import { resolvePriceEstimateMediaContext, type PricingMediaMetadataReaders } from '@/core/pricing/resolvePriceEstimateMediaContext'
+import { attachVideoDurations } from '@/core/services/generationVideoDurations'
 import { HENJI_GENERATION_EXECUTION_PACKS, HENJI_GENERATION_MODELS, getHenjiGenerationModel } from '@/core/modelCatalog/applicationModelProfile'
 import type { ModelDefinition } from '@/core/types'
 import { getI18nText } from '@/core/types'
@@ -186,6 +188,12 @@ function sampleInputs(definition: ModelDefinition, runtimeLimits: unknown, defau
   return values
 }
 
+/** 默认参数叠上示例输入：离线检查与参考价共用同一份。 */
+function sampleValues(definition: ModelDefinition, runtimeLimits: unknown): DynamicValueMap {
+  const defaults = registry.getDefaultValues(definition.meta.id)
+  return { ...defaults, ...sampleInputs(definition, runtimeLimits, defaults) }
+}
+
 const DRY_RUN_TIMEOUT_MS = 5_000
 
 export interface SdkDryRunResult {
@@ -204,8 +212,7 @@ export async function dryRunGenerationModel(modelId: string, params?: DynamicVal
   const runtime = getHenjiGenerationModel(modelId) ?? HENJI_GENERATION_EXECUTION_PACKS.flatMap((pack) => pack.models).find((model) => model.meta.id === modelId)
   const definition = registry.getModel(modelId)
   if (!runtime || !definition) return { ok: false, error: `SDK 里找不到模型 ${modelId}` }
-  const defaults = registry.getDefaultValues(modelId)
-  const values: DynamicValueMap = { ...defaults, ...(options.sample ? sampleInputs(definition, runtime.inputLimits, defaults) : {}), ...params }
+  const values: DynamicValueMap = { ...(options.sample ? sampleValues(definition, runtime.inputLimits) : registry.getDefaultValues(modelId)), ...params }
   try {
     // 个别 builder 会读取素材元数据；占位地址读不到时不能一直挂着。
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -220,4 +227,58 @@ export async function dryRunGenerationModel(modelId: string, params?: DynamicVal
 
 export function sdkModelDefaults(modelId: string): DynamicValueMap {
   return registry.getDefaultValues(modelId)
+}
+
+/** 参考价用的示例素材指标：按时长、像素计价的模型拿它算，免得都显示成缺价格。 */
+export const SAMPLE_PRICING_MEDIA = { image: { width: 1024, height: 1024, fileSizeBytes: 1_048_576 }, video: { width: 1280, height: 720, durationSeconds: 5 }, audio: { durationSeconds: 10 } } as const
+const SAMPLE_PRICING_READERS: PricingMediaMetadataReaders = {
+  image: async () => SAMPLE_PRICING_MEDIA.image,
+  video: async () => SAMPLE_PRICING_MEDIA.video,
+  audio: async () => SAMPLE_PRICING_MEDIA.audio,
+}
+
+export type SdkModelPrice =
+  | { status: 'priced'; display: string; description?: string }
+  /** 算出来是 0：可能真免费，也可能是计价漏填，要人工核对。 */
+  | { status: 'zero'; display: string; description?: string }
+  | { status: 'missing'; reason: string; description?: string }
+
+const CURRENCY_SYMBOL: Readonly<Record<'CNY' | 'USD', string>> = { CNY: '¥', USD: '$' }
+
+function formatAmount(amount: number): string {
+  return amount >= 1 ? amount.toFixed(2) : amount.toPrecision(3).replace(/\.?0+$/, '')
+}
+
+/**
+ * 每个模型的参考价：生成模型用默认参数加示例输入（图 1024²、视频 5 秒、音频 10 秒）算一次，语音识别按每小时单价。
+ * 大语言模型与翻译在 SDK 里没有登记单价，记为缺价格。
+ * 生成模型这里直接调 calculator 而不走 createPriceEstimate：它把抛错和没声明都收成“暂不可估算”，开发者要看到具体原因。
+ */
+export async function estimateSdkModelPrice(row: SdkModelRow): Promise<SdkModelPrice> {
+  if (row.category === 'asr' && row.capability) {
+    const hour = estimateAsrCost(row.capability.descriptor.id, 3_600_000)
+    if (hour.status === 'unknown') return { status: 'missing', reason: '语音识别单价表里没有' }
+    const display = `${CURRENCY_SYMBOL[hour.currency]}${formatAmount(hour.amount)}/小时`
+    return hour.amount > 0 ? { status: 'priced', display } : { status: 'zero', display: '免费' }
+  }
+  if (row.category === 'llm') return { status: 'missing', reason: 'SDK 的大语言模型目录没有单价' }
+  if (row.category === 'translation') return { status: 'missing', reason: 'SDK 的翻译预设没有单价' }
+  const definition = row.generation?.definition
+  if (!definition) return { status: 'missing', reason: '没有计价信息' }
+  const { pricing } = definition
+  const description = pricing.description
+  if (pricing.fixed === undefined && !pricing.calculator) return { status: 'missing', reason: '模型没有声明计价', description }
+  const runtime = getHenjiGenerationModel(definition.meta.id) ?? HENJI_GENERATION_EXECUTION_PACKS.flatMap((pack) => pack.models).find((model) => model.meta.id === definition.meta.id)
+  try {
+    const withDurations = await attachVideoDurations(sampleValues(definition, runtime?.inputLimits), async () => SAMPLE_PRICING_MEDIA.video.durationSeconds)
+    const context = await resolvePriceEstimateMediaContext(pricing.mediaContext, withDurations, SAMPLE_PRICING_READERS)
+    if (!context.complete) return { status: 'missing', reason: `缺少媒体指标：${context.missingTargets.join('、')}`, description }
+    const amount = pricing.fixed ?? pricing.calculator?.(context.params as JsonObject) ?? Number.NaN
+    if (!Number.isFinite(amount) || amount < 0) return { status: 'missing', reason: `计价结果无效（${amount}）`, description }
+    const unit = pricing.estimateMode === 'unit' && pricing.estimateUnit ? `/${pricing.estimateUnit}` : ''
+    const display = `${pricing.estimateKind === 'upper-bound' ? '上限 ' : ''}${pricing.currency}${formatAmount(amount)}${unit}`
+    return amount > 0 ? { status: 'priced', display, description } : { status: 'zero', display, description }
+  } catch (error) {
+    return { status: 'missing', reason: `计价出错：${error instanceof Error ? error.message : String(error)}`, description }
+  }
 }

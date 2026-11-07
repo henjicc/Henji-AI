@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, CircleCheck, CircleX, Copy, FlaskConical, X } from 'lucide-react'
-import PriceEstimate from '@/components/ui/PriceEstimate'
+import Tooltip from '@/components/ui/Tooltip'
 import {
   UI_TEXT_META_CLASS,
   UI_TEXT_PANEL_TITLE_CLASS,
@@ -29,13 +29,13 @@ import { createLogger } from '@/core/logging'
 import { llmConfigService } from '@/services/llm'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { ModelTestBench } from './ModelTestBench'
-import { dryRunGenerationModel, listSdkModels, sdkModelDefaults, sdkProviderName, SDK_MODEL_CATEGORIES, type SdkDryRunResult, type SdkModelCategory, type SdkModelRow } from './sdkModelInventory'
+import { dryRunGenerationModel, estimateSdkModelPrice, listSdkModels, sdkModelDefaults, sdkProviderName, SDK_MODEL_CATEGORIES, type SdkDryRunResult, type SdkModelCategory, type SdkModelPrice, type SdkModelRow } from './sdkModelInventory'
 
 /** 三栏宽度与表格列宽都能拖，记在本机；能力列吃掉剩余宽度。 */
-interface PanelLayout { filter: number; detail: number; model: number; provider: number; category: number }
-const DEFAULT_LAYOUT: PanelLayout = { filter: 208, detail: 384, model: 280, provider: 104, category: 88 }
+interface PanelLayout { filter: number; detail: number; model: number; provider: number; category: number; price: number }
+const DEFAULT_LAYOUT: PanelLayout = { filter: 208, detail: 384, model: 280, provider: 104, category: 88, price: 112 }
 const LAYOUT_LIMITS: Readonly<Record<keyof PanelLayout, readonly [number, number]>> = {
-  filter: [160, 400], detail: [280, 960], model: [140, 640], provider: [64, 320], category: [56, 240],
+  filter: [160, 400], detail: [280, 960], model: [140, 640], provider: [64, 320], category: [56, 240], price: [64, 320],
 }
 const LAYOUT_STORAGE_KEY = 'henji.developer.sdkModels.layout'
 
@@ -73,7 +73,31 @@ const CATEGORY_LABEL: Readonly<Record<SdkModelCategory, string>> = {
 
 // 自动化与助手核对用：面板打开后可以在开发控制台或测试脚本里直接调用同一份清单与离线检查。
 if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
-  Object.assign(window as unknown as Record<string, unknown>, { __henjiSdkModels: { list: listSdkModels, dryRun: dryRunGenerationModel } })
+  Object.assign(window as unknown as Record<string, unknown>, { __henjiSdkModels: { list: listSdkModels, dryRun: dryRunGenerationModel, prices: listSdkModelPrices } })
+}
+
+/** 全部模型的参考价，缺价格的带原因；在开发控制台里拿来列清单。 */
+async function listSdkModelPrices(): Promise<Array<{ name: string; modelId: string; provider: string; category: string } & SdkModelPrice>> {
+  const rows = listSdkModels()
+  const prices = await Promise.all(rows.map(estimateSdkModelPrice))
+  return rows.map((row, index) => ({ name: row.name, modelId: row.modelId, provider: providerName(row.providerId), category: CATEGORY_LABEL[row.category], ...prices[index] }))
+}
+
+function priceLabel(price: SdkModelPrice | undefined): string {
+  if (!price) return '…'
+  return price.status === 'missing' ? '缺价格' : price.display
+}
+
+/** 一次算完全部参考价：示例素材的指标是写死的，不读文件、不联网。 */
+function useSdkModelPrices(rows: readonly SdkModelRow[]): ReadonlyMap<string, SdkModelPrice> {
+  const [prices, setPrices] = useState<ReadonlyMap<string, SdkModelPrice>>(new Map())
+  useEffect(() => {
+    let disposed = false
+    void Promise.all(rows.map(async (row) => [row.key, await estimateSdkModelPrice(row)] as const))
+      .then((entries) => { if (!disposed) setPrices(new Map(entries)) })
+    return () => { disposed = true }
+  }, [rows])
+  return prices
 }
 
 function providerName(providerId: string): string {
@@ -107,7 +131,8 @@ function useLlmKeyStatus(): Readonly<Record<string, boolean>> {
 export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const rows = useMemo(() => listSdkModels(), [])
   const { layout, resize } = usePanelLayout()
-  const rowColumns = { gridTemplateColumns: `${layout.model}px ${layout.provider}px ${layout.category}px minmax(0,1fr) 2rem` }
+  const rowColumns = { gridTemplateColumns: `${layout.model}px ${layout.provider}px ${layout.category}px ${layout.price}px minmax(0,1fr) 2rem` }
+  const prices = useSdkModelPrices(rows)
   const keyStatus = useSettingsStore((state) => state.providerKeyStatus)
   const llmKeyStatus = useLlmKeyStatus()
   const isConfigured = (row: SdkModelRow): boolean => (row.llm ? llmKeyStatus : keyStatus)[row.providerId] === true
@@ -118,6 +143,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [providers, setProviders] = useState<ReadonlySet<string>>(new Set())
   const [onlyConfigured, setOnlyConfigured] = useState(false)
   const [onlyFailed, setOnlyFailed] = useState(false)
+  const [onlyUnpriced, setOnlyUnpriced] = useState(false)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [checks, setChecks] = useState<ReadonlyMap<string, SdkDryRunResult>>(new Map())
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
@@ -136,8 +162,9 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       && (!providers.size || providers.has(row.providerId))
       && (!onlyConfigured || (row.llm ? llmKeyStatus : keyStatus)[row.providerId] === true)
       && (!onlyFailed || checks.get(row.modelId)?.ok === false)
+      && (!onlyUnpriced || isUnpriced(prices.get(row.key)))
       && (!needle || `${row.name} ${row.modelId} ${row.providerId} ${providerName(row.providerId)} ${row.tags.join(' ')} ${row.rawTags.join(' ')}`.toLowerCase().includes(needle)))
-  }, [rows, query, category, providers, onlyConfigured, onlyFailed, keyStatus, llmKeyStatus, checks])
+  }, [rows, query, category, providers, onlyConfigured, onlyFailed, onlyUnpriced, keyStatus, llmKeyStatus, checks, prices])
   const selected = rows.find((row) => row.key === selectedKey) ?? null
 
   const toggleProvider = (providerId: string): void => setProviders((current) => {
@@ -160,7 +187,10 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setBatch(null)
   }
   const copyList = (): void => {
-    const lines = filtered.map((row) => [row.name, row.modelId, providerName(row.providerId), CATEGORY_LABEL[row.category], checkLabel(checks.get(row.modelId))].join('\t'))
+    const lines = filtered.map((row) => {
+      const price = prices.get(row.key)
+      return [row.name, row.modelId, providerName(row.providerId), CATEGORY_LABEL[row.category], price?.status === 'missing' ? `缺价格：${price.reason}` : priceLabel(price), checkLabel(checks.get(row.modelId))].join('\t')
+    })
     void writeClipboardText(lines.join('\n'))
   }
   const failedCount = [...checks.values()].filter((result) => !result.ok).length
@@ -220,6 +250,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <div className="flex flex-wrap gap-1.5">
               <UiChipButton size="sm" active={onlyConfigured} onClick={() => setOnlyConfigured((value) => !value)}>已配密钥</UiChipButton>
               <UiChipButton size="sm" active={onlyFailed} onClick={() => setOnlyFailed((value) => !value)}>检查失败</UiChipButton>
+              <UiChipButton size="sm" active={onlyUnpriced} onClick={() => setOnlyUnpriced((value) => !value)} tooltip="算不出价格，或算出来是 0 要核对的">缺价格</UiChipButton>
             </div>
           </UiGroup>
         </aside>
@@ -232,6 +263,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <span className="relative"><span className="block truncate">模型</span><UiResizeHandle variant="column" label="调整模型列宽" {...resize('model')} /></span>
               <span className="relative"><span className="block truncate">供应商</span><UiResizeHandle variant="column" label="调整供应商列宽" {...resize('provider')} /></span>
               <span className="relative"><span className="block truncate">类别</span><UiResizeHandle variant="column" label="调整类别列宽" {...resize('category')} /></span>
+              <span className="relative"><span className="block truncate">参考价</span><UiResizeHandle variant="column" label="调整参考价列宽" {...resize('price')} /></span>
               <span>能力</span><span>检查</span>
             </span>
           </div>
@@ -239,7 +271,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <UiVirtualList
               data={filtered}
               getKey={(row) => row.key}
-              resetKey={`${query}|${category}|${[...providers].join(',')}|${onlyConfigured}|${onlyFailed}`}
+              resetKey={`${query}|${category}|${[...providers].join(',')}|${onlyConfigured}|${onlyFailed}|${onlyUnpriced}`}
               emptyState={<UiEmpty title="没有符合条件的模型" />}
               renderItem={(row) => (
                 <div className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-1 pl-4 pr-2">
@@ -261,6 +293,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   </span>
                   <span className={`truncate ${UI_TEXT_SECONDARY_CLASS}`}>{providerName(row.providerId)}</span>
                   <span className={`truncate ${UI_TEXT_SECONDARY_CLASS}`}>{CATEGORY_LABEL[row.category]}</span>
+                  <PriceCell price={prices.get(row.key)} />
                   <span className={`truncate ${UI_TEXT_SECONDARY_CLASS}`}>{row.tags.join(' · ')}</span>
                   <CheckIcon result={checks.get(row.modelId)} />
                 </UiOptionButton>
@@ -272,12 +305,25 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         <UiResizeHandle label="调整详情栏宽度" grow="start" {...resize('detail')} />
         <aside aria-label="模型详情" className="min-h-0 shrink-0 overflow-y-auto border-l border-line p-4" style={{ width: layout.detail }}>
           {selected
-            ? <ModelDetail key={selected.key} row={selected} configured={isConfigured(selected)} result={checks.get(selected.modelId)} onResult={(result) => record(selected.modelId, result)} />
+            ? <ModelDetail key={selected.key} row={selected} configured={isConfigured(selected)} price={prices.get(selected.key)} result={checks.get(selected.modelId)} onResult={(result) => record(selected.modelId, result)} />
             : <UiEmpty title="选一个模型查看详情" />}
         </aside>
       </div>
     </>
   )
+}
+
+function isUnpriced(price: SdkModelPrice | undefined): boolean {
+  return price?.status === 'missing' || price?.status === 'zero'
+}
+
+const PriceCell: React.FC<{ price: SdkModelPrice | undefined }> = ({ price }) => {
+  const cell = (
+    <span className={`truncate ${UI_TEXT_TIMECODE_CLASS} ${price?.status === 'missing' ? 'text-warning-text' : UI_TEXT_SECONDARY_CLASS}`} data-sdk-price-status={price?.status ?? 'pending'}>
+      {priceLabel(price)}
+    </span>
+  )
+  return price?.status === 'missing' ? <Tooltip content={price.reason} asChild>{cell}</Tooltip> : cell
 }
 
 function checkStatus(result: SdkDryRunResult | undefined): string {
@@ -294,7 +340,7 @@ const CheckIcon: React.FC<{ result: SdkDryRunResult | undefined }> = ({ result }
     : <CircleX aria-label="离线检查失败" className="h-4 w-4 text-danger-text" />
 }
 
-const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: SdkDryRunResult | undefined; onResult: (result: SdkDryRunResult) => void }> = ({ row, configured, result, onResult }) => {
+const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; price: SdkModelPrice | undefined; result: SdkDryRunResult | undefined; onResult: (result: SdkDryRunResult) => void }> = ({ row, configured, price, result, onResult }) => {
   const [sample, setSample] = useState(true)
   const [running, setRunning] = useState(false)
   const defaults = useMemo(() => (row.generation ? sdkModelDefaults(row.modelId) : {}), [row])
@@ -316,11 +362,16 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: Sdk
         <UiFormRow label="供应商" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{providerName(row.providerId)}{row.generation || row.capability || row.llm ? (configured ? ' · 已配密钥' : ' · 未配密钥') : ''}</span></UiFormRow>
         <UiFormRow label="类别" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{CATEGORY_LABEL[row.category]}</span></UiFormRow>
         {row.deprecated ? <UiFormRow label="已过时" density="compact"><span className="text-warning-text">{row.deprecated}</span></UiFormRow> : null}
+        <UiFormRow label="参考价" density="compact" info="生成模型按默认参数加示例输入（图 1024²、视频 5 秒、音频 10 秒）算；语音识别按每小时">
+          {price?.status === 'missing'
+            ? <span className="text-warning-text">缺价格：{price.reason}</span>
+            : <span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{priceLabel(price)}{price?.status === 'zero' ? '（核对是否免费）' : ''}</span>}
+        </UiFormRow>
+        {price?.description ? <UiFormRow label="计价说明" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{price.description}</span></UiFormRow> : null}
         {row.tags.length ? <UiFormRow label="能力" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.tags.join(' · ')}</span></UiFormRow> : null}
         {row.rawTags.length ? <UiFormRow label="原始标签" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.rawTags.join(' ')}</span></UiFormRow> : null}
         {row.generation ? <>
           <UiFormRow label="通用标识" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.generation.definition.meta.canonicalModelId}</span></UiFormRow>
-          <UiFormRow label="估价" density="compact"><PriceEstimate variant="badge" providerId={row.providerId} modelId={row.modelId} params={defaults} /></UiFormRow>
         </> : null}
         {row.llm ? <>
           <UiFormRow label="目录条目" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.llm.catalogId ?? '未登记（按纯文本处理）'}</span></UiFormRow>
