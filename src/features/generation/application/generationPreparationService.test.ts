@@ -172,6 +172,17 @@ describe('generationPreparation', () => {
     expect(legacy).toMatchObject({ standing: 'legacy', standingReason: expect.any(String) })
   })
 
+  // 魔粒是免费积分：按“无法预估”处理会让付费策略在每次用魔搭时都弹窗询问。
+  it('魔粒计价的模型在付费授权里按 0 元计', () => {
+    registry.register({
+      ...testModel,
+      meta: { ...testModel.meta, id: 'agent-preparation-free-credits' },
+      pricing: { currency: '魔粒', fixed: 2 },
+    })
+    const model = searchGenerationModelCatalog({ mediaType: 'image' }).models.find((item) => item.modelId === 'agent-preparation-free-credits')
+    expect(model?.priceEstimate).toMatchObject({ amount: 2, currency: '魔粒', comparableCnyAmount: 0 })
+  })
+
   it('忽略误传的题材词并按供应商标识大小写归一化，避免无效重复搜索', () => {
     const result = searchGenerationModelCatalog({
       mediaType: 'image',

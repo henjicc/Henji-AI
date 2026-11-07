@@ -4,7 +4,7 @@ import { UiButton, UiFormRow, UiGroup, UiInput, UiSpecialPanel, UiSwitch } from 
 import NumberInput from '@/components/ui/NumberInput'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
-import { GenerationService } from '@/core/services/GenerationService'
+import { generateToCompletion } from '@/features/generation/application/generationCompletion'
 import type { MinimaxVoiceClonePanelConfig } from '@/core/types/PanelTypes'
 import { deleteUploads, saveAudioFromUrl, saveUploadAudio } from '@/utils/save'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
@@ -278,7 +278,6 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
       }
       patchValue(submitPayload)
 
-      const generationService = GenerationService.getInstance()
       const runtimeParams: DynamicValueMap = {
         minimaxCloneOperation: 'clone',
         text: previewText,
@@ -290,10 +289,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
         runtimeParams.minimaxClonePromptAudioFilePath = promptAudioFilePath
       }
 
-      let result = await generationService.generate(modelId, runtimeParams)
-      if (result.status === 'pending' && result.taskId) {
-        result = await generationService.continuePolling(modelId, result.taskId, runtimeParams)
-      }
+      const result = await generateToCompletion(modelId, runtimeParams)
 
       const voiceId = extractVoiceId(result.metadata)
       if (!voiceId) {

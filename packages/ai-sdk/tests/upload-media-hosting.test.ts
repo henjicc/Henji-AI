@@ -53,6 +53,15 @@ describe('通用文件上传服务', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('APIMart 参考视频与音频经通用文件上传服务托管，不再直接拒绝', async () => {
+    const fetch = vi.fn(async () => kieOk())
+    const body = await preprocessRequestBody('apimart', '/v1/videos/generations', {
+      video_urls: [VIDEO], audio_urls: ['data:audio/mpeg;base64,AAAA'],
+    }, runtime(fetch, { kie: 'k' }), { __upload_provider: 'kie' })
+    expect(body).toEqual({ video_urls: ['https://kie.invalid/v.mp4'], audio_urls: ['https://kie.invalid/v.mp4'] })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('火山方舟只把视频托管成公网地址，图片和音频仍发 Base64', async () => {
     const fetch = vi.fn(async () => kieOk())
     const body = await preprocessRequestBody('volcengine', '/api/v3/contents/generations/tasks', {

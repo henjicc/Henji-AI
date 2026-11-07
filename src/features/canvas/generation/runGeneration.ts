@@ -7,7 +7,7 @@ import { captureResultContinuations } from '@/core/services/generationContinuati
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
 import type { JsonObject, StructuredGenerationOutput } from '@henjicc/ai-sdk';
 import { persistImageLocally } from '@/features/canvas/application/imageData';
-import { extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId';
+import { generateToCompletion } from '@/features/generation/application/generationCompletion';
 import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult';
 
 const logger = createLogger('features.canvas.generation.runGeneration');
@@ -152,7 +152,6 @@ function createThrottledProgressHandler(
 export async function runCanvasGeneration(request: CanvasGenerationRequest): Promise<CanvasGenerationOutput> {
   const mediaType = request.mediaType ?? 'image';
   const modelId = resolveCanvasModelId(request.modelId, mediaType);
-  const generationService = GenerationService.getInstance();
   const handleProgress = createThrottledProgressHandler(request.onProgress);
 
   const params: DynamicValueMap = { ...request.params };
@@ -181,27 +180,13 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
   await request.assertCurrent?.();
   request.signal?.throwIfAborted();
   const outputContainer = request.projectId ? canvasDocumentContainer(request.projectId) : undefined;
-  let result = await generationService.generate(modelId, params, handleProgress, {
+  const result = await generateToCompletion(modelId, params, handleProgress, {
     progressSource: 'canvas',
     requestId: request.requestId,
     signal: request.signal,
     ...(outputContainer ? { outputContainer } : {}),
+    onTaskId: request.onTaskId,
   });
-
-  if (result.status === 'pending') {
-    const taskId = result.taskId ?? extractServerTaskIdFromMetadata(result.metadata);
-    if (!taskId) {
-      throw new Error('异步任务缺少 taskId，无法继续轮询');
-    }
-    await request.onTaskId?.(taskId);
-    request.signal?.throwIfAborted();
-    result = await generationService.continuePolling(modelId, taskId, params, handleProgress, {
-      progressSource: 'canvas',
-      requestId: request.requestId,
-      signal: request.signal,
-      ...(outputContainer ? { outputContainer } : {}),
-    });
-  }
 
   return toGenerationOutput(result);
 }

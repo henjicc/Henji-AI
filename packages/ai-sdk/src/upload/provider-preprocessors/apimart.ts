@@ -1,15 +1,13 @@
 import { AiRuntimeError } from '../../runtime/AiRuntimeError'
 import { uploadToApiMart } from '../apimart-upload'
+import { uploadToPublicHost } from '../public-host-upload'
 import { createGenerationPreprocessor } from './factory'
 
 export const strategy = {
-  async rewrite({ mediaKind, prepared, runtime, route, requestId, signal }) {
-    if (mediaKind !== 'image') {
-      throw new AiRuntimeError(
-        'public_media_url_required',
-        `APIMart 没有通用的${mediaKind === 'video' ? '视频' : (mediaKind === 'audio' ? '音频' : '文件')}上传端点。`
-      )
-    }
+  async rewrite(input) {
+    const { mediaKind, prepared, runtime, route, requestId, signal } = input
+    // APIMart 只有图片上传端点；参考视频、音频经通用文件上传服务（KIE / Fal）托管成公网地址。
+    if (mediaKind !== 'image') return await uploadToPublicHost(input, 'APIMart')
     const apiKey = await runtime.credentials.get('generation', 'apimart')
     if (!apiKey) {
       throw new AiRuntimeError(

@@ -4,6 +4,7 @@ import { attachVideoDurations } from '@/core/services/generationVideoDurations'
 import { toApplicationStableIdSegment } from '@/core/application-control'
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
+import { isNonMonetaryCurrency } from '@/core/types/PricingConfig'
 import { generationModelStandingRank, getGenerationModelStanding, type GenerationModelStanding } from '@/core/modelCatalog/generationModelStanding'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { resolveModeForMedia } from '@/core/inputs/modeForMedia'
@@ -163,9 +164,11 @@ export function createPriceEstimate(
   const upperBound = model.pricing.estimateKind === 'upper-bound' || model.pricing.billingMode === 'estimated'
   const amount = Number.isFinite(calculated) && calculated >= 0 ? calculated : null
   const sourceCurrency = resolvePricingCurrency(model.pricing.currency)
-  const comparableCnyAmount = amount !== null && sourceCurrency
-    ? convertPriceAmount(amount, sourceCurrency, 'CNY', usdToCnyRate)
-    : null
+  // 魔粒是魔搭靠每日登录等免费获得的积分，没有充值入口，不是钱：按 0 元计，不让付费策略把它当成“费用无法预估”逐次询问。
+  const freeCredits = isNonMonetaryCurrency(model.pricing.currency)
+  const comparableCnyAmount = amount === null ? null
+    : freeCredits ? 0
+      : sourceCurrency ? convertPriceAmount(amount, sourceCurrency, 'CNY', usdToCnyRate) : null
 
   return {
     amount,
@@ -177,9 +180,11 @@ export function createPriceEstimate(
     description: model.pricing.description ?? null,
     comparableCnyAmount,
     comparableCnyExchangeRate: sourceCurrency === 'USD' ? usdToCnyRate : null,
-    comparisonNote: sourceCurrency
-      ? '人民币估值用于候选排序和统一付费授权；动态计费模型以提交前的实际参数估算为准。'
-      : '该货币暂不参与跨币种比较；以模型原始价格为准。',
+    comparisonNote: freeCredits
+      ? '魔粒是平台免费积分，不计人民币；付费授权按 0 元计。'
+      : sourceCurrency
+        ? '人民币估值用于候选排序和统一付费授权；动态计费模型以提交前的实际参数估算为准。'
+        : '该货币暂不参与跨币种比较；以模型原始价格为准。',
   }
 }
 

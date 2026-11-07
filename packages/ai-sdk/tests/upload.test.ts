@@ -170,7 +170,7 @@ describe('request media preprocessing', () => {
     })
   })
 
-  it('APIMart 本地视频在提交前明确要求公网 URL', async () => {
+  it('APIMart 本地视频没配通用文件上传服务时，提交前提示去设置里配置', async () => {
     const fetchMock = vi.fn()
 
     await expect(preprocessRequestBody(
@@ -181,7 +181,8 @@ describe('request media preprocessing', () => {
       { video: 'data:video/mp4;base64,AQID' }
     )).rejects.toMatchObject({
       code: 'public_media_url_required',
-      message: expect.stringContaining('没有通用的视频上传端点'),
+      message: expect.stringContaining('设置 → 通用文件上传服务'),
     })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
