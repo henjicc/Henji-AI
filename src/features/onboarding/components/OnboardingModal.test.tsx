@@ -87,12 +87,12 @@ describe('OnboardingModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '继续' }))
     expect(screen.getByText('选择一个默认供应商')).toBeTruthy()
     const providerButtons = screen.getAllByRole('button')
-      .filter((button) => ['KIE', 'APIMart', 'Fal', '派欧云']
+      .filter((button) => ['KIE', 'APIMart', 'Fal', '火山引擎']
         .some((name) => button.textContent?.startsWith(name)))
-      .map((button) => button.textContent?.match(/^(KIE|APIMart|Fal|派欧云)/)?.[0])
-    expect(providerButtons).toEqual(['KIE', 'APIMart', 'Fal', '派欧云'])
+      .map((button) => button.textContent?.match(/^(KIE|APIMart|Fal|火山引擎)/)?.[0])
+    expect(providerButtons).toEqual(['KIE', 'APIMart', 'Fal', '火山引擎'])
     expect(screen.getByText('推荐起步').className).toContain(UI_META_BADGE_CLASS)
-    expect(screen.getByText(/但目前支持的模型相对较少/)).toBeTruthy()
+    expect(screen.getByText(/Seedream 图片与 Seedance 视频/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /Fal/ }))
     fireEvent.click(screen.getByRole('button', { name: '继续' }))
