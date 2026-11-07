@@ -13,8 +13,10 @@ function resolveHailuo02Spec(params: JsonObject) {
         ? requestedResolution
         : '768P';
 
-    // KIE 的 512P 只属于 Standard 图生视频；文生视频 Standard 固定按 768P 请求/计价。
-    if (images.length === 0 && resolution === '512P') {
+    // 512P 只属于 Standard 单图图生视频：文生视频固定 768P；MiniMax 首尾帧不支持 512P
+    // （官方首尾帧文档原文；KIE 文档未写，带尾帧的 512P 请求在 KIE 内部失败 500，2026-11-08 实调），
+    // 两种情况都按 768P 请求和计价。
+    if (images.length !== 1 && resolution === '512P') {
         resolution = '768P';
     }
     // 1080P 只有 6 秒 Pro 档，历史工程的 10s + 1080P 回收到合法的 10s + 768P。
@@ -126,7 +128,7 @@ export const kieHailuo02Model = defineModel({
                 return 0.285;
             return (resolution === '512P' ? 0.01 : 0.025) * duration;
         },
-        description: 'Standard：文生固定 768P $0.025/秒，图生 768P $0.025/秒、512P $0.010/秒；Pro（1080P 固定 6 秒）：$0.285/条'
+        description: 'Standard：文生与首尾帧固定 768P $0.025/秒，单图图生 768P $0.025/秒、512P $0.010/秒；Pro（1080P 固定 6 秒）：$0.285/条'
     }
 });
 export default kieHailuo02Model;

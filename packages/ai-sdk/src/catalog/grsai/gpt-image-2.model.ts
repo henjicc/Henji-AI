@@ -69,10 +69,13 @@ export const grsaiGptImage2Model = defineModel({
       const raw = String(params.grsaiGptImage2AspectRatio || 'smart')
       let ratio = candidateSet.includes(raw) ? raw : '1:1'
       if (raw === 'smart' || raw === 'auto' || !candidateSet.includes(raw)) {
+        // 智能比例贴近素材；渠道不支持的具体比例（标准渠道的 1:3 / 3:1）贴近用户选的比例本身。
+        const [rawWidth, rawHeight] = raw.split(':').map(Number)
+        const target = rawWidth > 0 && rawHeight > 0 ? rawWidth / rawHeight : hint
         let bestDiff = Number.POSITIVE_INFINITY
         for (const candidate of candidateSet) {
           const pair = candidate.split(':').map(Number)
-          const diff = Math.abs(pair[0] / pair[1] - hint)
+          const diff = Math.abs(pair[0] / pair[1] - target)
           if (diff < bestDiff) { bestDiff = diff; ratio = candidate }
         }
       }

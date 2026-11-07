@@ -3,6 +3,7 @@
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
+import { uploadedImageCount } from '../mediaPresence'
 
 export const kiePresentationPart2: Record<string, ModelPresentation> = {
   "kie-hailuo-02": {
@@ -62,6 +63,16 @@ export const kiePresentationPart2: Record<string, ModelPresentation> = {
       target: 'kieHailuo02Resolution',
       condition: (_: unknown, allParams: Record<string, unknown>) => {
         return allParams.kieHailuo02Duration === 10 && allParams.kieHailuo02Resolution === '1080P'
+      },
+      value: '768P'
+    },
+    {
+      // 512P 只属于单图图生视频：文生视频和首尾帧都按 768P 请求和计价，界面跟着显示 768P。
+      trigger: ['kieHailuo02Resolution', 'images', 'uploadedImages'],
+      effect: 'autoSwitch',
+      target: 'kieHailuo02Resolution',
+      condition: (_: unknown, allParams: Record<string, unknown>) => {
+        return allParams.kieHailuo02Resolution === '512P' && uploadedImageCount(allParams) !== 1
       },
       value: '768P'
     }

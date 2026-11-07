@@ -9,7 +9,9 @@ const CREDITS_PER_SECOND: Record<string, number> = { '480p': 3300, '720p': 6600,
 
 const isReference = (params: JsonObject) => params.grsaiWan30Mode === 'reference-to-video'
 const resolutionOf = (params: JsonObject) => RESOLUTIONS.includes(String(params.grsaiWan30Resolution)) ? String(params.grsaiWan30Resolution) : '720p'
-const secondsOf = (params: JsonObject) => Math.min(30, Math.max(2, Number(params.grsaiWan30Duration ?? 5) || 5))
+// 官方文档写 2–30 秒，接口实际拒绝 2 秒（“duration must be greater than 2 seconds”，2026-11-08 实调），最短 3 秒。
+// 保存过的 2 秒旧值会在提交前的参数检查被拦下（它本来就会被平台拒绝），这里的下限只兜底直接调用构建器的消费方。
+const secondsOf = (params: JsonObject) => Math.min(30, Math.max(3, Number(params.grsaiWan30Duration ?? 5) || 5))
 
 function sources(value: JsonValue): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
@@ -40,7 +42,7 @@ export const grsaiWan30Model = defineModel({
     { id: 'grsaiWan30Mode', type: 'dropdown', order: 1, default: 'text-image-to-video', options: [{ value: 'text-image-to-video' }, { value: 'reference-to-video' }] },
     { id: 'grsaiWan30AspectRatio', type: 'dropdown', order: 2, default: 'smart', options: ['smart', ...RATIOS].map(value => ({ value })) },
     { id: 'grsaiWan30Resolution', type: 'dropdown', order: 3, default: '720p', options: RESOLUTIONS.map(value => ({ value })) },
-    { id: 'grsaiWan30Duration', type: 'dropdown', order: 4, default: '5', options: Array.from({ length: 29 }, (_, index) => ({ value: String(index + 2) })) },
+    { id: 'grsaiWan30Duration', type: 'dropdown', order: 4, default: '5', options: Array.from({ length: 28 }, (_, index) => ({ value: String(index + 3) })) },
   ],
   endpoints: '/v1/api/generate',
   request: { builder: params => {

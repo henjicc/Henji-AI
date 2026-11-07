@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-30 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 视频 |
 | 供应商 | KIE.ai |
 | 平台模型 ID | `hailuo/02-text-to-video-standard`、`hailuo/02-image-to-video-standard`、`hailuo/02-text-to-video-pro`、`hailuo/02-image-to-video-pro` |
@@ -14,13 +14,14 @@
 | 输入 | 规格 | 模型 |
 |---|---|---|
 | 无图 | 6/10 秒、768P | `hailuo/02-text-to-video-standard` |
-| 1–2 张图 | 6/10 秒、512P/768P | `hailuo/02-image-to-video-standard` |
+| 1 张图 / 2 张图（首尾帧） | 6/10 秒；单图 512P/768P，首尾帧只有 768P | `hailuo/02-image-to-video-standard` |
 | 无图 | 6 秒、1080P | `hailuo/02-text-to-video-pro` |
 | 1 张图 | 6 秒、1080P | `hailuo/02-image-to-video-pro` |
 
 约束：
 
 - 512P 价格只有图生视频 Standard 分支；文生视频 Standard 固定按 768P 计价，请求也不发送 `resolution`。
+- 首尾帧（2 张图）不支持 512P：MiniMax 官方首尾帧文档写明，KIE 文档未写；2026-11-08 实调带 `end_image_url` 的 512P 两次都在 KIE 内部失败（500 “Internal Error”，0 积分）。SDK 按 768P 请求和计价。
 - 1080P 只有 Pro 6 秒档；不存在 `10 秒 + 1080P`。遇到历史参数组合时，运行时必须回收到 10 秒 768P，不得带着 1080P 下发或估价。
 - 首尾帧仍走 Standard 图生视频端点，第二张图映射为 `end_image_url`。
 
@@ -48,6 +49,7 @@ SDK 应按实际路由计价：文生视频即使收到残留的 `512P` 参数�
 
 | 信息 | 链接 | 登录 |
 |---|---|---|
+| MiniMax 官方首尾帧（首尾帧不支持 512P） | https://platform.minimaxi.com/docs/api-reference/video-generation-fl2v | 否 |
 | Standard 文生视频 | https://docs.kie.ai/cn/market/hailuo/02-text-to-video-standard | 否 |
 | Standard 图生视频 | https://docs.kie.ai/cn/market/hailuo/02-image-to-video-standard | 否 |
 | Pro 文生视频 | https://docs.kie.ai/cn/market/hailuo/02-text-to-video-pro | 否 |

@@ -41,6 +41,11 @@ describe('packages/ai-sdk/docs/model-adaptation Grsai 图片模型', () => {
       prompt: 'cat', grsaiGptImage2Channel: 'vip', grsaiGptImage2AspectRatio: '1:3', grsaiGptImage2Resolution: '2K',
     })).toMatchObject({ aspectRatio: '688x2048' })
 
+    // 标准渠道没有 1:3，贴近用户选的比例（9:21），不能退回正方形。
+    expect(grsaiGptImage2Model.request?.builder?.({
+      prompt: 'cat', grsaiGptImage2Channel: 'standard', grsaiGptImage2AspectRatio: '1:3',
+    })).toMatchObject({ aspectRatio: '9:21' })
+
     expect(grsaiGptImage2Model.pricing.calculator?.({ grsaiGptImage2Channel: 'standard' })).toBe(0.06)
     expect(grsaiGptImage2Model.pricing.calculator?.({ grsaiGptImage2Channel: 'vip' })).toBe(0.2)
   })

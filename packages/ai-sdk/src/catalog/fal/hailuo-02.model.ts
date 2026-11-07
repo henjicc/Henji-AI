@@ -1,6 +1,12 @@
 import { defineModel } from "../defineModel";
 import type { JsonObject } from "../../types/runtime";
 import { countUploadedImages, resolveUploadedImageSources } from "../shared/mediaPresence";
+
+/** MiniMax 首尾帧不支持 512P（官方首尾帧文档原文），带尾帧时按 768P 请求和计价。 */
+function falHailuo02Resolution(params: JsonObject, imageCount: number): '512P' | '768P' {
+    return params.falHailuo02Resolution === '512P' && imageCount < 2 ? '512P' : '768P';
+}
+
 export const hailuo02Model = defineModel({
     meta: {
         id: 'fal-ai-minimax-hailuo-02',
@@ -105,7 +111,7 @@ export const hailuo02Model = defineModel({
             const images = resolveUploadedImageSources(params);
             const prompt = params.prompt || '';
             const version = params.falHailuo02Version || 'standard';
-            const resolution = params.falHailuo02Resolution || '768P';
+            const resolution = falHailuo02Resolution(params, images.length);
             const duration = params.falHailuo02Duration || '6';
             const isFastMode = images.length === 1 && params.falHailuo02FastMode === true;
             const promptOptimizer = params.falHailuo02PromptOptimizer !== false;
@@ -144,10 +150,10 @@ export const hailuo02Model = defineModel({
             // Standard 文生视频不接受 resolution，固定按 768P 秒价计费。
             if (imageCount === 0)
                 return 0.045 * duration;
-            const resolution = params.falHailuo02Resolution === '512P' ? '512P' : '768P';
+            const resolution = falHailuo02Resolution(params, imageCount);
             return (resolution === '512P' ? 0.017 : 0.045) * duration;
         },
-        description: 'Standard 文生：$0.045/秒；Standard 图生：768P $0.045/秒、512P $0.017/秒；Fast 图生：512P $0.017/秒；non-fast Pro：固定 1080P、6 秒，$0.48/条'
+        description: 'Standard 文生：$0.045/秒；Standard 图生：768P $0.045/秒、512P $0.017/秒（首尾帧固定 768P）；Fast 图生：512P $0.017/秒；non-fast Pro：固定 1080P、6 秒，$0.48/条'
     }
 });
 export default hailuo02Model;

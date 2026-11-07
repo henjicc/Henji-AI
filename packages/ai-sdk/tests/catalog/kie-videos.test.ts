@@ -95,6 +95,13 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
       model: 'hailuo/02-image-to-video-standard',
       input: { image_url: 'first.png', resolution: '512P' }
     })
+
+    // 首尾帧不支持 512P，原样发送会在平台内部失败。
+    const startEndParams = { ...textParams, uploadedFilePaths: ['first.png', 'last.png'] }
+    expect(kieHailuo02Model.pricing.calculator?.(startEndParams)).toBeCloseTo(0.15)
+    expect(kieHailuo02Model.request?.builder?.(startEndParams)).toMatchObject({
+      input: { image_url: 'first.png', end_image_url: 'last.png', resolution: '768P' }
+    })
   })
 
   it('Hailuo 02 将非法 10s 1080P 回收到 10s 768P', () => {

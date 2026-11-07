@@ -300,8 +300,10 @@ describe('packages/ai-sdk/docs/model-adaptation Fal 目标模型', () => {
       .toBe('fal-ai/minimax/hailuo-02/standard/image-to-video')
     expect(falHailuo02Model.request?.builder?.({ prompt: 'frames', ...staleFastWithTwoImages }))
       .toMatchObject({
-        image_url: 'first.png', end_image_url: 'last.png', duration: '10', resolution: '512P',
+        image_url: 'first.png', end_image_url: 'last.png', duration: '10', resolution: '768P',
       })
+    // 首尾帧不支持 512P，按 768P 请求和计价。
+    expect(falHailuo02Model.pricing.calculator?.(staleFastWithTwoImages)).toBeCloseTo(0.45)
 
     expect(isParamVisible(falHailuo02Runtime, 'falHailuo02Duration', proImage)).toBe(false)
     expect(isParamVisible(falHailuo02Runtime, 'falHailuo02Duration', proFastImage)).toBe(true)

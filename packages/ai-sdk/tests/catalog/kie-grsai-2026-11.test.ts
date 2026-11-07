@@ -109,6 +109,8 @@ describe('2026-11 KIE / Grsai 新模型请求契约', () => {
     const grsai = await build(grsaiWan30Model, { grsaiWan30Mode: 'reference-to-video', images: img(1) })
     expect(grsai).not.toHaveProperty('firstFrame')
     expect(grsai.images).toEqual(img(1))
+    // Grsai 接口拒绝 2 秒（文档写 2–30），不能按文档改回 2。
+    expect((await build(grsaiWan30Model, { grsaiWan30Duration: '2' })).duration).toBe(3)
   })
 
   it('价格按官方计费维度计算', () => {

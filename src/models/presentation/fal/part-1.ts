@@ -3,6 +3,7 @@
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
+import { uploadedImageCount } from '../mediaPresence'
 
 export const falPresentationPart1: Record<string, ModelPresentation> = {
   "fal-ai-gemini-omni-flash": {
@@ -267,7 +268,18 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
         name: sharedFieldText('promptOptimizer'),
       },
     },
-    linkages: [],
+    linkages: [
+      {
+        // MiniMax 首尾帧不支持 512P，SDK 按 768P 请求和计价，界面跟着显示 768P。
+        trigger: ['falHailuo02Resolution', 'images', 'uploadedImages'],
+        effect: 'autoSwitch',
+        target: 'falHailuo02Resolution',
+        condition: (_: unknown, allParams: Record<string, unknown>) => {
+          return allParams.falHailuo02Resolution === '512P' && uploadedImageCount(allParams) >= 2
+        },
+        value: '768P'
+      }
+    ],
   },
   "fal-ai-minimax-hailuo-2.3": {
     meta: {

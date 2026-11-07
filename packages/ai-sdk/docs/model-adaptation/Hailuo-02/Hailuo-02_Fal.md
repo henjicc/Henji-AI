@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-30 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 视频 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `fal-ai/minimax/hailuo-02/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-02-fast/image-to-video` |
@@ -25,7 +25,7 @@
 | 无图片，Standard | `fal-ai/minimax/hailuo-02/standard/text-to-video` | 端点不接收 `resolution`（按官方 `$0.045/秒` 计价） | 6 / 10 秒 |
 | 无图片，Pro | `fal-ai/minimax/hailuo-02/pro/text-to-video` | 固定 1080P | 固定 6 秒 |
 | 1 张图片且开启 Fast；版本选择不参与路由 | `fal-ai/minimax/hailuo-02-fast/image-to-video` | 固定 512P | 6 / 10 秒 |
-| 1～2 张图片、关闭 Fast、Standard | `fal-ai/minimax/hailuo-02/standard/image-to-video` | 512P / 768P | 6 / 10 秒 |
+| 1～2 张图片、关闭 Fast、Standard | `fal-ai/minimax/hailuo-02/standard/image-to-video` | 单图 512P / 768P；首尾帧只有 768P | 6 / 10 秒 |
 | 1～2 张图片、关闭 Fast、Pro | `fal-ai/minimax/hailuo-02/pro/image-to-video` | 固定 1080P | 固定 6 秒 |
 
 路由判定顺序：
@@ -40,7 +40,7 @@
 |---|---|---|---|
 | `prompt` | string | 全部 | 视频描述 |
 | `duration` | string / integer | Standard 与 Fast | `6` / `10`；只有 non-fast Pro 固定 6 秒且不发送该字段，单图 + Fast 即使版本值残留为 Pro 也仍发送 |
-| `resolution` | string | non-fast Standard 图生视频 | `512P` / `768P`；Fast 固定 512P，Pro 固定 1080P |
+| `resolution` | string | non-fast Standard 图生视频 | `512P` / `768P`（首尾帧只有 768P）；Fast 固定 512P，Pro 固定 1080P |
 | `prompt_optimizer` | boolean | 全部 | 是否优化提示词，默认开启 |
 | `image_url` | string | 图生视频 | 首帧图 URL |
 | `end_image_url` | string | non-fast 图生视频 | 可选尾帧图；提供后形成首尾帧生成 |
@@ -79,11 +79,13 @@ Fast 最多接受 1 张图；non-fast 图生视频最多接受首帧、尾帧共
 - non-fast Pro 不接受时长与分辨率选择，固定 1080P、6 秒；单图 + Fast 优先后属于 Fast 路由，仍按选择发送 6 / 10 秒 `duration`。
 - 图片存在性影响路由和计价，必须同时读取生成提交的 `uploadedFilePaths`、画布的 `images`、对话/工具面板的 `uploadedImages`。
 - Standard 512P 与 Fast 512P 单价相同，但 endpoint、输入上限和首尾帧能力不同，不能只凭价格合并路由。
+- 首尾帧（2 张图）不支持 512P（MiniMax 官方首尾帧文档；Fal schema 未写，未实测），SDK 按 768P 请求和计价，与 KIE 实测结论一致。
 
 ## 7. 原始链接索引
 
 | 信息 | 链接 | 是否需登录 |
 |---|---|---|
+| MiniMax 官方首尾帧（首尾帧不支持 512P） | https://platform.minimaxi.com/docs/api-reference/video-generation-fl2v | 否 |
 | Standard 文生视频 schema + 价格 | https://fal.ai/models/fal-ai/minimax/hailuo-02/standard/text-to-video/llms.txt | 否 |
 | Standard 图生视频 schema + 价格 | https://fal.ai/models/fal-ai/minimax/hailuo-02/standard/image-to-video/llms.txt | 否 |
 | Pro 文生视频 schema + 价格 | https://fal.ai/models/fal-ai/minimax/hailuo-02/pro/text-to-video/llms.txt | 否 |
