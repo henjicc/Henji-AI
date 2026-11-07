@@ -17,6 +17,7 @@ import {
   UiNavButton,
   UiOptionButton,
   UiPanel,
+  UiResizeHandle,
   UiSearchInput,
   UiSwitch,
   UiToolbar,
@@ -30,7 +31,41 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { ModelTestBench } from './ModelTestBench'
 import { dryRunGenerationModel, listSdkModels, sdkModelDefaults, sdkProviderName, SDK_MODEL_CATEGORIES, type SdkDryRunResult, type SdkModelCategory, type SdkModelRow } from './sdkModelInventory'
 
-const ROW_COLUMNS = 'grid-cols-[minmax(0,2fr)_6rem_5rem_minmax(0,1.4fr)_2rem]'
+/** 三栏宽度与表格列宽都能拖，记在本机；能力列吃掉剩余宽度。 */
+interface PanelLayout { filter: number; detail: number; model: number; provider: number; category: number }
+const DEFAULT_LAYOUT: PanelLayout = { filter: 208, detail: 384, model: 280, provider: 104, category: 88 }
+const LAYOUT_LIMITS: Readonly<Record<keyof PanelLayout, readonly [number, number]>> = {
+  filter: [160, 400], detail: [280, 960], model: [140, 640], provider: [64, 320], category: [56, 240],
+}
+const LAYOUT_STORAGE_KEY = 'henji.developer.sdkModels.layout'
+
+function readLayout(): PanelLayout {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) ?? '{}') as Partial<PanelLayout>
+    return Object.fromEntries((Object.keys(DEFAULT_LAYOUT) as Array<keyof PanelLayout>).map((key) => {
+      const value = stored[key]
+      const [min, max] = LAYOUT_LIMITS[key]
+      return [key, typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : DEFAULT_LAYOUT[key]]
+    })) as unknown as PanelLayout
+  } catch {
+    return DEFAULT_LAYOUT
+  }
+}
+
+function usePanelLayout(): { layout: PanelLayout; resize: (key: keyof PanelLayout) => Pick<React.ComponentProps<typeof UiResizeHandle>, 'value' | 'min' | 'max' | 'onChange' | 'onCommit'> } {
+  const [layout, setLayout] = useState<PanelLayout>(readLayout)
+  const resize = (key: keyof PanelLayout) => ({
+    value: layout[key],
+    min: LAYOUT_LIMITS[key][0],
+    max: LAYOUT_LIMITS[key][1],
+    onChange: (value: number) => setLayout((current) => ({ ...current, [key]: value })),
+    onCommit: () => setLayout((current) => {
+      try { localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(current)) } catch { /* 只是本机偏好 */ }
+      return current
+    }),
+  })
+  return { layout, resize }
+}
 
 const CATEGORY_LABEL: Readonly<Record<SdkModelCategory, string>> = {
   image: '图片', video: '视频', audio: '音频', tool: '图片工具', llm: '大语言模型', asr: '语音识别', translation: '翻译',
@@ -71,6 +106,8 @@ function useLlmKeyStatus(): Readonly<Record<string, boolean>> {
 
 export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const rows = useMemo(() => listSdkModels(), [])
+  const { layout, resize } = usePanelLayout()
+  const rowColumns = { gridTemplateColumns: `${layout.model}px ${layout.provider}px ${layout.category}px minmax(0,1fr) 2rem` }
   const keyStatus = useSettingsStore((state) => state.providerKeyStatus)
   const llmKeyStatus = useLlmKeyStatus()
   const isConfigured = (row: SdkModelRow): boolean => (row.llm ? llmKeyStatus : keyStatus)[row.providerId] === true
@@ -91,7 +128,6 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const toggleTest = (row: SdkModelRow): void => setTestKeys((current) => current.includes(row.key)
     ? current.filter((key) => key !== row.key)
     : testRows[0] && testRows[0].category !== row.category ? [row.key] : [...current, row.key])
-  const openBench = (keys: readonly string[]): void => { setTestKeys(keys); setBenchOpen(true) }
 
   const providerIds = useMemo(() => [...new Set(rows.map((row) => row.providerId).filter(Boolean))].sort(), [rows])
   const filtered = useMemo(() => {
@@ -159,8 +195,8 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         <span className={UI_TEXT_PANEL_TITLE_CLASS}>SDK 模型</span>
         <span className={UI_TEXT_META_CLASS}>{filtered.length} / {rows.length}{failedCount ? ` · 检查失败 ${failedCount}` : ''}</span>
       </UiToolbar>
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,13rem)_minmax(0,1fr)_minmax(0,24rem)]">
-        <aside aria-label="筛选" className="flex min-h-0 flex-col gap-6 overflow-y-auto border-r border-line p-3">
+      <div className="flex min-h-0 flex-1">
+        <aside aria-label="筛选" className="flex min-h-0 shrink-0 flex-col gap-6 overflow-y-auto border-r border-line p-3" style={{ width: layout.filter }}>
           <UiGroup title="类别" titleTone="compact">
             <div className="flex flex-col">
               <UiNavButton size="md" active={category === null} onClick={() => setCategory(null)}>全部 · {rows.length}</UiNavButton>
@@ -187,11 +223,17 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
           </UiGroup>
         </aside>
-        <section aria-label="模型" className="flex min-h-0 flex-col">
+        <UiResizeHandle label="调整筛选栏宽度" {...resize('filter')} />
+        <section aria-label="模型" className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* 表头和行同一套两段结构：勾选列 + 菜单项（菜单项自带 px-3），列宽才对得齐 */}
           <div className={`grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-1 border-b border-line py-2 pl-4 pr-2 ${UI_TEXT_META_CLASS}`}>
             <span />
-            <span className={`grid ${ROW_COLUMNS} gap-3 px-3`}><span>模型</span><span>供应商</span><span>类别</span><span>能力</span><span>检查</span></span>
+            <span className="grid gap-3 px-3" style={rowColumns}>
+              <span className="relative"><span className="block truncate">模型</span><UiResizeHandle variant="column" label="调整模型列宽" {...resize('model')} /></span>
+              <span className="relative"><span className="block truncate">供应商</span><UiResizeHandle variant="column" label="调整供应商列宽" {...resize('provider')} /></span>
+              <span className="relative"><span className="block truncate">类别</span><UiResizeHandle variant="column" label="调整类别列宽" {...resize('category')} /></span>
+              <span>能力</span><span>检查</span>
+            </span>
           </div>
           <div className="min-h-0 flex-1">
             <UiVirtualList
@@ -209,7 +251,8 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   active={row.key === selectedKey}
                   data-sdk-model-row={row.key}
                   data-check-status={checkStatus(checks.get(row.modelId))}
-                  className={`grid min-h-11 w-full ${ROW_COLUMNS} items-center gap-3 text-left`}
+                  className="grid min-h-11 w-full items-center gap-3 text-left"
+                  style={rowColumns}
                   onClick={() => setSelectedKey(row.key)}
                 >
                   <span className="flex min-w-0 flex-col">
@@ -226,9 +269,10 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             />
           </div>
         </section>
-        <aside aria-label="模型详情" className="min-h-0 overflow-y-auto border-l border-line p-4">
+        <UiResizeHandle label="调整详情栏宽度" grow="start" {...resize('detail')} />
+        <aside aria-label="模型详情" className="min-h-0 shrink-0 overflow-y-auto border-l border-line p-4" style={{ width: layout.detail }}>
           {selected
-            ? <ModelDetail key={selected.key} row={selected} configured={isConfigured(selected)} result={checks.get(selected.modelId)} onResult={(result) => record(selected.modelId, result)} onTest={() => openBench([selected.key])} />
+            ? <ModelDetail key={selected.key} row={selected} configured={isConfigured(selected)} result={checks.get(selected.modelId)} onResult={(result) => record(selected.modelId, result)} />
             : <UiEmpty title="选一个模型查看详情" />}
         </aside>
       </div>
@@ -250,7 +294,7 @@ const CheckIcon: React.FC<{ result: SdkDryRunResult | undefined }> = ({ result }
     : <CircleX aria-label="离线检查失败" className="h-4 w-4 text-danger-text" />
 }
 
-const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: SdkDryRunResult | undefined; onResult: (result: SdkDryRunResult) => void; onTest: () => void }> = ({ row, configured, result, onResult, onTest }) => {
+const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: SdkDryRunResult | undefined; onResult: (result: SdkDryRunResult) => void }> = ({ row, configured, result, onResult }) => {
   const [sample, setSample] = useState(true)
   const [running, setRunning] = useState(false)
   const defaults = useMemo(() => (row.generation ? sdkModelDefaults(row.modelId) : {}), [row])
@@ -318,10 +362,9 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: Sdk
           ) : null}
         </UiGroup>
       </> : null}
+      {/* 单个模型直接在这里调；要和同类模型并排对比，在列表里勾选多个再进测试台 */}
       <UiGroup title="真实调用" titleTone="compact" divided>
-        <UiButton variant="primary" onClick={onTest} data-sdk-open-bench="" tooltip="在测试台里真实调用这个模型；要和同类模型对比，在列表里勾选多个">
-          <FlaskConical />在测试台打开
-        </UiButton>
+        <ModelTestBench layout="inline" rows={[row]} />
       </UiGroup>
     </div>
   )

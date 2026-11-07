@@ -16,6 +16,7 @@ import {
   UiTextArea,
   UiToolbar,
 } from '@/components/ui'
+import PriceEstimate from '@/components/ui/PriceEstimate'
 import Tooltip from '@/components/ui/Tooltip'
 import { applicationPaidOperationReceipt, bindPaidOperationReceipt } from '@/core/application-control/userConfirmation'
 import type { PaidOperationCategory } from '@/core/application-control/paidApproval'
@@ -62,9 +63,12 @@ function applyParamChanges(modelId: string, current: DynamicValueMap, changes: D
 
 export const ModelTestBench: React.FC<{
   rows: readonly SdkModelRow[]
-  onBack: () => void
-  onRemove: (key: string) => void
-}> = ({ rows, onBack, onRemove }) => {
+  /** page：整页并排对比；inline：嵌在模型详情里调一个模型，没有工具条，输入、运行与结果从上往下排 */
+  layout?: 'page' | 'inline'
+  onBack?: () => void
+  onRemove?: (key: string) => void
+}> = ({ rows, layout = 'page', onBack, onRemove }) => {
+  const inline = layout === 'inline'
   const category = rows[0]?.category
   const kind = category === 'llm' || category === 'asr' || category === 'translation' ? category : 'generation'
   const isLlm = kind === 'llm'
@@ -246,7 +250,7 @@ export const ModelTestBench: React.FC<{
   const remove = (key: string): void => {
     stopRun(key)
     controllers.current.delete(key)
-    onRemove(key)
+    onRemove?.(key)
   }
   const missingInput = kind === 'llm' ? !user.trim() ? '先写好要发给模型的消息' : null
     : kind === 'asr' ? !audioPath ? '先选一段音频' : null
@@ -255,34 +259,7 @@ export const ModelTestBench: React.FC<{
 
   if (!category) return <UiEmpty title="测试台里没有模型" />
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col" data-test-bench={category}>
-      <UiToolbar
-        variant="command"
-        trailing={<>
-          {!isLlm && rows.length > 1 ? (
-            <Tooltip content="改一列的比例、分辨率、时长等通用参数时，同步到其他列" asChild>
-              <label className="flex items-center gap-2">
-                <span className={UI_TEXT_META_CLASS}>参数联动</span>
-                <UiSwitch checked={sync} onCheckedChange={setSync} aria-label="参数联动" />
-              </label>
-            </Tooltip>
-          ) : null}
-          {running
-            ? <UiButton size="sm" onClick={() => rows.forEach((row) => stopRun(row.key))}><Square />全部停止</UiButton>
-            : <UiButton size="sm" variant="primary" disabled={missingInput !== null} disabledReason={missingInput ?? undefined} onClick={() => void runAll()} data-test-bench-run-all="">
-                <Play />{rows.length > 1 ? `全部运行 ${rows.length} 个` : '运行'}
-              </UiButton>}
-        </>}
-      >
-        <UiIconButton tooltip="返回模型列表" aria-label="返回模型列表" onClick={onBack}><ArrowLeft /></UiIconButton>
-        <span className={UI_TEXT_PANEL_TITLE_CLASS}>测试台</span>
-        <span className={UI_TEXT_META_CLASS}>{BENCH_LABEL[category]} · {rows.length} 个模型 · 真实调用，按付费策略计费</span>
-      </UiToolbar>
-
-      <div className="border-b border-line p-4">
-        {/* 输入区限宽：铺满宽屏时一行太长不好读，下方各列照常横向铺开 */}
-        <div className="flex max-w-3xl flex-col gap-4">
+  const inputs = <>
         {notice ? <UiInlineStatus tone="warning">{notice}</UiInlineStatus> : null}
         {kind === 'asr' ? (
           <UiGroup labelWidth={96}>
@@ -344,19 +321,72 @@ export const ModelTestBench: React.FC<{
             </div>
           ) : null}
         </>}
+  </>
+  const columns = <>
+        {rows.map((row) => kind === 'asr' || kind === 'translation'
+          ? <TextTestColumn key={row.key} embedded={inline} row={row} run={textRuns[row.key]} runnable={textBlocker(row)}
+              onRun={() => runOne(row)} onStop={() => stopRun(row.key)} onRemove={() => remove(row.key)} />
+          : isLlm
+          ? <LlmTestColumn key={row.key} embedded={inline} row={row} run={llmRuns[row.key]} runnable={llmBlocker(row)}
+              onRun={() => runOne(row)} onStop={() => stop(row.key)} onRemove={() => remove(row.key)} />
+          : <GenerationTestColumn key={row.key} embedded={inline} row={row} params={paramsOf(row)} run={generationRuns[row.key]}
+              onParamsChange={(changes) => changeParams(row, changes)}
+              onRun={() => runOne(row)} onStop={() => stop(row.key)} onRemove={() => remove(row.key)} />)}
+  </>
+
+  if (inline) {
+    const row = rows[0]
+    const blocker = kind === 'llm' ? llmBlocker(row) : kind === 'generation' ? null : textBlocker(row)
+    return (
+      <div className="flex flex-col gap-4" data-test-bench={category} data-test-bench-inline="">
+        {inputs}
+        <div className="flex items-center gap-3">
+          {running
+            ? <UiButton size="sm" onClick={() => stopRun(row.key)}><Square />停止</UiButton>
+            : <UiButton size="sm" variant="primary" disabled={missingInput !== null || blocker !== null} disabledReason={missingInput ?? blocker ?? undefined} onClick={() => void runOne(row)} data-test-bench-run={row.key}>
+                <Play />运行
+              </UiButton>}
+          {kind === 'generation' ? <PriceEstimate variant="badge" providerId={row.providerId} modelId={row.modelId} params={paramsOf(row)} /> : null}
+        </div>
+        {columns}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col" data-test-bench={category}>
+      <UiToolbar
+        variant="command"
+        trailing={<>
+          {!isLlm && rows.length > 1 ? (
+            <Tooltip content="改一列的比例、分辨率、时长等通用参数时，同步到其他列" asChild>
+              <label className="flex items-center gap-2">
+                <span className={UI_TEXT_META_CLASS}>参数联动</span>
+                <UiSwitch checked={sync} onCheckedChange={setSync} aria-label="参数联动" />
+              </label>
+            </Tooltip>
+          ) : null}
+          {running
+            ? <UiButton size="sm" onClick={() => rows.forEach((row) => stopRun(row.key))}><Square />全部停止</UiButton>
+            : <UiButton size="sm" variant="primary" disabled={missingInput !== null} disabledReason={missingInput ?? undefined} onClick={() => void runAll()} data-test-bench-run-all="">
+                <Play />{rows.length > 1 ? `全部运行 ${rows.length} 个` : '运行'}
+              </UiButton>}
+        </>}
+      >
+        <UiIconButton tooltip="返回模型列表" aria-label="返回模型列表" onClick={() => onBack?.()}><ArrowLeft /></UiIconButton>
+        <span className={UI_TEXT_PANEL_TITLE_CLASS}>测试台</span>
+        <span className={UI_TEXT_META_CLASS}>{BENCH_LABEL[category]} · {rows.length} 个模型 · 真实调用，按付费策略计费</span>
+      </UiToolbar>
+
+      <div className="border-b border-line p-4">
+        {/* 输入区限宽：铺满宽屏时一行太长不好读，下方各列照常横向铺开 */}
+        <div className="flex max-w-3xl flex-col gap-4">
+          {inputs}
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-x-auto">
-        {rows.map((row) => kind === 'asr' || kind === 'translation'
-          ? <TextTestColumn key={row.key} row={row} run={textRuns[row.key]} runnable={textBlocker(row)}
-              onRun={() => runOne(row)} onStop={() => stopRun(row.key)} onRemove={() => remove(row.key)} />
-          : isLlm
-          ? <LlmTestColumn key={row.key} row={row} run={llmRuns[row.key]} runnable={llmBlocker(row)}
-              onRun={() => runOne(row)} onStop={() => stop(row.key)} onRemove={() => remove(row.key)} />
-          : <GenerationTestColumn key={row.key} row={row} params={paramsOf(row)} run={generationRuns[row.key]}
-              onParamsChange={(changes) => changeParams(row, changes)}
-              onRun={() => runOne(row)} onStop={() => stop(row.key)} onRemove={() => remove(row.key)} />)}
+        {columns}
       </div>
     </div>
   )

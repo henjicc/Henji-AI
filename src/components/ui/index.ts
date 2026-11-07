@@ -17,6 +17,7 @@ export type { AlertDialogAction } from './AlertDialog';
 export * from './GlobalAlertDialog';
 export * from './UiErrorBoundary';
 export * from './UiOverflowRow';
+export * from './UiResizeHandle';
 export * from './UiAngleDial';
 export * from './UiPointPad';
 export * from './UiRangeSlider';

@@ -60,6 +60,23 @@ const ColumnHeader: React.FC<{
   </div>
 )
 
+/** 整页里是一列带列头的竖条；嵌在模型详情里时只留内容，由外层负责滚动 */
+const BenchColumn: React.FC<{
+  embedded?: boolean
+  row: SdkModelRow
+  status: RunStatus
+  header: React.ReactNode
+  gap?: 'gap-3' | 'gap-5'
+  children: React.ReactNode
+}> = ({ embedded, row, status, header, gap = 'gap-3', children }) => embedded
+  ? <section className={`flex flex-col ${gap}`} aria-label={row.name} data-test-bench-column={row.key} data-run-status={status}>{children}</section>
+  : (
+    <section className="flex w-96 shrink-0 flex-col border-r border-line" aria-label={row.name} data-test-bench-column={row.key} data-run-status={status}>
+      {header}
+      <div className={`flex min-h-0 flex-1 flex-col ${gap} overflow-y-auto p-4`}>{children}</div>
+    </section>
+  )
+
 const RunFooter: React.FC<{ requestId?: string; summary?: string }> = ({ requestId, summary }) => (
   <div className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}>
     <span className={`min-w-0 flex-1 truncate ${UI_TEXT_TIMECODE_CLASS}`}>{summary}</span>
@@ -92,6 +109,7 @@ const GenerationOutput: React.FC<{ type: string; result: GenerationTestResult }>
 }
 
 export const GenerationTestColumn: React.FC<{
+  embedded?: boolean
   row: SdkModelRow
   params: DynamicValueMap
   run: GenerationRun | undefined
@@ -99,14 +117,13 @@ export const GenerationTestColumn: React.FC<{
   onRun: () => void
   onStop: () => void
   onRemove: () => void
-}> = ({ row, params, run, onParamsChange, onRun, onStop, onRemove }) => {
+}> = ({ embedded, row, params, run, onParamsChange, onRun, onStop, onRemove }) => {
   const type = registry.getModel(row.modelId)?.meta.type ?? 'image'
   const status = run?.status ?? 'idle'
   return (
-    <section className="flex w-96 shrink-0 flex-col border-r border-line" aria-label={row.name} data-test-bench-column={row.key} data-run-status={status}>
-      <ColumnHeader row={row} running={status === 'running'} onRun={onRun} onStop={onStop} onRemove={onRemove}
-        price={<PriceEstimate variant="badge" providerId={row.providerId} modelId={row.modelId} params={params} />} />
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4">
+    <BenchColumn embedded={embedded} row={row} status={status} gap="gap-5"
+      header={<ColumnHeader row={row} running={status === 'running'} onRun={onRun} onStop={onStop} onRemove={onRemove}
+        price={<PriceEstimate variant="badge" providerId={row.providerId} modelId={row.modelId} params={params} />} />}>
         <UiGroup title="参数" titleTone="compact">
           <ParameterPanel
             currentModel={null}
@@ -124,19 +141,19 @@ export const GenerationTestColumn: React.FC<{
           {run?.result ? <GenerationOutput type={type} result={run.result} /> : status === 'idle' ? <span className={UI_TEXT_META_CLASS}>还没运行</span> : null}
           {run?.result ? <RunFooter requestId={run.result.requestId} summary={`用时 ${seconds(run.result.elapsedMs)} · ${run.result.filePaths.length || run.result.urls.length} 个结果`} /> : null}
         </UiGroup>
-      </div>
-    </section>
+    </BenchColumn>
   )
 }
 
 export const LlmTestColumn: React.FC<{
+  embedded?: boolean
   row: SdkModelRow
   run: LlmRun | undefined
   runnable: string | null
   onRun: () => void
   onStop: () => void
   onRemove: () => void
-}> = ({ row, run, runnable, onRun, onStop, onRemove }) => {
+}> = ({ embedded, row, run, runnable, onRun, onStop, onRemove }) => {
   const [showReasoning, setShowReasoning] = useState(false)
   const status = run?.status ?? 'idle'
   const metrics = useMemo(() => {
@@ -150,9 +167,8 @@ export const LlmTestColumn: React.FC<{
     ].filter(Boolean).join(' · ')
   }, [run?.result])
   return (
-    <section className="flex w-96 shrink-0 flex-col border-r border-line" aria-label={row.name} data-test-bench-column={row.key} data-run-status={status}>
-      <ColumnHeader row={row} running={status === 'running'} onRun={onRun} onStop={onStop} onRemove={onRemove} />
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+    <BenchColumn embedded={embedded} row={row} status={status}
+      header={<ColumnHeader row={row} running={status === 'running'} onRun={onRun} onStop={onStop} onRemove={onRemove} />}>
         {runnable ? <UiInlineStatus tone="warning">{runnable}</UiInlineStatus> : null}
         <StatusLine status={status} error={run?.error} />
         {metrics ? <span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`} data-llm-metrics="">{metrics}</span> : null}
@@ -164,8 +180,7 @@ export const LlmTestColumn: React.FC<{
         ) : null}
         {run?.output ? <p className="whitespace-pre-wrap break-words" data-llm-output="">{run.output}</p> : status === 'idle' ? <span className={UI_TEXT_META_CLASS}>还没运行</span> : null}
         {run?.result ? <RunFooter requestId={run.result.requestId} /> : null}
-      </div>
-    </section>
+    </BenchColumn>
   )
 }
 
@@ -177,24 +192,23 @@ export interface TextRun {
 
 /** 语音识别与翻译：结果都是一段文字，并排看差异 */
 export const TextTestColumn: React.FC<{
+  embedded?: boolean
   row: SdkModelRow
   run: TextRun | undefined
   runnable: string | null
   onRun: () => void
   onStop: () => void
   onRemove: () => void
-}> = ({ row, run, runnable, onRun, onStop, onRemove }) => {
+}> = ({ embedded, row, run, runnable, onRun, onStop, onRemove }) => {
   const status = run?.status ?? 'idle'
   const result = run?.result
   return (
-    <section className="flex w-96 shrink-0 flex-col border-r border-line" aria-label={row.name} data-test-bench-column={row.key} data-run-status={status}>
-      <ColumnHeader row={row} running={status === 'running'} onRun={onRun} onStop={onStop} onRemove={onRemove} />
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+    <BenchColumn embedded={embedded} row={row} status={status}
+      header={<ColumnHeader row={row} running={status === 'running'} onRun={onRun} onStop={onStop} onRemove={onRemove} />}>
         {runnable ? <UiInlineStatus tone="warning">{runnable}</UiInlineStatus> : null}
         <StatusLine status={status} error={run?.error} />
         {result ? <p className="whitespace-pre-wrap break-words" data-text-output="">{result.text || '（空）'}</p> : status === 'idle' && !runnable ? <span className={UI_TEXT_META_CLASS}>还没运行</span> : null}
         {result ? <RunFooter requestId={result.requestId} summary={`用时 ${seconds(result.elapsedMs)} · ${result.text.length} 字${result.segments ? ` · ${result.segments} 段` : ''}`} /> : null}
-      </div>
-    </section>
+    </BenchColumn>
   )
 }
