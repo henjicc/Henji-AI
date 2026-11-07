@@ -236,8 +236,8 @@ it('设置摘要从不返回完整密钥，替换、共享槽和清除保持一�
   mocks.isEncryptionAvailable.mockReturnValue(true)
   try {
     setAiProviderApiKey('fal', 'fixture-provider-secret-1234')
-    expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '••••1234' })
-    expect(getLlmProviderKeyStatus(['fal'])).toEqual([{ credentialId: 'fal', configured: true, maskedHint: '••••1234' }])
+    expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '•'.repeat('fixture-provider-secret-1234'.length) })
+    expect(getLlmProviderKeyStatus(['fal'])).toEqual([{ credentialId: 'fal', configured: true, maskedHint: '•'.repeat('fixture-provider-secret-1234'.length) }])
     setLlmProviderApiKey('fal', 'tiny')
     expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '••••' })
     expect(getAiProviderApiKey('fal')).toBe('tiny')

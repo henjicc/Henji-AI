@@ -114,9 +114,7 @@ describe('OnboardingModal', () => {
     onboardingManager.setPrimaryProvider('fal')
     onboardingManager.goToStep('api-key')
     render(<OnboardingModal />)
-    expect(await screen.findByText('已配置 · ••••1234')).toBeTruthy()
-    const input = screen.getByPlaceholderText('输入新密钥以替换') as HTMLInputElement
-    expect(input.value).toBe('')
+    await waitFor(() => expect(screen.getByDisplayValue('••••1234')).toBeTruthy())
     vi.mocked(aiSetProviderApiKey).mockClear()
     vi.mocked(aiTestProviderConnection).mockClear()
     fireEvent.click(screen.getByRole('button', { name: '保存并测试' }))

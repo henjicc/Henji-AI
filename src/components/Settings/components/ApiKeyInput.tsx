@@ -1,6 +1,5 @@
 import { UiFieldMessage } from '@/components/ui'
-import React, { useCallback, useEffect, useId, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { ExternalLink, Eye, EyeOff } from 'lucide-react'
 import {
   UI_FIELD_LABEL_CLASS,
@@ -16,7 +15,7 @@ const AUTO_SAVE_DELAY_MS = 600
 interface ApiKeyInputProps {
   maskedHint?: string
   onClear?: () => void
-  /** 自动保存：输入停顿、失焦、回车或卸载时调用；空输入不保存，删除只走“清除”。 */
+  /** 自动保存：输入停顿、失焦、回车或卸载时调用；把已保存的密钥清空则改调 onClear。 */
   onSave?: () => void
   label?: string
   value: string
@@ -57,25 +56,30 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   managementLabel,
   onOpenUrl,
 }) => {
-  const { t } = useTranslation('settings')
   const inputId = useId()
   const hintId = `${inputId}-hint`
   const errorId = `${inputId}-error`
   const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
   const toggleLabel = visible ? hideLabel : showLabel
-  const saveRef = useRef(onSave)
-  saveRef.current = onSave
+  // 已保存的密钥拿不到明文，只拿得到等长的圆点；没动过时把圆点当作框里的内容显示，像普通密码框一样。
+  // 按输入次数计时而不是按值：把已保存的圆点清空时值仍是空串，也要重新计时去删除。
+  const [edits, setEdits] = useState(0)
+  const showsSaved = Boolean(maskedHint) && edits === 0 && !value
+  const latest = useRef({ onSave, onClear, value, maskedHint })
+  latest.current = { onSave, onClear, value, maskedHint }
   const pendingRef = useRef(false)
   const flush = useCallback((): void => {
     if (!pendingRef.current) return
     pendingRef.current = false
-    saveRef.current?.()
+    const current = latest.current
+    if (current.value.trim()) current.onSave?.()
+    else if (current.maskedHint) current.onClear?.()
   }, [])
   useEffect(() => {
     if (!pendingRef.current) return
     const timer = setTimeout(flush, AUTO_SAVE_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [value, flush])
+  }, [edits, flush])
   // 设置页在停顿计时结束前关掉时，也要把刚输入的密钥存下来。
   useEffect(() => flush, [flush])
   // 上次保存失败时内容没变也允许失焦或回车重试。
@@ -114,30 +118,25 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           </div>
         </div>
       ) : null}
-      {maskedHint ? <div className="mb-2 flex items-center gap-2">
-        <span className={UI_TEXT_META_CLASS}>{t('apiKeys.configuredHint', { defaultValue: '已配置 · {{hint}}', hint: maskedHint })}</span>
-        {onClear ? <UiButton type="button" variant="danger" size="sm" disabled={disabled}
-          // 按下时不让输入框失焦，免得失焦保存与清除先后落盘，把刚清除的密钥又写回去。
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => { pendingRef.current = false; onClear() }}>
-          {t('apiKeys.clear', { defaultValue: '清除' })}
-        </UiButton> : null}
-      </div> : null}
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 grow">
           <UiInput
             id={inputId}
-            type={visible ? 'text' : 'password'}
-            value={value}
+            type={visible && !showsSaved ? 'text' : 'password'}
+            value={showsSaved ? maskedHint : value}
+            // 点进来就全选已保存的圆点，直接输入即替换。
+            onFocus={showsSaved ? (e) => e.currentTarget.select() : undefined}
             onChange={(e) => {
-              pendingRef.current = Boolean(onSave && e.target.value.trim())
-              onChange(e.target.value)
+              const next = showsSaved ? e.target.value.replace(/•/g, '') : e.target.value
+              setEdits(count => count + 1)
+              pendingRef.current = Boolean(onSave)
+              onChange(next)
             }}
             onBlur={retryOrFlush}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.nativeEvent.isComposing) retryOrFlush()
             }}
-            placeholder={maskedHint ? t('apiKeys.replacePlaceholder', { defaultValue: '输入新密钥以替换' }) : placeholder}
+            placeholder={placeholder}
             disabled={disabled}
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy}

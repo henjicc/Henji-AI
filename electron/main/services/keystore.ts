@@ -299,7 +299,7 @@ export function getLlmProviderApiKey(credentialId: string): string | null {
 export function getProviderKeyInfo(credentialId: string): ProviderKeyInfo {
   migrateLegacyProviderCredential(credentialId)
   const key = readStoredKey(PROVIDER_KEY_NAMESPACE, credentialId)
-  return { configured: key !== null, maskedHint: key === null ? null : key.length > 8 ? `••••${key.slice(-4)}` : '••••' }
+  return { configured: key !== null, maskedHint: key === null ? null : '•'.repeat(key.length) }
 }
 
 export function getLlmProviderKeyStatus(credentialIds: string[]): Array<ProviderKeyInfo & { credentialId: string }> {

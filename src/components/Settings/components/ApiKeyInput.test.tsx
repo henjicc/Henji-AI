@@ -61,31 +61,35 @@ describe('ApiKeyInput', () => {
   })
 })
 
-it('已配置摘要不是输入值，替换与清除动作保持独立', async () => {
+const SAVED = '•'.repeat(12)
+
+function Draft({ save, clear, hint = SAVED }: { save: () => void; clear?: () => void; hint?: string }): JSX.Element {
+  const [value, setValue] = useState('')
+  return <ApiKeyInput value={value} onChange={setValue} onSave={save} onClear={clear} maskedHint={hint} visible={false} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />
+}
+
+it('已保存的密钥在框里显示成等长圆点，没有额外提示与清除按钮；直接输入即替换', async () => {
   await i18n.changeLanguage('zh-CN')
-  const change = vi.fn(), clear = vi.fn()
-  render(<ApiKeyInput value="" maskedHint="••••1234" visible={false} onChange={change} onClear={clear} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />)
-  expect(screen.getByText('已配置 · ••••1234')).toBeTruthy()
-  const input = screen.getByPlaceholderText('输入新密钥以替换') as HTMLInputElement
-  expect(input.value).toBe('')
-  fireEvent.change(input, { target: { value: 'replacement' } })
-  expect(change).toHaveBeenCalledWith('replacement')
-  fireEvent.click(screen.getByRole('button', { name: '清除' }))
-  expect(clear).toHaveBeenCalledTimes(1)
+  const change = vi.fn()
+  render(<ApiKeyInput value="" maskedHint={SAVED} visible={false} onChange={change} onClear={() => {}} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />)
+  const input = screen.getByPlaceholderText('密钥') as HTMLInputElement
+  expect(input.value).toBe(SAVED)
+  expect(input.type).toBe('password')
+  expect(screen.queryByText(/已配置/)).toBeNull()
+  expect(screen.queryByRole('button', { name: /清除/ })).toBeNull()
+  // 在圆点后面接着打字也只算新输入的内容，圆点不会被当成密钥写进去。
+  fireEvent.change(input, { target: { value: SAVED + 'sk-new' } })
+  expect(change).toHaveBeenCalledWith('sk-new')
 })
 
-it('密钥自动保存：停顿、失焦、回车与卸载都会保存，没有保存按钮，清空输入不会删除已保存的密钥', async () => {
+it('密钥自动保存：停顿、失焦、回车与卸载都会保存，没有保存按钮', async () => {
   await i18n.changeLanguage('zh-CN')
   vi.useFakeTimers()
   try {
     const save = vi.fn()
-    function Draft(): JSX.Element {
-      const [value, setValue] = useState('')
-      return <ApiKeyInput value={value} onChange={setValue} onSave={save} maskedHint="••••1234" visible={false} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />
-    }
-    const view = render(<Draft />)
+    const view = render(<Draft save={save} />)
     expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
-    const input = screen.getByPlaceholderText('输入新密钥以替换')
+    const input = screen.getByPlaceholderText('密钥')
     fireEvent.change(input, { target: { value: 'sk-replacement' } })
     expect(save).not.toHaveBeenCalled()
     act(() => { vi.advanceTimersByTime(600) })
@@ -96,13 +100,33 @@ it('密钥自动保存：停顿、失焦、回车与卸载都会保存，没有�
     fireEvent.change(input, { target: { value: 'sk-replacement-3' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(save).toHaveBeenCalledTimes(3)
-    fireEvent.change(input, { target: { value: '' } })
-    act(() => { vi.advanceTimersByTime(600) })
-    fireEvent.blur(input)
-    expect(save).toHaveBeenCalledTimes(3)
     fireEvent.change(input, { target: { value: 'sk-closing' } })
     view.unmount()
     expect(save).toHaveBeenCalledTimes(4)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('把已保存的密钥清空就是删除；没保存过时清空什么也不做', async () => {
+  await i18n.changeLanguage('zh-CN')
+  vi.useFakeTimers()
+  try {
+    const save = vi.fn(), clear = vi.fn()
+    render(<Draft save={save} clear={clear} />)
+    const input = screen.getByPlaceholderText('密钥')
+    fireEvent.change(input, { target: { value: '' } })
+    act(() => { vi.advanceTimersByTime(600) })
+    expect(clear).toHaveBeenCalledTimes(1)
+    expect(save).not.toHaveBeenCalled()
+    cleanup()
+    const clearUnsaved = vi.fn()
+    render(<Draft save={save} clear={clearUnsaved} hint="" />)
+    const empty = screen.getByPlaceholderText('密钥')
+    fireEvent.change(empty, { target: { value: 'x' } })
+    fireEvent.change(empty, { target: { value: '' } })
+    act(() => { vi.advanceTimersByTime(600) })
+    expect(clearUnsaved).not.toHaveBeenCalled()
   } finally {
     vi.useRealTimers()
   }
