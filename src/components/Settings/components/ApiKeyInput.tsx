@@ -1,5 +1,5 @@
 import { UiFieldMessage } from '@/components/ui'
-import React, { useId } from 'react'
+import React, { useCallback, useEffect, useId, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ExternalLink, Eye, EyeOff } from 'lucide-react'
 import {
@@ -10,9 +10,13 @@ import {
   UiInput,
 } from '@/components/ui'
 
+/** 停止输入这么久后自动保存；失焦、回车与卸载时立即保存。 */
+const AUTO_SAVE_DELAY_MS = 600
+
 interface ApiKeyInputProps {
   maskedHint?: string
   onClear?: () => void
+  /** 自动保存：输入停顿、失焦、回车或卸载时调用；空输入不保存，删除只走“清除”。 */
   onSave?: () => void
   label?: string
   value: string
@@ -59,6 +63,26 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   const errorId = `${inputId}-error`
   const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
   const toggleLabel = visible ? hideLabel : showLabel
+  const saveRef = useRef(onSave)
+  saveRef.current = onSave
+  const pendingRef = useRef(false)
+  const flush = useCallback((): void => {
+    if (!pendingRef.current) return
+    pendingRef.current = false
+    saveRef.current?.()
+  }, [])
+  useEffect(() => {
+    if (!pendingRef.current) return
+    const timer = setTimeout(flush, AUTO_SAVE_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [value, flush])
+  // 设置页在停顿计时结束前关掉时，也要把刚输入的密钥存下来。
+  useEffect(() => flush, [flush])
+  // 上次保存失败时内容没变也允许失焦或回车重试。
+  const retryOrFlush = (): void => {
+    if (error && onSave && value.trim()) pendingRef.current = true
+    flush()
+  }
   return (
     <div>
       {label || websiteUrl || managementUrl ? (
@@ -92,7 +116,10 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
       ) : null}
       {maskedHint ? <div className="mb-2 flex items-center gap-2">
         <span className={UI_TEXT_META_CLASS}>{t('apiKeys.configuredHint', { defaultValue: '已配置 · {{hint}}', hint: maskedHint })}</span>
-        {onClear ? <UiButton type="button" variant="danger" size="sm" disabled={disabled} onClick={onClear}>
+        {onClear ? <UiButton type="button" variant="danger" size="sm" disabled={disabled}
+          // 按下时不让输入框失焦，免得失焦保存与清除先后落盘，把刚清除的密钥又写回去。
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => { pendingRef.current = false; onClear() }}>
           {t('apiKeys.clear', { defaultValue: '清除' })}
         </UiButton> : null}
       </div> : null}
@@ -102,10 +129,14 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
             id={inputId}
             type={visible ? 'text' : 'password'}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={onSave ? (e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing && value.trim()) onSave()
-            } : undefined}
+            onChange={(e) => {
+              pendingRef.current = Boolean(onSave && e.target.value.trim())
+              onChange(e.target.value)
+            }}
+            onBlur={retryOrFlush}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) retryOrFlush()
+            }}
             placeholder={maskedHint ? t('apiKeys.replacePlaceholder', { defaultValue: '输入新密钥以替换' }) : placeholder}
             disabled={disabled}
             aria-invalid={error ? true : undefined}
@@ -126,12 +157,6 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
             {visible ? <EyeOff  /> : <Eye  />}
           </UiIconButton>
         </div>
-        {onSave ? <UiButton type="button" variant="secondary" size="lg" className="shrink-0"
-          disabled={disabled || !value.trim()}
-          disabledReason={disabled ? undefined : t('apiKeys.saveDisabledReason', { defaultValue: '先输入密钥' })}
-          onClick={onSave}>
-          {t('common:save')}
-        </UiButton> : null}
       </div>
       {hint ? <div id={hintId} className={`mt-2 ${UI_TEXT_META_CLASS}`}>{hint}</div> : null}
       {error ? <UiFieldMessage id={errorId} className="mt-1">{error}</UiFieldMessage> : null}

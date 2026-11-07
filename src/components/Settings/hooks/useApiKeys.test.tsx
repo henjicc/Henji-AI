@@ -30,10 +30,10 @@ describe('生成密钥写入', () => {
     expect(result.current).toMatchObject({ errors: { fal: undefined } })
     await act(async () => result.current.saveKey('fal'))
     expect(mocks.status).toHaveBeenCalledWith('fal', true)
-    expect(result.current.keys.fal).toBe('')
+    expect(result.current.keys.fal).toBe('retry')
     expect(result.current.hints.fal).toBe('••••1234')
   })
-  it.each(['unfinished-key', ''])('输入停顿和卸载不保存草稿，只有清除按钮删除：%j', async value => {
+  it.each(['unfinished-key', ''])('密钥记录本身不自动写入（自动保存由输入框负责），只有清除按钮删除：%j', async value => {
     const { result, unmount } = renderHook(useApiKeys)
     await act(async () => {})
     act(() => value ? result.current.updateKey('fal', value) : result.current.clearKey('fal'))
@@ -56,7 +56,7 @@ it('已配置密钥只回填摘要，替换和清除不把掩码当作密钥写�
   act(() => result.current.updateKey('fal', 'replacement'))
   await act(async () => result.current.saveKey('fal'))
   expect(mocks.set).toHaveBeenCalledWith('fal', 'replacement')
-  expect(result.current.keys.fal).toBe('')
+  expect(result.current.keys.fal).toBe('replacement')
   mocks.info.mockResolvedValue({ configured: false, maskedHint: null })
   act(() => result.current.clearKey('fal'))
   await act(async () => { await vi.advanceTimersByTimeAsync(450) })

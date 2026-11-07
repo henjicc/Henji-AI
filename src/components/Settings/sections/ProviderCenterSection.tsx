@@ -350,6 +350,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               </div>
             ) : generationCredential || credentialProvider ? (
               <ApiKeyInput
+                key={generationCredential ?? credentialProvider?.providerId}
                 maskedHint={generationCredential ? generationKeys.hints?.[generationCredential] : credentialProvider ? llm.hints?.[credentialProvider.providerId] : undefined}
                 onClear={() => generationCredential ? generationKeys.clearKey(generationCredential) : credentialProvider && llm.clearKey(credentialProvider.providerId)}
                 onSave={() => {

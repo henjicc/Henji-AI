@@ -129,7 +129,6 @@ export function useLlmSettings(): UseLlmSettingsResult {
         remove ? { kind: 'remove' } : { kind: 'set', apiKey: trimmed }
       )
       if (mountedRef.current) {
-        setKeys(prev => prev[providerId] === value ? { ...prev, [providerId]: '' } : prev)
         await refreshProviderKey(providerId)
         if (mountedRef.current) setKeyErrors(prev => { const next = { ...prev }; delete next[providerId]; return next })
       }

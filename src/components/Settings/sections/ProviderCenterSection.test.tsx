@@ -48,17 +48,23 @@ beforeEach(() => { vi.clearAllMocks(); mocks.providers = []; mocks.errors = {}; 
 afterEach(cleanup)
 
 describe('供应商中心密钥错误', () => {
-  it.each([['fal'], ['volcengine', 'volcengine-speech']])('生成供应商 %s 的保存按钮提交对应凭据草稿', async (...ids) => {
+  it.each([['fal'], ['volcengine', 'volcengine-speech']])('生成供应商 %s 的密钥输入后自动保存到对应凭据', async (...ids) => {
     mocks.providers = ids.map(id => ({ id, name: id, type: 'image', models: [] }))
     mocks.drafts = Object.fromEntries(ids.map(id => [id, 'complete-replacement-value']))
-    render(<ProviderCenterSection llm={{ ...llm, config: { ...llm.config, providers: [] } }} />)
-    const buttons = await screen.findAllByRole('button', { name: /^(?:保存|Save)$/ })
-    buttons.forEach(button => fireEvent.click(button))
+    const { container } = render(<ProviderCenterSection llm={{ ...llm, config: { ...llm.config, providers: [] } }} />)
+    await screen.findAllByPlaceholderText(/./)
+    container.querySelectorAll('input[type="password"]').forEach(input => {
+      fireEvent.change(input, { target: { value: 'typed-new-key' } })
+      fireEvent.blur(input)
+    })
     expect(mocks.saveKey.mock.calls.map(([id]) => id)).toEqual(ids)
   })
-  it('LLM 供应商保存按钮提交对应草稿', async () => {
-    render(<ProviderCenterSection llm={{ ...llm, keys: { 'custom-relay': 'complete-replacement-value' } }} />)
-    fireEvent.click(await screen.findByRole('button', { name: /^(?:保存|Save)$/ }))
+  it('LLM 供应商的密钥输入后自动保存到对应供应商', async () => {
+    const { container } = render(<ProviderCenterSection llm={{ ...llm, keys: { 'custom-relay': 'complete-replacement-value' } }} />)
+    await screen.findAllByPlaceholderText(/./)
+    const input = container.querySelector('input[type="password"]')!
+    fireEvent.change(input, { target: { value: 'typed-new-key' } })
+    fireEvent.blur(input)
     expect(llm.saveKey).toHaveBeenCalledWith('custom-relay')
   })
   it.each([

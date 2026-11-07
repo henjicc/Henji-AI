@@ -45,7 +45,7 @@ it('LLM 只展示共享凭据摘要，替换和清除走原子设置入口', asy
   act(() => result.current.updateKey(provider.providerId, 'replacement'))
   await act(async () => result.current.saveKey(provider.providerId))
   expect(mocks.commit).toHaveBeenCalledWith(provider, [], { kind: 'set', apiKey: 'replacement' })
-  expect(result.current.keys[provider.providerId]).toBe('')
+  expect(result.current.keys[provider.providerId]).toBe('replacement')
   mocks.status.mockResolvedValue([{ credentialId, configured: false, maskedHint: null }])
   act(() => result.current.clearKey(provider.providerId))
   await act(async () => { await vi.advanceTimersByTimeAsync(450) })

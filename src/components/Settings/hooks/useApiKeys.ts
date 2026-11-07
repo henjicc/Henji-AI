@@ -71,7 +71,6 @@ export function useApiKeys(): UseApiKeysResult {
       emitApplicationEvent(trimmed ? 'provider-key-configured' : 'provider-key-removed', { providerId: provider })
       const info = await aiGetProviderKeyInfo(provider)
       if (mountedRef.current) {
-        setKeys(prev => prev[provider] === value ? { ...prev, [provider]: '' } : prev)
         setHints(prev => ({ ...prev, [provider]: info.maskedHint ?? undefined }))
         setErrors(prev => ({ ...prev, [provider]: undefined }))
       }

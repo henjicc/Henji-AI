@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 
@@ -74,27 +74,46 @@ it('已配置摘要不是输入值，替换与清除动作保持独立', async (
   expect(clear).toHaveBeenCalledTimes(1)
 })
 
-it('替换草稿只由保存或回车提交，输入与失焦不提交，空草稿不能保存', async () => {
+it('密钥自动保存：停顿、失焦、回车与卸载都会保存，没有保存按钮，清空输入不会删除已保存的密钥', async () => {
+  await i18n.changeLanguage('zh-CN')
+  vi.useFakeTimers()
+  try {
+    const save = vi.fn()
+    function Draft(): JSX.Element {
+      const [value, setValue] = useState('')
+      return <ApiKeyInput value={value} onChange={setValue} onSave={save} maskedHint="••••1234" visible={false} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />
+    }
+    const view = render(<Draft />)
+    expect(screen.queryByRole('button', { name: '保存' })).toBeNull()
+    const input = screen.getByPlaceholderText('输入新密钥以替换')
+    fireEvent.change(input, { target: { value: 'sk-replacement' } })
+    expect(save).not.toHaveBeenCalled()
+    act(() => { vi.advanceTimersByTime(600) })
+    expect(save).toHaveBeenCalledTimes(1)
+    fireEvent.change(input, { target: { value: 'sk-replacement-2' } })
+    fireEvent.blur(input)
+    expect(save).toHaveBeenCalledTimes(2)
+    fireEvent.change(input, { target: { value: 'sk-replacement-3' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(save).toHaveBeenCalledTimes(3)
+    fireEvent.change(input, { target: { value: '' } })
+    act(() => { vi.advanceTimersByTime(600) })
+    fireEvent.blur(input)
+    expect(save).toHaveBeenCalledTimes(3)
+    fireEvent.change(input, { target: { value: 'sk-closing' } })
+    view.unmount()
+    expect(save).toHaveBeenCalledTimes(4)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('保存失败后内容不变也能失焦或回车重试', async () => {
   await i18n.changeLanguage('zh-CN')
   const save = vi.fn()
-  function Draft(): JSX.Element {
-    const [value, setValue] = useState('')
-    return <ApiKeyInput value={value} onChange={setValue} onSave={save} maskedHint="••••1234" visible={false} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />
-  }
-  render(<Draft />)
-  const saveButton = screen.getByRole('button', { name: '保存' }) as HTMLButtonElement
-  expect(saveButton.getAttribute('aria-disabled')).toBe('true')
-  const input = screen.getByPlaceholderText('输入新密钥以替换')
-  fireEvent.change(input, { target: { value: 'partial-replacement' } })
+  render(<ApiKeyInput value="sk-same" onChange={() => {}} onSave={save} error="密钥更改未保存" visible={false} onToggleVisibility={() => {}} placeholder="密钥" showLabel="显示" hideLabel="隐藏" />)
+  const input = screen.getByPlaceholderText('密钥')
   fireEvent.blur(input)
-  expect(save).not.toHaveBeenCalled()
-  fireEvent.change(input, { target: { value: 'complete-replacement-value' } })
-  fireEvent.click(saveButton)
-  expect(save).toHaveBeenCalledTimes(1)
-  fireEvent.keyDown(input, { key: 'Enter' })
-  expect(save).toHaveBeenCalledTimes(2)
-  fireEvent.change(input, { target: { value: '' } })
-  expect(saveButton.getAttribute('aria-disabled')).toBe('true')
   fireEvent.keyDown(input, { key: 'Enter' })
   expect(save).toHaveBeenCalledTimes(2)
 })
