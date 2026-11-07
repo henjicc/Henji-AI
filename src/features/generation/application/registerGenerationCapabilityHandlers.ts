@@ -14,7 +14,9 @@ import { useGenerationDraftStore } from '@/features/generation/store/generationD
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasStore } from '@/stores/canvasStore'
-import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationDestination } from '@/core/application-control/domains/generation/generationApplicationCapabilities'
+import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationContinueFrom, GenerationDestination } from '@/core/application-control/domains/generation/generationApplicationCapabilities'
+import { prepareGenerationContinuation } from '@/core/services/generationContinuations'
+import { databaseService } from '@/services/database/index'
 import { isBuiltinModelType } from '@/core/modelSortOrder'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 
@@ -37,9 +39,55 @@ interface GenerationInput {
   mediaType?: 'image' | 'video' | 'audio'
   params?: Record<string, unknown>
   destination?: GenerationDestination
+  continueFrom?: GenerationContinueFrom
+}
+
+/** 续接的源结果：生成记录里保存的参数，或画布结果节点记下的源模型与参数。 */
+async function readContinuationSource(from: GenerationContinueFrom): Promise<{ modelId: string; options: DynamicValueMap }> {
+  if (from.kind === 'generation.task') {
+    const record = await databaseService.getHistoryById(from.taskId)
+    if (!record) throw new Error(`INVALID_INPUT:找不到要续接的生成任务 ${from.taskId}`)
+    return { modelId: record.modelId, options: (record.params ?? {}) as DynamicValueMap }
+  }
+  const { getCanvasProjectInstance } = await import('@/features/canvas/application/canvasProjectInstances')
+  const node = (await getCanvasProjectInstance(from.documentId)).store.getState().nodes.find(item => item.id === from.nodeId)
+  const source = node?.data.generationContinuation
+  if (!source) throw new Error(`INVALID_INPUT:画布节点 ${from.nodeId} 不是能续接的生成结果`)
+  return { modelId: source.modelId, options: source.params }
+}
+
+/**
+ * 续接请求：目标模型、参数与平台引用由源结果决定，调用方补写的提示词与参数覆盖在上面。
+ * 调用方给的 modelId 必须就是续接的目标模型，避免把引用交给认不出它的模型。
+ */
+async function applyContinuation(parsed: GenerationInput, resolvedParams: Record<string, unknown> | undefined): Promise<GenerationInput> {
+  if (!parsed.continueFrom) return parsed
+  const source = await readContinuationSource(parsed.continueFrom)
+  const prepared = prepareGenerationContinuation(source.modelId, source.options, parsed.continueFrom.continuationId)
+  if (!prepared) throw new Error(`INVALID_INPUT:这个结果不能做续接 ${parsed.continueFrom.continuationId}`)
+  if (parsed.modelId && parsed.modelId !== prepared.targetModelId) {
+    throw new Error(`INVALID_INPUT:续接 ${prepared.id} 的目标模型是 ${prepared.targetModelId}，modelId 不能改成别的模型`)
+  }
+  const target = registry.getModel(prepared.targetModelId)
+  return {
+    ...parsed,
+    modelId: prepared.targetModelId,
+    mediaType: (target?.meta.type ?? parsed.mediaType) as GenerationInput['mediaType'],
+    prompt: parsed.prompt ?? (typeof prepared.params.prompt === 'string' ? prepared.params.prompt : ''),
+    params: { ...prepared.params, ...(resolvedParams ?? {}) },
+  }
 }
 
 function generationDestination(input: GenerationInput): GenerationDestination {
+  const destination = defaultGenerationDestination(input)
+  if (!input.continueFrom || destination.mode !== 'canvas') return destination
+  // 续接靠平台引用，不把源结果当素材连进来；从画布结果续接时新节点放在它旁边。
+  const from = input.continueFrom
+  const anchor = from.kind === 'canvas.node' && from.documentId === destination.documentId ? from.nodeId : undefined
+  return { ...destination, sourceNodeIds: [], ...(destination.placement || !anchor ? {} : { placement: { mode: 'right_of_node', anchorNodeId: anchor } }) }
+}
+
+function defaultGenerationDestination(input: GenerationInput): GenerationDestination {
   if (input.destination) return input.destination
   const projectId = useProjectStore.getState().currentProjectId
   const selectedNodeId = useCanvasStore.getState().selectedNodeId
@@ -48,9 +96,12 @@ function generationDestination(input: GenerationInput): GenerationDestination {
     : { mode: 'history' }
 }
 
-async function prepareInput(parsed: GenerationInput, destination = generationDestination(parsed)): Promise<ResolvedGenerationInput> {
+async function prepareInput(input: GenerationInput, destination = generationDestination(input)): Promise<ResolvedGenerationInput> {
+  // 续接时调用方参数先解析媒体引用，再叠到源结果参数上；源参数里已是解析好的本地路径。
+  const ownParams = input.params !== undefined ? await resolveGenerationMediaReferences(input.params) : undefined
+  const parsed = await applyContinuation(input, ownParams)
   const resolved = resolveGenerationInput(parsed)
-  if (parsed.params !== undefined) resolved.options = await resolveGenerationMediaReferences(parsed.params)
+  if (parsed.params !== undefined) resolved.options = parsed.continueFrom ? parsed.params : ownParams
   if (destination.mode === 'canvas') {
     const { resolveCanvasGenerationOptions } = await import('@/features/canvas/application/canvasGenerationTaskService')
     resolved.options = await resolveCanvasGenerationOptions(resolved, destination)

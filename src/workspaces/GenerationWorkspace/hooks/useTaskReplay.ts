@@ -4,6 +4,8 @@ import { toDisplaySrc } from '@/platform/desktopApi'
 import { coerceImageEditSessionData, type ImageEditSessionData } from '@/core/imageEdit'
 import { loadEditState } from '@/utils/editStatePersistence'
 import type { GenerationTask, GeneratorOptions, MediaType } from '../types'
+import { prepareGenerationContinuation } from '@/core/services/generationContinuations'
+import { registry } from '@/core/ModelRegistry'
 import { isRecord, isStringArray } from '../utils/typeGuards'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskReplay')
@@ -16,6 +18,7 @@ export interface UseTaskReplayParams {
 export interface UseTaskReplayReturn {
   handleRegenerate: (task: GenerationTask) => Promise<void>
   handleReedit: (task: GenerationTask) => void
+  handleContinue: (task: GenerationTask, continuationId: string) => void
 }
 
 function cloneOptions(options?: GeneratorOptions): GeneratorOptions {
@@ -111,5 +114,33 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
     window.dispatchEvent(new CustomEvent('reedit-content', { detail }))
   }, [])
 
-  return { handleRegenerate, handleReedit }
+  // 续接：参数齐全的（草稿转正片）直接走再次生成的同一路径提交；要补写的（续写、做成视频）带进输入区。
+  const handleContinue = useCallback((task: GenerationTask, continuationId: string): void => {
+    const prepared = prepareGenerationContinuation(task.model, task.options, continuationId)
+    const target = prepared ? registry.getModel(prepared.targetModelId) : undefined
+    if (!prepared || !target) {
+      logger.warn('[Workspace] 结果已不能续接', { taskId: task.id, continuationId })
+      return
+    }
+    if (prepared.submit === 'direct') {
+      // 续接靠平台引用，不重新上传源结果的素材。
+      void handleRegenerate({
+        ...task, model: prepared.targetModelId, type: target.meta.type as MediaType, options: prepared.params,
+        images: [], videos: [], uploadedFilePaths: [], uploadedVideoFilePaths: [], uploadedAudioFilePaths: [],
+      })
+      return
+    }
+    window.dispatchEvent(new CustomEvent('reedit-content', { detail: {
+      prompt: task.prompt,
+      // 清掉输入区里原有的参考素材：续接靠平台引用，目标模型常常不收素材。
+      images: [],
+      uploadedFilePaths: [],
+      clearVideos: true,
+      model: prepared.targetModelId,
+      provider: target.meta.provider,
+      options: prepared.params,
+    } }))
+  }, [handleRegenerate])
+
+  return { handleRegenerate, handleReedit, handleContinue }
 }

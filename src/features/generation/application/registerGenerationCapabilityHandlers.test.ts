@@ -23,6 +23,11 @@ vi.mock('@/features/generation/application/generationApplicationService', () => 
     cancelTask: vi.fn(),
   },
 }))
+const canvasNodes = vi.hoisted(() => ({ list: [] as Array<{ id: string; data: Record<string, unknown> }> }))
+vi.mock('@/features/canvas/application/canvasProjectInstances', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/features/canvas/application/canvasProjectInstances')>(),
+  getCanvasProjectInstance: async () => ({ store: { getState: () => ({ nodes: canvasNodes.list }) } }),
+}))
 vi.mock('@/stores/navigationStore', () => ({ switchWorkspace: vi.fn(), useNavigationStore: { getState: () => ({ activeWorkspace: 'generation' }) } }))
 
 import { registry } from '@/core/ModelRegistry'
@@ -167,6 +172,33 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
     const submitted = mocks.submit.mock.calls[0][0]
     expect(submitted.prompt).toBe('显式传入的提示词')
     expect(submitted.options).toEqual({ explicitOnly: true })
+  })
+
+  it('continueFrom 由宿主填好续接引用，调用方只补提示词；目标模型不符时拒绝', async () => {
+    registry.register({ ...testModel, meta: { ...testModel.meta, id: 'continuation-source-model' }, continuations: [{
+      id: 'finalize-draft', targetModelId: testModel.meta.id, submit: 'direct',
+      capture: ({ taskId }) => taskId ? { taskId } : null, params: (source) => ({ ...source, draft: false }),
+    }] })
+    mocks.history.mockResolvedValue({ modelId: 'continuation-source-model', params: { prompt: '草稿', draft: true, uploadedFilePaths: ['/old.png'], __continuations: { 'finalize-draft': { taskId: 'provider-1' } } } })
+    const handler = registeredHandlers().get('create_visible_generation_task')!
+    const continueFrom = { kind: 'generation.task', taskId: 'history-1', continuationId: 'finalize-draft' }
+    await handler({ modelId: testModel.meta.id, mediaType: 'image', prompt: '正片', continueFrom }, context)
+    const submitted = mocks.submit.mock.calls[0][0]
+    expect(submitted).toMatchObject({ modelId: testModel.meta.id, prompt: '正片' })
+    expect(submitted.options).toEqual({ prompt: '草稿', draft: false, __continuation: { id: 'finalize-draft', sourceModelId: 'continuation-source-model', reference: { taskId: 'provider-1' } } })
+    await expect(handler({ modelId: 'other-model', mediaType: 'image', prompt: 'x', continueFrom }, context)).rejects.toThrow('目标模型')
+  })
+
+  it('continueFrom 指向画布结果节点时读节点记下的源参数与引用', async () => {
+    registry.register({ ...testModel, meta: { ...testModel.meta, id: 'continuation-canvas-source' }, continuations: [{
+      id: 'finalize-draft', targetModelId: testModel.meta.id, submit: 'direct',
+      capture: ({ taskId }) => taskId ? { taskId } : null, params: (source) => source,
+    }] })
+    canvasNodes.list = [{ id: 'result-1', data: { generationContinuation: { modelId: 'continuation-canvas-source', params: { prompt: '草稿', __continuations: { 'finalize-draft': { taskId: 'provider-2' } } } } } }]
+    const handler = registeredHandlers().get('create_visible_generation_task')!
+    await handler({ modelId: testModel.meta.id, mediaType: 'image', prompt: '正片', destination: { mode: 'history' },
+      continueFrom: { kind: 'canvas.node', documentId: 'doc-1', nodeId: 'result-1', continuationId: 'finalize-draft' } }, context)
+    expect(mocks.submit.mock.calls[0][0].options).toEqual({ prompt: '草稿', __continuation: { id: 'finalize-draft', sourceModelId: 'continuation-canvas-source', reference: { taskId: 'provider-2' } } })
   })
 
   it('只省略 mediaType 时从 modelId 对应的模型推断', async () => {

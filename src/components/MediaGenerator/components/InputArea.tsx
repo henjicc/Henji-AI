@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { PromptEditor, StackedMediaUploader, UiIconButton, UiLoading } from '@/components/ui'
+import { PromptEditor, StackedMediaUploader, UiChipButton, UiIconButton, UiLoading } from '@/components/ui'
 import type {
   PromptEditorHandle,
   PromptReferenceItem,
@@ -13,7 +13,7 @@ import { registry } from '@/core/ModelRegistry'
 import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
 import { usePromptOptimizationPreviewPlayback } from '../hooks/usePromptOptimizationPreviewPlayback'
-import { ArrowUp, Plus } from 'lucide-react'
+import { ArrowUp, Plus, X } from 'lucide-react'
 import { readVideoInfo } from '@/commands/video'
 import { getPathForFile } from '@/platform/desktopApi'
 import { getPlatform } from '@/platform/runtime'
@@ -25,6 +25,9 @@ export interface FileOrderItem {
 }
 interface InputAreaProps {
   compact?: boolean
+  /** 正在接着上一次结果生成时的动作名（转正片、续写…）；点标记取消续接 */
+  continuationAction?: string
+  onClearContinuation?: () => void
   promptDocument: PromptDocumentV1
   onPromptDocumentChange: (document: PromptDocumentV1) => void
   promptReferences: readonly PromptReferenceItem[]
@@ -89,6 +92,8 @@ function useMediaDragInProgress(): boolean {
  */
 const InputArea: React.FC<InputAreaProps> = ({
   compact = false,
+  continuationAction,
+  onClearContinuation,
   promptDocument,
   onPromptDocumentChange,
   promptReferences,
@@ -395,6 +400,16 @@ const InputArea: React.FC<InputAreaProps> = ({
               hintText={needsVideoUpload ? uploadHint : undefined}
             />
             {importingMedia && <UiLoading size="xs" message={t('inputArea.importingVideo')} />}
+          </div>
+        )}
+
+        {/* 续接标记：这次生成会接着哪个结果做，点一下改回普通生成 */}
+        {continuationAction && onClearContinuation && (
+          <div className="px-1 pt-0.5">
+            <UiChipButton active size="sm" onClick={onClearContinuation} tooltip={t('workspace.continuation.chipClear')} data-generation-continuation-chip="">
+              {t('workspace.continuation.chip', { action: continuationAction })}
+              <X />
+            </UiChipButton>
           </div>
         )}
 

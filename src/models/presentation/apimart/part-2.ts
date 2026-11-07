@@ -4,11 +4,6 @@ import { sharedFieldText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
 
-function hasUploadedImagePresentation(params: Record<string, unknown>): boolean {
-  return [params.uploadedFilePaths, params.images, params.uploadedImages]
-    .some((value) => Array.isArray(value) && value.length > 0)
-}
-
 export const apimartPresentationPart2: Record<string, ModelPresentation> = {
   "apimart-kling-3.0-omni": {
     meta: {
@@ -164,12 +159,9 @@ export const apimartPresentationPart2: Record<string, ModelPresentation> = {
       i18nScope: 'models.defs.apimart-midjourney-video',
     },
     params: {
-      "apimartMidjourneyVideoTaskId": {
-        name: { zh: '来源任务 ID', en: 'Source Task ID' },
-        description: { zh: '与上传首帧二选一', en: 'Use either a source task or an uploaded first frame' },
-      },
       "apimartMidjourneyVideoIndex": {
-        name: { zh: '来源图索引', en: 'Source Image Index' },
+        name: { zh: '首帧', en: 'First Frame' },
+        description: { zh: '从 Midjourney 图片结果做成视频时，用四宫格里的第几张作首帧', en: 'Which image of the Midjourney grid becomes the first frame when animating an image result' },
         optionLabels: Object.fromEntries((
           ['0', '1', '2', '3'].map((value, index) => ({
         value,
@@ -243,17 +235,10 @@ export const apimartPresentationPart2: Record<string, ModelPresentation> = {
       panelWidth: 420,
       sections: [
         {
-          id: 'source',
-          name: { zh: '来源', en: 'Source' },
-          paramIds: [
-            'apimartMidjourneyVideoTaskId',
-            'apimartMidjourneyVideoIndex'
-          ]
-        },
-        {
           id: 'motion',
           name: { zh: '运动', en: 'Motion' },
           paramIds: [
+            'apimartMidjourneyVideoIndex',
             'apimartMidjourneyVideoAnimateMode',
             'apimartMidjourneyVideoMotion'
           ]
@@ -261,23 +246,6 @@ export const apimartPresentationPart2: Record<string, ModelPresentation> = {
       ]
     }]
   },
-    linkages: [
-    {
-      trigger: ['uploadedImages', 'images'],
-      effect: 'filterOptions',
-      target: 'apimartMidjourneyVideoAnimateMode',
-      filter: (_value, options, allParams) => hasUploadedImagePresentation(allParams)
-        ? options.filter((option) => option.value === 'manual')
-        : options
-    },
-    {
-      trigger: ['uploadedImages', 'images'],
-      effect: 'autoSwitch',
-      target: 'apimartMidjourneyVideoAnimateMode',
-      condition: (_value, allParams) => hasUploadedImagePresentation(allParams) &&
-        allParams.apimartMidjourneyVideoAnimateMode !== 'manual',
-      value: 'manual'
-    }
-  ],
+    linkages: [],
   },
 }

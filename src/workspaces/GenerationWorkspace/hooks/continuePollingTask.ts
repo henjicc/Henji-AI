@@ -1,3 +1,5 @@
+import type { JsonObject } from '@henjicc/ai-sdk'
+import { captureResultContinuations, withStoredContinuations } from '@/core/services/generationContinuations'
 import { beginGenerationTaskExecution } from '../application/generationTaskExecution'
 import { aiReadSavedResult } from '@/commands/aiRuntime'
 import { awaitGenerationTaskPersistence } from './useTaskHistory'
@@ -67,7 +69,7 @@ export async function continuePollingTask({
     // 先查缓存结果（主进程轮询完成但渲染层已重载的场景）
     const cached = await aiReadSavedResult(serverTaskId)
     if (!execution.isCurrent()) return
-    let resultObj: { urls: string[]; filePaths: string[]; metadata?: unknown }
+    let resultObj: { urls: string[]; filePaths: string[]; metadata?: unknown; continuations?: Record<string, JsonObject> }
     if (cached && (!(cached.urls?.length) || cached.filePaths?.length === cached.urls.length)) {
       const provider = registry.getModel(task.model)?.meta.provider
       if (provider) await captureClonedVoice(task.model, provider, cached)
@@ -76,6 +78,7 @@ export async function continuePollingTask({
         urls: cached.urls ?? [],
         filePaths: cached.filePaths ?? [],
         metadata: cached.metadata,
+        continuations: captureResultContinuations(registry.getModel(task.model), options, serverTaskId, cached.metadata),
       }
     } else {
       const handleProgress: ContinuePollingProgressCallback = (status) => {
@@ -97,6 +100,7 @@ export async function continuePollingTask({
         urls: result.urls,
         filePaths: result.filePaths,
         metadata: result.metadata,
+        continuations: result.continuations,
       }
     }
     logger.info('[Workspace] 继续轮询响应', { model: task.model, taskId: serverTaskId, metadata: resultObj.metadata })
@@ -134,6 +138,7 @@ export async function continuePollingTask({
       dimensions: dimensions ?? undefined,
       duration: duration ?? undefined,
       serverTaskId,
+      options: withStoredContinuations(options, resultObj.continuations),
       result: {
         id: task.id,
         type: task.type,

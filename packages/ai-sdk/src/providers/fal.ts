@@ -140,9 +140,18 @@ function requireFalQueueUrl(value: string, field: string): string {
   return parsed.toString()
 }
 
+/**
+ * `draft_cache` 是 FLUX 3 草稿端点返回的加密缓存包，只用于转正片，不是生成结果；
+ * 收进媒体地址会被宿主当成第二段视频下载。它仍原样留在 metadata 里供续接读取。
+ */
 function extractUrls(payload: JsonValue): string[] {
   const urls: string[] = []
-  collectDeepUrls(payload, urls)
+  if (isJsonObject(payload) && 'draft_cache' in payload) {
+    const { draft_cache: _draftCache, ...media } = payload
+    collectDeepUrls(media, urls)
+  } else {
+    collectDeepUrls(payload, urls)
+  }
   return urls
 }
 

@@ -17,6 +17,7 @@ import { attachCanvasGenerationFeedback, getCanvasDomainExecutor } from './canva
 import { findCanvasProjectInstance, leaveCanvasProject } from './canvasProjectInstances'
 import { createCanvasTestProject, readCanvasTestProject } from '@/tests/canvasProjectFixture'
 import { deleteCanvasNodes } from './canvasMutationService'
+import { listCanvasNodeContinuations } from './canvasGenerationContinuationService'
 
 // 媒体 I/O 与历史存储使用替身；任务登记、图执行、结果编排及画布保存走正式服务。
 vi.mock('./imageData', async (original) => ({
@@ -111,6 +112,23 @@ it('不挂载 React 节点也能经同一执行器准备参考图、生成、连
   expect(result.resultNodeIds).toHaveLength(1)
   expect(saved.nodes.find(node => node.id === result.resultNodeIds[0])?.data).toMatchObject({ imageUrl: 'C:/generated.png', isGenerating: false, displayName: '最新输出标题' })
   expect(saved.edges).toEqual(expect.arrayContaining([expect.objectContaining({ source: nodeId, target: result.resultNodeIds[0] })]))
+})
+
+it('完成结果记下续接信息，结果节点上能列出可做的续接', async () => {
+  registry.register({ meta: { id: 'executor-draft', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '草稿', en: 'Draft' } },
+    params: [], endpoints: '/fixture', request: { builder: params => params },
+    inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } }, pricing: { currency: '$', fixed: 0.01 },
+    continuations: [{ id: 'finalize-draft', submit: 'direct', capture: ({ taskId }) => taskId ? { taskId } : null, params: source => source }] })
+  useCanvasStore.getState().updateNodeData(nodeId, { modelId: 'executor-draft' })
+  vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'completed', urls: ['C:/generated.png'], filePaths: ['C:/generated.png'],
+    continuations: { 'finalize-draft': { taskId: 'provider-1' } } })
+  registerCanvasNodeExecutor(nodeId, createGenerationNodeExecutor(() => options))
+  const result = await runCanvasNode(nodeId)
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  const resultNode = saved.nodes.find(node => node.id === result.resultNodeIds[0])!
+  expect(resultNode.data.generationContinuation).toMatchObject({ modelId: 'executor-draft', params: { __continuations: { 'finalize-draft': { taskId: 'provider-1' } } } })
+  expect(listCanvasNodeContinuations(resultNode)).toEqual([{ id: 'finalize-draft', targetModelId: 'executor-draft', submit: 'direct' }])
+  registry.unregister('executor-draft')
 })
 
 it('缺少提示词仍在提交前拒绝，不创建结果节点或调用供应商', async () => {

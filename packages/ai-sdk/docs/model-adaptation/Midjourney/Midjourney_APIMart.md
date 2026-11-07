@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-11-07 |
 | 模态 | 图片（另含图生视频） |
 | 供应商 | APIMart（聚合平台）——本清单中 **Midjourney 唯一可用供应商** |
 | 平台模型 ID | `midjourney`（新路由 `/v1/midjourney/...` 会自动注入 `model=midjourney`，请求体无需再传 `model`） |
@@ -359,12 +359,18 @@ v8 操作面板**移除了 U1–U4 / zoom / outpaint / inpaint**。对应替代�
 | `midjourney` | `/v1/midjourney/generations` | Imagine、垫图、版本 / Niji、速度、比例、质量、风格化、参考图权重、重复生成等结构化参数 |
 | `midjourney-blend` | `/v1/midjourney/generations/blend` | 2–4 图融合、比例、速度 |
 | `midjourney-edit` | `/v1/midjourney/generations/edits` | 图片编辑及与 Imagine 一致的结构化参数 |
-| `midjourney-video` | `/v1/midjourney/generations/video` | 上传首帧或复用 `task_id`、任务图索引、首尾帧、自动 / 手动动画、运动幅度、批量数 |
+| `midjourney-video` | `/v1/midjourney/generations/video` | 上传首帧（可加尾帧），或从 Midjourney 图片结果续接（`task_id` + 首帧索引、自动 / 手动动画）、运动幅度、批量数 |
+
+图转视频的续接（2026-11-07）：
+
+- 图片模型 `apimart-midjourney` 声明续接 `animate`，目标 `apimart-midjourney-video`；只有 Imagine 模式的结果可用（官方视频端点的 `task_id` 只写“复用已有 imagine SUCCESS”，编辑与混图未说明，不开放）。完成时取平台 `task_id` 作为引用；续接参数只带提示词（图片模型的速度、版本、参考图等在视频模型里没有对应含义），带进输入区由用户选首帧、动画模式、运动幅度后提交。
+- 视频模型从续接引用读 `task_id`，`index` 取“首帧”参数（0–3）；“首帧”与“动画模式”只在续接时显示，续接时不能再上传图片。`auto` 只在有 `task_id` 时发送，否则按 `manual`。
+- 不再提供手填“来源任务 ID”的参数（正式界面不展示平台任务 ID）。旧工程里残留的 `apimartMidjourneyVideoTaskId` 值仍在请求构建里兼容读取（无续接且无首帧时作为 `task_id`），参数本身不再显示。
 
 以下能力不是遗漏的请求字段，而是当前通用生成模型抽象无法安全表达的不同产品流程，因此没有伪装成普通模型：
 
 - `describe` 返回文本，不返回媒体 URL；需要先增加文本结果类型及其展示 / 持久化链路。
-- `upscale`、`variation`、`high-variation`、`low-variation`、`reroll`、`zoom`、`pan`、`remix-*` 依赖父任务、按钮 `customId` 和版本限制；应作为生成结果卡片上的后续动作接入。
+- `upscale`、`variation`、`high-variation`、`low-variation`、`reroll`、`zoom`、`pan`、`remix-*` 依赖父任务、按钮 `customId` 和版本限制；应作为生成结果卡片上的后续动作接入（可沿用模型续接契约 `continuations`，与图转视频同一机制）。
 - `inpaint` → `modal` 是带 30 分钟时限的两阶段状态机；必须先让运行时正确保存并恢复 `MODAL` 中间态，再接遮罩编辑界面。
 
 因此，当前代码层面的独立生成入口已经闭环；上述连续操作应在新增「结果后续操作」应用能力时统一实现，不能继续堆进模型 schema。

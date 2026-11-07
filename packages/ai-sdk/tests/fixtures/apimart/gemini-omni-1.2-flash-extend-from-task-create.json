@@ -1,0 +1,45 @@
+{
+  "provider": "apimart",
+  "modelId": "apimart-gemini-omni-1.2-flash",
+  "scenario": "create-extend-from-task",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/videos/generations",
+  "params": {
+    "model": "gemini-omni-1.2-flash",
+    "prompt": "The camera continues panning across the mountains.",
+    "extend_from_task_id": "task_01PREVIOUS",
+    "omni_reference_task_type": "extend",
+    "duration": 8
+  },
+  "expectedRequest": {
+    "url": "https://api.apimart.ai/v1/videos/generations",
+    "method": "POST",
+    "body": {
+      "model": "gemini-omni-1.2-flash",
+      "prompt": "The camera continues panning across the mountains.",
+      "extend_from_task_id": "task_01PREVIOUS",
+      "omni_reference_task_type": "extend",
+      "duration": 8,
+      "nsfw_check": false
+    }
+  },
+  "response": {
+    "code": 200,
+    "data": [
+      {
+        "status": "submitted",
+        "task_id": "task_01J9HA7JPQ9A0Z6JZ3V8M9W6PZ"
+      }
+    ]
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "task_01J9HA7JPQ9A0Z6JZ3V8M9W6PZ"
+  },
+  "source": {
+    "params": "https://docs.apimart.ai/cn/api-reference/videos/gemini-omni-1.2-flash/generation 的 extend_from_task_id 续写示例请求体逐字照搬（含官方字面占位任务 ID，2026-11-07，无需登录）；nsfw_check 是 APIMart provider 在发送边界的强制覆盖",
+    "response": "Gemini Omni 1.2 Flash 文档的提交返回同为 data[0].task_id；响应体取 https://docs.apimart.ai/cn/api-reference/videos/flux-3-video/generation 的同一 APIMart 统一提交响应示例逐字照搬，classification: official-literal（同端点协议字段，非本模型字面样本）"
+  }
+}

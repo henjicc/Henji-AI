@@ -32,6 +32,7 @@ import { TaskListRetentionContext } from '../hooks/useTaskListRetention'
 import { videoEditSendMenuItems } from '@/features/videoEdit/panels/videoEditSendActions'
 import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import { VideoEditSendDialog } from '@/features/videoEdit/panels/VideoEditSendMenu'
+import { listGenerationContinuations } from '@/core/services/generationContinuations'
 export interface TaskCardProps {
   task: GenerationTask
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
@@ -39,6 +40,7 @@ export interface TaskCardProps {
   onRegenerate: (task: GenerationTask) => Promise<void>
   onRetryPolling: (task: GenerationTask) => Promise<void>
   onReedit: (task: GenerationTask) => void
+  onContinue: (task: GenerationTask, continuationId: string) => void
   onDelete: (taskId: string) => Promise<void>
   onUsePrompt: (prompt: string) => void
   onRememberResultImageDimensions: (
@@ -58,6 +60,7 @@ const TaskCard = React.memo(function TaskCard({
   onRegenerate,
   onRetryPolling,
   onReedit,
+  onContinue,
   onDelete,
   onUsePrompt,
   onRememberResultImageDimensions,
@@ -460,6 +463,8 @@ const TaskCard = React.memo(function TaskCard({
           }}
           onRegenerate={() => onRegenerate(task)}
           onReedit={() => onReedit(task)}
+          continuations={task.status === 'success' ? listGenerationContinuations(task.model, task.options) : []}
+          onContinue={(continuationId) => onContinue(task, continuationId)}
           onDelete={() => onDelete(task.id)}
         />
       </div>

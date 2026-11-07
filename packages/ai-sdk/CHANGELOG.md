@@ -2,6 +2,10 @@
 
 ## 0.10.0 - 未发布
 
+- 新增续接生成契约：`ModelRuntimeDefinition.continuations`（`RuntimeContinuation`：动作标识、目标模型、`available`、`capture` 从完成结果取平台引用、`params` 调整续接参数、`submit` 直接提交或带进输入区），续接请求在参数里带 `__continuation`（`CONTINUATION_PARAM` / `RuntimeContinuationParam`）；工具函数 `captureContinuations`、`findContinuation`、`buildContinuationParams`、`readContinuation`。宿主随结果保存引用，用户与助手不接触平台任务 ID。
+- FLUX 3 Video 接入草稿与草稿转正片：APIMart 新增“草稿”开关（`draft: true`，固定 hd，每秒 $0.048、续写 $0.096），续接 `finalize-draft` 用 `draft_from_task_id` 转正片，只发可改的 `resolution`，按正片全价计费；Fal 标准版文/图生视频与续写新增“草稿”开关（路由 `…/draft`，每秒 $0.06、续写 $0.12），续接 `finalize-draft` 从结果 `draft_cache` 取缓存，走 `draft-enhance` 出 1080p（每秒 $0.29）。转正片不收素材。Fal provider 收集结果地址时跳过 `draft_cache`，不再把缓存包当成第二段视频。
+- Midjourney 图转视频改用续接：图片模型（Imagine）声明 `animate` 续接到 `apimart-midjourney-video`，视频模型从续接引用读 `task_id`；删除手填“来源任务 ID”参数（旧工程残留值仍兼容读取），`alternativeInputParamIds` 改为 `__continuation`；“首帧”与“动画模式”只在续接时显示。
+- Gemini Omni 1.2 Flash（APIMart）支持续写自己的结果：续接 `extend` 发 `extend_from_task_id` + `omni_reference_task_type: "extend"`，不需要输入视频，渠道与模式沿用源任务。
 - 本地媒体托管：新增 `upload/public-host-upload.ts`，按宿主“通用文件上传服务”设置（`__upload_provider` 首选、`__upload_fallback` 换用）用 KIE 或 Fal 把本地文件托管成公网地址；派欧云、魔搭改用它（此前忽略 Fal 设置、只走 KIE），火山方舟的参考视频也走它，一家都没配置时提交前报 `public_media_url_required` 并提示去设置。新增 `upload/bailian-oss-upload.ts`（百炼临时存储，语音识别与生成共用），百炼生成链路的视频、音频按请求 model 上传成 `oss://`，请求体含 `oss://` 时提交带 `X-DashScope-OssResourceResolve`。`ProviderMediaRewriteInput` 新增 `requestBody`。
 - 火山方舟 Seedance 开放参考视频（2.0 系列 ≤ 3 段、2.5 ≤ 10 段），按“输入含视频”单价并计入输入视频时长；Seedance 2.5 新增任务类型（自动 / 参考 / 视频编辑 / 视频延长）。百炼万相 3.0 开放参考视频与参考音频（各 ≤ 5），输入视频时长同价计费，读得到时长时输出时长收进“输入 + 输出 ≤ 30 秒”。
 - 新增生成模型：Wan 2.7 Image（APIMart，标准版与 Pro 为版本选项，含组图）、FLUX 3 Video（APIMart；Fal 标准版文生/图生/续写/编辑与 FLUX 3 Max 文生/图生）。草稿与草稿转正片两段式暂不接入。

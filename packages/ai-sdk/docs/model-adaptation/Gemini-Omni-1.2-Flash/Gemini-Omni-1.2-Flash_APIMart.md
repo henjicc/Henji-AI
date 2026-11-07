@@ -41,7 +41,7 @@
 | `first_frame_image` / `last_frame_image` / `image_with_roles` | 公网 HTTP(S) | Ext 无尾帧 |
 | `video_urls` | 1 段，≤ 15 秒（Ext 另限 MP4/MOV/WebM、≤ 64 MB） | |
 | `omni_reference_task_type` | `auto` / `edit` / `extend` / `reference`（及 `text_to_video` 等别名） | Ext 带视频时必须传 |
-| `extend_from_task_id` | 平台任务 ID | 项目不显示、不请求（界面拿不到供应商任务 ID） |
+| `extend_from_task_id` | 平台任务 ID | 引用自己上一次的生成任务续写，与 `video_urls` 互斥，需配 `omni_reference_task_type: "extend"`（不配默认按编辑）；`prompt` 仍必填，`duration` 为新增秒数 3–10。Ext 只认本账号已完成的 Ext 任务，原成片不能超过 15 秒，原通道不可用返回 503 `source_channel_unavailable` |
 | `negative_prompt` / `system_prompt` | 仅 Ext | 项目不请求 |
 
 ## 4. 价格
@@ -63,7 +63,8 @@
 - 顶层 `role: 'channel'` 渠道（默认官方）+ `role: 'mode'` 模式：文/图生视频（0 张文生、1 张首帧、2 张首尾帧；Ext 最多 1 张）、多图参考、视频编辑、视频续写。
 - 时长默认 10；编辑模式隐藏并不发送；续写模式范围收为 3–10；首尾帧在请求构建时收为 ≤ 10。
 - 比例：编辑与续写跟随输入视频；Ext 渠道带首帧或参考图时不传 `aspect_ratio` 以跟随素材。这些情况下比例选项隐藏且不发送。
-- 不显示、不请求：`extend_from_task_id`、`negative_prompt`、`system_prompt`。
+- 续写自己的结果：模型声明续接 `extend`（同模型），完成时取平台 `task_id` 作为引用；续接参数切到续写模式、去掉源请求的图和视频、时长收到 ≤ 10，带进输入区由用户改提示词与时长后提交。请求发 `extend_from_task_id` + `omni_reference_task_type: "extend"` + `duration`，不发 `video_urls`，此时不要求输入视频、也不能再上传素材。续写只能接同渠道的源任务，所以续接时渠道与模式沿用源任务、不显示也不让改。任务 ID 只在请求构建里使用，不进入界面。
+- 不显示、不请求：`negative_prompt`、`system_prompt`。
 - APIMart 没有通用视频上传端点，视频素材必须是公网 URL。
 
 ## 6. 原始链接索引

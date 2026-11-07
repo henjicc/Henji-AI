@@ -1,0 +1,78 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=blackforestlabs/flux-3/draft-enhance",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official Flux3DraftEnhanceInput / Flux3DraftEnhanceOutput schemas; descriptions, examples, titles and x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "required": [
+      "draft_cache_url"
+    ],
+    "type": "object",
+    "properties": {
+      "draft_cache_url": {
+        "type": "string"
+      },
+      "safety_tolerance": {
+        "default": 2,
+        "type": "integer",
+        "maximum": 4,
+        "minimum": 0
+      }
+    }
+  },
+  "responseSchema": {
+    "required": [
+      "video"
+    ],
+    "type": "object",
+    "properties": {
+      "video": {
+        "$ref": "#/components/schemas/File"
+      }
+    }
+  },
+  "fileSchema": {
+    "required": [
+      "url"
+    ],
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string"
+      },
+      "file_size": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "content_type": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "file_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -3,8 +3,9 @@ import { canvasDocumentContainer } from '../application/canvasProjectInstances';
 import { registry } from '@/core/ModelRegistry';
 import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecutionModels';
 import { GenerationService } from '@/core/services/GenerationService';
+import { captureResultContinuations } from '@/core/services/generationContinuations';
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
-import type { StructuredGenerationOutput } from '@henjicc/ai-sdk';
+import type { JsonObject, StructuredGenerationOutput } from '@henjicc/ai-sdk';
 import { persistImageLocally } from '@/features/canvas/application/imageData';
 import { extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId';
 import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult';
@@ -54,6 +55,8 @@ export interface CanvasResumeRequest {
   mediaType?: CanvasMediaType;
   taskId: string;
   onProgress?: (progress: number) => void;
+  /** 当初提交时的参数，用来判断结果能做哪些续接（续查本身不需要参数） */
+  continuationParams?: DynamicValueMap;
 }
 
 export interface CanvasGenerationOutput {
@@ -64,6 +67,8 @@ export interface CanvasGenerationOutput {
   /** AI Runtime 本次新建的受管媒体；结果提交完成后必须释放。 */
   createdFilePaths?: string[];
   structuredOutput?: StructuredGenerationOutput;
+  /** 这次结果能做的续接：动作标识 → 平台引用 */
+  continuations?: Record<string, JsonObject>;
 }
 
 /**
@@ -218,7 +223,13 @@ export async function resumeCanvasGeneration(
     createThrottledProgressHandler(request.onProgress),
     { progressSource: 'canvas', requestId: request.requestId, signal: request.signal, ...(outputContainer ? { outputContainer } : {}) }
   );
-  return toGenerationOutput(result);
+  // 续查不带参数，按当初的提交参数重新判断续接，避免把草稿当成正片、把不能做视频的结果当成能做。
+  return toGenerationOutput({
+    ...result,
+    continuations: request.continuationParams
+      ? captureResultContinuations(registry.getModel(modelId), request.continuationParams, result.taskId || request.taskId, result.metadata)
+      : undefined,
+  });
 }
 
 function toGenerationOutput(result: GenerateResult): CanvasGenerationOutput {
@@ -234,5 +245,6 @@ function toGenerationOutput(result: GenerateResult): CanvasGenerationOutput {
     primary: outputs[0],
     createdFilePaths: [...new Set(result.createdFilePaths ?? [])],
     structuredOutput: result.structuredOutput,
+    ...(result.continuations ? { continuations: result.continuations } : {}),
   };
 }

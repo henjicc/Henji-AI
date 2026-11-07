@@ -4,6 +4,7 @@ import { readFile } from '@/platform/desktopApi'
 import type { ModelState } from '../state/useModelState'
 import type { UIState } from '../state/useUIState'
 import type { PromptMediaBinding } from '@/core/inputs/promptDocument'
+import { GENERATION_CONTINUATIONS_KEY } from '@/core/services/generationContinuations'
 
 const logger = createLogger('components.MediaGenerator.hooks.useReeditContent')
 
@@ -18,6 +19,8 @@ interface ReEditEventDetail {
   model?: string
   provider?: string
   options?: DynamicValueMap
+  /** 清空输入区里已有的视频（续接不带源素材） */
+  clearVideos?: boolean
 }
 
 function sanitizePresetOptions(options: DynamicValueMap): DynamicValueMap {
@@ -30,6 +33,8 @@ function sanitizePresetOptions(options: DynamicValueMap): DynamicValueMap {
   delete paramsToSet.uploadedVideos
   delete paramsToSet.editStateFile
   delete paramsToSet.imageEditStates
+  // 上一次结果的续接引用只属于那次结果；要续接时由结果卡片上的续接动作带进来。
+  delete paramsToSet[GENERATION_CONTINUATIONS_KEY]
   return paramsToSet
 }
 
@@ -55,7 +60,8 @@ export function useReeditContent(uiState: UIState, modelState: ModelState): void
         uploadedVideoFilePaths,
         model,
         provider,
-        options
+        options,
+        clearVideos
       } = customEvent.detail
 
       logger.info('[MediaGenerator] Handle re-edit:', { model, provider })
@@ -109,6 +115,10 @@ export function useReeditContent(uiState: UIState, modelState: ModelState): void
         } catch (error) {
           logger.error('[MediaGenerator] 批量恢复视频失败:', error)
         }
+      } else if (clearVideos) {
+        uiState.setUploadedVideos([])
+        uiState.setUploadedVideoFiles([])
+        uiState.setUploadedVideoFilePaths([])
       } else if (videos && Array.isArray(videos) && videos.length > 0) {
         logger.info('[MediaGenerator] Restoring videos from legacy videos array', {})
         uiState.setUploadedVideos(videos)

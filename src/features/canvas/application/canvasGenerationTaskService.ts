@@ -1,3 +1,4 @@
+import { CONTINUATION_PARAM } from '@henjicc/ai-sdk'
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import { registry } from '@/core/ModelRegistry'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
@@ -112,7 +113,8 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
   if (await databaseService.getHistoryById(taskId)) throw new Error('此生成任务已登记，请查询原任务，不要重新提交。')
   const model = registry.getModel(input.modelId)
   if (!model) throw new Error('生成模型不存在。')
-  const params = Object.fromEntries(Object.entries(input.options ?? {}).filter(([key]) => model.params.some(param => param.id === key)))
+  // 节点只存模型声明过的参数；续接引用不是模型参数，但要随节点保存，运行时交回模型。
+  const params = Object.fromEntries(Object.entries(input.options ?? {}).filter(([key]) => key === CONTINUATION_PARAM || model.params.some(param => param.id === key)))
   const nodeType = input.mediaType === 'image' ? CANVAS_NODE_TYPES.imageEdit : input.mediaType === 'video' ? CANVAS_NODE_TYPES.videoGen : CANVAS_NODE_TYPES.audioGen
   const placement = destination.placement ?? (destination.sourceNodeIds[0]
     ? { mode: 'right_of_node' as const, anchorNodeId: destination.sourceNodeIds[0] }

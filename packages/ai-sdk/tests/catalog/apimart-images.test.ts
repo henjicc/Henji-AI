@@ -192,8 +192,9 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 图片模型', () => {
       apimartMidjourneyVideoTaskId: 'stale-task',
       apimartMidjourneyVideoAnimateMode: 'auto'
     })).toMatchObject({ image_urls: ['uploaded.png'], animate_mode: 'manual' })
+    // 从图片结果续接时首帧来自来源任务，不能再上传；旧工程手填的任务 ID 不再限制上传。
     expect(resolveInputLimits('apimart-midjourney-video', {
-      apimartMidjourneyVideoTaskId: 'task-1'
+      __continuation: { id: 'animate', sourceModelId: 'apimart-midjourney', reference: { taskId: 'task-1' } }
     }).images.max).toBe(0)
     expect(resolveInputLimits('apimart-midjourney-video', {
       apimartMidjourneyVideoTaskId: 'stale-task', images: ['uploaded.png']

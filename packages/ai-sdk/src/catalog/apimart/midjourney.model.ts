@@ -177,6 +177,16 @@ export const apimartMidjourneyModel = defineModel({
       default: '',
     },
   ],
+  continuations: [{
+    id: 'animate',
+    targetModelId: 'apimart-midjourney-video',
+    // 视频端点的 task_id 官方只认 Imagine 成功任务（四宫格），编辑与混图不能直接做成视频。
+    available: (params) => params.apimartMidjourneyMode !== 'edit' && params.apimartMidjourneyMode !== 'blend',
+    capture: ({ taskId }) => taskId ? { taskId } : null,
+    // 只带提示词：图片的速度、版本、参考图等参数视频模型没有对应含义。
+    params: (source) => ({ prompt: typeof source.prompt === 'string' ? source.prompt : '' }),
+    submit: 'edit',
+  }],
   runtimeConstraints: {
     mediaFields: [
       { field: 'cref', kind: 'image' },

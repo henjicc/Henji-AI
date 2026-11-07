@@ -22,6 +22,7 @@ export interface TaskListProps {
   onRegenerate: (task: GenerationTask) => Promise<void>
   onRetryPolling: (task: GenerationTask) => Promise<void>
   onReedit: (task: GenerationTask) => void
+  onContinue: (task: GenerationTask, continuationId: string) => void
   onDelete: (taskId: string) => Promise<void>
   onUsePrompt: (prompt: string) => void
   onRememberResultImageDimensions: (
@@ -45,6 +46,7 @@ export function TaskList({
   onRegenerate,
   onRetryPolling,
   onReedit,
+  onContinue,
   onDelete,
   onUsePrompt,
   onRememberResultImageDimensions,
@@ -117,6 +119,7 @@ export function TaskList({
             onRegenerate={onRegenerate}
             onRetryPolling={onRetryPolling}
             onReedit={onReedit}
+            onContinue={onContinue}
             onDelete={onDelete}
             onUsePrompt={onUsePrompt}
             onRememberResultImageDimensions={onRememberResultImageDimensions}

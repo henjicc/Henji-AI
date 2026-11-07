@@ -28,6 +28,8 @@
 | `v2v` | 传 `video_url` / `video_urls`（取第一个） | 视频续写，单价更高；同时有图和视频时按续写处理；实际时长可能短于请求，按实际退差额 |
 | `draft_enhance` | `draft:true` / `draft_from_task_id` | 草稿（约 1/3 价、仅 hd）→ 草稿转正片（仅可改 `resolution`，全价，与 `draft` 互斥） |
 
+草稿转正片（官方原文要点）：`draft_from_task_id` 指向**自己的**一条已成功的草稿任务 ID，使用草稿保存的原始参数（模式 / 提示词 / 种子 / 素材）全质量渲染；仅可改 `resolution`，提示词、时长、图片、视频一律不能改，传 `prompt` 会被拒绝；与 `draft:true` 互斥。官方示例：`{"model":"flux-3-video","draft_from_task_id":"task_01K_DRAFT...","resolution":"fhd"}`。按正片全价计费，草稿费用不抵扣；视频续写草稿转正片按续写正片单价。
+
 `mode` 还接受官方拼写 `text-to-video` / `image-continuation` / `video-continuation`。
 
 ## 3. 请求参数
@@ -42,7 +44,7 @@
 | `image_urls` | string[]，1–10 | 公网 URL 或 base64 |
 | `video_url` / `video_urls` | mp4，公网 URL 或 base64 | 官方未写时长/大小上限 |
 | `audio` | boolean，默认 true | 关闭出无声视频，不降价 |
-| `draft` / `draft_from_task_id` | | 见上 |
+| `draft` / `draft_from_task_id` | boolean / string | 见上；`draft:true` + `fhd` 报错（草稿只能 hd） |
 | `safety_tolerance` | 0–4，默认 2 | |
 | `nsfw_check` | boolean，默认 false | provider 强制 false |
 | `mode` | 见上 | |
@@ -66,9 +68,10 @@
 
 - 模式参数 `role: 'mode'`：文/图生视频（按是否有图在请求里显式发 `t2v` / `i2v`）与视频续写（`v2v`，必须 1 段视频、不带图）。显式发送 `mode`，避免平台在图视频同传时静默丢图。
 - 比例默认“智能”：只在纯文生视频显示；纯文生视频智能回退 `16:9`，有图或续写发 `auto` 交给平台跟随素材。
-- 计价：时长 × 档位单价（文/图生 hd/fhd，续写 v2v-hd/fhd）。
+- 计价：时长 × 档位单价（文/图生 hd/fhd，续写 v2v-hd/fhd）；草稿按 DRAFT / V2V-DRAFT 单价。
+- 草稿：开关参数 `apimartFlux3VideoDraft`（默认关），开启时请求发 `draft: true` 且 `resolution` 固定 `hd`；分辨率参数保留显示，表示转正片时的分辨率。
+- 草稿转正片：模型声明续接 `finalize-draft`（仅草稿结果可用），完成时从结果取平台 `task_id` 作为引用；续接参数只把草稿开关关掉、其余沿用草稿参数，直接提交。请求只发 `model` + `draft_from_task_id` + `resolution`，不发 `prompt`；计价按草稿参数的模式与时长 × 正片单价。任务 ID 只在请求构建里使用，不进入界面。
 - 不显示、不请求：`safety_tolerance`（平台默认 2）、`nsfw_check`（provider 强制 false）。
-- 暂不接：草稿与草稿转正片——转正片需要引用上一条草稿任务 ID，当前参数体系没有对应入口；单独出草稿只得低质预览、无法转正，先不提供。
 
 ## 6. 原始链接索引
 

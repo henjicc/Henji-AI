@@ -40,6 +40,7 @@ const content = [
   `export * from './validate'`,
   `export * from './conditions'`,
   `export * from './consumer-contract'`,
+  `export * from './continuation'`,
   `export * from './modelscope/customModelRegistry'`,
   '',
   'export const catalog: readonly ModelRuntimeDefinition[] = [',

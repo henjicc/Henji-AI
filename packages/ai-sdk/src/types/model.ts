@@ -544,6 +544,40 @@ export interface RuntimeConstraints {
   mediaFields?: RuntimeMediaFieldConstraint[]
 }
 
+// ========== 续接生成 ==========
+
+/**
+ * 续接生成请求携带的保留参数，由宿主写入、请求构建读取。
+ * `reference` 是源结果完成时 `capture` 取到的平台引用（任务 ID、草稿缓存等），界面不展示它。
+ */
+export interface RuntimeContinuationParam {
+  id: string
+  sourceModelId: string
+  reference: JsonObject
+}
+
+/** 续接请求放在参数里的键名。 */
+export const CONTINUATION_PARAM = '__continuation'
+
+/**
+ * 基于一次已完成的结果继续生成。平台常要求引用上一次的任务 ID 或草稿缓存，
+ * 这些引用由 SDK 从结果里取出、宿主随结果保存，用户与助手都不必知道它们。
+ */
+export interface RuntimeContinuation {
+  /** 续接动作标识，如 `finalize-draft`（草稿转正片）、`extend`（续写）、`animate`（做成视频） */
+  id: string
+  /** 续接到哪个模型；缺省为同一个模型 */
+  targetModelId?: string
+  /** 按源请求参数判断这次结果能否续接，例如只有草稿能转正片；缺省为都能 */
+  available?: (params: JsonObject) => boolean
+  /** 从完成结果里取出续接所需的平台引用；取不到时返回 null，表示这次结果不能续接 */
+  capture: (result: { taskId?: string; metadata: JsonValue }) => JsonObject | null
+  /** 续接请求的参数：在源参数基础上调整，`__continuation` 由宿主另行合入 */
+  params: (source: JsonObject) => JsonObject
+  /** direct：参数已齐全，直接提交；edit：带进输入区，由用户补写提示词等再提交 */
+  submit: 'direct' | 'edit'
+}
+
 // ========== 模型运行时定义（顶层契约） ==========
 
 export interface ModelRuntimeDefinition {
@@ -565,6 +599,9 @@ export interface ModelRuntimeDefinition {
 
   /** 可以独立构成一次生成输入的自定义参数 ID（如"父任务 ID"） */
   alternativeInputParamIds?: string[]
+
+  /** 这个模型的结果能做哪些续接生成（草稿转正片、续写、把图做成视频）。 */
+  continuations?: RuntimeContinuation[]
 
   /** 请求体构建后的运行时安全网约束 */
   runtimeConstraints?: RuntimeConstraints

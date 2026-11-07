@@ -46,6 +46,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { deleteCanvasNodes } from '@/features/canvas/application/canvasMutationService';
+import { continueCanvasGenerationResult, listCanvasNodeContinuations } from '@/features/canvas/application/canvasGenerationContinuationService';
 import { sanitizeStoryboardText } from '@/features/canvas/application/storyboardText';
 import {
   NODE_TOOLBAR_ALIGN,
@@ -93,6 +94,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     () => resolveCanvasImageCapabilityActionsForSourceNode(node),
     [node],
   );
+  const continuations = useMemo(() => listCanvasNodeContinuations(node), [node]);
   const tools = useMemo(
     () => excludeClaimedLocalTools(
       getNodeToolPlugins(node),
@@ -331,7 +333,24 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             void handleExecuteImageCapability(capabilityId);
           }}
         />
-        {imageCapabilityActions.length > 0 && (
+        {/* 续接（草稿转正片、续写、做成视频）是这个结果特有的下一步，保留文字 */}
+        {continuations.map((continuation) => (
+          <UiButton
+            key={`continuation-${continuation.id}`}
+            tooltip={t(`ui:workspace.continuation.tooltip.${continuation.id}`)}
+            data-canvas-continuation={continuation.id}
+            onClick={(event) => {
+              event.stopPropagation();
+              const projectId = useProjectStore.getState().currentProjectId;
+              if (!projectId) return;
+              void continueCanvasGenerationResult({ projectId, nodeId: node.id, continuationId: continuation.id })
+                .catch(reportCanvasOperationFailure);
+            }}
+          >
+            {t(`ui:workspace.continuation.action.${continuation.id}`)}
+          </UiButton>
+        ))}
+        {(imageCapabilityActions.length > 0 || continuations.length > 0) && (
           <span
             role="separator"
             aria-orientation="vertical"

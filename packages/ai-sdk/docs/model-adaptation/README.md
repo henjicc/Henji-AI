@@ -40,7 +40,8 @@
 - [Seedream 5.0 Flash · APIMart](Seedream-5.0-Flash/Seedream-5.0-Flash_APIMart.md)。
 - [Kling 4.0](Kling-4.0/)：[Fal](Kling-4.0/Kling-4.0_Fal.md)、[KIE](Kling-4.0/Kling-4.0_KIE.md)、[APIMart](Kling-4.0/Kling-4.0_APIMart.md)；[Kling 4.0 Flash](Kling-4.0-Flash/)：[Fal](Kling-4.0-Flash/Kling-4.0-Flash_Fal.md)、[KIE](Kling-4.0-Flash/Kling-4.0-Flash_KIE.md)。分镜与元素：Fal 标准版两者都支持，Fal Flash 与 KIE（标准版、Flash）仅支持元素，APIMart 两者都不支持（官方返回 400）。
 - [Wan 2.7 Image · APIMart](Wan-2.7-Image/Wan-2.7-Image_APIMart.md)（标准版 / Pro）。
-- [FLUX 3 Video](FLUX-3-Video/)：[APIMart](FLUX-3-Video/FLUX-3-Video_APIMart.md)、[Fal（含 FLUX 3 Max）](FLUX-3-Video/FLUX-3-Video_Fal.md)。
+- [FLUX 3 Video](FLUX-3-Video/)：[APIMart](FLUX-3-Video/FLUX-3-Video_APIMart.md)、[Fal（含 FLUX 3 Max）](FLUX-3-Video/FLUX-3-Video_Fal.md)；两家都支持草稿与草稿转正片（模型 `continuations`）。
+- 续接生成（模型 `continuations`）：FLUX 3 Video 草稿转正片、Midjourney 图转视频（APIMart）、Gemini Omni 1.2 Flash 续写（APIMart）。
 - [Wan 3.0](Wan-3.0/)：[Fal](Wan-3.0/Wan-3.0_Fal.md)、[APIMart](Wan-3.0/Wan-3.0_APIMart.md)（两家 Prime 为版本选项）、[KIE](Wan-3.0/Wan-3.0_KIE.md)、[Grsai](Wan-3.0/Wan-3.0_Grsai.md)；[Wan 3.0 Prime · KIE](Wan-3.0-Prime/Wan-3.0-Prime_KIE.md)。
 - [Gemini Omni 1.2 Flash](Gemini-Omni-1.2-Flash/)：[Fal](Gemini-Omni-1.2-Flash/Gemini-Omni-1.2-Flash_Fal.md)、[APIMart](Gemini-Omni-1.2-Flash/Gemini-Omni-1.2-Flash_APIMart.md)。
 - [Grok Imagine Video 1.5](Grok-Imagine-Video-1.5/)：[Fal](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_Fal.md)、[KIE](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_KIE.md)、[APIMart](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_APIMart.md)。

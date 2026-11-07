@@ -1,3 +1,4 @@
+import { withStoredContinuations } from '@/core/services/generationContinuations'
 import type { TFunction } from 'i18next'
 
 import { createLogger } from '@/core/logging'
@@ -299,6 +300,9 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
           generationInputImages: [...runtime.images],
           generationInputVideos: [...runtime.videos],
           generationInputAudios: [...runtime.audios],
+          // 模型能续接时记下这次提交的参数：应用重启后经恢复轮询完成，也按当初提交的参数判断续接，
+          // 不读源节点的现值（可能已改过，也不含提示词和默认值）。
+          ...(runtime.model?.continuations?.length ? { generationContinuation: { modelId: runtime.modelId, params: requestParams } } : {}),
           ...resultNodeExtraData,
           ...(capabilityPreparation?.resultNodeData ?? {}),
           ...resultNodeData,
@@ -350,6 +354,13 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
           ownership.generationResult = result
           current.signal?.throwIfAborted()
           const completionId = `generation-output:${resultNodeId}`
+          // 结果节点记下续接引用，之后可在节点上转正片、续写或做成视频。
+          // 完成时结果以占位节点的数据为准，所以先写到占位节点上，没有占位节点时再随新建数据带入。
+          const generationContinuation = runtime.model?.continuations?.length
+            ? { modelId: runtime.modelId, params: withStoredContinuations(requestParams, result.continuations) }
+            : null
+          if (generationContinuation) target.store.getState().updateNodeData(resultNodeId, { generationContinuation })
+          const resultNodeData = generationContinuation ? { ...placeholderData, generationContinuation } : placeholderData
           if (current.commitGenerationResult) {
             const committed = await current.commitGenerationResult({
               projectId: generationProjectId,
@@ -364,7 +375,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
               params: requestParams,
               inputs: requestInputs,
               result,
-              resultNodeData: placeholderData,
+              resultNodeData,
             })
             return {
               status: committed.idempotent ? 'reused' : 'completed',
@@ -385,7 +396,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
             sourceNodeId: current.nodeId,
             placeholderNodeId: resultNodeId,
             resultNodeType: current.resultNodeType,
-            resultNodeData: placeholderData,
+            resultNodeData,
             contract: {
               version: 1,
               strategy,

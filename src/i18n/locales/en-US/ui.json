@@ -711,6 +711,20 @@
       "reedit": "Re-edit",
       "usePrompt": "Use Prompt"
     },
+    "continuation": {
+      "action": {
+        "finalize-draft": "Finalize",
+        "extend": "Extend",
+        "animate": "Animate"
+      },
+      "tooltip": {
+        "finalize-draft": "Render this draft at full quality; billed at the final price",
+        "extend": "Continue this video; write what happens next and the length in the input",
+        "animate": "Turn these images into a video; pick the image and motion in the input"
+      },
+      "chip": "From the previous result: {{action}}",
+      "chipClear": "Stop continuing the previous result and generate normally"
+    },
     "status": {
       "cancelled": "Cancelled",
       "queued": "Queued...",

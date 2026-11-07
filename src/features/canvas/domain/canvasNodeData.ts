@@ -56,6 +56,8 @@ export interface NodeGenerationStatus {
   generationOutputDescriptor?: CanvasGenerationOutputDescriptorV1;
   /** 3D 后台输出的不可变请求回执；用于稳定任务引用在 ack 后校验幂等载荷。 */
   cameraStageRenderReceipt?: CameraStageRenderCompletionReceiptV1;
+  /** 结果能做的续接（草稿转正片、续写、做成视频）：源模型与带续接引用的源请求参数 */
+  generationContinuation?: { modelId: string; params: DynamicValueMap } | null;
 }
 
 export interface NodeImageData extends NodeDisplayData, NodeGenerationStatus {

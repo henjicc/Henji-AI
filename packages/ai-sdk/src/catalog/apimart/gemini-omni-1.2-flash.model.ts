@@ -1,5 +1,6 @@
 /** APIMart Gemini Omni 1.2 Flash 官方与 Ext 渠道统一模型（运行时契约） */
 
+import { readContinuation } from '../continuation'
 import { defineModel } from '../defineModel'
 import {
   hasUploadedImage, resolveUploadedImageSources, resolveUploadedVideoDurationSeconds, resolveUploadedVideoSources,
@@ -7,13 +8,30 @@ import {
 import type { JsonObject } from '../../types/runtime'
 
 const MODES = ['text-image-to-video', 'reference-to-video', 'edit', 'extend']
+const EXTEND = 'extend'
+// 宿主在三种场景下存放已上传素材的键；续写自己的结果时源任务已经给出视频，源请求的图和视频不能带过去。
+const MEDIA_KEYS = [
+  'uploadedFilePaths', 'images', 'uploadedImages', 'uploadedVideoFilePaths', 'videos', 'uploadedVideos',
+  '__videoDurationSeconds', '__totalVideoDurationSeconds', '__firstVideoDurationSeconds',
+]
 const RESOLUTIONS = ['360p', '720p', '1080p', '4k']
 const RATES: Record<string, Record<string, number>> = {
   official: { '360p': 0.02, '720p': 0.06, '1080p': 0.0904, '4k': 0.1808 },
   ext: { '360p': 0.016, '720p': 0.024, '1080p': 0.024, '4k': 0.056 },
 }
 
+/** 续写自己上一次的结果，平台按 extend_from_task_id 取源视频，不需要再上传。 */
+function extendFromTaskId(params: JsonObject): string | null {
+  const taskId = readContinuation(params, EXTEND)?.reference.taskId
+  return typeof taskId === 'string' && taskId.trim() ? taskId.trim() : null
+}
+
+function isContinued(params: JsonObject): boolean {
+  return extendFromTaskId(params) !== null
+}
+
 function mode(params: JsonObject): string {
+  if (isContinued(params)) return 'extend'
   const value = params.apimartGeminiOmni12Mode
   return typeof value === 'string' && MODES.includes(value) ? value : 'text-image-to-video'
 }
@@ -42,6 +60,7 @@ export const apimartGeminiOmni12FlashModel = defineModel({
       { when: 'apimartGeminiOmni12Channel === "ext" && apimartGeminiOmni12Mode === "text-image-to-video"', images: { max: 1 } },
       { when: 'apimartGeminiOmni12Mode === "reference-to-video"', images: { max: 10 } },
       { when: 'apimartGeminiOmni12Mode === "edit" || apimartGeminiOmni12Mode === "extend"', images: { max: 0 }, videos: { exact: 1 } },
+      { when: isContinued, images: { max: 0 }, videos: { exact: 0 } },
       { videoConstraints: { maxDurationSec: 15 } },
     ],
   },
@@ -51,13 +70,20 @@ export const apimartGeminiOmni12FlashModel = defineModel({
     message: { title: '提示词必需', message: '所有模式都需要填写提示词。', type: 'warning' },
   }, {
     id: 'apimart-gemini-omni-12-input-video',
-    when: 'apimartGeminiOmni12Mode === "edit" || apimartGeminiOmni12Mode === "extend"',
+    when: (params) => !isContinued(params) && (mode(params) === 'edit' || mode(params) === 'extend'),
     require: { videos: { exact: 1 } },
     message: { title: '需要输入视频', message: '视频编辑和续写需要 1 段输入视频。', type: 'warning' },
   }],
   params: [
-    { id: 'apimartGeminiOmni12Channel', type: 'dropdown', order: 1, default: 'official', options: [{ value: 'official' }, { value: 'ext' }] },
-    { id: 'apimartGeminiOmni12Mode', type: 'dropdown', order: 2, default: 'text-image-to-video', options: MODES.map(value => ({ value })) },
+    // 续写只能接同渠道的源任务（Ext 只认本账号已完成的 Ext 任务），续写时渠道与模式沿用源任务，不让改。
+    {
+      id: 'apimartGeminiOmni12Channel', type: 'dropdown', order: 1, default: 'official', options: [{ value: 'official' }, { value: 'ext' }],
+      visible: { condition: (params) => !isContinued(params) },
+    },
+    {
+      id: 'apimartGeminiOmni12Mode', type: 'dropdown', order: 2, default: 'text-image-to-video', options: MODES.map(value => ({ value })),
+      visible: { condition: (params) => !isContinued(params) },
+    },
     // 编辑与续写的画幅跟随输入视频；Ext 渠道带图时不传比例即跟随素材。这两种情况不显示也不发送比例。
     {
       id: 'apimartGeminiOmni12AspectRatio', type: 'dropdown', order: 3, default: '16:9', options: [{ value: '16:9' }, { value: '9:16' }],
@@ -69,10 +95,22 @@ export const apimartGeminiOmni12FlashModel = defineModel({
     // 编辑时输出时长跟随源视频，不能传 duration。
     {
       id: 'apimartGeminiOmni12Duration', type: 'number', order: 5, default: 10, min: 3, max: 15, step: 1,
-      visible: { condition: 'apimartGeminiOmni12Mode !== "edit"' },
+      visible: { condition: (params) => mode(params) !== 'edit' },
     },
-    // extend_from_task_id 需要供应商侧任务 ID，界面拿不到，按“不显示且不请求”处理。
   ],
+  continuations: [{
+    id: EXTEND,
+    capture: ({ taskId }) => taskId ? { taskId } : null,
+    params: (source) => {
+      const next: JsonObject = { ...source, apimartGeminiOmni12Mode: 'extend' }
+      for (const key of MEDIA_KEYS) delete next[key]
+      // 续写新增片段最长 10 秒。
+      const seconds = Number(source.apimartGeminiOmni12Duration)
+      if (Number.isFinite(seconds) && seconds > 10) next.apimartGeminiOmni12Duration = 10
+      return next
+    },
+    submit: 'edit',
+  }],
   endpoints: '/v1/videos/generations',
   request: {
     builder: (params) => {
@@ -90,6 +128,11 @@ export const apimartGeminiOmni12FlashModel = defineModel({
         resolution,
       }
 
+      const fromTaskId = extendFromTaskId(params)
+      if (fromTaskId) {
+        // 与 video_urls 互斥；渠道沿用源任务，跨渠道续写会被平台拒绝。
+        return { ...body, extend_from_task_id: fromTaskId, omni_reference_task_type: 'extend', duration: duration(params, 0) }
+      }
       if (current === 'edit' || current === 'extend') {
         if (videos.length !== 1) throw new Error('Gemini Omni 1.2 Flash 视频编辑和续写需要 1 段输入视频')
         body.video_urls = videos

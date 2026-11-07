@@ -163,11 +163,22 @@ const resolveGenerationModel = defineApplicationCapability({
   summarize: (output) => `已解析可执行模型 ${output.modelId}（${output.providerId}）。`,
 })
 
+/**
+ * 接着一条已完成的结果继续生成（草稿转正片、续写、把图做成视频）。可做的续接列在生成任务的
+ * continuations 或画布结果节点的 generationContinuations 里；宿主据此填好目标模型、参数与平台引用，
+ * 调用方只需给 modelId（续接的目标模型）、mediaType 和要补写的提示词或参数。
+ */
+const generationContinueFromSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('generation.task'), taskId: z.string().min(1), continuationId: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal('canvas.node'), documentId: z.string().min(1), nodeId: z.string().min(1), continuationId: z.string().min(1) }).strict(),
+])
+export type GenerationContinueFrom = z.infer<typeof generationContinueFromSchema>
+
 const prepareGenerationTask = defineApplicationCapability({
   id: 'prepare_generation_task',
   version: 1,
   title: '校验生成参数',
-  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；指定媒体类型但省略模型时读取当前默认模型；其余省略字段用 generation.draft 补全。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
+  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；指定媒体类型但省略模型时读取当前默认模型；其余省略字段用 generation.draft 补全。接着已完成的结果生成（草稿转正片、续写、把图做成视频）时传 continueFrom，可做的动作见生成任务的 continuations 或画布结果节点；modelId 用续接列出的目标模型。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['检查生成参数', '准备生成', 'prepare generation'],
   readOnly: true,
@@ -187,6 +198,7 @@ const prepareGenerationTask = defineApplicationCapability({
     mediaType: z.enum(['image', 'video', 'audio']).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
     destination: generationDestinationSchema.optional(),
+    continueFrom: generationContinueFromSchema.optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     preparation: z.object({
@@ -216,7 +228,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
   resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
-  description: '创建可见图片、视频或音频任务。画布用 destination={mode:"canvas",documentId,sourceNodeIds}，先创建生成节点与连线，结果自动落在旁侧，勿重复放入画布；仅存历史用 {mode:"history"}，默认当前画布优先。指定媒体类型但省略模型时读取当前默认模型；其余缺省字段用 generation.draft 补全。省略 baselineIds，宿主核对费用。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
+  description: '创建可见图片、视频或音频任务。画布用 destination={mode:"canvas",documentId,sourceNodeIds}，先创建生成节点与连线，结果自动落在旁侧，勿重复放入画布；仅存历史用 {mode:"history"}，默认当前画布优先。指定媒体类型但省略模型时读取当前默认模型；其余缺省字段用 generation.draft 补全。省略 baselineIds，宿主核对费用。接着已完成的结果生成（草稿转正片、续写、把图做成视频）时传 continueFrom，可做的动作见生成任务的 continuations 或画布结果节点；modelId 用续接列出的目标模型。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
@@ -248,6 +260,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
     mediaType: z.enum(['image', 'video', 'audio']).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
     destination: generationDestinationSchema.optional(),
+    continueFrom: generationContinueFromSchema.optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     taskId: z.string().min(1),

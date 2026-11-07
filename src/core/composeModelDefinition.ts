@@ -296,6 +296,7 @@ export function composeModelDefinition(
     requirements: runtime.requirements as GenerationRequirement[] | undefined,
     inputLimits: runtime.inputLimits as InputLimits | undefined,
     alternativeInputParamIds: runtime.alternativeInputParamIds,
+    continuations: runtime.continuations,
     runtimeConstraints: runtime.runtimeConstraints,
     endpoints: runtime.endpoints as EndpointConfig,
     request: runtime.request as RequestConfig | undefined,

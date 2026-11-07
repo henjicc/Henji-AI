@@ -20,7 +20,7 @@
 
 ## 2. 各端点字段
 
-结果统一为 `video: File`（`video.url`），另有 `seed`；Max 额外 `timings`；草稿端点额外 `draft_cache: File`。
+结果统一为 `video: File`（`video.url`），另有 `seed`；Max 额外 `timings`；草稿端点额外 `draft_cache: File | null`（OpenAPI：加密的持久缓存包，传给 `draft-enhance` 做全质量渲染；合作方没返回缓存包时为空）。`draft-enhance` 输入只有 `draft_cache_url`（必填，URL 或 data URI）与 `safety_tolerance`，输出只有 `video: File`，沿用草稿的种子与运动、不重新规划。
 
 | 字段 | t2v / i2v | extend-video | edit-video | Max t2v / i2v | 草稿 t2v/i2v/extend |
 |---|---|---|---|---|---|
@@ -59,8 +59,10 @@
 - 分辨率：标准 t2v/i2v 四档；续写与 Max 只开放 720p/1080p（其他档位没有公布价格，展示联动裁剪并重置，builder 回退 720p）。编辑不发分辨率、时长、音频。
 - 时长固定 5–20 整数，默认 5，不发 `auto`（按秒计费需要确定秒数）。
 - 计价：时长 × 档位单价；编辑按输入视频时长 × $0.03（读不到时长按上限 15 秒估）；Max 按 11-23 起的标准价预估，标为估算价。
+- 草稿：开关参数 `falFlux3VideoDraft`（默认关），只在标准版文/图生视频与续写显示（Max 与视频编辑没有草稿端点）；开启时路由到对应 `/draft` 端点，不发 `resolution`（草稿固定 720p），分辨率参数隐藏；计价 $0.06/秒、续写草稿 $0.12/秒。
+- 草稿转正片：模型声明续接 `finalize-draft`（仅草稿结果可用），完成时从结果 metadata 的 `draft_cache.url` 取缓存地址作为引用（为空则不能转正片）；续接参数关掉草稿、分辨率记为 1080p，直接提交。请求走 `blackforestlabs/flux-3/draft-enhance`，只发 `draft_cache_url`；计价 $0.29/秒 × 草稿时长。缓存地址只在请求构建里使用，不进入界面。
+- 结果解析：Fal provider 收集媒体地址时跳过 `draft_cache`，避免缓存包被当成第二段视频；它仍原样保留在 metadata 中。
 - 不显示、不请求：`safety_tolerance`（平台默认 2）、Max 的 `seed`。
-- 暂不接：三个草稿端点与 `draft-enhance`——增强需要回传上一次的 `draft_cache` 文件，当前参数体系没有对应入口。
 
 ## 5. 原始链接索引
 
@@ -74,4 +76,5 @@
 | Max 图生视频 | https://fal.ai/models/blackforestlabs/flux-3-max/image-to-video/llms.txt | 否 |
 | 草稿文生 / 图生 / 续写 | https://fal.ai/models/blackforestlabs/flux-3/text-to-video/draft/llms.txt 、 …/image-to-video/draft/llms.txt 、 …/extend-video/draft/llms.txt | 否 |
 | 草稿增强 | https://fal.ai/models/blackforestlabs/flux-3/draft-enhance/llms.txt | 否 |
+| OpenAPI（草稿与草稿增强，含 `draft_cache` 输出结构） | https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=blackforestlabs/flux-3/text-to-video/draft 、 …?endpoint_id=blackforestlabs/flux-3/draft-enhance | 否 |
 | OpenAPI（各端点） | https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=blackforestlabs/flux-3/text-to-video | 否 |

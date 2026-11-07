@@ -1,3 +1,5 @@
+import type { JsonObject } from '@henjicc/ai-sdk'
+import { listGenerationContinuations, withStoredContinuations } from '@/core/services/generationContinuations'
 import { readGenerationTasks } from '../application/generationTaskProjection'
 import { beginGenerationTaskExecution, cancelGenerationTaskExecution } from '../application/generationTaskExecution'
 import { createPersistedGenerationTask, awaitGenerationTaskPersistence } from './useTaskHistory'
@@ -236,6 +238,7 @@ export function useTaskGeneration({
       if (!execution.isCurrent()) return
       const resultObj: DynamicValueMap = isRecord(result) ? result : {}
       const metadata = resultObj['metadata']
+      const continuations = isRecord(resultObj['continuations']) ? resultObj['continuations'] as Record<string, JsonObject> : undefined
       const normalizedResultTaskId = typeof resultObj['taskId'] === 'string'
         ? resultObj['taskId'].trim() || undefined
         : undefined
@@ -308,6 +311,7 @@ export function useTaskGeneration({
         progress: 100,
         dimensions: dimensions ?? undefined,
         duration: duration ?? undefined,
+        options: withStoredContinuations(options, continuations),
         result: {
           id: taskId,
           type: task.type,
@@ -397,6 +401,7 @@ export function useTaskGeneration({
       resultAvailable: Boolean(task.result),
       errorCode: task.status === 'error' ? 'GENERATION_FAILED' : null,
       errorMessage: task.error?.slice(0, 1_000) ?? null,
+      continuations: task.status === 'success' ? listGenerationContinuations(task.model, task.options) : [],
     })),
     get: (taskId) => {
       const task = readGenerationTasks().find((item) => item.id === taskId)
@@ -411,6 +416,7 @@ export function useTaskGeneration({
         resultAvailable: Boolean(task.result),
         errorCode: task.status === 'error' ? 'GENERATION_FAILED' : null,
         errorMessage: task.error?.slice(0, 1_000) ?? null,
+        continuations: task.status === 'success' ? listGenerationContinuations(task.model, task.options) : [],
       }
     },
     getResult: (taskId) => {

@@ -90,7 +90,7 @@ const GenerationWorkspace: React.FC = () => {
     setTasks,
     clearTaskProgress: clearGenerationTaskProgress,
   })
-  const { handleRegenerate, handleReedit } = useTaskReplay({
+  const { handleRegenerate, handleReedit, handleContinue } = useTaskReplay({
     handleGenerate,
     imageEditStatesRef,
   })
@@ -299,6 +299,7 @@ const GenerationWorkspace: React.FC = () => {
               onRegenerate={handleRegenerate}
               onRetryPolling={handleContinuePolling}
               onReedit={handleReedit}
+              onContinue={handleContinue}
               onDelete={deleteTask}
               onUsePrompt={handleUsePrompt}
               onRememberResultImageDimensions={rememberResultImageDimensions}

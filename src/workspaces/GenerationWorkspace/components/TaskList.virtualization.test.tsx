@@ -51,7 +51,7 @@ function tasks(count: number): GenerationTask[] {
 }
 const callbacks = {
   showMenu: vi.fn(), onDownload: vi.fn(), onCopyImage: vi.fn(), onRegenerate: vi.fn(), onRetryPolling: vi.fn(),
-  onReedit: vi.fn(), onDelete: vi.fn(), onUsePrompt: vi.fn(), onRememberResultImageDimensions: vi.fn(),
+  onReedit: vi.fn(), onContinue: vi.fn(), onDelete: vi.fn(), onUsePrompt: vi.fn(), onRememberResultImageDimensions: vi.fn(),
   onOpenImageViewer: vi.fn(), onOpenVideoViewer: vi.fn(), notify: vi.fn(),
 } satisfies Omit<TaskListProps, 'scrollContainerRef' | 'tasks' | 'totalCount' | 'hasActiveFilters'>
 function Fixture({ items }: { items: GenerationTask[] }) {

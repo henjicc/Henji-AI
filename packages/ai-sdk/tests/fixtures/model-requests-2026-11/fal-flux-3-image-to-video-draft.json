@@ -1,0 +1,132 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=blackforestlabs/flux-3/image-to-video/draft",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official Flux3ImageToVideoDraftInput / Flux3ImageToVideoDraftOutput schemas; descriptions, examples, titles and x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "required": [
+      "prompt",
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "duration": {
+        "enum": [
+          "auto",
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "default": "auto"
+      },
+      "image_url": {
+        "type": "string"
+      },
+      "generate_audio": {
+        "type": "boolean",
+        "default": true
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "safety_tolerance": {
+        "default": 2,
+        "type": "integer",
+        "maximum": 4,
+        "minimum": 0
+      },
+      "aspect_ratio": {
+        "enum": [
+          "auto",
+          "21:9",
+          "2:1",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16"
+        ],
+        "type": "string",
+        "default": "auto"
+      }
+    }
+  },
+  "responseSchema": {
+    "required": [
+      "video"
+    ],
+    "type": "object",
+    "properties": {
+      "video": {
+        "$ref": "#/components/schemas/File"
+      },
+      "draft_cache": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/File"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    }
+  },
+  "fileSchema": {
+    "required": [
+      "url"
+    ],
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string"
+      },
+      "file_size": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "content_type": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "file_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -47,6 +47,11 @@ export const falPresentationPart10: Record<string, ModelPresentation> = {
       falFlux3VideoResolution: { name: sharedFieldText('resolution'), optionLabels: plain(['720p', '1080p', '1440p', '2160p'], { '1440p': '2K', '2160p': '4K' }) },
       falFlux3VideoDuration: { name: sharedFieldText('duration') },
       falFlux3VideoGenerateAudio: { name: sharedFieldText('generateAudio') },
+      falFlux3VideoDraft: {
+        name: { zh: '草稿', en: 'Draft' },
+        tooltip: { zh: '先以约 1/3 的价格出 720p 低质预览，满意后再转成 1080p 正片；转正片按 $0.29/秒另计。', en: 'Renders a low-quality 720p preview at about a third of the price; turn it into a 1080p final later at $0.29/s.' },
+        description: { zh: '开启后先出低价草稿，结果可一键转成 1080p 正片（沿用草稿的提示词、时长、素材与种子）', en: 'Renders a cheap draft first; the result can be finalized to 1080p, keeping its prompt, duration, media and seed' },
+      },
       falFlux3VideoReasoning: {
         name: { zh: '推理强度', en: 'Reasoning' },
         optionLabels: { low: { label: sharedOptionText('low') }, high: { label: sharedOptionText('high') } },

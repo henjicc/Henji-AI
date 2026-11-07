@@ -1,3 +1,4 @@
+import { CONTINUATION_PARAM, readContinuation, type JsonObject } from '@henjicc/ai-sdk'
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { getProviderAvailabilityFailure, subscribeProviderAvailability } from '@/core/services/providerAvailability'
 import { useTranslation } from 'react-i18next'
@@ -258,6 +259,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   })
 
   useReeditContent(uiState, modelState)
+  // 从结果卡片带进来的续接（续写、做成视频）：换模型时参数重置，续接随之取消。
+  const continuationId = readContinuation(modelState.params as JsonObject)?.id
+  const continuationAction = continuationId ? t(`ui:workspace.continuation.action.${continuationId}`) : undefined
 
   // 9. 生成按钮处理（带验证）
   const handleGenerate = async () => {
@@ -331,6 +335,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       {/* 输入区域：参考素材 · 提示词 · 底栏（模型与参数 ｜ 费用、预设、优化、生成） */}
       <InputArea
         compact={compact}
+        continuationAction={continuationAction}
+        onClearContinuation={() => modelState.setParam(CONTINUATION_PARAM, undefined)}
         promptDocument={uiState.promptDocument}
         onPromptDocumentChange={uiState.setPromptDocument}
         promptReferences={uiState.promptReferences}

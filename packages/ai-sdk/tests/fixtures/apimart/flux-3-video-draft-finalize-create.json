@@ -1,0 +1,41 @@
+{
+  "provider": "apimart",
+  "modelId": "apimart-flux-3-video",
+  "scenario": "create-finalize-draft",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/videos/generations",
+  "params": {
+    "model": "flux-3-video",
+    "draft_from_task_id": "task_01K_DRAFT...",
+    "resolution": "fhd"
+  },
+  "expectedRequest": {
+    "url": "https://api.apimart.ai/v1/videos/generations",
+    "method": "POST",
+    "body": {
+      "model": "flux-3-video",
+      "draft_from_task_id": "task_01K_DRAFT...",
+      "resolution": "fhd",
+      "nsfw_check": false
+    }
+  },
+  "response": {
+    "code": 200,
+    "data": [
+      {
+        "status": "submitted",
+        "task_id": "task_01J9HA7JPQ9A0Z6JZ3V8M9W6PZ"
+      }
+    ]
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "task_01J9HA7JPQ9A0Z6JZ3V8M9W6PZ"
+  },
+  "source": {
+    "params": "https://docs.apimart.ai/cn/api-reference/videos/flux-3-video/generation 的“草稿转正片”示例请求体逐字照搬（含官方字面占位任务 ID，2026-11-07，无需登录）；nsfw_check 是 APIMart provider 在发送边界的强制覆盖",
+    "response": "同页 200 提交响应示例逐字照搬，classification: official-literal"
+  }
+}

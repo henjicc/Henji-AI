@@ -5,7 +5,7 @@
  */
 
 import type { AiRuntimeTrace } from '@/core/types'
-import type { StructuredGenerationOutput } from '@henjicc/ai-sdk'
+import type { JsonObject, StructuredGenerationOutput } from '@henjicc/ai-sdk'
 
 /**
  * 生成结果接口
@@ -24,6 +24,8 @@ export interface GenerateResult {
   /** 额外元数据 */
   metadata?: DynamicValueMap
   structuredOutput?: StructuredGenerationOutput
+  /** 这次结果能做的续接生成：动作标识 → 平台引用；随结果保存，续接时原样交回模型 */
+  continuations?: Record<string, JsonObject>
   /** 真实 API 请求/响应追踪 */
   trace?: AiRuntimeTrace
 }

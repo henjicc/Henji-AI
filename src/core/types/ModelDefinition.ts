@@ -15,6 +15,7 @@ import type { Linkage } from './Linkage'
 import type { InputLimits } from './InputLimits'
 import type { GenerationRequirement } from './GenerationRequirements'
 import type { RuntimeConstraints } from './RuntimeConstraints'
+import type { RuntimeContinuation } from '@henjicc/ai-sdk'
 export type BuiltinModelType = 'image' | 'video' | 'audio'
 // eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 保留内置字面量补全，同时允许第三方扩展值。
 export type ModelType = BuiltinModelType | (string & {})
@@ -474,6 +475,9 @@ export interface ModelDefinition {
    * 避免在通用准备阶段被误判为「空请求」。
    */
   alternativeInputParamIds?: string[]
+
+  /** 结果能做的续接生成（草稿转正片、续写、做成视频），声明在 SDK 模型上。 */
+  continuations?: RuntimeContinuation[]
 
   /**
    * Runtime constraints applied after request builder output.

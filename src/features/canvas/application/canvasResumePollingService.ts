@@ -1,3 +1,4 @@
+import { withStoredContinuations } from '@/core/services/generationContinuations';
 import { createLogger } from '@/core/logging';
 import { registry } from '@/core/ModelRegistry';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
@@ -247,10 +248,13 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     const localRedrawContext = sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite'
       ? parseLocalRedrawContext(resultNodeData[LOCAL_REDRAW_CONTEXT_FIELD])
       : null;
+    // 提交时记在结果节点上的参数；续查本身不带参数，续接要按当初提交的参数判断。
+    const submitted = resultNodeData.generationContinuation as { modelId: string; params: DynamicValueMap } | null | undefined
     const result = await resumeCanvasGeneration({
       modelId,
       projectId,
       signal,
+      ...(submitted ? { continuationParams: submitted.params } : {}),
       requestId: typeof resultNodeData.generationTaskId === 'string' ? resultNodeData.generationTaskId : localRedrawContext?.requestId,
       mediaType,
       taskId,
@@ -261,6 +265,9 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     createdFilePaths = [...new Set(result.createdFilePaths ?? [])];
     signal.throwIfAborted();
     if (!isContextCurrent()) return;
+    if (submitted) {
+      await updateNodeData(nodeId, { generationContinuation: { modelId: submitted.modelId, params: withStoredContinuations(submitted.params, result.continuations) } });
+    }
     const resultOutputs = result.outputs;
 
     const storyboardContextValue = resultNodeData[STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD];

@@ -1,3 +1,4 @@
+import { CONTINUATION_PARAM, readContinuation, type JsonObject } from '@henjicc/ai-sdk'
 import { z } from 'zod'
 
 import { registry } from '@/core/ModelRegistry'
@@ -133,6 +134,8 @@ function validateGenerationData(
   const params = data.params as Record<string, unknown>
   const schemaById = new Map(model.params.map((param) => [param.id, param]))
   for (const [paramId, value] of Object.entries(params)) {
+    // 续接节点带着上一次结果的平台引用，它不是模型参数，结构由 SDK 校验。
+    if (paramId === CONTINUATION_PARAM && readContinuation(params as JsonObject)) continue
     const param = schemaById.get(paramId)
     if (!param || !validateParamValue(param, value)) {
       throw new Error(`模型参数无效：${paramId}`)

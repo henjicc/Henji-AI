@@ -1,5 +1,6 @@
 import { FolderCheck, FolderPlus, RefreshCw, SquarePen, Trash2 } from 'lucide-react'
-import { UiIconButton } from '@/components/ui'
+import { UiButton, UiIconButton } from '@/components/ui'
+import type { AvailableGenerationContinuation } from '@/core/services/generationContinuations'
 import { useI18n } from '@/hooks/useI18n'
 import type { GenerationTask } from '../types'
 import { DownloadIcon, UsePromptIcon } from './TaskActionIcons'
@@ -14,6 +15,9 @@ export interface TaskCardToolbarProps {
   onRegenerate: () => Promise<void>
   onReedit: () => void
   onDelete: () => Promise<void>
+  /** 这次结果能做的续接（草稿转正片、续写、做成视频） */
+  continuations: AvailableGenerationContinuation[]
+  onContinue: (continuationId: string) => void
 }
 
 export function TaskCardToolbar({
@@ -26,13 +30,25 @@ export function TaskCardToolbar({
   onRegenerate,
   onReedit,
   onDelete,
+  continuations,
+  onContinue,
 }: TaskCardToolbarProps): JSX.Element {
   const { t } = useI18n()
 
   // 记录工具条：图标化、名称进悬停提示；静息隐藏，悬停或键盘聚焦到这条记录时出现（设计稿 Generation）。
-  // 顺序：再次生成 · 编辑 · 下载 · 收进资产库 · 用作提示词 ｜ 删除（危险动作放最后）。
+  // 顺序：续接 · 再次生成 · 编辑 · 下载 · 收进资产库 · 用作提示词 ｜ 删除（危险动作放最后）。
+  // 续接是这个结果特有的下一步，图标说不清，用文字。
   return (
     <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-120 focus-within:opacity-100 group-hover/task:opacity-100 group-focus-within/task:opacity-100 [@media(hover:none)]:opacity-100">
+      {continuations.map(continuation => (
+        <UiButton key={continuation.id} size="sm"
+          onClick={() => onContinue(continuation.id)}
+          tooltip={t(`ui:workspace.continuation.tooltip.${continuation.id}`)}
+          data-generation-continuation={continuation.id}
+        >
+          {t(`ui:workspace.continuation.action.${continuation.id}`)}
+        </UiButton>
+      ))}
       <UiIconButton
         onClick={() => void onRegenerate()}
         tooltip={t('ui:workspace.actions.regenerate')}

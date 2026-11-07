@@ -15,6 +15,7 @@ import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecu
 import { createProgressTracker, resolveProgressSpec } from '@/core/progress/progressTracker'
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import { getI18nText, type ProviderId } from '@/core/types'
+import { captureResultContinuations } from './generationContinuations'
 import { stripDerivedMediaState } from '@/core/params/derivedMediaState'
 import { captureClonedVoice } from '@/services/voiceLibrary/captureClonedVoice'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
@@ -281,6 +282,7 @@ export class GenerationService {
         createdFilePaths: response.createdFilePaths,
         metadata: response.metadata,
         structuredOutput: response.structuredOutput,
+        continuations: captureResultContinuations(model, sourceParams, response.taskId, response.metadata),
         trace: response.trace,
       }
     } catch (error) {
@@ -439,6 +441,7 @@ export class GenerationService {
         createdFilePaths: response.createdFilePaths,
         metadata: response.metadata,
         structuredOutput: response.structuredOutput,
+        continuations: captureResultContinuations(model, params, response.taskId || taskId, response.metadata),
         trace: response.trace,
       }
     } catch (error) {

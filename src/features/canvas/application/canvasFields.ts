@@ -1,5 +1,6 @@
 import { readStoryboardFrameNote } from './storyboardPromptDocument';
 import { z } from 'zod'
+import { listCanvasNodeContinuations } from './canvasGenerationContinuationService'
 
 import {
   fieldWriterTable,
@@ -131,11 +132,14 @@ function generationJsonValue(suffix: string): Extract<ApplicationPropertyValue, 
 
 const GENERATION_CONFIG_VALUE = generationJsonValue('generation_config')
 const GENERATION_SCHEMA_VALUE = generationJsonValue('generation_schema')
+const GENERATION_CONTINUATIONS_VALUE = generationJsonValue('generation_continuations')
+const generationContinuationsSchema = z.array(z.object({ id: z.string(), targetModelId: z.string(), submit: z.enum(['direct', 'edit']) }))
 export const CANVAS_NODE_SCHEMA_DOCUMENTS = [
   { ref: STORYBOARD_FRAMES_VALUE.schemaRef, value: z.toJSONSchema(storyboardFramePatchesSchema) as JsonValue },
   { ref: ASSET_GROUP_MEMBER_ORDER_VALUE.schemaRef, value: z.toJSONSchema(assetGroupMemberOrderSchema) as JsonValue },
   { ref: GENERATION_CONFIG_VALUE.schemaRef, value: z.toJSONSchema(canvasNodeGenerationConfigSchema) as JsonValue },
   { ref: GENERATION_SCHEMA_VALUE.schemaRef, value: z.toJSONSchema(z.record(z.string(), z.unknown()).nullable()) as JsonValue },
+  { ref: GENERATION_CONTINUATIONS_VALUE.schemaRef, value: z.toJSONSchema(generationContinuationsSchema) as JsonValue },
 ]
 
 function parseStoryboardFramePatches(raw: JsonValue | undefined): CanvasStoryboardFramePatch[] {
@@ -178,6 +182,19 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
       readOnlyReason: '由节点类型与当前模型目录共同确定。',
     },
     read: readCanvasNodeGenerationSchema,
+    storeActions: [],
+  },
+  {
+    propertyId: `${NODE_ENTITY_TYPE}.generation_continuations`,
+    descriptor: {
+      ...canvasDescriptor(NODE_ENTITY_TYPE, 'generation_continuations', '可做的续接',
+        GENERATION_CONTINUATIONS_VALUE,
+        '生成结果节点能接着做的续接（finalize-draft 草稿转正片、extend 续写、animate 做成视频）；'
+        + '要续接时用 create_visible_generation_task 传 continueFrom={kind:"canvas.node",documentId,nodeId,continuationId}，modelId 用 targetModelId。非生成结果返回空数组。', true),
+      requiredPermissions: { read: ['canvas:read'], write: [] },
+      readOnlyReason: '由生成结果在完成时记下，随结果节点保存；续接通过生成能力提交，不直接改写。',
+    },
+    read: (node) => listCanvasNodeContinuations(node).map(({ id, targetModelId, submit }) => ({ id, targetModelId, submit })),
     storeActions: [],
   },
   {

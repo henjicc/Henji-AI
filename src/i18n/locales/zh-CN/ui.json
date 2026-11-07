@@ -711,6 +711,20 @@
       "reedit": "重新编辑",
       "usePrompt": "使用提示词"
     },
+    "continuation": {
+      "action": {
+        "finalize-draft": "转正片",
+        "extend": "续写",
+        "animate": "做成视频"
+      },
+      "tooltip": {
+        "finalize-draft": "按这条草稿的画面生成全质量正片，按正片价计费",
+        "extend": "接着这段视频往后生成，可在输入区写续写内容与时长",
+        "animate": "把这次生成的图做成视频，可在输入区选第几张与运动方式"
+      },
+      "chip": "接着上一次的结果：{{action}}",
+      "chipClear": "不接着上一次，改为普通生成"
+    },
     "status": {
       "cancelled": "已取消",
       "queued": "排队中...",

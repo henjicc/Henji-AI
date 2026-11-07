@@ -1,0 +1,23 @@
+{
+  "provider": "fal",
+  "modelId": "fal-flux-3-video",
+  "scenario": "poll-success-draft-cache",
+  "phase": "continuePolling",
+  "route": "blackforestlabs/flux-3/text-to-video/draft",
+  "taskId": "5d1e7f3a-2c4b-4f0e-9a61-0b7c3e2d9f10",
+  "notes": "草稿结果另带 draft_cache 缓存包；它只用于转正片，不能算作第二个媒体结果。同一份响应覆盖 status 与 result 两次 fetch",
+  "response": {
+    "status": "COMPLETED",
+    "request_id": "5d1e7f3a-2c4b-4f0e-9a61-0b7c3e2d9f10",
+    "video": { "url": "https://v3b.fal.media/files/example/flux-3-draft-result.mp4" },
+    "draft_cache": { "url": "https://v3b.fal.media/files/example/flux-3-draft-cache.bin" }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://v3b.fal.media/files/example/flux-3-draft-result.mp4"
+  },
+  "source": {
+    "response": "按 https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=blackforestlabs/flux-3/text-to-video/draft 的 Flux3DraftOutput 字段构造（video: File、draft_cache: File | null，2026-11-07，无需登录），classification: constructed-from-official-fields；两个 URL 均为不可下载占位符；status/request_id 按 docs/model-adaptation/供应商/Fal.md §2.2 拼合，与 flux-3-video-poll-success.json 同一约定"
+  }
+}

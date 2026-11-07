@@ -10,6 +10,8 @@ export interface GenerationTaskStatusSnapshot {
   cancellable?: boolean
   waitingExternal?: boolean
   origin?: 'canvas'
+  /** 结果能做的续接；要续接时把动作标识与这条任务一起作为 continueFrom 交给生成能力 */
+  continuations?: Array<{ id: string; targetModelId: string; submit: 'direct' | 'edit' }>
 }
 
 const snapshots = new Map<string, GenerationTaskStatusSnapshot>()
