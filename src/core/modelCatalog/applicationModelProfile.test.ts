@@ -114,8 +114,9 @@ describe('Henji-AI 显式模型选择', () => {
 describe('Henji-AI 统一能力发现', () => {
   it('只索引已选 generation 与真实 LLM 目录，不默认包含 Fal 工具', () => {
     const items = henjiModelCapabilityDiscovery.list()
-    expect(items.filter((item) => item.sourceKind === 'generation-model')).toHaveLength(HENJI_GENERATION_MODELS.length)
-    expect(items.filter((item) => item.sourceKind === 'llm-model')).toHaveLength(LLM_MODEL_CATALOG_ENTRIES.length)
+    // 已过时的模型与目录条目不进能力发现
+    expect(items.filter((item) => item.sourceKind === 'generation-model')).toHaveLength(HENJI_GENERATION_MODELS.filter((model) => !model.meta.deprecated).length)
+    expect(items.filter((item) => item.sourceKind === 'llm-model')).toHaveLength(LLM_MODEL_CATALOG_ENTRIES.filter((entry) => !entry.deprecated).length)
     expect(searchHenjiModelCapabilities({ features: 'erase' })).toEqual([])
 
     const optionalDiscovery = createModelCapabilityDiscovery({ generationPacks: [falImageEditTools] })
@@ -162,7 +163,7 @@ describe('Henji-AI 统一能力发现', () => {
       acceptedInputContentKinds: { allOf: ['text', 'image', 'video', 'audio'] },
     })
 
-    expect(text.length).toBe(LLM_MODEL_CATALOG_ENTRIES.length)
+    expect(text.length).toBe(LLM_MODEL_CATALOG_ENTRIES.filter((entry) => !entry.deprecated).length)
     expect(image.length).toBeGreaterThan(0)
     expect(video.length).toBeGreaterThan(0)
     expect(audio.length).toBeGreaterThan(0)
