@@ -61,7 +61,8 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
   const params: RuntimeParamDef[] = [
     {
       id: key('Mode'), type: 'dropdown', order: 1,
-      default: 'reference-to-video',
+      // 参考模式不设素材下限（2.5 可以只传音频），默认放在文/图生视频，带多图或音频时由按素材选模式切过去。
+      default: 'text-image-to-video',
       options: [{ value: 'text-image-to-video' }, { value: 'reference-to-video' }],
     },
     {

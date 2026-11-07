@@ -80,7 +80,8 @@ export async function continuePolling(input: ProviderContinuePollingInput): Prom
     const url = stringAt(payload, pointer)
     if (url && /^https?:\/\//i.test(url)) pushUniqueUrl(urls, url)
   }
-  if (!stringAt(payload, '/content/video_url')) {
+  const videoUrl = stringAt(payload, '/content/video_url')
+  if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {
     throw new AiRuntimeError('empty_result', `Volcengine Ark video task has no video_url (task_id=${input.taskId})`)
   }
   return { status: 'completed', url: urls.join('|||'), taskId: input.taskId, metadata: payload }
@@ -106,7 +107,9 @@ function normalizeAudioDataUris(body: JsonValue): JsonValue {
     if (!match) return item
     const subtype = match[1].toLowerCase()
     const format = subtype === 'mpeg' || subtype === 'mp3' ? 'mp3'
-      : ['wav', 'x-wav', 'wave', 'vnd.wave'].includes(subtype) ? 'wav' : subtype
+      : ['wav', 'x-wav', 'wave', 'vnd.wave'].includes(subtype) ? 'wav' : null
+    // 方舟只收 wav / mp3；其他格式提交前就拦下，不让用户只看到供应商报错。
+    if (!format) throw new AiRuntimeError('invalid_media', `火山方舟参考音频只支持 MP3 或 WAV，当前是 ${subtype}，请先转换格式`)
     return { ...item, audio_url: { ...item.audio_url, url: `data:audio/${format};base64,${url.slice(match[0].length)}` } }
   })
   return { ...body, content }

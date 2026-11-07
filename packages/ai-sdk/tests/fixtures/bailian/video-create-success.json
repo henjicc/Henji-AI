@@ -5,7 +5,7 @@
   "phase": "execute",
   "method": "POST",
   "route": "/api/v1/services/aigc/video-generation/video-synthesis",
-  "notes": "事件矩阵行：提交 → PENDING（对外 pending + taskId）。请求头 X-DashScope-Async 由 tests/providers/bailian-async.test.ts 精确断言。",
+  "notes": "事件矩阵行：提交 → PENDING（对外 pending + taskId）。请求头 X-DashScope-Async 由 tests/providers/video-async-official.test.ts 精确断言。",
   "params": {
     "model": "wan3.0-video",
     "input": {

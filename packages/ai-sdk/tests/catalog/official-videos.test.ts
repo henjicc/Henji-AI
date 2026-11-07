@@ -13,6 +13,11 @@ const build = (model: ModelRuntimeDefinition, params: JsonObject) => model.reque
 const price = (model: ModelRuntimeDefinition, params: JsonObject) => model.pricing!.calculator!(params)
 
 describe('火山方舟 Seedance 请求构建', () => {
+  it.each([volcengineSeedance25Model, volcengineSeedance20Model, volcengineSeedance20FastModel, volcengineSeedance20MiniModel])('$meta.id 用默认参数只写提示词也能构建（默认不落在需要素材的参考模式）', (model) => {
+    const defaults = Object.fromEntries(model.params.map((param) => [param.id, param.default ?? null])) as JsonObject
+    expect(() => build(model, { ...defaults, prompt: '一只猫在跑' })).not.toThrow()
+  })
+
   it('2.5 首尾帧：两张图分别为 first_frame / last_frame，比例强制 adaptive', () => {
     const body = build(volcengineSeedance25Model, {
       prompt: '日出', uploadedFilePaths: ['a.png', 'b.png'],
