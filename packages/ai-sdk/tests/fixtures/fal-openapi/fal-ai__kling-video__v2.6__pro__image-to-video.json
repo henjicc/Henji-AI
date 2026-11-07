@@ -1,0 +1,73 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/kling-video/v2.6/pro/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/kling-video/v2.6/pro/image-to-video",
+  "input": {
+    "properties": {
+      "prompt": {
+        "maxLength": 2500,
+        "type": "string"
+      },
+      "negative_prompt": {
+        "maxLength": 2500,
+        "default": "blur, distort, and low quality",
+        "type": "string"
+      },
+      "duration": {
+        "enum": [
+          "5",
+          "10"
+        ],
+        "default": "5",
+        "type": "string"
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "_fal_ui_field": "image",
+            "limit_description": "Max file size: 50.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "voice_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "generate_audio": {
+        "default": true,
+        "type": "boolean"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "start_image_url": {
+        "limit_description": "Max file size: 50.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+        "_fal_ui_field": "image",
+        "type": "string"
+      }
+    },
+    "required": [
+      "prompt",
+      "start_image_url"
+    ],
+    "type": "object"
+  }
+}

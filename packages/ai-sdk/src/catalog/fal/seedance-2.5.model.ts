@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { hasUploadedImage } from "../shared/mediaPresence";
 export const falSeedance25Model = defineModel({
     meta: {
         id: 'fal-ai-seedance-2.5', canonicalModelId: 'seedance-2.5', seriesId: 'seedance', seriesRank: 2.5,
@@ -23,6 +24,8 @@ export const falSeedance25Model = defineModel({
         {
             id: 'falSeedance25AspectRatio', type: 'dropdown', order: 2,
             default: 'smart',
+            // 图生视频端点的比例只能跟随首帧（官方 aspect_ratio 只收 auto），有首帧图时不让选。
+            visible: { condition: (params) => params.falSeedance25Mode === 'reference-to-video' || !hasUploadedImage(params) },
             options: [
                 { value: 'smart' },
                 ...['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'].map((value) => ({ value }))
@@ -92,7 +95,7 @@ export const falSeedance25Model = defineModel({
                 duration: params.falSeedance25AutoDuration === true
                     ? 'auto'
                     : String(Math.min(30, Math.max(4, Math.round(Number(params.falSeedance25Duration || 5))))),
-                aspect_ratio: raw === 'smart' && (images.length + videos.length) > 0 ? 'auto' : ratio,
+                aspect_ratio: (params.falSeedance25Mode !== 'reference-to-video' && images.length > 0) || (raw === 'smart' && (images.length + videos.length) > 0) ? 'auto' : ratio,
                 generate_audio: params.falSeedance25GenerateAudio !== false,
                 bitrate_mode: params.falSeedance25Bitrate === 'high' ? 'high' : 'standard'
             };

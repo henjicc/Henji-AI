@@ -1,0 +1,39 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=google/gemini-omni-flash/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "google/gemini-omni-flash/image-to-video",
+  "input": {
+    "required": [
+      "prompt",
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "image_url": {
+        "type": "string"
+      },
+      "prompt": {
+        "maxLength": 20000,
+        "type": "string"
+      },
+      "aspect_ratio": {
+        "type": "string",
+        "enum": [
+          "16:9",
+          "9:16"
+        ],
+        "default": "16:9"
+      },
+      "duration": {
+        "minimum": 3,
+        "maximum": 10,
+        "type": "integer",
+        "default": 8
+      }
+    }
+  }
+}

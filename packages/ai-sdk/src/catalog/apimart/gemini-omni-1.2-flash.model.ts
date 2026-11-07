@@ -58,9 +58,10 @@ export const apimartGeminiOmni12FlashModel = defineModel({
     images: { max: 2 }, videos: { max: 0 },
     rules: [
       { when: 'apimartGeminiOmni12Channel === "ext" && apimartGeminiOmni12Mode === "text-image-to-video"', images: { max: 1 } },
-      { when: 'apimartGeminiOmni12Mode === "reference-to-video"', images: { max: 10 } },
+      // 多图参考至少 1 张参考图。
+      { when: 'apimartGeminiOmni12Mode === "reference-to-video"', images: { min: 1, max: 10 } },
       { when: 'apimartGeminiOmni12Mode === "edit" || apimartGeminiOmni12Mode === "extend"', images: { max: 0 }, videos: { exact: 1 } },
-      { when: isContinued, images: { max: 0 }, videos: { exact: 0 } },
+      { when: isContinued, images: { exact: 0 }, videos: { exact: 0 } },
       { videoConstraints: { maxDurationSec: 15 } },
     ],
   },

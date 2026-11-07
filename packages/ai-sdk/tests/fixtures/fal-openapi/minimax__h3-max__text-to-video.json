@@ -1,0 +1,84 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=minimax/h3-max/text-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "minimax/h3-max/text-to-video",
+  "input": {
+    "properties": {
+      "resolution": {
+        "default": "768P",
+        "enum": [
+          "480P",
+          "768P",
+          "1080P"
+        ],
+        "type": "string"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "duration": {
+        "default": 5,
+        "minimum": 0.92,
+        "maximum": 15,
+        "type": "number"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "prompt_expansion_mode": {
+        "default": "balanced",
+        "type": "string"
+      },
+      "target_audio_url": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "type": "string",
+            "pattern": "\\S"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "aspect_ratio": {
+        "default": "16:9",
+        "enum": [
+          "21:9",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16"
+        ],
+        "type": "string"
+      },
+      "prompt": {
+        "maxLength": 50000,
+        "type": "string",
+        "minLength": 1
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt",
+      "prompt_expansion_mode"
+    ]
+  }
+}

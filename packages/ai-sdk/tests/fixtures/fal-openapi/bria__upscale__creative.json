@@ -1,0 +1,31 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=bria/upscale/creative",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "bria/upscale/creative",
+  "input": {
+    "properties": {
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "image_url": {
+        "type": "string",
+        "default": "https://bria-datasets.s3.us-east-1.amazonaws.com/upscale/wild-west.png"
+      },
+      "seed": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "default": 5555
+      },
+      "preserve_alpha": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "type": "object"
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=topaz/upscale/image/precision",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "topaz/upscale/image/precision",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "Standard V2",
+          "High Fidelity V3",
+          "High Fidelity V2",
+          "Low Resolution V2",
+          "CGI",
+          "Text Refine",
+          "Faces"
+        ],
+        "default": "Standard V2"
+      },
+      "denoise": {
+        "anyOf": [
+          {
+            "maximum": 1,
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sharpen": {
+        "anyOf": [
+          {
+            "maximum": 1,
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "strength": {
+        "anyOf": [
+          {
+            "maximum": 1,
+            "type": "number",
+            "minimum": 0.01
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "face_enhancement_creativity": {
+        "maximum": 1,
+        "type": "number",
+        "default": 0,
+        "minimum": 0
+      },
+      "upscale_factor": {
+        "maximum": 4,
+        "type": "number",
+        "default": 2,
+        "minimum": 1
+      },
+      "face_enhancement_strength": {
+        "maximum": 1,
+        "type": "number",
+        "default": 0.8,
+        "minimum": 0
+      },
+      "fix_compression": {
+        "anyOf": [
+          {
+            "maximum": 1,
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "output_format": {
+        "type": "string",
+        "enum": [
+          "jpeg",
+          "png"
+        ],
+        "default": "jpeg"
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "subject_detection": {
+        "type": "string",
+        "enum": [
+          "All",
+          "Foreground",
+          "Background"
+        ],
+        "default": "All"
+      },
+      "image_url": {
+        "type": "string",
+        "minLength": 1
+      },
+      "face_enhancement": {
+        "type": "boolean",
+        "default": true
+      },
+      "crop_to_fill": {
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "type": "object"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=xai/grok-imagine-video/v1.5/text-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "xai/grok-imagine-video/v1.5/text-to-video",
+  "input": {
+    "properties": {
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "duration": {
+        "type": "integer",
+        "default": 6,
+        "minimum": 1,
+        "maximum": 15
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "4:3",
+          "3:2",
+          "1:1",
+          "2:3",
+          "3:4",
+          "9:16"
+        ],
+        "default": "16:9",
+        "type": "string"
+      },
+      "resolution": {
+        "enum": [
+          "480p",
+          "720p",
+          "1080p"
+        ],
+        "default": "720p",
+        "type": "string"
+      },
+      "prompt": {
+        "maxLength": 4096,
+        "type": "string"
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt"
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/kling-video/o1/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/kling-video/o1/image-to-video",
+  "input": {
+    "properties": {
+      "prompt": {
+        "maxLength": 2500,
+        "type": "string"
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "limit_description": "Max file size: 50.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "duration": {
+        "enum": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10"
+        ],
+        "default": "5",
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "start_image_url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "prompt",
+      "start_image_url"
+    ],
+    "type": "object"
+  }
+}

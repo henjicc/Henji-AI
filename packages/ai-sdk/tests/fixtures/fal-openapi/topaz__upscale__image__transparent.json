@@ -1,0 +1,30 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=topaz/upscale/image/transparent",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "topaz/upscale/image/transparent",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "properties": {
+      "output_format": {
+        "type": "string",
+        "const": "png",
+        "default": "png"
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "image_url": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "type": "object"
+  }
+}

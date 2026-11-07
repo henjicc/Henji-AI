@@ -38,6 +38,7 @@ function nearestRatio(params: JsonObject): string {
 export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDefinition, 'meta'> {
   const p = variant.idPrefix
   const isReference = (params: JsonObject) => param(params, p, 'Mode') === 'reference-to-video'
+  const clampedSeconds = (params: JsonObject) => Math.min(variant.maxDuration, Math.max(3, Number(param(params, p, 'Duration') ?? 5) || 5))
   const duration = (params: JsonObject) => {
     const value = Number(param(params, p, 'Duration') ?? 5)
     if (!Number.isInteger(value) || value < 3 || value > variant.maxDuration) throw new Error(`${variant.name} 时长须为 3–${variant.maxDuration} 秒`)
@@ -53,6 +54,14 @@ export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDef
       videos: { max: 0 },
       rules: [{ when: `${p}Mode === "reference-to-video"`, images: { max: 10 }, videos: { max: 5 } }],
     },
+    // 关键帧张数随时长变：每秒 1 张再加首帧，最多 10 张（官方按秒数限制）。写成提交前提示而不是数量上限：
+    // 上限会让画布在缩短时长后把关键帧序列悄悄换成参考生视频。
+    requirements: variant.firstFrameOnly ? [] : [3, 4, 5, 6, 7, 8].map(seconds => ({
+      id: `${p}-keyframes-${seconds}s`,
+      when: `${p}Mode !== "reference-to-video" && ${p}Duration === "${seconds}"`,
+      require: { images: { max: seconds + 1 } },
+      message: { title: '关键帧太多', message: `${variant.name} ${seconds} 秒最多使用 ${seconds + 1} 张关键帧`, type: 'warning' as const },
+    })),
     params: [
       { id: `${p}Mode`, type: 'dropdown', order: 1, default: 'text-image-to-video', options: MODES.map(value => ({ value })) },
       // 关键帧模式下有图时画面比例跟随首帧，请求不带比例，界面也不显示。
@@ -95,7 +104,7 @@ export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDef
           return { model: `${variant.modelPrefix}reference-to-video`, input }
         }
         // 有帧时画面比例跟随首帧，比例只在纯文生视频时生效。
-        const maxFrames = variant.firstFrameOnly ? 1 : Math.min(seconds + 1, 10)
+        const maxFrames = variant.firstFrameOnly ? 1 : Math.min(clampedSeconds(params) + 1, 10)
         if (images.length > maxFrames) throw new Error(`${variant.name} ${seconds} 秒最多使用 ${maxFrames} 张关键帧`)
         if (images.length === 0) input.aspect_ratio = RATIOS.includes(rawRatio) ? rawRatio : nearestRatio(params)
         if (images[0]) input.first_frame_url = images[0]
@@ -110,7 +119,7 @@ export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDef
       currency: '$',
       calculator: (params) => {
         const rate = variant.rates[resolution(params)]
-        const seconds = Math.min(variant.maxDuration, Math.max(3, Number(param(params, p, 'Duration') ?? 5) || 5))
+        const seconds = clampedSeconds(params)
         const elementSeconds = subjectElementVideoSeconds(param(params, p, 'Elements'))
         if (!isReference(params) || (!hasUploadedVideo(params) && elementSeconds === 0)) return rate.base * seconds
         // 带视频输入（参考视频或视频元素）时输入时长也计费：输入不超过输出按输出 2 倍计，否则按输入加输出。

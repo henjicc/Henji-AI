@@ -1,0 +1,103 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=blackforestlabs/flux-3-max/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "blackforestlabs/flux-3-max/image-to-video",
+  "input": {
+    "required": [
+      "prompt",
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "reasoning_level": {
+        "default": "high",
+        "enum": [
+          "low",
+          "high"
+        ],
+        "type": "string"
+      },
+      "resolution": {
+        "default": "720p",
+        "enum": [
+          "720p",
+          "1080p",
+          "2K",
+          "4K"
+        ],
+        "type": "string"
+      },
+      "aspect_ratio": {
+        "default": "auto",
+        "enum": [
+          "auto",
+          "21:9",
+          "2:1",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16"
+        ],
+        "type": "string"
+      },
+      "generate_audio": {
+        "default": true,
+        "type": "boolean"
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "enum": [
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "type": "integer"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "prompt": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "image_url": {
+        "type": "string"
+      }
+    }
+  }
+}

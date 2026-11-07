@@ -139,7 +139,8 @@ export const seedanceModel = defineModel({
                 resolution,
                 camera_fixed: cameraFixed
             };
-            if (aspectRatio && aspectRatio !== 'smart') {
+            // “自动”只有图生视频端点认，文生视频不发，按平台默认比例。
+            if (aspectRatio && aspectRatio !== 'smart' && (aspectRatio !== 'auto' || mode === 'image-to-video')) {
                 requestData.aspect_ratio = aspectRatio;
             }
             if (mode === 'image-to-video' && images.length > 0) {

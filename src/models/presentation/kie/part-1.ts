@@ -2,7 +2,37 @@
 
 import { sharedFieldText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
+import type { Linkage } from '@/core/types/Linkage'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
+
+function hasUploadedImage(params: Record<string, unknown>): boolean {
+  return [params.uploadedFilePaths, params.images, params.uploadedImages]
+    .some(value => Array.isArray(value) && value.length > 0)
+}
+
+/**
+ * GPT Image 2（KIE）各比例能用的分辨率，与 SDK 构建器的校验一致：5:4、4:5 只有 1K；
+ * 文生图的 3:1、1:3、9:21 只有 1K；图生图的 1:1 没有 4K。智能比例由构建器在可用比例里挑，不受限。
+ */
+function kieGptImage2Resolutions(params: Record<string, unknown>): string[] {
+  const ratio = params.kieGptImage2AspectRatio
+  if (ratio === '5:4' || ratio === '4:5') return ['1K']
+  const image = hasUploadedImage(params)
+  if (!image && (ratio === '3:1' || ratio === '1:3' || ratio === '9:21')) return ['1K']
+  if (image && ratio === '1:1') return ['1K', '2K']
+  return ['1K', '2K', '4K']
+}
+const kieGptImage2Triggers = ['kieGptImage2AspectRatio', 'uploadedImages', 'images']
+const kieGptImage2Linkages: Linkage[] = [
+  {
+    trigger: kieGptImage2Triggers, effect: 'filterOptions', target: 'kieGptImage2Resolution',
+    filter: (_value, options, params) => options.filter(option => kieGptImage2Resolutions(params).includes(String(option.value))),
+  },
+  {
+    trigger: kieGptImage2Triggers, effect: 'reset', targets: ['kieGptImage2Resolution'],
+    condition: (_value, params) => !kieGptImage2Resolutions(params).includes(String(params.kieGptImage2Resolution)),
+  },
+]
 
 export const kiePresentationPart1: Record<string, ModelPresentation> = {
   "kie-gemini-omni-video": {
@@ -115,7 +145,7 @@ export const kiePresentationPart1: Record<string, ModelPresentation> = {
         })),
       },
     },
-    linkages: [],
+    linkages: kieGptImage2Linkages,
   },
   "kie-grok-imagine-2.0": {
     meta: {

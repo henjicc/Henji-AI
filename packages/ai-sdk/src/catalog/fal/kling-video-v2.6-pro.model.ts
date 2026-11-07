@@ -201,7 +201,8 @@ export const klingVideoV26ProModel = defineModel({
                 generate_audio: generateAudio
             };
             if (images.length > 0) {
-                requestData.image_url = images[0];
+                // 图生视频端点的首帧字段是 start_image_url（官方 OpenAPI 必填），image_url 只属于动作控制端点。
+                requestData.start_image_url = images[0];
             }
             else {
                 if (aspectRatio && aspectRatio !== 'auto') {

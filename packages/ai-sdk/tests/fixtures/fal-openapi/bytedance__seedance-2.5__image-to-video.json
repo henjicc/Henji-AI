@@ -1,0 +1,123 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=bytedance/seedance-2.5/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "bytedance/seedance-2.5/image-to-video",
+  "input": {
+    "type": "object",
+    "required": [
+      "image_url"
+    ],
+    "properties": {
+      "prompt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "codec": {
+        "enum": [
+          "auto",
+          "H264",
+          "H265"
+        ],
+        "default": "auto",
+        "type": "string"
+      },
+      "duration": {
+        "enum": [
+          "auto",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19",
+          "20",
+          "21",
+          "22",
+          "23",
+          "24",
+          "25",
+          "26",
+          "27",
+          "28",
+          "29",
+          "30"
+        ],
+        "default": "auto",
+        "type": "string"
+      },
+      "bitrate_mode": {
+        "enum": [
+          "standard",
+          "high"
+        ],
+        "default": "standard",
+        "type": "string"
+      },
+      "end_user_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "aspect_ratio": {
+        "const": "auto",
+        "default": "auto",
+        "type": "string"
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "image_url": {
+        "type": "string"
+      },
+      "draft": {
+        "default": false,
+        "type": "boolean"
+      },
+      "generate_audio": {
+        "default": true,
+        "type": "boolean"
+      },
+      "resolution": {
+        "enum": [
+          "480p",
+          "720p",
+          "1080p"
+        ],
+        "default": "720p",
+        "type": "string"
+      }
+    }
+  }
+}

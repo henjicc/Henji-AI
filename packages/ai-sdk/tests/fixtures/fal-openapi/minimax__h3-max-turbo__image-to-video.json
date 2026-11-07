@@ -1,0 +1,92 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=minimax/h3-max-turbo/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "minimax/h3-max-turbo/image-to-video",
+  "input": {
+    "type": "object",
+    "required": [
+      "prompt",
+      "prompt_expansion_mode"
+    ],
+    "properties": {
+      "resolution": {
+        "default": "768P",
+        "enum": [
+          "480P",
+          "768P",
+          "1080P"
+        ],
+        "type": "string"
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "duration": {
+        "default": 5,
+        "minimum": 0.92,
+        "maximum": 15,
+        "type": "number"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "prompt_expansion_mode": {
+        "default": "balanced",
+        "type": "string"
+      },
+      "image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "target_audio_url": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "type": "string",
+            "pattern": "\\S"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "prompt": {
+        "maxLength": 50000,
+        "type": "string",
+        "minLength": 1
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    }
+  }
+}

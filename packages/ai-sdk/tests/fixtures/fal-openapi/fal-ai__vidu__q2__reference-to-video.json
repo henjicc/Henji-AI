@@ -1,0 +1,97 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/vidu/q2/reference-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/vidu/q2/reference-to-video",
+  "input": {
+    "properties": {
+      "reference_image_urls": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "enable_safety_checker": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": true,
+        "hidden": true
+      },
+      "prompt": {
+        "maxLength": 3000,
+        "type": "string"
+      },
+      "bgm": {
+        "default": false,
+        "type": "boolean"
+      },
+      "movement_amplitude": {
+        "enum": [
+          "auto",
+          "small",
+          "medium",
+          "large"
+        ],
+        "default": "auto",
+        "type": "string"
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16",
+          "1:1"
+        ],
+        "default": "16:9",
+        "type": "string"
+      },
+      "resolution": {
+        "enum": [
+          "360p",
+          "520p",
+          "720p",
+          "1080p"
+        ],
+        "default": "720p",
+        "type": "string"
+      },
+      "duration": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "default": 4,
+        "type": "integer"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "prompt",
+      "reference_image_urls"
+    ],
+    "type": "object"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/image-apps-v2/outpaint",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/image-apps-v2/outpaint",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "output_format": {
+        "enum": [
+          "png",
+          "jpeg",
+          "jpg",
+          "webp"
+        ],
+        "default": "png",
+        "type": "string"
+      },
+      "zoom_out_percentage": {
+        "maximum": 90,
+        "minimum": 0,
+        "default": 20,
+        "type": "number"
+      },
+      "expand_left": {
+        "maximum": 700,
+        "minimum": 0,
+        "default": 0,
+        "type": "integer"
+      },
+      "prompt": {
+        "maxLength": 500,
+        "default": "",
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "image_url": {
+        "type": "string"
+      },
+      "num_images": {
+        "maximum": 4,
+        "minimum": 1,
+        "default": 1,
+        "type": "integer"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "expand_top": {
+        "maximum": 700,
+        "minimum": 0,
+        "default": 0,
+        "type": "integer"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "expand_right": {
+        "maximum": 700,
+        "minimum": 0,
+        "default": 0,
+        "type": "integer"
+      },
+      "expand_bottom": {
+        "maximum": 700,
+        "minimum": 0,
+        "default": 0,
+        "type": "integer"
+      }
+    }
+  }
+}

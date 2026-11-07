@@ -170,3 +170,21 @@ curl "https://api.fal.ai/v1/account/billing?expand=credits" \
 | 成本预估 API | https://fal.ai/docs/platform-apis/v1/models/pricing/estimate | 否 |
 | 账户余额 | https://fal.ai/docs/platform-apis/v1/account/billing | 否（调用需 Admin Key） |
 | API Key | https://fal.ai/dashboard/keys | 是 |
+
+## 2026-11-08 官方输入格式核对
+
+Fal 为每个端点公开 OpenAPI（`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<端点>`，无需登录）。开发者测试 `src/features/developer/falOfficialSchema.test.ts` 把各端点的输入格式存成快照（`tests/fixtures/fal-openapi/`，去掉说明与示例），再拿参数组合检查构建出的每个请求去校验字段名、取值范围、枚举与必填项，官方没列的字段也报出来；过时模型不核对。首轮查出并修正：
+
+| 模型 | 问题 | 修正 |
+|---|---|---|
+| Kling 2.6 Pro 图生视频 | 首帧发的是 `image_url`，官方必填 `start_image_url` | 改发 `start_image_url`（动作控制端点仍是 `image_url`） |
+| Kling O1 图生视频 | 端点必填首帧图，界面允许不传图提交 | 图生视频图片下限 1 张，没图时自动切到参考生视频（纯文字可生成） |
+| Kling O1 视频编辑 | 官方编辑端点没有 `duration` | 编辑模式不发时长、界面隐藏，按输入视频时长估价（读不到时按 10 秒） |
+| Vidu Q2 | 运动幅度发 `low` / `high`，官方是 `small` / `medium` / `large`；续写端点只收 2–7 秒且没有 `bgm`；图生视频、参考生视频必填图片，界面允许不传图 | 界面档位不变，请求时换成官方值；续写时界面去掉 8 秒、隐藏背景音乐，构建时也夹到 7 秒、不发 `bgm`；两个图片模式图片下限 1 张，没图时自动切回文生视频 |
+| Seedance 2.5 图生视频 | 端点的 `aspect_ratio` 只收 `auto` | 有首帧图时比例跟随图片、界面隐藏比例 |
+| Seedance V1 文生视频 | 文生视频不收 `auto` 比例 | 文生视频不提供“自动”，构建时也不发 |
+| Qwen3 TTS 1.7B | `temperature` 官方 (0, 1]，界面给到 0–2 | 界面收窄到 0.1–1，构建时夹紧；参数的静态范围仍是 0–2，旧工程存的值照常通过校验 |
+| Z-Image Turbo 图生图 | `strength` 官方大于 0 | 界面下限 0.05，构建时夹紧；静态下限仍为 0，兼容旧值 |
+| PixVerse v5.5 | 单图生视频端点没有 `aspect_ratio`，首尾帧转场没有 `generate_multi_clip_switch` | 对应场景不发、界面隐藏 |
+
+LTX-2、Veo 3.1 的端点 OpenAPI 已取不到，两者早已标为过时，不再核对。快照需要更新时用 `HENJI_REFRESH_FAL_OPENAPI=1` 运行该测试重新抓取。

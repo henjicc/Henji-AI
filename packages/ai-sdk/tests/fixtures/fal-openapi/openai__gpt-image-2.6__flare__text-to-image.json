@@ -1,0 +1,146 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=openai/gpt-image-2.6/flare/text-to-image",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "openai/gpt-image-2.6/flare/text-to-image",
+  "input": {
+    "properties": {
+      "prompt": {
+        "maxLength": 32000,
+        "type": "string",
+        "minLength": 1
+      },
+      "output_compression": {
+        "anyOf": [
+          {
+            "maximum": 100,
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "frame_count": {
+        "default": 9,
+        "maximum": 16,
+        "type": "integer",
+        "minimum": 2
+      },
+      "reasoning_effort": {
+        "default": "high",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "type": "string"
+      },
+      "num_images": {
+        "default": 1,
+        "maximum": 10,
+        "type": "integer",
+        "minimum": 1
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "quality": {
+        "default": "high",
+        "enum": [
+          "auto",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "type": "string"
+      },
+      "output_format": {
+        "default": "png",
+        "enum": [
+          "jpeg",
+          "png",
+          "webp",
+          "gif",
+          "svg"
+        ],
+        "type": "string"
+      },
+      "frame_duration_ms": {
+        "default": 200,
+        "maximum": 2000,
+        "type": "integer",
+        "minimum": 20
+      },
+      "svg_model": {
+        "default": "gpt-6-astra",
+        "enum": [
+          "gpt-6-astra",
+          "gpt-5.5",
+          "gpt-5.4",
+          "gpt-5.6-terra",
+          "gpt-6-luna"
+        ],
+        "type": "string"
+      },
+      "image_size": {
+        "default": "landscape_4_3",
+        "anyOf": [
+          {
+            "properties": {
+              "width": {
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "type": "integer",
+                "maximum": 14142
+              },
+              "height": {
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "type": "integer",
+                "maximum": 14142
+              }
+            },
+            "type": "object"
+          },
+          {
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "background": {
+        "default": "auto",
+        "enum": [
+          "auto",
+          "transparent",
+          "opaque"
+        ],
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "prompt"
+    ],
+    "type": "object"
+  }
+}

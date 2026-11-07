@@ -1,0 +1,91 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=bytedance/seedance-2.0/fast/text-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "bytedance/seedance-2.0/fast/text-to-video",
+  "input": {
+    "properties": {
+      "duration": {
+        "default": "auto",
+        "type": "string",
+        "enum": [
+          "auto",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15"
+        ]
+      },
+      "aspect_ratio": {
+        "default": "auto",
+        "type": "string",
+        "enum": [
+          "auto",
+          "21:9",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16"
+        ]
+      },
+      "resolution": {
+        "default": "720p",
+        "type": "string",
+        "enum": [
+          "480p",
+          "720p"
+        ]
+      },
+      "generate_audio": {
+        "default": true,
+        "type": "boolean"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "codec": {
+        "default": "auto",
+        "enum": [
+          "auto",
+          "H264",
+          "H265"
+        ],
+        "type": "string"
+      },
+      "bitrate_mode": {
+        "default": "standard",
+        "enum": [
+          "standard",
+          "high"
+        ],
+        "type": "string"
+      },
+      "end_user_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "prompt"
+    ],
+    "type": "object"
+  }
+}

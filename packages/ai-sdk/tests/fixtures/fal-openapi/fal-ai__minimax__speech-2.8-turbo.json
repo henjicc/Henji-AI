@@ -1,0 +1,254 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/minimax/speech-2.8-turbo",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/minimax/speech-2.8-turbo",
+  "input": {
+    "required": [
+      "prompt"
+    ],
+    "type": "object",
+    "properties": {
+      "output_format": {
+        "enum": [
+          "url",
+          "hex"
+        ],
+        "default": "hex",
+        "type": "string"
+      },
+      "prompt": {
+        "maxLength": 10000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "language_boost": {
+        "anyOf": [
+          {
+            "enum": [
+              "Chinese",
+              "Chinese,Yue",
+              "English",
+              "Arabic",
+              "Russian",
+              "Spanish",
+              "French",
+              "Portuguese",
+              "German",
+              "Turkish",
+              "Dutch",
+              "Ukrainian",
+              "Vietnamese",
+              "Indonesian",
+              "Japanese",
+              "Italian",
+              "Korean",
+              "Thai",
+              "Polish",
+              "Romanian",
+              "Greek",
+              "Czech",
+              "Finnish",
+              "Hindi",
+              "Bulgarian",
+              "Danish",
+              "Hebrew",
+              "Malay",
+              "Slovak",
+              "Swedish",
+              "Croatian",
+              "Hungarian",
+              "Norwegian",
+              "Slovenian",
+              "Catalan",
+              "Nynorsk",
+              "Afrikaans",
+              "auto"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "audio_setting": {
+        "properties": {
+          "channel": {
+            "enum": [
+              1,
+              2
+            ],
+            "default": 1,
+            "type": "integer"
+          },
+          "bitrate": {
+            "enum": [
+              32000,
+              64000,
+              128000,
+              256000
+            ],
+            "default": 128000,
+            "type": "integer"
+          },
+          "sample_rate": {
+            "enum": [
+              8000,
+              16000,
+              22050,
+              24000,
+              32000,
+              44100
+            ],
+            "default": 32000,
+            "type": "integer"
+          },
+          "format": {
+            "enum": [
+              "mp3",
+              "pcm",
+              "flac"
+            ],
+            "default": "mp3",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "normalization_setting": {
+        "properties": {
+          "target_peak": {
+            "maximum": 0,
+            "minimum": -3,
+            "default": -0.5,
+            "type": "number"
+          },
+          "target_loudness": {
+            "maximum": -10,
+            "minimum": -70,
+            "default": -18,
+            "type": "number"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "target_range": {
+            "maximum": 20,
+            "minimum": 0,
+            "default": 8,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "pronunciation_dict": {
+        "anyOf": [
+          {
+            "properties": {
+              "tone_list": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "voice_modify": {
+        "anyOf": [
+          {
+            "properties": {
+              "timbre": {
+                "maximum": 100,
+                "minimum": -100,
+                "default": 0,
+                "type": "integer"
+              },
+              "pitch": {
+                "maximum": 100,
+                "minimum": -100,
+                "default": 0,
+                "type": "integer"
+              },
+              "intensity": {
+                "maximum": 100,
+                "minimum": -100,
+                "default": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "voice_setting": {
+        "properties": {
+          "vol": {
+            "maximum": 10,
+            "minimum": 0.01,
+            "default": 1,
+            "type": "number"
+          },
+          "voice_id": {
+            "minLength": 1,
+            "default": "Wise_Woman",
+            "type": "string"
+          },
+          "emotion": {
+            "anyOf": [
+              {
+                "enum": [
+                  "happy",
+                  "sad",
+                  "angry",
+                  "fearful",
+                  "disgusted",
+                  "surprised",
+                  "neutral"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "english_normalization": {
+            "default": false,
+            "type": "boolean"
+          },
+          "pitch": {
+            "maximum": 12,
+            "minimum": -12,
+            "default": 0,
+            "type": "integer"
+          },
+          "speed": {
+            "maximum": 2,
+            "minimum": 0.5,
+            "default": 1,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}

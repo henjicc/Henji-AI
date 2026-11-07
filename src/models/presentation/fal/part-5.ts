@@ -238,7 +238,17 @@ export const falPresentationPart5: Record<string, ModelPresentation> = {
         name: sharedFieldText('fastMode'),
       },
     },
-    linkages: [],
+    // 文生视频端点没有“自动”比例（官方只收具体比例），只在图生视频里提供。
+    linkages: [
+      {
+        trigger: 'falSeedanceV1Mode', effect: 'filterOptions', target: 'falSeedanceV1AspectRatio',
+        filter: (mode, options) => mode === 'image-to-video' ? options : options.filter(option => option.value !== 'auto'),
+      },
+      {
+        trigger: 'falSeedanceV1Mode', effect: 'reset', targets: ['falSeedanceV1AspectRatio'],
+        condition: (mode, params) => mode !== 'image-to-video' && params.falSeedanceV1AspectRatio === 'auto',
+      },
+    ],
   },
   "fal-ai-seedream-5.0-lite": {
     meta: {

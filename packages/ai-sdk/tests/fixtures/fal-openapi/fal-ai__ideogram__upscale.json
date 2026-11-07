@@ -1,0 +1,65 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/ideogram/upscale",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/ideogram/upscale",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "resemblance": {
+        "minimum": 1,
+        "type": "integer",
+        "maximum": 100,
+        "default": 50
+      },
+      "prompt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": ""
+      },
+      "image_url": {
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_prompt_expansion": {
+        "type": "boolean",
+        "default": false
+      },
+      "detail": {
+        "minimum": 1,
+        "type": "integer",
+        "maximum": 100,
+        "default": 50
+      }
+    }
+  }
+}

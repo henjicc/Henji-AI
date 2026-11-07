@@ -61,9 +61,12 @@ export const kieGptImage2Model = defineModel({
                 }
                 return pair[0] / pair[1];
             };
-            const pickClosestRatio = (target: number): string => {
-                const options = ['3:1', '21:9', '2:1', '16:9', '3:2', '4:3', '5:4', '1:1', '4:5', '3:4', '2:3', '9:16', '1:2', '9:21', '1:3'];
-                let best = '1:1';
+            // 智能比例只在当前分辨率与有无参考图下支持的比例里挑最接近的，不自己挑出平台会拒绝的组合。
+            const pickClosestRatio = (target: number, resolution: string, hasImages: boolean): string => {
+                const options = ['3:1', '21:9', '2:1', '16:9', '3:2', '4:3', '5:4', '1:1', '4:5', '3:4', '2:3', '9:16', '1:2', '9:21', '1:3']
+                    .filter(ratio => resolution === '1K' || (!['5:4', '4:5'].includes(ratio)
+                        && (hasImages ? !(ratio === '1:1' && resolution === '4K') : !['3:1', '1:3', '9:21'].includes(ratio))));
+                let best = options[0];
                 let bestDiff = Number.POSITIVE_INFINITY;
                 for (const ratioText of options) {
                     const ratio = parseRatio(ratioText);
@@ -96,7 +99,7 @@ export const kieGptImage2Model = defineModel({
                 : null;
             const aspectRatioText = typeof rawAspectRatio === 'string' ? rawAspectRatio : '';
             const aspectRatio = !aspectRatioText || aspectRatioText === 'smart' || aspectRatioText === 'auto'
-                ? (ratioHint ? pickClosestRatio(ratioHint) : '1:1')
+                ? pickClosestRatio(ratioHint ?? 1, String(rawResolution), images.length > 0)
                 : aspectRatioText;
             const resolution = String(rawResolution);
             const textUnsupportedRatios = ['5:4', '4:5', '3:1', '1:3', '9:21'];

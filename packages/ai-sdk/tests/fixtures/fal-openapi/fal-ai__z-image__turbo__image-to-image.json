@@ -1,0 +1,116 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/z-image/turbo/image-to-image",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/z-image/turbo/image-to-image",
+  "input": {
+    "properties": {
+      "image_url": {
+        "type": "string"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "output_format": {
+        "enum": [
+          "jpeg",
+          "png",
+          "webp"
+        ],
+        "type": "string",
+        "default": "png"
+      },
+      "num_images": {
+        "minimum": 1,
+        "type": "integer",
+        "default": 1,
+        "maximum": 4
+      },
+      "strength": {
+        "exclusiveMinimum": 0,
+        "type": "number",
+        "default": 0.6,
+        "maximum": 1
+      },
+      "acceleration": {
+        "enum": [
+          "none",
+          "regular",
+          "high"
+        ],
+        "type": "string",
+        "default": "regular"
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "image_size": {
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "exclusiveMinimum": 0,
+                "type": "integer",
+                "default": 512,
+                "maximum": 14142
+              },
+              "width": {
+                "exclusiveMinimum": 0,
+                "type": "integer",
+                "default": 512,
+                "maximum": 14142
+              }
+            },
+            "type": "object"
+          },
+          {
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto"
+            ],
+            "type": "string"
+          }
+        ],
+        "default": "auto"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_prompt_expansion": {
+        "type": "boolean",
+        "default": false
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "num_inference_steps": {
+        "minimum": 1,
+        "type": "integer",
+        "default": 8,
+        "maximum": 8
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt",
+      "image_url"
+    ]
+  }
+}

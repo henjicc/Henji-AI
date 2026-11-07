@@ -1,0 +1,130 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=openai/gpt-image-2.5/sunburst/edit",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "openai/gpt-image-2.5/sunburst/edit",
+  "input": {
+    "properties": {
+      "output_compression": {
+        "anyOf": [
+          {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "prompt": {
+        "maxLength": 32000,
+        "type": "string",
+        "minLength": 1
+      },
+      "num_images": {
+        "maximum": 10,
+        "default": 1,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "mask_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "background": {
+        "enum": [
+          "auto",
+          "transparent",
+          "opaque"
+        ],
+        "default": "auto",
+        "type": "string"
+      },
+      "output_format": {
+        "enum": [
+          "jpeg",
+          "png",
+          "webp"
+        ],
+        "default": "png",
+        "type": "string"
+      },
+      "quality": {
+        "enum": [
+          "auto",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "type": "string",
+        "default": "high"
+      },
+      "image_size": {
+        "default": "auto",
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "maximum": 14142,
+                "exclusiveMinimum": 0,
+                "type": "integer",
+                "default": 512
+              },
+              "width": {
+                "maximum": 14142,
+                "exclusiveMinimum": 0,
+                "type": "integer",
+                "default": 512
+              }
+            },
+            "type": "object"
+          },
+          {
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "image_urls": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 16
+      }
+    },
+    "required": [
+      "prompt",
+      "image_urls"
+    ],
+    "type": "object"
+  }
+}

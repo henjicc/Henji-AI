@@ -1,0 +1,129 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=google/nano-banana-2.1",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "google/nano-banana-2.1",
+  "input": {
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "minLength": 3,
+        "maxLength": 50000,
+        "type": "string"
+      },
+      "thinking_level": {
+        "anyOf": [
+          {
+            "enum": [
+              "minimal",
+              "medium",
+              "high"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": "medium"
+      },
+      "system_prompt": {
+        "maxLength": 50000,
+        "default": "",
+        "type": "string"
+      },
+      "safety_tolerance": {
+        "enum": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "default": "4",
+        "type": "string"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "resolution": {
+        "enum": [
+          "1K",
+          "2K",
+          "4K"
+        ],
+        "default": "1K",
+        "type": "string"
+      },
+      "output_format": {
+        "enum": [
+          "jpeg",
+          "png",
+          "webp"
+        ],
+        "default": "png",
+        "type": "string"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "aspect_ratio": {
+        "default": "auto",
+        "anyOf": [
+          {
+            "enum": [
+              "auto",
+              "21:9",
+              "16:9",
+              "3:2",
+              "4:3",
+              "5:4",
+              "1:1",
+              "4:5",
+              "3:4",
+              "2:3",
+              "9:16",
+              "4:1",
+              "1:4",
+              "8:1",
+              "1:8"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_web_search": {
+        "default": false,
+        "type": "boolean"
+      },
+      "limit_generations": {
+        "default": true,
+        "type": "boolean"
+      },
+      "num_images": {
+        "maximum": 4,
+        "default": 1,
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "required": [
+      "prompt"
+    ]
+  }
+}

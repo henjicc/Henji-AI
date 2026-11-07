@@ -1,0 +1,159 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/iclight-v2",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/iclight-v2",
+  "input": {
+    "properties": {
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "image_url": {
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "initial_latent": {
+        "default": "None",
+        "enum": [
+          "None",
+          "Left",
+          "Right",
+          "Top",
+          "Bottom"
+        ],
+        "type": "string"
+      },
+      "output_format": {
+        "default": "jpeg",
+        "enum": [
+          "jpeg",
+          "png"
+        ],
+        "type": "string"
+      },
+      "highres_denoise": {
+        "maximum": 1,
+        "minimum": 0.01,
+        "default": 0.95,
+        "type": "number"
+      },
+      "negative_prompt": {
+        "default": "",
+        "type": "string"
+      },
+      "image_size": {
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "maximum": 14142,
+                "exclusiveMinimum": 0,
+                "default": 512,
+                "type": "integer"
+              },
+              "width": {
+                "maximum": 14142,
+                "exclusiveMinimum": 0,
+                "default": 512,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "enable_hr_fix": {
+        "default": false,
+        "type": "boolean"
+      },
+      "hr_downscale": {
+        "maximum": 1,
+        "minimum": 0.01,
+        "default": 0.5,
+        "type": "number"
+      },
+      "num_images": {
+        "maximum": 4,
+        "minimum": 1,
+        "default": 1,
+        "type": "integer"
+      },
+      "num_inference_steps": {
+        "maximum": 50,
+        "minimum": 1,
+        "default": 28,
+        "type": "integer"
+      },
+      "cfg": {
+        "maximum": 5,
+        "minimum": 0.01,
+        "default": 1,
+        "type": "number"
+      },
+      "mask_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "background_threshold": {
+        "maximum": 1,
+        "minimum": 0.01,
+        "default": 0.67,
+        "type": "number"
+      },
+      "guidance_scale": {
+        "maximum": 20,
+        "minimum": 0,
+        "default": 5,
+        "type": "number"
+      },
+      "lowres_denoise": {
+        "maximum": 1,
+        "minimum": 0.01,
+        "default": 0.98,
+        "type": "number"
+      }
+    },
+    "required": [
+      "prompt",
+      "image_url"
+    ],
+    "type": "object"
+  }
+}

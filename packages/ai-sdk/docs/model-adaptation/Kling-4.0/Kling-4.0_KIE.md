@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-11-07 |
+| 最后更新 | 2026-11-08 |
 | 项目模型 | `kie-kling-4.0`，通用标识 `kling-video-4.0`；Flash 见 [Kling-4.0-Flash_KIE.md](../Kling-4.0-Flash/Kling-4.0-Flash_KIE.md) |
 | model ID | `kling-4.0/keyframe-to-video`、`kling-4.0/reference-to-video` |
 | 文档与价格 | 公开，无需登录 |
@@ -51,3 +51,7 @@
 - [模型页](https://kie.ai/kling-4-0)
 - [实时价格页](https://kie.ai/pricing)（2026-11-07 核对 6 行 kling 4.0 价格）
 - 带视频输入的计费秒数规则见模型页 pricingDesc（2026-11-07 读取）
+
+## 2026-11-08 关键帧张数随时长收住
+
+关键帧模式每秒 1 张再加首帧、最多 10 张（构建时已按此校验）；上传上限现在也按当前时长计算，5 秒最多 6 张，不再等提交才报错。参考生视频仍是图片 10、视频 5。

@@ -1,0 +1,55 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/kling-video/v2.6/standard/motion-control",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/kling-video/v2.6/standard/motion-control",
+  "input": {
+    "properties": {
+      "prompt": {
+        "anyOf": [
+          {
+            "maxLength": 2500,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "character_orientation": {
+        "enum": [
+          "image",
+          "video"
+        ],
+        "type": "string"
+      },
+      "image_url": {
+        "limit_description": "Max file size: 10.0MB, Min width: 340px, Min height: 340px, Max width: 3850px, Max height: 3850px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+        "_fal_ui_field": "image",
+        "type": "string"
+      },
+      "keep_original_sound": {
+        "default": true,
+        "type": "boolean"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "video_url": {
+        "_fal_ui_field": "video",
+        "limit_description": "Max file size: 100.0MB, Min width: 340px, Min height: 340px, Max width: 3850px, Max height: 3850px, Min duration: 3.0s, Max duration: 30.05s, Timeout: 30.0s",
+        "type": "string"
+      }
+    },
+    "required": [
+      "image_url",
+      "video_url",
+      "character_orientation"
+    ],
+    "type": "object"
+  }
+}

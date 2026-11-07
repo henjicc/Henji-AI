@@ -16,7 +16,7 @@ import {
   countChangedParams,
   findMissingRequiredParams,
   isParamDisabled,
-  isParamVisible,
+  applyLinkageFilters, isParamVisible,
 } from '@/components/params/paramVisibility'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { ParamGroupSections, ParamGroupTrigger } from '@/components/params/ParamGroupTrigger'
@@ -126,15 +126,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     [linkageEngine, params, runtimeValues]
   )
 
-  const filteredParams = useMemo(() => {
-    if (!linkageEngine) return visibleParams
-    return visibleParams.map((param): ParamDef => {
-      if (param.type !== 'dropdown' && param.type !== 'radio') return param
-      const options = linkageEngine.getFilteredOptions(param.id, runtimeValues, params)
-      if (!options.length || options === param.options) return param
-      return { ...param, options } as ParamDef
-    })
-  }, [linkageEngine, params, runtimeValues, visibleParams])
+  const filteredParams = useMemo(
+    () => visibleParams.map((param) => applyLinkageFilters(param, runtimeValues, params, linkageEngine)),
+    [linkageEngine, params, runtimeValues, visibleParams]
+  )
 
   const specialPanelSpec = useMemo(() => {
     if (!modelDef || modelDef.meta.provider === 'modelscope') return null

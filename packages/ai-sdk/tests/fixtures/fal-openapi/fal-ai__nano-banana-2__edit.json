@@ -1,0 +1,688 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/nano-banana-2/edit",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/nano-banana-2/edit",
+  "input": {
+    "properties": {
+      "prompt": {
+        "maxLength": 50000,
+        "type": "string",
+        "minLength": 3
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "context": {
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "thought_signature": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "text"
+                },
+                "thought": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "type": "object",
+              "required": [
+                "type",
+                "text"
+              ]
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "thought_signature": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                },
+                "thought": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "image_url": {
+                  "type": "string"
+                }
+              },
+              "type": "object",
+              "required": [
+                "type",
+                "image_url"
+              ]
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "file_url": {
+                  "type": "string"
+                },
+                "mime_type": {
+                  "enum": [
+                    "application/pdf",
+                    "text/plain"
+                  ],
+                  "type": "string"
+                },
+                "thought_signature": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "document"
+                },
+                "thought": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object",
+              "required": [
+                "type",
+                "file_url",
+                "mime_type"
+              ]
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "thought_signature": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "video"
+                },
+                "thought": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "video_url": {
+                  "type": "string"
+                }
+              },
+              "type": "object",
+              "required": [
+                "type",
+                "video_url"
+              ]
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "thought_signature": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": "string",
+                  "const": "signature"
+                },
+                "thought": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object",
+              "required": [
+                "thought_signature",
+                "type"
+              ]
+            }
+          ],
+          "discriminator": {
+            "propertyName": "type",
+            "mapping": {
+              "image": "#/components/schemas/GeminiImagePart",
+              "document": "#/components/schemas/GeminiDocumentPart",
+              "text": "#/components/schemas/GeminiTextPart",
+              "video": "#/components/schemas/GeminiVideoPart",
+              "signature": "#/components/schemas/GeminiSignaturePart"
+            }
+          }
+        }
+      },
+      "thinking_level": {
+        "anyOf": [
+          {
+            "enum": [
+              "minimal",
+              "high"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "top_p": {
+        "anyOf": [
+          {
+            "maximum": 1,
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "limit_generations": {
+        "default": true,
+        "type": "boolean"
+      },
+      "temperature": {
+        "anyOf": [
+          {
+            "maximum": 2,
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "pdf_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "safety_tolerance": {
+        "enum": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "type": "string",
+        "default": "4"
+      },
+      "output_format": {
+        "enum": [
+          "jpeg",
+          "png",
+          "webp"
+        ],
+        "default": "png",
+        "type": "string"
+      },
+      "enable_image_search": {
+        "default": false,
+        "type": "boolean"
+      },
+      "image_urls": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "return_history": {
+        "default": false,
+        "type": "boolean"
+      },
+      "include_thoughts": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "history": {
+        "type": "array",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "parts": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "thought_signature": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "text"
+                      },
+                      "thought": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "text"
+                    ]
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "thought_signature": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "image"
+                      },
+                      "thought": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "image_url": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "image_url"
+                    ]
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "file_url": {
+                        "type": "string"
+                      },
+                      "mime_type": {
+                        "enum": [
+                          "application/pdf",
+                          "text/plain"
+                        ],
+                        "type": "string"
+                      },
+                      "thought_signature": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "document"
+                      },
+                      "thought": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "file_url",
+                      "mime_type"
+                    ]
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "thought_signature": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "video"
+                      },
+                      "thought": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "video_url": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "video_url"
+                    ]
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "thought_signature": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "signature"
+                      },
+                      "thought": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object",
+                    "required": [
+                      "thought_signature",
+                      "type"
+                    ]
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "thought_signature": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "audio"
+                      },
+                      "thought": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "audio_url": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "audio_url"
+                    ]
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "image": "#/components/schemas/GeminiImagePart",
+                    "document": "#/components/schemas/GeminiDocumentPart",
+                    "text": "#/components/schemas/GeminiTextPart",
+                    "video": "#/components/schemas/GeminiVideoPart",
+                    "audio": "#/components/schemas/GeminiAudioPart",
+                    "signature": "#/components/schemas/GeminiSignaturePart"
+                  }
+                }
+              }
+            },
+            "role": {
+              "enum": [
+                "user",
+                "model"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object",
+          "required": [
+            "role",
+            "parts"
+          ]
+        }
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "system_prompt": {
+        "default": "",
+        "maxLength": 50000,
+        "type": "string"
+      },
+      "resolution": {
+        "enum": [
+          "0.5K",
+          "1K",
+          "2K",
+          "4K"
+        ],
+        "type": "string",
+        "default": "1K"
+      },
+      "audio_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_web_search": {
+        "default": false,
+        "type": "boolean"
+      },
+      "num_images": {
+        "maximum": 4,
+        "default": 1,
+        "type": "integer",
+        "minimum": 1
+      },
+      "aspect_ratio": {
+        "default": "auto",
+        "anyOf": [
+          {
+            "enum": [
+              "auto",
+              "21:9",
+              "16:9",
+              "3:2",
+              "4:3",
+              "5:4",
+              "1:1",
+              "4:5",
+              "3:4",
+              "2:3",
+              "9:16",
+              "4:1",
+              "1:4",
+              "8:1",
+              "1:8"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "max_output_tokens": {
+        "anyOf": [
+          {
+            "maximum": 32768,
+            "type": "integer",
+            "minimum": 1
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "video_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt"
+    ]
+  }
+}

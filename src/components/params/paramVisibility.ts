@@ -80,3 +80,21 @@ export function findMissingRequiredParams(
     && isEmptyParamValue(values[param.id] ?? param.default)
   ))
 }
+
+/**
+ * 按联动给参数套上当前可选的取值：下拉与单选过滤选项（filterOptions），数值收窄范围（filterRange）。
+ * 生成页参数面板、画布节点与离线组合检查都用这一份，界面能选什么与检查按什么枚举才一致。
+ */
+export function applyLinkageFilters(param: ParamDef, values: ParamValueMap, schema: ParamDef[], linkageEngine: LinkageEngine | null): ParamDef {
+  if (!linkageEngine) return param
+  if (param.type === 'dropdown' || param.type === 'radio') {
+    const options = linkageEngine.getFilteredOptions(param.id, asRuntimeParams(values), schema)
+    return !options.length || options === param.options ? param : { ...param, options } as ParamDef
+  }
+  if (param.type === 'number') {
+    const range = linkageEngine.getFilteredRange(param.id, asRuntimeParams(values), schema)
+    if (!range || (range.min === param.min && range.max === param.max && range.step === param.step)) return param
+    return { ...param, ...range }
+  }
+  return param
+}

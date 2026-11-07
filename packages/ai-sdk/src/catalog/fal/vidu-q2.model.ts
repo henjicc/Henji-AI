@@ -15,12 +15,13 @@ export const viduQ2Model = defineModel({
         videos: { max: 0 },
         rules: [
             {
+                // 图生视频与参考生视频端点官方必填图片：没图时自动切回文生视频。
                 when: 'viduQ2Mode === "image-to-video"',
-                images: { max: 1 }
+                images: { min: 1, max: 1 }
             },
             {
                 when: 'viduQ2Mode === "reference-to-video"',
-                images: { max: 7 }
+                images: { min: 1, max: 7 }
             },
             {
                 when: 'viduQ2Mode === "video-extension"',
@@ -112,7 +113,11 @@ export const viduQ2Model = defineModel({
             id: 'viduQ2Bgm',
             order: 6,
             type: 'switch',
-            default: false
+            default: false,
+            // 续写端点没有背景音乐。
+            visible: {
+                condition: 'viduQ2Mode !== "video-extension"'
+            }
         },
         {
             id: 'viduQ2FastMode',
@@ -156,11 +161,14 @@ export const viduQ2Model = defineModel({
             const duration = params.falViduQ2VideoDuration || 4;
             const aspectRatio = params.viduQ2AspectRatio;
             const resolution = params.viduQ2Resolution || '720p';
-            const movementAmplitude = params.viduQ2MovementAmplitude || 'auto';
+            // 界面档位是低 / 中 / 高，官方取值是 small / medium / large。
+            const rawAmplitude = String(params.viduQ2MovementAmplitude || 'auto');
+            const movementAmplitude = rawAmplitude === 'low' ? 'small' : rawAmplitude === 'high' ? 'large' : rawAmplitude;
             const bgm = params.viduQ2Bgm === true;
             const videoInput = typeof params.video === 'string' ? params.video : videos[0];
             const requestData: JsonObject = { prompt };
-            requestData.duration = duration;
+            // 续写端点只收 2–7 秒，旧状态或其他使用方传 8 秒时按 7 秒发。
+            requestData.duration = mode === 'video-extension' ? Math.min(7, Number(duration)) : duration;
             if (mode === 'text-to-video' || mode === 'reference-to-video') {
                 if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
                     requestData.aspect_ratio = aspectRatio;
@@ -176,7 +184,9 @@ export const viduQ2Model = defineModel({
             if (mode !== 'video-extension') {
                 requestData.movement_amplitude = movementAmplitude;
             }
-            requestData.bgm = bgm;
+            // 续写端点没有背景音乐字段。
+            if (mode !== 'video-extension')
+                requestData.bgm = bgm;
             if (images.length > 0) {
                 if (mode === 'reference-to-video') {
                     requestData.reference_image_urls = images.slice(0, 7);
@@ -195,7 +205,9 @@ export const viduQ2Model = defineModel({
         currency: '$',
         calculator: (params) => {
             const mode = params.viduQ2Mode || 'text-to-video';
-            const duration = Number(params.falViduQ2VideoDuration) || 4;
+            const chosen = Number(params.falViduQ2VideoDuration) || 4;
+            // 续写端点只收 2–7 秒，构建时按 7 秒发，计价跟着一致。
+            const duration = mode === 'video-extension' ? Math.min(7, chosen) : chosen;
             const resolution = params.viduQ2Resolution === '1080p' ? '1080p' : '720p';
             if (mode === 'video-extension') {
                 return resolution === '1080p' ? 0.28 + 0.075 * duration : 0.075 * duration;

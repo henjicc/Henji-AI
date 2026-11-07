@@ -13,6 +13,7 @@ export const falQwen3Tts17bModel = defineModel({
     { id: 'falQwen3TtsVoice', type: 'dropdown', order: 1, default: 'Vivian', options: ['Vivian', 'Serena', 'Uncle_Fu', 'Dylan', 'Eric', 'Ryan', 'Aiden', 'Ono_Anna', 'Sohee'].map(value => ({ value })) },
     { id: 'falQwen3TtsLanguage', type: 'dropdown', order: 2, default: 'Auto', options: ['Auto', 'English', 'Chinese', 'Spanish', 'French', 'German', 'Italian', 'Japanese', 'Korean', 'Portuguese', 'Russian'].map(value => ({ value })) },
     { id: 'falQwen3TtsStyle', type: 'text', order: 3, default: '' },
+    // 官方取值大于 0、不超过 1；参数范围保留 0–2，旧工程存的值仍能通过校验，请求时夹到官方范围。
     { id: 'falQwen3TtsTemperature', type: 'number', order: 4, default: 0.9, min: 0, max: 2, step: 0.1 },
   ],
   endpoints: 'fal-ai/qwen-3-tts/text-to-speech/1.7b',
@@ -22,7 +23,7 @@ export const falQwen3Tts17bModel = defineModel({
         text: speechText(params),
         voice: speechString(params.falQwen3TtsVoice) ?? 'Vivian',
         language: speechString(params.falQwen3TtsLanguage) ?? 'Auto',
-        temperature: speechNumber(params.falQwen3TtsTemperature) ?? 0.9,
+        temperature: Math.min(1, Math.max(0.1, speechNumber(params.falQwen3TtsTemperature) ?? 0.9)),
       }
       const style = speechString(params.falQwen3TtsStyle)
       if (style) body.prompt = style

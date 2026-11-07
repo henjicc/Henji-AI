@@ -1,0 +1,48 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/image-apps-v2/photo-restoration",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/image-apps-v2/photo-restoration",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "enhance_resolution": {
+        "default": true,
+        "type": "boolean"
+      },
+      "remove_scratches": {
+        "default": true,
+        "type": "boolean"
+      },
+      "aspect_ratio": {
+        "type": "object",
+        "properties": {
+          "ratio": {
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4"
+            ],
+            "default": "1:1",
+            "type": "string"
+          }
+        }
+      },
+      "fix_colors": {
+        "default": true,
+        "type": "boolean"
+      },
+      "image_url": {
+        "type": "string"
+      }
+    }
+  }
+}

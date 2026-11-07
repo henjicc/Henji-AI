@@ -1,0 +1,67 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/ltx-2.3/audio-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/ltx-2.3/audio-to-video",
+  "input": {
+    "properties": {
+      "prompt": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "maxLength": 5000,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "audio_url": {
+        "type": "string"
+      },
+      "image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "aspect_ratio": {
+        "default": "auto",
+        "type": "string",
+        "enum": [
+          "auto",
+          "16:9",
+          "9:16"
+        ]
+      },
+      "guidance_scale": {
+        "anyOf": [
+          {
+            "minimum": 1,
+            "maximum": 50,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "type": "object",
+    "required": [
+      "audio_url"
+    ]
+  }
+}

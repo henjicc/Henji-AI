@@ -1,0 +1,180 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=topaz/upscale/image/generative",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "topaz/upscale/image/generative",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "properties": {
+      "prompt": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 1024
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "face_enhancement_strength": {
+        "maximum": 1,
+        "type": "number",
+        "default": 0.8,
+        "minimum": 0
+      },
+      "creativity": {
+        "anyOf": [
+          {
+            "maximum": 6,
+            "type": "integer",
+            "minimum": 1
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "output_format": {
+        "type": "string",
+        "enum": [
+          "jpeg",
+          "png"
+        ],
+        "default": "jpeg"
+      },
+      "autoprompt": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "texture": {
+        "anyOf": [
+          {
+            "maximum": 5,
+            "type": "integer",
+            "minimum": 1
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "upscale_factor": {
+        "maximum": 4,
+        "type": "number",
+        "default": 2,
+        "minimum": 1
+      },
+      "face_enhancement_creativity": {
+        "maximum": 1,
+        "type": "number",
+        "default": 0,
+        "minimum": 0
+      },
+      "model": {
+        "type": "string",
+        "enum": [
+          "Wonder 4",
+          "Wonder 3.5",
+          "Wonder 3",
+          "Wonder 2",
+          "Wonder",
+          "Recover 3",
+          "Standard MAX",
+          "Redefine",
+          "Recovery V2",
+          "Recovery"
+        ],
+        "default": "Wonder 3"
+      },
+      "denoise": {
+        "anyOf": [
+          {
+            "maximum": 1,
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sharpen": {
+        "anyOf": [
+          {
+            "maximum": 1,
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "crop_to_fill": {
+        "type": "boolean",
+        "default": false
+      },
+      "detail": {
+        "anyOf": [
+          {
+            "maximum": 1,
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "subject_detection": {
+        "type": "string",
+        "enum": [
+          "All",
+          "Foreground",
+          "Background"
+        ],
+        "default": "All"
+      },
+      "enhancement_strength": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "image_url": {
+        "type": "string",
+        "minLength": 1
+      },
+      "face_enhancement": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "type": "object"
+  }
+}

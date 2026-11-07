@@ -2,6 +2,7 @@
 
 ## 0.10.0 - 未发布
 
+- 按 Fal 官方 OpenAPI 与参数组合检查修正请求：Kling 2.6 Pro 图生视频首帧改发 `start_image_url`；Kling O1 图生视频图片下限 1 张（没图自动切到参考生视频）、视频编辑不发时长并按输入视频时长计价；Vidu Q2 运动幅度在请求里换成官方 `small` / `medium` / `large`、续写不发 `bgm` 且时长夹到 7 秒、图生视频与参考生视频图片下限 1 张；Seedance 2.5 图生视频比例固定 `auto`；Seedance V1 文生视频不发 `auto` 比例；Qwen3 TTS 温度、Z-Image Turbo 图生图强度按官方范围夹紧（参数静态范围不变，兼容旧值）；PixVerse v5.5 单图生视频不发比例、首尾帧转场不发多镜头开关。KIE Kling 4.0 关键帧上传上限随时长变化（声明式规则，能力发现仍能看到参考模式收视频）；KIE GPT Image 2 智能比例只在当前分辨率支持的比例里挑；APIMart Seedance 2.5 视频编辑与延长要求 1 段视频、Gemini Omni 1.2 多图参考要求 1 张图。
 - `SpeechRecognitionOutput` 新增可选 `usage`（`inputTokens` / `outputTokens`）；百炼短音频协议从 `usage.input_tokens` / `output_tokens` 读出，目前只有按 token 计费的 `qwen-audio-3.1-asr-flash` 返回。
 - **破坏性**：删除已下架的硅基流动 `TeleAI/TeleSpeechASR` 语音识别预设（`siliconFlowTeleSpeechAsr` 导出移除，`siliconFlowAsrPresets` 只剩 SenseVoiceSmall）；控制台与价格页都已不再列出该模型。
 - 新增 token 计价类型 `TokenListPricing`（输入 / 输出 / 缓存命中，可带按输入长度分档 `tiers` 与分时 `offPeak`）与 `tokenListPrice`、`tokenPrice`；`LlmProviderPreset` 新增 `modelPricing`，内置预设的 57 个推荐模型全部登记官方按量标准价；百炼 Qwen-MT 预设新增 `pricing`。新增 `textTokenRatioFor` 与 `estimateChineseTextCost`，按各家公布的汉字折 token 比例（DeepSeek 0.6、Kimi 1/1.5、GLM 与 MiniMax 1/1.6，未公布的按 1）把 token 单价换成每万字参考价。

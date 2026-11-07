@@ -1,0 +1,71 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/ltx-2.3/text-to-video/fast",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/ltx-2.3/text-to-video/fast",
+  "input": {
+    "properties": {
+      "prompt": {
+        "minLength": 1,
+        "maxLength": 5000,
+        "type": "string"
+      },
+      "duration": {
+        "default": 6,
+        "type": "integer",
+        "enum": [
+          6,
+          8,
+          10,
+          12,
+          14,
+          16,
+          18,
+          20
+        ]
+      },
+      "fps": {
+        "default": 25,
+        "type": "integer",
+        "enum": [
+          24,
+          25,
+          48,
+          50
+        ]
+      },
+      "resolution": {
+        "default": "1080p",
+        "type": "string",
+        "enum": [
+          "1080p",
+          "1440p",
+          "2160p"
+        ]
+      },
+      "aspect_ratio": {
+        "default": "16:9",
+        "type": "string",
+        "enum": [
+          "16:9",
+          "9:16"
+        ]
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "generate_audio": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt"
+    ]
+  }
+}

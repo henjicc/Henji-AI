@@ -175,3 +175,7 @@ rg -i "sk-|bearer |api[_-]?key" packages/ai-sdk/tests/fixtures/
 `generation.runtime.request_json`/`generation.runtime.response_json`，脱敏后写出**草稿**到
 `_drafts/<provider>/`（草稿字段里 `scenario`/`expected` 等需要人工判断的部分留 `TODO`，人工核对后
 才能移进正式 fixture 目录）。用法见 `node scripts/collect-provider-fixtures.cjs --help`。
+
+## Fal 官方输入格式快照（2026-11-08）
+
+`fal-openapi/<端点，/ 换成 __>.json` 来自 Fal 各端点的官方 OpenAPI（`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<端点>`，无需登录），分类 `official-literal`，只留输入格式的校验关键字（去掉说明、示例与界面提示）。由 `src/features/developer/falOfficialSchema.test.ts` 读取并校验参数组合检查构建出的请求；`HENJI_REFRESH_FAL_OPENAPI=1` 运行该测试会重新抓取全部端点。

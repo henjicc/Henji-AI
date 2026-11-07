@@ -15,11 +15,17 @@ import { bailianRealtimeAsrPresets } from '@henjicc/ai-sdk/capabilities/speech-r
 import { volcengineRealtimeAsrPresets } from '@henjicc/ai-sdk/capabilities/speech-recognition/volcengine/realtime'
 import { BAILIAN_QWEN_MT_PRESETS } from '@henjicc/ai-sdk/capabilities/translation/bailian'
 import { registry } from '@/core/ModelRegistry'
+import { LinkageEngine } from '@/core/linkage'
+import { reconcileDerivedMediaState } from '@/core/params/derivedMediaState'
+import { applyLinkageFilters, findMissingRequiredParams, isParamVisible } from '@/components/params/paramVisibility'
+import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
+import { reconcileGenerationParams } from '@/features/generation/domain/generationParams'
 import { ASR_CATALOG, estimateAsrCost } from '@/core/audioEdit/asrCatalog'
 import { resolvePriceEstimateMediaContext, type PricingMediaMetadataReaders } from '@/core/pricing/resolvePriceEstimateMediaContext'
 import { attachVideoDurations } from '@/core/services/generationVideoDurations'
 import { HENJI_GENERATION_EXECUTION_PACKS, HENJI_GENERATION_MODELS, getHenjiGenerationModel } from '@/core/modelCatalog/applicationModelProfile'
-import type { ModelDefinition } from '@/core/types'
+import type { ModelDefinition, ParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types'
 import i18n from '@/i18n'
 
@@ -165,6 +171,20 @@ export function listSdkModels(): SdkModelRow[] {
 // 图片用内联 1×1 PNG：部分模型构建请求时会读源图尺寸（智能比例），写成网址会真的去下载。
 const SAMPLE_URL = { image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', video: 'https://example.com/henji-sample.mp4', audio: 'https://example.com/henji-sample.mp3' } as const
 const SAMPLE_TEXT = '一只橘猫坐在洒满阳光的窗台上'
+
+/** 素材同时放进提交用的字段和界面字段：联动（模式自动切换、选项过滤）挂在界面字段上，只改提交字段触发不了。 */
+const MEDIA_KEYS = {
+  images: ['uploadedFilePaths', 'images', 'uploadedImages'],
+  videos: ['uploadedVideoFilePaths', 'videos', 'uploadedVideos'],
+  audios: ['uploadedAudioFilePaths', 'audios'],
+} as const
+type MediaKind = keyof typeof MEDIA_KEYS
+const MEDIA_KINDS = Object.keys(MEDIA_KEYS) as MediaKind[]
+const MEDIA_SAMPLE: Readonly<Record<MediaKind, string>> = { images: SAMPLE_URL.image, videos: SAMPLE_URL.video, audios: SAMPLE_URL.audio }
+
+function mediaValues(kind: MediaKind, count: number): DynamicValueMap {
+  return Object.fromEntries(MEDIA_KEYS[kind].map((key) => [key, Array.from({ length: count }, () => MEDIA_SAMPLE[kind])]))
+}
 const UPLOAD_KIND: Readonly<Record<string, keyof typeof SAMPLE_URL>> = { 'image-upload': 'image', 'video-upload': 'video', 'file-upload': 'audio' }
 
 function sampleCount(limit: { min?: number; max?: number; exact?: number } | undefined): number {
@@ -174,29 +194,35 @@ function sampleCount(limit: { min?: number; max?: number; exact?: number } | und
 
 /**
  * 补上示例输入：生成提交时素材走 uploadedFilePaths 等运行时字段（张数按 inputLimits 取），上传类参数各放一份，
- * 默认为空串的参数（提示词、音色 ID、自定义模型 ID 等）填一句示例。这样“缺提示词”“缺源图”这类前置条件不会挡住对请求映射本身的检查。
+ * 界面上看得见、默认为空的文字参数（提示词、自定义模型 ID 等）填一句示例；隐藏的内部字段（如克隆音色代号）留空，免得示例文字不合格式要求。
+ * 这样“缺提示词”“缺源图”这类前置条件不会挡住对请求映射本身的检查。
  */
+const TEXT_INPUT_TYPES = new Set(['text', 'textarea', 'composite'])
+
+/** 界面上看得见、默认为空的文字类输入；下拉里的空选项（“不指定”）不算。 */
+function needsSampleText(param: ParamDef, values: DynamicValueMap): boolean {
+  const value = values[param.id]
+  return TEXT_INPUT_TYPES.has(param.type) && (value === '' || value === undefined) && isParamVisible(param, values, null)
+}
+
 function sampleInputs(definition: ModelDefinition, runtimeLimits: unknown, defaults: DynamicValueMap): DynamicValueMap {
   const values: DynamicValueMap = {}
   for (const param of definition.params) {
     const kind = UPLOAD_KIND[param.type]
     if (kind) values[param.id] = [SAMPLE_URL[kind]]
-    else if (defaults[param.id] === '' || ((param.type === 'text' || param.type === 'textarea') && defaults[param.id] === undefined)) values[param.id] = SAMPLE_TEXT
+    else if (needsSampleText(param, defaults)) values[param.id] = SAMPLE_TEXT
   }
   const limits = (typeof runtimeLimits === 'function' ? (runtimeLimits as (params: DynamicValueMap) => unknown)({ ...defaults, ...values }) : runtimeLimits) as { images?: { max?: number }; videos?: { max?: number }; audios?: { max?: number } } | undefined
-  const fill = (count: number, url: string): string[] => Array.from({ length: count }, () => url)
-  values.uploadedFilePaths = fill(sampleCount(limits?.images), SAMPLE_URL.image)
-  values.uploadedVideoFilePaths = fill(sampleCount(limits?.videos), SAMPLE_URL.video)
-  values.uploadedAudioFilePaths = fill(sampleCount(limits?.audios), SAMPLE_URL.audio)
+  Object.assign(values, mediaValues('images', sampleCount(limits?.images)), mediaValues('videos', sampleCount(limits?.videos)), mediaValues('audios', sampleCount(limits?.audios)))
   if (!values.prompt && (defaults.prompt === '' || defaults.prompt === undefined)) values.prompt = SAMPLE_TEXT
   if (!values.text && (defaults.text === '' || defaults.text === undefined)) values.text = SAMPLE_TEXT
   return values
 }
 
-/** 默认参数叠上示例输入：离线检查与参考价共用同一份。 */
+/** 默认参数叠上示例输入，并按界面同一套联动整理（素材会触发模式切换等）：离线检查与参考价共用同一份。 */
 function sampleValues(definition: ModelDefinition, runtimeLimits: unknown): DynamicValueMap {
   const defaults = registry.getDefaultValues(definition.meta.id)
-  return { ...defaults, ...sampleInputs(definition, runtimeLimits, defaults) }
+  return applyGenerationParamChanges(definition.meta.id, defaults, sampleInputs(definition, runtimeLimits, defaults))
 }
 
 const DRY_RUN_TIMEOUT_MS = 5_000
@@ -213,8 +239,12 @@ export interface SdkDryRunResult {
  * 离线构建一次请求：默认参数（可补示例输入，再叠上传入的参数）走 SDK 的真实 selector 与 builder，再按 runtimeConstraints 规范化。
  * 不联网、不上传、不扣费；用来检查参数映射与分支是否写对。
  */
+function generationRuntime(modelId: string): ReturnType<typeof getHenjiGenerationModel> {
+  return getHenjiGenerationModel(modelId) ?? HENJI_GENERATION_EXECUTION_PACKS.flatMap((pack) => pack.models).find((model) => model.meta.id === modelId)
+}
+
 export async function dryRunGenerationModel(modelId: string, params?: DynamicValueMap, options: { sample?: boolean } = {}): Promise<SdkDryRunResult> {
-  const runtime = getHenjiGenerationModel(modelId) ?? HENJI_GENERATION_EXECUTION_PACKS.flatMap((pack) => pack.models).find((model) => model.meta.id === modelId)
+  const runtime = generationRuntime(modelId)
   const definition = registry.getModel(modelId)
   if (!runtime || !definition) return { ok: false, error: `SDK 里找不到模型 ${modelId}` }
   const values: DynamicValueMap = { ...(options.sample ? sampleValues(definition, runtime.inputLimits) : registry.getDefaultValues(modelId)), ...params }
@@ -232,6 +262,150 @@ export async function dryRunGenerationModel(modelId: string, params?: DynamicVal
 
 export function sdkModelDefaults(modelId: string): DynamicValueMap {
   return registry.getDefaultValues(modelId)
+}
+
+/** 改参数后按界面同一套联动与派生素材规则整理一遍，测试台和组合检查共用，结果才和用户实际能提交的一致。 */
+export function applyGenerationParamChanges(modelId: string, current: DynamicValueMap, changes: DynamicValueMap): DynamicValueMap {
+  const schema = registry.getSchema(modelId)
+  const linkages = registry.getModel(modelId)?.linkages ?? []
+  const merged = { ...current, ...changes }
+  return reconcileDerivedMediaState(schema, linkages.length ? reconcileGenerationParams(schema, merged, linkages, Object.keys(changes)) : merged)
+}
+
+/**
+ * 当前参数下界面能选的取值：选项（按联动过滤后）、开关两态、数值上下限（按联动收窄后）；文本、上传与复合面板不在这里枚举。
+ * 被联动禁用的参数选不了，返回空。
+ */
+function enumerableValues(param: ParamDef, params: DynamicValueMap, schema: ParamDef[], engine: LinkageEngine | null): unknown[] {
+  if (engine?.isParamDisabled(param.id, params)) return []
+  const filtered = applyLinkageFilters(param, params, schema, engine)
+  switch (filtered.type) {
+    case 'dropdown': case 'radio': case 'aspect-ratio':
+      return (filtered.options as Array<{ value: unknown; disabled?: boolean }>).filter((option) => !option.disabled).map((option) => option.value)
+    case 'resolution': return filtered.presets.map((preset) => preset.value)
+    case 'switch': return [true, false]
+    case 'number': return [filtered.min, filtered.max].filter((value): value is number => typeof value === 'number')
+    default: return []
+  }
+}
+
+const sameValue = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right)
+
+export interface SdkVariantCheck {
+  /** 这组参数怎么来的，例如“mode=edit · resolution=4k” */
+  label: string
+  params: DynamicValueMap
+  result: SdkDryRunResult
+  /** 计价抛错、结果为负或无穷、缺媒体指标时的原因；有意返回 NaN 的“提交前算不出总价”不算 */
+  priceError?: string
+}
+
+function mediaCount(params: DynamicValueMap, kind: MediaKind): number {
+  const value = params[MEDIA_KEYS[kind][0]]
+  return Array.isArray(value) ? value.length : 0
+}
+
+/**
+ * 参数组合离线检查：先展开每个模式 / 渠道，再在每个分支下把其余参数逐个换成每个可选值，外加“不带素材”和“素材放满”两种输入，
+ * 每组都走真实的 selector、builder 与计价。界面联动会改回去或隐藏掉的值用户选不到，提交前校验（数量限制与前置条件）拦下的组合
+ * 用户也提交不了，都跳过；剩下的失败就是“界面放行、构建或计价却出错”。
+ * 不联网、不扣费；只证明各分支能构建和计价，字段对不对还要对照官方格式。
+ */
+export async function checkGenerationModelVariants(modelId: string): Promise<SdkVariantCheck[]> {
+  const definition = registry.getModel(modelId)
+  const runtime = generationRuntime(modelId)
+  if (!definition || !runtime) return [{ label: '默认', params: {}, result: { ok: false, error: `SDK 里找不到模型 ${modelId}` } }]
+  const schema = registry.getSchema(modelId)
+  const engine = definition.linkages?.length ? new LinkageEngine(definition.linkages) : null
+  const uploadParamIds = schema.filter((param) => UPLOAD_KIND[param.type]).map((param) => param.id)
+  const limitsOf = (params: DynamicValueMap): ReturnType<typeof resolveInputLimits> =>
+    resolveInputLimits(modelId, params, { imagesCount: mediaCount(params, 'images'), videosCount: mediaCount(params, 'videos') })
+  // 界面在“必填项没填”或前置条件不满足时不让提交，这些组合用户发不出去。
+  const submittable = (params: DynamicValueMap): boolean => !findMissingRequiredParams(schema, params, engine).length && validateGenerationRequirements(modelId, params, {
+    prompt: typeof params.prompt === 'string' ? params.prompt : '', imagesCount: mediaCount(params, 'images'), videosCount: mediaCount(params, 'videos'),
+  }).ok
+  // 切到某个分支后按它的数量要求放素材：能放而没放的放一份，少于下限补齐，多于上限截掉。
+  const fitMedia = (params: DynamicValueMap, fillOptional: boolean): DynamicValueMap => {
+    const limits = limitsOf(params)
+    const changes: DynamicValueMap = {}
+    for (const kind of MEDIA_KINDS) {
+      const count = mediaCount(params, kind)
+      const { min, max } = limits[kind]
+      const target = Math.min(max, Math.max(min, fillOptional && count === 0 && max > 0 ? 1 : count))
+      if (target !== count) Object.assign(changes, mediaValues(kind, target))
+    }
+    return Object.keys(changes).length ? applyGenerationParamChanges(modelId, params, changes) : params
+  }
+  // 切到新分支后才露出来的文字输入（如克隆音色的名称）同样填示例。
+  const fillText = (params: DynamicValueMap): DynamicValueMap => {
+    const changes = Object.fromEntries(schema.filter((param) => needsSampleText(param, params)).map((param) => [param.id, SAMPLE_TEXT]))
+    return Object.keys(changes).length ? applyGenerationParamChanges(modelId, params, changes) : params
+  }
+  const variants = new Map<string, { label: string; params: DynamicValueMap }>()
+  const add = (label: string, params: DynamicValueMap): void => {
+    if (!submittable(params)) return
+    const key = JSON.stringify(Object.entries(params).sort(([a], [b]) => a.localeCompare(b)))
+    if (!variants.has(key)) variants.set(key, { label, params })
+  }
+  // 选不到就返回 null：联动把值改掉了，或这个参数在该分支下不显示。
+  const choose = (base: DynamicValueMap, param: ParamDef, value: unknown): DynamicValueMap | null => {
+    const next = applyGenerationParamChanges(modelId, base, { [param.id]: value as DynamicValue })
+    return sameValue(next[param.id], value) && isParamVisible(param, next, engine) ? next : null
+  }
+
+  const sample = sampleValues(definition, runtime.inputLimits)
+  const bases: Array<{ label: string; params: DynamicValueMap }> = [{ label: '默认', params: sample }]
+  for (const param of schema.filter((item) => item.role)) {
+    for (const value of enumerableValues(param, sample, schema, engine)) {
+      if (sameValue(value, sample[param.id])) continue
+      const next = choose(sample, param, value)
+      if (next) bases.push({ label: `${param.id}=${String(value)}`, params: fillText(fitMedia(next, true)) })
+    }
+  }
+  const empty = Object.fromEntries([...MEDIA_KINDS.flatMap((kind) => MEDIA_KEYS[kind]), ...uploadParamIds].map((key) => [key, []]))
+  for (const base of bases) {
+    add(base.label, base.params)
+    // 每个轴给出当前参数下能做的一步改动：普通参数换成每个可选值；素材轴是“不带素材”与各类素材放满。
+    const axes: Array<(params: DynamicValueMap) => Array<{ label: string; params: DynamicValueMap | null }>> = schema
+      .filter((param) => !param.role)
+      .map((param) => (params) => isParamVisible(param, params, engine)
+        ? enumerableValues(param, params, schema, engine)
+          .filter((value) => !sameValue(value, params[param.id]))
+          .map((value) => ({ label: `${param.id}=${String(value)}`, params: choose(params, param, value) }))
+        : [])
+    axes.push((params) => {
+      const limits = limitsOf(params)
+      return [
+        // 能用其他参数代替素材的模型（续接引用）不试“不带素材”：那种提交要带引用，示例里造不出来。
+        ...(!definition.alternativeInputParamIds?.length ? [{ label: '不带素材', params: applyGenerationParamChanges(modelId, params, empty) }] : []),
+        ...MEDIA_KINDS.filter((kind) => Number.isFinite(limits[kind].max) && limits[kind].max > mediaCount(params, kind)).map((kind) => ({
+          label: `${kind} 放满 ${limits[kind].max}`,
+          params: applyGenerationParamChanges(modelId, params, mediaValues(kind, limits[kind].max)),
+        })),
+      ]
+    })
+    // 单项改动加两两组合：比例与分辨率、有无素材与分辨率这类搭配限制只有组合起来才会暴露。
+    for (const [index, axis] of axes.entries()) {
+      for (const first of axis(base.params)) {
+        if (!first.params) continue
+        const once = fitMedia(first.params, false)
+        add(`${base.label} · ${first.label}`, once)
+        for (const other of axes.slice(index + 1)) {
+          for (const second of other(once)) {
+            if (second.params) add(`${base.label} · ${first.label} · ${second.label}`, fitMedia(second.params, false))
+          }
+        }
+      }
+    }
+  }
+
+  const checks: SdkVariantCheck[] = []
+  for (const { label, params } of variants.values()) {
+    const result = await dryRunGenerationModel(modelId, params)
+    const price = result.ok ? await generationPrice(definition, params) : {}
+    checks.push({ label, params, result, ...(price.error && price.error !== NOT_ESTIMABLE ? { priceError: price.error } : {}) })
+  }
+  return checks
 }
 
 /** 参考价用的示例素材指标：按时长、像素计价的模型拿它算，免得都显示成缺价格。 */
@@ -300,17 +474,27 @@ export async function estimateSdkModelPrice(row: SdkModelRow): Promise<SdkModelP
   const { pricing } = definition
   const description = pricing.description
   if (pricing.fixed === undefined && !pricing.calculator) return { status: 'missing', reason: '模型没有声明计价', description }
-  const runtime = getHenjiGenerationModel(definition.meta.id) ?? HENJI_GENERATION_EXECUTION_PACKS.flatMap((pack) => pack.models).find((model) => model.meta.id === definition.meta.id)
+  const price = await generationPrice(definition, sampleValues(definition, generationRuntime(definition.meta.id)?.inputLimits))
+  if (price.amount === undefined) return { status: 'missing', reason: price.error ?? '计价结果无效', description }
+  const unit = pricing.estimateMode === 'unit' && pricing.estimateUnit ? `/${pricing.estimateUnit}` : ''
+  const display = `${pricing.estimateKind === 'upper-bound' ? '上限 ' : ''}${pricing.currency}${formatAmount(price.amount)}${unit}`
+  return price.amount > 0 ? { status: 'priced', display, description } : { status: 'zero', display, description }
+}
+
+const NOT_ESTIMABLE = '提交前算不出总价'
+
+/** 按给定参数算一次价：视频时长与媒体指标用示例值补齐，不读文件。 */
+async function generationPrice(definition: ModelDefinition, params: DynamicValueMap): Promise<{ amount?: number; error?: string }> {
+  const { pricing } = definition
   try {
-    const withDurations = await attachVideoDurations(sampleValues(definition, runtime?.inputLimits), async () => SAMPLE_PRICING_MEDIA.video.durationSeconds)
+    const withDurations = await attachVideoDurations(params, async () => SAMPLE_PRICING_MEDIA.video.durationSeconds)
     const context = await resolvePriceEstimateMediaContext(pricing.mediaContext, withDurations, SAMPLE_PRICING_READERS)
-    if (!context.complete) return { status: 'missing', reason: `缺少媒体指标：${context.missingTargets.join('、')}`, description }
+    if (!context.complete) return { error: `缺少媒体指标：${context.missingTargets.join('、')}` }
     const amount = pricing.fixed ?? pricing.calculator?.(context.params as JsonObject) ?? Number.NaN
-    if (!Number.isFinite(amount) || amount < 0) return { status: 'missing', reason: `计价结果无效（${amount}）`, description }
-    const unit = pricing.estimateMode === 'unit' && pricing.estimateUnit ? `/${pricing.estimateUnit}` : ''
-    const display = `${pricing.estimateKind === 'upper-bound' ? '上限 ' : ''}${pricing.currency}${formatAmount(amount)}${unit}`
-    return amount > 0 ? { status: 'priced', display, description } : { status: 'zero', display, description }
+    // 计价函数返回 NaN 表示提交前就算不出（例如按实际输出的图层数计费），界面不显示估价、提交时照常确认，不算错误。
+    if (Number.isNaN(amount)) return { error: NOT_ESTIMABLE }
+    return Number.isFinite(amount) && amount >= 0 ? { amount } : { error: `计价结果无效（${amount}）` }
   } catch (error) {
-    return { status: 'missing', reason: `计价出错：${error instanceof Error ? error.message : String(error)}`, description }
+    return { error: `计价出错：${error instanceof Error ? error.message : String(error)}` }
   }
 }

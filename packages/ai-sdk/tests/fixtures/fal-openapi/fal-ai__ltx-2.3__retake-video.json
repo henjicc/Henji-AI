@@ -1,0 +1,51 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/ltx-2.3/retake-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/ltx-2.3/retake-video",
+  "input": {
+    "properties": {
+      "prompt": {
+        "minLength": 1,
+        "maxLength": 5000,
+        "type": "string"
+      },
+      "duration": {
+        "maximum": 20,
+        "minimum": 2,
+        "type": "number",
+        "default": 5
+      },
+      "video_url": {
+        "type": "string"
+      },
+      "start_time": {
+        "maximum": 20,
+        "minimum": 0,
+        "type": "number",
+        "default": 0
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "retake_mode": {
+        "type": "string",
+        "default": "replace_audio_and_video",
+        "enum": [
+          "replace_audio",
+          "replace_video",
+          "replace_audio_and_video"
+        ]
+      }
+    },
+    "type": "object",
+    "required": [
+      "video_url",
+      "prompt"
+    ]
+  }
+}

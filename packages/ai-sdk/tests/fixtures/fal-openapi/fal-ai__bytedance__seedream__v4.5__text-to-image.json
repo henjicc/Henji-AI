@@ -1,0 +1,88 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/bytedance/seedream/v4.5/text-to-image",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/bytedance/seedream/v4.5/text-to-image",
+  "input": {
+    "required": [
+      "prompt"
+    ],
+    "properties": {
+      "max_images": {
+        "maximum": 6,
+        "default": 1,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "image_size": {
+        "default": {
+          "height": 2048,
+          "width": 2048
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "maximum": 14142,
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              "width": {
+                "maximum": 14142,
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto_2K",
+              "auto_4K"
+            ]
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "num_images": {
+        "maximum": 6,
+        "default": 1,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object"
+  }
+}

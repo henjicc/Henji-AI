@@ -1,0 +1,41 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=google/gemini-omni-flash/v1.2/extend",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "google/gemini-omni-flash/v1.2/extend",
+  "input": {
+    "required": [
+      "prompt",
+      "video_url"
+    ],
+    "type": "object",
+    "properties": {
+      "resolution": {
+        "default": "720p",
+        "type": "string",
+        "enum": [
+          "360p",
+          "720p",
+          "1080p",
+          "4k"
+        ]
+      },
+      "duration": {
+        "default": 8,
+        "maximum": 10,
+        "type": "integer",
+        "minimum": 3
+      },
+      "prompt": {
+        "maxLength": 20000,
+        "type": "string"
+      },
+      "video_url": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { countUploadedImages } from "../shared/mediaPresence";
 export const pixverseV55Model = defineModel({
     meta: {
         id: 'fal-ai-pixverse-v5.5',
@@ -20,6 +21,8 @@ export const pixverseV55Model = defineModel({
             order: 1,
             type: 'dropdown',
             default: '16:9',
+            // 单图生视频跟随图片比例（官方图生视频端点没有比例字段）。
+            visible: { condition: (params: JsonObject) => countUploadedImages(params) !== 1 },
             options: [
                 { value: 'smart' },
                 { value: '16:9' },
@@ -86,7 +89,9 @@ export const pixverseV55Model = defineModel({
             id: 'pixverseMultiClip',
             order: 7,
             type: 'switch',
-            default: false
+            default: false,
+            // 首尾帧转场端点没有多镜头开关。
+            visible: { condition: (params: JsonObject) => countUploadedImages(params) < 2 }
         }
     ],
     endpoints: {
@@ -117,7 +122,7 @@ export const pixverseV55Model = defineModel({
             const resolution = params.pixverseResolution;
             const duration = params.falPixverse55VideoDuration || 5;
             const requestData: JsonObject = { prompt };
-            if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
+            if (images.length !== 1 && aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
                 requestData.aspect_ratio = aspectRatio;
             }
             if (resolution) {
@@ -131,7 +136,7 @@ export const pixverseV55Model = defineModel({
                 requestData.thinking_type = params.pixverseThinkingType;
             }
             requestData.generate_audio_switch = params.pixverseGenerateAudio !== false;
-            if (params.pixverseMultiClip !== undefined) {
+            if (images.length < 2 && params.pixverseMultiClip !== undefined) {
                 requestData.generate_multi_clip_switch = params.pixverseMultiClip;
             }
             if (images.length === 1) {

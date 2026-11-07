@@ -1,0 +1,51 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/image-apps-v2/perspective",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/image-apps-v2/perspective",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "aspect_ratio": {
+        "type": "object",
+        "properties": {
+          "ratio": {
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4"
+            ],
+            "default": "1:1",
+            "type": "string"
+          }
+        }
+      },
+      "target_perspective": {
+        "enum": [
+          "front",
+          "left_side",
+          "right_side",
+          "back",
+          "top_down",
+          "bottom_up",
+          "birds_eye",
+          "three_quarter_left",
+          "three_quarter_right"
+        ],
+        "default": "front",
+        "type": "string"
+      },
+      "image_url": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/minimax/hailuo-02/standard/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/minimax/hailuo-02/standard/image-to-video",
+  "input": {
+    "required": [
+      "prompt",
+      "image_url"
+    ],
+    "properties": {
+      "prompt": {
+        "maxLength": 2000,
+        "type": "string"
+      },
+      "image_url": {
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "duration": {
+        "enum": [
+          "6",
+          "10"
+        ],
+        "default": "6",
+        "type": "string"
+      },
+      "prompt_optimizer": {
+        "default": true,
+        "type": "boolean"
+      },
+      "resolution": {
+        "enum": [
+          "512P",
+          "768P"
+        ],
+        "default": "768P",
+        "type": "string"
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object"
+  }
+}

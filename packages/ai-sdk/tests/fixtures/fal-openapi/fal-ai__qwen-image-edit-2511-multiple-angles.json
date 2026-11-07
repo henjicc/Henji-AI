@@ -1,0 +1,150 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/qwen-image-edit-2511-multiple-angles",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/qwen-image-edit-2511-multiple-angles",
+  "input": {
+    "type": "object",
+    "required": [
+      "image_urls"
+    ],
+    "properties": {
+      "additional_prompt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "negative_prompt": {
+        "type": "string",
+        "default": ""
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "output_format": {
+        "type": "string",
+        "enum": [
+          "png",
+          "jpeg",
+          "webp"
+        ],
+        "default": "png"
+      },
+      "zoom": {
+        "maximum": 10,
+        "type": "number",
+        "default": 5,
+        "minimum": 0
+      },
+      "vertical_angle": {
+        "maximum": 90,
+        "type": "number",
+        "default": 0,
+        "minimum": -30
+      },
+      "horizontal_angle": {
+        "maximum": 360,
+        "type": "number",
+        "default": 0,
+        "minimum": 0
+      },
+      "num_images": {
+        "maximum": 4,
+        "type": "integer",
+        "default": 1,
+        "minimum": 1
+      },
+      "num_inference_steps": {
+        "maximum": 50,
+        "type": "integer",
+        "default": 28,
+        "minimum": 1
+      },
+      "image_urls": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "minItems": 1
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "guidance_scale": {
+        "maximum": 20,
+        "type": "number",
+        "default": 4.5,
+        "minimum": 1
+      },
+      "lora_scale": {
+        "maximum": 4,
+        "type": "number",
+        "default": 1,
+        "minimum": 0
+      },
+      "acceleration": {
+        "type": "string",
+        "enum": [
+          "none",
+          "regular"
+        ],
+        "default": "regular"
+      },
+      "image_size": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "height": {
+                "maximum": 14142,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "default": 512
+              },
+              "width": {
+                "maximum": 14142,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "default": 512
+              }
+            }
+          },
+          {
+            "type": "string",
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    }
+  }
+}

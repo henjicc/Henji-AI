@@ -1,0 +1,104 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=alibaba/qwen-image-3/text-to-image",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "alibaba/qwen-image-3/text-to-image",
+  "input": {
+    "type": "object",
+    "properties": {
+      "negative_prompt": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 500
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": ""
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "enable_prompt_expansion": {
+        "type": "boolean",
+        "default": true
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "output_format": {
+        "type": "string",
+        "default": "png",
+        "enum": [
+          "jpeg",
+          "png",
+          "webp"
+        ]
+      },
+      "prompt": {
+        "maxLength": 5000,
+        "type": "string",
+        "minLength": 1
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "image_size": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "height": {
+                "maximum": 14142,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "default": 512
+              },
+              "width": {
+                "maximum": 14142,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "default": 512
+              }
+            }
+          },
+          {
+            "type": "string",
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9"
+            ]
+          }
+        ],
+        "default": "square_hd"
+      },
+      "num_images": {
+        "maximum": 6,
+        "type": "integer",
+        "default": 1,
+        "minimum": 1
+      }
+    },
+    "required": [
+      "prompt"
+    ]
+  }
+}

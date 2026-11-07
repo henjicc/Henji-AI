@@ -1,0 +1,95 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/bytedance/seedream/v4.5/edit",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/bytedance/seedream/v4.5/edit",
+  "input": {
+    "required": [
+      "prompt",
+      "image_urls"
+    ],
+    "properties": {
+      "max_images": {
+        "maximum": 6,
+        "default": 1,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "num_images": {
+        "maximum": 6,
+        "default": 1,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "image_size": {
+        "default": {
+          "height": 2048,
+          "width": 2048
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "maximum": 14142,
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              "width": {
+                "maximum": 14142,
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto_2K",
+              "auto_4K"
+            ]
+          }
+        ]
+      },
+      "image_urls": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  }
+}

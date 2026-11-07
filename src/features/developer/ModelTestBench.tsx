@@ -22,16 +22,14 @@ import { applicationPaidOperationReceipt, bindPaidOperationReceipt } from '@/cor
 import type { PaidOperationCategory } from '@/core/application-control/paidApproval'
 import { createLogger } from '@/core/logging'
 import { registry } from '@/core/ModelRegistry'
-import { reconcileDerivedMediaState } from '@/core/params/derivedMediaState'
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer'
-import { reconcileGenerationParams } from '@/features/generation/domain/generationParams'
 import { getPathForFile } from '@/platform/desktopApi'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { PaidOperationCancelledError, withPaidOperation } from '@/services/paidApproval'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { ASR_CATALOG } from '@/core/audioEdit/asrCatalog'
 import { EMPTY_TEST_MEDIA, modelAcceptsMedia, runAsrTest, runGenerationTest, runLlmTest, runTranslationTest, type TestMedia, type TestMediaKind } from './modelTestRunner'
-import { LLM_CATALOG_ONLY_PROVIDER, type SdkModelCategory, type SdkModelRow } from './sdkModelInventory'
+import { applyGenerationParamChanges, LLM_CATALOG_ONLY_PROVIDER, type SdkModelCategory, type SdkModelRow } from './sdkModelInventory'
 import { GenerationTestColumn, LlmTestColumn, TextTestColumn, type GenerationRun, type LlmRun, type TextRun } from './testBenchColumns'
 
 const BENCH_LABEL: Readonly<Record<SdkModelCategory, string>> = {
@@ -52,13 +50,6 @@ function errorText(error: unknown): string {
 
 function isAbort(error: unknown, signal: AbortSignal): boolean {
   return signal.aborted || (error instanceof Error && error.name === 'AbortError')
-}
-
-function applyParamChanges(modelId: string, current: DynamicValueMap, changes: DynamicValueMap): DynamicValueMap {
-  const schema = registry.getSchema(modelId)
-  const linkages = registry.getModel(modelId)?.linkages ?? []
-  const merged = { ...current, ...changes }
-  return reconcileDerivedMediaState(schema, linkages.length ? reconcileGenerationParams(schema, merged, linkages, Object.keys(changes)) : merged)
 }
 
 export const ModelTestBench: React.FC<{
@@ -103,7 +94,7 @@ export const ModelTestBench: React.FC<{
   const changeParams = (row: SdkModelRow, changes: DynamicValueMap): void => {
     // 在更新函数里基于最新值计算，连着两次改动不会丢前一次
     setParamsByKey((current) => {
-      const next = applyParamChanges(row.modelId, current[row.key] ?? registry.getDefaultValues(row.modelId), changes)
+      const next = applyGenerationParamChanges(row.modelId, current[row.key] ?? registry.getDefaultValues(row.modelId), changes)
       const updated = { ...current, [row.key]: next }
       if (!sync) return updated
       // 只带这次改的参数，不把源列别的改动整份搬过去，免得冲掉其他列里手改过的值
@@ -111,7 +102,7 @@ export const ModelTestBench: React.FC<{
       for (const other of rows) {
         if (other.key === row.key) continue
         const carried = transferModelParamOverridesBetweenModels(row.modelId, other.modelId, carriedSource)
-        if (Object.keys(carried).length) updated[other.key] = applyParamChanges(other.modelId, current[other.key] ?? registry.getDefaultValues(other.modelId), carried)
+        if (Object.keys(carried).length) updated[other.key] = applyGenerationParamChanges(other.modelId, current[other.key] ?? registry.getDefaultValues(other.modelId), carried)
       }
       return updated
     })
@@ -150,7 +141,7 @@ export const ModelTestBench: React.FC<{
           const switched = Object.fromEntries(registry.getSchema(row.modelId)
             .filter((param) => param.role && result.params[param.id] !== undefined && base[param.id] === startParams[param.id] && base[param.id] !== result.params[param.id])
             .map((param) => [param.id, result.params[param.id]]))
-          return Object.keys(switched).length ? { ...current, [row.key]: applyParamChanges(row.modelId, base, switched) } : current
+          return Object.keys(switched).length ? { ...current, [row.key]: applyGenerationParamChanges(row.modelId, base, switched) } : current
         })
       }
       setRun({ status: 'done', result })

@@ -1,0 +1,86 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/ltx-2.3/image-to-video/fast",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/ltx-2.3/image-to-video/fast",
+  "input": {
+    "properties": {
+      "prompt": {
+        "minLength": 1,
+        "maxLength": 5000,
+        "type": "string"
+      },
+      "image_url": {
+        "type": "string"
+      },
+      "aspect_ratio": {
+        "default": "auto",
+        "type": "string",
+        "enum": [
+          "auto",
+          "16:9",
+          "9:16"
+        ]
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "fps": {
+        "default": 25,
+        "type": "integer",
+        "enum": [
+          24,
+          25,
+          48,
+          50
+        ]
+      },
+      "duration": {
+        "default": 6,
+        "type": "integer",
+        "enum": [
+          6,
+          8,
+          10,
+          12,
+          14,
+          16,
+          18,
+          20
+        ]
+      },
+      "resolution": {
+        "default": "1080p",
+        "type": "string",
+        "enum": [
+          "1080p",
+          "1440p",
+          "2160p"
+        ]
+      },
+      "generate_audio": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt",
+      "image_url"
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { resolveUploadedVideoDurationSeconds } from "../shared/mediaPresence";
 export const klingVideoO1Model = defineModel({
     meta: {
         id: 'fal-ai-kling-video-o1',
@@ -14,6 +15,11 @@ export const klingVideoO1Model = defineModel({
         images: { max: 2 },
         videos: { max: 0 },
         rules: [
+            {
+                // 图生视频端点官方必填 start_image_url：没有首帧图时自动切到参考生视频（纯文字也能生成）。
+                when: 'falKlingVideoO1Mode === "image-to-video"',
+                images: { min: 1, max: 2 }
+            },
             {
                 when: 'falKlingVideoO1Mode === "reference-to-video"',
                 images: { max: 7 }
@@ -57,6 +63,10 @@ export const klingVideoO1Model = defineModel({
             order: 2,
             type: 'dropdown',
             default: 5,
+            // 视频编辑的成片时长跟随输入视频，官方编辑端点没有时长字段。
+            visible: {
+                condition: 'falKlingVideoO1Mode !== "video-to-video-edit"'
+            },
             options: [
                 { value: 5 },
                 { value: 10 }
@@ -119,10 +129,9 @@ export const klingVideoO1Model = defineModel({
             const aspectRatio = params.falKlingVideoO1AspectRatio;
             const keepAudio = params.falKlingVideoO1KeepAudio || false;
             const videoInput = typeof params.video === 'string' ? params.video : videos[0];
-            const requestData: JsonObject = {
-                prompt,
-                duration: `${duration}`
-            };
+            const requestData: JsonObject = mode === 'video-to-video-edit'
+                ? { prompt }
+                : { prompt, duration: `${duration}` };
             if (mode === 'image-to-video') {
                 if (images.length > 0) {
                     requestData.start_image_url = images[0];
@@ -158,11 +167,13 @@ export const klingVideoO1Model = defineModel({
         currency: '$',
         calculator: (params) => {
             const mode = params.falKlingVideoO1Mode || 'image-to-video';
-            const duration = Number(params.falKlingVideoO1VideoDuration) || 5;
+            const chosen = Number(params.falKlingVideoO1VideoDuration) || 5;
+            // 编辑按输入视频时长计费；读不到时长时按官方输入上限 10 秒估，宁高勿低。
+            const duration = mode === 'video-to-video-edit' ? resolveUploadedVideoDurationSeconds(params, 10) : chosen;
             const isVideoEdit = mode === 'video-to-video-edit' || mode === 'video-to-video-reference';
             return (isVideoEdit ? 0.168 : 0.112) * duration;
         },
-        description: '图生视频/参考生视频 $0.112/秒；视频编辑/参考 $0.168/秒'
+        description: '图生视频/参考生视频 $0.112/秒；视频参考 $0.168/秒；视频编辑 $0.168/秒，按输入视频时长计'
     }
 });
 export default klingVideoO1Model;

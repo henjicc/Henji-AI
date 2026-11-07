@@ -1,0 +1,55 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/elevenlabs/tts/eleven-v3",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/elevenlabs/tts/eleven-v3",
+  "input": {
+    "required": [
+      "text"
+    ],
+    "properties": {
+      "timestamps": {
+        "type": "boolean",
+        "default": false
+      },
+      "apply_text_normalization": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "on",
+          "off"
+        ],
+        "default": "auto"
+      },
+      "stability": {
+        "maximum": 1,
+        "type": "number",
+        "default": 0.5,
+        "minimum": 0
+      },
+      "text": {
+        "minLength": 1,
+        "type": "string",
+        "maxLength": 5000
+      },
+      "voice": {
+        "type": "string",
+        "default": "Rachel"
+      },
+      "language_code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object"
+  }
+}

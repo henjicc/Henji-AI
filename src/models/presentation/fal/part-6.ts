@@ -303,6 +303,16 @@ export const falPresentationPart6: Record<string, ModelPresentation> = {
         name: sharedFieldText('turboMode'),
       },
     },
-    linkages: [],
+    // 续写端点只收 2–7 秒，其余模式 2–8 秒；切到续写时去掉 8 秒，已选 8 秒退回默认。
+    linkages: [
+      {
+        trigger: 'viduQ2Mode', effect: 'filterOptions', target: 'falViduQ2VideoDuration',
+        filter: (mode, options) => mode === 'video-extension' ? options.filter(option => Number(option.value) <= 7) : options,
+      },
+      {
+        trigger: 'viduQ2Mode', effect: 'reset', targets: ['falViduQ2VideoDuration'],
+        condition: (mode, params) => mode === 'video-extension' && Number(params.falViduQ2VideoDuration) > 7,
+      },
+    ],
   },
 }

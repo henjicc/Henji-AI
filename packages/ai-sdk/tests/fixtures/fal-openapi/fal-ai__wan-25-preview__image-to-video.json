@@ -1,0 +1,85 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/wan-25-preview/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/wan-25-preview/image-to-video",
+  "input": {
+    "properties": {
+      "image_url": {
+        "max_height": 8000,
+        "max_file_size": 26214400,
+        "max_width": 8000,
+        "type": "string",
+        "min_height": 240,
+        "min_width": 240
+      },
+      "negative_prompt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "audio_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_prompt_expansion": {
+        "type": "boolean",
+        "default": true
+      },
+      "resolution": {
+        "type": "string",
+        "enum": [
+          "480p",
+          "720p",
+          "1080p"
+        ],
+        "default": "1080p"
+      },
+      "prompt": {
+        "type": "string",
+        "minLength": 1
+      },
+      "duration": {
+        "type": "string",
+        "enum": [
+          "5",
+          "10"
+        ],
+        "default": "5"
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt",
+      "image_url"
+    ]
+  }
+}

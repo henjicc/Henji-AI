@@ -1,0 +1,102 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=kling/v4/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "kling/v4/image-to-video",
+  "input": {
+    "properties": {
+      "prompt": {
+        "anyOf": [
+          {
+            "maxLength": 26000,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "limit_description": "Max file size: 30.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "maximum": 30,
+        "minimum": 3,
+        "type": "integer"
+      },
+      "multi_prompt": {
+        "anyOf": [
+          {
+            "items": {
+              "properties": {
+                "prompt": {
+                  "minLength": 1,
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                "duration": {
+                  "maximum": 30,
+                  "minimum": 1,
+                  "default": 5,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "prompt"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "middle_image_urls": {
+        "anyOf": [
+          {
+            "items": {
+              "_fal_ui_field": "image",
+              "limit_description": "Max file size: 30.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "resolution": {
+        "enum": [
+          "720p",
+          "1080p"
+        ],
+        "default": "1080p",
+        "type": "string"
+      },
+      "start_image_url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "start_image_url"
+    ],
+    "type": "object"
+  }
+}

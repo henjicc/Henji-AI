@@ -1,0 +1,84 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=topaz/upscale/image/creative",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "topaz/upscale/image/creative",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "Bloom 2",
+          "Bloom",
+          "Bloom Realism"
+        ],
+        "default": "Bloom 2"
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "creativity": {
+        "anyOf": [
+          {
+            "maximum": 9,
+            "type": "integer",
+            "minimum": 1
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "output_format": {
+        "type": "string",
+        "enum": [
+          "jpeg",
+          "png"
+        ],
+        "default": "jpeg"
+      },
+      "autoprompt": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "color_preservation": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "upscale_factor": {
+        "maximum": 4,
+        "type": "number",
+        "default": 2,
+        "minimum": 1
+      },
+      "image_url": {
+        "type": "string",
+        "minLength": 1
+      },
+      "crop_to_fill": {
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "type": "object"
+  }
+}

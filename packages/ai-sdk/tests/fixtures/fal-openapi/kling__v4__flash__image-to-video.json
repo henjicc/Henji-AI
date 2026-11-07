@@ -1,0 +1,44 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=kling/v4/flash/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "kling/v4/flash/image-to-video",
+  "input": {
+    "properties": {
+      "prompt": {
+        "anyOf": [
+          {
+            "maxLength": 26000,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "duration": {
+        "maximum": 20,
+        "minimum": 3,
+        "default": 5,
+        "type": "integer"
+      },
+      "resolution": {
+        "enum": [
+          "720p"
+        ],
+        "default": "720p",
+        "type": "string"
+      },
+      "start_image_url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "start_image_url"
+    ],
+    "type": "object"
+  }
+}

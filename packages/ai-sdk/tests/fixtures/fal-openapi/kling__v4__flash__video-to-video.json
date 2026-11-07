@@ -1,0 +1,130 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=kling/v4/flash/video-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "kling/v4/flash/video-to-video",
+  "input": {
+    "properties": {
+      "prompt": {
+        "maxLength": 26000,
+        "type": "string"
+      },
+      "video_urls": {
+        "anyOf": [
+          {
+            "items": {
+              "_fal_ui_field": "video",
+              "limit_description": "Max file size: 300.0MB, Min width: 700px, Min height: 700px, Max width: 4553px, Max height: 4553px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Min duration: 3.0s, Max duration: 20.05s, Min FPS: 23.9, Max FPS: 60.05, Timeout: 30.0s",
+              "type": "string"
+            },
+            "maxItems": 4,
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "image_urls": {
+        "anyOf": [
+          {
+            "items": {
+              "_fal_ui_field": "image",
+              "limit_description": "Max file size: 30.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "elements": {
+        "anyOf": [
+          {
+            "items": {
+              "properties": {
+                "frontal_image_url": {
+                  "anyOf": [
+                    {
+                      "limit_description": "Max file size: 30.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reference_image_urls": {
+                  "anyOf": [
+                    {
+                      "items": {
+                        "_fal_ui_field": "image",
+                        "limit_description": "Max file size: 30.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s",
+                        "type": "string"
+                      },
+                      "maxItems": 3,
+                      "type": "array"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "video_url": {
+                  "anyOf": [
+                    {
+                      "limit_description": "Max file size: 300.0MB, Min width: 700px, Min height: 700px, Max width: 4553px, Max height: 4553px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Min duration: 3.0s, Max duration: 8.05s, Min FPS: 23.9, Max FPS: 60.05, Timeout: 30.0s",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "maxItems": 7,
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "duration": {
+        "anyOf": [
+          {
+            "maximum": 20,
+            "minimum": 3,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "resolution": {
+        "enum": [
+          "720p"
+        ],
+        "default": "720p",
+        "type": "string"
+      },
+      "video_url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "prompt",
+      "video_url"
+    ],
+    "type": "object"
+  }
+}

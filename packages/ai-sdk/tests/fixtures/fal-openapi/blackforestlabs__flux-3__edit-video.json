@@ -1,0 +1,31 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=blackforestlabs/flux-3/edit-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "blackforestlabs/flux-3/edit-video",
+  "input": {
+    "required": [
+      "prompt",
+      "video_url"
+    ],
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "maxLength": 4096,
+        "type": "string"
+      },
+      "safety_tolerance": {
+        "default": 2,
+        "type": "integer",
+        "maximum": 4,
+        "minimum": 0
+      },
+      "video_url": {
+        "type": "string"
+      }
+    }
+  }
+}

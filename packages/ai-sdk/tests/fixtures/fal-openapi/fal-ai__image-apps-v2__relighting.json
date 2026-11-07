@@ -1,0 +1,60 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/image-apps-v2/relighting",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/image-apps-v2/relighting",
+  "input": {
+    "required": [
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "lighting_style": {
+        "enum": [
+          "natural",
+          "studio",
+          "golden_hour",
+          "blue_hour",
+          "dramatic",
+          "soft",
+          "hard",
+          "backlight",
+          "side_light",
+          "front_light",
+          "rim_light",
+          "sunset",
+          "sunrise",
+          "neon",
+          "candlelight",
+          "moonlight",
+          "spotlight",
+          "ambient"
+        ],
+        "default": "natural",
+        "type": "string"
+      },
+      "aspect_ratio": {
+        "type": "object",
+        "properties": {
+          "ratio": {
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4"
+            ],
+            "default": "1:1",
+            "type": "string"
+          }
+        }
+      },
+      "image_url": {
+        "type": "string"
+      }
+    }
+  }
+}

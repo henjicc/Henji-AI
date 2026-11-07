@@ -12,6 +12,13 @@ export const apimartSeedance25Model = defineModel({
         images: { max: 2 }, videos: { max: 0 }, audios: { max: 0 },
         rules: [{ when: 'apimartSeedance25Mode === "reference-to-video"', images: { max: 30 }, videos: { max: 10 }, audios: { max: 10 } }]
     },
+    // 视频编辑与延长必须有一段参考视频：写成提交前提示而不是数量下限，下限会让画布把用户选的任务悄悄换成付费的自动参考。
+    requirements: [{
+        id: 'apimart-seedance-2.5-video-task',
+        when: 'apimartSeedance25Mode === "reference-to-video" && (apimartSeedance25TaskType === "edit" || apimartSeedance25TaskType === "extend")',
+        require: { videos: { min: 1 } },
+        message: { title: '需要参考视频', message: '视频编辑和视频延长需要上传一段参考视频', type: 'warning' }
+    }],
     params: [
         {
             id: 'apimartSeedance25Mode', type: 'dropdown', order: 1,

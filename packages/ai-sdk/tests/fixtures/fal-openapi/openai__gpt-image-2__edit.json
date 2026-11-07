@@ -1,0 +1,128 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=openai/gpt-image-2/edit",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "openai/gpt-image-2/edit",
+  "input": {
+    "required": [
+      "prompt",
+      "image_urls"
+    ],
+    "properties": {
+      "prompt": {
+        "maxLength": 32000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "output_compression": {
+        "anyOf": [
+          {
+            "minimum": 0,
+            "maximum": 100,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "mask_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "image_size": {
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "default": 512,
+                "maximum": 14142,
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "width": {
+                "default": 512,
+                "maximum": 14142,
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "type": "object"
+          },
+          {
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto"
+            ],
+            "type": "string"
+          }
+        ],
+        "default": "auto"
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "output_format": {
+        "enum": [
+          "jpeg",
+          "png",
+          "webp"
+        ],
+        "type": "string",
+        "default": "png"
+      },
+      "image_urls": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 16,
+        "type": "array"
+      },
+      "quality": {
+        "enum": [
+          "auto",
+          "low",
+          "medium",
+          "high"
+        ],
+        "type": "string",
+        "default": "high"
+      },
+      "num_images": {
+        "minimum": 1,
+        "maximum": 10,
+        "type": "integer",
+        "default": 1
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "background": {
+        "enum": [
+          "auto",
+          "transparent",
+          "opaque"
+        ],
+        "type": "string",
+        "default": "auto"
+      }
+    },
+    "type": "object"
+  }
+}

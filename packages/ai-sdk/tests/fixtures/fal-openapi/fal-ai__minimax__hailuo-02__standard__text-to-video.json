@@ -1,0 +1,38 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/minimax/hailuo-02/standard/text-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/minimax/hailuo-02/standard/text-to-video",
+  "input": {
+    "required": [
+      "prompt"
+    ],
+    "properties": {
+      "prompt": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "duration": {
+        "enum": [
+          "6",
+          "10"
+        ],
+        "default": "6",
+        "type": "string"
+      },
+      "prompt_optimizer": {
+        "default": true,
+        "type": "boolean"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  }
+}

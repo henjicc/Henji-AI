@@ -1,0 +1,33 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=pixelcut/background-removal",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "pixelcut/background-removal",
+  "input": {
+    "type": "object",
+    "required": [
+      "image_url"
+    ],
+    "properties": {
+      "image_url": {
+        "type": "string"
+      },
+      "output_format": {
+        "type": "string",
+        "enum": [
+          "rgba",
+          "alpha",
+          "zip"
+        ],
+        "default": "rgba"
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 图片 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `fal-ai/z-image/turbo`、`fal-ai/z-image/turbo/image-to-image` |
@@ -93,3 +93,7 @@
 | 图生图 schema + 价格 | https://fal.ai/models/fal-ai/z-image/turbo/image-to-image/llms.txt | 否 |
 | 队列协议 | https://fal.ai/docs/documentation/model-apis/inference/queue | 否 |
 | API Key 创建 | https://fal.ai/dashboard/keys | **是** |
+
+## 2026-11-08 官方格式核对
+
+图生图 `strength` 官方取值大于 0、不超过 1，界面下限 0.05、构建时夹紧，参数静态下限仍为 0 以兼容旧工程（2026-11-08 按官方 OpenAPI 核对）。来源：https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<端点>（无需登录）。

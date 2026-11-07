@@ -1,0 +1,103 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=alibaba/wan-3.0/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "alibaba/wan-3.0/image-to-video",
+  "input": {
+    "properties": {
+      "seed": {
+        "anyOf": [
+          {
+            "maximum": 2147483647,
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "prompt": {
+        "anyOf": [
+          {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "resolution": {
+        "enum": [
+          "480p",
+          "720p",
+          "1080p"
+        ],
+        "default": "1080p",
+        "type": "string"
+      },
+      "aspect_ratio": {
+        "enum": [
+          "adaptive",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16"
+        ],
+        "default": "adaptive",
+        "type": "string"
+      },
+      "enable_prompt_expansion": {
+        "default": true,
+        "type": "boolean"
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "audio": {
+        "default": true,
+        "type": "boolean"
+      },
+      "enable_thinking": {
+        "default": false,
+        "type": "boolean"
+      },
+      "start_image_url": {
+        "type": "string"
+      },
+      "duration": {
+        "default": 5,
+        "anyOf": [
+          {
+            "maximum": 30,
+            "type": "integer",
+            "minimum": 2
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "start_image_url"
+    ],
+    "type": "object"
+  }
+}

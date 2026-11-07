@@ -49,6 +49,7 @@ export const zImageTurboModel = defineModel({
         },
         {
             id: 'falZImageTurboStrength', type: 'number', order: 8,
+            // 官方取值大于 0、不超过 1；参数下限保留 0，旧工程存的值仍能通过校验，请求时夹到 0.05 以上。
             default: 0.6, min: 0, max: 1, step: 0.05,
             visible: { condition: (params: JsonObject) => {
                     const uploaded = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths : [];
@@ -102,7 +103,7 @@ export const zImageTurboModel = defineModel({
             };
             if (images.length > 0) {
                 body.image_url = images[0];
-                body.strength = Math.min(1, Math.max(0, Number(params.falZImageTurboStrength ?? 0.6)));
+                body.strength = Math.min(1, Math.max(0.05, Number(params.falZImageTurboStrength ?? 0.6)));
             }
             return body;
         }

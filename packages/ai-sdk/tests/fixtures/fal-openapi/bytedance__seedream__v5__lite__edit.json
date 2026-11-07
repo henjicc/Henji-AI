@@ -1,0 +1,109 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=bytedance/seedream/v5/lite/edit",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "bytedance/seedream/v5/lite/edit",
+  "input": {
+    "required": [
+      "prompt",
+      "image_urls"
+    ],
+    "properties": {
+      "max_images": {
+        "maximum": 15,
+        "default": 1,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "image_size": {
+        "default": "auto_2K",
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "maximum": 16384,
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              "width": {
+                "maximum": 16384,
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto_2K",
+              "auto_3K",
+              "auto_4K"
+            ]
+          }
+        ]
+      },
+      "image_urls": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "output_format": {
+        "default": "jpeg",
+        "type": "string",
+        "enum": [
+          "jpeg",
+          "png"
+        ]
+      },
+      "sequential_image_generation": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "auto",
+              "disabled"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "watermark": {
+        "default": false,
+        "type": "boolean"
+      },
+      "num_images": {
+        "maximum": 6,
+        "default": 1,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  }
+}

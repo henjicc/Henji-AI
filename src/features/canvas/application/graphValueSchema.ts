@@ -1,4 +1,4 @@
-import { isParamVisible } from '@/components/params/paramVisibility';
+import { applyLinkageFilters, isParamVisible } from '@/components/params/paramVisibility';
 import { LinkageEngine } from '@/core/linkage';
 import { buildParamPresentationItems, type ParamPresentationItem } from '@/core/params/paramPresentation';
 import { registry } from '@/core/ModelRegistry';
@@ -28,11 +28,7 @@ export function resolveVisibleSchemaParamRows(
   const visibleParams = [...schema]
     .filter((param) => !excludedParamIds.has(param.id))
     .filter((param) => isParamVisible(param, values, linkageEngine))
-    .map((param): ParamDef => {
-      if (!linkageEngine || (param.type !== 'dropdown' && param.type !== 'radio')) return param;
-      const options = linkageEngine.getFilteredOptions(param.id, values, schema);
-      return !options.length || options === param.options ? param : { ...param, options } as ParamDef;
-    })
+    .map((param) => applyLinkageFilters(param, values, schema, linkageEngine))
     .sort((left, right) => left.order - right.order);
   const presentationItems = buildParamPresentationItems(visibleParams, model?.paramPresentation);
   const displayedParams = presentationItems.flatMap((item) => item.kind === 'param'

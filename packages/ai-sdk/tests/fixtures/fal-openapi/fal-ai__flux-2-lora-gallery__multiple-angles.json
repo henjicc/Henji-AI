@@ -1,0 +1,135 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/flux-2-lora-gallery/multiple-angles",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/flux-2-lora-gallery/multiple-angles",
+  "input": {
+    "properties": {
+      "acceleration": {
+        "enum": [
+          "none",
+          "regular"
+        ],
+        "default": "regular",
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "vertical_angle": {
+        "maximum": 60,
+        "default": 0,
+        "type": "number",
+        "minimum": 0
+      },
+      "num_inference_steps": {
+        "maximum": 50,
+        "default": 40,
+        "type": "integer",
+        "minimum": 4
+      },
+      "guidance_scale": {
+        "maximum": 20,
+        "default": 2.5,
+        "type": "number",
+        "minimum": 0
+      },
+      "horizontal_angle": {
+        "maximum": 360,
+        "default": 0,
+        "type": "number",
+        "minimum": 0
+      },
+      "image_urls": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "image_size": {
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "exclusiveMinimum": 0,
+                "maximum": 14142,
+                "default": 512,
+                "type": "integer"
+              },
+              "width": {
+                "exclusiveMinimum": 0,
+                "maximum": 14142,
+                "default": 512,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "lora_scale": {
+        "maximum": 2,
+        "default": 1,
+        "type": "number",
+        "minimum": 0
+      },
+      "num_images": {
+        "maximum": 4,
+        "default": 1,
+        "type": "integer",
+        "minimum": 1
+      },
+      "output_format": {
+        "enum": [
+          "png",
+          "jpeg",
+          "webp"
+        ],
+        "default": "png",
+        "type": "string"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "zoom": {
+        "maximum": 10,
+        "default": 5,
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "image_urls"
+    ],
+    "type": "object"
+  }
+}

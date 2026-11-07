@@ -1,0 +1,90 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=bytedance/seedream/v5/pro/text-to-image",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "bytedance/seedream/v5/pro/text-to-image",
+  "input": {
+    "properties": {
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "num_images": {
+        "maximum": 6,
+        "minimum": 1,
+        "type": "integer",
+        "default": 1
+      },
+      "image_size": {
+        "default": "auto_2K",
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "maximum": 14142,
+                "exclusiveMinimum": 0,
+                "type": "integer",
+                "default": 512
+              },
+              "width": {
+                "maximum": 14142,
+                "exclusiveMinimum": 0,
+                "type": "integer",
+                "default": 512
+              }
+            },
+            "type": "object"
+          },
+          {
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto_1K",
+              "auto_1.5K",
+              "auto_2K"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "watermark": {
+        "type": "boolean",
+        "default": false
+      },
+      "output_format": {
+        "enum": [
+          "jpeg",
+          "png"
+        ],
+        "default": "jpeg",
+        "type": "string"
+      },
+      "enhance_prompt_mode": {
+        "enum": [
+          "standard",
+          "fast"
+        ],
+        "type": "string",
+        "default": "standard"
+      },
+      "prompt": {
+        "type": "string"
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt"
+    ]
+  }
+}

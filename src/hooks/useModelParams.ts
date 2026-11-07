@@ -21,6 +21,9 @@ import {
   resolveGenerationParamOptions,
 } from '@/features/generation/domain/generationParams'
 import { reconcileDerivedMediaState } from '@/core/params/derivedMediaState'
+import { LinkageEngine } from '@/core/linkage'
+import type { Linkage } from '@/core/types/Linkage'
+import { applyLinkageFilters } from '@/components/params/paramVisibility'
 
 /**
  * Hook 返回值接口
@@ -127,6 +130,27 @@ export interface UseModelParamsReturn {
  * }
  * ```
  */
+/**
+ * 换模型时带过来的值只按目标 schema 的静态范围夹过；这里再按目标模型当前的联动选项与范围收一次
+ * （例如非组图时数量最多 4），界面显示的值与实际提交的值才一致。只收带过来的值，不触发其他联动。
+ */
+function fitTransferredToLinkages(schema: ParamDef[], linkages: Linkage[], values: DynamicValueMap, keys: readonly string[]): DynamicValueMap {
+  if (!linkages.length || !keys.length) return values
+  const engine = new LinkageEngine(linkages)
+  const next = { ...values }
+  for (const param of schema) {
+    if (!keys.includes(param.id)) continue
+    const filtered = applyLinkageFilters(param, next, schema, engine)
+    const value = next[param.id]
+    if (filtered.type === 'number' && typeof value === 'number') {
+      next[param.id] = Math.min(filtered.max ?? value, Math.max(filtered.min ?? value, value))
+    } else if ((filtered.type === 'dropdown' || filtered.type === 'radio') && !filtered.options.some((option) => option.value === value)) {
+      next[param.id] = param.default as DynamicValue
+    }
+  }
+  return next
+}
+
 export function useModelParams(modelId: string, enableTracking = false): UseModelParamsReturn {
   // 1. 获取模型定义
   const model = useMemo(() => {
@@ -166,10 +190,10 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
         modelId,
         previousParams
       )
-      return { ...defaults, ...transferred }
+      return fitTransferredToLinkages(schema, linkages, { ...defaults, ...transferred }, Object.keys(transferred))
     })
     previousModelIdRef.current = modelId
-  }, [modelId, defaults])
+  }, [modelId, defaults, linkages, schema])
 
   // 7. 设置单个参数（集成联动引擎和追踪）
   const setParam = useCallback((key: string, value: DynamicValue) => {

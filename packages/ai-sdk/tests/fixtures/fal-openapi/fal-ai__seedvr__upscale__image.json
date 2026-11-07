@@ -1,0 +1,78 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/seedvr/upscale/image",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/seedvr/upscale/image",
+  "input": {
+    "type": "object",
+    "required": [
+      "image_url"
+    ],
+    "properties": {
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "upscale_factor": {
+        "type": "number",
+        "maximum": 10,
+        "default": 2,
+        "minimum": 1
+      },
+      "noise_scale": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0.1,
+        "multipleOf": 0.001
+      },
+      "target_resolution": {
+        "type": "string",
+        "default": "1080p",
+        "enum": [
+          "720p",
+          "1080p",
+          "1440p",
+          "2160p"
+        ]
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "upscale_mode": {
+        "type": "string",
+        "default": "factor",
+        "enum": [
+          "target",
+          "factor"
+        ]
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      },
+      "output_format": {
+        "type": "string",
+        "default": "jpg",
+        "enum": [
+          "png",
+          "jpg",
+          "webp"
+        ]
+      },
+      "image_url": {
+        "type": "string"
+      }
+    }
+  }
+}

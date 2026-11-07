@@ -1,0 +1,35 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video",
+  "input": {
+    "required": [
+      "prompt",
+      "image_url"
+    ],
+    "properties": {
+      "prompt": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "prompt_optimizer": {
+        "default": true,
+        "type": "boolean"
+      },
+      "image_url": {
+        "_fal_ui_field": "image",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  }
+}

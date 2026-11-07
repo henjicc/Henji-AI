@@ -1,0 +1,88 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=blackforestlabs/flux-3/edit-image",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "blackforestlabs/flux-3/edit-image",
+  "input": {
+    "properties": {
+      "version": {
+        "type": "string",
+        "const": "latest",
+        "default": "latest"
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "resolution": {
+        "enum": [
+          "768sq",
+          "1k",
+          "1.5k",
+          "2k",
+          "4k"
+        ],
+        "type": "string",
+        "default": "1k"
+      },
+      "output_format": {
+        "enum": [
+          "jpeg",
+          "png"
+        ],
+        "type": "string",
+        "default": "jpeg"
+      },
+      "safety_tolerance": {
+        "minimum": 0,
+        "maximum": 4,
+        "default": 2,
+        "type": "integer"
+      },
+      "image_urls": {
+        "maxItems": 10,
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string"
+        }
+      },
+      "aspect_ratio": {
+        "enum": [
+          "auto",
+          "21:9",
+          "2:1",
+          "16:9",
+          "3:2",
+          "7:5",
+          "4:3",
+          "5:4",
+          "1:1",
+          "4:5",
+          "3:4",
+          "5:7",
+          "2:3",
+          "9:16",
+          "1:2"
+        ],
+        "type": "string",
+        "default": "auto"
+      },
+      "enable_prompt_expansion": {
+        "type": "boolean",
+        "default": false
+      },
+      "prompt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "prompt",
+      "image_urls"
+    ],
+    "type": "object"
+  }
+}
