@@ -17,17 +17,27 @@ export const SILICONFLOW_PROVIDER_PRESET: LlmProviderPreset = {
   baseUrl: SILICONFLOW_BASE_URL,
   reasoning: { enabled: true, effort: 'high' },
   reasoningConfigurable: true,
+  // 2026-11-07 按账号模型列表核对；已过时的条目在建模型时自动跳过。
   modelIds: [
     SILICONFLOW_DEFAULT_MODEL_ID,
+    'deepseek-ai/DeepSeek-V4.1-Flash',
+    'deepseek-ai/DeepSeek-V4-Pro',
     'zai-org/GLM-5.3',
+    'zai-org/GLM-5.3-Flash',
+    'zai-org/GLM-5.2',
     'moonshotai/Kimi-K2.7-Code',
     'Qwen/Qwen3.8-27B',
   ],
+  // 托管能力以硅基流动为准：模型页没写明的多模态输入与输出上限不继承原厂，先按纯文本、输出上限留空，
+  // 由用户“验证此模型”补齐。
   modelCapabilities: {
     'zai-org/GLM-5.3': {
       image: false, video: false, audio: false, file: false,
       sampling: true, contextWindow: 1_048_576, maxOutputTokens: null,
     },
+    ...Object.fromEntries([
+      'deepseek-ai/DeepSeek-V4.1-Flash', 'deepseek-ai/DeepSeek-V4-Pro', 'zai-org/GLM-5.3-Flash', 'zai-org/GLM-5.2',
+    ].map(modelId => [modelId, { image: false, video: false, audio: false, file: false, maxOutputTokens: null }])),
   },
   websiteUrl: metadata.websiteUrl,
   apiKeyUrl: metadata.apiKeyUrl,

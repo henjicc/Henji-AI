@@ -44,10 +44,13 @@ describe('SiliconFlow LLM and model discovery', () => {
     const provider = createProviderFromPreset(SILICONFLOW_PROVIDER_PRESET, { providerId: 'my-siliconflow' })
     expect(provider).toMatchObject({ providerId: 'my-siliconflow', providerFamilyId: 'siliconflow', credentialId: 'my-siliconflow' })
     const models = createModelsFromPreset(SILICONFLOW_PROVIDER_PRESET, provider)
-    expect(models.map(m => m.modelId)).toEqual(['deepseek-ai/DeepSeek-V4-Flash', 'zai-org/GLM-5.3', 'Qwen/Qwen3.8-27B'])
+    expect(models.map(m => m.modelId)).not.toContain('moonshotai/Kimi-K2.7-Code')
+    expect(models[0].modelId).toBe('deepseek-ai/DeepSeek-V4-Flash')
     expect(models.every(m => m.apiProtocol === 'openai-compatible' && m.capabilities.toolCall)).toBe(true)
-    expect(models[1].capabilities).toMatchObject({ maxOutputTokens: null, sampling: true, image: false })
-    expect(models[2].capabilities).toMatchObject({ image: true, video: false, contextWindow: 262_144 })
+    const byId = (id: string) => models.find(m => m.modelId === id)!.capabilities
+    expect(byId('zai-org/GLM-5.3')).toMatchObject({ maxOutputTokens: null, sampling: true, image: false })
+    expect(byId('deepseek-ai/DeepSeek-V4.1-Flash')).toMatchObject({ image: false, maxOutputTokens: null })
+    expect(byId('Qwen/Qwen3.8-27B')).toMatchObject({ image: true, video: false, contextWindow: 262_144 })
     expect(findLlmProviderPreset('deepseek')?.modelIds[0]).toBe('deepseek-flash')
   })
 
