@@ -10,6 +10,8 @@ const labels = (values: readonly string[], named: Record<string, I18nText> = {})
 function seedancePresentation(id: string, name: string, prefix: string, resolutions: string[], is25: boolean): ModelPresentation {
   const maxImages = is25 ? 30 : 9
   const maxAudios = is25 ? 10 : 3
+  const maxVideos = is25 ? 10 : 3
+  const maxVideoSeconds = is25 ? 30 : 15
   return {
     meta: { name: { key: 'meta.name', fallback: name }, i18nScope: `models.defs.${id}` },
     params: {
@@ -21,10 +23,27 @@ function seedancePresentation(id: string, name: string, prefix: string, resoluti
           'reference-to-video': sharedModeText('referenceToVideo'),
         }),
         tooltip: {
-          zh: `文/图生视频：1 张图为首帧，2 张为首尾帧。参考生视频可放最多 ${maxImages} 张图、${maxAudios} 段音频${is25 ? '' : '（音频需搭配参考图）'}；火山方舟不支持上传参考视频。`,
-          en: `Text/Image to Video: 1 image is the first frame, 2 are first and last frames. Reference takes up to ${maxImages} images and ${maxAudios} audio clips${is25 ? '' : ' (audio needs a reference image)'}; Volcengine Ark does not accept uploaded reference videos.`,
+          zh: `文/图生视频：1 张图为首帧，2 张为首尾帧。参考生视频可放最多 ${maxImages} 张图、${maxVideos} 段视频（合计 ${maxVideoSeconds} 秒内）、${maxAudios} 段音频${is25 ? '' : '（音频需搭配参考图或视频）'}。本地视频会经设置里的通用文件上传服务托管后提交。`,
+          en: `Text/Image to Video: 1 image is the first frame, 2 are first and last frames. Reference takes up to ${maxImages} images, ${maxVideos} videos (${maxVideoSeconds}s in total) and ${maxAudios} audio clips${is25 ? '' : ' (audio needs a reference image or video)'}. Local videos are hosted through the file upload service in Settings before submitting.`,
         },
       },
+      ...(is25 ? {
+        [`${prefix}TaskType`]: {
+          name: { zh: '任务类型', en: 'Task Type' },
+          // 决定是否必须有参考视频、比例是否强制自适应、时长是否失效，属于模式级选择。
+          role: 'mode' as const,
+          optionLabels: labels(['auto', 'reference', 'edit', 'extend'], {
+            auto: { zh: '自动判断', en: 'Automatic' },
+            reference: { zh: '参考生成', en: 'Reference' },
+            edit: { zh: '视频编辑', en: 'Video Edit' },
+            extend: { zh: '视频延长', en: 'Video Extend' },
+          }),
+          tooltip: {
+            zh: '视频编辑与延长需要至少一段参考视频，比例跟随原视频；编辑的时长也跟随原视频。',
+            en: 'Video edit and extend need at least one reference video and follow its aspect ratio; edit also follows its duration.',
+          },
+        },
+      } : {}),
       [`${prefix}AspectRatio`]: {
         name: sharedFieldText('aspectRatio'),
         optionLabels: labels(['smart', '1:1', '4:3', '3:4', '16:9', '9:16', '21:9'], { smart: sharedOptionText('smart') }),

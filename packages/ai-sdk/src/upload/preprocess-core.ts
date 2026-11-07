@@ -38,6 +38,8 @@ export interface ProviderMediaRewriteInput {
   source: string
   prepared: PreparedMediaBinary
   params: JsonObject
+  /** 正在预处理的整个请求体（只读）；按模型申请上传凭证的供应商从这里取 model。 */
+  requestBody: JsonValue
   requestId?: string
   signal?: AbortSignal
   runtime: ResolvedRuntimeContext
@@ -64,6 +66,7 @@ interface TraversalContext {
   providerId: string
   route: string
   params: JsonObject
+  requestBody: JsonValue
   mediaSources: MediaSourceIndex
   mediaFields: ReadonlyMap<string, Exclude<MediaKind, 'unknown'>>
   requestId?: string
@@ -83,6 +86,7 @@ export async function preprocessWithProviderStrategy(
     providerId: input.providerId,
     route: input.route,
     params,
+    requestBody: body,
     mediaSources: buildMediaSourceIndex(params),
     mediaFields: new Map((input.constraints?.mediaFields ?? []).map(({ field, kind }) => [field, kind])),
     requestId: input.requestId,
@@ -159,6 +163,7 @@ async function rewriteMediaSource(
     source,
     prepared,
     params: context.params,
+    requestBody: context.requestBody,
     requestId: context.requestId,
     signal: context.signal,
     runtime: context.runtime,

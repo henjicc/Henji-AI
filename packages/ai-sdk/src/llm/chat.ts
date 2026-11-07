@@ -256,7 +256,11 @@ async function preprocessLlmRequest(request: LlmChatRequestDto, runtime: Runtime
     '/v1/chat/completions',
     body,
     runtime,
-    params
+    params,
+    undefined,
+    undefined,
+    undefined,
+    'llm'
   )
   const processedBody = isJsonObject(processed) ? processed : body
   const processedMessages = Array.isArray(processedBody.messages)

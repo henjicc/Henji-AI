@@ -26,7 +26,7 @@
 | 首尾帧 | 2 个 `image_url`，`role` 必填 `first_frame` / `last_frame`；尾帧比例不一致时以首帧为准裁剪 |
 | 全模态参考 | `image_url` + `role: reference_image`、`audio_url` + `role: reference_audio`、`video_url` + `role: reference_video`；参考图 1–30 张、参考音频最多 10 段（单段 2–30 秒，总 ≤ 30 秒），可只传音频 |
 
-图片支持公网 URL、`data:image/<格式>;base64,` 与 `asset://`；单张 < 30 MB，宽高比 0.4–2.5，边长 300–6000 px，请求体 ≤ 64 MB。音频支持公网 URL、`data:audio/<格式>;base64,`（格式 wav / mp3）与 `asset://`；单段 ≤ 15 MB。**参考视频只收公网 URL 或 `asset://`，不收 Base64。** 方舟 Files API 的 File ID 只用于理解类接口，官方未声明可用于视频生成，因此项目不开放参考视频（视频编辑、延长同样依赖参考视频，一并不开放）。
+图片支持公网 URL、`data:image/<格式>;base64,` 与 `asset://`；单张 < 30 MB，宽高比 0.4–2.5，边长 300–6000 px，请求体 ≤ 64 MB。音频支持公网 URL、`data:audio/<格式>;base64,`（格式 wav / mp3）与 `asset://`；单段 ≤ 15 MB。**参考视频只收公网 URL 或 `asset://`，不收 Base64**：最多 10 段，单段 2–30 秒（编辑任务 4–30 秒），合计 ≤ 30 秒，mp4 / mov，单个 ≤ 200 MB，24–60 fps。本地视频经设置里的“通用文件上传服务”（KIE / Fal）托管成公网地址后提交，一家都没配置时提交前提示去设置；2.5 另有 `omni_reference_task_type`（项目「任务类型」：自动 / 参考生成 / 视频编辑 / 视频延长），编辑与延长至少一段参考视频、`ratio` 必须 `adaptive`，编辑的 `duration` 必须 `-1`。
 
 不支持直接上传含真人人脸的参考图 / 视频（需走官方授权素材或虚拟人像库）。
 
@@ -56,7 +56,7 @@
 
 - 视频价格 = token 单价 × token 用量；token ≈ (输入视频时长 + 输出时长) × 输出宽 × 输出高 × 24 / 1024，准确值以查询结果 `usage.completion_tokens` 为准；仅成功生成计费。
 - 典型价：480p 16:9 5 秒 ¥3.36；720p ¥7.56；1080p ¥18.71（官方「价格示例」）。
-- 项目不开放参考视频，按「输入不含视频」单价与官方像素表（按所选比例，智能比例按 16:9）估算。
+- 不带参考视频时按「输入不含视频」单价；带参考视频时按「输入含视频」单价，token 用量计入输入视频时长（读不到时长按输出时长估、封顶合计上限；2.5 编辑任务输出时长按输入时长估）。像素按官方表与所选比例，智能比例按 16:9。含视频时官方另有最低 token 用量，项目未计入。
 
 ## 5. 事件 / 状态矩阵
 
@@ -78,7 +78,7 @@
 
 - 产品模型 `volcengine-seedance-2.5`，参数交互与 APIMart 同家族入口一致：`role: 'mode'` 模式（文/图生视频、参考生视频）+ 比例 + 分辨率 + 时长 + 声音 / 尾帧 / 联网搜索开关。
 - 2.5 首帧 / 首尾帧任务只接受 `ratio: "adaptive"`，SDK 在有首帧时强制发 `adaptive`。
-- 参考模式显式发 `omni_reference_task_type: "reference"`：不开放参考视频后只剩参考生视频这一种子任务，提交时即校验限制。
+- 参考模式默认显式发 `omni_reference_task_type: "reference"`（项目「任务类型」默认“参考生成”），提交时即校验限制，也避免 `auto` 因提示词里的“替换 / 删除”被判成编辑任务后异步失败；选“视频编辑 / 视频延长”时至少一段参考视频、比例固定 `adaptive`，编辑的时长固定 `-1` 并隐藏时长控件；“自动判断”放在最后。
 - 「自动时长」开关发 `duration: -1`，计价按 30 秒预估。
 - 未接入：`draft` 样片模式、`output_format: mov`（产品约定不暴露输出格式）、`priority`、`callback_url`、`execution_expires_after`、`safety_identifier`。
 - 本地图片、音频由方舟官方支持的 Data URI 发送；本地读出的 `audio/mpeg`、`audio/x-wav` 等 MIME 在发送前改成官方格式名 `mp3` / `wav`。

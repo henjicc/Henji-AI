@@ -36,14 +36,17 @@ async function readBailianJson(response: Response, model: string | undefined): P
 
 export async function execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
   const asyncTask = isAsyncRoute(input.route)
+  const body = JSON.stringify(input.body)
   const response = await fetchProvider('Bailian', normalizeEndpoint(BAILIAN_BASE_URL, input.route), {
     method: input.method,
     headers: {
       Authorization: `Bearer ${input.apiKey}`,
       'Content-Type': 'application/json',
       ...(asyncTask ? { 'X-DashScope-Async': 'enable' } : {}),
+      // 本地素材经临时存储上传成 oss:// 后，官方要求带这个头才会解析。
+      ...(body.includes('"oss://') ? { 'X-DashScope-OssResourceResolve': 'enable' } : {}),
     },
-    body: JSON.stringify(input.body),
+    body,
     signal: input.signal,
   }, {
     transport: input.runtime.transport,

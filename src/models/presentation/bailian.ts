@@ -67,7 +67,7 @@ export const bailianPresentation: Record<string, ModelPresentation> = {
           'text-image-to-video': { label: sharedModeText('textImageToVideo') },
           'reference-to-video': { label: sharedModeText('referenceToVideo') },
         },
-        tooltip: { zh: '文/图生视频：1 张图为首帧，2 张为首尾帧。参考生视频可放最多 10 张图，提示词里用“图1”“图2”指代。', en: 'Text/Image to Video: 1 image is the first frame, 2 are first and last frames. Reference takes up to 10 images; refer to them as Image 1, Image 2 in the prompt.' },
+        tooltip: { zh: '文/图生视频：1 张图为首帧，2 张为首尾帧。参考生视频可放最多 10 张图、5 段视频、5 段音频（视频、音频各合计 15 秒内），提示词里用“图1”“视频1”“音频1”指代；带上视频并写明意图即可编辑或延长它。', en: 'Text/Image to Video: 1 image is the first frame, 2 are first and last frames. Reference takes up to 10 images, 5 videos and 5 audio clips (15s each in total); refer to them as Image 1, Video 1, Audio 1 in the prompt. Add a video and describe the change to edit or extend it.' },
       },
       bailianWan30AspectRatio: {
         name: sharedFieldText('aspectRatio'),

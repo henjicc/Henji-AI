@@ -71,8 +71,8 @@ function modelStem(absolute) {
 }
 
 function preprocessorOf(provider) {
-  if (provider === 'modelscope') return 'kie'
-  if (['apimart', 'fal', 'kie', 'ppio'].includes(provider)) return provider
+  if (provider === 'modelscope') return 'public-host'
+  if (['apimart', 'fal', 'kie', 'ppio', 'volcengine', 'bailian'].includes(provider)) return provider
   return 'data-uri'
 }
 

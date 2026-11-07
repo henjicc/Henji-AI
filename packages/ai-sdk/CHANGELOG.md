@@ -2,6 +2,8 @@
 
 ## 0.10.0 - 未发布
 
+- 本地媒体托管：新增 `upload/public-host-upload.ts`，按宿主“通用文件上传服务”设置（`__upload_provider` 首选、`__upload_fallback` 换用）用 KIE 或 Fal 把本地文件托管成公网地址；派欧云、魔搭改用它（此前忽略 Fal 设置、只走 KIE），火山方舟的参考视频也走它，一家都没配置时提交前报 `public_media_url_required` 并提示去设置。新增 `upload/bailian-oss-upload.ts`（百炼临时存储，语音识别与生成共用），百炼生成链路的视频、音频按请求 model 上传成 `oss://`，请求体含 `oss://` 时提交带 `X-DashScope-OssResourceResolve`。`ProviderMediaRewriteInput` 新增 `requestBody`。
+- 火山方舟 Seedance 开放参考视频（2.0 系列 ≤ 3 段、2.5 ≤ 10 段），按“输入含视频”单价并计入输入视频时长；Seedance 2.5 新增任务类型（自动 / 参考 / 视频编辑 / 视频延长）。百炼万相 3.0 开放参考视频与参考音频（各 ≤ 5），输入视频时长同价计费，读得到时长时输出时长收进“输入 + 输出 ≤ 30 秒”。
 - `ModelRuntimeMeta` 与 `LlmModelCatalogEntry` 新增可选 `deprecated`（过时原因）：能力发现跳过这类模型，`createModelsFromPreset` 与 `createBigmodelModels` 不再为它们建模型，仍可按 ID 解析。首批标记 Fal LTX-2 / Veo 3.1、火山 Seedream 5.0 Lite、KIE Seedance 1.5 Pro、派欧云 Kling 3.0 与 MiniMax Speech、Kimi K2.6 / K2.7 Code、MiMo 2.5 / 2.5 Pro。
 - 新增生成模型（全部只做离线请求构建与官方价格核对）：GPT Image 2.6（Fal、KIE、APIMart、Grsai）、FLUX 3（Fal、APIMart）与 FLUX 3 Klein（KIE）、Seedream 5.0 Flash（APIMart）、Kling 4.0 与 4.0 Flash（Fal、KIE；APIMart 4.0）、Wan 3.0（Fal、APIMart、KIE、Grsai）与 Wan 3.0 Prime（KIE）、Gemini Omni 1.2 Flash（Fal、APIMart）、Grok Imagine Video 1.5（Fal、KIE、APIMart）、MiniMax H3 Max（Fal、APIMart）、LTX-2.3（Fal）、Veo 3.1 与 HappyHorse 1.1（APIMart）、Eleven v4 / v4 Turbo（Fal）、Gemini 3.8 Flash / Flash-Lite TTS（KIE）、Qwen Audio 3.1 TTS Plus（百炼）。
 - 火山方舟与百炼官方供应商新增异步视频任务（提交 + 按任务 ID 轮询，可在宿主重启后续查）：火山方舟 Seedance 2.5 / 2.0 / 2.0 Fast / 2.0 Mini，百炼万相 3.0（Prime 为版本选项）；同步图片与语音路径不变。方舟参考音频只收 MP3 / WAV，其他格式提交前报 `invalid_media`。

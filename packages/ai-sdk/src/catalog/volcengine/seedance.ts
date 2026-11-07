@@ -1,7 +1,7 @@
 /** 火山方舟官方 Seedance 2.5 / 2.0 系列视频生成模型的共用运行时契约。 */
 
 import { defineModel } from '../defineModel'
-import { resolveUploadedImageSources } from '../shared/mediaPresence'
+import { resolveUploadedImageSources, resolveUploadedVideoDurationSeconds, resolveUploadedVideoSources } from '../shared/mediaPresence'
 import type { RuntimeParamDef } from '../../types/model'
 import type { JsonObject, JsonValue } from '../../types/runtime'
 
@@ -33,6 +33,8 @@ export interface VolcengineSeedanceConfig {
   resolutions: string[]
   /** 输入不含视频时的在线推理 token 单价（元/百万 token），按输出分辨率。 */
   tokenPrices: Record<string, number>
+  /** 输入含参考视频时的 token 单价（元/百万 token）；输入视频时长同样计入 token 用量。 */
+  videoTokenPrices: Record<string, number>
   priceDescription: string
 }
 
@@ -49,6 +51,16 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
   const maxDuration = is25 ? 30 : 15
   const maxReferenceImages = is25 ? 30 : 9
   const maxReferenceAudios = is25 ? 10 : 3
+  // 参考视频：2.5 最多 10 段、合计 ≤ 30 秒；2.0 系列最多 3 段、合计 ≤ 15 秒。只收公网 URL，本地文件经通用文件上传服务托管。
+  const maxReferenceVideos = is25 ? 10 : 3
+  const maxReferenceVideoSeconds = is25 ? 30 : 15
+  // 2.5 才有显式任务类型；编辑、延长都要求至少一段参考视频且比例自适应，编辑还不能指定时长。
+  // 默认显式发 reference：提交时就校验限制，也不会因提示词里的“替换”被平台判成编辑任务后异步失败。
+  const taskType = (params: JsonObject): 'auto' | 'reference' | 'edit' | 'extend' => {
+    const value = String(params[key('TaskType')] ?? 'reference')
+    return is25 && (value === 'auto' || value === 'edit' || value === 'extend') ? value : 'reference'
+  }
+  const editing = `${key('Mode')} === "reference-to-video" && ${key('TaskType')} === "edit"`
 
   const resolution = (params: JsonObject): string => {
     const value = String(params[key('Resolution')] ?? '720p')
@@ -65,40 +77,53 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
       default: 'text-image-to-video',
       options: [{ value: 'text-image-to-video' }, { value: 'reference-to-video' }],
     },
+    ...(is25 ? [{
+      id: key('TaskType'), type: 'dropdown' as const, order: 2, default: 'reference',
+      visible: { condition: `${key('Mode')} === "reference-to-video"` },
+      options: [{ value: 'reference' }, { value: 'edit' }, { value: 'extend' }, { value: 'auto' }],
+    }] : []),
     {
-      id: key('AspectRatio'), type: 'dropdown', order: 2,
+      id: key('AspectRatio'), type: 'dropdown', order: 3,
       default: 'smart',
       options: [{ value: 'smart' }, ...['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'].map((value) => ({ value }))],
     },
     {
-      id: key('Resolution'), type: 'dropdown', order: 3,
+      id: key('Resolution'), type: 'dropdown', order: 4,
       default: '720p',
       options: config.resolutions.map((value) => ({ value })),
     },
     {
-      id: key('Duration'), type: 'number', order: 4,
+      id: key('Duration'), type: 'number', order: 5,
       default: 5, min: 4, max: maxDuration, step: 1,
+      ...(is25 ? { visible: { condition: `!(${editing})` } } : {}),
     },
-    ...(is25 ? [{ id: key('AutoDuration'), type: 'switch' as const, order: 5, default: false }] : []),
-    { id: key('GenerateAudio'), type: 'switch', order: 6, default: true },
-    { id: key('ReturnLastFrame'), type: 'switch', order: 7, default: false },
-    { id: key('WebSearch'), type: 'switch', order: 8, default: false },
+    ...(is25 ? [{ id: key('AutoDuration'), type: 'switch' as const, order: 6, default: false, visible: { condition: `!(${editing})` } }] : []),
+    { id: key('GenerateAudio'), type: 'switch', order: 7, default: true },
+    { id: key('ReturnLastFrame'), type: 'switch', order: 8, default: false },
+    { id: key('WebSearch'), type: 'switch', order: 9, default: false },
   ]
 
   return defineModel({
     meta: {
       id: config.id, canonicalModelId: config.canonicalModelId, seriesId: 'seedance', seriesRank: config.seriesRank,
       provider: 'volcengine', type: 'video',
-      tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
+      tags: is25
+        ? ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'video-to-video', 'video-extension']
+        : ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode'],
       polling: { interval: 5000, maxAttempts: 400, expectedAttempts: 60 },
     },
-    // 方舟参考视频只收公网 URL 或素材 ID，方舟没有可供视频生成使用的官方上传，故不开放参考视频。
     inputLimits: {
       images: { max: 2 }, videos: { max: 0 }, audios: { max: 0 },
-      rules: [{
-        when: `${key('Mode')} === "reference-to-video"`,
-        images: { max: maxReferenceImages }, videos: { max: 0 }, audios: { max: maxReferenceAudios },
-      }],
+      rules: [
+        {
+          when: `${key('Mode')} === "reference-to-video"`,
+          images: { max: maxReferenceImages }, videos: { max: maxReferenceVideos }, audios: { max: maxReferenceAudios },
+        },
+        ...(is25 ? [{
+          when: `${key('Mode')} === "reference-to-video" && (${key('TaskType')} === "edit" || ${key('TaskType')} === "extend")`,
+          images: { max: maxReferenceImages }, videos: { min: 1, max: maxReferenceVideos }, audios: { max: maxReferenceAudios },
+        }] : []),
+      ],
     },
     params,
     endpoints: '/api/v3/contents/generations/tasks',
@@ -106,6 +131,7 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
       builder: (input) => {
         const images = resolveUploadedImageSources(input)
         const audios = audioSources(input)
+        const videos = resolveUploadedVideoSources(input)
         const reference = input[key('Mode')] !== 'text-image-to-video'
         const rawRatio = String(input[key('AspectRatio')] || 'smart')
         const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : ''
@@ -125,11 +151,18 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
         if (input[key('WebSearch')] === true) body.tools = [{ type: 'web_search' }]
 
         if (reference) {
-          if (images.length + audios.length === 0) throw new Error(`Seedance ${config.generation} 参考生视频至少需要一张参考图或一段参考音频`)
-          if (!is25 && images.length === 0) throw new Error('Seedance 2.0 的参考音频必须与参考图片一起使用')
-          // 不开放参考视频，参考任务只可能是参考生视频，显式声明以便提交时就校验限制。
-          if (is25) body.omni_reference_task_type = 'reference'
+          if (images.length + audios.length + videos.length === 0) throw new Error(`Seedance ${config.generation} 参考生视频至少需要一张参考图、一段参考视频或参考音频`)
+          if (!is25 && audios.length > 0 && images.length + videos.length === 0) throw new Error('Seedance 2.0 的参考音频必须与参考图或参考视频一起使用')
+          const task = taskType(input)
+          if ((task === 'edit' || task === 'extend') && videos.length === 0) {
+            throw new Error(`Seedance 2.5 的${task === 'edit' ? '视频编辑' : '视频延长'}至少需要一段参考视频`)
+          }
+          if (is25) body.omni_reference_task_type = task
+          if (task === 'edit' || task === 'extend') body.ratio = 'adaptive'
+          // 编辑任务的输出时长跟随原视频，官方只接受 -1。
+          if (task === 'edit') body.duration = -1
           for (const url of images.slice(0, maxReferenceImages)) content.push({ type: 'image_url', image_url: { url }, role: 'reference_image' })
+          for (const url of videos.slice(0, maxReferenceVideos)) content.push({ type: 'video_url', video_url: { url }, role: 'reference_video' })
           for (const url of audios.slice(0, maxReferenceAudios)) content.push({ type: 'audio_url', audio_url: { url }, role: 'reference_audio' })
           return body
         }
@@ -150,10 +183,18 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
         const rawRatio = String(input[key('AspectRatio')] || 'smart')
         const table = PIXELS[config.generation][res] ?? PIXELS[config.generation]['720p']
         const [width, height] = table[rawRatio] ?? table['16:9']
-        const seconds = autoDuration(input) ? maxDuration : duration(input)
-        // 官方 token 用量估算：(输入视频时长 + 输出时长) × 宽 × 高 × 24fps / 1024；本入口无输入视频。
-        const tokens = seconds * width * height * 24 / 1024
-        return tokens * (config.tokenPrices[res] ?? config.tokenPrices['720p']) / 1_000_000
+        const withVideo = input[key('Mode')] !== 'text-image-to-video' && resolveUploadedVideoSources(input).length > 0
+        const task = taskType(input)
+        // 读不到参考视频时长时按输出时长估，并封顶到平台的合计上限。
+        const inputSeconds = withVideo
+          ? Math.min(maxReferenceVideoSeconds, resolveUploadedVideoDurationSeconds(input, duration(input)))
+          : 0
+        // 编辑任务输出时长跟随原视频；自动时长按上限预估。
+        const outputSeconds = task === 'edit' && withVideo ? inputSeconds : autoDuration(input) ? maxDuration : duration(input)
+        // 官方 token 用量估算：(输入视频时长 + 输出时长) × 宽 × 高 × 24fps / 1024。
+        const tokens = (inputSeconds + outputSeconds) * width * height * 24 / 1024
+        const prices = withVideo ? config.videoTokenPrices : config.tokenPrices
+        return tokens * (prices[res] ?? prices['720p']) / 1_000_000
       },
       description: config.priceDescription,
     },

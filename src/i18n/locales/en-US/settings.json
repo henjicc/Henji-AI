@@ -657,7 +657,7 @@
     },
     "upload": {
       "title": "Generic Upload Service",
-      "description": "Provide file hosting for models without native uploads (e.g., ModelScope, PPIO).",
+      "description": "Provide file hosting for models that do not accept local files (e.g., ModelScope, PPIO, Volcengine Ark reference videos).",
       "providerLabel": "File hosting service",
       "fallbackLabel": "Use another service if it fails",
       "fallbackHint": "Try other configured providers when the primary fails.",

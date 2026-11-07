@@ -1,7 +1,7 @@
 /** 由 scripts/generate-catalog-index.cjs 自动生成；`pack` 是完整执行单元，`model` 仅供低层目录用途。 */
 import model from '../../../catalog/bailian/qwen-audio-3.1-tts-plus.model'
 import * as adapter from '../../../providers/bailian'
-import { preprocess } from '../../../upload/provider-preprocessors/data-uri'
+import { preprocess } from '../../../upload/provider-preprocessors/bailian'
 import type { GenerationClientProviderRegistration, GenerationPack } from '../../../generation/core'
 
 export { model }

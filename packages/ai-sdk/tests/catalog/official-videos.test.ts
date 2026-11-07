@@ -39,7 +39,7 @@ describe('火山方舟 Seedance 请求构建', () => {
   it('2.5 参考生视频：参考图与参考音频，显式 reference 任务，自动时长发 -1', () => {
     const body = build(volcengineSeedance25Model, {
       prompt: '图1 在唱歌', uploadedFilePaths: ['a.png'], uploadedAudioFilePaths: ['v.mp3'],
-      volcengineSeedance25AspectRatio: 'smart', volcengineSeedance25AutoDuration: true, volcengineSeedance25WebSearch: true,
+      volcengineSeedance25AspectRatio: 'smart', volcengineSeedance25TaskType: 'reference', volcengineSeedance25AutoDuration: true, volcengineSeedance25WebSearch: true,
     })
     expect(body).toMatchObject({
       omni_reference_task_type: 'reference', ratio: 'adaptive', duration: -1, tools: [{ type: 'web_search' }],
@@ -51,8 +51,8 @@ describe('火山方舟 Seedance 请求构建', () => {
     })
   })
 
-  it('2.0 参考音频必须搭配参考图；2.0 不发 2.5 专属的任务类型', () => {
-    expect(() => build(volcengineSeedance20Model, { prompt: 'x', uploadedAudioFilePaths: ['v.mp3'] })).toThrow('参考图片')
+  it('2.0 参考音频必须搭配参考图或参考视频；2.0 不发 2.5 专属的任务类型', () => {
+    expect(() => build(volcengineSeedance20Model, { prompt: 'x', uploadedAudioFilePaths: ['v.mp3'] })).toThrow('参考图或参考视频')
     const body = build(volcengineSeedance20Model, { prompt: 'x', uploadedFilePaths: ['a.png'], volcengineSeedance20Resolution: '4k' })
     expect(body).not.toHaveProperty('omni_reference_task_type')
     expect(body).toMatchObject({ model: 'doubao-seedance-2-0-260128', resolution: '4k', duration: 5 })
@@ -125,4 +125,55 @@ describe('百炼 Qwen Audio 3.1 TTS Plus', () => {
     // 官方示例“中A文123”为 8 个字符。
     expect(price(bailianQwenAudio31TtsPlusModel, { prompt: '中A文123' })).toBeCloseTo(8 * 1.4 / 10_000, 8)
   })
+})
+
+describe('参考视频（火山方舟 Seedance、百炼万相 3.0）', () => {
+  it('Seedance 2.0 参考模式按 reference_video 发送视频，最多 3 段', () => {
+    const body = build(volcengineSeedance20Model, {
+      prompt: '视频1 的人换成卡通风', volcengineSeedance20Mode: 'reference-to-video',
+      uploadedVideoFilePaths: ['https://h/1.mp4', 'https://h/2.mp4', 'https://h/3.mp4', 'https://h/4.mp4'],
+    })
+    const videos = (body.content as JsonObject[]).filter((item) => item.type === 'video_url')
+    expect(videos).toEqual(['1', '2', '3'].map((n) => ({ type: 'video_url', video_url: { url: `https://h/${n}.mp4` }, role: 'reference_video' })))
+    expect(body).not.toHaveProperty('omni_reference_task_type')
+  })
+
+  it('Seedance 2.5 视频编辑强制自适应比例与 -1 时长，缺视频时提交前拒绝', () => {
+    const edit = { prompt: '把天空改成黄昏', volcengineSeedance25Mode: 'reference-to-video', volcengineSeedance25TaskType: 'edit', volcengineSeedance25AspectRatio: '16:9', volcengineSeedance25Duration: 8 }
+    expect(build(volcengineSeedance25Model, { ...edit, uploadedVideoFilePaths: ['https://h/a.mp4'] }))
+      .toMatchObject({ omni_reference_task_type: 'edit', ratio: 'adaptive', duration: -1 })
+    expect(build(volcengineSeedance25Model, { ...edit, volcengineSeedance25TaskType: 'extend', uploadedVideoFilePaths: ['https://h/a.mp4'] }))
+      .toMatchObject({ omni_reference_task_type: 'extend', ratio: 'adaptive', duration: 8 })
+    expect(() => build(volcengineSeedance25Model, { ...edit, uploadedFilePaths: ['a.png'] })).toThrow('至少需要一段参考视频')
+  })
+
+  it('Seedance 带参考视频按“输入含视频”单价计费，输入视频时长计入', () => {
+    // 2.0、720p、16:9：输入 10 秒 + 输出 5 秒 = 15 秒，单价 ¥28/百万 token。
+    const tokens = 15 * 1280 * 720 * 24 / 1024
+    expect(price(volcengineSeedance20Model, {
+      volcengineSeedance20Mode: 'reference-to-video', volcengineSeedance20Resolution: '720p', volcengineSeedance20AspectRatio: '16:9',
+      volcengineSeedance20Duration: 5, uploadedVideoFilePaths: ['https://h/a.mp4'], __videoDurationSeconds: [10],
+    })).toBeCloseTo(tokens * 28 / 1_000_000, 6)
+  })
+
+  it('万相 3.0 参考模式发参考视频与参考音频，输入视频时长与输出同价计入', () => {
+    const params = {
+      prompt: '视频1 接着往下拍', bailianWan30Mode: 'reference-to-video', bailianWan30Resolution: '720P', bailianWan30Duration: 5,
+      uploadedFilePaths: ['data:image/png;base64,AA=='], uploadedVideoFilePaths: ['oss://dir/v.mp4'], uploadedAudioFilePaths: ['oss://dir/a.mp3'], __videoDurationSeconds: [6],
+    }
+    expect((build(bailianWan30Model, params).input as JsonObject).media).toEqual([
+      { type: 'reference_image', url: 'data:image/png;base64,AA==' },
+      { type: 'reference_video', url: 'oss://dir/v.mp4' },
+      { type: 'reference_audio', url: 'oss://dir/a.mp3' },
+    ])
+    expect(price(bailianWan30Model, params)).toBeCloseTo(0.6 * (5 + 6), 6)
+  })
+})
+
+it('万相 3.0 有视频输入时输出时长收进“输入 + 输出 ≤ 30 秒”', () => {
+  const body = build(bailianWan30Model, {
+    prompt: '视频1 继续', bailianWan30Mode: 'reference-to-video', bailianWan30Duration: 30,
+    uploadedVideoFilePaths: ['oss://dir/v.mp4'], __videoDurationSeconds: [12.4],
+  })
+  expect((body.parameters as JsonObject).duration).toBe(17)
 })

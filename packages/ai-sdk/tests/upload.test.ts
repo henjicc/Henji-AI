@@ -40,7 +40,7 @@ describe('request media preprocessing', () => {
 
   afterEach(() => vi.useRealTimers())
 
-  it.each(['kie', 'modelscope'])('%s 上传失败保留根因、记录失败且不回退 data URI', async providerId => {
+  it.each(['kie'])('%s 上传失败保留根因、记录失败且不回退 data URI', async providerId => {
     // synthetic-negative：缺 URL、HTTP 故障、网络失败，不冒充官方响应。
     for (const failure of [
       () => Promise.resolve(jsonResponse({ success: true })),
@@ -60,7 +60,7 @@ describe('request media preprocessing', () => {
     }
   })
 
-  it.each(['kie', 'modelscope'])('%s 缺 KIE Key 时拒绝本地媒体并说明修正方式', async providerId => {
+  it.each(['kie'])('%s 缺 KIE Key 时拒绝本地媒体并说明修正方式', async providerId => {
     const fetchMock = vi.fn()
     await expect(preprocessRequestBody(providerId, '/api/v1/jobs/createTask', { image_url: 'data:image/png;base64,AQID' }, fakeRuntime(fetchMock, {}))).rejects.toMatchObject({ code: 'missing_api_key', message: expect.stringContaining('配置 KIE API Key') })
     expect(fetchMock).not.toHaveBeenCalled()
