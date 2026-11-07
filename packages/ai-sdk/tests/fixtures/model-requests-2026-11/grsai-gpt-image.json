@@ -1,0 +1,39 @@
+{
+  "source": {
+    "url": "https://qmy27nhsd9.apifox.cn/452409160e0.md",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official request schema; descriptions, examples and documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "type": "string"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "images": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "aspectRatio": {
+        "type": "string"
+      },
+      "replyType": {
+        "type": "string"
+      },
+      "quality": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "model",
+      "prompt"
+    ]
+  }
+}

@@ -107,12 +107,13 @@ describe('catalog consumer contract', () => {
   it('client.catalog 的 6 个公开查询函数直接消费真实 catalog', () => {
     const client = createAIClient({ runtime })
     try {
-      // 公开查询必须与真实 catalog 同源，不另抄一份数量清单。
-      const ids = (models: ReadonlyArray<{ meta: { id: string } }>) => models.map((model) => model.meta.id)
-      expect(ids(client.catalog.listByType('image'))).toEqual(ids(catalog.filter((model) => model.meta.type === 'image')))
-      expect(ids(client.catalog.listByType('video'))).toEqual(ids(catalog.filter((model) => model.meta.type === 'video')))
-      expect(ids(client.catalog.listByProvider('fal'))).toEqual(ids(catalog.filter((model) => model.meta.provider === 'fal')))
-      expect(client.catalog.listByProvider('volcengine').length).toBeGreaterThan(0)
+      // 查询函数必须原样反映 catalog，而不是另有一份筛选结果。
+      for (const type of ['image', 'video', 'audio'] as const) {
+        expect(client.catalog.listByType(type)).toEqual(catalog.filter((model) => model.meta.type === type))
+      }
+      for (const provider of ['fal', 'volcengine', 'kie']) {
+        expect(client.catalog.listByProvider(provider)).toEqual(catalog.filter((model) => model.meta.provider === provider))
+      }
       expect(client.catalog.listByTag('voice-clone').map((model) => model.meta.id))
         .toEqual(expect.arrayContaining(['ppio-minimax-speech', 'volcengine-seed-icl-2.0']))
 
@@ -136,12 +137,8 @@ describe('catalog consumer contract', () => {
 
   it('编译并执行真实 catalog 的全部显隐/inputLimits/requirement 条件', () => {
     const conditions = collectCatalogConditions()
-    const stringConditions = conditions.filter((item) => typeof item.condition === 'string')
-    const functionConditions = conditions.filter((item) => typeof item.condition === 'function')
-
-    expect(stringConditions.length).toBeGreaterThan(0)
-    expect(functionConditions.length).toBeGreaterThan(0)
-    expect(stringConditions.length + functionConditions.length).toBe(conditions.length)
+    expect(conditions.some((item) => typeof item.condition === 'string')).toBe(true)
+    expect(conditions.some((item) => typeof item.condition === 'function')).toBe(true)
 
     for (const { modelId, condition } of conditions) {
       if (typeof condition === 'string') expect(() => compileRuntimeCondition(condition)).not.toThrow()

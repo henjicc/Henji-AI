@@ -1,13 +1,15 @@
 /** 由 scripts/generate-catalog-index.cjs 自动生成；只聚合当前供应商的真实模型文件。 */
 import model1 from '../../catalog/grsai/gpt-image-2.5.model'
-import model2 from '../../catalog/grsai/gpt-image-2.model'
-import model3 from '../../catalog/grsai/nano-banana-2-lite.model'
-import model4 from '../../catalog/grsai/nano-banana-2.1.model'
-import model5 from '../../catalog/grsai/nano-banana-2.model'
-import model6 from '../../catalog/grsai/nano-banana-pro.model'
+import model2 from '../../catalog/grsai/gpt-image-2.6.model'
+import model3 from '../../catalog/grsai/gpt-image-2.model'
+import model4 from '../../catalog/grsai/nano-banana-2-lite.model'
+import model5 from '../../catalog/grsai/nano-banana-2.1.model'
+import model6 from '../../catalog/grsai/nano-banana-2.model'
+import model7 from '../../catalog/grsai/nano-banana-pro.model'
+import model8 from '../../catalog/grsai/wan-3.0.model'
 import { provider } from '../provider-adapters/grsai'
 import type { GenerationPack } from '../../generation/core'
 
-export const models = [model1, model2, model3, model4, model5, model6] as const
+export const models = [model1, model2, model3, model4, model5, model6, model7, model8] as const
 export const pack: GenerationPack = { models, providers: [provider] }
 export default pack

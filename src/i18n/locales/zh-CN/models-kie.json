@@ -145,6 +145,13 @@
         "name": "HappyHorse 1.1"
       }
     },
-    "kie-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "生成和编辑最高 4K 的图像"}}
+    "kie-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "生成和编辑最高 4K 的图像"}},
+    "kie-gpt-image-2.6": {"meta": {"name": "GPT Image 2.6"}},
+    "kie-kling-4.0": {"meta": {"name": "Kling 4.0"}},
+    "kie-kling-4.0-flash": {"meta": {"name": "Kling 4.0 Flash"}},
+    "kie-wan-3.0": {"meta": {"name": "Wan 3.0"}},
+    "kie-wan-3.0-prime": {"meta": {"name": "Wan 3.0 Prime"}},
+    "kie-grok-imagine-video-1.5": {"meta": {"name": "Grok Imagine 视频 1.5"}},
+    "kie-flux-3-klein": {"meta": {"name": "FLUX 3 Klein"}}
   }
 }

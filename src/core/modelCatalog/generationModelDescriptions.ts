@@ -30,6 +30,7 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'flux-2-multiple-angles': { zh: '基于 FLUX.2 的连续镜头角度调整工具，可分别控制水平角度、垂直角度和缩放，适合商品与主体视角探索。', en: 'A FLUX.2 camera-angle tool with continuous horizontal, vertical, and zoom controls.' },
   'gpt-image-2': { zh: '推荐使用！OpenAI 高端通用图像生成与编辑模型，文字排版、多语言、提示遵循和参考图保真表现突出，适合复杂商业视觉、海报及高精度修改。', en: '' },
   'gpt-image-2.5': { zh: '', en: '' },
+  'flux-3-klein': { zh: 'Black Forest Labs FLUX 3 的轻量快速版本，单价很低、出图快，适合大批量草图、风格探索与日常改图。', en: 'The lightweight, fast tier of FLUX 3 with a very low per-image price, suited to bulk drafts, style exploration and everyday edits.' },
   'ic-light-v2': { zh: '专用图片重打光模型，支持文字描述与五档离散初始光照方向，适合人物、商品和室内画面的光照重绘；方向仅是生成偏好，不是物理精确灯位。', en: '' },
   'grok-imagine-image': { zh: 'xAI 的对话式图片生成与编辑模型，侧重快速写实出图、风格变化和自然语言修改，分辨率比较低。', en: '' },
   'grok-imagine-image-2.0': { zh: 'xAI 新一代图片生成与编辑模型，强化写实质感、提示遵循、连续修改和多图输出，适合快速探索视觉方案与对话式迭代。', en: '' },
@@ -90,6 +91,7 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'vidu-q2': { zh: '在 Q1 基础上增强动态效果、画面细节和生成时长，支持文生、图生、参考生、首尾帧及视频延长，适合复杂运动和多主体内容。', en: '' },
   'vidu-q3': { zh: '新一代音视频一体化版本，支持智能分镜、同步对白与音效、最长 16 秒和更强多机位一致性，部分细分版本面向剧情及广告生产。', en: '' },
   'wan-2.5-preview': { zh: '万相首个原生音画同步版本，可同时生成对白、环境音效和背景音乐，支持 1080p、24fps 及最长 10 秒，奠定 Wan 音视频一体化能力。', en: '' },
+  'wan-3.0-prime': { zh: '万相 3.0 的高画质版本，在细节、质感和复杂运动上更进一步，价格更高，适合对画面要求高的成片。', en: 'The premium tier of Wan 3.0 with finer detail, texture and complex motion at a higher price, suited to final shots with demanding visuals.' },
 
   // 音频模型
   'minimax-speech-2.8': { zh: 'MiniMax 新一代多语言语音合成模型，重点提升情绪控制、呼吸和笑声等语气标签及 10 秒高相似度音色克隆；HD 侧重拟真表现，Turbo 侧重速度和自然流畅度。', en: '' },
@@ -99,6 +101,8 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'cosyvoice-v3.5': { zh: '百炼自定义音色语音合成，需要预先创建复刻或设计音色。', en: 'Speech synthesis using a previously created custom voice.' },
   'eleven-v3-dialogue': { zh: 'ElevenLabs 对话语音合成，支持按说话人组织台词。', en: 'Dialogue speech synthesis with per-turn voices.' },
   'gemini-3.1-flash-tts': { zh: 'Gemini 语音合成，可通过结构化说话人和台词生成对话。', en: 'Speech synthesis using structured speakers and dialogue turns.' },
+  'gemini-3.8-flash-tts': { zh: 'Gemini 3.8 语音合成，音色更丰富、语气标签和逐句风格描述更细，适合有表演感的旁白与对话。', en: 'Gemini 3.8 speech synthesis with more voices, richer tone tags and per-line style direction, suited to expressive narration and dialogue.' },
+  'gemini-3.8-flash-lite-tts': { zh: 'Gemini 3.8 语音合成的轻量版，延迟和价格更低，适合大批量配音与语音助手。', en: 'The lightweight tier of Gemini 3.8 speech synthesis with lower latency and price, suited to high-volume voiceover and voice agents.' },
   'cosyvoice2-0.5b': { zh: '硅基流动托管的 CosyVoice2 语音合成模型。', en: 'CosyVoice2 speech synthesis hosted by SiliconFlow.' },
   'moss-ttsd-v0.5': { zh: '硅基流动托管的多说话人对话语音模型。', en: 'Multi-speaker dialogue speech synthesis hosted by SiliconFlow.' },
   'seed-tts-2.0': { zh: '豆包新一代语音合成模型，可选择平台音色。', en: 'Doubao speech synthesis with platform voices.' },

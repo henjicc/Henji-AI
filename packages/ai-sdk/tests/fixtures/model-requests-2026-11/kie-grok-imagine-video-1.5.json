@@ -1,0 +1,114 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/grok-imagine/1-5-preview.md",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official request schema; descriptions, examples and documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "grok-imagine-video-1-5-preview"
+        ],
+        "default": "grok-imagine-video-1-5-preview"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 1
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4",
+              "3:2",
+              "2:3",
+              "auto"
+            ],
+            "default": "auto"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ],
+            "default": "480p"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 15,
+            "multipleOf": 1,
+            "default": 8
+          },
+          "first_frame_url": {
+            "type": "string"
+          },
+          "last_frame_url": {
+            "type": "string"
+          },
+          "loop_url": {
+            "type": "string"
+          },
+          "keyframes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "timestamp_s": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "url",
+                "timestamp_s"
+              ]
+            },
+            "maxItems": 4
+          },
+          "enable_audio": {
+            "type": "boolean"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "image_urls"
+        ]
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ]
+  }
+}

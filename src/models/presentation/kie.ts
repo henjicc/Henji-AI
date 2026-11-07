@@ -6,6 +6,7 @@ import { kiePresentationPart3 } from './kie/part-3'
 import { kiePresentationPart4 } from './kie/part-4'
 import { kiePresentationPart5 } from './kie/part-5'
 import { kiePresentationPart6 } from './kie/part-6'
+import { kiePresentationPart7 } from './kie/part-7'
 
 export const kiePresentation = {
   ...kiePresentationPart1,
@@ -14,4 +15,5 @@ export const kiePresentation = {
   ...kiePresentationPart4,
   ...kiePresentationPart5,
   ...kiePresentationPart6,
+  ...kiePresentationPart7,
 }

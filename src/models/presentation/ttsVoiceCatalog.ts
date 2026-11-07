@@ -29,6 +29,17 @@ const geminiNames = [
   'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat',
 ]
 
+// Gemini 3.8 TTS 官方 70 个预设音色，按用途分组排列。
+const gemini38Names = [
+  'Bodi', 'Lumi', 'Sadaltager', 'Sola', 'Sulafat', 'Varo', 'Zephyr', 'Koda', 'Kore', 'Nika', 'Tavi', 'Zeno',
+  'Algenib', 'Despina', 'Erinome', 'Kira', 'Ludo', 'Mako', 'Rasalgethi', 'Rina', 'Alnilam', 'Brio', 'Jori',
+  'Laomedeia', 'Rami', 'Veda', 'Achird', 'Enzo', 'Riko', 'Sami', 'Zali', 'Zubenelgenubi', 'Algieba', 'Aoede',
+  'Autonoe', 'Callirrhoe', 'Enceladus', 'Gero', 'Iapetus', 'Neno', 'Olin', 'Tari', 'Umbriel', 'Achernar',
+  'Charon', 'Daro', 'Fola', 'Hali', 'Milo', 'Puck', 'Arlo', 'Cleo', 'Fenrir', 'Finn', 'Leda', 'Lora', 'Orus',
+  'Enya', 'Jett', 'Knox', 'Nyla', 'Sadachbia', 'Vindemiatrix', 'Cruz', 'Elio', 'Gacrux', 'Pulcherrima',
+  'Schedar', 'Tova', 'Zuri',
+]
+
 const siliconflowNames: Array<[string, string]> = [
   ['alex', '沉稳男声 Alex'], ['benjamin', '低沉男声 Benjamin'],
   ['charles', '磁性男声 Charles'], ['david', '欢快男声 David'],
@@ -69,6 +80,8 @@ export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
     allowCustomId: true,
   },
   'kie-gemini-3.1-flash-tts': { voices: geminiNames.map((name) => systemVoice(name)), allowSearch: true },
+  'kie-gemini-3.8-flash-tts': { voices: gemini38Names.map((name) => systemVoice(name)), allowSearch: true },
+  'kie-gemini-3.8-flash-lite-tts': { voices: gemini38Names.map((name) => systemVoice(name)), allowSearch: true },
   'siliconflow-cosyvoice2-tts': {
     voices: siliconflowNames.map(([id, name]) => systemVoice(`FunAudioLLM/CosyVoice2-0.5B:${id}`, name)),
     allowSearch: true,
