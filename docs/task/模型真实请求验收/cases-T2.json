@@ -1,0 +1,395 @@
+[
+ {
+  "id": "T1-43-r2",
+  "tier": "T1",
+  "modelId": "apimart-grok-imagine-2.0",
+  "prompt": "手机横屏壁纸：极光",
+  "params": {
+   "apimartGrokImagine20Version": "official",
+   "apimartGrokImagine20Quality": "low",
+   "apimartGrokImagine20AspectRatio": "19.5:9"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "19.5:9"
+  }
+ },
+ {
+  "id": "T1-10-r3",
+  "tier": "T1",
+  "modelId": "kie-eleven-v3-dialogue",
+  "prompt": "Where did you go today?",
+  "params": {
+   "kieElevenDialogue": [
+    {
+     "text": "Where did you go today?",
+     "voice": "EkK5I93UQWFDigLMpZcX"
+    },
+    {
+     "text": "I went to the library.",
+     "voice": "Z3R5wn05IrDiVCyEkUrK"
+    }
+   ]
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-32-r3",
+  "tier": "T1",
+  "modelId": "kie-hailuo-02",
+  "prompt": "从第一张过渡到第二张，镜头平移",
+  "params": {
+   "kieHailuo02Resolution": "512P",
+   "kieHailuo02PromptOptimizer": false
+  },
+  "media": {
+   "images": [
+    "still.jpg",
+    "still2.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 6,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T2-15",
+  "tier": "T2",
+  "modelId": "apimart-gemini-omni-1.2-flash",
+  "prompt": "把画面改成黄昏的暖色调",
+  "params": {
+   "apimartGeminiOmni12Channel": "ext",
+   "apimartGeminiOmni12Mode": "edit",
+   "apimartGeminiOmni12Resolution": "360p"
+  },
+  "media": {
+   "videos": [
+    "clip3s.mp4"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1
+  }
+ },
+ {
+  "id": "T2-07",
+  "tier": "T2",
+  "modelId": "apimart-grok-imagine-video-1.5",
+  "prompt": "竖屏：一盏台灯慢慢亮起",
+  "params": {
+   "apimartGrokVideo15Channel": "official",
+   "apimartGrokVideo15Resolution": "480p",
+   "apimartGrokVideo15Duration": 1,
+   "apimartGrokVideo15AspectRatio": "3:4"
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "3:4",
+   "seconds": 1,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T2-02",
+  "tier": "T2",
+  "modelId": "apimart-wan-3.0",
+  "prompt": "湖面泛起涟漪，镜头缓慢推近",
+  "params": {
+   "apimartWan30Resolution": "480P",
+   "apimartWan30Duration": 2,
+   "apimartWan30Audio": false
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 2,
+   "secondsTolerance": 1,
+   "hasAudio": false
+  }
+ },
+ {
+  "id": "T2-03",
+  "tier": "T2",
+  "modelId": "kie-wan-3.0",
+  "prompt": "方形构图：一杯咖啡冒着热气",
+  "params": {
+   "kieWan30Resolution": "480p",
+   "kieWan30Duration": "2",
+   "kieWan30AspectRatio": "1:1",
+   "kieWan30Audio": false
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "1:1",
+   "seconds": 2,
+   "secondsTolerance": 1,
+   "hasAudio": false
+  }
+ },
+ {
+  "id": "T2-20",
+  "tier": "T2",
+  "modelId": "fal-ai-nano-banana-2.1",
+  "prompt": "竖幅杂志封面：一位老人在花园里读报",
+  "params": {
+   "falNanoBanana21AspectRatio": "4:5",
+   "falNanoBanana21OutputFormat": "webp",
+   "falNanoBanana21Thinking": "minimal"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "4:5"
+  }
+ },
+ {
+  "id": "T2-21",
+  "tier": "T2",
+  "modelId": "fal-ai-qwen-image-3.0",
+  "prompt": "横幅：茶馆招牌写着“清风茶舍”",
+  "params": {
+   "falQwenImage30Resolution": "1MP",
+   "falQwenImage30AspectRatio": "3:2",
+   "falQwenImage30PromptExpansion": false
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "3:2"
+  }
+ },
+ {
+  "id": "T2-22",
+  "tier": "T2",
+  "modelId": "fal-ai-flux-3",
+  "prompt": "一个陶瓷茶杯的产品照，白底",
+  "params": {
+   "falFlux3Resolution": "768sq",
+   "falFlux3AspectRatio": "1:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "1:1"
+  }
+ },
+ {
+  "id": "T2-23",
+  "tier": "T2",
+  "modelId": "fal-ai-grok-imagine-2.0",
+  "prompt": "横幅：沙漠公路上的老爷车",
+  "params": {
+   "falGrokImagine20Quality": "low",
+   "falGrokImagine20AspectRatio": "2:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "2:1"
+  }
+ },
+ {
+  "id": "T2-24",
+  "tier": "T2",
+  "modelId": "fal-ai-kling-image-o1",
+  "prompt": "把这张图改成水彩画风格",
+  "params": {
+   "falKlingImageO1AspectRatio": "16:9"
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1
+  }
+ },
+ {
+  "id": "T2-25",
+  "tier": "T2",
+  "modelId": "fal-ai-gpt-image-2.5",
+  "prompt": "横幅：极简风格的山脉线条",
+  "params": {
+   "gpt25Quality": "low",
+   "gpt25AspectRatio": "3:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "3:1"
+  }
+ },
+ {
+  "id": "T2-26",
+  "tier": "T2",
+  "modelId": "apimart-gpt-image-2.5",
+  "prompt": "竖长条：一棵竹子",
+  "params": {
+   "gpt25Quality": "low",
+   "gpt25AspectRatio": "1:3"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "1:3"
+  }
+ },
+ {
+  "id": "T2-27",
+  "tier": "T2",
+  "modelId": "apimart-qwen-image-3.0",
+  "prompt": "横幅：书店门口的黑板写着“今日推荐”",
+  "params": {
+   "apimartQwenImage30AspectRatio": "3:2"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "3:2"
+  }
+ },
+ {
+  "id": "T2-28",
+  "tier": "T2",
+  "modelId": "apimart-wan-2.7-image",
+  "prompt": "一盘饺子的俯拍美食照",
+  "params": {
+   "apimartWan27ImageResolution": "1K",
+   "apimartWan27ImageAspectRatio": "4:3"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "4:3"
+  }
+ },
+ {
+  "id": "T2-29",
+  "tier": "T2",
+  "modelId": "apimart-seedream-5.0-pro",
+  "prompt": "宽幅：清晨的稻田与远山",
+  "params": {
+   "apimartSeedream50ProResolution": "1K",
+   "apimartSeedream50ProAspectRatio": "2:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "2:1"
+  }
+ },
+ {
+  "id": "T2-30",
+  "tier": "T2",
+  "modelId": "grsai-gpt-image-2",
+  "prompt": "竖长条：一串红灯笼",
+  "params": {
+   "grsaiGptImage2AspectRatio": "1:3"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "1:3"
+  }
+ },
+ {
+  "id": "T2-31",
+  "tier": "T2",
+  "modelId": "grsai-nano-banana-2",
+  "prompt": "一只柴犬在雪地里奔跑",
+  "params": {
+   "grsaiNanoBanana2AspectRatio": "5:4"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "5:4"
+  }
+ },
+ {
+  "id": "T2-32",
+  "tier": "T2",
+  "modelId": "kie-gpt-image-2.5",
+  "prompt": "横幅：图书馆阅览室",
+  "params": {
+   "gpt25AspectRatio": "27:16",
+   "gpt25Background": "opaque"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "27:16"
+  }
+ },
+ {
+  "id": "T2-33",
+  "tier": "T2",
+  "modelId": "kie-seedream-5.0-pro",
+  "prompt": "宽银幕：雨夜霓虹街道",
+  "params": {
+   "kieSeedream50ProAspectRatio": "21:9"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "21:9"
+  }
+ },
+ {
+  "id": "T2-40",
+  "tier": "T2",
+  "modelId": "fal-flux-2-multiple-angles",
+  "prompt": "",
+  "params": {
+   "horizontalAngle": 45,
+   "verticalAngle": 30,
+   "zoom": 3
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1
+  }
+ },
+ {
+  "id": "T2-42",
+  "tier": "T2",
+  "modelId": "fal-image-apps-v2-outpaint",
+  "prompt": "",
+  "params": {
+   "expandLeft": 128,
+   "expandRight": 128,
+   "zoomOutPercentage": 0
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1
+  }
+ }
+]

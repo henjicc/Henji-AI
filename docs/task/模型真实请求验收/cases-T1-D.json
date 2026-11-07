@@ -1,0 +1,406 @@
+[
+ {
+  "id": "T1-34",
+  "tier": "T1",
+  "modelId": "kie-z-image",
+  "prompt": "竖幅：森林小屋，晨雾",
+  "params": {
+   "kieZImageAspectRatio": "3:4"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "3:4"
+  }
+ },
+ {
+  "id": "T1-35",
+  "tier": "T1",
+  "modelId": "kie-nano-banana-2.1",
+  "prompt": "改成竖长条的卷轴画",
+  "params": {
+   "kieNanoBanana21AspectRatio": "1:4",
+   "kieNanoBanana21OutputFormat": "png"
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "1:4"
+  }
+ },
+ {
+  "id": "T1-36",
+  "tier": "T1",
+  "modelId": "kie-grok-imagine-2.0",
+  "prompt": "复古胶片风格的海边咖啡馆",
+  "params": {
+   "kieGrokImagine20AspectRatio": "3:2"
+  },
+  "expect": {
+   "kind": "image",
+   "aspect": "3:2"
+  }
+ },
+ {
+  "id": "T1-37",
+  "tier": "T1",
+  "modelId": "kie-qwen-image-3.0",
+  "prompt": "宽幅海报，标题“夏日祭”",
+  "params": {
+   "kieQwenImage30AspectRatio": "21:9",
+   "kieQwenImage30PromptExtend": false
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "21:9"
+  }
+ },
+ {
+  "id": "T1-38",
+  "tier": "T1",
+  "modelId": "kie-seedream-5.0-lite",
+  "prompt": "竖幅：樱花树下的猫",
+  "params": {
+   "kieSeedream50LiteAspectRatio": "2:3"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "2:3"
+  }
+ },
+ {
+  "id": "T1-39",
+  "tier": "T1",
+  "modelId": "kie-nano-banana-2-lite",
+  "prompt": "超宽全景：雪山连绵",
+  "params": {
+   "kieNanoBanana2LiteAspectRatio": "8:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "8:1"
+  }
+ },
+ {
+  "id": "T1-40",
+  "tier": "T1",
+  "modelId": "apimart-gpt-image-2.6",
+  "prompt": "横幅：科技发布会背景板",
+  "params": {
+   "gpt26Channel": "official",
+   "gpt26Quality": "low",
+   "gpt26Complexity": "low",
+   "gpt26AspectRatio": "2:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "2:1"
+  }
+ },
+ {
+  "id": "T1-41",
+  "tier": "T1",
+  "modelId": "apimart-seedream-5.0-flash",
+  "prompt": "宽银幕：赛车冲过终点",
+  "params": {
+   "apimartSeedream50FlashResolution": "1K",
+   "apimartSeedream50FlashAspectRatio": "21:9"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "21:9"
+  }
+ },
+ {
+  "id": "T1-42",
+  "tier": "T1",
+  "modelId": "apimart-nano-banana-2.1",
+  "prompt": "竖长条书签设计，竹子图案",
+  "params": {
+   "apimartNanoBanana21Channel": "ext",
+   "apimartNanoBanana21AspectRatio": "1:8"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "1:8"
+  }
+ },
+ {
+  "id": "T1-43",
+  "tier": "T1",
+  "modelId": "apimart-grok-imagine-2.0",
+  "prompt": "手机横屏壁纸：极光",
+  "params": {
+   "apimartGrokImagine20Quality": "low",
+   "apimartGrokImagine20AspectRatio": "19.5:9"
+  },
+  "expect": {
+   "kind": "image"
+  }
+ },
+ {
+  "id": "T1-44",
+  "tier": "T1",
+  "modelId": "apimart-z-image-turbo",
+  "prompt": "竖屏：街头篮球场",
+  "params": {
+   "apimartZImageTurboAspectRatio": "9:16"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "9:16"
+  }
+ },
+ {
+  "id": "T1-45",
+  "tier": "T1",
+  "modelId": "apimart-nano-banana-2-lite",
+  "prompt": "宽幅：江南水乡",
+  "params": {
+   "apimartNanoBanana2LiteAspectRatio": "21:9"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "21:9"
+  }
+ },
+ {
+  "id": "T1-46",
+  "tier": "T1",
+  "modelId": "apimart-midjourney",
+  "prompt": "a lone astronaut in a field of sunflowers, painterly",
+  "params": {
+   "apimartMidjourneySpeed": "relax",
+   "apimartMidjourneyAspectRatio": "3:4",
+   "apimartMidjourneyStylize": 250
+  },
+  "timeoutMs": 1500000,
+  "expect": {
+   "kind": "image"
+  }
+ },
+ {
+  "id": "T1-47",
+  "tier": "T1",
+  "modelId": "grsai-nano-banana-2.1",
+  "prompt": "横幅：城市天际线剪影",
+  "params": {
+   "grsaiNanoBanana21AspectRatio": "4:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "4:1"
+  }
+ },
+ {
+  "id": "T1-48",
+  "tier": "T1",
+  "modelId": "grsai-gpt-image-2.5",
+  "prompt": "横幅：手绘风格的地图",
+  "params": {
+   "gpt25AspectRatio": "2:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "2:1"
+  }
+ },
+ {
+  "id": "T1-49",
+  "tier": "T1",
+  "modelId": "fal-ai-gpt-image-2",
+  "prompt": "宽银幕：太空站内部",
+  "params": {
+   "falGptImage2Resolution": "low",
+   "falGptImage2AspectRatio": "21:9"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "21:9"
+  }
+ },
+ {
+  "id": "T1-50",
+  "tier": "T1",
+  "modelId": "fal-ai-gpt-image-2.6",
+  "prompt": "一个蓝色的星形贴纸，干净背景",
+  "params": {
+   "falGptImage26Quality": "low",
+   "falGptImage26AspectRatio": "3:1",
+   "falGptImage26Background": "transparent"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "3:1",
+   "transparent": true
+  }
+ },
+ {
+  "id": "T1-55",
+  "tier": "T1",
+  "modelId": "fal-minimax-speech-2.8",
+  "prompt": "太好了，我们终于做到了！",
+  "params": {
+   "falMinimaxSpeechSpec": "turbo",
+   "falMinimaxSpeechSpeed": 1.2,
+   "falMinimaxSpeechEmotion": "happy"
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-56",
+  "tier": "T1",
+  "modelId": "fal-qwen3-tts-1.7b",
+  "prompt": "欢迎收听今天的科技新闻。",
+  "params": {
+   "falQwen3TtsVoice": "Dylan",
+   "falQwen3TtsLanguage": "Chinese",
+   "falQwen3TtsTemperature": 0.6
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-57",
+  "tier": "T1",
+  "modelId": "fal-eleven-v3-tts",
+  "prompt": "This is a calm and steady narration test.",
+  "params": {
+   "falElevenV3Stability": 0.8
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-58",
+  "tier": "T1",
+  "modelId": "bailian-qwen-audio-3.1-tts-plus",
+  "prompt": "春天来了，花都开了。",
+  "params": {
+   "bailianQwenTtsPlusSpeed": 0.8
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-59",
+  "tier": "T1",
+  "modelId": "siliconflow-moss-ttsd-0.5",
+  "prompt": "[S1]你今天去哪儿了？[S2]我去图书馆看书了。",
+  "params": {
+   "siliconflowMossFormat": "opus"
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-62",
+  "tier": "T1",
+  "modelId": "kie-gemini-3.8-flash-lite-tts",
+  "prompt": "放轻松，慢慢来，一切都会好起来的。",
+  "params": {
+   "kieGemini38TtsStyle": "轻松",
+   "kieGemini38TtsTemperature": 0.6
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-10-r2",
+  "tier": "T1",
+  "modelId": "kie-eleven-v3-dialogue",
+  "prompt": "今天天气真不错，我们去散步吧。",
+  "params": {},
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-28",
+  "tier": "T1",
+  "modelId": "apimart-gemini-omni-1.2-flash",
+  "continueFrom": {
+   "caseId": "T1-27",
+   "continuation": "extend"
+  },
+  "prompt": "镜头继续向前推进",
+  "params": {
+   "apimartGeminiOmni12Duration": 3
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1
+  }
+ },
+ {
+  "id": "T1-30-r2",
+  "tier": "T1",
+  "modelId": "grsai-wan-3.0",
+  "prompt": "竖屏：一个人在雨中撑伞走过街角",
+  "params": {
+   "grsaiWan30Resolution": "480p",
+   "grsaiWan30Duration": "3",
+   "grsaiWan30AspectRatio": "9:16"
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "9:16",
+   "seconds": 3,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T1-32-r2",
+  "tier": "T1",
+  "modelId": "kie-hailuo-02",
+  "prompt": "从第一张过渡到第二张，镜头平移",
+  "params": {
+   "kieHailuo02Resolution": "512P",
+   "kieHailuo02PromptOptimizer": false
+  },
+  "media": {
+   "images": [
+    "still.jpg",
+    "still2.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 6,
+   "secondsTolerance": 1
+  }
+ }
+]

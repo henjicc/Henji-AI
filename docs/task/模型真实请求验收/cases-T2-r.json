@@ -1,0 +1,18 @@
+[
+ {
+  "id": "T2-26-r2",
+  "tier": "T2",
+  "modelId": "apimart-gpt-image-2.5",
+  "prompt": "竖长条：一棵竹子",
+  "params": { "gpt25Channel": "official", "gpt25Quality": "low", "gpt25AspectRatio": "1:3" },
+  "expect": { "kind": "image", "count": 1, "aspect": "1:3" }
+ },
+ {
+  "id": "T2-30-r2",
+  "tier": "T2",
+  "modelId": "grsai-gpt-image-2",
+  "prompt": "竖长条：一串红灯笼",
+  "params": { "grsaiGptImage2AspectRatio": "1:3" },
+  "expect": { "kind": "image", "count": 1, "aspect": "9:21" }
+ }
+]
