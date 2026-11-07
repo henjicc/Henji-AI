@@ -63,6 +63,17 @@ export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
     allowCustomId: true,
     remoteModelId: 'bailian-qwen-audio-3.1-tts-flash',
   },
+  // Plus 只有官方音色清单里的 4 个旗舰音色，不能与 Flash 的音色混用。
+  'bailian-qwen-audio-3.1-tts-plus': {
+    voices: [
+      systemVoice('longanlingxin_v3.1', '龙安灵心_v3.1', '女'),
+      systemVoice('xunanchuan_v3.1', '许南川', '男'),
+      systemVoice('longanhuan_v3.1', '龙安欢_v3.1', '女'),
+      systemVoice('longanfengyue_v3.1', '龙安风悦_v3.1', '女'),
+    ],
+    allowSearch: true,
+    allowCustomId: true,
+  },
   'bailian-cosyvoice-v3.5': {
     voices: [],
     allowSearch: true,

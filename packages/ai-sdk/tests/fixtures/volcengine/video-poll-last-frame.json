@@ -1,0 +1,30 @@
+{
+  "provider": "volcengine",
+  "modelId": "volcengine-seedance-2.5",
+  "scenario": "boundary-video-last-frame",
+  "phase": "continuePolling",
+  "route": "/api/v3/contents/generations/tasks",
+  "taskId": "cgt-2026-fixture",
+  "notes": "事件矩阵行：succeeded 且请求过 return_last_frame；视频在前、尾帧在后。",
+  "response": {
+    "id": "cgt-2026-fixture",
+    "model": "doubao-seedance-2-5-260628",
+    "status": "succeeded",
+    "error": null,
+    "content": {
+      "video_url": "https://ark-content-generation.example.com/fixture/video.mp4",
+      "last_frame_url": "https://ark-content-generation.example.com/fixture/last.jpeg"
+    },
+    "usage": { "completion_tokens": 108000, "total_tokens": 108000 },
+    "duration": 5,
+    "framespersecond": 24
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://ark-content-generation.example.com/fixture/video.mp4|||https://ark-content-generation.example.com/fixture/last.jpeg"
+  },
+  "source": {
+    "response": "依据官方字段表构造：https://www.volcengine.com/docs/82379/1521309 （content.video_url、content.last_frame_url、error 成功时为 null；2026-11-07 读取，无需登录）；URL 为占位"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "provider": "volcengine",
+  "modelId": "volcengine-seedance-2.0",
+  "scenario": "video-poll-expired",
+  "phase": "continuePolling",
+  "route": "/api/v3/contents/generations/tasks",
+  "taskId": "cgt-2026-fixture",
+  "notes": "事件矩阵行：expired（排队或运行超过 execution_expires_after，终态）。官方未给 expired 的 error 示例，error 缺失时用固定中文原因。",
+  "response": {
+    "id": "cgt-2026-fixture",
+    "model": "doubao-seedance-2-0-260128",
+    "status": "expired",
+    "execution_expires_after": 172800
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "超时阈值"
+  },
+  "source": {
+    "response": "依据官方字段表构造：https://www.volcengine.com/docs/82379/1521309 （status 枚举 expired、execution_expires_after；2026-11-07 读取，无需登录）"
+  }
+}

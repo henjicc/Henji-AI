@@ -98,6 +98,7 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'qwen3-tts-1.7b': { zh: 'Qwen3 的多语言语音合成模型，可选择音色、语言和演绎风格。', en: 'Multilingual speech synthesis with voice and delivery controls.' },
   'eleven-v3-tts': { zh: 'ElevenLabs 的表现力语音合成模型，适合有情绪变化的朗读。', en: 'Expressive speech synthesis for natural narration.' },
   'qwen-audio-3.1-tts-flash': { zh: '通义千问快速语音合成模型，支持系统音色与演绎指令。', en: 'Fast speech synthesis with built-in voices and delivery instructions.' },
+  'qwen-audio-3.1-tts-plus': { zh: '通义千问旗舰语音合成模型，音色更自然饱满，适合对配音质感要求高的旁白与角色演绎。', en: 'Qwen’s flagship speech synthesis with fuller, more natural voices, suited to narration and character performances that need polished delivery.' },
   'cosyvoice-v3.5': { zh: '百炼自定义音色语音合成，需要预先创建复刻或设计音色。', en: 'Speech synthesis using a previously created custom voice.' },
   'eleven-v3-dialogue': { zh: 'ElevenLabs 对话语音合成，支持按说话人组织台词。', en: 'Dialogue speech synthesis with per-turn voices.' },
   'gemini-3.1-flash-tts': { zh: 'Gemini 语音合成，可通过结构化说话人和台词生成对话。', en: 'Speech synthesis using structured speakers and dialogue turns.' },

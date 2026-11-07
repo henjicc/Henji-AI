@@ -1,0 +1,26 @@
+{
+  "provider": "bailian",
+  "modelId": "bailian-wan-3.0",
+  "scenario": "video-poll-failed",
+  "phase": "continuePolling",
+  "route": "/api/v1/services/aigc/video-generation/video-synthesis",
+  "taskId": "eff1443c-ccab-4676-aad3-xxxxxx",
+  "notes": "事件矩阵行：FAILED（终态，output.code/message 原样上报，不再查询）。",
+  "response": {
+    "request_id": "e5e57877-c0fc-47ed-8fad-xxxxxx",
+    "output": {
+      "task_id": "eff1443c-ccab-4676-aad3-xxxxxx",
+      "task_status": "FAILED",
+      "code": "InvalidParameter",
+      "message": "The two modes are mutually exclusive. Do not pass reference_xx and first_frame/last_frame at the same time."
+    }
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "InvalidParameter: The two modes are mutually exclusive"
+  },
+  "source": {
+    "response": "官方原样：https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference 「任务执行失败」示例（2026-11-07 读取，无需登录）"
+  }
+}

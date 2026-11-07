@@ -1,0 +1,38 @@
+{
+  "provider": "bailian",
+  "modelId": "bailian-wan-3.0",
+  "scenario": "video-poll-success",
+  "phase": "continuePolling",
+  "route": "/api/v1/services/aigc/video-generation/video-synthesis",
+  "taskId": "17ed7e50-00cf-4509-aea1-xxxxxx",
+  "notes": "事件矩阵行：SUCCEEDED（终态，output.video_url 为有效结果）。",
+  "response": {
+    "request_id": "78c9b768-0285-996c-b682-xxxxxx",
+    "output": {
+      "task_id": "17ed7e50-00cf-4509-aea1-xxxxxx",
+      "task_status": "SUCCEEDED",
+      "submit_time": "2026-08-06 10:01:35.452",
+      "scheduled_time": "2026-08-06 10:01:35.507",
+      "end_time": "2026-08-06 10:13:33.838",
+      "orig_prompt": "A golden retriever running on a sunny beach, waves crashing in the background, cinematic lighting",
+      "video_url": "https://dashscope-result.example.com/fixture/video.mp4"
+    },
+    "usage": {
+      "video_count": 1,
+      "duration": 5.0,
+      "input_video_duration": 0.0,
+      "output_video_duration": 5.0,
+      "fps": 30,
+      "SR": 720,
+      "ratio": "16:9"
+    }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://dashscope-result.example.com/fixture/video.mp4"
+  },
+  "source": {
+    "response": "官方原样：https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference 「任务执行成功」示例（2026-11-07 读取，无需登录）；仅把 video_url 换成不可联网占位地址"
+  }
+}
