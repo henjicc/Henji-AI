@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import os from 'node:os'
 import path from 'path'
 import { pathToFileURL } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
@@ -11,6 +12,15 @@ import { videoEditRenderEngineVersion } from './scripts/vite/renderEngineVersion
  * 免得没替换日志或存储模块的用例写进用户真实资料。其他平台走 electron 的 app.getPath，测试里由各自的 mock 决定。
  */
 const TEST_PROGRAM_ENV = { LOCALAPPDATA: path.resolve(__dirname, '.tmp/test-local-app-data') }
+
+/**
+ * 本机跑测试时开发者同时在用这台电脑，CPU 不能被测试吃满：并行上限取一半逻辑核，并把测试进程降到低于正常优先级，
+ * 工作线程随主进程优先级。CI 在命令行显式给 --maxWorkers，会覆盖这里的上限。
+ */
+const LOCAL_MAX_WORKERS = Math.max(1, Math.floor(os.availableParallelism() / 2))
+if (!process.env.CI) {
+  try { os.setPriority(os.constants.priority.PRIORITY_BELOW_NORMAL) } catch { /* 无权限调整优先级时照常运行 */ }
+}
 
 /**
  * Vitest 配置覆盖 domain 纯函数与按文件声明 jsdom 的 React 组件测试。
@@ -45,6 +55,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
+      ...(process.env.CI ? {} : { maxWorkers: LOCAL_MAX_WORKERS, minWorkers: 1 }),
       ...suite,
       env: { ...TEST_PROGRAM_ENV, ...suite.env },
       ...(mode === 'unit' && process.env.HENJI_TEST_COSTS ? {

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-test-commands.cjs\"",
+            "timeout": 10,
+            "statusMessage": "检查测试命令范围"
+          }
+        ]
+      }
+    ]
+  }
+}
