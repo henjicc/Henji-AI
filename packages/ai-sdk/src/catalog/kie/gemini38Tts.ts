@@ -2,10 +2,13 @@ import type { JsonObject } from '../../types/runtime'
 import type { ModelRuntimeDefinition } from '../../types/model'
 import { speechNumber, speechString, speechText } from '../audio/tts-common'
 
+// KIE 按 Google 官方价七折卖；Google 2026 年内半价促销，2027-01-01 起恢复原价。估价直接用原价，促销期内实际扣费更低。
+const INPUT_RATE = 0.7
+
 /** Gemini 3.8 Flash TTS 与 Flash-Lite TTS 请求结构相同，只有模型 ID 与输出单价不同。 */
 export function gemini38TtsDefinition(model: string, outputRate: number, name: string): Omit<ModelRuntimeDefinition, 'meta'> {
   // 按 Gemini 3.1 Flash TTS 同样的输入 8192 / 输出 16384 Token 窗口预留上限；KIE 输入单价两档相同。
-  const estimate = (8192 * 0.35 + 16384 * outputRate) / 1_000_000
+  const estimate = (8192 * INPUT_RATE + 16384 * outputRate) / 1_000_000
   return {
     inputLimits: { images: { max: 0 }, videos: { max: 0 } },
     params: [
@@ -34,7 +37,7 @@ export function gemini38TtsDefinition(model: string, outputRate: number, name: s
     pricing: {
       currency: '$', billingMode: 'estimated',
       calculator: () => estimate,
-      description: `上限估价 $${estimate.toFixed(4)}：按输入8192、输出16384 Token预留；KIE ${name} 费率输入$0.35/输出$${outputRate}每百万Token，为 Google 限时促销价，有效期至 2026-12-31，实际以KIE账单为准。`,
+      description: `上限估价 $${estimate.toFixed(4)}：按输入8192、输出16384 Token预留；KIE ${name} 原价输入$${INPUT_RATE}/输出$${outputRate}每百万Token（2026 年内跟随 Google 促销减半），实际以KIE账单为准。`,
     },
   }
 }

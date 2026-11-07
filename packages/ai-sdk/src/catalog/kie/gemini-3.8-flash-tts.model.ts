@@ -7,7 +7,7 @@ export const kieGemini38FlashTtsModel = defineModel({
     tags: ['text-to-audio'],
     polling: { interval: 3000, maxAttempts: 120, expectedAttempts: 20 },
   },
-  ...gemini38TtsDefinition('google/gemini-3-8-flash-tts', 6.3, 'Flash'),
+  ...gemini38TtsDefinition('google/gemini-3-8-flash-tts', 12.6, 'Flash'),
 })
 
 export default kieGemini38FlashTtsModel

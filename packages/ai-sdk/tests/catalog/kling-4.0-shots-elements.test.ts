@@ -78,13 +78,16 @@ describe('Kling 4.0 分镜与元素请求契约', () => {
     expect(violations(schemaOf(fixture), await build(model, params))).toEqual([])
   })
 
-  it('Fal 分镜与主提示词、时长二选一；元素按正面图与其他角度拆分', async () => {
+  it('Fal 用分镜时主提示词并进每一镜、不发时长；元素按正面图与其他角度拆分', async () => {
     const body = await build(falKling40Model, {
       falKling40Mode: 'reference-to-video', falKling40Duration: 10,
       falKling40Shots: [shot('a', 2), shot('b', 3)],
       falKling40Elements: [imageElement('', img(3, 'e')), videoElement('', 'https://example.invalid/e.mp4')],
     })
-    expect(body.multi_prompt).toEqual([{ prompt: 'a', duration: 2 }, { prompt: 'b', duration: 3 }])
+    expect(body.multi_prompt).toEqual([{ prompt: 'A cat on a windowsill\na', duration: 2 }, { prompt: 'A cat on a windowsill\nb', duration: 3 }])
+    // 主提示词留空时每镜只发自己的提示词；拼接后超长要在提交前说明是拼接导致的。
+    expect((await build(falKling40Model, { prompt: '', falKling40Shots: [shot('a', 3)] })).multi_prompt).toEqual([{ prompt: 'a', duration: 3 }])
+    await expect(build(falKling40Model, { prompt: 'x'.repeat(500), falKling40Shots: [shot('y'.repeat(20), 3)] })).rejects.toThrow('加上主提示词后')
     expect(body).not.toHaveProperty('prompt')
     expect(body).not.toHaveProperty('duration')
     expect(body.elements).toEqual([

@@ -39,13 +39,22 @@ export function shotTotalSeconds(value: JsonValue | undefined, limits: Pick<Shot
   return Math.min(limits.maxTotalSeconds, Math.max(limits.minTotalSeconds, total))
 }
 
-/** 提交前校验并转成供应商的 `multi_prompt` 结构；不合法时抛出能直接给用户看的原因。 */
-export function buildShotPrompts(value: JsonValue | undefined, limits: ShotListLimits, modelName: string): Array<{ prompt: string; duration: number }> {
-  const shots = readShots(value)
+/**
+ * 提交前校验并转成供应商的 `multi_prompt` 结构；不合法时抛出能直接给用户看的原因。
+ * 平台的分镜与主提示词二选一，所以主提示词当作整体描述（人物、风格、场景）拼在每一镜前面，
+ * 每镜只写这一镜发生什么，不必重复交代。
+ */
+export function buildShotPrompts(value: JsonValue | undefined, limits: ShotListLimits, modelName: string, sharedPrompt = ''): Array<{ prompt: string; duration: number }> {
+  const shared = sharedPrompt.trim()
+  const shots = readShots(value).map(shot => ({ ...shot, prompt: shot.prompt && shared ? `${shared}\n${shot.prompt}` : shot.prompt }))
   shots.forEach((shot, index) => {
     const label = `${modelName} 第 ${index + 1} 镜`
     if (!shot.prompt) throw new Error(`${label}的提示词不能为空`)
-    if (shot.prompt.length > limits.maxPromptLength) throw new Error(`${label}的提示词最多 ${limits.maxPromptLength} 字符`)
+    if (shot.prompt.length > limits.maxPromptLength) {
+      throw new Error(shared
+        ? `${label}加上主提示词后超过 ${limits.maxPromptLength} 字符，请缩短主提示词或这一镜`
+        : `${label}的提示词最多 ${limits.maxPromptLength} 字符`)
+    }
     if (!Number.isInteger(shot.duration) || shot.duration < limits.minShotSeconds || shot.duration > limits.maxShotSeconds) {
       throw new Error(`${label}的时长须为 ${limits.minShotSeconds}–${limits.maxShotSeconds} 秒`)
     }

@@ -96,7 +96,7 @@ Flash 版见 [Kling-4.0-Flash_Fal.md](../Kling-4.0-Flash/Kling-4.0-Flash_Fal.md)
 - 文/图生视频：0 张图走文生；有图时第 1 张作首帧、最后一张作尾帧、中间按顺序作关键帧（最多 10 张）。
 - 视频编辑：第 1 个视频是源视频，其余作参考（最多 4）；不下发 `duration`，比例选智能时不下发（跟随源视频）。
 - 视频编辑计费按「源视频时长作输出」估算：`max(全部输入时长 + 源时长, 2 × 源时长)`；参考视频时长来自宿主注入的 `__videoDurationSeconds`，未知时每段按 5 秒估。
-- 分镜（`falKling40Shots`，面板 `shot-list`）：文/图生视频与参考生视频可用，视频编辑隐藏且不发送。值为 `[{ id, prompt, duration }]`；非空时只发 `multi_prompt`，不发 `prompt` 与 `duration`，时长参数隐藏。各镜之和按时长参数范围校验为 3–30 秒（schema 没有单独写总和范围），估价按总和。
+- 分镜（`falKling40Shots`，面板 `shot-list`）：文/图生视频与参考生视频可用，视频编辑隐藏且不发送。值为 `[{ id, prompt, duration }]`；非空时只发 `multi_prompt`，不发 `prompt` 与 `duration`，时长参数隐藏；平台两者二选一，项目把主提示词当整体描述拼到每一镜提示词前（换行连接，拼接后仍按每镜 ≤512 字符校验），主提示词可留空。各镜之和按时长参数范围校验为 3–30 秒（schema 没有单独写总和范围），估价按总和。
 - 元素（`falKling40Elements`，面板 `subject-elements`）：参考生视频与视频编辑可用。值为 `[{ id, kind, images, videos, videoSeconds? }]`（`videoSeconds` 只用于估价，不发送）；图片元素 2–4 张，第 1 张作 `frontal_image_url`、其余作 `reference_image_urls`；视频元素只发 `video_url`。媒体字段由公共上传预处理按字段名上传。视频元素估价用上传时读到的时长，读不到按上限 8 秒计入输入时长，避免付费授权偏低。
 - 未接入：`voice_ids` 与元素 `voice_id`（需另建声音）、参考模式里的首尾帧字段。源、参考与元素视频合计 ≤30 秒在提交前无法核对（元素视频时长未知），由平台校验。
 - 官方请求 schema 落在 `tests/fixtures/model-requests-2026-11/fal-kling-4.0-*.json`（含 Flash 两份），由 `tests/catalog/kling-4.0-shots-elements.test.ts` 校验；未做付费真网验收。

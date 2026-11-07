@@ -120,5 +120,8 @@ describe('2026-11 KIE / Grsai 新模型请求契约', () => {
     expect(price(grsaiWan30Model, { grsaiWan30Resolution: '1080p', grsaiWan30Duration: '10' })).toBeCloseTo(13.2)
     expect(price(kieFlux3KleinModel, { kieFlux3KleinResolution: '2K', kieFlux3KleinCount: 2 })).toBeCloseTo(0.025)
     expect(price(kieGptImage26Model, { kieGpt26Variant: 'economy' })).toBeCloseTo(0.025)
+    // Gemini 3.8 TTS 按原价（Google 2027 年起价格的七折）估上限：输入 8192、输出 16384 Token。
+    expect(price(kieGemini38FlashTtsModel, {})).toBeCloseTo((8192 * 0.7 + 16384 * 12.6) / 1_000_000, 6)
+    expect(price(kieGemini38FlashLiteTtsModel, {})).toBeCloseTo((8192 * 0.7 + 16384 * 8.4) / 1_000_000, 6)
   })
 })

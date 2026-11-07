@@ -7,12 +7,12 @@ export const kling40ShotsPresentation: ParamPresentationEntry = {
   panel: 'shot-list',
   config: { minShotSeconds: 1, maxShotSeconds: 30, minTotalSeconds: 3, maxTotalSeconds: 30, maxPromptLength: 512, defaultShotSeconds: 5 },
   tooltip: {
-    zh: '按顺序写每一镜的画面和秒数，成片时长是各镜之和。用了分镜就不再发送主提示词和时长。',
-    en: 'Describe each shot and its length in order; the video length is their sum. With shots, the main prompt and duration are not sent.',
+    zh: '按顺序写每一镜发生什么和秒数，成片时长是各镜之和。主提示词写整体的人物、风格和场景，会拼到每一镜前面；时长参数不再使用。',
+    en: 'Describe what happens in each shot and its length; the video length is their sum. The main prompt describes the overall subject, style and setting and is prepended to every shot; the duration setting is not used.',
   },
   description: {
-    zh: '多镜头分镜列表，值为 [{ id, prompt, duration }]：每镜提示词 1–512 字符、时长 1–30 秒，各镜之和 3–30 秒即成片时长。非空时替代主提示词与时长（两者都不发送）；空数组表示不分镜。视频编辑模式不可用。',
-    en: 'Multi-shot list, value [{ id, prompt, duration }]: each shot prompt 1–512 characters and 1–30 seconds; the 3–30 second sum is the video length. When non-empty it replaces the main prompt and duration (neither is sent); an empty array means a single shot. Not available in video edit mode.',
+    zh: '多镜头分镜列表，值为 [{ id, prompt, duration }]：每镜时长 1–30 秒，各镜之和 3–30 秒即成片时长。非空时主提示词作为整体描述拼到每一镜提示词前（拼接后每镜 ≤512 字符），时长参数不发送；主提示词可留空。空数组表示不分镜。视频编辑模式不可用。',
+    en: 'Multi-shot list, value [{ id, prompt, duration }]: each shot 1–30 seconds; the 3–30 second sum is the video length. When non-empty, the main prompt is treated as an overall description prepended to every shot prompt (≤512 characters per shot after joining) and duration is not sent; the main prompt may be empty. An empty array means a single shot. Not available in video edit mode.',
   },
 }
 

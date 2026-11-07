@@ -26,7 +26,7 @@ export const falKling40Model = defineModel({
         tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'video-to-video'],
         polling: { interval: 3000, maxAttempts: 400, expectedAttempts: 90 }
     },
-    // 写了分镜就不再发主提示词，分镜本身即可构成一次生成输入，画布与助手不再要求主提示词。
+    // 分镜本身即可构成一次生成输入（主提示词只作整体描述并进每一镜），画布与助手不再要求主提示词。
     alternativeInputParamIds: ['falKling40Shots'],
     inputLimits: {
         images: { max: 10 }, videos: { max: 0 }, audios: { max: 0 },
@@ -112,8 +112,8 @@ export const falKling40Model = defineModel({
                     body.aspect_ratio = ratio;
                 return body;
             }
-            // 提示词与分镜二选一：用了分镜就只发分镜，成片时长取各镜之和，不再发送时长。
-            const shots = buildShotPrompts(params.falKling40Shots, KLING_V4_SHOT_LIMITS, 'Kling 4.0');
+            // 平台的提示词与分镜二选一：用了分镜就只发分镜（主提示词并进每一镜），成片时长取各镜之和，不再发送时长。
+            const shots = buildShotPrompts(params.falKling40Shots, KLING_V4_SHOT_LIMITS, 'Kling 4.0', prompt);
             const body: JsonObject = { resolution };
             if (shots.length > 0)
                 body.multi_prompt = shots;
