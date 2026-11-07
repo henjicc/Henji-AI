@@ -14,6 +14,26 @@
       "meta": {
         "name": "Seedream 5.0 Flash"
       }
+    },
+    "volcengine-seedance-2.5": {
+      "meta": {
+        "name": "Seedance 2.5"
+      }
+    },
+    "volcengine-seedance-2.0": {
+      "meta": {
+        "name": "Seedance 2.0"
+      }
+    },
+    "volcengine-seedance-2.0-fast": {
+      "meta": {
+        "name": "Seedance 2.0 Fast"
+      }
+    },
+    "volcengine-seedance-2.0-mini": {
+      "meta": {
+        "name": "Seedance 2.0 Mini"
+      }
     }
   }
 }

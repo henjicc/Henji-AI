@@ -1,9 +1,54 @@
 /** 火山方舟（volcengine）模型的展示补丁：i18n 文案、联动、面板布局。按模型 id 关联运行时定义。 */
 
-import { sharedFieldText, sharedOptionText } from '@/core/i18n/modelText'
-import type { ModelPresentation } from '@/core/types/ModelPresentation'
+import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
+import type { I18nText } from '@/core/types/I18nText'
+import type { ModelPresentation, ParamOptionPresentation } from '@/core/types/ModelPresentation'
+
+const labels = (values: readonly string[], named: Record<string, I18nText> = {}): Record<string, ParamOptionPresentation> =>
+  Object.fromEntries(values.map(value => [value, { label: named[value] ?? value }]))
+
+function seedancePresentation(id: string, name: string, prefix: string, resolutions: string[], is25: boolean): ModelPresentation {
+  const maxImages = is25 ? 30 : 9
+  const maxAudios = is25 ? 10 : 3
+  return {
+    meta: { name: { key: 'meta.name', fallback: name }, i18nScope: `models.defs.${id}` },
+    params: {
+      [`${prefix}Mode`]: {
+        name: sharedFieldText('mode'),
+        role: 'mode',
+        optionLabels: labels(['text-image-to-video', 'reference-to-video'], {
+          'text-image-to-video': sharedModeText('textImageToVideo'),
+          'reference-to-video': sharedModeText('referenceToVideo'),
+        }),
+        tooltip: {
+          zh: `文/图生视频：1 张图为首帧，2 张为首尾帧。参考生视频可放最多 ${maxImages} 张图、${maxAudios} 段音频${is25 ? '' : '（音频需搭配参考图）'}；火山方舟不支持上传参考视频。`,
+          en: `Text/Image to Video: 1 image is the first frame, 2 are first and last frames. Reference takes up to ${maxImages} images and ${maxAudios} audio clips${is25 ? '' : ' (audio needs a reference image)'}; Volcengine Ark does not accept uploaded reference videos.`,
+        },
+      },
+      [`${prefix}AspectRatio`]: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: labels(['smart', '1:1', '4:3', '3:4', '16:9', '9:16', '21:9'], { smart: sharedOptionText('smart') }),
+      },
+      [`${prefix}Resolution`]: {
+        name: sharedFieldText('resolution'),
+        optionLabels: labels(resolutions, { '4k': '4K' }),
+      },
+      [`${prefix}Duration`]: { name: sharedFieldText('duration') },
+      ...(is25 ? { [`${prefix}AutoDuration`]: { name: { zh: '自动时长', en: 'Automatic Duration' } } } : {}),
+      [`${prefix}GenerateAudio`]: { name: sharedFieldText('generateAudio') },
+      [`${prefix}ReturnLastFrame`]: { name: { zh: '返回尾帧', en: 'Return Last Frame' } },
+      [`${prefix}WebSearch`]: { name: { zh: '联网搜索', en: 'Web Search' } },
+    },
+    linkages: [],
+  }
+}
 
 export const volcenginePresentation: Record<string, ModelPresentation> = {
+  'volcengine-seedance-2.5': seedancePresentation('volcengine-seedance-2.5', 'Seedance 2.5', 'volcengineSeedance25', ['480p', '720p', '1080p'], true),
+  'volcengine-seedance-2.0': seedancePresentation('volcengine-seedance-2.0', 'Seedance 2.0', 'volcengineSeedance20', ['480p', '720p', '1080p', '4k'], false),
+  'volcengine-seedance-2.0-fast': seedancePresentation('volcengine-seedance-2.0-fast', 'Seedance 2.0 Fast', 'volcengineSeedance20Fast', ['480p', '720p'], false),
+  'volcengine-seedance-2.0-mini': seedancePresentation('volcengine-seedance-2.0-mini', 'Seedance 2.0 Mini', 'volcengineSeedance20Mini', ['480p', '720p'], false),
+
   'volcengine-seedream-5.0-lite': {
     meta: {
       name: { key: 'meta.name', fallback: 'Seedream 5.0 Lite' },

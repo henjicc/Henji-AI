@@ -1,0 +1,53 @@
+{
+  "provider": "volcengine",
+  "modelId": "volcengine-seedance-2.5",
+  "scenario": "video-create-success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/api/v3/contents/generations/tasks",
+  "notes": "事件矩阵行：提交 → queued（对外 pending + taskId）。参考音频以本地 MIME audio/mpeg 读入，发送前改为官方要求的 data:audio/mp3。",
+  "params": {
+    "model": "doubao-seedance-2-5-260628",
+    "content": [
+      { "type": "text", "text": "fixture prompt" },
+      { "type": "image_url", "image_url": { "url": "https://example.com/ref.png" }, "role": "reference_image" },
+      { "type": "audio_url", "audio_url": { "url": "data:audio/mpeg;base64,AAAA" }, "role": "reference_audio" }
+    ],
+    "resolution": "720p",
+    "ratio": "16:9",
+    "duration": 5,
+    "generate_audio": true,
+    "return_last_frame": false,
+    "watermark": false,
+    "omni_reference_task_type": "reference"
+  },
+  "expectedRequest": {
+    "url": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+    "method": "POST",
+    "body": {
+      "model": "doubao-seedance-2-5-260628",
+      "content": [
+        { "type": "text", "text": "fixture prompt" },
+        { "type": "image_url", "image_url": { "url": "https://example.com/ref.png" }, "role": "reference_image" },
+        { "type": "audio_url", "audio_url": { "url": "data:audio/mp3;base64,AAAA" }, "role": "reference_audio" }
+      ],
+      "resolution": "720p",
+      "ratio": "16:9",
+      "duration": 5,
+      "generate_audio": true,
+      "return_last_frame": false,
+      "watermark": false,
+      "omni_reference_task_type": "reference"
+    }
+  },
+  "response": { "id": "cgt-20260414114820-fixture" },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "cgt-20260414114820-fixture"
+  },
+  "source": {
+    "params": "依据官方字段表构造：https://www.volcengine.com/docs/82379/1520757 （content 的 text/image_url/audio_url 与 role 取值、omni_reference_task_type、音频 Base64 格式 data:audio/<格式>；2026-11-07 读取，无需登录）",
+    "response": "依据官方字段表构造：同页「响应参数」只有 id；ID 取自同页 SDK 示例输出 cgt-20260414114820-*****，星号替换为 fixture 占位"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "provider": "bailian",
+  "modelId": "bailian-wan-3.0",
+  "scenario": "video-create-error",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/api/v1/services/aigc/video-generation/video-synthesis",
+  "notes": "事件矩阵行：提交失败（顶层 code/message，不创建任务、不进入轮询）。官方示例未给 HTTP 状态，这里按 200 承载以覆盖顶层 code 判定。",
+  "params": { "model": "wan3.0-video", "input": { "prompt": "fixture" }, "parameters": { "resolution": "720P" } },
+  "response": {
+    "code": "InvalidApiKey",
+    "message": "No API-key provided.",
+    "request_id": "7438d53d-6eb8-4596-8835-xxxxxx"
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "No API-key provided."
+  },
+  "source": {
+    "params": "依据官方字段表构造：https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference",
+    "response": "官方原样：同页「异常响应」示例（2026-11-07 读取，无需登录）"
+  }
+}

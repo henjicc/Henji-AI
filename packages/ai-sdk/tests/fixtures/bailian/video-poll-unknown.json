@@ -1,0 +1,23 @@
+{
+  "provider": "bailian",
+  "modelId": "bailian-wan-3.0",
+  "scenario": "video-poll-unknown",
+  "phase": "continuePolling",
+  "route": "/api/v1/services/aigc/video-generation/video-synthesis",
+  "taskId": "502a00b1-19d9-4839-a82f-xxxxxx",
+  "notes": "事件矩阵行：UNKNOWN（任务不存在或超过 24 小时查询期）。计入连续查询失败，连续 20 次后报任务不可达。",
+  "response": {
+    "request_id": "a4de7c32-7057-9f82-8581-xxxxxx",
+    "output": {
+      "task_id": "502a00b1-19d9-4839-a82f-xxxxxx",
+      "task_status": "UNKNOWN"
+    }
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_unreachable"
+  },
+  "source": {
+    "response": "官方原样：https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference 「任务查询过期」示例（2026-11-07 读取，无需登录）"
+  }
+}

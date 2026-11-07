@@ -1,0 +1,27 @@
+{
+  "provider": "volcengine",
+  "modelId": "volcengine-seedance-2.0",
+  "scenario": "video-poll-failed",
+  "phase": "continuePolling",
+  "route": "/api/v3/contents/generations/tasks",
+  "taskId": "cgt-2026-fixture",
+  "notes": "事件矩阵行：failed（终态，error.code/message 原样上报，不再查询）。",
+  "response": {
+    "id": "cgt-2026-fixture",
+    "model": "doubao-seedance-2-0-260128",
+    "status": "failed",
+    "content": null,
+    "error": {
+      "code": "OutputVideoSensitiveContentDetected",
+      "message": "The request failed because the output video may contain sensitive information.Request ID: fixture."
+    }
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "OutputVideoSensitiveContentDetected"
+  },
+  "source": {
+    "response": "依据官方字段表构造：https://www.volcengine.com/docs/82379/1521309 （status=failed 时 error 返回 code/message）；错误码与文案取自 https://www.volcengine.com/docs/82379/1299023 推理错误码表（2026-11-07 读取，无需登录），Request ID 为占位"
+  }
+}

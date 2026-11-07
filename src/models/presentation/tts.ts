@@ -55,6 +55,10 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     { zh: 'Qwen Audio 3.1 TTS Flash', en: 'Qwen Audio 3.1 TTS Flash' },
     { bailianQwenTtsVoice: voice, bailianQwenTtsInstruction: instruction, bailianQwenTtsSpeed: speed },
   ),
+  'bailian-qwen-audio-3.1-tts-plus': speechModel(
+    { zh: 'Qwen Audio 3.1 TTS Plus', en: 'Qwen Audio 3.1 TTS Plus' },
+    { bailianQwenTtsPlusVoice: voice, bailianQwenTtsPlusInstruction: instruction, bailianQwenTtsPlusSpeed: speed },
+  ),
   'bailian-cosyvoice-v3.5': speechModel(
     { zh: 'CosyVoice 3.5', en: 'CosyVoice 3.5' },
     {
@@ -174,6 +178,7 @@ const ttsVoiceFields: Record<keyof typeof TTS_VOICE_SELECTORS, string> = {
   'fal-eleven-v4-tts': 'falElevenV4Voice',
   'bailian-minimax-speech-2.8': 'bailianMinimaxSpeechVoice',
   'bailian-qwen-audio-3.1-tts-flash': 'bailianQwenTtsVoice',
+  'bailian-qwen-audio-3.1-tts-plus': 'bailianQwenTtsPlusVoice',
   'bailian-cosyvoice-v3.5': 'bailianCosyVoiceId',
   'kie-eleven-v3-dialogue': 'kieElevenDialogueVoice',
   'kie-gemini-3.1-flash-tts': 'kieGeminiTtsVoice',

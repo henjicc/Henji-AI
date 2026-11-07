@@ -125,6 +125,14 @@ rg -i "sk-|bearer |api[_-]?key" packages/ai-sdk/tests/fixtures/
 }
 ```
 
+### 火山方舟 Seedance / 百炼万相 3.0 异步视频 fixture（2026-11-07）
+
+`volcengine/video-*.json` 与 `bailian/video-*.json` 覆盖两家官方视频任务的提交、成功、失败与过期/未知终态。
+百炼五份全部取自万相 3.0 API 参考的官方原样示例；方舟查询成功样本取自查询 API 的官方原样返回体，提交、
+尾帧、失败与过期样本依据官方字段表构造（各自 `source` 已标明）。中间态迁移、请求头与取消在
+`tests/providers/video-async-official.test.ts` 精确断言。两家图片路由仍是同步契约，原有
+`continuePolling-unsupported.json` 继续覆盖“图片路由不轮询”。
+
 ### 关于"正向"断言的范围
 
 只有 `phase: "execute"` 且带 `expectedRequest` 的 fixture 才做请求体断言——`continuePolling` 阶段是无

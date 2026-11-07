@@ -1,0 +1,41 @@
+{
+  "provider": "volcengine",
+  "modelId": "volcengine-seedance-2.0",
+  "scenario": "video-poll-success",
+  "phase": "continuePolling",
+  "route": "/api/v3/contents/generations/tasks",
+  "taskId": "cgt-2026-fixture",
+  "notes": "事件矩阵行：succeeded（终态，content.video_url 为有效结果）。",
+  "response": {
+    "id": "cgt-2026****-****",
+    "model": "doubao-seedance-2-0-260128",
+    "status": "succeeded",
+    "content": {
+      "video_url": "https://ark-content-generation.example.com/fixture/video.mp4"
+    },
+    "usage": {
+      "completion_tokens": 108900,
+      "total_tokens": 108900
+    },
+    "created_at": 1779348818,
+    "updated_at": 1779348874,
+    "seed": 78674,
+    "resolution": "720p",
+    "ratio": "16:9",
+    "duration": 5,
+    "framespersecond": 24,
+    "service_tier": "default",
+    "execution_expires_after": 172800,
+    "generate_audio": true,
+    "draft": false,
+    "priority": 0
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://ark-content-generation.example.com/fixture/video.mp4"
+  },
+  "source": {
+    "response": "官方原样：https://www.volcengine.com/docs/82379/1521309 cURL 示例的返回体（2026-11-07 读取，无需登录）；仅把 content.video_url 换成不可联网占位地址"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "provider": "bailian",
+  "modelId": "bailian-wan-3.0",
+  "scenario": "video-create-success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/api/v1/services/aigc/video-generation/video-synthesis",
+  "notes": "事件矩阵行：提交 → PENDING（对外 pending + taskId）。请求头 X-DashScope-Async 由 tests/providers/bailian-async.test.ts 精确断言。",
+  "params": {
+    "model": "wan3.0-video",
+    "input": {
+      "prompt": "清晨太阳刚刚升起，在南瓜地里面，有一颗小南瓜上面挂着露珠。",
+      "media": [
+        { "type": "first_frame", "url": "https://example.com/first.webp" },
+        { "type": "last_frame", "url": "https://example.com/last.webp" }
+      ]
+    },
+    "parameters": { "resolution": "480P", "ratio": "adaptive", "duration": 5, "audio": true, "watermark": false }
+  },
+  "expectedRequest": {
+    "url": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
+    "method": "POST",
+    "body": {
+      "model": "wan3.0-video",
+      "input": {
+        "prompt": "清晨太阳刚刚升起，在南瓜地里面，有一颗小南瓜上面挂着露珠。",
+        "media": [
+          { "type": "first_frame", "url": "https://example.com/first.webp" },
+          { "type": "last_frame", "url": "https://example.com/last.webp" }
+        ]
+      },
+      "parameters": { "resolution": "480P", "ratio": "adaptive", "duration": 5, "audio": true, "watermark": false }
+    }
+  },
+  "response": {
+    "output": {
+      "task_status": "PENDING",
+      "task_id": "0385dc79-5ff8-4d82-bcb6-xxxxxx"
+    },
+    "request_id": "4909100c-7b5a-9f92-bfe5-xxxxxx"
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "0385dc79-5ff8-4d82-bcb6-xxxxxx"
+  },
+  "source": {
+    "params": "官方原样（截短提示词、替换图片 URL）：https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference 「首尾帧生视频」curl 示例；audio/watermark 为同页字段表的可选参数（2026-11-07 读取，无需登录）",
+    "response": "官方原样：同页「成功响应」示例"
+  }
+}
