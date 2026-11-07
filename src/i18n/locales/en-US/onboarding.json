@@ -65,8 +65,8 @@
       "apimart": {
         "description": "A unified API with detailed model metadata for cross-model workflows."
       },
-      "ppio": {
-        "description": "Good regional connectivity for common models and latency-sensitive work, but its supported model selection is currently more limited."
+      "volcengine": {
+        "description": "ByteDance's official API for Seedream images and Seedance video, with stable connectivity in mainland China."
       }
     }
   },

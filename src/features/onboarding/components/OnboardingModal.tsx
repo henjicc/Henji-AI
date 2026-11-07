@@ -53,7 +53,7 @@ import { OnboardingBasicsStep, OnboardingDataPathDialogs } from './OnboardingBas
 
 const logger = createLogger('features.onboarding.modal')
 
-const PRIMARY_PROVIDER_IDS: ApiKeyProvider[] = ['kie', 'apimart', 'fal', 'ppio']
+const PRIMARY_PROVIDER_IDS: ApiKeyProvider[] = ['kie', 'apimart', 'fal', 'volcengine']
 const LANGUAGE_OPTIONS: LanguageOption[] = ['auto', 'zh-CN', 'en-US']
 const appIconUrl = new URL('../../../../resources/icons/128x128@2x.png', import.meta.url).href
 

@@ -65,8 +65,8 @@
       "apimart": {
         "description": "统一接口与模型元数据较完整，适合跨模型工作流。"
       },
-      "ppio": {
-        "description": "国内网络体验友好，适合常用模型与低延迟场景，但目前支持的模型相对较少。"
+      "volcengine": {
+        "description": "字节官方直连，Seedream 图片与 Seedance 视频，国内网络稳定。"
       }
     }
   },
