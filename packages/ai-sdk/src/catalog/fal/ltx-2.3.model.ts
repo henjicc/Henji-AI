@@ -1,6 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonObject } from "../../types/runtime";
-import { hasUploadedImage, resolveUploadedImageSources, resolveUploadedVideoSources } from "../shared/mediaPresence";
+import { hasUploadedImage, resolveUploadedAudioDurationSeconds, resolveUploadedAudioSources, resolveUploadedImageSources, resolveUploadedVideoSources } from "../shared/mediaPresence";
 
 // 价格与字段来源：docs/model-adaptation/LTX-2.3/LTX-2.3_Fal.md（Fal 模型页与 OpenAPI，2026-11-07 读取）
 const RATES: Record<string, Record<string, number>> = {
@@ -9,10 +9,15 @@ const RATES: Record<string, Record<string, number>> = {
 };
 // 快速档 12–20 秒只支持 1080p + 25fps，其余组合最长 10 秒。
 const LONG_DURATIONS = [12, 14, 16, 18, 20];
+// 音频生视频：输出视频跟随输入音频长度，音频须为 2–20 秒；读不到时长时按最长 20 秒估，宁高勿低。
+const AUDIO_MIN_SECONDS = 2;
+const AUDIO_MAX_SECONDS = 20;
 
 function mode(params: JsonObject): string {
-    return ['video-extension', 'retake-video'].includes(String(params.falLtx23Mode)) ? String(params.falLtx23Mode) : 'text-image-to-video';
+    return ['video-extension', 'retake-video', 'audio-to-video'].includes(String(params.falLtx23Mode)) ? String(params.falLtx23Mode) : 'text-image-to-video';
 }
+
+const showsAspectRatio = (params: JsonObject): boolean => ['text-image-to-video', 'audio-to-video'].includes(mode(params));
 
 function choice<T extends string | number>(value: unknown, values: readonly T[], fallback: T): T {
     return values.includes(value as T) ? value as T : fallback;
@@ -27,14 +32,15 @@ export const falLtx23Model = defineModel({
     meta: {
         id: 'fal-ai-ltx-2.3', canonicalModelId: 'ltx-2.3', seriesId: 'ltx', seriesRank: 2.3,
         provider: 'fal', type: 'video',
-        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'video-to-video', 'video-extension'],
+        tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'video-to-video', 'video-extension', 'audio-to-video'],
         polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 40 }
     },
     inputLimits: {
         images: { max: 2 }, videos: { max: 0 }, audios: { max: 0 },
         rules: [
             { when: 'falLtx23Mode === "video-extension"', images: { max: 0 }, videos: { exact: 1 } },
-            { when: 'falLtx23Mode === "retake-video"', images: { max: 0 }, videos: { exact: 1 } }
+            { when: 'falLtx23Mode === "retake-video"', images: { max: 0 }, videos: { exact: 1 } },
+            { when: 'falLtx23Mode === "audio-to-video"', images: { max: 1 }, videos: { max: 0 }, audios: { exact: 1 } }
         ]
     },
     requirements: [
@@ -49,12 +55,12 @@ export const falLtx23Model = defineModel({
         {
             id: 'falLtx23Mode', type: 'dropdown', order: 1,
             default: 'text-image-to-video',
-            options: [{ value: 'text-image-to-video' }, { value: 'video-extension' }, { value: 'retake-video' }]
+            options: [{ value: 'text-image-to-video' }, { value: 'video-extension' }, { value: 'retake-video' }, { value: 'audio-to-video' }]
         },
         {
             id: 'falLtx23AspectRatio', type: 'dropdown', order: 2,
             default: 'smart',
-            visible: { condition: (params: JsonObject) => mode(params) === 'text-image-to-video' },
+            visible: { condition: showsAspectRatio },
             options: [{ value: 'smart' }, { value: '16:9' }, { value: '9:16' }]
         },
         {
@@ -120,6 +126,8 @@ export const falLtx23Model = defineModel({
                 return 'fal-ai/ltx-2.3/extend-video';
             if (current === 'retake-video')
                 return 'fal-ai/ltx-2.3/retake-video';
+            if (current === 'audio-to-video')
+                return 'fal-ai/ltx-2.3/audio-to-video';
             const route = hasUploadedImage(params) ? 'image-to-video' : 'text-to-video';
             return params.falLtx23FastMode === false ? `fal-ai/ltx-2.3/${route}` : `fal-ai/ltx-2.3/${route}/fast`;
         }
@@ -128,6 +136,24 @@ export const falLtx23Model = defineModel({
         builder: (params) => {
             const prompt = typeof params.prompt === 'string' ? params.prompt.trim() : '';
             const current = mode(params);
+            if (current === 'audio-to-video') {
+                const audio = resolveUploadedAudioSources(params)[0];
+                if (!audio)
+                    throw new Error('LTX-2.3 音频生视频需要上传 1 段音频');
+                const image = resolveUploadedImageSources(params)[0];
+                if (!image && !prompt)
+                    throw new Error('LTX-2.3 音频生视频不传首帧图时需要填写提示词');
+                const ratio = String(params.falLtx23AspectRatio || 'smart');
+                const body: JsonObject = {
+                    audio_url: audio,
+                    aspect_ratio: ratio === '9:16' || ratio === '16:9' ? ratio : 'auto'
+                };
+                if (image)
+                    body.image_url = image;
+                if (prompt)
+                    body.prompt = prompt;
+                return body;
+            }
             if (current !== 'text-image-to-video') {
                 const video = resolveUploadedVideoSources(params)[0];
                 if (!video)
@@ -189,11 +215,16 @@ export const falLtx23Model = defineModel({
                 return 0.1 * clampSeconds(params.falLtx23ExtendDuration, 2, 20, 5);
             if (current === 'retake-video')
                 return 0.1 * clampSeconds(params.falLtx23RetakeDuration, 2, 20, 5);
+            if (current === 'audio-to-video')
+                return 0.1 * clampSeconds(resolveUploadedAudioDurationSeconds(params, AUDIO_MAX_SECONDS), AUDIO_MIN_SECONDS, AUDIO_MAX_SECONDS, AUDIO_MAX_SECONDS);
             const rates = params.falLtx23FastMode === false ? RATES.pro : RATES.fast;
             const resolution = choice(params.falLtx23Resolution, ['1080p', '1440p', '2160p'], '1080p');
             return rates[resolution] * choice(Number(params.falLtx23Duration), [6, 8, 10, ...LONG_DURATIONS], 6);
         },
-        description: '快速：1080p $0.06/秒、1440p $0.12/秒、2160p $0.24/秒；标准：$0.08/$0.16/$0.32 每秒；延长视频与视频重拍 $0.10/秒'
+        mediaContext: [
+            { targetParam: '__audioDurationSeconds', mediaType: 'audio', metric: 'durationSeconds', when: (params) => mode(params) === 'audio-to-video' }
+        ],
+        description: '快速：1080p $0.06/秒、1440p $0.12/秒、2160p $0.24/秒；标准：$0.08/$0.16/$0.32 每秒；延长视频与视频重拍 $0.10/秒；音频生视频 $0.10/秒，按音频时长计算（视频与音频等长），读不到时长时按最长 20 秒估'
     }
 });
 export default falLtx23Model;

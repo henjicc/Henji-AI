@@ -10,7 +10,7 @@ export const kieKling40Model = defineModel({
   },
   ...kling40Definition({
     idPrefix: 'kieKling40', modelPrefix: 'kling-4.0/', name: 'Kling 4.0',
-    maxDuration: 30, firstFrameOnly: false, resolutions: ['720p', '1080p'],
+    maxDuration: 30, firstFrameOnly: false, elementTypeField: false, resolutions: ['720p', '1080p'],
     rates: { '720p': { base: 0.1425, withVideo: 0.085 }, '1080p': { base: 0.2125, withVideo: 0.1275 } },
   }),
 })

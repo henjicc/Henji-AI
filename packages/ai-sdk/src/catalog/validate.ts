@@ -397,9 +397,14 @@ function validatePricing(model: ModelRuntimeDefinition, fail: ValidationFailure)
       ? ['megapixels', 'width', 'height', 'fileSizeBytes'].includes(requirement.metric)
       : requirement.mediaType === 'video'
         ? ['durationSeconds', 'megapixels', 'width', 'height'].includes(requirement.metric)
-        : false
+        : requirement.mediaType === 'audio'
+          ? requirement.metric === 'durationSeconds'
+          : false
     if (!validMetric) {
       fail(`${prefix} has an unsupported mediaType/metric combination`)
+    }
+    if (requirement.when !== undefined && typeof requirement.when !== 'function') {
+      fail(`${prefix}.when must be a function`)
     }
 
     const multiplier = requirement.multiplier

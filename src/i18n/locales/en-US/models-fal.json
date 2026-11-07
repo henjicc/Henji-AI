@@ -133,6 +133,7 @@
     "fal-ai-gemini-omni-1.2-flash": { "meta": { "name": "Gemini Omni 1.2 Flash" } },
     "fal-ai-grok-imagine-video-1.5": { "meta": { "name": "Grok Imagine Video 1.5" } },
     "fal-ai-minimax-h3-max": { "meta": { "name": "MiniMax H3 Max" } },
-    "fal-ai-flux-3": { "meta": { "name": "FLUX 3" } }
+    "fal-ai-flux-3": { "meta": { "name": "FLUX 3" } },
+    "fal-flux-3-video": { "meta": { "name": "FLUX 3 Video" } }
   }
 }

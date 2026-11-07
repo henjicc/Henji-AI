@@ -17,6 +17,9 @@ const DISPLAY_TEXT = {
   notCloned: { zh: '未克隆', en: 'Not cloned' },
   cloned: { zh: '已克隆', en: 'Cloned' },
   items: { zh: '{n}项', en: '{n} items' },
+  unused: { zh: '未使用', en: 'Off' },
+  shots: { zh: '{n} 镜 · {s} 秒', en: '{n} shots · {s}s' },
+  elements: { zh: '{n} 个', en: '{n}' },
 } as const
 
 function displayText(key: keyof typeof DISPLAY_TEXT, language: string, count?: number): string {
@@ -58,7 +61,17 @@ export function formatPanelDisplayValue(
     // 复合面板没有取值时就是全部默认
     if (panel === 'composite') return displayText('defaults', language)
     if (panel === 'minimax-voice-clone') return displayText('notCloned', language)
+    if (panel === 'shot-list' || panel === 'subject-elements') return displayText('unused', language)
     return displayText('unset', language)
+  }
+
+  // 分镜与元素是可选的列表：空着就是没用这项能力
+  if (panel === 'shot-list' || panel === 'subject-elements') {
+    const items = Array.isArray(value) ? value.filter(item => item && typeof item === 'object') as DynamicValueMap[] : []
+    if (items.length === 0) return displayText('unused', language)
+    if (panel === 'subject-elements') return displayText('elements', language, items.length)
+    const seconds = items.reduce((sum, item) => sum + (Number(item.duration) || 0), 0)
+    return displayText('shots', language, items.length).replace('{s}', String(seconds))
   }
 
   if (panel === 'modelscope-custom-model') {

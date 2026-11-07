@@ -8,8 +8,9 @@ import type { ModelDefinition } from '@/core/types'
 
 import PriceEstimate from './PriceEstimate'
 
-const { readImageInfoMock } = vi.hoisted(() => ({
+const { readImageInfoMock, readVideoInfoMock } = vi.hoisted(() => ({
   readImageInfoMock: vi.fn(),
+  readVideoInfoMock: vi.fn(),
 }))
 
 vi.mock('@/commands/image', () => ({
@@ -17,7 +18,7 @@ vi.mock('@/commands/image', () => ({
 }))
 
 vi.mock('@/commands/video', () => ({
-  readVideoInfo: vi.fn(),
+  readVideoInfo: readVideoInfoMock,
 }))
 
 vi.mock('@/hooks/useI18n', () => ({
@@ -146,5 +147,15 @@ describe('PriceEstimate', () => {
     )
     expect(await rendered.findByText('$0.16')).toBeTruthy()
     expect(readImageInfoMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('没有预先读到视频时长的入口（画布节点）也按实际视频时长估价', async () => {
+    const model: ModelDefinition = { ...unitPriceModel, meta: { ...unitPriceModel.meta, id: 'video-seconds-test' },
+      pricing: { currency: '$', calculator: (params) => Number((params.__videoDurationSeconds as number[] | undefined)?.[0] ?? 5) * 0.1 } }
+    registry.register(model)
+    readVideoInfoMock.mockResolvedValue({ durationSeconds: 12 })
+    const rendered = render(<PriceEstimate providerId="fal" modelId={model.meta.id} params={{ videos: ['in.mp4'] }} variant="badge" />)
+    expect(rendered.queryByText('$0.50')).toBeNull()
+    expect(await rendered.findByText('$1.20')).toBeTruthy()
   })
 })

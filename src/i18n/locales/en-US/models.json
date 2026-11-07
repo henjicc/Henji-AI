@@ -36,7 +36,8 @@
     "volcengine": "Volcengine",
     "grsai": "Grsai",
     "siliconflow": "SiliconFlow",
-    "volcengine-speech": "Volcengine Speech"
+    "volcengine-speech": "Volcengine Speech",
+    "groq": "Groq"
   },
   "tags": {
     "text-to-image": "Text to Image",
@@ -48,6 +49,7 @@
     "video-to-video": "Video Editing",
     "video-extension": "Video Extension",
     "motion-control": "Motion Control",
+    "audio-to-video": "Audio to Video",
     "text-to-audio": "Speech Synthesis",
     "voice-clone": "Voice Cloning",
     "inpainting": "Inpainting",

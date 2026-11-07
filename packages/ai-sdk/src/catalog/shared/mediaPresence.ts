@@ -8,7 +8,8 @@
  * 会在以上三种场景都被调用到，只查其中一个键会导致另外两个场景判断错误（典型表现：某个参数该
  * 隐藏却没隐藏、模式自动切换在画布里完全不触发、计价该按"有视频"算却按"无视频"算）。
  *
- * 这几个函数统一查三个键，跨 kie/ppio/fal/modelscope 各 provider 通用。
+ * 这几个函数统一查三个键，跨 kie/ppio/fal/modelscope 各 provider 通用。音频同理：
+ * uploadedAudioFilePaths / audios / uploadedAudios。
  */
 
 import type { JsonValue, JsonObject } from '../../types/runtime'
@@ -46,6 +47,10 @@ export function resolveUploadedImageSources(params: JsonObject): string[] {
 
 export function resolveUploadedVideoSources(params: JsonObject): string[] {
   return richestMediaSources([params.uploadedVideoFilePaths, params.videos, params.uploadedVideos])
+}
+
+export function resolveUploadedAudioSources(params: JsonObject): string[] {
+  return richestMediaSources([params.uploadedAudioFilePaths, params.audios, params.uploadedAudios])
 }
 
 export function countUploadedImages(params: JsonObject): number {
@@ -93,6 +98,26 @@ export function resolveUploadedVideoDurationSeconds(
     ? fallbackPerVideoSeconds
     : 0
   return fallback * videoCount
+}
+
+/**
+ * 返回所有音频输入的计费总时长。`__audioDurationSeconds` 由宿主按 pricing.mediaContext
+ * 用媒体探针补齐（估价与提交前的付费确认都会补）；读不到时按调用方声明的单段兜底估算。
+ */
+export function resolveUploadedAudioDurationSeconds(
+  params: JsonObject,
+  fallbackPerAudioSeconds = 0
+): number {
+  const audioCount = resolveUploadedAudioSources(params).length
+  if (audioCount === 0) return 0
+
+  const duration = params.__audioDurationSeconds
+  if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) return duration
+
+  const fallback = Number.isFinite(fallbackPerAudioSeconds) && fallbackPerAudioSeconds > 0
+    ? fallbackPerAudioSeconds
+    : 0
+  return fallback * audioCount
 }
 
 export function hasUploadedImage(params: JsonObject): boolean {

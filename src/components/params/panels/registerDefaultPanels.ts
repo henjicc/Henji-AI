@@ -9,6 +9,8 @@ import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSele
 import { CompositeSpecialPanel } from './CompositePanel'
 import { MinimaxVoiceClonePanel } from './MinimaxVoiceClonePanel'
 import { ModelscopeCustomModelPanel } from './ModelscopeCustomModelPanel'
+import { ShotListPanel } from './ShotListPanel'
+import { SubjectElementsPanel } from './SubjectElementsPanel'
 import { VoiceSelectorPanel } from './VoiceSelectorPanel'
 import { registerDefaultComponents } from './composite/registerDefaultComponents'
 
@@ -20,4 +22,6 @@ export function registerDefaultPanels(): void {
   panelRegistry.register('modelscope-custom-model', ModelscopeCustomModelPanel)
   panelRegistry.register('voice-selector', VoiceSelectorPanel)
   panelRegistry.register('minimax-voice-clone', MinimaxVoiceClonePanel)
+  panelRegistry.register('shot-list', ShotListPanel)
+  panelRegistry.register('subject-elements', SubjectElementsPanel)
 }

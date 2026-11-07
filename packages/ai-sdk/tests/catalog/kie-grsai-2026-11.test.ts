@@ -114,7 +114,8 @@ describe('2026-11 KIE / Grsai 新模型请求契约', () => {
   it('价格按官方计费维度计算', () => {
     const price = (model: ModelRuntimeDefinition, params: JsonObject) => model.pricing.calculator!(params)
     expect(price(kieKling40Model, { kieKling40Resolution: '1080p', kieKling40Duration: '10' })).toBeCloseTo(2.125)
-    expect(price(kieKling40Model, { kieKling40Mode: 'reference-to-video', videos: vid(1), kieKling40Duration: '10' })).toBeCloseTo(0.85)
+    // 带视频输入时按输入加输出计费，至少为输出的 2 倍（视频时长未知按 5 秒估）。
+    expect(price(kieKling40Model, { kieKling40Mode: 'reference-to-video', videos: vid(1), kieKling40Duration: '10' })).toBeCloseTo(1.7)
     expect(price(kieWan30PrimeModel, { kieWan30PrimeResolution: '480p', kieWan30PrimeDuration: '10' })).toBeCloseTo(0.612)
     expect(price(grsaiWan30Model, { grsaiWan30Resolution: '1080p', grsaiWan30Duration: '10' })).toBeCloseTo(13.2)
     expect(price(kieFlux3KleinModel, { kieFlux3KleinResolution: '2K', kieFlux3KleinCount: 2 })).toBeCloseTo(0.025)

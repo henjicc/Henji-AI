@@ -32,6 +32,8 @@
     "apimart-flux-3-image": { "meta": { "name": "FLUX 3 Image" } },
     "apimart-veo-3.1": { "meta": { "name": "Veo 3.1" } },
     "apimart-seedream-5.0-flash": { "meta": { "name": "Seedream 5.0 Flash" } },
-    "apimart-happyhorse-1.1": { "meta": { "name": "HappyHorse 1.1" } }
+    "apimart-happyhorse-1.1": { "meta": { "name": "HappyHorse 1.1" } },
+    "apimart-wan-2.7-image": { "meta": { "name": "Wan 2.7 Image" } },
+    "apimart-flux-3-video": { "meta": { "name": "FLUX 3 Video" } }
   }
 }

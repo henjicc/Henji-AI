@@ -6,6 +6,7 @@ import { apimartPresentationPart3 } from './apimart/part-3'
 import { apimartPresentationPart4 } from './apimart/part-4'
 import { apimartPresentationPart5 } from './apimart/part-5'
 import { apimartPresentationPart6 } from './apimart/part-6'
+import { apimartPresentationPart7 } from './apimart/part-7'
 
 export const apimartPresentation = {
   ...apimartPresentationPart1,
@@ -14,4 +15,5 @@ export const apimartPresentation = {
   ...apimartPresentationPart4,
   ...apimartPresentationPart5,
   ...apimartPresentationPart6,
+  ...apimartPresentationPart7,
 }

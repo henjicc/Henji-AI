@@ -4,6 +4,7 @@ import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/m
 import type { Linkage } from '@/core/types/Linkage'
 import type { ModelPresentation, ParamOptionPresentation, ParamPresentationEntry } from '@/core/types/ModelPresentation'
 import { falPresentationPart1 } from './part-1'
+import { kling40ElementsPresentation, kling40ShotsPresentation } from '../kling-4.0'
 
 type Labels = Record<string, ParamOptionPresentation>
 
@@ -53,6 +54,7 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
           'text-image-to-video': textImageMode,
           'video-extension': videoExtensionMode,
           'retake-video': { label: sharedModeText('retakeVideo'), description: { zh: '重新生成视频中的一段，可只换画面或只换声音', en: 'Regenerate a section of the video, optionally only its picture or sound' } },
+          'audio-to-video': { label: { zh: '音频生视频', en: 'Audio to Video' }, description: { zh: '按 2–20 秒的音频生成等长、同步的画面；可再传 1 张图作首帧，不传图时需要提示词', en: 'Generate visuals synced to a 2–20 second audio clip of the same length; optionally add one image as the first frame, otherwise a prompt is required' } },
         },
       },
       falLtx23AspectRatio: aspectRatio(['16:9', '9:16']),
@@ -102,6 +104,8 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
       falKling40AspectRatio: aspectRatio(['16:9', '9:16', '1:1', '21:9']),
       falKling40Resolution: resolution(['720p', '1080p']),
       falKling40Duration: duration,
+      falKling40Shots: kling40ShotsPresentation,
+      falKling40Elements: kling40ElementsPresentation('indexed'),
     },
     linkages: [],
   },
@@ -118,6 +122,7 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
       },
       falKling40FlashAspectRatio: aspectRatio(['16:9', '9:16', '1:1', '21:9']),
       falKling40FlashDuration: duration,
+      falKling40FlashElements: kling40ElementsPresentation('indexed'),
     },
     linkages: [],
   },

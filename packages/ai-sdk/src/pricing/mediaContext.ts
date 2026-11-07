@@ -13,9 +13,15 @@ export interface PricingVideoMetadata {
   durationSeconds: number
 }
 
+export interface PricingAudioMetadata {
+  durationSeconds: number
+}
+
 export interface PricingMediaMetadataReaders {
   image: (source: string) => Promise<PricingImageMetadata>
   video: (source: string) => Promise<PricingVideoMetadata>
+  /** 可选：宿主没有音频探针时，按音频计价的指标记为缺失。 */
+  audio?: (source: string) => Promise<PricingAudioMetadata>
 }
 
 export interface ResolvedPricingMediaContext {
@@ -27,6 +33,7 @@ export interface ResolvedPricingMediaContext {
 const MEDIA_SOURCE_KEYS = {
   image: ['uploadedFilePaths', 'images', 'uploadedImages'],
   video: ['uploadedVideoFilePaths', 'videos', 'uploadedVideos'],
+  audio: ['uploadedAudioFilePaths', 'audios', 'uploadedAudios'],
 } as const
 
 function cachedRead<T>(
@@ -52,7 +59,7 @@ function cleanSources(value: JsonValue | undefined): string[] {
 }
 
 export function resolvePricingMediaSources(
-  mediaType: 'image' | 'video',
+  mediaType: 'image' | 'video' | 'audio',
   params: JsonObject,
 ): string[] {
   for (const key of MEDIA_SOURCE_KEYS[mediaType]) {
@@ -64,14 +71,14 @@ export function resolvePricingMediaSources(
 
 function readMetric(
   requirement: RuntimePricingMediaContextRequirement,
-  metadata: PricingImageMetadata | PricingVideoMetadata,
+  metadata: PricingImageMetadata | PricingVideoMetadata | PricingAudioMetadata,
 ): number | null {
   if (requirement.metric === 'megapixels') {
-    return metadata.width > 0 && metadata.height > 0
+    return 'width' in metadata && metadata.width > 0 && metadata.height > 0
       ? metadata.width * metadata.height / 1_000_000
       : null
   }
-  const value = metadata[requirement.metric as keyof typeof metadata]
+  const value = (metadata as unknown as Record<string, unknown>)[requirement.metric]
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
@@ -108,8 +115,10 @@ async function resolveRequirement(
     try {
       const metadata = requirement.mediaType === 'image'
         ? await readers.image(source)
-        : await readers.video(source)
-      return readMetric(requirement, metadata)
+        : requirement.mediaType === 'video'
+          ? await readers.video(source)
+          : readers.audio ? await readers.audio(source) : null
+      return metadata ? readMetric(requirement, metadata) : null
     } catch {
       return null
     }
@@ -137,16 +146,20 @@ export async function resolvePricingMediaContext(
 
   const imageReads = new Map<string, Promise<PricingImageMetadata>>()
   const videoReads = new Map<string, Promise<PricingVideoMetadata>>()
+  const audioReads = new Map<string, Promise<PricingAudioMetadata>>()
+  const audioReader = readers.audio
   const memoizedReaders: PricingMediaMetadataReaders = {
     image: (source) => cachedRead(imageReads, source, readers.image),
     video: (source) => cachedRead(videoReads, source, readers.video),
+    ...(audioReader ? { audio: (source: string) => cachedRead(audioReads, source, audioReader) } : {}),
   }
+  const applicable = requirements.filter((requirement) => requirement.when?.(params) ?? true)
   const resolvedValues = await Promise.all(
-    requirements.map((requirement) => resolveRequirement(requirement, params, memoizedReaders)),
+    applicable.map((requirement) => resolveRequirement(requirement, params, memoizedReaders)),
   )
   const next = { ...params }
   const missingTargets: string[] = []
-  requirements.forEach((requirement, index) => {
+  applicable.forEach((requirement, index) => {
     const value = resolvedValues[index]
     if (value === null || !Number.isFinite(value) || value <= 0) {
       delete next[requirement.targetParam]

@@ -1,0 +1,86 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=kling/v4/flash/reference-to-video",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official OpenAPI input schema; $ref resolved, null branches and descriptions/examples/x-fal metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "type": "object",
+    "required": [
+      "prompt"
+    ],
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "maxLength": 26000
+      },
+      "image_urls": {
+        "type": "array",
+        "maxItems": 10,
+        "items": {
+          "type": "string"
+        }
+      },
+      "elements": {
+        "type": "array",
+        "maxItems": 7,
+        "items": {
+          "type": "object",
+          "properties": {
+            "frontal_image_url": {
+              "type": "string"
+            },
+            "reference_image_urls": {
+              "type": "array",
+              "maxItems": 3,
+              "items": {
+                "type": "string"
+              }
+            },
+            "video_url": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "duration": {
+        "type": "integer",
+        "default": 5,
+        "minimum": 3,
+        "maximum": 20
+      },
+      "video_urls": {
+        "type": "array",
+        "maxItems": 5,
+        "items": {
+          "type": "string"
+        }
+      },
+      "aspect_ratio": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "16:9",
+          "9:16",
+          "1:1",
+          "21:9"
+        ],
+        "default": "16:9"
+      },
+      "resolution": {
+        "type": "string",
+        "enum": [
+          "720p"
+        ],
+        "default": "720p"
+      },
+      "start_image_url": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  }
+}

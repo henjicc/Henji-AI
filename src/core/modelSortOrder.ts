@@ -12,6 +12,7 @@ export const PROVIDER_ORDER: Record<string, number> = {
   grsai: 7,
   siliconflow: 8,
   'volcengine-speech': 9,
+  groq: 10,
 }
 
 /** 生成 tab 模型面板的类型宏观分组顺序 */

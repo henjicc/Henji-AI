@@ -42,6 +42,7 @@ export const BUILTIN_PROVIDER_IDS = [
   'fal',
   'grsai',
   'siliconflow',
+  'groq',
 ] as const
 
 /** 开放 ProviderId 仍保留内置供应商字面量的编辑器补全。 */
@@ -399,6 +400,8 @@ interface RuntimePricingMediaContextRequirementBase {
   aggregation?: RuntimePricingMediaAggregation
   /** 对媒体指标做固定或参数驱动的倍率变换，例如输出 MP = 输入 MP × 放大倍率²。 */
   multiplier?: RuntimePricingMediaMultiplier
+  /** 只有部分模式按媒体计价时声明；返回 false 时不读取媒体，也不算缺少指标。 */
+  when?: (params: JsonObject) => boolean
 }
 
 export type RuntimePricingMediaContextRequirement =
@@ -409,6 +412,10 @@ export type RuntimePricingMediaContextRequirement =
   | (RuntimePricingMediaContextRequirementBase & {
       mediaType: 'video'
       metric: 'durationSeconds' | 'megapixels' | 'width' | 'height'
+    })
+  | (RuntimePricingMediaContextRequirementBase & {
+      mediaType: 'audio'
+      metric: 'durationSeconds'
     })
 
 export interface RuntimePricingConfig {

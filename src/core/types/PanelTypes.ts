@@ -18,6 +18,8 @@ export type PanelType =
   | 'style-gallery'     // 风格画廊面板
   | 'color-picker'      // 颜色选择器面板
   | 'composite'         // 组合面板
+  | 'shot-list'         // 分镜列表：每镜提示词 + 秒数
+  | 'subject-elements'  // 元素：一组角色/物体参考图或一段视频
   | 'custom'            // 自定义面板
 
 /**

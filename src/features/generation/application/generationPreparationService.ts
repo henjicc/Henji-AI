@@ -1,4 +1,6 @@
 import { createLogger } from '@/core/logging'
+import { readCachedVideoDurationSeconds, resolvePriceEstimateMediaContext } from '@/core/pricing/resolvePriceEstimateMediaContext'
+import { attachVideoDurations } from '@/core/services/generationVideoDurations'
 import { toApplicationStableIdSegment } from '@/core/application-control'
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
@@ -178,6 +180,16 @@ export function createPriceEstimate(
       ? '人民币估值用于候选排序和统一付费授权；动态计费模型以提交前的实际参数估算为准。'
       : '该货币暂不参与跨币种比较；以模型原始价格为准。',
   }
+}
+
+/**
+ * 提交前的估价：按视频时长、音频时长、输入像素计价的模型，要先由宿主读出这些指标再算，
+ * 否则界面显示价、付费授权金额与助手看到的费用会各算各的。
+ */
+export async function estimateGenerationPrice(model: ModelDefinition, values: DynamicValueMap): Promise<Record<string, unknown>> {
+  const withDurations = await attachVideoDurations(values, readCachedVideoDurationSeconds)
+  const { params } = await resolvePriceEstimateMediaContext(model.pricing.mediaContext, withDurations)
+  return createPriceEstimate(model, params)
 }
 
 function createCatalogPriceEstimate(model: ModelDefinition, usdToCnyRate: number): Record<string, unknown> {

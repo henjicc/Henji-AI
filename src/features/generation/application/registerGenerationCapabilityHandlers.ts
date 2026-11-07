@@ -5,6 +5,7 @@ import { registry } from '@/core/ModelRegistry'
 import { createMediaGeneratorPromptReferences } from '@/components/MediaGenerator/promptState'
 import { toLegacyPromptString } from '@/core/inputs/promptDocument/index'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
+import { estimateGenerationPrice } from '@/features/generation/application/generationPreparationService'
 import { generationService } from '@/core/services/GenerationService'
 import { transferGenerationPaidApproval } from '@/core/services/generationSubmissionConfirmation'
 import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
@@ -170,7 +171,10 @@ export function registerGenerationCapabilityHandlers(
   registrar.registerHandler('prepare_generation_task', async (input) => {
     const parsed = parseCapabilityInput<GenerationInput>('prepare_generation_task', input)
     const resolved = await prepareInput(parsed)
-    const preparation = generationApplicationService.prepare(resolved)
+    const prepared = generationApplicationService.prepare(resolved)
+    // 助手提交时的付费授权金额取这里的估价，必须和界面一样补齐媒体指标。
+    const model = registry.getModel(resolved.modelId)
+    const preparation = model ? { ...prepared, priceEstimate: await estimateGenerationPrice(model, prepared.options as DynamicValueMap) } : prepared
     const providerConfigured = (await generationService.getConfiguredProviders()).includes(String(preparation.providerId))
     const unavailable = getProviderAvailabilityFailure(String(preparation.providerId), resolved.modelId)
     return {

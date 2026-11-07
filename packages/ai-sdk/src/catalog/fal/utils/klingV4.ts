@@ -2,9 +2,13 @@
 
 import type { JsonObject } from '../../../types/runtime'
 import { resolveUploadedVideoDurationSeconds } from '../../shared/mediaPresence'
+import type { ShotListLimits } from '../../shared/shotList'
 
 export const KLING_V4_MODES = ['text-image-to-video', 'reference-to-video', 'video-edit'] as const
 export const KLING_V4_RATIOS = ['16:9', '9:16', '1:1', '21:9'] as const
+
+/** 单镜 1–30 秒、提示词 ≤512 字符；总和沿用不分镜时的时长范围。 */
+export const KLING_V4_SHOT_LIMITS: ShotListLimits = { maxPromptLength: 512, minShotSeconds: 1, maxShotSeconds: 30, minTotalSeconds: 3, maxTotalSeconds: 30 }
 
 export function klingV4Mode(value: unknown): (typeof KLING_V4_MODES)[number] {
   return KLING_V4_MODES.includes(value as (typeof KLING_V4_MODES)[number])

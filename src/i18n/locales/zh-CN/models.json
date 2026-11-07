@@ -36,7 +36,8 @@
     "volcengine": "火山引擎",
     "grsai": "Grsai",
     "siliconflow": "硅基流动",
-    "volcengine-speech": "火山引擎（豆包语音）"
+    "volcengine-speech": "火山引擎（豆包语音）",
+    "groq": "Groq"
   },
   "tags": {
     "text-to-image": "文生图",
@@ -48,6 +49,7 @@
     "video-to-video": "视频编辑",
     "video-extension": "视频延长",
     "motion-control": "动作控制",
+    "audio-to-video": "音频生视频",
     "text-to-audio": "语音合成",
     "voice-clone": "克隆音色",
     "inpainting": "局部重绘",

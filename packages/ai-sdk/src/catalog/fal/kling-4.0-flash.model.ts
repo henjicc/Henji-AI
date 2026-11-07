@@ -1,10 +1,13 @@
 import { defineModel } from "../defineModel";
 import type { JsonObject } from "../../types/runtime";
 import { hasUploadedImage, hasUploadedVideo, resolveUploadedImageSources, resolveUploadedVideoDurationSeconds, resolveUploadedVideoSources } from "../shared/mediaPresence";
+import { buildFalSubjectElements, subjectElementVideoSeconds } from "../shared/subjectElements";
 import { KLING_V4_RATIOS, klingV4Duration, klingV4EditSeconds, klingV4Mode, klingV4Prompt, klingV4Ratio } from "./utils/klingV4";
 
 // 价格与字段来源：docs/model-adaptation/Kling-4.0-Flash/Kling-4.0-Flash_Fal.md（Fal 模型页与 OpenAPI，2026-11-07 读取）。
-// Flash 只出 720p，首帧图生视频不收尾帧，参考与编辑不接受声音。
+// Flash 只出 720p，首帧图生视频不收尾帧，参考与编辑不接受声音，也没有分镜。
+const usesElements = (params: JsonObject) => klingV4Mode(params.falKling40FlashMode) !== 'text-image-to-video';
+
 export const falKling40FlashModel = defineModel({
     meta: {
         id: 'fal-ai-kling-4.0-flash', canonicalModelId: 'kling-video-4.0-flash', seriesId: 'kling-video', seriesRank: 4.01,
@@ -47,6 +50,11 @@ export const falKling40FlashModel = defineModel({
             id: 'falKling40FlashDuration', type: 'number', order: 3,
             default: 5, min: 3, max: 20, step: 1,
             visible: { condition: (params: JsonObject) => klingV4Mode(params.falKling40FlashMode) !== 'video-edit' }
+        },
+        {
+            id: 'falKling40FlashElements', type: 'composite', order: 4, valueType: 'array',
+            default: [],
+            visible: { condition: usesElements }
         }
     ],
     endpoints: {
@@ -65,6 +73,7 @@ export const falKling40FlashModel = defineModel({
             const prompt = klingV4Prompt(params);
             const images = resolveUploadedImageSources(params).slice(0, 10);
             const videos = resolveUploadedVideoSources(params);
+            const elements = usesElements(params) ? buildFalSubjectElements(params.falKling40FlashElements, 'Kling 4.0 Flash') : [];
             if (mode === 'video-edit') {
                 if (!prompt)
                     throw new Error('Kling 4.0 Flash 视频编辑需要填写修改说明');
@@ -75,6 +84,8 @@ export const falKling40FlashModel = defineModel({
                     body.video_urls = videos.slice(1, 5);
                 if (images.length > 0)
                     body.image_urls = images;
+                if (elements.length > 0)
+                    body.elements = elements;
                 return body;
             }
             const duration = klingV4Duration(params.falKling40FlashDuration, 20);
@@ -89,6 +100,8 @@ export const falKling40FlashModel = defineModel({
                     body.image_urls = images;
                 if (videos.length > 0)
                     body.video_urls = videos.slice(0, 5);
+                if (elements.length > 0)
+                    body.elements = elements;
                 return body;
             }
             if (images.length > 0) {
@@ -106,16 +119,17 @@ export const falKling40FlashModel = defineModel({
         currency: '$',
         calculator: (params) => {
             const mode = klingV4Mode(params.falKling40FlashMode);
+            const elementVideoSeconds = usesElements(params) ? subjectElementVideoSeconds(params.falKling40FlashElements) : 0;
             if (mode === 'video-edit') {
                 const { source, input } = klingV4EditSeconds(params);
-                return 0.063 * (source + Math.max(input, source));
+                return 0.063 * (source + Math.max(input + elementVideoSeconds, source));
             }
             const duration = klingV4Duration(params.falKling40FlashDuration, 20);
-            if (mode === 'reference-to-video' && hasUploadedVideo(params))
-                return 0.063 * (duration + Math.max(resolveUploadedVideoDurationSeconds(params, 5), duration));
+            if (mode === 'reference-to-video' && (hasUploadedVideo(params) || elementVideoSeconds > 0))
+                return 0.063 * (duration + Math.max(resolveUploadedVideoDurationSeconds(params, 5) + elementVideoSeconds, duration));
             return 0.094 * duration;
         },
-        description: '720p $0.094/秒；视频编辑或带参考视频时 $0.063/秒，按输出时长加“输入视频与输出中较长者”计费'
+        description: '720p $0.094/秒；视频编辑、带参考视频或视频元素时 $0.063/秒，按输出时长加“输入视频与输出中较长者”计费'
     }
 });
 export default falKling40FlashModel;

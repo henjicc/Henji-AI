@@ -27,6 +27,8 @@ interface ImageUploadProps {
   onSmartMatch?: (metadata: ImageMetadata) => void
   disabled?: boolean
   showLabel?: boolean
+  /** 顺序有含义时（如元素第 1 张是正面主图）允许拖动缩略图调整顺序 */
+  reorderable?: boolean
 }
 
 interface ImageMetadata {
@@ -42,6 +44,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   onSmartMatch,
   disabled = false,
   showLabel = true,
+  reorderable = false,
 }) => {
   const { i18n, t } = useTranslation('ui')
   const { showNotification } = useNotification()
@@ -126,6 +129,12 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
         disabled={disabled}
         onUpload={handleUpload}
         onRemove={handleDelete}
+        onReorder={reorderable ? (from, to) => {
+          const next = safeValue.slice()
+          const [moved] = next.splice(from, 1)
+          next.splice(to, 0, moved)
+          onChange(next)
+        } : undefined}
       />
     </div>
   )

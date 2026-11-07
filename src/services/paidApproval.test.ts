@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { applicationPaidRequest, withPaidOperation, prepareExplanationPaidApproval, PaidOperationCancelledError, isUserCancellation } from './paidApproval'
+import { applicationPaidRequest, withPaidOperation, prepareExplanationPaidApproval, prepareGenerationPaidApproval, PaidOperationCancelledError, isUserCancellation } from './paidApproval'
+import { registry } from '@/core/ModelRegistry'
+import type { ModelDefinition } from '@/core/types'
+import { readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import type { LocalHostReply } from '@/core/application-control/localHostContracts'
@@ -11,6 +14,8 @@ vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ applicationControl:
 vi.mock('@/contexts/NotificationContext', () => ({ notifyUser: vi.fn() }))
 vi.mock('@/features/documents/documentOperations', () => ({ getDocumentOperations: () => ports }))
 vi.mock('@/features/canvas/application/imageEditDocumentProjectionBinding', () => ({ findCanvasImageEditDocumentTarget: ports.target }))
+const probes = vi.hoisted(() => ({ readVideoInfo: vi.fn() }))
+vi.mock('@/commands/video', () => probes)
 beforeEach(() => {
   vi.resetAllMocks()
   ports.findProject.mockResolvedValue({ id: 'project', name: '测试项目' })
@@ -78,6 +83,25 @@ it('工作已成功后的费用回执错误不得释放实际已执行的预算'
   })
   await expect(withPaidOperation({ category: 'title' }, async () => '已完成')).rejects.toThrow('保存回执失败')
   expect(ports.complete.mock.lastCall?.[0].uiPaidApproval.failureFacts).toEqual({ billing: 'completed' })
+})
+it('生成付费确认先按 pricing.mediaContext 补齐音频时长，授权金额与界面估价一致', async () => {
+  const model: ModelDefinition = {
+    meta: { id: 'audio-priced-test', canonicalModelId: 'ltx-2.3', provider: 'fal', type: 'video', name: { zh: '音频计价', en: 'Audio priced' }, tags: [] },
+    inputLimits: { images: { max: 0 }, videos: { max: 0 }, audios: { exact: 1 } },
+    params: [], linkages: [], endpoints: '/test', request: { builder: (params) => params },
+    pricing: {
+      currency: '$', calculator: (params) => 0.1 * Number(params.__audioDurationSeconds ?? 20),
+      mediaContext: [{ targetParam: '__audioDurationSeconds', mediaType: 'audio', metric: 'durationSeconds' }],
+    },
+  }
+  registry.register(model)
+  probes.readVideoInfo.mockResolvedValue({ durationSeconds: 5, width: 0, height: 0, hasAudio: true })
+  try {
+    await prepareGenerationPaidApproval(model.meta.id, { uploadedAudioFilePaths: ['paid-approval-voice.mp3'] })
+    expect(probes.readVideoInfo).toHaveBeenCalledWith('paid-approval-voice.mp3')
+    const prepared = ports.complete.mock.calls[0][0].uiPaidApproval.request
+    expect(prepared.estimatedCny).toBeCloseTo(0.5 * readPriceEstimateDisplaySettings().usdToCnyRate)
+  } finally { registry.clear() }
 })
 const missing = () => Object.assign(new Error('找不到文档'), { name: 'DocumentNotFoundError' })
 it('界面与 AI 均查询真实项目，图片引用解码；工具箱没有项目授权', async () => {

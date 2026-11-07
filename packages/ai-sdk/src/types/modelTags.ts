@@ -18,6 +18,7 @@ export const MODEL_TAG_DEFINITIONS = [
   { id: 'video-to-video', layer: 'form', mediaType: 'video', criterion: '输入一段视频，在原时间轴上改内容' },
   { id: 'video-extension', layer: 'form', mediaType: 'video', criterion: '接在输入视频之后继续生成' },
   { id: 'motion-control', layer: 'form', mediaType: 'video', criterion: '用一段视频的动作驱动图里的主体' },
+  { id: 'audio-to-video', layer: 'form', mediaType: 'video', criterion: '输入一段音频，生成与之同步、等长的视频' },
   { id: 'text-to-audio', layer: 'form', mediaType: 'audio', criterion: '文字转语音' },
   { id: 'voice-clone', layer: 'form', mediaType: 'audio', criterion: '用一段声音生成可复用的音色' },
   { id: 'inpainting', layer: 'specialty', mediaType: 'image', criterion: '有遮罩输入，按提示词只改遮罩内的区域' },

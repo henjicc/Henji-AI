@@ -1,0 +1,22 @@
+{
+  "provider": "fal",
+  "modelId": "fal-flux-3-video",
+  "scenario": "poll-success",
+  "phase": "continuePolling",
+  "route": "blackforestlabs/flux-3/text-to-video",
+  "taskId": "764cabcf-b745-4b3e-ae38-1200304cf45b",
+  "notes": "continuePolling 对同一个 taskId 先查 status 再取 result，同一份响应覆盖两次 fetch；只对第一次调用的 URL 做请求断言",
+  "response": {
+    "status": "COMPLETED",
+    "request_id": "764cabcf-b745-4b3e-ae38-1200304cf45b",
+    "video": { "url": "https://v3b.fal.media/files/example/flux-3-video-result.mp4" }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://v3b.fal.media/files/example/flux-3-video-result.mp4"
+  },
+  "source": {
+    "response": "video.url 结构取自 https://fal.ai/models/blackforestlabs/flux-3/text-to-video/llms.txt 的 Example Response（2026-11-07，无需登录），结果 URL 换成不可下载占位符；status/request_id 是队列状态字段，按 docs/model-adaptation/供应商/Fal.md §2.2 拼合，与 poll-success.json 同一约定"
+  }
+}

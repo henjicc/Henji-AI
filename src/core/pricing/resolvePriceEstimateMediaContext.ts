@@ -1,6 +1,7 @@
 import {
   resolvePricingMediaContext,
   type JsonObject,
+  type PricingAudioMetadata,
   type PricingImageMetadata,
   type PricingMediaMetadataReaders,
   type PricingVideoMetadata,
@@ -44,9 +45,23 @@ function cachedRead<T>(
   return pending
 }
 
+const audioMetadataCache = new Map<string, Promise<PricingAudioMetadata>>()
+
 const DEFAULT_READERS: PricingMediaMetadataReaders = {
   image: (source) => cachedRead(imageMetadataCache, source, readImageInfo),
   video: (source) => cachedRead(videoMetadataCache, source, readVideoInfo),
+  // 视频探针读的是 ffprobe 容器时长（format.duration），纯音频文件同样成立，不另开一套音频探针。
+  audio: (source) => cachedRead(audioMetadataCache, source, readVideoInfo),
+}
+
+/** 估价用的视频时长：和媒体指标共用同一份探针缓存，参数一改就重读会让价格反复闪成未就绪。 */
+export async function readCachedVideoDurationSeconds(source: string): Promise<number | null> {
+  try {
+    const info = await cachedRead(videoMetadataCache, source, readVideoInfo)
+    return info.durationSeconds > 0 ? info.durationSeconds : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -63,6 +78,7 @@ export async function resolvePriceEstimateMediaContext(
 }
 
 export type {
+  PricingAudioMetadata,
   PricingImageMetadata,
   PricingMediaMetadataReaders,
   PricingVideoMetadata,

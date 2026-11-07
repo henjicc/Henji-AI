@@ -35,7 +35,8 @@
 
 - 有图自动走 `edit-image`，无图走 `text-to-image`。
 - 智能比例：编辑时下发 `auto`（平台按第一张参考图），纯文生图回退 `1:1`。
-- FLUX 3 Klein（`blackforestlabs/flux-3/klein/*`，按尺寸逐档定价）与 FLUX 3 / FLUX 3 Max 视频端点不在本次范围。
+- FLUX 3 Klein（`blackforestlabs/flux-3/klein/*`，按尺寸逐档定价）不在本次范围。
+- FLUX 3 / FLUX 3 Max 视频端点已作为独立视频模型 `fal-flux-3-video` 接入，见 [FLUX-3-Video_Fal.md](../FLUX-3-Video/FLUX-3-Video_Fal.md)。
 
 ## 4. 原始链接索引
 

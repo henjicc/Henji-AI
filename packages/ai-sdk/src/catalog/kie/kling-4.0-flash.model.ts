@@ -10,7 +10,7 @@ export const kieKling40FlashModel = defineModel({
   },
   ...kling40Definition({
     idPrefix: 'kieKling40Flash', modelPrefix: 'kling-4.0/flash-', name: 'Kling 4.0 Flash',
-    maxDuration: 20, firstFrameOnly: true, resolutions: ['720p'],
+    maxDuration: 20, firstFrameOnly: true, elementTypeField: true, resolutions: ['720p'],
     rates: { '720p': { base: 0.085, withVideo: 0.0565 } },
   }),
 })

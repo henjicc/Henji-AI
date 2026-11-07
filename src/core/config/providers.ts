@@ -2,7 +2,7 @@ import { findProviderMetadata, type ProviderMetadata } from '@henjicc/ai-sdk'
 
 export const API_KEY_PROVIDER_IDS = [
   'ppio', 'fal', 'modelscope', 'kie', 'apimart', 'bailian', 'volcengine', 'grsai',
-  'siliconflow', 'volcengine-speech',
+  'siliconflow', 'volcengine-speech', 'groq',
 ] as const
 
 export type ApiKeyProvider = typeof API_KEY_PROVIDER_IDS[number]

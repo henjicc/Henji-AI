@@ -1,0 +1,40 @@
+{
+  "provider": "apimart",
+  "modelId": "apimart-flux-3-video",
+  "scenario": "create-task-success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/videos/generations",
+  "params": {
+    "model": "flux-3-video",
+    "prompt": "一只橘猫跳上洒满阳光的木桌，尾巴扫过一只玻璃杯，杯子晃了晃没有倒。电影感，浅景深。",
+    "duration": 5,
+    "resolution": "hd",
+    "aspect_ratio": "16:9"
+  },
+  "expectedRequest": {
+    "url": "https://api.apimart.ai/v1/videos/generations",
+    "method": "POST",
+    "body": {
+      "model": "flux-3-video",
+      "prompt": "一只橘猫跳上洒满阳光的木桌，尾巴扫过一只玻璃杯，杯子晃了晃没有倒。电影感，浅景深。",
+      "duration": 5,
+      "resolution": "hd",
+      "aspect_ratio": "16:9",
+      "nsfw_check": false
+    }
+  },
+  "response": {
+    "code": 200,
+    "data": [{ "status": "submitted", "task_id": "task_01J9HA7JPQ9A0Z6JZ3V8M9W6PZ" }]
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "task_01J9HA7JPQ9A0Z6JZ3V8M9W6PZ"
+  },
+  "source": {
+    "params": "https://docs.apimart.ai/cn/api-reference/videos/flux-3-video/generation.md 的 cURL 请求体逐字照搬（2026-11-07，无需登录）；nsfw_check 是 APIMart provider 在发送边界的强制覆盖",
+    "response": "同页 200 响应示例逐字照搬（含官方字面任务 ID），classification: official-literal"
+  }
+}

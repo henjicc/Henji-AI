@@ -4,6 +4,7 @@ import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/m
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation, ParamPresentationEntry } from '@/core/types/ModelPresentation'
 import { falPresentation } from '../fal'
+import { kling40ElementsPresentation } from '../kling-4.0'
 
 const special: Record<string, I18nText> = {
   smart: sharedOptionText('smart'), auto: sharedOptionText('auto'), adaptive: sharedOptionText('adaptive'),
@@ -80,6 +81,7 @@ function kling40(id: string, name: string, withResolution: boolean): ModelPresen
     },
     [`${p}Duration`]: { name: sharedFieldText('duration') },
     [`${p}KeepOriginalSound`]: { name: sharedFieldText('keepOriginalSound') },
+    [`${p}Elements`]: kling40ElementsPresentation('named'),
   }
   if (withResolution) params[`${p}Resolution`] = { name: sharedFieldText('resolution'), optionLabels: labels(['720p', '1080p']) }
   return { meta: meta(id, name), params, linkages: [] }

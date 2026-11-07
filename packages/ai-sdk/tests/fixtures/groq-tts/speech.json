@@ -1,0 +1,26 @@
+{
+  "kind": "capability",
+  "capturedAt": "2026-11-07",
+  "sources": {
+    "requests": { "url": "https://console.groq.com/docs/text-to-speech/orpheus", "loginRequired": false, "classification": "official-literal" },
+    "audio": { "url": "https://console.groq.com/docs/api-reference#audio-speech", "loginRequired": false, "classification": "constructed-from-official-field-table", "notes": "官方只说明返回 wav 音频文件；RIFF 四字节是稳定化占位音频，不代表真实生成" },
+    "error": { "url": "https://console.groq.com/docs/errors", "loginRequired": false, "classification": "official-literal" }
+  },
+  "englishRequest": {
+    "model": "canopylabs/orpheus-v1-english",
+    "input": "Welcome to Orpheus text-to-speech. [cheerful] This is an example of high-quality English audio generation with vocal directions support.",
+    "voice": "austin",
+    "response_format": "wav"
+  },
+  "arabicRequest": {
+    "model": "canopylabs/orpheus-arabic-saudi",
+    "input": "مرحبا بكم في نموذج أورفيوس للتحويل من النص إلى الكلام. هذا مثال على جودة الصوت العربية السعودية الطبيعية.",
+    "voice": "noura",
+    "response_format": "wav"
+  },
+  "audioBytes": [82, 73, 70, 70],
+  "error": {
+    "status": 400,
+    "payload": { "error": { "message": "String - description of the specific error", "type": "invalid_request_error" } }
+  }
+}

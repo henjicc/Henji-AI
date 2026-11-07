@@ -38,14 +38,16 @@
 - [GPT Image 2.6](GPT-Image-2.6/)：[Fal](GPT-Image-2.6/GPT-Image-2.6_Fal.md)、[KIE](GPT-Image-2.6/GPT-Image-2.6_KIE.md)、[APIMart](GPT-Image-2.6/GPT-Image-2.6_APIMart.md)、[Grsai](GPT-Image-2.6/GPT-Image-2.6_Grsai.md)。
 - [FLUX 3](FLUX-3/)：[Fal](FLUX-3/FLUX-3_Fal.md)、[APIMart（含 Klein 版本）](FLUX-3/FLUX-3_APIMart.md)；[FLUX 3 Klein · KIE](FLUX-3-Klein/FLUX-3-Klein_KIE.md)。
 - [Seedream 5.0 Flash · APIMart](Seedream-5.0-Flash/Seedream-5.0-Flash_APIMart.md)。
-- [Kling 4.0](Kling-4.0/)：[Fal](Kling-4.0/Kling-4.0_Fal.md)、[KIE](Kling-4.0/Kling-4.0_KIE.md)、[APIMart](Kling-4.0/Kling-4.0_APIMart.md)；[Kling 4.0 Flash](Kling-4.0-Flash/)：[Fal](Kling-4.0-Flash/Kling-4.0-Flash_Fal.md)、[KIE](Kling-4.0-Flash/Kling-4.0-Flash_KIE.md)。
+- [Kling 4.0](Kling-4.0/)：[Fal](Kling-4.0/Kling-4.0_Fal.md)、[KIE](Kling-4.0/Kling-4.0_KIE.md)、[APIMart](Kling-4.0/Kling-4.0_APIMart.md)；[Kling 4.0 Flash](Kling-4.0-Flash/)：[Fal](Kling-4.0-Flash/Kling-4.0-Flash_Fal.md)、[KIE](Kling-4.0-Flash/Kling-4.0-Flash_KIE.md)。分镜与元素：Fal 标准版两者都支持，Fal Flash 与 KIE（标准版、Flash）仅支持元素，APIMart 两者都不支持（官方返回 400）。
+- [Wan 2.7 Image · APIMart](Wan-2.7-Image/Wan-2.7-Image_APIMart.md)（标准版 / Pro）。
+- [FLUX 3 Video](FLUX-3-Video/)：[APIMart](FLUX-3-Video/FLUX-3-Video_APIMart.md)、[Fal（含 FLUX 3 Max）](FLUX-3-Video/FLUX-3-Video_Fal.md)。
 - [Wan 3.0](Wan-3.0/)：[Fal](Wan-3.0/Wan-3.0_Fal.md)、[APIMart](Wan-3.0/Wan-3.0_APIMart.md)（两家 Prime 为版本选项）、[KIE](Wan-3.0/Wan-3.0_KIE.md)、[Grsai](Wan-3.0/Wan-3.0_Grsai.md)；[Wan 3.0 Prime · KIE](Wan-3.0-Prime/Wan-3.0-Prime_KIE.md)。
 - [Gemini Omni 1.2 Flash](Gemini-Omni-1.2-Flash/)：[Fal](Gemini-Omni-1.2-Flash/Gemini-Omni-1.2-Flash_Fal.md)、[APIMart](Gemini-Omni-1.2-Flash/Gemini-Omni-1.2-Flash_APIMart.md)。
 - [Grok Imagine Video 1.5](Grok-Imagine-Video-1.5/)：[Fal](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_Fal.md)、[KIE](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_KIE.md)、[APIMart](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_APIMart.md)。
 - [MiniMax H3 Max](MiniMax-H3-Max/)：[Fal](MiniMax-H3-Max/MiniMax-H3-Max_Fal.md)、[APIMart](MiniMax-H3-Max/MiniMax-H3-Max_APIMart.md)。
-- [LTX-2.3 · Fal](LTX-2.3/LTX-2.3_Fal.md)（取代已过时的 LTX-2）、[Veo 3.1 · APIMart](Veo-3.1/Veo-3.1_APIMart.md)（Fal 的 Veo 3.1 11-17 下线）、[HappyHorse 1.1 · APIMart](HappyHorse-1.1/HappyHorse-1.1_APIMart.md)。
+- [LTX-2.3 · Fal](LTX-2.3/LTX-2.3_Fal.md)（取代已过时的 LTX-2；含音频生视频 `fal-ai/ltx-2.3/audio-to-video`）、[Veo 3.1 · APIMart](Veo-3.1/Veo-3.1_APIMart.md)（Fal 的 Veo 3.1 11-17 下线）、[HappyHorse 1.1 · APIMart](HappyHorse-1.1/HappyHorse-1.1_APIMart.md)。
 - 官方直连：火山方舟 Seedance [2.5](Seedance-2.5/Seedance-2.5_火山引擎.md)、[2.0](Seedance-2.0/Seedance-2.0_火山引擎.md)、[2.0 Fast](Seedance-2.0-Fast/Seedance-2.0-Fast_火山引擎.md)、[2.0 Mini](Seedance-2.0-Mini/Seedance-2.0-Mini_火山引擎.md)；[百炼万相 3.0（含 Prime 高速版）](Wan-3.0/Wan-3.0_百炼.md)。两家官方供应商新增异步任务提交与轮询。
-- 语音：[Eleven v4 · Fal](Eleven-v4/Eleven-v4_Fal.md)、[Gemini 3.8 Flash TTS · KIE](Gemini-3.8-Flash-TTS/Gemini-3.8-Flash-TTS_KIE.md)、[Gemini 3.8 Flash-Lite TTS · KIE](Gemini-3.8-Flash-Lite-TTS/Gemini-3.8-Flash-Lite-TTS_KIE.md)（限时价到 2026-12-31）、[Qwen Audio 3.1 TTS Plus · 百炼](Qwen-Audio-3.1-TTS-Plus/Qwen-Audio-3.1-TTS-Plus_百炼.md)。
+- 语音：[Eleven v4 · Fal](Eleven-v4/Eleven-v4_Fal.md)、[Gemini 3.8 Flash TTS · KIE](Gemini-3.8-Flash-TTS/Gemini-3.8-Flash-TTS_KIE.md)、[Gemini 3.8 Flash-Lite TTS · KIE](Gemini-3.8-Flash-Lite-TTS/Gemini-3.8-Flash-Lite-TTS_KIE.md)（限时价到 2026-12-31）、[Qwen Audio 3.1 TTS Plus · 百炼](Qwen-Audio-3.1-TTS-Plus/Qwen-Audio-3.1-TTS-Plus_百炼.md)、[Orpheus V1 English · Groq](Orpheus-V1-English/Orpheus-V1-English_Groq.md)、[Orpheus Arabic Saudi · Groq](Orpheus-Arabic-Saudi/Orpheus-Arabic-Saudi_Groq.md)（Groq 新进生成目录）。
 - 已过时（用户界面不再列出，文档保留）：LTX-2 · Fal、Veo 3.1 · Fal、Seedream 5.0 Lite · 火山方舟、Seedance 1.5 Pro · KIE、派欧云 Kling 3.0 与 MiniMax Speech。
 
 ## 2026-09-27 TTS 适配

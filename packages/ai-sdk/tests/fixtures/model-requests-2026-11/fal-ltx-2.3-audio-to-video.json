@@ -1,0 +1,169 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/ltx-2.3/audio-to-video",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official Ltx23AudioToVideoInput / Ltx23AudioToVideoOutput schemas; descriptions, examples, titles and x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "properties": {
+      "prompt": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "maxLength": 5000,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "audio_url": {
+        "type": "string"
+      },
+      "image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "aspect_ratio": {
+        "default": "auto",
+        "type": "string",
+        "enum": [
+          "auto",
+          "16:9",
+          "9:16"
+        ]
+      },
+      "guidance_scale": {
+        "anyOf": [
+          {
+            "minimum": 1,
+            "maximum": 50,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "type": "object",
+    "required": [
+      "audio_url"
+    ]
+  },
+  "responseSchema": {
+    "properties": {
+      "video": {
+        "$ref": "#/components/schemas/VideoFile"
+      }
+    },
+    "type": "object",
+    "required": [
+      "video"
+    ]
+  },
+  "videoFileSchema": {
+    "properties": {
+      "height": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "file_size": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "num_frames": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "fps": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "url": {
+        "type": "string"
+      },
+      "file_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "duration": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "content_type": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "width": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object",
+    "required": [
+      "url"
+    ]
+  }
+}

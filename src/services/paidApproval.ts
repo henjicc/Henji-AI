@@ -3,7 +3,7 @@ import i18n from '@/i18n'
 import { convertPriceAmount, readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
 import { z } from 'zod'
 import { registry } from '@/core/ModelRegistry'
-import { createPriceEstimate } from '@/features/generation/application/generationPreparationService'
+import { estimateGenerationPrice } from '@/features/generation/application/generationPreparationService'
 import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecutionModels'
 import type { TranscriptionPreparation } from '@/core/audioEdit/transcriptionFailure'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
@@ -51,7 +51,7 @@ export async function prepareGenerationPaidApproval(modelId: string, params: Dyn
   const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId)
   if (!model) throw new Error('所选生成模型不可用。')
   const values = { ...Object.fromEntries(model.params.map(param => [param.id, param.default])), ...params }
-  const { comparableCnyAmount: estimatedCny } = z.object({ comparableCnyAmount: z.number().nonnegative().nullable() }).parse(createPriceEstimate(model, values))
+  const { comparableCnyAmount: estimatedCny } = z.object({ comparableCnyAmount: z.number().nonnegative().nullable() }).parse(await estimateGenerationPrice(model, values))
   const project = projectId ? await getDocumentOperations().findProject(projectId) : undefined
   return prepareUiPaidApproval({ category: 'generation', estimatedCny, ...(project ? { project: { id: project.id, name: project.name } } : {}) }, 'create_visible_generation_task')
 }

@@ -7,7 +7,7 @@
 | 建议 `providerId` | `groq` |
 | Base URL | `https://api.groq.com/openai/v1` |
 | 鉴权 | `Authorization: Bearer <GROQ_API_KEY>` |
-| 公开能力 | OpenAI 兼容 LLM；同步文件语音转写/英文翻译 |
+| 公开能力 | OpenAI 兼容 LLM；同步文件语音转写/英文翻译；同步语音合成（Orpheus，已进生成目录，供应商 `groq`） |
 | 当前 Say-It 默认模型 | `openai/gpt-oss-20b` |
 | 文档/价格可见性 | 公开，无需登录；API Key、用量和账单需登录 |
 
@@ -130,3 +130,9 @@ GPT-OSS 20B/120B **不支持 `reasoning_format`**；默认在 assistant message 
 - 正式模型（自助账号）：`openai/gpt-oss-120b`（$0.15 / $0.60 每百万 token，上下文 131,072，最大输出 65,536）、`openai/gpt-oss-20b`（$0.075 / $0.30）、语音识别 `whisper-large-v3`（$0.111/小时）、`whisper-large-v3-turbo`（$0.04/小时）。Llama 3.1 8B / 3.3 70B 为企业版（联系销售），不进预设。
 - 预览模型：`qwen/qwen3.8-27b`（$0.80 / $4.00，上下文 131,072，最大输出 16,384，输入文本与图片，每次最多 3 张、单文件 ≤ 20 MB；工具调用、JSON Object / Schema、思考）已进预设；其余为安全分类器（Prompt Guard 2、gpt-oss-safeguard-20b）、企业版（Muse Spark Open、MiniMax M2.7）与语音合成（Orpheus English / Arabic Saudi），不进对话预设。
 - 思考参数（https://console.groq.com/docs/reasoning ）：Qwen3.8-27B 的 `reasoning_effort` 收 none / default / low / medium / high，关闭时发 `none`；GPT-OSS 只收 low / medium / high，关闭时只能用 `include_reasoning: false` 隐藏思考内容。
+
+## 2026-11-07 语音合成接入生成目录
+
+- 端点 `POST /openai/v1/audio/speech`（OpenAI 兼容，同步返回 wav 二进制，失败为通用 `{error:{message,type}}`）；SDK provider `providers/groq.ts` 与硅基流动共用 `providers/openai-speech.ts`。
+- 生成目录供应商 `groq` 与 LLM、语音识别共用同一把 `groq` 密钥（统一凭据空间 `provider:groq`），设置页的提供商中心按同一卡片合并显示。
+- 模型：`canopylabs/orpheus-v1-english`（$22/百万字符）、`canopylabs/orpheus-arabic-saudi`（$40/百万字符），单次输入最多 200 字符、只输出 wav；详见 [Orpheus-V1-English_Groq.md](../Orpheus-V1-English/Orpheus-V1-English_Groq.md)、[Orpheus-Arabic-Saudi_Groq.md](../Orpheus-Arabic-Saudi/Orpheus-Arabic-Saudi_Groq.md)。

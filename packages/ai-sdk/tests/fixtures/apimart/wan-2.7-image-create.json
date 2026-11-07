@@ -1,0 +1,40 @@
+{
+  "provider": "apimart",
+  "modelId": "apimart-wan-2.7-image",
+  "scenario": "create-task-success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/images/generations",
+  "params": {
+    "model": "wan2.7-image-pro",
+    "prompt": "一间有着精致窗户的花店，漂亮的木质门，摆放着花朵",
+    "resolution": "2K",
+    "n": 1,
+    "size": "1:1"
+  },
+  "expectedRequest": {
+    "url": "https://api.apimart.ai/v1/images/generations",
+    "method": "POST",
+    "body": {
+      "model": "wan2.7-image-pro",
+      "prompt": "一间有着精致窗户的花店，漂亮的木质门，摆放着花朵",
+      "resolution": "2K",
+      "n": 1,
+      "size": "1:1",
+      "nsfw_check": false
+    }
+  },
+  "response": {
+    "code": "success",
+    "data": [{ "task_id": "task_01HX...", "status": "processing" }]
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "task_01HX..."
+  },
+  "source": {
+    "params": "apimartWan27ImageModel.request.builder 对 Pro 版、默认比例与档位的真实输出（tests/catalog/model-update-2026-11-07.test.ts 同一断言）；提示词取自 https://docs.apimart.ai/cn/api-reference/images/wan2.7-image/generation.md 的 cURL 示例（2026-11-07，无需登录）",
+    "response": "同页 200 响应示例逐字照搬（含官方字面任务 ID task_01HX...），classification: official-literal"
+  }
+}

@@ -4,7 +4,7 @@ import { ApplicationPreflightFailure } from '@/core/application-control/executio
 import { createLogger } from '@/core/logging'
 import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationDestination } from '@/core/application-control/domains/generation/generationApplicationCapabilities'
 import type { GenerationPreparationInput } from '@/features/generation/application/generationPreparationService'
-import { prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
+import { estimateGenerationPrice, prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
 import { databaseService } from '@/services/database/DatabaseService'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
@@ -62,7 +62,10 @@ export async function prepareCanvasNodeGeneration(input: CanvasNodeGenerationInp
     videos: runtime.videos, uploadedVideoFilePaths: runtime.videos, audios: runtime.audios, uploadedAudioFilePaths: runtime.audios }
   const resolved: GenerationPreparationInput = { modelId: runtime.modelId, mediaType: readCanvasGenerationNodeProfile(input.nodeId, store).modelType,
     prompt: String(generationParams.prompt ?? ''), options }
-  return { preparation: prepareGenerationModelInput(resolved, runtime.model),
+  const preparation = prepareGenerationModelInput(resolved, runtime.model)
+  // 节点付费授权取这里的估价，按媒体计价的模型要先补齐媒体指标。
+  const priced: Record<string, unknown> = { ...preparation, priceEstimate: await estimateGenerationPrice(runtime.model, preparation.options as DynamicValueMap) }
+  return { preparation: priced,
     submitInput: { documentId: input.documentId, nodeId: input.nodeId, inputSignature: signature } }
 }
 

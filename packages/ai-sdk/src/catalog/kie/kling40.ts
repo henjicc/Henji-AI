@@ -1,6 +1,8 @@
 import type { JsonObject, JsonValue } from '../../types/runtime'
 import type { ModelRuntimeDefinition } from '../../types/model'
 import { hasUploadedImage, hasUploadedVideo, resolveKieImageSources, resolveKieVideoSources } from './mediaSources'
+import { resolveUploadedVideoDurationSeconds } from '../shared/mediaPresence'
+import { buildKieSubjectElements, subjectElementVideoSeconds } from '../shared/subjectElements'
 
 /** Kling 4.0 标准版与 Flash 共用 keyframe-to-video / reference-to-video 两个端点，差别只在档位与上限。 */
 export interface Kling40Variant {
@@ -10,6 +12,8 @@ export interface Kling40Variant {
   maxDuration: number
   /** Flash 只接受首帧，不支持中间帧与尾帧。 */
   firstFrameOnly: boolean
+  /** Flash 的元素用 `type` 区分图片与视频，标准版没有这个字段。 */
+  elementTypeField: boolean
   resolutions: string[]
   /** 每秒美元价：keyframe 与无视频参考同价，带参考视频另一档。 */
   rates: Record<string, { base: number; withVideo: number }>
@@ -61,6 +65,7 @@ export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDef
         options: Array.from({ length: variant.maxDuration - 2 }, (_, index) => ({ value: String(index + 3) })),
       },
       { id: `${p}KeepOriginalSound`, type: 'switch', order: 5, default: false, visible: { condition: params => isReference(params) && hasUploadedVideo(params) } },
+      { id: `${p}Elements`, type: 'composite', order: 6, valueType: 'array', default: [], visible: { condition: isReference } },
     ],
     endpoints: '/api/v1/jobs/createTask',
     request: {
@@ -76,7 +81,12 @@ export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDef
           const videos = resolveKieVideoSources(params)
           if (images.length > 10) throw new Error(`${variant.name} 最多 10 张参考图`)
           if (videos.length > 5) throw new Error(`${variant.name} 最多 5 段参考视频`)
+          const elements = buildKieSubjectElements(param(params, p, 'Elements'), variant.name, { sendType: variant.elementTypeField })
+          const videoElementCount = elements.filter(element => typeof element.video_url === 'string').length
+          if (videos.length + videoElementCount > 5) throw new Error(`${variant.name} 参考视频与视频元素合计最多 5 个`)
+          if (images.length + videos.length + elements.length > 15) throw new Error(`${variant.name} 参考图、参考视频与元素合计最多 15 个`)
           if (images.length) input.image_urls = images
+          if (elements.length) input.elements = elements
           if (videos.length) {
             input.video_urls = videos
             input.keep_original_sound = param(params, p, 'KeepOriginalSound') === true
@@ -100,12 +110,15 @@ export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDef
       currency: '$',
       calculator: (params) => {
         const rate = variant.rates[resolution(params)]
-        const withVideo = isReference(params) && hasUploadedVideo(params)
         const seconds = Math.min(variant.maxDuration, Math.max(3, Number(param(params, p, 'Duration') ?? 5) || 5))
-        return (withVideo ? rate.withVideo : rate.base) * seconds
+        const elementSeconds = subjectElementVideoSeconds(param(params, p, 'Elements'))
+        if (!isReference(params) || (!hasUploadedVideo(params) && elementSeconds === 0)) return rate.base * seconds
+        // 带视频输入（参考视频或视频元素）时输入时长也计费：输入不超过输出按输出 2 倍计，否则按输入加输出。
+        const input = resolveUploadedVideoDurationSeconds(params, 5) + elementSeconds
+        return rate.withVideo * Math.max(seconds * 2, input + seconds)
       },
       description: Object.entries(variant.rates)
-        .map(([res, rate]) => `${res} $${rate.base}/秒，带参考视频 $${rate.withVideo}/秒`).join('；'),
+        .map(([res, rate]) => `${res} $${rate.base}/秒，带参考视频或视频元素 $${rate.withVideo}/秒`).join('；') + '；带视频输入时按输入加输出时长计费（至少为输出的 2 倍）',
     },
   }
 }

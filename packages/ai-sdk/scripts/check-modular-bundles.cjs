@@ -121,9 +121,9 @@ for (const provider of providerDirectories) {
   }
 }
 
-const builtinsPattern = /\/src\/(?:catalog\/[^/]+\/[^/]+\.model\.ts|providers\/(?:apimart|bailian|fal|grsai|kie|modelscope|ppio|siliconflow|volcengine|volcengine-speech)\.ts)$/
+const builtinsPattern = /\/src\/(?:catalog\/[^/]+\/[^/]+\.model\.ts|providers\/(?:apimart|bailian|fal|groq|grsai|kie|modelscope|ppio|siliconflow|volcengine|volcengine-speech)\.ts)$/
 const modelPattern = /\/src\/catalog\/([^/]+)\/[^/]+\.model\.ts$/
-const providerPattern = /\/src\/providers\/(apimart|bailian|fal|grsai|kie|modelscope|ppio|siliconflow|volcengine|volcengine-speech)\.ts$/
+const providerPattern = /\/src\/providers\/(apimart|bailian|fal|groq|grsai|kie|modelscope|ppio|siliconflow|volcengine|volcengine-speech)\.ts$/
 const toolModelPattern = /\/src\/tool-packs\/fal-erase\/models\/[^/]+\.model\.ts$/
 const utilityModelPattern = /\/src\/tool-packs\/fal-image-utilities\/models\/[^/]+\.model\.ts$/
 const multiAngleModelPattern = /\/src\/tool-packs\/fal-multi-angle\/models\/[^/]+\.model\.ts$/
