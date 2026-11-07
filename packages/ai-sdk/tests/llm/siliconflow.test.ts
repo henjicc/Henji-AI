@@ -49,7 +49,8 @@ describe('SiliconFlow LLM and model discovery', () => {
     expect(models.every(m => m.apiProtocol === 'openai-compatible' && m.capabilities.toolCall)).toBe(true)
     const byId = (id: string) => models.find(m => m.modelId === id)!.capabilities
     expect(byId('zai-org/GLM-5.3')).toMatchObject({ maxOutputTokens: null, sampling: true, image: false })
-    expect(byId('deepseek-ai/DeepSeek-V4.1-Flash')).toMatchObject({ image: false, maxOutputTokens: null })
+    expect(byId('deepseek-ai/DeepSeek-V4.1-Flash')).toMatchObject({ image: true, toolCall: true, structuredOutputMode: 'json', contextWindow: 1_048_576, maxOutputTokens: null })
+    expect(byId('zai-org/GLM-5.2')).toMatchObject({ image: false, structuredOutputMode: 'json' })
     expect(byId('Qwen/Qwen3.8-27B')).toMatchObject({ image: true, video: false, contextWindow: 262_144 })
     expect(findLlmProviderPreset('deepseek')?.modelIds[0]).toBe('deepseek-flash')
   })

@@ -28,16 +28,23 @@ export const SILICONFLOW_PROVIDER_PRESET: LlmProviderPreset = {
     'moonshotai/Kimi-K2.7-Code',
     'Qwen/Qwen3.8-27B',
   ],
-  // 托管能力以硅基流动为准：模型页没写明的多模态输入与输出上限不继承原厂，先按纯文本、输出上限留空，
-  // 由用户“验证此模型”补齐。
+  // 托管能力以硅基流动为准（模型广场的结构化字段：vlm、functionCallSupport、jsonModeSupport、contextLen），
+  // 不继承原厂；平台没给输出上限，留空由动态验证补齐。视频输入未取得托管接口的字段契约，一律不声明。
   modelCapabilities: {
     'zai-org/GLM-5.3': {
       image: false, video: false, audio: false, file: false,
       sampling: true, contextWindow: 1_048_576, maxOutputTokens: null,
     },
-    ...Object.fromEntries([
-      'deepseek-ai/DeepSeek-V4.1-Flash', 'deepseek-ai/DeepSeek-V4-Pro', 'zai-org/GLM-5.3-Flash', 'zai-org/GLM-5.2',
-    ].map(modelId => [modelId, { image: false, video: false, audio: false, file: false, maxOutputTokens: null }])),
+    ...Object.fromEntries(([
+      ['deepseek-ai/DeepSeek-V4.1-Flash', true],
+      ['deepseek-ai/DeepSeek-V4-Pro', false],
+      ['zai-org/GLM-5.3-Flash', true],
+      ['zai-org/GLM-5.2', false],
+    ] as const).map(([modelId, image]) => [modelId, {
+      image, video: false, audio: false, file: false,
+      toolCall: true, jsonOutput: true, structuredOutputMode: 'json' as const, reasoning: true,
+      contextWindow: 1_048_576, maxOutputTokens: null,
+    }])),
   },
   websiteUrl: metadata.websiteUrl,
   apiKeyUrl: metadata.apiKeyUrl,
