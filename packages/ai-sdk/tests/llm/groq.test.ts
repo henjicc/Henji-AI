@@ -75,7 +75,7 @@ describe('@henjicc/ai-sdk/llm/groq', () => {
     expect(GROQ_DEFAULT_MODEL_ID).toBe('openai/gpt-oss-20b')
     expect(GROQ_PROVIDER_PRESET).toMatchObject({
       providerId: 'groq',
-      modelIds: ['openai/gpt-oss-20b'],
+      modelIds: expect.arrayContaining(['openai/gpt-oss-20b']),
       reasoning: { enabled: true, effort: 'medium' },
     })
     const catalogCapabilities = createLlmCapabilitiesForModel(GROQ_DEFAULT_MODEL_ID)

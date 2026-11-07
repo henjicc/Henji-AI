@@ -1,5 +1,6 @@
 import { createLlmCapabilitiesForModel } from '../defaults'
 import { resolveLlmEndpointIdentity } from '../endpointProfiles'
+import { findLlmModelCatalogEntry } from '../modelCatalog'
 import type { LlmModelConfig, LlmProviderConfig } from '../types'
 import {
   BIGMODEL_ENDPOINT_PROFILE_FAMILY,
@@ -49,7 +50,7 @@ export function createBigmodelModels(provider: LlmProviderConfig): LlmModelConfi
   const identity = resolveLlmEndpointIdentity(provider)
   const profile = BIGMODEL_ENDPOINT_PROFILE_FAMILY.profiles.find(item => item.id === identity.endpointProfile)
   if (!profile) throw new Error('[llm_endpoint_profile_unknown] resolved BigModel endpoint profile is unavailable')
-  return profile.modelIds.map(modelId => ({
+  return profile.modelIds.filter(modelId => !findLlmModelCatalogEntry(modelId)?.deprecated).map(modelId => ({
     providerId: identity.providerId,
     providerFamilyId: identity.providerFamilyId,
     endpointProfile: identity.endpointProfile,

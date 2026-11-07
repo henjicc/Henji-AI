@@ -119,3 +119,10 @@ export function defineHiddenModel(model: ModelDefinition): ModelDefinition {
   registry.registerHidden(model)
   return model
 }
+
+/** 注册已过时的模型：旧工程照常解析与执行，但不再进入任何选择器与能力发现。 */
+export function defineDeprecatedModel(model: ModelDefinition): ModelDefinition {
+  prepareModel(model)
+  registry.registerDeprecated(model)
+  return model
+}

@@ -6,6 +6,7 @@ export const veo31Model = defineModel({
         canonicalModelId: 'veo-3.1',
         provider: 'fal',
         type: 'video',
+        deprecated: 'Fal 于 2026-11-17 下线 Veo 3.1，且未提供 Veo 4',
         tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode']
     },
     inputLimits: {

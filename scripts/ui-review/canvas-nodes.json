@@ -80,7 +80,7 @@
             "data": {
               "displayName": "音频生成",
               "prompt": "",
-              "modelId": "ppio-minimax-speech",
+              "modelId": "bailian-minimax-speech-2.8",
               "params": {},
               "mediaInputs": {},
               "isGenerating": false,
@@ -540,7 +540,7 @@
             },
             "data": {
               "displayName": "音频模型",
-              "modelId": "ppio-minimax-speech",
+              "modelId": "bailian-minimax-speech-2.8",
               "isExpanded": false
             }
           },

@@ -10,6 +10,7 @@ export const kling30Model = defineModel({
     seriesRank: 3.0,
     provider: 'ppio',
     type: 'video',
+    deprecated: '派欧云只保留大语言模型，不再提供生成模型',
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'motion-control'],
     polling: {
       interval: 3000,

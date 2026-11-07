@@ -274,6 +274,7 @@ export function composeModelDefinition(
     i18nScope: presentation.meta.i18nScope,
     tags: runtime.meta.tags,
     promptLanguage: runtime.meta.promptLanguage,
+    deprecated: runtime.meta.deprecated,
     icon: presentation.meta.icon,
     polling: runtime.meta.polling,
     progress: runtime.meta.progress as ProgressConfig | undefined,

@@ -2,6 +2,8 @@
 
 ## 0.10.0 - 未发布
 
+- `ModelRuntimeMeta` 与 `LlmModelCatalogEntry` 新增可选 `deprecated`（过时原因）：能力发现跳过这类模型，`createModelsFromPreset` 与 `createBigmodelModels` 不再为它们建模型，仍可按 ID 解析。首批标记 Fal LTX-2 / Veo 3.1、火山 Seedream 5.0 Lite、KIE Seedance 1.5 Pro、派欧云 Kling 3.0 与 MiniMax Speech、Kimi K2.6 / K2.7 Code、MiMo 2.5 / 2.5 Pro。
+- 大语言模型预设按 2026-11-07 的平台清单补充：派欧云 Kimi K3.1 Pro / K3、GLM-5.3、MiMo-V2.6-Pro、MiniMax-M3.1-Flash（按平台模型列表核对），DeepSeek V4 Pro，Groq GPT-OSS 120B（新增目录条目）。
 - 包入口新增导出翻译能力（`createQwenMt*TranslationModule` 等），与语音识别一致，不再必须走 `capabilities/translation` 子路径。
 - 流式聊天的结果与完成回调新增 `firstTokenMs`（发出请求到第一个字，含思考内容）和 `outputTokensPerSecond`（首字之后的输出 token 速度，供应商没给用量时为 null）；`LlmTrace` 增加对应可选字段与输入/输出 token 数。
 - **破坏性**：模型标签收成一份封闭词表 `MODEL_TAG_DEFINITIONS`（形态 11 个、专项 13 个，各带判断标准），`ModelTag` 不再接受任意字符串，`validateRuntimeModel`（`defineModel` 也走它）拒绝词表外的标签；`catalog` 全部模型按新词表重打。新增公开导出 `MODEL_TAGS`、`isModelTag`、`getModelTagDefinition` 与类型 `ModelTagDefinition`、`ModelTagLayer`；`ModelRuntimeMeta` 新增 `promptLanguage`。

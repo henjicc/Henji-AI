@@ -10,6 +10,7 @@ export const kieSeedance15ProModel = defineModel({
         seriesRank: 1.5,
         provider: 'kie',
         type: 'video',
+        deprecated: 'KIE 已下架 Seedance 1.5 Pro（文档与价格页均已移除）',
         tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
         polling: {
             interval: 3000,

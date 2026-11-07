@@ -15,6 +15,8 @@ function visitParams(params: ParamDef[], visit: (param: ParamDef) => void): void
   }
 }
 
+
+const LISTED_MODELS = HENJI_GENERATION_MODELS.filter(model => !model.meta.deprecated)
 describe('SDK catalog 应用侧加载入口', () => {
   beforeAll(async () => {
     registry.clear()
@@ -26,7 +28,13 @@ describe('SDK catalog 应用侧加载入口', () => {
       success: HENJI_GENERATION_MODELS.length + CONTROLLED_EXECUTION_MODELS.length,
       failed: 0,
     })
-    expect(registry.listAllModels().map(model => model.meta.id).sort()).toEqual(HENJI_GENERATION_MODELS.map(model => model.meta.id).sort())
+    expect(registry.listAllModels().map(model => model.meta.id).sort()).toEqual(LISTED_MODELS.map(model => model.meta.id).sort())
+    // 已过时的模型不进列表，但仍是可按 id 执行的普通生成模型
+    for (const model of HENJI_GENERATION_MODELS.filter(item => item.meta.deprecated)) {
+      expect(registry.getDiscoverableModel(model.meta.id), model.meta.id).toBeTruthy()
+      expect(registry.getModel(model.meta.id)?.meta.deprecated, model.meta.id).toBe(model.meta.deprecated)
+      expect(registry.getModelsByType(model.meta.type).some(item => item.meta.id === model.meta.id), model.meta.id).toBe(false)
+    }
     for (const model of CONTROLLED_EXECUTION_MODELS) {
       expect(registry.getModel(model.meta.id), model.meta.id).toBeTruthy()
       expect(registry.getDiscoverableModel(model.meta.id), model.meta.id).toBeUndefined()
@@ -111,9 +119,9 @@ describe('SDK catalog 应用侧加载入口', () => {
     })
 
     const stats = registry.getStats()
-    expect(stats.totalModels).toBe(HENJI_GENERATION_MODELS.length)
-    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(HENJI_GENERATION_MODELS.length)
-    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(HENJI_GENERATION_MODELS.length)
+    expect(stats.totalModels).toBe(LISTED_MODELS.length)
+    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(LISTED_MODELS.length)
+    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(LISTED_MODELS.length)
   })
 
   it('代表模型保留执行身份、模式语义、联动及参数分组', () => {

@@ -24,3 +24,15 @@ it('全部生成模型都能离线构建请求', async () => {
   }
   expect(failures).toEqual([])
 }, 300_000)
+
+it('已过时的模型留在开发者清单里，但用户入口找不到', async () => {
+  const { registry } = await import('@/core/ModelRegistry')
+  const deprecated = listSdkModels().filter((row) => row.deprecated && row.generation)
+  expect(deprecated.length).toBeGreaterThan(0)
+  for (const row of deprecated) {
+    expect(row.category, row.modelId).not.toBe('tool')
+    expect(registry.getModel(row.modelId), row.modelId).toBeDefined()
+    expect(registry.isModelDiscoverable(row.modelId), row.modelId).toBe(true)
+    expect(registry.listAllModels().some((model) => model.meta.id === row.modelId), row.modelId).toBe(false)
+  }
+})

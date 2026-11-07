@@ -62,6 +62,9 @@ export class ModelRegistry {
   /** 可按 id 解析、但不会进入普通模型列表和筛选器的受控执行模型与别名。 */
   private hiddenModelEntries: Set<string> = new Set()
 
+  /** 已过时的模型与别名：照常按 id 解析与执行（旧工程、画布节点、读回都不受影响），只是不进任何列表与筛选器。 */
+  private deprecatedModelEntries: Set<string> = new Set()
+
   /**
    * 私有构造函数（单例模式）
    */
@@ -103,15 +106,21 @@ export class ModelRegistry {
    * ```
    */
   register(model: ModelDefinition): void {
-    this.registerModel(model, true)
+    this.registerModel(model, 'listed')
   }
 
   /** 注册产品能力专用模型，同时保持普通模型选择器和能力发现不变。 */
   registerHidden(model: ModelDefinition): void {
-    this.registerModel(model, false)
+    this.registerModel(model, 'hidden')
   }
 
-  private registerModel(model: ModelDefinition, discoverable: boolean): void {
+  /** 注册已过时的模型：不再出现在选择器与能力发现里，但按 id 仍是普通生成模型。 */
+  registerDeprecated(model: ModelDefinition): void {
+    this.registerModel(model, 'deprecated')
+  }
+
+  private registerModel(model: ModelDefinition, visibility: 'listed' | 'hidden' | 'deprecated'): void {
+    const unlisted = visibility === 'hidden' ? this.hiddenModelEntries : visibility === 'deprecated' ? this.deprecatedModelEntries : null
     // 1. 检查 ID 是否已存在
     if (this.models.has(model.meta.id)) {
       throw new Error(`Model ID already exists: ${model.meta.id}`)
@@ -122,7 +131,7 @@ export class ModelRegistry {
 
     // 3. 注册主 ID
     this.models.set(model.meta.id, model)
-    if (!discoverable) this.hiddenModelEntries.add(model.meta.id)
+    unlisted?.add(model.meta.id)
 
     // 4. 注册别名
     model.meta.aliases?.forEach((alias) => {
@@ -130,11 +139,11 @@ export class ModelRegistry {
         logger.warn(`Alias "${alias}" already exists, skipping for model ${model.meta.id}`)
       } else {
         this.models.set(alias, model)
-        if (!discoverable) this.hiddenModelEntries.add(alias)
+        unlisted?.add(alias)
       }
     })
 
-    if (!discoverable) return
+    if (unlisted) return
 
     // 5. 构建索引：按供应商
     if (!this.modelsByProvider.has(model.meta.provider)) {
@@ -172,11 +181,13 @@ export class ModelRegistry {
     // 1. 从主索引删除
     this.models.delete(modelId)
     this.hiddenModelEntries.delete(modelId)
+    this.deprecatedModelEntries.delete(modelId)
 
     // 2. 删除别名
     model.meta.aliases?.forEach((alias) => {
       this.models.delete(alias)
       this.hiddenModelEntries.delete(alias)
+      this.deprecatedModelEntries.delete(alias)
     })
 
     // 3. 从供应商索引删除
@@ -460,7 +471,7 @@ export class ModelRegistry {
 
     this.models.forEach((model, id) => {
       // 只添加主 ID，跳过别名
-      if (id === model.meta.id && !this.hiddenModelEntries.has(id)) {
+      if (id === model.meta.id && !this.hiddenModelEntries.has(id) && !this.deprecatedModelEntries.has(id)) {
         uniqueModels.set(id, model)
       }
     })
@@ -532,7 +543,7 @@ export class ModelRegistry {
    */
   getStats(): DynamicValueMap {
     const allModels = this.listAllModels()
-    const totalEntries = this.models.size - this.hiddenModelEntries.size
+    const totalEntries = this.models.size - this.hiddenModelEntries.size - this.deprecatedModelEntries.size
     const totalModels = allModels.length
     const totalAliases = totalEntries - totalModels
 
@@ -576,6 +587,7 @@ export class ModelRegistry {
     this.modelsByType.clear()
     this.modelsByTag.clear()
     this.hiddenModelEntries.clear()
+    this.deprecatedModelEntries.clear()
   }
 }
 

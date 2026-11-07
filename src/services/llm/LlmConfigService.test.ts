@@ -53,6 +53,23 @@ describe('normalizeLlmConfig', () => {
     expect(cleared.models).toEqual([])
   })
 
+  it('派欧云下线的内置模型换成接替者并保留启用状态，已有接替者时只删旧条目', () => {
+    const defaults = normalizeLlmConfig(null)
+    const kimi = defaults.models.find(model => model.modelId === 'moonshotai/kimi-k3')!
+    const mimo = defaults.models.find(model => model.modelId === 'xiaomimimo/mimo-v2.6-pro')!
+    const others = defaults.models.filter(model => model !== kimi && model !== mimo)
+    const stored = [
+      ...others,
+      { ...kimi, modelId: 'moonshotai/kimi-k2.6', displayName: 'Kimi K2.6', enabled: false },
+      { ...mimo, modelId: 'xiaomimimo/mimo-v2.5-pro', displayName: 'MiMo-V2.5-Pro' },
+      mimo,
+    ]
+    const models = normalizeLlmConfig({ ...defaults, models: stored }).models
+    expect(models.filter(model => model.providerId === 'ppio').map(model => model.modelId).sort())
+      .toEqual(defaults.models.filter(model => model.providerId === 'ppio').map(model => model.modelId).sort())
+    expect(models.find(model => model.modelId === 'moonshotai/kimi-k3')?.enabled).toBe(false)
+  })
+
   it('只把官方地址上的存量 PPIO 识别成不可删除的内置 preset', () => {
     const official = normalizeLlmConfig({
       providers: [{

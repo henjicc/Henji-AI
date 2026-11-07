@@ -10,6 +10,7 @@ const logger = createLogger('core.loaders.modelLoader')
 import { registry } from '../ModelRegistry'
 import { getI18nText } from '../types/I18nText'
 import {
+  defineDeprecatedModel,
   defineHiddenModel,
   defineModel as defineApplicationModel,
 } from '../defineModel'
@@ -57,7 +58,8 @@ export async function loadAllModels(): Promise<LoadStats> {
 
       const model = composeModelDefinition(runtimeModel, presentation)
       // 应用侧 defineModel 保留既有的 canonical 描述补丁与 i18nScope 展开，并完成注册。
-      defineApplicationModel(model)
+      if (model.meta.deprecated) defineDeprecatedModel(model)
+      else defineApplicationModel(model)
 
       successCount++
     } catch (error) {

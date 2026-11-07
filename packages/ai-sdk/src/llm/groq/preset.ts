@@ -18,7 +18,7 @@ export const GROQ_PROVIDER_PRESET: LlmProviderPreset = {
   baseUrl: GROQ_BASE_URL,
   reasoning: { enabled: true, effort: 'medium' },
   reasoningConfigurable: true,
-  modelIds: [GROQ_DEFAULT_MODEL_ID],
+  modelIds: [GROQ_DEFAULT_MODEL_ID, 'openai/gpt-oss-120b'],
   websiteUrl: GROQ_PROVIDER_METADATA.websiteUrl,
   apiKeyUrl: GROQ_PROVIDER_METADATA.apiKeyUrl,
   docs: 'docs/model-adaptation/供应商/Groq.md',

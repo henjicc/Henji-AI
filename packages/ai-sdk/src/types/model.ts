@@ -124,6 +124,12 @@ export interface ModelRuntimeMeta {
   /** 只认这种语言的提示词；不填表示不限。 */
   promptLanguage?: 'en'
 
+  /**
+   * 已过时的原因（平台下线、被新版取代、不再提供等）。填写后能力发现与宿主的普通入口不再列出该模型，
+   * 但仍可按 ID 解析，旧工程能打开、开发者能核对。
+   */
+  deprecated?: string
+
   /** 轮询配置：异步任务状态轮询 */
   polling?: {
     interval: number

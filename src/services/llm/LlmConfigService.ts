@@ -319,11 +319,22 @@ function emitConfigChanged(): void {
 }
 subscribeRestored(item => { if (item.id.startsWith('llm-provider:') || item.id.startsWith('llm-model:') || item.path?.replaceAll('\\', '/').endsWith('/llm-config.json')) emitConfigChanged() })
 
+/** 派欧云内置模型已下线或即将下线时的接替者：用户没自己加过接替者时就地换掉，保留启用状态。 */
+const PPIO_BUILT_IN_REPLACEMENTS: Readonly<Record<string, string>> = {
+  'moonshotai/kimi-k2.6': 'moonshotai/kimi-k3',
+  'xiaomimimo/mimo-v2.5-pro': 'xiaomimimo/mimo-v2.6-pro',
+}
+
 function removeDeprecatedBuiltInModels(models: LlmModelConfig[]): LlmModelConfig[] {
-  return models.filter(model => !(
-    model.providerId === DEFAULT_DEEPSEEK_PROVIDER_ID
-    && ['deepseek-chat', 'deepseek-reasoner'].includes(model.modelId)
-  ))
+  const has = (modelId: string): boolean => models.some(model => model.providerId === DEFAULT_PPIO_PROVIDER_ID && model.modelId === modelId)
+  return models.flatMap(model => {
+    if (model.providerId === DEFAULT_DEEPSEEK_PROVIDER_ID && ['deepseek-chat', 'deepseek-reasoner'].includes(model.modelId)) return []
+    const replacement = model.providerId === DEFAULT_PPIO_PROVIDER_ID ? PPIO_BUILT_IN_REPLACEMENTS[model.modelId] : undefined
+    if (!replacement) return [model]
+    if (has(replacement)) return []
+    const builtIn = createBuiltInLlmModels().find(item => item.providerId === DEFAULT_PPIO_PROVIDER_ID && item.modelId === replacement)
+    return builtIn ? [{ ...builtIn, enabled: model.enabled }] : []
+  })
 }
 
 function upgradeBuiltInModelCapabilities(model: LlmModelConfig): LlmModelConfig {

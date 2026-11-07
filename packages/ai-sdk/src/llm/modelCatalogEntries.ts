@@ -34,7 +34,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
   },
   // 硅基流动模型页与 Chat VLM 契约；未确认的视频字段和输出上限不猜测。
   ...[
-    { id: 'kimi-k2.7-code', displayName: 'Kimi K2.7 Code', vendor: 'Moonshot' },
+    { id: 'kimi-k2.7-code', displayName: 'Kimi K2.7 Code', vendor: 'Moonshot', deprecated: 'Kimi 于 2026 年底下线全部 K2 系列，10-31 起不再对新用户开放；请改用 K3 / K3.1 Pro' },
     { id: 'qwen3.8-27b', displayName: 'Qwen3.8-27B', vendor: 'Qwen' },
   ].map(model => ({
     ...model,
@@ -64,6 +64,22 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     maxOutputTokens: 65_536,
     note: 'Groq Production 模型；reasoning_effort 仅支持 low / medium / high，且不支持 reasoning_format。',
     docs: 'docs/model-adaptation/GPT-OSS-20B/GPT-OSS-20B_Groq.md',
+  },
+  {
+    id: 'gpt-oss-120b',
+    displayName: 'GPT-OSS 120B',
+    vendor: 'OpenAI',
+    input: { image: false, video: false, audio: false },
+    toolCall: true,
+    parallelTools: false,
+    structuredOutputMode: 'json',
+    structuredOutputWithReasoning: true,
+    reasoning: true,
+    sampling: true,
+    contextWindow: 131_072,
+    maxOutputTokens: 65_536,
+    note: 'Groq Production 模型，参数约定与 20B 相同；reasoning_effort 仅支持 low / medium / high，且不支持 reasoning_format。',
+    docs: 'docs/model-adaptation/供应商/Groq.md',
   },
 
   // ---------------- DeepSeek ----------------
@@ -183,6 +199,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     contextWindow: null,
     maxOutputTokens: null,
     note: '沿用项目既有内置配置的模态标注，未逐项核对官方文档；上下文与输出上限留空由动态验证或用户补齐。',
+    deprecated: 'Kimi 于 2026 年底下线全部 K2 系列，10-31 起不再对新用户开放；请改用 K3 / K3.1 Pro',
     docs: 'docs/llm-adaptation/供应商/Kimi.md',
   },
 
@@ -393,6 +410,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     contextWindow: 1_000_000,
     maxOutputTokens: 131_072,
     note: '多轮工具调用时官方建议把历史轮次的 reasoning_content 一并回传。',
+    deprecated: '小米于 2026-10-21 下线 MiMo 2.5 系列，请改用 2.6',
     docs: 'docs/llm-adaptation/供应商/小米MiMo.md',
   },
   {
@@ -408,6 +426,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     contextWindow: 1_000_000,
     maxOutputTokens: 131_072,
     note: '官方标注全模态理解，图片 / 音频 / 视频均可作为输入。',
+    deprecated: '小米于 2026-10-21 下线 MiMo 2.5 系列，请改用 2.6',
     docs: 'docs/llm-adaptation/供应商/小米MiMo.md',
   },
 

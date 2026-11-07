@@ -399,6 +399,8 @@ export function describeGenerationModel(model: ModelDefinition): Record<string, 
       description: model.meta.description,
       tags: model.meta.tags ?? [],
       ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),
+      // 旧节点仍可能用到过时模型，带上原因让助手提醒用户换模型
+      ...(model.meta.deprecated ? { deprecated: model.meta.deprecated } : {}),
     },
     inputLimits: toSafeValue(model.inputLimits),
     priceEstimate: createPriceEstimate(model),

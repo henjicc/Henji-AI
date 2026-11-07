@@ -11,7 +11,7 @@ import { volcengineRealtimeAsrPresets } from '@henjicc/ai-sdk/capabilities/speec
 import { BAILIAN_QWEN_MT_PRESETS } from '@henjicc/ai-sdk/capabilities/translation/bailian'
 import { registry } from '@/core/ModelRegistry'
 import { ASR_CATALOG } from '@/core/audioEdit/asrCatalog'
-import { HENJI_GENERATION_EXECUTION_PACKS, getHenjiGenerationModel } from '@/core/modelCatalog/applicationModelProfile'
+import { HENJI_GENERATION_EXECUTION_PACKS, HENJI_GENERATION_MODELS, getHenjiGenerationModel } from '@/core/modelCatalog/applicationModelProfile'
 import type { ModelDefinition } from '@/core/types'
 import { getI18nText } from '@/core/types'
 import i18n from '@/i18n'
@@ -34,6 +34,8 @@ export interface SdkModelRow {
   tags: readonly string[]
   /** 模型声明里的原始标签或特性，只在详情里给开发者核对。 */
   rawTags: readonly string[]
+  /** 已过时的原因；用户界面已不再列出，只在这里留给开发者核对。 */
+  deprecated?: string
   /** 只有生成模型能做请求预览与估价。 */
   generation?: { definition: ModelDefinition }
   llm?: { catalogId: string | null; protocol: 'responses' | 'chat' | null; note?: string; capabilities: readonly string[]; contextWindow: number | null; maxOutputTokens: number | null }
@@ -46,15 +48,19 @@ const ASR_FEATURE_LABEL: Readonly<Record<string, string>> = {
   'remote-url': '网址输入', realtime: '实时', streaming: '流式', 'partial-results': '中间结果', 'pcm-s16le-16khz-mono': '16kHz PCM 输入',
 }
 
-function generationRow(definition: ModelDefinition, hidden: boolean): SdkModelRow {
+const DEPRECATED_TAG = '已过时'
+
+function generationRow(definition: ModelDefinition, tool: boolean): SdkModelRow {
+  const deprecated = definition.meta.deprecated
   return {
     key: `generation:${definition.meta.id}`,
-    category: hidden || !GENERATION_TYPES.has(definition.meta.type) ? 'tool' : definition.meta.type as SdkModelCategory,
+    category: tool || !GENERATION_TYPES.has(definition.meta.type) ? 'tool' : definition.meta.type as SdkModelCategory,
     name: getI18nText(definition.meta.name, 'zh-CN') || definition.meta.id,
     modelId: definition.meta.id,
     providerId: definition.meta.provider,
-    tags: (definition.meta.tags ?? []).map((tag) => i18n.t(`models:tags.${tag}`)),
+    tags: [...(deprecated ? [DEPRECATED_TAG] : []), ...(definition.meta.tags ?? []).map((tag) => i18n.t(`models:tags.${tag}`))],
     rawTags: definition.meta.tags ?? [],
+    deprecated,
     generation: { definition },
   }
 }
@@ -103,8 +109,9 @@ function llmRow(key: string, modelId: string, providerId: string, entry: (typeof
     name: entry?.displayName ?? modelId,
     modelId,
     providerId,
-    tags: [...capabilities, ...(protocol === 'responses' ? ['Responses 接口'] : [])],
+    tags: [...(entry?.deprecated ? [DEPRECATED_TAG] : []), ...capabilities, ...(protocol === 'responses' ? ['Responses 接口'] : [])],
     rawTags: [],
+    deprecated: entry?.deprecated,
     llm: { catalogId: entry?.id ?? null, protocol, note: entry?.note, capabilities, contextWindow: entry?.contextWindow ?? null, maxOutputTokens: entry?.maxOutputTokens ?? null },
   }
 }
@@ -124,10 +131,13 @@ function capabilityRow(category: 'asr', descriptor: CapabilityDescriptor): SdkMo
 
 /** 汇总 SDK 适配的全部模型：生成（含受控工具）、大语言模型预设与目录、语音识别、翻译。 */
 export function listSdkModels(): SdkModelRow[] {
-  const generation = registry.listAllModels().map((definition) => generationRow(definition, false))
-  const visible = new Set(generation.map((row) => row.modelId))
+  // 已过时的模型不进普通注册索引，从 SDK 清单补回来，仍按自身模态分类
+  const deprecated = HENJI_GENERATION_MODELS.filter((model) => model.meta.deprecated)
+    .flatMap((model) => { const definition = registry.getModel(model.meta.id); return definition ? [definition] : [] })
+  const generation = [...registry.listAllModels(), ...deprecated].map((definition) => generationRow(definition, false))
+  const listed = new Set(generation.map((row) => row.modelId))
   const tools = HENJI_GENERATION_EXECUTION_PACKS.flatMap((pack) => pack.models)
-    .filter((model) => !visible.has(model.meta.id))
+    .filter((model) => !listed.has(model.meta.id))
     .flatMap((model) => {
       const definition = registry.getModel(model.meta.id)
       return definition ? [generationRow(definition, true)] : []

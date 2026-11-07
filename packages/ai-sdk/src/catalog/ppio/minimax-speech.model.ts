@@ -14,6 +14,7 @@ export const minimaxSpeechModel = defineModel({
     canonicalModelId: 'minimax-speech-2.8',
     provider: 'ppio',
     type: 'audio',
+    deprecated: '派欧云只保留大语言模型，不再提供生成模型',
     tags: ['text-to-audio', 'voice-clone'],
     polling: {
       interval: 3000,

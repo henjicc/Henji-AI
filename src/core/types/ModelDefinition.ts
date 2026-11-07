@@ -257,6 +257,9 @@ export interface ModelMeta {
   /** 只认这种语言的提示词；不填表示不限 */
   promptLanguage?: 'en'
 
+  /** 已过时的原因；不再进入选择器与能力发现，按 id 仍可照常使用 */
+  deprecated?: string
+
   /**
    * 模型图标 URL（可选）
    *

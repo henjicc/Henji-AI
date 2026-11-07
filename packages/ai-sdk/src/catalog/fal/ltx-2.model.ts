@@ -6,6 +6,7 @@ export const ltx2Model = defineModel({
         canonicalModelId: 'ltx-2',
         provider: 'fal',
         type: 'video',
+        deprecated: 'Fal 已撤下全部 LTX-2 端点（2026-11 起返回 404），由 LTX-2.3 取代',
         tags: ['text-to-video', 'image-to-video', 'video-to-video']
     },
     inputLimits: {

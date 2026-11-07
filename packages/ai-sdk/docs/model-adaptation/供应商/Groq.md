@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-31 |
+| 最后更新 | 2026-11-07 |
 | 供应商 | GroqCloud（与 xAI Grok 无关） |
 | 建议 `providerId` | `groq` |
 | Base URL | `https://api.groq.com/openai/v1` |
@@ -119,3 +119,7 @@ GPT-OSS 20B/120B **不支持 `reasoning_format`**；默认在 assistant message 
 | Reasoning 参数 | https://console.groq.com/docs/reasoning | 否 |
 | 错误码与错误体 | https://console.groq.com/docs/errors | 否 |
 | API Key | https://console.groq.com/keys | **是** |
+
+## 2026-11-07 补充
+
+预设新增 `openai/gpt-oss-120b`（Groq Production 模型，上下文 131,072、最大输出 65,536，参数约定与 20B 相同：`reasoning_effort` 只收 low / medium / high，不支持 `reasoning_format`）。本次没有 Groq 账号可做模型列表核对，首次使用请用设置里的“验证此模型”确认。

@@ -119,9 +119,11 @@ export function createModelCapabilityDiscovery(input: CreateCapabilityDiscoveryI
     ...(input.generationPacks ?? []).flatMap((pack) => pack.models),
   ])
   for (const model of generation) {
+    if (model.meta.deprecated) continue
     add({ sourceKind: 'generation-model', id: model.meta.id, profile: profileGenerationModel(model), source: model })
   }
   for (const entry of input.llmEntries ?? []) {
+    if (entry.deprecated) continue
     add({ sourceKind: 'llm-model', id: entry.id, profile: profileLlmCatalogEntry(entry), source: entry })
   }
   for (const model of input.llmModels ?? []) {

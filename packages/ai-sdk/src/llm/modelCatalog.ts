@@ -40,6 +40,8 @@ export interface LlmModelCatalogEntry {
   /** 模型原厂已确认支持的协议；最终使用协议还要与接入供应商的端点能力取交集。 */
   apiProtocols?: readonly LlmApiProtocol[]
   note?: string
+  /** 已过时的原因；填写后预设不再自动添加、能力发现不再列出，已有配置不受影响。 */
+  deprecated?: string
   /** 该条目的资料出处，仓库内相对路径 */
   docs: string
 }

@@ -64,9 +64,15 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     baseUrl: DEFAULT_PPIO_BASE_URL,
     reasoning: { enabled: false, effort: 'high' },
     reasoningConfigurable: false,
+    // 2026-11-07 按派欧云模型列表核对；已过时的条目在建模型时自动跳过。
     modelIds: [
       'deepseek/deepseek-v4-pro',
       'deepseek/deepseek-v4.1-flash',
+      'moonshotai/kimi-k3.1-pro',
+      'moonshotai/kimi-k3',
+      'zai-org/glm-5.3',
+      'xiaomimimo/mimo-v2.6-pro',
+      'minimax/minimax-m3.1-flash',
       'moonshotai/kimi-k2.6',
       'xiaomimimo/mimo-v2.5-pro',
     ],
@@ -83,7 +89,7 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     baseUrl: DEFAULT_DEEPSEEK_BASE_URL,
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
-    modelIds: ['deepseek-flash'],
+    modelIds: ['deepseek-flash', 'deepseek-v4-pro'],
     responsesModelIds: ['deepseek-flash', 'deepseek-v4-pro'],
     websiteUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).websiteUrl,
     apiKeyUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).apiKeyUrl,
@@ -268,9 +274,10 @@ export function createModelsFromPreset(
   if (!modelIds) {
     throw new Error(`[llm_endpoint_profile_unknown] bigmodel endpoint profile "${provider.endpointProfile}" is unavailable`)
   }
-  return modelIds.map((modelId) => {
+  return modelIds.flatMap((modelId) => {
     const entry = findLlmModelCatalogEntry(modelId, preset.providerId)
-    return {
+    if (entry?.deprecated) return []
+    return [{
       providerId: provider.providerId,
       providerFamilyId: provider.providerFamilyId,
       endpointProfile: provider.endpointProfile,
@@ -283,6 +290,6 @@ export function createModelsFromPreset(
       capabilities: { ...createLlmCapabilitiesForModel(modelId, preset.providerId), ...preset.modelCapabilities?.[modelId] },
       catalogId: entry?.id,
       enabled: true,
-    }
+    }]
   })
 }

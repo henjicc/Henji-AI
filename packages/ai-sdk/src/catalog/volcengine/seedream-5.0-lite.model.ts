@@ -10,6 +10,7 @@ export const volcengineSeedream50LiteModel = defineModel({
   meta: {
     id: 'volcengine-seedream-5.0-lite', canonicalModelId: 'seedream-5.0-lite', seriesId: 'seedream', seriesRank: 5,
     provider: 'volcengine', type: 'image',
+    deprecated: '火山方舟 2026-11-24 关停 doubao-seedream-5-0-260128，官方替代为 5.0 Pro',
     tags: ['text-to-image', 'image-to-image'],
     aliases: ['seedream-5-lite-official']
   },

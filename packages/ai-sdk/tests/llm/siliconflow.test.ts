@@ -40,15 +40,15 @@ describe('SiliconFlow LLM and model discovery', () => {
     expect(body).toMatchObject({ enable_thinking: true, reasoning_effort: 'high' })
     expect(body).not.toHaveProperty('thinking')
   })
-  it('预设支持四个模型、独立实例保留协议族，官方 DeepSeek 默认不变', () => {
+  it('预设跳过已过时模型、独立实例保留协议族，官方 DeepSeek 默认不变', () => {
     const provider = createProviderFromPreset(SILICONFLOW_PROVIDER_PRESET, { providerId: 'my-siliconflow' })
     expect(provider).toMatchObject({ providerId: 'my-siliconflow', providerFamilyId: 'siliconflow', credentialId: 'my-siliconflow' })
     const models = createModelsFromPreset(SILICONFLOW_PROVIDER_PRESET, provider)
-    expect(models.map(m => m.modelId)).toEqual(['deepseek-ai/DeepSeek-V4-Flash', 'zai-org/GLM-5.3', 'moonshotai/Kimi-K2.7-Code', 'Qwen/Qwen3.8-27B'])
+    expect(models.map(m => m.modelId)).toEqual(['deepseek-ai/DeepSeek-V4-Flash', 'zai-org/GLM-5.3', 'Qwen/Qwen3.8-27B'])
     expect(models.every(m => m.apiProtocol === 'openai-compatible' && m.capabilities.toolCall)).toBe(true)
     expect(models[1].capabilities).toMatchObject({ maxOutputTokens: null, sampling: true, image: false })
     expect(models[2].capabilities).toMatchObject({ image: true, video: false, contextWindow: 262_144 })
-    expect(findLlmProviderPreset('deepseek')?.modelIds).toEqual(['deepseek-flash'])
+    expect(findLlmProviderPreset('deepseek')?.modelIds[0]).toBe('deepseek-flash')
   })
 
   it.each(SILICONFLOW_PROVIDER_PRESET.modelIds)('准确构建 %s 思考开关，不把原厂字段带给网关', modelId => {

@@ -277,8 +277,11 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
   return [
     ppio('deepseek/deepseek-v4-pro', 'DeepSeek V4 Pro'),
     ppio(DEFAULT_PPIO_MODEL_ID, 'DeepSeek V4.1 Flash'),
-    ppio('xiaomimimo/mimo-v2.5-pro', 'MiMo-V2.5-Pro'),
-    ppio('moonshotai/kimi-k2.6', 'Kimi K2.6'),
+    ppio('moonshotai/kimi-k3.1-pro', 'Kimi K3.1 Pro'),
+    ppio('moonshotai/kimi-k3', 'Kimi K3'),
+    ppio('zai-org/glm-5.3', 'GLM-5.3'),
+    ppio('xiaomimimo/mimo-v2.6-pro', 'MiMo-V2.6-Pro'),
+    ppio('minimax/minimax-m3.1-flash', 'MiniMax-M3.1-Flash'),
     deepseek(DEFAULT_DEEPSEEK_MODEL_ID, 'DeepSeek V4.1 Flash'),
   ]
 }

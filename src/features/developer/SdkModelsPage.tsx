@@ -271,6 +271,7 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; result: Sdk
       <UiGroup title="基本信息" titleTone="compact" labelWidth={96}>
         <UiFormRow label="供应商" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{providerName(row.providerId)}{row.generation || row.capability || row.llm ? (configured ? ' · 已配密钥' : ' · 未配密钥') : ''}</span></UiFormRow>
         <UiFormRow label="类别" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{CATEGORY_LABEL[row.category]}</span></UiFormRow>
+        {row.deprecated ? <UiFormRow label="已过时" density="compact"><span className="text-warning-text">{row.deprecated}</span></UiFormRow> : null}
         {row.tags.length ? <UiFormRow label="能力" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.tags.join(' · ')}</span></UiFormRow> : null}
         {row.rawTags.length ? <UiFormRow label="原始标签" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.rawTags.join(' ')}</span></UiFormRow> : null}
         {row.generation ? <>
