@@ -1,0 +1,445 @@
+[
+ {
+  "id": "T3-01",
+  "tier": "T3",
+  "modelId": "kie-minimax-h3",
+  "prompt": "湖面泛起涟漪，镜头缓慢推近",
+  "params": {
+   "kieMiniMaxH3Resolution": "768P",
+   "kieMiniMaxH3Duration": 4
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 4,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-01-r2",
+  "tier": "T3",
+  "modelId": "kie-minimax-h3",
+  "prompt": "湖面泛起涟漪，镜头缓慢推近",
+  "params": {
+   "kieMiniMaxH3Resolution": "768P",
+   "kieMiniMaxH3Duration": 4
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 4,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-02",
+  "tier": "T3",
+  "modelId": "fal-ai-minimax-h3",
+  "prompt": "竖屏：一盏路灯在雨夜亮起",
+  "params": {
+   "falMiniMaxH3Resolution": "480P",
+   "falMiniMaxH3Duration": 5,
+   "falMiniMaxH3AspectRatio": "9:16",
+   "falMiniMaxH3PromptExpansion": false
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "9:16",
+   "seconds": 5,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-03",
+  "tier": "T3",
+  "modelId": "apimart-minimax-h3-max",
+  "prompt": "方形构图：一只纸鹤在桌面上被风吹动",
+  "params": {
+   "apimartMiniMaxH3MaxResolution": "480P",
+   "apimartMiniMaxH3MaxDuration": 5,
+   "apimartMiniMaxH3MaxAspectRatio": "1:1"
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "1:1",
+   "seconds": 5,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-04",
+  "tier": "T3",
+  "modelId": "kie-wan-3.0-prime",
+  "prompt": "竖幅：书页被风一页页翻过",
+  "params": {
+   "kieWan30PrimeResolution": "480p",
+   "kieWan30PrimeDuration": "2",
+   "kieWan30PrimeAspectRatio": "3:4",
+   "kieWan30PrimeAudio": false
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "3:4",
+   "seconds": 2,
+   "secondsTolerance": 1,
+   "hasAudio": false
+  }
+ },
+ {
+  "id": "T3-05",
+  "tier": "T3",
+  "modelId": "fal-ai-wan-3.0",
+  "prompt": "云层缓慢移动，光影变化",
+  "params": {
+   "falWan30Resolution": "480p",
+   "falWan30Duration": 2,
+   "falWan30GenerateAudio": false,
+   "falWan30PromptExpansion": false
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 2,
+   "secondsTolerance": 1,
+   "hasAudio": false
+  }
+ },
+ {
+  "id": "T3-06",
+  "tier": "T3",
+  "modelId": "apimart-kling-3.0",
+  "prompt": "竖屏：咖啡杯里的拉花慢慢成形",
+  "params": {
+   "apimartKling30Resolution": "720p",
+   "apimartKling30Duration": 3,
+   "apimartKling30AspectRatio": "9:16",
+   "apimartKling30Audio": false
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "9:16",
+   "seconds": 3,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-07",
+  "tier": "T3",
+  "modelId": "kie-kling-3.0-turbo",
+  "prompt": "画面中的水面泛起波光",
+  "params": {
+   "kieKling30TurboResolution": "720p",
+   "kieKling30TurboDuration": "3"
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 3,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-08",
+  "tier": "T3",
+  "modelId": "fal-ai-kling-3.0-turbo",
+  "prompt": "方形构图：一盆绿植的叶子在微风中摆动",
+  "params": {
+   "falKling30TurboResolution": "standard",
+   "falKling30TurboDuration": 3,
+   "falKling30TurboAspectRatio": "1:1"
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "1:1",
+   "seconds": 3,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-09",
+  "tier": "T3",
+  "modelId": "kie-kling-4.0-flash",
+  "prompt": "宽屏：海浪拍打礁石",
+  "params": {
+   "kieKling40FlashDuration": "3",
+   "kieKling40FlashAspectRatio": "16:9"
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "16:9",
+   "seconds": 3,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-10",
+  "tier": "T3",
+  "modelId": "fal-ai-ltx-2.3",
+  "prompt": "竖屏：霓虹招牌在夜色中闪烁",
+  "params": {
+   "falLtx23Resolution": "1080p",
+   "falLtx23Duration": 6,
+   "falLtx23AspectRatio": "9:16",
+   "falLtx23GenerateAudio": false,
+   "falLtx23FastMode": true
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "aspect": "9:16",
+   "seconds": 6,
+   "secondsTolerance": 1,
+   "hasAudio": false
+  }
+ },
+ {
+  "id": "T3-11",
+  "tier": "T3",
+  "modelId": "apimart-kling-3.0-omni",
+  "prompt": "把画面改成水墨画风格",
+  "params": {
+   "apimartKling30OmniResolution": "720p",
+   "apimartKling30OmniVideoReferenceType": "base"
+  },
+  "media": {
+   "videos": [
+    "clip3s.mp4"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 3,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-12",
+  "tier": "T3",
+  "modelId": "kie-kling-3.0-omni",
+  "prompt": "画面中的光线慢慢变暖",
+  "params": {
+   "kieKling30OmniMode": "image-to-video",
+   "kieKling30OmniResolution": "720p",
+   "kieKling30OmniDuration": "3"
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "video",
+   "count": 1,
+   "seconds": 3,
+   "secondsTolerance": 1
+  }
+ },
+ {
+  "id": "T3-20",
+  "tier": "T3",
+  "modelId": "apimart-seedream-5.0-lite",
+  "prompt": "参考这张图，画出清晨和黄昏两个版本",
+  "params": {
+   "apimartSeedream50LiteResolution": "2K",
+   "apimartSeedream50LiteAspectRatio": "4:3",
+   "apimartSeedream50LiteCount": 2
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "image",
+   "aspect": "4:3"
+  }
+ },
+ {
+  "id": "T3-21",
+  "tier": "T3",
+  "modelId": "kie-nano-banana-pro",
+  "prompt": "竖幅杂志封面：一位厨师在厨房里",
+  "params": {
+   "kieNanoBananaAspectRatio": "4:5"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "4:5"
+  }
+ },
+ {
+  "id": "T3-22",
+  "tier": "T3",
+  "modelId": "kie-nano-banana-2",
+  "prompt": "竖长条：一座灯塔",
+  "params": {
+   "kieNanoBanana2AspectRatio": "1:4"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "1:4"
+  }
+ },
+ {
+  "id": "T3-23",
+  "tier": "T3",
+  "modelId": "kie-gpt-image-2",
+  "prompt": "横幅：极简风格的城市线稿",
+  "params": {
+   "kieGptImage2AspectRatio": "3:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "3:1"
+  }
+ },
+ {
+  "id": "T3-24",
+  "tier": "T3",
+  "modelId": "grsai-nano-banana-pro",
+  "prompt": "宽屏：未来感的地铁站",
+  "params": {
+   "grsaiNanoBananaProChannel": "vt",
+   "grsaiNanoBananaProAspectRatio": "16:9"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "16:9"
+  }
+ },
+ {
+  "id": "T3-25",
+  "tier": "T3",
+  "modelId": "apimart-nano-banana-2",
+  "prompt": "横幅：森林里的小路",
+  "params": {
+   "apimartNanoBanana2Resolution": "0.5K",
+   "apimartNanoBanana2AspectRatio": "4:1"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "4:1"
+  }
+ },
+ {
+  "id": "T3-26",
+  "tier": "T3",
+  "modelId": "apimart-nano-banana-pro",
+  "prompt": "横幅：秋天的银杏大道",
+  "params": {
+   "apimartNanoBananaProAspectRatio": "3:2"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "3:2"
+  }
+ },
+ {
+  "id": "T3-27",
+  "tier": "T3",
+  "modelId": "fal-ai-seedream-5.0-lite",
+  "prompt": "竖屏海报：夏日冰饮",
+  "params": {
+   "falSeedream50LiteResolution": "1MP",
+   "falSeedream50LiteAspectRatio": "9:16"
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1,
+   "aspect": "9:16"
+  }
+ },
+ {
+  "id": "T3-28",
+  "tier": "T3",
+  "modelId": "fal-ai-ic-light-v2",
+  "prompt": "傍晚的暖色侧光",
+  "params": {
+   "falIcLightV2InitialLatent": "Left"
+  },
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1
+  }
+ },
+ {
+  "id": "T3-29",
+  "tier": "T3",
+  "modelId": "fal-ai-bria-creative-upscale",
+  "prompt": "",
+  "params": {},
+  "media": {
+   "images": [
+    "still.jpg"
+   ]
+  },
+  "expect": {
+   "kind": "image",
+   "count": 1
+  }
+ },
+ {
+  "id": "T3-40",
+  "tier": "T3",
+  "modelId": "kie-gemini-3.1-flash-tts",
+  "prompt": "今天的天气真不错，适合出去走走。",
+  "params": {
+   "kieGeminiTtsTemperature": 0.7
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ },
+ {
+  "id": "T3-41",
+  "tier": "T3",
+  "modelId": "bailian-cosyvoice-v3.5",
+  "prompt": "欢迎来到我们的节目。",
+  "params": {
+   "bailianCosyVoiceSpeed": 1.2
+  },
+  "expect": {
+   "kind": "audio",
+   "count": 1
+  }
+ }
+]
