@@ -22,6 +22,16 @@
     "apimart-gpt-image-2.5": {
       "meta": { "name": "GPT Image 2.5" }
     },
-    "apimart-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "Generate and edit images up to 4K"}}
+    "apimart-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "Generate and edit images up to 4K"}},
+    "apimart-gpt-image-2.6": { "meta": { "name": "GPT Image 2.6" } },
+    "apimart-kling-4.0": { "meta": { "name": "Kling 4.0" } },
+    "apimart-gemini-omni-1.2-flash": { "meta": { "name": "Gemini Omni 1.2 Flash" } },
+    "apimart-wan-3.0": { "meta": { "name": "Wan 3.0" } },
+    "apimart-grok-imagine-video-1.5": { "meta": { "name": "Grok Imagine Video 1.5" } },
+    "apimart-minimax-h3-max": { "meta": { "name": "MiniMax H3 Max" } },
+    "apimart-flux-3-image": { "meta": { "name": "FLUX 3 Image" } },
+    "apimart-veo-3.1": { "meta": { "name": "Veo 3.1" } },
+    "apimart-seedream-5.0-flash": { "meta": { "name": "Seedream 5.0 Flash" } },
+    "apimart-happyhorse-1.1": { "meta": { "name": "HappyHorse 1.1" } }
   }
 }

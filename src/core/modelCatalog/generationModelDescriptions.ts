@@ -15,6 +15,13 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'nano-banana-2.1': { zh: '面向图像生成与参考图编辑的新版本，侧重视觉质量、文字呈现、提示词遵循和主体一致性。', en: 'An updated image generation and editing model focused on visual quality, text rendering, prompt adherence and subject consistency.' },
   'seedream-5.0-flash': { zh: '', en: '' },
   'happyhorse-1.1': { zh: '', en: '' },
+  'gpt-image-2.6': { zh: 'OpenAI 图像模型的 2.6 版本，在 2.5 基础上加强规划强度控制，适合密集文字、复杂版式与多轮精细编辑。', en: 'Version 2.6 of the OpenAI image model, adding planning-strength control for dense text, complex layouts and multi-round precise edits.' },
+  'kling-video-4.0': { zh: '可灵新一代全能视频模型，一个模型覆盖生成、参考、编辑与续写，单次最长 30 秒并始终带立体声，适合长镜头叙事与成片修改。', en: 'Kling’s next all-in-one video model covering generation, reference, editing and extension, up to 30 seconds per run with stereo audio, suited to long-take storytelling and revising finished clips.' },
+  'gemini-omni-1.2-flash': { zh: 'Google Gemini Omni 的 1.2 Flash 版本，时长延长到 15 秒并支持首尾帧插值，擅长对话式视频编辑与续写，速度快、成本低。', en: 'The 1.2 Flash release of Google Gemini Omni, extending clips to 15 seconds with first-last frame interpolation; fast and low-cost, strong at conversational video editing and extension.' },
+  'wan-3.0': { zh: '阿里万相 3.0 全能参考视频模型，可同时理解图片、视频、音频乃至文档网页，最长 30 秒，适合素材驱动的叙事短片。', en: 'Alibaba Wan 3.0, an all-in-one reference video model that reads images, video, audio and even documents or web pages, up to 30 seconds, suited to asset-driven short stories.' },
+  'grok-imagine-video-1.5': { zh: 'xAI Grok Imagine 视频的 1.5 版本，画质提升到 1080p，侧重快速出片与参考图动态化，适合草稿与社媒短视频。', en: 'Version 1.5 of xAI Grok Imagine video, now up to 1080p, focused on quick results and animating reference images, suited to drafts and social clips.' },
+  'minimax-h3-max': { zh: 'MiniMax H3 的极速版，最高 1080p，生成更快、单价更低，适合批量出片和多模态参考的快速试错。', en: 'The fast tier of MiniMax H3, up to 1080p with quicker generation and a lower price, suited to batch output and fast iteration with multimodal references.' },
+  'flux-3-image': { zh: 'Black Forest Labs 第三代图像模型，支持生成前检索与提示词内框选布局，最高 4K；Klein 版本更小更快、价格很低。', en: 'Black Forest Labs’ third-generation image model with pre-generation search grounding and in-prompt box layouts, up to 4K; the Klein version is smaller, faster and very cheap.' },
   // 图片模型
   'flux-1-krea-dev': { zh: 'Krea 与 Black Forest Labs 联合推出的 12B 开放权重模型，强调自然写实、设计感和较少的“AI 油亮感”；兼容 FLUX.1 Dev 生态，适合本地部署与微调。', en: '' },
   'flux-2-multiple-angles': { zh: '基于 FLUX.2 的连续镜头角度调整工具，可分别控制水平角度、垂直角度和缩放，适合商品与主体视角探索。', en: 'A FLUX.2 camera-angle tool with continuous horizontal, vertical, and zoom controls.' },
