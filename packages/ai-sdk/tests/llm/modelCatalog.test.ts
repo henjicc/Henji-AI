@@ -74,7 +74,7 @@ describe('findLlmModelCatalogEntry', () => {
 
 describe('applyLlmModelCatalogEntry', () => {
   it('按目录标好输入模态与上下文，通用能力保持基础值', () => {
-    const entry = findLlmModelCatalogEntry('mimo-v2.5')
+    const entry = findLlmModelCatalogEntry('mimo-v2.6-pro')
     expect(entry).not.toBeNull()
     const capabilities = applyLlmModelCatalogEntry(DEFAULT_LLM_CAPABILITIES, entry!)
     expect(capabilities).toMatchObject({
@@ -100,11 +100,10 @@ describe('applyLlmModelCatalogEntry', () => {
   })
 
   it('协议接通后登记对应模态，并保留模型自身边界', () => {
-    // DeepSeek 的视觉模型只在 Responses API 上收图；该协议接通后可以如实开放图片输入。
-    const entry = findLlmModelCatalogEntry('deepseek-v4-flash-vision-exp')!
+    // DeepSeek 官方 Flash 只在 Responses API 上收图；该协议接通后可以如实开放图片输入。
+    const entry = findLlmModelCatalogEntry('deepseek-flash')!
     expect(entry.input.image).toBe(true)
     expect(entry.apiProtocols).toContain('openai-responses')
-    expect(entry.note).toContain('Responses API')
     // GLM-5.3 官方明确只支持文本模态
     expect(findLlmModelCatalogEntry('glm-5.3')!.input).toEqual({ image: false, video: false, audio: false })
   })

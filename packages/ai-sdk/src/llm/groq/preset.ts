@@ -18,11 +18,21 @@ export const GROQ_PROVIDER_PRESET: LlmProviderPreset = {
   baseUrl: GROQ_BASE_URL,
   reasoning: { enabled: true, effort: 'medium' },
   reasoningConfigurable: true,
-  modelIds: [GROQ_DEFAULT_MODEL_ID, 'openai/gpt-oss-120b'],
+  // 2026-11-07 按官方模型页核对：自助账号可用的对话模型只有 GPT-OSS 两款正式版与 Qwen3.8-27B 预览版；
+  // Llama 系列为企业版，Prompt Guard / Safeguard 是安全分类器，Orpheus 是语音合成，均不进对话预设。
+  modelIds: [GROQ_DEFAULT_MODEL_ID, 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b'],
+  // 托管限制以 Groq 模型页为准：Qwen3.8-27B 上下文 131,072、最大输出 16,384、每次最多 3 张图，支持 JSON Schema。
+  modelCapabilities: {
+    'qwen/qwen3.8-27b': {
+      image: true, video: false, audio: false, file: false,
+      toolCall: true, jsonOutput: true, structuredOutputMode: 'schema', reasoning: true,
+      contextWindow: 131_072, maxOutputTokens: 16_384,
+    },
+  },
   websiteUrl: GROQ_PROVIDER_METADATA.websiteUrl,
   apiKeyUrl: GROQ_PROVIDER_METADATA.apiKeyUrl,
   docs: 'docs/model-adaptation/供应商/Groq.md',
-  note: 'GroqCloud（providerId=groq）不是 xAI Grok；GPT-OSS 不支持 reasoning_format。',
+  note: 'GroqCloud（providerId=groq）不是 xAI Grok；GPT-OSS 不支持 reasoning_format；Qwen3.8-27B 为预览模型，可能随时下线。',
 }
 
 /** 可直接交给统一能力发现器的默认模型；不会触发模型列表网络请求。 */

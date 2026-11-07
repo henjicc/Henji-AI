@@ -123,3 +123,10 @@ GPT-OSS 20B/120B **不支持 `reasoning_format`**；默认在 assistant message 
 ## 2026-11-07 补充
 
 预设新增 `openai/gpt-oss-120b`（Groq Production 模型，上下文 131,072、最大输出 65,536，参数约定与 20B 相同：`reasoning_effort` 只收 low / medium / high，不支持 `reasoning_format`）。本次没有 Groq 账号可做模型列表核对，首次使用请用设置里的“验证此模型”确认。
+
+## 2026-11-07 模型清单核对
+
+官方模型页（https://console.groq.com/docs/models ，无需登录）：
+- 正式模型（自助账号）：`openai/gpt-oss-120b`（$0.15 / $0.60 每百万 token，上下文 131,072，最大输出 65,536）、`openai/gpt-oss-20b`（$0.075 / $0.30）、语音识别 `whisper-large-v3`（$0.111/小时）、`whisper-large-v3-turbo`（$0.04/小时）。Llama 3.1 8B / 3.3 70B 为企业版（联系销售），不进预设。
+- 预览模型：`qwen/qwen3.8-27b`（$0.80 / $4.00，上下文 131,072，最大输出 16,384，输入文本与图片，每次最多 3 张、单文件 ≤ 20 MB；工具调用、JSON Object / Schema、思考）已进预设；其余为安全分类器（Prompt Guard 2、gpt-oss-safeguard-20b）、企业版（Muse Spark Open、MiniMax M2.7）与语音合成（Orpheus English / Arabic Saudi），不进对话预设。
+- 思考参数（https://console.groq.com/docs/reasoning ）：Qwen3.8-27B 的 `reasoning_effort` 收 none / default / low / medium / high，关闭时发 `none`；GPT-OSS 只收 low / medium / high，关闭时只能用 `include_reasoning: false` 隐藏思考内容。

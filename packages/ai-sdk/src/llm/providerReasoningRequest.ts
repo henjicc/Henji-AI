@@ -91,12 +91,12 @@ const PROVIDER_REASONING_BODY: Readonly<Record<string, ReasoningBodyBuilder>> = 
 
   // Groq GPT-OSS：只接受 low / medium / high；不支持 reasoning_format。
   // include_reasoning 是独立的返回控制开关，关闭时不再发送 reasoning_effort。
-  groq: reasoning => (reasoning.enabled
-    ? {
-        reasoning_effort: pickEffort(reasoning.effort, ['low', 'medium', 'high']),
-        include_reasoning: true,
-      }
-    : { include_reasoning: false }),
+  // GPT-OSS 不能关闭思考，关闭时只隐藏思考内容；Qwen3.8-27B 收 reasoning_effort: none，能真正关掉。
+  groq: (reasoning, body) => {
+    const model = typeof body.model === 'string' ? body.model.toLowerCase() : ''
+    if (reasoning.enabled) return { reasoning_effort: pickEffort(reasoning.effort, ['low', 'medium', 'high']), include_reasoning: true }
+    return model === 'qwen/qwen3.8-27b' ? { reasoning_effort: 'none' } : { include_reasoning: false }
+  },
 
 }
 

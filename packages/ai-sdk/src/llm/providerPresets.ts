@@ -74,7 +74,6 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
       'xiaomimimo/mimo-v2.6-pro',
       'minimax/minimax-m3.1-flash',
       'moonshotai/kimi-k2.6',
-      'xiaomimimo/mimo-v2.5-pro',
     ],
     websiteUrl: providerMetadata(DEFAULT_PPIO_PROVIDER_ID).websiteUrl,
     apiKeyUrl: providerMetadata(DEFAULT_PPIO_PROVIDER_ID).apiKeyUrl,

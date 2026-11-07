@@ -81,6 +81,13 @@ describe('applyProviderReasoningRequestBody', () => {
     })
   })
 
+  it('Groq Qwen3.8-27B 关闭思考时发 reasoning_effort: none，真正关掉思考', () => {
+    const off = applyProviderReasoningRequestBody('groq', undefined, { model: 'qwen/qwen3.8-27b' }, { enabled: false, effort: 'high' })
+    expect(off).toEqual({ model: 'qwen/qwen3.8-27b', reasoning_effort: 'none' })
+    expect(applyProviderReasoningRequestBody('groq', undefined, { model: 'qwen/qwen3.8-27b' }, { enabled: true, effort: 'medium' }))
+      .toMatchObject({ reasoning_effort: 'medium', include_reasoning: true })
+  })
+
   it('文档没给出请求侧开关的供应商走通用兜底，不编造私有字段', () => {
     const mimo = apply('mimo', { enabled: true, effort: 'high' })
     expect(mimo).toMatchObject({ thinking: { type: 'enabled' } })
