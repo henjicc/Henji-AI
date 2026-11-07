@@ -39,6 +39,7 @@ const siliconflowNames: Array<[string, string]> = [
 export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
   'fal-minimax-speech-2.8': { voices: [systemVoice('Wise_Woman')], allowSearch: true, allowCustomId: true },
   'fal-eleven-v3-tts': { voices: elevenNames.map((name) => systemVoice(name)), allowSearch: true, allowCustomId: true },
+  'fal-eleven-v4-tts': { voices: elevenNames.map((name) => systemVoice(name)), allowSearch: true, allowCustomId: true },
   'bailian-minimax-speech-2.8': {
     voices: [systemVoice('male-qn-qingse', '青涩青年音色')],
     allowSearch: true,

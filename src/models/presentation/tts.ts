@@ -38,6 +38,15 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
       falElevenV3Language: { zh: '语言代码', en: 'Language code' },
     },
   ),
+  'fal-eleven-v4-tts': speechModel(
+    { zh: 'Eleven v4', en: 'Eleven v4' },
+    {
+      falElevenV4Version: version,
+      falElevenV4Voice: voice,
+      falElevenV4Stability: { zh: '稳定度', en: 'Stability' },
+      falElevenV4Language: { zh: '语言代码', en: 'Language code' },
+    },
+  ),
   'bailian-minimax-speech-2.8': speechModel(
     { zh: 'MiniMax Speech 2.8', en: 'MiniMax Speech 2.8' },
     { bailianMinimaxSpeechSpec: version, bailianMinimaxSpeechVoice: voice, bailianMinimaxSpeechSpeed: speed, bailianMinimaxSpeechEmotion: emotion },
@@ -96,6 +105,11 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
   ),
 }
 
+ttsPresentation['fal-eleven-v4-tts'].params.falElevenV4Version.optionLabels = {
+  standard: { label: 'v4' }, turbo: { label: 'v4 Turbo' },
+}
+ttsPresentation['fal-eleven-v4-tts'].params.falElevenV4Version.tooltip = { zh: 'Turbo 更快，价格减半。', en: 'Turbo is faster and half the price.' }
+
 const cloneParams = ttsPresentation['volcengine-seed-icl-2.0'].params
 ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation = {
   condition: params => params.volcIclMode === 'clone',
@@ -128,6 +142,7 @@ cloneParams.volcCloneLanguage.optionLabels = Object.fromEntries(cloneLanguages.f
 
 for (const [modelId, paramId] of [
   ['fal-minimax-speech-2.8', 'falMinimaxSpeechSpec'],
+  ['fal-eleven-v4-tts', 'falElevenV4Version'],
   ['bailian-minimax-speech-2.8', 'bailianMinimaxSpeechSpec'],
   ['bailian-cosyvoice-v3.5', 'bailianCosyVoiceSpec'],
 ]) ttsPresentation[modelId].params[paramId].role = 'mode'
@@ -140,6 +155,7 @@ for (const model of [ttsPresentation['fal-minimax-speech-2.8'], ttsPresentation[
 const ttsVoiceFields: Record<keyof typeof TTS_VOICE_SELECTORS, string> = {
   'fal-minimax-speech-2.8': 'falMinimaxSpeechVoice',
   'fal-eleven-v3-tts': 'falElevenV3Voice',
+  'fal-eleven-v4-tts': 'falElevenV4Voice',
   'bailian-minimax-speech-2.8': 'bailianMinimaxSpeechVoice',
   'bailian-qwen-audio-3.1-tts-flash': 'bailianQwenTtsVoice',
   'bailian-cosyvoice-v3.5': 'bailianCosyVoiceId',
