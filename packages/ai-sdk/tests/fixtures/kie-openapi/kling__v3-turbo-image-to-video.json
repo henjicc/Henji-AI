@@ -1,0 +1,62 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/kling/v3-turbo-image-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "kling/v3-turbo-image-to-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "kling/v3-turbo-image-to-video"
+        ],
+        "default": "kling/v3-turbo-image-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 2500
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 1
+          },
+          "duration": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "image_urls",
+          "duration",
+          "resolution"
+        ]
+      }
+    }
+  }
+}

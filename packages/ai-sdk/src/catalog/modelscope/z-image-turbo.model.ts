@@ -37,7 +37,8 @@ export const modelscopeZImageTurboModel = defineModel({
       default: 1440,
       min: 512,
       max: 2048,
-      step: 8
+      // 实际尺寸按 16 对齐（resolveModelscopeSize），步长与它一致。
+      step: 16
     },
     {
       id: 'modelscopeSteps',

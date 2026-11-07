@@ -1,4 +1,5 @@
 import { defineModel } from "../defineModel";
+import { hasUploadedImage } from '../shared/mediaPresence';
 import type { JsonValue, JsonObject } from "../../types/runtime";
 export const falKling30Model = defineModel({
     meta: {
@@ -11,6 +12,8 @@ export const falKling30Model = defineModel({
     params: [
         {
             id: 'falKling30AspectRatio', type: 'dropdown', order: 1,
+            // 图生视频端点没有比例字段，比例跟随首帧。
+            visible: { condition: (params) => !hasUploadedImage(params) },
             default: 'smart',
             options: [
                 { value: 'smart' },

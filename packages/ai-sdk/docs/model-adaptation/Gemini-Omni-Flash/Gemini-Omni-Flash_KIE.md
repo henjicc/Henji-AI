@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 视频（配套语音与角色能力） |
 | 供应商 | KIE.ai（聚合平台） |
 | 平台模型 ID / 端点 | `gemini-omni-video`（任务）、`POST /api/v1/omni/audio/create`、`POST /api/v1/omni/character/create` |
@@ -116,6 +116,8 @@
 - **按次计费**：720p 与 1080p 同价，4k 更贵；有视频输入时价格固定且明显更高。
 - `video_list` 的截取窗口 `ends - start` 必须 ≤ 10 秒。
 - `resultJson` 是 JSON 字符串，必须二次 parse。
+
+- 官方格式核对（2026-11-08）：官方 OpenAPI 把 `duration` 列为必填，带参考视频时官方忽略它：界面隐藏时长，请求固定发 `"8"`。
 
 ## 7. 原始链接索引
 

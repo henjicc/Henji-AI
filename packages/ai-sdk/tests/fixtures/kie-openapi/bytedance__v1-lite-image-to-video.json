@@ -1,0 +1,79 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/bytedance/v1-lite-image-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "bytedance/v1-lite-image-to-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "bytedance/v1-lite-image-to-video"
+        ],
+        "default": "bytedance/v1-lite-image-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ],
+            "default": "720p"
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "5",
+              "10"
+            ],
+            "default": "5"
+          },
+          "camera_fixed": {
+            "type": "boolean"
+          },
+          "seed": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 2147483647,
+            "default": -1
+          },
+          "enable_safety_checker": {
+            "type": "boolean"
+          },
+          "end_image_url": {
+            "type": "string"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "image_url"
+        ]
+      }
+    }
+  }
+}

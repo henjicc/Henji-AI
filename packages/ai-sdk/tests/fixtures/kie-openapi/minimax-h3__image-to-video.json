@@ -1,0 +1,89 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/minimax-h3/image-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "minimax-h3/image-to-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "minimax-h3/image-to-video"
+        ],
+        "default": "minimax-h3/image-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "required": [
+          "prompt",
+          "duration"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 7000
+          },
+          "first_frame_url": {
+            "type": "string",
+            "pattern": "^(https?|oss)://",
+            "format": "uri"
+          },
+          "last_frame_url": {
+            "type": "string",
+            "pattern": "^(https?|oss)://",
+            "format": "uri"
+          },
+          "duration": {
+            "type": "integer",
+            "enum": [
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "default": 6,
+            "minimum": 4,
+            "maximum": 15
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "768P",
+              "2K"
+            ],
+            "default": "2K"
+          }
+        },
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
+    }
+  }
+}

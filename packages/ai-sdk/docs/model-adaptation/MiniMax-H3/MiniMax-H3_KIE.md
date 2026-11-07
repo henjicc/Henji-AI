@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-10-12 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 视频 |
 | 供应商 | KIE.ai（聚合平台） |
 | 平台模型 ID | `minimax-h3/text-to-video`、`minimax-h3/image-to-video`、`minimax-h3/reference-to-video` |
@@ -97,6 +97,8 @@
 - 图生视频端点关于首尾帧的描述自相矛盾，接入前必须实测。
 - 输入视频时长会**叠加进计费秒数**；输入图片前 5 张免费。
 - `resultJson` 是 JSON 字符串，必须二次 parse。
+
+- 官方格式核对（2026-11-08）：图生视频字段按官方 OpenAPI 用 `first_frame_url` / `last_frame_url`；此前误用 APIMart 的 `first_frame_image`，平台把请求当成文生视频并报 “aspect_ratio is required for text-to-video”（2026-11-08 实调）。
 
 ## 7. 原始链接索引
 

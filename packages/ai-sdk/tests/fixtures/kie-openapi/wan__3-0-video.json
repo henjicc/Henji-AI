@@ -1,0 +1,122 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/wan/3-0-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "wan/3-0-video",
+  "body": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "wan/3-0-video"
+        ]
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "first_frame_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "last_frame_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "reference_image_urls": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "reference_video_urls": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "reference_audio_urls": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "reference_file_urls": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "reference_link_urls": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "480P",
+              "720P",
+              "1080P"
+            ],
+            "default": "1080P"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "adaptive",
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16"
+            ],
+            "default": "adaptive"
+          },
+          "duration": {
+            "type": "integer",
+            "default": 5
+          },
+          "audio": {
+            "type": "boolean",
+            "default": true
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 /** APIMart 万相 2.7 Image 标准版与 Pro 统一模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
-import { resolveUploadedImageSources } from '../shared/mediaPresence'
+import { resolveUploadedImageSources, hasUploadedImage } from '../shared/mediaPresence'
 import type { JsonObject } from '../../types/runtime'
 
 // 字段、限制与价格来源：docs/model-adaptation/Wan-2.7-Image/Wan-2.7-Image_APIMart.md（2026-11-07 读取）。
@@ -37,7 +37,7 @@ export const apimartWan27ImageModel = defineModel({
   inputLimits: { images: { max: 9 }, videos: { max: 0 } },
   params: [
     { id: 'apimartWan27ImageVariant', type: 'dropdown', order: 1, default: 'standard', options: [{ value: 'standard' }, { value: 'pro' }] },
-    { id: 'apimartWan27ImageAspectRatio', type: 'dropdown', order: 2, default: 'smart', options: [{ value: 'smart' }, ...RATIOS.map(value => ({ value }))] },
+    { id: 'apimartWan27ImageAspectRatio', type: 'dropdown', order: 2, visible: { condition: (params) => !hasUploadedImage(params) }, default: 'smart', options: [{ value: 'smart' }, ...RATIOS.map(value => ({ value }))] },
     { id: 'apimartWan27ImageResolution', type: 'dropdown', order: 3, default: '2K', options: RESOLUTIONS.map(value => ({ value })) },
     // 静态上限取组图的 12，非组图时由展示层联动收窄到 4；校验器只认静态范围。
     { id: 'apimartWan27ImageCount', type: 'number', order: 4, default: 1, min: 1, max: 12, step: 1 },

@@ -305,16 +305,16 @@ function mediaCount(params: DynamicValueMap, kind: MediaKind): number {
   return Array.isArray(value) ? value.length : 0
 }
 
+const variantKey = (params: DynamicValueMap): string => JSON.stringify(Object.entries(params).sort(([a], [b]) => a.localeCompare(b)))
+
 /**
- * 参数组合离线检查：先展开每个模式 / 渠道，再在每个分支下把其余参数逐个换成每个可选值，外加“不带素材”和“素材放满”两种输入，
- * 每组都走真实的 selector、builder 与计价。界面联动会改回去或隐藏掉的值用户选不到，提交前校验（数量限制与前置条件）拦下的组合
- * 用户也提交不了，都跳过；剩下的失败就是“界面放行、构建或计价却出错”。
- * 不联网、不扣费；只证明各分支能构建和计价，字段对不对还要对照官方格式。
+ * 组合检查与“所选即所发”检查共用的取值空间：各模式 / 渠道分支（素材按分支要求放好）、按数量要求补齐素材、
+ * 界面能否提交、某个值用户选不选得到。
  */
-export async function checkGenerationModelVariants(modelId: string): Promise<SdkVariantCheck[]> {
+function variantSpace(modelId: string) {
   const definition = registry.getModel(modelId)
   const runtime = generationRuntime(modelId)
-  if (!definition || !runtime) return [{ label: '默认', params: {}, result: { ok: false, error: `SDK 里找不到模型 ${modelId}` } }]
+  if (!definition || !runtime) return null
   const schema = registry.getSchema(modelId)
   const engine = definition.linkages?.length ? new LinkageEngine(definition.linkages) : null
   const uploadParamIds = schema.filter((param) => UPLOAD_KIND[param.type]).map((param) => param.id)
@@ -341,12 +341,6 @@ export async function checkGenerationModelVariants(modelId: string): Promise<Sdk
     const changes = Object.fromEntries(schema.filter((param) => needsSampleText(param, params)).map((param) => [param.id, SAMPLE_TEXT]))
     return Object.keys(changes).length ? applyGenerationParamChanges(modelId, params, changes) : params
   }
-  const variants = new Map<string, { label: string; params: DynamicValueMap }>()
-  const add = (label: string, params: DynamicValueMap): void => {
-    if (!submittable(params)) return
-    const key = JSON.stringify(Object.entries(params).sort(([a], [b]) => a.localeCompare(b)))
-    if (!variants.has(key)) variants.set(key, { label, params })
-  }
   // 选不到就返回 null：联动把值改掉了，或这个参数在该分支下不显示。
   const choose = (base: DynamicValueMap, param: ParamDef, value: unknown): DynamicValueMap | null => {
     const next = applyGenerationParamChanges(modelId, base, { [param.id]: value as DynamicValue })
@@ -362,7 +356,36 @@ export async function checkGenerationModelVariants(modelId: string): Promise<Sdk
       if (next) bases.push({ label: `${param.id}=${String(value)}`, params: fillText(fitMedia(next, true)) })
     }
   }
+  // 分支里才露出来的下拉（如参考模式下的“任务类型”）也展开成分支，“编辑 / 延长”这类第二层分支才查得到。
+  for (const base of bases.slice(1)) {
+    for (const param of schema.filter((item) => item.type === 'dropdown' && !isParamVisible(item, sample, engine) && isParamVisible(item, base.params, engine))) {
+      for (const value of enumerableValues(param, base.params, schema, engine)) {
+        if (sameValue(value, base.params[param.id])) continue
+        const next = choose(base.params, param, value)
+        if (next) bases.push({ label: `${base.label} · ${param.id}=${String(value)}`, params: fillText(fitMedia(next, true)) })
+      }
+    }
+  }
   const empty = Object.fromEntries([...MEDIA_KINDS.flatMap((kind) => MEDIA_KEYS[kind]), ...uploadParamIds].map((key) => [key, []]))
+  return { definition, schema, engine, limitsOf, submittable, fitMedia, choose, bases, empty }
+}
+
+/**
+ * 参数组合离线检查：先展开每个模式 / 渠道，再在每个分支下把其余参数逐个换成每个可选值，外加“不带素材”和“素材放满”两种输入，
+ * 每组都走真实的 selector、builder 与计价。界面联动会改回去或隐藏掉的值用户选不到，提交前校验（数量限制与前置条件）拦下的组合
+ * 用户也提交不了，都跳过；剩下的失败就是“界面放行、构建或计价却出错”。
+ * 不联网、不扣费；只证明各分支能构建和计价，字段对不对还要对照官方格式。
+ */
+export async function checkGenerationModelVariants(modelId: string): Promise<SdkVariantCheck[]> {
+  const space = variantSpace(modelId)
+  if (!space) return [{ label: '默认', params: {}, result: { ok: false, error: `SDK 里找不到模型 ${modelId}` } }]
+  const { definition, schema, engine, limitsOf, submittable, fitMedia, choose, bases, empty } = space
+  const variants = new Map<string, { label: string; params: DynamicValueMap }>()
+  const add = (label: string, params: DynamicValueMap): void => {
+    if (!submittable(params)) return
+    const key = variantKey(params)
+    if (!variants.has(key)) variants.set(key, { label, params })
+  }
   for (const base of bases) {
     add(base.label, base.params)
     // 每个轴给出当前参数下能做的一步改动：普通参数换成每个可选值；素材轴是“不带素材”与各类素材放满。
@@ -406,6 +429,75 @@ export async function checkGenerationModelVariants(modelId: string): Promise<Sdk
     checks.push({ label, params, result, ...(price.error && price.error !== NOT_ESTIMABLE ? { priceError: price.error } : {}) })
   }
   return checks
+}
+
+export interface SdkDeliveryCollision {
+  /** 分支与素材情况，例如“默认 · 不带素材” */
+  context: string
+  paramId: string
+  /** 选了这几个不同的值，发出的请求一模一样 */
+  values: unknown[]
+  route?: string
+  body?: unknown
+}
+
+/** 数值参数取上下限、紧挨上下限的一档和默认值：夹取、取整写错时最先在边界上撞到一起。 */
+function deliveryValues(param: ParamDef, params: DynamicValueMap, schema: ParamDef[], engine: LinkageEngine | null): unknown[] {
+  if (param.type !== 'number') return enumerableValues(param, params, schema, engine)
+  const filtered = applyLinkageFilters(param, params, schema, engine)
+  if (filtered.type !== 'number' || typeof filtered.min !== 'number' || typeof filtered.max !== 'number') return []
+  const step = typeof filtered.step === 'number' && filtered.step > 0 ? filtered.step : 1
+  const round = (value: number): number => Number(value.toFixed(6))
+  const candidates = [filtered.min, round(filtered.min + step), params[param.id], round(filtered.max - step), filtered.max]
+  return [...new Set(candidates.filter((value): value is number => typeof value === 'number' && value >= filtered.min! && value <= filtered.max!))]
+}
+
+/**
+ * “所选即所发”检查：在每个分支与素材情况下（默认、不带素材、各类素材放满），把一个参数换成它每个选得到的值分别构建请求。
+ * 两个不同的值发出一模一样的请求，说明其中一个被构建器悄悄改掉了，或这个参数根本没发出去：界面显示的和实际请求对不上。
+ * 不联网、不扣费；有意合并的（例如“智能”恰好落到某个比例）要人工判断。
+ */
+export async function checkGenerationParamDelivery(modelId: string): Promise<SdkDeliveryCollision[]> {
+  const space = variantSpace(modelId)
+  if (!space) return []
+  const { definition, schema, engine, limitsOf, submittable, fitMedia, choose, bases, empty } = space
+  const contexts = new Map<string, { label: string; params: DynamicValueMap }>()
+  const addContext = (label: string, params: DynamicValueMap): void => {
+    const key = variantKey(params)
+    if (submittable(params) && !contexts.has(key)) contexts.set(key, { label, params })
+  }
+  for (const base of bases) {
+    addContext(base.label, base.params)
+    if (!definition.alternativeInputParamIds?.length) addContext(`${base.label} · 不带素材`, fitMedia(applyGenerationParamChanges(modelId, base.params, empty), false))
+    const limits = limitsOf(base.params)
+    for (const kind of MEDIA_KINDS) {
+      if (Number.isFinite(limits[kind].max) && limits[kind].max > mediaCount(base.params, kind)) {
+        addContext(`${base.label} · ${kind} 放满 ${limits[kind].max}`, fitMedia(applyGenerationParamChanges(modelId, base.params, mediaValues(kind, limits[kind].max)), false))
+      }
+    }
+  }
+  const collisions: SdkDeliveryCollision[] = []
+  for (const context of contexts.values()) {
+    for (const param of schema.filter((item) => isParamVisible(item, context.params, engine))) {
+      const groups = new Map<string, unknown[]>()
+      for (const value of deliveryValues(param, context.params, schema, engine)) {
+        const chosen = sameValue(value, context.params[param.id]) ? context.params : choose(context.params, param, value)
+        if (!chosen) continue
+        const params = fitMedia(chosen, false)
+        if (!submittable(params) || !sameValue(params[param.id], value)) continue
+        const result = await dryRunGenerationModel(modelId, params)
+        if (!result.ok) continue
+        const key = JSON.stringify([result.route ?? '', result.body ?? null])
+        groups.set(key, [...(groups.get(key) ?? []), value])
+      }
+      for (const [key, values] of groups) {
+        if (values.length < 2) continue
+        const [route, body] = JSON.parse(key) as [string, unknown]
+        collisions.push({ context: context.label, paramId: param.id, values, route, body })
+      }
+    }
+  }
+  return collisions
 }
 
 /** 参考价用的示例素材指标：按时长、像素计价的模型拿它算，免得都显示成缺价格。 */

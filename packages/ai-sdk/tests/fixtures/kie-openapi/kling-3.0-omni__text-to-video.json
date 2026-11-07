@@ -1,0 +1,171 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/kling/v3-omni-text-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "kling-3.0-omni/text-to-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "kling-3.0-omni/text-to-video"
+        ],
+        "default": "kling-3.0-omni/text-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 3072
+          },
+          "customize_multi_shots": {
+            "type": "boolean",
+            "default": false
+          },
+          "prefer_multi_shots": {
+            "type": "boolean"
+          },
+          "multi_prompt": {
+            "type": "array",
+            "maxItems": 6,
+            "default": [],
+            "items": {
+              "type": "object",
+              "required": [
+                "prompt",
+                "duration"
+              ],
+              "properties": {
+                "prompt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "duration": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 12
+                }
+              }
+            }
+          },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "description",
+                "element_input_urls"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "element_input_urls": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 4,
+                  "items": {
+                    "type": "string",
+                    "format": "uri",
+                    "pattern": "^(https?|oss)://"
+                  }
+                },
+                "element_input_audio_urls": {
+                  "type": "array",
+                  "default": [],
+                  "items": {
+                    "type": "string",
+                    "format": "uri",
+                    "pattern": "^(https?|oss)://"
+                  }
+                }
+              }
+            },
+            "default": []
+          },
+          "audio": {
+            "type": "boolean",
+            "default": false
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p",
+              "4k"
+            ],
+            "default": "720p"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ],
+            "default": "16:9"
+          },
+          "duration": {
+            "type": "integer",
+            "enum": [
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "default": 5,
+            "minimum": 3,
+            "maximum": 15
+          }
+        },
+        "allOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
+    }
+  }
+}

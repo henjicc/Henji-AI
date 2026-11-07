@@ -39,7 +39,8 @@ export const modelscopeQwenImage2512Model = defineModel({
       default: 1024,
       min: 64,
       max: 1664,
-      step: 8
+      // 实际尺寸按 16 对齐（resolveModelscopeSize），步长与它一致。
+      step: 16
     },
     {
       id: 'modelscopeSteps',

@@ -2,6 +2,9 @@
 
 ## 0.10.0 - 未发布
 
+- KIE 按官方 OpenAPI 修正：MiniMax H3 图生视频字段改为 first_frame_url / last_frame_url（此前图生视频不可用）；Qwen Image 3.0 Pro 文生图 model 改为 qwen3/pro-text-to-image；Kling 3.0 Omni 风格转换与参考生视频按官方分支构建；Seedance 2.5 web_search 改发布尔值；Nano Banana 2 参考图上限 10；Gemini 3.1 TTS 说话人带 accent；Gemini Omni Video 始终发 duration；Grok Imagine 图生图不发比例、Grok Imagine Video 图生视频时长为字符串。
+- APIMart Kling 3.0 Omni 编辑视频时不发时长；APIMart Seedance 2.5 任务类型只在参考模式下生效；Fal Veo 3.1 参考生视频按标准价计价；Fal Z-Image Turbo 强度下限 0.05、1MP 计价。
+- 一批视频与图片模型在“当前分支不发送”的情况下隐藏对应参数（带图时的比例、带视频时的模式与音频、编辑任务的时长等），界面与实际请求一致；Qwen3 TTS 温度改为官方的 0.1–1；KIE Seedance V1 选到该版本没有的比例时贴近所选比例；魔搭基准尺寸步长改为 16（离线“所选即所发”检查发现）。
 - Grsai GPT Image 2 标准渠道选 1:3 / 3:1 时改为贴近所选比例（9:21 / 21:9），不再退回 1:1（真实请求验收发现）。
 - 海螺 02（KIE、Fal）首尾帧改为按 768P 请求和计价：MiniMax 首尾帧不支持 512P，KIE 带尾帧的 512P 请求会在平台内部失败（真实请求验收发现）。
 - Grsai 万相 3.0 时长改为 3–30 秒：官方文档写 2–30，接口实际拒绝 2 秒（真实请求验收发现）。

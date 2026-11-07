@@ -216,7 +216,7 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 图片模型', () => {
       prompt: 'dense layout',
       kieQwenImage30Variant: 'pro',
       kieQwenImage30Resolution: '2K'
-    })).toMatchObject({ model: 'qwen3-pro/text-to-image' })
+    })).toMatchObject({ model: 'qwen3/pro-text-to-image' })
     expect(kieQwenImage30Model.request?.builder?.({
       prompt: 'edit', uploadedFilePaths: ['a.png'], kieQwenImage30Variant: 'pro'
     })).toMatchObject({ model: 'qwen3/pro-image-to-image' })

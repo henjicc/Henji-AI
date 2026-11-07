@@ -1,0 +1,71 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/google/nano-banana-2-lite.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "nano-banana-2-lite",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "nano-banana-2-lite",
+        "enum": [
+          "nano-banana-2-lite"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "image_urls": {
+            "default": [],
+            "items": {
+              "format": "uri",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "prompt": {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "aspect_ratio": {
+            "enum": [
+              "1:1",
+              "1:4",
+              "1:8",
+              "2:3",
+              "3:2",
+              "3:4",
+              "4:1",
+              "4:3",
+              "4:5",
+              "5:4",
+              "8:1",
+              "9:16",
+              "16:9",
+              "21:9",
+              "auto"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ],
+    "type": "object"
+  }
+}

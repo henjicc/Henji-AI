@@ -179,3 +179,5 @@ rg -i "sk-|bearer |api[_-]?key" packages/ai-sdk/tests/fixtures/
 ## Fal 官方输入格式快照（2026-11-08）
 
 `fal-openapi/<端点，/ 换成 __>.json` 来自 Fal 各端点的官方 OpenAPI（`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<端点>`，无需登录），分类 `official-literal`，只留输入格式的校验关键字（去掉说明、示例与界面提示）。由 `src/features/developer/falOfficialSchema.test.ts` 读取并校验参数组合检查构建出的请求；`HENJI_REFRESH_FAL_OPENAPI=1` 运行该测试会重新抓取全部端点。
+
+`kie-openapi/<model，/ 与 : 换成 __>.json` 来自 KIE 各接口官方文档的 .md 版本里内嵌的 OpenAPI（`https://docs.kie.ai/llms.txt` 列出的 market 文档，无需登录），分类 `official-literal`，按请求体 `model` 的取值存整份请求体格式（含 `input`）。由 `src/features/developer/kieOfficialSchema.test.ts` 读取并校验参数组合检查构建出的请求；`HENJI_REFRESH_KIE_OPENAPI=1` 运行该测试会重新抓取。KIE 文档生成器留下的与对象类型矛盾的 `anyOf` 分支，以及 Zod 不支持的 `not` / `dependencies`，校验时忽略。

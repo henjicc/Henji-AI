@@ -1,0 +1,54 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/hailuo/02-image-to-video-pro.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "hailuo/02-image-to-video-pro",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "hailuo/02-image-to-video-pro"
+        ],
+        "default": "hailuo/02-image-to-video-pro"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 1500
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "end_image_url": {
+            "type": "string"
+          },
+          "prompt_optimizer": {
+            "type": "boolean"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "image_url"
+        ]
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { defineModel } from "../defineModel";
-import { countUploadedVideos, resolveUploadedVideoDurationSeconds } from '../shared/mediaPresence';
+import { countUploadedVideos, resolveUploadedVideoDurationSeconds, hasUploadedImage } from '../shared/mediaPresence';
 import type { JsonValue, JsonObject } from "../../types/runtime";
 export const apimartSeedance25Model = defineModel({
     meta: {
@@ -41,6 +41,10 @@ export const apimartSeedance25Model = defineModel({
         },
         {
             id: 'apimartSeedance25AspectRatio', type: 'dropdown', order: 3,
+            // 首帧 / 首尾帧与编辑、延长任务只能 adaptive，比例跟随素材。
+            visible: { condition: (params: JsonObject) => params.apimartSeedance25Mode === 'reference-to-video'
+                    ? !['edit', 'extend'].includes(String(params.apimartSeedance25TaskType))
+                    : !hasUploadedImage(params) },
             default: 'smart',
             options: [{ value: 'smart' }, ...['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'].map((ratio) => ({ value: ratio }))]
         },
@@ -51,10 +55,14 @@ export const apimartSeedance25Model = defineModel({
         },
         {
             id: 'apimartSeedance25Duration', type: 'number', order: 5,
+            // 编辑任务的时长跟随参考视频。
+            visible: { condition: (params: JsonObject) => !(params.apimartSeedance25Mode === 'reference-to-video' && params.apimartSeedance25TaskType === 'edit') },
             default: 5, min: 4, max: 30, step: 1
         },
         {
             id: 'apimartSeedance25AutoDuration', type: 'switch', order: 6,
+            // 编辑任务的时长跟随参考视频。
+            visible: { condition: (params: JsonObject) => !(params.apimartSeedance25Mode === 'reference-to-video' && params.apimartSeedance25TaskType === 'edit') },
             default: false
         },
         {
@@ -85,7 +93,7 @@ export const apimartSeedance25Model = defineModel({
             const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'];
             const raw = String(params.apimartSeedance25AspectRatio || 'smart');
             const mode = params.apimartSeedance25Mode === 'reference-to-video' ? 'reference-to-video' : 'text-image-to-video';
-            const taskType = ['reference', 'edit', 'extend'].includes(String(params.apimartSeedance25TaskType))
+            const taskType = mode === 'reference-to-video' && ['reference', 'edit', 'extend'].includes(String(params.apimartSeedance25TaskType))
                 ? String(params.apimartSeedance25TaskType)
                 : 'auto';
             const hasFrames = mode === 'text-image-to-video' && images.length > 0;
@@ -127,7 +135,8 @@ export const apimartSeedance25Model = defineModel({
     pricing: {
         currency: '$',
         calculator: (params) => {
-            const autoDuration = params.apimartSeedance25AutoDuration === true || params.apimartSeedance25TaskType === 'edit';
+            const autoDuration = params.apimartSeedance25AutoDuration === true
+                || (params.apimartSeedance25Mode === 'reference-to-video' && params.apimartSeedance25TaskType === 'edit');
             const duration = autoDuration ? 30 : Math.min(30, Math.max(4, Math.round(Number(params.apimartSeedance25Duration || 5))));
             const rates: Record<string, {
                 noVideo: number;

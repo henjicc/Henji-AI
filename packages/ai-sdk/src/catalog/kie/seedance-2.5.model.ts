@@ -133,7 +133,7 @@ export const kieSeedance25Model = defineModel({
                 nsfw_checker: true
             };
             if (params.kieSeedance25WebSearch === true)
-                input.web_search = 'true';
+                input.web_search = true;
             if (mode === 'reference-to-video') {
                 if (images.length > 0)
                     input.reference_image_urls = images.slice(0, 30);

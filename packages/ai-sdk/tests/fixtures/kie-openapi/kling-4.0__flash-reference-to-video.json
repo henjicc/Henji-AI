@@ -1,0 +1,153 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/kling/v4-flash-reference-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "kling-4.0/flash-reference-to-video",
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "kling-4.0/flash-reference-to-video"
+        ],
+        "default": "kling-4.0/flash-reference-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 3,
+            "maximum": 20,
+            "default": 5
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "720p"
+            ],
+            "default": "720p"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "16:9",
+              "9:16",
+              "1:1",
+              "21:9"
+            ]
+          },
+          "image_urls": {
+            "type": "array",
+            "maxItems": 10,
+            "default": [],
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://"
+            }
+          },
+          "video_urls": {
+            "type": "array",
+            "maxItems": 5,
+            "default": [],
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://"
+            }
+          },
+          "keep_original_sound": {
+            "type": "boolean",
+            "default": false
+          },
+          "elements": {
+            "type": "array",
+            "maxItems": 7,
+            "default": [],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[一-龥A-Za-z0-9_]{1,20}$"
+                },
+                "image_urls": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 4,
+                  "items": {
+                    "type": "string",
+                    "format": "uri",
+                    "pattern": "^https?://"
+                  }
+                },
+                "video_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^https?://"
+                },
+                "tag": {
+                  "type": "string",
+                  "enum": [
+                    "character",
+                    "animal",
+                    "prop",
+                    "costume",
+                    "scene",
+                    "effect",
+                    "others"
+                  ]
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "voice_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^https?://"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "image",
+                    "video"
+                  ],
+                  "default": "image"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -4,6 +4,13 @@ import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/m
 import type { I18nText } from '@/core/types/I18nText'
 import type { Linkage } from '@/core/types/Linkage'
 import type { ModelPresentation, ParamOptionPresentation } from '@/core/types/ModelPresentation'
+import { uploadedImageCount } from '../mediaPresence'
+
+/** 首尾帧（两张图）与续写最长 10 秒，其余 15 秒；与 SDK 构建器的夹取一致。 */
+function apimartGeminiOmni12MaxSeconds(params: Record<string, unknown>): number {
+  const mode = params.apimartGeminiOmni12Mode
+  return mode === 'extend' || ((mode === undefined || mode === 'text-image-to-video') && uploadedImageCount(params) >= 2) ? 10 : 15
+}
 
 const labels = (values: readonly string[], named: Record<string, I18nText> = {}): Record<string, ParamOptionPresentation> =>
   Object.fromEntries(values.map(value => [value, { label: named[value] ?? value }]))
@@ -108,11 +115,11 @@ export const apimartPresentationPart6: Record<string, ModelPresentation> = {
       },
     },
     linkages: [{
-      trigger: 'apimartGeminiOmni12Mode', effect: 'filterRange', target: 'apimartGeminiOmni12Duration',
-      filter: mode => ({ min: 3, max: mode === 'extend' ? 10 : 15, step: 1 }),
+      trigger: ['apimartGeminiOmni12Mode', 'images', 'uploadedImages'], effect: 'filterRange', target: 'apimartGeminiOmni12Duration',
+      filter: (_, params) => ({ min: 3, max: apimartGeminiOmni12MaxSeconds(params), step: 1 }),
     }, {
-      trigger: 'apimartGeminiOmni12Mode', effect: 'autoSwitch', target: 'apimartGeminiOmni12Duration',
-      condition: (mode, params) => mode === 'extend' && Number(params.apimartGeminiOmni12Duration) > 10,
+      trigger: ['apimartGeminiOmni12Mode', 'images', 'uploadedImages'], effect: 'autoSwitch', target: 'apimartGeminiOmni12Duration',
+      condition: (_, params) => Number(params.apimartGeminiOmni12Duration) > apimartGeminiOmni12MaxSeconds(params),
       value: 10, noRestore: true,
     }],
   },

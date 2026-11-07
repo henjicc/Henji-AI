@@ -16,7 +16,7 @@ export const kieNanoBanana2Model = defineModel({
         aliases: ['nano-banana-2-kie']
     },
     inputLimits: {
-        images: { max: 14 },
+        images: { max: 10 },
         videos: { max: 0 }
     },
     params: [

@@ -1,0 +1,82 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/gpt/gpt-image-2-6-economy-image-to-image.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "gpt-image-2-6/economy-image-to-image",
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "gpt-image-2-6/economy-image-to-image"
+        ],
+        "default": "gpt-image-2-6/economy-image-to-image"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "input_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 16
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "1:1",
+              "16:9",
+              "9:16",
+              "3:2",
+              "2:3",
+              "21:9",
+              "4:3"
+            ],
+            "default": "auto"
+          },
+          "background": {
+            "type": "string",
+            "enum": [
+              "transparent",
+              "opaque",
+              "auto"
+            ],
+            "default": "auto"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "png"
+            ],
+            "default": "png"
+          }
+        }
+      }
+    }
+  }
+}

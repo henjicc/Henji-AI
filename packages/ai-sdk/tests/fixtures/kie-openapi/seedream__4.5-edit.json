@@ -1,0 +1,74 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/seedream/4-5-edit.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "seedream/4.5-edit",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "seedream/4.5-edit"
+        ],
+        "default": "seedream/4.5-edit"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 3000
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 14
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:4",
+              "16:9",
+              "9:16",
+              "2:3",
+              "3:2",
+              "21:9"
+            ]
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "basic",
+              "high"
+            ]
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "image_urls",
+          "aspect_ratio",
+          "quality"
+        ]
+      }
+    }
+  }
+}

@@ -236,7 +236,15 @@ export const kiePresentationPart1: Record<string, ModelPresentation> = {
         })),
       },
     },
-    linkages: [],
+    linkages: [{
+      trigger: ['kieGrokImagineVideoMode', 'images', 'uploadedImages'], effect: 'filterOptions', target: 'kieGrokImagineVideoMode',
+      filter: (_: unknown, options, allParams) => hasUploadedImage(allParams) ? options.filter(option => option.value !== 'spicy') : options,
+    }, {
+      // 官方图生视频不支持 spicy，构建器按 normal 发送，界面跟着显示 normal。
+      trigger: ['kieGrokImagineVideoMode', 'images', 'uploadedImages'], effect: 'autoSwitch', target: 'kieGrokImagineVideoMode',
+      condition: (_: unknown, allParams: Record<string, unknown>) => allParams.kieGrokImagineVideoMode === 'spicy' && hasUploadedImage(allParams),
+      value: 'normal',
+    }],
   },
   "kie-grok-imagine": {
     meta: {

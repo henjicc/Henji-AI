@@ -143,9 +143,8 @@ export const kieGeminiOmniVideoModel = defineModel({
                 const clipDuration = Math.min(10, Math.max(1, Math.round(rawClipDuration)));
                 input.video_list = [{ url: videos[0], start: 0, ends: clipDuration }];
             }
-            else {
-                input.duration = String(params.kieGeminiOmniVideoDuration || '8');
-            }
+            // 官方 OpenAPI 把 duration 列为必填；带参考视频时官方忽略它，界面也隐藏，固定发 8。
+            input.duration = videos.length > 0 ? '8' : String(params.kieGeminiOmniVideoDuration || '8');
             return {
                 model: 'gemini-omni-video',
                 input

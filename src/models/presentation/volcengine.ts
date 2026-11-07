@@ -3,6 +3,7 @@
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation, ParamOptionPresentation } from '@/core/types/ModelPresentation'
+import { outputCountWithinImageBudget } from './mediaPresence'
 
 const labels = (values: readonly string[], named: Record<string, I18nText> = {}): Record<string, ParamOptionPresentation> =>
   Object.fromEntries(values.map(value => [value, { label: named[value] ?? value }]))
@@ -100,7 +101,7 @@ export const volcenginePresentation: Record<string, ModelPresentation> = {
         name: { zh: '最大生成数量', en: 'Maximum Outputs' },
       },
     },
-    linkages: [],
+    linkages: outputCountWithinImageBudget('volcengineSeedream50LiteCount', 15),
   },
 
   'volcengine-seedream-5.0-pro': {

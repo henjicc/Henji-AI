@@ -95,7 +95,7 @@ export const kieQwenImage30Model = defineModel({
             const isPro = params.kieQwenImage30Variant === 'pro';
             return {
                 model: isPro
-                    ? (images.length > 0 ? 'qwen3/pro-image-to-image' : 'qwen3-pro/text-to-image')
+                    ? (images.length > 0 ? 'qwen3/pro-image-to-image' : 'qwen3/pro-text-to-image')
                     : (images.length > 0 ? 'qwen3/image-to-image' : 'qwen3/text-to-image'),
                 input
             };

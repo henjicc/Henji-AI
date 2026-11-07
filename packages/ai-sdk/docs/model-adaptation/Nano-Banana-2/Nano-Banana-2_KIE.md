@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 图片 |
 | 供应商 | KIE.ai（聚合平台） |
 | 平台模型 ID | `nano-banana-2` |
@@ -58,6 +58,8 @@
 - 无 `google_search` 类搜索增强参数。
 - `resultJson` 是 JSON 字符串，必须二次 parse。
 - Lite 版本不要并入本模型：图片字段名（`image_urls` vs `image_input`）、数量上限（10 vs 14）都不同，是独立产品，见 [Nano-Banana-2-Lite_KIE.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_KIE.md)。
+
+- 官方格式核对（2026-11-08）：官方 `image_input` 最多 10 张，参考图上限由 14 改为 10。
 
 ## 7. 原始链接索引
 

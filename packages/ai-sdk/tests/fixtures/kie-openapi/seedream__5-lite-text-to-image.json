@@ -1,0 +1,74 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/seedream/5-lite-text-to-image.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "seedream/5-lite-text-to-image",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "seedream/5-lite-text-to-image",
+        "enum": [
+          "seedream/5-lite-text-to-image"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "prompt": {
+            "maxLength": 2995,
+            "minLength": 4,
+            "type": "string"
+          },
+          "aspect_ratio": {
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:4",
+              "16:9",
+              "9:16",
+              "2:3",
+              "3:2",
+              "21:9"
+            ],
+            "type": "string"
+          },
+          "quality": {
+            "enum": [
+              "basic",
+              "high",
+              "ultra"
+            ],
+            "type": "string"
+          },
+          "output_format": {
+            "enum": [
+              "png",
+              "jpeg"
+            ],
+            "type": "string"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "quality"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model"
+    ],
+    "type": "object"
+  }
+}

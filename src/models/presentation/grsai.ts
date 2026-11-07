@@ -38,7 +38,14 @@ export const grsaiPresentation: Record<string, ModelPresentation> = {
         optionLabels: resolutionOptionLabels,
       },
     },
-    linkages: [],
+    linkages: [{
+      trigger: 'grsaiGptImage2Channel', effect: 'filterOptions', target: 'grsaiGptImage2AspectRatio',
+      filter: (channel, options) => channel === 'vip' ? options : options.filter(option => !['1:3', '3:1'].includes(String(option.value))),
+    }, {
+      trigger: ['grsaiGptImage2Channel', 'grsaiGptImage2AspectRatio'], effect: 'autoSwitch', target: 'grsaiGptImage2AspectRatio',
+      condition: (_: unknown, params: Record<string, unknown>) => params.grsaiGptImage2Channel !== 'vip' && ['1:3', '3:1'].includes(String(params.grsaiGptImage2AspectRatio)),
+      value: (_: unknown, params: Record<string, unknown>) => params.grsaiGptImage2AspectRatio === '1:3' ? '9:21' : '21:9',
+    }],
   },
 
   'grsai-nano-banana-2-lite': {

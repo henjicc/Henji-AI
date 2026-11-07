@@ -1,0 +1,64 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/hailuo/2-3-image-to-video-standard.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "hailuo/2-3-image-to-video-standard",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "hailuo/2-3-image-to-video-standard"
+        ],
+        "default": "hailuo/2-3-image-to-video-standard"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "6",
+              "10"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "768P",
+              "1080P"
+            ]
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "image_url",
+          "duration",
+          "resolution"
+        ]
+      }
+    }
+  }
+}

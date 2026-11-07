@@ -1,0 +1,52 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/grok-imagine-image-2-0/text-to-image.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "grok-imagine-image-2-0/text-to-image",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "grok-imagine-image-2-0/text-to-image"
+        ],
+        "default": "grok-imagine-image-2-0/text-to-image"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "required": [
+          "prompt",
+          "aspect_ratio"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "2:3",
+              "3:2",
+              "16:9",
+              "9:16"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

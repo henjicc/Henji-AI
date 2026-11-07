@@ -1,0 +1,61 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/kling/image-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "kling-2.6/image-to-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "kling-2.6/image-to-video"
+        ],
+        "default": "kling-2.6/image-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 2500
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 1
+          },
+          "sound": {
+            "type": "boolean"
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "5",
+              "10"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "image_urls",
+          "sound",
+          "duration"
+        ]
+      }
+    }
+  }
+}

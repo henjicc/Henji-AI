@@ -1,0 +1,114 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/gemini-omni-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "gemini-omni-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "gemini-omni-video"
+        ],
+        "default": "gemini-omni-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "audio_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "video_list": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "url",
+                "start",
+                "ends"
+              ],
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "ends": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "character_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "4",
+              "6",
+              "8",
+              "10"
+            ]
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p",
+              "4k"
+            ],
+            "default": "720p"
+          },
+          "seed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "prompt",
+          "duration"
+        ]
+      }
+    }
+  }
+}

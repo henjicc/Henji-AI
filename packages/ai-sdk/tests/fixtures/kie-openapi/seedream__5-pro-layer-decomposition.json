@@ -1,0 +1,64 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/seedream/5-pro-layer-decomposition.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "seedream/5-pro-layer-decomposition",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "seedream/5-pro-layer-decomposition",
+        "enum": [
+          "seedream/5-pro-layer-decomposition"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "prompt": {
+            "maxLength": 5000,
+            "minLength": 0,
+            "type": "string"
+          },
+          "image_url": {
+            "format": "uri",
+            "type": "string"
+          },
+          "size": {
+            "enum": [
+              "auto",
+              "1K",
+              "1.5K",
+              "2K"
+            ],
+            "type": "string"
+          },
+          "output_format": {
+            "default": "jpeg",
+            "enum": [
+              "png",
+              "jpeg"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "image_url",
+          "size"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ],
+    "type": "object"
+  }
+}

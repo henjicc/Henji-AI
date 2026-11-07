@@ -1,0 +1,73 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/happyhorse-1-1/text-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "happyhorse-1-1/text-to-video",
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "happyhorse-1-1/text-to-video"
+        ],
+        "default": "happyhorse-1-1/text-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ],
+            "default": "1080p"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1",
+              "4:3",
+              "3:4",
+              "4:5",
+              "5:4",
+              "9:21",
+              "21:9"
+            ],
+            "default": "16:9"
+          },
+          "duration": {
+            "type": "number",
+            "minimum": 3,
+            "maximum": 15,
+            "multipleOf": 1,
+            "default": 5
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      }
+    }
+  }
+}

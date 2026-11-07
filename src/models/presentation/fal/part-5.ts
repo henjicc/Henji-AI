@@ -287,7 +287,14 @@ export const falPresentationPart5: Record<string, ModelPresentation> = {
         name: { zh: '每轮最大图片数', en: 'Max Images Per Run' },
       },
     },
-    linkages: [],
+    // SDK 里的 1MP 是旧插件的兼容档，低于 Lite 的官方下限（2560×1440），Fal 会自动放大：痕迹AI 不提供，存过的改为 2K。
+    linkages: [{
+      trigger: 'falSeedream50LiteResolution', effect: 'filterOptions', target: 'falSeedream50LiteResolution',
+      filter: (_, options) => options.filter(option => option.value !== '1MP'),
+    }, {
+      trigger: 'falSeedream50LiteResolution', effect: 'autoSwitch', target: 'falSeedream50LiteResolution',
+      condition: value => value === '1MP', value: '2K', noRestore: true,
+    }],
   },
   "fal-ai-seedream-5.0-pro": {
     meta: {

@@ -1,0 +1,84 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/seedream/5-pro-image-to-image.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "seedream/5-pro-image-to-image",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "seedream/5-pro-image-to-image",
+        "enum": [
+          "seedream/5-pro-image-to-image"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "prompt": {
+            "maxLength": 5000,
+            "minLength": 4,
+            "type": "string"
+          },
+          "image_urls": {
+            "items": {
+              "format": "uri",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "aspect_ratio": {
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:4",
+              "16:9",
+              "9:16",
+              "2:3",
+              "3:2",
+              "21:9"
+            ],
+            "type": "string"
+          },
+          "quality": {
+            "enum": [
+              "basic",
+              "high"
+            ],
+            "type": "string"
+          },
+          "output_format": {
+            "default": "png",
+            "enum": [
+              "png",
+              "jpeg"
+            ],
+            "type": "string"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "image_urls",
+          "aspect_ratio",
+          "quality"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ],
+    "type": "object"
+  }
+}

@@ -1,9 +1,7 @@
 /** APIMart MiniMax H3 Max 文生、首尾帧与多模态参考视频模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
-import {
-  countUploadedImages, resolveUploadedImageSources, resolveUploadedVideoDurationSeconds, resolveUploadedVideoSources,
-} from '../shared/mediaPresence'
+import { countUploadedImages, resolveUploadedImageSources, resolveUploadedVideoDurationSeconds, resolveUploadedVideoSources, hasUploadedImage } from '../shared/mediaPresence'
 import type { JsonObject, JsonValue } from '../../types/runtime'
 
 const RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16']
@@ -50,7 +48,7 @@ export const apimartMiniMaxH3MaxModel = defineModel({
       id: 'apimartMiniMaxH3MaxMode', type: 'dropdown', order: 1, default: 'text-image-to-video',
       options: [{ value: 'text-image-to-video' }, { value: 'reference-to-video' }],
     },
-    { id: 'apimartMiniMaxH3MaxAspectRatio', type: 'dropdown', order: 2, default: 'smart', options: [{ value: 'smart' }, ...RATIOS.map(value => ({ value }))] },
+    { id: 'apimartMiniMaxH3MaxAspectRatio', type: 'dropdown', order: 2, visible: { condition: (params) => params.apimartMiniMaxH3MaxMode === 'reference-to-video' || !hasUploadedImage(params) }, default: 'smart', options: [{ value: 'smart' }, ...RATIOS.map(value => ({ value }))] },
     { id: 'apimartMiniMaxH3MaxResolution', type: 'dropdown', order: 3, default: '768P', options: RESOLUTIONS.map(value => ({ value })) },
     { id: 'apimartMiniMaxH3MaxDuration', type: 'number', order: 4, default: 5, min: 5, max: 15, step: 1 },
   ],

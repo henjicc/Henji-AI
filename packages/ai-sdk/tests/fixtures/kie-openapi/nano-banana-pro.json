@@ -1,0 +1,81 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/google/pro-image-to-image.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "nano-banana-pro",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "nano-banana-pro",
+        "enum": [
+          "nano-banana-pro"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "prompt": {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "image_input": {
+            "items": {
+              "format": "uri",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "aspect_ratio": {
+            "default": "1:1",
+            "enum": [
+              "1:1",
+              "2:3",
+              "3:2",
+              "3:4",
+              "4:3",
+              "4:5",
+              "5:4",
+              "9:16",
+              "16:9",
+              "21:9",
+              "auto"
+            ],
+            "type": "string"
+          },
+          "resolution": {
+            "default": "1K",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "type": "string"
+          },
+          "output_format": {
+            "enum": [
+              "png",
+              "jpg"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model"
+    ],
+    "type": "object"
+  }
+}

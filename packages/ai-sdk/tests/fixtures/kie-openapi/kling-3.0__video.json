@@ -1,0 +1,150 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/kling/kling-3-0.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "kling-3.0/video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "kling-3.0/video"
+        ],
+        "default": "kling-3.0/video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "sound": {
+            "type": "boolean"
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "3",
+              "4",
+              "5",
+              "6",
+              "7",
+              "8",
+              "9",
+              "10",
+              "11",
+              "12",
+              "13",
+              "14",
+              "15"
+            ]
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "std",
+              "pro",
+              "4K"
+            ]
+          },
+          "multi_shots": {
+            "type": "boolean"
+          },
+          "multi_prompt": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "prompt": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "duration": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 12
+                }
+              },
+              "required": [
+                "prompt",
+                "duration"
+              ]
+            }
+          },
+          "kling_elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "element_input_urls": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "element_input_audio_urls": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "start_time": {
+                  "type": "integer"
+                },
+                "end_time": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "description",
+                "element_input_urls"
+              ]
+            },
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "sound",
+          "duration",
+          "mode",
+          "multi_shots"
+        ]
+      }
+    }
+  }
+}

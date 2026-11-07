@@ -1,7 +1,7 @@
 /** APIMart Gemini Omni Flash 官方与 Ext 渠道统一模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
-import { countUploadedVideos, resolveUploadedImageSources, resolveUploadedVideoSources } from '../shared/mediaPresence'
+import { countUploadedVideos, resolveUploadedImageSources, resolveUploadedVideoSources, hasUploadedVideo, hasUploadedImage } from '../shared/mediaPresence'
 import type { JsonObject } from '../../types/runtime'
 
 export const apimartGeminiOmniFlashModel = defineModel({
@@ -80,13 +80,15 @@ export const apimartGeminiOmniFlashModel = defineModel({
     {
       id: 'apimartGeminiOmniFlashExtDuration', type: 'dropdown', order: 4,
       default: '6',
-      visible: { condition: (params) => params.apimartGeminiOmniFlashChannel === 'ext' },
+      // 带参考视频时时长跟随视频，不发送。
+      visible: { condition: (params) => params.apimartGeminiOmniFlashChannel === 'ext' && !hasUploadedVideo(params) },
       options: ['4', '6', '8', '10'].map((value) => ({ value }))
     },
     {
       id: 'apimartGeminiOmniFlashGenerationType', type: 'dropdown', order: 5,
       default: 'reference',
-      visible: { condition: (params) => params.apimartGeminiOmniFlashChannel === 'ext' },
+      // 只决定图片的用法，不带图时不发送。
+      visible: { condition: (params) => params.apimartGeminiOmniFlashChannel === 'ext' && hasUploadedImage(params) },
       options: [
         { value: 'reference' },
         { value: 'frame' }

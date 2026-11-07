@@ -130,6 +130,7 @@ export const falPresentationPart7: Record<string, ModelPresentation> = {
         name: { zh: '重绘强度', en: 'Strength' },
       },
     },
-    linkages: [],
+    // 旧版界面允许强度 0，官方要求大于 0：存下的 0 先改为 0.05，提交前的范围校验才不会拒绝旧工程。
+    linkages: [{ trigger: 'falZImageTurboStrength', effect: 'autoSwitch', target: 'falZImageTurboStrength', condition: value => Number(value) < 0.05, value: 0.05, noRestore: true }],
   },
 }

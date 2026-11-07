@@ -1,0 +1,60 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/grok-imagine-image-2-0/image-to-image.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "grok-imagine-image-2-0/image-edit",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "grok-imagine-image-2-0/image-edit"
+        ],
+        "default": "grok-imagine-image-2-0/image-edit"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "2:3",
+              "3:2",
+              "16:9",
+              "9:16",
+              "auto"
+            ]
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 5
+          }
+        },
+        "required": [
+          "aspect_ratio",
+          "image_urls"
+        ]
+      }
+    }
+  }
+}

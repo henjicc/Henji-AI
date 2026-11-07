@@ -119,9 +119,11 @@ export const kieMiniMaxH3Model = defineModel({
                 return { model: 'minimax-h3/reference-to-video', input };
             }
             if (images.length > 0) {
-                input.first_frame_image = images[0];
+                // KIE 图生视频的字段是 first_frame_url / last_frame_url（APIMart 叫 first_frame_image）；
+                // 字段名不认识时平台把请求当成文生视频，报“aspect_ratio is required for text-to-video”（2026-11-08 实调）。
+                input.first_frame_url = images[0];
                 if (images[1])
-                    input.last_frame_image = images[1];
+                    input.last_frame_url = images[1];
                 return { model: 'minimax-h3/image-to-video', input };
             }
             input.aspect_ratio = aspectRatio;

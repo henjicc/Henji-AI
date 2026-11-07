@@ -145,9 +145,13 @@ export const kieSeedanceV1Model = defineModel({
                 if (value && value !== 'smart' && value !== 'auto' && supportedTextRatios.includes(value)) {
                     return value;
                 }
-                const ratioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
-                    ? params.__firstImageRatio
-                    : 1;
+                // 智能比例贴近素材；当前版本不支持的具体比例（Lite 的 21:9、Pro 的 9:21）贴近所选比例本身。
+                const [requestedWidth, requestedHeight] = value.split(':').map(Number);
+                const ratioHint = requestedWidth > 0 && requestedHeight > 0
+                    ? requestedWidth / requestedHeight
+                    : typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+                        ? params.__firstImageRatio
+                        : 1;
                 let best = '1:1';
                 let bestDiff = Number.POSITIVE_INFINITY;
                 for (const ratioText of supportedTextRatios) {

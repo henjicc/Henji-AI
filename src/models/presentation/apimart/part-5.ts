@@ -3,6 +3,7 @@
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
+import { outputCountWithinImageBudget } from '../mediaPresence'
 
 export const apimartPresentationPart5: Record<string, ModelPresentation> = {
   "apimart-seedance-2.0": {
@@ -183,7 +184,7 @@ export const apimartPresentationPart5: Record<string, ModelPresentation> = {
         name: { zh: '生成数量', en: 'Output Count' },
       },
     },
-    linkages: [],
+    linkages: outputCountWithinImageBudget('apimartSeedream50LiteCount', 15),
   },
   "apimart-seedream-5.0-pro": {
     meta: {

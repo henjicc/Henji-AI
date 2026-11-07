@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { hasUploadedImage } from '../shared/mediaPresence';
 export const wan25PreviewModel = defineModel({
     meta: {
         id: 'fal-ai-wan-25-preview',
@@ -30,6 +31,8 @@ export const wan25PreviewModel = defineModel({
             id: 'falWan25AspectRatio',
             order: 2,
             type: 'dropdown',
+            // 图生视频的比例跟随首帧，不发送。
+            visible: { condition: (params: JsonObject) => !hasUploadedImage(params) },
             default: '16:9',
             options: [
                 { value: '16:9' },

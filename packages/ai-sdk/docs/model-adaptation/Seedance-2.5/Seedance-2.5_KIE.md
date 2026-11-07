@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-10-12 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 视频 |
 | 供应商 | KIE.ai（聚合平台） |
 | 平台模型 ID | `bytedance/seedance-2-5` |
@@ -35,7 +35,7 @@
 | `input.aspect_ratio` | string | 可选 | **`adaptive`** | `1:1`、`4:3`、`3:4`、`16:9`、`9:16`、`21:9`、`adaptive` |
 | `input.duration` | integer | 可选 | `5` | **4–30 秒**。特殊值 **`-1`**：自动选择时长——视频编辑任务下匹配输入视频时长，其他任务类型在有效范围内自主选择 |
 | `input.output_format` | string | 可选 | `mp4` | `mp4` / `mov` |
-| `input.web_search` | string | 可选 | — | 是否开启联网搜索（**schema 类型标注为 string，不是 boolean，接入前实测确认**） |
+| `input.web_search` | boolean | 可选 | — | 是否开启联网搜索（官方 OpenAPI 早期标为 string，2026-11-08 复查已改为 boolean） |
 | `input.nsfw_checker` | boolean | 可选 | `false` | `false` 时关闭内容过滤 |
 
 > KIE 的 schema 里出现了 `draft` 的说明（`return_last_frame` 描述提到 `draft=true`），但请求体中**没有 `draft` 字段**，接入前需确认。
@@ -43,7 +43,7 @@
 ### 与 APIMart 的差异
 
 - KIE **没有 `omni_reference_task_type`**（APIMart 用它把编辑 / 延长的异步报错提前成同步报错）
-- KIE 没有 `watermark`、没有 `tools`（改为 `web_search` 布尔/字符串开关）
+- KIE 没有 `watermark`、没有 `tools`（改为 `web_search` 布尔开关）
 - KIE 把首尾帧与参考素材做成**硬互斥**（APIMart 是自动降级为 `reference_image`）
 
 ## 3. 响应结构
@@ -74,7 +74,7 @@
 - **首尾帧与参考素材在 KIE 上是硬互斥**，UI 必须二选一，不能像 APIMart 那样自动降级。
 - `last_frame_url` 不能单独传，必须配 `first_frame_url`。
 - `aspect_ratio` 默认 `adaptive`（2.0 系列默认 `16:9`），跨代不能共用默认值。
-- `web_search` 的 schema 类型是 string 而非 boolean，接入前实测。
+- `web_search` 按官方 OpenAPI 发布尔值（早期文档写 string，已更正）。
 - 有视频输入时计费按「输入 + 输出总时长」。
 - `resultJson` 是 JSON 字符串，必须二次 parse；`return_last_frame` 会改变结构。
 

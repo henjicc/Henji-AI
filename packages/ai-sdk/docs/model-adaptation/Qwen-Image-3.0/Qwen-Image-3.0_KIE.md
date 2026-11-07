@@ -2,15 +2,15 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 图片 |
 | 供应商 | KIE.ai（聚合平台） |
-| 平台模型 ID | 标准版 `qwen3/text-to-image`、`qwen3/image-to-image`；Pro 版 `qwen3-pro/text-to-image`、`qwen3/pro-image-to-image` |
+| 平台模型 ID | 标准版 `qwen3/text-to-image`、`qwen3/image-to-image`；Pro 版 `qwen3/pro-text-to-image`、`qwen3/pro-image-to-image` |
 | 接口形态 | **异步任务**（`createTask` + `recordInfo`） |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录 |
 
-> ⚠️ **文档不一致，接入前必须实测确认**：Pro 文生图页面的 `model` 字段中，`enum` 写的是 `qwen3-pro/text-to-image`，而 `default` 与描述文字写的是 `qwen3/pro-text-to-image`；Pro 图生图页面则统一为 `qwen3/pro-image-to-image`。
+> Pro 文生图的 `model` 曾在 KIE 页面前后不一致（`enum` 写 `qwen3-pro/text-to-image`，`default` 与描述写 `qwen3/pro-text-to-image`）。2026-11-08 复查官方 OpenAPI，`enum` 与 `default` 已统一为 `qwen3/pro-text-to-image`，按它发送。
 
 ## 1. 接入协议
 
@@ -27,7 +27,7 @@
 |---|---|
 | 标准版 文生图 | `qwen3/text-to-image` |
 | 标准版 图生图 | `qwen3/image-to-image` |
-| Pro 版 文生图 | `qwen3-pro/text-to-image`（见上方不一致提示） |
+| Pro 版 文生图 | `qwen3/pro-text-to-image` |
 | Pro 版 图生图 | `qwen3/pro-image-to-image` |
 
 > KIE 上 Qwen Image 3.0 **没有多张输出参数**（无 `n` / `num_images`），一次任务出 1 张。

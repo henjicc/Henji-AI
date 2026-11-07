@@ -1,6 +1,7 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
 import { falOneMegapixelSize } from './imageSizing';
+import { hasUploadedImage } from '../shared/mediaPresence';
 const Z_IMAGE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const;
 export const zImageTurboModel = defineModel({
     meta: {
@@ -18,6 +19,9 @@ export const zImageTurboModel = defineModel({
         },
         {
             id: 'falZImageTurboResolution', type: 'dropdown', order: 2,
+            // 选 1MP 时尺寸固定为一百万像素；带图且比例为智能时尺寸跟随原图（auto）：两种情况都不看分辨率。
+            visible: { condition: (params: JsonObject) => params.falZImageTurboImageSize !== '1MP'
+                    && !(hasUploadedImage(params) && String(params.falZImageTurboAspectRatio || 'smart') === 'smart') },
             default: '1K',
             options: ['1K', '2K'].map((value) => ({ value }))
         },
@@ -49,13 +53,9 @@ export const zImageTurboModel = defineModel({
         },
         {
             id: 'falZImageTurboStrength', type: 'number', order: 8,
-            // 官方取值大于 0、不超过 1；参数下限保留 0，旧工程存的值仍能通过校验，请求时夹到 0.05 以上。
-            default: 0.6, min: 0, max: 1, step: 0.05,
-            visible: { condition: (params: JsonObject) => {
-                    const uploaded = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths : [];
-                    const images = uploaded.length > 0 ? uploaded : (Array.isArray(params.images) ? params.images : []);
-                    return images.length > 0;
-                } }
+            // 官方取值大于 0、不超过 1。旧工程存的 0 由展示层联动在提交前改为 0.05。
+            default: 0.6, min: 0.05, max: 1, step: 0.05,
+            visible: { condition: (params: JsonObject) => hasUploadedImage(params) }
         }
     ],
     endpoints: {
@@ -117,7 +117,7 @@ export const zImageTurboModel = defineModel({
             const longSide = params.falZImageTurboResolution === '2K' ? 2048 : 1024;
             const width = ratio >= 1 ? longSide : longSide * ratio;
             const height = ratio >= 1 ? longSide / ratio : longSide;
-            const megapixels = width * height / 1000000;
+            const megapixels = params.falZImageTurboImageSize === '1MP' ? 1 : width * height / 1000000;
             const count = Math.min(4, Math.max(1, Math.round(Number(params.falZImageTurboNumImages || 1))));
             return count * megapixels * 0.005 + (params.falZImageTurboPromptExpansion === true ? 0.0025 : 0);
         },

@@ -181,7 +181,8 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
       uploadedFilePaths: ['first.png', 'last.png']
     })).toMatchObject({
       model: 'minimax-h3/image-to-video',
-      input: { first_frame_image: 'first.png', last_frame_image: 'last.png' }
+      // 字段名按 KIE 官方 first_frame_url / last_frame_url；写错时平台把请求当成文生视频。
+      input: { first_frame_url: 'first.png', last_frame_url: 'last.png' }
     })
     expect(kieMiniMaxH3Model.request?.builder?.({
       prompt: 'reference',
@@ -306,7 +307,7 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
     })
   })
 
-  it('Seedance 2.5 支持 adaptive、-1 自动时长和字符串联网搜索开关', () => {
+  it('Seedance 2.5 支持 adaptive、-1 自动时长和布尔联网搜索开关', () => {
     expect(kieSeedance25Model.request?.builder?.({
       prompt: 'search and animate',
       kieSeedance25AutoDuration: true,
@@ -315,7 +316,7 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
       input: {
         aspect_ratio: 'adaptive',
         duration: -1,
-        web_search: 'true',
+        web_search: true,
         nsfw_checker: true
       }
     })

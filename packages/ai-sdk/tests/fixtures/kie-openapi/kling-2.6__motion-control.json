@@ -1,0 +1,73 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/kling/motion-control.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "kling-2.6/motion-control",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "kling-2.6/motion-control"
+        ],
+        "default": "kling-2.6/motion-control"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 2500
+          },
+          "input_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 1
+          },
+          "video_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 1
+          },
+          "character_orientation": {
+            "type": "string",
+            "enum": [
+              "image",
+              "video"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ]
+          }
+        },
+        "required": [
+          "input_urls",
+          "video_urls",
+          "character_orientation",
+          "mode"
+        ]
+      }
+    }
+  }
+}

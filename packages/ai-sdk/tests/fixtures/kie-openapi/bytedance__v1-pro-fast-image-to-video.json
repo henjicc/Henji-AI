@@ -1,0 +1,63 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/bytedance/v1-pro-fast-image-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "bytedance/v1-pro-fast-image-to-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "bytedance/v1-pro-fast-image-to-video"
+        ],
+        "default": "bytedance/v1-pro-fast-image-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ],
+            "default": "720p"
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "5",
+              "10"
+            ],
+            "default": "5"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "image_url"
+        ]
+      }
+    }
+  }
+}

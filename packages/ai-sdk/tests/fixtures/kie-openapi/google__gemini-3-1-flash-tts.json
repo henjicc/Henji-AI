@@ -1,0 +1,157 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/google/gemini-3-1-flash-tts.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "google/gemini-3-1-flash-tts",
+  "body": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "google/gemini-3-1-flash-tts"
+        ],
+        "default": "google/gemini-3-1-flash-tts"
+      },
+      "callBackUrl": {
+        "type": "string"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 1
+          },
+          "scene": {
+            "type": "string",
+            "default": ""
+          },
+          "sample_context": {
+            "type": "string",
+            "default": ""
+          },
+          "speakers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "speaker_id": {
+                  "type": "string"
+                },
+                "voice_name": {
+                  "type": "string",
+                  "enum": [
+                    "Achernar",
+                    "Achird",
+                    "Algenib",
+                    "Algieba",
+                    "Alnilam",
+                    "Aoede",
+                    "Autonoe",
+                    "Callirrhoe",
+                    "Charon",
+                    "Despina",
+                    "Enceladus",
+                    "Erinome",
+                    "Fenrir",
+                    "Gacrux",
+                    "Iapetus",
+                    "Kore",
+                    "Laomedeia",
+                    "Leda",
+                    "Orus",
+                    "Puck",
+                    "Pulcherrima",
+                    "Rasalgethi",
+                    "Sadachbia",
+                    "Sadaltager",
+                    "Schedar",
+                    "Sulafat",
+                    "Umbriel",
+                    "Vindemiatrix",
+                    "Zephyr",
+                    "Zubenelgenubi"
+                  ]
+                },
+                "audio_profile": {
+                  "type": "string"
+                },
+                "accent": {
+                  "type": "string",
+                  "enum": [
+                    "Neutral",
+                    "American (Gen)",
+                    "American (Valley)",
+                    "American (South)",
+                    "British (RP)",
+                    "British (Brixton)",
+                    "Transatlantic",
+                    "Australian"
+                  ]
+                },
+                "style": {
+                  "type": "string",
+                  "enum": [
+                    "Vocal Smile",
+                    "Newscaster",
+                    "Whisper",
+                    "Empathetic",
+                    "Promo/Hype",
+                    "Deadpan"
+                  ]
+                },
+                "pace": {
+                  "type": "string",
+                  "enum": [
+                    "Natural",
+                    "Rapid Fire",
+                    "The Drift",
+                    "Staccato"
+                  ]
+                }
+              },
+              "required": [
+                "speaker_id",
+                "voice_name",
+                "accent"
+              ]
+            }
+          },
+          "dialogue_turns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "speaker_id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 10000
+                }
+              },
+              "required": [
+                "speaker_id",
+                "text"
+              ]
+            }
+          }
+        },
+        "required": [
+          "speakers",
+          "dialogue_turns"
+        ]
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ]
+  }
+}

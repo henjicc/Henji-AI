@@ -1,0 +1,67 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/happyhorse-1-1/image-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "happyhorse-1-1/image-to-video",
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "happyhorse-1-1/image-to-video"
+        ],
+        "default": "happyhorse-1-1/image-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 5000,
+            "default": ""
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 1
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ],
+            "default": "1080p"
+          },
+          "duration": {
+            "type": "number",
+            "minimum": 3,
+            "maximum": 15,
+            "multipleOf": 1,
+            "default": 5
+          }
+        },
+        "required": [
+          "image_urls"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/seedream/seedream-v4-text-to-image.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "bytedance/seedream-v4-text-to-image",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "bytedance/seedream-v4-text-to-image",
+        "enum": [
+          "bytedance/seedream-v4-text-to-image"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "prompt": {
+            "maxLength": 5000,
+            "type": "string"
+          },
+          "image_size": {
+            "default": "square_hd",
+            "enum": [
+              "square",
+              "square_hd",
+              "portrait_4_3",
+              "portrait_3_2",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_3_2",
+              "landscape_16_9",
+              "landscape_21_9"
+            ],
+            "type": "string"
+          },
+          "image_resolution": {
+            "default": "1K",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "type": "string"
+          },
+          "max_images": {
+            "default": 1,
+            "maximum": 6,
+            "minimum": 1,
+            "type": "number"
+          },
+          "seed": {
+            "maximum": 1000000,
+            "type": "integer"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model"
+    ],
+    "type": "object"
+  }
+}

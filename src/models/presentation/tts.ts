@@ -21,15 +21,22 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     { zh: 'MiniMax Speech 2.8', en: 'MiniMax Speech 2.8' },
     { falMinimaxSpeechSpec: version, falMinimaxSpeechVoice: voice, falMinimaxSpeechSpeed: speed, falMinimaxSpeechEmotion: emotion },
   ),
-  'fal-qwen3-tts-1.7b': speechModel(
-    { zh: 'Qwen3 TTS 1.7B', en: 'Qwen3 TTS 1.7B' },
-    {
-      falQwen3TtsVoice: voice,
-      falQwen3TtsLanguage: { zh: '语言', en: 'Language' },
-      falQwen3TtsStyle: instruction,
-      falQwen3TtsTemperature: { zh: '表现变化', en: 'Variation' },
-    },
-  ),
+  'fal-qwen3-tts-1.7b': {
+    ...speechModel(
+      { zh: 'Qwen3 TTS 1.7B', en: 'Qwen3 TTS 1.7B' },
+      {
+        falQwen3TtsVoice: voice,
+        falQwen3TtsLanguage: { zh: '语言', en: 'Language' },
+        falQwen3TtsStyle: instruction,
+        falQwen3TtsTemperature: { zh: '表现变化', en: 'Variation' },
+      },
+    ),
+    // 旧版界面允许 0–2，存下的范围外的值先改回官方边界，提交前的范围校验才不会拒绝旧工程。
+    linkages: [
+      { trigger: 'falQwen3TtsTemperature', effect: 'autoSwitch', target: 'falQwen3TtsTemperature', condition: value => Number(value) > 1, value: 1, noRestore: true },
+      { trigger: 'falQwen3TtsTemperature', effect: 'autoSwitch', target: 'falQwen3TtsTemperature', condition: value => Number(value) < 0.1, value: 0.1, noRestore: true },
+    ],
+  },
   'fal-eleven-v3-tts': speechModel(
     { zh: 'Eleven v3', en: 'Eleven v3' },
     {

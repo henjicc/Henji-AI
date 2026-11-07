@@ -1,0 +1,55 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/hailuo/02-text-to-video-standard.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "hailuo/02-text-to-video-standard",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "hailuo/02-text-to-video-standard"
+        ],
+        "default": "hailuo/02-text-to-video-standard"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 1500
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "6",
+              "10"
+            ]
+          },
+          "prompt_optimizer": {
+            "type": "boolean"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "duration"
+        ]
+      }
+    }
+  }
+}

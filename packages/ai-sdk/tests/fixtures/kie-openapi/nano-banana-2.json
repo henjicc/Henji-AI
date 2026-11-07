@@ -1,0 +1,87 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/google/nanobanana2.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "nano-banana-2",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "nano-banana-2"
+        ],
+        "default": "nano-banana-2"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "image_input": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 10
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "2:3",
+              "3:2",
+              "1:4",
+              "4:1",
+              "3:4",
+              "4:3",
+              "4:5",
+              "5:4",
+              "1:8",
+              "8:1",
+              "9:16",
+              "16:9",
+              "21:9",
+              "auto"
+            ],
+            "default": "auto"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "default": "1K"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpg"
+            ],
+            "default": "jpg"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      }
+    }
+  }
+}

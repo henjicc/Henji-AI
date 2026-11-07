@@ -100,6 +100,8 @@ export const veo31Model = defineModel({
             id: 'falVeo31FastMode',
             order: 7,
             type: 'switch',
+            // 参考生视频只有标准端点，没有快速版。
+            visible: { condition: 'falVeo31Mode !== "reference-to-video"' },
             default: false
         },
         {
@@ -185,7 +187,7 @@ export const veo31Model = defineModel({
         currency: '$',
         calculator: (params) => {
             const duration = Number(params.falVeo31VideoDuration) || 8;
-            const fastMode = params.falVeo31FastMode === true;
+            const fastMode = params.falVeo31FastMode === true && params.falVeo31Mode !== 'reference-to-video';
             const generateAudio = params.falVeo31GenerateAudio !== false;
             const rate = fastMode
                 ? (generateAudio ? 0.15 : 0.1)

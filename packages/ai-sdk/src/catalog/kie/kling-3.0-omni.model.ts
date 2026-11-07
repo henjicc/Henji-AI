@@ -1,6 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
-import { hasUploadedVideo } from './mediaSources';
+import { hasUploadedImage, hasUploadedVideo } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieKling30OmniModel = defineModel({
     meta: {
@@ -24,7 +24,7 @@ export const kieKling30OmniModel = defineModel({
             },
             {
                 when: 'kieKling30OmniMode === "transformation"',
-                images: { max: 7 },
+                images: { max: 4 },
                 videos: { exact: 1 }
             },
             {
@@ -73,6 +73,9 @@ export const kieKling30OmniModel = defineModel({
             id: 'kieKling30OmniAspectRatio',
             type: 'dropdown',
             order: 2,
+            // 图生视频、只带视频的风格转换由构建器固定发 auto，比例跟随素材。
+            visible: { condition: (params) => params.kieKling30OmniMode !== 'image-to-video'
+                    && !(['transformation', 'reference-to-video'].includes(String(params.kieKling30OmniMode)) && hasUploadedVideo(params) && !hasUploadedImage(params)) },
             default: 'smart',
             options: [
                 { value: 'smart' },
@@ -96,6 +99,8 @@ export const kieKling30OmniModel = defineModel({
             id: 'kieKling30OmniDuration',
             type: 'dropdown',
             order: 4,
+            // 只带视频的风格转换与参考生视频时长跟随视频，不发送。
+            visible: { condition: (params: JsonObject) => !(['transformation', 'reference-to-video'].includes(String(params.kieKling30OmniMode)) && hasUploadedVideo(params) && !hasUploadedImage(params)) },
             default: '5',
             options: Array.from({ length: 13 }, (_, index) => {
                 const value = String(index + 3);
@@ -106,6 +111,8 @@ export const kieKling30OmniModel = defineModel({
             id: 'kieKling30OmniAudio',
             type: 'switch',
             order: 5,
+            // 带参考视频的参考生视频官方只允许关闭音频。
+            visible: { condition: (params: JsonObject) => !(params.kieKling30OmniMode === 'reference-to-video' && hasUploadedVideo(params)) },
             default: false
         }
     ],
@@ -150,7 +157,7 @@ export const kieKling30OmniModel = defineModel({
                 aspect_ratio: aspectRatio,
                 audio: params.kieKling30OmniAudio === true
             };
-            if (!input.prompt && mode !== 'transformation')
+            if (!input.prompt)
                 throw new Error('Kling 3.0 Omni 的提示词不能为空');
             if (mode === 'image-to-video') {
                 input.aspect_ratio = 'auto';
@@ -158,14 +165,37 @@ export const kieKling30OmniModel = defineModel({
                     input.image_urls = [images[0]];
                 return { model: 'kling-3.0-omni/image-to-video', input };
             }
+            // 官方 OpenAPI 的风格转换与参考生视频按“只带视频 / 视频加图 / 只带图”分成互斥的几种请求体，
+            // 多余字段会被拒绝：只带视频时不传时长和图，比例只能 auto；视频加图时最多 4 张图；带视频的参考生视频不能开音频。
+            if (videos.length > 0 && images.length > 4)
+                throw new Error('Kling 3.0 Omni 带参考视频时最多 4 张参考图');
+            if (mode === 'reference-to-video' && images.length + videos.length === 0)
+                throw new Error('Kling 3.0 Omni 参考生视频至少需要一张参考图或一段参考视频');
             if (mode === 'transformation') {
+                const transformation: JsonObject = { prompt: input.prompt, resolution: input.resolution, audio: input.audio };
                 if (videos[0])
-                    input.video_urls = [videos[0]];
-                if (images.length > 0)
-                    input.image_urls = images.slice(0, 7);
-                if (videos.length > 0 && images.length === 0)
-                    input.aspect_ratio = 'auto';
-                return { model: 'kling-3.0-omni/transformation', input };
+                    transformation.video_urls = [videos[0]];
+                if (images.length > 0) {
+                    transformation.image_urls = images;
+                    transformation.duration = String(input.duration);
+                    transformation.aspect_ratio = aspectRatio;
+                }
+                else {
+                    transformation.aspect_ratio = 'auto';
+                }
+                return { model: 'kling-3.0-omni/transformation', input: transformation };
+            }
+            if (mode === 'reference-to-video' && videos.length > 0) {
+                const reference: JsonObject = { prompt: input.prompt, resolution: input.resolution, video_urls: [videos[0]], audio: false };
+                if (images.length > 0) {
+                    reference.image_urls = images;
+                    reference.duration = input.duration;
+                    reference.aspect_ratio = aspectRatio;
+                }
+                else {
+                    reference.aspect_ratio = 'auto';
+                }
+                return { model: 'kling-3.0-omni/reference-to-video', input: reference };
             }
             if (mode === 'reference-to-video') {
                 if (images.length > 0)
@@ -180,9 +210,14 @@ export const kieKling30OmniModel = defineModel({
     pricing: {
         currency: '$',
         calculator: (params) => {
-            const duration = Math.min(15, Math.max(3, Number(params.kieKling30OmniDuration || 5)));
-            const resolution = String(params.kieKling30OmniResolution || '720p');
             const hasVideoInput = hasUploadedVideo(params);
+            // 只带视频的风格转换与参考生视频不发时长，输出跟随视频，按视频时长估价。
+            const followsVideo = hasVideoInput && !hasUploadedImage(params) && ['transformation', 'reference-to-video'].includes(String(params.kieKling30OmniMode));
+            const videoSeconds = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0 ? params.__firstVideoDurationSeconds : 10;
+            const duration = followsVideo
+                ? Math.min(10, Math.max(3, Math.ceil(videoSeconds)))
+                : Math.min(15, Math.max(3, Number(params.kieKling30OmniDuration || 5)));
+            const resolution = String(params.kieKling30OmniResolution || '720p');
             if (resolution === '4k')
                 return duration * 0.335;
             if (hasVideoInput || params.kieKling30OmniMode === 'transformation') {

@@ -55,6 +55,7 @@ export const kieGrokImagineModel = defineModel({
             id: 'kieGrokImagineAspectRatio',
             type: 'dropdown',
             order: 3,
+            visible: { condition: 'kieGrokImagineMode !== "image-to-image"' },
             default: '1:1',
             options: [
                 { value: '1:1' },
@@ -77,7 +78,8 @@ export const kieGrokImagineModel = defineModel({
             const aspectRatio = params.kieGrokImagineAspectRatio || params.aspect_ratio;
             const mode = params.kieGrokImagineMode === 'image-to-image' ? 'image-to-image' : 'text-to-image';
             const input: JsonObject = { prompt };
-            if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
+            // 图生图接口没有比例字段（官方 OpenAPI），比例跟随原图。
+            if (mode !== 'image-to-image' && aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
                 input.aspect_ratio = aspectRatio;
             }
             if (mode === 'image-to-image') {

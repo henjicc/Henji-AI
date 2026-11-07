@@ -1,6 +1,7 @@
 /** APIMart Kling 3.0 Omni 多模态视频模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
+import { hasUploadedVideo } from '../shared/mediaPresence'
 import type { JsonValue, JsonObject } from '../../types/runtime'
 
 export const apimartKling30OmniModel = defineModel({
@@ -20,6 +21,8 @@ export const apimartKling30OmniModel = defineModel({
   params: [
     {
       id: 'apimartKling30OmniMode', type: 'dropdown', order: 1,
+      // 带参考视频时走 video_list，首尾帧 / 参考图模式与生成音频都不生效。
+      visible: { condition: (params) => !hasUploadedVideo(params) },
       default: 'text-image-to-video',
       options: [
         { value: 'text-image-to-video' },
@@ -38,18 +41,23 @@ export const apimartKling30OmniModel = defineModel({
     },
     {
       id: 'apimartKling30OmniDuration', type: 'number', order: 4,
+      // 待编辑视频（base）的输出时长跟随视频。
+      visible: { condition: (params) => !(hasUploadedVideo(params) && params.apimartKling30OmniVideoReferenceType !== 'feature') },
       default: 5, min: 3, max: 15, step: 1
     },
     {
       id: 'apimartKling30OmniAudio', type: 'switch', order: 5,
+      visible: { condition: (params) => !hasUploadedVideo(params) },
       default: false
     },
     {
       id: 'apimartKling30OmniKeepOriginalSound', type: 'switch', order: 6,
+      visible: { condition: (params) => hasUploadedVideo(params) },
       default: false
     },
     {
       id: 'apimartKling30OmniVideoReferenceType', type: 'dropdown', order: 7,
+      visible: { condition: (params) => hasUploadedVideo(params) },
       default: 'base',
       options: [
         { value: 'base' },
@@ -83,6 +91,7 @@ export const apimartKling30OmniModel = defineModel({
           keep_original_sound: params.apimartKling30OmniKeepOriginalSound === true ? 'yes' : 'no'
         }]
         if (referenceType === 'feature' && images.length > 0) body.image_urls = images.slice(0, 1)
+        else delete body.duration
       } else {
         if (images.length > 0) {
           if (params.apimartKling30OmniMode === 'reference-to-video') body.image_urls = images.slice(0, 7)

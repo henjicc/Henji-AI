@@ -1,0 +1,61 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/kling/text-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "kling-2.6/text-to-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "kling-2.6/text-to-video"
+        ],
+        "default": "kling-2.6/text-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 2500
+          },
+          "sound": {
+            "type": "boolean"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "5",
+              "10"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "sound",
+          "aspect_ratio",
+          "duration"
+        ]
+      }
+    }
+  }
+}

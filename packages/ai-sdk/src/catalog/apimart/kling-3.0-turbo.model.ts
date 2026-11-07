@@ -1,6 +1,7 @@
 /** APIMart Kling 3.0 Turbo 视频模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
+import { hasUploadedImage } from '../shared/mediaPresence'
 import type { JsonValue, JsonObject } from '../../types/runtime'
 
 export const apimartKling30TurboModel = defineModel({
@@ -14,6 +15,8 @@ export const apimartKling30TurboModel = defineModel({
   params: [
     {
       id: 'apimartKling30TurboAspectRatio', type: 'dropdown', order: 1,
+      // 图生视频的比例跟随首帧，接口不收比例。
+      visible: { condition: (params) => !hasUploadedImage(params) },
       default: 'smart',
       options: [{ value: 'smart' }, ...['16:9', '9:16', '1:1'].map((ratio) => ({ value: ratio }))]
     },

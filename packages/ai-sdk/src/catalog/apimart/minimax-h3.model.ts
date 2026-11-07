@@ -1,7 +1,7 @@
 /** APIMart MiniMax H3 文生、首尾帧与多模态参考视频模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
-import { countUploadedImages, resolveUploadedVideoDurationSeconds } from '../shared/mediaPresence'
+import { countUploadedImages, resolveUploadedVideoDurationSeconds, hasUploadedImage } from '../shared/mediaPresence'
 import type { JsonValue, JsonObject } from '../../types/runtime'
 
 export const apimartMiniMaxH3Model = defineModel({
@@ -29,6 +29,8 @@ export const apimartMiniMaxH3Model = defineModel({
     },
     {
       id: 'apimartMiniMaxH3AspectRatio', type: 'dropdown', order: 2,
+      // 首帧、首尾帧时比例由图片决定，不发送。
+      visible: { condition: (params) => params.apimartMiniMaxH3Mode === 'reference-to-video' || !hasUploadedImage(params) },
       default: 'smart',
       options: [
         { value: 'smart' },

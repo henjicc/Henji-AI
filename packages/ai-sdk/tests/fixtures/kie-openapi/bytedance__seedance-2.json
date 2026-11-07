@@ -1,0 +1,111 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/bytedance/seedance-2.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "bytedance/seedance-2",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "bytedance/seedance-2"
+        ],
+        "default": "bytedance/seedance-2"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 20000
+          },
+          "first_frame_url": {
+            "type": "string"
+          },
+          "last_frame_url": {
+            "type": "string"
+          },
+          "reference_image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 9
+          },
+          "reference_video_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 3
+          },
+          "reference_audio_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 3
+          },
+          "return_last_frame": {
+            "type": "boolean",
+            "default": false,
+            "deprecated": true
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "default": true
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p",
+              "4k"
+            ],
+            "default": "720p"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:4",
+              "16:9",
+              "9:16",
+              "21:9",
+              "adaptive"
+            ],
+            "default": "16:9"
+          },
+          "duration": {
+            "type": "integer",
+            "default": 5
+          },
+          "web_search": {
+            "type": "boolean"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

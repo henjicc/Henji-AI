@@ -1,0 +1,350 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/kling/v3-omni-image-to-video.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "kling-3.0-omni/image-to-video",
+  "body": {
+    "type": "object",
+    "required": [
+      "model"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "kling-3.0-omni/image-to-video"
+        ],
+        "default": "kling-3.0-omni/image-to-video"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "prompt",
+              "image_urls"
+            ],
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "maxLength": 3072,
+                "pattern": "^.*\\S.*$"
+              },
+              "image_urls": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^(https?|oss)://"
+                }
+              },
+              "duration": {
+                "type": "integer",
+                "enum": [
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10,
+                  11,
+                  12,
+                  13,
+                  14,
+                  15
+                ],
+                "default": 5,
+                "minimum": 3,
+                "maximum": 15
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "720p",
+                  "1080p",
+                  "4k"
+                ],
+                "default": "720p"
+              },
+              "aspect_ratio": {
+                "type": "string",
+                "enum": [
+                  "16:9",
+                  "9:16",
+                  "1:1",
+                  "auto"
+                ],
+                "default": "auto"
+              },
+              "audio": {
+                "type": "boolean"
+              },
+              "customize_multi_shots": {
+                "type": "boolean",
+                "default": false
+              },
+              "prefer_multi_shots": {
+                "type": "boolean"
+              },
+              "multi_prompt": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 6,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "duration",
+                    "prompt"
+                  ],
+                  "properties": {
+                    "duration": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 12
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  }
+                }
+              },
+              "elements": {
+                "type": "array",
+                "maxItems": 3,
+                "default": [],
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "description",
+                    "element_input_urls"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "element_input_urls": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 4,
+                      "items": {
+                        "type": "string",
+                        "format": "uri",
+                        "pattern": "^(https?|oss)://"
+                      }
+                    },
+                    "element_input_audio_urls": {
+                      "type": "array",
+                      "default": [],
+                      "items": {
+                        "type": "string",
+                        "format": "uri",
+                        "pattern": "^(https?|oss)://"
+                      }
+                    },
+                    "start_time": {
+                      "type": "integer",
+                      "default": 0,
+                      "minimum": 0
+                    },
+                    "end_time": {
+                      "type": "integer",
+                      "default": 8000,
+                      "minimum": 3000
+                    }
+                  }
+                }
+              }
+            },
+            "allOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "prompt",
+              "image_urls"
+            ],
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "maxLength": 3072,
+                "pattern": "^.*\\S.*$"
+              },
+              "image_urls": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^(https?|oss)://"
+                }
+              },
+              "duration": {
+                "type": "integer",
+                "enum": [
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10,
+                  11,
+                  12,
+                  13,
+                  14,
+                  15
+                ],
+                "default": 5,
+                "minimum": 3,
+                "maximum": 15
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "720p",
+                  "1080p",
+                  "4k"
+                ],
+                "default": "720p"
+              },
+              "aspect_ratio": {
+                "type": "string",
+                "enum": [
+                  "16:9",
+                  "9:16",
+                  "1:1",
+                  "auto"
+                ],
+                "default": "auto"
+              },
+              "audio": {
+                "type": "boolean"
+              },
+              "customize_multi_shots": {
+                "type": "boolean",
+                "default": false
+              },
+              "prefer_multi_shots": {
+                "type": "boolean"
+              },
+              "multi_prompt": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 6,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "duration",
+                    "prompt"
+                  ],
+                  "properties": {
+                    "duration": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 12
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  }
+                }
+              },
+              "elements": {
+                "type": "array",
+                "maxItems": 3,
+                "default": [],
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "description",
+                    "element_input_urls"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "element_input_urls": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 4,
+                      "items": {
+                        "type": "string",
+                        "format": "uri",
+                        "pattern": "^(https?|oss)://"
+                      }
+                    },
+                    "element_input_audio_urls": {
+                      "type": "array",
+                      "default": [],
+                      "items": {
+                        "type": "string",
+                        "format": "uri",
+                        "pattern": "^(https?|oss)://"
+                      }
+                    },
+                    "start_time": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "end_time": {
+                      "type": "integer",
+                      "default": 8000
+                    }
+                  }
+                }
+              }
+            },
+            "allOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  }
+}

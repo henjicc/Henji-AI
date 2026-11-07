@@ -1,0 +1,99 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/qwen3/image-to-image.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "qwen3/image-to-image",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "qwen3/image-to-image",
+        "enum": [
+          "qwen3/image-to-image"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "image_urls": {
+            "items": {
+              "format": "uri",
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "type": "array"
+          },
+          "prompt": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "resolution": {
+            "default": "1K",
+            "enum": [
+              "1K",
+              "2K"
+            ],
+            "type": "string"
+          },
+          "image_size": {
+            "default": "16:9",
+            "enum": [
+              "1:1",
+              "3:2",
+              "2:3",
+              "4:3",
+              "3:4",
+              "16:9",
+              "9:16",
+              "21:9"
+            ],
+            "type": "string"
+          },
+          "output_format": {
+            "enum": [
+              "png",
+              "jpeg"
+            ],
+            "type": "string"
+          },
+          "prompt_extend": {
+            "default": true,
+            "type": "boolean"
+          },
+          "negative_prompt": {
+            "maxLength": 5000,
+            "minLength": 0,
+            "type": "string"
+          },
+          "seed": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "nsfw_checker": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "image_urls",
+          "prompt"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ],
+    "type": "object"
+  }
+}

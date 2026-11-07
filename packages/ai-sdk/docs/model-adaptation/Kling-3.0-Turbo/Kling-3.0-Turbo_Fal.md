@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 视频 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `fal-ai/kling-video/v3/turbo/{pro,standard}/{text-to-video,image-to-video}` |
@@ -70,6 +70,8 @@ Turbo 没有音频开关，因此没有有声 / 无声的价差。
 - **`prompt` 与 `multi_prompt` 互斥**，且多镜头总时长 ≤ 15 s。
 - 图生视频字段是 `image_url`（**单字符串**），与 KIE 的 `image_urls`（数组）、APIMart 的 `first_frame_image` 都不同。
 - Turbo 没有音频，产品上若强调「有声」需引导用户改用 Kling 3.0 或 Omni。
+
+- 界面与请求一致（2026-11-08“所选即所发”离线检查）：带首帧时图生视频端点没有比例字段，比例参数在带图时隐藏。
 
 ## 7. 原始链接索引
 

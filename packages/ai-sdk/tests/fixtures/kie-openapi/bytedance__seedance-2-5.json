@@ -1,0 +1,120 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/bytedance/seedance-2-5.md",
+    "collectedAt": "2026-11-07",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "bytedance/seedance-2-5",
+  "body": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "bytedance/seedance-2-5"
+        ],
+        "default": "bytedance/seedance-2-5"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 20480
+          },
+          "first_frame_url": {
+            "type": "string"
+          },
+          "last_frame_url": {
+            "type": "string"
+          },
+          "reference_image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 30
+          },
+          "reference_video_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 10
+          },
+          "reference_audio_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "maxItems": 10
+          },
+          "return_last_frame": {
+            "type": "boolean",
+            "default": false
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "default": true
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ],
+            "default": "720p"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:4",
+              "16:9",
+              "9:16",
+              "21:9",
+              "adaptive"
+            ],
+            "default": "adaptive"
+          },
+          "duration": {
+            "type": "integer",
+            "default": 5
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "mp4",
+              "mov"
+            ],
+            "default": "mp4"
+          },
+          "web_search": {
+            "type": "boolean"
+          },
+          "draft": {
+            "type": "boolean",
+            "default": false
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

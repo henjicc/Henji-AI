@@ -19,7 +19,8 @@ export const kieGemini31FlashTtsModel = defineModel({
     builder: (params): JsonObject => {
       const speakers = Array.isArray(params.kieGeminiTtsSpeakers) && params.kieGeminiTtsSpeakers.length > 0
         ? params.kieGeminiTtsSpeakers
-        : [{ speaker_id: 'Speaker 1', voice_name: speechString(params.kieGeminiTtsVoice) ?? 'Fenrir' }]
+        // 官方每个说话人必填 accent，没有口音设置时用 Neutral。
+        : [{ speaker_id: 'Speaker 1', voice_name: speechString(params.kieGeminiTtsVoice) ?? 'Fenrir', accent: 'Neutral' }]
       const dialogueTurns = Array.isArray(params.kieGeminiTtsDialogueTurns) && params.kieGeminiTtsDialogueTurns.length > 0
         ? params.kieGeminiTtsDialogueTurns
         : [{ speaker_id: 'Speaker 1', text: speechText(params) }]

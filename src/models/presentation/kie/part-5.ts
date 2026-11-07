@@ -3,6 +3,7 @@
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
+import { uploadedImageCount } from '../mediaPresence'
 
 export const kiePresentationPart5: Record<string, ModelPresentation> = {
   "kie-seedance-2.0": {
@@ -238,13 +239,19 @@ export const kiePresentationPart5: Record<string, ModelPresentation> = {
     },
     linkages: [
     {
-      trigger: 'uploadedImages',
+      trigger: 'kieSeedanceV1Version', effect: 'filterOptions', target: 'kieSeedanceV1AspectRatio',
+      filter: (version, options) => options.filter(option => String(option.value) !== (version === 'pro' ? '9:21' : '21:9')),
+    },
+    {
+      trigger: ['kieSeedanceV1Version', 'kieSeedanceV1AspectRatio'], effect: 'autoSwitch', target: 'kieSeedanceV1AspectRatio',
+      condition: (_: unknown, params: Record<string, unknown>) => params.kieSeedanceV1AspectRatio === (params.kieSeedanceV1Version === 'pro' ? '9:21' : '21:9'),
+      value: (_: unknown, params: Record<string, unknown>) => params.kieSeedanceV1Version === 'pro' ? '9:16' : '16:9',
+    },
+    {
+      trigger: ['images', 'uploadedImages'],
       effect: 'autoSwitch',
       target: 'kieSeedanceV1FastMode',
-      condition: (images: string[], allParams: Record<string, unknown>) => {
-        const imageCount = images?.length || 0
-        return imageCount !== 1 && allParams.kieSeedanceV1FastMode === true
-      },
+      condition: (_: unknown, allParams: Record<string, unknown>) => uploadedImageCount(allParams) !== 1 && allParams.kieSeedanceV1FastMode === true,
       value: false,
       noRestore: true
     },

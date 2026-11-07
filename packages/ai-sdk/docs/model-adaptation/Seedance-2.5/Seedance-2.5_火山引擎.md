@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-11-07 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 视频 |
 | 供应商 | 火山方舟（官方） |
 | 项目模型 ID | `volcengine-seedance-2.5`（通用标识 `seedance-2.5`） |
@@ -83,6 +83,8 @@
 - 未接入：`draft` 样片模式、`output_format: mov`（产品约定不暴露输出格式）、`priority`、`callback_url`、`execution_expires_after`、`safety_identifier`。
 - 本地图片、音频由方舟官方支持的 Data URI 发送；本地读出的 `audio/mpeg`、`audio/x-wav` 等 MIME 在发送前改成官方格式名 `mp3` / `wav`。
 - Fixture：`packages/ai-sdk/tests/fixtures/volcengine/video-*.json`；状态迁移与取消测试：`packages/ai-sdk/tests/providers/video-async-official.test.ts`；请求构建与价格：`packages/ai-sdk/tests/catalog/official-videos.test.ts`。未做真实付费调用。
+
+- 界面与请求一致（2026-11-08“所选即所发”离线检查）：首帧 / 首尾帧与编辑、延长任务只接受 adaptive，比例参数在这些情况下隐藏。
 
 ## 7. 原始链接索引
 

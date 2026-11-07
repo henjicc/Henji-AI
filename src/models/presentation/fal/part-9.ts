@@ -5,6 +5,13 @@ import type { Linkage } from '@/core/types/Linkage'
 import type { ModelPresentation, ParamOptionPresentation, ParamPresentationEntry } from '@/core/types/ModelPresentation'
 import { falPresentationPart1 } from './part-1'
 import { kling40ElementsPresentation, kling40ShotsPresentation } from '../kling-4.0'
+import { uploadedImageCount } from '../mediaPresence'
+
+/** 首尾帧（两张图）与延长视频最长 10 秒，其余 15 秒；与 SDK 构建器的夹取一致。 */
+function falGeminiOmni12MaxSeconds(params: Record<string, unknown>): number {
+  const mode = params.falGeminiOmni12Mode
+  return mode === 'video-extension' || ((mode === undefined || mode === 'text-image-to-video') && uploadedImageCount(params) >= 2) ? 10 : 15
+}
 
 type Labels = Record<string, ParamOptionPresentation>
 
@@ -203,7 +210,14 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
         tooltip: { zh: '首尾帧与延长视频最长 10 秒，其余最长 15 秒。', en: 'Up to 10 seconds with an end frame or when extending; otherwise up to 15.' },
       },
     },
-    linkages: [],
+    linkages: [{
+      trigger: ['falGeminiOmni12Mode', 'images', 'uploadedImages'], effect: 'filterRange', target: 'falGeminiOmni12Duration',
+      filter: (_, params) => ({ min: 3, max: falGeminiOmni12MaxSeconds(params), step: 1 }),
+    }, {
+      trigger: ['falGeminiOmni12Mode', 'images', 'uploadedImages'], effect: 'autoSwitch', target: 'falGeminiOmni12Duration',
+      condition: (_, params) => Number(params.falGeminiOmni12Duration) > falGeminiOmni12MaxSeconds(params),
+      value: 10, noRestore: true,
+    }],
   },
   'fal-ai-grok-imagine-video-1.5': {
     meta: meta('fal-ai-grok-imagine-video-1.5', 'Grok Imagine Video 1.5'),

@@ -1,6 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonObject } from "../../types/runtime";
-import { resolveKieImageSources } from './mediaSources';
+import { hasUploadedImage, resolveKieImageSources } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 export const kieGrokImagineVideoModel = defineModel({
     meta: {
@@ -26,6 +26,8 @@ export const kieGrokImagineVideoModel = defineModel({
             id: 'kieGrokImagineVideoAspectRatio',
             type: 'dropdown',
             order: 1,
+            // 图生视频的比例跟随图片，不发送。
+            visible: { condition: (params: JsonObject) => !hasUploadedImage(params) },
             default: '2:3',
             options: [
                 { value: '2:3' },
@@ -81,7 +83,8 @@ export const kieGrokImagineVideoModel = defineModel({
             const model = hasImages
                 ? 'grok-imagine/image-to-video'
                 : 'grok-imagine/text-to-video';
-            const input: JsonObject = { prompt, duration, resolution };
+            // 官方图生视频端点的 duration 是字符串，文生视频端点是数字。
+            const input: JsonObject = { prompt, duration: hasImages ? String(duration) : duration, resolution };
             if (!hasImages && aspectRatio) {
                 input.aspect_ratio = aspectRatio;
             }

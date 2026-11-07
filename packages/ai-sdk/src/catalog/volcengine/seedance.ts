@@ -1,7 +1,7 @@
 /** 火山方舟官方 Seedance 2.5 / 2.0 系列视频生成模型的共用运行时契约。 */
 
 import { defineModel } from '../defineModel'
-import { resolveUploadedImageSources, resolveUploadedVideoDurationSeconds, resolveUploadedVideoSources } from '../shared/mediaPresence'
+import { hasUploadedImage, resolveUploadedImageSources, resolveUploadedVideoDurationSeconds, resolveUploadedVideoSources } from '../shared/mediaPresence'
 import type { RuntimeParamDef } from '../../types/model'
 import type { JsonObject, JsonValue } from '../../types/runtime'
 
@@ -85,6 +85,10 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
     }] : []),
     {
       id: key('AspectRatio'), type: 'dropdown', order: 3,
+      // 2.5 的首帧 / 首尾帧与编辑、延长任务只接受 adaptive，比例跟随素材。
+      ...(is25 ? { visible: { condition: (params: JsonObject) => params[key('Mode')] === 'reference-to-video'
+        ? !['edit', 'extend'].includes(String(params[key('TaskType')]))
+        : !hasUploadedImage(params) } } : {}),
       default: 'smart',
       options: [{ value: 'smart' }, ...['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'].map((value) => ({ value }))],
     },
