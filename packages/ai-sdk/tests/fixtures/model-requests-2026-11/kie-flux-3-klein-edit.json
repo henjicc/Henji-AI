@@ -1,0 +1,126 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/flux3/klein-edit-image.md",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official request schema; descriptions, examples and documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "flux-3/klein-edit-image"
+        ],
+        "default": "flux-3/klein-edit-image"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "image_urls": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "pattern": "^https?://.+"
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:4",
+              "3:2",
+              "2:3",
+              "16:9",
+              "9:16",
+              "21:9",
+              "9:21",
+              "auto"
+            ],
+            "default": "auto"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "default": "1K"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 4096
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 4096
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg",
+              "webp"
+            ],
+            "default": "png"
+          },
+          "num_images": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4,
+            "default": 1
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "enhance_prompt": {
+            "type": "boolean",
+            "enum": [
+              true,
+              false
+            ],
+            "default": true
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "image_urls"
+        ],
+        "dependencies": {
+          "width": [
+            "height"
+          ],
+          "height": [
+            "width"
+          ]
+        }
+      }
+    }
+  }
+}

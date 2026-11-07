@@ -1,0 +1,91 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/gpt/gpt-image-2-6-economy-text-to-image.md",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official request schema; descriptions, examples and documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "gpt-image-2-6/economy-text-to-image"
+        ],
+        "default": "gpt-image-2-6/economy-text-to-image"
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "1:1",
+              "16:9",
+              "9:16",
+              "3:2",
+              "2:3",
+              "21:9",
+              "4:3"
+            ],
+            "default": "auto"
+          },
+          "background": {
+            "type": "string",
+            "enum": [
+              "transparent",
+              "opaque",
+              "auto"
+            ],
+            "default": "auto"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "gif"
+            ],
+            "default": "png"
+          },
+          "frame_count": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "4",
+              "9",
+              "16",
+              "25",
+              "36",
+              "64"
+            ],
+            "default": "auto"
+          },
+          "frame_duration_ms": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

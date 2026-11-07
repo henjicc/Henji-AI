@@ -1,6 +1,6 @@
 /** Grsai 模型的展示补丁：i18n 文案、联动、面板布局。按模型 id 关联运行时定义。 */
 
-import { sharedFieldText, sharedOptionText } from '@/core/i18n/modelText'
+import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
 
 const RATIO_LABELS = [
@@ -126,5 +126,49 @@ export const grsaiPresentation: Record<string, ModelPresentation> = {
         value: '2K',
       },
     ],
+  },
+  'grsai-gpt-image-2.6': {
+    meta: {
+      name: { key: 'meta.name', fallback: 'GPT Image 2.6' },
+      i18nScope: 'models.defs.grsai-gpt-image-2.6',
+    },
+    params: {
+      grsaiGpt26AspectRatio: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: { smart: { label: sharedOptionText('smart') }, ...ratioOptionLabels },
+      },
+    },
+    linkages: [],
+  },
+
+  'grsai-wan-3.0': {
+    meta: {
+      name: { key: 'meta.name', fallback: 'Wan 3.0' },
+      i18nScope: 'models.defs.grsai-wan-3.0',
+    },
+    params: {
+      grsaiWan30Mode: {
+        name: sharedFieldText('mode'),
+        role: 'mode',
+        optionLabels: {
+          'text-image-to-video': { label: sharedModeText('textImageToVideo') },
+          'reference-to-video': { label: sharedModeText('referenceToVideo') },
+        },
+        tooltip: {
+          zh: '文/图生视频：可传首帧，或首帧加尾帧。参考生视频：最多 10 张参考图和 5 段参考音频（每段不超过 15 秒）。',
+          en: 'Text/Image to Video takes a first frame, or first and last frames. Reference mode takes up to 10 images and 5 audio clips (15 s each at most).',
+        },
+      },
+      grsaiWan30AspectRatio: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: { smart: { label: sharedOptionText('smart') }, ...ratioOptionLabels },
+      },
+      grsaiWan30Resolution: {
+        name: sharedFieldText('resolution'),
+        optionLabels: { '480p': { label: '480p' }, '720p': { label: '720p' }, '1080p': { label: '1080p' } },
+      },
+      grsaiWan30Duration: { name: sharedFieldText('duration') },
+    },
+    linkages: [],
   },
 }

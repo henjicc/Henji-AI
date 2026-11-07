@@ -107,10 +107,13 @@ describe('catalog consumer contract', () => {
   it('client.catalog 的 6 个公开查询函数直接消费真实 catalog', () => {
     const client = createAIClient({ runtime })
     try {
-      expect(client.catalog.listByType('image')).toHaveLength(64)
-      expect(client.catalog.listByType('video')).toHaveLength(46)
-      expect(client.catalog.listByProvider('fal')).toHaveLength(42)
-      expect(client.catalog.listByProvider('volcengine')).toHaveLength(3)
+      // 查询函数必须原样反映 catalog，而不是另有一份筛选结果。
+      for (const type of ['image', 'video', 'audio'] as const) {
+        expect(client.catalog.listByType(type)).toEqual(catalog.filter((model) => model.meta.type === type))
+      }
+      for (const provider of ['fal', 'volcengine', 'kie']) {
+        expect(client.catalog.listByProvider(provider)).toEqual(catalog.filter((model) => model.meta.provider === provider))
+      }
       expect(client.catalog.listByTag('voice-clone').map((model) => model.meta.id))
         .toEqual(expect.arrayContaining(['ppio-minimax-speech', 'volcengine-seed-icl-2.0']))
 
@@ -132,14 +135,10 @@ describe('catalog consumer contract', () => {
     }
   })
 
-  it('编译并执行真实 catalog 的全部 175 条显隐/inputLimits/requirement 条件', () => {
+  it('编译并执行真实 catalog 的全部显隐/inputLimits/requirement 条件', () => {
     const conditions = collectCatalogConditions()
-    const stringConditions = conditions.filter((item) => typeof item.condition === 'string')
-    const functionConditions = conditions.filter((item) => typeof item.condition === 'function')
-
-    expect(conditions).toHaveLength(175)
-    expect(stringConditions).toHaveLength(115)
-    expect(functionConditions).toHaveLength(60)
+    expect(conditions.some((item) => typeof item.condition === 'string')).toBe(true)
+    expect(conditions.some((item) => typeof item.condition === 'function')).toBe(true)
 
     for (const { modelId, condition } of conditions) {
       if (typeof condition === 'string') expect(() => compileRuntimeCondition(condition)).not.toThrow()

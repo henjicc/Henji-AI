@@ -67,6 +67,22 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
       kieGeminiTtsTemperature: { zh: '表现变化', en: 'Variation' },
     },
   ),
+  'kie-gemini-3.8-flash-tts': speechModel(
+    { zh: 'Gemini 3.8 Flash TTS', en: 'Gemini 3.8 Flash TTS' },
+    {
+      kieGemini38TtsVoice: voice,
+      kieGemini38TtsStyle: { zh: '说话风格', en: 'Speaking style' },
+      kieGemini38TtsTemperature: { zh: '表现变化', en: 'Variation' },
+    },
+  ),
+  'kie-gemini-3.8-flash-lite-tts': speechModel(
+    { zh: 'Gemini 3.8 Flash-Lite TTS', en: 'Gemini 3.8 Flash-Lite TTS' },
+    {
+      kieGemini38TtsVoice: voice,
+      kieGemini38TtsStyle: { zh: '说话风格', en: 'Speaking style' },
+      kieGemini38TtsTemperature: { zh: '表现变化', en: 'Variation' },
+    },
+  ),
   'siliconflow-cosyvoice2-tts': speechModel(
     { zh: 'CosyVoice2', en: 'CosyVoice2' },
     { siliconflowCosyVoice: voice, siliconflowCosySpeed: speed, siliconflowCosyFormat: format },
@@ -145,6 +161,8 @@ const ttsVoiceFields: Record<keyof typeof TTS_VOICE_SELECTORS, string> = {
   'bailian-cosyvoice-v3.5': 'bailianCosyVoiceId',
   'kie-eleven-v3-dialogue': 'kieElevenDialogueVoice',
   'kie-gemini-3.1-flash-tts': 'kieGeminiTtsVoice',
+  'kie-gemini-3.8-flash-tts': 'kieGemini38TtsVoice',
+  'kie-gemini-3.8-flash-lite-tts': 'kieGemini38TtsVoice',
   'siliconflow-cosyvoice2-tts': 'siliconflowCosyVoice',
   'siliconflow-moss-ttsd-0.5': 'siliconflowMossVoice',
   'volcengine-seed-tts-2.0': 'volcSeedTtsSpeaker',

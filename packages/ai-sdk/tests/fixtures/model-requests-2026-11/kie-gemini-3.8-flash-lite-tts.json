@@ -1,0 +1,182 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/google/gemini-3-8-flash-lite-tts.md",
+    "capturedAt": "2026-11-07",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official request schema; descriptions, examples and documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "google/gemini-3-8-flash-lite-tts"
+        ],
+        "default": "google/gemini-3-8-flash-lite-tts"
+      },
+      "callBackUrl": {
+        "type": "string"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 1
+          },
+          "speakers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "speaker_id": {
+                  "type": "string"
+                },
+                "voice_name": {
+                  "type": "string",
+                  "enum": [
+                    "Bodi",
+                    "Lumi",
+                    "Sadaltager",
+                    "Sola",
+                    "Sulafat",
+                    "Varo",
+                    "Zephyr",
+                    "Koda",
+                    "Kore",
+                    "Nika",
+                    "Tavi",
+                    "Zeno",
+                    "Algenib",
+                    "Despina",
+                    "Erinome",
+                    "Kira",
+                    "Ludo",
+                    "Mako",
+                    "Rasalgethi",
+                    "Rina",
+                    "Alnilam",
+                    "Brio",
+                    "Jori",
+                    "Laomedeia",
+                    "Rami",
+                    "Veda",
+                    "Achird",
+                    "Enzo",
+                    "Riko",
+                    "Sami",
+                    "Zali",
+                    "Zubenelgenubi",
+                    "Algieba",
+                    "Aoede",
+                    "Autonoe",
+                    "Callirrhoe",
+                    "Enceladus",
+                    "Gero",
+                    "Iapetus",
+                    "Neno",
+                    "Olin",
+                    "Tari",
+                    "Umbriel",
+                    "Achernar",
+                    "Charon",
+                    "Daro",
+                    "Fola",
+                    "Hali",
+                    "Milo",
+                    "Puck",
+                    "Arlo",
+                    "Cleo",
+                    "Fenrir",
+                    "Finn",
+                    "Leda",
+                    "Lora",
+                    "Orus",
+                    "Enya",
+                    "Jett",
+                    "Knox",
+                    "Nyla",
+                    "Sadachbia",
+                    "Vindemiatrix",
+                    "Cruz",
+                    "Elio",
+                    "Gacrux",
+                    "Pulcherrima",
+                    "Schedar",
+                    "Tova",
+                    "Zuri"
+                  ],
+                  "default": "Fola"
+                },
+                "replica": {
+                  "type": "object",
+                  "properties": {
+                    "source_audio_url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "consent_audio_url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "source_audio_url",
+                    "consent_audio_url"
+                  ]
+                }
+              },
+              "required": [
+                "speaker_id"
+              ],
+              "not": {
+                "required": [
+                  "voice_name",
+                  "replica"
+                ]
+              }
+            }
+          },
+          "filler_words": {
+            "type": "boolean",
+            "default": false
+          },
+          "dialogue_turns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "speaker_id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 10000
+                },
+                "style": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "speaker_id",
+                "text"
+              ]
+            }
+          }
+        },
+        "required": [
+          "speakers",
+          "dialogue_turns"
+        ]
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ]
+  }
+}

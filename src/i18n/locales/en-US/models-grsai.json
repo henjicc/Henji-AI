@@ -7,6 +7,8 @@
     "grsai-gpt-image-2.5": {
       "meta": { "name": "GPT Image 2.5" }
     },
-    "grsai-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "Generate and edit images up to 4K"}}
+    "grsai-nano-banana-2.1": {"meta": {"name": "Nano Banana 2.1", "description": "Generate and edit images up to 4K"}},
+    "grsai-gpt-image-2.6": {"meta": {"name": "GPT Image 2.6"}},
+    "grsai-wan-3.0": {"meta": {"name": "Wan 3.0"}}
   }
 }
