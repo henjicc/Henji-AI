@@ -6,7 +6,8 @@ import { reportCanvasOperationFailure } from '@/features/canvas/application/canv
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
-import { Check, ClipboardCopy, Copy, Crop, Download, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
+import { Check, ClipboardCopy, Copy, Crop, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
+import { ICON_DOWNLOAD } from '@/core/theme/icons';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.ui.NodeActionToolbar')
@@ -441,7 +442,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             tooltip={t('nodeToolbar.download')}
             onClick={handleDownloadClick}
           >
-            <Download />
+            <ICON_DOWNLOAD />
           </UiIconButton>
         )}
         {!isImageEdit && (isGroupNode(node) || isAssetGroupNode(node)) && (

@@ -8,7 +8,8 @@ import { WaveformView } from './waveform/WaveformView'
 import { TooltipContent } from './ui/Tooltip'
 import { useI18n } from '@/hooks/useI18n'
 import { useWaveformData } from '@/hooks/useWaveformData'
-import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { ICON_DOWNLOAD } from '@/core/theme/icons'
 
 function formatPlaybackTime(seconds: number): string {
   const time = Math.max(0, Math.floor(seconds))
@@ -445,7 +446,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             size={buttonSize}
             tooltip={t('common:actions.download')}
  >
-            <Download />
+            <ICON_DOWNLOAD />
           </UiIconButton>}
         </div>
       </div>

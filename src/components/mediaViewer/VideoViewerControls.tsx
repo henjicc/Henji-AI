@@ -3,7 +3,8 @@ import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { Dropdown, UI_TEXT_TIMECODE_CLASS, UiIconButton, UiPanel } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
-import { Download, Maximize, Minimize, Pause, Play, Repeat, Volume1, Volume2, VolumeX, Waves } from 'lucide-react'
+import { Maximize, Minimize, Pause, Play, Repeat, Volume1, Volume2, VolumeX, Waves } from 'lucide-react'
+import { ICON_DOWNLOAD } from '@/core/theme/icons'
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => ({ label: `${speed}×`, value: speed }))
 
@@ -277,7 +278,7 @@ export function VideoViewerControls({
             )}
             {onDownload && filePath && (
               <UiIconButton size="sm" onClick={() => onDownload(filePath)} tooltip={t('common:actions.download')}>
-                <Download />
+                <ICON_DOWNLOAD />
               </UiIconButton>
             )}
           </div>

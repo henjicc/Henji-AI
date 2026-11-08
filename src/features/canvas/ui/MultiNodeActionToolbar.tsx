@@ -1,12 +1,12 @@
 import { useNodeToolbarBoundary } from './useNodeToolbarBoundary'
 import { memo } from 'react'
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react'
-import { Download, LayoutGrid } from 'lucide-react'
+import { LayoutGrid } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { UiButton, UiPanel } from '@/components/ui'
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { isAssetGroupNode } from '@/features/canvas/domain/canvasNodes'
-import { ICON_NODE_ASSET_GROUP } from '@/core/theme/icons'
+import { ICON_DOWNLOAD, ICON_NODE_ASSET_GROUP } from '@/core/theme/icons'
 import { resolveAssetGroupMemberKind } from '@/features/canvas/application/assetGroupGraph'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload'
@@ -86,7 +86,7 @@ export const MultiNodeActionToolbar = memo(({
             <UiButton
               onClick={handleDownloadClick}
             >
-              <Download  />
+              <ICON_DOWNLOAD  />
               {t('nodeToolbar.batchDownload', { count: downloadCount })}
             </UiButton>
             )}

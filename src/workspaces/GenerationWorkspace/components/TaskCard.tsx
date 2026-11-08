@@ -22,16 +22,15 @@ import { formatMediaDuration, formatTaskCreatedAt, joinTaskMeta } from "../utils
 import { taskErrorMessage } from '../utils/taskErrorMessage'
 import { TaskInputPreview } from "./TaskInputPreview"
 import { TaskPrompt } from "./TaskPrompt"
-import { CopyIcon, DownloadIcon } from "./TaskActionIcons"
 import { TaskCardToolbar } from './TaskCardToolbar'
 import { useHistoryDrag } from "../hooks/useHistoryDrag"
-import { FolderCheck, FolderPlus, MessageCircleQuestion, Play } from 'lucide-react'
+import { Copy, FolderCheck, FolderPlus, MessageCircleQuestion, Play } from 'lucide-react'
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary'
 import { checkAssetPaths } from '@/commands/assetLibrary'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
 import { TaskListRetentionContext } from '../hooks/useTaskListRetention'
 import { videoEditSendMenuItems } from '@/features/videoEdit/panels/videoEditSendActions'
-import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
+import { ICON_DOWNLOAD, ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import { VideoEditSendDialog } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { listGenerationContinuations } from '@/core/services/generationContinuations'
 
@@ -287,7 +286,7 @@ const TaskCard = React.memo(function TaskCard({
                     {
                       id: "copy-image",
                       label: t("common:actions.copy"),
-                      icon: <CopyIcon className={`${UI_ICON_SIZE_CLASS.md}`} />,
+                      icon: <Copy className={`${UI_ICON_SIZE_CLASS.md}`} />,
                       onClick: async () => onCopyImage(filePath),
                       disabled: !filePath,
                     },
@@ -301,7 +300,7 @@ const TaskCard = React.memo(function TaskCard({
                     {
                       id: "download-image",
                       label: t("common:actions.download"),
-                      icon: <DownloadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />,
+                      icon: <ICON_DOWNLOAD className={`${UI_ICON_SIZE_CLASS.md}`} />,
                       onClick: async () => { if (filePath) await onDownload(filePath, false) },
                       disabled: !filePath,
                     },
@@ -367,7 +366,7 @@ const TaskCard = React.memo(function TaskCard({
               {
                 id: "download-video",
                 label: t("common:actions.download"),
-                icon: <DownloadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />,
+                icon: <ICON_DOWNLOAD className={`${UI_ICON_SIZE_CLASS.md}`} />,
                 onClick: async () => { if (filePath) await onDownload(filePath, false) },
                 disabled: !filePath,
               },
@@ -435,7 +434,7 @@ const TaskCard = React.memo(function TaskCard({
               {
                 id: "download-audio",
                 label: t("common:actions.download"),
-                icon: <DownloadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />,
+                icon: <ICON_DOWNLOAD className={`${UI_ICON_SIZE_CLASS.md}`} />,
                 onClick: async () => { if (filePath) await onDownload(filePath, false) },
                 disabled: !filePath,
               },

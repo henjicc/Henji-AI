@@ -2,7 +2,7 @@ import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Download, SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal } from 'lucide-react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { useTranslation } from 'react-i18next';
 
@@ -35,7 +35,7 @@ import { exportStoryboardImages } from '@/features/canvas/nodes/storyboardSplit/
 import { useStoryboardSort } from '@/features/canvas/nodes/storyboardSplit/useStoryboardSort';
 import { buildFrameViewerImageList, buildIncomingImageItems } from '@/features/canvas/nodes/storyboardSplit/data';
 import { resolveExportOptions, STORYBOARD_GRID_GAP_PX } from '@/features/canvas/nodes/storyboardSplit/shared';
-import { ICON_STORYBOARD } from '@/core/theme/icons';
+import { ICON_DOWNLOAD, ICON_STORYBOARD } from '@/core/theme/icons';
 import { computeStoryboardSplitBaseLayout, computeStoryboardSplitFrameLayout } from '@/features/canvas/nodes/storyboardSplit/layout';
 
 type StoryboardNodeProps = NodeProps & {
@@ -344,7 +344,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
           }}
           disabled={isExporting}
         >
-          <Download className={NODE_CONTROL_ICON_CLASS} />
+          <ICON_DOWNLOAD className={NODE_CONTROL_ICON_CLASS} />
           {'合并导出'}
         </UiButton>
       </div>

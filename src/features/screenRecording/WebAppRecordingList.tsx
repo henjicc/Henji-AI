@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, FolderOpen, ListChecks, Pencil, Trash2 } from 'lucide-react'
+import { FolderOpen, ListChecks, Pencil, Trash2 } from 'lucide-react'
+import { ICON_DOWNLOAD } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { UI_TEXT_META_CLASS, UiButton, UiIconButton, UiInput, UiModal, UiOptionButton, UiVirtualList } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
@@ -82,7 +83,7 @@ export function WebAppRecordingList({ model }: { model: WebAppRecordingModel }):
     const items = selection.active && selection.isSelected(recording.id) && chosen.length > 1 ? chosen : [recording]
     menu.showMenu(event, [
       { id: 'rename', label: items.length > 1 ? t('recording.webapp_renameMany', { count: items.length }) : t('recording.webapp_rename'), icon: <Pencil />, onClick: () => setRenaming(items) },
-      { id: 'export', label: t('recording.webapp_exportVideos'), icon: <Download />, onClick: () => void exportVideos(items) },
+      { id: 'export', label: t('recording.webapp_exportVideos'), icon: <ICON_DOWNLOAD />, onClick: () => void exportVideos(items) },
       ...(items.length === 1 ? [{ id: 'reveal', label: t('recording.webapp_reveal'), icon: <FolderOpen />, onClick: () => void model.reveal(recording.id) }] : []),
       { id: 'delete', label: t('recording.webapp_delete'), icon: <Trash2 />, divider: true, disabled: Boolean(model.activeId && items.some(item => item.id === model.activeId)), onClick: () => void remove(items) },
     ])
@@ -115,7 +116,7 @@ export function WebAppRecordingList({ model }: { model: WebAppRecordingModel }):
     </div>
     {selection.active && <div className="flex shrink-0 items-center gap-1 border-t border-gap px-2 py-2">
       <UiButton size="sm" disabled={!chosen.length} disabledReason={t('recording.webapp_selectFirst')} onClick={() => setRenaming(chosen)}><Pencil />{t('recording.webapp_rename')}</UiButton>
-      <UiButton size="sm" disabled={!chosen.length} disabledReason={t('recording.webapp_selectFirst')} onClick={() => void exportVideos(chosen)}><Download />{t('recording.webapp_export')}</UiButton>
+      <UiButton size="sm" disabled={!chosen.length} disabledReason={t('recording.webapp_selectFirst')} onClick={() => void exportVideos(chosen)}><ICON_DOWNLOAD />{t('recording.webapp_export')}</UiButton>
       <span className="flex-1" />
       <UiButton size="sm" variant="danger" disabled={!chosen.length} disabledReason={t('recording.webapp_selectFirst')} onClick={() => void remove(chosen)}><Trash2 />{t('recording.webapp_delete')}</UiButton>
     </div>}

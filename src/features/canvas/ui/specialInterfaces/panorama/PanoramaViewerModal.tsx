@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
-  Download,
   Maximize2,
   Minimize2,
   RotateCcw,
@@ -16,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { UiButton, UiError, UiErrorBoundary, UiIconButton, UiLoading } from '@/components/ui';
 import { UiViewerShell, useUiViewerShell } from '@/components/ui';
 import { createLogger } from '@/core/logging';
-import { ICON_PANORAMA } from '@/core/theme/icons';
+import { ICON_DOWNLOAD, ICON_PANORAMA } from '@/core/theme/icons';
 import {
   resolveNodeDownloadTarget,
   saveCanvasMediaTargetAs,
@@ -252,7 +251,7 @@ export function PanoramaViewerModal({
             disabled={isDownloading}
             tooltip={t('viewer.panorama.download')}
           >
-            <Download  />
+            <ICON_DOWNLOAD  />
           </UiIconButton>
           <UiIconButton size="md" tone="media" shape="circle"
             onClick={() => void handleFullscreen()}

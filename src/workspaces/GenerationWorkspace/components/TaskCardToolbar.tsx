@@ -1,9 +1,9 @@
-import { FolderCheck, FolderPlus, RefreshCw, SquarePen, Trash2 } from 'lucide-react'
+import { FolderCheck, FolderPlus, Trash2 } from 'lucide-react'
 import { UiButton, UiIconButton } from '@/components/ui'
+import { ICON_DOWNLOAD, ICON_REEDIT, ICON_REGENERATE, ICON_USE_PROMPT } from '@/core/theme/icons'
 import type { AvailableGenerationContinuation } from '@/core/services/generationContinuations'
 import { useI18n } from '@/hooks/useI18n'
 import type { GenerationTask } from '../types'
-import { DownloadIcon, UsePromptIcon } from './TaskActionIcons'
 
 export interface TaskCardToolbarProps {
   task: GenerationTask
@@ -53,20 +53,20 @@ export function TaskCardToolbar({
         onClick={() => void onRegenerate()}
         tooltip={t('ui:workspace.actions.regenerate')}
       >
-        <RefreshCw  />
+        <ICON_REGENERATE />
       </UiIconButton>
       <UiIconButton
         onClick={onReedit}
         tooltip={t('ui:workspace.actions.reedit')}
       >
-        <SquarePen  />
+        <ICON_REEDIT />
       </UiIconButton>
       {task.result && task.result.filePaths.length > 0 && (
         <UiIconButton
           onClick={() => void onDownloadAll()}
           tooltip={t('common:actions.download')}
         >
-          <DownloadIcon  />
+          <ICON_DOWNLOAD />
         </UiIconButton>
       )}
       {task.result && task.result.filePaths.length > 0 && (
@@ -85,7 +85,7 @@ export function TaskCardToolbar({
         onClick={onUsePrompt}
         tooltip={t('ui:workspace.actions.usePrompt')}
       >
-        <UsePromptIcon  />
+        <ICON_USE_PROMPT />
       </UiIconButton>
       <UiIconButton tone="danger"
         onClick={() => void onDelete()}

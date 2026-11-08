@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import { ICON_DOWNLOAD } from '@/core/theme/icons'
 import { useTranslation } from 'react-i18next'
 
 import { UiButton, UiIconButton, UiModal } from '@/components/ui'
@@ -174,7 +175,7 @@ export function MultiLayerDocumentEditorDialog({
       tooltip={exportUnavailableReason ?? t('toolDialog.imageEditorV3.exportToCanvas')}
       onClick={exportToCanvas}
     >
-      <Download  />
+      <ICON_DOWNLOAD  />
       {exportFailed
           ? t('toolDialog.imageEditorV3.exportToCanvasFailed')
           : t('toolDialog.imageEditorV3.exportToCanvas')}

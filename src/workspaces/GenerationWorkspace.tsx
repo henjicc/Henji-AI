@@ -32,7 +32,8 @@ import { useGenerationHistoryFiltering } from './GenerationWorkspace/hooks/useGe
 import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
 import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerationImageViewer'
 import { GENERATION_COLUMN_MAX_WIDTH_CLASS, GENERATION_COLUMN_MAX_WIDTH_PX } from './GenerationWorkspace/generationColumn'
-import { Copy, Download } from 'lucide-react'
+import { Copy } from 'lucide-react'
+import { ICON_DOWNLOAD } from '@/core/theme/icons'
 
 // 与历史列的外框同宽：输入卡片两侧比记录文字各宽出一档留白（设计稿 Generation）；列宽随窗口变宽，见 generationColumn
 const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = GENERATION_COLUMN_MAX_WIDTH_PX
@@ -158,7 +159,7 @@ const GenerationWorkspace: React.FC = () => {
         id: 'download-image',
         label: t('common:actions.download'),
         icon: (
-          <Download className={`${UI_ICON_SIZE_CLASS.md}`} />
+          <ICON_DOWNLOAD className={`${UI_ICON_SIZE_CLASS.md}`} />
         ),
         onClick: async () => {
           if (filePath) await download(filePath, false)

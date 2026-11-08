@@ -1,5 +1,6 @@
 import { createElement, useCallback, useMemo, type MouseEvent } from 'react';
-import { Download, FolderOpen } from 'lucide-react';
+import { FolderOpen, type LucideIcon } from 'lucide-react';
+import { ICON_DOWNLOAD } from '@/core/theme/icons';
 import { useTranslation } from 'react-i18next';
 import { openDialog } from '@/platform/desktopApi';
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes';
@@ -127,12 +128,12 @@ export function useNodeDownload(
       return;
     }
     // 菜单贴着下载按钮弹出（右缘对齐），菜单项与其他菜单同一套外观
-    const icon = (Icon: typeof Download) => createElement(Icon, { className: 'h-4 w-4' });
+    const icon = (Icon: LucideIcon) => createElement(Icon, { className: 'h-4 w-4' });
     showMenuAt(event.currentTarget, [
       {
         id: 'save-as',
         label: t(downloadTargets.length > 1 ? 'nodeToolbar.chooseDownloadFolder' : 'nodeToolbar.saveAs'),
-        icon: icon(Download),
+        icon: icon(ICON_DOWNLOAD),
         divider: true,
         onClick: () => { void handleDownloadSaveAs(); },
       },

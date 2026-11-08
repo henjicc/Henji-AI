@@ -120,6 +120,37 @@ export const ICON_EFFECT_DISABLED: LucideIcon = createLucideIcon('effect-disable
 export const ICON_MOTION_BLUR: LucideIcon = createLucideIcon('motion-blur', [['path', { d: 'M2 9h6M3 12h5M2 15h6', key: 'trail' }], ['circle', { cx: '15', cy: '12', r: '6', key: 'body' }]])
 export const ICON_FRAME_BLEND: LucideIcon = createLucideIcon('frame-blend', [['rect', { x: '3', y: '4', width: '12', height: '10', rx: '1', key: 'back' }], ['rect', { x: '9', y: '10', width: '12', height: '10', rx: '1', key: 'front' }]])
 
+/* 结果操作 ----------------------------------------------------------------- */
+/*
+ * 这组图标常并排出现在同一条操作栏里，按收藏（FolderPlus）与删除（Trash2）的视觉大小做过光学校正：
+ * 单圆箭头与满格方框看起来偏大，各自缩小；下载的箭头只有一根细杆，加宽箭头补足笔墨。
+ * 校正直接烘进坐标，描边仍走统一线宽。
+ */
+
+/** 用同样的参数再生成一次 */
+export const ICON_REGENERATE: LucideIcon = createLucideIcon('regenerate', [
+  ['path', { d: 'M19.98 12.4a8.28 8.28 0 1 1-8.28-8.28c2.318 0 4.536.92 6.201 2.521L19.98 8.72', key: 'arc' }],
+  ['path', { d: 'M19.98 4.12v4.6h-4.6', key: 'head' }],
+])
+/** 把一条生成记录的参数带回输入区重新编辑 */
+export const ICON_REEDIT: LucideIcon = createLucideIcon('reedit', [
+  ['path', { d: 'M12 3.9H5.9a2 2 0 0 0-2 2v12.2a2 2 0 0 0 2 2h12.2a2 2 0 0 0 2-2v-6.3', key: 'box' }],
+  ['path', { d: 'M17.738 3.563a.9.9 0 0 1 2.7 2.7l-8.112 8.113a1.8 1.8 0 0 1-.768.455l-2.586.756a.45.45 0 0 1-.558-.558l.756-2.586a1.8 1.8 0 0 1 .455-.767z', key: 'pen' }],
+])
+/** 下载 / 导出到本地文件。全应用唯一的下载图形。 */
+export const ICON_DOWNLOAD: LucideIcon = createLucideIcon('download', [
+  ['path', { d: 'M12 3v12', key: 'stem' }],
+  ['path', { d: 'm6 9 6 6 6-6', key: 'head' }],
+  ['path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', key: 'tray' }],
+])
+/** 只把提示词文字填回输入框：两行文字加回车箭头。lucide 没有贴切字形，按 24 网格自绘。 */
+export const ICON_USE_PROMPT: LucideIcon = createLucideIcon('use-prompt', [
+  ['path', { d: 'M3 4h18', key: 'line1' }],
+  ['path', { d: 'M3 9h10', key: 'line2' }],
+  ['path', { d: 'M21 8v6a3 3 0 0 1-3 3H8', key: 'return' }],
+  ['path', { d: 'm11.5 13.5-3.5 3.5 3.5 3.5', key: 'head' }],
+])
+
 /* 其他跨界面概念 ----------------------------------------------------------- */
 
 /** 预设 */

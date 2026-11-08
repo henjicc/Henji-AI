@@ -5,7 +5,7 @@ import { ApplicationOperationReviewBanner } from '@/features/application-control
 import { useShallow } from 'zustand/react/shallow'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
-import { ArrowLeft, Download, Mic, Redo2, Search, Upload } from 'lucide-react'
+import { ArrowLeft, Mic, Redo2, Search, Upload } from 'lucide-react'
 import { useStore } from 'zustand'
 import { AudioCaptureRecoveryBanner, getAudioCaptureSession } from '@/features/audioCapture'
 
@@ -14,7 +14,7 @@ import { audioEditMultitrackAvailable, openAudioEditMultitrack } from './applica
 import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
 import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditTask, AudioEditRange } from '@/core/audioEdit/types'
 import type { DocumentSummary } from '@/core/documents/types'
-import { ICON_TOOL_AUDIO_EDIT } from '@/core/theme/icons'
+import { ICON_DOWNLOAD, ICON_TOOL_AUDIO_EDIT } from '@/core/theme/icons'
 import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage'
 import { returnFromEmbedded, useEmbeddedHost } from '@/features/documents/embeddedDocuments'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -314,7 +314,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
         <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id) })} />
-        <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><Download className="mr-1.5" />导出</UiButton>
+        <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><ICON_DOWNLOAD className="mr-1.5" />导出</UiButton>
       </>}
     >
       {embeddedHost

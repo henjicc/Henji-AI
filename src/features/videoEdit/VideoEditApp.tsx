@@ -2,7 +2,7 @@ import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMen
 import { VideoEditAppMenus } from './VideoEditAppMenus'
 import { countVideoEditTiming } from './engine/videoEditFirstFrameTiming'
 import { retainVideoEditProgramWarmup } from './engine/videoEditProgramPool'
-import { ICON_TOOL_SCREEN_RECORDING, UI_ICON_SIZE } from '@/core/theme/icons'
+import { ICON_DOWNLOAD, ICON_TOOL_SCREEN_RECORDING, UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationText } from '@/i18n/notifications'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
@@ -13,7 +13,7 @@ import { subscribeVideoEditImportCompletion } from './application/videoEditImpor
 import { VideoEditImportProgress } from './panels/VideoEditImportProgress'
 import { VideoEditProjectsPage } from './VideoEditProjectsPage'
 import { VideoEditOpeningOverlay } from './panels/VideoEditOpeningOverlay'
-import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, Redo2, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, FolderInput, FolderOpen, Keyboard, Redo2, Undo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { DockviewApi } from 'dockview-react'
@@ -114,7 +114,7 @@ export function VideoEditToolbar({ instance, api, run, onNotice }: { instance: V
       } finally { setCollecting(false) }
     })}>{'成片加入资产库'}</UiButton>}
     {task?.state === 'running' && <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton>}
-    <UiButton variant="primary" aria-label="导出视频" tooltip={exporting.tooltip} disabledReason={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download  />导出</UiButton>
+    <UiButton variant="primary" aria-label="导出视频" tooltip={exporting.tooltip} disabledReason={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><ICON_DOWNLOAD  />导出</UiButton>
   </>}>
     <UiIconButton size="md" aria-label={t('videoEditProject.back')} tooltip={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft  /></UiIconButton>
     <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">

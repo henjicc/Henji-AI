@@ -1,4 +1,5 @@
-import { ChevronDown, Download, FilePenLine, Save } from 'lucide-react'
+import { ChevronDown, FilePenLine, Save } from 'lucide-react'
+import { ICON_DOWNLOAD } from '@/core/theme/icons'
 import { ImageEditorFileAppMenus } from './ImageEditorFileAppMenus'
 import { useTranslation } from 'react-i18next'
 
@@ -192,7 +193,7 @@ export function ImageMarkToolToolbarActions({
                   : t('imageEditor.v3.host.toolbar.exportMenuAria')}
                 onClick={togglePanel}
               >
-                <Download  className="mr-1.5" />
+                <ICON_DOWNLOAD  className="mr-1.5" />
                 {exportUnavailable
                   ? t('imageEditor.v3.host.toolbar.exportUnavailable')
                   : t('imageEditor.v3.host.toolbar.export')}
