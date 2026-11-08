@@ -7,8 +7,7 @@ import { captureResultContinuations } from '@/core/services/generationContinuati
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
 import type { JsonObject, StructuredGenerationOutput } from '@henjicc/ai-sdk';
 import { persistImageLocally } from '@/features/canvas/application/imageData';
-import { generateToCompletion } from '@/features/generation/application/generationCompletion';
-import { assertGenerationMediaDimensions } from '@/features/generation';
+import { assertGenerationMediaDimensions, generateToCompletion } from '@/features/generation';
 import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult';
 
 const logger = createLogger('features.canvas.generation.runGeneration');

@@ -49,7 +49,7 @@ async function readContinuationSource(from: GenerationContinueFrom): Promise<{ m
     if (!record) throw new Error(`INVALID_INPUT:找不到要续接的生成任务 ${from.taskId}`)
     return { modelId: record.modelId, options: (record.params ?? {}) as DynamicValueMap }
   }
-  const { getCanvasProjectInstance } = await import('@/features/canvas/application/canvasProjectInstances')
+  const { getCanvasProjectInstance } = await import('@/features/canvas')
   const node = (await getCanvasProjectInstance(from.documentId)).store.getState().nodes.find(item => item.id === from.nodeId)
   const source = node?.data.generationContinuation
   if (!source) throw new Error(`INVALID_INPUT:画布节点 ${from.nodeId} 不是能续接的生成结果`)
