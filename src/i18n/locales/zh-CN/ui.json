@@ -684,6 +684,8 @@
     "videoUnavailableTitle": "视频无法播放",
     "imageUnavailableMessage": "文件可能已被移动或删除。",
     "imageAlt": "图片",
+    "videoAlt": "视频",
+    "audioAlt": "音频",
     "speed": "播放速度",
     "loop": "循环播放",
     "mute": "静音",
@@ -701,6 +703,7 @@
       "message": "文件已被移动或删除，无法预览和下载。可以重新生成，或删除这条记录。"
     },
     "inputImageAlt": "输入图片 {{index}}",
+    "inputMaterials": "参考素材",
     "panelHint": "移到这里展开输入面板…",
     "actions": {
       "regenerate": "重新生成",

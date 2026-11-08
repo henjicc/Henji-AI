@@ -98,13 +98,11 @@ style={{ transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow) }}
 
 | 位置 | 属性 | 为什么改不了 |
 |---|---|---|
-| `src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx` | `width` | 容器宽度变化要带动兄弟重排，这正是需要的效果 |
 | `src/components/TabContainer.tsx` | `padding` | 助手停靠的 inset，工作区必须真的收缩；resize 期间已用 `--assistant-layout-transition-duration: 0ms` 关掉过渡 |
 | `src/components/ui/layout.tsx` 的 `UiDisclosurePanel` | `grid-template-rows` | `0fr → 1fr` 是 auto-height 动画的推荐做法，替代方案（max-height / JS 测高）更差 |
 | `src/workspaces/GenerationWorkspace/components/FloatingInputPanel.tsx` | `max-height` | 同上，折叠展开的高度动画 |
-| `src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx` | `margin` | 缩略图堆叠的重叠间距，margin 影响兄弟位置 |
 
-**已经改掉的**：`FloatingInputPanel` 的 `top` 已合并进 `transform`（绝对定位元素的位移没有理由走布局属性）。
+**已经改掉的**：`FloatingInputPanel` 的 `top` 已合并进 `transform`（绝对定位元素的位移没有理由走布局属性）；生成记录的参考素材堆（`TaskInputPreview`）叠放与铺开只用 `translateX + rotate`。
 参考素材条（`MediaStripUploader`）增删、排序时的补位用 `useFlipTransition`：布局到位后只用 translate 从旧位置滑过来，不过渡任何布局属性。
 合并时注意 **`translate` 必须写在 `rotate`/`scale` 之前**，否则旋转缩放会一起作用到位移量上。
 
@@ -137,6 +135,6 @@ transition/animation 时长压到 0.01ms，延迟清零，循环只播一次，�
 
 ## 自动门禁（5.2）
 
-`check:ui-design` 全量扫描 src 的 CSS、TS/TSX 类串、style 与 uiTransition 属性列表。时长允许共享 --ui-duration/--ui-loop 变量、登记的助手 inset 时长、0；缓动允许 --ui-ease 具名变量和 linear；Tailwind 时长仅 0/120/180/240/500。布局属性及裸 transition/transition-all 阻断，五个文件例外与上表同源登记在 uiDesignRules.cjs 的 LAYOUT_EXCEPTIONS（TaskInputPreview 含 margin-left）。全局 reduced-motion 近零时长仅 index.css 的对应媒体查询例外。
+`check:ui-design` 全量扫描 src 的 CSS、TS/TSX 类串、style 与 uiTransition 属性列表。时长允许共享 --ui-duration/--ui-loop 变量、登记的助手 inset 时长、0；缓动允许 --ui-ease 具名变量和 linear；Tailwind 时长仅 0/120/180/240/500。布局属性及裸 transition/transition-all 阻断，三个文件例外与上表同源登记在 uiDesignRules.cjs 的 LAYOUT_EXCEPTIONS。全局 reduced-motion 近零时长仅 index.css 的对应媒体查询例外。
 
 手写 useEffect 中 visible=false + setTimeout 卸载 mounted/shouldRender/rendered 会命中 manualExit，迁至 useDialogTransition；业务通知停留和延迟不按退出动画判。该静态规则是可确定模式，不宣称能识别所有动态写法。

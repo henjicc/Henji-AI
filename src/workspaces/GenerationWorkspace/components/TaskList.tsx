@@ -32,6 +32,7 @@ export interface TaskListProps {
   ) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
   onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
+  onOpenAudioViewer: (url: string, filePath?: string) => void
   notify: (message: string, type?: 'success' | 'error') => void
 }
 
@@ -52,6 +53,7 @@ export function TaskList({
   onRememberResultImageDimensions,
   onOpenImageViewer,
   onOpenVideoViewer,
+  onOpenAudioViewer,
   notify,
 }: TaskListProps): JSX.Element {
   const { t } = useI18n()
@@ -125,6 +127,7 @@ export function TaskList({
             onRememberResultImageDimensions={onRememberResultImageDimensions}
             onOpenImageViewer={onOpenImageViewer}
             onOpenVideoViewer={onOpenVideoViewer}
+            onOpenAudioViewer={onOpenAudioViewer}
             notify={notify}
           />
       })}</div>}

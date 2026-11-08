@@ -51,6 +51,7 @@ export interface TaskCardProps {
   ) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
   onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
+  onOpenAudioViewer: (url: string, filePath?: string) => void
   showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
   notify: (message: string, type?: 'success' | 'error') => void
 }
@@ -67,6 +68,7 @@ const TaskCard = React.memo(function TaskCard({
   onRememberResultImageDimensions,
   onOpenImageViewer,
   onOpenVideoViewer,
+  onOpenAudioViewer,
   showMenu,
   notify,
 }: TaskCardProps): JSX.Element {
@@ -458,47 +460,52 @@ const TaskCard = React.memo(function TaskCard({
       data-generation-task-id={task.id}
       tabIndex={-1}
     >
-      <div className="flex flex-col gap-1.5">
-      <TaskInputPreview
-        taskId={task.id}
-        inputImages={inputImages}
-        inputVideos={inputVideos}
-        uploadedFilePaths={task.uploadedFilePaths}
-        uploadedVideoFilePaths={task.uploadedVideoFilePaths}
-        onOpenImage={handleImageClick}
-        onOpenVideo={handleInputVideoClick}
-        onStartImageDrag={startImageDrag}
-        onStartVideoDrag={startVideoDrag}
-        onStartImageNativeDrag={startImageNativeDrag}
-        onStartVideoNativeDrag={startVideoNativeDrag}
-        onNativeDragEnd={endNativeDrag}
-        nativeFileDragEnabled={isNativeFileDragEnabled}
-        shouldIgnoreClick={shouldIgnoreClick}
-      />
-      <div className="flex items-start gap-2">
-        <TaskPrompt prompt={task.prompt} />
-        <TaskCardToolbar
-          task={task}
-          collecting={collecting}
-          allResultsCollected={
-            resultFilePaths.length > 0 &&
-            resultFilePaths.every((filePath) => collectedPaths.has(filePath))
-          }
-          onUsePrompt={() => onUsePrompt(task.prompt)}
-          onCollectAll={async () => {
-            for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
-          }}
-          onDownloadAll={async () => {
-            for (const filePath of resultFilePaths) await onDownload(filePath, true)
-          }}
-          onRegenerate={() => onRegenerate(task)}
-          onReedit={() => onReedit(task)}
-          continuations={task.status === 'success' ? listGenerationContinuations(task.model, task.options) : []}
-          onContinue={(continuationId) => onContinue(task, continuationId)}
-          onDelete={() => onDelete(task.id)}
+      {/* 左侧是参考素材堆，右侧是提示词与信息；素材点开后在本行铺开，盖住右侧 */}
+      <div className="relative flex items-start gap-4">
+        <TaskInputPreview
+          taskId={task.id}
+          inputImages={inputImages}
+          inputVideos={inputVideos}
+          uploadedFilePaths={task.uploadedFilePaths}
+          uploadedVideoFilePaths={task.uploadedVideoFilePaths}
+          uploadedAudioFilePaths={task.uploadedAudioFilePaths}
+          onOpenImage={handleImageClick}
+          onOpenVideo={handleInputVideoClick}
+          onOpenAudio={onOpenAudioViewer}
+          onStartImageDrag={startImageDrag}
+          onStartVideoDrag={startVideoDrag}
+          onStartImageNativeDrag={startImageNativeDrag}
+          onStartVideoNativeDrag={startVideoNativeDrag}
+          onNativeDragEnd={endNativeDrag}
+          nativeFileDragEnabled={isNativeFileDragEnabled}
+          shouldIgnoreClick={shouldIgnoreClick}
         />
-      </div>
-      <div className="truncate text-xs text-text3" title={metaLine}>{metaLine}</div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="flex items-start gap-2">
+            <TaskPrompt prompt={task.prompt} />
+            <TaskCardToolbar
+              task={task}
+              collecting={collecting}
+              allResultsCollected={
+                resultFilePaths.length > 0 &&
+                resultFilePaths.every((filePath) => collectedPaths.has(filePath))
+              }
+              onUsePrompt={() => onUsePrompt(task.prompt)}
+              onCollectAll={async () => {
+                for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
+              }}
+              onDownloadAll={async () => {
+                for (const filePath of resultFilePaths) await onDownload(filePath, true)
+              }}
+              onRegenerate={() => onRegenerate(task)}
+              onReedit={() => onReedit(task)}
+              continuations={task.status === 'success' ? listGenerationContinuations(task.model, task.options) : []}
+              onContinue={(continuationId) => onContinue(task, continuationId)}
+              onDelete={() => onDelete(task.id)}
+            />
+          </div>
+          <div className="truncate text-xs text-text3" title={metaLine}>{metaLine}</div>
+        </div>
       </div>
       {statusLabel && !isInProgress && <span className="text-xs text-text3">{statusLabel}</span>}
       {result}

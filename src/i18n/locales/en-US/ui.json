@@ -684,6 +684,8 @@
     "videoUnavailableTitle": "Video can't be played",
     "imageUnavailableMessage": "The file may have been moved or deleted.",
     "imageAlt": "Image",
+    "videoAlt": "Video",
+    "audioAlt": "Audio",
     "speed": "Playback speed",
     "loop": "Loop",
     "mute": "Mute",
@@ -701,6 +703,7 @@
       "message": "The file was moved or deleted, so it can't be previewed or downloaded. Regenerate it, or delete this record."
     },
     "inputImageAlt": "Input image {{index}}",
+    "inputMaterials": "Reference materials",
     "panelHint": "Hover here to expand the input panel…",
     "actions": {
       "regenerate": "Regenerate",

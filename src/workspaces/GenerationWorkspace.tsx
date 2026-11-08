@@ -305,6 +305,7 @@ const GenerationWorkspace: React.FC = () => {
               onRememberResultImageDimensions={rememberResultImageDimensions}
               onOpenImageViewer={(url, list, filePaths) => openImageViewer(url, list, filePaths, false)}
               onOpenVideoViewer={openVideoViewer}
+              onOpenAudioViewer={openAudioViewer}
               notify={notify}
             />
           </div>
