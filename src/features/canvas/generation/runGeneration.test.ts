@@ -37,6 +37,14 @@ describe('runCanvasGeneration 付费请求门禁', () => {
       .catch((error: unknown) => error)
     expect(rejected).toBeInstanceOf(GenerationPreparationError)
     expect((rejected as Error).message).toContain('链接已过期')
+
+    // 已取消的执行原样抛出，不变成需要提示用户的拒绝。
+    const controller = new AbortController()
+    controller.abort()
+    persistImageLocally.mockRejectedValueOnce(new Error('链接已过期'))
+    const cancelled = await prepareCanvasGenerationMedia({ modelId: 'test-model', params: {}, upstream: { images: ['https://example.com/a.png'] } }, { signal: controller.signal })
+      .catch((error: unknown) => error)
+    expect(cancelled).not.toBeInstanceOf(GenerationPreparationError)
   })
 
   it('本地媒体准备期间输入失效时不提交供应商任务', async () => {

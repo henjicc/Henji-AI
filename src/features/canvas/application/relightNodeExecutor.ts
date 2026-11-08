@@ -62,7 +62,7 @@ export function createRelightNodeExecutor(id: string, store: typeof useCanvasSto
     const target = execution.runtime
     if (!target) throw new Error('生成任务缺少画布运行实例')
     const prepared = prepareExecution()
-    const upstreamImages = await prepareCanvasGenerationMedia({ modelId: prepared.route.model.meta.id, params: prepared.params, upstream: prepared.upstream })
+    const upstreamImages = await prepareCanvasGenerationMedia({ modelId: prepared.route.model.meta.id, params: prepared.params, upstream: prepared.upstream }, { signal: execution.signal })
     const estimate = await GenerationService.getInstance().getProgressEstimate(
       prepared.route.model.meta.id,
       prepared.params,

@@ -280,7 +280,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
         // 扩图、局部重绘到这里才定下实际发出的素材，所以尺寸在这之后、建结果节点之前检查。
         const upstreamImages = await prepareCanvasGenerationMedia(
           { modelId: runtime.modelId, mediaType: current.modelType, params: requestParams, upstream: requestInputs },
-          { dimensionsChecked: current.mediaDimensionsChecked === true && !requestPreparation },
+          { dimensionsChecked: current.mediaDimensionsChecked === true && !requestPreparation, signal: current.signal },
         )
         const resultNodeData = requestPreparation?.resultNodeData ?? {}
         const resultNodeExtraData = typeof current.resultNodeExtraData === 'function'

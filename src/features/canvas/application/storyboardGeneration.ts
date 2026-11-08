@@ -75,6 +75,7 @@ export function buildStoryboardPrompt({
 }
 
 interface PrepareStoryboardReferenceImagesParams {
+  signal?: AbortSignal
   modelId: string
   params: DynamicValueMap
   incomingImages: string[]
@@ -86,6 +87,7 @@ interface PrepareStoryboardReferenceImagesParams {
 
 /** 画出栅格参考图，落盘并按模型的素材尺寸约束检查全部参考图；执行器在建结果节点之前调用。 */
 export async function prepareStoryboardReferenceImages({
+  signal,
   modelId,
   params,
   incomingImages,
@@ -99,7 +101,7 @@ export async function prepareStoryboardReferenceImages({
     resumeContext.gridCols,
     gridImageResolution
   )
-  return await prepareCanvasGenerationMedia({ modelId, params, referenceImages: [...incomingImages, gridImageDataUrl] })
+  return await prepareCanvasGenerationMedia({ modelId, params, referenceImages: [...incomingImages, gridImageDataUrl] }, { signal })
 }
 
 export async function generateStoryboardImage({

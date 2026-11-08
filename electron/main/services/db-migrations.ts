@@ -11,7 +11,7 @@ import type Database from 'better-sqlite3'
 import type { LocationContext } from '../../../src/core/storage/locationCodec'
 import { createApplicationOperationTablesV1 } from './application-runtime/operationStore'
 import { createAiRuntimeTablesV1, createGenerationSubmissionsTableV1, createPendingTaskResultsTableV1 } from './ai-runtime/schema'
-import { createAssetLibraryTablesV1, addAssetForeignMarker, restrictAssetPathUniquenessToActive, reinspectVideoAssetDimensions } from './asset-library/schema'
+import { createAssetLibraryTablesV1, addAssetForeignMarker, restrictAssetPathUniquenessToActive } from './asset-library/schema'
 import { createAssistantMemoryTablesV1, replaceAssistantMemoryTablesV22, assistantMemoryNeedsBackup } from './assistant/storageSchema'
 import { createCameraStageRenderTaskTableV1 } from './camera-stage-render-task-schema'
 import { createCustomModelsTableV1 } from './custom-models-schema'
@@ -113,11 +113,8 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(JSON.stringify(preferences), 'mcp.preferences')
     }
   } },
-  { version: 26, name: 'active_asset_path_uniqueness', up: restrictAssetPathUniquenessToActive, transaction: false,
+  { version: SQLITE_SCHEMA_VERSION, name: 'active_asset_path_uniqueness', up: restrictAssetPathUniquenessToActive, transaction: false,
     backupWhen: db => !!db.prepare('SELECT 1 FROM assets LIMIT 1').get() },
-  // 26 → 27：视频宽高改按旋转标记记播放朝向，已登记的视频退回待检查，下次读取时重新登记宽高。
-  { version: SQLITE_SCHEMA_VERSION, name: 'video_asset_display_dimensions', up: reinspectVideoAssetDimensions,
-    backupWhen: db => !!db.prepare("SELECT 1 FROM assets WHERE media_type='video' AND inspection_status='ready' LIMIT 1").get() },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

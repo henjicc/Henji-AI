@@ -5,7 +5,8 @@ import { ApplicationPreflightFailure } from '@/core/application-control/executio
 import { createLogger } from '@/core/logging'
 import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationDestination } from '@/core/application-control/domains/generation/generationApplicationCapabilities'
 import type { GenerationPreparationInput } from '@/features/generation/application/generationPreparationService'
-import { assertGenerationMediaDimensions, estimateGenerationPrice, prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
+import { assertGenerationMediaDimensions, estimateGenerationPrice, GenerationPreparationError, prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
+import i18n from '@/i18n'
 import { databaseService } from '@/services/database/DatabaseService'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
@@ -21,6 +22,7 @@ import { createCanvasExecutionPlan } from './canvasExecutionPlan'
 import { confirmCanvasPersistence, runCanvasMutationStage } from './canvasPersistenceService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { getGraphNodeMediaOutputs } from './graphOutputResolver'
+import { persistImageLocally } from './imageData'
 import { getCanvasNodeDefinition } from '../domain/nodeRegistry'
 import { publishCanvasGenerationTaskStatus } from '@/features/generation/application/generationTaskStatusRegistry'
 import { normalizeGenerationTaskStatus } from '@/core/application-control/domains/generation/taskStatus'
@@ -120,6 +122,12 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
   if (await databaseService.getHistoryById(taskId)) throw new Error('此生成任务已登记，请查询原任务，不要重新提交。')
   const model = registry.getModel(input.modelId)
   if (!model) throw new Error('生成模型不存在。')
+  // 调用方给的参考图先落到本地，节点里存本地文件，检查与执行都读它，不再各下载一次。
+  if (Array.isArray(input.options?.images)) {
+    const images = await Promise.all(input.options.images.map(async image => typeof image === 'string' ? await persistImageLocally(image) : image))
+      .catch((error: unknown) => { throw new GenerationPreparationError('INVALID_INPUT', i18n.t('errors:mediaDimensions.referencePersistFailed', { reason: error instanceof Error ? error.message : String(error) })) })
+    input = { ...input, options: { ...input.options, images, uploadedFilePaths: images } }
+  }
   // 建节点之前检查素材尺寸，不合格时画布上不留下注定失败的节点；执行器随后不再重复读取。
   await assertGenerationMediaDimensions(model, (input.options ?? {}) as DynamicValueMap)
   // 节点只存模型声明过的参数；续接引用不是模型参数，但要随节点保存，运行时交回模型。

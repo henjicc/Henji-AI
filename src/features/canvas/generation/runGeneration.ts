@@ -178,10 +178,12 @@ async function persistUpstreamImages(request: CanvasGenerationMediaInput): Promi
  */
 export async function prepareCanvasGenerationMedia(
   request: CanvasGenerationMediaInput,
-  options: { dimensionsChecked?: boolean } = {},
+  options: { dimensionsChecked?: boolean; signal?: AbortSignal } = {},
 ): Promise<string[]> {
   // 这时还没有结果节点能显示失败原因，落盘失败（远程链接失效、写盘失败）也作为提交前拒绝交给调用方呈现。
+  // 已取消的执行不再提示：用户已经离开这次生成。
   const images = await persistUpstreamImages(request).catch((error: unknown) => {
+    if (options.signal?.aborted) throw error;
     throw new GenerationPreparationError('INVALID_INPUT', i18n.t('errors:mediaDimensions.referencePersistFailed', {
       reason: error instanceof Error ? error.message : String(error),
     }));

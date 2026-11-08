@@ -54,6 +54,7 @@ export function createStoryboardNodeExecutor(id: string, store: typeof useCanvas
         : {}),
     }
     const referenceImages = await prepareStoryboardReferenceImages({
+      signal: execution.signal,
       modelId: runtime.modelId,
       params: generationParams,
       incomingImages: runtime.images,
