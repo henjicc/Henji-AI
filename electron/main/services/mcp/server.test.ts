@@ -147,7 +147,8 @@ describe('本地 MCP 协议与边界', () => {
     expect(context.structuredContent).toMatchObject({ data: { catalogSchemaHash: summary.catalogSchemaHash } })
     const fullSchema = await client.callTool({ name: 'describe_application_contract', arguments: { names: [tool.name], includeSchemas: true } })
     expect(fullSchema.structuredContent).toMatchObject({ data: { toolSchemas: [{ name: tool.name, schemaHash: summary.toolSchemas.find(item => item.name === tool.name)!.schemaHash, inputSchema: tool.inputSchema }] } })
-  })
+  // 全目录 tools/list 与两次契约摘要要给每个工具算 schema 哈希，CI 分片满载时超过默认 5 秒
+  }, 15_000)
   it('同一订阅的 schema 变化通知促使重新发现；应用重启后须重连、重订阅再收到通知', async () => {
     const f = await fixture()
     const { client } = await f.connect()
