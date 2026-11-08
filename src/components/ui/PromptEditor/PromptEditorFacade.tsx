@@ -53,8 +53,11 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
       },
       getDocument: () => value,
       replaceDocument: (document): void => onChange(document),
-      // 静态态还没有编辑器，拖放只在激活后的真实编辑器上发生
+      // 静态态还没有编辑器：拖放与撤销只在激活后的真实编辑器上发生
       insertMediaReferences: (): void => undefined,
+      recordExternalChange: (): void => undefined,
+      undo: (): void => undefined,
+      redo: (): void => undefined,
     }), [onActivate, onChange, value])
 
     return (

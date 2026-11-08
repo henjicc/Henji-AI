@@ -360,6 +360,37 @@ describe('PromptEditor', () => {
     expect(onChange).toHaveBeenLastCalledWith(second)
   })
 
+  it('外部变化与插入引用同进撤销栈：撤销一次两者一起回去，重做再一起回来；整份替换后旧变化不再执行', () => {
+    const ref = createRef<PromptEditorHandle>()
+    const references = [{ resourceId: 'asset:a', mediaType: 'image' as const, label: '图片1' }]
+    render(
+      <PromptEditor ref={ref} value={createPlainTextPromptDocument('左右')} onChange={vi.fn()} ariaLabel="撤销" preset="media-references" references={references} />,
+    )
+    const hasReference = (): boolean => JSON.stringify(ref.current?.getDocument()).includes('asset:a')
+    const media = { undo: vi.fn(), redo: vi.fn() }
+    act(() => ref.current?.insertMediaReferences(2, references, media))
+    expect(hasReference()).toBe(true)
+    expect(media.undo).not.toHaveBeenCalled()
+
+    act(() => ref.current?.undo())
+    expect(hasReference()).toBe(false)
+    expect(media.undo).toHaveBeenCalledTimes(1)
+    act(() => ref.current?.redo())
+    expect(hasReference()).toBe(true)
+    expect(media.redo).toHaveBeenCalledTimes(1)
+
+    // 只有外部变化（素材拖到参考条）时单独成一步
+    const upload = { undo: vi.fn(), redo: vi.fn() }
+    act(() => ref.current?.recordExternalChange(upload))
+    act(() => ref.current?.undo())
+    expect(upload.undo).toHaveBeenCalledTimes(1)
+    expect(hasReference()).toBe(true)
+
+    act(() => ref.current?.replaceDocument(createPlainTextPromptDocument('换稿'), { addToHistory: false }))
+    act(() => ref.current?.undo())
+    expect(media.undo).toHaveBeenCalledTimes(1)
+  })
+
   it('提交快捷键避开 composition 并吞掉当前事件', () => {
     const onSubmit = vi.fn()
     const rendered = render(

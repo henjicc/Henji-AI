@@ -17,6 +17,7 @@ import { useImageUpload } from './hooks/useImageUpload'
 import { useVideoUpload } from './hooks/useVideoUpload'
 import { useAudioUpload } from './hooks/useAudioUpload'
 import { useGlobalPasteImage } from './hooks/useGlobalPasteImage'
+import { trackMediaChange } from './utils/mediaHistory'
 import { usePriceEstimateParams } from './hooks/usePriceEstimateParams'
 import { useReeditContent } from './hooks/useReeditContent'
 import { PresetManager } from './preset/PresetManager'
@@ -254,7 +255,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     modelParams: modelState.params,
     uploadedImagesCount: uiState.uploadedImages.length,
     uploadedVideosCount: uiState.uploadedVideos.length,
-    handleImageFileUpload: imageUpload.handleImageFileUpload,
+    // 焦点不在提示词时的全局粘贴同样进撤销栈
+    handleImageFileUpload: (files, maxCount) => trackMediaChange(() => promptEditorRef.current, () => imageUpload.handleImageFileUpload(files, maxCount)),
     onPasteError: (error) => uiState.showAlert(t('ui:uploadArea.uploadFailed'), error instanceof Error ? error.message : String(error), 'error')
   })
 
@@ -358,11 +360,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onImageReplace={imageUpload.handleImageReplace}
         onImageReorder={imageUpload.handleImageReorder}
         onImageClick={onImageClick}
-        onPaste={(e) => {
-          void imageUpload.handlePaste(e, maxImageCount).catch(error => {
-            uiState.showAlert(t('ui:uploadArea.uploadFailed'), error instanceof Error ? error.message : String(error), 'error')
-          })
-        }}
+        onPaste={(e) => imageUpload.handlePaste(e, maxImageCount).catch(error => {
+          uiState.showAlert(t('ui:uploadArea.uploadFailed'), error instanceof Error ? error.message : String(error), 'error')
+        })}
         onDragStateChange={imageUpload.setIsDraggingImage}
         onVideoReplace={videoUpload.handleVideoReplace}
         onVideoTrim={videoTrimMaxClipSeconds ? (index) => void handleVideoTrim(index) : undefined}

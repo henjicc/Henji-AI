@@ -20,6 +20,7 @@ import type { Editor } from '@tiptap/react'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { UI_TEXT_META_CLASS } from '../styleTokens'
 
+import { addExternalChange, ExternalHistoryExtension } from './extensions/externalHistory'
 import { MediaReferenceExtension } from './extensions/mediaReference'
 import { TemplateVariableExtension } from './extensions/templateVariable'
 import {
@@ -66,6 +67,15 @@ function readCharacterCount(editor: Editor | null, fallback: PromptDocumentV1): 
   const storage = editor.storage.characterCount as { characters?: () => number } | undefined
   if (typeof storage?.characters !== 'function') return countPromptDocumentCharacters(fallback)
   return storage.characters()
+}
+
+function externalEpoch(editor: Editor): number {
+  return (editor.storage as unknown as { externalHistory: { epoch: number } }).externalHistory.epoch
+}
+
+/** 内容被整份替换（换稿、重新编辑）后，之前登记的外部变化不再撤销：那份旧状态已经不是用户眼前的了。 */
+function retireExternalChanges(editor: Editor): void {
+  (editor.storage as unknown as { externalHistory: { epoch: number } }).externalHistory.epoch += 1
 }
 
 const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
@@ -171,6 +181,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         Text,
         HardBreak,
         UndoRedo.configure({ depth: 100, newGroupDelay: 500 }),
+        ExternalHistoryExtension,
         Placeholder.configure({ placeholder: () => placeholderRef.current }),
         CharacterCount.configure({ limit: maxCharacters ?? null, mode: 'textSize' }),
         ...(capabilities.mediaReferences
@@ -281,6 +292,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     useEffect(() => {
       if (!editor || promptDocumentsEqual(fromTiptapContent(editor.getJSON()), value)) return
       try {
+        retireExternalChanges(editor)
         editor.chain()
           .setMeta('addToHistory', false)
           .setContent(toTiptapContent(value), {
@@ -369,7 +381,10 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
 
         try {
           const chain = editor.chain().focus()
-          if (options.addToHistory === false) chain.setMeta('addToHistory', false)
+          if (options.addToHistory === false) {
+            retireExternalChanges(editor)
+            chain.setMeta('addToHistory', false)
+          }
           chain.setContent(toTiptapContent(document), {
             emitUpdate: true,
             errorOnInvalidContent: true,
@@ -380,10 +395,13 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
           )
         }
       },
-      insertMediaReferences: (position, references): void => {
+      insertMediaReferences: (position, references, change): void => {
         if (!editor || references.length === 0) return
         const at = Math.max(0, Math.min(position, editor.state.doc.content.size))
-        editor.chain().focus().insertContentAt(at, references.map(reference => ({
+        const chain = editor.chain().focus()
+        // 素材变化与插入引用同一个事务：撤销一次两者一起回去
+        if (change) chain.command(({ tr }) => { addExternalChange(tr, change, externalEpoch(editor)); return true })
+        chain.insertContentAt(at, references.map(reference => ({
           type: 'mediaReference',
           attrs: {
             resourceId: reference.resourceId,
@@ -393,6 +411,12 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
           },
         }))).run()
       },
+      recordExternalChange: (change): void => {
+        if (!editor) return
+        editor.view.dispatch(addExternalChange(editor.state.tr, change, externalEpoch(editor)))
+      },
+      undo: (): void => { editor?.commands.undo() },
+      redo: (): void => { editor?.commands.redo() },
     }), [editor])
 
     // 画布静态态切换为真实编辑器时，调用方会在 onReady 中恢复光标或拖拽选区。

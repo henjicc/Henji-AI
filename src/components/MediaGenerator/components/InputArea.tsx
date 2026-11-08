@@ -9,6 +9,10 @@ import type {
 } from '@/components/ui'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
+import { readGenerationMediaSnapshot, type GenerationMediaSnapshot } from '@/features/generation/store/generationMediaSnapshot'
+import { contributeAppMenus } from '@/core/appMenu/appMenu'
+import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
+import { mediaChangeSince, trackMediaChange } from '../utils/mediaHistory'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { registry } from '@/core/ModelRegistry'
 import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
@@ -44,7 +48,7 @@ interface InputAreaProps {
   onImageReplace: (index: number, file: File) => void
   onImageReorder: (from: number, to: number) => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
-  onPaste: (event: ClipboardEvent) => void
+  onPaste: (event: ClipboardEvent) => void | Promise<void>
   onDragStateChange: (isDragging: boolean) => void
   uploadedVideos?: string[]
   onVideoUpload?: (files: File[]) => void | Promise<void>
@@ -332,14 +336,50 @@ const InputArea: React.FC<InputAreaProps> = ({
   const uploaderRef = useRef<MediaStripUploaderHandle>(null)
   const localPromptEditorRef = useRef<PromptEditorHandle>(null)
   const editorRef = promptEditorRef ?? localPromptEditorRef
-  // 拖到提示词里的素材：先照常进参考素材条，导入落定后把新出现的引用插到松手的位置。
+  // 参考素材的增删改都记进提示词编辑器的撤销栈，Ctrl+Z 与打字按顺序一起撤销
+  const promptDropActiveRef = useRef(false)
+  const mediaOperation = <A extends unknown[], R>(operation: (...args: A) => R) => (...args: A): R => (
+    trackMediaChange(() => editorRef.current, () => operation(...args))
+  )
+  // 拖进提示词的那次上传由落定后的插入一并登记，这里不再单记；删除、排序等其他操作照常各记一步
+  const uploadOperation = <A extends unknown[], R>(operation: (...args: A) => R) => (...args: A): R => (
+    promptDropActiveRef.current ? operation(...args) : trackMediaChange(() => editorRef.current, () => operation(...args))
+  )
+  // 拖到提示词里的素材：先照常进参考素材条，导入落定后把新出现的引用插到松手的位置，与素材变化并成一步撤销。
   // 落定后用 state 记下落点：这次渲染排在导入里所有 setState 之后，effect 读到的引用列表一定已含新素材。
-  const [settledDrop, setSettledDrop] = useState<{ position: number; knownIds: Set<string> } | null>(null)
+  const [settledDrop, setSettledDrop] = useState<{ position: number | null; knownIds: Set<string>; before: GenerationMediaSnapshot } | null>(null)
   useEffect(() => {
     if (!settledDrop) return
     setSettledDrop(null)
-    editorRef.current?.insertMediaReferences(settledDrop.position, promptReferences.filter(reference => !settledDrop.knownIds.has(reference.resourceId)))
+    const editor = editorRef.current
+    const change = mediaChangeSince(settledDrop.before)
+    const added = promptReferences.filter(reference => !settledDrop.knownIds.has(reference.resourceId))
+    if (settledDrop.position !== null && added.length > 0) editor?.insertMediaReferences(settledDrop.position, added, change ?? undefined)
+    else if (change) editor?.recordExternalChange(change)
   }, [editorRef, promptReferences, settledDrop])
+  // 刚拖到素材条上松手时焦点不在提示词里：生成页没有别的输入框获得焦点时，Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 也交给提示词的撤销栈
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.altKey) return
+      const key = event.key.toLowerCase()
+      const redo = (key === 'z' && event.shiftKey) || (key === 'y' && !event.shiftKey)
+      if (!redo && !(key === 'z' && !event.shiftKey)) return
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+      // 生成页隐藏（切到别的工作区）或有弹窗时不接管
+      if (!composerRef.current?.offsetParent || document.querySelector('[role="dialog"][aria-modal="true"]')) return
+      event.preventDefault()
+      if (redo) editorRef.current?.redo()
+      else editorRef.current?.undo()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [editorRef])
+  const menuVisible = useAppMenuVisibility()
+  useEffect(() => menuVisible ? contributeAppMenus('generationInput', [{ menu: 'edit', order: 0, items: [
+    { kind: 'action', id: 'generation.undo', editRole: 'undo', label: '撤销', shortcut: 'Ctrl+Z', run: () => editorRef.current?.undo() },
+    { kind: 'action', id: 'generation.redo', editRole: 'redo', label: '重做', shortcut: 'Ctrl+Shift+Z', run: () => editorRef.current?.redo() },
+  ] }]) : undefined, [editorRef, menuVisible])
   const dropIntoPrompt = (event: DragEvent, position: number | null): void => {
     const transfer = event.dataTransfer
     // 只接管文件与软件内素材；提示词里拖动选中的文字仍由编辑器自己移动
@@ -349,12 +389,17 @@ const InputArea: React.FC<InputAreaProps> = ({
     event.preventDefault()
     event.stopPropagation()
     const knownIds = new Set(promptReferences.map(reference => reference.resourceId))
+    const before = readGenerationMediaSnapshot()
+    promptDropActiveRef.current = true
     void uploader.acceptDrop(transfer)
       .catch((error: unknown) => {
         showAlert(t('uploadArea.uploadFailed'), error instanceof Error ? error.message : String(error), 'error')
       })
       // 部分失败时已导入的素材照样插入
-      .finally(() => { if (position !== null) setSettledDrop({ position, knownIds }) })
+      .finally(() => {
+        promptDropActiveRef.current = false
+        setSettledDrop({ position, knownIds, before })
+      })
   }
   const dragInProgress = useMediaDragInProgress()
   const showReferenceRow = mixedFiles.length > 0 || dragInProgress || importingMedia
@@ -426,11 +471,11 @@ const InputArea: React.FC<InputAreaProps> = ({
               ref={uploaderRef}
               onBeforeLayoutChange={captureComposerLayout}
               files={mixedFiles}
-              onUpload={mixedKinds ? handleMixedFileUpload : onImageUpload}
-              onRemove={mixedKinds ? handleMixedFileRemove : onImageRemove}
-              onReplace={mixedKinds ? handleMixedFileReplace : onImageReplace}
+              onUpload={uploadOperation(mixedKinds ? handleMixedFileUpload : onImageUpload)}
+              onRemove={mediaOperation(mixedKinds ? handleMixedFileRemove : onImageRemove)}
+              onReplace={mediaOperation(mixedKinds ? handleMixedFileReplace : onImageReplace)}
               onTrim={needsVideoUpload && videoConstraints?.trim ? handleMixedFileTrim : undefined}
-              onReorder={mixedKinds ? handleMixedFileReorder : onImageReorder}
+              onReorder={mediaOperation(mixedKinds ? handleMixedFileReorder : onImageReorder)}
               onFileClick={mixedKinds ? handleMixedFileClick : onImageClick}
               accept={needsVideoOnly
                 ? (needsAudioUpload ? "video/*,audio/*" : "video/*")
@@ -466,7 +511,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             frame="none"
             ariaLabel={t('inputArea.placeholder.default')}
             references={promptReferences}
-            onPaste={onPaste}
+            onPaste={mediaOperation(onPaste)}
             onDrop={(event, target) => dropIntoPrompt(event, target.position)}
             submitShortcut="enter"
             onSubmit={onGenerate}

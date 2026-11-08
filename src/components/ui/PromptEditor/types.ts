@@ -1,5 +1,8 @@
 import type { UiTextAreaHeight } from '../styleTokens'
 import type { PromptDocumentV1, PromptMediaType } from '@/core/inputs/promptDocument'
+import type { PromptEditorExternalChange } from './extensions/externalHistory'
+
+export type { PromptEditorExternalChange }
 
 export type PromptEditorPreset =
   | 'plain'
@@ -74,8 +77,15 @@ export interface PromptEditorHandle {
     document: PromptDocumentV1,
     options?: ReplacePromptDocumentOptions,
   ) => void
-  /** 在文档位置插入素材引用（与手动输入 @ 选中素材相同）；位置超出当前文档时落在末尾。 */
-  insertMediaReferences: (position: number, references: readonly PromptReferenceItem[]) => void
+  /**
+   * 在文档位置插入素材引用（与手动输入 @ 选中素材相同）；位置超出当前文档时落在末尾。
+   * 带 change 时把这次外部变化（如素材进参考条）与插入并成一步撤销。
+   */
+  insertMediaReferences: (position: number, references: readonly PromptReferenceItem[], change?: PromptEditorExternalChange) => void
+  /** 把编辑器以外已经发生的一次变化记进编辑器的撤销栈，与文字编辑按顺序一起撤销、重做。 */
+  recordExternalChange: (change: PromptEditorExternalChange) => void
+  undo: () => void
+  redo: () => void
 }
 
 /** 拖放落点：松手处对应的文档位置，落在文字区之外时为 null。 */
