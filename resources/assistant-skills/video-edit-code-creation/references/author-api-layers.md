@@ -24,7 +24,7 @@
 
 draw 里的坐标始终是画布像素，`setTransform`、`resetTransform`、`getTransform` 也一样（运动层的栅格缩放由宿主叠上）。渐变、图案对象（含图案的 `setTransform`）可以缓存到模块变量跨帧复用；预先画好、反复贴的图块缓存成 `transferToImageBitmap()` 得到的 ImageBitmap，不要缓存 OffscreenCanvas。
 
-`layoutText` 按内容、样式、选项与字体字节复用只读布局，可在 `layers()` 中调用。逐字用一次 `drawText` 的 `graphemes` 回调返回位移与透明度，null 隐藏。整段与逐字绘制共用字素几何；底板和装饰线保持整段，用 `backgroundAndDecorationOpacity` 控制。分层、连写、档位和 flex 内容尺寸、截断、基线规则见 author-text-motion；字体静态声明见 author-text-motion；简单数字表用 `henji-layout/table`，用法见 recipes-text-data。
+`layoutText` 按内容、样式、选项与字体字节复用只读布局，可在 `layers()` 中调用。逐字用一次 `drawText` 的 `graphemes` 回调返回位移与透明度，null 隐藏。整段与逐字绘制共用字素几何；底板和装饰线保持整段，用 `backgroundAndDecorationOpacity` 控制。分层、连写、档位和 flex 内容尺寸、截断、基线规则见 author-text-motion 与 author-text-layout；字体静态声明见 author-text-motion；简单数字表用 `henji-layout/table`，用法见 recipes-text-data。
 
 ```ts
 import { layoutText, drawText } from "henji-layout/text"

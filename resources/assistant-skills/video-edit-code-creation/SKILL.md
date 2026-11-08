@@ -52,7 +52,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 
 ## 按任务分流
 
-`load_assistant_skill` 的 name 为 `video-edit-code-creation`。省略 path 读入口，按下表路径读参考，每步一两份，已读的直接复用。
+`load_assistant_skill` 的 name 为 `video-edit-code-creation`。省略 path 读入口，按下表路径读参考，每步一两份。
 
 | 任务 | 参考 |
 | --- | --- |
@@ -74,8 +74,8 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 空间构图、展开压平、three 内容 | [空间配方](references/recipes-3d.md) |
 | 模块契约、内置库、画面键、图层、效果链 | [作者接口](references/author-api.md)、[画面键](references/author-api-frame.md)、[图层](references/author-api-layers.md)、[效果链](references/author-api-effects.md) |
 | 预览卡顿、成本反馈 | [性能](references/performance.md) |
-| 音乐节拍、视频与网页画面 | [音频与画面输入](references/author-api-media.md)、[网页画面](references/author-api-web.md) |
-| 文字参数与样式、量字、逐字 | [文字动效接口](references/author-text-motion.md) |
+| 音乐节拍、视频与网页画面 | [音频与画面输入](references/author-api-media.md)、[网页画面](references/author-api-web.md)、[逐字](references/author-api-web-text.md) |
+| 文字参数与样式、量字、逐字 | [文字动效](references/author-text-motion.md)、[排版](references/author-text-layout.md) |
 | WebGPU、WebGL、滤镜、相邻帧 | [GPU 接口](references/author-shaders.md) |
 | 查内置 shaders 组件名称与角色 | [纹理](references/shader-components-textures.md)、[图形材质](references/shader-components-shapes.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
 | 用户标注发现、定位、回复 | [标注协议](references/annotations.md) |
@@ -87,7 +87,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 
 ## 导演流程
 
-已有决定就从相应阶段继续；小改直接读现状、修改、审查。各阶段的参考按上面的任务表取。
+已有决定就从相应阶段继续；小改直接读现状、修改、审查。
 
 | 阶段 | 产出 |
 | --- | --- |
