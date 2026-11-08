@@ -1,7 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
-import type { StageObject } from '../domain/sceneTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
 import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
 import { captureCameraStageUndo, rollbackCameraStageWrite } from './cameraStageUndo'
@@ -30,7 +29,7 @@ async function ensureProjectLoaded(projectId: string): Promise<void> {
 }
 
 /** 纯输入校验，必须在任何写入之前跑完——写到一半才发现参数不对，留下的残局比失败本身更难收拾。 */
-function assertStateKeyframeInputsValid(inputs: CameraStageStateKeyframeCreateInput[], objects: StageObject[]): void {
+function assertStateKeyframeInputsValid(inputs: CameraStageStateKeyframeCreateInput[]): void {
   for (const [index, input] of inputs.entries()) {
     if (!Number.isFinite(input.time) || input.time < 0 || input.time > 3_600) {
       throw new Error(`STATE_KEYFRAME_TIME_INVALID：第 ${index} 项的 time 必须是 0~3600 秒之间的有限数。`)
@@ -67,8 +66,7 @@ const implementation = {
       event: 'camera_stage.state_keyframe.create.start', projectId, stateKeyframeCount: inputs.length,
     })
     await ensureProjectLoaded(projectId)
-    const before = cameraStageProjectStore(projectId).getState()
-    assertStateKeyframeInputsValid(inputs, before.objects)
+    assertStateKeyframeInputsValid(inputs)
     const undoToken = captureCameraStageUndo(projectId)
     try {
       const stateKeyframeIds: string[] = []
