@@ -67,6 +67,28 @@ it('用户拒绝提交确认后，画布节点和任务都进入取消状态', a
   expect(saved.nodes.some(node => node.data.generationTaskId === taskId && node.data.generationCancelled === true)).toBe(true)
 })
 
+it('新建节点前按尺寸约束拦下素材；合格时提交与执行只读一次尺寸', async () => {
+  registry.unregister('canvas-task-fixture')
+  registry.register({ meta: { id: 'canvas-task-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } }, params: [], endpoints: '/fixture',
+    inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 }, rules: [{ imageConstraints: { minShortSidePx: 300 } }] },
+    pricing: { currency: '$', fixed: 0.03 }, request: { builder: params => params } })
+  const readImageInfo = vi.spyOn(imageCommands, 'readImageInfo')
+  const destination = { mode: 'canvas' as const, documentId: projectId, sourceNodeIds: ['reference'] }
+  const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: '尺寸检查', options: {} }
+  input.options = await resolveCanvasGenerationOptions(input, destination)
+  const nodeCount = useCanvasStore.getState().nodes.length
+
+  readImageInfo.mockResolvedValue({ width: 200, height: 800, orientation: null } as Awaited<ReturnType<typeof imageCommands.readImageInfo>>)
+  await expect(submitCanvasGenerationTask(input, destination, crypto.randomUUID())).rejects.toThrow('200×800')
+  expect(useCanvasStore.getState().nodes).toHaveLength(nodeCount)
+
+  readImageInfo.mockClear().mockResolvedValue({ width: 1024, height: 1024, orientation: null } as Awaited<ReturnType<typeof imageCommands.readImageInfo>>)
+  const taskId = crypto.randomUUID()
+  await submitCanvasGenerationTask(input, destination, taskId)
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
+  expect(readImageInfo).toHaveBeenCalledTimes(1)
+})
+
 it('A 页面准备和提交 B 的生成，打开 B 不重复提交，结果保存到同一实例', async () => {
   const targetId = projectId
   const visibleId = await createCanvasTestProject('正在编辑 A')

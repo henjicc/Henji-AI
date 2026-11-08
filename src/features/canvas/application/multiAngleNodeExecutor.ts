@@ -8,7 +8,7 @@ import { executeMultiAngleBatch } from './multiAngleBatchService'
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities/types'
 import { createMultiAngleBatchPlan, createMultiAngleCommitContract, normalizeMultiAngleConfig, resolveMultiAngleExecutionTarget } from '../capabilities/multiAnglePolicy'
 import { CANVAS_NODE_TYPES, EXPORT_RESULT_NODE_DEFAULT_WIDTH, EXPORT_RESULT_NODE_LAYOUT_HEIGHT } from '../domain/canvasNodes'
-import { assertCanvasGenerationMedia, runCanvasGeneration, resumeCanvasGeneration } from '../generation/runGeneration'
+import { prepareCanvasGenerationMedia, runCanvasGeneration, resumeCanvasGeneration } from '../generation/runGeneration'
 import { ensureGenerationProviderConfigured } from '../nodes/shared/generationNodeGuards'
 import type { CanvasNodeExecutionContext, CanvasNodeExecutionResult, CanvasRegisteredExecutor } from './canvasExecutionContracts'
 import type { MultiAngleGenerationNodeData } from './specialGenerationNodeTypes'
@@ -96,9 +96,9 @@ export function createMultiAngleNodeExecutor(id: string, store: typeof useCanvas
     const target = execution.runtime
     if (!target) throw new Error('生成任务缺少画布运行实例')
     const prepared = prepareExecution()
-    // 各视角共用同一模型和同一张源图，只是角度参数不同，检查第一个视角即可。
+    // 各视角共用同一模型和同一张源图（随视角参数的 image 发出），只是角度不同，检查第一个视角即可。
     const [firstView] = createMultiAngleBatchPlan(prepared.latestConfig, prepared.sourceImage)
-    await assertCanvasGenerationMedia({ modelId: firstView.modelId, params: firstView.params, upstream: { images: [prepared.sourceImage] } })
+    await prepareCanvasGenerationMedia({ modelId: firstView.modelId, params: firstView.params })
     await execution.assertCurrent()
     const placeholderNodeId = createPlaceholder(
       id,

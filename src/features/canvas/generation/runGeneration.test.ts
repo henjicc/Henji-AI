@@ -23,11 +23,20 @@ vi.mock('@/features/generation/application/taskServerId', () => ({
   extractServerTaskIdFromMetadata: () => null,
 }))
 
-import { runCanvasGeneration } from './runGeneration'
+import { GenerationPreparationError } from '@/features/generation'
+import { prepareCanvasGenerationMedia, runCanvasGeneration } from './runGeneration'
 
 describe('runCanvasGeneration 付费请求门禁', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('建结果节点前参考图落盘失败，作为提交前拒绝交给调用方呈现', async () => {
+    persistImageLocally.mockRejectedValueOnce(new Error('链接已过期'))
+    const rejected = await prepareCanvasGenerationMedia({ modelId: 'test-model', params: {}, upstream: { images: ['https://example.com/a.png'] } })
+      .catch((error: unknown) => error)
+    expect(rejected).toBeInstanceOf(GenerationPreparationError)
+    expect((rejected as Error).message).toContain('链接已过期')
   })
 
   it('本地媒体准备期间输入失效时不提交供应商任务', async () => {

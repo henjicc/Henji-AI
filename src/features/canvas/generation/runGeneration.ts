@@ -7,7 +7,8 @@ import { captureResultContinuations } from '@/core/services/generationContinuati
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
 import type { JsonObject, StructuredGenerationOutput } from '@henjicc/ai-sdk';
 import { persistImageLocally } from '@/features/canvas/application/imageData';
-import { assertGenerationMediaDimensions, generateToCompletion } from '@/features/generation';
+import { assertGenerationMediaDimensions, GenerationPreparationError, generateToCompletion } from '@/features/generation';
+import i18n from '@/i18n';
 import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult';
 
 const logger = createLogger('features.canvas.generation.runGeneration');
@@ -165,18 +166,31 @@ function withUpstreamMedia(request: CanvasGenerationMediaInput, images: string[]
   return params;
 }
 
-function upstreamImages(request: CanvasGenerationMediaInput): string[] {
-  return [...(request.upstream?.images ?? []), ...(request.referenceImages ?? [])];
+async function persistUpstreamImages(request: CanvasGenerationMediaInput): Promise<string[]> {
+  const images = [...(request.upstream?.images ?? []), ...(request.referenceImages ?? [])];
+  return await Promise.all(images.map(async (imageUrl) => await persistImageLocally(imageUrl)));
 }
 
 /**
- * 按模型的素材尺寸约束检查这次画布生成实际要发出的素材。
- * 执行器在建结果节点之前调用：不合格时画布上不留下注定失败的节点。
+ * 把参考图落到本地，再按模型的素材尺寸约束检查这次要发出的素材，返回落盘后的图片。
+ * 执行器在建结果节点之前调用（不合格时画布上不留下注定失败的节点），并把返回的图片作为
+ * upstream.images 交给 runCanvasGeneration：已是本地路径的图片不会再下载或写盘一次。
  */
-export async function assertCanvasGenerationMedia(request: CanvasGenerationMediaInput): Promise<void> {
+export async function prepareCanvasGenerationMedia(
+  request: CanvasGenerationMediaInput,
+  options: { dimensionsChecked?: boolean } = {},
+): Promise<string[]> {
+  // 这时还没有结果节点能显示失败原因，落盘失败（远程链接失效、写盘失败）也作为提交前拒绝交给调用方呈现。
+  const images = await persistUpstreamImages(request).catch((error: unknown) => {
+    throw new GenerationPreparationError('INVALID_INPUT', i18n.t('errors:mediaDimensions.referencePersistFailed', {
+      reason: error instanceof Error ? error.message : String(error),
+    }));
+  });
+  if (options.dimensionsChecked) return images;
   const modelId = resolveCanvasModelId(request.modelId, request.mediaType ?? 'image');
   const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId);
-  if (model) await assertGenerationMediaDimensions(model, withUpstreamMedia(request, upstreamImages(request)));
+  if (model) await assertGenerationMediaDimensions(model, withUpstreamMedia(request, images));
+  return images;
 }
 
 /**
@@ -187,8 +201,7 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
   const mediaType = request.mediaType ?? 'image';
   const modelId = resolveCanvasModelId(request.modelId, mediaType);
   const handleProgress = createThrottledProgressHandler(request.onProgress);
-  const images = await Promise.all(upstreamImages(request).map(async (imageUrl) => await persistImageLocally(imageUrl)));
-  const params = withUpstreamMedia(request, images);
+  const params = withUpstreamMedia(request, await persistUpstreamImages(request));
 
   await request.assertCurrent?.();
   request.signal?.throwIfAborted();

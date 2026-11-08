@@ -158,7 +158,7 @@ it('素材尺寸不合模型要求时在建结果节点前拒绝，不调用供�
   const generate = vi.spyOn(GenerationService.getInstance(), 'generate')
   registerCanvasNodeExecutor(nodeId, createGenerationNodeExecutor(() => options))
   try {
-    await expect(runCanvasNode(nodeId)).rejects.toThrow('图片（200×800）宽和高都不能小于 300 像素')
+    await expect(runCanvasNode(nodeId)).rejects.toThrow('the image (200×800) must be at least 300 px on both sides')
   } finally {
     Object.assign(imageInfo, { width: 1024, height: 1024 })
   }

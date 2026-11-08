@@ -1,5 +1,5 @@
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
-import { assertCanvasGenerationMedia, runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
+import { prepareCanvasGenerationMedia, runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { sanitizeStoryboardPromptText } from '@/features/canvas/application/storyboardText'
 import { isNineGridStoryboard } from '@/features/canvas/capabilities/nineGridPolicy'
 import type { CanvasGenerationOutputBatchContractV1 } from '@/features/canvas/domain/generationOutputs'
@@ -84,7 +84,7 @@ interface PrepareStoryboardReferenceImagesParams {
   gridImageResolution: string
 }
 
-/** 画出栅格参考图并按模型的素材尺寸约束检查全部参考图，执行器在建结果节点之前调用。 */
+/** 画出栅格参考图，落盘并按模型的素材尺寸约束检查全部参考图；执行器在建结果节点之前调用。 */
 export async function prepareStoryboardReferenceImages({
   modelId,
   params,
@@ -99,9 +99,7 @@ export async function prepareStoryboardReferenceImages({
     resumeContext.gridCols,
     gridImageResolution
   )
-  const referenceImages = [...incomingImages, gridImageDataUrl]
-  await assertCanvasGenerationMedia({ modelId, params, referenceImages })
-  return referenceImages
+  return await prepareCanvasGenerationMedia({ modelId, params, referenceImages: [...incomingImages, gridImageDataUrl] })
 }
 
 export async function generateStoryboardImage({

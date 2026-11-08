@@ -251,9 +251,6 @@ export function registerGenerationCapabilityHandlers(
     if (destination.mode === 'canvas') {
       const { submitCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
       const preparation = generationApplicationService.prepare(resolved)
-      const model = registry.getModel(resolved.modelId)
-      // 画布任务会先建出生成节点再执行；在建节点之前拦下，画布上不留注定失败的节点。
-      if (model) await assertGenerationMediaDimensions(model, preparation.options as DynamicValueMap)
       return await submitCanvasGenerationTask({ ...resolved, options: preparation.options as Record<string, unknown> }, destination,
         taskId)
     }

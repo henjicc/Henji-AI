@@ -121,6 +121,9 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(db.prepare('SELECT file_path, thumbnail_name, content_identity FROM assets WHERE id = ?').get('a2'))
         .toEqual({ file_path: externalFile, thumbnail_name: null, content_identity: null })
       expect(db.prepare('SELECT * FROM asset_library_items').all()).toHaveLength(1)
+      // 第 27 项：视频改按播放朝向登记宽高，已检查的视频退回待检查；图片不受影响。
+      expect(db.prepare('SELECT id, inspection_status FROM assets ORDER BY id').all())
+        .toEqual([{ id: 'a1', inspection_status: 'ready' }, { id: 'a2', inspection_status: 'pending' }])
 
       // 回执 JSON 整份换算；生成提交账本补齐当时散写的列。
       expect(JSON.parse((db.prepare('SELECT result_json FROM pending_task_results').get() as { result_json: string }).result_json)).toEqual({ filePath: 'henji://user/生成结果/a.png' })

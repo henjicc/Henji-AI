@@ -120,6 +120,14 @@ export function upgradeAssetSources(conn: Database.Database): void {
   rebuildAssetsTable(conn, replacement)
 }
 
+/**
+ * 视频宽高按播放朝向登记（手机竖拍常以横向编码再带旋转标记）。之前按编码宽高登记的视频
+ * 改回待检查，下次读取时完整重查并写入新宽高（内容身份与缩略图不变，重查后保持原值）；SQL 里看不出哪些带旋转，全部视频重查一次。
+ */
+export function reinspectVideoAssetDimensions(conn: Database.Database): void {
+  conn.prepare("UPDATE assets SET inspection_status='pending', inspection_error=NULL WHERE media_type='video' AND inspection_status='ready'").run()
+}
+
 export function restrictAssetPathUniquenessToActive(conn: Database.Database): void {
   const { sql } = conn.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='assets'").get() as { sql: string }
   const replacement = sql.replace(/(\bfile_path\s+TEXT\s+NOT\s+NULL)\s+UNIQUE/i, '$1')

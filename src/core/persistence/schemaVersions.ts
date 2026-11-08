@@ -1,5 +1,5 @@
 /** Existing SQLite ledger baseline. The ledger's final entry uses this constant. */
-export const SQLITE_SCHEMA_VERSION = 26
+export const SQLITE_SCHEMA_VERSION = 27
 // 独立内容版本；冻结既有编号以保留历史样本身份，不随 SQL DDL 迁移递增。
 export const SETTING_RECORD_VERSION = 22
 export const ASSET_RECORD_VERSION = 22

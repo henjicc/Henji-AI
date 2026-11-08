@@ -102,7 +102,7 @@ describe('visible generation task internal result contract', () => {
     })
     const error = await created.catch((rejected: unknown) => rejected)
     expect(error).toBeInstanceOf(GenerationPreparationError)
-    expect((error as Error).message).toContain('图片（200×800）宽和高都不能小于 300 像素')
+    expect((error as Error).message).toContain('the image (200×800) must be at least 300 px on both sides')
     expect(appendTask).not.toHaveBeenCalled()
     expect(notify).not.toHaveBeenCalled()
   })

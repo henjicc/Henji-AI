@@ -25,5 +25,22 @@
     "generationInterrupted": "上次生成在任务提交完成前中断，已无法继续，请重新发起",
     "uploadFailed": "上传失败",
     "downloadFailed": "下载失败"
+  },
+  "mediaDimensions": {
+    "rejected": "{{model}} 不接受当前素材：{{reasons}}。请换用符合要求的素材后再生成。",
+    "separator": "；",
+    "item": "{{media}}（{{width}}×{{height}}）{{reason}}",
+    "image": "图片",
+    "video": "视频",
+    "imageNumbered": "第 {{index}} 个图片",
+    "videoNumbered": "第 {{index}} 个视频",
+    "minShortSidePx": "宽和高都不能小于 {{limit}} 像素",
+    "maxLongSidePx": "宽和高都不能超过 {{limit}} 像素",
+    "minPixels": "画面总像素（宽×高）不能少于 {{limit}}",
+    "maxPixels": "画面总像素（宽×高）不能超过 {{limit}}",
+    "aspectRange": "宽高比（宽÷高）需在 {{min}}～{{max}} 之间，当前为 {{actual}}",
+    "aspectMin": "宽高比（宽÷高）需不小于 {{min}}，当前为 {{actual}}",
+    "aspectMax": "宽高比（宽÷高）需不大于 {{max}}，当前为 {{actual}}",
+    "referencePersistFailed": "参考图准备失败：{{reason}}。请检查参考图后重试。"
   }
 }

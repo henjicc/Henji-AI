@@ -25,5 +25,22 @@
     "generationInterrupted": "The previous generation was interrupted before the task was fully submitted and cannot continue. Please start it again.",
     "uploadFailed": "Upload failed",
     "downloadFailed": "Download failed"
+  },
+  "mediaDimensions": {
+    "rejected": "{{model}} cannot use the current media: {{reasons}}. Replace it with media that meets the requirements and try again.",
+    "separator": "; ",
+    "item": "{{media}} ({{width}}×{{height}}) {{reason}}",
+    "image": "the image",
+    "video": "the video",
+    "imageNumbered": "image {{index}}",
+    "videoNumbered": "video {{index}}",
+    "minShortSidePx": "must be at least {{limit}} px on both sides",
+    "maxLongSidePx": "must be at most {{limit}} px on both sides",
+    "minPixels": "must have at least {{limit}} pixels in total (width × height)",
+    "maxPixels": "must have at most {{limit}} pixels in total (width × height)",
+    "aspectRange": "must have an aspect ratio (width ÷ height) between {{min}} and {{max}}; it is {{actual}}",
+    "aspectMin": "must have an aspect ratio (width ÷ height) of at least {{min}}; it is {{actual}}",
+    "aspectMax": "must have an aspect ratio (width ÷ height) of at most {{max}}; it is {{actual}}",
+    "referencePersistFailed": "Could not prepare the reference image: {{reason}}. Check the reference image and try again."
   }
 }

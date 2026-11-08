@@ -1,6 +1,8 @@
 import { findMediaDimensionViolation, type MediaDimensions, type MediaDimensionViolation } from '@henjicc/ai-sdk'
 import { readVideoInfo } from '@/commands/video'
 import { createLogger } from '@/core/logging'
+import i18n from '@/i18n'
+import { resolveModelName } from '@/utils/modelHelpers'
 import { readCachedVideoDurationSeconds, resolvePriceEstimateMediaContext } from '@/core/pricing/resolvePriceEstimateMediaContext'
 import { attachVideoDurations, resolveGenerationVideoSources } from '@/core/services/generationVideoDurations'
 import { readSourceImageInfo } from '@/core/services/generationRequestPreflight'
@@ -606,20 +608,17 @@ function describeDimensionViolation(
   violation: MediaDimensionViolation,
   constraints: ImageConstraints | VideoConstraints,
 ): string {
-  switch (violation.rule) {
-    case 'minShortSidePx': return `宽和高都不能小于 ${violation.limit} 像素`
-    case 'maxLongSidePx': return `宽和高都不能超过 ${violation.limit} 像素`
-    case 'minPixels': return `画面总像素（宽×高）不能少于 ${violation.limit}`
-    case 'maxPixels': return `画面总像素（宽×高）不能超过 ${violation.limit}`
-    case 'minAspectRatio':
-    case 'maxAspectRatio': {
-      const { minAspectRatio: min, maxAspectRatio: max } = constraints
-      const range = min !== undefined && max !== undefined
-        ? `${formatAspectRatio(min)}～${formatAspectRatio(max)} 之间`
-        : min !== undefined ? `不小于 ${formatAspectRatio(min)}` : `不大于 ${formatAspectRatio(max ?? violation.limit)}`
-      return `宽高比（宽÷高）需${range}，当前为 ${formatAspectRatio(violation.actual)}`
-    }
+  if (violation.rule !== 'minAspectRatio' && violation.rule !== 'maxAspectRatio') {
+    return i18n.t(`errors:mediaDimensions.${violation.rule}`, { limit: violation.limit })
   }
+  const { minAspectRatio: min, maxAspectRatio: max } = constraints
+  const actual = formatAspectRatio(violation.actual)
+  if (min !== undefined && max !== undefined) {
+    return i18n.t('errors:mediaDimensions.aspectRange', { min: formatAspectRatio(min), max: formatAspectRatio(max), actual })
+  }
+  return min !== undefined
+    ? i18n.t('errors:mediaDimensions.aspectMin', { min: formatAspectRatio(min), actual })
+    : i18n.t('errors:mediaDimensions.aspectMax', { max: formatAspectRatio(max ?? violation.limit), actual })
 }
 
 /**
@@ -636,29 +635,28 @@ export async function assertGenerationMediaDimensions(
   if (imageSources.length === 0 && videoSources.length === 0) return
   const limits = resolveInputLimits(model, values, { imagesCount: imageSources.length, videosCount: videoSources.length })
   const groups = [
-    { kind: 'image' as const, label: '图片', sources: imageSources, constraints: limits.imageConstraints },
-    { kind: 'video' as const, label: '视频', sources: videoSources, constraints: limits.videoConstraints },
+    { kind: 'image' as const, sources: imageSources, constraints: limits.imageConstraints },
+    { kind: 'video' as const, sources: videoSources, constraints: limits.videoConstraints },
   ]
   const errors: Array<{ paramId: string; type: 'dimensions'; message: string }> = []
-  for (const { kind, label, sources, constraints } of groups) {
+  for (const { kind, sources, constraints } of groups) {
     if (!constraints || sources.length === 0) continue
     const sizes = await Promise.all(sources.map((source) => readers[kind](source)))
     sizes.forEach((size, index) => {
       if (!size) return
       const violation = findMediaDimensionViolation(constraints, size)
       if (!violation) return
-      const which = sources.length > 1 ? `第 ${index + 1} 个${label}` : label
+      const media = i18n.t(sources.length > 1 ? `errors:mediaDimensions.${kind}Numbered` : `errors:mediaDimensions.${kind}`, { index: index + 1 })
       errors.push({
         paramId: kind === 'image' ? 'images' : 'videos',
         type: 'dimensions',
-        message: `${which}（${size.width}×${size.height}）${describeDimensionViolation(violation, constraints)}`,
+        message: i18n.t('errors:mediaDimensions.item', { media, width: size.width, height: size.height, reason: describeDimensionViolation(violation, constraints) }),
       })
     })
   }
   if (errors.length === 0) return
-  const modelName = getI18nText(model.meta.name, 'zh') || model.meta.id
   logger.warn('素材尺寸不符合模型要求', { event: 'generation.media_dimensions.rejected', modelId: model.meta.id, errors })
   throw new GenerationPreparationError('INVALID_INPUT',
-    `${modelName} 不接受当前素材：${errors.map((error) => error.message).join('；')}。请换用符合要求的素材后再生成。`,
+    i18n.t('errors:mediaDimensions.rejected', { model: resolveModelName(model), reasons: errors.map((error) => error.message).join(i18n.t('errors:mediaDimensions.separator')) }),
     { modelId: model.meta.id, errors })
 }

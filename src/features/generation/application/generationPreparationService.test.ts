@@ -11,6 +11,7 @@ import {
   toApplicationStableIdSegment,
 } from '@/core/application-control'
 import { registry } from '@/core/ModelRegistry'
+import i18n from '@/i18n'
 import { composeModelDefinition } from '@/core/composeModelDefinition'
 import { USD_TO_CNY_RATE_STORAGE_KEY } from '@/core/pricing/priceDisplay'
 import type { ModelDefinition } from '@/core/types'
@@ -94,6 +95,7 @@ describe('generationPreparation', () => {
   })
 
   it('提交前按模型尺寸约束拦下不合格素材，读不到尺寸的不拦', async () => {
+    await i18n.changeLanguage('zh-CN')
     const model = composeModelDefinition(apimartKling30OmniModel, modelPresentations[apimartKling30OmniModel.meta.id])
     registry.register(model)
     const values = { ...registry.getDefaultValues(model.meta.id), uploadedVideoFilePaths: ['D:/clip.mp4'], videos: ['henji-media://clip.mp4'] }
@@ -111,6 +113,7 @@ describe('generationPreparation', () => {
   })
 
   it('不在注册表里的受控执行模型也按它自己的尺寸约束检查', async () => {
+    await i18n.changeLanguage('zh-CN')
     const controlled = { ...testModel, meta: { ...testModel.meta, id: 'controlled-utility' },
       inputLimits: { images: { max: 1 }, rules: [{ imageConstraints: { minShortSidePx: 512 } }] } }
     const reader = { image: async () => ({ width: 400, height: 900 }), video: async () => null }

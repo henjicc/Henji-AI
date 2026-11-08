@@ -38,7 +38,7 @@ import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import {
   createCanvasGenerationTaskLifecycle,
 } from '@/features/canvas/generation/activeGenerationTasks'
-import { assertCanvasGenerationMedia, runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
+import { prepareCanvasGenerationMedia, runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { getPlatform } from '@/platform'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -130,6 +130,8 @@ export interface GenerationNodeExecutionOptions {
   ) => Promise<GenerationNodeResultCommitResult>
   setPromptInvalid: (invalid: boolean) => void
   t: TFunction
+  /** 调用方已在建这个节点之前按同一批素材检查过尺寸；扩图、局部重绘这类提交时才生成素材的节点仍会重查。 */
+  mediaDimensionsChecked?: boolean
 }
 
 /** UI 与后台调用共享的生成执行器；读取最新配置，不依赖 React 挂载。 */
@@ -276,7 +278,10 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
           audios: runtime.audios,
         }
         // 扩图、局部重绘到这里才定下实际发出的素材，所以尺寸在这之后、建结果节点之前检查。
-        await assertCanvasGenerationMedia({ modelId: runtime.modelId, mediaType: current.modelType, params: requestParams, upstream: requestInputs })
+        const upstreamImages = await prepareCanvasGenerationMedia(
+          { modelId: runtime.modelId, mediaType: current.modelType, params: requestParams, upstream: requestInputs },
+          { dimensionsChecked: current.mediaDimensionsChecked === true && !requestPreparation },
+        )
         const resultNodeData = requestPreparation?.resultNodeData ?? {}
         const resultNodeExtraData = typeof current.resultNodeExtraData === 'function'
           ? current.resultNodeExtraData(runtime.data)
@@ -348,7 +353,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
             signal: current.signal,
             mediaType: current.modelType,
             params: requestParams,
-            upstream: requestInputs,
+            upstream: { ...requestInputs, images: upstreamImages },
             onProgress: (progress) => {
               setProgress(resultNodeId, progress)
             },

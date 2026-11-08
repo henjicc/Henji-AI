@@ -120,6 +120,8 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
   if (await databaseService.getHistoryById(taskId)) throw new Error('此生成任务已登记，请查询原任务，不要重新提交。')
   const model = registry.getModel(input.modelId)
   if (!model) throw new Error('生成模型不存在。')
+  // 建节点之前检查素材尺寸，不合格时画布上不留下注定失败的节点；执行器随后不再重复读取。
+  await assertGenerationMediaDimensions(model, (input.options ?? {}) as DynamicValueMap)
   // 节点只存模型声明过的参数；续接引用不是模型参数，但要随节点保存，运行时交回模型。
   const params = Object.fromEntries(Object.entries(input.options ?? {}).filter(([key]) => key === CONTINUATION_PARAM || model.params.some(param => param.id === key)))
   const nodeType = input.mediaType === 'image' ? CANVAS_NODE_TYPES.imageEdit : input.mediaType === 'video' ? CANVAS_NODE_TYPES.videoGen : CANVAS_NODE_TYPES.audioGen
@@ -140,7 +142,7 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
   })
   const nodeId = String(transaction.appliedOperations[0].nodeId)
   const inputFingerprint = (store?: typeof useCanvasStore) => readNodeInputSignature(destination.documentId, nodeId, store)
-  return startCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint).catch(error => {
+  return startCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint, true).catch(error => {
     // 此入口已经创建并保存节点，后续登记失败不能冒充整个操作尚未执行。
     if (error instanceof ApplicationPreflightFailure || error instanceof CanvasApplicationError) {
       throw new CanvasApplicationError('INVALID_INPUT', error.message, true,
@@ -151,7 +153,7 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
 }
 
 async function startCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination,
-  nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string) {
+  nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string, mediaDimensionsChecked = false) {
   const key = `${destination.documentId}:${nodeId}`
   const existingTaskId = activeNodeTasks.get(key)
   if (existingTaskId) throw new CanvasApplicationError('INVALID_INPUT', '此节点已有正在执行的任务，请查询原任务；其他节点可以独立生成。', true,
@@ -159,7 +161,7 @@ async function startCanvasGenerationTask(input: GenerationPreparationInput, dest
   if (isCanvasNodeRunActive(destination.documentId, nodeId)) throw new ApplicationPreflightFailure('此节点正在执行，请等待原节点完成；其他节点可以独立生成。')
   activeNodeTasks.set(key, taskId)
   try {
-    return await registerCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint, () => {
+    return await registerCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint, mediaDimensionsChecked, () => {
       if (activeNodeTasks.get(key) === taskId) activeNodeTasks.delete(key)
     })
   } catch (error) {
@@ -169,7 +171,7 @@ async function startCanvasGenerationTask(input: GenerationPreparationInput, dest
 }
 
 async function registerCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination,
-  nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string, releaseNode: () => void) {
+  nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string, mediaDimensionsChecked: boolean, releaseNode: () => void) {
   const { fingerprint } = await (async () => {
     const fingerprint = inputFingerprint()
     if (await databaseService.getHistoryById(taskId)) throw new Error(`此任务已经登记，请查询原任务 ${taskId}。`)
@@ -187,7 +189,7 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
   const releaseExecutor = retainCanvasTaskExecutor(destination.documentId, nodeId, createGenerationNodeExecutor(store => {
     const profile = readCanvasGenerationNodeProfile(nodeId, store)
     const extra = profile.resultNodeExtraData
-    return { ...profile, requestId: taskId, signal: controller.signal,
+    return { ...profile, requestId: taskId, signal: controller.signal, mediaDimensionsChecked,
       resultNodeExtraData: data => ({ ...(typeof extra === 'function' ? extra(data) : extra), generationTaskId: taskId }) }
   }))
   logger.info('画布生成已创建节点与连线', { event: 'canvas.generationTask.start', taskId, projectId: destination.documentId, nodeId })
