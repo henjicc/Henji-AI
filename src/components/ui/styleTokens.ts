@@ -234,8 +234,9 @@ export const UI_GROUP_SIBLING_GAP_CLASS = '[&+[data-ui-group]]:mt-8';
 /** Narrow docked panels (compact titles): the divider already separates groups, so siblings sit closer. */
 export const UI_GROUP_SIBLING_GAP_COMPACT_CLASS = '[&+[data-ui-group]]:mt-3';
 
+/** 浮起的卡片不画投影，靠强一档的描边（与实底浮层同为 line-strong）和窗口底分开。 */
 export const UI_PANEL_SURFACE_CLASS =
-  'bg-panel border border-line text-text1 shadow-panel';
+  'bg-panel border border-line-strong text-text1 shadow-panel';
 
 /**
  * 内嵌表面（五级容器词汇表的第 4 级 Surface）。

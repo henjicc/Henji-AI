@@ -221,8 +221,11 @@
    * 背后只剩约 20% 透光率——玻璃只会更脏。所以走 `surface="glass"` 的弹窗必须换用 soft 档。
    */
   /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费；颜色类已改为上方别名 */
-  /* 实底与玻璃浮层共用一个投影；颜色随主题 shade 变化。深色底上的亮度台阶由窗口底色自带的抖动细噪点打散（tailwind.config.js 的 bg-window / bg-gap）。 */
-  --shadow-overlay: 0 25px 50px -12px color-mix(in srgb, var(--shade) 50%, transparent);
+  /*
+   * 浮层不画投影，靠描边与底色分层：深色底上 8 位色只剩几档亮度，大半径柔投影会摊成一圈圈台阶，
+   * 短投影又显得立体、厚重（2026-11-09 用户确认）。保留为空投影而不是删掉，玻璃浮层的 box-shadow 列表仍要引用它。
+   */
+  --shadow-overlay: 0 0 0 0 transparent;
   --node-radius: var(--radius-overlay);
   /*
    * 尺寸令牌（重要记录 004）。Tailwind 的 rounded-control/field/overlay（以及改指同一组变量的

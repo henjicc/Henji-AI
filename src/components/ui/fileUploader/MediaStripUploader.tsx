@@ -96,10 +96,10 @@ async function dragTransferDataToFile(dragData: HenjiDragTransferData): Promise<
   return null
 }
 
-/** 卡片按 9:16 竖幅（h-16 w-9），与生成结果常见的竖图一致 */
-const CARD_FRAME_CLASS = 'h-16 w-9'
-/** 相邻两张卡片左缘的距离：卡片 36 + 间距 8（gap-2），拖动时其余卡片按它让位 */
-const CARD_STEP_PX = 44
+/** 卡片按 3:4 竖幅（h-16 w-12） */
+const CARD_FRAME_CLASS = 'h-16 w-12'
+/** 相邻两张卡片左缘的距离：卡片 48 + 间距 8（gap-2），拖动时其余卡片按它让位 */
+const CARD_STEP_PX = 56
 
 function matchesAccept(file: File, accept: string): boolean {
   if (accept === '*') return true
@@ -278,7 +278,7 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
               style={reorderStyle(index)}
               onMouseDown={(event) => handleMouseDown(index, event)}>
               {/* 卡片外观画在封面框上：悬停发丝线与键盘焦点环由封面卡统一提供 */}
-              {/* 缩略图只有 36 宽，悬停看大图；拖动排序时按下即收起（Tooltip 按下后不再弹出） */}
+              {/* 缩略图较小，悬停看大图；拖动排序时按下即收起（Tooltip 按下后不再弹出） */}
               {/* 视频条目的 file 是封面图，与缩略图一样用 img 显示 */}
               <Tooltip asChild appearance="media" content={type === 'audio' ? null
                 : <img src={file} alt="" className={UI_TOOLTIP_MEDIA_CLASS} draggable={false} />}>

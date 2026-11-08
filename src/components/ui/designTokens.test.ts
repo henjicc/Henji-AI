@@ -92,7 +92,6 @@ describe('设计令牌：Tailwind ↔ CSS 变量', () => {
     const shadows = tailwindConfig.slice(tailwindConfig.indexOf('boxShadow: {'), tailwindConfig.indexOf('transitionTimingFunction'))
     expect(shadows).not.toMatch(/rgb\(0 0 0/)
     expect(shadows).toMatch(/'node-error': '0 0 0 1px color-mix\(in srgb, var\(--danger\) 28%/)
-    expect(rootVars.get('--shadow-overlay')).toContain('var(--shade)')
     expect(config.theme.boxShadow.panel).toBe('var(--shadow-overlay)')
     expect(indexCss).not.toContain('--ui-shadow-panel')
     expect(indexCss).toMatch(/\.ui-glass-elevated\s*\{[^}]*var\(--shadow-overlay\)/)

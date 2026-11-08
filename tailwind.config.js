@@ -3,12 +3,6 @@
 const withOpacity = (variable) => `rgb(var(${variable}) / <alpha-value>)`
 // 自带透明度的令牌（浅底、遮罩、媒体叠层等）：直接取完整颜色，不支持透明度修饰。
 const cssVar = (variable) => `var(${variable})`
-/*
- * 抖动细噪点：一半像素叠 1/255 的白，即亮度随机 +1 档。深色底上 8 位色只剩四五档可用，大半径柔投影的每档亮度
- * 会摊成十几像素宽的一圈，看起来一层层；投影叠在带噪点的底色上，相邻两档在边界处随机交错，台阶就看不出来。
- * 只用白不用黑：浅色底上 +1/255 的白几乎不改变像素，无需按主题开关。
- */
-const DITHER_GRAIN = 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAADAFBMVEUAAAD///8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABnduxjAAAAAnRSTlMAAQGU/a4AAALjSURBVHjabZeLdiMxDELh/3+6TWYsLnK225x0xg8ZAZJl6//n89/fT0nPk++L55veN5+XM/r5/nz4/ZZl3qWegfPw++hMO4/8/DvD3r/fDbOIMvsMnFVOFG8Mz9iM0URb0SUM7aFz1PP9xPju88541+JeB5wTMhANQDZOcQI2t5ozZ9+aFywz8XxqFlFg61BzboQH3CymOzHPGRHNJOYgNrkOkSatgeUEnvMhU8h14A3iiWGWTsYGJHDsANH4Dx/m3WBAmLB+1JDoJ1qeOIyaYQrPXOHV+YoqunLEXywZXA5rJ72F/UwCwc9imVcZwaITkoLJUJqxjCACyUEWYChTEYpEsI4m6kCYIcALUpf/IIhBygNwayG7jucgST1o7C62I4hhxO8Fc3R6YJ/0DDJmnsxRcL8gA5lFiqFa5IhIO63JWJ2f6CJmt1kJRyWckGPxqNKp4ga9d9ElDk+iVGHKlqUZrmU4+JI4NoDpO/YYVoAJcTOzTmzeXVJVHR62EpEKZcnw2rK28M6UAhwvpCwHKMFjYhwPtui28mYZIoWf0kcoN1QtV0ZRyJaFQnHSDxA7h0CluGZWJCBqaBO2RjN1SbWbmxCNjBFWLh8Sigk0yGofyvlSsijoXZtc7KX2xKQyRIoWUqdK5uyC/5HxEfdiK7oCqaqK2Wr88FzW/ZykbVtocNCsACmQsDK17Lb6opYbwFfMcVlvFX4KXgu98iBCYdrxZWQIHRxk9wvBSt1ez3nEXapX6EarhFbNSlX0boW6CJXHkjHsSVGysF+CJS+pHC8P89UiLFfVT21zw9WxaLu+umMgO7x8jmYhXiyaIbjSoNtxF2/1aF3VqTtddfXzaoh/2rXMC5loaCwjqsBddlQrkdl3I4dadLdx6sLVd5PbeGi7rX/RR0sRq9r76qJRALvdVhlCOYOWTrut1NX08fpQl8XVY9CJXc1y3Zt4T8J1NbUH13FV9Whv3zHQh4RaWb3OHy9lCCi48nrMAAAAAElFTkSuQmCC")'
 // 阴影颜色按主题的 `shade` 令牌取比例：深色 shade = 黑 50%，浅色 = 冷灰 18%。
 // 比例按原深色数值反推（如 0.25 = shade 50%），深色观感不变、浅色自动变浅。
 const shade = (percent) => `color-mix(in srgb, var(--shade) ${percent}%, transparent)`
@@ -50,8 +44,7 @@ export default {
       // 大读数（录制计时、倒计时）专用，不用于标题或正文。
       display: ['40px', { lineHeight: '48px' }],
     },
-    // 浮层阴影唯一档位。内容区一律不用阴影，层次靠间距与排版建立。
-    // 几何取值与 Tailwind shadow-2xl 一致；颜色走主题 shade 令牌（深色下仍是黑 25%，像素不变）。
+    // 浮层阴影唯一档位，取 index.css 的 --shadow-overlay（当前为空投影：浮层靠描边分层）。内容区一律不用阴影。
     //
     // 其余档位是「登记过的特效阴影」：它们不是层次装饰，而是有具体功能语义
     // （选中描边 / 失败描边 / 堆叠缩略图立体感），不可用 shadow-panel 替代。
@@ -366,13 +359,7 @@ export default {
       }
     },
   },
-  plugins: [
-    // 投影最常落在窗口底与缝隙底上：这两个底色令牌自带抖动细噪点（DITHER_GRAIN），带透明度修饰的半透明底不加。
-    ({ addUtilities }) => addUtilities({
-      '.bg-window': { 'background-image': DITHER_GRAIN },
-      '.bg-gap': { 'background-image': DITHER_GRAIN },
-    }),
-  ],
+  plugins: [],
   // 全仓没有 dark: 变体，主题由引擎写变量切换；保留 class 策略只是为了让误写的 dark: 永不随系统偏好生效。
   darkMode: 'class',
 }
